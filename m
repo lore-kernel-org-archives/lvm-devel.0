@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Oct 2006 17:18:40 -0000
-Subject: LVM2/lib/misc timestamp.c
-Message-ID: <20061012171840.30493.qmail@sourceware.org>
+Date: 12 Oct 2006 18:13:33 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20061012181333.27928.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,32 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-10-12 17:18:40
+Changes by:	agk at sourceware.org	2006-10-12 18:13:33
 
 Modified files:
-	lib/misc       : timestamp.c 
+	.              : VERSION WHATS_NEW 
 
 Log message:
-	remove unused variable
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/timestamp.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.465&r2=1.466
 
---- LVM2/lib/misc/timestamp.c	2006/09/30 20:02:02	1.1
-+++ LVM2/lib/misc/timestamp.c	2006/10/12 17:18:40	1.2
-@@ -39,7 +39,6 @@
- struct timestamp *get_timestamp(void)
- {
- 	struct timestamp *ts = NULL;
--	int err = 0;
- 
- 	if (!(ts = dm_malloc(sizeof(*ts))))
- 		return_NULL;
-@@ -89,12 +88,11 @@
- struct timestamp *get_timestamp(void)
- {
- 	struct timestamp *ts = NULL;
--	int err = 0;
- 
- 	if (!(ts = dm_malloc(sizeof(*ts))))
- 		return_NULL;
- 
--	if ((err = gettimeofday(&ts->t, NULL))) {
-+	if (gettimeofday(&ts->t, NULL)) {
- 		log_sys_error("gettimeofday", "get_timestamp");
- 		return NULL;
- 	}
+--- LVM2/VERSION	2006/09/19 19:36:59	1.120
++++ LVM2/VERSION	2006/10/12 18:13:33	1.121
+@@ -1 +1 @@
+-2.02.11-cvs (2006-09-19)
++2.02.11-cvs (2006-10-12)
+--- LVM2/WHATS_NEW	2006/10/10 17:20:40	1.465
++++ LVM2/WHATS_NEW	2006/10/12 18:13:33	1.466
+@@ -1,5 +1,5 @@
+-Version 2.02.11 -  
+-=====================================
++Version 2.02.11 - 12th October 2006
++===================================
+   Add clvmd function to return the cluster name. not used by LVM yet.
+   Add cling allocation policy.
+   Change _check_contiguous() to use _for_each_pv().
 
 
