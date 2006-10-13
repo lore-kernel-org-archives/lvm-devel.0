@@ -1,42 +1,47 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 30 Jul 2012 15:17:50 +0000 (UTC)
-Subject: master - version: update
-Message-ID: <20120730151750.4F9175600@fedorahosted.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 13 Oct 2006 17:14:37 -0400
+Subject: [PATCH LVM2] (11/12) extending parallel_area to cover log device
+In-Reply-To: <452FFCFB.6090805@ce.jp.nec.com>
+References: <452FFCFB.6090805@ce.jp.nec.com>
+Message-ID: <453001BD.5080503@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e39de2282214e8716a9e6e3152a0957889fe6f29
-Commit:        e39de2282214e8716a9e6e3152a0957889fe6f29
-Parent:        20ca6d6545e6a0a8e84c117fd4530de0421bc78d
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Jul 30 16:17:16 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Jul 30 16:17:16 2012 +0100
+This patch extends parallel_area to include log device appropriately.
 
-version: update
+o The log device is considered as covering the whole range of the segment
+  including newly allocated extents.
+  However, current parallel_areas list is not composed as so.
 
-Update version date.
----
- VERSION    |    2 +-
- VERSION_DM |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+  For example, if you have a mirrored LV with length 10,
+  parallel_areas would say: there are parallel PVs for the extents from
+  0 to 9.
+  If you are going to extend the mirrored LV, nothing constraints
+  extents allocated for le 10 or higher.
 
-diff --git a/VERSION b/VERSION
-index b26c415..e1fd846 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.97(2)-git (2012-06-09)
-+2.02.97(2)-git (2012-07-30)
-diff --git a/VERSION_DM b/VERSION_DM
-index 749d204..e01aaa7 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.76-git (2012-06-09)
-+1.02.76-git (2012-07-30)
+  In this case, the existing log device should be taken as parallel to
+  all extents including le 10 or higher.
+
+o _for_each_pv() is changed to accept flags which controls what type
+  of segments _for_each_pv() walks through.
 
 
+$ diffstat -p1 11.log_coverage.patch
+ lib/metadata/lv_manip.c |   71 +++++++++++++++++++++++++++++++++++++----------- 1 file changed, 56 insertions(+), 15 deletions(-)
+
+
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 11.log_coverage.patch
+Type: text/x-patch
+Size: 5820 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061013/d4739cbb/attachment.bin>
