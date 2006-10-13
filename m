@@ -1,48 +1,33 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Oct 2006 20:37:13 -0000
-Subject: LVM2 ./WHATS_NEW tools/Makefile.in
-Message-ID: <20061026203713.20961.qmail@sourceware.org>
+From: Patrick Caulfield <pcaulfie@redhat.com>
+Date: Fri, 13 Oct 2006 10:58:54 +0100
+Subject: [PATCH] for bz 210511 & 203983
+Message-ID: <452F635E.2060809@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-10-26 20:37:13
+It seems that vgsplit was not propogating the CLUSTERED flag onto the new VG.
+-- 
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : Makefile.in 
+patrick
 
-Log message:
-	dd couple of missing files to tools/Makefile CLEAN_TARGETS.
+Index: tools/vgsplit.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/tools/vgsplit.c,v
+retrieving revision 1.19
+diff -u -p -r1.19 vgsplit.c
+--- tools/vgsplit.c	2 Sep 2006 01:18:17 -0000	1.19
++++ tools/vgsplit.c	13 Oct 2006 09:57:03 -0000
+@@ -302,6 +302,9 @@ int vgsplit(struct cmd_context *cmd, int
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.483&r2=1.484
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.76&r2=1.77
+ 	vg_to->status &= ~EXPORTED_VG;
 
---- LVM2/WHATS_NEW	2006/10/26 18:22:10	1.483
-+++ LVM2/WHATS_NEW	2006/10/26 20:37:13	1.484
-@@ -1,5 +1,6 @@
- Version 2.02.13 -
- ===================================
-+  Add couple of missing files to tools/Makefile CLEAN_TARGETS.
-   When adding snapshot leave cow LV mapped device active after zeroing.
-   Fix a clvmd debug message.
-   Add dev_flush() to set_lv().
---- LVM2/tools/Makefile.in	2006/08/18 21:17:18	1.76
-+++ LVM2/tools/Makefile.in	2006/10/26 20:37:13	1.77
-@@ -82,7 +82,8 @@
- 
- CLEAN_TARGETS = liblvm2cmd.so liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
- 		lvm2cmd.o lvm2cmd-static.o lvm2cmdlib.o lvm.static \
--		lvm.cflow lvm.xref lvm.tree lvm.rxref lvm.rtree
-+		lvm.cflow lvm.xref lvm.tree lvm.rxref lvm.rtree \
-+		lvmcmdlib.o lvm-static.o
- 
- ifeq ("@CMDLIB@", "yes")
- 	TARGETS += liblvm2cmd.so
++	if (vg_from->status & CLUSTERED)
++		vg_to->status |= CLUSTERED;
++
+ 	if (!vg_write(vg_to) || !vg_commit(vg_to))
+ 		goto error;
 
 
