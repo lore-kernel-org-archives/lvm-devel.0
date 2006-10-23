@@ -1,35 +1,46 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 13 Oct 2006 17:14:46 -0400
-Subject: [PATCH LVM2] (12/12) sort the allocation requests
-In-Reply-To: <452FFCFB.6090805@ce.jp.nec.com>
-References: <452FFCFB.6090805@ce.jp.nec.com>
-Message-ID: <453001C6.4040600@ce.jp.nec.com>
+From: Patrick Caulfield <pcaulfie@redhat.com>
+Date: Mon, 23 Oct 2006 11:11:44 +0100
+Subject: [PATCH] get exclusive lock on an LV before removing it.
+Message-ID: <453C9560.8040701@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds sorting of allocation requests.
+This patch is for BZ#209370 and prevents removing of an LV that is activated exclusively on another node.
 
-o This patch sorts the allocation request based on its type.
-  Allocation for log device is done before allocation of others.
-
-
-$ diffstat -p1 12.sort_requests.patch
- lib/metadata/lv_manip.c |   21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+patrick
 
 
-Thanks,
+Index: tools/lvremove.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/tools/lvremove.c,v
+retrieving revision 1.48
+diff -u -p -r1.48 lvremove.c
+--- tools/lvremove.c	9 May 2006 21:23:51 -0000	1.48
++++ tools/lvremove.c	23 Oct 2006 10:10:48 -0000
+@@ -75,6 +75,16 @@ static int lvremove_single(struct cmd_co
+ 	if (!archive(vg))
+ 		return ECMD_FAILED;
+
++	/* If the VG is clustered then make sure no-one else is using the LV
++	   we are about to remove */
++	if (vg->status & CLUSTERED) {
++		if (!activate_lv_excl(cmd, lv)) {
++			log_error("Can't get exclusive access to volume \"%s\"",
++				  lv->name);
++			return ECMD_FAILED;
++		}
++	}
++
+ 	/* FIXME Snapshot commit out of sequence if it fails after here? */
+ 	if (!deactivate_lv(cmd, lv)) {
+ 		log_error("Unable to deactivate logical volume \"%s\"",
+
+
 -- 
-Jun'ichi Nomura, NEC Corporation of America
+
+patrick
 
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 12.sort_requests.patch
-Type: text/x-patch
-Size: 1235 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061013/ad75d725/attachment.bin>
