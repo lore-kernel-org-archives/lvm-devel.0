@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 Oct 2006 18:25:30 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20061024182530.3254.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 24 Oct 2006 18:49:31 -0000
+Subject: LVM2/daemons/clvmd lvm-functions.c
+Message-ID: <20061024184931.14050.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-10-24 18:25:30
+Changes by:	jbrassow at sourceware.org	2006-10-24 18:49:31
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+	daemons/clvmd  : lvm-functions.c 
 
 Log message:
-	Add dev_flush() to set_lv()
+	- likely cut and paste error.  Fix wrong function name in debug
+	output.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.480&r2=1.481
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
 
---- LVM2/WHATS_NEW	2006/10/24 17:18:24	1.480
-+++ LVM2/WHATS_NEW	2006/10/24 18:25:30	1.481
-@@ -1,5 +1,6 @@
- Version 2.02.13 -
- ===================================
-+  Add dev_flush() to set_lv().
-   Add lvchange --resync.
-   Perform high-level free space check before each allocation attempt.
-   Don't allow a node to remove an LV that's exclusively active on anther node.
---- LVM2/tools/toollib.c	2006/10/21 23:18:43	1.91
-+++ LVM2/tools/toollib.c	2006/10/24 18:25:30	1.92
-@@ -1222,6 +1222,7 @@
- 		return 0;
+--- LVM2/daemons/clvmd/lvm-functions.c	2006/10/06 10:06:37	1.24
++++ LVM2/daemons/clvmd/lvm-functions.c	2006/10/24 18:49:31	1.25
+@@ -243,7 +243,7 @@
+ 	/* Is it open ? */
+ 	oldmode = get_current_lock(resource);
+ 	if (oldmode == -1) {
+-		DEBUGLOG("do_deactivate_lock, lock not already held\n");
++		DEBUGLOG("do_resume_lv, lock not already held\n");
+ 		return 0;	/* We don't need to do anything */
+ 	}
  
- 	dev_set(dev, UINT64_C(0), (size_t) 4096, value);
-+	dev_flush(dev);
- 	dev_close_immediate(dev);
- 
- 	return 1;
 
 
