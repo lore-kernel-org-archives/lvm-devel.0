@@ -1,29 +1,31 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 24 Oct 2006 16:27:24 +0100
-Subject: LVM2 ./WHATS_NEW man/lvchange.8 tools/args.h t ...
-In-Reply-To: <cb25965068fcc60d0dc73882c222e4a1@redhat.com>
-References: <20061023230356.28539.qmail@sourceware.org>
-	<453D5BA4.9000107@ce.jp.nec.com>
-	<cb25965068fcc60d0dc73882c222e4a1@redhat.com>
-Message-ID: <20061024152724.GA29513@agk.surrey.redhat.com>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Thu, 26 Oct 2006 16:29:53 -0400
+Subject: [PATCH LVM2] fix tools/Makefile to clean lvmcmdlib.o/lvm-static.o
+Message-ID: <45411AC1.5060403@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> >This "active = 1" should be set only if info.exists is true,
+Files specific to some build targets are declared as
+part of CLEAN_TARGETS in tools/Makefile.
+2 files (lvmcmdlib.o and lvm-static.o) are missing from it.
 
-Yes
+As a result, they are not removed after make clean or make distclean
+and you'll see strange error if you moved build tree from
+one environment to another and do make clean and make.
 
-> I also think we lost the ability to distinguish between clustered 
-> (active = -1) and active (active = 1).
- 
-Correct - there's no mechanism yet to distinguish between those cases: if
-it's not active locally, we don't reactivate.
+With this patch, I saw no *.o/*.a/*.so files in the build tree
+after make clean.
 
-Alasdair
+Thanks,
 -- 
-agk at redhat.com
-
-
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-make-clean-fix.patch
+Type: text/x-patch
+Size: 559 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061026/20e711bc/attachment.bin>
