@@ -1,31 +1,39 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Thu, 26 Oct 2006 16:29:53 -0400
-Subject: [PATCH LVM2] fix tools/Makefile to clean lvmcmdlib.o/lvm-static.o
-Message-ID: <45411AC1.5060403@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Oct 2006 15:21:08 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20061027152108.32233.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Files specific to some build targets are declared as
-part of CLEAN_TARGETS in tools/Makefile.
-2 files (lvmcmdlib.o and lvm-static.o) are missing from it.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2006-10-27 15:21:08
 
-As a result, they are not removed after make clean or make distclean
-and you'll see strange error if you moved build tree from
-one environment to another and do make clean and make.
+Modified files:
+	.              : VERSION WHATS_NEW 
 
-With this patch, I saw no *.o/*.a/*.so files in the build tree
-after make clean.
+Log message:
+	pre-release
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-make-clean-fix.patch
-Type: text/x-patch
-Size: 559 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061026/20e711bc/attachment.bin>
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.124&r2=1.125
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.484&r2=1.485
+
+--- LVM2/VERSION	2006/10/16 17:18:08	1.124
++++ LVM2/VERSION	2006/10/27 15:21:07	1.125
+@@ -1 +1 @@
+-2.02.13-cvs (2006-10-16)
++2.02.13-cvs (2006-10-27)
+--- LVM2/WHATS_NEW	2006/10/26 20:37:13	1.484
++++ LVM2/WHATS_NEW	2006/10/27 15:21:07	1.485
+@@ -1,4 +1,4 @@
+-Version 2.02.13 -
++Version 2.02.13 - 27th October 2006
+ ===================================
+   Add couple of missing files to tools/Makefile CLEAN_TARGETS.
+   When adding snapshot leave cow LV mapped device active after zeroing.
+
+
