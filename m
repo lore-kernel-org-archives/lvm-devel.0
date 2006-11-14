@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 Nov 2006 15:03:08 -0000
-Subject: LVM2 ./WHATS_NEW lib/label/label.c
-Message-ID: <20061114150308.6231.qmail@sourceware.org>
+Date: 14 Nov 2006 15:28:50 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvmcmdline.c
+Message-ID: <20061114152850.26487.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-11-14 15:03:07
+Changes by:	agk at sourceware.org	2006-11-14 15:28:50
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/label      : label.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Fix a label_verify error path.
+	Fix --autobackup argument which could never disable backups.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.495&r2=1.496
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/label/label.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.496&r2=1.497
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
 
---- LVM2/WHATS_NEW	2006/11/10 21:27:51	1.495
-+++ LVM2/WHATS_NEW	2006/11/14 15:03:07	1.496
+--- LVM2/WHATS_NEW	2006/11/14 15:03:07	1.496
++++ LVM2/WHATS_NEW	2006/11/14 15:28:50	1.497
 @@ -1,5 +1,6 @@
  Version 2.02.15 -
  ====================================
-+  Fix a label_verify error path.
++  Fix --autobackup argument which could never disable backups.
+   Fix a label_verify error path.
  
  Version 2.02.14 - 10th November 2006
- ====================================
---- LVM2/lib/label/label.c	2006/06/08 22:15:49	1.34
-+++ LVM2/lib/label/label.c	2006/11/14 15:03:07	1.35
-@@ -347,13 +347,11 @@
- 	int r = 0;
- 
- 	if (!dev_open(dev)) {
--		stack;
--
- 		if ((info = info_from_pvid(dev->pvid)))
- 			lvmcache_update_vgname_and_id(info, ORPHAN, ORPHAN,
- 						      0, NULL);
- 
--		goto out;
-+		return_0;
+--- LVM2/tools/lvmcmdline.c	2006/11/10 18:24:11	1.37
++++ LVM2/tools/lvmcmdline.c	2006/11/14 15:28:50	1.38
+@@ -712,10 +712,8 @@
+ 				  cmd->default_settings.activation);
  	}
  
- 	if (!(l = _find_labeller(dev, buf, &sector)))
+-	if (arg_count(cmd, autobackup_ARG)) {
+-		cmd->current_settings.archive = 1;
+-		cmd->current_settings.backup = 1;
+-	}
++	cmd->current_settings.archive = arg_int_value(cmd, autobackup_ARG, cmd->current_settings.archive);
++	cmd->current_settings.backup = arg_int_value(cmd, autobackup_ARG, cmd->current_settings.backup);
+ 
+ 	if (arg_count(cmd, partial_ARG)) {
+ 		init_partial(1);
 
 
