@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Nov 2006 23:30:46 -0000
-Subject: LVM2 VERSION WHATS_NEW
-Message-ID: <20061120233046.16045.qmail@sourceware.org>
+Date: 21 Nov 2006 15:13:36 -0000
+Subject: LVM2/lib/config config.c
+Message-ID: <20061121151336.6721.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-11-20 23:30:46
+Changes by:	agk at sourceware.org	2006-11-21 15:13:36
 
 Modified files:
-	.              : VERSION WHATS_NEW 
+	lib/config     : config.c 
 
 Log message:
-	post-release
+	fix _find_config_node: null parameter is permitted
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.129&r2=1.130
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.503&r2=1.504
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
 
---- LVM2/VERSION	2006/11/20 19:33:03	1.129
-+++ LVM2/VERSION	2006/11/20 23:30:45	1.130
-@@ -1 +1 @@
--2.02.15-cvs (2006-11-20)
-+2.02.16-cvs (2006-11-20)
---- LVM2/WHATS_NEW	2006/11/20 20:03:26	1.503
-+++ LVM2/WHATS_NEW	2006/11/20 23:30:45	1.504
-@@ -1,3 +1,6 @@
-+Version 2.02.16 -
-+====================================
-+
- Version 2.02.15 - 20th November 2006
- ====================================
-   Install lvmdump by default.
+--- LVM2/lib/config/config.c	2006/11/16 17:36:00	1.49
++++ LVM2/lib/config/config.c	2006/11/21 15:13:36	1.50
+@@ -772,7 +772,7 @@
+ 					     const char *path)
+ {
+ 	const char *e;
+-	const struct config_node *cn_found;
++	const struct config_node *cn_found = NULL;
+ 
+ 	while (cn) {
+ 		/* trim any leading slashes */
 
 
