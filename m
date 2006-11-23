@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 Nov 2006 22:41:57 -0000
-Subject: LVM2 ./WHATS_NEW scripts/lvm2create_initrd/lvm ...
-Message-ID: <20061121224157.24174.qmail@sourceware.org>
+Date: 23 Nov 2006 17:23:14 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvm_dump.sh
+Message-ID: <20061123172314.32465.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,94 +10,202 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-11-21 22:41:56
+Changes by:	agk at sourceware.org	2006-11-23 17:23:14
 
 Modified files:
 	.              : WHATS_NEW 
-	scripts/lvm2create_initrd: lvm2create_initrd 
+	scripts        : lvm_dump.sh 
 
 Log message:
-	Update lvm2create_initrd to support gentoo.
+	Improve lvm_dump.sh robustness.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.505&r2=1.506
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2create_initrd/lvm2create_initrd.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.506&r2=1.507
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm_dump.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2006/11/21 17:44:45	1.505
-+++ LVM2/WHATS_NEW	2006/11/21 22:41:55	1.506
+--- LVM2/WHATS_NEW	2006/11/21 22:41:55	1.506
++++ LVM2/WHATS_NEW	2006/11/23 17:23:14	1.507
 @@ -1,5 +1,6 @@
  Version 2.02.16 -
  ====================================
-+  Update lvm2create_initrd to support gentoo.
++  Improve lvm_dump.sh robustness.
+   Update lvm2create_initrd to support gentoo.
  
  Version 2.02.15 - 21st November 2006
- ====================================
---- LVM2/scripts/lvm2create_initrd/lvm2create_initrd	2004/06/07 16:20:05	1.1
-+++ LVM2/scripts/lvm2create_initrd/lvm2create_initrd	2006/11/21 22:41:56	1.2
-@@ -29,6 +29,8 @@
- #               PATH entries to /sbin/init shell script so chroot works without /usr mounted. Remove
- #               mkdir /initrd so we don't cause problems if root filesystem is corrupted. -- Jeff Layton
- # 15/05/2004	initial support for modules, create lvm.conf from lvm dumpconfig, other cleanups -- Jeff Layton
-+# 14/11/2006	Update handling of ldd output to handle hardcoded library links and virtual dll linux-gate.
-+#		Add support for Gentoo-style MAKEDEV. Remove hardcoded BINUTILS paths -- Douglas Mayle
- #
- # Copyright Miguel Cabeca, Jeffrey Layton, 2004
- #
-@@ -46,13 +48,13 @@
- #    along with this program; if not, write to the Free Software
- #    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- #
--# $Id: lvm2create_initrd,v 1.1 2004/06/07 16:20:05 agk Exp $
-+# $Id: lvm2create_initrd,v 1.2 2006/11/21 22:41:56 agk Exp $
- 
- TMPMNT=/tmp/mnt.$$
- DEVRAM=/tmp/initrd.$$
- 
- # set defaults
--BINFILES=${BINFILES:-"/lib/lvm-200/lvm /bin/bash /bin/busybox /sbin/pivot_root"}
-+BINFILES=${BINFILES:-"`which lvm` `which bash` `which busybox` `which pivot_root`"}
- BASICDEVICES=${BASICDEVICES:-"std consoleonly fd"}
- BLOCKDEVICES=${BLOCKDEVICES:-"md hda hdb hdc hdd sda sdb sdc sdd"}
- MAKEDEV=${MAKEDEV:-"debian"}
-@@ -269,7 +271,27 @@
- # Figure out which shared libraries we actually need in our initrd
- echo "$cmd -- finding required shared libraries"
- verbose "BINFILES: `echo $BINFILES`"
--LIBFILES=`ldd $BINFILES 2>/dev/null | awk '{if (/=>/) { print $3 }}' | sort -u`
+--- LVM2/scripts/lvm_dump.sh	2006/11/16 16:44:48	1.2
++++ LVM2/scripts/lvm_dump.sh	2006/11/23 17:23:14	1.3
+@@ -1,8 +1,41 @@
+ #!/bin/bash
+-#
++# we use some bash-isms (getopts?)
 +
-+# We need to strip certain lines from ldd output.  This is the full output of an example ldd:
-+#lvmhost~ # ldd /sbin/lvm /bin/bash
-+#/sbin/lvm:
-+#        not a dynamic executable
-+#/bin/bash:
-+#        linux-gate.so.1 =>  (0xbfffe000)
-+#        libncurses.so.5 => /lib/libncurses.so.5 (0xb7ee3000)
-+#        libdl.so.2 => /lib/libdl.so.2 (0xb7edf000)
-+#        libc.so.6 => /lib/libc.so.6 (0xb7dc1000)
-+#        /lib/ld-linux.so.2 (0xb7f28000)
-+#
-+# 1) Lines with a ":" contain the name of the original binary we're examining, and so are unnecessary.
-+#    We need to strip them because they contain "/", and can be confused with links with a hardcoded path.
-+# 2) The linux-gate library is a virtual dll that does not exist on disk, but is instead loaded automatically
-+#    into the process space, and can't be copied to the ramdisk
-+#
-+# After these lines have been stripped, we're interested in the lines remaining if they
-+# 1) Contain "=>" because they are pathless links, and the value following the token is the path on the disk
-+# 2) Contain "/" because it's a link with a hardcoded path, and so we're interested in the link itself.
-+LIBFILES=`ldd $BINFILES 2>/dev/null |grep -v -E \(linux-gate\|:\) | awk '{if (/=>/) { print $3 } else if (/\//) { print $1 }}' | sort -u`
- if [ $? -ne 0 ]; then
-    echo "$cmd -- ERROR figuring out needed shared libraries"
-    exit 1
-@@ -356,6 +378,10 @@
-     (cd $TMPMNT/dev; /dev/MAKEDEV $OPT_Q -d $TMPMNT/dev -m 2)
-     RETCODE=$?
-     ;;
-+gentoo)
-+    (cd $TMPMNT/dev; /usr/sbin/MAKEDEV $OPT_Q $BASICDEVICES $BLOCKDEVICES)
-+    RETCODE=$?
-+    ;;
- *)
-     echo "$cmd -- ERROR: $MAKEDEV is not a known MAKEDEV style."
-     RETCODE=1
+ # lvm_dump: This script is used to collect pertinent information for
+ #           the debugging of lvm issues.
+-#
++
++# following external commands are used throughout the script
++# which, echo and test are internal in bash at least
++MKDIR=mkdir # need -p
++TAR=tar # need czf
++RM=rm # need -rf
++CP=cp
++TAIL=tail # we need -n
++LS=ls # need -la
++PS=ps # need alx
++SED=sed
++DD=dd
++CUT=cut
++DATE=date
++BASENAME=basename
++
++# user may override lvm and dmsetup location by setting LVM_BINARY
++# and DMSETUP_BINARY respectively
++LVM=${LVM_BINARY-lvm}
++DMSETUP=${DMSETUP_BINARY-dmsetup}
++
++die() {
++    code=$1; shift
++    echo "$@" 1>&2
++    exit $code
++}
++
++# which should error out if the binary is not executable, although i
++# am not sure we can rely on this
++which $LVM >& /dev/null || die 2 "Fatal: could not find lvm binary '$LVM'"
++test -x `which $LVM` || die 2 "Fatal: lvm binary '$LVM' not executable"
++which $DMSETUP >& /dev/null || die 2 "Fatal: could not find dmsetup binary '$DMSETUP'"
++test -x `which $DMSETUP` || die 2 "Fatal: dmsetup binary '$DMSETUP' not executable"
+ 
+ function usage {
+ 	echo "$0 [options]"
+@@ -34,23 +67,16 @@
+ 	esac
+ done
+ 
+-DATE=`/bin/date -u +%G%m%d%k%M%S | /usr/bin/tr -d ' '`
++NOW=`$DATE -u +%G%m%d%k%M%S | /usr/bin/tr -d ' '`
+ if test -n "$userdir"; then
+ 	dir="$userdir"
+ else
+-	dirbase="lvmdump-$HOSTNAME-$DATE"
++	dirbase="lvmdump-$HOSTNAME-$NOW"
+ 	dir="$HOME/$dirbase"
+ fi
+ 
+-if test -e $dir; then
+-	echo $dir already exists, aborting >&2
+-	exit 2
+-fi
+-
+-if ! mkdir -p $dir; then
+-	echo Could not create $dir >&2
+-	exit 3
+-fi
++test -e $dir && die 3 "Fatal: $dir already exists"
++$MKDIR -p $dir || die 4 "Fatal: could not create $dir"
+ 
+ log="$dir/lvmdump.log"
+ 
+@@ -72,19 +98,19 @@
+ 	myecho "Gathering LVM volume info..."
+ 
+ 	myecho "  vgscan..."
+-	log "vgscan -vvvv > $dir/vgscan 2>&1"
++	log "$LVM vgscan -vvvv > $dir/vgscan 2>&1"
+ 
+ 	myecho "  pvscan..."
+-	log "pvscan -v >> $dir/pvscan 2>> $log"
++	log "$LVM pvscan -v >> $dir/pvscan 2>> $log"
+ 
+ 	myecho "  lvs..."
+-	log "lvs -a -o +devices >> $dir/lvs 2>> $log"
++	log "$LVM lvs -a -o +devices >> $dir/lvs 2>> $log"
+ 
+ 	myecho "  pvs..."
+-	log "pvs -a -v > $dir/pvs 2>> $log"
++	log "$LVM pvs -a -v > $dir/pvs 2>> $log"
+ 
+ 	echo "  vgs..."
+-	log "vgs -v > $dir/vgs 2>> $log"
++	log "$LVM vgs -v > $dir/vgs 2>> $log"
+ fi
+ 
+ if (( $clustered )); then
+@@ -102,41 +128,42 @@
+ 
+ myecho "Gathering LVM & device-mapper version info..."
+ echo "LVM VERSION:" > $dir/versions
+-lvs --version >> $dir/versions 2>> $log
++$LVM lvs --version >> $dir/versions 2>> $log
+ echo "DEVICE MAPPER VERSION:" >> $dir/versions
+-dmsetup --version >> $dir/versions 2>> $log
++$DMSETUP --version >> $dir/versions 2>> $log
+ 
+ myecho "Gathering dmsetup info..."
+-log "dmsetup info -c > $dir/dmsetup_info 2>> $log"
+-log "dmsetup table > $dir/dmsetup_table 2>> $log"
+-log "dmsetup status > $dir/dmsetup_status 2>> $log"
++log "$DMSETUP info -c > $dir/dmsetup_info 2>> $log"
++log "$DMSETUP table > $dir/dmsetup_table 2>> $log"
++log "$DMSETUP status > $dir/dmsetup_status 2>> $log"
+ 
+ myecho "Gathering process info..."
+-log "ps alx > $dir/ps_info 2>> $log"
++log "$PS alx > $dir/ps_info 2>> $log"
+ 
+ myecho "Gathering console messages..."
+-log "tail -n 75 /var/log/messages > $dir/messages 2>> $log"
++log "$TAIL -n 75 /var/log/messages > $dir/messages 2>> $log"
+ 
+ myecho "Gathering /etc/lvm info..."
+-log "cp -a /etc/lvm $dir/lvm 2>> $log"
++log "$CP -a /etc/lvm $dir/lvm 2>> $log"
+ 
+ myecho "Gathering /dev listing..."
+-log "ls -la /dev > $dir/dev_listing 2>> $log"
++log "$LS -la /dev > $dir/dev_listing 2>> $log"
+ 
+ if (( $metadata )); then
+ 	myecho "Gathering LVM metadata from Physical Volumes..."
+ 
+-	log "mkdir -p $dir/metadata"
++	log "$MKDIR -p $dir/metadata"
+ 
+-	pvs="$(pvs --separator , --noheadings --units s --nosuffix -o name,pe_start 2>> $log | \
+-		sed -e 's/^ *//')"
++	pvs="$($LVM pvs --separator , --noheadings --units s --nosuffix -o \
++	    name,pe_start 2>> $log | $SED -e 's/^ *//')"
+ 	for line in "$pvs"
+ 	do
+-		pv="$(echo $line | cut -d, -f1)"
+-		pe_start="$(echo $line | cut -d, -f2)"
+-		name="$(basename $pv)"
++		test -z "$line" && continue
++		pv="$(echo $line | $CUT -d, -f1)"
++		pe_start="$(echo $line | $CUT -d, -f2)"
++		name="$($BASENAME $pv)"
+ 		myecho "  $pv"
+-		log "dd if=$pv of=$dir/metadata/$name bs=512 count=$pe_start 2>> $log"
++		log "$DD if=$pv of=$dir/metadata/$name bs=512 count=$pe_start 2>> $log"
+ 	done
+ fi
+ 
+@@ -144,8 +171,14 @@
+ 	lvm_dump="$dirbase.tgz"
+ 	myecho "Creating report tarball in $HOME/$lvm_dump..."
+ 	cd $HOME
+-	tar czf $lvm_dump $dirbase 2>/dev/null
+-	rm -rf $dir
++	$TAR czf $lvm_dump $dirbase 2>/dev/null
++	$RM -rf $dir
++fi
++
++if test "$UID" != "0" && test "$EUID" != "0"; then
++	myecho
++	myecho "WARNING! Running as non-privileged user, dump is likely incomplete!"
++	myecho
+ fi
+ 
+ exit 0
 
 
