@@ -1,59 +1,48 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  2 Mar 2021 21:58:09 +0000 (GMT)
-Subject: main - tests: update setting LVM_BINARY for testing
-Message-ID: <20210302215809.BAA593834402@sourceware.org>
+From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
+Date: 11 Dec 2006 13:48:42 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20061211134842.21646.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7528a3363071b201c1f71a15e40cb9855ae169cf
-Commit:        7528a3363071b201c1f71a15e40cb9855ae169cf
-Parent:        3bab1a10264bf0d546cb5f0948ca382c9c882910
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 16:27:44 2021 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 2 22:24:51 2021 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	pcaulfield at sourceware.org	2006-12-11 13:48:41
 
-tests: update setting LVM_BINARY for testing
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
-When testing is running on uninstealled system - prefer our own binary
-in tests.
----
- test/lib/aux.sh   | 2 +-
- test/lib/utils.sh | 3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+Log message:
+	Fix hang in clvmd if a pre-command failed. The pre/post thread was getting
+	out of sync in this instance and would not quit.
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index c53d07b9e..1500e1f6a 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -177,7 +177,7 @@ prepare_clvmd() {
- 	echo "<======== Starting CLVMD ========>"
- 	echo -n "## preparing clvmd..."
- 	# lvs is executed from clvmd - use our version
--	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
-+	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 $run_valgrind clvmd -Isinglenode -d 1 -f &
- 	echo $! > LOCAL_CLVMD
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.515&r2=1.516
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+
+--- LVM2/WHATS_NEW	2006/12/01 23:29:54	1.515
++++ LVM2/WHATS_NEW	2006/12/11 13:48:41	1.516
+@@ -1,5 +1,6 @@
+ Version 2.02.17 -
+ ===================================
++  Fix hang in clvmd if a pre-command failed.
  
- 	for i in {200..0} ; do
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 175d1564a..9da9a966e 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -296,10 +296,11 @@ if test -z "${installed_testsuite+varset}"; then
-     *"$abs_top_builddir/test/lib"*) ;;
-     *)
- 	PATH="$abs_top_builddir/test/lib:$abs_top_builddir/test/api:$PATH"
-+	LVM_BINARY=$(which lvm)
- 	LD_LIBRARY_PATH=$(find -L "$abs_top_builddir/libdm/" "$abs_top_builddir/tools/"\
- 		"$abs_top_builddir/daemons/" \
- 		-name "*.so" -printf "%h:")"$LD_LIBRARY_PATH"
--	export PATH LD_LIBRARY_PATH ;;
-+	export PATH LD_LIBRARY_PATH LVM_BINARY ;;
-     esac
- fi
+ Version 2.02.16 - 1st December 2006
+ ===================================
+--- LVM2/daemons/clvmd/clvmd.c	2006/12/01 23:10:25	1.32
++++ LVM2/daemons/clvmd/clvmd.c	2006/12/11 13:48:41	1.33
+@@ -1426,6 +1426,8 @@
+ 		DEBUGLOG("Writing status %d down pipe %d\n", status, pipe_fd);
+ 		/* Tell the parent process we have finished this bit */
+ 		write(pipe_fd, &status, sizeof(int));
++		if (status)
++			continue; /* Wait for another PRE command */
  
+ 		/* We may need to wait for the condition variable before running the post command */
+ 		pthread_mutex_lock(&client->bits.localsock.mutex);
 
 
