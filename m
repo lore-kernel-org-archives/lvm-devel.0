@@ -1,141 +1,61 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed,  3 Mar 2021 19:28:43 +0000 (GMT)
-Subject: main - filters: better message for excluding LV
-Message-ID: <20210303192843.58568386102D@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 12 Dec 2006 19:30:11 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20061212193011.25028.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9d10f371199055e9ed0c2715b5353491cb759b0
-Commit:        e9d10f371199055e9ed0c2715b5353491cb759b0
-Parent:        d0b0c20077affbd9671f89c7eab685ee3315e8d8
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Mar 3 12:07:57 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 3 12:07:57 2021 -0600
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2006-12-12 19:30:10
 
-filters: better message for excluding LV
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
-Make the generic "device is not usable" message from filter-usable
-more specific in case the device is not usable because it's an LV.
-(i.e. when scan_lvs=0)
----
- lib/activate/activate.c     | 2 +-
- lib/activate/activate.h     | 2 +-
- lib/activate/dev_manager.c  | 6 ++++--
- lib/cache/lvmcache.c        | 2 ++
- lib/filters/filter-usable.c | 8 ++++++--
- lib/filters/filter.h        | 1 +
- 6 files changed, 15 insertions(+), 6 deletions(-)
+Log message:
+	Fix detection of smallest area in _alloc_parallel_area() for cling policy.
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index de866fb6c..75248aa63 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -392,7 +392,7 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.518&r2=1.519
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.112&r2=1.113
+
+--- LVM2/WHATS_NEW	2006/12/11 14:06:25	1.518
++++ LVM2/WHATS_NEW	2006/12/12 19:30:10	1.519
+@@ -1,5 +1,6 @@
+ Version 2.02.17 -
+ ===================================
++  Fix detection of smallest area in _alloc_parallel_area() for cling policy.
+   Add manpage entry for clvmd -T
+   Fix gulm operation of clvmd, including a hang when doing lvchange -aey
+   Fix hang in clvmd if a pre-command failed.
+--- LVM2/lib/metadata/lv_manip.c	2006/10/30 16:10:55	1.112
++++ LVM2/lib/metadata/lv_manip.c	2006/12/12 19:30:10	1.113
+@@ -628,17 +628,17 @@
+ 				struct pv_area **areas,
+ 				uint32_t *ix, struct pv_area *log_area)
  {
-         return 0;
- }
--int device_is_usable(struct device *dev, struct dev_usable_check_params check)
-+int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv)
- {
-         return 0;
- }
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 53c8631b4..4c9328a66 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -253,7 +253,7 @@ struct dev_usable_check_params {
-  * Returns 1 if mapped device is not suspended, blocked or
-  * is using a reserved name.
-  */
--int device_is_usable(struct device *dev, struct dev_usable_check_params check);
-+int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv);
+-	uint32_t area_len, smallest, remaining;
++	uint32_t area_len, remaining;
+ 	uint32_t s;
+ 	struct alloced_area *aa;
  
- /*
-  * Declaration moved here from fs.h to keep header fs.h hidden
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 9a2548213..1a8f848ac 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -405,7 +405,7 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
- 					       .check_blocked = 1,
- 					       .check_suspended = ignore_suspended_devices(),
- 					       .check_error_target = 1,
--					       .check_reserved = 0 }))
-+					       .check_reserved = 0 }, NULL))
- 				goto out; /* safe to use */
- 			stack;
- 		}
-@@ -620,7 +620,7 @@ static int _ignore_frozen_raid(struct device *dev, const char *params)
-  *
-  * Returns: 1 if usable, 0 otherwise
-  */
--int device_is_usable(struct device *dev, struct dev_usable_check_params check)
-+int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv)
- {
- 	struct dm_task *dmt;
- 	struct dm_info info;
-@@ -675,6 +675,8 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check)
+ 	remaining = needed - *ix;
+ 	area_len = remaining / ah->area_multiple;
  
- 	if (check.check_lv && uuid && !strncmp(uuid, "LVM-", 4)) {
- 		/* Skip LVs */
-+		if (is_lv)
-+			*is_lv = 1;
- 		goto out;
- 	}
+-	smallest = areas[ah->area_count - 1]->count;
+-
+-	if (area_len > smallest)
+-		area_len = smallest;
++	/* Reduce area_len to the smallest of the areas */
++	for (s = 0; s < ah->area_count; s++)
++		if (area_len > areas[s]->count)
++			area_len = areas[s]->count;
  
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 04f6fe0a5..b78262b65 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -2909,6 +2909,8 @@ const char *dev_filtered_reason(struct device *dev)
- 		return "device is not in devices file";
- 	if (dev->filtered_flags & DEV_FILTERED_DEVICES_LIST)
- 		return "device is not in devices list";
-+	if (dev->filtered_flags & DEV_FILTERED_IS_LV)
-+		return "device is an LV";
- 
- 	/* flag has not been added here */
- 	if (dev->filtered_flags)
-diff --git a/lib/filters/filter-usable.c b/lib/filters/filter-usable.c
-index 8a5b0d828..43a37afd0 100644
---- a/lib/filters/filter-usable.c
-+++ b/lib/filters/filter-usable.c
-@@ -111,6 +111,7 @@ static int _passes_usable_filter(struct cmd_context *cmd, struct dev_filter *f,
- 	filter_mode_t mode = data->mode;
- 	int skip_lvs = data->skip_lvs;
- 	struct dev_usable_check_params ucp = {0};
-+	int is_lv = 0;
- 	int r = 1;
- 
- 	dev->filtered_flags &= ~DEV_FILTERED_MINSIZE;
-@@ -145,8 +146,11 @@ static int _passes_usable_filter(struct cmd_context *cmd, struct dev_filter *f,
- 			break;
- 		}
- 
--		if (!(r = device_is_usable(dev, ucp))) {
--			dev->filtered_flags |= DEV_FILTERED_UNUSABLE;
-+		if (!(r = device_is_usable(dev, ucp, &is_lv))) {
-+			if (is_lv)
-+				dev->filtered_flags |= DEV_FILTERED_IS_LV;
-+			else
-+				dev->filtered_flags |= DEV_FILTERED_UNUSABLE;
- 			log_debug_devs("%s: Skipping unusable device.", dev_name(dev));
- 		}
- 	}
-diff --git a/lib/filters/filter.h b/lib/filters/filter.h
-index bd4293090..40fbdeabb 100644
---- a/lib/filters/filter.h
-+++ b/lib/filters/filter.h
-@@ -66,5 +66,6 @@ struct dev_filter *usable_filter_create(struct cmd_context *cmd, struct dev_type
- #define DEV_FILTERED_UNUSABLE		0x00000400
- #define DEV_FILTERED_DEVICES_FILE	0x00000800
- #define DEV_FILTERED_DEVICES_LIST	0x00001000
-+#define DEV_FILTERED_IS_LV		0x00002000
- 
- #endif 	/* _LVM_FILTER_H */
+ 	if (!(aa = dm_pool_alloc(ah->mem, sizeof(*aa) *
+ 			      (ah->area_count + (log_area ? 1 : 0))))) {
 
 
