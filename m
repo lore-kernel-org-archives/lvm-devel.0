@@ -1,56 +1,33 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Dec 2006 16:19:02 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
-Message-ID: <20061220161902.14253.qmail@sourceware.org>
+From: Shinn'ya Hoshino <hoshino-s@ma.dnes.nec.co.jp>
+Date: Tue, 26 Dec 2006 15:06:37 +0900
+Subject: Why print_log() is doing the memlock check?
+In-Reply-To: <20061217115801.GB4982@agk.surrey.redhat.com>
+References: <20061217115801.GB4982@agk.surrey.redhat.com>
+Message-ID: <20061226150637hoshino-s@mail.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2006-12-20 16:19:01
+Thanks for reply.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c 
+Alasdair G Kergon <agk@redhat.com> wrote:
+> While i/o is suspended you could have a situation where
+> most of the rest of the system blocks up until i/o is
+> resumed,
 
-Log message:
-	Fix some activate.c prototypes when compiled without devmapper.
+However, when a trouble occurs in the server currently used 
+for business, it needs to avoid that it becomes impossible to 
+investigate in order that there may be no log.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.524&r2=1.525
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
+If logging is suspended until unlocked, does it solve?
 
---- LVM2/WHATS_NEW	2006/12/20 14:34:04	1.524
-+++ LVM2/WHATS_NEW	2006/12/20 16:19:01	1.525
-@@ -1,5 +1,6 @@
- Version 2.02.18 -
- ====================================
-+  Fix some activate.c prototypes when compiled without devmapper.
-   Fix dmeventd mirror to cope if monitored device disappears.
- 
- Version 2.02.17 - 14th December 2006
---- LVM2/lib/activate/activate.c	2006/10/03 17:55:19	1.114
-+++ LVM2/lib/activate/activate.c	2006/12/20 16:19:01	1.115
-@@ -141,7 +141,7 @@
- {
- 	return 0;
- }
--int target_present(const char *target_name)
-+int target_present(const char *target_name, int use_modprobe)
- {
- 	return 0;
- }
-@@ -211,7 +211,7 @@
- 	return 1;
- }
- 
--int pv_uses_vg(struct cmd_context *cmd, struct physical_volume *pv,
-+int pv_uses_vg(struct physical_volume *pv,
- 	       struct volume_group *vg)
- {
- 	return 0;
+When it is true, I shall want to consider the addition which 
+suspends logging.
+
+/* -------------------------------------------------------------
+  Shinn'ya Hoshino          mailto:hoshino-s at ma.dnes.nec.co.jp
+------------------------------------------------------------- */
 
 
