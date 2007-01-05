@@ -1,126 +1,47 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:40:04 +0000 (GMT)
-Subject: main - tests: idm: Add testing for the fabric's half brain failure
-Message-ID: <20210603144004.395DD383B420@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 5 Jan 2007 15:53:41 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20070105155341.706.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=38abd6bb2c3c35ad476f11fd3cd4ee8d119e364d
-Commit:        38abd6bb2c3c35ad476f11fd3cd4ee8d119e364d
-Parent:        91d3b568758cbb11ffd797c864d03f7f36426efc
-Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:20 2021 +0800
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 3 09:39:32 2021 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2007-01-05 15:53:41
 
-tests: idm: Add testing for the fabric's half brain failure
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
-If the fabric is broken instantly and the partial drives connected on
-the fabric disappear from the system.  For this case, according to the
-locking algorithm in idm, the lease will not lose since the half drives
-are still alive so can renew the lease for the half drives.  On the
-other hand, since the VG lock requires to acquire the majority of drive
-number, but half drives failure cannot achieve the majority, so it
-cannot acquire the lock for VG and thus cannot change metadata for VG.
+Log message:
+	Fix create mirror with name longer than 22 chars.
 
-This patch is to add half brain failure for idm; the test command is as
-below:
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.525&r2=1.526
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
 
-  # make check_lvmlockd_idm \
-	LVM_TEST_BACKING_DEVICE=/dev/sdp3,/dev/sdo3 LVM_TEST_FAILURE=1 \
-	T=idm_fabric_failure_half_brain.sh
-
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
----
- test/shell/idm_fabric_failure_half_brain.sh | 78 +++++++++++++++++++++++++++++
- 1 file changed, 78 insertions(+)
-
-diff --git a/test/shell/idm_fabric_failure_half_brain.sh b/test/shell/idm_fabric_failure_half_brain.sh
-new file mode 100644
-index 000000000..c692a12ad
---- /dev/null
-+++ b/test/shell/idm_fabric_failure_half_brain.sh
-@@ -0,0 +1,78 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2020 Seagate, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
-+[ -z "$LVM_TEST_FAILURE" ] && skip;
-+
-+aux prepare_devs 2
-+aux extend_filter_LVMTEST
-+
-+DRIVE1=`dmsetup deps -o devname $dev1 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
-+DRIVE2=`dmsetup deps -o devname $dev2 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
-+
-+[ "$(basename -- $DRIVE1)" = "$(basename -- $DRIVE2)" ] && die "Need to pass two different drives!?"
-+
-+# The previous device-mapper are removed, but LVM still can directly
-+# access VGs from the specified physical drives.  So enable drives
-+# for these drives.
-+aux extend_filter_LVMTEST "a|/dev/$DRIVE1*|" "a|/dev/$DRIVE2*|"
-+aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
-+
-+vgcreate $SHARED $vg "$dev1" "$dev2"
-+
-+# Create new logic volume
-+lvcreate -a ey --zero n -l 100%FREE -n $lv1 $vg
-+
-+drive_list=($DRIVE1)
-+
-+# Find all drives with the same WWN and delete them from system,
-+# so that we can emulate the same drive with multiple paths are
-+# disconnected with system.
-+drive_wwn=`udevadm info /dev/${DRIVE1} | awk -F= '/E: ID_WWN=/ {print $2}'`
-+for dev in /dev/*; do
-+	if [ -b "$dev" ] && [[ ! "$dev" =~ [0-9] ]]; then
-+		wwn=`udevadm info "${dev}" | awk -F= '/E: ID_WWN=/ {print $2}'`
-+		if [ "$wwn" = "$drive_wwn" ]; then
-+			base_name="$(basename -- ${dev})"
-+			drive_list+=("$base_name")
-+			host_list+=(`readlink /sys/block/$base_name | awk -F'/' '{print $6}'`)
-+		fi
-+	fi
-+done
-+
-+for d in "${drive_list[@]}"; do
-+	[ -f /sys/block/$d/device/delete ] && echo 1 > /sys/block/$d/device/delete
-+done
-+
-+# Fail to create new logic volume
-+not lvcreate -a n --zero n -l 1 -n $lv2 $vg
-+
-+# Wait for lock time out caused by drive failure
-+sleep 70
-+
-+not check grep_lvmlockd_dump "S lvm_$vg kill_vg"
-+
-+# Rescan drives so can probe the deleted drives and join back them
-+for h in "${host_list[@]}"; do
-+	[ -f /sys/class/scsi_host/${h}/scan ] && echo "- - -" > /sys/class/scsi_host/${h}/scan
-+done
-+
-+# After the drive is reconnected, $vg should be visible again.
-+vgchange --lock-start
-+lvremove -f $vg/$lv1
-+lvcreate -a ey --zero n -l 1 -n $lv2 $vg
-+vgremove -ff $vg
+--- LVM2/WHATS_NEW	2006/12/20 16:19:01	1.525
++++ LVM2/WHATS_NEW	2007/01/05 15:53:40	1.526
+@@ -1,5 +1,6 @@
+ Version 2.02.18 -
+ ====================================
++  Fix create mirror with name longer than 22 chars.
+   Fix some activate.c prototypes when compiled without devmapper.
+   Fix dmeventd mirror to cope if monitored device disappears.
+ 
+--- LVM2/lib/metadata/lv_manip.c	2006/12/13 03:39:58	1.114
++++ LVM2/lib/metadata/lv_manip.c	2007/01/05 15:53:40	1.115
+@@ -1493,7 +1493,7 @@
+ 	struct cmd_context *cmd = vg->cmd;
+ 	struct lv_list *ll = NULL;
+ 	struct logical_volume *lv;
+-	char dname[32];
++	char dname[NAME_LEN];
+ 
+ 	if (vg->max_lv && (vg->max_lv == vg->lv_count)) {
+ 		log_error("Maximum number of logical volumes (%u) reached "
 
 
