@@ -1,45 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed,  2 Jun 2021 16:40:44 +0000 (GMT)
-Subject: dev-next - lvmdbusd: Use ID_FS_TYPE UDev property in udevwatch
-Message-ID: <20210602164044.3F717385DC22@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 5 Jan 2007 13:53:36 +0000
+Subject: [PATCH] LVM2 RFC: fix return code when exclusive activation fails
+In-Reply-To: <459E30C6.6090102@redhat.com>
+References: <459E30C6.6090102@redhat.com>
+Message-ID: <20070105135336.GY21980@agk.surrey.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2801b7a9b2faf08183685a79ec1dcee42d333541
-Commit:        2801b7a9b2faf08183685a79ec1dcee42d333541
-Parent:        c53bb2b5ea5e5a985e32235515ad21fff62e3b5b
-Author:        Vojtech Trefny <vtrefny@redhat.com>
-AuthorDate:    Wed Jun 2 17:17:40 2021 +0200
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 2 11:40:01 2021 -0500
+I don't see that a new error code gains us anything there:
 
-lvmdbusd: Use ID_FS_TYPE UDev property in udevwatch
+If operating on multiple objects and you need to know which ones did or
+didn't succeed, then you simply perform the operations separately.
 
-'.ID_FS_TYPE_NEW' is a custom property added by an LVM UDev rule
-which is now being removed and 'ID_FS_TYPE' has the same value.
+Only use commands that operate on multiple objects when you aren't
+interested in knowing.
 
-Signed-off-by: Vojtech Trefny <vtrefny@redhat.com>
----
- daemons/lvmdbusd/udevwatch.py | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
-index b53b18003..f9b3e4ad1 100644
---- a/daemons/lvmdbusd/udevwatch.py
-+++ b/daemons/lvmdbusd/udevwatch.py
-@@ -52,8 +52,8 @@ def filter_event(action, device):
- 	# when appropriate.
- 	refresh = False
- 
--	if '.ID_FS_TYPE_NEW' in device:
--		fs_type_new = device['.ID_FS_TYPE_NEW']
-+	if 'ID_FS_TYPE' in device:
-+		fs_type_new = device['ID_FS_TYPE']
- 
- 		if 'LVM' in fs_type_new:
- 			refresh = True
+The bugzilla referenced is discussing "What precisely should -ae" mean?
+Should it be different from "-ael" ?  Under precisely what sets of
+circumstances should it return an error, and based on the final state
+or whether a change happened?
+
+
+The man page says:
+    If clustered locking is enabled, -ae will  activate  exclusively
+    on  one  node and -aly will activate only on the local node.
+
+Note that it does *not* say -ae will activate exclusively on the
+*local* node.
+
+
+Alasdair
+-- 
+agk at redhat.com
 
 
