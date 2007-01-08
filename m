@@ -1,87 +1,85 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Tue, 1 Jun 2021 16:14:39 +0800
-Subject: [PATCH]pvchange: Fix the deadlock problem
-Message-ID: <eed37eea-bf93-158e-6366-cc6e338851c8@huawei.com>
+From: Dave Wysochanski <dave.wysochanski@redhat.com>
+Date: Mon, 08 Jan 2007 16:45:01 -0500
+Subject: [LVM2 PATCH] Fix _raw_read_mda_header does not free struct mda_header *mdah in error paths
+Message-ID: <1168292702.4239.30.camel@linux-cxyg.rtp.netapp.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Fix error paths of _raw_read_mda_header 
 
-I found a deadlock problem during testing?the reason is that the pvchange command
-did not acquire the global lock first.
+https://bugzilla.redhat.com/bugzilla/show_bug.cgi?id=220563
 
-
-The process 143116 obtains the global lock, it tries to obtain the hint file lock;
-The process 143112 obtains the hint file lock, it tries to obtain the global lock.
-Two processes formed a deadlock.
-
-# gdb attach 143116
-0x0000ffffae5e5754 in flock () from /usr/lib64/libc.so.6
-(gdb) bt
-#0  0x0000ffffae5e5754 in flock () from /usr/lib64/libc.so.6
-#1  0x0000aaaaade66a1c in _lock_hints (mode=mode at entry=2, nonblock=nonblock at entry=0, cmd=0xaaaaebd61a60) at label/hints.c:320
-#2  0x0000aaaaade68054 in _lock_hints (nonblock=0, mode=2, cmd=0xaaaaebd61a60) at label/hints.c:1097
-#3  clear_hint_file (cmd=cmd at entry=0xaaaaebd61a60) at label/hints.c:1091
-#4  0x0000aaaaade2e9bc in vgreduce (cmd=0xaaaaebd61a60, argc=1, argv=0xffffefe1bd98) at vgreduce.c:227
-#5  0x0000aaaaade062b8 in lvm_run_command (cmd=cmd at entry=0xaaaaebd61a60, argc=<optimized out>, argc at entry=3, argv=<optimized out>, argv at entry=0xffffefe1bd88) at lvmcmdline.c:3131
-#6  0x0000aaaaade072e8 in lvm2_main (argc=3, argv=0xffffefe1bd88) at lvmcmdline.c:3661
-#7  0x0000ffffae541f80 in __libc_start_main () from /usr/lib64/libc.so.6
-#8  0x0000aaaaadde4434 in _start ()
-
-# gdb attach 143112
-0x0000ffffaf52e754 in flock () from /usr/lib64/libc.so.6
-(gdb) bt
-#0  0x0000ffffaf52e754 in flock () from /usr/lib64/libc.so.6
-#1  0x0000aaaabf0a3d80 in _do_flock (file=file at entry=0xffffc4da6a68 "/run/lock/lvm/P_global", fd=fd at entry=0xaaaad30eb6e0, operation=operation at entry=1, nonblock=nonblock at entry=0) at misc/lvm-flock.c:129
-...
-#11 0x0000aaaabefcb1b8 in pvchange (cmd=0xaaaad2fd3a60, argc=1, argv=0xffffc4da85f0) at pvchange.c:237
-#12 0x0000aaaabefc62b8 in lvm_run_command (cmd=cmd at entry=0xaaaad2fd3a60, argc=<optimized out>, argc at entry=4, argv=<optimized out>, argv at entry=0xffffc4da85d8) at lvmcmdline.c:3131
-#13 0x0000aaaabefc72e8 in lvm2_main (argc=4, argv=0xffffc4da85d8) at lvmcmdline.c:3661
-#14 0x0000ffffaf48af80 in __libc_start_main () from /usr/lib64/libc.so.6
-#15 0x0000aaaabefa4434 in _start ()
-
-# cat /proc/locks
-1: FLOCK  ADVISORY  WRITE 143116 00:16:206122 0 EOF
-1: -> FLOCK  ADVISORY  READ  143120 00:16:206122 0 EOF
-1: -> FLOCK  ADVISORY  READ  143121 00:16:206122 0 EOF
-1: -> FLOCK  ADVISORY  WRITE 143117 00:16:206122 0 EOF
-1: -> FLOCK  ADVISORY  READ  143112 00:16:206122 0 EOF
-...
-6: FLOCK  ADVISORY  WRITE 143112 00:16:929 0 EOF
-6: -> FLOCK  ADVISORY  WRITE 143116 00:16:929 0 EOF
-
-# ls -li /run/lock/lvm/P_global
-206122 -rwx------. 1 root root 0 May 29 18:10 /run/lock/lvm/P_global
-# ls -li /run/lvm/hints
-929 -rw-------. 1 root root 64 May 29 18:10 /run/lvm/hints
-
-Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
----
- tools/pvchange.c | 3 +++
- 1 file changed, 3 insertions(+)
-
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index d6e35d66f..6b4fa45b8 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -248,6 +248,9 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
-
- 	set_pv_notify(cmd);
-
-+	if (!lock_global(cmd, "ex"))
-+		return_ECMD_FAILED;
-+
- 	clear_hint_file(cmd);
-
- 	ret = process_each_pv(cmd, argc, argv, NULL, 0, READ_FOR_UPDATE, handle, _pvchange_single);
--- 
-
-Regards
-
-Wu Guanghao
+Index: LVM2/WHATS_NEW
+===================================================================
+--- LVM2.orig/WHATS_NEW	2007-01-08 16:35:38.000000000 -0500
++++ LVM2/WHATS_NEW	2007-01-08 16:36:31.000000000 -0500
+@@ -1,5 +1,6 @@
+ Version 2.02.18 -
+ ====================================
++  Fix _raw_read_mda_header() error paths to free memory.
+   Fix typeo in lvextend man pg.
+   Fix misleading vgsplit error message when LV is part of PV not on cmdline.
+   Add dmeventd_mirror register_mutex, tidy initialisation & add memlock.
+Index: LVM2/lib/format_text/format-text.c
+===================================================================
+--- LVM2.orig/lib/format_text/format-text.c	2006-11-30 18:11:41.000000000 -0500
++++ LVM2/lib/format_text/format-text.c	2006-12-26 18:14:15.000000000 -0500
+@@ -127,42 +127,45 @@ static struct mda_header *_raw_read_mda_
+ 
+ 	if (!(mdah = dm_pool_alloc(fmt->cmd->mem, MDA_HEADER_SIZE))) {
+ 		log_error("struct mda_header allocation failed");
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
+ 		stack;
+-		dm_pool_free(fmt->cmd->mem, mdah);
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, mdah->magic,
+ 						  MDA_HEADER_SIZE -
+ 						  sizeof(mdah->checksum_xl)))) {
+ 		log_error("Incorrect metadata area header checksum");
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	_xlate_mdah(mdah);
+ 
+ 	if (strncmp((char *)mdah->magic, FMTT_MAGIC, sizeof(mdah->magic))) {
+ 		log_error("Wrong magic number in metadata area header");
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	if (mdah->version != FMTT_VERSION) {
+ 		log_error("Incompatible metadata area header version: %d",
+ 			  mdah->version);
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	if (mdah->start != dev_area->start) {
+ 		log_error("Incorrect start sector in metadata area header: %"
+ 			  PRIu64, mdah->start);
+-		return NULL;
++		goto error;
+ 	}
+ 
+ 	return mdah;
++ error:
++	if (mdah)
++		dm_pool_free(fmt->cmd->mem, mdah);
++	return NULL;
+ }
+ 
+ static int _raw_write_mda_header(const struct format_type *fmt,
 
 
 
