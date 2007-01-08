@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Jan 2007 15:00:57 -0000
-Subject: LVM2/lib/mirror mirrored.c
-Message-ID: <20070117150057.18109.qmail@sourceware.org>
+Date: 8 Jan 2007 14:24:21 -0000
+Subject: LVM2 ./WHATS_NEW dmeventd/mirror/dmeventd_mirr ...
+Message-ID: <20070108142421.11203.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,182 +10,191 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-17 15:00:57
+Changes by:	agk at sourceware.org	2007-01-08 14:24:20
 
 Modified files:
-	lib/mirror     : mirrored.c 
+	.              : WHATS_NEW 
+	dmeventd/mirror: dmeventd_mirror.c 
+	tools          : lvmcmdlib.c 
 
 Log message:
-	merge  _target_*register_events
-	introduce _create_dm_event_handler()
+	Add dmeventd_mirror register_mutex, tidy initialisation & add memlock.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.526&r2=1.527
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdlib.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/lib/mirror/mirrored.c	2007/01/16 23:05:13	1.42
-+++ LVM2/lib/mirror/mirrored.c	2007/01/17 15:00:57	1.43
-@@ -368,7 +368,7 @@
+--- LVM2/WHATS_NEW	2007/01/05 15:53:40	1.526
++++ LVM2/WHATS_NEW	2007/01/08 14:24:20	1.527
+@@ -1,5 +1,6 @@
+ Version 2.02.18 -
+ ====================================
++  Add dmeventd_mirror register_mutex, tidy initialisation & add memlock.
+   Fix create mirror with name longer than 22 chars.
+   Fix some activate.c prototypes when compiled without devmapper.
+   Fix dmeventd mirror to cope if monitored device disappears.
+--- LVM2/dmeventd/mirror/dmeventd_mirror.c	2006/12/20 14:34:05	1.9
++++ LVM2/dmeventd/mirror/dmeventd_mirror.c	2007/01/08 14:24:20	1.10
+@@ -32,19 +32,30 @@
+ #define ME_INSYNC    1
+ #define ME_FAILURE   2
+ 
+-static pthread_mutex_t _lock = PTHREAD_MUTEX_INITIALIZER;
+-
+-/* FIXME: We may need to lock around operations to these */
++/*
++ * register_device() is called first and performs initialisation.
++ * Only one device may be registered or unregistered at a time.
++ */
++static pthread_mutex_t _register_mutex = PTHREAD_MUTEX_INITIALIZER;
++
++/*
++ * Number of active registrations.
++ */
+ static int _register_count = 0;
+ 
+-/* FIXME Unsafe static? */
+ static struct dm_pool *_mem_pool = NULL;
++static void *_lvm_handle = NULL;
++
++/*
++ * Currently only one event can be processed at a time.
++ */
++static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
+ 
+ static int _get_mirror_event(char *params)
+ {
+ 	int i, r = ME_INSYNC;
+ 
+-#define MAX_ARGS 30;  /* should support at least 8-way mirrors */
++#define MAX_ARGS 30	/* should support at least 8-way mirrors */
+ /* FIXME Remove unnecessary limit.  It tells you how many devices there are - use it! */
+ 
+ 	char *args[MAX_ARGS];
+@@ -122,7 +133,6 @@
+ static int _remove_failed_devices(const char *device)
+ {
+ 	int r;
+-	void *handle;
+ #define CMD_SIZE 256	/* FIXME Use system restriction */
+ 	char cmd_str[CMD_SIZE];
+ 	char *vg = NULL, *lv = NULL, *layer = NULL;
+@@ -144,10 +154,7 @@
+ 		return -ENAMETOOLONG; /* FIXME Replace with generic error return - reason for failure has already got logged */
+ 	}
+ 
+-	lvm2_log_fn(_temporary_log_fn);
+-	handle = lvm2_init();
+-	lvm2_log_level(handle, 1);
+-	r = lvm2_run(handle, cmd_str);
++	r = lvm2_run(_lvm_handle, cmd_str);
+ 
+ 	dm_pool_empty(_mem_pool);  /* FIXME: not safe with multiple threads */
+ 	return (r == 1) ? 0 : -1;
+@@ -161,9 +168,9 @@
+ 	char *target_type = NULL;
+ 	char *params;
+ 
+-	if (pthread_mutex_trylock(&_lock)) {
++	if (pthread_mutex_trylock(&_event_mutex)) {
+ 		syslog(LOG_NOTICE, "Another thread is handling an event.  Waiting...");
+-		pthread_mutex_lock(&_lock);
++		pthread_mutex_lock(&_event_mutex);
+ 	}
+ 	/* FIXME Move inside libdevmapper */
+ 	if (!(dmt = dm_task_create(DM_DEVICE_STATUS))) {
+@@ -185,9 +192,10 @@
+ 		next = dm_get_next_target(dmt, next, &start, &length,
+ 					  &target_type, &params);
+ 
+-		if (!target_type)
++		if (!target_type) {
+ 			syslog(LOG_INFO, "%s mapping lost.\n", device);
+ 			continue;
++		}
+ 
+ 		if (strcmp(target_type, "mirror")) {
+ 			syslog(LOG_INFO, "%s has unmirrored portion.\n", device);
+@@ -225,11 +233,15 @@
+  fail:
+ 	if (dmt)
+ 		dm_task_destroy(dmt);
+-	pthread_mutex_unlock(&_lock);
++	pthread_mutex_unlock(&_event_mutex);
  }
  
- #ifdef DMEVENTD
--static int _setup_registration(struct cmd_context *cmd, char **dso)
-+static int _get_mirror_dso_path(struct cmd_context *cmd, char **dso)
+ int register_device(const char *device)
  {
- 	char *path;
- 	const char *libpath;
-@@ -388,6 +388,29 @@
- 	return 1;
- }
++	int r = 0;
++
++	pthread_mutex_lock(&_register_mutex);
++
+ 	syslog(LOG_INFO, "Monitoring mirror device, %s for events\n", device);
  
-+static struct dm_event_handler *_create_dm_event_handler(const char *dmname,
-+							 const char *dso,
-+							 enum dm_event_mask mask)
-+{
-+	struct dm_event_handler *dmevh;
-+
-+	if (!(dmevh = dm_event_handler_create()))
-+		return_0;
-+
-+       if (dm_event_handler_set_dso(dmevh, dso))
-+		goto fail;
-+
-+	if (dm_event_handler_set_dev_name(dmevh, dmname))
-+		goto fail;
-+
-+	dm_event_handler_set_event_mask(dmevh, mask);
-+	return dmevh;
-+
-+fail:
-+	dm_event_handler_destroy(dmevh);
-+	return NULL;
-+}
-+
- static int _target_registered(struct lv_segment *seg, int *pending)
- {
- 	char *dso, *name;
-@@ -400,21 +423,15 @@
- 	vg = lv->vg;
- 
- 	*pending = 0;
--	if (!_setup_registration(vg->cmd, &dso)) {
--		stack;
+ 	/*
+@@ -237,19 +249,42 @@
+ 	 * than enough for what we need (device mapper name splitting)
+ 	 */
+ 	if (!_mem_pool && !(_mem_pool = dm_pool_create("mirror_dso", 1024)))
 -		return 0;
--	}
-+	if (!_get_mirror_dso_path(vg->cmd, &dso))
-+		return_0;
++		goto out;
++
++	if (!_lvm_handle) {
++		lvm2_log_fn(_temporary_log_fn);
++		if (!(_lvm_handle = lvm2_init())) {
++			dm_pool_destroy(_mem_pool);
++			_mem_pool = NULL;
++			goto out;
++		}
++		lvm2_log_level(_lvm_handle, LVM2_LOG_SUPPRESS);
++		/* FIXME Temporary: move to dmeventd core */
++		lvm2_run(_lvm_handle, "_memlock_inc");
++	}
  
- 	if (!(name = build_dm_name(vg->cmd->mem, vg->name, lv->name, NULL)))
- 		return_0;
+ 	_register_count++;
++	r = 1;
++
++out:
++	pthread_mutex_unlock(&_register_mutex);
  
--	if (!(dmevh = dm_event_handler_create()))
-+	if (!(dmevh = _create_dm_event_handler(name, dso, DM_EVENT_ALL_ERRORS)))
- 		return_0;
- 
--	dm_event_handler_set_dso(dmevh, dso);
--	dm_event_handler_set_dev_name(dmevh, name);
--	dm_event_handler_set_event_mask(dmevh, DM_EVENT_ALL_ERRORS);
--
- 	if (dm_event_get_registered_device(dmevh, 0)) {
- 		dm_event_handler_destroy(dmevh);
- 		return 0;
-@@ -432,79 +449,50 @@
+-        return 1;
++	return r;
  }
  
- /* FIXME This gets run while suspended and performs banned operations. */
--/* FIXME Merge these two functions */
--static int _target_register_events(struct cmd_context *cmd,
-+static int _target_set_events(struct cmd_context *cmd,
- 				   struct lv_segment *seg,
--				   int evmask)
-+				   int evmask, int set)
+ int unregister_device(const char *device)
  {
- 	char *dso, *name;
- 	struct logical_volume *lv;
- 	struct volume_group *vg;
- 	struct dm_event_handler *dmevh;
-+	int r;
++	pthread_mutex_lock(&_register_mutex);
++
+ 	if (!--_register_count) {
+ 		dm_pool_destroy(_mem_pool);
+ 		_mem_pool = NULL;
++		lvm2_run(_lvm_handle, "_memlock_dec");
++		lvm2_exit(_lvm_handle);
++		_lvm_handle = NULL;
+ 	}
  
- 	lv = seg->lv;
- 	vg = lv->vg;
- 
--	if (!_setup_registration(cmd, &dso)) {
--		stack;
--		return 0;
--	}
-+	if (!_get_mirror_dso_path(cmd, &dso))
-+		return_0;
- 
- 	if (!(name = build_dm_name(cmd->mem, vg->name, lv->name, NULL)))
- 		return_0;
- 
--	if (!(dmevh = dm_event_handler_create()))
-+	if (!(dmevh = _create_dm_event_handler(name, dso, DM_EVENT_ALL_ERRORS)))
- 		return_0;
- 
--	dm_event_handler_set_dso(dmevh, dso);
--	dm_event_handler_set_dev_name(dmevh, name);
--	dm_event_handler_set_event_mask(dmevh, DM_EVENT_ALL_ERRORS);
--	if (!dm_event_register_handler(dmevh)) {
--		dm_event_handler_destroy(dmevh);
--		return_0;
--	}
-+	r = set ? dm_event_register_handler(dmevh) : dm_event_unregister_handler(dmevh);
- 	dm_event_handler_destroy(dmevh);
-+	if (!r)
-+		return_0;
- 
--	log_info("Registered %s for events", name);
-+	log_info("%s %s for events", set ? "Registered" : "Unregistered", name);
- 
- 	return 1;
+-        return 1;
++	pthread_mutex_unlock(&_register_mutex);
++
++	return 1;
  }
+--- LVM2/tools/lvmcmdlib.c	2006/08/22 15:56:06	1.2
++++ LVM2/tools/lvmcmdlib.c	2007/01/08 14:24:20	1.3
+@@ -77,7 +77,13 @@
+ 		goto out;
+ 	}
  
--static int _target_unregister_events(struct cmd_context *cmd,
-+static int _target_register_events(struct cmd_context *cmd,
- 				     struct lv_segment *seg,
--				     int evmask)
-+				     int events)
- {
--	char *dso;
--	char *name;
--	struct logical_volume *lv;
--	struct volume_group *vg;
--	struct dm_event_handler *dmevh;
--
--	lv = seg->lv;
--	vg = lv->vg;
--
--	/* FIXME Remove this and use handle to avoid config file race */
--	if (!_setup_registration(cmd, &dso))
--		return_0;
--
--	if (!(name = build_dm_name(cmd->mem, vg->name, lv->name, NULL)))
--		return_0;
--
--	if (!(dmevh = dm_event_handler_create()))
--		return_0;
--
--	dm_event_handler_set_dso(dmevh, dso);
--	dm_event_handler_set_dev_name(dmevh, name);
--	dm_event_handler_set_event_mask(dmevh, DM_EVENT_ALL_ERRORS);
--	if (!dm_event_unregister_handler(dmevh)) {
--		dm_event_handler_destroy(dmevh);
--		return_0;
--	}
--	dm_event_handler_destroy(dmevh);
--
--	log_info("Unregistered %s for events", name);
-+	return _target_set_events(cmd, seg, events, 1);
-+}
+-	ret = lvm_run_command(cmd, argc, argv);
++	/* FIXME Temporary - move to libdevmapper */
++	if (!strcmp(cmdline, "_memlock_inc"))
++		memlock_inc();
++	if (!strcmp(cmdline, "_memlock_dec"))
++		memlock_dec();
++	else
++		ret = lvm_run_command(cmd, argc, argv);
  
--	return 1;
-+static int _target_unregister_events(struct cmd_context *cmd,
-+				     struct lv_segment *seg,
-+				     int events)
-+{
-+	return _target_set_events(cmd, seg, events, 0);
- }
- 
- #endif /* DMEVENTD */
+       out:
+ 	dm_free(cmdcopy);
 
 
