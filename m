@@ -1,40 +1,45 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Jan 2007 23:40:34 -0000
-Subject: LVM2 VERSION WHATS_NEW
-Message-ID: <20070125234034.18661.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Mon, 08 Jan 2007 12:11:46 -0500
+Subject: [LVM2 PATCH] (3/5) Allocate mirror log first
+In-Reply-To: <45A2751E.5010707@ce.jp.nec.com>
+References: <45A2751E.5010707@ce.jp.nec.com>
+Message-ID: <45A27B52.80601@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-25 23:40:33
+This patch allows log allocation first to fix the problems that
+lvconvert from linear to mirror and lvconvert from corelog to disklog
+may allocate log from the same PV as mirror images.
 
-Modified files:
-	.              : VERSION WHATS_NEW 
+What is the problem?
+  - Different (stronger) constraint should be applied to log area.
+    i.e. log must avoid all parallel areas, not only the ones
+    corresponding to the current LE.
+    In other words, _find_parallel_space() should use ah->parallel_areas
+    as whole for log allocation constraint. Whereas the part of it
+    (parallel_pvs) is used for the other allocation.
 
-Log message:
-	post-release
+To fix it, this patch tries log allocation first and then others.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.141&r2=1.142
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.561&r2=1.562
+As a result of this change,
+"--alloc anywhere" for mirror with log on the same device also starts
+working. (It currently doesn't.)
 
---- LVM2/VERSION	2007/01/25 23:36:59	1.141
-+++ LVM2/VERSION	2007/01/25 23:40:33	1.142
-@@ -1 +1 @@
--2.02.20-cvs (2007-01-25)
-+2.02.21-cvs (2007-01-25)
---- LVM2/WHATS_NEW	2007/01/25 23:36:59	1.561
-+++ LVM2/WHATS_NEW	2007/01/25 23:40:33	1.562
-@@ -1,3 +1,6 @@
-+Version 2.02.21 -
-+===================================
-+
- Version 2.02.20 - 25th January 2007
- ===================================
-   dmeventd mirror sets ignore_suspended_devices and avoids scanning mirrors.
+Moving auto variables initialization after "restart" label
+is not necessary but for avoiding future problem.
 
 
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 03-allocate-mirror-log-first.patch
+Type: text/x-patch
+Size: 5896 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070108/d1bb0c43/attachment.bin>
