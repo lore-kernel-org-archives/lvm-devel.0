@@ -1,52 +1,40 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 23 Jan 2007 16:03:54 -0000
-Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c
-Message-ID: <20070123160354.18078.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Mon, 08 Jan 2007 12:11:24 -0500
+Subject: [LVM2 PATCH] (1/5) Separate mirror log allocation from _alloc_parallel_areas()
+In-Reply-To: <45A2751E.5010707@ce.jp.nec.com>
+References: <45A2751E.5010707@ce.jp.nec.com>
+Message-ID: <45A27B3C.7070301@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-23 16:03:54
+This patch moves the log allocation part from _alloc_parallel_area().
+Preparation for the following patches.
+No functional change.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/commands   : toolcontext.c 
+  - _alloc_parallel_area() doesn't need to allocate struct alloced_area
+    for log_area because it's pre-allocated in struct alloc_handle.
 
-Log message:
-	Long-lived processes write out persistent dev cache in refresh_toolcontext().
+  - consume_pv_area() has been done in the separate loop from
+    the loop for struct alloced_area setup.
+    However, consume_pv_area() just updates given pv_area and
+    pv_areas in areas[] are different each other.
+    So it can be done in the same loop with the struct alloced_area setup.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.552&r2=1.553
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
+  - ah->total_area_len, area_len, *ix and ah->area_multiple are not
+    used/updated in log_area allocation.
+    So operation on them can be moved before _alloc_log_area().
 
---- LVM2/WHATS_NEW	2007/01/23 15:58:05	1.552
-+++ LVM2/WHATS_NEW	2007/01/23 16:03:53	1.553
-@@ -1,5 +1,6 @@
- Version 2.02.20 -
- ===================================
-+  Long-lived processes write out persistent dev cache in refresh_toolcontext().
-   Fix refresh_toolcontext() always to wipe persistent device filter cache.
-   Add is_long_lived to toolcontext.
-   Add --clustered to man pages.
---- LVM2/lib/commands/toolcontext.c	2007/01/23 15:58:05	1.44
-+++ LVM2/lib/commands/toolcontext.c	2007/01/23 16:03:54	1.45
-@@ -1080,6 +1080,13 @@
- 	if (!_init_segtypes(cmd))
- 		return 0;
- 
-+	/*
-+	 * If we are a long-lived process, write out the updated persistent
-+	 * device cache for the benefit of short-lived processes.
-+	 */
-+	if (cmd->is_long_lived && cmd->dump_filter)
-+		persistent_filter_dump(cmd->filter);
-+
- 	cmd->config_valid = 1;
- 	return 1;
- }
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 01-separate-mirror-log-allocation-from-alloc_parallel_area.patch
+Type: text/x-patch
+Size: 2553 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070108/2d91c213/attachment.bin>
