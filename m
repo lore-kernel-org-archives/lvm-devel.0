@@ -1,46 +1,34 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:39:55 +0000 (GMT)
-Subject: main - tests: Add checking for lvmlockd log
-Message-ID: <20210603143955.097BA3838032@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 9 Jan 2007 20:48:24 +0000
+Subject: Why print_log() is doing the memlock check?
+In-Reply-To: <20061226150637hoshino-s@mail.jp.nec.com>
+References: <20061217115801.GB4982@agk.surrey.redhat.com>
+	<20061226150637hoshino-s@mail.jp.nec.com>
+Message-ID: <20070109204824.GZ21980@agk.surrey.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5b361b197e1a3fbbc5419b9c46f19539c2b7305c
-Commit:        5b361b197e1a3fbbc5419b9c46f19539c2b7305c
-Parent:        2097c27c05de30003850eb667b9cf21b3181fddf
-Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:12 2021 +0800
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 3 09:39:32 2021 -0500
-
-tests: Add checking for lvmlockd log
-
-Add checking for lvmlockd log, this can be used for the test cases which
-are interested in the interaction with lvmlockd.
-
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
----
- test/lib/check.sh | 5 +++++
- 1 file changed, 5 insertions(+)
-
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 8493bde83..1f261940a 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -456,6 +456,11 @@ grep_dmsetup() {
- 	grep -q "${@:3}" out || die "Expected output \"" "${@:3}" "\" from dmsetup $1 not found!"
- }
+On Tue, Dec 26, 2006 at 03:06:37PM +0900, Shinn'ya Hoshino wrote:
+> However, when a trouble occurs in the server currently used 
+> for business, it needs to avoid that it becomes impossible to 
+> investigate in order that there may be no log.
  
-+grep_lvmlockd_dump() {
-+	lvmlockctl --dump | tee out
-+	grep -q "${@:1}" out || die "Expected output \"" "${@:1}" "\" from lvmlockctl --dump not found!"
-+}
-+
- #set -x
- unset LVM_VALGRIND
- "$@"
+We don't have a safe way of logging yet.
+
+What happens, is people temporarily turn on logging during
+activation in the config file while debugging, and put things
+back again afterwards.
+ 
+A long time ago I started attempting to write some such code but never
+finished it.  Look for init_log_direct().
+Another approach might be to cache the log messages in memory
+then write them out when exiting the critical section.
+
+Alasdair
+-- 
+agk at redhat.com
 
 
