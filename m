@@ -1,124 +1,149 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:21 +0800
-Subject: [PATCH v1 13/17] tests: idm: Add testing for IDM lock manager failure
-In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
-References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-14-leo.yan@linaro.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Jan 2007 20:31:09 -0000
+Subject: LVM2 ./WHATS_NEW ./configure ./configure.in ./ ...
+Message-ID: <20070109203109.7120.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the IDM lock manager fails to access drives, might partially fail to
-access drives (e.g. it fails to access one of three drives), or totally
-fail to access drives, the lock manager should handle properly for these
-cases.  When the drives are partially failure, if the lock manager still
-can renew the lease for the locking, then it doesn't need to take any
-action for the drive failure; otherwise, if it detects it cannot renew
-the locking majority, it needs ti immediately kill the VG from the
-lvmlockd.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-01-09 20:31:08
 
-This patch adds the test for verification the IDM lock manager failure;
-the command can be used as below:
+Modified files:
+	.              : WHATS_NEW configure configure.in make.tmpl.in 
+	lib/activate   : dev_manager.c 
 
-  # make check_lvmlockd_idm \
-    LVM_TEST_BACKING_DEVICE=/dev/sdp3,/dev/sdl3,/dev/sdq3 \
-    LVM_TEST_FAILURE=1 T=idm_ilm_failure.sh
+Log message:
+	Add configure --with-dmdir to compile against a device-mapper source tree.
+	Use no flush suspending for mirrors.
 
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
----
- test/shell/idm_ilm_failure.sh | 80 +++++++++++++++++++++++++++++++++++
- 1 file changed, 80 insertions(+)
- create mode 100644 test/shell/idm_ilm_failure.sh
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.527&r2=1.528
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.55&r2=1.56
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
 
-diff --git a/test/shell/idm_ilm_failure.sh b/test/shell/idm_ilm_failure.sh
-new file mode 100644
-index 000000000..58bed270e
---- /dev/null
-+++ b/test/shell/idm_ilm_failure.sh
-@@ -0,0 +1,80 @@
-+#!/usr/bin/env bash
+--- LVM2/WHATS_NEW	2007/01/08 14:24:20	1.527
++++ LVM2/WHATS_NEW	2007/01/09 20:31:08	1.528
+@@ -1,5 +1,7 @@
+ Version 2.02.18 -
+ ====================================
++  Add configure --with-dmdir to compile against a device-mapper source tree.
++  Use no flush suspending for mirrors.
+   Add dmeventd_mirror register_mutex, tidy initialisation & add memlock.
+   Fix create mirror with name longer than 22 chars.
+   Fix some activate.c prototypes when compiled without devmapper.
+--- LVM2/configure	2006/11/20 20:03:26	1.55
++++ LVM2/configure	2007/01/09 20:31:08	1.56
+@@ -310,7 +310,7 @@
+ #endif"
+ 
+ ac_default_prefix=/usr
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os AWK CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA LN_S SET_MAKE RANLIB ac_ct_RANLIB CFLOW_CMD CSCOPE_CMD CPP EGREP ALLOCA LIBOBJS POW_LIB MSGFMT MODPROBE_CMD JOBS STATIC_LINK LVM1 POOL SNAPSHOTS MIRRORS OWNER GROUP COPTIMISE_FLAG CLDFLAGS CLDWHOLEARCHIVE CLDNOWHOLEARCHIVE LDDEPS LIB_SUFFIX LVM_VERSION LVM1_FALLBACK DEBUG DEVMAPPER HAVE_LIBDL HAVE_SELINUX HAVE_REALTIME CMDLIB LOCALEDIR CONFDIR STATICDIR INTL_PACKAGE INTL CLVMD CLUSTER FSADM DMEVENTD LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os AWK CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA LN_S SET_MAKE RANLIB ac_ct_RANLIB CFLOW_CMD CSCOPE_CMD CPP EGREP ALLOCA LIBOBJS POW_LIB MSGFMT MODPROBE_CMD JOBS STATIC_LINK LVM1 POOL SNAPSHOTS MIRRORS OWNER GROUP COPTIMISE_FLAG CLDFLAGS CLDWHOLEARCHIVE CLDNOWHOLEARCHIVE LDDEPS LIB_SUFFIX LVM_VERSION LVM1_FALLBACK DEBUG DEVMAPPER HAVE_LIBDL HAVE_SELINUX HAVE_REALTIME CMDLIB LOCALEDIR CONFDIR STATICDIR DMDIR INTL_PACKAGE INTL CLVMD CLUSTER FSADM DMEVENTD LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -883,6 +883,7 @@
+   --with-localedir=DIR    Translation files in DIR PREFIX/share/locale
+   --with-confdir=DIR      Configuration files in DIR /etc
+   --with-staticdir=DIR    Static binary in DIR EXEC_PREFIX/sbin
++  --with-dmdir=DIR        Build against device-mapper source tree in DIR
+ 
+ Some influential environment variables:
+   CC          C compiler command
+@@ -8964,6 +8965,15 @@
+    STATICDIR='${exec_prefix}/sbin'
+ fi;
+ 
 +
-+# Copyright (C) 2020 Seagate, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++# Check whether --with-dmdir or --without-dmdir was given.
++if test "${with_dmdir+set}" = set; then
++  withval="$with_dmdir"
++   DMDIR="$withval"
++else
++   DMDIR=
++fi;
 +
+ ################################################################################
+ if test x$READLINE = xyes; then
+ 
+@@ -11202,6 +11212,7 @@
+ 
+ 
+ 
 +
-+SKIP_WITH_LVMPOLLD=1
+ ################################################################################
+                                                                                                                                                                                                                                                           ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile"
+ cat >confcache <<\_ACEOF
+@@ -11900,6 +11911,7 @@
+ s, at LOCALEDIR@,$LOCALEDIR,;t t
+ s, at CONFDIR@,$CONFDIR,;t t
+ s, at STATICDIR@,$STATICDIR,;t t
++s, at DMDIR@,$DMDIR,;t t
+ s, at INTL_PACKAGE@,$INTL_PACKAGE,;t t
+ s, at INTL@,$INTL,;t t
+ s, at CLVMD@,$CLVMD,;t t
+--- LVM2/configure.in	2006/11/20 20:03:26	1.54
++++ LVM2/configure.in	2007/01/09 20:31:08	1.55
+@@ -526,6 +526,11 @@
+   	    [ STATICDIR="$withval" ],
+  	    [ STATICDIR='${exec_prefix}/sbin' ])
+ 
++AC_ARG_WITH(dmdir,
++	    [  --with-dmdir=DIR        Build against device-mapper source tree in DIR],
++  	    [ DMDIR="$withval" ],
++	    [ DMDIR= ])
 +
-+. lib/inittest
+ ################################################################################
+ dnl -- Ensure additional headers required
+ if test x$READLINE = xyes; then
+@@ -608,6 +613,7 @@
+ AC_SUBST(LOCALEDIR)
+ AC_SUBST(CONFDIR)
+ AC_SUBST(STATICDIR)
++AC_SUBST(DMDIR)
+ AC_SUBST(INTL_PACKAGE)
+ AC_SUBST(INTL)
+ AC_SUBST(CLVMD)
+--- LVM2/make.tmpl.in	2006/05/16 20:53:13	1.45
++++ LVM2/make.tmpl.in	2007/01/09 20:31:08	1.46
+@@ -73,6 +73,10 @@
+   DEFS += -DINTL_PACKAGE=\"@INTL_PACKAGE@\" -DLOCALEDIR=\"@LOCALEDIR@\"
+ endif
+ 
++ifneq ("@DMDIR@", "")
++  LDFLAGS += -L at DMDIR@/lib/ioctl
++endif
 +
-+[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
-+[ -z "$LVM_TEST_FAILURE" ] && skip;
+ LDFLAGS += -L$(top_srcdir)/lib -L$(libdir)
+ 
+ #DEFS += -DDEBUG_POOL
+@@ -89,6 +93,10 @@
+ 
+ INCLUDES += -I. -I$(top_srcdir)/include
+ 
++ifneq ("@DMDIR@", "")
++  INCLUDES += -I@DMDIR@/include
++endif
 +
-+aux prepare_devs 3
-+aux extend_filter_LVMTEST
-+
-+DRIVE1=`dmsetup deps -o devname $dev1 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
-+DRIVE2=`dmsetup deps -o devname $dev2 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
-+DRIVE3=`dmsetup deps -o devname $dev3 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
-+
-+if [ "$DRIVE1" = "$DRIVE2" ] || [ "$DRIVE1" = "$DRIVE3" ] || [ "$DRIVE2" = "$DRIVE3" ]; then
-+	die "Need to pass three different drives!?"
-+fi
-+
-+# The previous device-mapper are removed, but LVM still can directly
-+# access VGs from the specified physical drives.  So enable drives
-+# for these drives.
-+aux extend_filter_LVMTEST "a|/dev/$DRIVE1*|" "a|/dev/$DRIVE2*|" "a|/dev/$DRIVE3*|"
-+aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
-+
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
-+
-+# Create new logic volume and deactivate it
-+lvcreate -a y --zero n -l 1 -n $lv1 $vg
-+
-+# Inject failure 40% so cannot send partially request to drives
-+idm_inject_failure 40
-+
-+# Wait for 40s, but the lock will not be time out
-+sleep 40
-+
-+# Inject failure with 0% so can access drives
-+idm_inject_failure 0
-+
-+# Deactivate logic volume due to locking failure
-+lvchange $vg/$lv1 -a n
-+
-+# Inject failure 100% so cannot send request to drives
-+idm_inject_failure 100
-+
-+# Wait for 70s but should have no any alive locks
-+sleep 70
-+
-+# Inject failure with 0% so can access drives
-+idm_inject_failure 0
-+
-+# Activate logic volume
-+lvchange $vg/$lv1 -a y
-+
-+# Inject failure so cannot send request to drives
-+idm_inject_failure 100
-+
-+# Wait for 70s but will not time out
-+sleep 70
-+
-+# Inject failure with 0% so can access drives
-+idm_inject_failure 0
-+
-+check grep_lvmlockd_dump "S lvm_$vg kill_vg"
-+lvmlockctl --drop $vg
-+
-+vgchange --lock-start
-+vgremove -f $vg
--- 
-2.25.1
+ ifdef DESTDIR
+   INCLUDES += -I$(DESTDIR)/usr/include
+ endif
+--- LVM2/lib/activate/dev_manager.c	2006/11/30 23:11:39	1.117
++++ LVM2/lib/activate/dev_manager.c	2007/01/09 20:31:08	1.118
+@@ -993,6 +993,8 @@
+ 		break;
+ 	case SUSPEND:
+ 		dm_tree_skip_lockfs(root);
++		if ((lv->status & MIRRORED) && !(lv->status & PVMOVE))
++			dm_tree_use_no_flush_suspend(root);
+ 	case SUSPEND_WITH_LOCKFS:
+ 		if (!dm_tree_suspend_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 			goto_out;
 
 
