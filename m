@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 9 Jan 2007 23:22:32 -0000
-Subject: LVM2 ./WHATS_NEW lib/config/config.c lib/confi ...
-Message-ID: <20070109232232.17425.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 10 Jan 2007 14:13:48 -0000
+Subject: LVM2 ./WHATS_NEW man/lvconvert.8 man/lvcreate. ...
+Message-ID: <20070110141348.28867.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,151 +10,147 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-09 23:22:32
+Changes by:	mbroz at sourceware.org	2007-01-10 14:13:46
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/config     : config.c config.h 
-	tools          : commands.h dumpconfig.c 
+	man            : lvconvert.8 lvcreate.8 
+	tools          : lvconvert.c lvcreate.c 
 
 Log message:
-	dumpconfig accepts a list of configuration variables to display.
-	Change dumpconfig to use --file to redirect output to a file.
+	Print warning instead of error message if cannot zero volume
+	Update lvconvert man page (snapshot option)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.531&r2=1.532
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.h.diff?cvsroot=lvm2&r1=1.21&r2=1.22
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.92&r2=1.93
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dumpconfig.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.532&r2=1.533
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvconvert.8.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
 
---- LVM2/WHATS_NEW	2007/01/09 23:14:35	1.531
-+++ LVM2/WHATS_NEW	2007/01/09 23:22:31	1.532
+--- LVM2/WHATS_NEW	2007/01/09 23:22:31	1.532
++++ LVM2/WHATS_NEW	2007/01/10 14:13:46	1.533
 @@ -1,5 +1,7 @@
  Version 2.02.18 -
  ====================================
-+  dumpconfig accepts a list of configuration variables to display.
-+  Change dumpconfig to use --file to redirect output to a file.
++  Print warning instead of error message if cannot zero volume
++  Update lvconvert man page (snapshot option)
+   dumpconfig accepts a list of configuration variables to display.
+   Change dumpconfig to use --file to redirect output to a file.
    Avoid vgreduce error when mirror code removes the log LV.
-   Remove 3 redundant AC_MSG_RESULTs from configure.in.
-   Free memory in _raw_read_mda_header() error paths.
---- LVM2/lib/config/config.c	2006/11/21 15:13:36	1.50
-+++ LVM2/lib/config/config.c	2007/01/09 23:22:31	1.51
-@@ -373,7 +373,8 @@
+--- LVM2/man/lvconvert.8	2006/10/07 10:47:05	1.3
++++ LVM2/man/lvconvert.8	2007/01/10 14:13:46	1.4
+@@ -1,20 +1,35 @@
+ .TH LVCONVERT 8 "LVM TOOLS" "Red Hat, Inc" \" -*- nroff -*-
+ .SH NAME
+-lvconvert \- convert a logical volume between linear and mirror
++lvconvert \- convert a logical volume from linear to mirror or snapshot
+ .SH SYNOPSIS
+ .B lvconvert
+-[\-m/\-\-mirrors Mirrors [\-\-corelog] [\-R/\-\-regionsize MirrorLogRegionSize]]
++\-m/\-\-mirrors Mirrors [\-\-corelog] [\-R/\-\-regionsize MirrorLogRegionSize]
+ [\-A/\-\-alloc AllocationPolicy]
+ [\-h/\-?/\-\-help]
+ [\-v/\-\-verbose]
+ [\-\-version]
++.br
+ LogicalVolume[Path] [PhysicalVolume[Path]...]
++.br
++
++.br
++.B lvconvert
++\-s/\-\-snapshot [\-c/\-\-chunksize ChunkSize]
++[\-h/\-?/\-\-help]
++[\-v/\-\-verbose]
++[\-Z/\-\-zero y/n]
++[\-\-version]
++.br
++OriginalLogicalVolume[Path] SnapshotLogicalVolume[Path]
+ .SH DESCRIPTION
+ lvconvert will change a linear logical volume to a mirror
+-logical volume or vis versa.  It is also used to add and
+-remove disk logs from mirror devices.
++logical volume or to a snapshot of linear volume and vice versa.
++It is also used to add and remove disk logs from mirror devices.
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
++.br
++Exactly one of \-\-mirrors or \-\-snapshot arguments required.
++.br
+ .TP
+ .I \-m, \-\-mirrors Mirrors
+ Specifies the degree of the mirror you wish to create.
+@@ -32,6 +47,19 @@
+ .I \-R, \-\-regionsize MirrorLogRegionSize
+ A mirror is divided into regions of this size (in MB), and the mirror log
+ uses this granularity to track which regions are in sync.
++.br
++.TP
++.I \-s, \-\-snapshot
++Create a snapshot from existing logical volume using another
++existing logical volume as its origin.
++.TP
++.I \-c, \-\-chunksize ChunkSize
++Power of 2 chunk size for the snapshot logical volume between 4k and 512k.
++.TP
++.I \-Z, \-\-zero y/n
++Controls zeroing of the first KB of data in the snapshot.
++If the volume is read only snapshot will not be zeroed.
++.br
+ .SH Examples
+ "lvconvert -m1 vg00/lvol1"
+ .br
+@@ -49,6 +77,12 @@
+ .br
+ converts a mirror logical volume to a linear logical
+ volume.
++.br
++
++.br
++"lvconvert -s vg00/lvol1 vg00/lvol2"
++.br
++converts logical volume "vg00/lvol2" to snapshot of original volume "vg00/lvol1"
+ 
+ .SH SEE ALSO
+ .BR lvm (8),
+--- LVM2/man/lvcreate.8	2006/11/10 18:24:11	1.13
++++ LVM2/man/lvcreate.8	2007/01/10 14:13:46	1.14
+@@ -139,6 +139,10 @@
+ Controls zeroing of the first KB of data in the new logical volume.
+ .br
+ Default is yes.
++.br
++Volume will not be zeroed if read only flag is set.
++.br
++Snapshot volumes are zeroed always.
+ 
+ .br
+ Warning: trying to mount an unzeroed logical volume can cause the system to
+--- LVM2/tools/lvconvert.c	2006/12/13 03:39:58	1.24
++++ LVM2/tools/lvconvert.c	2007/01/10 14:13:46	1.25
+@@ -446,8 +446,8 @@
+ 		return 0;
  	}
- }
  
--static int _write_config(struct config_node *n, FILE *fp, int level)
-+static int _write_config(struct config_node *n, int only_one, FILE *fp,
-+			 int level)
- {
- 	char space[MAX_INDENT + 1];
- 	int l = (level < MAX_INDENT) ? level : MAX_INDENT;
-@@ -386,12 +387,12 @@
- 		space[i] = '\t';
- 	space[i] = '\0';
+-	if (!lp->zero)
+-		log_error("WARNING: \"%s\" not zeroed", lv->name);
++	if (!lp->zero || !(lv->status & LVM_WRITE))
++		log_print("WARNING: \"%s\" not zeroed", lv->name);
+ 	else if (!set_lv(cmd, lv, 0, 0)) {
+ 			log_error("Aborting. Failed to wipe snapshot "
+ 				  "exception store.");
+--- LVM2/tools/lvcreate.c	2006/11/10 18:24:11	1.131
++++ LVM2/tools/lvcreate.c	2007/01/10 14:13:46	1.132
+@@ -434,6 +434,10 @@
+ 	else
+ 		lp->permission = LVM_READ | LVM_WRITE;
  
--	while (n) {
-+	do {
- 		fprintf(fp, "%s%s", space, n->key);
- 		if (!n->v) {
- 			/* it's a sub section */
- 			fprintf(fp, " {\n");
--			_write_config(n->child, fp, level + 1);
-+			_write_config(n->child, 0, fp, level + 1);
- 			fprintf(fp, "%s}", space);
- 		} else {
- 			/* it's a value */
-@@ -411,13 +412,15 @@
- 		}
- 		fprintf(fp, "\n");
- 		n = n->sib;
--	}
-+	} while (n && !only_one);
- 	/* FIXME: add error checking */
- 	return 1;
- }
++	/* Must not zero read only volume */
++	if (!(lp->permission & LVM_WRITE))
++		lp->zero = 0;
++
+ 	lp->minor = arg_int_value(cmd, minor_ARG, -1);
+ 	lp->major = arg_int_value(cmd, major_ARG, -1);
  
--int write_config_file(struct config_tree *cft, const char *file)
-+int write_config_file(struct config_tree *cft, const char *file,
-+		      int argc, char **argv)
- {
-+	struct config_node *cn;
- 	int r = 1;
- 	FILE *fp;
- 
-@@ -430,9 +433,22 @@
- 	}
- 
- 	log_verbose("Dumping configuration to %s", file);
--	if (!_write_config(cft->root, fp, 0)) {
--		log_error("Failure while writing configuration");
--		r = 0;
-+	if (!argc) {
-+		if (!_write_config(cft->root, 0, fp, 0)) {
-+			log_error("Failure while writing configuration");
-+			r = 0;
-+		}
-+	} else while (argc--) {
-+		if ((cn = find_config_node(cft->root, *argv))) {
-+			if (!_write_config(cn, 1, fp, 0)) {
-+				log_error("Failure while writing configuration");
-+				r = 0;
-+			}
-+		} else {
-+			log_error("Configuration node %s not found", *argv);
-+			r = 0;
-+		}
-+		argv++;
- 	}
- 
- 	if (fp != stdout)
---- LVM2/lib/config/config.h	2006/11/04 03:34:09	1.21
-+++ LVM2/lib/config/config.h	2007/01/09 23:22:31	1.22
-@@ -65,7 +65,8 @@
- 		   checksum_fn_t checksum_fn, uint32_t checksum);
- 
- int read_config_file(struct config_tree *cft);
--int write_config_file(struct config_tree *cft, const char *file);
-+int write_config_file(struct config_tree *cft, const char *file,
-+		      int argc, char **argv);
- time_t config_file_timestamp(struct config_tree *cft);
- int config_file_changed(struct config_tree *cft);
- int merge_config_tree(struct cmd_context *cmd, struct config_tree *cft,
---- LVM2/tools/commands.h	2006/11/10 18:24:11	1.92
-+++ LVM2/tools/commands.h	2007/01/09 23:22:31	1.93
-@@ -30,7 +30,10 @@
- 
- xx(dumpconfig,
-    "Dump active configuration",
--   "dumpconfig <filename>\n")
-+   "dumpconfig "
-+   "\t[-f|--file filename] " "\n"
-+   "[ConfigurationVariable...]\n",
-+   file_ARG)
- 
- xx(formats,
-    "List available metadata formats",
---- LVM2/tools/dumpconfig.c	2004/03/30 19:35:42	1.4
-+++ LVM2/tools/dumpconfig.c	2007/01/09 23:22:31	1.5
-@@ -19,15 +19,10 @@
- {
- 	const char *file = NULL;
- 
--	if (argc == 1)
--		file = argv[0];
-+	if (arg_count(cmd, file_ARG))
-+		file = arg_str_value(cmd, file_ARG, "");
- 
--	if (argc > 1) {
--		log_error("Please specify one file for output");
--		return EINVALID_CMD_LINE;
--	}
--
--	if (!write_config_file(cmd->cft, file))
-+	if (!write_config_file(cmd->cft, file, argc, argv))
- 		return ECMD_FAILED;
- 
- 	return ECMD_PROCESSED;
 
 
