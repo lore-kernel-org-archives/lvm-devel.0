@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 15 Jan 2007 18:22:02 -0000
-Subject: LVM2 ./WHATS_NEW dmeventd/mirror/dmeventd_mirr ...
-Message-ID: <20070115182202.10577.qmail@sourceware.org>
+Date: 15 Jan 2007 21:55:12 -0000
+Subject: LVM2 ./WHATS_NEW lib/device/device.c tools/too ...
+Message-ID: <20070115215512.16380.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,151 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-15 18:22:02
+Changes by:	agk at sourceware.org	2007-01-15 21:55:11
 
 Modified files:
 	.              : WHATS_NEW 
-	dmeventd/mirror: dmeventd_mirror.c 
-	lib/mirror     : mirrored.c 
+	lib/device     : device.c 
+	tools          : toollib.c 
 
 Log message:
-	Some libdevmapper-event interface changes.
+	Fix partition table processing after sparc changes (introduced in 2.02.16).
+	Fix cmdline PE range processing segfault (introduced in 2.02.13).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.540&r2=1.541
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.541&r2=1.542
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
 
---- LVM2/WHATS_NEW	2007/01/12 20:38:29	1.540
-+++ LVM2/WHATS_NEW	2007/01/15 18:22:01	1.541
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2007/01/15 18:22:01	1.541
++++ LVM2/WHATS_NEW	2007/01/15 21:55:11	1.542
+@@ -1,5 +1,7 @@
  Version 2.02.19 - 
  ===================================
-+  Some libdevmapper-event interface changes.
++  Fix partition table processing after sparc changes (2.02.16).
++  Fix cmdline PE range processing segfault (2.02.13).
+   Some libdevmapper-event interface changes.
    Report dmeventd mirror monitoring status.
    Fix dmeventd mirror status line processing.
+--- LVM2/lib/device/device.c	2006/11/30 23:11:40	1.22
++++ LVM2/lib/device/device.c	2007/01/15 21:55:11	1.23
+@@ -72,7 +72,7 @@
+ 	/* Check for msdos partition table */
+ 	part_magic = buf + PART_MAGIC_OFFSET/sizeof(buf[0]);
+ 	if ((*part_magic == xlate16(PART_MAGIC))) {
+-		part = (struct partition *) (buf + PART_OFFSET);
++		part = (struct partition *) (buf + PART_OFFSET/sizeof(buf[0]));
+ 		for (p = 0; p < 4; p++, part++) {
+ 			/* Table is invalid if boot indicator not 0 or 0x80 */
+ 			if ((part->boot_ind & 0x7f)) {
+--- LVM2/tools/toollib.c	2006/11/03 21:23:06	1.95
++++ LVM2/tools/toollib.c	2007/01/15 21:55:11	1.96
+@@ -993,7 +993,7 @@
+ 	}
  
---- LVM2/dmeventd/mirror/dmeventd_mirror.c	2007/01/12 20:38:29	1.14
-+++ LVM2/dmeventd/mirror/dmeventd_mirror.c	2007/01/15 18:22:01	1.15
-@@ -164,7 +164,7 @@
- 	return (r == 1) ? 0 : -1;
- }
- 
--void process_event(struct dm_task *dmt, enum dm_event_type event)
-+void process_event(struct dm_task *dmt, enum dm_event_mask event)
- {
- 	void *next = NULL;
- 	uint64_t start, length;
---- LVM2/lib/mirror/mirrored.c	2007/01/12 20:38:30	1.39
-+++ LVM2/lib/mirror/mirrored.c	2007/01/15 18:22:02	1.40
-@@ -393,7 +393,7 @@
- 	char *dso, *name;
- 	struct logical_volume *lv;
- 	struct volume_group *vg;
--	enum dm_event_type events = 0;
-+	enum dm_event_mask evmask = 0;
- 
- 	lv = seg->lv;
- 	vg = lv->vg;
-@@ -407,27 +407,27 @@
- 	if (!(name = build_dm_name(vg->cmd->mem, vg->name, lv->name, NULL)))
- 		return_0;
- 
--	if (!dm_event_get_registered_device(&dso, &name, &events, 0))
-+	if (!dm_event_get_registered_device(&dso, &name, &evmask, 0))
+ 	/* Determine selected physical extents */
+-	if (!_parse_pes(mem, colon, pe_ranges, dev_name(pvl->pv->dev),
++	if (!_parse_pes(mem, colon, new_pvl->pe_ranges, dev_name(pvl->pv->dev),
+ 			pvl->pv->pe_count)) {
+ 		stack;
  		return 0;
- 
--	if (events & DM_EVENT_REGISTRATION_PENDING) {
-+	if (evmask & DM_EVENT_REGISTRATION_PENDING) {
- 		*pending = 1;
--		events &= ~DM_EVENT_REGISTRATION_PENDING;
-+		evmask &= ~DM_EVENT_REGISTRATION_PENDING;
- 	}
- 
--	return events;
-+	return evmask;
- }
- 
- /* FIXME This gets run while suspended and performs banned operations. */
- /* FIXME Merge these two functions */
- static int _target_register_events(struct cmd_context *cmd,
- 				   struct lv_segment *seg,
--				   int events)
-+				   int evmask)
- {
- 	char *dso, *name;
- 	struct logical_volume *lv;
- 	struct volume_group *vg;
--	struct dm_event_handler *handler;
-+	struct dm_event_handler *dmevh;
- 
- 	lv = seg->lv;
- 	vg = lv->vg;
-@@ -440,17 +440,17 @@
- 	if (!(name = build_dm_name(cmd->mem, vg->name, lv->name, NULL)))
- 		return_0;
- 
--	if (!(handler = dm_event_handler_create()))
-+	if (!(dmevh = dm_event_handler_create()))
- 		return_0;
- 
--	dm_event_handler_set_dso(handler, dso);
--	dm_event_handler_set_name(handler, name);
--	dm_event_handler_set_events(handler, DM_EVENT_ALL_ERRORS);
--	if (!dm_event_register(handler)) {
--		dm_event_handler_destroy(handler);
-+	dm_event_handler_set_dso(dmevh, dso);
-+	dm_event_handler_set_devname(dmevh, name);
-+	dm_event_handler_set_event_mask(dmevh, DM_EVENT_ALL_ERRORS);
-+	if (!dm_event_register_handler(dmevh)) {
-+		dm_event_handler_destroy(dmevh);
- 		return_0;
- 	}
--	dm_event_handler_destroy(handler);
-+	dm_event_handler_destroy(dmevh);
- 
- 	log_info("Registered %s for events", name);
- 
-@@ -459,13 +459,13 @@
- 
- static int _target_unregister_events(struct cmd_context *cmd,
- 				     struct lv_segment *seg,
--				     int events)
-+				     int evmask)
- {
- 	char *dso;
- 	char *name;
- 	struct logical_volume *lv;
- 	struct volume_group *vg;
--	struct dm_event_handler *handler;
-+	struct dm_event_handler *dmevh;
- 
- 	lv = seg->lv;
- 	vg = lv->vg;
-@@ -477,17 +477,17 @@
- 	if (!(name = build_dm_name(cmd->mem, vg->name, lv->name, NULL)))
- 		return_0;
- 
--	if (!(handler = dm_event_handler_create()))
-+	if (!(dmevh = dm_event_handler_create()))
- 		return_0;
- 
--	dm_event_handler_set_dso(handler, dso);
--	dm_event_handler_set_name(handler, name);
--	dm_event_handler_set_events(handler, DM_EVENT_ALL_ERRORS);
--	if (!dm_event_unregister(handler)) {
--		dm_event_handler_destroy(handler);
-+	dm_event_handler_set_dso(dmevh, dso);
-+	dm_event_handler_set_devname(dmevh, name);
-+	dm_event_handler_set_event_mask(dmevh, DM_EVENT_ALL_ERRORS);
-+	if (!dm_event_unregister_handler(dmevh)) {
-+		dm_event_handler_destroy(dmevh);
- 		return_0;
- 	}
--	dm_event_handler_destroy(handler);
-+	dm_event_handler_destroy(dmevh);
- 
- 	log_info("Unregistered %s for events", name);
- 
 
 
