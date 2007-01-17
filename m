@@ -1,47 +1,21 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 12 Jan 2007 18:32:09 -0500
-Subject: [PATCH] (4/4) LVM2 to use dm_report
-In-Reply-To: <45A81618.2080608@ce.jp.nec.com>
-References: <45A81618.2080608@ce.jp.nec.com>
-Message-ID: <45A81A79.8070307@ce.jp.nec.com>
+From: Jessie Story <akstcfundsxpressmnsdgs@fundsxpress.com>
+Date: Wed, 17 Jan 2007 17:48:08 -0060
+Subject: Confirmation link
+Message-ID: <761597933.73483400780591@thebat.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Thank you for your loan request, which we recieved yesterday, your refinance application has been accepted
 
-This patch makes LVM2 to use dm_report in libdevmapper
-instead of its lib/report functions.
+Bad credit OK, We are ready to give you a $355,000 loan, after further review, our lenders have established the lowest monthly payments.
 
-Tested following commands where LVs of linear, striped, mirrored
-and snapshot exist and confirmed the output is same with the
-original LVM2 2.02.17.
+Approval process will take only 1 minute.
 
-  lvs
-  pvs
-  vgs
-  lvs -a
-  pvs -a
-  lvs -a -o +devices
-  lvs -o name,name,lv_name,vg_name
-  lvs -a -o name,name,lv_name,vg_name
-  lvs -a -o name,lv_name,vg_name -O name
-  lvs -a -o name,lv_name,vg_name -O -name
-  lvs -a -o name,lv_name,vg_name -O size
-  lvs -a -o name,lv_name,vg_name -O lv_size
-  lvs -a -o name,lv_name,vg_name -O -size
-  pvs -o +pe_alloc_count,used,dev_size
-  pvs -a -o +pe_alloc_count,used,dev_size
+Please visit the confirmation link below and fill-out our short 30 second Secure Web-Form
 
-Thanks,
---
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 04-lvm2-use-dm-report.patch
-Type: text/x-patch
-Size: 74176 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070112/f4d39f00/attachment.bin>
+http://www.sewacndeatone.com
+
+
