@@ -1,45 +1,50 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Mon, 08 Jan 2007 12:11:46 -0500
-Subject: [LVM2 PATCH] (3/5) Allocate mirror log first
-In-Reply-To: <45A2751E.5010707@ce.jp.nec.com>
-References: <45A2751E.5010707@ce.jp.nec.com>
-Message-ID: <45A27B52.80601@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Jan 2007 17:15:17 -0000
+Subject: LVM2 ./WHATS_NEW lib/device/dev-md.c
+Message-ID: <20070126171517.11826.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch allows log allocation first to fix the problems that
-lvconvert from linear to mirror and lvconvert from corelog to disklog
-may allocate log from the same PV as mirror images.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-01-26 17:15:16
 
-What is the problem?
-  - Different (stronger) constraint should be applied to log area.
-    i.e. log must avoid all parallel areas, not only the ones
-    corresponding to the current LE.
-    In other words, _find_parallel_space() should use ah->parallel_areas
-    as whole for log allocation constraint. Whereas the part of it
-    (parallel_pvs) is used for the other allocation.
+Modified files:
+	.              : WHATS_NEW 
+	lib/device     : dev-md.c 
 
-To fix it, this patch tries log allocation first and then others.
+Log message:
+	Fix md signature check to handle both endiannesses.
 
-As a result of this change,
-"--alloc anywhere" for mirror with log on the same device also starts
-working. (It currently doesn't.)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.562&r2=1.563
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-md.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
-Moving auto variables initialization after "restart" label
-is not necessary but for avoiding future problem.
+--- LVM2/WHATS_NEW	2007/01/25 23:40:33	1.562
++++ LVM2/WHATS_NEW	2007/01/26 17:15:16	1.563
+@@ -1,5 +1,6 @@
+ Version 2.02.21 -
+ ===================================
++  Fix md signature check to handle both endiannesses.
+ 
+ Version 2.02.20 - 25th January 2007
+ ===================================
+--- LVM2/lib/device/dev-md.c	2004/11/27 22:07:41	1.3
++++ LVM2/lib/device/dev-md.c	2007/01/26 17:15:16	1.4
+@@ -53,8 +53,10 @@
+ 	sb_offset = MD_NEW_SIZE_SECTORS(size) << SECTOR_SHIFT;
+ 
+ 	/* Check if it is an md component device. */
++	/* Version 1 is little endian; version 0.90.0 is machine endian */
+ 	if (dev_read(dev, sb_offset, sizeof(uint32_t), &md_magic) &&
+-	    (md_magic == xlate32(MD_SB_MAGIC))) {
++	    ((md_magic == xlate32(MD_SB_MAGIC)) ||
++	     (md_magic == MD_SB_MAGIC))) {
+ 		if (sb)
+ 			*sb = sb_offset;
+ 		ret = 1;
 
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 03-allocate-mirror-log-first.patch
-Type: text/x-patch
-Size: 5896 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070108/d1bb0c43/attachment.bin>
