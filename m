@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Jan 2007 23:01:19 -0000
-Subject: LVM2 ./WHATS_NEW lib/report/report.c tools/vgs ...
-Message-ID: <20070129230119.32034.qmail@sourceware.org>
+Date: 30 Jan 2007 18:02:16 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvm2_monitoring_init_ ...
+Message-ID: <20070130180216.25040.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,119 +10,126 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-29 23:01:18
+Changes by:	agk at sourceware.org	2007-01-30 18:02:15
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/report     : report.c 
-	tools          : vgsplit.c 
+	scripts        : lvm2_monitoring_init_rhel4 
 
 Log message:
-	Fix vgsplit to handle mirrors.
-	Reorder fields in reporting field definitions.
+	Add warning to lvm2_monitoring_init_rhel4 if attempting to stop monitoring.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.564&r2=1.565
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.565&r2=1.566
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_init_rhel4.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2007/01/27 02:09:05	1.564
-+++ LVM2/WHATS_NEW	2007/01/29 23:01:17	1.565
-@@ -1,5 +1,7 @@
+--- LVM2/WHATS_NEW	2007/01/29 23:01:17	1.565
++++ LVM2/WHATS_NEW	2007/01/30 18:02:15	1.566
+@@ -1,5 +1,6 @@
  Version 2.02.21 -
  ===================================
-+  Fix vgsplit to handle mirrors.
-+  Reorder fields in reporting field definitions.
++  Add warning to lvm2_monitoring_init_rhel4 if attempting to stop monitoring.
+   Fix vgsplit to handle mirrors.
+   Reorder fields in reporting field definitions.
    Fix vgs to treat args as VGs even when PV fields are displayed.
-   Fix md signature check to handle both endiannesses.
+--- LVM2/scripts/lvm2_monitoring_init_rhel4	2007/01/24 23:43:27	1.1
++++ LVM2/scripts/lvm2_monitoring_init_rhel4	2007/01/30 18:02:15	1.2
+@@ -25,11 +25,11 @@
+ . /etc/init.d/functions
  
---- LVM2/lib/report/report.c	2007/01/24 16:51:24	1.54
-+++ LVM2/lib/report/report.c	2007/01/29 23:01:18	1.55
-@@ -868,11 +868,11 @@
+ VGCHANGE="/usr/sbin/vgchange"
++WARN=1
  
- #define STR DM_REPORT_FIELD_TYPE_STRING
- #define NUM DM_REPORT_FIELD_TYPE_NUMBER
--#define FIELD(type, strct, sorttype, head, field, width, func, id, desc) {type, id, (off_t)((void *)&_dummy._ ## strct.field - (void *)&_dummy._ ## strct), head, width, sorttype, &_ ## func ## _disp, desc},
-+#define FIELD(type, strct, sorttype, head, field, width, func, id, desc) {type, sorttype, (off_t)((void *)&_dummy._ ## strct.field - (void *)&_dummy._ ## strct), width, id, head, &_ ## func ## _disp, desc},
+ start()
+ {
+-    for ret in 0
+-    do
++	ret=0
+ 	# TODO do we want to separate out already active groups only?
+ 	VGS=`vgs --noheadings -o name`
+ 	for vg in $VGS
+@@ -40,50 +40,58 @@
+ 	    fi
+ 	done
  
- static struct dm_report_field_type _fields[] = {
- #include "columns.h"
--{0, "", 0, "", 0, 0, NULL, NULL},
-+{0, 0, 0, 0, "", "", NULL, NULL},
- };
- 
- #undef STR
---- LVM2/tools/vgsplit.c	2007/01/09 21:12:41	1.21
-+++ LVM2/tools/vgsplit.c	2007/01/29 23:01:18	1.22
-@@ -72,6 +72,9 @@
- 		if ((lv->status & SNAPSHOT))
- 			continue;
- 
-+		if ((lv->status & MIRRORED))
-+			continue;
-+
- 		/* Ensure all the PVs used by this LV remain in the same */
- 		/* VG as each other */
- 		vg_with = NULL;
-@@ -161,6 +164,48 @@
- 	return 1;
+-    done
+-
+-    return $ret
++	return $ret
  }
  
-+static int _move_mirrors(struct volume_group *vg_from,
-+			 struct volume_group *vg_to)
-+{
-+	struct list *lvh, *lvht;
-+	struct logical_volume *lv;
-+	struct lv_segment *seg;
-+	int i, seg_in, log_in;
-+
-+	list_iterate_safe(lvh, lvht, &vg_from->lvs) {
-+		lv = list_item(lvh, struct lv_list)->lv;
-+
-+		if (!(lv->status & MIRRORED))
-+			continue;
-+
-+		seg = first_seg(lv); 
-+
-+		seg_in = 0;
-+		for (i = 0; i < seg->area_count; i++)
-+			if (_lv_is_in_vg(vg_to, seg_lv(seg, i)))
-+			    seg_in++;
-+
-+		log_in = (!seg->log_lv || _lv_is_in_vg(vg_to, seg->log_lv));
-+		
-+		if ((seg_in && seg_in < seg->area_count) || 
-+		    (seg_in && seg->log_lv && !log_in) || 
-+		    (!seg_in && seg->log_lv && log_in)) {
-+			log_error("Mirror %s split", lv->name);
-+			return 0;
-+		}
-+
-+		if (seg_in == seg->area_count && log_in) {
-+			list_del(lvh);
-+			list_add(&vg_to->lvs, lvh);
-+
-+			vg_from->lv_count--;
-+			vg_to->lv_count++;
-+		}
-+	}
-+
-+	return 1;
-+}
-+
- int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- {
- 	char *vg_name_from, *vg_name_to;
-@@ -275,6 +320,10 @@
- 	if (!(_move_snapshots(vg_from, vg_to)))
- 		goto error;
  
-+	/* Move required mirrors across */
-+	if (!(_move_mirrors(vg_from, vg_to)))
-+		goto error;
+ stop()
+ {
+-    for ret in 0
+-    do
++	ret=0
+ 	# TODO do we want to separate out already active groups only?
++	if test "$WARN" = "1"; then
++	   echo "Not stopping monitoring, this is a dangerous operation. Please use force-stop to override."
++	   return 1
++	fi
+ 	VGS=`vgs --noheadings -o name`
+ 	for vg in $VGS
+ 	do
+-	    if ! action "Starting monitoring for VG $vg:" $VGCHANGE --monitor n $vg
++	    if ! action "Stopping monitoring for VG $vg:" $VGCHANGE --monitor n $vg
+ 	    then
+ 		ret=$?
+ 	    fi
+ 	done
+-
+-    done
+-
++	return $ret
+ }
+ 
+-ret=1
++result=1
+ 
+ # See how we were called.
+ case "$1" in
+   start)
+ 	start
+-	ret=$?
++	result=$?
++	;;
 +
- 	/* FIXME Split mdas properly somehow too! */
- 	/* Currently we cheat by sharing the format instance and relying on 
- 	 * vg_write to ignore mdas outside the VG!  Done this way, with text 
++  force-stop)
++	WARN=0
++	stop
++	result=$?
+ 	;;
+ 
+   stop)
++	test "$runlevel" = "0" && WARN=0
++	test "$runlevel" = "6" && WARN=0
+ 	stop
+-	ret=$?
++	result=$?
+ 	;;
+ 
+   restart)
++	WARN=0
+ 	if stop
+ 	then
+ 		start
+ 	fi 
+-	ret=$?
++	result=$?
+ 	;;
+ 
+   status)
+@@ -91,8 +99,8 @@
+ 	;;
+ 
+   *)
+-	echo $"Usage: $0 {start|stop|restart|status}"
++	echo $"Usage: $0 {start|stop|restart|status|force-stop}"
+ 	;;
+ esac
+ 
+-exit $ret
++exit $result
 
 
