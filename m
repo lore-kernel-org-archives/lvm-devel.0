@@ -1,65 +1,38 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 08 Feb 2007 11:31:45 -0500
+From: dustin@v.igoro.us <dustin@v.igoro.us>
+Date: Thu, 8 Feb 2007 10:42:56 -0600
 Subject: shared segtypes loading
-In-Reply-To: <20070207221541.GG29594@v.igoro.us>
+In-Reply-To: <1170952305.4207.25.camel@linux-cxyg.rtp.netapp.com>
 References: <20070207221541.GG29594@v.igoro.us>
-Message-ID: <1170952305.4207.25.camel@linux-cxyg.rtp.netapp.com>
+	<1170952305.4207.25.camel@linux-cxyg.rtp.netapp.com>
+Message-ID: <20070208164256.GO29594@v.igoro.us>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2007-02-07 at 16:15 -0600, dustin at v.igoro.us wrote:
-> I'm new to this list, but a longtime user of lvm.  My brief googling for
-> this problem turned up nothing, but if it has been discussed before,
-> please tell me to RTFA and I'll look harder.
+On Thu, Feb 08, 2007 at 11:31:45AM -0500, Dave Wysochanski wrote:
+> Moving the add below the list_iterate_safe will still add it to the list
+> even if there's a duplicate right?  So maybe the right thing is
+> something like this:
 > 
-> I believe I may have found a bug in the dynamic loading of segtypes in
-> toolcontext.c.  I've posted a bunch of details at
->   http://bugs.gentoo.org/show_bug.cgi?id=131662
-> but I'll summarize here to conserve your time.
-> 
-> When segtypes are loaded dynamically, _init_segtypes first adds them to
-> cmd->segtypes:
-> 
->         list_add(&cmd->segtypes, &segtype->list);
-> 
-> and then iterates over that same list, looking for a duplicate name:
-> 
->         list_iterate_safe(sgtl, tmp, &cmd->segtypes) {
->                 segtype2 = list_item(sgtl, struct segment_type);
->                 if (!strcmp(segtype2->name, segtype->name)) {
->                         log_error("Duplicate segment type %s: "
->                                   ...
-> 
-> from my understanding, under any circumstances that this code is executed, at
-> some point segtype2 == segtype, and thus the strcmp() returns zero.
-> 
-> I fixed this locally with a patch (attached to the above Gentoo ticket) tht
-> just moves the list_add() below the duplicate check.  This seems effective, but
-> the would-never-have-worked nature of this bug (and age of the relevant code)
-> makes me suspect I'm missing something.
-> 
+> Index: LVM2/lib/commands/toolcontext.c
+> ===================================================================
+> --- LVM2.orig/lib/commands/toolcontext.c	2007-02-08 11:27:13.000000000 -0500
+> +++ LVM2/lib/commands/toolcontext.c	2007-02-08 11:27:24.000000000 -0500
+> @@ -777,7 +777,8 @@ static int _init_segtypes(struct cmd_con
+>  
+>  			list_iterate_safe(sgtl, tmp, &cmd->segtypes) {
+>  				segtype2 = list_item(sgtl, struct segment_type);
+> -				if (!strcmp(segtype2->name, segtype->name)) {
+> +				if ( (segtype2 != segtype) &&
+> +				     !strcmp(segtype2->name, segtype->name)) {
+>  					log_error("Duplicate segment type %s: "
+>  						  "unloading shared library %s",
+>  						  segtype->name, cv->v.str);
 
-Moving the add below the list_iterate_safe will still add it to the list
-even if there's a duplicate right?  So maybe the right thing is
-something like this:
+Agreed, that would be better.
 
-Index: LVM2/lib/commands/toolcontext.c
-===================================================================
---- LVM2.orig/lib/commands/toolcontext.c	2007-02-08 11:27:13.000000000 -0500
-+++ LVM2/lib/commands/toolcontext.c	2007-02-08 11:27:24.000000000 -0500
-@@ -777,7 +777,8 @@ static int _init_segtypes(struct cmd_con
- 
- 			list_iterate_safe(sgtl, tmp, &cmd->segtypes) {
- 				segtype2 = list_item(sgtl, struct segment_type);
--				if (!strcmp(segtype2->name, segtype->name)) {
-+				if ( (segtype2 != segtype) &&
-+				     !strcmp(segtype2->name, segtype->name)) {
- 					log_error("Duplicate segment type %s: "
- 						  "unloading shared library %s",
- 						  segtype->name, cv->v.str);
-
+Dustin
 
 
