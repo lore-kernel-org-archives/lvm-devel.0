@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Feb 2007 17:31:03 -0000
-Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c
-Message-ID: <20070208173103.26558.qmail@sourceware.org>
+Date: 13 Feb 2007 16:04:02 -0000
+Subject: LVM2 ./WHATS_NEW doc/example.conf man/lvchange ...
+Message-ID: <20070213160402.1612.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,75 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-02-08 17:31:03
+Changes by:	agk at sourceware.org	2007-02-13 16:04:01
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/commands   : toolcontext.c 
+	doc            : example.conf 
+	man            : lvchange.8 pvmove.8 
 
 Log message:
-	Fix loading of segment_libraries. [gentoo]
+	Correct -b and -P on a couple of man pages.
+	Add global/units to example.conf.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.570&r2=1.571
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.571&r2=1.572
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvchange.8.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvmove.8.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/WHATS_NEW	2007/02/07 13:29:51	1.570
-+++ LVM2/WHATS_NEW	2007/02/08 17:31:02	1.571
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2007/02/08 17:31:02	1.571
++++ LVM2/WHATS_NEW	2007/02/13 16:04:01	1.572
+@@ -1,5 +1,7 @@
  Version 2.02.22 - 
  ===================================
-+  Fix loading of segment_libraries.
++  Correct -b and -P on a couple of man pages.
++  Add global/units to example.conf.
+   Fix loading of segment_libraries.
    If a PV reappears after it was removed from its VG, make it an orphan.
    Don't update metadata automatically if VGIDs don't match.
-   Fix some vgreduce --removemissing command line validation.
---- LVM2/lib/commands/toolcontext.c	2007/01/25 21:22:30	1.47
-+++ LVM2/lib/commands/toolcontext.c	2007/02/08 17:31:02	1.48
-@@ -754,7 +754,6 @@
- 		struct config_value *cv;
- 		struct segment_type *(*init_segtype_fn) (struct cmd_context *);
- 		void *lib;
--		struct list *sgtl, *tmp;
- 		struct segment_type *segtype2;
+--- LVM2/doc/example.conf	2007/01/25 21:22:30	1.28
++++ LVM2/doc/example.conf	2007/02/13 16:04:01	1.29
+@@ -188,6 +188,9 @@
+     # command.  Defaults to off.
+     test = 0
  
- 		for (cv = cn->v; cv; cv = cv->next) {
-@@ -781,18 +780,16 @@
- 			segtype->library = lib;
- 			list_add(&cmd->segtypes, &segtype->list);
- 
--			list_iterate_safe(sgtl, tmp, &cmd->segtypes) {
--				segtype2 = list_item(sgtl, struct segment_type);
--				if (!strcmp(segtype2->name, segtype->name)) {
--					log_error("Duplicate segment type %s: "
--						  "unloading shared library %s",
--						  segtype->name, cv->v.str);
--					list_del(&segtype->list);
--					segtype->ops->destroy(segtype);
--					dlclose(lib);
--					break;
--				}
--
-+			list_iterate_items(segtype2, &cmd->segtypes) {
-+				if ((segtype == segtype2) ||
-+				     strcmp(segtype2->name, segtype->name))
-+					continue;
-+				log_error("Duplicate segment type %s: "
-+					  "unloading shared library %s",
-+					  segtype->name, cv->v.str);
-+				list_del(&segtype->list);
-+				segtype->ops->destroy(segtype);
-+				dlclose(lib);
- 			}
- 		}
- 	}
++    # Default value for --units argument
++    units = "h"
++
+     # Whether or not to communicate with the kernel device-mapper.
+     # Set to 0 if you want to use the tools to manipulate LVM metadata 
+     # without activating any logical volumes.
+--- LVM2/man/lvchange.8	2006/10/24 17:18:24	1.11
++++ LVM2/man/lvchange.8	2007/02/13 16:04:01	1.12
+@@ -12,7 +12,7 @@
+ [\-\-ignorelockingfailure]
+ [\-\-monitor {y|n}]
+ [\-M/\-\-persistent y/n] [\-\-minor minor]
+-[\-P/\-\-partial y/n]
++[\-P/\-\-partial]
+ [\-p/\-\-permission r/w] [\-r/\-\-readahead ReadAheadSectors]
+ [\-\-refresh]
+ [\-t/\-\-test]
+--- LVM2/man/pvmove.8	2004/11/16 18:09:31	1.5
++++ LVM2/man/pvmove.8	2007/02/13 16:04:01	1.6
+@@ -5,7 +5,7 @@
+ .B pvmove
+ [\-\-abort]
+ [\-\-alloc AllocationPolicy]
+-[\-\-background]
++[\-b/\-\-background]
+ [\-d/\-\-debug] [\-h/\-\-help] [\-i/\-\-interval Seconds] [\-v/\-\-verbose]
+ [\-n/\-\-name LogicalVolume] 
+ [SourcePhysicalVolume[:PE[-PE]...] [DestinationPhysicalVolume[:PE[-PE]...]...]]
+@@ -73,7 +73,7 @@
+ .I \-\-abort
+ Abort any moves in progress.
+ .TP
+-.I \-\-background
++.I \-b, \-\-background
+ Run the daemon in the background.
+ .TP
+ .I \-i, \-\-interval Seconds
 
 
