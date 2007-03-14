@@ -1,50 +1,38 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 13 Mar 2007 14:59:22 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/no_locking.c
-Message-ID: <20070313145922.16499.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 14 Mar 2007 20:10:42 +0000
+Subject: Re: striped LVM1 volumes
+In-Reply-To: <20070313140738.GH29428@agk.surrey.redhat.com>
+References: <45F6702F.4090803@redhat.com>
+	<20070313140738.GH29428@agk.surrey.redhat.com>
+Message-ID: <20070314201042.GO29428@agk.surrey.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-03-13 14:59:21
+On Tue, Mar 13, 2007 at 02:07:38PM +0000, Alasdair G Kergon wrote:
+> I don't want to remove checks like that.
+> Two possibilities:
+>   the check is being performed wrongly and needs fixing 
+>     - unlikely since it works with LVM2 metadata
+>   the LVM1 format metadata isn't being set up correctly
+>     - fix it in the format lvm1 code
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : no_locking.c 
+Well, as expected, it is pretty clear that the bug is
+in the lvm1 format code.
 
-Log message:
-	Flag nolocking as a clustered locking module as we need to be able
-	to look at clustered LVs at clvmd startup
+Easily reproduced - just create a format1 striped LV of more than 2
+extents using lvm2 and find that lvm2 cannot read it back!
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.584&r2=1.585
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/no_locking.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-
---- LVM2/WHATS_NEW	2007/03/09 21:25:33	1.584
-+++ LVM2/WHATS_NEW	2007/03/13 14:59:21	1.585
-@@ -2,6 +2,8 @@
- ====================================
-   Add a few missing pieces of vgname command line validation.
-   Support the /dev/mapper prefix on most command lines.
-+  Flag nolocking as a clustered locking module as we need to be able
-+    to look at clustered LVs at clvmd startup (2.02.10)
+There's a factor of #stripes missing from the code that sets the
+segment size when building up the segments, and the algorithm used to
+detect the size of a segment is also bogus.  (It seems to be trying to
+handle an extended lvm1 format we once had that supported lvm2-like
+striping extensions.)
  
- Version 2.02.23 - 8th March 2007
- ================================
---- LVM2/lib/locking/no_locking.c	2006/05/16 16:48:30	1.10
-+++ LVM2/lib/locking/no_locking.c	2007/03/13 14:59:21	1.11
-@@ -81,7 +81,7 @@
- 	locking->lock_resource = _no_lock_resource;
- 	locking->reset_locking = _no_reset_locking;
- 	locking->fin_locking = _no_fin_locking;
--	locking->flags = 0;
-+	locking->flags = LCK_CLUSTERED;
- 
- 	return 1;
- }
+Alasdair
+-- 
+agk at redhat.com
 
 
