@@ -1,104 +1,149 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 17 Apr 2007 13:23:51 -0400
-Subject: [PATCH 1/2] add dev_read2 support function
-Message-ID: <1176830631.4070.19.camel@linux-cxyg>
+Date: Tue, 17 Apr 2007 13:24:43 -0400
+Subject: [PATCH 2/2] add lib/config support functions
+Message-ID: <1176830683.4070.21.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add dev_read2 - read from 2 regions on the same device.
+Add support functions for analysis of config sections,
+and hence, on-disk LVM2 metadata.
 Should not change functional behavior.
 
-
-Index: LVM2/lib/device/dev-io.c
-===================================================================
---- LVM2.orig/lib/device/dev-io.c	2007-01-25 09:37:47.000000000 -0500
-+++ LVM2/lib/device/dev-io.c	2007-04-17 12:34:49.000000000 -0400
-@@ -564,6 +564,36 @@ int dev_read(struct device *dev, uint64_
- 	return _aligned_io(&where, buffer, 0);
- }
- 
-+/*
-+ * Read from 'dev' into 'buf', possibly in 2 distinct regions, denoted
-+ * by (offset,len) and (offset2,len2).  Thus, the total size of
-+ * 'buf' should be len+len2.
-+ */
-+int dev_read2(struct device *dev, uint64_t offset, size_t len,
-+	      uint64_t offset2, size_t len2, void *buf)
-+{
-+	if (!dev_read(dev, (uint64_t) offset, len, buf)) {
-+		log_error("Read from %s failed", dev_name(dev));
-+		stack;
-+		return 0;
-+	}
-+
-+	/*
-+	 * The second region is optional, and allows for
-+	 * a circular buffer on the device.
-+	 */
-+	if (len2) {
-+		if (!dev_read(dev, (uint64_t) offset2, len2,
-+			      buf + len)) {
-+			log_error("Circular read from %s failed",
-+				  dev_name(dev));
-+			stack;
-+			return 0;
-+		}
-+	}
-+	return 1;
-+}
-+
- /* FIXME If O_DIRECT can't extend file, dev_extend first; dev_truncate after.
-  *       But fails if concurrent processes writing
-  */
-Index: LVM2/lib/device/device.h
-===================================================================
---- LVM2.orig/lib/device/device.h	2006-05-11 14:39:24.000000000 -0400
-+++ LVM2/lib/device/device.h	2007-04-17 12:33:38.000000000 -0400
-@@ -78,6 +78,8 @@ int dev_fd(struct device *dev);
- const char *dev_name(const struct device *dev);
- 
- int dev_read(struct device *dev, uint64_t offset, size_t len, void *buffer);
-+int dev_read2(struct device *dev, uint64_t offset, size_t len,
-+	      uint64_t offset2, size_t len2, void *buf);
- int dev_write(struct device *dev, uint64_t offset, size_t len, void *buffer);
- int dev_append(struct device *dev, size_t len, void *buffer);
- int dev_set(struct device *dev, uint64_t offset, size_t len, int value);
 Index: LVM2/lib/config/config.c
 ===================================================================
---- LVM2.orig/lib/config/config.c	2007-03-08 14:22:52.000000000 -0500
-+++ LVM2/lib/config/config.c	2007-04-17 12:40:30.000000000 -0400
-@@ -210,18 +210,10 @@ int read_config_fd(struct config_tree *c
- 			stack;
- 			return 0;
- 		}
--		if (!dev_read(dev, (uint64_t) offset, size, buf)) {
--			log_error("Read from %s failed", dev_name(dev));
-+		if (!dev_read2(dev, (uint64_t) offset, size,
-+			       (uint64_t) offset2, size2, buf)) {
- 			goto out;
- 		}
--		if (size2) {
--			if (!dev_read(dev, (uint64_t) offset2, size2,
--				      buf + size)) {
--				log_error("Circular read from %s failed",
--					  dev_name(dev));
--				goto out;
--			}
--		}
- 		p->fb = buf;
- 	}
+--- LVM2.orig/lib/config/config.c	2007-04-17 13:11:08.000000000 -0400
++++ LVM2/lib/config/config.c	2007-04-17 13:16:25.000000000 -0400
+@@ -26,6 +26,9 @@
+ #include <fcntl.h>
+ #include <ctype.h>
  
++#define TOK_SECTION_B_CHAR '{'
++#define TOK_SECTION_E_CHAR '}'
++
+ enum {
+ 	TOK_INT,
+ 	TOK_FLOAT,
+@@ -474,7 +477,7 @@ static struct config_node *_file(struct 
+ 
+ static struct config_node *_section(struct parser *p)
+ {
+-	/* IDENTIFIER '{' VALUE* '}' */
++	/* IDENTIFIER TOK_SECTION_B_CHAR VALUE* TOK_SECTION_E_CHAR */
+ 	struct config_node *root, *n, *l = NULL;
+ 	if (!(root = _create_node(p))) {
+ 		stack;
+@@ -623,12 +626,12 @@ static void _get_token(struct parser *p,
+ 	p->t = TOK_INT;		/* fudge so the fall through for
+ 				   floats works */
+ 	switch (*p->te) {
+-	case '{':
++	case TOK_SECTION_B_CHAR:
+ 		p->t = TOK_SECTION_B;
+ 		p->te++;
+ 		break;
+ 
+-	case '}':
++	case TOK_SECTION_E_CHAR:
+ 		p->t = TOK_SECTION_E;
+ 		p->te++;
+ 		break;
+@@ -708,8 +711,9 @@ static void _get_token(struct parser *p,
+ 	default:
+ 		p->t = TOK_IDENTIFIER;
+ 		while ((p->te != p->fe) && (*p->te) && !isspace(*p->te) &&
+-		       (*p->te != '#') && (*p->te != '=') && (*p->te != '{') &&
+-		       (*p->te != '}'))
++		       (*p->te != '#') && (*p->te != '=') &&
++		       (*p->te != TOK_SECTION_B_CHAR) &&
++		       (*p->te != TOK_SECTION_E_CHAR))
+ 			p->te++;
+ 		break;
+ 	}
+@@ -1146,3 +1150,61 @@ int merge_config_tree(struct cmd_context
+ 
+ 	return 1;
+ }
++
++/*
++ * Convert a token type to the char it represents.
++ */
++static char _token_type_to_char(int type)
++{
++	switch (type) {
++		case TOK_SECTION_B:
++			return TOK_SECTION_B_CHAR;
++		case TOK_SECTION_E:
++			return TOK_SECTION_E_CHAR;
++		default:
++			return 0;
++	}
++}
++
++/*
++ * Returns:
++ *  # of 'type' tokens in 'str'.
++ */
++static unsigned _count_tokens (char *str, unsigned len, int type)
++{
++	unsigned i;
++	unsigned count=0;
++	char c;
++
++	c = _token_type_to_char(type);
++
++	for (i=0; i<len; i++)
++		if (str[i] == c)
++			count++;
++	return count;
++}
++
++/*
++ * Determine whether a text region  contains a valid "section".
++ * A valid section is defined by an equal number of non-zero begin
++ * and end section tokens.
++ *
++ * Returns:
++ *  0 - not a section
++ *  1 - is a section
++ */
++unsigned is_config_section(char *str, unsigned len)
++{
++	int begin_count;
++	int end_count;
++
++	begin_count = _count_tokens(str, len, TOK_SECTION_B);
++	end_count = _count_tokens(str, len, TOK_SECTION_E);
++
++	if ((begin_count != 0)&&(end_count != 0)&&
++	    (begin_count - end_count == 0))
++		return 1;
++	else
++		return 0;
++}
++
+Index: LVM2/lib/config/config.h
+===================================================================
+--- LVM2.orig/lib/config/config.h	2007-04-17 13:11:08.000000000 -0400
++++ LVM2/lib/config/config.h	2007-04-17 13:15:12.000000000 -0400
+@@ -108,4 +108,6 @@ int get_config_uint64(const struct confi
+ int get_config_str(const struct config_node *cn, const char *path,
+ 		   char **result);
+ 
++unsigned is_config_section(char *str, unsigned len);
++
+ #endif
 Index: LVM2/WHATS_NEW
 ===================================================================
---- LVM2.orig/WHATS_NEW	2007-04-17 12:45:02.000000000 -0400
-+++ LVM2/WHATS_NEW	2007-04-17 12:45:18.000000000 -0400
-@@ -1,5 +1,6 @@
+--- LVM2.orig/WHATS_NEW	2007-04-17 13:11:08.000000000 -0400
++++ LVM2/WHATS_NEW	2007-04-17 13:15:12.000000000 -0400
+@@ -1,6 +1,6 @@
  Version 2.02.25 -
  =================================
-+  Add dev_read2.
+-  Add dev_read2.
++  Add dev_read2, lib/config support functions.
    Add pvck command stub.
    Update lists of attribute characters in man pages.
    Change cling alloc policy attribute character from 'C' to l'.
