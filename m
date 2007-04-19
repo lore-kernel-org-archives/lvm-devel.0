@@ -1,62 +1,111 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 18 Apr 2007 15:32:58 -0400
-Subject: [PATCH] LVM2: (2/2) Use dm_report filter
-In-Reply-To: <46264BAC.3000504@ce.jp.nec.com>
-References: <46264A57.1020800@ce.jp.nec.com> <46264BAC.3000504@ce.jp.nec.com>
-Message-ID: <4626726A.3070002@ce.jp.nec.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 19 Apr 2007 02:10:42 -0000
+Subject: LVM2 lib/device/dev-io.c lib/device/device.h l ...
+Message-ID: <20070419021042.2013.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2007-04-19 03:10:42
 
-This patch adds '--filter' option to reporting commands: lvs, vgs and pvs.
+Modified files:
+	lib/device     : dev-io.c device.h 
+	lib/config     : config.c 
+	.              : WHATS_NEW 
 
-The patch depends on the following patches:
-[PATCH] libdevmapper: (4/6) Add filtering feature to dm_report
-https://www.redhat.com/archives/dm-devel/2007-April/msg00029.html
-[PATCH] libdevmapper: (7/6) Add dm_report_get_report_types()
-https://www.redhat.com/archives/dm-devel/2007-April/msg00035.html
+Log message:
+	Add dev_read_circular, read 2 regions on same device.
 
-Examples:
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-io.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.h.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.595&r2=1.596
 
-Find PVs used for VG vg0
-# pvs --filter 'vg_name == "vg0"'
+--- LVM2/lib/device/dev-io.c	2007/01/25 14:37:47	1.56
++++ LVM2/lib/device/dev-io.c	2007/04/19 02:10:41	1.57
+@@ -564,6 +564,35 @@
+ 	return _aligned_io(&where, buffer, 0);
+ }
+ 
++/*
++ * Read from 'dev' into 'buf', possibly in 2 distinct regions, denoted
++ * by (offset,len) and (offset2,len2).  Thus, the total size of
++ * 'buf' should be len+len2.
++ */
++int dev_read_circular(struct device *dev, uint64_t offset, size_t len,
++		      uint64_t offset2, size_t len2, void *buf)
++{
++	if (!dev_read(dev, offset, len, buf)) {
++		log_error("Read from %s failed", dev_name(dev));
++		return 0;
++	}
++
++	/*
++	 * The second region is optional, and allows for
++	 * a circular buffer on the device.
++	 */
++	if (!len2)
++		return 1;
++
++	if (!dev_read(dev, offset2, len2, buf + len)) {
++		log_error("Circular read from %s failed",
++			  dev_name(dev));
++		return 0;
++	}
++
++	return 1;
++}
++
+ /* FIXME If O_DIRECT can't extend file, dev_extend first; dev_truncate after.
+  *       But fails if concurrent processes writing
+  */
+--- LVM2/lib/device/device.h	2006/05/11 18:39:24	1.32
++++ LVM2/lib/device/device.h	2007/04/19 02:10:41	1.33
+@@ -78,6 +78,8 @@
+ const char *dev_name(const struct device *dev);
+ 
+ int dev_read(struct device *dev, uint64_t offset, size_t len, void *buffer);
++int dev_read_circular(struct device *dev, uint64_t offset, size_t len,
++		      uint64_t offset2, size_t len2, void *buf);
+ int dev_write(struct device *dev, uint64_t offset, size_t len, void *buffer);
+ int dev_append(struct device *dev, size_t len, void *buffer);
+ int dev_set(struct device *dev, uint64_t offset, size_t len, int value);
+--- LVM2/lib/config/config.c	2007/03/08 19:22:52	1.54
++++ LVM2/lib/config/config.c	2007/04/19 02:10:42	1.55
+@@ -210,18 +210,10 @@
+ 			stack;
+ 			return 0;
+ 		}
+-		if (!dev_read(dev, (uint64_t) offset, size, buf)) {
+-			log_error("Read from %s failed", dev_name(dev));
++		if (!dev_read_circular(dev, (uint64_t) offset, size,
++				       (uint64_t) offset2, size2, buf)) {
+ 			goto out;
+ 		}
+-		if (size2) {
+-			if (!dev_read(dev, (uint64_t) offset2, size2,
+-				      buf + size)) {
+-				log_error("Circular read from %s failed",
+-					  dev_name(dev));
+-				goto out;
+-			}
+-		}
+ 		p->fb = buf;
+ 	}
+ 
+--- LVM2/WHATS_NEW	2007/03/30 21:00:26	1.595
++++ LVM2/WHATS_NEW	2007/04/19 02:10:42	1.596
+@@ -1,5 +1,6 @@
+ Version 2.02.25 -
+ =================================
++  Add dev_read_circular.
+   Add pvck command stub.
+   Update lists of attribute characters in man pages.
+   Change cling alloc policy attribute character from 'C' to l'.
 
-Find PVs not used by any LVs
-# pvs --filter 'used == 0'
 
-Find PVs satisfying both of the aboves
-# pvs --filter 'vg_name == "vg0" && used == 0'
-
-Find PVs not satisfying the above
-# pvs --filter '! (vg_name == "vg0" && used == 0)'
-
-Find VGs with more than 2 PVs and with more than 400 extents
-# vgs --filter 'pv_count > 2 && free_count > 400'
-
-Find active snapshot LVs
-# lvs --filter 'attr =~ /^s...a/'
-
-Find LVs using /dev/sdc
-# lvs --filter 'devices =~ |/dev/sdc|'
-
-..
-
-Possible future enhancements:
-  - Cope with units.
-    I.e. lvs --filter 'size > 4G' to find LVs larger than 4GB
-    Currently, the filter can handle only the raw value of the field.
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-add-filter.patch
-Type: text/x-patch
-Size: 7144 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070418/97908cf7/attachment.bin>
