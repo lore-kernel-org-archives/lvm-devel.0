@@ -1,20 +1,24 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 20 Apr 2007 10:37:13 -0400
-Subject: [PATCH] convert _count_hyphens to generalised _count_chars and export
-Message-ID: <1177079834.4206.5.camel@linux-cxyg>
+Date: Fri, 20 Apr 2007 11:06:52 -0400
+Subject: [PATCH REPOST] convert _count_hyphens to generalised count_chars and export
+In-Reply-To: <1177079834.4206.5.camel@linux-cxyg>
+References: <1177079834.4206.5.camel@linux-cxyg>
+Message-ID: <1177081612.4206.11.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+(NOTE: only change from previous patch - remove '_' from '_count_chars')
 Should not change functional behavior and be simple to review.
 Adds newly created function to lvm-string.h exports.
 
+
 Index: LVM2/lib/misc/lvm-string.c
 ===================================================================
---- LVM2.orig/lib/misc/lvm-string.c	2006-08-21 08:54:53.000000000 -0400
-+++ LVM2/lib/misc/lvm-string.c	2007-04-20 10:28:03.000000000 -0400
+--- LVM2.orig/lib/misc/lvm-string.c	2007-04-20 10:31:14.000000000 -0400
++++ LVM2/lib/misc/lvm-string.c	2007-04-20 11:00:53.000000000 -0400
 @@ -36,21 +36,6 @@ int emit_to_buffer(char **buffer, size_t
  }
  
@@ -42,7 +46,7 @@ Index: LVM2/lib/misc/lvm-string.c
  }
  
 +
-+void _count_chars(const char *str, size_t *len, int *count,
++void count_chars(const char *str, size_t *len, int *count,
 +		  char c)
 +{
 +	const char *ptr;
@@ -61,12 +65,12 @@ Index: LVM2/lib/misc/lvm-string.c
  
 -	_count_hyphens(vgname, &len, &hyphens);
 -	_count_hyphens(lvname, &len, &hyphens);
-+	_count_chars(vgname, &len, &hyphens, '-');
-+	_count_chars(lvname, &len, &hyphens, '-');
++	count_chars(vgname, &len, &hyphens, '-');
++	count_chars(lvname, &len, &hyphens, '-');
  
  	if (layer && *layer) {
 -		_count_hyphens(layer, &len, &hyphens);
-+		_count_chars(layer, &len, &hyphens, '-');
++		count_chars(layer, &len, &hyphens, '-');
  		hyphens++;
  	}
  
@@ -85,24 +89,24 @@ Index: LVM2/lib/misc/lvm-string.c
  	register char c;
 Index: LVM2/lib/misc/lvm-string.h
 ===================================================================
---- LVM2.orig/lib/misc/lvm-string.h	2006-08-21 08:54:53.000000000 -0400
-+++ LVM2/lib/misc/lvm-string.h	2007-04-20 10:22:23.000000000 -0400
+--- LVM2.orig/lib/misc/lvm-string.h	2007-04-20 10:31:14.000000000 -0400
++++ LVM2/lib/misc/lvm-string.h	2007-04-20 11:01:06.000000000 -0400
 @@ -30,4 +30,7 @@ char *build_dm_name(struct dm_pool *mem,
  
  int validate_name(const char *n);
  
-+void _count_chars(const char *str, size_t *len, int *count,
-+		  char c);
++void count_chars(const char *str, size_t *len, int *count,
++		 char c);
 +
  #endif
 Index: LVM2/WHATS_NEW
 ===================================================================
---- LVM2.orig/WHATS_NEW	2007-04-20 10:16:21.000000000 -0400
-+++ LVM2/WHATS_NEW	2007-04-20 10:23:37.000000000 -0400
+--- LVM2.orig/WHATS_NEW	2007-04-20 10:31:14.000000000 -0400
++++ LVM2/WHATS_NEW	2007-04-20 11:05:29.000000000 -0400
 @@ -1,5 +1,6 @@
  Version 2.02.25 -
  =================================
-+  Convert _count_hyphens to generalized _count_chars.
++  Convert _count_hyphens to generalized count_chars.
    Add dev_read_circular.
    Add pvck command stub.
    Update lists of attribute characters in man pages.
