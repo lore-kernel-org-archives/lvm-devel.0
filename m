@@ -1,122 +1,169 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 23 Apr 2007 14:57:53 -0400
-Subject: [PATCH REPOST2] convert _count_hyphens to generalised count_chars_null and export
-In-Reply-To: <1177089463.11574.0.camel@linux-cxyg>
-References: <1177079834.4206.5.camel@linux-cxyg>
-	<1177081612.4206.11.camel@linux-cxyg>
-	<1177089463.11574.0.camel@linux-cxyg>
-Message-ID: <1177354673.4165.39.camel@linux-cxyg>
+Date: Mon, 23 Apr 2007 18:04:14 -0400
+Subject: [REPOST PATCH 1/2] Add pvck ability to scan for labels on any area of disk
+In-Reply-To: <1177091131.11574.13.camel@linux-cxyg>
+References: <1177091131.11574.13.camel@linux-cxyg>
+Message-ID: <1177365854.4165.44.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add count_chars_null and count_chars_len functions, two
-generic string utility functions.
+I think all comments incorporated / addressed.
 
-Index: LVM2-working2/lib/misc/lvm-string.c
+Update pvck to read labels on disk, with flexible --labelsector
+parameter.
+
+Index: LVM2-label-read/lib/metadata/metadata.c
 ===================================================================
---- LVM2-working2.orig/lib/misc/lvm-string.c	2006-08-21 08:54:53.000000000 -0400
-+++ LVM2-working2/lib/misc/lvm-string.c	2007-04-23 14:48:56.000000000 -0400
-@@ -36,18 +36,38 @@ int emit_to_buffer(char **buffer, size_t
+--- LVM2-label-read.orig/lib/metadata/metadata.c	2007-04-23 14:21:01.000000000 -0400
++++ LVM2-label-read/lib/metadata/metadata.c	2007-04-23 17:53:02.000000000 -0400
+@@ -1555,3 +1555,35 @@ int pv_write_orphan(struct cmd_context *
+ 
+ 	return 1;
  }
- 
- /*
-- * Device layer names are all of the form <vg>-<lv>-<layer>, any
-- * other hyphens that appear in these names are quoted with yet
-- * another hyphen.  The top layer of any device has no layer
-- * name.  eg, vg0-lvol0.
-+ * Count occurences of 'c' in 'str' until we reach a null char.
-+ *
-+ * Returns:
-+ *  len - incremented for each char we encounter, whether 'c' or not.
-+ *  count - number of occurences of 'c'
-  */
--static void _count_hyphens(const char *str, size_t *len, int *hyphens)
-+void count_chars_null(const char *str, size_t *len, int *count,
-+		      char c)
- {
- 	const char *ptr;
- 
- 	for (ptr = str; *ptr; ptr++, (*len)++)
--		if (*ptr == '-')
--			(*hyphens)++;
-+		if (*ptr == c)
-+			(*count)++;
-+}
-+
 +/*
-+ * Count occurences of 'c' in 'str' of length 'size'.
-+ *
 + * Returns:
-+ *   # of occurences of 'c'
++ *  0 - fail
++ *  1 - success
 + */
-+unsigned count_chars_len(const char *str, size_t size, char c)
++int pv_analyze(struct cmd_context *cmd, const char *pv_name,
++	       int64_t label_sector)
 +{
-+	int i;
-+	unsigned count=0;
++	struct label *label;
++	struct device *dev;
 +
-+	for (i=0; i<size; i++)
-+		if (str[i] == c)
-+			count++;
-+	return count;
++	dev = dev_cache_get(pv_name, cmd->filter);
++	if (!dev) {
++		log_error("Device %s not found (or ignored by filtering).",
++			  pv_name);
++		return 0;
++	}
 +
- }
++	/*
++	 * First, scan for LVM labels.
++	 */
++	if (!label_read(dev, &label, label_sector)) {
++		log_error("Could not find LVM label on %s",
++			  pv_name);
++		return 0;
++	}
++
++	log_print("Found label on %s, sector %"PRIu64", type=%s",
++		  pv_name, label->sector, label->type);
++
++	return 1;
++}
+Index: LVM2-label-read/lib/metadata/metadata.h
+===================================================================
+--- LVM2-label-read.orig/lib/metadata/metadata.h	2007-03-23 08:43:17.000000000 -0400
++++ LVM2-label-read/lib/metadata/metadata.h	2007-04-23 15:13:43.000000000 -0400
+@@ -443,6 +443,8 @@ struct physical_volume *pv_create(const 
+ 				  uint64_t pvmetadatasize, struct list *mdas);
+ int pv_resize(struct physical_volume *pv, struct volume_group *vg,
+               uint32_t new_pe_count);
++int pv_analyze(struct cmd_context *cmd, const char *pv_name,
++	       int64_t label_sector);
  
- /*
-@@ -73,11 +93,11 @@ char *build_dm_name(struct dm_pool *mem,
- 	int hyphens = 1;
- 	char *r, *out;
+ struct volume_group *vg_create(struct cmd_context *cmd, const char *name,
+ 			       uint32_t extent_size, uint32_t max_pv,
+Index: LVM2-label-read/man/pvck.8
+===================================================================
+--- LVM2-label-read.orig/man/pvck.8	2007-03-30 17:00:25.000000000 -0400
++++ LVM2-label-read/man/pvck.8	2007-04-23 17:31:28.000000000 -0400
+@@ -3,11 +3,29 @@
+ pvck \- check physical volume metadata
+ .SH SYNOPSIS
+ .B pvck
+-[\-d/\-\-debug] [\-h/\-?/\-\-help] [\-v/\-\-verbose] [PhysicalVolume...]
++.RB [ \-d | \-\-debug ]
++.RB [ \-h | \-\-help ]
++.RB [ \-v | \-\-verbose ]
++.RB [ \-\-labelsector ]
++.IR PhysicalVolume " [" PhysicalVolume ...]
+ .SH DESCRIPTION
+ pvck checks physical volume LVM metadata for consistency.
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
++.TP
++.BR \-\-labelsector " sector"
++By default, 4 sectors of \fBPhysicalVolume\fP are scanned for an LVM label,
++starting at sector 0.  This parameter allows you to specify a different
++starting sector for the scan and is useful for recovery situations.  For
++example, suppose the partition table is corrupted or lost on /dev/sda,
++but you suspect there was an LVM partition at approximately 100 MB.  This
++area of the disk may be scanned by using the \fB--labelsector\fP parameter
++with a value of 204800 (100 * 1024 * 1024 / 512 = 204800):
++.sp
++.BI "pvck --labelsector 204800 /dev/sda"
++.sp
++Note that a script can be used with \fB--labelsector\fP to automate the
++process of finding LVM labels.
+ .SH SEE ALSO
+ .BR lvm (8),
+ .BR pvcreate (8),
+Index: LVM2-label-read/tools/commands.h
+===================================================================
+--- LVM2-label-read.orig/tools/commands.h	2007-03-30 17:00:26.000000000 -0400
++++ LVM2-label-read/tools/commands.h	2007-04-23 17:57:03.000000000 -0400
+@@ -412,9 +412,12 @@ xx(pvck,
+    "pvck "
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
++   "\t[--labelsector sector] " "\n"
+    "\t[-v|--verbose]\n"
+    "\t[--version]" "\n"
+-   "\tPhysicalVolume [PhysicalVolume...]\n" )
++   "\tPhysicalVolume [PhysicalVolume...]\n",
++
++   labelsector_ARG)
  
--	_count_hyphens(vgname, &len, &hyphens);
--	_count_hyphens(lvname, &len, &hyphens);
-+	count_chars_null(vgname, &len, &hyphens, '-');
-+	count_chars_null(lvname, &len, &hyphens, '-');
+ xx(pvcreate,
+    "Initialize physical volume(s) for use by LVM",
+Index: LVM2-label-read/tools/pvck.c
+===================================================================
+--- LVM2-label-read.orig/tools/pvck.c	2007-03-30 17:00:26.000000000 -0400
++++ LVM2-label-read/tools/pvck.c	2007-04-23 17:33:00.000000000 -0400
+@@ -15,16 +15,26 @@
  
- 	if (layer && *layer) {
--		_count_hyphens(layer, &len, &hyphens);
-+		count_chars_null(layer, &len, &hyphens, '-');
- 		hyphens++;
- 	}
+ #include "tools.h"
  
-@@ -105,6 +125,12 @@ char *build_dm_name(struct dm_pool *mem,
- 	return r;
- }
- 
-+/*
-+ * Device layer names are all of the form <vg>-<lv>-<layer>, any
-+ * other hyphens that appear in these names are quoted with yet
-+ * another hyphen.  The top layer of any device has no layer
-+ * name.  eg, vg0-lvol0.
-+ */
- int validate_name(const char *n)
+-static int _pvck_single(struct cmd_context * cmd,
+-			struct volume_group * vg,
+-			struct physical_volume * pv,
+-			void *handle)
+-{
+-	return ECMD_PROCESSED;
+-}
+-
+ int pvck(struct cmd_context *cmd, int argc, char **argv)
  {
- 	register char c;
-Index: LVM2-working2/lib/misc/lvm-string.h
-===================================================================
---- LVM2-working2.orig/lib/misc/lvm-string.h	2006-08-21 08:54:53.000000000 -0400
-+++ LVM2-working2/lib/misc/lvm-string.h	2007-04-23 14:38:45.000000000 -0400
-@@ -30,4 +30,8 @@ char *build_dm_name(struct dm_pool *mem,
- 
- int validate_name(const char *n);
- 
-+void count_chars_null(const char *str, size_t *len, int *count,
-+		      char c);
-+unsigned count_chars_len(const char *str, size_t size, char c);
+-	/* FIXME: Correlate findings of each PV */
+-	return process_each_pv(cmd, argc, argv, NULL, NULL, _pvck_single);
++	int i;
 +
- #endif
-Index: LVM2-working2/WHATS_NEW
-===================================================================
---- LVM2-working2.orig/WHATS_NEW	2007-04-23 14:21:01.000000000 -0400
-+++ LVM2-working2/WHATS_NEW	2007-04-23 14:41:22.000000000 -0400
-@@ -1,5 +1,6 @@
- Version 2.02.25 -
- =================================
-+  Add count_chars_null and count_chars_len functions.
-   Add scan_sector param to label_read and _find_labeller.
-   Make clvmd cope with quorum devices on RHEL5
-   Add dev_read_circular.
++	/* FIXME: validate cmdline options */
++	/* FIXME: what does the cmdline look like? */
++	/*
++	 * Use what's on the cmdline directly, and avoid calling into
++	 * some of the other infrastructure functions, so as to avoid
++	 * hitting some of the lvmcache behavior, scanning other devices,
++	 * etc.
++	 */
++	for (i = 0; i < argc; i++) {
++		/* FIXME: warning and/or check if in use? */
++		log_verbose("Scanning %s", argv[i]);
++
++		pv_analyze(cmd, argv[i],
++			   arg_int64_value(cmd, labelsector_ARG,
++					   UINT64_C(0)));
++	}
++
++	return ECMD_PROCESSED;
+ }
+
+
 
 
 
