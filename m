@@ -1,62 +1,53 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 10 Feb 2020 09:44:52 -0500
-Subject: master - vdo: fix vdoformat when -V is specified
-Message-ID: <56652.120021009444602865@us-mta-156.us.mimecast.lan>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Apr 2007 17:14:58 -0000
+Subject: LVM2 lib/device/dev-cache.c man/lvm.conf.5
+Message-ID: <20070426171458.5977.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3716aa848efef716ba8596d585a312fdb61850d3
-Commit:        3716aa848efef716ba8596d585a312fdb61850d3
-Parent:        8f794f2095583d41393ee9c697f470015b29f064
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 10 15:41:30 2020 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 10 15:41:30 2020 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-04-26 18:14:57
 
-vdo: fix vdoformat when -V is specified
+Modified files:
+	lib/device     : dev-cache.c 
+	man            : lvm.conf.5 
 
-The previous patch improved read of pipe when lvm2 was looking
-for default logical size, but we clearly must read pipe also
-for -V case, when the logical size is already defined.
----
- lib/metadata/vdo_manip.c | 16 ++++++++--------
- 1 file changed, 8 insertions(+), 8 deletions(-)
+Log message:
+	add preferred_names to man page.
 
-diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
-index b690e73..335e7dd 100644
---- a/lib/metadata/vdo_manip.c
-+++ b/lib/metadata/vdo_manip.c
-@@ -316,19 +316,19 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
- 		return 0;
- 	}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.46&r2=1.47
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+
+--- LVM2/lib/device/dev-cache.c	2007/04/26 16:44:58	1.46
++++ LVM2/lib/device/dev-cache.c	2007/04/26 17:14:57	1.47
+@@ -155,6 +155,9 @@
+ 	char *s0, *s1;
+ 	struct stat stat0, stat1;
  
--	if (!*logical_size)
--		while (!feof(f) && fgets(buf, sizeof(buf), f)) {
--			/* TODO: Watch out for locales */
-+	while (!feof(f) && fgets(buf, sizeof(buf), f)) {
-+		/* TODO: Watch out for locales */
-+		if (!*logical_size)
- 			if (sscanf(buf, "Logical blocks defaulted to " FMTu64 " blocks", &lb) == 1) {
- 				*logical_size = lb * DM_VDO_BLOCK_SIZE;
- 				log_verbose("Available VDO logical blocks " FMTu64 " (%s).",
- 					    lb, display_size(data_lv->vg->cmd, *logical_size));
- 			}
--			if ((dpath = strchr(buf, '\n')))
--				*dpath = 0; /* cut last '\n' away */
--			if (buf[0])
--				log_print("  %s", buf); /* Print vdo_format messages */
--		}
-+		if ((dpath = strchr(buf, '\n')))
-+			*dpath = 0; /* cut last '\n' away */
-+		if (buf[0])
-+			log_print("  %s", buf); /* Print vdo_format messages */
-+	}
- 
- 	if (!pipe_close(&pdata)) {
- 		log_error("Command %s failed.", argv[0]);
-
++	/*
++	 * FIXME Better to compare patterns one-at-a-time against all names.
++	 */
+ 	if (_cache.preferred_names_matcher) {
+ 		m0 = matcher_run(_cache.preferred_names_matcher, path0);
+ 		m1 = matcher_run(_cache.preferred_names_matcher, path1);
+--- LVM2/man/lvm.conf.5	2007/02/28 18:27:13	1.18
++++ LVM2/man/lvm.conf.5	2007/04/26 17:14:57	1.19
+@@ -81,6 +81,11 @@
+ Devices in directories outside this hierarchy will be ignored.
+ Defaults to "/dev".
+ .IP
++\fBpreferred_names\fP \(em List of patterns compared in turn against
++all the pathnames referencing the same device in in the scanned directories.
++The pathname that matches the earliest pattern in the list is the
++one used in any output.
++.IP
+ \fBfilter\fP \(em List of patterns to apply to devices found by a scan.
+ Patterns are regular expressions delimited by any character and preceded
+ by \fBa\fP (for accept) or \fBr\fP (for reject).  The list is traversed
 
 
