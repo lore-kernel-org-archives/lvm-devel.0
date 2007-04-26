@@ -1,95 +1,73 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Thu, 26 Apr 2007 18:21:04 +0200
-Subject: clvmd-command.c: unchecked realloc return value: potential DoS?
-Message-ID: <87ejm72jkf.fsf@rho.meyering.net>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 26 Apr 2007 16:40:46 -0000
+Subject: LVM2 ./WHATS_NEW lib/config/config.c lib/datas ...
+Message-ID: <20070426164046.18648.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-While this "case:" is solely for CLVMD_CMD_TEST, which is documented like this:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2007-04-26 17:40:46
 
-  #define CLVMD_CMD_TEST     4	/* Just for mucking about */
+Modified files:
+	.              : WHATS_NEW 
+	lib/config     : config.c 
+	lib/datastruct : lvm-types.h 
 
-we wouldn't want a malicious client to be able to DoS a server
-by provoking a low-memory condition and then sending a test message.
+Log message:
+	Fix warnings on x86_64 involving ptrdiff_t:
+	config/config.c:493: warning: format '%d' expects type 'int', but argument 5 has type 'long int'
+	
+	Modified original patch from Jim Meyering <jim@meyering.net>
 
-Here's the code:
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.605&r2=1.606
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/lvm-types.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
 
-int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
-	       char **buf, int buflen, int *retlen)
-{
-	...
-	switch (msg->cmd) {
-		/* Just a test message */
-	case CLVMD_CMD_TEST:
-		if (arglen > buflen) {
-			buflen = arglen + 200;
-			*buf = realloc(*buf, buflen);
-		}
-		uname(&nodeinfo);
-		*retlen = 1 + snprintf(*buf, buflen, "TEST from %s: %s v%s",
-				       nodeinfo.nodename, args,
-				       nodeinfo.release);
-		break;
-
-Here's an untested patch:
-
-	* daemons/clvmd/clvmd-command.c (do_command): Don't dereference NULL
-	upon failed realloc.
-
-Index: daemons/clvmd/clvmd-command.c
-===================================================================
-RCS file: /cvs/lvm2/LVM2/daemons/clvmd/clvmd-command.c,v
-retrieving revision 1.14
-diff -u -p -r1.14 clvmd-command.c
---- daemons/clvmd/clvmd-command.c	11 Dec 2006 14:00:26 -0000	1.14
-+++ daemons/clvmd/clvmd-command.c	26 Apr 2007 16:10:17 -0000
-@@ -95,13 +95,22 @@ int do_command(struct local_client *clie
- 		/* Just a test message */
- 	case CLVMD_CMD_TEST:
- 		if (arglen > buflen) {
-+			char *new_buf;
- 			buflen = arglen + 200;
--			*buf = realloc(*buf, buflen);
-+			new_buf = realloc(*buf, buflen);
-+			if (new_buf == NULL) {
-+				status = errno;
-+				free (*buf);
-+			}
-+			*buf = new_buf;
-+		}
-+		if (*buf) {
-+			uname(&nodeinfo);
-+			*retlen = 1 + snprintf(*buf, buflen,
-+					       "TEST from %s: %s v%s",
-+					       nodeinfo.nodename, args,
-+					       nodeinfo.release);
- 		}
--		uname(&nodeinfo);
--		*retlen = 1 + snprintf(*buf, buflen, "TEST from %s: %s v%s",
--				       nodeinfo.nodename, args,
--				       nodeinfo.release);
+--- LVM2/WHATS_NEW	2007/04/25 21:10:55	1.605
++++ LVM2/WHATS_NEW	2007/04/26 16:40:45	1.606
+@@ -1,5 +1,6 @@
+ Version 2.02.25 -
+ =================================
++  Fix warnings on x86_64 involving ptrdiff_t in log_error messages
+   Update pvck to include text metadata area and record detection
+   Add support functions for analysis of config sections
+   Update pvck to read labels on disk, with --labelsector parameter
+--- LVM2/lib/config/config.c	2007/04/25 20:38:39	1.56
++++ LVM2/lib/config/config.c	2007/04/26 16:40:46	1.57
+@@ -83,7 +83,8 @@
+ 
+ #define match(t) do {\
+    if (!_match_aux(p, (t))) {\
+-	log_error("Parse error at byte %d (line %d): unexpected token", p->tb - p->fb + 1, p->line); \
++	log_error("Parse error at byte %" PRIptrdiff_t " (line %d): unexpected token", \
++		  p->tb - p->fb + 1, p->line); \
+       return 0;\
+    } \
+ } while(0);
+@@ -590,7 +591,8 @@
  		break;
-
- 	case CLVMD_CMD_LOCK_VG:
-
-------------------------------
-BTW, in the same function, I noticed that "*retlen" is not set consistently.
-In the CLVMD_CMD_TEST and CLVMD_CMD_LOCK_VG cases, it's set to
-"1 + snprintf(...)", so it includes the trailing NUL byte.
-But here, it doesn't:
-
-	case CLVMD_CMD_GET_CLUSTERNAME:
-		status = clops->get_cluster_name(*buf, buflen);
-		if (!status)
-			*retlen = strlen(*buf);
-		break;
-
-I don't know enough to say whether there's a bug, but it's worth
-fixing in any case, e.g.,
-
-			*retlen = 1 + strlen(*buf);
+ 
+ 	default:
+-		log_error("Parse error at byte %d (line %d): expected a value", p->tb - p->fb + 1, p->line);
++		log_error("Parse error at byte %" PRIptrdiff_t " (line %d): expected a value",
++			  p->tb - p->fb + 1, p->line);
+ 		return 0;
+ 	}
+ 	return v;
+--- LVM2/lib/datastruct/lvm-types.h	2005/05/09 17:45:06	1.11
++++ LVM2/lib/datastruct/lvm-types.h	2007/04/26 16:40:46	1.12
+@@ -23,6 +23,7 @@
+ 
+ /* Define some portable printing types */
+ #define PRIsize_t "zu"
++#define PRIptrdiff_t "td"
+ 
+ struct str_list {
+ 	struct list list;
 
 
