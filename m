@@ -1,98 +1,227 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 8 Nov 2019 09:14:58 -0500
-Subject: stable-2.02 - cov: missing checks of syscalls
-Message-ID: <201911081414.xA8EEwb4008298@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Apr 2007 17:46:18 -0000
+Subject: LVM2 ./WHATS_NEW ./make.tmpl.in daemons/clvmd/ ...
+Message-ID: <20070427174618.18491.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=67bdae069751e4779e738283e3d8a5873622bfc0
-Commit:        67bdae069751e4779e738283e3d8a5873622bfc0
-Parent:        50fb24f5c208ff9b89b80a1f7aa32dcdafd98e12
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 1 20:25:39 2019 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 8 13:04:02 2019 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-04-27 18:46:16
 
-cov: missing checks of syscalls
+Modified files:
+	.              : WHATS_NEW make.tmpl.in 
+	daemons/clvmd  : clvmd-cman.c clvmd-command.c clvmd-gulm.c 
+	                 clvmd.c lvm-functions.c system-lv.c tcp-comms.c 
+	dmeventd/mirror: dmeventd_mirror.c 
+	lib/activate   : activate.c 
+	lib/misc       : lib.h 
 
-Check for sigaction,sigprocmask,pthread_sigmask errors
----
- daemons/clvmd/clvmd.c            |   10 ++++++----
- libdaemon/server/daemon-server.c |    9 ++++++---
- tools/toollib.c                  |    3 ++-
- 3 files changed, 14 insertions(+), 8 deletions(-)
+Log message:
+	Change some #include lines to search only standard system directories.
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 829c5e5..e1d8a79 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -887,7 +887,8 @@ static void main_loop(int cmd_timeout)
- 	sigemptyset(&ss);
- 	sigaddset(&ss, SIGINT);
- 	sigaddset(&ss, SIGTERM);
--	pthread_sigmask(SIG_UNBLOCK, &ss, NULL);
-+	if (pthread_sigmask(SIG_UNBLOCK, &ss, NULL))
-+		log_warn("WARNING: Failed to unblock SIGCHLD.");
- 	/* Main loop */
- 	while (!quit) {
- 		fd_set in;
-@@ -1731,11 +1732,12 @@ static __attribute__ ((noreturn)) void *pre_and_post_thread(void *arg)
- 	   SIGUSR2 (kills subthreads) */
- 	sigemptyset(&ss);
- 	sigaddset(&ss, SIGUSR1);
--	pthread_sigmask(SIG_BLOCK, &ss, NULL);
--
-+	if (pthread_sigmask(SIG_BLOCK, &ss, NULL))
-+		log_warn("WARNING: Failed to block SIGUSR1.");
- 	sigdelset(&ss, SIGUSR1);
- 	sigaddset(&ss, SIGUSR2);
--	pthread_sigmask(SIG_UNBLOCK, &ss, NULL);
-+	if (pthread_sigmask(SIG_UNBLOCK, &ss, NULL))
-+		log_warn("WARNING: Failed to unblock SIGUSR2.");
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.607&r2=1.608
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-cman.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-gulm.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/system-lv.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/tcp-comms.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lib.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+
+--- LVM2/WHATS_NEW	2007/04/26 16:44:57	1.607
++++ LVM2/WHATS_NEW	2007/04/27 17:46:15	1.608
+@@ -1,5 +1,6 @@
+ Version 2.02.25 -
+ =================================
++  Change some #include lines to search only standard system directories.
+   Add devices/preferred_names config regex list for displayed device names.
+   Free a temporary dir string in fcntl_lock_file() after use.
+   Fix a dm_pool_destroy() in matcher_create().
+--- LVM2/make.tmpl.in	2007/01/11 17:12:26	1.47
++++ LVM2/make.tmpl.in	2007/04/27 17:46:15	1.48
+@@ -94,7 +94,7 @@
+ LIB_VERSION := $(shell cat $(top_srcdir)/VERSION | \
+ 		 awk -F '.' '{printf "%s.%s",$$1,$$2}')
  
- 	/* Loop around doing PRE and POST functions until the client goes away */
- 	while (!client->bits.localsock.finished) {
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 62f403a..51e5866 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -663,14 +663,17 @@ void daemon_start(daemon_state s)
- 		FD_SET(s.socket_fd, &in);
+-INCLUDES += -I. -I$(top_srcdir)/include
++INCLUDES += -I$(top_srcdir)/include
  
- 		_reap(s, 0);
--		sigprocmask(SIG_SETMASK, &new_set, NULL);
-+		if (sigprocmask(SIG_SETMASK, &new_set, NULL))
-+			perror("sigprocmask error");
- 		if (_shutdown_requested && !s.threads->next) {
--			sigprocmask(SIG_SETMASK, &old_set, NULL);
-+			if (sigprocmask(SIG_SETMASK, &old_set, NULL))
-+				perror("sigprocmask error");
- 			INFO(&s, "%s shutdown requested", s.name);
- 			break;
- 		}
- 		ret = pselect(s.socket_fd + 1, &in, NULL, NULL, _get_timeout(s), &old_set);
--		sigprocmask(SIG_SETMASK, &old_set, NULL);
-+		if (sigprocmask(SIG_SETMASK, &old_set, NULL))
-+			perror("sigprocmask error");
+ ifneq ("@DMDIR@", "")
+   INCLUDES += -I at DMDIR@/include
+--- LVM2/daemons/clvmd/clvmd-cman.c	2007/04/23 14:55:28	1.17
++++ LVM2/daemons/clvmd/clvmd-cman.c	2007/04/27 17:46:16	1.18
+@@ -36,10 +36,10 @@
+ #include <fcntl.h>
+ #include <getopt.h>
+ #include <errno.h>
++#include <libdlm.h>
  
- 		if (ret < 0) {
- 			if (errno != EINTR && errno != EAGAIN &&
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 42179d9..0c1c095 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -59,7 +59,8 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
+ #include "clvmd-comms.h"
+ #include "clvm.h"
+-#include "libdlm.h"
+ #include "log.h"
+ #include "clvmd.h"
+ #include "lvm-functions.h"
+--- LVM2/daemons/clvmd/clvmd-command.c	2006/12/11 14:00:26	1.14
++++ LVM2/daemons/clvmd/clvmd-command.c	2007/04/27 17:46:16	1.15
+@@ -64,8 +64,9 @@
+ #include <stddef.h>
+ #include <unistd.h>
+ #include <errno.h>
++#include <libdevmapper.h>
++#include <libdlm.h>
  
- 	log_verbose("Forking background process from command: %s", cmd->cmd_line);
+-#include "libdevmapper.h"
+ #include "list.h"
+ #include "locking.h"
+ #include "log.h"
+@@ -73,7 +74,6 @@
+ #include "clvmd-comms.h"
+ #include "clvm.h"
+ #include "clvmd.h"
+-#include "libdlm.h"
  
--	sigaction(SIGCHLD, &act, NULL);
-+	if (sigaction(SIGCHLD, &act, NULL))
-+		log_warn("WARNING: Failed to set SIGCHLD action.");
+ extern struct cluster_ops *clops;
  
- 	if (!skip_lvm)
- 		if (!sync_local_dev_names(cmd)) { /* Flush ops and reset dm cookie */
+--- LVM2/daemons/clvmd/clvmd-gulm.c	2006/12/11 14:00:26	1.20
++++ LVM2/daemons/clvmd/clvmd-gulm.c	2007/04/27 17:46:16	1.21
+@@ -40,9 +40,10 @@
+ #include <utmpx.h>
+ #include <syslog.h>
+ #include <assert.h>
++#include <libdevmapper.h>
++#include <ccs.h>
++#include <libgulm.h>
+ 
+-#include "libdevmapper.h"
+-#include "ccs.h"
+ #include "list.h"
+ #include "locking.h"
+ #include "log.h"
+@@ -51,7 +52,6 @@
+ #include "lvm-functions.h"
+ #include "clvmd.h"
+ #include "clvmd-gulm.h"
+-#include "libgulm.h"
+ 
+ /* Hash list of nodes in the cluster */
+ static struct dm_hash_table *node_hash;
+--- LVM2/daemons/clvmd/clvmd.c	2007/03/29 13:59:33	1.34
++++ LVM2/daemons/clvmd/clvmd.c	2007/04/27 17:46:16	1.35
+@@ -37,6 +37,7 @@
+ #include <getopt.h>
+ #include <syslog.h>
+ #include <errno.h>
++#include <libdlm.h>
+ 
+ #include "clvmd-comms.h"
+ #include "lvm-functions.h"
+@@ -44,7 +45,6 @@
+ #include "version.h"
+ #include "clvmd.h"
+ #include "refresh_clvmd.h"
+-#include "libdlm.h"
+ #include "system-lv.h"
+ #include "list.h"
+ #include "log.h"
+--- LVM2/daemons/clvmd/lvm-functions.c	2007/04/24 15:13:13	1.29
++++ LVM2/daemons/clvmd/lvm-functions.c	2007/04/27 17:46:16	1.30
+@@ -30,11 +30,11 @@
+ #include <errno.h>
+ #include <syslog.h>
+ #include <assert.h>
++#include <libdevmapper.h>
++#include <libdlm.h>
+ 
+-#include "libdevmapper.h"
+ #include "list.h"
+ #include "lvm-types.h"
+-#include "libdlm.h"
+ #include "clvm.h"
+ #include "clvmd-comms.h"
+ #include "clvmd.h"
+--- LVM2/daemons/clvmd/system-lv.c	2005/01/13 13:24:02	1.2
++++ LVM2/daemons/clvmd/system-lv.c	2007/04/27 17:46:16	1.3
+@@ -36,8 +36,11 @@
+ #include <dirent.h>
+ #include <errno.h>
+ #include <mntent.h>
++#include <libdlm.h>
++#ifdef HAVE_CCS
++#include <ccs.h>
++#endif
+ 
+-#include "libdlm.h"
+ #include "log.h"
+ #include "list.h"
+ #include "locking.h"
+@@ -45,9 +48,6 @@
+ #include "clvm.h"
+ #include "clvmd-comms.h"
+ #include "clvmd.h"
+-#ifdef HAVE_CCS
+-#include "ccs.h"
+-#endif
+ 
+ #define SYSTEM_LV_FILESYSTEM "ext2"
+ #define SYSTEM_LV_MOUNTPOINT "/tmp/.clvmd-XXXXXX"
+--- LVM2/daemons/clvmd/tcp-comms.c	2006/05/09 21:23:49	1.15
++++ LVM2/daemons/clvmd/tcp-comms.c	2007/04/27 17:46:16	1.16
+@@ -34,8 +34,8 @@
+ #include <syslog.h>
+ #include <netdb.h>
+ #include <assert.h>
++#include <libdevmapper.h>
+ 
+-#include "libdevmapper.h"
+ #include "clvm.h"
+ #include "clvmd-comms.h"
+ #include "clvmd.h"
+--- LVM2/dmeventd/mirror/dmeventd_mirror.c	2007/01/25 23:32:29	1.17
++++ LVM2/dmeventd/mirror/dmeventd_mirror.c	2007/04/27 17:46:16	1.18
+@@ -12,10 +12,10 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
+ 
+-#include "libdevmapper.h"
+-#include "libdevmapper-event.h"
+ #include "lvm2cmd.h"
+ 
++#include <libdevmapper.h>
++#include <libdevmapper-event.h>
+ #include <errno.h>
+ #include <signal.h>
+ #include <string.h>
+--- LVM2/lib/activate/activate.c	2007/03/08 21:08:25	1.121
++++ LVM2/lib/activate/activate.c	2007/04/27 17:46:16	1.122
+@@ -168,7 +168,7 @@
+ {
+ 	return 0;
+ }
+-int lvs_in_vg_activated_by_uuid_only(struct volume_group *vg);
++int lvs_in_vg_activated_by_uuid_only(struct volume_group *vg)
+ {
+ 	return 0;
+ }
+--- LVM2/lib/misc/lib.h	2006/08/17 18:23:44	1.10
++++ LVM2/lib/misc/lib.h	2007/04/27 17:46:16	1.11
+@@ -19,7 +19,7 @@
+ #ifndef _LVM_LIB_H
+ #define _LVM_LIB_H
+ 
+-#include <configure.h>
++#include "configure.h"
+ 
+ #define _REENTRANT
+ #define _GNU_SOURCE
 
 
