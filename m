@@ -1,81 +1,80 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 26 Feb 2020 07:30:57 -0500
-Subject: master - tests: validate vdo slab_size
-Message-ID: <202002261230.01QCUvNI001080@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Jim Meyering <jim@meyering.net>
+Date: Fri, 27 Apr 2007 12:00:54 +0200
+Subject: clvmd-cman.c: another unchecked malloc
+In-Reply-To: <87lkgf2qkj.fsf@rho.meyering.net> (Jim Meyering's message of
+	"Thu\, 26 Apr 2007 15\:49\:48 +0200")
+References: <87lkgf2qkj.fsf@rho.meyering.net>
+Message-ID: <874pn216i1.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9532bb577a82df454254ab65002f4be5bcc65060
-Commit:        9532bb577a82df454254ab65002f4be5bcc65060
-Parent:        d02d7bc560ef27d2a0e66d40f96519379d320735
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 26 13:26:46 2020 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Feb 26 13:29:21 2020 +0100
+Jim Meyering <jim@meyering.net> wrote:
 
-tests: validate vdo slab_size
+> There's an unchecked malloc in clvmd-cman.c's get_members function:
+>
+> 	if (node_updown == NULL) {
+> 		node_updown =
+> 			(int *) malloc(sizeof(int) *
+> 				       max(num_nodes, max_updown_nodes));
+> 		memset(node_updown, 0,
+> 		       sizeof(int) * max(num_nodes, max_updown_nodes));
+> 	}
+>
+> Here's a fix.
+> At the same time, I've taken the liberty of factoring out
+> the common sub-expression (buffer length) and eliminating
+> the cast on malloc's return value.
+>
+> 	* daemons/clvmd/clvmd-cman.c (get_members): Don't dereference NULL
+> 	upon failed malloc.
+>
+> Index: daemons/clvmd/clvmd-cman.c
+> ===================================================================
+> RCS file: /cvs/lvm2/LVM2/daemons/clvmd/clvmd-cman.c,v
+> retrieving revision 1.17
+> diff -u -p -r1.17 clvmd-cman.c
+> --- daemons/clvmd/clvmd-cman.c	23 Apr 2007 14:55:28 -0000	1.17
+> +++ daemons/clvmd/clvmd-cman.c	26 Apr 2007 13:46:02 -0000
+> @@ -320,11 +320,10 @@ static void get_members()
+>  	}
+>
+>  	if (node_updown == NULL) {
+> -		node_updown =
+> -			(int *) malloc(sizeof(int) *
+> -				       max(num_nodes, max_updown_nodes));
+> -		memset(node_updown, 0,
+> -		       sizeof(int) * max(num_nodes, max_updown_nodes));
+> +		size_t buf_len = sizeof(int) * max(num_nodes, max_updown_nodes));
 
-New vdoformat can print this size - so check we pass proper bit count
-matching preset value.
----
- WHATS_NEW                  |  1 +
- test/lib/aux.sh            |  1 +
- test/shell/lvcreate-vdo.sh | 13 ++++++++-----
- 3 files changed, 10 insertions(+), 5 deletions(-)
+Whoops.
+Now that I've installed enough -devel packages to compile that file,
+I see that there are too many parentheses above.
+Here's a corrected patch:
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 30f1391..664df61 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.09 - 
- ====================================
-+  Fix formating of vdopool (vdo_slab_size_mb was smaller by 2 bits).
-   Fix showing of a dm kernel error when uncaching a volume with cachevol.
- 
- Version 2.03.08 - 11th February 2020
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index a9d1fe4..83a88a6 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1233,6 +1233,7 @@ activation/udev_sync = 1
- activation/verify_udev_operations = $LVM_VERIFY_UDEV
- activation/raid_region_size = 512
- allocation/wipe_signatures_when_zeroing_new_lvs = 0
-+allocation/vdo_slab_size_mb = 128
- backup/archive = 0
- backup/backup = 0
- devices/cache_dir = "$TESTDIR/etc"
-diff --git a/test/shell/lvcreate-vdo.sh b/test/shell/lvcreate-vdo.sh
-index 64377cd..d66e353 100644
---- a/test/shell/lvcreate-vdo.sh
-+++ b/test/shell/lvcreate-vdo.sh
-@@ -34,14 +34,17 @@ get_devs
- #	'allocation/vdo_physical_threads = 0' \
- #	'allocation/vdo_cpu_threads = 1'
- 
--aux lvmconf 'allocation/vdo_slab_size_mb = 128'
--
--
- vgcreate $SHARED -s 64K "$vg" "${DEVICES[@]}"
- 
- # Create VDO device  (vdo-pool is ATM internal volume type)
--lvcreate --type vdo -L4G -n $lv1 $vg/$lv2
--check lv_field $vg/$lv1 size "1.24g"
-+lvcreate --type vdo -L4G -n $lv1 $vg/$lv2 >out 2>&1
-+# new vdoformat prints some more info
-+if grep "data slabs" out ; then
-+	# check we have match vdo_slab_size_mb == 128MB (aux.sh)
-+	grep "each 128 MB" out
-+fi
-+
-+check lv_field $vg/$lv1 size "<1.24g"
- check lv_field $vg/${lv2} size "4.00g"
- check lv_field $vg/${lv2}_vdata size "4.00g"
- lvremove -ff $vg
+Index: daemons/clvmd/clvmd-cman.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/daemons/clvmd/clvmd-cman.c,v
+retrieving revision 1.17
+diff -u -p -r1.17 clvmd-cman.c
+--- daemons/clvmd/clvmd-cman.c	23 Apr 2007 14:55:28 -0000	1.17
++++ daemons/clvmd/clvmd-cman.c	27 Apr 2007 10:00:06 -0000
+@@ -320,11 +320,10 @@ static void get_members()
+ 	}
 
+ 	if (node_updown == NULL) {
+-		node_updown =
+-			(int *) malloc(sizeof(int) *
+-				       max(num_nodes, max_updown_nodes));
+-		memset(node_updown, 0,
+-		       sizeof(int) * max(num_nodes, max_updown_nodes));
++		size_t bufsiz = sizeof(int) * max(num_nodes, max_updown_nodes);
++		node_updown = malloc(bufsiz);
++		if (node_updown)
++			memset(node_updown, 0, bufsiz);
+ 	}
+ }
 
 
