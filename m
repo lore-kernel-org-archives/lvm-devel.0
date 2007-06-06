@@ -1,61 +1,55 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 5 Jun 2007 18:23:18 -0000
-Subject: LVM2/tools pvdisplay.c
-Message-ID: <20070605182318.32172.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 6 Jun 2007 19:40:36 +0100
+Subject: [PATCH] add vg_check_status to consolidate vg status checks and error messages
+In-Reply-To: <1180982410.3830.18.camel@linux-cxyg>
+References: <1180982410.3830.18.camel@linux-cxyg>
+Message-ID: <20070606184036.GL25091@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-06-05 18:23:18
+On Mon, Jun 04, 2007 at 02:40:10PM -0400, Dave Wysochanski wrote:
+> Minor functional changes:
+> 1) Some checks are not in the exact order as before, but this should not
+> matter (other than possible error message sequencing)
 
-Modified files:
-	tools          : pvdisplay.c 
+Not a problem.
 
-Log message:
-	make code consistent with pvresize code - good candidate for common code cleanup
+> 2) Very slight differences in some error messages as a result of the
+> messages printed from a single function (e.g. some vg names displayed
+> were in double quotes, others were not)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvdisplay.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+Not a problem.  LVM1 used quotes; I preferred not to.
 
---- LVM2/tools/pvdisplay.c	2007/05/31 20:10:25	1.27
-+++ LVM2/tools/pvdisplay.c	2007/06/05 18:23:17	1.28
-@@ -19,10 +19,10 @@
- 			     struct volume_group *vg __attribute((unused)),
- 			     struct physical_volume *pv, void *handle)
- {
-+	struct pv_list *pvl;
- 	int consistent = 0;
- 	int ret = ECMD_PROCESSED;
- 	uint64_t size;
--	struct physical_volume *pv_temp;
+> 3) Now using "vg->name" in the log_error messages, instead of the
+> variety of different variables being used.  I traced the prior call to
+> vg_read though, and if we get non-NULL there, vg->name should be valid,
+> so I'm fairly certain this is ok.
+
+OK
  
- 	const char *pv_name = dev_name(pv->dev);
+> RFC items:
+> 1) Possible unlock errors in 2 places of existing code involving the
+> CLUSTERED check (see pvchange.c and pvmove.c).  I think an unlock should
+> be added here but left it out to keep as close to existing code as
+> possible and to call out this possible change.
+
+Well a successful lock_vol on a VG must be followed eventually by an
+unlock_vg on all paths - including error paths - so an inconsistency
+between the different error paths while holding the lock is a bug.
+
+> 2) Not sure if lib/metadata.c is the right place for this.  Should I
+> create a lib/metadata/vg_manip.c or put it elsewhere
  
-@@ -49,15 +49,14 @@
- 		  * Replace possibly incomplete PV structure with new one
- 		  * allocated in vg_read() path.
- 		  */
--		 pv_temp = find_pv(vg, pv->dev);
--		 if (!pv_temp) {
--			 log_error("Unable to find physical volume %s "
--				   "in volume group %s",
--				   pv_name, pv->vg_name);
-+		 if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-+			 log_error("Unable to find \"%s\" in volume group \"%s\"",
-+				   pv_name, vg->name);
- 	                 ret = ECMD_FAILED;
--			 goto out;
-+	                 goto out;
- 		 }
--		 pv = pv_temp;
-+
-+		 pv = pvl->pv;
- 	}
- 
- 	if (!*pv->vg_name)
+lib/metadata.c is fine.
+tools/toollib.c would also be OK.
+There isn't yet a clear policy - though ECMD_* errors shouldn't be
+used outside the tools directory.
+
+Alasdair
+-- 
+agk at redhat.com
 
 
