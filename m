@@ -1,7 +1,7 @@
-From: bmr@sourceware.org <bmr@sourceware.org>
-Date: 8 Jun 2007 22:38:49 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/archive.c lib ...
-Message-ID: <20070608223849.1607.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 11 Jun 2007 18:29:31 -0000
+Subject: LVM2 lib/metadata/metadata.c ./WHATS_NEW
+Message-ID: <20070611182931.19436.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,137 +10,230 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	bmr at sourceware.org	2007-06-08 22:38:48
+Changes by:	wysochanski at sourceware.org	2007-06-11 18:29:30
 
 Modified files:
+	lib/metadata   : metadata.c 
 	.              : WHATS_NEW 
-	lib/format_text: archive.c archiver.c archiver.h format-text.h 
-	tools          : vgcfgrestore.c 
 
 Log message:
-	Allow vgcfgrestore to list metadata backup files using -f
+	Add wrappers to functions related to pv commands in preparation for exported LVM lib
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.624&r2=1.625
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.h.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.h.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgrestore.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.625&r2=1.626
 
---- LVM2/WHATS_NEW	2007/06/06 19:40:27	1.624
-+++ LVM2/WHATS_NEW	2007/06/08 22:38:48	1.625
-@@ -1,5 +1,6 @@
- Version 2.02.26 -
- =================================
-+  Allow vgcfgrestore to list metadata backup files using -f
-   Add vg_check_status to consolidate vg status checks and error messages.
-   Add pvdisplay --maps implementation.
-   Fix vgcfgrestore man pg to show mandatory VG name and remove LVM1 options.
---- LVM2/lib/format_text/archive.c	2007/01/25 14:37:48	1.25
-+++ LVM2/lib/format_text/archive.c	2007/06/08 22:38:48	1.26
-@@ -362,6 +362,22 @@
+--- LVM2/lib/metadata/metadata.c	2007/06/06 19:40:27	1.109
++++ LVM2/lib/metadata/metadata.c	2007/06/11 18:29:30	1.110
+@@ -28,6 +28,33 @@
+ 
+ #include <sys/param.h>
+ 
++static struct physical_volume *_pv_read(struct cmd_context *cmd, 
++					const char *pv_name,
++					struct list *mdas, 
++					uint64_t *label_sector,
++					int warnings);
++
++static struct physical_volume *_pv_create(const struct format_type *fmt,
++				  struct device *dev,
++				  struct id *id, uint64_t size,
++				  uint64_t pe_start,
++				  uint32_t existing_extent_count,
++				  uint32_t existing_extent_size,
++				  int pvmetadatacopies,
++				  uint64_t pvmetadatasize, struct list *mdas);
++
++static int _pv_write(struct cmd_context *cmd __attribute((unused)), 
++		     struct physical_volume *pv,
++	     	     struct list *mdas, int64_t label_sector);
++
++static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
++			 			const char *pv_name);
++
++static struct pv_list *_find_pv_in_vg(struct volume_group *vg, const char *pv_name);
++
++static struct physical_volume *_find_pv_in_vg_by_uuid(struct volume_group *vg,
++						      struct id *id);
++
+ unsigned long pe_align(void)
+ {
+ 	return MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
+@@ -50,7 +77,7 @@
+ 	}
+ 
+ 	list_init(&mdas);
+-	if (!(pv = pv_read(fid->fmt->cmd, pv_name, &mdas, NULL, 1))) {
++	if (!(pv = _pv_read(fid->fmt->cmd, pv_name, &mdas, NULL, 1))) {
+ 		log_error("%s not identified as an existing physical volume",
+ 			  pv_name);
+ 		return 0;
+@@ -103,7 +130,7 @@
+ 		return 0;
+ 	}
+ 
+-	if (find_pv_in_vg(vg, pv_name)) {
++	if (_find_pv_in_vg(vg, pv_name)) {
+ 		log_error("Physical volume '%s' listed more than once.",
+ 			  pv_name);
+ 		return 0;
+@@ -533,7 +560,7 @@
  	return 1;
  }
  
-+int archive_list_file(struct cmd_context *cmd, const char *file)
-+{
-+	struct archive_file af;
-+
-+	af.path = (char *)file;
-+
-+	if (!path_exists(af.path)) {
-+		log_err("Archive file %s not found.", af.path);
-+		return 0;
-+	}
-+
-+	_display_archive(cmd, &af);
-+
-+	return 1;
+-/* Sizes in sectors */
++/* FIXME: liblvm todo - make into function that returns handle */
+ struct physical_volume *pv_create(const struct format_type *fmt,
+ 				  struct device *dev,
+ 				  struct id *id, uint64_t size,
+@@ -543,6 +570,23 @@
+ 				  int pvmetadatacopies,
+ 				  uint64_t pvmetadatasize, struct list *mdas)
+ {
++	return _pv_create(fmt, dev, id, size, pe_start, 
++			  existing_extent_count,
++			  existing_extent_size,
++			  pvmetadatacopies,
++			  pvmetadatasize, mdas);
 +}
 +
- int backup_list(struct cmd_context *cmd, const char *dir, const char *vgname)
- {
- 	struct archive_file af;
---- LVM2/lib/format_text/archiver.c	2006/08/21 12:54:52	1.5
-+++ LVM2/lib/format_text/archiver.c	2007/06/08 22:38:48	1.6
-@@ -148,6 +148,17 @@
- 	return r1 && r2;
++/* Sizes in sectors */
++static struct physical_volume *_pv_create(const struct format_type *fmt,
++				  struct device *dev,
++				  struct id *id, uint64_t size,
++				  uint64_t pe_start,
++				  uint32_t existing_extent_count,
++				  uint32_t existing_extent_size,
++				  int pvmetadatacopies,
++				  uint64_t pvmetadatasize, struct list *mdas)
++{
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = dm_pool_zalloc(mem, sizeof(*pv));
+ 
+@@ -610,8 +654,14 @@
+ 	return NULL;
  }
  
-+int archive_display_file(struct cmd_context *cmd, const char *file)
-+{
-+	int r;
-+
-+	init_partial(1);
-+	r = archive_list_file(cmd, file);
-+	init_partial(0);
-+
-+	return r;
++/* FIXME: liblvm todo - make into function that returns handle */
+ struct pv_list *find_pv_in_vg(struct volume_group *vg, const char *pv_name)
+ {
++	return _find_pv_in_vg(vg, pv_name);
 +}
 +
- int backup_init(struct cmd_context *cmd, const char *dir)
++static struct pv_list *_find_pv_in_vg(struct volume_group *vg, const char *pv_name)
++{
+ 	struct pv_list *pvl;
+ 
+ 	list_iterate_items(pvl, &vg->pvs)
+@@ -632,9 +682,17 @@
+ 	return 0;
+ }
+ 
++/* FIXME: liblvm todo - make into function that returns handle */
+ struct physical_volume *find_pv_in_vg_by_uuid(struct volume_group *vg,
+ 					      struct id *id)
  {
- 	if (!(cmd->backup_params = dm_pool_zalloc(cmd->libmem,
---- LVM2/lib/format_text/archiver.h	2005/05/17 13:46:37	1.1
-+++ LVM2/lib/format_text/archiver.h	2007/06/08 22:38:48	1.2
-@@ -38,6 +38,7 @@
- void archive_enable(struct cmd_context *cmd, int flag);
- int archive(struct volume_group *vg);
- int archive_display(struct cmd_context *cmd, const char *vg_name);
-+int archive_display_file(struct cmd_context *cmd, const char *file);
++	return _find_pv_in_vg_by_uuid(vg, id);
++}
++
++
++static struct physical_volume *_find_pv_in_vg_by_uuid(struct volume_group *vg,
++						      struct id *id)
++{
+ 	struct pv_list *pvl;
  
- int backup_init(struct cmd_context *cmd, const char *dir);
- void backup_exit(struct cmd_context *cmd);
---- LVM2/lib/format_text/format-text.h	2006/05/11 17:58:58	1.20
-+++ LVM2/lib/format_text/format-text.h	2007/06/08 22:38:48	1.21
-@@ -33,6 +33,7 @@
-  * Displays a list of vg backups in a particular archive directory.
-  */
- int archive_list(struct cmd_context *cmd, const char *dir, const char *vgname);
-+int archive_list_file(struct cmd_context *cmd, const char *file);
- int backup_list(struct cmd_context *cmd, const char *dir, const char *vgname);
+ 	list_iterate_items(pvl, &vg->pvs)
+@@ -691,12 +749,20 @@
+ 	return NULL;
+ }
  
- /*
---- LVM2/tools/vgcfgrestore.c	2007/03/09 20:47:41	1.13
-+++ LVM2/tools/vgcfgrestore.c	2007/06/08 22:38:48	1.14
-@@ -19,26 +19,27 @@
++/* FIXME: liblvm todo - make into function that returns handle */
+ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+ 					const char *pv_name)
  {
- 	char *vg_name;
++	return _find_pv_by_name(cmd, pv_name);
++}
++
++
++static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
++			 			const char *pv_name)
++{
+ 	struct physical_volume *pv;
  
--	if (argc != 1) {
-+	if (argc == 1) {
-+		vg_name = skip_dev_dir(cmd, argv[0], NULL);
-+		if (!validate_name(vg_name)) {
-+			log_error("Volume group name \"%s\" is invalid", vg_name);
-+			return ECMD_FAILED;
-+		}
-+	} else if (!(arg_count(cmd, list_ARG) && arg_count(cmd, file_ARG))) {
- 		log_err("Please specify a *single* volume group to restore.");
- 		return ECMD_FAILED;
+-	if (!(pv = pv_read(cmd, pv_name, NULL, NULL, 1))) {
++	if (!(pv = _pv_read(cmd, pv_name, NULL, NULL, 1))) {
+ 		log_error("Physical volume %s not found", pv_name);
+ 		return NULL;
+ 	}
+@@ -980,7 +1046,7 @@
  	}
  
--	vg_name = skip_dev_dir(cmd, argv[0], NULL);
--
--	if (!validate_name(vg_name)) {
--		log_error("Volume group name \"%s\" is invalid", vg_name);
--		return ECMD_FAILED;
--	}
--
- 	/*
- 	 * FIXME: overloading the -l arg for now to display a
- 	 * list of archive files for a particular vg
- 	 */
- 	if (arg_count(cmd, list_ARG)) {
--		if (!archive_display(cmd, vg_name))
-+		if (!(arg_count(cmd,file_ARG) ?
-+			archive_display_file(cmd,
-+					arg_str_value(cmd, file_ARG, "")) :
-+			archive_display(cmd, vg_name)))
- 			return ECMD_FAILED;
--
- 		return ECMD_PROCESSED;
+ 	list_iterate_items(info, &vginfo->infos) {
+-		if (!(pv = pv_read(cmd, dev_name(info->dev), NULL, NULL, 1))) {
++		if (!(pv = _pv_read(cmd, dev_name(info->dev), NULL, NULL, 1))) {
+ 			continue;
+ 		}
+ 		if (!(pvl = dm_pool_zalloc(cmd->mem, sizeof(*pvl)))) {
+@@ -1386,11 +1452,21 @@
+ 	return lvl->lv;
+ }
+ 
+-/* FIXME Use label functions instead of PV functions */
++/* FIXME: liblvm todo - make into function that returns handle */
+ struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+ 				struct list *mdas, uint64_t *label_sector,
+ 				int warnings)
+ {
++	return _pv_read(cmd, pv_name, mdas, label_sector, warnings);
++}
++
++/* FIXME Use label functions instead of PV functions */
++static struct physical_volume *_pv_read(struct cmd_context *cmd, 
++					const char *pv_name,
++					struct list *mdas, 
++					uint64_t *label_sector,
++					int warnings)
++{
+ 	struct physical_volume *pv;
+ 	struct label *label;
+ 	struct lvmcache_info *info;
+@@ -1510,9 +1586,18 @@
+ 	return results;
+ }
+ 
+-int pv_write(struct cmd_context *cmd __attribute((unused)), struct physical_volume *pv,
++/* FIXME: liblvm todo - make into function that takes handle */
++int pv_write(struct cmd_context *cmd __attribute((unused)),
++	     struct physical_volume *pv,
+ 	     struct list *mdas, int64_t label_sector)
+ {
++	return _pv_write(cmd, pv, mdas, label_sector);
++}
++
++static int _pv_write(struct cmd_context *cmd __attribute((unused)), 
++		     struct physical_volume *pv,
++	     	     struct list *mdas, int64_t label_sector)
++{
+ 	if (!pv->fmt->ops->pv_write) {
+ 		log_error("Format does not support writing physical volumes");
+ 		return 0;
+@@ -1544,7 +1629,7 @@
+ 		return 0;
  	}
  
+-	if (!pv_write(cmd, pv, NULL, INT64_C(-1))) {
++	if (!_pv_write(cmd, pv, NULL, INT64_C(-1))) {
+ 		log_error("Failed to clear metadata from physical "
+ 			  "volume \"%s\" after removal from \"%s\"",
+ 			  dev_name(pv->dev), old_vg_name);
+--- LVM2/WHATS_NEW	2007/06/08 22:38:48	1.625
++++ LVM2/WHATS_NEW	2007/06/11 18:29:30	1.626
+@@ -1,5 +1,6 @@
+ Version 2.02.26 -
+ =================================
++  Add wrappers to some functions in preparation for external LVM library.
+   Allow vgcfgrestore to list metadata backup files using -f
+   Add vg_check_status to consolidate vg status checks and error messages.
+   Add pvdisplay --maps implementation.
 
 
