@@ -1,60 +1,66 @@
-From: Bryn M. Reeves <breeves@redhat.com>
-Date: Mon, 25 Jun 2007 13:45:13 +0100
-Subject: fix lvmdiskscan volume reporting when using lvm shell
-Message-ID: <467FB8D9.5090004@redhat.com>
+From: bmr@sourceware.org <bmr@sourceware.org>
+Date: 25 Jun 2007 13:19:38 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvmdiskscan.c
+Message-ID: <20070625131938.20550.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
------BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA1
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	bmr at sourceware.org	2007-06-25 13:19:37
 
-Currently lvmdiskscan uses four global counters to track the number of
-disks, partitions & PVs located. These are statically initialised to
-zero but are never reset between runs.
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvmdiskscan.c 
 
-This is fine for the standalone command but causes mis-reporting when
-the tool is repeatedly run in the lvm shell:
+Log message:
+	Fix lvmdiskscan volume reporting when run in the lvm shell
 
-# lvm
-lvm> lvmdiskscan
-  /dev/ramdisk               [       16.00 MB]
-  /dev/loop0                 [      500.00 MB] LVM physical volume
-[...]
-  7 disks
-  14 partitions
-  0 LVM physical volume whole disks
-  1 LVM physical volume
-lvm> lvmdiskscan
-  /dev/ramdisk               [       16.00 MB]
-  /dev/loop0                 [      500.00 MB] LVM physical volume
-[...]
-  14 disks
-  28 partitions
-  0 LVM physical volume whole disks
-  2 LVM physical volumes
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.640&r2=1.641
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmdiskscan.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
 
-etc.
+--- LVM2/WHATS_NEW	2007/06/25 09:02:37	1.640
++++ LVM2/WHATS_NEW	2007/06/25 13:19:37	1.641
+@@ -1,5 +1,6 @@
+ Version 2.02.27 - 
+ ================================
++  Fix lvmdiskscan volume reporting when run in the lvm shell
+   Fix missing lvm_shell symbol in lvm2cmd library. (2.02.23)
+   Add vg_status function and clean up vg->status in tools directory.
+   Add --ignoremonitoring to disable all dmeventd interaction.
+--- LVM2/tools/lvmdiskscan.c	2007/04/23 18:21:01	1.17
++++ LVM2/tools/lvmdiskscan.c	2007/06/25 13:19:37	1.18
+@@ -21,10 +21,10 @@
+ 
+ #include "tools.h"
+ 
+-int disks_found = 0;
+-int parts_found = 0;
+-int pv_disks_found = 0;
+-int pv_parts_found = 0;
++int disks_found;
++int parts_found;
++int pv_disks_found;
++int pv_parts_found;
+ int max_len;
+ 
+ static int _get_max_dev_name_len(struct dev_filter *filter)
+@@ -99,6 +99,12 @@
+ 	struct device *dev;
+ 	struct label *label;
+ 
++	/* initialise these here to avoid problems with the lvm shell */
++	disks_found = 0;
++	parts_found = 0;
++	pv_disks_found = 0;
++	pv_parts_found = 0;
++
+ 	if (arg_count(cmd, lvmpartition_ARG))
+ 		log_print("WARNING: only considering LVM devices");
+ 
 
-Patch just moves the initialisation into the lvmdiskscan function.
 
-Regards,
-Bryn.
-	
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.7 (GNU/Linux)
-Comment: Using GnuPG with Fedora - http://enigmail.mozdev.org
-
-iD8DBQFGf7jZ6YSQoMYUY94RAjUEAJ9LMqyi8bZdRqNrynK6CefPnIau2ACfVv4I
-km8ZqH2XpwTPdxhWhSx37og=
-=ce90
------END PGP SIGNATURE-----
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvmdiskscan.patch
-Type: text/x-patch
-Size: 910 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070625/964e7574/attachment.bin>
