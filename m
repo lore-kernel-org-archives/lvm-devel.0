@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 15 Jun 2007 10:11:15 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/locking.c lib/loc ...
-Message-ID: <20070615101115.24088.qmail@sourceware.org>
+Date: 28 Jun 2007 17:33:47 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/c ...
+Message-ID: <20070628173347.26116.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,380 +10,445 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2007-06-15 10:11:15
+Changes by:	mornfall at sourceware.org	2007-06-28 17:33:44
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/locking    : locking.c locking.h 
-	tools          : lvchange.c lvmcmdline.c lvresize.c pvcreate.c 
-	                 toollib.c 
+	lib/activate   : activate.c 
+	lib/commands   : toolcontext.c 
+	lib/format_text: archiver.c format-text.c 
+	lib/locking    : locking.c 
+	lib/log        : log.c log.h 
+	lib/metadata   : metadata.c mirror.c 
+	scripts        : lvm2_monitoring_init_rhel4 
+	tools          : lvconvert.c lvcreate.c lvmcmdline.c 
+	                 lvmdiskscan.c lvresize.c pvcreate.c pvremove.c 
+	                 pvresize.c pvscan.c vgcfgbackup.c vgcreate.c 
 
 Log message:
-	Allow keyboard interrupts in yes_no_prompt(). Add code to toollib.c
-	loops and to pvcreate.c, lvchange.c and lvresize.c to handle
-	interrupted prompts.
+	Make warnings go to stderr. Change log_warn to that effect, log_print
+	continues to send messages to stdout.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.632&r2=1.633
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.30&r2=1.31
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.99&r2=1.100
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.641&r2=1.642
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.h.diff?cvsroot=lvm2&r1=1.36&r2=1.37
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_init_rhel4.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.136&r2=1.137
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmdiskscan.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvremove.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvresize.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvscan.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgbackup.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
---- LVM2/WHATS_NEW	2007/06/14 10:16:34	1.632
-+++ LVM2/WHATS_NEW	2007/06/15 10:11:14	1.633
-@@ -1,5 +1,6 @@
- Version 2.02.26 -
- =================================
-+  Allow keyboard interrupt in user prompts where appropriate.
-   Remove system-lv code from clvmd. It's highly dodgy and never used.
-   Convert a lot of code pv dereferences to use get_pv_* functions.
-   Suppress a couple benign warnings by adding variable initializations.
---- LVM2/lib/locking/locking.c	2006/11/30 23:11:41	1.35
-+++ LVM2/lib/locking/locking.c	2007/06/15 10:11:14	1.36
-@@ -34,6 +34,87 @@
- static int _vg_write_lock_held = 0;	/* VG write lock held? */
- static int _signals_blocked = 0;
+--- LVM2/WHATS_NEW	2007/06/25 13:19:37	1.641
++++ LVM2/WHATS_NEW	2007/06/28 17:33:43	1.642
+@@ -6,6 +6,7 @@
+   Add --ignoremonitoring to disable all dmeventd interaction.
+   Remove get_ prefix from get_pv_* functions.
+   clvmd-openais now uses cpg_local_get() to get nodeid, rather than Clm.
++  Print warnings to stderr instead of stdout.
  
-+static volatile sig_atomic_t _sigint_caught = 0;
-+static volatile sig_atomic_t _handler_installed;
-+static struct sigaction _oldhandler;
-+static int _oldmasked;
-+
-+static void _catch_sigint(int unused __attribute__((unused)))
-+{
-+	_sigint_caught = 1;
-+}
-+
-+int sigint_caught() {
-+	return _sigint_caught;
-+}
-+
-+void sigint_clear()
-+{
-+	_sigint_caught = 0;
-+}
-+
-+/* Temporarily allow keyboard interrupts to be intercepted and noted;
-+   saves interrupt handler state for sigint_restore(). Users should
-+   use the sigint_caught() predicate to check whether interrupt was
-+   requested and act appropriately. Interrupt flags are never
-+   automatically cleared by this code, but lvm_run_command() clears
-+   the flag before running any command. All other places where the
-+   flag needs to be cleared need to call sigint_clear(). */
-+
-+void sigint_allow()
-+{
-+	struct sigaction handler;
-+	sigset_t sigs;
-+
-+	/* do not overwrite the backed up handler data with our
-+	   override ones; we just increase nesting count */
-+	if (_handler_installed) {
-+		_handler_installed++;
-+		return;
-+	}
-+
-+	/* grab old sigaction for SIGINT; shall not fail */
-+	sigaction(SIGINT, NULL, &handler);
-+	handler.sa_flags &= ~SA_RESTART; /* clear restart flag */
-+	handler.sa_handler = _catch_sigint;
-+
-+	_handler_installed = 1;
-+
-+	/* override the signal handler; shall not fail */
-+	sigaction(SIGINT, &handler, &_oldhandler);
-+
-+	/* unmask SIGINT, remember to mask it again on restore */
-+	sigprocmask(0, NULL, &sigs);
-+	if ((_oldmasked = sigismember(&sigs, SIGINT))) {
-+		sigdelset(&sigs, SIGINT);
-+		sigprocmask(SIG_SETMASK, &sigs, NULL);
-+	}
-+}
-+
-+void sigint_restore()
-+{
-+	/* extra call, ignore */
-+	if (!_handler_installed)
-+		return;
-+
-+	if (_handler_installed > 1) {
-+		_handler_installed--;
-+		return;
-+	}
-+
-+	/* nesting count went down to 0 */
-+	_handler_installed = 0;
-+
-+	if (_oldmasked) {
-+		sigset_t sigs;
-+		sigprocmask(0, NULL, &sigs);
-+		sigaddset(&sigs, SIGINT);
-+		sigprocmask(SIG_SETMASK, &sigs, NULL);
-+	}
-+
-+	sigaction(SIGINT, &_oldhandler, NULL);
-+}
-+
- static void _block_signals(int flags __attribute((unused)))
+ Version 2.02.26 - 15th June 2007
+ ================================
+--- LVM2/lib/activate/activate.c	2007/04/27 17:46:16	1.122
++++ LVM2/lib/activate/activate.c	2007/06/28 17:33:43	1.123
+@@ -245,7 +245,7 @@
+ 		log_verbose("Activation enabled. Device-mapper kernel "
+ 			    "driver will be used.");
+ 	else
+-		log_print("WARNING: Activation disabled. No device-mapper "
++		log_warn("WARNING: Activation disabled. No device-mapper "
+ 			  "interaction will be attempted.");
+ }
+ 
+--- LVM2/lib/commands/toolcontext.c	2007/04/26 16:44:58	1.50
++++ LVM2/lib/commands/toolcontext.c	2007/06/28 17:33:44	1.51
+@@ -184,7 +184,7 @@
+ 	}
+ 
+ 	if (*cmd->proc_dir && !dir_exists(cmd->proc_dir)) {
+-		log_error("Warning: proc dir %s not found - some checks will be bypassed",
++		log_error("WARNING: proc dir %s not found - some checks will be bypassed",
+ 			  cmd->proc_dir);
+ 		cmd->proc_dir[0] = '\0';
+ 	}
+--- LVM2/lib/format_text/archiver.c	2007/06/08 22:38:48	1.6
++++ LVM2/lib/format_text/archiver.c	2007/06/28 17:33:44	1.7
+@@ -214,7 +214,7 @@
+ int backup(struct volume_group *vg)
  {
- 	sigset_t set;
---- LVM2/lib/locking/locking.h	2007/01/19 22:21:45	1.30
-+++ LVM2/lib/locking/locking.h	2007/06/15 10:11:14	1.31
-@@ -115,4 +115,11 @@
- int resume_lvs(struct cmd_context *cmd, struct list *lvs);
- int activate_lvs_excl(struct cmd_context *cmd, struct list *lvs);
+ 	if (!vg->cmd->backup_params->enabled || !vg->cmd->backup_params->dir) {
+-		log_print("WARNING: This metadata update is NOT backed up");
++		log_warn("WARNING: This metadata update is NOT backed up");
+ 		return 1;
+ 	}
  
-+/* interrupt handling */
+--- LVM2/lib/format_text/format-text.c	2007/04/25 21:10:55	1.75
++++ LVM2/lib/format_text/format-text.c	2007/06/28 17:33:44	1.76
+@@ -1204,8 +1204,8 @@
+ 
+ 	/* Ensure it's not going to be bigger than the disk! */
+ 	if (start1 + mda_size1 > disk_size) {
+-		log_print("Warning: metadata area fills disk leaving no "
+-			  "space for data on %s.", dev_name(pv->dev));
++		log_warn("WARNING: metadata area fills disk leaving no "
++			 "space for data on %s.", dev_name(pv->dev));
+ 		/* Leave some free space for rounding */
+ 		/* Avoid empty data area as could cause tools problems */
+ 		mda_size1 = disk_size - start1 - alignment * 2;
+--- LVM2/lib/locking/locking.c	2007/06/15 20:46:04	1.37
++++ LVM2/lib/locking/locking.c	2007/06/28 17:33:44	1.38
+@@ -214,7 +214,7 @@
+ 	switch (type) {
+ 	case 0:
+ 		init_no_locking(&_locking, cmd);
+-		log_print("WARNING: Locking disabled. Be careful! "
++		log_warn("WARNING: Locking disabled. Be careful! "
+ 			  "This could corrupt your metadata.");
+ 		return 1;
+ 
+@@ -255,8 +255,8 @@
+ 	if ((type == 2 || type == 3) &&
+             find_config_tree_int(cmd, "locking/fallback_to_local_locking",
+ 				 DEFAULT_FALLBACK_TO_LOCAL_LOCKING)) {
+-		log_print("WARNING: Falling back to local file-based locking.");
+-		log_print("Volume Groups with the clustered attribute will "
++		log_warn("WARNING: Falling back to local file-based locking.");
++		log_warn("Volume Groups with the clustered attribute will "
+ 			  "be inaccessible.");
+ 		if (init_file_locking(&_locking, cmd))
+ 			return 1;
+--- LVM2/lib/log/log.c	2007/01/25 21:22:30	1.38
++++ LVM2/lib/log/log.c	2007/06/28 17:33:44	1.39
+@@ -302,6 +302,9 @@
+ 	int bufused, n;
+ 	const char *message;
+ 	const char *trformat;		/* Translated format string */
++	int use_stderr = level & _LOG_STDERR;
 +
-+void sigint_clear();
-+void sigint_allow();
-+void sigint_restore();
-+int sigint_caught();
-+
- #endif
---- LVM2/tools/lvchange.c	2007/01/24 23:43:27	1.78
-+++ LVM2/tools/lvchange.c	2007/06/15 10:11:14	1.79
-@@ -212,6 +212,9 @@
- 				return ECMD_FAILED;
++	level &= ~_LOG_STDERR;
+ 
+ 	if (_log_suppress == 2)
+ 		return;
+@@ -373,9 +376,9 @@
+ 			break;
+ 		case _LOG_WARN:
+ 			if (_verbose_level >= _LOG_WARN) {
+-				printf("%s%s", _cmd_name, _msg_prefix);
+-				vprintf(trformat, ap);
+-				putchar('\n');
++				fprintf(use_stderr ? stderr : stdout, "%s%s", _cmd_name, _msg_prefix);
++				vfprintf(use_stderr ? stderr : stdout, trformat, ap);
++				fputc('\n', use_stderr ? stderr : stdout);
  			}
+ 			break;
+ 		case _LOG_ERR:
+--- LVM2/lib/log/log.h	2007/04/26 16:44:58	1.36
++++ LVM2/lib/log/log.h	2007/06/28 17:33:44	1.37
+@@ -41,6 +41,8 @@
+ #include <string.h>		/* strerror() */
+ #include <errno.h>
  
-+			if (sigint_caught())
-+				return ECMD_FAILED;
-+
- 			active = 1;
- 		}
++#define _LOG_STDERR 128 /* force things to go to stderr, even if loglevel
++			   would make them go to stdout */
+ #define _LOG_DEBUG 7
+ #define _LOG_INFO 6
+ #define _LOG_NOTICE 5
+@@ -116,14 +118,14 @@
+ #define log_debug(x...) plog(_LOG_DEBUG, x)
+ #define log_info(x...) plog(_LOG_INFO, x)
+ #define log_notice(x...) plog(_LOG_NOTICE, x)
+-#define log_warn(x...) plog(_LOG_WARN, x)
++#define log_warn(x...) plog(_LOG_WARN | _LOG_STDERR, x)
+ #define log_err(x...) plog(_LOG_ERR, x)
+ #define log_fatal(x...) plog(_LOG_FATAL, x)
+ 
+ #define stack log_debug("<backtrace>")	/* Backtrace on error */
+ 
+ #define log_error(args...) log_err(args)
+-#define log_print(args...) log_warn(args)
++#define log_print(args...) plog(_LOG_WARN, args)
+ #define log_verbose(args...) log_notice(args)
+ #define log_very_verbose(args...) log_info(args)
+ 
+--- LVM2/lib/metadata/metadata.c	2007/06/19 04:36:12	1.121
++++ LVM2/lib/metadata/metadata.c	2007/06/28 17:33:44	1.122
+@@ -207,8 +207,8 @@
  	}
-@@ -454,6 +457,10 @@
- 				  lv->name);
+ 
+ 	if (!consistent)
+-		log_error("Warning: Volume group %s is not consistent",
+-			  vg_name);
++		log_warn("WARNING: Volume group %s is not consistent",
++			 vg_name);
+ 
+ 	list_iterate_items(pvl, &vg->pvs) {
+ 		if (id_equal(&pvl->pv->id, (const struct id *) pvid)) {
+@@ -641,7 +641,7 @@
+ 
+ 	if (size) {
+ 		if (size > pv->size)
+-			log_print("WARNING: %s: Overriding real size. "
++			log_warn("WARNING: %s: Overriding real size. "
+ 				  "You could lose data.", dev_name(pv->dev));
+ 		log_verbose("%s: Pretending size is %" PRIu64 " sectors.",
+ 			    dev_name(pv->dev), size);
+@@ -1324,8 +1324,8 @@
+ 			return correct_vg;
+ 		}
+ 
+-		log_print("Inconsistent metadata found for VG %s - updating "
+-			  "to use version %u", vgname, correct_vg->seqno);
++		log_warn("WARNING: Inconsistent metadata found for VG %s - updating "
++			 "to use version %u", vgname, correct_vg->seqno);
+ 
+ 		if (!vg_write(correct_vg)) {
+ 			log_error("Automatic metadata correction failed");
+@@ -1620,8 +1620,8 @@
+ 			continue;
+ 		}
+ 		if (!consistent)
+-			log_print("Warning: Volume Group %s is not consistent",
+-				  vgname);
++			log_warn("WARNING: Volume Group %s is not consistent",
++				 vgname);
+ 
+ 		/* Move PVs onto results list */
+ 		list_iterate_safe(pvh, tmp, &vg->pvs) {
+--- LVM2/lib/metadata/mirror.c	2007/03/26 16:10:10	1.38
++++ LVM2/lib/metadata/mirror.c	2007/06/28 17:33:44	1.39
+@@ -377,7 +377,7 @@
+ 		/* Unable to remove bad devices */
+ 		return 0;
+ 
+-	log_print("WARNING: Bad device removed from mirror volume, %s/%s",
++	log_warn("WARNING: Bad device removed from mirror volume, %s/%s",
+ 		  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 
+ 	log_policy = get_mirror_log_fault_policy(mirrored_seg->lv->vg->cmd);
+@@ -394,15 +394,15 @@
+ 			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 	else if (r > 0)
+ 		/* Success in replacing device(s) */
+-		log_print("WARNING: Mirror volume, %s/%s restored - substitute for failed device found.",
++		log_warn("WARNING: Mirror volume, %s/%s restored - substitute for failed device found.",
+ 			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 	else
+ 		/* Bad device removed, but not replaced because of policy */
+ 		if (mirrored_seg->area_count == 1) {
+-			log_print("WARNING: Mirror volume, %s/%s converted to linear due to device failure.",
++			log_warn("WARNING: Mirror volume, %s/%s converted to linear due to device failure.",
+ 				  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 		} else if (had_log && !mirrored_seg->log_lv) {
+-			log_print("WARNING: Mirror volume, %s/%s disk log removed due to device failure.",
++			log_warn("WARNING: Mirror volume, %s/%s disk log removed due to device failure.",
+ 				  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 		}
+ 	/*
+--- LVM2/scripts/lvm2_monitoring_init_rhel4	2007/03/16 17:15:36	1.3
++++ LVM2/scripts/lvm2_monitoring_init_rhel4	2007/06/28 17:33:44	1.4
+@@ -31,7 +31,7 @@
+ {
+ 	ret=0
+ 	# TODO do we want to separate out already active groups only?
+-	VGS=`vgs --noheadings -o name`
++	VGS=`vgs --noheadings -o name 2> /dev/null`
+ 	for vg in $VGS
+ 	do
+ 	    action "Starting monitoring for VG $vg:" $VGCHANGE --monitor y $vg || ret=$?
+@@ -49,7 +49,7 @@
+ 	   echo "Not stopping monitoring, this is a dangerous operation. Please use force-stop to override."
+ 	   return 1
+ 	fi
+-	VGS=`vgs --noheadings -o name`
++	VGS=`vgs --noheadings -o name 2> /dev/null`
+ 	for vg in $VGS
+ 	do
+ 	    action "Stopping monitoring for VG $vg:" $VGCHANGE --monitor n $vg || ret=$?
+--- LVM2/tools/lvconvert.c	2007/06/06 19:40:28	1.27
++++ LVM2/tools/lvconvert.c	2007/06/28 17:33:44	1.28
+@@ -447,7 +447,7 @@
+ 	}
+ 
+ 	if (!lp->zero || !(lv->status & LVM_WRITE))
+-		log_print("WARNING: \"%s\" not zeroed", lv->name);
++		log_warn("WARNING: \"%s\" not zeroed", lv->name);
+ 	else if (!set_lv(cmd, lv, 0, 0)) {
+ 			log_error("Aborting. Failed to wipe snapshot "
+ 				  "exception store.");
+--- LVM2/tools/lvcreate.c	2007/06/19 04:23:32	1.136
++++ LVM2/tools/lvcreate.c	2007/06/28 17:33:44	1.137
+@@ -693,7 +693,7 @@
+ 		init_mirror_in_sync(lp->nosync);
+ 
+ 		if (lp->nosync) {
+-			log_print("WARNING: New mirror won't be synchronised. "
++			log_warn("WARNING: New mirror won't be synchronised. "
+ 				  "Don't read what you didn't write!");
+ 			status |= MIRROR_NOTSYNCED;
+ 		}
+--- LVM2/tools/lvmcmdline.c	2007/06/15 10:11:14	1.43
++++ LVM2/tools/lvmcmdline.c	2007/06/28 17:33:44	1.44
+@@ -733,7 +733,7 @@
+ 			return EINVALID_CMD_LINE;
+ 		}
+ 		init_trust_cache(1);
+-		log_print("WARNING: Cache file of PVs will be trusted.  "
++		log_warn("WARNING: Cache file of PVs will be trusted.  "
+ 			  "New devices holding PVs may get ignored.");
+ 	} else
+ 		init_trust_cache(0);
+--- LVM2/tools/lvmdiskscan.c	2007/06/25 13:19:37	1.18
++++ LVM2/tools/lvmdiskscan.c	2007/06/28 17:33:44	1.19
+@@ -106,7 +106,7 @@
+ 	pv_parts_found = 0;
+ 
+ 	if (arg_count(cmd, lvmpartition_ARG))
+-		log_print("WARNING: only considering LVM devices");
++		log_warn("WARNING: only considering LVM devices");
+ 
+ 	max_len = _get_max_dev_name_len(cmd->filter);
+ 
+--- LVM2/tools/lvresize.c	2007/06/15 10:11:14	1.78
++++ LVM2/tools/lvresize.c	2007/06/28 17:33:44	1.79
+@@ -155,14 +155,14 @@
+ 		if (vg->fid->fmt->features & FMT_SEGMENTS)
+ 			lp->stripes = arg_uint_value(cmd, stripes_ARG, 1);
+ 		else
+-			log_print("Varied striping not supported. Ignoring.");
++			log_warn("Varied striping not supported. Ignoring.");
+ 	}
+ 
+ 	if (arg_count(cmd, mirrors_ARG)) {
+ 		if (vg->fid->fmt->features & FMT_SEGMENTS)
+ 			lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 1) + 1;
+ 		else
+-			log_print("Mirrors not supported. Ignoring.");
++			log_warn("Mirrors not supported. Ignoring.");
+ 		if (arg_sign_value(cmd, mirrors_ARG, 0) == SIGN_MINUS) {
+ 			log_error("Mirrors argument may not be negative");
  			return 0;
+@@ -182,7 +182,7 @@
  		}
-+
-+		if (sigint_caught())
-+			return 0;
-+
- 		log_verbose("Ensuring %s is inactive.", lv->name);
- 		if (!deactivate_lv(cmd, lv)) {
- 			log_error("%s: deactivation failed", lv->name);
-@@ -626,6 +633,8 @@
- 			return ECMD_FAILED;
- 		archived = 1;
- 		doit += lvchange_persistent(cmd, lv);
-+		if (sigint_caught())
-+			return ECMD_FAILED;
+ 
+ 		if (!(vg->fid->fmt->features & FMT_SEGMENTS))
+-			log_print("Varied stripesize not supported. Ignoring.");
++			log_warn("Varied stripesize not supported. Ignoring.");
+ 		else if (arg_uint_value(cmd, stripesize_ARG, 0) > vg->extent_size) {
+                 	log_error("Reducing stripe size %s to maximum, "
+ 				  "physical extent size %s",
+@@ -447,7 +447,7 @@
+ 
+ 	if (lp->resize == LV_REDUCE) {
+ 		if (lp->argc)
+-			log_print("Ignoring PVs on command line when reducing");
++			log_warn("Ignoring PVs on command line when reducing");
+ 	} else if (!(pvh = lp->argc ? create_pv_list(cmd->mem, vg, lp->argc,
+ 						     lp->argv, 1) : &vg->pvs)) {
+ 		stack;
+@@ -469,13 +469,13 @@
+ 		}
+ 
+ 		if (info.exists && !lp->resizefs && (lp->resize == LV_REDUCE)) {
+-			log_print("WARNING: Reducing active%s logical volume "
++			log_warn("WARNING: Reducing active%s logical volume "
+ 				  "to %s", info.open_count ? " and open" : "",
+ 				  display_size(cmd, (uint64_t) lp->extents *
+ 						    vg->extent_size));
+ 
+-			log_print("THIS MAY DESTROY YOUR DATA "
+-				  "(filesystem etc.)");
++			log_warn("THIS MAY DESTROY YOUR DATA "
++				 "(filesystem etc.)");
+ 
+ 			if (!arg_count(cmd, force_ARG)) {
+ 				if (yes_no_prompt("Do you really want to "
+--- LVM2/tools/pvcreate.c	2007/06/15 22:16:55	1.53
++++ LVM2/tools/pvcreate.c	2007/06/28 17:33:44	1.54
+@@ -110,7 +110,7 @@
+ 		return 0;
+ 
+ 	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG)) {
+-		log_print("WARNING: Forcing physical volume creation on "
++		log_warn("WARNING: Forcing physical volume creation on "
+ 			  "%s%s%s%s", name,
+ 			  !is_orphan(pv) ? " of volume group \"" : "",
+ 			  !is_orphan(pv) ? pv_vg_name(pv) : "",
+--- LVM2/tools/pvremove.c	2007/06/15 22:16:55	1.17
++++ LVM2/tools/pvremove.c	2007/06/28 17:33:44	1.18
+@@ -62,7 +62,7 @@
  	}
  
- 	/* add tag */
---- LVM2/tools/lvmcmdline.c	2007/04/26 16:44:59	1.42
-+++ LVM2/tools/lvmcmdline.c	2007/06/15 10:11:14	1.43
-@@ -373,6 +373,7 @@
- 	int c = 0, ret = 0;
- 	va_list ap;
+ 	if (arg_count(cmd, force_ARG)) {
+-		log_print("WARNING: Wiping physical volume label from "
++		log_warn("WARNING: Wiping physical volume label from "
+ 			  "%s%s%s%s", name,
+ 			  !is_orphan(pv) ? " of volume group \"" : "",
+ 			  !is_orphan(pv) ? pv_vg_name(pv) : "",
+--- LVM2/tools/pvresize.c	2007/06/15 22:16:55	1.11
++++ LVM2/tools/pvresize.c	2007/06/28 17:33:44	1.12
+@@ -111,7 +111,7 @@
+ 	
+ 	if (params->new_size) {
+ 		if (params->new_size > size)
+-			log_print("WARNING: %s: Overriding real size. "
++			log_warn("WARNING: %s: Overriding real size. "
+ 				  "You could lose data.", pv_name);
+ 		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
+ 			    " sectors.", pv_name, params->new_size, pv_size(pv));
+--- LVM2/tools/pvscan.c	2007/06/15 22:16:55	1.39
++++ LVM2/tools/pvscan.c	2007/06/28 17:33:44	1.40
+@@ -120,7 +120,7 @@
+ 	}
  
-+	sigint_allow();
- 	do {
- 		if (c == '\n' || !c) {
- 			va_start(ap, prompt);
-@@ -390,6 +391,8 @@
- 			ret = c;
- 	} while (!ret || c != '\n');
+ 	if (arg_count(cmd, exported_ARG) || arg_count(cmd, novolumegroup_ARG))
+-		log_print("WARNING: only considering physical volumes %s",
++		log_warn("WARNING: only considering physical volumes %s",
+ 			  arg_count(cmd, exported_ARG) ?
+ 			  "of exported volume group(s)" : "in no volume group");
  
-+	sigint_restore();
-+
- 	if (c != '\n')
- 		printf("\n");
+--- LVM2/tools/vgcfgbackup.c	2006/05/10 17:49:25	1.21
++++ LVM2/tools/vgcfgbackup.c	2007/06/28 17:33:44	1.22
+@@ -61,7 +61,7 @@
+ 	}
  
-@@ -865,6 +868,9 @@
- 	int ret = 0;
- 	int locking_type;
+ 	if (!consistent)
+-		log_error("Warning: Volume group \"%s\" inconsistent", vg_name);
++		log_error("WARNING: Volume group \"%s\" inconsistent", vg_name);
  
-+	/* each command should start out with sigint flag cleared */
-+	sigint_clear();
-+
- 	if (!(cmd->cmd_line = _copy_command_line(cmd, argc, argv)))
+ 	if (arg_count(cmd, file_ARG)) {
+ 		if (!(filename = _expand_filename(arg_value(cmd, file_ARG),
+--- LVM2/tools/vgcreate.c	2007/03/09 20:47:41	1.48
++++ LVM2/tools/vgcreate.c	2007/06/28 17:33:44	1.49
+@@ -95,12 +95,12 @@
  		return ECMD_FAILED;
  
---- LVM2/tools/lvresize.c	2007/06/06 19:40:28	1.77
-+++ LVM2/tools/lvresize.c	2007/06/15 10:11:14	1.78
-@@ -485,6 +485,8 @@
- 						  "reduced", lp->lv_name);
- 					return ECMD_FAILED;
- 				}
-+				if (sigint_caught())
-+					return ECMD_FAILED;
- 			}
- 		}
- 	}
---- LVM2/tools/pvcreate.c	2007/06/14 15:48:04	1.51
-+++ LVM2/tools/pvcreate.c	2007/06/15 10:11:14	1.52
-@@ -58,6 +58,9 @@
- 		return 0;
- 	}
+ 	if (max_lv != vg->max_lv)
+-		log_error("Warning: Setting maxlogicalvolumes to %d "
+-			  "(0 means unlimited)", vg->max_lv);
++		log_warn("WARNING: Setting maxlogicalvolumes to %d "
++			 "(0 means unlimited)", vg->max_lv);
  
-+	if (sigint_caught())
-+		return 0;
-+
- 	dev = dev_cache_get(name, cmd->filter);
+ 	if (max_pv != vg->max_pv)
+-		log_error("Warning: Setting maxphysicalvolumes to %d "
+-			  "(0 means unlimited)", vg->max_pv);
++		log_warn("WARNING: Setting maxphysicalvolumes to %d "
++			 "(0 means unlimited)", vg->max_pv);
  
- 	/* Is there an md superblock here? */
-@@ -103,6 +106,9 @@
- 		}
- 	}
- 
-+	if (sigint_caught())
-+		return 0;
-+
- 	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG)) {
- 		log_print("WARNING: Forcing physical volume creation on "
- 			  "%s%s%s%s", name,
-@@ -173,6 +179,9 @@
- 	if (!pvcreate_check(cmd, pv_name))
- 		goto error;
- 
-+	if (sigint_caught())
-+		goto error;
-+
- 	if (arg_sign_value(cmd, physicalvolumesize_ARG, 0) == SIGN_MINUS) {
- 		log_error("Physical volume size may not be negative");
- 		goto error;
-@@ -309,6 +318,8 @@
- 		r = pvcreate_single(cmd, argv[i], &pp);
- 		if (r > ret)
- 			ret = r;
-+		if (sigint_caught())
-+			return ret;
- 	}
- 
- 	return ret;
---- LVM2/tools/toollib.c	2007/06/06 19:40:28	1.99
-+++ LVM2/tools/toollib.c	2007/06/15 10:11:14	1.100
-@@ -209,6 +209,8 @@
- 		ret = process_single(cmd, lvl->lv, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	if (lvargs_supplied && lvargs_matched != list_size(arg_lvnames)) {
-@@ -407,6 +409,8 @@
- 		unlock_vg(cmd, vgname);
- 		if (ret > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	return ret_max;
-@@ -429,6 +433,8 @@
- 		ret = process_single(cmd, vg, pvseg, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	return ret_max;
-@@ -449,6 +455,8 @@
- 		ret = process_single(cmd, seg, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	return ret_max;
-@@ -498,6 +506,9 @@
- 		ret_max = ret;
- 	}
- 
-+	if (sigint_caught())
-+		return ret_max;
-+
- 	unlock_vg(cmd, vg_name);
- 
- 	return ret_max;
-@@ -573,6 +584,8 @@
- 						  &arg_vgnames,
- 					  	  lock_type, consistent, handle,
- 					  	  ret_max, process_single);
-+			if (sigint_caught())
-+				return ret_max;
- 		}
- 	} else {
- 		list_iterate_items(sl, vgnames) {
-@@ -583,6 +596,8 @@
- 						  &arg_vgnames,
- 					  	  lock_type, consistent, handle,
- 					  	  ret_max, process_single);
-+			if (sigint_caught())
-+				return ret_max;
- 		}
- 	}
- 
-@@ -607,6 +622,8 @@
- 		}
- 		if ((ret = process_single(cmd, vg, pvl->pv, handle)) > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	return ret_max;
-@@ -643,6 +660,8 @@
- 		ret = process_single(cmd, NULL, pv, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
-+		if (sigint_caught())
-+			return ret_max;
- 	}
- 
- 	dev_iter_destroy(iter);
-@@ -715,6 +734,8 @@
- 			ret = process_single(cmd, vg, pv, handle);
- 			if (ret > ret_max)
- 				ret_max = ret;
-+			if (sigint_caught())
-+				return ret_max;
- 		}
- 		if (!list_empty(&tags) && (vgnames = get_vgs(cmd, 0)) &&
- 		    !list_empty(vgnames)) {
-@@ -735,6 +756,8 @@
- 							    process_single);
- 				if (ret > ret_max)
- 					ret_max = ret;
-+				if (sigint_caught())
-+					return ret_max;
- 			}
- 		}
- 	} else {
-@@ -745,10 +768,14 @@
- 						    process_single);
- 			if (ret > ret_max)
- 				ret_max = ret;
-+			if (sigint_caught())
-+				return ret_max;
- 		} else if (arg_count(cmd, all_ARG)) {
- 			ret = _process_all_devs(cmd, handle, process_single);
- 			if (ret > ret_max)
- 				ret_max = ret;
-+			if (sigint_caught())
-+				return ret_max;
- 		} else {
- 			log_verbose("Scanning for physical volume names");
- 			if (!(pvslist = get_pvs(cmd)))
-@@ -759,6 +786,8 @@
- 						     handle);
- 				if (ret > ret_max)
- 					ret_max = ret;
-+				if (sigint_caught())
-+					return ret_max;
- 			}
- 		}
- 	}
+ 	if (arg_count(cmd, addtag_ARG)) {
+ 		if (!(tag = arg_str_value(cmd, addtag_ARG, NULL))) {
 
 
