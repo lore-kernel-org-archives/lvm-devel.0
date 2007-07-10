@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 10 Jul 2007 17:51:26 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20070710175126.10593.qmail@sourceware.org>
+Date: 10 Jul 2007 18:18:34 -0000
+Subject: LVM2/lib/report report.c
+Message-ID: <20070710181834.29170.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-07-10 17:51:26
+Changes by:	agk at sourceware.org	2007-07-10 18:18:33
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+	lib/report     : report.c 
 
 Log message:
-	Call dev_iter_destroy() if _process_all_devs() is interrupted by sigint.
+	Fix pv_mda_count to cope with missing PV.
+	[vgcreate vg1 pv1 pv2; pvremove -ff pv1; pvs -P -o+pv_mda_count =>segfault]
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.649&r2=1.650
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
 
---- LVM2/WHATS_NEW	2007/07/09 15:40:42	1.649
-+++ LVM2/WHATS_NEW	2007/07/10 17:51:26	1.650
-@@ -1,5 +1,6 @@
- Version 2.02.27 - 
- ================================
-+  Call dev_iter_destroy() if _process_all_devs() is interrupted by sigint.
-   Add vg_mda_count and pv_mda_count columns to reports.
-   Fix dumpconfig to use log_print instead of stdout directly.
-   Remove unused parameter 'fid' from _add_pv_to_vg.
---- LVM2/tools/toollib.c	2007/06/19 04:36:12	1.101
-+++ LVM2/tools/toollib.c	2007/07/10 17:51:26	1.102
-@@ -659,7 +659,7 @@
- 		if (ret > ret_max)
- 			ret_max = ret;
- 		if (sigint_caught())
--			return ret_max;
-+			break;
- 	}
+--- LVM2/lib/report/report.c	2007/07/09 15:40:43	1.57
++++ LVM2/lib/report/report.c	2007/07/10 18:18:33	1.58
+@@ -723,10 +723,11 @@
+ 			const void *data, void *private)
+ {
+ 	struct lvmcache_info *info; 
+-	uint32_t count;
++	uint32_t count = 0;
++	const char *pvid = (const char *)(&((struct id *) data)->uuid);
  
- 	dev_iter_destroy(iter);
+-	info = info_from_pvid((const char *)(&((struct id *) data)->uuid));
+-	count = list_size(&info->mdas);
++	info = info_from_pvid(pvid);
++	count = info ? list_size(&info->mdas) : 0;
+ 
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
 
 
