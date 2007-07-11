@@ -1,76 +1,151 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 11 Jul 2007 12:07:40 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-openais.c
-Message-ID: <20070711120740.12673.qmail@sourceware.org>
+From: Jim Meyering <jim@meyering.net>
+Date: Wed, 11 Jul 2007 16:18:12 +0200
+Subject: avoid trouble with failed strdup
+Message-ID: <87sl7vowgr.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-07-11 12:07:39
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-openais.c 
+There are three uses of basename in the lvm2/cvs tree.  The two uses
+in lvmcmdline.c operate on strdup'd copies, presumably to avoid the
+portability problem whereby an old basename implementation would modify
+its argument string.  The third use (in tools/fsadm/fsadm.c) operates
+on a "const" string but has no such protection.  Here's one of the uses
+from lvmcmdline.c:
 
-Log message:
-	Tidy bits of clvmd-openais and improve an error report.
+       namebase = strdup(name);
+       base = basename(namebase);
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.651&r2=1.652
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+Note that if strdup fails, basename will dereference the NULL pointer.
+The same happens with the other use of strdup in that file.
 
---- LVM2/WHATS_NEW	2007/07/10 18:50:02	1.651
-+++ LVM2/WHATS_NEW	2007/07/11 12:07:39	1.652
-@@ -1,5 +1,6 @@
- Version 2.02.27 - 
- ================================
-+  Tidy clvmd-openais of redundant bits, and improve an error report.
-   Cope with find_seg_by_le() failure in check_lv_segments().
-   Call dev_iter_destroy() if _process_all_devs() is interrupted by sigint.
-   Add vg_mda_count and pv_mda_count columns to reports.
---- LVM2/daemons/clvmd/clvmd-openais.c	2007/06/25 09:02:37	1.2
-+++ LVM2/daemons/clvmd/clvmd-openais.c	2007/07/11 12:07:39	1.3
-@@ -37,7 +37,6 @@
- 
- #include <openais/saAis.h>
- #include <openais/saLck.h>
--#include <openais/saClm.h>
- #include <openais/cpg.h>
- 
- #include "list.h"
-@@ -346,7 +345,6 @@
- 	SaAisErrorT err;
- 	SaVersionT  ver = { 'B', 1, 1 };
- 	int select_fd;
--	SaClmClusterNodeT cluster_node;
- 
- 	node_hash = dm_hash_create(100);
- 	lock_hash = dm_hash_create(10);
-@@ -379,19 +377,18 @@
- 		cpg_finalize(cpg_handle);
- 		saLckFinalize(lck_handle);
- 		syslog(LOG_ERR, "Cannot join clvmd process group");
--		DEBUGLOG("Cannot join clvmd process group\n");
-+		DEBUGLOG("Cannot join clvmd process group: %d\n", err);
- 		return ais_to_errno(err);
+The patch at the end of this message removes both strdup calls
+(and the related decl and free).
+
+If you would like the code to continue to work even when linked
+with a buggy (er, ancient at least) basename implementation, here's
+a function you can use in place of basename.
+Just change each of the three uses of "basename" to "last_component".
+If you're interested in using that, tell me where you'd like the new
+function, and I'll submit a patch with that addition.
+Hmm... I see there are no other uses of "bool", or inclusion
+of <stdbool.h>, so I'd also change it to use "int".
+
+
+BTW, this last_component function is based on the GPL'd basename.c from gnulib.
+All of the ifdefs are to accommodate certain "other" types of systems.
+=========================================================
+#include <stdbool.h>
+
+#ifndef DIRECTORY_SEPARATOR
+# define DIRECTORY_SEPARATOR '/'
+#endif
+
+#ifndef ISSLASH
+# define ISSLASH(C) ((C) == DIRECTORY_SEPARATOR)
+#endif
+
+#ifndef FILE_SYSTEM_PREFIX_LEN
+# if FILE_SYSTEM_ACCEPTS_DRIVE_LETTER_PREFIX
+    /* This internal macro assumes ASCII, but all hosts that support drive
+       letters use ASCII.  */
+#  define _IS_DRIVE_LETTER(c) (((unsigned int) (c) | ('a' - 'A')) - 'a' \
+				<= 'z' - 'a')
+#  define FILE_SYSTEM_PREFIX_LEN(Filename) \
+	   (_IS_DRIVE_LETTER ((Filename)[0]) && (Filename)[1] == ':' ? 2 : 0)
+# else
+#  define FILE_SYSTEM_PREFIX_LEN(Filename) 0
+# endif
+#endif
+
+/* Return the address of the last file name component of NAME.
+   If NAME has no relative file name components because it is
+   a file system root, return the empty string.  */
+
+char *
+last_component (char const *name)
+{
+  char const *base = name + FILE_SYSTEM_PREFIX_LEN (name);
+  char const *p;
+  bool saw_slash = false;
+
+  while (ISSLASH (*base))
+    base++;
+
+  for (p = base; *p; p++)
+    {
+      if (ISSLASH (*p))
+	saw_slash = true;
+      else if (saw_slash)
+	{
+	  base = p;
+	  saw_slash = false;
+	}
+    }
+
+  return (char *) base;
+}
+=========================================================
+
+Here's the patch.
+
+	Remove unchecked strdup that worked around buggy basename.
+	* tools/lvmcmdline.c (_find_command, lvm2_main): Let basename
+	operate directly on its argument.
+
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 039eb51..7fbabb2 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -479,18 +479,15 @@ void lvm_register_commands(void)
+ static struct command *_find_command(const char *name)
+ {
+ 	int i;
+-	char *namebase, *base;
++	char *base;
+
+-	namebase = strdup(name);
+-	base = basename(namebase);
++	base = basename(name);
+
+ 	for (i = 0; i < _cmdline.num_commands; i++) {
+ 		if (!strcmp(base, _cmdline.commands[i].name))
+ 			break;
  	}
- 
- 	err = cpg_local_get(cpg_handle,
--			    &cluster_node);
-+			    &our_nodeid);
- 	if (err != SA_AIS_OK) {
- 		cpg_finalize(cpg_handle);
- 		saLckFinalize(lck_handle);
- 		syslog(LOG_ERR, "Cannot get local node id\n");
- 		return ais_to_errno(err);
+
+-	free(namebase);
+-
+ 	if (i >= _cmdline.num_commands)
+ 		return 0;
+
+@@ -1138,14 +1135,13 @@ static void _exec_lvm1_command(char **argv)
+
+ int lvm2_main(int argc, char **argv, unsigned is_static)
+ {
+-	char *namebase, *base;
++	char *base;
+ 	int ret, alias = 0;
+ 	struct cmd_context *cmd;
+
+ 	_close_stray_fds();
+
+-	namebase = strdup(argv[0]);
+-	base = basename(namebase);
++	base = basename(argv[0]);
+ 	while (*base == '/')
+ 		base++;
+ 	if (strcmp(base, "lvm") && strcmp(base, "lvm.static") &&
+@@ -1160,8 +1156,6 @@ int lvm2_main(int argc, char **argv, unsigned is_static)
+ 		unsetenv("LVM_DID_EXEC");
  	}
--	our_nodeid = cluster_node.nodeId;
- 	DEBUGLOG("Our local node id is %d\n", our_nodeid);
- 
- 	saLckSelectionObjectGet(lck_handle, (SaSelectionObjectT *)&select_fd);
+
+-	free(namebase);
+-
+ 	if (!(cmd = init_lvm(is_static)))
+ 		return -1;
 
 
