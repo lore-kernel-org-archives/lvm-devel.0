@@ -1,151 +1,98 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Wed, 11 Jul 2007 16:18:12 +0200
-Subject: avoid trouble with failed strdup
-Message-ID: <87sl7vowgr.fsf@rho.meyering.net>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 11 Jul 2007 23:33:13 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c lib/m ...
+Message-ID: <20070711233313.28767.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2007-07-11 23:33:12
 
-There are three uses of basename in the lvm2/cvs tree.  The two uses
-in lvmcmdline.c operate on strdup'd copies, presumably to avoid the
-portability problem whereby an old basename implementation would modify
-its argument string.  The third use (in tools/fsadm/fsadm.c) operates
-on a "const" string but has no such protection.  Here's one of the uses
-from lvmcmdline.c:
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c metadata.h 
 
-       namebase = strdup(name);
-       base = basename(namebase);
+Log message:
+	Add pv_read_path, a proposed external LVM library function to take a device path and return a PV handle
 
-Note that if strdup fails, basename will dereference the NULL pointer.
-The same happens with the other use of strdup in that file.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.652&r2=1.653
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.166&r2=1.167
 
-The patch at the end of this message removes both strdup calls
-(and the related decl and free).
-
-If you would like the code to continue to work even when linked
-with a buggy (er, ancient at least) basename implementation, here's
-a function you can use in place of basename.
-Just change each of the three uses of "basename" to "last_component".
-If you're interested in using that, tell me where you'd like the new
-function, and I'll submit a patch with that addition.
-Hmm... I see there are no other uses of "bool", or inclusion
-of <stdbool.h>, so I'd also change it to use "int".
-
-
-BTW, this last_component function is based on the GPL'd basename.c from gnulib.
-All of the ifdefs are to accommodate certain "other" types of systems.
-=========================================================
-#include <stdbool.h>
-
-#ifndef DIRECTORY_SEPARATOR
-# define DIRECTORY_SEPARATOR '/'
-#endif
-
-#ifndef ISSLASH
-# define ISSLASH(C) ((C) == DIRECTORY_SEPARATOR)
-#endif
-
-#ifndef FILE_SYSTEM_PREFIX_LEN
-# if FILE_SYSTEM_ACCEPTS_DRIVE_LETTER_PREFIX
-    /* This internal macro assumes ASCII, but all hosts that support drive
-       letters use ASCII.  */
-#  define _IS_DRIVE_LETTER(c) (((unsigned int) (c) | ('a' - 'A')) - 'a' \
-				<= 'z' - 'a')
-#  define FILE_SYSTEM_PREFIX_LEN(Filename) \
-	   (_IS_DRIVE_LETTER ((Filename)[0]) && (Filename)[1] == ':' ? 2 : 0)
-# else
-#  define FILE_SYSTEM_PREFIX_LEN(Filename) 0
-# endif
-#endif
-
-/* Return the address of the last file name component of NAME.
-   If NAME has no relative file name components because it is
-   a file system root, return the empty string.  */
-
-char *
-last_component (char const *name)
-{
-  char const *base = name + FILE_SYSTEM_PREFIX_LEN (name);
-  char const *p;
-  bool saw_slash = false;
-
-  while (ISSLASH (*base))
-    base++;
-
-  for (p = base; *p; p++)
-    {
-      if (ISSLASH (*p))
-	saw_slash = true;
-      else if (saw_slash)
-	{
-	  base = p;
-	  saw_slash = false;
-	}
-    }
-
-  return (char *) base;
-}
-=========================================================
-
-Here's the patch.
-
-	Remove unchecked strdup that worked around buggy basename.
-	* tools/lvmcmdline.c (_find_command, lvm2_main): Let basename
-	operate directly on its argument.
-
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 039eb51..7fbabb2 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -479,18 +479,15 @@ void lvm_register_commands(void)
- static struct command *_find_command(const char *name)
- {
- 	int i;
--	char *namebase, *base;
-+	char *base;
-
--	namebase = strdup(name);
--	base = basename(namebase);
-+	base = basename(name);
-
- 	for (i = 0; i < _cmdline.num_commands; i++) {
- 		if (!strcmp(base, _cmdline.commands[i].name))
- 			break;
- 	}
-
--	free(namebase);
--
- 	if (i >= _cmdline.num_commands)
+--- LVM2/WHATS_NEW	2007/07/11 12:07:39	1.652
++++ LVM2/WHATS_NEW	2007/07/11 23:33:12	1.653
+@@ -1,5 +1,6 @@
+ Version 2.02.27 - 
+ ================================
++  Add pv_read_path external library function.
+   Tidy clvmd-openais of redundant bits, and improve an error report.
+   Cope with find_seg_by_le() failure in check_lv_segments().
+   Call dev_iter_destroy() if _process_all_devs() is interrupted by sigint.
+--- LVM2/lib/metadata/metadata.c	2007/07/02 21:48:30	1.123
++++ LVM2/lib/metadata/metadata.c	2007/07/11 23:33:12	1.124
+@@ -72,7 +72,6 @@
+ 	struct physical_volume *pv;
+ 	struct format_instance *fid = vg->fid;
+ 	struct dm_pool *mem = fid->fmt->cmd->mem;
+-	struct list mdas;
+ 
+ 	log_verbose("Adding physical volume '%s' to volume group '%s'",
+ 		    pv_name, vg->name);
+@@ -82,8 +81,7 @@
  		return 0;
-
-@@ -1138,14 +1135,13 @@ static void _exec_lvm1_command(char **argv)
-
- int lvm2_main(int argc, char **argv, unsigned is_static)
- {
--	char *namebase, *base;
-+	char *base;
- 	int ret, alias = 0;
- 	struct cmd_context *cmd;
-
- 	_close_stray_fds();
-
--	namebase = strdup(argv[0]);
--	base = basename(namebase);
-+	base = basename(argv[0]);
- 	while (*base == '/')
- 		base++;
- 	if (strcmp(base, "lvm") && strcmp(base, "lvm.static") &&
-@@ -1160,8 +1156,6 @@ int lvm2_main(int argc, char **argv, unsigned is_static)
- 		unsetenv("LVM_DID_EXEC");
  	}
-
--	free(namebase);
--
- 	if (!(cmd = init_lvm(is_static)))
- 		return -1;
+ 
+-	list_init(&mdas);
+-	if (!(pv = _pv_read(fid->fmt->cmd, pv_name, &mdas, NULL, 1))) {
++	if (!(pv = pv_read_path(fid->fmt->cmd, pv_name))) {
+ 		log_error("%s not identified as an existing physical volume",
+ 			  pv_name);
+ 		return 0;
+@@ -1842,3 +1840,22 @@
+ {
+ 	return vg->status;
+ }
++
++
++/**
++ * pv_read_path - Given a device path return a PV handle if it is a PV
++ * @cmd - handle to the LVM command instance
++ * @pv_name - device path to read for the PV
++ *
++ * Returns:
++ *  NULL - device path does not contain a valid PV
++ *  non-NULL - PV handle corresponding to device path
++ *
++ */
++pv_t *pv_read_path(const struct cmd_context *cmd, const char *pv_name)
++{
++	struct list mdas;
++	
++	list_init(&mdas);
++	return _pv_read(cmd, pv_name, &mdas, NULL, 1);
++}
+--- LVM2/lib/metadata/metadata.h	2007/06/19 04:36:12	1.166
++++ LVM2/lib/metadata/metadata.h	2007/07/11 23:33:12	1.167
+@@ -638,7 +638,7 @@
+ 		       char *buffer, size_t len);
+ 
+ /*
+- * Gets/Sets for external LVM library
++ * Begin skeleton for external LVM library
+  */
+ struct id pv_id(pv_t *pv);
+ const struct format_type *pv_format_type(pv_t *pv);
+@@ -654,4 +654,6 @@
+ 
+ uint32_t vg_status(vg_t *vg);
+ 
++pv_t *pv_read_path(const struct cmd_context *cmd, const char *pv_name);
++
+ #endif
 
 
