@@ -1,124 +1,78 @@
 From: Jim Meyering <jim@meyering.net>
-Date: Mon, 16 Jul 2007 14:16:36 +0200
-Subject: Detect unlikely write failure: persistent device cache, config file
-Message-ID: <87wsx01r2z.fsf@rho.meyering.net>
+Date: Mon, 16 Jul 2007 19:20:58 +0200
+Subject: [PATCH] Don't leak a file descriptor when flock fails.
+Message-ID: <87ps2sz2md.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Alasdair,
+I was looking through the code and spotted a minor problem.
+A failed flock can lead to a file-descriptor leak here:
 
-Here's the patch I mentioned last week.
-The only real question is where the new (tiny) close_stream function belongs.
-Putting it in config.h is not ideal, but does work, since the two files
-that close written-to streams also include config.h.
+	* lib/locking/file_locking.c (_lock_file): Close fd upon flock failure.
 
-Would you like a new .h file as I did for lib/misc/last-component.h?
-This time, it'd be lib/misc/close-stream.h.
+Here's the original code, then the patch:
 
-Or maybe a pair of files:
-  lib/misc/close-stream.c
-  lib/misc/close-stream.h
+            do {
+                    if ((ll->lf > -1) && close(ll->lf))
+                            log_sys_error("close", file);
 
-Here's the patch with the new static inline function in config.h:
+                    if ((ll->lf = open(file, O_CREAT | O_APPEND | O_RDWR, 0777))
+                    ...
+                    r = flock(ll->lf, operation);
+                    old_errno = errno;
+                    ...
+                    if (r) {
+                            errno = old_errno;
+                            log_sys_error("flock", ll->res);
+                            goto err;
+                    }
 
------------------------------------------------
-Detect unlikely write failure: persistent device cache, config file
- * lib/config/config.h (close_stream): New static inline function.
- * lib/filters/filter-persistent.c (persistent_filter_dump): Use the
- new function to detect and diagnose unlikely write failure.
- * lib/config/config.c (write_config_file): Likewise.
- * WHATS_NEW: Mention this.
+                    if (!stat(ll->res, &buf1) && !fstat(ll->lf, &buf2) &&
+                        !memcmp(&buf1.st_ino, &buf2.st_ino, sizeof(ino_t)))
+                            break;
+            } while (!(flags & LCK_NONBLOCK));
 
+            list_add(&_lock_list, &ll->list);
+            return 1;
 
-Signed-off-by: Jim Meyering <jim@meyering.net>
----
- WHATS_NEW                       |    1 +
- lib/config/config.c             |    7 +++++--
- lib/config/config.h             |   21 +++++++++++++++++++++
- lib/filters/filter-persistent.c |    7 +++++--
- 4 files changed, 32 insertions(+), 4 deletions(-)
+          err:
+            dm_free(ll->res);
+            dm_free(ll);
+            return 0;
+    }
+
+It may well be that whenever _lock_file fails, the caller always
+bails out, so the FD leak doesn't really matter, but fixing it now
+means we don't have to audit all callers, and will also prevent further
+reports :-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 56f579e..8b44142 100644
+index 56f579e..27ad8f3 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.02.27 - 
+ Version 2.02.27 -
  ================================
-+  Detect unlikely write failure: persistent device cache, config file
++  Don't leak a file descriptor when flock fails.
    Fix configure libdevmapper.h check when --with-dmdir is used.
    Turn _add_pv_to_vg() into external library function add_pv_to_vg().
    Add pv_by_path() external library function.
-diff --git a/lib/config/config.c b/lib/config/config.c
-index b5f0038..8f02e13 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -518,8 +518,11 @@ int write_config_file(struct config_tree *cft, const char *file,
- 		argv++;
- 	}
- 
--	if (outline.fp && fclose(outline.fp)) {
--		log_sys_error("fclose", file);
-+	if (outline.fp && close_stream(outline.fp) != 0) {
-+		if (errno == 0)
-+			log_error("%s: write error", file);
-+		else
-+			log_sys_error("fclose", file);
- 		r = 0;
- 	}
- 
-diff --git a/lib/config/config.h b/lib/config/config.h
-index ad27b0f..5658ecc 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -110,4 +110,25 @@ int get_config_str(const struct config_node *cn, const char *path,
- 
- unsigned maybe_config_section(const char *str, unsigned len);
- 
-+/* Close a stream, with nicer error checking than fclose's.
-+   Derived from gnulib's close-stream.c.
-+
-+   Close STREAM.  Return 0 if successful, nonzero (setting errno)
-+   otherwise.  Upon failure, set errno to 0 if the error number
-+   cannot be determined.  */
-+static inline int
-+close_stream(FILE *stream)
-+{
-+	int prev_fail = ferror(stream);
-+	int fclose_fail = fclose(stream);
-+
-+	/* If there was a previous failure, but fclose succeeded,
-+	   clear errno, since ferror does not set it, and its value
-+	   may be unrelated to the ferror-reported failure.  */
-+	if (prev_fail && !fclose_fail)
-+		errno = 0;
-+
-+	return prev_fail || fclose_fail;
-+}
-+
- #endif
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index 91e7147..58a89ce 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -239,8 +239,11 @@ int persistent_filter_dump(struct dev_filter *f)
- 	/* _write_array(pf, fp, "invalid_devices", PF_BAD_DEVICE); */
- 
- 	fprintf(fp, "}\n");
--	if (fclose(fp)) {
--		log_sys_error("fclose", tmp_file);
-+	if (close_stream(fp) != 0) {
-+		if (errno == 0)
-+			log_error("%s: write error", tmp_file);
-+		else
-+			log_sys_error("fclose", tmp_file);
- 		goto out;
- 	}
- 
--- 
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index 3126411..1ac76c1 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -185,6 +185,7 @@ static int _lock_file(const char *file, int flags)
+ 		if (r) {
+ 			errno = old_errno;
+ 			log_sys_error("flock", ll->res);
++			close(ll->lf);
+ 			goto err;
+ 		}
+
+--
 1.5.3.rc1.27.ga5e40
 
 
