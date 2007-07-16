@@ -1,78 +1,50 @@
 From: Jim Meyering <jim@meyering.net>
-Date: Mon, 16 Jul 2007 19:20:58 +0200
-Subject: [PATCH] Don't leak a file descriptor when flock fails.
-Message-ID: <87ps2sz2md.fsf@rho.meyering.net>
+Date: Mon, 16 Jul 2007 19:35:56 +0200
+Subject: SAME_INODE comparison
+Message-ID: <87k5t0z1xf.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I was looking through the code and spotted a minor problem.
-A failed flock can lead to a file-descriptor leak here:
+In the context of the preceding message, I saw code using memcmp
+to compare two stat buffers to see if they refer to the same inode.
 
-	* lib/locking/file_locking.c (_lock_file): Close fd upon flock failure.
+Any objection to using this macro,
 
-Here's the original code, then the patch:
+# define SAME_INODE(Stat_buf_1, Stat_buf_2) \
+   ((Stat_buf_1).st_ino == (Stat_buf_2).st_ino \
+    && (Stat_buf_1).st_dev == (Stat_buf_2).st_dev)
 
-            do {
-                    if ((ll->lf > -1) && close(ll->lf))
-                            log_sys_error("close", file);
+in the three places where that is done?
 
-                    if ((ll->lf = open(file, O_CREAT | O_APPEND | O_RDWR, 0777))
-                    ...
-                    r = flock(ll->lf, operation);
-                    old_errno = errno;
-                    ...
-                    if (r) {
-                            errno = old_errno;
-                            log_sys_error("flock", ll->res);
-                            goto err;
-                    }
+                if (!memcmp(&info.st_ino, &info2.st_ino, sizeof(ino_t)))
+                            !memcmp(&buf1.st_ino, &buf2.st_ino, sizeof(ino_t)))
+                    !memcmp(&buf1.st_ino, &buf2.st_ino, sizeof(ino_t)))
 
-                    if (!stat(ll->res, &buf1) && !fstat(ll->lf, &buf2) &&
-                        !memcmp(&buf1.st_ino, &buf2.st_ino, sizeof(ino_t)))
-                            break;
-            } while (!(flags & LCK_NONBLOCK));
+Using the macro makes the code more readable, and also adds the st_dev
+comparison, so that if by some bizarre chance (or mischief) you get
+two files with the same st_ino value, but from *different* devices,
+it won't get a false positive.  E.g., the above would become
 
-            list_add(&_lock_list, &ll->list);
-            return 1;
+                if (SAME_INODE(info, info2)
+                            SAME_INODE(&buf1, &buf2))
+                    SAME_INODE(buf1, buf2))
 
-          err:
-            dm_free(ll->res);
-            dm_free(ll);
-            return 0;
-    }
+FYI, those uses are from these two files:
+  lib/filters/filter-persistent.c
+  lib/locking/file_locking.c
 
-It may well be that whenever _lock_file fails, the caller always
-bails out, so the FD leak doesn't really matter, but fixing it now
-means we don't have to audit all callers, and will also prevent further
-reports :-)
+Here are the two .h files directly included by both of those .c files:
+      #include "lib.h"
+      #include "config.h"
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 56f579e..27ad8f3 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.27 -
- ================================
-+  Don't leak a file descriptor when flock fails.
-   Fix configure libdevmapper.h check when --with-dmdir is used.
-   Turn _add_pv_to_vg() into external library function add_pv_to_vg().
-   Add pv_by_path() external library function.
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index 3126411..1ac76c1 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -185,6 +185,7 @@ static int _lock_file(const char *file, int flags)
- 		if (r) {
- 			errno = old_errno;
- 			log_sys_error("flock", ll->res);
-+			close(ll->lf);
- 			goto err;
- 		}
+So, I'm inclined to put the #define (or an equivalent static inline function)
+in e.g., lib/misc/misc.h and let lib/misc/lib.h include misc.h.
 
---
-1.5.3.rc1.27.ga5e40
+Alternative: put the macro/function directly in lib.h.
+
+Preferences?
 
 
