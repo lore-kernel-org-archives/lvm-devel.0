@@ -1,7 +1,7 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 19 Jul 2007 07:06:47 -0000
-Subject: LVM2 ./WHATS_NEW lib/filters/filter.c
-Message-ID: <20070719070647.31485.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 23 Jul 2007 10:41:19 -0000
+Subject: LVM2/lib/misc util.c
+Message-ID: <20070723104119.6688.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-07-19 07:06:47
+Changes by:	mbroz at sourceware.org	2007-07-23 10:41:19
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/filters    : filter.c 
+	lib/misc       : util.c 
 
 Log message:
-	Add SUN's LDOM virtual block device to filters
-	Thanks to Fabio Massimo Di Nitto
+	Fix compilation warning in util.c.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.660&r2=1.661
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/util.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2007/07/18 15:38:57	1.660
-+++ LVM2/WHATS_NEW	2007/07/19 07:06:47	1.661
-@@ -1,5 +1,6 @@
- Version 2.02.28 -
- ================================
-+  Add SUN's LDOM virtual block device to filters
-   Split metadata-external.h out from metadata.h for the tools to use.
- 
- Version 2.02.27 - 17th July 2007
---- LVM2/lib/filters/filter.c	2007/01/25 23:03:48	1.39
-+++ LVM2/lib/filters/filter.c	2007/07/19 07:06:47	1.40
-@@ -75,6 +75,7 @@
- 	{"aoe", 16},		/* ATA over Ethernet */
- 	{"device-mapper", 1},	/* Other mapped devices */
- 	{"xvd", 16},		/* Xen virtual block device */
-+	{"vdisk", 8},		/* SUN's LDOM virtual block device */
- 	{NULL, 0}
- };
- 
+--- LVM2/lib/misc/util.c	2007/07/20 15:48:39	1.1
++++ LVM2/lib/misc/util.c	2007/07/23 10:41:19	1.2
+@@ -16,6 +16,9 @@
+  * Return the address of the last file name component of NAME.
+  * If NAME ends in a slash, return the empty string.
+  */
++
++#include "lib.h"
++
+ char *last_path_component(char const *name)
+ {
+ 	char const *slash = strrchr (name, '/');
 
 
