@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 23 Jul 2007 22:20:43 -0000
-Subject: LVM2/tools lvconvert.c lvrename.c
-Message-ID: <20070723222043.16274.qmail@sourceware.org>
+Date: 24 Jul 2007 10:58:01 -0000
+Subject: LVM2 man/lvdisplay.8 ./WHATS_NEW
+Message-ID: <20070724105801.22255.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,81 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-07-23 22:20:42
+Changes by:	wysochanski at sourceware.org	2007-07-24 10:58:01
 
 Modified files:
-	tools          : lvconvert.c lvrename.c 
+	man            : lvdisplay.8 
+	.              : WHATS_NEW 
 
 Log message:
-	Update lvconvert and lvrename to use vg_lock_and_read
+	Trivial fix to lvdisplay man pg to correct volume size units
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvrename.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvdisplay.8.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.668&r2=1.669
 
---- LVM2/tools/lvconvert.c	2007/06/28 17:33:44	1.28
-+++ LVM2/tools/lvconvert.c	2007/07/23 22:20:41	1.29
-@@ -534,7 +534,6 @@
- 
- int lvconvert(struct cmd_context * cmd, int argc, char **argv)
- {
--	int consistent = 1;
- 	struct volume_group *vg;
- 	struct lv_list *lvl;
- 	struct lvconvert_params lp;
-@@ -547,18 +546,10 @@
- 
- 	log_verbose("Checking for existing volume group \"%s\"", lp.vg_name);
- 
--	if (!lock_vol(cmd, lp.vg_name, LCK_VG_WRITE)) {
--		log_error("Can't get lock for %s", lp.vg_name);
-+	if (!(vg = vg_lock_and_read(cmd, lp.vg_name, LCK_VG_WRITE,
-+				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
-+				    CORRECT_INCONSISTENT)))
- 		return ECMD_FAILED;
--	}
--
--	if (!(vg = vg_read(cmd, lp.vg_name, NULL, &consistent))) {
--		log_error("Volume group \"%s\" doesn't exist", lp.vg_name);
--		goto error;
--	}
--
--	if (!vg_check_status(vg, CLUSTERED | EXPORTED_VG | LVM_WRITE))
--		goto error;
- 
- 	if (!(lvl = find_lv_in_vg(vg, lp.lv_name))) {
- 		log_error("Logical volume \"%s\" not found in "
---- LVM2/tools/lvrename.c	2007/06/06 19:40:28	1.43
-+++ LVM2/tools/lvrename.c	2007/07/23 22:20:42	1.44
-@@ -22,7 +22,6 @@
- 	char *lv_name_old, *lv_name_new;
- 	const char *vg_name, *vg_name_new, *vg_name_old;
- 	char *st;
--	int consistent = 1;
- 
- 	struct volume_group *vg;
- 	struct logical_volume *lv;
-@@ -99,18 +98,10 @@
- 
- 	log_verbose("Checking for existing volume group \"%s\"", vg_name);
- 
--	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
--		log_error("Can't get lock for %s", vg_name);
-+	if (!(vg = vg_lock_and_read(cmd, vg_name, LCK_VG_WRITE,
-+				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
-+				    CORRECT_INCONSISTENT)))
- 		return ECMD_FAILED;
--	}
--
--	if (!(vg = vg_read(cmd, vg_name, NULL, &consistent))) {
--		log_error("Volume group \"%s\" doesn't exist", vg_name);
--		goto error;
--	}
--
--	if (!vg_check_status(vg, CLUSTERED | EXPORTED_VG | LVM_WRITE))
--		goto error;
- 
- 	if (find_lv_in_vg(vg, lv_name_new)) {
- 		log_error("Logical volume \"%s\" already exists in "
+--- LVM2/man/lvdisplay.8	2005/12/02 20:35:06	1.4
++++ LVM2/man/lvdisplay.8	2007/07/24 10:58:01	1.5
+@@ -29,7 +29,7 @@
+ * logical volume status
+ * internal logical volume number
+ * open count of logical volume
+-* logical volume size in kilobytes
++* logical volume size in sectors
+ * current logical extents associated to logical volume
+ * allocated logical extents of logical volume
+ * allocation policy of logical volume
+--- LVM2/WHATS_NEW	2007/07/23 17:27:54	1.668
++++ LVM2/WHATS_NEW	2007/07/24 10:58:01	1.669
+@@ -1,5 +1,6 @@
+ Version 2.02.28 -
+ ================================
++  Trivial fix to lvdisplay man page.
+   Add vg_lock_and_read() external library function.
+   Fix loading of persistent cache if cache_dir is used. (2.02.23)
+   Eliminate uses of strdup+basename.  Use last_path_component instead.
 
 
