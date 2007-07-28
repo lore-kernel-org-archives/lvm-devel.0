@@ -1,7 +1,7 @@
 From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 24 Jul 2007 17:48:09 -0000
-Subject: LVM2 ./WHATS_NEW lib/config/config.c lib/filte ...
-Message-ID: <20070724174809.31459.qmail@sourceware.org>
+Date: 28 Jul 2007 12:26:22 -0000
+Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c li ...
+Message-ID: <20070728122622.24978.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,172 +10,178 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	meyering at sourceware.org	2007-07-24 17:48:08
+Changes by:	meyering at sourceware.org	2007-07-28 12:26:21
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/config     : config.c 
-	lib/filters    : filter-persistent.c 
-	lib/format_text: archive.c format-text.c 
-	lib/log        : log.c 
+	lib/commands   : toolcontext.c 
+	lib/format_text: archiver.c format-text.c 
+	lib/locking    : file_locking.c 
 	lib/misc       : lvm-file.c lvm-file.h 
 
 Log message:
-	Detect stream write failure reliably; new fn: lvm_fclose; use dm_fclose
-	* lib/misc/lvm-file.c (lvm_fclose): New function.
-	* lib/misc/lvm-file.h (lvm_fclose): Declare it.
-	* lib/config/config.c (write_config_file): Use the new function to detect
-	and diagnose unlikely write failure.
-	* lib/filters/filter-persistent.c (persistent_filter_dump): Likewise.
-	* lib/format_text/archive.c (archive_vg): Likewise.
-	* lib/format_text/format-text.c (_vg_write_file): Likewise.
-	* lib/log/log.c (fin_log): Similar, but use dm_fclose directly.
-	Include "\n" at end of each fprintf format string.
+	Remove create_dir function; use now-equivalent dm_create_dir instead.
+	* lib/misc/lvm-file.c (_create_dir_recursive, create_dir): Remove functions.
+	* lib/misc/lvm-file.h (create_dir): Remove declaration.
+	* lib/commands/toolcontext.c (create_toolcontext): s/create_dir/dm_create_dir/
+	* lib/format_text/archiver.c (archive, backup): Likewise.
+	* lib/format_text/format-text.c (_add_dir): Likewise.
+	* lib/locking/file_locking.c (init_file_locking): Likewise.
+	Patch by Jun'ichi Nomura.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.670&r2=1.671
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-persistent.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.672&r2=1.673
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/file_locking.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/WHATS_NEW	2007/07/24 15:35:11	1.670
-+++ LVM2/WHATS_NEW	2007/07/24 17:48:07	1.671
+--- LVM2/WHATS_NEW	2007/07/26 13:28:32	1.672
++++ LVM2/WHATS_NEW	2007/07/28 12:26:21	1.673
 @@ -1,5 +1,6 @@
  Version 2.02.28 -
  ================================
-+  Detect stream write failure reliably; new fn: lvm_fclose; use dm_fclose
++  Remove create_dir function; use now-equivalent dm_create_dir instead
+   Detect stream write failure reliably; new fn: lvm_fclose; use dm_fclose
    Fix clvmd if compiled with gulm support. (2.02.26)
    Trivial fix to lvdisplay man page.
-   Add vg_lock_and_read() external library function.
---- LVM2/lib/config/config.c	2007/07/20 15:38:19	1.62
-+++ LVM2/lib/config/config.c	2007/07/24 17:48:07	1.63
-@@ -20,6 +20,7 @@
- #include "str_list.h"
- #include "toolcontext.h"
- #include "lvm-string.h"
-+#include "lvm-file.h"
+--- LVM2/lib/commands/toolcontext.c	2007/07/23 10:45:49	1.52
++++ LVM2/lib/commands/toolcontext.c	2007/07/28 12:26:21	1.53
+@@ -939,7 +939,7 @@
+ 		goto error;
  
- #include <sys/stat.h>
- #include <sys/mman.h>
-@@ -520,8 +521,8 @@
- 		argv++;
+ 	/* Create system directory if it doesn't already exist */
+-	if (*cmd->sys_dir && !create_dir(cmd->sys_dir)) {
++	if (*cmd->sys_dir && !dm_create_dir(cmd->sys_dir)) {
+ 		log_error("Failed to create LVM2 system dir for metadata backups, config "
+ 			  "files and internal cache.");
+ 		log_error("Set environment variable LVM_SYSTEM_DIR to alternative location "
+--- LVM2/lib/format_text/archiver.c	2007/06/28 17:33:44	1.7
++++ LVM2/lib/format_text/archiver.c	2007/07/28 12:26:21	1.8
+@@ -117,7 +117,7 @@
+ 		return 1;
  	}
  
--	if (outline.fp && fclose(outline.fp)) {
--		log_sys_error("fclose", file);
-+	if (outline.fp && lvm_fclose(outline.fp, file)) {
-+		stack;
- 		r = 0;
- 	}
- 
---- LVM2/lib/filters/filter-persistent.c	2007/07/20 15:22:45	1.31
-+++ LVM2/lib/filters/filter-persistent.c	2007/07/24 17:48:08	1.32
-@@ -239,10 +239,8 @@
- 	/* _write_array(pf, fp, "invalid_devices", PF_BAD_DEVICE); */
- 
- 	fprintf(fp, "}\n");
--	if (fclose(fp)) {
--		log_sys_error("fclose", tmp_file);
--		goto out;
--	}
-+	if (lvm_fclose(fp, tmp_file))
-+		goto_out;
- 
- 	if (rename(tmp_file, pf->file))
- 		log_error("%s: rename to %s failed: %s", tmp_file, pf->file,
---- LVM2/lib/format_text/archive.c	2007/07/02 11:17:21	1.27
-+++ LVM2/lib/format_text/archive.c	2007/07/24 17:48:08	1.28
-@@ -261,11 +261,8 @@
+-	if (!create_dir(vg->cmd->archive_params->dir))
++	if (!dm_create_dir(vg->cmd->archive_params->dir))
  		return 0;
+ 
+ 	/* Trap a read-only file system */
+@@ -223,7 +223,7 @@
+ 		return 1;
  	}
  
--	if (fclose(fp)) {
--		log_sys_error("fclose", temp_file);
--		/* Leave file behind as evidence of failure */
--		return 0;
--	}
-+	if (lvm_fclose(fp, temp_file))
-+		return_0; /* Leave file behind as evidence of failure */
- 
- 	/*
- 	 * Now we want to rename this file to <vg>_index.vg.
---- LVM2/lib/format_text/format-text.c	2007/07/02 11:17:21	1.77
-+++ LVM2/lib/format_text/format-text.c	2007/07/24 17:48:08	1.78
-@@ -892,10 +892,8 @@
+-	if (!create_dir(vg->cmd->backup_params->dir))
++	if (!dm_create_dir(vg->cmd->backup_params->dir))
  		return 0;
- 	}
  
--	if (fclose(fp)) {
--		log_sys_error("fclose", tc->path_edit);
--		return 0;
--	}
-+	if (lvm_fclose(fp, tc->path_edit))
-+		return_0;
+ 	/* Trap a read-only file system */
+--- LVM2/lib/format_text/format-text.c	2007/07/24 17:48:08	1.78
++++ LVM2/lib/format_text/format-text.c	2007/07/28 12:26:21	1.79
+@@ -1856,7 +1856,7 @@
+ {
+ 	struct dir_list *dl;
  
- 	if (rename(temp_file, tc->path_edit)) {
- 		log_debug("Renaming %s to %s", temp_file, tc->path_edit);
---- LVM2/lib/log/log.c	2007/06/28 17:33:44	1.39
-+++ LVM2/lib/log/log.c	2007/07/24 17:48:08	1.40
-@@ -17,6 +17,7 @@
- #include "device.h"
- #include "memlock.h"
- #include "lvm-string.h"
-+#include "lvm-file.h"
- #include "defaults.h"
+-	if (create_dir(dir)) {
++	if (dm_create_dir(dir)) {
+ 		if (!(dl = dm_malloc(sizeof(struct list) + strlen(dir) + 1))) {
+ 			log_error("_add_dir allocation failed");
+ 			return 0;
+--- LVM2/lib/locking/file_locking.c	2007/07/20 15:22:46	1.28
++++ LVM2/lib/locking/file_locking.c	2007/07/28 12:26:21	1.29
+@@ -284,7 +284,7 @@
+ 						DEFAULT_LOCK_DIR),
+ 		sizeof(_lock_dir));
  
- #include <stdarg.h>
-@@ -121,8 +122,14 @@
- 	}
+-	if (!create_dir(_lock_dir))
++	if (!dm_create_dir(_lock_dir))
+ 		return 0;
  
- 	if (_log_to_file) {
--		if (fclose(_log_file))
--			fprintf(stderr, "fclose() on log file failed: %s", strerror(errno));
-+		if (dm_fclose(_log_file)) {
-+			if (errno)
-+			      fprintf(stderr, "failed to write log file: %s\n",
-+				      strerror(errno));
-+			else
-+			      fprintf(stderr, "failed to write log file\n");
-+
-+		}
- 		_log_to_file = 0;
- 	}
- }
---- LVM2/lib/misc/lvm-file.c	2007/04/26 16:44:59	1.20
-+++ LVM2/lib/misc/lvm-file.c	2007/07/24 17:48:08	1.21
-@@ -321,3 +321,13 @@
- 			  strerror(errno));
+ 	/* Trap a read-only file system */
+--- LVM2/lib/misc/lvm-file.c	2007/07/24 17:48:08	1.21
++++ LVM2/lib/misc/lvm-file.c	2007/07/28 12:26:21	1.22
+@@ -140,56 +140,6 @@
+ 	return 1;
  }
  
-+int lvm_fclose(FILE *fp, const char *filename)
-+{
-+	if (!dm_fclose(fp))
-+		return 0;
-+	if (errno == 0)
-+		log_error("%s: write error", filename);
-+	else
-+		log_sys_error("write error", filename);
-+	return EOF;
-+}
---- LVM2/lib/misc/lvm-file.h	2007/07/20 15:22:46	1.9
-+++ LVM2/lib/misc/lvm-file.h	2007/07/24 17:48:08	1.10
-@@ -56,4 +56,13 @@
-   ((buf1).st_ino == (buf2).st_ino && \
-    (buf1).st_dev == (buf2).st_dev)
+-static int _create_dir_recursive(const char *dir)
+-{
+-	char *orig, *s;
+-	int rc;
+-
+-	log_verbose("Creating directory \"%s\"", dir);
+-	/* Create parent directories */
+-	orig = s = dm_strdup(dir);
+-	while ((s = strchr(s, '/')) != NULL) {
+-		*s = '\0';
+-		if (*orig) {
+-			rc = mkdir(orig, 0777);
+-			if (rc < 0 && errno != EEXIST) {
+-				if (errno != EROFS)
+-					log_sys_error("mkdir", orig);
+-				dm_free(orig);
+-				return 0;
+-			}
+-		}
+-		*s++ = '/';
+-	}
+-	dm_free(orig);
+-
+-	/* Create final directory */
+-	rc = mkdir(dir, 0777);
+-	if (rc < 0 && errno != EEXIST) {
+-		if (errno != EROFS)
+-			log_sys_error("mkdir", dir);
+-		return 0;
+-	}
+-	return 1;
+-}
+-
+-int create_dir(const char *dir)
+-{
+-	struct stat info;
+-
+-	if (!*dir)
+-		return 1;
+-
+-	if (stat(dir, &info) < 0)
+-		return _create_dir_recursive(dir);
+-
+-	if (S_ISDIR(info.st_mode))
+-		return 1;
+-
+-	log_error("Directory \"%s\" not found", dir);
+-	return 0;
+-}
+-
+ int is_empty_dir(const char *dir)
+ {
+ 	struct dirent *dirent;
+@@ -273,7 +223,7 @@
+ 	if ((c = strrchr(dir, '/')))
+ 		*c = '\0';
  
-+/*
-+ * Close the specified stream, taking care to detect and diagnose any write
-+ * error.  If there is an error, use the supplied file name in a diagnostic
-+ * that is reported via log_error or log_sys_error, as appropriate.
-+ * Use this function to close a stream when you've written data to it via
-+ * unchecked fprintf, fputc, etc. calls.  Return 0 on success, EOF on failure.
-+ */
-+int lvm_fclose(FILE *fp, const char *filename);
-+
- #endif
+-	if (!create_dir(dir)) {
++	if (!dm_create_dir(dir)) {
+ 		dm_free(dir);
+ 		return -1;
+ 	}
+--- LVM2/lib/misc/lvm-file.h	2007/07/24 17:48:08	1.10
++++ LVM2/lib/misc/lvm-file.h	2007/07/28 12:26:21	1.11
+@@ -39,12 +39,6 @@
+  */
+ int is_empty_dir(const char *dir);
+ 
+-/*
+- * Create directory (recursively) if necessary.  Return 1
+- * if directory was successfully created (or already exists), else 0.
+- */
+-int create_dir(const char *dir);
+-
+ /* Sync directory changes */
+ void sync_dir(const char *file);
+ 
 
 
