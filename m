@@ -1,41 +1,39 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Sat, 28 Jul 2007 16:40:51 +0200
-Subject: Don't leak a file descriptor in fcntl_lock_file(), when fcntl fails.
-Message-ID: <87vec4vbf0.fsf@rho.meyering.net>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 31 Jul 2007 15:13:09 -0500
+Subject: [PATCH 0 of 2] Mirror argument changes.
+Message-ID: <1185912789.18824.10.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Looking at recent lvm-file.c changes, I stumbled upon a leak
-that's surprisingly similar to the one fixed last week in
-lib/locking/file_locking.c.  Here's the fix:
+I've made some changes to the mirror logging arguments for lvcreate and
+lvconvert.  Rather than using '--corelog' to specify in-memory logging
+and relying on the fact that it wasn't specified to infer disk logging,
+I've added the '--log' argument.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 44b1e98..243ca25 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.28 -
- ================================
-+  Don't leak a file descriptor in fcntl_lock_file(), when fcntl fails.
-   Remove create_dir function; use now-equivalent dm_create_dir instead
-   Detect stream write failure reliably; new fn: lvm_fclose; use dm_fclose
-   Fix clvmd if compiled with gulm support. (2.02.26)
-diff --git a/lib/misc/lvm-file.c b/lib/misc/lvm-file.c
-index caaebbe..7ce0a0b 100644
---- a/lib/misc/lvm-file.c
-+++ b/lib/misc/lvm-file.c
-@@ -245,6 +245,7 @@ int fcntl_lock_file(const char *file, short lock_type, int warn_if_read_only)
+Examples:
+$> lvcreate -m1 --log core ...
+$> lvcreate -m1 --log disk ...
 
- 	if (fcntl(lockfd, F_SETLKW, &lock)) {
- 		log_sys_error("fcntl", file);
-+		close(lockfd);
- 		return -1;
- 	}
+$> lvconvert --log core ...
+$> lvconvert --log disk ...
 
---
-1.5.3.rc3.13.g7ab3
+The old ways still work.  '--corelog' is interpreted as '--log core'.
+The nice thing is that you no longer need to specify a '--mirrors'
+argument to lvconvert if you are not changing the number of mirrors.
+Additionally, it makes it more clear when converting from core logging
+to disk logging while not changing the mirror count.
+
+Old way (two-way core mirror to two-way disk mirror):
+$> lvconvert -m1 vg/lv
+
+New way:
+$> lvconvert --log disk vg/lv
+
+I've also tried to clean-up the mirror convert code a little.
+
+ brassow
 
 
