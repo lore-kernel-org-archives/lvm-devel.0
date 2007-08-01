@@ -1,33 +1,49 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 1 Aug 2007 14:21:07 -0500
-Subject: Re: [LVM2 PATCH 1/2] lvrename: add mirrored LV support
-In-Reply-To: <46AA1024.5010606@ce.jp.nec.com>
-References: <46AA1024.5010606@ce.jp.nec.com>
-Message-ID: <24987A0D-5C3A-4339-BCB8-F387BBC6A1A1@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 1 Aug 2007 20:29:08 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
+Message-ID: <20070801202908.2611.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2007-08-01 20:29:07
 
-On Jul 27, 2007, at 10:32 AM, Jun'ichi Nomura wrote:
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : activate.c 
 
-> -	if ((lv->status & MIRRORED) ||
-> -	    (lv->status & MIRROR_LOG) ||
-> -	    (lv->status & MIRROR_IMAGE)) {
-> -		log_error("Mirrored LV, \"%s\" cannot be renamed: %s",
-> -			  lv->name, strerror(ENOSYS));
-> -		return 0;
-> -	}
-> -
+Log message:
+	lib/activate/activate.c:_lv_activate tries to monitor a device
+	regardless of whether it was successfully activated.  Now fixed
+	to only monitor if it was successfully activated.
 
-I don't think you want to remove this wholesale.  Testing reveals  
-that you are allowed to change a sub-lv name by itself, which is not  
-something we want, I don't think.  Instead, leave the checks in for  
-MIRROR_LOG and MIRROR_IMAGE.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.674&r2=1.675
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.124&r2=1.125
 
-  brassow
-
+--- LVM2/WHATS_NEW	2007/07/28 15:20:36	1.674
++++ LVM2/WHATS_NEW	2007/08/01 20:29:07	1.675
+@@ -1,5 +1,6 @@
+ Version 2.02.28 -
+ ================================
++  Don't try to monitor devices which we failed to create.
+   Don't leak a file descriptor in fcntl_lock_file(), when fcntl fails.
+   Remove create_dir function; use now-equivalent dm_create_dir instead
+   Detect stream write failure reliably; new fn: lvm_fclose; use dm_fclose
+--- LVM2/lib/activate/activate.c	2007/07/02 11:17:21	1.124
++++ LVM2/lib/activate/activate.c	2007/08/01 20:29:07	1.125
+@@ -963,7 +963,7 @@
+ 	memlock_dec();
+ 	fs_unlock();
+ 
+-	if (!monitor_dev_for_events(cmd, lv, 1))
++	if (r && !monitor_dev_for_events(cmd, lv, 1))
+ 		stack;
+ 
+ 	return r;
 
 
