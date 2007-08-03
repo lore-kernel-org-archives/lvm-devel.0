@@ -1,61 +1,37 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 01 Aug 2007 17:33:42 -0400
-Subject: Re: [LVM2 PATCH 2/2] lvrename: add mirrored LV support
-In-Reply-To: <24987A0D-5C3A-4339-BCB8-F387BBC6A1A1@redhat.com>
-References: <46AA1024.5010606@ce.jp.nec.com>
-	<24987A0D-5C3A-4339-BCB8-F387BBC6A1A1@redhat.com>
-Message-ID: <46B0FC36.8060604@ce.jp.nec.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 03 Aug 2007 13:18:49 -0400
+Subject: [LVM2 PATCH 1/2] lvrename: factor out core routine
+In-Reply-To: <46AA1020.8060600@ce.jp.nec.com>
+References: <46AA1020.8060600@ce.jp.nec.com>
+Message-ID: <1186161529.4398.9.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Jon,
-
-Thanks for testing and reviewing.
-
-Jonathan Brassow wrote:
->> -    if ((lv->status & MIRRORED) ||
->> -        (lv->status & MIRROR_LOG) ||
->> -        (lv->status & MIRROR_IMAGE)) {
->> -        log_error("Mirrored LV, \"%s\" cannot be renamed: %s",
->> -              lv->name, strerror(ENOSYS));
->> -        return 0;
->> -    }
->> -
+On Fri, 2007-07-27 at 11:32 -0400, Jun'ichi Nomura wrote:
+> Hi,
 > 
-> I don't think you want to remove this wholesale.  Testing reveals that
-> you are allowed to change a sub-lv name by itself, which is not
-> something we want, I don't think.  Instead, leave the checks in for
-> MIRROR_LOG and MIRROR_IMAGE.
+> This patch factors out core renaming function from lvrename()
+> as a preparation for mirrored LV renaming.
+> 
+> No functional change except for the order of the validity check.
+> It used to be:
+>   - check if the new name is not yet used in the VG
+>   - check if the old name really exists in the VG
+> This order is now reversed.
+> As the VG is locked, it should have no problem.
+> 
+> Also the following cleanups are included:
+>   - converting "stack; return 0;" to "return_0"
+>   - removing duplicated mirrored LV check
+>     (there were 2 identical checks)
+> 
+> Applicable to the CVS head.
+> 
 
-You are right.
-I didn't intend to remove the limitation.
+This looks fine and is a nice cleanup.  Will probably move the new
+function out of the tools dir though.
 
-I fixed it and modified 2 other parts:
-  - Removed "Failed on <LV name>" messages from _for_each_sublv(),
-    as they have no useful information.
-    Callback function is responsible to put necessary info about
-    failure. Added a comment about it.
-  - Changed _rename_sub_lv() to return success if it can't
-    determine a new name for the sub LV.
-    e.g. if "lv1" is a sub LV of "lv0", renaming "lv0" will
-         success without changing "lv1".
-    This situation won't happen with current LVM2 code.
-    But if such LVs exist, I think expected behaviour is leaving
-    them unchanged and renaming others as far as possible.
 
-Revised patch is attached.
-(and fixed subject to "2/2" as it should have been)
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-lvrename-support-mirror.patch
-Type: text/x-patch
-Size: 4821 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070801/45b86bed/attachment.bin>
