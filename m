@@ -1,47 +1,50 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 7 Aug 2007 14:47:04 +0100
-Subject: stack smash?
-In-Reply-To: <871wegcw1q.fsf@rho.meyering.net>
-References: <871wegcw1q.fsf@rho.meyering.net>
-Message-ID: <20070807134704.GS2064@agk.fab.redhat.com>
+From: meyering@sourceware.org <meyering@sourceware.org>
+Date: 6 Aug 2007 09:04:24 -0000
+Subject: LVM2/lib/metadata lv_manip.c metadata-exported.h
+Message-ID: <20070806090424.16126.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Aug 06, 2007 at 09:17:21PM +0200, Jim Meyering wrote:
-> Caveat: There may well be code somewhere that ensures ->path_live is so
-> much shorter than PATH_MAX that this is a non-issue.  But if that's the
-> case, please let me know and instead, I'll add a comment or some sort
-> of assertion here to that effect.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	meyering at sourceware.org	2007-08-06 09:04:22
+
+Modified files:
+	lib/metadata   : lv_manip.c metadata-exported.h 
+
+Log message:
+	Make lv_rename's interface "const correct".
+	* lib/metadata/lv_manip.c (lv_rename): Make char* param "const".
+	* lib/metadata/metadata-exported.h: Update prototype, too.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+
+--- LVM2/lib/metadata/lv_manip.c	2007/08/03 21:22:09	1.116
++++ LVM2/lib/metadata/lv_manip.c	2007/08/06 09:04:21	1.117
+@@ -1466,7 +1466,7 @@
+  * Returns 0 on failure, 1 on success.
+  */
+ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+-	      char *newname)
++	      const char *newname)
+ {
+ 	struct volume_group *vg = lv->vg;
  
-Can you fix this at source?  i.e. Add a path size restriction when the original
-string is read from the config file, after allowing for the maximum permitted
-vgname (NAME_LEN) and suffix.
-
-> Assuming this patch is on the right track (yes, I'll test first),
-> any preference on where to #define MIN?  
-
-It's sad this has never made it into a standard include file, but there
-are numerous instances of it under /usr/include.
-
-How about adopting the linux kernel version of this with its enforced type
-checking?
-
-> Obviously, it doesn't belong in this file.
+--- LVM2/lib/metadata/metadata-exported.h	2007/08/03 21:22:09	1.4
++++ LVM2/lib/metadata/metadata-exported.h	2007/08/06 09:04:21	1.5
+@@ -357,7 +357,7 @@
+ int lv_remove(struct logical_volume *lv);
  
-Could include in the new util.h?
-
->  	if (strcmp(slash, vg->name)) {
-> +		char new_name[PATH_MAX];
-
-We define all variables at the top of the function.
-If there's a strong feeling a variable should be defined locally to a block,
-then instead we split the block out into a separate function.
-
-Alasdair
--- 
-agk at redhat.com
+ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+-	      char *newname);
++	      const char *newname);
+ 
+ /* Find a PV within a given VG */
+ struct pv_list *find_pv_in_vg(struct volume_group *vg, const char *pv_name);
 
 
