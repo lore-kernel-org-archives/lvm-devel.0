@@ -1,34 +1,43 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 6 Aug 2007 20:38:42 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20070806203842.28237.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 06 Aug 2007 23:02:57 +0200
+Subject: const correctness, first cut
+In-Reply-To: <87vebsbf5i.fsf@rho.meyering.net> (Jim Meyering's message of
+	"Mon, 06 Aug 2007 22:07:37 +0200")
+References: <87odhkd741.fsf@rho.meyering.net>
+	<20070806193302.GK2064@agk.fab.redhat.com>
+	<87vebsbf5i.fsf@rho.meyering.net>
+Message-ID: <87hcnccr5q.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-08-06 20:38:41
+>>>  		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL,
+>>> -				      &lvdisplay_full);
+>>> +				      (process_single_lv_fn_t)lvdisplay_full);
+>>
+>> Is there a nice way to avoid those casts?
+>
+> This is where you wish for features of other languages.
+>
+> I wrote an earlier iteration that instead added a new function,
+> process_each_lv_in_vg_ro (read-only), with the appropriate
+> signature for the fn-parameter, but IMHO, that was worse,
+> and besides, wasn't worth it, for just one use.
 
-Modified files:
-	.              : WHATS_NEW 
+You could still add a new function that just confines the ugly cast?
+(Assuming that's not what you have done). Maybe _const instead of _ro,
+too.
 
-Log message:
-	Add entry for last checkin of lvrename mirror support
+Yours, Peter.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.677&r2=1.678
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
---- LVM2/WHATS_NEW	2007/08/03 21:22:09	1.677
-+++ LVM2/WHATS_NEW	2007/08/06 20:38:41	1.678
-@@ -1,5 +1,6 @@
- Version 2.02.28 -
- ================================
-+  Add support for renaming mirrored LVs.
-   Factor out core of lvrename() to lv_rename lvm library function.
-   Add --log argument to specify log type for mirrors.
-   Don't try to monitor devices which we failed to create.
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
