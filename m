@@ -1,79 +1,42 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Aug 2007 18:55:39 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20070807185539.26876.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Tue, 07 Aug 2007 17:15:53 -0400
+Subject: Re: LVM2/lib/metadata lv_manip.c
+In-Reply-To: <20070807125220.GO2064@agk.fab.redhat.com>
+References: <20070806203548.25477.qmail@sourceware.org>
+	<20070807125220.GO2064@agk.fab.redhat.com>
+Message-ID: <46B8E109.80905@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-08-07 18:55:38
+Dave,
+thanks a lot for rapidly applying fixes for Alasdair's comments.
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+Alasdair,
+as for the comments about extra checks in _rename_sub_lv(),
+they were to allow future enhancements like stacked LV, having
+LVs with independent names as sub LVs, not only the internal ones.
+But, for now, the checks are not necessary unless metadata is broken.
+Also we can seek for other solutions like marking independently
+named LV as you mentioned.
 
-Log message:
-	A few more cleanups for lvrename of mirrors checkin:
-	* add struct lv_names for old/new names
-	* replace lv->status & MIRROR checks with lv_is_visible()
+So, I'm ok with this:
+> One simple way out perhaps?
+>   Check if it begins with lv_name_old: if so, replace that part of the
+>   string with lv_name_new;  if not, log_error and make the entire rename
+>   fail.  (Add complete name validation to vg_validate, if you wish.)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+A patch is attached.
 
---- LVM2/lib/metadata/lv_manip.c	2007/08/07 16:57:09	1.120
-+++ LVM2/lib/metadata/lv_manip.c	2007/08/07 18:55:38	1.121
-@@ -25,6 +25,11 @@
- #include "segtype.h"
- #include "archiver.h"
- 
-+struct lv_names {
-+	const char *old;
-+	const char *new;
-+};
-+
- /*
-  * PVs used by a segment of an LV
-  */
-@@ -1548,9 +1553,9 @@
- static int _rename_cb(struct cmd_context *cmd, struct logical_volume *lv,
- 		      void *data)
- {
--	char **names = (char **) data;
-+	struct lv_names *lv_names = (struct lv_names *) data;
- 
--	return _rename_sub_lv(cmd, lv, names[0], names[1]);
-+	return _rename_sub_lv(cmd, lv, lv_names->old, lv_names->new);
- }
- 
- /*
-@@ -1588,10 +1593,10 @@
- 	      const char *new_name)
- {
- 	struct volume_group *vg = lv->vg;
--	const char *names[2];
-+	struct lv_names lv_names;
- 
- 	/* rename is not allowed on sub LVs */
--	if ((lv->status & MIRROR_LOG) || (lv->status & MIRROR_IMAGE)) {
-+	if (!lv_is_visible(lv)) {
- 		log_error("Cannot rename internal LV \"%s\".", lv->name);
- 		return 0;
- 	}
-@@ -1611,9 +1616,9 @@
- 		return 0;
- 
- 	/* rename sub LVs */
--	names[0] = lv->name;
--	names[1] = new_name;
--	if (!_for_each_sub_lv(cmd, lv, _rename_cb, (void *) names))
-+	lv_names.old = lv->name;
-+	lv_names.new = new_name;
-+	if (!_for_each_sub_lv(cmd, lv, _rename_cb, (void *) &lv_names))
- 		return 0;
- 
- 	/* rename main LV */
-
-
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-lvrename-simplify-sublv-name-check.patch
+Type: text/x-patch
+Size: 1675 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070807/07c00a58/attachment.bin>
