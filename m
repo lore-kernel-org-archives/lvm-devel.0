@@ -1,34 +1,33 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 10 Aug 2007 14:24:44 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20070810142444.21849.qmail@sourceware.org>
+From: Petr Rockai <me@mornfall.net>
+Date: Wed, 08 Aug 2007 19:06:05 +0200
+Subject: permitting tightly scoped declarations
+In-Reply-To: <87ps1y6m6r.fsf_-_@rho.meyering.net> (Jim Meyering's message of
+	"Wed, 08 Aug 2007 18:11:24 +0200")
+References: <871wegcw1q.fsf@rho.meyering.net>
+	<20070807134704.GS2064@agk.fab.redhat.com>
+	<87wsw78149.fsf@rho.meyering.net>
+	<20070808140251.GJ2064@agk.fab.redhat.com>
+	<87ps1y6m6r.fsf_-_@rho.meyering.net>
+Message-ID: <87y7gmarcy.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-08-10 14:24:43
+Well, i would probably vote for allowing C99-style declarations
+anywhere, but even declarations at the start of the block would be an
+improvement... IMHO / personal preference (ie. i find code easier to
+write, easier to read and getting better compile-time checks, too).
 
-Modified files:
-	.              : WHATS_NEW 
+Yours (C++-spoilt) Peter.
 
-Log message:
-	Remove unneeded WHATS_NEW entry
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.681&r2=1.682
-
---- LVM2/WHATS_NEW	2007/08/10 13:33:49	1.681
-+++ LVM2/WHATS_NEW	2007/08/10 14:24:43	1.682
-@@ -1,6 +1,5 @@
- Version 2.02.28 -
- ================================
--  Fix "lvconvert -s" from always failing with argument error message.
-   Add more cluster info to lvmdump
-   Add const attributes where possible, first cut.
-   Add support for renaming mirrored LVs.
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
