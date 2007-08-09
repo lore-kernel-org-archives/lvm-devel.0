@@ -1,30 +1,44 @@
 From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Thu, 09 Aug 2007 13:56:07 -0400
-Subject: [LVM2 PATCH] Add overflow check to find_config_int()
-Message-ID: <46BB5537.6060609@ce.jp.nec.com>
+Date: Thu, 09 Aug 2007 14:23:57 -0400
+Subject: [LVM2 PATCH] Add lv_is_internal() to check internal LVs
+In-Reply-To: <46BB5526.5030706@ce.jp.nec.com>
+References: <46BB5526.5030706@ce.jp.nec.com>
+Message-ID: <46BB5BBD.9080705@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-find_config_int() and find_config_tree_int() are the function
-to search throught the config tree and return the found value
-or given default on failure.
+Jun'ichi Nomura wrote:
+> Attached patch adds lv_is_internal() to check internal LVs.
+> lv_is_visible() returns true for "snapshotX" so it can't
+> directly usable for this purpose.
 
-Internally, the values are int64_t but implicitly casted to int
-on return.
+Oops, sorry. I posted a wrong patch.
 
-Though I think it doesn't matter in realistic configs,
-it's better to check them and leave explicit log message.
+> +int lv_is_internal(const struct logical_volume *lv)
+> +{
+> +	if (lv->status & SNAPSHOT)
+> +		return 0;
+> +
+> +	return lv_is_visible(lv);
+> +}
+
+The return value is apparently inverted here.
+Internal LVs are either:
+  - snapshot (i.e. "snapshotX")
+  - not visible
+
+Resending the correct patch.
 
 Thanks,
 -- 
 Jun'ichi Nomura, NEC Corporation of America
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-config-find-int-check-overflow.patch
+Name: lvm2-add-lv_is_internal.patch
 Type: text/x-patch
-Size: 1529 bytes
+Size: 3163 bytes
 Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070809/0e47d9e4/attachment.bin>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070809/1c493535/attachment.bin>
