@@ -1,7 +1,7 @@
-From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 20 Aug 2007 12:06:36 -0000
-Subject: LVM2/scripts lvm_dump.sh
-Message-ID: <20070820120636.29293.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 20 Aug 2007 16:16:55 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h tools/lv ...
+Message-ID: <20070820161655.25192.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,91 +10,177 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	meyering at sourceware.org	2007-08-20 12:06:36
+Changes by:	wysochanski at sourceware.org	2007-08-20 16:16:54
 
 Modified files:
-	scripts        : lvm_dump.sh 
+	lib/metadata   : metadata-exported.h 
+	tools          : lvremove.c 
 
 Log message:
-	factor out some duplication -- mostly I/O redirection
+	Prepare to move guts of lvremove into lvm library
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm_dump.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvremove.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
 
---- LVM2/scripts/lvm_dump.sh	2007/08/09 09:53:33	1.7
-+++ LVM2/scripts/lvm_dump.sh	2007/08/20 12:06:35	1.8
-@@ -116,45 +116,40 @@
+--- LVM2/lib/metadata/metadata-exported.h	2007/08/07 09:06:05	1.7
++++ LVM2/lib/metadata/metadata-exported.h	2007/08/20 16:16:54	1.8
+@@ -103,6 +103,15 @@
+ 	AREA_LV
+ } area_type_t;
  
- if (( $clustered )); then
- 	myecho "Gathering cluster info..."
--	echo "NODES: " > $dir/cluster_info
--	echo "----------------------------------" >> $dir/cluster_info
--	log "cman_tool nodes >> $dir/cluster_info 2>> $log"
--	echo " " >> $dir/cluster_info
--
--	echo "STATUS: " > $dir/cluster_info
--	echo "----------------------------------" >> $dir/cluster_info
--	log "cman_tool status >> $dir/cluster_info 2>> $log"
--	echo " " >> $dir/cluster_info
--
--	echo "SERVICES: " >> $dir/cluster_info
--	echo "----------------------------------" >> $dir/cluster_info
--	log "cman_tool services >> $dir/cluster_info 2>> $log"
--	echo " " >> $dir/cluster_info
- 
--	echo "LOCKS: "  >> $dir/cluster_info
--	echo "----------------------------------" >> $dir/cluster_info
-+	{
-+	for i in nodes status services; do
-+		cap_i=$(echo $i|tr a-z A-Z)
-+		printf "$cap_i:\n----------------------------------\n"
-+		log "cman_tool $i 2>> $log"
-+		echo
-+	done
++/*
++ * Whether or not to force an operation.
++ */
++typedef enum {
++	DONT_FORCE = 0,
++	FORCE = 1,
++	FORCE_2 = 2
++} force_t;
 +
-+	echo "LOCKS:"
-+	echo "----------------------------------"
- 	if [ -f /proc/cluster/dlm_locks ]
- 	then
--		echo "clvmd" > /proc/cluster/dlm_locks
--		cat /proc/cluster/dlm_locks >> $dir/cluster_info
--		echo " " >> $dir/cluster_info
--		echo "RESOURCE DIR: "  >> $dir/cluster_info
--		cat /proc/cluster/dlm_dir >> $dir/cluster_info
--		echo " " >> $dir/cluster_info
--		echo "DEBUG LOG: "  >> $dir/cluster_info
--		cat /proc/cluster/dlm_debug >> $dir/cluster_info
--		echo " " >> $dir/cluster_info
-+		echo clvmd > /proc/cluster/dlm_locks
-+		cat /proc/cluster/dlm_locks
-+		echo
-+		echo "RESOURCE DIR:"
-+		cat /proc/cluster/dlm_dir
-+		echo
-+		echo "DEBUG LOG:"
-+		cat /proc/cluster/dlm_debug
-+		echo
- 	fi
- 	if [ -f /debug/dlm/clvmd ]
- 	then
--		cat /debug/dlm/clvmd >> $dir/cluster_info
--		echo " " >> $dir/cluster_info
--		echo "WAITERS: "  >> $dir/cluster_info
--		cat /debug/dlm/clvmd_waiters >> $dir/cluster_info
--		echo " " >> $dir/cluster_info
--		echo "MASTER: "  >> $dir/cluster_info
--		cat /debug/dlm/clvmd_master >> $dir/cluster_info
-+		cat /debug/dlm/clvmd
-+		echo
-+		echo "WAITERS:"
-+		cat /debug/dlm/clvmd_waiters
-+		echo
-+		echo "MASTER:"
-+		cat /debug/dlm/clvmd_master
- 	fi
-+	} > $dir/cluster_info
- fi
+ struct cmd_context;
+ struct format_handler;
+ struct labeller;
+--- LVM2/tools/lvremove.c	2007/06/19 04:36:12	1.50
++++ LVM2/tools/lvremove.c	2007/08/20 16:16:54	1.51
+@@ -15,8 +15,9 @@
  
- myecho "Gathering LVM & device-mapper version info..."
+ #include "tools.h"
+ 
+-static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
+-			   void *handle __attribute((unused)))
++/* TODO: Next checkin, move to lvm library (lv_manip.c, metadata-exported.h) */
++static int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
++			    force_t force)
+ {
+ 	struct volume_group *vg;
+ 	struct lvinfo info;
+@@ -25,29 +26,29 @@
+ 	vg = lv->vg;
+ 
+ 	if (!vg_check_status(vg, LVM_WRITE))
+-		return ECMD_FAILED;
++		return 0;
+ 
+ 	if (lv_is_origin(lv)) {
+ 		log_error("Can't remove logical volume \"%s\" under snapshot",
+ 			  lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	if (lv->status & MIRROR_IMAGE) {
+ 		log_error("Can't remove logical volume %s used by a mirror",
+ 			  lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	if (lv->status & MIRROR_LOG) {
+ 		log_error("Can't remove logical volume %s used as mirror log",
+ 			  lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	/* FIXME Ensure not referred to by another existing LVs */
+@@ -56,22 +57,22 @@
+ 		if (info.open_count) {
+ 			log_error("Can't remove open logical volume \"%s\"",
+ 				  lv->name);
+-			return ECMD_FAILED;
++			return 0;
+ 		}
+ 
+-		if (info.exists && !arg_count(cmd, force_ARG)) {
++		if (info.exists && (force == DONT_FORCE)) {
+ 			if (yes_no_prompt("Do you really want to remove active "
+ 					  "logical volume \"%s\"? [y/n]: ",
+ 					  lv->name) == 'n') {
+ 				log_print("Logical volume \"%s\" not removed",
+ 					  lv->name);
+-				return ECMD_FAILED;
++				return 0;
+ 			}
+ 		}
+ 	}
+ 
+ 	if (!archive(vg))
+-		return ECMD_FAILED;
++		return 0;
+ 
+ 	/* If the VG is clustered then make sure no-one else is using the LV
+ 	   we are about to remove */
+@@ -79,7 +80,7 @@
+ 		if (!activate_lv_excl(cmd, lv)) {
+ 			log_error("Can't get exclusive access to volume \"%s\"",
+ 				  lv->name);
+-			return ECMD_FAILED;
++			return 0;
+ 		}
+ 	}
+ 
+@@ -87,7 +88,7 @@
+ 	if (!deactivate_lv(cmd, lv)) {
+ 		log_error("Unable to deactivate logical volume \"%s\"",
+ 			  lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	if (lv_is_cow(lv)) {
+@@ -95,24 +96,24 @@
+ 		log_verbose("Removing snapshot %s", lv->name);
+ 		if (!vg_remove_snapshot(lv)) {
+ 			stack;
+-			return ECMD_FAILED;
++			return 0;
+ 		}
+ 	}
+ 
+ 	log_verbose("Releasing logical volume \"%s\"", lv->name);
+ 	if (!lv_remove(lv)) {
+ 		log_error("Error releasing logical volume \"%s\"", lv->name);
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	/* store it on disks */
+ 	if (!vg_write(vg))
+-		return ECMD_FAILED;
++		return 0;
+ 
+ 	backup(vg);
+ 
+ 	if (!vg_commit(vg))
+-		return ECMD_FAILED;
++		return 0;
+ 
+ 	/* If no snapshots left, reload without -real. */
+ 	if (origin && !lv_is_origin(origin)) {
+@@ -123,7 +124,16 @@
+ 	}
+ 
+ 	log_print("Logical volume \"%s\" successfully removed", lv->name);
+-	return ECMD_PROCESSED;
++	return 1;
++}
++
++static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
++			   void *handle __attribute((unused)))
++{
++	if (!lv_remove_single(cmd, lv, arg_count(cmd, force_ARG)))
++		return ECMD_FAILED;
++	else
++		return ECMD_PROCESSED;
+ }
+ 
+ int lvremove(struct cmd_context *cmd, int argc, char **argv)
 
 
