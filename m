@@ -1,43 +1,28 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Tue, 21 Aug 2007 18:59:19 -0400
-Subject: [LVM2 RFC PATCH] Tidy extent-related variables in allocation code
-Message-ID: <46CB6E47.7040403@ce.jp.nec.com>
+From: David Robinson <zxvdr.au@gmail.com>
+Date: Wed, 22 Aug 2007 13:31:25 +1000
+Subject: [PATCH] s-c-l crashes if LV mirror was created with --nosync
+Message-ID: <46CBAE0D.60202@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+system-config-lvm crashes if there are mirrored logical volumes created
+with --nosync (BZ 247325). lvs shows an attribute of 'M' for --nosync 
+mirrors, not 'm'. The patch below corrects the problem.
 
-This patch is rfc, not very well tested yet.
+--- lvm_model.py.orig   2007-07-12 00:10:29.000000000 +1000
++++ lvm_model.py        2007-07-12 00:11:14.000000000 +1000
+@@ -496,7 +496,7 @@
 
-Current allocation code is very hard to read and I think
-part of the reason is the ambiguity of 'extents' variables.
-Some are length of LV, others are the number of extents.
-It makes the code prone to introduce errors.
+        segment = None
+        devs = devices.split(',')
+-      if attrs[0] == 'm':
++      if attrs[0] == 'm' or attrs[0] == 'M':
+          # mirrored LV
+          lv.set_mirror_log(mirror_log) # tmp, will get replaced with 
+real one at __link_mirrors()
+          segment = MirroredSegment(seg_start, seg_size)
 
-For example, in _find_parallel_space(), this code:
-       if (needed - *allocated > free_pes) {
-                log_error("Insufficient free space: %" PRIu32
-                            " extents needed,"
-                            " but only %" PRIu32 " available",
-                            needed - *allocated, free_pes);
-checks the free physical extents.
-But since 'needed' and 'allocated' are the length of LV,
-the comparison doesn't work as expected if the LV is mirrored
-because 1-extent of n-way mirrored LV requires n-extents.
 
-I would like to know if the idea of renaming makes sense
-and if there are better names of variables and conversion functions.
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-allocate-rename-extents-variables.patch
-Type: text/x-patch
-Size: 13552 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070821/3ec4c7c3/attachment.bin>
