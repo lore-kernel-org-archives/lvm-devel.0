@@ -1,43 +1,40 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 23 Aug 2007 12:44:11 -0000
-Subject: LVM2/daemons/clvmd lvm-functions.c
-Message-ID: <20070823124411.7901.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Thu, 23 Aug 2007 09:52:35 -0400
+Subject: [LVM2 PATCH] Rename ambiguous extent-related variables in allocation code
+Message-ID: <46CD9123.3040804@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-08-23 12:44:10
+Hi,
 
-Modified files:
-	daemons/clvmd  : lvm-functions.c 
+Thanks for private comments to the RFC posted on Aug. 21.
 
-Log message:
-	Force a device scan after init_full_scan_done() per agk.
+As a first step, this patch only renames the variables,
+with 2 exceptions:
+  1. 'remaining' in _alloc_parallel_area() is just replaced
+     with 'goal_le - *current_le'
+  2. Update comments accordingly
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+No change in the functionality.
+The patch is made to applicable to and tested on today's CVS head +
+pvmove cleanup patch below.
+https://www.redhat.com/archives/lvm-devel/2007-August/msg00068.html
+Dependency to the pvmove patch is only about the patch context,
+so the change itself is valid without it.
 
---- LVM2/daemons/clvmd/lvm-functions.c	2007/08/23 12:19:13	1.32
-+++ LVM2/daemons/clvmd/lvm-functions.c	2007/08/23 12:44:09	1.33
-@@ -42,6 +42,7 @@
- 
- /* LVM2 headers */
- #include "toolcontext.h"
-+#include "lvmcache.h"
- #include "log.h"
- #include "activate.h"
- #include "locking.h"
-@@ -448,6 +449,7 @@
- 
- 	ret = refresh_toolcontext(cmd);
- 	init_full_scan_done(0);
-+	lvmcache_label_scan(cmd, 2);
- 
- 	return ret==1?0:-1;
- }
+Please consider to apply.
 
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-allocate-rename-extents-variables.patch
+Type: text/x-patch
+Size: 17951 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070823/3c5f6fbf/attachment.bin>
