@@ -1,66 +1,78 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 24 Aug 2007 08:29:41 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
-Message-ID: <20070824082941.5534.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 24 Aug 2007 13:01:02 -0400
+Subject: vgremove -f option add
+In-Reply-To: <1187902565.4547.15.camel@linux-cxyg>
+References: <0JMI00FL0XLWQOB0@mta.telcel.com>
+	<1187902565.4547.15.camel@linux-cxyg>
+Message-ID: <1187974862.4339.20.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-08-24 08:29:40
+On Thu, 2007-08-23 at 16:56 -0400, Dave Wysochanski wrote:
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
+> I did some cleanup work first and I've attached an updated patch against
+> the latest code.  Patch was tested against a simple cluster as well as
+> single node and seems to work fine.  Some sample output in a clustered
+> environment:
+> 
+> # lvs
+>   LV       VG         Attr   LSize  Origin Snap%  Move Log Copy% 
+>   LogVol00 VolGroup00 -wi-ao  5.84G                              
+>   LogVol01 VolGroup00 -wi-ao  1.03G                              
+>   lv0      vg0        -wi-a- 96.00M                              
+> # vgs
+>   VG         #PV #LV #SN Attr   VSize   VFree  
+>   VolGroup00   1   2   0 wz--n-   6.91G  32.00M
+>   vg0          5   1   0 wz--nc 240.00M 144.00M
+> # vgremove vg0
+> Do you really want to remove volume group "vg0" with active logical volumes? [y/n]: n
+>   Volume group "vg0" not removed
+> # vgremove -f vg0
+>   Error locking on node rhel4u5-node1: Volume is busy on another node
+>   Can't get exclusive access to volume "lv0"
+> # vgremove vg0
+> Do you really want to remove volume group "vg0" with active logical volumes? [y/n]: y
+> Do you really want to remove active logical volume "lv0"? [y/n]: y
+>   Error locking on node rhel4u5-node1: Volume is busy on another node
+>   Can't get exclusive access to volume "lv0"
 
-Log message:
-	Fix clvmd logging so you can get lvm-level debugging out of it.
+Updated patch attached that fixes the above case.  Now we can remove LVs
+that may be active on other nodes in the cluster:
+[root at rhel4u5-node1 LVM2]# ./tools/lvm vgremove vg0
+Do you really want to remove volume group "vg0" containing 1 logical
+volumes? [y/n]: y
+  Error locking on node rhel4u5-node1: Volume is busy on another node
+Logical volume "lv0" is active on other cluster nodes.  Really remove?
+[y/n]: y
+  Logical volume "lv0" successfully removed
+  Volume group "vg0" successfully removed
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.694&r2=1.695
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
-
---- LVM2/WHATS_NEW	2007/08/23 15:02:26	1.694
-+++ LVM2/WHATS_NEW	2007/08/24 08:29:39	1.695
-@@ -1,5 +1,6 @@
- Version 2.02.28 -
- ================================
-+  Fix clvmd logging so you can get lvm-level debugging out of it.
-   Introduce VG_GLOBAL lock type for vgscan/pvscan to trigger clvmd -R.
-   Fix clvmd -R, so it fully refreshes the caches.
-   Change lvconvert_mirrors to use mirror segtype not striped.
---- LVM2/daemons/clvmd/lvm-functions.c	2007/08/23 12:44:09	1.33
-+++ LVM2/daemons/clvmd/lvm-functions.c	2007/08/24 08:29:39	1.34
-@@ -548,6 +548,15 @@
- static void lvm2_log_fn(int level, const char *file, int line,
- 			const char *message)
- {
-+
-+	/* Send messages to the normal LVM2 logging system too,
-+	   so we get debug output when it's asked for. 
-+ 	   We need to NULL the function ptr otherwise it will just call
-+	   back into here! */
-+	init_log_fn(NULL);
-+	print_log(level, file, line, "%s", message);
-+	init_log_fn(lvm2_log_fn);
-+
- 	/*
- 	 * Ignore non-error messages, but store the latest one for returning
- 	 * to the user.
-@@ -601,7 +610,10 @@
- 
- 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
- 	init_syslog(LOG_DAEMON);
--	init_debug(_LOG_ERR);
-+	openlog("clvmd", LOG_PID, LOG_DAEMON);
-+	init_debug(cmd->current_settings.debug);
-+	init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
-+	set_activation(cmd->current_settings.activation);
- 
- 	/* Check lvm.conf is setup for cluster-LVM */
- 	check_config();
+The new check seems ok even when another node has the LV open (e.g.
+mounted) - the remove just fails at the deactivate_lv() call for the
+node(s) that have it open:
+[root at rhel4u5-node1 LVM2]# ./tools/lvm vgremove vg0
+Do you really want to remove volume group "vg0" containing 1 logical
+volumes? [y/n]: y
+  Error locking on node rhel4u5-node1: Volume is busy on another node
+Logical volume "lv0" is active on other cluster nodes.  Really remove?
+[y/n]: y
+  Error locking on node rhel4u5-node3: LV vg0/lv0 in use: not
+deactivating
+  Unable to deactivate logical volume "lv0"
 
 
+Also cleaned up the first message "Do you really want to remove..." -
+got rid of "active" word (at that point, we don't know any LVs are
+active) and printed the number of LVs in the VG.
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vgremove-f-current.patch
+Type: text/x-patch
+Size: 5824 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070824/eb3a4079/attachment.bin>
