@@ -1,35 +1,58 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Fri, 07 Sep 2007 14:08:35 +0200
-Subject: strdup in str_list.c: why strdup rather than e.g., dm_pool_strdup?
-Message-ID: <87sl5q3cfw.fsf@rho.meyering.net>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 10 Sep 2007 13:58:12 -0400
+Subject: [LVM2 PATCH] Add pvseg_free field to 'pvs' output
+Message-ID: <1189447092.4444.2.camel@linux-cxyg>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I noticed the use of strdup in str_list.c, and wondered why that code
-isn't using dm_pool_strdup, since the list structure itself is allocated
-via dm_pool_alloc(mem,...
+Add pvseg_free field to 'pvs' output to display whether a segment
+is free or allocated to an LV.  This brings pvs segment output 
+closer to 'pvdisplay --maps'.
 
-Anyone know why?
+# tools/lvm pvs -o pv_name,pvseg_start,pvseg_size,pvseg_free 
+  PV         Start SSize Free 
+  /dev/loop1     0    32 Y    
+  /dev/loop1    32    31 N    
+  /dev/loop2     0    32 Y    
+  /dev/loop2    32    15 Y    
+  /dev/loop2    47    16 N    
+  /dev/loop3     0    63 N    
 
-int str_list_dup(struct dm_pool *mem, struct list *sllnew,
-		 const struct list *sllold)
-{
-	struct str_list *sl;
 
-	list_init(sllnew);
+---
+Index: LVM2/lib/report/columns.h
+===================================================================
+--- LVM2.orig/lib/report/columns.h	2007-08-20 16:55:27.000000000 -0400
++++ LVM2/lib/report/columns.h	2007-09-10 13:47:33.000000000 -0400
+@@ -83,4 +83,5 @@ FIELD(SEGS, seg, STR, "Devices", list, 5
+ 
+ FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, "pvseg_start", "Physical Extent number of start of segment.")
+ FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, "pvseg_size", "Number of extents in segment.")
++FIELD(PVSEGS, pvseg, STR, "Free", lvseg, 5, lvseg, "pvseg_free", "Whether the segment is free or allocated to an LV.")
+ /* *INDENT-ON* */
+Index: LVM2/lib/report/report.c
+===================================================================
+--- LVM2.orig/lib/report/report.c	2007-08-22 10:38:17.000000000 -0400
++++ LVM2/lib/report/report.c	2007-09-10 13:47:33.000000000 -0400
+@@ -62,6 +62,15 @@ static char _alloc_policy_char(alloc_pol
+ /*
+  * Data-munging functions to prepare each data type for display and sorting
+  */
++static int _lvseg_disp(struct dm_report *rh, struct dm_pool *mem __attribute((unused)),
++		       struct dm_report_field *field,
++		       const void *data, void *private __attribute((unused)))
++{
++	const struct lv_segment *seg = *(const struct lv_segment **) data;
++	dm_report_field_set_value(field, seg ? "Y" : "N", NULL);
++	return 1;
++}
++
+ static int _string_disp(struct dm_report *rh, struct dm_pool *mem __attribute((unused)),
+ 			struct dm_report_field *field,
+ 			const void *data, void *private __attribute((unused)))
 
-	list_iterate_items(sl, sllold) {
-		if (!str_list_add(mem, sllnew, strdup(sl->str))) {
-[[ why strdup here, and not "dm_pool_strdup(mem," ? ]]
-			stack;
-			return 0;
-		}
-	}
-
-	return 1;
-}
 
 
