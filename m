@@ -1,56 +1,43 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Mon, 17 Sep 2007 11:56:06 -0000
-Subject: [PATCH] Clean up shared-lib support in test/.
-Message-ID: <mailman.1.1646510520.4176946.lvm-devel@redhat.com>
+From: Nix <nix@esperi.org.uk>
+Date: Wed, 12 Sep 2007 12:39:08 -0000
+Subject: [PATCH] trivial build fix: link fsadm against liblvm.a
+Message-ID: <87642ggisc.fsf@hades.wkstn.nix>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-* test/Makefile.in (so_name): Use @DMDIR at .
-(.bin-dir-stamp): Create symlink only if @DMDIR@ is nonempty.
-(lvm-wrapper): Emit LD_LIBRARY_PATH setting only if @DMDIR@ is nonempty.
-Based on a patch from Jun'ichi Nomura.
+Currently it's not, which means that since the introduction of
+last_path_component(), it hasn't built.
 
-Signed-off-by: Jim Meyering <jim@meyering.net>
----
- test/Makefile.in |   11 ++++++-----
- 1 files changed, 6 insertions(+), 5 deletions(-)
+Fix is trivial:
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 0d8da89..a7f2876 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -42,13 +42,13 @@ $(T): init.sh
- 	@echo "*** $@ ***"; '$(SHELL_PATH_SQ)' \
- 	  $(TESTS_ENVIRONMENT) $@ $(GIT_TEST_OPTS)
+Index: lvm/tools/fsadm/Makefile.in
+===================================================================
+RCS file: /cvs/lvm2/LVM2/tools/fsadm/Makefile.in,v
+retrieving revision 1.2
+diff -u -r1.2 Makefile.in
+--- lvm/tools/fsadm/Makefile.in	11 Jan 2007 17:12:27 -0000	1.2
++++ lvm/tools/fsadm/Makefile.in	12 Sep 2007 12:38:07 -0000
+@@ -20,10 +20,12 @@
  
--dmdir = $(abs_top_srcdir)/../device-mapper
--so_name = $(dmdir)/lib/ioctl/libdevmapper.so.1.02
-+so_name = @DMDIR@/lib/ioctl/libdevmapper.so.1.02
+ TARGETS = fsadm
  
--# Having to create this link is a huge kludge,
-+# Having to create this symlink is an ugly kludge,
- # and a major argument for including device-mapper in lvm.
- .bin-dir-stamp: lvm-wrapper
--	ln -fs libdevmapper.so $(so_name)
-+	test -n "@DMDIR@" \
-+	  && ln -fs libdevmapper.so $(so_name)
- 	rm -rf bin
- 	mkdir bin
- 	for i in lvm $$(cat $(top_srcdir)/tools/.commands); do \
-@@ -59,7 +59,8 @@ so_name = $(dmdir)/lib/ioctl/libdevmapper.so.1.02
- lvm-wrapper: Makefile
- 	rm -f $@-t $@
- 	echo '#!/bin/sh' >> $@-t
--	echo 'export LD_LIBRARY_PATH="$(dmdir)/lib/ioctl"' >> $@-t
-+	test -n "@DMDIR@" \
-+	  && echo 'export LD_LIBRARY_PATH="@DMDIR@/lib/ioctl"' >> $@-t
- 	echo 'cmd=$$(echo ./$$0|sed "s,.*/,,")' >> $@-t
- 	echo 'test "$$cmd" = lvm &&' >> $@-t
- 	echo 'exec "$(abs_top_builddir)/tools/lvm"         "$$@"' >> $@-t
++LVMLIBS = -llvm
++
+ include $(top_srcdir)/make.tmpl
+ 
+ fsadm: $(OBJECTS)
+-	$(CC) -o $@ $(CFLAGS) $(OBJECTS) -rdynamic
++	$(CC) -o $@ $(CFLAGS) $(OBJECTS) $(LDFLAGS) $(LVMLIBS) -rdynamic
+ 
+ install: fsadm
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) fsadm \
+
+
 -- 
-1.5.3.1.19.gb5ef6-dirty
+`Some people don't think performance issues are "real bugs", and I think 
+such people shouldn't be allowed to program.' --- Linus Torvalds
 
 
