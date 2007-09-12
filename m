@@ -1,44 +1,42 @@
-From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 12 Sep 2007 18:23:03 -0000
-Subject: LVM2 configure
-Message-ID: <20070912182303.24883.qmail@sourceware.org>
+From: Jim Meyering <jim@meyering.net>
+Date: Wed, 12 Sep 2007 20:29:25 +0200
+Subject: fix for link pthread-related link failure on Debian
+In-Reply-To: <1189620953.4435.2.camel@linux-cxyg> (Dave Wysochanski's message
+	of "Wed\, 12 Sep 2007 14\:15\:53 -0400")
+References: <877imvsty8.fsf@rho.meyering.net>
+	<1189620953.4435.2.camel@linux-cxyg>
+Message-ID: <873axjrb3u.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	meyering at sourceware.org	2007-09-12 18:23:02
+Dave Wysochanski <dwysocha@redhat.com> wrote:
 
-Modified files:
-	.              : configure 
+> On Wed, 2007-09-12 at 18:57 +0200, Jim Meyering wrote:
+>> FYI, I've just fixed in LVM the problem I fixed in device-mapper
+>> not long ago: link failure (due to unsatisfied -lpthread references)
+>> when building with --enable-static_link.  I noticed it on a Debian
+>> unstable system.  The patch will show up here in a few minutes:
+>>
+>>   http://git.et.redhat.com/?p=lvm2.git
+>>
+>
+> This causes a build script I have to fail on my rhel4u5/6 xen node.
+> Might be a problem in my script but I've been using it successfully for
+> quite a while.
 
-Log message:
-	configure: regenerate, to remove vestige of an upcoming patch
+Thanks for the heads-up.
+The generated configure script had vestiges of an upcoming
+patch (which works fine in my polluted work area, btw, but
+nowhere else), and since there is no rule to regenerate configure
+when configure.in is newer, I mistakenly checked in the stale copy.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+I've just rerun autoconf and committed the new, regenerated file.
+This is one of the reasons I really like to have complete and
+accurate dependencies.  Does anyone know why we lack this particular one?
 
---- LVM2/configure	2007/09/12 16:54:23	1.60
-+++ LVM2/configure	2007/09/12 18:23:02	1.61
-@@ -11591,7 +11591,7 @@
- 
- 
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile t/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile"
- 
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -12206,7 +12206,6 @@
-     "test/format1/Makefile") CONFIG_FILES="$CONFIG_FILES test/format1/Makefile" ;;
-     "test/regex/Makefile") CONFIG_FILES="$CONFIG_FILES test/regex/Makefile" ;;
-     "test/filters/Makefile") CONFIG_FILES="$CONFIG_FILES test/filters/Makefile" ;;
--    "t/Makefile") CONFIG_FILES="$CONFIG_FILES t/Makefile" ;;
- 
-   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
- $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}
+Would anyone object to my adding the missing rule?
 
 
