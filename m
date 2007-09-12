@@ -1,46 +1,44 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 12 Sep 2007 14:19:23 -0400
-Subject: [LVM2 PATCH] Fix lvcreate's checking of the number of PVs
-Message-ID: <46E82DAB.9080805@ce.jp.nec.com>
+From: meyering@sourceware.org <meyering@sourceware.org>
+Date: 12 Sep 2007 18:23:03 -0000
+Subject: LVM2 configure
+Message-ID: <20070912182303.24883.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	meyering at sourceware.org	2007-09-12 18:23:02
 
-While not explained in man page, lvcreate can take tags of PVs
-as a specification of allocatable PVs.
-e.g. if you have 2 MD RAID1 disks and other disks in your vg,
-      you can do:
-       pvchange --addtag raid1 /dev/md[01]
-       lvcreate -L100M -i2 vg @raid1
-      instead of 'lvcreate -L100M -i2 vg /dev/md0 /dev/md1'
+Modified files:
+	.              : configure 
 
-However, lvcreate checks the number of PVs based on the number of
-arguments, so it fails even if the number of PVs for the tag is many
-enough.
+Log message:
+	configure: regenerate, to remove vestige of an upcoming patch
 
-The same check is done later in the allocation code.
-So it's safe to remove the checks here.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.60&r2=1.61
 
-A patch to fix this and a reproducer script is attached.
+--- LVM2/configure	2007/09/12 16:54:23	1.60
++++ LVM2/configure	2007/09/12 18:23:02	1.61
+@@ -11591,7 +11591,7 @@
+ 
+ 
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile t/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -12206,7 +12206,6 @@
+     "test/format1/Makefile") CONFIG_FILES="$CONFIG_FILES test/format1/Makefile" ;;
+     "test/regex/Makefile") CONFIG_FILES="$CONFIG_FILES test/regex/Makefile" ;;
+     "test/filters/Makefile") CONFIG_FILES="$CONFIG_FILES test/filters/Makefile" ;;
+-    "t/Makefile") CONFIG_FILES="$CONFIG_FILES t/Makefile" ;;
+ 
+   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
+ $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-remove-incorrect-check-of-num-pvs.patch
-Type: text/x-patch
-Size: 1493 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070912/d5a19f46/attachment.bin>
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-lvcreate-pvtags.sh
-Type: application/x-sh
-Size: 1172 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20070912/d5a19f46/attachment.sh>
+
