@@ -1,141 +1,59 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Mon, 17 Sep 2007 16:42:59 +0200
-Subject: test/t1000-lvcreate-usage.sh: exercise lvcreate
-Message-ID: <873axdcpzg.fsf@rho.meyering.net>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 17 Sep 2007 16:02:47 -0000
+Subject: LVM2 ./WHATS_NEW lib/datastruct/str_list.c lib ...
+Message-ID: <20070917160247.30018.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave and I were talking last week about the lack of
-integration tests, and since he was working on lvcreate
-and I'd just created this test framework, he sent me a bunch
-of commands he'd been using to test lvcreate;  Today I
-made them work with the new framework.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-09-17 16:02:46
 
-When I run the new test by itself, it does this:
+Modified files:
+	.              : WHATS_NEW 
+	lib/datastruct : str_list.c 
+	lib/metadata   : metadata.c 
 
-    # cd test && ./t1000-lvcreate-usage.sh
-    *   ok 1: set up temp files, loopback devices, PVs, and a VG
-    *   ok 2: lvcreate w/negative stripesize must fail
-    *   ok 3: lvcreate w/too-large stripesize must fail
-    *   ok 4: lvcreate w/single stripe succeeds with diagnostics to stdout
-    *   ok 5: lvcreate w/no stripe size succeeds with diagnostics to stdout
-    *   ok 6: lvcreate w/invalid number of stripes must fail
-    *   ok 7: lvcreate w/invalid stripe size must fail
-    * passed all 7 test(s)
+Log message:
+	Fix strdup memory leak in str_list_dup().
 
-[Remember, I'm new to LVM, so if there are better/cleaner ways to test
- these things, please let me know, soon.  Otherwise, anything that's ugly
- or plain wrong in this test may end up being copy/pasted into new tests.
- Of course, if there's too much commonality, things will be factored out
- into shell functions that are shared, but still... ]
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.706&r2=1.707
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/str_list.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
 
-Here's the patch:
-
-	Test how lvcreate handles its command-line options.
-
-	* test/t1000-lvcreate-usage.sh: New tests.
-	* test/Makefile.in (T): Add it.
-	Derived from test cases by Dave Wysochanski.
-
-Signed-off-by: Jim Meyering <jim@meyering.net>
----
- test/Makefile.in             |    1 +
- test/t1000-lvcreate-usage.sh |   70 ++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 71 insertions(+), 0 deletions(-)
- create mode 100755 test/t1000-lvcreate-usage.sh
-
-diff --git a/test/Makefile.in b/test/Makefile.in
-index a7f2876..b54560f 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -32,6 +32,7 @@ SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
- # T = $(wildcard t[0-9][0-9][0-9][0-9]-*.sh)
- T = \
-   t0000-basic.sh \
-+  t1000-lvcreate-usage.sh \
-   t3000-lvcreate-pvtags.sh \
-   t4000-pv-range-overflow.sh
-
-diff --git a/test/t1000-lvcreate-usage.sh b/test/t1000-lvcreate-usage.sh
-new file mode 100755
-index 0000000..5f04b3e
---- /dev/null
-+++ b/test/t1000-lvcreate-usage.sh
-@@ -0,0 +1,70 @@
-+#!/bin/sh
-+
-+test_description='Exercise some lvcreate diagnostics'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$vg" && {
-+    vgchange -an "$vg"
-+    lvremove -ff "$vg"
-+    vgremove "$vg"
-+  } > /dev/null
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  rm -f "$f1" "$f2"
-+}
-+
-+test_expect_success \
-+  'set up temp files, loopback devices, PVs, and a VG' \
-+  'f1="$(pwd)/1" && d1=$(loop_setup_ "$f1") &&
-+   f2="$(pwd)/2" && d2=$(loop_setup_ "$f2") &&
-+   pvcreate $d1 $d2      &&
-+   vg=$(this_test_)-test-vg-$$  &&
-+   vgcreate $vg $d1 $d2'
-+
-+lv=lvcreate-usage-$$
-+
-+test_expect_success \
-+  'lvcreate w/negative stripesize must fail' \
-+  'lvcreate -L 64M -n $lv -i2 --stripesize -4 $vg 2>err; test $? = 3 &&
-+   grep "^  Negative stripesize is invalid\$" err'
-+
-+test_expect_success \
-+  'lvcreate w/too-large stripesize must fail' \
-+  'lvcreate -L 64M -n $lv -i2 --stripesize 4294967291 $vg 2>err; test $? = 3 &&
-+   grep "^  Stripe size cannot be larger than 512.00 GB\$" err'
-+
-+test_expect_success \
-+  'lvcreate w/single stripe succeeds with diagnostics to stdout' \
-+  'lvcreate -L 64M -n $lv -i1 --stripesize 4 $vg >out 2>err &&
-+   grep "^  Redundant stripes argument: default is 1\$" out &&
-+   grep "^  Ignoring stripesize argument with single stripe\$" out &&
-+   lvdisplay $vg &&
-+   lvremove -ff $vg'
-+
-+test_expect_success \
-+  'lvcreate w/no stripe size succeeds with diagnostics to stdout' \
-+  'lvcreate -L 64M -n $lv -i2 $vg > out &&
-+   grep "^  Using default stripesize" out &&
-+   lvdisplay $vg &&
-+   lvremove -ff $vg'
-+
-+test_expect_success \
-+  'lvcreate w/invalid number of stripes must fail' \
-+  'lvcreate -L 64M -n $lv -i129 $vg 2>err; test $? = 3 &&
-+   grep "^  Number of stripes (129) must be between 1 and 128\$" err'
-+
-+# The case on lvdisplay output is to verify that the LV was not created.
-+test_expect_success \
-+  'lvcreate w/invalid stripe size must fail' \
-+  'lvcreate -L 64M -n $lv -i2 --stripesize 3 $vg 2>err; test $? = 3 &&
-+   grep "^  Invalid stripe size 3\.00 KB\$" err &&
-+   case "$(lvdisplay $vg)" in "") true ;; *) false ;; esac'
-+
-+test_done
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
---
-1.5.3.1.19.gb5ef6-dirty
+--- LVM2/WHATS_NEW	2007/09/12 16:54:23	1.706
++++ LVM2/WHATS_NEW	2007/09/17 16:02:46	1.707
+@@ -1,5 +1,6 @@
+ Version 2.02.29 -
+ ==================================
++  Fix strdup memory leak in str_list_dup().
+   Avoid static link failure with some SELinux libraries.
+   Diagnose invalid PE values given on the pvmove command line (64-bit systems).
+   Include strerror string in dev_open_flags' stat failure message.
+--- LVM2/lib/datastruct/str_list.c	2007/08/20 20:55:24	1.8
++++ LVM2/lib/datastruct/str_list.c	2007/09/17 16:02:46	1.9
+@@ -74,7 +74,7 @@
+ 	list_init(sllnew);
+ 
+ 	list_iterate_items(sl, sllold) {
+-		if (!str_list_add(mem, sllnew, strdup(sl->str))) {
++		if (!str_list_add(mem, sllnew, dm_pool_strdup(mem, sl->str))) {
+ 			stack;
+ 			return 0;
+ 		}
+--- LVM2/lib/metadata/metadata.c	2007/08/28 16:14:48	1.135
++++ LVM2/lib/metadata/metadata.c	2007/09/17 16:02:46	1.136
+@@ -908,6 +908,7 @@
+ 		return NULL;
+ 	}
+ 
++	/* FIXME Can fail when no PV mda */
+ 	if (!pv->vg_name[0]) {
+ 		log_error("Physical volume %s not in a volume group", pv_name);
+ 		return NULL;
 
 
