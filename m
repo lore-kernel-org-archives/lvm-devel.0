@@ -1,44 +1,95 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 17 Sep 2007 20:34:50 +0100
-Subject: fix for link pthread-related link failure on Debian
-In-Reply-To: <87lkb5b1l0.fsf@rho.meyering.net>
-References: <877imvsty8.fsf@rho.meyering.net>
-	<1189620953.4435.2.camel@linux-cxyg>
-	<873axjrb3u.fsf@rho.meyering.net>
-	<20070917175407.GJ18444@agk.fab.redhat.com>
-	<87lkb5b1l0.fsf@rho.meyering.net>
-Message-ID: <20070917193450.GO18444@agk.fab.redhat.com>
+From: Jim Meyering <jim@meyering.net>
+Date: Mon, 17 Sep 2007 21:39:03 +0200
+Subject: test/t1000-lvcreate-usage.sh: exercise lvcreate
+In-Reply-To: <20070917192012.GN18444@agk.fab.redhat.com> (Alasdair G. Kergon's
+	message of "Mon, 17 Sep 2007 20:20:12 +0100")
+References: <873axdcpzg.fsf@rho.meyering.net>
+	<20070917192012.GN18444@agk.fab.redhat.com>
+Message-ID: <87vea99j54.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Sep 17, 2007 at 08:15:23PM +0200, Jim Meyering wrote:
-> How about making it so autoconf is required, only if you modify
-> configure.in or otherwise fiddle with mtimes to make it look like
-> configure is out of date?
- 
-I still think that is too much risk for the build environment.
-A warning message, yes, but blocking the build, no.
-I don't want any chance of autoconf running unless people specifically
-ask for it.
+Alasdair G Kergon <agk@redhat.com> wrote:
 
-> Why cater to developers who lack the required version of autoconf?
+> On Mon, Sep 17, 2007 at 04:42:59PM +0200, Jim Meyering wrote:
+>> When I run the new test by itself, it does this:
+>>     # cd test && ./t1000-lvcreate-usage.sh
+>>     *   ok 1: set up temp files, loopback devices, PVs, and a VG
+>>     *   ok 2: lvcreate w/negative stripesize must fail
+>>     *   ok 3: lvcreate w/too-large stripesize must fail
+>>     *   ok 4: lvcreate w/single stripe succeeds with diagnostics to stdout
+>>     *   ok 5: lvcreate w/no stripe size succeeds with diagnostics to stdout
+>>     *   ok 6: lvcreate w/invalid number of stripes must fail
+>>     *   ok 7: lvcreate w/invalid stripe size must fail
+>>     * passed all 7 test(s)
+>
+> Can you make that easier to parse?
 
-It's the build/packaging environment I consider primary here.  I do not
-want builds from tarball to acquire an autoconf dependency, and if
-there's a rule saying that 'configure' sometimes needs rebuilding
-automatically then that dependency exists - even if you consider
-the possibility only theoretical, timestamps may get messed up under
-some configurations.
+The idea is that you don't bother to parse it unless something fails :)
+But see proposed rewordings below.
 
-Another way to do this would be to flip the --enable-autoreconf default
-setting in the release tarballs.  (E.g. Only attempt the autoreconf if
-the version ends in -cvs.)
+> Should every test have a reference number (perhaps derived from its
 
-Alasdair
--- 
-agk at redhat.com
+All of those tests come from the same file: t1000-lvcreate-usage.
+Currently, I have these files:
+
+  $ ls -1 t[0-9]*.sh
+  t0000-basic.sh*
+  t1000-lvcreate-usage.sh*
+  t3000-lvcreate-pvtags.sh*
+  t4000-pv-range-overflow.sh*
+
+The numbers are pretty arbitrary, now.
+Ideally, you'd put simplest tests early and ones that rely on
+more and more functionality/tools later.
+
+> filename?) that is not going to change and appears on the output line?
+
+IMHO, the combination of the file name, t1000-lvcreate-usage,
+and the textual "title" of each test within that file is sufficient
+to identify it.
+
+> Should each test belong to a defined category, e.g. 'lvcreate' above.
+> What role do the *s serve?  Would a wider range of characters make
+> the output more readable?
+
+The output format is from that of git's tests.
+
+> Can the version of the test also appear in the test logs along with
+> complete command output?
+
+If you want more output, you can run the test with --debug --verbose.
+Or set those options in test/Makefile.in.  This is the first line of
+that file:
+
+    #TEST_OPTS=--verbose --debug
+
+> [I noticed a '>/dev/null' earlier that ought
+> to disappear:-) ]
+
+If you mean the one in t1000*'s cleanup_ function, then
+I'd rather not remove it.  Otherwise, currently you'd see
+this at the end of the test:
+
+    0 logical volume(s) in volume group "t1000-test-vg-11070" now active
+    Volume group "t1000-test-vg-11070" successfully removed
+
+> 'ok' with 'must fail' is misleading - try inverting the descriptions
+> e.g. 'rejects negative stripesizes'  (plural as I'd assume a range of
+> values are being tested each time)
+
+How about these rewordings:
+
+    ./t1000-lvcreate-usage.sh
+    *   ok 1: set up temp files, loopback devices, PVs, and a VG
+    *   ok 2: lvcreate rejects a negative stripesize
+    *   ok 3: lvcreate rejects a too-large stripesize
+    *   ok 4: lvcreate w/single stripe succeeds with diagnostics to stdout
+    *   ok 5: lvcreate w/no stripe size succeeds with diagnostics to stdout
+    *   ok 6: lvcreate rejects an invalid number of stripes
+    *   ok 7: lvcreate rejects an invalid stripe size
 
 
