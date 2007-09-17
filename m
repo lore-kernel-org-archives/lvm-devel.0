@@ -1,40 +1,41 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 17 Sep 2007 20:20:12 +0100
-Subject: test/t1000-lvcreate-usage.sh: exercise lvcreate
-In-Reply-To: <873axdcpzg.fsf@rho.meyering.net>
-References: <873axdcpzg.fsf@rho.meyering.net>
-Message-ID: <20070917192012.GN18444@agk.fab.redhat.com>
+Date: Mon, 17 Sep 2007 20:34:50 +0100
+Subject: fix for link pthread-related link failure on Debian
+In-Reply-To: <87lkb5b1l0.fsf@rho.meyering.net>
+References: <877imvsty8.fsf@rho.meyering.net>
+	<1189620953.4435.2.camel@linux-cxyg>
+	<873axjrb3u.fsf@rho.meyering.net>
+	<20070917175407.GJ18444@agk.fab.redhat.com>
+	<87lkb5b1l0.fsf@rho.meyering.net>
+Message-ID: <20070917193450.GO18444@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Sep 17, 2007 at 04:42:59PM +0200, Jim Meyering wrote:
-> When I run the new test by itself, it does this:
->     # cd test && ./t1000-lvcreate-usage.sh
->     *   ok 1: set up temp files, loopback devices, PVs, and a VG
->     *   ok 2: lvcreate w/negative stripesize must fail
->     *   ok 3: lvcreate w/too-large stripesize must fail
->     *   ok 4: lvcreate w/single stripe succeeds with diagnostics to stdout
->     *   ok 5: lvcreate w/no stripe size succeeds with diagnostics to stdout
->     *   ok 6: lvcreate w/invalid number of stripes must fail
->     *   ok 7: lvcreate w/invalid stripe size must fail
->     * passed all 7 test(s)
+On Mon, Sep 17, 2007 at 08:15:23PM +0200, Jim Meyering wrote:
+> How about making it so autoconf is required, only if you modify
+> configure.in or otherwise fiddle with mtimes to make it look like
+> configure is out of date?
  
-Can you make that easier to parse?
-Should every test have a reference number (perhaps derived from its
-filename?) that is not going to change and appears on the output line?
-Should each test belong to a defined category, e.g. 'lvcreate' above.
-What role do the *s serve?  Would a wider range of characters make
-the output more readable?
-Can the version of the test also appear in the test logs along with
-complete command output?  [I noticed a '>/dev/null' earlier that ought
-to disappear:-) ]
+I still think that is too much risk for the build environment.
+A warning message, yes, but blocking the build, no.
+I don't want any chance of autoconf running unless people specifically
+ask for it.
 
-'ok' with 'must fail' is misleading - try inverting the descriptions
-e.g. 'rejects negative stripesizes'  (plural as I'd assume a range of
-values are being tested each time)
+> Why cater to developers who lack the required version of autoconf?
+
+It's the build/packaging environment I consider primary here.  I do not
+want builds from tarball to acquire an autoconf dependency, and if
+there's a rule saying that 'configure' sometimes needs rebuilding
+automatically then that dependency exists - even if you consider
+the possibility only theoretical, timestamps may get messed up under
+some configurations.
+
+Another way to do this would be to flip the --enable-autoreconf default
+setting in the release tarballs.  (E.g. Only attempt the autoreconf if
+the version ends in -cvs.)
 
 Alasdair
 -- 
