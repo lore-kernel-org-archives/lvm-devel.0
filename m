@@ -1,85 +1,38 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Sep 2007 17:18:38 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvcreate.c
-Message-ID: <20070917171838.18417.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 17 Sep 2007 18:54:07 +0100
+Subject: fix for link pthread-related link failure on Debian
+In-Reply-To: <873axjrb3u.fsf@rho.meyering.net>
+References: <877imvsty8.fsf@rho.meyering.net>
+	<1189620953.4435.2.camel@linux-cxyg>
+	<873axjrb3u.fsf@rho.meyering.net>
+Message-ID: <20070917175407.GJ18444@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-09-17 17:18:37
+On Wed, Sep 12, 2007 at 08:29:25PM +0200, Jim Meyering wrote:
+> I've just rerun autoconf and committed the new, regenerated file.
+> This is one of the reasons I really like to have complete and
+> accurate dependencies.  Does anyone know why we lack this particular one?
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : lvcreate.c 
+Because we ship the 'configure' file etc. and that is all that we
+support in build environments: autoconf etc. should not be a requirement
+to build the code.
 
-Log message:
-	Remove no-longer-correct restrictions on PV arg count with stripes/mirrors.
-	[E.g. They fail if tags or --alloc anywhere used.]
+> Would anyone object to my adding the missing rule?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.708&r2=1.709
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
+Only if not done in such a way that it was optional and disabled by
+default in build environments (though a non-fatal warning message would
+be OK).
 
---- LVM2/WHATS_NEW	2007/09/17 17:06:31	1.708
-+++ LVM2/WHATS_NEW	2007/09/17 17:18:37	1.709
-@@ -1,5 +1,6 @@
- Version 2.02.29 -
- ==================================
-+  Remove no-longer-correct restrictions on PV arg count with stripes/mirrors.
-   Fix strdup memory leak in str_list_dup().
-   Link with -lpthread when static SELinux libraries require that.
-   Detect command line PE values that exceed their 32-bit range.
---- LVM2/tools/lvcreate.c	2007/08/30 19:34:19	1.144
-+++ LVM2/tools/lvcreate.c	2007/09/17 17:18:37	1.145
-@@ -180,10 +180,8 @@
-  * up to the power of 2) */
- static int _read_stripe_params(struct lvcreate_params *lp,
- 			       struct cmd_context *cmd,
--			       int *pargc)
-+			       int *pargc __attribute((unused)))
- {
--	int argc = *pargc;
--
- 	if (arg_count(cmd, stripesize_ARG)) {
- 		if (arg_sign_value(cmd, stripesize_ARG, 0) == SIGN_MINUS) {
- 			log_error("Negative stripesize is invalid");
-@@ -211,12 +209,6 @@
- 			  display_size(cmd, (uint64_t) lp->stripe_size));
- 	}
- 
--	if (argc && (unsigned) argc < lp->stripes) {
--		log_error("Too few physical volumes on "
--			  "command line for %d-way striping", lp->stripes);
--		return 0;
--	}
--
- 	if (lp->stripes < 1 || lp->stripes > MAX_STRIPES) {
- 		log_error("Number of stripes (%d) must be between %d and %d",
- 			  lp->stripes, 1, MAX_STRIPES);
-@@ -236,19 +228,12 @@
- 
- static int _read_mirror_params(struct lvcreate_params *lp,
- 			       struct cmd_context *cmd,
--			       int *pargc)
-+			       int *pargc __attribute((unused)))
- {
--	int argc = *pargc;
- 	int region_size;
- 	int pagesize = lvm_getpagesize();
- 	const char *mirrorlog;
- 
--	if (argc && (unsigned) argc < lp->mirrors) {
--		log_error("Too few physical volumes on "
--			  "command line for %d-way mirroring", lp->mirrors);
--		return 0;
--	}
--
- 	if (arg_count(cmd, regionsize_ARG)) {
- 		if (arg_sign_value(cmd, regionsize_ARG, 0) == SIGN_MINUS) {
- 			log_error("Negative regionsize is invalid");
+E.g. configure --enable-autoreconf would require the autoconf tools to
+be present and then cause the makefiles to detect when they are
+out-of-date and attempt to reconfigure themselves and relaunch etc.
+
+Alasdair
+-- 
+agk at redhat.com
 
 
