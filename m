@@ -1,7 +1,7 @@
 From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 18 Sep 2007 18:26:32 -0000
-Subject: LVM2 configure configure.in
-Message-ID: <20070918182632.22650.qmail@sourceware.org>
+Date: 18 Sep 2007 21:07:21 -0000
+Subject: LVM2/test t3000-lvcreate-pvtags.sh
+Message-ID: <20070918210721.27742.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,115 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	meyering at sourceware.org	2007-09-18 18:26:32
+Changes by:	meyering at sourceware.org	2007-09-18 21:07:21
 
 Modified files:
-	.              : configure configure.in 
+	test           : t3000-lvcreate-pvtags.sh 
 
 Log message:
-	* configure.in (AC_CONFIG_FILES): Remove the test/*/Makefile names
-	corresponding to the recently-removed directories.
-	* configure: Regenerate.
-	Reported by Dave Wysochanski.
+	test/t3000-lvcreate-pvtags.sh: Use better test names.
 	
 	Author: Jim Meyering <jim@meyering.net>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.63&r2=1.64
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t3000-lvcreate-pvtags.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/configure	2007/09/18 14:01:08	1.63
-+++ LVM2/configure	2007/09/18 18:26:32	1.64
-@@ -11597,7 +11597,7 @@
+--- LVM2/test/t3000-lvcreate-pvtags.sh	2007/09/18 14:02:22	1.2
++++ LVM2/test/t3000-lvcreate-pvtags.sh	2007/09/18 21:07:21	1.3
+@@ -9,7 +9,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  
+-test_description='Ensure that pvmove diagnoses PE-range values 2^32 and larger.'
++test_description="ensure that lvcreate's select-by-tag code works"
+ privileges_required_=1
  
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile test/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile test/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile"
+ . ./test-lib.sh
+@@ -56,24 +56,27 @@
+   'pvcreate $pvs'
  
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -12208,11 +12208,6 @@
-     "tools/Makefile") CONFIG_FILES="$CONFIG_FILES tools/Makefile" ;;
-     "tools/version.h") CONFIG_FILES="$CONFIG_FILES tools/version.h" ;;
-     "tools/fsadm/Makefile") CONFIG_FILES="$CONFIG_FILES tools/fsadm/Makefile" ;;
--    "test/mm/Makefile") CONFIG_FILES="$CONFIG_FILES test/mm/Makefile" ;;
--    "test/device/Makefile") CONFIG_FILES="$CONFIG_FILES test/device/Makefile" ;;
--    "test/format1/Makefile") CONFIG_FILES="$CONFIG_FILES test/format1/Makefile" ;;
--    "test/regex/Makefile") CONFIG_FILES="$CONFIG_FILES test/regex/Makefile" ;;
--    "test/filters/Makefile") CONFIG_FILES="$CONFIG_FILES test/filters/Makefile" ;;
+ vg=lvcreate-pvtags-vg-$$
+-test_expect_success "Run this: vgcreate $vg $pvs" \
+-  'vgcreate $vg $pvs'
+-test_expect_success "Run this: pvchange --addtag fast $pvs" \
+-  'pvchange --addtag fast $pvs'
+-
+-test_expect_success t 'lvcreate -l3 -i3 $vg @fast'
+-test_expect_failure u 'lvcreate -l4 -i4 $vg @fast'
+-test_expect_failure v 'lvcreate -l2 -i2 $vg /dev/mapper/pv1'
++test_expect_success \
++  'set up a VG with tagged PVs' \
++  'vgcreate $vg $pvs &&
++   pvchange --addtag fast $pvs'
++
++test_expect_success '3 stripes with 3 PVs (selected by tag, @fast) is fine' \
++  'lvcreate -l3 -i3 $vg @fast'
++test_expect_failure 'too many stripes(4) for 3 PVs' \
++  'lvcreate -l4 -i4 $vg @fast'
++test_expect_failure '2 stripes is too many with just one PV' \
++  'lvcreate -l2 -i2 $vg /dev/mapper/pv1'
  
-   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
- $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}
---- LVM2/configure.in	2007/09/18 14:01:08	1.61
-+++ LVM2/configure.in	2007/09/18 18:26:32	1.62
-@@ -24,7 +24,7 @@
+-test_expect_success 'lvcreate mirror'           \
++test_expect_success 'lvcreate mirror' \
+   'lvcreate -l1 -m1 $vg @fast'
+-test_expect_success 'lvcreate mirror corelog'   \
++test_expect_success 'lvcreate mirror w/corelog' \
+   'lvcreate -l1 -m2 --corelog $vg @fast'
+-test_expect_failure 'lvcreate mirror'           \
++test_expect_failure 'lvcreate mirror w/no free PVs' \
+   'lvcreate -l1 -m2 $vg @fast'
+-test_expect_failure 'lvcreate mirror (corelog)' \
++test_expect_failure 'lvcreate mirror (corelog, w/no free PVs)' \
+   'lvcreate -l1 -m3 --corelog $vg @fast'
+-test_expect_failure 'lvcreate mirror'           \
++test_expect_failure 'lvcreate mirror with a single PV arg' \
+   'lvcreate -l1 -m1 --corelog $vg /dev/mapper/pv1'
  
- ################################################################################
- dnl -- Setup the directory where autoconf has auxilary files
--AC_CONFIG_AUX_DIR(autoconf) 
-+AC_CONFIG_AUX_DIR(autoconf)
- 
- ################################################################################
- dnl -- Get system type
-@@ -638,35 +638,30 @@
- AC_SUBST([LIB_PTHREAD])
- 
- ################################################################################
--dnl -- First and last lines should not contain files to generate in order to 
-+dnl -- First and last lines should not contain files to generate in order to
- dnl -- keep utility scripts running properly
--AC_CONFIG_FILES([\
--Makefile								\
--make.tmpl								\
--daemons/Makefile							\
--daemons/clvmd/Makefile							\
--dmeventd/Makefile							\
--dmeventd/mirror/Makefile						\
--doc/Makefile								\
--include/Makefile						 	\
--lib/Makefile							 	\
--lib/format1/Makefile						 	\
--lib/format_pool/Makefile						\
--lib/locking/Makefile							\
--lib/mirror/Makefile							\
--lib/snapshot/Makefile							\
--test/Makefile                                                           \
--man/Makefile							 	\
--po/Makefile								\
--scripts/Makefile								\
--tools/Makefile							 	\
--tools/version.h								\
--tools/fsadm/Makefile							\
--test/mm/Makefile							\
--test/device/Makefile							\
--test/format1/Makefile							\
--test/regex/Makefile                                                     \
--test/filters/Makefile                                                   \
-+AC_CONFIG_FILES([
-+Makefile
-+make.tmpl
-+daemons/Makefile
-+daemons/clvmd/Makefile
-+dmeventd/Makefile
-+dmeventd/mirror/Makefile
-+doc/Makefile
-+include/Makefile
-+lib/Makefile
-+lib/format1/Makefile
-+lib/format_pool/Makefile
-+lib/locking/Makefile
-+lib/mirror/Makefile
-+lib/snapshot/Makefile
-+test/Makefile
-+man/Makefile
-+po/Makefile
-+scripts/Makefile
-+tools/Makefile
-+tools/version.h
-+tools/fsadm/Makefile
- ])
- AC_OUTPUT
- 
+ test_done
 
 
