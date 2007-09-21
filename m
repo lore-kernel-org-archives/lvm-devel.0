@@ -1,30 +1,35 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Fri, 21 Sep 2007 13:49:03 +0200
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 21 Sep 2007 12:53:30 +0100
 Subject: revised error output: Run ... --help for more information
-In-Reply-To: <20070921114356.GW18444@agk.fab.redhat.com> (Alasdair G. Kergon's
-	message of "Fri, 21 Sep 2007 12:43:56 +0100")
+In-Reply-To: <877imkfe84.fsf_-_@rho.meyering.net>
 References: <878x75cuy9.fsf@rho.meyering.net>
 	<20070917190950.GM18444@agk.fab.redhat.com>
 	<877imkfe84.fsf_-_@rho.meyering.net>
-	<20070921114356.GW18444@agk.fab.redhat.com>
-Message-ID: <871wcsfdcg.fsf@rho.meyering.net>
+Message-ID: <20070921115330.GX18444@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alasdair G Kergon <agk@redhat.com> wrote:
-> Be aware that this is partly configurable already, but
-> can still come out looking a bit of a mess.
-> E.g. In lvm.conf set log { command_names = 1 prefix = ": " }
+On Fri, Sep 21, 2007 at 01:30:03PM +0200, Jim Meyering wrote:
+>     $ ./lvchange
+>       Need 1 or more of -a, -C, -j, -m, -M, -p, -r, --resync, --refresh, --alloc, --addtag, --deltag or --monitor
+>       lvchange: Run `lvchange --help' for more information.
+ 
+So we should certainly drop the 'lvchange:' now from the second line of output.
 
-Oh!  Thanks.
+>       lvchange: Need 1 or more of -a, -C, -j, -m, -M, -p, -r, --resync, --refresh, --alloc, --addtag, --deltag or --monitor
 
-It'd be nice to make that the default,
-but I guess there are reasons.
+So should we add a new option (command_names = 2, perhaps)
+that only applies it to messages produced using log_error()
+rather than for all output?  [And make this the default setting.]
 
-All the more reason to make the new tests use their own /etc and /dev
-directories.
+Or do we only want it (roughly speaking) for EINVALID_CMD_LINE not for
+ECMD_FAILED?
+
+Alasdair
+-- 
+agk at redhat.com
 
 
