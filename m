@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 21 Sep 2007 21:14:25 -0000
-Subject: LVM2/test lvm-utils.sh t-lvextend-percent-exte ...
-Message-ID: <20070921211425.27590.qmail@sourceware.org>
+Date: 24 Sep 2007 13:25:32 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvcreate.c
+Message-ID: <20070924132532.13191.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,145 +10,100 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-09-21 21:14:25
+Changes by:	wysochanski at sourceware.org	2007-09-24 13:25:31
 
 Modified files:
-	test           : lvm-utils.sh 
-Added files:
-	test           : t-lvextend-percent-extents.sh 
+	.              : WHATS_NEW 
+	tools          : lvcreate.c 
 
 Log message:
-	add tests to validate lvextend %PVS
+	Refactor lvcreate stripe parameter validation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvextend-percent-extents.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.713&r2=1.714
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.146&r2=1.147
 
-/cvs/lvm2/LVM2/test/t-lvextend-percent-extents.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvextend-percent-extents.sh
-+++ -	2007-09-21 21:14:25.676249000 +0000
-@@ -0,0 +1,104 @@
-+#!/bin/sh
-+# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Check extents percentage arguments'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$vg" && {
-+    vgchange -an "$vg"
-+    lvremove -ff "$vg"
-+    vgremove -f "$vg"
-+  } > "$test_dir_/cleanup.log"
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  rm -f "$f1" "$f2"
-+}
-+
-+test_expect_success \
-+  'set up temp files, loopback devices, PVs, and a VG' \
-+  'f1="$(pwd)/1" && d1=$(loop_setup_ "$f1") &&
-+   f2="$(pwd)/2" && d2=$(loop_setup_ "$f2") &&
-+   pvcreate $d1 $d2      &&
-+   vg=$(this_test_)-test-vg-$$  &&
-+   vgcreate $vg $d1 $d2 &&
-+   lv=$(this_test_)-test-lv-$$ &&
-+   lvcreate -L 64M -n $lv $vg'
-+
-+test_expect_success \
-+  'lvextend rejects both size and extents without PVs' \
-+  'lvextend -l 10 -L 64M $vg/$lv 2>err; test $? = 3 &&
-+   grep "^  Please specify either size or extents but not both.\$" err'
-+
-+test_expect_success \
-+  'lvextend rejects both size and extents with PVs' \
-+  'lvextend -l 10 -L 64M $vg/$lv $d1 2>err; test $? = 3 &&
-+   grep "^  Please specify either size or extents but not both.\$" err'
-+
-+test_expect_success \
-+  'lvextend accepts no size or extents but one PV - bz154691' \
-+  'lvextend $vg/$lv $d1 >out; test $? = 0 &&
-+  grep "^  Logical volume $lv successfully resized\$" out &&
-+  check_pv_size_ $d1 "0"'
-+
-+test_expect_success \
-+  'Reset LV to original size' \
-+  'lvremove -f $vg/$lv; test $? = 0 &&
-+   lvcreate -L 64M -n $lv $vg; test $? = 0'
-+
-+test_expect_success \
-+  'lvextend accepts no size but extents 100%PVS and two PVs - bz154691' \
-+  'lvextend -l +100%PVS $vg/$lv $d1 $d2 >out; test $? = 0 &&
-+  grep "^  Logical volume $lv successfully resized\$" out &&
-+  check_pv_size_ $d1 "0" &&
-+  check_pv_size_ $d2 "0"'
-+
-+# Exercise the range overlap code.  Allocate every 2 extents.
-+# 
-+#      Physical Extents
-+#           1         2
-+#012345678901234567890123
-+#
-+#aaXXaaXXaaXXaaXXaaXXaaXX - (a)llocated
-+#rrrXXXrrrXXXrrrXXXrrrXXX - (r)ange on cmdline
-+#ooXXXXXXoXXXooXXXXXXoXXX - (o)verlap of range and allocated
-+#
-+# Key: a - allocated
-+#      F - free
-+#      r - part of a range on the cmdline
-+#      N - not on cmdline
-+#
-+# Create the LV with 12 extents, allocated every other 2 extents.
-+# Then extend it, with a range of PVs on the cmdline of every other 3 extents.
-+# Total number of extents should be 12 + overlap = 12 + 6 = 18.
-+# Thus, total size for the LV should be 18 * 4M = 72M
-+#
-+test_expect_success \
-+  'Reset LV to 12 extents, allocate every other 2 extents' \
-+  'create_pvs=`for i in $(seq 0 4 20); do echo -n "\$d1:$i-$(($i + 1)) "; done` &&
-+   lvremove -f $vg/$lv; test $? = 0 &&
-+   lvcreate -l 12 -n $lv $vg $create_pvs; test $? = 0'
-+
-+test_expect_success \
-+  'lvextend with partially allocated PVs and extents 100%PVS with PE ranges' \
-+  'extend_pvs=`for i in $(seq 0 6 18); do echo -n "\$d1:$i-$(($i + 2)) "; done` &&
-+  lvextend -l +100%PVS $vg/$lv $extend_pvs >out; test $? = 0 &&
-+  grep "^  Logical volume $lv successfully resized\$" out &&
-+  check_lv_size_ $vg/$lv "72.00M"'
-+
-+
-+test_done
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
---- LVM2/test/lvm-utils.sh	2007/09/18 14:02:22	1.2
-+++ LVM2/test/lvm-utils.sh	2007/09/21 21:14:25	1.3
-@@ -54,3 +54,14 @@
-   echo "$dev"
-   return 0;
+--- LVM2/WHATS_NEW	2007/09/21 18:06:56	1.713
++++ LVM2/WHATS_NEW	2007/09/24 13:25:31	1.714
+@@ -1,5 +1,6 @@
+ Version 2.02.29 -
+ ==================================
++  Refactor lvcreate stripe and mirror parameter validation.
+   All tools: print --help output to stdout, not stderr.
+   After a diagnostic, suggest --help, rather than printing all --help output.
+   Add %PVS extents option to lvresize, lvextend, and lvcreate.
+--- LVM2/tools/lvcreate.c	2007/09/20 21:39:08	1.146
++++ LVM2/tools/lvcreate.c	2007/09/24 13:25:31	1.147
+@@ -174,28 +174,13 @@
+ 	return 1;
  }
-+
-+
-+check_pv_size_()
+ 
+-/* The stripe size is limited by the size of a uint32_t, but since the
+- * value given by the user is doubled, and the final result must be a
+- * power of 2, we must divide UINT_MAX by four and add 1 (to round it
+- * up to the power of 2) */
+-static int _read_stripe_params(struct lvcreate_params *lp,
+-			       struct cmd_context *cmd,
+-			       int *pargc __attribute((unused)))
++/*
++ * Generic stripe parameter checks.
++ * FIXME: Should eventually be moved into lvm library.
++ */
++static int _validate_stripe_params(struct cmd_context *cmd,
++				   struct lvcreate_params *lp)
+ {
+-	if (arg_count(cmd, stripesize_ARG)) {
+-		if (arg_sign_value(cmd, stripesize_ARG, 0) == SIGN_MINUS) {
+-			log_error("Negative stripesize is invalid");
+-			return 0;
+-		}
+-		/* Check to make sure we won't overflow lp->stripe_size */
+-		if(arg_uint_value(cmd, stripesize_ARG, 0) > STRIPE_SIZE_LIMIT) {
+-			log_error("Stripe size cannot be larger than %s",
+-				  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
+-			return 0;
+-		}
+-		lp->stripe_size = 2 * arg_uint_value(cmd, stripesize_ARG, 0);
+-	}
+-
+ 	if (lp->stripes == 1 && lp->stripe_size) {
+ 		log_print("Ignoring stripesize argument with single stripe");
+ 		lp->stripe_size = 0;
+@@ -226,6 +211,35 @@
+ 	return 1;
+ }
+ 
++/* The stripe size is limited by the size of a uint32_t, but since the
++ * value given by the user is doubled, and the final result must be a
++ * power of 2, we must divide UINT_MAX by four and add 1 (to round it
++ * up to the power of 2) */
++static int _read_stripe_params(struct lvcreate_params *lp,
++			       struct cmd_context *cmd,
++			       int *pargc __attribute((unused)))
 +{
-+  return $(test $(pvs --noheadings -o pv_free $1) == $2)
++	if (arg_count(cmd, stripesize_ARG)) {
++		if (arg_sign_value(cmd, stripesize_ARG, 0) == SIGN_MINUS) {
++			log_error("Negative stripesize is invalid");
++			return 0;
++		}
++		/* Check to make sure we won't overflow lp->stripe_size */
++		if(arg_uint_value(cmd, stripesize_ARG, 0) > STRIPE_SIZE_LIMIT) {
++			log_error("Stripe size cannot be larger than %s",
++				  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
++			return 0;
++		}
++		lp->stripe_size = 2 * arg_uint_value(cmd, stripesize_ARG, 0);
++	}
++
++
++	if (!_validate_stripe_params(cmd, lp))
++		return 0;
++
++	return 1;
 +}
 +
-+check_lv_size_()
-+{
-+  return $(test $(lvs --noheadings -o lv_size $1) == $2)
-+}
+ static int _read_mirror_params(struct lvcreate_params *lp,
+ 			       struct cmd_context *cmd,
+ 			       int *pargc __attribute((unused)))
 
 
