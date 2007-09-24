@@ -1,66 +1,103 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 24 Sep 2007 12:39:03 -0400
-Subject: RFC: Clarifying the usage of pvs on the lvextend command line, especially %VG and %FREE
-Message-ID: <1190651943.4431.28.camel@linux-cxyg>
+From: meyering@sourceware.org <meyering@sourceware.org>
+Date: 24 Sep 2007 19:19:18 -0000
+Subject: LVM2/test t-lvcreate-pvtags.sh t-lvcreate-usag ...
+Message-ID: <20070924191918.15858.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I just did a quick survey of the size (-L) and extent (-l) options to
-lvextend / lvresize when combined with PVS on the cmdline.  The analysis
-led me to ponder whether there should be some clarification or
-restriction as to when PVs should be given with lvextend / lvresize.
-Options seem to be an explicit check in the code or a
-clarification/suggestion in the man page.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	meyering at sourceware.org	2007-09-24 19:19:18
 
-In particular, I'm wondering about the cases of %VG and %FREE with pvs
-on the cmdline.  Are there cases people can think of where it would be
-useful for a user to specify PVS on the cmdline with %VG and/or %FREE?
-I'm wondering whether allowing pvs here just makes things more confusing
-to the user.
+Modified files:
+	test           : t-lvcreate-pvtags.sh t-lvcreate-usage.sh 
+	                 t-lvextend-percent-extents.sh 
+	                 t-pv-range-overflow.sh 
 
-Here's what I came up with that led me to question this:
+Log message:
+	Avoid over-quoting in shell scripts.
+	
+	Do not use "..." around the RHS of VAR= assignment,
+	nor on the argument of "case ... in ...".
+	
+	Author: Jim Meyering <jim@meyering.net>
 
-When we put pvs on the cmdline, we are saying "use these PVs to do the 
-allocation needed".  They do not specify how much allocation to do, the
-only exception being the %PVS option.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-pvtags.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvextend-percent-extents.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pv-range-overflow.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
-Case 1: -L size option.  If you specify pvs with a size, the allocation
-is
-done based on the size and the pool of PVS is given on the cmdline.  If
-you
-don't specify pvs with a size, then all PVS in the vg are used.  This
-usage
-seems to make sense.  So pvs on the cmdline with -L is fine.
-
-Case 2: -l extents option.  There are many cases within this one with
-all
-the different percentage options.
-  	a) Simple extents number, w/out percentage.  In this case, we
- 	either get an absolute number of extents or a delta of extents.
-	In both cases, we are using the pvs on the cmdline to get the
-	extents needed.
-	b) %VG as extents number.  Here we specify a percentage of the
-	volume group size to use for the lvextend.  If we specify a 
-	subset of the overall pvs in the vg on the cmdline, this percentage
-	might not make as much sense.  So perhaps it does not make much
-	sense to allow pvs on the cmdline with %VG?  Does this just open
-	the door to users being confused?
-	c) %FREE as extents number.  We specify the percentage of free 
-	space in the volume group to get the number of extents, but again
-	the allocation is qualified with the pvs on the cmdline.  Does this
-	make sense?  Would a user ever want this or does it just create 
-	confusion?  Would someone naturally think %FREE is associated with
-	free space on the PVS?
-	d) %LV as extents number.  Here we want to change the size of the
-	LV relative to itself (for example, double the size of the LV) and
-	we specify PVS on the cmdline so we know where the space comes from.
-	This seems to be a sensible thing the user might want.
-	e) %PVS as extents number.  Clearly we need pvs on the cmdline as
-	the extents calculation depends on it.
-
-
+--- LVM2/test/t-lvcreate-pvtags.sh	2007/09/21 17:12:13	1.1
++++ LVM2/test/t-lvcreate-pvtags.sh	2007/09/24 19:19:18	1.2
+@@ -35,7 +35,7 @@
+ 
+ test_expect_success \
+   'set up temp file and loopback device' \
+-  'lofile="$(pwd)/lofile" && lodev=$(loop_setup_ "$lofile")'
++  'lofile=$(pwd)/lofile && lodev=$(loop_setup_ "$lofile")'
+ 
+ offset=0
+ pvs=
+--- LVM2/test/t-lvcreate-usage.sh	2007/09/21 17:12:13	1.1
++++ LVM2/test/t-lvcreate-usage.sh	2007/09/24 19:19:18	1.2
+@@ -28,8 +28,8 @@
+ 
+ test_expect_success \
+   'set up temp files, loopback devices, PVs, and a VG' \
+-  'f1="$(pwd)/1" && d1=$(loop_setup_ "$f1") &&
+-   f2="$(pwd)/2" && d2=$(loop_setup_ "$f2") &&
++  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
++   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
+    pvcreate $d1 $d2      &&
+    vg=$(this_test_)-test-vg-$$  &&
+    vgcreate $vg $d1 $d2'
+@@ -71,7 +71,7 @@
+   'lvcreate rejects an invalid stripe size' \
+   'lvcreate -L 64M -n $lv -i2 --stripesize 3 $vg 2>err; test $? = 3 &&
+    grep "^  Invalid stripe size 3\.00 KB\$" err &&
+-   case "$(lvdisplay $vg)" in "") true ;; *) false ;; esac'
++   case $(lvdisplay $vg) in "") true ;; *) false ;; esac'
+ 
+ test_done
+ # Local Variables:
+--- LVM2/test/t-lvextend-percent-extents.sh	2007/09/21 21:14:25	1.1
++++ LVM2/test/t-lvextend-percent-extents.sh	2007/09/24 19:19:18	1.2
+@@ -28,8 +28,8 @@
+ 
+ test_expect_success \
+   'set up temp files, loopback devices, PVs, and a VG' \
+-  'f1="$(pwd)/1" && d1=$(loop_setup_ "$f1") &&
+-   f2="$(pwd)/2" && d2=$(loop_setup_ "$f2") &&
++  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
++   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
+    pvcreate $d1 $d2      &&
+    vg=$(this_test_)-test-vg-$$  &&
+    vgcreate $vg $d1 $d2 &&
+@@ -65,7 +65,7 @@
+   check_pv_size_ $d2 "0"'
+ 
+ # Exercise the range overlap code.  Allocate every 2 extents.
+-# 
++#
+ #      Physical Extents
+ #           1         2
+ #012345678901234567890123
+--- LVM2/test/t-pv-range-overflow.sh	2007/09/21 17:12:13	1.1
++++ LVM2/test/t-pv-range-overflow.sh	2007/09/24 19:19:18	1.2
+@@ -28,8 +28,8 @@
+ 
+ test_expect_success \
+   'set up temp files, loopback devices, PVs, VG, LV' \
+-  'f1="$(pwd)/1" && d1=$(loop_setup_ "$f1") &&
+-   f2="$(pwd)/2" && d2=$(loop_setup_ "$f2") &&
++  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
++   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
+    pvcreate $d1 $d2              &&
+    vg=pvmove-demo-vg-$$          &&
+    vgcreate "$vg" $d1 $d2        &&
 
 
