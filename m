@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 3 Oct 2007 15:00:53 -0000
-Subject: LVM2/scripts lvm_dump.sh
-Message-ID: <20071003150053.14552.qmail@sourceware.org>
+From: meyering@sourceware.org <meyering@sourceware.org>
+Date: 3 Oct 2007 16:08:18 -0000
+Subject: LVM2/tools/fsadm Makefile.in
+Message-ID: <20071003160818.15226.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,71 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2007-10-03 15:00:52
+Changes by:	meyering at sourceware.org	2007-10-03 16:08:18
 
 Modified files:
-	scripts        : lvm_dump.sh 
+	tools/fsadm    : Makefile.in 
 
 Log message:
-	a) use dmsetup version to check for dmsetup, but if it fails, set
-	DMSETUP=: to disable dmsetup checks (but let the script run
-	nevertheless); warn the user if this is the case
-	b) put the non-root and dmsetup warnings both at start and end of
-	output
+	Revert last change.  fsadm must not depend on -llvm.
+	
+	Author: Jim Meyering <meyering@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm_dump.sh.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/fsadm/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/scripts/lvm_dump.sh	2007/10/02 16:09:46	1.11
-+++ LVM2/scripts/lvm_dump.sh	2007/10/03 15:00:51	1.12
-@@ -44,7 +44,7 @@
- }
+--- LVM2/tools/fsadm/Makefile.in	2007/10/03 09:46:57	1.4
++++ LVM2/tools/fsadm/Makefile.in	2007/10/03 16:08:18	1.5
+@@ -20,12 +20,10 @@
  
- "$LVM" version >& /dev/null || die 2 "Could not run lvm binary '$LVM'"
--"$DMSETUP" help >& /dev/null || die 2 "Fatal: could not run dmsetup binary '$DMSETUP'"
-+"$DMSETUP" version >& /dev/null || DMSETUP=:
+ TARGETS = fsadm
  
- function usage {
- 	echo "$0 [options]"
-@@ -99,7 +99,16 @@
- 	eval "$@"
- }
- 
--echo " "
-+warnings() {
-+	if test "$UID" != "0" && test "$EUID" != "0"; then
-+		myecho "WARNING! Running as non-privileged user, dump is likely incomplete!"
-+	elif test "$DMSETUP" = ":"; then
-+		myecho "WARNING! Could not run dmsetup, dump is likely incomplete."
-+	fi
-+}
-+
-+warnings
-+
- myecho "Creating dump directory: $dir"
- echo " "
- 
-@@ -211,16 +220,15 @@
- if test -z "$userdir"; then
- 	lvm_dump="$dirbase.tgz"
- 	myecho "Creating report tarball in $HOME/$lvm_dump..."
-+fi
-+
-+warnings
-+
-+if test -z "$userdir"; then
- 	cd "$HOME"
- 	"$TAR" czf "$lvm_dump" "$dirbase" 2>/dev/null
- 	"$RM" -rf "$dir"
- fi
- 
--if test "$UID" != "0" && test "$EUID" != "0"; then
--	myecho
--	myecho "WARNING! Running as non-privileged user, dump is likely incomplete!"
--	myecho
--fi
+-LVMLIBS = -llvm
 -
- exit 0
+ include $(top_srcdir)/make.tmpl
  
+ fsadm: $(OBJECTS)
+-	$(CC) -o $@ $(CFLAGS) $(OBJECTS) $(LDFLAGS) $(LVMLIBS) -rdynamic
++	$(CC) -o $@ $(CFLAGS) $(OBJECTS) -rdynamic
+ 
+ install: fsadm
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) fsadm \
 
 
