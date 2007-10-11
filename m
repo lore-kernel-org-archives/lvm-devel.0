@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 11 Oct 2007 18:51:22 -0000
-Subject: LVM2 lib/format1/import-export.c lib/metadata/ ...
-Message-ID: <20071011185122.10151.qmail@sourceware.org>
+Date: 11 Oct 2007 19:20:39 -0000
+Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/meta ...
+Message-ID: <20071011192039.1291.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,95 +10,120 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-10-11 18:51:22
+Changes by:	wysochanski at sourceware.org	2007-10-11 19:20:38
 
 Modified files:
-	lib/format1    : import-export.c 
-	lib/metadata   : metadata-exported.h snapshot_manip.c 
-	lib/snapshot   : snapshot.c 
-	tools          : lvconvert.c lvcreate.c 
+	lib/metadata   : lv_manip.c metadata-exported.h mirror.c 
+	                 snapshot_manip.c 
+	tools          : lvcreate.c pvmove.c toollib.c 
 
 Log message:
-	Non-functional change - refactor vg_add_snapshot fid parameter.
+	Non-functional change - refactor lv_create_empty().
+	Remove struct format_instance param - we can safely obtain
+	this from vg->fid inside the function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/import-export.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.150&r2=1.151
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.151&r2=1.152
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
 
---- LVM2/lib/format1/import-export.c	2007/08/22 14:38:16	1.86
-+++ LVM2/lib/format1/import-export.c	2007/10/11 18:51:21	1.87
-@@ -644,7 +644,7 @@
- 				continue;
+--- LVM2/lib/metadata/lv_manip.c	2007/09/24 21:30:00	1.129
++++ LVM2/lib/metadata/lv_manip.c	2007/10/11 19:20:38	1.130
+@@ -1656,14 +1656,14 @@
+ /*
+  * Create a new empty LV.
+  */
+-struct logical_volume *lv_create_empty(struct format_instance *fi,
+-				       const char *name,
++struct logical_volume *lv_create_empty(const char *name,
+ 				       union lvid *lvid,
+ 				       uint32_t status,
+ 				       alloc_policy_t alloc,
+ 				       int import,
+ 				       struct volume_group *vg)
+ {
++	struct format_instance *fi = vg->fid;
+ 	struct cmd_context *cmd = vg->cmd;
+ 	struct lv_list *ll = NULL;
+ 	struct logical_volume *lv;
+--- LVM2/lib/metadata/metadata-exported.h	2007/10/11 18:51:21	1.17
++++ LVM2/lib/metadata/metadata-exported.h	2007/10/11 19:20:38	1.18
+@@ -349,8 +349,7 @@
+ 		  struct volume_group *vg_to);
  
- 			/* insert the snapshot */
--			if (!vg_add_snapshot(vg->fid, NULL, org, cow, NULL,
-+			if (!vg_add_snapshot(vg, NULL, org, cow, NULL,
- 					     org->le_count, 
- 					     lvd->lv_chunk_size)) {
- 				log_err("Couldn't add snapshot.");
---- LVM2/lib/metadata/metadata-exported.h	2007/09/24 21:30:00	1.16
-+++ LVM2/lib/metadata/metadata-exported.h	2007/10/11 18:51:21	1.17
-@@ -412,7 +412,7 @@
- /* Given a cow LV, return its origin */
- struct logical_volume *origin_from_cow(const struct logical_volume *lv);
+ /* Manipulate LVs */
+-struct logical_volume *lv_create_empty(struct format_instance *fi,
+-				       const char *name,
++struct logical_volume *lv_create_empty(const char *name,
+ 				       union lvid *lvid,
+ 				       uint32_t status,
+ 				       alloc_policy_t alloc,
+--- LVM2/lib/metadata/mirror.c	2007/08/29 20:19:11	1.42
++++ LVM2/lib/metadata/mirror.c	2007/10/11 19:20:38	1.43
+@@ -439,7 +439,7 @@
+ 	}
  
--int vg_add_snapshot(struct format_instance *fid, const char *name,
-+int vg_add_snapshot(struct volume_group *vg, const char *name,
- 		    struct logical_volume *origin, struct logical_volume *cow,
- 		    union lvid *lvid, uint32_t extent_count,
- 		    uint32_t chunk_size);
---- LVM2/lib/metadata/snapshot_manip.c	2007/08/20 20:55:26	1.25
-+++ LVM2/lib/metadata/snapshot_manip.c	2007/10/11 18:51:21	1.26
-@@ -48,11 +48,12 @@
- 	return lv->snapshot->origin;
- }
- 
--int vg_add_snapshot(struct format_instance *fid, const char *name,
-+int vg_add_snapshot(struct volume_group *vg, const char *name,
- 		    struct logical_volume *origin,
+ 	for (m = 0; m < num_mirrors; m++) {
+-		if (!(img_lvs[m] = lv_create_empty(lv->vg->fid, img_name,
++		if (!(img_lvs[m] = lv_create_empty(img_name,
+ 					     NULL, LVM_READ | LVM_WRITE,
+ 					     ALLOC_INHERIT, 0, lv->vg))) {
+ 			log_error("Aborting. Failed to create mirror image LV. "
+--- LVM2/lib/metadata/snapshot_manip.c	2007/10/11 18:51:21	1.26
++++ LVM2/lib/metadata/snapshot_manip.c	2007/10/11 19:20:38	1.27
+@@ -53,7 +53,6 @@
  		    struct logical_volume *cow, union lvid *lvid,
  		    uint32_t extent_count, uint32_t chunk_size)
  {
-+	struct format_instance *fid = vg->fid;
+-	struct format_instance *fid = vg->fid;
  	struct logical_volume *snap;
  	struct lv_segment *seg;
  
---- LVM2/lib/snapshot/snapshot.c	2007/08/22 14:38:18	1.22
-+++ LVM2/lib/snapshot/snapshot.c	2007/10/11 18:51:21	1.23
-@@ -69,7 +69,7 @@
+@@ -65,7 +64,7 @@
  		return 0;
  	}
  
--	if (!vg_add_snapshot(seg->lv->vg->fid, seg->lv->name, org, cow,
-+	if (!vg_add_snapshot(seg->lv->vg, seg->lv->name, org, cow,
- 			     &seg->lv->lvid, seg->len, chunk_size)) {
+-	if (!(snap = lv_create_empty(fid, name ? name : "snapshot%d",
++	if (!(snap = lv_create_empty(name ? name : "snapshot%d",
+ 				     lvid, LVM_READ | LVM_WRITE | VISIBLE_LV,
+ 				     ALLOC_INHERIT, 1, origin->vg))) {
  		stack;
- 		return 0;
---- LVM2/tools/lvconvert.c	2007/08/30 19:34:19	1.40
-+++ LVM2/tools/lvconvert.c	2007/10/11 18:51:21	1.41
-@@ -515,7 +515,7 @@
- 		return 0;
+--- LVM2/tools/lvcreate.c	2007/10/11 18:51:21	1.151
++++ LVM2/tools/lvcreate.c	2007/10/11 19:20:38	1.152
+@@ -762,7 +762,7 @@
+ 		}
  	}
  
--	if (!vg_add_snapshot(lv->vg->fid, NULL, org, lv, NULL, org->le_count,
-+	if (!vg_add_snapshot(lv->vg, NULL, org, lv, NULL, org->le_count,
- 			     lp->chunk_size)) {
- 		log_error("Couldn't create snapshot.");
- 		return 0;
---- LVM2/tools/lvcreate.c	2007/10/01 15:01:26	1.150
-+++ LVM2/tools/lvcreate.c	2007/10/11 18:51:21	1.151
-@@ -853,7 +853,7 @@
+-	if (!(lv = lv_create_empty(vg->fid, lv_name ? lv_name : "lvol%d", NULL,
++	if (!(lv = lv_create_empty(lv_name ? lv_name : "lvol%d", NULL,
+ 				   status, lp->alloc, 0, vg))) {
+ 		stack;
+ 		goto error;
+--- LVM2/tools/pvmove.c	2007/08/20 20:55:30	1.41
++++ LVM2/tools/pvmove.c	2007/10/11 19:20:38	1.42
+@@ -119,7 +119,7 @@
+ 	struct lv_list *lvl;
  
- 		/* cow LV remains active and becomes snapshot LV */
+ 	/* FIXME Cope with non-contiguous => splitting existing segments */
+-	if (!(lv_mirr = lv_create_empty(vg->fid, "pvmove%d", NULL,
++	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
+ 					LVM_READ | LVM_WRITE,
+ 					ALLOC_CONTIGUOUS, 0, vg))) {
+ 		log_error("Creation of temporary pvmove LV failed");
+--- LVM2/tools/toollib.c	2007/09/11 20:12:54	1.106
++++ LVM2/tools/toollib.c	2007/10/11 19:20:38	1.107
+@@ -1347,7 +1347,7 @@
+ 		return NULL;
+ 	}
  
--		if (!vg_add_snapshot(vg->fid, NULL, org, lv, NULL,
-+		if (!vg_add_snapshot(vg, NULL, org, lv, NULL,
- 				     org->le_count, lp->chunk_size)) {
- 			log_err("Couldn't create snapshot.");
- 			return 0;
+-	if (!(log_lv = lv_create_empty(vg->fid, log_name, NULL,
++	if (!(log_lv = lv_create_empty(log_name, NULL,
+ 				       VISIBLE_LV | LVM_READ | LVM_WRITE,
+ 				       alloc, 0, vg))) {
+ 		stack;
 
 
