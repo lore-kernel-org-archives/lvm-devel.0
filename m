@@ -1,40 +1,38 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Oct 2007 21:08:39 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20071012210839.23324.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 12 Oct 2007 17:18:43 -0400
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+In-Reply-To: <20071012183720.31244.qmail@sourceware.org>
+References: <20071012183720.31244.qmail@sourceware.org>
+Message-ID: <470FE4B3.7040205@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-10-12 21:08:38
+Hi Dave,
 
-Modified files:
-	lib/metadata   : metadata.c 
+Thanks for committing the patches to CVS.
 
-Log message:
-	Remove comment about allocation of pv->vg_name.
+I found a comment below:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.139&r2=1.140
+wysochanski at sourceware.org wrote:
+> +	 * FIXME: leak pv->vg_name
+> +	 * Adding dm_pool_free(mem, pv->vg_name) - causes warning w/'const'
 
---- LVM2/lib/metadata/metadata.c	2007/10/12 18:37:19	1.139
-+++ LVM2/lib/metadata/metadata.c	2007/10/12 21:08:38	1.140
-@@ -710,12 +710,6 @@
- 
- static void _free_pv(struct dm_pool *mem, struct physical_volume *pv)
- {
--	/*
--	 * FIXME: leak pv->vg_name
--	 * Adding dm_pool_free(mem, pv->vg_name) - causes warning w/'const'
--	 * Perhaps pv->vg_name should be initialized to ORPHAN, not alloc'd
--	 * memory?
--	 */
- 	dm_pool_free(mem, pv);
- }
- 
+since 'pv->vg_name' is allocated after 'pv' from the same pool,
+freeing 'pv' will free 'pv->vg_name' as well.
+So we don't have to do dm_pool_free(mem, pv->vg_name) here.
+
+However,
+
+> +	 * Perhaps pv->vg_name should be initialized to ORPHAN, not alloc'd
+> +	 * memory?
+
+I agree moving pv->vg_name allocation outside of _alloc_pv() is better.
+
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
 
