@@ -1,38 +1,25 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 12 Oct 2007 17:18:43 -0400
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-In-Reply-To: <20071012183720.31244.qmail@sourceware.org>
-References: <20071012183720.31244.qmail@sourceware.org>
-Message-ID: <470FE4B3.7040205@ce.jp.nec.com>
+From: Mike Snitzer <snitzer@gmail.com>
+Date: Tue, 23 Oct 2007 11:32:56 -0400
+Subject: [PATCH] lvm2 support for detecting v1.x MD superblocks
+Message-ID: <170fa0d20710230832v3313d38fmc646d89c1b990252@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Dave,
+lvm2's MD v1.0 superblock detection doesn't work at all (because it
+doesn't use v1 sb offsets).
 
-Thanks for committing the patches to CVS.
+I've tested the attached patch to work on MDs with v0.90.0, v1.0,
+v1.1, and v1.2 superblocks.
 
-I found a comment below:
-
-wysochanski at sourceware.org wrote:
-> +	 * FIXME: leak pv->vg_name
-> +	 * Adding dm_pool_free(mem, pv->vg_name) - causes warning w/'const'
-
-since 'pv->vg_name' is allocated after 'pv' from the same pool,
-freeing 'pv' will free 'pv->vg_name' as well.
-So we don't have to do dm_pool_free(mem, pv->vg_name) here.
-
-However,
-
-> +	 * Perhaps pv->vg_name should be initialized to ORPHAN, not alloc'd
-> +	 * memory?
-
-I agree moving pv->vg_name allocation outside of _alloc_pv() is better.
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
-
-
+please advise, thanks.
+Mike
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2_md_v1_sb_fix.patch
+Type: text/x-patch
+Size: 2059 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071023/a40b0263/attachment.bin>
