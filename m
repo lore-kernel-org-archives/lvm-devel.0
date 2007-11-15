@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 15 Nov 2007 02:55:23 -0000
-Subject: LVM2/lib/locking locking.h
-Message-ID: <20071115025523.30602.qmail@sourceware.org>
+From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
+Date: 15 Nov 2007 10:16:14 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20071115101614.29615.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,28 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-11-15 02:55:22
+Changes by:	pcaulfield at sourceware.org	2007-11-15 10:16:14
 
 Modified files:
-	lib/locking    : locking.h 
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	define LCK_NONE for cases when vg_lock_and_read already holds lock
-	(temporary - library will use internal ref counting instead)
+	If the pre_command fails then go back and wait patiently for the next
+	pre function rather than retrying it until we get stuck!
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.736&r2=1.737
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
 
---- LVM2/lib/locking/locking.h	2007/08/23 15:02:26	1.35
-+++ LVM2/lib/locking/locking.h	2007/11/15 02:55:22	1.36
-@@ -86,6 +86,8 @@
- /*
-  * Common combinations
-  */
-+#define LCK_NONE		0
-+
- #define LCK_VG_READ		(LCK_VG | LCK_READ | LCK_HOLD)
- #define LCK_VG_WRITE		(LCK_VG | LCK_WRITE | LCK_HOLD)
- #define LCK_VG_UNLOCK		(LCK_VG | LCK_UNLOCK)
+--- LVM2/WHATS_NEW	2007/11/15 02:20:03	1.736
++++ LVM2/WHATS_NEW	2007/11/15 10:16:14	1.737
+@@ -1,5 +1,6 @@
+ Version 2.02.29 -
+ ==================================
++  Stop clvmd going haywire if a pre_function fails.
+   Convert some vg_reads into vg_lock_and_reads.
+   Avoid nested vg_reads when processing PVs in VGs and fix associated locking.
+   Accept sizes with --readahead argument.
+--- LVM2/daemons/clvmd/clvmd.c	2007/08/17 11:51:23	1.39
++++ LVM2/daemons/clvmd/clvmd.c	2007/11/15 10:16:14	1.40
+@@ -1379,8 +1379,10 @@
+ 			break;
+ 		} while(1);
+ 
+-		if (status)
+-			continue; /* Wait for another PRE command */
++		if (status) {
++			client->bits.localsock.state = POST_COMMAND;
++			goto next_pre;
++		}
+ 
+ 		/* We may need to wait for the condition variable before running the post command */
+ 		pthread_mutex_lock(&client->bits.localsock.mutex);
+@@ -1409,7 +1411,7 @@
+ 			log_error("Error sending to pipe: %m\n");
+ 			break;
+ 		} while(1);
+-
++next_pre:
+ 		DEBUGLOG("Waiting for next pre command\n");
+ 
+ 		pthread_mutex_lock(&client->bits.localsock.mutex);
 
 
