@@ -1,38 +1,39 @@
 From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 21 Nov 2007 16:24:46 -0500
-Subject: [PATCH pvmove 1/3] remove pvmove-specific params from allocation code
-Message-ID: <4744A21E.7090601@ce.jp.nec.com>
+Date: Wed, 21 Nov 2007 16:28:02 -0500
+Subject: [PATCH pvmove 2/3] support splitted destinations of pvmove
+In-Reply-To: <4744A21E.7090601@ce.jp.nec.com>
+References: <4744A21E.7090601@ce.jp.nec.com>
+Message-ID: <4744A2E2.3070503@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This set of patches changes pvmove to use more generalized
-allocation code and logic.
-The approach might be adaptible to other intermediate layer
-manipulation.
-Please let me know if this approach is acceptable or not.
+Currently, pvmove can't split destination area.
+This patch removes the restriction.
+(Actually, a prepration for removing the restriction.)
 
-[1/3] remove pvmove-specific params from allocation code
-[2/3] support splitted destinations of pvmove
-[3/3] use generic mirror allocation for pvmove
+If you have 1GB LV on a contiguous area of PV1
+and would like to move it to 2 x 500MB PVs, PV2 and PV3,
+you have to manually split the pvmove session into 2.
 
-This 1st patch is basically a repost of the patch posted August:
-https://www.redhat.com/archives/lvm-devel/2007-August/msg00068.html
-with a few edits to comments, variable names, etc.
+It's because pvmove assumes 1-1 relationship between
+source area and destination area and forces a contiguous allocation.
 
-The patch is a preparation for other pathes in this series.
-This patch removes most of pvmove specific codes from extent allocation
-code without affecting the functionality.
+This patch changes pvmove completion to split the original segment
+to map to the destination areas.
+
+Other patch ("3/3" of this series) allows allocation of splitted areas
+for a single source area.
 
 Thanks,
 -- 
 Jun'ichi Nomura, NEC Corporation of America
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-pvmove-cleanup-lv_extend.patch
+Name: lvm2-pvmove-handle-splitted-area.patch
 Type: text/x-patch
-Size: 12398 bytes
+Size: 1772 bytes
 Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071121/1e42b778/attachment.bin>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071121/0f07c413/attachment.bin>
