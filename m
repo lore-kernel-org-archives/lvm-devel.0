@@ -1,30 +1,29 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 21 Nov 2007 16:28:53 -0500
-Subject: [PATCH pvmove 3/3] use generic mirror allocation for pvmove
-In-Reply-To: <4744A21E.7090601@ce.jp.nec.com>
-References: <4744A21E.7090601@ce.jp.nec.com>
-Message-ID: <4744A315.4000909@ce.jp.nec.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 21 Nov 2007 22:42:17 +0000
+Subject: [PATCH] Cleanup partial failure of activation
+In-Reply-To: <47445603.1000602@ce.jp.nec.com>
+References: <47445603.1000602@ce.jp.nec.com>
+Message-ID: <20071121224217.GQ22843@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Extent allocation code used to have special support for pvmove
-since pvmove already knows PV area to use for mirrored segment.
+On Wed, Nov 21, 2007 at 11:00:03AM -0500, Jun'ichi Nomura wrote:
+> If activate_lv() fails, callers won't call deactivate_lv().
+> However, activate_lv() may succeeded activation partially.
+ 
+> Attached patch deactivates a partially activated LV so that
+> callers of activate_lv() don't need to care about partial failure.
 
-This patch changes the pvmove's logic to the way similar to
-what lvconvert does for mirrored LV.
-Not only clean up the allocation code, it also allows
-splitted allocation for destination areas.
+But could the deactivation call deactivate something that was active *before*
+it was called?  Are you sure this will always accurately return things to the
+state they were in prior to the failed call, and not deactivate something that
+was previously active?
 
-Thanks,
+Alasdair
 -- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-pvmove-generalized-mirror-allocation.patch
-Type: text/x-patch
-Size: 14681 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071121/34e24058/attachment.bin>
+agk at redhat.com
+
+
