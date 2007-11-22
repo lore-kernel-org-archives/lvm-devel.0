@@ -1,104 +1,187 @@
-From: Marian Csontos <mcsontos@redhat.com>
-Date: Thu, 26 Jul 2012 07:34:23 +0200
-Subject: master - filters: Add Micron PCIe SSDs (mtip32xx) [part2]
-In-Reply-To: <20120726013156.BA1DE7E@lists.fedorahosted.org>
-References: <20120726013156.BA1DE7E@lists.fedorahosted.org>
-Message-ID: <5010D6DF.5020404@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Nov 2007 14:54:36 -0000
+Subject: LVM2 lib/metadata/lv_alloc.h lib/metadata/lv_m ...
+Message-ID: <20071122145436.14216.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Alasdair, should not the struct definition go with the array to 
-the header file?
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-11-22 14:54:35
 
-It's not very common seeing a header file depending on a struct defined 
-in a C file...
+Modified files:
+	lib/metadata   : lv_alloc.h lv_manip.c 
+	tools          : lvconvert.c lvcreate.c 
 
--- Marian
+Log message:
+	drop mirrored_pv/mirrored_pe from alloc handle
 
-On 07/26/2012 03:31 AM, Alasdair Kergon wrote:
-> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e0bc3cf1a0102aff6c047a3293ef45ca5f221c10
-> Commit:        e0bc3cf1a0102aff6c047a3293ef45ca5f221c10
-> Parent:        7803756e9751117c8a2454d55c145f6e759279dd
-> Author:        Alasdair G Kergon<agk@redhat.com>
-> AuthorDate:    Thu Jul 26 02:31:06 2012 +0100
-> Committer:     Alasdair G Kergon<agk@redhat.com>
-> CommitterDate: Thu Jul 26 02:31:06 2012 +0100
->
-> filters: Add Micron PCIe SSDs (mtip32xx) [part2]
->
-> Recognise Micron PCIe SSDs in filter and move array out to device-types.h.
-> ---
->   lib/filters/device-types.h |   55 ++++++++++++++++++++++++++++++++++++++++++++
->   1 files changed, 55 insertions(+), 0 deletions(-)
->
-> diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
-> new file mode 100644
-> index 0000000..1208160
-> --- /dev/null
-> +++ b/lib/filters/device-types.h
-> @@ -0,0 +1,55 @@
-> +/*
-> + * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-> + * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-> + *
-> + * This file is part of LVM2.
-> + *
-> + * This copyrighted material is made available to anyone wishing to use,
-> + * modify, copy, or redistribute it subject to the terms and conditions
-> + * of the GNU Lesser General Public License v.2.1.
-> + *
-> + * You should have received a copy of the GNU Lesser General Public License
-> + * along with this program; if not, write to the Free Software Foundation,
-> + * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-> + */
-> +
-> +/*
-> + * Devices are only checked for partition tables if their minor number
-> + * is a multiple of the number corresponding to their type below
-> + * i.e. this gives the granularity of whole-device minor numbers.
-> + * Use 1 if the device is not partitionable.
-> + *
-> + * The list can be supplemented with devices/types in the config file.
-> + */
-> +static const device_info_t _device_info[] = {
-> +	{"ide", 64},		/* IDE disk */
-> +	{"sd", 16},		/* SCSI disk */
-> +	{"md", 1},		/* Multiple Disk driver (SoftRAID) */
-> +	{"mdp", 1},		/* Partitionable MD */
-> +	{"loop", 1},		/* Loop device */
-> +	{"dasd", 4},		/* DASD disk (IBM S/390, zSeries) */
-> +	{"dac960", 8},		/* DAC960 */
-> +	{"nbd", 16},		/* Network Block Device */
-> +	{"ida", 16},		/* Compaq SMART2 */
-> +	{"cciss", 16},		/* Compaq CCISS array */
-> +	{"ubd", 16},		/* User-mode virtual block device */
-> +	{"ataraid", 16},	/* ATA Raid */
-> +	{"drbd", 16},		/* Distributed Replicated Block Device */
-> +	{"emcpower", 16},	/* EMC Powerpath */
-> +	{"power2", 16},		/* EMC Powerpath */
-> +	{"i2o_block", 16},	/* i2o Block Disk */
-> +	{"iseries/vd", 8},	/* iSeries disks */
-> +	{"gnbd", 1},		/* Network block device */
-> +	{"ramdisk", 1},		/* RAM disk */
-> +	{"aoe", 16},		/* ATA over Ethernet */
-> +	{"device-mapper", 1},	/* Other mapped devices */
-> +	{"xvd", 16},		/* Xen virtual block device */
-> +	{"vdisk", 8},		/* SUN's LDOM virtual block device */
-> +	{"ps3disk", 16},	/* PlayStation 3 internal disk */
-> +	{"virtblk", 8},		/* VirtIO disk */
-> +	{"mmc", 16},		/* MMC block device */
-> +	{"blkext", 1},		/* Extended device partitions */
-> +	{"fio", 16},		/* Fusion */
-> +	{"mtip32xx", 16},	/* Micron PCIe SSDs */
-> +	{"", 0}
-> +};
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_alloc.h.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.134&r2=1.135
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.160&r2=1.161
+
+--- LVM2/lib/metadata/lv_alloc.h	2007/08/22 14:38:17	1.17
++++ LVM2/lib/metadata/lv_alloc.h	2007/11/22 14:54:35	1.18
+@@ -48,8 +48,6 @@
+                                       uint32_t stripes,
+                                       uint32_t mirrors, uint32_t log_count,
+ 				      uint32_t extents,
+-                                      struct physical_volume *mirrored_pv,
+-                                      uint32_t mirrored_pe,
+                                       struct list *allocatable_pvs,
+ 				      alloc_policy_t alloc,
+ 				      struct list *parallel_areas);
+--- LVM2/lib/metadata/lv_manip.c	2007/11/12 20:51:53	1.134
++++ LVM2/lib/metadata/lv_manip.c	2007/11/22 14:54:35	1.135
+@@ -414,8 +414,6 @@
+ 	uint32_t log_count;		/* Number of parallel 1-extent logs */
+ 	uint32_t total_area_len;	/* Total number of parallel extents */
+ 
+-	struct physical_volume *mirrored_pv;	/* FIXME Remove this */
+-	uint32_t mirrored_pe;			/* FIXME Remove this */
+ 	struct list *parallel_areas;	/* PVs to avoid */
+ 
+ 	struct alloced_area log_area;	/* Extent used for log */
+@@ -441,8 +439,6 @@
+ 					uint32_t mirrors,
+ 					uint32_t stripes,
+ 					uint32_t log_count,
+-					struct physical_volume *mirrored_pv,
+-					uint32_t mirrored_pe,
+ 					struct list *parallel_areas)
+ {
+ 	struct alloc_handle *ah;
+@@ -453,15 +449,8 @@
+ 		return NULL;
+ 	}
+ 
+-	if ((stripes > 1 || mirrors > 1) && mirrored_pv) {
+-		log_error("Can't mix striping or mirroring with "
+-			  "creation of a mirrored PV yet");
+-		return NULL;
+-	}
+-
+-	if (log_count && (stripes > 1 || mirrored_pv)) {
+-		log_error("Can't mix striping or pvmove with "
+-			  "a mirror log yet.");
++	if (log_count && stripes > 1) {
++		log_error("Can't mix striping with a mirror log yet.");
+ 		return NULL;
+ 	}
+ 
+@@ -469,8 +458,6 @@
+ 		area_count = 0;
+ 	else if (mirrors > 1)
+ 		area_count = mirrors;
+-	else if (mirrored_pv)
+-		area_count = 1;
+ 	else
+ 		area_count = stripes;
+ 
+@@ -497,8 +484,6 @@
+ 	for (s = 0; s < ah->area_count; s++)
+ 		list_init(&ah->alloced_areas[s]);
+ 
+-	ah->mirrored_pv = mirrored_pv;
+-	ah->mirrored_pe = mirrored_pe;
+ 	ah->parallel_areas = parallel_areas;
+ 
+ 	return ah;
+@@ -1087,7 +1072,7 @@
+ 		return 1;
+ 	}
+ 
+-	if (ah->mirrored_pv || (ah->alloc == ALLOC_CONTIGUOUS))
++	if (ah->alloc == ALLOC_CONTIGUOUS)
+ 		can_split = 0;
+ 
+ 	if (lv && !list_empty(&lv->segments))
+@@ -1193,8 +1178,6 @@
+ 				      uint32_t stripes,
+ 				      uint32_t mirrors, uint32_t log_count,
+ 				      uint32_t extents,
+-				      struct physical_volume *mirrored_pv,
+-				      uint32_t mirrored_pe,
+ 				      struct list *allocatable_pvs,
+ 				      alloc_policy_t alloc,
+ 				      struct list *parallel_areas)
+@@ -1220,11 +1203,8 @@
+ 		alloc = vg->alloc;
+ 
+ 	if (!(ah = _alloc_init(vg->cmd, vg->cmd->mem, segtype, alloc, mirrors,
+-			       stripes, log_count, mirrored_pv,
+-			       mirrored_pe, parallel_areas))) {
+-		stack;
+-		return NULL;
+-	}
++			       stripes, log_count, parallel_areas)))
++		return_NULL;
+ 
+ 	if (!segtype_is_virtual(segtype) &&
+ 	    !_allocate(ah, vg, lv, (lv ? lv->le_count : 0) + extents,
+@@ -1427,12 +1407,13 @@
+ 	if (segtype_is_virtual(segtype))
+ 		return lv_add_virtual_segment(lv, status, extents, segtype);
+ 
++	/* FIXME Temporary restriction during code reorganisation */
++	if (mirrored_pv)
++		alloc = ALLOC_CONTIGUOUS;
++
+ 	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors, 0,
+-				    extents, mirrored_pv, mirrored_pe,
+-				    allocatable_pvs, alloc, NULL))) {
+-		stack;
+-		return 0;
+-	}
++				    extents, allocatable_pvs, alloc, NULL)))
++		return_0;
+ 
+ 	if (mirrors < 2) {
+ 		if (!lv_add_segment(ah, 0, ah->area_count, lv, segtype, stripe_size,
+--- LVM2/tools/lvconvert.c	2007/11/15 02:20:03	1.45
++++ LVM2/tools/lvconvert.c	2007/11/22 14:54:35	1.46
+@@ -338,9 +338,7 @@
+ 		if (!(ah = allocate_extents(lv->vg, NULL, lp->segtype,
+ 					    1, lp->mirrors - 1,
+ 					    corelog ? 0U : 1U,
+-					    lv->le_count,
+-					    NULL, 0, lp->pvh,
+-					    lp->alloc,
++					    lv->le_count, lp->pvh, lp->alloc,
+ 					    parallel_areas)))
+ 			return_0;
+ 
+@@ -386,9 +384,7 @@
+ 			}
+ 
+ 			if (!(ah = allocate_extents(lv->vg, NULL, lp->segtype, 0,
+-						    0, 1, 0,
+-						    NULL, 0, lp->pvh,
+-						    lp->alloc,
++						    0, 1, 0, lp->pvh, lp->alloc,
+ 						    parallel_areas))) {
+ 				stack;
+ 				return 0;
+--- LVM2/tools/lvcreate.c	2007/11/15 02:20:03	1.160
++++ LVM2/tools/lvcreate.c	2007/11/22 14:54:35	1.161
+@@ -740,11 +740,8 @@
+ 
+ 		if (!(ah = allocate_extents(vg, NULL, lp->segtype, lp->stripes,
+ 					    lp->mirrors, lp->corelog ? 0U : 1U,
+-					    lp->extents, NULL, 0,
+-					    pvh, lp->alloc, NULL))) {
+-			stack;
+-			return 0;
+-		}
++					    lp->extents, pvh, lp->alloc, NULL)))
++			return_0;
+ 
+ 		lp->region_size = adjusted_mirror_region_size(vg->extent_size,
+ 							      lp->extents,
 
 
