@@ -1,50 +1,51 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 21 Nov 2007 21:16:44 -0500
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 22 Nov 2007 02:42:10 +0000
 Subject: [PATCH] Cleanup partial failure of activation
-In-Reply-To: <20071121224217.GQ22843@agk.fab.redhat.com>
+In-Reply-To: <4744E68C.3050601@ce.jp.nec.com>
 References: <47445603.1000602@ce.jp.nec.com>
 	<20071121224217.GQ22843@agk.fab.redhat.com>
-Message-ID: <4744E68C.3050601@ce.jp.nec.com>
+	<4744E68C.3050601@ce.jp.nec.com>
+Message-ID: <20071122024210.GS22843@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alasdair G Kergon wrote:
-> On Wed, Nov 21, 2007 at 11:00:03AM -0500, Jun'ichi Nomura wrote:
->> If activate_lv() fails, callers won't call deactivate_lv().
->> However, activate_lv() may succeeded activation partially.
->  
->> Attached patch deactivates a partially activated LV so that
->> callers of activate_lv() don't need to care about partial failure.
+On Wed, Nov 21, 2007 at 09:16:44PM -0500, Jun'ichi Nomura wrote:
+> Currently, mirror, snapshot and pvmove are only stacking-type LVs.
+> They don't allow partial activation.
+> # Is this assumption correct?
 > 
-> But could the deactivation call deactivate something that was active *before*
-> it was called?  Are you sure this will always accurately return things to the
-> state they were in prior to the failed call, and not deactivate something that
-> was previously active?
+> If the above is correct, the tree is either activated or deactivated
+> as a whole. So, if activation failed, deactivating the LV would
+> return it to the state before activation is called.
+ 
+Have all the code paths been audited?
 
-Currently, mirror, snapshot and pvmove are only stacking-type LVs.
-They don't allow partial activation.
-# Is this assumption correct?
+The general "self-correcting" philosophy throughout the activation code is to
+ensure the LV is in a known final state when they return success, and to cope
+with a broad range of initial states.
 
-If the above is correct, the tree is either activated or deactivated
-as a whole. So, if activation failed, deactivating the LV would
-return it to the state before activation is called.
+This patch would represent a change in the semantics of the functions,
+reducing the range of initial states handled sensibly.
 
+Look at the lv_resume code path, for example.  Wouldn't it be more sensible to
+revert to the previous table on failure than to attempt to remove the device?
 
-And if, in future, partial activation is allowed, I think the
-current activation implementation can't handle this case anyway:
-  1. activate partial tree
-  2. activate other tree on top of the partial tree
-  ..
-  3. deactivate the other tree
-  <but don't want to deactivate the partial tree>
+I don't believe this problem can be resolved with such a tiny patch.
 
-I'm not whether there actually is such a use case.
+There are two approaches:
+  1) have proper reversion code inside the guts of the library activation code
+  2) let the caller, which possesses knowledge about the *sequence* of steps
+making up the operation, handle reversion sensibly
 
-Thanks,
+I expect a mixture of the two - mostly (2) in the places we need it now (quick
+and easy and a few cases already done), but eventually more use of (1) which is
+technically a better solution (but harder).
+
+Alasdair
 -- 
-Jun'ichi Nomura, NEC Corporation of America
+agk at redhat.com
 
 
