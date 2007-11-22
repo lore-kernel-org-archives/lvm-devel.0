@@ -1,31 +1,29 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 22 Nov 2007 02:01:18 +0000
-Subject: [PATCH mirror 0/13] Add/collapse temporary mirror
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Wed, 21 Nov 2007 21:08:28 -0500
+Subject: [PATCH mirror 1/13] Enable mirror-addition to lvconvert
 In-Reply-To: <4744DF34.7090701@ce.jp.nec.com>
 References: <4744DF34.7090701@ce.jp.nec.com>
-Message-ID: <20071122020118.GR22843@agk.fab.redhat.com>
+Message-ID: <4744E49C.6060902@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Nov 21, 2007 at 08:45:24PM -0500, Jun'ichi Nomura wrote:
-> because I vaguely remember that naming suffixes like "_mimage_<n>"
+This patch allows lvconvert to add mirror to mirrored LV.
 
-dm_snprintf(img_name, len, "%s_mimage_%%d", lv->name)
+If mirrors are added to mirrored LV, a temporary layer will
+be inserted for resync new mirrors.
+The temporary LV is under the same naming rule with mirror images.
 
-Gah - how did that underscore sneak in front of the name:-(
-Oh well, we're stuck with it for now.
-
-Reserved names are controlled by:
-  apply_lvname_restrictions()
-
-and should be consistent: all 'mimage' LVs should be structured
-the same way.  If not, it may require a different name.
-
-Alasdair
+Thanks,
 -- 
-agk at redhat.com
+Jun'ichi Nomura, NEC Corporation of America
 
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-stacked-mirror-add-mirror.patch
+Type: text/x-patch
+Size: 4023 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071121/4a7f1e47/attachment.bin>
