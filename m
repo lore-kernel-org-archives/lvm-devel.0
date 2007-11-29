@@ -1,33 +1,64 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Mon, 26 Nov 2007 20:51:37 -0500
-Subject: [PATCH] Cleanup partial failure of activation
-In-Reply-To: <20071122024210.GS22843@agk.fab.redhat.com>
-References: <47445603.1000602@ce.jp.nec.com>	<20071121224217.GQ22843@agk.fab.redhat.com>	<4744E68C.3050601@ce.jp.nec.com>
-	<20071122024210.GS22843@agk.fab.redhat.com>
-Message-ID: <474B7829.5090708@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Nov 2007 15:04:12 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20071129150412.16182.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alasdair G Kergon wrote:
-> I don't believe this problem can be resolved with such a tiny patch.
-> 
-> There are two approaches:
->   1) have proper reversion code inside the guts of the library activation code
->   2) let the caller, which possesses knowledge about the *sequence* of steps
-> making up the operation, handle reversion sensibly
-> 
-> I expect a mixture of the two - mostly (2) in the places we need it now (quick
-> and easy and a few cases already done), but eventually more use of (1) which is
-> technically a better solution (but harder).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2007-11-29 15:04:12
 
-Thanks for the explanation.
-I see the point.
+Modified files:
+	lib/activate   : dev_manager.c 
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
+Log message:
+	uncomment libdevmapper readahead calls
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+
+--- LVM2/lib/activate/dev_manager.c	2007/11/12 20:51:53	1.128
++++ LVM2/lib/activate/dev_manager.c	2007/11/29 15:04:12	1.129
+@@ -142,11 +142,10 @@
+ 	if (!dm_task_get_info(dmt, info))
+ 		goto_out;
+ 
+-	if (!with_read_ahead) {
+-		if (read_ahead)
+-			*read_ahead = DM_READ_AHEAD_NONE;
+-	} else
+-		; // FIXME *read_ahead = dm_task_get_read_ahead(dmt);
++	if (with_read_ahead)
++		*read_ahead = dm_task_get_read_ahead(dmt);
++	else if (read_ahead)
++		*read_ahead = DM_READ_AHEAD_NONE;
+ 
+ 	r = 1;
+ 
+@@ -901,7 +900,7 @@
+ 	char *name, *dlid;
+ 	uint32_t max_stripe_size = UINT32_C(0);
+ 	uint32_t read_ahead = lv->read_ahead;
+-	uint32_t flags = UINT32_C(0);
++	uint32_t read_ahead_flags = UINT32_C(0);
+ 
+ 	if (!(name = build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
+ 		return_0;
+@@ -955,9 +954,9 @@
+ 	if (read_ahead == DM_READ_AHEAD_AUTO)
+ 		read_ahead = max_stripe_size;
+ 	else
+-		flags = DM_READ_AHEAD_MINIMUM_FLAG;
++		read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;
+ 
+-	// FIXME dm_tree_node_set_read_ahead(dnode, read_ahead, flags);
++	dm_tree_node_set_read_ahead(dnode, read_ahead, read_ahead_flags);
+ 
+ 	return 1;
+ }
 
 
