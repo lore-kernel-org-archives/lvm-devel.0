@@ -1,7 +1,7 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 5 Dec 2007 13:17:19 -0000
-Subject: LVM2 daemons/clvmd/lvm-functions.c daemons/clv ...
-Message-ID: <20071205131719.16438.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 5 Dec 2007 19:24:35 -0000
+Subject: LVM2 lib/activate/dev_manager.c tools/lvchange ...
+Message-ID: <20071205192435.9424.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,125 +10,87 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2007-12-05 13:17:18
+Changes by:	agk at sourceware.org	2007-12-05 19:24:32
 
 Modified files:
-	daemons/clvmd  : lvm-functions.c lvm-functions.h 
-	lib/locking    : cluster_locking.c 
+	lib/activate   : dev_manager.c 
+	tools          : lvchange.c lvcreate.c 
 
 Log message:
-	Tidy the clvmd backup code.
-	Move the backups inside the protection of the VG lock,
-	Don't backup if we have a suspended LV
-	Correct the vg_read() call
+	round readahead to multiple of page size in tools
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.161&r2=1.162
 
---- LVM2/daemons/clvmd/lvm-functions.c	2007/12/04 15:39:26	1.36
-+++ LVM2/daemons/clvmd/lvm-functions.c	2007/12/05 13:17:18	1.37
-@@ -54,6 +54,7 @@
- static pthread_mutex_t lv_hash_lock;
- static pthread_mutex_t lvm_lock;
- static char last_error[1024];
-+static int suspended = 0;
+--- LVM2/lib/activate/dev_manager.c	2007/12/03 18:00:38	1.130
++++ LVM2/lib/activate/dev_manager.c	2007/12/05 19:24:31	1.131
+@@ -952,10 +952,10 @@
+ 			max_stripe_size = seg->stripe_size;
+ 	}
  
- struct lv_info {
- 	int lock_id;
-@@ -340,11 +341,15 @@
- 
- 	case LCK_LV_SUSPEND:
- 		status = do_suspend_lv(resource);
-+		if (!status)
-+			suspended++;
- 		break;
- 
- 	case LCK_UNLOCK:
- 	case LCK_LV_RESUME:	/* if active */
- 		status = do_resume_lv(resource);
-+		if (!status)
-+			suspended--;
- 		break;
- 
- 	case LCK_LV_ACTIVATE:
-@@ -602,18 +607,21 @@
- }
- 
- /* Backups up the LVM metadata if it's changed */
--void lvm_do_backup(char *vgname)
-+void lvm_do_backup(const char *vgname)
- {
- 	struct volume_group * vg;
--	int consistent;
-+	int consistent = 0;
- 
--	DEBUGLOG("Triggering backup of VG metadata for %s\n", vgname);
-+	DEBUGLOG("Triggering backup of VG metadata for %s. suspended=%d\n", vgname, suspended);
- 
- 	vg = vg_read(cmd, vgname, NULL /*vgid*/, &consistent);
--	if (vg)
--		check_current_backup(vg);
+-	if (read_ahead == DM_READ_AHEAD_AUTO)
++	if (read_ahead == DM_READ_AHEAD_AUTO) {
+ 		read_ahead = max_stripe_size;
 -	else
-+	if (vg) {
-+		if (consistent)
-+			check_current_backup(vg);
+ 		read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;
 +	}
-+	else {
- 		log_error("Error backing up metadata, can't find VG for group %s", vgname);
-+	}
- }
  
- /* Called to initialise the LVM context of the daemon */
---- LVM2/daemons/clvmd/lvm-functions.h	2007/12/04 15:39:26	1.6
-+++ LVM2/daemons/clvmd/lvm-functions.h	2007/12/05 13:17:18	1.7
-@@ -28,7 +28,7 @@
- extern int do_refresh_cache(void);
- extern int init_lvm(int using_gulm);
- extern void init_lvhash(void);
--extern void lvm_do_backup(char *vgname);
-+extern void lvm_do_backup(const char *vgname);
- extern int hold_unlock(char *resource);
- extern int hold_lock(char *resource, int mode, int flags);
- extern void unlock_all(void);
---- LVM2/lib/locking/cluster_locking.c	2007/12/04 15:39:26	1.23
-+++ LVM2/lib/locking/cluster_locking.c	2007/12/05 13:17:18	1.24
-@@ -378,7 +378,6 @@
+ 	dm_tree_node_set_read_ahead(dnode, read_ahead, read_ahead_flags);
+ 
+--- LVM2/tools/lvchange.c	2007/11/12 20:51:54	1.83
++++ LVM2/tools/lvchange.c	2007/12/05 19:24:32	1.84
+@@ -372,6 +372,7 @@
+ 			      struct logical_volume *lv)
  {
- 	char lockname[PATH_MAX];
- 	int cluster_cmd = 0;
--	int ret;
- 	const char *lock_scope;
- 	const char *lock_type = "";
+ 	unsigned read_ahead = 0;
++	unsigned pagesize = (unsigned) lvm_getpagesize() >> SECTOR_SHIFT;
  
-@@ -439,6 +438,12 @@
+ 	read_ahead = arg_uint_value(cmd, readahead_ARG, 0);
+ 
+@@ -382,6 +383,13 @@
  		return 0;
  	}
  
-+	/* If we are unlocking a VG, then trigger remote metadata backups */
-+	if (cluster_cmd == CLVMD_CMD_LOCK_VG && ((flags & LCK_TYPE_MASK) == LCK_UNLOCK)) {
-+		log_very_verbose("Requesing backup of VG metadata for %s", resource);
-+		_lock_for_cluster(CLVMD_CMD_VG_BACKUP, LCK_CLUSTER_VG, resource);
++	if (read_ahead != DM_READ_AHEAD_AUTO &&
++	    read_ahead != DM_READ_AHEAD_NONE && read_ahead % pagesize) {
++		read_ahead = (read_ahead / pagesize) * pagesize;
++		log_verbose("Rounding down readahead to %u sectors, a multiple "
++			    "of page size %u.", read_ahead, pagesize);
 +	}
 +
- 	log_very_verbose("Locking %s %s %s %s%s%s%s (0x%x)", lock_scope, lockname,
- 			 lock_type,
- 			 flags & LCK_NONBLOCK ? "" : "B", 
-@@ -448,13 +453,7 @@
- 			 flags);
+ 	if (lv->read_ahead == read_ahead) {
+ 		log_error("Read ahead is already %u for \"%s\"",
+ 			  read_ahead, lv->name);
+--- LVM2/tools/lvcreate.c	2007/11/22 14:54:35	1.161
++++ LVM2/tools/lvcreate.c	2007/12/05 19:24:32	1.162
+@@ -333,6 +333,7 @@
+ 			    int argc, char **argv)
+ {
+ 	int contiguous;
++	unsigned pagesize;
  
- 	/* Send a message to the cluster manager */
--	ret = _lock_for_cluster(cluster_cmd, flags, lockname);
--
--	/* If we are unlocking a VG, then trigger remote metadata backups */
--	if (ret && cluster_cmd == CLVMD_CMD_LOCK_VG && ((flags & LCK_TYPE_MASK) == LCK_UNLOCK)) {
--		ret = _lock_for_cluster(CLVMD_CMD_VG_BACKUP, LCK_CLUSTER_VG, resource);
--	}
--	return ret;
-+	return _lock_for_cluster(cluster_cmd, flags, lockname);
- }
+ 	memset(lp, 0, sizeof(*lp));
  
- #ifdef CLUSTER_LOCKING_INTERNAL
+@@ -462,8 +463,17 @@
+ 	/*
+ 	 * Read ahead.
+ 	 */
+-	if (arg_count(cmd, readahead_ARG))
++	if (arg_count(cmd, readahead_ARG)) {
+ 		lp->read_ahead = arg_uint_value(cmd, readahead_ARG, 0);
++		pagesize = lvm_getpagesize() >> SECTOR_SHIFT;
++		if (lp->read_ahead != DM_READ_AHEAD_AUTO &&
++		    lp->read_ahead != DM_READ_AHEAD_NONE &&
++		    lp->read_ahead % pagesize) {
++			lp->read_ahead = (lp->read_ahead / pagesize) * pagesize;
++			log_verbose("Rounding down readahead to %u sectors, a multiple "
++				    "of page size %u.", lp->read_ahead, pagesize);
++		}
++	}
+ 
+ 	/*
+ 	 * Permissions.
 
 
