@@ -1,77 +1,83 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Thu, 06 Dec 2007 11:53:16 -0500
+From: Heinz Mauelshagen <mauelshagen@redhat.com>
+Date: Fri, 7 Dec 2007 12:49:54 +0100
 Subject: [PATCH pvmove 0/6] Refactoring pvmove with generic APIs
 In-Reply-To: <475825EF.6000803@ce.jp.nec.com>
 References: <475825EF.6000803@ce.jp.nec.com>
-Message-ID: <475828FC.8040307@ce.jp.nec.com>
+Message-ID: <20071207114954.GA6313@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Attached is a test script for basic pvmove operations.
-More tests are added since the previous version.
-I hope it gets included in the test directory for future
-regression testings.
 
-To run this, put it in LVM2/test directory, then
-  # cd test; ./t-pvmove-basic.sh
-With the posted patch set, all tests succeeds.
-Without the patches, tests for splitted destinations will fail.
+Nick,
 
-# ./t-pvmove-basic.sh 
-*   ok 1: set up temp file and loopback device
-*   ok 2: create pv1
-*   ok 3: create pv2
-*   ok 4: create pv3
-*   ok 5: create pv4
-*   ok 6: create pv5
-*   ok 7: Run this: pvcreate  
-*   ok 8: set up a VG
-*   ok 9: check environment setup/cleanup
-*   ok 10: only specified LV is moved: from pv2 to pv5 only for lv1
-*   ok 11: the 1st seg of 3-segs LV is moved: from pv1 of lv1 to pv4
-*   ok 12: the 2nd seg of 3-segs LV is moved: from pv2 of lv1 to pv4
-*   ok 13: the 3rd seg of 3-segs LV is moved: from pv3 of lv1 to pv4
-*   ok 14: 1 out of 3 LVs is moved: from pv4 to pv5
-*   ok 15: 2 out of 3 LVs are moved: from pv3 to pv5
-*   ok 16: 3 out of 3 LVs are moved: from pv2 to pv5
-*   ok 17: move the 1st stripe: from pv2 of lv2 to pv1
-*   ok 18: move the 2nd stripe: from pv3 of lv2 to pv1
-*   ok 19: move the 3rd stripe: from pv4 of lv2 to pv1
-*   ok 20: match to the start of segment:from pv2:0-0 to pv5
-*   ok 21: match to the middle of segment: from pv2:1-1 to pv5
-*   ok 22: match to the end of segment: from pv2:2-2 to pv5
-*   ok 23: no destination split: from pv2:0-2 to pv5
-*   ok 24: destination split into 2: from pv2:0-2 to pv5:5-5 and pv4:5-6
-*   ok 25: destination split into 3: from pv2:0-2 to {pv3,4,5}:5-5
-*   ok 26: alloc normal on same PV for source and destination: from pv3:0-2 to pv3:5-7
-*   ok 27: (cleanup previous test)
-*   ok 28: alloc anywhere on same PV for source and destination: from pv3:0-2 to pv3:5-7
-*   ok 29: alloc anywhere but better area available: from pv3:0-2 to pv3:5-7 or pv5:5-6,pv4:5-5
-*   ok 30: alloc contiguous but area not available: from pv2:0-2 to pv5:5-5 and pv4:5-6
-*   ok 31: (cleanup previous test)
-*   ok 32: alloc contiguous and contiguous area available: from pv2:0-2 to pv5:0-0,pv5:3-5 and pv4:5-6
-*   ok 33: multiple source LVs: from pv3 to pv5
-*   ok 34: move inactive LV: from pv2 to pv5
-*   ok 35: no PEs to move: from pv3 to pv1
-*   ok 36: (cleanup previous test)
-*   ok 37: no space available: from pv2:0-0 to pv1:0-0
-*   ok 38: (cleanup previous test)
-*   ok 39: same source and destination: from pv1 to pv1
-*   ok 40: (cleanup previous test)
-*   ok 41: pvmove abort
-* passed all 41 test(s)
+it would be better to make this more generic.
+
+Ie. convert_segments(struct lvm_conversion_handler *handler, ...)
+rather than having a per target conversion function.
+
+Heinz
 
 
-Thanks,
+On Thu, Dec 06, 2007 at 11:40:15AM -0500, Jun'ichi Nomura wrote:
+> Hi,
+> 
+> This patchset is a follow up to the previous post:
+> https://www.redhat.com/archives/lvm-devel/2007-November/msg00034.html
+> 
+> This version introduces 3 APIs and let pvmove use them:
+>   - insert_layer_for_segments_on_pv()
+>       Insert a layer (a linear lv segment) below each lv segment
+>       of the LV, only when the segment is on a specified PV.
+>   - convert_segments_mirrored()
+>       Convert each segment in the LV to mirrored.
+>   - split_parent_segments()
+>       For a given layer LV, walk through LVs in the VG and split
+>       any LV segment whose underlying layer segment is splitted.
+> 
+> I'm trying to add functionality for lvconvert, i.e. mirroring
+> as a whole LV, not segment by segment.
+> However, it involves moving some codes from toollib to lib and
+> I think further discussion may be necessary.
+> And anyway they will be an addition to this patchset.
+> 
+> So I'm posting this set first as they are stable and easy to review.
+> 
+> [1/6] add insert_layer_for_segments_on_pv()
+> [2/6] add convert_segments_mirrored()
+> [3/6] add split_parent_segments()
+> [4/6] change pvmove to use the generalized APIs
+> [5/6] remove unused mirrored_pv/mirrored_pe params from internal code
+> [6/6] remove unused can_split param from allocate_extents()
+> [Appendix] pvmove test script for 'make check'
+> 
+> Thanks,
+> -- 
+> Jun'ichi Nomura, NEC Corporation of America
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+
 -- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: t-pvmove-basic.sh
-Type: application/x-shellscript
-Size: 12446 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071206/c22128ad/attachment.bin>
+
+Regards,
+Heinz    -- The LVM Guy --
+
+*** Software bugs are stupid.
+    Nevertheless it needs not so stupid people to solve them ***
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Heinz Mauelshagen                                 Red Hat GmbH
+Consulting Development Engineer                   Am Sonnenhang 11
+Storage Development                               56242 Marienrachdorf
+                                                  Germany
+Mauelshagen at RedHat.com                            PHONE +49  171 7803392
+                                                  FAX   +49 2626 924446
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+
