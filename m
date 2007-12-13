@@ -1,34 +1,40 @@
 From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Thu, 13 Dec 2007 16:31:35 -0500
-Subject: [PATCH lvconvert 4/6] Change lvcreate to use the new mirror APIs
+Date: Thu, 13 Dec 2007 16:31:40 -0500
+Subject: [PATCH lvconvert 5/6] Remove unused mirror functions
 In-Reply-To: <47619E84.2060905@ce.jp.nec.com>
 References: <47619E84.2060905@ce.jp.nec.com>
-Message-ID: <4761A4B7.902@ce.jp.nec.com>
+Message-ID: <4761A4BC.2060300@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Change lvconvert to use add_mirror_images().
+This patch removes:
+  - lv_add_mirror_segment()
+       Replaced by lv_add_mirror_lvs()
+  - lv_add_more_mirrored_areas()
+  - add_mirror_layers()
+       These functions were not used.
+  - create_mirror_layers()
+       Replaced by add_mirror_images()
+  - generate_log_name_format()
+       "_mlog" hard coding is moved to lib. ("_mimage" has been there.)
+  - create_mirror_log()
+       Replaced by add_mirror_log()
+  - _write_log_header()
+       Moved to lib
 
-The patch simplifies the lvcreate code and we no longer need
-to export allocate_extents() directly to tools.
+and renames:
+  - _create_layers_for_mirror() -> _create_mimage_lvs()
+       This function doesn't create layers but just creates mimage LVs.
 
-However, this patch slightly changes the allocation logic.
-Original code allocated all mirrors at once.
-OTOH, this code creates a linear LV first then adds mirrors to it.
-It's better to allocate all at once because otherwise the allocation
-code may make worse choice at the first attempt.
-To do that, we have to be able to create an empty mirror layers.
-
-Thanks,
 -- 
 Jun'ichi Nomura, NEC Corporation of America
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-lvcreate-use-new-mirror-api.patch
+Name: lvm2-remove-unused-mirror-functions.patch
 Type: text/x-patch
-Size: 3257 bytes
+Size: 14528 bytes
 Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071213/174fcfbb/attachment.bin>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071213/bbbfae2c/attachment.bin>
