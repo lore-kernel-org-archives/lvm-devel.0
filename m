@@ -1,55 +1,80 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Dec 2007 16:49:38 -0000
-Subject: LVM2 lib/report/report.c tools/reporter.c
-Message-ID: <20071220164938.15053.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Thu, 20 Dec 2007 12:34:52 -0500
+Subject: [PATCH mirror 0/13] Stacking and collapsing mirror (rev. 2)
+Message-ID: <476AA7BC.9080708@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-12-20 16:49:38
+This set of patches allows mirror addition to mirrored LV.
 
-Modified files:
-	lib/report     : report.c 
-	tools          : reporter.c 
+The patchset is an updated version of this one:
+[PATCH mirror 0/13] Add/collapse temporary mirror
+https://www.redhat.com/archives/lvm-devel/2007-November/msg00040.html
 
-Log message:
-	avoid some compiler warnings
+Changes:
+  - rebased to the CVS head, which contains most of the latest
+    pvmove/lvconvert patchset
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+[ 1/13] Add 'const' for mirror-related functions
+[ 2/13] Misc fixes to the 'lvconvert' generalization
+[ 3/13] Enable layer specification in remove_layer_from_lv()
+[ 4/13] lv_rename() to walk down the stacked LV
+[ 5/13] lv_mirror_count() to cope with stacked mirror
+[ 6/13] remove_mirror_images() to cope with stacked mirror
+[ 7/13] lv_extend() to cope with stacked mirror
+[ 8/13] lvconvert to stack a temporary resync mirror  on addition
+[ 9/13] Add collapsing feature for stacked mirror
+[10/13] Add '--collapse' option to lvconvert
+[11/13] Add 'lv_mirrors' field to reporting functions
+[12/13] Remove hardcoded "_mlog" name from deptree construction
+[13/13] Allow disk logs for temporary resync mirror
 
---- LVM2/lib/report/report.c	2007/12/14 21:53:02	1.68
-+++ LVM2/lib/report/report.c	2007/12/20 16:49:37	1.69
-@@ -639,9 +639,11 @@
- 	return _size64_disp(rh, mem, field, &start, private);
- }
- 
--static int _segstartpe_disp(struct dm_report *rh, struct dm_pool *mem,
--			  struct dm_report_field *field,
--			  const void *data, void *private)
-+static int _segstartpe_disp(struct dm_report *rh,
-+			    struct dm_pool *mem __attribute((unused)),
-+			    struct dm_report_field *field,
-+			    const void *data,
-+			    void *private __attribute((unused)))
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
- 
---- LVM2/tools/reporter.c	2007/12/14 21:53:02	1.31
-+++ LVM2/tools/reporter.c	2007/12/20 16:49:37	1.32
-@@ -289,7 +289,7 @@
- 
- 	/* Change report type if fields specified makes this necessary */
- 	if ((report_type & PVSEGS) ||
--	    (report_type & PVS) && (report_type & LVS))
-+	    ((report_type & PVS) && (report_type & LVS)))
- 		report_type = PVSEGS;
- 	else if (report_type & PVS)
- 		report_type = PVS;
+Comments are welcome.
+
+
+Overview of the patches
+--------------------------
+
+Current LVM2 mirror doesn't allow mirror addition to already
+mirrored LV.
+It's not possible to simply add mirror image to the existing LV
+because it will result in full resync even if existing images are
+already in sync.
+
+With this patchset, a temporary mirror layer is inserted.
+
+For example, if we have the mirrored LV below:
+  testvg-lvol0
+   |-testvg-lvol0_mimage_1
+   |-testvg-lvol0_mimage_0
+   `-testvg-lvol0_mlog0
+
+'lvconvert -m+1' will result in this:
+  testvg-lvol0
+   |-testvg-lvol0_mimage_2
+   |-testvg-lvol0_resync0
+   |  |-testvg-lvol0_mimage_1
+   |  |-testvg-lvol0_mimage_0
+   |  `-testvg-lvol0_mlog0
+   `-testvg-lvol0_mlog1
+
+"resync0" is a temporary layer to resync "mimage_2".
+
+'lvs -o mirrors testvg/lvol0' will show "3" as a number of mirror images.
+
+After the resync completes, 'lvconvert --collapse testvg/lvol0' will
+change the LV to this form:
+  testvg-lvol0
+   |-testvg-lvol0_mimage_2
+   |-testvg-lvol0_mimage_1
+   |-testvg-lvol0_mimage_0
+   `-testvg-lvol0_mlog0
+
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
 
