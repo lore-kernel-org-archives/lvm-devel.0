@@ -1,53 +1,34 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 Dec 2007 01:08:19 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20071221010819.28713.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 21 Dec 2007 20:22:57 -0500
+Subject: [PATCH 1/4] Fix '--nosync' option of lvcreate and remove unnecessary tag collection
+Message-ID: <476C66F1.7020803@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-12-21 01:08:18
+This patch fixes 2 things.
 
-Modified files:
-	tools          : lvconvert.c 
+While converting lvcreate to use the newly added lv_add_mirrors(),
+I mistakenly moved the MIRROR_NOTSYNCED flag setting *after*
+lv_create_empty().
+As a result, '--nosync' option of lvcreate becomes nop.
+This patch moves the flag setting and makes nosync option working again.
 
-Log message:
-	auto-collapse layers
+In the old code, tag list is created and passed for mirror log creation
+function because the log was created before the LV.
+In the current code, linear LV is created first and the log creation
+function takes tag list from the LV. So we don't need to create
+tag list in lvcreate.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
-
---- LVM2/tools/lvconvert.c	2007/12/20 18:55:46	1.49
-+++ LVM2/tools/lvconvert.c	2007/12/21 01:08:18	1.50
-@@ -236,7 +236,14 @@
- 	unsigned corelog = 0;
- 
- 	seg = first_seg(lv);
--	existing_mirrors = (lv->status & MIRRORED) ? seg->area_count : 1;
-+	existing_mirrors = lv_mirror_count(lv);
-+
-+	/* If called with no argument, try collapsing the resync layers */
-+	if (!arg_count(cmd, mirrors_ARG) && !arg_count(cmd, mirrorlog_ARG)) {
-+		if (!collapse_mirrored_lv(lv))
-+			return_0;
-+		goto commit_changes;
-+	}
- 
- 	/*
- 	 * Adjust required number of mirrors
-@@ -516,8 +523,7 @@
- 		return ECMD_FAILED;
- 	}
- 
--	if (arg_count(cmd, mirrors_ARG) ||
--	    ((lv->status & MIRRORED) && arg_count(cmd, mirrorlog_ARG))) {
-+	if (arg_count(cmd, mirrors_ARG) || (lv->status & MIRRORED)) {
- 		if (!archive(lv->vg))
- 			return ECMD_FAILED;
- 		if (!lvconvert_mirrors(cmd, lv, lp))
-
-
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: revive-nosync-option.patch
+Type: text/x-patch
+Size: 1701 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20071221/e5e7b214/attachment.bin>
