@@ -1,90 +1,48 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 4 Jan 2008 11:48:41 -0000
-Subject: LVM2 ./WHATS_NEW man/pvchange.8 man/pvcreate.8 ...
-Message-ID: <20080104114841.8832.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 04 Jan 2008 09:55:20 -0500
+Subject: [PATCH lvconvert 0/11] Additional fixes and changes to lvconvert restructure
+Message-ID: <477E48D8.4050404@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-01-04 11:48:40
+These patchset includes bugfixes and feature updates to
+the recently committed lvconvert changes.
 
-Modified files:
-	.              : WHATS_NEW 
-	man            : pvchange.8 pvcreate.8 vgchange.8 
+Bug fixes
+[ 1/11] Correct 'const' for _lv_mimage_in_sync()
+[ 2/11] Don't start polldaemon if conversion failed in early stage
+[ 3/11] Multiple fixes about to-corelog conversion
+[ 4/11] Fix possible mirror image corruption 
+[ 5/11] Don't insert temporary layer for corelog mirror
+[ 6/11] init_mirror_in_sync(0) for corelog mirror addition
+[ 7/11] Fix semantic consistency of mirrorlog option
 
-Log message:
-	Update --uuid argument description in man pages.
+Feature updates
+[ 8/11] Add internal 'CONVERTING' flag for LVs under conversion
+[ 9/11] Add a new attr field char for the CONVERTING LV
+[10/11] Warn if lvconvert needs activation to complete conversion
+[11/11] Start lvconvert polldaemon on activation (like pvmove)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.750&r2=1.751
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvchange.8.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvcreate.8.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgchange.8.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+Other things I would like to work on next are:
+  - Generalization of seg->mirrored_seg as upward link
+    from LV to seg(s) which use the LV.
+  - Review and fix remove_mirror_images() so that 'removable_pvs'
+    filtering works on stacked mirror.
+  - Review the suspend code path. I think 'noflush' should be
+    avoided for lower-level mirrors. Otherwise the upper-level mirror
+    can't suspend.
+  - Remaining patches from the last post:
+    https://www.redhat.com/archives/lvm-devel/2007-December/msg00045.html
+     [11/13] Add 'lv_mirrors' field to reporting functions
+     [12/13] Remove hardcoded "_mlog" name from deptree construction
+     [13/13] Allow disk logs for temporary resync mirror
+  - Creating a script for 'make check'
 
---- LVM2/WHATS_NEW	2008/01/03 19:03:31	1.750
-+++ LVM2/WHATS_NEW	2008/01/04 11:48:40	1.751
-@@ -1,5 +1,6 @@
- Version 2.02.30 -
- ===================================
-+  Update --uuid argument description in man pages.
-   Fix vgreduce PV list processing not to process every PV in the VG. (2.02.29)
-   Extend lvconvert to use polldaemon.
-   Add support for stacked mirrors.
---- LVM2/man/pvchange.8	2004/03/22 15:08:50	1.4
-+++ LVM2/man/pvchange.8	2008/01/04 11:48:40	1.5
-@@ -8,7 +8,8 @@
- [\-\-deltag Tag]
- [\-h/\-?/\-\-help]
- [\-t/\-\-test]
--[\-v/\-\-verbose] [\-a/\-\-all] [\-x/\-\-allocatable y/n] [PhysicalVolumePath...]
-+[\-v/\-\-verbose] [\-a/\-\-all] [\-x/\-\-allocatable y/n]
-+[\-u/\-\-uuid] [PhysicalVolumePath...]
- .SH DESCRIPTION
- pvchange allows you to change the allocation permissions of one or
- more physical volumes.
-@@ -19,6 +20,9 @@
- If PhysicalVolumePath is not specified on the command line all
- physical volumes are searched for and used.
- .TP
-+.I \-u, \-\-uuid
-+Generate new random UUID for specified physical volumes.
-+.TP
- .I \-x, \-\-allocatable y/n
- Enable or disable allocation of physical extents on this physical volume.
- .SH Example
---- LVM2/man/pvcreate.8	2005/03/03 21:52:58	1.5
-+++ LVM2/man/pvcreate.8	2008/01/04 11:48:40	1.6
-@@ -15,6 +15,7 @@
- .RB [ \-\-metadatasize size ]
- .RB [ \-\-restorefile file ]
- .RB [ \-\-setphysicalvolumesize size ]
-+.RB [ \-u | \-\-uuid uuid ]
- .RB [ \-\-version ]
- .RB [ \-Z | \-\-zero y/n ]
- .IR PhysicalVolume " [" PhysicalVolume ...]
---- LVM2/man/vgchange.8	2007/06/18 14:14:33	1.13
-+++ LVM2/man/vgchange.8	2008/01/04 11:48:40	1.14
-@@ -11,6 +11,7 @@
- .RB [ \-a | \-\-available " [e|l] {" y | n }]
- .RB [ \-\-monitor " {" y | n }]
- .RB [ \-c | \-\-clustered " {" y | n }]
-+.RB [ \-u | \-\-uuid ]
- .RB [ \-d | \-\-debug]
- .RB [ \-\-deltag
- .IR Tag ]
-@@ -70,6 +71,9 @@
- particular time, you may still be able to use Volume Groups that
- are not marked as clustered.
- .TP
-+.BR \-u ", " \-\-uuid
-+Generate new random UUID for specified Volume Groups.
-+.TP
- .BR \-\-monitor " " { y | n }
- Controls whether or not a mirrored logical volume is monitored by
- dmeventd, if it is installed.
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
 
