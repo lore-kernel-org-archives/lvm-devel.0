@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Jan 2008 17:01:42 -0000
-Subject: LVM2/man fsadm.8
-Message-ID: <20080108170142.12951.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 9 Jan 2008 00:18:37 -0000
+Subject: LVM2 ./WHATS_NEW tools/pvcreate.c
+Message-ID: <20080109001837.5131.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,77 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2008-01-08 17:01:42
+Changes by:	mornfall at sourceware.org	2008-01-09 00:18:37
 
-Added files:
-	man            : fsadm.8 
+Modified files:
+	.              : WHATS_NEW 
+	tools          : pvcreate.c 
 
 Log message:
-	added manpage
+	Prevent pvcreate from overwriting MDA-less PVs belonging to active VGs.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/fsadm.8.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.752&r2=1.753
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
 
-/cvs/lvm2/LVM2/man/fsadm.8,v  -->  standard output
-revision 1.1
---- LVM2/man/fsadm.8
-+++ -	2008-01-08 17:01:42.332047000 +0000
-@@ -0,0 +1,56 @@
-+.TH "FSADM" "8" "LVM TOOLS" "Red Hat, Inc" "\""
-+.SH "NAME"
-+fsadm \- utility to resize or check filesystem on a device
-+.SH "SYNOPSIS"
-+.B fsdam
-+.RI [options]\ check\ device
+--- LVM2/WHATS_NEW	2008/01/07 20:42:56	1.752
++++ LVM2/WHATS_NEW	2008/01/09 00:18:36	1.753
+@@ -1,5 +1,6 @@
+ Version 2.02.30 -
+ ===================================
++  Prevent pvcreate from overwriting MDA-less PVs belonging to active VGs.
+   Fix a segfault if using pvs with --all argument. (2.02.29)
+   Update --uuid argument description in man pages.
+   Fix vgreduce PV list processing not to process every PV in the VG. (2.02.29)
+--- LVM2/tools/pvcreate.c	2007/11/22 01:25:06	1.58
++++ LVM2/tools/pvcreate.c	2008/01/09 00:18:36	1.59
+@@ -14,6 +14,7 @@
+  */
+ 
+ #include "tools.h"
++#include "metadata.h"
+ 
+ struct pvcreate_params {
+ 	int zero;
+@@ -43,6 +44,17 @@
+ 	/* FIXME Use partial mode here? */
+ 	pv = pv_read(cmd, name, NULL, NULL, 0);
+ 
++	/*
++         * If a PV has no MDAs it may appear to be an orphan until the
++         * metadata is read off another PV in the same VG.  Detecting
++         * this means checking every VG by scanning every PV on the
++         * system.
++	 */
++	if (pv && is_orphan(pv)) {
++		(void) get_vgs(cmd, 1);
++		pv = pv_read(cmd, name, NULL, NULL, 0);
++	}
 +
-+.B fsdam
-+.RI [options]\ resize\ device\ [new_size[BKMGTEP]]
-+
-+.SH "DESCRIPTION"
-+\fBfsadm\fR utility resizes or checks the filesystem on a device. It tries to use the same API for \fBExt2/3\fR, \fBReiserFS\fR and \fBXFS\fR filesystem and simply resize and filesystem check operation.
-+.SH "OPTIONS"
-+.TP 
-+\fB\-h \-\-help\fR
-+\(em print help message
-+.TP 
-+\fB\-v \-\-verbose\fR
-+\(em be more verbose
-+.TP 
-+\fB\-e \-\-ext\-offline\fR
-+\(em unmount Ext2/3 filesystem before doing resize
-+.TP 
-+\fB\-f \-\-force\fR
-+\(em bypass some sanity checks
-+.TP 
-+\fB\-n \-\-dry\-run\fR
-+\(em print commands without running them
-+.TP 
-+\fB\-y \-\-yes\fR
-+\(em answer "yes" at any prompts
-+.TP  
-+\fBnew_size\fR
-+\(em Absolute number of filesystem blocks to be in the filesystem, or an absolute size using a suffix (in powers of 1024). If new_size is not supplied, the whole device is used.
-+
-+
-+.SH "EXAMPLES"
-+"fsadm \-e \-y resize /dev/vg/test 1000M" tries to resize the size of the filesystem on logical volume /dev/vg/test. If /dev/vg/test contains Ext2/3 filesystem it will be unmounted prior the resize. All [y|n] questions will be answered 'y'.
-+.SH "ENVIRONMENT VARIABLES"
-+.TP 
-+\fBTMPDIR\fP 
-+Where the temporary directory should be created.
-+.TP 
-+.BR 
-+.SH "SEE ALSO"
-+.BR lvm (8), 
-+.BR lvresize (8), 
-+.BR lvm.conf (5),
-+.BR tune2fs (8),
-+.BR resize2fs (8),
-+.BR reiserfstune (8),
-+.BR resize_reiserfs (8),
-+.BR xfs_info (8),
-+.BR xfs_growfs (8),
-+.BR xfs_check (8)
-+
+ 	/* Allow partial & exported VGs to be destroyed. */
+ 	/* We must have -ff to overwrite a non orphan */
+ 	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG) != 2) {
 
 
