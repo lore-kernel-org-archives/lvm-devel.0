@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 9 Jan 2008 00:18:37 -0000
-Subject: LVM2 ./WHATS_NEW tools/pvcreate.c
-Message-ID: <20080109001837.5131.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 9 Jan 2008 14:17:58 -0000
+Subject: LVM2/man Makefile.in
+Message-ID: <20080109141758.24911.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,55 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-01-09 00:18:37
+Changes by:	zkabelac at sourceware.org	2008-01-09 14:17:58
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : pvcreate.c 
+	man            : Makefile.in 
 
 Log message:
-	Prevent pvcreate from overwriting MDA-less PVs belonging to active VGs.
+	install conditionally fsadm.8 manpage
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.752&r2=1.753
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.21&r2=1.22
 
---- LVM2/WHATS_NEW	2008/01/07 20:42:56	1.752
-+++ LVM2/WHATS_NEW	2008/01/09 00:18:36	1.753
-@@ -1,5 +1,6 @@
- Version 2.02.30 -
- ===================================
-+  Prevent pvcreate from overwriting MDA-less PVs belonging to active VGs.
-   Fix a segfault if using pvs with --all argument. (2.02.29)
-   Update --uuid argument description in man pages.
-   Fix vgreduce PV list processing not to process every PV in the VG. (2.02.29)
---- LVM2/tools/pvcreate.c	2007/11/22 01:25:06	1.58
-+++ LVM2/tools/pvcreate.c	2008/01/09 00:18:36	1.59
-@@ -14,6 +14,7 @@
-  */
+--- LVM2/man/Makefile.in	2007/09/21 10:16:44	1.21
++++ LVM2/man/Makefile.in	2008/01/09 14:17:58	1.22
+@@ -16,6 +16,12 @@
+ top_srcdir = @top_srcdir@
+ VPATH = @srcdir@
  
- #include "tools.h"
-+#include "metadata.h"
- 
- struct pvcreate_params {
- 	int zero;
-@@ -43,6 +44,17 @@
- 	/* FIXME Use partial mode here? */
- 	pv = pv_read(cmd, name, NULL, NULL, 0);
- 
-+	/*
-+         * If a PV has no MDAs it may appear to be an orphan until the
-+         * metadata is read off another PV in the same VG.  Detecting
-+         * this means checking every VG by scanning every PV on the
-+         * system.
-+	 */
-+	if (pv && is_orphan(pv)) {
-+		(void) get_vgs(cmd, 1);
-+		pv = pv_read(cmd, name, NULL, NULL, 0);
-+	}
++ifeq ("@FSADM@", "yes")
++FSADMMAN = fsadm.8
++else
++FSADMMAN =
++endif
 +
- 	/* Allow partial & exported VGs to be destroyed. */
- 	/* We must have -ff to overwrite a non orphan */
- 	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG) != 2) {
+ MAN5=lvm.conf.5
+ MAN8=lvchange.8 lvconvert.8 lvcreate.8 lvdisplay.8 lvextend.8 lvm.8 \
+ 	lvmchange.8 lvmdiskscan.8 lvmdump.8 \
+@@ -24,7 +30,7 @@
+ 	pvresize.8 pvs.8 pvscan.8 vgcfgbackup.8 vgcfgrestore.8 vgchange.8 \
+ 	vgck.8 vgcreate.8 vgconvert.8 vgdisplay.8 vgexport.8 vgextend.8 \
+ 	vgimport.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 vgrename.8 \
+-	vgs.8 vgscan.8 vgsplit.8
++	vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN)
+ MAN8CLUSTER=clvmd.8
+ MAN5DIR=${mandir}/man5
+ MAN8DIR=${mandir}/man8
 
 
