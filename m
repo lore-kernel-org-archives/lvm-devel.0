@@ -1,24 +1,32 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Wed, 16 Jan 2008 21:47:26 +0100
-Subject: Re: [PATCH] Fix 'make check' to use dmsetup built in DMDIR
-In-Reply-To: <478E6AFB.30007@ce.jp.nec.com> (Jun'ichi Nomura's message of
-	"Wed, 16 Jan 2008 15:37:15 -0500")
-References: <478E6AFB.30007@ce.jp.nec.com>
-Message-ID: <871w8ho5up.fsf@rho.meyering.net>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 11 Jan 2008 18:48:17 -0500
+Subject: [PATCH 8/11] Allow "mirror" segment with only 1 area
+In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
+References: <4787FA27.8050300@ce.jp.nec.com>
+Message-ID: <47880041.4080307@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-"Jun'ichi Nomura" <j-nomura@ce.jp.nec.com> wrote:
-> If DMDIR is specified in configuration script,
-> 'make check' should use it to check DM_DEV_DIR support.
-...
-> Index: LVM2.work/test/Makefile.in
-...
-> +	test -n "@DMDIR@" && ln -s "@DMDIR@/dmsetup/dmsetup" bin/dmsetup
+Allow "mirror" segment with only 1 area.
 
-Looks good.
+As a transitional state, "mirror" segment with only 1 area makes sense
+for keeping mirror specific parameters (log_lv, region_size) in metadata.
 
+The segment handler already has a code to add "linear" target line
+for table. (see MIRR_DISABLED)
 
+Codes to get copy percent have to consider the segment is in-sync
+if area_count is 1.
+
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: allow-1way-mirror-seg.patch
+Type: text/x-patch
+Size: 1990 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/c7d0c283/attachment.bin>
