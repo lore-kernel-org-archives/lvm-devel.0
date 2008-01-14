@@ -1,34 +1,50 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:43:56 -0500
-Subject: [PATCH 1/11] lvconvert takes '--wait' instead of '--background'
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <4787FF3C.8010503@ce.jp.nec.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 14 Jan 2008 22:53:45 +0000
+Subject: [PATCH 2/11] Add upward link from underlying LV to stacked seg
+In-Reply-To: <4787FF72.9000400@ce.jp.nec.com>
+References: <4787FA27.8050300@ce.jp.nec.com> <4787FF72.9000400@ce.jp.nec.com>
+Message-ID: <20080114225345.GG8075@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Remove '--background' option and add '--wait' option to lvconvert.
+ /*
++ * Add/remove upward link from underlying LV to the segment using it
++ */
++int lv_add_user_seg(struct logical_volume *lv, struct lv_segment *seg);
++int lv_remove_user_seg(struct logical_volume *lv, struct lv_segment *seg);
 
-Recent change in lvconvert let it starts polling the conversion by default
-for adding mirror(s).
-'--background' is an option to immediately exit from the command and
-do the polling in background.
+need to rename - too ambiguous
 
-The option was inherited from pvmove.
-However, since lvconvert used to exit immediately and it still does
-for different types of conversion (e.g. linear to mirror conversion),
-it's more consistent and intuitive to add '--wait' option for foreground
-polling and do it in background by default.
++/*
++ * This is a function specialized for the common case where there is
++ * only one segment which uses the LV.
++ * e.g. the LV is a layer inserted by insert_layer_for_lv().
++ *
++ * In general, walk through lv->segs_using_this_lv.
++ */
++struct lv_segment *seg_using_lv(struct logical_volume *lv)
++{
++	struct seg_list *sl;
++
++	if (list_size(&lv->segs_using_this_lv) != 1)
++		return NULL;
 
+Is it ever valid to return here and not have an error?
+
++		if (!lv_add_user_seg(log_lv, seg))
+
+Needs a clearer name.
+
+@@ -110,8 +110,8 @@ int check_lv_segments(struct logical_vol
+ 		}
+ 
+Where is this new list validated?
+
+Alasdair
 -- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvconvert-wait-option.patch
-Type: text/x-patch
-Size: 2932 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/38ae8e53/attachment.bin>
+agk at redhat.com
+
+
