@@ -1,406 +1,110 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  7 Jun 2022 15:15:55 +0000 (GMT)
-Subject: main - tests: add lvm_vdo_wrapper
-Message-ID: <20220607151555.40FE438133EC@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 14 Jan 2008 21:11:47 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
+Message-ID: <20080114211147.9451.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2ecfd503edadaf5d46115826c629754bf9fd573f
-Commit:        2ecfd503edadaf5d46115826c629754bf9fd573f
-Parent:        1b070f366ba57a6eb24df03241284732db5047e9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 31 22:45:29 2022 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jun 7 17:14:08 2022 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-14 21:11:47
 
-tests: add lvm_vdo_wrapper
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvconvert.c 
 
-Introduce a replacement vdo manager wrapper for testing.
-When using test suite on a system without vdo manager (which has got
-deprecated) - we still need its functionality to prepare 'vdo volume'
-for testing lvm_import_vdo.
+Log message:
+	lvconvert waits for initial completion by default
 
-Wrapper currently need 2 binaries from older 'vdo 6.2' package -
-to be named:
-oldvdoformat - format VDO metadata with older format
-oldvdoprepareforlvm - shift vdo metadata by 1MiB
----
- test/Makefile.in            |   1 +
- test/lib/lvm_vdo_wrapper.sh | 353 ++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 354 insertions(+)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.758&r2=1.759
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index ecb9e4264..f69dc97b6 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -369,6 +369,7 @@ LIB = $(addprefix lib/, $(LIB_SECURETEST) $(LIB_DMSECURETEST) $(LIB_SHARED) $(LI
- 	$(Q) $(LN_S) -f $(abs_top_srcdir)/conf/thin-performance.profile lib/
- 	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
- 	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/lvm_import_vdo.sh lib/lvm_import_vdo
-+	$(Q) which vdo || $(LN_S) -f $(abs_top_srcdir)/test/lib/lvm_vdo_wrapper.sh lib/vdo
- 	@test "$(srcdir)" = . || \
- 		for i in $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF); do \
- 			test -n "$(Q)" || echo "$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/"; \
-diff --git a/test/lib/lvm_vdo_wrapper.sh b/test/lib/lvm_vdo_wrapper.sh
-new file mode 100755
-index 000000000..d622d6456
---- /dev/null
-+++ b/test/lib/lvm_vdo_wrapper.sh
-@@ -0,0 +1,353 @@
-+#!/bin/bash
-+#
-+# Wrapper script for 'naive' emulation of vdo manager tool for systems
-+# that no longer have this tool present
-+#
+--- LVM2/WHATS_NEW	2008/01/11 07:02:34	1.758
++++ LVM2/WHATS_NEW	2008/01/14 21:11:47	1.759
+@@ -1,5 +1,6 @@
+ Version 2.02.30 -
+ ===================================
++  lvconvert waits for completion of initial sync by default.
+   Refactor vgcreate for parameter validation and add tests.
+   Add new convert_lv field to lvs output.
+   Print warning when lvm tools are running as non-root.
+--- LVM2/tools/lvconvert.c	2008/01/10 18:35:51	1.53
++++ LVM2/tools/lvconvert.c	2008/01/14 21:11:47	1.54
+@@ -24,7 +24,8 @@
+ 	const char *lv_name;
+ 	const char *lv_name_full;
+ 	const char *vg_name;
+-	int wait_daemon;
++	int wait_completion;
++	int need_polling;
+ 
+ 	uint32_t chunk_size;
+ 	uint32_t region_size;
+@@ -116,6 +117,9 @@
+ 		return 0;
+ 	}
+ 
++	if (!arg_count(cmd, background_ARG))
++		lp->wait_completion = 1;
 +
-+set -euE -o pipefail
-+
-+# tool for formating 'old' VDO metadata format
-+LVM_VDO_FORMAT=${LVM_VDO_FORMAT-"oldvdoformat"}
-+# tool for shifting VDO metadata header by 2MiB
-+LVM_VDO_PREPARE=${LVM_VDO_PREPARE-"oldvdoprepareforlvm"}
-+# default vdo conf file
-+LVM_VDO_DEFAULT_CONF=${LVM_VDO_DEFAULT_CONF-"/tmp/vdoconf.yml"}
-+
-+vdo_die_() {
-+	echo -e "$@" >&2
-+	return 1
-+}
-+
-+vdo_verbose_() {
-+	test -z "$vdo_verbose" || echo "$0:" "$@"
-+}
-+
-+vdo_dry_() {
-+	if test -n "$vdo_dry"; then
-+		vdo_verbose_ "Dry execution" "$@"
-+		return 0
-+	fi
-+	vdo_verbose_ "Executing" "$@"
-+	"$@"
-+}
-+
-+vdo_get_kb_size_with_unit_() {
-+	local sz=${2-1}  # 2nd. arg as unit - default 'k'
-+
-+	case "$sz" in
-+	  [mM]) sz=1024 ;;
-+	esac
-+
-+	case "$1" in
-+	  *[mM]) sz=1024 ;;
-+	  *[gG]) sz=$(( 1024 * 1024 )) ;;
-+	  *[tT]) sz=$(( 1024 * 1024 * 1024 )) ;;
-+	  *[pP]) sz=$(( 1024 * 1024 * 1024 * 1024 )) ;;
-+	esac
-+
-+	echo $(( sz * ${1%[kKmMgGtTpP]} ))
-+}
-+
-+#
-+# Emulate functionality of deprecated 'vdo create'
-+#
-+vdo_create_() {
-+local cachesize=
-+local devsize=
-+local emulate512=disabled
-+local logicalsize=
-+local maxdiscardsize=
-+local slabbits=0  # 4k
-+local slabsize=
-+local sparse=
-+local table=
-+local vdo_compression_msg=
-+local vdo_dry=
-+local vdo_index_msg=
-+local vdo_logicalBlockSize=
-+local vdo_verbose=
-+
-+local vdo_ackThreads=${vdo_ackThreads-1}
-+local vdo_bioRotationInterval=${vdo_bioRotationInterval-64}
-+local vdo_bioThreads=${vdo_bioThreads-4}
-+local vdo_blockMapCacheSize=${vdo_blockMapCacheSize-128M}
-+local vdo_blockMapPeriod=${vdo_blockMapPeriod-16380}
-+local vdo_compression=${vdo_compression-enabled}
-+local vdo_confFile=$LVM_VDO_DEFAULT_CONF  # place some file in /tmp
-+local vdo_cpuThreads=${vdo_cpuThreads-2}
-+local vdo_deduplication=${vdo_deduplication-enabled}
-+local vdo_hashZoneThreads=${vdo_hashZoneThreads-1}
-+local vdo_indexCfreq=${vdo_indexCfreq-0}
-+local vdo_indexMemory=${vdo_indexMemory-0.25}
-+local vdo_indexSparse=${vdo_indexSparse-disabled}
-+local vdo_indexThreads=${vdo_indexThreads-0}
-+local vdo_logicalSize=${vdo_logicalSize-0}
-+local vdo_logicalThreads=${vdo_logicalThreads-1}
-+local vdo_maxDiscardSize=${vdo_maxDiscardSize-4K}
-+local vdo_name=${vdo_name-VDONAME}
-+local vdo_physicalThreads=${vdo_physicalThreads-1}
-+local vdo_slabSize=${vdo_slabSize-2G}
-+local vdo_uuid="VDO-$(uuidgen || echo \"f7a3ecdc-40a0-4e43-814c-4a7039a75de4\")"
-+local vdo_writePolicy=${vdo_writePolicy-auto}
-+
-+while [ "$#" -ne 0 ]
-+do
-+	case "$1" in
-+	  "--blockMapCacheSize") shift; vdo_blockMapCacheSize=$1 ;;
-+	  "--blockMapPeriod") shift; vdo_blockMapPeriod=$1 ;;
-+	  "--compression") shift; vdo_compression=$1 ;;
-+	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
-+	  "--deduplication") shift; vdo_deduplication=$1 ;;
-+	  "--device") shift; vdo_device=$1 ;;
-+	  "--emulate512") shift; emulate512=$1 ;;
-+	  "--indexMem") shift; vdo_indexMemory=$1 ;;
-+	  "--maxDiscardSize") shift; vdo_maxDiscardSize=$1 ;;
-+	  "--name"|"-n") shift; vdo_name=$1 ;;
-+	  "--sparseIndex") shift; vdo_indexSparse=$1 ;;
-+	  "--uuid") shift ;;		# ignored
-+	  "--vdoAckThreads") shift; vdo_ackThreads=$1 ;;
-+	  "--vdoBioRotationInterval") shift; vdo_bioRotationInterval=$1 ;;
-+	  "--vdoBioThreads") shift; vdo_bioThreads=$1 ;;
-+	  "--vdoCpuThreads") shift; vdo_cpuThreads=$1 ;;
-+	  "--vdoHashZoneThreads") shift; vdo_hashZoneThreads=$1 ;;
-+	  "--vdoLogicalSize") shift; vdo_logicalSize=$1 ;;
-+	  "--vdoLogicalThreads") shift; vdo_logicalThreads=$1 ;;
-+	  "--vdoLogLevel") shift ;;	# ignored
-+	  "--vdoPhysicalThreads") shift; vdo_physicalSize=$1 ;;
-+	  "--vdoSlabSize") shift; vdo_slabSize=$1 ;;
-+	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
-+	  "--writePolicy") shift; vdo_writePolicy=$1 ;;
-+	esac
-+	shift
-+done
-+
-+# Convert when set
-+case "$emulate512" in
-+  "enabled") vdo_logicalBlockSize=512 ;;
-+  "disabled") vdo_logicalBlockSize=4096 ;;
-+  *) vdo_die_ "Invalid emulate512 setting."
-+esac
-+
-+case "$vdo_deduplication" in
-+  "enabled")  vdo_index_msg="index-enable" ;;
-+  "disabled") vdo_index_msg="index-disable";;
-+  *) vdo_die_ "Invalid deduplication setting."
-+esac
-+
-+case "$vdo_compression" in
-+  "enabled")  vdo_compression_msg="compression on" ;;
-+  "disabled") vdo_compression_msg="compression off";;
-+  *) vdo_die_ "Invalid compression setting."
-+esac
-+
-+test -n "${vdo_device-}" || vdo_die_ "VDO device is missing"
-+
-+blkid -s UUID -o value "${vdo_device}" || true
-+
-+devsize=$(blockdev --getsize64 "$vdo_device")
-+devsize=$(( devsize / 4096 )) # convert to 4KiB units
-+
-+logicalsize=$(vdo_get_kb_size_with_unit_ "$vdo_logicalSize" M)
-+logicalsize=$(( logicalsize * 2 ))	# 512B  units
-+
-+cachesize=$(vdo_get_kb_size_with_unit_ "$vdo_blockMapCacheSize" M)
-+cachesize=$(( cachesize / 4 ))		# 4KiB units
-+
-+maxdiscardsize=$(vdo_get_kb_size_with_unit_ "$vdo_maxDiscardSize" M)
-+maxdiscardsize=$(( maxdiscardsize / 4 )) # 4KiB units
-+
-+test -e "$vdo_confFile" || {
-+	cat > "$vdo_confFile" <<EOF
-+####################################################################
-+# THIS FILE IS MACHINE GENERATED. DO NOT EDIT THIS FILE BY HAND.
-+####################################################################
-+config: !Configuration
-+  vdos:
-+EOF
-+}
-+
-+cat >> "$vdo_confFile" <<EOF
-+    $vdo_name: !VDOService
-+      _operationState: finished
-+      ackThreads: $vdo_ackThreads
-+      activated: enabled
-+      bioRotationInterval: $vdo_bioRotationInterval
-+      bioThreads: $vdo_bioThreads
-+      blockMapCacheSize: $(( cachesize * 4 ))K
-+      blockMapPeriod: $vdo_blockMapPeriod
-+      compression: $vdo_compression
-+      cpuThreads: $vdo_cpuThreads
-+      deduplication: $vdo_deduplication
-+      device: $vdo_device
-+      hashZoneThreads: $vdo_hashZoneThreads
-+      indexCfreq: $vdo_indexCfreq
-+      indexMemory: $vdo_indexMemory
-+      indexSparse: $vdo_indexSparse
-+      indexThreads: $vdo_indexThreads
-+      logicalBlockSize: $vdo_logicalBlockSize
-+      logicalSize: $(( logicalsize / 2 ))K
-+      logicalThreads: $vdo_logicalThreads
-+      maxDiscardSize: $(( maxdiscardsize * 4 ))K
-+      name: $vdo_name
-+      physicalSize: $(( devsize * 4 ))K
-+      physicalThreads: $vdo_physicalThreads
-+      slabSize: $vdo_slabSize
-+      uuid: $vdo_uuid
-+      writePolicy: $vdo_writePolicy
-+  version: 538380551
-+EOF
-+
-+slabsize=$(vdo_get_kb_size_with_unit_ "$vdo_slabSize")
-+while test "$slabsize" -gt 4 ; do
-+	slabbits=$(( slabbits + 1 ))
-+	slabsize=$(( slabsize / 2 ))
-+done
-+
-+case "$vdo_indexSparse" in
-+  "enabled") sparse="--uds-sparse" ;;
-+esac
-+
-+vdo_dry_ "$LVM_VDO_FORMAT" $vdo_verbose $sparse\
-+ --logical-size "$vdo_logicalSize" --slab-bits "$slabbits"\
-+ --uds-checkpoint-frequency "$vdo_indexCfreq"\
-+ --uds-memory-size "$vdo_indexMemory" "$vdo_device"
-+
-+# V2 format
-+table="0 $logicalsize vdo V2 $vdo_device\
-+ $devsize\
-+ $vdo_logicalBlockSize\
-+ $cachesize\
-+ $vdo_blockMapPeriod\
-+ on\
-+ $vdo_writePolicy\
-+ $vdo_name\
-+ maxDiscard $maxdiscardsize\
-+ ack $vdo_ackThreads\
-+ bio $vdo_bioThreads\
-+ bioRotationInterval $vdo_bioRotationInterval\
-+ cpu $vdo_cpuThreads\
-+ hash $vdo_hashZoneThreads\
-+ logical $vdo_logicalThreads\
-+ physical $vdo_physicalThreads"
-+
-+vdo_dry_ dmsetup create "$vdo_name" --uuid "$vdo_uuid" --table "$table"
-+vdo_dry_ dmsetup message "$vdo_name" 0 "$vdo_index_msg"
-+vdo_dry_ dmsetup message "$vdo_name" 0 "$vdo_compression_msg"
-+}
-+
-+#
-+# vdo stop
-+#
-+vdo_stop_() {
-+local vdo_confFile=$LVM_VDO_DEFAULT_CONF
-+local vdo_dry=
-+local vdo_force=
-+local vdo_name=
-+local vdo_verbose=
-+
-+while [ "$#" -ne 0 ]
-+do
-+	case "$1" in
-+	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
-+	  "--name"|"-n") shift; vdo_name=$1 ;;
-+	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
-+	  "--force") vdo_force="--force" ;;
-+	esac
-+	shift
-+done
-+
-+vdo_dry_ dmsetup status --target vdo "$vdo_name" 2>/dev/null || return 0
-+vdo_dry_ dmsetup remove $vdo_force "$vdo_name" || true
-+}
-+
-+#
-+# vdo remove
-+#
-+vdo_remove_() {
-+local vdo_confFile=$LVM_VDO_DEFAULT_CONF
-+local vdo_name=
-+
-+vdo_stop_ "$@"
-+while [ "$#" -ne 0 ]
-+do
-+	case "$1" in
-+	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
-+	  "--name"|"-n") shift; vdo_name=$1 ;;
-+	esac
-+	shift
-+done
-+
-+# remove entry from conf file
-+awk -v vdovolname="$vdo_name" 'BEGIN { have=0 }
-+	$0 ~ "!VDOService" { have=0 }
-+	$0 ~ vdovolname":" { have=1 }
-+	{ if (have==0) { print } ;}
-+	' "$vdo_confFile" >"${vdo_confFile}.new"
-+
-+mv "${vdo_confFile}.new" "$vdo_confFile"
-+grep "!VDOService" "$vdo_confFile" || rm -f "$vdo_confFile"
-+}
-+
-+
-+#
-+# print_config_file
-+#
-+vdo_print_config_file_() {
-+local vdo_confFile=$LVM_VDO_DEFAULT_CONF
-+
-+while [ "$#" -ne 0 ]
-+do
-+	case "$1" in
-+	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
-+	  "--verbose"|"-d"|"--debug") ;;
-+	  "--logfile") shift ;;  # ignore
-+	esac
-+	shift
-+done
-+
-+cat "$vdo_confFile"
-+}
-+
-+#
-+# vdo convert
-+#
-+vdo_convert_() {
-+local vdo_confFile=$LVM_VDO_DEFAULT_CONF
-+local vdo_dry=
-+local vdo_force=
-+local vdo_name=
-+local vdo_verbose=
-+local vdo_device=
-+
-+while [ "$#" -ne 0 ]
-+do
-+	case "$1" in
-+	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
-+	  "--name"|"-n") shift; vdo_name=$1 ;;
-+	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
-+	  "--force") vdo_force="--force" ;;
-+	esac
-+	shift
-+done
-+
-+vdo_device=$(awk -v vdovolname="$vdo_name" 'BEGIN { have=0 }
-+     $0 ~ "!VDOService" { have=0 }
-+     $0 ~ vdovolname":" { have=1 }
-+     { if (have==1 && $0 ~ "device:" ) {  print $2 } ;}'\
-+     "$vdo_confFile")
-+
-+#dmsetup status --target vdo "$vdo_name" || true
-+vdo_dry_ "$LVM_VDO_PREPARE" "$vdo_device"
-+vdo_dry_ vdo_remove_ -f "$vdo_confFile" -n "$vdo_name" || true
-+}
-+
-+#
-+# MAIN
-+#
-+case "$1" in
-+  "create") shift; vdo_create_ "$@" ;;
-+  "remove") shift; vdo_remove_ "$@" ;;
-+  "stop") shift; vdo_stop_ "$@" ;;
-+  "convert") shift; vdo_convert_ "$@" ;;
-+  "printConfigFile") shift; vdo_print_config_file_ "$@" ;;
-+esac
+ 	if (arg_count(cmd, snapshot_ARG))
+ 		lp->snapshot = 1;
+ 
+@@ -374,7 +378,7 @@
+ 	/* If called with no argument, try collapsing the resync layers */
+ 	if (!arg_count(cmd, mirrors_ARG) && !arg_count(cmd, mirrorlog_ARG) &&
+ 	    !arg_count(cmd, corelog_ARG)) {
+-		lp->wait_daemon = 1;
++		lp->need_polling = 1;
+ 		return 1;
+ 	}
+ 
+@@ -476,6 +480,8 @@
+ 				    corelog ? 0U : 1U, lp->pvh, lp->alloc,
+ 				    MIRROR_BY_LV))
+ 			return_0;
++		if (lp->wait_completion)
++			lp->need_polling = 1;
+ 		goto commit_changes;
+ 	}
+ 
+@@ -549,7 +555,7 @@
+ 				    MIRROR_BY_LV))
+ 			return_0;
+ 		lv->status |= CONVERTING;
+-		lp->wait_daemon = 1;
++		lp->need_polling = 1;
+ 	} else {
+ 		/* Reduce number of mirrors */
+ 		if (!lv_remove_mirrors(cmd, lv, existing_mirrors - lp->mirrors,
+@@ -584,7 +590,7 @@
+ 		return 0;
+ 	}
+ 
+-	if (!lp->wait_daemon)
++	if (!lp->need_polling)
+ 		log_print("Logical volume %s converted.", lv->name);
+ 
+ 	return 1;
+@@ -740,13 +746,13 @@
+ error:
+ 	unlock_vg(cmd, lp.vg_name);
+ 
+-	if (ret == ECMD_PROCESSED && lp.wait_daemon) {
++	if (ret == ECMD_PROCESSED && lp.need_polling) {
+ 		if (!lv_info(cmd, lvl->lv, &info, 1, 0) || !info.exists) {
+ 			log_print("Conversion starts after activation");
+ 			return ret;
+ 		}
+ 		ret = lvconvert_poll(cmd, lp.lv_name_full,
+-				     arg_count(cmd, background_ARG) ? 1U : 0);
++				     lp.wait_completion ? 0 : 1U);
+ 	}
+ 
+ 	return ret;
+
 
