@@ -1,24 +1,35 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:45:43 -0500
-Subject: [PATCH 4/11] Move _find_tmp_mirror()
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <4787FFA7.2090504@ce.jp.nec.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 15 Jan 2008 20:37:50 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080115203750.20970.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move _find_tmp_mirror() for the use by remove_mirror_images().
-No functional change.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-01-15 20:37:50
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: cosmetic-move-find_tmp_mirror-to-head.patch
-Type: text/x-patch
-Size: 1582 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/a1da17f2/attachment.bin>
+Modified files:
+	.              : WHATS_NEW 
+
+Log message:
+	Update WHATS_NEW for vgsplit changes
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.759&r2=1.760
+
+--- LVM2/WHATS_NEW	2008/01/14 21:11:47	1.759
++++ LVM2/WHATS_NEW	2008/01/15 20:37:49	1.760
+@@ -1,5 +1,7 @@
+ Version 2.02.30 -
+ ===================================
++  Update vgsplit to include vgcreate-style options when new VG is destination.
++  Update vgsplit to accept existing VG as destination.
+   lvconvert waits for completion of initial sync by default.
+   Refactor vgcreate for parameter validation and add tests.
+   Add new convert_lv field to lvs output.
+
+
