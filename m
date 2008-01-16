@@ -1,45 +1,26 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 16 Jan 2008 19:40:43 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20080116194043.25273.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Wed, 16 Jan 2008 14:48:01 -0500
+Subject: [PATCH] Fix error message for mirror log allocation failure
+Message-ID: <478E5F71.1090000@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-01-16 19:40:43
+In the course of pvmove/lvconvert restructuring,
+an error message for pvmove was copied in to mirror log
+allocation code.
 
-Modified files:
-	tools          : lvconvert.c 
+Attached is a patch to fix it.
 
-Log message:
-	fix to earlier checkin
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
-
---- LVM2/tools/lvconvert.c	2008/01/16 19:16:48	1.55
-+++ LVM2/tools/lvconvert.c	2008/01/16 19:40:42	1.56
-@@ -540,7 +540,7 @@
- 		 * linear-to-mirror conversion.
- 		 */
- 		original_lv = _original_lv(lv);
--		if (!seg->log_lv && !corelog) {
-+		if (!first_seg(original_lv)->log_lv && !corelog) {
- 			if (!add_mirror_log(cmd, original_lv, 1,
- 					    adjusted_mirror_region_size(
- 							lv->vg->extent_size,
-@@ -548,7 +548,7 @@
- 							lp->region_size),
- 					    lp->pvh, lp->alloc))
- 				return_0;
--		} else if (seg->log_lv && corelog) {
-+		} else if (first_seg(original_lv)->log_lv && corelog) {
- 			if (!remove_mirror_log(cmd, original_lv,
- 					       lp->pv_count ? lp->pvh : NULL))
- 				return_0;
-
-
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: fix-msg-for-log-allocation-failure.patch
+Type: text/x-patch
+Size: 1026 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080116/8fda64fe/attachment.bin>
