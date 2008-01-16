@@ -1,26 +1,36 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Wed, 16 Jan 2008 14:48:01 -0500
-Subject: [PATCH] Fix error message for mirror log allocation failure
-Message-ID: <478E5F71.1090000@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 16 Jan 2008 19:50:23 -0000
+Subject: LVM2/lib/metadata mirror.c
+Message-ID: <20080116195023.29189.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In the course of pvmove/lvconvert restructuring,
-an error message for pvmove was copied in to mirror log
-allocation code.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-16 19:50:23
 
-Attached is a patch to fix it.
+Modified files:
+	lib/metadata   : mirror.c 
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fix-msg-for-log-allocation-failure.patch
-Type: text/x-patch
-Size: 1026 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080116/8fda64fe/attachment.bin>
+Log message:
+	adjust mirror log error message
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+
+--- LVM2/lib/metadata/mirror.c	2008/01/16 19:38:39	1.58
++++ LVM2/lib/metadata/mirror.c	2008/01/16 19:50:23	1.59
+@@ -1187,7 +1187,7 @@
+ 			      0, 0, log_count, 0,
+ 			      allocatable_pvs, alloc, parallel_areas);
+ 	if (!ah) {
+-		log_error("Unable to allocate temporary LV for pvmove.");
++		log_error("Unable to allocate extents for mirror log.");
+ 		return 0;
+ 	}
+ 
+
+
