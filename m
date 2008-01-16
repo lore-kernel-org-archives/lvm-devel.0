@@ -1,26 +1,44 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:46:22 -0500
-Subject: [PATCH 5/11] Move removable_pvs checking
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <4787FFCE.7000601@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 16 Jan 2008 15:26:41 -0000
+Subject: LVM2/tools lvcreate.c
+Message-ID: <20080116152641.24233.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move 'removable_pvs' checking from _remove_mirror_images() to a new function.
-No functional change.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-16 15:26:40
 
-To improve readability.
+Modified files:
+	tools          : lvcreate.c 
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: cosmetic-move-removable_pvs-checking.patch
-Type: text/x-patch
-Size: 2819 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/016363b3/attachment.bin>
+Log message:
+	revert temp change
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.166&r2=1.167
+
+--- LVM2/tools/lvcreate.c	2008/01/16 15:25:10	1.166
++++ LVM2/tools/lvcreate.c	2008/01/16 15:26:40	1.167
+@@ -705,11 +705,11 @@
+ 		return 0;
+ 	}
+ 
+-//	if (lp->mirrors > 1 && !activation()) {
+-		//log_error("Can't create mirror without using "
+-			  //"device-mapper kernel driver.");
+-		//return 0;
+-	//}
++	if (lp->mirrors > 1 && !activation()) {
++		log_error("Can't create mirror without using "
++			  "device-mapper kernel driver.");
++		return 0;
++	}
+ 
+ 	/* The snapshot segment gets created later */
+ 	if (lp->snapshot &&
+
+
