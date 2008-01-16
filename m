@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 16 Jan 2008 19:38:39 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20080116193839.24454.qmail@sourceware.org>
+Date: 16 Jan 2008 19:40:43 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20080116194043.25273.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-01-16 19:38:39
+Changes by:	agk at sourceware.org	2008-01-16 19:40:43
 
 Modified files:
-	lib/metadata   : mirror.c 
+	tools          : lvconvert.c 
 
 Log message:
-	cope with stacked LVs as well as PVs when deciding which bits of mirrors to remove
+	fix to earlier checkin
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
 
---- LVM2/lib/metadata/mirror.c	2008/01/16 19:18:51	1.57
-+++ LVM2/lib/metadata/mirror.c	2008/01/16 19:38:39	1.58
-@@ -347,9 +347,12 @@
- 
- 	list_iterate_items(seg, &mimage_lv->segments) {
- 		for (s = 0; s < seg->area_count; s++) {
--			if (seg_type(seg, s) != AREA_PV)
--				/* FIXME Recurse for AREA_LV */
--				continue;
-+			if (seg_type(seg, s) != AREA_PV) {
-+				/* FIXME Recurse for AREA_LV? */
-+				/* Structure of seg_lv is unknown.
-+				 * Not removing this LV for safety. */
-+				return 0;
-+			}
- 
- 			pv = seg_pv(seg, s);
- 
+--- LVM2/tools/lvconvert.c	2008/01/16 19:16:48	1.55
++++ LVM2/tools/lvconvert.c	2008/01/16 19:40:42	1.56
+@@ -540,7 +540,7 @@
+ 		 * linear-to-mirror conversion.
+ 		 */
+ 		original_lv = _original_lv(lv);
+-		if (!seg->log_lv && !corelog) {
++		if (!first_seg(original_lv)->log_lv && !corelog) {
+ 			if (!add_mirror_log(cmd, original_lv, 1,
+ 					    adjusted_mirror_region_size(
+ 							lv->vg->extent_size,
+@@ -548,7 +548,7 @@
+ 							lp->region_size),
+ 					    lp->pvh, lp->alloc))
+ 				return_0;
+-		} else if (seg->log_lv && corelog) {
++		} else if (first_seg(original_lv)->log_lv && corelog) {
+ 			if (!remove_mirror_log(cmd, original_lv,
+ 					       lp->pv_count ? lp->pvh : NULL))
+ 				return_0;
 
 
