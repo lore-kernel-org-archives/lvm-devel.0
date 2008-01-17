@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Jan 2008 13:37:52 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20080117133752.32597.qmail@sourceware.org>
+Date: 17 Jan 2008 13:54:06 -0000
+Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/meta ...
+Message-ID: <20080117135406.3934.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,116 +10,96 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-01-17 13:37:52
+Changes by:	agk at sourceware.org	2008-01-17 13:54:05
 
 Modified files:
-	lib/metadata   : mirror.c 
+	lib/metadata   : lv_manip.c metadata-exported.h mirror.c 
+	tools          : vgreduce.c 
 
 Log message:
-	mirror log stuff
+	rename lv_remap_error
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.143&r2=1.144
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
 
---- LVM2/lib/metadata/mirror.c	2008/01/17 13:13:54	1.60
-+++ LVM2/lib/metadata/mirror.c	2008/01/17 13:37:51	1.61
-@@ -192,9 +192,12 @@
+--- LVM2/lib/metadata/lv_manip.c	2008/01/17 13:13:54	1.143
++++ LVM2/lib/metadata/lv_manip.c	2008/01/17 13:54:05	1.144
+@@ -461,7 +461,7 @@
+ /*
+  * Empty an LV and add error segment.
   */
- static int _init_mirror_log(struct cmd_context *cmd,
- 			    struct logical_volume *log_lv, int in_sync,
--			    struct list *tags)
-+			    struct list *tags, int remove_on_failure)
+-int lv_remap_error(struct logical_volume *lv)
++int replace_lv_with_error_segment(struct logical_volume *lv)
  {
- 	struct str_list *sl;
-+	struct lvinfo info;
-+	uint32_t orig_status = log_lv->status;
-+	int was_active = 0;
+ 	uint32_t len = lv->le_count;
  
- 	if (!activation() && in_sync) {
- 		log_error("Aborting. Unable to create in-sync mirror log "
-@@ -202,21 +205,31 @@
- 		return 0;
- 	}
+--- LVM2/lib/metadata/metadata-exported.h	2008/01/17 13:13:54	1.38
++++ LVM2/lib/metadata/metadata-exported.h	2008/01/17 13:54:05	1.39
+@@ -379,7 +379,7 @@
+ int lv_empty(struct logical_volume *lv);
  
-+	/* If the LV is active, deactivate it first. */
-+	if (lv_info(cmd, log_lv, &info, 0, 0) && info.exists) {
-+		if (!deactivate_lv(cmd, log_lv))
-+			return_0;
-+		was_active = 1;
-+	}
-+
-+	/* Temporary make it visible for set_lv() */
-+	log_lv->status |= VISIBLE_LV;
-+
- 	/* Temporary tag mirror log for activation */
- 	list_iterate_items(sl, tags)
- 		if (!str_list_add(cmd->mem, &log_lv->tags, sl->str)) {
- 			log_error("Aborting. Unable to tag mirror log.");
--			return 0;
-+			goto activate_lv;
+ /* Empty an LV and add error segment */
+-int lv_remap_error(struct logical_volume *lv);
++int replace_lv_with_error_segment(struct logical_volume *lv);
+ 
+ /* Entry point for all LV extent allocations */
+ int lv_extend(struct logical_volume *lv,
+--- LVM2/lib/metadata/mirror.c	2008/01/17 13:37:51	1.61
++++ LVM2/lib/metadata/mirror.c	2008/01/17 13:54:05	1.62
+@@ -521,7 +521,7 @@
+ 		_remove_mirror_log(mirrored_seg);
+ 		lv->status &= ~MIRRORED;
+ 		lv->status &= ~MIRROR_NOTSYNCED;
+-		if (!lv_remap_error(lv))
++		if (!replace_lv_with_error_segment(lv))
+ 			return_0;
+ 		remove_log = 1;
+ 	} else if (remove_log)
+@@ -616,7 +616,7 @@
+ 			/* Some mirrors are removed from the temporary mirror,
+ 			 * but the temporary layer still exists.
+ 			 * Down the stack and retry for remainder. */
+-			next_lv = find_tmp_mirror(next_lv);
++			next_lv = find_temporary_mirror(next_lv);
  		}
  
- 	/* store mirror log on disk(s) */
- 	if (!vg_write(log_lv->vg))
--		return_0;
-+		goto activate_lv;
+ 		num_removed -= r;
+--- LVM2/tools/vgreduce.c	2008/01/17 13:13:54	1.74
++++ LVM2/tools/vgreduce.c	2008/01/17 13:54:05	1.75
+@@ -54,7 +54,6 @@
+ 	struct list *snh, *snht;
+ 	struct logical_volume *cow;
+ 	struct lv_list *lvl;
+-	uint32_t extents;
+ 	struct lvinfo info;
+ 	int first = 1;
  
- 	backup(log_lv->vg);
+@@ -116,19 +115,10 @@
+ 	 * the mirrored LV also should be cleaned up.
+ 	 * Clean-up is currently done by caller (_make_vg_consistent()).
+ 	 */
+-	if ((lv_info(cmd, lv, &info, 0, 0) && info.exists)
+-	    || find_mirror_seg(first_seg(lv))) {
+-		extents = lv->le_count;
+-		if (!lv_empty(lv)) {
+-			stack;
+-			return 0;
+-		}
+-		if (!lv_add_virtual_segment(lv, 0, extents,
+-					    get_segtype_from_string(cmd,
+-								    "error"))) {
+-			stack;
+-			return 0;
+-		}
++	if ((lv_info(cmd, lv, &info, 0, 0) && info.exists) ||
++	    find_mirror_seg(first_seg(lv))) {
++		if (!replace_lv_with_error_segment(lv))
++			return_0;
  
- 	if (!vg_commit(log_lv->vg))
--		return_0;
-+		goto activate_lv;
- 
- 	if (!activate_lv(cmd, log_lv)) {
- 		log_error("Aborting. Failed to activate mirror log.");
-@@ -248,6 +261,9 @@
- 
- 	log_lv->status &= ~VISIBLE_LV;
- 
-+	if (was_active && !activate_lv(cmd, log_lv))
-+		return_0;
-+
- 	return 1;
- 
- deactivate_and_revert_new_lv:
-@@ -258,10 +274,27 @@
- 	}
- 
- revert_new_lv:
--	if (!lv_remove(log_lv) || !vg_write(log_lv->vg) ||
--	    (backup(log_lv->vg), !vg_commit(log_lv->vg)))
-+	log_lv->status = orig_status;
-+
-+	list_iterate_items(sl, tags)
-+		if (!str_list_del(&log_lv->tags, sl->str))
-+			log_error("Failed to remove tag %s from mirror log.",
-+				  sl->str);
-+
-+	if (remove_on_failure && !lv_remove(log_lv)) {
- 		log_error("Manual intervention may be required to remove "
- 			  "abandoned log LV before retrying.");
-+		return 0;
-+	}
-+
-+	if (!vg_write(log_lv->vg) ||
-+	    (backup(log_lv->vg), !vg_commit(log_lv->vg)))
-+		log_error("Manual intervention may be required to "
-+			  "remove/restore abandoned log LV before retrying.");
-+activate_lv:
-+	if (was_active && !remove_on_failure && !activate_lv(cmd, log_lv))
-+		return_0;
-+
- 	return 0;
- }
- 
-@@ -1199,7 +1232,7 @@
- 		return NULL;
- 	}
- 
--	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags)) {
-+	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
- 		log_error("Failed to create mirror log.");
- 		return NULL;
- 	}
+ 		if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
+ 			log_error("lv_list alloc failed");
 
 
