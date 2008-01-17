@@ -1,36 +1,47 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:49:14 -0500
-Subject: [PATCH 10/11] Fix _remove_mirror_images() to cope with stacked mirror
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <4788007A.2020108@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 17 Jan 2008 15:03:00 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20080117150300.17934.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-remove_mirror_images() has a feature to select mimage LV(s) to be
-removed (with 'removable_pvs' param).
-e.g. 'lvconvert -m-1 vg/lvol1 /dev/sdc /dev/sdd' removes a mirror image
-     that doesn't use PVs other than /dev/sdc and /dev/sdd.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-17 15:02:59
 
-But it doesn't work properly if the LV is stacked.
-  - Even if no LVs were removed, remove_mirror_images() should walk down
-    the stack and retry because it may have LVs matching 'removable_pvs'.
-    To allow that, _remove_mirror_images() should return how many LVs are
-    removed and distinguish failure vs. 0-removal.
-  - If the mimage is a temporary one ("*_mimagetmp_<n>"), don't remove.
-  - If a temporary LV becomes single area as a result of removal,
-    it should still be a "mirror" to keep log_lv and region_size.
-    collapse_mirrored_lv() will take care of reconfiguration.
+Modified files:
+	.              : VERSION WHATS_NEW 
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fix-remove_mirror_images-for-removable_pvs.patch
-Type: text/x-patch
-Size: 6599 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/b8215336/attachment.bin>
+Log message:
+	pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.160&r2=1.161
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.764&r2=1.765
+
+--- LVM2/VERSION	2007/12/05 22:48:06	1.160
++++ LVM2/VERSION	2008/01/17 15:02:59	1.161
+@@ -1 +1 @@
+-2.02.30-cvs (2007-12-05)
++2.02.30-cvs (2008-01-17)
+--- LVM2/WHATS_NEW	2008/01/16 19:00:58	1.764
++++ LVM2/WHATS_NEW	2008/01/17 15:02:59	1.765
+@@ -1,10 +1,10 @@
+-Version 2.02.30 -
++Version 2.02.30 - 17th January 2008
+ ===================================
+-  Maintain lists of stacked LV segments using each LV.
++  Add lists of stacked LV segments using each LV to the internal metadata.
+   Change vgsplit -l (for unimplemented --list) into --maxlogicalvolumes.
+   Fix process_all_pvs to detect non-orphans with no MDAs correctly.
+   Don't use block_on_error with mirror targets version 1.12 and above.
+-  Update vgsplit to include vgcreate-style options when new VG is destination.
++  Update vgsplit to accept vgcreate options when new VG is destination.
+   Update vgsplit to accept existing VG as destination.
+   lvconvert waits for completion of initial sync by default.
+   Refactor vgcreate for parameter validation and add tests.
+
+
