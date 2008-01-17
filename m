@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 17 Jan 2008 02:20:48 -0000
-Subject: LVM2/test t-mirror-basic.sh t-mirror-lvconvert.sh
-Message-ID: <20080117022048.29442.qmail@sourceware.org>
+Date: 17 Jan 2008 03:18:18 -0000
+Subject: LVM2/man vgsplit.8
+Message-ID: <20080117031818.30750.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,44 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-01-17 02:20:48
+Changes by:	wysochanski at sourceware.org	2008-01-17 03:18:18
 
 Modified files:
-	test           : t-mirror-basic.sh t-mirror-lvconvert.sh 
+	man            : vgsplit.8 
 
 Log message:
-	Fix descriptions in the newly added test cases
+	Fixup vgsplit man page
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgsplit.8.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/test/t-mirror-basic.sh	2008/01/16 21:21:22	1.1
-+++ LVM2/test/t-mirror-basic.sh	2008/01/17 02:20:48	1.2
-@@ -10,7 +10,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- 
--test_description="ensure that pvmove works with basic options"
-+test_description="ensure that basic operations on mirrored LV works"
- privileges_required_=1
- 
- . ./test-lib.sh
---- LVM2/test/t-mirror-lvconvert.sh	2008/01/16 21:21:22	1.1
-+++ LVM2/test/t-mirror-lvconvert.sh	2008/01/17 02:20:48	1.2
-@@ -10,7 +10,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- 
--test_description="ensure that pvmove works with basic options"
-+test_description="ensure that lvconvert for mirrored LV works"
- privileges_required_=1
- 
- . ./test-lib.sh
-@@ -44,7 +44,7 @@
- nr_pvs=5
- pvsize=$((80 * 1024 * 2))
- 
--vg=mirror-basic-vg-$$
-+vg=mirror-lvconvert-vg-$$
- lv1=lv1
- lv2=lv2
- lv3=lv3
+--- LVM2/man/vgsplit.8	2008/01/16 17:14:56	1.5
++++ LVM2/man/vgsplit.8	2008/01/17 03:18:18	1.6
+@@ -29,9 +29,24 @@
+ .I SourceVolumeGroupName
+ into
+ .I DestinationVolumeGroupName\fP.
++
+ If
+ .I DestinationVolumeGroupName
+-does not exist, it will be created.
++does not exist, a new volume group will be created.  The default attributes
++for the new volume group can be specified with \fB\-\-alloc\fR,
++\fB\-\-clustered\fR, \fB\-\-maxlogicalvolumes\fR, \fB\-\-metadatatype\fR,
++\fB\-\-maxphysicalvolumes\fR, and \fB\-\-physicalextentsize\fR
++(see \fBvgcreate(8)\fR for a description of these options).
++If any of these options are not given, the default attribute(s) are taken
++from
++.I SourceVolumeGroupName\fP.
++
++If
++.I DestinationVolumeGroupName
++does exist, it will be checked for compatibility with
++.I SourceVolumeGroupName
++before the physical volumes are moved.
++
+ Logical Volumes cannot be split between Volume Groups.
+ Each existing Logical Volume must be entirely on the Physical Volumes forming
+ either the source or the destination Volume Group.
 
 
