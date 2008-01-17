@@ -1,30 +1,57 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:48:41 -0500
-Subject: [PATCH 9/11] _init_mirror_log() to cope with activation status
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <47880059.4020104@ce.jp.nec.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 17 Jan 2008 02:20:48 -0000
+Subject: LVM2/test t-mirror-basic.sh t-mirror-lvconvert.sh
+Message-ID: <20080117022048.29442.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-_init_mirror_log() is a function to initialize mirror log contents
-with necessary activation and cleanups.
-The function was originaly made for log_lv, which is just created
-and not active.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-01-17 02:20:48
 
-For the log (re-)initialization, it's nice if the function takes
-care of the current activation status and the intent of the caller
-for the failure case.
+Modified files:
+	test           : t-mirror-basic.sh t-mirror-lvconvert.sh 
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: init_mirror_log-cope-with-existing-active-log.patch
-Type: text/x-patch
-Size: 3184 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/d7de6533/attachment.bin>
+Log message:
+	Fix descriptions in the newly added test cases
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+
+--- LVM2/test/t-mirror-basic.sh	2008/01/16 21:21:22	1.1
++++ LVM2/test/t-mirror-basic.sh	2008/01/17 02:20:48	1.2
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+-test_description="ensure that pvmove works with basic options"
++test_description="ensure that basic operations on mirrored LV works"
+ privileges_required_=1
+ 
+ . ./test-lib.sh
+--- LVM2/test/t-mirror-lvconvert.sh	2008/01/16 21:21:22	1.1
++++ LVM2/test/t-mirror-lvconvert.sh	2008/01/17 02:20:48	1.2
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+-test_description="ensure that pvmove works with basic options"
++test_description="ensure that lvconvert for mirrored LV works"
+ privileges_required_=1
+ 
+ . ./test-lib.sh
+@@ -44,7 +44,7 @@
+ nr_pvs=5
+ pvsize=$((80 * 1024 * 2))
+ 
+-vg=mirror-basic-vg-$$
++vg=mirror-lvconvert-vg-$$
+ lv1=lv1
+ lv2=lv2
+ lv3=lv3
+
+
