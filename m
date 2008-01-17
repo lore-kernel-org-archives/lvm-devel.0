@@ -1,53 +1,29 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 17 Jan 2008 03:18:18 -0000
-Subject: LVM2/man vgsplit.8
-Message-ID: <20080117031818.30750.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Thu, 17 Jan 2008 03:38:05 -0500
+Subject: [PATCH 1/2] Fix 'vgreduce --removemissing' on stacked mirror
+Message-ID: <478F13ED.4080004@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-01-17 03:18:18
+'vgreduce --removemissing' is similar to lvconvert but is different in:
+  - it removes any mirror images, not specifying the number
+  - all images may be removed from the mirrored LV
+  - mirrored LV itself may be removed
 
-Modified files:
-	man            : vgsplit.8 
+reconfigure_mirror_images() is the underlying function of vgreduce.
 
-Log message:
-	Fixup vgsplit man page
+However, even with the recent patches of mine, reconfigure_mirror_images()
+doesn't work well for stacked mirror.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgsplit.8.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+Attached patch fixes it.
 
---- LVM2/man/vgsplit.8	2008/01/16 17:14:56	1.5
-+++ LVM2/man/vgsplit.8	2008/01/17 03:18:18	1.6
-@@ -29,9 +29,24 @@
- .I SourceVolumeGroupName
- into
- .I DestinationVolumeGroupName\fP.
-+
- If
- .I DestinationVolumeGroupName
--does not exist, it will be created.
-+does not exist, a new volume group will be created.  The default attributes
-+for the new volume group can be specified with \fB\-\-alloc\fR,
-+\fB\-\-clustered\fR, \fB\-\-maxlogicalvolumes\fR, \fB\-\-metadatatype\fR,
-+\fB\-\-maxphysicalvolumes\fR, and \fB\-\-physicalextentsize\fR
-+(see \fBvgcreate(8)\fR for a description of these options).
-+If any of these options are not given, the default attribute(s) are taken
-+from
-+.I SourceVolumeGroupName\fP.
-+
-+If
-+.I DestinationVolumeGroupName
-+does exist, it will be checked for compatibility with
-+.I SourceVolumeGroupName
-+before the physical volumes are moved.
-+
- Logical Volumes cannot be split between Volume Groups.
- Each existing Logical Volume must be entirely on the Physical Volumes forming
- either the source or the destination Volume Group.
-
-
+Thanks,
+--
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: fix-vgreduce-removemissing-on-stacked-mirror.patch
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080117/20e1c4ac/attachment.ksh>
