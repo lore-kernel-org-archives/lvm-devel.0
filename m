@@ -1,24 +1,44 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 18:56:18 -0500
-Subject: [Test case 1/2] Basic mirrored LV testing
-In-Reply-To: <4787FA27.8050300@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com>
-Message-ID: <47880222.6040607@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 19 Jan 2008 12:28:04 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20080119122804.25098.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is a test script for basic mirrored LV operations.
-Not yet comprehensive but can prevent trivial regressions.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-19 12:28:03
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: t-mirror-basic.sh
-Type: application/x-sh
-Size: 7365 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/339a892b/attachment.sh>
+Modified files:
+	.              : VERSION WHATS_NEW 
+
+Log message:
+	Pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.162&r2=1.163
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.770&r2=1.771
+
+--- LVM2/VERSION	2008/01/18 21:56:39	1.162
++++ LVM2/VERSION	2008/01/19 12:28:03	1.163
+@@ -1 +1 @@
+-2.02.31-cvs (2008-01-17)
++2.02.31-cvs (2008-01-19)
+--- LVM2/WHATS_NEW	2008/01/18 22:02:37	1.770
++++ LVM2/WHATS_NEW	2008/01/19 12:28:03	1.771
+@@ -1,8 +1,8 @@
+-Version 2.02.31 -
++Version 2.02.31 - 19th January 2008
+ ===================================
+   Fix lvcreate --nosync not to wait for non-happening sync. (2.02.30)
+   Add very_verbose lvconvert messages.
+-  Avoid error message when using default setting of lvcreate -M1. (2.02.30)
++  Avoid error message when using default setting of lvcreate -M1. (2.02.29)
+ 
+ Version 2.02.30 - 17th January 2008
+ ===================================
+
+
