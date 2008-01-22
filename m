@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 22 Jan 2008 03:49:39 -0000
-Subject: LVM2/tools vgsplit.c
-Message-ID: <20080122034939.14990.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Jan 2008 15:58:32 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080122155832.17106.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,28 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-01-22 03:49:39
+Changes by:	agk at sourceware.org	2008-01-22 15:58:32
 
 Modified files:
-	tools          : vgsplit.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Fix vgsplit test mode
+	update
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.775&r2=1.776
 
---- LVM2/tools/vgsplit.c	2008/01/22 03:25:45	1.48
-+++ LVM2/tools/vgsplit.c	2008/01/22 03:49:39	1.49
-@@ -361,7 +361,8 @@
- 	}
+--- LVM2/WHATS_NEW	2008/01/21 14:07:43	1.775
++++ LVM2/WHATS_NEW	2008/01/22 15:58:31	1.776
+@@ -1,5 +1,6 @@
+ Version 2.02.32 -
+ ===================================
++  Fix new parameter validation in vgsplit and test mode. (2.02.30)
+   Remove redundant cnxman-socket.h file from clvmd directory.
+   Fix pvs, vgs, lvs error exit status on some error paths.
  
- 	/* Remove EXPORTED flag from new VG */
--	if (!(vg_to = vg_lock_and_read(cmd, vg_name_to, NULL, LCK_NONE, 0,
-+	if (!test_mode() &&
-+	    !(vg_to = vg_lock_and_read(cmd, vg_name_to, NULL, LCK_NONE, 0,
- 				       CORRECT_INCONSISTENT | FAIL_INCONSISTENT))) {
- 		log_error("Volume group \"%s\" became inconsistent: please "
- 			  "fix manually", vg_name_to);
 
 
