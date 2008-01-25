@@ -1,36 +1,34 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Jan 2008 16:02:26 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20080122160226.20755.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Fri, 25 Jan 2008 15:58:21 -0500
+Subject: [PATCH 1/3] Fix 'lvchange --resync'
+Message-ID: <479A4D6D.10506@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-01-22 16:02:26
+Fix 'lvchange --resync' breakage (since 2.02.30)
 
-Modified files:
-	lib/metadata   : metadata.c 
+# lvchange --resync vg/lv
+  LV lv_mlog is used by LV lv:0, but missing ptr from lv to lv_mlog
+  Internal error: LV segments corrupted in lv_mlog.
+  Failed to write intermediate VG metadata.
 
-Log message:
-	suppress compiler warning
+When changing seg->log_lv, it needs to do corresponding
+add_seg_to_segs_using_this_lv/remove_seg_from_segs_using_this_lv.
+Without them, the metadata validator will detect inconsistency
+and report like the above.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
+Attached patch fixes the issue.
 
---- LVM2/lib/metadata/metadata.c	2008/01/22 02:48:52	1.153
-+++ LVM2/lib/metadata/metadata.c	2008/01/22 16:02:26	1.154
-@@ -1086,7 +1086,7 @@
- /*
-  * Determine whether two vgs are compatible for merging.
-  */
--int vgs_are_compatible(struct cmd_context *cmd,
-+int vgs_are_compatible(struct cmd_context *cmd __attribute((unused)),
- 		       struct volume_group *vg_from,
- 		       struct volume_group *vg_to)
- {
-
-
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: fix-lvchange-resync.patch
+Type: text/x-patch
+Size: 1515 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080125/ee9d7fe7/attachment.bin>
