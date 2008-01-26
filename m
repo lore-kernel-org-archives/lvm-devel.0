@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Jan 2008 00:25:45 -0000
-Subject: LVM2/test t-mirror-basic.sh
-Message-ID: <20080126002545.5503.qmail@sourceware.org>
+Date: 26 Jan 2008 00:30:33 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/merge.c
+Message-ID: <20080126003033.6983.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-01-26 00:25:45
+Changes by:	agk at sourceware.org	2008-01-26 00:30:33
 
 Modified files:
-	test           : t-mirror-basic.sh 
+	.              : WHATS_NEW 
+	lib/metadata   : merge.c 
 
 Log message:
-	.
+	Fix two check_lv_segments error messages to show whole segment.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.778&r2=1.779
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/merge.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
 
---- LVM2/test/t-mirror-basic.sh	2008/01/17 02:20:48	1.2
-+++ LVM2/test/t-mirror-basic.sh	2008/01/26 00:25:45	1.3
-@@ -302,6 +302,27 @@
- test_expect_success "(cleanup previous test)" \
-   'check_and_cleanup_lvs_'
- 
-+# ---
-+# resync
-+# FIXME: using dm-delay to properly check whether the resync really started
-+
-+test_expect_success "force resync 2-way active mirror" \
-+  'prepare_lvs_ &&
-+   lvcreate -l2 -m1 -n $lv1 $vg $(pv_ 1) $(pv_ 2) $(pv_ 3):0-1 &&
-+   mirrorlog_is_on_ $vg/$lv1 $(pv_ 3) &&
-+   yes | lvchange --resync $vg/$lv1 &&
-+   mirrorlog_is_on_ $vg/$lv1 $(pv_ 3) &&
-+   check_and_cleanup_lvs_'
-+
-+test_expect_success "force resync 2-way inactive mirror" \
-+  'prepare_lvs_ &&
-+   lvcreate -l2 -m1 -n $lv1 $vg $(pv_ 1) $(pv_ 2) $(pv_ 3):0-1 &&
-+   lvchange -an $vg/$lv1 &&
-+   mirrorlog_is_on_ $vg/$lv1 $(pv_ 3) &&
-+   lvchange --resync $vg/$lv1 &&
-+   mirrorlog_is_on_ $vg/$lv1 $(pv_ 3) &&
-+   check_and_cleanup_lvs_'
-+
- # ---------------------------------------------------------------------
- 
- test_done
+--- LVM2/WHATS_NEW	2008/01/26 00:25:04	1.778
++++ LVM2/WHATS_NEW	2008/01/26 00:30:28	1.779
+@@ -1,5 +1,6 @@
+ Version 2.02.32 -
+ ===================================
++  Fix two check_lv_segments error messages to show whole segment.
+   Refactor mirror log attachment code.
+   Fix internal metadata corruption in lvchange --resync. (2.02.30)
+   Fix new parameter validation in vgsplit and test mode. (2.02.30)
+--- LVM2/lib/metadata/merge.c	2008/01/16 19:00:59	1.31
++++ LVM2/lib/metadata/merge.c	2008/01/26 00:30:28	1.32
+@@ -210,17 +210,18 @@
+ 		if (seg->log_lv == lv)
+ 			seg_found++;
+ 		if (!seg_found) {
+-			log_error("LV %s is used by LV %s:%" PRIu32 ", "
+-				  "but missing ptr from %s to %s",
++			log_error("LV %s is used by LV %s:%" PRIu32 "-%" PRIu32
++				  ", but missing ptr from %s to %s",
+ 				  lv->name, seg->lv->name, seg->le,
++				  seg->le + seg->len - 1,
+ 				  seg->lv->name, lv->name);
+ 			r = 0;
+ 		} else if (seg_found != sl->count) {
+ 			log_error("Reference count mismatch: LV %s has %d "
+-				  "links to LV %s:%" PRIu32
++				  "links to LV %s:%" PRIu32 "-%" PRIu32
+ 				  ", which has %d links",
+-				  lv->name, sl->count,
+-				  seg->lv->name, seg->le, seg_found);
++				  lv->name, sl->count, seg->lv->name, seg->le,
++				  seg->le + seg->len - 1, seg_found);
+ 			r = 0;
+ 		}
+ 	}
 
 
