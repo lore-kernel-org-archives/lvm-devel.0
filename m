@@ -1,90 +1,70 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 25 Jan 2008 19:13:06 -0500
-Subject: 'Resuming before suspend' problem
-Message-ID: <479A7B12.3060200@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Jan 2008 00:13:45 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvchange.c
+Message-ID: <20080126001345.612.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-26 00:13:45
 
-Attached is a patch to workaround the problem that resuming
-of a inserted layer occurs before the suspending of the
-original mirror.
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvchange.c 
 
-I would like to hear comments about how to fix this problem:
+Log message:
+	Fix internal metadata corruption in lvchange --resync.
 
-Current status:
-  - suspend_lv() in LVM2 preloads dm tables before suspending.
-    It's necessary because the table loading could require memory
-    while kernel may not able to allocate memory without writing
-    to the device.
-  - The preloading involves resuming, if the device has a parent
-    node in the deptree.
-    It's necessary because, for example, the new device size needs
-    to be visible to load the parent table.
-  - Preloading is bottom-up. Suspending is top-down.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.776&r2=1.777
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.85&r2=1.86
 
-What's the problem:
-  - If a layer LV is inserted, suspend_lv() after that will
-    resume the layer LV temporarily before the parent LV is
-    suspended.
-    It creates a window where both the parent LV and the layer LV
-    have the same active table.
+--- LVM2/WHATS_NEW	2008/01/22 15:58:31	1.776
++++ LVM2/WHATS_NEW	2008/01/26 00:13:44	1.777
+@@ -1,5 +1,6 @@
+ Version 2.02.32 -
+ ===================================
++  Fix internal metadata corruption in lvchange --resync. (2.02.30)
+   Fix new parameter validation in vgsplit and test mode. (2.02.30)
+   Remove redundant cnxman-socket.h file from clvmd directory.
+   Fix pvs, vgs, lvs error exit status on some error paths.
+--- LVM2/tools/lvchange.c	2008/01/10 18:35:51	1.85
++++ LVM2/tools/lvchange.c	2008/01/26 00:13:45	1.86
+@@ -274,6 +274,7 @@
+ 		first_seg(lv)->log_lv = NULL;
+ 		log_lv->status &= ~MIRROR_LOG;
+ 		log_lv->status |= VISIBLE_LV;
++		remove_seg_from_segs_using_this_lv(log_lv, first_seg(lv));
+ 
+ 		if (!vg_write(lv->vg)) {
+ 			log_error("Failed to write intermediate VG metadata.");
+@@ -281,6 +282,7 @@
+ 				first_seg(lv)->log_lv = log_lv;
+ 				log_lv->status |= MIRROR_LOG;
+ 				log_lv->status &= ~VISIBLE_LV;
++				add_seg_to_segs_using_this_lv(log_lv, first_seg(lv));
+ 				if (!activate_lv(cmd, lv))
+ 					stack;
+ 			}
+@@ -295,6 +297,7 @@
+ 				first_seg(lv)->log_lv = log_lv;
+ 				log_lv->status |= MIRROR_LOG;
+ 				log_lv->status &= ~VISIBLE_LV;
++				add_seg_to_segs_using_this_lv(log_lv, first_seg(lv));
+ 				if (!activate_lv(cmd, lv))
+ 					stack;
+ 			}
+@@ -326,6 +329,7 @@
+ 		first_seg(lv)->log_lv = log_lv;
+ 		log_lv->status |= MIRROR_LOG;
+ 		log_lv->status &= ~VISIBLE_LV;
++		add_seg_to_segs_using_this_lv(log_lv, first_seg(lv));
+ 	}
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
 
-For example, in case of adding a mirror,
 
-$ lvconvert -m+1 -vvvv vg/lvol0 2>&1 | egrep 'Suspend|Resum|Load'
-#libdm-deptree.c:1463     Loading vg-lvol0_mimage_1 table
-#libdm-deptree.c:1463     Loading vg-lvol0_mimage_0 table
-#libdm-deptree.c:1463     Loading vg-lvol0_mlog table
-#libdm-deptree.c:1463     Loading vg-lvol0_mimagetmp_2 table
-#libdm-deptree.c:897     Resuming vg-lvol0_mimagetmp_2 (253:5)
-                               ^^^^HERE
-#libdm-deptree.c:1463     Loading vg-lvol0_mimage_2 table
-#libdm-deptree.c:897     Resuming vg-lvol0_mimage_2 (253:6)
-#libdm-deptree.c:1463     Loading vg-lvol0 table
-#libdm-deptree.c:940     Suspending vg-lvol0 (253:4)
-                               ^^^^HERE
-#libdm-deptree.c:940     Suspending vg-lvol0_mimage_1 (253:3)
-#libdm-deptree.c:940     Suspending vg-lvol0_mimage_0 (253:2)
-#libdm-deptree.c:940     Suspending vg-lvol0_mlog (253:1)
-
-lvol0_mimagetmp_2 is supposed to have the same table as
-lvol0 had. lvol0 will be updated to mirror lvol0_mimagetmp_2
-and lvol0_mimage_2.
-However, lvol0_mimagetmp_2 is resumed before lvol0 is suspended.
-
-The problem is not only for mirror.
-For example, adding snapshot has the similar window:
-
-$ lvcreate -l1 -s -vvvv vg/lvol0 2>&1 | egrep 'Suspend|Resum|Load' #libdm-deptree.c:1463     Loading vg-lvol1 table
-#libdm-deptree.c:897     Resuming vg-lvol1 (253:2)
-#libdm-deptree.c:1463     Loading vg-lvol0-real table
-#libdm-deptree.c:897     Resuming vg-lvol0-real (253:3)
-                               ^^^^HERE
-#libdm-deptree.c:1463     Loading vg-lvol0 table
-#libdm-deptree.c:1463     Loading vg-lvol1-cow table
-#libdm-deptree.c:897     Resuming vg-lvol1-cow (253:4)
-#libdm-deptree.c:1463     Loading vg-lvol1 table
-#libdm-deptree.c:940     Suspending vg-lvol0 (253:1) with filesystem sync without device flush
-                               ^^^^HERE
-#libdm-deptree.c:940     Suspending vg-lvol0-real (253:3) with filesystem sync without device flush
-
-But it might not be a big problem because the mapping is linear.
-
-In case of mirror, the resuming has a side effect (e.g. synching).
-So it would be a problem.
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fix-lvconvert-resume-before-suspend.patch
-Type: text/x-patch
-Size: 1726 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080125/5c9d59c0/attachment.bin>
