@@ -1,34 +1,39 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 25 Jan 2008 21:52:04 -0500
-Subject: 'Resuming before suspend' problem
-In-Reply-To: <479A7B12.3060200@ce.jp.nec.com>
-References: <479A7B12.3060200@ce.jp.nec.com>
-Message-ID: <479AA054.6050001@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Jan 2008 11:48:11 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20080129114811.6382.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jun'ichi Nomura wrote:
-> Attached is a patch to workaround the problem that resuming
-> of a inserted layer occurs before the suspending of the
-> original mirror.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-29 11:48:11
 
-This is an updated version of the workaround patch.
-The activation of layer LV should be only done
-when the layer is inserted.
-That's what pvmove code currently does.
-(lv->status | CONVERTING) could be true if the layer
-has already been inserted.
+Modified files:
+	.              : VERSION WHATS_NEW 
 
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fix-lvconvert-resume-before-suspend.patch
-Type: text/x-patch
-Size: 3319 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080125/b81f64e0/attachment.bin>
+Log message:
+	pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.164&r2=1.165
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.779&r2=1.780
+
+--- LVM2/VERSION	2008/01/19 12:30:55	1.164
++++ LVM2/VERSION	2008/01/29 11:48:11	1.165
+@@ -1 +1 @@
+-2.02.32-cvs (2008-01-19)
++2.02.32-cvs (2008-01-29)
+--- LVM2/WHATS_NEW	2008/01/26 00:30:28	1.779
++++ LVM2/WHATS_NEW	2008/01/29 11:48:11	1.780
+@@ -1,4 +1,4 @@
+-Version 2.02.32 -
++Version 2.02.32 - 29th January 2008
+ ===================================
+   Fix two check_lv_segments error messages to show whole segment.
+   Refactor mirror log attachment code.
+
+
