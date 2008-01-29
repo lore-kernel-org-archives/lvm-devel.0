@@ -1,32 +1,40 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 11 Jan 2008 20:48:07 -0500
-Subject: [PATCH 13/14] lvconvert should check first_seg(original_lv)
-In-Reply-To: <4788001A.60304@ce.jp.nec.com>
-References: <4787FA27.8050300@ce.jp.nec.com> <4788001A.60304@ce.jp.nec.com>
-Message-ID: <47881C57.2070504@ce.jp.nec.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Jan 2008 12:02:05 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20080129120205.12774.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jun'ichi Nomura wrote:
-> If mirror log addition/removal was requested during conversion,
-> lvconvert should manipulate on the original LV, not the top-level LV.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-01-29 12:02:04
 
-[13/14] lvconvert should check first_seg(original_lv)
-          lvconvert tries to add/remove log for the original LV.
-          So it should check the original LV's segment for
-          the current log type.
-          However, it checks the existing of the log for the
-          top-level LV.
+Modified files:
+	.              : VERSION WHATS_NEW 
 
--- 
-Jun'ichi Nomura, NEC Corporation of America
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: fix-lvconvert-on-original-lv.patch
-Type: text/x-patch
-Size: 1031 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080111/8e870dd9/attachment.bin>
+Log message:
+	post-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.165&r2=1.166
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.780&r2=1.781
+
+--- LVM2/VERSION	2008/01/29 11:48:11	1.165
++++ LVM2/VERSION	2008/01/29 12:02:04	1.166
+@@ -1 +1 @@
+-2.02.32-cvs (2008-01-29)
++2.02.33-cvs (2008-01-29)
+--- LVM2/WHATS_NEW	2008/01/29 11:48:11	1.780
++++ LVM2/WHATS_NEW	2008/01/29 12:02:04	1.781
+@@ -1,3 +1,6 @@
++Version 2.02.33 -
++===================================
++
+ Version 2.02.32 - 29th January 2008
+ ===================================
+   Fix two check_lv_segments error messages to show whole segment.
+
+
