@@ -1,50 +1,80 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Feb 2008 16:09:52 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20080206160952.1607.qmail@sourceware.org>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Wed, 06 Feb 2008 16:55:11 -0500
+Subject: [PATCH lvconvert 0/2] Fixes suspend/resume ordering of lvconvert
+Message-ID: <47AA2CBF.1060109@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-02-06 16:09:51
+lvconvert has problems where 2 active mirror maps coexist
+for a short while sharing the same log device.
+That is critical to cluster mirror as it detects such situation
+but also dangerous to non-clustered mirror.
+(A lot of thanks to Jon Brassow for the reports, testings and
+analysis from cluster mirror viewpoint)
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+The problems are:
 
-Log message:
-	Fix 'pvs -a' to detect VGs of PVs without metadata areas.
+  1. resume before suspend
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.790&r2=1.791
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+      When a layer is inserted beneath a LV, the layer is
+      resumed before the LV is suspended.
 
---- LVM2/WHATS_NEW	2008/02/06 15:47:27	1.790
-+++ LVM2/WHATS_NEW	2008/02/06 16:09:51	1.791
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Fix 'pvs -a' to detect VGs of PVs without metadata areas.
-   Divide up internal orphan volume group by format type.
-   Update usage message for clvmd.
-   Fix clvmd man page printing <br>, clarified debug options.
---- LVM2/tools/toollib.c	2008/01/30 14:00:02	1.130
-+++ LVM2/tools/toollib.c	2008/02/06 16:09:51	1.131
-@@ -648,6 +648,11 @@
- 	int ret_max = 0;
- 	int ret = 0;
- 
-+	if (!scan_vgs_for_pvs(cmd)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
- 	if (!(iter = dev_iter_create(cmd->filter, 1))) {
- 		log_error("dev_iter creation failed");
- 		return ECMD_FAILED;
+      I.e. if the LV is active, lvconvert calls suspend_lv() for
+      the LV to suspend the LV preparing for the update:
+
+        suspend_lv()
+          _lv_suspend()
+            _lv_preload()
+              dev_manager_preload()
+                dm_tree_preload_children()
+                  Load tables for devices from bottom to top.
+                  If a device has parents, resume the device, too.
+            _lv_suspend_lv()
+              dev_manager_suspend()
+
+      However, before actually suspend the LV, suspend_lv() will end
+      up calling dm_tree_preload_children() that involves resuming
+      of the layer.
+
+  2. off-tree device not updated
+
+      When a layer is removed, a new table of "error" target
+      is not loaded/resumed for the layer during the update
+      of the LV.
+      So the layer continues to have the old table.
+
+        _remove_mirror_images()
+          remove_layer_from_lv()
+            Update the in-memory VG metadata.
+            The layer is no longer a part of the LV in the metadata.
+          vg_write()
+            The metadata is pre-committed.
+          suspend_lv()
+          vg_commit()
+            The metadata is committed.
+          resume_lv()
+            Load new tables based on the new metadata and resume.
+            It doesn't load a new table for the layer.
+
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation of America
 
 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvconvert-bad.log
+Type: text/x-log
+Size: 228564 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080206/402cb516/attachment.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvconvert-good.log
+Type: text/x-log
+Size: 230023 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080206/402cb516/attachment-0001.bin>
