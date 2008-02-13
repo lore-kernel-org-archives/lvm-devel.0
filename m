@@ -1,47 +1,64 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Feb 2008 13:29:09 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
-Message-ID: <20080212132909.8697.qmail@sourceware.org>
+From: Jim Meyering <jim@meyering.net>
+Date: Wed, 13 Feb 2008 20:11:32 +0100
+Subject: [PATCH] is_orphan: make parameter "const" to avoid compiler warning
+Message-ID: <87abm4n02j.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-02-12 13:29:08
+Building lvm today, I saw this warning:
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : lvconvert.c 
+    display/display.c:310: warning: passing argument 1 of 'is_orphan'\
+      discards qualifiers from pointer target type
 
-Log message:
-	Fix lvconvert detection of mirror conversion in progress.
+Here's the fix I expect to commit:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.792&r2=1.793
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+---
+ WHATS_NEW                        |    1 +
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/metadata.c          |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
 
---- LVM2/WHATS_NEW	2008/02/12 13:26:53	1.792
-+++ LVM2/WHATS_NEW	2008/02/12 13:29:08	1.793
+diff --git a/WHATS_NEW b/WHATS_NEW
+index f992b1d..22895de 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.34 -
  ===================================
-+  Fix lvconvert detection of mirror conversion in progress. (2.02.30)
++  Avoid a compiler warning.
+   Fix lvconvert detection of mirror conversion in progress. (2.02.30)
    Avoid automatic lvconvert polldaemon invocation when -R specified. (2.02.30)
    Fix 'pvs -a' to detect VGs of PVs without metadata areas.
-   Divide up internal orphan volume group by format type.
---- LVM2/tools/lvconvert.c	2008/02/12 13:26:53	1.60
-+++ LVM2/tools/lvconvert.c	2008/02/12 13:29:08	1.61
-@@ -526,6 +526,8 @@
- 			log_error("Logical volume %s already has %"
- 				  PRIu32 " mirror(s).", lv->name,
- 				  lp->mirrors - 1);
-+			if (lv->status & CONVERTING)
-+				lp->need_polling = 1;
- 			return 1;
- 		}
- 	} else if (lp->mirrors > existing_mirrors) {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index f98c472..df70128 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -318,7 +318,7 @@ int pv_write(struct cmd_context *cmd, struct physical_volume *pv,
+ 	     struct list *mdas, int64_t label_sector);
+ int is_pv(pv_t *pv);
+ int is_orphan_vg(const char *vg_name);
+-int is_orphan(pv_t *pv);
++int is_orphan(const pv_t *pv);
+ int vgs_are_compatible(struct cmd_context *cmd,
+ 		       struct volume_group *vg_from,
+ 		       struct volume_group *vg_to);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 92c282c..640f874 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1975,7 +1975,7 @@ int is_orphan_vg(const char *vg_name)
+  * is_orphan - Determine whether a pv is an orphan based on its vg_name
+  * @pv: handle to the physical volume
+  */
+-int is_orphan(pv_t *pv)
++int is_orphan(const pv_t *pv)
+ {
+ 	return is_orphan_vg(pv_field(pv, vg_name));
+ }
+--
+1.5.4.1.35.g882c
 
 
