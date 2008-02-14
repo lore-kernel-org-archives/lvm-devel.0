@@ -1,59 +1,89 @@
-From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 13 Feb 2008 20:01:49 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
-Message-ID: <20080213200149.607.qmail@sourceware.org>
+From: Jim Meyering <jim@meyering.net>
+Date: Thu, 14 Feb 2008 14:07:55 +0100
+Subject: [PATCH] clvmd.c: Remove redundant if-before-free tests.
+Message-ID: <871w7fit3o.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	meyering at sourceware.org	2008-02-13 20:01:48
+Since "free (NULL);" is universally safe these days, I propose
+to remove all of lvm's redundant "if-before-free" tests.
+There are only 5.  If no one objects, I'll commit it tonight.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata-exported.h metadata.c 
+In case you need more justification than "POSIX requires it",
+(understandable, that :-), the following was enough for Wine
+development a year and a half ago:
 
-Log message:
-	is_orphan: make parameter "const" to avoid compiler warning
+    http://www.winehq.org/pipermail/wine-patches/2006-October/031544.html
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.793&r2=1.794
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.157&r2=1.158
+Sure, the extra test is not a big deal, but removing it does make the
+code slightly smaller, and maybe even more readable (people won't wonder
+about the test of such a pointer, when they know that free can handle
+a NULL pointer).
 
---- LVM2/WHATS_NEW	2008/02/12 13:29:08	1.793
-+++ LVM2/WHATS_NEW	2008/02/13 20:01:48	1.794
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Avoid a compiler warning: make is_orphan's parameter "const".
-   Fix lvconvert detection of mirror conversion in progress. (2.02.30)
-   Avoid automatic lvconvert polldaemon invocation when -R specified. (2.02.30)
-   Fix 'pvs -a' to detect VGs of PVs without metadata areas.
---- LVM2/lib/metadata/metadata-exported.h	2008/02/06 15:47:28	1.43
-+++ LVM2/lib/metadata/metadata-exported.h	2008/02/13 20:01:48	1.44
-@@ -318,7 +318,7 @@
- 	     struct list *mdas, int64_t label_sector);
- int is_pv(pv_t *pv);
- int is_orphan_vg(const char *vg_name);
--int is_orphan(pv_t *pv);
-+int is_orphan(const pv_t *pv);
- int vgs_are_compatible(struct cmd_context *cmd,
- 		       struct volume_group *vg_from,
- 		       struct volume_group *vg_to);
---- LVM2/lib/metadata/metadata.c	2008/02/06 15:47:28	1.157
-+++ LVM2/lib/metadata/metadata.c	2008/02/13 20:01:48	1.158
-@@ -1975,7 +1975,7 @@
-  * is_orphan - Determine whether a pv is an orphan based on its vg_name
-  * @pv: handle to the physical volume
-  */
--int is_orphan(pv_t *pv)
-+int is_orphan(const pv_t *pv)
- {
- 	return is_orphan_vg(pv_field(pv, vg_name));
- }
+The changes in the patch below were created by running this command
+after a fresh "clone":
+
+  find . -name '*.c' -print0 | xargs -0 perl -0x3b -pi -e \
+     's/\bif\s*\(\s*(\S+?)(?:\s*!=\s*NULL)?\s*\)\s+(free\s*\(\s*\1\s*\))/$2/s'
+
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 574010f..14ee1c6 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -903,8 +903,7 @@ static int read_from_local_sock(struct local_client *thisfd)
+ 		}
+
+ 		/* Free the command buffer */
+-		if (thisfd->bits.localsock.cmd)
+-			free(thisfd->bits.localsock.cmd);
++		free(thisfd->bits.localsock.cmd);
+
+ 		/* Clear out the cross-link */
+ 		if (thisfd->bits.localsock.pipe_client != NULL)
+@@ -939,8 +938,7 @@ static int read_from_local_sock(struct local_client *thisfd)
+ 		}
+
+ 		/* Free any old buffer space */
+-		if (thisfd->bits.localsock.cmd)
+-			free(thisfd->bits.localsock.cmd);
++		free(thisfd->bits.localsock.cmd);
+
+ 		/* See if we have the whole message */
+ 		argslen =
+@@ -1547,8 +1545,7 @@ static void send_local_reply(struct local_client *client, int status, int fd)
+ 		}
+ 		thisreply = thisreply->next;
+
+-		if (tempreply->replymsg)
+-			free(tempreply->replymsg);
++		free(tempreply->replymsg);
+ 		free(tempreply);
+ 	}
+
+@@ -1579,8 +1576,7 @@ static void free_reply(struct local_client *client)
+
+ 		thisreply = thisreply->next;
+
+-		if (tempreply->replymsg)
+-			free(tempreply->replymsg);
++		free(tempreply->replymsg);
+ 		free(tempreply);
+ 	}
+ 	client->bits.localsock.replies = NULL;
+@@ -1732,8 +1728,7 @@ static __attribute__ ((noreturn)) void *lvm_thread_fn(void *arg)
+ 			pthread_mutex_unlock(&lvm_thread_mutex);
+
+ 			process_work_item(cmd);
+-			if (cmd->msg)
+-				free(cmd->msg);
++			free(cmd->msg);
+ 			free(cmd);
+
+ 			pthread_mutex_lock(&lvm_thread_mutex);
+--
+1.5.4.1.98.gf3293
 
 
