@@ -1,88 +1,72 @@
 From: Jim Meyering <jim@meyering.net>
-Date: Thu, 14 Feb 2008 14:07:55 +0100
-Subject: [PATCH] clvmd.c: Remove redundant if-before-free tests.
-Message-ID: <871w7fit3o.fsf@rho.meyering.net>
+Date: Thu, 14 Feb 2008 14:26:28 +0100
+Subject: [PATCH] Remove redundant if-before-free tests.
+In-Reply-To: <871w7fit3o.fsf@rho.meyering.net> (Jim Meyering's message of
+	"Thu, 14 Feb 2008 14:07:55 +0100")
+References: <871w7fit3o.fsf@rho.meyering.net>
+Message-ID: <87lk5nhdob.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Since "free (NULL);" is universally safe these days, I propose
-to remove all of lvm's redundant "if-before-free" tests.
-There are only 5.  If no one objects, I'll commit it tonight.
+[as I just wrote to lvm-devel:
+  http://www.redhat.com/archives/lvm-devel/2008-February/msg00017.html ]
 
-In case you need more justification than "POSIX requires it",
-(understandable, that :-), the following was enough for Wine
-development a year and a half ago:
+Jim Meyering <jim@meyering.net> wrote:
+> Since "free (NULL);" is universally safe these days, I propose
+> to remove all of lvm's redundant "if-before-free" tests.
+> If no one objects, I'll commit it tonight.
+>
+> In case you need more justification than "POSIX requires it",
+> (understandable, that :-), the following was enough for Wine
+> development a year and a half ago:
+>
+>     http://www.winehq.org/pipermail/wine-patches/2006-October/031544.html
+>
+> Sure, the extra test is not a big deal, but removing it does make the
+> code slightly smaller, and maybe even more readable (people won't wonder
+> about the test of such a pointer, when they know that free can handle
+> a NULL pointer).
 
-    http://www.winehq.org/pipermail/wine-patches/2006-October/031544.html
+Same for dm, but here there are only 3:
 
-Sure, the extra test is not a big deal, but removing it does make the
-code slightly smaller, and maybe even more readable (people won't wonder
-about the test of such a pointer, when they know that free can handle
-a NULL pointer).
+---
+ dmeventd/old/dmevent.c               |    6 ++----
+ multilog/pthread_lock/pthread_lock.c |    3 +--
+ 2 files changed, 3 insertions(+), 6 deletions(-)
 
-The changes in the patch below were created by running this command
-after a fresh "clone":
+diff --git a/dmeventd/old/dmevent.c b/dmeventd/old/dmevent.c
+index 6e9eb46..5d80410 100644
+--- a/dmeventd/old/dmevent.c
++++ b/dmeventd/old/dmevent.c
+@@ -220,10 +220,8 @@ int main(int argc, char **argv)
+    out:
+ 	multilog_del_type(standard);
 
-  find . -name '*.c' -print0 | xargs -0 perl -0x3b -pi -e \
-     's/\bif\s*\(\s*(\S+?)(?:\s*!=\s*NULL)?\s*\)\s+(free\s*\(\s*\1\s*\))/$2/s'
+-	if (device)
+-		free(device);
+-	if (dso_name)
+-		free(dso_name);
++	free(device);
++	free(dso_name);
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 574010f..14ee1c6 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -903,8 +903,7 @@ static int read_from_local_sock(struct local_client *thisfd)
- 		}
+ 	exit(ret);
+ }
+diff --git a/multilog/pthread_lock/pthread_lock.c b/multilog/pthread_lock/pthread_lock.c
+index b782301..c52050b 100644
+--- a/multilog/pthread_lock/pthread_lock.c
++++ b/multilog/pthread_lock/pthread_lock.c
+@@ -62,7 +62,6 @@ int unlock_fn(void *handle)
+ void destroy_locking(void *handle)
+ {
+         pthread_mutex_t *mutex = (pthread_mutex_t *)handle;
+-	if(mutex)
+-		free(mutex);
++	free(mutex);
+ }
 
- 		/* Free the command buffer */
--		if (thisfd->bits.localsock.cmd)
--			free(thisfd->bits.localsock.cmd);
-+		free(thisfd->bits.localsock.cmd);
-
- 		/* Clear out the cross-link */
- 		if (thisfd->bits.localsock.pipe_client != NULL)
-@@ -939,8 +938,7 @@ static int read_from_local_sock(struct local_client *thisfd)
- 		}
-
- 		/* Free any old buffer space */
--		if (thisfd->bits.localsock.cmd)
--			free(thisfd->bits.localsock.cmd);
-+		free(thisfd->bits.localsock.cmd);
-
- 		/* See if we have the whole message */
- 		argslen =
-@@ -1547,8 +1545,7 @@ static void send_local_reply(struct local_client *client, int status, int fd)
- 		}
- 		thisreply = thisreply->next;
-
--		if (tempreply->replymsg)
--			free(tempreply->replymsg);
-+		free(tempreply->replymsg);
- 		free(tempreply);
- 	}
-
-@@ -1579,8 +1576,7 @@ static void free_reply(struct local_client *client)
-
- 		thisreply = thisreply->next;
-
--		if (tempreply->replymsg)
--			free(tempreply->replymsg);
-+		free(tempreply->replymsg);
- 		free(tempreply);
- 	}
- 	client->bits.localsock.replies = NULL;
-@@ -1732,8 +1728,7 @@ static __attribute__ ((noreturn)) void *lvm_thread_fn(void *arg)
- 			pthread_mutex_unlock(&lvm_thread_mutex);
-
- 			process_work_item(cmd);
--			if (cmd->msg)
--				free(cmd->msg);
-+			free(cmd->msg);
- 			free(cmd);
-
- 			pthread_mutex_lock(&lvm_thread_mutex);
 --
 1.5.4.1.98.gf3293
 
