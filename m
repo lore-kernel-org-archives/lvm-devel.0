@@ -1,73 +1,88 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Thu, 14 Feb 2008 14:26:28 +0100
-Subject: [PATCH] Remove redundant if-before-free tests.
-In-Reply-To: <871w7fit3o.fsf@rho.meyering.net> (Jim Meyering's message of
-	"Thu, 14 Feb 2008 14:07:55 +0100")
-References: <871w7fit3o.fsf@rho.meyering.net>
-Message-ID: <87lk5nhdob.fsf@rho.meyering.net>
+From: meyering@sourceware.org <meyering@sourceware.org>
+Date: 15 Feb 2008 14:12:34 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20080215141234.32380.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-[as I just wrote to lvm-devel:
-  http://www.redhat.com/archives/lvm-devel/2008-February/msg00017.html ]
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	meyering at sourceware.org	2008-02-15 14:12:33
 
-Jim Meyering <jim@meyering.net> wrote:
-> Since "free (NULL);" is universally safe these days, I propose
-> to remove all of lvm's redundant "if-before-free" tests.
-> If no one objects, I'll commit it tonight.
->
-> In case you need more justification than "POSIX requires it",
-> (understandable, that :-), the following was enough for Wine
-> development a year and a half ago:
->
->     http://www.winehq.org/pipermail/wine-patches/2006-October/031544.html
->
-> Sure, the extra test is not a big deal, but removing it does make the
-> code slightly smaller, and maybe even more readable (people won't wonder
-> about the test of such a pointer, when they know that free can handle
-> a NULL pointer).
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
-Same for dm, but here there are only 3:
+Log message:
+	Remove redundant if-before-free tests in clvmd.c.
 
----
- dmeventd/old/dmevent.c               |    6 ++----
- multilog/pthread_lock/pthread_lock.c |    3 +--
- 2 files changed, 3 insertions(+), 6 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.794&r2=1.795
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
 
-diff --git a/dmeventd/old/dmevent.c b/dmeventd/old/dmevent.c
-index 6e9eb46..5d80410 100644
---- a/dmeventd/old/dmevent.c
-+++ b/dmeventd/old/dmevent.c
-@@ -220,10 +220,8 @@ int main(int argc, char **argv)
-    out:
- 	multilog_del_type(standard);
-
--	if (device)
--		free(device);
--	if (dso_name)
--		free(dso_name);
-+	free(device);
-+	free(dso_name);
-
- 	exit(ret);
- }
-diff --git a/multilog/pthread_lock/pthread_lock.c b/multilog/pthread_lock/pthread_lock.c
-index b782301..c52050b 100644
---- a/multilog/pthread_lock/pthread_lock.c
-+++ b/multilog/pthread_lock/pthread_lock.c
-@@ -62,7 +62,6 @@ int unlock_fn(void *handle)
- void destroy_locking(void *handle)
- {
-         pthread_mutex_t *mutex = (pthread_mutex_t *)handle;
--	if(mutex)
--		free(mutex);
-+	free(mutex);
- }
-
---
-1.5.4.1.98.gf3293
+--- LVM2/WHATS_NEW	2008/02/13 20:01:48	1.794
++++ LVM2/WHATS_NEW	2008/02/15 14:12:32	1.795
+@@ -1,5 +1,6 @@
+ Version 2.02.34 -
+ ===================================
++  Remove redundant if-before-free tests in clvmd.c.
+   Avoid a compiler warning: make is_orphan's parameter "const".
+   Fix lvconvert detection of mirror conversion in progress. (2.02.30)
+   Avoid automatic lvconvert polldaemon invocation when -R specified. (2.02.30)
+--- LVM2/daemons/clvmd/clvmd.c	2008/02/05 09:38:04	1.41
++++ LVM2/daemons/clvmd/clvmd.c	2008/02/15 14:12:32	1.42
+@@ -903,8 +903,7 @@
+ 		}
+ 
+ 		/* Free the command buffer */
+-		if (thisfd->bits.localsock.cmd)
+-			free(thisfd->bits.localsock.cmd);
++		free(thisfd->bits.localsock.cmd);
+ 
+ 		/* Clear out the cross-link */
+ 		if (thisfd->bits.localsock.pipe_client != NULL)
+@@ -939,8 +938,7 @@
+ 		}
+ 
+ 		/* Free any old buffer space */
+-		if (thisfd->bits.localsock.cmd)
+-			free(thisfd->bits.localsock.cmd);
++		free(thisfd->bits.localsock.cmd);
+ 
+ 		/* See if we have the whole message */
+ 		argslen =
+@@ -1547,8 +1545,7 @@
+ 		}
+ 		thisreply = thisreply->next;
+ 
+-		if (tempreply->replymsg)
+-			free(tempreply->replymsg);
++		free(tempreply->replymsg);
+ 		free(tempreply);
+ 	}
+ 
+@@ -1579,8 +1576,7 @@
+ 
+ 		thisreply = thisreply->next;
+ 
+-		if (tempreply->replymsg)
+-			free(tempreply->replymsg);
++		free(tempreply->replymsg);
+ 		free(tempreply);
+ 	}
+ 	client->bits.localsock.replies = NULL;
+@@ -1732,8 +1728,7 @@
+ 			pthread_mutex_unlock(&lvm_thread_mutex);
+ 
+ 			process_work_item(cmd);
+-			if (cmd->msg)
+-				free(cmd->msg);
++			free(cmd->msg);
+ 			free(cmd);
+ 
+ 			pthread_mutex_lock(&lvm_thread_mutex);
 
 
