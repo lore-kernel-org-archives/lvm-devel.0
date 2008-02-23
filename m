@@ -1,47 +1,35 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Feb 2008 13:28:30 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
-Message-ID: <20080222132830.15811.qmail@sourceware.org>
+From: Jim Meyering <jim@meyering.net>
+Date: Sat, 23 Feb 2008 09:44:25 +0100
+Subject: [PATCH 2/2] Fix lv-seg relationship on layer removal
+In-Reply-To: <47BDAF13.4040503@ce.jp.nec.com> (Jun'ichi Nomura's message of
+	"Thu, 21 Feb 2008 12:04:19 -0500")
+References: <47BDAF13.4040503@ce.jp.nec.com>
+Message-ID: <871w74t63a.fsf@rho.meyering.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-02-22 13:28:29
+"Jun'ichi Nomura" <j-nomura@ce.jp.nec.com> wrote:
+> When removing a layer, segments are moved from the layer LV to
+> the original LV (parent).
+> Before doing that, call lv_empty() to cleanup the parent and
+> any relationships.
+>
+> Without this, the relationship between the layer_lv and parent remains
+> and lvconvert will fail, for example:
+>
+> # lvconvert -m-1 vg/lvol0
+>   LV lvol0_mimagetmp_2 used by LV lvol0:0-511, but is not listed in LV lvol0 segments list.
+>   Internal error: LV segments corrupted in lvol0_mimagetmp_2.
+>   intermediate VG write failed.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : mirror.c 
+Hi Jun'ichi,
 
-Log message:
-	Fix resetting of MIRROR_IMAGE and VISIBLE_LV after removal of LV.
+Would you please consider writing (or just outlining) a test case
+that fails without yesterday's change, but succeeds with it?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.797&r2=1.798
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
-
---- LVM2/WHATS_NEW	2008/02/22 13:22:44	1.797
-+++ LVM2/WHATS_NEW	2008/02/22 13:28:29	1.798
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Fix resetting of MIRROR_IMAGE and VISIBLE_LV after removal of LV. (2.02.30)
-   Fix remove_layer_from_lv to empty the LV before removing it. (2.02.30)
-   Add missing no-longer-used segs_using_this_lv test to check_lv_segments.
-   Remove redundant non-NULL tests before calling free in clvmd.c.
---- LVM2/lib/metadata/mirror.c	2008/01/31 12:19:35	1.69
-+++ LVM2/lib/metadata/mirror.c	2008/02/22 13:28:29	1.70
-@@ -504,6 +504,8 @@
- 	 * to remove the layer. */
- 	if (new_area_count == 1 && !is_temporary_mirror_layer(lv)) {
- 		lv1 = seg_lv(mirrored_seg, 0);
-+		lv1->status &= ~MIRROR_IMAGE;
-+		lv1->status |= VISIBLE_LV;
- 		detached_log_lv = detach_mirror_log(mirrored_seg);
- 		if (!remove_layer_from_lv(lv, lv1))
- 			return_0;
+Future maintainers will be grateful :-)
 
 
