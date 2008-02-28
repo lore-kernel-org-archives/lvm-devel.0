@@ -1,35 +1,53 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Sat, 23 Feb 2008 09:44:25 +0100
-Subject: [PATCH 2/2] Fix lv-seg relationship on layer removal
-In-Reply-To: <47BDAF13.4040503@ce.jp.nec.com> (Jun'ichi Nomura's message of
-	"Thu, 21 Feb 2008 12:04:19 -0500")
-References: <47BDAF13.4040503@ce.jp.nec.com>
-Message-ID: <871w74t63a.fsf@rho.meyering.net>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 28 Feb 2008 16:48:11 -0000
+Subject: LVM2/test t-vgsplit-operation.sh
+Message-ID: <20080228164811.6385.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-"Jun'ichi Nomura" <j-nomura@ce.jp.nec.com> wrote:
-> When removing a layer, segments are moved from the layer LV to
-> the original LV (parent).
-> Before doing that, call lv_empty() to cleanup the parent and
-> any relationships.
->
-> Without this, the relationship between the layer_lv and parent remains
-> and lvconvert will fail, for example:
->
-> # lvconvert -m-1 vg/lvol0
->   LV lvol0_mimagetmp_2 used by LV lvol0:0-511, but is not listed in LV lvol0 segments list.
->   Internal error: LV segments corrupted in lvol0_mimagetmp_2.
->   intermediate VG write failed.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-02-28 16:48:11
 
-Hi Jun'ichi,
+Modified files:
+	test           : t-vgsplit-operation.sh 
 
-Would you please consider writing (or just outlining) a test case
-that fails without yesterday's change, but succeeds with it?
+Log message:
+	Fix t-vgsplit-operation.sh lv1 definition to include test signature.
 
-Future maintainers will be grateful :-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+
+--- LVM2/test/t-vgsplit-operation.sh	2008/01/22 03:30:14	1.7
++++ LVM2/test/t-vgsplit-operation.sh	2008/02/28 16:48:09	1.8
+@@ -34,6 +34,7 @@
+    f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
+    vg1=$(this_test_)-test-vg1-$$          &&
+    vg2=$(this_test_)-test-vg2-$$          &&
++   lv1=$(this_test_)-test-lv1-$$          &&
+    pvcreate $d1 $d2 $d3 $d4'
+ 
+ test_expect_success \
+@@ -138,7 +139,7 @@
+   'pvcreate -ff -M2 $d3 $d4 &&
+    vgcreate $vg1 $d1 $d2 &&
+    vgcreate $vg2 $d3 $d4 &&
+-   lvcreate -l 4 -n lv1 $vg1 &&
++   lvcreate -l 4 -n $lv1 $vg1 &&
+    vgsplit $vg1 $vg2 $d1 2>err;
+    status=$?; echo status=$?; test $status = 5 &&
+    grep "^  Logical volumes in \"$vg1\" must be inactive\$" err &&
+@@ -149,7 +150,7 @@
+   'vgsplit rejects split because max_lv is exceeded' \
+   'vgcreate --maxlogicalvolumes 2 $vg1 $d1 $d2 &&
+    vgcreate --maxlogicalvolumes 2 $vg2 $d3 $d4 &&
+-   lvcreate -l 4 -n lv1 $vg1 &&
++   lvcreate -l 4 -n $lv1 $vg1 &&
+    lvcreate -l 4 -n lv2 $vg1 &&
+    lvcreate -l 4 -n lv3 $vg2 &&
+    vgchange -an $vg1 &&
 
 
