@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 29 Feb 2008 00:09:21 -0000
-Subject: LVM2/test t-vgsplit-operation.sh
-Message-ID: <20080229000921.4295.qmail@sourceware.org>
+Date: 29 Feb 2008 00:13:48 -0000
+Subject: LVM2/tools vgsplit.c
+Message-ID: <20080229001348.5326.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,72 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-02-29 00:09:21
+Changes by:	wysochanski at sourceware.org	2008-02-29 00:13:48
 
 Modified files:
-	test           : t-vgsplit-operation.sh 
+	tools          : vgsplit.c 
 
 Log message:
-	Add vgsplit test to check failure when PV not in source volume group.
+	Refactor _move_pv() in vgsplit.
+	Should be no functional change.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
 
---- LVM2/test/t-vgsplit-operation.sh	2008/02/28 17:39:47	1.9
-+++ LVM2/test/t-vgsplit-operation.sh	2008/02/29 00:09:21	1.10
-@@ -163,6 +163,19 @@
-    vgremove -f $vg2 &&
-    vgremove -f $vg1'
+--- LVM2/tools/vgsplit.c	2008/01/30 14:00:02	1.50
++++ LVM2/tools/vgsplit.c	2008/02/29 00:13:48	1.51
+@@ -15,18 +15,11 @@
  
-+test_expect_success \
-+  'vgsplit rejects split because PV not in VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   lvcreate -l 4 -n $lv2 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d3 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Physical volume $d3 not in volume group $vg1" err &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
+ #include "tools.h"
+ 
+-static int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+-		    char *pv_name)
++static void _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
++		     struct pv_list *pvl)
+ {
+-	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+ 
+-	if (!(pvl = find_pv_in_vg(vg_from, pv_name))) {
+-		log_error("Physical volume %s not in volume group %s",
+-			  pv_name, vg_from->name);
+-		return 0;
+-	}
+-
+ 	list_del(&pvl->list);
+ 	list_add(&vg_to->pvs, &pvl->list);
+ 
+@@ -40,8 +33,6 @@
+ 
+ 	vg_from->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
+ 	vg_to->free_count += pv_pe_count(pv) - pv_pe_alloc_count(pv);
+-
+-	return 1;
+ }
+ 
+ /* FIXME Why not (lv->vg == vg) ? */
+@@ -230,6 +221,7 @@
+ 	int opt;
+ 	int active;
+ 	int existing_vg;
++	struct pv_list *pvl;
+ 
+ 	if (argc < 3) {
+ 		log_error("Existing VG, new VG and physical volumes required.");
+@@ -312,8 +304,13 @@
+ 
+ 	/* Move PVs across to new structure */
+ 	for (opt = 0; opt < argc; opt++) {
+-		if (!_move_pv(vg_from, vg_to, argv[opt]))
++		if (!(pvl = find_pv_in_vg(vg_from, argv[opt]))) {
++			log_error("Physical volume %s not in volume group %s",
++				  argv[opt], vg_from->name);
+ 			goto error;
++		}
 +
- test_done
- # Local Variables:
- # indent-tabs-mode: nil
++		_move_pv(vg_from, vg_to, pvl);
+ 	}
+ 
+ 	/* Move required LVs across, checking consistency */
 
 
