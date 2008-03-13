@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 12 Mar 2008 17:34:58 -0000
-Subject: LVM2/test t-mdata-strings.sh
-Message-ID: <20080312173458.28336.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 13 Mar 2008 12:33:26 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/import.c
+Message-ID: <20080313123326.30882.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,72 +10,78 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-03-12 17:34:58
+Changes by:	agk at sourceware.org	2008-03-13 12:33:25
 
-Added files:
-	test           : t-mdata-strings.sh 
+Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: import.c 
 
 Log message:
-	Add metadata test for escaping double quotes in device names (bz431474).
+	Refactor text format initialisation into _init_text_import.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mdata-strings.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.802&r2=1.803
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
 
-/cvs/lvm2/LVM2/test/t-mdata-strings.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-mdata-strings.sh
-+++ -	2008-03-12 17:34:58.833097000 +0000
-@@ -0,0 +1,51 @@
-+#!/bin/sh
-+# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/WHATS_NEW	2008/03/12 16:03:21	1.802
++++ LVM2/WHATS_NEW	2008/03/13 12:33:21	1.803
+@@ -1,5 +1,6 @@
+ Version 2.02.34 -
+ ===================================
++  Refactor text format initialisation into _init_text_import.
+   Escape double quotes and backslashes in external metadata and config data.
+   Add functions for escaping double quotes in strings.
+   Rename count_chars_len to count_chars.
+--- LVM2/lib/format_text/import.c	2008/01/30 13:59:59	1.45
++++ LVM2/lib/format_text/import.c	2008/03/13 12:33:22	1.46
+@@ -23,6 +23,18 @@
+ /* FIXME Use tidier inclusion method */
+ static struct text_vg_version_ops *(_text_vsn_list[2]);
+ 
++static int _text_import_initialised = 0;
 +
-+test_description='Test for proper escaping of strings in metadata (bz431474)'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
++static void _init_text_import()
 +{
-+  test -n "$vg" && {
-+    vgchange -an "$vg"
-+    vgremove "$vg"
-+  } > "$test_dir_/cleanup.log"
-+  test -n "$d1" && losetup -d "$d1"
-+  rm -f "$f1"
++	if (_text_import_initialised)
++		return;
++
++	_text_vsn_list[0] = text_vg_vsn1_init();
++	_text_vsn_list[1] = NULL;
++	_text_import_initialised = 1;
 +}
 +
-+pv_suffix="__\"!@#\$%^&*()'\\\"__"
-+
-+test_expect_success \
-+  'set up temp files, loopback devices' \
-+  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
-+  mv "$d1" "$d1$pv_suffix"                &&
-+  d1=$d1$pv_suffix'
-+
-+test_expect_success \
-+  'pvcreate, vgcreate on filename with backslashed chars' \
-+  'pvcreate "$d1"                          &&
-+  vg=$(this_test_)-test-vg-$$              &&
-+  vgcreate $vg $d1'
-+  
-+test_expect_success \
-+  'no parse errors and VG really exists' \
-+  'vgs 2>err                                    &&
-+  grep "Parse error" err;
-+  status=$?; echo status=$?; test $status -ne 0 &&
-+  vgs $vg'
-+
-+test_done
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
+ const char *text_vgname_import(const struct format_type *fmt,
+ 			       struct device *dev,
+ 			       off_t offset, uint32_t size,
+@@ -35,13 +47,7 @@
+ 	struct text_vg_version_ops **vsn;
+ 	const char *vgname = NULL;
+ 
+-	static int _text_import_initialised = 0;
+-
+-	if (!_text_import_initialised) {
+-		_text_vsn_list[0] = text_vg_vsn1_init();
+-		_text_vsn_list[1] = NULL;
+-		_text_import_initialised = 1;
+-	}
++	_init_text_import();
+ 
+ 	if (!(cft = create_config_tree(NULL, 0)))
+ 		return_NULL;
+@@ -83,13 +89,7 @@
+ 	struct config_tree *cft;
+ 	struct text_vg_version_ops **vsn;
+ 
+-	static int _text_vg_import_initialised = 0;
+-
+-	if (!_text_vg_import_initialised) {
+-		_text_vsn_list[0] = text_vg_vsn1_init();
+-		_text_vsn_list[1] = NULL;
+-		_text_vg_import_initialised = 1;
+-	}
++	_init_text_import();
+ 
+ 	*desc = NULL;
+ 	*when = 0;
 
 
