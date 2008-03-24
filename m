@@ -1,85 +1,38 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 23 Mar 2008 15:40:36 -0000
-Subject: LVM2/test lvm-utils.sh t-vgsplit-usage.sh
-Message-ID: <20080323154036.10495.qmail@sourceware.org>
+From: dwysocha@redhat.com <dwysocha@redhat.com>
+Date: Mon, 24 Mar 2008 16:23:43 -0400
+Subject: [PATCH vgsplit 0/4] bz#251990: Move logical volume from one VG to another
+Message-ID: <20080324202343.627758622@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-03-23 15:40:35
+The following patches update vgsplit to allow LVs on the cmdline.
 
-Modified files:
-	test           : lvm-utils.sh t-vgsplit-usage.sh 
+Original vgsplit code only allowed PVs on the cmdline, and would fail with
+an error message in many cases indicating that the split could not occur
+because it would violate an internal LVM rule of splitting a LV across a
+volume group.
 
-Log message:
-	Add vgsplit tests to verfy attributes of new VG match source VG.
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
+This code enhances vgsplit in the following ways:
+1) Allow LVs on the commandline.  This should be very useful as the user does
+not have to figure out which PVs to move.
+2) Figures out underlying dependencies and queries the user if more volumes
+would be moved than specified on the commandline.  This seemed to be a natural
+progression once LVs were considered.  There are many scenarios where moving
+one LV would result in moving other LVs/PVs as a result of the internal LVM
+rules where an LV/PV must be contained within a single VG.
+3) No longer fails with error messages indicating we can't split a PV/LV
+across volume groups
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-usage.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+The following patches should also allow a simple fix to another bz:
+https://bugzilla.redhat.com/show_bug.cgi?id=252041
+"vgsplit an active VG where the split involves only inactive LVs"
 
---- LVM2/test/lvm-utils.sh	2008/01/17 18:05:57	1.7
-+++ LVM2/test/lvm-utils.sh	2008/03/23 15:40:35	1.8
-@@ -50,6 +50,15 @@
-   return 0;
- }
- 
-+compare_vg_field_()
-+{
-+if test "$verbose" = "t"
-+then
-+  echo "compare_vg_field_ VG1: `vgs --noheadings -o $3 $1` VG2: `vgs --noheadings -o $3 $2`"
-+fi
-+  return $(test $(vgs --noheadings -o $3 $1) == $(vgs --noheadings -o $3 $2) )
-+}
-+
- check_vg_field_()
- {
- if test "$verbose" = "t"
---- LVM2/test/t-vgsplit-usage.sh	2008/03/21 22:00:29	1.2
-+++ LVM2/test/t-vgsplit-usage.sh	2008/03/23 15:40:35	1.3
-@@ -164,6 +164,36 @@
-    vgremove -f $vg1'
- 
- test_expect_success \
-+  'verify default - max_lv attribute from new VG is same as source VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 &&
-+   compare_vg_field_ $vg1 $vg2 max_lv &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_expect_success \
-+  'verify default - max_pv attribute from new VG is same as source VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 &&
-+   compare_vg_field_ $vg1 $vg2 max_pv &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_expect_success \
-+  'verify default - vg_fmt attribute from new VG is same as source VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 &&
-+   compare_vg_field_ $vg1 $vg2 vg_fmt &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_expect_success \
-   'vgsplit rejects split because PV not in VG' \
-   'vgcreate $vg1 $d1 $d2 &&
-    vgcreate $vg2 $d3 $d4 &&
+I am not entirely happy with the code and there are some shortcomings but I
+figured it is close enough to post.  Comments welcome.
+
+-- 
 
 
