@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Mar 2008 12:37:49 -0000
-Subject: LVM2 ./WHATS_NEW man/lvmdiskscan.8
-Message-ID: <20080325123749.12222.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 25 Mar 2008 15:25:03 -0000
+Subject: LVM2 ./WHATS_NEW tools/toollib.c tools/toollib.h
+Message-ID: <20080325152503.12645.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,62 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-03-25 12:37:48
+Changes by:	wysochanski at sourceware.org	2008-03-25 15:25:00
 
 Modified files:
 	.              : WHATS_NEW 
-	man            : lvmdiskscan.8 
+	tools          : toollib.c toollib.h 
 
 Log message:
-	Correct command name in lvmdiskscan man page.
+	Add 'is_reserved_lvname()' helper function.
+	
+	Very similar to apply_lvname_restrictions but without the error messages.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.805&r2=1.806
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvmdiskscan.8.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.806&r2=1.807
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.56&r2=1.57
 
---- LVM2/WHATS_NEW	2008/03/25 10:41:59	1.805
-+++ LVM2/WHATS_NEW	2008/03/25 12:37:47	1.806
+--- LVM2/WHATS_NEW	2008/03/25 12:37:47	1.806
++++ LVM2/WHATS_NEW	2008/03/25 15:24:57	1.807
 @@ -1,5 +1,6 @@
  Version 2.02.34 -
  ===================================
-+  Correct command name in lvmdiskscan man page.
++  Add 'is_reserved_lvname()' helper function.
+   Correct command name in lvmdiskscan man page.
    clvmd no longer crashes if it sees nodeids over 50.
    Fix potential deadlock in clvmd thread handling.
-   Refactor text format initialisation into _init_text_import.
---- LVM2/man/lvmdiskscan.8	2003/11/14 16:17:55	1.1
-+++ LVM2/man/lvmdiskscan.8	2008/03/25 12:37:48	1.2
-@@ -7,7 +7,7 @@
- [\-l/\-\-lvmpartition]
- [\-v/\-\-verbose]
- .SH DESCRIPTION
--vgscan scans all SCSI, (E)IDE disks, multiple devices and a bunch
-+\fBlvmdiskscan\fP scans all SCSI, (E)IDE disks, multiple devices and a bunch
- of other block devices in the system looking for LVM physical volumes.
- The size reported is the real device size.
- Define a filter in \fBlvm.conf\fP(5) to restrict 
+--- LVM2/tools/toollib.c	2008/02/06 16:09:51	1.131
++++ LVM2/tools/toollib.c	2008/03/25 15:24:59	1.132
+@@ -1234,6 +1234,19 @@
+ 	return 1;
+ }
+ 
++int is_reserved_lvname(const char *name)
++{
++	int rc, old_suppress;
++
++	old_suppress = log_suppress(2);
++	rc = !apply_lvname_restrictions(name);
++	log_suppress(old_suppress);
++
++	return rc;
++}
++
++
++
+ /*
+  * Set members of struct vgcreate_params from cmdline.
+  * Do preliminary validation with arg_*() interface.
+--- LVM2/tools/toollib.h	2008/01/15 22:56:30	1.56
++++ LVM2/tools/toollib.h	2008/03/25 15:24:59	1.57
+@@ -95,6 +95,7 @@
+ struct list *clone_pv_list(struct dm_pool *mem, struct list *pvs);
+ 
+ int apply_lvname_restrictions(const char *name);
++int is_reserved_lvname(const char *name);
+ 
+ int fill_vg_create_params(struct cmd_context *cmd,
+ 			  char *vg_name, struct vgcreate_params *vp_new,
 
 
