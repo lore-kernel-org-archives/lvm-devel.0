@@ -1,162 +1,89 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Mar 2008 18:03:36 -0000
-Subject: LVM2 test/t-vgmerge-usage.sh ./WHATS_NEW test/ ...
-Message-ID: <20080326180336.7455.qmail@sourceware.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Wed, 26 Mar 2008 14:34:22 -0400 (EDT)
+Subject: [PATCH] lvconvert should not allow creating a snapshot of a mirror
+Message-ID: <Pine.LNX.4.64.0803261404400.15040@porkchop.devel.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-03-26 18:03:35
+Hi
 
-Modified files:
-	test           : t-vgmerge-usage.sh 
-	.              : WHATS_NEW 
-Added files:
-	test           : t-vgmerge-operation.sh 
+lvconvert allows creating snapshots of mirrors --- and it shouldn't.
 
-Log message:
-	Add vgmerge tests.
+lvconvert -s vg1/mirror vg1/snap
+will create snapshot of a mirrored image. It should fail.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgmerge-operation.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgmerge-usage.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.809&r2=1.810
+lvconvert -s vg1/lv vg1/mirror
+writes "Logical volume mirror converted." and does nothing. It should 
+return an error.
 
-/cvs/lvm2/LVM2/test/t-vgmerge-operation.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-vgmerge-operation.sh
-+++ -	2008-03-26 18:03:35.831011000 +0000
-@@ -0,0 +1,107 @@
-+#!/bin/sh
-+# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Test vgmerge operation'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  test -n "$d3" && losetup -d "$d3"
-+  test -n "$d4" && losetup -d "$d4"
-+  rm -f "$f1" "$f2" "$f3" "$f4"
-+}
-+
-+vg_validate_pvlv_counts_()
-+{
-+	local local_vg=$1
-+	local num_pvs=$2
-+	local num_lvs=$3
-+	local num_snaps=$4
-+
-+	check_vg_field_ $local_vg pv_count $num_pvs &&
-+	check_vg_field_ $local_vg lv_count $num_lvs &&
-+	check_vg_field_ $local_vg snap_count $num_snaps
-+}
-+
-+test_expect_success \
-+  'set up temp files, loopback devices, PVs, vgnames' \
-+  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
-+   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
-+   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
-+   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
-+   vg1=$(this_test_)-test-vg1-$$          &&
-+   vg2=$(this_test_)-test-vg2-$$          &&
-+   lv1=$(this_test_)-test-lv1-$$          &&
-+   lv2=$(this_test_)-test-lv2-$$          &&
-+   lv3=$(this_test_)-test-lv3-$$          &&
-+   pvcreate $d1 $d2 $d3 $d4'
-+
-+test_expect_success \
-+  'vgmerge succeeds with single linear LV in source VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 $d1 &&
-+   vgchange -an $vg1 &&
-+   vg_validate_pvlv_counts_ $vg1 2 1 0 &&
-+   vg_validate_pvlv_counts_ $vg2 2 0 0 &&
-+   vgmerge $vg2 $vg1 &&
-+   vg_validate_pvlv_counts_ $vg2 4 1 0 &&
-+   vgremove -f $vg2'
-+
-+test_expect_success \
-+  'vgmerge succeeds with single linear LV in source and destination VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   lvcreate -l 4 -n $lv2 $vg2 &&
-+   vgchange -an $vg1 &&
-+   vgchange -an $vg2 &&
-+   vg_validate_pvlv_counts_ $vg1 2 1 0 &&
-+   vg_validate_pvlv_counts_ $vg2 2 1 0 &&
-+   vgmerge $vg2 $vg1 &&
-+   vg_validate_pvlv_counts_ $vg2 4 2 0 &&
-+   vgremove -f $vg2'
-+
-+test_expect_success \
-+  'vgmerge succeeds with linear LV + snapshots in source VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 16 -n $lv1 $vg1 &&
-+   lvcreate -l 4 -s -n $lv2 $vg1/$lv1 &&
-+   vgchange -an $vg1 &&
-+   vg_validate_pvlv_counts_ $vg1 2 1 1 &&
-+   vg_validate_pvlv_counts_ $vg2 2 0 0 &&
-+   vgmerge $vg2 $vg1 &&
-+   vg_validate_pvlv_counts_ $vg2 4 1 1 &&
-+   lvremove -f $vg2/$lv2 &&
-+   vgremove -f $vg2'
-+
-+test_expect_success \
-+  'vgmerge succeeds with mirrored LV in source VG' \
-+  'vgcreate $vg1 $d1 $d2 $d3 &&
-+   vgcreate $vg2 $d4 &&
-+   lvcreate -l 4 -n $lv1 -m1 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vg_validate_pvlv_counts_ $vg1 3 4 0 &&
-+   vg_validate_pvlv_counts_ $vg2 1 0 0 &&
-+   vgmerge $vg2 $vg1 &&
-+   vg_validate_pvlv_counts_ $vg2 4 4 0 &&
-+   lvremove -f $vg2/$lv1 &&
-+   vgremove -f $vg2'
-+
-+test_done
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
---- LVM2/test/t-vgmerge-usage.sh	2008/01/16 21:21:22	1.2
-+++ LVM2/test/t-vgmerge-usage.sh	2008/03/26 18:03:35	1.3
-@@ -9,7 +9,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+This patch fixes both scenarios.
+
+Mikulas
+-------------- next part --------------
+This patch fixes bugs in lvconvert regarding mixing snapshots and mirrors.
+
+Assume that you have two independent LVs: vg1/lv and vg1/lv_mirror.
+vg1/lv is a simple linear storage, vg1/lv_mirror is a mirror.
+
+1. lvconvert -s vg1/lv vg1/lv_mirror writes this output:
+	vg1/lv_mirror: Converted: 100.0%
+	Logical volume lv_mirror converted.
+and it really does nothing. It should write an error message.
+
+2. lvconvert -s vg1/lv_mirror vg1/lv creates a snapshot of a mirrored volume,
+which is unsupported and may cause problems with other tools.
+(lvcreate doesn't allow creating snapshots of mirrors)
+lvconvert should fail with an error message in this situation.
+
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+
+---
+ tools/lvconvert.c |   18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+Index: LVM2.2.02.33/tools/lvconvert.c
+===================================================================
+--- LVM2.2.02.33.orig/tools/lvconvert.c	2008-03-26 18:57:29.000000000 +0100
++++ LVM2.2.02.33/tools/lvconvert.c	2008-03-26 19:03:13.000000000 +0100
+@@ -627,10 +627,12 @@ static int lvconvert_snapshot(struct cmd
+ 		return 0;
+ 	}
  
--test_description='Exercise some vgmerge diagnostics'
-+test_description='Test vgmerge command options for validity'
- privileges_required_=1
+-	if (org->status & (LOCKED|PVMOVE) || lv_is_cow(org)) {
++	if (org->status & (LOCKED|PVMOVE|MIRRORED) || lv_is_cow(org)) {
+ 		log_error("Unable to create a snapshot of a %s LV.",
+ 			  org->status & LOCKED ? "locked" :
+-			  org->status & PVMOVE ? "pvmove" : "snapshot");
++			  org->status & PVMOVE ? "pvmove" :
++			  org->status & MIRRORED ? "mirrored" :
++			  "snapshot");
+ 		return 0;
+ 	}
  
- . ./test-lib.sh
---- LVM2/WHATS_NEW	2008/03/26 16:48:09	1.809
-+++ LVM2/WHATS_NEW	2008/03/26 18:03:35	1.810
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Add vgmerge tests.
-   Add pvseg_is_allocated() for identifying a PV segment allocated to a LV.
-   Add list_move() for moving elements from one list to another.
-   Add 'is_reserved_lvname()' for identifying hidden LVs.
-
-
+@@ -705,15 +707,19 @@ static int lvconvert_single(struct cmd_c
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if (arg_count(cmd, mirrors_ARG) || (lv->status & MIRRORED)) {
++	if (lp->snapshot) {
++		if (lv->status & MIRRORED) {
++			log_error("Unable to convert mirrored LV \"%s\" into a snapshot.", lv->name);
++			return ECMD_FAILED;
++		}
+ 		if (!archive(lv->vg))
+ 			return ECMD_FAILED;
+-		if (!lvconvert_mirrors(cmd, lv, lp))
++		if (!lvconvert_snapshot(cmd, lv, lp))
+ 			return ECMD_FAILED;
+-	} else if (lp->snapshot) {
++	} else if (arg_count(cmd, mirrors_ARG) || (lv->status & MIRRORED)) {
+ 		if (!archive(lv->vg))
+ 			return ECMD_FAILED;
+-		if (!lvconvert_snapshot(cmd, lv, lp))
++		if (!lvconvert_mirrors(cmd, lv, lp))
+ 			return ECMD_FAILED;
+ 	}
+ 
