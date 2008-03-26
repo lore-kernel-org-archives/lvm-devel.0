@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Mar 2008 15:25:03 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c tools/toollib.h
-Message-ID: <20080325152503.12645.qmail@sourceware.org>
+Date: 26 Mar 2008 16:20:55 -0000
+Subject: LVM2 ./WHATS_NEW lib/datastruct/list.h
+Message-ID: <20080326162055.7417.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,48 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-03-25 15:25:00
+Changes by:	wysochanski at sourceware.org	2008-03-26 16:20:54
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : toollib.c toollib.h 
+	lib/datastruct : list.h 
 
 Log message:
-	Add 'is_reserved_lvname()' helper function.
-	
-	Very similar to apply_lvname_restrictions but without the error messages.
+	Add list_move() support function for list manipulation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.806&r2=1.807
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.807&r2=1.808
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/list.h.diff?cvsroot=lvm2&r1=1.25&r2=1.26
 
---- LVM2/WHATS_NEW	2008/03/25 12:37:47	1.806
-+++ LVM2/WHATS_NEW	2008/03/25 15:24:57	1.807
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2008/03/25 15:24:57	1.807
++++ LVM2/WHATS_NEW	2008/03/26 16:20:54	1.808
+@@ -1,6 +1,7 @@
  Version 2.02.34 -
  ===================================
-+  Add 'is_reserved_lvname()' helper function.
+-  Add 'is_reserved_lvname()' helper function.
++  Add list_move() for moving elements from one list to another.
++  Add 'is_reserved_lvname()' for identifying hidden LVs.
    Correct command name in lvmdiskscan man page.
    clvmd no longer crashes if it sees nodeids over 50.
    Fix potential deadlock in clvmd thread handling.
---- LVM2/tools/toollib.c	2008/02/06 16:09:51	1.131
-+++ LVM2/tools/toollib.c	2008/03/25 15:24:59	1.132
-@@ -1234,6 +1234,19 @@
- 	return 1;
- }
+--- LVM2/lib/datastruct/list.h	2007/08/20 20:55:24	1.25
++++ LVM2/lib/datastruct/list.h	2008/03/26 16:20:54	1.26
+@@ -55,6 +55,16 @@
+ void list_del(struct list *elem);
  
-+int is_reserved_lvname(const char *name)
+ /*
++ * Move an element from an existing list to list 'head'.
++ * Insert the element before 'head'.
++ */
++static inline void list_move(struct list *item, struct list *head)
 +{
-+	int rc, old_suppress;
-+
-+	old_suppress = log_suppress(2);
-+	rc = !apply_lvname_restrictions(name);
-+	log_suppress(old_suppress);
-+
-+	return rc;
++        list_del(item);
++        list_add(head, item);
 +}
 +
-+
-+
- /*
-  * Set members of struct vgcreate_params from cmdline.
-  * Do preliminary validation with arg_*() interface.
---- LVM2/tools/toollib.h	2008/01/15 22:56:30	1.56
-+++ LVM2/tools/toollib.h	2008/03/25 15:24:59	1.57
-@@ -95,6 +95,7 @@
- struct list *clone_pv_list(struct dm_pool *mem, struct list *pvs);
- 
- int apply_lvname_restrictions(const char *name);
-+int is_reserved_lvname(const char *name);
- 
- int fill_vg_create_params(struct cmd_context *cmd,
- 			  char *vg_name, struct vgcreate_params *vp_new,
++/*
+  * Is the list empty?
+  */
+ int list_empty(const struct list *head);
 
 
