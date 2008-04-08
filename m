@@ -1,34 +1,25 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Apr 2008 22:02:17 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20080408220217.25362.qmail@sourceware.org>
+From: dwysocha@redhat.com <dwysocha@redhat.com>
+Date: Tue, 08 Apr 2008 18:52:43 -0400
+Subject: [patch 0/3] Update vgsplit to take "-n LogicalVolumeName" on the commandline.
+Message-ID: <20080408225243.753169956@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-08 22:02:16
+Allow the user to specify either a list of PVs or a single LV name via
+"-n LogicalVolumeName".
+    
+Add vgsplit tests to verify vgsplit with "-n LogicalVolumeName" on the
+command line.
+    
+Update the vgsplit man page to reflect "-n LogicalVolumeName".
+    
+Multiple LVs and more complex cases not currently handled but could be with
+future modification.  See negative tests in t-vgsplit-operation.sh for
+some examples.
 
-Modified files:
-	.              : WHATS_NEW 
-
-Log message:
-	
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.834&r2=1.835
-
---- LVM2/WHATS_NEW	2008/04/08 21:47:54	1.834
-+++ LVM2/WHATS_NEW	2008/04/08 22:02:16	1.835
-@@ -1,6 +1,5 @@
- Version 2.02.34 -
- ===================================
--  Fix vgsplit error display - fully remove log_suppress.
-   Fix vgsplit error paths to release vg_to lock.
-   Indicate whether or not VG is clustered in vgcreate log message.
-   Mention default --clustered setting in vgcreate man page.
+-- 
 
 
