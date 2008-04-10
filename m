@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 10 Apr 2008 18:50:37 -0000
-Subject: LVM2/doc example.conf
-Message-ID: <20080410185037.18181.qmail@sourceware.org>
+Date: 10 Apr 2008 18:51:17 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080410185117.18413.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,30 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-04-10 18:50:37
+Changes by:	agk at sourceware.org	2008-04-10 18:51:16
 
 Modified files:
-	doc            : example.conf 
+	.              : WHATS_NEW 
 
 Log message:
 	.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.844&r2=1.845
 
---- LVM2/doc/example.conf	2008/02/11 16:57:40	1.35
-+++ LVM2/doc/example.conf	2008/04/10 18:50:37	1.36
-@@ -25,9 +25,8 @@
-     # list of regular expressions in turn and the first match is used.
-     preferred_names = [ ]
- 
--    # If device-mapper multipath is used, more descriptive names might
--    # be preferred over the dm-N names:
--    # preferred_names = [ "^/dev/mapper/mpath" ]
-+    # Try to avoid using undescriptive /dev/dm-N names, if present.
-+    # preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
- 
-     # A filter that tells LVM2 to only use a restricted set of devices.
-     # The filter consists of an array of regular expressions.  These
+--- LVM2/WHATS_NEW	2008/04/10 18:19:49	1.844
++++ LVM2/WHATS_NEW	2008/04/10 18:51:16	1.845
+@@ -1,5 +1,6 @@
+ Version 2.02.34 - 10th April 2008
+ =================================
++  Improve preferred_names lvm.conf example.
+   Fix vgdisplay 'Cur LV' field to match lvdisplay output.
+   Fix lv_count report field to exclude hidden LVs.
+   Add vg_is_clustered() helper function.
 
 
