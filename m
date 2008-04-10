@@ -1,145 +1,292 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Mar 2014 20:56:02 +0000 (UTC)
-Subject: master - tests: restore usage of reading kmsg
-Message-ID: <20140302205602.ECC4A611B2@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 10 Apr 2008 19:59:47 -0000
+Subject: LVM2 lib/metadata/metadata.c test/t-lvresize-u ...
+Message-ID: <20080410195947.1963.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c377f5b3c36cc0514210821b3d0b72c10d2a819
-Commit:        6c377f5b3c36cc0514210821b3d0b72c10d2a819
-Parent:        33d69162e4b45e7926d4c0e4a425fedb4246088e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 2 21:30:26 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Mar 2 21:30:26 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-04-10 19:59:43
 
-tests: restore usage of reading kmsg
+Modified files:
+	lib/metadata   : metadata.c 
+	test           : t-lvresize-usage.sh t-vgmerge-operation.sh 
+	                 t-vgsplit-usage.sh 
+	tools          : lvresize.c toollib.c vgsplit.c 
 
-Basically reverts commit af8580d756d3d4ed56a00d377fd6bfb18d5bed41.
-"test: Use klogctl in the harness instead of reading /var/log/messages."
+Log message:
+	more pre-release cleanup
 
-Problem is - this interface clears dmesg buffer
-(just like call of dmesg -c)
-Thus after running lvm2 test suitedmesg is empty - while all the
-messages are usually logged in the journal/message, it's still not nice to
-clear dmesg buffer.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.169&r2=1.170
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvresize-usage.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgmerge-operation.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-usage.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
 
-It's not a pure revert, but switch to use /proc/kmsg directly instead of
-reading /var/log/messages.
----
- test/lib/harness.c |   45 +++++++++++++++++++++------------------------
- 1 files changed, 21 insertions(+), 24 deletions(-)
-
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index ded86f0..5258c04 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -25,7 +25,6 @@
- #include <sys/time.h>
- #include <sys/types.h>
- #include <sys/wait.h>
--#include <sys/klog.h>
- #include <time.h>
- #include <unistd.h>
- #include <stdint.h>
-@@ -263,23 +262,6 @@ static void drain(int fd, size_t size_limit)
- 	}
+--- LVM2/lib/metadata/metadata.c	2008/04/10 19:14:26	1.169
++++ LVM2/lib/metadata/metadata.c	2008/04/10 19:59:42	1.170
+@@ -885,6 +885,7 @@
+ 	list_iterate_items(pvl, pl)
+ 		if (pvl->pv == pv)
+ 			return pvl;
++
+ 	return NULL;
  }
  
--#define SYSLOG_ACTION_READ_CLEAR     4
--#define SYSLOG_ACTION_CLEAR          5
--
--static void clear_dmesg(void)
--{
--	klogctl(SYSLOG_ACTION_CLEAR, 0, 0);
--}
--
--static void drain_dmesg(void)
--{
--	char buf[16392 + 1];
--	size_t sz = klogctl(SYSLOG_ACTION_READ_CLEAR, buf, sizeof(buf) - 1);
--	buf[sz] = 0;
--	_append_buf(buf, sz);
--}
--
--
- static const char *duration(time_t start, const struct rusage *usage)
- {
- 	static char buf[100];
-@@ -365,7 +347,6 @@ static void run(int i, char *f) {
- 	struct rusage usage;
- 	char flavour[512], script[512];
- 
--	clear_dmesg();
- 	pid = fork();
- 	if (pid < 0) {
- 		perror("Fork failed.");
-@@ -404,11 +385,13 @@ static void run(int i, char *f) {
- 		int no_write = 0;
- 		int collect_debug = 0;
- 		int fd_debuglog = -1;
-+		int fd_kmsg = -1;
-+		FILE *kmsg;
- 
- 		//close(fds[1]);
- 		testdirdebug[0] = '\0'; /* Capture RUNTESTDIR */
- 		snprintf(buf, sizeof(buf), "%s ...", f);
--		printf("Running %-60s ", buf);
-+		printf("Running %-60s%c", buf, verbose ? '\n' : ' ');
- 		fflush(stdout);
- 		snprintf(outpath, sizeof(outpath), "%s/%s.txt", results, f);
- 		while ((c = strchr(c, '/')))
-@@ -416,6 +399,18 @@ static void run(int i, char *f) {
- 		if (!(outfile = fopen(outpath, "w")))
- 			perror("fopen");
- 
-+		/* Mix-in kernel log message */
-+		if (!(kmsg = fopen("/proc/kmsg", "r")))
-+			perror("fopen kmsg");
-+		else if ((fd_kmsg = fileno(kmsg)) >= 0) {
-+			if ((fcntl(fd_kmsg, F_SETFL, O_NONBLOCK ) == -1)) {
-+				perror("fcntl kmsg");
-+				fclose(kmsg);
-+				kmsg = NULL;
-+			} else if (fseek(kmsg, 0L, SEEK_END))
-+				perror("fseek kmsg");
-+		}
+@@ -957,6 +958,7 @@
+ 	list_iterate_items(lvl, ll)
+ 		if (lvl->lv == lv)
+ 			return lvl;
 +
- 		while ((w = wait4(pid, &st, WNOHANG, &usage)) == 0) {
- 			if ((fullbuffer && fullbuffer++ == 8000) ||
- 			    (no_write > 180 * 2)) /* a 3 minute timeout */
-@@ -459,14 +454,16 @@ static void run(int i, char *f) {
- 			}
- 			drain(fds[0], INT32_MAX);
- 			no_write = 0;
--			drain_dmesg();
-+			if (fd_kmsg >= 0)
-+				drain(fd_kmsg, INT32_MAX);
- 		}
- 		if (w != pid) {
- 			perror("waitpid");
- 			exit(206);
- 		}
- 		drain(fds[0], INT32_MAX);
--		drain_dmesg();
-+		if (fd_kmsg >= 0)
-+			drain(fd_kmsg, INT32_MAX);
- 		if (die == 2)
- 			interrupted(i, f);
- 		else if (runaway) {
-@@ -487,8 +484,8 @@ static void run(int i, char *f) {
- 		} else
- 			failed(i, f, st);
+ 	return NULL;
+ }
  
--		if (fd_debuglog >= 0)
--			close(fd_debuglog);
-+		if (kmsg)
-+			fclose(kmsg);
- 		if (outfile)
- 			fclose(outfile);
- 		if (fullbuffer)
+--- LVM2/test/t-lvresize-usage.sh	2008/04/02 12:17:30	1.1
++++ LVM2/test/t-lvresize-usage.sh	2008/04/10 19:59:43	1.2
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+--- LVM2/test/t-vgmerge-operation.sh	2008/03/26 18:03:35	1.1
++++ LVM2/test/t-vgmerge-operation.sh	2008/04/10 19:59:43	1.2
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+--- LVM2/test/t-vgsplit-usage.sh	2008/04/10 01:06:48	1.4
++++ LVM2/test/t-vgsplit-usage.sh	2008/04/10 19:59:43	1.5
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+--- LVM2/tools/lvresize.c	2008/04/02 12:17:30	1.95
++++ LVM2/tools/lvresize.c	2008/04/10 19:59:43	1.96
+@@ -229,8 +229,8 @@
+ 	argv++;
+ 	argc--;
+ 
+-	if (!(lp->lv_name = skip_dev_dir(cmd, lp->lv_name, &dev_dir_found))
+-	    || (!(lp->vg_name = extract_vgname(cmd, lp->lv_name)))) {
++	if (!(lp->lv_name = skip_dev_dir(cmd, lp->lv_name, &dev_dir_found)) ||
++	    !(lp->vg_name = extract_vgname(cmd, lp->lv_name))) {
+ 		log_error("Please provide a volume group name");
+ 		return 0;
+ 	}
+@@ -269,6 +269,7 @@
+ 	uint32_t sz, str;
+ 	struct list *pvh = NULL;
+ 	char size_buf[SIZE_BUF];
++	char lv_path[PATH_MAX];
+ 
+ 	/* does LV exist? */
+ 	if (!(lvl = find_lv_in_vg(vg, lp->lv_name))) {
+@@ -623,8 +624,6 @@
+ 	log_print("Logical volume %s successfully resized", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND)) {
+-		char lv_path[PATH_MAX];
+-
+ 		if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", cmd->dev_dir,
+ 				lp->vg_name, lp->lv_name) < 0) {
+ 			log_error("Couldn't create LV path for %s",
+--- LVM2/tools/toollib.c	2008/03/25 15:24:59	1.132
++++ LVM2/tools/toollib.c	2008/04/10 19:59:43	1.133
+@@ -1245,8 +1245,6 @@
+ 	return rc;
+ }
+ 
+-
+-
+ /*
+  * Set members of struct vgcreate_params from cmdline.
+  * Do preliminary validation with arg_*() interface.
+--- LVM2/tools/vgsplit.c	2008/04/10 19:14:27	1.62
++++ LVM2/tools/vgsplit.c	2008/04/10 19:59:43	1.63
+@@ -93,13 +93,12 @@
+ 	return 0;
+ }
+ 
+-static int _move_one_lv(struct volume_group *vg_from,
+-			struct volume_group *vg_to,
+-			struct list *lvh)
++static void _move_one_lv(struct volume_group *vg_from,
++			 struct volume_group *vg_to,
++			 struct list *lvh)
+ {
+-	struct logical_volume *lv;
++	struct logical_volume *lv = list_item(lvh, struct lv_list)->lv;
+ 
+-	lv = list_item(lvh, struct lv_list)->lv;
+ 	list_move(&vg_to->lvs, lvh);
+ 	
+ 	if (lv->status & SNAPSHOT) {
+@@ -109,7 +108,6 @@
+ 		vg_from->lv_count--;
+ 		vg_to->lv_count++;
+ 	}
+-	return 1;
+ }	
+ 
+ static int _move_lvs(struct volume_group *vg_from, struct volume_group *vg_to)
+@@ -170,8 +168,7 @@
+ 			continue;
+ 
+ 		/* Move this LV */
+-		if (!_move_one_lv(vg_from, vg_to, lvh))
+-			return 0;
++		_move_one_lv(vg_from, vg_to, lvh);
+ 	}
+ 
+ 	/* FIXME Ensure no LVs contain segs pointing at LVs in the other VG */
+@@ -215,10 +212,8 @@
+ 			 * in vg_to.
+ 			 */
+ 			if (_lv_is_in_vg(vg_to, seg->cow) &&
+-			    _lv_is_in_vg(vg_to, seg->origin)) {
+-				if (!_move_one_lv(vg_from, vg_to, lvh))
+-					return 0;
+-			}
++			    _lv_is_in_vg(vg_to, seg->origin))
++				_move_one_lv(vg_from, vg_to, lvh);
+ 		}
+ 
+ 	}
+@@ -344,10 +339,10 @@
+ 		if (new_vg_option_specified(cmd)) {
+ 			log_error("Volume group \"%s\" exists, but new VG "
+ 				    "option specified", vg_name_to);
+-			goto bad;
++			goto_bad;
+ 		}
+ 		if (!vgs_are_compatible(cmd, vg_from,vg_to))
+-			goto bad;
++			goto_bad;
+ 	} else {
+ 		existing_vg = 0;
+ 
+@@ -377,7 +372,7 @@
+ 		if (!(vg_to = vg_create(cmd, vg_name_to, vp_new.extent_size,
+ 					vp_new.max_pv, vp_new.max_lv,
+ 					vp_new.alloc, 0, NULL)))
+-			goto bad;
++			goto_bad;
+ 
+ 		if (vg_is_clustered(vg_from))
+ 			vg_to->status |= CLUSTERED;
+@@ -385,41 +380,39 @@
+ 
+ 	/* Archive vg_from before changing it */
+ 	if (!archive(vg_from))
+-		goto bad;
++		goto_bad;
+ 
+ 	/* Move PVs across to new structure */
+ 	for (opt = 0; opt < argc; opt++) {
+ 		if (!_move_pv(vg_from, vg_to, argv[opt]))
+-			goto bad;
++			goto_bad;
+ 	}
+ 
+ 	/* If an LV given on the cmdline, move used_by PVs */
+-	if (lv_name) {
+-		if (!_move_pvs_used_by_lv(vg_from, vg_to, lv_name))
+-			goto bad;
+-	}
++	if (lv_name && !_move_pvs_used_by_lv(vg_from, vg_to, lv_name))
++		goto_bad;
+ 
+ 	/* Move required LVs across, checking consistency */
+ 	if (!(_move_lvs(vg_from, vg_to)))
+-		goto bad;
++		goto_bad;
+ 
+ 	/* Move required snapshots across */
+ 	if (!(_move_snapshots(vg_from, vg_to)))
+-		goto bad;
++		goto_bad;
+ 
+ 	/* Move required mirrors across */
+ 	if (!(_move_mirrors(vg_from, vg_to)))
+-		goto bad;
++		goto_bad;
+ 
+ 	/* Split metadata areas and check if both vgs have@least one area */
+ 	if (!(vg_split_mdas(cmd, vg_from, vg_to)) && vg_from->pv_count) {
+ 		log_error("Cannot split: Nowhere to store metadata for new Volume Group");
+-		goto bad;
++		goto_bad;
+ 	}
+ 
+ 	/* Set proper name for all PVs in new VG */
+ 	if (!vg_rename(cmd, vg_to, vg_name_to))
+-		goto bad;
++		goto_bad;
+ 
+ 	/* store it on disks */
+ 	log_verbose("Writing out updated volume groups");
+@@ -434,21 +427,21 @@
+ 	vg_to->status |= EXPORTED_VG;
+ 
+ 	if (!archive(vg_to))
+-		goto bad;
++		goto_bad;
+ 
+ 	if (!vg_write(vg_to) || !vg_commit(vg_to))
+-		goto bad;
++		goto_bad;
+ 
+ 	backup(vg_to);
+ 
+ 	/*
+ 	 * Next, write out the updated old VG.  If we crash after this point,
+ 	 * recovery is a vgimport on the new VG.
+-	 * FIXME: recover automatically or instruct the user the user?
++	 * FIXME: recover automatically or instruct the user?
+ 	 */
+ 	if (vg_from->pv_count) {
+ 		if (!vg_write(vg_from) || !vg_commit(vg_from))
+-			goto bad;
++			goto_bad;
+ 
+ 		backup(vg_from);
+ 	}
+@@ -458,17 +451,17 @@
+ 	 */
+ 	consistent = 1;
+ 	if (!test_mode() &&
+-	    (!(vg_to = vg_read(cmd, vg_name_to, NULL, &consistent))
+-	     || !consistent)) {
++	    (!(vg_to = vg_read(cmd, vg_name_to, NULL, &consistent)) ||
++	     !consistent)) {
+ 		log_error("Volume group \"%s\" became inconsistent: please "
+ 			  "fix manually", vg_name_to);
+-		goto bad;
++		goto_bad;
+ 	}
+ 
+ 	vg_to->status &= ~EXPORTED_VG;
+ 
+ 	if (!vg_write(vg_to) || !vg_commit(vg_to))
+-		goto bad;
++		goto_bad;
+ 
+ 	backup(vg_to);
+ 
 
 
