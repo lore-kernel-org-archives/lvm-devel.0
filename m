@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 10 Apr 2008 21:34:19 -0000
-Subject: LVM2/lib/activate activate.c activate.h
-Message-ID: <20080410213419.14041.qmail@sourceware.org>
+Date: 10 Apr 2008 21:34:54 -0000
+Subject: LVM2/tools vgsplit.c
+Message-ID: <20080410213454.14213.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,73 +10,109 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-10 21:34:18
+Changes by:	wysochanski at sourceware.org	2008-04-10 21:34:53
 
 Modified files:
-	lib/activate   : activate.c activate.h 
+	tools          : vgsplit.c 
 
 Log message:
-	Add lv_is_active() to determine whether an lv is active.
+	Update vgsplit to only restrict split with active LVs involved in split.
 	
-	Handles non-clustered as well as clustered.  For clustered,
-	the best we can do is try exclusive local activation.  If this
-	succeeds, we know it is not active elsewhere in the cluster.
-	Otherwise, we assume it is active elsewhere.
+	Existing code will reject a vgsplit if any LVs in the source VG are active.
+	This patch updates vgsplit to only check LVs involved in the split.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.134&r2=1.135
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
 
---- LVM2/lib/activate/activate.c	2008/04/07 10:23:46	1.134
-+++ LVM2/lib/activate/activate.c	2008/04/10 21:34:18	1.135
-@@ -674,6 +674,38 @@
+--- LVM2/tools/vgsplit.c	2008/04/10 20:02:04	1.64
++++ LVM2/tools/vgsplit.c	2008/04/10 21:34:53	1.65
+@@ -93,7 +93,7 @@
+ 	return 0;
  }
  
- /*
-+ * Determine whether an LV is active locally or in a cluster.
-+ * Assumes vg lock held.
-+ * Returns:
-+ * 0 - not active locally or on any node in cluster
-+ * 1 - active either locally or some node in the cluster
-+ */
-+int lv_is_active(struct logical_volume *lv)
-+{
-+	if (_lv_active(lv->vg->cmd, lv, 0))
-+		return 1;
-+
-+	if (!vg_is_clustered(lv->vg))
-+		return 0;
-+
-+	/*
-+	 * FIXME: Cluster does not report per-node LV activation status.
-+	 * Currently the best we can do is try exclusive local activation.
-+	 * If that succeeds, we know the LV is not active elsewhere in the
-+	 * cluster.
-+	 */
-+	if (activate_lv_excl(lv->vg->cmd, lv)) {
-+		deactivate_lv(lv->vg->cmd, lv);
+-static void _move_one_lv(struct volume_group *vg_from,
++static int _move_one_lv(struct volume_group *vg_from,
+ 			 struct volume_group *vg_to,
+ 			 struct list *lvh)
+ {
+@@ -101,6 +101,11 @@
+ 
+ 	list_move(&vg_to->lvs, lvh);
+ 	
++	if (lv_is_active(lv)) {
++		log_error("Logical volume \"%s\" must be inactive", lv->name);
 +		return 0;
 +	}
 +
-+	/*
-+	 * Exclusive local activation failed so assume it is active elsewhere.
-+	 */
+ 	if (lv->status & SNAPSHOT) {
+ 		vg_from->snapshot_count--;
+ 		vg_to->snapshot_count++;
+@@ -108,6 +113,7 @@
+ 		vg_from->lv_count--;
+ 		vg_to->lv_count++;
+ 	}
 +	return 1;
-+}
-+
-+/*
-  * Returns 0 if an attempt to (un)monitor the device failed.
-  * Returns 1 otherwise.
-  */
---- LVM2/lib/activate/activate.h	2008/04/07 10:23:46	1.60
-+++ LVM2/lib/activate/activate.h	2008/04/10 21:34:18	1.61
-@@ -91,6 +91,7 @@
- int lvs_in_vg_activated_by_uuid_only(struct volume_group *vg);
- int lvs_in_vg_opened(const struct volume_group *vg);
+ }	
  
-+int lv_is_active(struct logical_volume *lv);
+ static int _move_lvs(struct volume_group *vg_from, struct volume_group *vg_to)
+@@ -168,7 +174,8 @@
+ 			continue;
  
- int monitor_dev_for_events(struct cmd_context *cmd,
- 			    struct logical_volume *lv, int do_reg);
+ 		/* Move this LV */
+-		_move_one_lv(vg_from, vg_to, lvh);
++		if (!_move_one_lv(vg_from, vg_to, lvh))
++			return 0;
+ 	}
+ 
+ 	/* FIXME Ensure no LVs contain segs pointing at LVs in the other VG */
+@@ -212,8 +219,10 @@
+ 			 * in vg_to.
+ 			 */
+ 			if (_lv_is_in_vg(vg_to, seg->cow) &&
+-			    _lv_is_in_vg(vg_to, seg->origin))
+-				_move_one_lv(vg_from, vg_to, lvh);
++			    _lv_is_in_vg(vg_to, seg->origin)) {
++				if (!_move_one_lv(vg_from, vg_to, lvh))
++					return 0;
++			}
+ 		}
+ 
+ 	}
+@@ -252,8 +261,10 @@
+ 			return 0;
+ 		}
+ 
+-		if (seg_in == seg->area_count && log_in)
+-			_move_one_lv(vg_from, vg_to, lvh);
++		if (seg_in == seg->area_count && log_in) {
++			if (!_move_one_lv(vg_from, vg_to, lvh))
++				return 0;
++		}
+ 	}
+ 
+ 	return 1;
+@@ -277,7 +288,6 @@
+ 	char *vg_name_from, *vg_name_to;
+ 	struct volume_group *vg_to, *vg_from;
+ 	int opt;
+-	int active;
+ 	int existing_vg;
+ 	int consistent;
+ 	const char *lv_name;
+@@ -316,14 +326,6 @@
+ 				       CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
+ 		 return ECMD_FAILED;
+ 
+-	if ((active = lvs_in_vg_activated(vg_from))) {
+-		/* FIXME Remove this restriction */
+-		log_error("Logical volumes in \"%s\" must be inactive",
+-			  vg_name_from);
+-		unlock_vg(cmd, vg_name_from);
+-		return ECMD_FAILED;
+-	}
+-
+ 	log_verbose("Checking for new volume group \"%s\"", vg_name_to);
+ 	if (!lock_vol(cmd, vg_name_to, LCK_VG_WRITE | LCK_NONBLOCK)) {
+ 		log_error("Can't get lock for %s", vg_name_to);
 
 
