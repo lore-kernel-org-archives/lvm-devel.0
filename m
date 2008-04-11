@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 10 Apr 2008 21:38:52 -0000
-Subject: LVM2 ./WHATS_NEW test/t-vgsplit-operation.sh
-Message-ID: <20080410213852.15899.qmail@sourceware.org>
+Date: 11 Apr 2008 14:06:17 -0000
+Subject: LVM2/test lvm-utils.sh t-vgmerge-operation.sh ...
+Message-ID: <20080411140617.22959.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,100 +10,108 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-10 21:38:52
+Changes by:	wysochanski at sourceware.org	2008-04-11 14:06:16
 
 Modified files:
-	.              : WHATS_NEW 
-	test           : t-vgsplit-operation.sh 
+	test           : lvm-utils.sh t-vgmerge-operation.sh 
+	                 t-vgsplit-operation.sh 
 
 Log message:
-	Update vgsplit test to verify loosening of active LV restriction.
-	
-	This and prior 2 commits resolve Red Hat bz 252041:
-	Ability to vgsplit an active Volume Group where the split involves only inactive LVs
+	Fix vgsplit and vgmerge tests for updated lv counting.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.846&r2=1.847
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgmerge-operation.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.20&r2=1.21
 
---- LVM2/WHATS_NEW	2008/04/10 20:07:19	1.846
-+++ LVM2/WHATS_NEW	2008/04/10 21:38:52	1.847
-@@ -1,5 +1,8 @@
- Version 2.02.35 - 
- =================================
-+  Update vgsplit tests to verify loosening of active LV restriction.
-+  Update vgsplit to only restrict split with active LVs involved in split.
-+  Add lv_is_active() to determine whether an lv is active.
+--- LVM2/test/lvm-utils.sh	2008/03/28 18:02:22	1.9
++++ LVM2/test/lvm-utils.sh	2008/04/11 14:06:16	1.10
+@@ -86,6 +86,18 @@
+   return $(test $(lvs --noheadings -o $2 $1) == $3)
+ }
  
- Version 2.02.34 - 10th April 2008
- =================================
---- LVM2/test/t-vgsplit-operation.sh	2008/04/10 18:55:40	1.19
-+++ LVM2/test/t-vgsplit-operation.sh	2008/04/10 21:38:52	1.20
-@@ -276,6 +276,65 @@
-    status=$?; echo status=$status; test $status = 5 &&
-    vgremove -ff $vg1'
- 
-+#
-+# Verify vgsplit rejects active LVs only when active LVs involved in split
-+#
-+test_expect_success \
-+  "vgsplit fails, active mirror involved in split" \
-+  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
-+   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
-+   lvcreate -l 16 -n $lv2 $vg1 $d4 &&
-+   lvchange -an $vg1/$lv2 &&
-+   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
-+   vgsplit -n $lv1 $vg1 $vg2;
-+   status=$?; echo status=$status; test $status = 5 &&
-+   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
-+   vgremove -ff $vg1'
++vg_validate_pvlv_counts_()
++{
++	local local_vg=$1
++	local num_pvs=$2
++	local num_lvs=$3
++	local num_snaps=$4
 +
-+test_expect_success \
-+  "vgsplit succeeds, active mirror not involved in split" \
-+  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
-+   lvcreate -l 16 -n $lv1 -m1 $vg1 $d1 $d2 $d3 &&
-+   lvcreate -l 16 -n $lv2 $vg1 $d4 &&
-+   lvchange -an $vg1/$lv2 &&
-+   vg_validate_pvlv_counts_ $vg1 4 2 0 &&
-+   vgsplit -n $lv2 $vg1 $vg2 &&
++	check_vg_field_ $local_vg pv_count $num_pvs &&
++	check_vg_field_ $local_vg lv_count $num_lvs &&
++	check_vg_field_ $local_vg snap_count $num_snaps
++}
++
+ dmsetup_has_dm_devdir_support_()
+ {
+   # Detect support for the envvar.  If it's supported, the
+--- LVM2/test/t-vgmerge-operation.sh	2008/04/10 19:59:43	1.2
++++ LVM2/test/t-vgmerge-operation.sh	2008/04/11 14:06:16	1.3
+@@ -23,18 +23,6 @@
+   rm -f "$f1" "$f2" "$f3" "$f4"
+ }
+ 
+-vg_validate_pvlv_counts_()
+-{
+-	local local_vg=$1
+-	local num_pvs=$2
+-	local num_lvs=$3
+-	local num_snaps=$4
+-
+-	check_vg_field_ $local_vg pv_count $num_pvs &&
+-	check_vg_field_ $local_vg lv_count $num_lvs &&
+-	check_vg_field_ $local_vg snap_count $num_snaps
+-}
+-
+ test_expect_success \
+   'set up temp files, loopback devices, PVs, vgnames' \
+   'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
+@@ -81,10 +69,10 @@
+    lvcreate -l 16 -n $lv1 $vg1 &&
+    lvcreate -l 4 -s -n $lv2 $vg1/$lv1 &&
+    vgchange -an $vg1 &&
+-   vg_validate_pvlv_counts_ $vg1 2 1 1 &&
++   vg_validate_pvlv_counts_ $vg1 2 2 1 &&
+    vg_validate_pvlv_counts_ $vg2 2 0 0 &&
+    vgmerge $vg2 $vg1 &&
+-   vg_validate_pvlv_counts_ $vg2 4 1 1 &&
++   vg_validate_pvlv_counts_ $vg2 4 2 1 &&
+    lvremove -f $vg2/$lv2 &&
+    vgremove -f $vg2'
+ 
+@@ -94,10 +82,10 @@
+    vgcreate $vg2 $d4 &&
+    lvcreate -l 4 -n $lv1 -m1 $vg1 &&
+    vgchange -an $vg1 &&
+-   vg_validate_pvlv_counts_ $vg1 3 4 0 &&
 +   vg_validate_pvlv_counts_ $vg1 3 1 0 &&
-+   vg_validate_pvlv_counts_ $vg2 1 1 0 &&
-+   vgremove -ff $vg1 &&
-+   vgremove -ff $vg2'
-+
-+test_expect_success \
-+  "vgsplit fails, active snapshot involved in split" \
-+  'vgcreate $vg1 $d1 $d2 $d3 $d4 &&
-+   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 &&
-+   lvcreate -l 64 -i 2 -n $lv3 $vg1 $d3 $d4 &&
-+   lvchange -an $vg1/$lv3 &&
-+   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
-+   vgsplit -n $lv2 $vg1 $vg2;
-+   status=$?; echo status=$status; test $status = 5 &&
-+   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
-+   lvremove -f $vg1/$lv2 &&
-+   vgremove -ff $vg1'
-+
-+test_expect_success \
-+  "vgsplit succeeds, active snapshot not involved in split" \
-+  'vgcreate $vg1 $d1 $d2 $d3 &&
-+   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -s -n $lv2 $vg1/$lv1 &&
-+   vgextend $vg1 $d4 &&
-+   lvcreate -l 64 -n $lv3 $vg1 $d4 &&
-+   lvchange -an $vg1/$lv3 &&
-+   vg_validate_pvlv_counts_ $vg1 4 3 1 &&
-+   vgsplit -n $lv3 $vg1 $vg2 &&
-+   vg_validate_pvlv_counts_ $vg1 3 2 1 &&
-+   vg_validate_pvlv_counts_ $vg2 1 1 0 &&
-+   vgchange -an $vg1 &&
-+   lvremove -f $vg1/$lv2 &&
-+   vgremove -ff $vg1 &&
-+   vgremove -ff $vg2'
-+
+    vg_validate_pvlv_counts_ $vg2 1 0 0 &&
+    vgmerge $vg2 $vg1 &&
+-   vg_validate_pvlv_counts_ $vg2 4 4 0 &&
++   vg_validate_pvlv_counts_ $vg2 4 1 0 &&
+    lvremove -f $vg2/$lv1 &&
+    vgremove -f $vg2'
  
- test_done
+--- LVM2/test/t-vgsplit-operation.sh	2008/04/10 21:38:52	1.20
++++ LVM2/test/t-vgsplit-operation.sh	2008/04/11 14:06:16	1.21
+@@ -24,18 +24,6 @@
+   rm -f "$f1" "$f2" "$f3" "$f4" "$f5"
+ }
  
+-vg_validate_pvlv_counts_()
+-{
+-	local local_vg=$1
+-	local num_pvs=$2
+-	local num_lvs=$3
+-	local num_snaps=$4
+-
+-	check_vg_field_ $local_vg pv_count $num_pvs &&
+-	check_vg_field_ $local_vg lv_count $num_lvs &&
+-	check_vg_field_ $local_vg snap_count $num_snaps
+-}
+-
+ # FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
+ # fine with lvm1 metadata as well; for now, just add disks 5 and 6 as lvm1
+ # metadata
 
 
