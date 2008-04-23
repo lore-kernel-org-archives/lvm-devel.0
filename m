@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 23 Apr 2008 14:33:06 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
-Message-ID: <20080423143306.7289.qmail@sourceware.org>
+Date: 23 Apr 2008 18:28:00 -0000
+Subject: LVM2/test t-mirror-lvconvert.sh
+Message-ID: <20080423182800.13307.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-23 14:33:06
+Changes by:	wysochanski at sourceware.org	2008-04-23 18:27:59
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata-exported.h 
-	tools          : vgsplit.c 
+	test           : t-mirror-lvconvert.sh 
 
 Log message:
-	Fix vgsplit internal counting of snapshot LVs.
+	Add test for rhbz440405 - lvconvert -m0 fails incorrectly if all PEs allocated.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.859&r2=1.860
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.47&r2=1.48
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.66&r2=1.67
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2008/04/23 12:53:10	1.859
-+++ LVM2/WHATS_NEW	2008/04/23 14:33:05	1.860
-@@ -1,5 +1,6 @@
- Version 2.02.36 - 
- =================================
-+  Fix vgsplit internal counting of snapshot LVs.
-   Fix internal snapshot_count when vgmerge with snapshots in source VG.
-   Simply clvmd-openais by using non-async saLckResourceLock.
-   Check lv_count in vg_validate.
---- LVM2/lib/metadata/metadata-exported.h	2008/04/10 17:09:31	1.47
-+++ LVM2/lib/metadata/metadata-exported.h	2008/04/23 14:33:05	1.48
-@@ -202,7 +202,23 @@
- 	uint32_t pv_count;
- 	struct list pvs;
+--- LVM2/test/t-mirror-lvconvert.sh	2008/01/17 02:20:48	1.2
++++ LVM2/test/t-mirror-lvconvert.sh	2008/04/23 18:27:59	1.3
+@@ -387,6 +387,16 @@
+    mirrorlog_is_on_ $vg/$lv1 $(pv_ 3) &&
+    check_and_cleanup_lvs_'
  
--	/* logical volumes */
-+	/*
-+	 * logical volumes
-+	 * The following relationship should always hold:
-+	 * list_size(lvs) = lv_count + 2 * snapshot_count
-+	 *
-+	 * Snapshots consist of 2 instances of "struct logical_volume":
-+	 * - cow (lv_name is visible to the user)
-+	 * - snapshot (lv_name is 'snapshotN')
-+	 * Neither of these instances is reflected in lv_count, but we
-+	 * multiply the snapshot_count by 2.
-+	 *
-+	 * Mirrors consist of multiple instances of "struct logical_volume":
-+	 * - one for the mirror log
-+	 * - one for each mirror leg
-+	 * - one for the user-visible mirror LV
-+	 * all of the instances are reflected in lv_count.
-+	 */
- 	uint32_t lv_count;
- 	uint32_t snapshot_count;
- 	struct list lvs;
---- LVM2/tools/vgsplit.c	2008/04/15 14:57:12	1.66
-+++ LVM2/tools/vgsplit.c	2008/04/23 14:33:06	1.67
-@@ -109,7 +109,7 @@
- 	if (lv->status & SNAPSHOT) {
- 		vg_from->snapshot_count--;
- 		vg_to->snapshot_count++;
--	} else {
-+	} else if (!lv_is_cow(lv)) {
- 		vg_from->lv_count--;
- 		vg_to->lv_count++;
- 	}
++test_expect_success "rhbz440405: lvconvert -m0 incorrectly fails if all PEs allocated" \
++  'prepare_lvs_ &&
++   lvcreate -l`pvs --noheadings -ope_count $(pv_ 1)` -m1 -n $lv1 $vg $(pv_ 1) $(pv_ 2) $(pv_ 3):0 &&
++   check_mirror_count_ $vg/$lv1 2 &&
++   check_mirror_log_ $vg/$lv1 &&
++   lvconvert -m0 $vg/$lv1 $(pv_ 1) &&
++   check_no_tmplvs_ $vg/$lv1 &&
++   check_mirror_count_ $vg/$lv1 1 &&
++   check_and_cleanup_lvs_'
++
+ # ---------------------------------------------------------------------
+ 
+ test_done
 
 
