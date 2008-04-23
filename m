@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 23 Apr 2008 12:53:11 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgmerge.c
-Message-ID: <20080423125311.22330.qmail@sourceware.org>
+Date: 23 Apr 2008 13:02:03 -0000
+Subject: LVM2/test lvm-utils.sh
+Message-ID: <20080423130203.28130.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-04-23 12:53:10
+Changes by:	wysochanski at sourceware.org	2008-04-23 13:02:03
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : vgmerge.c 
+	test           : lvm-utils.sh 
 
 Log message:
-	Fix internal snapshot_count when vgmerge with snapshots in source VG.
+	Update test function _check_{vg|lv|pv}_field to aid in test debug.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.858&r2=1.859
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/WHATS_NEW	2008/04/23 09:53:49	1.858
-+++ LVM2/WHATS_NEW	2008/04/23 12:53:10	1.859
-@@ -1,5 +1,6 @@
- Version 2.02.36 - 
- =================================
-+  Fix internal snapshot_count when vgmerge with snapshots in source VG.
-   Simply clvmd-openais by using non-async saLckResourceLock.
-   Check lv_count in vg_validate.
-   Fix internal LV counter when a snapshot is removed.
---- LVM2/tools/vgmerge.c	2008/04/10 19:14:26	1.47
-+++ LVM2/tools/vgmerge.c	2008/04/23 12:53:10	1.48
-@@ -99,6 +99,7 @@
- 	}
- 
- 	vg_to->lv_count += vg_from->lv_count;
-+	vg_to->snapshot_count += vg_from->snapshot_count;
- 
- 	vg_to->extent_count += vg_from->extent_count;
- 	vg_to->free_count += vg_from->free_count;
+--- LVM2/test/lvm-utils.sh	2008/04/11 14:06:16	1.10
++++ LVM2/test/lvm-utils.sh	2008/04/23 13:02:03	1.11
+@@ -63,7 +63,7 @@
+ {
+ if test "$verbose" = "t"
+ then
+-  echo "check_vg_field_ VG: $1 actual: `vgs --noheadings -o $2 $1` expected $3"
++  echo "check_vg_field_ VG=$1, field=$2, actual=`vgs --noheadings -o $2 $1`, expected=$3"
+ fi
+   return $(test $(vgs --noheadings -o $2 $1) == $3)
+ }
+@@ -72,7 +72,7 @@
+ {
+ if test "$verbose" = "t"
+ then
+-  echo "check_pv_field_ PV: $1 actual: `pvs --noheadings -o $2 $1` expected $3"
++  echo "check_pv_field_ PV=$1, field=$2, actual=`pvs --noheadings -o $2 $1`, expected=$3"
+ fi
+   return $(test $(pvs --noheadings -o $2 $1) == $3)
+ }
+@@ -81,7 +81,7 @@
+ {
+ if test "$verbose" = "t"
+ then
+-  echo "check_lv_field_ LV: $1 actual: `lvs --noheadings -o $2 $1` expected $3"
++  echo "check_lv_field_ LV=$1, field=$2, actual=`lvs --noheadings -o $2 $1`, expected=$3"
+ fi
+   return $(test $(lvs --noheadings -o $2 $1) == $3)
+ }
 
 
