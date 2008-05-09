@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 9 May 2008 18:45:16 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c ...
-Message-ID: <20080509184516.25532.qmail@sourceware.org>
+Date: 9 May 2008 19:26:58 -0000
+Subject: LVM2 daemons/clvmd/clvmd-command.c daemons/clv ...
+Message-ID: <20080509192658.24864.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,141 +10,103 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-05-09 18:45:15
+Changes by:	agk at sourceware.org	2008-05-09 19:26:58
 
 Modified files:
-	.              : WHATS_NEW 
 	daemons/clvmd  : clvmd-command.c lvm-functions.c 
-	lib/cache      : lvmcache.c 
-	lib/locking    : cluster_locking.c file_locking.c locking.c 
+	lib/locking    : file_locking.c locking.h 
 
 Log message:
-	More P_ and V_ lock cleanup.
+	more cleanup
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.873&r2=1.874
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/file_locking.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/file_locking.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.40&r2=1.41
 
---- LVM2/WHATS_NEW	2008/05/09 15:13:20	1.873
-+++ LVM2/WHATS_NEW	2008/05/09 18:45:14	1.874
-@@ -6,6 +6,7 @@
- 
- Version 2.02.37 - 
- =================================
-+  Add assertions to trap deprecated P_ and V_ lock usage.
-   Add missing mutex around clvmd lvmcache_drop_metadata library call.
-   Fix uninitialised mutex in clvmd if all daemons are not running at startup.
-   Avoid using DLM locks with LCK_CACHE type P_ lock requests.
---- LVM2/daemons/clvmd/clvmd-command.c	2008/05/09 15:13:20	1.22
-+++ LVM2/daemons/clvmd/clvmd-command.c	2008/05/09 18:45:14	1.23
-@@ -118,10 +118,10 @@
- 		lockname = &args[2];
+--- LVM2/daemons/clvmd/clvmd-command.c	2008/05/09 18:45:14	1.23
++++ LVM2/daemons/clvmd/clvmd-command.c	2008/05/09 19:26:58	1.24
+@@ -119,7 +119,7 @@
  		/* Check to see if the VG is in use by LVM1 */
  		status = do_check_lvm1(lockname);
--		/* P_#global causes a cache refresh */
--		if (strcmp(lockname, "P_#global") == 0)
--		      do_refresh_cache();
--		else if (strncmp(lockname, "P_", 2) == 0)
-+		/* P_#global causes a full cache refresh */
-+		if (!strcmp(lockname, "P_#global"))
-+			do_refresh_cache();
-+		else
+ 		/* P_#global causes a full cache refresh */
+-		if (!strcmp(lockname, "P_#global"))
++		if (!strcmp(lockname, "P_" VG_GLOBAL))
+ 			do_refresh_cache();
+ 		else
  			drop_metadata(lockname + 2);
- 
- 		break;
-@@ -254,9 +254,9 @@
- 
- 	case CLVMD_CMD_LOCK_VG:
- 		lockname = &args[2];
--		/* Do not use lock for cache related commands */
-+		/* We take out a real lock unless LCK_CACHE was set */
- 		if (!strncmp(lockname, "V_", 2) ||
--		    !strcmp(lockname, "P_#global"))
-+		    !strncmp(lockname, "P_#", 3))
- 			status = lock_vg(client);
- 		break;
- 
---- LVM2/daemons/clvmd/lvm-functions.c	2008/05/09 15:13:20	1.40
-+++ LVM2/daemons/clvmd/lvm-functions.c	2008/05/09 18:45:14	1.41
-@@ -472,7 +472,8 @@
+--- LVM2/daemons/clvmd/lvm-functions.c	2008/05/09 18:45:14	1.41
++++ LVM2/daemons/clvmd/lvm-functions.c	2008/05/09 19:26:58	1.42
+@@ -472,8 +472,8 @@
  	    popen
  	    ("lvm pvs  --config 'log{command_names=0 prefix=\"\"}' --nolocking --noheadings -o vg_name", "r");
  
--	sync_unlock("P_orphans", LCK_EXCL);
-+	sync_unlock("P_#orphans", LCK_EXCL);
-+	sync_unlock("P_#global", LCK_EXCL);
+-	sync_unlock("P_#orphans", LCK_EXCL);
+-	sync_unlock("P_#global", LCK_EXCL);
++	sync_unlock("P_" VG_ORPHANS, LCK_EXCL);
++	sync_unlock("P_" VG_GLOBAL, LCK_EXCL);
  
  	if (!vgs)
  		return;
---- LVM2/lib/cache/lvmcache.c	2008/05/09 15:13:20	1.49
-+++ LVM2/lib/cache/lvmcache.c	2008/05/09 18:45:14	1.50
-@@ -162,6 +162,9 @@
- 		_drop_metadata(FMT_TEXT_ORPHAN_VG_NAME);
- 		_drop_metadata(FMT_LVM1_ORPHAN_VG_NAME);
- 		_drop_metadata(FMT_POOL_ORPHAN_VG_NAME);
-+
-+		/* Indicate that PVs could now be missing from the cache */
-+		init_full_scan_done(0);
- 	} else
- 		_drop_metadata(vgname);
- }
---- LVM2/lib/locking/cluster_locking.c	2008/04/15 14:46:19	1.28
-+++ LVM2/lib/locking/cluster_locking.c	2008/05/09 18:45:15	1.29
-@@ -387,13 +387,12 @@
+--- LVM2/lib/locking/file_locking.c	2008/05/09 18:45:15	1.38
++++ LVM2/lib/locking/file_locking.c	2008/05/09 19:26:58	1.39
+@@ -210,10 +210,14 @@
+ 
  	switch (flags & LCK_SCOPE_MASK) {
  	case LCK_VG:
- 		/* If the VG name is empty then lock the unused PVs */
--		if (!*resource)	/* FIXME Deprecated */
--			dm_snprintf(lockname, sizeof(lockname), "P_orphans");
--		else if (*resource == '#' || (flags & LCK_CACHE))
--			dm_snprintf(lockname, sizeof(lockname), "P_%s", resource);
-+		if (*resource == '#' || (flags & LCK_CACHE))
-+			dm_snprintf(lockname, sizeof(lockname), "P_%s",
-+				    resource);
- 		else
- 			dm_snprintf(lockname, sizeof(lockname), "V_%s",
--				     resource);
-+				    resource);
- 
- 		lock_scope = "VG";
- 		cluster_cmd = CLVMD_CMD_LOCK_VG;
---- LVM2/lib/locking/file_locking.c	2008/04/15 14:46:19	1.37
-+++ LVM2/lib/locking/file_locking.c	2008/05/09 18:45:15	1.38
-@@ -214,10 +214,7 @@
+-		if (flags & LCK_CACHE) {
++		/* Skip cache refresh for VG_GLOBAL - the caller handles it */
++		if (strcmp(resource, VG_GLOBAL))
  			lvmcache_drop_metadata(resource);
++
++		/* LCK_CACHE does not require a real lock */
++		if (flags & LCK_CACHE)
  			break;
- 		}
--		if (!*resource)	/* FIXME Deprecated */
--			dm_snprintf(lockfile, sizeof(lockfile),
--				     "%s/P_orphans", _lock_dir);
--		else if (*resource == '#')
-+		if (*resource == '#')
+-		}
++
+ 		if (*resource == '#')
  			dm_snprintf(lockfile, sizeof(lockfile),
  				     "%s/P_%s", _lock_dir, resource + 1);
- 		else
---- LVM2/lib/locking/locking.c	2008/05/08 18:35:58	1.48
-+++ LVM2/lib/locking/locking.c	2008/05/09 18:45:15	1.49
-@@ -323,6 +323,16 @@
+--- LVM2/lib/locking/locking.h	2008/04/15 14:46:19	1.40
++++ LVM2/lib/locking/locking.h	2008/05/09 19:26:58	1.41
+@@ -27,9 +27,11 @@
  
- 	assert(resource);
+ /*
+  * LCK_VG:
+- *   Lock/unlock on-disk volume group data
+- *   Use VG_ORPHANS to lock orphan PVs
+- *   char *vol holds volume group name
++ *   Lock/unlock on-disk volume group data.
++ *   Use VG_ORPHANS to lock all orphan PVs.
++ *   Use VG_GLOBAL as a global lock and to wipe the internal cache.
++ *   char *vol holds volume group name.
++ *   Set the LCK_CACHE flag to invalidate 'vol' in the internal cache.
+  *
+  * LCK_LV:
+  *   Lock/unlock an individual logical volume
+@@ -38,6 +40,13 @@
+ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags);
  
-+	if (!*resource) {
-+		log_error("Internal error: Use of P_orphans is deprecated.");
-+		return 0;
-+	}
+ /*
++ * Internal locking representation.
++ *   LCK_VG: Uses prefix V_ unless the vol begins with # (i.e. #global or #orphans)
++ *           or the LCK_CACHE flag is set when it uses the prefix P_.
++ * If LCK_CACHE is set, we do not take out a real lock.
++ */
 +
-+	if (*resource == '#' && (flags & LCK_CACHE)) {
-+		log_error("Internal error: P_%s referenced", resource);
-+		return 0;
-+	}
-+
- 	if ((ret = _locking.lock_resource(cmd, resource, flags))) {
- 		if ((flags & LCK_SCOPE_MASK) == LCK_VG &&
- 		    !(flags & LCK_CACHE)) {
++/*
+  * Does the LVM1 driver have this VG active?
+  */
+ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+@@ -69,7 +78,7 @@
+ #define LCK_HOLD	0x00000020U	/* Hold lock when lock_vol returns? */
+ #define LCK_LOCAL	0x00000040U	/* Don't propagate to other nodes */
+ #define LCK_CLUSTER_VG	0x00000080U	/* VG is clustered */
+-#define LCK_CACHE	0x00000100U	/* Operation on cache using P_ lock */
++#define LCK_CACHE	0x00000100U	/* Operation on cache only using P_ lock */
+ 
+ /*
+  * Additional lock bits for cluster communication
 
 
