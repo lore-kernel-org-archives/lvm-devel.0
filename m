@@ -1,70 +1,67 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:48:37 +0000 (UTC)
-Subject: master - lvremove: remove thin volumes on damaged pools
-Message-ID: <20140702084837.E212561054@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 21 May 2008 14:10:12 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvchange.c
+Message-ID: <20080521141012.15733.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=93a80018ae8e2f3f56e56b42237779661c9040b3
-Commit:        93a80018ae8e2f3f56e56b42237779661c9040b3
-Parent:        0b872ce870b753d034da919814c13703606af188
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 2 00:13:32 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 2 10:37:52 2014 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-05-21 14:10:11
 
-lvremove: remove thin volumes on damaged pools
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvchange.c 
 
-Support remove of thin volumes With --force --force
-when thin pools is damaged.
+Log message:
+	Temporarily disable dmeventd mirror monitoring during lvchange --resync.
 
-This way it's possible to remove thin pool with
-unrepairable metadata without requiring to
-manually edit lvm2 metadata.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.875&r2=1.876
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
 
-lvremove -ff vg/pool
-
-removes all thin volumes and pool even when
-thin pool cannot be activated (to accept
-removal of thin volumes in kernel metadata)
----
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    9 +++++++--
- 2 files changed, 8 insertions(+), 2 deletions(-)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 846983f..230bdf0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.108 -
+--- LVM2/WHATS_NEW	2008/05/19 19:49:56	1.875
++++ LVM2/WHATS_NEW	2008/05/21 14:10:11	1.876
+@@ -6,6 +6,7 @@
+ 
+ Version 2.02.37 - 
  =================================
-+  Support lvremove -ff to remove thin volumes from broken thin pools.
-   Require --yes to skip raid repair prompt.
-   Change makefile %.d generation to handle filename changes without make clean.
-   Fix use of buildir in make pofile.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d35a244..537ec30 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4923,8 +4923,13 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	/* Clear thin pool stacked messages */
- 	if (pool_lv && !pool_has_message(first_seg(pool_lv), lv, 0) &&
- 	    !update_pool_lv(pool_lv, 1)) {
--		log_error("Failed to update thin pool %s.", pool_lv->name);
--		return 0;
-+		if (force < DONT_PROMPT_OVERRIDE) {
-+			log_error("Failed to update thin pool %s.", pool_lv->name);
-+			return 0;
-+		}
-+		log_warn("WARNING: Forced to ignoring failure of pool metadata update %s.",
-+			 pool_lv->name);
-+		pool_lv = NULL; /* Do not retry */
++  Temporarily disable dmeventd mirror monitoring during lvchange --resync.
+   Refactor some vginfo manipulation code.
+   Add assertions to trap deprecated P_ and V_ lock usage.
+   Add missing mutex around clvmd lvmcache_drop_metadata library call.
+--- LVM2/tools/lvchange.c	2008/04/10 17:09:32	1.90
++++ LVM2/tools/lvchange.c	2008/05/21 14:10:11	1.91
+@@ -178,6 +178,7 @@
+ 			      struct logical_volume *lv)
+ {
+ 	int active = 0;
++	int monitored;
+ 	struct lvinfo info;
+ 	struct logical_volume *log_lv;
+ 
+@@ -221,6 +222,10 @@
+ 		}
  	}
  
- 	visible = lv_is_visible(lv);
++	/* Activate exclusively to ensure no nodes still have LV active */
++	monitored = dmeventd_monitor_mode();
++	init_dmeventd_monitor(0);
++
+ 	if (vg_is_clustered(lv->vg) && !activate_lv_excl(cmd, lv)) {
+ 		log_error("Can't get exclusive access to clustered volume %s",
+ 			  lv->name);
+@@ -232,6 +237,8 @@
+ 		return 0;
+ 	}
+ 
++	init_dmeventd_monitor(monitored);
++
+ 	log_lv = first_seg(lv)->log_lv;
+ 
+ 	log_very_verbose("Starting resync of %s%s%s mirror \"%s\"",
 
 
