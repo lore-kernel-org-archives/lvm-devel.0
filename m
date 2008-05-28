@@ -1,268 +1,158 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  2 Jul 2014 08:49:00 +0000 (UTC)
-Subject: master - tests: avoid hiding results in local
-Message-ID: <20140702084900.D0FE360BAB@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 28 May 2008 22:27:48 -0000
+Subject: LVM2 lib/cache/lvmcache.c lib/device/dev-cache ...
+Message-ID: <20080528222748.352.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b22ab4dab0dcf78d86ff64c3412cf175118d1785
-Commit:        b22ab4dab0dcf78d86ff64c3412cf175118d1785
-Parent:        d1dcbe085370ba194b6598bb9440550edb7f184f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 30 20:04:24 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 2 10:45:43 2014 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-05-28 22:27:47
 
-tests: avoid hiding results in local
+Modified files:
+	lib/cache      : lvmcache.c 
+	lib/device     : dev-cache.c 
+	.              : WHATS_NEW 
 
-There is a difference between:
+Log message:
+	Avoid spurious duplicate VG messages referring to VGs that are gone.
+	(untested)
 
-local a=$(shell)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.876&r2=1.877
 
-and
-
-local a
-a=$(shell)
-
-The first return exit code from shells' local command.
----
- test/shell/fsadm.sh                         |    3 +-
- test/shell/lvchange-raid.sh                 |   10 ++++++--
- test/shell/lvconvert-mirror-basic.sh        |    2 +-
- test/shell/lvcreate-signature-wiping.sh     |    3 +-
- test/shell/mirror-names.sh                  |    4 ++-
- test/shell/mirror-vgreduce-removemissing.sh |   11 ++++++---
- test/shell/snapshot-merge.sh                |    4 ++-
- test/shell/topology-support.sh              |   30 +++++++++++---------------
- 8 files changed, 38 insertions(+), 29 deletions(-)
-
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index 612d2b7..368e747 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -75,7 +75,8 @@ fscheck_reiserfs()
- 
- check_missing()
+--- LVM2/lib/cache/lvmcache.c	2008/05/19 19:49:56	1.51
++++ LVM2/lib/cache/lvmcache.c	2008/05/28 22:27:47	1.52
+@@ -31,6 +31,7 @@
+ static struct dm_hash_table *_vgname_hash = NULL;
+ static struct dm_hash_table *_lock_hash = NULL;
+ static struct list _vginfos;
++static int _scanning_in_progress = 0;
+ static int _has_scanned = 0;
+ static int _vgs_locked = 0;
+ static int _vg_global_lock_held = 0;	/* Global lock held when cache wiped? */
+@@ -220,6 +221,9 @@
+ static void _vginfo_attach_info(struct lvmcache_vginfo *vginfo,
+ 				struct lvmcache_info *info)
  {
--	eval local t=$\check_$1
-+	local t
-+	eval t=$\check_$1
- 	test -z "$t" && return 0
- 	test "$t" = skip && return 1
- 	echo "WARNING: fsadm test skipped $1 tests, $t tool is missing."
-diff --git a/test/shell/lvchange-raid.sh b/test/shell/lvchange-raid.sh
-index e35f4de..a0a0d2a 100644
---- a/test/shell/lvchange-raid.sh
-+++ b/test/shell/lvchange-raid.sh
-@@ -29,9 +29,13 @@ aux prepare_vg 6
- run_writemostly_check() {
- 	local vg=$1
- 	local lv=${2}${THIN_POSTFIX}
--	local segtype=$(get lv_field $vg/$lv segtype -a)
--	local d0=$(get lv_devices $vg/${lv}_rimage_0)
--	local d1=$(get lv_devices $vg/${lv}_rimage_1)
-+	local segtype=
-+	local d0
-+	local d1
++	if (!vginfo)
++		return;
 +
-+	segtype=$(get lv_field $vg/$lv segtype -a)
-+	d0=$(get lv_devices $vg/${lv}_rimage_0)
-+	d1=$(get lv_devices $vg/${lv}_rimage_1)
- 
- 	printf "#\n#\n#\n# %s/%s (%s): run_writemostly_check\n#\n#\n#\n" \
- 		$vg $lv $segtype
-diff --git a/test/shell/lvconvert-mirror-basic.sh b/test/shell/lvconvert-mirror-basic.sh
-index 6fcff70..07bafb9 100644
---- a/test/shell/lvconvert-mirror-basic.sh
-+++ b/test/shell/lvconvert-mirror-basic.sh
-@@ -43,7 +43,7 @@ test_lvconvert() {
- 	local finish_count=$3
- 	local finish_count_p1=$(($finish_count + 1))
- 	local finish_log_type=$4
--	local dev_array=("$dev1" "$dev2" "$dev3" "$dev4" "$dev5")
-+	local dev_array=( "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" )
- 	local start_log_count
- 	local finish_log_count
- 	local max_log_count
-diff --git a/test/shell/lvcreate-signature-wiping.sh b/test/shell/lvcreate-signature-wiping.sh
-index 388c542..32ef363 100644
---- a/test/shell/lvcreate-signature-wiping.sh
-+++ b/test/shell/lvcreate-signature-wiping.sh
-@@ -18,7 +18,8 @@ init_lv_() {
+ 	info->vginfo = vginfo;
+ 	list_add(&vginfo->infos, &info->list);
+ }
+@@ -361,6 +365,18 @@
+ 	return 1;
  }
  
- test_blkid_() {
--	local type=$(blkid -s TYPE -o value -c /dev/null "$DM_DEV_DIR/$vg/$lv1")
-+	local type
-+	type=$(blkid -s TYPE -o value -c /dev/null "$DM_DEV_DIR/$vg/$lv1")
- 	test "$type" = "swap"
- }
- 
-diff --git a/test/shell/mirror-names.sh b/test/shell/mirror-names.sh
-index 8094798..0e064ed 100644
---- a/test/shell/mirror-names.sh
-+++ b/test/shell/mirror-names.sh
-@@ -22,7 +22,9 @@ lv_devices_() {
- 	local lv=$1
- 	shift
- 	local devices=$@
--	local devs=$(get lv_field $lv devices -a | sed 's/([0-9]*)//g; s/ //g; s/,/ /g')
-+	local devs
++/* vginfo is invalid if it does not contain at least one valid info */
++static int _vginfo_is_invalid(struct lvmcache_vginfo *vginfo)
++{
++	struct lvmcache_info *info;
 +
-+	devs=$(get lv_devices "$lv")
++	list_iterate_items(info, &vginfo->infos)
++		if (_info_is_valid(info))
++			return 0;
++
++	return 1;
++}
++
+ /*
+  * If valid_only is set, data will only be returned if the cached data is
+  * known still to be valid.
+@@ -407,7 +423,6 @@
+ 	struct device *dev;
+ 	struct format_type *fmt;
  
- 	for d in $devs; do
- 		(echo "$devices" | grep $d) || return 1
-diff --git a/test/shell/mirror-vgreduce-removemissing.sh b/test/shell/mirror-vgreduce-removemissing.sh
-index 62847ae..fd71696 100644
---- a/test/shell/mirror-vgreduce-removemissing.sh
-+++ b/test/shell/mirror-vgreduce-removemissing.sh
-@@ -75,9 +75,10 @@ rest_pvs_()
- 	local num=$2
- 	local rem=
- 	local n
-+	local dev
+-	static int _scanning_in_progress = 0;
+ 	int r = 0;
  
- 	for n in $(seq 1 $(($index - 1))) $(seq $(($index + 1)) $num); do
--		eval local dev=$\dev$n
-+		eval dev=$\dev$n
- 		rem="$rem $dev"
- 	done
+ 	/* Avoid recursion when a PVID can't be found! */
+@@ -604,12 +619,14 @@
  
-@@ -223,6 +224,7 @@ done
- test_3way_mirror_plus_1_fail_3_()
+ 	_free_cached_vgmetadata(vginfo);
+ 
+-	dm_hash_remove(_vgname_hash, vginfo->vgname);
+-	if (vginfo->next && !dm_hash_insert(_vgname_hash, vginfo->vgname,
+-					    vginfo->next)) {
+-		log_error("_vgname_hash re-insertion for %s failed",
+-			  vginfo->vgname);
+-		r = 0;
++	if (vginfo_from_vgname(vginfo->vgname, NULL) == vginfo) {
++		dm_hash_remove(_vgname_hash, vginfo->vgname);
++		if (vginfo->next && !dm_hash_insert(_vgname_hash, vginfo->vgname,
++						    vginfo->next)) {
++			log_error("_vgname_hash re-insertion for %s failed",
++				  vginfo->vgname);
++			r = 0;
++		}
+ 	}
+ 
+ 	if (vginfo->vgname)
+@@ -801,7 +818,8 @@
+ 				   uint32_t vgstatus, const char *creation_host,
+ 				   const struct format_type *fmt)
  {
- 	local index=$1
-+	local dev
+-	struct lvmcache_vginfo *vginfo, *primary_vginfo;
++	struct lvmcache_vginfo *vginfo, *primary_vginfo, *orphan_vginfo;
++	struct lvmcache_info *info2, *info3;
+ 	// struct lvmcache_vginfo  *old_vginfo, *next;
  
- 	lvcreate -an -Zn -l2 --type mirror -m2 -n $lv1 $vg "$dev1" "$dev2" "$dev3" "$dev5":$BLOCKS
- 	lvconvert -m+1 $vg/$lv1 "$dev4"
-@@ -232,9 +234,9 @@ test_3way_mirror_plus_1_fail_3_()
- 	aux disable_dev $(rest_pvs_ $index 4)
- 	vgreduce --removemissing --force $vg
- 	lvs -a -o+devices $vg
--	eval local dev=\$dev$n
-+	eval dev=\$dev$n
- 	check linear $vg $lv1
--        check lv_on $vg $lv1 "$dev"
-+	check lv_on $vg $lv1 "$dev"
- }
- 
- for n in $(seq 1 4); do
-@@ -278,6 +280,7 @@ done
- test_2way_mirror_plus_2_fail_3_()
- {
- 	local index=$1
-+	local dev
- 
- 	lvcreate -an -Zn -l2 --type mirror -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev5":$BLOCKS
- 	lvconvert -m+2 $vg/$lv1 "$dev3" "$dev4"
-@@ -286,7 +289,7 @@ test_2way_mirror_plus_2_fail_3_()
- 	aux disable_dev $(rest_pvs_ $index 4)
- 	vgreduce --removemissing --force $vg
- 	lvs -a -o+devices $vg
--	eval local dev=\$dev$n
-+	eval dev=\$dev$n
- 	mimages_are_on_ $lv1 "$dev" || lv_is_on_ $lv1 "$dev"
- 	not mirrorlog_is_on_ $lv1 "$dev5"
- }
-diff --git a/test/shell/snapshot-merge.sh b/test/shell/snapshot-merge.sh
-index 0117cdc..44d6c24 100644
---- a/test/shell/snapshot-merge.sh
-+++ b/test/shell/snapshot-merge.sh
-@@ -25,7 +25,9 @@ setup_merge_() {
-     local VG_NAME=$1
-     local LV_NAME=$2
-     local NUM_EXTRA_SNAPS=${3:-0}
--    local BASE_SNAP_LV_NAME=$(snap_lv_name_ $LV_NAME)
-+    local BASE_SNAP_LV_NAME
+ 	if (!vgname || (info && info->vginfo && !strcmp(info->vginfo->vgname, vgname)))
+@@ -860,7 +878,24 @@
+ 			return 0;
+ 		}
+ 		list_init(&vginfo->infos);
+-		primary_vginfo = vginfo_from_vgname(vgname, NULL);
 +
-+    BASE_SNAP_LV_NAME=$(snap_lv_name_ $LV_NAME)
- 
-     lvcreate -aey -n $LV_NAME -l 50%FREE $VG_NAME
-     lvcreate -s -n $BASE_SNAP_LV_NAME -l 20%FREE ${VG_NAME}/${LV_NAME}
-diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
-index a1af6d7..caebb3d 100644
---- a/test/shell/topology-support.sh
-+++ b/test/shell/topology-support.sh
-@@ -14,23 +14,17 @@
- which mkfs.ext3 || skip
- 
- check_logical_block_size() {
--    local DEV_=$(cat SCSI_DEBUG_DEV)
-     # Verify logical_block_size - requires Linux >= 2.6.31
--    SYSFS_LOGICAL_BLOCK_SIZE=$(echo /sys/block/$(basename $DEV_)/queue/logical_block_size)
--    if [ -f "$SYSFS_LOGICAL_BLOCK_SIZE" ] ; then
--	ACTUAL_LOGICAL_BLOCK_SIZE=$(cat $SYSFS_LOGICAL_BLOCK_SIZE)
--	test $ACTUAL_LOGICAL_BLOCK_SIZE = $1
--    fi
-+    SYSFS_LOGICAL_BLOCK_SIZE="/sys/block/$(basename $(< SCSI_DEBUG_DEV))/queue/logical_block_size"
-+    test -f "$SYSFS_LOGICAL_BLOCK_SIZE" || return 0
-+    test "$(< $SYSFS_LOGICAL_BLOCK_SIZE)" -eq "$1" # ACTUAL_LOGICAL_BLOCK_SIZE
- }
- 
- check_optimal_io_size() {
--    local DEV_=$(cat SCSI_DEBUG_DEV)
-     # Verify optimal_io_size
--    SYSFS_OPTIMAL_IO_SIZE=$(echo /sys/block/$(basename $DEV_)/queue/optimal_io_size)
--    if [ -f "$SYSFS_OPTIMAL_IO_SIZE" ] ; then
--	ACTUAL_OPTIMAL_IO_SIZE=$(cat $SYSFS_OPTIMAL_IO_SIZE)
--	test $ACTUAL_OPTIMAL_IO_SIZE = $1
--    fi
-+    SYSFS_OPTIMAL_IO_SIZE="/sys/block/$(basename $(< SCSI_DEBUG_DEV))/queue/optimal_io_size"
-+    test -f "$SYSFS_OPTIMAL_IO_SIZE" || return 0
-+    test "$(< $SYSFS_OPTIMAL_IO_SIZE)" -eq "$1" # ACTUAL_OPTIMAL_IO_SIZE
- }
- 
- lvdev_() {
-@@ -64,7 +58,7 @@ DEV_SIZE=$(($NUM_DEVS*$PER_DEV_SIZE))
- # Test that kernel supports topology
- aux prepare_scsi_debug_dev $DEV_SIZE || skip
- 
--if [ ! -e /sys/block/$(basename $(cat SCSI_DEBUG_DEV))/alignment_offset ] ; then
-+if [ ! -e /sys/block/$(basename $(< SCSI_DEBUG_DEV))/alignment_offset ] ; then
- 	aux cleanup_scsi_debug_dev
- 	skip
- fi
-@@ -79,7 +73,9 @@ aux prepare_scsi_debug_dev $DEV_SIZE \
- check_logical_block_size $LOGICAL_BLOCK_SIZE
- 
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
--vgcreate $vg $(cat DEVICES)
-+get_devs
++		/*
++		 * If we're scanning and there's an invalidated entry, remove it.
++		 * Otherwise we risk bogus warnings of duplicate VGs.
++		 */
++		while ((primary_vginfo = vginfo_from_vgname(vgname, NULL)) &&
++		       _scanning_in_progress && _vginfo_is_invalid(primary_vginfo))
++			list_iterate_items_safe(info2, info3, &primary_vginfo->infos) {
++				orphan_vginfo = vginfo_from_vgname(primary_vginfo->fmt->orphan_vg_name, NULL);
++				_drop_vginfo(info2, primary_vginfo);	
++				_vginfo_attach_info(orphan_vginfo, info2);
++				log_debug("lvmcache: %s: now in VG %s%s%s%s",
++					  dev_name(info2->dev),
++					  vgname, orphan_vginfo->vgid[0] ? " (" : "",
++					  orphan_vginfo->vgid[0] ? orphan_vginfo->vgid : "",
++					  orphan_vginfo->vgid[0] ? ")" : "");
++		}
 +
-+vgcreate $vg "${DEVICES[@]}"
- test_snapshot_mount
- vgremove $vg
+ 		if (!_insert_vginfo(vginfo, vgid, vgstatus, creation_host,
+ 				    primary_vginfo)) {
+ 			dm_free(vginfo->vgname);
+--- LVM2/lib/device/dev-cache.c	2008/01/30 13:59:58	1.52
++++ LVM2/lib/device/dev-cache.c	2008/05/28 22:27:47	1.53
+@@ -687,7 +687,8 @@
+ 			continue;
+ 		}
  
-@@ -94,7 +90,7 @@ aux prepare_scsi_debug_dev $DEV_SIZE \
- check_logical_block_size $LOGICAL_BLOCK_SIZE
+-		log_error("Aborting - please provide new pathname for what "
++		/* Scanning issues this inappropriately sometimes. */
++		log_debug("Aborting - please provide new pathname for what "
+ 			  "used to be %s", name);
+ 		return NULL;
+ 	}
+--- LVM2/WHATS_NEW	2008/05/21 14:10:11	1.876
++++ LVM2/WHATS_NEW	2008/05/28 22:27:47	1.877
+@@ -6,6 +6,9 @@
  
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
--vgcreate $vg $(cat DEVICES)
-+vgcreate $vg "${DEVICES[@]}"
- test_snapshot_mount
- vgremove $vg
- 
-@@ -109,7 +105,7 @@ aux prepare_scsi_debug_dev $DEV_SIZE \
- check_logical_block_size $LOGICAL_BLOCK_SIZE
- 
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
--vgcreate $vg $(cat DEVICES)
-+vgcreate $vg "${DEVICES[@]}"
- test_snapshot_mount
- vgremove $vg
- 
-@@ -126,6 +122,6 @@ check_logical_block_size $LOGICAL_BLOCK_SIZE
- check_optimal_io_size 786432
- 
- aux prepare_pvs 1 $PER_DEV_SIZE
--check pv_field $(cat DEVICES) pe_start 768.00k
-+check pv_field "${DEVICES[@]}" pe_start 768.00k
- 
- aux cleanup_scsi_debug_dev
+ Version 2.02.37 - 
+ =================================
++  Avoid spurious duplicate VG messages referring to VGs that are gone.
++  Drop dev_name_confirmed error message to debug level.
++  Fix setpriority error message to signed int.
+   Temporarily disable dmeventd mirror monitoring during lvchange --resync.
+   Refactor some vginfo manipulation code.
+   Add assertions to trap deprecated P_ and V_ lock usage.
 
 
