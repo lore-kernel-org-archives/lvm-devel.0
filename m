@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Jun 2008 16:37:52 -0000
-Subject: LVM2/daemons/clvmd lvm-functions.c
-Message-ID: <20080606163752.7793.qmail@sourceware.org>
+Date: 6 Jun 2008 17:24:28 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080606172428.915.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-06-06 16:37:52
+Changes by:	agk at sourceware.org	2008-06-06 17:24:28
 
 Modified files:
-	daemons/clvmd  : lvm-functions.c 
+	.              : WHATS_NEW 
 
 Log message:
-	cleaner LCK_LV decoding
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.886&r2=1.887
 
---- LVM2/daemons/clvmd/lvm-functions.c	2008/06/05 14:24:28	1.43
-+++ LVM2/daemons/clvmd/lvm-functions.c	2008/06/06 16:37:51	1.44
-@@ -61,6 +61,8 @@
- 	int lock_mode;
- };
+--- LVM2/WHATS_NEW	2008/06/06 13:04:44	1.886
++++ LVM2/WHATS_NEW	2008/06/06 17:24:28	1.887
+@@ -1,14 +1,14 @@
+ Version 2.02.38 - 
+ =================================
+-  Correct config file line numbers in messages when parsing comments.
+   In script-processing mode, stop if any command fails.
+   Warn if command exits with non-zero status code without a prior log_error.
+-  Make clvmd-cman use a hash rather than an array for node updown info.
+   Check lv_count in vg_validate.
+   Add --prefixes to reporting tools for field name prefix output format.
  
-+#define LCK_MASK (LCK_TYPE_MASK | LCK_SCOPE_MASK)
-+
- static const char *decode_locking_cmd(unsigned char cmdl)
- {
- 	static char buf[128];
-@@ -104,23 +106,20 @@
- 		break;
- 	}
- 
--	switch (cmdl) {
--	case LCK_LV_EXCLUSIVE:  
-+	switch (cmdl & LCK_MASK) {
-+	case LCK_LV_EXCLUSIVE & LCK_MASK:
- 		command = "LCK_LV_EXCLUSIVE";  
- 		break;
--	case LCK_LV_SUSPEND:    
-+	case LCK_LV_SUSPEND & LCK_MASK:    
- 		command = "LCK_LV_SUSPEND";    
- 		break;
--	case LCK_LV_UNLOCK:        
--		command = "LCK_LV_UNLOCK";     
--		break;
--	case LCK_LV_RESUME:     
-+	case LCK_LV_RESUME & LCK_MASK:     
- 		command = "LCK_LV_RESUME";     
- 		break;
--	case LCK_LV_ACTIVATE:   
-+	case LCK_LV_ACTIVATE & LCK_MASK:   
- 		command = "LCK_LV_ACTIVATE";   
- 		break;
--	case LCK_LV_DEACTIVATE: 
-+	case LCK_LV_DEACTIVATE & LCK_MASK: 
- 		command = "LCK_LV_DEACTIVATE"; 
- 		break;
- 	default:
+-Version 2.02.37 - 
+-=================================
++Version 2.02.37 - 6th June 2008
++===============================
++  Make clvmd-cman use a hash rather than an array for node updown info.
++  Correct config file line numbers in messages when parsing comments.
+   Drop cached metadata when renaming a VG.
+   Allow for vginfo changing during _vg_read.
+   Decode numbers in clvmd debugging output.
 
 
