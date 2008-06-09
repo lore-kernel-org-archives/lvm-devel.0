@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Jun 2008 15:31:58 -0000
-Subject: LVM2/test t-lvmcache-exercise.sh
-Message-ID: <20080609153158.720.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Jun 2008 16:22:33 -0000
+Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c
+Message-ID: <20080609162233.8203.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,82 +10,59 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-06-09 15:31:58
+Changes by:	agk at sourceware.org	2008-06-09 16:22:33
 
-Added files:
-	test           : t-lvmcache-exercise.sh 
+Modified files:
+	.              : WHATS_NEW 
+	lib/cache      : lvmcache.c 
 
 Log message:
-	Add simple test case to repro pvs segfault with duplicate vgnames.
+	Fix segfault after _free_vginfo by remembering to remove vginfo from list.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvmcache-exercise.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.892&r2=1.893
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
 
-/cvs/lvm2/LVM2/test/t-lvmcache-exercise.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvmcache-exercise.sh
-+++ -	2008-06-09 15:31:58.339422000 +0000
-@@ -0,0 +1,61 @@
-+#!/bin/sh
-+# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/WHATS_NEW	2008/06/08 14:18:44	1.892
++++ LVM2/WHATS_NEW	2008/06/09 16:22:32	1.893
+@@ -1,5 +1,6 @@
+ Version 2.02.38 - 
+ =================================
++  Fix segfault after _free_vginfo by remembering to remove vginfo from list.
+   Tweak detection of invalid fid after changes to PVs in VG in _vg_read.
+   Revert assuming precommitted metadata is live when activating (unnecessary).
+   Drop cached metadata for disappearing VG in vgmerge.
+--- LVM2/lib/cache/lvmcache.c	2008/06/06 12:43:40	1.56
++++ LVM2/lib/cache/lvmcache.c	2008/06/09 16:22:33	1.57
+@@ -631,11 +631,14 @@
+ 
+ static int _free_vginfo(struct lvmcache_vginfo *vginfo)
+ {
++	struct lvmcache_vginfo *primary_vginfo, *vginfo2;
+ 	int r = 1;
+ 
+ 	_free_cached_vgmetadata(vginfo);
+ 
+-	if (vginfo_from_vgname(vginfo->vgname, NULL) == vginfo) {
++	vginfo2 = primary_vginfo = vginfo_from_vgname(vginfo->vgname, NULL);
 +
-+test_description='Test lvmcache operation'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  test -n "$d3" && losetup -d "$d3"
-+  test -n "$d4" && losetup -d "$d4"
-+  test -n "$d5" && losetup -d "$d5"
-+  rm -f "$f1" "$f2" "$f3" "$f4" "$f5"
-+}
-+
-+# FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
-+# fine with lvm1 metadata as well; for now, just add disks 5 and 6 as lvm1
-+# metadata
-+test_expect_success \
-+  'set up temp files, loopback devices, PVs, vgnames' \
-+  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
-+   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
-+   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
-+   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
-+   f5=$(pwd)/5 && d5=$(loop_setup_ "$f5") &&
-+   vg1=$(this_test_)-test-vg1-$$          &&
-+   vg2=$(this_test_)-test-vg2-$$          &&
-+   lv1=$(this_test_)-test-lv1-$$          &&
-+   lv2=$(this_test_)-test-lv2-$$          &&
-+   lv3=$(this_test_)-test-lv3-$$          &&
-+   pvcreate $d1 $d2 $d3 $d4 $d5'
-+
-+#
-+# Duplicate vg name should cause warnings (but not segfault!)
-+#
-+test_expect_success \
-+  "Duplicate vg name might cause warnings but should succeed" \
-+  'vgcreate $vg1 $d1 &&
-+   vgcreate $vg2 $d3 &&
-+   losetup -d $d1 &&
-+   vgcreate $vg1 $d2 &&
-+   losetup $d1 $f1 &&
-+   pvs &&
-+   pvs'
-+
-+test_done
-+
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
++	if (vginfo == primary_vginfo) {
+ 		dm_hash_remove(_vgname_hash, vginfo->vgname);
+ 		if (vginfo->next && !dm_hash_insert(_vgname_hash, vginfo->vgname,
+ 						    vginfo->next)) {
+@@ -643,7 +646,12 @@
+ 				  vginfo->vgname);
+ 			r = 0;
+ 		}
+-	}
++	} else do
++		if (vginfo2->next == vginfo) {
++			vginfo2->next = vginfo->next;
++			break;
++		}
++ 	while ((vginfo2 = primary_vginfo->next));
+ 
+ 	if (vginfo->vgname)
+ 		dm_free(vginfo->vgname);
 
 
