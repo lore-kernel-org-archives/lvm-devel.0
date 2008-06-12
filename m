@@ -1,7 +1,7 @@
-From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 23 Jun 2008 09:27:45 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvmcmdlib.c
-Message-ID: <20080623092745.8672.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 12 Jun 2008 11:49:47 -0000
+Subject: LVM2 ./WHATS_NEW tools/vgchange.c
+Message-ID: <20080612114947.31490.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	meyering at sourceware.org	2008-06-23 09:27:45
+Changes by:	mbroz at sourceware.org	2008-06-12 11:49:46
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : lvmcmdlib.c 
+	tools          : vgchange.c 
 
 Log message:
-	lvm2_run: don't return uninitialized for _memlock_inc or _memlock_dec
-	
-	* tools/lvmcmdlib.c: Initialize "ret".  Also avoid useless string
-	comparison.
+	Fix vgchange to not activate mirror leg and log volumes directly.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.910&r2=1.911
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdlib.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.899&r2=1.900
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
 
---- LVM2/WHATS_NEW	2008/06/23 09:25:07	1.910
-+++ LVM2/WHATS_NEW	2008/06/23 09:27:45	1.911
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2008/06/11 12:14:41	1.899
++++ LVM2/WHATS_NEW	2008/06/12 11:49:45	1.900
+@@ -1,6 +1,8 @@
  Version 2.02.39 -
  ================================
-+  lvm2_run: Don't return uninitialized "ret" for _memlock_inc or _memlock_dec.
-   Avoid link failure when configuring without --enable-cmdlib.
-   Avoid link failure when configuring without --enable-readline.
-   Make clvmd return immediately if other nodes are down in an openais cluster.
---- LVM2/tools/lvmcmdlib.c	2008/01/30 14:00:02	1.6
-+++ LVM2/tools/lvmcmdlib.c	2008/06/23 09:27:45	1.7
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -79,9 +79,10 @@
- 	}
+-
++  Fix vgchange to not activate mirror leg and log volumes directly.
++  Fix test directory clean up in make distclean.
++ 
+ Version 2.02.38 - 11th June 2008
+ ================================
+   Fix tracking of validity of PVs with no mdas in lvmcache.
+--- LVM2/tools/vgchange.c	2008/04/10 17:09:32	1.64
++++ LVM2/tools/vgchange.c	2008/06/12 11:49:46	1.65
+@@ -66,10 +66,14 @@
+ 		if ((lv->status & SNAPSHOT) || lv_is_cow(lv))
+ 			continue;
  
- 	/* FIXME Temporary - move to libdevmapper */
-+	ret = ECMD_PROCESSED;
- 	if (!strcmp(cmdline, "_memlock_inc"))
- 		memlock_inc();
--	if (!strcmp(cmdline, "_memlock_dec"))
-+	else if (!strcmp(cmdline, "_memlock_dec"))
- 		memlock_dec();
- 	else
- 		ret = lvm_run_command(cmd, argc, argv);
+-		/* Can't deactive a pvmove or log LV */
++		/* Only request activation of mirror LV */
++		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
++			continue;
++
++		/* Can't deactivate a pvmove LV */
+ 		/* FIXME There needs to be a controlled way of doing this */
+ 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
+-		    ((lv->status & PVMOVE) || (lv->status & MIRROR_LOG)))
++		    ((lv->status & PVMOVE) ))
+ 			continue;
+ 
+ 		if (activate == CHANGE_AN) {
 
 
