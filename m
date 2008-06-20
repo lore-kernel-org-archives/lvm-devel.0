@@ -1,7 +1,7 @@
-From: meyering@sourceware.org <meyering@sourceware.org>
-Date: 12 Jun 2008 09:48:46 -0000
-Subject: LVM2 Makefile.in
-Message-ID: <20080612094846.27393.qmail@sourceware.org>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 20 Jun 2008 10:58:28 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-gulm.c
+Message-ID: <20080620105828.8589.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,41 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	meyering at sourceware.org	2008-06-12 09:48:45
+Changes by:	ccaulfield at sourceware.org	2008-06-20 10:58:28
 
 Modified files:
-	.              : Makefile.in 
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd-gulm.c 
 
 Log message:
-	Makefile.in: correct distclean rule
-	
-	* Makefile.in (SUBDIRS): Remove long-unused test/* names.
-	(SUBDIRS) [distclean]: Append "test".
-	Discovered with Zden??k Kabel????.
+	Make clvmd return immediately if other nodes are down in a gulm cluster.
+	bz#447799
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.906&r2=1.907
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-gulm.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
 
---- LVM2/Makefile.in	2007/09/21 10:16:43	1.20
-+++ LVM2/Makefile.in	2008/06/12 09:48:45	1.21
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -36,8 +36,8 @@
- 	     lib/locking \
- 	     lib/mirror \
- 	     lib/snapshot \
--	     po \
--	     test/mm test/device test/format1 test/regex test/filters
-+	     test \
-+	     po
-   DISTCLEAN_TARGETS += lib/misc/configure.h
- endif
+--- LVM2/WHATS_NEW	2008/06/18 11:32:14	1.906
++++ LVM2/WHATS_NEW	2008/06/20 10:58:27	1.907
+@@ -1,5 +1,6 @@
+ Version 2.02.39 -
+ ================================
++  Make clvmd return immediately if other nodes are down in a gulm cluster.
+   Improve/Fix read ahead 'auto' calculation for stripe_size
+   Fix lvchange output for -r auto setting if auto is already set
+   Add testcase for read ahead
+--- LVM2/daemons/clvmd/clvmd-gulm.c	2007/07/24 15:35:11	1.22
++++ LVM2/daemons/clvmd/clvmd-gulm.c	2008/06/20 10:58:28	1.23
+@@ -665,6 +665,7 @@
+ {
+     struct dm_hash_node *hn;
+     struct node_info *ninfo;
++    int somedown = 0;
  
+     dm_hash_iterate(hn, node_hash)
+     {
+@@ -686,12 +687,14 @@
+ 	    client = dm_hash_lookup_binary(sock_hash, csid, GULM_MAX_CSID_LEN);
+ 
+ 	}
++	DEBUGLOG("down_callback2. node %s, state = %d\n", ninfo->name, ninfo->state);
+ 	if (ninfo->state != NODE_DOWN)
+ 		callback(master_client, csid, ninfo->state == NODE_CLVMD);
+ 
+-
++	if (ninfo->state != NODE_CLVMD)
++		somedown = -1;
+     }
+-    return 0;
++    return somedown;
+ }
+ 
+ /* Convert gulm error codes to unix errno numbers */
 
 
