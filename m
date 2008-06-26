@@ -1,50 +1,42 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 26 Jun 2008 16:52:56 -0500
-Subject: [PATCH - take 2] Allow mirror log conversion while inactive
-Message-ID: <1214517177.21232.2.camel@hydrogen>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Jun 2008 23:05:12 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c tools/l ...
+Message-ID: <20080626230512.18479.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
- brassow
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-06-26 23:05:11
 
-Fix for bug 192865.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
+	tools          : lvconvert.c 
 
-Allow mirror log conversion (disk -> core) of a non-clustered
-mirror while it is inactive.
+Log message:
+	Update validation of safe mirror log type conversions in lvconvert. (brassow)
 
-It should be mentioned that core -> disk was already working.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.918&r2=1.919
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
 
-I also had to turn off support for this for cluster mirrors,
-due to the fact that a mirror could be active on another
-machine, but processing would continue as though inactive if
-that was the state on the executing machine.  (core -> disk
-conversions of cluster mirrors was being allowed... but
-should not have been.)
-
-So, in summary:
-Single Machine mirroring
-OPERATION	BEFORE PATCH	AFTER PATCH
-inactive c->d	allowed		allowed
-inactive d->c	disallowed	allowed (y/n prompt)
-active c->d	allowed		allowed
-active d->c	allowed		allowed
-
-Cluster mirroring
-OPERATION	BEFORE PATCH	AFTER PATCH
-inactive c->d	allowed		disallowed (better msg)
-inactive d->c	disallowed	disallowed (better msg)
-active c->d	allowed		allowed
-active d->c	allowed		allowed
-
-
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -1140,6 +1140,8 @@ int remove_mirror_log(struct cmd_context
+--- LVM2/WHATS_NEW	2008/06/26 21:38:57	1.918
++++ LVM2/WHATS_NEW	2008/06/26 23:05:10	1.919
+@@ -1,5 +1,6 @@
+ Version 2.02.39 -
+ ================================
++  Update validation of safe mirror log type conversions in lvconvert.
+   Fix lvconvert to disallow snapshot and mirror combinations.
+   Fix reporting of LV fields alongside unallocated PV segments.
+   Add --unquoted and --rows to reporting tools.
+--- LVM2/lib/metadata/mirror.c	2008/06/13 12:15:55	1.72
++++ LVM2/lib/metadata/mirror.c	2008/06/26 23:05:11	1.73
+@@ -1140,6 +1140,8 @@
  		      struct list *removable_pvs)
  {
  	float sync_percent;
@@ -53,7 +45,7 @@ Index: LVM2/lib/metadata/mirror.c
  
  	/* Unimplemented features */
  	if (list_size(&lv->segments) != 1) {
-@@ -1148,10 +1150,21 @@ int remove_mirror_log(struct cmd_context
+@@ -1148,10 +1150,21 @@
  	}
  
  	/* Had disk log, switch to core. */
@@ -65,12 +57,12 @@ Index: LVM2/lib/metadata/mirror.c
 +			return 0;
 +		}
 +	} else if (vg_is_clustered(vg)) {
-+		log_error("Unable to convert the log of an inactive "
-+			  "cluster mirrors, %s", lv->name);
++		log_error("Unable to convert the log of inactive "
++			  "cluster mirror %s", lv->name);
 +		return 0;
-+	} else if (yes_no_prompt("Converting %s to core log while inactive "
-+			       " requires a complete resync of the mirror.\n"
-+			       "Proceed? [y/n]: "))
++	} else if (yes_no_prompt("Full resync required to convert "
++				 "inactive mirror %s to core log. "
++				 "Proceed? [y/n]: "))
 +		sync_percent = 0;
 +	else
  		return 0;
@@ -78,7 +70,7 @@ Index: LVM2/lib/metadata/mirror.c
  
  	if (sync_percent >= 100.0)
  		init_mirror_in_sync(1);
-@@ -1269,12 +1282,9 @@ int attach_mirror_log(struct lv_segment 
+@@ -1269,12 +1282,9 @@
  	return add_seg_to_segs_using_this_lv(log_lv, seg);
  }
  
@@ -94,7 +86,7 @@ Index: LVM2/lib/metadata/mirror.c
  {
  	struct alloc_handle *ah;
  	const struct segment_type *segtype;
-@@ -1282,17 +1292,31 @@ int add_mirror_log(struct cmd_context *c
+@@ -1282,17 +1292,31 @@
  	float sync_percent;
  	int in_sync;
  	struct logical_volume *log_lv;
@@ -118,19 +110,17 @@ Index: LVM2/lib/metadata/mirror.c
 +	 */
 +	if (vg_is_clustered(lv->vg) &&
 +	    !(lv_info(cmd, lv, &info, 0, 0) && info.exists)) {
-+		log_error("Unable to convert the log of an inactive "
-+			  "cluster mirror, %s", lv->name);
++		log_error("Unable to convert the log of inactive "
++			  "cluster mirror %s", lv->name);
 +		return 0;
 +	}
 +
  	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, lv)))
  		return_0;
  
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -508,6 +508,9 @@ static int lvconvert_mirrors(struct cmd_
+--- LVM2/tools/lvconvert.c	2008/06/26 21:38:58	1.65
++++ LVM2/tools/lvconvert.c	2008/06/26 23:05:11	1.66
+@@ -508,6 +508,9 @@
  	}
  
  	if (lp->mirrors == existing_mirrors) {
@@ -140,6 +130,5 @@ Index: LVM2/tools/lvconvert.c
  		original_lv = _original_lv(lv);
  		if (!first_seg(original_lv)->log_lv && !corelog) {
  			if (!add_mirror_log(cmd, original_lv, 1,
-
 
 
