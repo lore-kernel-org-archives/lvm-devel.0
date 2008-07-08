@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 08 Jul 2008 15:21:44 +0200
-Subject: [PATCH] (3/5) vgreduce --consolidate
-Message-ID: <87vdzgik9j.fsf@eriador.mornfall.net>
+Date: Tue, 08 Jul 2008 15:22:34 +0200
+Subject: [PATCH] (4/5) partial volume group activation without /dev/ioerror
+Message-ID: <87tzf0ik85.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,22 +10,19 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this patch adds a new (sub-)command, vgreduce --consolidate, that is a safer
-(and now preferred) variant of vgreduce --removemissing, that will only bring
-volume group back from partial mode if that does not compromise any logical
-volumes residing there (ie. those having extents on missing PVs).
-
-Users should probably use lvremove and lvconvert --repair to get rid of logical
-volumes residing on missing PVs (or let dmeventd sort out the latter). The
-possibility to use --removemissing is of course still there as well.
+this patch is mostly orthogonal to the rest of the series. It uses the "error"
+target of device-mapper to implement partial volume group activation. This used
+to rely on /dev/ioerror, which is often not present on modern systems and is
+generally cumbersome. The code will now create error maps of the right size for
+each of the missing pieces of storage and use those.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: vgreduce-consolidate.diff
+Name: lib-partial-activation.diff
 Type: text/x-diff
-Size: 6205 bytes
-Desc: vgreduce-consolidate.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/d5650de4/attachment.bin>
+Size: 2213 bytes
+Desc: lib-partial-activation.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/8351de0b/attachment.bin>
 -------------- next part --------------
 
 -- 
