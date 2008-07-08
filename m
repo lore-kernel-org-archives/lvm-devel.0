@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 08 Jul 2008 15:22:34 +0200
-Subject: [PATCH] (4/5) partial volume group activation without /dev/ioerror
-Message-ID: <87tzf0ik85.fsf@eriador.mornfall.net>
+Date: Tue, 08 Jul 2008 15:23:28 +0200
+Subject: [PATCH] (5/5) (experimental) lvconvert --repair
+Message-ID: <87r6a4ik6n.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,19 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this patch is mostly orthogonal to the rest of the series. It uses the "error"
-target of device-mapper to implement partial volume group activation. This used
-to rely on /dev/ioerror, which is often not present on modern systems and is
-generally cumbersome. The code will now create error maps of the right size for
-each of the missing pieces of storage and use those.
+this last patch implements a (somewhat) experimental lvconvert extension that
+presents basis for further hotspare work. It needs user documentation, but
+otherwise it seems to work well in my (somewhat limited) testing.
+
+Running lvconvert --repair on a partially broken mirror will remove the missing
+legs and/or log. Furthermore, if supplied with a PV list on commandline, it
+will replace missing pieces with freshly allocated ones, when enough
+allocatable space is available in the supplied PVs.
+
+There is no special "hotspare" allocation policy yet, but when we have one in
+place, it should be easy to add automatic hotspare allocation capability to
+--repair.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lib-partial-activation.diff
+Name: lvconvert-repair.diff
 Type: text/x-diff
-Size: 2213 bytes
-Desc: lib-partial-activation.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/8351de0b/attachment.bin>
+Size: 14022 bytes
+Desc: lvconvert-repair.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/bf15cb4a/attachment.bin>
 -------------- next part --------------
 
 -- 
