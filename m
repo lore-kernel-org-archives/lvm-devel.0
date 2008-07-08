@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 08 Jul 2008 15:14:38 +0200
-Subject: [PATCH] (1/5) partial volume group metadata handling
-Message-ID: <87y74cikld.fsf@eriador.mornfall.net>
+Date: Tue, 08 Jul 2008 15:18:54 +0200
+Subject: [PATCH] (2/5) tools & partial volume group handling
+Message-ID: <87wsjwike9.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this is the patch I have sent previously (on 5th May), with coding style and
-naming cleanups (and one backward compatibility fix to flag reading), plus
-rebased to current CVS. It provides the basic library support for improved
-partial volume group handling. Patches for tools that build on the new
-capabilities will follow soon.
+the following two patches establish basic tool support for partial volume
+groups, as defined by the previous patch for the library. The first one adds
+handles_partial flag to toolcontext and enables the library to write out
+partial volume group metadata, when this flag is set (it is off by default).
 
-The basic new features are:
-- PVs are flagged with MISSING_PV appropriately
-- LVs are flagged with PARTIAL_LV if they are incomplete (in any way)
-- partial VGs will be read in by default and will have PARTIAL_VG status flag
-  set (previously, they would be ignored by tools without activating special
-  "partial mode", which is now deprecated)
+It also makes lvremove work on partial volume groups by default and adds
+--partial flag to vgcfgrestore to allow it restoring partial volume groups.
+
+The latter patch fixes vgreduce --removemissing to work with new partial VG
+semantics.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lib-partial-metadata.diff
+Name: tools-handles_partial.diff
 Type: text/x-diff
-Size: 13261 bytes
-Desc: lib-partial-metadata.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/c03979f3/attachment.bin>
+Size: 4633 bytes
+Desc: tools-handles_partial.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/217f2f15/attachment.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vgreduce-removemissing.diff
+Type: text/x-diff
+Size: 1053 bytes
+Desc: vgreduce-removemissing.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/217f2f15/attachment-0001.bin>
 -------------- next part --------------
 
 -- 
