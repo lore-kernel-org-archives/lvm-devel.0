@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 08 Jul 2008 15:18:54 +0200
-Subject: [PATCH] (2/5) tools & partial volume group handling
-Message-ID: <87wsjwike9.fsf@eriador.mornfall.net>
+Date: Tue, 08 Jul 2008 15:21:44 +0200
+Subject: [PATCH] (3/5) vgreduce --consolidate
+Message-ID: <87vdzgik9j.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,22 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-the following two patches establish basic tool support for partial volume
-groups, as defined by the previous patch for the library. The first one adds
-handles_partial flag to toolcontext and enables the library to write out
-partial volume group metadata, when this flag is set (it is off by default).
+this patch adds a new (sub-)command, vgreduce --consolidate, that is a safer
+(and now preferred) variant of vgreduce --removemissing, that will only bring
+volume group back from partial mode if that does not compromise any logical
+volumes residing there (ie. those having extents on missing PVs).
 
-It also makes lvremove work on partial volume groups by default and adds
---partial flag to vgcfgrestore to allow it restoring partial volume groups.
-
-The latter patch fixes vgreduce --removemissing to work with new partial VG
-semantics.
+Users should probably use lvremove and lvconvert --repair to get rid of logical
+volumes residing on missing PVs (or let dmeventd sort out the latter). The
+possibility to use --removemissing is of course still there as well.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: tools-handles_partial.diff
+Name: vgreduce-consolidate.diff
 Type: text/x-diff
-Size: 4633 bytes
-Desc: tools-handles_partial.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/217f2f15/attachment.bin>
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: vgreduce-removemissing.diff
-Type: text/x-diff
-Size: 1053 bytes
-Desc: vgreduce-removemissing.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/217f2f15/attachment-0001.bin>
+Size: 6205 bytes
+Desc: vgreduce-consolidate.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080708/d5650de4/attachment.bin>
 -------------- next part --------------
 
 -- 
