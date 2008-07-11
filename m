@@ -1,54 +1,38 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 11 Jul 2008 09:19:54 -0000
-Subject: LVM2/lib/format_text import_vsn1.c
-Message-ID: <20080711091954.8912.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Fri, 11 Jul 2008 15:42:15 +0200
+Subject: [PATCH] (1/3) partial volume group metadata handling (take 2)
+Message-ID: <87zloo1qrs.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-07-11 09:19:54
+Hi,
 
-Modified files:
-	lib/format_text: import_vsn1.c 
+further cleanups amassed to the patchset:
+- PARTIAL_VG is now never set on live metadata
+- use vg_missing_pv_count instead of PARTIAL_VG check to see if PVs are missing
+- COW LVs (in snapshots) are marked PARTIAL_LV when origin is missing, instead
+  of the virtual (snapshotN) LV
+- MISSING_PV uses the new compatible flags mechanism
 
-Log message:
-	Fix gcc warnings.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lib-partial_metadata.diff
+Type: text/x-diff
+Size: 19448 bytes
+Desc: lib-partial_metadata.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080711/a48824e1/attachment.bin>
+-------------- next part --------------
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+Yours,
+    Petr.
 
---- LVM2/lib/format_text/import_vsn1.c	2008/07/10 11:30:57	1.51
-+++ LVM2/lib/format_text/import_vsn1.c	2008/07/11 09:19:54	1.52
-@@ -125,7 +125,7 @@
- 	return 1;
- }
- 
--static int _read_flag_config(struct config_node *n, int *status, int type)
-+static int _read_flag_config(struct config_node *n, uint32_t *status, int type)
- {
- 	struct config_node *cn;
- 	*status = 0;
-@@ -140,7 +140,7 @@
- 		return 0;
- 	}
- 
--	if (cn = find_config_node(n, "flags")) {
-+	if ((cn = find_config_node(n, "flags"))) {
- 		if (!(read_flags(status, type, cn->v))) {
- 			log_error("Could not read flags.");
- 			return 0;
-@@ -836,7 +836,7 @@
- 				struct config_tree *cft, struct id *vgid,
- 				uint32_t *vgstatus, char **creation_host)
- {
--	struct config_node *vgn, *cn;
-+	struct config_node *vgn;
- 	struct dm_pool *mem = fmt->cmd->mem;
- 	char *vgname;
- 	int old_suppress;
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
