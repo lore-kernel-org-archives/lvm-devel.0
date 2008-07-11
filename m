@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Fri, 11 Jul 2008 15:42:15 +0200
-Subject: [PATCH] (1/3) partial volume group metadata handling (take 2)
-Message-ID: <87zloo1qrs.fsf@eriador.mornfall.net>
+Date: Fri, 11 Jul 2008 15:42:30 +0200
+Subject: [PATCH] (2/3) tools & missing PV handling
+Message-ID: <87y7481qrd.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,20 +10,17 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-further cleanups amassed to the patchset:
-- PARTIAL_VG is now never set on live metadata
-- use vg_missing_pv_count instead of PARTIAL_VG check to see if PVs are missing
-- COW LVs (in snapshots) are marked PARTIAL_LV when origin is missing, instead
-  of the virtual (snapshotN) LV
-- MISSING_PV uses the new compatible flags mechanism
+this is a naming cleanup of the former tools & partial volume group handling
+patch. The handles_partial flag has been renamed to handles_missing_pvs to
+separate terminology and clear up the naming mess somewhat.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lib-partial_metadata.diff
+Name: tools-handles_missing_pvs.diff
 Type: text/x-diff
-Size: 19448 bytes
-Desc: lib-partial_metadata.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080711/a48824e1/attachment.bin>
+Size: 3431 bytes
+Desc: tools-handles_missing_pvs.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080711/c25a5b8c/attachment.bin>
 -------------- next part --------------
 
 Yours,
