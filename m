@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 17 Jul 2008 15:19:43 -0000
-Subject: LVM2/tools lvcreate.c
-Message-ID: <20080717151943.2052.qmail@sourceware.org>
+Date: 21 Jul 2008 18:50:11 -0000
+Subject: LVM2/test t-pvcreate-operation.sh
+Message-ID: <20080721185011.7527.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,70 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-07-17 15:19:42
+Changes by:	wysochanski at sourceware.org	2008-07-21 18:50:10
 
 Modified files:
-	tools          : lvcreate.c 
+	test           : t-pvcreate-operation.sh 
 
 Log message:
-	Refactor _lvcreate() - no functional change.
+	Add more pvcreate tests to validate writing lvm2 label using --labelsector.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/tools/lvcreate.c	2008/06/05 13:38:30	1.175
-+++ LVM2/tools/lvcreate.c	2008/07/17 15:19:42	1.176
-@@ -523,8 +523,6 @@
- 	struct lvinfo info;
- 	uint32_t pv_extent_count;
+--- LVM2/test/t-pvcreate-operation.sh	2008/07/17 03:17:01	1.1
++++ LVM2/test/t-pvcreate-operation.sh	2008/07/21 18:50:10	1.2
+@@ -66,6 +66,20 @@
+    pvremove -f $d2 &&
+    pvremove -f $d1'
  
--	status |= lp->permission | VISIBLE_LV;
--
- 	if (lp->lv_name && find_lv_in_vg(vg, lp->lv_name)) {
- 		log_error("Logical volume \"%s\" already exists in "
- 			  "volume group \"%s\"", lp->lv_name, lp->vg_name);
-@@ -544,16 +542,6 @@
- 		return 0;
- 	}
- 
--	/*
--	 * Create the pv list.
--	 */
--	if (lp->pv_count) {
--		if (!(pvh = create_pv_list(cmd->mem, vg,
--					   lp->pv_count, lp->pvs, 1)))
--			return_0;
--	} else
--		pvh = &vg->pvs;
--
- 	if (lp->stripe_size > vg->extent_size) {
- 		log_error("Reducing requested stripe size %s to maximum, "
- 			  "physical extent size %s",
-@@ -594,6 +582,16 @@
- 		lp->extents = (uint64_t) tmp_size / vg->extent_size;
- 	}
- 
-+	/*
-+	 * Create the pv list.
-+	 */
-+	if (lp->pv_count) {
-+		if (!(pvh = create_pv_list(cmd->mem, vg,
-+					   lp->pv_count, lp->pvs, 1)))
-+			return_0;
-+	} else
-+		pvh = &vg->pvs;
++for i in 0 1 2 3 
++do
++ test_expect_success \
++  "pvcreate (lvm2) succeeds writing LVM label at sector $i" \
++  'pvcreate --labelsector $i $d1 &&
++  dd if=$d1 bs=512 skip=$i count=1 status=noxfer 2>&1 | strings | grep -q LABELONE;
++  test $? == 0 &&
++  pvremove -f $d1'
++done
 +
- 	switch(lp->percent) {
- 		case PERCENT_VG:
- 			lp->extents = lp->extents * vg->extent_count / 100;
-@@ -631,6 +629,8 @@
- 		return 0;
- 	}
- 
-+	status |= lp->permission | VISIBLE_LV;
++test_expect_failure \
++  "pvcreate (lvm2) fails writing LVM label at sector 4" \
++  'pvcreate --labelsector 4 $d1'
 +
- 	if (lp->snapshot) {
- 		if (!activation()) {
- 			log_error("Can't create snapshot without using "
+ test_done
+ # Local Variables:
+ # indent-tabs-mode: nil
 
 
