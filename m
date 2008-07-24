@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 Jul 2008 15:39:47 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20080724153947.13776.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 24 Jul 2008 17:33:40 -0000
+Subject: LVM2/test t-pvcreate-operation.sh
+Message-ID: <20080724173340.30965.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,30 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-07-24 15:39:47
+Changes by:	wysochanski at sourceware.org	2008-07-24 17:33:40
 
 Modified files:
-	.              : WHATS_NEW 
+	test           : t-pvcreate-operation.sh 
 
 Log message:
-	.
+	Add pvcreate tests for uuid and restorefile.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.935&r2=1.936
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2008/07/24 14:54:06	1.935
-+++ LVM2/WHATS_NEW	2008/07/24 15:39:47	1.936
-@@ -1,8 +1,8 @@
- Version 2.02.40 - 
- ================================
--  configure no longer fails when the readline library is not available
--  Remove dead code, is_lvm_partition() - no functional change.
--  Refactor pvcreate to divide parameter parsing & validation from create logic.
-+  Fix configure to work w/o readline unless --enable-readline used. (2.02.39)
-+  Remove is_lvm_partition template which has not yet been coded.
-+  Refactor pvcreate to separate parameter parsing from validation logic.
-   Check for label_write() failure in _text_pv_write().
-   Add pvcreate tests and update vgsplit tests to handle lvm1 and lvm2 metadata.
-   Fix pvchange -M1 -u to preserve existing extent locations when there's a VG.
+--- LVM2/test/t-pvcreate-operation.sh	2008/07/21 18:50:10	1.2
++++ LVM2/test/t-pvcreate-operation.sh	2008/07/24 17:33:40	1.3
+@@ -80,6 +80,33 @@
+   "pvcreate (lvm2) fails writing LVM label at sector 4" \
+   'pvcreate --labelsector 4 $d1'
+ 
++backupfile=mybackupfile-$(this_test_)
++uuid1=freddy-fred-fred-fred-fred-fred-freddy
++uuid2=freddy-fred-fred-fred-fred-fred-fredie
++bogusuuid=fred
++
++test_expect_failure \
++  'pvcreate rejects uuid option with less than 32 characters' \
++  'pvcreate --uuid $bogusuuid $d1'
++
++test_expect_success \
++  'pvcreate rejects uuid already in use' \
++  'pvcreate --uuid freddy-fred-fred-fred-fred-fred-freddy $d1 &&
++   pvcreate --uuid freddy-fred-fred-fred-fred-fred-freddy $d2;
++   status=$?; echo status=$status; test $status != 0'
++
++test_expect_success \
++  'pvcreate rejects non-existent file given with restorefile' \
++  'pvcreate --uuid $uuid1 --restorefile $backupfile $d1;
++   status=$?; echo status=$status; test $status != 0'
++
++test_expect_success \
++  'pvcreate rejects restorefile with uuid not found in file' \
++  'pvcreate --uuid $uuid1 $d1 &&
++   vgcfgbackup -f $backupfile &&
++   pvcreate --uuid $uuid2 --restorefile $backupfile $d2;
++   status=$?; echo status=$status; test $status != 0'
++
+ test_done
+ # Local Variables:
+ # indent-tabs-mode: nil
 
 
