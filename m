@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Jul 2008 14:37:01 -0000
-Subject: LVM2 test/t-pvcreate-operation.sh tools/pvcreate.c
-Message-ID: <20080725143701.27268.qmail@sourceware.org>
+Date: 25 Jul 2008 14:45:26 -0000
+Subject: LVM2/tools pvcreate.c
+Message-ID: <20080725144526.31663.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-07-25 14:36:56
+Changes by:	wysochanski at sourceware.org	2008-07-25 14:45:25
 
 Modified files:
-	test           : t-pvcreate-operation.sh 
 	tools          : pvcreate.c 
 
 Log message:
-	Refactor pvcreate - --force parameter.
+	Refactor pvcreate - --yes argument
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
 
---- LVM2/test/t-pvcreate-operation.sh	2008/07/25 00:30:57	1.4
-+++ LVM2/test/t-pvcreate-operation.sh	2008/07/25 14:36:52	1.5
-@@ -45,7 +45,7 @@
- done
- 
- test_expect_success \
--  'pvcreate (lvm2) fails when PV with metadatacopies=0 belongs to VG' \
-+  'pvcreate (lvm2) fails without -ff when PV with metadatacopies=0 belongs to VG' \
-   'pvcreate --metadatacopies 0 $d1 &&
-    pvcreate --metadatacopies 1 $d2 &&
-    vgcreate $vg1 $d1 $d2 &&
---- LVM2/tools/pvcreate.c	2008/07/25 14:12:29	1.70
-+++ LVM2/tools/pvcreate.c	2008/07/25 14:36:55	1.71
-@@ -28,6 +28,7 @@
- 	uint32_t extent_count;
+--- LVM2/tools/pvcreate.c	2008/07/25 14:36:55	1.71
++++ LVM2/tools/pvcreate.c	2008/07/25 14:45:24	1.72
+@@ -29,6 +29,7 @@
  	uint32_t extent_size;
  	const char *restorefile; /* 0 if no --restorefile option */
-+	force_t force;
+ 	force_t force;
++	unsigned yes;
  };
  
  const char _really_init[] =
-@@ -64,7 +65,7 @@
+@@ -72,7 +73,7 @@
+ 	}
  
- 	/* Allow partial & exported VGs to be destroyed. */
- 	/* We must have -ff to overwrite a non orphan */
--	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG) != 2) {
-+	if (pv && !is_orphan(pv) && pp->force != DONT_PROMPT_OVERRIDE) {
- 		log_error("Can't initialize physical volume \"%s\" of "
- 			  "volume group \"%s\" without -ff", name, pv_vg_name(pv));
+ 	/* prompt */
+-	if (pv && !is_orphan(pv) && !arg_count(cmd, yes_ARG) &&
++	if (pv && !is_orphan(pv) && !pp->yes &&
+ 	    yes_no_prompt(_really_init, name, pv_vg_name(pv)) == 'n') {
+ 		log_print("%s: physical volume not initialized", name);
  		return 0;
-@@ -129,7 +130,7 @@
- 	if (sigint_caught())
- 		return 0;
+@@ -114,9 +115,7 @@
  
--	if (pv && !is_orphan(pv) && arg_count(cmd, force_ARG)) {
-+	if (pv && !is_orphan(pv) && pp->force) {
- 		log_warn("WARNING: Forcing physical volume creation on "
- 			  "%s%s%s%s", name,
- 			  !is_orphan(pv) ? " of volume group \"" : "",
-@@ -291,6 +292,8 @@
+ 	/* Wipe superblock? */
+ 	if (dev_is_md(dev, &md_superblock) &&
+-	    ((!pp->idp &&
+-	      !pp->restorefile) ||
+-	     arg_count(cmd, yes_ARG) ||
++	    ((!pp->idp && !pp->restorefile) || pp->yes ||
+ 	     (yes_no_prompt("Software RAID md superblock "
+ 			    "detected on %s. Wipe it? [y/n] ", name) == 'y'))) {
+ 		log_print("Wiping software RAID md superblock on %s", name);
+@@ -292,6 +291,7 @@
  		return 0;
  	}
  
-+	pp->force = arg_count(cmd, force_ARG);
-+
++	pp->yes = arg_count(cmd, yes_ARG);
+ 	pp->force = arg_count(cmd, force_ARG);
+ 
  	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
- 		log_error("labelsector must be less than %lu",
- 			  LABEL_SCAN_SECTORS);
 
 
