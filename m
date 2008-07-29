@@ -1,28 +1,22 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 29 Jul 2008 15:25:34 +0200
-Subject: [PATCH] (1/6) Partial metadata handling (one more take)
-Message-ID: <87ljzk3jqp.fsf@eriador.mornfall.net>
+Date: Tue, 29 Jul 2008 15:29:10 +0200
+Subject: [PATCH] (2/6) Tools & missing PV handling
+Message-ID: <87fxps3jkp.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
-
-Here comes the newest-and-greatest rebase of the partial metadata patchset. I
-believe all outstanding issues have been fixed by now in this foundation
-patch. I have integrated all fixes that have turned out as part of other work
-(partial activation, vgreduce, lvconvert work). Bar any unexpected issues, this
-should be ready for merging.
+Nothing new in this one, just re-diffed against latest everything.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lib-partial_metadata.diff
+Name: tools-handles_missing_pvs.diff
 Type: text/x-diff
-Size: 79 bytes
-Desc: lib-partial_metadata.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080729/ab225a91/attachment.bin>
+Size: 3336 bytes
+Desc: tools-handles_missing_pvs.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20080729/b89c7462/attachment.bin>
 -------------- next part --------------
 
 -- 
