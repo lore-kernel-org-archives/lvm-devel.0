@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Jul 2008 12:40:52 -0000
-Subject: LVM2/tools pvchange.c
-Message-ID: <20080731124052.17162.qmail@sourceware.org>
+Date: 31 Jul 2008 13:03:02 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvchange.c
+Message-ID: <20080731130302.4228.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,96 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-07-31 12:40:52
+Changes by:	agk at sourceware.org	2008-07-31 13:03:02
 
 Modified files:
-	tools          : pvchange.c 
+	.              : WHATS_NEW 
+	tools          : lvchange.c 
 
 Log message:
-	remove unused mdas variable
+	Change lvchange exit status to indicate if any part of the operation failed.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.939&r2=1.940
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.92&r2=1.93
 
---- LVM2/tools/pvchange.c	2008/07/31 12:28:51	1.61
-+++ LVM2/tools/pvchange.c	2008/07/31 12:40:52	1.62
-@@ -23,7 +23,6 @@
- 	struct volume_group *vg = NULL;
- 	const char *vg_name = NULL;
- 	struct pv_list *pvl;
--	struct list mdas;
- 	uint64_t sector;
- 	uint32_t orig_pe_alloc_count;
- 	/* FIXME Next three only required for format1. */
-@@ -38,8 +37,6 @@
- 	int allocatable = 0;
- 	int tagarg = 0;
+--- LVM2/WHATS_NEW	2008/07/31 12:38:31	1.939
++++ LVM2/WHATS_NEW	2008/07/31 13:03:01	1.940
+@@ -1,5 +1,6 @@
+ Version 2.02.40 - 
+ ================================
++  Change lvchange exit status to indicate if any part of the operation failed.
+   Fix pvchange and pvremove to handle PVs without mdas.
+   Refactor _text_pv_read and always return mda list if requested.
+   Fix configure to work w/o readline unless --enable-readline used. (2.02.39)
+--- LVM2/tools/lvchange.c	2008/06/18 11:32:14	1.92
++++ LVM2/tools/lvchange.c	2008/07/31 13:03:01	1.93
+@@ -545,7 +545,7 @@
+ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			   void *handle __attribute((unused)))
+ {
+-	int doit = 0;
++	int doit = 0, docmds = 0;
+ 	int archived = 0;
  
--	list_init(&mdas);
--
- 	if (arg_count(cmd, addtag_ARG))
- 		tagarg = addtag_ARG;
- 	else if (arg_count(cmd, deltag_ARG))
-@@ -100,7 +97,7 @@
- 			return 0;
- 		}
+ 	if (!(lv->vg->status & LVM_WRITE) &&
+@@ -606,6 +606,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_permission(cmd, lv);
++		docmds++;
+ 	}
  
--		if (!(pv = pv_read(cmd, pv_name, &mdas, &sector, 1))) {
-+		if (!(pv = pv_read(cmd, pv_name, NULL, &sector, 1))) {
- 			unlock_vg(cmd, vg_name);
- 			log_error("Unable to read PV \"%s\"", pv_name);
- 			return 0;
+ 	/* allocation policy change */
+@@ -614,6 +615,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_alloc(cmd, lv);
++		docmds++;
+ 	}
+ 
+ 	/* read ahead sector change */
+@@ -622,6 +624,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_readahead(cmd, lv);
++		docmds++;
+ 	}
+ 
+ 	/* read ahead sector change */
+@@ -630,6 +633,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_persistent(cmd, lv);
++		docmds++;
+ 		if (sigint_caught())
+ 			return ECMD_FAILED;
+ 	}
+@@ -640,6 +644,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_tag(cmd, lv, addtag_ARG);
++		docmds++;
+ 	}
+ 
+ 	/* del tag */
+@@ -648,6 +653,7 @@
+ 			return ECMD_FAILED;
+ 		archived = 1;
+ 		doit += lvchange_tag(cmd, lv, deltag_ARG);
++		docmds++;
+ 	}
+ 
+ 	if (doit)
+@@ -674,6 +680,9 @@
+ 			return ECMD_FAILED;
+ 	}
+ 
++	if (doit != docmds)
++		return ECMD_FAILED;
++
+ 	return ECMD_PROCESSED;
+ }
+ 
 
 
