@@ -1,39 +1,81 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Tue, 23 Aug 2016 15:10:17 +0000 (UTC)
-Subject: master - dmeventd: Add fixed timeout when unmonitoring.
-Message-ID: <20160823151017.7EF2C60EC5@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 31 Jul 2008 12:38:31 -0000
+Subject: LVM2 tools/pvremove.c ./WHATS_NEW
+Message-ID: <20080731123831.14093.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2d65ce9711dace22cebb370b0d93fd7a98213bd8
-Commit:        2d65ce9711dace22cebb370b0d93fd7a98213bd8
-Parent:        db0e34535c82cfb73af19a7673de82881ad2468c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Aug 23 16:09:18 2016 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Aug 23 16:09:18 2016 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-07-31 12:38:31
 
-dmeventd: Add fixed timeout when unmonitoring.
+Modified files:
+	tools          : pvremove.c 
+	.              : WHATS_NEW 
 
----
- lib/activate/activate.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Log message:
+	fix pvremove for pvs without mdas
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 22e3afa..f4d3a17 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1853,7 +1853,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
- 			continue;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvremove.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.938&r2=1.939
+
+--- LVM2/tools/pvremove.c	2008/07/24 15:25:09	1.23
++++ LVM2/tools/pvremove.c	2008/07/31 12:38:31	1.24
+@@ -25,18 +25,40 @@
+ static int pvremove_check(struct cmd_context *cmd, const char *name)
+ {
+ 	struct physical_volume *pv;
++	struct list mdas;
++
++	list_init(&mdas);
  
- 		if (new_unmonitor) {
--			if (!target_register_events(cmd, dso, lv, 0, 0, 0)) {
-+			if (!target_register_events(cmd, dso, lv, 0, 0, 10)) {
- 				log_error("%s: segment unmonitoring failed.",
- 					  display_lvname(lv));
-  
+ 	/* FIXME Check partition type is LVM unless --force is given */
+ 
+ 	/* Is there a pv here already? */
+ 	/* If not, this is an error unless you used -f. */
+-	if (!(pv = pv_read(cmd, name, NULL, NULL, 1))) {
++	if (!(pv = pv_read(cmd, name, &mdas, NULL, 1))) {
+ 		if (arg_count(cmd, force_ARG))
+ 			return 1;
+ 		log_error("Physical Volume %s not found", name);
+ 		return 0;
+ 	}
+ 
++	/*
++	 * If a PV has no MDAs it may appear to be an
++	 * orphan until the metadata is read off
++	 * another PV in the same VG.  Detecting this
++	 * means checking every VG by scanning every
++	 * PV on the system.
++	 */
++	if (is_orphan(pv) && !list_size(&mdas)) {
++		if (!scan_vgs_for_pvs(cmd)) {
++			log_error("Rescan for PVs without metadata areas "
++				  "failed.");
++			return 0;
++		}
++		if (!(pv = pv_read(cmd, name, NULL, NULL, 1))) {
++			log_error("Failed to read physical volume %s", name);
++			return 0;
++		}
++	}
++
+ 	/* orphan ? */
+ 	if (is_orphan(pv))
+ 		return 1;
+--- LVM2/WHATS_NEW	2008/07/31 12:28:50	1.938
++++ LVM2/WHATS_NEW	2008/07/31 12:38:31	1.939
+@@ -1,6 +1,6 @@
+ Version 2.02.40 - 
+ ================================
+-  Fix pvchange to handle PVs without mdas.
++  Fix pvchange and pvremove to handle PVs without mdas.
+   Refactor _text_pv_read and always return mda list if requested.
+   Fix configure to work w/o readline unless --enable-readline used. (2.02.39)
+   Remove is_lvm_partition template which has not yet been coded.
 
 
