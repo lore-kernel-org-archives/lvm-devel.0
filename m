@@ -1,39 +1,221 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 24 Jun 2015 09:27:43 +0000 (UTC)
-Subject: master - config: display global/umask in octal form
-Message-ID: <20150624092743.9E2B360DF6@fedorahosted.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 12 Aug 2008 10:04:31 -0000
+Subject: LVM2/test t-pvchange-usage.sh t-vgreduce-usage.sh
+Message-ID: <20080812100431.6848.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6575122c63de3d400ee46ea0f400ab44b8520978
-Commit:        6575122c63de3d400ee46ea0f400ab44b8520978
-Parent:        74bf75a2f5f7b918e1fe7531766aa377de23191c
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 23 13:24:15 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 24 11:13:38 2015 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2008-08-12 10:04:31
 
-config: display global/umask in octal form
+Added files:
+	test           : t-pvchange-usage.sh t-vgreduce-usage.sh 
 
----
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Log message:
+	add tests for pvchange and vgreduce usage (Jaroslav Stava)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 1b67488..461bacc 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -597,7 +597,7 @@ cfg(backup_retain_days_CFG, "retain_days", backup_CFG_SECTION, 0, CFG_TYPE_INT,
- cfg(shell_history_size_CFG, "history_size", shell_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_MAX_HISTORY, vsn(1, 0, 0), NULL, 0, NULL,
- 	"Number of lines of history to store in ~/.lvm_history.\n")
- 
--cfg(global_umask_CFG, "umask", global_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_UMASK, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg(global_umask_CFG, "umask", global_CFG_SECTION, CFG_FORMAT_INT_OCTAL, CFG_TYPE_INT, DEFAULT_UMASK, vsn(1, 0, 0), NULL, 0, NULL,
- 	"The file creation mask for any files and directories created.\n"
- 	"Interpreted as octal if the first digit is zero.\n")
- 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvchange-usage.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgreduce-usage.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+
+/cvs/lvm2/LVM2/test/t-pvchange-usage.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-pvchange-usage.sh
++++ -	2008-08-12 10:04:31.553888000 +0000
+@@ -0,0 +1,95 @@
++#!/bin/sh
++# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Test pvchange option values'
++privileges_required_=1
++
++. ./test-lib.sh
++
++cleanup_()
++{
++  test -n "$d1" && losetup -d "$d1"
++  test -n "$d2" && losetup -d "$d2"
++  test -n "$d3" && losetup -d "$d3"
++  test -n "$d4" && losetup -d "$d4"
++  rm -f "$f1" "$f2" "$f3" "$f4"
++}
++
++test_expect_success \
++  'set up temp files, loopback devices, PVs, vgname' \
++  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
++   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
++   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
++   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
++   vg1=$(this_test_)-test-vg1-$$ &&
++   lv=$(this_test_)-test-lv-$$'
++
++for mda in 0 1 2 
++do
++test_expect_success \
++  "setup pv with metadatacopies = $mda" '
++   pvcreate $d4 &&
++   pvcreate --metadatacopies $mda $d1 &&
++   vgcreate $vg1 $d1 $d4 
++'
++
++test_expect_success \
++  "pvchange adds/dels tag to pvs with metadatacopies = $mda " '
++   pvchange $d1 --addtag test$mda &&
++   check_pv_field_ $d1 pv_tags test$mda &&
++   pvchange $d1 --deltag test$mda &&
++   check_pv_field_ $d1 pv_tags " "
++'
++
++test_expect_success \
++  "vgchange disable/enable allocation for pvs with metadatacopies = $mda" '
++   pvchange $d1 -x n &&
++   check_pv_field_ $d1 pv_attr  --  &&
++   pvchange $d1 -x y &&
++   check_pv_field_ $d1 pv_attr  a- 
++'
++
++test_expect_success \
++  'remove pv' '
++   vgremove $vg1 &&
++   pvremove $d1 $d4
++'
++done
++
++test_expect_success \
++  "pvchange uuid" "
++   pvcreate --metadatacopies 0 $d1 &&
++   pvcreate --metadatacopies 2 $d2 &&
++   vgcreate $vg1 $d1 $d2 &&
++   pvchange -u $d1 &&
++   pvchange -u $d2 &&
++   vg_validate_pvlv_counts_ $vg1 2 0 0
++"
++test_expect_success \
++  "pvchange rejects uuid change under an active lv" '
++   lvcreate -l 16 -i 2 -n $lv --alloc anywhere $vg1 &&
++   vg_validate_pvlv_counts_ $vg1 2 1 0 &&
++   pvchange -u $d1;
++   status=$?; echo status=$status; test $status = 5 &&
++   lvchange -an "$vg1"/"$lv" &&
++   pvchange -u $d1
++'
++
++test_expect_success \
++  "cleanup" '
++   lvremove -f "$vg1"/"$lv" &&
++   vgremove $vg1
++'
++
++test_done
++# Local Variables:
++# indent-tabs-mode: nil
++# End:
+/cvs/lvm2/LVM2/test/t-vgreduce-usage.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-vgreduce-usage.sh
++++ -	2008-08-12 10:04:31.636950000 +0000
+@@ -0,0 +1,90 @@
++#!/bin/sh
++# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Test vgreduce command options for validity'
++privileges_required_=1
++
++. ./test-lib.sh
++
++cleanup_()
++{
++  test -n "$d1" && losetup -d "$d1"
++  test -n "$d2" && losetup -d "$d2"
++  test -n "$d3" && losetup -d "$d3"
++  test -n "$d4" && losetup -d "$d4"
++  rm -f "$f1" "$f2" "$f3" "$f4"
++}
++
++test_expect_success \
++  'set up temp files, loopback devices, PVs, vgnames' \
++  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
++   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
++   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
++   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
++   vg1=$(this_test_)-test-vg1-$$          &&
++   vg2=$(this_test_)-test-vg2-$$          &&
++   lv1=$(this_test_)-test-lv1-$$          &&
++   lv2=$(this_test_)-test-lv2-$$          &&
++   lv3=$(this_test_)-test-lv3-$$'
++
++
++for mdatype in 1 2
++do
++test_expect_success \
++  "(lvm$mdatype) setup PVs" '
++  pvcreate -M$mdatype $d1 $d2 
++'
++
++test_expect_success \
++  "(lvm$mdatype) vgreduce rejects removing the last pv (--all)" '
++   vgcreate -M$mdatype $vg1 $d1 $d2 &&
++   vgreduce --all $vg1  2>err;
++   vgremove -f $vg1
++'
++   #status=$?; echo status=$status; test $status = 5 &&
++
++test_expect_success \
++  "(lvm$mdatype) vgreduce rejects removing the last pv" '
++   vgcreate -M$mdatype $vg1 $d1 $d2 &&
++   vgreduce $vg1 $d1 $d2 2>err;
++   status=$?; echo status=$status; test $status = 5 &&
++   vgremove -f $vg1
++'
++
++test_expect_success \
++  "(lvm$mdatype) remove PVs " '
++  pvremove -ff $d1 $d2 
++'
++done
++
++## TODO --mirrorsonly ?
++for mdatype in 2
++do
++test_expect_success \
++  "(lvm$mdatype) setup PVs (--metadatacopies 0)" '
++  pvcreate -M$mdatype $d1 $d2 
++  pvcreate --metadatacopies 0 -M$mdatype $d3 $d4
++'
++
++test_expect_success \
++  "(lvm$mdatype) vgreduce rejects removing pv with the last mda copy" '
++   vgcreate -M$mdatype $vg1 $d1 $d3 &&
++   vgreduce $vg1 $d1 2>err;
++   status=$?; echo status=$status; test $status != 0 &&
++   vgremove -f $vg1
++'
++done
++
++
++test_done
++# Local Variables:
++# indent-tabs-mode: nil
++# End:
 
 
