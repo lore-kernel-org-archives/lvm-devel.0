@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 13 Aug 2008 12:44:24 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgcfgbackup.c
-Message-ID: <20080813124424.6581.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 13 Aug 2008 13:42:36 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20080813134236.18449.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-08-13 12:44:24
+Changes by:	zkabelac at sourceware.org	2008-08-13 13:42:36
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : vgcfgbackup.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Fix vgcfgbackup to properly check filename if template is used.
+	get lv_list properly from vg->lst and fix compiler warning
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.945&r2=1.946
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgbackup.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.185&r2=1.186
 
---- LVM2/WHATS_NEW	2008/08/05 14:29:38	1.945
-+++ LVM2/WHATS_NEW	2008/08/13 12:44:23	1.946
-@@ -1,5 +1,6 @@
- Version 2.02.40 - 
- ================================
-+  Fix vgcfgbackup to properly check filename if template is used.
-   configure aborts if lcov or genhtml are missing with --enable-profiling
-   vgremove tries to remove lv snapshot first.
-   Added function lv_remove_with_dependencies().
---- LVM2/tools/vgcfgbackup.c	2008/01/30 14:00:02	1.24
-+++ LVM2/tools/vgcfgbackup.c	2008/08/13 12:44:24	1.25
-@@ -34,8 +34,7 @@
- 		dm_free(filename);	
- 		return NULL;
- 	}
--	if (*last_filename && !strncmp(*last_filename, filename,
--				      strlen(template))) {
-+	if (*last_filename && !strncmp(*last_filename, filename, PATH_MAX)) {
- 		log_error("VGs must be backed up into different files. "
- 			  "Use %%s in filename for VG name.");
- 		dm_free(filename);
-@@ -70,7 +69,8 @@
- 			return ECMD_FAILED;
- 		}
+--- LVM2/lib/metadata/metadata.c	2008/08/05 12:05:25	1.185
++++ LVM2/lib/metadata/metadata.c	2008/08/13 13:42:35	1.186
+@@ -296,11 +296,14 @@
+ 			    struct volume_group *vg,
+ 			    force_t force)
+ {
++	struct list *lst;
+ 	struct lv_list *lvl;
  
--		backup_to_file(filename, vg->cmd->cmd_line, vg);
-+		if (!backup_to_file(filename, vg->cmd->cmd_line, vg))
-+			return ECMD_FAILED;
- 	} else {
- 		if (!consistent) {
- 			log_error("No backup taken: specify filename with -f "
+-        while ((lvl = list_first(&vg->lvs)))
++	while ((lst = list_first(&vg->lvs))) {
++		lvl = list_item(lst, struct lv_list);
+ 		if (!lv_remove_with_dependencies(cmd, lvl->lv, force))
+-			return 0;
++		    return 0;
++	}
+ 
+ 	return 1;
+ }
 
 
