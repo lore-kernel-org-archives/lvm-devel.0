@@ -1,59 +1,50 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 24 Jun 2015 09:27:41 +0000 (UTC)
-Subject: master - config: use proper unconfigured default values for use_lvmetad and use_lvmpolld settings
-Message-ID: <20150624092741.7896560FB4@fedorahosted.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 21 Aug 2008 14:33:49 -0000
+Subject: LVM2/test lvm-utils.sh
+Message-ID: <20080821143349.14478.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=74bf75a2f5f7b918e1fe7531766aa377de23191c
-Commit:        74bf75a2f5f7b918e1fe7531766aa377de23191c
-Parent:        1545ebf938d3eab5df5ab48b8258afc4f62b896b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jun 23 14:13:12 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 24 11:13:38 2015 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-08-21 14:33:48
 
-config: use proper unconfigured default values for use_lvmetad and use_lvmpolld settings
+Modified files:
+	test           : lvm-utils.sh 
 
-Default value for lvmetad and lvmpolld has hooks in configure script,
-the "lvmconfig --type default --unconfigured" should display:
+Log message:
+	Fix symbolic link creation in test infrastructure.
+	
+	Original code would create "*.so" symbolic links if there were no actual
+	files ending in "so".  The second iteration would then cause an error
+	in the test logs.
 
-   use_lvmetad = @DEFAULT_USE_LVMETAD@
-   use_lvmpolld = @DEFAULT_USE_LVMPOLLD@
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.14&r2=1.15
 
-Note that these settings are not of string type. Recent change (the
-DM_CONFIG_VALUE_FMT_STRING_NO_QUOTES formatting flag) makes it
-possible to recognize that the setting is not of string type and if
-there's unconfigured value defined for it, the enclosing " " is
-automatically removed on output.
----
- lib/config/config_settings.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 9335a7a..1b67488 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -797,7 +797,7 @@ cfg(global_lvdisplay_shows_full_device_path_CFG, "lvdisplay_shows_full_device_pa
- 	"was never a valid path in the /dev filesystem.\n"
- 	"Enable this option to reinstate the previous format.\n")
- 
--cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMETAD, vsn(2, 2, 93), NULL, 0, NULL,
-+cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMETAD, vsn(2, 2, 93), "@DEFAULT_USE_LVMETAD@", 0, NULL,
- 	"Use lvmetad to cache metadata and reduce disk scanning.\n"
- 	"When enabled (and running), lvmetad provides LVM commands\n"
- 	"with VG metadata and PV state.  LVM commands then avoid\n"
-@@ -937,7 +937,7 @@ cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, D
- 	"Some of the checks may be expensive, so it's best to use\n"
- 	"this only when there seems to be a problem.\n")
- 
--cfg(global_use_lvmpolld_CFG, "use_lvmpolld", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMPOLLD, vsn(2, 2, 120), NULL, 0, NULL,
-+cfg(global_use_lvmpolld_CFG, "use_lvmpolld", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_LVMPOLLD, vsn(2, 2, 120), "@DEFAULT_USE_LVMPOLLD@", 0, NULL,
- 	"Use lvmpolld to supervise long running LVM commands.\n"
- 	"When enabled, control of long running LVM commands is transferred\n"
- 	"from the original LVM command to the lvmpolld daemon.  This allows\n"
+--- LVM2/test/lvm-utils.sh	2008/08/05 11:39:54	1.14
++++ LVM2/test/lvm-utils.sh	2008/08/21 14:33:48	1.15
+@@ -152,8 +152,16 @@
+   for i in 0 1 2 3 4 5 6 7; do
+     mknod $G_root_/dev/loop$i b 7 $i
+   done
+-  ln -s $abs_top_builddir/dmeventd/mirror/*.so $G_root_/lib
+-  ln -s $abs_top_builddir/dmeventd/snapshot/*.so $G_root_/lib
++  for i in $abs_top_builddir/dmeventd/mirror/*.so $abs_top_builddir/dmeventd/snapshot/*.so
++  do
++    # NOTE: This check is necessary because the loop above will give us the value
++    # "$abs_top_builddir/dmeventd/mirror/*.so" if no files ending in 'so' exist.
++    # This is the best way I could quickly determine to skip over this bogus value.
++    if [ -f $i ]; then
++      echo Setting up symlink from $i to $G_root_/lib
++      ln -s $i $G_root_/lib
++    fi
++  done
+   cat > $G_root_/etc/lvm.conf <<-EOF
+   devices {
+     dir = "$G_dev_"
 
 
