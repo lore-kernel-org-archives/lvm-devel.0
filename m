@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 28 Aug 2008 13:28:13 -0000
-Subject: LVM2/lib/label label.c
-Message-ID: <20080828132813.1347.qmail@sourceware.org>
+Date: 28 Aug 2008 13:41:47 -0000
+Subject: LVM2/lib/format1 disk-rep.c
+Message-ID: <20080828134147.15622.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-08-28 13:28:13
+Changes by:	mbroz at sourceware.org	2008-08-28 13:41:46
 
 Modified files:
-	lib/label      : label.c 
+	lib/format1    : disk-rep.c 
 
 Log message:
-	Not detecing label on disc is not error, remove <backtrace> from debug log
-	and report it only if device cannot be read.
+	format1: Not detecing label on disc is not error, remove <backtrace> from debug log
+	(happens when you explicitly use -M 1)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/label/label.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/disk-rep.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
 
---- LVM2/lib/label/label.c	2008/02/06 15:47:28	1.42
-+++ LVM2/lib/label/label.c	2008/08/28 13:28:13	1.43
-@@ -119,7 +119,7 @@
- 	if (!dev_read(dev, scan_sector << SECTOR_SHIFT,
- 		      LABEL_SCAN_SIZE, readbuf)) {
- 		log_debug("%s: Failed to read label area", dev_name(dev));
--		goto out;
-+		goto_out;
+--- LVM2/lib/format1/disk-rep.c	2008/02/06 15:47:27	1.73
++++ LVM2/lib/format1/disk-rep.c	2008/08/28 13:41:46	1.74
+@@ -194,7 +194,7 @@
+ 	if (!_munge_formats(pvd)) {
+ 		log_very_verbose("format1: Unknown metadata version %d "
+ 				 "found on %s", pvd->version, dev_name(dev));
+-		return 0;
++		return_0;
  	}
  
- 	/* Scan a few sectors for a valid label */
-@@ -284,7 +284,7 @@
+ 	/* If VG is exported, set VG name back to the real name */
+@@ -208,7 +208,7 @@
+ 	if (!dev_read(dev, UINT64_C(0), sizeof(*pvd), pvd)) {
+ 		log_very_verbose("Failed to read PV data from %s",
+ 				 dev_name(dev));
+-		return 0;
++		return_0;
  	}
  
- 	if (!(l = _find_labeller(dev, buf, &sector, scan_sector)))
--		goto_out;
-+		goto out;
+ 	return munge_pvd(dev, pvd);
+@@ -356,7 +356,7 @@
+ 	list_init(&dl->lvds);
  
- 	if ((r = (l->ops->read)(l, dev, buf, result)) && result && *result)
- 		(*result)->sector = sector;
-@@ -361,7 +361,7 @@
- 	}
+ 	if (!_read_pvd(dev, &dl->pvd))
+-		goto_bad;
++		goto bad;
  
- 	if (!(l = _find_labeller(dev, buf, &sector, UINT64_C(0))))
--		goto_out;
-+		goto out;
- 
- 	r = l->ops->verify ? l->ops->verify(l, buf, sector) : 1;
- 
+ 	/*
+ 	 * is it an orphan ?
 
 
