@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 28 Aug 2008 10:24:56 -0000
-Subject: LVM2/test t-pvremove-usage.sh
-Message-ID: <20080828102456.32107.qmail@sourceware.org>
+Date: 28 Aug 2008 10:40:45 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvm_dump.sh
+Message-ID: <20080828104045.7200.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,132 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-08-28 10:24:55
+Changes by:	mbroz at sourceware.org	2008-08-28 10:40:44
 
-Added files:
-	test           : t-pvremove-usage.sh 
+Modified files:
+	.              : WHATS_NEW 
+	scripts        : lvm_dump.sh 
 
 Log message:
-	Add pvremove usage test (Jaroslav Stava)
+	Fix lvmdump metadata gather option (-m) to work correctly. (Jaroslav Stava)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvremove-usage.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.947&r2=1.948
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm_dump.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
 
-/cvs/lvm2/LVM2/test/t-pvremove-usage.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-pvremove-usage.sh
-+++ -	2008-08-28 10:24:56.045564000 +0000
-@@ -0,0 +1,111 @@
-+#!/bin/sh
-+# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Test pvremove'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  test -n "$d3" && losetup -d "$d3"
-+  rm -f "$f1" "$f2"
-+}
-+
-+test_expect_success "set up temp files, loopback devices" \
-+  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
-+   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
-+   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
-+   vg=$(this_test_)-test-vg-$$            &&
-+   pvcreate "$d1"                         &&
-+   pvcreate --metadatacopies 0 "$d2"      &&
-+   pvcreate --metadatacopies 2 "$d3"
-+'
-+
-+test_expect_success "check pvremove fails when bogus pv given" '
-+   pvremove "$d2" bogus;
-+   status=$?; echo $status; test $status != 0 
-+'
-+
-+#failing, but still removing everything what can be removed
-+#is somewhat odd as default, what do we have -f for?
-+test_expect_failure "but still removes the valid pv that was given too :-/" '
-+   pvs | grep "$d2"; status=$?;
-+   pvcreate  --metadatacopies 0 "$d2";
-+   echo $status; test $status = 0
-+'
-+
-+test_expect_success "check pvremove refuses to remove pv in a vg" '
-+   vgcreate -c n "$vg" "$d1" "$d2" &&
-+   { pvremove "$d2" "$d3";
-+     status=$?; echo $status; test $status != 0
-+   }
-+'
-+
-+for mdacp in 0 1 2; do
-+test_expect_success \
-+  "check pvremove truly wipes the label (pvscan wont find) (---metadatacopies $mdacp)" '
-+   pvcreate --metadatacopies $mdacp "$d3" &&
-+   pvremove "$d3" &&
-+   { pvscan |grep "$d3"; 
-+     status=$?; echo $status; test $status != 0 
-+   }
-+'
-+
-+test_expect_success "reset setup" '
-+   vgremove -ff $vg &&
-+   pvcreate --metadatacopies $mdacp "$d1" &&
-+   pvcreate "$d2" &&
-+   vgcreate $vg $d1 $d2 
-+'
-+test_expect_success "pvremove -f fails when pv in a vg (---metadatacopies $mdacp)" '
-+   pvremove -f $d1;
-+   status=$?; echo $status; test $status != 0 &&
-+   pvs $d1
-+'
-+test_expect_success \
-+  "pvremove -ff fails without confirmation when pv in a vg (---metadatacopies $mdacp)" '
-+   echo n|eval pvremove -ff $d1;
-+   status=$?; echo $status; test $status != 0
-+'
-+test_expect_success \
-+  "pvremove -ff succeds with confirmation when pv in a vg (---metadatacopies $mdacp)" '
-+   yes | pvremove -ff $d1 &&
-+   pvs $d1;
-+   status=$?; echo $status; test $status != 0
-+'
-+test_expect_success "cleanup & setup" '
-+  vgreduce --removemissing $vg &&
-+  pvcreate --metadatacopies $mdacp "$d1" &&
-+  vgextend $vg $d1
-+'
-+test_expect_success \
-+  "pvremove -ff -y is sufficient when pv in a vg (---metadatacopies $mdacp)" '
-+   echo n | pvremove -ff -y $d1
-+'
-+test_expect_success "cleanup & setup" '
-+  vgreduce --removemissing $vg &&
-+  pvcreate --metadatacopies $mdacp "$d1" &&
-+  vgextend $vg $d1
-+'
-+done
-+
-+test_expect_success "cleanup" '
-+   vgremove -ff "$vg"
-+'
-+
-+test_done
-+
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
+--- LVM2/WHATS_NEW	2008/08/16 09:46:55	1.947
++++ LVM2/WHATS_NEW	2008/08/28 10:40:44	1.948
+@@ -1,5 +1,6 @@
+ Version 2.02.40 - 
+ ================================
++  Fix lvmdump metadata gather option (-m) to work correctly.
+   Fix allocation bug in text metadata format write error path.
+   Fix vgcfgbackup to properly check filename if template is used.
+   configure aborts if lcov or genhtml are missing with --enable-profiling
+--- LVM2/scripts/lvm_dump.sh	2007/10/03 15:00:51	1.12
++++ LVM2/scripts/lvm_dump.sh	2008/08/28 10:40:44	1.13
+@@ -206,7 +206,7 @@
+ 
+ 	pvs="$("$LVM" pvs --separator , --noheadings --units s --nosuffix -o \
+ 	    name,pe_start 2>> "$log" | $SED -e 's/^ *//')"
+-	for line in "$pvs"
++	for line in $pvs
+ 	do
+ 		test -z "$line" && continue
+ 		pv="$(echo $line | $CUT -d, -f1)"
 
 
