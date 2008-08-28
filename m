@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 28 Aug 2008 11:20:49 -0000
-Subject: LVM2/test t-vgreduce-usage.sh
-Message-ID: <20080828112049.1776.qmail@sourceware.org>
+Date: 28 Aug 2008 13:28:13 -0000
+Subject: LVM2/lib/label label.c
+Message-ID: <20080828132813.1347.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,92 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-08-28 11:20:49
+Changes by:	mbroz at sourceware.org	2008-08-28 13:28:13
 
 Modified files:
-	test           : t-vgreduce-usage.sh 
+	lib/label      : label.c 
 
 Log message:
-	fix vgreduce tests to detect partial command failure (Jaroslav Stava)
+	Not detecing label on disc is not error, remove <backtrace> from debug log
+	and report it only if device cannot be read.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgreduce-usage.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/label/label.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
 
---- LVM2/test/t-vgreduce-usage.sh	2008/08/12 10:04:31	1.1
-+++ LVM2/test/t-vgreduce-usage.sh	2008/08/28 11:20:49	1.2
-@@ -35,28 +35,39 @@
-    lv2=$(this_test_)-test-lv2-$$          &&
-    lv3=$(this_test_)-test-lv3-$$'
+--- LVM2/lib/label/label.c	2008/02/06 15:47:28	1.42
++++ LVM2/lib/label/label.c	2008/08/28 13:28:13	1.43
+@@ -119,7 +119,7 @@
+ 	if (!dev_read(dev, scan_sector << SECTOR_SHIFT,
+ 		      LABEL_SCAN_SIZE, readbuf)) {
+ 		log_debug("%s: Failed to read label area", dev_name(dev));
+-		goto out;
++		goto_out;
+ 	}
  
-+#TODO --removemissing (+ -- mirrorsonly)
+ 	/* Scan a few sectors for a valid label */
+@@ -284,7 +284,7 @@
+ 	}
  
- for mdatype in 1 2
- do
- test_expect_success \
-   "(lvm$mdatype) setup PVs" '
--  pvcreate -M$mdatype $d1 $d2 
-+   pvcreate -M$mdatype $d1 $d2 
- '
+ 	if (!(l = _find_labeller(dev, buf, &sector, scan_sector)))
+-		goto_out;
++		goto out;
  
- test_expect_success \
--  "(lvm$mdatype) vgreduce rejects removing the last pv (--all)" '
-+  "(lvm$mdatype) vgreduce removes only the specified pv from vg (bz427382)" '
-    vgcreate -M$mdatype $vg1 $d1 $d2 &&
--   vgreduce --all $vg1  2>err;
-+   vgreduce $vg1 $d1 &&
-+   check_pv_field_ $d2 vg_name $vg1 &&
-    vgremove -f $vg1
- '
--   #status=$?; echo status=$status; test $status = 5 &&
-+
-+test_expect_success \
-+  "(lvm$mdatype) vgreduce rejects removing the last pv (--all)" '
-+   vgcreate -M$mdatype $vg1 $d1 $d2 &&
-+   { vgreduce --all $vg1;
-+     status=$?; echo status=$status; test $status != 0 &&
-+     vgremove -f $vg1
-+   }
-+'
+ 	if ((r = (l->ops->read)(l, dev, buf, result)) && result && *result)
+ 		(*result)->sector = sector;
+@@ -361,7 +361,7 @@
+ 	}
  
- test_expect_success \
-   "(lvm$mdatype) vgreduce rejects removing the last pv" '
-    vgcreate -M$mdatype $vg1 $d1 $d2 &&
--   vgreduce $vg1 $d1 $d2 2>err;
--   status=$?; echo status=$status; test $status = 5 &&
--   vgremove -f $vg1
-+   { vgreduce $vg1 $d1 $d2;
-+     status=$?; echo status=$status; test $status = 5 &&
-+     vgremove -f $vg1
-+   }
- '
+ 	if (!(l = _find_labeller(dev, buf, &sector, UINT64_C(0))))
+-		goto_out;
++		goto out;
  
- test_expect_success \
-@@ -65,21 +76,21 @@
- '
- done
- 
--## TODO --mirrorsonly ?
- for mdatype in 2
- do
- test_expect_success \
-   "(lvm$mdatype) setup PVs (--metadatacopies 0)" '
--  pvcreate -M$mdatype $d1 $d2 
-+  pvcreate -M$mdatype $d1 $d2 &&
-   pvcreate --metadatacopies 0 -M$mdatype $d3 $d4
- '
- 
- test_expect_success \
-   "(lvm$mdatype) vgreduce rejects removing pv with the last mda copy" '
-    vgcreate -M$mdatype $vg1 $d1 $d3 &&
--   vgreduce $vg1 $d1 2>err;
--   status=$?; echo status=$status; test $status != 0 &&
--   vgremove -f $vg1
-+   { vgreduce $vg1 $d1;
-+     status=$?; echo status=$status; test $status != 0 &&
-+     vgremove -f $vg1
-+   }
- '
- done
+ 	r = l->ops->verify ? l->ops->verify(l, buf, sector) : 1;
  
 
 
