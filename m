@@ -1,68 +1,39 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 05 Sep 2008 10:04:44 -0500
-Subject: [Patch - addendum] Fix mirror corruption during primary device failure
-Message-ID: <1220627086.11979.4.camel@hydrogen>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 10 Sep 2008 10:14:59 -0000
+Subject: LVM2/lib/locking locking.c
+Message-ID: <20080910101459.12221.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-There is another spot in tools/vgreduce.c that makes the same error as
-in lib/metadata/mirror.c.  This patch addresses that.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2008-09-10 10:14:59
 
-I did duplicate the function I created in mirror.c in the previous
-patch.
+Modified files:
+	lib/locking    : locking.c 
 
- brassow
+Log message:
+	Do not scan for lvm1 entries in /proc if not running 2.4 kernel.
+	(LVM1 is only present in 2.4 kernel.)
 
-Index: LVM2-cvs/tools/vgreduce.c
-===================================================================
---- LVM2-cvs.orig/tools/vgreduce.c
-+++ LVM2-cvs/tools/vgreduce.c
-@@ -130,6 +130,31 @@ static int _remove_lv(struct cmd_context
- 	return 1;
- }
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+
+--- LVM2/lib/locking/locking.c	2008/05/09 18:45:15	1.49
++++ LVM2/lib/locking/locking.c	2008/09/10 10:14:59	1.50
+@@ -292,6 +292,10 @@
+ 	if (is_orphan_vg(vgname))
+ 		return 1;
  
-+/*
-+ * FIXME: exact same function as found in lib/metadata/mirror.c
-+ *        should reuse code
-+ */
-+static int shift_mirror_legs(struct lv_segment *mirrored_seg, int leg_pos)
-+{
-+       int i;
-+       struct lv_segment_area area;
++	/* LVM1 is only present in 2.4 kernels. */
++	if (strncmp(cmd->kernel_vsn, "2.4.", 4))
++		return 1;
 +
-+
-+       if (leg_pos >= mirrored_seg->area_count)
-+               return 1; /* -EINVAL */
-+
-+       area = mirrored_seg->areas[leg_pos];
-+
-+       /* Shift everyone down to fill the hole */
-+       for (i = leg_pos+1; i < mirrored_seg->area_count; i++)
-+               mirrored_seg->areas[i-1] = mirrored_seg->areas[i];
-+
-+       /* Stick this one at the end */
-+       mirrored_seg->areas[i-1] = area;
-+
-+       return 0;
-+}
-+
- static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
- {
- 	struct list *pvh, *pvht;
-@@ -250,9 +275,7 @@ static int _make_vg_consistent(struct cm
- 					    lvl2->lv != seg_lv(mirrored_seg, s))
- 						continue;
- 					list_del(&lvl2->list);
--					area = mirrored_seg->areas[mimages - 1];
--					mirrored_seg->areas[mimages - 1] = mirrored_seg->areas[s];
--					mirrored_seg->areas[s] = area;
-+					shift_mirror_legs(mirrored_seg, s);
- 					mimages--;	/* FIXME Assumes uniqueness */
- 				}
- 			}
-
+ 	if (dm_snprintf(path, sizeof(path), "%s/lvm/VGs/%s", cmd->proc_dir,
+ 			 vgname) < 0) {
+ 		log_error("LVM1 proc VG pathname too long for %s", vgname);
 
 
