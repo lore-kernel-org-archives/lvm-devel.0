@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 16 Sep 2008 18:05:12 -0000
-Subject: LVM2 lib/cache/lvmcache.c ./WHATS_NEW
-Message-ID: <20080916180512.27596.qmail@sourceware.org>
+Date: 18 Sep 2008 19:09:47 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20080918190947.32654.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-09-16 18:05:11
+Changes by:	agk at sourceware.org	2008-09-18 19:09:47
 
 Modified files:
-	lib/cache      : lvmcache.c 
 	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
 Log message:
-	Avoid repeatedly wiping cache while VG_GLOBAL is held in vgscan & pvscan.
+	Add missing LV error target activation in _remove_mirror_images.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.951&r2=1.952
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.953&r2=1.954
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
 
---- LVM2/lib/cache/lvmcache.c	2008/06/27 15:18:31	1.59
-+++ LVM2/lib/cache/lvmcache.c	2008/09/16 18:05:11	1.60
-@@ -97,9 +97,10 @@
- 	int was_locked = (info->status & CACHE_LOCKED) ? 1 : 0;
- 
- 	/*
--	 * Cache becomes invalid whenever lock state changes
-+	 * Cache becomes invalid whenever lock state changes unless
-+	 * exclusive VG_GLOBAL is held (i.e. while scanning).
- 	 */
--	if (was_locked != locked) {
-+	if (!vgname_is_locked(VG_GLOBAL) && (was_locked != locked)) {
- 		info->status |= CACHE_INVALID;
- 		*cached_vgmetadata_valid = 0;
- 	}
-@@ -166,7 +167,7 @@
- 
- 		/* Indicate that PVs could now be missing from the cache */
- 		init_full_scan_done(0);
--	} else
-+	} else if (!vgname_is_locked(VG_GLOBAL))
- 		_drop_metadata(vgname);
- }
- 
---- LVM2/WHATS_NEW	2008/09/12 15:26:44	1.951
-+++ LVM2/WHATS_NEW	2008/09/16 18:05:11	1.952
+--- LVM2/WHATS_NEW	2008/09/18 18:51:58	1.953
++++ LVM2/WHATS_NEW	2008/09/18 19:09:47	1.954
 @@ -1,5 +1,6 @@
  Version 2.02.40 - 
  ================================
-+  Avoid repeatedly wiping cache while VG_GLOBAL is held in vgscan & pvscan.
++  Add missing LV error target activation in _remove_mirror_images.
+   Prevent resizing an LV while lvconvert is using it.
+   Avoid repeatedly wiping cache while VG_GLOBAL is held in vgscan & pvscan.
    Fix pvresize to not allow resize if PV has two metadata areas.
-   Fix setting of volume limit count if converting to lvm1 format.
-   Fix vgconvert logical volume id metadata validation.
+--- LVM2/lib/metadata/mirror.c	2008/06/26 23:05:11	1.73
++++ LVM2/lib/metadata/mirror.c	2008/09/18 19:09:47	1.74
+@@ -552,6 +552,17 @@
+ 
+ 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
+ 
++	/*
++	 * Avoid having same mirror target loaded twice simultaneouly by first
++	 * activating the removed LV which now contains an error segment.
++	 * As it's now detached from mirrored_seg->lv we must activate it
++	 * explicitly.
++	 */
++	if (lv1 && !activate_lv(lv1->vg->cmd, lv1)) {
++		log_error("Problem reactivating removed %s", lv1->name);
++		return 0;
++	}
++
+ 	if (!resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv)) {
+ 		log_error("Problem reactivating %s", mirrored_seg->lv->name);
+ 		return 0;
 
 
