@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 18 Sep 2008 19:09:47 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
-Message-ID: <20080918190947.32654.qmail@sourceware.org>
+Date: 18 Sep 2008 18:51:59 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvresize.c
+Message-ID: <20080918185159.25927.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-09-18 19:09:47
+Changes by:	agk at sourceware.org	2008-09-18 18:51:58
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : mirror.c 
+	tools          : lvresize.c 
 
 Log message:
-	Add missing LV error target activation in _remove_mirror_images.
+	Prevent resizing an LV while lvconvert is using it.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.953&r2=1.954
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.952&r2=1.953
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.97&r2=1.98
 
---- LVM2/WHATS_NEW	2008/09/18 18:51:58	1.953
-+++ LVM2/WHATS_NEW	2008/09/18 19:09:47	1.954
+--- LVM2/WHATS_NEW	2008/09/16 18:05:11	1.952
++++ LVM2/WHATS_NEW	2008/09/18 18:51:58	1.953
 @@ -1,5 +1,6 @@
  Version 2.02.40 - 
  ================================
-+  Add missing LV error target activation in _remove_mirror_images.
-   Prevent resizing an LV while lvconvert is using it.
++  Prevent resizing an LV while lvconvert is using it.
    Avoid repeatedly wiping cache while VG_GLOBAL is held in vgscan & pvscan.
    Fix pvresize to not allow resize if PV has two metadata areas.
---- LVM2/lib/metadata/mirror.c	2008/06/26 23:05:11	1.73
-+++ LVM2/lib/metadata/mirror.c	2008/09/18 19:09:47	1.74
-@@ -552,6 +552,17 @@
+   Fix setting of volume limit count if converting to lvm1 format.
+--- LVM2/tools/lvresize.c	2008/04/29 15:25:28	1.97
++++ LVM2/tools/lvresize.c	2008/09/18 18:51:58	1.98
+@@ -308,6 +308,11 @@
+ 		return ECMD_FAILED;
+ 	}
  
- 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
- 
-+	/*
-+	 * Avoid having same mirror target loaded twice simultaneouly by first
-+	 * activating the removed LV which now contains an error segment.
-+	 * As it's now detached from mirrored_seg->lv we must activate it
-+	 * explicitly.
-+	 */
-+	if (lv1 && !activate_lv(lv1->vg->cmd, lv1)) {
-+		log_error("Problem reactivating removed %s", lv1->name);
-+		return 0;
++	if (lv->status & CONVERTING) {
++		log_error("Can't resize %s while lvconvert in progress", lv->name);
++		return ECMD_FAILED;
 +	}
 +
- 	if (!resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv)) {
- 		log_error("Problem reactivating %s", mirrored_seg->lv->name);
- 		return 0;
+ 	alloc = arg_uint_value(cmd, alloc_ARG, lv->alloc);
+ 
+ 	if (lp->size) {
 
 
