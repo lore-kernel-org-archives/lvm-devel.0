@@ -1,38 +1,34 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 26 May 2017 01:42:14 -0400
-Subject: master - spec: Enable notify-dbus in builds with dbus
-Message-ID: <201705260542.v4Q5gEd4023974@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 19 Sep 2008 06:44:54 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080919064454.16690.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3745b52ed4ff28e553e1372e425491d11cc78031
-Commit:        3745b52ed4ff28e553e1372e425491d11cc78031
-Parent:        65b10281f8b10c51730ab74e2d384d5d03d32f96
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri May 26 07:40:09 2017 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri May 26 07:40:09 2017 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-09-19 06:44:54
 
-spec: Enable notify-dbus in builds with dbus
+Modified files:
+	.              : WHATS_NEW 
 
----
- spec/build.inc |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+Log message:
+	.
 
-diff --git a/spec/build.inc b/spec/build.inc
-index 5321a70..5fb38f7 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -34,6 +34,7 @@
- %enableif %{enable_python3} python3-bindings
- %enableif %{enable_python} applib
- %enableif %{enable_dbusd} dbus-service
-+%enableif %{enable_dbusd} notify-dbus
- %enableif %{enable_dmfilemapd} dmfilemapd
- 
- %build
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.960&r2=1.961
+
+--- LVM2/WHATS_NEW	2008/09/19 06:41:57	1.960
++++ LVM2/WHATS_NEW	2008/09/19 06:44:54	1.961
+@@ -1,5 +1,6 @@
+ Version 2.02.40 - 
+ ================================
++  Allow lvremove to remove LVs from VGs with missing PVs.
+   In VG with PVs missing, by default allow activation of LVs that are complete.
+   Track PARTIAL_LV and MISSING_PV flags internally.
+   Require --force with --removemissing in vgreduce to remove partial LVs.
 
 
