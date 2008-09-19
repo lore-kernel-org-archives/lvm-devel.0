@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Sep 2008 18:26:43 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20080919182643.12131.qmail@sourceware.org>
+Date: 19 Sep 2008 18:31:20 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20080919183120.14324.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-09-19 18:26:42
+Changes by:	agk at sourceware.org	2008-09-19 18:31:20
 
 Modified files:
-	lib/commands   : toolcontext.c 
+	.              : WHATS_NEW 
 
 Log message:
-	suppress warning if old value found for now
+	.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.963&r2=1.964
 
---- LVM2/lib/commands/toolcontext.c	2008/09/19 06:41:58	1.62
-+++ LVM2/lib/commands/toolcontext.c	2008/09/19 18:26:41	1.63
-@@ -267,6 +267,12 @@
- 	cmd->stripe_filler = find_config_tree_str(cmd,
- 						  "activation/missing_stripe_filler",
- 						  DEFAULT_STRIPE_FILLER);
-+
-+	/* FIXME Missing error code checks from the stats, not log_warn?, notify if setting overridden, delay message/check till it is actually used (eg consider if lvm shell - file could appear later after this check)? */
-+	if (!strcmp(cmd->stripe_filler, "/dev/ioerror") &&
-+	    stat(cmd->stripe_filler, &st))
-+		cmd->stripe_filler = "error";
-+
- 	if (strcmp(cmd->stripe_filler, "error")) {
- 		if (stat(cmd->stripe_filler, &st)) {
- 			log_warn("WARNING: activation/missing_stripe_filler = \"%s\" "
+--- LVM2/WHATS_NEW	2008/09/19 15:44:03	1.963
++++ LVM2/WHATS_NEW	2008/09/19 18:31:20	1.964
+@@ -1,5 +1,6 @@
+ Version 2.02.41 -
+ =====================================
++  Fix release: clvmd build, vgreduce consolidate & tests, /dev/ioerror warning.
+ 
+ Version 2.02.40 - 19th September 2008
+ =====================================
 
 
