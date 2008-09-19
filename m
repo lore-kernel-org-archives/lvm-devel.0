@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Sep 2008 04:28:58 -0000
-Subject: LVM2/lib/metadata metadata.h
-Message-ID: <20080919042858.11126.qmail@sourceware.org>
+Date: 19 Sep 2008 04:30:03 -0000
+Subject: LVM2/lib/metadata mirror.c
+Message-ID: <20080919043003.11645.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-09-19 04:28:58
+Changes by:	agk at sourceware.org	2008-09-19 04:30:02
 
 Modified files:
-	lib/metadata   : metadata.h 
+	lib/metadata   : mirror.c 
 
 Log message:
-	Pass struct physical_volume to pe_align.
+	remove unsed var
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.180&r2=1.181
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
 
---- LVM2/lib/metadata/metadata.h	2008/04/01 22:40:13	1.180
-+++ LVM2/lib/metadata/metadata.h	2008/09/19 04:28:58	1.181
-@@ -239,7 +239,7 @@
- /*
-  * Utility functions
-  */
--unsigned long pe_align(void);
-+unsigned long pe_align(struct physical_volume *pv);
- int vg_validate(struct volume_group *vg);
- 
- int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
+--- LVM2/lib/metadata/mirror.c	2008/09/19 00:20:39	1.76
++++ LVM2/lib/metadata/mirror.c	2008/09/19 04:30:02	1.77
+@@ -491,7 +491,6 @@
+ 	struct logical_volume *detached_log_lv = NULL;
+ 	struct logical_volume *lv1 = NULL;
+ 	struct lv_segment *mirrored_seg = first_seg(lv);
+-	struct lv_segment_area area;
+ 	uint32_t old_area_count = mirrored_seg->area_count;
+ 	uint32_t new_area_count = mirrored_seg->area_count;
+ 	struct lv_list *lvl;
 
 
