@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Sep 2008 15:44:08 -0000
-Subject: LVM2 ./VERSION ./WHATS_NEW daemons/clvmd/lvm-f ...
-Message-ID: <20080919154408.28915.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 19 Sep 2008 16:10:47 -0000
+Subject: LVM2/test t-mirror-vgreduce-removemissing.sh
+Message-ID: <20080919161047.10115.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,93 +10,144 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-09-19 15:44:03
+Changes by:	mbroz at sourceware.org	2008-09-19 16:10:46
 
 Modified files:
-	.              : VERSION WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
-	tools          : vgreduce.c 
+	test           : t-mirror-vgreduce-removemissing.sh 
 
 Log message:
-	fix last release
+	Fix vgreduce test,  now requires --force flag. (Jaroslav Stava)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.181&r2=1.182
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.962&r2=1.963
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-vgreduce-removemissing.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/VERSION	2008/09/19 06:48:48	1.181
-+++ LVM2/VERSION	2008/09/19 15:44:03	1.182
-@@ -1 +1 @@
--2.02.40-cvs (2008-09-18)
-+2.02.41-cvs (2008-09-19)
---- LVM2/WHATS_NEW	2008/09/19 06:48:48	1.962
-+++ LVM2/WHATS_NEW	2008/09/19 15:44:03	1.963
-@@ -1,3 +1,6 @@
-+Version 2.02.41 -
-+=====================================
-+
- Version 2.02.40 - 19th September 2008
- =====================================
-   Allow lvremove to remove LVs from VGs with missing PVs.
---- LVM2/daemons/clvmd/lvm-functions.c	2008/09/19 06:41:57	1.45
-+++ LVM2/daemons/clvmd/lvm-functions.c	2008/09/19 15:44:03	1.46
-@@ -141,8 +141,7 @@
- {
- 	static char buf[128];
- 
--	sprintf(buf, "0x%x (%s%s%s)", flags,
--		flags & LCK_PARTIAL_MODE	  ? "PARTIAL " : "",
-+	sprintf(buf, "0x%x (%s%s)", flags,
- 		flags & LCK_MIRROR_NOSYNC_MODE	  ? "MIRROR_NOSYNC " : "",
- 		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR " : "");
- 
---- LVM2/tools/vgreduce.c	2008/09/19 06:42:00	1.83
-+++ LVM2/tools/vgreduce.c	2008/09/19 15:44:03	1.84
-@@ -163,7 +163,9 @@
- 
- static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
- {
-+	struct list *pvh, *pvht;
- 	struct list *lvh, *lvht;
-+	struct pv_list *pvl;
- 	struct lv_list *lvl, *lvl2, *lvlt;
- 	struct logical_volume *lv;
- 	struct physical_volume *pv;
-@@ -190,7 +192,8 @@
- 				/* FIXME Also check for segs on deleted LVs (incl pvmove) */
- 
- 				pv = seg_pv(seg, s);
--				if (!pv || !pv_dev(pv)) {
-+				if (!pv || !pv_dev(pv) ||
-+				    (pv->status & MISSING_PV)) {
- 					if (arg_count(cmd, mirrorsonly_ARG) &&
- 					    !(lv->status & MIRROR_IMAGE)) {
- 						log_error("Non-mirror-image LV %s found: can't remove.", lv->name);
-@@ -211,8 +214,21 @@
- 		return 0;
- 	}
- 
--	if (!_consolidate_vg(cmd, vg))
--		return_0;
-+	/*
-+	 * Remove missing PVs. FIXME: This duplicates _consolidate_vg above,
-+	 * but we cannot use that right now, since the LV removal code in this
-+	 * function leaves the VG in a "somewhat inconsistent" state and
-+	 * _consolidate_vg doesn't like that -- specifically, mirrors are fixed
-+	 * up *after* the PVs are removed. All this should be gradually
-+	 * superseded by lvconvert --repair.
-+	 */
-+	list_iterate_safe(pvh, pvht, &vg->pvs) {
-+		pvl = list_item(pvh, struct pv_list);
-+		if (pvl->pv->dev)
-+			continue;
-+		if (!_remove_pv(vg, pvl, 0))
-+			return_0;
-+	}
- 
- 	/* FIXME Recovery.  For now people must clean up by hand. */
- 
+--- LVM2/test/t-mirror-vgreduce-removemissing.sh	2008/01/17 18:29:36	1.1
++++ LVM2/test/t-mirror-vgreduce-removemissing.sh	2008/09/19 16:10:46	1.2
+@@ -218,7 +218,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 3) &&
+    fail_pv_ $(pv_ 2) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lv_is_linear_ $lv1 &&
+    lv_is_on_ $lv1 $(pv_ 1)'
+ test_expect_success "cleanup" \
+@@ -238,7 +238,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 4) &&
+    fail_pv_ $(pv_ $index) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    mimages_are_on_ $lv1 $(rest_pvs_ $index 3) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 4)
+@@ -266,7 +266,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 4) &&
+    fail_pv_ $(rest_pvs_ $index 3) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    lv_is_linear_ $lv1 &&
+    lv_is_on_ $lv1 $(pv_ $index)
+@@ -295,7 +295,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) $(pv_ 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ $index) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    mimages_are_on_ $lv1 $(rest_pvs_ $index 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5)
+@@ -324,7 +324,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) $(pv_ 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(rest_pvs_ $index 4) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    (mimages_are_on_ $lv1 $(pv_ $index) || lv_is_on_ $lv1 $(pv_ $index)) &&
+    ! mirrorlog_is_on_ $lv1 $(pv_ 5)
+@@ -353,7 +353,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) $(pv_ 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ $index) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    mimages_are_on_ $lv1 $(rest_pvs_ $index 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5)
+@@ -382,7 +382,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) $(pv_ 4) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(rest_pvs_ $index 4) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lvs -a -o+devices $vg &&
+    (mimages_are_on_ $lv1 $(pv_ $index) || lv_is_on_ $lv1 $(pv_ $index)) &&
+    ! mirrorlog_is_on_ $lv1 $(pv_ 5)
+@@ -406,7 +406,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ 5) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    ! mirrorlog_is_on_ $lv1 $(pv_ 5)'
+ test_expect_success "cleanup" \
+@@ -420,7 +420,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ 5) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+    ! mirrorlog_is_on_ $lv1 $(pv_ 5)'
+ test_expect_success "cleanup" \
+@@ -436,7 +436,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ 1) $(pv_ 2) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    ! lvs $vg/$lv1'
+ test_expect_success "cleanup" \
+   "recover_vg_ $(pv_ 1) $(pv_ 2)"
+@@ -449,7 +449,7 @@
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    fail_pv_ $(pv_ 1) $(pv_ 2) $(pv_ 3) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    ! lvs $vg/$lv1'
+ test_expect_success "cleanup" \
+   "recover_vg_ $(pv_ 1) $(pv_ 2) $(pv_ 3)"
+@@ -468,7 +468,7 @@
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+    mirrorlog_is_on_ $lv2 $(pv_ 5) &&
+    fail_pv_ $(pv_ 2) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    mimages_are_on_ $lv2 $(pv_ 3) $(pv_ 4) &&
+    mirrorlog_is_on_ $lv2 $(pv_ 5) &&
+    lv_is_linear_ $lv1 &&
+@@ -488,7 +488,7 @@
+    mirrorlog_is_on_ $lv2 $(pv_ 5) &&
+    fail_pv_ $(pv_ 2) &&
+    fail_pv_ $(pv_ 4) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    lv_is_linear_ $lv1 &&
+    lv_is_on_ $lv1 $(pv_ 1) &&
+    lv_is_linear_ $lv2 &&
+@@ -505,7 +505,7 @@
+    lvchange -an $vg/$lv1 &&
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5) &&
+-   vgreduce --removemissing $vg &&
++   vgreduce --removemissing --force $vg &&
+    mimages_are_on_ $lv1 $(pv_ 1) $(pv_ 2) &&
+    mirrorlog_is_on_ $lv1 $(pv_ 5)'
+ test_expect_success "cleanup" \
 
 
