@@ -1,54 +1,102 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 26 May 2017 03:14:28 -0400
-Subject: master - test: Use _pv suffix for nested devices
-Message-ID: <201705260714.v4Q7ESf4004087@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 19 Sep 2008 15:44:08 -0000
+Subject: LVM2 ./VERSION ./WHATS_NEW daemons/clvmd/lvm-f ...
+Message-ID: <20080919154408.28915.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7687ab82c8d71e5d11c915a4dd390249b8124b9a
-Commit:        7687ab82c8d71e5d11c915a4dd390249b8124b9a
-Parent:        3745b52ed4ff28e553e1372e425491d11cc78031
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri May 26 08:33:39 2017 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri May 26 08:33:39 2017 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-09-19 15:44:03
 
-test: Use _pv suffix for nested devices
+Modified files:
+	.              : VERSION WHATS_NEW 
+	daemons/clvmd  : lvm-functions.c 
+	tools          : vgreduce.c 
 
-Testsuite uses global_filter to accept only test devices with
-suffix matching /_pv[0-9_]*$/ set by generate_config in aux.sh.
----
- test/dbus/lvmdbustest.py |    7 ++++---
- 1 files changed, 4 insertions(+), 3 deletions(-)
+Log message:
+	fix last release
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index e3eeb6e..d9f0f8c 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -716,9 +716,9 @@ class TestDbusService(unittest.TestCase):
- 			LV_BASE_INT)
- 		self._validate_lookup("%s/%s" % (vg.Name, lv_name), lv.object_path)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.181&r2=1.182
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.962&r2=1.963
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+
+--- LVM2/VERSION	2008/09/19 06:48:48	1.181
++++ LVM2/VERSION	2008/09/19 15:44:03	1.182
+@@ -1 +1 @@
+-2.02.40-cvs (2008-09-18)
++2.02.41-cvs (2008-09-19)
+--- LVM2/WHATS_NEW	2008/09/19 06:48:48	1.962
++++ LVM2/WHATS_NEW	2008/09/19 15:44:03	1.963
+@@ -1,3 +1,6 @@
++Version 2.02.41 -
++=====================================
++
+ Version 2.02.40 - 19th September 2008
+ =====================================
+   Allow lvremove to remove LVs from VGs with missing PVs.
+--- LVM2/daemons/clvmd/lvm-functions.c	2008/09/19 06:41:57	1.45
++++ LVM2/daemons/clvmd/lvm-functions.c	2008/09/19 15:44:03	1.46
+@@ -141,8 +141,7 @@
+ {
+ 	static char buf[128];
  
--	def _create_lv(self, thinpool=False, size=None, vg=None):
-+	def _create_lv(self, thinpool=False, size=None, vg=None, suffix=None):
+-	sprintf(buf, "0x%x (%s%s%s)", flags,
+-		flags & LCK_PARTIAL_MODE	  ? "PARTIAL " : "",
++	sprintf(buf, "0x%x (%s%s)", flags,
+ 		flags & LCK_MIRROR_NOSYNC_MODE	  ? "MIRROR_NOSYNC " : "",
+ 		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR " : "");
  
--		lv_name = lv_n()
-+		lv_name = lv_n(suffix=suffix)
- 		interfaces = list(LV_BASE_INT)
+--- LVM2/tools/vgreduce.c	2008/09/19 06:42:00	1.83
++++ LVM2/tools/vgreduce.c	2008/09/19 15:44:03	1.84
+@@ -163,7 +163,9 @@
  
- 		if thinpool:
-@@ -1842,7 +1842,8 @@ class TestDbusService(unittest.TestCase):
- 		self.assertIn(pv_object_path, vg.Vg.Pvs,
- 						"Expecting PV object path in Vg.Pvs")
+ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
+ {
++	struct list *pvh, *pvht;
+ 	struct list *lvh, *lvht;
++	struct pv_list *pvl;
+ 	struct lv_list *lvl, *lvl2, *lvlt;
+ 	struct logical_volume *lv;
+ 	struct physical_volume *pv;
+@@ -190,7 +192,8 @@
+ 				/* FIXME Also check for segs on deleted LVs (incl pvmove) */
  
--		lv = self._create_lv(vg=vg.Vg, size=vg.Vg.FreeBytes)
-+		lv = self._create_lv(vg=vg.Vg, size=vg.Vg.FreeBytes,
-+								suffix="_pv")
- 		device_path = '/dev/%s/%s' % (vg.Vg.Name, lv.LvCommon.Name)
- 		new_pv_object_path = self._pv_create(device_path)
+ 				pv = seg_pv(seg, s);
+-				if (!pv || !pv_dev(pv)) {
++				if (!pv || !pv_dev(pv) ||
++				    (pv->status & MISSING_PV)) {
+ 					if (arg_count(cmd, mirrorsonly_ARG) &&
+ 					    !(lv->status & MIRROR_IMAGE)) {
+ 						log_error("Non-mirror-image LV %s found: can't remove.", lv->name);
+@@ -211,8 +214,21 @@
+ 		return 0;
+ 	}
+ 
+-	if (!_consolidate_vg(cmd, vg))
+-		return_0;
++	/*
++	 * Remove missing PVs. FIXME: This duplicates _consolidate_vg above,
++	 * but we cannot use that right now, since the LV removal code in this
++	 * function leaves the VG in a "somewhat inconsistent" state and
++	 * _consolidate_vg doesn't like that -- specifically, mirrors are fixed
++	 * up *after* the PVs are removed. All this should be gradually
++	 * superseded by lvconvert --repair.
++	 */
++	list_iterate_safe(pvh, pvht, &vg->pvs) {
++		pvl = list_item(pvh, struct pv_list);
++		if (pvl->pv->dev)
++			continue;
++		if (!_remove_pv(vg, pvl, 0))
++			return_0;
++	}
+ 
+ 	/* FIXME Recovery.  For now people must clean up by hand. */
  
 
 
