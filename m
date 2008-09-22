@@ -1,35 +1,47 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 30 Sep 2008 21:45:43 -0000
-Subject: LVM2/test harness.sh
-Message-ID: <20080930214543.20363.qmail@sourceware.org>
+From: Benjamin Schweizer <2008@benjamin-schweizer.de>
+Date: Mon, 22 Sep 2008 15:17:26 +0200
+Subject: dsnapshot, a high-level interface to the snapshot facility
+Message-ID: <20080922131726.GD21738@sickos.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-09-30 21:45:42
+Hello there,
 
-Modified files:
-	test           : harness.sh 
+recently, I've written a helper script that I use with my rsync-based
+backups. Here's the abstract:
 
-Log message:
-	Make harness.sh exit with non-zero status when tests fail.
+| The dsnapshot script provides a high-level interface to the Linux
+| Logical Volume Manager. It uses its block-level snapshot support to
+| create directory snapshots. In contrast to block-level snapshots,
+| directory snapshots resemble the file system layer. Thus, you can
+| snapshot any directory that is on a logical volume and you don?t have to
+| worry about the actual logical volumes, mount points and paths.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+And this is the actual syntax for creating...
 
---- LVM2/test/harness.sh	2008/09/30 21:43:16	1.2
-+++ LVM2/test/harness.sh	2008/09/30 21:45:42	1.3
-@@ -29,6 +29,7 @@
-     for t in $failed; do
- 	printf "\t%s\n" $t
-     done
-+    exit 1
- else
-     echo "All tests passed."
- fi
+| $ dsnapshot --create /srv/mysql/test/
+| /var/lib/dsnapshot/srv-fdf2e6dc/mysql/test/
+
+... and removing a directory snapshot
+
+| $ dsnapshot --remove /var/lib/dsnapshot/srv-fdf2e6dc/mysql/test/
+
+I've found it very handy when you need to backup partial directories and
+not the whole volume. Some people use it to backup the disk images of
+running virtual machines, I use it with mailstores and small databases.
+
+The script can be found here [ http://benjamin-schweizer.de/files/dsnapshot/ ]
+and an introduction there [ http://benjamin-schweizer.de/dsnapshot.html ].
+If you like it and find it useful, I'd like to see it in the /contrib directory.
+
+
+Greetings
+Benjamin
+
+-- 
+http://benjamin-schweizer.de/contact
 
 
