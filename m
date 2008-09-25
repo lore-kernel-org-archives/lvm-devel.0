@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 25 Sep 2008 15:52:29 -0000
-Subject: LVM2 ./WHATS_NEW dmeventd/mirror/dmeventd_mirror.c
-Message-ID: <20080925155229.4236.qmail@sourceware.org>
+Date: 25 Sep 2008 15:57:03 -0000
+Subject: LVM2/lib/metadata metadata-exported.h metadata ...
+Message-ID: <20080925155703.5415.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-09-25 15:52:29
+Changes by:	mbroz at sourceware.org	2008-09-25 15:57:03
 
 Modified files:
-	.              : WHATS_NEW 
-	dmeventd/mirror: dmeventd_mirror.c 
+	lib/metadata   : metadata-exported.h metadata.c metadata.h 
 
 Log message:
-	Fix mirror DSO to call vgreduce with proper parameters.
+	Try to fix possible infinite loop in dependency tree walking (by mornfall).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.965&r2=1.966
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/dmeventd/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.191&r2=1.192
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.182&r2=1.183
 
---- LVM2/WHATS_NEW	2008/09/24 16:32:51	1.965
-+++ LVM2/WHATS_NEW	2008/09/25 15:52:28	1.966
-@@ -1,5 +1,6 @@
- Version 2.02.41 -
- =====================================
-+  Fix mirror DSO to call vgreduce with proper parameters.
-   Fix validation of --minor and --major in lvcreate to require -My always.
-   Fix release: clvmd build, vgreduce consolidate & tests, /dev/ioerror warning.
+--- LVM2/lib/metadata/metadata-exported.h	2008/09/19 06:41:59	1.53
++++ LVM2/lib/metadata/metadata-exported.h	2008/09/25 15:57:02	1.54
+@@ -75,8 +75,8 @@
+ #define PARTIAL_LV              0x01000000U	/* LV - derived flag, not
+ 						   written out in metadata*/
  
---- LVM2/dmeventd/mirror/dmeventd_mirror.c	2008/01/31 12:19:35	1.19
-+++ LVM2/dmeventd/mirror/dmeventd_mirror.c	2008/09/25 15:52:29	1.20
-@@ -152,7 +152,7 @@
- 	}
+-//#define POSTORDER_FLAG	0x02000000U /* Not a real flag, reserved for
+-//					       temporary use inside vg_read. */
++//#define POSTORDER_FLAG	0x02000000U /* Not real flags, reserved for
++//#define POSTORDER_OPEN_FLAG	0x04000000U    temporary use inside vg_read. */
  
- 	/* FIXME Is any sanity-checking required on %s? */
--	if (CMD_SIZE <= snprintf(cmd_str, CMD_SIZE, "vgreduce --config devices{ignore_suspended_devices=1} --removemissing %s", vg)) {
-+	if (CMD_SIZE <= snprintf(cmd_str, CMD_SIZE, "vgreduce --config devices{ignore_suspended_devices=1} --removemissing --force %s", vg)) {
- 		/* this error should be caught above, but doesn't hurt to check again */
- 		syslog(LOG_ERR, "Unable to form LVM command: Device name too long");
- 		dm_pool_empty(_mem_pool);  /* FIXME: not safe with multiple threads */
+ #define LVM_READ              	0x00000100U	/* LV VG */
+ #define LVM_WRITE             	0x00000200U	/* LV VG */
+--- LVM2/lib/metadata/metadata.c	2008/09/19 06:41:59	1.191
++++ LVM2/lib/metadata/metadata.c	2008/09/25 15:57:02	1.192
+@@ -1199,7 +1199,11 @@
+ static int _lv_postorder_level(struct logical_volume *lv, void *data)
+ {
+ 	struct _lv_postorder_baton *baton = data;
++	if (lv->status & POSTORDER_OPEN_FLAG)
++		return 1; // a data structure loop has closed...
++	lv->status |= POSTORDER_OPEN_FLAG;
+ 	int r =_lv_postorder_visit(lv, baton->fn, baton->data);
++	lv->status &= ~POSTORDER_OPEN_FLAG;
+ 	lv->status |= POSTORDER_FLAG;
+ 	return r;
+ };
+--- LVM2/lib/metadata/metadata.h	2008/09/19 06:41:59	1.182
++++ LVM2/lib/metadata/metadata.h	2008/09/25 15:57:02	1.183
+@@ -67,8 +67,8 @@
+ //#define PARTIAL_LV		0x01000000U	/* LV - derived flag, not
+ //						   written out in metadata*/
+ 
+-#define POSTORDER_FLAG		0x02000000U /* Not a real flag, reserved for
+-					       temporary use inside vg_read. */
++#define POSTORDER_FLAG		0x02000000U /* Not real flags, reserved for  */
++#define POSTORDER_OPEN_FLAG	0x04000000U /* temporary use inside vg_read. */
+ 
+ //#define LVM_READ              	0x00000100U	/* LV VG */
+ //#define LVM_WRITE             	0x00000200U	/* LV VG */
 
 
