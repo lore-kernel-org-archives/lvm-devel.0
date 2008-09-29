@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 29 Sep 2008 16:07:02 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20080929160702.22397.qmail@sourceware.org>
+Date: 29 Sep 2008 16:00:54 -0000
+Subject: LVM2/test test-lib.sh
+Message-ID: <20080929160054.17782.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-09-29 16:07:02
+Changes by:	mornfall at sourceware.org	2008-09-29 16:00:53
 
 Modified files:
-	test           : Makefile.in 
+	test           : test-lib.sh 
 
 Log message:
-	Update test/Makefile.in to use the new harness for calling tests.
+	Export testlib_cleanup_ from test-lib.sh, which is needed for test-utils.sh to
+	be able to call proper EXIT traps.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-lib.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/test/Makefile.in	2008/08/28 10:07:33	1.11
-+++ LVM2/test/Makefile.in	2008/09/29 16:07:02	1.12
-@@ -26,6 +26,8 @@
- abs_top_srcdir = @abs_top_srcdir@
+--- LVM2/test/test-lib.sh	2008/08/05 11:39:54	1.4
++++ LVM2/test/test-lib.sh	2008/09/29 16:00:53	1.5
+@@ -247,10 +247,14 @@
+ test_dir_rand_=$($abs_srcdir/mkdtemp $test_dir_ lvm-$this_test.XXXXXXXXXX) \
+     || error "failed to create temporary directory in $test_dir_"
  
- all: init.sh
-+	sh harness.sh
++testlib_cleanup_() {
++    d="$test_dir_rand_";
++    cd "$test_dir_" && chmod -R u+rwx "$d" && rm -rf "$d"
++}
 +
- init.sh: Makefile.in .bin-dir-stamp
- 	rm -f $@-t $@
- 	echo 'top_srcdir=$(top_srcdir)' >> $@-t
-@@ -47,8 +49,7 @@
- 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+ # Run each test from within a temporary sub-directory named after the
+ # test itself, and arrange to remove it upon exception or normal exit.
+-trap 'st=$?; cleanup_; d='"$test_dir_rand_"';
+-    cd '"$test_dir_"' && chmod -R u+rwx "$d" && rm -rf "$d" && exit $st' 0
++trap 'st=$?; cleanup_; testlib_cleanup_; exit $st' 0
+ trap '(exit $?); exit $?' 1 2 13 15
  
- $(T): init.sh
--	@echo "*** $@ ***"; '$(SHELL_PATH_SQ)' \
--	  $(TESTS_ENVIRONMENT) $@ $(LVM_TEST_OPTS)
-+	sh harness.sh $@
- 
- .bin-dir-stamp: lvm-wrapper
- 	rm -rf bin
-@@ -76,6 +77,5 @@
- 
- distclean: clean
- 
--all: $(T)
- .PHONY: $(T) clean distclean
- .NOTPARALLEL:
+ cd $test_dir_rand_ || error "failed to cd to $test_dir_rand_"
 
 
