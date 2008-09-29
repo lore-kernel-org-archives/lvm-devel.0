@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 29 Sep 2008 16:00:54 -0000
-Subject: LVM2/test test-lib.sh
-Message-ID: <20080929160054.17782.qmail@sourceware.org>
+Date: 29 Sep 2008 16:04:57 -0000
+Subject: LVM2/test t-partial-activate.sh
+Message-ID: <20080929160457.20946.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-09-29 16:00:53
+Changes by:	mornfall at sourceware.org	2008-09-29 16:04:57
 
-Modified files:
-	test           : test-lib.sh 
+Added files:
+	test           : t-partial-activate.sh 
 
 Log message:
-	Export testlib_cleanup_ from test-lib.sh, which is needed for test-utils.sh to
-	be able to call proper EXIT traps.
+	Add a simple test for partial activation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-lib.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-partial-activate.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/test/test-lib.sh	2008/08/05 11:39:54	1.4
-+++ LVM2/test/test-lib.sh	2008/09/29 16:00:53	1.5
-@@ -247,10 +247,14 @@
- test_dir_rand_=$($abs_srcdir/mkdtemp $test_dir_ lvm-$this_test.XXXXXXXXXX) \
-     || error "failed to create temporary directory in $test_dir_"
- 
-+testlib_cleanup_() {
-+    d="$test_dir_rand_";
-+    cd "$test_dir_" && chmod -R u+rwx "$d" && rm -rf "$d"
-+}
+/cvs/lvm2/LVM2/test/t-partial-activate.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-partial-activate.sh
++++ -	2008-09-29 16:04:57.776087000 +0000
+@@ -0,0 +1,12 @@
++. ./test-utils.sh
 +
- # Run each test from within a temporary sub-directory named after the
- # test itself, and arrange to remove it upon exception or normal exit.
--trap 'st=$?; cleanup_; d='"$test_dir_rand_"';
--    cd '"$test_dir_"' && chmod -R u+rwx "$d" && rm -rf "$d" && exit $st' 0
-+trap 'st=$?; cleanup_; testlib_cleanup_; exit $st' 0
- trap '(exit $?); exit $?' 1 2 13 15
- 
- cd $test_dir_rand_ || error "failed to cd to $test_dir_rand_"
++aux prepare_vg 3
++
++lvcreate -m 1 -l 1 -n mirror $vg
++lvchange -a n $vg/mirror
++disable_dev $dev1
++
++# FIXME should this return an error code due to that big fat WARNING?
++vgreduce --removemissing $vg
++not lvchange -v -a y $vg/mirror
++lvchange -v --partial -a y $vg/mirror
 
 
