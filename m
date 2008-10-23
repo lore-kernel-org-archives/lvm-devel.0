@@ -1,39 +1,78 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 23 Oct 2008 09:45:52 +0200
-Subject: [PATCH] Fix _mimagetmp left activated after upconversion of inactive mirrored LV
-In-Reply-To: <490020E8.4000401@ce.jp.nec.com>
-References: <490020E8.4000401@ce.jp.nec.com>
-Message-ID: <49002BB0.3060603@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 23 Oct 2008 11:21:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20081023112105.5250.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jun'ichi Nomura wrote:
->> commit e36b529d7381725e839befcf001e9453eda6886a
->> Author: Alasdair Kergon <agk@redhat.com>
->> Date:   Fri Oct 17 10:57:14 2008 +0000
->>
->>     Use temp table to set device size when converting mirrors.
->>     
->>     (Avoids having same mirror table loaded twice concurrently by first
->>     using a 'zero' table to set the size of the device so when mirror
->>     table is preloaded it doesn't have to be activated immediately.)
-> 
-> This change broke t-mirror-vgreduce-removemissing.sh test.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-10-23 11:21:04
 
-Hi,
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
-yes, it broke tests and not only this test. There is already patch,
-but unfortunately not yet in CVS/git...
+Log message:
+	Fix temp table activation in mirror conversions not to happen in other cmds.
+	Fix temp table in mirror conversions to use always-present error not zero.
 
-This commit also introduced using zero target, which is not guaranteed
-to be properly initialized there (try to run without dm_zero loaded),
-so new patch also uses error target instead for temporary mapping.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.979&r2=1.980
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.157&r2=1.158
 
-
-Thanks,
-Milan
+--- LVM2/WHATS_NEW	2008/10/17 17:48:10	1.979
++++ LVM2/WHATS_NEW	2008/10/23 11:21:04	1.980
+@@ -1,5 +1,7 @@
+ Version 2.02.42 - 
+ ===================================
++  Fix temp table activation in mirror conversions not to happen in other cmds.
++  Fix temp table in mirror conversions to use always-present error not zero.
+ 
+ Version 2.02.41 - 17th October 2008
+ ===================================
+--- LVM2/lib/metadata/lv_manip.c	2008/10/17 10:57:15	1.157
++++ LVM2/lib/metadata/lv_manip.c	2008/10/23 11:21:04	1.158
+@@ -2380,30 +2380,29 @@
+ 		return NULL;
+ 	}
+ 
+-	if (strstr(name, "_mimagetmp")) {
+-		log_very_verbose("Creating transient 'zero' LV"
+-				 " for Mirror -> mirror up-convert.");
++	if (lv_is_active(lv_where) && strstr(name, "_mimagetmp")) {
++		log_very_verbose("Creating transient LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
+ 
+-		segtype = get_segtype_from_string(cmd, "zero");
++		segtype = get_segtype_from_string(cmd, "error");
+ 
+ 		if (!lv_add_virtual_segment(layer_lv, 0, lv_where->le_count, segtype)) {
+-			log_error("Creation of intermediate layer LV failed.");
++			log_error("Creation of transient LV %s for mirror conversion in VG %s failed.", name, lv_where->vg->name);
+ 			return NULL;
+ 		}
+ 
+ 		if (!vg_write(lv_where->vg)) {
+-			log_error("Failed to write intermediate VG metadata");
++			log_error("Failed to write intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
+ 			return NULL;
+ 		}
+ 
+ 		if (!vg_commit(lv_where->vg)) {
+-			log_error("Failed to commit intermediate VG metadata");
++			log_error("Failed to commit intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
+ 			vg_revert(lv_where->vg);
+ 			return NULL;
+ 		}
+ 
+ 		if (!activate_lv(cmd, layer_lv)) {
+-			log_error("Failed to resume intermediate 'zero' LV, %s", name);
++			log_error("Failed to resume transient error LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
+ 			return NULL;
+ 		}
+ 	}
 
 
