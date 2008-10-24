@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 23 Oct 2008 11:21:05 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20081023112105.5250.qmail@sourceware.org>
+Date: 24 Oct 2008 01:16:17 -0000
+Subject: LVM2 lib/locking/locking.c ./WHATS_NEW
+Message-ID: <20081024011617.13624.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,69 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-23 11:21:04
+Changes by:	agk at sourceware.org	2008-10-24 01:16:17
 
 Modified files:
+	lib/locking    : locking.c 
 	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
 
 Log message:
-	Fix temp table activation in mirror conversions not to happen in other cmds.
-	Fix temp table in mirror conversions to use always-present error not zero.
+	Accept locking fallback_to_* options in the global section as documented.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.979&r2=1.980
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.157&r2=1.158
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.980&r2=1.981
 
---- LVM2/WHATS_NEW	2008/10/17 17:48:10	1.979
-+++ LVM2/WHATS_NEW	2008/10/23 11:21:04	1.980
-@@ -1,5 +1,7 @@
+--- LVM2/lib/locking/locking.c	2008/09/10 10:14:59	1.50
++++ LVM2/lib/locking/locking.c	2008/10/24 01:16:16	1.51
+@@ -233,7 +233,8 @@
+ 				return 1;
+ 		}
+ 		if (!find_config_tree_int(cmd, "locking/fallback_to_clustered_locking",
+-					  DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING))
++			    find_config_tree_int(cmd, "global/fallback_to_clustered_locking",
++						 DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING)))
+ 			break;
+ #endif
+ 
+@@ -255,7 +256,8 @@
+ 
+ 	if ((type == 2 || type == 3) &&
+ 	    find_config_tree_int(cmd, "locking/fallback_to_local_locking",
+-				 DEFAULT_FALLBACK_TO_LOCAL_LOCKING)) {
++	    	    find_config_tree_int(cmd, "global/fallback_to_local_locking",
++					 DEFAULT_FALLBACK_TO_LOCAL_LOCKING))) {
+ 		log_warn("WARNING: Falling back to local file-based locking.");
+ 		log_warn("Volume Groups with the clustered attribute will "
+ 			  "be inaccessible.");
+--- LVM2/WHATS_NEW	2008/10/23 11:21:04	1.980
++++ LVM2/WHATS_NEW	2008/10/24 01:16:16	1.981
+@@ -1,5 +1,6 @@
  Version 2.02.42 - 
  ===================================
-+  Fix temp table activation in mirror conversions not to happen in other cmds.
-+  Fix temp table in mirror conversions to use always-present error not zero.
++  Accept locking fallback_to_* options in the global section as documented.
+   Fix temp table activation in mirror conversions not to happen in other cmds.
+   Fix temp table in mirror conversions to use always-present error not zero.
  
- Version 2.02.41 - 17th October 2008
- ===================================
---- LVM2/lib/metadata/lv_manip.c	2008/10/17 10:57:15	1.157
-+++ LVM2/lib/metadata/lv_manip.c	2008/10/23 11:21:04	1.158
-@@ -2380,30 +2380,29 @@
- 		return NULL;
- 	}
- 
--	if (strstr(name, "_mimagetmp")) {
--		log_very_verbose("Creating transient 'zero' LV"
--				 " for Mirror -> mirror up-convert.");
-+	if (lv_is_active(lv_where) && strstr(name, "_mimagetmp")) {
-+		log_very_verbose("Creating transient LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
- 
--		segtype = get_segtype_from_string(cmd, "zero");
-+		segtype = get_segtype_from_string(cmd, "error");
- 
- 		if (!lv_add_virtual_segment(layer_lv, 0, lv_where->le_count, segtype)) {
--			log_error("Creation of intermediate layer LV failed.");
-+			log_error("Creation of transient LV %s for mirror conversion in VG %s failed.", name, lv_where->vg->name);
- 			return NULL;
- 		}
- 
- 		if (!vg_write(lv_where->vg)) {
--			log_error("Failed to write intermediate VG metadata");
-+			log_error("Failed to write intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
- 			return NULL;
- 		}
- 
- 		if (!vg_commit(lv_where->vg)) {
--			log_error("Failed to commit intermediate VG metadata");
-+			log_error("Failed to commit intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
- 			vg_revert(lv_where->vg);
- 			return NULL;
- 		}
- 
- 		if (!activate_lv(cmd, layer_lv)) {
--			log_error("Failed to resume intermediate 'zero' LV, %s", name);
-+			log_error("Failed to resume transient error LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
- 			return NULL;
- 		}
- 	}
 
 
