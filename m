@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 30 Oct 2008 19:23:11 +0100
-Subject: [PATCH] (9/11) bring vgreduce up to date with API changes
-Message-ID: <87r65y2b8w.fsf@eriador.mornfall.net>
+Date: Thu, 30 Oct 2008 19:26:05 +0100
+Subject: [PATCH] (10/11) conflict resolution with hotspare changes
+Message-ID: <87ljw62b42.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,21 +10,21 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this here accumulates the changes over vgreduce, since those had some conflicts
-with the hotspare branch that has been running sort of parallel to this. It
-should be fairly straightforward here. Mostly just removes uses of
-vg_read_internal and replaces them with new-style API.
+this is just an explicit patch doing the conflict resolution, and is mostly for
+reference. The vgreduce part has already appeared as part of the previous
+patch, the metadata.c bit just clarifies what is the right resolution of the
+unresolved conflict that appeared in one of the previous patches.
 
 Yours,
    Petr.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-lvmlib-vgreduce.diff
+Name: lvm2-lvmlib-hotspare-merge.diff
 Type: text/x-diff
-Size: 6955 bytes
-Desc: lvmlib-vgreduce.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/2c80977c/attachment.bin>
+Size: 3820 bytes
+Desc: lvmlib-hotspare-merge.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/637d357c/attachment.bin>
 -------------- next part --------------
 
 -- 
