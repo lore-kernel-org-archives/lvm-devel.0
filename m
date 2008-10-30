@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 30 Oct 2008 17:39:00 -0000
-Subject: LVM2/lib/misc lvm-globals.c
-Message-ID: <20081030173900.23206.qmail@sourceware.org>
+Date: 30 Oct 2008 17:40:01 -0000
+Subject: LVM2 ./WHATS_NEW lib/misc/lvm-globals.h
+Message-ID: <20081030174001.2086.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-30 17:39:00
+Changes by:	agk at sourceware.org	2008-10-30 17:40:01
 
+Modified files:
+	.              : WHATS_NEW 
 Added files:
-	lib/misc       : lvm-globals.c 
+	lib/misc       : lvm-globals.h 
 
 Log message:
-	Separate out globals from the logging code.
+	separate lvm-globals
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-globals.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.985&r2=1.986
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-globals.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
-/cvs/lvm2/LVM2/lib/misc/lvm-globals.c,v  -->  standard output
+--- LVM2/WHATS_NEW	2008/10/30 17:27:28	1.985
++++ LVM2/WHATS_NEW	2008/10/30 17:40:00	1.986
+@@ -1,6 +1,6 @@
+ Version 2.02.43 -
+ ===================================
+-  Split out lvm-logging.h from log.h.
++  Split out lvm-logging.h from log.h and lvm-globals.[ch] from log.[ch].
+   Add libdm subdirectory for libdevmapper files.
+ 
+ Version 2.02.42 - 26th October 2008
+/cvs/lvm2/LVM2/lib/misc/lvm-globals.h,v  -->  standard output
 revision 1.1
---- LVM2/lib/misc/lvm-globals.c
-+++ -	2008-10-30 17:39:00.881868000 +0000
-@@ -0,0 +1,201 @@
+--- LVM2/lib/misc/lvm-globals.h
++++ -	2008-10-30 17:40:01.677555000 +0000
+@@ -0,0 +1,59 @@
 +/*
-+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
++ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
 + * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
 + *
 + * This file is part of LVM2.
@@ -41,191 +54,49 @@ revision 1.1
 + * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
 +
-+#include "lib.h"
-+#include "device.h"
-+#include "memlock.h"
-+#include "lvm-string.h"
-+#include "lvm-file.h"
-+#include "defaults.h"
++#ifndef _LVM_GLOBALS_H
++#define _LVM_GLOBALS_H
 +
-+#include <stdarg.h>
++#define VERBOSE_BASE_LEVEL _LOG_WARN
++#define SECURITY_LEVEL 0
 +
-+static int _verbose_level = VERBOSE_BASE_LEVEL;
-+static int _test = 0;
-+static int _md_filtering = 0;
-+static int _pvmove = 0;
-+static int _full_scan_done = 0;	/* Restrict to one full scan during each cmd */
-+static int _trust_cache = 0; /* Don't scan when incomplete VGs encountered */
-+static int _debug_level = 0;
-+static int _log_cmd_name = 0;
-+static int _ignorelockingfailure = 0;
-+static int _lockingfailed = 0;
-+static int _security_level = SECURITY_LEVEL;
-+static char _cmd_name[30] = "";
-+static int _mirror_in_sync = 0;
-+static int _dmeventd_monitor = DEFAULT_DMEVENTD_MONITOR;
-+static int _ignore_suspended_devices = 0;
-+static int _error_message_produced = 0;
++void init_verbose(int level);
++void init_test(int level);
++void init_md_filtering(int level);
++void init_pvmove(int level);
++void init_full_scan_done(int level);
++void init_trust_cache(int trustcache);
++void init_debug(int level);
++void init_cmd_name(int status);
++void init_msg_prefix(const char *prefix);
++void init_indent(int indent);
++void init_ignorelockingfailure(int level);
++void init_lockingfailed(int level);
++void init_security_level(int level);
++void init_mirror_in_sync(int in_sync);
++void init_dmeventd_monitor(int reg);
++void init_ignore_suspended_devices(int ignore);
++void init_error_message_produced(int error_message_produced);
 +
-+void init_verbose(int level)
-+{
-+	_verbose_level = level;
-+}
++void set_cmd_name(const char *cmd_name);
 +
-+void init_test(int level)
-+{
-+	if (!_test && level)
-+		log_print("Test mode: Metadata will NOT be updated.");
-+	_test = level;
-+}
++int test_mode(void);
++int md_filtering(void);
++int pvmove_mode(void);
++int full_scan_done(void);
++int trust_cache(void);
++int verbose_level(void);
++int debug_level(void);
++int ignorelockingfailure(void);
++int lockingfailed(void);
++int security_level(void);
++int mirror_in_sync(void);
++int ignore_suspended_devices(void);
++const char *log_command_name(void);
 +
-+void init_md_filtering(int level)
-+{
-+	_md_filtering = level;
-+}
++#define DMEVENTD_MONITOR_IGNORE -1
++int dmeventd_monitor_mode(void);
 +
-+void init_pvmove(int level)
-+{
-+	_pvmove = level;
-+}
-+
-+void init_full_scan_done(int level)
-+{
-+	_full_scan_done = level;
-+}
-+
-+void init_trust_cache(int trustcache)
-+{
-+	_trust_cache = trustcache;
-+}
-+
-+void init_ignorelockingfailure(int level)
-+{
-+	_ignorelockingfailure = level;
-+}
-+
-+void init_lockingfailed(int level)
-+{
-+	_lockingfailed = level;
-+}
-+
-+void init_security_level(int level)
-+{
-+	_security_level = level;
-+}
-+
-+void init_mirror_in_sync(int in_sync)
-+{
-+	_mirror_in_sync = in_sync;
-+}
-+
-+void init_dmeventd_monitor(int reg)
-+{
-+	_dmeventd_monitor = reg;
-+}
-+
-+void init_ignore_suspended_devices(int ignore)
-+{
-+	_ignore_suspended_devices = ignore;
-+}
-+
-+void init_cmd_name(int status)
-+{
-+	_log_cmd_name = status;
-+}
-+
-+void set_cmd_name(const char *cmd)
-+{
-+	strncpy(_cmd_name, cmd, sizeof(_cmd_name));
-+	_cmd_name[sizeof(_cmd_name) - 1] = '\0';
-+}
-+
-+const char *log_command_name()
-+{
-+	if (!_log_cmd_name)
-+		return "";
-+
-+	return _cmd_name;
-+}
-+
-+void init_error_message_produced(int value)
-+{
-+	_error_message_produced = value;
-+}
-+
-+int error_message_produced(void)
-+{
-+	return _error_message_produced;
-+}
-+
-+int test_mode()
-+{
-+	return _test;
-+}
-+
-+int md_filtering()
-+{
-+	return _md_filtering;
-+}
-+
-+int pvmove_mode()
-+{
-+	return _pvmove;
-+}
-+
-+int full_scan_done()
-+{
-+	return _full_scan_done;
-+}
-+
-+int trust_cache()
-+{
-+	return _trust_cache;
-+}
-+
-+int lockingfailed()
-+{
-+	return _lockingfailed;
-+}
-+
-+int ignorelockingfailure()
-+{
-+	return _ignorelockingfailure;
-+}
-+
-+int security_level()
-+{
-+	return _security_level;
-+}
-+
-+int mirror_in_sync(void)
-+{
-+	return _mirror_in_sync;
-+}
-+
-+int dmeventd_monitor_mode(void)
-+{
-+	return _dmeventd_monitor;
-+}
-+
-+int ignore_suspended_devices(void)
-+{
-+	return _ignore_suspended_devices;
-+}
-+
-+void init_debug(int level)
-+{
-+	_debug_level = level;
-+}
-+
-+int verbose_level()
-+{
-+	return _verbose_level;
-+}
-+
-+int debug_level()
-+{
-+	return _debug_level;
-+}
++#endif
 
 
