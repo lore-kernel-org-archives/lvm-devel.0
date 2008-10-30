@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 30 Oct 2008 19:04:47 +0100
-Subject: [PATCH] (5/11) vg_read error returns, part 1
-Message-ID: <87fxme3qo0.fsf@eriador.mornfall.net>
+Date: Thu, 30 Oct 2008 19:08:20 +0100
+Subject: [PATCH] (6/11) re-introduce vg_read
+Message-ID: <87abcm3qi3.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,20 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this patch is the first attempt at allowing vg_read* users to infer more
-information about the error, apart from "an error has happened and been
-reported to the user". This will be useful whenever the tools need to
-differentiate behaviour depending on the kind of error that has happened, as is
-the case in a few spots -- those can be found in the later patches, when this
-functionality is used. In this particular patch, it is used for
-FAILED_NOTFOUND.
+this patch gets us back a function called vg_read, but this time it also does
+locking -- by default it grabs a read lock, as vg_read_for_update should be
+used when write lock is desired.
 
 Yours,
    Petr.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-lvmlib-vg_read-errors.diff
+Name: lvm2-lvmlib-new-vg_read.diff
 Type: text/x-diff
-Size: 14734 bytes
-Desc: lvmlib-vg_read-errors.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/c82583f5/attachment.bin>
+Size: 3807 bytes
+Desc: lvmlib-vg_read.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/e9b15a03/attachment.bin>
 -------------- next part --------------
 
 -- 
