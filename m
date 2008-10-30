@@ -1,33 +1,36 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 30 Oct 2008 18:56:09 +0100
-Subject: [PATCH] (3/11) introduce vg_read_for_update
-Message-ID: <87r65y3r2e.fsf@eriador.mornfall.net>
+Date: Thu, 30 Oct 2008 18:50:20 +0100
+Subject: [PATCH] (1/11) rename vg_read to vg_read_internal
+Message-ID: <873aie55wj.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Hello lvm-devel,
 
-this is mostly the initial implementation of vg_read_for_update, that will
-later be used for most cases where vg_read is called with the intention of
-updating the VG and writing it out again. Implies various requirements that
-updates usually have.
+this is a first patch in my "lvmlib" series. This work is not completely done,
+but it does pass the testsuite. Please note, that the patches are chopped up in
+a somewhat arbitrary manner, as it is fairly hard to come up with a good
+ordering in the pretty long history of the patchset. Also please note that
+parts of these patches, especially early in the series are obsoleted by later
+ones, so it would make sense to at least glance over all of the patches first
+and then go into more detailed review process.
+
+This first preparatory patch just renames vg_read to vg_read_internal so it's
+easily spotted and the "preferred" vg_read name is freed.
 
 Yours,
    Petr.
 
-PS: I have noticed a slight forward-dependence of this patch -- ORPHAN_LOCK is
-defined I believe in one of the later patches.
-
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-lvmlib-vg_read_for_update.diff
+Name: lvm2-rename-vg_read.diff
 Type: text/x-diff
-Size: 6701 bytes
-Desc: lvmlib-vg_read_for_update.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/4ff05954/attachment.bin>
+Size: 12520 bytes
+Desc: lvmlib-rename-vg_read.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/142ca976/attachment.bin>
 -------------- next part --------------
 
 -- 
