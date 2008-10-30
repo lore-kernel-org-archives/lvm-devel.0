@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 30 Oct 2008 19:08:20 +0100
-Subject: [PATCH] (6/11) re-introduce vg_read
-Message-ID: <87abcm3qi3.fsf@eriador.mornfall.net>
+Date: Thu, 30 Oct 2008 19:15:26 +0100
+Subject: [PATCH] (7/11) API improvements
+Message-ID: <873aie3q69.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,20 +10,24 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-this patch gets us back a function called vg_read, but this time it also does
-locking -- by default it grabs a read lock, as vg_read_for_update should be
-used when write lock is desired.
+this patch improves the API somewhat, by restructuring the way errors are
+checked for by the client code: a vg_read_error function is provided for that,
+and the vg_read(_for_update) has seen some improvements unrelated to that. It
+also makes vg_read_for_update a simple front-end to vg_read, as vg_read will be
+needed later to have the same capabilities, easily (this is done through the
+READ_FOR_UPDATE flag). I admit that this is a little incoherent together in a
+single patch, but that's how things winded up.
 
 Yours,
    Petr.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: lvm2-lvmlib-new-vg_read.diff
+Name: lvm2-lvmlib-newapi.diff
 Type: text/x-diff
-Size: 3807 bytes
-Desc: lvmlib-vg_read.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/e9b15a03/attachment.bin>
+Size: 20708 bytes
+Desc: lvmlib-new-api.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/ea88f20a/attachment.bin>
 -------------- next part --------------
 
 -- 
