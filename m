@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Oct 2008 22:32:09 -0000
-Subject: LVM2 configure.in
-Message-ID: <20081031223209.17822.qmail@sourceware.org>
+Date: 31 Oct 2008 22:32:54 -0000
+Subject: LVM2/po pogen.h
+Message-ID: <20081031223254.20339.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,32 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-31 22:32:09
+Changes by:	agk at sourceware.org	2008-10-31 22:32:54
 
 Modified files:
-	.              : configure.in 
+	po             : pogen.h 
 
 Log message:
-	no DMDIR
+	dm+lvm2 macros
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/po/pogen.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/configure.in	2008/10/31 22:29:44	1.83
-+++ LVM2/configure.in	2008/10/31 22:32:09	1.84
-@@ -611,12 +611,6 @@
- 	    [ STATICDIR="$withval" ],
- 	    [ STATICDIR='${exec_prefix}/sbin' ])
+--- LVM2/po/pogen.h	2004/03/30 19:35:41	1.2
++++ LVM2/po/pogen.h	2008/10/31 22:32:54	1.3
+@@ -13,11 +13,11 @@
+  */
  
--# Convert a relative dir name to absolute.
--case $DMDIR in
--  /*) ;;
--  *) DMDIR="`pwd`/$DMDIR" ;;
--esac
+ /*
+- * Macro to change log messages into a format that xgettext can handle.
++ * Macros to change log messages into a format that xgettext can handle.
+  *
+  * Note that different PRI* definitions lead to different strings for
+  * different architectures.
+  */
+ 
+ #define print_log(level, file, line, format, args...) print_log(format, args)
 -
- AC_ARG_WITH(usrlibdir,
- 	    [  --with-usrlibdir=DIR],
- 	    [ usrlibdir="$withval"],
-@@ -723,7 +717,6 @@
- AC_SUBST(CSCOPE_CMD)
- AC_SUBST(DEBUG)
- AC_SUBST(DEVMAPPER)
--AC_SUBST(DMDIR)
- AC_SUBST(DMEVENTD)
- AC_SUBST(DM_COMPAT)
- AC_SUBST(DM_DEVICE_GID)
++#define dm_log(level, file, line, format, args...) dm_log(format, args)
 
 
