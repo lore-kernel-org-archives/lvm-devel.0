@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Oct 2008 18:44:16 -0000
-Subject: LVM2/daemons/dmeventd/plugins
-Message-ID: <20081031184416.10631.qmail@sourceware.org>
+Date: 31 Oct 2008 18:58:31 -0000
+Subject: LVM2/daemons/dmeventd/plugins/mirror
+Message-ID: <20081031185831.18755.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,14 +10,14 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-31 18:44:16
+Changes by:	agk at sourceware.org	2008-10-31 18:58:31
 
-LVM2/daemons/dmeventd/plugins
+LVM2/daemons/dmeventd/plugins/mirror
 
-Update of /cvs/lvm2/LVM2/daemons/dmeventd/plugins
-In directory sourceware.org:/tmp/cvs-serv10121/dmeventd/plugins
+Update of /cvs/lvm2/LVM2/daemons/dmeventd/plugins/mirror
+In directory sourceware.org:/tmp/cvs-serv18636/mirror
 
 Log Message:
-Directory /cvs/lvm2/LVM2/daemons/dmeventd/plugins added to the repository
+Directory /cvs/lvm2/LVM2/daemons/dmeventd/plugins/mirror added to the repository
 
 
