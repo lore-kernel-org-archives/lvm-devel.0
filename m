@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Oct 2008 22:22:05 -0000
-Subject: LVM2 ./configure.in include/.symlinks
-Message-ID: <20081031222205.831.qmail@sourceware.org>
+Date: 31 Oct 2008 22:29:45 -0000
+Subject: LVM2 ./Makefile.in ./configure.in daemons/Make ...
+Message-ID: <20081031222945.7508.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,76 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-31 22:22:05
+Changes by:	agk at sourceware.org	2008-10-31 22:29:44
 
 Modified files:
-	.              : configure.in 
-	include        : .symlinks 
+	.              : Makefile.in configure.in 
+	daemons        : Makefile.in 
 
 Log message:
-	drop configure --with-dmdir
+	dmeventd plugins move
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.81&r2=1.82
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.82&r2=1.83
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/Makefile.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/configure.in	2008/10/31 22:06:09	1.81
-+++ LVM2/configure.in	2008/10/31 22:22:04	1.82
-@@ -611,11 +611,6 @@
- 	    [ STATICDIR="$withval" ],
- 	    [ STATICDIR='${exec_prefix}/sbin' ])
+--- LVM2/Makefile.in	2008/06/27 19:24:17	1.23
++++ LVM2/Makefile.in	2008/10/31 22:29:44	1.24
+@@ -24,13 +24,9 @@
  
--AC_ARG_WITH(dmdir,
--	    [  --with-dmdir=DIR        Build against device-mapper source tree in DIR],
--	    [ DMDIR="$withval" CPPFLAGS="$CPPFLAGS -I$DMDIR/include"],
--	    [ DMDIR= ])
+ SUBDIRS += lib tools daemons
+ 
+-ifeq ("@DMEVENTD@", "yes")
+-  SUBDIRS += dmeventd
+-endif
 -
- # Convert a relative dir name to absolute.
- case $DMDIR in
-   /*) ;;
---- LVM2/include/.symlinks	2008/10/30 17:54:11	1.50
-+++ LVM2/include/.symlinks	2008/10/31 22:22:04	1.51
-@@ -50,6 +50,7 @@
- ../lib/misc/sharedlib.h
- ../lib/report/report.h
- ../lib/uuid/uuid.h
-+../libdm/libdevmapper.h
- ../libdm/misc/dm-ioctl.h
- ../libdm/misc/dm-logging.h
- ../libdm/misc/kdev_t.h
+ ifeq ($(MAKECMDGOALS),distclean)
+   SUBDIRS += daemons/clvmd \
+-	     dmeventd \
++	     daemons/dmeventd/plugins \
+ 	     lib/format1 \
+ 	     lib/format_pool \
+ 	     lib/locking \
+@@ -47,15 +43,13 @@
+ daemons: lib
+ lib: include
+ tools: lib
+-dmeventd: tools
+-po: tools daemons dmeventd
++po: tools daemons
+ 
+ ifeq ("@INTL@", "yes")
+ lib.pofile: include.pofile
+ tools.pofile: lib.pofile
+ daemons.pofile: lib.pofile
+-dmeventd.pofile: tools.pofile
+-po.pofile: tools.pofile daemons.pofile dmeventd.pofile
++po.pofile: tools.pofile daemons.pofile
+ pofile: po.pofile
+ endif
+ 
+--- LVM2/configure.in	2008/10/31 22:22:04	1.82
++++ LVM2/configure.in	2008/10/31 22:29:44	1.83
+@@ -774,6 +774,7 @@
+ daemons/clvmd/Makefile
+ daemons/dmeventd/Makefile
+ daemons/dmeventd/libdevmapper-event.pc
++daemons/dmeventd/plugins/Makefile
+ daemons/dmeventd/plugins/mirror/Makefile
+ daemons/dmeventd/plugins/snapshot/Makefile
+ doc/Makefile
+--- LVM2/daemons/Makefile.in	2007/09/21 10:16:43	1.3
++++ LVM2/daemons/Makefile.in	2008/10/31 22:29:44	1.4
+@@ -19,5 +19,9 @@
+   SUBDIRS = clvmd
+ endif
+ 
++ifeq ("@DMEVENTD@", "yes")
++  SUBDIRS += dmeventd/plugins
++endif
++
+ include $(top_srcdir)/make.tmpl
+ 
 
 
