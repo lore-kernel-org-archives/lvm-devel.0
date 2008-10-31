@@ -1,56 +1,46 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 30 Oct 2008 19:36:31 +0100
-Subject: [PATCH] (11/11) re-instantiate automatic VG recovery
-Message-ID: <87fxme2amo.fsf@eriador.mornfall.net>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 31 Oct 2008 12:25:56 -0000
+Subject: LVM2 ./WHATS_NEW debian/README.Debian debian/c ...
+Message-ID: <20081031122556.11631.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Finally!
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-10-31 12:25:54
 
-This one restores the functionality that has been severed from the toollib,
-that is the automatic metadata recovery in case of running after an interrupted
-commit. This could do with a better naming and all, but that will be dealt with
-in later patches (in another series, I suppose).
+Modified files:
+	.              : WHATS_NEW 
+Removed files:
+	debian         : README.Debian changelog control copyright dirs 
+	                 docs init.d manpages rules 
 
-All in all, this is a fairly big bundle, and hopefully it should hit CVS soon
-after the dust from the device-mapper merge has settled. It is definitely work
-in progress and there will be regressions. However, since it's now easier than
-ever to write tests for the testsuite, using the new tools, I would welcome
-this as a good opportunity to augment our suite with all the regressions we can
-find that the bundle has created (and even more). This is essential to improve
-confidence in new code and makes it a lot less hassle to change things. I have
-been running the branch through our resident buildbot
-(http://nevrast.englab.brq.redhat.com:8010/waterfall) for a while now -- and
-it's pretty much green.
+Log message:
+	remove ancient debian dir
 
-I would also like to thank everyone who's worked on the testsuite, it's already
-been of great help in development -- and I hope it will become even much more
-useful, as it covers more and more use-cases, bugs and, hopefully, all of our
-favourite regressions.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.986&r2=1.987
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/README.Debian.diff?cvsroot=lvm2&r1=1.1&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/changelog.diff?cvsroot=lvm2&r1=1.14&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/control.diff?cvsroot=lvm2&r1=1.7&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/copyright.diff?cvsroot=lvm2&r1=1.3&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/dirs.diff?cvsroot=lvm2&r1=1.2&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/docs.diff?cvsroot=lvm2&r1=1.3&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/init.d.diff?cvsroot=lvm2&r1=1.8&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/manpages.diff?cvsroot=lvm2&r1=1.1&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/debian/rules.diff?cvsroot=lvm2&r1=1.5&r2=NONE
 
-Now, I'm done for. I have been staring at diffs just a little too long by now,
-but I'll try to write up a summary on what still needs to be done, and some
-ideas on how to approach that, in not-so-distant (I hope) future.
+--- LVM2/WHATS_NEW	2008/10/30 17:40:00	1.986
++++ LVM2/WHATS_NEW	2008/10/31 12:25:54	1.987
+@@ -1,5 +1,6 @@
+ Version 2.02.43 -
+ ===================================
++  Remove ancient debian directory.
+   Split out lvm-logging.h from log.h and lvm-globals.[ch] from log.[ch].
+   Add libdm subdirectory for libdevmapper files.
+ 
 
-Yours,
-   Petr.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-lvmlib-recovery.diff
-Type: text/x-diff
-Size: 1924 bytes
-Desc: lvmlib-recovery.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081030/d3811143/attachment.bin>
--------------- next part --------------
-
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
