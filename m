@@ -1,56 +1,36 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 31 Oct 2017 20:02:14 -0400
-Subject: master - lv_manip: hide layered LV temporarily
-Message-ID: <201711010002.vA102EtI010613@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 1 Nov 2008 01:43:31 -0000
+Subject: LVM2 configure.in
+Message-ID: <20081101014331.27162.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=373372c8ab3749bc76ced37cec04b00aae6e5979
-Commit:        373372c8ab3749bc76ced37cec04b00aae6e5979
-Parent:        0ba393954296ee9521fffc83fbf4507060f08ffd
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 1 00:51:39 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 1 00:55:24 2017 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-11-01 01:43:31
 
-lv_manip: hide layered LV temporarily
+Modified files:
+	.              : configure.in 
 
-Since vg_validate() now rejects LVs without segments and
-insert_layer_for_segments_on_pv() gets just created
-'layer_lv' without segment,  it needs to be hidden
-from vg->lvs during processing of _align_segment_boundary_to_pe_range()
-as this function calls  lv_validate() and now requires
-vg to be consistent.  LV is then put back into vg->lvs.
----
- lib/metadata/lv_manip.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
+Log message:
+	export DM_LIB_VERSION
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index f0e492b..c4c2fdf 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7054,9 +7054,19 @@ int insert_layer_for_segments_on_pv(struct cmd_context *cmd,
- 			 layer_lv->name, lv_where->name,
- 			 pvl ? pv_dev_name(pvl->pv) : "any");
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.84&r2=1.85
+
+--- LVM2/configure.in	2008/10/31 22:32:09	1.84
++++ LVM2/configure.in	2008/11/01 01:43:31	1.85
+@@ -701,6 +701,8 @@
  
-+	/* Temporarily hide layer_lv from vg->lvs list
-+	 * so the lv_split_segment() passes  vg_validate()
-+	 * since here layer_lv has empty segment list */
-+	if (!(lvl = find_lv_in_vg(lv_where->vg, layer_lv->name)))
-+		return_0;
-+	dm_list_del(&lvl->list);
+ ################################################################################
+ DM_LIB_VERSION="\"`cat VERSION_LIB 2>/dev/null || echo Unknown`\""
++AC_DEFINE_UNQUOTED(DM_LIB_VERSION, $DM_LIB_VERSION, [Library version])
 +
- 	if (!_align_segment_boundary_to_pe_range(lv_where, pvl))
- 		return_0;
+ LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
  
-+	/* Put back layer_lv in vg->lv */
-+	dm_list_add(&lv_where->vg->lvs, &lvl->list);
-+
- 	/* Work through all segments on the supplied PV */
- 	dm_list_iterate_items(seg, &lv_where->segments) {
- 		for (s = 0; s < seg->area_count; s++) {
+ ################################################################################
 
 
