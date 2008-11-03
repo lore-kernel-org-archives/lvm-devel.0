@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 1 Nov 2008 20:48:51 -0000
-Subject: LVM2 configure
-Message-ID: <20081101204851.20656.qmail@sourceware.org>
+Date: 3 Nov 2008 16:26:28 -0000
+Subject: LVM2 ./WHATS_NEW lib/format1/disk-rep.c
+Message-ID: <20081103162628.8163.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,71 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-11-01 20:48:51
+Changes by:	agk at sourceware.org	2008-11-03 16:26:27
 
 Modified files:
-	.              : configure 
+	.              : WHATS_NEW 
+	lib/format1    : disk-rep.c 
 
 Log message:
-	autoreconf
+	Rename a couple of variables that matched function names.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.82&r2=1.83
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.988&r2=1.989
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/disk-rep.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
 
---- LVM2/configure	2008/11/01 02:20:06	1.82
-+++ LVM2/configure	2008/11/01 20:48:50	1.83
-@@ -708,6 +708,7 @@
- DM_DEVICE_UID
- DM_IOCTLS
- DM_LIB_VERSION
-+DM_LIB_PATCHLEVEL
- FSADM
- GROUP
- HAVE_LIBDL
-@@ -11804,6 +11805,8 @@
- _ACEOF
+--- LVM2/WHATS_NEW	2008/11/01 20:48:09	1.988
++++ LVM2/WHATS_NEW	2008/11/03 16:26:26	1.989
+@@ -1,5 +1,6 @@
+ Version 2.02.43 -
+ ===================================
++  Rename a couple of variables that matched function names.
+   Use simplified x.y.z version number in libdevmapper.pc.
+   Merge device-mapper into the lvm2 tree.
+   Remove ancient debian directory.
+--- LVM2/lib/format1/disk-rep.c	2008/09/19 07:03:23	1.76
++++ LVM2/lib/format1/disk-rep.c	2008/11/03 16:26:27	1.77
+@@ -277,12 +277,12 @@
  
+ static int _read_lvs(struct disk_list *data)
+ {
+-	unsigned int i, read = 0;
++	unsigned int i, lvs_read = 0;
+ 	uint64_t pos;
+ 	struct lvd_list *ll;
+ 	struct vg_disk *vgd = &data->vgd;
  
-+DM_LIB_PATCHLEVEL=`cat VERSION_LIB | awk -F '[-. ]' '{printf "%s.%s.%s",$1,$2,$3}'`
-+
- LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
+-	for (i = 0; (i < vgd->lv_max) && (read < vgd->lv_cur); i++) {
++	for (i = 0; (i < vgd->lv_max) && (lvs_read < vgd->lv_cur); i++) {
+ 		pos = data->pvd.lv_on_disk.base + (i * sizeof(struct lv_disk));
+ 		ll = dm_pool_alloc(data->mem, sizeof(*ll));
  
- ################################################################################
-@@ -11860,6 +11863,7 @@
+@@ -295,7 +295,7 @@
+ 		if (!_check_lvd(&ll->lvd))
+ 			continue;
  
+-		read++;
++		lvs_read++;
+ 		list_add(&data->lvds, &ll->list);
+ 	}
  
- 
-+
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/Makefile test/Makefile tools/Makefile tools/version.h"
- 
-@@ -12598,9 +12602,9 @@
- DM_DEVICE_UID!$DM_DEVICE_UID$ac_delim
- DM_IOCTLS!$DM_IOCTLS$ac_delim
- DM_LIB_VERSION!$DM_LIB_VERSION$ac_delim
-+DM_LIB_PATCHLEVEL!$DM_LIB_PATCHLEVEL$ac_delim
- FSADM!$FSADM$ac_delim
- GROUP!$GROUP$ac_delim
--HAVE_LIBDL!$HAVE_LIBDL$ac_delim
- _ACEOF
- 
-   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
-@@ -12642,6 +12646,7 @@
- ac_delim='%!_!# '
- for ac_last_try in false false false false false :; do
-   cat >conf$$subs.sed <<_ACEOF
-+HAVE_LIBDL!$HAVE_LIBDL$ac_delim
- HAVE_REALTIME!$HAVE_REALTIME$ac_delim
- HAVE_SELINUX!$HAVE_SELINUX$ac_delim
- INTL!$INTL$ac_delim
-@@ -12672,7 +12677,7 @@
- LTLIBOBJS!$LTLIBOBJS$ac_delim
- _ACEOF
- 
--  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 28; then
-+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 29; then
-     break
-   elif $ac_last_try; then
-     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5
 
 
