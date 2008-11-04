@@ -1,157 +1,184 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:38 +0000 (UTC)
-Subject: master - thin: lvconvert supports swapping metadata device
-Message-ID: <20121202170238.AB86BA0D87@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 4 Nov 2008 17:25:34 -0000
+Subject: LVM2 ./make.tmpl.in daemons/dmeventd/Makefile. ...
+Message-ID: <20081104172534.19712.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99018b37ee9e916662ebd482ac8fe0f36bbd7ac8
-Commit:        99018b37ee9e916662ebd482ac8fe0f36bbd7ac8
-Parent:        97f8454eccefe29464336ba1823448f4d1fa009b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 2 16:40:07 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 2 18:01:27 2012 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-11-04 17:25:33
 
-thin: lvconvert supports swapping metadata device
+Modified files:
+	.              : make.tmpl.in 
+	daemons/dmeventd: Makefile.in 
+	include        : Makefile.in 
+	libdm          : Makefile.in 
+	man            : Makefile.in 
+	tools          : Makefile.in 
 
-Support swapping of metadata device if the thin pool already
-exists. This way it's easy to i.e. resize metadata or their
-repair operation.
+Log message:
+	make install_device-mapper
 
-User may create some empty LV, replace existing metadata
-or dump and restore them into bigger LV.
----
- WHATS_NEW          |    1 +
- man/lvconvert.8.in |   11 ++++++++++-
- tools/lvconvert.c  |   50 +++++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 60 insertions(+), 2 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.62&r2=1.63
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/Makefile.in.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.87&r2=1.88
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index be2ebea..ceb2295 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Add lvconvert support to swap thin pool metadata volume.
-   Implement internal function detach_pool_metadata_lv().
-   Fix lvm2app to return all property sizes in bytes.
-   Recognize DM_DISABLE_UDEV environment variable for a complete fallback.
-diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
-index 48345a9..4fe9bdd 100644
---- a/man/lvconvert.8.in
-+++ b/man/lvconvert.8.in
-@@ -231,6 +231,13 @@ Specifies thin pool metadata logical volume.
- The size should be in between 2MiB and 16GiB.
- Thin pool is specified with the option
- \fB\-\-thinpool\fP.
-+When the specified thin pool already exists,
-+the thin pool's metadata volume will be swapped with the given LV.
-+Properties of the thin pool like chunk size, discards or zero
-+are preserved by default in this case.
-+It can be useful for thin pool metadata repair or its offline resize,
-+since the content of metadata becomes accessible for
-+thin provisioning tools \fBthin_dump\fP(8) and \fBthin_restore\fP(8).
- .TP
- .BR \-\-poolmetadatasize " " \fIThinPoolMetadataSize [ \fIbBsSkKmMgG ]
- Sets the size of thin pool's metadata logical volume,
-@@ -375,4 +382,6 @@ available in the volume group.
- .BR lvextend (8),
- .BR lvreduce (8),
- .BR lvdisplay (8),
--.BR lvscan (8)
-+.BR lvscan (8),
-+.BR thin_dump(8),
-+.BR thin_restore(8)
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 2ef8d86..d0429d8 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1794,10 +1794,12 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- {
- 	int r = 0;
- 	char *name;
-+	const char *old_name;
- 	int len;
- 	struct lv_segment *seg;
- 	struct logical_volume *data_lv;
- 	struct logical_volume *metadata_lv;
-+	struct logical_volume *pool_metadata_lv;
+--- LVM2/make.tmpl.in	2008/11/04 15:55:26	1.62
++++ LVM2/make.tmpl.in	2008/11/04 17:25:32	1.63
+@@ -129,7 +129,8 @@
+ OBJECTS = $(SOURCES:%.c=%.o)
+ POTFILES = $(SOURCES:%.c=%.pot)
  
- 	if (!lv_is_visible(pool_lv)) {
- 		log_error("Can't convert internal LV %s/%s.",
-@@ -1805,7 +1807,7 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		return 0;
- 	}
+-.PHONY: all install install_cluster pofile distclean clean cflow device-mapper
++.PHONY: all install install_cluster pofile distclean clean cflow device-mapper 
++.PHONY: install_device-mapper
+ .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
+ .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
+ .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
+@@ -163,7 +164,7 @@
+ $(SUBDIRS.install_cluster): $(SUBDIRS)
+ 	$(MAKE) -C $(@:.install_cluster=) install_cluster
  
--	if (lv_is_thin_type(pool_lv)) {
-+	if (lv_is_thin_type(pool_lv) && !lp->pool_metadata_lv_name) {
- 		log_error("Can't use thin logical volume %s/%s for thin pool data.",
- 			  pool_lv->vg->name, pool_lv->name);
- 		return 0;
-@@ -1864,6 +1866,50 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 				  metadata_lv->vg->name, metadata_lv->name);
- 			return 0;
- 		}
-+
-+		/* Swap normal LV with pool's metadata LV ? */
-+		if (lv_is_thin_pool(pool_lv)) {
-+			if (!deactivate_lv(cmd, metadata_lv)) {
-+				log_error("Aborting. Failed to deactivate thin metadata lv.");
-+				return 0;
-+			}
-+			if (!arg_count(cmd, yes_ARG) &&
-+			    yes_no_prompt("Do you want to swap metadata of %s/%s pool with "
-+					  "volume %s/%s? [y/n]: ",
-+					  pool_lv->vg->name, pool_lv->name,
-+					  pool_lv->vg->name, metadata_lv->name) == 'n') {
-+				log_error("Conversion aborted.");
-+				return 0;
-+			}
-+			seg = first_seg(pool_lv);
-+			/* Swap names between old and new metadata LV */
-+			if (!detach_pool_metadata_lv(seg, &pool_metadata_lv))
-+				return_0;
-+			old_name = metadata_lv->name;
-+			if (!lv_rename_update(cmd, metadata_lv, "pvmove_tmeta", 0))
-+				return_0;
-+			if (!lv_rename_update(cmd, pool_metadata_lv, old_name, 0))
-+				return_0;
-+
-+			if (!arg_count(cmd, chunksize_ARG))
-+				lp->chunk_size = seg->chunk_size;
-+			else if ((lp->chunk_size != seg->chunk_size) &&
-+				 !arg_count(cmd, force_ARG) &&
-+				 yes_no_prompt("Do you really want to change chunk size %s to %s for %s/%s "
-+					       "pool volume? [y/n]: ", display_size(cmd, seg->chunk_size),
-+					       display_size(cmd, lp->chunk_size),
-+					       pool_lv->vg->name, pool_lv->name) == 'n') {
-+				log_error("Conversion aborted.");
-+				return 0;
-+			}
-+			if (!arg_count(cmd, discards_ARG))
-+				lp->discards = seg->discards;
-+			if (!arg_count(cmd, zero_ARG))
-+				lp->zero = seg->zero_new_blocks;
-+
-+			goto mda_write;
-+		}
-+
- 		if (!lv_is_active(metadata_lv) &&
- 		    !activate_lv_local(cmd, metadata_lv)) {
- 			log_error("Aborting. Failed to activate thin metadata lv.");
-@@ -1941,6 +1987,8 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+-$(SUBDIRS.install_device-mapper): $(SUBDIRS)
++$(SUBDIRS.install_device-mapper): device-mapper
+ 	$(MAKE) -C $(@:.install_device-mapper=) install_device-mapper
  
- 	seg->low_water_mark = 0;
- 	seg->transaction_id = 0;
+ $(SUBDIRS.clean):
+--- LVM2/daemons/dmeventd/Makefile.in	2008/11/04 15:55:27	1.22
++++ LVM2/daemons/dmeventd/Makefile.in	2008/11/04 17:25:32	1.23
+@@ -61,6 +61,8 @@
+ 
+ install: $(INSTALL_TYPE) install_include install_dmeventd
+ 
++install_device-mapper: install
 +
-+mda_write:
- 	seg->chunk_size = lp->chunk_size;
- 	seg->discards = lp->discards;
- 	seg->zero_new_blocks = lp->zero ? 1 : 0;
+ install_include:
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.h \
+ 		$(includedir)/libdevmapper-event.h
+--- LVM2/include/Makefile.in	2008/11/01 02:19:17	1.9
++++ LVM2/include/Makefile.in	2008/11/04 17:25:32	1.10
+@@ -20,7 +20,7 @@
+ 
+ LN_S = @LN_S@
+ 
+-.PHONY: clean distclean all install pofile install_cluster
++.PHONY: clean distclean all install pofile install_cluster install_device-mapper
+ 
+ all: .symlinks_created
+ 
+@@ -43,5 +43,7 @@
+ 
+ install_cluster:
+ 
++install_device-mapper:
++
+ cflow:
+ 
+--- LVM2/libdm/Makefile.in	2008/11/03 22:14:29	1.41
++++ LVM2/libdm/Makefile.in	2008/11/04 17:25:32	1.42
+@@ -67,6 +67,8 @@
+ 
+ install: $(INSTALL_TYPE) install_include
+ 
++install_device-mapper: install
++
+ install_include:
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper.h \
+ 		$(includedir)/libdevmapper.h
+--- LVM2/man/Makefile.in	2008/11/01 02:19:18	1.24
++++ LVM2/man/Makefile.in	2008/11/04 17:25:32	1.25
+@@ -32,10 +32,11 @@
+ 	vgimport.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 vgrename.8 \
+ 	vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN)
+ MAN8CLUSTER=clvmd.8
++MAN8DM=dmsetup.8
+ MAN5DIR=${mandir}/man5
+ MAN8DIR=${mandir}/man8
+ 
+-CLEAN_TARGETS=$(MAN5) $(MAN8) $(MAN8CLUSTER) $(FSADMMAN) dmsetup.8
++CLEAN_TARGETS=$(MAN5) $(MAN8) $(MAN8CLUSTER) $(FSADMMAN) $(MAN8DM)
+ 
+ include $(top_srcdir)/make.tmpl
+ 
+@@ -47,7 +48,7 @@
+ 
+ .PHONY: man
+ 
+-device-mapper: dmsetup.8
++device-mapper: $(MAN8DM)
+ 
+ man: $(MAN5) $(MAN8) $(MAN8CLUSTER)
+ 
+@@ -56,7 +57,7 @@
+ %: %.in
+ 	$(SED) -e "s/#VERSION#/$(LVM_VERSION)/" $< > $@
+ 
+-install:
++install: install_device-mapper
+ 	@echo "Installing $(MAN8) in $(MAN8DIR)"
+ 	@for f in $(MAN8); \
+ 	do \
+@@ -78,3 +79,11 @@
+ 	   $(RM) $(MAN8DIR)/$$f; \
+ 	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
+ 	done
++
++install_device-mapper:
++	@echo "Installing $(MAN8DM) in $(MAN8DIR)"
++	@for f in $(MAN8DM); \
++	do \
++	   $(RM) $(MAN8DIR)/$$f; \
++	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	done
+--- LVM2/tools/Makefile.in	2008/11/03 22:14:30	1.87
++++ LVM2/tools/Makefile.in	2008/11/04 17:25:32	1.88
+@@ -66,12 +66,14 @@
+ 	.commands \
+ 	lvm
+ 
+-INSTALL_TARGETS = install_tools_dynamic
++INSTALL_LVM_TARGETS = install_tools_dynamic
++INSTALL_DMSETUP_TARGETS = install_dmsetup_dynamic
+ INSTALL_CMDLIB_TARGETS = install_cmdlib_dynamic
+ 
+ ifeq ("@STATIC_LINK@", "yes")
+   TARGETS += lvm.static
+-  INSTALL_TARGETS += install_tools_static
++  INSTALL_LVM_TARGETS += install_tools_static
++  INSTALL_DMSETUP_TARGETS += install_dmsetup_static
+   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
+ endif
+ 
+@@ -84,7 +86,7 @@
+ 
+ ifeq ("@CMDLIB@", "yes")
+ 	TARGETS += liblvm2cmd.so
+-	INSTALL_TARGETS += $(INSTALL_CMDLIB_TARGETS)
++	INSTALL_LVM_TARGETS += $(INSTALL_CMDLIB_TARGETS)
+ endif
+ 
+ ifeq ("@DMEVENTD@", "yes")
+@@ -182,4 +184,12 @@
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm.static \
+ 		$(staticdir)/lvm.static
+ 
+-install: $(INSTALL_TARGETS)
++install_dmsetup_dynamic: dmsetup
++	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++
++install_dmsetup_static: dmsetup.static
++	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++
++install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
++
++install: $(INSTALL_LVM_TARGETS) install_device-mapper
 
 
