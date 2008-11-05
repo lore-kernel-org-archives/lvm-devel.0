@@ -1,70 +1,27 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:04 +0000 (UTC)
-Subject: master - cleanup: ignore errors
-Message-ID: <20121215162504.A131AAAB83@fedorahosted.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 5 Nov 2008 16:28:19 +0000
+Subject: [PATCH] (2/11) various minor cleanups
+In-Reply-To: <1225900465.11788.10.camel@localhost.localdomain>
+References: <87wsfq3r91.fsf@eriador.mornfall.net>
+	<1225900465.11788.10.camel@localhost.localdomain>
+Message-ID: <20081105162819.GS14593@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1b05438fcbb27ba425c369c0b9d4e641ccc1b970
-Commit:        1b05438fcbb27ba425c369c0b9d4e641ccc1b970
-Parent:        8b8065a870591e743a79e9aa7f738d084d88bcad
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 13 19:55:33 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Dec 15 14:57:40 2012 +0100
+On Wed, Nov 05, 2008 at 10:54:24AM -0500, Dave Wysochanski wrote:
+> On Thu, 2008-10-30 at 18:52 +0100, Petr Rockai wrote:
+> > +               log_error("Attempted to write unlocked VG's device.");
 
-cleanup: ignore errors
-
-Since we are doing just dump and function doesn't report
-any error, explicitely ignore return values from
-dm_config_write_node and dm_asprintf.
-
-Same applies for the logging function.
----
- daemons/lvmetad/lvmetad-core.c |    6 +++---
- libdaemon/server/daemon-log.c  |    2 +-
- 2 files changed, 4 insertions(+), 4 deletions(-)
-
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 0a1c884..e1cb583 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -950,7 +950,7 @@ static void _dump_cft(struct buffer *buf, struct dm_hash_table *ht, const char *
- 		struct dm_config_tree *cft = dm_hash_get_data(ht, n);
- 		const char *key_backup = cft->root->key;
- 		cft->root->key = dm_config_find_str(cft->root, key_addr, "unknown");
--		dm_config_write_node(cft->root, buffer_line, buf);
-+		(void) dm_config_write_node(cft->root, buffer_line, buf);
- 		cft->root->key = key_backup;
- 		n = dm_hash_get_next(ht, n);
- 	}
-@@ -969,9 +969,9 @@ static void _dump_pairs(struct buffer *buf, struct dm_hash_table *ht, const char
- 			   *val = dm_hash_get_data(ht, n);
- 		buffer_append(buf, "    ");
- 		if (int_key)
--			dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
-+			(void) dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
- 		else
--			dm_asprintf(&append, "%s = \"%s\"", key, val);
-+			(void) dm_asprintf(&append, "%s = \"%s\"", key, val);
- 		if (append)
- 			buffer_append(buf, append);
- 		buffer_append(buf, "\n");
-diff --git a/libdaemon/server/daemon-log.c b/libdaemon/server/daemon-log.c
-index 6f5f4dc..c9e133c 100644
---- a/libdaemon/server/daemon-log.c
-+++ b/libdaemon/server/daemon-log.c
-@@ -98,7 +98,7 @@ void daemon_log_cft(log_state *s, int type, const char *prefix, const struct dm_
- 	if (!_type_interesting(s, type))
- 		return;
+> Probably want a WHATS_NEW comment like:
+> Do not allow dev_write() to proceed unless a VG write lock is held.
  
--	dm_config_write_node(n, &_log_line, &b);
-+	(void) dm_config_write_node(n, &_log_line, &b);
- }
- 
- void daemon_log_multi(log_state *s, int type, const char *prefix, const char *msg)
+And make the error message useful by including specific details in it:-)
+
+Alasdair
+-- 
+agk at redhat.com
 
 
