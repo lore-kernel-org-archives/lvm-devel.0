@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Nov 2008 13:41:44 -0000
-Subject: LVM2/tools Makefile.in
-Message-ID: <20081110134144.3709.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 10 Nov 2008 13:44:02 -0000
+Subject: LVM2/test t-pool-labels.sh
+Message-ID: <20081110134402.19357.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2008-11-10 13:41:44
+Changes by:	mornfall at sourceware.org	2008-11-10 13:44:01
 
 Modified files:
-	tools          : Makefile.in 
+	test           : t-pool-labels.sh 
 
 Log message:
-	Fix lvm2.static build.
+	Fix t-pool-labels to pass again after the vgdisplay error return fix from
+	last Friday.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.88&r2=1.89
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pool-labels.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/tools/Makefile.in	2008/11/04 17:25:32	1.88
-+++ LVM2/tools/Makefile.in	2008/11/10 13:41:43	1.89
-@@ -119,7 +119,7 @@
- LIB_PTHREAD = @LIB_PTHREAD@
- lvm.static: $(OBJECTS) lvm-static.o $(top_srcdir)/lib/liblvm.a
- 	$(CC) -o $@ $(CFLAGS) $(OBJECTS) lvm-static.o -static \
--		$(LDFLAGS) $(LVMLIBS) $(LIBS) $(LIB_PTHREAD) -rdynamic
-+		-L$(interfacedir) $(LDFLAGS) $(LVMLIBS) $(LIBS) $(LIB_PTHREAD) -rdynamic
+--- LVM2/test/t-pool-labels.sh	2008/09/29 16:02:49	1.2
++++ LVM2/test/t-pool-labels.sh	2008/11/10 13:44:01	1.3
+@@ -31,7 +31,9 @@
+ not pvcreate "$dev1"
  
- liblvm2cmd.a: $(top_srcdir)/lib/liblvm.a $(OBJECTS) lvmcmdlib.o lvm2cmd.o
- 	cat $(top_srcdir)/lib/liblvm.a > $@
+ # check that vgdisplay and pvcreate -ff works with the pool device
+-vgdisplay
++vgdisplay --config 'global { locking_type = 0 }'
+ disable_dev "$dev2"
+-vgdisplay
++# FIXME! since pool1 cannot be opened, vgdisplay gives error... should we say
++# "not" there instead, checking that it indeed does fail?
++vgdisplay --config 'global { locking_type = 0 }' || true
+ pvcreate -ff -y "$dev1"
 
 
