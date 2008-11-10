@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 10 Nov 2008 12:37:53 -0000
-Subject: LVM2/test t-mirror-basic.sh
-Message-ID: <20081110123753.5404.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 10 Nov 2008 12:39:51 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20081110123951.23618.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,61 +10,57 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-11-10 12:37:53
+Changes by:	agk at sourceware.org	2008-11-10 12:39:51
 
 Modified files:
-	test           : t-mirror-basic.sh 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	bz429342 lvcreate --nosync
-	bz192865 lvconvert logtype of an inactive mirror lv
-	(both by jstava)
+	First test release of the merged code base.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.186&r2=1.187
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.992&r2=1.993
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.255&r2=1.256
 
---- LVM2/test/t-mirror-basic.sh	2008/11/10 12:32:00	1.5
-+++ LVM2/test/t-mirror-basic.sh	2008/11/10 12:37:53	1.6
-@@ -168,6 +168,13 @@
- mirrorlog_is_on_ $vg/$lv1 $dev3 
- check_and_cleanup_lvs_
+--- LVM2/VERSION	2008/10/26 10:40:50	1.186
++++ LVM2/VERSION	2008/11/10 12:39:50	1.187
+@@ -1 +1 @@
+-2.02.43-cvs (2008-10-26)
++2.02.43-cvs (2008-11-10)
+--- LVM2/VERSION_DM	2008/10/31 21:55:40	1.1
++++ LVM2/VERSION_DM	2008/11/10 12:39:50	1.2
+@@ -1 +1 @@
+-1.02.29-cvs (2008-09-18)
++1.02.29-cvs (2008-11-10)
+--- LVM2/WHATS_NEW	2008/11/07 19:23:52	1.992
++++ LVM2/WHATS_NEW	2008/11/10 12:39:50	1.993
+@@ -1,11 +1,11 @@
+-Version 2.02.43 -
+-===================================
++Version 2.02.43 - 10th November 2008
++====================================
++  Merge device-mapper into the lvm2 tree.
+   Fix lvchange and lvcreate man pages permissions option.
+   Fix vgdisplay return code and exit status.
+   Move list.c into libdevmapper and rename functions.
+   Rename a couple of variables that matched function names.
+   Use simplified x.y.z version number in libdevmapper.pc.
+-  Merge device-mapper into the lvm2 tree.
+   Remove ancient debian directory.
+   Split out lvm-logging.h from log.h and lvm-globals.[ch] from log.[ch].
  
-+#COMM "lvcreate --nosync is in 100% sync after creation (bz429342)"
-+prepare_lvs_ 
-+lvcreate -l2 -m1 --nosync -n $lv1 $vg $dev1 $dev2 $dev3:0-1 2>out
-+grep "New mirror won't be synchronised." out
-+lvs -o copy_percent --noheadings $vg/$lv1 |grep 100.00
-+check_and_cleanup_lvs_
-+
- # ---
- # convert
- 
-@@ -186,20 +193,25 @@
- mimages_are_redundant_ $vg $lv1 
- check_and_cleanup_lvs_
- 
-+for status in active inactive; do 
-+# bz192865 lvconvert log of an inactive mirror lv
- #COMM "convert from disklog to corelog"
- prepare_lvs_ 
- lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1 
--lvconvert --mirrorlog core $vg/$lv1 
-+	test $status = "inactive" && lvchange -an $vg/$lv1
-+	yes | lvconvert --mirrorlog core $vg/$lv1 
- mimages_are_redundant_ $vg $lv1 
- check_and_cleanup_lvs_
- 
- #COMM "convert from corelog to disklog"
- prepare_lvs_ 
- lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2 
-+	test $status = "inactive" && lvchange -an $vg/$lv1
- lvconvert --mirrorlog disk $vg/$lv1 $dev3:0-1 
- mimages_are_redundant_ $vg $lv1 
- mirrorlog_is_on_ $vg/$lv1 $dev3 
- check_and_cleanup_lvs_
-+done
- 
- # ---
- # resize
+--- LVM2/WHATS_NEW_DM	2008/10/30 17:24:03	1.255
++++ LVM2/WHATS_NEW_DM	2008/11/10 12:39:50	1.256
+@@ -1,5 +1,6 @@
+-Version 1.02.29 -
+-=====================================
++Version 1.02.29 - 10th November 2008
++====================================
++  Merge device-mapper into the LVM2 tree.
+   Split out dm-logging.h from log.h.
+   Use lvm-types.h.
+   Add usrsbindir to configure.
 
 
