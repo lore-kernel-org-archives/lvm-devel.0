@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Nov 2008 15:16:59 -0000
-Subject: LVM2/man lvresize.8.in lvs.8.in pvs.8.in vgs.8.in
-Message-ID: <20081112151659.21376.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 14 Nov 2008 20:59:57 -0000
+Subject: LVM2 libdm/Makefile.in tools/Makefile.in
+Message-ID: <20081114205957.22260.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,72 +10,82 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-11-12 15:16:58
+Changes by:	agk at sourceware.org	2008-11-14 20:59:57
 
 Modified files:
-	man            : lvresize.8.in lvs.8.in pvs.8.in vgs.8.in 
+	libdm          : Makefile.in 
+	tools          : Makefile.in 
 
 Log message:
-	More man page cleanup - convert "+/-" to "+|-"
+	some makefile fixes for liblvm2cmd & remove some hardcoded .so
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvresize.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvs.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgs.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/Makefile.in.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.89&r2=1.90
 
---- LVM2/man/lvresize.8.in	2008/11/12 15:01:36	1.2
-+++ LVM2/man/lvresize.8.in	2008/11/12 15:16:58	1.3
-@@ -25,7 +25,7 @@
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .TP
--.I \-l, \-\-extents [+/-]LogicalExtentsNumber[%{VG|LV|PVS|FREE}]
-+.I \-l, \-\-extents [+|-]LogicalExtentsNumber[%{VG|LV|PVS|FREE}]
- Change or set the logical volume size in units of logical extents.
- With the + or - sign the value is added to or subtracted from the actual size
- of the logical volume and without it, the value is taken as an absolute one.
-@@ -36,7 +36,7 @@
- suffix %PVS, or as a percentage of the remaining free space in the
- Volume Group with the suffix %FREE.
- .TP
--.I \-L, \-\-size [+/-]LogicalVolumeSize[kKmMgGtTpPeE]
-+.I \-L, \-\-size [+|-]LogicalVolumeSize[kKmMgGtTpPeE]
- Change or set the logical volume size in units of megabytes.
- A size suffix of M for megabytes,
- G for gigabytes, T for terabytes, P for petabytes 
---- LVM2/man/lvs.8.in	2008/11/12 15:01:36	1.2
-+++ LVM2/man/lvs.8.in	2008/11/12 15:16:58	1.3
-@@ -6,7 +6,7 @@
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
- [\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
- [\-o|\-\-options [+]Field[,Field]]
--[\-O|\-\-sort [+/-]Key1[,[+/-]Key2[,...]]]
-+[\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial] [\-\-segments]
- [\-\-separator Separator] [\-\-unbuffered]
- [\-\-units hsbkmgtHKMGT]
---- LVM2/man/pvs.8.in	2008/11/12 15:01:36	1.2
-+++ LVM2/man/pvs.8.in	2008/11/12 15:16:58	1.3
-@@ -6,7 +6,7 @@
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
- [\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
- [\-o|\-\-options [+]Field[,Field]]
--[\-O|\-\-sort [+/-]Key1[,[+/-]Key2[,...]]]
-+[\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-\-separator Separator] [\-\-unbuffered]
- [\-\-units hsbkmgtHKMGT]
- [\-v|\-\-verbose] 
---- LVM2/man/vgs.8.in	2008/11/12 15:01:36	1.2
-+++ LVM2/man/vgs.8.in	2008/11/12 15:16:58	1.3
-@@ -6,7 +6,7 @@
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
- [\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
- [\-o|\-\-options [+]Field[,Field]]
--[\-O|\-\-sort [+/-]Key1[,[+/-]Key2[,...]]]
-+[\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial]
- [\-\-separator Separator] [\-\-unbuffered]
- [\-\-units hsbkmgtHKMGT]
+--- LVM2/libdm/Makefile.in	2008/11/04 17:25:32	1.42
++++ LVM2/libdm/Makefile.in	2008/11/14 20:59:56	1.43
+@@ -95,8 +95,8 @@
+ $(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_DM): $(interface)/%.$(LIB_SUFFIX)
+ 	rm -f $@
+ 	$(LN_S) $< $@
+-	rm -f libdevmapper.so
+-	$(LN_S) $< libdevmapper.so
++	rm -f libdevmapper.$(LIB_SUFFIX)
++	$(LN_S) $< libdevmapper.$(LIB_SUFFIX)
+ 
+ .PHONY: distclean_lib distclean
+ 
+--- LVM2/tools/Makefile.in	2008/11/10 13:41:43	1.89
++++ LVM2/tools/Makefile.in	2008/11/14 20:59:57	1.90
+@@ -79,13 +79,13 @@
+ 
+ LVMLIBS = -llvm
+ 
+-CLEAN_TARGETS = liblvm2cmd.so liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
++CLEAN_TARGETS = liblvm2cmd.$(LIB_SUFFIX) liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
+ 		lvm2cmd.o lvm2cmd-static.o lvm2cmdlib.o lvm.static \
+ 		lvm.cflow lvm.xref lvm.tree lvm.rxref lvm.rtree \
+ 		lvmcmdlib.o lvm-static.o dmsetup.o
+ 
+ ifeq ("@CMDLIB@", "yes")
+-	TARGETS += liblvm2cmd.so
++	TARGETS += liblvm2cmd.$(LIB_SUFFIX)
+ 	INSTALL_LVM_TARGETS += $(INSTALL_CMDLIB_TARGETS)
+ endif
+ 
+@@ -129,7 +129,7 @@
+ 	cat $(top_srcdir)/lib/liblvm.a > $@
+ 	$(AR) rs $@ $(OBJECTS) lvmcmdlib.o lvm2cmd-static.o
+ 
+-liblvm2cmd.so: liblvm2cmd.a $(LDDEPS)
++liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
+ 
+ .commands: commands.h cmdnames.h Makefile
+ 	$(CC) -E -P cmdnames.h 2> /dev/null | \
+@@ -155,17 +155,17 @@
+ cflow: lvm.cflow lvm.xref lvm.tree lvm.rtree lvm.rxref
+ endif
+ 
+-install_cmdlib_dynamic: liblvm2cmd.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) liblvm2cmd.so \
+-		$(libdir)/liblvm2cmd.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2cmd.so.$(LIB_VERSION) $(libdir)/liblvm2cmd.so
++install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
++	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) liblvm2cmd.$(LIB_SUFFIX) \
++		$(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION_LVM)
++	$(LN_S) -f liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION_LVM) $(libdir)/liblvm2cmd.$(LIB_SUFFIX)
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 lvm2cmd.h \
+ 		$(includedir)/lvm2cmd.h
+ 
+ install_cmdlib_static: liblvm2cmd-static.a
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) liblvm2cmd-static.a \
+-		$(libdir)/liblvm2cmd.a.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2cmd.a.$(LIB_VERSION) $(libdir)/liblvm2cmd.a
++		$(libdir)/liblvm2cmd.a.$(LIB_VERSION_LVM)
++	$(LN_S) -f liblvm2cmd.a.$(LIB_VERSION_LVM) $(libdir)/liblvm2cmd.a
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 lvm2cmd.h \
+ 		$(includedir)/lvm2cmd.h
+ 
 
 
