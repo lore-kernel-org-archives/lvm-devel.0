@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 4 Nov 2008 14:37:11 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20081104143711.3589.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 17 Nov 2008 18:20:15 -0000
+Subject: LVM2 ./WHATS_NEW man/lvremove.8.in tools/lvrem ...
+Message-ID: <20081117182015.8703.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,35 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-11-04 14:37:11
+Changes by:	wysochanski at sourceware.org	2008-11-17 18:20:14
 
 Modified files:
-	test           : Makefile.in 
+	.              : WHATS_NEW 
+	man            : lvremove.8.in 
+	tools          : lvremove.c 
 
 Log message:
-	Use $(abs_top_builddir) instead of @DMDIR@ and update paths appropriately.
+	Fix "lvremove -f vgname" when vgname contains snapshots.
+	
+	Prior to this patch, "lvremove -f vgname" would fail if vgname contained
+	one or more snapshot LVs.  Now this passes, but has a side-effect.
+	If you issue "lvremove vgname" where vgname contains one or more snaps,
+	you will get an extra "y/n" prompt to remove the same snapshot.
+	Example:
+	$ lvs
+	LV     VG     Attr   LSize  Origin Snap%  Move Log Copy%  Convert
+	lvsnap vgtest swi-a- 16.00M lvtest   0.05
+	lvtest vgtest owi-a- 64.00M
+	$ lvremove vgtest
+	Do you really want to remove active logical volume "lvsnap"? [y/n]: n
+	Logical volume "lvsnap" not removed
+	Do you really want to remove active logical volume "lvsnap"? [y/n]: n
+	Logical volume "lvsnap" not removed
+	Command failed with status code 5.
+	
+	Fixing this will most likely require modification of the iterator
+	function, process_each_lvs_in_vg() to iterate over snaps in some
+	cases (e.g. lvs, vgdisplay -v) but not in others (lvremove).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.995&r2=1.996
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvremove.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvremove.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
 
---- LVM2/test/Makefile.in	2008/09/29 16:07:02	1.12
-+++ LVM2/test/Makefile.in	2008/11/04 14:37:10	1.13
-@@ -57,14 +57,13 @@
- 	for i in lvm $$(cat $(top_srcdir)/tools/.commands); do \
- 	  ln -s ../lvm-wrapper bin/$$i; \
- 	done
--	test -n "@DMDIR@" && ln -s "@DMDIR@/dmsetup/dmsetup" bin/dmsetup
-+	ln -s "$(abs_top_builddir)/tools/dmsetup" bin/dmsetup
- 	touch $@
+--- LVM2/WHATS_NEW	2008/11/12 15:01:35	1.995
++++ LVM2/WHATS_NEW	2008/11/17 18:20:13	1.996
+@@ -1,5 +1,6 @@
+ Version 2.02.43 - 10th November 2008
+ ====================================
++  Cope with snapshot dependencies when removing a whole VG with lvremove.
+   Make man pages consistent with either-or options (use "|" everywhere).
+   Merge device-mapper into the lvm2 tree.
+   Correct prototype for --permission on lvchange and lvcreate man pages.
+--- LVM2/man/lvremove.8.in	2008/11/12 15:01:36	1.2
++++ LVM2/man/lvremove.8.in	2008/11/17 18:20:13	1.3
+@@ -12,6 +12,7 @@
+ Confirmation will be requested before deactivating any active logical
+ volume prior to removal.  Logical volumes cannot be deactivated
+ or removed while they are open (e.g. if they contain a mounted filesystem).
++Removing an origin logical volume will also remove all dependent snapshots.
+ .sp
+ If the logical volume is clustered then it must be deactivated on all
+ nodes in the cluster before it can be removed. A single lvchange command
+--- LVM2/tools/lvremove.c	2008/09/19 06:42:00	1.55
++++ LVM2/tools/lvremove.c	2008/11/17 18:20:14	1.56
+@@ -18,7 +18,7 @@
+ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			   void *handle __attribute((unused)))
+ {
+-	if (!lv_remove_single(cmd, lv, arg_count(cmd, force_ARG)))
++	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG)))
+ 		return ECMD_FAILED;
  
- lvm-wrapper: Makefile
- 	rm -f $@-t $@
- 	echo '#!/bin/sh'                                          >  $@-t
--	test -n "@DMDIR@" \
--	  && echo 'export LD_LIBRARY_PATH="@DMDIR@/lib:@DMDIR@/dmeventd"' >> $@-t
-+	echo 'export LD_LIBRARY_PATH="$(abs_top_builddir)/libdm:$(abs_top_builddir)/dmeventd"' >> $@-t
- 	echo 'cmd=$$(echo ./$$0|sed "s,.*/,,")'                   >> $@-t
- 	echo 'test "$$cmd" = lvm &&'                              >> $@-t
- 	echo 'exec "$(abs_top_builddir)/tools/lvm" "$$@"'         >> $@-t
+ 	return ECMD_PROCESSED;
 
 
