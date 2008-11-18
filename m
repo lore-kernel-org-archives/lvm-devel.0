@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 18 Nov 2008 10:13:24 -0000
-Subject: LVM2/tools lvmcmdline.c
-Message-ID: <20081118101324.3901.qmail@sourceware.org>
+Date: 18 Nov 2008 13:16:04 -0000
+Subject: LVM2 Makefile.in
+Message-ID: <20081118131604.28336.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2008-11-18 10:13:23
+Changes by:	zkabelac at sourceware.org	2008-11-18 13:16:03
 
 Modified files:
-	tools          : lvmcmdline.c 
+	.              : Makefile.in 
 
 Log message:
-	fix missing const char*
+	daemons depends on liblvm2cmd - fixes parallel builds
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.29&r2=1.30
 
---- LVM2/tools/lvmcmdline.c	2008/11/12 09:53:33	1.74
-+++ LVM2/tools/lvmcmdline.c	2008/11/18 10:13:23	1.75
-@@ -1218,7 +1218,7 @@
+--- LVM2/Makefile.in	2008/11/10 14:04:12	1.29
++++ LVM2/Makefile.in	2008/11/18 13:16:03	1.30
+@@ -42,7 +42,7 @@
  
- int lvm2_main(int argc, char **argv, unsigned is_static)
- {
--	char *base;
-+	const char *base;
- 	int ret, alias = 0;
- 	struct cmd_context *cmd;
+ libdm: include
+ lib: libdm
+-daemons: lib
++daemons: lib tools
+ tools: lib device-mapper
+ po: tools daemons
  
 
 
