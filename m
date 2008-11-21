@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 4 Nov 2008 14:37:53 -0000
-Subject: LVM2/test harness.sh
-Message-ID: <20081104143753.7394.qmail@sourceware.org>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 21 Nov 2008 13:48:01 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20081121134801.10871.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2008-11-04 14:37:52
+Changes by:	ccaulfield at sourceware.org	2008-11-21 13:48:00
 
 Modified files:
-	test           : harness.sh 
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Also report the tests that have been skipped, at the end of harness.sh.
+	Fix a starup race in clvmd that could result in huge waits for the first command to be processed.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.998&r2=1.999
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
 
---- LVM2/test/harness.sh	2008/10/06 16:55:29	1.4
-+++ LVM2/test/harness.sh	2008/11/04 14:37:51	1.5
-@@ -10,6 +10,7 @@
-     if test $ret = 0; then
- 	echo " passed."
-     elif test $ret = 200; then
-+        skipped="$skipped $t"
- 	echo " skipped."
-     else
- 	echo " FAILED!"
-@@ -25,6 +26,10 @@
- done
+--- LVM2/WHATS_NEW	2008/11/19 19:33:25	1.998
++++ LVM2/WHATS_NEW	2008/11/21 13:48:00	1.999
+@@ -1,5 +1,6 @@
+ Version 2.02.44 - 
+ ====================================
++  Fix startup race in clvmd.
+   Generate Red Hat clvmd startup script at configuration time with correct paths.
+   Fix clvmd & dmeventd builds after tree restructuring.
+   Cope with snapshot dependencies when removing a whole VG with lvremove.
+--- LVM2/daemons/clvmd/clvmd.c	2008/11/04 16:41:47	1.51
++++ LVM2/daemons/clvmd/clvmd.c	2008/11/21 13:48:00	1.52
+@@ -423,6 +423,9 @@
+ 	/* This needs to be started after cluster initialisation
+ 	   as it may need to take out locks */
+ 	DEBUGLOG("starting LVM thread\n");
++
++	/* Don't let anyone else to do work until we are started */
++	pthread_mutex_lock(&lvm_start_mutex);
+ 	pthread_create(&lvm_thread, NULL, lvm_thread_fn,
+ 			(void *)(long)using_gulm);
  
- if test -n "$failed"; then
-+    echo "Tests skipped:"
-+    for t in $skipped; do
-+	printf "\t%s\n" $t
-+    done
-     echo "TESTS FAILED:"
-     for t in $failed; do
- 	printf "\t%s\n" $t
+@@ -1758,9 +1761,6 @@
+ 	sigset_t ss;
+ 	int using_gulm = (int)(long)arg;
+ 
+-	/* Don't let anyone else to do work until we are started */
+-	pthread_mutex_lock(&lvm_start_mutex);
+-
+ 	DEBUGLOG("LVM thread function started\n");
+ 
+ 	/* Ignore SIGUSR1 & 2 */
 
 
