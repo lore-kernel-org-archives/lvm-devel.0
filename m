@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun, 23 Nov 2008 22:59:42 -0500
-Subject: [PATCH] (6/11) re-introduce vg_read
-In-Reply-To: <87abcm3qi3.fsf@eriador.mornfall.net>
-References: <87abcm3qi3.fsf@eriador.mornfall.net>
-Message-ID: <1227499182.6608.20.camel@localhost.localdomain>
+Date: Sun, 23 Nov 2008 23:06:38 -0500
+Subject: [PATCH] (7/11) API improvements
+In-Reply-To: <873aie3q69.fsf@eriador.mornfall.net>
+References: <873aie3q69.fsf@eriador.mornfall.net>
+Message-ID: <1227499598.6608.27.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,22 +11,38 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 
-On Thu, 2008-10-30 at 19:08 +0100, Petr Rockai wrote:
-> Hi,
-> 
-> this patch gets us back a function called vg_read, but this time it
-> also does
-> locking -- by default it grabs a read lock, as vg_read_for_update
-> should be
-> used when write lock is desired.
-> 
-> Yours,
->    Petr.
+On Thu, 2008-10-30 at 19:15 +0100, Petr Rockai wrote:
+> +int vg_read_error(vg_t *vg) {
+> +       if (!vg)
+> +               return FAILED_ALLOCATION;
+> +       if (vg->read_failed & EXISTENCE_CHECK)
+> +               return vg->read_failed & ~(EXISTENCE_CHECK |
+> FAILED_NOTFOUND);
+> +       return vg->read_failed;
+> +}
+> +
+> +/* Returns true if the volume group already exists. If unsure, it
+> will return
+> +   true (it might exist, but we are not sure, as the read failed for
+> some
+> +   other reason). */
+> +
+> +int vg_exists(vg_t *vg) {
+> +       if (!vg)
+> +               return 1;
+> +       log_error("vg_exists: %d != %d?", vg->read_failed,
+> FAILED_NOTFOUND | EXISTENCE_CHECK);
+> +       if (vg->read_failed == (FAILED_NOTFOUND | EXISTENCE_CHECK))
+> +               return 0;
+> +       return 1;
+> +}
 > 
 
-It is a little confusing have a vg_read_for_update() (only intended for
-WRITE) and a generic vg_read() (that allows both READ/WRITE) in the same
-API.  Should we have "vg_read_for_update()" (WRITE) and
-vg_read_for_query()" (READ) or something like that?
+Although the comment explains the vg_exists() function may be just a
+guess, it is misleading to have a function called "vg_exists()" that
+takes a vg_t * and returns true of vg_t * is NULL.
+
+Also from what I can tell, all places that call vg_exists() is preceeded
+immediately by a call to vg_read_error() which does the same check.
 
 
