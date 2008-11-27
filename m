@@ -1,88 +1,51 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 25 Nov 2008 23:42:55 -0500
-Subject: _vg_read() - meaning of consistent when PVs are missing in a VG
-Message-ID: <1227674575.8335.83.camel@localhost.localdomain>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Nov 2008 18:13:51 -0000
+Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c
+Message-ID: <20081127181351.27924.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr, with your recent changes, is the below to be expected?
-Should _vg_read() return 'consistent = 0' if the VG has missing PVs?  If
-so, what is the meaning of 'consistent' now upon return from the
-function?  Does it mean "no LVs have missing PVs?"
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-11-27 18:13:51
 
-I wrote a little program to use the latest vg_read() APIs and was
-suprised when I called vg_read_for_update(cmd, vgname, NULL, 0) with a
-missing PV and got 'consistent = 1' on return, and vg_read_error()
-returned no error.  How will the app writer detect this if he wants to
-then lvcreate on the VG?  Are we missing an API or error condition?
+Modified files:
+	.              : WHATS_NEW 
+	lib/cache      : lvmcache.c 
 
-Specifically I'm talking about after this commit:
-commit 95d43e17b390e532628dc8ab58cf1d377b71ef2b
-Author: Alasdair Kergon <agk@redhat.com>
-Date:   Fri Sep 19 06:42:00 2008 +0000
+Log message:
+	Don't skip updating pvid hash when lvmcache_info struct got swapped.
 
-    Improve the way VGs with PVs missing are handled so manual
-intervention is required in fewer circumstances.  (mornfall)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1000&r2=1.1001
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
 
-
-
-/* Caller sets consistent to 1 if it's safe for vg_read_internal to correct
- * inconsistent metadata on disk (i.e. the VG write lock is held).
- * This guarantees only consistent metadata is returned.
- * If consistent is 0, caller must check whether consistent == 1 on return
- * and take appropriate action if it isn't (e.g. abort; get write lock
- * and call vg_read_internal again).
- *
- * If precommitted is set, use precommitted metadata if present.
- *
- * Either of vgname or vgid may be NULL.
- */
-static struct volume_group *_vg_read(struct cmd_context *cmd,
-				     const char *vgname,
-				     const char *vgid,
-				     int *consistent, unsigned precommitted)
-{
-	struct format_instance *fid;
-	const struct format_type *fmt;
-	struct volume_group *vg, *correct_vg = NULL;
-	struct metadata_area *mda;
-	struct lvmcache_info *info;
-	int inconsistent = 0;
-	int inconsistent_vgid = 0;
-	int inconsistent_pvs = 0;
-	unsigned use_precommitted = precommitted;
-	struct dm_list *pvids;
-	struct pv_list *pvl, *pvl2;
-	struct dm_list all_pvs;
-	char uuid[64] __attribute((aligned(8)));
-
-	if (is_orphan_vg(vgname)) {
-		if (use_precommitted) {
-			log_error("Internal error: vg_read_internal requires vgname "
-				  "with pre-commit.");
-			return NULL;
-		}
-		*consistent = 1;
-		return _vg_read_orphans(cmd, vgname);
-	}
-
-	if ((correct_vg = lvmcache_get_vg(vgid, precommitted))) {
-		if (vg_missing_pv_count(correct_vg)) {
-			log_verbose("There are %d physical volumes missing.",
-				    vg_missing_pv_count(correct_vg));
-			_vg_mark_partial_lvs(correct_vg);
-/*
- * NOTE: ===> We're not returning *consistent = 0 with missing PVs, so
- * the meaning of consistent is unclear.
- */
-		}
-		*consistent = 1;
-		return correct_vg;
-	}
-
-
+--- LVM2/WHATS_NEW	2008/11/24 13:33:16	1.1000
++++ LVM2/WHATS_NEW	2008/11/27 18:13:50	1.1001
+@@ -1,5 +1,6 @@
+ Version 2.02.44 - 
+ ====================================
++  Don't skip updating pvid hash when lvmcache_info struct got swapped.
+   Add tinfo to termcap search path for pld-linux.
+   Fix startup race in clvmd.
+   Generate Red Hat clvmd startup script at configuration time with correct paths.
+--- LVM2/lib/cache/lvmcache.c	2008/11/03 22:14:27	1.61
++++ LVM2/lib/cache/lvmcache.c	2008/11/27 18:13:51	1.62
+@@ -707,7 +707,11 @@
+ 
+ static int _lvmcache_update_pvid(struct lvmcache_info *info, const char *pvid)
+ {
+-	if (!strcmp(info->dev->pvid, pvid))
++	/*
++	 * Nothing to do if already stored with same pvid.
++	 */
++	if (((dm_hash_lookup(_pvid_hash, pvid)) == info) &&
++	    !strcmp(info->dev->pvid, pvid))
+ 		return 1;
+ 	if (*info->dev->pvid) {
+ 		dm_hash_remove(_pvid_hash, info->dev->pvid);
 
 
