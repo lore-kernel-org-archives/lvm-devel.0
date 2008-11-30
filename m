@@ -1,45 +1,52 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun, 30 Nov 2008 09:57:47 -0500
-Subject: [PATCH 1/4] Move guts of pvcreate into library area - prep for vgcreate.
-In-Reply-To: <20081130042620.GF13235@agk.fab.redhat.com>
-References: <1227992553-4381-1-git-send-email-dwysocha@redhat.com>
-	<20081130042620.GF13235@agk.fab.redhat.com>
-Message-ID: <1228057068.3315.33.camel@localhost.localdomain>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sun, 30 Nov 2008 13:42:12 +0100
+Subject: _vg_read() - meaning of consistent when PVs are missing in a VG
+In-Reply-To: <1227674575.8335.83.camel@localhost.localdomain> (Dave
+	Wysochanski's message of "Tue, 25 Nov 2008 23:42:55 -0500")
+References: <1227674575.8335.83.camel@localhost.localdomain>
+Message-ID: <87y6z12xnf.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Hi,
 
-On Sun, 2008-11-30 at 04:26 +0000, Alasdair G Kergon wrote:
-> I'm a bit bothered that too much code may be getting dumped into the library here
-> wholesale rather than getting broken up into separate calls.
-> 
-> - I don't think the library should be prompting, that should remain at tools level
-> and the interface should allow for that.
-> -- maybe yes_no_prompt needs some global mode (anaconda would set) to control
-> whether it does anything or simply defaults to the value given in an additional
-> parameter 
-> 
+Dave Wysochanski <dwysocha@redhat.com> writes:
+> Petr, with your recent changes, is the below to be expected?  Should
+> _vg_read() return 'consistent = 0' if the VG has missing PVs?  If so, what is
+> the meaning of 'consistent' now upon return from the function?  Does it mean
+> "no LVs have missing PVs?"
+consistent is pretty much overloaded, and I have never been quite sure what it
+really means. However, with the current code, whether PVs are missing or not
+does not influence the value of *consistent. It is still used for at least
+failed auto-recoveries, or for cases where auto-recovery is forbidden.
 
-Why global mode - why not just set 'force' and '-y' for the API call?  I
-think this was similar to Thomas's argument - he always envisioned '-ff'
-and '-y' on things like pvcreate.
+> I wrote a little program to use the latest vg_read() APIs and was
+> suprised when I called vg_read_for_update(cmd, vgname, NULL, 0) with a
+> missing PV and got 'consistent = 1' on return, and vg_read_error()
+> returned no error.  How will the app writer detect this if he wants to
+> then lvcreate on the VG?  Are we missing an API or error condition?
+You have vg_missing_pv_count. You generally don't need to care at all about
+missing PVs in client code, unless you want to handle it specially. By default,
+the library will refuse to write out a new version of the volume group if PVs
+are missing.
 
-To be specific, in pvcreate we prompt if:
-1) the device is already a PV
-2) we find an MD superblock
-(and of course the user has not given the '-ff' and '-y')
+If you need special handling of VGs with missing PVs, you can set
+`cmd->handles_missing_pvs = 1`. At that point, all bets are off: the library
+lets you write out new version of the VG. Currently, only lvremove and vgreduce
+leverage this.
 
-So if we don't want the yes_no_prompt() in the library, either the
-library calls do not do these checks at all, or we duplicate the code in
-the library.  Otherwise, we leave the yes_no_prompt() code in the
-library and just set the options for the API call.
+Yours,
+   Petr.
 
-Note that we currently have yes_no_prompt() in the library for lvremove
-and vgremove code paths.  The pvcreate/vgremove/lvremove paths might
-also be a good area to talk about the error codes/handling and what the
-API should look like.
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
+
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
