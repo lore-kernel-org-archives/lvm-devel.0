@@ -1,58 +1,47 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 1 Dec 2008 15:02:15 +0000
-Subject: [PATCH] Update vgcreate and vgextend to allow uninitialized devices as input.
-In-Reply-To: <1228141197.3256.4.camel@localhost.localdomain>
-References: <1228055977.3315.21.camel@localhost.localdomain>
-	<1228072273-8119-1-git-send-email-dwysocha@redhat.com>
-	<20081130194037.GK13235@agk.fab.redhat.com>
-	<1228141197.3256.4.camel@localhost.localdomain>
-Message-ID: <20081201150215.GC26097@agk.fab.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 1 Dec 2008 17:38:36 -0000
+Subject: LVM2 lib/display/display.c ./WHATS_NEW
+Message-ID: <20081201173836.1555.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Dec 01, 2008 at 09:19:57AM -0500, Dave Wysochanski wrote:
-> vgextend() obtains VG_ORPHAN, then the lock on the vg before calling
-> vg_extend().  
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-12-01 17:38:35
 
-Makes sense.
+Modified files:
+	lib/display    : display.c 
+	.              : WHATS_NEW 
 
-> So if I put pvcreate_devices() logic in there, that calls
-> down into pvcreate_single(), which also tries to obtain / release
-> VG_ORPHAN.  
+Log message:
+	Fix uninitialised lv_count in vgdisplay -c
 
-So you have two options:
-1. an extra parameter on the function to say whether or not the lock
-is already held
-2. require the lock always to be held before calling that function.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.94&r2=1.95
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1001&r2=1.1002
 
-Think of VG_ORPHAN as if it was a real volume group - pvcreate is the
-same as vgextend on that volume group and should be calling into
-the same code and should already hold the VG lock.
-
-But then you see this:
-                unlock_vg(cmd, VG_ORPHANS);
-
-                persistent_filter_wipe(cmd->filter);
-                lvmcache_destroy(cmd, 1);
-
-                init_md_filtering(0);
-                if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-
-and need to worry about *why* the code drops the lock there.
-
-It's probably just for accounting reasons - the cache knows something about
-held locks.  IOW (I think) no locks can be held when lvmcache_destroy is
-called.  Check that (look at other instances where it's called) then look for
-some workaround - a less-drastic destroy function that preserves the state,
-perhaps, or splitting the function.
-
-Also note that VG_ORPHANS is set to disappear, replaced by ORPHAN_VG_NAME(fmt).
-
-Alasdair
--- 
-agk at redhat.com
+--- LVM2/lib/display/display.c	2008/11/03 22:14:28	1.94
++++ LVM2/lib/display/display.c	2008/12/01 17:38:35	1.95
+@@ -656,7 +656,7 @@
+ void vgdisplay_colons(const struct volume_group *vg)
+ {
+ 	uint32_t active_pvs;
+-	uint32_t lv_count;
++	uint32_t lv_count = 0;
+ 	struct lv_list *lvl;
+ 	const char *access_str;
+ 	char uuid[64] __attribute((aligned(8)));
+--- LVM2/WHATS_NEW	2008/11/27 18:13:50	1.1001
++++ LVM2/WHATS_NEW	2008/12/01 17:38:35	1.1002
+@@ -1,5 +1,6 @@
+ Version 2.02.44 - 
+ ====================================
++  Fix uninitialised lv_count in vgdisplay -c.
+   Don't skip updating pvid hash when lvmcache_info struct got swapped.
+   Add tinfo to termcap search path for pld-linux.
+   Fix startup race in clvmd.
 
 
