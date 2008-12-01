@@ -1,76 +1,50 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 1 Dec 2008 13:30:44 +0000
-Subject: [PATCH] Update vgcreate and vgextend to allow uninitialized devices as input.
-In-Reply-To: <1228072273-8119-1-git-send-email-dwysocha@redhat.com>
-References: <1228055977.3315.21.camel@localhost.localdomain>
-	<1228072273-8119-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20081201133044.GA26097@agk.fab.redhat.com>
+Date: Mon, 1 Dec 2008 13:59:15 +0000
+Subject: [PATCH 1/4] Move guts of pvcreate into library area - prep for vgcreate.
+In-Reply-To: <1228057068.3315.33.camel@localhost.localdomain>
+References: <1227992553-4381-1-git-send-email-dwysocha@redhat.com>
+	<20081130042620.GF13235@agk.fab.redhat.com>
+	<1228057068.3315.33.camel@localhost.localdomain>
+Message-ID: <20081201135915.GB26097@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Nov 30, 2008 at 02:11:13PM -0500, Dave Wysochanski wrote:
-> With this update, the user may opt to skip pvcreate, provided the default
-> values of pvcreate are adequate.  If the user wants some non-default value
-> in the PV (e.g. 0 metadatacopies, etc), pvcreate must be used prior to
-> vgcreate/vgextend.
+On Sun, Nov 30, 2008 at 09:57:47AM -0500, Dave Wysochanski wrote:
+> On Sun, 2008-11-30 at 04:26 +0000, Alasdair G Kergon wrote:
+> > I'm a bit bothered that too much code may be getting dumped into the library here
+> > wholesale rather than getting broken up into separate calls.
+> > 
+> > - I don't think the library should be prompting, that should remain at tools level
+> > and the interface should allow for that.
+> > -- maybe yes_no_prompt needs some global mode (anaconda would set) to control
+> > whether it does anything or simply defaults to the value given in an additional
+> > parameter 
  
-Look at each of the pvcreate command line options and try to offer them as part
-of vgcreate and vgextend.  They will only be used for devices that are not
-already PVs and inside the VG.
+> Why global mode - why not just set 'force' and '-y' for the API call?  I
+> think this was similar to Thomas's argument - he always envisioned '-ff'
+> and '-y' on things like pvcreate.
+> To be specific, in pvcreate we prompt if:
+> 1) the device is already a PV
+> 2) we find an MD superblock
+> (and of course the user has not given the '-ff' and '-y')
 
-vgcreate
-        [--addtag Tag]   
-	  - will continue to add a VG tag not a PV tag (because the command
-	    name starts with vg)
-	If there's a need for both in future we can add --addpvtag and --addvgtag.
+To clarify: I mentioned two possible ways to proceed there.
 
-pvcreate args:
-    Add to both vgcreate & vgextend:
-        [-f[f]|--force [--force]] 
-        [-y|--yes]
-	    - trivial
+1) no prompting in the library (which was my original intention)
+=> library calls are split at appropriate places
+In your example above, this would mean separate calls for the validation
+functions (which anaconda would also call) prior to the call
+that actually makes the change (which would not repeat the validation).
 
-        [--labelsector sector] 
-        [--metadatasize MetadataSize[kKmMgGtTpPeE]]
-	    - unambiguous
-
-        [--metadatacopies #copies]
-	    - ambiguous: Does it mean number of copies on each disk or number
-	      of copies in total in the VG?
-	Solution: add --pvmetadatacopies to pvcreate, vgcreate & vgextend 
-	In future we can add --vgmetadatacopies to vgcreate & vgextend.
-	--metadatacopies will be the same as --pvmetadatacopies in pv* commands and
-	--vgmetadatacopies in vg* commands.  Code it ready to work like that, i.e.
-	change the existing code to use pvmetadatacopies_ARG everywhere
-	internally, and use _merge_synonym() based on the first 2 chars of the
-	command (hard-coded).
-
-        [-Z|--zero {y|n}]
-	   - potentially ambiguous: Does it mean zero the VG itself?
-	But it's already ambiguous and the only way to find out what it does is to
-	read the man page definition.  Zeroing the VG would have no impact or use
-	within LVM, so we can leave it doing just what it does today to new PVs.
-
-    Don't add to vgcreate & vgextend - leave these as pv-only for now:  (We can add
-    them in an extended way eventually.)
-        [--setphysicalvolumesize PhysicalVolumeSize[kKmMgGtTpPeE]
-	    - main use is for testing so leave as pvcreate only
-
-        [--restorefile file]
-        [-u|--uuid uuid] 
-	    - only required in recovery situations
-
-
-After these changes, the only necessary use of pvcreate will be in recovery
-situations.  In future, we'll sort out those remaining recovery options,
-then require a vgname (defaulting to an explicit per-metadata-type orphan vg)
-always to be given with pvcreate so that every PV belongs to a VG and make
-pvcreate a synonym for vgcreate.
-
-
+2) prompting within the library, with a guaranteed way for a caller
+to avoid it (e.g. a global setting that defaults to returning with
+an error whenever there would otherwise have been a prompt).
+In the pvcreate example, it would avoid returning with an error because when
+the equivalent of -ff and -y are given there would not be a prompt.
+ 
 Alasdair
 -- 
 agk at redhat.com
