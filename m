@@ -1,129 +1,68 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 1 Dec 2008 20:14:33 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgcreate.c
-Message-ID: <20081201201433.21067.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 01 Dec 2008 21:26:08 -0500
+Subject: [PATCH 1/4] Move guts of pvcreate into library area - prep for vgcreate.
+In-Reply-To: <20081201135915.GB26097@agk.fab.redhat.com>
+References: <1227992553-4381-1-git-send-email-dwysocha@redhat.com>
+	<20081130042620.GF13235@agk.fab.redhat.com>
+	<1228057068.3315.33.camel@localhost.localdomain>
+	<20081201135915.GB26097@agk.fab.redhat.com>
+Message-ID: <1228184768.3256.25.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-01 20:14:33
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : vgcreate.c 
+On Mon, 2008-12-01 at 13:59 +0000, Alasdair G Kergon wrote:
+> On Sun, Nov 30, 2008 at 09:57:47AM -0500, Dave Wysochanski wrote:
+> > On Sun, 2008-11-30 at 04:26 +0000, Alasdair G Kergon wrote:
+> > > I'm a bit bothered that too much code may be getting dumped into the library here
+> > > wholesale rather than getting broken up into separate calls.
+> > > 
+> > > - I don't think the library should be prompting, that should remain at tools level
+> > > and the interface should allow for that.
+> > > -- maybe yes_no_prompt needs some global mode (anaconda would set) to control
+> > > whether it does anything or simply defaults to the value given in an additional
+> > > parameter 
+>  
+> > Why global mode - why not just set 'force' and '-y' for the API call?  I
+> > think this was similar to Thomas's argument - he always envisioned '-ff'
+> > and '-y' on things like pvcreate.
+> > To be specific, in pvcreate we prompt if:
+> > 1) the device is already a PV
+> > 2) we find an MD superblock
+> > (and of course the user has not given the '-ff' and '-y')
+> 
+> To clarify: I mentioned two possible ways to proceed there.
+> 
+> 1) no prompting in the library (which was my original intention)
+> => library calls are split at appropriate places
+> In your example above, this would mean separate calls for the validation
+> functions (which anaconda would also call) prior to the call
+> that actually makes the change (which would not repeat the validation).
+> 
+I don't see how this is possible.  Are you suggesting we split the
+validation into a separate API call(s), and let an app decide to call it
+or not?
 
-Log message:
-	Fix vgcreate race which could allow two parallel vgcreates to succeed,
-	with the second vgcreate overwriting the first.
-	
-	Obtain lock before calling vg_create(), which checks for existence of vgname
-	and fails if it already exists.
+If you're not saying let the app decide, then if we split the validation
+and the create APIs, the only way I can think of ensuring the app has
+called the validation before calling the create is to somehow store a
+"passed_validation" flag somewhere (maybe within struct cmd_context).
+Seems kinda messy though since the "passed_validation" would depend on
+the create parameters.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1002&r2=1.1003
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+Maybe there is another way but I don't see it.
 
---- LVM2/WHATS_NEW	2008/12/01 17:38:35	1.1002
-+++ LVM2/WHATS_NEW	2008/12/01 20:14:33	1.1003
-@@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Fix race in vgcreate that would result in second caller overwriting first.
-   Fix uninitialised lv_count in vgdisplay -c.
-   Don't skip updating pvid hash when lvmcache_info struct got swapped.
-   Add tinfo to termcap search path for pld-linux.
---- LVM2/tools/vgcreate.c	2008/04/08 14:22:13	1.57
-+++ LVM2/tools/vgcreate.c	2008/12/01 20:14:33	1.58
-@@ -46,11 +46,22 @@
- 	if (validate_vg_create_params(cmd, &vp_new))
- 	    return EINVALID_CMD_LINE;
- 
-+	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-+		log_error("Can't get lock for orphan PVs");
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!lock_vol(cmd, vp_new.vg_name, LCK_VG_WRITE | LCK_NONBLOCK)) {
-+		log_error("Can't get lock for %s", vp_new.vg_name);
-+		unlock_vg(cmd, VG_ORPHANS);
-+		return ECMD_FAILED;
-+	}
-+
- 	/* Create the new VG */
- 	if (!(vg = vg_create(cmd, vp_new.vg_name, vp_new.extent_size,
- 			     vp_new.max_pv, vp_new.max_lv, vp_new.alloc,
- 			     argc - 1, argv + 1)))
--		return ECMD_FAILED;
-+		goto bad;
- 
- 	if (vp_new.max_lv != vg->max_lv)
- 		log_warn("WARNING: Setting maxlogicalvolumes to %d "
-@@ -63,18 +74,18 @@
- 	if (arg_count(cmd, addtag_ARG)) {
- 		if (!(tag = arg_str_value(cmd, addtag_ARG, NULL))) {
- 			log_error("Failed to get tag");
--			return ECMD_FAILED;
-+			goto bad;
- 		}
- 
- 		if (!(vg->fid->fmt->features & FMT_TAGS)) {
- 			log_error("Volume group format does not support tags");
--			return ECMD_FAILED;
-+			goto bad;
- 		}
- 
- 		if (!str_list_add(cmd->mem, &vg->tags, tag)) {
- 			log_error("Failed to add tag %s to volume group %s",
- 				  tag, vp_new.vg_name);
--			return ECMD_FAILED;
-+			goto bad;
- 		}
- 	}
- 
-@@ -88,28 +99,13 @@
- 			clustered_message = "Non-clustered ";
- 	}
- 
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
--		log_error("Can't get lock for orphan PVs");
--		return ECMD_FAILED;
--	}
--
--	if (!lock_vol(cmd, vp_new.vg_name, LCK_VG_WRITE | LCK_NONBLOCK)) {
--		log_error("Can't get lock for %s", vp_new.vg_name);
--		unlock_vg(cmd, VG_ORPHANS);
--		return ECMD_FAILED;
--	}
--
- 	if (!archive(vg)) {
--		unlock_vg(cmd, vp_new.vg_name);
--		unlock_vg(cmd, VG_ORPHANS);
--		return ECMD_FAILED;
-+		goto bad;
- 	}
- 
- 	/* Store VG on disk(s) */
- 	if (!vg_write(vg) || !vg_commit(vg)) {
--		unlock_vg(cmd, vp_new.vg_name);
--		unlock_vg(cmd, VG_ORPHANS);
--		return ECMD_FAILED;
-+		goto bad;
- 	}
- 
- 	unlock_vg(cmd, vp_new.vg_name);
-@@ -121,4 +117,9 @@
- 		  clustered_message, *clustered_message ? 'v' : 'V', vg->name);
- 
- 	return ECMD_PROCESSED;
-+
-+bad:
-+	unlock_vg(cmd, vp_new.vg_name);
-+	unlock_vg(cmd, VG_ORPHANS);
-+	return ECMD_FAILED;
- }
+
+> 2) prompting within the library, with a guaranteed way for a caller
+> to avoid it (e.g. a global setting that defaults to returning with
+> an error whenever there would otherwise have been a prompt).
+> In the pvcreate example, it would avoid returning with an error because when
+> the equivalent of -ff and -y are given there would not be a prompt.
+>  
+This might be the only reasonable way to proceed.  This would be the
+equivalent of a "--no" option without prompting I guess.
 
 
