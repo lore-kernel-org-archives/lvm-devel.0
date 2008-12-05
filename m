@@ -1,65 +1,41 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 5 Dec 2008 05:03:24 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20081205050324.20366.qmail@sourceware.org>
+From: Stas Sergeev <stsp@aknet.ru>
+Date: Fri, 05 Dec 2008 14:44:36 +0300
+Subject: broken vg after vgconvert -M1
+Message-ID: <49391424.8090505@aknet.ru>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-05 05:03:24
+Hello.
 
-Modified files:
-	test           : test-utils.sh 
+I tried to convert my VG to LVM1 format.
+I use lvm2-2.02.33, and vgconvert segfaults.
+Not knowing that the problem is alreay
+fixed in CVS, I made the attached patch.
+The conversion then succeeded, according
+to the vgconvert message, but now I get
+---
+  Invalid LV in extent map (PV /dev/sdb3, PE 0, LV 0, LE 0)
+  Couldn't fill logical volume maps.
+  Volume group "fedora_vg" not found
+---
+from any lvm tool.
+Oddly enough, vgck says the same.
+I am a bit confused about that. Are there
+any ways to recover the vg now? And what
+could lead to the corruption? Could my patch
+be guilty, or are there other bugs in vgconvert?
 
-Log message:
-	Fix test-utils.h for rhel4 backward compatability.
-	
-	for losetup, break out of the loop when successful setup of loop device,
-	and only look at 7 loop devices (default loop module setting)
-	for blockdev, use old option if new one is not available
+I also wonder how the lvnum_from_lvid()
+supposed to ever work at all. It iterates
+32 times in a loop, multiplying the int32
+variable by 64 every iter. But only 5
+iterations are safe, the rest may (and does)
+overflow.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-
---- LVM2/test/test-utils.sh	2008/11/10 12:36:23	1.6
-+++ LVM2/test/test-utils.sh	2008/12/05 05:03:23	1.7
-@@ -73,15 +73,19 @@
- 		return 0
- 	else
- 		# no -f support 
--		# Iterate through $G_dev_/loop{,/}{0,1,2,3,4,5,6,7,8,9}
-+		# Iterate through $G_dev_/loop{,/}{0,1,2,3,4,5,6,7}
- 		for slash in '' /; do
--			for i in 0 1 2 3 4 5 6 7 8 9; do
-+			for i in 0 1 2 3 4 5 6 7; do
- 				local dev=$G_dev_/loop$slash$i
- 				! losetup $dev >/dev/null 2>&1 || continue
- 				# got a free
- 				losetup "$dev" "$LOOPFILE"
- 				LOOP=$dev
-+				break
- 			done
-+			if [ -n "$LOOP" ]; then 
-+				break
-+			fi
- 		done
- 		test -n "$LOOP" # confirm or fail
- 		return 0
-@@ -99,7 +103,10 @@
- 
- 	PREFIX="LVMTEST$$"
- 
--	local loopsz=`blockdev --getsz $LOOP`
-+	if ! loopsz=`blockdev --getsz $LOOP 2>/dev/null`; then
-+  		loopsz=`blockdev --getsize $LOOP 2>/dev/null`
-+	fi
-+
- 	local size=$(($loopsz/$n))
- 
- 	for i in `seq 1 $n`; do
-
-
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: lvnum.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20081205/229b3406/attachment.ksh>
