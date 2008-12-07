@@ -1,163 +1,263 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Dec 2008 04:27:58 -0000
-Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c li ...
-Message-ID: <20081207042758.31494.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Sat,  6 Dec 2008 23:33:11 -0500
+Subject: [PATCH] Add liblvm interactive test infrastructure to build.
+In-Reply-To: <>
+References: <>
+Message-ID: <1228624391-904-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-07 04:27:57
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/commands   : toolcontext.c toolcontext.h 
-	lib/format_text: archive.c format-text.c 
-	lib/misc       : lvm-file.c lvm-file.h 
-	tools          : lvmcmdline.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ configure            |    3 +-
+ configure.in         |    1 +
+ lib/liblvm2.h        |   43 +++++++++++++++++++++
+ test/api/Makefile.in |   38 ++++++++++++++++++
+ test/api/test.c      |  102 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 186 insertions(+), 1 deletions(-)
+ create mode 100644 lib/liblvm2.h
+ create mode 100644 test/api/Makefile.in
+ create mode 100644 test/api/test.c
 
-Log message:
-	Make _init_rand() thread safe - use rand_r() instead of rand().
-	
-	Use good entropy for seed value if possible.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1005&r2=1.1006
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.h.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.98&r2=1.99
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.h.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
-
---- LVM2/WHATS_NEW	2008/12/07 04:23:37	1.1005
-+++ LVM2/WHATS_NEW	2008/12/07 04:27:56	1.1006
-@@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Use better random seed value in temp file creation.
-   Add generic function to read /dev/urandom, used in uuid calculation.
-   Use displayable_lvs_in_vg and lv_is_displayable for consistency throughout.
-   Fix race in vgcreate that would result in second caller overwriting first.
---- LVM2/lib/commands/toolcontext.c	2008/11/03 22:14:27	1.64
-+++ LVM2/lib/commands/toolcontext.c	2008/12/07 04:27:56	1.65
-@@ -979,6 +979,14 @@
- 	return 1;
- }
+diff --git a/configure b/configure
+index 2fe92fd..5d2ed22 100755
+--- a/configure
++++ b/configure
+@@ -11720,7 +11720,7 @@ LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
  
-+static void _init_rand(struct cmd_context *cmd)
-+{
-+	if (read_urandom(&cmd->rand_seed, sizeof(cmd->rand_seed)))
-+		return;
+ 
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile tools/Makefile tools/version.h"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile tools/version.h"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -12301,6 +12301,7 @@ do
+     "scripts/clvmd_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/clvmd_init_red_hat" ;;
+     "scripts/Makefile") CONFIG_FILES="$CONFIG_FILES scripts/Makefile" ;;
+     "test/Makefile") CONFIG_FILES="$CONFIG_FILES test/Makefile" ;;
++    "test/api/Makefile") CONFIG_FILES="$CONFIG_FILES test/api/Makefile" ;;
+     "tools/Makefile") CONFIG_FILES="$CONFIG_FILES tools/Makefile" ;;
+     "tools/version.h") CONFIG_FILES="$CONFIG_FILES tools/version.h" ;;
+ 
+diff --git a/configure.in b/configure.in
+index d18d5fd..0a05406 100644
+--- a/configure.in
++++ b/configure.in
+@@ -806,6 +806,7 @@ po/Makefile
+ scripts/clvmd_init_red_hat
+ scripts/Makefile
+ test/Makefile
++test/api/Makefile
+ tools/Makefile
+ tools/version.h
+ ])
+diff --git a/lib/liblvm2.h b/lib/liblvm2.h
+new file mode 100644
+index 0000000..757cd31
+--- /dev/null
++++ b/lib/liblvm2.h
+@@ -0,0 +1,43 @@
++#ifndef _LIBLVM_API_H_
++#define _LIBLVM_API_H_
 +
-+	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
++#include <stdint.h>
++
++/*
++ * Library Initialisation
++ * HACK: For now just #define lvm2_open() and lvm2_close() to 
++ * create_toolcontext() and destroy_toolcontext()
++ */
++struct arg;
++struct cmd_context;
++struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static, unsigned is_long_lived);
++void destroy_toolcontext(struct cmd_context *cmd);
++
++/*
++ * lvm2_open
++lvm_context_t lvm2_open(void);
++ *
++ * Description: Open an LVM2 context used in many other APIs.
++ *
++ * Returns:
++ * NULL: Fail - unable to initialise context.
++ * non-NULL: Success - valid LVM2 handle returned
++ */
++#define lvm2_open(X) create_toolcontext(NULL,0,1)
++
++/*
++ * lvm2_close
++int lvm2_close(lvm_context_t h);
++ *
++ * Description: Close an LVM2 context allocated with lvm2_open
++ *
++ * Parameters:
++ * - h (IN): context obtained from lvm2_open
++ *
++ * Returns:
++ * 0 - fail
++ * 1 - success
++ */
++#define lvm2_close(X) destroy_toolcontext(X)
++
++#endif
+diff --git a/test/api/Makefile.in b/test/api/Makefile.in
+new file mode 100644
+index 0000000..c1c44c6
+--- /dev/null
++++ b/test/api/Makefile.in
+@@ -0,0 +1,38 @@
++#
++# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++srcdir = @srcdir@
++top_srcdir = @top_srcdir@
++VPATH = @srcdir@
++
++SOURCES = test.c
++
++ifeq ("@DEBUG@", "yes")
++	DEFS += -DDEBUG
++endif
++
++TARGETS = test
++
++LVMLIBS = -llvm -ldevmapper
++
++DEFS += -D_REENTRANT
++CFLAGS += -fno-strict-aliasing
++
++LDFLAGS += -L$(top_srcdir)/api/lib
++
++include $(top_srcdir)/make.tmpl
++
++test: $(OBJECTS) $(top_srcdir)/lib/liblvm.a $(top_srcdir)/libdm/libdevmapper.so
++	$(CC) -o test $(OBJECTS) $(CFLAGS) $(LDFLAGS) \
++		$(LVMLIBS) $(LMLIBS) $(LIBS)
++
+diff --git a/test/api/test.c b/test/api/test.c
+new file mode 100644
+index 0000000..df673f8
+--- /dev/null
++++ b/test/api/test.c
+@@ -0,0 +1,102 @@
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <readline/readline.h>
++#include "../../lib/liblvm2.h"
++
++#define MAX_ARGS 64
++
++static int lvm_split(char *str, int *argc, char **argv, int max)
++{
++	char *b = str, *e;
++	*argc = 0;
++
++	while (*b) {
++		while (*b && isspace(*b))
++			b++;
++
++		if ((!*b) || (*b == '#'))
++			break;
++
++		e = b;
++		while (*e && !isspace(*e))
++			e++;
++
++		argv[(*argc)++] = b;
++		if (!*e)
++			break;
++		*e++ = '\0';
++		b = e;
++		if (*argc == max)
++			break;
++	}
++
++	return *argc;
 +}
 +
- /* Entry point */
- struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
- 				       unsigned is_long_lived)
-@@ -1077,6 +1085,8 @@
- 	if (!_init_backup(cmd))
- 		goto error;
- 
-+	_init_rand(cmd);
++static int lvmapi_test_shell(void *h)
++{
++	int argc, i;
++	char *input = NULL, *args[MAX_ARGS], **argv;
 +
- 	cmd->default_settings.cache_vgmetadata = 1;
- 	cmd->current_settings = cmd->default_settings;
- 
---- LVM2/lib/commands/toolcontext.h	2008/11/03 22:14:27	1.27
-+++ LVM2/lib/commands/toolcontext.h	2008/12/07 04:27:56	1.28
-@@ -62,6 +62,7 @@
- 	const char *hostname;
- 	const char *kernel_vsn;
- 
-+	unsigned rand_seed;
- 	char *cmd_line;
- 	struct command *command;
- 	struct arg *args;
---- LVM2/lib/format_text/archive.c	2008/11/03 22:14:28	1.32
-+++ LVM2/lib/format_text/archive.c	2008/12/07 04:27:56	1.33
-@@ -236,7 +236,8 @@
- 	/*
- 	 * Write the vg out to a temporary file.
- 	 */
--	if (!create_temp_name(dir, temp_file, sizeof(temp_file), &fd)) {
-+	if (!create_temp_name(dir, temp_file, sizeof(temp_file), &fd,
-+			      &vg->cmd->rand_seed)) {
- 		log_err("Couldn't create temporary archive name.");
- 		return 0;
- 	}
---- LVM2/lib/format_text/format-text.c	2008/11/03 22:14:28	1.98
-+++ LVM2/lib/format_text/format-text.c	2008/12/07 04:27:57	1.99
-@@ -848,7 +848,8 @@
- 		return 0;
- 	}
- 
--	if (!create_temp_name(temp_dir, temp_file, sizeof(temp_file), &fd)) {
-+	if (!create_temp_name(temp_dir, temp_file, sizeof(temp_file), &fd,
-+			      &vg->cmd->rand_seed)) {
- 		log_err("Couldn't create temporary text file name.");
- 		return 0;
- 	}
---- LVM2/lib/misc/lvm-file.c	2008/01/30 14:00:00	1.25
-+++ LVM2/lib/misc/lvm-file.c	2008/12/07 04:27:57	1.26
-@@ -29,7 +29,8 @@
-  * rename the file after successfully writing it.  Grab
-  * NFS-supported exclusive fcntl discretionary lock.
-  */
--int create_temp_name(const char *dir, char *buffer, size_t len, int *fd)
-+int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
-+		     unsigned *seed)
- {
- 	int i, num;
- 	pid_t pid;
-@@ -41,7 +42,7 @@
- 		.l_len = 0
- 	};
- 
--	num = rand();
-+	num = rand_r(seed);
- 	pid = getpid();
- 	if (gethostname(hostname, sizeof(hostname)) < 0) {
- 		log_sys_error("gethostname", "");
---- LVM2/lib/misc/lvm-file.h	2007/08/20 20:55:27	1.12
-+++ LVM2/lib/misc/lvm-file.h	2008/12/07 04:27:57	1.13
-@@ -19,7 +19,8 @@
- /*
-  * Create a temporary filename, and opens a descriptor to the file.
-  */
--int create_temp_name(const char *dir, char *buffer, size_t len, int *fd);
-+int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
-+		     unsigned *seed);
- 
- /*
-  * NFS-safe rename of a temporary file to a common name, designed
---- LVM2/tools/lvmcmdline.c	2008/11/18 10:13:23	1.75
-+++ LVM2/tools/lvmcmdline.c	2008/12/07 04:27:57	1.76
-@@ -997,11 +997,6 @@
- 	return *argc;
- }
- 
--static void _init_rand(void)
--{
--	srand((unsigned) time(NULL) + (unsigned) getpid());
--}
--
- static const char *_get_cmdline(pid_t pid)
- {
- 	static char _proc_cmdline[32];
-@@ -1096,8 +1091,6 @@
- 	if (!(cmd = create_toolcontext(_cmdline.the_args, is_static, 0)))
- 		return_NULL;
- 
--	_init_rand();
--
- 	_apply_settings(cmd);
- 
- 	return cmd;
++	while (1) {
++		free(input);
++		input = readline("lvm> ");
++
++		/* EOF */
++		if (!input) {
++			printf("\n");
++			break;
++		}
++
++		/* empty line */
++		if (!*input)
++			continue;
++
++		argv = args;
++
++		if (lvm_split(input, &argc, argv, MAX_ARGS) == MAX_ARGS) {
++			printf("Too many arguments, sorry.");
++			continue;
++		}
++
++		if (!strcmp(argv[0], "lvm")) {
++			argv++;
++			argc--;
++		}
++
++		if (!argc)
++			continue;
++
++		if (!strcmp(argv[0], "quit") || !strcmp(argv[0], "exit")) {
++			printf("Exiting.\n");
++			break;
++		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
++			printf("No commands defined\n");
++		} else if (!strcmp(argv[0], "scan")) {
++			for (i=1; i < argc; i++)
++				printf("Scan a path!\n");
++		}
++	}
++
++	free(input);
++	return 0;
++}
++		      
++int main (int argc, char *argv[])
++{
++	void *h;
++
++	h = lvm2_open();
++	if (!h) {
++		printf("Unable to open lvm library instance\n");
++		return 1;
++	}
++
++	lvmapi_test_shell(h);
++
++	if (h)
++		lvm2_close(h);
++	return 0;
++}
++
+-- 
+1.5.4.3
 
 
