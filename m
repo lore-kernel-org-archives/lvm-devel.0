@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Dec 2008 04:23:38 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/lvm-wrappers.c lib/m ...
-Message-ID: <20081207042338.19010.qmail@sourceware.org>
+Date: 7 Dec 2008 04:27:58 -0000
+Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c li ...
+Message-ID: <20081207042758.31494.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,116 +10,154 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-07 04:23:37
+Changes by:	wysochanski at sourceware.org	2008-12-07 04:27:57
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/misc       : lvm-wrappers.c lvm-wrappers.h 
-	lib/uuid       : uuid.c 
+	lib/commands   : toolcontext.c toolcontext.h 
+	lib/format_text: archive.c format-text.c 
+	lib/misc       : lvm-file.c lvm-file.h 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Add generic function to read /dev/urandom, used in uuid calculation.
+	Make _init_rand() thread safe - use rand_r() instead of rand().
+	
+	Use good entropy for seed value if possible.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1004&r2=1.1005
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-wrappers.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-wrappers.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/uuid/uuid.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1005&r2=1.1006
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.h.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.98&r2=1.99
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.h.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
 
---- LVM2/WHATS_NEW	2008/12/04 15:54:26	1.1004
-+++ LVM2/WHATS_NEW	2008/12/07 04:23:37	1.1005
+--- LVM2/WHATS_NEW	2008/12/07 04:23:37	1.1005
++++ LVM2/WHATS_NEW	2008/12/07 04:27:56	1.1006
 @@ -1,5 +1,6 @@
  Version 2.02.44 - 
  ====================================
-+  Add generic function to read /dev/urandom, used in uuid calculation.
++  Use better random seed value in temp file creation.
+   Add generic function to read /dev/urandom, used in uuid calculation.
    Use displayable_lvs_in_vg and lv_is_displayable for consistency throughout.
    Fix race in vgcreate that would result in second caller overwriting first.
-   Fix uninitialised lv_count in vgdisplay -c.
---- LVM2/lib/misc/lvm-wrappers.c	2007/08/20 20:55:27	1.2
-+++ LVM2/lib/misc/lvm-wrappers.c	2008/12/07 04:23:37	1.3
-@@ -15,8 +15,34 @@
- #include "lib.h"
- 
- #include <unistd.h>
-+#include <fcntl.h>
- 
- int lvm_getpagesize(void)
- {
- 	return getpagesize();
+--- LVM2/lib/commands/toolcontext.c	2008/11/03 22:14:27	1.64
++++ LVM2/lib/commands/toolcontext.c	2008/12/07 04:27:56	1.65
+@@ -979,6 +979,14 @@
+ 	return 1;
  }
-+
-+int read_urandom(void *buf, size_t len)
+ 
++static void _init_rand(struct cmd_context *cmd)
 +{
-+	int fd;
++	if (read_urandom(&cmd->rand_seed, sizeof(cmd->rand_seed)))
++		return;
 +
-+	/* FIXME: we should stat here, and handle other cases */
-+	/* FIXME: use common _io() routine's open/read/close */
-+	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
-+		log_sys_error("open", "read_urandom: /dev/urandom");
-+		return 0;
-+	}
-+
-+	if (read(fd, buf, len) != (ssize_t) len) {
-+		log_sys_error("read", "read_urandom: /dev/urandom");
-+		if (close(fd))
-+			stack;
-+		return 0;
-+	}
-+
-+	if (close(fd))
-+		stack;
-+
-+	return 1;
++	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
 +}
 +
---- LVM2/lib/misc/lvm-wrappers.h	2007/08/20 20:55:27	1.2
-+++ LVM2/lib/misc/lvm-wrappers.h	2008/12/07 04:23:37	1.3
-@@ -18,4 +18,9 @@
+ /* Entry point */
+ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
+ 				       unsigned is_long_lived)
+@@ -1077,6 +1085,8 @@
+ 	if (!_init_backup(cmd))
+ 		goto error;
  
- int lvm_getpagesize(void);
- 
-+/*
-+ * Read 'len' bytes of entropy from /dev/urandom and store in 'buf'.
-+ */
-+int read_urandom(void *buf, size_t len);
++	_init_rand(cmd);
 +
- #endif
---- LVM2/lib/uuid/uuid.c	2008/11/04 15:07:45	1.28
-+++ LVM2/lib/uuid/uuid.c	2008/12/07 04:23:37	1.29
-@@ -15,6 +15,7 @@
+ 	cmd->default_settings.cache_vgmetadata = 1;
+ 	cmd->current_settings = cmd->default_settings;
  
- #include "lib.h"
- #include "uuid.h"
-+#include "lvm-wrappers.h"
+--- LVM2/lib/commands/toolcontext.h	2008/11/03 22:14:27	1.27
++++ LVM2/lib/commands/toolcontext.h	2008/12/07 04:27:56	1.28
+@@ -62,6 +62,7 @@
+ 	const char *hostname;
+ 	const char *kernel_vsn;
  
- #include <assert.h>
- #include <sys/stat.h>
-@@ -94,25 +95,14 @@
- 
- int id_create(struct id *id)
- {
--	int randomfile;
- 	unsigned i;
- 	size_t len = sizeof(id->uuid);
- 
- 	memset(id->uuid, 0, len);
--	if ((randomfile = open("/dev/urandom", O_RDONLY)) < 0) {
--		log_sys_error("open", "id_create: /dev/urandom");
-+	if (!read_urandom(&id->uuid, len)) {
++	unsigned rand_seed;
+ 	char *cmd_line;
+ 	struct command *command;
+ 	struct arg *args;
+--- LVM2/lib/format_text/archive.c	2008/11/03 22:14:28	1.32
++++ LVM2/lib/format_text/archive.c	2008/12/07 04:27:56	1.33
+@@ -236,7 +236,8 @@
+ 	/*
+ 	 * Write the vg out to a temporary file.
+ 	 */
+-	if (!create_temp_name(dir, temp_file, sizeof(temp_file), &fd)) {
++	if (!create_temp_name(dir, temp_file, sizeof(temp_file), &fd,
++			      &vg->cmd->rand_seed)) {
+ 		log_err("Couldn't create temporary archive name.");
+ 		return 0;
+ 	}
+--- LVM2/lib/format_text/format-text.c	2008/11/03 22:14:28	1.98
++++ LVM2/lib/format_text/format-text.c	2008/12/07 04:27:57	1.99
+@@ -848,7 +848,8 @@
  		return 0;
  	}
  
--	if (read(randomfile, id->uuid, len) != (ssize_t) len) {
--		log_sys_error("read", "id_create: /dev/urandom");
--		if (close(randomfile))
--			stack;
--		return 0;
--	}
--	if (close(randomfile))
--		stack;
+-	if (!create_temp_name(temp_dir, temp_file, sizeof(temp_file), &fd)) {
++	if (!create_temp_name(temp_dir, temp_file, sizeof(temp_file), &fd,
++			      &vg->cmd->rand_seed)) {
+ 		log_err("Couldn't create temporary text file name.");
+ 		return 0;
+ 	}
+--- LVM2/lib/misc/lvm-file.c	2008/01/30 14:00:00	1.25
++++ LVM2/lib/misc/lvm-file.c	2008/12/07 04:27:57	1.26
+@@ -29,7 +29,8 @@
+  * rename the file after successfully writing it.  Grab
+  * NFS-supported exclusive fcntl discretionary lock.
+  */
+-int create_temp_name(const char *dir, char *buffer, size_t len, int *fd)
++int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
++		     unsigned *seed)
+ {
+ 	int i, num;
+ 	pid_t pid;
+@@ -41,7 +42,7 @@
+ 		.l_len = 0
+ 	};
+ 
+-	num = rand();
++	num = rand_r(seed);
+ 	pid = getpid();
+ 	if (gethostname(hostname, sizeof(hostname)) < 0) {
+ 		log_sys_error("gethostname", "");
+--- LVM2/lib/misc/lvm-file.h	2007/08/20 20:55:27	1.12
++++ LVM2/lib/misc/lvm-file.h	2008/12/07 04:27:57	1.13
+@@ -19,7 +19,8 @@
+ /*
+  * Create a temporary filename, and opens a descriptor to the file.
+  */
+-int create_temp_name(const char *dir, char *buffer, size_t len, int *fd);
++int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
++		     unsigned *seed);
+ 
+ /*
+  * NFS-safe rename of a temporary file to a common name, designed
+--- LVM2/tools/lvmcmdline.c	2008/11/18 10:13:23	1.75
++++ LVM2/tools/lvmcmdline.c	2008/12/07 04:27:57	1.76
+@@ -997,11 +997,6 @@
+ 	return *argc;
+ }
+ 
+-static void _init_rand(void)
+-{
+-	srand((unsigned) time(NULL) + (unsigned) getpid());
+-}
 -
- 	/*
- 	 * Skip out the last 2 chars in randomized creation for LVM1
- 	 * backwards compatibility.
+ static const char *_get_cmdline(pid_t pid)
+ {
+ 	static char _proc_cmdline[32];
+@@ -1096,8 +1091,6 @@
+ 	if (!(cmd = create_toolcontext(_cmdline.the_args, is_static, 0)))
+ 		return_NULL;
+ 
+-	_init_rand();
+-
+ 	_apply_settings(cmd);
+ 
+ 	return cmd;
 
 
