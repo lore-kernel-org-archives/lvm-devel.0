@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Dec 2008 16:15:42 -0000
-Subject: LVM2/test lvm-utils.sh t-000-basic.sh
-Message-ID: <20081210161542.23563.qmail@sourceware.org>
+Date: 10 Dec 2008 16:16:54 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20081210161654.23913.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2008-12-10 16:15:41
+Changes by:	zkabelac at sourceware.org	2008-12-10 16:16:54
 
 Modified files:
-	test           : lvm-utils.sh t-000-basic.sh 
+	test           : test-utils.sh 
 
 Log message:
-	add simple test for dev node usability (detect devices mounted with nodev)
+	operate on test subdirectory instead on main /dev
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-000-basic.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/test/lvm-utils.sh	2008/08/21 14:33:48	1.15
-+++ LVM2/test/lvm-utils.sh	2008/12/10 16:15:41	1.16
-@@ -185,6 +185,4 @@
- EOF
+--- LVM2/test/test-utils.sh	2008/12/05 05:03:23	1.7
++++ LVM2/test/test-utils.sh	2008/12/10 16:16:53	1.8
+@@ -33,7 +33,7 @@
+ 	echo $PREFIX
+ 
+ 	test -n "$PREFIX" && {
+-		rm -rf /dev/$PREFIX*
++		rm -rf $G_root_/dev/$PREFIX*
+ 		while dmsetup table | grep -q ^$PREFIX; do
+ 			for s in `dmsetup table | grep ^$PREFIX| cut -f1 -d:`; do
+ 				dmsetup resume $s 2>/dev/null > /dev/null || true
+@@ -52,7 +52,7 @@
+ make_ioerror() {
+ 	echo 0 10000000 error | dmsetup create ioerror
+ 	dmsetup resume ioerror
+-	ln -s /dev/mapper/ioerror /dev/ioerror
++	ln -s $G_dev_/mapper/ioerror $G_dev_/ioerror
  }
  
--if test $(this_test_) != 000-basic; then
--  init_root_dir_
--fi
-+init_root_dir_
---- LVM2/test/t-000-basic.sh	2008/09/29 16:02:49	1.4
-+++ LVM2/test/t-000-basic.sh	2008/12/10 16:15:41	1.5
-@@ -23,3 +23,8 @@
- # Need mdadm for some pvcreate tests
- # verify mdadm is installed and in path (needed for pvcreate tests) ... is it?
- which mdadm
-+
-+mknod $G_root_/dev/null c 1 3 ||
-+  error "Can't create nodes on filesystem"
-+echo >$G_root_/dev/null || 
-+  error "Filesystem for tests does not allow using device nodes (check nodev)"
+ prepare_loop() {
 
 
