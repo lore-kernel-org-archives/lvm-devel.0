@@ -1,9 +1,10 @@
 From: Thomas Woerner <twoerner@redhat.com>
-Date: Thu, 11 Dec 2008 17:43:40 +0100
-Subject: [PATCH] Renamed create_toolcontext function to _create_context and added sys_dir as argument, new functions create_librarycontext and create_toolcontext.
-In-Reply-To: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+Date: Thu, 11 Dec 2008 17:43:41 +0100
+Subject: [PATCH] New lib/lvm2.c for base library functions
+In-Reply-To: <1229013822-10809-2-git-send-email-twoerner@redhat.com>
 References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
-Message-ID: <1229013822-10809-2-git-send-email-twoerner@redhat.com>
+	<1229013822-10809-2-git-send-email-twoerner@redhat.com>
+Message-ID: <1229013822-10809-3-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,72 +12,73 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/commands/toolcontext.c |   25 +++++++++++++++++++++----
- lib/commands/toolcontext.h |    1 +
- 2 files changed, 22 insertions(+), 4 deletions(-)
+ lib/Makefile.in |    3 ++-
+ lib/lvm2.c      |   42 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 44 insertions(+), 1 deletions(-)
+ create mode 100644 lib/lvm2.c
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index e9ef66c..e37af6e 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -990,9 +990,10 @@ static void _init_rand(struct cmd_context *cmd)
- 	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
- }
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 54092cd..c0b58b9 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -86,7 +86,8 @@ SOURCES =\
+ 	report/report.c \
+ 	striped/striped.c \
+ 	uuid/uuid.c \
+-	zero/zero.c
++	zero/zero.c \
++	lvm2.c
  
--/* Entry point */
--struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
--				       unsigned is_long_lived)
-+static struct cmd_context *_create_context(struct arg *the_args,
-+					   unsigned is_static,
-+					   unsigned is_long_lived,
-+					   const char *sys_dir)
- {
- 	struct cmd_context *cmd;
- 
-@@ -1024,7 +1025,10 @@ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
- 	dm_list_init(&cmd->tags);
- 	dm_list_init(&cmd->config_files);
- 
--	strcpy(cmd->sys_dir, DEFAULT_SYS_DIR);
-+	strncpy(cmd->sys_dir, DEFAULT_SYS_DIR, PATH_MAX);
-+	
-+	if (sys_dir)
-+		strncpy(cmd->sys_dir, sys_dir, PATH_MAX);
- 
- 	if (!_get_env_vars(cmd))
- 		goto error;
-@@ -1101,6 +1105,19 @@ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
- 	return NULL;
- }
- 
-+/* Library Entry point */
-+struct cmd_context *create_librarycontext(const char *sys_dir)
+ ifeq ("@LVM1@", "internal")
+   SOURCES +=\
+diff --git a/lib/lvm2.c b/lib/lvm2.c
+new file mode 100644
+index 0000000..daf9a79
+--- /dev/null
++++ b/lib/lvm2.c
+@@ -0,0 +1,42 @@
++/*
++ * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lvm2.h"
++#include "lib.h"
++#include "toolcontext.h"
++
++
++lvm2_handle_t lvm2_create(const char *sys_dir)
 +{
-+	return _create_context(NULL, 0, 1, sys_dir);
++  struct cmd_context *cmd;
++
++  /* use internal version with system_dir */
++  cmd = create_librarycontext(sys_dir);
++  if (! cmd)
++    return NULL;
++
++  /* TODO:
++   * - bind logging to handle
++   */
++
++  return (lvm2_handle_t) cmd;
 +}
 +
-+/* Tool Entry point */
-+struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
-+				       unsigned is_long_lived)
-+{
-+	return _create_context(the_args, is_static, is_long_lived, NULL);
-+}
 +
- static void _destroy_formats(struct dm_list *formats)
- {
- 	struct dm_list *fmtl, *tmp;
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 4ea3486..a37911f 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -96,6 +96,7 @@ struct cmd_context {
- 	char sysfs_dir[PATH_MAX];
- };
- 
-+struct cmd_context *create_librarycontext(const char *sys_dir);
- struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static, unsigned is_long_lived);
- void destroy_toolcontext(struct cmd_context *cmd);
- int refresh_toolcontext(struct cmd_context *cmd);
++void lvm2_destroy(lvm2_handle_t libh)
++{
++  destroy_toolcontext((struct cmd_context *) libh); /* no error handling here */
++
++  return 1;
++}
 -- 
 1.6.0.4
 
