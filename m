@@ -1,10 +1,11 @@
 From: Thomas Woerner <twoerner@redhat.com>
-Date: Thu, 11 Dec 2008 17:43:41 +0100
-Subject: [PATCH] New lib/lvm2.c for base library functions
-In-Reply-To: <1229013822-10809-2-git-send-email-twoerner@redhat.com>
+Date: Thu, 11 Dec 2008 17:43:42 +0100
+Subject: [PATCH] New public functions lvm2_reload_config, lvm2_set_config_option and lvm2_reset_config_option.
+In-Reply-To: <1229013822-10809-3-git-send-email-twoerner@redhat.com>
 References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
 	<1229013822-10809-2-git-send-email-twoerner@redhat.com>
-Message-ID: <1229013822-10809-3-git-send-email-twoerner@redhat.com>
+	<1229013822-10809-3-git-send-email-twoerner@redhat.com>
+Message-ID: <1229013822-10809-4-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,73 +13,131 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/Makefile.in |    3 ++-
- lib/lvm2.c      |   42 ++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 44 insertions(+), 1 deletions(-)
- create mode 100644 lib/lvm2.c
+ lib/lvm2.c |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/lvm2.h |   38 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 90 insertions(+), 0 deletions(-)
 
-diff --git a/lib/Makefile.in b/lib/Makefile.in
-index 54092cd..c0b58b9 100644
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -86,7 +86,8 @@ SOURCES =\
- 	report/report.c \
- 	striped/striped.c \
- 	uuid/uuid.c \
--	zero/zero.c
-+	zero/zero.c \
-+	lvm2.c
- 
- ifeq ("@LVM1@", "internal")
-   SOURCES +=\
 diff --git a/lib/lvm2.c b/lib/lvm2.c
-new file mode 100644
-index 0000000..daf9a79
---- /dev/null
+index daf9a79..ac5e583 100644
+--- a/lib/lvm2.c
 +++ b/lib/lvm2.c
-@@ -0,0 +1,42 @@
-+/*
-+ * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+#include "lvm2.h"
-+#include "lib.h"
-+#include "toolcontext.h"
+@@ -15,6 +15,30 @@
+ #include "lvm2.h"
+ #include "lib.h"
+ #include "toolcontext.h"
++#include "archiver.h"
++#include "activate.h"
++#include "../tools/tools.h"
 +
 +
-+lvm2_handle_t lvm2_create(const char *sys_dir)
++static void _apply_settings(struct cmd_context *cmd)
 +{
-+  struct cmd_context *cmd;
++  init_debug(cmd->current_settings.debug);
++  init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
++  init_test(cmd->current_settings.test);
++  init_full_scan_done(0);
++  init_mirror_in_sync(0);
++  
++  init_msg_prefix(cmd->default_settings.msg_prefix);
++  init_cmd_name(cmd->default_settings.cmd_name);
 +
-+  /* use internal version with system_dir */
-+  cmd = create_librarycontext(sys_dir);
-+  if (! cmd)
-+    return NULL;
++  archive_enable(cmd, cmd->current_settings.archive);
++  backup_enable(cmd, cmd->current_settings.backup);
 +
-+  /* TODO:
-+   * - bind logging to handle
-+   */
++  set_activation(cmd->current_settings.activation);
 +
-+  return (lvm2_handle_t) cmd;
++  cmd->fmt = cmd->current_settings.fmt;
++  cmd->handles_missing_pvs = 0;
++}
+ 
+ 
+ lvm2_handle_t lvm2_create(const char *sys_dir)
+@@ -30,6 +54,8 @@ lvm2_handle_t lvm2_create(const char *sys_dir)
+    * - bind logging to handle
+    */
+ 
++  _apply_settings(cmd);
++
+   return (lvm2_handle_t) cmd;
+ }
+ 
+@@ -40,3 +66,29 @@ void lvm2_destroy(lvm2_handle_t libh)
+ 
+   return 1;
+ }
++
++
++int lvm2_reload_config(lvm2_handle_t libh)
++{
++  int refresh;
++  
++  refresh = refresh_toolcontext((struct cmd_context *) libh);
++
++  if (refresh)
++    _apply_settings((struct cmd_context *) libh);
++
++  return refresh;
 +}
 +
 +
-+void lvm2_destroy(lvm2_handle_t libh)
++int lvm2_set_config_option(lvm2_handle_t libh, const char *option,
++			   const char *value)
 +{
-+  destroy_toolcontext((struct cmd_context *) libh); /* no error handling here */
-+
 +  return 1;
 +}
++
++
++int lvm2_reset_config_option(lvm2_handle_t libh, const char *option)
++{
++  return 1;
++}
+diff --git a/lib/lvm2.h b/lib/lvm2.h
+index b131fd7..b2c97d0 100644
+--- a/lib/lvm2.h
++++ b/lib/lvm2.h
+@@ -49,4 +49,42 @@ lvm2_handle_t lvm2_create(const char *sys_dir);
+  */
+ void lvm2_destroy(lvm2_handle_t h);
+ 
++/*
++ * lvm2_reload_config
++ *
++ * Description: Reload configuration files
++ *
++ * Returns:
++ *   0: error
++ *   1: success
++ */
++int lvm2_reload_config(lvm2_handle_t h);
++
++/*
++ * lvm2_set_config_option
++ *
++ * Description: Load an lvm config option into the existing configuration.
++ *   The formation of the option parameter is similar to the names
++ *   in /etc/lvm/lvm.conf.
++ *   An option within a section is specified with a '/' between the
++ *   section name and option.  For example, the 'filter' option in the
++ *   devices section is specified by 'devices/filter'
++ *
++ * Returns:
++ *   0: error
++ *   1: success
++ */
++int lvm2_set_config_option(lvm2_handle_t h, const char *option,
++			   const char *value);
++/*
++ * lvm2_remove_config_option
++ *
++ * Description:
++ *
++ * Returns:
++ *   0: error
++ *   1: success
++ */
++int lvm2_reset_config_option(lvm2_handle_t h, const char *option);
++
+ #endif
 -- 
 1.6.0.4
 
