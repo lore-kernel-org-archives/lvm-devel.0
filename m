@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 11 Dec 2008 03:30:20 -0000
-Subject: LVM2 daemons/clvmd/lvm-functions.c tools/lvmcm ...
-Message-ID: <20081211033020.20382.qmail@sourceware.org>
+Date: 11 Dec 2008 03:31:10 -0000
+Subject: LVM2/tools lvmcmdline.c
+Message-ID: <20081211033110.22879.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-11 03:30:20
+Changes by:	wysochanski at sourceware.org	2008-12-11 03:31:10
 
 Modified files:
-	daemons/clvmd  : lvm-functions.c 
 	tools          : lvmcmdline.c 
 
 Log message:
-	Remove init_verbose() calls immediately after create_toolcontext() calls.
+	Remove handles_missing_pvs assignment after call to create_toolcontext().
 	
-	The rationale for removing init_verbose() call is very similar to removing
-	init_debug() call.  create_toolcontext() calls _init_logging() which
-	makes these calls:
-	/* Verbose level for tty output */
-	cmd->default_settings.verbose =
-	find_config_tree_int(cmd, "log/verbose", DEFAULT_VERBOSE);
-	init_verbose(cmd->default_settings.verbose + VERBOSE_BASE_LEVEL);
-	
-	And being that create_toolcontext() copies default_settings into
-	current_settings at the bottom, the init_verbose() call we are removing:
-	init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
-	
-	is redundant.
+	This variable is set at the top of create_toolcontext() to 0.
+	Nothing later in create_toolcontext() changes the value.
+	In init_lvm(), nothing between create_toolcontext() call and this assignment
+	changes the value.  Thus, the assignment is redundant.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
 
---- LVM2/daemons/clvmd/lvm-functions.c	2008/12/11 03:29:37	1.49
-+++ LVM2/daemons/clvmd/lvm-functions.c	2008/12/11 03:30:19	1.50
-@@ -732,7 +732,6 @@
- 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
- 	init_syslog(LOG_DAEMON);
- 	openlog("clvmd", LOG_PID, LOG_DAEMON);
--	init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
- 	set_activation(cmd->current_settings.activation);
- 	archive_enable(cmd, cmd->current_settings.archive);
- 	backup_enable(cmd, cmd->current_settings.backup);
---- LVM2/tools/lvmcmdline.c	2008/12/11 03:29:37	1.78
-+++ LVM2/tools/lvmcmdline.c	2008/12/11 03:30:20	1.79
-@@ -1091,7 +1091,6 @@
- 	if (!(cmd = create_toolcontext(_cmdline.the_args, is_static, 0)))
- 		return_NULL;
+--- LVM2/tools/lvmcmdline.c	2008/12/11 03:30:20	1.79
++++ LVM2/tools/lvmcmdline.c	2008/12/11 03:31:10	1.80
+@@ -1105,7 +1105,6 @@
  
--	init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
- 	init_test(cmd->current_settings.test);
- 	init_full_scan_done(0);
- 	init_mirror_in_sync(0);
+ 	cmd->fmt = arg_ptr_value(cmd, metadatatype_ARG,
+ 				 cmd->current_settings.fmt);
+-	cmd->handles_missing_pvs = 0;
+ 
+ 	return cmd;
+ }
 
 
