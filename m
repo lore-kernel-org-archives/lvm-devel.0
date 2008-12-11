@@ -1,169 +1,50 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 11 Dec 2008 16:49:55 -0500
-Subject: [PATCH] New public functions lvm2_reload_config, lvm2_set_config_option and lvm2_reset_config_option.
-In-Reply-To: <1229013822-10809-4-git-send-email-twoerner@redhat.com>
-References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
-	<1229013822-10809-2-git-send-email-twoerner@redhat.com>
-	<1229013822-10809-3-git-send-email-twoerner@redhat.com>
-	<1229013822-10809-4-git-send-email-twoerner@redhat.com>
-Message-ID: <1229032195.20795.34.camel@localhost.localdomain>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 11 Dec 2008 22:41:05 +0000
+Subject: [PATCH 10/11] Remove redundant init_mirror_in_sync() call in init_lvm().
+In-Reply-To: <1228962585.10873.9.camel@localhost.localdomain>
+References: <1228932661-15662-3-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-4-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-5-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-6-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-7-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-8-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-9-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-10-git-send-email-dwysocha@redhat.com>
+	<20081210225018.GF24785@agk.fab.redhat.com>
+	<1228962585.10873.9.camel@localhost.localdomain>
+Message-ID: <20081211224105.GL24785@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+On Wed, Dec 10, 2008 at 09:29:45PM -0500, Dave Wysochanski wrote:
+> On Wed, 2008-12-10 at 22:50 +0000, Alasdair G Kergon wrote:
+> > On Wed, Dec 10, 2008 at 01:11:00PM -0500, Dave Wysochanski wrote:
+> > > _mirror_in_sync is statically initialized to 0 in lvm-globals.c,
+> > > so no need to set it in init_lvm().  Only other callers that may
+> > > set this are later in execution.
+> > Can the statics be relied upon if a handle is created, then destroyed
+> > then a new handle created within the same process?
+> > It basically depends if that initial value is relied upon anywhere, or
+> > if later code always sets this before using it.
 
-On Thu, 2008-12-11 at 17:43 +0100, Thomas Woerner wrote:
-> ---
->  lib/lvm2.c |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
->  lib/lvm2.h |   38 ++++++++++++++++++++++++++++++++++++++
->  2 files changed, 90 insertions(+), 0 deletions(-)
-> 
-> diff --git a/lib/lvm2.c b/lib/lvm2.c
-> index daf9a79..ac5e583 100644
-> --- a/lib/lvm2.c
-> +++ b/lib/lvm2.c
-> @@ -15,6 +15,30 @@
->  #include "lvm2.h"
->  #include "lib.h"
->  #include "toolcontext.h"
-> +#include "archiver.h"
-> +#include "activate.h"
-> +#include "../tools/tools.h"
-> +
+> This is a good point.  We will have some global state and this needs
+> thought out.  We may need to export _apply_settings() or something like
+> it to reset the global state.  Or perhaps the global state should be
+> reset at the bottom of create_toolcontext()?
+> For the the handle re-use case of the existing lvmcmdlib.c, we do a
+> _apply_settings() in lvm_run_command() so the global state is reset. We
+> won't have lvm_run_command() to rely on for liblvm, but I guess we need
+> the equivalent.
+ 
+I'm talking *new* handle here - in other words when creating a new handle
+the code must not rely upon pre-existing values of those static variables: it
+must initialise them.
 
-Do we need the relative path here?
-
-> +
-> +static void _apply_settings(struct cmd_context *cmd)
-> +{
-> +  init_debug(cmd->current_settings.debug);
-> +  init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
-> +  init_test(cmd->current_settings.test);
-> +  init_full_scan_done(0);
-> +  init_mirror_in_sync(0);
-> +  
-> +  init_msg_prefix(cmd->default_settings.msg_prefix);
-> +  init_cmd_name(cmd->default_settings.cmd_name);
-> +
-> +  archive_enable(cmd, cmd->current_settings.archive);
-> +  backup_enable(cmd, cmd->current_settings.backup);
-> +
-> +  set_activation(cmd->current_settings.activation);
-> +
-> +  cmd->fmt = cmd->current_settings.fmt;
-> +  cmd->handles_missing_pvs = 0;
-> +}
->  
-
-We should avoid duplicating this code with lvmcmdline.c.  Did you check
-the other callers to see if we could consolidate somehow?
-
-> 
->  lvm2_handle_t lvm2_create(const char *sys_dir)
-> @@ -30,6 +54,8 @@ lvm2_handle_t lvm2_create(const char *sys_dir)
->     * - bind logging to handle
->     */
->  
-> +  _apply_settings(cmd);
-> +
->    return (lvm2_handle_t) cmd;
->  }
->  
-> @@ -40,3 +66,29 @@ void lvm2_destroy(lvm2_handle_t libh)
->  
->    return 1;
->  }
-> +
-> +
-> +int lvm2_reload_config(lvm2_handle_t libh)
-> +{
-> +  int refresh;
-> +  
-> +  refresh = refresh_toolcontext((struct cmd_context *) libh);
-> +
-
-I think we need:
-cmd->current_settings = cmd->default_settings;
-
-either here or at the bottom of refresh_toolcontext().  This I think is
-a bug in the existing code so it does not necessarily apply to this
-patch.  It is a problem for callers of refresh_toolcontext() though, and
-I believe clvmd has this problem (see do_refresh_cache() in
-lvm-functions.c).
-
-
-> +  if (refresh)
-> +    _apply_settings((struct cmd_context *) libh);
-> +
-
-
-> +  return refresh;
-> +}
-> +
-> +
-> +int lvm2_set_config_option(lvm2_handle_t libh, const char *option,
-> +			   const char *value)
-> +{
-> +  return 1;
-> +}
-> +
-> +
-> +int lvm2_reset_config_option(lvm2_handle_t libh, const char *option)
-> +{
-> +  return 1;
-> +}
-> diff --git a/lib/lvm2.h b/lib/lvm2.h
-> index b131fd7..b2c97d0 100644
-> --- a/lib/lvm2.h
-> +++ b/lib/lvm2.h
-> @@ -49,4 +49,42 @@ lvm2_handle_t lvm2_create(const char *sys_dir);
->   */
->  void lvm2_destroy(lvm2_handle_t h);
->  
-> +/*
-> + * lvm2_reload_config
-> + *
-> + * Description: Reload configuration files
-> + *
-> + * Returns:
-> + *   0: error
-> + *   1: success
-> + */
-> +int lvm2_reload_config(lvm2_handle_t h);
-> +
-> +/*
-> + * lvm2_set_config_option
-> + *
-> + * Description: Load an lvm config option into the existing configuration.
-> + *   The formation of the option parameter is similar to the names
-> + *   in /etc/lvm/lvm.conf.
-> + *   An option within a section is specified with a '/' between the
-> + *   section name and option.  For example, the 'filter' option in the
-> + *   devices section is specified by 'devices/filter'
-> + *
-> + * Returns:
-> + *   0: error
-> + *   1: success
-> + */
-> +int lvm2_set_config_option(lvm2_handle_t h, const char *option,
-> +			   const char *value);
-> +/*
-> + * lvm2_remove_config_option
-> + *
-> + * Description:
-> + *
-> + * Returns:
-> + *   0: error
-> + *   1: success
-> + */
-> +int lvm2_reset_config_option(lvm2_handle_t h, const char *option);
-> +
-
-We should probably be consistent with return code types - uint32_t?
-
-Then again, if we're going to try to use errno return values perhaps we
-need int after all?
+Alasdair
+-- 
+agk at redhat.com
 
 
