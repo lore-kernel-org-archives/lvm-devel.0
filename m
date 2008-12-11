@@ -1,43 +1,123 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 24 Nov 2014 13:50:01 +0000 (UTC)
-Subject: master - libdm: there is no element in item 0
-Message-ID: <20141124135001.6294F613B6@fedorahosted.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 11 Dec 2008 13:45:14 -0500
+Subject: [PATCH] Use struct cmd_context* as type for lvm2_handle_t with hidden cmd_context. Accessors and mutators have to be used. (lib/lvm2.h)
+In-Reply-To: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+Message-ID: <1229021114.20795.6.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8bc7b4f926c8ae24c99391c39fc8e2a9fa55d80a
-Commit:        8bc7b4f926c8ae24c99391c39fc8e2a9fa55d80a
-Parent:        fb220314ec787bd8f0855b055e1b3bba7368dd26
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 24 14:37:11 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 24 14:38:54 2014 +0100
 
-libdm: there is no element in item 0
+On Thu, 2008-12-11 at 17:43 +0100, Thomas Woerner wrote:
+> ---
+>  lib/lvm2.h      |   23 +++++++++++------------
+>  test/api/test.c |   13 ++++++-------
+>  2 files changed, 17 insertions(+), 19 deletions(-)
+> 
+> diff --git a/lib/lvm2.h b/lib/lvm2.h
+> index 8ddaf68..b131fd7 100644
+> --- a/lib/lvm2.h
+> +++ b/lib/lvm2.h
+> @@ -1,5 +1,4 @@
+>  /*
+> - * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+>   * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
+>   *
+>   * This file is part of LVM2.
+> @@ -17,37 +16,37 @@
+>  
+>  #include <stdint.h>
+>  
+> +/*** Library Initialisation ***/
+> +
+>  /*
+> - * Library Initialisation
+> - * FIXME: For now just #define lvm2_create() and lvm2_destroy() to 
+> - * create_toolcontext() and destroy_toolcontext()
+> + * lvm2_handle_t
+>   */
+> -struct arg;
+> -struct cmd_context;
+> -struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static, unsigned is_long_lived);
+> -void destroy_toolcontext(struct cmd_context *cmd);
+> +struct cmd_context; /* private context */
+> +typedef struct cmd_context* lvm2_handle_t;
+>  
+>  /*
+>   * lvm2_create
+> -lvm_handle_t lvm2_create(void);
+>   *
+>   * Description: Create an LVM2 handle used in many other APIs.
+>   *
+> + * Parameters:
+> + * - sys_dir: Directory containing lvm.conf and other LVM system files,
+> + *            overwritten by LVM_SYSTEM_DIR environment variable (if set)
+> + *
+>   * Returns:
+>   * NULL: Fail - unable to initialise handle.
+>   * non-NULL: Success - valid LVM2 handle returned
+>   */
+> -#define lvm2_create(X) create_toolcontext(NULL,0,1)
+> +lvm2_handle_t lvm2_create(const char *sys_dir);
+>  
+>  /*
+>   * lvm2_destroy
+> -void lvm2_destroy(lvm_handle_t h);
+>   *
+>   * Description: Destroy an LVM2 handle allocated with lvm2_create
+>   *
+>   * Parameters:
+>   * - h (IN): handle obtained from lvm2_create
+>   */
+> -#define lvm2_destroy(X) destroy_toolcontext(X)
+> +void lvm2_destroy(lvm2_handle_t h);
 
-Items[0] holds only counter in .len.
-So don't zero already zeroed items[0].len assigned above.
+Might have been nice to leave the #defines until the later patch when
+you actually add these functions but no big deal.
 
-(finishing fc935495c813b7577ac8237459a2cc65ea291ac2)
----
- libdm/libdm-report.c |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+>  
+>  #endif
+> diff --git a/test/api/test.c b/test/api/test.c
+> index de53c46..866be8f 100644
+> --- a/test/api/test.c
+> +++ b/test/api/test.c
+> @@ -48,7 +48,7 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
+>  	return *argc;
+>  }
+>  
+> -static int lvmapi_test_shell(void *h)
+> +static int lvmapi_test_shell(lvm2_handle_t libh)
+>  {
+>  	int argc, i;
+>  	char *input = NULL, *args[MAX_ARGS], **argv;
+> @@ -99,18 +99,17 @@ static int lvmapi_test_shell(void *h)
+>  		      
+>  int main (int argc, char *argv[])
+>  {
+> -	void *h;
+> +	lvm2_handle_t libh;
+>  
+> -	h = lvm2_create();
+> -	if (!h) {
+> +	libh = lvm2_create(NULL);
+> +	if (!libh) {
+>  		printf("Unable to open lvm library instance\n");
+>  		return 1;
+>  	}
+>  
+> -	lvmapi_test_shell(h);
+> +	lvmapi_test_shell(libh);
+>  
+> -	if (h)
+> -		lvm2_destroy(h);
+> +	lvm2_destroy(libh);
+>  	return 0;
+>  }
+>  
 
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 470c2d1..a1bab05 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -393,8 +393,6 @@ static int _report_field_string_list(struct dm_report *rh,
- 	/* zero items */
- 	if (!list_size) {
- 		sort_value->value = field->report_string = "";
--		sort_value->items[0].pos = 0;
--		sort_value->items[0].len = 0;
- 		field->sort_value = sort_value;
- 		return 1;
- 	}
+Looks ok.
 
 
