@@ -1,7 +1,9 @@
 From: Thomas Woerner <twoerner@redhat.com>
-Date: Thu, 11 Dec 2008 17:43:39 +0100
-Subject: [PATCH] Use struct cmd_context* as type for lvm2_handle_t with hidden cmd_context. Accessors and mutators have to be used. (lib/lvm2.h)
-Message-ID: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+Date: Thu, 11 Dec 2008 17:43:40 +0100
+Subject: [PATCH] Renamed create_toolcontext function to _create_context and added sys_dir as argument, new functions create_librarycontext and create_toolcontext.
+In-Reply-To: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+Message-ID: <1229013822-10809-2-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -9,106 +11,72 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 ---
- lib/lvm2.h      |   23 +++++++++++------------
- test/api/test.c |   13 ++++++-------
- 2 files changed, 17 insertions(+), 19 deletions(-)
+ lib/commands/toolcontext.c |   25 +++++++++++++++++++++----
+ lib/commands/toolcontext.h |    1 +
+ 2 files changed, 22 insertions(+), 4 deletions(-)
 
-diff --git a/lib/lvm2.h b/lib/lvm2.h
-index 8ddaf68..b131fd7 100644
---- a/lib/lvm2.h
-+++ b/lib/lvm2.h
-@@ -1,5 +1,4 @@
- /*
-- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
-  * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-@@ -17,37 +16,37 @@
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index e9ef66c..e37af6e 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -990,9 +990,10 @@ static void _init_rand(struct cmd_context *cmd)
+ 	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
+ }
  
- #include <stdint.h>
+-/* Entry point */
+-struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
+-				       unsigned is_long_lived)
++static struct cmd_context *_create_context(struct arg *the_args,
++					   unsigned is_static,
++					   unsigned is_long_lived,
++					   const char *sys_dir)
+ {
+ 	struct cmd_context *cmd;
  
-+/*** Library Initialisation ***/
+@@ -1024,7 +1025,10 @@ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
+ 	dm_list_init(&cmd->tags);
+ 	dm_list_init(&cmd->config_files);
+ 
+-	strcpy(cmd->sys_dir, DEFAULT_SYS_DIR);
++	strncpy(cmd->sys_dir, DEFAULT_SYS_DIR, PATH_MAX);
++	
++	if (sys_dir)
++		strncpy(cmd->sys_dir, sys_dir, PATH_MAX);
+ 
+ 	if (!_get_env_vars(cmd))
+ 		goto error;
+@@ -1101,6 +1105,19 @@ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
+ 	return NULL;
+ }
+ 
++/* Library Entry point */
++struct cmd_context *create_librarycontext(const char *sys_dir)
++{
++	return _create_context(NULL, 0, 1, sys_dir);
++}
 +
- /*
-- * Library Initialisation
-- * FIXME: For now just #define lvm2_create() and lvm2_destroy() to 
-- * create_toolcontext() and destroy_toolcontext()
-+ * lvm2_handle_t
-  */
--struct arg;
--struct cmd_context;
--struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static, unsigned is_long_lived);
--void destroy_toolcontext(struct cmd_context *cmd);
-+struct cmd_context; /* private context */
-+typedef struct cmd_context* lvm2_handle_t;
- 
- /*
-  * lvm2_create
--lvm_handle_t lvm2_create(void);
-  *
-  * Description: Create an LVM2 handle used in many other APIs.
-  *
-+ * Parameters:
-+ * - sys_dir: Directory containing lvm.conf and other LVM system files,
-+ *            overwritten by LVM_SYSTEM_DIR environment variable (if set)
-+ *
-  * Returns:
-  * NULL: Fail - unable to initialise handle.
-  * non-NULL: Success - valid LVM2 handle returned
-  */
--#define lvm2_create(X) create_toolcontext(NULL,0,1)
-+lvm2_handle_t lvm2_create(const char *sys_dir);
- 
- /*
-  * lvm2_destroy
--void lvm2_destroy(lvm_handle_t h);
-  *
-  * Description: Destroy an LVM2 handle allocated with lvm2_create
-  *
-  * Parameters:
-  * - h (IN): handle obtained from lvm2_create
-  */
--#define lvm2_destroy(X) destroy_toolcontext(X)
-+void lvm2_destroy(lvm2_handle_t h);
- 
- #endif
-diff --git a/test/api/test.c b/test/api/test.c
-index de53c46..866be8f 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -48,7 +48,7 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
- 	return *argc;
- }
- 
--static int lvmapi_test_shell(void *h)
-+static int lvmapi_test_shell(lvm2_handle_t libh)
++/* Tool Entry point */
++struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
++				       unsigned is_long_lived)
++{
++	return _create_context(the_args, is_static, is_long_lived, NULL);
++}
++
+ static void _destroy_formats(struct dm_list *formats)
  {
- 	int argc, i;
- 	char *input = NULL, *args[MAX_ARGS], **argv;
-@@ -99,18 +99,17 @@ static int lvmapi_test_shell(void *h)
- 		      
- int main (int argc, char *argv[])
- {
--	void *h;
-+	lvm2_handle_t libh;
+ 	struct dm_list *fmtl, *tmp;
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 4ea3486..a37911f 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -96,6 +96,7 @@ struct cmd_context {
+ 	char sysfs_dir[PATH_MAX];
+ };
  
--	h = lvm2_create();
--	if (!h) {
-+	libh = lvm2_create(NULL);
-+	if (!libh) {
- 		printf("Unable to open lvm library instance\n");
- 		return 1;
- 	}
- 
--	lvmapi_test_shell(h);
-+	lvmapi_test_shell(libh);
- 
--	if (h)
--		lvm2_destroy(h);
-+	lvm2_destroy(libh);
- 	return 0;
- }
- 
++struct cmd_context *create_librarycontext(const char *sys_dir);
+ struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static, unsigned is_long_lived);
+ void destroy_toolcontext(struct cmd_context *cmd);
+ int refresh_toolcontext(struct cmd_context *cmd);
 -- 
 1.6.0.4
 
