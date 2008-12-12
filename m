@@ -1,53 +1,53 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 12 Dec 2008 12:50:25 -0500
-Subject: [PATCH] (1/2) new library interface for vg_read
-In-Reply-To: <87ljulbvgu.fsf@eriador.mornfall.net>
-References: <87y6ypcn7l.fsf@eriador.mornfall.net>
-	<1229027813.20795.15.camel@localhost.localdomain>
-	<87ljulbvgu.fsf@eriador.mornfall.net>
-Message-ID: <1229104225.16499.21.camel@localhost.localdomain>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 12 Dec 2008 18:45:59 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20081212184559.26854.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2008-12-12 18:45:58
 
-On Fri, 2008-12-12 at 10:20 +0100, Petr Rockai wrote:
-> Dave Wysochanski <dwysocha@redhat.com> writes:
-> > On Tue, 2008-12-09 at 17:44 +0100, Petr Rockai wrote:
-> >>  /* FIXME: remove redundant vg_name */
-> >>  int vg_remove_single(struct cmd_context *cmd, const char *vg_name,
-> >> -                    struct volume_group *vg, int consistent,
-> >> +                    struct volume_group *vg,
-> >>                      force_t force __attribute((unused)))
-> >>  {
-> >>         struct physical_volume *pv;
-> >> @@ -340,7 +340,7 @@ int vg_remove_single(struct cmd_context 
-> >>         unsigned lv_count;
-> >>         int ret = 1;
-> >>  
-> >> -       if (!vg || !consistent || vg_missing_pv_count(vg)) {
-> >> +       if (vg_read_error(vg) || vg_missing_pv_count(vg)) {
-> >>                 log_error("Volume group \"%s\" not found, is
-> >> inconsistent "
-> >>                           "or has PVs missing.", vg_name);
-> >>                 log_error("Consider vgreduce --removemissing if
-> >> metadata "
-> >
-> > Did you mean to put this in the second patch?
-> Actually, hard to tell. It, after all, is part of the library, for a reason or
-> other. It belongs equally well to the first as to the second patch. What do you
-> propose?
-> 
+Modified files:
+	libdm          : libdm-deptree.c 
 
-Well, doesn't this cause a bug in this path though for the !consistent
-case?  First patch drops the consistent variable in this vgremove path,
-but things like _process_one_vg() do not use the new APIs (which sets
-the proper error codes) until the second patch.  You mention in your
-patch intro this first patch should apply and make a completely workable
-LVM so I'm assuming you mean no bugs.
+Log message:
+	Use dm_snprintf to avoid duplicating the snprintf compatibility code.
 
-I'm still digesting the main changes in vg_lock_and_read().
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+
+--- LVM2/libdm/libdm-deptree.c	2008/12/11 16:25:51	1.48
++++ LVM2/libdm/libdm-deptree.c	2008/12/12 18:45:58	1.49
+@@ -1224,17 +1224,14 @@
+ 
+ /* simplify string emiting code */
+ #define EMIT_PARAMS(p, str...)\
+-	do {\
+-		const size_t bufsize = paramsize - (size_t)p;\
+-		int w;\
+-		\
+-		if ((w = snprintf(params + p, bufsize, str)) < 0\
+-		    || ((size_t)w >= bufsize)) {\
+-			stack; /* Out of space */\
+-			return -1;\
+-		}\
+-		p += w;\
+-	} while (0)
++do {\
++	int w;\
++	if ((w = dm_snprintf(params + p, paramsize - (size_t) p, str)) < 0) {\
++		stack; /* Out of space */\
++		return -1;\
++	}\
++	p += w;\
++} while (0)
+ 
+ static int _emit_areas_line(struct dm_task *dmt __attribute((unused)),
+ 			    struct load_segment *seg, char *params,
 
 
