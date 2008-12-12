@@ -1,28 +1,24 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 12 Dec 2008 00:07:13 +0000
-Subject: Re: LVM2 ./WHATS_NEW_DM libdm/libdm-deptree.c
-In-Reply-To: <1229013323.20795.3.camel@localhost.localdomain>
-References: <20081211162552.29826.qmail@sourceware.org>
-	<1229013323.20795.3.camel@localhost.localdomain>
-Message-ID: <20081212000713.GR24785@agk.fab.redhat.com>
+Date: Fri, 12 Dec 2008 00:46:54 +0000
+Subject: [PATCH] Use struct cmd_context* as type for lvm2_handle_t with hidden cmd_context. Accessors and mutators have to be used. (lib/lvm2.h)
+In-Reply-To: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+Message-ID: <20081212004654.GS24785@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Dec 11, 2008 at 11:35:23AM -0500, Dave Wysochanski wrote:
-> 
-> > +/* simplify string emiting code */
-> > +#define EMIT_PARAMS(p, str...)\
-> > +	do {\
+On Thu, Dec 11, 2008 at 05:43:39PM +0100, Thomas Woerner wrote:
+> diff --git a/lib/lvm2.h b/lib/lvm2.h
+> +void lvm2_destroy(lvm2_handle_t h);
 
-> Do we have to do a macro here?  Macros like this are harder to debug...
+Let's use a longer variable name than 'h' and something unique so we can grep
+for it easily.
 
-Indeed - but sometimes there's stuff that's just too awkward to do
-as a function.  I don't mind this one - we have a similar one in the kernel
-called DMEMIT - so long as it is correct:-)
- 
+Apart from that, ACK.
+
 Alasdair
 -- 
 agk at redhat.com
