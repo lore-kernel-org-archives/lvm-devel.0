@@ -1,44 +1,52 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 26 Nov 2014 08:37:10 +0000 (UTC)
-Subject: master - makefiles: avoid regeneration of Makefile
-Message-ID: <20141126083710.DB4D16055B@fedorahosted.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Fri, 12 Dec 2008 10:20:49 +0100
+Subject: [PATCH] (1/2) new library interface for vg_read
+In-Reply-To: <1229027813.20795.15.camel@localhost.localdomain> (Dave
+	Wysochanski's message of "Thu, 11 Dec 2008 15:36:53 -0500")
+References: <87y6ypcn7l.fsf@eriador.mornfall.net>
+	<1229027813.20795.15.camel@localhost.localdomain>
+Message-ID: <87ljulbvgu.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2cd98b27825b00459bd8e2c0539ffe5c09ed5b62
-Commit:        2cd98b27825b00459bd8e2c0539ffe5c09ed5b62
-Parent:        2de11c9e9e9513fb7d9ab0323370e584d3d3acde
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 25 23:01:28 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 26 09:36:12 2014 +0100
+Dave Wysochanski <dwysocha@redhat.com> writes:
+> On Tue, 2008-12-09 at 17:44 +0100, Petr Rockai wrote:
+>>  /* FIXME: remove redundant vg_name */
+>>  int vg_remove_single(struct cmd_context *cmd, const char *vg_name,
+>> -                    struct volume_group *vg, int consistent,
+>> +                    struct volume_group *vg,
+>>                      force_t force __attribute((unused)))
+>>  {
+>>         struct physical_volume *pv;
+>> @@ -340,7 +340,7 @@ int vg_remove_single(struct cmd_context 
+>>         unsigned lv_count;
+>>         int ret = 1;
+>>  
+>> -       if (!vg || !consistent || vg_missing_pv_count(vg)) {
+>> +       if (vg_read_error(vg) || vg_missing_pv_count(vg)) {
+>>                 log_error("Volume group \"%s\" not found, is
+>> inconsistent "
+>>                           "or has PVs missing.", vg_name);
+>>                 log_error("Consider vgreduce --removemissing if
+>> metadata "
+>
+> Did you mean to put this in the second patch?
+Actually, hard to tell. It, after all, is part of the library, for a reason or
+other. It belongs equally well to the first as to the second patch. What do you
+propose?
 
-makefiles: avoid regeneration of Makefile
+Yours,
+   Petr.
 
-When Makefile.in is touched, it's been matched by 'man' rule
-and it's been wrongly regnerated.
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-Put in explicit rules to avoid Makefile sed processing.
----
- man/Makefile.in |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
-
-diff --git a/man/Makefile.in b/man/Makefile.in
-index 40bf7a2..c42f07a 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -92,6 +92,9 @@ man: $(MAN5) $(MAN7) $(MAN8) $(MAN8CLUSTER) $(MAN8SYSTEMD_GENERATORS)
- 
- $(MAN5) $(MAN7) $(MAN8) $(MAN8DM) $(MAN8CLUSTER):	Makefile
- 
-+Makefile: Makefile.in
-+	@:
-+
- %: %.in
- 	@case "$@" in \
- 	  */*) ;; \
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
