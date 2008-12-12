@@ -1,72 +1,45 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Dec 2008 03:30:42 -0000
-Subject: LVM2 lib/commands/toolcontext.c tools/lvmcmdline.c
-Message-ID: <20081212033042.3776.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 11 Dec 2008 22:32:53 -0500
+Subject: [PATCH 10/11] Remove redundant init_mirror_in_sync() call in init_lvm().
+In-Reply-To: <20081211224105.GL24785@agk.fab.redhat.com>
+References: <1228932661-15662-3-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-4-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-5-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-6-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-7-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-8-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-9-git-send-email-dwysocha@redhat.com>
+	<1228932661-15662-10-git-send-email-dwysocha@redhat.com>
+	<20081210225018.GF24785@agk.fab.redhat.com>
+	<1228962585.10873.9.camel@localhost.localdomain>
+	<20081211224105.GL24785@agk.fab.redhat.com>
+Message-ID: <1229052774.20795.41.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-12-12 03:30:41
 
-Modified files:
-	lib/commands   : toolcontext.c 
-	tools          : lvmcmdline.c 
+On Thu, 2008-12-11 at 22:41 +0000, Alasdair G Kergon wrote:
+> On Wed, Dec 10, 2008 at 09:29:45PM -0500, Dave Wysochanski wrote:
 
-Log message:
-	Create _init_globals() and call from bottom of create_toolcontext().
-	
-	Move init_full_scan_done(0) and init_mirror_in_sync(0) from init_lvm()
-	after call to create_toolcontext() to _init_globals(), called from bottom
-	of create_toolcontext().  No functional change.
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
-	Acked-by: James Cameron <james.cameron@hp.com>
-	Acked-by: Alasdair G Kergon <agk@redhat.com>
+> > This is a good point.  We will have some global state and this needs
+> > thought out.  We may need to export _apply_settings() or something like
+> > it to reset the global state.  Or perhaps the global state should be
+> > reset at the bottom of create_toolcontext()?
+> > For the the handle re-use case of the existing lvmcmdlib.c, we do a
+> > _apply_settings() in lvm_run_command() so the global state is reset. We
+> > won't have lvm_run_command() to rely on for liblvm, but I guess we need
+> > the equivalent.
+>  
+> I'm talking *new* handle here - in other words when creating a new handle
+> the code must not rely upon pre-existing values of those static variables: it
+> must initialise them.
+> 
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-
---- LVM2/lib/commands/toolcontext.c	2008/12/11 03:36:16	1.69
-+++ LVM2/lib/commands/toolcontext.c	2008/12/12 03:30:41	1.70
-@@ -990,6 +990,13 @@
- 	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
- }
- 
-+static void _init_globals(struct cmd_context *cmd)
-+{
-+	init_full_scan_done(0);
-+	init_mirror_in_sync(0);
-+
-+}
-+
- /* Entry point */
- struct cmd_context *create_toolcontext(struct arg *the_args, unsigned is_static,
- 				       unsigned is_long_lived)
-@@ -1090,6 +1097,8 @@
- 
- 	_init_rand(cmd);
- 
-+	_init_globals(cmd);
-+
- 	cmd->default_settings.cache_vgmetadata = 1;
- 	cmd->current_settings = cmd->default_settings;
- 
---- LVM2/tools/lvmcmdline.c	2008/12/11 03:36:16	1.86
-+++ LVM2/tools/lvmcmdline.c	2008/12/12 03:30:41	1.87
-@@ -1091,9 +1091,6 @@
- 	if (!(cmd = create_toolcontext(_cmdline.the_args, is_static, 0)))
- 		return_NULL;
- 
--	init_full_scan_done(0);
--	init_mirror_in_sync(0);
--
- 	return cmd;
- }
- 
+Are there other globals we need to worry about or do you think the
+create/destroy/create handle scenario will work with the existing
+variable resets in the code (e.g. _apply_settings())?
 
 
