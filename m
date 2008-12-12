@@ -1,183 +1,33 @@
-From: Thomas Woerner <twoerner@redhat.com>
-Date: Fri, 12 Dec 2008 12:36:30 +0100
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 12 Dec 2008 12:45:32 +0000
 Subject: [PATCH] New public functions lvm2_reload_config, lvm2_set_config_option and lvm2_reset_config_option.
-In-Reply-To: <1229032195.20795.34.camel@localhost.localdomain>
-References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>	<1229013822-10809-2-git-send-email-twoerner@redhat.com>	<1229013822-10809-3-git-send-email-twoerner@redhat.com>	<1229013822-10809-4-git-send-email-twoerner@redhat.com>
+In-Reply-To: <49424CBE.6020204@redhat.com>
+References: <1229013822-10809-1-git-send-email-twoerner@redhat.com>
+	<1229013822-10809-2-git-send-email-twoerner@redhat.com>
+	<1229013822-10809-3-git-send-email-twoerner@redhat.com>
+	<1229013822-10809-4-git-send-email-twoerner@redhat.com>
 	<1229032195.20795.34.camel@localhost.localdomain>
-Message-ID: <49424CBE.6020204@redhat.com>
+	<49424CBE.6020204@redhat.com>
+Message-ID: <20081212124532.GZ24785@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski wrote:
-> On Thu, 2008-12-11 at 17:43 +0100, Thomas Woerner wrote:
->> ---
->>  lib/lvm2.c |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
->>  lib/lvm2.h |   38 ++++++++++++++++++++++++++++++++++++++
->>  2 files changed, 90 insertions(+), 0 deletions(-)
->>
->> diff --git a/lib/lvm2.c b/lib/lvm2.c
->> index daf9a79..ac5e583 100644
->> --- a/lib/lvm2.c
->> +++ b/lib/lvm2.c
->> @@ -15,6 +15,30 @@
->>  #include "lvm2.h"
->>  #include "lib.h"
->>  #include "toolcontext.h"
->> +#include "archiver.h"
->> +#include "activate.h"
->> +#include "../tools/tools.h"
->> +
-> 
-> Do we need the relative path here?
-> 
-Ok, I will add tools/tools.h, tools/toollib.h, tools/commands.h and 
-tools/args.h to include/.smylinks. Then it is possible to use #include 
-"tools.h".
+On Fri, Dec 12, 2008 at 12:36:30PM +0100, Thomas Woerner wrote:
+> Ok, I will add tools/tools.h, tools/toollib.h, tools/commands.h and 
+> tools/args.h to include/.smylinks. Then it is possible to use #include 
+> "tools.h".
+ 
+You can't use *anything* from the tools directory in the library!
+That would be like linking the library against anaconda or
+other client code!
+Where you need any functions in there you need to move them first 
+into the lib directory behind a proper interface.
 
->> +
->> +static void _apply_settings(struct cmd_context *cmd)
->> +{
->> +  init_debug(cmd->current_settings.debug);
->> +  init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
->> +  init_test(cmd->current_settings.test);
->> +  init_full_scan_done(0);
->> +  init_mirror_in_sync(0);
->> +  
->> +  init_msg_prefix(cmd->default_settings.msg_prefix);
->> +  init_cmd_name(cmd->default_settings.cmd_name);
->> +
->> +  archive_enable(cmd, cmd->current_settings.archive);
->> +  backup_enable(cmd, cmd->current_settings.backup);
->> +
->> +  set_activation(cmd->current_settings.activation);
->> +
->> +  cmd->fmt = cmd->current_settings.fmt;
->> +  cmd->handles_missing_pvs = 0;
->> +}
->>  
-> 
-> We should avoid duplicating this code with lvmcmdline.c.  Did you check
-> the other callers to see if we could consolidate somehow?
-> 
->>  lvm2_handle_t lvm2_create(const char *sys_dir)
->> @@ -30,6 +54,8 @@ lvm2_handle_t lvm2_create(const char *sys_dir)
->>     * - bind logging to handle
->>     */
->>  
->> +  _apply_settings(cmd);
->> +
->>    return (lvm2_handle_t) cmd;
->>  }
->>  
->> @@ -40,3 +66,29 @@ void lvm2_destroy(lvm2_handle_t libh)
->>  
->>    return 1;
->>  }
->> +
->> +
->> +int lvm2_reload_config(lvm2_handle_t libh)
->> +{
->> +  int refresh;
->> +  
->> +  refresh = refresh_toolcontext((struct cmd_context *) libh);
->> +
-> 
-> I think we need:
-> cmd->current_settings = cmd->default_settings;
-> 
-> either here or at the bottom of refresh_toolcontext().  This I think is
-> a bug in the existing code so it does not necessarily apply to this
-> patch.  It is a problem for callers of refresh_toolcontext() though, and
-> I believe clvmd has this problem (see do_refresh_cache() in
-> lvm-functions.c).
-> 
-> 
->> +  if (refresh)
->> +    _apply_settings((struct cmd_context *) libh);
->> +
-> 
-> 
->> +  return refresh;
->> +}
->> +
->> +
->> +int lvm2_set_config_option(lvm2_handle_t libh, const char *option,
->> +			   const char *value)
->> +{
->> +  return 1;
->> +}
->> +
->> +
->> +int lvm2_reset_config_option(lvm2_handle_t libh, const char *option)
->> +{
->> +  return 1;
->> +}
->> diff --git a/lib/lvm2.h b/lib/lvm2.h
->> index b131fd7..b2c97d0 100644
->> --- a/lib/lvm2.h
->> +++ b/lib/lvm2.h
->> @@ -49,4 +49,42 @@ lvm2_handle_t lvm2_create(const char *sys_dir);
->>   */
->>  void lvm2_destroy(lvm2_handle_t h);
->>  
->> +/*
->> + * lvm2_reload_config
->> + *
->> + * Description: Reload configuration files
->> + *
->> + * Returns:
->> + *   0: error
->> + *   1: success
->> + */
->> +int lvm2_reload_config(lvm2_handle_t h);
->> +
->> +/*
->> + * lvm2_set_config_option
->> + *
->> + * Description: Load an lvm config option into the existing configuration.
->> + *   The formation of the option parameter is similar to the names
->> + *   in /etc/lvm/lvm.conf.
->> + *   An option within a section is specified with a '/' between the
->> + *   section name and option.  For example, the 'filter' option in the
->> + *   devices section is specified by 'devices/filter'
->> + *
->> + * Returns:
->> + *   0: error
->> + *   1: success
->> + */
->> +int lvm2_set_config_option(lvm2_handle_t h, const char *option,
->> +			   const char *value);
->> +/*
->> + * lvm2_remove_config_option
->> + *
->> + * Description:
->> + *
->> + * Returns:
->> + *   0: error
->> + *   1: success
->> + */
->> +int lvm2_reset_config_option(lvm2_handle_t h, const char *option);
->> +
-> 
-> We should probably be consistent with return code types - uint32_t?
-> 
-> Then again, if we're going to try to use errno return values perhaps we
-> need int after all?
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-
-
+Alasdair
 -- 
-Thomas Woerner
-Software Engineer            Phone: +49-711-96437-310
-Red Hat GmbH                 Fax  : +49-711-96437-111
-Hauptstaetterstr. 58         Email: Thomas Woerner <twoerner@redhat.com>
-D-70178 Stuttgart            Web  : http://www.redhat.de/
+agk at redhat.com
 
 
