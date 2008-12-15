@@ -1,29 +1,30 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 15 Dec 2008 19:49:06 +0000
-Subject: Re: dmsetup export
-In-Reply-To: <ac3eb2510811251934w68ca5404r5cb2fff324586a4@mail.gmail.com>
-References: <20080915202517.GB12984@agk.fab.redhat.com>
-	<ac3eb2510811251934w68ca5404r5cb2fff324586a4@mail.gmail.com>
-Message-ID: <20081215194906.GI19917@agk.fab.redhat.com>
+Date: Mon, 15 Dec 2008 19:51:08 +0000
+Subject: Re: udev lvm permisions
+In-Reply-To: <20081215193753.GG19917@agk.fab.redhat.com>
+References: <1229360539.15208.5.camel@x61.fubar.dk>
+	<1229360818.21463.7.camel@quest>
+	<ac3eb2510812150914n7231a1afvb2719187f61b7c30@mail.gmail.com>
+	<1229361483.21463.14.camel@quest>
+	<ac3eb2510812150919x3e67f46fi4a14fadb0659c497@mail.gmail.com>
+	<1229363958.21463.17.camel@quest>
+	<ac3eb2510812151019i2ad8f0ebw8f9dcbf21108ef3f@mail.gmail.com>
+	<1229365310.21463.20.camel@quest>
+	<ac3eb2510812151038i7f8a459bo16e1906cfe39a9d9@mail.gmail.com>
+	<20081215193753.GG19917@agk.fab.redhat.com>
+Message-ID: <20081215195108.GJ19917@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Nov 26, 2008 at 04:34:32AM +0100, Kay Sievers wrote:
-> One thing I'm missing, what the "export" did, is a comma separated
-> list of the table types used for the volume. There are currently
-> matches in udev rules for:
->   ENV{DM_TARGET_TYPES}=="|*error*"
->   ENV{DM_TARGET_TYPES}=="*snapshot-origin*"
-> Any idea how to provide something similar, or how to replace that? I
-> don't care about any name or format it is provided.
+On Mon, Dec 15, 2008 at 07:37:53PM +0000, Alasdair G Kergon wrote:
+> 1) udev able to query device-mapper to determine what the /dev/mapper
+> entry should be called.
+> - udev uses dmsetup.  Sorted.
  
-Ah.
-
-What are those rules actually doing?  Maybe we can come up with a better way to
-avoid those special cases...
+BTW Milan sent me a patch today to make name and uuid available in sysfs.
 
 Alasdair
 -- 
