@@ -1,30 +1,29 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 15 Dec 2008 19:45:41 +0000
-Subject: Re: [lvm-team] Soliciting feature requests for development of an LVM library / API
-In-Reply-To: <ac3eb2510812150654m59118516o3a7ed00d9027f61d@mail.gmail.com>
-References: <1227556378.8335.10.camel@localhost.localdomain>
-	<1228490691.7218.64.camel@x61.fubar.dk>
-	<ac3eb2510812050820x50eb14co43021c2836275c1d@mail.gmail.com>
-	<1229131838.16499.55.camel@localhost.localdomain>
-	<ac3eb2510812130628n782db746gab5c14186a928bce@mail.gmail.com>
-	<20081213152328.GB19178@agk.fab.redhat.com>
-	<ac3eb2510812150654m59118516o3a7ed00d9027f61d@mail.gmail.com>
-Message-ID: <20081215194541.GH19917@agk.fab.redhat.com>
+Date: Mon, 15 Dec 2008 19:49:06 +0000
+Subject: Re: dmsetup export
+In-Reply-To: <ac3eb2510811251934w68ca5404r5cb2fff324586a4@mail.gmail.com>
+References: <20080915202517.GB12984@agk.fab.redhat.com>
+	<ac3eb2510811251934w68ca5404r5cb2fff324586a4@mail.gmail.com>
+Message-ID: <20081215194906.GI19917@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Remind me - why does udev want to know about 'target type'?
+On Wed, Nov 26, 2008 at 04:34:32AM +0100, Kay Sievers wrote:
+> One thing I'm missing, what the "export" did, is a comma separated
+> list of the table types used for the volume. There are currently
+> matches in udev rules for:
+>   ENV{DM_TARGET_TYPES}=="|*error*"
+>   ENV{DM_TARGET_TYPES}=="*snapshot-origin*"
+> Any idea how to provide something similar, or how to replace that? I
+> don't care about any name or format it is provided.
+ 
+Ah.
 
-Is it a hack so it can guess which program (lvm2, cryptsetup, multipath etc.)
-is responsible for creating the device?
-
-We introduced a standard prefix on the UUID for this purpose instead.
-Next time we revise the ioctl interface it'll go in as a separate 'owning
-subsystem' field.  (Need to check if any of our packages still need this
-prefix adding.)
+What are those rules actually doing?  Maybe we can come up with a better way to
+avoid those special cases...
 
 Alasdair
 -- 
