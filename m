@@ -1,58 +1,130 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 26 Nov 2014 10:51:55 +0000 (UTC)
-Subject: master - coverity: fix possible NULL dereference
-Message-ID: <20141126105155.B774760E2F@fedorahosted.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 16 Dec 2008 12:30:40 -0000
+Subject: LVM2/lib/locking cluster_locking.c
+Message-ID: <20081216123040.1585.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=193f9b26a0a87b2f5ce9a308ea0d957fadfe4aeb
-Commit:        193f9b26a0a87b2f5ce9a308ea0d957fadfe4aeb
-Parent:        86ae68a5f7e396a6584b8003667b44a433d914fd
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 26 11:46:13 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 26 11:46:13 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-12-16 12:30:40
 
-coverity: fix possible NULL dereference
+Modified files:
+	lib/locking    : cluster_locking.c 
 
-The call to dm_config_destroy can derefence result->mem
-while result is still NULL:
+Log message:
+	Rename 'cmd' to 'clvmd_cmd' to remove ambiguity.
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Acked-by: James Cameron <james.cameron@hp.com>
+	Acked-by: Alasdair G Kergon <agk@redhat.com>
 
-struct dm_config_tree *get_cachepolicy_params(struct cmd_context *cmd)
-{
-	...
-	int ok = 0;
-	...
-	if (!(result = dm_config_flatten(current)))
-		goto_out;
-	...
-	ok = 1;
-out:
-	 if (!ok) {
-		dm_config_destroy(result)
-		...
-	}
-	...
-}
----
- tools/toollib.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index ddf2dcf..71eb9a8 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1175,7 +1175,7 @@ struct dm_config_tree *get_cachepolicy_params(struct cmd_context *cmd)
- 	ok = 1;
+--- LVM2/lib/locking/cluster_locking.c	2008/11/04 15:07:44	1.31
++++ LVM2/lib/locking/cluster_locking.c	2008/12/16 12:30:39	1.32
+@@ -164,10 +164,11 @@
+ }
  
- out:
--	if (!ok) {
-+	if (!ok && result) {
- 		dm_config_destroy(result);
- 		result = NULL;
+ /* Build the structure header and parse-out wildcard node names */
+-static void _build_header(struct clvm_header *head, int cmd, const char *node,
++/* FIXME: Cleanup implicit casts of clvmd_cmd (int, char, uint8_t, etc). */
++static void _build_header(struct clvm_header *head, int clvmd_cmd, const char *node,
+ 			  int len)
+ {
+-	head->cmd = cmd;
++	head->cmd = clvmd_cmd;
+ 	head->status = 0;
+ 	head->flags = 0;
+ 	head->clientid = 0;
+@@ -193,7 +194,7 @@
+ /*
+  * Send a message to a(or all) node(s) in the cluster and wait for replies
+  */
+-static int _cluster_request(char cmd, const char *node, void *data, int len,
++static int _cluster_request(char clvmd_cmd, const char *node, void *data, int len,
+ 			   lvm_response_t ** response, int *num)
+ {
+ 	char outbuf[sizeof(struct clvm_header) + len + strlen(node) + 1] __attribute((aligned(8)));
+@@ -213,7 +214,7 @@
+ 	if (_clvmd_sock == -1)
+ 		return 0;
+ 
+-	_build_header(head, cmd, node, len);
++	_build_header(head, clvmd_cmd, node, len);
+ 	memcpy(head->node + strlen(head->node) + 1, data, len);
+ 
+ 	status = _send_request(outbuf, sizeof(struct clvm_header) +
+@@ -296,7 +297,7 @@
+ 	return 1;
+ }
+ 
+-static int _lock_for_cluster(unsigned char cmd, uint32_t flags, const char *name)
++static int _lock_for_cluster(unsigned char clvmd_cmd, uint32_t flags, const char *name)
+ {
+ 	int status;
+ 	int i;
+@@ -332,13 +333,13 @@
+ 	 * the cluster because they might have side-effects.
+ 	 */
+ 	if (strncmp(name, "P_", 2) &&
+-	    (cmd == CLVMD_CMD_LOCK_VG ||
++	    (clvmd_cmd == CLVMD_CMD_LOCK_VG ||
+ 	     (flags & LCK_TYPE_MASK) == LCK_EXCL ||
+ 	     (flags & LCK_LOCAL) ||
+ 	     !(flags & LCK_CLUSTER_VG)))
+ 		node = ".";
+ 
+-	status = _cluster_request(cmd, node, args, len,
++	status = _cluster_request(clvmd_cmd, node, args, len,
+ 				  &response, &num_responses);
+ 
+ 	/* If any nodes were down then display them and return an error */
+@@ -375,7 +376,7 @@
+ #endif
+ {
+ 	char lockname[PATH_MAX];
+-	int cluster_cmd = 0;
++	int clvmd_cmd = 0;
+ 	const char *lock_scope;
+ 	const char *lock_type = "";
+ 
+@@ -393,12 +394,12 @@
+ 				    resource);
+ 
+ 		lock_scope = "VG";
+-		cluster_cmd = CLVMD_CMD_LOCK_VG;
++		clvmd_cmd = CLVMD_CMD_LOCK_VG;
+ 		flags &= LCK_TYPE_MASK;
+ 		break;
+ 
+ 	case LCK_LV:
+-		cluster_cmd = CLVMD_CMD_LOCK_LV;
++		clvmd_cmd = CLVMD_CMD_LOCK_LV;
+ 		strcpy(lockname, resource);
+ 		lock_scope = "LV";
+ 		flags &= 0xffdf;	/* Mask off HOLD flag */
+@@ -436,7 +437,7 @@
  	}
+ 
+ 	/* If we are unlocking a clustered VG, then trigger remote metadata backups */
+-	if (cluster_cmd == CLVMD_CMD_LOCK_VG &&
++	if (clvmd_cmd == CLVMD_CMD_LOCK_VG &&
+ 	    ((flags & LCK_TYPE_MASK) == LCK_UNLOCK) &&
+ 	    (flags & LCK_CLUSTER_VG)) {
+ 		log_very_verbose("Requesing backup of VG metadata for %s", resource);
+@@ -452,7 +453,7 @@
+ 			 flags);
+ 
+ 	/* Send a message to the cluster manager */
+-	return _lock_for_cluster(cluster_cmd, flags, lockname);
++	return _lock_for_cluster(clvmd_cmd, flags, lockname);
+ }
+ 
+ #ifdef CLUSTER_LOCKING_INTERNAL
 
 
