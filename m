@@ -1,45 +1,162 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 26 Nov 2014 10:58:38 +0000 (UTC)
-Subject: master - coverity: remove dead code in lv_info_with_seg_status (continued)
-Message-ID: <20141126105838.9171A602C7@fedorahosted.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 17 Dec 2008 16:45:33 -0000
+Subject: LVM2/tools lvmcmdline.c toollib.c
+Message-ID: <20081217164533.5778.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c8890e3ac1adcb9129c30d3fe9a1a11ceedebce4
-Commit:        c8890e3ac1adcb9129c30d3fe9a1a11ceedebce4
-Parent:        193f9b26a0a87b2f5ce9a308ea0d957fadfe4aeb
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Nov 26 11:58:25 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Nov 26 11:58:25 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2008-12-17 16:45:32
 
-coverity: remove dead code in lv_info_with_seg_status (continued)
+Modified files:
+	tools          : lvmcmdline.c toollib.c 
 
----
- lib/activate/activate.c |    8 +++-----
- 1 files changed, 3 insertions(+), 5 deletions(-)
+Log message:
+	Move arg_* functions from toollib.c to lvmcmdline.c.
+	
+	In preparation for removing cmd->args.
+	IMO, it makes more sense to put these accessor functions
+	in the same location as the static array _the_args.
+	Next patch will update arg_* functions to use _the_args[]
+	directly and remove cmd->args.
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 258873b..dd0a4f9 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -722,11 +722,9 @@ int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume
- 	if (!activation())
- 		return 0;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.87&r2=1.88
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
+
+--- LVM2/tools/lvmcmdline.c	2008/12/12 03:30:41	1.87
++++ LVM2/tools/lvmcmdline.c	2008/12/17 16:45:32	1.88
+@@ -53,6 +53,62 @@
  
--	if (lv == lv_seg->lv) {
--		r = _lv_info(cmd, lv, use_layer, lvinfo, lv_seg, lv_seg_status,
--			     with_open_count, with_read_ahead);
--		return 0;
--	}
-+	if (lv == lv_seg->lv)
-+		return _lv_info(cmd, lv, use_layer, lvinfo, lv_seg, lv_seg_status,
-+				with_open_count, with_read_ahead);
+ static struct cmdline_context _cmdline;
  
- 	/*
- 	 * If the info is requested for an LV and segment
++/* Command line args */
++unsigned arg_count(const struct cmd_context *cmd, int a)
++{
++	return cmd->args[a].count;
++}
++
++const char *arg_value(struct cmd_context *cmd, int a)
++{
++	return cmd->args[a].value;
++}
++
++const char *arg_str_value(struct cmd_context *cmd, int a, const char *def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].value : def;
++}
++
++int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].i_value : def;
++}
++
++uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].ui_value : def;
++}
++
++int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].i64_value : def;
++}
++
++uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].ui64_value : def;
++}
++
++const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].ptr : def;
++}
++
++sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].sign : def;
++}
++
++percent_t arg_percent_value(struct cmd_context *cmd, int a, const percent_t def)
++{
++	return arg_count(cmd, a) ? cmd->args[a].percent : def;
++}
++
++int arg_count_increment(struct cmd_context *cmd, int a)
++{
++	return cmd->args[a].count++;
++}
++
+ int yes_no_arg(struct cmd_context *cmd __attribute((unused)), struct arg *a)
+ {
+ 	a->sign = SIGN_NONE;
+--- LVM2/tools/toollib.c	2008/11/03 22:14:30	1.137
++++ LVM2/tools/toollib.c	2008/12/17 16:45:32	1.138
+@@ -20,62 +20,6 @@
+ #include <sys/stat.h>
+ #include <sys/wait.h>
+ 
+-/* Command line args */
+-unsigned arg_count(const struct cmd_context *cmd, int a)
+-{
+-	return cmd->args[a].count;
+-}
+-
+-const char *arg_value(struct cmd_context *cmd, int a)
+-{
+-	return cmd->args[a].value;
+-}
+-
+-const char *arg_str_value(struct cmd_context *cmd, int a, const char *def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].value : def;
+-}
+-
+-int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].i_value : def;
+-}
+-
+-uint32_t arg_uint_value(struct cmd_context *cmd, int a, const uint32_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].ui_value : def;
+-}
+-
+-int64_t arg_int64_value(struct cmd_context *cmd, int a, const int64_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].i64_value : def;
+-}
+-
+-uint64_t arg_uint64_value(struct cmd_context *cmd, int a, const uint64_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].ui64_value : def;
+-}
+-
+-const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].ptr : def;
+-}
+-
+-sign_t arg_sign_value(struct cmd_context *cmd, int a, const sign_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].sign : def;
+-}
+-
+-percent_t arg_percent_value(struct cmd_context *cmd, int a, const percent_t def)
+-{
+-	return arg_count(cmd, a) ? cmd->args[a].percent : def;
+-}
+-
+-int arg_count_increment(struct cmd_context *cmd, int a)
+-{
+-	return cmd->args[a].count++;
+-}
+-
+ const char *command_name(struct cmd_context *cmd)
+ {
+ 	return cmd->command->name;
 
 
