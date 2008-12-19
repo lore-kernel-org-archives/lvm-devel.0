@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: Thu, 04 Dec 2008 15:54:48 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/d ...
-Message-ID: <20081204155429.27098.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 19 Dec 2008 15:24:54 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_alloc.h lib/m ...
+Message-ID: <20081219152454.13886.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,324 +10,211 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2008-12-04 15:54:27
+Changes by:	mbroz at sourceware.org	2008-12-19 15:24:53
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/activate   : activate.c 
-	lib/display    : display.c 
-	lib/format_text: export.c 
-	lib/metadata   : lv_manip.c metadata-exported.h metadata.c 
-	                 metadata.h snapshot_manip.c 
-	lib/report     : report.c 
-	tools          : lvchange.c lvdisplay.c lvscan.c reporter.c 
+	lib/metadata   : lv_alloc.h lv_manip.c metadata.h mirror.c 
 
 Log message:
-	Added displayable_lvs_in_vg and lv_is_displayable functions to deal with
-	the counts of visible LVs from user's perspective consistently throughout
-	the code.
+	Calculate mirror log size instead of hardcoding 1 extent size.
+	
+	It fails for 1k PE now.
+	
+	Patch adds log_region_size into allocation habdle struct
+	and use it in _alloc_parallel_area() for proper log size calculation
+	instead of hardcoded 1 extent - which can fail.
+	
+	Reproducer for incorrect log size calculation:
+	DEV=/dev/sd[bcd]
+	
+	pvcreate $DEV
+	vgcreate -s 1k vg_test $DEV
+	lvcreate -m1 -L 12M -n mirr vg_test
+	
+	https://bugzilla.redhat.com/show_bug.cgi?id=477040
+	
+	The log size calculation is mostly copied from kernel code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1003&r2=1.1004
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.140&r2=1.141
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/export.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.159&r2=1.160
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.55&r2=1.56
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.195&r2=1.196
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.184&r2=1.185
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.89&r2=1.90
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvdisplay.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvscan.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1012&r2=1.1013
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_alloc.h.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.160&r2=1.161
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.185&r2=1.186
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
 
---- LVM2/WHATS_NEW	2008/12/01 20:14:33	1.1003
-+++ LVM2/WHATS_NEW	2008/12/04 15:54:26	1.1004
+--- LVM2/WHATS_NEW	2008/12/19 15:23:03	1.1012
++++ LVM2/WHATS_NEW	2008/12/19 15:24:52	1.1013
 @@ -1,5 +1,6 @@
  Version 2.02.44 - 
  ====================================
-+  Use displayable_lvs_in_vg and lv_is_displayable for consistency throughout.
-   Fix race in vgcreate that would result in second caller overwriting first.
-   Fix uninitialised lv_count in vgdisplay -c.
-   Don't skip updating pvid hash when lvmcache_info struct got swapped.
---- LVM2/lib/activate/activate.c	2008/11/03 22:14:27	1.140
-+++ LVM2/lib/activate/activate.c	2008/12/04 15:54:26	1.141
-@@ -666,7 +666,7 @@
- 		return 0;
++  Calculate mirror log size instead of using 1 extent.
+   Check if requested major/minor pair is already used.
+   Fix incorrect return value in help function.
+   Fix vgrename using UUID in case there are VGs with the same name.
+--- LVM2/lib/metadata/lv_alloc.h	2008/11/03 22:14:29	1.22
++++ LVM2/lib/metadata/lv_alloc.h	2008/12/19 15:24:53	1.23
+@@ -47,7 +47,7 @@
+                                       const struct segment_type *segtype,
+                                       uint32_t stripes,
+                                       uint32_t mirrors, uint32_t log_count,
+-				      uint32_t extents,
++				      uint32_t log_region_size, uint32_t extents,
+                                       struct dm_list *allocatable_pvs,
+ 				      alloc_policy_t alloc,
+ 				      struct dm_list *parallel_areas);
+--- LVM2/lib/metadata/lv_manip.c	2008/12/04 15:54:27	1.160
++++ LVM2/lib/metadata/lv_manip.c	2008/12/19 15:24:53	1.161
+@@ -516,6 +516,7 @@
+ 	uint32_t area_count;		/* Number of parallel areas */
+ 	uint32_t area_multiple;		/* seg->len = area_len * area_multiple */
+ 	uint32_t log_count;		/* Number of parallel 1-extent logs */
++	uint32_t log_region_size;	/* region size for log device */
+ 	uint32_t total_area_len;	/* Total number of parallel extents */
  
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (lvl->lv->status & VISIBLE_LV)
-+		if (lv_is_displayable(lvl->lv))
- 			count += (_lv_open_count(vg->cmd, lvl->lv) > 0);
- 	}
- 
---- LVM2/lib/display/display.c	2008/12/01 17:38:35	1.95
-+++ LVM2/lib/display/display.c	2008/12/04 15:54:27	1.96
-@@ -574,8 +574,6 @@
+ 	struct dm_list *parallel_areas;	/* PVs to avoid */
+@@ -543,6 +544,7 @@
+ 					uint32_t mirrors,
+ 					uint32_t stripes,
+ 					uint32_t log_count,
++					uint32_t log_region_size,
+ 					struct dm_list *parallel_areas)
  {
- 	uint32_t access_str;
- 	uint32_t active_pvs;
--	uint32_t lv_count = 0;
--	struct lv_list *lvl;
- 	char uuid[64] __attribute((aligned(8)));
+ 	struct alloc_handle *ah;
+@@ -582,6 +584,7 @@
  
- 	active_pvs = vg->pv_count - vg_missing_pv_count(vg);
-@@ -607,12 +605,8 @@
- 			  vg->status & SHARED ? "yes" : "no");
- 	}
+ 	ah->area_count = area_count;
+ 	ah->log_count = log_count;
++	ah->log_region_size = log_region_size;
+ 	ah->alloc = alloc;
+ 	ah->area_multiple = calc_area_multiple(segtype, area_count);
  
--	dm_list_iterate_items(lvl, &vg->lvs)
--		if (lv_is_visible(lvl->lv) && !(lvl->lv->status & SNAPSHOT))
--			lv_count++;
--
- 	log_print("MAX LV                %u", vg->max_lv);
--	log_print("Cur LV                %u", lv_count);
-+	log_print("Cur LV                %u", displayable_lvs_in_vg(vg));
- 	log_print("Open LV               %u", lvs_in_vg_opened(vg));
- /****** FIXME Max LV Size
-       log_print ( "MAX LV Size           %s",
-@@ -656,17 +650,11 @@
- void vgdisplay_colons(const struct volume_group *vg)
- {
- 	uint32_t active_pvs;
--	uint32_t lv_count = 0;
--	struct lv_list *lvl;
- 	const char *access_str;
- 	char uuid[64] __attribute((aligned(8)));
- 
- 	active_pvs = vg->pv_count - vg_missing_pv_count(vg);
- 
--	dm_list_iterate_items(lvl, &vg->lvs)
--		if (lv_is_visible(lvl->lv) && !(lvl->lv->status & SNAPSHOT))
--			lv_count++;
--
- 	switch (vg->status & (LVM_READ | LVM_WRITE)) {
- 		case LVM_READ | LVM_WRITE:
- 			access_str = "r/w";
-@@ -693,7 +681,7 @@
- 		vg->status,
- 		/* internal volume group number; obsolete */
- 		vg->max_lv,
--		vg->lv_count,
-+		displayable_lvs_in_vg(vg),
- 		lvs_in_vg_opened(vg),
- 		/* FIXME: maximum logical volume size */
- 		vg->max_pv,
---- LVM2/lib/format_text/export.c	2008/11/03 22:14:28	1.65
-+++ LVM2/lib/format_text/export.c	2008/12/04 15:54:27	1.66
-@@ -592,14 +592,14 @@
- 	 * Write visible LVs first
- 	 */
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (!(lvl->lv->status & VISIBLE_LV))
-+		if (!(lv_is_displayable(lvl->lv)))
- 			continue;
- 		if (!_print_lv(f, lvl->lv))
- 			return_0;
- 	}
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if ((lvl->lv->status & VISIBLE_LV))
-+		if ((lv_is_displayable(lvl->lv)))
- 			continue;
- 		if (!_print_lv(f, lvl->lv))
- 			return_0;
---- LVM2/lib/metadata/lv_manip.c	2008/11/03 22:14:29	1.159
-+++ LVM2/lib/metadata/lv_manip.c	2008/12/04 15:54:27	1.160
-@@ -1715,7 +1715,7 @@
- 	struct lv_names lv_names;
- 
- 	/* rename is not allowed on sub LVs */
--	if (!lv_is_visible(lv)) {
-+	if (!lv_is_displayable(lv)) {
- 		log_error("Cannot rename internal LV \"%s\".", lv->name);
- 		return 0;
- 	}
---- LVM2/lib/metadata/metadata-exported.h	2008/11/03 22:14:29	1.55
-+++ LVM2/lib/metadata/metadata-exported.h	2008/12/04 15:54:27	1.56
-@@ -483,6 +483,9 @@
- int lv_is_cow(const struct logical_volume *lv);
- int lv_is_visible(const struct logical_volume *lv);
- 
-+/* Test if given LV is visible from user's perspective */
-+int lv_is_displayable(const struct logical_volume *lv);
-+
- int pv_is_in_vg(struct volume_group *vg, struct physical_volume *pv);
- 
- /* Given a cow LV, return return the snapshot lv_segment that uses it */
---- LVM2/lib/metadata/metadata.c	2008/11/03 22:14:29	1.195
-+++ LVM2/lib/metadata/metadata.c	2008/12/04 15:54:27	1.196
-@@ -337,6 +337,7 @@
- {
- 	struct physical_volume *pv;
- 	struct pv_list *pvl;
-+	unsigned lv_count;
- 	int ret = 1;
- 
- 	if (!vg || !consistent || vg_missing_pv_count(vg)) {
-@@ -350,22 +351,26 @@
- 	if (!vg_check_status(vg, EXPORTED_VG))
- 		return 0;
- 
--	if (vg->lv_count) {
-+	lv_count = displayable_lvs_in_vg(vg);
-+
-+	if (lv_count) {
- 		if ((force == PROMPT) &&
- 		    (yes_no_prompt("Do you really want to remove volume "
--				   "group \"%s\" containing %d "
-+				   "group \"%s\" containing %u "
- 				   "logical volumes? [y/n]: ",
--				   vg_name, vg->lv_count) == 'n')) {
-+				   vg_name, lv_count) == 'n')) {
- 			log_print("Volume group \"%s\" not removed", vg_name);
- 			return 0;
- 		}
- 		if (!remove_lvs_in_vg(cmd, vg, force))
- 			return 0;
- 	}
-+
-+	lv_count = displayable_lvs_in_vg(vg);
- 	
--	if (vg->lv_count) {
--		log_error("Volume group \"%s\" still contains %d "
--			  "logical volume(s)", vg_name, vg->lv_count);
-+	if (lv_count) {
-+		log_error("Volume group \"%s\" still contains %u "
-+			  "logical volume(s)", vg_name, lv_count);
- 		return 0;
- 	}
- 
-@@ -1098,6 +1103,18 @@
- 	return 1;
+@@ -704,6 +707,28 @@
  }
  
-+unsigned displayable_lvs_in_vg(const struct volume_group *vg)
-+{
-+	struct lv_list *lvl;
-+	unsigned lv_count = 0;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (lv_is_displayable(lvl->lv))
-+			lv_count++;
-+
-+	return lv_count;
-+}
-+
  /*
-  * Determine whether two vgs are compatible for merging.
-  */
---- LVM2/lib/metadata/metadata.h	2008/11/03 22:14:29	1.184
-+++ LVM2/lib/metadata/metadata.h	2008/12/04 15:54:27	1.185
-@@ -321,6 +321,11 @@
- struct lv_segment *get_only_segment_using_this_lv(struct logical_volume *lv);
- 
- /*
-+ * Count LVs that are visible from user's perspective.
++ * Returns log device size in extents, algorithm from kernel code
 + */
-+unsigned displayable_lvs_in_vg(const struct volume_group *vg);
++#define BYTE_SHIFT 3
++static uint32_t mirror_log_extents(uint32_t region_size, uint32_t pe_size, uint32_t area_len)
++{
++	size_t area_size, bitset_size, log_size, region_count;
++
++	area_size = area_len * pe_size;
++	region_count = dm_div_up(area_size, region_size);
++
++	/* Work out how many "unsigned long"s we need to hold the bitset. */
++	bitset_size = dm_round_up(region_count, sizeof(uint32_t) << BYTE_SHIFT);
++	bitset_size >>= BYTE_SHIFT;
++
++	/* Log device holds both header and bitset. */
++	log_size = dm_round_up((MIRROR_LOG_OFFSET << SECTOR_SHIFT) + bitset_size, 1 << SECTOR_SHIFT);
++	log_size >>= SECTOR_SHIFT;
++
++	return dm_div_up(log_size, pe_size);
++}
 +
 +/*
-  * For internal metadata caching.
-  */
- int export_vg_to_buffer(struct volume_group *vg, char **buf);
---- LVM2/lib/metadata/snapshot_manip.c	2008/11/03 22:14:29	1.32
-+++ LVM2/lib/metadata/snapshot_manip.c	2008/12/04 15:54:27	1.33
-@@ -36,6 +36,14 @@
- 	return lv->status & VISIBLE_LV ? 1 : 0;
- }
- 
-+int lv_is_displayable(const struct logical_volume *lv)
-+{
-+	if (lv->status & SNAPSHOT)
-+		return 0;
-+
-+	return (lv->status & VISIBLE_LV) || lv_is_cow(lv) ? 1 : 0;
-+}
-+
- /* Given a cow LV, return the snapshot lv_segment that uses it */
- struct lv_segment *find_cow(const struct logical_volume *lv)
- {
---- LVM2/lib/report/report.c	2008/11/03 22:14:29	1.89
-+++ LVM2/lib/report/report.c	2008/12/04 15:54:27	1.90
-@@ -511,7 +511,7 @@
- 	char *repstr, *lvname;
- 	size_t len;
- 
--	if (lv_is_visible(lv)) {
-+	if (lv_is_displayable(lv)) {
- 		repstr = lv->name;
- 		return dm_report_field_string(rh, field, (const char **) &repstr);
- 	}
-@@ -911,12 +911,9 @@
- 			 const void *data, void *private)
- {
- 	const struct volume_group *vg = (const struct volume_group *) data;
--        struct lv_list *lvl;
--	uint32_t count = 0;
-+	uint32_t count;
- 
--        dm_list_iterate_items(lvl, &vg->lvs)
--		if (lv_is_visible(lvl->lv) && !(lvl->lv->status & SNAPSHOT))
--			count++;
-+	count = displayable_lvs_in_vg(vg);	
- 
- 	return _uint32_disp(rh, mem, field, &count, private);
- }
---- LVM2/tools/lvchange.c	2008/07/31 13:03:01	1.93
-+++ LVM2/tools/lvchange.c	2008/12/04 15:54:27	1.94
-@@ -590,7 +590,7 @@
- 		return ECMD_FAILED;
+  * This function takes a list of pv_areas and adds them to allocated_areas.
+  * If the complete area is not needed then it gets split.
+  * The part used is removed from the pv_map so it can't be allocated twice.
+@@ -745,7 +770,9 @@
+ 	if (log_area) {
+ 		ah->log_area.pv = log_area->map->pv;
+ 		ah->log_area.pe = log_area->start;
+-		ah->log_area.len = MIRROR_LOG_SIZE;	/* FIXME Calculate & check this */
++		ah->log_area.len = mirror_log_extents(ah->log_region_size,
++						      pv_pe_size(log_area->map->pv),
++						      area_len);
+ 		consume_pv_area(log_area, ah->log_area.len);
  	}
  
--	if (!(lv->status & VISIBLE_LV)) {
-+	if (!(lv_is_displayable(lv))) {
- 		log_error("Unable to change internal LV %s directly",
- 			  lv->name);
- 		return ECMD_FAILED;
---- LVM2/tools/lvdisplay.c	2008/01/30 14:00:01	1.20
-+++ LVM2/tools/lvdisplay.c	2008/12/04 15:54:27	1.21
-@@ -18,7 +18,7 @@
- static int _lvdisplay_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			     void *handle)
- {
--	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
-+	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
- 		return ECMD_PROCESSED;
+@@ -817,7 +844,7 @@
  
- 	if (arg_count(cmd, colon_ARG))
---- LVM2/tools/lvscan.c	2008/11/03 22:14:30	1.36
-+++ LVM2/tools/lvscan.c	2008/12/04 15:54:27	1.37
-@@ -27,7 +27,7 @@
+ 	/* FIXME only_single_area_segments used as workaround to skip log LV - needs new param? */
+ 	if (!only_single_area_segments && seg_is_mirrored(seg) && seg->log_lv) {
+-		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, MIRROR_LOG_SIZE,
++		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count?:1,
+ 				       NULL, 0, 0, 0, only_single_area_segments,
+ 				       fn, data)))
+ 			stack;
+@@ -1256,7 +1283,7 @@
+ 				      const struct segment_type *segtype,
+ 				      uint32_t stripes,
+ 				      uint32_t mirrors, uint32_t log_count,
+-				      uint32_t extents,
++				      uint32_t log_region_size, uint32_t extents,
+ 				      struct dm_list *allocatable_pvs,
+ 				      alloc_policy_t alloc,
+ 				      struct dm_list *parallel_areas)
+@@ -1282,7 +1309,7 @@
+ 		alloc = vg->alloc;
  
- 	const char *active_str, *snapshot_str;
+ 	if (!(ah = _alloc_init(vg->cmd, vg->cmd->mem, segtype, alloc, mirrors,
+-			       stripes, log_count, parallel_areas)))
++			       stripes, log_count, log_region_size, parallel_areas)))
+ 		return_NULL;
  
--	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
-+	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
- 		return ECMD_PROCESSED;
+ 	if (!segtype_is_virtual(segtype) &&
+@@ -1577,7 +1604,7 @@
+ 	if (segtype_is_virtual(segtype))
+ 		return lv_add_virtual_segment(lv, status, extents, segtype);
  
- 	inkernel = lv_info(cmd, lv, &info, 1, 0) && info.exists;
---- LVM2/tools/reporter.c	2008/11/03 22:14:30	1.41
-+++ LVM2/tools/reporter.c	2008/12/04 15:54:27	1.42
-@@ -36,7 +36,7 @@
- static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		       void *handle)
- {
--	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
-+	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
- 		return ECMD_PROCESSED;
+-	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors, 0,
++	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors, 0, 0,
+ 				    extents, allocatable_pvs, alloc, NULL)))
+ 		return_0;
  
- 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL))
-@@ -102,7 +102,7 @@
- static int _lvsegs_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			  void *handle)
- {
--	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
-+	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
- 		return ECMD_PROCESSED;
+--- LVM2/lib/metadata/metadata.h	2008/12/04 15:54:27	1.185
++++ LVM2/lib/metadata/metadata.h	2008/12/19 15:24:53	1.186
+@@ -34,7 +34,18 @@
+ //#define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
+ //#define PV_MIN_SIZE ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ //#define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
+-#define MIRROR_LOG_SIZE 1	/* Extents */
++#define MIRROR_LOG_OFFSET	2	/* sectors */
++
++/*
++ * Ceiling(n / sz)
++ */
++#define dm_div_up(n, sz) (((n) + (sz) - 1) / (sz))
++
++/*
++ * Ceiling(n / size) * size
++ */
++#define dm_round_up(n, sz) (dm_div_up((n), (sz)) * (sz))
++
  
- 	return process_each_segment_in_lv(cmd, lv, handle, _segs_single);
+ /* Various flags */
+ /* Note that the bits no longer necessarily correspond to LVM1 disk format */
+--- LVM2/lib/metadata/mirror.c	2008/11/03 22:14:29	1.79
++++ LVM2/lib/metadata/mirror.c	2008/12/19 15:24:53	1.80
+@@ -1171,7 +1171,7 @@
+ 							   lv->le_count,
+ 							   region_size);
+ 
+-	if (!(ah = allocate_extents(lv->vg, NULL, segtype, 1, mirrors, 0,
++	if (!(ah = allocate_extents(lv->vg, NULL, segtype, 1, mirrors, 0, 0,
+ 				    lv->le_count, allocatable_pvs, alloc,
+ 				    parallel_areas))) {
+ 		log_error("Unable to allocate mirror extents for %s.", lv->name);
+@@ -1388,7 +1388,7 @@
+ 
+ 	/* allocate destination extents */
+ 	ah = allocate_extents(lv->vg, NULL, segtype,
+-			      0, 0, log_count, 0,
++			      0, 0, log_count, region_size, 0,
+ 			      allocatable_pvs, alloc, parallel_areas);
+ 	if (!ah) {
+ 		log_error("Unable to allocate extents for mirror log.");
+@@ -1443,7 +1443,7 @@
+ 		return_0;
+ 
+ 	ah = allocate_extents(lv->vg, NULL, segtype,
+-			      stripes, mirrors, log_count, lv->le_count,
++			      stripes, mirrors, log_count, region_size, lv->le_count,
+ 			      allocatable_pvs, alloc, parallel_areas);
+ 	if (!ah) {
+ 		log_error("Unable to allocate extents for mirror(s).");
 
 
