@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Mar 2009 15:42:14 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/import_vsn1.c
-Message-ID: <20090309154214.20285.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 19 Dec 2008 14:43:03 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvmcmdline.c
+Message-ID: <20081219144303.19227.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,71 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-03-09 15:42:13
+Changes by:	prajnoha at sourceware.org	2008-12-19 14:43:03
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/format_text: import_vsn1.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Fix error messages when PV uuid or pe_start reading fails.
-	
-	Author: Takahiro Yasui <tyasui@redhat.com>
-	Committer: Dave Wysochanski <dwysocha@redhat.com>
+	Fix incorrect return value in help function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1064&r2=1.1065
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1010&r2=1.1011
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
 
---- LVM2/WHATS_NEW	2009/03/06 16:19:52	1.1064
-+++ LVM2/WHATS_NEW	2009/03/09 15:42:10	1.1065
+--- LVM2/WHATS_NEW	2008/12/19 14:22:48	1.1010
++++ LVM2/WHATS_NEW	2008/12/19 14:43:02	1.1011
 @@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Fix error messages when PV uuid or pe_start reading fails.
-   Rename liblvm.a to liblvm-internal.a and build new application library.
-   Flush memory pool and fix locking in clvmd refresh and backup command.
-   Fix unlocks in clvmd-corosync. Broken in 2.02.45.
---- LVM2/lib/format_text/import_vsn1.c	2008/11/03 22:14:28	1.55
-+++ LVM2/lib/format_text/import_vsn1.c	2009/03/09 15:42:12	1.56
-@@ -179,7 +179,7 @@
+ Version 2.02.44 - 
+ ====================================
++  Fix incorrect return value in help function.
+   Fix vgrename using UUID in case there are VGs with the same name.
+   Fix segfault when invalid field given in reporting commands.
+   Refactor init_lvm() for lvmcmdline and clvmd.
+--- LVM2/tools/lvmcmdline.c	2008/12/18 05:27:18	1.90
++++ LVM2/tools/lvmcmdline.c	2008/12/19 14:43:02	1.91
+@@ -568,14 +568,17 @@
+ 	log_error("Run `%s --help' for more information.", name);
+ }
+ 
+-static void _usage(const char *name)
++static int _usage(const char *name)
+ {
+ 	struct command *com = _find_command(name);
+ 
+-	if (!com)
+-		return;
++	if (!com) {
++		log_print("%s: no such command.", name);
++		return 0;
++	}
+ 
+ 	log_print("%s: %s\n\n%s", com->name, com->desc, com->usage);
++	return 1;
+ }
+ 
+ /*
+@@ -852,15 +855,18 @@
+ 
+ int help(struct cmd_context *cmd __attribute((unused)), int argc, char **argv)
+ {
++	int ret = ECMD_PROCESSED;
++
+ 	if (!argc)
+ 		_display_help();
+ 	else {
+ 		int i;
+ 		for (i = 0; i < argc; i++)
+-			_usage(argv[i]);
++			if (!_usage(argv[i]))
++				ret = EINVALID_CMD_LINE;
  	}
  
- 	if (!_read_id(&pv->id, pvn, "id")) {
--		log_error("Couldn't read uuid for volume group.");
-+		log_error("Couldn't read uuid for physical volume.");
- 		return 0;
- 	}
+-	return 0;
++	return ret;
+ }
  
-@@ -213,7 +213,7 @@
- 	_read_int64(pvn, "dev_size", &pv->size);
- 
- 	if (!_read_int64(pvn, "pe_start", &pv->pe_start)) {
--		log_error("Couldn't read extent size for volume group.");
-+		log_error("Couldn't read extent size for physical volume.");
- 		return 0;
- 	}
- 
+ static int _override_settings(struct cmd_context *cmd)
 
 
