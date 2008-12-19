@@ -1,7 +1,7 @@
-From: taka@sourceware.org <taka@sourceware.org>
-Date: 23 Mar 2009 22:57:27 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/archiver.c
-Message-ID: <20090323225727.8354.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 19 Dec 2008 15:26:02 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20081219152602.17341.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	taka at sourceware.org	2009-03-23 22:57:27
+Changes by:	mbroz at sourceware.org	2008-12-19 15:26:02
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/format_text: archiver.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Restore log_suppress state when metadata backup file is up-to-date.
+	Do not issue write behind lv size.
 	
-	Author: Takahiro Yasui <tyasui@redhat.com>
+	pvcreate $DEV
+	vgcreate -s 1k vg_test $DEV
+	lvcreate -l 1 -n lv1 vg_test
+	..
+	/dev/vg_test/lv1: write failed after 1024 of 4096 at 0: No space left on device
+	
+	Just check for maximum write size in set_lv.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1070&r2=1.1071
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1013&r2=1.1014
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.161&r2=1.162
 
---- LVM2/WHATS_NEW	2009/03/23 22:29:06	1.1070
-+++ LVM2/WHATS_NEW	2009/03/23 22:57:27	1.1071
-@@ -10,6 +10,7 @@
-   Fix error message when adding metadata directory to internal list fails.
-   Fix size and error message of memory allocation at backup initialization.
-   Remove old metadata backup file after renaming vg.
-+  Restore log_suppress state when metadata backup file is up-to-date.
+--- LVM2/WHATS_NEW	2008/12/19 15:24:52	1.1013
++++ LVM2/WHATS_NEW	2008/12/19 15:26:01	1.1014
+@@ -1,5 +1,6 @@
+ Version 2.02.44 - 
+ ====================================
++  Check for maximal LV size when wiping device.
+   Calculate mirror log size instead of using 1 extent.
+   Check if requested major/minor pair is already used.
+   Fix incorrect return value in help function.
+--- LVM2/lib/metadata/lv_manip.c	2008/12/19 15:24:53	1.161
++++ LVM2/lib/metadata/lv_manip.c	2008/12/19 15:26:02	1.162
+@@ -2698,9 +2698,13 @@
+ 	if (!dev_open_quiet(dev))
+ 		return_0;
  
- Version 2.02.45 - 3rd March 2009
- ================================
---- LVM2/lib/format_text/archiver.c	2009/03/23 21:56:32	1.19
-+++ LVM2/lib/format_text/archiver.c	2009/03/23 22:57:27	1.20
-@@ -405,8 +405,10 @@
- 	/* Up-to-date backup exists? */
- 	if ((vg_backup = backup_read_vg(vg->cmd, vg->name, path)) &&
- 	    (vg->seqno == vg_backup->seqno) &&
--	    (id_equal(&vg->id, &vg_backup->id)))
-+	    (id_equal(&vg->id, &vg_backup->id))) {
-+		log_suppress(0);
- 		return;
-+	}
- 	log_suppress(0);
+-	dev_set(dev, UINT64_C(0),
+-		sectors ? (size_t) sectors << SECTOR_SHIFT : (size_t) 4096,
+-		value);
++	if (!sectors)
++		sectors = UINT64_C(4096) >> SECTOR_SHIFT;
++
++	if (sectors > lv->size)
++		sectors = lv->size;
++
++	dev_set(dev, UINT64_C(0), (size_t) sectors << SECTOR_SHIFT, value);
+ 	dev_flush(dev);
+ 	dev_close_immediate(dev);
  
- 	if (vg_backup)
 
 
