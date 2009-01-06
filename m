@@ -1,30 +1,36 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 06 Jan 2009 18:21:17 +0100
-Subject: [PATCH] Calculate mirror log size instead of hardcoding 1 extent size.
-In-Reply-To: <4952F985.5010307@ce.jp.nec.com>
-References: <494B82EE.7020006@redhat.com> <4952F985.5010307@ce.jp.nec.com>
-Message-ID: <4963930D.5030404@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 6 Jan 2009 17:24:22 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20090106172422.552.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jun'ichi Nomura wrote:
-> Milan Broz wrote:
->> +		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count?:1,
-> 
-> "seg->log_lv->le_count?:1" could be just "seg->log_lv->le_count",
-> to avoid possible future confusion.
-> (I.e. there is no explanation why we pass 1 when le_count is 0.)
-> And if the seg->log_lv is empty, _for_each_pv() will just fail anyway
-> by not finding a matching segment, regardless of len = 0 or 1.
-> If it is possible to pass an empty seg->log_lv here in future,
-> le_count check should be done in the above "if", I think.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-01-06 17:24:21
 
-Yes, thanks, I'll fix the commit.
+Modified files:
+	lib/metadata   : lv_manip.c 
 
-Milan
+Log message:
+	Fix "Calculate mirror log size" commit, the le_count should be always set.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.162&r2=1.163
+
+--- LVM2/lib/metadata/lv_manip.c	2008/12/19 15:26:02	1.162
++++ LVM2/lib/metadata/lv_manip.c	2009/01/06 17:24:21	1.163
+@@ -844,7 +844,7 @@
+ 
+ 	/* FIXME only_single_area_segments used as workaround to skip log LV - needs new param? */
+ 	if (!only_single_area_segments && seg_is_mirrored(seg) && seg->log_lv) {
+-		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count?:1,
++		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count,
+ 				       NULL, 0, 0, 0, only_single_area_segments,
+ 				       fn, data)))
+ 			stack;
 
 
