@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 6 Jan 2009 17:24:22 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20090106172422.552.qmail@sourceware.org>
+Date: 6 Jan 2009 18:02:58 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvm_dump.sh
+Message-ID: <20090106180258.24201.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-01-06 17:24:21
+Changes by:	mbroz at sourceware.org	2009-01-06 18:02:58
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	.              : WHATS_NEW 
+	scripts        : lvm_dump.sh 
 
 Log message:
-	Fix "Calculate mirror log size" commit, the le_count should be always set.
+	Fix lvmdump /sys listing to include virtual devices directory.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.162&r2=1.163
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1015&r2=1.1016
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm_dump.sh.diff?cvsroot=lvm2&r1=1.13&r2=1.14
 
---- LVM2/lib/metadata/lv_manip.c	2008/12/19 15:26:02	1.162
-+++ LVM2/lib/metadata/lv_manip.c	2009/01/06 17:24:21	1.163
-@@ -844,7 +844,7 @@
+--- LVM2/WHATS_NEW	2008/12/22 09:04:35	1.1015
++++ LVM2/WHATS_NEW	2009/01/06 18:02:57	1.1016
+@@ -1,5 +1,6 @@
+ Version 2.02.44 - 
+ ====================================
++  Fix lvmdump /sys listing to include virtual devices directory.
+   Add "--refresh" functionality to vgchange and vgmknodes.
+   Check for maximal LV size when wiping device.
+   Calculate mirror log size instead of using 1 extent.
+--- LVM2/scripts/lvm_dump.sh	2008/08/28 10:40:44	1.13
++++ LVM2/scripts/lvm_dump.sh	2009/01/06 18:02:58	1.14
+@@ -197,7 +197,8 @@
+ log "$LS -laR /dev > \"$dir/dev_listing\" 2>> \"$log\""
  
- 	/* FIXME only_single_area_segments used as workaround to skip log LV - needs new param? */
- 	if (!only_single_area_segments && seg_is_mirrored(seg) && seg->log_lv) {
--		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count?:1,
-+		if (!(r = _for_each_pv(cmd, seg->log_lv, 0, seg->log_lv->le_count,
- 				       NULL, 0, 0, 0, only_single_area_segments,
- 				       fn, data)))
- 			stack;
+ myecho "Gathering /sys/block listing..."
+-log "$LS -laR /sys/block > \"$dir/sysblock_listing\""
++log "$LS -laR /sys/block > \"$dir/sysblock_listing\"  2>> \"$log\""
++log "$LS -laR /sys/devices/virtual/block >> \"$dir/sysblock_listing\"  2>> \"$log\""
+ 
+ if (( $metadata )); then
+ 	myecho "Gathering LVM metadata from Physical Volumes..."
 
 
