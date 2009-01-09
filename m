@@ -1,34 +1,23 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Jan 2009 22:48:22 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20090109224822.3882.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 9 Jan 2009 22:53:54 +0000
+Subject: LVM2 lib/format_text/format-text.c lib/metadat ...
+In-Reply-To: <20090109224435.1246.qmail@sourceware.org>
+References: <20090109224435.1246.qmail@sourceware.org>
+Message-ID: <20090109225354.GD30284@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-01-09 22:48:22
+On Fri, Jan 09, 2009 at 10:44:35PM -0000, wysochanski at sourceware.org wrote:
+> Log message:
+> 	Add pv_mda_size to 'pvs' and vg_mda_size to 'vgs'.
 
-Modified files:
-	.              : WHATS_NEW 
+Reviewed & tested.
 
-Log message:
-	Add pv_mda_size to pvs and vg_mda_size to vgs.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1016&r2=1.1017
-
---- LVM2/WHATS_NEW	2009/01/06 18:02:57	1.1016
-+++ LVM2/WHATS_NEW	2009/01/09 22:48:22	1.1017
-@@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Add pv_mda_size to pvs and vg_mda_size to vgs.
-   Fix lvmdump /sys listing to include virtual devices directory.
-   Add "--refresh" functionality to vgchange and vgmknodes.
-   Check for maximal LV size when wiping device.
+Alasdair
+-- 
+agk at redhat.com
 
 
