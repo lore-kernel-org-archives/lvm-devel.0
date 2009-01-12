@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 12 Jan 2009 15:08:03 +0100
-Subject: [PATCH 8/11] Convert vgreduce to use vg_read_for_update.
-In-Reply-To: <1231769286-15534-8-git-send-email-prockai@redhat.com>
+Date: Mon, 12 Jan 2009 15:08:06 +0100
+Subject: [PATCH 11/11] Remove now-unused vg_lock_and_read.
+In-Reply-To: <1231769286-15534-11-git-send-email-prockai@redhat.com>
 References: <1231769286-15534-1-git-send-email-prockai@redhat.com>
 	<1231769286-15534-2-git-send-email-prockai@redhat.com>
 	<1231769286-15534-3-git-send-email-prockai@redhat.com>
@@ -10,127 +10,71 @@ References: <1231769286-15534-1-git-send-email-prockai@redhat.com>
 	<1231769286-15534-6-git-send-email-prockai@redhat.com>
 	<1231769286-15534-7-git-send-email-prockai@redhat.com>
 	<1231769286-15534-8-git-send-email-prockai@redhat.com>
-Message-ID: <1231769286-15534-9-git-send-email-prockai@redhat.com>
+	<1231769286-15534-9-git-send-email-prockai@redhat.com>
+	<1231769286-15534-10-git-send-email-prockai@redhat.com>
+	<1231769286-15534-11-git-send-email-prockai@redhat.com>
+Message-ID: <1231769286-15534-12-git-send-email-prockai@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fri Jan  9 15:38:20 CET 2009  Petr Rockai <me@mornfall.net>
-  * Convert vgreduce to use vg_read_for_update.
-diff -rN -u -p old-lvmlib_apply/tools/vgreduce.c new-lvmlib_apply/tools/vgreduce.c
---- old-lvmlib_apply/tools/vgreduce.c	2009-01-12 14:55:57.675018490 +0100
-+++ new-lvmlib_apply/tools/vgreduce.c	2009-01-12 14:55:57.771017353 +0100
-@@ -382,7 +382,6 @@ static int _vgreduce_single(struct cmd_c
- {
- 	struct pv_list *pvl;
- 	struct volume_group *orphan_vg;
+Fri Jan  9 15:48:51 CET 2009  Petr Rockai <me@mornfall.net>
+  * Remove now-unused vg_lock_and_read.
+diff -rN -u -p old-lvmlib_apply/lib/metadata/metadata.c new-lvmlib_apply/lib/metadata/metadata.c
+--- old-lvmlib_apply/lib/metadata/metadata.c	2009-01-12 14:56:03.159015547 +0100
++++ new-lvmlib_apply/lib/metadata/metadata.c	2009-01-12 14:56:03.219017936 +0100
+@@ -2422,50 +2422,6 @@ int vg_check_status(const struct volume_
+ 	return !_vg_check_status(vg, status);
+ }
+ 
+-/*
+- * vg_lock_and_read - consolidate vg locking, reading, and status flag checking
+- *
+- * Returns:
+- * NULL - failure
+- * non-NULL - success; volume group handle
+- */
+-vg_t *vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
+-		       const char *vgid,
+-		       uint32_t lock_flags, uint32_t status_flags,
+-		       uint32_t misc_flags)
+-{
+-	struct volume_group *vg;
 -	int consistent = 1;
- 	const char *name = pv_dev_name(pv);
- 
- 	if (pv_pe_alloc_count(pv)) {
-@@ -396,17 +395,10 @@ static int _vgreduce_single(struct cmd_c
- 		return ECMD_FAILED;
- 	}
- 
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE | LCK_NONBLOCK)) {
--		log_error("Can't get lock for orphan PVs");
--		return ECMD_FAILED;
+-
+-	if (!(misc_flags & CORRECT_INCONSISTENT))
+-		consistent = 0;
+-
+-	if (!validate_name(vg_name)) {
+-		log_error("Volume group name %s has invalid characters",
+-			  vg_name);
+-		return NULL;
 -	}
 -
- 	pvl = find_pv_in_vg(vg, name);
- 
--	if (!archive(vg)) {
--		unlock_vg(cmd, VG_ORPHANS);
-+	if (!archive(vg))
- 		return ECMD_FAILED;
--	}
- 
- 	log_verbose("Removing \"%s\" from volume group \"%s\"", name, vg->name);
- 
-@@ -426,12 +418,11 @@ static int _vgreduce_single(struct cmd_c
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
- 
--	if(!(orphan_vg = vg_read_internal(cmd, vg->fid->fmt->orphan_vg_name, NULL, &consistent)) ||
--	   !consistent) {
--		log_error("Unable to read existing orphan PVs");
--		unlock_vg(cmd, VG_ORPHANS);
-+	orphan_vg = vg_read_for_update(cmd, vg->fid->fmt->orphan_vg_name,
-+				       NULL, NONBLOCKING_LOCK | ORPHAN_LOCK);
-+
-+	if (vg_read_error(orphan_vg))
- 		return ECMD_FAILED;
--	}
- 
- 	if (!vg_split_mdas(cmd, vg, orphan_vg) || !vg->pv_count) {
- 		log_error("Cannot remove final metadata area on \"%s\" from \"%s\"",
-@@ -468,7 +459,6 @@ int vgreduce(struct cmd_context *cmd, in
- 	struct volume_group *vg;
- 	char *vg_name;
- 	int ret = 1;
--	int consistent = 1;
- 	int fixed = 1;
- 	int repairing = arg_count(cmd, removemissing_ARG);
- 
-@@ -515,41 +505,37 @@ int vgreduce(struct cmd_context *cmd, in
- 	}
- 
- 	log_verbose("Finding volume group \"%s\"", vg_name);
--	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+-	if (!lock_vol(cmd, vg_name, lock_flags)) {
 -		log_error("Can't get lock for %s", vg_name);
--		return ECMD_FAILED;
+-		return NULL;
 -	}
- 
--	if ((!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent)) || !consistent)
--	    && !repairing) {
--		log_error("Volume group \"%s\" doesn't exist", vg_name);
+-
+-	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)) ||
+-	    ((misc_flags & FAIL_INCONSISTENT) && !consistent)) {
+-		log_error("Volume group \"%s\" not found", vg_name);
 -		unlock_vg(cmd, vg_name);
-+	vg = vg_read_for_update(cmd, vg_name, NULL, ALLOW_EXPORTED);
-+	if (vg_read_error(vg) == FAILED_ALLOCATION ||
-+	    vg_read_error(vg) == FAILED_NOTFOUND)
- 		return ECMD_FAILED;
+-		return NULL;
 -	}
- 
--	if (vg && !vg_check_status(vg, CLUSTERED)) {
+-
+-	if (!vg_check_status(vg, status_flags)) {
 -		unlock_vg(cmd, vg_name);
-+	/* FIXME We want to allow read-only VGs to be changed here? */
-+	if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+	    && !arg_count(cmd, removemissing_ARG))
- 		return ECMD_FAILED;
+-		return NULL;
 -	}
- 
- 	if (repairing) {
--		if (vg && consistent && !vg_missing_pv_count(vg)) {
-+		if (!vg_read_error(vg) && !vg_missing_pv_count(vg)) {
- 			log_error("Volume group \"%s\" is already consistent",
- 				  vg_name);
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_PROCESSED;
- 		}
- 
--		consistent = !arg_count(cmd, force_ARG);
--		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
--			log_error("Volume group \"%s\" not found", vg_name);
--			unlock_vg(cmd, vg_name);
--			return ECMD_FAILED;
--		}
--		if (!vg_check_status(vg, CLUSTERED)) {
-+		log_verbose("Trying to open VG %s for recovery...", vg_name);
-+
-+		vg = vg_read_for_update(cmd, vg_name, NULL,
-+					ALLOW_INCONSISTENT | DISABLE_LOCK
-+					| ALLOW_EXPORTED);
-+
-+		if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+		    && vg_read_error(vg) != FAILED_INCONSISTENT) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
- 		}
-+
- 		if (!archive(vg)) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
+-
+-	return vg;
+-}
+-
+ static vg_t *_vg_make_handle(struct cmd_context *cmd,
+ 			     struct volume_group *vg,
+ 			     uint32_t failure)
 
 
