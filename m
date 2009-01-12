@@ -1,41 +1,44 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 12 Jan 2009 22:08:17 +0000
-Subject: [PATCH 3/11] Replace implementation of vg_check_status with a call to _vg_check_status.
-In-Reply-To: <1231769286-15534-4-git-send-email-prockai@redhat.com>
+Date: Mon, 12 Jan 2009 22:16:01 +0000
+Subject: [PATCH 4/11] Add vg_read_error and vg_might_exist.
+In-Reply-To: <1231769286-15534-5-git-send-email-prockai@redhat.com>
 References: <1231769286-15534-1-git-send-email-prockai@redhat.com>
 	<1231769286-15534-2-git-send-email-prockai@redhat.com>
 	<1231769286-15534-3-git-send-email-prockai@redhat.com>
 	<1231769286-15534-4-git-send-email-prockai@redhat.com>
-Message-ID: <20090112220817.GL1804@agk.fab.redhat.com>
+	<1231769286-15534-5-git-send-email-prockai@redhat.com>
+Message-ID: <20090112221601.GM1804@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Jan 12, 2009 at 03:07:58PM +0100, Peter Rockai wrote:
->   * Replace implementation of vg_check_status with a call to _vg_check_status.
+On Mon, Jan 12, 2009 at 03:07:59PM +0100, Peter Rockai wrote:
+> +uint32_t vg_read_error(vg_t *vg) {
 
-> -int vg_check_status(const struct volume_group *vg, uint32_t status)
-> +static uint32_t _vg_check_status(const struct volume_group *vg, uint32_t status)
+{ on new line please.
 
-typedef for the return value?
+Again, I suggest using a typedef for the return value.
 
->  {
-> +	uint32_t ret = 0;
+> +	if (!vg)
+> +		return FAILED_ALLOCATION;
+> +	if (vg->read_failed & EXISTENCE_CHECK)
+> +		return vg->read_failed & ~(EXISTENCE_CHECK | FAILED_NOTFOUND);
+> +	return vg->read_failed;
+> +}
 
-This is more than a simple yes/no return value, call it the same as whatever
-you decide to call it elsewhere e.g. 'failure'.
+Let's explain that logic in a description above the function (or in the .h file
+where the FAILED* are defined).
+- Why are some combinations valid in some parts of the code but not in others?
+- Is the EXISTENCE_CHECK part obfuscation that could be done more cleanly?
 
->  	if ((status & CLUSTERED) &&
->  	    (vg_is_clustered(vg)) && !locking_is_clustered() &&
->  	    !lockingfailed()) {
->  		log_error("Skipping clustered volume group %s", vg->name);
-> -		return 0;
-> +		ret |= FAILED_CLUSTERED;
->  	}
+> +/* Queries on a (possibly error-indicating) VG handle. */
+> +uint32_t vg_read_error(vg_t *vg);
+> +uint32_t vg_might_exist(vg_t *vg);
 
-If we're skipping the VG, why do we want to perform the other checks now?
+Explain what the uint32_t returned means.  (Or use a typedef which should be
+self-documenting.)
 
 Alasdair
 -- 
