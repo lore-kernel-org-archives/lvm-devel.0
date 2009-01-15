@@ -1,33 +1,81 @@
-From: Bryn M. Reeves <bmr@redhat.com>
-Date: Wed, 14 Jan 2009 17:26:04 +0000
-Subject: lvresize.c: use kilobytes when passing sizes to fsadm
-Message-ID: <496E202C.1060009@redhat.com>
+From: Ty! Boyack <ty@nrel.colostate.edu>
+Date: Wed, 14 Jan 2009 22:23:53 -0700
+Subject: iSCSI logout hangs LVM
+Message-ID: <496EC869.2060803@nrel.colostate.edu>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi all,
+Hi folks,
 
-The code in lvresize.c computes a new file system size to pass to 
-fsadm when resizing as (extents * extent_size), giving a result in 
-kilobytes.
+I'm not sure if I'm seeing a bug in LVM, device mapper (dm-multipath), 
+open-iscsi or udev, but this seems like the best place to start. 
 
-This is then passed on to fsadm without a suffix, meaning that fsadm 
-interprets it as a count of the number of file system blocks instead.
 
-This breaks fsadm for all file system block sizes other than 1K.
+I can cause pvscan to hang consistently with the following sequence of 
+events:
+1) run pvscan -- works OK
+2) connect to iscsi disk -- works OK
+3) run pvscan -- works OK, finds physical volume on iscsi disk
+4) logout of iscsi disk -- works OK
+5) run pvscan -- HANGS
 
-The attached patch adds a "K" suffix and fixes the problem for me - see:
 
-https://bugzilla.redhat.com/show_bug.cgi?id=480022
+If I run the (step 5) pvscan with 'strace -f /sbin/pvscan' the end of 
+that trace is:
 
-For testing details.
+stat("/dev/dm-2", {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
+stat("/dev/dm-2", {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
+open("/dev/dm-2", O_RDWR|O_DIRECT|O_NOATIME) = 4
+fstat(4, {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
+ioctl(4, BLKBSZGET, 0x20043f0)          = 0
+lseek(4, 12884836352, SEEK_SET)         = 12884836352
+read(4,
 
-Regards,
-Bryn.
--------------- next part --------------
-An embedded and charset-unspecified text was scrubbed...
-Name: lvm2-lvresize-units.patch
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090114/26d3d877/attachment.ksh>
+and then the read hangs forever.
+
+In my setup, the iscsi login/logout is to a single target with two 
+portals, and dm-multipath us used to present one multi-path device.  
+That device in this case is /dev/dm-2.  I can use that disk as a PV just 
+fine -- it's in a VG and has a couple of LV's filled with test data.
+
+I retried the sequence but only logged into one portal, so only one 
+connection existed (hopefully bypassing dm-multipath) and had exactly 
+the same problem.
+
+I also tried waiting several minutes after logging out of the iSCSI disk 
+before running pvscan, and that also hang.
+
+It seems like the LVM database detects a new disk being inserted, but 
+not removed.  I have not tried this on any other hot-swap disk system -- 
+has anyone tried this with a USB or other removable disk?
+
+Does anyone know if this is expected behavior?  Or is it a problem 
+elsewhere, maybe with udev not doing something to indicate that the disk 
+has been removed?  Or does LVM keep it's own internal database of where 
+it's PV's are, and then later assume that they will still be there?
+
+This is all being done on a Fedora 9 boxes with updated packages:
+lvm2-2.02.33-11.fc9.x86_64
+iscsi-initiator-utils-6.2.0.870-1.0.fc9.x86_64
+device-mapper-1.02.24-11.fc9.x86_64
+udev-124-2.fc9.x86_64
+kernel-2.6.27.9-73.fc9.x86_64
+
+I would appreciate any thoughts or suggestion on this!
+
+-Ty!
+
+
+
+-- 
+-===========================-
+  Ty! Boyack
+  NREL Unix Network Manager
+  ty at nrel.colostate.edu
+  (970) 491-1186
+-===========================-
+
+
