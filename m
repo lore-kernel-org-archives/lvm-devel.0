@@ -1,78 +1,47 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 16 Jan 2009 13:02:48 -0500
+From: Bryn M. Reeves <bmr@redhat.com>
+Date: Fri, 16 Jan 2009 18:30:21 +0000
 Subject: iSCSI logout hangs LVM
-In-Reply-To: <496EC869.2060803@nrel.colostate.edu>
+In-Reply-To: <1232128968.14288.33.camel@localhost.localdomain>
 References: <496EC869.2060803@nrel.colostate.edu>
-Message-ID: <1232128968.14288.33.camel@localhost.localdomain>
+	<1232128968.14288.33.camel@localhost.localdomain>
+Message-ID: <4970D23D.7030303@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Dave Wysochanski wrote:
+> On Wed, 2009-01-14 at 22:23 -0700, Ty! Boyack wrote:
+>> This is all being done on a Fedora 9 boxes with updated packages:
+>> lvm2-2.02.33-11.fc9.x86_64
+>> iscsi-initiator-utils-6.2.0.870-1.0.fc9.x86_64
+>> device-mapper-1.02.24-11.fc9.x86_64
+>> udev-124-2.fc9.x86_64
+>> kernel-2.6.27.9-73.fc9.x86_64
+>>
+>> I would appreciate any thoughts or suggestion on this!
+>>
+> 
+> You need to make sure iscsi and multipath are setup properly to
+> eventually fail the IO.  I believe the README and/or config files in
+> these projects describe the settings needed.
 
-On Wed, 2009-01-14 at 22:23 -0700, Ty! Boyack wrote:
-> Hi folks,
-> 
-> I'm not sure if I'm seeing a bug in LVM, device mapper (dm-multipath), 
-> open-iscsi or udev, but this seems like the best place to start. 
-> 
-> 
-> I can cause pvscan to hang consistently with the following sequence of 
-> events:
-> 1) run pvscan -- works OK
-> 2) connect to iscsi disk -- works OK
-> 3) run pvscan -- works OK, finds physical volume on iscsi disk
-> 4) logout of iscsi disk -- works OK
-> 5) run pvscan -- HANGS
-> 
-> 
-> If I run the (step 5) pvscan with 'strace -f /sbin/pvscan' the end of 
-> that trace is:
-> 
-> stat("/dev/dm-2", {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
-> stat("/dev/dm-2", {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
-> open("/dev/dm-2", O_RDWR|O_DIRECT|O_NOATIME) = 4
-> fstat(4, {st_mode=S_IFBLK|0660, st_rdev=makedev(253, 2), ...}) = 0
-> ioctl(4, BLKBSZGET, 0x20043f0)          = 0
-> lseek(4, 12884836352, SEEK_SET)         = 12884836352
-> read(4,
-> 
-> and then the read hangs forever.
-> 
-> In my setup, the iscsi login/logout is to a single target with two 
-> portals, and dm-multipath us used to present one multi-path device.  
-> That device in this case is /dev/dm-2.  I can use that disk as a PV just 
-> fine -- it's in a VG and has a couple of LV's filled with test data.
-> 
-> I retried the sequence but only logged into one portal, so only one 
-> connection existed (hopefully bypassing dm-multipath) and had exactly 
-> the same problem.
-> 
-> I also tried waiting several minutes after logging out of the iSCSI disk 
-> before running pvscan, and that also hang.
-> 
-> It seems like the LVM database detects a new disk being inserted, but 
-> not removed.  I have not tried this on any other hot-swap disk system -- 
-> has anyone tried this with a USB or other removable disk?
-> 
-> Does anyone know if this is expected behavior?  Or is it a problem 
-> elsewhere, maybe with udev not doing something to indicate that the disk 
-> has been removed?  Or does LVM keep it's own internal database of where 
-> it's PV's are, and then later assume that they will still be there?
-> 
-> This is all being done on a Fedora 9 boxes with updated packages:
-> lvm2-2.02.33-11.fc9.x86_64
-> iscsi-initiator-utils-6.2.0.870-1.0.fc9.x86_64
-> device-mapper-1.02.24-11.fc9.x86_64
-> udev-124-2.fc9.x86_64
-> kernel-2.6.27.9-73.fc9.x86_64
-> 
-> I would appreciate any thoughts or suggestion on this!
-> 
+Or remove the multipath maps for these devices *before* logging out of 
+the target. This is a common mistake with multipath - when you're 
+removing storage, the ordering should normally be:
 
-You need to make sure iscsi and multipath are setup properly to
-eventually fail the IO.  I believe the README and/or config files in
-these projects describe the settings needed.
+- unmount file systems / stop applications using the device
+- flush multipath map(s) (-f/-F)
+- remove underlying path devices (iSCSI logout etc)
+
+If this isn't possible, there's a feature in the RHEL builds of 
+multipath-tools named "flush_on_last_del" which may help you here. It 
+will disable queueing for the multipath target when the last path to 
+it disappears, preventing I/O from hanging forever on the missing devices.
+
+Regards,
+Bryn.
+
 
 
