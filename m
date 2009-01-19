@@ -1,205 +1,154 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 16 Jan 2009 17:42:27 -0500
-Subject: [PATCH] Replace is_long_lived with configuration variable read_cache_state.
-Message-ID: <1232145747-31079-1-git-send-email-dwysocha@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 19 Jan 2009 13:54:53 +0100
+Subject: [PATCH] fix configure for static build
+Message-ID: <4974781D.5060908@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This removes the last parameter from create_toolcontext() and
-gives us a clean libLVM init API.
+I am still using static build for some testing,
+but I think this should be fixed upstream too...
 
-Original code was as follows.  Callers of create_toolcontext()
-were:
-1) commandline tools (lvmcmdline.c).  Set is_long_lived = 0.
-2) clvmd.  Set is_long_lived = 1.
+(and there are already tests in configure
+for STATIC_LINK variable before it is defined)
 
-is_long_lived influenced both reading and writing of the
-persistent devices cache.  I propose going forward we only
-use the two explicit configuration variables to do this,
-1) write_cache_state (already exists) and 2) read_cache_state.
+Milan
+--
 
-For reading the persistent devices cache, read_cache_state is
-== !is_long_lived (original code read the cache only
-when !is_long_lived).  For writing the cache, the caller/user
-must set write_cache_state.
+commit 32dc3f7254811eb3068a541d6651e73adbb5da1a
+Author: Milan Broz <mbroz@redhat.com>
+Date:   Mon Jan 19 13:48:15 2009 +0100
 
-We set read_cache_state to 1 by default, which matches the
-original behavior of the tools, but not clvmd, for reading the
-cache.  To replace original clvmd behavior, we will need another
-API most likely or explicitly set the variable before calling
-create_toolcontext().
+    Fix problems with static build
+    
+     - compiler warning (missing header)
+    
+     - configure should set static flag early to be able
+       use STATIC_LINK flag during configure script
+    
+    Signed-off-by: Milan Broz <mbroz@redhat.com>
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- daemons/clvmd/lvm-functions.c |    2 +-
- lib/commands/toolcontext.c    |   17 +++++++++++------
- lib/commands/toolcontext.h    |    4 ++--
- lib/config/defaults.h         |    1 +
- lib/lvm2.h                    |    4 ++--
- man/lvm.conf.5.in             |    4 ++++
- tools/lvmcmdline.c            |    2 +-
- 7 files changed, 22 insertions(+), 12 deletions(-)
-
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index c74bf26..c744768 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -724,7 +724,7 @@ void lvm_do_backup(const char *vgname)
- /* Called to initialise the LVM context of the daemon */
- int init_lvm(int using_gulm)
- {
--	if (!(cmd = create_toolcontext(1))) {
-+	if (!(cmd = create_toolcontext())) {
- 		log_error("Failed to allocate command context");
- 		return 0;
- 	}
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 0a98325..f82ab7c 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -691,14 +691,20 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
- 	if (find_config_tree_int(cmd, "devices/write_cache_state", 1))
- 		cmd->dump_filter = 1;
+diff --git a/configure b/configure
+index 5d2ed22..8095090 100755
+--- a/configure
++++ b/configure
+@@ -1323,6 +1323,8 @@ if test -n "$ac_init_help"; then
+ Optional Features:
+   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
+   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
++  --enable-static_link    Use this to link the tools to their libraries
++                          statically.  Default is dynamic linking
+   --enable-lvm1_fallback  Use this to fall back and use LVM1 binaries if
+                           device-mapper is missing from the kernel
+   --disable-readline      Disable readline support
+@@ -1337,8 +1339,6 @@ Optional Features:
+   --enable-pkgconfig      Install pkgconfig support
+   --enable-fsadm          Enable fsadm
+   --enable-dmeventd       Enable the device-mapper event daemon
+-  --enable-static_link    Use this to link the tools to their libraries
+-                          statically.  Default is dynamic linking
+   --disable-selinux       Disable selinux support
+   --enable-nls            Enable Native Language Support
  
--	if (!*cmd->sys_dir)
-+	/* Should we ever load persistent filter state? */
-+	if (find_config_tree_int(cmd, "devices/read_cache_state", 1))
-+		cmd->read_cache_state = DEFAULT_READ_CACHE_STATE;
+@@ -8398,6 +8398,19 @@ done
+ 
+ 
+ ################################################################################
++{ echo "$as_me:$LINENO: checking whether to use static linking" >&5
++echo $ECHO_N "checking whether to use static linking... $ECHO_C" >&6; }
++# Check whether --enable-static_link was given.
++if test "${enable_static_link+set}" = set; then
++  enableval=$enable_static_link; STATIC_LINK=$enableval
++else
++  STATIC_LINK=no
++fi
 +
-+	if (!*cmd->sys_dir) {
- 		cmd->dump_filter = 0;
-+		cmd->read_cache_state = DEFAULT_READ_CACHE_STATE;
-+	}
++{ echo "$as_me:$LINENO: result: $STATIC_LINK" >&5
++echo "${ECHO_T}$STATIC_LINK" >&6; }
++
++################################################################################
  
- 	/*
- 	 * Only load persistent filter device cache on startup if it is newer
--	 * than the config file and this is not a long-lived process.
-+	 * than the config file and told to do so
- 	 */
--	if (load_persistent_cache && !cmd->is_long_lived &&
-+	if (load_persistent_cache && cmd->read_cache_state &&
- 	    !stat(dev_cache, &st) &&
- 	    (st.st_ctime > config_file_timestamp(cmd->cft)) &&
- 	    !persistent_filter_load(f4, NULL))
-@@ -998,7 +1004,7 @@ static void _init_globals(struct cmd_context *cmd)
- }
  
- /* Entry point */
--struct cmd_context *create_toolcontext(unsigned is_long_lived)
-+struct cmd_context *create_toolcontext(void)
+ ################################################################################
+@@ -9308,19 +9321,6 @@ echo "$as_me: error: Features cannot be 'shared' when building statically
+ fi
+ 
+ ################################################################################
+-{ echo "$as_me:$LINENO: checking whether to use static linking" >&5
+-echo $ECHO_N "checking whether to use static linking... $ECHO_C" >&6; }
+-# Check whether --enable-static_link was given.
+-if test "${enable_static_link+set}" = set; then
+-  enableval=$enable_static_link; STATIC_LINK=$enableval
+-else
+-  STATIC_LINK=no
+-fi
+-
+-{ echo "$as_me:$LINENO: result: $STATIC_LINK" >&5
+-echo "${ECHO_T}$STATIC_LINK" >&6; }
+-
+-################################################################################
+ { echo "$as_me:$LINENO: checking whether to enable selinux support" >&5
+ echo $ECHO_N "checking whether to enable selinux support... $ECHO_C" >&6; }
+ # Check whether --enable-selinux was given.
+@@ -10609,7 +10609,7 @@ if test "$ac_res" != no; then
+   ac_cv_func_getmntent=yes
+ 
+ cat >>confdefs.h <<\_ACEOF
+-#define HAVE_GETMNTENT
++#define HAVE_GETMNTENT 1
+ _ACEOF
+ 
+ else
+diff --git a/configure.in b/configure.in
+index 0a05406..5d28c2c 100644
+--- a/configure.in
++++ b/configure.in
+@@ -129,6 +129,15 @@ AC_FUNC_STRTOD
+ AC_FUNC_VPRINTF
+ 
+ ################################################################################
++dnl -- Enables statically-linked tools
++AC_MSG_CHECKING(whether to use static linking)
++AC_ARG_ENABLE(static_link,
++  [  --enable-static_link    Use this to link the tools to their libraries
++                          statically.  Default is dynamic linking],
++  STATIC_LINK=$enableval, STATIC_LINK=no)
++AC_MSG_RESULT($STATIC_LINK)
++
++################################################################################
+ dnl -- Prefix is /usr by default, the exec_prefix default is setup later
+ AC_PREFIX_DEFAULT(/usr)
+ 
+@@ -509,15 +518,6 @@ Features cannot be 'shared' when building statically
+ fi
+ 
+ ################################################################################
+-dnl -- Enables statically-linked tools
+-AC_MSG_CHECKING(whether to use static linking)
+-AC_ARG_ENABLE(static_link,
+-  [  --enable-static_link    Use this to link the tools to their libraries
+-                          statically.  Default is dynamic linking],
+-  STATIC_LINK=$enableval, STATIC_LINK=no)
+-AC_MSG_RESULT($STATIC_LINK)
+-
+-################################################################################
+ dnl -- Disable selinux
+ AC_MSG_CHECKING(whether to enable selinux support)
+ AC_ARG_ENABLE(selinux, [  --disable-selinux       Disable selinux support],
+diff --git a/tools/lvm-static.c b/tools/lvm-static.c
+index 822989f..f75930c 100644
+--- a/tools/lvm-static.c
++++ b/tools/lvm-static.c
+@@ -14,6 +14,7 @@
+  */
+ 
+ #include "lvm2cmdline.h"
++#include "lib.h"
+ 
+ int main(int argc, char **argv)
  {
- 	struct cmd_context *cmd;
- 
-@@ -1020,7 +1026,6 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived)
- 		return NULL;
- 	}
- 	memset(cmd, 0, sizeof(*cmd));
--	cmd->is_long_lived = is_long_lived;
- 	cmd->handles_missing_pvs = 0;
- 	cmd->hosttags = 0;
- 	dm_list_init(&cmd->formats);
-@@ -1205,7 +1210,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	 * If we are a long-lived process, write out the updated persistent
- 	 * device cache for the benefit of short-lived processes.
- 	 */
--	if (cmd->is_long_lived && cmd->dump_filter)
-+	if (cmd->dump_filter)
- 		persistent_filter_dump(cmd->filter);
- 
- 	cmd->config_valid = 1;
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 7d2aef9..a4ef0e9 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -66,12 +66,12 @@ struct cmd_context {
- 	char *cmd_line;
- 	struct command *command;
- 	char **argv;
--	unsigned is_long_lived:1;	/* Optimises persistent_filter handling */
- 	unsigned handles_missing_pvs:1;
- 	unsigned partial_activation:1;
- 
- 	struct dev_filter *filter;
- 	int dump_filter;	/* Dump filter when exiting? */
-+	unsigned read_cache_state; /* read devices cache state during init */
- 
- 	struct dm_list config_files;
- 	int config_valid;
-@@ -94,7 +94,7 @@ struct cmd_context {
- 	char sysfs_dir[PATH_MAX];
- };
- 
--struct cmd_context *create_toolcontext(unsigned is_long_lived);
-+struct cmd_context *create_toolcontext(void);
- void destroy_toolcontext(struct cmd_context *cmd);
- int refresh_toolcontext(struct cmd_context *cmd);
- int config_files_changed(struct cmd_context *cmd);
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 605bc49..67bbe1b 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -23,6 +23,7 @@
- #define DEFAULT_BACKUP_SUBDIR "backup"
- #define DEFAULT_CACHE_SUBDIR "cache"
- #define DEFAULT_CACHE_FILE_PREFIX ""
-+#define DEFAULT_READ_CACHE_STATE 1
- 
- #define DEFAULT_ARCHIVE_DAYS 30
- #define DEFAULT_ARCHIVE_NUMBER 10
-diff --git a/lib/lvm2.h b/lib/lvm2.h
-index b18cead..9101321 100644
---- a/lib/lvm2.h
-+++ b/lib/lvm2.h
-@@ -24,7 +24,7 @@
-  */
- struct arg;
- struct cmd_context;
--struct cmd_context *create_toolcontext(unsigned is_long_lived);
-+struct cmd_context *create_toolcontext(void);
- void destroy_toolcontext(struct cmd_context *cmd);
- 
- /*
-@@ -37,7 +37,7 @@ lvm_handle_t lvm2_create(void);
-  * NULL: Fail - unable to initialise handle.
-  * non-NULL: Success - valid LVM2 handle returned
-  */
--#define lvm2_create(X) create_toolcontext(1)
-+#define lvm2_create(X) create_toolcontext()
- 
- /*
-  * lvm2_destroy
-diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index fdd728a..d1ce30b 100644
---- a/man/lvm.conf.5.in
-+++ b/man/lvm.conf.5.in
-@@ -111,6 +111,10 @@ Defaults to "/etc/lvm/cache".
- persistent filter cache file when \fBlvm\fP exits.
- Defaults to 1.
- .IP
-+\fBread_cache_state\fP \(em Set to 0 to disable the reading in of the
-+persistent filter cache file when \fBlvm\fP initializes.
-+Defaults to 1.
-+.IP
- \fBtypes\fP \(em List of pairs of additional acceptable block device types
- found in /proc/devices together with maximum (non-zero) number of
- partitions (normally 16).  By default, LVM2 supports ide, sd, md, loop, 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 0b12750..4bcac86 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1159,7 +1159,7 @@ struct cmd_context *init_lvm(void)
- 
- 	_cmdline.the_args = &_the_args[0];
- 
--	if (!(cmd = create_toolcontext(0)))
-+	if (!(cmd = create_toolcontext()))
- 		return_NULL;
- 
- 	return cmd;
--- 
-1.5.5.1
+
 
 
