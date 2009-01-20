@@ -1,7 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 20 Jan 2009 11:25:50 -0500
-Subject: [PATCH 1/2] Add --nameprefixes to pvs, vgs, lvs man pages.
-Message-ID: <1232468751-6028-1-git-send-email-dwysocha@redhat.com>
+Date: Tue, 20 Jan 2009 11:25:51 -0500
+Subject: [PATCH 2/2] Add --rows option to pvs, vgs, lvs man pages.
+In-Reply-To: <1232468751-6028-1-git-send-email-dwysocha@redhat.com>
+References: <1232468751-6028-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1232468751-6028-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,83 +13,79 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- man/lvs.8.in |    6 +++++-
- man/pvs.8.in |    6 +++++-
- man/vgs.8.in |    6 +++++-
- 3 files changed, 15 insertions(+), 3 deletions(-)
+ man/lvs.8.in |    5 ++++-
+ man/pvs.8.in |    4 ++++
+ man/vgs.8.in |    5 ++++-
+ 3 files changed, 12 insertions(+), 2 deletions(-)
 
 diff --git a/man/lvs.8.in b/man/lvs.8.in
-index 9819241..934a89e 100644
+index 934a89e..fa27fe5 100644
 --- a/man/lvs.8.in
 +++ b/man/lvs.8.in
-@@ -4,7 +4,7 @@ lvs \- report information about logical volumes
- .SH SYNOPSIS
- .B lvs
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
--[\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
-+[\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
+@@ -7,7 +7,7 @@ lvs \- report information about logical volumes
+ [\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
  [\-o|\-\-options [+]Field[,Field]]
  [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial] [\-\-segments]
-@@ -20,6 +20,10 @@ See \fBlvm\fP for common options.
- .I \-\-aligned
- Use with \-\-separator to align the output columns.
+-[\-P|\-\-partial] [\-\-segments]
++[\-P|\-\-partial] [\-\-rows] [\-\-segments]
+ [\-\-separator Separator] [\-\-unbuffered]
+ [\-\-units hsbkmgtHKMGT]
+ [\-v|\-\-verbose] 
+@@ -75,6 +75,9 @@ Use default columns that emphasize segment information.
+ Comma-separated ordered list of columns to sort by.  Replaces the default
+ selection. Precede any column with - for a reverse sort on that column.
  .TP
-+.I \-\-nameprefixes
-+Add a "LVM2_" prefix plus the field name to the output.  Useful with
-+--noheadings to produce environment variable listing of field=value pairs.
++.I \-\-rows
++Output columns as rows.
 +.TP
- .I \-\-noheadings
- Suppress the headings line that is normally the first line of output.
- Useful if grepping the output.
+ .I \-\-separator Separator
+ String to use to separate each column.  Useful if grepping the output.
+ .TP
 diff --git a/man/pvs.8.in b/man/pvs.8.in
-index 49810b6..a78218e 100644
+index a78218e..667f07a 100644
 --- a/man/pvs.8.in
 +++ b/man/pvs.8.in
-@@ -4,7 +4,7 @@ pvs \- report information about physical volumes
- .SH SYNOPSIS
- .B pvs
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
--[\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
-+[\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
+@@ -7,6 +7,7 @@ pvs \- report information about physical volumes
+ [\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
  [\-o|\-\-options [+]Field[,Field]]
  [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
++[\-\-rows]
  [\-\-separator Separator] [\-\-unbuffered]
-@@ -19,6 +19,10 @@ See \fBlvm\fP for common options.
- .I \-\-aligned
- Use with \-\-separator to align the output columns.
+ [\-\-units hsbkmgtHKMGT]
+ [\-v|\-\-verbose] 
+@@ -51,6 +52,9 @@ units of physical extents.
+ Comma-separated ordered list of columns to sort by.  Replaces the default
+ selection. Precede any column with - for a reverse sort on that column.
  .TP
-+.I \-\-nameprefixes
-+Add a "LVM2_" prefix plus the field name to the output.  Useful with
-+--noheadings to produce environment variable listing of field=value pairs.
++.I \-\-rows
++Output columns as rows.
 +.TP
- .I \-\-noheadings
- Suppress the headings line that is normally the first line of output.
- Useful if grepping the output.
+ .I \-\-separator Separator
+ String to use to separate each column.  Useful if grepping the output.
+ .TP
 diff --git a/man/vgs.8.in b/man/vgs.8.in
-index 0ae5c7b..b3fed28 100644
+index b3fed28..2a4d36b 100644
 --- a/man/vgs.8.in
 +++ b/man/vgs.8.in
-@@ -4,7 +4,7 @@ vgs \- report information about volume groups
- .SH SYNOPSIS
- .B vgs
- [\-\-aligned] [\-d|\-\-debug] [\-h|\-?|\-\-help]
--[\-\-ignorelockingfailure] [\-\-noheadings] [\-\-nosuffix]
-+[\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
+@@ -7,7 +7,7 @@ vgs \- report information about volume groups
+ [\-\-ignorelockingfailure] [\-\-nameprefixes] [\-\-noheadings] [\-\-nosuffix]
  [\-o|\-\-options [+]Field[,Field]]
  [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial]
-@@ -20,6 +20,10 @@ See \fBlvm\fP for common options.
- .I \-\-aligned
- Use with \-\-separator to align the output columns.
+-[\-P|\-\-partial]
++[\-P|\-\-partial] [\-\-rows]
+ [\-\-separator Separator] [\-\-unbuffered]
+ [\-\-units hsbkmgtHKMGT]
+ [\-v|\-\-verbose] 
+@@ -63,6 +63,9 @@ Allocation policy: (c)ontiguous, c(l)ing, (n)ormal, (a)nywhere, (i)nherited
+ Comma-separated ordered list of columns to sort by.  Replaces the default
+ selection. Precede any column with - for a reverse sort on that column.
  .TP
-+.I \-\-nameprefixes
-+Add a "LVM2_" prefix plus the field name to the output.  Useful with
-+--noheadings to produce environment variable listing of field=value pairs.
++.I \-\-rows
++Output columns as rows.
 +.TP
- .I \-\-noheadings
- Suppress the headings line that is normally the first line of output.
- Useful if grepping the output.
+ .I \-\-separator Separator
+ String to use to separate each column.  Useful if grepping the output.
+ .TP
 -- 
 1.6.0.5
 
