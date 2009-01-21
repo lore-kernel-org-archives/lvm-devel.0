@@ -1,7 +1,7 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 21 Jan 2009 12:19:53 +0100
-Subject: [PATCH 12/15] Add lvconcert crypt implementation.
-In-Reply-To: <11624519b513cc630635406dc8b35f380bb43a9f.1232488181.git.mbroz@redhat.com>
+Date: Wed, 21 Jan 2009 12:19:54 +0100
+Subject: [PATCH 13/15] Add --keyfile option.
+In-Reply-To: <8063c7b937ce3760c31028df5e6689d2bb35fde1.1232488181.git.mbroz@redhat.com>
 References: <cover.1232488181.git.mbroz@redhat.com>
 	<f798c95b982dd875729f4c43b4cb7667965ea41a.1232488181.git.mbroz@redhat.com>
 	<1778134dc3683bb96cc98ad243d673be1175880a.1232488181.git.mbroz@redhat.com>
@@ -14,238 +14,149 @@ References: <cover.1232488181.git.mbroz@redhat.com>
 	<3d899235af519a0e471dc86df580a991371b91fd.1232488181.git.mbroz@redhat.com>
 	<35fcbf3ab1527b121e3a8064a35eab8f7a7a2f1d.1232488181.git.mbroz@redhat.com>
 	<11624519b513cc630635406dc8b35f380bb43a9f.1232488181.git.mbroz@redhat.com>
-Message-ID: <8063c7b937ce3760c31028df5e6689d2bb35fde1.1232488181.git.mbroz@redhat.com>
+	<8063c7b937ce3760c31028df5e6689d2bb35fde1.1232488181.git.mbroz@redhat.com>
+Message-ID: <56eb4722a65edf5a12d79098ab2ec848b3e727b4.1232488181.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvconvert --crypt KeyStoreType LogicalVolume[Path]
+Allow input of key from file (or standard input)
+by specifying --keyfile on commandline.
 
-If the defined key handler contains support
-for conversion (it implements scan function),
-it converts linear volume into encrypted using
-the first extent as keystore area.
+If the file is "-" stdin is used, e.g.
+echo $key | lvcreate ...
 
-Note, that there is currently not yet implemented
-key management interface, so you lost access
-to keystore for key management operation
-after conversion.
+(It is not safe, but useful in scripts. Similar approach
+is used in cryptsetup.)
 
-You can activate volume using only keys defined
-in the moment when conversion happened.
-
-[basically this allows using LUKS keystore only now]
+Currently supported only for lvcreate, vgchange, lvchange.
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- tools/commands.h  |    8 +++-
- tools/lvconvert.c |  125 +++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 131 insertions(+), 2 deletions(-)
+ tools/args.h     |    1 +
+ tools/commands.h |   17 +++++++++--------
+ tools/lvchange.c |    7 +++++++
+ tools/lvcreate.c |    7 +++++++
+ tools/vgchange.c |    7 +++++++
+ 5 files changed, 31 insertions(+), 8 deletions(-)
 
+diff --git a/tools/args.h b/tools/args.h
+index a1347ea..cacbb2b 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -60,6 +60,7 @@ arg(rows_ARG, '\0', "rows", NULL, 0)
+ arg(crypt_ARG, '\0', "crypt", string_arg, 0)
+ arg(cipher_ARG, '\0', "cipher", string_arg, 0)
+ arg(keysize_ARG, '\0', "keysize", int_arg, 0)
++arg(keyfile_ARG, '\0', "keyfile", string_arg, 0)
+ 
+ /* Allow some variations */
+ arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
 diff --git a/tools/commands.h b/tools/commands.h
-index aa5814c..deb300b 100644
+index deb300b..07c472e 100644
 --- a/tools/commands.h
 +++ b/tools/commands.h
-@@ -112,9 +112,13 @@ xx(lvconvert,
-    "\t[-v|--verbose]\n"
-    "\t[-Z|--zero {y|n}]\n"
-    "\t[--version]" "\n"
--   "\tOriginalLogicalVolume[Path] SnapshotLogicalVolume[Path]\n",
-+   "\tOriginalLogicalVolume[Path] SnapshotLogicalVolume[Path]\n\n"
+@@ -85,9 +85,10 @@ xx(lvchange,
+    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
  
--   alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
-+   "lvconvert "
-+   "[--crypt KeyStoreType]\n"
-+   "\tLogicalVolume[Path]]\n",
-+
-+   alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, crypt_ARG, interval_ARG,
-    mirrorlog_ARG, mirrors_ARG, regionsize_ARG, snapshot_ARG, test_ARG, zero_ARG)
+    alloc_ARG, autobackup_ARG, available_ARG, contiguous_ARG, force_ARG,
+-   ignorelockingfailure_ARG, ignoremonitoring_ARG, major_ARG, minor_ARG,
+-   monitor_ARG, partial_ARG, permission_ARG, persistent_ARG, readahead_ARG,
+-   resync_ARG, refresh_ARG, addtag_ARG, deltag_ARG, test_ARG, yes_ARG)
++   ignorelockingfailure_ARG, ignoremonitoring_ARG, keyfile_ARG, major_ARG,
++   minor_ARG, monitor_ARG, partial_ARG, permission_ARG, persistent_ARG,
++   readahead_ARG, resync_ARG, refresh_ARG, addtag_ARG, deltag_ARG, test_ARG,
++   yes_ARG)
  
- xx(lvcreate,
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index d1260f5..6723f5a 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -15,10 +15,12 @@
- #include "tools.h"
- #include "polldaemon.h"
- #include "lv_alloc.h"
-+#include "metadata.h"
+ xx(lvconvert,
+    "Change logical volume layout",
+@@ -136,7 +137,7 @@ xx(lvcreate,
+    "\t -L|--size LogicalVolumeSize[kKmMgGtTpPeE]}\n"
+    "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
+    "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core}|--corelog}]]\n"
+-   "\t[--crypt KeyStoreType --cipher Cipher --keysize KeySize]\n"
++   "\t[--crypt KeyStoreType --cipher Cipher --keysize KeySize [--keyfile filename]]\n"
+    "\t[--crypt TemplateLogicalVolume[Path]]\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[-p|--permission {r|rw}]\n"
+@@ -171,7 +172,7 @@ xx(lvcreate,
  
- struct lvconvert_params {
- 	int snapshot;
- 	int zero;
-+	int crypt;
+    addtag_ARG, alloc_ARG, autobackup_ARG, chunksize_ARG, cipher_ARG,
+    contiguous_ARG, corelog_ARG, crypt_ARG, extents_ARG, keysize_ARG,
+-   major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG,
++   keyfile_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG,
+    nosync_ARG, permission_ARG, persistent_ARG, readahead_ARG,
+    regionsize_ARG, size_ARG, snapshot_ARG, stripes_ARG, stripesize_ARG,
+    test_ARG, type_ARG, zero_ARG)
+@@ -689,9 +690,9 @@ xx(vgchange,
  
- 	const char *origin;
- 	const char *lv_name;
-@@ -33,6 +35,9 @@ struct lvconvert_params {
- 	uint32_t mirrors;
- 	sign_t mirrors_sign;
+    addtag_ARG, alloc_ARG, allocation_ARG, autobackup_ARG, available_ARG,
+    clustered_ARG, deltag_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
+-   logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG, partial_ARG,
+-   physicalextentsize_ARG, refresh_ARG, resizeable_ARG, resizable_ARG,
+-   test_ARG, uuid_ARG)
++   keyfile_ARG, logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG,
++   partial_ARG, physicalextentsize_ARG, refresh_ARG, resizeable_ARG,
++   resizable_ARG, test_ARG, uuid_ARG)
  
-+	const char *crypt_handler;
-+	struct crypto_store_type *cs_type;
-+
- 	struct segment_type *segtype;
+ xx(vgck,
+    "Check the consistency of volume group(s)",
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index cd0ff5a..0a4778f 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -728,6 +728,13 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
  
- 	alloc_policy_t alloc;
-@@ -123,6 +128,17 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 	if (arg_count(cmd, snapshot_ARG))
- 		lp->snapshot = 1;
- 
-+	if (arg_count(cmd, crypt_ARG)) {
-+		if (arg_count(cmd, snapshot_ARG) ||
-+		    arg_count(cmd, mirrorlog_ARG) ||
-+		    arg_count(cmd, mirrors_ARG)) {
-+			log_error("--crypt argument cannot be mixed "
-+				  "with mirrors of snapshots args");
-+			return 0;
-+		}
-+		lp->crypt = 1;
++	if (arg_count(cmd, keyfile_ARG) &&
++	    !lvm_set_password_dev(arg_value(cmd, keyfile_ARG))) {
++		log_error("--keyfile argument %s is invalid",
++			  arg_value(cmd, keyfile_ARG));
++		return EINVALID_CMD_LINE;
 +	}
 +
- 	if (arg_count(cmd, mirrors_ARG)) {
- 		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0);
- 		lp->mirrors_sign = arg_sign_value(cmd, mirrors_ARG, 0);
-@@ -159,6 +175,22 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 						 SEG_CANNOT_BE_ZEROED) ?
- 						"n" : "y"), "n");
- 
-+	} else if (lp->crypt) { /* Convert to encrypted LV */
-+
-+		lp->crypt_handler = arg_str_value(cmd, crypt_ARG, NULL);
-+		if (!(lp->cs_type = lvm_get_keystore_handler(lp->crypt_handler))) {
-+			log_error("Unsuported crypt handler %s", lp->crypt_handler);
-+			return 0;
-+		}
-+
-+		if (!lp->cs_type->ops->scan) {
-+			log_error("Key handler %s does not support conversion.",
-+				  lp->cs_type->name);
-+			return 0;
-+		}
-+
-+		if (!(lp->segtype = get_segtype_from_string(cmd, "crypt")))
-+			return_0;
- 	} else {	/* Mirrors */
- 		if (arg_count(cmd, chunksize_ARG)) {
- 			log_error("--chunksize is only available with "
-@@ -385,6 +417,15 @@ static int lvconvert_mirrors(struct cmd_context * cmd, struct logical_volume * l
- 	struct logical_volume *original_lv;
- 
- 	seg = first_seg(lv);
-+
-+	if (seg_is_encrypted(seg)) {
-+		log_error("Logical volume %s is encrypted, this operation is "
-+			  "not supported because will store unencrypted data "
-+			  "directly in new mirror log.",
-+			  lv->name);
-+		return 0;
-+	}
-+
- 	existing_mirrors = lv_mirror_count(lv);
- 
- 	/* If called with no argument, try collapsing the resync layers */
-@@ -685,6 +726,85 @@ static int lvconvert_snapshot(struct cmd_context *cmd,
- 	return 1;
+ 	return process_each_lv(cmd, argc, argv, LCK_VG_WRITE, NULL,
+ 			       &lvchange_single);
  }
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index e0f59be..6eea76d 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -342,6 +342,13 @@ static int _read_crypt_params(struct lvcreate_params *lp,
+ 	if (!arg_count(cmd, crypt_ARG))
+ 		return 1;
  
-+static int lvconvert_crypt(struct cmd_context *cmd,
-+			   struct logical_volume *lv,
-+			   struct lvconvert_params *lp)
-+{
-+	struct lv_segment *seg, *cs_seg;
-+	struct crypto_store *cs;
-+
-+	/*
-+	 * Conversion is supporetd only if keystore is in first extent. 
-+	 */
-+
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		if (seg_is_encrypted(seg)) {
-+			log_error("Logical volume %s already contains encrypted "
-+				  "segments.", lv->name);
-+			return 0;
-+		}
-+		if (!seg_is_striped(seg) || seg->area_count > 1) {
-+			log_error("Only plain linear volumes can be converted "
-+				  "(no mirrors, stripes).");
-+			return 0;
-+		}
-+	}
-+
-+	if (!deactivate_lv(cmd, lv)) {
-+		log_error("Couldn't deactivate LV %s.", lv->name);
++	if (arg_count(cmd, keyfile_ARG) &&
++	    !lvm_set_password_dev(arg_value(cmd, keyfile_ARG))) {
++		log_error("--keyfile argument %s is invalid",
++			  arg_value(cmd, keyfile_ARG));
 +		return 0;
 +	}
 +
-+	/* Split keystore area */
-+	if (!lv_split_segment(lv, 1)) {
-+		log_error("Cannot split keystore from LV.");
-+		return 0;
+ 	if (arg_count(cmd, cipher_ARG)) {
+ 		/*
+ 		 * Explicit cipher specification
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 8831a23..ed00744 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -631,6 +631,13 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
++	if (arg_count(cmd, keyfile_ARG) &&
++	    !lvm_set_password_dev(arg_value(cmd, keyfile_ARG))) {
++		log_error("--keyfile argument %s is invalid",
++			  arg_value(cmd, keyfile_ARG));
++		return EINVALID_CMD_LINE;
 +	}
 +
-+	/*
-+	 * Detach segment from LV
-+	 */
-+	cs_seg = first_seg(lv);
-+	dm_list_del(&cs_seg->list);
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		seg->segtype = lp->segtype;
-+		seg->le--;
-+	}
-+	lv->le_count--;
-+
-+	if (!(cs = vg_add_cryptostore(lv->vg, cs_seg, lp->crypt_handler))) {
-+		log_error("Failed to create cryptstore LV.");
-+		return 0;
-+	}
-+
-+	/*
-+	 * Scan if the segment really contains compatible keystore header
-+	 */
-+	if (!cs->type->ops->scan(first_crypto_area(cs))) {
-+		log_error("There is no compatible keystore area on LV %s.",
-+			  lv->name);
-+		return 0;
-+	}
-+
-+	/*
-+	 * Attach segment to cryptostore LV
-+	 */
-+	if (!lv_add_cryptostore(lv, cs)) {
-+		log_error("Cannot change cryptostore to %s", lv->name);
-+		return 0;
-+	}
-+
-+	if (!vg_write(lv->vg))
-+		return_0;
-+
-+	if (!vg_commit(lv->vg))
-+		return_0;
-+
-+	log_print("Logical volume %s was imported as encrypted.", lv->name);
-+
-+	return 1;
-+}
-+
- static int lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			    void *handle)
- {
-@@ -721,6 +841,11 @@ static int lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			return ECMD_FAILED;
- 		if (!lvconvert_snapshot(cmd, lv, lp))
- 			return ECMD_FAILED;
-+	} else if (lp->crypt) {
-+		if (!archive(lv->vg))
-+			return ECMD_FAILED;
-+		if (!lvconvert_crypt(cmd, lv, lp))
-+			return ECMD_FAILED;
- 	} else if (arg_count(cmd, mirrors_ARG) || (lv->status & MIRRORED)) {
- 		if (!archive(lv->vg))
- 			return ECMD_FAILED;
+ 	return process_each_vg(cmd, argc, argv,
+ 			       (arg_count(cmd, available_ARG)) ?
+ 			       LCK_VG_READ : LCK_VG_WRITE, 0, NULL,
 -- 
 1.5.6.5
 
