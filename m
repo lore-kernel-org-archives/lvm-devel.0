@@ -1,140 +1,140 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 22 Jan 2009 11:10:10 +0100
-Subject: [PATCH 14/14] Un-export vg_read_internal.
-In-Reply-To: <1232619010-4858-14-git-send-email-prockai@redhat.com>
-References: <1232619010-4858-1-git-send-email-prockai@redhat.com>
-	<1232619010-4858-2-git-send-email-prockai@redhat.com>
-	<1232619010-4858-3-git-send-email-prockai@redhat.com>
-	<1232619010-4858-4-git-send-email-prockai@redhat.com>
-	<1232619010-4858-5-git-send-email-prockai@redhat.com>
-	<1232619010-4858-6-git-send-email-prockai@redhat.com>
-	<1232619010-4858-7-git-send-email-prockai@redhat.com>
-	<1232619010-4858-8-git-send-email-prockai@redhat.com>
-	<1232619010-4858-9-git-send-email-prockai@redhat.com>
-	<1232619010-4858-10-git-send-email-prockai@redhat.com>
-	<1232619010-4858-11-git-send-email-prockai@redhat.com>
-	<1232619010-4858-12-git-send-email-prockai@redhat.com>
-	<1232619010-4858-13-git-send-email-prockai@redhat.com>
-	<1232619010-4858-14-git-send-email-prockai@redhat.com>
-Message-ID: <1232619010-4858-15-git-send-email-prockai@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 21 Jan 2009 12:19:42 +0100
+Subject: [PATCH 01/15] Support crypt segment in libdevmapper tree.
+In-Reply-To: <cover.1232488181.git.mbroz@redhat.com>
+References: <cover.1232488181.git.mbroz@redhat.com>
+Message-ID: <f798c95b982dd875729f4c43b4cb7667965ea41a.1232488181.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Thu Jan 22 10:56:49 CET 2009  Petr Rockai <me@mornfall.net>
-  * Un-export vg_read_internal.
-diff -rN -u -p old-temp.4430/lib/metadata/metadata.c new-temp.4430/lib/metadata/metadata.c
---- old-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:58.730781531 +0100
-+++ new-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:58.778780229 +0100
-@@ -31,6 +31,9 @@
+ - it can support multiple segments, but note that
+to work properly, correct IV (initialization vector)
+offset parameter must be set properly.
+
+Both cipher and key must be supplied in correct dm-crypt format,
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ libdm/.exported_symbols |    1 +
+ libdm/libdevmapper.h    |    4 ++++
+ libdm/libdm-deptree.c   |   31 ++++++++++++++++++++++++++++---
+ 3 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
+index a6e04f8..f8dba1b 100644
+--- a/libdm/.exported_symbols
++++ b/libdm/.exported_symbols
+@@ -66,6 +66,7 @@ dm_tree_node_add_error_target
+ dm_tree_node_add_zero_target
+ dm_tree_node_add_linear_target
+ dm_tree_node_add_striped_target
++dm_tree_node_add_crypt_target
+ dm_tree_node_add_mirror_target
+ dm_tree_node_add_mirror_target_log
+ dm_tree_node_add_target_area
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 93aecbb..775b4ec 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -373,6 +373,10 @@ int dm_tree_node_add_linear_target(struct dm_tree_node *node,
+ int dm_tree_node_add_striped_target(struct dm_tree_node *node,
+ 				       uint64_t size,
+ 				       uint32_t stripe_size);
++int dm_tree_node_add_crypt_target(struct dm_tree_node *node,
++				  uint64_t size,
++				  const char *cipher,
++				  const char *key);
+ int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
+ 				      uint64_t size);
+  
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 11428ca..310b30e 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -28,7 +28,8 @@
  
- #include <sys/param.h>
+ /* Supported segment types */
+ enum {
+-	SEG_ERROR, 
++	SEG_CRYPT,
++	SEG_ERROR,
+ 	SEG_LINEAR,
+ 	SEG_MIRRORED,
+ 	SEG_SNAPSHOT,
+@@ -43,6 +44,7 @@ struct {
+ 	unsigned type;
+ 	const char *target;
+ } dm_segtypes[] = {
++	{ SEG_CRYPT, "crypt" },
+ 	{ SEG_ERROR, "error" },
+ 	{ SEG_LINEAR, "linear" },
+ 	{ SEG_MIRRORED, "mirror" },
+@@ -69,8 +71,8 @@ struct load_segment {
  
-+static struct volume_group *_vg_read_internal(struct cmd_context *cmd,
-+					      const char *vgname,
-+					      const char *vgid, int *consistent);
- /*
-  * FIXME: Check for valid handle before dereferencing field or log error?
-  */
-@@ -224,8 +227,8 @@ int get_pv_from_vg_by_id(const struct fo
- 	struct pv_list *pvl;
- 	int consistent = 0;
+ 	uint64_t size;
  
--	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, &consistent))) {
--		log_error("get_pv_from_vg_by_id: vg_read_internal failed to read VG %s",
-+	if (!(vg = _vg_read_internal(fmt->cmd, vg_name, vgid, &consistent))) {
-+		log_error("get_pv_from_vg_by_id: _vg_read_internal failed to read VG %s",
- 			  vg_name);
- 		return 0;
+-	unsigned area_count;		/* Linear + Striped + Mirrored */
+-	struct dm_list areas;		/* Linear + Striped + Mirrored */
++	unsigned area_count;		/* Linear + Striped + Mirrored + Crypt */
++	struct dm_list areas;		/* Linear + Striped + Mirrored + Crypt */
+ 
+ 	uint32_t stripe_size;		/* Striped */
+ 
+@@ -85,6 +87,9 @@ struct load_segment {
+ 	unsigned mirror_area_count;	/* Mirror */
+ 	uint32_t flags;			/* Mirror log */
+ 	char *uuid;			/* Clustered mirror log */
++
++	const char *cipher;		/* Crypt */
++	const char *key;		/* Crypt */
+ };
+ 
+ /* Per-device properties */
+@@ -1323,6 +1328,9 @@ static int _emit_segment_line(struct dm_task *dmt, struct load_segment *seg, uin
+ 	case SEG_STRIPED:
+ 		EMIT_PARAMS(pos, "%u %u", seg->area_count, seg->stripe_size);
+ 		break;
++	case SEG_CRYPT:
++		EMIT_PARAMS(pos, "%s %s %" PRIu64, seg->cipher, seg->key, *seg_start);
++		break;
  	}
-@@ -503,7 +506,7 @@ struct volume_group *vg_create(struct cm
- 		return_NULL;
  
- 	/* is this vg name already in use ? */
--	if (vg_read_internal(cmd, vg_name, NULL, &consistent)) {
-+	if (_vg_read_internal(cmd, vg_name, NULL, &consistent)) {
- 		log_err("A volume group called '%s' already exists.", vg_name);
- 		goto bad;
- 	}
-@@ -1716,7 +1719,7 @@ static struct volume_group *_vg_read(str
- 
- 	if (is_orphan_vg(vgname)) {
- 		if (use_precommitted) {
--			log_error("Internal error: vg_read_internal requires vgname "
-+			log_error("Internal error: _vg_read_internal requires vgname "
- 				  "with pre-commit.");
- 			return NULL;
- 		}
-@@ -1974,8 +1977,9 @@ static struct volume_group *_vg_read(str
- 	return correct_vg;
+ 	switch(seg->type) {
+@@ -1331,6 +1339,7 @@ static int _emit_segment_line(struct dm_task *dmt, struct load_segment *seg, uin
+ 	case SEG_SNAPSHOT_ORIGIN:
+ 	case SEG_ZERO:
+ 		break;
++	case SEG_CRYPT:
+ 	case SEG_LINEAR:
+ 	case SEG_MIRRORED:
+ 	case SEG_STRIPED:
+@@ -1664,6 +1673,22 @@ int dm_tree_node_add_striped_target(struct dm_tree_node *node,
+ 	return 1;
  }
  
--struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgname,
--			     const char *vgid, int *consistent)
-+static struct volume_group *_vg_read_internal(struct cmd_context *cmd,
-+					      const char *vgname,
-+					      const char *vgid, int *consistent)
- {
- 	struct volume_group *vg;
- 	struct lv_list *lvl;
-@@ -2002,7 +2006,7 @@ struct volume_group *vg_read_internal(st
- 
- /* This is only called by lv_from_lvid, which is only called from
-  * activate.c so we know the appropriate VG lock is already held and
-- * the vg_read_internal is therefore safe.
-+ * the _vg_read_internal is therefore safe.
-  */
- static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 					    const char *vgid,
-@@ -2034,7 +2038,7 @@ static struct volume_group *_vg_read_by_
- 	if (memlock())
- 		return NULL;
- 
--	/* FIXME Need a genuine read by ID here - don't vg_read_internal by name! */
-+	/* FIXME Need a genuine read by ID here - don't _vg_read_internal by name! */
- 	/* FIXME Disabled vgrenames while active for now because we aren't
- 	 *       allowed to do a full scan here any more. */
- 
-@@ -2218,7 +2222,7 @@ static int _get_pvs(struct cmd_context *
- 			stack;
- 			continue;
- 		}
--		if (!(vg = vg_read_internal(cmd, vgname, vgid, &consistent))) {
-+		if (!(vg = _vg_read_internal(cmd, vgname, vgid, &consistent))) {
- 			stack;
- 			continue;
- 		}
-@@ -2456,7 +2460,7 @@ static vg_t *_recover_vg(struct cmd_cont
- 	if (!lock_vol(cmd, lock, lock_flags))
- 		return_NULL;
- 
--	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)))
-+	if (!(vg = _vg_read_internal(cmd, vg_name, vgid, &consistent)))
- 		return_NULL;
- 	if (!consistent)
- 		return_NULL;
-@@ -2515,7 +2519,7 @@ static vg_t *_vg_lock_and_read(struct cm
- 	consistent_in = consistent;
- 
- 	/* If consistent == 1, we get NULL here if correction fails. */
--	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent))) {
-+	if (!(vg = _vg_read_internal(cmd, vg_name, vgid, &consistent))) {
- 		if (consistent_in && !consistent) {
- 			log_error("Volume group \"%s\" inconsistent.", vg_name);
- 			failure |= FAILED_INCONSISTENT;
-diff -rN -u -p old-temp.4430/lib/metadata/metadata-exported.h new-temp.4430/lib/metadata/metadata-exported.h
---- old-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:58.730781531 +0100
-+++ new-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:58.778780229 +0100
-@@ -364,8 +364,6 @@ struct lv_list {
- int vg_write(struct volume_group *vg);
- int vg_commit(struct volume_group *vg);
- int vg_revert(struct volume_group *vg);
--struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
--			     const char *vgid, int *consistent);
- struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
- 				struct dm_list *mdas, uint64_t *label_sector,
- 				int warnings);
++int dm_tree_node_add_crypt_target(struct dm_tree_node *node,
++				  uint64_t size,
++				  const char *cipher,
++				  const char *key)
++{
++	struct load_segment *seg;
++
++	if (!(seg = _add_segment(node, SEG_CRYPT, size)))
++		return_0;
++
++	seg->cipher = cipher;
++	seg->key = key;
++
++	return 1;
++}
++
+ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+ 					  uint32_t region_size,
+ 					  unsigned clustered, 
+-- 
+1.5.6.5
 
 
