@@ -1,204 +1,212 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 20 Jan 2009 19:26:39 -0500
-Subject: [PATCH] Add flag to LV interators to indicate whether to process hidden LVs.
-Message-ID: <1232497599-19893-1-git-send-email-dwysocha@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 21 Jan 2009 12:19:51 +0100
+Subject: [PATCH 10/15] Cache key from crypt mapping table if segment is active.
+In-Reply-To: <3d899235af519a0e471dc86df580a991371b91fd.1232488181.git.mbroz@redhat.com>
+References: <cover.1232488181.git.mbroz@redhat.com>
+	<f798c95b982dd875729f4c43b4cb7667965ea41a.1232488181.git.mbroz@redhat.com>
+	<1778134dc3683bb96cc98ad243d673be1175880a.1232488181.git.mbroz@redhat.com>
+	<589f0ab5ed9a4e91eeb4fefd9a46e0c873af0e2a.1232488181.git.mbroz@redhat.com>
+	<b43d35ebbdda1be4696b072c222c243cb0645f72.1232488181.git.mbroz@redhat.com>
+	<3417d8a2769cc152bd8aef5921716b693360ee15.1232488181.git.mbroz@redhat.com>
+	<6d887c3c90806a55ac1cf569425845ce0ed16daa.1232488181.git.mbroz@redhat.com>
+	<0cf2e4e850e1c919e0e6bc98504be6d5087caa1c.1232488181.git.mbroz@redhat.com>
+	<b8d375b5ca799bd88ff701ba19b93bed02f62343.1232488181.git.mbroz@redhat.com>
+	<3d899235af519a0e471dc86df580a991371b91fd.1232488181.git.mbroz@redhat.com>
+Message-ID: <35fcbf3ab1527b121e3a8064a35eab8f7a7a2f1d.1232488181.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fixes rhbz 232499.
+For some online operations (like lvresize) we need preload
+new table, thus we need master key.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+But the key is already in mapping table, do not ask
+user and try to retrieve master key from mapping table first.
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- tools/lvchange.c  |    2 +-
- tools/lvdisplay.c |    2 +-
- tools/lvremove.c  |    2 +-
- tools/lvscan.c    |    2 +-
- tools/reporter.c  |    4 ++--
- tools/toollib.c   |   15 +++++++++++++--
- tools/toollib.h   |   12 +++++++++++-
- tools/vgdisplay.c |    2 +-
- tools/vgmknodes.c |    4 ++--
- 9 files changed, 33 insertions(+), 12 deletions(-)
+ lib/activate/activate.c    |   41 ++++++++++++++++++++++++++++++
+ lib/activate/activate.h    |    5 +++
+ lib/activate/dev_manager.c |   59 ++++++++++++++++++++++++++++++++++++++++++++
+ lib/activate/dev_manager.h |    4 +++
+ lib/metadata/crypt_manip.c |    6 ++++
+ 5 files changed, 115 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index cd0ff5a..fbf8dab 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -728,6 +728,6 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_lv(cmd, argc, argv, LCK_VG_WRITE, NULL,
-+	return process_each_lv(cmd, argc, argv, LCK_VG_WRITE, 0, NULL,
- 			       &lvchange_single);
- }
-diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
-index 5263e0d..28b9cea 100644
---- a/tools/lvdisplay.c
-+++ b/tools/lvdisplay.c
-@@ -54,6 +54,6 @@ int lvdisplay(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_lv(cmd, argc, argv, LCK_VG_READ, NULL,
-+	return process_each_lv(cmd, argc, argv, LCK_VG_READ, 0, NULL,
- 			       &_lvdisplay_single);
- }
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index 8b8401d..e3aaab9 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -33,6 +33,6 @@ int lvremove(struct cmd_context *cmd, int argc, char **argv)
- 
- 	cmd->handles_missing_pvs = 1;
- 
--	return process_each_lv(cmd, argc, argv, LCK_VG_WRITE, NULL,
-+	return process_each_lv(cmd, argc, argv, LCK_VG_WRITE, 0, NULL,
- 			       &lvremove_single);
- }
-diff --git a/tools/lvscan.c b/tools/lvscan.c
-index 1186b3b..a667046 100644
---- a/tools/lvscan.c
-+++ b/tools/lvscan.c
-@@ -80,6 +80,6 @@ int lvscan(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_lv(cmd, argc, argv, LCK_VG_READ, NULL,
-+	return process_each_lv(cmd, argc, argv, LCK_VG_READ, 0, NULL,
- 			       &lvscan_single);
- }
-diff --git a/tools/reporter.c b/tools/reporter.c
-index c62fc03..af372a8 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -352,7 +352,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 
- 	switch (report_type) {
- 	case LVS:
--		r = process_each_lv(cmd, argc, argv, LCK_VG_READ, report_handle,
-+		r = process_each_lv(cmd, argc, argv, LCK_VG_READ, 0, report_handle,
- 				    &_lvs_single);
- 		break;
- 	case VGS:
-@@ -368,7 +368,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 					    report_handle, &_pvs_in_vg);
- 		break;
- 	case SEGS:
--		r = process_each_lv(cmd, argc, argv, LCK_VG_READ, report_handle,
-+		r = process_each_lv(cmd, argc, argv, LCK_VG_READ, 0, report_handle,
- 				    &_lvsegs_single);
- 		break;
- 	case PVSEGS:
-diff --git a/tools/toollib.c b/tools/toollib.c
-index a0494a1..db839a3 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -86,6 +86,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 			  const struct volume_group *vg,
- 			  const struct dm_list *arg_lvnames,
- 			  const struct dm_list *tags,
-+			  uint32_t flags,
- 			  void *handle,
- 			  process_single_lv_fn_t process_single)
- {
-@@ -121,6 +122,15 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (lvl->lv->status & SNAPSHOT)
- 			continue;
-+		/*
-+		 * If no LVs given on the cmdline, and this is not
-+		 * a visible LV, then skip the LV if we were told
-+		 * to only process visible ones.
-+		 */
-+		if (!lvargs_supplied &&
-+		    !lv_is_visible(lvl->lv) &&
-+		    (flags & PROCESS_ONLY_VISIBLE_LVS))
-+			continue;
- 
- 		/* Should we process this LV? */
- 		if (process_all)
-@@ -161,7 +171,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 0f13cbd..0b17be8 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1117,6 +1117,47 @@ int pv_uses_vg(struct physical_volume *pv,
+ 	return dev_manager_device_uses_vg(pv->dev, vg);
  }
  
- int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
--		    uint32_t lock_type, void *handle,
-+		    uint32_t lock_type, uint32_t flags,
-+		    void *handle,
- 		    int (*process_single) (struct cmd_context * cmd,
- 					   struct logical_volume * lv,
- 					   void *handle))
-@@ -343,7 +354,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 		}
- 
- 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
--					    handle, process_single);
-+					    flags, handle, process_single);
- 		unlock_vg(cmd, vgname);
- 		if (ret > ret_max)
- 			ret_max = ret;
-diff --git a/tools/toollib.h b/tools/toollib.h
-index 915e3f3..5a20d12 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -47,9 +47,18 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 						      struct volume_group * vg,
- 						      struct pv_segment * pvseg,
- 						      void *handle));
 +/*
-+ * Indicates whether we should process only visible LVs when looping
-+ * through a list of LVs on a VG.
-+ * NOTE: This does not apply if a hidden/non-visible LV is given on the
-+ * commandline for a tool, only if another option is given (e.g. a VG) that
-+ * implies a list of LVs and the tools need to make a decision.
++ * Retrieve key for lv segment from dm table and cache it
 + */
-+#define PROCESS_ONLY_VISIBLE_LVS 0x1
++int lv_seg_cache_key(struct lv_segment *seg)
++{
++	char *key;
++	struct dev_manager *dm;
++	struct logical_volume *lv = seg->lv;
++	struct crypto_store *cs = seg->crypto_store;
++	int r;
++
++	if (!(key = dm_malloc(cs_key_bytes(cs) + 1)))
++		return_0;
++
++	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name))) {
++		dm_free(key);
++		return_0;
++	}
++
++	if (!(r = dev_manager_crypt_key(dm, seg, key, cs_key_bytes(cs) + 1)))
++		stack;
++
++	dev_manager_destroy(dm);
++
++	if (!r)
++		goto out;
++
++	if (!lvm_masterkeys_verify(cs, key)) {
++		log_error("Internal error: Key in mapping table "
++			  "is not in expected format.");
++		goto out;
++	}
++
++	return lvm_masterkeys_insert(&cs->id, key);
++out:
++	memset(key, 0, cs_key_bytes(cs));
++	dm_free(key);
++	return 0;
++}
++
++
+ void activation_release(void)
+ {
+ 	dev_manager_release();
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index c5bd4b6..cc096a2 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -107,4 +107,9 @@ int pv_uses_vg(struct physical_volume *pv,
+  */
+ int device_is_usable(dev_t dev);
  
- int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
--		    uint32_t lock_type, void *handle,
-+		    uint32_t lock_type, uint32_t flags,
-+		    void *handle,
- 		    int (*process_single) (struct cmd_context * cmd,
- 					   struct logical_volume * lv,
- 					   void *handle));
-@@ -77,6 +86,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 			  const struct volume_group *vg,
- 			  const struct dm_list *arg_lvnames,
- 			  const struct dm_list *tags,
-+			  uint32_t flags,
- 			  void *handle,
- 			  process_single_lv_fn_t process_single);
- 
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index 02fdc19..562fdf8 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -45,7 +45,7 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
- 	if (arg_count(cmd, verbose_ARG)) {
- 		vgdisplay_extents(vg);
- 
--		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL,
-+		process_each_lv_in_vg(cmd, vg, NULL, NULL, 0, NULL,
- 				      (process_single_lv_fn_t)lvdisplay_full);
- 
- 		log_print("--- Physical volumes ---");
-diff --git a/tools/vgmknodes.c b/tools/vgmknodes.c
-index fce925b..6e57a14 100644
---- a/tools/vgmknodes.c
-+++ b/tools/vgmknodes.c
-@@ -33,6 +33,6 @@ int vgmknodes(struct cmd_context *cmd, int argc, char **argv)
- 	if (!lv_mknodes(cmd, NULL))
- 		return ECMD_FAILED;
- 
--	return process_each_lv(cmd, argc, argv, LCK_VG_READ, NULL,
--			    &_vgmknodes_single);
-+	return process_each_lv(cmd, argc, argv, LCK_VG_READ, 0, NULL,
-+			       &_vgmknodes_single);
++/*
++ * Retrieve key for lv segment from dm table and cache it
++ */
++int lv_seg_cache_key(struct lv_segment *seg);
++
+ #endif
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index ef827ad..9be77f3 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1272,3 +1272,62 @@ out:
+ 	dm_tree_free(dtree);
+ 	return r;
  }
++
++int dev_manager_crypt_key(struct dev_manager *dm, struct lv_segment *seg,
++			  char *buffer, int buffer_len)
++{
++	struct logical_volume *lv = seg->lv;
++	const char *dlid;
++	int r = 0;
++	struct dm_task *dmt;
++	struct dm_info info;
++	void *next = NULL;
++	uint64_t req_start, start, length;
++	char *type = NULL;
++	char *params = NULL;
++	char *key_start, *key_end;
++
++	// FIXME: secure pool operation & deallocate
++
++	/*
++	 * Build a name for the top layer.
++	 */
++	if (!(dlid = build_dlid(dm, lv->lvid.s, NULL)))
++		return_0;
++
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TABLE, 0, 0)))
++		return_0;
++
++	if (!dm_task_no_open_count(dmt))
++		log_error("Failed to disable open_count");
++
++	if (!dm_task_run(dmt))
++		goto_out;
++
++	if (!dm_task_get_info(dmt, &info) || !info.exists)
++		goto_out;
++
++	req_start = seg->le * seg->lv->vg->extent_size;
++
++	do {
++		next = dm_get_next_target(dmt, next, &start, &length,
++					  &type, &params);
++		if (req_start == start) {
++			if (!(key_start = strchr(params, ' ')))
++				break;
++			key_start++;
++			if (!(key_end = strchr(key_start, ' ')))
++				break;
++			if (key_end - key_start > buffer_len)
++				break;
++			strncpy(buffer, key_start, buffer_len);
++			buffer[buffer_len - 1] = '\0';
++			r = 1;
++			break;
++		}
++	} while (next);
++
++out:
++	dm_task_destroy(dmt);
++	return r;
++}
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index 7a76453..ac7cec9 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -17,6 +17,7 @@
+ #define _LVM_DEV_MANAGER_H
+ 
+ struct logical_volume;
++struct lv_segment;
+ struct volume_group;
+ struct cmd_context;
+ struct dev_manager;
+@@ -57,6 +58,9 @@ int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv);
+ int dev_manager_lv_mknodes(const struct logical_volume *lv);
+ int dev_manager_lv_rmnodes(const struct logical_volume *lv);
+ 
++int dev_manager_crypt_key(struct dev_manager *dm, struct lv_segment *seg,
++			  char *buffer, int buffer_len);
++
+ /*
+  * Put the desired changes into effect.
+  */
+diff --git a/lib/metadata/crypt_manip.c b/lib/metadata/crypt_manip.c
+index ff5c3e2..4b45a07 100644
+--- a/lib/metadata/crypt_manip.c
++++ b/lib/metadata/crypt_manip.c
+@@ -242,6 +242,12 @@ static int _seg_retrieve_masterkey(struct lv_segment *seg)
+ 	if (lvm_masterkeys_query(&seg->crypto_store->id))
+ 		return 1;
+ 
++	/*
++	 * Try to retrieve key from dm table
++	 */
++	if (lv_is_active(seg->lv) && lv_seg_cache_key(seg))
++		return 1;
++
+ 	return lvm_masterkeys_retrieve(seg->lv->name, seg->crypto_store);
+ }
+ 
 -- 
-1.6.0.5
+1.5.6.5
 
 
