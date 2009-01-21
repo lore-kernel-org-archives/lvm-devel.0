@@ -1,438 +1,213 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 30 Jan 2009 12:56:28 +0100
-Subject: [PATCH v2] Add --align parameter to pvcreate
-In-Reply-To: <49804A78.3020302@redhat.com>
-References: <49804A78.3020302@redhat.com>
-Message-ID: <4982EAEC.9000209@redhat.com>
+Date: Wed, 21 Jan 2009 12:19:46 +0100
+Subject: [PATCH 05/15] Add key store handlers machinery.
+In-Reply-To: <b43d35ebbdda1be4696b072c222c243cb0645f72.1232488181.git.mbroz@redhat.com>
+References: <cover.1232488181.git.mbroz@redhat.com>
+	<f798c95b982dd875729f4c43b4cb7667965ea41a.1232488181.git.mbroz@redhat.com>
+	<1778134dc3683bb96cc98ad243d673be1175880a.1232488181.git.mbroz@redhat.com>
+	<589f0ab5ed9a4e91eeb4fefd9a46e0c873af0e2a.1232488181.git.mbroz@redhat.com>
+	<b43d35ebbdda1be4696b072c222c243cb0645f72.1232488181.git.mbroz@redhat.com>
+Message-ID: <3417d8a2769cc152bd8aef5921716b693360ee15.1232488181.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-(added lvm.conf value and fixed precedence when restoring from backup)
+This code should load various drivers for manipulating
+with key for volumes.
 
---
-Add --align parameter to pvcreate.
+Here will be interface between LVM (for volume management)
+and key management (and related security code).
 
-Some RAID controllers suggest align volumes
-to stripe or chunk size.
+Currently it only maintains the list of key handlers
+and provides search for key handler in this list.
 
-Currently lvm2 align LVs to underlying MD device chunk automatically,
-but there is no proper way to set this parameter directly
-for other RAID drivers.
+Also implements manadatory key handler "simple".
+ - it stores cipher & keysize in LVM metadata directly
+ - asks for Master Key (no processig here)
 
-Note that it is not as the same as metadata area size.
-
-I think we should provide possibility for system administrator
-to force PV data payload alignment during PV creation.
-(Also it is adminitrator or distro installator responsibility
-to set proper physical extent size later during vgcreate.)
-
-Patch adds --align to pvcreate (default is size in KB).
-Also it add pv_alignment to device section of lvm.conf,
-where the default PV alignment can be specified.
-
-pe_align() function now takes force_align parameter, which
-can overwite data aligmnent if set to non-zero.
-
-Patch also fixes that after vgremove the orphan PV data align
-value is not rewritten by default.
+This is direct interface to dm-crypt mapping, and
+it does not require any cryptography code in userspace.
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- WHATS_NEW                        |    1 +
- doc/example.conf                 |   16 +++++++++---
- lib/format_text/format-text.c    |   13 +++++++---
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |   50 ++++++++++++++++++++++++++++++-------
- lib/metadata/metadata.h          |    2 +-
- man/pvcreate.8.in                |    7 +++++
- tools/args.h                     |    1 +
- tools/commands.h                 |    5 ++-
- tools/pvcreate.c                 |   18 +++++++++++++-
- tools/vgconvert.c                |    2 +-
- 11 files changed, 93 insertions(+), 23 deletions(-)
+ lib/Makefile.in            |    1 +
+ lib/commands/toolcontext.c |    3 ++
+ lib/crypt/key_handlers.c   |   85 ++++++++++++++++++++++++++++++++++++++++++++
+ lib/crypt/lvm-crypto.h     |   25 ++++++++++++-
+ 4 files changed, 112 insertions(+), 2 deletions(-)
+ create mode 100644 lib/crypt/key_handlers.c
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 29c3cd2..c9b3d8e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.45 - 
- ===================================
-+  Add --align parameter to pvcreate to allow specify payload align directly.
-   Replace internal vg_check_status() implementation.
-   Rename vg_read() to vg_read_internal().
- 
-diff --git a/doc/example.conf b/doc/example.conf
-index 16cefb2..3bcfff0 100644
---- a/doc/example.conf
-+++ b/doc/example.conf
-@@ -86,7 +86,7 @@ devices {
-     # If sysfs is mounted (2.6 kernels) restrict device scanning to 
-     # the block devices it believes are valid.
-     # 1 enables; 0 disables.
--    sysfs_scan = 1	
-+    sysfs_scan = 1
- 
-     # By default, LVM2 will ignore devices used as components of
-     # software RAID (md) devices by looking for md superblocks.
-@@ -98,6 +98,14 @@ devices {
-     # 1 enables; 0 disables.
-     md_chunk_alignment = 1
- 
-+    # Default alignment (in KB) for PV, data payload will be aligned
-+    # to multiple of this boundary.
-+    # If not defined (or set to zero) alignment will be 64k or page size,
-+    # if page size is bigger.
-+    # Also note that specialized alignment (md_chunk_alignment) takes
-+    # precedence before this setting.
-+    #pv_alignment = 4096
-+
-     # If, while scanning the system for PVs, LVM2 encounters a device-mapper
-     # device that has its I/O suspended, it waits for it to become accessible.
-     # Set this to 1 to skip such devices.  This should only be needed
-@@ -129,7 +137,7 @@ log {
-     # There are 6 syslog-like log levels currently in use - 2 to 7 inclusive.
-     # 7 is the most verbose (LOG_DEBUG).
-     level = 0
--    
-+
-     # Format of output messages
-     # Whether or not (1 or 0) to indent messages according to their severity
-     indent = 1
-@@ -175,7 +183,7 @@ backup {
-     # Where should archived files go ?
-     # Remember to back up this directory regularly!
-     archive_dir = "/etc/lvm/archive"
--    
-+
-     # What is the minimum number of archive files you wish to keep ?
-     retain_min = 10
- 
-@@ -193,7 +201,7 @@ shell {
- 
- # Miscellaneous global LVM2 settings
- global {
--    
-+
-     # The file creation mask for any files and directories created.
-     # Interpreted as octal if the first digit is zero.
-     umask = 077
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 428b5e2..74c8759 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1182,7 +1182,7 @@ static int _mda_setup(const struct format_type *fmt,
- 	if (!pvmetadatacopies)
- 		return 1;
- 
--	alignment = pe_align(pv) << SECTOR_SHIFT;
-+	alignment = pe_align(pv, 0) << SECTOR_SHIFT;
- 	disk_size = pv->size << SECTOR_SHIFT;
- 	pe_start <<= SECTOR_SHIFT;
- 	pe_end <<= SECTOR_SHIFT;
-@@ -1347,9 +1347,14 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
- 	else
- 		dm_list_init(&info->das);
- 
-+	/*
-+	 * Keep PV data alignment if already set
-+	 */
-+	if (pv->pe_start < pe_align(pv, 0))
-+		pv->pe_start = pe_align(pv, 0);
-+
- 	/* Set pe_start to first aligned sector after any metadata
- 	 * areas that begin before pe_start */
--	pv->pe_start = pe_align(pv);
- 	dm_list_iterate_items(mda, &info->mdas) {
- 		mdac = (struct mda_context *) mda->metadata_locn;
- 		if (pv->dev == mdac->area.dev &&
-@@ -1358,9 +1363,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
- 		     (pv->pe_start << SECTOR_SHIFT))) {
- 			pv->pe_start = (mdac->area.start + mdac->area.size)
- 			    >> SECTOR_SHIFT;
--			adjustment = pv->pe_start % pe_align(pv);
-+			adjustment = pv->pe_start % pe_align(pv, 0);
- 			if (adjustment)
--				pv->pe_start += (pe_align(pv) - adjustment);
-+				pv->pe_start += (pe_align(pv, 0) - adjustment);
- 		}
- 	}
- 	if (!add_da
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index e785383..b25e30d 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -407,6 +407,7 @@ pv_t *pv_create(const struct cmd_context *cmd,
- 		      struct device *dev,
- 		      struct id *id,
- 		      uint64_t size,
-+		      unsigned long req_pe_align,
- 		      uint64_t pe_start,
- 		      uint32_t existing_extent_count,
- 		      uint32_t existing_extent_size,
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 0130bd3..cf7cb70 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -46,6 +46,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- static struct physical_volume *_pv_create(const struct format_type *fmt,
- 				  struct device *dev,
- 				  struct id *id, uint64_t size,
-+				  unsigned long align,
- 				  uint64_t pe_start,
- 				  uint32_t existing_extent_count,
- 				  uint32_t existing_extent_size,
-@@ -65,19 +66,33 @@ static struct pv_list *_find_pv_in_vg(const struct volume_group *vg,
- static struct physical_volume *_find_pv_in_vg_by_uuid(const struct volume_group *vg,
- 						      const struct id *id);
- 
--unsigned long pe_align(struct physical_volume *pv)
-+unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align)
- {
--	if (pv->pe_align)
-+	if (pv->pe_align && !force_pe_align)
- 		goto out;
- 
--	pv->pe_align = MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
-+	if (force_pe_align)
-+		pv->pe_align = force_pe_align;
-+	else 
-+		/*
-+		 * Config value is in KB
-+		 */
-+		pv->pe_align = (find_config_tree_int(pv->fmt->cmd,
-+				"devices/pv_alignment", 0) * 1024) >> SECTOR_SHIFT;
- 
- 	/*
--	 * Align to chunk size of underlying md device if present
-+	 * Use old default if not specified
- 	 */
-+	if (!pv->pe_align)
-+		pv->pe_align = MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
-+
-+
- 	if (!pv->dev)
- 		goto out;
- 
-+	/*
-+	 * Align to chunk size of underlying md device if present
-+	 */
- 	if (find_config_tree_bool(pv->fmt->cmd, "devices/md_chunk_alignment",
- 				  DEFAULT_MD_CHUNK_ALIGNMENT))
- 		pv->pe_align = MAX(pv->pe_align,
-@@ -148,8 +163,8 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 
- 	/* FIXME Do proper rounding-up alignment? */
- 	/* Reserved space for label; this holds 0 for PVs created by LVM1 */
--	if (pv->pe_start < pe_align(pv))
--		pv->pe_start = pe_align(pv);
-+	if (pv->pe_start < pe_align(pv, 0))
-+		pv->pe_start = pe_align(pv, 0);
- 
- 	/*
- 	 * pe_count must always be calculated by pv_setup
-@@ -759,6 +774,7 @@ int vg_split_mdas(struct cmd_context *cmd __attribute((unused)),
-  * @dev: PV device to initialize
-  * @id: PV UUID to use for initialization
-  * @size: size of the PV in sectors
-+ * @req_pe_align: requested alignment of payload
-  * @pe_start: physical extent start
-  * @existing_extent_count
-  * @existing_extent_size
-@@ -776,13 +792,14 @@ int vg_split_mdas(struct cmd_context *cmd __attribute((unused)),
- pv_t *pv_create(const struct cmd_context *cmd,
- 		struct device *dev,
- 		struct id *id, uint64_t size,
-+		unsigned long req_pe_align,
- 		uint64_t pe_start,
- 		uint32_t existing_extent_count,
- 		uint32_t existing_extent_size,
- 		int pvmetadatacopies,
- 		uint64_t pvmetadatasize, struct dm_list *mdas)
- {
--	return _pv_create(cmd->fmt, dev, id, size, pe_start,
-+	return _pv_create(cmd->fmt, dev, id, size, req_pe_align, pe_start,
- 			  existing_extent_count,
- 			  existing_extent_size,
- 			  pvmetadatacopies,
-@@ -826,6 +843,7 @@ static struct physical_volume *_alloc_pv(struct dm_pool *mem, struct device *dev
- static struct physical_volume *_pv_create(const struct format_type *fmt,
- 				  struct device *dev,
- 				  struct id *id, uint64_t size,
-+				  unsigned long req_pe_align,
- 				  uint64_t pe_start,
- 				  uint32_t existing_extent_count,
- 				  uint32_t existing_extent_size,
-@@ -860,15 +878,25 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
- 		pv->size = size;
- 	}
- 
--	if (pv->size < PV_MIN_SIZE) {
--		log_error("%s: Size must exceed minimum of %ld sectors.",
--			  pv_dev_name(pv), PV_MIN_SIZE);
-+	if (pv->size < (req_pe_align + PV_MIN_SIZE)) {
-+		log_error("%s: Size %smust exceed minimum of %ld sectors.",
-+			  pv_dev_name(pv),
-+			  req_pe_align ? "after data alignment " : "",
-+			  PV_MIN_SIZE);
- 		goto bad;
- 	}
- 
- 	pv->fmt = fmt;
- 	pv->vg_name = fmt->orphan_vg_name;
- 
-+	/*
-+	 * Force data alignment if specified
-+	 */
-+	if (req_pe_align && pe_align(pv, req_pe_align) != req_pe_align)
-+		log_warn("%s: Overriding data aligmnent to %lu sectors"
-+			 " (requested %lu sectors)", pv_dev_name(pv),
-+			 pe_align(pv, 0), req_pe_align);
-+
- 	if (!fmt->ops->pv_setup(fmt, pe_start, existing_extent_count,
- 				existing_extent_size,
- 				pvmetadatacopies, pvmetadatasize, mdas,
-@@ -877,6 +905,8 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
- 			  "failed.", pv_dev_name(pv));
- 		goto bad;
- 	}
-+
-+
- 	return pv;
- 
-       bad:
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index c425fbf..c982b78 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -263,7 +263,7 @@ struct format_handler {
- /*
-  * Utility functions
-  */
--unsigned long pe_align(struct physical_volume *pv);
-+unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align);
- int vg_validate(struct volume_group *vg);
- 
- int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
-diff --git a/man/pvcreate.8.in b/man/pvcreate.8.in
-index 7ecda56..bfecc5b 100644
---- a/man/pvcreate.8.in
-+++ b/man/pvcreate.8.in
-@@ -13,6 +13,7 @@ pvcreate \- initialize a disk or partition for use by LVM
- .RB [ \-M | \-\-metadatatype type ]
- .RB [ \-\-metadatacopies #copies ]
- .RB [ \-\-metadatasize size ]
-+.RB [ \-\-align size ]
- .RB [ \-\-restorefile file ]
- .RB [ \-\-setphysicalvolumesize size ]
- .RB [ \-u | \-\-uuid uuid ]
-@@ -89,6 +90,12 @@ to see where the metadata areas are placed.
- The approximate amount of space to be set aside for each metadata area.
- (The size you specify may get rounded.)
- .TP
-+.BR \-\-align " size"
-+Force align start of the payload to specified boundary (to align
-+with underlying RAID device stripe or chunk).
-+Note that you should use properly sized physical extent later
-+in vgcreate to correctly align all Logical Volumes start too.
-+.TP
- .BR \-\-metadatacopies " copies"
- The number of metadata areas to set aside on each PV.  Currently
- this can be 0, 1 or 2.  
-diff --git a/tools/args.h b/tools/args.h
-index 8f026fc..776fc0c 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -56,6 +56,7 @@ arg(ignoremonitoring_ARG, '\0', "ignoremonitoring", NULL, 0)
- arg(nameprefixes_ARG, '\0', "nameprefixes", NULL, 0)
- arg(unquoted_ARG, '\0', "unquoted", NULL, 0)
- arg(rows_ARG, '\0', "rows", NULL, 0)
-+arg(physicalvolumealign_ARG, '\0', "align", size_kb_arg, 0)
- 
- /* Allow some variations */
- arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index 58c6156..4007639 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -462,6 +462,7 @@ xx(pvcreate,
-    "\t[-M|--metadatatype 1|2]" "\n"
-    "\t[--metadatacopies #copies]" "\n"
-    "\t[--metadatasize MetadataSize[kKmMgGtTpPeE]]" "\n"
-+   "\t[--align Size[kKmM]]" "\n"
-    "\t[--setphysicalvolumesize PhysicalVolumeSize[kKmMgGtTpPeE]" "\n"
-    "\t[-t|--test] " "\n"
-    "\t[-u|--uuid uuid] " "\n"
-@@ -472,8 +473,8 @@ xx(pvcreate,
-    "\tPhysicalVolume [PhysicalVolume...]\n",
- 
-    force_ARG, test_ARG, labelsector_ARG, metadatatype_ARG, metadatacopies_ARG,
--   metadatasize_ARG, physicalvolumesize_ARG, restorefile_ARG, uuidstr_ARG,
--   yes_ARG, zero_ARG)
-+   metadatasize_ARG, physicalvolumealign_ARG, physicalvolumesize_ARG,
-+   restorefile_ARG, uuidstr_ARG, yes_ARG, zero_ARG)
- 
- xx(pvdata,
-    "Display the on-disk metadata for physical volume(s)",
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index db1a0e2..9a12c33 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -19,6 +19,7 @@
- struct pvcreate_params {
- 	int zero;
- 	uint64_t size;
-+	uint64_t align;
- 	int pvmetadatacopies;
- 	uint64_t pvmetadatasize;
- 	int64_t labelsector;
-@@ -177,7 +178,7 @@ static int pvcreate_single(struct cmd_context *cmd, const char *pv_name,
- 	}
- 
- 	dm_list_init(&mdas);
--	if (!(pv = pv_create(cmd, dev, pp->idp, pp->size, pp->pe_start,
-+	if (!(pv = pv_create(cmd, dev, pp->idp, pp->size, pp->align, pp->pe_start,
- 			     pp->extent_count, pp->extent_size,
- 			     pp->pvmetadatacopies,
- 			     pp->pvmetadatasize,&mdas))) {
-@@ -329,6 +330,21 @@ static int pvcreate_validate_params(struct cmd_context *cmd,
- 	}
- 	pp->size = arg_uint64_value(cmd, physicalvolumesize_ARG, UINT64_C(0));
- 
-+	if (arg_sign_value(cmd, physicalvolumealign_ARG, 0) == SIGN_MINUS) {
-+		log_error("Physical volume alignment may not be negative");
-+		return 0;
-+	}
-+	pp->align = arg_uint64_value(cmd, physicalvolumealign_ARG, UINT64_C(0));
-+
-+	if (pp->align > ULONG_MAX) {
-+		log_error("Physical volume alignment is too big.");
-+		return 0;
-+	}
-+	if (pp->align && pp->pe_start && (pp->pe_start % pp->align)) {
-+		log_error("Incompatible alignment value is ignored.");
-+		pp->align = 0;
-+	}
-+
- 	if (arg_sign_value(cmd, metadatasize_ARG, 0) == SIGN_MINUS) {
- 		log_error("Metadata size may not be negative");
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index d7b2bf2..41395ed 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -37,6 +37,7 @@ SOURCES =\
+ 	cache/lvmcache.c \
+ 	commands/toolcontext.c \
+ 	config/config.c \
++	crypt/key_handlers.c \
+ 	crypt/masterkey.c \
+ 	crypt/password.c \
+ 	datastruct/btree.c \
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 26a4c83..f9a0b13 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1002,6 +1002,8 @@ static int _init_crypto(struct cmd_context *cmd)
+ #ifdef CRYPT_INTERNAL
+ 	if (!lvm_masterkeys_init())
  		return 0;
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-index dc9d023..209d597 100644
---- a/tools/vgconvert.c
-+++ b/tools/vgconvert.c
-@@ -133,7 +133,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
++	if (!lvm_keystore_handlers_init())
++		return 0;
+ #endif
+ 	return 1;
+ }
+@@ -1010,6 +1012,7 @@ static void _destroy_crypto(struct cmd_context *cmd)
+ {
+ #ifdef CRYPT_INTERNAL
+ 	lvm_masterkeys_destroy();
++	lvm_keystore_handlers_destroy();
+ #endif
+ }
  
- 		dm_list_init(&mdas);
- 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
--				     &existing_pv->id, size,
-+				     &existing_pv->id, size, 0,
- 				     pe_start, pv_pe_count(existing_pv),
- 				     pv_pe_size(existing_pv), pvmetadatacopies,
- 				     pvmetadatasize, &mdas))) {
-
+diff --git a/lib/crypt/key_handlers.c b/lib/crypt/key_handlers.c
+new file mode 100644
+index 0000000..678a260
+--- /dev/null
++++ b/lib/crypt/key_handlers.c
+@@ -0,0 +1,85 @@
++/*
++ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "lvm-crypto.h"
++
++/*
++ * Global Key Store handlers list
++ */
++static struct dm_list _keystore_handlers;
++
++/*
++ * Plain handler (mandatory)
++ */
++static int plain_retrieve(struct crypto_store *cs, const char *for_text,
++			  char *buffer, unsigned buffer_len)
++{
++	char prompt[4096];
++	unsigned len;
++
++	dm_snprintf(prompt, sizeof(prompt), "Enter master key%s%s [%u]: ",
++		    for_text ? " for " : "", for_text ?: "", buffer_len);
++	len = lvm_read_password(prompt, buffer, buffer_len);
++	if (len != buffer_len) {
++		log_error("Incorrect key length (need %u bytes, received %u)",
++			  buffer_len, len);
++		return 0;
++	}
++
++	return 1;
++}
++
++static struct crypto_store_ops _plain_ops = {
++	.master_key_retrieve = plain_retrieve,
++};
++
++static struct crypto_store_type _plain_csh = {
++	.name = "plain",
++	.flags = CS_IGNORE_KEYHASH,
++	.ops = &_plain_ops,
++};
++
++/*
++ * Key Store registration helpers
++ */
++int lvm_keystore_handlers_init()
++{
++	dm_list_init(&_keystore_handlers);
++
++	// FIXME: here should be library loading
++	dm_list_add(&_keystore_handlers, &_plain_csh.list);
++
++	return 1;
++}
++
++void lvm_keystore_handlers_destroy()
++{
++	dm_list_init(&_keystore_handlers);
++}
++
++struct crypto_store_type *lvm_get_keystore_handler(const char *name)
++{
++	struct crypto_store_type *csh;
++
++	if (!name)
++		return_NULL;
++
++	dm_list_iterate_items(csh, &_keystore_handlers)
++		if (!strcmp(name, csh->name))
++			return csh;
++
++	log_debug("Not supported %s handler for crypto store.", name);
++	return NULL;
++}
+diff --git a/lib/crypt/lvm-crypto.h b/lib/crypt/lvm-crypto.h
+index 1a7825d..3ebddce 100644
+--- a/lib/crypt/lvm-crypto.h
++++ b/lib/crypt/lvm-crypto.h
+@@ -23,9 +23,23 @@
+  */
+ typedef const char *masterkey_t;
+ 
+-#define cs_handler_name(cs)     ((cs)->type ? (cs)->type->name : (cs)->type_name)
++/*
++ * Flags says if attribute is stored in keystore area and not in LVM metadata.
++ * By default, all generic attributes in LVM metadata must be retained
++ * (for example when some keystore handler is not loaded in rescue mode).
++ */
++#define CS_IGNORE_CIPHER	0x00000001U
++#define CS_IGNORE_KEYLEN	0x00000002U
++#define CS_IGNORE_KEYHASH	0x00000004U
++
++#define cs_flags(cs)		((cs)->type ? (cs)->type->flags : 0)
++#define cs_handler_name(cs)	((cs)->type ? (cs)->type->name : (cs)->type_name)
++
++#define cs_store_cipher(cs)	(cs_flags(cs) & CS_IGNORE_CIPHER ? 0 : 1)
++#define cs_store_keylen(cs)	(cs_flags(cs) & CS_IGNORE_KEYLEN ? 0 : 1)
++#define cs_store_keyhash(cs)	(cs_flags(cs) & CS_IGNORE_KEYHASH ? 0 : 1)
+ 
+-#define cs_key_bytes(cs)        ((cs)->key_size ? ((cs)->key_size * 2 / 8) : 4095)
++#define cs_key_bytes(cs)	((cs)->key_size ? ((cs)->key_size * 2 / 8) : 4095)
+ 
+ /*
+  * Crypto config & key store
+@@ -85,6 +99,13 @@ int lvm_masterkeys_verify(struct crypto_store *cs, const char *key);
+ int lvm_masterkeys_retrieve(const char *for_text, struct crypto_store *cs);
+ 
+ /*
++ * Key Store handlers manipulation
++ */
++int lvm_keystore_handlers_init(void);
++void lvm_keystore_handlers_destroy(void);
++struct crypto_store_type *lvm_get_keystore_handler(const char *name);
++
++/*
+  * Crypto Helper functions
+  */
+ int lvm_set_password_dev(const char *password_file);
+-- 
+1.5.6.5
 
 
