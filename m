@@ -1,136 +1,114 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 22 Jan 2009 11:10:04 +0100
-Subject: [PATCH 8/14] Convert vgreduce to use vg_read_for_update.
-In-Reply-To: <1232619010-4858-8-git-send-email-prockai@redhat.com>
+Date: Thu, 22 Jan 2009 11:10:01 +0100
+Subject: [PATCH 5/14] Implement vg_read and vg_read_for_update.
+In-Reply-To: <1232619010-4858-5-git-send-email-prockai@redhat.com>
 References: <1232619010-4858-1-git-send-email-prockai@redhat.com>
 	<1232619010-4858-2-git-send-email-prockai@redhat.com>
 	<1232619010-4858-3-git-send-email-prockai@redhat.com>
 	<1232619010-4858-4-git-send-email-prockai@redhat.com>
 	<1232619010-4858-5-git-send-email-prockai@redhat.com>
-	<1232619010-4858-6-git-send-email-prockai@redhat.com>
-	<1232619010-4858-7-git-send-email-prockai@redhat.com>
-	<1232619010-4858-8-git-send-email-prockai@redhat.com>
-Message-ID: <1232619010-4858-9-git-send-email-prockai@redhat.com>
+Message-ID: <1232619010-4858-6-git-send-email-prockai@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fri Jan  9 15:38:20 CET 2009  Petr Rockai <me@mornfall.net>
-  * Convert vgreduce to use vg_read_for_update.
-diff -rN -u -p old-temp.4430/tools/vgreduce.c new-temp.4430/tools/vgreduce.c
---- old-temp.4430/tools/vgreduce.c	2009-01-22 11:02:46.762781688 +0100
-+++ new-temp.4430/tools/vgreduce.c	2009-01-22 11:02:46.894781355 +0100
-@@ -382,7 +382,6 @@ static int _vgreduce_single(struct cmd_c
- {
- 	struct pv_list *pvl;
- 	struct volume_group *orphan_vg;
--	int consistent = 1;
- 	const char *name = pv_dev_name(pv);
+Thu Jan 15 10:55:15 CET 2009  Petr Rockai <me@mornfall.net>
+  * Implement vg_read and vg_read_for_update.
+diff -rN -u -p old-temp.4430/lib/metadata/metadata.c new-temp.4430/lib/metadata/metadata.c
+--- old-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:40.622781563 +0100
++++ new-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:40.670780470 +0100
+@@ -2601,6 +2601,74 @@ static vg_t *_vg_lock_and_read(struct cm
+ }
  
- 	if (pv_pe_alloc_count(pv)) {
-@@ -396,17 +395,10 @@ static int _vgreduce_single(struct cmd_c
- 		return ECMD_FAILED;
- 	}
- 
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE | LCK_NONBLOCK)) {
--		log_error("Can't get lock for orphan PVs");
--		return ECMD_FAILED;
--	}
--
- 	pvl = find_pv_in_vg(vg, name);
- 
--	if (!archive(vg)) {
--		unlock_vg(cmd, VG_ORPHANS);
-+	if (!archive(vg))
- 		return ECMD_FAILED;
--	}
- 
- 	log_verbose("Removing \"%s\" from volume group \"%s\"", name, vg->name);
- 
-@@ -426,12 +418,11 @@ static int _vgreduce_single(struct cmd_c
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
- 
--	if(!(orphan_vg = vg_read_internal(cmd, vg->fid->fmt->orphan_vg_name, NULL, &consistent)) ||
--	   !consistent) {
--		log_error("Unable to read existing orphan PVs");
--		unlock_vg(cmd, VG_ORPHANS);
-+	orphan_vg = vg_read_for_update(cmd, vg->fid->fmt->orphan_vg_name,
-+				       NULL, NONBLOCKING_LOCK | ORPHAN_LOCK);
+ /*
++ * vg_read: High-level volume group metadata read function.
++ *
++ * On failure, an error-indicating handle is returned. Users should use
++ * "vg_read_error" to check whether handle indicates an error or it points to
++ * valid volume group data. Moreover, vg_read_error will provide more details
++ * about the kind of failure:
++ *
++ *  - metadata inconsistent and automatic correction failed: FAILED_INCONSISTENT
++ *  - VG is read-only: FAILED_READ_ONLY
++ *  - VG is EXPORTED, unless flags has ALLOW_EXPORTED: FAILED_EXPORTED
++ *  - VG is not RESIZEABLE, unless flags has ALLOW_NONRESIZEABLE:
++ *    FAILED_RESIZEABLE
++ *  - locking failed: FAILED_LOCKING
++ *
++ * On failures, all locks are released, unless KEEP_LOCK has been supplied.
++ *
++ * By default, volume groups are opened read-only. To open a VG for updates,
++ * please use vg_read_for_update (see below).
++ *
++ * Checking for VG existence:
++ *
++ * If EXISTENCE_CHECK is set in flags, if the VG exists, a non-NULL struct
++ * volume_group will be returned every time, but if it has INCONSISTENT_VG set,
++ * the other fields will be uninitialized. You *have to* check for
++ * INCONSISTENT_VG if passing EXISTENCE_CHECK. You also *must not* use it if it
++ * has INCONSISTENT_VG set.
++ *
++ * FIXME: We want vg_read to attempt automatic recovery after acquiring a
++ * temporary write lock -- if that fails, we bail out as usual, with failed &
++ * FAILED_INCONSISTENT. If it works, we are good to go. Code that's been in
++ * toollib just set lock type to LCK_WRITE and called vg_read_internal with
++ * *consistent = 1.
++ */
++vg_t *vg_read(struct cmd_context *cmd, const char *vg_name,
++	      const char *vgid, uint32_t flags)
++{
++	uint32_t status = CLUSTERED;
++	uint32_t lock = LCK_VG_READ;
 +
-+	if (vg_read_error(orphan_vg))
- 		return ECMD_FAILED;
--	}
- 
- 	if (!vg_split_mdas(cmd, vg, orphan_vg) || !vg->pv_count) {
- 		log_error("Cannot remove final metadata area on \"%s\" from \"%s\"",
-@@ -468,7 +459,6 @@ int vgreduce(struct cmd_context *cmd, in
- 	struct volume_group *vg;
- 	char *vg_name;
- 	int ret = 1;
--	int consistent = 1;
- 	int fixed = 1;
- 	int repairing = arg_count(cmd, removemissing_ARG);
- 
-@@ -515,41 +505,37 @@ int vgreduce(struct cmd_context *cmd, in
- 	}
- 
- 	log_verbose("Finding volume group \"%s\"", vg_name);
--	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
--		log_error("Can't get lock for %s", vg_name);
--		return ECMD_FAILED;
--	}
- 
--	if ((!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent)) || !consistent)
--	    && !repairing) {
--		log_error("Volume group \"%s\" doesn't exist", vg_name);
--		unlock_vg(cmd, vg_name);
-+	vg = vg_read_for_update(cmd, vg_name, NULL, ALLOW_EXPORTED);
-+	if (vg_read_error(vg) == FAILED_ALLOCATION ||
-+	    vg_read_error(vg) == FAILED_NOTFOUND)
- 		return ECMD_FAILED;
--	}
- 
--	if (vg && !vg_check_status(vg, CLUSTERED)) {
--		unlock_vg(cmd, vg_name);
-+	/* FIXME We want to allow read-only VGs to be changed here? */
-+	if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+	    && !arg_count(cmd, removemissing_ARG))
- 		return ECMD_FAILED;
--	}
- 
- 	if (repairing) {
--		if (vg && consistent && !vg_missing_pv_count(vg)) {
-+		if (!vg_read_error(vg) && !vg_missing_pv_count(vg)) {
- 			log_error("Volume group \"%s\" is already consistent",
- 				  vg_name);
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_PROCESSED;
- 		}
- 
--		consistent = !arg_count(cmd, force_ARG);
--		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
--			log_error("Volume group \"%s\" not found", vg_name);
--			unlock_vg(cmd, vg_name);
--			return ECMD_FAILED;
--		}
--		if (!vg_check_status(vg, CLUSTERED)) {
-+		log_verbose("Trying to open VG %s for recovery...", vg_name);
++	if (flags & READ_FOR_UPDATE) {
++		status |= EXPORTED_VG | LVM_WRITE;
++		lock = LCK_VG_WRITE;
++	}
 +
-+		vg = vg_read_for_update(cmd, vg_name, NULL,
-+					ALLOW_INCONSISTENT | DISABLE_LOCK
-+					| ALLOW_EXPORTED);
++	if (flags & ALLOW_EXPORTED)
++		status &= ~EXPORTED_VG;
 +
-+		if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+		    && vg_read_error(vg) != FAILED_INCONSISTENT) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
- 		}
++	if (flags & REQUIRE_RESIZEABLE)
++		status |= RESIZEABLE_VG;
 +
- 		if (!archive(vg)) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
++	if (flags & NONBLOCKING_LOCK)
++		lock |= LCK_NONBLOCK;
++
++	return _vg_lock_and_read(cmd, vg_name, vgid, lock, status, flags);
++}
++
++/*
++ * A high-level volume group metadata reading function. Open a volume group for
++ * later update (this means the user code can change the metadata and later
++ * request the new metadata to be written and committed).
++ */
++vg_t *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
++			 const char *vgid, uint32_t flags)
++{
++	return vg_read(cmd, vg_name, vgid, flags | READ_FOR_UPDATE);
++}
++
++/*
+  * Gets/Sets for external LVM library
+  */
+ struct id pv_id(const pv_t *pv)
+diff -rN -u -p old-temp.4430/lib/metadata/metadata-exported.h new-temp.4430/lib/metadata/metadata-exported.h
+--- old-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:40.622781563 +0100
++++ new-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:40.670780470 +0100
+@@ -393,6 +393,12 @@ vg_t *vg_lock_and_read(struct cmd_contex
+ 		       uint32_t lock_flags, uint32_t status_flags,
+ 		       uint32_t misc_flags);
+ 
++/* Loading volume group metadata. */
++vg_t *vg_read(struct cmd_context *cmd, const char *vg_name,
++              const char *vgid, uint32_t flags);
++vg_t *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
++                         const char *vgid, uint32_t flags);
++
+ /* pe_start and pe_end relate to any existing data so that new metadata
+ * areas can avoid overlap */
+ pv_t *pv_create(const struct cmd_context *cmd,
 
 
