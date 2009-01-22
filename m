@@ -1,300 +1,96 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 22 Jan 2009 11:09:57 +0100
-Subject: [PATCH 1/14] Move vg_read out of the way, renaming it to vg_read_internal.
-In-Reply-To: <1232619010-4858-1-git-send-email-prockai@redhat.com>
+Date: Thu, 22 Jan 2009 11:10:09 +0100
+Subject: [PATCH 13/14] Remove now-unused vg_lock_and_read.
+In-Reply-To: <1232619010-4858-13-git-send-email-prockai@redhat.com>
 References: <1232619010-4858-1-git-send-email-prockai@redhat.com>
-Message-ID: <1232619010-4858-2-git-send-email-prockai@redhat.com>
+	<1232619010-4858-2-git-send-email-prockai@redhat.com>
+	<1232619010-4858-3-git-send-email-prockai@redhat.com>
+	<1232619010-4858-4-git-send-email-prockai@redhat.com>
+	<1232619010-4858-5-git-send-email-prockai@redhat.com>
+	<1232619010-4858-6-git-send-email-prockai@redhat.com>
+	<1232619010-4858-7-git-send-email-prockai@redhat.com>
+	<1232619010-4858-8-git-send-email-prockai@redhat.com>
+	<1232619010-4858-9-git-send-email-prockai@redhat.com>
+	<1232619010-4858-10-git-send-email-prockai@redhat.com>
+	<1232619010-4858-11-git-send-email-prockai@redhat.com>
+	<1232619010-4858-12-git-send-email-prockai@redhat.com>
+	<1232619010-4858-13-git-send-email-prockai@redhat.com>
+Message-ID: <1232619010-4858-14-git-send-email-prockai@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Mon Jan 12 17:38:59 CET 2009  Petr Rockai <me@mornfall.net>
-  * Move vg_read out of the way, renaming it to vg_read_internal.
-diff -rN -u -p old-temp.4430/daemons/clvmd/lvm-functions.c new-temp.4430/daemons/clvmd/lvm-functions.c
---- old-temp.4430/daemons/clvmd/lvm-functions.c	2009-01-22 11:02:32.294776955 +0100
-+++ new-temp.4430/daemons/clvmd/lvm-functions.c	2009-01-22 11:02:32.322780654 +0100
-@@ -711,7 +711,7 @@ void lvm_do_backup(const char *vgname)
- 
- 	DEBUGLOG("Triggering backup of VG metadata for %s. suspended=%d\n", vgname, suspended);
- 
--	vg = vg_read(cmd, vgname, NULL /*vgid*/, &consistent);
-+	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, &consistent);
- 	if (vg) {
- 		if (consistent)
- 			check_current_backup(vg);
+Thu Jan 15 10:52:08 CET 2009  Petr Rockai <me@mornfall.net>
+  * Remove now-unused vg_lock_and_read.
 diff -rN -u -p old-temp.4430/lib/metadata/metadata.c new-temp.4430/lib/metadata/metadata.c
---- old-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:32.294776955 +0100
-+++ new-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:32.342781520 +0100
-@@ -224,8 +224,8 @@ int get_pv_from_vg_by_id(const struct fo
- 	struct pv_list *pvl;
- 	int consistent = 0;
- 
--	if (!(vg = vg_read(fmt->cmd, vg_name, vgid, &consistent))) {
--		log_error("get_pv_from_vg_by_id: vg_read failed to read VG %s",
-+	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, &consistent))) {
-+		log_error("get_pv_from_vg_by_id: vg_read_internal failed to read VG %s",
- 			  vg_name);
- 		return 0;
- 	}
-@@ -503,7 +503,7 @@ struct volume_group *vg_create(struct cm
- 		return_NULL;
- 
- 	/* is this vg name already in use ? */
--	if (vg_read(cmd, vg_name, NULL, &consistent)) {
-+	if (vg_read_internal(cmd, vg_name, NULL, &consistent)) {
- 		log_err("A volume group called '%s' already exists.", vg_name);
- 		goto bad;
- 	}
-@@ -1684,12 +1684,12 @@ int vg_missing_pv_count(const vg_t *vg)
- 	return ret;
+--- old-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:56.842777680 +0100
++++ new-temp.4430/lib/metadata/metadata.c	2009-01-22 11:02:56.890780708 +0100
+@@ -2424,50 +2424,6 @@ int vg_check_status(const struct volume_
  }
  
--/* Caller sets consistent to 1 if it's safe for vg_read to correct
-+/* Caller sets consistent to 1 if it's safe for vg_read_internal to correct
-  * inconsistent metadata on disk (i.e. the VG write lock is held).
-  * This guarantees only consistent metadata is returned.
-  * If consistent is 0, caller must check whether consistent == 1 on return
-  * and take appropriate action if it isn't (e.g. abort; get write lock
-- * and call vg_read again).
-+ * and call vg_read_internal again).
-  *
-  * If precommitted is set, use precommitted metadata if present.
-  *
-@@ -1716,7 +1716,7 @@ static struct volume_group *_vg_read(str
- 
- 	if (is_orphan_vg(vgname)) {
- 		if (use_precommitted) {
--			log_error("Internal error: vg_read requires vgname "
-+			log_error("Internal error: vg_read_internal requires vgname "
- 				  "with pre-commit.");
- 			return NULL;
- 		}
-@@ -1974,7 +1974,7 @@ static struct volume_group *_vg_read(str
- 	return correct_vg;
- }
- 
--struct volume_group *vg_read(struct cmd_context *cmd, const char *vgname,
-+struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgname,
- 			     const char *vgid, int *consistent)
- {
- 	struct volume_group *vg;
-@@ -2002,7 +2002,7 @@ struct volume_group *vg_read(struct cmd_
- 
- /* This is only called by lv_from_lvid, which is only called from
-  * activate.c so we know the appropriate VG lock is already held and
-- * the vg_read is therefore safe.
-+ * the vg_read_internal is therefore safe.
+ /*
+- * vg_lock_and_read - consolidate vg locking, reading, and status flag checking
+- *
+- * Returns:
+- * NULL - failure
+- * non-NULL - success; volume group handle
+- */
+-vg_t *vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
+-		       const char *vgid,
+-		       uint32_t lock_flags, uint32_t status_flags,
+-		       uint32_t misc_flags)
+-{
+-	struct volume_group *vg;
+-	int consistent = 1;
+-
+-	if (!(misc_flags & CORRECT_INCONSISTENT))
+-		consistent = 0;
+-
+-	if (!validate_name(vg_name)) {
+-		log_error("Volume group name %s has invalid characters",
+-			  vg_name);
+-		return NULL;
+-	}
+-
+-	if (!lock_vol(cmd, vg_name, lock_flags)) {
+-		log_error("Can't get lock for %s", vg_name);
+-		return NULL;
+-	}
+-
+-	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)) ||
+-	    ((misc_flags & FAIL_INCONSISTENT) && !consistent)) {
+-		log_error("Volume group \"%s\" not found", vg_name);
+-		unlock_vg(cmd, vg_name);
+-		return NULL;
+-	}
+-
+-	if (!vg_check_status(vg, status_flags)) {
+-		unlock_vg(cmd, vg_name);
+-		return NULL;
+-	}
+-
+-	return vg;
+-}
+-
+-/*
+  * Create a (vg_t) volume group handle from a struct volume_group pointer and a
+  * possible failure code. Zero failure code = success.
   */
- static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 					    const char *vgid,
-@@ -2034,7 +2034,7 @@ static struct volume_group *_vg_read_by_
- 	if (memlock())
- 		return NULL;
- 
--	/* FIXME Need a genuine read by ID here - don't vg_read by name! */
-+	/* FIXME Need a genuine read by ID here - don't vg_read_internal by name! */
- 	/* FIXME Disabled vgrenames while active for now because we aren't
- 	 *       allowed to do a full scan here any more. */
- 
-@@ -2218,7 +2218,7 @@ static int _get_pvs(struct cmd_context *
- 			stack;
- 			continue;
- 		}
--		if (!(vg = vg_read(cmd, vgname, vgid, &consistent))) {
-+		if (!(vg = vg_read_internal(cmd, vgname, vgid, &consistent))) {
- 			stack;
- 			continue;
- 		}
-@@ -2446,7 +2446,7 @@ vg_t *vg_lock_and_read(struct cmd_contex
- 		return NULL;
- 	}
- 
--	if (!(vg = vg_read(cmd, vg_name, vgid, &consistent)) ||
-+	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)) ||
- 	    ((misc_flags & FAIL_INCONSISTENT) && !consistent)) {
- 		log_error("Volume group \"%s\" not found", vg_name);
- 		unlock_vg(cmd, vg_name);
 diff -rN -u -p old-temp.4430/lib/metadata/metadata-exported.h new-temp.4430/lib/metadata/metadata-exported.h
---- old-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:32.294776955 +0100
-+++ new-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:32.342781520 +0100
-@@ -76,7 +76,7 @@ struct pv_segment;
- 						   written out in metadata*/
+--- old-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:56.842777680 +0100
++++ new-temp.4430/lib/metadata/metadata-exported.h	2009-01-22 11:02:56.890780708 +0100
+@@ -95,10 +95,6 @@ struct pv_segment;
+ #define FMT_UNLIMITED_STRIPESIZE 0x00000100U	/* Unlimited stripe size? */
+ #define FMT_RESTRICTED_READAHEAD 0x00000200U	/* Readahead restricted to 2-120? */
  
- //#define POSTORDER_FLAG	0x02000000U /* Not real flags, reserved for
--//#define POSTORDER_OPEN_FLAG	0x04000000U    temporary use inside vg_read. */
-+//#define POSTORDER_OPEN_FLAG	0x04000000U    temporary use inside vg_read_internal. */
- 
- #define LVM_READ              	0x00000100U	/* LV VG */
- #define LVM_WRITE             	0x00000200U	/* LV VG */
-@@ -328,7 +328,7 @@ struct lv_list {
- int vg_write(struct volume_group *vg);
- int vg_commit(struct volume_group *vg);
- int vg_revert(struct volume_group *vg);
--struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name,
-+struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
- 			     const char *vgid, int *consistent);
- struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
- 				struct dm_list *mdas, uint64_t *label_sector,
-diff -rN -u -p old-temp.4430/lib/metadata/metadata.h new-temp.4430/lib/metadata/metadata.h
---- old-temp.4430/lib/metadata/metadata.h	2009-01-22 11:02:32.286779011 +0100
-+++ new-temp.4430/lib/metadata/metadata.h	2009-01-22 11:02:32.342781520 +0100
-@@ -79,7 +79,7 @@
- //						   written out in metadata*/
- 
- #define POSTORDER_FLAG		0x02000000U /* Not real flags, reserved for  */
--#define POSTORDER_OPEN_FLAG	0x04000000U /* temporary use inside vg_read. */
-+#define POSTORDER_OPEN_FLAG	0x04000000U /* temporary use inside vg_read_internal. */
- 
- //#define LVM_READ              	0x00000100U	/* LV VG */
- //#define LVM_WRITE             	0x00000200U	/* LV VG */
-diff -rN -u -p old-temp.4430/tools/pvdisplay.c new-temp.4430/tools/pvdisplay.c
---- old-temp.4430/tools/pvdisplay.c	2009-01-22 11:02:32.286779011 +0100
-+++ new-temp.4430/tools/pvdisplay.c	2009-01-22 11:02:32.382780458 +0100
-@@ -37,7 +37,7 @@ static int _pvdisplay_single(struct cmd_
- 
- 	 	/*
- 		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read() path.
-+		 * allocated in vg_read_internal() path.
- 		 */
- 		 if (!(pvl = find_pv_in_vg(vg, pv_name))) {
- 			 log_error("Unable to find \"%s\" in volume group \"%s\"",
-diff -rN -u -p old-temp.4430/tools/pvresize.c new-temp.4430/tools/pvresize.c
---- old-temp.4430/tools/pvresize.c	2009-01-22 11:02:32.286779011 +0100
-+++ new-temp.4430/tools/pvresize.c	2009-01-22 11:02:32.382780458 +0100
-@@ -62,7 +62,7 @@ static int _pv_resize_single(struct cmd_
- 			return 0;
- 		}
- 
--		if (!(vg = vg_read(cmd, vg_name, NULL, &consistent))) {
-+		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
- 			unlock_vg(cmd, vg_name);
- 			log_error("Unable to find volume group of \"%s\"",
- 				  pv_name);
-diff -rN -u -p old-temp.4430/tools/reporter.c new-temp.4430/tools/reporter.c
---- old-temp.4430/tools/reporter.c	2009-01-22 11:02:32.286779011 +0100
-+++ new-temp.4430/tools/reporter.c	2009-01-22 11:02:32.382780458 +0100
-@@ -136,7 +136,7 @@ static int _pvs_single(struct cmd_contex
- 
- 		/*
- 		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read() path.
-+		 * allocated in vg_read_internal() path.
- 		*/
- 		if (!(pvl = find_pv_in_vg(vg, pv_dev_name(pv)))) {
- 			log_error("Unable to find \"%s\" in volume group \"%s\"",
-diff -rN -u -p old-temp.4430/tools/toollib.c new-temp.4430/tools/toollib.c
---- old-temp.4430/tools/toollib.c	2009-01-22 11:02:32.286779011 +0100
-+++ new-temp.4430/tools/toollib.c	2009-01-22 11:02:32.382780458 +0100
-@@ -291,7 +291,7 @@ int process_each_lv(struct cmd_context *
- 			consistent = 1;
- 		else
- 			consistent = 0;
--		if (!(vg = vg_read(cmd, vgname, NULL, &consistent)) || !consistent) {
-+		if (!(vg = vg_read_internal(cmd, vgname, NULL, &consistent)) || !consistent) {
- 			unlock_vg(cmd, vgname);
- 			if (!vg)
- 				log_error("Volume group \"%s\" "
-@@ -433,7 +433,7 @@ static int _process_one_vg(struct cmd_co
- 	}
- 
- 	log_verbose("Finding volume group \"%s\"", vg_name);
--	if (!(vg = vg_read(cmd, vg_name, vgid, &consistent))) {
-+	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent))) {
- 		log_error("Volume group \"%s\" not found", vg_name);
- 		unlock_vg(cmd, vg_name);
- 		return ECMD_FAILED;
-@@ -720,7 +720,7 @@ int process_each_pv(struct cmd_context *
- 					log_error("Can't lock %s: skipping", sll->str);
- 					continue;
- 				}
--				if (!(vg = vg_read(cmd, sll->str, NULL, &consistent))) {
-+				if (!(vg = vg_read_internal(cmd, sll->str, NULL, &consistent))) {
- 					log_error("Volume group \"%s\" not found", sll->str);
- 					unlock_vg(cmd, sll->str);
- 					ret_max = ECMD_FAILED;
-@@ -1143,7 +1143,7 @@ struct volume_group *recover_vg(struct c
- 		return NULL;
- 	}
- 
--	return vg_read(cmd, vgname, NULL, &consistent);
-+	return vg_read_internal(cmd, vgname, NULL, &consistent);
- }
- 
- int apply_lvname_restrictions(const char *name)
-diff -rN -u -p old-temp.4430/tools/vgreduce.c new-temp.4430/tools/vgreduce.c
---- old-temp.4430/tools/vgreduce.c	2009-01-22 11:02:32.282780319 +0100
-+++ new-temp.4430/tools/vgreduce.c	2009-01-22 11:02:32.386780408 +0100
-@@ -426,7 +426,7 @@ static int _vgreduce_single(struct cmd_c
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
- 
--	if(!(orphan_vg = vg_read(cmd, vg->fid->fmt->orphan_vg_name, NULL, &consistent)) ||
-+	if(!(orphan_vg = vg_read_internal(cmd, vg->fid->fmt->orphan_vg_name, NULL, &consistent)) ||
- 	   !consistent) {
- 		log_error("Unable to read existing orphan PVs");
- 		unlock_vg(cmd, VG_ORPHANS);
-@@ -520,7 +520,7 @@ int vgreduce(struct cmd_context *cmd, in
- 		return ECMD_FAILED;
- 	}
- 
--	if ((!(vg = vg_read(cmd, vg_name, NULL, &consistent)) || !consistent)
-+	if ((!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent)) || !consistent)
- 	    && !repairing) {
- 		log_error("Volume group \"%s\" doesn't exist", vg_name);
- 		unlock_vg(cmd, vg_name);
-@@ -541,7 +541,7 @@ int vgreduce(struct cmd_context *cmd, in
- 		}
- 
- 		consistent = !arg_count(cmd, force_ARG);
--		if (!(vg = vg_read(cmd, vg_name, NULL, &consistent))) {
-+		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
- 			log_error("Volume group \"%s\" not found", vg_name);
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
-diff -rN -u -p old-temp.4430/tools/vgrename.c new-temp.4430/tools/vgrename.c
---- old-temp.4430/tools/vgrename.c	2009-01-22 11:02:32.282780319 +0100
-+++ new-temp.4430/tools/vgrename.c	2009-01-22 11:02:32.386780408 +0100
-@@ -75,7 +75,7 @@ static int vg_rename_path(struct cmd_con
- 		return 0;
- 	}
- 
--	if (!(vg = vg_read(cmd, vg_name_old, vgid, &consistent)) || !consistent) {
-+	if (!(vg = vg_read_internal(cmd, vg_name_old, vgid, &consistent)) || !consistent) {
- 		log_error("Volume group %s %s%s%snot found.", vg_name_old,
- 		vgid ? "(" : "", vgid ? vgid : "", vgid ? ") " : "");
- 		unlock_vg(cmd, vg_name_old);
-@@ -107,7 +107,7 @@ static int vg_rename_path(struct cmd_con
- 	}
- 
- 	consistent = 0;
--	if ((vg_new = vg_read(cmd, vg_name_new, NULL, &consistent))) {
-+	if ((vg_new = vg_read_internal(cmd, vg_name_new, NULL, &consistent))) {
- 		log_error("New volume group \"%s\" already exists",
- 			  vg_name_new);
- 		goto error;
-diff -rN -u -p old-temp.4430/tools/vgsplit.c new-temp.4430/tools/vgsplit.c
---- old-temp.4430/tools/vgsplit.c	2009-01-22 11:02:32.282780319 +0100
-+++ new-temp.4430/tools/vgsplit.c	2009-01-22 11:02:32.386780408 +0100
-@@ -334,7 +334,7 @@ int vgsplit(struct cmd_context *cmd, int
- 	}
- 
- 	consistent = 0;
--	if ((vg_to = vg_read(cmd, vg_name_to, NULL, &consistent))) {
-+	if ((vg_to = vg_read_internal(cmd, vg_name_to, NULL, &consistent))) {
- 		existing_vg = 1;
- 		if (new_vg_option_specified(cmd)) {
- 			log_error("Volume group \"%s\" exists, but new VG "
-@@ -451,7 +451,7 @@ int vgsplit(struct cmd_context *cmd, int
- 	 */
- 	consistent = 1;
- 	if (!test_mode() &&
--	    (!(vg_to = vg_read(cmd, vg_name_to, NULL, &consistent)) ||
-+	    (!(vg_to = vg_read_internal(cmd, vg_name_to, NULL, &consistent)) ||
- 	     !consistent)) {
- 		log_error("Volume group \"%s\" became inconsistent: please "
- 			  "fix manually", vg_name_to);
+-/* LVM2 external library flags */
+-#define CORRECT_INCONSISTENT    0x00000001U /* Correct inconsistent metadata */
+-#define FAIL_INCONSISTENT       0x00000002U /* Fail if metadata inconsistent */
+-
+ /* Mirror conversion type flags */
+ #define MIRROR_BY_SEG		0x00000001U	/* segment-by-segment mirror */
+ #define MIRROR_BY_LV		0x00000002U	/* mirror using whole mimage LVs */
 
 
