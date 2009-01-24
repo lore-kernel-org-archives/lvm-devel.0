@@ -1,38 +1,19 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 23 Jan 2009 13:33:18 -0600
-Subject: [PATCH 1/2] remove floating point values from lvm
-In-Reply-To: <Pine.LNX.4.64.0901211055240.17174@hs20-bc2-1.build.redhat.com>
-References: <Pine.LNX.4.64.0901211055240.17174@hs20-bc2-1.build.redhat.com>
-Message-ID: <8ACBAFF9-AC2F-4B80-9290-CB604D939B59@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Sat, 24 Jan 2009 16:43:54 -0500
+Subject: [PATCH updated] Convert vgreduce to use vg_read_for_update.
+In-Reply-To: <1232619010-4858-9-git-send-email-prockai>
+References: <1232619010-4858-9-git-send-email-prockai>
+Message-ID: <1232833435-2917-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I like the idea of getting rid of the floating point return value, but  
-do we really have to introduce the 4 new return values?
 
-  brassow
-
-On Jan 21, 2009, at 9:57 AM, Mikulas Patocka wrote:
-
-> Avoid depending on comparison of floating-point values. Return 4  
-> values:
-> TARGET_STATUS_ERROR --- error occured
-> TARGET_STATUS_INVALIDATED --- the snapshot is invalidated (there may  
-> still exist
-> 	100% filled snapshot that is not invalidated)
-> TARGET_STATUS_PROCESSING --- mirror is resynchronizing, snapshot is  
-> neither
-> 	empty nor invalidated.
-> TARGET_STATUS_FINISHED --- finished. For mirrors, it is returned  
-> when the mirror
-> 	resynchronization finished. For snapshots, it is returned when the
-> 	snapshot contains no exceptions (merging finished).
->
-> Decisions are made based on these returned values, not on actual  
-> floating point
-> number.
+One line removed from original patch:
+Remove incorrect unlock_vg() in vgreduce_single() error path.
+If dev_get_size() fails we don't have the orphan lock yet so
+don't try to unlock.
 
 
