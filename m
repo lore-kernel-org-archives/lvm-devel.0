@@ -1,153 +1,97 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sat, 24 Jan 2009 19:21:28 -0500
-Subject: [PATCH] Convert vgreduce to use vg_read_for_update.
-In-Reply-To: <1232842888-10752-1-git-send-email-dwysocha@redhat.com>
-References: <1232833560-2964-2-git-send-email-dwysocha@redhat.com>
-	<1232842888-10752-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1232842888-10752-2-git-send-email-dwysocha@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Jan 2009 13:14:23 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20090126131423.16776.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Petr Rockai <prockai@redhat.com>
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-01-26 13:14:22
 
-Fri Jan  9 15:38:20 CET 2009  Petr Rockai <me@mornfall.net>
-  * Convert vgreduce to use vg_read_for_update.
+Modified files:
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
-Remove incorrect unlock_vg() in vgreduce_single() error path.
-If dev_get_size() fails we don't have the orphan lock yet so
-don't try to unlock.
+Log message:
+	pre-release
 
-Add unlock_vg() after vg_read_for_update() error path.
-If vg_read_error() fails we need to unlock the orphan vg.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.188&r2=1.189
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1024&r2=1.1025
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.260&r2=1.261
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- tools/vgreduce.c |   55 ++++++++++++++++++++---------------------------------
- 1 files changed, 21 insertions(+), 34 deletions(-)
-
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index 79bf3e0..3742785 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -382,7 +382,6 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- {
- 	struct pv_list *pvl;
- 	struct volume_group *orphan_vg;
--	int consistent = 1;
- 	const char *name = pv_dev_name(pv);
+--- LVM2/VERSION	2008/11/19 14:14:51	1.188
++++ LVM2/VERSION	2009/01/26 13:14:22	1.189
+@@ -1 +1 @@
+-2.02.44-cvs (2008-11-19)
++2.02.44-cvs (2009-01-26)
+--- LVM2/VERSION_DM	2008/11/19 14:14:52	1.3
++++ LVM2/VERSION_DM	2009/01/26 13:14:22	1.4
+@@ -1 +1 @@
+-1.02.30-cvs (2008-11-19)
++1.02.30-cvs (2009-01-26)
+--- LVM2/WHATS_NEW	2009/01/22 10:21:12	1.1024
++++ LVM2/WHATS_NEW	2009/01/26 13:14:22	1.1025
+@@ -1,33 +1,33 @@
+-Version 2.02.44 - 
+-====================================
+-  Add corosync/DLM cluster interface to clvmd
++Version 2.02.44 - 26th January 2009
++===================================
++  Add corosync/DLM cluster interface to clvmd.
+   Add --nameprefixes, --unquoted, --rows to pvs, vgs, lvs man pages.
+-  Fix fsadm failure with block size != 1K.
++  Fix lvresize size conversion for fsadm when block size is not 1K.
+   Fix pvs segfault when run with orphan PV and some VG fields.
+   Display a 'dev_size' of zero for missing devices in reports.
+   Add pv_mda_size to pvs and vg_mda_size to vgs.
+   Fix lvmdump /sys listing to include virtual devices directory.
+   Add "--refresh" functionality to vgchange and vgmknodes.
+-  Check for maximal LV size when wiping device.
++  Avoid exceeding LV size when wiping device.
+   Calculate mirror log size instead of using 1 extent.
+-  Check if requested major/minor pair is already used.
++  Ensure requested device number is available before activating with it.
+   Fix incorrect exit status from 'help <command>'.
+   Fix vgrename using UUID if there are VGs with identical names.
+   Fix segfault when invalid field given in reporting commands.
+   Refactor init_lvm() for lvmcmdline and clvmd.
+   Add liblvm interactive test infrastructure to build.
+   Use better random seed value in temp file creation.
+-  Add generic function to read /dev/urandom, used in uuid calculation.
++  Add read_urandom to read /dev/urandom. Use in uuid calculation.
+   Use displayable_lvs_in_vg and lv_is_displayable for consistency throughout.
+   Fix race in vgcreate that would result in second caller overwriting first.
+   Fix uninitialised lv_count in vgdisplay -c.
+   Don't skip updating pvid hash when lvmcache_info struct got swapped.
+   Add tinfo to termcap search path for pld-linux.
+   Fix startup race in clvmd.
+-  Generate Red Hat clvmd startup script at configuration time with correct paths.
++  Generate Red Hat clvmd startup script at config time with correct paths.
+   Fix clvmd & dmeventd builds after tree restructuring.
+   Cope with snapshot dependencies when removing a whole VG with lvremove.
+-  Make man pages consistent with either-or options (use "|" everywhere).
++  Make man pages and tool help text consistent using | for alternative options.
  
- 	if (pv_pe_alloc_count(pv)) {
-@@ -396,17 +395,10 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 		return ECMD_FAILED;
- 	}
+ Version 2.02.43 - 10th November 2008
+ ====================================
+--- LVM2/WHATS_NEW_DM	2009/01/10 03:01:35	1.260
++++ LVM2/WHATS_NEW_DM	2009/01/26 13:14:22	1.261
+@@ -1,8 +1,8 @@
+-Version 1.02.30 -
++Version 1.02.30 - 26th January 2009
+ ====================================
+   Add "all" field to reports expanding to all fields of report type.
+-  Add checks for device names in dmsetup and show proper error messages.
+-  Replace _dm_snprintf with EMIT_PARAMS macro for creating target lines
++  Enforce device name length and character limitations in libdm.
++  Replace _dm_snprintf with EMIT_PARAMS macro for creating target lines.
  
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE | LCK_NONBLOCK)) {
--		log_error("Can't get lock for orphan PVs");
--		return ECMD_FAILED;
--	}
--
- 	pvl = find_pv_in_vg(vg, name);
- 
--	if (!archive(vg)) {
--		unlock_vg(cmd, VG_ORPHANS);
-+	if (!archive(vg))
- 		return ECMD_FAILED;
--	}
- 
- 	log_verbose("Removing \"%s\" from volume group \"%s\"", name, vg->name);
- 
-@@ -418,7 +410,6 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 
- 	if (!dev_get_size(pv_dev(pv), &pv->size)) {
- 		log_error("%s: Couldn't get size.", pv_dev_name(pv));
--		unlock_vg(cmd, VG_ORPHANS);
- 		return ECMD_FAILED;
- 	}
- 
-@@ -426,9 +417,10 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
- 
--	if(!(orphan_vg = vg_read_internal(cmd, vg->fid->fmt->orphan_vg_name, NULL, &consistent)) ||
--	   !consistent) {
--		log_error("Unable to read existing orphan PVs");
-+	orphan_vg = vg_read_for_update(cmd, vg->fid->fmt->orphan_vg_name,
-+				       NULL, NONBLOCKING_LOCK | ORPHAN_LOCK);
-+
-+	if (vg_read_error(orphan_vg)) {
- 		unlock_vg(cmd, VG_ORPHANS);
- 		return ECMD_FAILED;
- 	}
-@@ -468,7 +460,6 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
- 	struct volume_group *vg;
- 	char *vg_name;
- 	int ret = 1;
--	int consistent = 1;
- 	int fixed = 1;
- 	int repairing = arg_count(cmd, removemissing_ARG);
- 
-@@ -515,41 +506,37 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	log_verbose("Finding volume group \"%s\"", vg_name);
--	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
--		log_error("Can't get lock for %s", vg_name);
--		return ECMD_FAILED;
--	}
- 
--	if ((!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent)) || !consistent)
--	    && !repairing) {
--		log_error("Volume group \"%s\" doesn't exist", vg_name);
--		unlock_vg(cmd, vg_name);
-+	vg = vg_read_for_update(cmd, vg_name, NULL, ALLOW_EXPORTED);
-+	if (vg_read_error(vg) == FAILED_ALLOCATION ||
-+	    vg_read_error(vg) == FAILED_NOTFOUND)
- 		return ECMD_FAILED;
--	}
- 
--	if (vg && !vg_check_status(vg, CLUSTERED)) {
--		unlock_vg(cmd, vg_name);
-+	/* FIXME We want to allow read-only VGs to be changed here? */
-+	if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+	    && !arg_count(cmd, removemissing_ARG))
- 		return ECMD_FAILED;
--	}
- 
- 	if (repairing) {
--		if (vg && consistent && !vg_missing_pv_count(vg)) {
-+		if (!vg_read_error(vg) && !vg_missing_pv_count(vg)) {
- 			log_error("Volume group \"%s\" is already consistent",
- 				  vg_name);
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_PROCESSED;
- 		}
- 
--		consistent = !arg_count(cmd, force_ARG);
--		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
--			log_error("Volume group \"%s\" not found", vg_name);
--			unlock_vg(cmd, vg_name);
--			return ECMD_FAILED;
--		}
--		if (!vg_check_status(vg, CLUSTERED)) {
-+		log_verbose("Trying to open VG %s for recovery...", vg_name);
-+
-+		vg = vg_read_for_update(cmd, vg_name, NULL,
-+					ALLOW_INCONSISTENT | DISABLE_LOCK
-+					| ALLOW_EXPORTED);
-+
-+		if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
-+		    && vg_read_error(vg) != FAILED_INCONSISTENT) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
- 		}
-+
- 		if (!archive(vg)) {
- 			unlock_vg(cmd, vg_name);
- 			return ECMD_FAILED;
--- 
-1.5.5.1
+ Version 1.02.29 - 10th November 2008
+ ====================================
 
 
