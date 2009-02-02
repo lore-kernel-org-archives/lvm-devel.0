@@ -1,117 +1,88 @@
-From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
-Date: 11 Feb 2009 10:13:21 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/Makefile.in dae ...
-Message-ID: <20090211101321.19616.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon,  2 Feb 2009 15:49:57 -0500
+Subject: [PATCH 01/13] Add system_dir to create_toolcontext().
+In-Reply-To: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
+References: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1233607809-1087-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	ccaulfield at sourceware.org	2009-02-11 10:13:21
+Signed-off-by: Thomas Woerner <twoerner@redhat.com>
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ daemons/clvmd/lvm-functions.c |    2 +-
+ lib/commands/toolcontext.c    |    6 +++++-
+ lib/commands/toolcontext.h    |    2 +-
+ tools/lvmcmdline.c            |    2 +-
+ 4 files changed, 8 insertions(+), 4 deletions(-)
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : Makefile.in clvmd-corosync.c 
-
-Log message:
-	Add a fully-functional get_cluster_name() to clvmd corosync interface.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1041&r2=1.1042
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/Makefile.in.diff?cvsroot=lvm2&r1=1.26&r2=1.27
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-corosync.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-
---- LVM2/WHATS_NEW	2009/02/10 13:22:18	1.1041
-+++ LVM2/WHATS_NEW	2009/02/11 10:13:20	1.1042
-@@ -1,5 +1,6 @@
- Version 2.02.45 - 
- ===================================
-+  Add a fully-functional get_cluster_name() to clvmd corosync interface.
-   Remove duplicate cpg_initialize from clvmd startup.
-   Add option to /etc/sysconfig/cluster to select cluster type for clvmd.
-   Allow clvmd to start up if its lockspace already exists.
---- LVM2/daemons/clvmd/Makefile.in	2009/02/02 14:34:25	1.26
-+++ LVM2/daemons/clvmd/Makefile.in	2009/02/11 10:13:20	1.27
-@@ -68,7 +68,7 @@
- 
- ifeq ("$(COROSYNC)", "yes")
-         SOURCES += clvmd-corosync.c
--        LMLIBS += -lquorum -lcpg -ldlm
-+        LMLIBS += -lquorum -lconfdb -lcpg -ldlm
-         DEFS += -DUSE_COROSYNC
- endif
- 
---- LVM2/daemons/clvmd/clvmd-corosync.c	2009/02/10 13:22:18	1.4
-+++ LVM2/daemons/clvmd/clvmd-corosync.c	2009/02/11 10:13:20	1.5
-@@ -42,6 +42,7 @@
- #include <corosync/corotypes.h>
- #include <corosync/cpg.h>
- #include <corosync/quorum.h>
-+#include <corosync/confdb.h>
- #include <libdlm.h>
- 
- #include "locking.h"
-@@ -507,7 +508,6 @@
- 	return 0;
- }
- 
--/* We are always quorate ! */
- static int _is_quorate()
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index 5cf7eff..3db2756 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -724,7 +724,7 @@ void lvm_do_backup(const char *vgname)
+ /* Called to initialise the LVM context of the daemon */
+ int init_lvm(int using_gulm)
  {
- 	int quorate;
-@@ -556,10 +556,49 @@
- 	return cs_to_errno(err);
+-	if (!(cmd = create_toolcontext(1))) {
++	if (!(cmd = create_toolcontext(1, NULL))) {
+ 		log_error("Failed to allocate command context");
+ 		return 0;
+ 	}
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 0a98325..c481a2b 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -998,7 +998,8 @@ static void _init_globals(struct cmd_context *cmd)
  }
  
--/* We don't have a cluster name to report here */
-+/*
-+ * We are not necessarily connected to a Red Hat Cluster system,
-+ * but if we are, this returns the cluster name from cluster.conf.
-+ * I've used confdb rather than ccs to reduce the inter-package
-+ * dependancies as well as to allow people to set a cluster name
-+ * for themselves even if they are not running on RH cluster.
-+ */
- static int _get_cluster_name(char *buf, int buflen)
+ /* Entry point */
+-struct cmd_context *create_toolcontext(unsigned is_long_lived)
++struct cmd_context *create_toolcontext(unsigned is_long_lived,
++				       const char *system_dir)
  {
-+	confdb_handle_t handle;
-+	int result;
-+	int namelen = buflen;
-+	unsigned int cluster_handle;
-+	confdb_callbacks_t callbacks = {
-+		.confdb_key_change_notify_fn = NULL,
-+		.confdb_object_create_change_notify_fn = NULL,
-+		.confdb_object_delete_change_notify_fn = NULL
-+	};
-+
-+	/* This is a default in case everything else fails */
- 	strncpy(buf, "Corosync", buflen);
-+
-+	/* Look for a cluster name in confdb */
-+	result = confdb_initialize (&handle, &callbacks);
-+        if (result != CS_OK)
-+		return 0;
-+
-+        result = confdb_object_find_start(handle, OBJECT_PARENT_HANDLE);
-+	if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_object_find(handle, OBJECT_PARENT_HANDLE, (void *)"cluster", strlen("cluster"), &cluster_handle);
-+        if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_key_get(handle, cluster_handle, (void *)"name", strlen("name"), buf, &namelen);
-+        if (result != CS_OK)
-+		goto out;
-+
-+	buf[namelen] = '\0';
-+
-+out:
-+	confdb_finalize(handle);
- 	return 0;
- }
+ 	struct cmd_context *cmd;
  
+@@ -1030,6 +1031,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived)
+ 
+ 	strcpy(cmd->sys_dir, DEFAULT_SYS_DIR);
+ 
++        if (system_dir)
++                strncpy(cmd->sys_dir, system_dir, PATH_MAX);
++
+ 	if (!_get_env_vars(cmd))
+ 		goto error;
+ 
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 7d2aef9..ba6f1ed 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -94,7 +94,7 @@ struct cmd_context {
+ 	char sysfs_dir[PATH_MAX];
+ };
+ 
+-struct cmd_context *create_toolcontext(unsigned is_long_lived);
++struct cmd_context *create_toolcontext(unsigned is_long_lived, const char *system_dir);
+ void destroy_toolcontext(struct cmd_context *cmd);
+ int refresh_toolcontext(struct cmd_context *cmd);
+ int config_files_changed(struct cmd_context *cmd);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 0b12750..2dabe64 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1159,7 +1159,7 @@ struct cmd_context *init_lvm(void)
+ 
+ 	_cmdline.the_args = &_the_args[0];
+ 
+-	if (!(cmd = create_toolcontext(0)))
++	if (!(cmd = create_toolcontext(0, NULL)))
+ 		return_NULL;
+ 
+ 	return cmd;
+-- 
+1.5.5.1
 
 
