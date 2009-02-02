@@ -1,111 +1,87 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun,  8 Feb 2009 23:21:58 -0500
-Subject: [PATCH 10/21] Add lvm_lv_get_attr_list() and lvm_lv_get_attr_value().
-In-Reply-To: <1234153329-2829-10-git-send-email-dwysocha@redhat.com>
-References: <1234153329-2829-1-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-2-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-3-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-4-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-5-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-6-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-7-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-8-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-9-git-send-email-dwysocha@redhat.com>
-	<1234153329-2829-10-git-send-email-dwysocha@redhat.com>
-Message-ID: <1234153329-2829-11-git-send-email-dwysocha@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 02 Feb 2009 18:15:56 +0100
+Subject: [PATCH v2] Add --align parameter to pvcreate
+In-Reply-To: <1233592128.5366.13.camel@localhost.localdomain>
+References: <49804A78.3020302@redhat.com> <4982EAEC.9000209@redhat.com>
+	<1233592128.5366.13.camel@localhost.localdomain>
+Message-ID: <49872A4C.6090908@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Dave Wysochanski wrote:
+>>  # Miscellaneous global LVM2 settings
+>>  global {
+>> -    
+>> +
+>>      # The file creation mask for any files and directories created.
+>>      # Interpreted as octal if the first digit is zero.
+>>      umask = 077
+> 
+> Uintended whitespace changes?
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/lvm2.h          |    3 ++
- lib/report/report.c |   57 +++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 60 insertions(+), 0 deletions(-)
+well, intended (whitespace cleaning),  but not necessary for patch:-)
 
-diff --git a/lib/lvm2.h b/lib/lvm2.h
-index 25ce12d..2a5dd9e 100644
---- a/lib/lvm2.h
-+++ b/lib/lvm2.h
-@@ -91,6 +91,9 @@ struct lvm_lv_list {
- };
- struct dm_list *lvm_lvs_in_vg(vg_t *vg);
- 
-+int lvm_lv_get_attr_list(lv_t *lv, struct dm_list *list);
-+int lvm_lv_get_attr_value(lv_t *lv, const char *attr_name,
-+			  struct dm_report_field_value_type *value);
- /*
-  * FIXME: struct lvm_pv_list is not equivalent to struct pv_list, which
-  * is used in lvm_pvs_in_vg().  Ideally we should not need a new structure.
-diff --git a/lib/report/report.c b/lib/report/report.c
-index fb342a5..1d219bf 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1245,3 +1245,60 @@ int lvm_vg_get_attr_value(vg_t *vg, const char *attr_name,
- 	dm_report_free(rh);
- 	return 1;
- }
-+
-+
-+/*
-+ * Get a list of attributes for a LV
-+ */
-+int lvm_lv_get_attr_list(lv_t *lv, struct dm_list *list)
-+{
-+	void *rh;
-+	report_type_t report_type = LVS;
-+
-+	dm_list_init(list);
-+
-+	/*
-+	 * Create a report so we can return the headings.
-+	 */
-+	if (!(rh = report_init(lv->vg->cmd, "all", "", &report_type,
-+			       " ", 1, 1, 1, 0, 0, 0))) {
-+		stack;
-+		return 0;
-+	}
-+
-+	if (!dm_report_get_field_ids(rh, report_type, list)) {
-+		dm_report_free(rh);
-+		return 0;
-+	}
-+
-+	dm_report_free(rh);
-+	return 1;
-+}
-+
-+/*
-+ * Get the value of the LV attribute 'attr_name'.
-+ */
-+int lvm_lv_get_attr_value(lv_t *lv, const char *attr_name,
-+			  struct dm_report_field_value_type *value)
-+{
-+	void *rh;
-+	report_type_t report_type = LVS;
-+
-+	if (!(rh = report_init(lv->vg->cmd, attr_name, "", &report_type,
-+			       " ", 1, 1, 1, 0, 0, 0))) {
-+		stack;
-+		return 0;
-+	}
-+
-+	if (!report_object(rh, NULL, lv, NULL, NULL, NULL)) {
-+		stack;
-+		return 0;
-+	}
-+	
-+	if (!dm_report_get_field_value(rh, value)) {
-+		stack;
-+		return 0;
-+	}
-+	dm_report_free(rh);
-+	return 1;
-+}
--- 
-1.6.0.5
+
+>> -unsigned long pe_align(struct physical_volume *pv)
+>> +unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align)
+> 
+> 
+> Inconsistent naming?  You have 'req_pe_align', 'align', and
+> 'force_pe_align'.
+
+...and physicalvolumealign_ARG, and pv_alignment in lvm.conf
+
+I know, but if it is consistent in one place, it breaks somewhere else.
+The idea was
+	align is read from --align CLI parameter in pvcreate.c
+
+(and is --align for commandline ok here?)
+
+Others were just prefixes (req_/force_)
+
+So if we have some name consistency rules, I'll rename it according it,
+I just need to know these rules:-)
+
+See for example this 
+	pp->pe_start = pv_pe_start(existing_pv);
+	pp->extent_size = pv_pe_size(existing_pv);
+	pp->extent_count = pv_pe_count(existing_pv);
+
+so pe_size or extent_size? align or pe_align or ... ?
+
+
+>> +.BR \-\-align " size"
+>> +Force align start of the payload to specified boundary (to align
+>> +with underlying RAID device stripe or chunk).
+>> +Note that you should use properly sized physical extent later
+>> +in vgcreate to correctly align all Logical Volumes start too.
+>> +.TP
+> 
+> Might be worth adding a sentence or two of how to query / derive this
+> value.  I would guess someone will use this value, then want to verify
+> it is set correctly.  I know we don't store it so we can't add it to the
+> reporting code as a field but we can point out the use of pe_start and
+> pe_size.
+
+Yes, so I'll add
+
+"To print the current data payload offset for the Physical Volume use
+pvs -o +pe_start command.  The reported value is always multiple
+of requested alignment value".
+
+Any other suggestions?
+
+> Ack other than the comments above.
+> 
+> I reviewed the whole patch and did limited testing.
+
+Thanks for review!
+
+Milan
+--
+mbroz at redhat.com
 
 
