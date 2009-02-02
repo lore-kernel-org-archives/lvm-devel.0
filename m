@@ -1,118 +1,65 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 02 Feb 2009 18:29:15 -0500
-Subject: [PATCH v2] Add --align parameter to pvcreate
-In-Reply-To: <49872A4C.6090908@redhat.com>
-References: <49804A78.3020302@redhat.com>  <4982EAEC.9000209@redhat.com>
-	<1233592128.5366.13.camel@localhost.localdomain>
-	<49872A4C.6090908@redhat.com>
-Message-ID: <1233617355.5366.45.camel@localhost.localdomain>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 03 Feb 2009 00:45:01 +0100
+Subject: [PATCH 06/13] Add lvm_vg_close().
+In-Reply-To: <1233607809-1087-7-git-send-email-dwysocha@redhat.com> (Dave
+	Wysochanski's message of "Mon, 2 Feb 2009 15:50:02 -0500")
+References: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-2-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-3-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-4-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-5-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-6-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <87d4e0769u.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Dave Wysochanski <dwysocha@redhat.com> writes:
+> +void lvm_vg_close(vg_t *vg)
+> +{
+> +	if (vgname_is_locked(vg->name))
+> +		unlock_vg(vg->cmd, vg->name);
+> +}
+Do we want to do reference counting in here? Might be moot if we don't allow
+multiple opens. But contrary to what I said on IRC last time, it might be worth
+to have proper lock upgrading procedure, and it would be sort of nice if that
+could be achieved (for the user) by just calling the open function again on the
+same VG, with write permission request. One use case is automated recovery,
+which could be probably reformulated elegantly in terms of a lock upgrade.
 
-On Mon, 2009-02-02 at 18:15 +0100, Milan Broz wrote:
-> Dave Wysochanski wrote:
-> >>  # Miscellaneous global LVM2 settings
-> >>  global {
-> >> -    
-> >> +
-> >>      # The file creation mask for any files and directories created.
-> >>      # Interpreted as octal if the first digit is zero.
-> >>      umask = 077
-> > 
-> > Uintended whitespace changes?
-> 
-> well, intended (whitespace cleaning),  but not necessary for patch:-)
-> 
+Another is the one you have mentioned, "read in the vg, wibble around a little
+and then decide you want to change it". The solution I proposed back then, to
+close and open for writing again, is inherently race-prone, so you would need
+to do all your wibbling again. Of course, the lock upgrade might fail, in which
+case, you will have to anyway, but maybe it still makes the API a little more
+friendly and less tempting to do the wrong thing.
 
-ok.
+However, now I think about it, even that probably doesn't need refcounting if
+we structure the lock upgrade API accordingly. Ok, clear.
 
-> 
-> >> -unsigned long pe_align(struct physical_volume *pv)
-> >> +unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align)
-> > 
-> > 
-> > Inconsistent naming?  You have 'req_pe_align', 'align', and
-> > 'force_pe_align'.
-> 
-> ...and physicalvolumealign_ARG, and pv_alignment in lvm.conf
-> 
-> I know, but if it is consistent in one place, it breaks somewhere else.
-> The idea was
-> 	align is read from --align CLI parameter in pvcreate.c
-> 
-> (and is --align for commandline ok here?)
-> 
+I'm getting pretty tangential now, but another thought: should be the locking
+state encapsulated in the library handle, as opposed to process-global? This
+probably depends whether the locks can actually prevent the same process (in
+say different thread) from acquiring the lock second time (ie. whether they are
+effective in preventing unintended concurrent accesses from same process). If
+they are, it wouldn't be so hard to make the proposed lvmlib API thread-safe,
+by requiring that each thread owns its own library handle. This might be of
+direct benefit to eg. dmeventd, which currently has a fairly ugly mutex hack
+instead.
 
-Actually, now that you mention it and I look at it more, for consistency
-with other 'size' parameters, we might want "--alignsize".  If it were
-me I'd err on the side of length rather than ambiguity.  Then again,
-"--physicalvolumealignsize" might be over the top.  We do have
---physicalextentsize in vgcreate, and this is a related param.
---physicalextentalignsize?
+Sorry for the tangential reply...
 
+Petr.
 
-> Others were just prefixes (req_/force_)
-> 
-> So if we have some name consistency rules, I'll rename it according it,
-> I just need to know these rules:-)
-> 
-> See for example this 
-> 	pp->pe_start = pv_pe_start(existing_pv);
-> 	pp->extent_size = pv_pe_size(existing_pv);
-> 	pp->extent_count = pv_pe_count(existing_pv);
-> 
-> so pe_size or extent_size? align or pe_align or ... ?
-> 
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-I was mainly reacting to your naming in that same file which seemed
-inconsistent.  I thought 'req_pe_align' was fine for those cases.  If
-the same thing is being passed around, there's no change in meaning, and
-there's no namespace conflict, code normally keeps the same naming.
-There's certainly inconsistencies in the code.  For user-visible
-changes, they have their own (similar) namespace but we should try to be
-consistent between things like cmdline options and conf file options.
-Where we can't, a small explanation (like your "pvs -o +pe_start"
-sentence to query the value) helps.
-
-
-> >> +.BR \-\-align " size"
-> >> +Force align start of the payload to specified boundary (to align
-> >> +with underlying RAID device stripe or chunk).
-> >> +Note that you should use properly sized physical extent later
-> >> +in vgcreate to correctly align all Logical Volumes start too.
-> >> +.TP
-> > 
-> > Might be worth adding a sentence or two of how to query / derive this
-> > value.  I would guess someone will use this value, then want to verify
-> > it is set correctly.  I know we don't store it so we can't add it to the
-> > reporting code as a field but we can point out the use of pe_start and
-> > pe_size.
-> 
-> Yes, so I'll add
-> 
-> "To print the current data payload offset for the Physical Volume use
-> pvs -o +pe_start command.  The reported value is always multiple
-> of requested alignment value".
-> 
-> Any other suggestions?
-> 
-
-Did you forgot to update man/lvm.conf.5
-
-Also looks like you need another check in there for a minimum size
-(cannot be less than metadatasize):
-tools/lvm pvcreate --align 1 /dev/loop0
-  Physical volume "/dev/loop0" successfully created
-root at dwysocha-rhel5-laptop:newlvm2git> tools/lvm pvs -opv_name,vg_name,pe_start,mda_size,pv_size
-  PV         VG   1st PE  PMdaSize  PSize  
-  /dev/loop0        1.00K   128.00K 101.00M
-  /dev/loop1      192.00K   188.00K 101.00M
-  /dev/loop2      192.00K   188.00K 101.00M
-  /dev/loop3      192.00K   188.00K 101.00M
-
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
