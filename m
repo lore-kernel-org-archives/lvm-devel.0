@@ -1,12 +1,22 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 03 Feb 2009 00:22:02 +0100
-Subject: [PATCH 02/13] Add lvm_create, lvm_destroy, lvm_reload_config() APIs.
-In-Reply-To: <1233607809-1087-3-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Mon, 2 Feb 2009 15:49:58 -0500")
+Date: Tue, 03 Feb 2009 00:58:42 +0100
+Subject: [PATCH 12/13] First cut at adding pv_obj_* APIs.
+In-Reply-To: <1233607809-1087-13-git-send-email-dwysocha@redhat.com> (Dave
+	Wysochanski's message of "Mon, 2 Feb 2009 15:50:08 -0500")
 References: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-2-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <87pri077c5.fsf@eriador.mornfall.net>
+	<1233607809-1087-4-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-5-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-6-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-7-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-8-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-9-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-10-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-11-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-12-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-13-git-send-email-dwysocha@redhat.com>
+Message-ID: <874ozc75n1.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,98 +25,42 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-see comments inline.
-
 Dave Wysochanski <dwysocha@redhat.com> writes:
-> +++ b/lib/lvm2.c
-> @@ -0,0 +1,70 @@
-> +/*
-> + * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
-> + *
-> + * This file is part of LVM2.
-> + *
-> + * This copyrighted material is made available to anyone wishing to use,
-> + * modify, copy, or redistribute it subject to the terms and conditions
-> + * of the GNU Lesser General Public License v.2.1.
-> + *
-> + * You should have received a copy of the GNU Lesser General Public License
-> + * along with this program; if not, write to the Free Software Foundation,
-> + * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-> + */
-> +
-> +#include "lvm2.h"
-> +#include "lib.h"
-> +#include "toolcontext.h"
-> +#include "locking.h"
-> +#include "metadata-exported.h"
-> +#include "report.h"
-> +
-> +
-> +lvm_handle_t lvm_create(const char *system_dir)
-> +{
-> +	struct cmd_context *cmd;
-> +
-> +	/* To be done:
-> +	 * logging bound to handle
-> +	 */
-> +
-> +	/* create context */
-> +	cmd = create_toolcontext(1, system_dir);
-> +
-> +	/* initilize remaining */
-> +	if (cmd) {
-> +		int locking_type;
-> +
-> +		/* initilization from lvm_run_command */
-> +		init_error_message_produced(0);
-> +		sigint_clear();
-> +
-> +		/* get locking type from config tree */
-> +		/* FIXME: config option needed? */
-> +		locking_type = find_config_tree_int(cmd, "global/locking_type",
-> +						    1);
-I'm wondering if it would make sense to unify the code reading the default
-locking type and the code reading the fallback options and such. As things are,
-half of the configuration processing is done here and the other half inside
-init_locking called below (cf lib/locking/locking.c, init_locking).
+> Impelemnt pv_obj_get(), pv_obj_get_list(), pv_obj_get_attr_list() and
+> pv_obj_get_attr_value().
+>
+> This is a first attempt at adding pv_obj_* APIs as outlined by
+> http://fedoraproject.org/wiki/LVM/liblvm/api
+>
+> Why add another structure when we could use struct physical_volume
+> and other internal structs?  At this point it is not clear but would
+> provide us with the ability to more easily allocate and free handles,
+> and would allow places to store things like the access mode and API
+> errors without polluting the internal structures.
+I don't say this is completely wrong, but the naming seems very baroque to me,
+and not at all clear what it means, in relation to pv_t, lv_t and such. Also,
+how does this relate to the idea that we want to push back the concept of a PV
+as away from users as possible? I think Alasdair mentioned that on several
+occasions -- PVs should become implicit, as opposed to explicit. Although it
+might be a stretch for library. Not sure. What do you think?
 
-> +
-> +		/* initialize locking */
-> +		if (! init_locking(locking_type, cmd)) {
-> +			printf("Locking type %d initialisation failed.",
-> +			       locking_type);
-> +			lvm_destroy((lvm_handle_t) cmd);
-> +			return NULL;
-> +		}
-> +	}
-> +
-> +	return (lvm_handle_t) cmd;
-I'm also wondering if the explicit cast is such a great idea afterall. (I know
-this has been brought up before with my patches.) I would probably prefer to
-see a comment saying /* lvm_handle_t is an alias for struct cmd_context * */ --
-that way, when that fact changes, we will hopefully get a warning from the
-compiler on all the places this is assumed (which might be suppressed by the
-explicit cast). Or am I wrong on that count?
+As for internal structures, I suppose the major hurdle is the way we allocate
+those in the toolcontext pool (and then maybe their complex interlinked
+nature). I wouldn't say that another layer of, especially
+heap-or-pool-allocated indirection will do any good. I think we already have
+more than is good for us: the lvmcache is keeping a shadow copy of everything
+already in an incompatible format from the struct volume_group and
+friends. This happens to be the on-disk text format in a string buffer. I
+believe this is also due to allocation and linking issues of the current struct
+volume_group representation. So improving the situation with the struct
+volume_group etc. would probably help the lvmcache, as well as the lvmlib
+API. Maybe that would be a worthy investment then, instead of building up
+another incompatible shadow structure?
 
-> +}
-> +
-> +
-> +void lvm_destroy(lvm_handle_t libh)
-> +{
-> +	destroy_toolcontext((struct cmd_context *)libh);
-> +	/* no error handling here */
-> +}
-> +
-> +
-> +int lvm_reload_config(lvm_handle_t libh)
-> +{
-> +	return refresh_toolcontext((struct cmd_context *)libh);
-> +}
-Should this also cater for locking re-initialisation? I suppose if
-configuration changed, so might have locking.
+Also, the patch seems to be duplicating a lot of code from previous patches? Or
+were those for different kind of object (listing and checking attributes, eg.)?
 
-[snip lvm2.h changes, no comments]
-[snip test.c changes, no comment either]
+[snip patch]
 
 Yours,
    Petr.
