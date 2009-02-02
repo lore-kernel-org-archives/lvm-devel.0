@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon,  2 Feb 2009 15:50:08 -0500
-Subject: [PATCH 12/13] First cut at adding pv_obj_* APIs.
-In-Reply-To: <1233607809-1087-12-git-send-email-dwysocha@redhat.com>
+Date: Mon,  2 Feb 2009 15:50:09 -0500
+Subject: [PATCH 13/13] Add test code.
+In-Reply-To: <1233607809-1087-13-git-send-email-dwysocha@redhat.com>
 References: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-2-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-3-git-send-email-dwysocha@redhat.com>
@@ -14,205 +14,371 @@ References: <1233607809-1087-1-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-10-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-11-git-send-email-dwysocha@redhat.com>
 	<1233607809-1087-12-git-send-email-dwysocha@redhat.com>
-Message-ID: <1233607809-1087-13-git-send-email-dwysocha@redhat.com>
+	<1233607809-1087-13-git-send-email-dwysocha@redhat.com>
+Message-ID: <1233607809-1087-14-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Impelemnt pv_obj_get(), pv_obj_get_list(), pv_obj_get_attr_list() and
-pv_obj_get_attr_value().
-
-This is a first attempt at adding pv_obj_* APIs as outlined by
-http://fedoraproject.org/wiki/LVM/liblvm/api
-
-Why add another structure when we could use struct physical_volume
-and other internal structs?  At this point it is not clear but would
-provide us with the ability to more easily allocate and free handles,
-and would allow places to store things like the access mode and API
-errors without polluting the internal structures.
+Test lvm_pv_list, lvm_lv_get_attr_list, lvm_lv_get_attr_value().
+pv_obj_get(), pv_obj_get_attr_list(), pv_obj_get_attr_value,
+vg_get_attr_list and vg_get_attr_value,
+lv_get_attr_list and lv_get_attr_value,
+lvs_in_vg(), pvs_in_vg()
+lvm_vg_open, lvm_vg_close().
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/lvm2.c |  121 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/lvm2.h |   36 ++++++++++++++++++
- 2 files changed, 157 insertions(+), 0 deletions(-)
+ test/api/test.c |  322 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 317 insertions(+), 5 deletions(-)
 
-diff --git a/lib/lvm2.c b/lib/lvm2.c
-index bb8f295..4108321 100644
---- a/lib/lvm2.c
-+++ b/lib/lvm2.c
-@@ -68,3 +68,124 @@ int lvm_reload_config(lvm_handle_t libh)
- {
- 	return refresh_toolcontext((struct cmd_context *)libh);
+diff --git a/test/api/test.c b/test/api/test.c
+index 9411663..b996770 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -48,10 +48,299 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
+ 	return *argc;
  }
-+
-+
-+struct lvm_pv_obj {
-+	char mode;
-+	struct physical_volume *pv;
-+};
-+
-+
-+/*
-+ * Gets object for a physical volume by volume path
-+ * Retuns lvm_pv_obj_t on success, otherwide NULL. errno is used to indicate 
-+ * the error.
-+ * mode: "r" or "w"
-+ */
-+lvm_pv_obj_t *lvm_pv_obj_get(lvm_handle_t libh, const char* phys_vol,
-+                            const char *mode)
+ 
++static void _show_help(void)
 +{
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
-+	lvm_pv_obj_t *pv_obj;
-+	struct physical_volume *pv;
-+	struct dm_list mdas;
-+	uint64_t label_sector;
-+
-+	dm_list_init(&mdas);
-+	pv = pv_read(cmd, phys_vol, &mdas, &label_sector, 0);
-+	if (!pv)
-+		return NULL;
-+	
-+	pv_obj = dm_pool_alloc(cmd->mem, sizeof(*pv_obj));
-+	if (!pv_obj)
-+		return NULL;
-+
-+	pv_obj->pv = pv;
-+	pv_obj->mode = mode[0];
-+
-+	return pv_obj;
++	printf("'pv_obj_get pvname': Issue a lvm_pv_obj_get() API call on PV 'pvname'\n");
++	printf("'pv_obj_get_attr_list': Issue lvm_pv_obj_get_attr_list() API; must follow pv_obj_get\n");
++	printf("'pv_obj_get_attr_value [attr_name]': Issue lvm_pv_obj_get_attr_value() API; must follow pv_obj_get\n");
++	printf("'vg_open vgname': Issue a lvm_vg_open() API call on VG 'vgname'\n");
++	printf("'vg_close vgname': Issue a lvm_vg_close() API call on VG 'vgname'\n");
++	printf("'vg_get_attr_list': Issue lvm_vg_get_attr_list() API; must follow vg_open\n");
++	printf("'vg_get_attr_value [attr_name]': Issue lvm_vg_get_attr_value() API; must follow vg_open\n");
++	printf("'pvs_in_vg': Issue lvm_pvs_in_vg() API; must follow vg_open\n");
++	printf("'lv_get_attr_list': Issue lvm_lv_get_attr_list() API; must follow vg_open\n");
++	printf("'lv_get_attr_value [attr_name]': Issue lvm_lv_get_attr_value() API; must follow vg_open\n");
++	printf("'quit': exit the program\n");
 +}
 +
++static void _print_attr(const char *name,
++			struct dm_report_field_value_type value)
++{
++	if (value.is_string)
++		printf("%s = %s\n", name, value.u.s_val);
++	else
++		printf("%s = %llu\n", name, (unsigned long long)value.u.n_val);
++}
 +
-+lvm_pv_obj_list_t *lvm_pv_obj_list(lvm_handle_t libh)
++static void get_and_print_vg_attr(vg_t *vg, const char *name)
++{
++	struct dm_report_field_value_type value;
++
++	if (!lvm_vg_get_attr_value(vg, name, &value)) {
++		printf("Error reading vg attribute %s value \n",
++		       name);
++		return;
++	}
++	_print_attr(name, value);
++}
++
++static void get_and_print_lv_attr(lv_t *lv, const char *name)
++{
++	struct dm_report_field_value_type value;
++
++	if (!lvm_lv_get_attr_value(lv, name, &value)) {
++		printf("Error reading lv attribute %s value \n",
++		       name);
++		return;
++	}
++	_print_attr(name, value);
++}
++
++static void get_and_print_pv_attr(lvm_pv_obj_t *pv, const char *name)
++{
++	struct dm_report_field_value_type value;
++
++	if (!lvm_pv_obj_get_attr_value(pv, name, &value)) {
++		printf("Error reading pv attribute %s value \n",
++		       name);
++		return;
++	}
++	_print_attr(name, value);
++}
++
++static void _vg_open(char **argv, int argc, vg_t **vgp, void *h)
++{
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return;
++	}
++	*vgp = lvm_vg_open(h, argv[1], O_RDONLY);
++	if (vg_read_error(*vgp))
++		printf("Error opening vg %s\n", argv[1]);
++	else
++		printf("Success opening vg %s\n", argv[1]);
++}
++
++static void _pv_obj_get(char **argv, int argc, lvm_pv_obj_t **pvp, void *h)
++{
++	if (argc < 2) {
++		printf ("Please enter pv_name\n");
++		return;
++	}
++	if (!(*pvp = lvm_pv_obj_get(h, argv[1], "r")))
++		printf("Error opening PV %s\n", argv[1]);
++	else
++		printf("Success opening PV %s\n", argv[1]);
++}
++
++static void _pv_obj_get_attr_list(lvm_pv_obj_t *pv, void *h)
++{
++	struct dm_report_field_ids_type *field;
++	struct dm_list fields;
++
++	if (!pv) {
++		printf("Run pv_obj_get first\n");
++		return;
++			}
++	if (!lvm_pv_obj_get_attr_list(pv, &fields)) {
++		printf("Error reading pv attribute list\n");
++		return;
++	}
++	printf("PV attribute names:\n");
++	dm_list_iterate_items(field, &fields) {
++		printf("%s\n", field->id);
++	}
++}
++
++static void _pv_obj_get_attr_value(char **argv, int argc,
++				   lvm_pv_obj_t *pv)
++{
++	struct dm_report_field_ids_type *field;
++	struct dm_list fields;
++	int i;
++
++	if (!pv) {
++		printf("Run pv_obj_get first\n");
++		return;
++	}
++	if (argc > 1) {
++		for (i=1; i<argc; i++)
++			get_and_print_pv_attr(pv, argv[i]);
++		return;
++	}
++	if (!lvm_pv_obj_get_attr_list(pv, &fields)) {
++		printf("Error reading pv attribute list\n");
++		return;
++	}
++	dm_list_iterate_items(field, &fields) {
++		get_and_print_pv_attr(pv, field->id);
++	}
++}
++
++static void _vg_get_attr_list(vg_t *vg)
++{
++	struct dm_report_field_ids_type *field;
++	struct dm_list fields;
++
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
++	}
++	if (!lvm_vg_get_attr_list(vg, &fields)) {
++		printf("Error reading vg attribute list\n");
++		return;
++	}
++	printf("VG attribute names:\n");
++	dm_list_iterate_items(field, &fields) {
++		printf("%s\n", field->id);
++	}
++}
++
++static void _lvs_in_vg(vg_t *vg)
++{
++	struct dm_list *lvs;
++	struct lvm_lv_list *lvl;
++
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
++	}
++	lvs = lvm_lvs_in_vg(vg);
++	if (dm_list_empty(lvs)) {
++		printf("No LVs in VG %s\n", lvm_vg_name(vg));
++		return;
++	}
++	printf("LVs in VG %s:\n", lvm_vg_name(vg));
++	dm_list_iterate_items(lvl, lvs) {
++		printf("%s\n", lvm_lv_name(lvl->lv));
++	}
++}
++
++static void _pvs_in_vg(vg_t *vg)
 +{
 +	struct dm_list *pvs;
-+	struct pv_list *pvl;
-+	lvm_pv_obj_list_t *head = NULL, *elem;
-+	struct cmd_context *cmd = (struct cmd_context *)libh;
++	struct lvm_pv_list *pvl;
 +
-+	pvs = get_pvs(cmd);
-+
-+	if (dm_list_empty(pvs))
-+		return NULL;
-+
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
++	}
++	pvs = lvm_pvs_in_vg(vg);
++	if (dm_list_empty(pvs)) {
++		printf("No PVs in VG %s\n", lvm_vg_name(vg));
++		return;
++	}
++	printf("PVs in VG %s:\n", lvm_vg_name(vg));
 +	dm_list_iterate_items(pvl, pvs) {
-+		elem = dm_pool_alloc(cmd->mem, sizeof(*elem));
-+		if (!elem)
-+			return NULL;
-+		elem->obj = lvm_pv_obj_get(libh, lvm_pv_name(pvl->pv), "r");
-+		if (!head)
-+			head = elem;
-+		dm_list_add(&head->list, &elem->list);
++		printf("%s\n", lvm_pv_name(pvl->pv));
 +	}
-+	return head;
 +}
 +
-+
-+/*
-+ * Get a list of attributes for a vg
-+ */
-+int lvm_pv_obj_get_attr_list(lvm_pv_obj_t *obj, struct dm_list *list)
++static void _vg_get_attr_value(char **argv, int argc, vg_t *vg)
 +{
-+	void *rh;
-+	report_type_t report_type = PVS;
++	struct dm_list fields;
++	struct dm_report_field_ids_type *field;
++	int i;
 +
-+	dm_list_init(list);
-+
-+	/*
-+	 * Create a report so we can return the headings.
-+	 */
-+	if (!(rh = report_init(obj->pv->fmt->cmd, "all", "", &report_type,
-+			       " ", 1, 1, 1, 0, 0, 0))) {
-+		stack;
-+		return 0;
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
 +	}
-+
-+	if (!dm_report_get_field_ids(rh, report_type, list)) {
-+		dm_report_free(rh);
-+		return 0;
++	if (argc > 1) {
++		for (i=1; i<argc; i++)
++			get_and_print_vg_attr(vg, argv[i]);
++		return;
 +	}
-+
-+	dm_report_free(rh);
-+	return 1;
++	if (!lvm_vg_get_attr_list(vg, &fields)) {
++		printf("Error reading vg attribute list\n");
++		return;
++	}
++	dm_list_iterate_items(field, &fields) {
++		get_and_print_vg_attr(vg, field->id);
++	}
 +}
 +
-+/*
-+ * Get the value of the VG attribute 'attr_name'.
-+ */
-+int lvm_pv_obj_get_attr_value(lvm_pv_obj_t *obj, const char *attr_name,
-+			  struct dm_report_field_value_type *value)
++static void _lv_get_attr_list(vg_t *vg)
 +{
-+	void *rh;
-+	report_type_t report_type = PVS;
++	struct dm_list *lvs;
++	struct lvm_lv_list *lvl;
++	struct dm_list fields;
++	struct dm_report_field_ids_type *field;
 +
-+	if (!(rh = report_init(obj->pv->fmt->cmd, attr_name, "", &report_type,
-+			       " ", 1, 1, 1, 0, 0, 0))) {
-+		stack;
-+		return 0;
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
 +	}
-+
-+	if (!report_object(rh, NULL, NULL, obj->pv, NULL, NULL)) {
-+		stack;
-+		return 0;
++	lvs = lvm_lvs_in_vg(vg);
++	lvl = (struct lvm_lv_list *) dm_list_first(lvs);
++	if (!lvl) {
++		printf("No LVs in VG %s\n",
++		       lvm_vg_name(vg));
++		return;
 +	}
-+	
-+	if (!dm_report_get_field_value(rh, value)) {
-+		stack;
-+		return 0;
++	if (!lvm_lv_get_attr_list(lvl->lv, &fields)) {
++		printf("Error reading lv attribute list\n");
++		return;
 +	}
-+	dm_report_free(rh);
-+	return 1;
++	printf("LV attribute names:\n");
++	dm_list_iterate_items(field, &fields) {
++		printf("%s\n", field->id);
++	}
 +}
 +
++static void _lv_get_attr_value(char **argv, int argc, vg_t *vg)
++{
++	struct dm_list *lvs;
++	struct lvm_lv_list *lvl;
++	struct dm_list fields;
++	struct dm_report_field_ids_type *field;
++	int i;
 +
-diff --git a/lib/lvm2.h b/lib/lvm2.h
-index 2a5dd9e..a47c0a5 100644
---- a/lib/lvm2.h
-+++ b/lib/lvm2.h
-@@ -104,4 +104,40 @@ struct lvm_pv_list {
- };
- struct dm_list *lvm_pvs_in_vg(vg_t *vg);
++	if (vg_read_error(vg)) {
++		printf("Run vg_open first\n");
++		return;
++	}
++	lvs = lvm_lvs_in_vg(vg);
++	lvl = (struct lvm_lv_list *) dm_list_first(lvs);
++	if (!lvl) {
++		printf("No LVs in VG %s\n",
++		       lvm_vg_name(vg));
++		return;
++	}
++	if (!lvm_lv_get_attr_list(lvl->lv, &fields)) {
++		printf("Error reading lv attribute list\n");
++		return;
++	}
++	if (argc > 1) {
++		for (i=1; i<argc; i++)
++			get_and_print_lv_attr(lvl->lv,argv[i]);
++		return;
++	}
++	dm_list_iterate_items(field, &fields) {
++		get_and_print_lv_attr(lvl->lv, field->id);
++	}
++}
++
++static void _vg_close(char **argv, int argc, vg_t **vgp)
++{
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return;
++	}
++	if (!*vgp || (strcmp(argv[1], lvm_vg_name(*vgp)))) {
++		printf ("Run vg_open first\n");
++		return;
++	}
++	lvm_vg_close(*vgp);
++	*vgp = NULL;
++}	
++
+ static int lvmapi_test_shell(lvm_handle_t libh)
+ {
+-	int argc, i;
++	int argc;
+ 	char *input = NULL, *args[MAX_ARGS], **argv;
++	vg_t *vg = NULL;
++	lvm_pv_obj_t *pv = NULL;
  
-+/*
-+ * The lvm physical volume object.
-+ */
-+struct lvm_pv_obj;
-+typedef struct lvm_pv_obj lvm_pv_obj_t; /* with mode inside (r/rw) */
-+
-+/*
-+ * The lvm physical volume object list.
-+ */
-+typedef struct lvm_pv_obj_list {
-+  struct dm_list list;
-+  lvm_pv_obj_t *obj;
-+} lvm_pv_obj_list_t;
-+
-+/*
-+ * Gets object for a physical volume by volume path
-+ * Retuns lvm_pv_obj_t on success, otherwide NULL. errno is used to indicate 
-+ * the error.
-+ * mode: "r" or "rw"
-+ */
-+lvm_pv_obj_t *lvm_pv_obj_get(lvm_handle_t libh, const char* phys_vol,
-+                            const char *mode);
-+
-+
-+/*
-+ * Returns list of physical volumes.
-+ * Retuns lvm_pv_obj_list_t on success, otherwide NULL. errno is used to 
-+ * indicate the error. The objects are read only.
-+ */
-+lvm_pv_obj_list_t *lvm_pv_obj_list(lvm_handle_t libh);
-+
-+int lvm_pv_obj_get_attr_list(lvm_pv_obj_t *obj, struct dm_list *list);
-+int lvm_pv_obj_get_attr_value(lvm_pv_obj_t *obj, const char *attr_name,
-+			      struct dm_report_field_value_type *value);
-+
-+
- #endif
+ 	while (1) {
+ 		free(input);
+@@ -86,12 +375,35 @@ static int lvmapi_test_shell(lvm_handle_t libh)
+ 			printf("Exiting.\n");
+ 			break;
+ 		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
+-			printf("No commands defined\n");
+-		} else if (!strcmp(argv[0], "scan")) {
+-			for (i=1; i < argc; i++)
+-				printf("Scan a path!\n");
++			_show_help();
++		} else if (!strcmp(argv[0], "vg_open")) {
++			_vg_open(argv, argc, &vg, libh);
++		} else if (!strcmp(argv[0], "vg_close")) {
++			_vg_close(argv, argc, &vg);
++		} else if (!strcmp(argv[0], "vg_get_attr_list")) {
++			_vg_get_attr_list(vg);
++		} else if (!strcmp(argv[0], "vg_get_attr_value")) {
++			_vg_get_attr_value(argv, argc, vg);
++		} else if (!strcmp(argv[0], "pvs_in_vg")) {
++			_pvs_in_vg(vg);
++		} else if (!strcmp(argv[0], "pv_obj_get")) {
++			_pv_obj_get(argv, argc, &pv, libh);
++		} else if (!strcmp(argv[0], "pv_obj_get_attr_list")) {
++			_pv_obj_get_attr_list(pv, libh);
++		} else if (!strcmp(argv[0], "pv_obj_get_attr_value")) {
++			_pv_obj_get_attr_value(argv, argc, pv);
++		} else if (!strcmp(argv[0], "lvs_in_vg")) {
++			_lvs_in_vg(vg);
++		} else if (!strcmp(argv[0], "lv_get_attr_list")) {
++			_lv_get_attr_list(vg);
++		} else if (!strcmp(argv[0], "lv_get_attr_value")) {
++			_lv_get_attr_value(argv, argc, vg);
++		} else {
++			printf ("Unrecognized command %s\n", argv[0]);
+ 		}
+ 	}
++	if (!vg_read_error(vg))
++		lvm_vg_close(vg);
+ 
+ 	free(input);
+ 	return 0;
 -- 
 1.5.5.1
 
