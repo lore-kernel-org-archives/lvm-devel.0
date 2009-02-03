@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 3 Feb 2009 16:19:27 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
-Message-ID: <20090203161927.12950.qmail@sourceware.org>
+Date: 3 Feb 2009 16:23:20 -0000
+Subject: LVM2 ./WHATS_NEW lib/locking/locking.c tools/l ...
+Message-ID: <20090203162320.21473.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,95 +10,62 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-02-03 16:19:26
+Changes by:	wysochanski at sourceware.org	2009-02-03 16:23:19
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : metadata-exported.h metadata.c 
-	tools          : toollib.c 
+	lib/locking    : locking.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Rename get_vgs() to get_vgnames() and clarify related error messages.
+	Move locking_type reading inside init_locking().
 	
-	get_vgs() really returns a list of vgnames.  In the future we will use
-	get_vgs() to return a list of vg structures, similar to get_pvs().
+	No functional change.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1032&r2=1.1033
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.60&r2=1.61
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.202&r2=1.203
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1033&r2=1.1034
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
 
---- LVM2/WHATS_NEW	2009/02/02 14:34:24	1.1032
-+++ LVM2/WHATS_NEW	2009/02/03 16:19:25	1.1033
+--- LVM2/WHATS_NEW	2009/02/03 16:19:25	1.1033
++++ LVM2/WHATS_NEW	2009/02/03 16:23:19	1.1034
 @@ -1,5 +1,6 @@
  Version 2.02.45 - 
  ===================================
-+  Rename get_vgs() to get_vgnames() and clarify related error messages.
++  Move locking_type reading inside init_locking().
+   Rename get_vgs() to get_vgnames() and clarify related error messages.
    Allow clvmd to be built with all cluster managers & select one on cmdline.
    Mention --with-clvmd=corosync in ./configure.
-   Replace internal vg_check_status() implementation.
---- LVM2/lib/metadata/metadata-exported.h	2009/01/27 01:48:47	1.60
-+++ LVM2/lib/metadata/metadata-exported.h	2009/02/03 16:19:26	1.61
-@@ -370,7 +370,7 @@
- struct dm_list *get_pvs(struct cmd_context *cmd);
+--- LVM2/lib/locking/locking.c	2008/12/18 05:27:18	1.54
++++ LVM2/lib/locking/locking.c	2009/02/03 16:23:19	1.55
+@@ -208,11 +208,16 @@
  
- /* Set full_scan to 1 to re-read every (filtered) device label */
--struct dm_list *get_vgs(struct cmd_context *cmd, int full_scan);
-+struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan);
- struct dm_list *get_vgids(struct cmd_context *cmd, int full_scan);
- int scan_vgs_for_pvs(struct cmd_context *cmd);
- 
---- LVM2/lib/metadata/metadata.c	2009/01/27 01:48:47	1.202
-+++ LVM2/lib/metadata/metadata.c	2009/02/03 16:19:26	1.203
-@@ -2039,8 +2039,8 @@
- 	 *       allowed to do a full scan here any more. */
- 
- 	// The slow way - full scan required to cope with vgrename
--	if (!(vgnames = get_vgs(cmd, 2))) {
--		log_error("vg_read_by_vgid: get_vgs failed");
-+	if (!(vgnames = get_vgnames(cmd, 2))) {
-+		log_error("vg_read_by_vgid: get_vgnames failed");
- 		return NULL;
- 	}
- 
-@@ -2167,7 +2167,7 @@
- }
- 
- /* May return empty list */
--struct dm_list *get_vgs(struct cmd_context *cmd, int full_scan)
-+struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan)
+ /*
+  * Select a locking type
++ * type: locking type; if < 0, then read config tree value
+  */
+ int init_locking(int type, struct cmd_context *cmd)
  {
- 	return lvmcache_get_vgnames(cmd, full_scan);
- }
-@@ -2201,7 +2201,7 @@
+ 	init_lockingfailed(0);
  
- 	/* Get list of VGs */
- 	if (!(vgids = get_vgids(cmd, 0))) {
--		log_error("get_pvs: get_vgs failed");
-+		log_error("get_pvs: get_vgids failed");
- 		return 0;
- 	}
++	if (type < 0)
++		type = find_config_tree_int(cmd, "global/locking_type", 1);
++		
++	
+ 	switch (type) {
+ 	case 0:
+ 		init_no_locking(&_locking, cmd);
+--- LVM2/tools/lvmcmdline.c	2008/12/19 14:43:02	1.91
++++ LVM2/tools/lvmcmdline.c	2009/02/03 16:23:19	1.92
+@@ -995,8 +995,7 @@
+ 	if (arg_count(cmd, nolocking_ARG))
+ 		locking_type = 0;
+ 	else
+-		locking_type = find_config_tree_int(cmd,
+-					       "global/locking_type", 1);
++		locking_type = -1;
  
---- LVM2/tools/toollib.c	2009/01/26 19:01:32	1.141
-+++ LVM2/tools/toollib.c	2009/02/03 16:19:26	1.142
-@@ -273,7 +273,7 @@
- 
- 	if (!argc || !dm_list_empty(&tags)) {
- 		log_verbose("Finding all logical volumes");
--		if (!(vgnames = get_vgs(cmd, 0)) || dm_list_empty(vgnames)) {
-+		if (!(vgnames = get_vgnames(cmd, 0)) || dm_list_empty(vgnames)) {
- 			log_error("No volume groups found");
- 			return ret_max;
- 		}
-@@ -713,7 +713,7 @@
- 			if (sigint_caught())
- 				return ret_max;
- 		}
--		if (!dm_list_empty(&tags) && (vgnames = get_vgs(cmd, 0)) &&
-+		if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 0)) &&
- 			   !dm_list_empty(vgnames)) {
- 			dm_list_iterate_items(sll, vgnames) {
- 				if (!lock_vol(cmd, sll->str, lock_type)) {
+ 	if (!init_locking(locking_type, cmd)) {
+ 		log_error("Locking type %d initialisation failed.",
 
 
