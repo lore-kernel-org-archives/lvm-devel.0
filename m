@@ -1,22 +1,47 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 3 Feb 2009 16:58:25 +0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
-In-Reply-To: <20090203161927.12950.qmail@sourceware.org>
-References: <20090203161927.12950.qmail@sourceware.org>
-Message-ID: <20090203165825.GH20668@agk.fab.redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 03 Feb 2009 21:28:54 -0500
+Subject: [PATCH] A different implementation of --ignorelockingfailure.
+In-Reply-To: <871vuva9yn.fsf@eriador.mornfall.net>
+References: <871vuva9yn.fsf@eriador.mornfall.net>
+Message-ID: <1233714534.16492.10.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Feb 03, 2009 at 04:19:27PM -0000, wysochanski at sourceware.org wrote:
-> 	Rename get_vgs() to get_vgnames() and clarify related error messages.
+Nice attempt at cleanup.
 
-Ack.
+Not sure about this patch but I do have comments.
+1. Why call it 'boottime_locking' - why not readonly_locking which is
+clearer?
+2. If you make this change you'll also need to modify lvchange.c to take
+a READ lock if the request is for an availability change (vgchange has a
+conditional).*  Otherwise, lvchange will fail when before it would
+succeed.
+3. Introducing boottime/readonly as a "type" of locking seems out of
+place with the current set of locking types - file operations, cluster
+operations.
 
-Alasdair
--- 
-agk at redhat.com
+* Then again, lvchange and vgchange seem to have different code for
+changing availability of an LV (?) so there may be a subtle reason
+lvchange always takes a WRITE lock.
+
+
+On Thu, 2009-01-22 at 11:53 +0100, Petr Rockai wrote:
+> Hi,
+> 
+> two ends are addressed by this patch: getting rid of some global state and also
+> restricting --ignorelockingfailure to only allow what it is supposed to allow
+> (instead of a few hacked-in checks at some places and our belief that the users
+> will be well-behaved).
+> 
+> Yours,
+>    Petr.
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
