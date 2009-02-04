@@ -1,71 +1,150 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 04 Feb 2009 09:36:19 +0100
-Subject: [PATCH] A different implementation of --ignorelockingfailure.
-In-Reply-To: <1233714534.16492.10.camel@localhost.localdomain> (Dave
-	Wysochanski's message of "Tue, 03 Feb 2009 21:28:54 -0500")
-References: <871vuva9yn.fsf@eriador.mornfall.net>
-	<1233714534.16492.10.camel@localhost.localdomain>
-Message-ID: <873aeuk398.fsf@eriador.mornfall.net>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 4 Feb 2009 12:47:06 -0000
+Subject: LVM2 ./WHATS_NEW man/fsadm.8.in scripts/fsadm.sh
+Message-ID: <20090204124706.3630.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
-> 1. Why call it 'boottime_locking' - why not readonly_locking which is
-> clearer?
-boottime is to show clearly that it should never be used elsewhere than
-boottime. It's *not* readonly locking. It's locking that will grant read access
-*without taking any locks*. Ie. inherently dangerous. Under normal operation,
-this is a locking violation that may lead to corrupt metadata reads.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2009-02-04 12:47:05
 
-> 2. If you make this change you'll also need to modify lvchange.c to take
-> a READ lock if the request is for an availability change (vgchange has a
-> conditional).*  Otherwise, lvchange will fail when before it would
-> succeed.
-Oh. Ok, I will need to investigate that. From a glance, it seems like a simple
-omission where lvchange doesn't check that it doesn't need a write lock in some
-cases. I'll amend my patch with a fix for that and resend.
+Modified files:
+	.              : WHATS_NEW 
+	man            : fsadm.8.in 
+	scripts        : fsadm.sh 
 
-Will also see if I can come up with some test for the suite...
+Log message:
+	add support for ext4 resize in fsadm
 
-> 3. Introducing boottime/readonly as a "type" of locking seems out of
-> place with the current set of locking types - file operations, cluster
-> operations.
-There's also "nolocking" as a locking type, so a boottime one that is
-restriction of nolocking seems in line to me.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1034&r2=1.1035
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/fsadm.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
-> * Then again, lvchange and vgchange seem to have different code for
-> changing availability of an LV (?) so there may be a subtle reason
-> lvchange always takes a WRITE lock.
-It doesn't seem so (see above). It however might be related to the pvmove_poll
-and lvconvert_poll bits that are invoked by lvchange -a y (but not vgchange -a
-y). This discrepancy alone looks a little odd at best. However, the polldaemons
-do their own locking. This is not really a reason for lvchange requiring a
-write lock. What does happen is though that the polldaemons inherit the locking
-type, so if anyone runs lvchange -a y --ignorelockingfailure, they might be in
-for serious trouble if pvmove (or lvconvert maybe) was in progress, since they
-will get unlocked metadata writes on a live system that way.
-
-However, at least on Debian, the initscripts don't use lvchange at all, they
-just use vgchange -a y --ignorelockingfailure and I imagine this is the case
-with most distributions? In which case, we don't really need to care about
-lvchange all that much. (Also note that this patch fixes the above corruption
-bug induced by lvchange -a y --ignorelockingfailure, since it will disallow the
-polldaemon to write metadata, and it should fail in some reasonable controlled
-fashion. Well, it will disallow lvchange -a y altogether, but that can be fixed
-by not requiring write lock for the activation itself...)
-
-Thanks for review,
-   Petr.
-
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+--- LVM2/WHATS_NEW	2009/02/03 16:23:19	1.1034
++++ LVM2/WHATS_NEW	2009/02/04 12:47:05	1.1035
+@@ -1,5 +1,6 @@
+ Version 2.02.45 - 
+ ===================================
++  Add support for ext4 resize in fsadm
+   Move locking_type reading inside init_locking().
+   Rename get_vgs() to get_vgnames() and clarify related error messages.
+   Allow clvmd to be built with all cluster managers & select one on cmdline.
+--- LVM2/man/fsadm.8.in	2008/10/08 12:50:13	1.1
++++ LVM2/man/fsadm.8.in	2009/02/04 12:47:05	1.2
+@@ -9,42 +9,48 @@
+ .RI [options]\ resize\ device\ [new_size[BKMGTEP]]
+ 
+ .SH "DESCRIPTION"
+-\fBfsadm\fR utility resizes or checks the filesystem on a device. It tries to use the same API for \fBExt2/3\fR, \fBReiserFS\fR and \fBXFS\fR filesystem and simply resize and filesystem check operation.
++\fBfsadm\fR utility resizes or checks the filesystem on a device.
++It tries to use the same API for \fBext2/ext3/ext4\fR,
++\fBReiserFS\fR and \fBXFS\fR filesystem.
+ .SH "OPTIONS"
+-.TP 
++.TP
+ \fB\-h \-\-help\fR
+ \(em print help message
+-.TP 
++.TP
+ \fB\-v \-\-verbose\fR
+ \(em be more verbose
+-.TP 
++.TP
+ \fB\-e \-\-ext\-offline\fR
+-\(em unmount Ext2/3 filesystem before doing resize
+-.TP 
++\(em unmount ext2/ext3/ext4 filesystem before doing resize
++.TP
+ \fB\-f \-\-force\fR
+ \(em bypass some sanity checks
+-.TP 
++.TP
+ \fB\-n \-\-dry\-run\fR
+ \(em print commands without running them
+-.TP 
++.TP
+ \fB\-y \-\-yes\fR
+ \(em answer "yes" at any prompts
+-.TP  
++.TP
+ \fBnew_size\fR
+-\(em Absolute number of filesystem blocks to be in the filesystem, or an absolute size using a suffix (in powers of 1024). If new_size is not supplied, the whole device is used.
+-
++\(em Absolute number of filesystem blocks to be in the filesystem,
++or an absolute size using a suffix (in powers of 1024).
++If new_size is not supplied, the whole device is used.
+ 
+ .SH "EXAMPLES"
+-"fsadm \-e \-y resize /dev/vg/test 1000M" tries to resize the size of the filesystem on logical volume /dev/vg/test. If /dev/vg/test contains Ext2/3 filesystem it will be unmounted prior the resize. All [y|n] questions will be answered 'y'.
++"fsadm \-e \-y resize /dev/vg/test 1000M" tries to resize the filesystem
++on logical volume /dev/vg/test. If /dev/vg/test contains ext2/ext3/ext4
++filesystem it will be unmounted prior the resize.
++All [y|n] questions will be answered 'y'.
+ .SH "ENVIRONMENT VARIABLES"
+-.TP 
+-\fBTMPDIR\fP 
++.TP
++\fBTMPDIR\fP
+ Where the temporary directory should be created.
+-.TP 
+-.BR 
++.TP
++.BR
+ .SH "SEE ALSO"
+-.BR lvm (8), 
+-.BR lvresize (8), 
++.BR lvm (8),
++.BR lvresize (8),
+ .BR lvm.conf (5),
+ .BR tune2fs (8),
+ .BR resize2fs (8),
+@@ -53,4 +59,3 @@
+ .BR xfs_info (8),
+ .BR xfs_growfs (8),
+ .BR xfs_check (8)
+-
+--- LVM2/scripts/fsadm.sh	2008/04/29 15:58:24	1.7
++++ LVM2/scripts/fsadm.sh	2009/02/04 12:47:05	1.8
+@@ -19,7 +19,7 @@
+ # Needed utilities:
+ #   mount, umount, grep, readlink, blockdev, blkid, fsck, xfs_check
+ #
+-# ext2/ext3: resize2fs, tune2fs
++# ext2/ext3/ext4: resize2fs, tune2fs
+ # reiserfs: resize_reiserfs, reiserfstune
+ # xfs: xfs_growfs, xfs_info
+ #
+@@ -80,7 +80,7 @@
+ 	echo "  Options:"
+ 	echo "    -h | --help         Show this help message"
+ 	echo "    -v | --verbose      Be verbose"
+-	echo "    -e | --ext-offline  unmount filesystem before Ext2/3 resize"
++	echo "    -e | --ext-offline  unmount filesystem before ext2/ext3/ext4 resize"
+ 	echo "    -f | --force        Bypass sanity checks"
+ 	echo "    -n | --dry-run      Print commands without running them"
+ 	echo "    -l | --lvresize     Resize given device (if it is LVM device)"
+@@ -226,7 +226,7 @@
+ 	test -n "$BLOCKSIZE" -a -n "$BLOCKCOUNT" || error "Cannot parse $1 output"
+ }
+ ####################################
+-# Resize ext2/ext3 filesystem
++# Resize ext2/ext3/ext4 filesystem
+ # - unmounted or mounted for upsize
+ # - unmounted for downsize
+ ####################################
+@@ -329,7 +329,7 @@
+ 	#IFS=$'\n'  # don't use bash-ism ??
+ 	IFS="$(printf \"\\n\")"  # needed for parsing output
+ 	case "$FSTYPE" in
+-	  "ext3"|"ext2") resize_ext $NEWSIZE ;;
++	  "ext3"|"ext2"|"ext4") resize_ext $NEWSIZE ;;
+ 	  "reiserfs") resize_reiser $NEWSIZE ;;
+ 	  "xfs") resize_xfs $NEWSIZE ;;
+ 	  *) error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool" ;;
 
 
