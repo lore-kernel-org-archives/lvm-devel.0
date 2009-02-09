@@ -1,463 +1,72 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 02 Feb 2009 11:28:48 -0500
-Subject: [PATCH v2] Add --align parameter to pvcreate
-In-Reply-To: <4982EAEC.9000209@redhat.com>
-References: <49804A78.3020302@redhat.com>  <4982EAEC.9000209@redhat.com>
-Message-ID: <1233592128.5366.13.camel@localhost.localdomain>
+Date: Sun,  8 Feb 2009 23:21:51 -0500
+Subject: [PATCH 03/21] Add lvm_pv_name, lvm_vg_name, and lvm_lv_name accessors.
+In-Reply-To: <1234153329-2829-3-git-send-email-dwysocha@redhat.com>
+References: <1234153329-2829-1-git-send-email-dwysocha@redhat.com>
+	<1234153329-2829-2-git-send-email-dwysocha@redhat.com>
+	<1234153329-2829-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1234153329-2829-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+RFC - liblvm could provide accessor functions such as these along with
+the generic attribute functions.  These specific accessor functions will
+make application code simpler and more readable and may be desired by
+application programmers over the generic attribute functions for single
+attributes.
 
-On Fri, 2009-01-30 at 12:56 +0100, Milan Broz wrote:
-> (added lvm.conf value and fixed precedence when restoring from backup)
-> 
-> --
-> Add --align parameter to pvcreate.
-> 
-> Some RAID controllers suggest align volumes
-> to stripe or chunk size.
-> 
-> Currently lvm2 align LVs to underlying MD device chunk automatically,
-> but there is no proper way to set this parameter directly
-> for other RAID drivers.
-> 
-> Note that it is not as the same as metadata area size.
-> 
-> I think we should provide possibility for system administrator
-> to force PV data payload alignment during PV creation.
-> (Also it is adminitrator or distro installator responsibility
-> to set proper physical extent size later during vgcreate.)
-> 
-> Patch adds --align to pvcreate (default is size in KB).
-> Also it add pv_alignment to device section of lvm.conf,
-> where the default PV alignment can be specified.
-> 
-> pe_align() function now takes force_align parameter, which
-> can overwite data aligmnent if set to non-zero.
-> 
-> Patch also fixes that after vgremove the orphan PV data align
-> value is not rewritten by default.
-> 
-> Signed-off-by: Milan Broz <mbroz@redhat.com>
-> ---
->  WHATS_NEW                        |    1 +
->  doc/example.conf                 |   16 +++++++++---
->  lib/format_text/format-text.c    |   13 +++++++---
->  lib/metadata/metadata-exported.h |    1 +
->  lib/metadata/metadata.c          |   50 ++++++++++++++++++++++++++++++-------
->  lib/metadata/metadata.h          |    2 +-
->  man/pvcreate.8.in                |    7 +++++
->  tools/args.h                     |    1 +
->  tools/commands.h                 |    5 ++-
->  tools/pvcreate.c                 |   18 +++++++++++++-
->  tools/vgconvert.c                |    2 +-
->  11 files changed, 93 insertions(+), 23 deletions(-)
-> 
-> diff --git a/WHATS_NEW b/WHATS_NEW
-> index 29c3cd2..c9b3d8e 100644
-> --- a/WHATS_NEW
-> +++ b/WHATS_NEW
-> @@ -1,5 +1,6 @@
->  Version 2.02.45 - 
->  ===================================
-> +  Add --align parameter to pvcreate to allow specify payload align directly.
->    Replace internal vg_check_status() implementation.
->    Rename vg_read() to vg_read_internal().
->  
-> diff --git a/doc/example.conf b/doc/example.conf
-> index 16cefb2..3bcfff0 100644
-> --- a/doc/example.conf
-> +++ b/doc/example.conf
-> @@ -86,7 +86,7 @@ devices {
->      # If sysfs is mounted (2.6 kernels) restrict device scanning to 
->      # the block devices it believes are valid.
->      # 1 enables; 0 disables.
-> -    sysfs_scan = 1	
-> +    sysfs_scan = 1
->  
->      # By default, LVM2 will ignore devices used as components of
->      # software RAID (md) devices by looking for md superblocks.
-> @@ -98,6 +98,14 @@ devices {
->      # 1 enables; 0 disables.
->      md_chunk_alignment = 1
->  
-> +    # Default alignment (in KB) for PV, data payload will be aligned
-> +    # to multiple of this boundary.
-> +    # If not defined (or set to zero) alignment will be 64k or page size,
-> +    # if page size is bigger.
-> +    # Also note that specialized alignment (md_chunk_alignment) takes
-> +    # precedence before this setting.
-> +    #pv_alignment = 4096
-> +
->      # If, while scanning the system for PVs, LVM2 encounters a device-mapper
->      # device that has its I/O suspended, it waits for it to become accessible.
->      # Set this to 1 to skip such devices.  This should only be needed
-> @@ -129,7 +137,7 @@ log {
->      # There are 6 syslog-like log levels currently in use - 2 to 7 inclusive.
->      # 7 is the most verbose (LOG_DEBUG).
->      level = 0
-> -    
-> +
->      # Format of output messages
->      # Whether or not (1 or 0) to indent messages according to their severity
->      indent = 1
-> @@ -175,7 +183,7 @@ backup {
->      # Where should archived files go ?
->      # Remember to back up this directory regularly!
->      archive_dir = "/etc/lvm/archive"
-> -    
-> +
->      # What is the minimum number of archive files you wish to keep ?
->      retain_min = 10
->  
-> @@ -193,7 +201,7 @@ shell {
->  
->  # Miscellaneous global LVM2 settings
->  global {
-> -    
-> +
->      # The file creation mask for any files and directories created.
->      # Interpreted as octal if the first digit is zero.
->      umask = 077
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/lvm2.h              |    7 +++++++
+ lib/metadata/metadata.c |   15 +++++++++++++++
+ 2 files changed, 22 insertions(+), 0 deletions(-)
 
-Uintended whitespace changes?
-
-> diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-> index 428b5e2..74c8759 100644
-> --- a/lib/format_text/format-text.c
-> +++ b/lib/format_text/format-text.c
-> @@ -1182,7 +1182,7 @@ static int _mda_setup(const struct format_type *fmt,
->  	if (!pvmetadatacopies)
->  		return 1;
->  
-> -	alignment = pe_align(pv) << SECTOR_SHIFT;
-> +	alignment = pe_align(pv, 0) << SECTOR_SHIFT;
->  	disk_size = pv->size << SECTOR_SHIFT;
->  	pe_start <<= SECTOR_SHIFT;
->  	pe_end <<= SECTOR_SHIFT;
-> @@ -1347,9 +1347,14 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
->  	else
->  		dm_list_init(&info->das);
->  
-> +	/*
-> +	 * Keep PV data alignment if already set
-> +	 */
-> +	if (pv->pe_start < pe_align(pv, 0))
-> +		pv->pe_start = pe_align(pv, 0);
-> +
->  	/* Set pe_start to first aligned sector after any metadata
->  	 * areas that begin before pe_start */
-> -	pv->pe_start = pe_align(pv);
->  	dm_list_iterate_items(mda, &info->mdas) {
->  		mdac = (struct mda_context *) mda->metadata_locn;
->  		if (pv->dev == mdac->area.dev &&
-> @@ -1358,9 +1363,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
->  		     (pv->pe_start << SECTOR_SHIFT))) {
->  			pv->pe_start = (mdac->area.start + mdac->area.size)
->  			    >> SECTOR_SHIFT;
-> -			adjustment = pv->pe_start % pe_align(pv);
-> +			adjustment = pv->pe_start % pe_align(pv, 0);
->  			if (adjustment)
-> -				pv->pe_start += (pe_align(pv) - adjustment);
-> +				pv->pe_start += (pe_align(pv, 0) - adjustment);
->  		}
->  	}
->  	if (!add_da
-> diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-> index e785383..b25e30d 100644
-> --- a/lib/metadata/metadata-exported.h
-> +++ b/lib/metadata/metadata-exported.h
-> @@ -407,6 +407,7 @@ pv_t *pv_create(const struct cmd_context *cmd,
->  		      struct device *dev,
->  		      struct id *id,
->  		      uint64_t size,
-> +		      unsigned long req_pe_align,
->  		      uint64_t pe_start,
->  		      uint32_t existing_extent_count,
->  		      uint32_t existing_extent_size,
-> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-> index 0130bd3..cf7cb70 100644
-> --- a/lib/metadata/metadata.c
-> +++ b/lib/metadata/metadata.c
-> @@ -46,6 +46,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
->  static struct physical_volume *_pv_create(const struct format_type *fmt,
->  				  struct device *dev,
->  				  struct id *id, uint64_t size,
-> +				  unsigned long align,
->  				  uint64_t pe_start,
->  				  uint32_t existing_extent_count,
->  				  uint32_t existing_extent_size,
-> @@ -65,19 +66,33 @@ static struct pv_list *_find_pv_in_vg(const struct volume_group *vg,
->  static struct physical_volume *_find_pv_in_vg_by_uuid(const struct volume_group *vg,
->  						      const struct id *id);
->  
-> -unsigned long pe_align(struct physical_volume *pv)
-> +unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align)
-
-
-Inconsistent naming?  You have 'req_pe_align', 'align', and
-'force_pe_align'.
-
-
-
->  {
-> -	if (pv->pe_align)
-> +	if (pv->pe_align && !force_pe_align)
->  		goto out;
->  
-> -	pv->pe_align = MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
-> +	if (force_pe_align)
-> +		pv->pe_align = force_pe_align;
-> +	else 
-> +		/*
-> +		 * Config value is in KB
-> +		 */
-> +		pv->pe_align = (find_config_tree_int(pv->fmt->cmd,
-> +				"devices/pv_alignment", 0) * 1024) >> SECTOR_SHIFT;
->  
->  	/*
-> -	 * Align to chunk size of underlying md device if present
-> +	 * Use old default if not specified
->  	 */
-> +	if (!pv->pe_align)
-> +		pv->pe_align = MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
-> +
-> +
->  	if (!pv->dev)
->  		goto out;
->  
-> +	/*
-> +	 * Align to chunk size of underlying md device if present
-> +	 */
->  	if (find_config_tree_bool(pv->fmt->cmd, "devices/md_chunk_alignment",
->  				  DEFAULT_MD_CHUNK_ALIGNMENT))
->  		pv->pe_align = MAX(pv->pe_align,
-> @@ -148,8 +163,8 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
->  
->  	/* FIXME Do proper rounding-up alignment? */
->  	/* Reserved space for label; this holds 0 for PVs created by LVM1 */
-> -	if (pv->pe_start < pe_align(pv))
-> -		pv->pe_start = pe_align(pv);
-> +	if (pv->pe_start < pe_align(pv, 0))
-> +		pv->pe_start = pe_align(pv, 0);
->  
->  	/*
->  	 * pe_count must always be calculated by pv_setup
-> @@ -759,6 +774,7 @@ int vg_split_mdas(struct cmd_context *cmd __attribute((unused)),
->   * @dev: PV device to initialize
->   * @id: PV UUID to use for initialization
->   * @size: size of the PV in sectors
-> + * @req_pe_align: requested alignment of payload
->   * @pe_start: physical extent start
->   * @existing_extent_count
->   * @existing_extent_size
-> @@ -776,13 +792,14 @@ int vg_split_mdas(struct cmd_context *cmd __attribute((unused)),
->  pv_t *pv_create(const struct cmd_context *cmd,
->  		struct device *dev,
->  		struct id *id, uint64_t size,
-> +		unsigned long req_pe_align,
->  		uint64_t pe_start,
->  		uint32_t existing_extent_count,
->  		uint32_t existing_extent_size,
->  		int pvmetadatacopies,
->  		uint64_t pvmetadatasize, struct dm_list *mdas)
->  {
-> -	return _pv_create(cmd->fmt, dev, id, size, pe_start,
-> +	return _pv_create(cmd->fmt, dev, id, size, req_pe_align, pe_start,
->  			  existing_extent_count,
->  			  existing_extent_size,
->  			  pvmetadatacopies,
-> @@ -826,6 +843,7 @@ static struct physical_volume *_alloc_pv(struct dm_pool *mem, struct device *dev
->  static struct physical_volume *_pv_create(const struct format_type *fmt,
->  				  struct device *dev,
->  				  struct id *id, uint64_t size,
-> +				  unsigned long req_pe_align,
->  				  uint64_t pe_start,
->  				  uint32_t existing_extent_count,
->  				  uint32_t existing_extent_size,
-> @@ -860,15 +878,25 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
->  		pv->size = size;
->  	}
->  
-> -	if (pv->size < PV_MIN_SIZE) {
-> -		log_error("%s: Size must exceed minimum of %ld sectors.",
-> -			  pv_dev_name(pv), PV_MIN_SIZE);
-> +	if (pv->size < (req_pe_align + PV_MIN_SIZE)) {
-> +		log_error("%s: Size %smust exceed minimum of %ld sectors.",
-> +			  pv_dev_name(pv),
-> +			  req_pe_align ? "after data alignment " : "",
-> +			  PV_MIN_SIZE);
->  		goto bad;
->  	}
->  
->  	pv->fmt = fmt;
->  	pv->vg_name = fmt->orphan_vg_name;
->  
-> +	/*
-> +	 * Force data alignment if specified
-> +	 */
-> +	if (req_pe_align && pe_align(pv, req_pe_align) != req_pe_align)
-> +		log_warn("%s: Overriding data aligmnent to %lu sectors"
-> +			 " (requested %lu sectors)", pv_dev_name(pv),
-> +			 pe_align(pv, 0), req_pe_align);
-> +
->  	if (!fmt->ops->pv_setup(fmt, pe_start, existing_extent_count,
->  				existing_extent_size,
->  				pvmetadatacopies, pvmetadatasize, mdas,
-> @@ -877,6 +905,8 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
->  			  "failed.", pv_dev_name(pv));
->  		goto bad;
->  	}
-> +
-> +
->  	return pv;
->  
->        bad:
-> diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-> index c425fbf..c982b78 100644
-> --- a/lib/metadata/metadata.h
-> +++ b/lib/metadata/metadata.h
-> @@ -263,7 +263,7 @@ struct format_handler {
->  /*
->   * Utility functions
->   */
-> -unsigned long pe_align(struct physical_volume *pv);
-> +unsigned long pe_align(struct physical_volume *pv, unsigned long force_pe_align);
->  int vg_validate(struct volume_group *vg);
->  
->  int pv_write_orphan(struct cmd_context *cmd, struct physical_volume *pv);
-> diff --git a/man/pvcreate.8.in b/man/pvcreate.8.in
-> index 7ecda56..bfecc5b 100644
-> --- a/man/pvcreate.8.in
-> +++ b/man/pvcreate.8.in
-> @@ -13,6 +13,7 @@ pvcreate \- initialize a disk or partition for use by LVM
->  .RB [ \-M | \-\-metadatatype type ]
->  .RB [ \-\-metadatacopies #copies ]
->  .RB [ \-\-metadatasize size ]
-> +.RB [ \-\-align size ]
->  .RB [ \-\-restorefile file ]
->  .RB [ \-\-setphysicalvolumesize size ]
->  .RB [ \-u | \-\-uuid uuid ]
-> @@ -89,6 +90,12 @@ to see where the metadata areas are placed.
->  The approximate amount of space to be set aside for each metadata area.
->  (The size you specify may get rounded.)
->  .TP
-> +.BR \-\-align " size"
-> +Force align start of the payload to specified boundary (to align
-> +with underlying RAID device stripe or chunk).
-> +Note that you should use properly sized physical extent later
-> +in vgcreate to correctly align all Logical Volumes start too.
-> +.TP
-
-Might be worth adding a sentence or two of how to query / derive this
-value.  I would guess someone will use this value, then want to verify
-it is set correctly.  I know we don't store it so we can't add it to the
-reporting code as a field but we can point out the use of pe_start and
-pe_size.
-
-
->  .BR \-\-metadatacopies " copies"
->  The number of metadata areas to set aside on each PV.  Currently
->  this can be 0, 1 or 2.  
-> diff --git a/tools/args.h b/tools/args.h
-> index 8f026fc..776fc0c 100644
-> --- a/tools/args.h
-> +++ b/tools/args.h
-> @@ -56,6 +56,7 @@ arg(ignoremonitoring_ARG, '\0', "ignoremonitoring", NULL, 0)
->  arg(nameprefixes_ARG, '\0', "nameprefixes", NULL, 0)
->  arg(unquoted_ARG, '\0', "unquoted", NULL, 0)
->  arg(rows_ARG, '\0', "rows", NULL, 0)
-> +arg(physicalvolumealign_ARG, '\0', "align", size_kb_arg, 0)
->  
->  /* Allow some variations */
->  arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
-> diff --git a/tools/commands.h b/tools/commands.h
-> index 58c6156..4007639 100644
-> --- a/tools/commands.h
-> +++ b/tools/commands.h
-> @@ -462,6 +462,7 @@ xx(pvcreate,
->     "\t[-M|--metadatatype 1|2]" "\n"
->     "\t[--metadatacopies #copies]" "\n"
->     "\t[--metadatasize MetadataSize[kKmMgGtTpPeE]]" "\n"
-> +   "\t[--align Size[kKmM]]" "\n"
->     "\t[--setphysicalvolumesize PhysicalVolumeSize[kKmMgGtTpPeE]" "\n"
->     "\t[-t|--test] " "\n"
->     "\t[-u|--uuid uuid] " "\n"
-> @@ -472,8 +473,8 @@ xx(pvcreate,
->     "\tPhysicalVolume [PhysicalVolume...]\n",
->  
->     force_ARG, test_ARG, labelsector_ARG, metadatatype_ARG, metadatacopies_ARG,
-> -   metadatasize_ARG, physicalvolumesize_ARG, restorefile_ARG, uuidstr_ARG,
-> -   yes_ARG, zero_ARG)
-> +   metadatasize_ARG, physicalvolumealign_ARG, physicalvolumesize_ARG,
-> +   restorefile_ARG, uuidstr_ARG, yes_ARG, zero_ARG)
->  
->  xx(pvdata,
->     "Display the on-disk metadata for physical volume(s)",
-> diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-> index db1a0e2..9a12c33 100644
-> --- a/tools/pvcreate.c
-> +++ b/tools/pvcreate.c
-> @@ -19,6 +19,7 @@
->  struct pvcreate_params {
->  	int zero;
->  	uint64_t size;
-> +	uint64_t align;
->  	int pvmetadatacopies;
->  	uint64_t pvmetadatasize;
->  	int64_t labelsector;
-> @@ -177,7 +178,7 @@ static int pvcreate_single(struct cmd_context *cmd, const char *pv_name,
->  	}
->  
->  	dm_list_init(&mdas);
-> -	if (!(pv = pv_create(cmd, dev, pp->idp, pp->size, pp->pe_start,
-> +	if (!(pv = pv_create(cmd, dev, pp->idp, pp->size, pp->align, pp->pe_start,
->  			     pp->extent_count, pp->extent_size,
->  			     pp->pvmetadatacopies,
->  			     pp->pvmetadatasize,&mdas))) {
-> @@ -329,6 +330,21 @@ static int pvcreate_validate_params(struct cmd_context *cmd,
->  	}
->  	pp->size = arg_uint64_value(cmd, physicalvolumesize_ARG, UINT64_C(0));
->  
-> +	if (arg_sign_value(cmd, physicalvolumealign_ARG, 0) == SIGN_MINUS) {
-> +		log_error("Physical volume alignment may not be negative");
-> +		return 0;
-> +	}
-> +	pp->align = arg_uint64_value(cmd, physicalvolumealign_ARG, UINT64_C(0));
-> +
-> +	if (pp->align > ULONG_MAX) {
-> +		log_error("Physical volume alignment is too big.");
-> +		return 0;
-> +	}
-> +	if (pp->align && pp->pe_start && (pp->pe_start % pp->align)) {
-> +		log_error("Incompatible alignment value is ignored.");
-> +		pp->align = 0;
-> +	}
-> +
->  	if (arg_sign_value(cmd, metadatasize_ARG, 0) == SIGN_MINUS) {
->  		log_error("Metadata size may not be negative");
->  		return 0;
-> diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-> index dc9d023..209d597 100644
-> --- a/tools/vgconvert.c
-> +++ b/tools/vgconvert.c
-> @@ -133,7 +133,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
->  
->  		dm_list_init(&mdas);
->  		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
-> -				     &existing_pv->id, size,
-> +				     &existing_pv->id, size, 0,
->  				     pe_start, pv_pe_count(existing_pv),
->  				     pv_pe_size(existing_pv), pvmetadatacopies,
->  				     pvmetadatasize, &mdas))) {
-> 
-> 
-
-Ack other than the comments above.
-
-I reviewed the whole patch and did limited testing.
+diff --git a/lib/lvm2.h b/lib/lvm2.h
+index bfa1852..5f44614 100644
+--- a/lib/lvm2.h
++++ b/lib/lvm2.h
+@@ -69,4 +69,11 @@ typedef struct physical_volume pv_t;
+ struct logical_volume;
+ typedef struct logical_volume lv_t;
+ 
++/*
++ * PV, VG, and LV object attribute functions.
++ */
++const char *lvm_pv_name(const pv_t *pv);
++const char *lvm_vg_name(const vg_t *vg);
++const char *lvm_lv_name(const lv_t *lv);
++
+ #endif
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a2b5f2f..4c9f939 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2673,6 +2673,21 @@ vg_t *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
+ 	return vg_read(cmd, vg_name, vgid, flags | READ_FOR_UPDATE);
+ }
+ 
++const char *lvm_pv_name(const pv_t *pv)
++{
++	return dev_name(pv->dev);
++}
++
++const char *lvm_vg_name(const vg_t *vg)
++{
++	return vg->name;
++}
++
++const char *lvm_lv_name(const lv_t *lv)
++{
++	return lv->name;
++}
++
+ /*
+  * Test the validity of a VG handle returned by vg_read() or vg_read_for_update().
+  *
+-- 
+1.6.0.5
 
 
