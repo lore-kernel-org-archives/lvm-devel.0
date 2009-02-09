@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun,  8 Feb 2009 23:22:01 -0500
-Subject: [PATCH 13/21] Add test code.
-In-Reply-To: <1234153329-2829-13-git-send-email-dwysocha@redhat.com>
+Date: Sun,  8 Feb 2009 23:22:02 -0500
+Subject: [PATCH 14/21] Add lvm_errno(), lvm_strerror, lvm_vg_mode.
+In-Reply-To: <1234153329-2829-14-git-send-email-dwysocha@redhat.com>
 References: <1234153329-2829-1-git-send-email-dwysocha@redhat.com>
 	<1234153329-2829-2-git-send-email-dwysocha@redhat.com>
 	<1234153329-2829-3-git-send-email-dwysocha@redhat.com>
@@ -15,548 +15,292 @@ References: <1234153329-2829-1-git-send-email-dwysocha@redhat.com>
 	<1234153329-2829-11-git-send-email-dwysocha@redhat.com>
 	<1234153329-2829-12-git-send-email-dwysocha@redhat.com>
 	<1234153329-2829-13-git-send-email-dwysocha@redhat.com>
-Message-ID: <1234153329-2829-14-git-send-email-dwysocha@redhat.com>
+	<1234153329-2829-14-git-send-email-dwysocha@redhat.com>
+Message-ID: <1234153329-2829-15-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Test lvm_pv_list, lvm_lv_get_attr_list, lvm_lv_get_attr_value().
-pv_obj_get(), pv_obj_get_attr_list(), pv_obj_get_attr_value,
-vg_get_attr_list and vg_get_attr_value,
-lv_get_attr_list and lv_get_attr_value,
-lvs_in_vg(), pvs_in_vg()
-lvm_vg_open, lvm_vg_close().
-
-- modularize code more
-- don't ignore orphan vg names (e.g. #orphan_lvm2) but allow comments
-- when vg_open called, store vg, lvs, and pvs inside hashes for later lookup
-- allow lv attr value display by vgname/lvname
+Create struct lib_context to store lvm_errno field as well as cmd_context.
+Add 'mode' field to struct volume_group.
+Create error APIs - lvm_errno, lvm_strerror.
+Update lvm_vg_open to set lvm_errno if invalid mode given (mode != O_RDONLY).
+Move lvm_vg_open, lvm_vg_close to lvm2.c (b/c lib_context defined there).
+Update test code to use lvm_strerror().
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- test/api/test.c |  487 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 480 insertions(+), 7 deletions(-)
+ lib/lvm2.c                       |   97 ++++++++++++++++++++++++++++++++------
+ lib/lvm2.h                       |   13 +++++
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   25 ----------
+ test/api/test.c                  |   20 ++++++--
+ 5 files changed, 111 insertions(+), 45 deletions(-)
 
-diff --git a/test/api/test.c b/test/api/test.c
-index 9411663..e7137f0 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -29,7 +29,7 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
- 		while (*b && isspace(*b))
- 			b++;
+diff --git a/lib/lvm2.c b/lib/lvm2.c
+index d880902..cf4e603 100644
+--- a/lib/lvm2.c
++++ b/lib/lvm2.c
+@@ -12,6 +12,8 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
--		if ((!*b) || (*b == '#'))
-+		if ((!*b) || ((*argc == 0)&&(*b == '#')))
- 			break;
++#include <errno.h>
++#include <string.h>
+ #include "lvm2.h"
+ #include "lib.h"
+ #include "toolcontext.h"
+@@ -19,10 +21,70 @@
+ #include "metadata-exported.h"
+ #include "report.h"
  
- 		e = b;
-@@ -48,11 +48,457 @@ static int lvm_split(char *str, int *argc, char **argv, int max)
- 	return *argc;
- }
- 
--static int lvmapi_test_shell(lvm_handle_t libh)
-+static void _show_help(void)
- {
--	int argc, i;
-+	printf("'pvs_in_vg vgname': "
-+	       "Issue lvm_pvs_in_vg() API; must follow vg_open\n");
-+	printf("'pv_obj_get pvname': "
-+	       "Issue a lvm_pv_obj_get() API call on PV 'pvname'\n");
-+	printf("'pv_obj_get_attr_list': "
-+	       "Issue lvm_pv_obj_get_attr_list() API; must follow pv_obj_get\n");
-+	printf("'pv_obj_get_attr_value [attr_name]':"
-+	       "Issue lvm_pv_obj_get_attr_value() API; must follow pv_obj_get\n");
-+	printf("'vgs_open': "
-+	       "List the VGs that are currently open\n");
-+	printf("'vgs': "
-+	       "List all VGs known to the system\n");
-+	printf("'vg_open vgname': "
-+	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
-+	printf("'vg_close vgname': "
-+	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
-+	printf("'vg_get_attr_list vgname':"
-+	       "Issue lvm_vg_get_attr_list() API; must follow vg_open\n");
-+	printf("'vg_get_attr_value vgname [attr_name]':"
-+	       "Issue lvm_vg_get_attr_value() API; must follow vg_open\n");
-+	printf("'lvs_in_vg vgname': "
-+	       "Issue lvm_lvs_in_vg() API; must follow vg_open\n");
-+	printf("'lv_get_attr_list vgname/lvname': "
-+	       "Issue lvm_lv_get_attr_list() API; must follow vg_open\n");
-+	printf("'lv_get_attr_value vgname/lvname [attr_name]': "
-+	       "Issue lvm_lv_get_attr_value() API; must follow vg_open\n");
-+	printf("'quit': exit the program\n");
-+}
++struct lib_context {
++	struct cmd_context *cmd;
++	int lvm_errno;
++};
 +
-+static struct dm_hash_table *_vgname_hash = NULL;
-+static struct dm_hash_table *_pvname_hash = NULL;
-+static struct dm_hash_table *_lvname_hash = NULL;
-+
-+static void _hash_destroy_single(struct dm_hash_table **htable)
++mode_t lvm_vg_mode(vg_t *vg)
 +{
-+	if (htable && *htable) {
-+		dm_hash_destroy(*htable);
-+		*htable = NULL;
-+	}
++	return vg->mode;
 +}
 +
-+static void _hash_destroy(void)
++int lvm_errno(lvm_handle_t libh)
 +{
-+	_hash_destroy_single(&_vgname_hash);
-+	_hash_destroy_single(&_pvname_hash);
-+	_hash_destroy_single(&_lvname_hash);
++	return libh->lvm_errno;
 +}
 +
-+static int _hash_create(void)
++char *lvm_strerror(lvm_handle_t libh)
 +{
-+	if (!(_vgname_hash = dm_hash_create(128)))
-+		return 0;
-+	if (!(_pvname_hash = dm_hash_create(128))) {
-+		_hash_destroy_single(&_vgname_hash);
-+		return 0;
-+	}
-+	if (!(_lvname_hash = dm_hash_create(128))) {
-+		_hash_destroy_single(&_vgname_hash);
-+		_hash_destroy_single(&_pvname_hash);
-+		return 0;
-+	}
-+	return 1;
++	return strerror(libh->lvm_errno);
 +}
 +
-+static vg_t *_lookup_vg_by_name(char **argv, int argc)
++/*
++ * Open / read a VG.
++ * FIXME: Only read access allowed.
++ */
++vg_t *lvm_vg_open(lvm_handle_t libh, const char *vg_name, mode_t mode)
 +{
 +	vg_t *vg;
 +
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
++	if ((mode & O_ACCMODE) != O_RDONLY) {
++		log_error("Invalid access mode 0x%x for lvm_vg_read()\n",
++			  mode);
++		libh->lvm_errno = EPERM;
 +		return NULL;
 +	}
-+	if (!(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
-+		printf ("Can't find %s in open VGs - run vg_open first\n",
-+			argv[1]);
-+		return NULL;
-+	}
++	vg = vg_read(libh->cmd, vg_name, NULL, 0);
++
 +	if (vg_read_error(vg)) {
-+		printf("Error on VG - try vg_close/vg_open\n");
++		/* FIXME: fill in vg->errno */
 +		return NULL;
 +	}
++	vg->mode = mode;
 +	return vg;
 +}
 +
-+static pv_t *_lookup_pv_by_name(char **argv, int argc)
++/*
++ * Close a VG handle.
++ * If lock is still held, unlock the VG.
++ * FIXME: We cannot free the memory as it's tied to the cmd->mem pool.
++ */
++void lvm_vg_close(vg_t *vg)
 +{
-+	pv_t *pv;
-+
-+	if (argc < 2) {
-+		printf ("Please enter pv_name\n");
-+		return NULL;
-+	}
-+	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-+		printf ("Can't find %s in open VGs - run vg_open first\n",
-+			argv[1]);
-+		return NULL;
-+	}
-+	return pv;
++	if (vgname_is_locked(vg->name))
++		unlock_vg(vg->cmd, vg->name);
 +}
-+
-+static lv_t *_lookup_lv_by_name(char *lv_name)
-+{
-+	lv_t *lv;
-+
-+	if (!(lv = dm_hash_lookup(_lvname_hash, lv_name))) {
-+		printf ("Can't find %s in open VGs - run vg_open first\n",
-+			lv_name);
-+		return NULL;
-+	}
-+	return lv;
-+}
-+
-+static void _print_attr(const char *name,
-+			struct dm_report_field_value_type value)
-+{
-+	if (value.is_string)
-+		printf("%s = %s\n", name, value.u.s_val);
-+	else
-+		printf("%s = %llu\n", name, (unsigned long long)value.u.n_val);
-+}
-+
-+static void get_and_print_vg_attr(vg_t *vg, const char *name)
-+{
-+	struct dm_report_field_value_type value;
-+
-+	if (!lvm_vg_get_attr_value(vg, name, &value)) {
-+		printf("Error reading vg attribute %s value \n",
-+		       name);
-+		return;
-+	}
-+	_print_attr(name, value);
-+}
-+
-+static void get_and_print_lv_attr(lv_t *lv, const char *name)
-+{
-+	struct dm_report_field_value_type value;
-+
-+	if (!lvm_lv_get_attr_value(lv, name, &value)) {
-+		printf("Error reading lv attribute %s value \n",
-+		       name);
-+		return;
-+	}
-+	_print_attr(name, value);
-+}
-+
-+static void get_and_print_pv_attr(lvm_pv_obj_t *pv, const char *name)
-+{
-+	struct dm_report_field_value_type value;
-+
-+	if (!lvm_pv_obj_get_attr_value(pv, name, &value)) {
-+		printf("Error reading pv attribute %s value \n",
-+		       name);
-+		return;
-+	}
-+	_print_attr(name, value);
-+}
-+
-+static void _vg_open(char **argv, int argc, lvm_handle_t libh)
-+{
-+	vg_t *vg;
-+	struct dm_list *lvs;
-+	struct lvm_lv_list *lvl;
-+	struct dm_list *pvs;
-+	struct lvm_pv_list *pvl;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	if ((vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
-+		printf ("VG already open\n");
-+		return;
-+	}
-+	vg = lvm_vg_open(libh, argv[1], O_RDONLY);
-+	if (vg_read_error(vg)) {
-+		printf("Error opening vg %s\n", argv[1]);
-+		return;
-+	}
-+
-+	printf("Success opening vg %s\n", argv[1]);
-+	dm_hash_insert(_vgname_hash, lvm_vg_name(vg), vg);
-+
-+	/*
-+	 * Add the LVs and PVs into the hashes for lookups
-+	 */
-+	lvs = lvm_lvs_in_vg(vg);
-+	dm_list_iterate_items(lvl, lvs) {
-+		/* Concatenate VG name with LV name */
-+		dm_hash_insert(_lvname_hash, lvm_lv_name(lvl->lv), lvl->lv);
-+	}
-+	pvs = lvm_pvs_in_vg(vg);
-+	dm_list_iterate_items(pvl, pvs) {
-+		dm_hash_insert(_pvname_hash, lvm_pv_name(pvl->pv), pvl->pv);
-+	}
-+}
-+
-+static void _vg_close(char **argv, int argc)
-+{
-+	vg_t *vg;
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	if (!(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
-+		printf ("Can't find %s in open VGs - run vg_open first\n",
-+			argv[1]);
-+		return;
-+	}
-+	dm_hash_remove(_vgname_hash, lvm_vg_name(vg));
-+	lvm_vg_close(vg);
-+}	
-+
-+static void _show_one_vg(vg_t *vg)
-+{
-+	/* FIXME: store / display actual open mode */
-+	printf("%s: mode = READ\n", lvm_vg_name(vg));
-+}
-+static void _list_open_vgs(void)
-+{
-+	dm_hash_iter(_vgname_hash, (dm_hash_iterate_fn) _show_one_vg);
-+}
-+
-+static void _list_all_vgs(lvm_handle_t libh)
-+{
-+	struct dm_list *vgnames;
-+	struct str_list *vgname;
-+
-+	/* FIXME: properly export str_list and API function */
-+	vgnames = get_vgnames(libh, 0);
-+	dm_list_iterate_items(vgname, vgnames) {
-+		printf("%s\n", vgname->str);
-+	}
-+}
-+
-+static void _vg_get_attr_list(char **argv, int argc)
-+{
-+	struct dm_report_field_ids_type *field;
-+	struct dm_list fields;
-+	vg_t *vg;
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	if (!lvm_vg_get_attr_list(vg, &fields)) {
-+		printf("Error reading vg attribute list\n");
-+		return;
-+	}
-+	printf("VG attribute names:\n");
-+	dm_list_iterate_items(field, &fields) {
-+		printf("%s\n", field->id);
-+	}
-+}
-+
-+static void _vg_get_attr_value(char **argv, int argc)
-+{
-+	struct dm_list fields;
-+	struct dm_report_field_ids_type *field;
-+	int i;
-+	vg_t *vg;
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	if (argc > 2) {
-+		for (i=2; i<argc; i++)
-+			get_and_print_vg_attr(vg, argv[i]);
-+		return;
-+	}
-+	if (!lvm_vg_get_attr_list(vg, &fields)) {
-+		printf("Error reading vg attribute list\n");
-+		return;
-+	}
-+	dm_list_iterate_items(field, &fields) {
-+		get_and_print_vg_attr(vg, field->id);
-+	}
-+}
-+
-+static void _pv_obj_get(char **argv, int argc, lvm_pv_obj_t **pvp,
-+			lvm_handle_t libh)
-+{
-+	if (argc < 2) {
-+		printf ("Please enter pv_name\n");
-+		return;
-+	}
-+	if (!(*pvp = lvm_pv_obj_get(libh, argv[1], "r")))
-+		printf("Error opening PV %s\n", argv[1]);
-+	else
-+		printf("Success opening PV %s\n", argv[1]);
-+}
-+
-+static void _pv_obj_get_attr_list(lvm_pv_obj_t *pv)
-+{
-+	struct dm_report_field_ids_type *field;
-+	struct dm_list fields;
-+
-+	if (!pv) {
-+		printf("Run pv_obj_get first\n");
-+		return;
-+			}
-+	if (!lvm_pv_obj_get_attr_list(pv, &fields)) {
-+		printf("Error reading pv attribute list\n");
-+		return;
-+	}
-+	printf("PV attribute names:\n");
-+	dm_list_iterate_items(field, &fields) {
-+		printf("%s\n", field->id);
-+	}
-+}
-+
-+static void _pv_obj_get_attr_value(char **argv, int argc,
-+				   lvm_pv_obj_t *pv)
-+{
-+	struct dm_report_field_ids_type *field;
-+	struct dm_list fields;
-+	int i;
-+
-+	if (!pv) {
-+		printf("Run pv_obj_get first\n");
-+		return;
-+	}
-+	if (argc > 1) {
-+		for (i=1; i<argc; i++)
-+			get_and_print_pv_attr(pv, argv[i]);
-+		return;
-+	}
-+	if (!lvm_pv_obj_get_attr_list(pv, &fields)) {
-+		printf("Error reading pv attribute list\n");
-+		return;
-+	}
-+	dm_list_iterate_items(field, &fields) {
-+		get_and_print_pv_attr(pv, field->id);
-+	}
-+}
-+
-+static void _lvs_in_vg(char **argv, int argc)
-+{
-+	struct dm_list *lvs;
-+	struct lvm_lv_list *lvl;
-+	vg_t *vg;
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	lvs = lvm_lvs_in_vg(vg);
-+	if (dm_list_empty(lvs)) {
-+		printf("No LVs in VG %s\n", lvm_vg_name(vg));
-+		return;
-+	}
-+	printf("LVs in VG %s:\n", lvm_vg_name(vg));
-+	dm_list_iterate_items(lvl, lvs) {
-+		printf("%s/%s\n", lvm_vg_name(vg), lvm_lv_name(lvl->lv));
-+	}
-+}
-+
-+static void _pvs_in_vg(char **argv, int argc)
-+{
-+	struct dm_list *pvs;
-+	struct lvm_pv_list *pvl;
-+	vg_t *vg;
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	pvs = lvm_pvs_in_vg(vg);
-+	if (dm_list_empty(pvs)) {
-+		printf("No PVs in VG %s\n", lvm_vg_name(vg));
-+		return;
-+	}
-+	printf("PVs in VG %s:\n", lvm_vg_name(vg));
-+	dm_list_iterate_items(pvl, pvs) {
-+		printf("%s\n", lvm_pv_name(pvl->pv));
-+	}
-+}
-+
-+static void _lv_get_attr_list(char **argv, int argc)
-+{
-+	struct dm_list fields;
-+	struct dm_report_field_ids_type *field;
-+	vg_t *vg;
-+	char *slash;
-+	lv_t *lv;
-+
-+	/*
-+	 * cmdline should be: vgname/lvname
-+	 */
-+	slash = strchr(argv[1], '/');
-+	if (argc < 2 || !slash) {
-+		printf("Invalid commandline - please enter vgname/lvname");
-+	}
-+	slash[0] ='\0';
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	if (!strlen(slash+1) || !(lv = _lookup_lv_by_name(slash+1)))
-+		return;
-+	if (!lvm_lv_get_attr_list(lv, &fields)) {
-+		printf("Error reading lv attribute list\n");
-+		return;
-+	}
-+	printf("LV attribute names:\n");
-+	dm_list_iterate_items(field, &fields) {
-+		printf("%s\n", field->id);
-+	}
-+}
-+
-+static void _lv_get_attr_value(char **argv, int argc)
-+{
-+	struct dm_list fields;
-+	struct dm_report_field_ids_type *field;
-+	int i;
-+	vg_t *vg;
-+	char *slash;
-+	lv_t *lv;
-+
-+	/*
-+	 * cmdline should be: vgname/lvname
-+	 */
-+	slash = strchr(argv[1], '/');
-+	if (argc < 2 || !slash) {
-+		printf("Invalid commandline - please enter vgname/lvname");
-+	}
-+	slash[0] ='\0';
-+
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	if (!strlen(slash+1) || !(lv = _lookup_lv_by_name(slash+1)))
-+		return;
-+	if (!lvm_lv_get_attr_list(lv, &fields)) {
-+		printf("Error reading lv attribute list\n");
-+		return;
-+	}
-+	if (argc > 2) {
-+		for (i=2; i<argc; i++)
-+			get_and_print_lv_attr(lv, argv[i]);
-+		return;
-+	}
-+	dm_list_iterate_items(field, &fields) {
-+		get_and_print_lv_attr(lv, field->id);
-+	}
-+}
-+
-+
-+int lvmapi_test_shell(lvm_handle_t libh)
-+{
-+	int argc;
- 	char *input = NULL, *args[MAX_ARGS], **argv;
-+	lvm_pv_obj_t *pv = NULL;
  
-+	_hash_create();
-+	argc=0;
- 	while (1) {
- 		free(input);
- 		input = readline("lvm> ");
-@@ -86,13 +532,40 @@ static int lvmapi_test_shell(lvm_handle_t libh)
- 			printf("Exiting.\n");
- 			break;
- 		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
--			printf("No commands defined\n");
--		} else if (!strcmp(argv[0], "scan")) {
--			for (i=1; i < argc; i++)
--				printf("Scan a path!\n");
-+			_show_help();
-+		} else if (!strcmp(argv[0], "vg_open")) {
-+			_vg_open(argv, argc, libh);
-+		} else if (!strcmp(argv[0], "vg_close")) {
-+			_vg_close(argv, argc);
-+		} else if (!strcmp(argv[0], "vgs_open")) {
-+			_list_open_vgs();
-+		} else if (!strcmp(argv[0], "vgs")) {
-+			_list_all_vgs(libh);
-+		} else if (!strcmp(argv[0], "vg_get_attr_list")) {
-+			_vg_get_attr_list(argv, argc);
-+		} else if (!strcmp(argv[0], "vg_get_attr_value")) {
-+			_vg_get_attr_value(argv, argc);
-+		} else if (!strcmp(argv[0], "pvs_in_vg")) {
-+			_pvs_in_vg(argv, argc);
-+		} else if (!strcmp(argv[0], "pv_obj_get")) {
-+			_pv_obj_get(argv, argc, &pv, libh);
-+		} else if (!strcmp(argv[0], "pv_obj_get_attr_list")) {
-+			_pv_obj_get_attr_list(pv);
-+		} else if (!strcmp(argv[0], "pv_obj_get_attr_value")) {
-+			_pv_obj_get_attr_value(argv, argc, pv);
-+		} else if (!strcmp(argv[0], "lvs_in_vg")) {
-+			_lvs_in_vg(argv, argc);
-+		} else if (!strcmp(argv[0], "lv_get_attr_list")) {
-+			_lv_get_attr_list(argv, argc);
-+		} else if (!strcmp(argv[0], "lv_get_attr_value")) {
-+			_lv_get_attr_value(argv, argc);
-+		} else {
-+			printf ("Unrecognized command %s\n", argv[0]);
- 		}
+ lvm_handle_t lvm_create(const char *system_dir)
+ {
+ 	struct cmd_context *cmd;
++	struct lib_context *libh;
++
++	if (!(libh = dm_malloc(sizeof(*libh)))) {
++		log_error("Failed to allocate library context");
++		return NULL;
++	}
+ 
+ 	/* To be done:
+ 	 * logging bound to handle
+@@ -32,27 +94,34 @@ lvm_handle_t lvm_create(const char *system_dir)
+ 	cmd = create_toolcontext(1, system_dir);
+ 
+ 	/* initilize remaining */
+-	if (cmd) {
+-		/* initilization from lvm_run_command */
+-		init_error_message_produced(0);
+-		sigint_clear();
+-
+-		/* FIXME: locking_type config option needed? */
+-		/* initialize locking */
+-		if (! init_locking(-1, cmd)) {
+-			printf("Locking initialisation failed.");
+-			lvm_destroy((lvm_handle_t) cmd);
+-			return NULL;
+-		}
++	if (!cmd) {
++		dm_free(libh);
++		return NULL;
++	}
++
++	libh->cmd = cmd;
++
++	/* initilization from lvm_run_command */
++	init_error_message_produced(0);
++	sigint_clear();
++	
++	/* FIXME: locking_type config option needed? */
++	/* initialize locking */
++	if (! init_locking(-1, cmd)) {
++		printf("Locking initialisation failed.");
++		lvm_destroy(libh);
++		dm_free(libh);
++		return NULL;
  	}
  
-+	dm_hash_iter(_vgname_hash, (dm_hash_iterate_fn) lvm_vg_close);
-+	_hash_destroy();
- 	free(input);
- 	return 0;
+-	return (lvm_handle_t) cmd;
++	return libh;
  }
+ 
+ 
+ void lvm_destroy(lvm_handle_t libh)
+ {
+-	destroy_toolcontext((struct cmd_context *)libh);
++	destroy_toolcontext(libh->cmd);
++	dm_free(libh);
+ 	/* no error handling here */
+ }
+ 
+diff --git a/lib/lvm2.h b/lib/lvm2.h
+index f0fe0a3..e555291 100644
+--- a/lib/lvm2.h
++++ b/lib/lvm2.h
+@@ -83,6 +83,16 @@ int lvm_vg_get_attr_list(vg_t *vg, struct dm_list *list);
+ int lvm_vg_get_attr_value(vg_t *vg, const char *attr_name,
+ 			  struct dm_report_field_value_type *value);
+ 
++/*
++ * Open volume group 'vg_name' for reading or writing.
++ *
++ * Returns:
++ * NULL - failure; use liblvm error APIs for specifics
++ * non-NULL - success; VG handle (vg_t *) returned may be used in future calls.
++ *
++ * liblvm error code explanations:
++ * EPERM: Invalid access mode given.
++ */
+ vg_t *lvm_vg_open(lvm_handle_t libh, const char *vg_name, mode_t mode);
+ void lvm_vg_close(vg_t *vg);
+ 
+@@ -141,4 +151,7 @@ int lvm_pv_obj_get_attr_value(lvm_pv_obj_t *obj, const char *attr_name,
+ 			      struct dm_report_field_value_type *value);
+ 
+ 
++int lvm_errno(lvm_handle_t libh);
++char *lvm_strerror(lvm_handle_t libh);
++mode_t lvm_vg_mode(vg_t *vg);
+ #endif
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 257bf91..3063abb 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -212,6 +212,7 @@ struct volume_group {
+ 	struct id id;
+ 	char *name;
+ 	char *system_id;
++	mode_t mode;
+ 
+ 	uint32_t status;
+ 	alloc_policy_t alloc;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d6ecf67..dcc0156 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2471,31 +2471,6 @@ vg_t *vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
+ 	return vg;
+ }
+ 
+-/*
+- * Open / read a VG.
+- * FIXME: Only read access allowed.
+- */
+-vg_t *lvm_vg_open(lvm_handle_t libh, const char *vg_name, mode_t mode)
+-{
+-	if ((mode & O_ACCMODE) != O_RDONLY) {
+-		log_error("Invalid access mode 0x%x for lvm_vg_read()\n",
+-			mode);
+-		return NULL;
+-	}
+-	return vg_read((struct cmd_context *)libh, vg_name, NULL, 0);
+-}
+-
+-/*
+- * Close a VG handle.
+- * If lock is still held, unlock the VG.
+- * FIXME: We cannot free the memory as it's tied to the cmd->mem pool.
+- */
+-void lvm_vg_close(vg_t *vg)
+-{
+-	if (vgname_is_locked(vg->name))
+-		unlock_vg(vg->cmd, vg->name);
+-}
+-
+ struct dm_list *lvm_pvs_in_vg(vg_t *vg)
+ {
+ 	return (&vg->pvs);
+diff --git a/test/api/test.c b/test/api/test.c
+index e7137f0..681c9a8 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -62,7 +62,7 @@ static void _show_help(void)
+ 	       "List the VGs that are currently open\n");
+ 	printf("'vgs': "
+ 	       "List all VGs known to the system\n");
+-	printf("'vg_open vgname': "
++	printf("'vg_open vgname ['r' | 'w']': "
+ 	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
+ 	printf("'vg_close vgname': "
+ 	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
+@@ -214,6 +214,7 @@ static void _vg_open(char **argv, int argc, lvm_handle_t libh)
+ 	struct lvm_lv_list *lvl;
+ 	struct dm_list *pvs;
+ 	struct lvm_pv_list *pvl;
++	mode_t mode;
+ 
+ 	if (argc < 2) {
+ 		printf ("Please enter vg_name\n");
+@@ -223,9 +224,14 @@ static void _vg_open(char **argv, int argc, lvm_handle_t libh)
+ 		printf ("VG already open\n");
+ 		return;
+ 	}
+-	vg = lvm_vg_open(libh, argv[1], O_RDONLY);
+-	if (vg_read_error(vg)) {
+-		printf("Error opening vg %s\n", argv[1]);
++	if ((argc == 3) && (argv[2][0] == 'w')) {
++		mode = O_RDWR;
++	} else
++		mode = O_RDONLY;
++	vg = lvm_vg_open(libh, argv[1], mode);
++	if (!vg) {
++		printf("Error opening %s: %s\n", argv[1],
++		       lvm_strerror(libh));
+ 		return;
+ 	}
+ 
+@@ -267,8 +273,10 @@ static void _vg_close(char **argv, int argc)
+ 
+ static void _show_one_vg(vg_t *vg)
+ {
+-	/* FIXME: store / display actual open mode */
+-	printf("%s: mode = READ\n", lvm_vg_name(vg));
++	printf("%s: mode = %s\n", lvm_vg_name(vg),
++	       lvm_vg_mode(vg) == O_RDWR ? "READ/WRITE" :
++	       lvm_vg_mode(vg) == O_RDONLY ? "READ" :
++	       "UNKNOWN");
+ }
+ static void _list_open_vgs(void)
+ {
 -- 
 1.6.0.5
 
