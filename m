@@ -1,62 +1,74 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 12 Feb 2009 14:30:33 -0500
-Subject: [PATCH 04/12] Move vg_t, lv_t, and pv_t from metadata-exported.h into lvm2.h
-In-Reply-To: <1234467041-21522-4-git-send-email-dwysocha@redhat.com>
+Date: Thu, 12 Feb 2009 14:30:34 -0500
+Subject: [PATCH 05/12] Add lvm_pv_name, lvm_vg_name, and lvm_lv_name accessors.
+In-Reply-To: <1234467041-21522-5-git-send-email-dwysocha@redhat.com>
 References: <1234467041-21522-1-git-send-email-dwysocha@redhat.com>
 	<1234467041-21522-2-git-send-email-dwysocha@redhat.com>
 	<1234467041-21522-3-git-send-email-dwysocha@redhat.com>
 	<1234467041-21522-4-git-send-email-dwysocha@redhat.com>
-Message-ID: <1234467041-21522-5-git-send-email-dwysocha@redhat.com>
+	<1234467041-21522-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1234467041-21522-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+RFC - liblvm could provide accessor functions such as these along with
+the generic attribute functions.  These specific accessor functions will
+make application code simpler and more readable and may be desired by
+application programmers over the generic attribute functions for single
+attributes.
+
 Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/lvm2.h                       |    9 +++++++++
- lib/metadata/metadata-exported.h |    8 +-------
- 2 files changed, 10 insertions(+), 7 deletions(-)
+ lib/lvm2.h              |    7 +++++++
+ lib/metadata/metadata.c |   15 +++++++++++++++
+ 2 files changed, 22 insertions(+), 0 deletions(-)
 
 diff --git a/lib/lvm2.h b/lib/lvm2.h
-index f348035..bfa1852 100644
+index bfa1852..5f44614 100644
 --- a/lib/lvm2.h
 +++ b/lib/lvm2.h
-@@ -60,4 +60,13 @@ void lvm_destroy(lvm_handle_t libh);
-  */
- int lvm_reload_config(lvm_handle_t libh);
+@@ -69,4 +69,11 @@ typedef struct physical_volume pv_t;
+ struct logical_volume;
+ typedef struct logical_volume lv_t;
  
-+struct volume_group;
-+typedef struct volume_group vg_t;
-+
-+struct physical_volume;
-+typedef struct physical_volume pv_t;
-+
-+struct logical_volume;
-+typedef struct logical_volume lv_t;
++/*
++ * PV, VG, and LV object attribute functions.
++ */
++const char *lvm_pv_name(const pv_t *pv);
++const char *lvm_vg_name(const vg_t *vg);
++const char *lvm_lv_name(const lv_t *lv);
 +
  #endif
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index a1c45ce..257bf91 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -22,13 +22,7 @@
- #define _LVM_METADATA_EXPORTED_H
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a2b5f2f..4c9f939 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2673,6 +2673,21 @@ vg_t *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
+ 	return vg_read(cmd, vg_name, vgid, flags | READ_FOR_UPDATE);
+ }
  
- #include "uuid.h"
--
--struct physical_volume;
--typedef struct physical_volume pv_t;
--struct volume_group;
--typedef struct volume_group vg_t;
--
--struct logical_volume;
-+#include "lvm2.h"
- 
- struct lv_segment;
- struct pv_segment;
++const char *lvm_pv_name(const pv_t *pv)
++{
++	return dev_name(pv->dev);
++}
++
++const char *lvm_vg_name(const vg_t *vg)
++{
++	return vg->name;
++}
++
++const char *lvm_lv_name(const lv_t *lv)
++{
++	return lv->name;
++}
++
+ /*
+  * Test the validity of a VG handle returned by vg_read() or vg_read_for_update().
+  *
 -- 
 1.6.0.6
 
