@@ -1,33 +1,41 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 12 Feb 2009 10:03:28 +0100
-Subject: [PATCH] Fix segfault when using vgsplit in stacked environment
-In-Reply-To: <20090210181443.GB7582@agk.fab.redhat.com>
-References: <498FE109.6000103@redhat.com>
-	<20090210181443.GB7582@agk.fab.redhat.com>
-Message-ID: <4993E5E0.4060004@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 12 Feb 2009 10:41:54 +0100
+Subject: [PATCH] lvconvert --repair
+In-Reply-To: <877i3y9od8.fsf@eriador.mornfall.net> (Petr Rockai's message of
+	"Tue, 10 Feb 2009 18:46:11 +0100")
+References: <87skn1p0jo.fsf@eriador.mornfall.net>
+	<498B2A94.7050105@redhat.com> <877i3y9od8.fsf@eriador.mornfall.net>
+Message-ID: <87skmkc7q5.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alasdair G Kergon wrote:
-> It is meaningless to call pv_uses_vg() if the PV does not exist.
+Petr Rockai <prockai@redhat.com> writes:
+>> - missing man page update
+> indeed
+The manpage update is still missing, but all the rest should be addressed in
+the attached patch. (I will chop it up for commit, just sending in all the bits
+together). I'll trow the manpage together later (this should not interfere with
+review or acceptance, I hope).
 
-Well, it's some kind of an exception, so I thought it would be
-better to check it right here than all the other places outside
-the function.
+Yours,
+   Petr.
 
-> And the function currently returns 0 if the answer is unknown - it'll
-> get even more confusing if it returns 0 for some types of 'unknown'
-> and 1 for other types!
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvconvert-repair.diff
+Type: text/x-diff
+Size: 19249 bytes
+Desc: lvconvert-repair.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090212/683e0cba/attachment.bin>
+-------------- next part --------------
 
-Hmm, isn't it the opposite way? Looking at the dev_manager_device_uses_vg
-function that is called from pv_uses_vg and returs its value,
-dev_manager_device_uses_vg should return 1 if uncertain. So I relied on
-this at that time... I return 1 when checking for NULL value of pv->dev,
-because we can't decide if PV uses VG in this situation, too.
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-Peter
-
-
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
