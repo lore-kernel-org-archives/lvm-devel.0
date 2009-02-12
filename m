@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 Feb 2009 19:54:54 -0000
-Subject: LVM2/test Makefile.in harness.c
-Message-ID: <20090212195454.24524.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 12 Feb 2009 20:42:08 -0000
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM lib/activate/d ...
+Message-ID: <20090212204208.16166.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,231 +10,151 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-02-12 19:54:51
+Changes by:	agk at sourceware.org	2009-02-12 20:42:08
 
 Modified files:
-	test           : Makefile.in 
-Added files:
-	test           : harness.c 
+	.              : WHATS_NEW WHATS_NEW_DM 
+	lib/activate   : dev_manager.c 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Re-implement the test harness in C. This lets us pass through signals and
-	trigger proper test teardown upon harness interrupt or termination. I also
-	tweaked the output somewhat while I was at it...
+	If kernel supports only one dm major number, use in place of any supplied.
+	No longer require kernel and metadata major numbers to match.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1042&r2=1.1043
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.262&r2=1.263
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
 
-/cvs/lvm2/LVM2/test/harness.c,v  -->  standard output
-revision 1.1
---- LVM2/test/harness.c
-+++ -	2009-02-12 19:54:51.984403000 +0000
-@@ -0,0 +1,171 @@
-+#include <fcntl.h>
-+#include <string.h>
-+#include <stdio.h>
-+#include <sys/socket.h>
-+#include <sys/wait.h>
-+#include <unistd.h>
-+#include <stdlib.h>
+--- LVM2/WHATS_NEW	2009/02/11 10:13:20	1.1042
++++ LVM2/WHATS_NEW	2009/02/12 20:42:07	1.1043
+@@ -1,5 +1,6 @@
+ Version 2.02.45 - 
+ ===================================
++  No longer require kernel and metadata major numbers to match.
+   Add a fully-functional get_cluster_name() to clvmd corosync interface.
+   Remove duplicate cpg_initialize from clvmd startup.
+   Add option to /etc/sysconfig/cluster to select cluster type for clvmd.
+--- LVM2/WHATS_NEW_DM	2009/01/26 14:46:09	1.262
++++ LVM2/WHATS_NEW_DM	2009/02/12 20:42:07	1.263
+@@ -1,5 +1,6 @@
+ Version 1.02.31 - 
+ ====================================
++  If kernel supports only one dm major number, use in place of any supplied.
+ 
+ Version 1.02.30 - 26th January 2009
+ ====================================
+--- LVM2/lib/activate/dev_manager.c	2008/12/19 15:23:03	1.144
++++ LVM2/lib/activate/dev_manager.c	2009/02/12 20:42:07	1.145
+@@ -640,7 +640,10 @@
+ 	 * requested major/minor and that major/minor pair is available for use
+ 	 */
+ 	if (!layer && lv->major != -1 && lv->minor != -1) {
+-		if (info.exists && (info.major != lv->major || info.minor != lv->minor)) {
++		/*
++		 * FIXME compare info.major with lv->major if multiple major support
++		 */
++		if (info.exists && (info.minor != lv->minor)) {
+ 			log_error("Volume %s (%" PRIu32 ":%" PRIu32")"
+ 				  " differs from already active device "
+ 				  "(%" PRIu32 ":%" PRIu32")",
+--- LVM2/libdm/ioctl/libdm-iface.c	2009/01/07 12:17:40	1.55
++++ LVM2/libdm/ioctl/libdm-iface.c	2009/02/12 20:42:07	1.56
+@@ -24,6 +24,7 @@
+ #include <fcntl.h>
+ #include <dirent.h>
+ #include <sys/ioctl.h>
++#include <sys/utsname.h>
+ #include <limits.h>
+ 
+ #ifdef linux
+@@ -63,12 +64,22 @@
+ static unsigned _dm_version_patchlevel = 0;
+ static int _log_suppress = 0;
+ 
++/*
++ * If the kernel dm driver only supports one major number
++ * we store it in _dm_device_major.  Otherwise we indicate
++ * which major numbers have been claimed by device-mapper
++ * in _dm_bitset.
++ */
++static unsigned _dm_multiple_major_support = 1;
+ static dm_bitset_t _dm_bitset = NULL;
++static uint32_t _dm_device_major = 0;
 +
-+pid_t pid;
-+int fds[2];
-+int *status;
-+int nfailed = 0;
-+int nskipped = 0;
-+int npassed = 0;
+ static int _control_fd = -1;
+ static int _version_checked = 0;
+ static int _version_ok = 1;
+ static unsigned _ioctl_buffer_double_factor = 0;
+ 
 +
-+char *readbuf = NULL;
-+int readbuf_sz = 0, readbuf_used = 0;
+ /*
+  * Support both old and new major numbers to ease the transition.
+  * Clumsy, but only temporary.
+@@ -249,12 +260,35 @@
+ }
+ #endif
+ 
++/*
++ * FIXME Update bitset in long-running process if dm claims new major numbers.
++ */
+ static int _create_dm_bitset(void)
+ {
+ #ifdef DM_IOCTLS
+-	if (_dm_bitset)
++	struct utsname uts;
 +
-+int die = 0;
-+
-+#define PASSED 0
-+#define SKIPPED 1
-+#define FAILED 2
-+
-+void handler( int s ) {
-+	signal( s, SIG_DFL );
-+	kill( pid, s );
-+	die = s;
-+}
-+
-+void dump() {
-+	write(1, readbuf, readbuf_used);
-+}
-+
-+void clear() {
-+	readbuf_used = 0;
-+}
-+
-+void drain() {
-+	int sz;
-+	char buf[2048];
-+	while (1) {
-+		sz = read(fds[1], buf, 2048);
-+		if (sz <= 0)
-+			return;
-+		if (readbuf_used + sz >= readbuf_sz) {
-+			readbuf_sz = readbuf_sz ? 2 * readbuf_sz : 4096;
-+			readbuf = realloc(readbuf, readbuf_sz);
-+		}
-+		if (!readbuf)
-+			exit(205);
-+		memcpy(readbuf + readbuf_used, buf, sz);
-+		readbuf_used += sz;
-+	}
-+}
-+
-+void passed(int i, char *f) {
-+	++ npassed;
-+	status[i] = PASSED;
-+	printf("passed.\n");
-+}
-+
-+void skipped(int i, char *f) {
-+	++ nskipped;
-+	status[i] = SKIPPED;
-+	printf("skipped.\n");
-+}
-+
-+void failed(int i, char *f, int st) {
-+	++ nfailed;
-+	status[i] = FAILED;
-+	if(die == 2) {
-+		printf("interrupted.\n");
-+		return;
-+	}
-+	printf("FAILED.\n");
-+	printf("-- FAILED %s ------------------------------------\n", f);
-+	dump();
-+	printf("-- FAILED %s (end) ------------------------------\n", f);
-+}
-+
-+void run(int i, char *f) {
-+	pid = fork();
-+	if (pid < 0) {
-+		perror("Fork failed.");
-+		exit(201);
-+	} else if (pid == 0) {
-+		close(0);
-+		dup2(fds[0], 1);
-+		dup2(fds[0], 2);
-+		execlp("bash", "bash", f, NULL);
-+		perror("execlp");
-+		exit(202);
-+	} else {
-+		char buf[128];
-+		snprintf(buf, 128, "%s ...", f);
-+		buf[127] = 0;
-+		printf("Running %-40s ", buf);
-+		fflush(stdout);
-+		int st, w;
-+		while ((w = waitpid(pid, &st, WNOHANG)) == 0) {
-+			drain();
-+			usleep(20000);
-+		}
-+		if (w != pid) {
-+			perror("waitpid");
-+			exit(206);
-+		}
-+		if (WIFEXITED(st)) {
-+			if (WEXITSTATUS(st) == 0) {
-+				passed(i, f);
-+			} else if (WEXITSTATUS(st) == 200) {
-+				skipped(i, f);
-+			} else {
-+				failed(i, f, st);
-+			}
-+		} else {
-+			failed(i, f, st);
-+		}
-+		clear();
-+	}
-+}
-+
-+int main(int argc, char **argv) {
-+	int i;
-+	status = alloca(sizeof(int)*argc);
-+
-+	if (socketpair(PF_UNIX, SOCK_STREAM, 0, fds)) {
-+		perror("socketpair");
-+		return 201;
-+	}
-+
-+        if ( fcntl( fds[1], F_SETFL, O_NONBLOCK ) == -1 ) {
-+		perror("fcntl on socket");
-+		return 202;
-+	}
-+
-+	/* set up signal handlers */
-+        for (i = 0; i <= 32; ++i) {
-+            if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
-+                continue;
-+            signal(i, handler);
-+        }
-+
-+	/* run the tests */
-+	for (i = 1; i < argc; ++ i) {
-+		run(i, argv[i]);
-+		if (die)
-+			break;
-+	}
-+
-+	printf("\n## %d tests: %d OK, %d failed, %d skipped\n",
-+	       npassed + nfailed + nskipped, npassed, nfailed, nskipped);
-+
-+	/* print out a summary */
-+	if (nfailed || nskipped ) {
-+		for (i = 1; i < argc; ++ i) {
-+			switch (status[i]) {
-+			case FAILED:
-+				printf("FAILED: %s\n", argv[i]);
-+				break;
-+			case SKIPPED:
-+				printf("skipped: %s\n", argv[i]);
-+				break;
-+			}
-+		}
-+		printf("\n");
++	if (_dm_bitset || _dm_device_major)
 +		return 1;
-+	}
-+	return !die;
-+}
---- LVM2/test/Makefile.in	2009/01/12 18:45:44	1.15
-+++ LVM2/test/Makefile.in	2009/02/12 19:54:45	1.16
-@@ -25,13 +25,16 @@
- abs_top_builddir = @abs_top_builddir@
- abs_top_srcdir = @abs_top_srcdir@
- 
--all: bin/not init.sh
--	sh harness.sh
-+all: init.sh
-+	./bin/harness $(T)
- 
--bin/not: .bin-dir-stamp
-+bin/not: .bin-dir-stamp not.c
- 	$(CC) -o bin/not not.c
- 
--init.sh: Makefile.in .bin-dir-stamp
-+bin/harness: .bin-dir-stamp harness.c
-+	$(CC) -o bin/harness harness.c
 +
-+init.sh: Makefile.in .bin-dir-stamp bin/not bin/harness
- 	rm -f $@-t $@
- 	echo 'top_srcdir=$(top_srcdir)' >> $@-t
- 	echo 'abs_top_builddir=$(abs_top_builddir)' >> $@-t
-@@ -52,8 +55,8 @@
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
++	if (uname(&uts))
++		return 0;
++
++	/*
++	 * 2.6 kernels are limited to one major number.
++	 * Assume 2.4 kernels are patched not to.
++	 * FIXME Check _dm_version and _dm_version_minor if 2.6 changes this.
++	 */
++	if (!strncmp(uts.release, "2.6.", 4))
++		_dm_multiple_major_support = 0;
++
++	if (!_dm_multiple_major_support) {
++		if (!_get_proc_number(PROC_DEVICES, DM_NAME, &_dm_device_major))
++			return 0;
+ 		return 1;
++	}
  
--$(T): bin/not init.sh
--	sh harness.sh $@
-+$(T): init.sh
-+	./bin/harness $@
++	/* Multiple major numbers supported */
+ 	if (!(_dm_bitset = dm_bitset_create(NULL, NUMBER_OF_MAJORS)))
+ 		return 0;
  
- .bin-dir-stamp: lvm-wrapper
- 	rm -rf bin
+@@ -275,7 +309,10 @@
+ 	if (!_create_dm_bitset())
+ 		return 0;
+ 
+-	return dm_bit(_dm_bitset, major) ? 1 : 0;
++	if (_dm_multiple_major_support)
++		return dm_bit(_dm_bitset, major) ? 1 : 0;
++	else
++		return (major == _dm_device_major) ? 1 : 0;
+ }
+ 
+ static int _open_control(void)
+@@ -1297,6 +1334,14 @@
+ 			log_error("Missing major number for persistent device.");
+ 			goto bad;
+ 		}
++
++		if (!_dm_multiple_major_support && dmt->major != _dm_device_major) {
++			log_verbose("Overriding major number of %" PRIu32 
++				    " with %" PRIu32 " for persistent device.",
++				    dmt->major, _dm_device_major);
++			dmt->major = _dm_device_major;
++		}
++
+ 		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
+ 		dmi->dev = MKDEV(dmt->major, dmt->minor);
+ 	}
 
 
