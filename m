@@ -1,37 +1,29 @@
-From: twoerner@sourceware.org <twoerner@sourceware.org>
-Date: 24 Feb 2009 13:13:56 -0000
-Subject: LVM2/include .symlinks
-Message-ID: <20090224131356.24969.qmail@sourceware.org>
+From: David A. Barrett <david.barrett@asgard.com>
+Date: Thu, 12 Feb 2009 12:22:44 -0500
+Subject: LVM2 Disk Layout (on-disk data-structures)
+Message-ID: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	twoerner at sourceware.org	2009-02-24 13:13:56
+Does anyone know about where I can find
+documentation of layout of information for
+LVM2 on the disk?
 
-Modified files:
-	include        : .symlinks 
+I need to write code to parse the data
+directly from the low-level disc image.
 
-Log message:
-	Fix include/.symlinks for lvm2.h to lvm.h renaming
-	
-	Author: Thomas Woerner <twoerner@redhat.com>
+I need to do some data recovery operations
+on multiple logical volumes in two volume groups
+on two physical volumes (each a raid5).
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+Redhat's fedora 10 installation DVD overwrote
+the partition table and a new lvm on every single
+accessable device immediately after asking for
+my keyboard type (without confirmation).
 
---- LVM2/include/.symlinks	2009/02/22 22:11:58	1.56
-+++ LVM2/include/.symlinks	2009/02/24 13:13:56	1.57
-@@ -1,6 +1,6 @@
- ../daemons/clvmd/clvm.h
- ../daemons/dmeventd/libdevmapper-event.h
--../lib/lvm2.h
-+../lib/lvm.h
- ../lib/activate/activate.h
- ../lib/activate/targets.h
- ../lib/cache/lvmcache.h
+d dot barrett at asgard dot com.
 
 
