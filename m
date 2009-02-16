@@ -1,36 +1,66 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 16 Feb 2009 17:05:15 -0500
-Subject: [PATCH] Use vgid as well as vgname in lvmcache_update_vg().
-In-Reply-To: <20090216190806.GA26197@agk.fab.redhat.com>
-References: <1234048029-29850-1-git-send-email-dwysocha@redhat.com>
-	<20090216190806.GA26197@agk.fab.redhat.com>
-Message-ID: <1234821915.2574.33.camel@f10-node1>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 16 Feb 2009 23:10:12 +0100
+Subject: [PATCH] Fix segfault when using vgsplit in stacked environment
+In-Reply-To: <20090210181443.GB7582@agk.fab.redhat.com> (Alasdair G. Kergon's
+	message of "Tue, 10 Feb 2009 18:14:43 +0000")
+References: <498FE109.6000103@redhat.com>
+	<20090210181443.GB7582@agk.fab.redhat.com>
+Message-ID: <87bpt211a3.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2009-02-16 at 19:08 +0000, Alasdair G Kergon wrote:
-> On Sat, Feb 07, 2009 at 06:07:09PM -0500, Dave Wysochanski wrote:
-> > With duplicate vgnames in a system, vg metadata could get
-> > exported to the wrong lvmcache_vginfo structure.  Use the vg_uuid as
-> > well as the name to lookup the vginfo structure before we store the
-> > metadata.
->  
-> Did you construct any test case where this actually goes wrong?
-> 
+Hi,
 
-I saw the problem when testing one series of liblvm patches that I
-posted to lvm-devel.  I'm not sure I can hit the problem with the
-existing tools.
+Alasdair G Kergon <agk@redhat.com> writes:
+> I don't think the code should be getting as far as it does in that
+> situation.
 
-The scenario I was testing involved duplicate vgnames in the system.  I
-tried to open both VGs (different vgids) but noticed that I could only
-ever open one of them.  I traced the bug to this piece of code and
-submitted the patch.
+(explanation for the list) After an IRC discussion, we have agreed that a
+different approach would work here, specifically, that we should not allow
+tools to try tinkering with VGs that have PVs missing, unless they specifically
+know what they are doing. There's probably half dozen other places where we
+assume that `pv->dev` is valid. The attached patch changes the meaning of
+`cmd->handles_missing_pvs` somewhat: If a tool now opens a VG *for writing* but
+it does not set handles_missing_pvs, vg_read will fail.
 
-I've reproduced the problem with my patches but I'm looking at the code
-more carefully and trying to remember it all.
+This check was previously done only in vg_write, which led to situations like
+the above bug, where a little less vigorous code path trips a NULL
+pointer. This behaviour change of handles_missing_pvs affects these situations:
 
+- lvchange -a, vgchange -a take a write lock, so they need to set, for the -a
+  case, handles_missing_pvs. This is safe.
+- vgreduce needs to set handles_missing_pvs, since it is supposed to work in
+  that situation... it previously did not need the flag in general, since it
+  most of the time writes out a VG that has no PVs missing in it; however,
+  since it's now needed also for opening the VG for writing, this needs to be
+  always set for --removemissing; there's a small risk of bugs associated, but
+  it can be mitigated by adding appropriate check to the code...
 
+Please note that this patch depends on the "vg_read" patchset found elsewhere
+on this list.
+
+Yours,
+   Petr.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm-vg_read-missing_pvs.diff
+Type: text/x-diff
+Size: 4043 bytes
+Desc: lvm-vg_read-missing_pvs.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090216/47777170/attachment.bin>
+-------------- next part --------------
+
+PS: The patch passes the testsuite and also makes Milan's testcase pass (it is
+included with the patch).
+
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
+
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
