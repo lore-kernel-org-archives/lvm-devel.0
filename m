@@ -1,48 +1,45 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 13 Feb 2009 08:19:33 -0500
-Subject: [RFC PATCH 0/12] dm_report attribute handling and liblvm vg attributes
-In-Reply-To: <1234467041-21522-1-git-send-email-dwysocha@redhat.com>
-References: <1234467041-21522-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1234531174.2731.129.camel@f10-node1>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 16 Feb 2009 16:49:22 -0000
+Subject: LVM2/test harness.c
+Message-ID: <20090216164922.25304.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, 2009-02-12 at 14:30 -0500, Dave Wysochanski wrote:
-> The purpose of this patchset is to get feedback on one approach to handling
-> attributes in liblvm.  The most important patches are:
-> 1/12: Adds dm_report_output_attribute() function and related structures.
-> 9/12: Updates vg_open to store vg attributes in the handle.  This allows us
-> to use the report memory safely (we free it in vg_close().
-> 10/12: Add lvm_vg_get_attr_list() and lvm_vg_get_attr().
-> 
-> What is missing in the patch is the mode (read/write) of the attribute.
-> I have not thought extensively about this but one option is as follows.
-> Add a 'mode' or 'is_writable' field to the dm structure, and set it to
-> 'readonly' for all attributes output by dm_report_output_attribute().
-> Then in vg_open(), depending on the mode and capabilities of the current
-> release of liblvm code, we can gradually change various attributes to
-> writeable.
-> 
-> This patchset should build fine but with some warnings.  Attribute code
-> was exercised with test code in last patch.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-02-16 16:49:22
 
-These patches should apply cleanly on top of the following commit:
-commit 9487820c32ded20b71422e79e74732273f1c4bef
-Author: Christine Caulfield <ccaulfie@redhat.com>
-Date:   Wed Feb 11 10:13:20 2009 +0000
+Modified files:
+	test           : harness.c 
 
-    Add a fully-functional get_cluster_name() to clvmd corosync
-interface.
+Log message:
+	Only fail when tests have failed, but not when they have been just skipped.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
-
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+--- LVM2/test/harness.c	2009/02/12 19:54:45	1.1
++++ LVM2/test/harness.c	2009/02/16 16:49:21	1.2
+@@ -153,7 +153,7 @@
+ 	       npassed + nfailed + nskipped, npassed, nfailed, nskipped);
+ 
+ 	/* print out a summary */
+-	if (nfailed || nskipped ) {
++	if (nfailed || nskipped) {
+ 		for (i = 1; i < argc; ++ i) {
+ 			switch (status[i]) {
+ 			case FAILED:
+@@ -165,7 +165,7 @@
+ 			}
+ 		}
+ 		printf("\n");
+-		return 1;
++		return nfailed > 0 || die;
+ 	}
+ 	return !die;
+ }
 
 
