@@ -1,26 +1,25 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 16 Feb 2009 12:26:54 -0500
-Subject: Deprecating LVM code / commands?
-Message-ID: <1234805214.2574.29.camel@f10-node1>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 16 Feb 2009 19:08:06 +0000
+Subject: [PATCH] Use vgid as well as vgname in lvmcache_update_vg().
+In-Reply-To: <1234048029-29850-1-git-send-email-dwysocha@redhat.com>
+References: <1234048029-29850-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <20090216190806.GA26197@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I know everyone is focused on features in the next RHEL6 / Fedora, but
-have we thought enough about what we could deprecate?  With a major
-release around the corner, we don't get this opportunity very often.
+On Sat, Feb 07, 2009 at 06:07:09PM -0500, Dave Wysochanski wrote:
+> With duplicate vgnames in a system, vg metadata could get
+> exported to the wrong lvmcache_vginfo structure.  Use the vg_uuid as
+> well as the name to lookup the vginfo structure before we store the
+> metadata.
+ 
+Did you construct any test case where this actually goes wrong?
 
-For example, do we really need to keep pool and lvm1 formats for the
-next 7 years?  If not, we could more easily clean up some of the
-internal abstractions.  Other code we could remove that would make
-future features / maintenance easier?
-
-Or any LVM commands that should be removed completely?
-
-Note that there is at least 2 approaches:
-1) Remove the code completely
-2) Deprecate but don't remove
+Alasdair
+-- 
+agk at redhat.com
 
 
