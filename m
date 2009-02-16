@@ -1,45 +1,26 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 16 Feb 2009 16:49:22 -0000
-Subject: LVM2/test harness.c
-Message-ID: <20090216164922.25304.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 16 Feb 2009 12:26:54 -0500
+Subject: Deprecating LVM code / commands?
+Message-ID: <1234805214.2574.29.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-02-16 16:49:22
+I know everyone is focused on features in the next RHEL6 / Fedora, but
+have we thought enough about what we could deprecate?  With a major
+release around the corner, we don't get this opportunity very often.
 
-Modified files:
-	test           : harness.c 
+For example, do we really need to keep pool and lvm1 formats for the
+next 7 years?  If not, we could more easily clean up some of the
+internal abstractions.  Other code we could remove that would make
+future features / maintenance easier?
 
-Log message:
-	Only fail when tests have failed, but not when they have been just skipped.
+Or any LVM commands that should be removed completely?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-
---- LVM2/test/harness.c	2009/02/12 19:54:45	1.1
-+++ LVM2/test/harness.c	2009/02/16 16:49:21	1.2
-@@ -153,7 +153,7 @@
- 	       npassed + nfailed + nskipped, npassed, nfailed, nskipped);
- 
- 	/* print out a summary */
--	if (nfailed || nskipped ) {
-+	if (nfailed || nskipped) {
- 		for (i = 1; i < argc; ++ i) {
- 			switch (status[i]) {
- 			case FAILED:
-@@ -165,7 +165,7 @@
- 			}
- 		}
- 		printf("\n");
--		return 1;
-+		return nfailed > 0 || die;
- 	}
- 	return !die;
- }
+Note that there is at least 2 approaches:
+1) Remove the code completely
+2) Deprecate but don't remove
 
 
