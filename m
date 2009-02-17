@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 17 Feb 2009 19:36:16 -0000
-Subject: LVM2/test harness.c
-Message-ID: <20090217193616.10984.qmail@sourceware.org>
+Date: 17 Feb 2009 19:37:28 -0000
+Subject: LVM2/test not.c
+Message-ID: <20090217193728.11776.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-02-17 19:36:16
+Changes by:	mornfall at sourceware.org	2009-02-17 19:37:28
 
 Modified files:
-	test           : harness.c 
+	test           : not.c 
 
 Log message:
-	Fix test output collection in harness.c.
+	In testsuite's not.c, print a notice when program dies of a fatal signal.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/not.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/test/harness.c	2009/02/16 16:49:21	1.2
-+++ LVM2/test/harness.c	2009/02/17 19:36:16	1.3
-@@ -106,6 +106,7 @@
- 			perror("waitpid");
- 			exit(206);
+--- LVM2/test/not.c	2009/01/12 18:45:44	1.1
++++ LVM2/test/not.c	2009/02/17 19:37:28	1.2
+@@ -25,6 +25,10 @@
+ 	} else {		/* parent */
+ 		waitpid(pid, &status, 0);
+ 		if (!WIFEXITED(status)) {
++			if (WIFSIGNALED(status))
++				fprintf(stderr,
++					"Process %d died of signal %d.\n",
++					pid, WTERMSIG(status));
+ 			/* did not exit correctly */
+ 			return FAILURE;
  		}
-+		drain();
- 		if (WIFEXITED(st)) {
- 			if (WEXITSTATUS(st) == 0) {
- 				passed(i, f);
 
 
