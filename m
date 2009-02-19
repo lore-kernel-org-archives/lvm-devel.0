@@ -1,10 +1,11 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 19 Feb 2009 13:14:42 -0500
-Subject: [PATCH 1/3] New parameter system_dir for create_toolcontext.
-In-Reply-To: <1235070093-23387-2-git-send-email-twoerner@redhat.com>
+Date: Thu, 19 Feb 2009 13:15:12 -0500
+Subject: [PATCH 2/3] Added more version defines to tools/version.h.in.
+In-Reply-To: <1235070093-23387-3-git-send-email-twoerner@redhat.com>
 References: <1235070093-23387-1-git-send-email-twoerner@redhat.com>
 	<1235070093-23387-2-git-send-email-twoerner@redhat.com>
-Message-ID: <1235067282.19308.0.camel@f10-node1>
+	<1235070093-23387-3-git-send-email-twoerner@redhat.com>
+Message-ID: <1235067312.19308.1.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,127 +13,92 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 On Thu, 2009-02-19 at 20:01 +0100, Thomas Woerner wrote:
-> cmd->sys_dir, which defaults to DEFAULT_SYS_DIR, will be set to system_dir i
-> the parameter is not NULL. If the environment variable LVM_SYSTEM_DIR is set
-> it will overwrite any value of cmd->sys_dir.
+> Modified tools/version.h.in and configure.in:
+> New defines LVM_MAJOR, LVM_MINOR, LVM_PATCHLEVEL and LVM_RELEASE generated in
+> configure. Maybe a rename of version.h.in to lvm_version.h.in would be good to
+> prevent name conflicts with other projects. Added GPL header to version.h.in.
+> 
+> TODO: recreate configure
 > 
 > Signed-off-by: Thomas Woerner <twoerner@redhat.com>
 > ---
->  daemons/clvmd/lvm-functions.c |    4 ++--
->  lib/commands/toolcontext.c    |   16 ++++++++++++++--
->  lib/commands/toolcontext.h    |    9 +++++++--
->  tools/lvmcmdline.c            |    4 ++--
->  4 files changed, 25 insertions(+), 8 deletions(-)
+>  configure.in       |   13 ++++++++++++-
+>  tools/version.h.in |   27 +++++++++++++++++++++++++++
+>  2 files changed, 39 insertions(+), 1 deletions(-)
 > 
-> diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-> index 5cf7eff..d720802 100644
-> --- a/daemons/clvmd/lvm-functions.c
-> +++ b/daemons/clvmd/lvm-functions.c
+> diff --git a/configure.in b/configure.in
+> index ea77eff..02a9bbb 100644
+> --- a/configure.in
+> +++ b/configure.in
 > @@ -1,6 +1,6 @@
->  /*
->   * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-> - * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
-> + * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
->   *
->   * This file is part of LVM2.
->   *
-> @@ -724,7 +724,7 @@ void lvm_do_backup(const char *vgname)
->  /* Called to initialise the LVM context of the daemon */
->  int init_lvm(int using_gulm)
->  {
-> -	if (!(cmd = create_toolcontext(1))) {
-> +	if (!(cmd = create_toolcontext(1, NULL))) {
->  		log_error("Failed to allocate command context");
->  		return 0;
->  	}
-> diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-> index 0a98325..39c644c 100644
-> --- a/lib/commands/toolcontext.c
-> +++ b/lib/commands/toolcontext.c
-> @@ -1,6 +1,6 @@
->  /*
->   * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-> - * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-> + * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
->   *
->   * This file is part of LVM2.
->   *
-> @@ -998,7 +998,8 @@ static void _init_globals(struct cmd_context *cmd)
->  }
+>  ###############################################################################
+>  ## Copyright (C) 2000-2004 Sistina Software, Inc. All rights reserved.
+> -## Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
+> +## Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
+>  ##
+>  ## This copyrighted material is made available to anyone wishing to use,
+>  ## modify, copy, or redistribute it subject to the terms and conditions
+> @@ -723,6 +723,13 @@ DM_LIB_PATCHLEVEL=`cat VERSION_DM | awk -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,$
 >  
->  /* Entry point */
-> -struct cmd_context *create_toolcontext(unsigned is_long_lived)
-> +struct cmd_context *create_toolcontext(unsigned is_long_lived,
-> +				       const char *system_dir)
->  {
->  	struct cmd_context *cmd;
+>  LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
 >  
-> @@ -1030,6 +1031,17 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived)
->  
->  	strcpy(cmd->sys_dir, DEFAULT_SYS_DIR);
->  
-> +	/*
-> +	 * cmd->sys_dir, which defaults to DEFAULT_SYS_DIR, will be set to 
-> +	 * system_dir if the parameter is not NULL. If the environment 
-> +	 * variable LVM_SYSTEM_DIR is set, it will overwrite any value of 
-> +	 * cmd->sys_dir.
-> +	 */
-> +        if (system_dir) {
-> +		strncpy(cmd->sys_dir, system_dir, sizeof(cmd->sys_dir));
-> +		cmd->sys_dir[sizeof(cmd->sys_dir) - 1] = '\0';
-> +	}
+> +VER=`cat VERSION | awk '{print $1}'`
+> +echo "$VER" | grep -qi "cvs" && LVM_RELEASE=\"cvs\" || LVM_RELEASE=\"\"
+> +VER=`echo "$VER" | awk -F '-' '{print $1}'`
+> +LVM_MAJOR=`echo "$VER" | awk -F '.' '{printf "%s",$1}'`
+> +LVM_MINOR=`echo "$VER" | awk -F '.' '{printf "%s",$2}'`
+> +LVM_PATCHLEVEL=`echo "$VER" | awk -F '.' '{printf "%s",$3}'`
 > +
->  	if (!_get_env_vars(cmd))
->  		goto error;
->  
-> diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-> index 7d2aef9..eb2b6ef 100644
-> --- a/lib/commands/toolcontext.h
-> +++ b/lib/commands/toolcontext.h
-> @@ -1,6 +1,6 @@
->  /*
->   * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
-> - * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-> + * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
->   *
->   * This file is part of LVM2.
->   *
-> @@ -94,7 +94,12 @@ struct cmd_context {
->  	char sysfs_dir[PATH_MAX];
->  };
->  
-> -struct cmd_context *create_toolcontext(unsigned is_long_lived);
+>  ################################################################################
+>  AC_SUBST(BUILD_DMEVENTD)
+>  AC_SUBST(CFLAGS)
+> @@ -761,6 +768,10 @@ AC_SUBST(LVM1)
+>  AC_SUBST(LVM1_FALLBACK)
+>  AC_SUBST(CONFDIR)
+>  AC_SUBST(LVM_VERSION)
+> +AC_SUBST(LVM_MAJOR)
+> +AC_SUBST(LVM_MINOR)
+> +AC_SUBST(LVM_PATCHLEVEL)
+> +AC_SUBST(LVM_RELEASE)
+>  AC_SUBST(MIRRORS)
+>  AC_SUBST(MSGFMT)
+>  AC_SUBST(OWNER)
+> diff --git a/tools/version.h.in b/tools/version.h.in
+> index a122792..f41fcae 100644
+> --- a/tools/version.h.in
+> +++ b/tools/version.h.in
+> @@ -1,3 +1,30 @@
 > +/*
-> + * cmd->sys_dir, which defaults to DEFAULT_SYS_DIR, will be set to system_dir 
-> + * if the parameter is not NULL. If the environment variable LVM_SYSTEM_DIR is 
-> + * set, it will overwrite any value of cmd->sys_dir.
-> + */
-> +struct cmd_context *create_toolcontext(unsigned is_long_lived, const char *system_dir);
->  void destroy_toolcontext(struct cmd_context *cmd);
->  int refresh_toolcontext(struct cmd_context *cmd);
->  int config_files_changed(struct cmd_context *cmd);
-> diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-> index 880f31e..cb1bfc6 100644
-> --- a/tools/lvmcmdline.c
-> +++ b/tools/lvmcmdline.c
-> @@ -1,6 +1,6 @@
->  /*
->   * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-> - * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+> + * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
 > + * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
->   *
->   * This file is part of LVM2.
->   *
-> @@ -1158,7 +1158,7 @@ struct cmd_context *init_lvm(void)
->  
->  	_cmdline.the_args = &_the_args[0];
->  
-> -	if (!(cmd = create_toolcontext(0)))
-> +	if (!(cmd = create_toolcontext(0, NULL)))
->  		return_NULL;
->  
->  	return cmd;
+> + *
+> + * This file is part of LVM2.
+> + *
+> + * This copyrighted material is made available to anyone wishing to use,
+> + * modify, copy, or redistribute it subject to the terms and conditions
+> + * of the GNU Lesser General Public License v.2.1.
+> + *
+> + * You should have received a copy of the GNU Lesser General Public License
+> + * along with this program; if not, write to the Free Software Foundation,
+> + * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+> + */
+> +
+>  #ifndef _LVM_VERSION_H
+> +/**
+> + * The LVM version number
+> + *
+> + * LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL[-LVM_RELEASE]
+> + *
+> + * If the LVM release tag contains "cvs" then it is a development snapshot.
+> + */
+> +
+>  #define LVM_VERSION @LVM_VERSION@
+> +#define LVM_MAJOR @LVM_MAJOR@
+> +#define LVM_MINOR @LVM_MINOR@
+> +#define LVM_PATCHLEVEL @LVM_PATCHLEVEL@
+> +#define LVM_RELEASE @LVM_RELEASE@
+>  #endif
 
-Ack.
+Ack.  Will you generate configure or someone else?
 
 
