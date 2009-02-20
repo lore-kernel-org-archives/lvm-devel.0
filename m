@@ -1,11 +1,7 @@
 From: Thomas Woerner <twoerner@redhat.com>
-Date: Fri, 20 Feb 2009 17:41:51 +0100
+Date: Fri, 20 Feb 2009 17:58:28 +0100
 Subject: [PATCH 3/3] New base files needed for liblvm with doxygen style descriptions.
-In-Reply-To: <1235148111-10652-3-git-send-email-twoerner@redhat.com>
-References: <1235148111-10652-1-git-send-email-twoerner@redhat.com>
-	<1235148111-10652-2-git-send-email-twoerner@redhat.com>
-	<1235148111-10652-3-git-send-email-twoerner@redhat.com>
-Message-ID: <1235148111-10652-4-git-send-email-twoerner@redhat.com>
+Message-ID: <1235149108-13478-1-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -58,7 +54,7 @@ index 54092cd..47786a7 100644
    SOURCES +=\
 diff --git a/lib/lvm.h b/lib/lvm.h
 new file mode 100644
-index 0000000..1687b51
+index 0000000..3b60510
 --- /dev/null
 +++ b/lib/lvm.h
 @@ -0,0 +1,57 @@
@@ -78,7 +74,7 @@ index 0000000..1687b51
 +#ifndef _LIB_LVM_H
 +#define _LIB_LVM_H
 +
-+#include "version.h"
++#include "lvm-version.h"
 +
 +#include <stdint.h>
 +
