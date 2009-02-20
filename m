@@ -1,9 +1,7 @@
 From: Thomas Woerner <twoerner@redhat.com>
-Date: Fri, 20 Feb 2009 12:24:13 +0100
+Date: Fri, 20 Feb 2009 14:53:49 +0100
 Subject: [PATCH 3/3] New base files needed for liblvm with doxygen style descriptions.
-In-Reply-To: <1235129053-5967-1-git-send-email-twoerner@redhat.com>
-References: <1235129053-5967-1-git-send-email-twoerner@redhat.com>
-Message-ID: <1235129053-5967-2-git-send-email-twoerner@redhat.com>
+Message-ID: <1235138029-5804-1-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -178,7 +176,7 @@ index b18cead..0000000
 -#endif
 diff --git a/lib/lvm_base.c b/lib/lvm_base.c
 new file mode 100644
-index 0000000..e76ee15
+index 0000000..af18707
 --- /dev/null
 +++ b/lib/lvm_base.c
 @@ -0,0 +1,61 @@
@@ -213,20 +211,20 @@ index 0000000..e76ee15
 +	/* create context */
 +	/* FIXME: split create_toolcontext */
 +	cmd = create_toolcontext(1, system_dir);
++	if (!cmd)
++		return NULL;
++	/* FIXME: if an error occured, return NULL and maybe cleanup. */
 +
-+	/* initilize remaining */
-+	if (cmd) {
-+		/* initilization from lvm_run_command */
-+		init_error_message_produced(0);
++	/* initialization from lvm_run_command */
++	init_error_message_produced(0);
 +
-+		/* FIXME: locking_type config option needed? */
-+		/* initialize locking */
-+		if (!init_locking(-1, cmd)) {
-+			/* FIXME: use EAGAIN as error code here */
-+			log_error("Locking initialisation failed.");
-+			lvm_destroy((lvm_t) cmd);
-+			return NULL;
-+		}
++	/* FIXME: locking_type config option needed? */
++	/* initialize locking */
++	if (!init_locking(-1, cmd)) {
++		/* FIXME: use EAGAIN as error code here */
++		log_error("Locking initialisation failed.");
++		lvm_destroy((lvm_t) cmd);
++		return NULL;
 +	}
 +
 +	return (lvm_t) cmd;
