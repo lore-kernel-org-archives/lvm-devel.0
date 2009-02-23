@@ -1,49 +1,40 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Sun, 22 Feb 2009 23:39:42 +0000
-Subject: [PATCH 08/12] Add lvm_errno(), lvm_strerror, lvm_vg_mode.
-In-Reply-To: <20090222231111.GF15443@agk.fab.redhat.com>
-References: <1234467041-21522-1-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-2-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-3-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-4-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-5-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-6-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-7-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-8-git-send-email-dwysocha@redhat.com>
-	<1234467041-21522-9-git-send-email-dwysocha@redhat.com>
-	<20090222231111.GF15443@agk.fab.redhat.com>
-Message-ID: <20090222233942.GG15443@agk.fab.redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 23 Feb 2009 16:53:42 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20090223165342.29473.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Feb 22, 2009 at 11:11:11PM +0000, Alasdair G Kergon wrote:
-> As we discussed on the call last week, let't see first if we can get an error
-> number and messages integrated into the existing log_error() reporting
-> mechanism.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-02-23 16:53:42
+
+Modified files:
+	lib/metadata   : metadata.c 
+
+Log message:
+	Fix validation of dataalignment value introduced in previous commit.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.204&r2=1.205
+
+--- LVM2/lib/metadata/metadata.c	2009/02/22 19:00:27	1.204
++++ LVM2/lib/metadata/metadata.c	2009/02/23 16:53:42	1.205
+@@ -868,6 +868,12 @@
+ 		goto bad;
+ 	}
  
-So take those as two separate problems.
-
-(1) Add another output mechanism to print_log() to cache messages in memory.
-Like the other mechanisms, the application should be able to configure what severity
-of message it wants recording.
-Needs a way to obtain the cached messages (returned as a single multi-line
-string?) and a way to clear them (hooked automatically at the start of every
-library function).
-
-(2) Setting the library return code.
-Have the level that wants to generate the error set it explicitly.
-There'd be a default value that would be returned if it has not
-been set to something else.  Only the first value would be returned - if
-the function to set it is called a second time, that call would not
-change the value.  This has the advantage that we only have to deal with
-the places where it's actually useful to distinguish between different
-errors - and I still don't think there are many such places.
-
-Alasdair
--- 
-agk at redhat.com
++	if (pv->size < data_alignment) {
++		log_error("%s: Data alignment must not exceed device size.",
++			  pv_dev_name(pv));
++		goto bad;
++	}
++
+ 	pv->fmt = fmt;
+ 	pv->vg_name = fmt->orphan_vg_name;
+ 
 
 
