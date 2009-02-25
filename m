@@ -1,29 +1,89 @@
-From: David A. Barrett <david.barrett@asgard.com>
-Date: Thu, 12 Feb 2009 12:22:44 -0500
-Subject: LVM2 Disk Layout (on-disk data-structures)
-Message-ID: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 25 Feb 2009 13:17:42 -0000
+Subject: LVM2 ./WHATS_NEW man/vgchange.8.in man/vgmknod ...
+Message-ID: <20090225131742.12076.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Does anyone know about where I can find
-documentation of layout of information for
-LVM2 on the disk?
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-02-25 13:17:41
 
-I need to write code to parse the data
-directly from the low-level disc image.
+Modified files:
+	.              : WHATS_NEW 
+	man            : vgchange.8.in vgmknodes.8.in 
 
-I need to do some data recovery operations
-on multiple logical volumes in two volume groups
-on two physical volumes (each a raid5).
+Log message:
+	Update vgchange and vgmknodes man pages to include --refresh.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
-Redhat's fedora 10 installation DVD overwrote
-the partition table and a new lvm on every single
-accessable device immediately after asking for
-my keyboard type (without confirmation).
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1052&r2=1.1053
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgchange.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgmknodes.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
-d dot barrett at asgard dot com.
+--- LVM2/WHATS_NEW	2009/02/24 15:48:01	1.1052
++++ LVM2/WHATS_NEW	2009/02/25 13:17:40	1.1053
+@@ -1,5 +1,6 @@
+ Version 2.02.45 - 
+ ===================================
++  Add --refresh to vgchange and vgmknodes man pages.
+   Fixed bug where lvresize option -t was not properly passed to fsadm.
+   Using argv[] list in exec_cmd() to allow more params for external commands.
+   Fsadm does not allow checking mounted filesystem.
+--- LVM2/man/vgchange.8.in	2008/10/08 12:50:13	1.1
++++ LVM2/man/vgchange.8.in	2009/02/25 13:17:41	1.2
+@@ -25,6 +25,7 @@
+ .RB [ \-P | \-\-partial]
+ .RB [ \-s | \-\-physicalextentsize
+ .IR PhysicalExtentSize [ \fBkKmMgGtT\fR ]]
++.RB [ \-\-refresh]
+ .RB [ -t | \-\-test]
+ .RB [ \-v | \-\-verbose]
+ .RB [ \-\-version ]
+@@ -128,6 +129,12 @@
+  
+ The 2.4 kernel has a limitation of 2TB per block device.
+ .TP
++.BR \-\-refresh
++If any logical volume in the volume group is active, reload its metadata.
++This is not necessary in normal operation, but may be useful
++if something has gone wrong or if you're doing clustering
++manually without a clustered lock manager.
++.TP
+ .BR \-x ", " \-\-resizeable " " { y | n }
+ Enables or disables the extension/reduction of this volume group
+ with/by physical volumes.
+--- LVM2/man/vgmknodes.8.in	2008/11/12 15:01:36	1.2
++++ LVM2/man/vgmknodes.8.in	2009/02/25 13:17:41	1.3
+@@ -3,13 +3,22 @@
+ vgmknodes \- recreate volume group directory and logical volume special files
+ .SH SYNOPSIS
+ .B vgmknodes
+-[\-d|\-\-debug] [\-h|\-?|\-\-help] 
+-[\-v|\-\-verbose]
++.RB [ \-d | \-\-debug]
++.RB [ \-h | \-\-help]
++.RB [ \-\-refresh]
++.RB [ \-v | \-\-verbose]
+ [[VolumeGroupName | LogicalVolumePath]...]
+ .SH DESCRIPTION
+ Checks the LVM2 special files in /dev that are needed for active 
+ logical volumes and creates any missing ones and removes unused ones.
+ .SH OPTIONS
++.TP
++.BR \-\-refresh
++If any logical volume in the volume group is active, reload its metadata.
++This is not necessary in normal operation, but may be useful
++if something has gone wrong or if you're doing clustering
++manually without a clustered lock manager.
++.TP
+ See \fBlvm\fP for common options.
+ .SH SEE ALSO
+ .BR lvm (8),
 
 
