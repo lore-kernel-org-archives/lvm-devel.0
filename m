@@ -1,43 +1,38 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 25 Feb 2009 13:13:41 -0600
+From: Bryn M. Reeves <bmr@redhat.com>
+Date: Wed, 25 Feb 2009 19:23:44 +0000
 Subject: LVM2 Disk Layout (on-disk data-structures)
 In-Reply-To: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
 References: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
-Message-ID: <B0342446-3DF3-49BB-99B0-324DE09A6FED@redhat.com>
+Message-ID: <49A59AC0.5080305@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-It is text based.  You can see examples in /etc/lvm/archive or /etc/ 
-lvm/backup.
+David A. Barrett wrote:
+> Does anyone know about where I can find documentation of layout of 
+> information for LVM2 on the disk?
+> 
+> I need to write code to parse the data directly from the low-level 
+> disc image.
 
-  brassow
+There are better ways to do this. As Jon points out, the LVM2 metadata
+is plain text. You can rip it out of the raw devices with dd if
+necessary and then tidy it up in an editor.
 
-On Feb 12, 2009, at 11:22 AM, David A. Barrett wrote:
+You'll then want to look into vgcfgrestore.
 
-> Does anyone know about where I can find
-> documentation of layout of information for
-> LVM2 on the disk?
->
-> I need to write code to parse the data
-> directly from the low-level disc image.
->
-> I need to do some data recovery operations
-> on multiple logical volumes in two volume groups
-> on two physical volumes (each a raid5).
->
-> Redhat's fedora 10 installation DVD overwrote
-> the partition table and a new lvm on every single
-> accessable device immediately after asking for
-> my keyboard type (without confirmation).
->
-> d dot barrett at asgard dot com.
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+If you didn't have a backup of your partition tables then you may want
+to look at parted's rescue command.
+
+> Redhat's fedora 10 installation DVD overwrote the partition table 
+> and a new lvm on every single accessable device immediately after 
+> asking for my keyboard type (without confirmation).
+
+I'd file a bug if you can reproduce this.
+
+Regards,
+Bryn.
 
 
