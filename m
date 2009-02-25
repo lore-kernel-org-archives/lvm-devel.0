@@ -1,76 +1,43 @@
-From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
-Date: 25 Feb 2009 14:33:02 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-corosync.c
-Message-ID: <20090225143302.4435.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Wed, 25 Feb 2009 13:13:41 -0600
+Subject: LVM2 Disk Layout (on-disk data-structures)
+In-Reply-To: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
+References: <1f8f1b050902120922m5f22835ew715cf0d093440646@mail.gmail.com>
+Message-ID: <B0342446-3DF3-49BB-99B0-324DE09A6FED@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	ccaulfield at sourceware.org	2009-02-25 14:33:01
+It is text based.  You can see examples in /etc/lvm/archive or /etc/ 
+lvm/backup.
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-corosync.c 
+  brassow
 
-Log message:
-	Fix error returns in clvmd-corosync interface to DLM.
-	
-	Thanks to Xinwei Hu for spotting this.
+On Feb 12, 2009, at 11:22 AM, David A. Barrett wrote:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1053&r2=1.1054
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-corosync.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-
---- LVM2/WHATS_NEW	2009/02/25 13:17:40	1.1053
-+++ LVM2/WHATS_NEW	2009/02/25 14:33:00	1.1054
-@@ -1,5 +1,6 @@
- Version 2.02.45 - 
- ===================================
-+  Fix error returns in clvmd-corosync interface to DLM.
-   Add --refresh to vgchange and vgmknodes man pages.
-   Fixed bug where lvresize option -t was not properly passed to fsadm.
-   Using argv[] list in exec_cmd() to allow more params for external commands.
---- LVM2/daemons/clvmd/clvmd-corosync.c	2009/02/11 10:13:20	1.5
-+++ LVM2/daemons/clvmd/clvmd-corosync.c	2009/02/25 14:33:01	1.6
-@@ -478,6 +478,12 @@
- 		DEBUGLOG("dlm_ls_lock returned %d\n", errno);
- 		return err;
- 	}
-+	if (lksb.sb_status != 0)
-+	{
-+		DEBUGLOG("dlm_ls_lock returns lksb.sb_status %d\n", lksb.sb_status);
-+		errno = lksb.sb_status;
-+		return -1;
-+	}
- 
- 	DEBUGLOG("lock_resource returning %d, lock_id=%x\n", err, lksb.sb_lkid);
- 
-@@ -504,6 +510,13 @@
- 		DEBUGLOG("Unlock returned %d\n", err);
- 		return err;
- 	}
-+	if (lksb.sb_status != 0)
-+	{
-+		DEBUGLOG("dlm_ls_unlock_wait returns lksb.sb_status: %d\n", lksb.sb_status);
-+		errno = lksb.sb_status;
-+		return -1;
-+	}   
-+
- 
- 	return 0;
- }
-@@ -568,7 +581,7 @@
- 	confdb_handle_t handle;
- 	int result;
- 	int namelen = buflen;
--	unsigned int cluster_handle;
-+	hdb_handle_t cluster_handle;
- 	confdb_callbacks_t callbacks = {
- 		.confdb_key_change_notify_fn = NULL,
- 		.confdb_object_create_change_notify_fn = NULL,
+> Does anyone know about where I can find
+> documentation of layout of information for
+> LVM2 on the disk?
+>
+> I need to write code to parse the data
+> directly from the low-level disc image.
+>
+> I need to do some data recovery operations
+> on multiple logical volumes in two volume groups
+> on two physical volumes (each a raid5).
+>
+> Redhat's fedora 10 installation DVD overwrote
+> the partition table and a new lvm on every single
+> accessable device immediately after asking for
+> my keyboard type (without confirmation).
+>
+> d dot barrett at asgard dot com.
+>
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
