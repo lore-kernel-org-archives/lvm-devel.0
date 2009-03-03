@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 3 Mar 2009 13:03:04 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20090303130304.2654.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 3 Mar 2009 16:35:37 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/format-text.c
+Message-ID: <20090303163537.20000.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,76 +10,64 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-03-03 13:03:03
+Changes by:	mbroz at sourceware.org	2009-03-03 16:35:35
 
 Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+	.              : WHATS_NEW 
+	lib/format_text: format-text.c 
 
 Log message:
-	pre-release
+	vgname_from_mda now tries to parse for vgname even
+	if rlocn not defined (there is no metadata area).
+	
+	In most cases it fails in validate_name(),
+	unfortunately there are situatuions, when
+	validate_name is ok and later code fails with
+	checksum error.
+	
+	Reproducer:
+	
+	# dd if=/dev/zero of=/dev/loop0
+	
+	# pvcreate --metadatasize 637k /dev/loop0
+	Physical volume "/dev/loop0" successfully created
+	
+	# pvs /dev/loop0
+	/dev/loop0: Checksum error
+	PV         VG   Fmt  Attr PSize PFree
+	/dev/loop0      lvm2 --   1.00M 1.00M
+	
+	Signed-off-by: Milan Broz <mbroz@redhat.com>
+	
+	-
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.191&r2=1.192
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1058&r2=1.1059
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.263&r2=1.264
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1059&r2=1.1060
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.102&r2=1.103
 
---- LVM2/VERSION	2009/02/27 23:40:11	1.191
-+++ LVM2/VERSION	2009/03/03 13:03:03	1.192
-@@ -1 +1 @@
--2.02.45-cvs (2009-02-26)
-+2.02.45-cvs (2009-03-03)
---- LVM2/VERSION_DM	2009/01/26 14:46:09	1.5
-+++ LVM2/VERSION_DM	2009/03/03 13:03:03	1.6
-@@ -1 +1 @@
--1.02.31-cvs (2009-01-26)
-+1.02.31-cvs (2009-03-03)
---- LVM2/WHATS_NEW	2009/02/28 00:54:06	1.1058
-+++ LVM2/WHATS_NEW	2009/03/03 13:03:03	1.1059
-@@ -1,15 +1,15 @@
--Version 2.02.45 - 26th February 2009
--====================================
-+Version 2.02.45 - 3rd March 2009
-+================================
+--- LVM2/WHATS_NEW	2009/03/03 13:03:03	1.1059
++++ LVM2/WHATS_NEW	2009/03/03 16:35:32	1.1060
+@@ -1,5 +1,6 @@
+ Version 2.02.45 - 3rd March 2009
+ ================================
++  Avoid scanning empty metadata areas for VG names.
    Attempt proper clean up in child before executing new binary in exec_cmd().
    Do not scan devices if reporting only attributes from PV label.
    Use pkgconfig to obtain corosync library details during configuration.
-   Fix error returns in clvmd-corosync interface to DLM.
-   Add --refresh to vgchange and vgmknodes man pages.
--  Fixed bug where lvresize option -t was not properly passed to fsadm.
--  Using argv[] list in exec_cmd() to allow more params for external commands.
--  Fsadm does not allow checking mounted filesystem.
--  Fsadm no longer accepts 'any other key' as 'no' answer to y/n.
--  Fsadm improved handling of command line options.
-+  Pass --test from lvresize to fsadm as --dry-run.
-+  Supply argv[] list to exec_cmd() to allow for variable number of parameters.
-+  Prevent fsadm from checking mounted filesystems.
-+  No longer treats any other key as 'no' when prompting in fsadm.
-+  Tidy fsadm command line processing.
-   Add lib/lvm.h and lib/lvm_base.c for the new library interface.
-   Move tools/version.h to lib/misc/lvm-version.h.
-   Split LVM_VERSION into MAJOR, MINOR, PATCHLEVEL, RELEASE and RELEASE_DATE.
-@@ -25,9 +25,9 @@
-   Add option to /etc/sysconfig/cluster to select cluster type for clvmd.
-   Allow clvmd to start up if its lockspace already exists.
-   Separate PV label attributes which do not need parse metadata when reporting.
--  Remove external dependency on the 'cut' command in fsadm.
-+  Remove external dependency on the 'cut' command from fsadm.
-   Fix pvs segfault when pv mda attributes requested for not available PV.
--  Add support for ext4 resize in fsadm.
-+  Add fsadm support for reszing ext4 filesysystems.
-   Move locking_type reading inside init_locking().
-   Rename get_vgs() to get_vgnames() and clarify related error messages.
-   Allow clvmd to be built with all cluster managers & select one on cmdline.
---- LVM2/WHATS_NEW_DM	2009/02/12 20:42:07	1.263
-+++ LVM2/WHATS_NEW_DM	2009/03/03 13:03:03	1.264
-@@ -1,5 +1,5 @@
--Version 1.02.31 - 
--====================================
-+Version 1.02.31 - 3rd March 2009
-+================================
-   If kernel supports only one dm major number, use in place of any supplied.
+--- LVM2/lib/format_text/format-text.c	2009/02/25 23:29:06	1.102
++++ LVM2/lib/format_text/format-text.c	2009/03/03 16:35:34	1.103
+@@ -1061,6 +1061,12 @@
+ 	/* FIXME Cope with returning a list */
+ 	rlocn = mdah->raw_locns;
  
- Version 1.02.30 - 26th January 2009
++	/*
++	 * If no valid offset, do not try to search for vgname
++	 */
++	if (!rlocn->offset)
++		goto out;
++
+ 	/* Do quick check for a vgname */
+ 	if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
+ 		      NAME_LEN, buf))
 
 
