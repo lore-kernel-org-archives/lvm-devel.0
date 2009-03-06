@@ -1,218 +1,289 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 19 Dec 2008 14:22:52 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/a ...
-Message-ID: <20081219142252.6140.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri,  6 Mar 2009 03:49:14 -0500
+Subject: [PATCH 2/2] Add new liblvm build directory and move lvm_base.c.
+In-Reply-To: <1236329354-26253-2-git-send-email-dwysocha@redhat.com>
+References: <1236329354-26253-1-git-send-email-dwysocha@redhat.com>
+	<1236329354-26253-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1236329354-26253-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2008-12-19 14:22:49
+The original liblvm.a has been moved to liblvm-internal.a.
+We now use liblvm.a for the new application library and build
+it inside liblvm directory.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c dev_manager.c fs.c fs.h 
-	tools          : lvchange.c toollib.c toollib.h vgrename.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ Makefile.in        |    2 +-
+ WHATS_NEW          |    1 +
+ configure          |    3 +-
+ configure.in       |    1 +
+ lib/Makefile.in    |    3 +-
+ lib/lvm_base.c     |   64 ----------------------------------------------------
+ liblvm/Makefile.in |   36 +++++++++++++++++++++++++++++
+ liblvm/lvm_base.c  |   64 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 8 files changed, 106 insertions(+), 68 deletions(-)
+ delete mode 100644 lib/lvm_base.c
+ create mode 100644 liblvm/Makefile.in
+ create mode 100644 liblvm/lvm_base.c
 
-Log message:
-	Fix vgrename using UUID in case there are VGs with the same name.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1009&r2=1.1010
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.142&r2=1.143
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.h.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.58&r2=1.59
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgrename.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
-
---- LVM2/WHATS_NEW	2008/12/15 13:30:45	1.1009
-+++ LVM2/WHATS_NEW	2008/12/19 14:22:48	1.1010
+diff --git a/Makefile.in b/Makefile.in
+index 07f22c6..38835eb 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -22,7 +22,7 @@ ifeq ("@INTL@", "yes")
+   SUBDIRS += po
+ endif
+ 
+-SUBDIRS += lib tools daemons libdm
++SUBDIRS += lib tools daemons libdm liblvm
+ 
+ ifeq ($(MAKECMDGOALS),distclean)
+   SUBDIRS += daemons/clvmd \
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e039108..0b96651 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Fix vgrename using UUID in case there are VGs with the same name.
-   Fix segfault when invalid field given in reporting commands.
-   Refactor init_lvm() for lvmcmdline and clvmd.
-   Add liblvm interactive test infrastructure to build.
---- LVM2/lib/activate/activate.c	2008/12/04 15:54:26	1.141
-+++ LVM2/lib/activate/activate.c	2008/12/19 14:22:48	1.142
-@@ -1084,9 +1084,10 @@
- 	if (!_lv_info(cmd, lv, 1, &info, 0, 0, 0))
- 		return_0;
+ Version 2.02.46 - 
+ ================================
++  Rename liblvm.a to liblvm-internal.a and build new application library.
+   Flush memory pool and fix locking in clvmd refresh and backup command.
+   Fix unlocks in clvmd-corosync. Broken in 2.02.45.
  
--	if (info.exists)
--		r = dev_manager_lv_mknodes(lv);
--	else
-+	if (info.exists) {
-+		if (lv_is_visible(lv))
-+			r = dev_manager_lv_mknodes(lv);
-+	} else
- 		r = dev_manager_lv_rmnodes(lv);
+diff --git a/configure b/configure
+index 64afd3c..dbc9263 100755
+--- a/configure
++++ b/configure
+@@ -12659,7 +12659,7 @@ LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
  
- 	fs_unlock();
---- LVM2/lib/activate/dev_manager.c	2008/11/03 22:14:27	1.142
-+++ LVM2/lib/activate/dev_manager.c	2008/12/19 14:22:48	1.143
-@@ -1005,7 +1005,8 @@
- 	void *handle = NULL;
- 	struct dm_tree_node *child;
- 	struct lv_layer *lvlayer;
--	char *vgname, *lvname, *layer;
-+	char *old_vgname, *old_lvname, *old_layer;
-+	char *new_vgname, *new_lvname, *new_layer;
- 	const char *name;
- 	int r = 1;
  
-@@ -1017,11 +1018,16 @@
- 		name = dm_tree_node_get_name(child);
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile"
  
- 		if (name && lvlayer->old_name && *lvlayer->old_name && strcmp(name, lvlayer->old_name)) {
--			if (!dm_split_lvm_name(dm->mem, lvlayer->old_name, &vgname, &lvname, &layer)) {
-+			if (!dm_split_lvm_name(dm->mem, lvlayer->old_name, &old_vgname, &old_lvname, &old_layer)) {
- 				log_error("_create_lv_symlinks: Couldn't split up old device name %s", lvlayer->old_name);
- 				return 0;
- 			}
--			fs_rename_lv(lvlayer->lv, name, lvname);
-+			if (!dm_split_lvm_name(dm->mem, name, &new_vgname, &new_lvname, &new_layer)) {
-+				log_error("_create_lv_symlinks: Couldn't split up new device name %s", name);
-+				return 0;
-+			}
-+			if (!fs_rename_lv(lvlayer->lv, name, old_vgname, old_lvname))
-+				r = 0;
- 		} else if (!dev_manager_lv_mknodes(lvlayer->lv))
- 			r = 0;
- 	}
---- LVM2/lib/activate/fs.c	2008/11/03 22:14:27	1.43
-+++ LVM2/lib/activate/fs.c	2008/12/19 14:22:48	1.44
-@@ -335,11 +335,17 @@
- 	return _fs_op(FS_DEL, dev_dir, vg_name, lv_name, "", "");
- }
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -13278,6 +13278,7 @@ do
+     "lib/snapshot/Makefile") CONFIG_FILES="$CONFIG_FILES lib/snapshot/Makefile" ;;
+     "libdm/Makefile") CONFIG_FILES="$CONFIG_FILES libdm/Makefile" ;;
+     "libdm/libdevmapper.pc") CONFIG_FILES="$CONFIG_FILES libdm/libdevmapper.pc" ;;
++    "liblvm/Makefile") CONFIG_FILES="$CONFIG_FILES liblvm/Makefile" ;;
+     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
+     "po/Makefile") CONFIG_FILES="$CONFIG_FILES po/Makefile" ;;
+     "scripts/clvmd_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/clvmd_init_red_hat" ;;
+diff --git a/configure.in b/configure.in
+index 1eaa2a0..f84d589 100644
+--- a/configure.in
++++ b/configure.in
+@@ -835,6 +835,7 @@ lib/misc/lvm-version.h
+ lib/snapshot/Makefile
+ libdm/Makefile
+ libdm/libdevmapper.pc
++liblvm/Makefile
+ man/Makefile
+ po/Makefile
+ scripts/clvmd_init_red_hat
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 0d5ee94..ee1f8ff 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -86,8 +86,7 @@ SOURCES =\
+ 	report/report.c \
+ 	striped/striped.c \
+ 	uuid/uuid.c \
+-	zero/zero.c \
+-	lvm_base.c
++	zero/zero.c
  
--int fs_rename_lv(struct logical_volume *lv,
--		 const char *dev, const char *old_name)
-+int fs_rename_lv(struct logical_volume *lv, const char *dev, 
-+		const char *old_vgname, const char *old_lvname)
- {
--	return _fs_op(FS_RENAME, lv->vg->cmd->dev_dir, lv->vg->name, lv->name,
--		      dev, old_name);
-+	if (strcmp(old_vgname, lv->vg->name)) {
-+		return
-+			(_fs_op(FS_DEL, lv->vg->cmd->dev_dir, old_vgname, old_lvname, "", "") &&
-+			 _fs_op(FS_ADD, lv->vg->cmd->dev_dir, lv->vg->name, lv->name, dev, ""));
-+	}
-+	else 
-+		return _fs_op(FS_RENAME, lv->vg->cmd->dev_dir, lv->vg->name, lv->name,
-+			      dev, old_lvname);
- }
- 
- void fs_unlock(void)
---- LVM2/lib/activate/fs.h	2007/08/20 20:55:24	1.12
-+++ LVM2/lib/activate/fs.h	2008/12/19 14:22:48	1.13
-@@ -26,8 +26,8 @@
- int fs_add_lv(const struct logical_volume *lv, const char *dev);
- int fs_del_lv(const struct logical_volume *lv);
- int fs_del_lv_byname(const char *dev_dir, const char *vg_name, const char *lv_name);
--int fs_rename_lv(struct logical_volume *lv,
--		 const char *dev, const char *old_name);
-+int fs_rename_lv(struct logical_volume *lv, const char *dev, 
-+		const char *old_vgname, const char *old_lvname);
- void fs_unlock(void);
- 
- #endif
---- LVM2/tools/lvchange.c	2008/12/18 05:27:18	1.95
-+++ LVM2/tools/lvchange.c	2008/12/19 14:22:48	1.96
-@@ -168,10 +168,7 @@
- static int lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
- {
- 	log_verbose("Refreshing logical volume \"%s\" (if active)", lv->name);
--	if (!suspend_lv(cmd, lv) || !resume_lv(cmd, lv))
--		return 0;
+ ifeq ("@LVM1@", "internal")
+   SOURCES +=\
+diff --git a/lib/lvm_base.c b/lib/lvm_base.c
+deleted file mode 100644
+index f917533..0000000
+--- a/lib/lvm_base.c
++++ /dev/null
+@@ -1,64 +0,0 @@
+-/*
+- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
 -
--	return 1;
-+	return lv_refresh(cmd, lv);
- }
- 
- static int lvchange_resync(struct cmd_context *cmd,
---- LVM2/tools/toollib.c	2008/12/17 16:45:32	1.138
-+++ LVM2/tools/toollib.c	2008/12/19 14:22:48	1.139
-@@ -1232,3 +1232,8 @@
- 
- 	return 0;
- }
+-#include "lib.h"
+-#include "lvm.h"
+-#include "toolcontext.h"
+-#include "locking.h"
+-#include "metadata-exported.h"
+-#include "report.h"
+-
+-lvm_t lvm_create(const char *system_dir)
+-{
+-	struct cmd_context *cmd;
+-
+-	/* FIXME: logging bound to handle
+-	 */
+-
+-	/* create context */
+-	/* FIXME: split create_toolcontext */
+-	cmd = create_toolcontext(1, system_dir);
+-	if (!cmd)
+-		return NULL;
+-	/*
+-	 * FIXME: if an non memory error occured, return the cmd (maybe some
+-	 * cleanup needed).
+-	 */
+-
+-	/* initialization from lvm_run_command */
+-	init_error_message_produced(0);
+-
+-	/* FIXME: locking_type config option needed? */
+-	/* initialize locking */
+-	if (!init_locking(-1, cmd)) {
+-		/* FIXME: use EAGAIN as error code here */
+-		log_error("Locking initialisation failed.");
+-		lvm_destroy((lvm_t) cmd);
+-		return NULL;
+-	}
+-
+-	return (lvm_t) cmd;
+-}
+-
+-void lvm_destroy(lvm_t libh)
+-{
+-	/* FIXME: error handling */
+-	destroy_toolcontext((struct cmd_context *)libh);
+-}
+-
+-int lvm_reload_config(lvm_t libh)
+-{
+-	/* FIXME: re-init locking needed here? */
+-	return refresh_toolcontext((struct cmd_context *)libh);
+-}
+diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
+new file mode 100644
+index 0000000..6f90f6a
+--- /dev/null
++++ b/liblvm/Makefile.in
+@@ -0,0 +1,36 @@
++#
++# Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
++# Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
++srcdir = @srcdir@
++top_srcdir = @top_srcdir@
++VPATH = @srcdir@
++
++SOURCES =\
++	lvm_base.c
++
++LIB_STATIC = liblvm.a
++
++$(SUBDIRS): $(LIB_STATIC)
++
++CLEAN_TARGETS += liblvm.cflow
++
++include $(top_srcdir)/make.tmpl
++
++liblvm.cflow: $(SOURCES)
++	set -e; (echo -n "SOURCES += "; \
++		 echo $(SOURCES) | \
++		 sed "s/^/ /;s/ / $(top_srcdir)\/lib\//g;s/$$//"; \
++		 ) > $@
++
++cflow: liblvm.cflow
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+new file mode 100644
+index 0000000..f917533
+--- /dev/null
++++ b/liblvm/lvm_base.c
+@@ -0,0 +1,64 @@
++/*
++ * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "lvm.h"
++#include "toolcontext.h"
++#include "locking.h"
++#include "metadata-exported.h"
++#include "report.h"
++
++lvm_t lvm_create(const char *system_dir)
 +{
-+	return suspend_lv(cmd, lv) && resume_lv(cmd, lv);
-+}
---- LVM2/tools/toollib.h	2008/11/03 22:14:30	1.58
-+++ LVM2/tools/toollib.h	2008/12/19 14:22:48	1.59
-@@ -100,4 +100,6 @@
- int fill_vg_create_params(struct cmd_context *cmd,
- 			  char *vg_name, struct vgcreate_params *vp_new,
- 			  struct vgcreate_params *vp_def);
++	struct cmd_context *cmd;
 +
-+int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv);
- #endif
---- LVM2/tools/vgrename.c	2008/11/03 22:14:30	1.55
-+++ LVM2/tools/vgrename.c	2008/12/19 14:22:48	1.56
-@@ -23,7 +23,9 @@
- 	int consistent = 1;
- 	int match = 0;
- 	int found_id = 0;
-+	int symlinks_refresh_ok = 1;
- 	struct dm_list *vgids;
-+	struct lv_list *lvl;
- 	struct str_list *sl;
- 	char *vg_name_new;
- 	const char *vgid = NULL, *vg_name, *vg_name_old;
-@@ -122,24 +124,33 @@
- 	/* Change the volume group name */
- 	vg_rename(cmd, vg, vg_name_new);
- 
-+	/* store it on disks */
-+	log_verbose("Writing out updated volume group");
-+	if (!vg_write(vg) || !vg_commit(vg)) {
-+		goto error;
++	/* FIXME: logging bound to handle
++	 */
++
++	/* create context */
++	/* FIXME: split create_toolcontext */
++	cmd = create_toolcontext(1, system_dir);
++	if (!cmd)
++		return NULL;
++	/*
++	 * FIXME: if an non memory error occured, return the cmd (maybe some
++	 * cleanup needed).
++	 */
++
++	/* initialization from lvm_run_command */
++	init_error_message_produced(0);
++
++	/* FIXME: locking_type config option needed? */
++	/* initialize locking */
++	if (!init_locking(-1, cmd)) {
++		/* FIXME: use EAGAIN as error code here */
++		log_error("Locking initialisation failed.");
++		lvm_destroy((lvm_t) cmd);
++		return NULL;
 +	}
 +
- 	sprintf(old_path, "%s%s", dev_dir, vg_name_old);
- 	sprintf(new_path, "%s%s", dev_dir, vg_name_new);
- 
- 	if (activation() && dir_exists(old_path)) {
- 		log_verbose("Renaming \"%s\" to \"%s\"", old_path, new_path);
++	return (lvm_t) cmd;
++}
 +
- 		if (test_mode())
- 			log_verbose("Test mode: Skipping rename.");
--		else if (rename(old_path, new_path)) {
--			log_error("Renaming \"%s\" to \"%s\" failed: %s",
--				  old_path, new_path, strerror(errno));
--			goto error;
--		}
--	}
- 
--	/* store it on disks */
--	log_verbose("Writing out updated volume group");
--	if (!vg_write(vg) || !vg_commit(vg)) {
--		goto error;
-+		else if (lvs_in_vg_activated_by_uuid_only(vg)) {
-+			dm_list_iterate_items(lvl, &vg->lvs)
-+				if (lv_is_visible(lvl->lv))
-+					if (!lv_refresh(cmd, lvl->lv))
-+						symlinks_refresh_ok = 0;
++void lvm_destroy(lvm_t libh)
++{
++	/* FIXME: error handling */
++	destroy_toolcontext((struct cmd_context *)libh);
++}
 +
-+			if (!symlinks_refresh_ok) {
-+				log_error("Renaming \"%s\" to \"%s\" failed", 
-+					old_path, new_path);
-+				goto error;
-+			}
-+		}
- 	}
- 
- /******* FIXME Rename any active LVs! *****/
++int lvm_reload_config(lvm_t libh)
++{
++	/* FIXME: re-init locking needed here? */
++	return refresh_toolcontext((struct cmd_context *)libh);
++}
+-- 
+1.6.0.6
 
 
