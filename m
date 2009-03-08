@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Mar 2009 18:10:39 -0000
-Subject: LVM2/liblvm Makefile.in
-Message-ID: <20090308181039.5040.qmail@sourceware.org>
+Date: 8 Mar 2009 18:58:53 -0000
+Subject: LVM2/liblvm .exported_symbols
+Message-ID: <20090308185853.21904.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-03-08 18:10:39
+Changes by:	wysochanski at sourceware.org	2009-03-08 18:58:53
 
-Modified files:
-	liblvm         : Makefile.in 
+Added files:
+	liblvm         : .exported_symbols 
 
 Log message:
-	Fix liblvm version symlink.
+	Add missing liblvm/.exported_symbols
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/liblvm/Makefile.in	2009/03/08 17:29:26	1.3
-+++ LVM2/liblvm/Makefile.in	2009/03/08 18:10:39	1.4
-@@ -21,6 +21,7 @@
- 
- LIB_NAME = liblvm
- LIB_VERSION = $(LIB_VERSION_LVM)
-+VERSIONED_SHLIB = $(LIB_NAME).$(LIB_SUFFIX).$(LIB_VERSION_LVM)
- 
- LIB_STATIC = $(LIB_NAME).a
- LIB_SHARED = $(LIB_NAME).so
-@@ -31,11 +32,9 @@
- 
- LIBS += -ldevmapper -llvm-internal
- 
--$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION): $(interface)/%.$(LIB_SUFFIX)
-+$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION): %.$(LIB_SUFFIX)
- 	rm -f $@
- 	$(LN_S) $< $@
--	rm -f $(LIB_NAME).$(LIB_SUFFIX)
--	$(LN_S) $< $(LIB_NAME).$(LIB_SUFFIX)
- 
- liblvm.cflow: $(SOURCES)
- 	set -e; (echo -n "SOURCES += "; \
+/cvs/lvm2/LVM2/liblvm/.exported_symbols,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/.exported_symbols
++++ -	2009-03-08 18:58:53.679071000 +0000
+@@ -0,0 +1,3 @@
++lvm_create
++lvm_destroy
++lvm_reload_config
+\ No newline at end of file
 
 
