@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 19 Dec 2008 14:43:03 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvmcmdline.c
-Message-ID: <20081219144303.19227.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 10 Mar 2009 12:10:13 -0000
+Subject: LVM2/daemons/clvmd Makefile.in
+Message-ID: <20090310121013.11274.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,71 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2008-12-19 14:43:03
+Changes by:	mbroz at sourceware.org	2009-03-10 12:10:13
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : lvmcmdline.c 
+	daemons/clvmd  : Makefile.in 
 
 Log message:
-	Fix incorrect return value in help function.
+	Fix clvmd build after liblvm commit.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1010&r2=1.1011
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/Makefile.in.diff?cvsroot=lvm2&r1=1.28&r2=1.29
 
---- LVM2/WHATS_NEW	2008/12/19 14:22:48	1.1010
-+++ LVM2/WHATS_NEW	2008/12/19 14:43:02	1.1011
-@@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Fix incorrect return value in help function.
-   Fix vgrename using UUID in case there are VGs with the same name.
-   Fix segfault when invalid field given in reporting commands.
-   Refactor init_lvm() for lvmcmdline and clvmd.
---- LVM2/tools/lvmcmdline.c	2008/12/18 05:27:18	1.90
-+++ LVM2/tools/lvmcmdline.c	2008/12/19 14:43:02	1.91
-@@ -568,14 +568,17 @@
- 	log_error("Run `%s --help' for more information.", name);
- }
+--- LVM2/daemons/clvmd/Makefile.in	2009/02/25 22:41:13	1.28
++++ LVM2/daemons/clvmd/Makefile.in	2009/03/10 12:10:12	1.29
+@@ -84,7 +84,7 @@
+ TARGETS = \
+ 	clvmd
  
--static void _usage(const char *name)
-+static int _usage(const char *name)
- {
- 	struct command *com = _find_command(name);
+-LVMLIBS = -llvm -lpthread
++LVMLIBS = -llvm-internal -lpthread
  
--	if (!com)
--		return;
-+	if (!com) {
-+		log_print("%s: no such command.", name);
-+		return 0;
-+	}
+ ifeq ("@DMEVENTD@", "yes")
+ 	LVMLIBS += -ldevmapper-event
+@@ -100,7 +100,7 @@
+ INSTALL_TARGETS = \
+ 	install_clvmd
  
- 	log_print("%s: %s\n\n%s", com->name, com->desc, com->usage);
-+	return 1;
- }
+-clvmd: $(OBJECTS) $(top_srcdir)/lib/liblvm.a
++clvmd: $(OBJECTS) $(top_srcdir)/lib/liblvm-internal.a
+ 	$(CC) -o clvmd $(OBJECTS) $(CFLAGS) $(LDFLAGS) \
+ 		$(LVMLIBS) $(LMLIBS) $(LIBS)
  
- /*
-@@ -852,15 +855,18 @@
- 
- int help(struct cmd_context *cmd __attribute((unused)), int argc, char **argv)
- {
-+	int ret = ECMD_PROCESSED;
-+
- 	if (!argc)
- 		_display_help();
- 	else {
- 		int i;
- 		for (i = 0; i < argc; i++)
--			_usage(argv[i]);
-+			if (!_usage(argv[i]))
-+				ret = EINVALID_CMD_LINE;
- 	}
- 
--	return 0;
-+	return ret;
- }
- 
- static int _override_settings(struct cmd_context *cmd)
 
 
