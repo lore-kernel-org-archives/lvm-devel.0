@@ -1,165 +1,380 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 10 Mar 2009 18:41:00 +0100
-Subject: [PATCH 1/3] clvmd: fix remote metadata backup
-Message-ID: <49B6A62C.3080709@redhat.com>
+Date: Tue, 10 Mar 2009 18:41:18 +0100
+Subject: [PATCH 2/3] metadata backup: call backup() after vg_commit always
+Message-ID: <49B6A63E.1030404@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix remote metadata backup for clvmd
+Move metadata backup call after vg_commit.
 
-Currently the remote metadata backup doesn't work,
-because we added
-	if (clvmd_cmd == CLVMD_CMD_LOCK_VG &&
-	   ((flags & LCK_TYPE_MASK) == LCK_UNLOCK) &&
-           (flags & LCK_CLUSTER_VG)) {
-		... call the remote backup command
+The backup() call store metadata from memory.
 
-LCK_CLUSTER_VG is never set during LCK_UNLOCK,
-unlock_vg() takes only vgname as argument and cannot
-distinguish if vg is clustered, leaving flag unset
-(that flag is set only if locking LV).
+In cluster, backup() call performs remote node metadata
+backup, it reads data from disk.
 
-The idea is call remote backup from archiver directly,
-here from backup() call.
+We want to have all metadata backup consistent,
+so move all backup() calls after vg_commit.
 
-If called from clvmd, the new flag is set to perform
-only local_backup.
-
-Lock is now trigered by LCK_VG_BACKUP flag
-combination (I hope unused one:-).
+(Moreover, some tools already do that. The reason
+was probably that in old ode there were no vg_commit
+but only vg_write.)
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- daemons/clvmd/clvmd-command.c |    6 +++++-
- lib/format_text/archiver.c    |   13 +++++++++++--
- lib/locking/cluster_locking.c |   15 +++++++--------
- lib/locking/locking.h         |    3 +++
- 4 files changed, 26 insertions(+), 11 deletions(-)
+ lib/metadata/lv_manip.c |   11 ++++-------
+ lib/metadata/mirror.c   |   25 ++++++++++++++-----------
+ tools/lvchange.c        |   32 ++++++++++++--------------------
+ tools/lvconvert.c       |   12 ++++++------
+ tools/lvcreate.c        |   10 +++++-----
+ tools/lvresize.c        |    4 ++--
+ tools/pvmove.c          |    4 ++--
+ 7 files changed, 45 insertions(+), 53 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index 12bf935..dffff21 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -159,7 +159,11 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 		break;
- 
- 	case CLVMD_CMD_VG_BACKUP:
--		lvm_do_backup(&args[2]);
-+		/*
-+		 * Do not run backup on local node, caller should do that.
-+		 */
-+		if (!client)
-+			lvm_do_backup(&args[2]);
- 		break;
- 
- 	default:
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 0406ae5..a3efc3e 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -20,6 +20,7 @@
- #include "lvm-string.h"
- #include "lvmcache.h"
- #include "toolcontext.h"
-+#include "locking.h"
- 
- #include <unistd.h>
- 
-@@ -202,7 +203,7 @@ static int __backup(struct volume_group *vg)
- 	return backup_to_file(name, desc, vg);
- }
- 
--int backup(struct volume_group *vg)
-+static int _backup(struct volume_group *vg, int local_only)
- {
- 	if (!vg->cmd->backup_params->enabled || !vg->cmd->backup_params->dir) {
- 		log_warn("WARNING: This metadata update is NOT backed up");
-@@ -222,6 +223,9 @@ int backup(struct volume_group *vg)
- 	    (errno == EROFS))
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2661e0c..9974093 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1777,8 +1777,6 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (!vg_write(vg))
  		return 0;
  
-+	if (!local_only && vg_is_clustered(vg))
-+		remote_backup_metadata(vg);
-+
- 	if (!__backup(vg)) {
- 		log_error("Backup of volume group %s metadata failed.",
- 			  vg->name);
-@@ -231,6 +235,11 @@ int backup(struct volume_group *vg)
- 	return 1;
- }
- 
-+int backup(struct volume_group *vg)
-+{
-+	return _backup(vg, 0);
-+}
-+
- int backup_remove(struct cmd_context *cmd, const char *vg_name)
- {
- 	char path[PATH_MAX];
-@@ -412,5 +421,5 @@ void check_current_backup(struct volume_group *vg)
- 	if (vg_backup)
- 		archive(vg_backup);
- 	archive(vg);
 -	backup(vg);
-+	_backup(vg, 1);
- }
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 1d4d867..1f0e841 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -385,6 +385,13 @@ int lock_resource(struct cmd_context *cmd, const char *resource, uint32_t flags)
- 
- 	switch (flags & LCK_SCOPE_MASK) {
- 	case LCK_VG:
-+		if (flags == LCK_VG_BACKUP) {
-+			log_very_verbose("Requesting backup of VG metadata for %s",
-+					 resource);
-+			return _lock_for_cluster(CLVMD_CMD_VG_BACKUP,
-+						 LCK_CLUSTER_VG, resource);
-+		}
-+
- 		/* If the VG name is empty then lock the unused PVs */
- 		if (*resource == '#' || (flags & LCK_CACHE))
- 			dm_snprintf(lockname, sizeof(lockname), "P_%s",
-@@ -436,14 +443,6 @@ int lock_resource(struct cmd_context *cmd, const char *resource, uint32_t flags)
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		stack;
+ 		vg_revert(vg);
+@@ -1791,6 +1789,8 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
  		return 0;
  	}
  
--	/* If we are unlocking a clustered VG, then trigger remote metadata backups */
--	if (clvmd_cmd == CLVMD_CMD_LOCK_VG &&
--	    ((flags & LCK_TYPE_MASK) == LCK_UNLOCK) &&
--	    (flags & LCK_CLUSTER_VG)) {
--		log_very_verbose("Requesing backup of VG metadata for %s", resource);
--		_lock_for_cluster(CLVMD_CMD_VG_BACKUP, LCK_CLUSTER_VG, resource);
--	}
++	backup(vg);
++
+ 	resume_lv(cmd, lv);
+ 
+ 	return 1;
+@@ -2055,14 +2055,11 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	/* store it on disks */
+-	if (!vg_write(vg))
+-		return 0;
++	if (!vg_write(vg) || !vg_commit(vg))
++		return_0;
+ 
+ 	backup(vg);
+ 
+-	if (!vg_commit(vg))
+-		return 0;
 -
- 	log_very_verbose("Locking %s %s %s %s%s%s%s (0x%x)", lock_scope, lockname,
- 			 lock_type,
- 			 flags & LCK_NONBLOCK ? "" : "B",
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index a00d742..3844ed1 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -101,6 +101,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- #define LCK_VG_WRITE		(LCK_VG | LCK_WRITE | LCK_HOLD)
- #define LCK_VG_UNLOCK		(LCK_VG | LCK_UNLOCK)
- #define LCK_VG_DROP_CACHE	(LCK_VG | LCK_WRITE | LCK_CACHE)
-+#define LCK_VG_BACKUP		(LCK_VG | LCK_CACHE)
+ 	/* If no snapshots left, reload without -real. */
+ 	if (origin && !lv_is_origin(origin)) {
+ 		if (!suspend_lv(cmd, origin))
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index c7f16df..c0707b3 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -270,14 +270,11 @@ static int _init_mirror_log(struct cmd_context *cmd,
+ 		}
  
- #define LCK_LV_EXCLUSIVE	(LCK_LV | LCK_EXCL | LCK_NONBLOCK)
- #define LCK_LV_SUSPEND		(LCK_LV | LCK_WRITE | LCK_NONBLOCK)
-@@ -128,6 +129,8 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- 	lock_lv_vol(cmd, lv, LCK_LV_DEACTIVATE | LCK_LOCAL)
- #define drop_cached_metadata(vg)	\
- 	lock_vol((vg)->cmd, (vg)->name, LCK_VG_DROP_CACHE)
-+#define remote_backup_metadata(vg)	\
-+	lock_vol((vg)->cmd, (vg)->name, LCK_VG_BACKUP)
+ 	/* store mirror log on disk(s) */
+-	if (!vg_write(log_lv->vg))
++	if (!vg_write(log_lv->vg) || !vg_commit(log_lv->vg))
+ 		goto activate_lv;
  
- /* Process list of LVs */
- int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs);
+ 	backup(log_lv->vg);
+ 
+-	if (!vg_commit(log_lv->vg))
+-		goto activate_lv;
+-
+ 	if (!activate_lv(cmd, log_lv)) {
+ 		log_error("Aborting. Failed to activate mirror log.");
+ 		goto revert_new_lv;
+@@ -334,10 +331,12 @@ revert_new_lv:
+ 		return 0;
+ 	}
+ 
+-	if (!vg_write(log_lv->vg) ||
+-	    (backup(log_lv->vg), !vg_commit(log_lv->vg)))
++	if (!vg_write(log_lv->vg) || !vg_commit(log_lv->vg))
+ 		log_error("Manual intervention may be required to "
+ 			  "remove/restore abandoned log LV before retrying.");
++	else
++		backup(log_lv->vg);
++
+ activate_lv:
+ 	if (was_active && !remove_on_failure && !activate_lv(cmd, log_lv))
+ 		return_0;
+@@ -1497,11 +1496,15 @@ int add_mirror_images(struct cmd_context *cmd, struct logical_volume *lv,
+ 	return 1;
+ 
+   out_remove_log:
+-	if (log_lv && (!lv_remove(log_lv) || !vg_write(log_lv->vg) ||
+-		       (backup(log_lv->vg), !vg_commit(log_lv->vg))))
+-		log_error("Manual intervention may be required to remove "
+-			  "abandoned log LV before retrying.");
+-
++	if (log_lv) {
++		if (!lv_remove(log_lv) ||
++		    !vg_write(log_lv->vg) ||
++		    !vg_commit(log_lv->vg))
++			log_error("Manual intervention may be required to remove "
++				  "abandoned log LV before retrying.");
++		else
++			backup(log_lv->vg);
++	}
+   out_remove_imgs:
+ 	return 0;
+ }
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index cd0ff5a..cb258ea 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -56,8 +56,6 @@ static int lvchange_permission(struct cmd_context *cmd,
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+@@ -69,6 +67,8 @@ static int lvchange_permission(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	backup(lv->vg);
++
+ 	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+@@ -274,8 +274,6 @@ static int lvchange_resync(struct cmd_context *cmd,
+ 			return 0;
+ 		}
+ 
+-		backup(lv->vg);
+-
+ 		if (!vg_commit(lv->vg)) {
+ 			log_error("Failed to commit intermediate VG metadata.");
+ 			if (!attach_mirror_log(first_seg(lv), log_lv))
+@@ -285,6 +283,8 @@ static int lvchange_resync(struct cmd_context *cmd,
+ 			return 0;
+ 		}
+ 
++		backup(lv->vg);
++
+ 		if (!activate_lv(cmd, log_lv)) {
+ 			log_error("Unable to activate %s for mirror log resync",
+ 				  log_lv->name);
+@@ -349,15 +349,12 @@ static int lvchange_alloc(struct cmd_context *cmd, struct logical_volume *lv)
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+ 
+-	if (!vg_write(lv->vg))
++	/* No need to suspend LV for this change */
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
+ 	backup(lv->vg);
+ 
+-	/* No need to suspend LV for this change */
+-	if (!vg_commit(lv->vg))
+-		return_0;
+-
+ 	return 1;
+ }
+ 
+@@ -401,8 +398,6 @@ static int lvchange_readahead(struct cmd_context *cmd,
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+@@ -414,6 +409,8 @@ static int lvchange_readahead(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	backup(lv->vg);
++
+ 	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+@@ -477,14 +474,11 @@ static int lvchange_persistent(struct cmd_context *cmd,
+ 	}
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
+ 	backup(lv->vg);
+ 
+-	if (!vg_commit(lv->vg))
+-		return_0;
+-
+ 	if (active) {
+ 		log_verbose("Re-activating logical volume \"%s\"", lv->name);
+ 		if (!activate_lv(cmd, lv)) {
+@@ -527,15 +521,13 @@ static int lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
+-		return_0;
+-
+-	backup(lv->vg);
+ 
+ 	/* No need to suspend LV for this change */
+-	if (!vg_commit(lv->vg))
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
++	backup(lv->vg);
++
+ 	return 1;
+ }
+ 
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index cc9c5ca..9b95da4 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -281,8 +281,6 @@ static int _finish_lvconvert_mirror(struct cmd_context *cmd,
+ 	if (!vg_write(vg))
+ 		return_0;
+ 
+-	backup(vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(vg);
+@@ -294,6 +292,8 @@ static int _finish_lvconvert_mirror(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	backup(vg);
++
+ 	log_very_verbose("Updating \"%s\" in kernel", lv->name);
+ 
+ 	if (!resume_lv(cmd, lv)) {
+@@ -589,8 +589,6 @@ commit_changes:
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+@@ -602,6 +600,8 @@ commit_changes:
+ 		return 0;
+ 	}
+ 
++	backup(lv->vg);
++
+ 	log_very_verbose("Updating \"%s\" in kernel", lv->name);
+ 
+ 	if (!resume_lv(cmd, lv)) {
+@@ -664,8 +664,6 @@ static int lvconvert_snapshot(struct cmd_context *cmd,
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, org)) {
+ 		log_error("Failed to suspend origin %s", org->name);
+ 		vg_revert(lv->vg);
+@@ -675,6 +673,8 @@ static int lvconvert_snapshot(struct cmd_context *cmd,
+ 	if (!vg_commit(lv->vg))
+ 		return_0;
+ 
++	backup(lv->vg);
++
+ 	if (!resume_lv(cmd, org)) {
+ 		log_error("Problem reactivating origin %s", org->name);
+ 		return 0;
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 1f14eb1..bf68f97 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -786,14 +786,11 @@ static int _lvcreate(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
+ 
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg))
++	if (!vg_write(vg) || !vg_commit(vg))
+ 		return_0;
+ 
+ 	backup(vg);
+ 
+-	if (!vg_commit(vg))
+-		return_0;
+-
+ 	if (lp->snapshot) {
+ 		if (!activate_lv_excl(cmd, lv)) {
+ 			log_error("Aborting. Failed to activate snapshot "
+@@ -878,9 +875,12 @@ deactivate_and_revert_new_lv:
+ 
+ revert_new_lv:
+ 	/* FIXME Better to revert to backup of metadata? */
+-	if (!lv_remove(lv) || !vg_write(vg) || (backup(vg), !vg_commit(vg)))
++	if (!lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
+ 		log_error("Manual intervention may be required to remove "
+ 			  "abandoned LV(s) before retrying.");
++	else
++		backup(vg);
++
+ 	return 0;
+ }
+ 
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index b74978b..8871874 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -626,8 +626,6 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	backup(vg);
+-
+ 	/* If snapshot, must suspend all associated devices */
+ 	if (lv_is_cow(lv))
+ 		lock_lv = origin_from_cow(lv);
+@@ -646,6 +644,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 		return ECMD_FAILED;
+ 	}
+ 
++	backup(vg);
++
+ 	if (!resume_lv(cmd, lock_lv)) {
+ 		log_error("Problem reactivating %s", lp->lv_name);
+ 		return ECMD_FAILED;
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index 6fb439d..12b4ec3 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -287,8 +287,6 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
+ 		return 0;
+ 	}
+ 
+-	backup(vg);
+-
+ 	/* Suspend lvs_changed */
+ 	if (!suspend_lvs(cmd, lvs_changed))
+ 		return_0;
+@@ -312,6 +310,8 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
+ 		return 0;
+ 	}
+ 
++	backup(vg);
++
+ 	/* Activate the temporary mirror LV */
+ 	/* Only the first mirror segment gets activated as a mirror */
+ 	/* FIXME: Add option to use a log */
 
 
 
