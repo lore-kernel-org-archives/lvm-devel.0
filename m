@@ -1,45 +1,65 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sun, 15 Mar 2009 00:29:31 +0100
-Subject: [PATCH] fix max_lv & snapshots creation problem
-Message-ID: <49BC3DDB.7050508@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 16 Mar 2009 14:34:59 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c lib/m ...
+Message-ID: <20090316143459.32209.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix lv_count when manipulating with snapshots and max_lv is set.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-03-16 14:34:58
 
-Patch fixes these problems:
- - during the snapshot creation process, it needs create 2 LVs,
-   one is cow, second becomes snapshot.
-   If the code fails in vg_add_snapshot, lvcreate command will not remove
-   LV cow volume.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c snapshot_manip.c 
+	test           : t-lvcreate-usage.sh 
+	tools          : lvcreate.c vgck.c 
 
- - if max_lv is set and VG contains snapshot, it can happen that
-   during the activation lv_count is temporarily increased over the limit
-   and VG metadata are not properly processed
-   see https://bugzilla.redhat.com/show_bug.cgi?id=490298
+Log message:
+	Fix lv_count when manipulating with snapshots and max_lv is set.
+	
+	Patch fixes these problems:
+	- during the snapshot creation process, it needs create 2 LVs,
+	one is cow, second becomes snapshot.
+	If the code fails in vg_add_snapshot, code lvcreate will not remove
+	LV cow volume.
+	
+	- if max_lv is set and VG contains snapshot, it can happen that
+	during the activation lv_count is temporarily increased over the limit
+	and VG metadata are not properly processed
+	see https://bugzilla.redhat.com/show_bug.cgi?id=490298
+	
+	- vgcfgrestore alows restore with max_lv set to lower valuer that actual
+	LV count. This later leads to situation that max_lv is completely ignored.
+	
+	- vgck doesn't call vg_validate(). It should at least try:-)
+	
+	Signed-off-by: Milan Broz <mbroz@redhat.com>
 
- - vgcfgrestore allows restore with max_lv set to lower value that actual
-   LV count. This later leads to situation that max_lv is completely ignored.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1065&r2=1.1066
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.206&r2=1.207
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.179&r2=1.180
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgck.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
 
- - vgck doesn't call vg_validate(). It should at least try:-)
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/metadata/metadata.c       |    7 +++++++
- lib/metadata/snapshot_manip.c |   11 ++++++++---
- test/t-lvcreate-usage.sh      |    9 +++++++++
- tools/lvcreate.c              |    2 +-
- tools/vgck.c                  |    3 +++
- 5 files changed, 28 insertions(+), 4 deletions(-)
-
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 81a7fe2..7848d82 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1461,6 +1461,13 @@ int vg_validate(struct volume_group *vg)
+--- LVM2/WHATS_NEW	2009/03/09 15:42:10	1.1065
++++ LVM2/WHATS_NEW	2009/03/16 14:34:57	1.1066
+@@ -1,5 +1,7 @@
+ Version 2.02.46 - 
+ ================================
++  Fix maximal volume count check for snapshots if max_lv set for volume group.
++  Fix lvcreate to remove cow volume if the snapshot creation fails.
+   Fix error messages when PV uuid or pe_start reading fails.
+   Rename liblvm.a to liblvm-internal.a and build new application library.
+   Flush memory pool and fix locking in clvmd refresh and backup command.
+--- LVM2/lib/metadata/metadata.c	2009/02/25 23:29:06	1.206
++++ LVM2/lib/metadata/metadata.c	2009/03/16 14:34:58	1.207
+@@ -1461,6 +1461,13 @@
  		r = 0;
  	}
  
@@ -53,11 +73,9 @@ index 81a7fe2..7848d82 100644
  	return r;
  }
  
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 9531c92..d007fcd 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -76,6 +76,14 @@ int vg_add_snapshot(const char *name, struct logical_volume *origin,
+--- LVM2/lib/metadata/snapshot_manip.c	2008/12/04 15:54:27	1.33
++++ LVM2/lib/metadata/snapshot_manip.c	2009/03/16 14:34:58	1.34
+@@ -76,10 +76,18 @@
  		return 0;
  	}
  
@@ -65,28 +83,29 @@ index 9531c92..d007fcd 100644
 +	 * Set origin lv count in advance to prevent fail because
 +	 * of temporary violation of LV limits.
 +	 */
-+	origin->origin_count++;
-+	origin->vg->snapshot_count++;
 +	origin->vg->lv_count--;
 +
  	if (!(snap = lv_create_empty(name ? name : "snapshot%d",
  				     lvid, LVM_READ | LVM_WRITE | VISIBLE_LV,
- 				     ALLOC_INHERIT, 1, origin->vg)))
-@@ -91,9 +99,6 @@ int vg_add_snapshot(const char *name, struct logical_volume *origin,
- 	seg->cow = cow;
- 	seg->lv->status |= SNAPSHOT;
+-				     ALLOC_INHERIT, 1, origin->vg)))
++				     ALLOC_INHERIT, 1, origin->vg))) {
++		origin->vg->lv_count++;
+ 		return_0;
++	}
  
--	origin->origin_count++;
--	origin->vg->snapshot_count++;
+ 	snap->le_count = extent_count;
+ 
+@@ -93,7 +101,6 @@
+ 
+ 	origin->origin_count++;
+ 	origin->vg->snapshot_count++;
 -	origin->vg->lv_count--;
  	cow->snapshot = seg;
  
  	cow->status &= ~VISIBLE_LV;
-diff --git a/test/t-lvcreate-usage.sh b/test/t-lvcreate-usage.sh
-index 4e78e9e..13abbdf 100755
---- a/test/t-lvcreate-usage.sh
-+++ b/test/t-lvcreate-usage.sh
-@@ -58,3 +58,12 @@ not lvcreate -L 64M -n $lv -i2 --stripesize 3 $vg 2>err
+--- LVM2/test/t-lvcreate-usage.sh	2008/11/10 12:37:03	1.9
++++ LVM2/test/t-lvcreate-usage.sh	2009/03/16 14:34:58	1.10
+@@ -58,3 +58,12 @@
  grep "^  Invalid stripe size 3\.00 KB\$" err
  case $(lvdisplay $vg) in "") true ;; *) false ;; esac
  
@@ -99,11 +118,9 @@ index 4e78e9e..13abbdf 100755
 +vgs $vg
 +lvremove -ff $vg
 +vgchange -l 0 $vg
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 1f14eb1..e25ecdd 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -836,7 +836,7 @@ static int _lvcreate(struct cmd_context *cmd, struct volume_group *vg,
+--- LVM2/tools/lvcreate.c	2009/02/28 20:04:25	1.179
++++ LVM2/tools/lvcreate.c	2009/03/16 14:34:58	1.180
+@@ -836,7 +836,7 @@
  		if (!vg_add_snapshot(NULL, org, lv, NULL,
  				     org->le_count, lp->chunk_size)) {
  			log_error("Couldn't create snapshot.");
@@ -112,11 +129,9 @@ index 1f14eb1..e25ecdd 100644
  		}
  
  		/* store vg on disk(s) */
-diff --git a/tools/vgck.c b/tools/vgck.c
-index 1fb6c03..26eab99 100644
---- a/tools/vgck.c
-+++ b/tools/vgck.c
-@@ -33,6 +33,9 @@ static int vgck_single(struct cmd_context *cmd __attribute((unused)),
+--- LVM2/tools/vgck.c	2008/01/30 14:00:02	1.18
++++ LVM2/tools/vgck.c	2009/03/16 14:34:58	1.19
+@@ -33,6 +33,9 @@
  	if (!vg_check_status(vg, EXPORTED_VG))
  		return ECMD_FAILED;
  
@@ -126,6 +141,5 @@ index 1fb6c03..26eab99 100644
  	return ECMD_PROCESSED;
  }
  
-
 
 
