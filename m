@@ -1,73 +1,48 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 16 Mar 2009 18:28:05 -0000
-Subject: LVM2 ./Makefile.in scripts/Makefile.in test/Ma ...
-Message-ID: <20090316182805.9618.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 16 Mar 2009 19:56:40 +0100
+Subject: [PATCH] pvcreate: conditionally wipe swap signatures
+Message-ID: <87tz5tl2jb.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-03-16 18:28:05
+Hi,
 
-Modified files:
-	.              : Makefile.in 
-	scripts        : Makefile.in 
-	test           : Makefile.in 
+this should address https://bugzilla.redhat.com/show_bug.cgi?id=443062 -- the
+first patch implements the actual check, in the spirit of dev_is_md (it also
+gets a check in the testsuite). The code is based on swap signature detection
+in swapon implementation of util-linux-ng:
+http://git.kernel.org/?p=utils/util-linux-ng/util-linux-ng.git;a=blob_plain;f=mount/swapon.c
 
-Log message:
-	Fix some distclean rules.
-	
-	By gnu coding stds, 'distclean' should remove all files generated
-	by ./configure in addition to what 'clean' does.
-	
-	Author: Takahiro Yasui <tyasui@redhat.com>
+The latter patch just throws in some checks that the old code misses. They
+might as well be redundant (or not, depends on how you look at it). Personally,
+I am ambivalent -- advice about (non-)inclusion sought.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm-pvcreate-wipe-swap.diff
+Type: text/x-diff
+Size: 4790 bytes
+Desc: pvcreate-wipe-swap.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090316/8f5d0a79/attachment.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm-pvcreate-paranoia.diff
+Type: text/x-diff
+Size: 1662 bytes
+Desc: lvm-pvcreate-paranoia.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090316/8f5d0a79/attachment-0001.bin>
+-------------- next part --------------
 
---- LVM2/Makefile.in	2009/03/06 16:19:52	1.31
-+++ LVM2/Makefile.in	2009/03/16 18:28:04	1.32
-@@ -27,14 +27,16 @@
- ifeq ($(MAKECMDGOALS),distclean)
-   SUBDIRS += daemons/clvmd \
- 	     daemons/dmeventd/plugins \
-+	     daemons/dmeventd \
- 	     lib/format1 \
- 	     lib/format_pool \
- 	     lib/locking \
- 	     lib/mirror \
- 	     lib/snapshot \
-+	     test/api \
- 	     test \
- 	     po
--  DISTCLEAN_TARGETS += lib/misc/configure.h
-+  DISTCLEAN_TARGETS += lib/misc/configure.h lib/misc/lvm-version.h
-   DISTCLEAN_DIRS += lcov_reports*
- endif
- 
---- LVM2/scripts/Makefile.in	2008/11/01 02:19:18	1.4
-+++ LVM2/scripts/Makefile.in	2009/03/16 18:28:05	1.5
-@@ -24,3 +24,6 @@
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) fsadm.sh \
- 		$(sbindir)/fsadm
- endif
-+
-+distclean:
-+	$(RM) Makefile clvmd_init_red_hat
---- LVM2/test/Makefile.in	2009/02/12 19:54:45	1.16
-+++ LVM2/test/Makefile.in	2009/03/16 18:28:05	1.17
-@@ -81,6 +81,7 @@
- 	rm -rf init.sh lvm-wrapper bin .bin-dir-stamp
- 
- distclean: clean
-+	rm -f Makefile
- 
- .PHONY: $(T) clean distclean
- .NOTPARALLEL:
+Yours,
+   Petr.
 
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
