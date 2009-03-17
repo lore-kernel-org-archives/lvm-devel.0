@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 17 Mar 2009 14:01:02 -0000
-Subject: LVM2/tools pvcreate.c
-Message-ID: <20090317140102.27121.qmail@sourceware.org>
+Date: 17 Mar 2009 14:40:00 -0000
+Subject: LVM2/lib/device dev-swap.c
+Message-ID: <20090317144000.18125.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,108 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-03-17 14:01:01
+Changes by:	mornfall at sourceware.org	2009-03-17 14:40:00
 
-Modified files:
-	tools          : pvcreate.c 
+Added files:
+	lib/device     : dev-swap.c 
 
 Log message:
-	Some extra (paranoid) checks on dev_is_{md,swap} result.
+	Missed file from previous checkin.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-swap.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/tools/pvcreate.c	2009/03/17 13:59:57	1.79
-+++ LVM2/tools/pvcreate.c	2009/03/17 14:00:58	1.80
-@@ -46,6 +46,7 @@
- 	struct physical_volume *pv;
- 	struct device *dev;
- 	uint64_t md_superblock, swap_signature;
-+	int wipe_md, wipe_swap;
- 
- 	/* FIXME Check partition type is LVM unless --force is given */
- 
-@@ -117,7 +118,7 @@
- 	}
- 
- 	/* Wipe superblock? */
--	if (dev_is_md(dev, &md_superblock) &&
-+	if ((wipe_md = dev_is_md(dev, &md_superblock)) == 1 &&
- 	    ((!pp->idp && !pp->restorefile) || pp->yes ||
- 	     (yes_no_prompt("Software RAID md superblock "
- 			    "detected on %s. Wipe it? [y/n] ", name) == 'y'))) {
-@@ -129,7 +130,13 @@
- 		}
- 	}
- 
--	if (dev_is_swap(dev, &swap_signature) &&
-+	if (wipe_md == -1) {
-+		log_error("Fatal error while trying to detect software "
-+			  "RAID md superblock on %s", name);
-+		return 0;
+/cvs/lvm2/LVM2/lib/device/dev-swap.c,v  -->  standard output
+revision 1.1
+--- LVM2/lib/device/dev-swap.c
++++ -	2009-03-17 14:40:00.925930000 +0000
+@@ -0,0 +1,87 @@
++/*
++ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "metadata.h"
++#include "xlate.h"
++#include "filter.h"
++
++#ifdef linux
++
++#define MAX_PAGESIZE	(64 * 1024)
++#define SIGNATURE_SIZE  10
++
++static int
++_swap_detect_signature(const char *buf)
++{
++	if (memcmp(buf, "SWAP-SPACE", 10) == 0 ||
++            memcmp(buf, "SWAPSPACE2", 10) == 0)
++		return 1;
++
++	if (memcmp(buf, "S1SUSPEND", 9) == 0 ||
++	    memcmp(buf, "S2SUSPEND", 9) == 0 ||
++	    memcmp(buf, "ULSUSPEND", 9) == 0 ||
++	    memcmp(buf, "\xed\xc3\x02\xe9\x98\x56\xe5\x0c", 8) == 0)
++		return 1;
++
++	return 0;
++}
++
++int dev_is_swap(struct device *dev, uint64_t *signature)
++{
++	char buf[10];
++	uint64_t size;
++	int page;
++
++	if (!dev_get_size(dev, &size)) {
++		stack;
++		return -1;
 +	}
 +
-+	if ((wipe_swap = dev_is_swap(dev, &swap_signature)) == 1 &&
- 	    ((!pp->idp && !pp->restorefile) || pp->yes ||
- 	     (yes_no_prompt("Swap signature detected on %s. Wipe it? [y/n] ",
- 			    name) == 'y'))) {
-@@ -140,6 +147,12 @@
- 		}
- 	}
- 
-+	if (wipe_swap == -1) {
-+		log_error("Fatal error while trying to detect swap "
-+			  "signature on %s", name);
-+		return 0;
++	if (!dev_open(dev)) {
++		stack;
++		return -1;
 +	}
 +
- 	if (sigint_caught())
- 		return 0;
- 
++	*signature = 0;
++
++	for (page = 0x1000; page <= MAX_PAGESIZE; page <<= 1) {
++		/*
++		 * skip 32k pagesize since this does not seem to be supported
++		 */
++		if (page == 0x8000)
++			continue;
++		if (size < page)
++			break;
++		if (!dev_read(dev, page - SIGNATURE_SIZE,
++			      SIGNATURE_SIZE, buf)) {
++			stack;
++			return -1;
++		}
++		if (_swap_detect_signature(buf)) {
++			*signature = page - SIGNATURE_SIZE;
++			break;
++		}
++	}
++
++	if (!dev_close(dev))
++		stack;
++
++	if (*signature)
++		return 1;
++
++	return 0;
++}
++
++#endif
 
 
