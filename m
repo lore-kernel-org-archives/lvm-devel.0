@@ -1,66 +1,42 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 12 Dec 2008 15:00:06 +0100
-Subject: Re: LVM2 ./WHATS_NEW_DM libdm/libdm-deptree.c
-In-Reply-To: <1229088579.16499.7.camel@localhost.localdomain>
-References: <20081211162552.29826.qmail@sourceware.org>	
-	<1229013323.20795.3.camel@localhost.localdomain>	
-	<49422E5E.7030700@redhat.com>
-	<1229088579.16499.7.camel@localhost.localdomain>
-Message-ID: <49426E66.9020900@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 17 Mar 2009 13:24:29 +0100
+Subject: [PATCH] pvcreate: conditionally wipe swap signatures
+In-Reply-To: <87tz5tl2jb.fsf@eriador.mornfall.net>
+References: <87tz5tl2jb.fsf@eriador.mornfall.net>
+Message-ID: <49BF967D.9060702@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski napsal(a):
-> On Fri, 2008-12-12 at 10:26 +0100, Zdenek Kabelac wrote:
->> Dave Wysochanski napsal(a):
->>>> +/* simplify string emiting code */
->>>> +#define EMIT_PARAMS(p, str...)\
->>>> +	do {\
->>>> +		const size_t bufsize = paramsize - (size_t)p;\
->>>> +		int w;\
->>>> +		\
->>>> +		if ((w = snprintf(params + p, bufsize, str)) < 0\
->>>> +		    || ((size_t)w >= bufsize)) {\
->>>> +			stack; /* Out of space */\
->>>> +			return -1;\
->>>> +		}\
->>>> +		p += w;\
->>>> +	} while (0)
->>>> +
->>> Do we have to do a macro here?  Macros like this are harder to debug...
->>>
->>
->> I think it's actually minimizing the chance you will add a buggy code by some 
->> cut&paste operation when you add new string emitting line.
->>
->> Also it makes the code more readable.
->>
->> Do you think there is some potential debug problem in this code, that makes
->> worth to keep the original emitting style?
->>
->> (i.e. replicator emits string 11 times - without this macro it makes the code 
->> even less readable,  and also using inline function and 'stack' macro is not 
->> going to work together, so it's hard to use gdb-friendly inline here :( )
->>
+Petr Rockai wrote:
 > 
-> I agree something like this makes the code more readable - I was not
-> suggesting keeping the original code.  Was just wondering why you chose
-> the macro vs a regular function.  Is performance very critical here?
-> Something to do with using va_list?  Is there another reason for a macro
-> I'm missing?
+> this should address https://bugzilla.redhat.com/show_bug.cgi?id=443062 -- the
+> first patch implements the actual check, in the spirit of dev_is_md (it also
+> gets a check in the testsuite). The code is based on swap signature detection
+> in swapon implementation of util-linux-ng:
+> http://git.kernel.org/?p=utils/util-linux-ng/util-linux-ng.git;a=blob_plain;f=mount/swapon.c
+> 
+> The latter patch just throws in some checks that the old code misses. They
+> might as well be redundant (or not, depends on how you look at it). Personally,
+> I am ambivalent -- advice about (non-)inclusion sought.
+
+Reviewed-by: Milan Broz <mbroz@redhat.com>
+Tested-by: Milan Broz <mbroz@redhat.com>
+
+Milan
+--
+mbroz at redhat.com
 
 
-Inline function would not resolve the 'if (emit() < 0) { stack; return -1;}' 
-repeating part of the code. So with inline we would have actually saved only 
-'p += w;' line
+nit-picking mode:
 
-Eventually we could use macro 'IF_MEM_OK(emit())' to only hide 'stack; return' 
-and keep emit() as a static incline function, but then there is no big victory 
-against the current EMIT_PARAMS macro.
++int dev_is_swap(struct device *dev, uint64_t *signature)
++{
++	char buf[10];
 
-Zdenek
+why not char buf[SIGNATURE_SIZE]; ?
+
 
 
