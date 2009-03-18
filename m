@@ -1,117 +1,66 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 17 Mar 2009 14:40:00 -0000
-Subject: LVM2/lib/device dev-swap.c
-Message-ID: <20090317144000.18125.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 18 Mar 2009 12:18:15 -0400
+Subject: [PATCH] Add --config to lvm man page.
+Message-ID: <1237393095-4149-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-03-17 14:40:00
+NOTE: This option is useful in some cases, but in others it is misleading
+because it does not really work.  For example, you can try disabling writing
+the devices cache via --config 'devices { write_cache_sate = 0 }'.  However,
+this does not work since at the bottom of lvm_run_command(), we destroy
+the 'cft_override' config tree, and call refresh_toolcontext() again,
+resetting the cmd->dump_filter variable which is what we wanted to override.
+The writing of the devices cache takes place inside destroy_toolcontext(),
+which is called after lvm_run_command() completes.  At this point, the
+overridden value has been reset to whatever was in the lvm.conf file
+(see _init_filters() code).
 
-Added files:
-	lib/device     : dev-swap.c 
+Despite some limitations, I felt it was useful to document the option since
+we have been verbally telling people they could use this as a workaround
+for other issues.
 
-Log message:
-	Missed file from previous checkin.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ WHATS_NEW    |    1 +
+ man/lvm.8.in |    9 +++++++++
+ 2 files changed, 10 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-swap.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-
-/cvs/lvm2/LVM2/lib/device/dev-swap.c,v  -->  standard output
-revision 1.1
---- LVM2/lib/device/dev-swap.c
-+++ -	2009-03-17 14:40:00.925930000 +0000
-@@ -0,0 +1,87 @@
-+/*
-+ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+#include "lib.h"
-+#include "metadata.h"
-+#include "xlate.h"
-+#include "filter.h"
-+
-+#ifdef linux
-+
-+#define MAX_PAGESIZE	(64 * 1024)
-+#define SIGNATURE_SIZE  10
-+
-+static int
-+_swap_detect_signature(const char *buf)
-+{
-+	if (memcmp(buf, "SWAP-SPACE", 10) == 0 ||
-+            memcmp(buf, "SWAPSPACE2", 10) == 0)
-+		return 1;
-+
-+	if (memcmp(buf, "S1SUSPEND", 9) == 0 ||
-+	    memcmp(buf, "S2SUSPEND", 9) == 0 ||
-+	    memcmp(buf, "ULSUSPEND", 9) == 0 ||
-+	    memcmp(buf, "\xed\xc3\x02\xe9\x98\x56\xe5\x0c", 8) == 0)
-+		return 1;
-+
-+	return 0;
-+}
-+
-+int dev_is_swap(struct device *dev, uint64_t *signature)
-+{
-+	char buf[10];
-+	uint64_t size;
-+	int page;
-+
-+	if (!dev_get_size(dev, &size)) {
-+		stack;
-+		return -1;
-+	}
-+
-+	if (!dev_open(dev)) {
-+		stack;
-+		return -1;
-+	}
-+
-+	*signature = 0;
-+
-+	for (page = 0x1000; page <= MAX_PAGESIZE; page <<= 1) {
-+		/*
-+		 * skip 32k pagesize since this does not seem to be supported
-+		 */
-+		if (page == 0x8000)
-+			continue;
-+		if (size < page)
-+			break;
-+		if (!dev_read(dev, page - SIGNATURE_SIZE,
-+			      SIGNATURE_SIZE, buf)) {
-+			stack;
-+			return -1;
-+		}
-+		if (_swap_detect_signature(buf)) {
-+			*signature = page - SIGNATURE_SIZE;
-+			break;
-+		}
-+	}
-+
-+	if (!dev_close(dev))
-+		stack;
-+
-+	if (*signature)
-+		return 1;
-+
-+	return 0;
-+}
-+
-+#endif
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 20a87a2..f44ecb5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Add --config to lvm man page.
+   Detect and conditionally wipe swapspace signatures in pvcreate.
+   Fix maximal volume count check for snapshots if max_lv set for volume group.
+   Fix lvcreate to remove cow volume if the snapshot creation fails.
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 6bad5fc..eee9bcf 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -153,6 +153,15 @@ than repeated on individual manual pages.
+ Repeat from 1 to 3 times to increase the detail of messages 
+ sent to stdout and stderr.  Overrides config file setting.
+ .TP
++\fB--config\fP \(em Override configuration setting.
++Allows override of \fBlvm.conf\fP (5) config file settings
++for a single command.
++WARNING: Only use this if you know what you are doing!
++Useful in various situations such as using the devices filter
++to limit an lvm command to specific devices.  Example:
++.br
++lvm pvs --config \(aqdevices { filter = ["a/loop[01]/", "r/.*/"] }\(aq
++.TP
+ \fB-d | --debug\fP \(em Set debug level.
+ Repeat from 1 to 6 times to increase the detail of messages sent 
+ to the log file and/or syslog (if configured).
+-- 
+1.6.0.6
 
 
