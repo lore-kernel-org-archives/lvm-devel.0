@@ -1,7 +1,7 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Thu, 19 Mar 2009 11:40:11 -0400
-Subject: [PATCH] Fix error message in create_text_format
-Message-ID: <49C2675B.7080608@redhat.com>
+Date: Thu, 19 Mar 2009 11:52:21 -0400
+Subject: [PATCH] remove old backup file after renaming vg
+Message-ID: <49C26A35.105@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,9 +10,8 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-This patch fixes the error message in create_text_format
-function.
-
+This patch removes an old backup file after renaming vg
+by the vgrename command.
 
 Regards,
 ---
@@ -23,23 +22,20 @@ Hitachi Computer Products (America), Inc.
 
 Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
 ---
- lib/format_text/format-text.c |    4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/vgrename.c |    1 +
+ 1 file changed, 1 insertion(+)
 
-Index: LVM2.02.46-20090316/lib/format_text/format-text.c
+Index: LVM2.02.46-20090316/tools/vgrename.c
 ===================================================================
---- LVM2.02.46-20090316.orig/lib/format_text/format-text.c
-+++ LVM2.02.46-20090316/lib/format_text/format-text.c
-@@ -1996,8 +1996,8 @@ struct format_type *create_text_format(s
- 			}
+--- LVM2.02.46-20090316.orig/tools/vgrename.c
++++ LVM2.02.46-20090316/tools/vgrename.c
+@@ -149,6 +149,7 @@ static int vg_rename_path(struct cmd_con
+ /******* FIXME Rename any active LVs! *****/
  
- 			if (!_add_dir(cv->v.str, &mda_lists->dirs)) {
--				log_error("Failed to add %s to internal device "
--					  "cache", cv->v.str);
-+				log_error("Failed to add %s to text format "
-+					  "metadata directory list ", cv->v.str);
- 				goto err;
- 			}
- 		}
+ 	backup(vg);
++	backup_remove(cmd, vg_name_old);
+ 
+ 	unlock_vg(cmd, vg_name_new);
+ 	unlock_vg(cmd, vg_name_old);
 
 
