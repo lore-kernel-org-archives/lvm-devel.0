@@ -1,75 +1,194 @@
-From: Bryn M. Reeves <bmr@redhat.com>
-Date: Fri, 20 Mar 2009 17:37:20 +0000
-Subject: lvcreate -s - why specifying size for snapshot ?
-In-Reply-To: <37d33d830903201038v6ceba2cdxf37e3ee686025aee@mail.gmail.com>
-References: <37d33d830903200847w45cee0b1xc973299627dead2f@mail.gmail.com>	<49C3BFDF.1090900@redhat.com>	<BADBA4B7-ADF9-4150-9AB7-44D3EEF6CC67@redhat.com>	<37d33d830903200940t753c52few9ec36b3e75d68a6f@mail.gmail.com>	<49C3CD3D.3000002@redhat.com>
-	<37d33d830903201038v6ceba2cdxf37e3ee686025aee@mail.gmail.com>
-Message-ID: <49C3D450.8090001@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 20 Mar 2009 18:44:30 +0100
+Subject: [PATCH] fix following problems if max_lv is set
+Message-ID: <49C3D5FE.6090001@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
------BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA1
+Fix the last fix for max_lv....
 
-Sandeep K Sinha wrote:
-> On Fri, Mar 20, 2009 at 10:37 PM, Bryn M. Reeves <bmr@redhat.com> wrote:
-> Sandeep K Sinha wrote:
->>>> On Fri, Mar 20, 2009 at 9:48 PM, Jonathan Brassow <jbrassow@redhat.com> wrote:
->>>>> On Mar 20, 2009, at 11:10 AM, Bryn M. Reeves wrote:
->>>>>
->>>>>> -----BEGIN PGP SIGNED MESSAGE-----
->>>>>> Hash: SHA1
->>>>>>
->>>>>> Sandeep K Sinha wrote:
->>>>>>> Hi all,
->>>>>>> Disk
->>>>>>> After hunting for relevant documents and failing to find one.
->>>>>>> I would like to know if its not true that the size of the snapshot
->>>>>>> should be equal to the original volume?
->>>>>>> If so, then why do we accept size for a snapshot?
->>>>>>>
->>>>>>> Or Am I missing something somewhere else?
->>>>>>>
->>>>>> The size of the snapshot governs the amount of space set aside for
->>>>>> storing the changes to the origin volume. E.g. if you made a snapshot
->>>>>> and then completely overwrote the origin the snapshot would have to be
->>>>>> at least as big as the origin volume to hold the changes.
->>>>>>
->>>> Agreed to all the explainations, but then I would like to know why am
->>>> I able to succeed in creating a snapshot > original volume.
->>>> LVM should puke an error for it right.
-> Not at all - going back to the original example: suppose you created a
-> snapshot and then completely overwrite the origin volume *twice*. Now
-> the snapshot must be twice the size of the origin - one to hold the data
-> that was originally on the origin and one to hold the data from the
-> first overwrite.
-> 
-> 
->> I am getting slightly confused here,
->> do you mean to say that we keep incremental backup of the original LV
->> blocks in the snapshots.
+The vg->lv_count is now confusing:
+during the metadata parsing it counts all volumes, later
+it contains only user visible ones.
 
-No, ignore that. I was being dumb.
+Unfortunately change that is too risky, so for now use this workaround:
 
->> What jonathan said, that if you maintain several point in time
->> snapshot in the same cow device then that makes sense to me that
->> atleast we would be able to revert back to those point in time states.
+When checking for max_lv violation:
+	- ignore the check if adding snapshot (import = 1 is set)
+	(the check applies before when creating COW)
+	- on other places, check max_lv against actual count
+	of visible LVs (including snapshots)
 
-Right.
+Temporarily disable the vg_validate check, mirror conversion
+violates max LV # (during downconversion it removes mirror image
+flag and sets visible flag for all removed images, activates VG,
+and later removes these "orphan" LVs...)
 
-Cheers,
-Bryn.
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/metadata/lv_manip.c       |    2 +-
+ lib/metadata/metadata.c       |   20 +++++++++++++++++---
+ lib/metadata/metadata.h       |    2 ++
+ lib/metadata/snapshot_manip.c |    9 ++++-----
+ test/t-lvcreate-usage.sh      |    4 ++++
+ tools/vgchange.c              |    5 +++--
+ 6 files changed, 31 insertions(+), 11 deletions(-)
 
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.9 (GNU/Linux)
-Comment: Using GnuPG with Fedora - http://enigmail.mozdev.org
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2661e0c..687a88b 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1832,7 +1832,7 @@ struct logical_volume *lv_create_empty(const char *name,
+ 	struct logical_volume *lv;
+ 	char dname[NAME_LEN];
+ 
+-	if (vg->max_lv && (vg->max_lv == vg->lv_count)) {
++	if (!import && vg->max_lv && (vg->max_lv == visible_lvs_in_vg(vg))) {
+ 		log_error("Maximum number of logical volumes (%u) reached "
+ 			  "in volume group %s", vg->max_lv, vg->name);
+ 		return NULL;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 7848d82..c6991ab 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1124,6 +1124,18 @@ unsigned displayable_lvs_in_vg(const struct volume_group *vg)
+ 	return lv_count;
+ }
+ 
++unsigned visible_lvs_in_vg(const struct volume_group *vg)
++{
++	struct lv_list *lvl;
++	unsigned lv_count = 0;
++
++	dm_list_iterate_items(lvl, &vg->lvs)
++		if (lvl->lv->status & VISIBLE_LV)
++			lv_count++;
++
++	return lv_count;
++}
++
+ /*
+  * Determine whether two vgs are compatible for merging.
+  */
+@@ -1158,7 +1170,7 @@ int vgs_are_compatible(struct cmd_context *cmd __attribute((unused)),
+ 	}
+ 
+ 	if (vg_to->max_lv &&
+-	    (vg_to->max_lv < vg_to->lv_count + vg_from->lv_count)) {
++	    (vg_to->max_lv < visible_lvs_in_vg(vg_to) + visible_lvs_in_vg(vg_from))) {
+ 		log_error("Maximum number of logical volumes (%d) exceeded "
+ 			  " for \"%s\" and \"%s\"", vg_to->max_lv, vg_to->name,
+ 			  vg_from->name);
+@@ -1461,12 +1473,14 @@ int vg_validate(struct volume_group *vg)
+ 		r = 0;
+ 	}
+ 
+-	if (vg->max_lv && (vg->max_lv < vg->lv_count)) {
++	/* FIXME: mirror conversion violates this temporarily
++	if (vg->max_lv && (vg->max_lv < visible_lvs_in_vg(vg))) {
+ 		log_error("Internal error: Volume group %s contains %u volumes"
+ 			  " but the limit is set to %u.",
+-			  vg->name, vg->lv_count, vg->max_lv);
++			  vg->name, visible_lvs_in_vg(vg), vg->max_lv);
+ 		r = 0;
+ 	}
++	*/
+ 
+ 	return r;
+ }
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index fbcf82b..11e9fe7 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -339,8 +339,10 @@ struct lv_segment *get_only_segment_using_this_lv(struct logical_volume *lv);
+ 
+ /*
+  * Count LVs that are visible from user's perspective.
++ * FIXME: confusing, displayable doesn't count snapshots
+  */
+ unsigned displayable_lvs_in_vg(const struct volume_group *vg);
++unsigned visible_lvs_in_vg(const struct volume_group *vg);
+ 
+ /*
+  * For internal metadata caching.
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index 3955382..d4441db 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -77,15 +77,15 @@ int vg_add_snapshot(const char *name, struct logical_volume *origin,
+ 	}
+ 
+ 	/*
+-	 * Set origin lv count in advance to prevent fail because
++	 * Hide origin lv in advance to prevent fail because
+ 	 * of temporary violation of LV limits.
+ 	 */
+-	origin->vg->lv_count--;
++	cow->status &= ~VISIBLE_LV;
+ 
+ 	if (!(snap = lv_create_empty(name ? name : "snapshot%d",
+ 				     lvid, LVM_READ | LVM_WRITE | VISIBLE_LV,
+ 				     ALLOC_INHERIT, 1, origin->vg))) {
+-		origin->vg->lv_count++;
++		cow->status |= VISIBLE_LV;
+ 		return_0;
+ 	}
+ 
+@@ -99,12 +99,11 @@ int vg_add_snapshot(const char *name, struct logical_volume *origin,
+ 	seg->cow = cow;
+ 	seg->lv->status |= SNAPSHOT;
+ 
++	origin->vg->lv_count--;
+ 	origin->origin_count++;
+ 	origin->vg->snapshot_count++;
+ 	cow->snapshot = seg;
+ 
+-	cow->status &= ~VISIBLE_LV;
+-
+ 	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
+ 
+ 	return 1;
+diff --git a/test/t-lvcreate-usage.sh b/test/t-lvcreate-usage.sh
+index 13abbdf..cd3e3c7 100755
+--- a/test/t-lvcreate-usage.sh
++++ b/test/t-lvcreate-usage.sh
+@@ -65,5 +65,9 @@ lvcreate -l1 -s -n $lv2 $vg/$lv1
+ lvcreate -l1 -n $lv3 $vg
+ not lvcreate -l1 -n $lv4 $vg
+ vgs $vg
++lvremove -ff $vg/$lv3
++lvcreate -l1 -s -n $lv3 $vg/$lv1
++not lvcreate -l1 -s -n $lv4 $vg/$lv1
++# FIXME add mirror & lvconvert tests
+ lvremove -ff $vg
+ vgchange -l 0 $vg
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 8831a23..27335c6 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -14,6 +14,7 @@
+  */
+ 
+ #include "tools.h"
++#include "metadata.h"
+ 
+ static int _monitor_lvs_in_vg(struct cmd_context *cmd,
+ 			       struct volume_group *vg, int reg)
+@@ -308,9 +309,9 @@ static int _vgchange_logicalvolume(struct cmd_context *cmd,
+ 		}
+ 	}
+ 
+-	if (max_lv && max_lv < vg->lv_count) {
++	if (max_lv && max_lv < visible_lvs_in_vg(vg)) {
+ 		log_error("MaxLogicalVolume is less than the current number "
+-			  "%d of LVs for \"%s\"", vg->lv_count,
++			  "%d of LVs for \"%s\"", visible_lvs_in_vg(vg),
+ 			  vg->name);
+ 		return ECMD_FAILED;
+ 	}
 
-iEYEARECAAYFAknD1FAACgkQ6YSQoMYUY97migCgv18SSfqZ4fnF9Y6YmglwOfC5
-8xYAoLkowBhDEHa16NrZhsCBJw/QZWfD
-=iqC5
------END PGP SIGNATURE-----
 
 
