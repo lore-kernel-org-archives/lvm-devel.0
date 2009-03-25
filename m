@@ -1,44 +1,81 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 25 Mar 2009 15:30:30 +0100
-Subject: [PATCH] lvconvert --repair
-In-Reply-To: <87skmkc7q5.fsf@eriador.mornfall.net>
-References: <87skn1p0jo.fsf@eriador.mornfall.net>	<498B2A94.7050105@redhat.com>
-	<877i3y9od8.fsf@eriador.mornfall.net>
-	<87skmkc7q5.fsf@eriador.mornfall.net>
-Message-ID: <49CA4006.2010804@redhat.com>
+Date: Wed, 25 Mar 2009 18:07:22 +0100
+Subject: [PATCH] fix dm debug pool issues
+Message-ID: <49CA64CA.6010708@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr Rockai wrote:
+fix some issues when compiling with -D DEBUG_POOL 
 
-> The manpage update is still missing, but all the rest should be addressed in
-> the attached patch. (I will chop it up for commit, just sending in all the bits
-> together). I'll trow the manpage together later (this should not interfere with
-> review or acceptance, I hope).
-please try this test - it tries to allocate new log - not sure if it is what we want,
-but lvconvert fails but log lv is later visible, vg is still inconsistent
-and I am confused what the correct state should be:-)
+- fix compilation issues
 
-Milan
+- fix wrong pool object maipulation (lvm dumpconfig triggers assert)
 
-diff --git a/test/t-lvconvert-repair.sh b/test/t-lvconvert-repair.sh
-index 2b72495..98a5ede 100644
---- a/test/t-lvconvert-repair.sh
-+++ b/test/t-lvconvert-repair.sh
-@@ -37,3 +37,10 @@ disable_dev $dev3
- lvconvert --repair $vg/mirror
- vgreduce --removemissing $vg
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+
+diff --git a/lib/config/config.c b/lib/config/config.c
+index c80f18e..224f2ce 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -457,9 +457,9 @@ static int _write_config(struct config_node *n, int only_one,
+ 			line_append(" {");
+ 			if (!_line_end(outline))
+ 				return_0;
++			_write_config(n->child, 0, outline, level + 1);
+ 			if (!_line_start(outline))
+ 				return_0;
+-			_write_config(n->child, 0, outline, level + 1);
+ 			line_append("%s}", space);
+ 		} else {
+ 			/* it's a value */
+diff --git a/libdm/mm/pool-debug.c b/libdm/mm/pool-debug.c
+index b656cc2..911f8e2 100644
+--- a/libdm/mm/pool-debug.c
++++ b/libdm/mm/pool-debug.c
+@@ -14,6 +14,7 @@
+  */
  
-+enable_dev $dev3
-+vgextend $vg $dev3
-+lvcreate -m 2 -l 1 -n mirror2 $vg $dev1 $dev2 $dev3 $dev4
-+vgchange -a n $vg
-+pvremove -ff -y $dev4
-+not echo 'y' | lvconvert --repair $vg/mirror2
-+vgs
+ #include "dmlib.h"
++#include <assert.h>
+ 
+ struct block {
+ 	struct block *next;
+@@ -43,7 +44,7 @@ struct dm_pool {
+ /* by default things come out aligned for doubles */
+ #define DEFAULT_ALIGNMENT __alignof__ (double)
+ 
+-struct pool *dm_pool_create(const char *name, size_t chunk_hint)
++struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
+ {
+ 	struct dm_pool *mem = dm_malloc(sizeof(*mem));
+ 
+@@ -130,8 +131,6 @@ static void _append_block(struct dm_pool *p, struct block *b)
+ 
+ static struct block *_new_block(size_t s, unsigned alignment)
+ {
+-	static const char *_oom = "Out of memory";
+-
+ 	/* FIXME: I'm currently ignoring the alignment arg. */
+ 	size_t len = sizeof(struct block) + s;
+ 	struct block *b = dm_malloc(len);
+@@ -144,12 +143,12 @@ static struct block *_new_block(size_t s, unsigned alignment)
+ 	assert(alignment == DEFAULT_ALIGNMENT);
+ 
+ 	if (!b) {
+-		log_err(_oom);
++		log_err("Out of memory");
+ 		return NULL;
+ 	}
+ 
+ 	if (!(b->data = dm_malloc(s))) {
+-		log_err(_oom);
++		log_err("Out of memory");
+ 		dm_free(b);
+ 		return NULL;
+ 	}
 
 
 
