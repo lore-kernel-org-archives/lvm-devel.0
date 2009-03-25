@@ -1,34 +1,25 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 22 Dec 2008 09:04:35 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20081222090435.3786.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 25 Mar 2009 18:09:13 +0000
+Subject: [PATCH] fix dm debug pool issues
+In-Reply-To: <49CA6FB2.4090504@redhat.com>
+References: <49CA64CA.6010708@redhat.com>
+	<20090325173303.GL13664@agk.fab.redhat.com>
+	<49CA6FB2.4090504@redhat.com>
+Message-ID: <20090325180913.GM13664@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2008-12-22 09:04:35
+On Wed, Mar 25, 2009 at 06:53:54PM +0100, Milan Broz wrote:
+> and next obvious problem with pool data caught by pool debug:
+> - second iteration in loop operates on non-existing object here
+ 
+Ack.
 
-Modified files:
-	.              : WHATS_NEW 
-
-Log message:
-	Add "--refresh" functionality to vgchange and vgmknodes.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1014&r2=1.1015
-
---- LVM2/WHATS_NEW	2008/12/19 15:26:01	1.1014
-+++ LVM2/WHATS_NEW	2008/12/22 09:04:35	1.1015
-@@ -1,5 +1,6 @@
- Version 2.02.44 - 
- ====================================
-+  Add "--refresh" functionality to vgchange and vgmknodes.
-   Check for maximal LV size when wiping device.
-   Calculate mirror log size instead of using 1 extent.
-   Check if requested major/minor pair is already used.
+Alasdair
+-- 
+agk at redhat.com
 
 
