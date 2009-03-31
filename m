@@ -1,42 +1,43 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 30 Mar 2009 17:14:32 +0200
-Subject: [PATCH] lvconvert --repair
-In-Reply-To: <49CA4006.2010804@redhat.com> (Milan Broz's message of "Wed, 25
-	Mar 2009 15:30:30 +0100")
-References: <87skn1p0jo.fsf@eriador.mornfall.net>
-	<498B2A94.7050105@redhat.com> <877i3y9od8.fsf@eriador.mornfall.net>
-	<87skmkc7q5.fsf@eriador.mornfall.net> <49CA4006.2010804@redhat.com>
-Message-ID: <8763hrf3fr.fsf@eriador.mornfall.net>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 31 Mar 2009 17:30:48 -0000
+Subject: LVM2/test t-mdata-strings.sh
+Message-ID: <20090331173048.16060.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
-> please try this test - it tries to allocate new log - not sure if it is what we want,
-> but lvconvert fails but log lv is later visible, vg is still inconsistent
-> and I am confused what the correct state should be:-)
-The problem was that the code neglected to write out the consistent volume
-before trying to add new bits (which could obviously fail). The attached
-version of the patch fixes that (it also contains your test now).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-03-31 17:30:47
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvconvert-repair.diff
-Type: text/x-diff
-Size: 19931 bytes
-Desc: lvconvert-repair.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090330/04afeba8/attachment.bin>
--------------- next part --------------
+Modified files:
+	test           : t-mdata-strings.sh 
 
-Yours,
-   Petr.
+Log message:
+	Add some more special chars for device name test.
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mdata-strings.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+--- LVM2/test/t-mdata-strings.sh	2008/09/30 17:47:34	1.3
++++ LVM2/test/t-mdata-strings.sh	2009/03/31 17:30:47	1.4
+@@ -15,12 +15,12 @@
+ 
+ aux prepare_devs 1
+ 
+-pv_suffix="__\"!@#\$%^&*()'\\\"__"
++pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
+ 
+ # 'set up temp files, loopback devices' 
+ name=$(basename "$dev1")
+-dmsetup rename "$name" "$name$pv_suffix" 
+-dev1=$(dirname "$dev1")/$name$pv_suffix
++dmsetup rename "$name" "$PREFIX$pv_ugly" 
++dev1=$(dirname "$dev1")/$PREFIX$pv_ugly
+ 
+ # 'pvcreate, vgcreate on filename with backslashed chars' 
+ pvcreate "$dev1" 
+
+
