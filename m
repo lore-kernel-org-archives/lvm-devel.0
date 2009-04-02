@@ -1,299 +1,277 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Thu, 02 Apr 2009 13:19:22 -0400
-Subject: [RFC PATCH 3/7] separate metadata parse and verification
+Date: Thu, 02 Apr 2009 13:19:25 -0400
+Subject: [RFC PATCH 4/7] support metadata cache feature
 In-Reply-To: <49D3D9F5.902@redhat.com>
 References: <49D3D9F5.902@redhat.com>
-Message-ID: <49D4F39A.6040302@redhat.com>
+Message-ID: <49D4F39D.80409@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch separates parse and verification process in _reav_pv function.
-Instead of getting device data by accessing and checking devices, the
-DEV_NEED_VERIFY flag is set to the device structures so that they will
-be verified later.
+Metadata cache files are read from the specified directory, and their
+information are registered into lvmcache. The CACHE_INVALID flag is
+set to the caches so that they will be reloaded from actual devices
+when they are really processed.
+
+This prototype uses metadata backup files in the backup directory as
+cache files. But the own cache directory will be used in the future
+version.
 
 
 Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
 ---
- lib/cache/lvmcache.c          |    5 +++--
- lib/device/dev-cache.c        |   12 ++++++++++++
- lib/device/dev-cache.h        |    1 +
- lib/device/device.h           |    2 ++
- lib/format_text/format-text.c |   37 ++++++++++++++++++++++++++++++++-----
- lib/format_text/format-text.h |    2 ++
- lib/format_text/import_vsn1.c |   40 ++++++++++++++++++++++++++++------------
- lib/label/label.c             |    9 +++++++++
- 8 files changed, 89 insertions(+), 19 deletions(-)
+ lib/cache/lvmcache.c          |    5 +++
+ lib/cache/lvmcache.h          |    2 +
+ lib/commands/toolcontext.c    |    1 
+ lib/commands/toolcontext.h    |    3 ++
+ lib/format_text/archiver.c    |   50 +++++++++++++++++++++++++++++++++
+ lib/format_text/archiver.h    |    5 +++
+ lib/format_text/format-text.c |   63 ++++++++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata.h       |    5 +++
+ 8 files changed, 134 insertions(+)
 
 Index: LVM2.02.46-cvs-20090324/lib/cache/lvmcache.c
 ===================================================================
 --- LVM2.02.46-cvs-20090324.orig/lib/cache/lvmcache.c
 +++ LVM2.02.46-cvs-20090324/lib/cache/lvmcache.c
-@@ -525,6 +525,8 @@ struct volume_group *lvmcache_get_vg(con
- 		return_NULL;
- 	}
- 
-+	verify_pv_status(fid, vg);
-+
- 	log_debug("Using cached %smetadata for VG %s.",
- 		  vginfo->precommitted ? "pre-committed" : "", vginfo->vgname);
- 
-@@ -705,7 +707,6 @@ static int _drop_vginfo(struct lvmcache_
- 	return 1;
- }
- 
--/* Unused
- void lvmcache_del(struct lvmcache_info *info)
- {
- 	if (info->dev->pvid[0] && _pvid_hash)
-@@ -718,7 +719,7 @@ void lvmcache_del(struct lvmcache_info *
- 	dm_free(info);
- 
- 	return;
--} */
-+}
- 
- static int _lvmcache_update_pvid(struct lvmcache_info *info, const char *pvid)
- {
-Index: LVM2.02.46-cvs-20090324/lib/device/dev-cache.c
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/device/dev-cache.c
-+++ LVM2.02.46-cvs-20090324/lib/device/dev-cache.c
-@@ -779,3 +779,15 @@ const char *dev_name(const struct device
- 	return (dev) ? dm_list_item(dev->aliases.n, struct str_list)->str :
- 	    "unknown device";
+@@ -1274,3 +1274,8 @@ void lvmcache_destroy(struct cmd_context
+ 	if (retain_orphans)
+ 		init_lvmcache_orphans(cmd);
  }
 +
-+int dev_is_valid(struct device *dev, struct dev_filter *f)
++void lvmcache_reset_need_scan(void)
 +{
-+	if (dev->flags & DEV_NEED_VERIFY) {
-+		dev->flags &= ~DEV_NEED_VERIFY;
++	_need_scan = 0;
++}
+Index: LVM2.02.46-cvs-20090324/lib/cache/lvmcache.h
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/cache/lvmcache.h
++++ LVM2.02.46-cvs-20090324/lib/cache/lvmcache.h
+@@ -112,4 +112,6 @@ struct dm_list *lvmcache_get_pvids(struc
+ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted);
+ void lvmcache_drop_metadata(const char *vgname);
+ 
++void lvmcache_reset_need_scan(void);
 +
-+		if (!f->passes_filter(f, dev))
-+			return 0;
+ #endif
+Index: LVM2.02.46-cvs-20090324/lib/commands/toolcontext.c
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/commands/toolcontext.c
++++ LVM2.02.46-cvs-20090324/lib/commands/toolcontext.c
+@@ -776,6 +776,7 @@ static int _init_formats(struct cmd_cont
+ 	dm_list_add(&cmd->formats, &fmt->list);
+ 
+ 	cmd->fmt_backup = fmt;
++	cmd->fmt_mcache = fmt;
+ 
+ 	format = find_config_tree_str(cmd, "global/format",
+ 				 DEFAULT_FORMAT);
+Index: LVM2.02.46-cvs-20090324/lib/commands/toolcontext.h
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/commands/toolcontext.h
++++ LVM2.02.46-cvs-20090324/lib/commands/toolcontext.h
+@@ -33,6 +33,7 @@ struct config_info {
+ 	int suffix;
+ 	int archive;		/* should we archive ? */
+ 	int backup;		/* should we backup ? */
++	int mcache;		/* should we enable metadata cache ? */
+ 	int read_ahead;		/* DM_READ_AHEAD_NONE or _AUTO */
+ 	int cache_vgmetadata;
+ 	const char *msg_prefix;
+@@ -56,6 +57,7 @@ struct cmd_context {
+ 
+ 	const struct format_type *fmt;	/* Current format to use by default */
+ 	struct format_type *fmt_backup;	/* Format to use for backups */
++	struct format_type *fmt_mcache;	/* Format to use for metadata cache */
+ 
+ 	struct dm_list formats;	/* Available formats */
+ 	struct dm_list segtypes;	/* Available segment types */
+@@ -82,6 +84,7 @@ struct cmd_context {
+ 
+ 	struct archive_params *archive_params;
+ 	struct backup_params *backup_params;
++	struct mcache_params *mcache_params;
+ 	const char *stripe_filler;
+ 
+ 	/* List of defined tags */
+Index: LVM2.02.46-cvs-20090324/lib/format_text/archiver.c
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/format_text/archiver.c
++++ LVM2.02.46-cvs-20090324/lib/format_text/archiver.c
+@@ -35,6 +35,11 @@ struct backup_params {
+ 	char *dir;
+ };
+ 
++struct mcache_params {
++	int enabled;
++	char *dir;
++};
++
+ int archive_init(struct cmd_context *cmd, const char *dir,
+ 		 unsigned int keep_days, unsigned int keep_min,
+ 		 int enabled)
+@@ -423,3 +428,48 @@ void check_current_backup(struct volume_
+ 	archive(vg);
+ 	backup(vg);
+ }
++
++int mcache_init(struct cmd_context *cmd, const char *dir,
++		int enabled)
++{
++	if (!(cmd->mcache_params = dm_pool_zalloc(cmd->libmem,
++					       sizeof(*cmd->mcache_params)))) {
++		log_error("mcache_params alloc failed");
++		return 0;
 +	}
++
++	cmd->mcache_params->dir = NULL;
++	if (!*dir)
++		return 1;
++
++	if (!(cmd->mcache_params->dir = dm_strdup(dir))) {
++		log_error("Couldn't copy mcache directory name.");
++		return 0;
++	}
++	mcache_enable(cmd, enabled);
 +
 +	return 1;
 +}
-Index: LVM2.02.46-cvs-20090324/lib/device/dev-cache.h
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/device/dev-cache.h
-+++ LVM2.02.46-cvs-20090324/lib/device/dev-cache.h
-@@ -51,5 +51,6 @@ struct dev_iter;
- struct dev_iter *dev_iter_create(struct dev_filter *f, int dev_scan);
- void dev_iter_destroy(struct dev_iter *iter);
- struct device *dev_iter_get(struct dev_iter *iter);
-+int dev_is_valid(struct device *dev, struct dev_filter *f);
- 
- #endif
-Index: LVM2.02.46-cvs-20090324/lib/device/device.h
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/device/device.h
-+++ LVM2.02.46-cvs-20090324/lib/device/device.h
-@@ -28,6 +28,8 @@
- #define DEV_O_DIRECT		0x00000020	/* Use O_DIRECT */
- #define DEV_O_DIRECT_TESTED	0x00000040	/* DEV_O_DIRECT is reliable */
- 
-+#define DEV_NEED_VERIFY		0x10000000	/* Should be verified */
 +
- /*
-  * All devices in LVM will be represented by one of these.
-  * pointer comparisons are valid.
++void mcache_exit(struct cmd_context *cmd)
++{
++	if (cmd->mcache_params->dir)
++		dm_free(cmd->mcache_params->dir);
++	memset(cmd->mcache_params, 0, sizeof(*cmd->mcache_params));
++}
++
++void mcache_enable(struct cmd_context *cmd, int flag)
++{
++	cmd->mcache_params->enabled = flag;
++}
++
++void mcache_load(struct cmd_context *cmd)
++{
++	if (!cmd->mcache_params->enabled || !cmd->mcache_params->dir)
++		return;
++
++	if (cmd->fmt_mcache->ops->scan_mcache &&
++	    cmd->fmt_mcache->ops->scan_mcache(cmd->fmt,
++					      cmd->mcache_params->dir))
++		lvmcache_reset_need_scan();
++}
+Index: LVM2.02.46-cvs-20090324/lib/format_text/archiver.h
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/format_text/archiver.h
++++ LVM2.02.46-cvs-20090324/lib/format_text/archiver.h
+@@ -59,4 +59,9 @@ int backup_to_file(const char *file, con
+ 
+ void check_current_backup(struct volume_group *vg);
+ 
++int mcache_init(struct cmd_context *cmd, const char *dir, int enabled);
++void mcache_exit(struct cmd_context *cmd);
++void mcache_enable(struct cmd_context *cmd, int flag);
++void mcache_load(struct cmd_context *cmd);
++
+ #endif
 Index: LVM2.02.46-cvs-20090324/lib/format_text/format-text.c
 ===================================================================
 --- LVM2.02.46-cvs-20090324.orig/lib/format_text/format-text.c
 +++ LVM2.02.46-cvs-20090324/lib/format_text/format-text.c
-@@ -439,6 +439,27 @@ static int _raw_holds_vgname(struct form
- 	return r;
- }
- 
-+void verify_pv_status(struct format_instance *fid, struct volume_group *vg)
-+{
-+	struct pv_list *pvl;
-+	char buffer[64] __attribute((aligned(8)));
-+
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		if (!dev_is_valid(pvl->pv->dev, vg->cmd->filter) ||
-+		    !(pvl->pv->dev = device_from_pvid(fid->fmt->cmd,
-+						      &pvl->pv->id))) {
-+			if (!id_write_format(&pvl->pv->id, buffer,
-+					     sizeof(buffer)))
-+				log_error("Couldn't find device.");
-+			else
-+				log_error("Couldn't find device with uuid"
-+					  " '%s'.", buffer);
-+
-+			pvl->pv->status |= MISSING_PV;
-+		}
-+	}
-+}
-+
- static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 					      const char *vgname,
- 					      struct device_area *area,
-@@ -487,6 +508,8 @@ static struct volume_group *_vg_read_raw
- 	if (precommitted)
- 		vg->status |= PRECOMMITTED;
- 
-+	verify_pv_status(fid, vg);
-+
-       out:
- 	if (!dev_close(area->dev))
- 		stack;
-@@ -783,7 +806,8 @@ static int _vg_remove_raw(struct format_
- 
- static struct volume_group *_vg_read_file_name(struct format_instance *fid,
- 					       const char *vgname,
--					       const char *read_path)
-+					       const char *read_path,
-+					       int verify_pv)
- {
- 	struct volume_group *vg;
- 	time_t when;
-@@ -805,6 +829,9 @@ static struct volume_group *_vg_read_fil
- 	} else
- 		log_debug("Read volume group %s from %s", vg->name, read_path);
- 
-+	if (verify_pv)
-+		verify_pv_status(fid, vg);
-+
- 	return vg;
- }
- 
-@@ -814,7 +841,7 @@ static struct volume_group *_vg_read_fil
- {
- 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
- 
--	return _vg_read_file_name(fid, vgname, tc->path_live);
-+	return _vg_read_file_name(fid, vgname, tc->path_live, 1);
- }
- 
- static struct volume_group *_vg_read_precommit_file(struct format_instance *fid,
-@@ -824,10 +851,10 @@ static struct volume_group *_vg_read_pre
- 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
- 	struct volume_group *vg;
- 
--	if ((vg = _vg_read_file_name(fid, vgname, tc->path_edit)))
-+	if ((vg = _vg_read_file_name(fid, vgname, tc->path_edit, 1)))
- 		vg->status |= PRECOMMITTED;
- 	else
--		vg = _vg_read_file_name(fid, vgname, tc->path_live);
-+		vg = _vg_read_file_name(fid, vgname, tc->path_live, 1);
- 
- 	return vg;
- }
-@@ -1023,7 +1050,7 @@ static int _scan_file(const struct forma
- 				fid = _text_create_text_instance(fmt, NULL, NULL,
- 							    NULL);
- 				if ((vg = _vg_read_file_name(fid, vgname,
--							     path)))
-+							     path, 1)))
- 					/* FIXME Store creation host in vg */
- 					lvmcache_update_vg(vg, 0);
- 			}
-Index: LVM2.02.46-cvs-20090324/lib/format_text/format-text.h
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/format_text/format-text.h
-+++ LVM2.02.46-cvs-20090324/lib/format_text/format-text.h
-@@ -47,6 +47,8 @@ struct format_type *create_text_format(s
- void *create_text_context(struct cmd_context *cmd, const char *path,
- 			  const char *desc);
- 
-+void verify_pv_status(struct format_instance *fid, struct volume_group *vg);
-+
- struct labeller *text_labeller_create(const struct format_type *fmt);
- 
- int pvhdr_read(struct device *dev, char *buf);
-Index: LVM2.02.46-cvs-20090324/lib/format_text/import_vsn1.c
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/format_text/import_vsn1.c
-+++ LVM2.02.46-cvs-20090324/lib/format_text/import_vsn1.c
-@@ -150,6 +150,32 @@ static int _read_flag_config(struct conf
+@@ -1062,6 +1062,68 @@ static int _scan_file(const struct forma
  	return 1;
  }
  
-+static int _read_device(struct cmd_context *cmd, struct device **dev,
-+			struct config_node *cn,	const char *path)
++static int _text_scan_mcache(const struct format_type *fmt, const char *dir)
 +{
-+	struct config_value *cv;
++	struct dirent *dirent;
++	char *tmp;
++	DIR *d;
++	struct volume_group *vg;
++	struct format_instance *fid;
++	char path[PATH_MAX];
++	char *vgname;
++	int ret = 1;
 +
-+	if (!(cn = find_config_node(cn, path))) {
-+		log_error("Couldn't find device.");
++	if (!(d = opendir(dir))) {
++		log_sys_error("opendir", dir);
 +		return 0;
 +	}
 +
-+	cv = cn->v;
-+	if (!cv || cv->type != CFG_STRING || !cv->v.str) {
-+		log_error("device must be a string.");
-+		return 0;
-+	}
++	while ((dirent = readdir(d))) {
++		if (!strcmp(dirent->d_name, ".") ||
++		    !strcmp(dirent->d_name, "..") ||
++		    ((tmp = strstr(dirent->d_name, ".tmp")) &&
++		     tmp == dirent->d_name + strlen(dirent->d_name) - 4))
++			continue;
 +
-+	/* dev_cache_get function causes disk access if partition
-+	   information is not cached on memory */
-+	if (!(*dev = dev_cache_get(cv->v.str, NULL)))
-+		return 0;
++		vgname = dirent->d_name;
++		if (dm_snprintf(path, PATH_MAX, "%s/%s", dir, vgname) < 0) {
++			log_error("Name too long %s/%s", dir, vgname);
++			break;
++		}
 +
-+	(*dev)->flags |= DEV_NEED_VERIFY;
++		/* FIXME stat file to see if it's changed */
++		fid = _text_create_text_instance(fmt, NULL, NULL, NULL);
++		if ((vg = _vg_read_file_name(fid, vgname, path, 0))) {
++			struct pv_list *pvl;
++			struct lvmcache_info *info;
 +
-+	return 1;
-+}
++			dm_list_iterate_items(pvl, &vg->pvs) {
++				info = lvmcache_add(fmt->labeller,
++						    (char *)pvl->pv->id.uuid,
++						    pvl->pv->dev, vg->name,
++						    (char *)vg->id.uuid, 0);
++				if (!info) {
++					/* FIXME: remove all mcache here */
++					ret = 0;
++					goto out;
++				}
 +
- static int _read_pv(struct format_instance *fid, struct dm_pool *mem,
- 		    struct volume_group *vg, struct config_node *pvn,
- 		    struct config_node *vgn __attribute((unused)),
-@@ -183,18 +209,8 @@ static int _read_pv(struct format_instan
- 		return 0;
- 	}
- 
--	/*
--	 * Convert the uuid into a device.
--	 */
--	if (!(pv->dev = device_from_pvid(fid->fmt->cmd, &pv->id))) {
--		char buffer[64] __attribute((aligned(8)));
--
--		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
--			log_error("Couldn't find device.");
--		else
--			log_error("Couldn't find device with uuid '%s'.",
--				  buffer);
--	}
-+	if (!_read_device(fid->fmt->cmd, &pv->dev, pvn, "device"))
-+		log_error("Couldn't get device for physical volume.");
- 
- 	if (!(pv->vg_name = dm_pool_strdup(mem, vg->name)))
- 		return_0;
-Index: LVM2.02.46-cvs-20090324/lib/label/label.c
-===================================================================
---- LVM2.02.46-cvs-20090324.orig/lib/label/label.c
-+++ LVM2.02.46-cvs-20090324/lib/label/label.c
-@@ -19,6 +19,8 @@
- #include "xlate.h"
- #include "lvmcache.h"
- #include "metadata.h"
-+#include "toolcontext.h"
-+#include "dev-cache.h"
- 
- #include <sys/stat.h>
- #include <fcntl.h>
-@@ -283,6 +285,13 @@ int label_read(struct device *dev, struc
- 		return r;
- 	}
- 
-+	if ((info = info_from_pvid(dev->pvid, 0))) {
-+		if (!dev_is_valid(info->dev, info->fmt->cmd->filter)) {
-+			lvmcache_del(info);
-+			goto out;
++				dm_list_init(&info->mdas);
++				dm_list_init(&info->das);
++
++				/* info is generated from metadata cache and
++				   it is need to be revalidated later */
++				info->status |= CACHE_INVALID;
++			}
 +		}
 +	}
++ out:
++	if (closedir(d))
++		log_sys_error("closedir", dir);
 +
- 	if (!(l = _find_labeller(dev, buf, &sector, scan_sector)))
- 		goto out;
++	return ret;
++}
++
+ const char *vgname_from_mda(const struct format_type *fmt,
+ 			    struct device_area *dev_area, struct id *vgid,
+ 			    uint32_t *vgstatus, char **creation_host,
+@@ -1889,6 +1951,7 @@ void *create_text_context(struct cmd_con
  
-
-
+ static struct format_handler _text_handler = {
+ 	.scan = _text_scan,
++	.scan_mcache = _text_scan_mcache,
+ 	.pv_read = _text_pv_read,
+ 	.pv_setup = _text_pv_setup,
+ 	.pv_write = _text_pv_write,
+Index: LVM2.02.46-cvs-20090324/lib/metadata/metadata.h
+===================================================================
+--- LVM2.02.46-cvs-20090324.orig/lib/metadata/metadata.h
++++ LVM2.02.46-cvs-20090324/lib/metadata/metadata.h
+@@ -198,6 +198,11 @@ struct format_handler {
+ 	int (*scan) (const struct format_type * fmt);
+ 
+ 	/*
++	 * Load and setup metadata cache files
++	 */
++	int (*scan_mcache) (const struct format_type *fmt, const char *dir);
++
++	/*
+ 	 * Return PV with given path.
+ 	 */
+ 	int (*pv_read) (const struct format_type * fmt, const char *pv_name,
 
 
 
