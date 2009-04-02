@@ -1,40 +1,120 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Thu, 02 Apr 2009 17:21:15 -0400
-Subject: Re: [RFC PATCH 0/7] Introduce metadata cache feature
-In-Reply-To: <20090402201311.GA8492@redhat.com>
-References: <49D4F38B.9090705@redhat.com> <20090402201311.GA8492@redhat.com>
-Message-ID: <49D52C4B.9010209@redhat.com>
+From: taka@sourceware.org <taka@sourceware.org>
+Date: 2 Apr 2009 21:34:42 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/archiver.c li ...
+Message-ID: <20090402213442.10235.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Mike Snitzer wrote:
- >> FUTURE WORKS
->> ============
-> ...
->> * Add commandline option
->>
->>   Add a new commandline option (ex --metadatacache y|n) to enable and
->>   disable cache feature in order to override a setting of the lvm
->>   configuration file.
-> 
-> You should already be able to achieve that with:
-> 
-> <lvm_command> ... --config 'backup{metadata_cache=1}'
-> or
-> <lvm_command> ... --config 'backup{metadata_cache=0}'
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	taka at sourceware.org	2009-04-02 21:34:41
 
-Unfortunately another parse procedure in _gets_settings() is needed
-to handle the command line option, since metadata_cache option in
-lvm.conf is processed in init_lvm() before a command line option is
-parsed in lvm_run_command().
+Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: archiver.c import_vsn1.c 
+	lib/snapshot   : snapshot.c 
 
-But thank you for the suggestion. Command line '--config' option
-should be handled as well. I will update this in the next version.
+Log message:
+	Save and restore the previous logging level when log level is changed.
 
-Thanks,
-Taka
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1075&r2=1.1076
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+
+--- LVM2/WHATS_NEW	2009/04/02 20:46:11	1.1075
++++ LVM2/WHATS_NEW	2009/04/02 21:34:41	1.1076
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Save and restore the previous logging level when log level is changed.
+   Fix error message when archive initialization fails.
+   Make sure clvmd-corosync releases the lockspace when it exits.
+   Fix segfault for vgcfgrestore on VG with missing PVs.
+--- LVM2/lib/format_text/archiver.c	2009/03/24 13:16:35	1.21
++++ LVM2/lib/format_text/archiver.c	2009/04/02 21:34:41	1.22
+@@ -397,6 +397,7 @@
+ {
+ 	char path[PATH_MAX];
+ 	struct volume_group *vg_backup;
++	int old_suppress;
+ 
+ 	if (vg->status & EXPORTED_VG)
+ 		return;
+@@ -407,15 +408,15 @@
+ 		return;
+ 	}
+ 
+-	log_suppress(1);
++	old_suppress = log_suppress(1);
+ 	/* Up-to-date backup exists? */
+ 	if ((vg_backup = backup_read_vg(vg->cmd, vg->name, path)) &&
+ 	    (vg->seqno == vg_backup->seqno) &&
+ 	    (id_equal(&vg->id, &vg_backup->id))) {
+-		log_suppress(0);
++		log_suppress(old_suppress);
+ 		return;
+ 	}
+-	log_suppress(0);
++	log_suppress(old_suppress);
+ 
+ 	if (vg_backup)
+ 		archive(vg_backup);
+--- LVM2/lib/format_text/import_vsn1.c	2009/03/09 15:42:12	1.56
++++ LVM2/lib/format_text/import_vsn1.c	2009/04/02 21:34:41	1.57
+@@ -816,10 +816,11 @@
+ {
+ 	const char *d;
+ 	unsigned int u = 0u;
++	int old_suppress;
+ 
+-	log_suppress(1);
++	old_suppress = log_suppress(1);
+ 	d = find_config_str(cft->root, "description", "");
+-	log_suppress(0);
++	log_suppress(old_suppress);
+ 	*desc = dm_pool_strdup(mem, d);
+ 
+ 	get_config_uint32(cft->root, "creation_time", &u);
+--- LVM2/lib/snapshot/snapshot.c	2009/02/28 20:04:25	1.35
++++ LVM2/lib/snapshot/snapshot.c	2009/04/02 21:34:41	1.36
+@@ -37,6 +37,7 @@
+ 	uint32_t chunk_size;
+ 	const char *org_name, *cow_name;
+ 	struct logical_volume *org, *cow;
++	int old_suppress;
+ 
+ 	seg->lv->status |= SNAPSHOT;
+ 
+@@ -45,21 +46,21 @@
+ 		return 0;
+ 	}
+ 
+-	log_suppress(1);
++	old_suppress = log_suppress(1);
+ 
+ 	if (!(cow_name = find_config_str(sn, "cow_store", NULL))) {
+-		log_suppress(0);
++		log_suppress(old_suppress);
+ 		log_error("Snapshot cow storage not specified.");
+ 		return 0;
+ 	}
+ 
+ 	if (!(org_name = find_config_str(sn, "origin", NULL))) {
+-		log_suppress(0);
++		log_suppress(old_suppress);
+ 		log_error("Snapshot origin not specified.");
+ 		return 0;
+ 	}
+ 
+-	log_suppress(0);
++	log_suppress(old_suppress);
+ 
+ 	if (!(cow = find_lv(seg->lv->vg, cow_name))) {
+ 		log_error("Unknown logical volume specified for "
 
 
