@@ -1,21 +1,19 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 2 Apr 2009 15:37:36 +0100
-Subject: [PATCH] fix debugging version of dm_pool_grow_object to properly use delta=0
-In-Reply-To: <49D4C97D.5020304@redhat.com>
-References: <49D4C97D.5020304@redhat.com>
-Message-ID: <20090402143736.GR13664@agk.fab.redhat.com>
+Date: Thu, 2 Apr 2009 15:42:26 +0100
+Subject: [PATCH] fix _copy_pv to allocate even new pv->vg_name
+In-Reply-To: <49D4C98A.5050906@redhat.com>
+References: <49D4C98A.5050906@redhat.com>
+Message-ID: <20090402144226.GS13664@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Apr 02, 2009 at 04:19:41PM +0200, Milan Broz wrote:
-> Fix debug poll grow object to properly support delta=0
+On Thu, Apr 02, 2009 at 04:19:54PM +0200, Milan Broz wrote:
+> Allocate new pv->vg_name from pool, it can be destroyed later.
  
-It's a bit obfuscated.
-
-Maybe try extra_size instead of delta within the fn, and new_size instead of size?
+Ack.
 
 Alasdair
 -- 
