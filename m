@@ -1,154 +1,304 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Apr 2009 09:56:59 -0000
-Subject: LVM2 ./WHATS_NEW libdm/ioctl/libdm-iface.c lib ...
-Message-ID: <20090410095659.18696.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 06 Apr 2009 10:32:41 +0200
+Subject: [PATCH 3/6] vg mempool: fix activation code
+Message-ID: <49D9BE29.8030002@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-04-10 09:56:59
+Properly release VG memory pool in activation code and clvmd.
 
-Modified files:
-	.              : WHATS_NEW 
-	libdm/ioctl    : libdm-iface.c 
-	libdm/mm       : pool-debug.c pool-fast.c pool.c 
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ daemons/clvmd/lvm-functions.c |    1 +
+ lib/activate/activate.c       |  120 +++++++++++++++++++++++++++--------------
+ 2 files changed, 80 insertions(+), 41 deletions(-)
 
-Log message:
-	Helper function to catch memory pool leaks.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1084&r2=1.1085
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-debug.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-
---- LVM2/WHATS_NEW	2009/04/10 09:56:00	1.1084
-+++ LVM2/WHATS_NEW	2009/04/10 09:56:58	1.1085
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Add memory pool leaks detection.
-   Use copy of PV structure when manipulating with global PV lists.
-   Always return exit error status when locking of volume group fails.
-   Fix mirror log convert validation question.
---- LVM2/libdm/ioctl/libdm-iface.c	2009/02/12 20:42:07	1.56
-+++ LVM2/libdm/ioctl/libdm-iface.c	2009/04/10 09:56:58	1.57
-@@ -1817,12 +1817,15 @@
- 	update_devs();
- }
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index 4fc8613..6509bc2 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -724,6 +724,7 @@ void lvm_do_backup(const char *vgname)
+ 	else
+ 		log_error("Error backing up metadata, can't find VG for group %s", vgname);
  
-+void dm_pools_check_leaks(void);
-+
- void dm_lib_exit(void)
++	vg_release(vg);
+ 	dm_pool_empty(cmd->mem);
+ 
+ 	pthread_mutex_unlock(&lvm_lock);
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 863f471..7011a09 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -843,36 +843,39 @@ int monitor_dev_for_events(struct cmd_context *cmd,
+ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		       int error_if_not_suspended)
  {
- 	dm_lib_release();
- 	if (_dm_bitset)
- 		dm_bitset_destroy(_dm_bitset);
- 	_dm_bitset = NULL;
-+	dm_pools_check_leaks();
- 	dm_dump_memory();
- 	_version_ok = 1;
- 	_version_checked = 0;
---- LVM2/libdm/mm/pool-debug.c	2009/04/02 15:02:18	1.7
-+++ LVM2/libdm/mm/pool-debug.c	2009/04/10 09:56:59	1.8
-@@ -30,7 +30,9 @@
- } pool_stats;
+-	struct logical_volume *lv, *lv_pre;
++	struct logical_volume *lv = NULL, *lv_pre = NULL;
+ 	struct lvinfo info;
+-	int lockfs = 0;
++	int r = 0, lockfs = 0;
  
- struct dm_pool {
-+	struct dm_list list;
- 	const char *name;
-+	void *orig_pool;	/* to pair it with first allocation call */
+ 	if (!activation())
+ 		return 1;
  
- 	int begun;
- 	struct block *object;
-@@ -65,10 +67,13 @@
- 	mem->stats.bytes = 0;
- 	mem->stats.maxbytes = 0;
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return_0;
++		goto_out;
  
-+	mem->orig_pool = mem;
-+
- #ifdef DEBUG_POOL
- 	log_debug("Created mempool %s", name);
- #endif
+ 	/* Use precommitted metadata if present */
+ 	if (!(lv_pre = lv_from_lvid(cmd, lvid_s, 1)))
+-		return_0;
++		goto_out;
  
-+	dm_list_add(&_dm_pools, &mem->list);
- 	return mem;
- }
- 
-@@ -103,6 +108,7 @@
- {
- 	_pool_stats(p, "Destroying");
- 	_free_blocks(p, p->blocks);
-+	dm_list_del(&p->list);
- 	dm_free(p);
- }
- 
---- LVM2/libdm/mm/pool-fast.c	2008/11/03 18:59:59	1.6
-+++ LVM2/libdm/mm/pool-fast.c	2009/04/10 09:56:59	1.7
-@@ -21,6 +21,7 @@
- };
- 
- struct dm_pool {
-+	struct dm_list list;
- 	struct chunk *chunk, *spare_chunk;	/* spare_chunk is a one entry free
- 						   list to stop 'bobbling' */
- 	size_t chunk_size;
-@@ -51,6 +52,7 @@
- 	while (new_size < p->chunk_size)
- 		new_size <<= 1;
- 	p->chunk_size = new_size;
-+	dm_list_add(&_dm_pools, &p->list);
- 	return p;
- }
- 
-@@ -65,6 +67,7 @@
- 		c = pr;
+ 	if (test_mode()) {
+ 		_skip("Suspending '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
  	}
  
-+	dm_list_del(&p->list);
- 	dm_free(p);
- }
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
  
---- LVM2/libdm/mm/pool.c	2008/11/03 18:59:59	1.4
-+++ LVM2/libdm/mm/pool.c	2009/04/10 09:56:59	1.5
-@@ -15,6 +15,10 @@
- 
- #include "dmlib.h"
- 
-+/* FIXME: thread unsafe */
-+static DM_LIST_INIT(_dm_pools);
-+void dm_pools_check_leaks(void);
-+
- #ifdef DEBUG_POOL
- #include "pool-debug.c"
- #else
-@@ -52,3 +56,22 @@
- 
- 	return ptr;
- }
-+
-+void dm_pools_check_leaks(void)
-+{
-+	struct dm_pool *p;
-+
-+	if (dm_list_empty(&_dm_pools))
-+		return;
-+
-+	log_error("You have a memory leak (not released memory pool):");
-+	dm_list_iterate_items(p, &_dm_pools) {
-+#ifdef DEBUG_POOL
-+		log_error(" [%p] %s (%u bytes)",
-+			  p->orig_pool,
-+			  p->name, p->stats.bytes);
-+#else
-+		log_error(" [%p]", p);
-+#endif
+-	if (!info.exists || info.suspended)
+-		return error_if_not_suspended ? 0 : 1;
++	if (!info.exists || info.suspended) {
++		r = error_if_not_suspended ? 0 : 1;
++		goto out;
 +	}
-+}
+ 
+ 	/* If VG was precommitted, preload devices for the LV */
+ 	if ((lv_pre->vg->status & PRECOMMITTED)) {
+ 		if (!_lv_preload(lv_pre)) {
+ 			/* FIXME Revert preloading */
+-			return_0;
++			goto_out;
+ 		}
+ 	}
+ 
+@@ -888,10 +891,17 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!_lv_suspend_lv(lv, lockfs)) {
+ 		memlock_dec();
+ 		fs_unlock();
+-		return 0;
++		goto out;
+ 	}
+ 
+-	return 1;
++	r = 1;
++out:
++	if (lv_pre)
++		vg_release(lv_pre->vg);
++	if (lv)
++		vg_release(lv->vg);
++
++	return r;
+ }
+ 
+ /* Returns success if the device is not active */
+@@ -910,26 +920,30 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
++	int r = 0;
+ 
+ 	if (!activation())
+ 		return 1;
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (test_mode()) {
+ 		_skip("Resuming '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
+ 	}
+ 
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (!info.exists || !info.suspended)
+-		return error_if_not_active ? 0 : 1;
++	if (!info.exists || !info.suspended) {
++		r = error_if_not_active ? 0 : 1;
++		goto out;
++	}
+ 
+ 	if (!_lv_activate_lv(lv))
+-		return 0;
++		goto out;
+ 
+ 	memlock_dec();
+ 	fs_unlock();
+@@ -937,7 +951,12 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!monitor_dev_for_events(cmd, lv, 1))
+ 		stack;
+ 
+-	return 1;
++	r = 1;
++out:
++	if (lv)
++		vg_release(lv->vg);
++
++	return r;
+ }
+ 
+ /* Returns success if the device is not active */
+@@ -955,29 +974,32 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
+-	int r;
++	int r = 0;
+ 
+ 	if (!activation())
+ 		return 1;
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (test_mode()) {
+ 		_skip("Deactivating '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
+ 	}
+ 
+ 	if (!lv_info(cmd, lv, &info, 1, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (!info.exists)
+-		return 1;
++	if (!info.exists) {
++		r = 1;
++		goto out;
++	}
+ 
+ 	if (info.open_count && (lv->status & VISIBLE_LV)) {
+ 		log_error("LV %s/%s in use: not deactivating", lv->vg->name,
+ 			  lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!monitor_dev_for_events(cmd, lv, 0))
+@@ -988,6 +1010,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	memlock_dec();
+ 	fs_unlock();
+ 
++out:
++	if (lv)
++		vg_release(lv->vg);
++
+ 	return r;
+ }
+ 
+@@ -996,23 +1022,28 @@ int lv_activation_filter(struct cmd_context *cmd, const char *lvid_s,
+ 			 int *activate_lv)
+ {
+ 	struct logical_volume *lv;
++	int r = 0;
+ 
+-	if (!activation())
+-		goto activate;
++	if (!activation()) {
++		*activate_lv = 1;
++		return 1;
++	}
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (!_passes_activation_filter(cmd, lv)) {
+ 		log_verbose("Not activating %s/%s due to config file settings",
+ 			    lv->vg->name, lv->name);
+ 		*activate_lv = 0;
+-		return 1;
+-	}
++	} else
++		*activate_lv = 1;
++	r = 1;
++out:
++	if (lv)
++		vg_release(lv->vg);
+ 
+-      activate:
+-	*activate_lv = 1;
+-	return 1;
++	return r;
+ }
+ 
+ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+@@ -1020,36 +1051,39 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
+-	int r;
++	int r = 0;
+ 
+ 	if (!activation())
+ 		return 1;
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (filter && !_passes_activation_filter(cmd, lv)) {
+ 		log_verbose("Not activating %s/%s due to config file settings",
+ 			    lv->vg->name, lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if ((!lv->vg->cmd->partial_activation) && (lv->status & PARTIAL_LV)) {
+ 		log_error("Refusing activation of partial LV %s. Use --partial to override.",
+ 			  lv->name);
+-		return_0;
++		goto_out;
+ 	}
+ 
+ 	if (test_mode()) {
+ 		_skip("Activating '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
+ 	}
+ 
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (info.exists && !info.suspended && info.live_table)
+-		return 1;
++	if (info.exists && !info.suspended && info.live_table) {
++		r = 1;
++		goto out;
++	}
+ 
+ 	if (exclusive)
+ 		lv->status |= ACTIVATE_EXCL;
+@@ -1062,6 +1096,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 	if (r && !monitor_dev_for_events(cmd, lv, 1))
+ 		stack;
+ 
++out:
++	if (lv)
++		vg_release(lv->vg);
++
+ 	return r;
+ }
+ 
+
 
 
