@@ -1,268 +1,337 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 08 Apr 2009 14:13:06 +0200
-Subject: [PATCH 1/4] Udev integration: add LVM fields support for dmsetup
-Message-ID: <49DC94D2.4010903@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 06 Apr 2009 10:32:14 +0200
+Subject: [PATCH 2/6] vg mempool: introduce separate vg mempool
+Message-ID: <49D9BE0E.5090901@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi, 
+Introduce memory pool per volume group.
 
-this is the first patch of the whole udev integration patchset.
-Udev integration patchset relies on "uevent cookie env var support"
-DM patch, see dm-devel list.
+Since now, all code reading volume group is responsible for releasing
+the memory allocated by calling vg_release(vg).
+(For simplicity of use, vg_releae can be called for vg == NULL,
+the same logic like free(NULL)).
 
-This patch adds support for splitting given UUID and LVM name into
-its subsystem (the UUID prefix), VG/LV/LV layer constituents. This
-way we can import these values in udev rules and use its primary
-use is to create the directories with symlinks under /dev dir.
+Also providing simple macro for unlocking & releasing in one step,
+tools usually uses this approach.
 
-Peter
+The global memory pool (cmd->mem) should be used only for global
+physical volume operations.
 
+This patch have to be applied with all subsequent patches to complete
+memory pool per vg logic.
 
-diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index a6e04f8..9f7e4af 100644
---- a/libdm/.exported_symbols
-+++ b/libdm/.exported_symbols
-@@ -116,6 +116,7 @@ dm_hash_get_first
- dm_hash_get_next
- dm_set_selinux_context
- dm_task_set_geometry
-+dm_split_lvm_name_mem
- dm_split_lvm_name
- dm_split_words
- dm_snprintf
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 93aecbb..c1c6218 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -131,6 +131,13 @@ struct dm_versions {
- 	char name[0];
- };
- 
-+struct dm_split_name {
-+	char *subsystem;
-+	char *vg;
-+	char *lv;
-+	char *lv_layer;
-+};
-+
- int dm_get_library_version(char *version, size_t size);
- int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size);
- int dm_task_get_info(struct dm_task *dmt, struct dm_info *dmi);
-@@ -819,6 +826,8 @@ int dm_set_selinux_context(const char *path, mode_t mode);
-  * Break up the name of a mapped device into its constituent
-  * Volume Group, Logical Volume and Layer (if present).
-  */
-+void dm_split_lvm_name_mem(char *mem, char **vgname, char **lvname, char **layer);
-+
- int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
- 		      char **vgname, char **lvname, char **layer);
- 
-diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
-index 0e41f9d..ef06ea6 100644
---- a/libdm/libdm-string.c
-+++ b/libdm/libdm-string.c
-@@ -90,13 +90,19 @@ static char *_unquote(char *component)
- 	return r;
+Using separate memory pool has quite bit memory saving impact when
+using large VGs, this is mainly needed when we have to use
+preallocated and locked memory (and should not overflow from that
+memory space).
+
+(To fix some memory allocation with PV manipulation tools like
+pvs, pvdisplay another patches are neeeded - but this is separate issue.)
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/format1/format1.c            |   12 +++++----
+ lib/format_pool/format_pool.c    |    6 +++-
+ lib/format_text/import_vsn1.c    |   13 +++++++---
+ lib/locking/locking.h            |    3 ++
+ lib/metadata/metadata-exported.h |    2 +
+ lib/metadata/metadata.c          |   50 +++++++++++++++++++++++++++----------
+ lib/metadata/metadata.h          |    1 +
+ 7 files changed, 62 insertions(+), 25 deletions(-)
+
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index a679c09..2a998ef 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -111,9 +111,9 @@ static int _check_vgs(struct dm_list *pvs)
  }
  
-+void dm_split_lvm_name_mem(char *mem, char **vgname, char **lvname, char **layer)
-+{
-+	*vgname = mem;
-+	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
-+}
-+
- int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
- 		      char **vgname, char **lvname, char **layer)
+ static struct volume_group *_build_vg(struct format_instance *fid,
+-				      struct dm_list *pvs)
++				      struct dm_list *pvs,
++				      struct dm_pool *mem)
  {
- 	if (!(*vgname = dm_pool_strdup(mem, dmname)))
- 		return 0;
+-	struct dm_pool *mem = fid->fmt->cmd->mem;
+ 	struct volume_group *vg = dm_pool_alloc(mem, sizeof(*vg));
+ 	struct disk_list *dl;
  
--	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
-+	dm_split_lvm_name_mem(*vgname, vgname, lvname, layer);
+@@ -126,6 +126,7 @@ static struct volume_group *_build_vg(struct format_instance *fid,
+ 	memset(vg, 0, sizeof(*vg));
  
- 	return 1;
+ 	vg->cmd = fid->fmt->cmd;
++	vg->vgmem = mem;
+ 	vg->fid = fid;
+ 	vg->seqno = 0;
+ 	dm_list_init(&vg->pvs);
+@@ -178,12 +179,13 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	    (fid->fmt, vg_name, fid->fmt->cmd->filter, mem, &pvs))
+ 		goto_bad;
+ 
+-	if (!(vg = _build_vg(fid, &pvs)))
++	if (!(vg = _build_vg(fid, &pvs, mem)))
+ 		goto_bad;
+ 
+-      bad:
+-	dm_pool_destroy(mem);
+ 	return vg;
++bad:
++	dm_pool_destroy(mem);
++	return NULL;
  }
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 0d6a371..9a42c81 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -141,7 +141,8 @@ typedef enum {
- 	DR_TASK = 1,
- 	DR_INFO = 2,
- 	DR_DEPS = 4,
--	DR_TREE = 8	/* Complete dependency tree required */
-+	DR_TREE = 8,	/* Complete dependency tree required */
-+	DR_NAME = 16
- } report_type_t;
  
- static int _switches[NUM_SWITCHES];
-@@ -261,6 +262,7 @@ struct dmsetup_report_obj {
- 	struct dm_info *info;
- 	struct dm_task *deps_task;
- 	struct dm_tree_node *tree_node;
-+	struct dm_split_name *split_name;
- };
+ static struct disk_list *_flatten_pv(struct format_instance *fid,
+diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
+index aa22722..4647b0e 100644
+--- a/lib/format_pool/format_pool.c
++++ b/lib/format_pool/format_pool.c
+@@ -113,6 +113,7 @@ static struct volume_group *_build_vg_from_pds(struct format_instance
+ 	}
  
- static struct dm_task *_get_deps_task(int major, int minor)
-@@ -294,6 +296,55 @@ static struct dm_task *_get_deps_task(int major, int minor)
+ 	vg->cmd = fid->fmt->cmd;
++	vg->vgmem = mem;
+ 	vg->fid = fid;
+ 	vg->name = NULL;
+ 	vg->status = 0;
+@@ -182,9 +183,10 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
+ 	if (!(vg = _build_vg_from_pds(fid, mem, &pds)))
+ 		goto_out;
+ 
+-      out:
+-	dm_pool_destroy(mem);
+ 	return vg;
++out:
++	dm_pool_destroy(mem);
++	return NULL;
+ }
+ 
+ static int _pool_pv_setup(const struct format_type *fmt __attribute((unused)),
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 7703fe2..fcb11d2 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -662,18 +662,23 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	struct config_node *vgn, *cn;
+ 	struct volume_group *vg;
+ 	struct dm_hash_table *pv_hash = NULL;
+-	struct dm_pool *mem = fid->fmt->cmd->mem;
++	struct dm_pool *mem = dm_pool_create("lvm2 vg_read", VG_MEMPOOL_SIZE);
++
++	if (!mem)
++		return_NULL;
+ 
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib) ;
+ 
+ 	if (!vgn) {
+ 		log_error("Couldn't find volume group in file.");
+-		return NULL;
++		goto bad;
+ 	}
+ 
+ 	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
+-		return_NULL;
++		goto_bad;
++
++	vg->vgmem = mem;
+ 	vg->cmd = fid->fmt->cmd;
+ 
+ 	/* FIXME Determine format type from file contents */
+@@ -807,7 +812,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	if (pv_hash)
+ 		dm_hash_destroy(pv_hash);
+ 
+-	dm_pool_free(mem, vg);
++	dm_pool_destroy(mem);
  	return NULL;
  }
  
-+static char *_get_uuid_prefix(const char *uuid)
-+{
-+	char *ptr;
-+	int len;
-+	char *str = NULL;
-+
-+	ptr = strchr(uuid, '-');
-+
-+	len = ptr ? ptr - uuid : 0;
-+	if (!(str = dm_malloc(len + 1)))
-+		return NULL;
-+
-+	memcpy(str, uuid, len);
-+	str[len] = '\0';
-+
-+	return str;
-+}
-+
-+static struct dm_split_name *_get_split_name(const char *uuid, const char *name)
-+{
-+	struct dm_split_name *split_name;
-+	char *name_dup;
-+
-+	name_dup = dm_strdup(name);
-+
-+	if (!(split_name = dm_malloc(sizeof(struct dm_split_name))))
-+		return NULL;
-+
-+	split_name->subsystem = _get_uuid_prefix(uuid);
-+
-+	if (!strcmp(split_name->subsystem, "LVM"))
-+		dm_split_lvm_name_mem(name_dup, &split_name->vg, &split_name->lv, &split_name->lv_layer);
-+	else
-+		split_name->vg = split_name->lv = split_name->lv_layer = "";
-+
-+	return split_name;
-+}
-+
-+static void _destroy_split_name(struct dm_split_name *split_name)
-+{
-+	dm_free(split_name->subsystem);
-+	/* vg, lv and lv_layer is under one allocated block of memory
-+	 * starting at vg pointer and separated by \0 each, so by
-+	 * freeing vg, we free memory for lv and lv_layer as well */
-+	if (*split_name->vg)
-+		dm_free(split_name->vg);
-+	dm_free(split_name);
-+}
-+
- static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index a00d742..71122c3 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -115,6 +115,9 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ 	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
+ 
+ #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
++#define unlock_release_vg(cmd, vg, vol) do { unlock_vg(cmd, vol); \
++					     vg_release(vg); \
++					} while (0)
+ 
+ #define resume_lv(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_RESUME)
+ #define suspend_lv(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_SUSPEND | LCK_HOLD)
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 2850bb4..c95f744 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -212,6 +212,7 @@ struct format_instance {
+ 
+ struct volume_group {
+ 	struct cmd_context *cmd;
++	struct dm_pool *vgmem;
+ 	struct format_instance *fid;
+ 	uint32_t seqno;		/* Metadata sequence number */
+ 
+@@ -437,6 +438,7 @@ int vg_change_pesize(struct cmd_context *cmd, struct volume_group *vg,
+ int vg_split_mdas(struct cmd_context *cmd, struct volume_group *vg_from,
+ 		  struct volume_group *vg_to);
+ 
++void vg_release(struct volume_group *vg);
+ /* Manipulate LVs */
+ struct logical_volume *lv_create_empty(const char *name,
+ 				       union lvid *lvid,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 9824eff..dd6ce54 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -29,6 +29,7 @@
+ #include "archiver.h"
+ #include "defaults.h"
+ 
++#include <assert.h>
+ #include <sys/param.h>
+ 
+ /*
+@@ -517,18 +518,22 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name,
+ 			       int pv_count, char **pv_names)
  {
- 	struct dmsetup_report_obj obj;
-@@ -307,6 +358,7 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- 	obj.task = dmt;
- 	obj.info = info;
- 	obj.deps_task = NULL;
-+	obj.split_name = NULL;
+ 	struct volume_group *vg;
+-	struct dm_pool *mem = cmd->mem;
+ 	int consistent = 0;
+-
+-	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
+-		return_NULL;
++	struct dm_pool *mem;
  
- 	if (_report_type & DR_TREE)
- 		obj.tree_node = dm_tree_find_node(_dtree, info->major, info->minor);
-@@ -314,6 +366,9 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- 	if (_report_type & DR_DEPS)
- 		obj.deps_task = _get_deps_task(info->major, info->minor);
+ 	/* is this vg name already in use ? */
+-	if (vg_read_internal(cmd, vg_name, NULL, &consistent)) {
++	if ((vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
+ 		log_err("A volume group called '%s' already exists.", vg_name);
+-		goto bad;
++		vg_release(vg);
++		return NULL;
+ 	}
  
-+	if (_report_type & DR_NAME)
-+		obj.split_name = _get_split_name(dm_task_get_uuid(dmt), dm_task_get_name(dmt));
++	if (!(mem = dm_pool_create("lvm2 vg_create", VG_MEMPOOL_SIZE)))
++		return_NULL;
 +
- 	if (!dm_report_object(_report, &obj))
- 		goto out;
++	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
++		goto_bad;
++
+ 	if (!id_create(&vg->id)) {
+ 		log_err("Couldn't create uuid for volume group '%s'.", vg_name);
+ 		goto bad;
+@@ -537,6 +542,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name,
+ 	/* Strip dev_dir if present */
+ 	vg_name = strip_dir(vg_name, cmd->dev_dir);
  
-@@ -322,6 +377,8 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
-       out:
- 	if (obj.deps_task)
- 		dm_task_destroy(obj.deps_task);
-+	if (obj.split_name)
-+		_destroy_split_name(obj.split_name);
- 	return r;
++	vg->vgmem = mem;
+ 	vg->cmd = cmd;
+ 
+ 	if (!(vg->name = dm_pool_strdup(mem, vg_name)))
+@@ -589,7 +595,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name,
+ 	return vg;
+ 
+       bad:
+-	dm_pool_free(mem, vg);
++	dm_pool_destroy(mem);
+ 	return NULL;
  }
  
-@@ -1899,6 +1956,41 @@ static int _dm_deps_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return 0;
+@@ -1643,23 +1649,28 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 	struct pv_list *pvl;
+ 	struct volume_group *vg;
+ 	struct physical_volume *pv;
++	struct dm_pool *mem;
+ 
+ 	lvmcache_label_scan(cmd, 0);
+ 
+ 	if (!(vginfo = vginfo_from_vgname(orphan_vgname, NULL)))
+ 		return_NULL;
+ 
+-	if (!(vg = dm_pool_zalloc(cmd->mem, sizeof(*vg)))) {
++	if (!(mem = dm_pool_create("vg_read orphan", VG_MEMPOOL_SIZE)))
++		return_NULL;
++
++	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg)))) {
+ 		log_error("vg allocation failed");
+ 		return NULL;
+ 	}
+ 	dm_list_init(&vg->pvs);
+ 	dm_list_init(&vg->lvs);
+ 	dm_list_init(&vg->tags);
++	vg->vgmem = mem;
+ 	vg->cmd = cmd;
+-	if (!(vg->name = dm_pool_strdup(cmd->mem, orphan_vgname))) {
++	if (!(vg->name = dm_pool_strdup(mem, orphan_vgname))) {
+ 		log_error("vg name allocation failed");
+-		return NULL;
++		goto bad;
+ 	}
+ 
+ 	/* create format instance with appropriate metadata area */
+@@ -1667,17 +1678,16 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 							  orphan_vgname, NULL,
+ 							  NULL))) {
+ 		log_error("Failed to create format instance");
+-		dm_pool_free(cmd->mem, vg);
+-		return NULL;
++		goto bad;
+ 	}
+ 
+ 	dm_list_iterate_items(info, &vginfo->infos) {
+ 		if (!(pv = _pv_read(cmd, dev_name(info->dev), NULL, NULL, 1, 0))) {
+ 			continue;
+ 		}
+-		if (!(pvl = dm_pool_zalloc(cmd->mem, sizeof(*pvl)))) {
++		if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl)))) {
+ 			log_error("pv_list allocation failed");
+-			return NULL;
++			goto bad;
+ 		}
+ 		pvl->pv = pv;
+ 		dm_list_add(&vg->pvs, &pvl->list);
+@@ -1685,6 +1695,9 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 	}
+ 
+ 	return vg;
++bad:
++	dm_pool_destroy(mem);
++	return NULL;
  }
  
-+static int _dm_subsystem_disp(struct dm_report *rh,
-+			 struct dm_pool *mem __attribute((unused)),
-+			 struct dm_report_field *field, const void *data,
-+			 void *private __attribute((unused)))
-+{
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
-+
-+static int _dm_vg_name_disp(struct dm_report *rh,
-+					struct dm_pool *mem __attribute((unused)),
-+					struct dm_report_field *field, const void *data,
-+					void *private __attribute((unused)))
-+{
-+
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
-+
-+static int _dm_lv_name_disp(struct dm_report *rh,
-+					struct dm_pool *mem __attribute((unused)),
-+					struct dm_report_field *field, const void *data,
-+					void *private __attribute((unused)))
-+
-+{
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
-+
-+static int _dm_lv_layer_name_disp(struct dm_report *rh,
-+					struct dm_pool *mem __attribute((unused)),
-+					struct dm_report_field *field, const void *data,
-+					void *private __attribute((unused)))
-+
-+{
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
-+
- static void *_task_get_obj(void *obj)
- {
- 	return ((struct dmsetup_report_obj *)obj)->task;
-@@ -1919,11 +2011,17 @@ static void *_tree_get_obj(void *obj)
- 	return ((struct dmsetup_report_obj *)obj)->tree_node;
+ static int _update_pv_list(struct dm_pool *pvmem, struct dm_list *all_pvs, struct volume_group *vg)
+@@ -2040,6 +2053,15 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
+ 	return vg;
  }
  
-+static void *_split_name_get_obj(void *obj)
++void vg_release(struct volume_group *vg)
 +{
-+	return ((struct dmsetup_report_obj *)obj)->split_name;
++	if (!vg || !vg->vgmem)
++		return;
++
++	assert(vg->vgmem != vg->cmd->mem);
++	dm_pool_destroy(vg->vgmem);
 +}
 +
- static const struct dm_report_object_type _report_types[] = {
- 	{ DR_TASK, "Mapped Device Name", "", _task_get_obj },
- 	{ DR_INFO, "Mapped Device Information", "", _info_get_obj },
- 	{ DR_DEPS, "Mapped Device Relationship Information", "", _deps_get_obj },
- 	{ DR_TREE, "Mapped Device Relationship Information", "", _tree_get_obj },
-+	{ DR_NAME, "Mapped Device LVM Fields", "", _split_name_get_obj },
- 	{ 0, "", "", NULL },
- };
+ /* This is only called by lv_from_lvid, which is only called from
+  * activate.c so we know the appropriate VG lock is already held and
+  * the vg_read_internal is therefore safe.
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index fbcf82b..115d0bf 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -35,6 +35,7 @@
+ //#define PV_MIN_SIZE ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ //#define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
+ #define MIRROR_LOG_OFFSET	2	/* sectors */
++#define VG_MEMPOOL_SIZE		10240	/* in KB, hint only */
  
-@@ -1960,6 +2058,12 @@ FIELD_F(DEPS, STR, "DevNos", 6, dm_deps, "devnos_used", "List of device numbers
- FIELD_F(TREE, NUM, "#Refs", 5, dm_tree_parents_count, "device_ref_count", "Number of mapped devices referencing this one.")
- FIELD_F(TREE, STR, "RefNames", 8, dm_tree_parents_names, "names_using_dev", "List of names of mapped devices using this one.")
- FIELD_F(TREE, STR, "RefDevNos", 9, dm_tree_parents_devs, "devnos_using_dev", "List of device numbers of mapped devices using this one.")
-+
-+FIELD_O(NAME, dm_split_name, STR, "Subsystem", subsystem, 10, dm_subsystem, "subsystem", "DM subsystem.")
-+FIELD_O(NAME, dm_split_name, STR, "VGName", vg, 10, dm_vg_name, "vg_name", "LVM volume group name.")
-+FIELD_O(NAME, dm_split_name, STR, "LVName", lv, 10, dm_lv_name, "lv_name", "LVM logical volume name.")
-+FIELD_O(NAME, dm_split_name, STR, "LVLayer", lv_layer, 10, dm_lv_layer_name, "lv_layer", "LVM layer.")
-+
- {0, 0, 0, 0, "", "", NULL, NULL},
- /* *INDENT-ON* */
- };
+ /*
+  * Ceiling(n / sz)
+
 
 
