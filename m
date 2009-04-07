@@ -1,50 +1,46 @@
-From: Greg Price <price@MIT.EDU>
-Date: Mon, 6 Apr 2009 23:55:15 -0400
-Subject: [PATCH] When a resume_lv() fails, fail also in resume_lvs().
-Message-ID: <20090407035514.GA21950@vinegar-pot.mit.edu>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 7 Apr 2009 22:53:49 -0000
+Subject: LVM2 WHATS_NEW make.tmpl.in
+Message-ID: <20090407225349.16007.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When a resume fails because device-mapper returns EINVAL to a reload
-ioctl, this bug can cause pvmove to update an LV's metadata as if it
-had been copied over, when in fact it has not.  This can lead to data
-loss if not swiftly and manually noticed.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-04-07 22:53:48
 
-The corresponding code in suspend_lvs() attempts to resume any
-successfully suspended LVs after an error.  It's possible resume_lvs()
-should do likewise.  On the other hand, it's not clear what to do if
-one of those attempts itself fails.  suspend_lvs() ignores further
-errors in that case; presumably, like resume_lvs(), it was written
-under the assumption that resume_lv() cannot fail.
+Modified files:
+	.              : WHATS_NEW make.tmpl.in 
 
-Signed-off-by: Greg Price <price@mit.edu>
----
- lib/locking/locking.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+Log message:
+	Add missing 'device-mapper' internal subdir build dependency.
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 81cb992..0c225ed 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -369,8 +369,12 @@ int resume_lvs(struct cmd_context *cmd, struct list *lvs)
- {
- 	struct lv_list *lvl;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1077&r2=1.1078
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.64&r2=1.65
+
+--- LVM2/WHATS_NEW	2009/04/07 10:20:28	1.1077
++++ LVM2/WHATS_NEW	2009/04/07 22:53:48	1.1078
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Add missing 'device-mapper' internal subdir build dependency.
+   Fix memory leak in mirror allocation code.
+   Save and restore the previous logging level when log level is changed.
+   Fix error message when archive initialization fails.
+--- LVM2/make.tmpl.in	2009/02/22 22:11:58	1.64
++++ LVM2/make.tmpl.in	2009/04/07 22:53:48	1.65
+@@ -152,7 +152,7 @@
+ install_cluster: all $(SUBDIRS.install_cluster)
+ install_device-mapper: $(SUBDIRS.install_device-mapper)
  
--	list_iterate_items(lvl, lvs)
--		resume_lv(cmd, lvl->lv);
-+	list_iterate_items(lvl, lvs) {
-+		if (!resume_lv(cmd, lvl->lv)) {
-+			log_error("Failed to resume %s", lvl->lv->name);
-+			return 0;
-+		}
-+        }
+-$(SUBDIRS):
++$(SUBDIRS): $(SUBDIRS.device-mapper)
+ 	$(MAKE) -C $@
  
- 	return 1;
- }
--- 
-1.5.2.2
+ $(SUBDIRS.device-mapper):
 
 
