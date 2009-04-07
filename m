@@ -1,46 +1,35 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 7 Apr 2009 22:53:49 -0000
-Subject: LVM2 WHATS_NEW make.tmpl.in
-Message-ID: <20090407225349.16007.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 08 Apr 2009 01:12:22 +0200
+Subject: [PATCH 3/6] vg mempool: fix activation code
+In-Reply-To: <49D9BE29.8030002@redhat.com> (Milan Broz's message of "Mon, 06
+	Apr 2009 10:32:41 +0200")
+References: <49D9BE29.8030002@redhat.com>
+Message-ID: <87ws9w9hyh.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-04-07 22:53:48
+Milan Broz <mbroz@redhat.com> writes:
+> Properly release VG memory pool in activation code and clvmd.
+>
+> Signed-off-by: Milan Broz <mbroz@redhat.com>
+Acked-By: Petr Ro?kai <prockai@redhat.com>
 
-Modified files:
-	.              : WHATS_NEW make.tmpl.in 
+No particular comments. Lots of code path shuffling, I have read through all of
+it and I believe it's all equivalent, plus it calls vg_release when needed, as
+advertised.
 
-Log message:
-	Add missing 'device-mapper' internal subdir build dependency.
+Yours,
+   Petr.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1077&r2=1.1078
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.64&r2=1.65
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
---- LVM2/WHATS_NEW	2009/04/07 10:20:28	1.1077
-+++ LVM2/WHATS_NEW	2009/04/07 22:53:48	1.1078
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Add missing 'device-mapper' internal subdir build dependency.
-   Fix memory leak in mirror allocation code.
-   Save and restore the previous logging level when log level is changed.
-   Fix error message when archive initialization fails.
---- LVM2/make.tmpl.in	2009/02/22 22:11:58	1.64
-+++ LVM2/make.tmpl.in	2009/04/07 22:53:48	1.65
-@@ -152,7 +152,7 @@
- install_cluster: all $(SUBDIRS.install_cluster)
- install_device-mapper: $(SUBDIRS.install_device-mapper)
- 
--$(SUBDIRS):
-+$(SUBDIRS): $(SUBDIRS.device-mapper)
- 	$(MAKE) -C $@
- 
- $(SUBDIRS.device-mapper):
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
