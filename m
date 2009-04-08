@@ -1,35 +1,34 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 08 Apr 2009 14:35:35 +0200
-Subject: [PATCH] Udev integration: udev rules 2/3
-Message-ID: <49DC9A17.9010705@redhat.com>
+Date: Wed, 08 Apr 2009 14:41:14 +0200
+Subject: [PATCH] Udev integration: udev rules 3/3
+Message-ID: <49DC9B6A.7040206@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This one is for LVM -- to create symlinks under /dev directory.
-That's all :)
+This is used for exceptional situations -- if the notification in the
+rules before were not defined (so it's a simple fallback). This is
+to prevent the hang of processes waiting for this notification.
+Or, for example, for some reason, the user doesn't have LVM package
+installed (and so he doesn't have LVM udev rules installed as well),
+just the basic libdm/dmsetup and unfortunately creates a device with
+the LVM (or any other subsystem) prefix. This could happen...
 
-# udev rules for LVM 
-# This will create LVM symlinks in /dev directory.
+(this rule should be defined with the least priority)
 
-SUBSYSTEM!="block", GOTO="lvm_end"
-KERNEL!="dm-[0-9]*", GOTO="lvm_end"
-ACTION!="change|remove", GOTO="lvm_end"
+Peter
 
-ACTION=="change", IMPORT{PROGRAM}="/sbin/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o name,uuid,subsystem,vg_name,lv_name,lv_layer"
-ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
 
-# Do not create symlinks for hidden subdevices.
-ENV{DM_LV_NAME}=="?*_mlog", GOTO="notify"
-ENV{DM_LV_NAME}=="?*_mimage_[0-9]*", GOTO="notify"
+# These rules are used to send any residual DM cookie notifications.
 
-# Create symlinks for top level devices only.
-ENV{DM_VG_NAME}=="?*", ENV{DM_LV_NAME}=="?*", ENV{DM_LV_LAYER}!="?*", SYMLINK+="$env{DM_VG_NAME}/$env{DM_LV_NAME}"
+SUBSYSTEM!="block", GOTO="dm_end"
+KERNEL!="dm-[0-9]*", GOTO="dm_end"
+ACTION!="change|remove", GOTO="dm_end"
 
-LABEL="notify", ENV{COOKIE}=="[0-9]*", RUN+="/sbin/dmsetup notify $env{COOKIE}", OPTIONS+="last_rule"
+ENV{COOKIE}=="[0-9]*", RUN+="/sbin/dmsetup notify $env{COOKIE}", OPTIONS+="last_rule"
 
-LABEL="lvm_end"
+LABEL="dm_end"
 
 
