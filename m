@@ -1,231 +1,418 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 08 Apr 2009 14:24:46 +0200
-Subject: [PATCH 3/4] Udev integration: add cookie support for dmsetup
-Message-ID: <49DC978E.4040101@redhat.com>
+Date: Wed, 08 Apr 2009 14:27:50 +0200
+Subject: [PATCH 4/4] Udev integration: add cookie support for dm trees
+Message-ID: <49DC9846.3060703@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds cookie support for dmsetup commands using the
-semaphore IPC mechanism (we wait for udev rule completion in
-resume, rename and remove commands).
-
-A new command is added "notify" with the cookie value as the
-parameter. This is called from udev rule to decrease the value
-of the semaphore (and so to notify that it is completed).
+This patch adds support for the LVM layer where DM trees are used.
+We set only one semaphore per tree. The functionality and logic is
+the same as in previous patch for dmsetup.
 
 Peter
 
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 21d2dfe..df6237b 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -523,6 +523,7 @@ static int _create(int argc, char **argv, void *data __attribute((unused)))
- 	int r = 0;
- 	struct dm_task *dmt;
- 	const char *file = NULL;
-+	uint32_t cookie;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 1083fcd..f697e6a 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1123,7 +1123,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root)
+ 		if (!*layer)
+ 			continue;
  
- 	if (argc == 3)
- 		file = argv[2];
-@@ -565,9 +566,19 @@ static int _create(int argc, char **argv, void *data __attribute((unused)))
- 				    _read_ahead_flags))
- 		goto out;
+-		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid)))
++		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid), 0))
+ 			return_0;
+ 	}
  
--	if (!dm_task_run(dmt))
-+	if (!dm_notification_sem_open(&cookie) ||
-+			!dm_notification_sem_inc(cookie) ||
-+			!dm_task_set_cookie(dmt, cookie))
- 		goto out;
+@@ -1157,7 +1157,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv, actio
+ 		break;
+ 	case DEACTIVATE:
+  		/* Deactivate LV and all devices it references that nothing else has open. */
+-		if (!dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
++		if (!dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1, 0))
+ 			goto_out;
+ 		if (!_remove_lv_symlinks(dm, root))
+ 			log_error("Failed to remove all device symlinks associated with %s.", lv->name);
+@@ -1177,11 +1177,11 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv, actio
+ 			goto_out;
  
-+	if (!dm_task_run(dmt)) {
-+		dm_notification_sem_close(cookie);
-+		goto out;
-+	}
-+
-+	dm_notification_sem_wait_zero(cookie);
-+	dm_notification_sem_close(cookie);
-+
- 	r = 1;
+ 		/* Preload any devices required before any suspensions */
+-		if (!dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
++		if (!dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1, 0))
+ 			goto_out;
  
- 	if (_switches[VERBOSE_ARG])
-@@ -583,6 +594,7 @@ static int _rename(int argc, char **argv, void *data __attribute((unused)))
- {
- 	int r = 0;
- 	struct dm_task *dmt;
-+	uint32_t cookie;
+ 		if ((action == ACTIVATE) &&
+-		    !dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
++		    !dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1, 0))
+ 			goto_out;
  
- 	if (!(dmt = dm_task_create(DM_DEVICE_RENAME)))
- 		return 0;
-@@ -597,8 +609,18 @@ static int _rename(int argc, char **argv, void *data __attribute((unused)))
- 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
- 		goto out;
+ 		if (!_create_lv_symlinks(dm, root)) {
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 92b943d..6292d92 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -308,23 +308,23 @@ int dm_tree_node_num_children(struct dm_tree_node *node, uint32_t inverted);
+  * Ignores devices that don't have a uuid starting with uuid_prefix.
+  */
+ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+-				   const char *uuid_prefix,
+-				   size_t uuid_prefix_len);
++				   const char *uuid_prefix, size_t uuid_prefix_len,
++					 uint32_t cookie);
+ /*
+  * Preload/create a device plus all dependencies.
+  * Ignores devices that don't have a uuid starting with uuid_prefix.
+  */
+ int dm_tree_preload_children(struct dm_tree_node *dnode,
+-			     const char *uuid_prefix,
+-			     size_t uuid_prefix_len);
++			     const char *uuid_prefix, size_t uuid_prefix_len,
++					 uint32_t cookie);
  
--	if (!dm_task_run(dmt))
-+	if (!dm_notification_sem_open(&cookie) ||
-+			!dm_notification_sem_inc(cookie) ||
-+			!dm_task_set_cookie(dmt, cookie))
-+		goto out;
-+
-+	if (!dm_task_run(dmt)) {
-+		dm_notification_sem_close(cookie);
- 		goto out;
-+	}
-+
-+	dm_notification_sem_wait_zero(cookie);
-+	dm_notification_sem_close(cookie);
+ /*
+  * Resume a device plus all dependencies.
+  * Ignores devices that don't have a uuid starting with uuid_prefix.
+  */
+ int dm_tree_activate_children(struct dm_tree_node *dnode,
+-			      const char *uuid_prefix,
+-			      size_t uuid_prefix_len);
++			      const char *uuid_prefix, size_t uuid_prefix_len,
++						uint32_t cookie);
  
- 	r = 1;
- 
-@@ -705,6 +727,19 @@ static int _setgeometry(int argc, char **argv, void *data __attribute((unused)))
+ /*
+  * Suspend a device plus all dependencies.
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 11428ca..6fab3f8 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -806,10 +806,10 @@ static int _info_by_dev(uint32_t major, uint32_t minor, int with_open_count,
  	return r;
  }
  
-+static int _notify(int argc, char **argv, void *data __attribute((unused)))
-+{
-+	uint32_t cookie;
-+	char *p;
-+
-+	if (!(cookie = strtoul(argv[1], &p, 0)) || *p) {
-+		err("Incorrect cookie value");
-+		return 0;
-+	}
-+
-+	return dm_notification_sem_dec(cookie);
-+}
-+
- static int _version(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
+-static int _deactivate_node(const char *name, uint32_t major, uint32_t minor)
++static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, uint32_t cookie)
  {
- 	char version[80];
-@@ -720,7 +755,8 @@ static int _version(int argc __attribute((unused)), char **argv __attribute((unu
- 	return 1;
- }
+ 	struct dm_task *dmt;
+-	int r;
++	int r = 0;
  
--static int _simple(int task, const char *name, uint32_t event_nr, int display)
-+static int _simple(int task, const char *name, uint32_t event_nr,
-+										uint32_t cookie, int display)
- {
- 	int r = 0;
+ 	log_verbose("Removing %s (%" PRIu32 ":%" PRIu32 ")", name, major, minor);
  
-@@ -749,6 +785,9 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
- 				    _read_ahead_flags))
- 		goto out;
+@@ -820,26 +820,34 @@ static int _deactivate_node(const char *name, uint32_t major, uint32_t minor)
  
-+	if (cookie && !dm_task_set_cookie(dmt, cookie))
+ 	if (!dm_task_set_major(dmt, major) || !dm_task_set_minor(dmt, minor)) {
+ 		log_error("Failed to set device number for %s deactivation", name);
+-		dm_task_destroy(dmt);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!dm_task_no_open_count(dmt))
+ 		log_error("Failed to disable open_count");
+ 
++	if (!dm_task_set_cookie(dmt, cookie) ||
++			!dm_notification_sem_inc(cookie))
 +		goto out;
 +
  	r = dm_task_run(dmt);
  
- 	if (r && display && _switches[VERBOSE_ARG])
-@@ -761,17 +800,31 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
++	if (!r)
++		dm_notification_sem_dec(cookie);
++
+ 	/* FIXME Until kernel returns actual name so dm-ioctl.c can handle it */
+ 	rm_dev_node(name);
  
- static int _suspend(int argc, char **argv, void *data __attribute((unused)))
- {
--	return _simple(DM_DEVICE_SUSPEND, argc > 1 ? argv[1] : NULL, 0, 1);
-+	return _simple(DM_DEVICE_SUSPEND, argc > 1 ? argv[1] : NULL, 0, 0, 1);
+ 	/* FIXME Remove node from tree or mark invalid? */
+ 
++out:
+ 	dm_task_destroy(dmt);
+ 
+ 	return r;
  }
  
- static int _resume(int argc, char **argv, void *data __attribute((unused)))
+-static int _rename_node(const char *old_name, const char *new_name, uint32_t major, uint32_t minor)
++static int _rename_node(const char *old_name, const char *new_name, uint32_t major,
++							uint32_t minor, uint32_t cookie)
  {
--	return _simple(DM_DEVICE_RESUME, argc > 1 ? argv[1] : NULL, 0, 1);
-+	uint32_t cookie;
-+
-+	if (!dm_notification_sem_open(&cookie) ||
-+		  !dm_notification_sem_inc(cookie))
-+		return 0;
-+
-+	if (!_simple(DM_DEVICE_RESUME, argc > 1 ? argv[1] : NULL, 0, cookie, 1)) {
-+		dm_notification_sem_close(cookie);
-+		return 0;
-+	}
-+
-+	dm_notification_sem_wait_zero(cookie);
-+	dm_notification_sem_close(cookie);
-+
-+	return 1;
- }
- 
- static int _clear(int argc, char **argv, void *data __attribute((unused)))
- {
--	return _simple(DM_DEVICE_CLEAR, argc > 1 ? argv[1] : NULL, 0, 1);
-+	return _simple(DM_DEVICE_CLEAR, argc > 1 ? argv[1] : NULL, 0, 0, 1);
- }
- 
- static int _wait(int argc, char **argv, void *data __attribute((unused)))
-@@ -788,7 +841,7 @@ static int _wait(int argc, char **argv, void *data __attribute((unused)))
+ 	struct dm_task *dmt;
+ 	int r = 0;
+@@ -857,13 +865,20 @@ static int _rename_node(const char *old_name, const char *new_name, uint32_t maj
  	}
  
- 	return _simple(DM_DEVICE_WAITEVENT, name,
--		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 1);
-+		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 0, 1);
- }
+ 	if (!dm_task_set_newname(dmt, new_name))
+-                goto_out;
++		goto_out;
  
- static int _process_all(int argc, char **argv, int silent,
-@@ -898,8 +951,8 @@ static int _error_device(int argc __attribute((unused)), char **argv __attribute
- 	if (!dm_task_run(dmt))
- 		goto error;
+ 	if (!dm_task_no_open_count(dmt))
+ 		log_error("Failed to disable open_count");
  
--	if (!_simple(DM_DEVICE_RESUME, name, 0, 0)) {
--		_simple(DM_DEVICE_CLEAR, name, 0, 0);
-+	if (!_simple(DM_DEVICE_RESUME, name, 0, 0, 0)) {
-+		_simple(DM_DEVICE_CLEAR, name, 0, 0, 0);
- 		goto error;
++	if (!dm_task_set_cookie(dmt, cookie) ||
++		 (!dm_notification_sem_inc(cookie)))
++		goto out;
++
+ 	r = dm_task_run(dmt);
+ 
++	if (!r)
++		dm_notification_sem_dec(cookie);
++
+ out:
+ 	dm_task_destroy(dmt);
+ 
+@@ -873,10 +888,10 @@ out:
+ /* FIXME Merge with _suspend_node? */
+ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 			uint32_t read_ahead, uint32_t read_ahead_flags,
+-			struct dm_info *newinfo)
++			struct dm_info *newinfo, uint32_t cookie)
+ {
+ 	struct dm_task *dmt;
+-	int r;
++	int r = 0;
+ 
+ 	log_verbose("Resuming %s (%" PRIu32 ":%" PRIu32 ")", name, major, minor);
+ 
+@@ -888,14 +903,12 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 	/* FIXME Kernel should fill in name on return instead */
+ 	if (!dm_task_set_name(dmt, name)) {
+ 		log_error("Failed to set readahead device name for %s", name);
+-		dm_task_destroy(dmt);
+-		return 0;
++		goto out;
  	}
  
-@@ -913,11 +966,24 @@ error:
- static int _remove(int argc, char **argv, void *data __attribute((unused)))
- {
- 	int r;
-+	uint32_t cookie;
+ 	if (!dm_task_set_major(dmt, major) || !dm_task_set_minor(dmt, minor)) {
+ 		log_error("Failed to set device number for %s resumption.", name);
+-		dm_task_destroy(dmt);
+-		return 0;
++		goto out;
+ 	}
  
- 	if (_switches[FORCE_ARG] && argc > 1)
- 		r = _error_device(argc, argv, NULL);
+ 	if (!dm_task_no_open_count(dmt))
+@@ -904,9 +917,16 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
+ 		log_error("Failed to set read ahead");
  
--	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
-+	if (!dm_notification_sem_open(&cookie) ||
++	if (!dm_task_set_cookie(dmt, cookie) ||
 +			!dm_notification_sem_inc(cookie))
-+		return 0;
++		goto out;
 +
-+	if (!_simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, cookie, 0)) {
-+		dm_notification_sem_close(cookie);
-+		return 0;
-+	}
-+
-+	dm_notification_sem_wait_zero(cookie);
-+	dm_notification_sem_close(cookie);
-+
-+	return 1;
+ 	if ((r = dm_task_run(dmt)))
+ 		r = dm_task_get_info(dmt, newinfo);
++	else
++		dm_notification_sem_dec(cookie);
+ 
++out:
+ 	dm_task_destroy(dmt);
+ 
+ 	return r;
+@@ -952,8 +972,8 @@ static int _suspend_node(const char *name, uint32_t major, uint32_t minor,
  }
  
- static int _count_devices(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
-@@ -932,7 +998,7 @@ static int _remove_all(int argc __attribute((unused)), char **argv __attribute((
- 	int r;
+ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+-				   const char *uuid_prefix,
+-				   size_t uuid_prefix_len)
++				   const char *uuid_prefix, size_t uuid_prefix_len,
++					 uint32_t cookie)
+ {
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child = dnode;
+@@ -961,6 +981,16 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 	const struct dm_info *dinfo;
+ 	const char *name;
+ 	const char *uuid;
++	uint32_t local_cookie;
++
++	/* Set notification semaphore at the root level only and
++	 * use its value for every child to group them together.
++	 * We are at the root level if cookie == 0. */
++	if (!cookie) {
++		if (!dm_notification_sem_open(&local_cookie))
++			return 0;
++	}	else
++		local_cookie = cookie;
  
- 	/* Remove all closed devices */
--	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
-+	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0, 0) | dm_mknodes(NULL);
+ 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
+ 		if (!(dinfo = dm_tree_node_get_info(child))) {
+@@ -987,7 +1017,7 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 		    !info.exists || info.open_count)
+ 			continue;
  
- 	if (!_switches[FORCE_ARG])
- 		return r;
-@@ -945,7 +1011,7 @@ static int _remove_all(int argc __attribute((unused)), char **argv __attribute((
- 		return r;
+-		if (!_deactivate_node(name, info.major, info.minor)) {
++		if (!_deactivate_node(name, info.major, info.minor, local_cookie)) {
+ 			log_error("Unable to deactivate %s (%" PRIu32
+ 				  ":%" PRIu32 ")", name, info.major,
+ 				  info.minor);
+@@ -995,7 +1025,12 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 		}
  
- 	r |= _process_all(argc, argv, 1, _error_device);
--	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
-+	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0, 0) | dm_mknodes(NULL);
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_deactivate_children(child, uuid_prefix, uuid_prefix_len);
++			dm_tree_deactivate_children(child, uuid_prefix, uuid_prefix_len, local_cookie);
++	}
++
++	if (!cookie) {
++		dm_notification_sem_wait_zero(local_cookie);
++		dm_notification_sem_close(local_cookie);
+ 	}
  
- 	_num_devices = 0;
- 	r |= _process_all(argc, argv, 1, _count_devices);
-@@ -2222,6 +2288,7 @@ static struct command _commands[] = {
- 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, 1, _status},
- 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
-+	{"notify", "<cookie>", 1, 1, _notify},
- 	{"targets", "", 0, 0, _targets},
- 	{"version", "", 0, 0, _version},
- 	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
+ 	return 1;
+@@ -1085,8 +1120,8 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
+ }
+ 
+ int dm_tree_activate_children(struct dm_tree_node *dnode,
+-				 const char *uuid_prefix,
+-				 size_t uuid_prefix_len)
++				 const char *uuid_prefix, size_t uuid_prefix_len,
++				 uint32_t cookie)
+ {
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child = dnode;
+@@ -1094,6 +1129,17 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 	const char *name;
+ 	const char *uuid;
+ 	int priority;
++	uint32_t local_cookie;
++
++	/* Set notification semaphore at the root level only and
++	 * use its value for every child to group them together.
++	 * We are at the root level if cookie == 0. */
++	if (!cookie) {
++		if (!dm_notification_sem_open(&local_cookie))
++			return 0;
++	}
++	else
++		local_cookie = cookie;
+ 
+ 	/* Activate children first */
+ 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
+@@ -1106,7 +1152,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 			continue;
+ 
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len);
++			dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len, local_cookie);
+ 	}
+ 
+ 	handle = NULL;
+@@ -1131,10 +1177,13 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 
+ 			/* Rename? */
+ 			if (child->props.new_name) {
+-				if (!_rename_node(name, child->props.new_name, child->info.major, child->info.minor)) {
++				if (!_rename_node(name, child->props.new_name, child->info.major,
++							child->info.minor, local_cookie)) {
+ 					log_error("Failed to rename %s (%" PRIu32
+ 						  ":%" PRIu32 ") to %s", name, child->info.major,
+ 						  child->info.minor, child->props.new_name);
++					if (!cookie)
++						dm_notification_sem_close(local_cookie);
+ 					return 0;
+ 				}
+ 				child->name = child->props.new_name;
+@@ -1145,8 +1194,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 				continue;
+ 
+ 			if (!_resume_node(child->name, child->info.major, child->info.minor,
+-					  child->props.read_ahead,
+-					  child->props.read_ahead_flags, &newinfo)) {
++					  child->props.read_ahead, child->props.read_ahead_flags,
++						&newinfo, local_cookie)) {
+ 				log_error("Unable to resume %s (%" PRIu32
+ 					  ":%" PRIu32 ")", child->name, child->info.major,
+ 					  child->info.minor);
+@@ -1160,6 +1209,11 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 
+ 	handle = NULL;
+ 
++	if (!cookie) {
++		dm_notification_sem_wait_zero(local_cookie);
++		dm_notification_sem_close(local_cookie);
++	}
++
+ 	return 1;
+ }
+ 
+@@ -1445,12 +1499,22 @@ out:
+ }
+ 
+ int dm_tree_preload_children(struct dm_tree_node *dnode,
+-			     const char *uuid_prefix,
+-			     size_t uuid_prefix_len)
++			     const char *uuid_prefix, size_t uuid_prefix_len,
++					 uint32_t cookie)
+ {
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child;
+ 	struct dm_info newinfo;
++	uint32_t local_cookie;
++
++	/* Set notification semaphore at the root level only and
++	 * use its value for every child to group them together.
++	 * We are at the root level if cookie == 0. */
++	if (!cookie) {
++		if (!dm_notification_sem_open(&local_cookie))
++			return 0;
++	} else
++		local_cookie = cookie;
+ 
+ 	/* Preload children first */
+ 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
+@@ -1464,20 +1528,20 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			continue;
+ 
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len);
++			dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len, local_cookie);
+ 
+ 		/* FIXME Cope if name exists with no uuid? */
+ 		if (!child->info.exists) {
+ 			if (!_create_node(child)) {
+ 				stack;
+-				return 0;
++				goto out;
+ 			}
+ 		}
+ 
+ 		if (!child->info.inactive_table && child->props.segment_count) {
+ 			if (!_load_node(child)) {
+ 				stack;
+-				return 0;
++				goto out;
+ 			}
+ 		}
+ 
+@@ -1489,8 +1553,8 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			continue;
+ 
+ 		if (!_resume_node(child->name, child->info.major, child->info.minor,
+-				  child->props.read_ahead,
+-				  child->props.read_ahead_flags, &newinfo)) {
++				  child->props.read_ahead, child->props.read_ahead_flags,
++					&newinfo, local_cookie)) {
+ 			log_error("Unable to resume %s (%" PRIu32
+ 				  ":%" PRIu32 ")", child->name, child->info.major,
+ 				  child->info.minor);
+@@ -1503,7 +1567,17 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 
+ 	handle = NULL;
+ 
++	if (!cookie) {
++		dm_notification_sem_wait_zero(local_cookie);
++		dm_notification_sem_close(local_cookie);
++	}
++
+ 	return 1;
++
++out:
++	if (!cookie)
++		dm_notification_sem_close(local_cookie);
++	return 0;
+ }
+ 
+ /*
 
 
