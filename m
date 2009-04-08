@@ -1,266 +1,231 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 08 Apr 2009 14:19:44 +0200
-Subject: [PATCH 2/4] Udev integration: add semaphore IPC to wait for udev rule completion
-Message-ID: <49DC9660.9070306@redhat.com>
+Date: Wed, 08 Apr 2009 14:24:46 +0200
+Subject: [PATCH 3/4] Udev integration: add cookie support for dmsetup
+Message-ID: <49DC978E.4040101@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds simple IPC support (using semaphores) to set a
-communication channel between a udev rule and the process that
-waits for its completion.
+This patch adds cookie support for dmsetup commands using the
+semaphore IPC mechanism (we wait for udev rule completion in
+resume, rename and remove commands).
 
-We generate random unsigned 32 bit variable (cookie) which we
-use to identify the semaphore. When dealing with DM trees, we
-don't have to set a new IPC, we just reuse the existing one,
-increasing the semaphore's value. Each udev's rule completion
-is notified by decreasing this value. So we're waiting on zero
-in the process that fired off the actions.
+A new command is added "notify" with the cookie value as the
+parameter. This is called from udev rule to decrease the value
+of the semaphore (and so to notify that it is completed).
 
 Peter
 
 
-diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index 9f7e4af..ab2f58c 100644
---- a/libdm/.exported_symbols
-+++ b/libdm/.exported_symbols
-@@ -21,6 +21,7 @@ dm_task_get_uuid
- dm_task_get_read_ahead
- dm_task_set_ro
- dm_task_set_newname
-+dm_task_set_cookie
- dm_task_set_event_nr
- dm_task_set_major
- dm_task_set_minor
-@@ -149,3 +150,8 @@ dm_list_last
- dm_list_prev
- dm_list_next
- dm_list_size
-+dm_notification_sem_open
-+dm_notification_sem_inc
-+dm_notification_sem_dec
-+dm_notification_sem_wait_zero
-+dm_notification_sem_close
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index fe86494..8c8a4c3 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -864,6 +864,13 @@ int dm_check_version(void)
- 	return 0;
- }
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 21d2dfe..df6237b 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -523,6 +523,7 @@ static int _create(int argc, char **argv, void *data __attribute((unused)))
+ 	int r = 0;
+ 	struct dm_task *dmt;
+ 	const char *file = NULL;
++	uint32_t cookie;
  
-+int dm_cookie_supported()
-+{
-+	return (dm_check_version() &&
-+					_dm_version >= 4 &&
-+					_dm_version_minor >= 15);
-+}
-+
- void *dm_get_next_target(struct dm_task *dmt, void *next,
- 			 uint64_t *start, uint64_t *length,
- 			 char **target_type, char **params)
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index c1c6218..92b943d 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -155,6 +155,7 @@ int dm_task_set_major(struct dm_task *dmt, int major);
- int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
- int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
- int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t cookie);
- int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
- int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
- int dm_task_set_message(struct dm_task *dmt, const char *message);
-@@ -985,4 +986,19 @@ int dm_report_field_uint64(struct dm_report *rh, struct dm_report_field *field,
- void dm_report_field_set_value(struct dm_report_field *field, const void *value,
- 			       const void *sortvalue);
+ 	if (argc == 3)
+ 		file = argv[2];
+@@ -565,9 +566,19 @@ static int _create(int argc, char **argv, void *data __attribute((unused)))
+ 				    _read_ahead_flags))
+ 		goto out;
  
-+int dm_cookie_supported();
-+
-+/*
-+ * Functions to set simple notification channel between instances of libdm
-+ * code by means of using semaphore identified by a cookie. Primarily used
-+ * to provide a way of notification that related udev rule is completed as
-+ * a consequence of libdm actions fired before and marked by the value of
-+ * the cookie.
-+ */
-+int dm_notification_sem_open(uint32_t *cookie);
-+int dm_notification_sem_inc(uint32_t cookie);
-+int dm_notification_sem_dec(uint32_t cookie);
-+int dm_notification_sem_wait_zero(uint32_t cookie);
-+int dm_notification_sem_close(uint32_t cookie);
-+
- #endif				/* LIB_DEVICE_MAPPER_H */
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index bbb46f5..7f91ded 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -22,6 +22,9 @@
- #include <stdarg.h>
- #include <sys/param.h>
- #include <sys/ioctl.h>
-+#include <sys/types.h>
-+#include <sys/ipc.h>
-+#include <sys/sem.h>
- #include <fcntl.h>
+-	if (!dm_task_run(dmt))
++	if (!dm_notification_sem_open(&cookie) ||
++			!dm_notification_sem_inc(cookie) ||
++			!dm_task_set_cookie(dmt, cookie))
+ 		goto out;
  
- #ifdef linux
-@@ -222,6 +225,14 @@ int dm_task_set_mode(struct dm_task *dmt, mode_t mode)
- 	return 1;
- }
++	if (!dm_task_run(dmt)) {
++		dm_notification_sem_close(cookie);
++		goto out;
++	}
++
++	dm_notification_sem_wait_zero(cookie);
++	dm_notification_sem_close(cookie);
++
+ 	r = 1;
  
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t cookie)
-+{
-+	/* We reuse event_nr field to pass the cookie in.*/
-+	dmt->event_nr = cookie;
-+
-+	return 1;
-+}
-+
- int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
- 		       const char *ttype, const char *params)
+ 	if (_switches[VERBOSE_ARG])
+@@ -583,6 +594,7 @@ static int _rename(int argc, char **argv, void *data __attribute((unused)))
  {
-@@ -711,3 +722,139 @@ out:
+ 	int r = 0;
+ 	struct dm_task *dmt;
++	uint32_t cookie;
+ 
+ 	if (!(dmt = dm_task_create(DM_DEVICE_RENAME)))
+ 		return 0;
+@@ -597,8 +609,18 @@ static int _rename(int argc, char **argv, void *data __attribute((unused)))
+ 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
+ 		goto out;
+ 
+-	if (!dm_task_run(dmt))
++	if (!dm_notification_sem_open(&cookie) ||
++			!dm_notification_sem_inc(cookie) ||
++			!dm_task_set_cookie(dmt, cookie))
++		goto out;
++
++	if (!dm_task_run(dmt)) {
++		dm_notification_sem_close(cookie);
+ 		goto out;
++	}
++
++	dm_notification_sem_wait_zero(cookie);
++	dm_notification_sem_close(cookie);
+ 
+ 	r = 1;
+ 
+@@ -705,6 +727,19 @@ static int _setgeometry(int argc, char **argv, void *data __attribute((unused)))
  	return r;
  }
  
-+int dm_notification_sem_open(uint32_t *cookie)
++static int _notify(int argc, char **argv, void *data __attribute((unused)))
 +{
-+	int semid;
-+	int fd;
-+	uint32_t gen_cookie;
++	uint32_t cookie;
++	char *p;
 +
-+	if (!dm_cookie_supported())
-+		return 1;
-+
-+	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
-+		log_error("Failed to open /dev/urandom to create random cookie value.");
++	if (!(cookie = strtoul(argv[1], &p, 0)) || *p) {
++		err("Incorrect cookie value");
 +		return 0;
 +	}
 +
-+	/* Generate random cookie value. Be sure it is unique and != 0. */
-+	do {
-+		if (read(fd, &gen_cookie, sizeof(gen_cookie)) != sizeof(gen_cookie))
-+			goto out;
++	return dm_notification_sem_dec(cookie);
++}
 +
-+		if ((semid = semget((key_t) gen_cookie, 1, 0600 | IPC_CREAT | IPC_EXCL)) < 0) {
-+			/* if the semaphore key exists, we simply generate another random one */
-+			if (errno == EEXIST)
-+				gen_cookie = 0;
-+			else
-+				goto out;
-+		}
-+	} while (!gen_cookie);
-+
-+	if (semctl(semid, 0, SETVAL, 0) < 0)
+ static int _version(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
+ {
+ 	char version[80];
+@@ -720,7 +755,8 @@ static int _version(int argc __attribute((unused)), char **argv __attribute((unu
+ 	return 1;
+ }
+ 
+-static int _simple(int task, const char *name, uint32_t event_nr, int display)
++static int _simple(int task, const char *name, uint32_t event_nr,
++										uint32_t cookie, int display)
+ {
+ 	int r = 0;
+ 
+@@ -749,6 +785,9 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
+ 				    _read_ahead_flags))
+ 		goto out;
+ 
++	if (cookie && !dm_task_set_cookie(dmt, cookie))
 +		goto out;
 +
-+	if (close(fd))
-+		stack;
-+	*cookie = gen_cookie;
+ 	r = dm_task_run(dmt);
+ 
+ 	if (r && display && _switches[VERBOSE_ARG])
+@@ -761,17 +800,31 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
+ 
+ static int _suspend(int argc, char **argv, void *data __attribute((unused)))
+ {
+-	return _simple(DM_DEVICE_SUSPEND, argc > 1 ? argv[1] : NULL, 0, 1);
++	return _simple(DM_DEVICE_SUSPEND, argc > 1 ? argv[1] : NULL, 0, 0, 1);
+ }
+ 
+ static int _resume(int argc, char **argv, void *data __attribute((unused)))
+ {
+-	return _simple(DM_DEVICE_RESUME, argc > 1 ? argv[1] : NULL, 0, 1);
++	uint32_t cookie;
 +
-+	return 1;
++	if (!dm_notification_sem_open(&cookie) ||
++		  !dm_notification_sem_inc(cookie))
++		return 0;
 +
-+out:
-+	log_error("Failed to create and initialize notification cookie");
-+	if (close(fd))
-+		stack;
-+	return 0;
-+}
-+
-+static int _get_cookie_sem(uint32_t cookie, int *semid)
-+{
-+	if ((*semid = semget((key_t) cookie, 1, 0)) < 0) {
-+		log_error("Could not find notification cookie %" PRIu32 " (0x%x)",
-+			cookie, cookie);
++	if (!_simple(DM_DEVICE_RESUME, argc > 1 ? argv[1] : NULL, 0, cookie, 1)) {
++		dm_notification_sem_close(cookie);
 +		return 0;
 +	}
 +
++	dm_notification_sem_wait_zero(cookie);
++	dm_notification_sem_close(cookie);
++
 +	return 1;
-+}
-+
-+int dm_notification_sem_inc(uint32_t cookie)
-+{
-+	int semid;
-+	struct sembuf sb = {0, 1, 0};
-+
-+	if (!dm_cookie_supported())
-+		return 1;
-+
-+	if (!_get_cookie_sem(cookie, &semid))
+ }
+ 
+ static int _clear(int argc, char **argv, void *data __attribute((unused)))
+ {
+-	return _simple(DM_DEVICE_CLEAR, argc > 1 ? argv[1] : NULL, 0, 1);
++	return _simple(DM_DEVICE_CLEAR, argc > 1 ? argv[1] : NULL, 0, 0, 1);
+ }
+ 
+ static int _wait(int argc, char **argv, void *data __attribute((unused)))
+@@ -788,7 +841,7 @@ static int _wait(int argc, char **argv, void *data __attribute((unused)))
+ 	}
+ 
+ 	return _simple(DM_DEVICE_WAITEVENT, name,
+-		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 1);
++		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 0, 1);
+ }
+ 
+ static int _process_all(int argc, char **argv, int silent,
+@@ -898,8 +951,8 @@ static int _error_device(int argc __attribute((unused)), char **argv __attribute
+ 	if (!dm_task_run(dmt))
+ 		goto error;
+ 
+-	if (!_simple(DM_DEVICE_RESUME, name, 0, 0)) {
+-		_simple(DM_DEVICE_CLEAR, name, 0, 0);
++	if (!_simple(DM_DEVICE_RESUME, name, 0, 0, 0)) {
++		_simple(DM_DEVICE_CLEAR, name, 0, 0, 0);
+ 		goto error;
+ 	}
+ 
+@@ -913,11 +966,24 @@ error:
+ static int _remove(int argc, char **argv, void *data __attribute((unused)))
+ {
+ 	int r;
++	uint32_t cookie;
+ 
+ 	if (_switches[FORCE_ARG] && argc > 1)
+ 		r = _error_device(argc, argv, NULL);
+ 
+-	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
++	if (!dm_notification_sem_open(&cookie) ||
++			!dm_notification_sem_inc(cookie))
 +		return 0;
 +
-+	if (semop(semid, &sb, 1) < 0) {
-+		log_error("Could not set notification cookie %" PRIu32 " (0x%x)",
-+			cookie, cookie);
++	if (!_simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, cookie, 0)) {
++		dm_notification_sem_close(cookie);
 +		return 0;
 +	}
 +
-+	return 1;
-+}
-+
-+int dm_notification_sem_dec(uint32_t cookie)
-+{
-+	int semid;
-+	struct sembuf sb = {0, -1, 0};
-+
-+	if (!dm_cookie_supported())
-+		return 1;
-+
-+	if (!_get_cookie_sem(cookie, &semid))
-+		return 0;
-+
-+	if (semop(semid, &sb, 1) < 0) {
-+		log_error("Could not signal waiting process using notification cookie %" PRIu32 " (0x%x)",
-+			cookie, cookie);
-+		return 0;
-+	}
++	dm_notification_sem_wait_zero(cookie);
++	dm_notification_sem_close(cookie);
 +
 +	return 1;
-+}
-+
-+int dm_notification_sem_wait_zero(uint32_t cookie)
-+{
-+	int semid;
-+	struct sembuf sb = {0, 0, 0};
-+
-+	if (!dm_cookie_supported())
-+		return 1;
-+
-+	if (!_get_cookie_sem(cookie, &semid))
-+		return 0;
-+
-+repeat_wait:
-+	if (semop(semid, &sb, 1) < 0) {
-+		if (errno == EINTR)
-+			goto repeat_wait;
-+		log_error("Could not set wait state for notification cookie %" PRIu32 " (0x%x)",
-+			cookie, cookie);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+int dm_notification_sem_close(uint32_t cookie)
-+{
-+	int semid;
-+
-+	if (!dm_cookie_supported())
-+		return 1;
-+
-+	if (!_get_cookie_sem(cookie, &semid))
-+		return 0;
-+
-+	if (semctl(semid, 0, IPC_RMID, cookie) < 0) {
-+		log_error("Could not remove notification cookie '%" PRIu32 " (0x%x)",
-+			cookie, cookie);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
+ }
+ 
+ static int _count_devices(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
+@@ -932,7 +998,7 @@ static int _remove_all(int argc __attribute((unused)), char **argv __attribute((
+ 	int r;
+ 
+ 	/* Remove all closed devices */
+-	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
++	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0, 0) | dm_mknodes(NULL);
+ 
+ 	if (!_switches[FORCE_ARG])
+ 		return r;
+@@ -945,7 +1011,7 @@ static int _remove_all(int argc __attribute((unused)), char **argv __attribute((
+ 		return r;
+ 
+ 	r |= _process_all(argc, argv, 1, _error_device);
+-	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
++	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0, 0) | dm_mknodes(NULL);
+ 
+ 	_num_devices = 0;
+ 	r |= _process_all(argc, argv, 1, _count_devices);
+@@ -2222,6 +2288,7 @@ static struct command _commands[] = {
+ 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, 1, _status},
+ 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
+ 	{"mknodes", "[<device>]", 0, 1, _mknodes},
++	{"notify", "<cookie>", 1, 1, _notify},
+ 	{"targets", "", 0, 0, _targets},
+ 	{"version", "", 0, 0, _version},
+ 	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
 
 
