@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Apr 2009 09:59:20 -0000
-Subject: LVM2 ./WHATS_NEW lib/format1/format1.c lib/for ...
-Message-ID: <20090410095920.19426.qmail@sourceware.org>
+Date: 10 Apr 2009 10:00:06 -0000
+Subject: LVM2 daemons/clvmd/lvm-functions.c lib/activat ...
+Message-ID: <20090410100006.19820.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,353 +10,297 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-04-10 09:59:19
+Changes by:	mbroz at sourceware.org	2009-04-10 10:00:05
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/format1    : format1.c 
-	lib/format_pool: format_pool.c 
-	lib/format_text: import_vsn1.c 
-	lib/locking    : locking.h 
-	lib/metadata   : metadata-exported.h metadata.c metadata.h 
+	daemons/clvmd  : lvm-functions.c 
+	lib/activate   : activate.c 
 
 Log message:
-	Introduce memory pool per volume group.
-	
-	Since now, all code reading volume group is responsible for releasing
-	the memory allocated by calling vg_release(vg).
-	(For simplicity of use, vg_releae can be called for vg == NULL,
-	the same logic like free(NULL)).
-	
-	Also providing simple macro for unlocking & releasing in one step,
-	tools usualy uses this approach.
-	
-	The global memory pool (cmd->mem) should be used only for global
-	physical volume operations.
-	
-	This patch have to be applied with all subsequent patches to complete
-	memory pool per vg logic.
-	
-	Using separate memory pool has quite bit memory saving impact when
-	using large VGs, this is mainly needed when we have to use
-	preallocated and locked memory (and should not overflow from that
-	memory space).
+	Properly release VG memory pool in activation code and clvmd.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1085&r2=1.1086
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.63&r2=1.64
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.209&r2=1.210
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.190&r2=1.191
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
 
---- LVM2/WHATS_NEW	2009/04/10 09:56:58	1.1085
-+++ LVM2/WHATS_NEW	2009/04/10 09:59:18	1.1086
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Introduce memory pools per volume group (to reduce memory for large VGs).
-   Add memory pool leaks detection.
-   Use copy of PV structure when manipulating with global PV lists.
-   Always return exit error status when locking of volume group fails.
---- LVM2/lib/format1/format1.c	2009/02/25 23:29:06	1.111
-+++ LVM2/lib/format1/format1.c	2009/04/10 09:59:18	1.112
-@@ -111,9 +111,9 @@
- }
+--- LVM2/daemons/clvmd/lvm-functions.c	2009/03/05 16:25:36	1.58
++++ LVM2/daemons/clvmd/lvm-functions.c	2009/04/10 10:00:04	1.59
+@@ -724,6 +724,7 @@
+ 	else
+ 		log_error("Error backing up metadata, can't find VG for group %s", vgname);
  
- static struct volume_group *_build_vg(struct format_instance *fid,
--				      struct dm_list *pvs)
-+				      struct dm_list *pvs,
-+				      struct dm_pool *mem)
++	vg_release(vg);
+ 	dm_pool_empty(cmd->mem);
+ 
+ 	pthread_mutex_unlock(&lvm_lock);
+--- LVM2/lib/activate/activate.c	2009/02/28 00:54:06	1.144
++++ LVM2/lib/activate/activate.c	2009/04/10 10:00:04	1.145
+@@ -843,36 +843,39 @@
+ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		       int error_if_not_suspended)
  {
--	struct dm_pool *mem = fid->fmt->cmd->mem;
- 	struct volume_group *vg = dm_pool_alloc(mem, sizeof(*vg));
- 	struct disk_list *dl;
+-	struct logical_volume *lv, *lv_pre;
++	struct logical_volume *lv = NULL, *lv_pre = NULL;
+ 	struct lvinfo info;
+-	int lockfs = 0;
++	int r = 0, lockfs = 0;
  
-@@ -126,6 +126,7 @@
- 	memset(vg, 0, sizeof(*vg));
+ 	if (!activation())
+ 		return 1;
  
- 	vg->cmd = fid->fmt->cmd;
-+	vg->vgmem = mem;
- 	vg->fid = fid;
- 	vg->seqno = 0;
- 	dm_list_init(&vg->pvs);
-@@ -163,7 +164,7 @@
- 				     const char *vg_name,
- 				     struct metadata_area *mda __attribute((unused)))
- {
--	struct dm_pool *mem = dm_pool_create("lvm1 vg_read", 1024 * 10);
-+	struct dm_pool *mem = dm_pool_create("lvm1 vg_read", VG_MEMPOOL_CHUNK);
- 	struct dm_list pvs;
- 	struct volume_group *vg = NULL;
- 	dm_list_init(&pvs);
-@@ -178,12 +179,13 @@
- 	    (fid->fmt, vg_name, fid->fmt->cmd->filter, mem, &pvs))
- 		goto_bad;
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return_0;
++		goto_out;
  
--	if (!(vg = _build_vg(fid, &pvs)))
-+	if (!(vg = _build_vg(fid, &pvs, mem)))
- 		goto_bad;
+ 	/* Use precommitted metadata if present */
+ 	if (!(lv_pre = lv_from_lvid(cmd, lvid_s, 1)))
+-		return_0;
++		goto_out;
  
--      bad:
--	dm_pool_destroy(mem);
- 	return vg;
-+bad:
-+	dm_pool_destroy(mem);
-+	return NULL;
- }
- 
- static struct disk_list *_flatten_pv(struct format_instance *fid,
-@@ -240,7 +242,7 @@
- static int _format1_vg_write(struct format_instance *fid, struct volume_group *vg,
- 		     struct metadata_area *mda __attribute((unused)))
- {
--	struct dm_pool *mem = dm_pool_create("lvm1 vg_write", 1024 * 10);
-+	struct dm_pool *mem = dm_pool_create("lvm1 vg_write", VG_MEMPOOL_CHUNK);
- 	struct dm_list pvds;
- 	int r = 0;
- 
---- LVM2/lib/format_pool/format_pool.c	2009/02/25 23:29:06	1.20
-+++ LVM2/lib/format_pool/format_pool.c	2009/04/10 09:59:18	1.21
-@@ -113,6 +113,7 @@
+ 	if (test_mode()) {
+ 		_skip("Suspending '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
  	}
  
- 	vg->cmd = fid->fmt->cmd;
-+	vg->vgmem = mem;
- 	vg->fid = fid;
- 	vg->name = NULL;
- 	vg->status = 0;
-@@ -160,7 +161,7 @@
- 				     const char *vg_name,
- 				     struct metadata_area *mda __attribute((unused)))
- {
--	struct dm_pool *mem = dm_pool_create("pool vg_read", 1024);
-+	struct dm_pool *mem = dm_pool_create("pool vg_read", VG_MEMPOOL_CHUNK);
- 	struct dm_list pds;
- 	struct volume_group *vg = NULL;
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
  
-@@ -182,9 +183,10 @@
- 	if (!(vg = _build_vg_from_pds(fid, mem, &pds)))
- 		goto_out;
+-	if (!info.exists || info.suspended)
+-		return error_if_not_suspended ? 0 : 1;
++	if (!info.exists || info.suspended) {
++		r = error_if_not_suspended ? 0 : 1;
++		goto out;
++	}
  
--      out:
--	dm_pool_destroy(mem);
- 	return vg;
+ 	/* If VG was precommitted, preload devices for the LV */
+ 	if ((lv_pre->vg->status & PRECOMMITTED)) {
+ 		if (!_lv_preload(lv_pre)) {
+ 			/* FIXME Revert preloading */
+-			return_0;
++			goto_out;
+ 		}
+ 	}
+ 
+@@ -888,10 +891,17 @@
+ 	if (!_lv_suspend_lv(lv, lockfs)) {
+ 		memlock_dec();
+ 		fs_unlock();
+-		return 0;
++		goto out;
+ 	}
+ 
+-	return 1;
++	r = 1;
 +out:
-+	dm_pool_destroy(mem);
-+	return NULL;
++	if (lv_pre)
++		vg_release(lv_pre->vg);
++	if (lv)
++		vg_release(lv->vg);
++
++	return r;
  }
  
- static int _pool_pv_setup(const struct format_type *fmt __attribute((unused)),
---- LVM2/lib/format_text/import_vsn1.c	2009/04/02 21:34:41	1.57
-+++ LVM2/lib/format_text/import_vsn1.c	2009/04/10 09:59:19	1.58
-@@ -662,18 +662,23 @@
- 	struct config_node *vgn, *cn;
- 	struct volume_group *vg;
- 	struct dm_hash_table *pv_hash = NULL;
--	struct dm_pool *mem = fid->fmt->cmd->mem;
-+	struct dm_pool *mem = dm_pool_create("lvm2 vg_read", VG_MEMPOOL_CHUNK);
-+
-+	if (!mem)
-+		return_NULL;
- 
- 	/* skip any top-level values */
- 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib) ;
- 
- 	if (!vgn) {
- 		log_error("Couldn't find volume group in file.");
--		return NULL;
-+		goto bad;
- 	}
- 
- 	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
--		return_NULL;
-+		goto_bad;
-+
-+	vg->vgmem = mem;
- 	vg->cmd = fid->fmt->cmd;
- 
- 	/* FIXME Determine format type from file contents */
-@@ -807,7 +812,7 @@
- 	if (pv_hash)
- 		dm_hash_destroy(pv_hash);
- 
--	dm_pool_free(mem, vg);
-+	dm_pool_destroy(mem);
- 	return NULL;
- }
- 
---- LVM2/lib/locking/locking.h	2008/11/03 22:14:29	1.43
-+++ LVM2/lib/locking/locking.h	2009/04/10 09:59:19	1.44
-@@ -115,6 +115,9 @@
- 	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
- 
- #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
-+#define unlock_release_vg(cmd, vg, vol) do { unlock_vg(cmd, vol); \
-+					     vg_release(vg); \
-+					} while (0)
- 
- #define resume_lv(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_RESUME)
- #define suspend_lv(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_SUSPEND | LCK_HOLD)
---- LVM2/lib/metadata/metadata-exported.h	2009/02/25 23:29:06	1.63
-+++ LVM2/lib/metadata/metadata-exported.h	2009/04/10 09:59:19	1.64
-@@ -212,6 +212,7 @@
- 
- struct volume_group {
- 	struct cmd_context *cmd;
-+	struct dm_pool *vgmem;
- 	struct format_instance *fid;
- 	uint32_t seqno;		/* Metadata sequence number */
- 
-@@ -437,6 +438,7 @@
- int vg_split_mdas(struct cmd_context *cmd, struct volume_group *vg_from,
- 		  struct volume_group *vg_to);
- 
-+void vg_release(struct volume_group *vg);
- /* Manipulate LVs */
- struct logical_volume *lv_create_empty(const char *name,
- 				       union lvid *lvid,
---- LVM2/lib/metadata/metadata.c	2009/04/10 09:56:00	1.209
-+++ LVM2/lib/metadata/metadata.c	2009/04/10 09:59:19	1.210
-@@ -517,18 +517,22 @@
- 			       int pv_count, char **pv_names)
+ /* Returns success if the device is not active */
+@@ -910,26 +920,30 @@
  {
- 	struct volume_group *vg;
--	struct dm_pool *mem = cmd->mem;
- 	int consistent = 0;
--
--	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
--		return_NULL;
-+	struct dm_pool *mem;
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
++	int r = 0;
  
- 	/* is this vg name already in use ? */
--	if (vg_read_internal(cmd, vg_name, NULL, &consistent)) {
-+	if ((vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
- 		log_err("A volume group called '%s' already exists.", vg_name);
--		goto bad;
-+		vg_release(vg);
-+		return NULL;
+ 	if (!activation())
+ 		return 1;
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (test_mode()) {
+ 		_skip("Resuming '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
  	}
  
-+	if (!(mem = dm_pool_create("lvm2 vg_create", VG_MEMPOOL_CHUNK)))
-+		return_NULL;
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (!info.exists || !info.suspended)
+-		return error_if_not_active ? 0 : 1;
++	if (!info.exists || !info.suspended) {
++		r = error_if_not_active ? 0 : 1;
++		goto out;
++	}
+ 
+ 	if (!_lv_activate_lv(lv))
+-		return 0;
++		goto out;
+ 
+ 	memlock_dec();
+ 	fs_unlock();
+@@ -937,7 +951,12 @@
+ 	if (!monitor_dev_for_events(cmd, lv, 1))
+ 		stack;
+ 
+-	return 1;
++	r = 1;
++out:
++	if (lv)
++		vg_release(lv->vg);
 +
-+	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
-+		goto_bad;
-+
- 	if (!id_create(&vg->id)) {
- 		log_err("Couldn't create uuid for volume group '%s'.", vg_name);
- 		goto bad;
-@@ -537,6 +541,7 @@
- 	/* Strip dev_dir if present */
- 	vg_name = strip_dir(vg_name, cmd->dev_dir);
- 
-+	vg->vgmem = mem;
- 	vg->cmd = cmd;
- 
- 	if (!(vg->name = dm_pool_strdup(mem, vg_name)))
-@@ -589,7 +594,7 @@
- 	return vg;
- 
-       bad:
--	dm_pool_free(mem, vg);
-+	dm_pool_destroy(mem);
- 	return NULL;
++	return r;
  }
  
-@@ -1643,23 +1648,28 @@
- 	struct pv_list *pvl;
- 	struct volume_group *vg;
- 	struct physical_volume *pv;
-+	struct dm_pool *mem;
+ /* Returns success if the device is not active */
+@@ -955,29 +974,32 @@
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
+-	int r;
++	int r = 0;
  
- 	lvmcache_label_scan(cmd, 0);
+ 	if (!activation())
+ 		return 1;
  
- 	if (!(vginfo = vginfo_from_vgname(orphan_vgname, NULL)))
- 		return_NULL;
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
  
--	if (!(vg = dm_pool_zalloc(cmd->mem, sizeof(*vg)))) {
-+	if (!(mem = dm_pool_create("vg_read orphan", VG_MEMPOOL_CHUNK)))
-+		return_NULL;
+ 	if (test_mode()) {
+ 		_skip("Deactivating '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
+ 	}
+ 
+ 	if (!lv_info(cmd, lv, &info, 1, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (!info.exists)
+-		return 1;
++	if (!info.exists) {
++		r = 1;
++		goto out;
++	}
+ 
+ 	if (info.open_count && (lv->status & VISIBLE_LV)) {
+ 		log_error("LV %s/%s in use: not deactivating", lv->vg->name,
+ 			  lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!monitor_dev_for_events(cmd, lv, 0))
+@@ -988,6 +1010,10 @@
+ 	memlock_dec();
+ 	fs_unlock();
+ 
++out:
++	if (lv)
++		vg_release(lv->vg);
 +
-+	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg)))) {
- 		log_error("vg allocation failed");
- 		return NULL;
- 	}
- 	dm_list_init(&vg->pvs);
- 	dm_list_init(&vg->lvs);
- 	dm_list_init(&vg->tags);
-+	vg->vgmem = mem;
- 	vg->cmd = cmd;
--	if (!(vg->name = dm_pool_strdup(cmd->mem, orphan_vgname))) {
-+	if (!(vg->name = dm_pool_strdup(mem, orphan_vgname))) {
- 		log_error("vg name allocation failed");
--		return NULL;
-+		goto bad;
- 	}
- 
- 	/* create format instance with appropriate metadata area */
-@@ -1667,17 +1677,16 @@
- 							  orphan_vgname, NULL,
- 							  NULL))) {
- 		log_error("Failed to create format instance");
--		dm_pool_free(cmd->mem, vg);
--		return NULL;
-+		goto bad;
- 	}
- 
- 	dm_list_iterate_items(info, &vginfo->infos) {
- 		if (!(pv = _pv_read(cmd, dev_name(info->dev), NULL, NULL, 1, 0))) {
- 			continue;
- 		}
--		if (!(pvl = dm_pool_zalloc(cmd->mem, sizeof(*pvl)))) {
-+		if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl)))) {
- 			log_error("pv_list allocation failed");
--			return NULL;
-+			goto bad;
- 		}
- 		pvl->pv = pv;
- 		dm_list_add(&vg->pvs, &pvl->list);
-@@ -1685,6 +1694,9 @@
- 	}
- 
- 	return vg;
-+bad:
-+	dm_pool_destroy(mem);
-+	return NULL;
+ 	return r;
  }
  
- static int _update_pv_list(struct dm_pool *pvmem, struct dm_list *all_pvs, struct volume_group *vg)
-@@ -2040,6 +2052,18 @@
- 	return vg;
+@@ -996,23 +1022,28 @@
+ 			 int *activate_lv)
+ {
+ 	struct logical_volume *lv;
++	int r = 0;
+ 
+-	if (!activation())
+-		goto activate;
++	if (!activation()) {
++		*activate_lv = 1;
++		return 1;
++	}
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (!_passes_activation_filter(cmd, lv)) {
+ 		log_verbose("Not activating %s/%s due to config file settings",
+ 			    lv->vg->name, lv->name);
+ 		*activate_lv = 0;
+-		return 1;
+-	}
++	} else
++		*activate_lv = 1;
++	r = 1;
++out:
++	if (lv)
++		vg_release(lv->vg);
+ 
+-      activate:
+-	*activate_lv = 1;
+-	return 1;
++	return r;
  }
  
-+void vg_release(struct volume_group *vg)
-+{
-+	if (!vg || !vg->vgmem)
-+		return;
-+
-+	if (vg->vgmem == vg->cmd->mem)
-+		log_error("Internal error: global memory pool used for VG %s",
-+			  vg->name);
-+
-+	dm_pool_destroy(vg->vgmem);
-+}
-+
- /* This is only called by lv_from_lvid, which is only called from
-  * activate.c so we know the appropriate VG lock is already held and
-  * the vg_read_internal is therefore safe.
---- LVM2/lib/metadata/metadata.h	2009/02/25 23:29:06	1.190
-+++ LVM2/lib/metadata/metadata.h	2009/04/10 09:59:19	1.191
-@@ -35,6 +35,7 @@
- //#define PV_MIN_SIZE ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
- //#define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
- #define MIRROR_LOG_OFFSET	2	/* sectors */
-+#define VG_MEMPOOL_CHUNK	10240	/* in bytes, hint only */
+ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+@@ -1020,36 +1051,39 @@
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
+-	int r;
++	int r = 0;
  
- /*
-  * Ceiling(n / sz)
+ 	if (!activation())
+ 		return 1;
+ 
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+-		return 0;
++		goto out;
+ 
+ 	if (filter && !_passes_activation_filter(cmd, lv)) {
+ 		log_verbose("Not activating %s/%s due to config file settings",
+ 			    lv->vg->name, lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if ((!lv->vg->cmd->partial_activation) && (lv->status & PARTIAL_LV)) {
+ 		log_error("Refusing activation of partial LV %s. Use --partial to override.",
+ 			  lv->name);
+-		return_0;
++		goto_out;
+ 	}
+ 
+ 	if (test_mode()) {
+ 		_skip("Activating '%s'.", lv->name);
+-		return 1;
++		r = 1;
++		goto out;
+ 	}
+ 
+ 	if (!lv_info(cmd, lv, &info, 0, 0))
+-		return_0;
++		goto_out;
+ 
+-	if (info.exists && !info.suspended && info.live_table)
+-		return 1;
++	if (info.exists && !info.suspended && info.live_table) {
++		r = 1;
++		goto out;
++	}
+ 
+ 	if (exclusive)
+ 		lv->status |= ACTIVATE_EXCL;
+@@ -1062,6 +1096,10 @@
+ 	if (r && !monitor_dev_for_events(cmd, lv, 1))
+ 		stack;
+ 
++out:
++	if (lv)
++		vg_release(lv->vg);
++
+ 	return r;
+ }
+ 
 
 
