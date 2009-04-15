@@ -1,36 +1,34 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 15 Apr 2009 14:42:28 -0000
-Subject: LVM2/tools Makefile.in
-Message-ID: <20090415144228.32255.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 15 Apr 2009 18:35:01 +0200
+Subject: [PATCH] add MMC block device type into filters
+Message-ID: <49E60CB5.8050209@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-04-15 14:42:28
+Add mmc (dev/mmcblk*) block device type to filters.
 
-Modified files:
-	tools          : Makefile.in 
+(tested with SD card)
 
-Log message:
-	Fix dmsetup.static build.
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/filters/filter.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.94&r2=1.95
-
---- LVM2/tools/Makefile.in	2009/04/08 14:08:05	1.94
-+++ LVM2/tools/Makefile.in	2009/04/15 14:42:27	1.95
-@@ -71,7 +71,7 @@
- INSTALL_CMDLIB_TARGETS = install_cmdlib_dynamic
+diff --git a/lib/filters/filter.c b/lib/filters/filter.c
+index 7b343fe..bc07cb6 100644
+--- a/lib/filters/filter.c
++++ b/lib/filters/filter.c
+@@ -78,6 +78,7 @@ static const device_info_t device_info[] = {
+ 	{"vdisk", 8},		/* SUN's LDOM virtual block device */
+ 	{"ps3disk", 16},	/* PlayStation 3 internal disk */
+ 	{"virtblk", 8},		/* VirtIO disk */
++	{"mmc", 16},		/* MMC block device */
+ 	{NULL, 0}
+ };
  
- ifeq ("@STATIC_LINK@", "yes")
--  TARGETS += lvm.static
-+  TARGETS += lvm.static dmsetup.static
-   INSTALL_LVM_TARGETS += install_tools_static
-   INSTALL_DMSETUP_TARGETS += install_dmsetup_static
-   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
+
 
 
