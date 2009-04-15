@@ -1,34 +1,54 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 15 Apr 2009 18:35:01 +0200
-Subject: [PATCH] add MMC block device type into filters
-Message-ID: <49E60CB5.8050209@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 15 Apr 2009 19:07:03 +0100
+Subject: [PATCH] Udev integration: udev rules 1/3
+In-Reply-To: <49DC99BA.8000205@redhat.com>
+References: <49DC99BA.8000205@redhat.com>
+Message-ID: <20090415180703.GJ7843@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add mmc (dev/mmcblk*) block device type to filters.
-
-(tested with SD card)
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/filters/filter.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
-
-diff --git a/lib/filters/filter.c b/lib/filters/filter.c
-index 7b343fe..bc07cb6 100644
---- a/lib/filters/filter.c
-+++ b/lib/filters/filter.c
-@@ -78,6 +78,7 @@ static const device_info_t device_info[] = {
- 	{"vdisk", 8},		/* SUN's LDOM virtual block device */
- 	{"ps3disk", 16},	/* PlayStation 3 internal disk */
- 	{"virtblk", 8},		/* VirtIO disk */
-+	{"mmc", 16},		/* MMC block device */
- 	{NULL, 0}
- };
+On Wed, Apr 08, 2009 at 02:34:02PM +0200, Peter Rajnoha wrote:
+> # udev rules for DM devices
+> # This will create nodes in /dev/mapper directory.
  
+/dev and mapper are (separately) configurable, so this script should perhaps
+be generated from a template for consistency.
+(DM_DIR is fixed at compile time and must match the kernel - set in dm-ioctl.h)
+(/dev gets interesting if people invoked lvm with a private lvm.conf with a
+private devices/dir - as a minimum assumptions made by the script should be
+noted in comments.)
 
+> # "dm" sysfs subdirectory is available in newer DM versions only.
+
+"newer" ?  Be precise - give the version.
+
+> # You can define your own permissions for DM devices here.
+> # ENV{DM_NAME}=="my_device", OWNER="peter", GROUP="peter", MODE="0644"
+ 
+Can that be read from a separate file to avoid the need for manual editing
+when updating?  (Otherwise add markers so that a postinstall script
+can automatically update the file.)
+
+> # We won't send notifications for known subsystems since
+> # these have their own dedicated rules and the notification
+> # will be done after they finish their own actions.
+> ENV{DM_UUID}=="LVM-?*", GOTO="dm_end"
+ 
+Again, how are these prefixes defined?
+- Each package will want to install it's own prefix handler.
+  Can that be done without having to edit files?
+
+> ENV{COOKIE}=="[0-9]*", RUN+="/sbin/dmsetup notify $env{COOKIE}", OPTIONS+="last_rule"
+ 
+Since this is external input being passed to a trusted program, what is validating it?
+- Does that regex have implicit ^ and $ anchors around it?  (If not, add them.)
+- What if the variable is defined but empty?  (Change * to +) ?
+
+Alasdair
+-- 
+agk at redhat.com
 
 
