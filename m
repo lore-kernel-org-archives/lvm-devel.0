@@ -1,52 +1,43 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 15 Apr 2009 19:07:03 +0100
-Subject: [PATCH] Udev integration: udev rules 1/3
-In-Reply-To: <49DC99BA.8000205@redhat.com>
-References: <49DC99BA.8000205@redhat.com>
-Message-ID: <20090415180703.GJ7843@agk.fab.redhat.com>
+Date: Wed, 15 Apr 2009 19:12:53 +0100
+Subject: [PATCH] Udev integration: udev rules 2/3
+In-Reply-To: <49DC9A17.9010705@redhat.com>
+References: <49DC9A17.9010705@redhat.com>
+Message-ID: <20090415181253.GK7843@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Apr 08, 2009 at 02:34:02PM +0200, Peter Rajnoha wrote:
-> # udev rules for DM devices
-> # This will create nodes in /dev/mapper directory.
+On Wed, Apr 08, 2009 at 02:35:35PM +0200, Peter Rajnoha wrote:
+> # udev rules for LVM 
+> # This will create LVM symlinks in /dev directory.
  
-/dev and mapper are (separately) configurable, so this script should perhaps
-be generated from a template for consistency.
-(DM_DIR is fixed at compile time and must match the kernel - set in dm-ioctl.h)
-(/dev gets interesting if people invoked lvm with a private lvm.conf with a
-private devices/dir - as a minimum assumptions made by the script should be
-noted in comments.)
+Again, describe in more detail what the script is doing.
+Needs (C) notices too.
 
-> # "dm" sysfs subdirectory is available in newer DM versions only.
+> SUBSYSTEM!="block", GOTO="lvm_end"
+> KERNEL!="dm-[0-9]*", GOTO="lvm_end"
+> ACTION!="change|remove", GOTO="lvm_end"
+> 
+> ACTION=="change", IMPORT{PROGRAM}="/sbin/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o name,uuid,subsystem,vg_name,lv_name,lv_layer"
 
-"newer" ?  Be precise - give the version.
+If we already have the name (e.g. from sysfs), I think we talked about adding
+a 'split up this name' command to dmsetup which does not perform any ioctls.
 
-> # You can define your own permissions for DM devices here.
-> # ENV{DM_NAME}=="my_device", OWNER="peter", GROUP="peter", MODE="0644"
+> ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
+
+Seems to be some repetition here.  Does udev support including files inline
+within other files?
  
-Can that be read from a separate file to avoid the need for manual editing
-when updating?  (Otherwise add markers so that a postinstall script
-can automatically update the file.)
+> # Do not create symlinks for hidden subdevices.
+> ENV{DM_LV_NAME}=="?*_mlog", GOTO="notify"
+> ENV{DM_LV_NAME}=="?*_mimage_[0-9]*", GOTO="notify"
 
-> # We won't send notifications for known subsystems since
-> # these have their own dedicated rules and the notification
-> # will be done after they finish their own actions.
-> ENV{DM_UUID}=="LVM-?*", GOTO="dm_end"
+I think the rule was based on lv_layer: if it exists, don't create symlink, otherwise do.
+- Don't think mirrors need to be singled out, do they?
  
-Again, how are these prefixes defined?
-- Each package will want to install it's own prefix handler.
-  Can that be done without having to edit files?
-
-> ENV{COOKIE}=="[0-9]*", RUN+="/sbin/dmsetup notify $env{COOKIE}", OPTIONS+="last_rule"
- 
-Since this is external input being passed to a trusted program, what is validating it?
-- Does that regex have implicit ^ and $ anchors around it?  (If not, add them.)
-- What if the variable is defined but empty?  (Change * to +) ?
-
 Alasdair
 -- 
 agk at redhat.com
