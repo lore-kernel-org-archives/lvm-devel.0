@@ -1,41 +1,36 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 20 Apr 2009 20:30:18 +0200
-Subject: [PATCH] fix output of pvs -a fof non PV device
-Message-ID: <49ECBF3A.8060006@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 20 Apr 2009 20:46:07 -0000
+Subject: LVM2/test/api Makefile.in
+Message-ID: <20090420204607.17995.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix pvs -a for segmented output
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-04-20 20:46:06
 
- # pvs -a -o devices
-   Volume group name (null) has invalid characters
-   Skipping volume group (null)
+Modified files:
+	test/api       : Makefile.in 
 
-...
-_pvsegs_sub_single creates fake vg, we need to check
-that pv is real here.
+Log message:
+	Add libdevmapper to test/api building.
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- tools/toollib.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 3057c90..f9bd154 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -376,7 +376,7 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 	int ret;
- 	struct volume_group *old_vg = vg;
+--- LVM2/test/api/Makefile.in	2009/03/08 17:29:27	1.3
++++ LVM2/test/api/Makefile.in	2009/04/20 20:46:06	1.4
+@@ -25,7 +25,7 @@
  
--	if (!vg && !is_orphan(pv)) {
-+	if (is_pv(pv) && !vg && !is_orphan(pv)) {
- 		vg_name = pv_vg_name(pv);
+ TARGETS = test
  
- 		if (!(vg = vg_lock_and_read(cmd, vg_name, NULL, LCK_VG_READ,
-
+-LVMLIBS = -llvm
++LVMLIBS = -llvm -ldevmapper
+ 
+ DEFS += -D_REENTRANT
+ CFLAGS += -fno-strict-aliasing
 
 
