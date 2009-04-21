@@ -1,30 +1,38 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 21 Apr 2009 20:47:09 +0200
-Subject: [PATCH 1/4] Udev integration: add LVM fields support for dmsetup
-In-Reply-To: <1240338923.3705.66.camel@f10-node1>
-References: <49DC94D2.4010903@redhat.com> <1240338923.3705.66.camel@f10-node1>
-Message-ID: <49EE14AD.7050502@redhat.com>
+Date: Tue, 21 Apr 2009 21:07:56 +0200
+Subject: [PATCH 3/4] Udev integration: add cookie support for dmsetup
+In-Reply-To: <1240338838.3705.63.camel@f10-node1>
+References: <49DC978E.4040101@redhat.com> <1240338838.3705.63.camel@f10-node1>
+Message-ID: <49EE198C.6070404@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 04/21/2009 08:35 PM, Dave Wysochanski wrote:
-> A couple minor cleanup comments for this patch set:
-> 1. Warnings when compiling these patches. 
-> ioctl/libdm-iface.c:867: warning: no previous prototype for ?dm_cookie_supported?
-> dmsetup.c:332: warning: assignment discards qualifiers from pointer target type
+On 04/21/2009 08:33 PM, Dave Wysochanski wrote:
+>> -	if (!dm_task_run(dmt))
+>> +	if (!dm_notification_sem_open(&cookie) ||
+>> +			!dm_notification_sem_inc(cookie) ||
+>> +			!dm_task_set_cookie(dmt, cookie))
+>>  		goto out;
+>>  
+>> +	if (!dm_task_run(dmt)) {
+>> +		dm_notification_sem_close(cookie);
+>> +		goto out;
+>> +	}
+>> +
+>> +	dm_notification_sem_wait_zero(cookie);
+>> +	dm_notification_sem_close(cookie);
+>> +
+>>  	r = 1;
+> 
+> 
+> This piece of code could exit without cleanup of the semaphore.  Should
+> the first 'if' only check !dm_notification_sem_open, and the sem_inc and
+> set_cookie be '||'d with dm_task_run in the second 'if'?
 
-Yes, I've noticed, too :) I've added proper casting here, so it's OK now...
-
-> 2. whitespace / tabs - set to 8 spaces / tab?
-> Areas I noticed were dm_cookie_supported() definitions and other
-> indents.
-
-...ok, I'll have a look
-
-Thanks
+Oh, sure. I have to correct this. Thanks!
 
 Peter
 
