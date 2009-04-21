@@ -1,373 +1,597 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 06 Apr 2009 10:33:04 +0200
-Subject: [PATCH 5/6] vg mempool: fix metadata manipulation code
-Message-ID: <49D9BE40.1060504@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 21 Apr 2009 14:32:00 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c lib/m ...
+Message-ID: <20090421143200.11505.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Properly release VG memory pool in metadata manipulation code.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-04-21 14:31:58
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/metadata/metadata.c |  109 +++++++++++++++++++++++++++++++++++------------
- 1 files changed, 81 insertions(+), 28 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c mirror.c 
+	tools          : lvchange.c lvconvert.c lvcreate.c lvresize.c 
+	                 pvmove.c 
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index dd6ce54..1ded911 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -112,7 +112,7 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+Log message:
+	Move metadata backup call after vg_commit.
+	
+	The backup() call store metadata from memory.
+	
+	But in cluster backup() call performs
+	remote nodes metadata backup and it reads data from disk.
+	
+	For metadata backup consistency,
+	patch moves all backup() calls after vg_commit.
+	
+	(Moreover, some tools already do that this way.)
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1090&r2=1.1091
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.165&r2=1.166
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.96&r2=1.97
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.181&r2=1.182
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+
+--- LVM2/WHATS_NEW	2009/04/21 13:11:28	1.1090
++++ LVM2/WHATS_NEW	2009/04/21 14:31:57	1.1091
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Fix metadata backup to run after vg_commit always.
+   Tidy clvmd volume lock cache functions.
+   Fix pvs report for orphan PVs when segment attributes are requested.
+   Fix pvs -a output to not read volume groups from non-PV devices.
+--- LVM2/lib/metadata/lv_manip.c	2009/04/07 10:20:29	1.165
++++ LVM2/lib/metadata/lv_manip.c	2009/04/21 14:31:58	1.166
+@@ -1736,6 +1736,7 @@
  {
- 	struct pv_list *pvl;
- 	struct format_instance *fid = vg->fid;
--	struct dm_pool *mem = fid->fmt->cmd->mem;
-+	struct dm_pool *mem = vg->vgmem;
+ 	struct volume_group *vg = lv->vg;
+ 	struct lv_names lv_names;
++	int r = 0;
  
- 	log_verbose("Adding physical volume '%s' to volume group '%s'",
- 		    pv_name, vg->name);
-@@ -242,7 +242,7 @@ int get_pv_from_vg_by_id(const struct format_type *fmt, const char *vg_name,
- {
- 	struct volume_group *vg;
- 	struct pv_list *pvl;
--	int consistent = 0;
-+	int r = 0, consistent = 0;
+ 	/* rename is not allowed on sub LVs */
+ 	if (!lv_is_displayable(lv)) {
+@@ -1773,23 +1774,21 @@
+ 	if (!vg_write(vg))
+ 		return 0;
  
- 	if (!(vg = vg_read_internal(fmt->cmd, vg_name, vgid, &consistent))) {
- 		log_error("get_pv_from_vg_by_id: vg_read_internal failed to read VG %s",
-@@ -258,13 +258,16 @@ int get_pv_from_vg_by_id(const struct format_type *fmt, const char *vg_name,
- 		if (id_equal(&pvl->pv->id, (const struct id *) pvid)) {
- 			if (!_copy_pv(fmt->cmd->mem, pv, pvl->pv)) {
- 				log_error("internal PV duplication failed");
--				return_0;
-+				r = 0;
-+				goto out;
- 			}
--			return 1;
-+			r = 1;
-+			goto out;
- 		}
- 	}
+-	backup(vg);
 -
--	return 0;
+ 	if (!suspend_lv(cmd, lv)) {
+-		stack;
+ 		vg_revert(vg);
+-		return 0;
++		goto_out;
+ 	}
+ 
+ 	if (!vg_commit(vg)) {
+-		stack;
+ 		resume_lv(cmd, lv);
+-		return 0;
++		goto_out;
+ 	}
+ 
+ 	resume_lv(cmd, lv);
+-
+-	return 1;
++	r = 1;
 +out:
-+	vg_release(vg);
++	backup(vg);
 +	return r;
  }
  
- static int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
-@@ -317,7 +320,7 @@ int validate_vg_rename_params(struct cmd_context *cmd,
- int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
- 	      const char *new_name)
- {
--	struct dm_pool *mem = cmd->mem;
-+	struct dm_pool *mem = vg->vgmem;
- 	struct pv_list *pvl;
+ char *generate_lv_name(struct volume_group *vg, const char *format,
+@@ -2051,14 +2050,11 @@
+ 	}
  
- 	if (!(vg->name = dm_pool_strdup(mem, new_name))) {
-@@ -1824,18 +1827,25 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		    (!use_precommitted &&
- 		     !(vg = mda->ops->vg_read(fid, vgname, mda)))) {
- 			inconsistent = 1;
-+			vg_release(vg);
- 			continue;
+ 	/* store it on disks */
+-	if (!vg_write(vg))
+-		return 0;
++	if (!vg_write(vg) || !vg_commit(vg))
++		return_0;
+ 
+ 	backup(vg);
+ 
+-	if (!vg_commit(vg))
+-		return 0;
+-
+ 	/* If no snapshots left, reload without -real. */
+ 	if (origin && !lv_is_origin(origin)) {
+ 		if (!suspend_lv(cmd, origin))
+--- LVM2/lib/metadata/mirror.c	2009/04/10 09:53:43	1.83
++++ LVM2/lib/metadata/mirror.c	2009/04/21 14:31:58	1.84
+@@ -270,14 +270,11 @@
  		}
- 		if (!correct_vg) {
- 			correct_vg = vg;
- 			continue;
- 		}
+ 
+ 	/* store mirror log on disk(s) */
+-	if (!vg_write(log_lv->vg))
++	if (!vg_write(log_lv->vg) || !vg_commit(log_lv->vg))
+ 		goto activate_lv;
+ 
+ 	backup(log_lv->vg);
+ 
+-	if (!vg_commit(log_lv->vg))
+-		goto activate_lv;
+-
+ 	if (!activate_lv(cmd, log_lv)) {
+ 		log_error("Aborting. Failed to activate mirror log.");
+ 		goto revert_new_lv;
+@@ -334,10 +331,12 @@
+ 		return 0;
+ 	}
+ 
+-	if (!vg_write(log_lv->vg) ||
+-	    (backup(log_lv->vg), !vg_commit(log_lv->vg)))
++	if (!vg_write(log_lv->vg) || !vg_commit(log_lv->vg))
+ 		log_error("Manual intervention may be required to "
+ 			  "remove/restore abandoned log LV before retrying.");
++	else
++		backup(log_lv->vg);
 +
- 		/* FIXME Also ensure contents same - checksum compare? */
- 		if (correct_vg->seqno != vg->seqno) {
- 			inconsistent = 1;
--			if (vg->seqno > correct_vg->seqno)
-+			if (vg->seqno > correct_vg->seqno) {
-+				vg_release(correct_vg);
- 				correct_vg = vg;
-+			}
- 		}
-+
-+		if (vg != correct_vg)
-+			vg_release(vg);
- 	}
+ activate_lv:
+ 	if (was_active && !remove_on_failure && !activate_lv(cmd, log_lv))
+ 		return_0;
+@@ -1504,11 +1503,15 @@
+ 	return 1;
  
- 	/* Ensure every PV in the VG was in the cache */
-@@ -1885,14 +1895,17 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 
- 			if (memlock())
- 				inconsistent = 1;
--			else
-+			else {
-+				vg_release(correct_vg);
- 				correct_vg = NULL;
-+			}
- 		} else dm_list_iterate_items(pvl, &correct_vg->pvs) {
- 			if (pvl->pv->status & MISSING_PV)
- 				continue;
- 			if (!str_list_match_item(pvids, pvl->pv->dev->pvid)) {
- 				log_debug("Cached VG %s had incorrect PV list",
- 					  vgname);
-+				vg_release(correct_vg);
- 				correct_vg = NULL;
- 				break;
- 			}
-@@ -1932,8 +1945,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			}
- 			if (!correct_vg) {
- 				correct_vg = vg;
--				if (!_update_pv_list(cmd->mem, &all_pvs, correct_vg))
-+				if (!_update_pv_list(cmd->mem, &all_pvs, correct_vg)) {
-+					vg_release(vg);
- 					return_NULL;
-+				}
- 				continue;
- 			}
- 
-@@ -1946,11 +1961,19 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			/* FIXME Also ensure contents same - checksums same? */
- 			if (correct_vg->seqno != vg->seqno) {
- 				inconsistent = 1;
--				if (!_update_pv_list(cmd->mem, &all_pvs, vg))
-+				if (!_update_pv_list(cmd->mem, &all_pvs, vg)) {
-+					vg_release(vg);
-+					vg_release(correct_vg);
- 					return_NULL;
--				if (vg->seqno > correct_vg->seqno)
-+				}
-+				if (vg->seqno > correct_vg->seqno) {
-+					vg_release(correct_vg);
- 					correct_vg = vg;
-+				}
- 			}
-+
-+			if (vg != correct_vg)
-+				vg_release(vg);
- 		}
- 
- 		/* Give up looking */
-@@ -1965,6 +1988,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		if (use_precommitted) {
- 			log_error("Inconsistent pre-commit metadata copies "
- 				  "for volume group %s", vgname);
-+			vg_release(correct_vg);
- 			return NULL;
- 		}
- 
-@@ -1984,12 +2008,14 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 
- 		if (!vg_write(correct_vg)) {
- 			log_error("Automatic metadata correction failed");
-+			vg_release(correct_vg);
- 			return NULL;
- 		}
- 
- 		if (!vg_commit(correct_vg)) {
- 			log_error("Automatic metadata correction commit "
- 				  "failed");
-+			vg_release(correct_vg);
- 			return NULL;
- 		}
- 
-@@ -1998,12 +2024,16 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 				if (pvl->pv->dev == pvl2->pv->dev)
- 					goto next_pv;
- 			}
--			if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid)))
-+			if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid))) {
-+				vg_release(correct_vg);
- 				return_NULL;
-+			}
- 			log_error("Removing PV %s (%s) that no longer belongs to VG %s",
- 				  pv_dev_name(pvl->pv), uuid, correct_vg->name);
--			if (!pv_write_orphan(cmd, pvl->pv))
-+			if (!pv_write_orphan(cmd, pvl->pv)) {
-+				vg_release(correct_vg);
- 				return_NULL;
-+			}
-       next_pv:
- 			;
- 		}
-@@ -2020,6 +2050,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			  "volume group %s", correct_vg->name);
- 		log_error("Please restore the metadata by running "
- 			  "vgcfgrestore.");
-+		vg_release(correct_vg);
- 		return NULL;
- 	}
- 
-@@ -2039,6 +2070,7 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
- 	if (!check_pv_segments(vg)) {
- 		log_error("Internal error: PV segments corrupted in %s.",
- 			  vg->name);
-+		vg_release(vg);
- 		return NULL;
- 	}
- 
-@@ -2046,6 +2078,7 @@ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vgnam
- 		if (!check_lv_segments(lvl->lv, 1)) {
- 			log_error("Internal error: LV segments corrupted in %s.",
- 				  lvl->lv->name);
-+			vg_release(vg);
- 			return NULL;
- 		}
- 	}
-@@ -2072,7 +2105,7 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- {
- 	const char *vgname;
- 	struct dm_list *vgnames;
--	struct volume_group *vg;
-+	struct volume_group *vg = NULL;
- 	struct lvmcache_vginfo *vginfo;
- 	struct str_list *strl;
- 	int consistent = 0;
-@@ -2090,11 +2123,12 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 			}
- 			return vg;
- 		}
-+		vg_release(vg);
- 	}
- 
- 	/* Mustn't scan if memory locked: ensure cache gets pre-populated! */
- 	if (memlock())
--		return NULL;
-+		goto out;
- 
- 	/* FIXME Need a genuine read by ID here - don't vg_read_internal by name! */
- 	/* FIXME Disabled vgrenames while active for now because we aren't
-@@ -2103,7 +2137,7 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 	// The slow way - full scan required to cope with vgrename
- 	if (!(vgnames = get_vgnames(cmd, 2))) {
- 		log_error("vg_read_by_vgid: get_vgnames failed");
--		return NULL;
-+		goto out;
- 	}
- 
- 	dm_list_iterate_items(strl, vgnames) {
-@@ -2118,12 +2152,14 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 			if (!consistent) {
- 				log_error("Volume group %s metadata is "
- 					  "inconsistent", vgname);
--				return NULL;
-+				goto out;
- 			}
- 			return vg;
- 		}
- 	}
- 
-+out:
-+	vg_release(vg);
- 	return NULL;
- }
- 
-@@ -2146,14 +2182,17 @@ struct logical_volume *lv_from_lvid(struct cmd_context *cmd, const char *lvid_s,
- 	log_verbose("Found volume group \"%s\"", vg->name);
- 	if (vg->status & EXPORTED_VG) {
- 		log_error("Volume group \"%s\" is exported", vg->name);
--		return NULL;
-+		goto out;
- 	}
- 	if (!(lvl = find_lv_in_vg_by_lvid(vg, lvid))) {
- 		log_very_verbose("Can't find logical volume id %s", lvid_s);
--		return NULL;
-+		goto out;
- 	}
- 
- 	return lvl->lv;
-+out:
-+	vg_release(vg);
-+	return NULL;
- }
- 
- /**
-@@ -2294,10 +2333,12 @@ static int _get_pvs(struct cmd_context *cmd, struct dm_list **pvslist)
- 			dm_list_iterate_items(pvl, &vg->pvs) {
- 				if (!(pvl_copy = _copy_pvl(cmd->mem, pvl))) {
- 					log_error("PV list allocation failed");
-+					vg_release(vg);
- 					return 0;
- 				}
- 				dm_list_add(results, &pvl_copy->list);
- 			}
-+		vg_release(vg);
- 	}
- 	init_pvmove(old_pvmove);
- 
-@@ -2527,12 +2568,12 @@ vg_t *vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
- 	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)) ||
- 	    ((misc_flags & FAIL_INCONSISTENT) && !consistent)) {
- 		log_error("Volume group \"%s\" not found", vg_name);
--		unlock_vg(cmd, vg_name);
-+		unlock_release_vg(cmd, vg, vg_name);
- 		return NULL;
- 	}
- 
- 	if (!vg_check_status(vg, status_flags)) {
--		unlock_vg(cmd, vg_name);
-+		unlock_release_vg(cmd, vg, vg_name);
- 		return NULL;
- 	}
- 
-@@ -2547,9 +2588,17 @@ static vg_t *_vg_make_handle(struct cmd_context *cmd,
- 			     struct volume_group *vg,
- 			     uint32_t failure)
- {
--	if (!vg && !(vg = dm_pool_zalloc(cmd->mem, sizeof(*vg)))) {
--		log_error("Error allocating vg handle.");
--		return_NULL;
-+	struct dm_pool *vgmem;
-+
-+	if (!vg) {
-+		if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_SIZE)) &&
-+		    !(vg = dm_pool_zalloc(vgmem, sizeof(*vg)))) {
-+			log_error("Error allocating vg handle.");
-+			if (vgmem)
-+				dm_pool_destroy(vgmem);
-+			return_NULL;
-+		}
-+		vg->vgmem = vgmem;
- 	}
- 
- 	vg->read_status = failure;
-@@ -2577,8 +2626,10 @@ static vg_t *_recover_vg(struct cmd_context *cmd, const char *lock_name,
- 	if (!(vg = vg_read_internal(cmd, vg_name, vgid, &consistent)))
- 		return_NULL;
- 
--	if (!consistent)
-+	if (!consistent) {
-+		vg_release(vg);
- 		return_NULL;
+   out_remove_log:
+-	if (log_lv && (!lv_remove(log_lv) || !vg_write(log_lv->vg) ||
+-		       (backup(log_lv->vg), !vg_commit(log_lv->vg))))
+-		log_error("Manual intervention may be required to remove "
+-			  "abandoned log LV before retrying.");
+-
++	if (log_lv) {
++		if (!lv_remove(log_lv) ||
++		    !vg_write(log_lv->vg) ||
++		    !vg_commit(log_lv->vg))
++			log_error("Manual intervention may be required to remove "
++				  "abandoned log LV before retrying.");
++		else
++			backup(log_lv->vg);
 +	}
- 
- 	return (vg_t *)vg;
- }
-@@ -2598,7 +2649,7 @@ static vg_t *_vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
- 			       const char *vgid, uint32_t lock_flags,
- 			       uint32_t status_flags, uint32_t misc_flags)
+   out_remove_imgs:
+ 	alloc_destroy(ah);
+ 	return 0;
+--- LVM2/tools/lvchange.c	2008/12/19 14:22:48	1.96
++++ LVM2/tools/lvchange.c	2009/04/21 14:31:58	1.97
+@@ -20,6 +20,7 @@
  {
--	struct volume_group *vg = 0;
-+	struct volume_group *vg = NULL;
- 	const char *lock_name;
-  	int consistent = 1;
- 	int consistent_in;
-@@ -2654,13 +2705,15 @@ static vg_t *_vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
+ 	uint32_t lv_access;
+ 	struct lvinfo info;
++	int r = 0;
+ 
+ 	lv_access = arg_uint_value(cmd, permission_ARG, 0);
+ 
+@@ -56,26 +57,27 @@
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+-		return 0;
++		goto out;
  	}
  
- 	/* consistent == 0 when VG is not found, but failed == FAILED_NOTFOUND */
--	if (!consistent && !failure)
-+	if (!consistent && !failure) {
-+		vg_release(vg);
- 		if (!(vg = _recover_vg(cmd, lock_name, vg_name, vgid, lock_flags))) {
- 			log_error("Recovery of volume group \"%s\" failed.",
- 				  vg_name);
- 			failure |= FAILED_INCONSISTENT;
- 			goto_bad;
- 		}
-+	}
- 	
+ 	if (!vg_commit(lv->vg)) {
+ 		resume_lv(cmd, lv);
+-		return 0;
++		goto_out;
+ 	}
  
- 	failure |= _vg_bad_status_bits(vg, status_flags & ~CLUSTERED);
-
+ 	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+-	return 1;
++	r = 1;	
++out:
++	backup(lv->vg);
++	return r;
+ }
+ 
+ static int lvchange_monitoring(struct cmd_context *cmd,
+@@ -274,8 +276,6 @@
+ 			return 0;
+ 		}
+ 
+-		backup(lv->vg);
+-
+ 		if (!vg_commit(lv->vg)) {
+ 			log_error("Failed to commit intermediate VG metadata.");
+ 			if (!attach_mirror_log(first_seg(lv), log_lv))
+@@ -285,6 +285,8 @@
+ 			return 0;
+ 		}
+ 
++		backup(lv->vg);
++
+ 		if (!activate_lv(cmd, log_lv)) {
+ 			log_error("Unable to activate %s for mirror log resync",
+ 				  log_lv->name);
+@@ -349,15 +351,12 @@
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+ 
+-	if (!vg_write(lv->vg))
++	/* No need to suspend LV for this change */
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
+ 	backup(lv->vg);
+ 
+-	/* No need to suspend LV for this change */
+-	if (!vg_commit(lv->vg))
+-		return_0;
+-
+ 	return 1;
+ }
+ 
+@@ -366,6 +365,7 @@
+ {
+ 	unsigned read_ahead = 0;
+ 	unsigned pagesize = (unsigned) lvm_getpagesize() >> SECTOR_SHIFT;
++	int r = 0;
+ 
+ 	read_ahead = arg_uint_value(cmd, readahead_ARG, 0);
+ 
+@@ -401,26 +401,27 @@
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!vg_commit(lv->vg)) {
+ 		resume_lv(cmd, lv);
+-		return 0;
++		goto_out;
+ 	}
+ 
+ 	log_very_verbose("Updating permissions for \"%s\" in kernel", lv->name);
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+-	return 1;
++	r = 1;
++out:
++	backup(lv->vg);
++	return r;
+ }
+ 
+ static int lvchange_persistent(struct cmd_context *cmd,
+@@ -477,14 +478,11 @@
+ 	}
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
+ 	backup(lv->vg);
+ 
+-	if (!vg_commit(lv->vg))
+-		return_0;
+-
+ 	if (active) {
+ 		log_verbose("Re-activating logical volume \"%s\"", lv->name);
+ 		if (!activate_lv(cmd, lv)) {
+@@ -527,15 +525,13 @@
+ 	}
+ 
+ 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
+-	if (!vg_write(lv->vg))
+-		return_0;
+-
+-	backup(lv->vg);
+ 
+ 	/* No need to suspend LV for this change */
+-	if (!vg_commit(lv->vg))
++	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+ 		return_0;
+ 
++	backup(lv->vg);
++
+ 	return 1;
+ }
+ 
+--- LVM2/tools/lvconvert.c	2009/04/10 10:01:38	1.69
++++ LVM2/tools/lvconvert.c	2009/04/21 14:31:58	1.70
+@@ -269,6 +269,8 @@
+ 				    struct logical_volume *lv,
+ 				    struct dm_list *lvs_changed __attribute((unused)))
+ {
++	int r = 0;
++
+ 	if (!collapse_mirrored_lv(lv)) {
+ 		log_error("Failed to remove temporary sync layer.");
+ 		return 0;
+@@ -281,29 +283,29 @@
+ 	if (!vg_write(vg))
+ 		return_0;
+ 
+-	backup(vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(vg);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!vg_commit(vg)) {
+ 		resume_lv(cmd, lv);
+-		return 0;
++		goto_out;
+ 	}
+ 
+ 	log_very_verbose("Updating \"%s\" in kernel", lv->name);
+ 
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
++	r = 1;
+ 	log_print("Logical volume %s converted.", lv->name);
+-
+-	return 1;
++out:
++	backup(vg);
++	return r;
+ }
+ 
+ static struct poll_functions _lvconvert_mirror_fns = {
+@@ -383,6 +385,7 @@
+ 	const char *mirrorlog;
+ 	unsigned corelog = 0;
+ 	struct logical_volume *original_lv;
++	int r = 0;
+ 
+ 	seg = first_seg(lv);
+ 	existing_mirrors = lv_mirror_count(lv);
+@@ -589,30 +592,31 @@
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, lv)) {
+ 		log_error("Failed to lock %s", lv->name);
+ 		vg_revert(lv->vg);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!vg_commit(lv->vg)) {
+ 		resume_lv(cmd, lv);
+-		return 0;
++		goto_out;
+ 	}
+ 
+ 	log_very_verbose("Updating \"%s\" in kernel", lv->name);
+ 
+ 	if (!resume_lv(cmd, lv)) {
+ 		log_error("Problem reactivating %s", lv->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!lp->need_polling)
+ 		log_print("Logical volume %s converted.", lv->name);
+ 
+-	return 1;
++	r = 1;
++out:
++	backup(lv->vg);
++	return r;
+ }
+ 
+ static int lvconvert_snapshot(struct cmd_context *cmd,
+@@ -620,6 +624,7 @@
+ 			      struct lvconvert_params *lp)
+ {
+ 	struct logical_volume *org;
++	int r = 0;
+ 
+ 	if (!(org = find_lv(lv->vg, lp->origin))) {
+ 		log_error("Couldn't find origin volume '%s'.", lp->origin);
+@@ -664,25 +669,25 @@
+ 	if (!vg_write(lv->vg))
+ 		return_0;
+ 
+-	backup(lv->vg);
+-
+ 	if (!suspend_lv(cmd, org)) {
+ 		log_error("Failed to suspend origin %s", org->name);
+ 		vg_revert(lv->vg);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	if (!vg_commit(lv->vg))
+-		return_0;
++		goto_out;
+ 
+ 	if (!resume_lv(cmd, org)) {
+ 		log_error("Problem reactivating origin %s", org->name);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	log_print("Logical volume %s converted to snapshot.", lv->name);
+-
+-	return 1;
++	r = 1;
++out:
++	backup(lv->vg);
++	return r;
+ }
+ 
+ static int lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+--- LVM2/tools/lvcreate.c	2009/04/10 10:01:38	1.181
++++ LVM2/tools/lvcreate.c	2009/04/21 14:31:58	1.182
+@@ -786,14 +786,11 @@
+ 	}
+ 
+ 	/* store vg on disk(s) */
+-	if (!vg_write(vg))
++	if (!vg_write(vg) || !vg_commit(vg))
+ 		return_0;
+ 
+ 	backup(vg);
+ 
+-	if (!vg_commit(vg))
+-		return_0;
+-
+ 	if (lp->snapshot) {
+ 		if (!activate_lv_excl(cmd, lv)) {
+ 			log_error("Aborting. Failed to activate snapshot "
+@@ -878,9 +875,12 @@
+ 
+ revert_new_lv:
+ 	/* FIXME Better to revert to backup of metadata? */
+-	if (!lv_remove(lv) || !vg_write(vg) || (backup(vg), !vg_commit(vg)))
++	if (!lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
+ 		log_error("Manual intervention may be required to remove "
+ 			  "abandoned LV(s) before retrying.");
++	else
++		backup(vg);
++
+ 	return 0;
+ }
+ 
+--- LVM2/tools/lvresize.c	2009/04/10 10:01:38	1.106
++++ LVM2/tools/lvresize.c	2009/04/21 14:31:58	1.107
+@@ -626,8 +626,6 @@
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	backup(vg);
+-
+ 	/* If snapshot, must suspend all associated devices */
+ 	if (lv_is_cow(lv))
+ 		lock_lv = origin_from_cow(lv);
+@@ -637,20 +635,25 @@
+ 	if (!suspend_lv(cmd, lock_lv)) {
+ 		log_error("Failed to suspend %s", lp->lv_name);
+ 		vg_revert(vg);
++		backup(vg);
+ 		return ECMD_FAILED;
+ 	}
+ 
+ 	if (!vg_commit(vg)) {
+ 		stack;
+ 		resume_lv(cmd, lock_lv);
++		backup(vg);
+ 		return ECMD_FAILED;
+ 	}
+ 
+ 	if (!resume_lv(cmd, lock_lv)) {
+ 		log_error("Problem reactivating %s", lp->lv_name);
++		backup(vg);
+ 		return ECMD_FAILED;
+ 	}
+ 
++	backup(vg);
++
+ 	log_print("Logical volume %s successfully resized", lp->lv_name);
+ 
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+--- LVM2/tools/pvmove.c	2009/04/10 10:01:38	1.56
++++ LVM2/tools/pvmove.c	2009/04/21 14:31:58	1.57
+@@ -280,6 +280,7 @@
+ {
+ 	unsigned exclusive = _pvmove_is_exclusive(cmd, vg);
+ 	unsigned first_time = (flags & PVMOVE_FIRST_TIME) ? 1 : 0;
++	int r = 0;
+ 
+ 	log_verbose("Updating volume group metadata");
+ 	if (!vg_write(vg)) {
+@@ -287,19 +288,16 @@
+ 		return 0;
+ 	}
+ 
+-	backup(vg);
+-
+ 	/* Suspend lvs_changed */
+ 	if (!suspend_lvs(cmd, lvs_changed))
+-		return_0;
++		goto_out;
+ 
+ 	/* Suspend mirrors on subsequent calls */
+ 	if (!first_time) {
+ 		if (!suspend_lv(cmd, lv_mirr)) {
+-			stack;
+ 			resume_lvs(cmd, lvs_changed);
+ 			vg_revert(vg);
+-			return 0;
++			goto_out;
+ 		}
+ 	}
+ 
+@@ -309,7 +307,7 @@
+ 		if (!first_time)
+ 			resume_lv(cmd, lv_mirr);
+ 		resume_lvs(cmd, lvs_changed);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	/* Activate the temporary mirror LV */
+@@ -323,22 +321,25 @@
+ 					  "Run pvmove --abort.");
+ 			/* FIXME Resume using *original* metadata here! */
+ 			resume_lvs(cmd, lvs_changed);
+-			return 0;
++			goto out;
+ 		}
+ 	} else if (!resume_lv(cmd, lv_mirr)) {
+ 		log_error("Unable to reactivate logical volume \"%s\"",
+ 			  lv_mirr->name);
+ 		resume_lvs(cmd, lvs_changed);
+-		return 0;
++		goto out;
+ 	}
+ 
+ 	/* Unsuspend LVs */
+ 	if (!resume_lvs(cmd, lvs_changed)) {
+ 		log_error("Unable to resume logical volumes");
+-		return 0;
++		goto out;
+ 	}
+ 
+-	return 1;
++	r = 1;
++out:
++	backup(vg);
++	return r;
+ }
+ 
+ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
 
 
