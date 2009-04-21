@@ -1,130 +1,68 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 21 Apr 2009 14:31:50 +0200
-Subject: [PATCH v2] Fix pvseg report for orphan PVs and other devices.
-In-Reply-To: <49EDA675.9080902@redhat.com>
-References: <49EDA675.9080902@redhat.com>
-Message-ID: <49EDBCB6.30903@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 21 Apr 2009 12:57:33 -0000
+Subject: LVM2 ./WHATS_NEW lib/report/columns.h tools/to ...
+Message-ID: <20090421125733.21379.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix pvseg report for orphan PVs and other devices.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-04-21 12:57:32
 
-If user requests report attribute from PVSEG type
-and PV is orphan (or all devices is set), the report
-is empty.
+Modified files:
+	.              : WHATS_NEW 
+	lib/report     : columns.h 
+	tools          : toollib.c 
 
-Try for example (when only orphan PV are present)
- #pvs
- #pvs -o +devices
-# pvs /dev/sdb1
-  PV         VG   Fmt  Attr PSize  PFree
-    /dev/sdb1       lvm2 --   46.58G 46.58G
-# pvs -o +devices /dev/sdb1
-(no output)
+Log message:
+	Fix pvs -a for segmented output
+	
+	# pvs -a -o devices
+	Volume group name (null) has invalid characters
+	Skipping volume group (null)
+	
+	...
+	_pvsegs_sub_single creates fake vg, we need to check
+	that pv is real here.
 
-The problem is caused by empty pv->segments list.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1087&r2=1.1088
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.148&r2=1.149
 
-Fix it by providing fake segment here (similar to fake structures
-in _pvsegs_sub_single() calls.
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- test/t-listings.sh |    4 ++++
- tools/reporter.c   |   12 ++++++++++--
- tools/toollib.c    |   16 +++++++++++-----
- 3 files changed, 25 insertions(+), 7 deletions(-)
-
-diff --git a/test/t-listings.sh b/test/t-listings.sh
-index e6da5b0..9ea10b6 100644
---- a/test/t-listings.sh
-+++ b/test/t-listings.sh
-@@ -34,6 +34,10 @@ pvcreate --metadatacopies 0 $dev5
- pvs --noheadings|tee out
- test $(wc -l <out) -eq 5
+--- LVM2/WHATS_NEW	2009/04/16 10:16:14	1.1087
++++ LVM2/WHATS_NEW	2009/04/21 12:57:31	1.1088
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Fix pvs -a output to not read volume groups from non-PV devices.
+   Add MMC (mmcblk) device type to filters.
+   Introduce memory pools per volume group (to reduce memory for large VGs).
+   Add memory pool leaks detection.
+--- LVM2/lib/report/columns.h	2009/02/25 23:31:06	1.31
++++ LVM2/lib/report/columns.h	2009/04/21 12:57:32	1.32
+@@ -89,7 +89,7 @@
+ FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, "seg_size", "Size of segment in current units.")
+ FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, "seg_tags", "Tags, if any.")
+ FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, "seg_pe_ranges", "Ranges of Physical Extents of underlying devices in command line format.")
+-FIELD(SEGS, seg, STR, "Devices", list, 5, devices, "devices", "Underlying devices used with starting extent numbers.")
++FIELD(SEGS, seg, STR, "Devices", list, 7, devices, "devices", "Underlying devices used with starting extent numbers.")
  
-+#COMM pvs with segment attributes works even for orphans
-+pvs --noheadings -o  seg_all,pv_all,lv_all,vg_all | tee out
-+test $(wc -l <out) -eq 5
-+
- vgcreate -c n $vg $devs
- 
- #COMM pvs and vgs report mda_count, mda_free (bz202886, bz247444)
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 9d03f58..0a9de09 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -54,15 +54,20 @@ static int _segs_single(struct cmd_context *cmd __attribute((unused)),
- 	return ECMD_PROCESSED;
- }
- 
--static int _pvsegs_sub_single(struct cmd_context *cmd __attribute((unused)),
-+static int _pvsegs_sub_single(struct cmd_context *cmd,
- 			      struct volume_group *vg,
- 			      struct pv_segment *pvseg, void *handle)
- {
- 	int ret = ECMD_PROCESSED;
- 	struct lv_segment *seg = pvseg->lvseg;
- 
-+	struct volume_group _free_vg = {
-+		.cmd = cmd,
-+		.name = (char *)"",
-+	};
-+
- 	struct logical_volume _free_logical_volume = {
--		.vg = vg,
-+		.vg = vg ?: &_free_vg,
- 		.name = (char *) "",
- 	        .snapshot = NULL,
- 		.status = VISIBLE_LV,
-@@ -88,6 +93,9 @@ static int _pvsegs_sub_single(struct cmd_context *cmd __attribute((unused)),
- 
-         _free_lv_segment.segtype = get_segtype_from_string(cmd, "free");
- 	_free_lv_segment.len = pvseg->len;
-+	dm_list_init(&_free_vg.pvs);
-+	dm_list_init(&_free_vg.lvs);
-+	dm_list_init(&_free_vg.tags);
- 	dm_list_init(&_free_lv_segment.tags);
- 	dm_list_init(&_free_lv_segment.origin_list);
- 	dm_list_init(&_free_logical_volume.tags);
-diff --git a/tools/toollib.c b/tools/toollib.c
-index bdca53f..ae600c7 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -375,6 +375,7 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 	int ret_max = ECMD_PROCESSED;
+ FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, "pvseg_start", "Physical Extent number of start of segment.")
+ FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, "pvseg_size", "Number of extents in segment.")
+--- LVM2/tools/toollib.c	2009/04/10 10:01:38	1.148
++++ LVM2/tools/toollib.c	2009/04/21 12:57:32	1.149
+@@ -376,7 +376,7 @@
  	int ret;
  	struct volume_group *old_vg = vg;
-+	struct pv_segment _free_pv_segment = { .pv = pv };
  
- 	if (is_pv(pv) && !vg && !is_orphan(pv)) {
+-	if (!vg && !is_orphan(pv)) {
++	if (is_pv(pv) && !vg && !is_orphan(pv)) {
  		vg_name = pv_vg_name(pv);
-@@ -399,13 +400,18 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 		pv = pvl->pv;
- 	}
  
--	dm_list_iterate_items(pvseg, &pv->segments) {
--		ret = process_single(cmd, vg, pvseg, handle);
-+	if (dm_list_empty(&pv->segments)) {
-+		ret = process_single(cmd, NULL, &_free_pv_segment, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
--		if (sigint_caught())
--			break;
--	}
-+	} else
-+		dm_list_iterate_items(pvseg, &pv->segments) {
-+			ret = process_single(cmd, vg, pvseg, handle);
-+			if (ret > ret_max)
-+				ret_max = ret;
-+			if (sigint_caught())
-+				break;
-+		}
- 
- 	if (vg_name)
- 		unlock_vg(cmd, vg_name);
-
+ 		if (!(vg = vg_lock_and_read(cmd, vg_name, NULL, LCK_VG_READ,
 
 
