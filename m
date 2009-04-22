@@ -1,67 +1,44 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 22 Apr 2009 17:00:32 -0000
-Subject: LVM2 ./WHATS_NEW test/t-partial-activate.sh to ...
-Message-ID: <20090422170032.16152.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 22 Apr 2009 19:43:25 +0200
+Subject: [PATCH] lvconvert --repair
+In-Reply-To: <8763hrf3fr.fsf@eriador.mornfall.net>
+References: <87skn1p0jo.fsf@eriador.mornfall.net>	<498B2A94.7050105@redhat.com>
+	<877i3y9od8.fsf@eriador.mornfall.net>	<87skmkc7q5.fsf@eriador.mornfall.net>
+	<49CA4006.2010804@redhat.com> <8763hrf3fr.fsf@eriador.mornfall.net>
+Message-ID: <49EF573D.2010407@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-04-22 17:00:31
 
-Modified files:
-	.              : WHATS_NEW 
-	test           : t-partial-activate.sh 
-	tools          : vgreduce.c 
+Petr Rockai wrote:
+> Milan Broz <mbroz@redhat.com> writes:
+>> please try this test - it tries to allocate new log - not sure if it is what we want,
+>> but lvconvert fails but log lv is later visible, vg is still inconsistent
+>> and I am confused what the correct state should be:-)
+> The problem was that the code neglected to write out the consistent volume
+> before trying to add new bits (which could obviously fail). The attached
+> version of the patch fixes that (it also contains your test now).
 
-Log message:
-	Fix vgreduce --removemissing failure exit code.
+Just minor things:
+- some chunks (repairing vgreduce return code etc) are now already upstream
+- there is also trivial merge problem, I am sure darcs merge code handle it:-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1093&r2=1.1094
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-partial-activate.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
+- please check and remove some trailing whitespaces
 
---- LVM2/WHATS_NEW	2009/04/22 09:39:45	1.1093
-+++ LVM2/WHATS_NEW	2009/04/22 17:00:28	1.1094
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Fix vgreduce --removemissing failure exit code.
-   Fix remote metadata backup for clvmd.
-   Alloc PV internal structure from VG mempool if possible.
-   Fix metadata backup to run after vg_commit always.
---- LVM2/test/t-partial-activate.sh	2008/09/29 16:04:57	1.1
-+++ LVM2/test/t-partial-activate.sh	2009/04/22 17:00:30	1.2
-@@ -6,7 +6,6 @@
- lvchange -a n $vg/mirror
- disable_dev $dev1
- 
--# FIXME should this return an error code due to that big fat WARNING?
--vgreduce --removemissing $vg
-+not vgreduce --removemissing $vg
- not lvchange -v -a y $vg/mirror
- lvchange -v --partial -a y $vg/mirror
---- LVM2/tools/vgreduce.c	2009/04/10 10:01:39	1.88
-+++ LVM2/tools/vgreduce.c	2009/04/22 17:00:31	1.89
-@@ -556,11 +556,13 @@
- 		}
- 		backup(vg);
- 
--		if (fixed)
-+		if (fixed) {
- 			log_print("Wrote out consistent volume group %s",
- 				  vg_name);
-+			ret = ECMD_PROCESSED;
-+		} else
-+			ret = ECMD_FAILED;
- 
--		ret = ECMD_PROCESSED;
- 	} else {
- 		if (!vg_check_status(vg, EXPORTED_VG | LVM_WRITE | RESIZEABLE_VG))
- 			goto out;
+- consider using vg->vgmem instead of cmd->mem - VG is locked
+for the whole operation and failed PV list make sense only for that VG
+
+- please add -i parameter to lvconvert in test script - it waits too long in tests
+
+- add man page entry ;-)
+
+Otherwise
+
+Acked-by: Milan Broz <mbroz@redhat.com>
+
+Milan
 
 
