@@ -1,90 +1,82 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 23 Apr 2009 15:07:39 +0200
-Subject: [PATCH 5/5] Udev integration: add lvmsplit command for dmsetup
-Message-ID: <49F0681B.1030106@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 23 Apr 2009 16:27:59 -0000
+Subject: LVM2/lib/report columns.h
+Message-ID: <20090423162759.5875.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This one adds support for lvmsplit command in dmsetup so we can split
-given DM name into its VG/LV/LAYER parts. This way we don't have to
-issue an ioctl when we already have a name in udev rule and we
-want this name to be splitted, nothing else.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-04-23 16:27:58
 
-The implementation is very simple and not perfect though, but it does
-what it is supposed to do. I also hope we move this code to liblvm
-sometime in the future, together with the first patch ("add LVM fields
-support for dmsetup"). But we keep it here for now.
+Modified files:
+	lib/report     : columns.h 
 
-Peter
+Log message:
+	Update columns.h comment to describe macro args.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.32&r2=1.33
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index b1121f8..eb156a4 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -745,6 +745,24 @@ static int _udevnotify(int argc, char **argv, void *data __attribute((unused)))
- 	return dm_notification_sem_dec(cookie);
- }
+--- LVM2/lib/report/columns.h	2009/04/21 12:57:32	1.32
++++ LVM2/lib/report/columns.h	2009/04/23 16:27:58	1.33
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.  
++ * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
+  * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+@@ -13,9 +13,44 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
-+static int _lvmsplit(int argc, char **argv, void *data __attribute((unused)))
-+{
-+	int r = 1;
-+
-+	struct dmsetup_report_obj obj;
-+
-+	obj.task = NULL;
-+	obj.info = NULL;
-+	obj.deps_task = NULL;
-+	obj.tree_node = NULL;
-+	obj.split_name = _get_split_name("LVM-", argv[1]);
-+
-+	r = dm_report_object(_report, &obj);
-+	_destroy_split_name(obj.split_name);
-+
-+	return r;
-+}
-+
- static int _version(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
- {
- 	char version[80];
-@@ -2145,6 +2163,7 @@ FIELD_O(NAME, dm_split_name, STR, "LVLayer", lv_layer, 7, dm_lv_layer_name, "lv_
- #undef FIELD_F
+-/* Report type, Containing struct, Field type, Report heading,
+- * Data field with struct to pass to display function, Minimum display width,
+- * Display Fn, Unique format identifier */
++/*
++ * This file defines the fields (columns) for the reporting commands
++ * (pvs/vgs/lvs).
++ */
++/*
++ * The 'FIELD' macro arguments are defined as follows:
++ * 1. report_type.  An enum value that selects a specific
++ * struct dm_report_object_type in the _report_types array.  The value is
++ * used to select the containing base object address (see *obj_get*
++ * functions) for any data values of any field in the report.
++ * 2. Containing struct.  The structure that either contains the field data
++ * as a member or should be used to obtain the field data.  The containing
++ * struct should match the base object of the report_type.
++ * 3. Field type.  This must be either 'STR' or 'NUM'.
++ * 4. Report heading.  This is the field heading that is displayed by the
++ * reporting commands.
++ * 5. Data value pointer.  This argument is is always a member of the
++ * containing struct.  In some cases, the member points to the data value
++ * of the field (for example, lv_uuid - see _uuid_disp()).  In other cases
++ * it is pointer that may be used to derive the data value (for example,
++ * seg_count - see _lvsegcount_disp()).  In the FIELD macro definition,
++ * this is used in an offset calculation to derive the offset to the
++ * data value from the containing struct base address.
++ * 6. Minimum display width.  This is the minimum width used to display
++ * the field value.
++ * 7. Display function identifier.  Used to derive the full name of the
++ * function that displays this field.  Derivation is done by appending '_'
++ * then prepending this argument to '_disp'.  For example, if this argument
++ * is 'uuid', the display function is _uuid_disp().  Adding a new field may
++ * require defining a new display function (for example _myfieldname_disp()),
++ * or re-use of an existing one (for example, _uint32_disp()).
++ * 8. Unique format identifier / field id.  This name must be unique and is
++ * used to select fields via '-o' in the reporting commands (pvs/vgs/lvs).
++ * The string used to specify the field - the 'id' member of
++ * struct dm_report_field_type.
++ * 9. Description of field.  This is a brief (ideally <= 52 chars) description
++ * of the field used in the reporting commands.
++ */
  
- static const char *default_report_options = "name,major,minor,attr,open,segments,events,uuid";
-+static const char *lvmsplit_report_options = "vg_name,lv_name,lv_layer";
- 
- static int _report_init(struct command *c)
- {
-@@ -2157,6 +2176,9 @@ static int _report_init(struct command *c)
- 	size_t len = 0;
- 	int r = 0;
- 
-+	if (!strcmp(c->name, "lvmsplit"))
-+		options = (char *) lvmsplit_report_options;
-+
- 	/* emulate old dmsetup behaviour */
- 	if (_switches[NOHEADINGS_ARG]) {
- 		separator = ":";
-@@ -2294,6 +2316,7 @@ static struct command _commands[] = {
- 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
- 	{"udevnotify", "<cookie>", 1, 1, _udevnotify},
-+	{"lvmsplit", "<dev_name>", 1, 1, _lvmsplit},
- 	{"targets", "", 0, 0, _targets},
- 	{"version", "", 0, 0, _version},
- 	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
-@@ -2914,6 +2937,9 @@ int main(int argc, char **argv)
- 		goto out;
- 	}
- 
-+	if (!_switches[COLS_ARG] && !strcmp(c->name, "lvmsplit"))
-+		_switches[COLS_ARG]++;
-+
- 	if (_switches[COLS_ARG] && !_report_init(c))
- 		goto out;
- 
+ /* *INDENT-OFF* */
+ FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, "lv_uuid", "Unique identifier")
 
 
