@@ -1,26 +1,28 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 23 Apr 2009 22:34:26 +0100
-Subject: RFC: Command line support to create sparse devices
-In-Reply-To: <20090423211840.GA7421@agk-dp.fab.redhat.com>
-References: <20090423211840.GA7421@agk-dp.fab.redhat.com>
-Message-ID: <20090423213426.GA15019@agk.fab.redhat.com>
+Date: Fri, 24 Apr 2009 01:30:17 +0100
+Subject: LVM2/lib/metadata pv_map.c
+In-Reply-To: <20090423164128.10352.qmail@sourceware.org>
+References: <20090423164128.10352.qmail@sourceware.org>
+Message-ID: <20090424003017.GB15019@agk.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Apr 23, 2009 at 10:18:41PM +0100, Alasdair G Kergon wrote:
-> Here's a quick patch I've thrown together to make it easier to create sparse
-> devices.
+On Thu, Apr 23, 2009 at 04:41:28PM -0000, mornfall at sourceware.org wrote:
+> 	Do not include MISSING_PVs in allocation maps.
  
-Unfinished bits I can think of:
-  - disallow multiple snapshots of the same origin if origin is invisible
-  - if origin is invisible, remove it when its snapshot is removed
-  - deal with activation/deactivation by translating the command from the
-    snapshot to the origin iff the origin is hidden
+Ack.
 
-And it needs testing.
+WHATS_NEW ?
+
+> +		assert(pvl->pv->dev);
+  
+Please don't use 'assert'.  It bypasses our logging mechanisms
+and aborts the code making debugging harder.
+
+Use log_error() with an informative message instead, for example.
 
 Alasdair
 -- 
