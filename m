@@ -1,25 +1,38 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 24 Apr 2009 01:40:23 +0100
-Subject: LVM2/tools toollib.c
-In-Reply-To: <20090423164532.13450.qmail@sourceware.org>
-References: <20090423164532.13450.qmail@sourceware.org>
-Message-ID: <20090424004023.GD15019@agk.fab.redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 24 Apr 2009 08:00:49 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20090424080049.7937.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Apr 23, 2009 at 04:45:32PM -0000, mornfall at sourceware.org wrote:
-> 	Refuse adding missing PVs in create_pv_list in toollib when allocatable_only is
-> 	requested.
- 
-Ack.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-04-24 08:00:48
 
-WHATS_NEW?
+Modified files:
+	test           : test-utils.sh 
 
-Alasdair
--- 
-agk at redhat.com
+Log message:
+	Avoid scanning non-PV devices in functional tests, otherwise lvconvert --repair
+	breaks for some reason -- possibly needs investagation, but this should fix it
+	in the meantime.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+
+--- LVM2/test/test-utils.sh	2009/01/12 18:45:44	1.10
++++ LVM2/test/test-utils.sh	2009/04/24 08:00:48	1.11
+@@ -179,7 +179,7 @@
+   devices {
+     dir = "$G_dev_"
+     scan = "$G_dev_"
+-    filter = [ "a/dev\/mirror/", "a/dev\/mapper/", "r/.*/" ]
++    filter = [ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
+     cache_dir = "$G_root_/etc"
+     sysfs_scan = 0
+   }
 
 
