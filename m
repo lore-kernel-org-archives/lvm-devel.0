@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Apr 2009 17:46:47 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20090428174647.28649.qmail@sourceware.org>
+Date: 28 Apr 2009 19:08:26 -0000
+Subject: LVM2/test/api Makefile.in
+Message-ID: <20090428190826.26289.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,30 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-04-28 17:46:47
+Changes by:	wysochanski at sourceware.org	2009-04-28 19:08:25
 
 Modified files:
-	lib/metadata   : metadata.c 
+	test/api       : Makefile.in 
 
 Log message:
-	Fix error path in vg_make_handle().
-	
-	Enter the error condition if either of the allocations fail, and
-	don't use dm_pool_zalloc if dm_pool_create fails.
+	Use liblvm.so instead of .a
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.212&r2=1.213
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/lib/metadata/metadata.c	2009/04/22 09:31:31	1.212
-+++ LVM2/lib/metadata/metadata.c	2009/04/28 17:46:47	1.213
-@@ -2595,7 +2595,7 @@
- 	struct dm_pool *vgmem;
+--- LVM2/test/api/Makefile.in	2009/04/20 20:46:06	1.4
++++ LVM2/test/api/Makefile.in	2009/04/28 19:08:25	1.5
+@@ -35,6 +35,6 @@
+ LDFLAGS = -L$(top_srcdir)/libdm -L$(top_srcdir)/liblvm
+ CLDFLAGS = -L$(top_srcdir)/libdm -L$(top_srcdir)/liblvm
  
- 	if (!vg) {
--		if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_CHUNK)) &&
-+		if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_CHUNK)) ||
- 		    !(vg = dm_pool_zalloc(vgmem, sizeof(*vg)))) {
- 			log_error("Error allocating vg handle.");
- 			if (vgmem)
+-test: $(OBJECTS) $(top_srcdir)/liblvm/liblvm.a $(top_srcdir)/libdm/libdevmapper.so
++test: $(OBJECTS) $(top_srcdir)/liblvm/liblvm.so $(top_srcdir)/libdm/libdevmapper.so
+ 	$(CC) -o test $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS)
+ 
 
 
