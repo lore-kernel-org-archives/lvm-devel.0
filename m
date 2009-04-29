@@ -1,97 +1,105 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 29 Apr 2009 15:55:32 -0400
-Subject: [PATCH 6/8] Add lvm_lvs_in_vg() - returns a list of lv handles for a given vg.
-In-Reply-To: <1241034934-25639-6-git-send-email-dwysocha@redhat.com>
+Date: Wed, 29 Apr 2009 15:55:33 -0400
+Subject: [PATCH 7/8] Add lvm_vg_open() and lvm_vg_close for testing.
+In-Reply-To: <1241034934-25639-7-git-send-email-dwysocha@redhat.com>
 References: <1241034934-25639-1-git-send-email-dwysocha@redhat.com>
 	<1241034934-25639-2-git-send-email-dwysocha@redhat.com>
 	<1241034934-25639-3-git-send-email-dwysocha@redhat.com>
 	<1241034934-25639-4-git-send-email-dwysocha@redhat.com>
 	<1241034934-25639-5-git-send-email-dwysocha@redhat.com>
 	<1241034934-25639-6-git-send-email-dwysocha@redhat.com>
-Message-ID: <1241034934-25639-7-git-send-email-dwysocha@redhat.com>
+	<1241034934-25639-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <1241034934-25639-8-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-- Use vgmem pool to allocate a list of lvm_lv_list structs
-- Allocate a new list each call (list may have changed since last call)
-- Add lvm_lvs_in_vg to liblvm's exported symbols
+- lvm_vg_open: very simplistic version of vg_read()
+- export lvm_vg_open and lvm_vg_close
 
-NOTE: we may want to think about memory management beyond using the
-vgmem pool.  Another possibility is to have a list handle that is allocated
-and freed, then the memory is attached to that.  With a list handle you
-would not have to close/release the vg to free the list memory.
+NOTE: This patch is mainly to allow testing of the attribute patches.
+I view this patch as peripheral to the attribute patches and is mainly
+included for testing so please don't get hung up on it.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/.exported_symbols |    1 +
- liblvm/lvm.h             |    7 +++++++
- liblvm/lvm_base.c        |   26 ++++++++++++++++++++++++++
- 3 files changed, 34 insertions(+), 0 deletions(-)
+ liblvm/.exported_symbols |    2 ++
+ liblvm/lvm.h             |    4 ++++
+ liblvm/lvm_base.c        |   25 +++++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 0 deletions(-)
 
 diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
-index f00bb19..d05be6f 100644
+index d05be6f..3b0ffb8 100644
 --- a/liblvm/.exported_symbols
 +++ b/liblvm/.exported_symbols
-@@ -5,3 +5,4 @@ lvm_lv_get_name
- lvm_lv_get_uuid
+@@ -6,3 +6,5 @@ lvm_lv_get_uuid
  lvm_vg_get_name
  lvm_vg_get_uuid
-+lvm_lvs_in_vg
+ lvm_lvs_in_vg
++lvm_vg_open
++lvm_vg_close
 diff --git a/liblvm/lvm.h b/liblvm/lvm.h
-index b345b36..9574991 100644
+index 9574991..47a5270 100644
 --- a/liblvm/lvm.h
 +++ b/liblvm/lvm.h
-@@ -58,6 +58,13 @@ typedef struct lvm_lv_list {
- 	lv_t *lv;
- } lv_list_t;
+@@ -18,6 +18,7 @@
+ #include "libdevmapper.h"
  
-+/**
-+ * Return a list of LV handles for a given VG handle.
-+ *
-+ * \return  A list of lv_list_t structures containing lv handles for this vg.
-+ *          If no LVs exist on the given VG, NULL is returned.
-+ */
-+struct dm_list *lvm_lvs_in_vg(vg_t *vg);
+ #include <stdint.h>
++#include <fcntl.h>
  
- struct lvm; /* internal data */
+ /* Internal object structures */
+ struct volume_group;
+@@ -104,4 +105,7 @@ int lvm_reload_config(lvm_t libh);
  
+ #include "lvm_object_prop.h"
+ 
++vg_t *lvm_vg_open(lvm_t libh, const char *vg_name, const mode_t mode);
++void lvm_vg_close(vg_t *vg);
++
+ #endif /* _LIB_LVM_H */
 diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 213246a..4e235ab 100644
+index 4e235ab..a4a3deb 100644
 --- a/liblvm/lvm_base.c
 +++ b/liblvm/lvm_base.c
-@@ -60,3 +60,29 @@ int lvm_reload_config(lvm_t libh)
- 	/* FIXME: re-init locking needed here? */
- 	return refresh_toolcontext((struct cmd_context *)libh);
+@@ -16,6 +16,8 @@
+ #include "lvm.h"
+ #include "toolcontext.h"
+ #include "locking.h"
++#include "metadata-exported.h"
++#include "lvmcache.h"
+ 
+ lvm_t lvm_create(const char *system_dir)
+ {
+@@ -86,3 +88,26 @@ struct dm_list *lvm_lvs_in_vg(vg_t *vg)
+ 	}
+ 	return list;
  }
 +
-+struct dm_list *lvm_lvs_in_vg(vg_t *vg)
++/*
++ * Open / read a VG.
++ * FIXME: Only read access allowed.
++ */
++vg_t *lvm_vg_open(lvm_t libh, const char *vg_name, mode_t mode)
 +{
-+	struct dm_list *list;
-+	lv_list_t *lvs;
-+	struct lv_list *lvl;
-+
-+	if (dm_list_empty(&vg->lvs))
-+		return NULL;
-+
-+	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
-+		log_error("Memory allocation fail for dm_list.\n");
++	if ((mode & O_ACCMODE) != O_RDONLY) {
++		log_error("Invalid access mode 0x%x for lvm_vg_read()\n",
++			  mode);
 +		return NULL;
 +	}
-+	dm_list_init(list);
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
-+			log_error("Memory allocation fail for lvm_lv_list.\n");
-+			return NULL;
-+		}
-+		lvs->lv = lvl->lv;
-+		dm_list_add(list, &lvs->list);
-+	}
-+	return list;
++	return vg_lock_and_read((struct cmd_context *)libh,
++				vg_name, NULL, LCK_VG_READ, CLUSTERED, 0);
 +}
++
++void lvm_vg_close(vg_t *vg)
++{
++	if (vgname_is_locked(vg->name))
++	    unlock_vg(vg->cmd, vg->name);
++	vg_release(vg);
++}
++
 -- 
 1.6.0.6
 
