@@ -1,43 +1,77 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 03 May 2009 18:37:00 +0200
-Subject: LVM2/lib/metadata mirror.c
-References: <20090423164302.11615.qmail@sourceware.org>
-	<20090424003839.GC15019@agk.fab.redhat.com>
-Message-ID: <87my9urvmb.fsf@eriador.mornfall.net>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 04 May 2009 22:08:42 +0200
+Subject: [PATCH] Fix PV datalign when for values starts prior to MDA area
+Message-ID: <49FF4B4A.1080208@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-(I was pretty sure I have sent this one already, but I can't find it now on the
-list... re-sending in case it got lost somewhere...)
+Fix PV datalign when for values starts prior to MDA area.
 
-Alasdair G Kergon <agk@redhat.com> writes:
-> I'm not at all sure about this: what is your test case that requires the
-> id_equal() check and fails without it?
-The testcase is that the sought-for PV is a MISSING_PV. This happens when
-trying to repair a mirror: we are looking for a PV to remove and we certainly
-want the missing one to be found to be removable. But we can't use pv->dev for
-checking that, since there is no device associated to a MISSING_PV. So I have
-guessed that UUID is the next best thing.
+The dataalign value must always be aligned according
+to MDA area.
+The currect code checks if calculated value collides with
+MDA area but not if the value is so small that it is
+located before MDA starts.
 
-> (Is there a danger it could match the wrong device, if, say, someone
-> cloned a PV?)
-If the reading code will allow us to proceed with dup PVs, then yes, this could
-happen. However, it seems to me that lvmcache_add will throw away any such dup
-PVs (in lvmcache.c) -- and even if that path is not invoked, vg_validate will
-reject any VG with a dup PV in it. Hopefully, that is robust enough.
+Unfortunately there can be also MDA in the end of the device.
 
-Yours,
-   Petr.
+The patch adds simple check to avoid this miscalculation.
+Patch expects that first MDA always starts on <=8 sector
+(this is true for all allowed label sector parameters).
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
+(Similar patch was somehow lost during datalign patch review...)
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/format_text/format-text.c |    4 +++-
+ lib/metadata/metadata.h       |    1 +
+ test/t-pvcreate-usage.sh      |    3 +++
+ 3 files changed, 7 insertions(+), 1 deletions(-)
+
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 5488d32..9cab306 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1372,7 +1372,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ 	dm_list_iterate_items(mda, &info->mdas) {
+ 		mdac = (struct mda_context *) mda->metadata_locn;
+ 		if (pv->dev == mdac->area.dev &&
+-		    (mdac->area.start <= (pv->pe_start << SECTOR_SHIFT)) &&
++		    ((mdac->area.start <= (pv->pe_start << SECTOR_SHIFT)) ||
++		    (mdac->area.start <= (PV_MIN_ALIGN << SECTOR_SHIFT) &&
++		     pv->pe_start < PV_MIN_ALIGN)) &&
+ 		    (mdac->area.start + mdac->area.size >
+ 		     (pv->pe_start << SECTOR_SHIFT))) {
+ 			pv->pe_start = (mdac->area.start + mdac->area.size)
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index eff2380..f1a1750 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -36,6 +36,7 @@
+ //#define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
+ #define MIRROR_LOG_OFFSET	2	/* sectors */
+ #define VG_MEMPOOL_CHUNK	10240	/* in bytes, hint only */
++#define PV_MIN_ALIGN		8	/* sectors, minimal data align of PV with MDA */
+ 
+ /*
+  * Ceiling(n / sz)
+diff --git a/test/t-pvcreate-usage.sh b/test/t-pvcreate-usage.sh
+index dc4537e..aa5877d 100755
+--- a/test/t-pvcreate-usage.sh
++++ b/test/t-pvcreate-usage.sh
+@@ -94,6 +94,9 @@ check_pv_field_ $dev1 pe_start 512.00K
+ pvcreate --metadatasize 100k --dataalignment 100k $dev1
+ check_pv_field_ $dev1 pe_start 200.00K
+ 
++pvcreate --metadatasize 128k --dataalignment 3.5k $dev1
++check_pv_field_ $dev1 pe_start 133.00K
++
+ #COMM 'pv with LVM1 compatible data alignment can be convereted'
+ #compatible == LVM1_PE_ALIGN == 64k
+ pvcreate --dataalignment 256k $dev1
+
 
 
