@@ -1,245 +1,324 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed,  6 May 2009 16:43:00 +0200
-Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
+Date: Wed,  6 May 2009 16:43:01 +0200
+Subject: [PATCH 4/7] Introduce vg_add_lc and vg_remove_lv functions.
 In-Reply-To: <cover.1241620083.git.mbroz@redhat.com>
 References: <cover.1241620083.git.mbroz@redhat.com>
-Message-ID: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
+Message-ID: <bf14f3b5346d9d6ddf3ecfe7c064caf2b1bb9bcd.1241620083.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+vg_add_lv and vg_remove_lv are the only functions for
+adding/removing logical volume into volume group.
+
+Only these function should manipulate with vg->lvs list
+and (together with following patches) will update
+VG logical volume counter (vg->lv_count).
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/format1/import-export.c      |    2 +-
- lib/format_pool/format_pool.c    |    1 -
- lib/metadata/metadata-exported.h |    8 ++------
- lib/metadata/metadata.c          |   18 ++++++++++++++----
- lib/metadata/metadata.h          |    5 +++++
- lib/metadata/snapshot_manip.c    |    2 --
- lib/report/columns.h             |    2 +-
- lib/report/report.c              |   12 ++++++++++++
- lib/snapshot/snapshot.c          |    1 -
- tools/vgmerge.c                  |    2 --
- tools/vgsplit.c                  |    5 +----
- 11 files changed, 36 insertions(+), 22 deletions(-)
+ lib/format1/disk-rep.h           |    3 +-
+ lib/format1/import-export.c      |   24 +++++-------
+ lib/format_pool/import_export.c  |   15 +------
+ lib/format_text/import_vsn1.c    |   12 +-----
+ lib/metadata/lv_manip.c          |   81 ++++++++++++++++++++++---------------
+ lib/metadata/metadata-exported.h |    3 +
+ 6 files changed, 67 insertions(+), 71 deletions(-)
 
+diff --git a/lib/format1/disk-rep.h b/lib/format1/disk-rep.h
+index 4a3b31a..138794e 100644
+--- a/lib/format1/disk-rep.h
++++ b/lib/format1/disk-rep.h
+@@ -215,7 +215,8 @@ int import_vg(struct dm_pool *mem,
+ 	      struct volume_group *vg, struct disk_list *dl);
+ int export_vg(struct vg_disk *vgd, struct volume_group *vg);
+ 
+-int import_lv(struct dm_pool *mem, struct logical_volume *lv, struct lv_disk *lvd);
++int import_lv(struct cmd_context *cmd, struct dm_pool *mem,
++	      struct logical_volume *lv, struct lv_disk *lvd);
+ 
+ int import_extents(struct cmd_context *cmd, struct volume_group *vg,
+ 		   struct dm_list *pvds);
 diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 4321965..627ee05 100644
+index 627ee05..573836d 100644
 --- a/lib/format1/import-export.c
 +++ b/lib/format1/import-export.c
-@@ -282,7 +282,7 @@ int export_vg(struct vg_disk *vgd, struct volume_group *vg)
- 		vgd->vg_status |= VG_EXTENDABLE;
- 
- 	vgd->lv_max = vg->max_lv;
--	vgd->lv_cur = vg->lv_count + vg->snapshot_count;
-+	vgd->lv_cur = vg->lv_count + snapshot_lvs_in_vg(vg);
- 
- 	vgd->pv_max = vg->max_pv;
- 	vgd->pv_cur = vg->pv_count;
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index 9a34f94..114cec1 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -120,7 +120,6 @@ static struct volume_group *_build_vg_from_pds(struct format_instance
- 	vg->extent_count = 0;
- 	vg->pv_count = 0;
- 	vg->lv_count = 0;
--	vg->snapshot_count = 0;
- 	vg->seqno = 1;
- 	vg->system_id = NULL;
- 	dm_list_init(&vg->pvs);
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index d7099b7..92728ff 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -236,15 +236,12 @@ struct volume_group {
- 	struct dm_list pvs;
- 
- 	/*
--	 * logical volumes
--	 * The following relationship should always hold:
--	 * dm_list_size(lvs) = lv_count + 2 * snapshot_count
-+	 * logical volumes count
- 	 *
- 	 * Snapshots consist of 2 instances of "struct logical_volume":
- 	 * - cow (lv_name is visible to the user)
- 	 * - snapshot (lv_name is 'snapshotN')
--	 * Neither of these instances is reflected in lv_count, but we
--	 * multiply the snapshot_count by 2.
-+	 * Neither of these instances is reflected in lv_count.
- 	 *
- 	 * Mirrors consist of multiple instances of "struct logical_volume":
- 	 * - one for the mirror log
-@@ -253,7 +250,6 @@ struct volume_group {
- 	 * all of the instances are reflected in lv_count.
- 	 */
- 	uint32_t lv_count;
--	uint32_t snapshot_count;
- 	struct dm_list lvs;
- 
- 	struct dm_list tags;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 13ab8f3..50762f6 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -574,8 +574,6 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name,
- 	vg->lv_count = 0;
- 	dm_list_init(&vg->lvs);
- 
--	vg->snapshot_count = 0;
--
- 	dm_list_init(&vg->tags);
- 
- 	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg_name,
-@@ -1155,6 +1153,18 @@ unsigned displayable_lvs_in_vg(const struct volume_group *vg)
- 	return lv_count;
+@@ -294,10 +294,9 @@ int export_vg(struct vg_disk *vgd, struct volume_group *vg)
+ 	return 1;
  }
  
-+unsigned snapshot_lvs_in_vg(const struct volume_group *vg)
-+{
-+	struct lv_list *lvl;
-+	unsigned lv_count = 0;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (lv_is_cow(lvl->lv))
-+			lv_count++;
-+
-+	return lv_count;
-+}
-+
- /*
-  * Determine whether two vgs are compatible for merging.
-  */
-@@ -1445,11 +1455,11 @@ int vg_validate(struct volume_group *vg)
- 	}
+-int import_lv(struct dm_pool *mem, struct logical_volume *lv, struct lv_disk *lvd)
++int import_lv(struct cmd_context *cmd, struct dm_pool *mem,
++	      struct logical_volume *lv, struct lv_disk *lvd)
+ {
+-	lvid_from_lvnum(&lv->lvid, &lv->vg->id, lvd->lv_number);
+-
+ 	if (!(lv->name = _create_lv_name(mem, (char *)lvd->lv_name)))
+ 		return_0;
  
- 	if ((lv_count = (uint32_t) dm_list_size(&vg->lvs)) !=
--	    vg->lv_count + 2 * vg->snapshot_count) {
-+	    vg->lv_count + 2 * snapshot_lvs_in_vg(vg)) {
- 		log_error("Internal error: #internal LVs (%u) != #LVs (%"
- 			  PRIu32 ") + 2 * #snapshots (%" PRIu32 ") in VG %s",
- 			  dm_list_size(&vg->lvs), vg->lv_count,
--			  vg->snapshot_count, vg->name);
-+			  snapshot_lvs_in_vg(vg), vg->name);
- 		r = 0;
- 	}
+@@ -331,7 +330,7 @@ int import_lv(struct dm_pool *mem, struct logical_volume *lv, struct lv_disk *lv
+ 		lv->alloc = ALLOC_NORMAL;
  
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index eff2380..410a9f9 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -345,6 +345,11 @@ struct lv_segment *get_only_segment_using_this_lv(struct logical_volume *lv);
- unsigned displayable_lvs_in_vg(const struct volume_group *vg);
+ 	if (!lvd->lv_read_ahead)
+-		lv->read_ahead = lv->vg->cmd->default_settings.read_ahead;
++		lv->read_ahead = cmd->default_settings.read_ahead;
+ 	else
+ 		lv->read_ahead = lvd->lv_read_ahead;
  
- /*
-+ * Count snapshot LVs.
-+ */
-+unsigned snapshot_lvs_in_vg(const struct volume_group *vg);
-+
-+/*
-  * For internal metadata caching.
-  */
- int export_vg_to_buffer(struct volume_group *vg, char **buf);
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 2297c54..cc57aeb 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -106,7 +106,6 @@ int vg_add_snapshot(struct logical_volume *origin,
- 	seg->lv->status |= SNAPSHOT;
+@@ -456,22 +455,19 @@ static struct logical_volume *_add_lv(struct dm_pool *mem,
+ 				      struct volume_group *vg,
+ 				      struct lv_disk *lvd)
+ {
+-	struct lv_list *ll;
+ 	struct logical_volume *lv;
  
- 	origin->origin_count++;
--	origin->vg->snapshot_count++;
- 	cow->snapshot = seg;
+-	if (!(ll = dm_pool_zalloc(mem, sizeof(*ll))) ||
+-	    !(ll->lv = dm_pool_zalloc(mem, sizeof(*ll->lv))))
++	if (!(lv = dm_pool_zalloc(mem, sizeof(*lv))))
+ 		return_NULL;
+-	lv = ll->lv;
+-	lv->vg = vg;
  
- 	cow->status &= ~VISIBLE_LV;
-@@ -133,7 +132,6 @@ int vg_remove_snapshot(struct logical_volume *cow)
+-	if (!import_lv(mem, lv, lvd))
+-		return_NULL;
++	lvid_from_lvnum(&lv->lvid, &vg->id, lvd->lv_number);
  
- 	cow->snapshot = NULL;
+-	dm_list_add(&vg->lvs, &ll->list);
+-	vg->lv_count++;
++	if (!import_lv(vg->cmd, mem, lv, lvd)) {
++		dm_pool_free(mem, lv);
++		return_NULL;
++	}
  
--	cow->vg->snapshot_count--;
- 	cow->vg->lv_count++;
- 	cow->status |= VISIBLE_LV;
- 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 707347b..6ca24e5 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -105,7 +105,7 @@ FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, "max_lv", "Maximum number of LVs
- FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, "max_pv", "Maximum number of PVs allowed in VG or 0 if unlimited.")
- FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, "pv_count", "Number of PVs.")
- FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, "lv_count", "Number of LVs.")
--FIELD(VGS, vg, NUM, "#SN", snapshot_count, 3, uint32, "snap_count", "Number of snapshots.")
-+FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots.")
- FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
- FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
- FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 91e2b98..b02fdd8 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -991,6 +991,18 @@ static int _lvsegcount_disp(struct dm_report *rh, struct dm_pool *mem,
- 	return _uint32_disp(rh, mem, field, &count, private);
+-	return lv;
++	return vg_add_lv(vg, lv) ? lv : NULL;
  }
  
-+static int _snapcount_disp(struct dm_report *rh, struct dm_pool *mem,
-+			   struct dm_report_field *field,
-+			   const void *data, void *private)
-+{
-+	const struct volume_group *vg = (const struct volume_group *) data;
-+	uint32_t count;
-+
-+	count = snapshot_lvs_in_vg(vg);
-+
-+	return _uint32_disp(rh, mem, field, &count, private);
-+}
-+
- static int _snpercent_disp(struct dm_report *rh __attribute((unused)), struct dm_pool *mem,
- 			   struct dm_report_field *field,
- 			   const void *data, void *private __attribute((unused)))
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index a9eea45..ad5d158 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -85,7 +85,6 @@ static int _snap_text_import(struct lv_segment *seg, const struct config_node *s
+ int import_lvs(struct dm_pool *mem, struct volume_group *vg, struct dm_list *pvds)
+diff --git a/lib/format_pool/import_export.c b/lib/format_pool/import_export.c
+index 4d2163d..91e3bcd 100644
+--- a/lib/format_pool/import_export.c
++++ b/lib/format_pool/import_export.c
+@@ -58,22 +58,14 @@ int import_pool_vg(struct volume_group *vg, struct dm_pool *mem, struct dm_list
+ int import_pool_lvs(struct volume_group *vg, struct dm_pool *mem, struct dm_list *pls)
+ {
+ 	struct pool_list *pl;
+-	struct lv_list *lvl = dm_pool_zalloc(mem, sizeof(*lvl));
+ 	struct logical_volume *lv;
  
- 	org->origin_count++;
- 	org->vg->lv_count--;
--	org->vg->snapshot_count++;
- 
-         /* FIXME Assumes an invisible origin belongs to a sparse device */
-         if (!lv_is_visible(org))
-diff --git a/tools/vgmerge.c b/tools/vgmerge.c
-index c847c7e..82c3456 100644
---- a/tools/vgmerge.c
-+++ b/tools/vgmerge.c
-@@ -102,8 +102,6 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
- 	}
- 
- 	vg_to->lv_count += vg_from->lv_count;
--	vg_to->snapshot_count += vg_from->snapshot_count;
+-	if (!lvl) {
+-		log_error("Unable to allocate lv list structure");
+-		return 0;
+-	}
 -
- 	vg_to->extent_count += vg_from->extent_count;
- 	vg_to->free_count += vg_from->free_count;
- 
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 87e74a4..c4b583a 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -106,10 +106,7 @@ static int _move_one_lv(struct volume_group *vg_from,
+-	if (!(lvl->lv = dm_pool_zalloc(mem, sizeof(*lvl->lv)))) {
++	if (!(lv = dm_pool_zalloc(mem, sizeof(*lv)))) {
+ 		log_error("Unable to allocate logical volume structure");
  		return 0;
  	}
  
--	if (lv->status & SNAPSHOT) {
--		vg_from->snapshot_count--;
--		vg_to->snapshot_count++;
--	} else if (!lv_is_cow(lv)) {
-+	if (!(lv->status & SNAPSHOT) && !lv_is_cow(lv)) {
- 		vg_from->lv_count--;
- 		vg_to->lv_count++;
+-	lv = lvl->lv;
+ 	lv->status = 0;
+-	lv->vg = vg;
+ 	lv->alloc = ALLOC_NORMAL;
+ 	lv->size = 0;
+ 	lv->name = NULL;
+@@ -115,11 +107,8 @@ int import_pool_lvs(struct volume_group *vg, struct dm_pool *mem, struct dm_list
  	}
+ 
+ 	lv->le_count = lv->size / POOL_PE_SIZE;
+-	lvl->lv = lv;
+-	dm_list_add(&vg->lvs, &lvl->list);
+-	vg->lv_count++;
+ 
+-	return 1;
++	return vg_add_lv(vg, lv);
+ }
+ 
+ int import_pool_pvs(const struct format_type *fmt, struct volume_group *vg,
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index a9748aa..52ef075 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -495,15 +495,11 @@ static int _read_lvnames(struct format_instance *fid __attribute((unused)),
+ 			 struct dm_hash_table *pv_hash __attribute((unused)))
+ {
+ 	struct logical_volume *lv;
+-	struct lv_list *lvl;
+ 	struct config_node *cn;
+ 
+-	if (!(lvl = dm_pool_zalloc(mem, sizeof(*lvl))) ||
+-	    !(lvl->lv = dm_pool_zalloc(mem, sizeof(*lvl->lv))))
++	if (!(lv = dm_pool_zalloc(mem, sizeof(*lv))))
+ 		return_0;
+ 
+-	lv = lvl->lv;
+-
+ 	if (!(lv->name = dm_pool_strdup(mem, lvn->key)))
+ 		return_0;
+ 
+@@ -561,11 +557,7 @@ static int _read_lvnames(struct format_instance *fid __attribute((unused)),
+ 		return 0;
+ 	}
+ 
+-	lv->vg = vg;
+-	vg->lv_count++;
+-	dm_list_add(&vg->lvs, &lvl->list);
+-
+-	return 1;
++	return vg_add_lv(vg, lv);
+ }
+ 
+ static int _read_lvsegs(struct format_instance *fid __attribute((unused)),
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7214b27..1903320 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -402,7 +402,6 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
+  */
+ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ {
+-	struct lv_list *lvl;
+ 	struct lv_segment *seg;
+ 	uint32_t count = extents;
+ 	uint32_t reduction;
+@@ -434,13 +433,11 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 
+ 	/* Remove the LV if it is now empty */
+ 	if (!lv->le_count) {
+-		if (!(lvl = find_lv_in_vg(lv->vg, lv->name)))
++		if(!vg_remove_lv(lv))
+ 			return_0;
+-
+-		dm_list_del(&lvl->list);
+-
+-		if (!(lv->status & SNAPSHOT))
+-			lv->vg->lv_count--;
++		//FIXME: cow still in VG, fix count, remove this later
++		if (lv->status & SNAPSHOT)
++			lv->vg->lv_count++;
+ 	} else if (lv->vg->fid->fmt->ops->lv_setup &&
+ 		   !lv->vg->fid->fmt->ops->lv_setup(lv->vg->fid, lv))
+ 		return_0;
+@@ -1822,8 +1819,6 @@ struct logical_volume *lv_create_empty(const char *name,
+ 				       struct volume_group *vg)
+ {
+ 	struct format_instance *fi = vg->fid;
+-	struct cmd_context *cmd = vg->cmd;
+-	struct lv_list *ll = NULL;
+ 	struct logical_volume *lv;
+ 	char dname[NAME_LEN];
+ 
+@@ -1843,23 +1838,11 @@ struct logical_volume *lv_create_empty(const char *name,
+ 	if (!import)
+ 		log_verbose("Creating logical volume %s", name);
+ 
+-	if (!(ll = dm_pool_zalloc(cmd->mem, sizeof(*ll))) ||
+-	    !(ll->lv = dm_pool_zalloc(cmd->mem, sizeof(*ll->lv)))) {
+-		log_error("lv_list allocation failed");
+-		if (ll)
+-			dm_pool_free(cmd->mem, ll);
+-		return NULL;
+-	}
++	if (!(lv = dm_pool_zalloc(vg->vgmem, sizeof(*lv))))
++		return_NULL;
+ 
+-	lv = ll->lv;
+-	lv->vg = vg;
+-
+-	if (!(lv->name = dm_pool_strdup(cmd->mem, name))) {
+-		log_error("lv name strdup failed");
+-		if (ll)
+-			dm_pool_free(cmd->mem, ll);
+-		return NULL;
+-	}
++	if (!(lv->name = dm_pool_strdup(vg->vgmem, name)))
++		goto_bad;
+ 
+ 	lv->status = status;
+ 	lv->alloc = alloc;
+@@ -1877,18 +1860,20 @@ struct logical_volume *lv_create_empty(const char *name,
+ 	if (lvid)
+ 		lv->lvid = *lvid;
+ 
+-	if (fi->fmt->ops->lv_setup && !fi->fmt->ops->lv_setup(fi, lv)) {
+-		if (ll)
+-			dm_pool_free(cmd->mem, ll);
+-		return_NULL;
+-	}
++	if (!vg_add_lv(vg, lv))
++		goto_bad;
+ 
+-	if (!import)
+-		vg->lv_count++;
++	if (fi->fmt->ops->lv_setup && !fi->fmt->ops->lv_setup(fi, lv))
++		goto_bad;
+ 
+-	dm_list_add(&vg->lvs, &ll->list);
++	//FIXME: remove that
++	if (import)
++		vg->lv_count--;
+ 
+ 	return lv;
++bad:
++	dm_pool_free(vg->vgmem, lv);
++	return_NULL;
+ }
+ 
+ static int _add_pvs(struct cmd_context *cmd, struct pv_segment *peg,
+@@ -1957,6 +1942,36 @@ struct dm_list *build_parallel_areas_from_lv(struct cmd_context *cmd,
+ 	return parallel_areas;
+ }
+ 
++int vg_add_lv(struct volume_group *vg, struct logical_volume *lv)
++{
++	struct lv_list *lvl;
++
++	if (!(lvl = dm_pool_zalloc(vg->vgmem, sizeof(*lvl))))
++		return_0;
++
++	lvl->lv = lv;
++	lv->vg = vg;
++	dm_list_add(&vg->lvs, &lvl->list);
++
++	vg->lv_count++;
++
++	return 1;
++}
++
++int vg_remove_lv(struct logical_volume *lv)
++{
++	struct lv_list *lvl;
++
++	if (!(lvl = find_lv_in_vg(lv->vg, lv->name)))
++			return_0;
++
++	dm_list_del(&lvl->list);
++
++	lvl->lv->vg->lv_count--;
++
++	return 1;
++}
++
+ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		     const force_t force)
+ {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 92728ff..92942e1 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -367,6 +367,9 @@ struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+ 				int warnings, int scan_label_only);
+ struct dm_list *get_pvs(struct cmd_context *cmd);
+ 
++int vg_add_lv(struct volume_group *vg, struct logical_volume *lv);
++int vg_remove_lv(struct logical_volume *lv);
++
+ /* Set full_scan to 1 to re-read every (filtered) device label */
+ struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan);
+ struct dm_list *get_vgids(struct cmd_context *cmd, int full_scan);
 -- 
 1.6.2.4
 
