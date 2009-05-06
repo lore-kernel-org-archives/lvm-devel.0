@@ -1,100 +1,245 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed,  6 May 2009 16:42:59 +0200
-Subject: [PATCH 2/7] Never set mirror log and images directly visible in metadata.
+Date: Wed,  6 May 2009 16:43:00 +0200
+Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
 In-Reply-To: <cover.1241620083.git.mbroz@redhat.com>
 References: <cover.1241620083.git.mbroz@redhat.com>
-Message-ID: <a3d0392fa15ad5ecbc874cb5419a0177011655ed.1241620083.git.mbroz@redhat.com>
+Message-ID: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Mirror creation and conversion force set mirror log and images
-to be visible. This can violate VG max_lv restriction on LV.
-
-There is no need to set these volumes visible, even during
-mirror images conversion.
-
-The log must be cleared, but the requested symlink is created
-if the volume is manipulated directly.
-
-[Is it true for udev?]
-
-[Is there some side effect on cluster with this patch?]
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/metadata/mirror.c |   14 +++++---------
- 1 files changed, 5 insertions(+), 9 deletions(-)
+ lib/format1/import-export.c      |    2 +-
+ lib/format_pool/format_pool.c    |    1 -
+ lib/metadata/metadata-exported.h |    8 ++------
+ lib/metadata/metadata.c          |   18 ++++++++++++++----
+ lib/metadata/metadata.h          |    5 +++++
+ lib/metadata/snapshot_manip.c    |    2 --
+ lib/report/columns.h             |    2 +-
+ lib/report/report.c              |   12 ++++++++++++
+ lib/snapshot/snapshot.c          |    1 -
+ tools/vgmerge.c                  |    2 --
+ tools/vgsplit.c                  |    5 +----
+ 11 files changed, 36 insertions(+), 22 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 5eb53f4..678e54f 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -259,9 +259,6 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 		was_active = 1;
+diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
+index 4321965..627ee05 100644
+--- a/lib/format1/import-export.c
++++ b/lib/format1/import-export.c
+@@ -282,7 +282,7 @@ int export_vg(struct vg_disk *vgd, struct volume_group *vg)
+ 		vgd->vg_status |= VG_EXTENDABLE;
+ 
+ 	vgd->lv_max = vg->max_lv;
+-	vgd->lv_cur = vg->lv_count + vg->snapshot_count;
++	vgd->lv_cur = vg->lv_count + snapshot_lvs_in_vg(vg);
+ 
+ 	vgd->pv_max = vg->max_pv;
+ 	vgd->pv_cur = vg->pv_count;
+diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
+index 9a34f94..114cec1 100644
+--- a/lib/format_pool/format_pool.c
++++ b/lib/format_pool/format_pool.c
+@@ -120,7 +120,6 @@ static struct volume_group *_build_vg_from_pds(struct format_instance
+ 	vg->extent_count = 0;
+ 	vg->pv_count = 0;
+ 	vg->lv_count = 0;
+-	vg->snapshot_count = 0;
+ 	vg->seqno = 1;
+ 	vg->system_id = NULL;
+ 	dm_list_init(&vg->pvs);
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d7099b7..92728ff 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -236,15 +236,12 @@ struct volume_group {
+ 	struct dm_list pvs;
+ 
+ 	/*
+-	 * logical volumes
+-	 * The following relationship should always hold:
+-	 * dm_list_size(lvs) = lv_count + 2 * snapshot_count
++	 * logical volumes count
+ 	 *
+ 	 * Snapshots consist of 2 instances of "struct logical_volume":
+ 	 * - cow (lv_name is visible to the user)
+ 	 * - snapshot (lv_name is 'snapshotN')
+-	 * Neither of these instances is reflected in lv_count, but we
+-	 * multiply the snapshot_count by 2.
++	 * Neither of these instances is reflected in lv_count.
+ 	 *
+ 	 * Mirrors consist of multiple instances of "struct logical_volume":
+ 	 * - one for the mirror log
+@@ -253,7 +250,6 @@ struct volume_group {
+ 	 * all of the instances are reflected in lv_count.
+ 	 */
+ 	uint32_t lv_count;
+-	uint32_t snapshot_count;
+ 	struct dm_list lvs;
+ 
+ 	struct dm_list tags;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 13ab8f3..50762f6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -574,8 +574,6 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name,
+ 	vg->lv_count = 0;
+ 	dm_list_init(&vg->lvs);
+ 
+-	vg->snapshot_count = 0;
+-
+ 	dm_list_init(&vg->tags);
+ 
+ 	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg_name,
+@@ -1155,6 +1153,18 @@ unsigned displayable_lvs_in_vg(const struct volume_group *vg)
+ 	return lv_count;
+ }
+ 
++unsigned snapshot_lvs_in_vg(const struct volume_group *vg)
++{
++	struct lv_list *lvl;
++	unsigned lv_count = 0;
++
++	dm_list_iterate_items(lvl, &vg->lvs)
++		if (lv_is_cow(lvl->lv))
++			lv_count++;
++
++	return lv_count;
++}
++
+ /*
+  * Determine whether two vgs are compatible for merging.
+  */
+@@ -1445,11 +1455,11 @@ int vg_validate(struct volume_group *vg)
  	}
  
--	/* Temporary make it visible for set_lv() */
--	log_lv->status |= VISIBLE_LV;
+ 	if ((lv_count = (uint32_t) dm_list_size(&vg->lvs)) !=
+-	    vg->lv_count + 2 * vg->snapshot_count) {
++	    vg->lv_count + 2 * snapshot_lvs_in_vg(vg)) {
+ 		log_error("Internal error: #internal LVs (%u) != #LVs (%"
+ 			  PRIu32 ") + 2 * #snapshots (%" PRIu32 ") in VG %s",
+ 			  dm_list_size(&vg->lvs), vg->lv_count,
+-			  vg->snapshot_count, vg->name);
++			  snapshot_lvs_in_vg(vg), vg->name);
+ 		r = 0;
+ 	}
+ 
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index eff2380..410a9f9 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -345,6 +345,11 @@ struct lv_segment *get_only_segment_using_this_lv(struct logical_volume *lv);
+ unsigned displayable_lvs_in_vg(const struct volume_group *vg);
+ 
+ /*
++ * Count snapshot LVs.
++ */
++unsigned snapshot_lvs_in_vg(const struct volume_group *vg);
++
++/*
+  * For internal metadata caching.
+  */
+ int export_vg_to_buffer(struct volume_group *vg, char **buf);
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index 2297c54..cc57aeb 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -106,7 +106,6 @@ int vg_add_snapshot(struct logical_volume *origin,
+ 	seg->lv->status |= SNAPSHOT;
+ 
+ 	origin->origin_count++;
+-	origin->vg->snapshot_count++;
+ 	cow->snapshot = seg;
+ 
+ 	cow->status &= ~VISIBLE_LV;
+@@ -133,7 +132,6 @@ int vg_remove_snapshot(struct logical_volume *cow)
+ 
+ 	cow->snapshot = NULL;
+ 
+-	cow->vg->snapshot_count--;
+ 	cow->vg->lv_count++;
+ 	cow->status |= VISIBLE_LV;
+ 
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 707347b..6ca24e5 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -105,7 +105,7 @@ FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, "max_lv", "Maximum number of LVs
+ FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, "max_pv", "Maximum number of PVs allowed in VG or 0 if unlimited.")
+ FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, "pv_count", "Number of PVs.")
+ FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, "lv_count", "Number of LVs.")
+-FIELD(VGS, vg, NUM, "#SN", snapshot_count, 3, uint32, "snap_count", "Number of snapshots.")
++FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots.")
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+ FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 91e2b98..b02fdd8 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -991,6 +991,18 @@ static int _lvsegcount_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _snapcount_disp(struct dm_report *rh, struct dm_pool *mem,
++			   struct dm_report_field *field,
++			   const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++	uint32_t count;
++
++	count = snapshot_lvs_in_vg(vg);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _snpercent_disp(struct dm_report *rh __attribute((unused)), struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private __attribute((unused)))
+diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+index a9eea45..ad5d158 100644
+--- a/lib/snapshot/snapshot.c
++++ b/lib/snapshot/snapshot.c
+@@ -85,7 +85,6 @@ static int _snap_text_import(struct lv_segment *seg, const struct config_node *s
+ 
+ 	org->origin_count++;
+ 	org->vg->lv_count--;
+-	org->vg->snapshot_count++;
+ 
+         /* FIXME Assumes an invisible origin belongs to a sparse device */
+         if (!lv_is_visible(org))
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index c847c7e..82c3456 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -102,8 +102,6 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 	}
+ 
+ 	vg_to->lv_count += vg_from->lv_count;
+-	vg_to->snapshot_count += vg_from->snapshot_count;
 -
- 	/* Temporary tag mirror log for activation */
- 	dm_list_iterate_items(sl, tags)
- 		if (!str_list_add(cmd->mem, &log_lv->tags, sl->str)) {
-@@ -275,6 +272,10 @@ static int _init_mirror_log(struct cmd_context *cmd,
+ 	vg_to->extent_count += vg_from->extent_count;
+ 	vg_to->free_count += vg_from->free_count;
  
- 	backup(log_lv->vg);
- 
-+	/*
-+	 * Directly activating log_lv will create symlink for set_lv,
-+	 * even then log_lv is never directly visible
-+	 */
- 	if (!activate_lv(cmd, log_lv)) {
- 		log_error("Aborting. Failed to activate mirror log.");
- 		goto revert_new_lv;
-@@ -303,8 +304,6 @@ static int _init_mirror_log(struct cmd_context *cmd,
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 87e74a4..c4b583a 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -106,10 +106,7 @@ static int _move_one_lv(struct volume_group *vg_from,
  		return 0;
  	}
  
--	log_lv->status &= ~VISIBLE_LV;
--
- 	if (was_active && !activate_lv(cmd, log_lv))
- 		return_0;
- 
-@@ -410,7 +409,6 @@ struct logical_volume *detach_mirror_log(struct lv_segment *mirrored_seg)
- 
- 	log_lv = mirrored_seg->log_lv;
- 	mirrored_seg->log_lv = NULL;
--	log_lv->status |= VISIBLE_LV;
- 	log_lv->status &= ~MIRROR_LOG;
- 	remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg);
- 
-@@ -536,7 +534,6 @@ static int _remove_mirror_images(struct logical_volume *lv,
- 	dm_list_init(&tmp_orphan_lvs);
- 	for (m = new_area_count; m < mirrored_seg->area_count; m++) {
- 		seg_lv(mirrored_seg, m)->status &= ~MIRROR_IMAGE;
--		seg_lv(mirrored_seg, m)->status |= VISIBLE_LV;
- 		if (!(lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl)))) {
- 			log_error("lv_list alloc failed");
- 			return 0;
-@@ -554,7 +551,6 @@ static int _remove_mirror_images(struct logical_volume *lv,
- 	if (new_area_count == 1 && !is_temporary_mirror_layer(lv)) {
- 		lv1 = seg_lv(mirrored_seg, 0);
- 		lv1->status &= ~MIRROR_IMAGE;
--		lv1->status |= VISIBLE_LV;
- 		detached_log_lv = detach_mirror_log(mirrored_seg);
- 		if (!remove_layer_from_lv(lv, lv1))
- 			return_0;
-@@ -1265,7 +1261,7 @@ static struct logical_volume *_create_mirror_log(struct logical_volume *lv,
+-	if (lv->status & SNAPSHOT) {
+-		vg_from->snapshot_count--;
+-		vg_to->snapshot_count++;
+-	} else if (!lv_is_cow(lv)) {
++	if (!(lv->status & SNAPSHOT) && !lv_is_cow(lv)) {
+ 		vg_from->lv_count--;
+ 		vg_to->lv_count++;
  	}
- 
- 	if (!(log_lv = lv_create_empty(log_name, NULL,
--				       VISIBLE_LV | LVM_READ | LVM_WRITE,
-+				       LVM_READ | LVM_WRITE,
- 				       alloc, 0, lv->vg)))
- 		return_NULL;
- 
 -- 
 1.6.2.4
 
