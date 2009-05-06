@@ -1,305 +1,324 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed,  6 May 2009 16:43:02 +0200
-Subject: [PATCH 5/7] Introduce lv_set_visible & lv_set_hidden and use lv_is_visible always.
+Date: Wed,  6 May 2009 16:43:03 +0200
+Subject: [PATCH 6/7] Merge lv_is_displayable and lv_is_visible.
 In-Reply-To: <cover.1241620083.git.mbroz@redhat.com>
 References: <cover.1241620083.git.mbroz@redhat.com>
-Message-ID: <a69d7e8ab6e48759349210e94d8f96495af3f660.1241620083.git.mbroz@redhat.com>
+Message-ID: <121713e1267ebb0dd4123c8fa4774b611eea576a.1241620083.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The vg->lv_count parameter now includes always number of visible
-logical volumes.
-
-Note that virtual snapshot volume (snapshotX) is never visible,
-but it is stored in metadata with visible flag, so code
-use exception here.
+Displayable and visible is the same thing, stored
+in lv_count volume group attribute.
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/activate/activate.c          |    4 +-
- lib/metadata/lv_manip.c          |   45 ++++++++++++++++++++++++++-----------
- lib/metadata/metadata-exported.h |    2 +
- lib/metadata/metadata.c          |   16 ++++++++-----
- lib/metadata/mirror.c            |    2 +-
- lib/metadata/snapshot_manip.c    |   28 +++++++++++++++--------
- lib/snapshot/snapshot.c          |    9 ++-----
- tools/vgsplit.c                  |    2 +-
- 8 files changed, 68 insertions(+), 40 deletions(-)
+ lib/activate/activate.c          |    2 +-
+ lib/display/display.c            |    4 ++--
+ lib/format_text/export.c         |    4 ++--
+ lib/metadata/lv_manip.c          |    2 +-
+ lib/metadata/metadata-exported.h |    3 +--
+ lib/metadata/metadata.c          |   25 ++++---------------------
+ lib/metadata/metadata.h          |    5 -----
+ lib/metadata/snapshot_manip.c    |    8 --------
+ lib/report/columns.h             |    2 +-
+ lib/report/report.c              |   14 +-------------
+ tools/lvchange.c                 |    2 +-
+ tools/lvdisplay.c                |    2 +-
+ tools/lvscan.c                   |    2 +-
+ tools/reporter.c                 |    4 ++--
+ 14 files changed, 18 insertions(+), 61 deletions(-)
 
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 7011a09..e38c4d8 100644
+index e38c4d8..34f979a 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -647,7 +647,7 @@ static int _lvs_in_vg_activated(struct volume_group *vg, unsigned by_uuid_only)
+@@ -673,7 +673,7 @@ int lvs_in_vg_opened(const struct volume_group *vg)
  		return 0;
  
  	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (lvl->lv->status & VISIBLE_LV)
+-		if (lv_is_displayable(lvl->lv))
 +		if (lv_is_visible(lvl->lv))
- 			count += (_lv_active(vg->cmd, lvl->lv, by_uuid_only) == 1);
+ 			count += (_lv_open_count(vg->cmd, lvl->lv) > 0);
  	}
  
-@@ -996,7 +996,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 		goto out;
+diff --git a/lib/display/display.c b/lib/display/display.c
+index c1ae8db..042d760 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -606,7 +606,7 @@ void vgdisplay_full(const struct volume_group *vg)
  	}
  
--	if (info.open_count && (lv->status & VISIBLE_LV)) {
-+	if (info.open_count && lv_is_visible(lv)) {
- 		log_error("LV %s/%s in use: not deactivating", lv->vg->name,
- 			  lv->name);
- 		goto out;
+ 	log_print("MAX LV                %u", vg->max_lv);
+-	log_print("Cur LV                %u", displayable_lvs_in_vg(vg));
++	log_print("Cur LV                %u", vg->lv_count);
+ 	log_print("Open LV               %u", lvs_in_vg_opened(vg));
+ /****** FIXME Max LV Size
+       log_print ( "MAX LV Size           %s",
+@@ -681,7 +681,7 @@ void vgdisplay_colons(const struct volume_group *vg)
+ 		vg->status,
+ 		/* internal volume group number; obsolete */
+ 		vg->max_lv,
+-		displayable_lvs_in_vg(vg),
++		vg->lv_count,
+ 		lvs_in_vg_opened(vg),
+ 		/* FIXME: maximum logical volume size */
+ 		vg->max_pv,
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 604138c..ce6676e 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -592,14 +592,14 @@ static int _print_lvs(struct formatter *f, struct volume_group *vg)
+ 	 * Write visible LVs first
+ 	 */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (!(lv_is_displayable(lvl->lv)))
++		if (!(lv_is_visible(lvl->lv)))
+ 			continue;
+ 		if (!_print_lv(f, lvl->lv))
+ 			return_0;
+ 	}
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if ((lv_is_displayable(lvl->lv)))
++		if ((lv_is_visible(lvl->lv)))
+ 			continue;
+ 		if (!_print_lv(f, lvl->lv))
+ 			return_0;
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1903320..705fa2b 100644
+index 705fa2b..fa83614 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -432,13 +432,9 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
- 		return 1;
+@@ -1732,7 +1732,7 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+ 	int r = 0;
  
- 	/* Remove the LV if it is now empty */
--	if (!lv->le_count) {
--		if(!vg_remove_lv(lv))
--			return_0;
--		//FIXME: cow still in VG, fix count, remove this later
--		if (lv->status & SNAPSHOT)
--			lv->vg->lv_count++;
--	} else if (lv->vg->fid->fmt->ops->lv_setup &&
-+	if (!lv->le_count && !vg_remove_lv(lv))
-+		return_0;
-+	else if (lv->vg->fid->fmt->ops->lv_setup &&
- 		   !lv->vg->fid->fmt->ops->lv_setup(lv->vg->fid, lv))
- 		return_0;
- 
-@@ -1507,7 +1503,7 @@ int lv_add_mirror_lvs(struct logical_volume *lv,
- 		if (!set_lv_segment_area_lv(seg, m, sub_lvs[m - old_area_count],
- 					    0, status))
- 			return_0;
--		sub_lvs[m - old_area_count]->status &= ~VISIBLE_LV;
-+		lv_set_hidden(sub_lvs[m - old_area_count]);
+ 	/* rename is not allowed on sub LVs */
+-	if (!lv_is_displayable(lv)) {
++	if (!lv_is_visible(lv)) {
+ 		log_error("Cannot rename internal LV \"%s\".", lv->name);
+ 		return 0;
  	}
- 
- 	lv->status |= MIRRORED;
-@@ -1866,10 +1862,6 @@ struct logical_volume *lv_create_empty(const char *name,
- 	if (fi->fmt->ops->lv_setup && !fi->fmt->ops->lv_setup(fi, lv))
- 		goto_bad;
- 
--	//FIXME: remove that
--	if (import)
--		vg->lv_count--;
--
- 	return lv;
- bad:
- 	dm_pool_free(vg->vgmem, lv);
-@@ -1953,7 +1945,8 @@ int vg_add_lv(struct volume_group *vg, struct logical_volume *lv)
- 	lv->vg = vg;
- 	dm_list_add(&vg->lvs, &lvl->list);
- 
--	vg->lv_count++;
-+	if (lv_is_visible(lv))
-+		vg->lv_count++;
- 
- 	return 1;
- }
-@@ -1967,11 +1960,35 @@ int vg_remove_lv(struct logical_volume *lv)
- 
- 	dm_list_del(&lvl->list);
- 
--	lvl->lv->vg->lv_count--;
-+	if (lv_is_visible(lvl->lv))
-+		lvl->lv->vg->lv_count--;
- 
- 	return 1;
- }
- 
-+void lv_set_visible(struct logical_volume *lv)
-+{
-+	if (lv_is_visible(lv))
-+		return;
-+
-+	if (lv->status & SNAPSHOT)
-+		return;
-+
-+	log_debug("LV %s in VG %s is now visible.",  lv->name, lv->vg->name);
-+	lv->status |= VISIBLE_LV;
-+	lv->vg->lv_count++;
-+}
-+
-+void lv_set_hidden(struct logical_volume *lv)
-+{
-+	if (!lv_is_visible(lv))
-+		return;
-+
-+	log_debug("LV %s in VG %s is now hidden.",  lv->name, lv->vg->name);
-+	lv->status &= ~VISIBLE_LV;
-+	lv->vg->lv_count--;
-+}
-+
- int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		     const force_t force)
- {
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 92942e1..ac5de87 100644
+index ac5de87..ffb1510 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -369,6 +369,8 @@ struct dm_list *get_pvs(struct cmd_context *cmd);
+@@ -535,10 +535,9 @@ struct lv_segment *first_seg(const struct logical_volume *lv);
+ int lv_is_origin(const struct logical_volume *lv);
+ int lv_is_virtual_origin(const struct logical_volume *lv);
+ int lv_is_cow(const struct logical_volume *lv);
+-int lv_is_visible(const struct logical_volume *lv);
  
- int vg_add_lv(struct volume_group *vg, struct logical_volume *lv);
- int vg_remove_lv(struct logical_volume *lv);
-+void lv_set_visible(struct logical_volume *lv);
-+void lv_set_hidden(struct logical_volume *lv);
+ /* Test if given LV is visible from user's perspective */
+-int lv_is_displayable(const struct logical_volume *lv);
++int lv_is_visible(const struct logical_volume *lv);
  
- /* Set full_scan to 1 to re-read every (filtered) device label */
- struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan);
+ int pv_is_in_vg(struct volume_group *vg, struct physical_volume *pv);
+ 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 50762f6..745083b 100644
+index 745083b..ceea447 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -1454,12 +1454,16 @@ int vg_validate(struct volume_group *vg)
- 		r = 0;
- 	}
- 
--	if ((lv_count = (uint32_t) dm_list_size(&vg->lvs)) !=
--	    vg->lv_count + 2 * snapshot_lvs_in_vg(vg)) {
--		log_error("Internal error: #internal LVs (%u) != #LVs (%"
--			  PRIu32 ") + 2 * #snapshots (%" PRIu32 ") in VG %s",
--			  dm_list_size(&vg->lvs), vg->lv_count,
--			  snapshot_lvs_in_vg(vg), vg->name);
-+	lv_count = 0;
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (lv_is_visible(lvl->lv))
-+			lv_count++;
-+
-+	if (lv_count != vg->lv_count) {
-+		log_error("Internal error: #internal visible LVs (%u) != "
-+			  "visible #LVs (%u of %" PRIu32 ") in VG %s",
-+			  lv_count, vg->lv_count, dm_list_size(&vg->lvs),
-+			  vg->name);
- 		r = 0;
- 	}
- 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 678e54f..f46381e 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1336,7 +1336,7 @@ int attach_mirror_log(struct lv_segment *seg, struct logical_volume *log_lv)
+@@ -362,7 +362,6 @@ int vg_remove_single(struct cmd_context *cmd, const char *vg_name,
  {
- 	seg->log_lv = log_lv;
- 	log_lv->status |= MIRROR_LOG;
--	log_lv->status &= ~VISIBLE_LV;
-+	lv_set_hidden(log_lv);
- 	return add_seg_to_segs_using_this_lv(log_lv, seg);
- }
+ 	struct physical_volume *pv;
+ 	struct pv_list *pvl;
+-	unsigned lv_count;
+ 	int ret = 1;
  
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index cc57aeb..852ad76 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -30,8 +30,11 @@ int lv_is_cow(const struct logical_volume *lv)
+ 	if (!vg || !consistent || vg_missing_pv_count(vg)) {
+@@ -376,14 +375,12 @@ int vg_remove_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (!vg_check_status(vg, EXPORTED_VG))
+ 		return 0;
  
- int lv_is_visible(const struct logical_volume *lv)
- {
-+	if (lv->status & SNAPSHOT)
-+		return 0;
-+
- 	if (lv_is_cow(lv))
--		return lv_is_visible(find_cow(lv)->lv);
-+		return lv_is_visible(origin_from_cow(lv));
- 
- 	return lv->status & VISIBLE_LV ? 1 : 0;
- }
-@@ -83,15 +86,15 @@ int vg_add_snapshot(struct logical_volume *origin,
- 	}
- 
- 	/*
--	 * Set origin lv count in advance to prevent fail because
-+	 * Remove COW from visible volumes in advance to prevent fail because
- 	 * of temporary violation of LV limits.
- 	 */
--	origin->vg->lv_count--;
-+	lv_set_hidden(cow);
- 
- 	if (!(snap = lv_create_empty("snapshot%d",
- 				     lvid, LVM_READ | LVM_WRITE | VISIBLE_LV,
- 				     ALLOC_INHERIT, 1, origin->vg))) {
--		origin->vg->lv_count++;
-+		lv_set_visible(cow);
- 		return_0;
- 	}
- 
-@@ -108,11 +111,11 @@ int vg_add_snapshot(struct logical_volume *origin,
- 	origin->origin_count++;
- 	cow->snapshot = seg;
- 
--	cow->status &= ~VISIBLE_LV;
+-	lv_count = displayable_lvs_in_vg(vg);
 -
-         /* FIXME Assumes an invisible origin belongs to a sparse device */
--        if (!lv_is_visible(origin))
-+        if (!lv_is_visible(origin)) {
-+		origin->vg->lv_count--;
-                 origin->status |= VIRTUAL_ORIGIN;
-+	}
+-	if (lv_count) {
++	if (vg->lv_count) {
+ 		if ((force == PROMPT) &&
+ 		    (yes_no_prompt("Do you really want to remove volume "
+ 				   "group \"%s\" containing %u "
+ 				   "logical volumes? [y/n]: ",
+-				   vg_name, lv_count) == 'n')) {
++				   vg_name, vg->lv_count) == 'n')) {
+ 			log_print("Volume group \"%s\" not removed", vg_name);
+ 			return 0;
+ 		}
+@@ -391,11 +388,9 @@ int vg_remove_single(struct cmd_context *cmd, const char *vg_name,
+ 			return 0;
+ 	}
  
- 	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
- 
-@@ -130,10 +133,15 @@ int vg_remove_snapshot(struct logical_volume *cow)
+-	lv_count = displayable_lvs_in_vg(vg);
+-	
+-	if (lv_count) {
++	if (vg->lv_count) {
+ 		log_error("Volume group \"%s\" still contains %u "
+-			  "logical volume(s)", vg_name, lv_count);
++			  "logical volume(s)", vg_name, vg->lv_count);
  		return 0;
  	}
  
--	cow->snapshot = NULL;
-+	/*
-+	 * Virtual snapshot volume was removed
-+	 * LV count must be fixed...
-+	 */
-+        if (!lv_is_virtual_origin(cow->snapshot->origin))
-+		cow->vg->lv_count--;
- 
--	cow->vg->lv_count++;
--	cow->status |= VISIBLE_LV;
-+	lv_set_visible(cow);
-+	cow->snapshot = NULL;
- 
+@@ -1141,18 +1136,6 @@ int vg_remove(struct volume_group *vg)
  	return 1;
  }
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index ad5d158..4dc7111 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -78,17 +78,14 @@ static int _snap_text_import(struct lv_segment *seg, const struct config_node *s
- 	seg->origin = org;
- 	seg->cow = cow;
  
--	// FIXME: direct count manipulation to be removed later
--	cow->status &= ~VISIBLE_LV;
--	cow->vg->lv_count--;
- 	cow->snapshot = seg;
+-unsigned displayable_lvs_in_vg(const struct volume_group *vg)
+-{
+-	struct lv_list *lvl;
+-	unsigned lv_count = 0;
 -
- 	org->origin_count++;
--	org->vg->lv_count--;
+-	dm_list_iterate_items(lvl, &vg->lvs)
+-		if (lv_is_displayable(lvl->lv))
+-			lv_count++;
+-
+-	return lv_count;
+-}
+-
+ unsigned snapshot_lvs_in_vg(const struct volume_group *vg)
+ {
+ 	struct lv_list *lvl;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 410a9f9..b1ea5cb 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -340,11 +340,6 @@ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv, struct lv_segm
+ struct lv_segment *get_only_segment_using_this_lv(struct logical_volume *lv);
  
-         /* FIXME Assumes an invisible origin belongs to a sparse device */
--        if (!lv_is_visible(org))
-+        if (!lv_is_visible(org)) {
-+		org->vg->lv_count--;
-                 org->status |= VIRTUAL_ORIGIN;
-+	}
+ /*
+- * Count LVs that are visible from user's perspective.
+- */
+-unsigned displayable_lvs_in_vg(const struct volume_group *vg);
+-
+-/*
+  * Count snapshot LVs.
+  */
+ unsigned snapshot_lvs_in_vg(const struct volume_group *vg);
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index 852ad76..154c404 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -39,14 +39,6 @@ int lv_is_visible(const struct logical_volume *lv)
+ 	return lv->status & VISIBLE_LV ? 1 : 0;
+ }
  
- 	seg->lv->status |= VIRTUAL;
+-int lv_is_displayable(const struct logical_volume *lv)
+-{
+-	if (lv->status & SNAPSHOT)
+-		return 0;
+-
+-	return (lv->status & VISIBLE_LV) || lv_is_cow(lv) ? 1 : 0;
+-}
+-
+ int lv_is_virtual_origin(const struct logical_volume *lv)
+ {
+ 	return (lv->status & VIRTUAL_ORIGIN) ? 1 : 0;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 6ca24e5..8366a40 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -104,7 +104,7 @@ FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, "vg_free_count", "Total numbe
+ FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, "max_lv", "Maximum number of LVs allowed in VG or 0 if unlimited.")
+ FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, "max_pv", "Maximum number of PVs allowed in VG or 0 if unlimited.")
+ FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, "pv_count", "Number of PVs.")
+-FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, "lv_count", "Number of LVs.")
++FIELD(VGS, vg, NUM, "#LV", lv_count, 3, uint32, "lv_count", "Number of LVs.")
+ FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots.")
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+diff --git a/lib/report/report.c b/lib/report/report.c
+index b02fdd8..0a1eeb1 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -497,7 +497,7 @@ static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	char *repstr, *lvname;
+ 	size_t len;
  
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index c4b583a..a960302 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -106,7 +106,7 @@ static int _move_one_lv(struct volume_group *vg_from,
- 		return 0;
- 	}
- 
--	if (!(lv->status & SNAPSHOT) && !lv_is_cow(lv)) {
+-	if (lv_is_displayable(lv)) {
 +	if (lv_is_visible(lv)) {
- 		vg_from->lv_count--;
- 		vg_to->lv_count++;
+ 		repstr = lv->name;
+ 		return dm_report_field_string(rh, field, (const char **) &repstr);
  	}
+@@ -967,18 +967,6 @@ static int _vgmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _size64_disp(rh, mem, field, &freespace, private);
+ }
+ 
+-static int _lvcount_disp(struct dm_report *rh, struct dm_pool *mem,
+-			 struct dm_report_field *field,
+-			 const void *data, void *private)
+-{
+-	const struct volume_group *vg = (const struct volume_group *) data;
+-	uint32_t count;
+-
+-	count = displayable_lvs_in_vg(vg);	
+-
+-	return _uint32_disp(rh, mem, field, &count, private);
+-}
+-
+ static int _lvsegcount_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			    struct dm_report_field *field,
+ 			    const void *data, void *private)
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 2696a95..466fe29 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -584,7 +584,7 @@ static int lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if (!(lv_is_displayable(lv))) {
++	if (!(lv_is_visible(lv))) {
+ 		log_error("Unable to change internal LV %s directly",
+ 			  lv->name);
+ 		return ECMD_FAILED;
+diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
+index 5263e0d..16e7052 100644
+--- a/tools/lvdisplay.c
++++ b/tools/lvdisplay.c
+@@ -18,7 +18,7 @@
+ static int _lvdisplay_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			     void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
++	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+ 		return ECMD_PROCESSED;
+ 
+ 	if (arg_count(cmd, colon_ARG))
+diff --git a/tools/lvscan.c b/tools/lvscan.c
+index 1186b3b..a286fe1 100644
+--- a/tools/lvscan.c
++++ b/tools/lvscan.c
+@@ -27,7 +27,7 @@ static int lvscan_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 
+ 	const char *active_str, *snapshot_str;
+ 
+-	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
++	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+ 		return ECMD_PROCESSED;
+ 
+ 	inkernel = lv_info(cmd, lv, &info, 1, 0) && info.exists;
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 0a9de09..28393f8 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -36,7 +36,7 @@ static int _vgs_single(struct cmd_context *cmd __attribute((unused)),
+ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
++	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+ 		return ECMD_PROCESSED;
+ 
+ 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL))
+@@ -113,7 +113,7 @@ static int _pvsegs_sub_single(struct cmd_context *cmd,
+ static int _lvsegs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			  void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_displayable(lv))
++	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+ 		return ECMD_PROCESSED;
+ 
+ 	return process_each_segment_in_lv(cmd, lv, handle, _segs_single);
 -- 
 1.6.2.4
 
