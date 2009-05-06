@@ -1,66 +1,74 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 06 May 2009 15:19:07 +0200
-Subject: [PATCH v2] Fix PV datalign when for values starts prior to MDA area
-In-Reply-To: <49FF4B4A.1080208@redhat.com>
-References: <49FF4B4A.1080208@redhat.com>
-Message-ID: <4A018E4B.3020702@redhat.com>
+Date: Wed,  6 May 2009 16:42:57 +0200
+Subject: [PATCH 0/7] Fix lv_count & max_lv problems in lvm2
+Message-ID: <cover.1241620083.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix PV datalign when for values starts prior to MDA area.
+LVM2 allows setting of maximal logical count in metadata.
 
-The dataalign value must always be aligned according
-to MDA area.
-The currect code checks if calculated value collides with
-MDA area but not if the value is so small that it is
-located before MDA starts.
+Logically, the maximal count of LVs should be count of user-visible LVs.
 
-Unfortunatelly there can be also MDA in the end of the device.
+Curently there are several problems:
+ - we have several variables and code paths counts visible/diplayable LVs
+   not consistently
 
-The patch adds simple check to avoid this miscalculation.
-Patch expects that first MDA always starts on <= pagesize boundary
-(this is true for all allowed label sector parameters).
+ - some code paths violates these restrictions
 
-(Similar patch was somehow lost during datalign patch review...)
+ - there are situations when code allows creating new LV, but then
+   during metadata loading the VG is not read (because of violating limits)
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/format_text/format-text.c |    4 +++-
- test/t-pvcreate-usage.sh      |    3 +++
- 2 files changed, 6 insertions(+), 1 deletions(-)
+   Only possible fix if this happen is to restore metadata from backup
+   an manualy edit max_lv (or remove some volume).
+   (vgchange -l doesn't work too here)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 5488d32..4181335 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1372,7 +1372,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
- 	dm_list_iterate_items(mda, &info->mdas) {
- 		mdac = (struct mda_context *) mda->metadata_locn;
- 		if (pv->dev == mdac->area.dev &&
--		    (mdac->area.start <= (pv->pe_start << SECTOR_SHIFT)) &&
-+		    ((mdac->area.start <= (pv->pe_start << SECTOR_SHIFT)) ||
-+		    (mdac->area.start <= lvm_getpagesize() &&
-+		     pv->pe_start < (lvm_getpagesize() >> SECTOR_SHIFT))) &&
- 		    (mdac->area.start + mdac->area.size >
- 		     (pv->pe_start << SECTOR_SHIFT))) {
- 			pv->pe_start = (mdac->area.start + mdac->area.size)
-diff --git a/test/t-pvcreate-usage.sh b/test/t-pvcreate-usage.sh
-index dc4537e..aa5877d 100755
---- a/test/t-pvcreate-usage.sh
-+++ b/test/t-pvcreate-usage.sh
-@@ -94,6 +94,9 @@ check_pv_field_ $dev1 pe_start 512.00K
- pvcreate --metadatasize 100k --dataalignment 100k $dev1
- check_pv_field_ $dev1 pe_start 200.00K
- 
-+pvcreate --metadatasize 128k --dataalignment 3.5k $dev1
-+check_pv_field_ $dev1 pe_start 133.00K
-+
- #COMM 'pv with LVM1 compatible data alignment can be convereted'
- #compatible == LVM1_PE_ALIGN == 64k
- pvcreate --dataalignment 256k $dev1
+This patchset tries to consistenly use visible LV count and fixes
+all code paths which are temporarily violating the restrictions.
 
+See also bug https://bugzilla.redhat.com/show_bug.cgi?id=490298
+(with reproducer)
+
+Milan Broz (7):
+  Fix snapshot segment import to not use duplicate segments & replace.
+  Never set mirror log and images directly visible in metadata.
+  Remove snapshot_count from VG and use function instead.
+  Introduce vg_add_lc and vg_remove_lv functions.
+  Introduce lv_set_visible & lv_set_hidden and use lv_is_visible
+    always.
+  Merge lv_is_displayable and lv_is_visible.
+  Remove import paramater from lv_create_empty.
+
+ lib/activate/activate.c          |    6 +-
+ lib/display/display.c            |    4 +-
+ lib/format1/disk-rep.h           |    3 +-
+ lib/format1/import-export.c      |   28 ++++-----
+ lib/format_pool/format_pool.c    |    1 -
+ lib/format_pool/import_export.c  |   15 +----
+ lib/format_text/export.c         |    4 +-
+ lib/format_text/import_vsn1.c    |   22 +------
+ lib/metadata/lv_manip.c          |  127 +++++++++++++++++++++++--------------
+ lib/metadata/metadata-exported.h |   20 +++---
+ lib/metadata/metadata.c          |   35 +++++------
+ lib/metadata/metadata.h          |    4 +-
+ lib/metadata/mirror.c            |   20 +++----
+ lib/metadata/snapshot_manip.c    |   44 ++++++-------
+ lib/report/columns.h             |    4 +-
+ lib/report/report.c              |   22 +++---
+ lib/snapshot/snapshot.c          |   19 +++++-
+ test/t-lvcreate-usage.sh         |   22 ++++++-
+ test/test-utils.sh               |    1 +
+ tools/lvchange.c                 |    2 +-
+ tools/lvconvert.c                |    3 +-
+ tools/lvcreate.c                 |    6 +-
+ tools/lvdisplay.c                |    2 +-
+ tools/lvscan.c                   |    2 +-
+ tools/pvmove.c                   |    2 +-
+ tools/reporter.c                 |    4 +-
+ tools/vgmerge.c                  |    2 -
+ tools/vgsplit.c                  |    5 +-
+ 28 files changed, 221 insertions(+), 208 deletions(-)
 
 
