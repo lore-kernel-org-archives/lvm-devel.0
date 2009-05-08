@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 May 2009 05:15:53 -0000
-Subject: LVM2/test t-vgcreate-usage.sh
-Message-ID: <20090508051553.13733.qmail@sourceware.org>
+Date: 8 May 2009 06:10:48 -0000
+Subject: LVM2/test lvm-utils.sh t-pvcreate-usage.sh
+Message-ID: <20090508061048.20292.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,35 +10,62 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-05-08 05:15:52
+Changes by:	wysochanski at sourceware.org	2009-05-08 06:10:47
 
 Modified files:
-	test           : t-vgcreate-usage.sh 
+	test           : lvm-utils.sh t-pvcreate-usage.sh 
 
 Log message:
-	Add tests to check vgcreate --physicalextentsize and field vg_extent_size.
+	Add tests to check pv_mda_size and vg_mda_size.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgcreate-usage.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.9&r2=1.10
 
---- LVM2/test/t-vgcreate-usage.sh	2008/11/10 12:43:35	1.6
-+++ LVM2/test/t-vgcreate-usage.sh	2009/05/08 05:15:52	1.7
-@@ -66,3 +66,16 @@
+--- LVM2/test/lvm-utils.sh	2009/01/10 12:19:41	1.17
++++ LVM2/test/lvm-utils.sh	2009/05/08 06:10:45	1.18
+@@ -50,6 +50,26 @@
+   return 0;
+ }
  
- #COMM "vgcreate fails when the only pv has --metadatacopies 0"
- not vgcreate $vg $dev3
++compare_two_fields_()
++{
++    local cmd1=$1;
++    local obj1=$2;
++    local field1=$3;
++    local cmd2=$4;
++    local obj2=$5;
++    local field2=$6;
++    local val1;
++    local val2;
 +
-+# Test default (4MB) vg_extent_size as well as limits of extent_size
-+not vgcreate --physicalextentsize 0K $vg $dev1 $dev2
++    val1=$($cmd1 --noheadings -o $field1 $obj1)
++    val2=$($cmd2 --noheadings -o $field2 $obj2)
++if test "$verbose" = "t"
++then
++  echo "compare_two_fields_ $obj1($field1): $val1 $obj2($field2): $val2"
++fi
++  test $val1 = $val2
++}
++
+ compare_vg_field_()
+ {
+     local vg1=$1;
+--- LVM2/test/t-pvcreate-usage.sh	2009/05/07 12:11:51	1.9
++++ LVM2/test/t-pvcreate-usage.sh	2009/05/08 06:10:45	1.10
+@@ -29,6 +29,13 @@
+ pvcreate --metadatasize 0 $dev1
+ pvremove $dev1
+ 
++#Verify vg_mda_size is smaller pv_mda_size
++pvcreate --metadatasize 512K $dev1
++pvcreate --metadatasize 96K $dev2
 +vgcreate $vg $dev1 $dev2
-+check_vg_field_ $vg vg_extent_size 4.00M
++compare_two_fields_ vgs $vg vg_mda_size pvs $dev2 pv_mda_size
 +vgremove -ff $vg
-+vgcreate --physicalextentsize 1K $vg $dev1 $dev2
-+check_vg_field_ $vg vg_extent_size 1.00K
-+vgremove -ff $vg
-+not vgcreate --physicalextentsize 3K $vg $dev1 $dev2
-+not vgcreate --physicalextentsize 1024T $vg $dev1 $dev2
-+#not vgcreate --physicalextentsize 1T $vg $dev1 $dev2
-+# FIXME: vgcreate allows physicalextentsize larger than pv size!
++
+ # x. metadatasize too large
+ # For some reason we allow this, even though there's no room for data?
+ ##COMM  'pvcreate rejects metadatasize too large' 
 
 
