@@ -1,50 +1,33 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 19 May 2009 10:18:23 +0200
-Subject: [PATCH] add error message if vgcfg fails because og missing PVs
-In-Reply-To: <4A0D5471.4050307@redhat.com> (Milan Broz's message of "Fri, 15
-	May 2009 13:39:29 +0200")
-References: <4A0D5471.4050307@redhat.com>
-Message-ID: <87ab59bj5c.fsf@mornfall.net>
+Date: Sun, 10 May 2009 20:41:32 +0200
+Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
+In-Reply-To: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
+	(Milan Broz's message of "Wed, 6 May 2009 16:43:00 +0200")
+References: <cover.1241620083.git.mbroz@redhat.com>
+	<cover.1241620083.git.mbroz@redhat.com>
+	<a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
+Message-ID: <87iqk8u7fn.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
-> Signed-off-by: Milan Broz <mbroz@redhat.com>
-Acked-By: Petr Rockai <prockai@redhat.com>
+Patch looks good. Good to get rid of redundant counter, which is prone to
+getting out of sync. I would, however, propose to rename "snapshot_lvs_in_vg"
+to "vg_snapshot_lv_count" -- we already have "vg_missing_pv_count" as a
+precedent for that naming scheme.
 
-> diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-> index 5362adb..d80c0ba 100644
-> --- a/lib/format_text/archiver.c
-> +++ b/lib/format_text/archiver.c
-> @@ -335,7 +335,7 @@ int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
->  			     const char *file)
->  {
->  	struct volume_group *vg;
-> -	int r = 0;
-> +	int missing_pvs, r = 0;
->  
->  	/*
->  	 * Read in the volume group from the text file.
-> @@ -343,11 +343,12 @@ int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
->  	if (!(vg = backup_read_vg(cmd, vg_name, file)))
->  		return_0;
->  
-> -	/*
-> -	 * If PV is missing, there is already message from read above
-> -	 */
-> -	if (!vg_missing_pv_count(vg))
-> +	missing_pvs = vg_missing_pv_count(vg);
-> +	if (missing_pvs == 0)
->  		r = backup_restore_vg(cmd, vg);
-> +	else
-> +		log_error("Cannot restore Volume Group %s with %i PVs "
-> +			  "marked as missing.", vg->name, missing_pvs);
->  
->  	vg_release(vg);
->  	return r;
+Yours,
+   Petr.
+
+PS: I would welcome a similar approach to removing lv_count as well (and other
+redundant counters), since the counting function's implementation clearly
+defines what gets counted in the given counter (vg_lv_count, say), *and* it
+never gets out of sync. In other words, I believe this approach is much more
+transparent, albeit a little less efficient -- however, I don't believe such
+counting function is going to show up on any profile of any LVM2 command
+whatsoever.
 
 -- 
 Peter Rockai | me()mornfall!net | prockai()redhat!com
