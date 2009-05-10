@@ -1,34 +1,37 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 9 May 2009 13:47:03 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20090509134703.15293.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 10 May 2009 20:06:10 +0200
+Subject: [PATCH] Do not use generic install if running install_device-mapper.
+In-Reply-To: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
+References: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1241978772-6394-3-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-05-09 13:47:03
+It propagates into subdirs which includes DSOs which requires
+lvm2 build (only install_device-mapper should propagate there).
 
-Modified files:
-	.              : WHATS_NEW 
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ daemons/dmeventd/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Log message:
-	Update WHATS_NEW wrt a recent patch.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1097&r2=1.1098
-
---- LVM2/WHATS_NEW	2009/05/07 12:11:50	1.1097
-+++ LVM2/WHATS_NEW	2009/05/09 13:47:03	1.1098
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Reject missing PVs from allocation in toollib.
-   Fix PV datalignment for values starting prior to MDA area. (2.02.45)
-   Add sparse devices: lvcreate -s --virtualoriginsize (hidden zero origin).
-   Add lvs origin_size field.
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index 2878cf2..1e659e0 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -63,7 +63,7 @@ endif
+ 
+ install: $(INSTALL_TYPE) install_include install_dmeventd
+ 
+-install_device-mapper: install
++install_device-mapper: $(INSTALL_TYPE) install_include install_dmeventd
+ 
+ install_include:
+ 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.h \
+-- 
+1.6.2.4
 
 
