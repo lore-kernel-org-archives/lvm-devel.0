@@ -1,188 +1,204 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Sun, 10 May 2009 20:06:12 +0200
-Subject: [PATCH] Introduce lvm2_install target.
+Date: Sun, 10 May 2009 20:06:09 +0200
+Subject: [PATCH] Use readahead of underlying device and not default (smaller) one.
 In-Reply-To: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
 References: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1241978772-6394-5-git-send-email-mbroz@redhat.com>
+Message-ID: <1241978772-6394-2-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Buildsystem support device-mapper only install,
-but generic install tagret includes both dm+lvm2.
+When we are stacking LV over device, which has for some reason
+increased read_ahead (e.g. MD RAID), the read_ahead hint
+for libdevmapper is wrong (it is zero).
 
-For distribution which uses separate install_device-mapper,
-there is no way how to install lvm2 only
-(so after installing lvm2 for packaging purposes
-built system must remove installed device-mapper files).
+If the calculated read_ahead hint is zero, patch uses read_ahead of underlying device
+(if first segment is PV) when setting DM_READ_AHEAD_MINIMUM_FLAG.
 
-Fix it by allowing lvm2_install target, similarily like
-install_cluster for clvmd.
+Because we are using dev-cache, it also store this value to cache for future use
+(if several LVs are over one PV, BLKRAGET is called only once for underlying device.)
 
-(install = install_device-mapper + install_lvm2)
+This should fix all the reamining problems with readahead mismatch reported
+for DM over MD configurations (and similar cases).
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- WHATS_NEW                                     |    1 +
- daemons/dmeventd/plugins/mirror/Makefile.in   |    4 +++-
- daemons/dmeventd/plugins/snapshot/Makefile.in |    4 +++-
- doc/Makefile.in                               |    4 +++-
- include/Makefile.in                           |    2 ++
- make.tmpl.in                                  |    7 ++++++-
- man/Makefile.in                               |    4 +++-
- scripts/Makefile.in                           |    2 ++
- tools/Makefile.in                             |    4 +++-
- 9 files changed, 26 insertions(+), 6 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |    3 ++
+ lib/device/dev-cache.c     |    2 +
+ lib/device/dev-io.c        |   53 ++++++++++++++++++++++++++++++++++++++++++++
+ lib/device/device.h        |    2 +
+ test/t-read-ahead.sh       |   18 +++++++++-----
+ 6 files changed, 72 insertions(+), 7 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 25ab1ae..f6dd5ae 100644
+index e9e7446..25ab1ae 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.46 - 
  ================================
-+  Add make install_lvm2 as complement to device-mapper install.
-   Inherit read ahead from underlying device.
++  Inherit read ahead from underlying device.
    Fix first_seg() call for empty segment list.
    Fix PV datalignment for values starting prior to MDA area. (2.02.45)
-diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
-index 4154d05..284ab52 100644
---- a/daemons/dmeventd/plugins/mirror/Makefile.in
-+++ b/daemons/dmeventd/plugins/mirror/Makefile.in
-@@ -31,7 +31,9 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+   Add sparse devices: lvcreate -s --virtualoriginsize (hidden zero origin).
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 671f4c3..aa69b30 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1021,6 +1021,9 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	if (read_ahead == DM_READ_AHEAD_AUTO) {
+ 		/* we need RA at least twice a whole stripe - see the comment in md/raid0.c */
+ 		read_ahead = max_stripe_size * 2;
++		seg = first_seg(lv);
++		if (!read_ahead && seg && seg_type(seg, 0) == AREA_PV)
++		    dev_get_read_ahead(seg_pv(seg, 0)->dev, &read_ahead);
+ 		read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;
+ 	}
  
- include $(top_srcdir)/make.tmpl
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index d3c58fc..dd4ce6a 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -104,6 +104,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
+ 	dev->fd = -1;
+ 	dev->open_count = 0;
+ 	dev->block_size = -1;
++	dev->read_ahead = -1;
+ 	memset(dev->pvid, 0, sizeof(dev->pvid));
+ 	dm_list_init(&dev->open_list);
  
--install: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
-+install: install_lvm2
+@@ -124,6 +125,7 @@ static struct device *_dev_create(dev_t d)
+ 	dev->fd = -1;
+ 	dev->open_count = 0;
+ 	dev->block_size = -1;
++	dev->read_ahead = -1;
+ 	dev->end = UINT64_C(0);
+ 	memset(dev->pvid, 0, sizeof(dev->pvid));
+ 	dm_list_init(&dev->open_list);
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index c163d93..0fb37cf 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -262,6 +262,46 @@ static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
+ 	return 1;
+ }
+ 
++static int _dev_read_ahead_dev(struct device *dev, uint32_t *read_ahead)
++{
++	int fd = dev_fd(dev);
++	int use_dev_fd = (fd != -1);
++	long read_ahead_long;
++	const char *name = dev_name(dev);
 +
-+install_lvm2: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
-index fd3851b..98f398a 100644
---- a/daemons/dmeventd/plugins/snapshot/Makefile.in
-+++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
-@@ -31,7 +31,9 @@ LIB_VERSION = $(LIB_VERSION_LVM)
- 
- include $(top_srcdir)/make.tmpl
- 
--install: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
-+install: install_lvm2
++	/*
++	 * If device is in cache and has fd, use that fd and cache read_ahead.
++	 * otherwise just run BLKRAGET ioctl.
++	 */
++	if (use_dev_fd && dev->read_ahead != -1) {
++		*read_ahead = (uint32_t) dev->read_ahead;
++		return 1;
++	}
 +
-+install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-diff --git a/doc/Makefile.in b/doc/Makefile.in
-index b327752..56dca0a 100644
---- a/doc/Makefile.in
-+++ b/doc/Makefile.in
-@@ -20,7 +20,9 @@ CONFDEST=lvm.conf
- 
- include $(top_srcdir)/make.tmpl
- 
--install:
-+install: install_lvm2
++	if (!use_dev_fd && (fd = open(name, O_RDONLY)) < 0) {
++		log_sys_error("open", name);
++		return 0;
++	}
 +
-+install_lvm2:
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
- 		echo "Installing $(CONFSRC) as $(confdir)/$(CONFDEST)"; \
- 		@INSTALL@ -D $(OWNER) $(GROUP) -m 644 $(CONFSRC) \
-diff --git a/include/Makefile.in b/include/Makefile.in
-index 2d86488..301290e 100644
---- a/include/Makefile.in
-+++ b/include/Makefile.in
-@@ -45,5 +45,7 @@ install_cluster:
- 
- install_device-mapper:
- 
-+install_lvm2:
++	if (ioctl(fd, BLKRAGET, &read_ahead_long) < 0) {
++		log_sys_error("ioctl BLKRAGET", name);
++		if (!use_dev_fd && close(fd))
++			log_sys_error("close", name);
++		return 0;
++	}
 +
- cflow:
- 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index d5c2fa9..fa3b884 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -126,7 +126,7 @@ OBJECTS = $(SOURCES:%.c=%.o)
- POTFILES = $(SOURCES:%.c=%.pot)
- 
- .PHONY: all install install_cluster pofile distclean clean cflow device-mapper 
--.PHONY: install_device-mapper
-+.PHONY: install_device-mapper install_lvm2
- .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
- .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
- .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
-@@ -135,6 +135,7 @@ SUBDIRS.device-mapper := $(SUBDIRS:=.device-mapper)
- SUBDIRS.install := $(SUBDIRS:=.install)
- SUBDIRS.install_cluster := $(SUBDIRS:=.install_cluster)
- SUBDIRS.install_device-mapper := $(SUBDIRS:=.install_device-mapper)
-+SUBDIRS.install_lvm2 := $(SUBDIRS:=.install_lvm2)
- SUBDIRS.pofile := $(SUBDIRS:=.pofile)
- SUBDIRS.cflow := $(SUBDIRS:=.cflow)
- SUBDIRS.clean := $(SUBDIRS:=.clean)
-@@ -147,6 +148,7 @@ all: $(SUBDIRS) $(TARGETS)
- install: all $(SUBDIRS.install)
- install_cluster: all $(SUBDIRS.install_cluster)
- install_device-mapper: $(SUBDIRS.install_device-mapper)
-+install_lvm2: $(SUBDIRS.install_lvm2)
- 
- $(SUBDIRS): $(SUBDIRS.device-mapper)
- 	$(MAKE) -C $@
-@@ -163,6 +165,9 @@ $(SUBDIRS.install_cluster): $(SUBDIRS)
- $(SUBDIRS.install_device-mapper): device-mapper
- 	$(MAKE) -C $(@:.install_device-mapper=) install_device-mapper
- 
-+$(SUBDIRS.install_lvm2): $(SUBDIRS)
-+	$(MAKE) -C $(@:.install_lvm2=) install_lvm2
++	if (!use_dev_fd && close(fd))
++		log_sys_error("close", name);
 +
- $(SUBDIRS.clean):
- 	-$(MAKE) -C $(@:.clean=) clean
- 
-diff --git a/man/Makefile.in b/man/Makefile.in
-index f1a34d7..c7c28d1 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -57,7 +57,9 @@ $(MAN5) $(MAN8) $(MAN8CLUSTER):	Makefile
- %: %.in
- 	$(SED) -e "s/#VERSION#/$(LVM_VERSION)/" $< > $@
- 
--install: install_device-mapper
-+install: install_lvm2 install_device-mapper
++	*read_ahead = (uint32_t) read_ahead_long;
++	if (use_dev_fd)
++		dev->read_ahead = read_ahead_long; 
 +
-+install_lvm2:
- 	@echo "Installing $(MAN8) in $(MAN8DIR)"
- 	@for f in $(MAN8); \
- 	do \
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index afd3916..d8ee816 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -17,6 +17,8 @@ VPATH = @srcdir@
- 
- include $(top_srcdir)/make.tmpl
- 
-+install_lvm2: install
++	log_very_verbose("%s: read_ahead is %u sectors", name, *read_ahead);
 +
- install:
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm_dump.sh \
- 		$(sbindir)/lvmdump
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 874d391..89c4609 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -195,4 +195,6 @@ install_dmsetup_static: dmsetup.static
- 
- install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
- 
--install: $(INSTALL_LVM_TARGETS) install_device-mapper
-+install_lvm2: $(INSTALL_LVM_TARGETS)
++	return 1;
++}
 +
-+install: install_lvm2 install_device-mapper
+ /*-----------------------------------------------------------------
+  * Public functions
+  *---------------------------------------------------------------*/
+@@ -277,6 +317,19 @@ int dev_get_size(const struct device *dev, uint64_t *size)
+ 		return _dev_get_size_dev(dev, size);
+ }
+ 
++int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead)
++{
++	if (!dev)
++		return 0;
++
++	if (dev->flags & DEV_REGULAR) {
++		*read_ahead = 0;
++		return 1;
++	}
++
++	return _dev_read_ahead_dev(dev, read_ahead);
++}
++
+ /* FIXME Unused
+ int dev_get_sectsize(struct device *dev, uint32_t *size)
+ {
+diff --git a/lib/device/device.h b/lib/device/device.h
+index abec650..94f17b4 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -40,6 +40,7 @@ struct device {
+ 	int fd;
+ 	int open_count;
+ 	int block_size;
++	int read_ahead;
+ 	uint32_t flags;
+ 	uint64_t end;
+ 	struct dm_list open_list;
+@@ -64,6 +65,7 @@ struct device_area {
+  */
+ int dev_get_size(const struct device *dev, uint64_t *size);
+ int dev_get_sectsize(struct device *dev, uint32_t *size);
++int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead);
+ 
+ /* Use quiet version if device number could change e.g. when opening LV */
+ int dev_open(struct device *dev);
+diff --git a/test/t-read-ahead.sh b/test/t-read-ahead.sh
+index 53903b4..00f9eb8 100755
+--- a/test/t-read-ahead.sh
++++ b/test/t-read-ahead.sh
+@@ -32,14 +32,18 @@ check_lvs_() {
+ aux prepare_vg 5
+ 
+ #COMM "test various read ahead settings (bz450922)"
+-lvcreate -n "$lv" -l 100%FREE -i5 -I256 "$vg"     
++lvcreate -n "$lv" -l 100%FREE -i5 -I256 "$vg"
+ ra="$(get_lvs_ lv_kernel_read_ahead)"
+ test "$(( ( $ra / 5 ) * 5 ))" -eq $ra
+-lvdisplay "$vg"/"$lv"                             
+-lvchange -r auto "$vg"/"$lv" 2>&1 | grep auto     
+-check_lvs_ lv_read_ahead auto                                  
+-check_lvs_ lv_kernel_read_ahead 5120                           
+-lvchange -r 400 "$vg/$lv"                         
+-check_lvs_ lv_read_ahead 400                                   
++lvdisplay "$vg"/"$lv"
++lvchange -r auto "$vg"/"$lv" 2>&1 | grep auto
++check_lvs_ lv_read_ahead auto
++check_lvs_ lv_kernel_read_ahead 5120
++lvchange -r 400 "$vg/$lv"
++check_lvs_ lv_read_ahead 400
+ lvremove -ff "$vg"
+ 
++#COMM "read ahead is properly inherited from underlying PV"
++blockdev --setra 768 $dev1
++lvcreate -n $lv -L4M $vg $dev1
++test $(blockdev --getra $G_dev_/$vg/$lv) -eq 768
 -- 
 1.6.2.4
 
