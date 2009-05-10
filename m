@@ -1,72 +1,115 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 May 2009 09:01:35 -0400
-Subject: [PATCH 22/30] Update lvcount_disp to call liblvm 'get' function.
-In-Reply-To: <1242046903-15133-22-git-send-email-dwysocha@redhat.com>
-References: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-2-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-3-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-4-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-5-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-6-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-7-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-8-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-9-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-10-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-11-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-12-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-13-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-14-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-15-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-16-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-17-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-18-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-19-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-20-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-21-git-send-email-dwysocha@redhat.com>
-	<1242046903-15133-22-git-send-email-dwysocha@redhat.com>
-Message-ID: <1242046903-15133-23-git-send-email-dwysocha@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sun, 10 May 2009 21:23:20 +0200
+Subject: [PATCH 5/7] Introduce lv_set_visible & lv_set_hidden and use lv_is_visible always.
+In-Reply-To: <a69d7e8ab6e48759349210e94d8f96495af3f660.1241620083.git.mbroz@redhat.com>
+	(Milan Broz's message of "Wed, 6 May 2009 16:43:02 +0200")
+References: <cover.1241620083.git.mbroz@redhat.com>
+	<cover.1241620083.git.mbroz@redhat.com>
+	<a69d7e8ab6e48759349210e94d8f96495af3f660.1241620083.git.mbroz@redhat.com>
+Message-ID: <878wl4u5hz.fsf@eriador.mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Should be no functional change.
+This patch does improve upon the previous one with regards to the consistency
+of lv_count handling (to the point of addressing most of my concerns with
+previous).
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/report/lvm_object_prop.c |    3 +--
- lib/report/report.c          |    2 +-
- 2 files changed, 2 insertions(+), 3 deletions(-)
+Milan Broz <mbroz@redhat.com> writes:
+> The vg->lv_count parameter now includes always number of visible logical
+> volumes.
+The patch does as advertised.
 
-diff --git a/lib/report/lvm_object_prop.c b/lib/report/lvm_object_prop.c
-index e04318e..69a32fa 100644
---- a/lib/report/lvm_object_prop.c
-+++ b/lib/report/lvm_object_prop.c
-@@ -756,8 +756,7 @@ int lvm_vg_set_pv_count(vg_t *vg, const uint64_t value)
-  */
- uint64_t lvm_vg_get_lv_count(const vg_t *vg)
- {
--	/* FIXME: implement function body */
--	return 0;
-+	return displayable_lvs_in_vg(vg);
- }
- int lvm_vg_set_lv_count(vg_t *vg, const uint64_t value)
- {
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 2bd0886..447ab24 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1068,7 +1068,7 @@ static int _lvcount_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct volume_group *vg = (const struct volume_group *) data;
- 	uint32_t count;
- 
--	count = displayable_lvs_in_vg(vg);	
-+	count = lvm_vg_get_lv_count(vg);
- 
- 	return _uint32_disp(rh, mem, field, &count, private);
- }
+> Note that virtual snapshot volume (snapshotX) is never visible,
+> but it is stored in metadata with visible flag, so code
+> use exception here.
+The & SNAPSHOT logic is a little dubious, but seems to be a sufficient solution
+to the issue at hand.
+
+Overall, seems good enough to me,
+
+Acked-By: Petr Rockai <prockai@redhat.com>
+
+> diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+> index cc57aeb..852ad76 100644
+> --- a/lib/metadata/snapshot_manip.c
+> +++ b/lib/metadata/snapshot_manip.c
+> @@ -30,8 +30,11 @@ int lv_is_cow(const struct logical_volume *lv)
+>  
+>  int lv_is_visible(const struct logical_volume *lv)
+>  {
+> +	if (lv->status & SNAPSHOT)
+> +		return 0;
+> +
+>  	if (lv_is_cow(lv))
+> -		return lv_is_visible(find_cow(lv)->lv);
+> +		return lv_is_visible(origin_from_cow(lv));
+>  
+>  	return lv->status & VISIBLE_LV ? 1 : 0;
+>  }
+Why is the latter change included here? Doesn't seem to be directly related to
+the rest of the patch (although I might just be missing something).
+
+>          /* FIXME Assumes an invisible origin belongs to a sparse device */
+> -        if (!lv_is_visible(origin))
+> +        if (!lv_is_visible(origin)) {
+> +		origin->vg->lv_count--;
+>                  origin->status |= VIRTUAL_ORIGIN;
+> +	}
+>  
+>  	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
+>  
+> @@ -130,10 +133,15 @@ int vg_remove_snapshot(struct logical_volume *cow)
+>  		return 0;
+>  	}
+>  
+> -	cow->snapshot = NULL;
+> +	/*
+> +	 * Virtual snapshot volume was removed
+> +	 * LV count must be fixed...
+> +	 */
+> +        if (!lv_is_virtual_origin(cow->snapshot->origin))
+> +		cow->vg->lv_count--;
+These two are ugly hacks again, and spill the lv_count manipulation (and
+knowledge) out of the supposed keeper functions (set visible/hidden, vg
+add/remove). Nevertheless, it's hard to tell how to fix this more cleanly.
+
+> diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+> index ad5d158..4dc7111 100644
+> --- a/lib/snapshot/snapshot.c
+> +++ b/lib/snapshot/snapshot.c
+> @@ -78,17 +78,14 @@ static int _snap_text_import(struct lv_segment *seg, const struct config_node *s
+>  	seg->origin = org;
+>  	seg->cow = cow;
+>  
+> -	// FIXME: direct count manipulation to be removed later
+> -	cow->status &= ~VISIBLE_LV;
+> -	cow->vg->lv_count--;
+>  	cow->snapshot = seg;
+> -
+>  	org->origin_count++;
+> -	org->vg->lv_count--;
+>  
+>          /* FIXME Assumes an invisible origin belongs to a sparse device */
+> -        if (!lv_is_visible(org))
+> +        if (!lv_is_visible(org)) {
+> +		org->vg->lv_count--;
+Same as above.
+
+>                  org->status |= VIRTUAL_ORIGIN;
+> +	}
+
+Yours,
+   Petr.
+
 -- 
-1.6.0.6
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
+
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
