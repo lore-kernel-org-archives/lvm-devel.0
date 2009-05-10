@@ -1,40 +1,35 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 26 May 2009 19:33:13 +0200
-Subject: [PATCH] Fix CLUSTERED flag in new _vg_read_for_update() and vg_read().
-In-Reply-To: <1243356748-22653-1-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Tue, 26 May 2009 12:52:28 -0400")
-References: <1243356748-22653-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <8763fnzs4m.fsf@mornfall.net>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 10 May 2009 20:42:53 +0200
+Subject: [PATCH 2/7] Never set mirror log and images directly visible in metadata.
+In-Reply-To: <87my9ku7t9.fsf@eriador.mornfall.net>
+References: <cover.1241620083.git.mbroz@redhat.com>	<cover.1241620083.git.mbroz@redhat.com>	<a3d0392fa15ad5ecbc874cb5419a0177011655ed.1241620083.git.mbroz@redhat.com>
+	<87my9ku7t9.fsf@eriador.mornfall.net>
+Message-ID: <4A07202D.1010903@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
-> In the new _vg_read_for_update(), we always do the check for CLUSTERED vg
-> status flag after reading the volume group.  Thus, no need to set the flag
-> in vg_read() or clear it later before calling _vg_bad_status_bits().
-Ok, makes sense.
+Petr Rockai wrote:
+> Milan Broz <mbroz@redhat.com> writes:
+>> Mirror creation and conversion force set mirror log and images
+>> to be visible. This can violate VG max_lv restriction on LV.
+>>
+>> There is no need to set these volumes visible, even during
+>> mirror images conversion.
+> Well, I believe the use-case is that when the operation fails halfway (which
+> happens from time to time -- more often than would be comfortable, even), you
+> can clean up by hand, since those offending LVs became visible. If there is a
+> reasonable procedure that the admins can follow to get rid of the junk LVs in
+> those scenarios, I'm fine.
 
-> Also, add back in the !lockingfailed() as part of the CLUSTERED flag check.
-> It's unclear why it was removed when the check was moved from
-> _vg_bad_status_bits() to inside _vg_lock_and_read().
-There is a patch floating somewhere removing lockingfailed() altogether, since
-it's an ugly piece of global state (a rampant modularity violation, if you
-will). But I concede to have it put back, although I don't really know what its
-effect here would be, anyway (don't report errors when cluster locking failed?
-why?).
+Maybe we should display these "invisible" LVs to user (in reporting commands)
+if no visible LV references them (I mean _mimage, _mlog & Co. devices)
 
-Yours,
-   Petr.
+Admin can remove these insvible LV even now (lvremove works), but must
+run "lvs -a" to found them first...
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+Milan
 
 
