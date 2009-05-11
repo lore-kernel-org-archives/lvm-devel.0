@@ -1,51 +1,65 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 19 May 2009 08:01:13 +0200
-Subject: [PATCH] Use lvconvert --repair as a dmeventd mirror failure handler
-Message-ID: <87r5ylbphy.fsf@mornfall.net>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 11 May 2009 10:13:28 -0000
+Subject: LVM2/tools Makefile.in
+Message-ID: <20090511101328.14693.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-05-11 10:13:28
 
-this one-liner enables the dmeventd mirror monitoring DSO to use lvconvert
---repair to fix any broken mirrors. This means two things:
+Modified files:
+	tools          : Makefile.in 
 
-1) Non-mirrored LVs will be no longer affected by mirror monitoring. (Before,
-if you had a LV that went partially missing on a VG where a mirror leg failed,
-this LV would be removed automatically by dmeventd... Probably not an
-unrecoverable dataloss bug, but still quite unpleasant.)
+Log message:
+	Fix device-mapper static build targets.
+	
+	dmsetup.static is not built and cleaned properly
+	if running only device-mapper install/build.
 
-2) If enough parallel PV space is available at the time of the mirror failure,
-the failed devices will be automatically replaced using this spare space. Which
-(and whether) free space may be used is still not configurable, but is a
-planned feature. Since it is relatively easy to undo the action by converting
-the mirror manually, I don't consider this to be a showstopper. In fact, I
-think the compromise is much better than what we have now.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.95&r2=1.96
 
-I have tested the patch and mirrors get repaired for me automatically when
-things fail. This does not equate thorough testing, but lvconvert --repair is
-already covered by the testsuite for a few weeks now and so far no obvious
-issues appeared.
+--- LVM2/tools/Makefile.in	2009/04/15 14:42:27	1.95
++++ LVM2/tools/Makefile.in	2009/05/11 10:13:28	1.96
+@@ -66,12 +66,15 @@
+ 	.commands \
+ 	lvm
+ 
++TARGETS_DM = dmsetup
++
+ INSTALL_LVM_TARGETS = install_tools_dynamic
+ INSTALL_DMSETUP_TARGETS = install_dmsetup_dynamic
+ INSTALL_CMDLIB_TARGETS = install_cmdlib_dynamic
+ 
+ ifeq ("@STATIC_LINK@", "yes")
+-  TARGETS += lvm.static dmsetup.static
++  TARGETS += lvm.static
++  TARGETS_DM += dmsetup.static
+   INSTALL_LVM_TARGETS += install_tools_static
+   INSTALL_DMSETUP_TARGETS += install_dmsetup_static
+   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
+@@ -82,7 +85,7 @@
+ CLEAN_TARGETS = liblvm2cmd.$(LIB_SUFFIX) liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
+ 		lvm2cmd.o lvm2cmd-static.o lvm2cmdlib.o lvm.static \
+ 		lvm.cflow lvm.xref lvm.tree lvm.rxref lvm.rtree \
+-		lvmcmdlib.o lvm-static.o dmsetup.o dmsetup
++		lvmcmdlib.o lvm-static.o dmsetup.o $(TARGETS_DM)
+ 
+ ifeq ("@CMDLIB@", "yes")
+ 	TARGETS += liblvm2cmd.$(LIB_SUFFIX)
+@@ -99,7 +102,7 @@
+ 
+ include $(top_srcdir)/make.tmpl
+ 
+-device-mapper: dmsetup
++device-mapper: $(TARGETS_DM)
+ 
+ dmsetup: dmsetup.o $(top_srcdir)/libdm/libdevmapper.$(LIB_SUFFIX)
+ 	$(CC) -o $@ dmsetup.o $(CFLAGS) $(LDFLAGS) \
 
-Yours,
-   Petr.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: dmevent-lvconvert-mirrors.diff
-Type: text/x-diff
-Size: 956 bytes
-Desc: dmeventd-lvconvert-mirrors.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090519/dbd7f5d5/attachment.bin>
--------------- next part --------------
-
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
