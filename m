@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 May 2009 09:01:23 -0400
-Subject: [PATCH 10/30] Update originsize_disp() to call liblvm 'get' function.
-In-Reply-To: <1242046903-15133-10-git-send-email-dwysocha@redhat.com>
+Date: Mon, 11 May 2009 09:01:24 -0400
+Subject: [PATCH 11/30] Update devsize_disp() to call liblvm 'get' function.
+In-Reply-To: <1242046903-15133-11-git-send-email-dwysocha@redhat.com>
 References: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
 	<1242046903-15133-2-git-send-email-dwysocha@redhat.com>
 	<1242046903-15133-3-git-send-email-dwysocha@redhat.com>
@@ -12,7 +12,8 @@ References: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
 	<1242046903-15133-8-git-send-email-dwysocha@redhat.com>
 	<1242046903-15133-9-git-send-email-dwysocha@redhat.com>
 	<1242046903-15133-10-git-send-email-dwysocha@redhat.com>
-Message-ID: <1242046903-15133-11-git-send-email-dwysocha@redhat.com>
+	<1242046903-15133-11-git-send-email-dwysocha@redhat.com>
+Message-ID: <1242046903-15133-12-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -20,50 +21,71 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 Should be no functional change.
+Note again we change the field data pointer from 'dev' to 'id' so that
+the 'data' pointer value is simply the pointer to the 'pv'.  We can then
+call the liblvm 'get' function to retrieve the value.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/lvm_object_prop.c |   11 +++++++++--
- lib/report/report.c          |    7 +------
- 2 files changed, 10 insertions(+), 8 deletions(-)
+ lib/report/columns.h         |    2 +-
+ lib/report/lvm_object_prop.c |    8 ++++++--
+ lib/report/report.c          |    5 ++---
+ 3 files changed, 9 insertions(+), 6 deletions(-)
 
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 7e9c95d..fc79d62 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -79,7 +79,7 @@ FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, "modules", "Kernel device-mappe
+ 
+ FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, "pv_fmt", "Type of metadata.")
+ FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, "pv_uuid", "Unique identifier.")
+-FIELD(LABEL, pv, NUM, "DevSize", dev, 7, devsize, "dev_size", "Size of underlying device in current units.")
++FIELD(LABEL, pv, NUM, "DevSize", id, 7, devsize, "dev_size", "Size of underlying device in current units.")
+ FIELD(LABEL, pv, STR, "PV", dev, 10, dev_name, "pv_name", "Name.")
+ FIELD(LABEL, pv, NUM, "PMdaFree", id, 9, pvmdafree, "pv_mda_free", "Free metadata area space on this device in current units.")
+ FIELD(LABEL, pv, NUM, "PMdaSize", id, 9, pvmdasize, "pv_mda_size", "Size of smallest metadata area on this device in current units.")
 diff --git a/lib/report/lvm_object_prop.c b/lib/report/lvm_object_prop.c
-index 071d9ce..ab8cc9c 100644
+index ab8cc9c..27690a6 100644
 --- a/lib/report/lvm_object_prop.c
 +++ b/lib/report/lvm_object_prop.c
-@@ -187,8 +187,15 @@ int lvm_lv_set_origin(lv_t *lv, const char *value)
+@@ -15,6 +15,7 @@
+ #include "lib.h"
+ #include "metadata-exported.h"
+ #include "activate.h"
++#include "device.h"
+ 
+ /**
+  * lvm_lv_{get|set}_uuid
+@@ -334,8 +335,11 @@ int lvm_pv_set_uuid(pv_t *pv, const char *value)
   */
- uint64_t lvm_lv_get_origin_size(const lv_t *lv)
+ uint64_t lvm_pv_get_dev_size(const pv_t *pv)
  {
 -	/* FIXME: implement function body */
 -	return 0;
 +	uint64_t size;
 +
-+	if (lv_is_cow(lv))
-+		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-+	else if (lv_is_origin(lv))
-+		size = lv->size;
-+	else
-+		size = UINT64_C(0);
++	if (!dev_get_size(pv->dev, &size))
++		size = 0;
 +	return size;
  }
- int lvm_lv_set_origin_size(lv_t *lv, const uint64_t value)
+ int lvm_pv_set_dev_size(pv_t *pv, const uint64_t value)
  {
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 78aea9b..85addc9 100644
+index 85addc9..02e61de 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -775,12 +775,7 @@ static int _originsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
+@@ -832,11 +832,10 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			 struct dm_report_field *field,
+ 			 const void *data, void *private)
+ {
+-	const struct device *dev = *(const struct device **) data;
++	const struct physical_volume *pv = (const struct physical_volume *) data;
  	uint64_t size;
  
--	if (lv_is_cow(lv))
--		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
--	else if (lv_is_origin(lv))
--		size = lv->size;
--	else
--		size = UINT64_C(0);
-+	size = lvm_lv_get_origin_size(lv);
+-	if (!dev_get_size(dev, &size))
+-		size = 0;
++	size = lvm_pv_get_dev_size(pv);
  
  	return _size64_disp(rh, mem, field, &size, private);
  }
