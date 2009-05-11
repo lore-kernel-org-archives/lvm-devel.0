@@ -1,205 +1,275 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sun, 10 May 2009 20:06:09 +0200
-Subject: [PATCH] Use readahead of underlying device and not default (smaller) one.
-In-Reply-To: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
-References: <1241978772-6394-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1241978772-6394-2-git-send-email-mbroz@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 11 May 2009 09:01:15 -0400
+Subject: [PATCH 02/30] Add lvm_object_prop.pl to generate liblvm object property functions.
+In-Reply-To: <1242046903-15133-2-git-send-email-dwysocha@redhat.com>
+References: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
+	<1242046903-15133-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1242046903-15133-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When we are stacking LV over device, which has for some reason
-increased read_ahead (e.g. MD RAID), the read_ahead hint
-for libdevmapper is wrong (it is zero).
+The intent of this perl code, lvm_object_prop.pl, is to help maintain
+liblvm object property consistency with the reporting commands pvs, vgs, lvs.
+As new fields get added to columns.h, we should re-run this script on the new
+FIELD line(s), take the generated code, edit as appropriate, and place into
+appropriate liblvm code file.
 
-If the calculated read_ahead hint is zero, patch uses read_ahead of underlying device
-(if first segment is PV) when setting DM_READ_AHEAD_MINIMUM_FLAG.
+This patch adds the perl file, lvm_object_prop.pl.  A later patch will
+add the files this code generates, namely the liblvm object property
+function header and C file, lvm_object_prop.[ch].
 
-Because we are using dev-cache, it also store this value to cache for future use
-(if several LVs are over one PV, BLKRAGET is called only once for underlying device.)
+NOTE: The term 'attribute' is used in some of the reporting fields (for
+example, vg_attr), so we avoid it here and instead use the term 'properties'
+or 'prop'.
 
-This should fix all the reamining problems with readahead mismatch reported
-for DM over MD configurations (and similar cases).
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    3 ++
- lib/device/dev-cache.c     |    2 +
- lib/device/dev-io.c        |   53 ++++++++++++++++++++++++++++++++++++++++++++
- lib/device/device.h        |    2 +
- test/t-read-ahead.sh       |   18 +++++++++-----
- 6 files changed, 72 insertions(+), 7 deletions(-)
+ lib/report/lvm_object_prop.pl |  232 +++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 232 insertions(+), 0 deletions(-)
+ create mode 100644 lib/report/lvm_object_prop.pl
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e9e7446..25ab1ae 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Inherit read ahead from underlying device.
-   Fix first_seg() call for empty segment list.
-   Fix PV datalignment for values starting prior to MDA area. (2.02.45)
-   Add sparse devices: lvcreate -s --virtualoriginsize (hidden zero origin).
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 671f4c3..aa69b30 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1021,6 +1021,9 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	if (read_ahead == DM_READ_AHEAD_AUTO) {
- 		/* we need RA at least twice a whole stripe - see the comment in md/raid0.c */
- 		read_ahead = max_stripe_size * 2;
-+		seg = first_seg(lv);
-+		if (!read_ahead && seg && seg_type(seg, 0) == AREA_PV)
-+		    dev_get_read_ahead(seg_pv(seg, 0)->dev, &read_ahead);
- 		read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;
- 	}
- 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index d3c58fc..dd4ce6a 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -104,6 +104,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
- 	dev->fd = -1;
- 	dev->open_count = 0;
- 	dev->block_size = -1;
-+	dev->read_ahead = -1;
- 	memset(dev->pvid, 0, sizeof(dev->pvid));
- 	dm_list_init(&dev->open_list);
- 
-@@ -124,6 +125,7 @@ static struct device *_dev_create(dev_t d)
- 	dev->fd = -1;
- 	dev->open_count = 0;
- 	dev->block_size = -1;
-+	dev->read_ahead = -1;
- 	dev->end = UINT64_C(0);
- 	memset(dev->pvid, 0, sizeof(dev->pvid));
- 	dm_list_init(&dev->open_list);
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index c163d93..0fb37cf 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -262,6 +262,46 @@ static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
- 	return 1;
- }
- 
-+static int _dev_read_ahead_dev(struct device *dev, uint32_t *read_ahead)
-+{
-+	int fd = dev_fd(dev);
-+	int use_dev_fd = (fd != -1);
-+	long read_ahead_long;
-+	const char *name = dev_name(dev);
+diff --git a/lib/report/lvm_object_prop.pl b/lib/report/lvm_object_prop.pl
+new file mode 100644
+index 0000000..824d33a
+--- /dev/null
++++ b/lib/report/lvm_object_prop.pl
+@@ -0,0 +1,232 @@
++#!/usr/bin/perl
++#
++# Take the colunms.h file as input and produce a header and
++# default code for liblvm object property accessor and mutator functions.
++# To run: perl lvm_object_prop.pl < columns.h
++#
++# For maintenance purposes, when adding a new line to columns.h,
++# we can pipe the diff to this program to generate the new prototypes
++# and C code, then cut/paste into the proper liblvm files.
++#
 +
-+	/*
-+	 * If device is in cache and has fd, use that fd and cache read_ahead.
-+	 * otherwise just run BLKRAGET ioctl.
-+	 */
-+	if (use_dev_fd && dev->read_ahead != -1) {
-+		*read_ahead = (uint32_t) dev->read_ahead;
-+		return 1;
-+	}
++sub write_code_header;
++sub write_code_body;
++sub write_code_body_get;
++sub write_code_footer;
++sub write_include_header;
++sub write_include_body;
++sub write_include_footer;
 +
-+	if (!use_dev_fd && (fd = open(name, O_RDONLY)) < 0) {
-+		log_sys_error("open", name);
-+		return 0;
-+	}
++#
++# Open the files and write the headers
++#
++$outfile = "lvm_object_prop";
++open(INCLUDE_FILE, ">./$outfile.h") || die "Cannot open $outfile.h!\n";
++write_include_header(INCLUDE_FILE);
++open(CODE_FILE, ">./$outfile.c") || die "Cannot open $outfile.c!\n";
++write_code_header(CODE_FILE);
 +
-+	if (ioctl(fd, BLKRAGET, &read_ahead_long) < 0) {
-+		log_sys_error("ioctl BLKRAGET", name);
-+		if (!use_dev_fd && close(fd))
-+			log_sys_error("close", name);
-+		return 0;
-+	}
++#
++# Write the include and code body
++#
++while(<>) {
++    # Skip if line does not begin w/"FIELD" - not perfect but does the job
++    if ($_ !~ /^FIELD/) {
++	next;
++    }
++    # Pull out the actual parameters to the FIELD macro
++    m%FIELD\((.*)\)%;
++    $_ = $1;
 +
-+	if (!use_dev_fd && close(fd))
-+		log_sys_error("close", name);
++    #FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, "lv_uuid", "Unique identifier")
++    # NOTE: I tried using Text:CSV but could not make it work.
++    # Parse using brute force regex
++    m%(\S+),\s*(\S+),\s*(\S+),\s*(\".*\"),\s*(\S+),\s*(\S+),\s*(\S+),\s*(\".*\"),\s*(\".*\")%;
++    ($type, $strct, $sorttype, $head, $field, $width, $func, $id, $desc) =
++	    ($1, $2, $3, $4, $5, $6, $7, $8, $9);
 +
-+	*read_ahead = (uint32_t) read_ahead_long;
-+	if (use_dev_fd)
-+		dev->read_ahead = read_ahead_long; 
++    #
++    # Fixup the id / field name / attribute name
++    #
 +
-+	log_very_verbose("%s: read_ahead is %u sectors", name, *read_ahead);
++    # Unquote 'id' (field name) and description
++    $id =~ tr/"//d;
++    $desc =~ tr/"//d;
 +
-+	return 1;
++    # Skip redundant fields
++    if ($id =~ /^(stripesize|regionsize|chunksize)$/) {
++        next;
++    }
++
++    # Map report type to liblvm object name
++    # - PVS, VGS, LVS reports, the liblvm object is pv/vg/lv
++    # - PVSEG, the object is pvseg
++    # - SEG, the object is lvseg
++    # - LABEL, the object is pv
++    if ($type =~ /^PVS$/) {
++	$object = "pv";
++    } elsif ($type =~ /^VGS$/) {
++	$object = "vg";
++    } elsif ($type =~ /^LVS$/) {
++	$object = "lv";
++    } elsif ($type =~ /^LABEL$/) {
++	$object = "pv";
++    } elsif ($type =~ /^SEGS$/) {
++	$object = "lvseg";
++    } elsif ($type =~ /^PVSEGS$/) {
++	$object = "pvseg";
++    } else {
++	print "Skipping type: $type, line: $_\n"; #DEBUG
++	next;
++    }
++
++    # lv_kernel_major and lv_kernel_minor are 'STR' but we make them uint64_t here
++    # as this seems more appropriate and easier to manage.
++    if ($id =~ /^(lv_kernel_major|lv_kernel_minor)$/) {
++	$prop_type = "uint64_t ";
++    } elsif ($sorttype =~ m/STR/) {
++	$prop_type = "char *";
++    } else {
++	$prop_type = "uint64_t ";
++    }
++
++    # Some field names/ids contain the struct name, while others don't.
++    # For consistency, if the field name contains the struct name, remove
++    # it (we always put the object name in the function name.
++    #
++    if ($id =~ /^$strct/) {
++	$id = substr($id,length($strct)+1,length($id));
++    }
++
++    # Write 'get' prototype to header and code to C file.
++    write_include_body(INCLUDE_FILE, $object, $id, $desc, $prop_type);
++    write_code_body(CODE_FILE, $object, $id, $desc, $prop_type, $func, $field);
 +}
 +
- /*-----------------------------------------------------------------
-  * Public functions
-  *---------------------------------------------------------------*/
-@@ -277,6 +317,19 @@ int dev_get_size(const struct device *dev, uint64_t *size)
- 		return _dev_get_size_dev(dev, size);
- }
- 
-+int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead)
++write_include_footer(INCLUDE_FILE);
++write_code_footer(CODE_FILE);
++close(INCLUDE_FILE);
++close(CODE_FILE);
++
++sub write_include_header
 +{
-+	if (!dev)
-+		return 0;
++    my($file) = @_;
++    print $file <<END_INCLUDE_HEADER;
++/*
++ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
 +
-+	if (dev->flags & DEV_REGULAR) {
-+		*read_ahead = 0;
-+		return 1;
-+	}
++#ifndef _LVM_OBJECT_PROP_H
++#define _LVM_OBJECT_PROP_H
 +
-+	return _dev_read_ahead_dev(dev, read_ahead);
++END_INCLUDE_HEADER
 +}
 +
- /* FIXME Unused
- int dev_get_sectsize(struct device *dev, uint32_t *size)
- {
-diff --git a/lib/device/device.h b/lib/device/device.h
-index abec650..94f17b4 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -40,6 +40,7 @@ struct device {
- 	int fd;
- 	int open_count;
- 	int block_size;
-+	int read_ahead;
- 	uint32_t flags;
- 	uint64_t end;
- 	struct dm_list open_list;
-@@ -64,6 +65,7 @@ struct device_area {
-  */
- int dev_get_size(const struct device *dev, uint64_t *size);
- int dev_get_sectsize(struct device *dev, uint32_t *size);
-+int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead);
- 
- /* Use quiet version if device number could change e.g. when opening LV */
- int dev_open(struct device *dev);
-diff --git a/test/t-read-ahead.sh b/test/t-read-ahead.sh
-index 53903b4..00f9eb8 100755
---- a/test/t-read-ahead.sh
-+++ b/test/t-read-ahead.sh
-@@ -32,14 +32,18 @@ check_lvs_() {
- aux prepare_vg 5
- 
- #COMM "test various read ahead settings (bz450922)"
--lvcreate -n "$lv" -l 100%FREE -i5 -I256 "$vg"     
-+lvcreate -n "$lv" -l 100%FREE -i5 -I256 "$vg"
- ra="$(get_lvs_ lv_kernel_read_ahead)"
- test "$(( ( $ra / 5 ) * 5 ))" -eq $ra
--lvdisplay "$vg"/"$lv"                             
--lvchange -r auto "$vg"/"$lv" 2>&1 | grep auto     
--check_lvs_ lv_read_ahead auto                                  
--check_lvs_ lv_kernel_read_ahead 5120                           
--lvchange -r 400 "$vg/$lv"                         
--check_lvs_ lv_read_ahead 400                                   
-+lvdisplay "$vg"/"$lv"
-+lvchange -r auto "$vg"/"$lv" 2>&1 | grep auto
-+check_lvs_ lv_read_ahead auto
-+check_lvs_ lv_kernel_read_ahead 5120
-+lvchange -r 400 "$vg/$lv"
-+check_lvs_ lv_read_ahead 400
- lvremove -ff "$vg"
- 
-+#COMM "read ahead is properly inherited from underlying PV"
-+blockdev --setra 768 $dev1
-+lvcreate -n $lv -L4M $vg $dev1
-+test $(blockdev --getra $G_dev_/$vg/$lv) -eq 768
++sub write_include_body
++{
++    my($file, $object, $id, $desc, $prop_type) = @_;
++    #
++    # Use the description and field name in the comment
++    #
++    print $file "/**\n";
++    print $file " * "."lvm_"."$object"."_{get|set}_$id\n";
++    print $file " * $id - $desc\n";
++    print $file " */\n";
++    # Write out 'get' method prototype
++    $fun_name = "lvm_"."$object"."_get_$id";
++    $fun_args = "(const $object"."_t *$object)";
++    print $file "$prop_type"."$fun_name"."$fun_args".";\n";
++    # Write out 'set' method prototype
++    $fun_name = "lvm_"."$object"."_set_$id";
++    $fun_args = "($object"."_t *$object, const $prop_type"."value)";
++    print $file "int "."$fun_name"."$fun_args".";\n\n";
++}
++
++sub write_include_footer
++{
++    my($file) = @_;
++    print $file <<END_INCLUDE_FOOTER;
++#endif
++END_INCLUDE_FOOTER
++}
++
++sub write_code_header
++{
++    my($file) = @_;
++    print $file <<END_CODE_HEADER;
++/*
++ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++#include "lvm.h"
++#include "lib.h"
++#include "metadata-exported.h"
++
++END_CODE_HEADER
++}
++
++sub write_code_body_get
++{
++    my($file, $object, $func, $field, $fun_name, $prop_type, $id) = @_;
++
++    if ($func =~ /^(int32|uint32|size32|size64)$/) {
++	$code = "\treturn $object->$field;";
++    } else {
++	$code = "\t/* FIXME: implement function body */\n\treturn 0;";
++    }
++    print $file <<END_CODE_GET;
++{
++$code
++}
++END_CODE_GET
++}
++
++sub write_code_body
++{
++    my($file, $object, $id, $desc, $prop_type, $func, $field) = @_;
++    print $file "/**\n";
++    print $file " * "."lvm_"."$object"."_{get|set}_$id\n";
++    print $file " * $id - $desc\n";
++    print $file " */\n";
++    # Write out 'get' method
++    $fun_name = "lvm_"."$object"."_get_$id";
++    $fun_args = "(const $object"."_t *$object)";
++    print $file "$prop_type"."$fun_name"."$fun_args"."\n";
++    write_code_body_get($file, $object, $func, $field, $fun_name, $prop_type, $id);
++
++    # Write out 'set' method; all sets require internal logic so no autogeneration
++    $fun_name = "lvm_"."$object"."_set_$id";
++    $fun_args = "($object"."_t *$object, const $prop_type"."value)";
++    print $file "int "."$fun_name"."$fun_args"."\n";
++    $code = "\t/* FIXME: implement function body */\n\treturn -1;";
++    print $file <<END_CODE_SET;
++{
++$code
++}
++END_CODE_SET
++}
++
++
++sub write_code_footer
++{
++# nothing to do
++}
 -- 
-1.6.2.4
+1.6.0.6
 
 
