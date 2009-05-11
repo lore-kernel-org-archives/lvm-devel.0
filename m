@@ -1,37 +1,35 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 20 May 2009 13:41:41 -0500
-Subject: Re: LVM command-line interface for shared snapshots
-In-Reply-To: <Pine.LNX.4.64.0905191636010.19127@hs20-bc2-1.build.redhat.com>
-References: <20090514212943.GA25445@redhat.com>
-	<Pine.LNX.4.64.0905181136510.22422@hs20-bc2-1.build.redhat.com>
-	<095d01c9d7f2$4295a290$c7c0e7b0$@com>
-	<20090518222822.GA1319@redhat.com>
-	<0ab001c9d809$89ddce90$9d996bb0$@com>
-	<Pine.LNX.4.64.0905191636010.19127@hs20-bc2-1.build.redhat.com>
-Message-ID: <8B4D3601-336A-4D0C-9FC1-E7101F2680F6@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 11 May 2009 12:42:52 +0100
+Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
+In-Reply-To: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
+References: <cover.1241620083.git.mbroz@redhat.com>
+	<a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
+Message-ID: <20090511114252.GF7680@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If we all start replying to this e-mail, it could become pretty  
-fragmented and hard to follow.  So, I've taken my thoughts and merged  
-them as best I could with what Mikulas has proposed and put them up on  
-the wiki.
+On Wed, May 06, 2009 at 04:43:00PM +0200, Milan Broz wrote:
+> -	 * The following relationship should always hold:
+> -	 * dm_list_size(lvs) = lv_count + 2 * snapshot_count
+> +	 * logical volumes count
 
-http://sources.redhat.com/lvm2/wiki/FeatureRequests/dm/snapshots
+Please leave the description of dm_list_size(lvs).
+  "Number of snapshots" instead of snapshot_count?
+  (Or the new function?)
 
-If people would rather have all discussion on the mailing list, or  
-some combination - I'm sure we could do that too.
+> +unsigned snapshot_lvs_in_vg(const struct volume_group *vg)
+> +{
+> +	struct lv_list *lvl;
+> +	unsigned lv_count = 0;
 
-  brassow
+A confusing alternative use for a variable called lv_count?
+'unsigned snapshot_count'?
 
-On May 19, 2009, at 3:43 PM, Mikulas Patocka wrote:
+Ack.
 
-> Hi
->
-> Here I'm submitting the proposed interface.
->
+Alasdair.
 
 
