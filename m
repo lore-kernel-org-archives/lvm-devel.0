@@ -1,44 +1,61 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 12 May 2009 17:12:22 +0200
-Subject: [PATCH 5/7] Introduce lv_set_visible & lv_set_hidden and use lv_is_visible always.
-In-Reply-To: <878wl4u5hz.fsf@eriador.mornfall.net>
-References: <cover.1241620083.git.mbroz@redhat.com>	<cover.1241620083.git.mbroz@redhat.com>	<a69d7e8ab6e48759349210e94d8f96495af3f660.1241620083.git.mbroz@redhat.com>
-	<878wl4u5hz.fsf@eriador.mornfall.net>
-Message-ID: <4A0991D6.5040904@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 12 May 2009 19:09:22 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20090512190922.28498.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr Rockai wrote:
->> diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
->> index cc57aeb..852ad76 100644
->> --- a/lib/metadata/snapshot_manip.c
->> +++ b/lib/metadata/snapshot_manip.c
->> @@ -30,8 +30,11 @@ int lv_is_cow(const struct logical_volume *lv)
->>  
->>  int lv_is_visible(const struct logical_volume *lv)
->>  {
->> +	if (lv->status & SNAPSHOT)
->> +		return 0;
->> +
->>  	if (lv_is_cow(lv))
->> -		return lv_is_visible(find_cow(lv)->lv);
->> +		return lv_is_visible(origin_from_cow(lv));
->>  
->>  	return lv->status & VISIBLE_LV ? 1 : 0;
->>  }
-> Why is the latter change included here? Doesn't seem to be directly related to
-> the rest of the patch (although I might just be missing something).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-05-12 19:09:21
 
-This is kind of bugfix, I'll move it to separate patch.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
 
-If the query LV is COW, ut returns visibility status of its origin because
-the virtual LV (which find_cow(lv)->lv points to) is never set visible in metadata.
+Log message:
+	Fix first_seg() call for empty segment list.
+	
+	The seg variable is temporary variable for list iterator,
+	code cannot expect that after iteration it remains NULL
+	(it contains non-NULL pointer here id list is empty).
+	
+	Patch fixes first_seg function so it now correctly returns NULL
+	for empty segment list.
 
-But with virtual origin is this assumption wrong, I'll fix it somehow.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1099&r2=1.1100
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.213&r2=1.214
 
-Milan
+--- LVM2/WHATS_NEW	2009/05/11 10:28:45	1.1099
++++ LVM2/WHATS_NEW	2009/05/12 19:09:21	1.1100
+@@ -1,5 +1,6 @@
+ Version 2.02.46 - 
+ ================================
++  Fix first_seg() call for empty segment list.
+   Add make install_lvm2 as complement to device-mapper install.
+   Reject missing PVs from allocation in toollib.
+   Fix PV datalignment for values starting prior to MDA area. (2.02.45)
+--- LVM2/lib/metadata/metadata.c	2009/04/28 17:46:47	1.213
++++ LVM2/lib/metadata/metadata.c	2009/05/12 19:09:21	1.214
+@@ -1108,12 +1108,12 @@
+ 
+ struct lv_segment *first_seg(const struct logical_volume *lv)
+ {
+-	struct lv_segment *seg = NULL;
++	struct lv_segment *seg;
+ 
+ 	dm_list_iterate_items(seg, &lv->segments)
+-		break;
++		return seg;
+ 
+-	return seg;
++	return NULL;
+ }
+ 
+ /* Find segment at a given physical extent in a PV */
 
 
