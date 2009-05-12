@@ -1,43 +1,59 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 10 May 2009 20:33:22 +0200
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 12 May 2009 14:34:19 +0200
 Subject: [PATCH 2/7] Never set mirror log and images directly visible in metadata.
-In-Reply-To: <a3d0392fa15ad5ecbc874cb5419a0177011655ed.1241620083.git.mbroz@redhat.com>
-	(Milan Broz's message of "Wed, 6 May 2009 16:42:59 +0200")
-References: <cover.1241620083.git.mbroz@redhat.com>
-	<cover.1241620083.git.mbroz@redhat.com>
-	<a3d0392fa15ad5ecbc874cb5419a0177011655ed.1241620083.git.mbroz@redhat.com>
-Message-ID: <87my9ku7t9.fsf@eriador.mornfall.net>
+In-Reply-To: <20090511015448.GC7680@agk-dp.fab.redhat.com>
+References: <cover.1241620083.git.mbroz@redhat.com>	<a3d0392fa15ad5ecbc874cb5419a0177011655ed.1241620083.git.mbroz@redhat.com>
+	<20090511015448.GC7680@agk-dp.fab.redhat.com>
+Message-ID: <4A096CCB.8070308@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
-> Mirror creation and conversion force set mirror log and images
-> to be visible. This can violate VG max_lv restriction on LV.
->
-> There is no need to set these volumes visible, even during
-> mirror images conversion.
-Well, I believe the use-case is that when the operation fails halfway (which
-happens from time to time -- more often than would be comfortable, even), you
-can clean up by hand, since those offending LVs became visible. If there is a
-reasonable procedure that the admins can follow to get rid of the junk LVs in
-those scenarios, I'm fine.
+Alasdair G Kergon wrote:
+> On Wed, May 06, 2009 at 04:42:59PM +0200, Milan Broz wrote:
+>> This can violate VG max_lv restriction on LV.
+> 
+> I'm not bothered if the code exceeds max_lv temporarily.
 
-(The whole non-atomicity of those mirror operation is very unfortunate for
-other reasons, but I didn't yet have time to investigate how hard it would be
-to make those really atomic.)
+It is not temporarily, it is stored in metadata on disk in this case.
 
-Other than that, I have reviewed the patch, and it does what the description
-advertises, so (bar the above issue) it is good to go, IMHO.
+That's why I do not want to store VISIBLE flag there.
+Even without mentioning max_lv, the proper solution should be properly
+revert these invisible volumes if operation fails in the middle.
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+> I mean, does anyone have a real-world use case for that parameter?
+That parameter is mistake for text metadata format IMHO. 
+
+The only real use is to downconvert to lvm1 format (which has limited LVs)
+
+But we have it documented, "supported" so removing it is probably not good way.
+
+> (Perhaps make it so VGs exceeding that limit can still be manipulated
+> internally, but users cannot add new LVs until it drops below the
+> limit i.e. a soft limit enforced on the user.)
+
+What the internally means here? Not stored in persistent metadata?
+Or stored with an internal/temporary flag?
+
+> This comes back to whether we actually need the distinction between
+> TOPLEVEL (nothing in lvm uses the LV) and VISIBLE (it's for users/tools
+> to open) or not, a distinction we've been eliminating I think.
+
+Which will probably re-complicate again when replicator & crypto segments/LVs
+are introduced...
+
+> (If we got automatic clean-up of incomplete multi-step operations
+> wouldn't the problem go away?  Might be as simple as flagging LVs as
+> temporary/uncommitted in the metadata and having them deleted next time
+> the VG lock is taken in the same way as we deal with multiple metadata
+> sequence numbers in different VG mdas.)
+
+Is this possible without breaking compatibility with old versions?
+(new LV flag?)
+
+Milan
 
 
