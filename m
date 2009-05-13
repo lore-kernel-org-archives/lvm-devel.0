@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 13 May 2009 21:28:32 -0000
+Date: 13 May 2009 21:29:11 -0000
 Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c lib/m ...
-Message-ID: <20090513212832.30225.qmail@sourceware.org>
+Message-ID: <20090513212911.30422.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,135 +10,183 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-05-13 21:28:31
+Changes by:	mbroz at sourceware.org	2009-05-13 21:29:10
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c metadata-exported.h mirror.c 
-	                 snapshot_manip.c 
-	tools          : lvcreate.c pvmove.c 
+	lib/metadata   : lv_manip.c metadata-exported.h metadata.c 
+	test           : t-lvcreate-usage.sh test-utils.sh 
+	tools          : lvcreate.c 
 
 Log message:
-	Remove unneeded import parameter from lv_create_empty.
+	Check max_lv on only place and force the check only for new volume.
+	
+	We can temporarily violate max_lv during mirror conversion etc.
+	
+	(If the operation fails, orphan mirror images are visible to administrator
+	for manual remove for example. Not that this should ever happen:-)
+	
+	Force limit only for lvcreate (and vg merge) command.
+	
+	Patch also adds simple max_lv tests into testsuite
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1109&r2=1.1110
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.170&r2=1.171
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.71&r2=1.72
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.186&r2=1.187
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1110&r2=1.1111
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.171&r2=1.172
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.218&r2=1.219
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.187&r2=1.188
 
---- LVM2/WHATS_NEW	2009/05/13 21:27:43	1.1109
-+++ LVM2/WHATS_NEW	2009/05/13 21:28:31	1.1110
+--- LVM2/WHATS_NEW	2009/05/13 21:28:31	1.1110
++++ LVM2/WHATS_NEW	2009/05/13 21:29:10	1.1111
 @@ -1,5 +1,6 @@
  Version 2.02.46 - 
  ================================
-+  Remove unneeded import parameter from lv_create_empty.
++  Force max_lv restriction only for newly created LV.
+   Remove unneeded import parameter from lv_create_empty.
    Merge lv_is_displayable and lv_is_visible functions.
    Introduce lv_set_visible & lv_set_invisible functions.
-   Fix lv_is_visible to handle virtual origin.
---- LVM2/lib/metadata/lv_manip.c	2009/05/13 21:27:43	1.170
-+++ LVM2/lib/metadata/lv_manip.c	2009/05/13 21:28:31	1.171
-@@ -1811,7 +1811,6 @@
- 				       union lvid *lvid,
- 				       uint32_t status,
- 				       alloc_policy_t alloc,
--				       int import,
- 				       struct volume_group *vg)
+--- LVM2/lib/metadata/lv_manip.c	2009/05/13 21:28:31	1.171
++++ LVM2/lib/metadata/lv_manip.c	2009/05/13 21:29:10	1.172
+@@ -1804,6 +1804,20 @@
+ 	return buffer;
+ }
+ 
++int vg_max_lv_reached(struct volume_group *vg)
++{
++	if (!vg->max_lv)
++		return 0;
++
++	if (vg->max_lv > vg_visible_lvs(vg))
++		return 0;
++
++	log_verbose("Maximum number of logical volumes (%u) reached "
++		    "in volume group %s", vg->max_lv, vg->name);
++
++	return 1;
++}
++
+ /*
+  * Create a new empty LV.
+  */
+@@ -1817,11 +1831,8 @@
+ 	struct logical_volume *lv;
+ 	char dname[NAME_LEN];
+ 
+-	if (vg->max_lv && (vg->max_lv == vg_visible_lvs(vg))) {
+-		log_error("Maximum number of logical volumes (%u) reached "
+-			  "in volume group %s", vg->max_lv, vg->name);
+-		return NULL;
+-	}
++	if (vg_max_lv_reached(vg))
++		stack;
+ 
+ 	if (strstr(name, "%d") &&
+ 	    !(name = generate_lv_name(vg, name, dname, sizeof(dname)))) {
+@@ -1936,6 +1947,9 @@
  {
- 	struct format_instance *fi = vg->fid;
-@@ -1831,8 +1830,7 @@
- 		return NULL;
- 	}
+ 	struct lv_list *lvl;
  
--	if (!import)
--		log_verbose("Creating logical volume %s", name);
-+	log_verbose("Creating logical volume %s", name);
- 
- 	if (!(lv = dm_pool_zalloc(vg->vgmem, sizeof(*lv))))
- 		return_NULL;
-@@ -2417,7 +2415,7 @@
- 	}
- 
- 	if (!(layer_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
--					 ALLOC_INHERIT, 0, lv_where->vg))) {
-+					 ALLOC_INHERIT, lv_where->vg))) {
- 		log_error("Creation of layer LV failed");
- 		return NULL;
- 	}
---- LVM2/lib/metadata/metadata-exported.h	2009/05/13 21:27:43	1.71
-+++ LVM2/lib/metadata/metadata-exported.h	2009/05/13 21:28:31	1.72
-@@ -448,7 +448,6 @@
- 				       union lvid *lvid,
- 				       uint32_t status,
- 				       alloc_policy_t alloc,
--				       int import,
- 				       struct volume_group *vg);
- 
- /* Write out LV contents */
---- LVM2/lib/metadata/mirror.c	2009/05/13 21:26:45	1.86
-+++ LVM2/lib/metadata/mirror.c	2009/05/13 21:28:31	1.87
-@@ -932,7 +932,7 @@
- 	for (m = 0; m < num_mirrors; m++) {
- 		if (!(img_lvs[m] = lv_create_empty(img_name,
- 					     NULL, LVM_READ | LVM_WRITE,
--					     ALLOC_INHERIT, 0, lv->vg))) {
-+					     ALLOC_INHERIT, lv->vg))) {
- 			log_error("Aborting. Failed to create mirror image LV. "
- 				  "Remove new LV and retry.");
- 			return 0;
-@@ -1266,7 +1266,7 @@
- 
- 	if (!(log_lv = lv_create_empty(log_name, NULL,
- 				       VISIBLE_LV | LVM_READ | LVM_WRITE,
--				       alloc, 0, lv->vg)))
-+				       alloc, lv->vg)))
- 		return_NULL;
- 
- 	if (!lv_add_log_segment(ah, log_lv))
---- LVM2/lib/metadata/snapshot_manip.c	2009/05/13 21:27:43	1.41
-+++ LVM2/lib/metadata/snapshot_manip.c	2009/05/13 21:28:31	1.42
-@@ -105,7 +105,7 @@
- 
- 	if (!(snap = lv_create_empty("snapshot%d",
- 				     lvid, LVM_READ | LVM_WRITE | VISIBLE_LV,
--				     ALLOC_INHERIT, 1, origin->vg)))
-+				     ALLOC_INHERIT, origin->vg)))
++	if (vg_max_lv_reached(vg))
++		stack;
++
+ 	if (!(lvl = dm_pool_zalloc(vg->vgmem, sizeof(*lvl))))
  		return_0;
  
- 	snap->le_count = extent_count;
---- LVM2/tools/lvcreate.c	2009/05/13 21:21:59	1.186
-+++ LVM2/tools/lvcreate.c	2009/05/13 21:28:31	1.187
-@@ -577,7 +577,7 @@
+--- LVM2/lib/metadata/metadata-exported.h	2009/05/13 21:28:31	1.72
++++ LVM2/lib/metadata/metadata-exported.h	2009/05/13 21:29:10	1.73
+@@ -565,6 +565,11 @@
+ unsigned vg_visible_lvs(const struct volume_group *vg);
+ 
+ /*
++ * Check if the VG reached maximal LVs count (if set)
++ */
++int vg_max_lv_reached(struct volume_group *vg);
++
++/*
+ * Mirroring functions
+ */
+ struct lv_segment *find_mirror_seg(struct lv_segment *seg);
+--- LVM2/lib/metadata/metadata.c	2009/05/13 21:27:43	1.218
++++ LVM2/lib/metadata/metadata.c	2009/05/13 21:29:10	1.219
+@@ -1528,12 +1528,8 @@
+ 		r = 0;
  	}
  
- 	if (!(lv = lv_create_empty(vorigin_name, NULL, permission,
--				   ALLOC_INHERIT, 0, vg)))
-+				   ALLOC_INHERIT, vg)))
- 		return_0;
+-	if (vg->max_lv && (vg->max_lv < vg_visible_lvs(vg))) {
+-		log_error("Internal error: Volume group %s contains %u volumes"
+-			  " but the limit is set to %u.",
+-			  vg->name, vg_visible_lvs(vg), vg->max_lv);
+-		r = 0;
+-	}
++	if (vg_max_lv_reached(vg))
++		stack;
  
- 	if (!lv_extend(lv, segtype, 1, 0, 1, voriginextents, NULL, 0u, 0u,
-@@ -824,7 +824,7 @@
+ 	return r;
+ }
+--- LVM2/test/t-lvcreate-usage.sh	2009/05/08 21:50:20	1.12
++++ LVM2/test/t-lvcreate-usage.sh	2009/05/13 21:29:10	1.13
+@@ -55,12 +55,33 @@
+ case $(lvdisplay $vg) in "") true ;; *) false ;; esac
+ 
+ # Setting max_lv works. (bz490298)
+-vgchange -l 4 $vg
++lvremove -ff $vg
++vgchange -l 3 $vg
+ lvcreate -l1 -n $lv1 $vg
+ lvcreate -l1 -s -n $lv2 $vg/$lv1
+ lvcreate -l1 -n $lv3 $vg
+ not lvcreate -l1 -n $lv4 $vg
++
++lvremove -ff $vg/$lv3
++lvcreate -l1 -s -n $lv3 $vg/$lv1
++not lvcreate -l1 -n $lv4 $vg
++not lvcreate -l1 -m1 -n $lv4 $vg
++
++lvremove -ff $vg/$lv3
++lvcreate -l1 -m1 -n $lv3 $vg
++lvs
++vgs -o +max_lv
++not lvcreate -l1 -n $lv4 $vg
++not lvcreate -l1 -m1 -n $lv4 $vg
++
++lvconvert -m0 $vg/$lv3
++lvconvert -m2 -i 1 $vg/$lv3
++lvconvert -m1 $vg/$lv3
++
++not vgchange -l 2
++vgchange -l 4
+ vgs $vg
++
+ lvremove -ff $vg
+ vgchange -l 0 $vg
+ 
+--- LVM2/test/test-utils.sh	2009/05/13 19:18:47	1.12
++++ LVM2/test/test-utils.sh	2009/05/13 21:29:10	1.13
+@@ -130,6 +130,7 @@
+ 	lv1=LV1
+ 	lv2=LV2
+ 	lv3=LV3
++	lv4=LV4
+ }
+ 
+ disable_dev() {
+--- LVM2/tools/lvcreate.c	2009/05/13 21:28:31	1.187
++++ LVM2/tools/lvcreate.c	2009/05/13 21:29:10	1.188
+@@ -613,6 +613,12 @@
+ 		return 0;
  	}
  
- 	if (!(lv = lv_create_empty(lv_name ? lv_name : "lvol%d", NULL,
--				   status, lp->alloc, 0, vg)))
-+				   status, lp->alloc, vg)))
- 		return_0;
- 
- 	if (lp->read_ahead) {
---- LVM2/tools/pvmove.c	2009/04/21 14:31:58	1.57
-+++ LVM2/tools/pvmove.c	2009/05/13 21:28:31	1.58
-@@ -191,7 +191,7 @@
- 	/* FIXME Cope with non-contiguous => splitting existing segments */
- 	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
- 					LVM_READ | LVM_WRITE,
--					ALLOC_CONTIGUOUS, 0, vg))) {
-+					ALLOC_CONTIGUOUS, vg))) {
- 		log_error("Creation of temporary pvmove LV failed");
- 		return NULL;
- 	}
++	if (vg_max_lv_reached(vg)) {
++		log_error("Maximum number of logical volumes (%u) reached "
++			  "in volume group %s", vg->max_lv, vg->name);
++		return 0;
++	}
++
+ 	if (lp->mirrors > 1 && !(vg->fid->fmt->features & FMT_SEGMENTS)) {
+ 		log_error("Metadata does not support mirroring.");
+ 		return 0;
 
 
