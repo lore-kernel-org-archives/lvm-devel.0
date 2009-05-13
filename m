@@ -1,62 +1,36 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 13 May 2009 13:09:05 +0200
-Subject: [PATCH] Add escape sequence for ':' in command's PV list
-Message-ID: <4A0AAA51.8040609@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 13 May 2009 08:55:09 -0400
+Subject: Re: vgimportclone: script to import SAN snapshots and clones
+In-Reply-To: <20090513023333.GD10652@agk-dp.fab.redhat.com>
+References: <1242168445-30898-1-git-send-email-snitzer@redhat.com>
+	<20090513023333.GD10652@agk-dp.fab.redhat.com>
+Message-ID: <20090513125508.GB2267@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On Tue, May 12 2009 at 10:33pm -0400,
+Alasdair G Kergon <agk@redhat.com> wrote:
 
-this little patch provides an escape sequence in command's PV list
-where ':' is also used as a delimiter for extent ranges. To escape
-this char, we just double it, so '::' is translated to ':' and ':'
-is extent range delimiter.
-(BZ #491409)
+> On Tue, May 12, 2009 at 06:47:25PM -0400, Mike Snitzer wrote:
+> > Revised vgimportclone that should be ready for inclussion in the LVM2
+> > tree.
 
-Peter
+I was certainly mistaken with that statement :)
 
+I'll sort out all of your comments and repost.
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index aa33468..b5a43b5 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1095,8 +1095,9 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
- 	struct dm_list *r;
- 	struct pv_list *pvl;
- 	struct dm_list tags, arg_pvnames;
--	const char *pvname = NULL;
-+	char *pvname = NULL;
- 	char *colon, *tagname;
-+	char *ptr, *ptr_end;
- 	int i;
- 
- 	/* Build up list of PVs */
-@@ -1128,9 +1129,21 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
- 			continue;
- 		}
- 
--		pvname = argv[i];
-+		ptr = pvname = argv[i];
-+		ptr_end = strchr(ptr, '\0');
-+		colon = NULL;
- 
--		if ((colon = strchr(pvname, ':'))) {
-+		while ((ptr = strchr(ptr, ':'))) {
-+			if (ptr[1] == ':') {
-+				memmove(ptr, ptr + 1, ptr_end - ptr);
-+				ptr_end--;
-+			}
-+			else if (!colon)
-+				colon = ptr;
-+			ptr++;
-+		}
-+
-+		if (colon) {
- 			if (!(pvname = dm_pool_strndup(mem, pvname,
- 						    (unsigned) (colon -
- 								pvname)))) {
+> > +            exec 2> ./${SCRIPTNAME}.log
+> 
+> Errr ./ ???  What directory are we in and what file might we be clobbering?
+> (Security blocker.)  Better to retain output from earlier runs too and
+> ensure there's a timestamp of the run somewhere (cf. lvmdump).
+
+Yes, this DEBUG functionality is not safe at all; not sure how I missed
+this.
+
+Mike
 
 
