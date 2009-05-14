@@ -1,28 +1,43 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 14 May 2009 11:33:31 +0200
-Subject: [PATCH] Add escape sequence for ':' in command's PV list
-In-Reply-To: <1242243809.2556.19.camel@f10-node1>
-References: <4A0AAA51.8040609@redhat.com> <1242243809.2556.19.camel@f10-node1>
-Message-ID: <4A0BE56B.2000508@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 14 May 2009 14:56:56 -0400
+Subject: lvconvert error when converting a linear to a mirror
+Message-ID: <1242327416.3943.82.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/13/2009 09:43 PM, Dave Wysochanski wrote:
-> I know, it does not make sense to specify a pe range
-> for pvcreate or vgcreate.  But shouldn't we be consistent, or at least
-> very much clarify the arguments are different?  I can just imagine
-> someone scripting something and then being surprised when they needed to
-> quote only for lvcreate, pvmove, etc.
+I keep hitting the below error path when using lvconvert on a linear
+volume that is spread across multiple PVs.
 
-Hmm, then the question is, what should we do with single unescaped ':' if
-it appears in pvcreate, vgcreate, e.g. "pvcreate /dev/a::b:c" -- the first
-double one is OK, but what about the second single one? Should it be considered
-as an input error then? (...probably giving the user a message like
-"PE range definition not allowed here.")
+	/*
+         * FIXME This check used to precede mirror->mirror conversion
+	 * but didn't affect mirror->linear or linear->mirror. I do
+	 * not understand what is its intention, in fact.
+	 */
+	if (dm_list_size(&lv->segments) != 1) {
+		log_error("Logical volume %s has multiple "
+			  "mirror segments.", lv->name);
+		return 0;
+	}
 
-Peter
+I created the linear volume by using PE ranges as follows:
+# tools/lvm lvcreate -L 64M -n lv1 vg1 /dev/loop0:0-3 /dev/loop1:0-7 /dev/loop2:0-3
+
+The lvconvert command I'm using is:
+# tools/lvm lvconvert -m1 vg1/lv1 
+  Logical volume lv1 has multiple mirror segments.
+
+I'm not that familiar with lvconvert code, but looking through it
+quickly, it looks like it should handle this case ok.  I removed the
+above check and the mirror seemed to be created fine.  Is this check
+there for some other reason though?  The comment above indicates it is
+not clear to at least one other person.  If we are checking mirror
+segments, perhaps we should add in a lv->MIRRORED flag check as well?
+
+NOTE: I hit this as a side issue so I don't want to get sidetracked
+indefinitely but figured it was worth a mention.
+
 
 
