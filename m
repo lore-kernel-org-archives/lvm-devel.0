@@ -1,39 +1,26 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 11 May 2009 08:27:13 +0200
-Subject: [PATCH 1/7] Fix snapshot segment import to not use duplicate segments & replace.
-In-Reply-To: <c09189aa621b29aa02b3c5b98fc65b900529b301.1241620083.git.mbroz@redhat.com>
-	(Milan Broz's message of "Wed, 6 May 2009 16:42:58 +0200")
-References: <cover.1241620083.git.mbroz@redhat.com>
-	<cover.1241620083.git.mbroz@redhat.com>
-	<c09189aa621b29aa02b3c5b98fc65b900529b301.1241620083.git.mbroz@redhat.com>
-Message-ID: <87r5ywrw72.fsf@eriador.mornfall.net>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 13 May 2009 23:33:13 -0400
+Subject: [PATCH 0/30]: liblvm object property baseline, take2
+In-Reply-To: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
+References: <1242046903-15133-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1242271993.2568.2.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
-> Simplify the code, snapshot segment is properly initialized
-> in text_import function now and do not need to be replaced
-> by vg_add_snapshot call.
-Looks OK, although it does duplicate part of the code. Nevertheless, seems like
-a better compromise than the previous one. Also, the ugly part of the code
-where lv_count is fiddled manually is fixed by a later patch.
+FYI - I have these patches rebased to Milan's latest lv / snapshot
+counting patches (nice cleanup Milan!).  I won't spam the list but if
+anyone wants them just let me know.
 
-> The vg_add_snapshot() is now usefull only for adding new snapshot. The name
-> is always gewerated, remove it from function call.
-Ack.
+The new patches now apply on:
+commit dc205333cd46770e5ca1a390a6b8fef1f584939a
+Author: Milan Broz <mbroz@redhat.com>
+Date:   Wed May 13 21:29:10 2009 +0000
 
-> Signed-off-by: Milan Broz <mbroz@redhat.com>
-Acked-By: Petr Rockai <prockai@redhat.com>
+    Check max_lv on only place and force the check only for new volume.
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
 
 
