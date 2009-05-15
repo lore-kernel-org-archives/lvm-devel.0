@@ -1,136 +1,77 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 15 May 2009 16:34:23 +0200
-Subject: [PATCH] vgcfgbackup: do not produce corrupted metadata if PVs are missing
-Message-ID: <4A0D7D6F.4020103@redhat.com>
+Date: Fri, 15 May 2009 18:17:56 +0200
+Subject: [RFC PATCH] pvmove: do not keep suspended devices behind and try automatically restore previous state
+Message-ID: <4A0D95B4.1060300@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use PV UUID in hash for device name when exporting metadata.
+If pvmove fails activating mirror volume, try restroe to previous state.
 
-Currently code uses pv_dev_name() for hash when getting internal
-"pvX" name.
+pvmove now keep suspended devices if temporary mirror creation fails.
 
-This produce corrupted metadata if PVs are missing, pv->dev
-is NULL and all these missing devices returns one name
-(using "unknown device" for all missing devices as hash key).
+We can try to restore previous state if it is first attempt to activate 
+pvmove (code basically run the same code as --abort automatically).
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/format_text/export.c    |   29 +++++++++++++++++++++--------
- test/t-vgcfgbackup-usage.sh |   22 ++++++++++++++++++++--
- 2 files changed, 41 insertions(+), 10 deletions(-)
+ test/t-pvmove-basic.sh |    5 +++++
+ tools/pvmove.c         |   20 ++++++++++++++------
+ 2 files changed, 19 insertions(+), 6 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index ce6676e..b6ead68 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -378,10 +378,19 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
-  * Get the pv%d name from the formatters hash
-  * table.
-  */
-+static const char *_get_pv_name_from_uuid(struct formatter *f, char *uuid)
-+{
-+	return dm_hash_lookup(f->pv_names, uuid);
-+}
-+
- static const char *_get_pv_name(struct formatter *f, struct physical_volume *pv)
- {
--	return (pv) ? (const char *)
--	    dm_hash_lookup(f->pv_names, pv_dev_name(pv)) : "Missing";
-+	char uuid[40];
-+
-+	if (!pv || !id_write_format(&pv->id, uuid, sizeof(uuid)))
-+		return_NULL;
-+
-+	return _get_pv_name_from_uuid(f, uuid);
+diff --git a/test/t-pvmove-basic.sh b/test/t-pvmove-basic.sh
+index ab39e4f..cbd5c8c 100755
+--- a/test/t-pvmove-basic.sh
++++ b/test/t-pvmove-basic.sh
+@@ -370,3 +370,8 @@ vgcreate $vg -s 256k $devs
+ lvcreate -l4 -n $lv1 $vg $dev1
+ pvmove -i1 $dev1
+ 
++#COMM "pvmove fails activating mirror, properly restores state before pvmove"
++dmsetup create "$vg-pvmove0" --notable
++not pvmove -i 1 $dev2
++test $(dmsetup info --noheadings -c -o suspended "$vg-$lv1") = "Active"
++dmsetup remove "$vg-pvmove0"
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index d760802..3e12ec1 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -274,6 +274,10 @@ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
+ 	return activate_lv(cmd, lv_mirr);
  }
  
- static int _print_pvs(struct formatter *f, struct volume_group *vg)
-@@ -398,16 +407,16 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		pv = pvl->pv;
- 
--		if (!(name = _get_pv_name(f, pv)))
-+		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
-+			return_0;
++static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
++			  struct logical_volume *lv_mirr,
++			  struct dm_list *lvs_changed);
 +
-+		if (!(name = _get_pv_name_from_uuid(f, buffer)))
- 			return_0;
- 
- 		outnl(f);
- 		outf(f, "%s {", name);
- 		_inc_indent(f);
- 
--		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
--			return_0;
--
- 		outf(f, "id = \"%s\"", buffer);
- 
- 		if (!(buf = alloca(escaped_len(pv_dev_name(pv))))) {
-@@ -621,7 +630,7 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
- 	int count = 0;
- 	struct pv_list *pvl;
- 	struct physical_volume *pv;
--	char buffer[32], *name;
-+	char buffer[32], *uuid, *name;
- 
- 	if (!(f->mem = dm_pool_create("text pv_names", 512)))
- 		return_0;
-@@ -639,7 +648,11 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
- 		if (!(name = dm_pool_strdup(f->mem, buffer)))
- 			return_0;
- 
--		if (!dm_hash_insert(f->pv_names, pv_dev_name(pv), name))
-+		if (!(uuid = dm_pool_zalloc(f->mem, 40)) ||
-+		   !id_write_format(&pv->id, uuid, 40))
-+			return_0;
+ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
+ 			    struct logical_volume *lv_mirr,
+ 			    struct dm_list *lvs_changed, unsigned flags)
+@@ -315,12 +319,16 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
+ 	/* FIXME: Add option to use a log */
+ 	if (first_time) {
+ 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+-			if (!test_mode())
+-				log_error("ABORTING: Temporary mirror "
+-					  "activation failed.  "
+-					  "Run pvmove --abort.");
+-			/* FIXME Resume using *original* metadata here! */
+-			resume_lvs(cmd, lvs_changed);
++			if (test_mode())
++				goto out;
 +
-+		if (!dm_hash_insert(f->pv_names, uuid, name))
- 			return_0;
- 	}
- 
-diff --git a/test/t-vgcfgbackup-usage.sh b/test/t-vgcfgbackup-usage.sh
-index 0242d55..6d49121 100644
---- a/test/t-vgcfgbackup-usage.sh
-+++ b/test/t-vgcfgbackup-usage.sh
-@@ -11,14 +11,32 @@
- 
- . ./test-utils.sh
- 
--aux prepare_pvs 2
-+aux prepare_pvs 4
- 
- # vgcfgbackup handles similar VG names (bz458941)
- vg1=${PREFIX}vg00
--vg1=${PREFIX}vg01
-+vg2=${PREFIX}vg01
- vgcreate $vg1 $dev1
- vgcreate $vg2 $dev2
- vgcfgbackup -f /tmp/bak-%s >out
- grep "Volume group \"$vg1\" successfully backed up." out
- grep "Volume group \"$vg2\" successfully backed up." out
-+vgremove -ff $vg1
-+vgremove -ff $vg2
- 
-+# vgcfgbackup correctly stores metadata with missing PVs
-+# and vgcfgrestore able to restore them when device reappears
-+pv1_uuid=$(pvs --noheadings -o pv_uuid $dev1)
-+pv2_uuid=$(pvs --noheadings -o pv_uuid $dev2)
-+vgcreate $vg $devs
-+lvcreate -l1 -n $lv1 $vg $dev1
-+lvcreate -l1 -n $lv2 $vg $dev2
-+lvcreate -l1 -n $lv3 $vg $dev3
-+vgchange -a n $vg
-+pvcreate -ff -y $dev1
-+pvcreate -ff -y $dev2
-+vgcfgbackup -f "$(pwd)/backup.$$" $vg
-+sed 's/flags = \[\"MISSING\"\]/flags = \[\]/' "$(pwd)/backup.$$" > "$(pwd)/backup.$$1"
-+pvcreate -ff -y -u $pv1_uuid $dev1
-+pvcreate -ff -y -u $pv2_uuid $dev2
-+vgcfgrestore -f "$(pwd)/backup.$$1" $vg
++			/*
++			 * Nothing changed yet, try to revert pvmove.
++			 */
++			log_error("Temporary pvmove mirror activation failed.");
++			if (!_finish_pvmove(cmd, vg, lv_mirr, lvs_changed))
++				log_error("ABORTING: Restoring original configuration "
++					  "before pvmove failed. Run pvmove --abort.");
+ 			goto out;
+ 		}
+ 	} else if (!resume_lv(cmd, lv_mirr)) {
 
 
 
