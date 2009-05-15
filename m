@@ -1,64 +1,136 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 15 May 2009 08:27:40 -0400
-Subject: [PATCH] Add escape sequence for ':' in command's PV list
-In-Reply-To: <1242389250.2506.6.camel@f10-node1>
-References: <4A0AAA51.8040609@redhat.com>
-	<1242243809.2556.19.camel@f10-node1>  <4A0BE56B.2000508@redhat.com>
-	<1242329131.3943.111.camel@f10-node1>
-	<1242389250.2506.6.camel@f10-node1>
-Message-ID: <1242390460.2506.8.camel@f10-node1>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 15 May 2009 16:34:23 +0200
+Subject: [PATCH] vgcfgbackup: do not produce corrupted metadata if PVs are missing
+Message-ID: <4A0D7D6F.4020103@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 2009-05-15 at 08:07 -0400, Dave Wysochanski wrote:
-> On Thu, 2009-05-14 at 15:25 -0400, Dave Wysochanski wrote:
-> > On Thu, 2009-05-14 at 11:33 +0200, Peter Rajnoha wrote: 
-> > > On 05/13/2009 09:43 PM, Dave Wysochanski wrote:
-> > > > I know, it does not make sense to specify a pe range
-> > > > for pvcreate or vgcreate.  But shouldn't we be consistent, or at least
-> > > > very much clarify the arguments are different?  I can just imagine
-> > > > someone scripting something and then being surprised when they needed to
-> > > > quote only for lvcreate, pvmove, etc.
-> > > 
-> > > Hmm, then the question is, what should we do with single unescaped ':' if
-> > > it appears in pvcreate, vgcreate, e.g. "pvcreate /dev/a::b:c" -- the first
-> > > double one is OK, but what about the second single one? Should it be considered
-> > > as an input error then? (...probably giving the user a message like
-> > > "PE range definition not allowed here.")
-> > > 
-> > 
-> > At this point I'd lean towards just clarifing the difference in the
-> > arguments for the commands (e.g. in man pages, etc).  See attached patch
-> > for a stab at updating the man pages.  If we go this route, then your
-> > patch is fine as is IMO.
-> > 
-> > Also, on IRC yesterday, Alasdair suggested a new built-in command to
-> > escape names such as this 
-> > 17:01:40 < deepthot> agk_: on the escaping, you mean someone would do something like: lvcreate -L 16M -n lvname vgname `lvmescape /dev/pname`?
-> > 17:05:07 < agk_> almost:   lvmescape /dev/path   then they can append :4-10 on it
-> > 
-> > IMO, this is a good idea.  However, in the spirit of not getting too
-> > sidetracked, I think if we add proper explanation, we can probably defer
-> > adding the built-in command, which probably requires some design thought
-> > (for example, how to specify whether it is a pvname, vgname, etc - they
-> > may have different characters to escape, etc).  If you want to tackle
-> > that too though, go for it.
-> > 
-> 
-> Upon further thought, I agree with you Peter - let's reject the ":" in
-> pvcreate/vgcreate commands and print a message about pe range not
-> allowed in these commands.  This way the commands are all consistent -
-> require a "::" if any pvname contains a ":" in any of the commands.
-> 
+Use PV UUID in hash for device name when exporting metadata.
 
-Updated man page patch is attached.
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 0001-Update-man-pages-to-clarify-usage-of-PE-ranges-and.patch
-Type: text/x-patch
-Size: 5575 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090515/284e1366/attachment.bin>
+Currently code uses pv_dev_name() for hash when getting internal
+"pvX" name.
+
+This produce corrupted metadata if PVs are missing, pv->dev
+is NULL and all these missing devices returns one name
+(using "unknown device" for all missing devices as hash key).
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/format_text/export.c    |   29 +++++++++++++++++++++--------
+ test/t-vgcfgbackup-usage.sh |   22 ++++++++++++++++++++--
+ 2 files changed, 41 insertions(+), 10 deletions(-)
+
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index ce6676e..b6ead68 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -378,10 +378,19 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+  * Get the pv%d name from the formatters hash
+  * table.
+  */
++static const char *_get_pv_name_from_uuid(struct formatter *f, char *uuid)
++{
++	return dm_hash_lookup(f->pv_names, uuid);
++}
++
+ static const char *_get_pv_name(struct formatter *f, struct physical_volume *pv)
+ {
+-	return (pv) ? (const char *)
+-	    dm_hash_lookup(f->pv_names, pv_dev_name(pv)) : "Missing";
++	char uuid[40];
++
++	if (!pv || !id_write_format(&pv->id, uuid, sizeof(uuid)))
++		return_NULL;
++
++	return _get_pv_name_from_uuid(f, uuid);
+ }
+ 
+ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+@@ -398,16 +407,16 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		pv = pvl->pv;
+ 
+-		if (!(name = _get_pv_name(f, pv)))
++		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
++			return_0;
++
++		if (!(name = _get_pv_name_from_uuid(f, buffer)))
+ 			return_0;
+ 
+ 		outnl(f);
+ 		outf(f, "%s {", name);
+ 		_inc_indent(f);
+ 
+-		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+-			return_0;
+-
+ 		outf(f, "id = \"%s\"", buffer);
+ 
+ 		if (!(buf = alloca(escaped_len(pv_dev_name(pv))))) {
+@@ -621,7 +630,7 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
+ 	int count = 0;
+ 	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+-	char buffer[32], *name;
++	char buffer[32], *uuid, *name;
+ 
+ 	if (!(f->mem = dm_pool_create("text pv_names", 512)))
+ 		return_0;
+@@ -639,7 +648,11 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
+ 		if (!(name = dm_pool_strdup(f->mem, buffer)))
+ 			return_0;
+ 
+-		if (!dm_hash_insert(f->pv_names, pv_dev_name(pv), name))
++		if (!(uuid = dm_pool_zalloc(f->mem, 40)) ||
++		   !id_write_format(&pv->id, uuid, 40))
++			return_0;
++
++		if (!dm_hash_insert(f->pv_names, uuid, name))
+ 			return_0;
+ 	}
+ 
+diff --git a/test/t-vgcfgbackup-usage.sh b/test/t-vgcfgbackup-usage.sh
+index 0242d55..6d49121 100644
+--- a/test/t-vgcfgbackup-usage.sh
++++ b/test/t-vgcfgbackup-usage.sh
+@@ -11,14 +11,32 @@
+ 
+ . ./test-utils.sh
+ 
+-aux prepare_pvs 2
++aux prepare_pvs 4
+ 
+ # vgcfgbackup handles similar VG names (bz458941)
+ vg1=${PREFIX}vg00
+-vg1=${PREFIX}vg01
++vg2=${PREFIX}vg01
+ vgcreate $vg1 $dev1
+ vgcreate $vg2 $dev2
+ vgcfgbackup -f /tmp/bak-%s >out
+ grep "Volume group \"$vg1\" successfully backed up." out
+ grep "Volume group \"$vg2\" successfully backed up." out
++vgremove -ff $vg1
++vgremove -ff $vg2
+ 
++# vgcfgbackup correctly stores metadata with missing PVs
++# and vgcfgrestore able to restore them when device reappears
++pv1_uuid=$(pvs --noheadings -o pv_uuid $dev1)
++pv2_uuid=$(pvs --noheadings -o pv_uuid $dev2)
++vgcreate $vg $devs
++lvcreate -l1 -n $lv1 $vg $dev1
++lvcreate -l1 -n $lv2 $vg $dev2
++lvcreate -l1 -n $lv3 $vg $dev3
++vgchange -a n $vg
++pvcreate -ff -y $dev1
++pvcreate -ff -y $dev2
++vgcfgbackup -f "$(pwd)/backup.$$" $vg
++sed 's/flags = \[\"MISSING\"\]/flags = \[\]/' "$(pwd)/backup.$$" > "$(pwd)/backup.$$1"
++pvcreate -ff -y -u $pv1_uuid $dev1
++pvcreate -ff -y -u $pv2_uuid $dev2
++vgcfgrestore -f "$(pwd)/backup.$$1" $vg
+
+
+
