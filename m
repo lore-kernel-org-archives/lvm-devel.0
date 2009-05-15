@@ -1,77 +1,30 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 15 May 2009 18:17:56 +0200
-Subject: [RFC PATCH] pvmove: do not keep suspended devices behind and try automatically restore previous state
-Message-ID: <4A0D95B4.1060300@redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 15 May 2009 19:57:50 +0200
+Subject: [PATCH] Add escape sequence for ':' in command's PV list
+In-Reply-To: <1242390460.2506.8.camel@f10-node1>
+References: <4A0AAA51.8040609@redhat.com>	<1242243809.2556.19.camel@f10-node1>
+	<4A0BE56B.2000508@redhat.com>	<1242329131.3943.111.camel@f10-node1>	<1242389250.2506.6.camel@f10-node1>
+	<1242390460.2506.8.camel@f10-node1>
+Message-ID: <4A0DAD1E.4090805@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If pvmove fails activating mirror volume, try restroe to previous state.
+On 05/15/2009 02:27 PM, Dave Wysochanski wrote:
+>> Upon further thought, I agree with you Peter - let's reject the ":" in
+>> pvcreate/vgcreate commands and print a message about pe range not
+>> allowed in these commands.  This way the commands are all consistent -
+>> require a "::" if any pvname contains a ":" in any of the commands.
+>>
+> 
+> Updated man page patch is attached.
+> 
 
-pvmove now keep suspended devices if temporary mirror creation fails.
+OK, thanks. I'll move the code to a separate function then and I'll add checks
+for pvcreate/vgcreate, too.
 
-We can try to restore previous state if it is first attempt to activate 
-pvmove (code basically run the same code as --abort automatically).
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- test/t-pvmove-basic.sh |    5 +++++
- tools/pvmove.c         |   20 ++++++++++++++------
- 2 files changed, 19 insertions(+), 6 deletions(-)
-
-diff --git a/test/t-pvmove-basic.sh b/test/t-pvmove-basic.sh
-index ab39e4f..cbd5c8c 100755
---- a/test/t-pvmove-basic.sh
-+++ b/test/t-pvmove-basic.sh
-@@ -370,3 +370,8 @@ vgcreate $vg -s 256k $devs
- lvcreate -l4 -n $lv1 $vg $dev1
- pvmove -i1 $dev1
- 
-+#COMM "pvmove fails activating mirror, properly restores state before pvmove"
-+dmsetup create "$vg-pvmove0" --notable
-+not pvmove -i 1 $dev2
-+test $(dmsetup info --noheadings -c -o suspended "$vg-$lv1") = "Active"
-+dmsetup remove "$vg-pvmove0"
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index d760802..3e12ec1 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -274,6 +274,10 @@ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
- 	return activate_lv(cmd, lv_mirr);
- }
- 
-+static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
-+			  struct logical_volume *lv_mirr,
-+			  struct dm_list *lvs_changed);
-+
- static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 			    struct logical_volume *lv_mirr,
- 			    struct dm_list *lvs_changed, unsigned flags)
-@@ -315,12 +319,16 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 	/* FIXME: Add option to use a log */
- 	if (first_time) {
- 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
--			if (!test_mode())
--				log_error("ABORTING: Temporary mirror "
--					  "activation failed.  "
--					  "Run pvmove --abort.");
--			/* FIXME Resume using *original* metadata here! */
--			resume_lvs(cmd, lvs_changed);
-+			if (test_mode())
-+				goto out;
-+
-+			/*
-+			 * Nothing changed yet, try to revert pvmove.
-+			 */
-+			log_error("Temporary pvmove mirror activation failed.");
-+			if (!_finish_pvmove(cmd, vg, lv_mirr, lvs_changed))
-+				log_error("ABORTING: Restoring original configuration "
-+					  "before pvmove failed. Run pvmove --abort.");
- 			goto out;
- 		}
- 	} else if (!resume_lv(cmd, lv_mirr)) {
-
+Peter
 
 
