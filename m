@@ -1,37 +1,69 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 15 May 2009 19:13:14 +0100
-Subject: [PATCH] Add escape sequence for ':' in command's PV list
-In-Reply-To: <4A0DAD1E.4090805@redhat.com>
-References: <4A0AAA51.8040609@redhat.com> <1242243809.2556.19.camel@f10-node1>
-	<4A0BE56B.2000508@redhat.com> <1242329131.3943.111.camel@f10-node1>
-	<1242389250.2506.6.camel@f10-node1>
-	<1242390460.2506.8.camel@f10-node1> <4A0DAD1E.4090805@redhat.com>
-Message-ID: <20090515181314.GM25793@agk-dp.fab.redhat.com>
+From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
+Date: Mon, 18 May 2009 19:48:00 +0900
+Subject: lvconvert error when converting a linear to a mirror
+In-Reply-To: <1242327416.3943.82.camel@f10-node1>
+References: <1242327416.3943.82.camel@f10-node1>
+Message-ID: <4A113CE0.3080308@ce.jp.nec.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, May 15, 2009 at 07:57:50PM +0200, Peter Rajnoha wrote:
-> OK, thanks. I'll move the code to a separate function then and I'll add checks
-> for pvcreate/vgcreate, too.
- 
-Main thing I'm bothered about here is applying a simple policy across the board.
-Having different policies in different places is a recipe for confusion.
+Hi Dave,
 
-[Note that doubling the hyphens in device names does not set a precedent
-as that is meant to be an internal tool matter, not exposed to the user who
-uses /dev/vgname/lvname.]
+Dave Wysochanski wrote:
+> I keep hitting the below error path when using lvconvert on a linear
+> volume that is spread across multiple PVs.
+> 
+> 	/*
+>          * FIXME This check used to precede mirror->mirror conversion
+> 	 * but didn't affect mirror->linear or linear->mirror. I do
+> 	 * not understand what is its intention, in fact.
+> 	 */
+> 	if (dm_list_size(&lv->segments) != 1) {
+> 		log_error("Logical volume %s has multiple "
+> 			  "mirror segments.", lv->name);
+> 		return 0;
+> 	}
+> 
+> I created the linear volume by using PE ranges as follows:
+> # tools/lvm lvcreate -L 64M -n lv1 vg1 /dev/loop0:0-3 /dev/loop1:0-7 /dev/loop2:0-3
+> 
+> The lvconvert command I'm using is:
+> # tools/lvm lvconvert -m1 vg1/lv1 
+>   Logical volume lv1 has multiple mirror segments.
+> 
+> I'm not that familiar with lvconvert code, but looking through it
+> quickly, it looks like it should handle this case ok.  I removed the
+> above check and the mirror seemed to be created fine.  Is this check
+> there for some other reason though?  The comment above indicates it is
 
-How many more things need escaping?
+I'm not the person adding the check but the intention of the check
+should be for conversion from already mirrored LV and it should not
+be applied to linear-to-mirror conversion.
 
-Is the policy "any character that needs escaping will be doubled"?  
+In a lot of places, mirrored LV is assumed to be single-segment
+and the attributes of the mirrored LV (such as log_lv and the number
+of mirror images) are obtained from the first segment
+(see the use of first_seg()).
 
-Or do we go for "any character that needs escaping will be preceded by a
-backslash"?
-(See config strings - does this work with config settings on cmdline too?)
+> not clear to at least one other person.  If we are checking mirror
+> segments, perhaps we should add in a lv->MIRRORED flag check as well?
 
-Alasdair
+I think that's ok.
+
+And a comment for this comment in the code:
+
+>          * FIXME This check used to precede mirror->mirror conversion
+> 	 * but didn't affect mirror->linear or linear->mirror. I do
+> 	 * not understand what is its intention, in fact.
+
+if the check wasn't done for mirror-to-linear conversion, that's a bug.
+It seems the bug has been there since the initial version of lvconvert.c. :)
+
+Thanks,
+-- 
+Jun'ichi Nomura, NEC Corporation
 
 
