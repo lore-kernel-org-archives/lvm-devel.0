@@ -1,42 +1,57 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 19 May 2009 10:01:07 +0200
-Subject: [PATCH] Re: [lvm-devel] lvconvert error when converting a linear
-	to a	mirror
-In-Reply-To: <87k54dbnwr.fsf_-_@mornfall.net>
-References: <1242327416.3943.82.camel@f10-node1>	<4A113CE0.3080308@ce.jp.nec.com>
-	<87k54dbnwr.fsf_-_@mornfall.net>
-Message-ID: <4A126743.6050008@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 19 May 2009 10:18:23 +0200
+Subject: [PATCH] add error message if vgcfg fails because og missing PVs
+In-Reply-To: <4A0D5471.4050307@redhat.com> (Milan Broz's message of "Fri, 15
+	May 2009 13:39:29 +0200")
+References: <4A0D5471.4050307@redhat.com>
+Message-ID: <87ab59bj5c.fsf@mornfall.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr Rockai wrote:
-> Hi,
-> 
-> "Jun'ichi Nomura" <j-nomura@ce.jp.nec.com> writes:
->> And a comment for this comment in the code:
->>
->>>          * FIXME This check used to precede mirror->mirror conversion
->>> 	 * but didn't affect mirror->linear or linear->mirror. I do
->>> 	 * not understand what is its intention, in fact.
->> if the check wasn't done for mirror-to-linear conversion, that's a bug.
->> It seems the bug has been there since the initial version of lvconvert.c. :)
-> 
-> I am the author of that FIXME comment there. It seems, that Dave's proposal of
-> adding a lv->status & MIRRORED check is the right solution here. Thanks both
-> for noticing and explaining the issue, at the time I was implementing lvconvert
-> --repair, it was not clear to me.
+Milan Broz <mbroz@redhat.com> writes:
+> Signed-off-by: Milan Broz <mbroz@redhat.com>
+Acked-By: Petr Rockai <prockai@redhat.com>
 
-Ack,
+> diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+> index 5362adb..d80c0ba 100644
+> --- a/lib/format_text/archiver.c
+> +++ b/lib/format_text/archiver.c
+> @@ -335,7 +335,7 @@ int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
+>  			     const char *file)
+>  {
+>  	struct volume_group *vg;
+> -	int r = 0;
+> +	int missing_pvs, r = 0;
+>  
+>  	/*
+>  	 * Read in the volume group from the text file.
+> @@ -343,11 +343,12 @@ int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
+>  	if (!(vg = backup_read_vg(cmd, vg_name, file)))
+>  		return_0;
+>  
+> -	/*
+> -	 * If PV is missing, there is already message from read above
+> -	 */
+> -	if (!vg_missing_pv_count(vg))
+> +	missing_pvs = vg_missing_pv_count(vg);
+> +	if (missing_pvs == 0)
+>  		r = backup_restore_vg(cmd, vg);
+> +	else
+> +		log_error("Cannot restore Volume Group %s with %i PVs "
+> +			  "marked as missing.", vg->name, missing_pvs);
+>  
+>  	vg_release(vg);
+>  	return r;
 
-(I think we already discussed several times why this check is here, 
-so simple disabling multisegment mirrors is ok here.
+-- 
+Peter Rockai | me()mornfall!net | prockai()redhat!com
+ http://blog.mornfall.net | http://web.mornfall.net
 
-Maybe error message could explain it to user more precisely too?)
-
-
-Milan
+"In My Egotistical Opinion, most people's C programs should be
+ indented six feet downward and covered with dirt."
+     -- Blair P. Houghton on the subject of C program indentation
 
 
