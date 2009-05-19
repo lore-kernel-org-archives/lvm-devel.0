@@ -1,40 +1,39 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 19 May 2009 15:47:52 -0000
-Subject: LVM2/test t-mirror-lvconvert.sh
-Message-ID: <20090519154752.27013.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 19 May 2009 11:50:53 -0400
+Subject: [PATCH] Re: [lvm-devel] lvconvert error when converting a
+	linear to a mirror
+In-Reply-To: <87k54dbnwr.fsf_-_@mornfall.net>
+References: <1242327416.3943.82.camel@f10-node1>
+	<4A113CE0.3080308@ce.jp.nec.com>  <87k54dbnwr.fsf_-_@mornfall.net>
+Message-ID: <1242748253.2418.0.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-05-19 15:47:50
+On Tue, 2009-05-19 at 08:35 +0200, Petr Rockai wrote:
+> Hi,
+> 
+> "Jun'ichi Nomura" <j-nomura@ce.jp.nec.com> writes:
+> > And a comment for this comment in the code:
+> >
+> >>          * FIXME This check used to precede mirror->mirror conversion
+> >> 	 * but didn't affect mirror->linear or linear->mirror. I do
+> >> 	 * not understand what is its intention, in fact.
+> >
+> > if the check wasn't done for mirror-to-linear conversion, that's a bug.
+> > It seems the bug has been there since the initial version of lvconvert.c. :)
+> 
+> I am the author of that FIXME comment there. It seems, that Dave's proposal of
+> adding a lv->status & MIRRORED check is the right solution here. Thanks both
+> for noticing and explaining the issue, at the time I was implementing lvconvert
+> --repair, it was not clear to me.
+> 
 
-Modified files:
-	test           : t-mirror-lvconvert.sh 
+Ack.
 
-Log message:
-	Add test - lvconvert from linear (on multiple PVs) to mirror.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/test/t-mirror-lvconvert.sh	2008/11/10 12:41:52	1.7
-+++ LVM2/test/t-mirror-lvconvert.sh	2009/05/19 15:47:50	1.8
-@@ -312,4 +312,12 @@
- lvconvert -m0 $vg/$lv1
- lvconvert -m1 $vg/$lv1
- lvs --noheadings -o attr $vg/$lv1 | grep '^ *m'
-+check_and_cleanup_lvs_
- 
-+# lvconvert from linear (on multiple PVs) to mirror
-+prepare_lvs_
-+lvcreate -l 8 -n $lv1 $vg $dev1:0-3 $dev2:0-3
-+lvconvert -m1 $vg/$lv1
-+check_mirror_count_ $vg/$lv1 2
-+check_mirror_log_ $vg/$lv1
-+check_and_cleanup_lvs_
+Thanks for fixing.  Just checked in a test for to cover multi-segment
+linear to mirror conversion.
 
 
