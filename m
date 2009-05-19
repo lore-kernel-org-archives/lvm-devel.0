@@ -1,188 +1,246 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 11 May 2009 10:28:48 -0000
-Subject: LVM2 ./WHATS_NEW ./make.tmpl.in daemons/dmeven ...
-Message-ID: <20090511102848.22776.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 19 May 2009 12:46:04 +0200
+Subject: [PATCH] Use suspend with flush when device size was changed during table preload.
+Message-ID: <4A128DEC.9080508@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-05-11 10:28:47
+Use suspend with flush when device size was changed during table preload.
 
-Modified files:
-	.              : WHATS_NEW make.tmpl.in 
-	daemons/dmeventd/plugins/mirror: Makefile.in 
-	daemons/dmeventd/plugins/snapshot: Makefile.in 
-	doc            : Makefile.in 
-	include        : Makefile.in 
-	man            : Makefile.in 
-	scripts        : Makefile.in 
-	tools          : Makefile.in 
+This allows online mirror resize, also removes condition to preventing
+code to do this.
 
-Log message:
-	Introduce lvm2_install target.
-	
-	Buildsystem support device-mapper only install,
-	but generic install tagret includes both dm+lvm2.
-	
-	For distribution which uses separate install_device-mapper,
-	there is no way how to install lvm2 only
-	(so after installing lvm2 for packaging purposes
-	built system must remove installed device-mapper files).
-	
-	Fix it by allowing lvm2_install target, similarily like
-	install_cluster for clvmd.
-	
-	(install = install_device-mapper + install_lvm2)
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/activate/activate.c    |   14 +++++++-------
+ lib/activate/dev_manager.c |   20 ++++++++++++++++----
+ lib/activate/dev_manager.h |    5 +++--
+ libdm/.exported_symbols    |    1 +
+ libdm/libdevmapper.h       |    1 +
+ libdm/libdm-deptree.c      |    9 +++++++++
+ tools/lvresize.c           |    6 ------
+ 7 files changed, 37 insertions(+), 19 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1098&r2=1.1099
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.66&r2=1.67
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/Makefile.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/Makefile.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.96&r2=1.97
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 34f979a..b600431 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -589,7 +589,7 @@ static int _lv_activate_lv(struct logical_volume *lv)
+ 	return r;
+ }
+ 
+-static int _lv_preload(struct logical_volume *lv)
++static int _lv_preload(struct logical_volume *lv, int *flush_required)
+ {
+ 	int r;
+ 	struct dev_manager *dm;
+@@ -597,7 +597,7 @@ static int _lv_preload(struct logical_volume *lv)
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name)))
+ 		return_0;
+ 
+-	if (!(r = dev_manager_preload(dm, lv)))
++	if (!(r = dev_manager_preload(dm, lv, flush_required)))
+ 		stack;
+ 
+ 	dev_manager_destroy(dm);
+@@ -619,7 +619,7 @@ static int _lv_deactivate(struct logical_volume *lv)
+ 	return r;
+ }
+ 
+-static int _lv_suspend_lv(struct logical_volume *lv, int lockfs)
++static int _lv_suspend_lv(struct logical_volume *lv, int lockfs, int flush_required)
+ {
+ 	int r;
+ 	struct dev_manager *dm;
+@@ -627,7 +627,7 @@ static int _lv_suspend_lv(struct logical_volume *lv, int lockfs)
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name)))
+ 		return_0;
+ 
+-	if (!(r = dev_manager_suspend(dm, lv, lockfs)))
++	if (!(r = dev_manager_suspend(dm, lv, lockfs, flush_required)))
+ 		stack;
+ 
+ 	dev_manager_destroy(dm);
+@@ -845,7 +845,7 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ {
+ 	struct logical_volume *lv = NULL, *lv_pre = NULL;
+ 	struct lvinfo info;
+-	int r = 0, lockfs = 0;
++	int r = 0, lockfs = 0, flush_required = 0;
+ 
+ 	if (!activation())
+ 		return 1;
+@@ -873,7 +873,7 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 
+ 	/* If VG was precommitted, preload devices for the LV */
+ 	if ((lv_pre->vg->status & PRECOMMITTED)) {
+-		if (!_lv_preload(lv_pre)) {
++		if (!_lv_preload(lv_pre, &flush_required)) {
+ 			/* FIXME Revert preloading */
+ 			goto_out;
+ 		}
+@@ -888,7 +888,7 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 	if (lv_is_origin(lv_pre) || lv_is_cow(lv_pre))
+ 		lockfs = 1;
+ 
+-	if (!_lv_suspend_lv(lv, lockfs)) {
++	if (!_lv_suspend_lv(lv, lockfs, flush_required)) {
+ 		memlock_dec();
+ 		fs_unlock();
+ 		goto out;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 3157f5f..0b22730 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -49,6 +49,7 @@ struct dev_manager {
+ 
+ 	void *target_state;
+ 	uint32_t pvmove_mirror_count;
++	int flush_required;
+ 
+ 	char *vg_name;
+ };
+@@ -1164,7 +1165,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv, actio
+ 		break;
+ 	case SUSPEND:
+ 		dm_tree_skip_lockfs(root);
+-		if ((lv->status & MIRRORED) && !(lv->status & PVMOVE))
++		if (!dm->flush_required && (lv->status & MIRRORED) && !(lv->status & PVMOVE))
+ 			dm_tree_use_no_flush_suspend(root);
+ 	case SUSPEND_WITH_LOCKFS:
+ 		if (!dm_tree_suspend_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+@@ -1180,6 +1181,9 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv, actio
+ 		if (!dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 			goto_out;
+ 
++		if (dm_tree_node_size_changed(root))
++			dm->flush_required = 1;
++
+ 		if ((action == ACTIVATE) &&
+ 		    !dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 			goto_out;
+@@ -1210,13 +1214,19 @@ int dev_manager_activate(struct dev_manager *dm, struct logical_volume *lv)
+ 	return _tree_action(dm, lv, CLEAN);
+ }
+ 
+-int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv)
++int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv,
++			int *flush_required)
+ {
+ 	/* FIXME Update the pvmove implementation! */
+ 	if ((lv->status & PVMOVE) || (lv->status & LOCKED))
+ 		return 1;
+ 
+-	return _tree_action(dm, lv, PRELOAD);
++	if (!_tree_action(dm, lv, PRELOAD))
++		return 0;
++
++	*flush_required = dm->flush_required;
++
++	return 1;
+ }
+ 
+ int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv)
+@@ -1231,8 +1241,10 @@ int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv)
+ }
+ 
+ int dev_manager_suspend(struct dev_manager *dm, struct logical_volume *lv,
+-			int lockfs)
++			int lockfs, int flush_required)
+ {
++	dm->flush_required = flush_required;
++
+ 	return _tree_action(dm, lv, lockfs ? SUSPEND_WITH_LOCKFS : SUSPEND);
+ }
+ 
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index 7a76453..f064504 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -49,9 +49,10 @@ int dev_manager_mirror_percent(struct dev_manager *dm,
+ 			       struct logical_volume *lv, int wait,
+ 			       float *percent, uint32_t *event_nr);
+ int dev_manager_suspend(struct dev_manager *dm, struct logical_volume *lv,
+-			int lockfs);
++			int lockfs, int flush_required);
+ int dev_manager_activate(struct dev_manager *dm, struct logical_volume *lv);
+-int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv);
++int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv,
++			int *flush_required);
+ int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv);
+ 
+ int dev_manager_lv_mknodes(const struct logical_volume *lv);
+diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
+index a6e04f8..2c80b05 100644
+--- a/libdm/.exported_symbols
++++ b/libdm/.exported_symbols
+@@ -49,6 +49,7 @@ dm_tree_node_get_name
+ dm_tree_node_get_uuid
+ dm_tree_node_get_info
+ dm_tree_node_get_context
++dm_tree_node_size_changed
+ dm_tree_node_num_children
+ dm_tree_node_num_parents
+ dm_tree_find_node
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 93aecbb..a6e2530 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -288,6 +288,7 @@ const char *dm_tree_node_get_name(struct dm_tree_node *node);
+ const char *dm_tree_node_get_uuid(struct dm_tree_node *node);
+ const struct dm_info *dm_tree_node_get_info(struct dm_tree_node *node);
+ void *dm_tree_node_get_context(struct dm_tree_node *node);
++int dm_tree_node_size_changed(struct dm_tree_node *dnode);
+ 
+ /*
+  * Returns the number of children of the given node (excluding the root node).
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 11428ca..179cf95 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -640,6 +640,11 @@ void *dm_tree_node_get_context(struct dm_tree_node *node)
+ 	return node->context;
+ }
+ 
++int dm_tree_node_size_changed(struct dm_tree_node *dnode)
++{
++	return dnode->props.size_changed;
++}
++
+ int dm_tree_node_num_children(struct dm_tree_node *node, uint32_t inverted)
+ {
+ 	if (inverted) {
+@@ -1481,6 +1486,10 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			}
+ 		}
+ 
++		/* Propagate device size change change */
++		if (child->props.size_changed)
++			dnode->props.size_changed = 1;
++
+ 		/* Resume device immediately if it has parents and its size changed */
+ 		if (!dm_tree_node_num_children(child, 1) || !child->props.size_changed)
+ 			continue;
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 5737558..966e33b 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -550,12 +550,6 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 		lp->resize = LV_EXTEND;
+ 	}
+ 
+-	if (lp->mirrors && activation() &&
+-	    lv_info(cmd, lv, &info, 0, 0) && info.exists) {
+-		log_error("Mirrors cannot be resized while active yet.");
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (lv_is_origin(lv)) {
+ 		if (lp->resize == LV_REDUCE) {
+ 			log_error("Snapshot origin volumes cannot be reduced "
 
---- LVM2/WHATS_NEW	2009/05/09 13:47:03	1.1098
-+++ LVM2/WHATS_NEW	2009/05/11 10:28:45	1.1099
-@@ -1,5 +1,6 @@
- Version 2.02.46 - 
- ================================
-+  Add make install_lvm2 as complement to device-mapper install.
-   Reject missing PVs from allocation in toollib.
-   Fix PV datalignment for values starting prior to MDA area. (2.02.45)
-   Add sparse devices: lvcreate -s --virtualoriginsize (hidden zero origin).
---- LVM2/make.tmpl.in	2009/04/08 14:08:18	1.66
-+++ LVM2/make.tmpl.in	2009/05/11 10:28:45	1.67
-@@ -126,7 +126,7 @@
- POTFILES = $(SOURCES:%.c=%.pot)
- 
- .PHONY: all install install_cluster pofile distclean clean cflow device-mapper 
--.PHONY: install_device-mapper
-+.PHONY: install_device-mapper install_lvm2
- .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
- .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
- .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
-@@ -135,6 +135,7 @@
- SUBDIRS.install := $(SUBDIRS:=.install)
- SUBDIRS.install_cluster := $(SUBDIRS:=.install_cluster)
- SUBDIRS.install_device-mapper := $(SUBDIRS:=.install_device-mapper)
-+SUBDIRS.install_lvm2 := $(SUBDIRS:=.install_lvm2)
- SUBDIRS.pofile := $(SUBDIRS:=.pofile)
- SUBDIRS.cflow := $(SUBDIRS:=.cflow)
- SUBDIRS.clean := $(SUBDIRS:=.clean)
-@@ -147,6 +148,7 @@
- install: all $(SUBDIRS.install)
- install_cluster: all $(SUBDIRS.install_cluster)
- install_device-mapper: $(SUBDIRS.install_device-mapper)
-+install_lvm2: $(SUBDIRS.install_lvm2)
- 
- $(SUBDIRS): $(SUBDIRS.device-mapper)
- 	$(MAKE) -C $@
-@@ -163,6 +165,9 @@
- $(SUBDIRS.install_device-mapper): device-mapper
- 	$(MAKE) -C $(@:.install_device-mapper=) install_device-mapper
- 
-+$(SUBDIRS.install_lvm2): $(SUBDIRS)
-+	$(MAKE) -C $(@:.install_lvm2=) install_lvm2
-+
- $(SUBDIRS.clean):
- 	-$(MAKE) -C $(@:.clean=) clean
- 
---- LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2008/11/03 22:14:26	1.8
-+++ LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2009/05/11 10:28:46	1.9
-@@ -31,7 +31,9 @@
- 
- include $(top_srcdir)/make.tmpl
- 
--install: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
-+install_lvm2: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-+
-+install: install_lvm2
---- LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2008/11/03 22:14:27	1.4
-+++ LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2009/05/11 10:28:46	1.5
-@@ -31,7 +31,9 @@
- 
- include $(top_srcdir)/make.tmpl
- 
--install: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
-+install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-+
-+install: install_lvm2
---- LVM2/doc/Makefile.in	2007/09/21 10:16:43	1.4
-+++ LVM2/doc/Makefile.in	2009/05/11 10:28:46	1.5
-@@ -20,10 +20,11 @@
- 
- include $(top_srcdir)/make.tmpl
- 
--install:
-+install_lvm2:
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
- 		echo "Installing $(CONFSRC) as $(confdir)/$(CONFDEST)"; \
- 		@INSTALL@ -D $(OWNER) $(GROUP) -m 644 $(CONFSRC) \
- 			$(confdir)/$(CONFDEST); \
- 	fi
- 
-+install: install_lvm2
---- LVM2/include/Makefile.in	2008/11/04 17:25:32	1.10
-+++ LVM2/include/Makefile.in	2009/05/11 10:28:46	1.11
-@@ -45,5 +45,7 @@
- 
- install_device-mapper:
- 
-+install_lvm2:
-+
- cflow:
- 
---- LVM2/man/Makefile.in	2008/11/04 17:25:32	1.25
-+++ LVM2/man/Makefile.in	2009/05/11 10:28:46	1.26
-@@ -57,7 +57,7 @@
- %: %.in
- 	$(SED) -e "s/#VERSION#/$(LVM_VERSION)/" $< > $@
- 
--install: install_device-mapper
-+install_lvm2:
- 	@echo "Installing $(MAN8) in $(MAN8DIR)"
- 	@for f in $(MAN8); \
- 	do \
-@@ -87,3 +87,5 @@
- 	   $(RM) $(MAN8DIR)/$$f; \
- 	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
- 	done
-+
-+install: install_lvm2 install_device-mapper
---- LVM2/scripts/Makefile.in	2009/03/16 20:00:10	1.6
-+++ LVM2/scripts/Makefile.in	2009/05/11 10:28:46	1.7
-@@ -17,6 +17,8 @@
- 
- include $(top_srcdir)/make.tmpl
- 
-+install_lvm2: install
-+
- install:
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm_dump.sh \
- 		$(sbindir)/lvmdump
---- LVM2/tools/Makefile.in	2009/05/11 10:13:28	1.96
-+++ LVM2/tools/Makefile.in	2009/05/11 10:28:46	1.97
-@@ -195,4 +195,6 @@
- 
- install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
- 
--install: $(INSTALL_LVM_TARGETS) install_device-mapper
-+install_lvm2: $(INSTALL_LVM_TARGETS)
-+
-+install: install_lvm2 install_device-mapper
 
 
