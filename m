@@ -1,40 +1,55 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 10 May 2009 20:41:32 +0200
-Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
-In-Reply-To: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
-	(Milan Broz's message of "Wed, 6 May 2009 16:43:00 +0200")
-References: <cover.1241620083.git.mbroz@redhat.com>
-	<cover.1241620083.git.mbroz@redhat.com>
-	<a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
-Message-ID: <87iqk8u7fn.fsf@eriador.mornfall.net>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 19 May 2009 09:45:34 -0000
+Subject: LVM2/lib/format_text archiver.c
+Message-ID: <20090519094534.28044.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch looks good. Good to get rid of redundant counter, which is prone to
-getting out of sync. I would, however, propose to rename "snapshot_lvs_in_vg"
-to "vg_snapshot_lv_count" -- we already have "vg_missing_pv_count" as a
-precedent for that naming scheme.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-05-19 09:45:34
 
-Yours,
-   Petr.
+Modified files:
+	lib/format_text: archiver.c 
 
-PS: I would welcome a similar approach to removing lv_count as well (and other
-redundant counters), since the counting function's implementation clearly
-defines what gets counted in the given counter (vg_lv_count, say), *and* it
-never gets out of sync. In other words, I believe this approach is much more
-transparent, albeit a little less efficient -- however, I don't believe such
-counting function is going to show up on any profile of any LVM2 command
-whatsoever.
+Log message:
+	vgcfgrestore should not quietly fail when backup file has missing PVs.
+	
+	(fixes previous commit: Fix segfault for vgcfgrestore on VG with missing PVs.)
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+--- LVM2/lib/format_text/archiver.c	2009/04/22 09:39:46	1.24
++++ LVM2/lib/format_text/archiver.c	2009/05/19 09:45:33	1.25
+@@ -335,7 +335,7 @@
+ 			     const char *file)
+ {
+ 	struct volume_group *vg;
+-	int r = 0;
++	int missing_pvs, r = 0;
+ 
+ 	/*
+ 	 * Read in the volume group from the text file.
+@@ -343,11 +343,12 @@
+ 	if (!(vg = backup_read_vg(cmd, vg_name, file)))
+ 		return_0;
+ 
+-	/*
+-	 * If PV is missing, there is already message from read above
+-	 */
+-	if (!vg_missing_pv_count(vg))
++	missing_pvs = vg_missing_pv_count(vg);
++	if (missing_pvs == 0)
+ 		r = backup_restore_vg(cmd, vg);
++	else
++		log_error("Cannot restore Volume Group %s with %i PVs "
++			  "marked as missing.", vg->name, missing_pvs);
+ 
+ 	vg_release(vg);
+ 	return r;
 
 
