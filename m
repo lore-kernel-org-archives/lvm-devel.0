@@ -1,35 +1,39 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 11 May 2009 12:42:52 +0100
-Subject: [PATCH 3/7] Remove snapshot_count from VG and use function instead.
-In-Reply-To: <a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
-References: <cover.1241620083.git.mbroz@redhat.com>
-	<a015c94d4f5d34699e100b182f539812543b883e.1241620083.git.mbroz@redhat.com>
-Message-ID: <20090511114252.GF7680@agk-dp.fab.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 20 May 2009 22:44:11 -0000
+Subject: LVM2 WHATS_NEW_DM
+Message-ID: <20090520224411.6015.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, May 06, 2009 at 04:43:00PM +0200, Milan Broz wrote:
-> -	 * The following relationship should always hold:
-> -	 * dm_list_size(lvs) = lv_count + 2 * snapshot_count
-> +	 * logical volumes count
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-05-20 22:44:11
 
-Please leave the description of dm_list_size(lvs).
-  "Number of snapshots" instead of snapshot_count?
-  (Or the new function?)
+Modified files:
+	.              : WHATS_NEW_DM 
 
-> +unsigned snapshot_lvs_in_vg(const struct volume_group *vg)
-> +{
-> +	struct lv_list *lvl;
-> +	unsigned lv_count = 0;
+Log message:
+	Missing entries.
 
-A confusing alternative use for a variable called lv_count?
-'unsigned snapshot_count'?
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.266&r2=1.267
 
-Ack.
-
-Alasdair.
+--- LVM2/WHATS_NEW_DM	2009/04/24 11:30:49	1.266
++++ LVM2/WHATS_NEW_DM	2009/05/20 22:44:10	1.267
+@@ -1,6 +1,10 @@
+ Version 1.02.32 - 
+ ================================
+-  Fix segfault when using -U, -G and -M options in dmsetup.
++  Only generate libdevmapper.a when configured to link statically.
++  Export dm_tree_node_size_changed() from libdevmapper.
++  Propagate the table size_changed property up the dm device tree.
++  Detect failure to free memory pools when releasing the library.
++  Fix segfault when getopt processes dmsetup -U, -G and -M options.
+ 
+ Version 1.02.31 - 3rd March 2009
+ ================================
 
 
