@@ -1,15 +1,11 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Fri, 22 May 2009 20:04:22 -0400 (EDT)
-Subject: Re: LVM command-line interface for shared snapshots
-In-Reply-To: <8B4D3601-336A-4D0C-9FC1-E7101F2680F6@redhat.com>
-References: <20090514212943.GA25445@redhat.com>
-	<Pine.LNX.4.64.0905181136510.22422@hs20-bc2-1.build.redhat.com>
-	<095d01c9d7f2$4295a290$c7c0e7b0$@com>
-	<20090518222822.GA1319@redhat.com>
-	<0ab001c9d809$89ddce90$9d996bb0$@com>
-	<Pine.LNX.4.64.0905191636010.19127@hs20-bc2-1.build.redhat.com>
-	<8B4D3601-336A-4D0C-9FC1-E7101F2680F6@redhat.com>
-Message-ID: <Pine.LNX.4.64.0905221947330.7953@hs20-bc2-1.build.redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 21 May 2009 08:26:03 -0500
+Subject: [PATCH] Use lvconvert --repair as a dmeventd mirror failure handler
+In-Reply-To: <87my96q0k0.fsf@mornfall.net>
+References: <87r5ylbphy.fsf@mornfall.net>
+	<64033B0F-38A8-4E13-BDD6-DAFEA17C4C51@redhat.com>
+	<87my96q0k0.fsf@mornfall.net>
+Message-ID: <999B59FD-7D31-48F8-B286-BAE8E097F25E@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -17,60 +13,86 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 
+On May 21, 2009, at 4:15 AM, Petr Rockai wrote:
 
-On Wed, 20 May 2009, Jonathan Brassow wrote:
+> Jonathan Brassow <jbrassow@redhat.com> writes:
+>> Wait, what?  Are you saying that with this change, it /will/ find  
+>> space for a
+>> new mirror leg?  It doesn't do that now.  I also don't  think  
+>> lvrepair is the
+>> right place to have the allocation take place.   'lvrepair' should  
+>> do exactly
+>> that - repair.  From there, you could do  an lvconvert.  The mirror  
+>> DSO should
+>> do the 'lvconvert' portion based  on user set policy found in /etc/ 
+>> lvm/lvm.conf
+>> -- see  'mirror_log_fault_policy' and 'mirror device_fault_policy'.
+>>
+>> Am I missing something?
+>
+> Yes, the current policy is completely bogus. It will kill LVs that are
+> completely unrelated to the mirror in question (if they happen to  
+> have any
+> extents allocated in any currently missing PV, which may be even  
+> unrelated to
+> the one that caused the mirror failure). Moreover, I don't know what  
+> you mean
+> with "lvrepair" since there's no such thing. And lvconvert --repair  
+> does
+> exactly repair, by either removing (no parallel space available) or  
+> replacing
+> (free parallel space available) missing devices.
+>
+> The mirror_log_fault_policy and device_fault_policy is all cool, but  
+> it's not
+> implemented (even the fact it's in lvm.conf while there's no code to  
+> handle the
+> options is quite silly). So I expect that an --auto switch will need  
+> to be
+> added to lvconvert --repair, that will honour those two  
+> configuration options.
+>
+> Please also note that this could have been fixed months ago (the  
+> patches have
+> been in review since last July at least -- see eg. message-id
+> <87tze8244p.fsf@eriador.mornfall.net>). Please next time, if you  
+> know all along
+> that a policy change is not acceptable, take a few minutes and reply  
+> to the
+> proposed patch. Thanks!
+>
+> (Just as a rationale, I did not implement the current lvm.conf  
+> options simply
+> because it has been suggested, that a much more complex  
+> configuration using
+> tags is planned. It just seemed redundant to implement options that  
+> would
+> become deprecated in the next release. Unfortunately, no-one has  
+> pointed out
+> that they need to be, or why.)
+>
+> As for doing things directly in the mirror DSO (as compared to  
+> lvconvert
+> --repair), it would get much more complicated, implementation-wise.  
+> It would
+> also lead to lots of code duplication (and the theoretical advantage  
+> of having
+> the code separated is dubious, too).
 
-> If we all start replying to this e-mail, it could become pretty fragmented and
-> hard to follow.  So, I've taken my thoughts and merged them as best I could
-> with what Mikulas has proposed and put them up on the wiki.
-> 
-> http://sources.redhat.com/lvm2/wiki/FeatureRequests/dm/snapshots
-> 
-> If people would rather have all discussion on the mailing list, or some
-> combination - I'm sure we could do that too.
-> 
-> brassow
+Of course the current policy is bogus.  Forgive my typo, s/lvrepair/ 
+lvconvert --repair/.
 
-Rename --sharedstore to --exstrore --- probably good thing, it could be 
-used even for non-shared stores (although there are not any new and won't 
-likely ever be).
+I guess the thing I care most about is that we are switching from a  
+policy of "just remove the failed device" to "just replace the device  
+(if possible)".  The methods you are using to repair are far superior  
+to what we had (addresses the "bogus" part in the current  
+implementation).  However, I don't understand why we are now  
+automatically taking the next step.  If we allow for user  
+specification of policy - then why not wait for that before taking  
+action to replace the device?  Otherwise we could be flip-flopping on  
+the (default) policy.
 
-
-prompt> lvcreate -L 1G -n snapshot_cow vg
-prompt> lvcreate -s [--exstore persistent|shared|mikulas] [-L <size>] -n
-snap vg/origin vg/snapshot_cow
-
---- the type of the exception store must be specified in the first 
-command. Also, if the old scripts should be able to run, they shouldn't 
-need to specify the exception store type with each snapshot creation.
-
-
-prompt> lvremove vg/snap
-
-Description
-If 'method 1' was used to create, the last snapshot removed in an
-exception store results in the removal of the exception store device. If
-'method 2' was used, then the device would be left in place.
-
---- I thought about this idea too, but rejected it. For admin's 
-convenience and for ease of programming scripts, the command behavior 
-should be deterministic and dependent on its arguments --- it should not 
-depend on some magic flag hidden in the metadata. Think what happens if 
-the admin forgets whether he used 'method 1' or 'method 2' to create the 
-volume and then becomes confused because lvremove command behaves 
-differently. Or if he writes script to remove all the snapshots and later 
-the script starts to misbehave because he used different method to create 
-the snapshot.
-
-lvremove behavior should be determined by its arguments, not by some value 
-stored in the metadata.
-
-
-About my proposal for "-L" when creating a snapshot --- if we implement 
-auto-resizing with dmeventd, we can ignore "-L" at all. I think it would 
-be the best thing.
-
-
-Mikulas
-
-
+  brassow
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090521/e6b228e6/attachment.htm>
