@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 22 May 2009 14:56:17 -0000
-Subject: LVM2/test t-mirror-lvconvert.sh
-Message-ID: <20090522145617.21457.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 May 2009 15:23:11 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20090522152311.19268.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-05-22 14:56:17
+Changes by:	agk at sourceware.org	2009-05-22 15:23:11
 
 Modified files:
-	test           : t-mirror-lvconvert.sh 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	Temporary disable one of lvconvert tests.
+	post-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.195&r2=1.196
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1123&r2=1.1124
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.268&r2=1.269
 
---- LVM2/test/t-mirror-lvconvert.sh	2009/05/19 15:47:50	1.8
-+++ LVM2/test/t-mirror-lvconvert.sh	2009/05/22 14:56:17	1.9
-@@ -280,19 +280,20 @@
- check_and_cleanup_lvs_
- 
- # "remove from original mirror (the original becomes linear)"
--prepare_lvs_ 
--lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1 
--check_mirror_count_ $vg/$lv1 2 
--check_mirror_log_ $vg/$lv1 
--lvconvert -m+1 -b $vg/$lv1 $dev4 
--lvconvert -m-1 $vg/$lv1 $dev2 
--lvconvert -i1 $vg/$lv1 
--wait_conversion_ $vg/$lv1 
--check_no_tmplvs_ $vg/$lv1 
--check_mirror_count_ $vg/$lv1 2 
--mimages_are_redundant_ $vg $lv1 
--mirrorlog_is_on_ $vg/$lv1 $dev3 
--check_and_cleanup_lvs_
-+# FIXME: enable this test later
-+#prepare_lvs_ 
-+#lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1 
-+#check_mirror_count_ $vg/$lv1 2 
-+#check_mirror_log_ $vg/$lv1 
-+#lvconvert -m+1 -b $vg/$lv1 $dev4 
-+#lvconvert -m-1 $vg/$lv1 $dev2 
-+#lvconvert -i1 $vg/$lv1 
-+#wait_conversion_ $vg/$lv1 
-+#check_no_tmplvs_ $vg/$lv1 
-+#check_mirror_count_ $vg/$lv1 2 
-+#mimages_are_redundant_ $vg $lv1 
-+#mirrorlog_is_on_ $vg/$lv1 $dev3 
-+#check_and_cleanup_lvs_
- 
- # ---------------------------------------------------------------------
- 
+--- LVM2/VERSION	2009/05/22 14:44:59	1.195
++++ LVM2/VERSION	2009/05/22 15:23:10	1.196
+@@ -1 +1 @@
+-2.02.47-cvs (2009-05-22)
++2.02.48-cvs (2009-05-22)
+--- LVM2/VERSION_DM	2009/05/21 03:04:52	1.8
++++ LVM2/VERSION_DM	2009/05/22 15:23:10	1.9
+@@ -1 +1 @@
+-1.02.32-cvs (2009-05-21)
++1.02.33-cvs (2009-05-22)
+--- LVM2/WHATS_NEW	2009/05/22 14:44:59	1.1123
++++ LVM2/WHATS_NEW	2009/05/22 15:23:11	1.1124
+@@ -1,3 +1,6 @@
++Version 2.02.48 - 
++===============================
++
+ Version 2.02.47 - 22nd May 2009
+ ===============================
+   Rename liblvm.so to liblvm2app.so and use configure --enable-applib.
+--- LVM2/WHATS_NEW_DM	2009/05/21 03:04:52	1.268
++++ LVM2/WHATS_NEW_DM	2009/05/22 15:23:11	1.269
+@@ -1,3 +1,6 @@
++Version 1.02.33 - 
++===============================
++
+ Version 1.02.32 - 21st May 2009
+ ===============================
+   Only generate libdevmapper.a when configured to link statically.
 
 
