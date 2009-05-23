@@ -1,139 +1,76 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 26 May 2009 20:07:59 +0200
-Subject: [PATCH] Fix handling of snapshots with virtual origin.
-Message-ID: <4A1C2FFF.8050604@redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Fri, 22 May 2009 20:04:22 -0400 (EDT)
+Subject: Re: LVM command-line interface for shared snapshots
+In-Reply-To: <8B4D3601-336A-4D0C-9FC1-E7101F2680F6@redhat.com>
+References: <20090514212943.GA25445@redhat.com>
+	<Pine.LNX.4.64.0905181136510.22422@hs20-bc2-1.build.redhat.com>
+	<095d01c9d7f2$4295a290$c7c0e7b0$@com>
+	<20090518222822.GA1319@redhat.com>
+	<0ab001c9d809$89ddce90$9d996bb0$@com>
+	<Pine.LNX.4.64.0905191636010.19127@hs20-bc2-1.build.redhat.com>
+	<8B4D3601-336A-4D0C-9FC1-E7101F2680F6@redhat.com>
+Message-ID: <Pine.LNX.4.64.0905221947330.7953@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix handling of snapshots with virtual origin.
 
- * validate code must count virtual origin into "invisible"
- volume count otherwise the test fails
 
- * when creating new LV snapshot with virtual origin, the virtual origin
- must be explicitly activated otherwise COW mapping table remains linear
- (but metadata are written correctly so later vgchange fixes it)
- Fix it by calling activate_lv on newly created origin.
+On Wed, 20 May 2009, Jonathan Brassow wrote:
 
- * when removing snapshot with virtual origin, code should not ask
- confirmation question for virtual origin
- (but it prints informational message that origin was removed too).
+> If we all start replying to this e-mail, it could become pretty fragmented and
+> hard to follow.  So, I've taken my thoughts and merged them as best I could
+> with what Mikulas has proposed and put them up on the wiki.
+> 
+> http://sources.redhat.com/lvm2/wiki/FeatureRequests/dm/snapshots
+> 
+> If people would rather have all discussion on the mailing list, or some
+> combination - I'm sure we could do that too.
+> 
+> brassow
 
- Also skip virtual origin when iterating volumes in VG.
- (All operations are handled on snapshot above.)
+Rename --sharedstore to --exstrore --- probably good thing, it could be 
+used even for non-shared stores (although there are not any new and won't 
+likely ever be).
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/metadata/metadata.c  |    6 +++++-
- test/t-lvcreate-usage.sh |    6 ++++++
- tools/lvcreate.c         |   16 +++++++++-------
- tools/lvremove.c         |    9 ++++++---
- tools/toollib.c          |    3 +++
- 5 files changed, 29 insertions(+), 11 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index f16cd55..f4ea237 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1492,7 +1492,11 @@ int vg_validate(struct volume_group *vg)
- 			continue;
- 
- 		/* snapshots */
--		if (lv_is_cow(lvl->lv) || lv_is_origin(lvl->lv))
-+		if (lv_is_cow(lvl->lv))
-+			continue;
-+
-+		/* virtual origin is invisible always */
-+		if (lv_is_origin(lvl->lv) && !lv_is_virtual_origin(lvl->lv))
- 			continue;
- 
- 		/* count other non-snapshot invisible volumes */
-diff --git a/test/t-lvcreate-usage.sh b/test/t-lvcreate-usage.sh
-index 43cf716..d6708ca 100755
---- a/test/t-lvcreate-usage.sh
-+++ b/test/t-lvcreate-usage.sh
-@@ -116,3 +116,9 @@ lvcreate -L 32M -n $lv --regionsize 4M -m 1 $vg
- check_lv_field_ $vg/$lv regionsize "4.00M"
- lvremove -ff $vg
- 
-+# snapshot with virtual origin works
-+lvcreate -s --virtualoriginsize 64M -L 32M -n $lv1 $vg
-+lvcreate -s --virtualoriginsize 64M -L 32M -n $lv2 $vg
-+lvchange -a n $vg/$lv1
-+lvremove $vg/$lv1
-+lvremove -ff $vg
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 67d065c..8d4ec23 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -913,13 +913,15 @@ static int _lvcreate(struct cmd_context *cmd, struct volume_group *vg,
- 			return 0;
- 		}
- 
--		if (lp->voriginsize &&
--		    !(org = _create_virtual_origin(cmd, vg, lv->name,
--						   lp->permission,
--						   lp->voriginextents))) {
--			log_error("Couldn't create virtual origin for LV %s",
--				  lv->name);
--			goto deactivate_and_revert_new_lv;
-+		if (lp->voriginsize) {
-+			org = _create_virtual_origin(cmd, vg, lv->name,
-+						     lp->permission,
-+						     lp->voriginextents);
-+			if (!org || !activate_lv(cmd, org)) {
-+				log_error("Couldn't create virtual origin "
-+					  "for LV %s", lv->name);
-+				goto deactivate_and_revert_new_lv;
-+			}
- 		}
- 
- 		/* cow LV remains active and becomes snapshot LV */
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index 712f175..56b304e 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -18,17 +18,20 @@
- static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			   void *handle __attribute((unused)))
- {
--	struct logical_volume *origin;
-+	struct logical_volume *virtual_origin = NULL;
- 
- 	/*
- 	 * If this is a sparse device, remove its origin too.
- 	 */
--        if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
--                lv = origin;
-+        if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
-+                virtual_origin = origin_from_cow(lv);
- 
- 	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG)))
- 		return ECMD_FAILED;
- 
-+	if (virtual_origin && !lv_remove_single(cmd, virtual_origin, DONT_PROMPT))
-+		return ECMD_FAILED;
-+
- 	return ECMD_PROCESSED;
- }
- 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 7f9eef1..fed2406 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -122,6 +122,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (lvl->lv->status & SNAPSHOT)
- 			continue;
- 
-+		if (lv_is_virtual_origin(lvl->lv))
-+			continue;
-+
- 		/* Should we process this LV? */
- 		if (process_all)
- 			process_lv = 1;
+prompt> lvcreate -L 1G -n snapshot_cow vg
+prompt> lvcreate -s [--exstore persistent|shared|mikulas] [-L <size>] -n
+snap vg/origin vg/snapshot_cow
 
+--- the type of the exception store must be specified in the first 
+command. Also, if the old scripts should be able to run, they shouldn't 
+need to specify the exception store type with each snapshot creation.
+
+
+prompt> lvremove vg/snap
+
+Description
+If 'method 1' was used to create, the last snapshot removed in an
+exception store results in the removal of the exception store device. If
+'method 2' was used, then the device would be left in place.
+
+--- I thought about this idea too, but rejected it. For admin's 
+convenience and for ease of programming scripts, the command behavior 
+should be deterministic and dependent on its arguments --- it should not 
+depend on some magic flag hidden in the metadata. Think what happens if 
+the admin forgets whether he used 'method 1' or 'method 2' to create the 
+volume and then becomes confused because lvremove command behaves 
+differently. Or if he writes script to remove all the snapshots and later 
+the script starts to misbehave because he used different method to create 
+the snapshot.
+
+lvremove behavior should be determined by its arguments, not by some value 
+stored in the metadata.
+
+
+About my proposal for "-L" when creating a snapshot --- if we implement 
+auto-resizing with dmeventd, we can ignore "-L" at all. I think it would 
+be the best thing.
+
+
+Mikulas
 
 
