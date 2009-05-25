@@ -1,231 +1,350 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 25 May 2009 14:18:45 +0200
-Subject: [PATCH 2/9] Udev integration: add LVM fields support for dmsetup
-Message-ID: <4A1A8CA5.9090308@redhat.com>
+Date: Mon, 25 May 2009 14:18:54 +0200
+Subject: [PATCH 3/9] Udev integration: add semaphore IPC to wait for udev rule completion
+Message-ID: <4A1A8CAE.2000803@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I think this hasn't changed, but sending it for sure...
+I've added these functions :
+
+dm_udev_notif_enable -- enable wait for udev's completion
+dm_udev_notif_disable -- disable wait for udev's completion
+dm_udev_notif_is_enabled -- is it enabled? :)
+
+I added the conditional compilation, too, so when the wait for
+udev completion is disabled at compilation time, we use only
+dummy functions.
+
+I use a global var as enable/disable flag to enable/disable the
+wait in runtime. I think it's better this way than having IFs all
+around the code. It's cleaner and less complicated...
 
 Peter
 
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 93aecbb..ded0eaf 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -131,6 +131,13 @@ struct dm_versions {
- 	char name[0];
- };
- 
-+struct dm_split_name {
-+	char *subsystem;
-+	char *vg;
-+	char *lv;
-+	char *lv_layer;
-+};
-+
- int dm_get_library_version(char *version, size_t size);
- int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size);
- int dm_task_get_info(struct dm_task *dmt, struct dm_info *dmi);
-diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
-index 0e41f9d..c6f101b 100644
---- a/libdm/libdm-string.c
-+++ b/libdm/libdm-string.c
-@@ -93,7 +93,7 @@ static char *_unquote(char *component)
- int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
- 		      char **vgname, char **lvname, char **layer)
- {
--	if (!(*vgname = dm_pool_strdup(mem, dmname)))
-+	if (mem && !(*vgname = dm_pool_strdup(mem, dmname)))
- 		return 0;
- 
- 	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 0d6a371..f2397f6 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -141,7 +141,8 @@ typedef enum {
- 	DR_TASK = 1,
- 	DR_INFO = 2,
- 	DR_DEPS = 4,
--	DR_TREE = 8	/* Complete dependency tree required */
-+	DR_TREE = 8,	/* Complete dependency tree required */
-+	DR_NAME = 16
- } report_type_t;
- 
- static int _switches[NUM_SWITCHES];
-@@ -261,6 +262,7 @@ struct dmsetup_report_obj {
- 	struct dm_info *info;
- 	struct dm_task *deps_task;
- 	struct dm_tree_node *tree_node;
-+	struct dm_split_name *split_name;
- };
- 
- static struct dm_task *_get_deps_task(int major, int minor)
-@@ -294,6 +296,60 @@ static struct dm_task *_get_deps_task(int major, int minor)
- 	return NULL;
- }
- 
-+static char *_extract_uuid_prefix(const char *uuid)
-+{
-+	char *ptr = NULL;
-+	size_t len;
-+	char *str = NULL;
-+
-+	if (uuid)
-+		ptr = strchr(uuid, '-');
-+
-+	len = ptr ? ptr - uuid : 0;
-+	if (!(str = dm_malloc(len + 1)))
-+		return NULL;
-+
-+	memcpy(str, uuid, len);
-+	str[len] = '\0';
-+
-+	return str;
-+}
-+
-+static struct dm_split_name *_get_split_name(const char *uuid, const char *name)
-+{
-+	struct dm_split_name *split_name;
-+
-+	if (!(split_name = dm_malloc(sizeof(struct dm_split_name))))
-+		return NULL;
-+
-+	split_name->subsystem = _extract_uuid_prefix(uuid);
-+
-+	if (!(split_name->vg = dm_strdup(name)))
-+		return split_name;
-+
-+	if (!strcmp(split_name->subsystem, "LVM"))
-+		dm_split_lvm_name(NULL, NULL, &split_name->vg,
-+				&split_name->lv, &split_name->lv_layer);
-+	else
-+		split_name->vg = split_name->lv = split_name->lv_layer = (char *) "";
-+
-+	return split_name;
-+}
-+
-+static void _destroy_split_name(struct dm_split_name *split_name)
-+{
-+	if (*split_name->subsystem)
-+		dm_free(split_name->subsystem);
-+
-+	/* vg, lv and lv_layer is under one allocated block of memory
-+	 * starting at vg pointer and separated by \0 each, so by
-+	 * freeing vg, we free memory for lv and lv_layer as well */
-+	if (*split_name->vg)
-+		dm_free(split_name->vg);
-+
-+	dm_free(split_name);
-+}
-+
- static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- {
- 	struct dmsetup_report_obj obj;
-@@ -307,6 +363,7 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- 	obj.task = dmt;
- 	obj.info = info;
- 	obj.deps_task = NULL;
-+	obj.split_name = NULL;
- 
- 	if (_report_type & DR_TREE)
- 		obj.tree_node = dm_tree_find_node(_dtree, info->major, info->minor);
-@@ -314,6 +371,9 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- 	if (_report_type & DR_DEPS)
- 		obj.deps_task = _get_deps_task(info->major, info->minor);
- 
-+	if (_report_type & DR_NAME)
-+		obj.split_name = _get_split_name(dm_task_get_uuid(dmt), dm_task_get_name(dmt));
-+
- 	if (!dm_report_object(_report, &obj))
- 		goto out;
- 
-@@ -322,6 +382,8 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
-       out:
- 	if (obj.deps_task)
- 		dm_task_destroy(obj.deps_task);
-+	if (obj.split_name)
-+		_destroy_split_name(obj.split_name);
- 	return r;
- }
- 
-@@ -1899,6 +1961,41 @@ static int _dm_deps_disp(struct dm_report *rh, struct dm_pool *mem,
+diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
+index 2c80b05..ff2e103 100644
+--- a/libdm/.exported_symbols
++++ b/libdm/.exported_symbols
+@@ -21,6 +21,7 @@ dm_task_get_uuid
+ dm_task_get_read_ahead
+ dm_task_set_ro
+ dm_task_set_newname
++dm_task_set_cookie
+ dm_task_set_event_nr
+ dm_task_set_major
+ dm_task_set_minor
+@@ -149,3 +150,11 @@ dm_list_last
+ dm_list_prev
+ dm_list_next
+ dm_list_size
++dm_udev_notif_enable
++dm_udev_notif_disable
++dm_udev_notif_is_enabled
++dm_udev_notif_sem_open
++dm_udev_notif_sem_inc
++dm_udev_notif_sem_dec
++dm_udev_notif_sem_wait_zero
++dm_udev_notif_sem_close
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 3698eda..935a3ea 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -864,6 +864,13 @@ int dm_check_version(void)
  	return 0;
  }
  
-+static int _dm_subsystem_disp(struct dm_report *rh,
-+			       struct dm_pool *mem __attribute((unused)),
-+			       struct dm_report_field *field, const void *data,
-+			       void *private __attribute((unused)))
++int dm_cookie_supported(void)
 +{
-+	return dm_report_field_string(rh, field, (const char **) data);
++	return (dm_check_version() &&
++	        _dm_version >= 4 &&
++	        _dm_version_minor >= 15);
 +}
 +
-+static int _dm_vg_name_disp(struct dm_report *rh,
-+			     struct dm_pool *mem __attribute((unused)),
-+			     struct dm_report_field *field, const void *data,
-+			     void *private __attribute((unused)))
-+{
+ void *dm_get_next_target(struct dm_task *dmt, void *next,
+ 			 uint64_t *start, uint64_t *length,
+ 			 char **target_type, char **params)
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 09b1036..7674e04 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -155,6 +155,7 @@ int dm_task_set_major(struct dm_task *dmt, int major);
+ int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
+ int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
+ int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
++int dm_task_set_cookie(struct dm_task *dmt, uint32_t cookie);
+ int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
+ int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
+ int dm_task_set_message(struct dm_task *dmt, const char *message);
+@@ -984,4 +985,22 @@ int dm_report_field_uint64(struct dm_report *rh, struct dm_report_field *field,
+ void dm_report_field_set_value(struct dm_report_field *field, const void *value,
+ 			       const void *sortvalue);
+ 
++int dm_cookie_supported(void);
 +
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
++/*
++ * Functions to set simple notification channel between instances of libdm
++ * code by means of using semaphore identified by a cookie. Primarily used
++ * to provide a way of notification that related udev rule is completed as
++ * a consequence of libdm actions fired before and marked by the value of
++ * the cookie.
++ */
++void dm_udev_notif_enable(void);
++void dm_udev_notif_disable(void);
++int dm_udev_notif_is_enabled(void);
++int dm_udev_notif_sem_open(uint32_t *cookie);
++int dm_udev_notif_sem_inc(uint32_t cookie);
++int dm_udev_notif_sem_dec(uint32_t cookie);
++int dm_udev_notif_sem_wait_zero(uint32_t cookie);
++int dm_udev_notif_sem_close(uint32_t cookie);
 +
-+static int _dm_lv_name_disp(struct dm_report *rh,
-+			     struct dm_pool *mem __attribute((unused)),
-+			     struct dm_report_field *field, const void *data,
-+			     void *private __attribute((unused)))
+ #endif				/* LIB_DEVICE_MAPPER_H */
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index bbb46f5..ef249dc 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -24,6 +24,12 @@
+ #include <sys/ioctl.h>
+ #include <fcntl.h>
+ 
++#ifdef WAITFORUDEV_SUPPORT
++#  include <sys/types.h>
++#  include <sys/ipc.h>
++#  include <sys/sem.h>
++#endif
 +
-+{
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
+ #ifdef linux
+ #  include <linux/fs.h>
+ #endif
+@@ -38,6 +44,10 @@ static char _dm_dir[PATH_MAX] = DEV_DIR DM_DIR;
+ 
+ static int _verbose = 0;
+ 
++#ifdef WAITFORUDEV_SUPPORT
++static int _wait_for_udev = 1;
++#endif
 +
-+static int _dm_lv_layer_name_disp(struct dm_report *rh,
-+				   struct dm_pool *mem __attribute((unused)),
-+				   struct dm_report_field *field, const void *data,
-+				   void *private __attribute((unused)))
-+
-+{
-+	return dm_report_field_string(rh, field, (const char **) data);
-+}
-+
- static void *_task_get_obj(void *obj)
- {
- 	return ((struct dmsetup_report_obj *)obj)->task;
-@@ -1919,11 +2016,17 @@ static void *_tree_get_obj(void *obj)
- 	return ((struct dmsetup_report_obj *)obj)->tree_node;
+ /*
+  * Library users can provide their own logging
+  * function.
+@@ -222,6 +232,14 @@ int dm_task_set_mode(struct dm_task *dmt, mode_t mode)
+ 	return 1;
  }
  
-+static void *_split_name_get_obj(void *obj)
++int dm_task_set_cookie(struct dm_task *dmt, uint32_t cookie)
 +{
-+	return ((struct dmsetup_report_obj *)obj)->split_name;
++	/* We reuse event_nr field to pass the cookie in.*/
++	dmt->event_nr = cookie;
++
++	return 1;
 +}
 +
- static const struct dm_report_object_type _report_types[] = {
- 	{ DR_TASK, "Mapped Device Name", "", _task_get_obj },
- 	{ DR_INFO, "Mapped Device Information", "", _info_get_obj },
- 	{ DR_DEPS, "Mapped Device Relationship Information", "", _deps_get_obj },
- 	{ DR_TREE, "Mapped Device Relationship Information", "", _tree_get_obj },
-+	{ DR_NAME, "Mapped Device LVM Name", "", _split_name_get_obj },
- 	{ 0, "", "", NULL },
- };
+ int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
+ 		       const char *ttype, const char *params)
+ {
+@@ -711,3 +729,200 @@ out:
+ 	return r;
+ }
  
-@@ -1960,6 +2063,12 @@ FIELD_F(DEPS, STR, "DevNos", 6, dm_deps, "devnos_used", "List of device numbers
- FIELD_F(TREE, NUM, "#Refs", 5, dm_tree_parents_count, "device_ref_count", "Number of mapped devices referencing this one.")
- FIELD_F(TREE, STR, "RefNames", 8, dm_tree_parents_names, "names_using_dev", "List of names of mapped devices using this one.")
- FIELD_F(TREE, STR, "RefDevNos", 9, dm_tree_parents_devs, "devnos_using_dev", "List of device numbers of mapped devices using this one.")
++#ifndef WAITFORUDEV_SUPPORT
 +
-+FIELD_O(NAME, dm_split_name, STR, "Subsystem", subsystem, 9, dm_subsystem, "subsystem", "DM subsystem.")
-+FIELD_O(NAME, dm_split_name, STR, "VGName", vg, 6, dm_vg_name, "vg_name", "LVM volume group name.")
-+FIELD_O(NAME, dm_split_name, STR, "LVName", lv, 6, dm_lv_name, "lv_name", "LVM logical volume name.")
-+FIELD_O(NAME, dm_split_name, STR, "LVLayer", lv_layer, 7, dm_lv_layer_name, "lv_layer", "LVM layer.")
++void dm_udev_notif_enable(void)
++{
++}
 +
- {0, 0, 0, 0, "", "", NULL, NULL},
- /* *INDENT-ON* */
- };
++void dm_udev_notif_disable(void)
++{
++}
++
++int dm_udev_notif_is_enabled(void)
++{
++	return 0;
++}
++
++int dm_udev_notif_sem_open(uint32_t *cookie)
++{
++	*cookie = 0;
++
++	return 1;
++}
++
++int dm_udev_notif_sem_inc(uint32_t cookie)
++{
++	return 1;
++}
++
++int dm_udev_notif_sem_dec(uint32_t cookie)
++{
++	return 1;
++}
++
++int dm_udev_notif_sem_wait_zero(uint32_t cookie)
++{
++	return 1;
++}
++
++int dm_udev_notif_sem_close(uint32_t cookie)
++{
++	return 1;
++}
++
++#else		/* WAITFORUDEV_SUPPORT */
++
++void dm_udev_notif_enable(void)
++{
++	_wait_for_udev = 1;
++}
++
++void dm_udev_notif_disable(void)
++{
++	_wait_for_udev = 0;
++}
++
++int dm_udev_notif_is_enabled(void)
++{
++	return _wait_for_udev;
++}
++
++int dm_udev_notif_sem_open(uint32_t *cookie)
++{
++	int semid;
++	int fd;
++	uint32_t gen_cookie;
++
++	if (!dm_udev_notif_is_enabled() || !dm_cookie_supported())
++		return 1;
++
++	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
++		log_error("Failed to open /dev/urandom to create random cookie value.");
++		return 0;
++	}
++
++	/* Generate random cookie value. Be sure it is unique and != 0. */
++	do {
++		if (read(fd, &gen_cookie, sizeof(gen_cookie)) != sizeof(gen_cookie))
++			goto out;
++
++		if ((semid = semget((key_t) gen_cookie, 1, 0600 | IPC_CREAT | IPC_EXCL)) < 0) {
++			/* if the semaphore key exists, we simply generate another random one */
++			if (errno == EEXIST)
++				gen_cookie = 0;
++			else
++				goto out;
++		}
++	} while (!gen_cookie);
++
++	if (semctl(semid, 0, SETVAL, 0) < 0)
++		goto out;
++
++	if (close(fd))
++		stack;
++	*cookie = gen_cookie;
++
++	return 1;
++
++out:
++	log_error("Failed to create and initialize notification cookie");
++	if (close(fd))
++		stack;
++	return 0;
++}
++
++static int _get_cookie_sem(uint32_t cookie, int *semid)
++{
++	if ((*semid = semget((key_t) cookie, 1, 0)) < 0) {
++		log_error("Could not find notification cookie %" PRIu32 " (0x%x)",
++			cookie, cookie);
++		return 0;
++	}
++
++	return 1;
++}
++
++int dm_udev_notif_sem_inc(uint32_t cookie)
++{
++	int semid;
++	struct sembuf sb = {0, 1, 0};
++
++	if (!dm_udev_notif_is_enabled() || !dm_cookie_supported())
++		return 1;
++
++	if (!_get_cookie_sem(cookie, &semid))
++		return 0;
++
++	if (semop(semid, &sb, 1) < 0) {
++		log_error("Could not set notification cookie %" PRIu32 " (0x%x)",
++			cookie, cookie);
++		return 0;
++	}
++
++	return 1;
++}
++
++int dm_udev_notif_sem_dec(uint32_t cookie)
++{
++	int semid;
++	struct sembuf sb = {0, -1, 0};
++
++	if (!dm_udev_notif_is_enabled() || !dm_cookie_supported())
++		return 1;
++
++	if (!_get_cookie_sem(cookie, &semid))
++		return 0;
++
++	if (semop(semid, &sb, 1) < 0) {
++		log_error("Could not signal waiting process using notification cookie %" PRIu32 " (0x%x)",
++			cookie, cookie);
++		return 0;
++	}
++
++	return 1;
++}
++
++int dm_udev_notif_sem_wait_zero(uint32_t cookie)
++{
++	int semid;
++	struct sembuf sb = {0, 0, 0};
++
++	if (!dm_udev_notif_is_enabled() || !dm_cookie_supported())
++		return 1;
++
++	if (!_get_cookie_sem(cookie, &semid))
++		return 0;
++
++repeat_wait:
++	if (semop(semid, &sb, 1) < 0) {
++		if (errno == EINTR)
++			goto repeat_wait;
++		log_error("Could not set wait state for notification cookie %" PRIu32 " (0x%x)",
++			cookie, cookie);
++		return 0;
++	}
++
++	return 1;
++}
++
++int dm_udev_notif_sem_close(uint32_t cookie)
++{
++	int semid;
++
++	if (!dm_udev_notif_is_enabled() || !dm_cookie_supported())
++		return 1;
++
++	if (!_get_cookie_sem(cookie, &semid))
++		return 0;
++
++	if (semctl(semid, 0, IPC_RMID, cookie) < 0) {
++		log_error("Could not remove notification cookie '%" PRIu32 " (0x%x)",
++			cookie, cookie);
++		return 0;
++	}
++
++	return 1;
++}
++
++#endif		/* WAITFORUDEV_SUPPORT */
 
 
