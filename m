@@ -1,83 +1,54 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 25 May 2009 14:19:15 +0200
-Subject: [PATCH 6/9] Udev integration: add lvmsplit command for dmsetup
-Message-ID: <4A1A8CC3.2000809@redhat.com>
+Date: Mon, 25 May 2009 14:19:21 +0200
+Subject: [PATCH 7/9] Adapt _mk_link for udev
+Message-ID: <4A1A8CC9.3040307@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adds lvmsplit command for dmsetup that can split-up given DM name into
-its VG/LV/LAYER constituents. No change in here, too...
+This one is a little bit tricky. Since udev now creates the nodes and
+symlinks, they should not be overwritten if the links exist already.
+
+Still, the question is how should we do this when udev notification
+is disabled. It's only the notification that is disabled, not the udev
+itself, we have no info about this. The problem is that we use
+/dev/dm-X as nodes and /dev/mapper contents as symlinks now. When the
+wait-for-udev is disabled and there's an existing symlink there,
+it still behaves the old way... Which means that the symlink in
+/dev/VG will point to /dev/mapper contents, not /dev/dm-X, just
+like in the situation with the udev. It's not 100% consistent...
+Need to think about this more if there's a better workaround for
+this...
 
 Peter
 
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 8db38b0..f9551d9 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -746,6 +746,24 @@ static int _udevnotify(int argc, char **argv, void *data __attribute((unused)))
- 	return dm_udev_notif_sem_dec(cookie);
- }
+diff --git a/lib/activate/fs.c b/lib/activate/fs.c
+index 6b83581..6a1fb60 100644
+--- a/lib/activate/fs.c
++++ b/lib/activate/fs.c
+@@ -161,11 +161,16 @@ static int _mk_link(const char *dev_dir, const char *vg_name,
+ 			return 0;
+ 		}
  
-+static int _lvmsplit(int argc, char **argv, void *data __attribute((unused)))
-+{
-+	int r = 1;
-+
-+	struct dmsetup_report_obj obj;
-+
-+	obj.task = NULL;
-+	obj.info = NULL;
-+	obj.deps_task = NULL;
-+	obj.tree_node = NULL;
-+	obj.split_name = _get_split_name("LVM-", argv[1]);
-+
-+	r = dm_report_object(_report, &obj);
-+	_destroy_split_name(obj.split_name);
-+
-+	return r;
-+}
-+
- static int _version(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
- {
- 	char version[80];
-@@ -2146,6 +2164,7 @@ FIELD_O(NAME, dm_split_name, STR, "LVLayer", lv_layer, 7, dm_lv_layer_name, "lv_
- #undef FIELD_F
- 
- static const char *default_report_options = "name,major,minor,attr,open,segments,events,uuid";
-+static const char *lvmsplit_report_options = "vg_name,lv_name,lv_layer";
- 
- static int _report_init(struct command *c)
- {
-@@ -2158,6 +2177,9 @@ static int _report_init(struct command *c)
- 	size_t len = 0;
- 	int r = 0;
- 
-+	if (!strcmp(c->name, "lvmsplit"))
-+		options = (char *) lvmsplit_report_options;
-+
- 	/* emulate old dmsetup behaviour */
- 	if (_switches[NOHEADINGS_ARG]) {
- 		separator = ":";
-@@ -2295,6 +2317,7 @@ static struct command _commands[] = {
- 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
- 	{"udevnotify", "<cookie>", 1, 1, _udevnotify},
-+	{"lvmsplit", "<dev_name>", 1, 1, _lvmsplit},
- 	{"targets", "", 0, 0, _targets},
- 	{"version", "", 0, 0, _version},
- 	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
-@@ -2918,6 +2941,9 @@ int main(int argc, char **argv)
- 		goto out;
+-		log_very_verbose("Removing %s", lv_path);
+-		if (unlink(lv_path) < 0) {
+-			log_sys_error("unlink", lv_path);
+-			return 0;
++		if (!dm_udev_notif_is_enabled()) {
++			log_very_verbose("Removing %s", lv_path);
++			if (unlink(lv_path) < 0) {
++				log_sys_error("unlink", lv_path);
++				return 0;
++			}
+ 		}
++		else
++			/* udev should have done this already */
++			return 1;
  	}
  
-+	if (!_switches[COLS_ARG] && !strcmp(c->name, "lvmsplit"))
-+		_switches[COLS_ARG]++;
-+
- 	if (_switches[COLS_ARG] && !_report_init(c))
- 		goto out;
- 
+ 	log_very_verbose("Linking %s -> %s", lv_path, link_path);
 
 
