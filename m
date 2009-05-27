@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Feb 2011 21:19:04 -0000
-Subject: LVM2/man pvcreate.8.in pvremove.8.in pvresize. ...
-Message-ID: <20110204211904.16103.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 May 2009 13:23:43 -0000
+Subject: LVM2 ./WHATS_NEW tools/toollib.c
+Message-ID: <20090527132343.494.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,91 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-04 21:19:04
+Changes by:	agk at sourceware.org	2009-05-27 13:23:42
 
 Modified files:
-	man            : pvcreate.8.in pvremove.8.in pvresize.8.in 
-	                 pvscan.8.in 
+	.              : WHATS_NEW 
+	tools          : toollib.c 
 
 Log message:
-	Place back some common options
-	
-	Until man pages are generated keep some common options with all commands.
+	Skip virtual origins in process_each_lv_in_vg(). (mbroz)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvcreate.8.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvremove.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvresize.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvscan.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1126&r2=1.1127
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
 
---- LVM2/man/pvcreate.8.in	2011/01/28 16:03:38	1.10
-+++ LVM2/man/pvcreate.8.in	2011/02/04 21:19:03	1.11
-@@ -3,6 +3,11 @@
- pvcreate \- initialize a disk or partition for use by LVM
- .SH SYNOPSIS
- .B pvcreate
-+.RB [ \-d | \-\-debug ]
-+.RB [ \-h | \-\-help ]
-+.RB [ \-t | \-\-test ]
-+.RB [ \-v | \-\-verbose ]
-+.RB [ \-\-version ]
- .RB [ \-f [ f ]| \-\-force " [" \-\-force ]]
- .RB [ \-y | \-\-yes ]
- .RB [ \-\-labelsector ]
---- LVM2/man/pvremove.8.in	2011/01/28 16:03:38	1.2
-+++ LVM2/man/pvremove.8.in	2011/02/04 21:19:04	1.3
-@@ -3,9 +3,16 @@
- pvremove \- remove a physical volume
- .SH SYNOPSIS
- .B pvremove
--.RB [ \-f [ f ]| \-\-force " [" \-\-force ]]
-+.RB [ \-d | \-\-debug ]
-+.RB [ \-h | \-\-help ]
-+.RB [ \-t | \-\-test ]
-+.RB [ \-v | \-\-verbose ]
-+.RB [ \-\-version ]
-+.RB [ \-f [ f ]| \-\-force 
-+.RB [ \-\-force ]]
- .RB [ \-y | \-\-yes ]
--.IR PhysicalVolume " [" PhysicalVolume ...]
-+.I PhysicalVolume
-+.RI [ PhysicalVolume ...]
- .SH DESCRIPTION
- .B pvremove
- wipes the label on a device so that LVM will no longer recognise it
---- LVM2/man/pvresize.8.in	2011/01/28 16:03:38	1.2
-+++ LVM2/man/pvresize.8.in	2011/02/04 21:19:04	1.3
-@@ -3,8 +3,15 @@
- pvresize \- resize a disk or partition in use by LVM2
- .SH SYNOPSIS
- .B pvresize
--.RB [ \-\-setphysicalvolumesize " " \fIsize ]
--.IR PhysicalVolume " [" PhysicalVolume ...]
-+.RB [ \-d | \-\-debug ]
-+.RB [ \-h | \-\-help ]
-+.RB [ \-t | \-\-test ]
-+.RB [ \-v | \-\-verbose ]
-+.RB [ \-\-version ]
-+.RB [ \-\-setphysicalvolumesize
-+.IR size ]
-+.I PhysicalVolume 
-+.RI [ PhysicalVolume ...]
- .SH DESCRIPTION
- .B pvresize
- resizes
---- LVM2/man/pvscan.8.in	2011/01/28 16:03:38	1.2
-+++ LVM2/man/pvscan.8.in	2011/02/04 21:19:04	1.3
-@@ -3,6 +3,11 @@
- pvscan \- scan all disks for physical volumes
- .SH SYNOPSIS
- .B pvscan
-+.RB [ \-d | \-\-debug ]
-+.RB [ \-h | \-\-help ]
-+.RB [ \-v | \-\-verbose ]
-+.RB [ \-\-version ]
-+.RB [ \-\-ignorelockingfailure ]
- .RB [ \-e | \-\-exported ]
- .RB [ \-n | \-\-novolumegroup ]
- .RB [ \-s | \-\-short ]
+--- LVM2/WHATS_NEW	2009/05/27 13:19:34	1.1126
++++ LVM2/WHATS_NEW	2009/05/27 13:23:41	1.1127
+@@ -1,5 +1,6 @@
+ Version 2.02.48 - 
+ ===============================
++  Skip virtual origins in process_each_lv_in_vg().
+   Fix counting of virtual origin LVs in vg_validate.
+   Attempt to load dm-zero module if zero target needed but not present.
+ 
+--- LVM2/tools/toollib.c	2009/05/21 03:04:53	1.153
++++ LVM2/tools/toollib.c	2009/05/27 13:23:42	1.154
+@@ -122,6 +122,9 @@
+ 		if (lvl->lv->status & SNAPSHOT)
+ 			continue;
+ 
++		if (lv_is_virtual_origin(lvl->lv))
++			continue;
++
+ 		/* Should we process this LV? */
+ 		if (process_all)
+ 			process_lv = 1;
 
 
