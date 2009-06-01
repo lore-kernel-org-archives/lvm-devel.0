@@ -1,101 +1,49 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 27 Jun 2016 09:51:38 +0000 (UTC)
-Subject: master - coverity: fix issues detected in recent code
-Message-ID: <20160627095138.04F1460994@fedorahosted.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Mon, 1 Jun 2009 12:04:17 -0400 (EDT)
+Subject: [PATCH] DM: change __kernel_dev_t to uint32_t
+Message-ID: <Pine.LNX.4.64.0906011158030.16282@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
-Commit:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
-Parent:        15b932a70e4a29f386ea57e1b845d637780b463b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 27 10:12:41 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 27 11:22:29 2016 +0200
+Change __kernel_dev_t to uint32_t
 
-coverity: fix issues detected in recent code
+In current 2.6 kernels, this is defined only inside kernel, there is no way
+how ti could me made available to the applications (if you attempt to make
+it available with #defines, you get many symbol conflicts with libc).
 
-Uninitialized variables  (UNINIT) /safe/guest2/covscan/LVM2.2.02.158/tools/toollib.c: 3520 in _process_pvs_in_vgs()
-Uninitialized variables  (UNINIT) Using uninitialized value "do_report_ret_code".
+So define it as uint32_t. This interface is legacy anyway and can't be used
+in current kernels.
 
-Null pointer dereferences  (REVERSE_INULL) /safe/guest2/covscan/LVM2.2.02.158/libdm/libdm-report.c: 4745 in dm_report_output()
-Null pointer dereferences  (REVERSE_INULL) Null-checking "rh" suggests that it may be null, but it has already been dereferenced on all paths leading to the check.
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 
-Incorrect expression  (MISSING_COMMA) /safe/guest2/covscan/LVM2.2.02.158/lib/log/log.c: 280 in _get_log_level_name()
-Incorrect expression  (MISSING_COMMA) In the initialization of "log_level_names", a suspicious concatenated string ""noticeinfo"" is produced.
-
-Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 816 in_get_report_options()
-Null pointer dereferences  (FORWARD_NULL) Comparing "mem" to null implies that "mem" might be null.
 ---
- lib/log/log.c        |    2 +-
- libdm/libdm-report.c |    4 ++--
- tools/reporter.c     |    2 +-
- tools/toollib.c      |    2 +-
- 4 files changed, 5 insertions(+), 5 deletions(-)
+ libdm/ioctl/libdm-compat.h |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index b3453dc..30d71ef 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -277,7 +277,7 @@ static const char *_get_log_level_name(int use_stderr, int level)
- 						"fatal", /* _LOG_FATAL */
- 						"error", /* _LOG_ERROR */
- 						"warn",  /* _LOG_WARN */
--						"notice" /* _LOG_NOTICE */
-+						"notice",/* _LOG_NOTICE */
- 						"info",  /* _LOG_INFO */
- 						"debug"  /* _LOG_DEBUG */
- 						};
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 6bea34c..ad03c6e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4001,7 +4001,7 @@ static int _report_set_selection(struct dm_report *rh, const char *selection, in
- 			goto_bad;
- 	}
+Index: LVM2.2.02.47/libdm/ioctl/libdm-compat.h
+===================================================================
+--- LVM2.2.02.47.orig/libdm/ioctl/libdm-compat.h	2009-05-26 15:19:00.000000000 +0200
++++ LVM2.2.02.47/libdm/ioctl/libdm-compat.h	2009-05-26 15:24:34.000000000 +0200
+@@ -40,7 +40,7 @@ struct dm_ioctl_v1 {
+ 	int32_t open_count;	/* out */
+ 	uint32_t flags;		/* in/out */
  
--	if (!selection || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
-+	if (!selection || !selection[0] || !strcasecmp(selection, SPECIAL_SELECTION_ALL))
- 		return 1;
+-	__kernel_dev_t dev;	/* in/out */
++	uint32_t dev;		/* in/out */
  
- 	rh->selection->add_new_fields = add_new_fields;
-@@ -4742,7 +4742,7 @@ int dm_report_output(struct dm_report *rh)
- 	else
- 		r = _output_as_columns(rh);
- out:
--	if (r && rh && rh->group_item)
-+	if (r && rh->group_item)
- 		rh->group_item->output_done = 1;
- 	return r;
- }
-diff --git a/tools/reporter.c b/tools/reporter.c
-index ee2d251..40d449c 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -815,7 +815,7 @@ static int _get_report_options(struct cmd_context *cmd,
+ 	char name[DM_NAME_LEN];	/* device name */
+ 	char uuid[DM_UUID_LEN];	/* unique identifier for
+@@ -60,7 +60,7 @@ struct dm_target_spec_v1 {
+ struct dm_target_deps_v1 {
+ 	uint32_t count;
  
- 	if (!(mem = dm_pool_create("report_options", 128))) {
- 		log_error("Failed to create temporary mempool to process report options.");
--		goto out;
-+		return ECMD_FAILED;
- 	}
+-	__kernel_dev_t dev[0];	/* out */
++	uint32_t dev[0];	/* out */
+ };
  
- 	if (single_args->report_type == CMDLOG) {
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 5c61ddd..80d0f32 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3439,7 +3439,7 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
- 	int skip;
- 	int notfound;
- 	int already_locked;
--	int do_report_ret_code;
-+	int do_report_ret_code = 1;
- 
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
- 
+ enum {
 
 
