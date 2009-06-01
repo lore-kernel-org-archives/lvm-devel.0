@@ -1,49 +1,57 @@
 From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Mon, 1 Jun 2009 12:04:17 -0400 (EDT)
-Subject: [PATCH] DM: change __kernel_dev_t to uint32_t
-Message-ID: <Pine.LNX.4.64.0906011158030.16282@hs20-bc2-1.build.redhat.com>
+Date: Mon, 1 Jun 2009 12:05:20 -0400 (EDT)
+Subject: [PATCH] build the whole lvm with 'make' command
+Message-ID: <Pine.LNX.4.64.0906011204190.16282@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Change __kernel_dev_t to uint32_t
+Build shared parts with 'make' command
 
-In current 2.6 kernels, this is defined only inside kernel, there is no way
-how ti could me made available to the applications (if you attempt to make
-it available with #defines, you get many symbol conflicts with libc).
+When some parts of lvm are built as shared libraries (for example with
+--with-snapshots=shared), the 'make' command does not build these parts.
+The shared parts are built with 'make install' command.
 
-So define it as uint32_t. This interface is legacy anyway and can't be used
-in current kernels.
+This bug can be seen if you go to 'lib' subdirectory and type 'make'.
+If you type 'make', the shared libraries are not built, if you type
+'make all', the shared libraries are built.
 
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+The reason for the bug is the line $(SUBDIRS): $(LIB_STATIC)
+If make is executed without any arguments, it makes the first target
+in the Makefile. If the first target is '$(SUBDIRS): $(LIB_STATIC)',
+it only builds static libraries.
+
+This patch moves '$(SUBDIRS): $(LIB_STATIC)' after
+include $(top_srcdir)/make.tmpl. make.tmpl contains the 'all' target
+as its first target, so 'make' will be equivalent to 'make all' and
+shared libraries will be build with 'make' command.
+
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com
 
 ---
- libdm/ioctl/libdm-compat.h |    4 ++--
+ lib/Makefile.in |    4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
-Index: LVM2.2.02.47/libdm/ioctl/libdm-compat.h
+Index: LVM2.2.02.47/lib/Makefile.in
 ===================================================================
---- LVM2.2.02.47.orig/libdm/ioctl/libdm-compat.h	2009-05-26 15:19:00.000000000 +0200
-+++ LVM2.2.02.47/libdm/ioctl/libdm-compat.h	2009-05-26 15:24:34.000000000 +0200
-@@ -40,7 +40,7 @@ struct dm_ioctl_v1 {
- 	int32_t open_count;	/* out */
- 	uint32_t flags;		/* in/out */
+--- LVM2.2.02.47.orig/lib/Makefile.in	2009-05-29 23:30:34.000000000 +0200
++++ LVM2.2.02.47/lib/Makefile.in	2009-05-29 23:30:53.000000000 +0200
+@@ -143,12 +143,12 @@ endif
+ LIB_NAME = liblvm-internal
+ LIB_STATIC = $(LIB_NAME).a
  
--	__kernel_dev_t dev;	/* in/out */
-+	uint32_t dev;		/* in/out */
+-$(SUBDIRS): $(LIB_STATIC)
+-
+ CLEAN_TARGETS += $(LIB_NAME).cflow
  
- 	char name[DM_NAME_LEN];	/* device name */
- 	char uuid[DM_UUID_LEN];	/* unique identifier for
-@@ -60,7 +60,7 @@ struct dm_target_spec_v1 {
- struct dm_target_deps_v1 {
- 	uint32_t count;
+ include $(top_srcdir)/make.tmpl
  
--	__kernel_dev_t dev[0];	/* out */
-+	uint32_t dev[0];	/* out */
- };
- 
- enum {
++$(SUBDIRS): $(LIB_STATIC)
++
+ $(LIB_NAME).cflow: $(SOURCES)
+ 	set -e; (echo -n "SOURCES += "; \
+ 		 echo $(SOURCES) | \
 
 
