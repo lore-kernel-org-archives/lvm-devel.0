@@ -1,42 +1,62 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 02 Jun 2009 20:51:15 +0200
-Subject: [PATCH] lvconvert --repair prompts and policies
-In-Reply-To: <873aaybhzz.fsf@mornfall.net> (Petr Rockai's message of "Thu, 21
-	May 2009 17:20:00 +0200")
-References: <873aaybhzz.fsf@mornfall.net>
-Message-ID: <87d49mcvvg.fsf@mornfall.net>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 3 Jun 2009 11:31:08 -0000
+Subject: LVM2/lib Makefile.in
+Message-ID: <20090603113108.12820.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-06-03 11:31:08
 
-this is a new iteration of the patch, that hopefully addresses everyone's
-concerns. For "normal" use (manual), it will prompt whether replacement of
-devices is desired, with -y and -f to select yes and no respectively. Moreover,
---use-policies is provided that will read and use the lvm.conf mirror policy
-settings.
+Modified files:
+	lib            : Makefile.in 
 
-We use --use-policies for dmeventd.
+Log message:
+	Build shared parts with 'make' command (mpatocka)
+	
+	When some parts of lvm are built as shared libraries (for example with
+	--with-snapshots=shared), the 'make' command does not build these parts.
+	The shared parts are built with 'make install' command.
+	
+	This bug can be seen if you go to 'lib' subdirectory and type 'make'.
+	If you type 'make', the shared libraries are not built, if you type
+	'make all', the shared libraries are built.
+	
+	The reason for the bug is the line $(SUBDIRS): $(LIB_STATIC)
+	If make is executed without any arguments, it makes the first target
+	in the Makefile. If the first target is '$(SUBDIRS): $(LIB_STATIC)',
+	it only builds static libraries.
+	
+	This patch moves '$(SUBDIRS): $(LIB_STATIC)' after
+	include $(top_srcdir)/make.tmpl. make.tmpl contains the 'all' target
+	as its first target, so 'make' will be equivalent to 'make all' and
+	shared libraries will be build with 'make' command.
+	
+	Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 
-Yours,
-   Petr.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/Makefile.in.diff?cvsroot=lvm2&r1=1.91&r2=1.92
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvconvert-repair-policies.diff
-Type: text/x-diff
-Size: 8138 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090602/d6471f13/attachment.bin>
--------------- next part --------------
+--- LVM2/lib/Makefile.in	2009/03/17 13:59:56	1.91
++++ LVM2/lib/Makefile.in	2009/06/03 11:31:06	1.92
+@@ -143,12 +143,12 @@
+ LIB_NAME = liblvm-internal
+ LIB_STATIC = $(LIB_NAME).a
+ 
+-$(SUBDIRS): $(LIB_STATIC)
+-
+ CLEAN_TARGETS += $(LIB_NAME).cflow
+ 
+ include $(top_srcdir)/make.tmpl
+ 
++$(SUBDIRS): $(LIB_STATIC)
++
+ $(LIB_NAME).cflow: $(SOURCES)
+ 	set -e; (echo -n "SOURCES += "; \
+ 		 echo $(SOURCES) | \
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
