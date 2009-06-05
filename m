@@ -1,217 +1,588 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 27 Jun 2016 09:51:40 +0000 (UTC)
-Subject: master - reporter: simplify --configreport handling for -S|--select and fix an issue reported by coverity
-Message-ID: <20160627095140.276C760994@fedorahosted.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 05 Jun 2009 15:34:20 +0200
+Subject: [PATCH] Fix double releasing of vg when repairing of vg is requested
+Message-ID: <4A291EDC.4060300@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=05196373bec81dcaad490a889388c57e7af1331a
-Commit:        05196373bec81dcaad490a889388c57e7af1331a
-Parent:        82f4f073bb7eb68aa7cb23a0c6ee75ba03fd0e57
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jun 27 10:14:17 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jun 27 11:26:38 2016 +0200
+Fix double releasing of vg when repairing of vg is requested.
 
-reporter: simplify --configreport handling for -S|--select and fix an issue reported by coverity
+Several commands calls process_each_vg() and in provided
+callback it explicitly recovers VG if inconsistent.
+(vgchange, vgconvert, vgscan)
 
-Simplify code around _do_get_report_selection - remove "expected_idxs[]"
-argument which is superfluous and add "allow_single" switch instead to
-allow for recognition of "--configreport <report_name> -S" as well as
-single "-S" if needed.
+It means that old VG is released and re-read  but the function
+above (process_one_vg) tries to unlock and release old VG.
 
-Null pointer dereferences  (FORWARD_NULL) /safe/guest2/covscan/LVM2.2.02.158/tools/reporter.c: 961 in _do_report_get_selection()
-Null pointer dereferences  (FORWARD_NULL) Dereferencing null pointer "single_args".
+Patch moves the repair logic into _process_one_vg() function.
+
+It always tries to read vg (even inconsistent) and then decides
+what to do according new defined parameter.
+
+Also patch unifies inconsistent error messages.
+
+The only slight change if for vgremove command, where
+it now tries to repair VG before it removes if force arg is given.
+(It works similar way before, just the order of operation changed).
+
+[maybe this somehow collide with proposed vg_read changes,
+but this is serious bug which should be fixed asap...]
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/report/report.h |    2 +-
- tools/reporter.c    |   60 +++++++++++++++++++++++----------------------------
- tools/toollib.c     |    2 +-
- 3 files changed, 29 insertions(+), 35 deletions(-)
+ lib/metadata/metadata-exported.h |   10 ++++++++++
+ test/t-inconsistent-metadata.sh  |   10 +++++-----
+ tools/polldaemon.c               |   15 +++------------
+ tools/reporter.c                 |   24 ++++++------------------
+ tools/toollib.c                  |   38 ++++++++++++++++++++++++++++----------
+ tools/toollib.h                  |    2 +-
+ tools/vgcfgbackup.c              |   13 +++----------
+ tools/vgchange.c                 |   16 ++--------------
+ tools/vgck.c                     |   13 ++-----------
+ tools/vgconvert.c                |   16 ++--------------
+ tools/vgdisplay.c                |   10 ++--------
+ tools/vgexport.c                 |   13 ++-----------
+ tools/vgimport.c                 |    9 ++-------
+ tools/vgremove.c                 |    6 ++++--
+ tools/vgscan.c                   |   17 ++---------------
+ 15 files changed, 74 insertions(+), 138 deletions(-)
 
-diff --git a/lib/report/report.h b/lib/report/report.h
-index b9028fe..ba3a8fa 100644
---- a/lib/report/report.h
-+++ b/lib/report/report.h
-@@ -90,7 +90,7 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
- 		  int aligned, int buffered, int headings, int field_prefixes,
- 		  int quoted, int columns_as_rows, const char *selection,
- 		  int multiple_output);
--int report_get_single_selection(struct cmd_context *cmd, const char **selection);
-+int report_get_single_selection(struct cmd_context *cmd, report_type_t report_type, const char **selection);
- void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_type,
- 				const char *selection);
- int report_get_prefix_and_desc(report_type_t report_type_id,
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 30725d6..f65df5c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -153,6 +153,16 @@ typedef enum {
+ 	DONT_PROMPT_OVERRIDE = 2 /* Skip prompt + override a second condition */
+ } force_t;
+ 
++/*
++ * What to do if VG is inconsistent
++ * FIXME: remove this after vg_read changes
++ */
++typedef enum {
++	VG_INCONSISTENT_ABORT    = 0, /* Abort operation */
++	VG_INCONSISTENT_CONTINUE = 1, /* Process operation but do not try repair */
++	VG_INCONSISTENT_REPAIR   = 2  /* Try to repair VG before processing */
++} inconsistent_t;
++
+ struct cmd_context;
+ struct format_handler;
+ struct labeller;
+diff --git a/test/t-inconsistent-metadata.sh b/test/t-inconsistent-metadata.sh
+index 92e6f49..1c6f366 100644
+--- a/test/t-inconsistent-metadata.sh
++++ b/test/t-inconsistent-metadata.sh
+@@ -26,7 +26,7 @@ init() {
+ 	lvresize -L 8192K $vg/resized
+ 	restore_dev $dev1
+ }
+-	
++
+ check() {
+ 	lvs -o lv_name,lv_size --units k $vg | tee lvs.out
+ 	grep resized lvs.out | grep 8192
+@@ -43,20 +43,20 @@ check
+ # vgdisplay doesn't change anything
+ init
+ vgdisplay 2>&1 | tee cmd.out
+-grep "Volume group \"$vg\" inconsistent" cmd.out
++grep "Volume group $vg inconsistent" cmd.out
+ vgdisplay 2>&1 | tee cmd.out
+-grep "Volume group \"$vg\" inconsistent" cmd.out
++grep "Volume group $vg inconsistent" cmd.out
+ 
+ # lvs fixes up
+ init
+ lvs 2>&1 | tee cmd.out
+ grep "Inconsistent metadata found for VG $vg - updating" cmd.out
+ vgdisplay 2>&1 | tee cmd.out
+-not grep "Volume group \"$vg\" inconsistent" cmd.out
++not grep "Volume group $vg inconsistent" cmd.out
+ check
+ 
+ # vgs doesn't fix up... (why?)
+ init
+ vgs 2>&1 | tee cmd.out
+ vgdisplay 2>&1 | tee cmd.out
+-grep "Volume group \"$vg\" inconsistent" cmd.out
++grep "Volume group $vg inconsistent" cmd.out
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index d491970..1adb521 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -182,17 +182,6 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 	const char *name;
+ 	int finished;
+ 
+-	if (!vg) {
+-		log_error("Couldn't read volume group %s", vgname);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent) {
+-		log_error("Volume Group %s inconsistent - skipping", vgname);
+-		/* FIXME Should we silently recover it here or not? */
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (!vg_check_status(vg, EXPORTED_VG))
+ 		return ECMD_FAILED;
+ 
+@@ -218,7 +207,9 @@ static void _poll_for_all_vgs(struct cmd_context *cmd,
+ {
+ 	while (1) {
+ 		parms->outstanding_count = 0;
+-		process_each_vg(cmd, 0, NULL, LCK_VG_WRITE, 1, parms, _poll_vg);
++		/* FIXME Should we silently recover it here or not? */
++		process_each_vg(cmd, 0, NULL, LCK_VG_WRITE,
++				VG_INCONSISTENT_ABORT, parms, _poll_vg);
+ 		if (!parms->outstanding_count)
+ 			break;
+ 		sleep(parms->interval);
 diff --git a/tools/reporter.c b/tools/reporter.c
-index 40d449c..6f8ed8f 100644
+index 28393f8..d50d586 100644
 --- a/tools/reporter.c
 +++ b/tools/reporter.c
-@@ -29,6 +29,8 @@ typedef enum {
- 	REPORT_IDX_COUNT
- } report_idx_t;
+@@ -20,11 +20,6 @@ static int _vgs_single(struct cmd_context *cmd __attribute((unused)),
+ 		       const char *vg_name, struct volume_group *vg,
+ 		       int consistent __attribute((unused)), void *handle)
+ {
+-	if (!vg) {
+-		log_error("Volume group %s not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (!report_object(handle, vg, NULL, NULL, NULL, NULL))
+ 		return ECMD_FAILED;
  
-+#define REPORT_IDX_FULL_START REPORT_IDX_FULL_VGS
-+
- struct single_report_args {
- 	report_type_t report_type;
- 	char report_prefix[32];
-@@ -748,12 +750,10 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
- 		return REPORT_IDX_NULL;
- 
- 	/* Change to basic report type for comparison. */
--	if (report_type == LABEL)
-+	if ((report_type == LABEL) || (report_type == PVSEGS))
- 		report_type = PVS;
- 	else if (report_type == SEGS)
- 		report_type = LVS;
--	else if (report_type == PVSEGS)
--		report_type = PVSEGS;
- 
- 	if (!strcasecmp(name, "log"))
- 		idx = REPORT_IDX_LOG;
-@@ -778,11 +778,11 @@ static report_idx_t _get_report_idx_from_name(report_type_t report_type, const c
- 	return idx;
+@@ -184,11 +179,6 @@ static int _pvs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 		      int consistent __attribute((unused)),
+ 		      void *handle)
+ {
+-	if (!vg) {
+-		log_error("Volume group %s not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvs_single);
  }
  
--static int _should_process_report_idx(report_type_t report_type, report_idx_t idx)
-+static int _should_process_report_idx(report_type_t report_type, int allow_single, report_idx_t idx)
+@@ -197,11 +187,6 @@ static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
+ 			 int consistent __attribute((unused)),
+ 			 void *handle)
  {
- 	if (((idx == REPORT_IDX_LOG) && (report_type != CMDLOG)) ||
--	    ((idx == REPORT_IDX_SINGLE) && ((report_type == FULL) || (report_type == CMDLOG))) ||
--	    ((idx > REPORT_IDX_LOG) && report_type != FULL))
-+	    ((idx == REPORT_IDX_SINGLE) && !allow_single) ||
-+	    ((idx >= REPORT_IDX_FULL_START) && report_type != FULL))
- 		return 0;
+-	if (!vg) {
+-		log_error("Volume group %s not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvsegs_single);
+ }
  
- 	return 1;
-@@ -867,7 +867,7 @@ static int _get_report_options(struct cmd_context *cmd,
- 				action = OPTS_REPLACE;
- 		}
- 
--		if (!_should_process_report_idx(single_args->report_type, idx))
-+		if (!_should_process_report_idx(single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)), idx))
- 			continue;
- 
- 		if ((action != OPTS_COMPACT) &&
-@@ -932,6 +932,9 @@ static int _get_report_keys(struct cmd_context *cmd,
- 				goto_out;
- 		}
- 
-+		if (!_should_process_report_idx(single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)), idx))
-+			continue;
-+
- 		args->single_args[idx].keys = grouped_arg_str_value(current_group->arg_values, sort_ARG, NULL);
+@@ -382,7 +367,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 				    &_lvs_single);
+ 		break;
+ 	case VGS:
+-		r = process_each_vg(cmd, argc, argv, LCK_VG_READ, 0,
++		r = process_each_vg(cmd, argc, argv, LCK_VG_READ,
++				    VG_INCONSISTENT_CONTINUE,
+ 				    report_handle, &_vgs_single);
+ 		break;
+ 	case LABEL:
+@@ -394,7 +380,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 			r = process_each_pv(cmd, argc, argv, NULL, LCK_VG_READ,
+ 					    0, report_handle, &_pvs_single);
+ 		else
+-			r = process_each_vg(cmd, argc, argv, LCK_VG_READ, 0,
++			r = process_each_vg(cmd, argc, argv, LCK_VG_READ,
++					    VG_INCONSISTENT_CONTINUE,
+ 					    report_handle, &_pvs_in_vg);
+ 		break;
+ 	case SEGS:
+@@ -406,7 +393,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 			r = process_each_pv(cmd, argc, argv, NULL, LCK_VG_READ,
+ 					    0, report_handle, &_pvsegs_single);
+ 		else
+-			r = process_each_vg(cmd, argc, argv, LCK_VG_READ, 0,
++			r = process_each_vg(cmd, argc, argv, LCK_VG_READ,
++					    VG_INCONSISTENT_CONTINUE,
+ 					    report_handle, &_pvsegs_in_vg);
+ 		break;
  	}
- 
-@@ -941,16 +944,15 @@ out:
- }
- 
- static int _do_report_get_selection(struct cmd_context *cmd,
-+				    report_type_t report_type,
-+				    int allow_single,
- 				    struct report_args *args,
--				    struct single_report_args *single_args,
--				    report_idx_t expected_idxs[],
--				    const char **ret_selection)
-+				    const char **last_selection)
- {
- 	struct arg_value_group_list *current_group;
--	const char *final_selection = "", *selection = NULL;
-+	const char *final_selection = NULL, *selection = NULL;
- 	const char *report_name = NULL;
- 	report_idx_t idx = REPORT_IDX_SINGLE;
--	int i;
- 
- 	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
- 		if (!grouped_arg_is_set(current_group->arg_values, select_ARG))
-@@ -958,27 +960,21 @@ static int _do_report_get_selection(struct cmd_context *cmd,
- 
- 		if (grouped_arg_is_set(current_group->arg_values, configreport_ARG)) {
- 			report_name = grouped_arg_str_value(current_group->arg_values, configreport_ARG, NULL);
--			if ((idx = _get_report_idx_from_name(single_args->report_type, report_name)) == REPORT_IDX_NULL)
-+			if ((idx = _get_report_idx_from_name(report_type, report_name)) == REPORT_IDX_NULL)
- 				return_0;
- 		}
- 
- 		selection = grouped_arg_str_value(current_group->arg_values, select_ARG, NULL);
- 
--		if (single_args) {
--			if (!_should_process_report_idx(single_args->report_type, idx))
--				continue;
-+		if (!_should_process_report_idx(report_type, allow_single, idx))
-+			continue;
-+		if (args)
- 			args->single_args[idx].selection = selection;
--			final_selection = selection;
--		} else {
--			for (i = 0; expected_idxs[i] != REPORT_IDX_NULL; i++) {
--				if (idx == expected_idxs[i])
--					final_selection = selection;
--			}
--		}
-+		final_selection = selection;
- 	}
- 
--	if (ret_selection)
--		*ret_selection = final_selection;
-+	if (last_selection)
-+		*last_selection = final_selection;
- 
- 	return 1;
- }
-@@ -987,13 +983,13 @@ static int _get_report_selection(struct cmd_context *cmd,
- 				 struct report_args *args,
- 				 struct single_report_args *single_args)
- {
--	return _do_report_get_selection(cmd, args, single_args, NULL, NULL) ? ECMD_PROCESSED : ECMD_FAILED;
-+	return _do_report_get_selection(cmd, single_args->report_type, !(single_args->report_type & (CMDLOG | FULL)),
-+					args, NULL) ? ECMD_PROCESSED : ECMD_FAILED;
- }
- 
--int report_get_single_selection(struct cmd_context *cmd, const char **selection)
-+int report_get_single_selection(struct cmd_context *cmd, report_type_t report_type, const char **selection)
- {
--	report_idx_t expected_idxs[] = {REPORT_IDX_SINGLE, REPORT_IDX_NULL};
--	return _do_report_get_selection(cmd, NULL, NULL, expected_idxs, selection);
-+	return _do_report_get_selection(cmd, report_type, 1, NULL, selection);
- }
- 
- static int _set_report_prefix_and_name(struct report_args *args,
-@@ -1525,9 +1521,8 @@ bad:
- 
- int lastlog(struct cmd_context *cmd, int argc, char **argv)
- {
--	static report_idx_t expected_idxs[] = {REPORT_IDX_SINGLE, REPORT_IDX_LOG, REPORT_IDX_NULL};
- 	struct dm_report_group *report_group = NULL;
--	const char *selection = NULL;
-+	const char *selection;
- 	int r = ECMD_FAILED;
- 
- 	if (!cmd->log_rh) {
-@@ -1538,8 +1533,7 @@ int lastlog(struct cmd_context *cmd, int argc, char **argv)
- 	if (!report_format_init(cmd, NULL, &report_group, &cmd->log_rh, NULL, NULL))
- 		goto_out;
- 
--	if (arg_is_set(cmd, select_ARG) &&
--	    !_do_report_get_selection(cmd, NULL, NULL, expected_idxs, &selection))
-+	if (!_do_report_get_selection(cmd, CMDLOG, 1, NULL, &selection))
- 		goto_out;
- 
- 	if (!dm_report_set_selection(cmd->log_rh, selection)) {
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 80d0f32..4c24b16 100644
+index 7c9ff44..c8e1f61 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1771,7 +1771,7 @@ int init_selection_handle(struct cmd_context *cmd, struct processing_handle *han
- 		return 0;
+@@ -449,7 +449,7 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
+ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 			   const char *vgid,
+ 			   struct dm_list *tags, struct dm_list *arg_vgnames,
+-			   uint32_t lock_type, int consistent, void *handle,
++			   uint32_t lock_type, inconsistent_t repair_vg, void *handle,
+ 			   int ret_max,
+ 			   int (*process_single) (struct cmd_context * cmd,
+ 						  const char *vg_name,
+@@ -457,6 +457,7 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 						  int consistent, void *handle))
+ {
+ 	struct volume_group *vg;
++	int consistent = 0;
+ 	int ret = 0;
+ 
+ 	if (!lock_vol(cmd, vg_name, lock_type)) {
+@@ -472,31 +473,48 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
  	}
  
--	if (!report_get_single_selection(cmd, &selection))
-+	if (!report_get_single_selection(cmd, initial_report_type, &selection))
- 		return_0;
+ 	if (!vg_check_status(vg, CLUSTERED)) {
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-		return ECMD_FAILED;
++		ret_max = ECMD_FAILED;
++		goto out;
+ 	}
  
- 	sh->report_type = initial_report_type;
+ 	if (!dm_list_empty(tags)) {
+ 		/* Only process if a tag matches or it's on arg_vgnames */
+ 		if (!str_list_match_item(arg_vgnames, vg_name) &&
+-		    !str_list_match_list(tags, &vg->tags)) {
++		    !str_list_match_list(tags, &vg->tags))
++			goto out;
++	}
++
++	if (!consistent)
++		switch (repair_vg) {
++		case VG_INCONSISTENT_ABORT:
++			log_error("Volume group %s inconsistent - skipping", vg_name);
++			ret_max = ECMD_FAILED;
++			goto out;
++		case VG_INCONSISTENT_CONTINUE:
++			log_error("Volume group %s inconsistent", vg_name);
++			break;
++		case VG_INCONSISTENT_REPAIR:
+ 			unlock_and_release_vg(cmd, vg, vg_name);
+-			return ret_max;
++			dev_close_all();
++			log_error("Volume group %s inconsistent", vg_name);
++			if (!(vg = recover_vg(cmd, vg_name, LCK_VG_WRITE)))
++				return ECMD_FAILED;
++			consistent = 1;
++			break;
+ 		}
+-	}
+ 
+ 	if ((ret = process_single(cmd, vg_name, vg, consistent,
+ 				  handle)) > ret_max) {
+ 		ret_max = ret;
+ 	}
+ 
++out:
+ 	unlock_and_release_vg(cmd, vg, vg_name);
+-
+ 	return ret_max;
+ }
+ 
+ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+-		    uint32_t lock_type, int consistent, void *handle,
++		    uint32_t lock_type, inconsistent_t repair_vg, void *handle,
+ 		    int (*process_single) (struct cmd_context * cmd,
+ 					   const char *vg_name,
+ 					   struct volume_group * vg,
+@@ -563,7 +581,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 				continue;
+ 			ret_max = _process_one_vg(cmd, vg_name, vgid, &tags,
+ 						  &arg_vgnames,
+-					  	  lock_type, consistent, handle,
++					  	  lock_type, repair_vg, handle,
+ 					  	  ret_max, process_single);
+ 			if (sigint_caught())
+ 				return ret_max;
+@@ -575,7 +593,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 				continue;	/* FIXME Unnecessary? */
+ 			ret_max = _process_one_vg(cmd, vg_name, NULL, &tags,
+ 						  &arg_vgnames,
+-					  	  lock_type, consistent, handle,
++					  	  lock_type, repair_vg, handle,
+ 					  	  ret_max, process_single);
+ 			if (sigint_caught())
+ 				return ret_max;
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 09c58f7..cc09796 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -27,7 +27,7 @@ struct volume_group *recover_vg(struct cmd_context *cmd, const char *vgname,
+ 				uint32_t lock_type);
+ 
+ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+-		    uint32_t lock_type, int consistent, void *handle,
++		    uint32_t lock_type, inconsistent_t repair_vg, void *handle,
+ 		    int (*process_single) (struct cmd_context * cmd,
+ 					   const char *vg_name,
+ 					   struct volume_group * vg,
+diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
+index 7a67e6a..2d77e65 100644
+--- a/tools/vgcfgbackup.c
++++ b/tools/vgcfgbackup.c
+@@ -54,14 +54,6 @@ static int vg_backup_single(struct cmd_context *cmd, const char *vg_name,
+ 	char **last_filename = (char **)handle;
+ 	char *filename;
+ 
+-	if (!vg) {
+-		log_error("Volume group \"%s\" not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent)
+-		log_error("WARNING: Volume group \"%s\" inconsistent", vg_name);
+-
+ 	if (arg_count(cmd, file_ARG)) {
+ 		if (!(filename = _expand_filename(arg_value(cmd, file_ARG),
+ 						  vg->name, last_filename))) {
+@@ -98,8 +90,9 @@ int vgcfgbackup(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	init_pvmove(1);
+ 
+-	ret = process_each_vg(cmd, argc, argv, LCK_VG_READ, 0, &last_filename,
+-			      &vg_backup_single);
++	ret = process_each_vg(cmd, argc, argv, LCK_VG_READ,
++			      VG_INCONSISTENT_CONTINUE,
++			      &last_filename, &vg_backup_single);
+ 
+ 	dm_free(last_filename);
+ 
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 84cbf1a..9c5b05b 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -526,19 +526,6 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ {
+ 	int r = ECMD_FAILED;
+ 
+-	if (!vg) {
+-		log_error("Unable to find volume group \"%s\"", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent) {
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-		dev_close_all();
+-		log_error("Volume group \"%s\" inconsistent", vg_name);
+-		if (!(vg = recover_vg(cmd, vg_name, LCK_VG_WRITE)))
+-			return ECMD_FAILED;
+-	}
+-
+ 	if (!(vg_status(vg) & LVM_WRITE) && !arg_count(cmd, available_ARG)) {
+ 		log_error("Volume group \"%s\" is read-only", vg->name);
+ 		return ECMD_FAILED;
+@@ -633,6 +620,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	return process_each_vg(cmd, argc, argv,
+ 			       (arg_count(cmd, available_ARG)) ?
+-			       LCK_VG_READ : LCK_VG_WRITE, 0, NULL,
++			       LCK_VG_READ : LCK_VG_WRITE,
++			       VG_INCONSISTENT_REPAIR, NULL,
+ 			       &vgchange_single);
+ }
+diff --git a/tools/vgck.c b/tools/vgck.c
+index 9d5773c..977f447 100644
+--- a/tools/vgck.c
++++ b/tools/vgck.c
+@@ -21,16 +21,6 @@ static int vgck_single(struct cmd_context *cmd __attribute((unused)),
+ 		       struct volume_group *vg, int consistent,
+ 		       void *handle __attribute((unused)))
+ {
+-	if (!vg) {
+-		log_error("Volume group \"%s\" not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent) {
+-		log_error("Volume group \"%s\" inconsistent", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (!vg_check_status(vg, EXPORTED_VG))
+ 		return ECMD_FAILED;
+ 
+@@ -42,6 +32,7 @@ static int vgck_single(struct cmd_context *cmd __attribute((unused)),
+ 
+ int vgck(struct cmd_context *cmd, int argc, char **argv)
+ {
+-	return process_each_vg(cmd, argc, argv, LCK_VG_READ, 0, NULL,
++	return process_each_vg(cmd, argc, argv, LCK_VG_READ,
++			       VG_INCONSISTENT_ABORT, NULL,
+ 			       &vgck_single);
+ }
+diff --git a/tools/vgconvert.c b/tools/vgconvert.c
+index b37cf49..ec5032e 100644
+--- a/tools/vgconvert.c
++++ b/tools/vgconvert.c
+@@ -32,19 +32,6 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 	struct lvinfo info;
+ 	int active = 0;
+ 
+-	if (!vg) {
+-		log_error("Unable to find volume group \"%s\"", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent) {
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-		dev_close_all();
+-		log_error("Volume group \"%s\" inconsistent", vg_name);
+-		if (!(vg = recover_vg(cmd, vg_name, LCK_VG_WRITE)))
+-			return ECMD_FAILED;
+-	}
+-
+ 	if (!vg_check_status(vg, LVM_WRITE | EXPORTED_VG))
+ 		return ECMD_FAILED;
+ 
+@@ -233,6 +220,7 @@ int vgconvert(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE, 0, NULL,
++	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
++			       VG_INCONSISTENT_REPAIR, NULL,
+ 			       &vgconvert_single);
+ }
+diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
+index 02fdc19..de38d8b 100644
+--- a/tools/vgdisplay.c
++++ b/tools/vgdisplay.c
+@@ -20,13 +20,6 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
+ 			    void *handle __attribute((unused)))
+ {
+ 	/* FIXME Do the active check here if activevolumegroups_ARG ? */
+-	if (!vg) {
+-		log_error("Volume group \"%s\" doesn't exist", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent)
+-		log_error("WARNING: Volume group \"%s\" inconsistent", vg_name);
+ 
+ 	vg_check_status(vg, EXPORTED_VG);
+ 
+@@ -98,7 +91,8 @@ int vgdisplay(struct cmd_context *cmd, int argc, char **argv)
+ 	}
+ **********/
+ 
+-	return process_each_vg(cmd, argc, argv, LCK_VG_READ, 0, NULL,
++	return process_each_vg(cmd, argc, argv, LCK_VG_READ,
++			       VG_INCONSISTENT_CONTINUE, NULL,
+ 			       vgdisplay_single);
+ 
+ /******** FIXME Need to count number processed
+diff --git a/tools/vgexport.c b/tools/vgexport.c
+index 9b0734c..fce7e9f 100644
+--- a/tools/vgexport.c
++++ b/tools/vgexport.c
+@@ -23,16 +23,6 @@ static int vgexport_single(struct cmd_context *cmd __attribute((unused)),
+ 	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+ 
+-	if (!vg) {
+-		log_error("Unable to find volume group \"%s\"", vg_name);
+-		goto error;
+-	}
+-
+-	if (!consistent) {
+-		log_error("Volume group %s inconsistent", vg_name);
+-		goto error;
+-	}
+-
+ 	if (!vg_check_status(vg, EXPORTED_VG | LVM_WRITE)) {
+ 		goto error;
+ 	}
+@@ -78,6 +68,7 @@ int vgexport(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE, 1, NULL,
++	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
++			       VG_INCONSISTENT_ABORT, NULL,
+ 			       &vgexport_single);
+ }
+diff --git a/tools/vgimport.c b/tools/vgimport.c
+index 25ab035..2be2c2f 100644
+--- a/tools/vgimport.c
++++ b/tools/vgimport.c
+@@ -23,12 +23,6 @@ static int vgimport_single(struct cmd_context *cmd __attribute((unused)),
+ 	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+ 
+-	if (!vg || !consistent) {
+-		log_error("Unable to find exported volume group \"%s\"",
+-			  vg_name);
+-		goto error;
+-	}
+-
+ 	if (!(vg_status(vg) & EXPORTED_VG)) {
+ 		log_error("Volume group \"%s\" is not exported", vg_name);
+ 		goto error;
+@@ -74,6 +68,7 @@ int vgimport(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE, 1, NULL,
++	return process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
++			       VG_INCONSISTENT_ABORT, NULL,
+ 			       &vgimport_single);
+ }
+diff --git a/tools/vgremove.c b/tools/vgremove.c
+index 38f9ee3..e5ad15d 100644
+--- a/tools/vgremove.c
++++ b/tools/vgremove.c
+@@ -40,8 +40,10 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	ret = process_each_vg(cmd, argc, argv,
+-			      LCK_VG_WRITE, 1,
++	ret = process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
++			      arg_count(cmd, force_ARG) ?
++			      VG_INCONSISTENT_REPAIR :
++			      VG_INCONSISTENT_ABORT,
+ 			      NULL, &vgremove_single);
+ 
+ 	unlock_vg(cmd, VG_ORPHANS);
+diff --git a/tools/vgscan.c b/tools/vgscan.c
+index 3ac0d84..083cb5a 100644
+--- a/tools/vgscan.c
++++ b/tools/vgscan.c
+@@ -19,20 +19,6 @@ static int vgscan_single(struct cmd_context *cmd, const char *vg_name,
+ 			 struct volume_group *vg, int consistent,
+ 			 void *handle __attribute((unused)))
+ {
+-	if (!vg) {
+-		log_error("Volume group \"%s\" not found", vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!consistent) {
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-		dev_close_all();
+-		log_error("Volume group \"%s\" inconsistent", vg_name);
+-		/* Don't allow partial switch to this program */
+-		if (!(vg = recover_vg(cmd, vg_name, LCK_VG_WRITE)))
+-			return ECMD_FAILED;
+-	}
+-
+ 	log_print("Found %svolume group \"%s\" using metadata type %s",
+ 		  (vg_status(vg) & EXPORTED_VG) ? "exported " : "", vg_name,
+ 		  vg->fid->fmt->name);
+@@ -61,7 +47,8 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	log_print("Reading all physical volumes.  This may take a while...");
+ 
+-	maxret = process_each_vg(cmd, argc, argv, LCK_VG_READ, 0, NULL,
++	maxret = process_each_vg(cmd, argc, argv, LCK_VG_READ,
++				 VG_INCONSISTENT_REPAIR, NULL,
+ 				 &vgscan_single);
+ 
+ 	if (arg_count(cmd, mknodes_ARG)) {
+
 
 
