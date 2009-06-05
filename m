@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 4 Jun 2009 13:23:10 -0000
-Subject: LVM2 WHATS_NEW_DM
-Message-ID: <20090604132310.27036.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 5 Jun 2009 10:42:23 -0000
+Subject: LVM2/test t-vgrename-usage.sh
+Message-ID: <20090605104223.31652.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-06-04 13:23:10
+Changes by:	wysochanski at sourceware.org	2009-06-05 10:42:22
 
 Modified files:
-	.              : WHATS_NEW_DM 
+	test           : t-vgrename-usage.sh 
 
 Log message:
-	test commit
+	Add vgrename test to check for existence of new vg.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.274&r2=1.275
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgrename-usage.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/WHATS_NEW_DM	2009/06/04 13:16:49	1.274
-+++ LVM2/WHATS_NEW_DM	2009/06/04 13:23:10	1.275
-@@ -1,4 +1,4 @@
--Version 1.02.33 -   
-+Version 1.02.33 -    
- ===============================
-   Add splitname command to dmsetup.
-   Add subsystem, vg_name, lv_name, lv_layer fields to dmsetup reports.
+--- LVM2/test/t-vgrename-usage.sh	2008/09/29 16:02:50	1.3
++++ LVM2/test/t-vgrename-usage.sh	2009/06/05 10:42:22	1.4
+@@ -27,3 +27,11 @@
+ vgrename $UUID $vg2
+ check_vg_field_ $vg2 vg_name $vg2
+ vgremove $vg2
++
++# vgrename fails - new vg already exists
++vgcreate $vg1 $dev1
++vgcreate $vg2 $dev2
++not vgrename $vg1 $vg2
++vgremove $vg1
++vgremove $vg2
++
 
 
