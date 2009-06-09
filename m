@@ -1,24 +1,22 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue,  9 Jun 2009 00:42:12 -0400
+Date: Tue,  9 Jun 2009 00:42:13 -0400
 Subject: [PATCH 0/3] LVM2 topology support
-Message-ID: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
+In-Reply-To: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
+References: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
+Message-ID: <1244522536-2132-2-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-LVM2 topology support to properly align the PV's pe_start using the
-associated 'alignment_offset' exposed in sysfs.
-
-Provides manual configuration with pvcreate --dataalignmentoffset and
-auto config control via 'devices/data_alignment_offset_detection' in
-lvm.conf
+pvcreate --dataalignmentoffset support and configuration via
+devices/data_alignment_offset_detection.
 
 Documentation was added to the lvm.conf and pvcreate man pages.
 
 Testing with pvcreate + vgextend + vgreduce + vgextend + vgreduce ...
-proved to maintain the pe_start from the initial pvcreate.
+proved to maintain the pe_start from the original pvcreate.
 
 Mike Snitzer (3):
   cmdline: support for bytes and sectors
