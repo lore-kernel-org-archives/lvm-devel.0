@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Jun 2009 14:29:12 -0000
-Subject: LVM2/lib/metadata metadata-exported.h metadata.c
-Message-ID: <20090609142912.6297.qmail@sourceware.org>
+Date: 9 Jun 2009 14:30:17 -0000
+Subject: LVM2/tools vgrename.c
+Message-ID: <20090609143017.6822.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,112 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-06-09 14:29:11
+Changes by:	wysochanski at sourceware.org	2009-06-09 14:30:16
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
+	tools          : vgrename.c 
 
 Log message:
-	Add vg_lock_newname() library function.
-	
-	Various tools need to check for existence of a VG before doing something
-	(vgsplit, vgrename, vgcreate).  Currently we don't have an interface to
-	check for existence, but the existence check is part of the vg_read* call(s).
-	This patch is an attempt to pull out some of that functionality into a
-	separate function, and hopefully simplify our vg_read interface, and
-	move those patches along.
-	
-	vg_lock_newname() is only concerned about checking whether a vg exists in
-	the system.  Unfortunately, we cannot just scan the system, but we must first
-	obtain a lock.  Since we are reserving a vgname, we take a WRITE lock on
-	the vgname.  Once obtained, we scan the system to ensure the name does
-	not exist.  The return codes and behavior is in the function header.
-	You might think of this function as similar to an open() call with
-	O_CREAT and O_EXCL flags (returns failure with -EEXIST if file already
-	exists).
-	
-	NOTE: I think including the word "lock" in the function name is important,
-	as it clearly states the function obtains a lock and makes the code more
-	readable, especially when it comes to cleanup / unlocking.  The ultimate
-	function name is somewhat open for debate though so later we may rename.
+	Update vgrename to use vg_lock_newname.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.76&r2=1.77
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.224&r2=1.225
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgrename.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
 
---- LVM2/lib/metadata/metadata-exported.h	2009/06/05 20:00:52	1.76
-+++ LVM2/lib/metadata/metadata-exported.h	2009/06/09 14:29:10	1.77
-@@ -127,6 +127,8 @@
- #define FAILED_RESIZEABLE	0x00000020U
- #define FAILED_CLUSTERED	0x00000040U
- #define FAILED_ALLOCATION	0x00000080U
-+#define FAILED_EXIST		0x00000100U
-+#define SUCCESS			0x00000000U
+--- LVM2/tools/vgrename.c	2009/05/21 03:04:54	1.62
++++ LVM2/tools/vgrename.c	2009/06/09 14:30:16	1.63
+@@ -28,7 +28,8 @@
+ 	char *vg_name_new;
+ 	const char *vgid = NULL, *vg_name, *vg_name_old;
+ 	char old_path[NAME_LEN], new_path[NAME_LEN];
+-	struct volume_group *vg = NULL, *vg_new = NULL;
++	struct volume_group *vg = NULL;
++	uint32_t rc;
  
- /* Ordered list - see lv_manip.c */
- typedef enum {
-@@ -401,6 +403,7 @@
- 		       const char *vgid,
- 		       uint32_t lock_flags, uint32_t status_flags,
- 		       uint32_t misc_flags);
-+uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
+ 	vg_name_old = skip_dev_dir(cmd, old_vg_path, NULL);
+ 	vg_name_new = skip_dev_dir(cmd, new_vg_path, NULL);
+@@ -100,17 +101,19 @@
  
- /*
-  * Return a handle to VG metadata.
---- LVM2/lib/metadata/metadata.c	2009/06/01 12:43:32	1.224
-+++ LVM2/lib/metadata/metadata.c	2009/06/09 14:29:10	1.225
-@@ -2909,6 +2909,52 @@
+ 	log_verbose("Checking for new volume group \"%s\"", vg_name_new);
+ 
+-	if (!lock_vol(cmd, vg_name_new, LCK_VG_WRITE)) {
++	rc = vg_lock_newname(cmd, vg_name_new);
++
++	if (rc == FAILED_LOCKING) {
+ 		unlock_and_release_vg(cmd, vg, vg_name_old);
+ 		log_error("Can't get lock for %s", vg_name_new);
+ 		return 0;
+ 	}
+ 
+-	consistent = 0;
+-	if ((vg_new = vg_read_internal(cmd, vg_name_new, NULL, &consistent))) {
++	if (rc == FAILED_EXIST) {
+ 		log_error("New volume group \"%s\" already exists",
+ 			  vg_name_new);
+-		goto error;
++		unlock_and_release_vg(cmd, vg, vg_name_old);
++		return 0;
+ 	}
+ 
+ 	if (!archive(vg))
+@@ -151,7 +154,7 @@
+ 	backup(vg);
+ 	backup_remove(cmd, vg_name_old);
+ 
+-	unlock_and_release_vg(cmd, vg_new, vg_name_new);
++	unlock_vg(cmd, vg_name_new);
+ 	unlock_and_release_vg(cmd, vg, vg_name_old);
+ 
+ 	log_print("Volume group \"%s\" successfully renamed to \"%s\"",
+@@ -164,7 +167,7 @@
+ 	return 1;
+ 
+       error:
+-	unlock_and_release_vg(cmd, vg_new, vg_name_new);
++	unlock_vg(cmd, vg_name_new);
+ 	unlock_and_release_vg(cmd, vg, vg_name_old);
+ 	return 0;
  }
- 
- /*
-+ * Lock a vgname and/or check for existence.
-+ * Takes a WRITE lock on the vgname before scanning.
-+ * If scanning fails or vgname found, release the lock.
-+ * NOTE: If you find the return codes confusing, you might think of this
-+ * function as similar to an open() call with O_CREAT and O_EXCL flags
-+ * (open returns fail with -EEXIST if file already exists).
-+ *
-+ * Returns:
-+ * FAILED_LOCKING - Cannot lock name
-+ * FAILED_EXIST - VG name already exists - cannot reserve
-+ * SUCCESS - VG name does not exist in system and WRITE lock held
-+ */
-+uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname)
-+{
-+	if (!lock_vol(cmd, vgname, LCK_VG_WRITE)) {
-+		return FAILED_LOCKING;
-+	}
-+
-+	/* Find the vgname in the cache */
-+	/* If it's not there we must do full scan to be completely sure */
-+	if (!fmt_from_vgname(vgname, NULL)) {
-+		lvmcache_label_scan(cmd, 0);
-+		if (!fmt_from_vgname(vgname, NULL)) {
-+			if (memlock()) {
-+				/*
-+				 * FIXME: Disallow calling this function if
-+				 * memlock() is true.
-+				 */
-+				unlock_vg(cmd, vgname);
-+				return FAILED_LOCKING;
-+			}
-+			lvmcache_label_scan(cmd, 2);
-+			if (!fmt_from_vgname(vgname, NULL)) {
-+				/* vgname not found after scanning */
-+				return SUCCESS;
-+			}
-+		}
-+	}
-+
-+	/* Found vgname, cannot reserve */
-+	unlock_vg(cmd, vgname);
-+	return FAILED_EXIST;
-+}
-+
-+
-+/*
-  * Gets/Sets for external LVM library
-  */
- struct id pv_id(const pv_t *pv)
 
 
