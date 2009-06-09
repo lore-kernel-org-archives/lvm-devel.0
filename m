@@ -1,200 +1,121 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue,  9 Jun 2009 00:42:16 -0400
-Subject: [PATCH 3/3] Add devices/data_alignment_offset_detection to lvm.conf.
-In-Reply-To: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
-References: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1244522536-2132-5-git-send-email-snitzer@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 9 Jun 2009 14:29:12 -0000
+Subject: LVM2/lib/metadata metadata-exported.h metadata.c
+Message-ID: <20090609142912.6297.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the pvcreate --dataalignmentoffset option is not specified the offset
-of the start of a PV's aligned data area will be padded with the
-associated 'alignment_offset' exposed in sysfs (unless
-devices/data_alignment_offset_detection is disabled in lvm.conf).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-06-09 14:29:11
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- WHATS_NEW                     |    1 +
- doc/example.conf              |    5 +++
- lib/config/defaults.h         |    1 +
- lib/device/device.c           |   60 +++++++++++++++++++++++++++++++++++++++++
- lib/device/device.h           |    3 ++
- lib/format_text/format-text.c |    9 ++++++
- man/lvm.conf.5.in             |    8 +++++-
- 7 files changed, 86 insertions(+), 1 deletions(-)
+Modified files:
+	lib/metadata   : metadata-exported.h metadata.c 
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index aff0f04..a2e3d7f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.48 - 
- ===============================
-+  Add devices/data_alignment_offset_detection to lvm.conf.
-   Implement pvcreate --dataalignmentoffset to pad offset of pe_start.
-   Allow specifying commandline sizes in terms of bytes and sectors.
-   Round up requested readahead to at least one page and print warning.
-diff --git a/doc/example.conf b/doc/example.conf
-index 73f17c2..864bf65 100644
---- a/doc/example.conf
-+++ b/doc/example.conf
-@@ -104,6 +104,11 @@ devices {
-     # Set to 0 for the default alignment of 64KB or page size, if larger.
-     data_alignment = 0
+Log message:
+	Add vg_lock_newname() library function.
+	
+	Various tools need to check for existence of a VG before doing something
+	(vgsplit, vgrename, vgcreate).  Currently we don't have an interface to
+	check for existence, but the existence check is part of the vg_read* call(s).
+	This patch is an attempt to pull out some of that functionality into a
+	separate function, and hopefully simplify our vg_read interface, and
+	move those patches along.
+	
+	vg_lock_newname() is only concerned about checking whether a vg exists in
+	the system.  Unfortunately, we cannot just scan the system, but we must first
+	obtain a lock.  Since we are reserving a vgname, we take a WRITE lock on
+	the vgname.  Once obtained, we scan the system to ensure the name does
+	not exist.  The return codes and behavior is in the function header.
+	You might think of this function as similar to an open() call with
+	O_CREAT and O_EXCL flags (returns failure with -EEXIST if file already
+	exists).
+	
+	NOTE: I think including the word "lock" in the function name is important,
+	as it clearly states the function obtains a lock and makes the code more
+	readable, especially when it comes to cleanup / unlocking.  The ultimate
+	function name is somewhat open for debate though so later we may rename.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.76&r2=1.77
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.224&r2=1.225
+
+--- LVM2/lib/metadata/metadata-exported.h	2009/06/05 20:00:52	1.76
++++ LVM2/lib/metadata/metadata-exported.h	2009/06/09 14:29:10	1.77
+@@ -127,6 +127,8 @@
+ #define FAILED_RESIZEABLE	0x00000020U
+ #define FAILED_CLUSTERED	0x00000040U
+ #define FAILED_ALLOCATION	0x00000080U
++#define FAILED_EXIST		0x00000100U
++#define SUCCESS			0x00000000U
  
-+    # By default, the offset of the start of a PV's aligned data area
-+    # will be padded with the 'alignment_offset' exposed in sysfs.
-+    # 1 enables; 0 disables.
-+    data_alignment_offset_detection = 1
-+
-     # If, while scanning the system for PVs, LVM2 encounters a device-mapper
-     # device that has its I/O suspended, it waits for it to become accessible.
-     # Set this to 1 to skip such devices.  This should only be needed
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 98c023a..4433ee4 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -34,6 +34,7 @@
- #define DEFAULT_MD_COMPONENT_DETECTION 1
- #define DEFAULT_MD_CHUNK_ALIGNMENT 1
- #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
-+#define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
+ /* Ordered list - see lv_manip.c */
+ typedef enum {
+@@ -401,6 +403,7 @@
+ 		       const char *vgid,
+ 		       uint32_t lock_flags, uint32_t status_flags,
+ 		       uint32_t misc_flags);
++uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
  
- #define DEFAULT_LOCK_DIR "/var/lock/lvm"
- #define DEFAULT_LOCKING_LIB "liblvm2clusterlock.so"
-diff --git a/lib/device/device.c b/lib/device/device.c
-index 9d3c1cf..fa08568 100644
---- a/lib/device/device.c
-+++ b/lib/device/device.c
-@@ -278,3 +278,63 @@ int _get_partition_type(struct dev_mgr *dm, struct device *d)
- 	return 0;
+ /*
+  * Return a handle to VG metadata.
+--- LVM2/lib/metadata/metadata.c	2009/06/01 12:43:32	1.224
++++ LVM2/lib/metadata/metadata.c	2009/06/09 14:29:10	1.225
+@@ -2909,6 +2909,52 @@
  }
- #endif
-+
-+#ifdef linux
-+
-+unsigned long dev_data_alignment_offset(const char *sysfs_dir,
-+					struct device *dev)
+ 
+ /*
++ * Lock a vgname and/or check for existence.
++ * Takes a WRITE lock on the vgname before scanning.
++ * If scanning fails or vgname found, release the lock.
++ * NOTE: If you find the return codes confusing, you might think of this
++ * function as similar to an open() call with O_CREAT and O_EXCL flags
++ * (open returns fail with -EEXIST if file already exists).
++ *
++ * Returns:
++ * FAILED_LOCKING - Cannot lock name
++ * FAILED_EXIST - VG name already exists - cannot reserve
++ * SUCCESS - VG name does not exist in system and WRITE lock held
++ */
++uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname)
 +{
-+	char path[PATH_MAX+1], buffer[64];
-+	FILE *fp;
-+	struct stat info;
-+	unsigned long data_alignment_offset = 0UL;
-+
-+	if (!sysfs_dir || !*sysfs_dir)
-+		return_0;
-+
-+	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/alignment_offset",
-+			sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev)) < 0) {
-+		log_error("dm_snprintf alignment_offset failed");
-+		return 0;
++	if (!lock_vol(cmd, vgname, LCK_VG_WRITE)) {
++		return FAILED_LOCKING;
 +	}
 +
-+	/* old sysfs structure not applicable (topology support is newer) */
-+
-+	if (stat(path, &info) < 0)
-+		return 0;
-+
-+	if (!(fp = fopen(path, "r"))) {
-+		log_sys_error("fopen", path);
-+		return 0;
-+	}
-+
-+	if (!fgets(buffer, sizeof(buffer), fp)) {
-+		log_sys_error("fgets", path);
-+		goto out;
-+	}
-+
-+	if (sscanf(buffer, "%lu", &data_alignment_offset) != 1) {
-+		log_error("sysfs file %s not in expected format: %s", path,
-+			  buffer);
-+		goto out;
-+	}
-+
-+	log_very_verbose("Device %s data_alignment is %lu bytes.",
-+			 dev_name(dev), data_alignment_offset);
-+
-+out:
-+	if (fclose(fp))
-+		log_sys_error("fclose", path);
-+
-+	return data_alignment_offset >> SECTOR_SHIFT;
-+}
-+
-+#else
-+
-+unsigned long dev_data_alignment_offset(const char *sysfs_dir,
-+					struct device *dev)
-+{
-+	return 0UL;
-+}
-+
-+#endif
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 94f17b4..25ac0d5 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -100,4 +100,7 @@ unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev);
- 
- int is_partitioned_dev(struct device *dev);
- 
-+unsigned long dev_data_alignment_offset(const char *sysfs_dir,
-+					struct device *dev);
-+
- #endif
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index a0fe852..f7b87ac 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -29,6 +29,7 @@
- #include "label.h"
- #include "memlock.h"
- #include "lvmcache.h"
-+#include "defaults.h"
- 
- #include <unistd.h>
- #include <sys/file.h>
-@@ -1720,6 +1721,14 @@ static int _text_pv_setup(const struct format_type *fmt,
- 				 "%lu sectors (requested %lu sectors)",
- 				 pv_dev_name(pv), pv->pe_align, data_alignment);
- 
-+		if (!pe_start && !data_alignment_offset &&
-+		    find_config_tree_bool(pv->fmt->cmd,
-+					  "devices/data_alignment_offset_detection",
-+					  DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION)) {
-+			data_alignment_offset =
-+				dev_data_alignment_offset(pv->fmt->cmd->sysfs_dir, pv->dev);
++	/* Find the vgname in the cache */
++	/* If it's not there we must do full scan to be completely sure */
++	if (!fmt_from_vgname(vgname, NULL)) {
++		lvmcache_label_scan(cmd, 0);
++		if (!fmt_from_vgname(vgname, NULL)) {
++			if (memlock()) {
++				/*
++				 * FIXME: Disallow calling this function if
++				 * memlock() is true.
++				 */
++				unlock_vg(cmd, vgname);
++				return FAILED_LOCKING;
++			}
++			lvmcache_label_scan(cmd, 2);
++			if (!fmt_from_vgname(vgname, NULL)) {
++				/* vgname not found after scanning */
++				return SUCCESS;
++			}
 +		}
++	}
 +
- 		if (pv->pe_start < pv->pe_align)
- 			pv->pe_start = pv->pe_align;
- 
-diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index 68024b6..40ce390 100644
---- a/man/lvm.conf.5.in
-+++ b/man/lvm.conf.5.in
-@@ -142,10 +142,16 @@ when creating a new Physical Volume using the \fBlvm2\fP format.
- If a Physical Volume is placed directly upon an md device and
- \fBmd_chunk_alignment\fP is enabled this parameter is ignored.
- Set to 0 to use the default alignment of 64KB or the page size, if larger.
-+.IP
-+\fBdata_alignment_offset_detection\fP \(em If set to 1, the offset to
-+the start of a PV's aligned data area will be set to the
-+alignment_offset exposed in sysfs.
- .sp
- To see the location of the first Physical Extent of an existing Physical Volume
- use \fBpvs -o +pe_start\fP .  It will be a multiple of the requested
--\fBdata_alignment\fP.
-+\fBdata_alignment\fP plus the alignment_offset from
-+\fBdata_alignment_offset_detection\fP (if enabled) or the pvcreate
-+commandline.
- .TP
- \fBlog\fP \(em Default log settings
- .IP
--- 
-1.6.2.2
++	/* Found vgname, cannot reserve */
++	unlock_vg(cmd, vgname);
++	return FAILED_EXIST;
++}
++
++
++/*
+  * Gets/Sets for external LVM library
+  */
+ struct id pv_id(const pv_t *pv)
 
 
