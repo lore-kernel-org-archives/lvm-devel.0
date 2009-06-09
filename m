@@ -1,24 +1,49 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 8 Jun 2009 23:58:38 +0100
-Subject: LinuxTag, Berlin - June 24th to 27th 2009
-Message-ID: <20090608225838.GJ647@agk-dp.fab.redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Tue,  9 Jun 2009 00:42:12 -0400
+Subject: [PATCH 0/3] LVM2 topology support
+Message-ID: <1244522536-2132-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Several members of the Red Hat device-mapper/LVM development team will
-be attending LinuxTag in Berlin in a couple of weeks for wide-ranging
-technical discussions about all aspects of the project.
+LVM2 topology support to properly align the PV's pe_start using the
+associated 'alignment_offset' exposed in sysfs.
 
-As ever, other developers who'll be present in Berlin are welcome to
-join us: please drop me a line, indicating when you'll be there (Tuesday
-to Sunday) and your topics of interest (if I don't already know) and
-I'll endeavour to take this into account when drawing up our timetable.
+Provides manual configuration with pvcreate --dataalignmentoffset and
+auto config control via 'devices/data_alignment_offset_detection' in
+lvm.conf
 
-  http://www.linuxtag.org/2009/en.html
+Documentation was added to the lvm.conf and pvcreate man pages.
 
-Alasdair
+Testing with pvcreate + vgextend + vgreduce + vgextend + vgreduce ...
+proved to maintain the pe_start from the initial pvcreate.
+
+Mike Snitzer (3):
+  cmdline: support for bytes and sectors
+  pvcreate: --dataalignmentoffset
+  Add devices/data_alignment_offset_detection to lvm.conf.
+
+ WHATS_NEW                        |    3 ++
+ doc/example.conf                 |    5 +++
+ lib/config/defaults.h            |    1 +
+ lib/device/device.c              |   60 ++++++++++++++++++++++++++++++++++++++
+ lib/device/device.h              |    3 ++
+ lib/format1/format1.c            |    1 +
+ lib/format_pool/format_pool.c    |    1 +
+ lib/format_text/archiver.c       |    2 +-
+ lib/format_text/format-text.c    |   33 +++++++++++++++++++--
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   10 +++++-
+ lib/metadata/metadata.h          |    1 +
+ man/lvm.conf.5.in                |    8 ++++-
+ man/pvcreate.8.in                |   18 ++++++++++-
+ tools/args.h                     |    1 +
+ tools/commands.h                 |   33 +++++++++++----------
+ tools/lvmcmdline.c               |   20 +++++++++----
+ tools/pvcreate.c                 |   23 +++++++++++++-
+ tools/vgconvert.c                |    2 +-
+ 19 files changed, 192 insertions(+), 34 deletions(-)
 
 
