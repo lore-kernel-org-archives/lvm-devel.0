@@ -1,35 +1,22 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 10 Jun 2009 07:45:58 +0200
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 10 Jun 2009 11:35:47 +0200
 Subject: [PATCH] Complain when lvconvert --repair is used on non-mirror LV.
-Message-ID: <87ski8myjt.fsf@mornfall.net>
+In-Reply-To: <87ski8myjt.fsf@mornfall.net>
+References: <87ski8myjt.fsf@mornfall.net>
+Message-ID: <4A2F7E73.4050307@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Petr Rockai wrote:
+> just a trivial patch to make things clear when people mistakenly run lvconvert
+> --repair on a non-mirrored LV (otherwise, this would succeed silently doing
+> nothing).
 
-just a trivial patch to make things clear when people mistakenly run lvconvert
---repair on a non-mirrored LV (otherwise, this would succeed silently doing
-nothing).
+ack.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvconvert-repair-nonmirror.diff
-Type: text/x-diff
-Size: 603 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090610/4cb4c54f/attachment.bin>
--------------- next part --------------
+Milan
 
-Yours,
-   Petr.
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
-
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
