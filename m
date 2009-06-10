@@ -1,35 +1,62 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 10 Jun 2009 21:51:26 +0200
-Subject: [PATCH] Allow metadata correction even when PVs are missing
-In-Reply-To: <87ab4gm2h5.fsf@mornfall.net> (Petr Rockai's message of "Wed, 10
-	Jun 2009 19:18:46 +0200")
-References: <4A2FCBB7.5000203@redhat.com> <87ab4gm2h5.fsf@mornfall.net>
-Message-ID: <87y6rzlvep.fsf@mornfall.net>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 10 Jun 2009 20:17:34 -0000
+Subject: LVM2 lib/metadata/metadata.c test/t-unlost-pv.sh
+Message-ID: <20090610201734.2506.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Same patch, with a test added (who would have guessed that the testsuite
-already had a test for this, just disabled since it was broken?)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-06-10 20:17:33
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: recovery-partial.diff
-Type: text/x-diff
-Size: 1484 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090610/5877b929/attachment.bin>
--------------- next part --------------
+Modified files:
+	lib/metadata   : metadata.c 
+	test           : t-unlost-pv.sh 
 
-Yours,
-   Petr.
+Log message:
+	Allow metadata correction even when PVs are missing.
 
--- 
-Peter Rockai | me()mornfall!net | prockai()redhat!com
- http://blog.mornfall.net | http://web.mornfall.net
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.226&r2=1.227
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-unlost-pv.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
-"In My Egotistical Opinion, most people's C programs should be
- indented six feet downward and covered with dirt."
-     -- Blair P. Houghton on the subject of C program indentation
+--- LVM2/lib/metadata/metadata.c	2009/06/10 16:14:40	1.226
++++ LVM2/lib/metadata/metadata.c	2009/06/10 20:17:32	1.227
+@@ -1835,6 +1835,7 @@
+ 	int inconsistent_vgid = 0;
+ 	int inconsistent_pvs = 0;
+ 	unsigned use_precommitted = precommitted;
++	unsigned saved_handles_missing_pvs = cmd->handles_missing_pvs;
+ 	struct dm_list *pvids;
+ 	struct pv_list *pvl, *pvl2;
+ 	struct dm_list all_pvs;
+@@ -2076,11 +2077,14 @@
+ 		log_warn("WARNING: Inconsistent metadata found for VG %s - updating "
+ 			 "to use version %u", vgname, correct_vg->seqno);
+ 
++		cmd->handles_missing_pvs = 1;
+ 		if (!vg_write(correct_vg)) {
+ 			log_error("Automatic metadata correction failed");
+ 			vg_release(correct_vg);
++			cmd->handles_missing_pvs = saved_handles_missing_pvs;
+ 			return NULL;
+ 		}
++		cmd->handles_missing_pvs = saved_handles_missing_pvs;
+ 
+ 		if (!vg_commit(correct_vg)) {
+ 			log_error("Automatic metadata correction commit "
+--- LVM2/test/t-unlost-pv.sh	2008/11/10 12:43:35	1.2
++++ LVM2/test/t-unlost-pv.sh	2009/06/10 20:17:33	1.3
+@@ -29,7 +29,6 @@
+ enable_dev $dev1
+ check
+ 
+-exit 0 # FIXME, bug demonstration code follows
+ # try to just change metadata; we expect the new version (with MISSING_PV set
+ # on the reappeared volume) to be written out to the previously missing PV
+ vgextend $vg $dev1
+
+
