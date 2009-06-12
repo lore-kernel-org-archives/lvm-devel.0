@@ -1,99 +1,127 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 15 Jun 2009 15:29:23 -0400
-Subject: [PATCH] Add --repair option to vgck.
-Message-ID: <1245094163-13196-1-git-send-email-dwysocha@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 12 Jun 2009 08:30:20 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c ...
+Message-ID: <20090612083020.20443.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Repair option will correct inconsistent metadata.  We could add other
-correction options but for now it suffices that vgck has the ability
-to actually correct some inconsistencies rather than just checking
-for them.  Also add an output line for each vg that checks out
-successfully.  This gives the user feedback on what precisely was
-checked and is known to be correct.
-Partially addresses rhbz:
-https://bugzilla.redhat.com/show_bug.cgi?id=248191
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-06-12 08:30:19
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- man/vgck.8.in    |    7 ++++++-
- tools/commands.h |    4 +++-
- tools/vgck.c     |   17 ++++++++++++++---
- 3 files changed, 23 insertions(+), 5 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : lvm-functions.c 
+	lib/locking    : cluster_locking.c locking.h 
 
-diff --git a/man/vgck.8.in b/man/vgck.8.in
-index 2e5d926..0822cb8 100644
---- a/man/vgck.8.in
-+++ b/man/vgck.8.in
-@@ -3,10 +3,15 @@
- vgck \- check volume group metadata
- .SH SYNOPSIS
- .B vgck
--[\-d|\-\-debug] [\-h|\-?|\-\-help] [\-v|\-\-verbose] [VolumeGroupName...]
-+[\-d|\-\-debug] [\-h|\-?|\-\-help] [\-\-repair] [\-v|\-\-verbose] [VolumeGroupName...]
- .SH DESCRIPTION
- vgck checks LVM metadata for each named volume group for consistency.
- .SH OPTIONS
-+.TP
-+.I \-\-repair
-+Attempt to repair the volume group metadata if inconsistency found.
-+.br
-+.TP
- See \fBlvm\fP for common options.
- .SH SEE ALSO
- .BR lvm (8),
-diff --git a/tools/commands.h b/tools/commands.h
-index ee39bf9..9664ef2 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -698,9 +698,11 @@ xx(vgck,
-    "vgck "
-    "\t[-d|--debug]\n"
-    "\t[-h|--help]\n"
-+   "\t[--repair]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]" "\n"
--   "\t[VolumeGroupName...]\n" )
-+   "\t[VolumeGroupName...]\n",
-+   repair_ARG)
- 
- xx(vgconvert,
-    "Change volume group metadata format",
-diff --git a/tools/vgck.c b/tools/vgck.c
-index 977f447..266c800 100644
---- a/tools/vgck.c
-+++ b/tools/vgck.c
-@@ -27,12 +27,23 @@ static int vgck_single(struct cmd_context *cmd __attribute((unused)),
- 	if (!vg_validate(vg))
- 		return ECMD_FAILED;
- 
-+	log_print("No problems found with metadata on volume group %s\n",
-+		  vg_name);
- 	return ECMD_PROCESSED;
- }
- 
- int vgck(struct cmd_context *cmd, int argc, char **argv)
+Log message:
+	Re-instate partial activation support in clustered mode. (mornfall)
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1145&r2=1.1146
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+
+--- LVM2/WHATS_NEW	2009/06/09 15:31:36	1.1145
++++ LVM2/WHATS_NEW	2009/06/12 08:30:19	1.1146
+@@ -1,5 +1,6 @@
+ Version 2.02.48 - 
+ ===============================
++  Re-instate partial activation support in clustered mode. (2.02.40)
+   Use 'lvm lvresize' instead of 'lvresize' in fsadm.
+   Do not use '-n' realine option in fsadm for busybox compatiblity.
+   Update vgrename, vgsplit, and vgcreate to use vg_lock_newname.
+--- LVM2/daemons/clvmd/lvm-functions.c	2009/05/19 10:39:00	1.61
++++ LVM2/daemons/clvmd/lvm-functions.c	2009/06/12 08:30:19	1.62
+@@ -145,7 +145,8 @@
  {
--	return process_each_vg(cmd, argc, argv, LCK_VG_READ,
--			       VG_INCONSISTENT_ABORT, NULL,
--			       &vgck_single);
-+	int repair = arg_count(cmd, repair_ARG);
+ 	static char buf[128];
+ 
+-	sprintf(buf, "0x%x (%s%s)", flags,
++	sprintf(buf, "0x%x (%s%s%s)", flags,
++		flags & LCK_PARTIAL_MODE	  ? "PARTIAL_MODE " : "",
+ 		flags & LCK_MIRROR_NOSYNC_MODE	  ? "MIRROR_NOSYNC " : "",
+ 		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR " : "");
+ 
+@@ -478,6 +479,8 @@
+ 	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
+ 		init_dmeventd_monitor(0);
+ 
++	cmd->partial_activation = (lock_flags & LCK_PARTIAL_MODE) ? 1 : 0;
 +
-+	if (repair) {
-+		cmd->handles_missing_pvs = 1;
-+		return process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
-+				       VG_INCONSISTENT_REPAIR, NULL,
-+				       &vgck_single);
-+	}
-+	else
-+		return process_each_vg(cmd, argc, argv, LCK_VG_READ,
-+				       VG_INCONSISTENT_ABORT, NULL,
-+				       &vgck_single);
+ 	switch (command) {
+ 	case LCK_LV_EXCLUSIVE:
+ 		status = do_activate_lv(resource, lock_flags, LKM_EXMODE);
+@@ -516,6 +519,8 @@
+ 	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
+ 		init_dmeventd_monitor(DEFAULT_DMEVENTD_MONITOR);
+ 
++	cmd->partial_activation = 0;
++
+ 	/* clean the pool for another command */
+ 	dm_pool_empty(cmd->mem);
+ 	pthread_mutex_unlock(&lvm_lock);
+--- LVM2/lib/locking/cluster_locking.c	2009/05/21 03:04:53	1.35
++++ LVM2/lib/locking/cluster_locking.c	2009/06/12 08:30:19	1.36
+@@ -24,6 +24,7 @@
+ #include "lvm-string.h"
+ #include "locking.h"
+ #include "locking_types.h"
++#include "toolcontext.h"
+ 
+ #include <assert.h>
+ #include <stddef.h>
+@@ -298,7 +299,8 @@
+ 	return 1;
  }
--- 
-1.6.0.6
+ 
+-static int _lock_for_cluster(unsigned char clvmd_cmd, uint32_t flags, const char *name)
++static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
++			     uint32_t flags, const char *name)
+ {
+ 	int status;
+ 	int i;
+@@ -324,6 +326,9 @@
+ 	if (dmeventd_monitor_mode())
+ 		args[1] |= LCK_DMEVENTD_MONITOR_MODE;
+ 
++	if (cmd->partial_activation)
++		args[1] |= LCK_PARTIAL_MODE;
++
+ 	/*
+ 	 * VG locks are just that: locks, and have no side effects
+ 	 * so we only need to do them on the local node because all
+@@ -389,7 +394,7 @@
+ 		if (flags == LCK_VG_BACKUP) {
+ 			log_very_verbose("Requesting backup of VG metadata for %s",
+ 					 resource);
+-			return _lock_for_cluster(CLVMD_CMD_VG_BACKUP,
++			return _lock_for_cluster(cmd, CLVMD_CMD_VG_BACKUP,
+ 						 LCK_CLUSTER_VG, resource);
+ 		}
+ 
+@@ -453,7 +458,7 @@
+ 			 flags);
+ 
+ 	/* Send a message to the cluster manager */
+-	return _lock_for_cluster(clvmd_cmd, flags, lockname);
++	return _lock_for_cluster(cmd, clvmd_cmd, flags, lockname);
+ }
+ 
+ static int decode_lock_type(const char *response)
+--- LVM2/lib/locking/locking.h	2009/05/21 03:04:53	1.47
++++ LVM2/lib/locking/locking.h	2009/06/12 08:30:19	1.48
+@@ -85,6 +85,7 @@
+ /*
+  * Additional lock bits for cluster communication
+  */
++#define LCK_PARTIAL_MODE        0x00000001U	/* Partial activation? */
+ #define LCK_MIRROR_NOSYNC_MODE	0x00000002U	/* Mirrors don't require sync */
+ #define LCK_DMEVENTD_MONITOR_MODE	0x00000004U	/* Register with dmeventd */
+ 
 
 
