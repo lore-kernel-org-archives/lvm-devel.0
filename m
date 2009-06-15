@@ -1,143 +1,99 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 15 Jun 2009 17:09:35 -0000
-Subject: LVM2/man lvs.8.in pvs.8.in vgs.8.in
-Message-ID: <20090615170935.19787.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 15 Jun 2009 15:29:23 -0400
+Subject: [PATCH] Add --repair option to vgck.
+Message-ID: <1245094163-13196-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-06-15 17:09:34
+Repair option will correct inconsistent metadata.  We could add other
+correction options but for now it suffices that vgck has the ability
+to actually correct some inconsistencies rather than just checking
+for them.  Also add an output line for each vg that checks out
+successfully.  This gives the user feedback on what precisely was
+checked and is known to be correct.
+Partially addresses rhbz:
+https://bugzilla.redhat.com/show_bug.cgi?id=248191
 
-Modified files:
-	man            : lvs.8.in pvs.8.in vgs.8.in 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ man/vgck.8.in    |    7 ++++++-
+ tools/commands.h |    4 +++-
+ tools/vgck.c     |   17 ++++++++++++++---
+ 3 files changed, 23 insertions(+), 5 deletions(-)
 
-Log message:
-	Cleanup pvs, vgs, and lvs "-o" section in man pages (rhbz 500861).
-	
-	http://bugzilla.redhat.com/show_bug.cgi?id=500861
-	- Update list of fields/columns for each command (a few missing).
-	- Update list order to match "-o help" output (easier to verify field list)
-	- Add "{pv|vg|lv}_all" description.
-	- Move "-o help" sentence above column/field list.
-	
-	New sample man page for lvs (pvs and vgs are similar):
-	-o, --options
-	Comma-separated ordered list of columns.  Precede the list  with  ???+???  to  append  to  the
-	default selection of columns instead of replacing it.
-	
-	Use  -o  lv_all to select all logical volume columns, and -o seg_all to select all logical
-	segment columns.
-	
-	Use -o help to view the full list of columns available.
-	
-	Column names  include:  lv_uuid,  lv_name,  lv_attr,  lv_major,  lv_minor,  lv_read_ahead,
-	lv_kernel_major,  lv_kernel_minor,  lv_kernel_read_ahead, lv_size, seg_count, origin, ori-
-	gin_size, snap_percent, copy_percent, move_pv, convert_lv, lv_tags,  mirror_log,  modules,
-	segtype,  stripes,  stripesize,  regionsize, chunksize, seg_start, seg_start_pe, seg_size,
-	seg_tags, seg_pe_ranges, devices.
-	
-	With --segments, any "seg_" prefixes  are  optional;  otherwise  any  "lv_"  prefixes  are
-	optional.  Columns mentioned in vgs (8) can also be chosen.
-	
-	The lv_attr bits are:
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvs.8.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgs.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/man/lvs.8.in	2009/04/25 01:18:00	1.7
-+++ LVM2/man/lvs.8.in	2009/06/15 17:09:32	1.8
-@@ -36,18 +36,22 @@
- .TP
- .I \-o, \-\-options
- Comma-separated ordered list of columns.  Precede the list with '+' to append
--to the default selection of columns instead of replacing it.  Column names are: 
--lv_uuid, lv_name, lv_attr, lv_major, lv_minor, lv_kernel_major, lv_kernel_minor,
--lv_size, seg_count, origin, snap_percent,
--copy_percent, move_pv, lv_tags, origin_size,
--segtype, stripes,
--stripesize, chunksize, seg_start, seg_size, seg_tags, devices,
--regionsize, mirror_log, modules.
-+to the default selection of columns instead of replacing it.
-+.IP
-+Use \fb-o lv_all\fP to select all logical volume columns, and \fb-o seg_all\fP to select all
-+logical segment columns.
-+.IP
-+Use \fb-o help\fP to view the full list of columns available.
-+.IP
-+Column names include:
-+lv_uuid, lv_name, lv_attr, lv_major, lv_minor, lv_read_ahead, lv_kernel_major, lv_kernel_minor,
-+lv_kernel_read_ahead, lv_size, seg_count, origin, origin_size, snap_percent, copy_percent, move_pv,
-+convert_lv, lv_tags, mirror_log, modules, segtype, stripes, stripesize, regionsize, chunksize, seg_start,
-+seg_start_pe, seg_size, seg_tags, seg_pe_ranges, devices.
- .IP
- With \-\-segments, any "seg_" prefixes are optional; otherwise any "lv_"
- prefixes are optional.  Columns mentioned in \fBvgs (8)\fP 
- can also be chosen.
--Use \fb-o help\fP to view the full list of fields available.
- .IP
- The lv_attr bits are: 
- .RS
---- LVM2/man/pvs.8.in	2009/01/20 17:39:08	1.8
-+++ LVM2/man/pvs.8.in	2009/06/15 17:09:32	1.9
-@@ -36,14 +36,20 @@
- .TP
- .I \-o, \-\-options
- Comma-separated ordered list of columns.  Precede the list with '+' to append
--to the default selection of columns.  Column names are: pv_fmt, pv_uuid,
--pv_size, dev_size, pv_free, pv_used, pv_name, pv_attr, pv_pe_count, 
--pv_pe_alloc_count, pv_tags, pvseg_start, pvseg_size, pe_start,
--pv_mda_count, pv_mda_free, and pv_mda_size.
-+to the default selection of columns.
-+.IP
-+Use \fb-o pv_all\fP to select all physical volume columns, and \fb-o pvseg_all\fP
-+to select all physical segment columns.
-+.IP
-+Use \fb-o help\fP to view the full list of columns available.
-+.IP
-+Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
-+pv_mda_size, pe_start, pv_size, pv_free, pv_used, pv_attr, pv_pe_count,
-+pv_pe_alloc_count, pv_tags, pv_mda_count, pvseg_start, and pvseg_size.
-+.IP
- With --segments, any "pvseg_" prefixes are optional; otherwise any
- "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
- be chosen. The pv_attr bits are: (a)llocatable and e(x)ported.
--Use \fb-o help\fP to view the full list of fields available.
- .TP
- .I \-\-segments
- Produces one line of output for each contiguous allocation of space on each
---- LVM2/man/vgs.8.in	2009/01/20 17:39:08	1.7
-+++ LVM2/man/vgs.8.in	2009/06/15 17:09:32	1.8
-@@ -36,14 +36,20 @@
- .TP
- .I \-o, \-\-options
- Comma-separated ordered list of columns.  Precede the list with '+' to append
--to the default selection of columns.  Column names are: vg_fmt, vg_uuid,
--vg_name, vg_attr, vg_size, vg_free, vg_sysid, vg_extent_size, vg_extent_count,
--vg_free_count, max_lv, max_pv, pv_count, lv_count, snap_count, vg_seqno,
--vg_tags, vg_mda_count, vg_mda_free, and vg_mda_size.
-+to the default selection of columns.
-+.IP
-+Use \fb-o vg_all\fP to select all volume group columns.
-+.IP
-+Use \fb-o help\fP to view the full list of columns available.
-+.IP
-+Column names include: vg_fmt, vg_uuid, vg_name, vg_attr, vg_size, vg_free,
-+vg_sysid, vg_extent_size, vg_extent_count, vg_free_count, max_lv, max_pv,
-+pv_count, lv_count, snap_count, vg_seqno, vg_tags, vg_mda_count, vg_mda_free,
-+and vg_mda_size.
-+.IP
- Any "vg_" prefixes are optional.  Columns mentioned in either \fBpvs (8)\fP 
- or \fBlvs (8)\fP can also be chosen, but columns cannot be taken from both
- at the same time.  
--Use \fb-o help\fP to view the full list of fields available.
- .IP
- The vg_attr bits are:
- .RS
+diff --git a/man/vgck.8.in b/man/vgck.8.in
+index 2e5d926..0822cb8 100644
+--- a/man/vgck.8.in
++++ b/man/vgck.8.in
+@@ -3,10 +3,15 @@
+ vgck \- check volume group metadata
+ .SH SYNOPSIS
+ .B vgck
+-[\-d|\-\-debug] [\-h|\-?|\-\-help] [\-v|\-\-verbose] [VolumeGroupName...]
++[\-d|\-\-debug] [\-h|\-?|\-\-help] [\-\-repair] [\-v|\-\-verbose] [VolumeGroupName...]
+ .SH DESCRIPTION
+ vgck checks LVM metadata for each named volume group for consistency.
+ .SH OPTIONS
++.TP
++.I \-\-repair
++Attempt to repair the volume group metadata if inconsistency found.
++.br
++.TP
+ See \fBlvm\fP for common options.
+ .SH SEE ALSO
+ .BR lvm (8),
+diff --git a/tools/commands.h b/tools/commands.h
+index ee39bf9..9664ef2 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -698,9 +698,11 @@ xx(vgck,
+    "vgck "
+    "\t[-d|--debug]\n"
+    "\t[-h|--help]\n"
++   "\t[--repair]\n"
+    "\t[-v|--verbose]\n"
+    "\t[--version]" "\n"
+-   "\t[VolumeGroupName...]\n" )
++   "\t[VolumeGroupName...]\n",
++   repair_ARG)
+ 
+ xx(vgconvert,
+    "Change volume group metadata format",
+diff --git a/tools/vgck.c b/tools/vgck.c
+index 977f447..266c800 100644
+--- a/tools/vgck.c
++++ b/tools/vgck.c
+@@ -27,12 +27,23 @@ static int vgck_single(struct cmd_context *cmd __attribute((unused)),
+ 	if (!vg_validate(vg))
+ 		return ECMD_FAILED;
+ 
++	log_print("No problems found with metadata on volume group %s\n",
++		  vg_name);
+ 	return ECMD_PROCESSED;
+ }
+ 
+ int vgck(struct cmd_context *cmd, int argc, char **argv)
+ {
+-	return process_each_vg(cmd, argc, argv, LCK_VG_READ,
+-			       VG_INCONSISTENT_ABORT, NULL,
+-			       &vgck_single);
++	int repair = arg_count(cmd, repair_ARG);
++
++	if (repair) {
++		cmd->handles_missing_pvs = 1;
++		return process_each_vg(cmd, argc, argv, LCK_VG_WRITE,
++				       VG_INCONSISTENT_REPAIR, NULL,
++				       &vgck_single);
++	}
++	else
++		return process_each_vg(cmd, argc, argv, LCK_VG_READ,
++				       VG_INCONSISTENT_ABORT, NULL,
++				       &vgck_single);
+ }
+-- 
+1.6.0.6
 
 
