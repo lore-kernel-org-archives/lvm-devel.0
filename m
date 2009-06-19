@@ -1,50 +1,62 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Mon, 4 Mar 2013 18:34:10 -0500 (EST)
-Subject: [PATCH] dmsetup: check errors
-Message-ID: <Pine.LNX.4.64.1303041833190.621@file.rdu.redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 19 Jun 2009 18:55:04 -0400
+Subject: [PATCH v2 0/4] LVM2 topology support
+Message-ID: <1245452108-25318-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-dmsetup: check errors
+LVM2 topology support to properly align the PV's pe_start using the
+associated 'alignment_offset' exposed in sysfs.
 
-atoll doesn't check for errors, so invalid sector numbers were silently
-accepted in the "dmsetup message" command.
+Provides manual configuration with pvcreate --dataalignmentoffset and
+auto config control via 'devices/data_alignment_offset_detection' in
+lvm.conf.
 
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+Documentation was added to the lvm.conf and pvcreate man pages.
 
----
- tools/dmsetup.c |    9 ++++++++-
- 1 file changed, 8 insertions(+), 1 deletion(-)
+Testing with pvcreate + vgextend + vgreduce + vgextend + vgreduce ...
+proved to maintain the pe_start from the initial pvcreate.
 
-Index: LVM2.2.02.98/tools/dmsetup.c
-===================================================================
---- LVM2.2.02.98.orig/tools/dmsetup.c	2013-01-30 20:14:03.000000000 +0100
-+++ LVM2.2.02.98/tools/dmsetup.c	2013-01-30 20:15:30.000000000 +0100
-@@ -770,6 +770,8 @@ static int _message(CMD_ARGS)
- 	size_t sz = 1;
- 	struct dm_task *dmt;
- 	char *str;
-+	uint64_t sector;
-+	char *endptr;
- 
- 	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
- 		return 0;
-@@ -784,7 +786,12 @@ static int _message(CMD_ARGS)
- 		argv++;
- 	}
- 
--	if (!dm_task_set_sector(dmt, (uint64_t) atoll(argv[1])))
-+	sector = strtoull(argv[1], &endptr, 10);
-+	if (*endptr || endptr == argv[1]) {
-+		err("invalid sector");
-+		goto out;
-+	}
-+	if (!dm_task_set_sector(dmt, sector))
- 		goto out;
- 
- 	argc -= 2;
+
+Also added another method for auto detection of --dataalignment using
+the topology information that is exposed in sysfs.  Controlled via
+'devices/data_alignment_detection' in lvm2.conf.
+
+
+Mike Snitzer (4):
+  cmdline: support for bytes and sectors
+  pvcreate: --dataalignmentoffset
+  Add devices/data_alignment_offset_detection to lvm.conf.
+  Add devices/data_alignment_detection to lvm.conf.
+
+ WHATS_NEW                        |    5 ++
+ doc/example.conf                 |   19 ++++++-
+ lib/config/defaults.h            |    2 +
+ lib/device/device.c              |   98 ++++++++++++++++++++++++++++++++++++++
+ lib/device/device.h              |    9 ++++
+ lib/format1/format1.c            |    1 +
+ lib/format_pool/format_pool.c    |    1 +
+ lib/format_text/archiver.c       |    2 +-
+ lib/format_text/format-text.c    |   24 ++++++++-
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   36 +++++++++++++-
+ lib/metadata/metadata.h          |    1 +
+ man/lvcreate.8.in                |    6 +-
+ man/lvextend.8.in                |    4 +-
+ man/lvm.conf.5.in                |   22 +++++++-
+ man/lvreduce.8.in                |    4 +-
+ man/lvresize.8.in                |    4 +-
+ man/pvcreate.8.in                |   18 ++++++-
+ man/vgchange.8.in                |    4 +-
+ man/vgcreate.8.in                |    4 +-
+ tools/args.h                     |    1 +
+ tools/commands.h                 |   33 +++++++------
+ tools/lvmcmdline.c               |   20 +++++--
+ tools/pvcreate.c                 |   23 ++++++++-
+ tools/vgconvert.c                |    2 +-
+ 25 files changed, 292 insertions(+), 52 deletions(-)
 
 
