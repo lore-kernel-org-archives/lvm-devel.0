@@ -1,204 +1,202 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 19 Jun 2009 18:55:07 -0400
-Subject: [PATCH 3/4] Add devices/data_alignment_offset_detection to lvm.conf.
+Date: Fri, 19 Jun 2009 18:55:08 -0400
+Subject: [PATCH 4/4] Add devices/data_alignment_detection to lvm.conf.
 In-Reply-To: <1245452108-25318-1-git-send-email-snitzer@redhat.com>
 References: <1245452108-25318-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1245452108-25318-4-git-send-email-snitzer@redhat.com>
+Message-ID: <1245452108-25318-5-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the pvcreate --dataalignmentoffset option is not specified the offset
-of the start of a PV's aligned data area will be padded with the
-associated 'alignment_offset' exposed in sysfs (unless
-devices/data_alignment_offset_detection is disabled in lvm.conf).
+Adds 'data_alignment_detection' config option to the devices section of
+lvm.conf.  If your kernel provides topology information in sysfs for the
+Physical Volume, the start of data area will be aligned on a multiple of
+the ?minimum_io_size? or ?optimal_io_size? exposed in sysfs.
+
+minimum_io_size is used if optimal_io_size is undefined (0).  If both
+md_chunk_alignment and data_alignment_detection are enabled the result
+of data_alignment_detection is used.
 
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
  WHATS_NEW               |    1 +
- doc/example.conf        |    5 +++
+ doc/example.conf        |   14 +++++++++++---
  lib/config/defaults.h   |    1 +
- lib/device/device.c     |   72 +++++++++++++++++++++++++++++++++++++++++++++++
- lib/device/device.h     |    3 ++
- lib/metadata/metadata.c |    8 +++++
- man/lvm.conf.5.in       |    9 +++++-
- 7 files changed, 98 insertions(+), 1 deletions(-)
+ lib/device/device.c     |   26 ++++++++++++++++++++++++++
+ lib/device/device.h     |    6 ++++++
+ lib/metadata/metadata.c |   18 ++++++++++++++++++
+ man/lvm.conf.5.in       |   13 +++++++++++--
+ 7 files changed, 74 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 7990d13..d78cd3d 100644
+index d78cd3d..8701733 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.48 - 
  ===============================
-+  Add devices/data_alignment_offset_detection to lvm.conf.
++  Add devices/data_alignment_detection to lvm.conf.
+   Add devices/data_alignment_offset_detection to lvm.conf.
    Implement pvcreate --dataalignmentoffset to pad offset of pe_start.
    Update the man pages to uniformly document size units.
-   Allow specifying commandline sizes in terms of bytes and sectors.
 diff --git a/doc/example.conf b/doc/example.conf
-index 73f17c2..864bf65 100644
+index 864bf65..fbdcc1c 100644
 --- a/doc/example.conf
 +++ b/doc/example.conf
-@@ -104,6 +104,11 @@ devices {
+@@ -94,13 +94,21 @@ devices {
+     md_component_detection = 1
+ 
+     # By default, if a PV is placed directly upon an md device, LVM2
+-    # will align its data blocks with the the chunk_size exposed in sysfs.
++    # will align its data blocks with the chunk_size exposed in sysfs.
+     # 1 enables; 0 disables.
+     md_chunk_alignment = 1
+ 
++    # By default, the start of a PV's data area will be aligned with
++    # the 'minimum_io_size' or 'optimal_io_size' exposed in sysfs.
++    # minimum_io_size is used if optimal_io_size is undefined (0).
++    # This offers a superset of what md_chunk_alignment detects
++    # (aka minimum_io_size) and is therefore preferred over it.
++    # 1 enables; 0 disables.
++    data_alignment_detection = 1
++
+     # Alignment (in KB) of start of data area when creating a new PV.
+-    # If a PV is placed directly upon an md device and md_chunk_alignment is
+-    # enabled this parameter is ignored.
++    # If a PV is placed directly upon an md device and md_chunk_alignment or
++    # data_alignment_detection is enabled this parameter is ignored.
      # Set to 0 for the default alignment of 64KB or page size, if larger.
      data_alignment = 0
  
-+    # By default, the offset of the start of a PV's aligned data area
-+    # will be padded with the 'alignment_offset' exposed in sysfs.
-+    # 1 enables; 0 disables.
-+    data_alignment_offset_detection = 1
-+
-     # If, while scanning the system for PVs, LVM2 encounters a device-mapper
-     # device that has its I/O suspended, it waits for it to become accessible.
-     # Set this to 1 to skip such devices.  This should only be needed
 diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 98c023a..4433ee4 100644
+index 4433ee4..f809dfe 100644
 --- a/lib/config/defaults.h
 +++ b/lib/config/defaults.h
-@@ -34,6 +34,7 @@
- #define DEFAULT_MD_COMPONENT_DETECTION 1
+@@ -35,6 +35,7 @@
  #define DEFAULT_MD_CHUNK_ALIGNMENT 1
  #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
-+#define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
+ #define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
++#define DEFAULT_DATA_ALIGNMENT_DETECTION 1
  
  #define DEFAULT_LOCK_DIR "/var/lock/lvm"
  #define DEFAULT_LOCKING_LIB "liblvm2clusterlock.so"
 diff --git a/lib/device/device.c b/lib/device/device.c
-index 9d3c1cf..537dcec 100644
+index 537dcec..c5922f6 100644
 --- a/lib/device/device.c
 +++ b/lib/device/device.c
-@@ -278,3 +278,75 @@ int _get_partition_type(struct dev_mgr *dm, struct device *d)
- 	return 0;
+@@ -341,6 +341,20 @@ unsigned long dev_alignment_offset(const char *sysfs_dir,
+ 					sysfs_dir, dev);
  }
- #endif
-+
-+#ifdef linux
-+
-+static unsigned long __dev_topology_attribute(const char *attribute,
-+					      const char *sysfs_dir,
-+					      struct device *dev)
+ 
++unsigned long dev_minimum_io_size(const char *sysfs_dir,
++				  struct device *dev)
 +{
-+	char path[PATH_MAX+1], buffer[64];
-+	FILE *fp;
-+	struct stat info;
-+	unsigned long result = 0UL;
-+
-+	if (!attribute || !*attribute)
-+		return_0;
-+
-+	if (!sysfs_dir || !*sysfs_dir)
-+		return_0;
-+
-+	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/%s",
-+			sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev),
-+			attribute) < 0) {
-+		log_error("dm_snprintf %s failed", attribute);
-+		return 0;
-+	}
-+
-+	/* old sysfs structure not applicable (topology support is newer) */
-+
-+	if (stat(path, &info) < 0)
-+		return 0;
-+
-+	if (!(fp = fopen(path, "r"))) {
-+		log_sys_error("fopen", path);
-+		return 0;
-+	}
-+
-+	if (!fgets(buffer, sizeof(buffer), fp)) {
-+		log_sys_error("fgets", path);
-+		goto out;
-+	}
-+
-+	if (sscanf(buffer, "%lu", &result) != 1) {
-+		log_error("sysfs file %s not in expected format: %s", path,
-+			  buffer);
-+		goto out;
-+	}
-+
-+	log_very_verbose("Device %s %s is %lu bytes.",
-+			 dev_name(dev), attribute, result);
-+
-+out:
-+	if (fclose(fp))
-+		log_sys_error("fclose", path);
-+
-+	return result >> SECTOR_SHIFT;
-+}
-+
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev)
-+{
-+	return __dev_topology_attribute("alignment_offset",
++	return __dev_topology_attribute("minimum_io_size",
 +					sysfs_dir, dev);
 +}
 +
-+#else
++unsigned long dev_optimal_io_size(const char *sysfs_dir,
++				  struct device *dev)
++{
++	return __dev_topology_attribute("optimal_io_size",
++					sysfs_dir, dev);
++}
 +
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev)
+ #else
+ 
+ unsigned long dev_alignment_offset(const char *sysfs_dir,
+@@ -349,4 +363,16 @@ unsigned long dev_alignment_offset(const char *sysfs_dir,
+ 	return 0UL;
+ }
+ 
++unsigned long dev_minimum_io_size(const char *sysfs_dir,
++				  struct device *dev)
 +{
 +	return 0UL;
 +}
 +
-+#endif
++unsigned long dev_optimal_io_size(const char *sysfs_dir,
++				  struct device *dev)
++{
++	return 0UL;
++}
++
+ #endif
 diff --git a/lib/device/device.h b/lib/device/device.h
-index 94f17b4..722cc4a 100644
+index 722cc4a..3bb97dd 100644
 --- a/lib/device/device.h
 +++ b/lib/device/device.h
-@@ -100,4 +100,7 @@ unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev);
+@@ -103,4 +103,10 @@ int is_partitioned_dev(struct device *dev);
+ unsigned long dev_alignment_offset(const char *sysfs_dir,
+ 				   struct device *dev);
  
- int is_partitioned_dev(struct device *dev);
- 
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev);
++unsigned long dev_minimum_io_size(const char *sysfs_dir,
++				  struct device *dev);
++
++unsigned long dev_optimal_io_size(const char *sysfs_dir,
++				  struct device *dev);
 +
  #endif
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index c5ab9ed..68bf8b1 100644
+index 68bf8b1..3759fce 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -910,6 +910,14 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
- 	pv->fmt = fmt;
- 	pv->vg_name = fmt->orphan_vg_name;
+@@ -90,6 +90,24 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
+ 				   dev_md_chunk_size(pv->fmt->cmd->sysfs_dir,
+ 						     pv->dev));
  
-+	if (!pe_start && !data_alignment_offset &&
-+	    find_config_tree_bool(pv->fmt->cmd,
-+				  "devices/data_alignment_offset_detection",
-+				  DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION)) {
-+		data_alignment_offset =
-+			dev_alignment_offset(pv->fmt->cmd->sysfs_dir, pv->dev);
++	/*
++	 * Align to topology's minimum_io_size or optimal_io_size if present
++	 * - minimum_io_size offers the smallest request the device can perform
++	 *   without incurring a read-modify-write penalty (e.g. MD's chunk size)
++	 * - optimal_io_size offers the device's preferred unit of receiving I/O
++	 *   (e.g. MD's stripe width)
++	 */
++	if (find_config_tree_bool(pv->fmt->cmd, "devices/data_alignment_detection",
++				  DEFAULT_DATA_ALIGNMENT_DETECTION)) {
++		pv->pe_align = MAX(pv->pe_align,
++				   dev_minimum_io_size(pv->fmt->cmd->sysfs_dir,
++						       pv->dev));
++
++		pv->pe_align = MAX(pv->pe_align,
++				   dev_optimal_io_size(pv->fmt->cmd->sysfs_dir,
++						       pv->dev));
 +	}
 +
- 	if (!fmt->ops->pv_setup(fmt, pe_start, existing_extent_count,
- 				existing_extent_size, data_alignment,
- 				data_alignment_offset,
+ 	log_very_verbose("%s: Setting PE alignment to %lu sectors.",
+ 			 dev_name(pv->dev), pv->pe_align);
+ 
 diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index 68024b6..68bcffa 100644
+index 68bcffa..9d59f59 100644
 --- a/man/lvm.conf.5.in
 +++ b/man/lvm.conf.5.in
-@@ -142,10 +142,17 @@ when creating a new Physical Volume using the \fBlvm2\fP format.
- If a Physical Volume is placed directly upon an md device and
- \fBmd_chunk_alignment\fP is enabled this parameter is ignored.
- Set to 0 to use the default alignment of 64KB or the page size, if larger.
-+.IP
-+\fBdata_alignment_offset_detection\fP \(em If set to 1, and your kernel
-+provides topology information in sysfs for the Physical Volume, the
-+start of the aligned data area of the Physical Volume will be padded
-+with the alignment_offset exposed in sysfs.
- .sp
- To see the location of the first Physical Extent of an existing Physical Volume
- use \fBpvs -o +pe_start\fP .  It will be a multiple of the requested
--\fBdata_alignment\fP.
-+\fBdata_alignment\fP plus the alignment_offset from
-+\fBdata_alignment_offset_detection\fP (if enabled) or the pvcreate
-+commandline.
- .TP
- \fBlog\fP \(em Default log settings
+@@ -134,13 +134,22 @@ superblocks. This doesn't always work satisfactorily e.g. if a device
+ has been reused without wiping the md superblocks first.
  .IP
+ \fBmd_chunk_alignment\fP \(em If set to 1, and a Physical Volume is placed
+-directly upon an md device, LVM2 will align its data blocks with the the
++directly upon an md device, LVM2 will align its data blocks with the
+ chunk_size exposed in sysfs.
+ .IP
++\fBdata_alignment_detection\fP \(em If set to 1, and your kernel provides
++topology information in sysfs for the Physical Volume, the start of data
++area will be aligned on a multiple of the ?minimum_io_size? or
++?optimal_io_size? exposed in sysfs.  minimum_io_size is used if
++optimal_io_size is undefined (0).  If both \fBmd_chunk_alignment\fP and
++\fBdata_alignment_detection\fP are enabled the result of
++\fBdata_alignment_detection\fP is used.
++.IP
+ \fBdata_alignment\fP \(em Default alignment (in KB) of start of data area
+ when creating a new Physical Volume using the \fBlvm2\fP format.
+ If a Physical Volume is placed directly upon an md device and
+-\fBmd_chunk_alignment\fP is enabled this parameter is ignored.
++\fBmd_chunk_alignment\fP or \fBdata_alignment_detection\fP is enabled
++this parameter is ignored.
+ Set to 0 to use the default alignment of 64KB or the page size, if larger.
+ .IP
+ \fBdata_alignment_offset_detection\fP \(em If set to 1, and your kernel
 -- 
 1.6.2.2
 
