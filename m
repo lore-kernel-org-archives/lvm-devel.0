@@ -1,39 +1,59 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 26 Jun 2009 02:59:49 -0400
-Subject: [PATCH] Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
-Message-ID: <1245999589-2926-1-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 26 Jun 2009 09:47:38 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvconvert.c tools/lvcre ...
+Message-ID: <20090626094738.24996.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Petr Rockai <prockai@redhat.com>
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-06-26 09:47:37
 
-Sun May  3 11:40:51 CEST 2009  Petr Rockai <me@mornfall.net>
-  * Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvconvert.c lvcreate.c lvrename.c lvresize.c 
+	                 polldaemon.c pvchange.c pvdisplay.c pvmove.c 
+	                 pvresize.c reporter.c vgextend.c vgmerge.c 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- tools/lvconvert.c  |   16 +++++-----------
- tools/lvcreate.c   |    5 ++---
- tools/lvrename.c   |    5 ++---
- tools/lvresize.c   |    5 ++---
- tools/polldaemon.c |    3 ++-
- tools/pvchange.c   |    5 ++---
- tools/pvdisplay.c  |    4 ++--
- tools/pvmove.c     |   12 +++---------
- tools/pvresize.c   |   15 ++-------------
- tools/reporter.c   |    4 ++--
- tools/vgextend.c   |   11 +++++------
- tools/vgmerge.c    |   14 ++++++--------
- 12 files changed, 35 insertions(+), 64 deletions(-)
+Log message:
+	Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
+	
+	Sun May  3 11:40:51 CEST 2009  Petr Rockai <me@mornfall.net>
+	* Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
+	
+	Author: Petr Rockai <prockai@redhat.com>
+	Committer: Dave Wysochanski <dwysocha@redhat.com>
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index e2afd78..e2285fd 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -239,13 +239,8 @@ static struct volume_group *_get_lvconvert_vg(struct cmd_context *cmd,
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1155&r2=1.1156
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.194&r2=1.195
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvrename.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.110&r2=1.111
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvdisplay.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvresize.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
+
+--- LVM2/WHATS_NEW	2009/06/26 09:19:13	1.1155
++++ LVM2/WHATS_NEW	2009/06/26 09:47:36	1.1156
+@@ -1,5 +1,6 @@
+ Version 2.02.48 - 
+ ===============================
++  Replace use of vg_lock_and_read with vg_read/vg_read_for_update.
+   Abort if automatic metadata correction fails when reading VG to update it.
+   Explicitly request fallback to default major number in device mapper.
+   Ignore suspended devices during repair.
+--- LVM2/tools/lvconvert.c	2009/06/26 09:04:00	1.83
++++ LVM2/tools/lvconvert.c	2009/06/26 09:47:36	1.84
+@@ -239,13 +239,8 @@
  {
  	dev_close_all();
  
@@ -49,7 +69,7 @@ index e2afd78..e2285fd 100644
  }
  
  static struct logical_volume *_get_lvconvert_lv(struct cmd_context *cmd __attribute((unused)),
-@@ -938,10 +933,9 @@ int lvconvert(struct cmd_context * cmd, int argc, char **argv)
+@@ -938,10 +933,9 @@
  
  	log_verbose("Checking for existing volume group \"%s\"", lp.vg_name);
  
@@ -63,11 +83,9 @@ index e2afd78..e2285fd 100644
  
  	if (!(lvl = find_lv_in_vg(vg, lp.lv_name))) {
  		log_error("Logical volume \"%s\" not found in "
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 37d30c6..030aa0c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -994,9 +994,8 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
+--- LVM2/tools/lvcreate.c	2009/06/26 09:19:13	1.194
++++ LVM2/tools/lvcreate.c	2009/06/26 09:47:36	1.195
+@@ -994,9 +994,8 @@
  		return EINVALID_CMD_LINE;
  
  	log_verbose("Finding volume group \"%s\"", lp.vg_name);
@@ -79,11 +97,9 @@ index 37d30c6..030aa0c 100644
  		return ECMD_FAILED;
  
  	if (!_lvcreate(cmd, vg, &lp))
-diff --git a/tools/lvrename.c b/tools/lvrename.c
-index b5d3b38..53ea116 100644
---- a/tools/lvrename.c
-+++ b/tools/lvrename.c
-@@ -102,9 +102,8 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+--- LVM2/tools/lvrename.c	2009/06/26 09:19:13	1.51
++++ LVM2/tools/lvrename.c	2009/06/26 09:47:37	1.52
+@@ -102,9 +102,8 @@
  	}
  
  	log_verbose("Checking for existing volume group \"%s\"", vg_name);
@@ -95,11 +111,9 @@ index b5d3b38..53ea116 100644
  		return ECMD_FAILED;
  
  	if (!(lvl = find_lv_in_vg(vg, lv_name_old))) {
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 1c0f570..b558792 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -671,9 +671,8 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
+--- LVM2/tools/lvresize.c	2009/06/26 09:19:13	1.110
++++ LVM2/tools/lvresize.c	2009/06/26 09:47:37	1.111
+@@ -671,9 +671,8 @@
  		return EINVALID_CMD_LINE;
  
  	log_verbose("Finding volume group %s", lp.vg_name);
@@ -111,11 +125,9 @@ index 1c0f570..b558792 100644
  		stack;
  		return ECMD_FAILED;
  	}
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index 1adb521..bdfd3de 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -147,7 +147,8 @@ static int _wait_for_single_mirror(struct cmd_context *cmd, const char *name, co
+--- LVM2/tools/polldaemon.c	2009/06/05 20:00:52	1.15
++++ LVM2/tools/polldaemon.c	2009/06/26 09:47:37	1.16
+@@ -147,7 +147,8 @@
  		}
  
  		/* Locks the (possibly renamed) VG again */
@@ -125,11 +137,9 @@ index 1adb521..bdfd3de 100644
  			log_error("ABORTING: Can't reread VG for %s", name);
  			/* What more could we do here? */
  			return 0;
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index 98fe2f2..1c9d394 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -57,9 +57,8 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+--- LVM2/tools/pvchange.c	2009/06/26 09:19:13	1.67
++++ LVM2/tools/pvchange.c	2009/06/26 09:47:37	1.68
+@@ -57,9 +57,8 @@
  
  		log_verbose("Finding volume group %s of physical volume %s",
  			    vg_name, pv_name);
@@ -141,11 +151,9 @@ index 98fe2f2..1c9d394 100644
  			return_0;
  
  		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index 406e631..c8c4a88 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -29,8 +29,8 @@ static int _pvdisplay_single(struct cmd_context *cmd,
+--- LVM2/tools/pvdisplay.c	2009/04/10 10:01:38	1.49
++++ LVM2/tools/pvdisplay.c	2009/06/26 09:47:37	1.50
+@@ -29,8 +29,8 @@
  
  	if (!is_orphan(pv) && !vg) {
  		vg_name = pv_vg_name(pv);
@@ -156,11 +164,9 @@ index 406e631..c8c4a88 100644
  		 	log_error("Skipping volume group %s", vg_name);
  			/* FIXME If CLUSTERED should return ECMD_PROCESSED here */
  		 	return ECMD_FAILED;
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 3d376e6..d288e6f 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -89,16 +89,9 @@ static const char *_extract_lvname(struct cmd_context *cmd, const char *vgname,
+--- LVM2/tools/pvmove.c	2009/06/01 14:43:28	1.61
++++ LVM2/tools/pvmove.c	2009/06/26 09:47:37	1.62
+@@ -89,16 +89,9 @@
  
  static struct volume_group *_get_vg(struct cmd_context *cmd, const char *vgname)
  {
@@ -178,7 +184,7 @@ index 3d376e6..d288e6f 100644
  }
  
  /* Create list of PVs for allocation of replacement extents */
-@@ -392,7 +385,8 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
+@@ -392,7 +385,8 @@
  	/* Read VG */
  	log_verbose("Finding volume group \"%s\"", pv_vg_name(pv));
  
@@ -188,11 +194,9 @@ index 3d376e6..d288e6f 100644
  		stack;
  		return ECMD_FAILED;
  	}
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 3b5f149..82c7936 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -29,7 +29,6 @@ static int _pv_resize_single(struct cmd_context *cmd,
+--- LVM2/tools/pvresize.c	2009/04/10 10:01:38	1.27
++++ LVM2/tools/pvresize.c	2009/06/26 09:47:37	1.28
+@@ -29,7 +29,6 @@
  			     const uint64_t new_size)
  {
  	struct pv_list *pvl;
@@ -200,7 +204,7 @@ index 3b5f149..82c7936 100644
  	uint64_t size = 0;
  	uint32_t new_pe_count = 0;
  	int r = 0;
-@@ -59,19 +58,9 @@ static int _pv_resize_single(struct cmd_context *cmd,
+@@ -59,19 +58,9 @@
  	} else {
  		vg_name = pv_vg_name(pv);
  
@@ -222,11 +226,9 @@ index 3b5f149..82c7936 100644
  			goto bad;
  
  		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-diff --git a/tools/reporter.c b/tools/reporter.c
-index d50d586..1e352b5 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -132,8 +132,8 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
+--- LVM2/tools/reporter.c	2009/06/05 20:00:52	1.49
++++ LVM2/tools/reporter.c	2009/06/26 09:47:37	1.50
+@@ -132,8 +132,8 @@
  	if (is_pv(pv) && !is_orphan(pv) && !vg) {
  		vg_name = pv_vg_name(pv);
  
@@ -237,11 +239,9 @@ index d50d586..1e352b5 100644
  			log_error("Skipping volume group %s", vg_name);
  			return ECMD_FAILED;
  		}
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index 4b2044c..aeb85ce 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -42,13 +42,12 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+--- LVM2/tools/vgextend.c	2009/05/21 03:04:53	1.40
++++ LVM2/tools/vgextend.c	2009/06/26 09:47:37	1.41
+@@ -42,13 +42,12 @@
  	}
  
  	log_verbose("Checking for volume group \"%s\"", vg_name);
@@ -260,11 +260,9 @@ index 4b2044c..aeb85ce 100644
  /********** FIXME
  	log_print("maximum logical volume size is %s",
  		  (dummy = lvm_show_size(LVM_LV_SIZE_MAX(vg) / 2, LONG)));
-diff --git a/tools/vgmerge.c b/tools/vgmerge.c
-index f507219..23b95a4 100644
---- a/tools/vgmerge.c
-+++ b/tools/vgmerge.c
-@@ -28,17 +28,15 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+--- LVM2/tools/vgmerge.c	2009/05/21 03:04:54	1.55
++++ LVM2/tools/vgmerge.c	2009/06/26 09:47:37	1.56
+@@ -28,17 +28,15 @@
  	}
  
  	log_verbose("Checking for volume group \"%s\"", vg_name_to);
@@ -288,7 +286,5 @@ index f507219..23b95a4 100644
  		return ECMD_FAILED;
  	}
  
--- 
-1.6.0.6
 
 
