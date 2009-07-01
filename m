@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 1 Jul 2009 17:02:18 -0000
-Subject: LVM2/tools vgrename.c
-Message-ID: <20090701170218.11388.qmail@sourceware.org>
+Date: 1 Jul 2009 17:23:11 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20090701172311.29327.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-01 17:02:18
+Changes by:	wysochanski at sourceware.org	2009-07-01 17:23:10
 
 Modified files:
-	tools          : vgrename.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Convert vgrename to vg_read_for_update.
-	
-	Sun May  3 12:54:28 CEST 2009  Petr Rockai <me@mornfall.net>
-	* Convert vgrename to vg_read_for_update.
-	
-	Rebased 6/26/2009 - Dave W.
-	
-	Author: Petr Rockai <prockai@redhat.com>
-	Committer: Dave Wysochanski <dwysocha@redhat.com>
+	Update WHATS_NEW for vg_read commits
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgrename.c.diff?cvsroot=lvm2&r1=1.63&r2=1.64
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1161&r2=1.1162
 
---- LVM2/tools/vgrename.c	2009/06/09 14:30:16	1.63
-+++ LVM2/tools/vgrename.c	2009/07/01 17:02:18	1.64
-@@ -20,7 +20,6 @@
- {
- 	char *dev_dir;
- 	struct id id;
--	int consistent = 1;
- 	int match = 0;
- 	int found_id = 0;
- 	struct dm_list *vgids;
-@@ -71,25 +70,11 @@
- 	} else
- 		vgid = NULL;
+--- LVM2/WHATS_NEW	2009/07/01 09:31:46	1.1161
++++ LVM2/WHATS_NEW	2009/07/01 17:23:10	1.1162
+@@ -1,5 +1,9 @@
+ Version 2.02.49 - 
+ ================================
++  Update test/t-inconsistent-metadata.sh to match new vg_read interface.
++  Add lvmcache_init() to polldaemon initialization.
++  Convert tools to use new vg_read / vg_read_for_update.
++  Fix segfault in vg_release when vg->cmd is NULL.
  
--	if (!lock_vol(cmd, vg_name_old, LCK_VG_WRITE)) {
--		log_error("Can't get lock for %s", vg_name_old);
--		return 0;
--	}
--
--	if (!(vg = vg_read_internal(cmd, vg_name_old, vgid, &consistent)) || !consistent) {
--		log_error("Volume group %s %s%s%snot found.", vg_name_old,
--		vgid ? "(" : "", vgid ? vgid : "", vgid ? ") " : "");
--		unlock_vg(cmd, vg_name_old);
--		return 0;
--	}
--
--	if (!vg_check_status(vg, CLUSTERED | LVM_WRITE)) {
--		unlock_and_release_vg(cmd, vg, vg_name_old);
--		return 0;
--	}
--
--	/* Don't return failure for EXPORTED_VG */
--	vg_check_status(vg, EXPORTED_VG);
-+	/* FIXME we used to print an error about EXPORTED, but proceeded
-+	   nevertheless. */
-+	vg = vg_read_for_update(cmd, vg_name_old, vgid, READ_ALLOW_EXPORTED);
-+	if (vg_read_error(vg))
-+		return_0;
- 
- 	if (lvs_in_vg_activated_by_uuid_only(vg)) {
- 		unlock_and_release_vg(cmd, vg, vg_name_old);
+ Version 2.02.48 - 30th June 2009
+ ================================
 
 
