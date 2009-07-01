@@ -1,263 +1,273 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 01 Jul 2009 18:08:42 +0200
-Subject: [PATCH] Fix confusing metadta syntax error messages.
-Message-ID: <4A4B8A0A.9080205@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 1 Jul 2009 16:59:39 -0000
+Subject: LVM2/tools lvconvert.c lvcreate.c lvrename.c l ...
+Message-ID: <20090701165939.31339.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix confusing metadta syntax error messages.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-01 16:59:37
 
-If there is syntax error in metadata, it now prints messages
-like:
-  Couldn't read 'start_extent' for segment 'extent_count'.
-  Couldn't read all logical volumes for volume group vg_test.
+Modified files:
+	tools          : lvconvert.c lvcreate.c lvrename.c lvresize.c 
+	                 polldaemon.c pvchange.c pvdisplay.c pvmove.c 
+	                 pvresize.c reporter.c vgextend.c vgmerge.c 
 
-The segment specification is wrong and confusing.
+Log message:
+	Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
+	
+	Sun May  3 11:40:51 CEST 2009  Petr Rockai <me@mornfall.net>
+	* Convert the straight instances of vg_lock_and_read to new vg_read(_for_update).
+	
+	Rebased 6/26/09 by Dave W.
 
-To provide better information to user, we should print at least
-proper section name or, if possible, even LV section where is
-the syntax problem.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.87&r2=1.88
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.196&r2=1.197
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvrename.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.112&r2=1.113
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvdisplay.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.63&r2=1.64
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvresize.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
 
-Patch fixes it by introducing "parent" member in config_node which
-points to parent section and config_node_name function, which
-provides pointer to node section name.
-
-Also it adds several LV refernces where possible.
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/config/config.c           |    9 +++++++++
- lib/config/config.h           |    4 +++-
- lib/format_text/import_vsn1.c |   34 +++++++++++-----------------------
- lib/mirror/mirrored.c         |   23 ++++++++++++++---------
- lib/striped/striped.c         |   10 +++++-----
- 5 files changed, 42 insertions(+), 38 deletions(-)
-
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 224f2ce..a14beac 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -546,6 +546,7 @@ static struct config_node *_file(struct parser *p)
- 			root = n;
- 		else
- 			l->sib = n;
-+		n->parent = root;
- 		l = n;
- 	}
- 	return root;
-@@ -573,6 +574,7 @@ static struct config_node *_section(struct parser *p)
- 				root->child = n;
- 			else
- 				l->sib = n;
-+			n->parent = root;
- 			l = n;
- 		}
- 		match(TOK_SECTION_E);
-@@ -1251,6 +1253,13 @@ static unsigned _count_tokens(const char *str, unsigned len, int type)
- 	return count_chars(str, len, c);
+--- LVM2/tools/lvconvert.c	2009/06/30 18:39:32	1.87
++++ LVM2/tools/lvconvert.c	2009/07/01 16:59:37	1.88
+@@ -240,13 +240,8 @@
+ {
+ 	dev_close_all();
+ 
+-	/*
+-	 * uuid is here LV uuid, but vg_read will use only first part.
+-	 */
+-        return vg_lock_and_read(cmd, extract_vgname(cmd, lv_name),
+-                               uuid, LCK_VG_WRITE,
+-                               CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-                               CORRECT_INCONSISTENT | FAIL_INCONSISTENT);
++        return vg_read_for_update(cmd, extract_vgname(cmd, lv_name),
++				  NULL, 0);
  }
  
-+const char *config_node_name(const struct config_node *n)
-+{
-+	if (n->parent)
-+		return n->parent->key;
-+
-+	return n->key;
-+}
- /*
-  * Heuristic function to make a quick guess as to whether a text
-  * region probably contains a valid config "section".  (Useful for
-diff --git a/lib/config/config.h b/lib/config/config.h
-index 57f6c32..7da4600 100644
---- a/lib/config/config.h
-+++ b/lib/config/config.h
-@@ -40,7 +40,7 @@ struct config_value {
+ static struct logical_volume *_get_lvconvert_lv(struct cmd_context *cmd __attribute((unused)),
+@@ -939,9 +934,8 @@
  
- struct config_node {
- 	char *key;
--	struct config_node *sib, *child;
-+	struct config_node *parent, *sib, *child;
- 	struct config_value *v;
- };
+ 	log_verbose("Checking for existing volume group \"%s\"", lp.vg_name);
  
-@@ -110,4 +110,6 @@ int get_config_str(const struct config_node *cn, const char *path,
+-	if (!(vg = vg_lock_and_read(cmd, lp.vg_name, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
++	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
++	if (vg_read_error(vg))
+ 		goto out;
  
- unsigned maybe_config_section(const char *str, unsigned len);
+ 	if (!(lvl = find_lv_in_vg(vg, lp.lv_name))) {
+--- LVM2/tools/lvcreate.c	2009/06/26 10:55:58	1.196
++++ LVM2/tools/lvcreate.c	2009/07/01 16:59:37	1.197
+@@ -994,9 +994,8 @@
+ 		return EINVALID_CMD_LINE;
  
-+const char *config_node_name(const struct config_node *n);
-+
- #endif
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index d8d8fcb..35253e5 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -305,14 +305,14 @@ static int _read_segment(struct dm_pool *mem, struct volume_group *vg,
+ 	log_verbose("Finding volume group \"%s\"", lp.vg_name);
+-	if (!(vg = vg_lock_and_read(cmd, lp.vg_name, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
++	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
++	if (vg_read_error(vg))
+ 		return ECMD_FAILED;
+ 
+ 	if (!_lvcreate(cmd, vg, &lp))
+--- LVM2/tools/lvrename.c	2009/06/26 10:55:58	1.53
++++ LVM2/tools/lvrename.c	2009/07/01 16:59:37	1.54
+@@ -102,9 +102,8 @@
  	}
  
- 	if (!_read_int32(sn, "start_extent", &start_extent)) {
--		log_error("Couldn't read 'start_extent' for segment '%s'.",
--			  sn->key);
-+		log_error("Couldn't read 'start_extent' for segment '%s' "
-+			  "of logical volume %s.", config_node_name(sn), lv->name);
- 		return 0;
+ 	log_verbose("Checking for existing volume group \"%s\"", vg_name);
+-	if (!(vg = vg_lock_and_read(cmd, vg_name, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
++	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
++	if (vg_read_error(vg))
+ 		return ECMD_FAILED;
+ 
+ 	if (!(lvl = find_lv_in_vg(vg, lv_name_old))) {
+--- LVM2/tools/lvresize.c	2009/06/26 10:55:58	1.112
++++ LVM2/tools/lvresize.c	2009/07/01 16:59:37	1.113
+@@ -671,9 +671,8 @@
+ 		return EINVALID_CMD_LINE;
+ 
+ 	log_verbose("Finding volume group %s", lp.vg_name);
+-	if (!(vg = vg_lock_and_read(cmd, lp.vg_name, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT))) {
++	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
++	if (vg_read_error(vg)) {
+ 		stack;
+ 		return ECMD_FAILED;
  	}
+--- LVM2/tools/polldaemon.c	2009/06/26 10:55:58	1.17
++++ LVM2/tools/polldaemon.c	2009/07/01 16:59:37	1.18
+@@ -147,7 +147,8 @@
+ 		}
  
- 	if (!_read_int32(sn, "extent_count", &extent_count)) {
--		log_error("Couldn't read 'extent_count' for segment '%s'.",
--			  sn->key);
-+		log_error("Couldn't read 'extent_count' for segment '%s' "
-+			  "of logical volume %s.", config_node_name(sn), lv->name);
- 		return 0;
- 	}
+ 		/* Locks the (possibly renamed) VG again */
+-		if (!(vg = parms->poll_fns->get_copy_vg(cmd, name, uuid))) {
++		vg = parms->poll_fns->get_copy_vg(cmd, name, uuid);
++		if (vg_read_error(vg)) {
+ 			log_error("ABORTING: Can't reread VG for %s", name);
+ 			/* What more could we do here? */
+ 			return 0;
+--- LVM2/tools/pvchange.c	2009/06/26 10:55:58	1.69
++++ LVM2/tools/pvchange.c	2009/07/01 16:59:37	1.70
+@@ -57,9 +57,8 @@
  
-@@ -377,32 +377,19 @@ int text_import_areas(struct lv_segment *seg, const struct config_node *sn,
- 	unsigned int s;
- 	struct config_value *cv;
- 	struct logical_volume *lv1;
--	const char *seg_name = sn->key;
-+	struct physical_volume *pv;
-+	const char *seg_name = config_node_name(sn);
+ 		log_verbose("Finding volume group %s of physical volume %s",
+ 			    vg_name, pv_name);
+-		if (!(vg = vg_lock_and_read(cmd, vg_name, NULL, LCK_VG_WRITE,
+-					    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-					    CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
++		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
++		if (vg_read_error(vg))
+ 			return_0;
  
- 	if (!seg->area_count) {
--		log_error("Zero areas not allowed for segment '%s'", sn->key);
-+		log_error("Zero areas not allowed for segment '%s'", seg_name);
- 		return 0;
- 	}
+ 		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+--- LVM2/tools/pvdisplay.c	2009/06/26 10:55:58	1.51
++++ LVM2/tools/pvdisplay.c	2009/07/01 16:59:37	1.52
+@@ -29,8 +29,8 @@
  
- 	for (cv = cn->v, s = 0; cv && s < seg->area_count; s++, cv = cv->next) {
+ 	if (!is_orphan(pv) && !vg) {
+ 		vg_name = pv_vg_name(pv);
+-		if (!(vg = vg_lock_and_read(cmd, vg_name, (char *)&pv->vgid,
+-					    LCK_VG_READ, CLUSTERED, 0))) {
++		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
++		if (vg_read_error(vg)) {
+ 		 	log_error("Skipping volume group %s", vg_name);
+ 			/* FIXME If CLUSTERED should return ECMD_PROCESSED here */
+ 		 	return ECMD_FAILED;
+--- LVM2/tools/pvmove.c	2009/06/26 10:55:58	1.63
++++ LVM2/tools/pvmove.c	2009/07/01 16:59:37	1.64
+@@ -89,16 +89,9 @@
  
- 		/* first we read the pv */
--		const char *bad = "Badly formed areas array for "
--		    "segment '%s'.";
--		struct physical_volume *pv;
+ static struct volume_group *_get_vg(struct cmd_context *cmd, const char *vgname)
+ {
+-	struct volume_group *vg;
 -
--		if (cv->type != CFG_STRING) {
--			log_error(bad, sn->key);
+ 	dev_close_all();
+ 
+-	if (!(vg = vg_lock_and_read(cmd, vgname, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
+-		 return NULL;
+-
+-	return vg;
++	return vg_read_for_update(cmd, vgname, NULL, 0);
+ }
+ 
+ /* Create list of PVs for allocation of replacement extents */
+@@ -392,7 +385,8 @@
+ 	/* Read VG */
+ 	log_verbose("Finding volume group \"%s\"", pv_vg_name(pv));
+ 
+-	if (!(vg = _get_vg(cmd, pv_vg_name(pv)))) {
++	vg = _get_vg(cmd, pv_vg_name(pv));
++	if (vg_read_error(vg)) {
+ 		stack;
+ 		return ECMD_FAILED;
+ 	}
+--- LVM2/tools/pvresize.c	2009/06/26 10:55:58	1.29
++++ LVM2/tools/pvresize.c	2009/07/01 16:59:37	1.30
+@@ -29,7 +29,6 @@
+ 			     const uint64_t new_size)
+ {
+ 	struct pv_list *pvl;
+-	int consistent = 1;
+ 	uint64_t size = 0;
+ 	uint32_t new_pe_count = 0;
+ 	int r = 0;
+@@ -59,19 +58,9 @@
+ 	} else {
+ 		vg_name = pv_vg_name(pv);
+ 
+-		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+-			log_error("Can't get lock for %s", pv_vg_name(pv));
 -			return 0;
 -		}
 -
--		if (!cv->next) {
--			log_error(bad, sn->key);
+-		if (!(vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
+-			unlock_vg(cmd, vg_name);
+-			log_error("Unable to find volume group of \"%s\"",
+-				  pv_name);
 -			return 0;
 -		}
--
--		if (cv->next->type != CFG_INT) {
--			log_error(bad, sn->key);
-+		if (cv->type != CFG_STRING || !cv->next || cv->next->type != CFG_INT) {
-+			log_error("Badly formed areas array for segment '%s'.", seg_name);
- 			return 0;
++		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 
+-		if (!vg_check_status(vg, CLUSTERED | EXPORTED_VG | LVM_WRITE))
++		if (vg_read_error(vg))
+ 			goto bad;
+ 
+ 		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+--- LVM2/tools/reporter.c	2009/06/26 10:55:58	1.51
++++ LVM2/tools/reporter.c	2009/07/01 16:59:37	1.52
+@@ -132,8 +132,8 @@
+ 	if (is_pv(pv) && !is_orphan(pv) && !vg) {
+ 		vg_name = pv_vg_name(pv);
+ 
+-		if (!(vg = vg_lock_and_read(cmd, vg_name, (char *)&pv->vgid,
+-					    LCK_VG_READ, CLUSTERED, 0))) {
++		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
++		if (vg_read_error(vg)) {
+ 			log_error("Skipping volume group %s", vg_name);
+ 			return ECMD_FAILED;
  		}
- 
-@@ -463,7 +450,8 @@ static int _read_segments(struct dm_pool *mem, struct volume_group *vg,
+--- LVM2/tools/vgextend.c	2009/06/26 10:55:58	1.42
++++ LVM2/tools/vgextend.c	2009/07/01 16:59:37	1.43
+@@ -42,13 +42,12 @@
  	}
  
- 	if (!_read_int32(lvn, "segment_count", &seg_count)) {
--		log_error("Couldn't read segment count for logical volume.");
-+		log_error("Couldn't read segment count for logical volume %s.",
-+			  lv->name);
- 		return 0;
+ 	log_verbose("Checking for volume group \"%s\"", vg_name);
+-	if (!(vg = vg_lock_and_read(cmd, vg_name, NULL, LCK_VG_WRITE,
+-				    CLUSTERED | EXPORTED_VG |
+-				    LVM_WRITE | RESIZEABLE_VG,
+-				    CORRECT_INCONSISTENT | FAIL_INCONSISTENT))) {
++	vg = vg_read_for_update(cmd, vg_name, NULL,
++				READ_REQUIRE_RESIZEABLE | LOCK_NONBLOCKING);
++	if (vg_read_error(vg)) {
+ 		unlock_vg(cmd, VG_ORPHANS);
+ 		return ECMD_FAILED;
+-	 }
++	}
+ /********** FIXME
+ 	log_print("maximum logical volume size is %s",
+ 		  (dummy = lvm_show_size(LVM_LV_SIZE_MAX(vg) / 2, LONG)));
+--- LVM2/tools/vgmerge.c	2009/06/26 10:55:58	1.57
++++ LVM2/tools/vgmerge.c	2009/07/01 16:59:37	1.58
+@@ -28,16 +28,14 @@
  	}
  
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index b243ebb..4d0fc63 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -78,7 +78,7 @@ static int _mirrored_text_import_area_count(struct config_node *sn, uint32_t *ar
- {
- 	if (!get_config_uint32(sn, "mirror_count", area_count)) {
- 		log_error("Couldn't read 'mirror_count' for "
--			  "segment '%s'.", sn->key);
-+			  "segment '%s'.", config_node_name(sn));
- 		return 0;
- 	}
+ 	log_verbose("Checking for volume group \"%s\"", vg_name_to);
+-	if (!(vg_to = vg_lock_and_read(cmd, vg_name_to, NULL, LCK_VG_WRITE,
+-				       CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-				       CORRECT_INCONSISTENT | FAIL_INCONSISTENT)))
++	vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0);
++	if (vg_read_error(vg_to))
+ 		 return ECMD_FAILED;
  
-@@ -97,7 +97,8 @@ static int _mirrored_text_import(struct lv_segment *seg, const struct config_nod
- 			seg->status |= PVMOVE;
- 		else {
- 			log_error("Couldn't read 'extents_moved' for "
--				  "segment '%s'.", sn->key);
-+				  "segment %s of logical volume %s.",
-+				  config_node_name(sn), seg->lv->name);
- 			return 0;
- 		}
+ 	log_verbose("Checking for volume group \"%s\"", vg_name_from);
+-	if (!(vg_from = vg_lock_and_read(cmd, vg_name_from, NULL,
+-					 LCK_VG_WRITE,
+-					 CLUSTERED | EXPORTED_VG | LVM_WRITE,
+-					 CORRECT_INCONSISTENT | FAIL_INCONSISTENT))) {
++	vg_from = vg_read_for_update(cmd, vg_name_from, NULL,
++				     LOCK_NONBLOCKING);
++	if (vg_read_error(vg_from)) {
+ 		unlock_and_release_vg(cmd, vg_to, vg_name_to);
+ 		return ECMD_FAILED;
  	}
-@@ -106,7 +107,8 @@ static int _mirrored_text_import(struct lv_segment *seg, const struct config_nod
- 		if (!get_config_uint32(sn, "region_size",
- 				      &seg->region_size)) {
- 			log_error("Couldn't read 'region_size' for "
--				  "segment '%s'.", sn->key);
-+				  "segment %s of logical volume %s.",
-+				  config_node_name(sn), seg->lv->name);
- 			return 0;
- 		}
- 	}
-@@ -118,22 +120,25 @@ static int _mirrored_text_import(struct lv_segment *seg, const struct config_nod
- 		}
- 		logname = cn->v->v.str;
- 		if (!(seg->log_lv = find_lv(seg->lv->vg, logname))) {
--			log_error("Unrecognised mirror log in segment %s.",
--				  sn->key);
-+			log_error("Unrecognised mirror log in "
-+				  "segment %s of logical volume %s.",
-+				  config_node_name(sn), seg->lv->name);
- 			return 0;
- 		}
- 		seg->log_lv->status |= MIRROR_LOG;
- 	}
- 
- 	if (logname && !seg->region_size) {
--		log_error("Missing region size for mirror log for segment "
--			  "'%s'.", sn->key);
-+		log_error("Missing region size for mirror log for "
-+			  "segment %s of logical volume %s.",
-+			  config_node_name(sn), seg->lv->name);
- 		return 0;
- 	}
- 
- 	if (!(cn = find_config_node(sn, "mirrors"))) {
--		log_error("Couldn't find mirrors array for segment "
--			  "'%s'.", sn->key);
-+		log_error("Couldn't find mirrors array for "
-+			  "segment %s of logical volume %s.",
-+			  config_node_name(sn), seg->lv->name);
- 		return 0;
- 	}
- 
-diff --git a/lib/striped/striped.c b/lib/striped/striped.c
-index 78129af..6dda69b 100644
---- a/lib/striped/striped.c
-+++ b/lib/striped/striped.c
-@@ -54,7 +54,7 @@ static int _striped_text_import_area_count(struct config_node *sn, uint32_t *are
- {
- 	if (!get_config_uint32(sn, "stripe_count", area_count)) {
- 		log_error("Couldn't read 'stripe_count' for "
--			  "segment '%s'.", sn->key);
-+			  "segment '%s'.", config_node_name(sn));
- 		return 0;
- 	}
- 
-@@ -68,14 +68,14 @@ static int _striped_text_import(struct lv_segment *seg, const struct config_node
- 
- 	if ((seg->area_count != 1) &&
- 	    !get_config_uint32(sn, "stripe_size", &seg->stripe_size)) {
--		log_error("Couldn't read stripe_size for segment '%s'.",
--			  sn->key);
-+		log_error("Couldn't read stripe_size for segment %s "
-+			  "of logical volume %s.", config_node_name(sn), seg->lv->name);
- 		return 0;
- 	}
- 
- 	if (!(cn = find_config_node(sn, "stripes"))) {
--		log_error("Couldn't find stripes array for segment "
--			  "'%s'.", sn->key);
-+		log_error("Couldn't find stripes array for segment %s "
-+			  "of logical volume %s.", config_node_name(sn), seg->lv->name);
- 		return 0;
- 	}
- 
-
 
 
