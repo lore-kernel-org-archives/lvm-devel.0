@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 6 Jul 2009 19:04:26 -0000
-Subject: LVM2 ./WHATS_NEW doc/example.conf lib/device/d ...
-Message-ID: <20090706190426.29812.qmail@sourceware.org>
+Date: 6 Jul 2009 19:13:28 -0000
+Subject: LVM2 ./WHATS_NEW man/lvcreate.8.in man/lvexten ...
+Message-ID: <20090706191328.1731.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,318 +10,322 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2009-07-06 19:04:25
+Changes by:	snitzer at sourceware.org	2009-07-06 19:13:27
 
 Modified files:
 	.              : WHATS_NEW 
-	doc            : example.conf 
-	lib/device     : dev-md.c device.h 
-	lib/metadata   : metadata.c 
-	man            : lvm.conf.5.in 
+	man            : lvcreate.8.in lvextend.8.in lvreduce.8.in 
+	                 lvresize.8.in vgchange.8.in vgcreate.8.in 
+	tools          : commands.h lvmcmdline.c 
 
 Log message:
-	Use the MD device's stripe-width, instead of chunk_size, to align the
-	data blocks of a Physical Volume that is placed directly upon an MD
-	device.
+	Allow commandline sizes to be specified in terms of bytes and sectors.
+	Update the man pages to document size units uniformly.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1163&r2=1.1164
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.40&r2=1.41
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-md.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.h.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.230&r2=1.231
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1164&r2=1.1165
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvextend.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvreduce.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvresize.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgchange.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgcreate.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.96&r2=1.97
 
---- LVM2/WHATS_NEW	2009/07/03 11:04:06	1.1163
-+++ LVM2/WHATS_NEW	2009/07/06 19:04:24	1.1164
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2009/07/06 19:04:24	1.1164
++++ LVM2/WHATS_NEW	2009/07/06 19:13:26	1.1165
+@@ -1,5 +1,7 @@
  Version 2.02.49 - 
  ================================
-+  Update 'md_chunk_alignment' to use stripe-width to align PV data area.
++  Update the man pages to document size units uniformly.
++  Allow specifying commandline sizes in terms of bytes and sectors.
+   Update 'md_chunk_alignment' to use stripe-width to align PV data area.
    Update test/t-inconsistent-metadata.sh to match new vg_read interface.
    Add lvmcache_init() to polldaemon initialization.
-   Convert tools to use new vg_read / vg_read_for_update.
---- LVM2/doc/example.conf	2009/06/04 12:01:15	1.40
-+++ LVM2/doc/example.conf	2009/07/06 19:04:25	1.41
-@@ -94,7 +94,7 @@
-     md_component_detection = 1
- 
-     # By default, if a PV is placed directly upon an md device, LVM2
--    # will align its data blocks with the the chunk_size exposed in sysfs.
-+    # will align its data blocks with the md device's stripe-width.
-     # 1 enables; 0 disables.
-     md_chunk_alignment = 1
- 
---- LVM2/lib/device/dev-md.c	2008/10/03 14:22:18	1.13
-+++ LVM2/lib/device/dev-md.c	2009/07/06 19:04:25	1.14
-@@ -125,39 +125,57 @@
- 	return ret;
- }
- 
--/*
-- * Retrieve chunk size from md device using sysfs.
-- */
--unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev)
-+static int _md_sysfs_attribute_snprintf(char *path, size_t size,
-+					const char *sysfs_dir,
-+					struct device *dev,
-+					const char *attribute)
+--- LVM2/man/lvcreate.8.in	2009/05/27 16:30:30	1.7
++++ LVM2/man/lvcreate.8.in	2009/07/06 19:13:26	1.8
+@@ -9,7 +9,7 @@
+ [\-h|\-?|\-\-help]
+ [\-i|\-\-stripes Stripes [\-I|\-\-stripesize StripeSize]]
+ {\-l|\-\-extents LogicalExtentsNumber[%{VG|PVS|FREE}] |
+- \-L|\-\-size LogicalVolumeSize[kKmMgGtT]}
++ \-L|\-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+ [\-M|\-\-persistent y|n] [\-\-minor minor]
+ [\-m|\-\-mirrors Mirrors [\-\-nosync] [\-\-mirrorlog {disk|core}] [\-\-corelog]
+ [\-R|\-\-regionsize MirrorLogRegionSize]]
+@@ -23,7 +23,7 @@
+ .br
+ .B lvcreate
+ {\-l|\-\-extents LogicalExtentsNumber[%{VG|FREE}] |
+- \-L|\-\-size LogicalVolumeSize[kKmMgGtT]}
++ \-L|\-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+ [\-c|\-\-chunksize ChunkSize]
+ \-n|\-\-name SnapshotLogicalVolumeName
+ {{\-s|\-\-snapshot}
+@@ -76,7 +76,7 @@
+ of the remaining free space for the specified PhysicalVolume(s)
+ with the suffix %PVS,
+ .TP
+-.I \-L, \-\-size LogicalVolumeSize[kKmMgGtTpPeE]
++.I \-L, \-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+ Gives the size to allocate for the new logical volume.
+ A size suffix of K for kilobytes, M for megabytes,
+ G for gigabytes, T for terabytes, P for petabytes
+--- LVM2/man/lvextend.8.in	2008/11/12 15:01:36	1.2
++++ LVM2/man/lvextend.8.in	2009/07/06 19:13:26	1.3
+@@ -7,7 +7,7 @@
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-h|\-?|\-\-help]
+ [\-i|\-\-stripes Stripes [\-I|\-\-stripesize StripeSize]]
+ {\-l|\-\-extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE}] |
+-\-L|\-\-size [+]LogicalVolumeSize[kKmMgGtT]}
++\-L|\-\-size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+ [\-t|\-\-test]
+ [\-v|\-\-verbose] LogicalVolumePath [PhysicalVolumePath...]
+ .SH DESCRIPTION
+@@ -32,7 +32,7 @@
+ or as a percentage of the remaining free space in the Volume Group
+ with the suffix %FREE.
+ .TP
+-.I \-L, \-\-size [+]LogicalVolumeSize[kKmMgGtTpPeE]
++.I \-L, \-\-size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+ Extend or set the logical volume size in units of megabytes.
+ A size suffix of M for megabytes,
+ G for gigabytes, T for terabytes, P for petabytes 
+--- LVM2/man/lvreduce.8.in	2008/11/12 15:01:36	1.2
++++ LVM2/man/lvreduce.8.in	2009/07/06 19:13:26	1.3
+@@ -6,7 +6,7 @@
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-f|\-\-force]
+ [\-h|\-?|\-\-help]
+ {\-l|\-\-extents [\-]LogicalExtentsNumber[%{VG|LV|FREE}] |
+-\-L|\-\-size [\-]LogicalVolumeSize[kKmMgGtT]}
++\-L|\-\-size [\-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+ [\-t|\-\-test]
+ [\-v|\-\-verbose] LogicalVolume[Path]
+ .SH DESCRIPTION
+@@ -46,7 +46,7 @@
+ size of the Logical Volume with the suffix %LV or as a percentage of the remaining
+ free space in the Volume Group with the suffix %FREE.
+ .TP
+-.I \-L, \-\-size [\-]LogicalVolumeSize[kKmMgGtTpPeE]
++.I \-L, \-\-size [\-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+ Reduce or set the logical volume size in units of megabyte by default.
+ A size suffix of k for kilobyte, m for megabyte, 
+ g for gigabytes, t for terabytes, p for petabytes 
+--- LVM2/man/lvresize.8.in	2008/11/12 15:16:58	1.3
++++ LVM2/man/lvresize.8.in	2009/07/06 19:13:26	1.4
+@@ -7,7 +7,7 @@
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-h|\-?|\-\-help]
+ [\-i|\-\-stripes Stripes [\-I|\-\-stripesize StripeSize]]
+ {\-l|\-\-extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE}] |
+-\-L|\-\-size [+]LogicalVolumeSize[kKmMgGtT]}
++\-L|\-\-size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+ [\-t|\-\-test]
+ [\-v|\-\-verbose] LogicalVolumePath [PhysicalVolumePath...]
+ .SH DESCRIPTION
+@@ -36,7 +36,7 @@
+ suffix %PVS, or as a percentage of the remaining free space in the
+ Volume Group with the suffix %FREE.
+ .TP
+-.I \-L, \-\-size [+|-]LogicalVolumeSize[kKmMgGtTpPeE]
++.I \-L, \-\-size [+|-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+ Change or set the logical volume size in units of megabytes.
+ A size suffix of M for megabytes,
+ G for gigabytes, T for terabytes, P for petabytes 
+--- LVM2/man/vgchange.8.in	2009/02/25 13:17:41	1.2
++++ LVM2/man/vgchange.8.in	2009/07/06 19:13:26	1.3
+@@ -24,7 +24,7 @@
+ .IR MaxPhysicalVolumes ]
+ .RB [ \-P | \-\-partial]
+ .RB [ \-s | \-\-physicalextentsize
+-.IR PhysicalExtentSize [ \fBkKmMgGtT\fR ]]
++.IR PhysicalExtentSize [ \fBbBsSkKmMgGtTpPeE\fR ]]
+ .RB [ \-\-refresh]
+ .RB [ -t | \-\-test]
+ .RB [ \-v | \-\-verbose]
+@@ -108,7 +108,7 @@
+ some use of \fB--metadatacopies 0\fP
+ as described in \fBpvcreate(8)\fP.
+ .TP
+-.BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBkKmMgGtT\fR]
++.BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBbBsSkKmMgGtTpPeE\fR]
+ Changes the physical extent size on physical volumes of this volume group.
+ A size suffix (k for kilobytes up to t for terabytes) is optional, megabytes
+ is the default if no suffix is present.
+--- LVM2/man/vgcreate.8.in	2008/10/08 12:50:13	1.1
++++ LVM2/man/vgcreate.8.in	2009/07/06 19:13:26	1.2
+@@ -17,7 +17,7 @@
+ .RB [ -p | \-\-maxphysicalvolumes
+ .IR MaxPhysicalVolumes ]
+ .RB [ \-s | \-\-physicalextentsize
+-.IR PhysicalExtentSize [ \fBkKmMgGtT\fR ]]
++.IR PhysicalExtentSize [ \fBbBsSkKmMgGtTpPeE\fR ]]
+ .RB [ \-t | \-\-test ]
+ .RB [ \-v | \-\-verbose ]
+ .RB [ \-\-version ]
+@@ -66,7 +66,7 @@
+ some use of \fB--metadatacopies 0\fP
+ as described in \fBpvcreate(8)\fP.
+ .TP
+-.BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBkKmMgGtT\fR]
++.BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBbBsSkKmMgGtTpPeE\fR]
+ Sets the physical extent size on physical volumes of this volume group.
+ A size suffix (k for kilobytes up to t for terabytes) is optional, megabytes
+ is the default if no suffix is present.  
+--- LVM2/tools/commands.h	2009/06/30 18:39:32	1.128
++++ LVM2/tools/commands.h	2009/07/06 19:13:26	1.129
+@@ -19,7 +19,7 @@
+    "e2fsadm "
+    "[-d|--debug] " "[-h|--help] " "[-n|--nofsck]" "\n"
+    "\t{[-l|--extents] [+|-]LogicalExtentsNumber |" "\n"
+-   "\t [-L|--size] [+|-]LogicalVolumeSize[kKmMgGtTpPeE]}" "\n"
++   "\t [-L|--size] [+|-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}" "\n"
+    "\t[-t|--test] "  "\n"
+    "\t[-v|--verbose] "  "\n"
+    "\t[--version] " "\n"
+@@ -133,7 +133,7 @@
+    "\t[-h|-?|--help]\n"
+    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
+    "\t{-l|--extents LogicalExtentsNumber |\n"
+-   "\t -L|--size LogicalVolumeSize[kKmMgGtTpPeE]}\n"
++   "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
+    "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core}|--corelog}]]\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+@@ -159,7 +159,7 @@
+    "\t[-h|-?|--help]\n"
+    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
+    "\t{-l|--extents LogicalExtentsNumber[%{VG|LV|PVS|FREE}] |\n"
+-   "\t -L|--size LogicalVolumeSize[kKmMgGtTpPeE]}\n"
++   "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[-p|--permission {r|rw}]\n"
+@@ -228,7 +228,7 @@
+    "\t[-h|--help]\n"
+    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
+    "\t{-l|--extents [+]LogicalExtentsNumber[%{VG|PVS|FREE}] |\n"
+-   "\t -L|--size [+]LogicalVolumeSize[kKmMgGtTpPeE]}\n"
++   "\t -L|--size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-m|--mirrors Mirrors]\n"
+    "\t[-n|--nofsck]\n"
+    "\t[-r|--resizefs]\n"
+@@ -298,7 +298,7 @@
+    "\t[-f|--force]\n"
+    "\t[-h|--help]\n"
+    "\t{-l|--extents [-]LogicalExtentsNumber[%{VG|LV|FREE}] |\n"
+-   "\t -L|--size [-]LogicalVolumeSize[kKmMgGtTpPeE]}\n"
++   "\t -L|--size [-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-n|--nofsck]\n"
+    "\t[-r|--resizefs]\n"
+    "\t[-t|--test]\n"
+@@ -351,7 +351,7 @@
+    "\t[-h|--help]\n"
+    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
+    "\t{-l|--extents [+|-]LogicalExtentsNumber[%{VG|LV|PVS|FREE}] |\n"
+-   "\t -L|--size [+|-]LogicalVolumeSize[kKmMgGtTpPeE]}\n"
++   "\t -L|--size [+|-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-n|--nofsck]\n"
+    "\t[-r|--resizefs]\n"
+    "\t[-t|--test]\n"
+@@ -436,7 +436,7 @@
+    "pvresize " "\n"
+    "\t[-d|--debug]" "\n"
+    "\t[-h|-?|--help] " "\n"
+-   "\t[--setphysicalvolumesize PhysicalVolumeSize[kKmMgGtTpPeE]" "\n"
++   "\t[--setphysicalvolumesize PhysicalVolumeSize[bBsSkKmMgGtTpPeE]" "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose] " "\n"
+    "\t[--version] " "\n"
+@@ -468,9 +468,9 @@
+    "\t[--labelsector sector] " "\n"
+    "\t[-M|--metadatatype 1|2]" "\n"
+    "\t[--metadatacopies #copies]" "\n"
+-   "\t[--metadatasize MetadataSize[kKmMgGtTpPeE]]" "\n"
+-   "\t[--dataalignment Alignment[kKmMgGtTpPeE]]" "\n"
+-   "\t[--setphysicalvolumesize PhysicalVolumeSize[kKmMgGtTpPeE]" "\n"
++   "\t[--metadatasize MetadataSize[bBsSkKmMgGtTpPeE]]" "\n"
++   "\t[--dataalignment Alignment[bBsSkKmMgGtTpPeE]]" "\n"
++   "\t[--setphysicalvolumesize PhysicalVolumeSize[bBsSkKmMgGtTpPeE]" "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-u|--uuid uuid] " "\n"
+    "\t[-v|--verbose] " "\n"
+@@ -683,7 +683,7 @@
+    "\t -x|--resizeable {y|n} |" "\n"
+    "\t -l|--logicalvolume MaxLogicalVolumes |" "\n"
+    "\t -p|--maxphysicalvolumes MaxPhysicalVolumes |" "\n"
+-   "\t -s|--physicalextentsize PhysicalExtentSize[kKmMgGtTpPeE] |" "\n"
++   "\t -s|--physicalextentsize PhysicalExtentSize[bBsSkKmMgGtTpPeE] |" "\n"
+    "\t --addtag Tag |\n"
+    "\t --deltag Tag}\n"
+    "\t[VolumeGroupName...]\n",
+@@ -713,7 +713,7 @@
+    "\t[--labelsector sector] " "\n"
+    "\t[-M|--metadatatype 1|2]" "\n"
+    "\t[--metadatacopies #copies]" "\n"
+-   "\t[--metadatasize MetadataSize[kKmMgGtTpPeE]]" "\n"
++   "\t[--metadatasize MetadataSize[bBsSkKmMgGtTpPeE]]" "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose] " "\n"
+    "\t[--version] " "\n"
+@@ -735,7 +735,7 @@
+    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
+    "\t[-M|--metadatatype 1|2] " "\n"
+    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
+-   "\t[-s|--physicalextentsize PhysicalExtentSize[kKmMgGtTpPeE]] " "\n"
++   "\t[-s|--physicalextentsize PhysicalExtentSize[bBsSkKmMgGtTpPeE]] " "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose]" "\n"
+    "\t[--version] " "\n"
+--- LVM2/tools/lvmcmdline.c	2009/05/27 16:30:30	1.96
++++ LVM2/tools/lvmcmdline.c	2009/07/06 19:13:26	1.97
+@@ -239,9 +239,10 @@
  {
--	char path[PATH_MAX+1], buffer[64];
--	FILE *fp;
- 	struct stat info;
--	unsigned long chunk_size_bytes = 0UL;
-+	int ret = -1;
+ 	char *ptr;
+ 	int i;
+-	static const char *suffixes = "kmgtpe";
++	static const char *suffixes = "kmgtpebs";
+ 	char *val;
+ 	double v;
++	uint64_t v_tmp, adjustment;
  
- 	if (MAJOR(dev->dev) != md_major())
--		return 0;
-+		return ret;
+ 	a->percent = PERCENT_NONE;
  
- 	if (!sysfs_dir || !*sysfs_dir)
--		return_0;
-+		return ret;
+@@ -272,13 +273,29 @@
+ 			if (suffixes[i] == tolower((int) *ptr))
+ 				break;
  
--	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/md/chunk_size",
--	    sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev)) < 0) {
--		log_error("dm_snprintf md chunk_size failed");
--		return 0;
-+	ret = dm_snprintf(path, size, "%s/dev/block/%d:%d/md/%s",
-+	      sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev), attribute);
-+	if (ret < 0) {
-+		log_error("dm_snprintf md %s failed", attribute);
-+		return ret;
- 	}
- 
--	/* old sysfs structure */
--	if (stat(path, &info) &&
--	    dm_snprintf(path, PATH_MAX, "%s/block/md%d/md/chunk_size",
--			sysfs_dir, MINOR(dev->dev)) < 0) {
--		log_error("dm_snprintf old md chunk size failed");
--		return 0;
-+	if (stat(path, &info) < 0) {
-+		/* old sysfs structure */
-+		ret = dm_snprintf(path, size, "%s/block/md%d/md/%s",
-+				  sysfs_dir, MINOR(dev->dev), attribute);
-+		if (ret < 0) {
-+			log_error("dm_snprintf old md %s failed", attribute);
-+			return ret;
-+		}
- 	}
- 
-+	return ret;
-+}
-+
-+static int _md_sysfs_attribute_scanf(const char *sysfs_dir,
-+				     struct device *dev,
-+				     const char *attribute_name,
-+				     const char *attribute_fmt,
-+				     void *attribute_value)
-+{
-+	char path[PATH_MAX+1], buffer[64];
-+	FILE *fp;
-+	int ret = 0;
-+
-+	if (_md_sysfs_attribute_snprintf(path, PATH_MAX, sysfs_dir,
-+					 dev, attribute_name) < 0)
-+		return ret;
-+
- 	if (!(fp = fopen(path, "r"))) {
- 		log_sys_error("fopen", path);
--		return 0;
-+		return ret;
- 	}
- 
- 	if (!fgets(buffer, sizeof(buffer), fp)) {
-@@ -165,22 +183,130 @@
- 		goto out;
- 	}
- 
--	if (sscanf(buffer, "%lu", &chunk_size_bytes) != 1) {
--		log_error("sysfs file %s not in expected format: %s", path,
--			  buffer);
-+	if ((ret = sscanf(buffer, attribute_fmt, attribute_value)) != 1) {
-+		log_error("%s sysfs attr %s not in expected format: %s",
-+			  dev_name(dev), attribute_name, buffer);
- 		goto out;
- 	}
- 
--	log_very_verbose("Device %s md chunk size is %lu bytes.",
--			 dev_name(dev), chunk_size_bytes);
+-		if (i < 0)
++		if (i < 0) {
+ 			return 0;
 -
- out:
- 	if (fclose(fp))
- 		log_sys_error("fclose", path);
+-		while (i-- > 0)
+-			v *= 1024;
+-
+-		v *= 2;
++		} else if (i == 7) {
++			/* sectors */
++			v = v;
++		} else if (i == 6) {
++			/* bytes */
++			v_tmp = (uint64_t) v;
++			adjustment = v_tmp % 512;
++			if (adjustment) {
++				v_tmp += (512 - adjustment);
++				log_error("Size is not a multiple of 512. "
++					  "Try using %lu or %lu.",
++					  v_tmp - 512, v_tmp);
++				return 0;
++			}
++			v /= 512;
++		} else {
++			/* all other units: kmgtpe */
++			while (i-- > 0)
++				v *= 1024;
++			v *= 2;
++		}
+ 	} else
+ 		v *= factor;
  
-+	return ret;
-+}
-+
-+/*
-+ * Retrieve chunk size from md device using sysfs.
-+ */
-+static unsigned long dev_md_chunk_size(const char *sysfs_dir,
-+				       struct device *dev)
-+{
-+	const char *attribute = "chunk_size";
-+	unsigned long chunk_size_bytes = 0UL;
-+
-+	if (_md_sysfs_attribute_scanf(sysfs_dir, dev, attribute,
-+				      "%lu", &chunk_size_bytes) != 1)
-+		return 0;
-+
-+	log_very_verbose("Device %s %s is %lu bytes.",
-+			 dev_name(dev), attribute, chunk_size_bytes);
-+
- 	return chunk_size_bytes >> SECTOR_SHIFT;
- }
- 
-+/*
-+ * Retrieve level from md device using sysfs.
-+ */
-+static int dev_md_level(const char *sysfs_dir, struct device *dev)
-+{
-+	const char *attribute = "level";
-+	int level = -1;
-+
-+	if (_md_sysfs_attribute_scanf(sysfs_dir, dev, attribute,
-+				      "raid%d", &level) != 1)
-+		return -1;
-+
-+	log_very_verbose("Device %s %s is raid%d.",
-+			 dev_name(dev), attribute, level);
-+
-+	return level;
-+}
-+
-+/*
-+ * Retrieve raid_disks from md device using sysfs.
-+ */
-+static int dev_md_raid_disks(const char *sysfs_dir, struct device *dev)
-+{
-+	const char *attribute = "raid_disks";
-+	int raid_disks = 0;
-+
-+	if (_md_sysfs_attribute_scanf(sysfs_dir, dev, attribute,
-+				      "%d", &raid_disks) != 1)
-+		return 0;
-+
-+	log_very_verbose("Device %s %s is %d.",
-+			 dev_name(dev), attribute, raid_disks);
-+
-+	return raid_disks;
-+}
-+
-+/*
-+ * Calculate stripe width of md device using its sysfs files.
-+ */
-+unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev)
-+{
-+	unsigned long chunk_size_sectors = 0UL;
-+	unsigned long stripe_width_sectors = 0UL;
-+	int level, raid_disks, data_disks;
-+
-+	chunk_size_sectors = dev_md_chunk_size(sysfs_dir, dev);
-+	if (!chunk_size_sectors)
-+		return 0;
-+
-+	level = dev_md_level(sysfs_dir, dev);
-+	if (level < 0)
-+		return 0;
-+
-+	raid_disks = dev_md_raid_disks(sysfs_dir, dev);
-+	if (!raid_disks)
-+		return 0;
-+
-+	/* The raid level governs the number of data disks. */
-+	switch (level) {
-+	case 0:
-+		/* striped md does not have any parity disks */
-+		data_disks = raid_disks;
-+		break;
-+	case 1:
-+	case 10:
-+		/* mirrored md effectively has 1 data disk */
-+		data_disks = 1;
-+		break;
-+	case 4:
-+	case 5:
-+		/* both raid 4 and 5 have a single parity disk */
-+		data_disks = raid_disks - 1;
-+		break;
-+	case 6:
-+		/* raid 6 has 2 parity disks */
-+		data_disks = raid_disks - 2;
-+		break;
-+	default:
-+		log_error("Device %s has an unknown md raid level: %d",
-+			  dev_name(dev), level);
-+		return 0;
-+	}
-+
-+	stripe_width_sectors = chunk_size_sectors * data_disks;
-+
-+	log_very_verbose("Device %s stripe-width is %lu bytes.",
-+			 dev_name(dev),
-+			 stripe_width_sectors << SECTOR_SHIFT);
-+
-+	return stripe_width_sectors;
-+}
-+
- #else
- 
- int dev_is_md(struct device *dev __attribute((unused)),
-@@ -189,8 +315,8 @@
- 	return 0;
- }
- 
--unsigned long dev_md_chunk_size(const char *sysfs_dir __attribute((unused)),
--				struct device *dev  __attribute((unused)))
-+unsigned long dev_md_stripe_width(const char *sysfs_dir __attribute((unused)),
-+				  struct device *dev  __attribute((unused)))
- {
- 	return 0UL;
- }
---- LVM2/lib/device/device.h	2009/05/20 11:09:49	1.39
-+++ LVM2/lib/device/device.h	2009/07/06 19:04:25	1.40
-@@ -96,7 +96,7 @@
- /* Does device contain md superblock?  If so, where? */
- int dev_is_md(struct device *dev, uint64_t *sb);
- int dev_is_swap(struct device *dev, uint64_t *signature);
--unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev);
-+unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev);
- 
- int is_partitioned_dev(struct device *dev);
- 
---- LVM2/lib/metadata/metadata.c	2009/07/01 17:03:38	1.230
-+++ LVM2/lib/metadata/metadata.c	2009/07/06 19:04:25	1.231
-@@ -81,13 +81,13 @@
- 		goto out;
- 
- 	/*
--	 * Align to chunk size of underlying md device if present
-+	 * Align to stripe-width of underlying md device if present
- 	 */
- 	if (find_config_tree_bool(pv->fmt->cmd, "devices/md_chunk_alignment",
- 				  DEFAULT_MD_CHUNK_ALIGNMENT))
- 		pv->pe_align = MAX(pv->pe_align,
--				   dev_md_chunk_size(pv->fmt->cmd->sysfs_dir,
--						     pv->dev));
-+				   dev_md_stripe_width(pv->fmt->cmd->sysfs_dir,
-+						       pv->dev));
- 
- 	log_very_verbose("%s: Setting PE alignment to %lu sectors.",
- 			 dev_name(pv->dev), pv->pe_align);
---- LVM2/man/lvm.conf.5.in	2009/02/22 19:00:28	1.2
-+++ LVM2/man/lvm.conf.5.in	2009/07/06 19:04:25	1.3
-@@ -134,8 +134,8 @@
- has been reused without wiping the md superblocks first.
- .IP
- \fBmd_chunk_alignment\fP \(em If set to 1, and a Physical Volume is placed
--directly upon an md device, LVM2 will align its data blocks with the the
--chunk_size exposed in sysfs.
-+directly upon an md device, LVM2 will align its data blocks with the
-+md device's stripe-width.
- .IP
- \fBdata_alignment\fP \(em Default alignment (in KB) of start of data area
- when creating a new Physical Volume using the \fBlvm2\fP format.
 
 
