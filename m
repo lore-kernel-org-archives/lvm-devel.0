@@ -1,44 +1,30 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Sun,  5 Jul 2009 22:39:48 -0400
-Subject: [PATCH v4 3/5] Add --dataalignmentoffset to pvcreate to pad aligned data area
+Date: Sun,  5 Jul 2009 22:39:49 -0400
+Subject: [PATCH v4 4/5] Add devices/data_alignment_offset_detection to lvm.conf.
 In-Reply-To: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
 References: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1246847990-13370-4-git-send-email-snitzer@redhat.com>
+Message-ID: <1246847990-13370-5-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Implement pvcreate --dataalignmentoffset to pad the start of
-the aligned data area.
-
-When setting up the first mda, format-text.c:_mda_setup now sets the
-pe_start to immediately follow the first mda (which ends at a pe_align
-boundry).  data_alignment_offset will be added to pe_start if
---dataalignmentoffset was used.
-
-Testing included verifying 'pvcreate --metadatacopies 2' works
-(2nd mda's location on disk isn't affected by data_alignment_offset).
-- Worst case scenario is the PV's pe_count may be reduced by 1 depending
-  upon the size of the device.
+If the pvcreate --dataalignmentoffset option is not specified the start
+of a PV's aligned data area will be padded with the associated
+'alignment_offset' exposed in sysfs (unless
+devices/data_alignment_offset_detection is disabled in lvm.conf).
 
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- WHATS_NEW                        |    1 +
- lib/format1/format1.c            |    1 +
- lib/format_pool/format_pool.c    |    1 +
- lib/format_text/archiver.c       |    2 +-
- lib/format_text/format-text.c    |   16 ++++++++++++++--
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |   10 ++++++++--
- lib/metadata/metadata.h          |    1 +
- man/pvcreate.8.in                |   20 +++++++++++++++++---
- tools/args.h                     |    1 +
- tools/commands.h                 |    7 ++++---
- tools/pvcreate.c                 |   23 +++++++++++++++++++++--
- tools/vgconvert.c                |    2 +-
- 13 files changed, 72 insertions(+), 14 deletions(-)
+ WHATS_NEW               |    1 
+ doc/example.conf        |    9 ++++++
+ lib/config/defaults.h   |    1 
+ lib/device/device.c     |   71 ++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/device/device.h     |    3 ++
+ lib/metadata/metadata.c |    8 +++++
+ man/lvm.conf.5.in       |    9 +++++-
+ 7 files changed, 101 insertions(+), 1 deletion(-)
 
 Index: LVM2/WHATS_NEW
 ===================================================================
@@ -47,334 +33,174 @@ Index: LVM2/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.49 - 
  ================================
-+  Add --dataalignmentoffset to pvcreate to pad aligned data area.
++  Add devices/data_alignment_offset_detection to lvm.conf.
+   Add --dataalignmentoffset to pvcreate to pad aligned data area.
    Update the man pages to document size units uniformly.
    Allow specifying commandline sizes in terms of bytes and sectors.
-   Update 'md_chunk_alignment' to use stripe-width to align PV data area.
-Index: LVM2/lib/format1/format1.c
+Index: LVM2/doc/example.conf
 ===================================================================
---- LVM2.orig/lib/format1/format1.c
-+++ LVM2/lib/format1/format1.c
-@@ -296,6 +296,7 @@ static int _format1_pv_setup(const struc
- 		     uint64_t pe_start, uint32_t extent_count,
- 		     uint32_t extent_size,
- 		     unsigned long data_alignment __attribute((unused)),
-+		     unsigned long data_alignment_offset __attribute((unused)),
- 		     int pvmetadatacopies __attribute((unused)),
- 		     uint64_t pvmetadatasize __attribute((unused)), struct dm_list *mdas __attribute((unused)),
- 		     struct physical_volume *pv, struct volume_group *vg __attribute((unused)))
-Index: LVM2/lib/format_pool/format_pool.c
-===================================================================
---- LVM2.orig/lib/format_pool/format_pool.c
-+++ LVM2/lib/format_pool/format_pool.c
-@@ -192,6 +192,7 @@ static int _pool_pv_setup(const struct f
- 			  uint32_t extent_count __attribute((unused)),
- 			  uint32_t extent_size __attribute((unused)),
- 			  unsigned long data_alignment __attribute((unused)),
-+			  unsigned long data_alignment_offset __attribute((unused)),
- 			  int pvmetadatacopies __attribute((unused)),
- 			  uint64_t pvmetadatasize __attribute((unused)),
- 			  struct dm_list *mdas __attribute((unused)),
-Index: LVM2/lib/format_text/archiver.c
-===================================================================
---- LVM2.orig/lib/format_text/archiver.c
-+++ LVM2/lib/format_text/archiver.c
-@@ -316,7 +316,7 @@ int backup_restore_vg(struct cmd_context
- 			return 0;
- 		}
- 		if (!vg->fid->fmt->ops->
--		    pv_setup(vg->fid->fmt, UINT64_C(0), 0, 0, 0, 0UL,
-+		    pv_setup(vg->fid->fmt, UINT64_C(0), 0, 0, 0, 0, 0UL,
- 			     UINT64_C(0), &vg->fid->metadata_areas, pv, vg)) {
- 			log_error("Format-specific setup for %s failed",
- 				  pv_dev_name(pv));
-Index: LVM2/lib/format_text/format-text.c
-===================================================================
---- LVM2.orig/lib/format_text/format-text.c
-+++ LVM2/lib/format_text/format-text.c
-@@ -1175,6 +1175,7 @@ static int _text_scan(const struct forma
-    Always have an mda between end-of-label and pe_align() boundary */
- static int _mda_setup(const struct format_type *fmt,
- 		      uint64_t pe_start, uint64_t pe_end,
-+		      unsigned long data_alignment_offset,
- 		      int pvmetadatacopies,
- 		      uint64_t pvmetadatasize, struct dm_list *mdas,
- 		      struct physical_volume *pv,
-@@ -1251,6 +1252,16 @@ static int _mda_setup(const struct forma
- 			return 0;
- 		}
+--- LVM2.orig/doc/example.conf
++++ LVM2/doc/example.conf
+@@ -104,6 +104,15 @@ devices {
+     # Set to 0 for the default alignment of 64KB or page size, if larger.
+     data_alignment = 0
  
-+		if (!pe_start && !pe_end) {
-+			/*
-+			 * Set PV's pe_start to immediately follow the
-+			 * first mda (which ends at a pe_align boundry)
-+			 */
-+			pv->pe_start = (start1 + mda_size1) >> SECTOR_SHIFT;
-+			if (data_alignment_offset)
-+				pv->pe_start += data_alignment_offset;
-+		}
++    # By default, the start of a PV's aligned data area will be padded with
++    # the 'alignment_offset' exposed in sysfs.  This offset is often 0 but
++    # may be non-zero; e.g.: certain 4KB sector drives that compensate for
++    # windows partitioning will have an alignment_offset of 3584 bytes
++    # (sector 7 is the lowest aligned logical block, the 4KB sectors start
++    # at LBA -1, and consequently sector 63 is aligned on a 4KB boundary).
++    # 1 enables; 0 disables.
++    data_alignment_offset_detection = 1
 +
- 		if (pvmetadatacopies == 1)
- 			return 1;
- 	} else
-@@ -1598,6 +1609,7 @@ static struct metadata_area_ops _metadat
- static int _text_pv_setup(const struct format_type *fmt,
- 		     uint64_t pe_start, uint32_t extent_count,
- 		     uint32_t extent_size, unsigned long data_alignment,
-+		     unsigned long data_alignment_offset,
- 		     int pvmetadatacopies,
- 		     uint64_t pvmetadatasize, struct dm_list *mdas,
- 		     struct physical_volume *pv, struct volume_group *vg)
-@@ -1707,8 +1719,8 @@ static int _text_pv_setup(const struct f
- 
- 		if (extent_count)
- 			pe_end = pe_start + extent_count * extent_size - 1;
--		if (!_mda_setup(fmt, pe_start, pe_end, pvmetadatacopies,
--				pvmetadatasize, mdas, pv, vg))
-+		if (!_mda_setup(fmt, pe_start, pe_end, data_alignment_offset,
-+				pvmetadatacopies, pvmetadatasize, mdas, pv, vg))
- 			return_0;
- 	}
- 
-Index: LVM2/lib/metadata/metadata-exported.h
+     # If, while scanning the system for PVs, LVM2 encounters a device-mapper
+     # device that has its I/O suspended, it waits for it to become accessible.
+     # Set this to 1 to skip such devices.  This should only be needed
+Index: LVM2/lib/config/defaults.h
 ===================================================================
---- LVM2.orig/lib/metadata/metadata-exported.h
-+++ LVM2/lib/metadata/metadata-exported.h
-@@ -416,6 +416,7 @@ pv_t *pv_create(const struct cmd_context
- 		      struct id *id,
- 		      uint64_t size,
- 		      unsigned long data_alignment,
-+		      unsigned long data_alignment_offset,
- 		      uint64_t pe_start,
- 		      uint32_t existing_extent_count,
- 		      uint32_t existing_extent_size,
+--- LVM2.orig/lib/config/defaults.h
++++ LVM2/lib/config/defaults.h
+@@ -34,6 +34,7 @@
+ #define DEFAULT_MD_COMPONENT_DETECTION 1
+ #define DEFAULT_MD_CHUNK_ALIGNMENT 1
+ #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
++#define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
+ 
+ #define DEFAULT_LOCK_DIR "/var/lock/lvm"
+ #define DEFAULT_LOCKING_LIB "liblvm2clusterlock.so"
+Index: LVM2/lib/device/device.c
+===================================================================
+--- LVM2.orig/lib/device/device.c
++++ LVM2/lib/device/device.c
+@@ -278,3 +278,74 @@ int _get_partition_type(struct dev_mgr *
+ 	return 0;
+ }
+ #endif
++
++#ifdef linux
++
++static unsigned long _dev_topology_attribute(const char *attribute,
++					     const char *sysfs_dir,
++					     struct device *dev)
++{
++	char path[PATH_MAX+1], buffer[64];
++	FILE *fp;
++	struct stat info;
++	unsigned long result = 0UL;
++
++	if (!attribute || !*attribute)
++		return_0;
++
++	if (!sysfs_dir || !*sysfs_dir)
++		return_0;
++
++	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/%s",
++			sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev),
++			attribute) < 0) {
++		log_error("dm_snprintf %s failed", attribute);
++		return 0;
++	}
++
++	/* check if the desired sysfs attribute exists */
++	if (stat(path, &info) < 0)
++		return 0;
++
++	if (!(fp = fopen(path, "r"))) {
++		log_sys_error("fopen", path);
++		return 0;
++	}
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", path);
++		goto out;
++	}
++
++	if (sscanf(buffer, "%lu", &result) != 1) {
++		log_error("sysfs file %s not in expected format: %s", path,
++			  buffer);
++		goto out;
++	}
++
++	log_very_verbose("Device %s %s is %lu bytes.",
++			 dev_name(dev), attribute, result);
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", path);
++
++	return result >> SECTOR_SHIFT;
++}
++
++unsigned long dev_alignment_offset(const char *sysfs_dir,
++				   struct device *dev)
++{
++	return _dev_topology_attribute("alignment_offset",
++				       sysfs_dir, dev);
++}
++
++#else
++
++unsigned long dev_alignment_offset(const char *sysfs_dir,
++				   struct device *dev)
++{
++	return 0UL;
++}
++
++#endif
+Index: LVM2/lib/device/device.h
+===================================================================
+--- LVM2.orig/lib/device/device.h
++++ LVM2/lib/device/device.h
+@@ -100,4 +100,7 @@ unsigned long dev_md_stripe_width(const 
+ 
+ int is_partitioned_dev(struct device *dev);
+ 
++unsigned long dev_alignment_offset(const char *sysfs_dir,
++				   struct device *dev);
++
+ #endif
 Index: LVM2/lib/metadata/metadata.c
 ===================================================================
 --- LVM2.orig/lib/metadata/metadata.c
 +++ LVM2/lib/metadata/metadata.c
-@@ -48,6 +48,7 @@ static struct physical_volume *_pv_creat
- 				  struct device *dev,
- 				  struct id *id, uint64_t size,
- 				  unsigned long data_alignment,
-+				  unsigned long data_alignment_offset,
- 				  uint64_t pe_start,
- 				  uint32_t existing_extent_count,
- 				  uint32_t existing_extent_size,
-@@ -157,7 +158,7 @@ int add_pv_to_vg(struct volume_group *vg
- 	pv->pe_alloc_count = 0;
+@@ -910,6 +910,14 @@ static struct physical_volume *_pv_creat
+ 	pv->fmt = fmt;
+ 	pv->vg_name = fmt->orphan_vg_name;
  
- 	if (!fid->fmt->ops->pv_setup(fid->fmt, UINT64_C(0), 0,
--				     vg->extent_size, 0, 0UL, UINT64_C(0),
-+				     vg->extent_size, 0, 0, 0UL, UINT64_C(0),
- 				     &fid->metadata_areas, pv, vg)) {
- 		log_error("Format-specific setup of physical volume '%s' "
- 			  "failed.", pv_name);
-@@ -787,6 +788,7 @@ int vg_split_mdas(struct cmd_context *cm
-  * @id: PV UUID to use for initialization
-  * @size: size of the PV in sectors
-  * @data_alignment: requested alignment of data
-+ * @data_alignment_offset: requested offset to aligned data
-  * @pe_start: physical extent start
-  * @existing_extent_count
-  * @existing_extent_size
-@@ -805,13 +807,15 @@ pv_t *pv_create(const struct cmd_context
- 		struct device *dev,
- 		struct id *id, uint64_t size,
- 		unsigned long data_alignment,
-+		unsigned long data_alignment_offset,
- 		uint64_t pe_start,
- 		uint32_t existing_extent_count,
- 		uint32_t existing_extent_size,
- 		int pvmetadatacopies,
- 		uint64_t pvmetadatasize, struct dm_list *mdas)
- {
--	return _pv_create(cmd->fmt, dev, id, size, data_alignment, pe_start,
-+	return _pv_create(cmd->fmt, dev, id, size,
-+			  data_alignment, data_alignment_offset, pe_start,
- 			  existing_extent_count,
- 			  existing_extent_size,
- 			  pvmetadatacopies,
-@@ -856,6 +860,7 @@ static struct physical_volume *_pv_creat
- 				  struct device *dev,
- 				  struct id *id, uint64_t size,
- 				  unsigned long data_alignment,
-+				  unsigned long data_alignment_offset,
- 				  uint64_t pe_start,
- 				  uint32_t existing_extent_count,
- 				  uint32_t existing_extent_size,
-@@ -907,6 +912,7 @@ static struct physical_volume *_pv_creat
- 
++	if (!pe_start && !data_alignment_offset &&
++	    find_config_tree_bool(pv->fmt->cmd,
++				  "devices/data_alignment_offset_detection",
++				  DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION)) {
++		data_alignment_offset =
++			dev_alignment_offset(pv->fmt->cmd->sysfs_dir, pv->dev);
++	}
++
  	if (!fmt->ops->pv_setup(fmt, pe_start, existing_extent_count,
  				existing_extent_size, data_alignment,
-+				data_alignment_offset,
- 				pvmetadatacopies, pvmetadatasize, mdas,
- 				pv, NULL)) {
- 		log_error("%s: Format-specific setup of physical volume "
-Index: LVM2/lib/metadata/metadata.h
+ 				data_alignment_offset,
+Index: LVM2/man/lvm.conf.5.in
 ===================================================================
---- LVM2.orig/lib/metadata/metadata.h
-+++ LVM2/lib/metadata/metadata.h
-@@ -213,6 +213,7 @@ struct format_handler {
- 	int (*pv_setup) (const struct format_type * fmt,
- 			 uint64_t pe_start, uint32_t extent_count,
- 			 uint32_t extent_size, unsigned long data_alignment,
-+			 unsigned long data_alignment_offset,
- 			 int pvmetadatacopies,
- 			 uint64_t pvmetadatasize, struct dm_list * mdas,
- 			 struct physical_volume * pv, struct volume_group * vg);
-Index: LVM2/man/pvcreate.8.in
-===================================================================
---- LVM2.orig/man/pvcreate.8.in
-+++ LVM2/man/pvcreate.8.in
-@@ -14,6 +14,7 @@ pvcreate \- initialize a disk or partiti
- .RB [ \-\-metadatacopies #copies ]
- .RB [ \-\-metadatasize size ]
- .RB [ \-\-dataalignment alignment ]
-+.RB [ \-\-dataalignmentoffset offset ]
- .RB [ \-\-restorefile file ]
- .RB [ \-\-setphysicalvolumesize size ]
- .RB [ \-u | \-\-uuid uuid ]
-@@ -91,13 +92,18 @@ The approximate amount of space to be se
- (The size you specify may get rounded.)
- .TP
- .BR \-\-dataalignment " alignment"
--Align the offset of the start of the data to a multiple of this number.
-+Align the start of the data to a multiple of this number.
- You should also specify an appropriate \fBPhysicalExtentSize\fP when creating
- the Volume Group with \fBvgcreate\fP.
+--- LVM2.orig/man/lvm.conf.5.in
++++ LVM2/man/lvm.conf.5.in
+@@ -142,10 +142,17 @@ when creating a new Physical Volume usin
+ If a Physical Volume is placed directly upon an md device and
+ \fBmd_chunk_alignment\fP is enabled this parameter is ignored.
+ Set to 0 to use the default alignment of 64KB or the page size, if larger.
++.IP
++\fBdata_alignment_offset_detection\fP \(em If set to 1, and your kernel
++provides topology information in sysfs for the Physical Volume, the
++start of the aligned data area of the Physical Volume will be padded
++with the alignment_offset exposed in sysfs.
  .sp
  To see the location of the first Physical Extent of an existing Physical Volume
  use \fBpvs -o +pe_start\fP .  It will be a multiple of the requested
 -\fBdata_alignment\fP.
-+\fBalignment\fP.  In addition it may be padded by \fBalignment_offset\fP from
-+\fBdata_alignment_offset_detection\fP (if enabled in \fBlvm.conf\fP) or
-+\fB--dataalignmentoffset\fP.
-+.TP
-+.BR \-\-dataalignmentoffset " alignment_offset"
-+Pad the start of the data with this additional \fBalignment_offset\fP.
++\fBdata_alignment\fP plus the alignment_offset from
++\fBdata_alignment_offset_detection\fP (if enabled) or the pvcreate
++commandline.
  .TP
- .BR \-\-metadatacopies " copies"
- The number of metadata areas to set aside on each PV.  Currently
-@@ -128,13 +134,21 @@ in the source).  Use with care.
- .TP
- .BR \-\-setphysicalvolumesize " size"
- Overrides the automatically-detected size of the PV.  Use with care.
--.SH Example
-+.SH EXAMPLES
- Initialize partition #4 on the third SCSI disk and the entire fifth
- SCSI disk for later use by LVM:
- .sp
- .B pvcreate /dev/sdc4 /dev/sde
- .sp
-+If the 2nd SCSI disk is a 4KB sector drive that compensates for windows
-+partitioning (sector 7 is the lowest aligned logical block, the 4KB
-+sectors start at LBA -1, and consequently sector 63 is aligned on a 4KB
-+boundary) manually account for this when initializing for use by LVM:
-+.sp
-+.B pvcreate --dataalignmentoffset 7S /dev/sdb
-+.sp
- .SH SEE ALSO
-+.BR lvm.conf (5),
- .BR lvm (8),
- .BR vgcreate (8), 
- .BR vgextend (8), 
-Index: LVM2/tools/args.h
-===================================================================
---- LVM2.orig/tools/args.h
-+++ LVM2/tools/args.h
-@@ -59,6 +59,7 @@ arg(nameprefixes_ARG, '\0', "nameprefixe
- arg(unquoted_ARG, '\0', "unquoted", NULL, 0)
- arg(rows_ARG, '\0', "rows", NULL, 0)
- arg(dataalignment_ARG, '\0', "dataalignment", size_kb_arg, 0)
-+arg(dataalignmentoffset_ARG, '\0', "dataalignmentoffset", size_kb_arg, 0)
- arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", size_mb_arg, 0)
- arg(virtualsize_ARG, '\0', "virtualsize", size_mb_arg, 0)
- 
-Index: LVM2/tools/commands.h
-===================================================================
---- LVM2.orig/tools/commands.h
-+++ LVM2/tools/commands.h
-@@ -470,6 +470,7 @@ xx(pvcreate,
-    "\t[--metadatacopies #copies]" "\n"
-    "\t[--metadatasize MetadataSize[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--dataalignment Alignment[bBsSkKmMgGtTpPeE]]" "\n"
-+   "\t[--dataalignmentoffset AlignmentOffset[bBsSkKmMgGtTpPeE]]" "\n"
-    "\t[--setphysicalvolumesize PhysicalVolumeSize[bBsSkKmMgGtTpPeE]" "\n"
-    "\t[-t|--test] " "\n"
-    "\t[-u|--uuid uuid] " "\n"
-@@ -479,9 +480,9 @@ xx(pvcreate,
-    "\t[--version] " "\n"
-    "\tPhysicalVolume [PhysicalVolume...]\n",
- 
--   dataalignment_ARG, force_ARG, test_ARG, labelsector_ARG, metadatatype_ARG,
--   metadatacopies_ARG, metadatasize_ARG, physicalvolumesize_ARG,
--   restorefile_ARG, uuidstr_ARG, yes_ARG, zero_ARG)
-+   dataalignment_ARG, dataalignmentoffset_ARG, force_ARG, test_ARG,
-+   labelsector_ARG, metadatatype_ARG, metadatacopies_ARG, metadatasize_ARG,
-+   physicalvolumesize_ARG, restorefile_ARG, uuidstr_ARG, yes_ARG, zero_ARG)
- 
- xx(pvdata,
-    "Display the on-disk metadata for physical volume(s)",
-Index: LVM2/tools/pvcreate.c
-===================================================================
---- LVM2.orig/tools/pvcreate.c
-+++ LVM2/tools/pvcreate.c
-@@ -20,6 +20,7 @@ struct pvcreate_params {
- 	int zero;
- 	uint64_t size;
- 	uint64_t data_alignment;
-+	uint64_t data_alignment_offset;
- 	int pvmetadatacopies;
- 	uint64_t pvmetadatasize;
- 	int64_t labelsector;
-@@ -203,8 +204,8 @@ static int pvcreate_single(struct cmd_co
- 
- 	dm_list_init(&mdas);
- 	if (!(pv = pv_create(cmd, dev, pp->idp, pp->size,
--			     pp->data_alignment, pp->pe_start,
--			     pp->extent_count, pp->extent_size,
-+			     pp->data_alignment, pp->data_alignment_offset,
-+			     pp->pe_start, pp->extent_count, pp->extent_size,
- 			     pp->pvmetadatacopies,
- 			     pp->pvmetadatasize,&mdas))) {
- 		log_error("Failed to setup physical volume \"%s\"", pv_name);
-@@ -377,6 +378,24 @@ static int pvcreate_validate_params(stru
- 		pp->data_alignment = 0;
- 	}
- 
-+	if (arg_sign_value(cmd, dataalignmentoffset_ARG, 0) == SIGN_MINUS) {
-+		log_error("Physical volume data alignment offset may not be negative");
-+		return 0;
-+	}
-+	pp->data_alignment_offset = arg_uint64_value(cmd, dataalignmentoffset_ARG, UINT64_C(0));
-+
-+	if (pp->data_alignment_offset > ULONG_MAX) {
-+		log_error("Physical volume data alignment offset is too big.");
-+		return 0;
-+	}
-+
-+	if (pp->data_alignment_offset && pp->pe_start) {
-+		log_warn("WARNING: Ignoring data alignment offset %" PRIu64
-+			 " incompatible with --restorefile value (%"
-+			 PRIu64").", pp->data_alignment_offset, pp->pe_start);
-+		pp->data_alignment_offset = 0;
-+	}
-+
- 	if (arg_sign_value(cmd, metadatasize_ARG, 0) == SIGN_MINUS) {
- 		log_error("Metadata size may not be negative");
- 		return 0;
-Index: LVM2/tools/vgconvert.c
-===================================================================
---- LVM2.orig/tools/vgconvert.c
-+++ LVM2/tools/vgconvert.c
-@@ -123,7 +123,7 @@ static int vgconvert_single(struct cmd_c
- 
- 		dm_list_init(&mdas);
- 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
--				     &existing_pv->id, size, 0,
-+				     &existing_pv->id, size, 0, 0,
- 				     pe_start, pv_pe_count(existing_pv),
- 				     pv_pe_size(existing_pv), pvmetadatacopies,
- 				     pvmetadatasize, &mdas))) {
+ \fBlog\fP \(em Default log settings
+ .IP
 
 
