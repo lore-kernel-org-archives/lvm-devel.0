@@ -1,257 +1,73 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri,  3 Jul 2009 10:08:20 -0400
-Subject: [PATCH] Fix vg_read() error paths to properly release upon vg_read_error().
-Message-ID: <1246630100-26016-1-git-send-email-dwysocha@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Sun,  5 Jul 2009 22:39:45 -0400
+Subject: [PATCH v4 0/5] LVM2 topology support
+Message-ID: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix vg_read() error paths to properly release upon vg_read_error().
-Note that in the code paths called from process_each_vg(), we release
-inside the iterator so no individual cleanup is needed.  However there
-are a number of other places we missed the cleanup.  Proper cleanup
-when vg_read_error() is true should be calling vg_release(vg), since
-there should be no locks held if we get an error (except in certain
-special cases, which IMO we should work to remove from the code).
+LVM2 topology support to properly align the PV's pe_start using the
+associated 'alignment_offset' exposed in sysfs.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- tools/lvcreate.c   |    4 +++-
- tools/lvrename.c   |    4 +++-
- tools/lvresize.c   |    1 +
- tools/polldaemon.c |    1 +
- tools/pvdisplay.c  |    1 +
- tools/pvmove.c     |    1 +
- tools/pvresize.c   |    8 +++-----
- tools/reporter.c   |    1 +
- tools/toollib.c    |    1 +
- tools/vgextend.c   |    1 +
- tools/vgmerge.c    |    6 ++++--
- tools/vgrename.c   |    4 +++-
- tools/vgscan.c     |    1 +
- tools/vgsplit.c    |    4 +++-
- 14 files changed, 27 insertions(+), 11 deletions(-)
+Provides manual configuration with pvcreate --dataalignmentoffset and
+auto config control via 'devices/data_alignment_offset_detection' in
+lvm.conf.
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 030aa0c..70f237a 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -995,8 +995,10 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- 
- 	log_verbose("Finding volume group \"%s\"", lp.vg_name);
- 	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
--	if (vg_read_error(vg))
-+	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		return ECMD_FAILED;
-+	}
- 
- 	if (!_lvcreate(cmd, vg, &lp))
- 		r = ECMD_FAILED;
-diff --git a/tools/lvrename.c b/tools/lvrename.c
-index 53ea116..7411854 100644
---- a/tools/lvrename.c
-+++ b/tools/lvrename.c
-@@ -103,8 +103,10 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
- 
- 	log_verbose("Checking for existing volume group \"%s\"", vg_name);
- 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
--	if (vg_read_error(vg))
-+	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		return ECMD_FAILED;
-+	}
- 
- 	if (!(lvl = find_lv_in_vg(vg, lv_name_old))) {
- 		log_error("Existing logical volume \"%s\" not found in "
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index b558792..033078f 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -673,6 +673,7 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
- 	log_verbose("Finding volume group %s", lp.vg_name);
- 	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
- 	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		stack;
- 		return ECMD_FAILED;
- 	}
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index 8c5c7da..4dcbc22 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -150,6 +150,7 @@ static int _wait_for_single_mirror(struct cmd_context *cmd, const char *name, co
- 		/* Locks the (possibly renamed) VG again */
- 		vg = parms->poll_fns->get_copy_vg(cmd, name, uuid);
- 		if (vg_read_error(vg)) {
-+			vg_release(vg);
- 			log_error("ABORTING: Can't reread VG for %s", name);
- 			/* What more could we do here? */
- 			return 0;
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index c8c4a88..46122d5 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -31,6 +31,7 @@ static int _pvdisplay_single(struct cmd_context *cmd,
- 		vg_name = pv_vg_name(pv);
- 		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
- 		if (vg_read_error(vg)) {
-+			vg_release(vg);
- 		 	log_error("Skipping volume group %s", vg_name);
- 			/* FIXME If CLUSTERED should return ECMD_PROCESSED here */
- 		 	return ECMD_FAILED;
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index d288e6f..65b7606 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -387,6 +387,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 
- 	vg = _get_vg(cmd, pv_vg_name(pv));
- 	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		stack;
- 		return ECMD_FAILED;
- 	}
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 336da9a..bd3cad2 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -37,7 +37,6 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 	const char *vg_name;
- 	struct lvmcache_info *info;
- 	int mda_count = 0;
--	struct volume_group *old_vg = vg;
- 
- 	dm_list_init(&mdas);
- 
-@@ -100,7 +99,7 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 		log_error("%s: Couldn't get size.", pv_name);
- 		goto bad;
- 	}
--	
-+
- 	if (new_size) {
- 		if (new_size > size)
- 			log_warn("WARNING: %s: Overriding real size. "
-@@ -127,7 +126,7 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 	if (vg) {
- 		pv->size -= pv_pe_start(pv);
- 		new_pe_count = pv_size(pv) / vg->extent_size;
--		
-+
-  		if (!new_pe_count) {
- 			log_error("%s: Size must leave space for at "
- 				  "least one physical extent of "
-@@ -162,8 +161,7 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 
- bad:
- 	unlock_vg(cmd, vg_name);
--	if (!old_vg)
--		vg_release(vg);
-+	vg_release(vg);
- 	return r;
- }
- 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index d1368d4..1af2adc 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -137,6 +137,7 @@ static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 
- 		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
- 		if (vg_read_error(vg)) {
-+			vg_release(vg);
- 			log_error("Skipping volume group %s", vg_name);
- 			return ECMD_FAILED;
- 		}
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 1fe9249..248fafb 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -354,6 +354,7 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
- 
- 		vg = vg_read(cmd, vg_name, NULL, 0);
- 		if (vg_read_error(vg)) {
-+			vg_release(vg);
- 			log_error("Skipping volume group %s", vg_name);
- 			return ECMD_FAILED;
- 		}
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index 5692582..1000dc2 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -45,6 +45,7 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
- 	vg = vg_read_for_update(cmd, vg_name, NULL,
- 				READ_REQUIRE_RESIZEABLE | LOCK_NONBLOCKING);
- 	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		unlock_vg(cmd, VG_ORPHANS);
- 		return ECMD_FAILED;
- 	}
-diff --git a/tools/vgmerge.c b/tools/vgmerge.c
-index 3ed6c50..006cfdf 100644
---- a/tools/vgmerge.c
-+++ b/tools/vgmerge.c
-@@ -29,8 +29,10 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
- 
- 	log_verbose("Checking for volume group \"%s\"", vg_name_to);
- 	vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0);
--	if (vg_read_error(vg_to))
--		 return ECMD_FAILED;
-+	if (vg_read_error(vg_to)) {
-+		vg_release(vg_to);
-+		return ECMD_FAILED;
-+	}
- 
- 	log_verbose("Checking for volume group \"%s\"", vg_name_from);
- 	vg_from = vg_read_for_update(cmd, vg_name_from, NULL,
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 4d115d0..57229e7 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -73,8 +73,10 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
- 	/* FIXME we used to print an error about EXPORTED, but proceeded
- 	   nevertheless. */
- 	vg = vg_read_for_update(cmd, vg_name_old, vgid, READ_ALLOW_EXPORTED);
--	if (vg_read_error(vg))
-+	if (vg_read_error(vg)) {
-+		vg_release(vg);
- 		return_0;
-+	}
- 
- 	if (lvs_in_vg_activated_by_uuid_only(vg)) {
- 		unlock_and_release_vg(cmd, vg, vg_name_old);
-diff --git a/tools/vgscan.c b/tools/vgscan.c
-index 769c5cf..3d42fa1 100644
---- a/tools/vgscan.c
-+++ b/tools/vgscan.c
-@@ -19,6 +19,7 @@ static int vgscan_single(struct cmd_context *cmd, const char *vg_name,
- 			 struct volume_group *vg,
- 			 void *handle __attribute((unused)))
- {
-+	/* NOTE: vg_unlock_and_release(vg) called from process_each_vg() */
- 	if (vg_read_error(vg))
- 		return ECMD_FAILED;
- 
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index bd9e8ec..9cd90b8 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -317,8 +317,10 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 
- 	vg_from = vg_read_for_update(cmd, vg_name_from, NULL,
- 				     READ_REQUIRE_RESIZEABLE);
--	if (vg_read_error(vg_from))
-+	if (vg_read_error(vg_from)) {
-+		vg_release(vg_from);
- 		return ECMD_FAILED;
-+	}
- 
- 	log_verbose("Checking for new volume group \"%s\"", vg_name_to);
- 	/*
--- 
-1.6.0.6
+Documentation was added to the lvm.conf and pvcreate man pages.
+
+Testing with pvcreate + vgextend + vgreduce + vgextend + vgreduce ...
+proved to maintain the pe_start from the initial pvcreate.
+
+v2 changes:
+Also added another method for auto detection of --dataalignment using
+the topology information that is exposed in sysfs.  Controlled via
+'devices/data_alignment_detection' in lvm2.conf.
+
+v3 changes:
+Fixed 'devices/data_alignment_detection' patch (5/5) to retrieve the
+minimum_io_size and optimal_io_size for partitions from the parent
+device's 'queue/'.  Both attributes are found in 'queue/'
+
+v4 changes:
+Added the md_chunk_alignment patch (1/1) to the patch series.
+Simplified the _mda_setupi() change in --dataalignmentoffset patch (3/5).
+Improved the documentation and comments in all patches. 
+
+Mike Snitzer (5):
+  Update 'md_chunk_alignment' to use stripe-width to align PV data
+  cmdline: support for bytes and sectors
+  Add --dataalignmentoffset to pvcreate to pad aligned data area
+  Add devices/data_alignment_offset_detection to lvm.conf.
+  Add devices/data_alignment_detection to lvm.conf.
+
+ WHATS_NEW                        |    6 ++
+ doc/example.conf                 |   23 +++++-
+ lib/config/defaults.h            |    2 +
+ lib/device/dev-md.c              |  161 ++++++++++++++++++++++++++++++++------
+ lib/device/device.c              |  136 ++++++++++++++++++++++++++++++++
+ lib/device/device.h              |   11 +++-
+ lib/format1/format1.c            |    1 +
+ lib/format_pool/format_pool.c    |    1 +
+ lib/format_text/archiver.c       |    2 +-
+ lib/format_text/format-text.c    |   16 ++++-
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   43 +++++++++-
+ lib/metadata/metadata.h          |    1 +
+ man/lvcreate.8.in                |    6 +-
+ man/lvextend.8.in                |    4 +-
+ man/lvm.conf.5.in                |   26 +++++-
+ man/lvreduce.8.in                |    4 +-
+ man/lvresize.8.in                |    4 +-
+ man/pvcreate.8.in                |   20 ++++-
+ man/vgchange.8.in                |    4 +-
+ man/vgcreate.8.in                |    4 +-
+ tools/args.h                     |    1 +
+ tools/commands.h                 |   33 ++++----
+ tools/lvmcmdline.c               |   20 ++++--
+ tools/pvcreate.c                 |   23 +++++-
+ tools/vgconvert.c                |    2 +-
+ 26 files changed, 473 insertions(+), 82 deletions(-)
 
 
