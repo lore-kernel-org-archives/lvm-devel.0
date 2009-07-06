@@ -1,41 +1,62 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 6 Jul 2009 11:47:37 +0100
-Subject: [PATCHi v2 1/5] Update 'md_chunk_alignment' to use stripe-width to align PV data
-In-Reply-To: <1246847990-13370-2-git-send-email-snitzer@redhat.com>
+Date: Mon, 6 Jul 2009 12:01:00 +0100
+Subject: [PATCH v4 2/5] cmdline: support for bytes and sectors
+In-Reply-To: <1246847990-13370-3-git-send-email-snitzer@redhat.com>
 References: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
-	<1246847990-13370-2-git-send-email-snitzer@redhat.com>
-Message-ID: <20090706104737.GB11082@agk-dp.fab.redhat.com>
+	<1246847990-13370-3-git-send-email-snitzer@redhat.com>
+Message-ID: <20090706110100.GC11082@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Jul 05, 2009 at 10:39:46PM -0400, Mike Snitzer wrote:
-> +static unsigned long dev_md_chunk_size(const char *sysfs_dir,
-> +				       struct device *dev)
+On Sun, Jul 05, 2009 at 10:39:47PM -0400, Mike Snitzer wrote:
+> Allow commandline sizes to be specified in terms of bytes and sectors.
+> Update the man pages to document size units uniformly.
+ 
+Does the addition of 'bytes' now permit invalid sizes to be specified anywhere
+leading to rounding happening without warning messages?
 
-> +	if (!(fp = md_sysfs_fopen(sysfs_dir, dev, attribute)))
-> +		return 0;
+If rounding occurs the user should be notified.
+E.g. 	lvcreate has: log_print("Rounding size (%d extents) up to stripe boundary "
 
-> -		log_sys_error("fgets", path);
-> +		log_sys_error("fgets", attribute);
+(Whether to round up or to round down may depend on the context - see lvresize,
+for example.)
 
-Please reinstate the variable contextual information in these messages.
-(sysfs_dir, dev, md are all now missing - return 'path' to the caller
-of the customised fopen, or create the path in a separate fn first
-and pass it in?)
+> @@ -274,11 +274,19 @@ static int _size_arg(struct cmd_context 
+>  
+>  		if (i < 0)
+>  			return 0;
+> -
+> -		while (i-- > 0)
+> -			v *= 1024;
+> -
+> -		v *= 2;
+> +		else if (i == 7) {
 
-> +static int dev_md_level(const char *sysfs_dir, struct device *dev)
-> +static int dev_md_raid_disks(const char *sysfs_dir, struct device *dev)
-> +unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev)
+else superfluous?
 
-Is there more code that could be shared between these functions?
+> +			/* sectors */
+> +			v = v;
+> +		} else if (i == 6) {
+> +			/* bytes */
 
-> +	data_disks = raid_disks - (level == 0 ? 0 : (level <= 5 ? 1 : 2));
-Add a comment before that line explaining it.
+Warning messages needed here, I think.
 
-Ack
+> +			if (v < 512)
+> +				return 0;
+> +			v /= 512;
+> +		} else {
+
+Add comment like the others to indicate which cases this now covers
+
+> +			while (i-- > 0)
+> +				v *= 1024;
+> +			v *= 2;
+> +		}
+>  	} else
+>  		v *= factor;
 
 Alasdair
 
