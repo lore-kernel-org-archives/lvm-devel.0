@@ -1,73 +1,314 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Sun,  5 Jul 2009 22:39:45 -0400
-Subject: [PATCH v4 0/5] LVM2 topology support
-Message-ID: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
+Date: Sun,  5 Jul 2009 22:39:46 -0400
+Subject: [PATCHi v2 1/5] Update 'md_chunk_alignment' to use stripe-width to align PV data
+In-Reply-To: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
+References: <1246847990-13370-1-git-send-email-snitzer@redhat.com>
+Message-ID: <1246847990-13370-2-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-LVM2 topology support to properly align the PV's pe_start using the
-associated 'alignment_offset' exposed in sysfs.
+Use the MD device's stripe-width, instead of chunk_size, to align the
+data blocks of a Physical Volume that is placed directly upon an MD
+device.
 
-Provides manual configuration with pvcreate --dataalignmentoffset and
-auto config control via 'devices/data_alignment_offset_detection' in
-lvm.conf.
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ WHATS_NEW               |    1 
+ doc/example.conf        |    2 
+ lib/device/dev-md.c     |  161 ++++++++++++++++++++++++++++++++++++++++--------
+ lib/device/device.h     |    2 
+ lib/metadata/metadata.c |    6 -
+ man/lvm.conf.5.in       |    4 -
+ 6 files changed, 145 insertions(+), 31 deletions(-)
 
-Documentation was added to the lvm.conf and pvcreate man pages.
-
-Testing with pvcreate + vgextend + vgreduce + vgextend + vgreduce ...
-proved to maintain the pe_start from the initial pvcreate.
-
-v2 changes:
-Also added another method for auto detection of --dataalignment using
-the topology information that is exposed in sysfs.  Controlled via
-'devices/data_alignment_detection' in lvm2.conf.
-
-v3 changes:
-Fixed 'devices/data_alignment_detection' patch (5/5) to retrieve the
-minimum_io_size and optimal_io_size for partitions from the parent
-device's 'queue/'.  Both attributes are found in 'queue/'
-
-v4 changes:
-Added the md_chunk_alignment patch (1/1) to the patch series.
-Simplified the _mda_setupi() change in --dataalignmentoffset patch (3/5).
-Improved the documentation and comments in all patches. 
-
-Mike Snitzer (5):
-  Update 'md_chunk_alignment' to use stripe-width to align PV data
-  cmdline: support for bytes and sectors
-  Add --dataalignmentoffset to pvcreate to pad aligned data area
-  Add devices/data_alignment_offset_detection to lvm.conf.
-  Add devices/data_alignment_detection to lvm.conf.
-
- WHATS_NEW                        |    6 ++
- doc/example.conf                 |   23 +++++-
- lib/config/defaults.h            |    2 +
- lib/device/dev-md.c              |  161 ++++++++++++++++++++++++++++++++------
- lib/device/device.c              |  136 ++++++++++++++++++++++++++++++++
- lib/device/device.h              |   11 +++-
- lib/format1/format1.c            |    1 +
- lib/format_pool/format_pool.c    |    1 +
- lib/format_text/archiver.c       |    2 +-
- lib/format_text/format-text.c    |   16 ++++-
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |   43 +++++++++-
- lib/metadata/metadata.h          |    1 +
- man/lvcreate.8.in                |    6 +-
- man/lvextend.8.in                |    4 +-
- man/lvm.conf.5.in                |   26 +++++-
- man/lvreduce.8.in                |    4 +-
- man/lvresize.8.in                |    4 +-
- man/pvcreate.8.in                |   20 ++++-
- man/vgchange.8.in                |    4 +-
- man/vgcreate.8.in                |    4 +-
- tools/args.h                     |    1 +
- tools/commands.h                 |   33 ++++----
- tools/lvmcmdline.c               |   20 ++++--
- tools/pvcreate.c                 |   23 +++++-
- tools/vgconvert.c                |    2 +-
- 26 files changed, 473 insertions(+), 82 deletions(-)
+Index: LVM2/lib/device/dev-md.c
+===================================================================
+--- LVM2.orig/lib/device/dev-md.c
++++ LVM2/lib/device/dev-md.c
+@@ -125,62 +125,175 @@ out:
+ 	return ret;
+ }
+ 
+-/*
+- * Retrieve chunk size from md device using sysfs.
+- */
+-unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev)
++static FILE *md_sysfs_fopen(const char *sysfs_dir, struct device *dev,
++			    const char *attribute)
+ {
+-	char path[PATH_MAX+1], buffer[64];
++	char path[PATH_MAX+1];
+ 	FILE *fp;
+ 	struct stat info;
+-	unsigned long chunk_size_bytes = 0UL;
+ 
+ 	if (MAJOR(dev->dev) != md_major())
+-		return 0;
++		return NULL;
+ 
+ 	if (!sysfs_dir || !*sysfs_dir)
+-		return_0;
++		return NULL;
+ 
+-	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/md/chunk_size",
+-	    sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev)) < 0) {
+-		log_error("dm_snprintf md chunk_size failed");
+-		return 0;
++	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/md/%s",
++	    sysfs_dir, MAJOR(dev->dev), MINOR(dev->dev), attribute) < 0) {
++		log_error("dm_snprintf md %s failed", attribute);
++		return NULL;
+ 	}
+ 
+ 	/* old sysfs structure */
+ 	if (stat(path, &info) &&
+-	    dm_snprintf(path, PATH_MAX, "%s/block/md%d/md/chunk_size",
+-			sysfs_dir, MINOR(dev->dev)) < 0) {
+-		log_error("dm_snprintf old md chunk size failed");
+-		return 0;
++	    dm_snprintf(path, PATH_MAX, "%s/block/md%d/md/%s",
++			sysfs_dir, MINOR(dev->dev), attribute) < 0) {
++		log_error("dm_snprintf old md %s failed", attribute);
++		return NULL;
+ 	}
+ 
+ 	if (!(fp = fopen(path, "r"))) {
+ 		log_sys_error("fopen", path);
+-		return 0;
++		return NULL;
+ 	}
+ 
++	return fp;
++}
++
++/*
++ * Retrieve chunk size from md device using sysfs.
++ */
++static unsigned long dev_md_chunk_size(const char *sysfs_dir,
++				       struct device *dev)
++{
++	char buffer[64];
++	FILE *fp;
++	const char *attribute = "chunk_size";
++	unsigned long chunk_size_bytes = 0UL;
++
++	if (!(fp = md_sysfs_fopen(sysfs_dir, dev, attribute)))
++		return 0;
++
+ 	if (!fgets(buffer, sizeof(buffer), fp)) {
+-		log_sys_error("fgets", path);
++		log_sys_error("fgets", attribute);
+ 		goto out;
+ 	}
+ 
+ 	if (sscanf(buffer, "%lu", &chunk_size_bytes) != 1) {
+-		log_error("sysfs file %s not in expected format: %s", path,
+-			  buffer);
++		log_error("%s sysfs attr %s not in expected format: %s",
++			  dev_name(dev), attribute, buffer);
+ 		goto out;
+ 	}
+ 
+-	log_very_verbose("Device %s md chunk size is %lu bytes.",
++	log_very_verbose("Device %s chunk size is %lu bytes.",
+ 			 dev_name(dev), chunk_size_bytes);
+ 
+ out:
+ 	if (fclose(fp))
+-		log_sys_error("fclose", path);
++		log_sys_error("fclose", attribute);
+ 
+ 	return chunk_size_bytes >> SECTOR_SHIFT;
+ }
+ 
++/*
++ * Retrieve level from md device using sysfs.
++ */
++static int dev_md_level(const char *sysfs_dir, struct device *dev)
++{
++	char buffer[64];
++	FILE *fp;
++	const char *attribute = "level";
++	int level = -1;
++
++	if (!(fp = md_sysfs_fopen(sysfs_dir, dev, attribute)))
++		return -1;
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", attribute);
++		goto out;
++	}
++
++	if (sscanf(buffer, "raid%d", &level) != 1) {
++		log_error("%s sysfs attr %s not in expected format: %s",
++			  dev_name(dev), attribute, buffer);
++		goto out;
++	}
++
++	log_very_verbose("Device %s raid level is %d.",
++			 dev_name(dev), level);
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", attribute);
++
++	return level;
++}
++
++/*
++ * Retrieve raid_disks from md device using sysfs.
++ */
++static int dev_md_raid_disks(const char *sysfs_dir, struct device *dev)
++{
++	char buffer[64];
++	FILE *fp;
++	const char *attribute = "raid_disks";
++	int raid_disks = 0;
++
++	if (!(fp = md_sysfs_fopen(sysfs_dir, dev, attribute)))
++		return 0;
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", attribute);
++		goto out;
++	}
++
++	if (sscanf(buffer, "%d", &raid_disks) != 1) {
++		log_error("%s sysfs attr %s not in expected format: %s",
++			  dev_name(dev), attribute, buffer);
++		goto out;
++	}
++
++	log_very_verbose("Device %s raid_disks is %d.",
++			 dev_name(dev), raid_disks);
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", attribute);
++
++	return raid_disks;
++}
++
++/*
++ * Calculate stripe width of md device using its sysfs files.
++ */
++unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev)
++{
++	unsigned long chunk_size_sectors = 0UL;
++	unsigned long stripe_width_sectors = 0UL;
++	int level, raid_disks, data_disks;
++
++	chunk_size_sectors = dev_md_chunk_size(sysfs_dir, dev);
++	if (!chunk_size_sectors)
++		return 0;
++
++	level = dev_md_level(sysfs_dir, dev);
++	if (level < 0)
++		return 0;
++
++	raid_disks = dev_md_raid_disks(sysfs_dir, dev);
++	if (!raid_disks)
++		return 0;
++
++	data_disks = raid_disks - (level == 0 ? 0 : (level <= 5 ? 1 : 2));
++	stripe_width_sectors = chunk_size_sectors * data_disks;
++
++	log_very_verbose("Device %s stripe-width is %lu bytes.",
++			 dev_name(dev),
++			 stripe_width_sectors << SECTOR_SHIFT);
++
++	return stripe_width_sectors;
++}
++
+ #else
+ 
+ int dev_is_md(struct device *dev __attribute((unused)),
+@@ -189,8 +302,8 @@ int dev_is_md(struct device *dev __attri
+ 	return 0;
+ }
+ 
+-unsigned long dev_md_chunk_size(const char *sysfs_dir __attribute((unused)),
+-				struct device *dev  __attribute((unused)))
++unsigned long dev_md_stripe_width(const char *sysfs_dir __attribute((unused)),
++				  struct device *dev  __attribute((unused)))
+ {
+ 	return 0UL;
+ }
+Index: LVM2/lib/device/device.h
+===================================================================
+--- LVM2.orig/lib/device/device.h
++++ LVM2/lib/device/device.h
+@@ -96,7 +96,7 @@ const char *dev_name_confirmed(struct de
+ /* Does device contain md superblock?  If so, where? */
+ int dev_is_md(struct device *dev, uint64_t *sb);
+ int dev_is_swap(struct device *dev, uint64_t *signature);
+-unsigned long dev_md_chunk_size(const char *sysfs_dir, struct device *dev);
++unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev);
+ 
+ int is_partitioned_dev(struct device *dev);
+ 
+Index: LVM2/lib/metadata/metadata.c
+===================================================================
+--- LVM2.orig/lib/metadata/metadata.c
++++ LVM2/lib/metadata/metadata.c
+@@ -81,13 +81,13 @@ unsigned long set_pe_align(struct physic
+ 		goto out;
+ 
+ 	/*
+-	 * Align to chunk size of underlying md device if present
++	 * Align to stripe-width of underlying md device if present
+ 	 */
+ 	if (find_config_tree_bool(pv->fmt->cmd, "devices/md_chunk_alignment",
+ 				  DEFAULT_MD_CHUNK_ALIGNMENT))
+ 		pv->pe_align = MAX(pv->pe_align,
+-				   dev_md_chunk_size(pv->fmt->cmd->sysfs_dir,
+-						     pv->dev));
++				   dev_md_stripe_width(pv->fmt->cmd->sysfs_dir,
++						       pv->dev));
+ 
+ 	log_very_verbose("%s: Setting PE alignment to %lu sectors.",
+ 			 dev_name(pv->dev), pv->pe_align);
+Index: LVM2/man/lvm.conf.5.in
+===================================================================
+--- LVM2.orig/man/lvm.conf.5.in
++++ LVM2/man/lvm.conf.5.in
+@@ -134,8 +134,8 @@ superblocks. This doesn't always work sa
+ has been reused without wiping the md superblocks first.
+ .IP
+ \fBmd_chunk_alignment\fP \(em If set to 1, and a Physical Volume is placed
+-directly upon an md device, LVM2 will align its data blocks with the the
+-chunk_size exposed in sysfs.
++directly upon an md device, LVM2 will align its data blocks with the
++md device's stripe-width.
+ .IP
+ \fBdata_alignment\fP \(em Default alignment (in KB) of start of data area
+ when creating a new Physical Volume using the \fBlvm2\fP format.
+Index: LVM2/WHATS_NEW
+===================================================================
+--- LVM2.orig/WHATS_NEW
++++ LVM2/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.49 - 
+ ================================
++  Update 'md_chunk_alignment' to use stripe-width to align PV data area.
+   Update test/t-inconsistent-metadata.sh to match new vg_read interface.
+   Add lvmcache_init() to polldaemon initialization.
+   Convert tools to use new vg_read / vg_read_for_update.
+Index: LVM2/doc/example.conf
+===================================================================
+--- LVM2.orig/doc/example.conf
++++ LVM2/doc/example.conf
+@@ -94,7 +94,7 @@ devices {
+     md_component_detection = 1
+ 
+     # By default, if a PV is placed directly upon an md device, LVM2
+-    # will align its data blocks with the the chunk_size exposed in sysfs.
++    # will align its data blocks with the md device's stripe-width.
+     # 1 enables; 0 disables.
+     md_chunk_alignment = 1
+ 
 
 
