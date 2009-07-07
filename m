@@ -1,58 +1,73 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  7 Jul 2009 00:24:21 -0400
-Subject: [PATCH] Remove LOCK_KEEP and READ_CHECK_EXISTENCE from vgsplit.
-In-Reply-To: <1246940664-14890-1-git-send-email-dwysocha@redhat.com>
+Date: Tue,  7 Jul 2009 00:24:22 -0400
+Subject: [PATCH] Remove unneeded LOCK_KEEP from vg_read() interface.
+In-Reply-To: <1246940664-14890-2-git-send-email-dwysocha@redhat.com>
 References: <1246940664-14890-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1246940664-14890-2-git-send-email-dwysocha@redhat.com>
+	<1246940664-14890-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1246940664-14890-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Remove LOCK_KEEP and READ_CHECK_EXISTENCE from vgsplit.
-These flags are no longer necessary.  We now check for existence
-in a differnet function, and it is not necessary to keep the lock.
-Removing these flags simplifies the new vg_read() interface.
-After this patch, we can fully remove LOCK_KEEP.
-READ_CHECK_EXISTENCE needs a bit more work before full removal.
+Remove unneeded LOCK_KEEP from vg_read() interface.
+Update comment to clarify cases where _vg_lock_and_read() may return
+with an error but the lock held.  Would be nice to make the vg_read()
+interface consistent with regards to lock held and error behavior.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/vgsplit.c |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ lib/metadata/metadata-exported.h |    1 -
+ lib/metadata/metadata.c          |    9 ++++++---
+ 2 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 9cd90b8..0dc5bc4 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -342,11 +342,12 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		existing_vg = 1;
- 		vg_to = vg_read_for_update(cmd, vg_name_to, NULL,
- 					   READ_REQUIRE_RESIZEABLE |
--					   LOCK_NONBLOCKING | LOCK_KEEP |
--					   READ_CHECK_EXISTENCE);
-+					   LOCK_NONBLOCKING);
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index b9e9591..6e45698 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -113,7 +113,6 @@ struct pv_segment;
  
--		if (vg_read_error(vg_to))
--			goto_bad;
-+		if (vg_read_error(vg_to)) {
-+			vg_release(vg_to);
-+			goto bad2;
-+		}
+ /* FIXME Deduce these next requirements internally instead of having caller specify. */
+ #define LOCK_NONBLOCKING	0x00000100U	/* Fail if not available immediately. */
+-#define LOCK_KEEP		0x00000200U	/* Do not unlock upon read failure. */
  
- 		if (new_vg_option_specified(cmd)) {
- 			log_error("Volume group \"%s\" exists, but new VG "
-@@ -483,7 +484,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 	r = ECMD_PROCESSED;
+ /* A meta-flag, useful with toollib for_each_* functions. */
+ #define READ_FOR_UPDATE 	0x00100000U
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index fda07be..3c25847 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2793,7 +2793,6 @@ static vg_t *_vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
+ 			goto_bad;
+ 		}
+ 	}
+-	
+ 
+ 	failure |= _vg_bad_status_bits(vg, status_flags);
+ 	if (failure)
+@@ -2803,7 +2802,7 @@ static vg_t *_vg_lock_and_read(struct cmd_context *cmd, const char *vg_name,
  
  bad:
--	unlock_and_release_vg(cmd, vg_from, vg_name_from);
- 	unlock_and_release_vg(cmd, vg_to, vg_name_to);
-+bad2:
-+	unlock_and_release_vg(cmd, vg_from, vg_name_from);
- 	return r;
- }
+ 	if (failure != (FAILED_NOTFOUND | READ_CHECK_EXISTENCE) &&
+-	    !(misc_flags & LOCK_KEEP) && !already_locked)
++	    !already_locked)
+ 		unlock_vg(cmd, lock_name);
+ 
+ 	return _vg_make_handle(cmd, vg, failure);
+@@ -2821,7 +2820,11 @@ bad:
+  *    FAILED_RESIZEABLE
+  *  - locking failed: FAILED_LOCKING
+  *
+- * On failures, all locks are released, unless LOCK_KEEP has been supplied.
++ * On failures, all locks are released, unless one of the following applies:
++ *  - failure == (FAILED_NOTFOUND | READ_CHECK_EXISTENCE)
++ *  - vgname_is_locked(lock_name) is true
++ * FIXME: remove the above 2 conditions if possible and make an error always
++ * release the lock.
+  *
+  * Volume groups are opened read-only unless flags contains READ_FOR_UPDATE.
+  *
 -- 
 1.6.0.6
 
