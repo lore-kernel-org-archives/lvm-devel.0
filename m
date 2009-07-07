@@ -1,180 +1,169 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 7 Jul 2009 19:28:59 -0000
-Subject: LVM2 lib/display/display.c man/lvreduce.8.in m ...
-Message-ID: <20090707192859.30594.qmail@sourceware.org>
+From: Thomas Woerner <twoerner@redhat.com>
+Date: Tue,  7 Jul 2009 22:19:59 +0200
+Subject: [PATCH 0/2] error messages bound to command
+Message-ID: <1246998001-17258-1-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2009-07-07 19:28:58
+This patch series add functions to add an error message and the error code to 
+the command context. This is needed for liblvm to be able to have handle 
+specific error reporting.
 
-Modified files:
-	lib/display    : display.c 
-	man            : lvreduce.8.in lvs.8.in pvs.8.in vgs.8.in 
-	test           : t-covercmd.sh 
+The first patch add the needed functions and corrects some code to use a script to add the error code to all log_error and log_err functions. It replaces all 
+log_err calls with log_error. The result is the second patch.
 
-Log message:
-	Continue to make --units and --size consistent (in code and man pages):
-	
-	Update units_to_bytes() to support (S)ectors: 500 bytes.
-	- 500 byte (S)ectors is of questionable value but it adds to consistency
-	if a user happens to use --units S.  This seems better than an error.
-	
-	Updated test/t-covercmd.sh to test --units [hS]
-	
-	Document the units that can be displayed via --units uniformly.
-	- (p)etabytes and (e)xabytes were missing in pvs, vgs and lvs man pages.
-	
-	Made lvreduce man page "... in units of megabytes." consistent (with the
-	lvextend and lvresize man pages).
+The script:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.97&r2=1.98
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvreduce.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvs.8.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgs.8.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-covercmd.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+    find . -name "*.[hc]" -exec perl -pi -e "s/log_error\(\"/log_error\(0, \"/g" {} \;
+    find . -name "*.[hc]" -exec perl -pi -e "s/log_err\(\"/log_error\(0, \"/g" {} \;
+    find . -name "*.[hc]" -exec perl -pi -e "s/log_error\(no_space\)/log_error\(0, no_space\)/g" {} \;
+    perl -pi -e "s/log_error\(bad,/log_error\(0, bad,/g" lib/format_text/import_vsn1.c
 
---- LVM2/lib/display/display.c	2009/05/13 21:27:43	1.97
-+++ LVM2/lib/display/display.c	2009/07/07 19:28:57	1.98
-@@ -62,14 +62,14 @@
- 		v = UINT64_C(1);
- 		*unit_type = *units;
- 		break;
--	case 's':
--		v *= SECTOR_SIZE;
--		break;
- 	case 'b':
- 	case 'B':
- 		v *= UINT64_C(1);
- 		break;
- #define KILO UINT64_C(1024)
-+	case 's':
-+		v *= (KILO/2);
-+		break;
- 	case 'k':
- 		v *= KILO;
- 		break;
-@@ -90,6 +90,9 @@
- 		break;
- #undef KILO
- #define KILO UINT64_C(1000)
-+	case 'S':
-+		v *= (KILO/2);
-+		break;
- 	case 'K':
- 		v *= KILO;
- 		break;
---- LVM2/man/lvreduce.8.in	2009/07/06 19:13:26	1.3
-+++ LVM2/man/lvreduce.8.in	2009/07/07 19:28:57	1.4
-@@ -47,7 +47,7 @@
- free space in the Volume Group with the suffix %FREE.
- .TP
- .I \-L, \-\-size [\-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
--Reduce or set the logical volume size in units of megabyte by default.
-+Reduce or set the logical volume size in units of megabytes.
- A size suffix of k for kilobyte, m for megabyte, 
- g for gigabytes, t for terabytes, p for petabytes 
- or e for exabytes is optional.
---- LVM2/man/lvs.8.in	2009/06/30 18:39:32	1.9
-+++ LVM2/man/lvs.8.in	2009/07/07 19:28:57	1.10
-@@ -9,7 +9,7 @@
- [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial] [\-\-rows] [\-\-segments]
- [\-\-separator Separator] [\-\-unbuffered]
--[\-\-units hsbkmgtHKMGT]
-+[\-\-units hHbBsSkKmMgGtTpPeE]
- [\-\-unquoted]
- [\-v|\-\-verbose] 
- [\-\-version] [VolumeGroupName [VolumeGroupName...]]
-@@ -91,11 +91,11 @@
- .I \-\-unbuffered
- Produce output immediately without sorting or aligning the columns properly.
- .TP
--.I \-\-units hsbkmgtHKMGT
--All sizes are output in these units: (h)uman-readable, (s)ectors, (b)ytes,
--(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes.  Capitalise to use multiples
--of 1000 (S.I.) instead of 1024.  Can also specify custom (u)nits e.g.
--\-\-units 3M
-+.I \-\-units hHbBsSkKmMgGtTpPeE
-+All sizes are output in these units: (h)uman-readable, (b)ytes, (s)ectors,
-+(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes, (p)etabytes, (e)xabytes.  
-+Capitalise to use multiples of 1000 (S.I.) instead of 1024.  Can also specify 
-+custom units e.g. \-\-units 3M
- .TP
- .I \-\-unquoted
- When used with --nameprefixes, output values in the field=value pairs are not quoted.
---- LVM2/man/pvs.8.in	2009/06/30 18:39:32	1.10
-+++ LVM2/man/pvs.8.in	2009/07/07 19:28:57	1.11
-@@ -9,7 +9,7 @@
- [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-\-rows] [\-\-segments]
- [\-\-separator Separator] [\-\-unbuffered]
--[\-\-units hsbkmgtHKMGT]
-+[\-\-units hHbBsSkKmMgGtTpPeE]
- [\-\-unquoted]
- [\-v|\-\-verbose] 
- [\-\-version] [PhysicalVolume [PhysicalVolume...]]
-@@ -69,11 +69,11 @@
- .I \-\-unbuffered
- Produce output immediately without sorting or aligning the columns properly.
- .TP
--.I \-\-units hsbkmgtHKMGT
--All sizes are output in these units: (h)uman-readable, (s)ectors, (b)ytes,
--(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes.  Capitalise to use multiples
--of 1000 (S.I.) instead of 1024.  Can also specify custom (u)nits e.g.
--\-\-units 3M
-+.I \-\-units hHbBsSkKmMgGtTpPeE
-+All sizes are output in these units: (h)uman-readable, (b)ytes, (s)ectors,
-+(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes, (p)etabytes, (e)xabytes.  
-+Capitalise to use multiples of 1000 (S.I.) instead of 1024.  Can also specify 
-+custom units e.g. \-\-units 3M
- .TP
- .I \-\-unquoted
- When used with --nameprefixes, output values in the field=value pairs are not quoted.
---- LVM2/man/vgs.8.in	2009/06/15 17:09:32	1.8
-+++ LVM2/man/vgs.8.in	2009/07/07 19:28:57	1.9
-@@ -9,7 +9,7 @@
- [\-O|\-\-sort [+|-]Key1[,[+|-]Key2[,...]]]
- [\-P|\-\-partial] [\-\-rows]
- [\-\-separator Separator] [\-\-unbuffered]
--[\-\-units hsbkmgtHKMGT]
-+[\-\-units hHbBsSkKmMgGtTpPeE]
- [\-\-unquoted]
- [\-v|\-\-verbose] 
- [\-\-version] [VolumeGroupName [VolumeGroupName...]]
-@@ -80,11 +80,11 @@
- .I \-\-unbuffered
- Produce output immediately without sorting or aligning the columns properly.
- .TP
--.I \-\-units hsbkmgtHKMGT
--All sizes are output in these units: (h)uman-readable, (s)ectors, (b)ytes,
--(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes.  Capitalise to use multiples
--of 1000 (S.I.) instead of 1024.  Can also specify custom (u)nits e.g.
--\-\-units 3M
-+.I \-\-units hHbBsSkKmMgGtTpPeE
-+All sizes are output in these units: (h)uman-readable, (b)ytes, (s)ectors,
-+(k)ilobytes, (m)egabytes, (g)igabytes, (t)erabytes, (p)etabytes, (e)xabytes.  
-+Capitalise to use multiples of 1000 (S.I.) instead of 1024.  Can also specify 
-+custom units e.g. \-\-units 3M
- .TP
- .I \-\-unquoted
- When used with --nameprefixes, output values in the field=value pairs are not quoted.
---- LVM2/test/t-covercmd.sh	2009/03/24 13:16:35	1.6
-+++ LVM2/test/t-covercmd.sh	2009/07/07 19:28:57	1.7
-@@ -41,7 +41,7 @@
- lvmdiskscan
- vgdisplay --units k
- lvdisplay --units g
--for i in b k m g t p e H B K M G T P E ; do
-+for i in h b s k m g t p e H B S K M G T P E ; do
-     pvdisplay --units "$i" "$dev1"
- done
- 
+testsuite: pass
+
+twoerner (2):
+  Add cmd logging for liblvm error reporting: All logging functions
+    have an additional argument: The error code This makes the
+    functions incompatible with the old ones.
+  Add error code for all log_err and log_error calls. Replace log_err
+    with log_error.
+
+ daemons/clvmd/clvmd-cman.c            |    8 +-
+ daemons/clvmd/clvmd-command.c         |    2 +-
+ daemons/clvmd/clvmd-gulm.c            |    4 +-
+ daemons/clvmd/clvmd.c                 |   26 ++--
+ daemons/clvmd/lvm-functions.c         |   15 ++-
+ daemons/dmeventd/libdevmapper-event.c |   50 ++++----
+ lib/activate/activate.c               |   26 ++--
+ lib/activate/dev_manager.c            |   64 +++++-----
+ lib/activate/fs.c                     |   24 ++--
+ lib/cache/lvmcache.c                  |   70 +++++-----
+ lib/commands/toolcontext.c            |  119 +++++++++--------
+ lib/commands/toolcontext.h            |    6 +
+ lib/config/config.c                   |   38 +++---
+ lib/device/dev-cache.c                |   50 ++++----
+ lib/device/dev-io.c                   |   22 ++--
+ lib/device/dev-md.c                   |    8 +-
+ lib/device/device.c                   |   12 +-
+ lib/display/display.c                 |    4 +-
+ lib/error/errseg.c                    |    2 +-
+ lib/filters/filter-composite.c        |    4 +-
+ lib/filters/filter-md.c               |    2 +-
+ lib/filters/filter-persistent.c       |    6 +-
+ lib/filters/filter-regex.c            |    4 +-
+ lib/filters/filter-sysfs.c            |   10 +-
+ lib/filters/filter.c                  |   10 +-
+ lib/format1/disk-rep.c                |   30 ++--
+ lib/format1/format1.c                 |   22 ++--
+ lib/format1/import-export.c           |   22 ++--
+ lib/format1/import-extents.c          |   24 ++--
+ lib/format1/layout.c                  |   10 +-
+ lib/format1/lvm1-label.c              |    4 +-
+ lib/format_pool/disk_rep.c            |    4 +-
+ lib/format_pool/format_pool.c         |   20 ++--
+ lib/format_pool/import_export.c       |   14 +-
+ lib/format_pool/pool_label.c          |    4 +-
+ lib/format_text/archive.c             |   16 +-
+ lib/format_text/archiver.c            |   32 +++---
+ lib/format_text/export.c              |   12 +-
+ lib/format_text/flags.c               |    8 +-
+ lib/format_text/format-text.c         |   96 +++++++-------
+ lib/format_text/import.c              |    2 +-
+ lib/format_text/import_vsn1.c         |  120 ++++++++--------
+ lib/format_text/tags.c                |    2 +-
+ lib/format_text/text_label.c          |   16 +-
+ lib/label/label.c                     |   14 +-
+ lib/locking/cluster_locking.c         |   20 ++--
+ lib/locking/external_locking.c        |    4 +-
+ lib/locking/file_locking.c            |    6 +-
+ lib/locking/locking.c                 |   18 ++--
+ lib/locking/no_locking.c              |    2 +-
+ lib/log/log.c                         |   44 ++++++-
+ lib/log/log.h                         |   16 +-
+ lib/log/lvm-logging.h                 |   11 +-
+ lib/metadata/lv_manip.c               |  176 ++++++++++++------------
+ lib/metadata/merge.c                  |   46 +++---
+ lib/metadata/metadata.c               |  238 ++++++++++++++++----------------
+ lib/metadata/mirror.c                 |  156 +++++++++++-----------
+ lib/metadata/pv_manip.c               |   32 +++---
+ lib/metadata/pv_map.c                 |    4 +-
+ lib/metadata/segtype.c                |    2 +-
+ lib/metadata/snapshot_manip.c         |    6 +-
+ lib/mirror/mirrored.c                 |   34 +++---
+ lib/misc/lvm-exec.c                   |    8 +-
+ lib/misc/lvm-file.c                   |   16 +-
+ lib/misc/lvm-string.c                 |    2 +-
+ lib/misc/sharedlib.c                  |    4 +-
+ lib/mm/memlock.c                      |    4 +-
+ lib/report/report.c                   |   58 ++++----
+ lib/snapshot/snapshot.c               |   14 +-
+ lib/striped/striped.c                 |    8 +-
+ lib/uuid/uuid.c                       |    8 +-
+ lib/zero/zero.c                       |    2 +-
+ libdm/ioctl/libdm-iface.c             |   94 +++++++-------
+ libdm/libdevmapper.h                  |    4 +-
+ libdm/libdm-common.c                  |   39 +++---
+ libdm/libdm-deptree.c                 |  154 +++++++++++-----------
+ libdm/libdm-file.c                    |    2 +-
+ libdm/libdm-report.c                  |  104 +++++++-------
+ libdm/misc/dm-logging.h               |    2 +-
+ libdm/mm/dbg_malloc.c                 |   10 +-
+ libdm/mm/pool-debug.c                 |    8 +-
+ libdm/mm/pool-fast.c                  |    6 +-
+ libdm/mm/pool.c                       |    6 +-
+ libdm/regex/matcher.c                 |    4 +-
+ libdm/regex/parse_rx.c                |   10 +-
+ liblvm/Makefile.in                    |    2 +
+ liblvm/lvm.h                          |    3 +
+ liblvm/lvm_base.c                     |   19 +++-
+ old-tests/datastruct/hash_t.c         |    4 +-
+ old-tests/dev-mgr/dev_cache_t.c       |    6 +-
+ old-tests/device/dev_cache_t.c        |    6 +-
+ old-tests/device/random.c             |    4 +-
+ old-tests/filters/pfilter_t.c         |    4 +-
+ old-tests/filters/rfilter_t.c         |    2 +-
+ tools/dmsetup.c                       |   42 +++---
+ tools/lvchange.c                      |  100 +++++++-------
+ tools/lvconvert.c                     |  112 ++++++++--------
+ tools/lvcreate.c                      |  156 +++++++++++-----------
+ tools/lvdisplay.c                     |    6 +-
+ tools/lvm.c                           |   10 +-
+ tools/lvmcmdlib.c                     |    8 +-
+ tools/lvmcmdline.c                    |   57 +++++----
+ tools/lvmdiskscan.c                   |   10 +-
+ tools/lvremove.c                      |    2 +-
+ tools/lvrename.c                      |   18 ++--
+ tools/lvresize.c                      |   68 +++++-----
+ tools/lvscan.c                        |    2 +-
+ tools/polldaemon.c                    |   16 +-
+ tools/pvchange.c                      |   47 +++----
+ tools/pvcreate.c                      |   58 ++++----
+ tools/pvdisplay.c                     |   10 +-
+ tools/pvmove.c                        |   66 +++++-----
+ tools/pvremove.c                      |   20 ++--
+ tools/pvresize.c                      |   28 ++--
+ tools/pvscan.c                        |    4 +-
+ tools/reporter.c                      |   10 +-
+ tools/stub.h                          |    8 +-
+ tools/toollib.c                       |  116 ++++++++--------
+ tools/vgcfgbackup.c                   |    8 +-
+ tools/vgcfgrestore.c                  |   10 +-
+ tools/vgchange.c                      |   66 +++++-----
+ tools/vgconvert.c                     |   38 +++---
+ tools/vgcreate.c                      |   14 +-
+ tools/vgdisplay.c                     |    8 +-
+ tools/vgexport.c                      |    6 +-
+ tools/vgextend.c                      |    6 +-
+ tools/vgimport.c                      |    8 +-
+ tools/vgmerge.c                       |    6 +-
+ tools/vgreduce.c                      |   58 ++++----
+ tools/vgremove.c                      |    4 +-
+ tools/vgrename.c                      |   14 +-
+ tools/vgscan.c                        |    4 +-
+ tools/vgsplit.c                       |   28 ++--
+ 133 files changed, 1910 insertions(+), 1832 deletions(-)
 
 
