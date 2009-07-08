@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Jul 2009 18:14:47 -0000
-Subject: LVM2/test t-lvm-init.sh
-Message-ID: <20090708181447.29624.qmail@sourceware.org>
+Date: 8 Jul 2009 18:15:51 -0000
+Subject: LVM2/tools pvchange.c pvmove.c
+Message-ID: <20090708181551.30409.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-08 18:14:47
+Changes by:	wysochanski at sourceware.org	2009-07-08 18:15:51
 
-Added files:
-	test           : t-lvm-init.sh 
+Modified files:
+	tools          : pvchange.c pvmove.c 
 
 Log message:
-	Add t-lvm-init.sh - test lvm init routines and error paths.
+	Refactor a couple log_error() statements in prep for larger log_error() patch.
+	
+	Part of twoerner's log_error() patches.
+	
+	Signed-off-by: Thomas Woerner <twoerner@redhat.com>
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvm-init.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
 
-/cvs/lvm2/LVM2/test/t-lvm-init.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvm-init.sh
-+++ -	2009-07-08 18:14:47.794730000 +0000
-@@ -0,0 +1,21 @@
-+# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+#
-+# tests lvm initialization, and especially negative tests of error paths
-+#
-+
-+. ./test-utils.sh
-+
-+aux prepare_devs 5
-+
-+# invalid units
-+not pvs --config 'global { units = "<" }'
-+
+--- LVM2/tools/pvchange.c	2009/07/07 01:18:35	1.71
++++ LVM2/tools/pvchange.c	2009/07/08 18:15:51	1.72
+@@ -64,9 +64,8 @@
+ 		}
+ 
+ 		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+-			log_error
+-			    ("Unable to find \"%s\" in volume group \"%s\"",
+-			     pv_name, vg->name);
++			log_error("Unable to find \"%s\" in volume group \"%s\"",
++				  pv_name, vg->name);
+ 			goto out;
+ 		}
+ 		if (tagarg && !(vg->fid->fmt->features & FMT_TAGS)) {
+--- LVM2/tools/pvmove.c	2009/07/07 01:18:35	1.65
++++ LVM2/tools/pvmove.c	2009/07/08 18:15:51	1.66
+@@ -400,15 +400,13 @@
+ 			log_error("Ignoring remaining command line arguments");
+ 
+ 		if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
+-			log_error
+-			    ("ABORTING: Failed to generate list of moving LVs");
++			log_error("ABORTING: Failed to generate list of moving LVs");
+ 			goto out;
+ 		}
+ 
+ 		/* Ensure mirror LV is active */
+ 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+-			log_error
+-			    ("ABORTING: Temporary mirror activation failed.");
++			log_error("ABORTING: Temporary mirror activation failed.");
+ 			goto out;
+ 		}
+ 
 
 
