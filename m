@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Jul 2009 18:15:51 -0000
-Subject: LVM2/tools pvchange.c pvmove.c
-Message-ID: <20090708181551.30409.qmail@sourceware.org>
+Date: 8 Jul 2009 22:18:33 -0000
+Subject: LVM2/lib format_text/archiver.c label/label.c
+Message-ID: <20090708221833.32518.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,56 +10,51 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-08 18:15:51
+Changes by:	wysochanski at sourceware.org	2009-07-08 22:18:32
 
 Modified files:
-	tools          : pvchange.c pvmove.c 
+	lib/format_text: archiver.c 
+	lib/label      : label.c 
 
 Log message:
-	Refactor a couple log_error() statements in prep for larger log_error() patch.
+	Make exit paths more robust when some init function fails.
 	
-	Part of twoerner's log_error() patches.
-	
-	Signed-off-by: Thomas Woerner <twoerner@redhat.com>
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/label/label.c.diff?cvsroot=lvm2&r1=1.46&r2=1.47
 
---- LVM2/tools/pvchange.c	2009/07/07 01:18:35	1.71
-+++ LVM2/tools/pvchange.c	2009/07/08 18:15:51	1.72
-@@ -64,9 +64,8 @@
- 		}
+--- LVM2/lib/format_text/archiver.c	2009/05/19 09:45:33	1.25
++++ LVM2/lib/format_text/archiver.c	2009/07/08 22:18:32	1.26
+@@ -65,6 +65,8 @@
  
- 		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error
--			    ("Unable to find \"%s\" in volume group \"%s\"",
--			     pv_name, vg->name);
-+			log_error("Unable to find \"%s\" in volume group \"%s\"",
-+				  pv_name, vg->name);
- 			goto out;
- 		}
- 		if (tagarg && !(vg->fid->fmt->features & FMT_TAGS)) {
---- LVM2/tools/pvmove.c	2009/07/07 01:18:35	1.65
-+++ LVM2/tools/pvmove.c	2009/07/08 18:15:51	1.66
-@@ -400,15 +400,13 @@
- 			log_error("Ignoring remaining command line arguments");
+ void archive_exit(struct cmd_context *cmd)
+ {
++	if (!cmd->archive_params)
++		return;
+ 	if (cmd->archive_params->dir)
+ 		dm_free(cmd->archive_params->dir);
+ 	memset(cmd->archive_params, 0, sizeof(*cmd->archive_params));
+@@ -175,6 +177,8 @@
  
- 		if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
--			log_error
--			    ("ABORTING: Failed to generate list of moving LVs");
-+			log_error("ABORTING: Failed to generate list of moving LVs");
- 			goto out;
- 		}
+ void backup_exit(struct cmd_context *cmd)
+ {
++	if (!cmd->backup_params)
++		return;
+ 	if (cmd->backup_params->dir)
+ 		dm_free(cmd->backup_params->dir);
+ 	memset(cmd->backup_params, 0, sizeof(*cmd->backup_params));
+--- LVM2/lib/label/label.c	2009/02/20 23:19:28	1.46
++++ LVM2/lib/label/label.c	2009/07/08 22:18:32	1.47
+@@ -72,7 +72,7 @@
+ 	struct dm_list *c, *n;
+ 	struct labeller_i *li;
  
- 		/* Ensure mirror LV is active */
- 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
--			log_error
--			    ("ABORTING: Temporary mirror activation failed.");
-+			log_error("ABORTING: Temporary mirror activation failed.");
- 			goto out;
- 		}
- 
+-	for (c = _labellers.n; c != &_labellers; c = n) {
++	for (c = _labellers.n; c && c != &_labellers; c = n) {
+ 		n = c->n;
+ 		li = dm_list_item(c, struct labeller_i);
+ 		li->l->ops->destroy(li->l);
 
 
