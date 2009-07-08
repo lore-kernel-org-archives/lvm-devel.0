@@ -1,89 +1,75 @@
-From: Thomas Woerner <twoerner@redhat.com>
-Date: Tue, 21 Jul 2009 17:42:04 +0200
-Subject: [PATCH] Add liblvm2app api version as so minor version number for liblvm2app.so.<major>.<lvm2app api version>
-Message-ID: <1248190924-14854-1-git-send-email-twoerner@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 8 Jul 2009 14:28:30 -0000
+Subject: LVM2/lib/metadata metadata-exported.h metadata.c
+Message-ID: <20090708142830.19624.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Extend VERSION from "<major>.<minor>.<patchlevel>[-<tag>] (date)" to
-"<major>.<minor>.<patchlevel>(<lvm2app api version>)[-<tag>] (date)".
-Change parsing of LVM_RELEASE_DATE that it expects a ' ' before the date.
-Change parsing of LVM_RELEASE and LVM_PATCHLEVEL that it honors '(' before after the patchlevel.
-Add LIB_VERSION_APPLIB to get <major>.<lvm2app api version> from VERSION.
----
- VERSION      |    2 +-
- configure    |    6 +++---
- configure.in |    6 +++---
- make.tmpl.in |    3 +++
- 4 files changed, 10 insertions(+), 7 deletions(-)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-08 14:28:30
 
-diff --git a/VERSION b/VERSION
-index c901e1d..728793b 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.50-cvs (2009-07-15)
-+2.02.50(01)-cvs (2009-07-15)
-diff --git a/configure b/configure
-index 2b8d9d7..5c9bdfc 100755
---- a/configure
-+++ b/configure
-@@ -12606,13 +12606,13 @@ DM_LIB_PATCHLEVEL=`cat VERSION_DM | $AWK -F '[-. ]' '{printf "%s.%s.%s",$1,$2,$3
- LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
+Modified files:
+	lib/metadata   : metadata-exported.h metadata.c 
+
+Log message:
+	Remove unneeded LOCK_KEEP from vg_read() interface.
+	
+	Remove unneeded LOCK_KEEP from vg_read() interface.
+	Update comment to clarify cases where _vg_lock_and_read() may return
+	with an error but the lock held.  Would be nice to make the vg_read()
+	interface consistent with regards to lock held and error behavior.
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.231&r2=1.232
+
+--- LVM2/lib/metadata/metadata-exported.h	2009/07/01 17:00:50	1.78
++++ LVM2/lib/metadata/metadata-exported.h	2009/07/08 14:28:30	1.79
+@@ -113,7 +113,6 @@
  
- VER=`cat VERSION`
--LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.*(//;s/).*//'`\""
-+LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
- VER=`echo "$VER" | $AWK '{print $1}'`
--LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
-+LVM_RELEASE="\"`echo "$VER" | $AWK -F '[(-]' '{print $2}'`\""
- VER=`echo "$VER" | $AWK -F '-' '{print $1}'`
- LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
- LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
--LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
-+LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[(.]' '{print $3}'`
+ /* FIXME Deduce these next requirements internally instead of having caller specify. */
+ #define LOCK_NONBLOCKING	0x00000100U	/* Fail if not available immediately. */
+-#define LOCK_KEEP		0x00000200U	/* Do not unlock upon read failure. */
  
- ################################################################################
+ /* A meta-flag, useful with toollib for_each_* functions. */
+ #define READ_FOR_UPDATE 	0x00100000U
+--- LVM2/lib/metadata/metadata.c	2009/07/06 19:04:25	1.231
++++ LVM2/lib/metadata/metadata.c	2009/07/08 14:28:30	1.232
+@@ -2793,7 +2793,6 @@
+ 			goto_bad;
+ 		}
+ 	}
+-	
  
-diff --git a/configure.in b/configure.in
-index eb6278d..d0e68a6 100644
---- a/configure.in
-+++ b/configure.in
-@@ -750,13 +750,13 @@ DM_LIB_PATCHLEVEL=`cat VERSION_DM | $AWK -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,
- LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
+ 	failure |= _vg_bad_status_bits(vg, status_flags);
+ 	if (failure)
+@@ -2803,7 +2802,7 @@
  
- VER=`cat VERSION`
--LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.*(//;s/).*//'`\""
-+LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
- VER=`echo "$VER" | $AWK '{print $1}'`
--LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
-+LVM_RELEASE="\"`echo "$VER" | $AWK -F '[[(-]]' '{print $2}'`\""
- VER=`echo "$VER" | $AWK -F '-' '{print $1}'`
- LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
- LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
--LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
-+LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[[(.]]' '{print $3}'`
+ bad:
+ 	if (failure != (FAILED_NOTFOUND | READ_CHECK_EXISTENCE) &&
+-	    !(misc_flags & LOCK_KEEP) && !already_locked)
++	    !already_locked)
+ 		unlock_vg(cmd, lock_name);
  
- ################################################################################
- AC_SUBST(APPLIB)
-diff --git a/make.tmpl.in b/make.tmpl.in
-index fa3b884..5556d16 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -116,6 +116,9 @@ LIB_VERSION_LVM := $(shell cat $(top_srcdir)/VERSION | \
- LIB_VERSION_DM := $(shell cat $(top_srcdir)/VERSION_DM | \
- 		    awk -F '.' '{printf "%s.%s",$$1,$$2}')
- 
-+LIB_VERSION_APPLIB := $(shell cat $(top_srcdir)/VERSION | \
-+		   awk -F '[(). ]' '{printf "%s.%s",$$1,$$4}')
-+
- INCLUDES += -I. -I$(top_srcdir)/include
- 
- INC_LNS = $(top_srcdir)/include/.symlinks_created
--- 
-1.6.2.5
+ 	return _vg_make_handle(cmd, vg, failure);
+@@ -2821,7 +2820,11 @@
+  *    FAILED_RESIZEABLE
+  *  - locking failed: FAILED_LOCKING
+  *
+- * On failures, all locks are released, unless LOCK_KEEP has been supplied.
++ * On failures, all locks are released, unless one of the following applies:
++ *  - failure == (FAILED_NOTFOUND | READ_CHECK_EXISTENCE)
++ *  - vgname_is_locked(lock_name) is true
++ * FIXME: remove the above 2 conditions if possible and make an error always
++ * release the lock.
+  *
+  * Volume groups are opened read-only unless flags contains READ_FOR_UPDATE.
+  *
 
 
