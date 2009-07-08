@@ -1,36 +1,27 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 20 Jul 2009 18:44:14 -0000
-Subject: LVM2/lib/device dev-md.c
-Message-ID: <20090720184414.19085.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 8 Jul 2009 13:37:47 +0100
+Subject: Re: [PATCH] more segtypes in one library
+In-Reply-To: <Pine.LNX.4.64.0906250938160.6612@hs20-bc2-1.build.redhat.com>
+References: <Pine.LNX.4.64.0906250938160.6612@hs20-bc2-1.build.redhat.com>
+Message-ID: <20090708123746.GO11082@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2009-07-20 18:44:14
+On Thu, Jun 25, 2009 at 10:04:14AM -0400, Mikulas Patocka wrote:
+> This is the patch for more segtypes in one shared library. You define 
+> function init_segtypes (instead of init_segtype) and this function can 
+> register arbitraty number of segtypes with lvm_add_segtype. It returns 
+> nonzero on success or zero on failure (in this case, the registered 
+> segtypes are destroyed and the library is unloaded).
+> The old function init_segtype to init one segtype is still available, so 
+> it doesn't break binary compatibility.
 
-Modified files:
-	lib/device     : dev-md.c 
-
-Log message:
-	Cast MINOR() in _md_sysfs_attribute_snprintf()'s dm_snprintf() call.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-md.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-
---- LVM2/lib/device/dev-md.c	2009/07/20 18:33:16	1.15
-+++ LVM2/lib/device/dev-md.c	2009/07/20 18:44:13	1.16
-@@ -149,7 +149,7 @@
- 	if (stat(path, &info) < 0) {
- 		/* old sysfs structure */
- 		ret = dm_snprintf(path, size, "%s/block/md%d/md/%s",
--				  sysfs_dir, MINOR(dev->dev), attribute);
-+				  sysfs_dir, (int)MINOR(dev->dev), attribute);
- 		if (ret < 0) {
- 			log_error("dm_snprintf old md %s failed", attribute);
- 			return ret;
+I've modified it a bit (passed a new struct instead of using the static,
+added warning if both interfaces defined) and checked it in.
+ 
+Alasdair
 
 
