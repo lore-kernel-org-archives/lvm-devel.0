@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Jul 2009 18:12:08 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20090708181208.27957.qmail@sourceware.org>
+Date: 8 Jul 2009 18:13:34 -0000
+Subject: LVM2/lib/filters filter-persistent.c
+Message-ID: <20090708181334.29142.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-08 18:12:08
+Changes by:	wysochanski at sourceware.org	2009-07-08 18:13:32
 
 Modified files:
-	lib/commands   : toolcontext.c 
+	lib/filters    : filter-persistent.c 
 
 Log message:
-	Make destroy_toolcontext() better able to handle NULL pointers.
+	Fix segfault in persistent_filter_dump() if lvm init fails.
 	
-	Part of twoerner's log_error() patches.
-	
-	Signed-off-by: Thomas Woerner <twoerner@redhat.com>
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Just return_0 in persistent_filter_dump() if passed a NULL filter;
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-persistent.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
 
---- LVM2/lib/commands/toolcontext.c	2009/07/08 12:36:01	1.77
-+++ LVM2/lib/commands/toolcontext.c	2009/07/08 18:12:08	1.78
-@@ -1302,12 +1302,15 @@
- 	label_exit();
- 	_destroy_segtypes(&cmd->segtypes);
- 	_destroy_formats(&cmd->formats);
--	cmd->filter->destroy(cmd->filter);
--	dm_pool_destroy(cmd->mem);
-+	if (cmd->filter)
-+		cmd->filter->destroy(cmd->filter);
-+	if (cmd->mem)
-+		dm_pool_destroy(cmd->mem);
- 	dev_cache_exit();
- 	_destroy_tags(cmd);
- 	_destroy_tag_configs(cmd);
--	dm_pool_destroy(cmd->libmem);
-+	if (cmd->libmem)
-+		dm_pool_destroy(cmd->libmem);
- 	dm_free(cmd);
+--- LVM2/lib/filters/filter-persistent.c	2008/11/03 22:14:28	1.37
++++ LVM2/lib/filters/filter-persistent.c	2009/07/08 18:13:32	1.38
+@@ -177,7 +177,7 @@
  
- 	release_log_memory();
+ int persistent_filter_dump(struct dev_filter *f)
+ {
+-	struct pfilter *pf = (struct pfilter *) f->private;
++	struct pfilter *pf;
+ 	char *tmp_file;
+ 	struct stat info, info2;
+ 	struct config_tree *cft = NULL;
+@@ -185,6 +185,10 @@
+ 	int lockfd;
+ 	int r = 0;
+ 
++	if (!f)
++		return_0;
++	pf = (struct pfilter *) f->private;
++
+ 	if (!dm_hash_get_num_entries(pf->devices)) {
+ 		log_very_verbose("Internal persistent device cache empty "
+ 				 "- not writing to %s", pf->file);
 
 
