@@ -1,186 +1,181 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 08 Jul 2009 12:34:16 -0400
-Subject: [PATCH 0/2] error messages bound to command
-In-Reply-To: <1246998001-17258-1-git-send-email-twoerner@redhat.com>
+Date: Wed, 08 Jul 2009 12:56:44 -0400
+Subject: [PATCH 1/2] Add cmd logging for liblvm error reporting: All logging functions have an additional argument: The error code This makes the functions incompatible with the old ones.
+In-Reply-To: <1246998001-17258-2-git-send-email-twoerner@redhat.com>
 References: <1246998001-17258-1-git-send-email-twoerner@redhat.com>
-Message-ID: <1247070856.2507.3.camel@f10-node1>
+	<1246998001-17258-2-git-send-email-twoerner@redhat.com>
+Message-ID: <1247072204.2507.26.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, 2009-07-07 at 22:19 +0200, Thomas Woerner wrote:
-> This patch series add functions to add an error message and the error code to 
-> the command context. This is needed for liblvm to be able to have handle 
-> specific error reporting.
-> 
-> The first patch add the needed functions and corrects some code to use a script to add the error code to all log_error and log_err functions. It replaces all 
-> log_err calls with log_error. The result is the second patch.
-> 
-> The script:
-> 
->     find . -name "*.[hc]" -exec perl -pi -e "s/log_error\(\"/log_error\(0, \"/g" {} \;
->     find . -name "*.[hc]" -exec perl -pi -e "s/log_err\(\"/log_error\(0, \"/g" {} \;
->     find . -name "*.[hc]" -exec perl -pi -e "s/log_error\(no_space\)/log_error\(0, no_space\)/g" {} \;
->     perl -pi -e "s/log_error\(bad,/log_error\(0, bad,/g" lib/format_text/import_vsn1.c
-> 
+I'm taking a few more review passes and have a couple more comments -
+see below.
 
-I think the default code for log_error should be nonzero right?
+> --- a/daemons/clvmd/lvm-functions.c
+> +++ b/daemons/clvmd/lvm-functions.c
+> @@ -788,7 +788,12 @@ void lvm_do_backup(const char *vgname)
+>  int init_lvm(int using_gulm)
+>  {
+>  	if (!(cmd = create_toolcontext(1, NULL))) {
+> -		log_error("Failed to allocate command context");
+> +		log_error(0, "Failed to allocate command context");
+> +		return 0;
+> +	}
+> +
+> +	if (lvm_error(cmd) != 0) {
+> +		log_error(0, "Failed to create command context");
+>  		return 0;
+>  	}
+>  
 
-In your patches you have:
-+       if (lvm_error(cmd) != 0) {
-+               log_error(0, "Failed to create command context");
+We need that non-zero error code in log_error() to catch
+create_toolcontext() errors.
 
-Maybe make it -1 for now?
 
-> testsuite: pass
-> 
-> twoerner (2):
->   Add cmd logging for liblvm error reporting: All logging functions
->     have an additional argument: The error code This makes the
->     functions incompatible with the old ones.
->   Add error code for all log_err and log_error calls. Replace log_err
->     with log_error.
-> 
->  daemons/clvmd/clvmd-cman.c            |    8 +-
->  daemons/clvmd/clvmd-command.c         |    2 +-
->  daemons/clvmd/clvmd-gulm.c            |    4 +-
->  daemons/clvmd/clvmd.c                 |   26 ++--
->  daemons/clvmd/lvm-functions.c         |   15 ++-
->  daemons/dmeventd/libdevmapper-event.c |   50 ++++----
->  lib/activate/activate.c               |   26 ++--
->  lib/activate/dev_manager.c            |   64 +++++-----
->  lib/activate/fs.c                     |   24 ++--
->  lib/cache/lvmcache.c                  |   70 +++++-----
->  lib/commands/toolcontext.c            |  119 +++++++++--------
->  lib/commands/toolcontext.h            |    6 +
->  lib/config/config.c                   |   38 +++---
->  lib/device/dev-cache.c                |   50 ++++----
->  lib/device/dev-io.c                   |   22 ++--
->  lib/device/dev-md.c                   |    8 +-
->  lib/device/device.c                   |   12 +-
->  lib/display/display.c                 |    4 +-
->  lib/error/errseg.c                    |    2 +-
->  lib/filters/filter-composite.c        |    4 +-
->  lib/filters/filter-md.c               |    2 +-
->  lib/filters/filter-persistent.c       |    6 +-
->  lib/filters/filter-regex.c            |    4 +-
->  lib/filters/filter-sysfs.c            |   10 +-
->  lib/filters/filter.c                  |   10 +-
->  lib/format1/disk-rep.c                |   30 ++--
->  lib/format1/format1.c                 |   22 ++--
->  lib/format1/import-export.c           |   22 ++--
->  lib/format1/import-extents.c          |   24 ++--
->  lib/format1/layout.c                  |   10 +-
->  lib/format1/lvm1-label.c              |    4 +-
->  lib/format_pool/disk_rep.c            |    4 +-
->  lib/format_pool/format_pool.c         |   20 ++--
->  lib/format_pool/import_export.c       |   14 +-
->  lib/format_pool/pool_label.c          |    4 +-
->  lib/format_text/archive.c             |   16 +-
->  lib/format_text/archiver.c            |   32 +++---
->  lib/format_text/export.c              |   12 +-
->  lib/format_text/flags.c               |    8 +-
->  lib/format_text/format-text.c         |   96 +++++++-------
->  lib/format_text/import.c              |    2 +-
->  lib/format_text/import_vsn1.c         |  120 ++++++++--------
->  lib/format_text/tags.c                |    2 +-
->  lib/format_text/text_label.c          |   16 +-
->  lib/label/label.c                     |   14 +-
->  lib/locking/cluster_locking.c         |   20 ++--
->  lib/locking/external_locking.c        |    4 +-
->  lib/locking/file_locking.c            |    6 +-
->  lib/locking/locking.c                 |   18 ++--
->  lib/locking/no_locking.c              |    2 +-
->  lib/log/log.c                         |   44 ++++++-
->  lib/log/log.h                         |   16 +-
->  lib/log/lvm-logging.h                 |   11 +-
->  lib/metadata/lv_manip.c               |  176 ++++++++++++------------
->  lib/metadata/merge.c                  |   46 +++---
->  lib/metadata/metadata.c               |  238 ++++++++++++++++----------------
->  lib/metadata/mirror.c                 |  156 +++++++++++-----------
->  lib/metadata/pv_manip.c               |   32 +++---
->  lib/metadata/pv_map.c                 |    4 +-
->  lib/metadata/segtype.c                |    2 +-
->  lib/metadata/snapshot_manip.c         |    6 +-
->  lib/mirror/mirrored.c                 |   34 +++---
->  lib/misc/lvm-exec.c                   |    8 +-
->  lib/misc/lvm-file.c                   |   16 +-
->  lib/misc/lvm-string.c                 |    2 +-
->  lib/misc/sharedlib.c                  |    4 +-
->  lib/mm/memlock.c                      |    4 +-
->  lib/report/report.c                   |   58 ++++----
->  lib/snapshot/snapshot.c               |   14 +-
->  lib/striped/striped.c                 |    8 +-
->  lib/uuid/uuid.c                       |    8 +-
->  lib/zero/zero.c                       |    2 +-
->  libdm/ioctl/libdm-iface.c             |   94 +++++++-------
->  libdm/libdevmapper.h                  |    4 +-
->  libdm/libdm-common.c                  |   39 +++---
->  libdm/libdm-deptree.c                 |  154 +++++++++++-----------
->  libdm/libdm-file.c                    |    2 +-
->  libdm/libdm-report.c                  |  104 +++++++-------
->  libdm/misc/dm-logging.h               |    2 +-
->  libdm/mm/dbg_malloc.c                 |   10 +-
->  libdm/mm/pool-debug.c                 |    8 +-
->  libdm/mm/pool-fast.c                  |    6 +-
->  libdm/mm/pool.c                       |    6 +-
->  libdm/regex/matcher.c                 |    4 +-
->  libdm/regex/parse_rx.c                |   10 +-
->  liblvm/Makefile.in                    |    2 +
->  liblvm/lvm.h                          |    3 +
->  liblvm/lvm_base.c                     |   19 +++-
->  old-tests/datastruct/hash_t.c         |    4 +-
->  old-tests/dev-mgr/dev_cache_t.c       |    6 +-
->  old-tests/device/dev_cache_t.c        |    6 +-
->  old-tests/device/random.c             |    4 +-
->  old-tests/filters/pfilter_t.c         |    4 +-
->  old-tests/filters/rfilter_t.c         |    2 +-
->  tools/dmsetup.c                       |   42 +++---
->  tools/lvchange.c                      |  100 +++++++-------
->  tools/lvconvert.c                     |  112 ++++++++--------
->  tools/lvcreate.c                      |  156 +++++++++++-----------
->  tools/lvdisplay.c                     |    6 +-
->  tools/lvm.c                           |   10 +-
->  tools/lvmcmdlib.c                     |    8 +-
->  tools/lvmcmdline.c                    |   57 +++++----
->  tools/lvmdiskscan.c                   |   10 +-
->  tools/lvremove.c                      |    2 +-
->  tools/lvrename.c                      |   18 ++--
->  tools/lvresize.c                      |   68 +++++-----
->  tools/lvscan.c                        |    2 +-
->  tools/polldaemon.c                    |   16 +-
->  tools/pvchange.c                      |   47 +++----
->  tools/pvcreate.c                      |   58 ++++----
->  tools/pvdisplay.c                     |   10 +-
->  tools/pvmove.c                        |   66 +++++-----
->  tools/pvremove.c                      |   20 ++--
->  tools/pvresize.c                      |   28 ++--
->  tools/pvscan.c                        |    4 +-
->  tools/reporter.c                      |   10 +-
->  tools/stub.h                          |    8 +-
->  tools/toollib.c                       |  116 ++++++++--------
->  tools/vgcfgbackup.c                   |    8 +-
->  tools/vgcfgrestore.c                  |   10 +-
->  tools/vgchange.c                      |   66 +++++-----
->  tools/vgconvert.c                     |   38 +++---
->  tools/vgcreate.c                      |   14 +-
->  tools/vgdisplay.c                     |    8 +-
->  tools/vgexport.c                      |    6 +-
->  tools/vgextend.c                      |    6 +-
->  tools/vgimport.c                      |    8 +-
->  tools/vgmerge.c                       |    6 +-
->  tools/vgreduce.c                      |   58 ++++----
->  tools/vgremove.c                      |    4 +-
->  tools/vgrename.c                      |   14 +-
->  tools/vgscan.c                        |    4 +-
->  tools/vgsplit.c                       |   28 ++--
->  133 files changed, 1910 insertions(+), 1832 deletions(-)
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+> diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+> index 4f6cf98..12b881b 100644
+> --- a/lib/commands/toolcontext.c
+> +++ b/lib/commands/toolcontext.c
+> @@ -1031,6 +1031,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+>  	dm_list_init(&cmd->tags);
+>  	dm_list_init(&cmd->config_files);
+>  
+> +	/* Log to command */
+> +	init_log_cmd(cmd);
+> +
+>  	/*
+>  	 * Environment variable LVM_SYSTEM_DIR overrides this below.
+>  	 */
+> @@ -1112,16 +1115,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+>  	return cmd;
+>  
+>        error:
+> -	_destroy_tag_configs(cmd);
+> -	dev_cache_exit();
+> -	if (cmd->filter)
+> -		cmd->filter->destroy(cmd->filter);
+> -	if (cmd->mem)
+> -		dm_pool_destroy(cmd->mem);
+> -	if (cmd->libmem)
+> -		dm_pool_destroy(cmd->libmem);
+> -	dm_free(cmd);
+> -	return NULL;
+> +	return cmd;
+>  }
+>  
+
+Ok, so this cleanup gets moved to destroy_toolcontext() and we always
+return a handle from create_toolcontext() (unless we could not allocate,
+in which case we return NULL).
+
+
+>  static void _destroy_formats(struct dm_list *formats)
+> @@ -1240,12 +1234,15 @@ void destroy_toolcontext(struct cmd_context *cmd)
+>  	label_exit();
+>  	_destroy_segtypes(&cmd->segtypes);
+>  	_destroy_formats(&cmd->formats);
+> -	cmd->filter->destroy(cmd->filter);
+> -	dm_pool_destroy(cmd->mem);
+> +	if (cmd->filter)
+> +		cmd->filter->destroy(cmd->filter);
+> +	if (cmd->mem)
+> +		dm_pool_destroy(cmd->mem);
+>  	dev_cache_exit();
+>  	_destroy_tags(cmd);
+>  	_destroy_tag_configs(cmd);
+> -	dm_pool_destroy(cmd->libmem);
+> +	if (cmd->libmem)
+> +		dm_pool_destroy(cmd->libmem);
+>  	dm_free(cmd);
+
+Strange why the cleanup order is different in this function than
+create_toolcontext() but that is not an issue with your patch.  Ok.
+
+The bottom of this function looks a bit strange though it might be best
+to leave it:
+	cmd->config_valid = 1;
+	return cmd;
+
+      error:
+	return cmd;
+
+
+>  }
+> diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+> index 1ad14d0..555be8f 100644
+> --- a/tools/lvmcmdline.c
+> +++ b/tools/lvmcmdline.c
+> @@ -1179,6 +1179,11 @@ struct cmd_context *init_lvm(void)
+>  	if (!(cmd = create_toolcontext(0, NULL)))
+>  		return_NULL;
+>  
+> +	if (cmd_error(cmd) != 0) {
+> +		destroy_toolcontext(cmd);
+> +		return_NULL;
+> +	}
+> +
+>  	return cmd;
+>  }
+
+This is another example of why we need the non-zero default.  If you use
+0 everywhere, we could get an error in create_toolcontext(), then never
+realize it and not cleanup properly.
+
+Maybe we can add a couple tests to catch initialization problems and
+make sure certain error paths get hit.
+
+>  
+> diff --git a/tools/pvchange.c b/tools/pvchange.c
+> index efc780b..def78cc 100644
+> --- a/tools/pvchange.c
+> +++ b/tools/pvchange.c
+> @@ -64,9 +64,8 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+>  		}
+>  
+>  		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+> -			log_error
+> -			    ("Unable to find \"%s\" in volume group \"%s\"",
+> -			     pv_name, vg->name);
+> +			log_error("Unable to find \"%s\" in volume group \"%s\"",
+> +				  pv_name, vg->name);
+>  			goto out;
+>  		}
+>  		if (tagarg && !(vg->fid->fmt->features & FMT_TAGS)) {
+> diff --git a/tools/pvmove.c b/tools/pvmove.c
+> index 65b7606..2490863 100644
+> --- a/tools/pvmove.c
+> +++ b/tools/pvmove.c
+> @@ -400,15 +400,13 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
+>  			log_error("Ignoring remaining command line arguments");
+>  
+>  		if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
+> -			log_error
+> -			    ("ABORTING: Failed to generate list of moving LVs");
+> +			log_error("ABORTING: Failed to generate list of moving LVs");
+>  			goto out;
+>  		}
+>  
+>  		/* Ensure mirror LV is active */
+>  		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+> -			log_error
+> -			    ("ABORTING: Temporary mirror activation failed.");
+> +			log_error("ABORTING: Temporary mirror activation failed.");
+>  			goto out;
+>  		}
+>  
+
+These probably belong in another tiny cleanup patch that can go in
+immediately.
+
+I believe the convention in lvm source is to break long quoted strings
+into two quotes on two lines.  For example:
+log_error("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+log_error("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+So if you find anything like that you can just checkin the fixup I
+believe.
 
 
