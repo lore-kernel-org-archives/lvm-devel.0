@@ -1,7 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Jul 2009 00:51:38 -0400
-Subject: [PATCH] Change behavior of tools to make setting the same value return success.
-Message-ID: <1247115098-11686-1-git-send-email-dwysocha@redhat.com>
+Date: Thu,  9 Jul 2009 01:10:09 -0400
+Subject: [PATCH v2] Change behavior of tools to make setting the same value return success.
+In-Reply-To: <1247115098-11686-1-git-send-email-dwysocha@redhat.com>
+References: <1247115098-11686-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1247116210-16571-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -27,11 +29,11 @@ a user sets a value already stored.
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
  lib/metadata/metadata.c |    5 -----
- tools/lvchange.c        |   12 ++++++------
+ tools/lvchange.c        |   22 +++++++++++-----------
  tools/lvrename.c        |    4 ++--
  tools/vgchange.c        |   24 ++++++++++++------------
  tools/vgrename.c        |    5 +++++
- 5 files changed, 25 insertions(+), 25 deletions(-)
+ 5 files changed, 30 insertions(+), 30 deletions(-)
 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
 index 449ac4c..6b42605 100644
@@ -50,19 +52,23 @@ index 449ac4c..6b42605 100644
  }
  
 diff --git a/tools/lvchange.c b/tools/lvchange.c
-index f64f6d1..bab1033 100644
+index f64f6d1..6f871cf 100644
 --- a/tools/lvchange.c
 +++ b/tools/lvchange.c
-@@ -27,13 +27,13 @@ static int lvchange_permission(struct cmd_context *cmd,
+@@ -25,15 +25,15 @@ static int lvchange_permission(struct cmd_context *cmd,
+ 	lv_access = arg_uint_value(cmd, permission_ARG, 0);
+ 
  	if ((lv_access & LVM_WRITE) && (lv->status & LVM_WRITE)) {
- 		log_error("Logical volume \"%s\" is already writable",
+-		log_error("Logical volume \"%s\" is already writable",
++		log_print("Logical volume \"%s\" is already writable",
  			  lv->name);
 -		return 0;
 +		return 1;
  	}
  
  	if (!(lv_access & LVM_WRITE) && !(lv->status & LVM_WRITE)) {
- 		log_error("Logical volume \"%s\" is already read only",
+-		log_error("Logical volume \"%s\" is already read only",
++		log_print("Logical volume \"%s\" is already read only",
  			  lv->name);
 -		return 0;
 +		return 1;
@@ -81,18 +87,27 @@ index f64f6d1..bab1033 100644
  	}
  
  	lv->alloc = alloc;
-@@ -384,7 +384,7 @@ static int lvchange_readahead(struct cmd_context *cmd,
+@@ -380,11 +380,11 @@ static int lvchange_readahead(struct cmd_context *cmd,
+ 
+ 	if (lv->read_ahead == read_ahead) {
+ 		if (read_ahead == DM_READ_AHEAD_AUTO)
+-			log_error("Read ahead is already auto for \"%s\"", lv->name);
++			log_print("Read ahead is already auto for \"%s\"", lv->name);
  		else
- 			log_error("Read ahead is already %u for \"%s\"",
+-			log_error("Read ahead is already %u for \"%s\"",
++			log_print("Read ahead is already %u for \"%s\"",
  				  read_ahead, lv->name);
 -		return 0;
 +		return 1;
  	}
  
  	lv->read_ahead = read_ahead;
-@@ -429,7 +429,7 @@ static int lvchange_persistent(struct cmd_context *cmd,
+@@ -427,9 +427,9 @@ static int lvchange_persistent(struct cmd_context *cmd,
+ 
+ 	if (!strcmp(arg_str_value(cmd, persistent_ARG, "n"), "n")) {
  		if (!(lv->status & FIXED_MINOR)) {
- 			log_error("Minor number is already not persistent "
+-			log_error("Minor number is already not persistent "
++			log_print("Minor number is already not persistent "
  				  "for \"%s\"", lv->name);
 -			return 0;
 +			return 1;
