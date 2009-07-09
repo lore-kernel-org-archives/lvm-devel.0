@@ -1,9 +1,10 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Jul 2009 01:10:09 -0400
+Date: Thu,  9 Jul 2009 01:10:10 -0400
 Subject: [PATCH v2] Change behavior of tools to make setting the same value return success.
-In-Reply-To: <1247115098-11686-1-git-send-email-dwysocha@redhat.com>
+In-Reply-To: <1247116210-16571-1-git-send-email-dwysocha@redhat.com>
 References: <1247115098-11686-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1247116210-16571-1-git-send-email-dwysocha@redhat.com>
+	<1247116210-16571-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1247116210-16571-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
