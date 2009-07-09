@@ -1,80 +1,127 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Jul 2009 03:08:40 -0400
-Subject: [PATCH 2/9] Add defines for default vgcreate parameters.
-In-Reply-To: <1247123327-26141-2-git-send-email-dwysocha@redhat.com>
+Date: Thu,  9 Jul 2009 03:08:41 -0400
+Subject: [PATCH 3/9] Update vg_change_pesize() to contain all validity checks.
+In-Reply-To: <1247123327-26141-3-git-send-email-dwysocha@redhat.com>
 References: <1247123327-26141-1-git-send-email-dwysocha@redhat.com>
 	<1247123327-26141-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <1247123327-26141-3-git-send-email-dwysocha@redhat.com>
+	<1247123327-26141-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1247123327-26141-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+It would be nice to have one function that does all the validation
+and setting of the VG's pesize.  However, currently some checks
+are in the higher-level function _vgchange_pesize(), and some
+checks are in the lower function vg_change_pesize().
+This patch moves most of the higher-level checks inside
+vg_change_pesize.  In one case a failure return code is
+changed from ECMD_FAILED to EINVALID_CMD_LINE.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/config/defaults.h |    8 ++++++--
- tools/vgcreate.c      |    8 ++++----
- tools/vgsplit.c       |    2 +-
- 3 files changed, 11 insertions(+), 7 deletions(-)
+ lib/metadata/metadata.c |   30 ++++++++++++++++++++++++++++++
+ tools/vgchange.c        |   27 ++-------------------------
+ 2 files changed, 32 insertions(+), 25 deletions(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 98c023a..ee6d758 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -1,6 +1,6 @@
- /*
-- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-+ * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -66,6 +66,10 @@
- #define DEFAULT_LABELSECTOR UINT64_C(1)
- #define DEFAULT_READ_AHEAD "auto"
- #define DEFAULT_EXTENT_SIZE 4096	/* In KB */
-+#define DEFAULT_MAX_PV 0
-+#define DEFAULT_MAX_LV 0
-+#define DEFAULT_ALLOC_POLICY ALLOC_NORMAL
-+#define DEFAULT_CLUSTERED 0
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 6b42605..88382cb 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -631,6 +631,36 @@ int vg_change_pesize(struct cmd_context *cmd __attribute((unused)),
+ 	struct pv_segment *pvseg;
+ 	uint32_t s;
  
- #define DEFAULT_MSG_PREFIX "  "
- #define DEFAULT_CMD_NAME 0
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index 232b570..353611b 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -36,10 +36,10 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
++	if (!(vg_status(vg) & RESIZEABLE_VG)) {
++		log_error("Volume group \"%s\" must be resizeable "
++			  "to change PE size", vg->name);
++		return 0;
++	}
++
++	if (!new_size) {
++		log_error("Physical extent size may not be zero");
++		return 0;
++	}
++
++	if (new_size == vg->extent_size) {
++		log_print("Physical extent size of VG %s is already %s",
++			  vg->name, display_size(vg->cmd, (uint64_t) new_size));
++		return 1;
++	}
++
++	if (new_size & (new_size - 1)) {
++		log_error("Physical extent size must be a power of 2.");
++		return 0;
++	}
++
++	if (new_size > vg->extent_size) {
++		if ((uint64_t) vg->extent_size * vg->extent_count % new_size) {
++			/* FIXME Adjust used PV sizes instead */
++			log_error("New extent size is not a perfect fit");
++			return 0;
++		}
++	}
++
+ 	vg->extent_size = new_size;
  
- 	vp_def.vg_name = NULL;
- 	vp_def.extent_size = DEFAULT_EXTENT_SIZE * 2;
--	vp_def.max_pv = 0;
--	vp_def.max_lv = 0;
--	vp_def.alloc = ALLOC_NORMAL;
--	vp_def.clustered = 0;
-+	vp_def.max_pv = DEFAULT_MAX_PV;
-+	vp_def.max_lv = DEFAULT_MAX_LV;
-+	vp_def.alloc = DEFAULT_ALLOC_POLICY;
-+	vp_def.clustered = DEFAULT_CLUSTERED;
- 	if (fill_vg_create_params(cmd, argv[0], &vp_new, &vp_def))
+ 	if (vg->fid->fmt->ops->vg_setup &&
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 49f1c86..471c672 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -381,48 +381,25 @@ static int _vgchange_pesize(struct cmd_context *cmd, struct volume_group *vg)
+ {
+ 	uint32_t extent_size;
+ 
+-	if (!(vg_status(vg) & RESIZEABLE_VG)) {
+-		log_error("Volume group \"%s\" must be resizeable "
+-			  "to change PE size", vg->name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (arg_sign_value(cmd, physicalextentsize_ARG, 0) == SIGN_MINUS) {
+ 		log_error("Physical extent size may not be negative");
  		return EINVALID_CMD_LINE;
+ 	}
  
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index e14e01c..573dfb6 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -368,7 +368,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		vp_def.max_pv = vg_from->max_pv;
- 		vp_def.max_lv = vg_from->max_lv;
- 		vp_def.alloc = vg_from->alloc;
--		vp_def.clustered = 0;
-+		vp_def.clustered = DEFAULT_CLUSTERED;
+ 	extent_size = arg_uint_value(cmd, physicalextentsize_ARG, 0);
+-	if (!extent_size) {
+-		log_error("Physical extent size may not be zero");
+-		return EINVALID_CMD_LINE;
+-	}
+-
++	/* FIXME: remove check - redundant with vg_change_pesize */
+ 	if (extent_size == vg->extent_size) {
+ 		log_print("Physical extent size of VG %s is already %s",
+ 			  vg->name, display_size(cmd, (uint64_t) extent_size));
+ 		return ECMD_PROCESSED;
+ 	}
  
- 		if (fill_vg_create_params(cmd, vg_name_to, &vp_new, &vp_def)) {
- 			r = EINVALID_CMD_LINE;
+-	if (extent_size & (extent_size - 1)) {
+-		log_error("Physical extent size must be a power of 2.");
+-		return EINVALID_CMD_LINE;
+-	}
+-
+-	if (extent_size > vg->extent_size) {
+-		if ((uint64_t) vg->extent_size * vg->extent_count % extent_size) {
+-			/* FIXME Adjust used PV sizes instead */
+-			log_error("New extent size is not a perfect fit");
+-			return EINVALID_CMD_LINE;
+-		}
+-	}
+-
+ 	if (!archive(vg))
+ 		return ECMD_FAILED;
+ 
+ 	if (!vg_change_pesize(cmd, vg, extent_size)) {
+ 		stack;
+-		return ECMD_FAILED;
++		return EINVALID_CMD_LINE;
+ 	}
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg))
 -- 
 1.6.0.6
 
