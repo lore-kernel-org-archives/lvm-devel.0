@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Jul 2009 10:07:47 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
-Message-ID: <20090709100747.11620.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 9 Jul 2009 11:28:10 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/import_vsn1.c
+Message-ID: <20090709112810.24684.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,109 +10,111 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-09 10:07:47
+Changes by:	mbroz at sourceware.org	2009-07-09 11:28:10
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
-	tools          : vgchange.c 
+	.              : WHATS_NEW 
+	lib/format_text: import_vsn1.c 
 
 Log message:
-	Add vg_set_max_pv() liblvm function and move vgchange logic inside.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Fix segment import functions to print segment name and logical volume name.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.84&r2=1.85
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.238&r2=1.239
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1170&r2=1.1171
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
 
---- LVM2/lib/metadata/metadata-exported.h	2009/07/09 10:06:00	1.84
-+++ LVM2/lib/metadata/metadata-exported.h	2009/07/09 10:07:47	1.85
-@@ -436,6 +436,7 @@
- int vg_extend(struct volume_group *vg, int pv_count, char **pv_names);
- int vg_set_extent_size(vg_t *vg, uint32_t new_extent_size);
- int vg_set_max_lv(vg_t *vg, uint32_t max_lv);
-+int vg_set_max_pv(vg_t *vg, uint32_t max_pv);
- int vg_split_mdas(struct cmd_context *cmd, struct volume_group *vg_from,
- 		  struct volume_group *vg_to);
- 
---- LVM2/lib/metadata/metadata.c	2009/07/09 10:06:00	1.238
-+++ LVM2/lib/metadata/metadata.c	2009/07/09 10:07:47	1.239
-@@ -802,6 +802,33 @@
- 	return 1;
- }
- 
-+int vg_set_max_pv(vg_t *vg, uint32_t max_pv)
-+{
-+	if (!(vg_status(vg) & RESIZEABLE_VG)) {
-+		log_error("Volume group \"%s\" must be resizeable "
-+			  "to change MaxPhysicalVolumes", vg->name);
-+		return 0;
-+	}
-+
-+	if (!(vg->fid->fmt->features & FMT_UNLIMITED_VOLS)) {
-+		if (!max_pv)
-+			max_pv = 255;
-+		else if (max_pv > 255) {
-+			log_error("MaxPhysicalVolume limit is 255");
-+			return 0;
-+		}
-+	}
-+
-+	if (max_pv && max_pv < vg->pv_count) {
-+		log_error("MaxPhysicalVolumes is less than the current number "
-+			  "%d of PVs for \"%s\"", vg->pv_count,
-+			  vg->name);
-+		return 0;
-+	}
-+	vg->max_pv = max_pv;
-+	return 1;
-+}
-+
- /*
-  * Separate metadata areas after splitting a VG.
-  * Also accepts orphan VG as destination (for vgreduce).
---- LVM2/tools/vgchange.c	2009/07/09 10:06:01	1.78
-+++ LVM2/tools/vgchange.c	2009/07/09 10:07:47	1.79
-@@ -314,37 +314,16 @@
+--- LVM2/WHATS_NEW	2009/07/09 10:19:07	1.1170
++++ LVM2/WHATS_NEW	2009/07/09 11:28:09	1.1171
+@@ -1,5 +1,6 @@
+ Version 2.02.49 - 
+ ================================
++  Fix segment import functions to print segment name and logical volume name.
+   Update vgsplit and vgcreate to call the new vg_create, then call 'set' fns.
+   Change vg_create to take minimal parameters, obtain a lock, and return vg_t.
+   Refactor vgchange extent_size, max_lv, max_pv, and alloc_policy for liblvm.
+--- LVM2/lib/format_text/import_vsn1.c	2009/05/13 21:25:02	1.61
++++ LVM2/lib/format_text/import_vsn1.c	2009/07/09 11:28:10	1.62
+@@ -293,32 +293,32 @@
  {
- 	uint32_t max_pv = arg_uint_value(cmd, maxphysicalvolumes_ARG, 0);
+ 	uint32_t area_count = 0u;
+ 	struct lv_segment *seg;
+-	struct config_node *cn;
++	struct config_node *cn, *sn_child = sn->child;
+ 	struct config_value *cv;
+ 	uint32_t start_extent, extent_count;
+ 	struct segment_type *segtype;
+ 	const char *segtype_str;
  
--	if (!(vg_status(vg) & RESIZEABLE_VG)) {
--		log_error("Volume group \"%s\" must be resizeable "
--			  "to change MaxPhysicalVolumes", vg->name);
--		return ECMD_FAILED;
--	}
--
- 	if (arg_sign_value(cmd, maxphysicalvolumes_ARG, 0) == SIGN_MINUS) {
- 		log_error("MaxPhysicalVolumes may not be negative");
- 		return EINVALID_CMD_LINE;
+-	if (!(sn = sn->child)) {
++	if (!sn_child) {
+ 		log_error("Empty segment section.");
+ 		return 0;
  	}
  
--	if (!(vg->fid->fmt->features & FMT_UNLIMITED_VOLS)) {
--		if (!max_pv)
--			max_pv = 255;
--		else if (max_pv > 255) {
--			log_error("MaxPhysicalVolume limit is 255");
--			return ECMD_FAILED;
--		}
--	}
--
--	if (max_pv && max_pv < vg->pv_count) {
--		log_error("MaxPhysicalVolumes is less than the current number "
--			  "%d of PVs for \"%s\"", vg->pv_count,
--			  vg->name);
--		return ECMD_FAILED;
--	}
--
- 	if (!archive(vg))
- 		return ECMD_FAILED;
+-	if (!_read_int32(sn, "start_extent", &start_extent)) {
+-		log_error("Couldn't read 'start_extent' for segment '%s'.",
+-			  sn->key);
++	if (!_read_int32(sn_child, "start_extent", &start_extent)) {
++		log_error("Couldn't read 'start_extent' for segment '%s' "
++			  "of logical volume %s.", sn->key, lv->name);
+ 		return 0;
+ 	}
  
--	vg->max_pv = max_pv;
-+	if (!vg_set_max_pv(vg, max_pv))
-+		return ECMD_FAILED;
+-	if (!_read_int32(sn, "extent_count", &extent_count)) {
+-		log_error("Couldn't read 'extent_count' for segment '%s'.",
+-			  sn->key);
++	if (!_read_int32(sn_child, "extent_count", &extent_count)) {
++		log_error("Couldn't read 'extent_count' for segment '%s' "
++			  "of logical volume %s.", sn->key, lv->name);
+ 		return 0;
+ 	}
  
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return ECMD_FAILED;
+ 	segtype_str = "striped";
+ 
+-	if ((cn = find_config_node(sn, "type"))) {
++	if ((cn = find_config_node(sn_child, "type"))) {
+ 		cv = cn->v;
+ 		if (!cv || !cv->v.str) {
+ 			log_error("Segment type must be a string.");
+@@ -331,7 +331,7 @@
+ 		return_0;
+ 
+ 	if (segtype->ops->text_import_area_count &&
+-	    !segtype->ops->text_import_area_count(sn, &area_count))
++	    !segtype->ops->text_import_area_count(sn_child, &area_count))
+ 		return_0;
+ 
+ 	if (!(seg = alloc_lv_segment(mem, segtype, lv, start_extent,
+@@ -342,11 +342,11 @@
+ 	}
+ 
+ 	if (seg->segtype->ops->text_import &&
+-	    !seg->segtype->ops->text_import(seg, sn, pv_hash))
++	    !seg->segtype->ops->text_import(seg, sn_child, pv_hash))
+ 		return_0;
+ 
+ 	/* Optional tags */
+-	if ((cn = find_config_node(sn, "tags")) &&
++	if ((cn = find_config_node(sn_child, "tags")) &&
+ 	    !(read_tags(mem, &seg->tags, cn->v))) {
+ 		log_error("Couldn't read tags for a segment of %s/%s.",
+ 			  vg->name, lv->name);
+@@ -463,13 +463,14 @@
+ 	}
+ 
+ 	if (!_read_int32(lvn, "segment_count", &seg_count)) {
+-		log_error("Couldn't read segment count for logical volume.");
++		log_error("Couldn't read segment count for logical volume %s.",
++			  lv->name);
+ 		return 0;
+ 	}
+ 
+ 	if (seg_count != count) {
+ 		log_error("segment_count and actual number of segments "
+-			  "disagree.");
++			  "disagree for logical volume %s.", lv->name);
+ 		return 0;
+ 	}
+ 
 
 
