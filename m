@@ -1,73 +1,127 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Jul 2009 18:17:48 -0400
-Subject: [PATCH 3/4] Move orphan lock inside vg_remove_single.
-In-Reply-To: <1247177869-12526-3-git-send-email-dwysocha@redhat.com>
+Date: Thu,  9 Jul 2009 18:17:49 -0400
+Subject: [PATCH 4/4] Move orphan lock obtain/release inside vg_extend().
+In-Reply-To: <1247177869-12526-4-git-send-email-dwysocha@redhat.com>
 References: <1247177869-12526-1-git-send-email-dwysocha@redhat.com>
 	<1247177869-12526-2-git-send-email-dwysocha@redhat.com>
 	<1247177869-12526-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1247177869-12526-4-git-send-email-dwysocha@redhat.com>
+	<1247177869-12526-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1247177869-12526-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move the vg orphan lock inside vg_remove_single, now a complete liblvm
-function.
+With this change we now have vgcreate/vgextend liblvm functions.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |    7 +++++++
- tools/vgremove.c        |    7 -------
- 2 files changed, 7 insertions(+), 7 deletions(-)
+ lib/metadata/metadata.c |   12 ++++++++++--
+ tools/vgcreate.c        |    8 --------
+ tools/vgextend.c        |    7 -------
+ 3 files changed, 10 insertions(+), 17 deletions(-)
 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5257801..bbfce76 100644
+index bbfce76..5ff28d5 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -390,8 +390,14 @@ int vg_remove_single(vg_t *vg)
- 	if (!archive(vg))
- 		return 0;
- 
+@@ -439,6 +439,13 @@ int vg_extend(struct volume_group *vg, int pv_count, char **pv_names)
+ {
+ 	int i;
+ 	struct physical_volume *pv;
++	struct cmd_context *cmd = vg->cmd;
++
++	/* FIXME: orphan lock needs tied to vg handle or inside library call */
 +	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
 +		log_error("Can't get lock for orphan PVs");
 +		return 0;
 +	}
-+
- 	if (!vg_remove(vg)) {
- 		log_error("vg_remove %s failed", vg_name);
-+		unlock_vg(cmd, VG_ORPHANS);
- 		return 0;
+ 
+ 	/* attach each pv */
+ 	for (i = 0; i < pv_count; i++) {
+@@ -447,18 +454,19 @@ int vg_extend(struct volume_group *vg, int pv_count, char **pv_names)
+ 				  "physical volume", pv_names[i]);
+ 			goto bad;
+ 		}
+-		
+ 		if (!add_pv_to_vg(vg, pv_names[i], pv))
+ 			goto bad;
  	}
  
-@@ -425,6 +431,7 @@ int vg_remove_single(vg_t *vg)
- 	else
- 		log_error("Volume group \"%s\" not properly removed", vg_name);
+ /* FIXME Decide whether to initialise and add new mdahs to format instance */
  
 +	unlock_vg(cmd, VG_ORPHANS);
- 	return ret;
+ 	return 1;
+-	
++
+       bad:
+ 	log_error("Unable to add physical volume '%s' to "
+ 		  "volume group '%s'.", pv_names[i], vg->name);
++	unlock_vg(cmd, VG_ORPHANS);
+ 	return 0;
  }
  
-diff --git a/tools/vgremove.c b/tools/vgremove.c
-index 1bfff1e..92c10fe 100644
---- a/tools/vgremove.c
-+++ b/tools/vgremove.c
-@@ -56,16 +56,9 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index 7cfd0f2..c41c50f 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -46,12 +46,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	if (validate_vg_create_params(cmd, &vp_new))
+ 	    return EINVALID_CMD_LINE;
+ 
+-	/* FIXME: orphan lock needs tied to vg handle or inside library call */
+-	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
+-		log_error("Can't get lock for orphan PVs");
+-		return ECMD_FAILED;
+-	}
+-
+ 	/* Create the new VG */
+ 	vg = vg_create(cmd, vp_new.vg_name);
+ 	if (vg_read_error(vg))
+@@ -113,7 +107,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
  	}
+ 
+ 	unlock_vg(cmd, vp_new.vg_name);
+-	unlock_vg(cmd, VG_ORPHANS);
+ 
+ 	backup(vg);
+ 
+@@ -126,6 +119,5 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ bad:
+ 	vg_release(vg);
+ 	unlock_vg(cmd, vp_new.vg_name);
+-	unlock_vg(cmd, VG_ORPHANS);
+ 	return ECMD_FAILED;
+ }
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index a08d4db..728d9f4 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -36,17 +36,11 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 	argc--;
+ 	argv++;
  
 -	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
 -		log_error("Can't get lock for orphan PVs");
 -		return ECMD_FAILED;
 -	}
 -
- 	ret = process_each_vg(cmd, argc, argv,
- 			      READ_FOR_UPDATE,
- 			      NULL, &vgremove_single);
+ 	log_verbose("Checking for volume group \"%s\"", vg_name);
+ 	vg = vg_read_for_update(cmd, vg_name, NULL,
+ 				READ_REQUIRE_RESIZEABLE);
+ 	if (vg_read_error(vg)) {
+ 		vg_release(vg);
+-		unlock_vg(cmd, VG_ORPHANS);
+ 		return ECMD_FAILED;
+ 	}
+ /********** FIXME
+@@ -77,6 +71,5 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
  
+ error:
+ 	unlock_and_release_vg(cmd, vg, vg_name);
 -	unlock_vg(cmd, VG_ORPHANS);
--
- 	return ret;
+ 	return r;
  }
 -- 
 1.6.0.6
