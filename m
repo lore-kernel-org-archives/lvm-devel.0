@@ -1,60 +1,30 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 10 Jul 2009 16:10:40 +0200
-Subject: [PATCH] Do not count VG_GLOBAL to lock_count.
-Message-ID: <4A574BE0.70704@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 10 Jul 2009 11:38:50 -0400
+Subject: [PATCH 0/5] Refactor vgremove and move orphan lock inside library, v2
+Message-ID: <1247240335-18769-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Do not count VG_GLOBAL to lock_count.
 
-Otherwise all read-only scanning will open devices RW.
-because of
-	flags = vg_write_lock_held() ? O_RDWR : O_RDONLY;
+The following 5 patches refactor vgremove and move the orphan lock inside
+a few library calls.  After these patches we will have vgcreate, vgremove,
+and vgextend library calls.  The last few patches also reorders VG orphan
+locks and VG name locks consistently throughout the code.  Now VG orphan
+locks are obtained second.  Previously in most cases they were obtained
+first, but in at least one case (vgreduce) they were second.
 
-(And trigger udev rule because of IN_CLOSE_WRITE monitoring).
+Passes testsuite and applies on:
+commit 7e7274b002956a377d1f02c97d2ba96f4da1de59
+Author: Alasdair Kergon <agk@redhat.com>
+Date:   Fri Jul 10 09:59:37 2009 +0000
 
-Anyway, there are many other situations when lvm opens
-device RW unnecessarily...
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/locking/locking.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
-
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 5c04b4f..482cdf0 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -189,12 +189,16 @@ void reset_locking(void)
- 		_unblock_signals();
- }
- 
--static void _update_vg_lock_count(uint32_t flags)
-+static void _update_vg_lock_count(const char *resource, uint32_t flags)
- {
- 	if ((flags & LCK_SCOPE_MASK) != LCK_VG ||
- 	    (flags & LCK_CACHE))
- 		return;
- 
-+	/* Ignore global locks */
-+	if (!strcmp(resource, VG_GLOBAL))
-+		return;
-+
- 	if ((flags & LCK_TYPE_MASK) == LCK_UNLOCK)
- 		_vg_lock_count--;
- 	else
-@@ -356,7 +360,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t fla
- 								== LCK_READ);
- 		}
- 
--		_update_vg_lock_count(flags);
-+		_update_vg_lock_count(resource, flags);
- 	}
- 
- 	_unlock_memory(flags);
+    Add dm_log_with_errno and dm_log_with_errno_init, deprecating the old
+    Change plog to use dm_log_with_errno unless deprecated dm_log_init was
+used.
+    Rename plog macro to LOG_LINE and use in dm_dump_memory_debug.
 
 
 
