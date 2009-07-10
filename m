@@ -1,63 +1,34 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 10 Jul 2009 11:38:55 -0400
-Subject: [PATCH 5/5] Change lock ordering of vgcfgrestore to be consistent with other tools.
-In-Reply-To: <1247240335-18769-5-git-send-email-dwysocha@redhat.com>
-References: <1247240335-18769-1-git-send-email-dwysocha@redhat.com>
-	<1247240335-18769-2-git-send-email-dwysocha@redhat.com>
-	<1247240335-18769-3-git-send-email-dwysocha@redhat.com>
-	<1247240335-18769-4-git-send-email-dwysocha@redhat.com>
-	<1247240335-18769-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1247240335-18769-6-git-send-email-dwysocha@redhat.com>
+Date: Fri, 10 Jul 2009 12:09:23 -0400
+Subject: [PATCH] Do not count VG_GLOBAL to lock_count.
+In-Reply-To: <4A574BE0.70704@redhat.com>
+References: <4A574BE0.70704@redhat.com>
+Message-ID: <1247242163.2462.10.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Orphan lock is now obtained second and released first.
+On Fri, 2009-07-10 at 16:10 +0200, Milan Broz wrote:
+> Do not count VG_GLOBAL to lock_count.
+> 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- tools/vgcfgrestore.c |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+This description is misleading - it's not the count that matters its the
+flag _vg_write_lock_held, and that's set based on the lock type:
+	/* We don't bother to reset this until all VG locks are dropped */
+	if ((flags & LCK_TYPE_MASK) == LCK_WRITE)
+		_vg_write_lock_held = 1;
+	else if (!_vg_lock_count)
+		_vg_write_lock_held = 0;
+}
 
-diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
-index 6ec20d1..e1d6bb4 100644
---- a/tools/vgcfgrestore.c
-+++ b/tools/vgcfgrestore.c
-@@ -43,17 +43,17 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_PROCESSED;
- 	}
- 
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
--		log_error("Unable to lock orphans");
--		return ECMD_FAILED;
--	}
--
- 	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
- 		log_error("Unable to lock volume group %s", vg_name);
- 		unlock_vg(cmd, VG_ORPHANS);
- 		return ECMD_FAILED;
- 	}
- 
-+	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-+		log_error("Unable to lock orphans");
-+		return ECMD_FAILED;
-+	}
-+
- 	if (!(arg_count(cmd, file_ARG) ?
- 	      backup_restore_from_file(cmd, vg_name,
- 				       arg_str_value(cmd, file_ARG, "")) :
-@@ -66,7 +66,7 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 
- 	log_print("Restored volume group %s", vg_name);
- 
--	unlock_vg(cmd, vg_name);
- 	unlock_vg(cmd, VG_ORPHANS);
-+	unlock_vg(cmd, vg_name);
- 	return ECMD_PROCESSED;
- }
--- 
-1.6.0.6
+Wouldn't a better fix just be changing pvscan and vgscan to use
+LCK_VG_READ instead of LCK_VG_WRITE since they are not updating
+metadata?  Or is there a problem with doing that?
+
+I guess in general I don't like the idea of affecting the count.  Unless
+of course we want to call "VG_GLOBAL" not really a vg lock.  But then
+the naming seems inconsistent.
 
 
