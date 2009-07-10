@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 10 Jul 2009 20:10:19 -0000
-Subject: LVM2/tools vgcfgrestore.c
-Message-ID: <20090710201019.26066.qmail@sourceware.org>
+Date: 10 Jul 2009 20:16:18 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20090710201618.28062.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,55 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-10 20:10:18
+Changes by:	wysochanski at sourceware.org	2009-07-10 20:16:16
 
 Modified files:
-	tools          : vgcfgrestore.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Change lock ordering of vgcfgrestore to be consistent with other tools.
-	
-	Orphan lock is now obtained second and released first, and all tools
-	are consistent in this regard.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Update WHATS_NEW for vgremove and ORPAHN_LOCK refactoring
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgrestore.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1175&r2=1.1176
 
---- LVM2/tools/vgcfgrestore.c	2009/05/13 13:02:55	1.19
-+++ LVM2/tools/vgcfgrestore.c	2009/07/10 20:10:18	1.20
-@@ -43,17 +43,17 @@
- 		return ECMD_PROCESSED;
- 	}
- 
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
--		log_error("Unable to lock orphans");
--		return ECMD_FAILED;
--	}
--
- 	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
- 		log_error("Unable to lock volume group %s", vg_name);
- 		unlock_vg(cmd, VG_ORPHANS);
- 		return ECMD_FAILED;
- 	}
- 
-+	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-+		log_error("Unable to lock orphans");
-+		return ECMD_FAILED;
-+	}
-+
- 	if (!(arg_count(cmd, file_ARG) ?
- 	      backup_restore_from_file(cmd, vg_name,
- 				       arg_str_value(cmd, file_ARG, "")) :
-@@ -66,7 +66,7 @@
- 
- 	log_print("Restored volume group %s", vg_name);
- 
--	unlock_vg(cmd, vg_name);
- 	unlock_vg(cmd, VG_ORPHANS);
-+	unlock_vg(cmd, vg_name);
- 	return ECMD_PROCESSED;
- }
+--- LVM2/WHATS_NEW	2009/07/09 22:50:45	1.1175
++++ LVM2/WHATS_NEW	2009/07/10 20:16:15	1.1176
+@@ -1,5 +1,7 @@
+ Version 2.02.49 - 
+ ================================
++  Refactor vg_remove_single for use in liblvm.
++  Make all tools consistent with lock ordering - obtain VG_ORPHAN lock second.
+   Check MD devices for a partition table during device scan.
+   Add extended device (blkext) and MD partition (mdp) types to filters.
+   Fix and precise metadata read errors for segment areas.
 
 
