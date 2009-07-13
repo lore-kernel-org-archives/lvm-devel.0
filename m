@@ -1,39 +1,88 @@
-From: Daniel Mierswa <impulze@impulze.org>
-Date: Mon, 13 Jul 2009 00:56:30 +0200
-Subject: [RFC][PATCH] S.I. and consistent units
-Message-ID: <4A5A6A1E.1020006@impulze.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 13 Jul 2009 00:12:34 -0400
+Subject: [PATCH 1/5] Define handles to liblvm objects for pv, vg, lv, lvseg, pvseg.
+In-Reply-To: <1247458358-24590-1-git-send-email-dwysocha@redhat.com>
+References: <1247458358-24590-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1247458358-24590-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-A proposed git format-patch for unit consistency in current LVM2.
-agk already answered on linux-lvm but I just now saw that you're
-supposed to post patches on lvm-devel so I do it here.
+Define the 5 main liblvm objects to be the pv, vg, lv, lvseg, and pvseg.
+We need handles defined to all these objects in order for liblvm to be
+equivalent to the reporting commands pvs, vgs, and lvs.
 
->From my last mail to linux-lvm:
+- move vg_t, lv_t, and pv_t from metadata-exported.h into lvm.h
+- move lv_segment and pv_segment forward declarations into lvm.h
+- add lvseg_t and pvseg_t to lvm.h
 
-The functional changes are as follows:
-- Users and programs currently checking the output of LVM have to
-distinguish between either IEC or SI units. Currently LVM prints K, KB
-and Kilobyte for SI and IEC units depending on what they passed in
---units. With the patch applied LVM prints K, KB and Kilobyte for SI
-units and k, KiB and Kibibyte for IEC units.
-- Users and programs currently passing LVM the uppercase size suffixes
-are now telling LVM to treat that value as SI unit whereas now LVM
-treats lower and uppercase suffixes as IEC (binary based unit).
+NOTE: We currently have an inconsistency in handle definitions.
+lvm_t is defined as a pointer, while these other handles are just
+structures.  We should pick one scheme and be consistent - perhaps
+define all handles as pointers (this is what I've seen elsewhere).
 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata-exported.h |   11 +----------
+ liblvm/lvm.h                     |   15 +++++++++++++++
+ 2 files changed, 16 insertions(+), 10 deletions(-)
+
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 7a2f813..47b2e8a 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -22,16 +22,7 @@
+ #define _LVM_METADATA_EXPORTED_H
+ 
+ #include "uuid.h"
+-
+-struct physical_volume;
+-typedef struct physical_volume pv_t;
+-struct volume_group;
+-typedef struct volume_group vg_t;
+-
+-struct logical_volume;
+-
+-struct lv_segment;
+-struct pv_segment;
++#include "lvm.h"
+ 
+ #define MAX_STRIPES 128U
+ #define SECTOR_SHIFT 9L
+diff --git a/liblvm/lvm.h b/liblvm/lvm.h
+index 3b60510..4e71e15 100644
+--- a/liblvm/lvm.h
++++ b/liblvm/lvm.h
+@@ -18,6 +18,20 @@
+ 
+ #include <stdint.h>
+ 
++/* Internal object structures */
++struct volume_group;
++struct physical_volume;
++struct logical_volume;
++struct lv_segment;
++struct pv_segment;
++
++/* liblvm handles to objects pv, vg, lv, pvseg, lvseg */
++typedef struct volume_group vg_t;
++typedef struct physical_volume pv_t;
++typedef struct logical_volume lv_t;
++typedef struct pv_segment pvseg_t;
++typedef struct lv_segment lvseg_t;
++
+ struct lvm; /* internal data */
+ 
+ /**
+@@ -54,4 +68,5 @@ void lvm_destroy(lvm_t libh);
+  */
+ int lvm_reload_config(lvm_t libh);
+ 
++
+ #endif /* _LIB_LVM_H */
 -- 
-Mierswa, Daniel
+1.6.0.6
 
-If you still don't like it, that's ok: that's why I'm boss. I simply
-know better than you do.
-               --- Linus Torvalds, comp.os.linux.advocacy, 1996/07/22
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm-units.patch.gz
-Type: application/gzip
-Size: 17407 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090713/74b95679/attachment.gz>
+
