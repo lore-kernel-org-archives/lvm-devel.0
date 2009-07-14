@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 14 Jul 2009 03:00:32 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h liblvm/lvm.h
-Message-ID: <20090714030032.29643.qmail@sourceware.org>
+Date: 14 Jul 2009 03:01:18 -0000
+Subject: LVM2/liblvm lvm_base.c
+Message-ID: <20090714030118.5342.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,83 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-14 03:00:31
+Changes by:	wysochanski at sourceware.org	2009-07-14 03:01:18
 
 Modified files:
-	lib/metadata   : metadata-exported.h 
-	liblvm         : lvm.h 
+	liblvm         : lvm_base.c 
 
 Log message:
-	Define handles to liblvm objects for pv, vg, lv, lvseg, pvseg.
+	Add default cmd->cmd_line initialization for liblvm lvm_create().
 	
-	Define the 5 main liblvm objects to be the pv, vg, lv, lvseg, and pvseg.
-	We need handles defined to all these objects in order for liblvm to be
-	equivalent to the reporting commands pvs, vgs, and lvs.
-	
-	- move vg_t, lv_t, and pv_t from metadata-exported.h into lvm.h
-	- move lv_segment and pv_segment forward declarations into lvm.h
-	- add lvseg_t and pvseg_t to lvm.h
-	
-	NOTE: We currently have an inconsistency in handle definitions.
-	lvm_t is defined as a pointer, while these other handles are just
-	structures.  We should pick one scheme and be consistent - perhaps
-	define all handles as pointers (this is what I've seen elsewhere).
+	This needs initialized to non-NULL before using the archive() call.
+	Normally this is set to the cmdline string when lvm is called from a tool.
+	We could think about using it in another way, as a potential audit trail
+	of liblvm calls, or just leave it set to the default "liblvm", similar to
+	what clvmd does.  For now, just set it to "liblvm".
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 	Acked-by: Alasdair G Kergon <agk@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.92&r2=1.93
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/lib/metadata/metadata-exported.h	2009/07/14 02:19:19	1.92
-+++ LVM2/lib/metadata/metadata-exported.h	2009/07/14 03:00:30	1.93
-@@ -22,16 +22,7 @@
- #define _LVM_METADATA_EXPORTED_H
+--- LVM2/liblvm/lvm_base.c	2009/03/10 15:38:46	1.2
++++ LVM2/liblvm/lvm_base.c	2009/07/14 03:01:18	1.3
+@@ -45,6 +45,12 @@
+ 		lvm_destroy((lvm_t) cmd);
+ 		return NULL;
+ 	}
++	/*
++	 * FIXME: Use cmd->cmd_line as audit trail for liblvm calls.  Used in
++	 * archive() call.  Possible example:
++	 * cmd_line = "lvm_vg_create: vg1\nlvm_vg_extend vg1 /dev/sda1\n"
++	 */
++	cmd->cmd_line = (char *)"liblvm";
  
- #include "uuid.h"
--
--struct physical_volume;
--typedef struct physical_volume pv_t;
--struct volume_group;
--typedef struct volume_group vg_t;
--
--struct logical_volume;
--
--struct lv_segment;
--struct pv_segment;
-+#include "lvm.h"
- 
- #define MAX_STRIPES 128U
- #define SECTOR_SHIFT 9L
---- LVM2/liblvm/lvm.h	2009/03/06 22:49:49	1.1
-+++ LVM2/liblvm/lvm.h	2009/07/14 03:00:31	1.2
-@@ -18,6 +18,20 @@
- 
- #include <stdint.h>
- 
-+/* Internal object structures */
-+struct volume_group;
-+struct physical_volume;
-+struct logical_volume;
-+struct lv_segment;
-+struct pv_segment;
-+
-+/* liblvm handles to objects pv, vg, lv, pvseg, lvseg */
-+typedef struct volume_group vg_t;
-+typedef struct physical_volume pv_t;
-+typedef struct logical_volume lv_t;
-+typedef struct pv_segment pvseg_t;
-+typedef struct lv_segment lvseg_t;
-+
- struct lvm; /* internal data */
- 
- /**
-@@ -54,4 +68,5 @@
-  */
- int lvm_reload_config(lvm_t libh);
- 
-+
- #endif /* _LIB_LVM_H */
+ 	return (lvm_t) cmd;
+ }
 
 
