@@ -1,21 +1,43 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 7 Jul 2009 23:03:14 +0100
-Subject: [PATCH 0/7]: Implement lvm_vg_create() and 4 required vg_set*() APIs
-In-Reply-To: <1246953008-27609-1-git-send-email-dwysocha@redhat.com>
-References: <1246953008-27609-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20090707220314.GM11082@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 14 Jul 2009 13:21:29 +0200
+Subject: [PATCH] Enable use new multi-segment registration for static segments too.
+Message-ID: <4A5C6A39.7090504@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Jul 07, 2009 at 03:50:01AM -0400, Dave Wysochanski wrote:
-> The following 7 patches implement the beginning of lvm_vg_create() liblvm API.
+Enable use new multi-segment registration for static segments.
 
-Ack to the principles within.
-(I've not done a line-by-line review of correctness.)
+so it allows adding code like:
 
-Alasdair
+#ifdef MYNEWSEG_INTERNAL
+	if (!init_mynewseg_segtypes(&seglib))
+			return 0;
+#endif
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/commands/toolcontext.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 7658c47..76802ab 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -855,10 +855,10 @@ static int _init_single_segtype(struct segtype_library *seglib)
+ static int _init_segtypes(struct cmd_context *cmd)
+ {
+ 	struct segment_type *segtype;
++	struct segtype_library seglib = { .cmd = cmd };
+ 
+ #ifdef HAVE_LIBDL
+ 	const struct config_node *cn;
+-	struct segtype_library seglib;
+ #endif
+ 
+ 	if (!(segtype = init_striped_segtype(cmd)))
+
 
 
