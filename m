@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 16 Jul 2009 03:25:26 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20090716032526.32314.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 16 Jul 2009 13:13:34 -0000
+Subject: LVM2/lib/log log.c log.h
+Message-ID: <20090716131334.1221.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,61 +10,59 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-16 03:25:26
+Changes by:	agk at sourceware.org	2009-07-16 13:13:34
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata.c 
+	lib/log        : log.c log.h 
 
 Log message:
-	Remove extraneous messages for extent_size and alloc_policy upon vgcreate.
-	
-	When converting to the new liblvm functions, the vgcreate code path
-	changed to create a new vg, then set values.  As a result of this
-	change, and the fact that we give a user a message if they try to
-	set the same value of a VG attribute (extent_size, alloc_policy, etc),
-	you'll see these 2 extraneous "is already" messages with vgcreate:
-	tools/lvm vgcreate vg2 /dev/loop2
-	Physical extent size of VG vg2 is already 4.00 MB
-	Volume group allocation policy is already normal
-	Volume group "vg2" successfully created
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
+	Fix so only log_error and log_fatal set EUNCLASSIFIED.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1192&r2=1.1193
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.256&r2=1.257
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.h.diff?cvsroot=lvm2&r1=1.45&r2=1.46
 
---- LVM2/WHATS_NEW	2009/07/16 00:52:06	1.1192
-+++ LVM2/WHATS_NEW	2009/07/16 03:25:26	1.1193
-@@ -1,5 +1,6 @@
- Version 2.02.50 - 
- ================================
-+  Remove unnecessary messages after vgcreate/vgsplit refactor (2.02.49).
-   Add log_errno to set a specific errno and replace log_error in due course.
-   Add lvm_errno and lvm_errmsg to liblvm to obtain failure information.
-   Change create_toolcontext to still return an object if it fails part-way.
---- LVM2/lib/metadata/metadata.c	2009/07/15 20:02:47	1.256
-+++ LVM2/lib/metadata/metadata.c	2009/07/16 03:25:26	1.257
-@@ -742,7 +742,7 @@
+--- LVM2/lib/log/log.c	2009/07/16 00:36:59	1.51
++++ LVM2/lib/log/log.c	2009/07/16 13:13:33	1.52
+@@ -186,7 +186,7 @@
+ 	if (dm_errno && !_lvm_errno)
+ 		_lvm_errno = dm_errno;
+ 
+-	if (_lvm2_log_fn || (_store_errmsg && (level == _LOG_ERR))) {
++	if (_lvm2_log_fn || (_store_errmsg && (level <= _LOG_ERR))) {
+ 		va_start(ap, format);
+ 		n = vsnprintf(buf2, sizeof(buf2) - 1, trformat, ap);
+ 		va_end(ap);
+@@ -201,7 +201,7 @@
+ 		message = &buf2[0];
  	}
  
- 	if (new_size == vg->extent_size) {
--		log_error("Physical extent size of VG %s is already %s",
-+		log_verbose("Physical extent size of VG %s is already %s",
- 			  vg->name, display_size(vg->cmd, (uint64_t) new_size));
- 		return 1;
- 	}
-@@ -933,7 +933,7 @@
- 	}
+-	if (_store_errmsg && (level == _LOG_ERR)) {
++	if (_store_errmsg && (level <= _LOG_ERR)) {
+ 		if (!_lvm_errmsg)
+ 			_lvm_errmsg = dm_strdup(message);
+ 		else if ((newbuf = dm_realloc(_lvm_errmsg,
+--- LVM2/lib/log/log.h	2009/07/16 00:52:09	1.45
++++ LVM2/lib/log/log.h	2009/07/16 13:13:33	1.46
+@@ -43,6 +43,8 @@
+ #include <string.h>		/* strerror() */
+ #include <errno.h>
  
- 	if (alloc == vg->alloc) {
--		log_print("Volume group allocation policy is already %s",
-+		log_verbose("Volume group allocation policy is already %s",
- 			  get_alloc_string(vg->alloc));
- 		return 1;
- 	}
++#define EUNCLASSIFIED -1	/* Generic error code */
++
+ #define _LOG_STDERR 128 /* force things to go to stderr, even if loglevel
+ 			   would make them go to stdout */
+ #define _LOG_DEBUG 7
+@@ -56,8 +58,8 @@
+ #define log_info(x...) LOG_LINE(_LOG_INFO, x)
+ #define log_notice(x...) LOG_LINE(_LOG_NOTICE, x)
+ #define log_warn(x...) LOG_LINE(_LOG_WARN | _LOG_STDERR, x)
+-#define log_err(x...) LOG_LINE(_LOG_ERR, x)
+-#define log_fatal(x...) LOG_LINE(_LOG_FATAL, x)
++#define log_err(x...) LOG_LINE_WITH_ERRNO(_LOG_ERR, EUNCLASSIFIED, x)
++#define log_fatal(x...) LOG_LINE_WITH_ERRNO(_LOG_FATAL, EUNCLASSIFIED, x)
+ 
+ #define stack log_debug("<backtrace>")	/* Backtrace on error */
+ #define log_very_verbose(args...) log_info(args)
 
 
