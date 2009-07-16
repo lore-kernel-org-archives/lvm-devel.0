@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 15 Jul 2009 23:57:57 -0000
+Date: 16 Jul 2009 00:37:01 -0000
 Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c ...
-Message-ID: <20090715235757.549.qmail@sourceware.org>
+Message-ID: <20090716003701.30823.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,250 +10,251 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-07-15 23:57:55
+Changes by:	agk at sourceware.org	2009-07-16 00:37:00
 
 Modified files:
 	.              : WHATS_NEW 
 	daemons/clvmd  : lvm-functions.c 
-	doc            : example_cmdlib.c 
 	lib/commands   : toolcontext.c 
 	lib/log        : log.c lvm-logging.h 
-	po             : pogen.h 
+	liblvm         : lvm_base.c 
 	tools          : lvmcmdline.c 
 
 Log message:
-	Store any errno and error messages issued while processing each command.
-	(Enabled by default while we test it, but in due course we'll only store
-	the error messages when we need to.)
+	Add lvm_errno and lvm_errmsg to liblvm to obtain failure information.
+	Change create_toolcontext to still return an object if it fails part-way.
+	Add EUNCLASSIFIED (-1) as the default LVM errno code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1189&r2=1.1190
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example_cmdlib.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.80&r2=1.81
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/lvm-logging.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/po/pogen.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.100&r2=1.101
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1190&r2=1.1191
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.81&r2=1.82
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/lvm-logging.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
 
---- LVM2/WHATS_NEW	2009/07/15 20:02:46	1.1189
-+++ LVM2/WHATS_NEW	2009/07/15 23:57:54	1.1190
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2009/07/15 23:57:54	1.1190
++++ LVM2/WHATS_NEW	2009/07/16 00:36:59	1.1191
+@@ -1,5 +1,8 @@
  Version 2.02.50 - 
  ================================
-+  Store any errno and error messages issued while processing each command.
++  Add lvm_errno and lvm_errmsg to liblvm to obtain failure information.
++  Change create_toolcontext to still return an object if it fails part-way.
++  Add EUNCLASSIFIED (-1) as the default LVM errno code.
+   Store any errno and error messages issued while processing each command.
    Use log_error macro consistently throughout in place of log_err.
  
- Version 2.02.49 - 15th July 2009
---- LVM2/daemons/clvmd/lvm-functions.c	2009/07/13 19:49:48	1.64
-+++ LVM2/daemons/clvmd/lvm-functions.c	2009/07/15 23:57:55	1.65
-@@ -714,7 +714,7 @@
- 	return NULL;
- }
+--- LVM2/daemons/clvmd/lvm-functions.c	2009/07/15 23:57:55	1.65
++++ LVM2/daemons/clvmd/lvm-functions.c	2009/07/16 00:36:59	1.66
+@@ -792,6 +792,11 @@
+ 		return 0;
+ 	}
  
--static void lvm2_log_fn(int level, const char *file, int line,
-+static void lvm2_log_fn(int level, const char *file, int line, int dm_errno,
- 			const char *message)
- {
++	if (stored_errno()) {
++		destroy_toolcontext(cmd);
++		return 0;
++	}
++
+ 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
+ 	init_syslog(LOG_DAEMON);
+ 	openlog("clvmd", LOG_PID, LOG_DAEMON);
+--- LVM2/lib/commands/toolcontext.c	2009/07/15 23:57:55	1.81
++++ LVM2/lib/commands/toolcontext.c	2009/07/16 00:36:59	1.82
+@@ -1083,6 +1083,9 @@
+ 	dm_list_init(&cmd->tags);
+ 	dm_list_init(&cmd->config_files);
  
-@@ -723,7 +723,7 @@
-  	   We need to NULL the function ptr otherwise it will just call
- 	   back into here! */
- 	init_log_fn(NULL);
--	print_log(level, file, line, "%s", message);
-+	print_log(level, file, line, dm_errno, "%s", message);
- 	init_log_fn(lvm2_log_fn);
- 
++	/* FIXME Make this configurable? */
++	reset_lvm_errno(1);
++
  	/*
---- LVM2/doc/example_cmdlib.c	2004/03/30 19:54:59	1.1
-+++ LVM2/doc/example_cmdlib.c	2009/07/15 23:57:55	1.2
-@@ -15,7 +15,8 @@
- #include "lvm2cmd.h"
+ 	 * Environment variable LVM_SYSTEM_DIR overrides this below.
+ 	 */
+@@ -1092,7 +1095,7 @@
+ 		strcpy(cmd->system_dir, DEFAULT_SYS_DIR);
  
- /* All output gets passed to this function line-by-line */
--void test_log_fn(int level, const char *file, int line, const char *format)
-+void test_log_fn(int level, int dm_errno, const char *file, int line,
-+		 const char *format)
- {
- 	/* Extract and process output here rather than printing it */
+ 	if (!_get_env_vars(cmd))
+-		goto error;
++		goto_out;
  
---- LVM2/lib/commands/toolcontext.c	2009/07/15 20:02:46	1.80
-+++ LVM2/lib/commands/toolcontext.c	2009/07/15 23:57:55	1.81
-@@ -190,7 +190,7 @@
+ 	/* Create system directory if it doesn't already exist */
+ 	if (*cmd->system_dir && !dm_create_dir(cmd->system_dir)) {
+@@ -1100,58 +1103,58 @@
+ 			  "files and internal cache.");
+ 		log_error("Set environment variable LVM_SYSTEM_DIR to alternative location "
+ 			  "or empty string.");
+-		goto error;
++		goto out;
+ 	}
  
- 	/* Tell device-mapper about our logging */
- #ifdef DEVMAPPER_SUPPORT
--	dm_log_init(print_log);
-+	dm_log_with_errno_init(print_log);
- #endif
- }
+ 	if (!(cmd->libmem = dm_pool_create("library", 4 * 1024))) {
+ 		log_error("Library memory pool creation failed");
+-		goto error;
++		goto out;
+ 	}
  
-@@ -1161,6 +1161,7 @@
+ 	if (!_init_lvm_conf(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	_init_logging(cmd);
+ 
+ 	if (!_init_hostname(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_tags(cmd, cmd->cft))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_tag_configs(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_merge_config_files(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_process_config(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_dev_cache(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_filters(cmd, 1))
+-		goto error;
++		goto_out;
+ 
+ 	if (!(cmd->mem = dm_pool_create("command", 4 * 1024))) {
+ 		log_error("Command memory pool creation failed");
+-		goto error;
++		goto out;
+ 	}
+ 
+ 	memlock_init(cmd);
+ 
+ 	if (!_init_formats(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!init_lvmcache_orphans(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_segtypes(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	if (!_init_backup(cmd))
+-		goto error;
++		goto_out;
+ 
+ 	_init_rand(cmd);
+ 
+@@ -1161,20 +1164,8 @@
  	cmd->current_settings = cmd->default_settings;
  
  	cmd->config_valid = 1;
-+	reset_lvm_errno(1);  /* FIXME Move to top when cmd returned on error */
+-	reset_lvm_errno(1);  /* FIXME Move to top when cmd returned on error */
++out:
  	return cmd;
- 
-       error:
-@@ -1288,6 +1289,8 @@
- 		persistent_filter_dump(cmd->filter);
- 
- 	cmd->config_valid = 1;
-+
-+	reset_lvm_errno(1);
- 	return 1;
+-
+-      error:
+-	_destroy_tag_configs(cmd);
+-	dev_cache_exit();
+-	if (cmd->filter)
+-		cmd->filter->destroy(cmd->filter);
+-	if (cmd->mem)
+-		dm_pool_destroy(cmd->mem);
+-	if (cmd->libmem)
+-		dm_pool_destroy(cmd->libmem);
+-	dm_free(cmd);
+-	return NULL;
  }
  
-@@ -1317,4 +1320,5 @@
- 	activation_exit();
- 	fin_log();
- 	fin_syslog();
-+	reset_lvm_errno(0);
+ static void _destroy_formats(struct dm_list *formats)
+--- LVM2/lib/log/log.c	2009/07/15 23:57:55	1.50
++++ LVM2/lib/log/log.c	2009/07/16 00:36:59	1.51
+@@ -152,12 +152,12 @@
+ 	_store_errmsg = store_errmsg;
  }
---- LVM2/lib/log/log.c	2008/10/30 17:27:27	1.49
-+++ LVM2/lib/log/log.c	2009/07/15 23:57:55	1.50
-@@ -38,6 +38,10 @@
  
- static lvm2_log_fn_t _lvm2_log_fn = NULL;
- 
-+static int _lvm_errno = 0;
-+static int _store_errmsg = 0;
-+static char *_lvm_errmsg = NULL;
-+
- void init_log_fn(lvm2_log_fn_t log_fn)
+-int lvm_errno(void)
++int stored_errno(void)
  {
- 	if (log_fn)
-@@ -136,13 +140,37 @@
- 	_indent = indent;
+ 	return _lvm_errno;
  }
  
--void print_log(int level, const char *file, int line, const char *format, ...)
-+void reset_lvm_errno(int store_errmsg)
-+{
-+	_lvm_errno = 0;
-+
-+	if (_lvm_errmsg) {
-+		dm_free(_lvm_errmsg);
-+		_lvm_errmsg = NULL;
-+	}
-+
-+	_store_errmsg = store_errmsg;
-+}
-+
-+int lvm_errno(void)
-+{
-+	return _lvm_errno;
-+}
-+
-+const char *lvm_errmsg(void)
-+{
-+	return _lvm_errmsg ? : "";
-+}
-+
-+void print_log(int level, const char *file, int line, int dm_errno,
-+	       const char *format, ...)
+-const char *lvm_errmsg(void)
++const char *stored_errmsg(void)
  {
- 	va_list ap;
- 	char buf[1024], buf2[4096], locn[4096];
- 	int bufused, n;
- 	const char *message;
- 	const char *trformat;		/* Translated format string */
-+	char *newbuf;
- 	int use_stderr = level & _LOG_STDERR;
+ 	return _lvm_errmsg ? : "";
+ }
+--- LVM2/lib/log/lvm-logging.h	2009/07/15 23:57:55	1.4
++++ LVM2/lib/log/lvm-logging.h	2009/07/16 00:36:59	1.5
+@@ -20,7 +20,8 @@
+ 	       const char *format, ...)
+     __attribute__ ((format(printf, 5, 6)));
  
- 	level &= ~_LOG_STDERR;
-@@ -155,7 +183,10 @@
- 
- 	trformat = _(format);
- 
--	if (_lvm2_log_fn) {
-+	if (dm_errno && !_lvm_errno)
-+		_lvm_errno = dm_errno;
-+
-+	if (_lvm2_log_fn || (_store_errmsg && (level == _LOG_ERR))) {
- 		va_start(ap, format);
- 		n = vsnprintf(buf2, sizeof(buf2) - 1, trformat, ap);
- 		va_end(ap);
-@@ -168,8 +199,21 @@
- 
- 		buf2[sizeof(buf2) - 1] = '\0';
- 		message = &buf2[0];
-+	}
- 
--		_lvm2_log_fn(level, file, line, message);
-+	if (_store_errmsg && (level == _LOG_ERR)) {
-+		if (!_lvm_errmsg)
-+			_lvm_errmsg = dm_strdup(message);
-+		else if ((newbuf = dm_realloc(_lvm_errmsg,
-+ 					      strlen(_lvm_errmsg) +
-+					      strlen(message) + 2))) {
-+			_lvm_errmsg = strcat(newbuf, "\n");
-+			_lvm_errmsg = strcat(newbuf, message);
-+		}
-+	}
-+
-+	if (_lvm2_log_fn) {
-+		_lvm2_log_fn(level, file, line, 0, message);
- 
- 		return;
- 	}
---- LVM2/lib/log/lvm-logging.h	2009/07/10 09:59:37	1.3
-+++ LVM2/lib/log/lvm-logging.h	2009/07/15 23:57:55	1.4
-@@ -16,15 +16,16 @@
- #ifndef _LVM_LOGGING_H
- #define _LVM_LOGGING_H
- 
--void print_log(int level, const char *file, int line, const char *format, ...)
--    __attribute__ ((format(printf, 4, 5)));
-+void print_log(int level, const char *file, int line, int dm_errno,
-+	       const char *format, ...)
-+    __attribute__ ((format(printf, 5, 6)));
- 
--#define LOG_LINE(l, x...) print_log(l, __FILE__, __LINE__ , ## x)
-+#define LOG_LINE(l, x...) print_log(l, __FILE__, __LINE__ , 0, ## x)
+-#define LOG_LINE(l, x...) print_log(l, __FILE__, __LINE__ , 0, ## x)
++#define EUNCLASSIFIED -1	/* Generic error code */
++#define LOG_LINE(l, x...) print_log(l, __FILE__, __LINE__ , EUNCLASSIFIED, ## x)
  
  #include "log.h"
  
- typedef void (*lvm2_log_fn_t) (int level, const char *file, int line,
--			       const char *message);
-+			       int dm_errno, const char *message);
- 
- void init_log_fn(lvm2_log_fn_t log_fn);
- 
-@@ -42,6 +43,9 @@
- void fin_syslog(void);
+@@ -44,8 +45,8 @@
  
  int error_message_produced(void);
-+void reset_lvm_errno(int store_errmsg);
-+int lvm_errno(void);
-+const char *lvm_errmsg(void);
+ void reset_lvm_errno(int store_errmsg);
+-int lvm_errno(void);
+-const char *lvm_errmsg(void);
++int stored_errno(void);
++const char *stored_errmsg(void);
  
  /* Suppress messages to stdout/stderr (1) or everywhere (2) */
  /* Returns previous setting */
---- LVM2/po/pogen.h	2009/07/10 09:59:38	1.4
-+++ LVM2/po/pogen.h	2009/07/15 23:57:55	1.5
-@@ -19,8 +19,8 @@
-  * different architectures.
-  */
- 
--#define print_log(level, file, line, format, args...) print_log(format, args)
-+#define print_log(level, dm_errno, file, line, format, args...) print_log(format, args)
- #define dm_log(level, file, line, format, args...) dm_log(format, args)
--#define dm_log_with_errno(level, file, line, format, dm_errno, args...) \
--    dm_log(format, args)
-+#define dm_log_with_errno(level, dm_errno, file, line, format, args...) \
-+    dm_log(level, file, line, format, args)
- 
---- LVM2/tools/lvmcmdline.c	2009/07/15 20:02:48	1.100
-+++ LVM2/tools/lvmcmdline.c	2009/07/15 23:57:55	1.101
-@@ -1054,6 +1054,8 @@
- 	 */
- 	dm_pool_empty(cmd->mem);
- 
-+	reset_lvm_errno(1);
+--- LVM2/liblvm/lvm_base.c	2009/07/14 03:01:18	1.3
++++ LVM2/liblvm/lvm_base.c	2009/07/16 00:37:00	1.4
+@@ -29,6 +29,10 @@
+ 	cmd = create_toolcontext(1, system_dir);
+ 	if (!cmd)
+ 		return NULL;
 +
- 	return ret;
++	if (stored_errno())
++		return (lvm_t) cmd;
++
+ 	/*
+ 	 * FIXME: if an non memory error occured, return the cmd (maybe some
+ 	 * cleanup needed).
+@@ -66,3 +70,13 @@
+ 	/* FIXME: re-init locking needed here? */
+ 	return refresh_toolcontext((struct cmd_context *)libh);
+ }
++
++int lvm_errno(lvm_t libh)
++{
++	return stored_errno();
++}
++
++const char *lvm_errmsg(lvm_t libh)
++{
++	return stored_errmsg();
++}
+--- LVM2/tools/lvmcmdline.c	2009/07/15 23:57:55	1.101
++++ LVM2/tools/lvmcmdline.c	2009/07/16 00:37:00	1.102
+@@ -1181,6 +1181,11 @@
+ 	if (!(cmd = create_toolcontext(0, NULL)))
+ 		return_NULL;
+ 
++	if (stored_errno()) {
++		destroy_toolcontext(cmd);
++		return_NULL;
++	}
++
+ 	return cmd;
  }
  
 
