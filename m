@@ -1,26 +1,44 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun, 19 Jul 2009 21:53:58 -0400
-Subject: [PATCH] liblvm install environment
-In-Reply-To: <1247845102-8166-1-git-send-email-twoerner@redhat.com>
-References: <1247845102-8166-1-git-send-email-twoerner@redhat.com>
-Message-ID: <1248054838.2425.13.camel@f10-node1>
+From: Thomas Woerner <twoerner@redhat.com>
+Date: Mon, 20 Jul 2009 18:23:47 +0200
+Subject: [PATCH 1/2] Fix compile warnings
+Message-ID: <1248107028-1130-1-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Ok, if we are moving away from "liblvm2app" we should be consistent in
-this patch.  Our options seem to be:
-1) liblvm2
-2) liblvm2app
-3) liblvm2api
+Fix compile warnings of an api test case.
 
-I would vote for #1, #2, and #3 in that order.  If we really want to
-leave open the door for other lvm libraries in the future, then perhaps
-we need another suffix such as #2 or #3.
+---
+ test/api/vgcreate.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-As has been stated on IRC, if we want to support both lvm1 and lvm2
-libraries on the same machine then we cannot simply reuse "liblvm".
+diff --git a/test/api/vgcreate.c b/test/api/vgcreate.c
+index c09e7a8..d2b089b 100644
+--- a/test/api/vgcreate.c
++++ b/test/api/vgcreate.c
+@@ -23,8 +23,8 @@
+ 
+ lvm_t handle;
+ vg_t *vg;
+-char *vg_name = "my_vg";
+-char *device = "/dev/loop3";
++const char *vg_name = "my_vg";
++const char *device = "/dev/loop3";
+ uint64_t size = 1024;
+ 
+ int main(int argc, char *argv[])
+@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
+ 		goto bad;
+ 	}
+ 
+-	printf("Setting VG %s extent_size to %d\n", vg_name, size);
++	printf("Setting VG %s extent_size to %ld\n", vg_name, size);
+ 	status = lvm_vg_set_extent_size(vg, size);
+ 	if (!status) {
+ 		fprintf(stderr, "Can not set physical extent "
+-- 
+1.6.2.5
 
 
