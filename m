@@ -1,45 +1,36 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Jul 2009 16:16:21 -0400
-Subject: [PATCH] Update vg_create to use lvm_errno and return NULL upon error.
-In-Reply-To: <1248292346-14208-1-git-send-email-dwysocha@redhat.com>
-References: <1248292346-14208-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248293781.2441.83.camel@f10-node1>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Jul 2009 20:29:57 -0000
+Subject: LVM2/liblvm Makefile.in
+Message-ID: <20090722202957.32215.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2009-07-22 at 15:52 -0400, Dave Wysochanski wrote:
-> We must update vgsplit and vgcreate at the same time or we break the
-> nightly tests.
-> 
-> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> ---
-> index 35c425a..158a532 100644
-> --- a/tools/vgsplit.c
-> +++ b/tools/vgsplit.c
-> @@ -264,7 +264,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
->  	log_verbose("Checking for new volume group \"%s\"", vg_name_to);
->  	/*
->  	 * First try to create a new VG.  If we cannot create it,
-> -	 * and we get FAILED_EXIST (we will not be holding a lock),
-> +	 * and we get EEXIST (we will not be holding a lock),
->  	 * a VG must already exist with this name.  We then try to
->  	 * read the existing VG - the vgsplit will be into an existing VG.
->  	 *
-> @@ -273,15 +273,12 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
->  	 * system.  Thus, the split will be into a new VG.
->  	 */
->  	vg_to = vg_create(cmd, vg_name_to);
-> -	if (vg_read_error(vg_to) == FAILED_LOCKING) {
-> -		log_error("Can't get lock for %s", vg_name_to);
-> -		vg_release(vg_to);
-> +	if (!vg_to && stored_errno() != EXIST) {
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-07-22 20:29:57
 
-This is a silly typo - should be EEXIST.  I corrected this error in my
-local repo and verified testsuite passes.
+Modified files:
+	liblvm         : Makefile.in 
 
+Log message:
+	fix dir in generated file list for cflow
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+
+--- LVM2/liblvm/Makefile.in	2009/07/22 20:12:14	1.8
++++ LVM2/liblvm/Makefile.in	2009/07/22 20:29:56	1.9
+@@ -42,7 +42,7 @@
+ liblvm.cflow: $(SOURCES)
+ 	set -e; (echo -n "SOURCES += "; \
+ 		 echo $(SOURCES) | \
+-		 sed "s/^/ /;s/ / $(top_srcdir)\/lib\//g;s/$$//"; \
++		 sed "s/^/ /;s/ / $(top_srcdir)\/liblvm\//g;s/$$//"; \
+ 		 ) > $@
+ 
+ cflow: liblvm.cflow
 
 
