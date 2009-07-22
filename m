@@ -1,75 +1,56 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Jul 2009 14:28:30 -0000
-Subject: LVM2/lib/metadata metadata-exported.h metadata.c
-Message-ID: <20090708142830.19624.qmail@sourceware.org>
+From: Thomas Woerner <twoerner@redhat.com>
+Date: Wed, 22 Jul 2009 17:38:15 +0200
+Subject: [PATCH 4/5] Add liblvm dynamic install target.
+In-Reply-To: <1248277096-29947-4-git-send-email-twoerner@redhat.com>
+References: <1248277096-29947-1-git-send-email-twoerner@redhat.com>
+	<1248277096-29947-2-git-send-email-twoerner@redhat.com>
+	<1248277096-29947-3-git-send-email-twoerner@redhat.com>
+	<1248277096-29947-4-git-send-email-twoerner@redhat.com>
+Message-ID: <1248277096-29947-5-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-08 14:28:30
+Install liblvm2app into libdir altogether with the devel link.
 
-Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
+Signed-off-by: Thomas Woerner <twoerner@redhat.com>
+---
+ liblvm/Makefile.in |   22 ++++++++++++++++++++++
+ 1 files changed, 22 insertions(+), 0 deletions(-)
 
-Log message:
-	Remove unneeded LOCK_KEEP from vg_read() interface.
-	
-	Remove unneeded LOCK_KEEP from vg_read() interface.
-	Update comment to clarify cases where _vg_lock_and_read() may return
-	with an error but the lock held.  Would be nice to make the vg_read()
-	interface consistent with regards to lock held and error behavior.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.78&r2=1.79
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.231&r2=1.232
-
---- LVM2/lib/metadata/metadata-exported.h	2009/07/01 17:00:50	1.78
-+++ LVM2/lib/metadata/metadata-exported.h	2009/07/08 14:28:30	1.79
-@@ -113,7 +113,6 @@
+diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
+index 0deaeac..f19069d 100644
+--- a/liblvm/Makefile.in
++++ b/liblvm/Makefile.in
+@@ -43,3 +43,25 @@ liblvm.cflow: $(SOURCES)
+ 		 ) > $@
  
- /* FIXME Deduce these next requirements internally instead of having caller specify. */
- #define LOCK_NONBLOCKING	0x00000100U	/* Fail if not available immediately. */
--#define LOCK_KEEP		0x00000200U	/* Do not unlock upon read failure. */
- 
- /* A meta-flag, useful with toollib for_each_* functions. */
- #define READ_FOR_UPDATE 	0x00100000U
---- LVM2/lib/metadata/metadata.c	2009/07/06 19:04:25	1.231
-+++ LVM2/lib/metadata/metadata.c	2009/07/08 14:28:30	1.232
-@@ -2793,7 +2793,6 @@
- 			goto_bad;
- 		}
- 	}
--	
- 
- 	failure |= _vg_bad_status_bits(vg, status_flags);
- 	if (failure)
-@@ -2803,7 +2802,7 @@
- 
- bad:
- 	if (failure != (FAILED_NOTFOUND | READ_CHECK_EXISTENCE) &&
--	    !(misc_flags & LOCK_KEEP) && !already_locked)
-+	    !already_locked)
- 		unlock_vg(cmd, lock_name);
- 
- 	return _vg_make_handle(cmd, vg, failure);
-@@ -2821,7 +2820,11 @@
-  *    FAILED_RESIZEABLE
-  *  - locking failed: FAILED_LOCKING
-  *
-- * On failures, all locks are released, unless LOCK_KEEP has been supplied.
-+ * On failures, all locks are released, unless one of the following applies:
-+ *  - failure == (FAILED_NOTFOUND | READ_CHECK_EXISTENCE)
-+ *  - vgname_is_locked(lock_name) is true
-+ * FIXME: remove the above 2 conditions if possible and make an error always
-+ * release the lock.
-  *
-  * Volume groups are opened read-only unless flags contains READ_FOR_UPDATE.
-  *
+ cflow: liblvm.cflow
++
++.PHONY: install_dynamic install_include install_pkgconfig
++
++INSTALL_TYPE = install_dynamic
++
++ifeq ("@PKGCONFIG@", "yes")
++  INSTALL_TYPE += install_pkgconfig
++endif
++
++install: $(INSTALL_TYPE) install_include
++
++install_include:
++	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 lvm.h $(includedir)/lvm.h
++
++install_dynamic:
++	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $(VERSIONED_SHLIB) \
++		$(libdir)/$(VERSIONED_SHLIB)
++	$(LN_S) -f $(VERSIONED_SHLIB) $(libdir)/$(LIB_NAME).$(LIB_SUFFIX)
++
++.PHONY: distclean_lib distclean
++
++distclean: distclean_lib
+-- 
+1.6.2.5
 
 
