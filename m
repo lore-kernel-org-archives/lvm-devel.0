@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Jul 2009 21:09:15 -0000
-Subject: LVM2 ./WHATS_NEW ./configure ./configure.in li ...
-Message-ID: <20090722210915.8844.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 22 Jul 2009 22:24:17 -0000
+Subject: LVM2/liblvm .exported_symbols lvm.h lvm_vg.c
+Message-ID: <20090722222417.32676.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,154 +10,103 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-07-22 21:09:14
+Changes by:	wysochanski at sourceware.org	2009-07-22 22:24:17
 
 Modified files:
-	.              : WHATS_NEW configure configure.in 
-	liblvm         : Makefile.in 
-Added files:
-	liblvm         : liblvm2app.pc 
+	liblvm         : .exported_symbols lvm.h lvm_vg.c 
 
 Log message:
-	Add liblvm2app Makefile installation targets.
-	Add liblvm pkgconfig file.
+	Add lvm_vg_open() to open an existing VG for reading or writing.
+	
+	lvm_vg_open() calls internal vg_read() function which is the entry point
+	for reading an existing VG.  In addition to the mode, we include a 'flags'
+	parameter for future extensions.
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1197&r2=1.1198
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.100&r2=1.101
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/liblvm2app.pc.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2009/07/22 20:12:14	1.1197
-+++ LVM2/WHATS_NEW	2009/07/22 21:09:13	1.1198
-@@ -1,5 +1,7 @@
- Version 2.02.50 - 
- ================================
-+  Add liblvm2app Makefile installation targets.
-+  Add liblvm pkgconfig file.
-   Use newly-independent LVM_LIBAPI in liblvm soname.  E.g. liblvm2app.so.2.1.
-   Add an API version number, LVM_LIBAPI, to the VERSION string for liblvm.
-   Pass a pointer to struct cmd_context to init_multiple_segtypes
---- LVM2/configure	2009/07/22 20:01:28	1.95
-+++ LVM2/configure	2009/07/22 21:09:13	1.96
-@@ -12685,7 +12685,7 @@
+--- LVM2/liblvm/.exported_symbols	2009/07/22 03:13:13	1.3
++++ LVM2/liblvm/.exported_symbols	2009/07/22 22:24:16	1.4
+@@ -5,6 +5,7 @@
+ lvm_vg_extend
+ lvm_vg_set_extent_size
+ lvm_vg_write
++lvm_vg_open
+ lvm_vg_close
+ lvm_vg_remove
+ lvm_errno
+--- LVM2/liblvm/lvm.h	2009/07/16 03:07:46	1.4
++++ LVM2/liblvm/lvm.h	2009/07/22 22:24:16	1.5
+@@ -190,4 +190,27 @@
+  */
+ int lvm_vg_close(vg_t *vg);
  
++/**
++ * Open an existing VG.
++ *
++ * Open a VG for reading or writing.
++ *
++ * \param   libh
++ *          Handle obtained from lvm_create.
++ *
++ * \param   vgname
++ *          Name of the VG to open.
++ *
++ * \param   mode
++ *          Open mode - either "r" (read) or "w" (read/write).
++ *          Any other character results in an error with EINVAL set.
++ *
++ * \param   flags
++ *          Open flags - currently ignored.
++ *
++ * \return  non-NULL VG handle (success) or NULL (failure).
++ */
++vg_t *lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
++		  uint32_t flags);
++
+ #endif /* _LIB_LVM_H */
+--- LVM2/liblvm/lvm_vg.c	2009/07/22 03:13:35	1.2
++++ LVM2/liblvm/lvm_vg.c	2009/07/22 22:24:16	1.3
+@@ -12,6 +12,9 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile"
- 
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -13305,6 +13305,7 @@
-     "libdm/Makefile") CONFIG_FILES="$CONFIG_FILES libdm/Makefile" ;;
-     "libdm/libdevmapper.pc") CONFIG_FILES="$CONFIG_FILES libdm/libdevmapper.pc" ;;
-     "liblvm/Makefile") CONFIG_FILES="$CONFIG_FILES liblvm/Makefile" ;;
-+    "liblvm/liblvm2app.pc") CONFIG_FILES="$CONFIG_FILES liblvm/liblvm2app.pc" ;;
-     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
-     "po/Makefile") CONFIG_FILES="$CONFIG_FILES po/Makefile" ;;
-     "scripts/clvmd_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/clvmd_init_red_hat" ;;
---- LVM2/configure.in	2009/07/22 20:01:29	1.100
-+++ LVM2/configure.in	2009/07/22 21:09:14	1.101
-@@ -852,6 +852,7 @@
- libdm/Makefile
- libdm/libdevmapper.pc
- liblvm/Makefile
-+liblvm/liblvm2app.pc
- man/Makefile
- po/Makefile
- scripts/clvmd_init_red_hat
-/cvs/lvm2/LVM2/liblvm/liblvm2app.pc,v  -->  standard output
-revision 1.1
---- LVM2/liblvm/liblvm2app.pc
-+++ -	2009-07-22 21:09:14.960422000 +0000
-@@ -0,0 +1,11 @@
-+prefix=/usr
-+exec_prefix=
-+libdir=${exec_prefix}/lib
-+includedir=${prefix}/include
++#include <errno.h>
++#include <string.h>
 +
-+Name: lvm2app
-+Description: lvm2 application library
-+Version: 2.1
-+Cflags: -I${includedir} 
-+Libs: -L${libdir} -llvm2app
-+Libs.private: -ldevmapper
---- LVM2/liblvm/Makefile.in	2009/07/22 20:29:56	1.9
-+++ LVM2/liblvm/Makefile.in	2009/07/22 21:09:14	1.10
-@@ -25,9 +25,14 @@
- VERSIONED_SHLIB = $(LIB_NAME).$(LIB_SUFFIX).$(LIB_VERSION_APP)
- 
- ifeq ("@STATIC_LINK@", "yes")
--LIB_STATIC = $(LIB_NAME).a
-+  LIB_STATIC = $(LIB_NAME).a
-+endif
+ #include "lib.h"
+ #include "lvm.h"
+ #include "toolcontext.h"
+@@ -80,3 +83,26 @@
+ bad:
+ 	return 0;
+ }
 +
-+ifeq ("@LIB_SUFFIX@","dylib")
-+  LIB_SHARED = $(LIB_NAME).dylib
-+else
-+  LIB_SHARED = $(LIB_NAME).so
- endif
--LIB_SHARED = $(LIB_NAME).so
- 
- CLEAN_TARGETS += liblvm.cflow
- 
-@@ -35,10 +40,43 @@
- 
- LIBS += -ldevmapper -llvm-internal
- 
--$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION): %.$(LIB_SUFFIX)
-+$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_APP): %.$(LIB_SUFFIX)
- 	rm -f $@
- 	$(LN_S) $< $@
- 
-+.PHONY: install_dynamic install_static install_include install_pkgconfig \
-+	distclean_lib distclean
++vg_t *lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
++		  uint32_t flags)
++{
++	uint32_t internal_flags = 0;
++	vg_t *vg;
 +
-+INSTALL_TYPE = install_dynamic
++	if (!strncmp(mode, "w", 1))
++		internal_flags |= READ_FOR_UPDATE;
++	else if (strncmp(mode, "r", 1)) {
++		log_errno(EINVAL, "Invalid VG open mode");
++		return NULL;
++	}
 +
-+ifeq ("@STATIC_LINK@", "yes")
-+  INSTALL_TYPE += install_static
-+endif
++	vg = vg_read((struct cmd_context *)libh, vgname, NULL, internal_flags);
++	if (vg_read_error(vg)) {
++		/* FIXME: use log_errno either here in inside vg_read */
++		vg_release(vg);
++		return NULL;
++	}
 +
-+ifeq ("@PKGCONFIG@", "yes")
-+  INSTALL_TYPE += install_pkgconfig
-+endif
-+
-+install: $(INSTALL_TYPE) install_include
-+
-+install_include:
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 lvm.h $(includedir)/lvm.h
-+
-+install_dynamic: $(LIB_SHARED)
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-+		$(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
-+	$(LN_S) -f $(LIB_SHARED).$(LIB_VERSION_APP) \
-+		$(libdir)/$(LIB_SHARED)
-+
-+install_static: $(LIB_STATIC)
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-+		$(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
-+	$(LN_S) -f $(LIB_STATIC).$(LIB_VERSION_APP) $(libdir)/$(LIB_STATIC)
-+
-+install_pkgconfig:
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(LIB_NAME).pc \
-+		$(usrlibdir)/pkgconfig/$(LIB_NAME).pc
-+
- liblvm.cflow: $(SOURCES)
- 	set -e; (echo -n "SOURCES += "; \
- 		 echo $(SOURCES) | \
-@@ -46,3 +84,10 @@
- 		 ) > $@
- 
- cflow: liblvm.cflow
-+
-+CLEAN_TARGETS += $(LIB_NAME).$(LIB_SUFFIX)
-+
-+distclean_lib:
-+	$(RM) $(LIB_NAME).pc
-+
-+distclean: distclean_lib
++	return vg;
++}
 
 
