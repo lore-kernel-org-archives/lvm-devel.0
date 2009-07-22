@@ -1,38 +1,45 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jul 2009 15:34:00 -0000
-Subject: LVM2/liblvm lvm.h
-Message-ID: <20090728153400.20501.qmail@sourceware.org>
+From: Thomas Woerner <twoerner@redhat.com>
+Date: Wed, 22 Jul 2009 17:38:13 +0200
+Subject: [PATCH 2/5] Use LIB_VERSION_APPLIB as liblvm so version.
+In-Reply-To: <1248277096-29947-2-git-send-email-twoerner@redhat.com>
+References: <1248277096-29947-1-git-send-email-twoerner@redhat.com>
+	<1248277096-29947-2-git-send-email-twoerner@redhat.com>
+Message-ID: <1248277096-29947-3-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-28 15:33:59
 
-Modified files:
-	liblvm         : lvm.h 
+Signed-off-by: Thomas Woerner <twoerner@redhat.com>
+---
+ liblvm/Makefile.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-Log message:
-	Add doxygen mainpage tag to lvm.h
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.40&r2=1.41
-
---- LVM2/liblvm/lvm.h	2009/07/28 13:17:04	1.40
-+++ LVM2/liblvm/lvm.h	2009/07/28 15:33:59	1.41
-@@ -30,7 +30,9 @@
+diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
+index 643cc0c..a330f1e 100644
+--- a/liblvm/Makefile.in
++++ b/liblvm/Makefile.in
+@@ -22,7 +22,7 @@ SOURCES =\
  
- /*************************** Design Overview ********************************/
+ LIB_NAME = liblvm2app
+ LIB_VERSION = $(LIB_VERSION_LVM)
+-VERSIONED_SHLIB = $(LIB_NAME).$(LIB_SUFFIX).$(LIB_VERSION_LVM)
++VERSIONED_SHLIB = $(LIB_NAME).$(LIB_SUFFIX).$(LIB_VERSION_APPLIB)
  
--/*
-+/**
-+ * \mainpage LVM library API
-+ *
-  * The API is designed around the following basic LVM objects:
-  * 1) Physical Volume (PV) 2) Volume Group (VG) 3) Logical Volume (LV).
-  *
+ ifeq ("@STATIC_LINK@", "yes")
+ LIB_STATIC = $(LIB_NAME).a
+@@ -35,7 +35,7 @@ include $(top_srcdir)/make.tmpl
+ 
+ LIBS += -ldevmapper -llvm-internal
+ 
+-$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION): %.$(LIB_SUFFIX)
++$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_APPLIB): %.$(LIB_SUFFIX)
+ 	rm -f $@
+ 	$(LN_S) $< $@
+ 
+-- 
+1.6.2.5
 
 
