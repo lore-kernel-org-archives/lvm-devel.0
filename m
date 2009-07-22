@@ -1,140 +1,138 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Jul 2009 15:52:26 -0400
-Subject: [PATCH] Update vg_create to use lvm_errno and return NULL upon error.
-Message-ID: <1248292346-14208-1-git-send-email-dwysocha@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Jul 2009 20:01:30 -0000
+Subject: LVM2 ./VERSION ./WHATS_NEW ./configure ./confi ...
+Message-ID: <20090722200130.12404.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We must update vgsplit and vgcreate at the same time or we break the
-nightly tests.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-07-22 20:01:29
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/metadata.c |   28 ++++++++++++++++------------
- tools/vgcreate.c        |    2 +-
- tools/vgsplit.c         |   11 ++++-------
- 3 files changed, 21 insertions(+), 20 deletions(-)
+Modified files:
+	.              : VERSION WHATS_NEW configure configure.in 
+	                 make.tmpl.in 
+	lib/misc       : lvm-version.h.in 
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 03e0810..f0a576d 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -597,10 +597,8 @@ int validate_vg_create_params(struct cmd_context *cmd,
- /*
-  * Create a VG with default parameters.
-  * Returns:
-- * - vg_t* with SUCCESS code: VG structure created
-- * - NULL or vg_t* with FAILED_* code: error creating VG structure
-- * Use vg_read_error() to determine success or failure.
-- * FIXME: cleanup usage of _vg_make_handle()
-+ * - non-NULL vg_t*: VG structure created
-+ * - NULL: error creating VG structure; use lvm_errno() for specific code
+Log message:
+	Add an API version number, LVM_LIBAPI, to the VERSION string.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.202&r2=1.203
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1195&r2=1.1196
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.94&r2=1.95
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.99&r2=1.100
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-version.h.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+
+--- LVM2/VERSION	2009/07/15 15:38:41	1.202
++++ LVM2/VERSION	2009/07/22 20:01:28	1.203
+@@ -1 +1 @@
+-2.02.50-cvs (2009-07-15)
++2.02.50(1)-cvs (2009-07-22)
+--- LVM2/WHATS_NEW	2009/07/21 20:00:02	1.1195
++++ LVM2/WHATS_NEW	2009/07/22 20:01:28	1.1196
+@@ -1,5 +1,6 @@
+ Version 2.02.50 - 
+ ================================
++  Add an API version number, LVM_LIBAPI, to the VERSION string for liblvm.
+   Pass a pointer to struct cmd_context to init_multiple_segtypes
+   Return EINVALID_CMD_LINE not success when invalid VG name format is used.
+   Remove unnecessary messages after vgcreate/vgsplit refactor (2.02.49).
+--- LVM2/configure	2009/05/22 14:44:59	1.94
++++ LVM2/configure	2009/07/22 20:01:28	1.95
+@@ -657,6 +657,7 @@
+ LVM_PATCHLEVEL
+ LVM_MINOR
+ LVM_MAJOR
++LVM_LIBAPI
+ LVM_VERSION
+ LVM1_FALLBACK
+ LVM1
+@@ -12606,13 +12607,14 @@
+ LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
+ 
+ VER=`cat VERSION`
+-LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.*(//;s/).*//'`\""
++LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
+ VER=`echo "$VER" | $AWK '{print $1}'`
+ LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
+ VER=`echo "$VER" | $AWK -F '-' '{print $1}'`
+ LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
+ LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
+-LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
++LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[(.]' '{print $3}'`
++LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
+ 
+ ################################################################################
+ 
+@@ -12681,6 +12683,7 @@
+ 
+ 
+ 
++
+ ################################################################################
+ ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile"
+ 
+--- LVM2/configure.in	2009/05/22 14:44:59	1.99
++++ LVM2/configure.in	2009/07/22 20:01:29	1.100
+@@ -750,13 +750,14 @@
+ LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
+ 
+ VER=`cat VERSION`
+-LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.*(//;s/).*//'`\""
++LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
+ VER=`echo "$VER" | $AWK '{print $1}'`
+ LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
+ VER=`echo "$VER" | $AWK -F '-' '{print $1}'`
+ LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
+ LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
+-LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
++LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[[(.]]' '{print $3}'`
++LVM_LIBAPI=`echo "$VER" | $AWK -F '[[()]]' '{print $2}'`
+ 
+ ################################################################################
+ AC_SUBST(APPLIB)
+@@ -801,6 +802,7 @@
+ AC_SUBST(LVM1)
+ AC_SUBST(LVM1_FALLBACK)
+ AC_SUBST(LVM_VERSION)
++AC_SUBST(LVM_LIBAPI)
+ AC_SUBST(LVM_MAJOR)
+ AC_SUBST(LVM_MINOR)
+ AC_SUBST(LVM_PATCHLEVEL)
+--- LVM2/make.tmpl.in	2009/05/11 10:28:45	1.67
++++ LVM2/make.tmpl.in	2009/07/22 20:01:29	1.68
+@@ -116,6 +116,9 @@
+ LIB_VERSION_DM := $(shell cat $(top_srcdir)/VERSION_DM | \
+ 		    awk -F '.' '{printf "%s.%s",$$1,$$2}')
+ 
++LIB_VERSION_APP := $(shell cat $(top_srcdir)/VERSION | \
++		     awk -F '[(). ]' '{printf "%s.%s",$$1,$$4}')
++
+ INCLUDES += -I. -I$(top_srcdir)/include
+ 
+ INC_LNS = $(top_srcdir)/include/.symlinks_created
+--- LVM2/lib/misc/lvm-version.h.in	2009/02/22 22:11:58	1.1
++++ LVM2/lib/misc/lvm-version.h.in	2009/07/22 20:01:29	1.2
+@@ -17,13 +17,14 @@
+ /**
+  * The LVM version number
+  *
+- * LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL[-LVM_RELEASE]
++ * LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL(LVM_LIBAPI)[-LVM_RELEASE]
   */
- vg_t *vg_create(struct cmd_context *cmd, const char *vg_name)
- {
-@@ -610,23 +608,29 @@ vg_t *vg_create(struct cmd_context *cmd, const char *vg_name)
- 	uint32_t rc;
  
- 	if (!validate_name(vg_name)) {
--		log_error("Invalid vg name %s", vg_name);
--		/* FIXME: use _vg_make_handle() w/proper error code */
-+		log_errno(EINVAL, "Invalid vg name %s", vg_name);
- 		return NULL;
- 	}
- 
- 	rc = vg_lock_newname(cmd, vg_name);
--	if (rc != SUCCESS)
--		/* NOTE: let caller decide - this may be check for existence */
--		return _vg_make_handle(cmd, NULL, rc);
-+	if (rc == FAILED_EXIST) {
-+		log_errno(EEXIST, "A volume group called '%s' already exists.",
-+			  vg_name);
-+		return NULL;
-+	}
-+	if (rc == FAILED_LOCKING) {
-+		log_error("Failed to lock vg name %s", vg_name);
-+		return NULL;
-+	}
- 
- 	/* FIXME: Is this vg_read_internal necessary? Move it inside
- 	   vg_lock_newname? */
- 	/* is this vg name already in use ? */
- 	if ((vg = vg_read_internal(cmd, vg_name, NULL, &consistent))) {
--		log_error("A volume group called '%s' already exists.", vg_name);
-+		log_errno(EEXIST, "A volume group called '%s' already exists.",
-+			  vg_name);
- 		unlock_and_release_vg(cmd, vg, vg_name);
--		return _vg_make_handle(cmd, NULL, FAILED_EXIST);
-+		return NULL;
- 	}
- 
- 	if (!(mem = dm_pool_create("lvm2 vg_create", VG_MEMPOOL_CHUNK)))
-@@ -686,7 +690,7 @@ vg_t *vg_create(struct cmd_context *cmd, const char *vg_name)
- 			  vg_name);
- 		goto bad;
- 	}
--	return _vg_make_handle(cmd, vg, SUCCESS);
-+	return vg;
- 
- bad:
- 	unlock_and_release_vg(cmd, vg, vg_name);
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index c41c50f..d24c853 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -48,7 +48,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 
- 	/* Create the new VG */
- 	vg = vg_create(cmd, vp_new.vg_name);
--	if (vg_read_error(vg))
-+	if (!vg)
- 		goto_bad;
- 
- 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 35c425a..158a532 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -264,7 +264,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 	log_verbose("Checking for new volume group \"%s\"", vg_name_to);
- 	/*
- 	 * First try to create a new VG.  If we cannot create it,
--	 * and we get FAILED_EXIST (we will not be holding a lock),
-+	 * and we get EEXIST (we will not be holding a lock),
- 	 * a VG must already exist with this name.  We then try to
- 	 * read the existing VG - the vgsplit will be into an existing VG.
- 	 *
-@@ -273,15 +273,12 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 	 * system.  Thus, the split will be into a new VG.
- 	 */
- 	vg_to = vg_create(cmd, vg_name_to);
--	if (vg_read_error(vg_to) == FAILED_LOCKING) {
--		log_error("Can't get lock for %s", vg_name_to);
--		vg_release(vg_to);
-+	if (!vg_to && stored_errno() != EXIST) {
- 		unlock_and_release_vg(cmd, vg_from, vg_name_from);
- 		return ECMD_FAILED;
- 	}
--	if (vg_read_error(vg_to) == FAILED_EXIST) {
-+	if (!vg_to && stored_errno() == EEXIST) {
- 		existing_vg = 1;
--		vg_release(vg_to);
- 		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0);
- 
- 		if (vg_read_error(vg_to)) {
-@@ -297,7 +294,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		}
- 		if (!vgs_are_compatible(cmd, vg_from,vg_to))
- 			goto_bad;
--	} else if (vg_read_error(vg_to) == SUCCESS) {
-+	} else {
- 		existing_vg = 0;
- 
- 		vp_def.vg_name = NULL;
--- 
-1.6.0.6
+ #define LVM_VERSION @LVM_VERSION@
+ #define LVM_MAJOR @LVM_MAJOR@
+ #define LVM_MINOR @LVM_MINOR@
+ #define LVM_PATCHLEVEL @LVM_PATCHLEVEL@
++#define LVM_LIBAPI @LVM_LIBAPI@
+ #define LVM_RELEASE @LVM_RELEASE@
+ #define LVM_RELEASE_DATE @LVM_RELEASE_DATE@
+ #endif
 
 
