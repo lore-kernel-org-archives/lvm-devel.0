@@ -1,183 +1,126 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 24 Jul 2009 20:08:18 -0400
-Subject: [PATCH 09/11] Add lvm_vg_create_lv_* liblvm functions.
-In-Reply-To: <1248480500-472-9-git-send-email-dwysocha@redhat.com>
-References: <1248480500-472-1-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-2-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-3-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-4-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-5-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-6-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-7-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-8-git-send-email-dwysocha@redhat.com>
-	<1248480500-472-9-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248480500-472-10-git-send-email-dwysocha@redhat.com>
+Date: Wed, 22 Jul 2009 00:05:46 -0400
+Subject: [PATCH 1/8] Remove unneeded pv_create wrapper function.
+In-Reply-To: <1248235553-13519-1-git-send-email-dwysocha@redhat.com>
+References: <1248235553-13519-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248235553-13519-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Create a default linear or striped logical volume from a volume group.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/.exported_symbols |    2 +
- liblvm/lvm.h             |   32 ++++++++++++++++++
- liblvm/lvm_lv.c          |   83 ++++++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 117 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |   73 +++++++++++++++--------------------------------
+ 1 files changed, 23 insertions(+), 50 deletions(-)
 
-diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
-index 08d5a60..257a13b 100644
---- a/liblvm/.exported_symbols
-+++ b/liblvm/.exported_symbols
-@@ -21,3 +21,5 @@ lvm_vg_list_pvs
- lvm_vg_list_lvs
- lvm_list_vg_names
- lvm_list_vg_ids
-+lvm_vg_create_lv_linear
-+lvm_vg_create_lv_striped
-diff --git a/liblvm/lvm.h b/liblvm/lvm.h
-index c2157a8..d906170 100644
---- a/liblvm/lvm.h
-+++ b/liblvm/lvm.h
-@@ -97,6 +97,38 @@ void lvm_destroy(lvm_t libh);
- int lvm_reload_config(lvm_t libh);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 03e0810..ce699e6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -44,16 +44,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					uint64_t *label_sector,
+ 					int warnings, int scan_label_only);
  
- /**
-+ * Create a linear logical volume.
-+ *
-+ * \param   vg
-+ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ *
-+ * \param   name
-+ *          Name of logical volume to create.
-+ *
-+ * \param   size
-+ *          Size of logical volume in extents.
-+ *
-+ */
-+lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
-+
-+/**
-+ * Create a striped logical volume.
-+ * The striped LV defaults to the following:
-+ * - stripes == 1
-+ * - stripe_size == 64KB
-+ *
-+ * \param   vg
-+ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ *
-+ * \param   name
-+ *          Name of logical volume to create.
-+ *
-+ * \param   size
-+ *          Size of logical volume in extents.
-+ */
-+lv_t *lvm_vg_create_lv_striped(vg_t *vg, const char *name, uint64_t size);
-+
-+/**
-  * Return stored error no describing last LVM API error.
-  *
-  * Users of liblvm should use lvm_errno to determine success or failure
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index d557350..098ad8d 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -16,6 +16,9 @@
- #include "lvm.h"
- #include "metadata-exported.h"
- #include "lvm-string.h"
-+#include "defaults.h"
-+#include "segtype.h"
-+#include <string.h>
- 
- char *lvm_lv_get_uuid(const lv_t *lv)
- {
-@@ -38,3 +41,83 @@ char *lvm_lv_get_name(const lv_t *lv)
- 	return name;
+-static struct physical_volume *_pv_create(const struct format_type *fmt,
+-				  struct device *dev,
+-				  struct id *id, uint64_t size,
+-				  unsigned long data_alignment,
+-				  uint64_t pe_start,
+-				  uint32_t existing_extent_count,
+-				  uint32_t existing_extent_size,
+-				  int pvmetadatacopies,
+-				  uint64_t pvmetadatasize, struct dm_list *mdas);
+-
+ static int _pv_write(struct cmd_context *cmd __attribute((unused)),
+ 		     struct physical_volume *pv,
+ 	     	     struct dm_list *mdas, int64_t label_sector);
+@@ -972,44 +962,6 @@ int vg_split_mdas(struct cmd_context *cmd __attribute((unused)),
+ 	return 1;
  }
  
-+/* Set defaults for non-segment specific LV parameters */
-+static void _lv_set_default_params(struct lvcreate_params *lp,
-+				   vg_t *vg, const char *lvname,
-+				   uint64_t extents)
-+{
-+	lp->zero = 1;
-+	lp->major = -1;
-+	lp->minor = -1;
-+	lp->vg_name = vg->name;
-+	lp->lv_name = lvname; /* FIXME: check this for safety */
-+	lp->pvh = &vg->pvs;
-+
-+	lp->extents = extents;
-+	lp->permission = LVM_READ | LVM_WRITE;
-+	lp->read_ahead = DM_READ_AHEAD_NONE;
-+	lp->alloc = ALLOC_INHERIT;
-+	lp->tag = NULL;
-+}
-+
-+/* Set default for linear segment specific LV parameters */
-+static void _lv_set_default_linear_params(struct cmd_context *cmd,
-+					  struct lvcreate_params *lp)
-+{
-+	lp->segtype = get_segtype_from_string(cmd, "striped");
-+	lp->stripes = 1;
-+	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
-+}
-+
-+/* Set defaults for striped segment specific LV parameters */
-+static void _lv_set_default_striped_params(struct cmd_context *cmd,
-+					   struct lvcreate_params *lp)
-+{
-+	lp->stripes = 1;
-+	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
-+	lp->segtype = get_segtype_from_string(cmd, "striped");
-+}
-+
-+lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size)
-+{
-+	struct lvcreate_params lp;
-+	uint64_t extents;
-+	struct lv_list *lvl;
-+
-+	/* FIXME: check for proper VG access */
-+	if (vg_read_error(vg))
-+		return NULL;
-+	memset(&lp, 0, sizeof(lp));
-+	extents = extents_from_size(vg->cmd, size, vg->extent_size);
-+	_lv_set_default_params(&lp, vg, name, extents);
-+	_lv_set_default_linear_params(vg->cmd, &lp);
-+	if (!lv_create_single(vg, &lp))
-+		return NULL;
-+	lvl = find_lv_in_vg(vg, name);
-+	if (!lvl)
-+		return NULL;
-+	return lvl->lv;
-+}
-+
-+
-+lv_t *lvm_vg_create_lv_striped(vg_t *vg, const char *name, uint64_t size)
-+{
-+	struct lvcreate_params lp;
-+	uint64_t extents;
-+	struct lv_list *lvl;
-+
-+	/* FIXME: check for proper VG access */
-+	if (vg_read_error(vg))
-+		return NULL;
-+
-+	memset(&lp, 0, sizeof(lp));
-+	extents = extents_from_size(vg->cmd, size, vg->extent_size);
-+	_lv_set_default_params(&lp, vg, name, extents);
-+	_lv_set_default_striped_params(vg->cmd, &lp);
-+	if (!lv_create_single(vg, &lp))
-+		return NULL;
-+	lvl = find_lv_in_vg(vg, name);
-+	if (!lvl)
-+		return NULL;
-+	return lvl->lv;
-+}
+-/**
+- * pv_create - initialize a physical volume for use with a volume group
+- * @fmt: format type
+- * @dev: PV device to initialize
+- * @id: PV UUID to use for initialization
+- * @size: size of the PV in sectors
+- * @data_alignment: requested alignment of data
+- * @pe_start: physical extent start
+- * @existing_extent_count
+- * @existing_extent_size
+- * @pvmetadatacopies
+- * @pvmetadatasize
+- * @mdas
+- *
+- * Returns:
+- *   PV handle - physical volume initialized successfully
+- *   NULL - invalid parameter or problem initializing the physical volume
+- *
+- * Note:
+- *   FIXME - liblvm todo - tidy up arguments for external use (fmt, mdas, etc)
+- */
+-pv_t *pv_create(const struct cmd_context *cmd,
+-		struct device *dev,
+-		struct id *id, uint64_t size,
+-		unsigned long data_alignment,
+-		uint64_t pe_start,
+-		uint32_t existing_extent_count,
+-		uint32_t existing_extent_size,
+-		int pvmetadatacopies,
+-		uint64_t pvmetadatasize, struct dm_list *mdas)
+-{
+-	return _pv_create(cmd->fmt, dev, id, size, data_alignment, pe_start,
+-			  existing_extent_count,
+-			  existing_extent_size,
+-			  pvmetadatacopies,
+-			  pvmetadatasize, mdas);
+-}
+-
+ static void _free_pv(struct dm_pool *mem, struct physical_volume *pv)
+ {
+ 	dm_pool_free(mem, pv);
+@@ -1043,8 +995,28 @@ static struct physical_volume *_alloc_pv(struct dm_pool *mem, struct device *dev
+ 	return pv;
+ }
+ 
+-/* Sizes in sectors */
+-static struct physical_volume *_pv_create(const struct format_type *fmt,
++/**
++ * pv_create - initialize a physical volume for use with a volume group
++ *
++ * @fmt: format type
++ * @dev: PV device to initialize
++ * @size: size of the PV in sectors
++ * @data_alignment: requested alignment of data
++ * @pe_start: physical extent start
++ * @existing_extent_count
++ * @existing_extent_size
++ * @pvmetadatacopies
++ * @pvmetadatasize
++ * @mdas
++ *
++ * Returns:
++ *   PV handle - physical volume initialized successfully
++ *   NULL - invalid parameter or problem initializing the physical volume
++ *
++ * Note:
++ *   FIXME: shorten argument list and replace with explict 'set' functions
++ */
++struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  struct device *dev,
+ 				  struct id *id, uint64_t size,
+ 				  unsigned long data_alignment,
+@@ -1054,6 +1026,7 @@ static struct physical_volume *_pv_create(const struct format_type *fmt,
+ 				  int pvmetadatacopies,
+ 				  uint64_t pvmetadatasize, struct dm_list *mdas)
+ {
++	const struct format_type *fmt = cmd->fmt;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = _alloc_pv(mem, dev);
+ 
 -- 
 1.6.0.6
 
