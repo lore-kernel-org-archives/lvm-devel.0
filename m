@@ -1,94 +1,71 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jul 2009 11:03:30 -0000
-Subject: LVM2 liblvm/.exported_symbols liblvm/lvm.h lib ...
-Message-ID: <20090728110330.10010.qmail@sourceware.org>
+From: Thomas Woerner <twoerner@redhat.com>
+Date: Wed, 22 Jul 2009 17:38:12 +0200
+Subject: [PATCH 1/5] Add liblvm2app api version as so minor version number for liblvm2app.so.<major>.<lvm2app api version>
+In-Reply-To: <1248277096-29947-1-git-send-email-twoerner@redhat.com>
+References: <1248277096-29947-1-git-send-email-twoerner@redhat.com>
+Message-ID: <1248277096-29947-2-git-send-email-twoerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-28 11:03:29
+Extend VERSION from "<major>.<minor>.<patchlevel>[-<tag>] (date)" to
+"<major>.<minor>.<patchlevel>(<lvm2app api version>)[-<tag>] (date)".
+Change parsing of LVM_RELEASE_DATE that it expects a ' ' before the date.
+Change parsing of LVM_RELEASE and LVM_PATCHLEVEL that it honors '(' after the patchlevel.
+Add LIB_VERSION_APPLIB to get <major>.<lvm2app api version> from VERSION.
 
-Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_base.c 
-	test/api       : test.c vgtest.c 
+Signed-off-by: Thomas Woerner <twoerner@redhat.com>
+---
+ VERSION      |    2 +-
+ configure.in |    6 +++---
+ make.tmpl.in |    3 +++
+ 3 files changed, 7 insertions(+), 4 deletions(-)
 
-Log message:
-	Add lvm_library_get_version() and update unit tests to display version.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/liblvm/.exported_symbols	2009/07/28 09:16:18	1.20
-+++ LVM2/liblvm/.exported_symbols	2009/07/28 11:03:28	1.21
-@@ -1,3 +1,4 @@
-+lvm_library_get_version
- lvm_init
- lvm_quit
- lvm_config_reload
---- LVM2/liblvm/lvm.h	2009/07/28 09:56:48	1.36
-+++ LVM2/liblvm/lvm.h	2009/07/28 11:03:28	1.37
-@@ -28,6 +28,20 @@
-  */
- /******************************** WARNING ********************************/
+diff --git a/VERSION b/VERSION
+index c901e1d..728793b 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.50-cvs (2009-07-15)
++2.02.50(01)-cvs (2009-07-15)
+diff --git a/configure.in b/configure.in
+index eb6278d..d0e68a6 100644
+--- a/configure.in
++++ b/configure.in
+@@ -750,13 +750,13 @@ DM_LIB_PATCHLEVEL=`cat VERSION_DM | $AWK -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,
+ LVM_VERSION="\"`cat VERSION 2>/dev/null || echo Unknown`\""
  
-+/**
-+ * Retrieve the library version.
-+ *
-+ * The library version is the same format as the full LVM version.
-+ * The format is as follows:
-+ *    LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL(LVM_LIBAPI)[-LVM_RELEASE]
-+ * An application wishing to determine compatibility with a particular version
-+ * of the library should check at least the LVM_MAJOR, LVM_MINOR, and
-+ * LVM_LIBAPI numbers.  For example, assume the full LVM version is
-+ * 2.02.50(1)-1.  The application should verify the "2.02" and the "(1)".
-+ *
-+ * \return  A string describing the library version.
-+ */
-+const char *lvm_library_get_version(void);
+ VER=`cat VERSION`
+-LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.*(//;s/).*//'`\""
++LVM_RELEASE_DATE="\"`echo $VER | $SED 's/.* (//;s/).*//'`\""
+ VER=`echo "$VER" | $AWK '{print $1}'`
+-LVM_RELEASE="\"`echo "$VER" | $AWK -F '-' '{print $2}'`\""
++LVM_RELEASE="\"`echo "$VER" | $AWK -F '[[(-]]' '{print $2}'`\""
+ VER=`echo "$VER" | $AWK -F '-' '{print $1}'`
+ LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
+ LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
+-LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '.' '{print $3}'`
++LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[[(.]]' '{print $3}'`
  
- /******************************** structures ********************************/
+ ################################################################################
+ AC_SUBST(APPLIB)
+diff --git a/make.tmpl.in b/make.tmpl.in
+index fa3b884..5556d16 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -116,6 +116,9 @@ LIB_VERSION_LVM := $(shell cat $(top_srcdir)/VERSION | \
+ LIB_VERSION_DM := $(shell cat $(top_srcdir)/VERSION_DM | \
+ 		    awk -F '.' '{printf "%s.%s",$$1,$$2}')
  
---- LVM2/liblvm/lvm_base.c	2009/07/28 09:16:18	1.9
-+++ LVM2/liblvm/lvm_base.c	2009/07/28 11:03:28	1.10
-@@ -17,6 +17,11 @@
- #include "toolcontext.h"
- #include "locking.h"
- 
-+const char *lvm_library_get_version(void)
-+{
-+	return LVM_VERSION;
-+}
++LIB_VERSION_APPLIB := $(shell cat $(top_srcdir)/VERSION | \
++		   awk -F '[(). ]' '{printf "%s.%s",$$1,$$4}')
 +
- lvm_t lvm_init(const char *system_dir)
- {
- 	struct cmd_context *cmd;
---- LVM2/test/api/test.c	2009/07/28 09:16:18	1.19
-+++ LVM2/test/api/test.c	2009/07/28 11:03:29	1.20
-@@ -607,6 +607,7 @@
- 		return 1;
- 	}
+ INCLUDES += -I. -I$(top_srcdir)/include
  
-+	printf("Library version: %s\n", lvm_library_get_version());
- 	lvmapi_test_shell(libh);
- 
- 	lvm_quit(libh);
---- LVM2/test/api/vgtest.c	2009/07/28 09:16:18	1.7
-+++ LVM2/test/api/vgtest.c	2009/07/28 11:03:29	1.8
-@@ -96,6 +96,7 @@
- 		goto bad;
- 	}
- 
-+	printf("Library version: %s\n", lvm_library_get_version());
- 	vg_create(vg_name);
- 	vg_extend(vg, device);
- 
+ INC_LNS = $(top_srcdir)/include/.symlinks_created
+-- 
+1.6.2.5
 
 
