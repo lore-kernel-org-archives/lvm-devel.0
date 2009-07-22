@@ -1,96 +1,93 @@
-From: Thomas Woerner <twoerner@redhat.com>
-Date: Wed, 22 Jul 2009 17:38:16 +0200
-Subject: [PATCH 5/5] Add lvm2app pkgconfig file
-In-Reply-To: <1248277096-29947-5-git-send-email-twoerner@redhat.com>
-References: <1248277096-29947-1-git-send-email-twoerner@redhat.com>
-	<1248277096-29947-2-git-send-email-twoerner@redhat.com>
-	<1248277096-29947-3-git-send-email-twoerner@redhat.com>
-	<1248277096-29947-4-git-send-email-twoerner@redhat.com>
-	<1248277096-29947-5-git-send-email-twoerner@redhat.com>
-Message-ID: <1248277096-29947-6-git-send-email-twoerner@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 22 Jul 2009 16:49:54 -0000
+Subject: LVM2/test/api vgtest.c
+Message-ID: <20090722164954.18577.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add liblvm/lvm2app.pc.in.
-Add LVM2APP_LIB_VERSION to configure.in to create lvm2app.pc from lvm2app.pc.in with the proper version.
-Add install_pkgconfig target and also distclean_lib to liblvm/Makefile.in.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-22 16:49:54
 
-Signed-off-by: Thomas Woerner <twoerner@redhat.com>
----
- configure.in         |    4 ++++
- liblvm/Makefile.in   |    7 +++++++
- liblvm/lvm2app.pc.in |   11 +++++++++++
- 3 files changed, 22 insertions(+), 0 deletions(-)
- create mode 100644 liblvm/lvm2app.pc.in
+Modified files:
+	test/api       : vgtest.c 
 
-diff --git a/configure.in b/configure.in
-index d0e68a6..6af7109 100644
---- a/configure.in
-+++ b/configure.in
-@@ -758,6 +758,8 @@ LVM_MAJOR=`echo "$VER" | $AWK -F '.' '{print $1}'`
- LVM_MINOR=`echo "$VER" | $AWK -F '.' '{print $2}'`
- LVM_PATCHLEVEL=`echo "$VER" | $AWK -F '[[(.]]' '{print $3}'`
+Log message:
+	Update api/test/vgtest.c error handling.
+	
+	Reverts some of my 'cleanup' from last night.  For now we will use pass/fail
+	on API calls (either 'int' return or NULL/non-NULL handle), then use
+	lvm_errno() to get more specific errors.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+
+--- LVM2/test/api/vgtest.c	2009/07/22 03:13:57	1.2
++++ LVM2/test/api/vgtest.c	2009/07/22 16:49:54	1.3
+@@ -43,38 +43,34 @@
  
-+LVM2APP_LIB_VERSION=`echo "$VER" | $AWK -F'[- ]' '{print $1}'`
-+
- ################################################################################
- AC_SUBST(APPLIB)
- AC_SUBST(BUILD_DMEVENTD)
-@@ -806,6 +808,7 @@ AC_SUBST(LVM_MINOR)
- AC_SUBST(LVM_PATCHLEVEL)
- AC_SUBST(LVM_RELEASE)
- AC_SUBST(LVM_RELEASE_DATE)
-+AC_SUBST(LVM2APP_LIB_VERSION)
- AC_SUBST(MIRRORS)
- AC_SUBST(MSGFMT)
- AC_SUBST(OWNER)
-@@ -850,6 +853,7 @@ lib/snapshot/Makefile
- libdm/Makefile
- libdm/libdevmapper.pc
- liblvm/Makefile
-+liblvm/lvm2app.pc
- man/Makefile
- po/Makefile
- scripts/clvmd_init_red_hat
-diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
-index f19069d..1c1decb 100644
---- a/liblvm/Makefile.in
-+++ b/liblvm/Makefile.in
-@@ -62,6 +62,13 @@ install_dynamic:
- 		$(libdir)/$(VERSIONED_SHLIB)
- 	$(LN_S) -f $(VERSIONED_SHLIB) $(libdir)/$(LIB_NAME).$(LIB_SUFFIX)
+ 	printf("Creating VG %s\n", vg_name);
+ 	vg = lvm_vg_create(handle, vg_name);
+-	if (lvm_errno(handle)) {
++	if (!vg) {
+ 		fprintf(stderr, "Error creating volume group %s\n", vg_name);
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 		goto bad;
+ 	}
  
-+install_pkgconfig:
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 lvm2app.pc \
-+		$(usrlibdir)/pkgconfig/
-+
- .PHONY: distclean_lib distclean
+ 	printf("Extending VG %s\n", vg_name);
+ 	status = lvm_vg_extend(vg, device);
+-	if (lvm_errno(handle)) {
++	if (!status) {
+ 		fprintf(stderr, "Error extending volume group %s "
+ 			"with device %s\n", vg_name, device);
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 		goto bad;
+ 	}
  
-+distclean_lib:
-+	$(RM) lvm2app.pc
-+
- distclean: distclean_lib
-diff --git a/liblvm/lvm2app.pc.in b/liblvm/lvm2app.pc.in
-new file mode 100644
-index 0000000..abfbc7e
---- /dev/null
-+++ b/liblvm/lvm2app.pc.in
-@@ -0,0 +1,11 @@
-+prefix=@prefix@
-+exec_prefix=@exec_prefix@
-+libdir=@libdir@
-+includedir=@includedir@
-+
-+Name: lvm2app
-+Description: lvm2app application library
-+Version: @LVM2APP_LIB_VERSION@
-+Cflags: -I${includedir} 
-+Libs: -L${libdir} -llvm2app
-+Libs.private: -ldevmapper
--- 
-1.6.2.5
+ 	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
+ 	status = lvm_vg_set_extent_size(vg, size);
+-	if (lvm_errno(handle)) {
++	if (!status) {
+ 		fprintf(stderr, "Can not set physical extent "
+ 			"size '%"PRIu64"' for '%s'\n",
+ 			size, vg_name);
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 		goto bad;
+ 	}
+ 
+ 	printf("Committing VG %s to disk\n", vg_name);
+ 	status = lvm_vg_write(vg);
+-	if (lvm_errno(handle)) {
++	if (!status) {
+ 		fprintf(stderr, "Creation of volume group '%s' on "
+ 			"device '%s' failed\n",
+ 			vg_name, device);
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 		goto bad;
+ 	}
+ 
+@@ -83,7 +79,6 @@
+ 	if (lvm_errno(handle)) {
+ 		fprintf(stderr, "Revmoval of volume group '%s' failed\n",
+ 			vg_name);
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 		goto bad;
+ 	}
+ 
+@@ -93,6 +88,8 @@
+ 	_exit(0);
+ bad:
+ 	printf("liblvm vgcreate unit test FAIL\n");
++	if (handle && lvm_errno(handle))
++		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+ 	if (vg)
+ 		lvm_vg_close(vg);
+ 	if (handle)
 
 
