@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 23 Jul 2009 23:39:03 -0000
-Subject: LVM2/liblvm .exported_symbols lvm.h lvm_vg.c
-Message-ID: <20090723233903.20533.qmail@sourceware.org>
+Date: 23 Jul 2009 23:40:06 -0000
+Subject: LVM2/liblvm .exported_symbols Makefile.in lvm. ...
+Message-ID: <20090723234006.21139.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,120 +10,210 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-23 23:39:02
+Changes by:	wysochanski at sourceware.org	2009-07-23 23:40:05
 
 Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_vg.c 
+	liblvm         : .exported_symbols Makefile.in lvm.h lvm_vg.c 
+Added files:
+	liblvm         : lvm_lv.c lvm_pv.c 
 
 Log message:
-	Add lvm_vg_list_{pvs|lvs} - return lists of pv/lv handles for a vg.
+	Add lvm_{pv|vg|lv}_get_{uuid|name}.
 	
-	- Use vgmem pool to allocate a list of lvm_*_list structs
-	- Allocate a new list each call (list may have changed since last call)
-	- Add to liblvm's exported symbols
+	Caller must free the memory of the uuid / name returned.
+	This may not be the best memory management policy since it may lead to
+	memory leaks if the caller has code like this:
+	if (!lvm_vg_get_name(vg))
+	
+	Maybe we don't care - if we do we can use pools tied to handles later
+	or some other scheme.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 	Acked-by: Thomas Woerner <twoerner@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/liblvm/.exported_symbols	2009/07/22 22:24:16	1.4
-+++ LVM2/liblvm/.exported_symbols	2009/07/23 23:39:02	1.5
-@@ -10,3 +10,5 @@
- lvm_vg_remove
- lvm_errno
- lvm_errmsg
-+lvm_vg_list_pvs
-+lvm_vg_list_lvs
---- LVM2/liblvm/lvm.h	2009/07/23 23:37:24	1.8
-+++ LVM2/liblvm/lvm.h	2009/07/23 23:39:02	1.9
-@@ -44,6 +44,13 @@
- 	lv_t *lv;
- } lv_list_t;
- 
-+/**
-+ * Return a list of LV handles for a given VG handle.
+/cvs/lvm2/LVM2/liblvm/lvm_lv.c,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/lvm_lv.c
++++ -	2009-07-23 23:40:06.280566000 +0000
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
 + *
-+ * \return  A list of lv_list_t structures containing lv handles for this vg.
-+ *          If no LVs exist on the given VG, NULL is returned.
-+ */
-+struct dm_list *lvm_vg_list_lvs(vg_t *vg);
- 
- struct lvm; /* internal data */
- 
-@@ -225,4 +232,12 @@
- vg_t *lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
- 		  uint32_t flags);
- 
-+/**
-+ * Return a list of PV handles for a given VG handle.
++ * This file is part of LVM2.
 + *
-+ * \return  A list of pv_list_t structures containing pv handles for this vg.
-+ *          If no PVs exist on the given VG, NULL is returned.
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
-+struct dm_list *lvm_vg_list_pvs(vg_t *vg);
 +
- #endif /* _LIB_LVM_H */
---- LVM2/liblvm/lvm_vg.c	2009/07/23 01:20:22	1.4
-+++ LVM2/liblvm/lvm_vg.c	2009/07/23 23:39:02	1.5
-@@ -114,3 +114,55 @@
- 
- 	return vg;
- }
++#include "lib.h"
++#include "lvm.h"
++#include "metadata-exported.h"
++#include "lvm-string.h"
 +
-+struct dm_list *lvm_vg_list_pvs(vg_t *vg)
++char *lvm_lv_get_uuid(const lv_t *lv)
 +{
-+	struct dm_list *list;
-+	pv_list_t *pvs;
-+	struct pv_list *pvl;
++	char uuid[64] __attribute((aligned(8)));
 +
-+	if (dm_list_empty(&vg->pvs))
-+		return NULL;
-+
-+	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
-+		log_error("Memory allocation fail for dm_list.\n");
++	if (!id_write_format(&lv->lvid.id[1], uuid, sizeof(uuid))) {
++		log_error("Internal error converting uuid");
 +		return NULL;
 +	}
-+	dm_list_init(list);
-+
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		if (!(pvs = dm_pool_zalloc(vg->vgmem, sizeof(*pvs)))) {
-+			log_error("Memory allocation fail for lvm_pv_list.\n");
-+			return NULL;
-+		}
-+		pvs->pv = pvl->pv;
-+		dm_list_add(list, &pvs->list);
-+	}
-+	return list;
++	return strndup((const char *)uuid, 64);
 +}
 +
-+struct dm_list *lvm_vg_list_lvs(vg_t *vg)
++char *lvm_lv_get_name(const lv_t *lv)
 +{
-+	struct dm_list *list;
-+	lv_list_t *lvs;
-+	struct lv_list *lvl;
++	char *name;
 +
-+	if (dm_list_empty(&vg->lvs))
-+		return NULL;
++	name = malloc(NAME_LEN + 1);
++	strncpy(name, (const char *)lv->name, NAME_LEN);
++	name[NAME_LEN] = '\0';
++	return name;
++}
 +
-+	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
-+		log_error("Memory allocation fail for dm_list.\n");
+/cvs/lvm2/LVM2/liblvm/lvm_pv.c,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/lvm_pv.c
++++ -	2009-07-23 23:40:06.447089000 +0000
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "lvm.h"
++#include "metadata-exported.h"
++#include "lvm-string.h"
++
++char *lvm_pv_get_uuid(const pv_t *pv)
++{
++	char uuid[64] __attribute((aligned(8)));
++
++	if (!id_write_format(&pv->id, uuid, sizeof(uuid))) {
++		log_error("Internal error converting uuid");
 +		return NULL;
 +	}
-+	dm_list_init(list);
++	return strndup((const char *)uuid, 64);
++}
 +
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
-+			log_error("Memory allocation fail for lvm_lv_list.\n");
-+			return NULL;
-+		}
-+		lvs->lv = lvl->lv;
-+		dm_list_add(list, &lvs->list);
++char *lvm_pv_get_name(const pv_t *pv)
++{
++	char *name;
++
++	name = malloc(NAME_LEN + 1);
++	strncpy(name, (const char *)pv_dev_name(pv), NAME_LEN);
++	name[NAME_LEN] = '\0';
++	return name;
++}
++
+--- LVM2/liblvm/.exported_symbols	2009/07/23 23:39:02	1.5
++++ LVM2/liblvm/.exported_symbols	2009/07/23 23:40:05	1.6
+@@ -1,6 +1,12 @@
+ lvm_create
+ lvm_destroy
+ lvm_reload_config
++lvm_pv_get_uuid
++lvm_vg_get_uuid
++lvm_lv_get_uuid
++lvm_pv_get_name
++lvm_vg_get_name
++lvm_lv_get_name
+ lvm_vg_create
+ lvm_vg_extend
+ lvm_vg_set_extent_size
+--- LVM2/liblvm/Makefile.in	2009/07/22 21:09:14	1.10
++++ LVM2/liblvm/Makefile.in	2009/07/23 23:40:05	1.11
+@@ -18,6 +18,8 @@
+ 
+ SOURCES =\
+ 	lvm_base.c \
++	lvm_lv.c \
++	lvm_pv.c \
+ 	lvm_vg.c
+ 
+ LIB_NAME = liblvm2app
+--- LVM2/liblvm/lvm.h	2009/07/23 23:39:02	1.9
++++ LVM2/liblvm/lvm.h	2009/07/23 23:40:05	1.10
+@@ -198,6 +198,22 @@
+ int lvm_vg_remove(vg_t *vg);
+ 
+ /**
++ * Get the current name or uuid of a PV, VG, or LV.
++ *
++ * Returns a copy of the current name or uuid for the given PV,
++ * VG, or LV.
++ *
++ * Memory is allocated using malloc() and caller must free the memory
++ * using free().
++ */
++char *lvm_pv_get_uuid(const pv_t *pv);
++char *lvm_vg_get_uuid(const vg_t *vg);
++char *lvm_lv_get_uuid(const lv_t *lv);
++char *lvm_pv_get_name(const pv_t *pv);
++char *lvm_vg_get_name(const vg_t *vg);
++char *lvm_lv_get_name(const lv_t *lv);
++
++/**
+  * Close a VG opened with lvm_vg_create
+  *
+  * This API releases a VG handle and any resources associated with the handle.
+--- LVM2/liblvm/lvm_vg.c	2009/07/23 23:39:02	1.5
++++ LVM2/liblvm/lvm_vg.c	2009/07/23 23:40:05	1.6
+@@ -21,6 +21,7 @@
+ #include "metadata-exported.h"
+ #include "archiver.h"
+ #include "locking.h"
++#include "lvm-string.h"
+ 
+ vg_t *lvm_vg_create(lvm_t libh, const char *vg_name)
+ {
+@@ -166,3 +167,24 @@
+ 	}
+ 	return list;
+ }
++
++char *lvm_vg_get_uuid(const vg_t *vg)
++{
++	char uuid[64] __attribute((aligned(8)));
++
++	if (!id_write_format(&vg->id, uuid, sizeof(uuid))) {
++		log_error("Internal error converting uuid");
++		return NULL;
 +	}
-+	return list;
++	return strndup((const char *)uuid, 64);
++}
++
++char *lvm_vg_get_name(const vg_t *vg)
++{
++	char *name;
++
++	name = malloc(NAME_LEN + 1);
++	strncpy(name, (const char *)vg->name, NAME_LEN);
++	name[NAME_LEN] = '\0';
++	return name;
 +}
 
 
