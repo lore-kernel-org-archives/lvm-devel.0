@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 22 Jul 2009 22:25:30 -0000
-Subject: LVM2/test/api vgtest.c
-Message-ID: <20090722222530.1171.qmail@sourceware.org>
+Date: 23 Jul 2009 01:20:23 -0000
+Subject: LVM2/liblvm lvm.h lvm_vg.c
+Message-ID: <20090723012023.22248.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-22 22:25:30
+Changes by:	wysochanski at sourceware.org	2009-07-23 01:20:23
 
 Modified files:
-	test/api       : vgtest.c 
+	liblvm         : lvm.h lvm_vg.c 
 
 Log message:
-	Add a couple lvm_vg_open() calls to vgtest.c.
+	Update lvm_vg_create to use NULL / non-NULL return for the time being.
+	
+	Some of the error interface is still TBD.  Rather than exporting a lot
+	of codes, etc, just use a simple pass / fail.  The allows our unit test
+	to not segfault if trying to create a VG that already exists.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/test/api/vgtest.c	2009/07/22 16:49:54	1.3
-+++ LVM2/test/api/vgtest.c	2009/07/22 22:25:30	1.4
-@@ -74,6 +74,20 @@
- 		goto bad;
- 	}
+--- LVM2/liblvm/lvm.h	2009/07/22 22:24:16	1.5
++++ LVM2/liblvm/lvm.h	2009/07/23 01:20:22	1.6
+@@ -110,8 +110,7 @@
+  * \param   libh
+  *          Handle obtained from lvm_create.
+  *
+- * \return  A VG handle with error code set appropriately.
+- * FIXME: Update error handling description after errno and logging patches
++ * \return  non-NULL vg handle (success) or NULL (failure)
+  */
+ vg_t *lvm_vg_create(lvm_t libh, const char *vg_name);
  
-+	printf("Closing VG %s\n", vg_name);
-+	if (!lvm_vg_close(vg))
-+		goto bad;
-+	printf("Re-opening VG %s for reading\n", vg_name);
-+	vg = lvm_vg_open(handle, vg_name, "r", 0);
-+	if (!vg)
-+		goto bad;
-+	printf("Closing VG %s\n", vg_name);
-+	if (!lvm_vg_close(vg))
-+		goto bad;
-+	printf("Re-opening VG %s for writing\n", vg_name);
-+	vg = lvm_vg_open(handle, vg_name, "w", 0);
-+	if (!vg)
-+		goto bad;
- 	printf("Removing VG %s from system\n", vg_name);
- 	status = lvm_vg_remove(vg);
- 	if (lvm_errno(handle)) {
+--- LVM2/liblvm/lvm_vg.c	2009/07/22 22:24:16	1.3
++++ LVM2/liblvm/lvm_vg.c	2009/07/23 01:20:22	1.4
+@@ -24,7 +24,15 @@
+ 
+ vg_t *lvm_vg_create(lvm_t libh, const char *vg_name)
+ {
+-	return vg_create((struct cmd_context *)libh, vg_name);
++	vg_t *vg;
++
++	vg = vg_create((struct cmd_context *)libh, vg_name);
++	/* FIXME: error handling is still TBD */
++	if (vg_read_error(vg)) {
++		vg_release(vg);
++		return NULL;
++	}
++	return vg;
+ }
+ 
+ int lvm_vg_extend(vg_t *vg, const char *device)
 
 
