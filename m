@@ -1,82 +1,116 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 22 Jul 2009 03:13:57 -0000
-Subject: LVM2/test/api vgtest.c
-Message-ID: <20090722031357.26668.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 22 Jul 2009 22:53:06 -0400
+Subject: [PATCH 5/6] Retrieve MD sysfs attributes for MD partitions
+In-Reply-To: <1248317587-11187-1-git-send-email-snitzer@redhat.com>
+References: <1248317587-11187-1-git-send-email-snitzer@redhat.com>
+Message-ID: <1248317587-11187-6-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-22 03:13:57
+Rename private _primary_dev() to a public get_primary_dev() and reuse it
+to allow retrieval of the MD sysfs attributes (raid level, etc) for MD
+partitions.
 
-Modified files:
-	test/api       : vgtest.c 
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ lib/device/dev-md.c |   13 +++++++++----
+ lib/device/device.c |   12 +++++++++---
+ lib/device/device.h |    3 +++
+ 3 files changed, 21 insertions(+), 7 deletions(-)
 
-Log message:
-	Update test/api/vgtest.c to use lvm_errno and lvm_errmsg.
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-
---- LVM2/test/api/vgtest.c	2009/07/21 10:46:45	1.1
-+++ LVM2/test/api/vgtest.c	2009/07/22 03:13:57	1.2
-@@ -43,42 +43,47 @@
+diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
+index 5525b4f..be33775 100644
+--- a/lib/device/dev-md.c
++++ b/lib/device/dev-md.c
+@@ -131,16 +131,21 @@ static int _md_sysfs_attribute_snprintf(char *path, size_t size,
+ 					const char *attribute)
+ {
+ 	struct stat info;
++	dev_t _dev = dev->dev;
+ 	int ret = -1;
  
- 	printf("Creating VG %s\n", vg_name);
- 	vg = lvm_vg_create(handle, vg_name);
--	if (!vg) {
-+	if (lvm_errno(handle)) {
- 		fprintf(stderr, "Error creating volume group %s\n", vg_name);
-+		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
- 		goto bad;
- 	}
+-	if (MAJOR(dev->dev) != md_major())
++	if (!sysfs_dir || !*sysfs_dir)
+ 		return ret;
  
- 	printf("Extending VG %s\n", vg_name);
- 	status = lvm_vg_extend(vg, device);
--	if (!status) {
-+	if (lvm_errno(handle)) {
- 		fprintf(stderr, "Error extending volume group %s "
- 			"with device %s\n", vg_name, device);
-+		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
- 		goto bad;
- 	}
+-	if (!sysfs_dir || !*sysfs_dir)
++check_md_major:
++	if (MAJOR(_dev) != md_major()) {
++		if (get_primary_dev(sysfs_dir, dev, &_dev))
++			goto check_md_major;
+ 		return ret;
++	}
  
- 	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
- 	status = lvm_vg_set_extent_size(vg, size);
--	if (!status) {
-+	if (lvm_errno(handle)) {
- 		fprintf(stderr, "Can not set physical extent "
- 			"size '%"PRIu64"' for '%s'\n",
- 			size, vg_name);
-+		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
- 		goto bad;
- 	}
+ 	ret = dm_snprintf(path, size, "%s/dev/block/%d:%d/md/%s", sysfs_dir,
+-			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), attribute);
++			  (int)MAJOR(_dev), (int)MINOR(_dev), attribute);
+ 	if (ret < 0) {
+ 		log_error("dm_snprintf md %s failed", attribute);
+ 		return ret;
+@@ -149,7 +154,7 @@ static int _md_sysfs_attribute_snprintf(char *path, size_t size,
+ 	if (stat(path, &info) < 0) {
+ 		/* old sysfs structure */
+ 		ret = dm_snprintf(path, size, "%s/block/md%d/md/%s",
+-				  sysfs_dir, (int)MINOR(dev->dev), attribute);
++				  sysfs_dir, (int)MINOR(_dev), attribute);
+ 		if (ret < 0) {
+ 			log_error("dm_snprintf old md %s failed", attribute);
+ 			return ret;
+diff --git a/lib/device/device.c b/lib/device/device.c
+index 93cd4bb..24d5075 100644
+--- a/lib/device/device.c
++++ b/lib/device/device.c
+@@ -286,8 +286,8 @@ int _get_partition_type(struct dev_mgr *dm, struct device *d)
  
- 	printf("Committing VG %s to disk\n", vg_name);
- 	status = lvm_vg_write(vg);
--	if (!status) {
-+	if (lvm_errno(handle)) {
- 		fprintf(stderr, "Creation of volume group '%s' on "
- 			"device '%s' failed\n",
- 			vg_name, device);
-+		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
- 		goto bad;
- 	}
+ #ifdef linux
  
- 	printf("Removing VG %s from system\n", vg_name);
- 	status = lvm_vg_remove(vg);
--	if (!status) {
-+	if (lvm_errno(handle)) {
- 		fprintf(stderr, "Revmoval of volume group '%s' failed\n",
- 			vg_name);
-+		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
- 		goto bad;
- 	}
+-static int _primary_dev(const char *sysfs_dir,
+-			struct device *dev, dev_t *result)
++int get_primary_dev(const char *sysfs_dir,
++		    struct device *dev, dev_t *result)
+ {
+ 	char path[PATH_MAX+1];
+ 	char temp_path[PATH_MAX+1];
+@@ -387,7 +387,7 @@ static unsigned long _dev_topology_attribute(const char *attribute,
+ 	 *   or the device could be a partition
+ 	 */
+ 	if (stat(path, &info) < 0) {
+-		if (!_primary_dev(sysfs_dir, dev, &primary))
++		if (!get_primary_dev(sysfs_dir, dev, &primary))
+ 			return 0;
  
+ 		/* get attribute from partition's primary device */
+@@ -450,6 +450,12 @@ unsigned long dev_optimal_io_size(const char *sysfs_dir,
+ 
+ #else
+ 
++int get_primary_dev(const char *sysfs_dir,
++		    struct device *dev, dev_t *result)
++{
++	return 0;
++}
++
+ unsigned long dev_alignment_offset(const char *sysfs_dir,
+ 				   struct device *dev)
+ {
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 454fd0b..4ccf9a9 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -100,6 +100,9 @@ unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev);
+ 
+ int is_partitioned_dev(struct device *dev);
+ 
++int get_primary_dev(const char *sysfs_dir,
++		    struct device *dev, dev_t *result);
++
+ unsigned long dev_alignment_offset(const char *sysfs_dir,
+ 				   struct device *dev);
+ 
+-- 
+1.6.2.5
 
 
