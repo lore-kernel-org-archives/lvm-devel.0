@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 24 Jul 2009 12:48:21 -0000
-Subject: LVM2/liblvm .exported_symbols lvm.h lvm_vg.c
-Message-ID: <20090724124821.21938.qmail@sourceware.org>
+Date: 24 Jul 2009 12:51:32 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20090724125132.22753.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,75 +10,87 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-24 12:48:21
+Changes by:	wysochanski at sourceware.org	2009-07-24 12:51:32
 
 Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_vg.c 
+	test/api       : test.c 
 
 Log message:
-	Add lvm_scan_vgs liblvm fn to scan the system for LVM metadata.
-	
-	The lvm_list_vg_{names|ids} functions do not do a scan so we provide
-	a liblvm function that does a scan.
+	Add tests for lvm_vg_name_list, lvm_vg_id_list and lvm_scan_vgs.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/liblvm/.exported_symbols	2009/07/24 12:47:15	1.7
-+++ LVM2/liblvm/.exported_symbols	2009/07/24 12:48:21	1.8
-@@ -14,6 +14,7 @@
- lvm_vg_open
- lvm_vg_close
- lvm_vg_remove
-+lvm_scan_vgs
- lvm_errno
- lvm_errmsg
- lvm_vg_list_pvs
---- LVM2/liblvm/lvm.h	2009/07/24 12:47:15	1.11
-+++ LVM2/liblvm/lvm.h	2009/07/24 12:48:21	1.12
-@@ -265,6 +265,8 @@
-  * Return a list of VG names or VG uuids in the system.
-  *
-  * NOTE: This function will _NOT_ scan devices in the system for LVM metadata.
-+ * To scan the system, use lvm_scan_vgs.
-+ *
-  * To process the list, use the dm_list iterator functions.  For example:
-  *      vg_t *vg;
-  *      struct dm_list *vgnames;
-@@ -286,5 +288,11 @@
- struct dm_list *lvm_list_vg_names(lvm_t libh);
- struct dm_list *lvm_list_vg_ids(lvm_t libh);
+--- LVM2/test/api/test.c	2009/07/24 04:15:30	1.4
++++ LVM2/test/api/test.c	2009/07/24 12:51:32	1.5
+@@ -50,6 +50,12 @@
  
-+/**
-+ * Scan all devices on the system for VGs and LVM metadata.
-+ *
-+ * \return  Status code of 1 (success) or 0 (failure).
-+ */
-+int lvm_scan_vgs(lvm_t libh);
- 
- #endif /* _LIB_LVM_H */
---- LVM2/liblvm/lvm_vg.c	2009/07/24 12:47:15	1.7
-+++ LVM2/liblvm/lvm_vg.c	2009/07/24 12:48:21	1.8
-@@ -22,6 +22,7 @@
- #include "archiver.h"
- #include "locking.h"
- #include "lvm-string.h"
-+#include "lvmcache.h"
- 
- vg_t *lvm_vg_create(lvm_t libh, const char *vg_name)
+ static void _show_help(void)
  {
-@@ -198,3 +199,8 @@
- {
- 	return get_vgids((struct cmd_context *)libh, 0);
++	printf("'scan_vgs': "
++	       "Scan the system for LVM metadata\n");
++	printf("'vg_list_names': "
++	       "List the names of the VGs that exist in the system\n");
++	printf("'vg_list_ids': "
++	       "List the uuids of the VGs that exist in the system\n");
+ 	printf("'vg_list_pvs vgname': "
+ 	       "List the PVs that exist in VG vgname\n");
+ 	printf("'vg_list_lvs vgname': "
+@@ -230,6 +236,40 @@
+ 	}
  }
-+
-+int lvm_scan_vgs(lvm_t libh)
+ 
++static void _scan_vgs(lvm_t libh)
 +{
-+	return lvmcache_label_scan((struct cmd_context *)libh, 2);
++	lvm_scan_vgs(libh);
 +}
++
++static void _vg_list_names(lvm_t libh)
++{
++	struct dm_list *list;
++	struct lvm_str_list *strl;
++	const char *tmp;
++
++	list = lvm_list_vg_names(libh);
++	printf("VG names:\n");
++	dm_list_iterate_items(strl, list) {
++		tmp = strl->str;
++		printf("%s\n", tmp);
++	}
++}
++
++static void _vg_list_ids(lvm_t libh)
++{
++	struct dm_list *list;
++	struct lvm_str_list *strl;
++	const char *tmp;
++
++	list = lvm_list_vg_ids(libh);
++	printf("VG uuids:\n");
++	dm_list_iterate_items(strl, list) {
++		tmp = strl->str;
++		printf("%s\n", tmp);
++	}
++}
++
++
+ static void _lvs_in_vg(char **argv, int argc)
+ {
+ 	struct dm_list *lvs;
+@@ -301,6 +341,12 @@
+ 			_pvs_in_vg(argv, argc);
+ 		} else if (!strcmp(argv[0], "vg_list_lvs")) {
+ 			_lvs_in_vg(argv, argc);
++		} else if (!strcmp(argv[0], "vg_list_names")) {
++			_vg_list_names(libh);
++		} else if (!strcmp(argv[0], "vg_list_ids")) {
++			_vg_list_ids(libh);
++		} else if (!strcmp(argv[0], "scan_vgs")) {
++			_scan_vgs(libh);
+ 		} else {
+ 			printf ("Unrecognized command %s\n", argv[0]);
+ 		}
 
 
