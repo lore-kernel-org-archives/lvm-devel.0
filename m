@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 24 Jul 2009 12:47:15 -0000
+Date: 24 Jul 2009 12:48:21 -0000
 Subject: LVM2/liblvm .exported_symbols lvm.h lvm_vg.c
-Message-ID: <20090724124715.21481.qmail@sourceware.org>
+Message-ID: <20090724124821.21938.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,92 +10,75 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-24 12:47:15
+Changes by:	wysochanski at sourceware.org	2009-07-24 12:48:21
 
 Modified files:
 	liblvm         : .exported_symbols lvm.h lvm_vg.c 
 
 Log message:
-	Add lvm_list_vg_names and lvm_list_vg_ids liblvm functions.
+	Add lvm_scan_vgs liblvm fn to scan the system for LVM metadata.
 	
-	These functions provide the capability of enumerating all vgnames and
-	vgids in the system.  They do not do a scan of the system.
+	The lvm_list_vg_{names|ids} functions do not do a scan so we provide
+	a liblvm function that does a scan.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/liblvm/.exported_symbols	2009/07/23 23:40:05	1.6
-+++ LVM2/liblvm/.exported_symbols	2009/07/24 12:47:15	1.7
-@@ -18,3 +18,5 @@
+--- LVM2/liblvm/.exported_symbols	2009/07/24 12:47:15	1.7
++++ LVM2/liblvm/.exported_symbols	2009/07/24 12:48:21	1.8
+@@ -14,6 +14,7 @@
+ lvm_vg_open
+ lvm_vg_close
+ lvm_vg_remove
++lvm_scan_vgs
+ lvm_errno
  lvm_errmsg
  lvm_vg_list_pvs
- lvm_vg_list_lvs
-+lvm_list_vg_names
-+lvm_list_vg_ids
---- LVM2/liblvm/lvm.h	2009/07/23 23:40:05	1.10
-+++ LVM2/liblvm/lvm.h	2009/07/24 12:47:15	1.11
-@@ -44,6 +44,11 @@
- 	lv_t *lv;
- } lv_list_t;
- 
-+struct lvm_str_list {
-+	struct dm_list list;
-+	const char *str;
-+};
-+
- /**
-  * Return a list of LV handles for a given VG handle.
+--- LVM2/liblvm/lvm.h	2009/07/24 12:47:15	1.11
++++ LVM2/liblvm/lvm.h	2009/07/24 12:48:21	1.12
+@@ -265,6 +265,8 @@
+  * Return a list of VG names or VG uuids in the system.
   *
-@@ -256,4 +261,30 @@
-  */
- struct dm_list *lvm_vg_list_pvs(vg_t *vg);
+  * NOTE: This function will _NOT_ scan devices in the system for LVM metadata.
++ * To scan the system, use lvm_scan_vgs.
++ *
+  * To process the list, use the dm_list iterator functions.  For example:
+  *      vg_t *vg;
+  *      struct dm_list *vgnames;
+@@ -286,5 +288,11 @@
+ struct dm_list *lvm_list_vg_names(lvm_t libh);
+ struct dm_list *lvm_list_vg_ids(lvm_t libh);
  
 +/**
-+ * Return a list of VG names or VG uuids in the system.
++ * Scan all devices on the system for VGs and LVM metadata.
 + *
-+ * NOTE: This function will _NOT_ scan devices in the system for LVM metadata.
-+ * To process the list, use the dm_list iterator functions.  For example:
-+ *      vg_t *vg;
-+ *      struct dm_list *vgnames;
-+ *      struct lvm_str_list *strl;
-+ *
-+ *      vgnames = lvm_list_vg_names(libh);
-+ *	dm_list_iterate_items(strl, vgnames) {
-+ *		vgname = strl->str;
-+ *              vg = lvm_vg_open(libh, vgname, "r");
-+ *              // do something with vg
-+ *              lvm_vg_close(vg);
-+ *      }
-+ *
-+ *
-+ * \return  A list of struct lvm_str_list
-+ *          If no VGs exist on the system, NULL is returned.
-+ * FIXME: handle list memory cleanup
++ * \return  Status code of 1 (success) or 0 (failure).
 + */
-+struct dm_list *lvm_list_vg_names(lvm_t libh);
-+struct dm_list *lvm_list_vg_ids(lvm_t libh);
-+
-+
++int lvm_scan_vgs(lvm_t libh);
+ 
  #endif /* _LIB_LVM_H */
---- LVM2/liblvm/lvm_vg.c	2009/07/23 23:40:05	1.6
-+++ LVM2/liblvm/lvm_vg.c	2009/07/24 12:47:15	1.7
-@@ -188,3 +188,13 @@
- 	name[NAME_LEN] = '\0';
- 	return name;
+--- LVM2/liblvm/lvm_vg.c	2009/07/24 12:47:15	1.7
++++ LVM2/liblvm/lvm_vg.c	2009/07/24 12:48:21	1.8
+@@ -22,6 +22,7 @@
+ #include "archiver.h"
+ #include "locking.h"
+ #include "lvm-string.h"
++#include "lvmcache.h"
+ 
+ vg_t *lvm_vg_create(lvm_t libh, const char *vg_name)
+ {
+@@ -198,3 +199,8 @@
+ {
+ 	return get_vgids((struct cmd_context *)libh, 0);
  }
 +
-+struct dm_list *lvm_list_vg_names(lvm_t libh)
++int lvm_scan_vgs(lvm_t libh)
 +{
-+	return get_vgnames((struct cmd_context *)libh, 0);
-+}
-+
-+struct dm_list *lvm_list_vg_ids(lvm_t libh)
-+{
-+	return get_vgids((struct cmd_context *)libh, 0);
++	return lvmcache_label_scan((struct cmd_context *)libh, 2);
 +}
 
 
