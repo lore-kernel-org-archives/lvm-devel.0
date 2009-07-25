@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 24 Jul 2009 20:08:17 -0400
-Subject: [PATCH 08/11] Move extents_from_size from lvcreate into internal library so we can reuse.
-In-Reply-To: <1248480500-472-8-git-send-email-dwysocha@redhat.com>
+Date: Fri, 24 Jul 2009 20:08:18 -0400
+Subject: [PATCH 09/11] Add lvm_vg_create_lv_* liblvm functions.
+In-Reply-To: <1248480500-472-9-git-send-email-dwysocha@redhat.com>
 References: <1248480500-472-1-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-2-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-3-git-send-email-dwysocha@redhat.com>
@@ -10,126 +10,174 @@ References: <1248480500-472-1-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-6-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-7-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-8-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248480500-472-9-git-send-email-dwysocha@redhat.com>
+	<1248480500-472-9-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248480500-472-10-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Create a default linear or striped logical volume from a volume group.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    3 +++
- lib/metadata/metadata.c          |   22 ++++++++++++++++++++++
- tools/lvcreate.c                 |   29 ++---------------------------
- 3 files changed, 27 insertions(+), 27 deletions(-)
+ liblvm/.exported_symbols |    2 +
+ liblvm/lvm.h             |   32 ++++++++++++++++++
+ liblvm/lvm_lv.c          |   83 ++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 117 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 345992f..370be25 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -475,6 +475,9 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
- int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	      const char *new_name);
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index 08d5a60..257a13b 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -21,3 +21,5 @@ lvm_vg_list_pvs
+ lvm_vg_list_lvs
+ lvm_list_vg_names
+ lvm_list_vg_ids
++lvm_vg_create_lv_linear
++lvm_vg_create_lv_striped
+diff --git a/liblvm/lvm.h b/liblvm/lvm.h
+index c2157a8..d906170 100644
+--- a/liblvm/lvm.h
++++ b/liblvm/lvm.h
+@@ -97,6 +97,38 @@ void lvm_destroy(lvm_t libh);
+ int lvm_reload_config(lvm_t libh);
  
-+uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
-+			   uint32_t extent_size);
+ /**
++ * Create a linear logical volume.
++ *
++ * \param   vg
++ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \param   name
++ *          Name of logical volume to create.
++ *
++ * \param   size
++ *          Size of logical volume in extents.
++ *
++ */
++lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
 +
- /* FIXME: refactor and reduce the size of this struct! */
- struct lvcreate_params {
- 	/* flags */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 3a59cf2..2871a93 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -686,6 +686,28 @@ bad:
- 	return NULL;
++/**
++ * Create a striped logical volume.
++ * The striped LV defaults to the following:
++ * - stripes == 1
++ * - stripe_size == 64KB
++ *
++ * \param   vg
++ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \param   name
++ *          Name of logical volume to create.
++ *
++ * \param   size
++ *          Size of logical volume in extents.
++ */
++lv_t *lvm_vg_create_lv_striped(vg_t *vg, const char *name, uint64_t size);
++
++/**
+  * Return stored error no describing last LVM API error.
+  *
+  * Users of liblvm should use lvm_errno to determine success or failure
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index d557350..098ad8d 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -16,6 +16,9 @@
+ #include "lvm.h"
+ #include "metadata-exported.h"
+ #include "lvm-string.h"
++#include "defaults.h"
++#include "segtype.h"
++#include <string.h>
+ 
+ char *lvm_lv_get_uuid(const lv_t *lv)
+ {
+@@ -38,3 +41,83 @@ char *lvm_lv_get_name(const lv_t *lv)
+ 	return name;
  }
  
-+uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
-+			   uint32_t extent_size)
++/* Set defaults for non-segment specific LV parameters */
++static void _lv_set_default_params(struct lvcreate_params *lp,
++				   vg_t *vg, const char *lvname,
++				   uint64_t extents)
 +{
-+	if (size % extent_size) {
-+		size += extent_size - size % extent_size;
-+		log_print("Rounding up size to full physical extent %s",
-+			  display_size(cmd, size));
-+	}
++	lp->zero = 1;
++	lp->major = -1;
++	lp->minor = -1;
++	lp->vg_name = vg->name;
++	lp->lv_name = lvname; /* FIXME: check this for safety */
++	lp->pvh = &vg->pvs;
 +
-+	if (size > (uint64_t) UINT32_MAX * extent_size) {
-+		log_error("Volume too large (%s) for extent size %s. "
-+			  "Upper limit is %s.",
-+			  display_size(cmd, size),
-+			  display_size(cmd, (uint64_t) extent_size),
-+			  display_size(cmd, (uint64_t) UINT32_MAX *
-+				       extent_size));
-+		return 0;
-+	}
-+
-+	return (uint64_t) size / extent_size;
++	lp->extents = extents;
++	lp->permission = LVM_READ | LVM_WRITE;
++	lp->read_ahead = DM_READ_AHEAD_NONE;
++	lp->alloc = ALLOC_INHERIT;
++	lp->tag = NULL;
 +}
 +
- static int _recalc_extents(uint32_t *extents, const char *desc1,
- 			   const char *desc2, uint32_t old_size,
- 			   uint32_t new_size)
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 8c13954..53943d7 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -25,9 +25,6 @@ struct lvcreate_cmdline_params {
- 	int pv_count;
- };
- 
--static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
--				   uint32_t extent_size);
--
- static int _lvcreate_name_params(struct lvcreate_params *lp,
- 				 struct cmd_context *cmd,
- 				 int *pargc, char ***pargv)
-@@ -136,12 +133,12 @@ static int _update_extents_params(struct volume_group *vg,
- 	uint32_t pv_extent_count;
- 
- 	if (lcp->size &&
--	    !(lp->extents = _extents_from_size(vg->cmd, lcp->size,
-+	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
- 					       vg->extent_size)))
- 		return_0;
- 
- 	if (lp->voriginsize &&
--	    !(lp->voriginextents = _extents_from_size(vg->cmd, lp->voriginsize,
-+	    !(lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
- 						      vg->extent_size)))
- 		return_0;
- 
-@@ -573,28 +570,6 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	return 1;
- }
- 
--static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
--				   uint32_t extent_size)
--{
--	if (size % extent_size) {
--		size += extent_size - size % extent_size;
--		log_print("Rounding up size to full physical extent %s",
--			  display_size(cmd, size));
--	}
--
--	if (size > (uint64_t) UINT32_MAX * extent_size) {
--		log_error("Volume too large (%s) for extent size %s. "
--			  "Upper limit is %s.",
--			  display_size(cmd, size),
--			  display_size(cmd, (uint64_t) extent_size),
--			  display_size(cmd, (uint64_t) UINT32_MAX *
--				       extent_size));
--		return 0;
--	}
--
--	return (uint64_t) size / extent_size;
--}
--
- int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- {
- 	int r = ECMD_PROCESSED;
++/* Set default for linear segment specific LV parameters */
++static void _lv_set_default_linear_params(struct cmd_context *cmd,
++					  struct lvcreate_params *lp)
++{
++	lp->segtype = get_segtype_from_string(cmd, "striped");
++	lp->stripes = 1;
++	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
++}
++
++/* Set defaults for striped segment specific LV parameters */
++static void _lv_set_default_striped_params(struct cmd_context *cmd,
++					   struct lvcreate_params *lp)
++{
++	lp->stripes = 1;
++	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
++	lp->segtype = get_segtype_from_string(cmd, "striped");
++}
++
++lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size)
++{
++	struct lvcreate_params lp;
++	uint64_t extents;
++	struct lv_list *lvl;
++
++	/* FIXME: check for proper VG access */
++	if (vg_read_error(vg))
++		return NULL;
++	memset(&lp, 0, sizeof(lp));
++	extents = extents_from_size(vg->cmd, size, vg->extent_size);
++	_lv_set_default_params(&lp, vg, name, extents);
++	_lv_set_default_linear_params(vg->cmd, &lp);
++	if (!lv_create_single(vg, &lp))
++		return NULL;
++	lvl = find_lv_in_vg(vg, name);
++	if (!lvl)
++		return NULL;
++	return lvl->lv;
++}
++
++
++lv_t *lvm_vg_create_lv_striped(vg_t *vg, const char *name, uint64_t size)
++{
++	struct lvcreate_params lp;
++	uint64_t extents;
++	struct lv_list *lvl;
++
++	/* FIXME: check for proper VG access */
++	if (vg_read_error(vg))
++		return NULL;
++
++	memset(&lp, 0, sizeof(lp));
++	extents = extents_from_size(vg->cmd, size, vg->extent_size);
++	_lv_set_default_params(&lp, vg, name, extents);
++	_lv_set_default_striped_params(vg->cmd, &lp);
++	if (!lv_create_single(vg, &lp))
++		return NULL;
++	lvl = find_lv_in_vg(vg, name);
++	if (!lvl)
++		return NULL;
++	return lvl->lv;
++}
 -- 
 1.6.0.6
 
