@@ -1,115 +1,92 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Sat, 25 Jul 2009 18:14:52 -0400
-Subject: [PATCH 2/6] Add devices/data_alignment_offset_detection to lvm.conf.
+Date: Sat, 25 Jul 2009 18:14:54 -0400
+Subject: [PATCH 4/6] Improve ability to lookup primary device associated with partition
 In-Reply-To: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
 References: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1248560096-28641-3-git-send-email-snitzer@redhat.com>
+Message-ID: <1248560096-28641-5-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the pvcreate --dataalignmentoffset option is not specified the start
-of a PV's aligned data area will be padded with the associated
-'alignment_offset' exposed in sysfs (unless
-devices/data_alignment_offset_detection is disabled in lvm.conf).
+Improve lib/device/device.c:_primary_dev()'s ability to look up the
+primary device associated with all partitions; including blkext
+(e.g. partitions directly on MD).  The same will also work for obscure
+sysfs paths; e.g.: paths with mangled names like the HP cciss driver
+uses: /sys/block/cciss!c0d0/cciss!c0d0p1/
 
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- WHATS_NEW                     |    1 
- doc/example.conf              |    9 +++++
- lib/config/defaults.h         |    1 
- lib/device/device.c           |   71 ++++++++++++++++++++++++++++++++++++++++++
- lib/device/device.h           |    3 +
- lib/format_text/format-text.c |    8 +++-
- lib/metadata/metadata.c       |    8 ++++
- man/lvm.conf.5.in             |    9 ++++-
- 8 files changed, 107 insertions(+), 3 deletions(-)
+ lib/device/device.c |   61 ++++++++++++++++++++++++++++++++++++++++++++++----
+ 1 files changed, 56 insertions(+), 5 deletions(-)
 
-Index: LVM2/WHATS_NEW
-===================================================================
---- LVM2.orig/WHATS_NEW
-+++ LVM2/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.50 - 
- ================================
-+  Add devices/data_alignment_offset_detection to lvm.conf.
-   Add --dataalignmentoffset to pvcreate to shift start of aligned data area.
-   Add global/wait_for_locks to lvm.conf so blocking for locks can be disabled.
-   All LV locks are non-blocking so remove LCK_NONBLOCK from separate macros.
-Index: LVM2/doc/example.conf
-===================================================================
---- LVM2.orig/doc/example.conf
-+++ LVM2/doc/example.conf
-@@ -104,6 +104,15 @@ devices {
-     # Set to 0 for the default alignment of 64KB or page size, if larger.
-     data_alignment = 0
+diff --git a/lib/device/device.c b/lib/device/device.c
+index e627517..93cd4bb 100644
+--- a/lib/device/device.c
++++ b/lib/device/device.c
+@@ -13,6 +13,7 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
  
-+    # By default, the start of a PV's aligned data area will be padded with
-+    # the 'alignment_offset' exposed in sysfs.  This offset is often 0 but
-+    # may be non-zero; e.g.: certain 4KB sector drives that compensate for
-+    # windows partitioning will have an alignment_offset of 3584 bytes
-+    # (sector 7 is the lowest aligned logical block, the 4KB sectors start
-+    # at LBA -1, and consequently sector 63 is aligned on a 4KB boundary).
-+    # 1 enables; 0 disables.
-+    data_alignment_offset_detection = 1
-+
-     # If, while scanning the system for PVs, LVM2 encounters a device-mapper
-     # device that has its I/O suspended, it waits for it to become accessible.
-     # Set this to 1 to skip such devices.  This should only be needed
-Index: LVM2/lib/config/defaults.h
-===================================================================
---- LVM2.orig/lib/config/defaults.h
-+++ LVM2/lib/config/defaults.h
-@@ -34,6 +34,7 @@
- #define DEFAULT_MD_COMPONENT_DETECTION 1
- #define DEFAULT_MD_CHUNK_ALIGNMENT 1
- #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
-+#define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
- 
- #define DEFAULT_LOCK_DIR "/var/lock/lvm"
- #define DEFAULT_LOCKING_LIB "liblvm2clusterlock.so"
-Index: LVM2/lib/device/device.c
-===================================================================
---- LVM2.orig/lib/device/device.c
-+++ LVM2/lib/device/device.c
-@@ -282,3 +282,74 @@ int _get_partition_type(struct dev_mgr *
- 	return 0;
- }
- #endif
-+
-+#ifdef linux
-+
-+static unsigned long _dev_topology_attribute(const char *attribute,
-+					     const char *sysfs_dir,
-+					     struct device *dev)
-+{
-+	char path[PATH_MAX+1], buffer[64];
++#include <libgen.h> /* dirname, basename */
+ #include "lib.h"
+ #include "lvm-types.h"
+ #include "device.h"
+@@ -289,21 +290,71 @@ static int _primary_dev(const char *sysfs_dir,
+ 			struct device *dev, dev_t *result)
+ {
+ 	char path[PATH_MAX+1];
++	char temp_path[PATH_MAX+1];
++	char buffer[64];
+ 	struct stat info;
 +	FILE *fp;
-+	struct stat info;
-+	unsigned long result = 0UL;
-+
-+	if (!attribute || !*attribute)
-+		return_0;
-+
-+	if (!sysfs_dir || !*sysfs_dir)
-+		return_0;
-+
-+	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/%s",
-+			sysfs_dir, (int)MAJOR(dev->dev), (int)MINOR(dev->dev),
-+			attribute) < 0) {
-+		log_error("dm_snprintf %s failed", attribute);
-+		return 0;
++	int pri_maj, pri_min;
++	int ret = 0;
+ 
+ 	/* check if dev is a partition */
+ 	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/partition",
+ 			sysfs_dir, (int)MAJOR(dev->dev), (int)MINOR(dev->dev)) < 0) {
+ 		log_error("dm_snprintf partition failed");
+-		return 0;
++		return ret;
+ 	}
+ 
+ 	if (stat(path, &info) < 0)
+-		return 0;
++		return ret;
+ 
+-	*result = dev->dev -
+-		(MINOR(dev->dev) % max_partitions(MAJOR(dev->dev)));
+-	return 1;
++	/*
++	 * extract parent's path from the partition's symlink, e.g.:
++	 * - readlink /sys/dev/block/259:0 = ../../block/md0/md0p1
++	 * - dirname ../../block/md0/md0p1 = ../../block/md0
++	 * - basename ../../block/md0/md0  = md0
++	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
++	 */
++	if (readlink(dirname(path), temp_path, PATH_MAX) < 0) {
++		log_sys_error("readlink", path);
++		return ret;
 +	}
 +
-+	/* check if the desired sysfs attribute exists */
-+	if (stat(path, &info) < 0)
-+		return 0;
++	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/dev",
++			sysfs_dir, basename(dirname(temp_path))) < 0) {
++		log_error("dm_snprintf dev failed");
++		return ret;
++	}
 +
-+	if (!(fp = fopen(path, "r"))) {
++	/* finally, parse 'dev' attribute and create corresponding dev_t */
++	if (stat(path, &info) < 0) {
++		log_error("sysfs file %s does not exist", path);
++		return ret;
++	}
++
++	fp = fopen(path, "r");
++	if (!fp) {
 +		log_sys_error("fopen", path);
-+		return 0;
++		return ret;
 +	}
 +
 +	if (!fgets(buffer, sizeof(buffer), fp)) {
@@ -117,110 +94,23 @@ Index: LVM2/lib/device/device.c
 +		goto out;
 +	}
 +
-+	if (sscanf(buffer, "%lu", &result) != 1) {
-+		log_error("sysfs file %s not in expected format: %s", path,
-+			  buffer);
++	if (sscanf(buffer, "%d:%d", &pri_maj, &pri_min) != 2) {
++		log_error("sysfs file %s not in expected MAJ:MIN format: %s",
++			  path, buffer);
 +		goto out;
 +	}
-+
-+	log_very_verbose("Device %s %s is %lu bytes.",
-+			 dev_name(dev), attribute, result);
++	*result = makedev(pri_maj, pri_min);
++	ret = 1;
 +
 +out:
 +	if (fclose(fp))
 +		log_sys_error("fclose", path);
 +
-+	return result >> SECTOR_SHIFT;
-+}
-+
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev)
-+{
-+	return _dev_topology_attribute("alignment_offset",
-+				       sysfs_dir, dev);
-+}
-+
-+#else
-+
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev)
-+{
-+	return 0UL;
-+}
-+
-+#endif
-Index: LVM2/lib/device/device.h
-===================================================================
---- LVM2.orig/lib/device/device.h
-+++ LVM2/lib/device/device.h
-@@ -100,4 +100,7 @@ unsigned long dev_md_stripe_width(const 
++	return ret;
+ }
  
- int is_partitioned_dev(struct device *dev);
- 
-+unsigned long dev_alignment_offset(const char *sysfs_dir,
-+				   struct device *dev);
-+
- #endif
-Index: LVM2/lib/format_text/format-text.c
-===================================================================
---- LVM2.orig/lib/format_text/format-text.c
-+++ LVM2/lib/format_text/format-text.c
-@@ -1711,8 +1711,12 @@ static int _text_pv_setup(const struct f
- 				 "%lu sectors (requested %lu sectors)",
- 				 pv_dev_name(pv), pv->pe_align, data_alignment);
- 
--		if (!pe_start)
--			set_pe_align_offset(pv, data_alignment_offset);
-+		if (!pe_start &&
-+		    (set_pe_align_offset(pv, data_alignment_offset) != data_alignment_offset) &&
-+		    data_alignment_offset)
-+			log_warn("WARNING: %s: Overriding data alignment offset to "
-+				 "%lu sectors (requested %lu sectors)",
-+				 pv_dev_name(pv), pv->pe_align_offset, data_alignment_offset);
- 
- 		if (pv->pe_start < pv->pe_align) {
- 			pv->pe_start = pv->pe_align;
-Index: LVM2/lib/metadata/metadata.c
-===================================================================
---- LVM2.orig/lib/metadata/metadata.c
-+++ LVM2/lib/metadata/metadata.c
-@@ -115,6 +115,14 @@ unsigned long set_pe_align_offset(struct
- 	if (!pv->dev)
- 		goto out;
- 
-+	if (find_config_tree_bool(pv->fmt->cmd,
-+				  "devices/data_alignment_offset_detection",
-+				  DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION))
-+		pv->pe_align_offset =
-+			MAX(pv->pe_align_offset,
-+			    dev_alignment_offset(pv->fmt->cmd->sysfs_dir,
-+						 pv->dev));
-+
- 	log_very_verbose("%s: Setting PE alignment offset to %lu sectors.",
- 			 dev_name(pv->dev), pv->pe_align_offset);
- 
-Index: LVM2/man/lvm.conf.5.in
-===================================================================
---- LVM2.orig/man/lvm.conf.5.in
-+++ LVM2/man/lvm.conf.5.in
-@@ -142,10 +142,17 @@ when creating a new Physical Volume usin
- If a Physical Volume is placed directly upon an md device and
- \fBmd_chunk_alignment\fP is enabled this parameter is ignored.
- Set to 0 to use the default alignment of 64KB or the page size, if larger.
-+.IP
-+\fBdata_alignment_offset_detection\fP \(em If set to 1, and your kernel
-+provides topology information in sysfs for the Physical Volume, the
-+start of the aligned data area of the Physical Volume will be padded
-+with the alignment_offset exposed in sysfs.
- .sp
- To see the location of the first Physical Extent of an existing Physical Volume
- use \fBpvs -o +pe_start\fP .  It will be a multiple of the requested
--\fBdata_alignment\fP.
-+\fBdata_alignment\fP plus the alignment_offset from
-+\fBdata_alignment_offset_detection\fP (if enabled) or the pvcreate
-+commandline.
- .TP
- \fBlog\fP \(em Default log settings
- .IP
+ static unsigned long _dev_topology_attribute(const char *attribute,
+-- 
+1.6.2.5
 
 
