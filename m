@@ -1,116 +1,153 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Sat, 25 Jul 2009 18:14:55 -0400
-Subject: [PATCH 5/6] Retrieve MD sysfs attributes for MD partitions
+Date: Sat, 25 Jul 2009 18:14:56 -0400
+Subject: [PATCH 6/6] Add MD, partition and topology tests to the LVM2 test-suite
 In-Reply-To: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
 References: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1248560096-28641-6-git-send-email-snitzer@redhat.com>
+Message-ID: <1248560096-28641-7-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Rename private _primary_dev() to a public get_primary_dev() and reuse it
-to allow retrieval of the MD sysfs attributes (raid level, etc) for MD
-partitions.
+Add MD, partition, and topology tests to the LVM2 test-suite.
+
+Added MD devices to the filter in test-utils.sh:prepare_lvmconf()
 
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- lib/device/dev-md.c |   13 +++++++++----
- lib/device/device.c |   12 +++++++++---
- lib/device/device.h |    3 +++
- 3 files changed, 21 insertions(+), 7 deletions(-)
+ test/t-pvcreate-operation-md.sh |   86 ++++++++++++++++++++++++++++++++++++++++
+ test/t-pvcreate-usage.sh        |   12 +++++
+ test/test-utils.sh              |    2 
+ 3 files changed, 99 insertions(+), 1 deletion(-)
+ create mode 100644 test/t-pvcreate-operation-md.sh
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 5525b4f..be33775 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -131,16 +131,21 @@ static int _md_sysfs_attribute_snprintf(char *path, size_t size,
- 					const char *attribute)
- {
- 	struct stat info;
-+	dev_t _dev = dev->dev;
- 	int ret = -1;
- 
--	if (MAJOR(dev->dev) != md_major())
-+	if (!sysfs_dir || !*sysfs_dir)
- 		return ret;
- 
--	if (!sysfs_dir || !*sysfs_dir)
-+check_md_major:
-+	if (MAJOR(_dev) != md_major()) {
-+		if (get_primary_dev(sysfs_dir, dev, &_dev))
-+			goto check_md_major;
- 		return ret;
-+	}
- 
- 	ret = dm_snprintf(path, size, "%s/dev/block/%d:%d/md/%s", sysfs_dir,
--			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), attribute);
-+			  (int)MAJOR(_dev), (int)MINOR(_dev), attribute);
- 	if (ret < 0) {
- 		log_error("dm_snprintf md %s failed", attribute);
- 		return ret;
-@@ -149,7 +154,7 @@ static int _md_sysfs_attribute_snprintf(char *path, size_t size,
- 	if (stat(path, &info) < 0) {
- 		/* old sysfs structure */
- 		ret = dm_snprintf(path, size, "%s/block/md%d/md/%s",
--				  sysfs_dir, (int)MINOR(dev->dev), attribute);
-+				  sysfs_dir, (int)MINOR(_dev), attribute);
- 		if (ret < 0) {
- 			log_error("dm_snprintf old md %s failed", attribute);
- 			return ret;
-diff --git a/lib/device/device.c b/lib/device/device.c
-index 93cd4bb..24d5075 100644
---- a/lib/device/device.c
-+++ b/lib/device/device.c
-@@ -286,8 +286,8 @@ int _get_partition_type(struct dev_mgr *dm, struct device *d)
- 
- #ifdef linux
- 
--static int _primary_dev(const char *sysfs_dir,
--			struct device *dev, dev_t *result)
-+int get_primary_dev(const char *sysfs_dir,
-+		    struct device *dev, dev_t *result)
- {
- 	char path[PATH_MAX+1];
- 	char temp_path[PATH_MAX+1];
-@@ -387,7 +387,7 @@ static unsigned long _dev_topology_attribute(const char *attribute,
- 	 *   or the device could be a partition
- 	 */
- 	if (stat(path, &info) < 0) {
--		if (!_primary_dev(sysfs_dir, dev, &primary))
-+		if (!get_primary_dev(sysfs_dir, dev, &primary))
- 			return 0;
- 
- 		/* get attribute from partition's primary device */
-@@ -450,6 +450,12 @@ unsigned long dev_optimal_io_size(const char *sysfs_dir,
- 
- #else
- 
-+int get_primary_dev(const char *sysfs_dir,
-+		    struct device *dev, dev_t *result)
-+{
-+	return 0;
+Index: LVM2/test/t-pvcreate-operation-md.sh
+===================================================================
+--- /dev/null
++++ LVM2/test/t-pvcreate-operation-md.sh
+@@ -0,0 +1,86 @@
++# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++# skip this test if mdadm or sfdisk aren't available
++which mdadm || exit 200
++which sfdisk || exit 200
++
++. ./test-utils.sh
++
++aux prepare_devs 2
++
++# Have MD use a non-standard name to avoid colliding with an existing MD device
++mddev=/dev/md_lvm_test0
++mddev_p=${mddev}p1
++
++cleanup_md() {
++    mdadm --stop $mddev
++    rm -f $mddev
++    teardown
 +}
 +
- unsigned long dev_alignment_offset(const char *sysfs_dir,
- 				   struct device *dev)
- {
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 454fd0b..4ccf9a9 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -100,6 +100,9 @@ unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev);
- 
- int is_partitioned_dev(struct device *dev);
- 
-+int get_primary_dev(const char *sysfs_dir,
-+		    struct device *dev, dev_t *result);
++# create 2 disk MD raid0 array (stripe_width=128K)
++[ -b "$mddev" ] && exit 200
++mdadm --create $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 $dev1 $dev2
++trap 'aux cleanup_md' EXIT # cleanup this MD device at the end of the test
 +
- unsigned long dev_alignment_offset(const char *sysfs_dir,
- 				   struct device *dev);
++# Test alignment of PV on MD without any MD-aware or topology-aware detection
++# - should treat $mddev just like any other block device
++pv_align="192.00K"
++pvcreate --metadatasize 128k \
++    --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
++    $mddev
++check_pv_field_ $mddev pe_start $pv_align
++
++# Test md_chunk_alignment independent of topology-aware detection
++pv_align="256.00K"
++pvcreate --metadatasize 128k \
++    --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
++    $mddev
++check_pv_field_ $mddev pe_start $pv_align
++
++# Test newer topology-aware alignment detection
++pv_align="256.00K"
++pvcreate --metadatasize 128k \
++    --config 'devices { md_chunk_alignment=0 }' $mddev
++check_pv_field_ $mddev pe_start $pv_align
++
++# partition MD array directly, depends on blkext in Linux >= 2.6.28
++linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
++if [ $linux_minor -gt 27 ]; then
++    sfdisk $mddev <<EOF
++,,83
++EOF
++    # make sure partition on MD is _not_ removed
++    # - tests partition -> parent lookup via sysfs paths
++    not pvcreate --metadatasize 128k $mddev
++
++    # verify alignment_offset padding is accounted for in pe_start
++    # - topology infrastructure is available in Linux >= 2.6.31
++    # - also tests partition -> parent lookup via sysfs paths
++    base_mddev=`basename $mddev`
++    base_mddev_p=`basename $mddev_p`
++    sysfs_alignment_offset=/sys/block/${base_mddev}/${base_mddev_p}/alignment_offset
++    [ -f "$sysfs_alignment_offset" ] && \
++	alignment_offset=`cat $sysfs_alignment_offset` || \
++	alignment_offset=0
++
++    if [ "$alignment_offset" = "512" ]; then
++	pv_align="256.50K"
++	pvcreate --metadatasize 128k $mddev_p
++	check_pv_field_ $mddev_p pe_start $pv_align
++	pvremove $mddev_p
++    elif [ "$alignment_offset" = "2048" ]; then
++	pv_align="258.00K"
++	pvcreate --metadatasize 128k $mddev_p
++	check_pv_field_ $mddev_p pe_start $pv_align
++	pvremove $mddev_p
++    fi
++fi
+Index: LVM2/test/t-pvcreate-usage.sh
+===================================================================
+--- LVM2.orig/test/t-pvcreate-usage.sh
++++ LVM2/test/t-pvcreate-usage.sh
+@@ -116,6 +116,18 @@ check_pv_field_ $dev1 pe_start $pv_align
+ pvcreate --metadatasize 128k --metadatacopies 2 --dataalignment 3.5k $dev1
+ check_pv_field_ $dev1 pe_start $pv_align
  
--- 
-1.6.2.5
++# data area is aligned to 64k by default,
++# data area has additional padding before its start
++pv_align="195.50K"
++pvcreate --metadatasize 128k --dataalignmentoffset 7s $dev1
++check_pv_field_ $dev1 pe_start $pv_align
++
++# 2nd metadata area is created without problems when
++# additional data area padding is used
++pvcreate --metadatasize 128k --metadatacopies 2 --dataalignmentoffset 7s $dev1
++check_pv_field_ $dev1 pv_mda_count 2
++# FIXME: compare start of 2nd mda with and without --dataalignmentoffset
++
+ #COMM 'pv with LVM1 compatible data alignment can be convereted'
+ #compatible == LVM1_PE_ALIGN == 64k
+ pvcreate --dataalignment 256k $dev1
+Index: LVM2/test/test-utils.sh
+===================================================================
+--- LVM2.orig/test/test-utils.sh
++++ LVM2/test/test-utils.sh
+@@ -182,7 +182,7 @@ prepare_lvmconf() {
+   devices {
+     dir = "$G_dev_"
+     scan = "$G_dev_"
+-    filter = [ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
++    filter = [ "a|/dev/md.*|", "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
+     cache_dir = "$G_root_/etc"
+     sysfs_scan = 0
+   }
 
 
