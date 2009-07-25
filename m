@@ -1,97 +1,81 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 24 Jul 2009 20:08:14 -0400
-Subject: [PATCH 05/11] Comment lvcreate_params struct.
-In-Reply-To: <1248480500-472-5-git-send-email-dwysocha@redhat.com>
+Date: Fri, 24 Jul 2009 20:08:15 -0400
+Subject: [PATCH 06/11] Move pvs and pv_count fields from lvcreate_params to lvcreate_cmdline_params.
+In-Reply-To: <1248480500-472-6-git-send-email-dwysocha@redhat.com>
 References: <1248480500-472-1-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-2-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-3-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-4-git-send-email-dwysocha@redhat.com>
 	<1248480500-472-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248480500-472-6-git-send-email-dwysocha@redhat.com>
+	<1248480500-472-6-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248480500-472-7-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+No functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/lvcreate.c |   50 +++++++++++++++++++++++++-------------------------
- 1 files changed, 25 insertions(+), 25 deletions(-)
+ tools/lvcreate.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index cca8fc8..b6558f8 100644
+index b6558f8..aadf519 100644
 --- a/tools/lvcreate.c
 +++ b/tools/lvcreate.c
-@@ -26,39 +26,39 @@ struct lvcreate_cmdline_params {
- /* FIXME: refactor and reduce the size of this struct! */
- struct lvcreate_params {
- 	/* flags */
--	int snapshot;
--	int zero;
--	int major;
--	int minor;
--	int corelog;
--	int nosync;
--
--	char *origin;
--	const char *vg_name;
--	const char *lv_name;
-+	int snapshot; /* snap */
-+	int zero; /* all */
-+	int major; /* all */
-+	int minor; /* all */
-+	int corelog; /* mirror */
-+	int nosync; /* mirror */
- 
--	uint32_t stripes;
--	uint32_t stripe_size;
--	uint32_t chunk_size;
--	uint32_t region_size;
-+	char *origin; /* snap */
-+	const char *vg_name; /* all */
-+	const char *lv_name; /* all */
- 
--	uint32_t mirrors;
-+	uint32_t stripes; /* striped */
-+	uint32_t stripe_size; /* striped */
-+	uint32_t chunk_size; /* snapshot */
-+	uint32_t region_size; /* mirror */
- 
--	const struct segment_type *segtype;
-+	uint32_t mirrors; /* mirror */
-+
-+	const struct segment_type *segtype; /* all */
- 
- 	/* size */
--	uint32_t extents;
--	uint32_t voriginextents;
--	uint64_t voriginsize;
--	struct dm_list *pvh;
--
--	uint32_t permission;
--	uint32_t read_ahead;
--	alloc_policy_t alloc;
--
--	int pv_count;
--	char **pvs;
--	const char *tag;
-+	uint32_t extents; /* all */
-+	uint32_t voriginextents; /* snapshot */
-+	uint64_t voriginsize; /* snapshot */
-+	struct dm_list *pvh; /* all */
-+
-+	uint32_t permission; /* all */
-+	uint32_t read_ahead; /* all */
-+	alloc_policy_t alloc; /* all */
-+
-+	int pv_count; /* all; redundant? */
-+	char **pvs; /* all; redundant? */
-+	const char *tag; /* all */
+@@ -21,6 +21,8 @@
+ struct lvcreate_cmdline_params {
+ 	percent_t percent;
+ 	uint64_t size;
++	char **pvs;
++	int pv_count;
  };
  
- static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
+ /* FIXME: refactor and reduce the size of this struct! */
+@@ -56,8 +58,6 @@ struct lvcreate_params {
+ 	uint32_t read_ahead; /* all */
+ 	alloc_policy_t alloc; /* all */
+ 
+-	int pv_count; /* all; redundant? */
+-	char **pvs; /* all; redundant? */
+ 	const char *tag; /* all */
+ };
+ 
+@@ -185,9 +185,9 @@ static int _update_extents_params(struct volume_group *vg,
+ 	 * Create the pv list before we parse lcp->percent - might be
+ 	 * PERCENT_PVSs
+ 	 */
+-	if (lp->pv_count) {
++	if (lcp->pv_count) {
+ 		if (!(lp->pvh = create_pv_list(vg->cmd->mem, vg,
+-					   lp->pv_count, lp->pvs, 1)))
++					   lcp->pv_count, lcp->pvs, 1)))
+ 			return_0;
+ 	} else
+ 		lp->pvh = &vg->pvs;
+@@ -200,7 +200,7 @@ static int _update_extents_params(struct volume_group *vg,
+ 			lp->extents = lp->extents * vg->free_count / 100;
+ 			break;
+ 		case PERCENT_PVS:
+-			if (!lp->pv_count) {
++			if (!lcp->pv_count) {
+ 				log_error("Please specify physical volume(s) "
+ 					  "with %%PVS");
+ 				return 0;
+@@ -603,8 +603,8 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 		return 0;
+ 	}
+ 
+-	lp->pv_count = argc;
+-	lp->pvs = argv;
++	lcp->pv_count = argc;
++	lcp->pvs = argv;
+ 
+ 	return 1;
+ }
 -- 
 1.6.0.6
 
