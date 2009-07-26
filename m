@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 20:29:29 -0000
-Subject: LVM2/liblvm lvm_vg.c
-Message-ID: <20090726202929.22632.qmail@sourceware.org>
+Date: 26 Jul 2009 20:29:56 -0000
+Subject: LVM2/test/api test.c vgtest.c
+Message-ID: <20090726202956.22778.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,56 +10,89 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 20:29:28
+Changes by:	wysochanski at sourceware.org	2009-07-26 20:29:56
 
 Modified files:
-	liblvm         : lvm_vg.c 
+	test/api       : test.c vgtest.c 
 
 Log message:
-	Update a few liblvm calls with log_errno.
+	Update test/api/*.c to use consistent liblvm error returns.
+	
+	For now, liblvm will return -1 (fail) / 0 (success) or
+	NULL (fail) / non-NULL (success).  Upon failure, lvm_errno and
+	lvm_errmsg should be used to determine the precise error.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/liblvm/lvm_vg.c	2009/07/26 20:28:59	1.16
-+++ LVM2/liblvm/lvm_vg.c	2009/07/26 20:29:28	1.17
-@@ -144,14 +144,15 @@
- 		return NULL;
- 
- 	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_error("Memory allocation fail for dm_list.\n");
-+		log_errno(ENOMEM, "Memory allocation fail for dm_list.\n");
- 		return NULL;
+--- LVM2/test/api/test.c	2009/07/26 16:44:05	1.13
++++ LVM2/test/api/test.c	2009/07/26 20:29:56	1.14
+@@ -327,7 +327,7 @@
  	}
- 	dm_list_init(list);
+ 	if (!(lv = _lookup_lv_by_name(argv[2])))
+ 		return;
+-	if (!lvm_vg_remove_lv(lv))
++	if (lvm_vg_remove_lv(lv))
+ 		printf("Error ");
+ 	else {
+ 		printf("Success ");
+--- LVM2/test/api/vgtest.c	2009/07/22 22:25:30	1.4
++++ LVM2/test/api/vgtest.c	2009/07/26 20:29:56	1.5
+@@ -50,7 +50,7 @@
  
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		if (!(pvs = dm_pool_zalloc(vg->vgmem, sizeof(*pvs)))) {
--			log_error("Memory allocation fail for lvm_pv_list.\n");
-+			log_errno(ENOMEM,
-+				"Memory allocation fail for lvm_pv_list.\n");
- 			return NULL;
- 		}
- 		pvs->pv = pvl->pv;
-@@ -170,14 +171,15 @@
- 		return NULL;
+ 	printf("Extending VG %s\n", vg_name);
+ 	status = lvm_vg_extend(vg, device);
+-	if (!status) {
++	if (status) {
+ 		fprintf(stderr, "Error extending volume group %s "
+ 			"with device %s\n", vg_name, device);
+ 		goto bad;
+@@ -58,7 +58,7 @@
  
- 	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_error("Memory allocation fail for dm_list.\n");
-+		log_errno(ENOMEM, "Memory allocation fail for dm_list.\n");
- 		return NULL;
+ 	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
+ 	status = lvm_vg_set_extent_size(vg, size);
+-	if (!status) {
++	if (status) {
+ 		fprintf(stderr, "Can not set physical extent "
+ 			"size '%"PRIu64"' for '%s'\n",
+ 			size, vg_name);
+@@ -67,7 +67,7 @@
+ 
+ 	printf("Committing VG %s to disk\n", vg_name);
+ 	status = lvm_vg_write(vg);
+-	if (!status) {
++	if (status) {
+ 		fprintf(stderr, "Creation of volume group '%s' on "
+ 			"device '%s' failed\n",
+ 			vg_name, device);
+@@ -75,14 +75,14 @@
  	}
- 	dm_list_init(list);
  
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
--			log_error("Memory allocation fail for lvm_lv_list.\n");
-+			log_errno(ENOMEM,
-+				"Memory allocation fail for lvm_lv_list.\n");
- 			return NULL;
- 		}
- 		lvs->lv = lvl->lv;
+ 	printf("Closing VG %s\n", vg_name);
+-	if (!lvm_vg_close(vg))
++	if (lvm_vg_close(vg))
+ 		goto bad;
+ 	printf("Re-opening VG %s for reading\n", vg_name);
+ 	vg = lvm_vg_open(handle, vg_name, "r", 0);
+ 	if (!vg)
+ 		goto bad;
+ 	printf("Closing VG %s\n", vg_name);
+-	if (!lvm_vg_close(vg))
++	if (lvm_vg_close(vg))
+ 		goto bad;
+ 	printf("Re-opening VG %s for writing\n", vg_name);
+ 	vg = lvm_vg_open(handle, vg_name, "w", 0);
+@@ -90,7 +90,7 @@
+ 		goto bad;
+ 	printf("Removing VG %s from system\n", vg_name);
+ 	status = lvm_vg_remove(vg);
+-	if (lvm_errno(handle)) {
++	if (status) {
+ 		fprintf(stderr, "Revmoval of volume group '%s' failed\n",
+ 			vg_name);
+ 		goto bad;
 
 
