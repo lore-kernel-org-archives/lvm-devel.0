@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 13:06:59 -0000
-Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c l ...
-Message-ID: <20090726130659.6869.qmail@sourceware.org>
+Date: 26 Jul 2009 13:07:41 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20090726130741.7041.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,144 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 13:06:59
+Changes by:	wysochanski at sourceware.org	2009-07-26 13:07:41
 
 Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_lv.c lvm_pv.c 
-	                 lvm_vg.c 
+	test/api       : test.c 
 
 Log message:
-	Add most all liblvm 'get' functions needed for anaconda.
-	
-	Add the most straightforward 'get' functions required for anaconda.
-	These are the ones that return simple uint64_t values.
-	The other more complex ones involve the lv_attr bits.  These will
-	come in a separate patch series since each lv_attr bit will be returned
-	in a separate API instred of returning the string and requiring the
-	user to parse it.
+	Update test/api/test.c for liblvm 'get' functions.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.14&r2=1.15
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/liblvm/.exported_symbols	2009/07/26 02:34:36	1.9
-+++ LVM2/liblvm/.exported_symbols	2009/07/26 13:06:59	1.10
-@@ -1,12 +1,20 @@
- lvm_create
- lvm_destroy
- lvm_reload_config
-+lvm_pv_get_name
- lvm_pv_get_uuid
-+lvm_pv_get_mda_count
-+lvm_vg_get_name
- lvm_vg_get_uuid
-+lvm_vg_get_size
-+lvm_vg_get_free
-+lvm_vg_get_extent_size
-+lvm_vg_get_extent_count
-+lvm_vg_get_free_count
-+lvm_vg_get_pv_count
- lvm_lv_get_uuid
--lvm_pv_get_name
--lvm_vg_get_name
- lvm_lv_get_name
-+lvm_lv_get_size
- lvm_vg_create
- lvm_vg_extend
- lvm_vg_set_extent_size
---- LVM2/liblvm/lvm.h	2009/07/26 02:34:36	1.14
-+++ LVM2/liblvm/lvm.h	2009/07/26 13:06:59	1.15
-@@ -243,6 +243,21 @@
- char *lvm_lv_get_name(const lv_t *lv);
+--- LVM2/test/api/test.c	2009/07/26 02:35:47	1.7
++++ LVM2/test/api/test.c	2009/07/26 13:07:41	1.8
+@@ -210,9 +210,10 @@
  
- /**
-+ * Get various pv, vg, or lv properties.
-+ * For full description of each property, consult the man pages for pvs,
-+ * vgs, and lvs.
-+ * FIXME: What value to return for invalid handle or other errors?
-+ */
-+uint64_t lvm_pv_get_mda_count(const pv_t *pv);
-+uint64_t lvm_vg_get_size(const vg_t *vg);
-+uint64_t lvm_vg_get_free(const vg_t *vg);
-+uint64_t lvm_vg_get_extent_size(const vg_t *vg);
-+uint64_t lvm_vg_get_extent_count(const vg_t *vg);
-+uint64_t lvm_vg_get_free_count(const vg_t *vg);
-+uint64_t lvm_vg_get_pv_count(const vg_t *vg);
-+uint64_t lvm_lv_get_size(const lv_t *lv);
-+
-+/**
-  * Close a VG opened with lvm_vg_create
-  *
-  * This API releases a VG handle and any resources associated with the handle.
---- LVM2/liblvm/lvm_lv.c	2009/07/26 02:34:36	1.2
-+++ LVM2/liblvm/lvm_lv.c	2009/07/26 13:06:59	1.3
-@@ -20,6 +20,12 @@
- #include "segtype.h"
- #include <string.h>
- 
-+/* FIXME: have lib/report/report.c _disp function call lv_size()? */
-+uint64_t lvm_lv_get_size(const lv_t *lv)
-+{
-+	return lv_size(lv);
-+}
-+
- char *lvm_lv_get_uuid(const lv_t *lv)
+ static void _show_one_vg(vg_t *vg)
  {
- 	char uuid[64] __attribute((aligned(8)));
---- LVM2/liblvm/lvm_pv.c	2009/07/23 23:40:05	1.1
-+++ LVM2/liblvm/lvm_pv.c	2009/07/26 13:06:59	1.2
-@@ -38,3 +38,7 @@
- 	return name;
+-	/* FIXME: uuid is not null terminated */
+-	printf("%s (%s): mode = %s\n", lvm_vg_get_name(vg),
+-	       lvm_vg_get_uuid(vg), "READ");
++	printf("%s (%s): size=%"PRIu64", free=%"PRIu64", #pv=%"PRIu64"\n",
++		lvm_vg_get_name(vg), lvm_vg_get_uuid(vg),
++		lvm_vg_get_size(vg), lvm_vg_get_free(vg),
++		lvm_vg_get_pv_count(vg));
  }
  
-+uint64_t lvm_pv_get_mda_count(const pv_t *pv)
-+{
-+	return (uint64_t) pv_mda_count(pv);
-+}
---- LVM2/liblvm/lvm_vg.c	2009/07/26 01:54:40	1.10
-+++ LVM2/liblvm/lvm_vg.c	2009/07/26 13:06:59	1.11
-@@ -190,6 +190,37 @@
- 	return list;
+ static void _list_open_vgs(void)
+@@ -235,8 +236,9 @@
+ 	}
+ 	printf("PVs in VG %s:\n", lvm_vg_get_name(vg));
+ 	dm_list_iterate_items(pvl, pvs) {
+-		printf("%s (%s)\n",
+-		       lvm_pv_get_name(pvl->pv), lvm_pv_get_uuid(pvl->pv));
++		printf("%s (%s): mda_count=%"PRIu64"\n",
++		       lvm_pv_get_name(pvl->pv), lvm_pv_get_uuid(pvl->pv),
++			lvm_pv_get_mda_count(pvl->pv));
+ 	}
  }
  
-+/* FIXME: invalid handle? return INTMAX? */
-+uint64_t lvm_vg_get_size(const vg_t *vg)
-+{
-+	return vg_size(vg);
-+}
-+
-+uint64_t lvm_vg_get_free(const vg_t *vg)
-+{
-+	return vg_free(vg);
-+}
-+
-+uint64_t lvm_vg_get_extent_size(const vg_t *vg)
-+{
-+	return vg_extent_size(vg);
-+}
-+
-+uint64_t lvm_vg_get_extent_count(const vg_t *vg)
-+{
-+	return vg_extent_count(vg);
-+}
-+
-+uint64_t lvm_vg_get_free_count(const vg_t *vg)
-+{
-+	return vg_free_count(vg);
-+}
-+
-+uint64_t lvm_vg_get_pv_count(const vg_t *vg)
-+{
-+	return vg_pv_count(vg);
-+}
-+
- char *lvm_vg_get_uuid(const vg_t *vg)
- {
- 	char uuid[64] __attribute((aligned(8)));
+@@ -289,8 +291,9 @@
+ 	}
+ 	printf("LVs in VG %s:\n", lvm_vg_get_name(vg));
+ 	dm_list_iterate_items(lvl, lvs) {
+-		printf("%s/%s (%s)\n", lvm_vg_get_name(vg),
+-		       lvm_lv_get_name(lvl->lv), lvm_lv_get_uuid(lvl->lv));
++		printf("%s/%s (%s): size=%"PRIu64"\n", lvm_vg_get_name(vg),
++			lvm_lv_get_name(lvl->lv), lvm_lv_get_uuid(lvl->lv),
++			lvm_lv_get_size(lvl->lv));
+ 	}
+ }
+ 
 
 
