@@ -1,55 +1,132 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 16:49:52 -0000
-Subject: LVM2/liblvm lvm.h
-Message-ID: <20090726164952.26214.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Sun, 26 Jul 2009 14:31:50 -0400
+Subject: [PATCH] Implement lvm_lv_activate and lvm_lv_deactivate liblvm calls.
+Message-ID: <1248633110-4514-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 16:49:52
+Limited implementation but other types of activation should probably have
+separate calls.  We also currently do not handle pvmoves or lvconverts.
 
-Modified files:
-	liblvm         : lvm.h 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ liblvm/.exported_symbols |    2 ++
+ liblvm/lvm.h             |   25 +++++++++++++++++++++++++
+ liblvm/lvm_lv.c          |   44 ++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 71 insertions(+), 0 deletions(-)
 
-Log message:
-	A few more lvm.h updates that got missed.
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-
---- LVM2/liblvm/lvm.h	2009/07/26 16:44:05	1.22
-+++ LVM2/liblvm/lvm.h	2009/07/26 16:49:52	1.23
-@@ -38,11 +38,11 @@
- /**
-  * Physical volume object.
-  *
-- * This object can be either a read-only object or a read-write object and
-- * depends on the mode of the volume group.  This object can not be
-- * written to disk independently, and changes will be written to disk
-- * when the volume group gets committed to disk. The open mode is the
-- * same as the volume group object it was created from.
-+ * This object can be either a read-only object or a read-write object
-+ * depending on the mode it was returned by a function. This object can not be
-+ * written to disk independently, it is bound to a volume group and changes
-+ * will be written to disk when the volume group gets committed to disk. The
-+ * open mode is the same as the volume group object is was created of.
-  */
- typedef struct physical_volume pv_t;
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index d0e87df..6708154 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -12,6 +12,8 @@ lvm_vg_get_extent_size
+ lvm_vg_get_extent_count
+ lvm_vg_get_free_extent_count
+ lvm_vg_get_pv_count
++lvm_lv_activate
++lvm_lv_deactivate
+ lvm_lv_get_uuid
+ lvm_lv_get_name
+ lvm_lv_get_size
+diff --git a/liblvm/lvm.h b/liblvm/lvm.h
+index ac64ca2..c5c4486 100644
+--- a/liblvm/lvm.h
++++ b/liblvm/lvm.h
+@@ -441,6 +441,31 @@ struct dm_list *lvm_vg_list_lvs(vg_t *vg);
+ lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
  
-@@ -326,7 +326,7 @@
-  * \param   vg
-  *          VG handle obtained from lvm_vg_create or lvm_vg_open.
-  * \param   new_size
-- *          New extent size to set (in sectors).
-+ *          New extent size in bytes.
-  * \return  Status code of 1 (success) or 0 (failure).
-  */
- int lvm_vg_set_extent_size(vg_t *vg, uint32_t new_size);
+ /**
++ * Activate a logical volume.
++ *
++ * This API is the equivalent of the lvm command "lvchange -ay".
++ *
++ * NOTE: This API cannot currently handle LVs with an in-progress pvmove or
++ * lvconvert.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  Status code of 1 (success) or 0 (failure).
++ */
++int lvm_lv_activate(lv_t *lv);
++
++/**
++ * Deactivate a logical volume.
++ *
++ * This API is the equivalent of the lvm command "lvchange -an".
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  Status code of 1 (success) or 0 (failure).
++ */
++int lvm_lv_deactivate(lv_t *lv);
++
++/**
+  * Remove a logical volume from a volume group.
+  *
+  * This function commits the change to disk and does _not_ require calling
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 556d457..4a12030 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -18,6 +18,8 @@
+ #include "lvm-string.h"
+ #include "defaults.h"
+ #include "segtype.h"
++#include "locking.h"
++
+ #include <string.h>
+ 
+ /* FIXME: have lib/report/report.c _disp function call lv_size()? */
+@@ -102,3 +104,45 @@ int lvm_vg_remove_lv(lv_t *lv)
+ 		return 0;
+ 	return lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT);
+ }
++
++int lvm_lv_activate(lv_t *lv)
++{
++	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
++		return 0;
++
++	/* FIXME: handle pvmove stuff later */
++	if (lv->status & LOCKED) {
++		log_error("Unable to activate locked LV\n");
++		return 0;
++	}
++
++	/* FIXME: handle lvconvert stuff later */
++	if (lv->status & CONVERTING) {
++		log_error("Unable to activate LV with in-progress lvconvert\n");
++		return 0;
++	}
++
++	if (lv_is_origin(lv)) {
++		log_verbose("Activating logical volume \"%s\" "
++			    "exclusively", lv->name);
++		if (!activate_lv_excl(lv->vg->cmd, lv))
++			return_0;
++	} else {
++		log_verbose("Activating logical volume \"%s\"",
++			    lv->name);
++		if (!activate_lv(lv->vg->cmd, lv))
++			return_0;
++	}
++	return 1;
++}
++
++int lvm_lv_deactivate(lv_t *lv)
++{
++	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
++		return 0;
++
++	log_verbose("Deactivating logical volume \"%s\"", lv->name);
++	if (!deactivate_lv(lv->vg->cmd, lv))
++		return_0;
++	return 1;
++}
+-- 
+1.6.0.6
 
 
