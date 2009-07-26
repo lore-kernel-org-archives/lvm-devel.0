@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 11:21:33 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20090726112133.6864.qmail@sourceware.org>
+Date: 26 Jul 2009 12:40:28 -0000
+Subject: LVM2/lib/format_text archive.c
+Message-ID: <20090726124028.14687.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,28 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 11:21:32
+Changes by:	wysochanski at sourceware.org	2009-07-26 12:40:28
 
 Modified files:
-	.              : WHATS_NEW 
+	lib/format_text: archive.c 
 
 Log message:
-	Update WHATS_NEW for recent checkins
+	Rename vg_size to vgsize to avoid naming conflicts.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1202&r2=1.1203
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
 
---- LVM2/WHATS_NEW	2009/07/24 23:28:55	1.1202
-+++ LVM2/WHATS_NEW	2009/07/26 11:21:32	1.1203
-@@ -1,5 +1,9 @@
- Version 2.02.50 - 
- ================================
-+  Update test/api/test.c to call new liblvm functions.
-+  Add liblvm function lvm_vg_create_lv_linear.
-+  Update lvm_vg_extend to do an implicit pvcreate on the device.
-+  Refactor pvcreate and lvcreate for liblvm.
-   Add global/wait_for_locks to lvm.conf so blocking for locks can be disabled.
-   All LV locks are non-blocking so remove LCK_NONBLOCK from separate macros.
-   Fix race condition with vgcreate and vgextend on same device (2.02.49).
+--- LVM2/lib/format_text/archive.c	2009/07/15 20:02:47	1.35
++++ LVM2/lib/format_text/archive.c	2009/07/26 12:40:27	1.36
+@@ -57,7 +57,7 @@
+ /*
+  * Extract vg name and version number from a filename.
+  */
+-static int _split_vg(const char *filename, char *vgname, size_t vg_size,
++static int _split_vg(const char *filename, char *vgname, size_t vgsize,
+ 		     uint32_t *ix)
+ {
+ 	size_t len, vg_len;
+@@ -78,7 +78,7 @@
+ 		return 0;
+ 
+ 	vg_len = underscore - filename;
+-	if (vg_len + 1 > vg_size)
++	if (vg_len + 1 > vgsize)
+ 		return 0;
+ 
+ 	strncpy(vgname, filename, vg_len);
 
 
