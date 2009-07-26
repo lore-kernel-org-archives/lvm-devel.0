@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 02:32:27 -0000
+Date: 26 Jul 2009 02:32:50 -0000
 Subject: LVM2/tools lvcreate.c
-Message-ID: <20090726023227.16225.qmail@sourceware.org>
+Message-ID: <20090726023250.16555.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,89 +10,72 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 02:32:27
+Changes by:	wysochanski at sourceware.org	2009-07-26 02:32:50
 
 Modified files:
 	tools          : lvcreate.c 
 
 Log message:
-	Comment lvcreate_params struct.
+	Move pvs and pv_count fields from lvcreate_params to lvcreate_cmdline_params.
+	
+	No functional change.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.203&r2=1.204
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.204&r2=1.205
 
---- LVM2/tools/lvcreate.c	2009/07/26 02:32:00	1.203
-+++ LVM2/tools/lvcreate.c	2009/07/26 02:32:26	1.204
-@@ -26,39 +26,39 @@
- /* FIXME: refactor and reduce the size of this struct! */
- struct lvcreate_params {
- 	/* flags */
--	int snapshot;
--	int zero;
--	int major;
--	int minor;
--	int corelog;
--	int nosync;
-+	int snapshot; /* snap */
-+	int zero; /* all */
-+	int major; /* all */
-+	int minor; /* all */
-+	int corelog; /* mirror */
-+	int nosync; /* mirror */
-+
-+	char *origin; /* snap */
-+	const char *vg_name; /* all */
-+	const char *lv_name; /* all */
-+
-+	uint32_t stripes; /* striped */
-+	uint32_t stripe_size; /* striped */
-+	uint32_t chunk_size; /* snapshot */
-+	uint32_t region_size; /* mirror */
- 
--	char *origin;
--	const char *vg_name;
--	const char *lv_name;
--
--	uint32_t stripes;
--	uint32_t stripe_size;
--	uint32_t chunk_size;
--	uint32_t region_size;
-+	uint32_t mirrors; /* mirror */
- 
--	uint32_t mirrors;
--
--	const struct segment_type *segtype;
-+	const struct segment_type *segtype; /* all */
- 
- 	/* size */
--	uint32_t extents;
--	uint32_t voriginextents;
--	uint64_t voriginsize;
--	struct dm_list *pvh;
--
--	uint32_t permission;
--	uint32_t read_ahead;
--	alloc_policy_t alloc;
--
--	int pv_count;
--	char **pvs;
--	const char *tag;
-+	uint32_t extents; /* all */
-+	uint32_t voriginextents; /* snapshot */
-+	uint64_t voriginsize; /* snapshot */
-+	struct dm_list *pvh; /* all */
-+
-+	uint32_t permission; /* all */
-+	uint32_t read_ahead; /* all */
-+	alloc_policy_t alloc; /* all */
-+
-+	int pv_count; /* all; redundant? */
-+	char **pvs; /* all; redundant? */
-+	const char *tag; /* all */
+--- LVM2/tools/lvcreate.c	2009/07/26 02:32:26	1.204
++++ LVM2/tools/lvcreate.c	2009/07/26 02:32:50	1.205
+@@ -21,6 +21,8 @@
+ struct lvcreate_cmdline_params {
+ 	percent_t percent;
+ 	uint64_t size;
++	char **pvs;
++	int pv_count;
  };
  
- static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
+ /* FIXME: refactor and reduce the size of this struct! */
+@@ -56,8 +58,6 @@
+ 	uint32_t read_ahead; /* all */
+ 	alloc_policy_t alloc; /* all */
+ 
+-	int pv_count; /* all; redundant? */
+-	char **pvs; /* all; redundant? */
+ 	const char *tag; /* all */
+ };
+ 
+@@ -185,9 +185,9 @@
+ 	 * Create the pv list before we parse lcp->percent - might be
+ 	 * PERCENT_PVSs
+ 	 */
+-	if (lp->pv_count) {
++	if (lcp->pv_count) {
+ 		if (!(lp->pvh = create_pv_list(vg->cmd->mem, vg,
+-					   lp->pv_count, lp->pvs, 1)))
++					   lcp->pv_count, lcp->pvs, 1)))
+ 			return_0;
+ 	} else
+ 		lp->pvh = &vg->pvs;
+@@ -200,7 +200,7 @@
+ 			lp->extents = lp->extents * vg->free_count / 100;
+ 			break;
+ 		case PERCENT_PVS:
+-			if (!lp->pv_count) {
++			if (!lcp->pv_count) {
+ 				log_error("Please specify physical volume(s) "
+ 					  "with %%PVS");
+ 				return 0;
+@@ -603,8 +603,8 @@
+ 		return 0;
+ 	}
+ 
+-	lp->pv_count = argc;
+-	lp->pvs = argv;
++	lcp->pv_count = argc;
++	lcp->pvs = argv;
+ 
+ 	return 1;
+ }
 
 
