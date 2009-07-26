@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 20:57:38 -0000
+Date: 26 Jul 2009 20:58:12 -0000
 Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c
-Message-ID: <20090726205738.32677.qmail@sourceware.org>
+Message-ID: <20090726205812.390.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,131 +10,96 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 20:57:38
+Changes by:	wysochanski at sourceware.org	2009-07-26 20:58:11
 
 Modified files:
 	liblvm         : .exported_symbols lvm.h lvm_lv.c 
 
 Log message:
-	Implement lvm_lv_activate and lvm_lv_deactivate liblvm calls.
+	Add lvm_lv_is_active and lvm_lv_is_suspended.
 	
-	Limited implementation but other types of activation should probably have
-	separate calls.  We also currently do not handle pvmoves or lvconverts.
+	Return whether an LV is active in the kernel (live table) or suspended
+	(table suspend).
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.24&r2=1.25
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/liblvm/.exported_symbols	2009/07/26 16:44:05	1.15
-+++ LVM2/liblvm/.exported_symbols	2009/07/26 20:57:37	1.16
-@@ -12,6 +12,8 @@
- lvm_vg_get_extent_count
- lvm_vg_get_free_extent_count
- lvm_vg_get_pv_count
-+lvm_lv_activate
-+lvm_lv_deactivate
+--- LVM2/liblvm/.exported_symbols	2009/07/26 20:57:37	1.16
++++ LVM2/liblvm/.exported_symbols	2009/07/26 20:58:11	1.17
+@@ -17,6 +17,8 @@
  lvm_lv_get_uuid
  lvm_lv_get_name
  lvm_lv_get_size
---- LVM2/liblvm/lvm.h	2009/07/26 20:28:59	1.24
-+++ LVM2/liblvm/lvm.h	2009/07/26 20:57:37	1.25
-@@ -443,6 +443,31 @@
- lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
++lvm_lv_is_active
++lvm_lv_is_suspended
+ lvm_vg_create
+ lvm_vg_extend
+ lvm_vg_set_extent_size
+--- LVM2/liblvm/lvm.h	2009/07/26 20:57:37	1.25
++++ LVM2/liblvm/lvm.h	2009/07/26 20:58:11	1.26
+@@ -516,6 +516,24 @@
+  */
+ uint64_t lvm_lv_get_size(const lv_t *lv);
+ 
++/**
++ * Get the current activation state of a logical volume.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  1 if the LV is active in the kernel, 0 if not
++ */
++uint64_t lvm_lv_is_active(const lv_t *lv);
++
++/**
++ * Get the current suspended state of a logical volume.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  1 if the LV is suspended in the kernel, 0 if not
++ */
++uint64_t lvm_lv_is_suspended(const lv_t *lv);
++
+ /************************** physical volume handling ************************/
  
  /**
-+ * Activate a logical volume.
-+ *
-+ * This API is the equivalent of the lvm command "lvchange -ay".
-+ *
-+ * NOTE: This API cannot currently handle LVs with an in-progress pvmove or
-+ * lvconvert.
-+ *
-+ * \param   lv
-+ *          Logical volume handle.
-+ * \return  0 (success) or -1 (failure).
-+ */
-+int lvm_lv_activate(lv_t *lv);
-+
-+/**
-+ * Deactivate a logical volume.
-+ *
-+ * This API is the equivalent of the lvm command "lvchange -an".
-+ *
-+ * \param   lv
-+ *          Logical volume handle.
-+ * \return  0 (success) or -1 (failure).
-+ */
-+int lvm_lv_deactivate(lv_t *lv);
-+
-+/**
-  * Remove a logical volume from a volume group.
-  *
-  * This function commits the change to disk and does _not_ require calling
---- LVM2/liblvm/lvm_lv.c	2009/07/26 20:28:59	1.5
-+++ LVM2/liblvm/lvm_lv.c	2009/07/26 20:57:37	1.6
-@@ -18,6 +18,8 @@
- #include "lvm-string.h"
+--- LVM2/liblvm/lvm_lv.c	2009/07/26 20:57:37	1.6
++++ LVM2/liblvm/lvm_lv.c	2009/07/26 20:58:11	1.7
+@@ -19,6 +19,7 @@
  #include "defaults.h"
  #include "segtype.h"
-+#include "locking.h"
-+
+ #include "locking.h"
++#include "activate.h"
+ 
  #include <string.h>
  
- /* FIXME: have lib/report/report.c _disp function call lv_size()? */
-@@ -104,3 +106,51 @@
- 		return -1;
- 	return 0;
+@@ -49,6 +50,24 @@
+ 	return name;
  }
-+
-+int lvm_lv_activate(lv_t *lv)
+ 
++uint64_t lvm_lv_is_active(const lv_t *lv)
 +{
-+	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
-+		return -1;
-+
-+	/* FIXME: handle pvmove stuff later */
-+	if (lv->status & LOCKED) {
-+		log_error("Unable to activate locked LV\n");
-+		return -1;
-+	}
-+
-+	/* FIXME: handle lvconvert stuff later */
-+	if (lv->status & CONVERTING) {
-+		log_error("Unable to activate LV with in-progress lvconvert\n");
-+		return -1;
-+	}
-+
-+	if (lv_is_origin(lv)) {
-+		log_verbose("Activating logical volume \"%s\" "
-+			    "exclusively", lv->name);
-+		if (!activate_lv_excl(lv->vg->cmd, lv)) {
-+			log_error("Activate exclusive failed.\n");
-+			return -1;
-+		}
-+	} else {
-+		log_verbose("Activating logical volume \"%s\"",
-+			    lv->name);
-+		if (!activate_lv(lv->vg->cmd, lv)) {
-+			log_error("Activate failed.\n");
-+			return -1;
-+		}
-+	}
++	struct lvinfo info;
++	if (lv_info(lv->vg->cmd, lv, &info, 1, 0) &&
++	    info.exists && info.live_table)
++		return 1;
 +	return 0;
 +}
 +
-+int lvm_lv_deactivate(lv_t *lv)
++uint64_t lvm_lv_is_suspended(const lv_t *lv)
 +{
-+	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
-+		return -1;
-+
-+	log_verbose("Deactivating logical volume \"%s\"", lv->name);
-+	if (!deactivate_lv(lv->vg->cmd, lv)) {
-+		log_error("Deactivate failed.\n");
-+		return -1;
-+	}
++	struct lvinfo info;
++	if (lv_info(lv->vg->cmd, lv, &info, 1, 0) &&
++	    info.exists && info.suspended)
++		return 1;
 +	return 0;
 +}
++
+ /* Set defaults for non-segment specific LV parameters */
+ static void _lv_set_default_params(struct lvcreate_params *lp,
+ 				   vg_t *vg, const char *lvname,
 
 
