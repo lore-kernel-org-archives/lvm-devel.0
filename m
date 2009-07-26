@@ -1,125 +1,71 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sat, 25 Jul 2009 23:03:38 -0400
-Subject: [PATCH] Add most all liblvm 'get' functions needed for anaconda.
-Message-ID: <1248577419-25724-1-git-send-email-dwysocha@redhat.com>
+Date: Sat, 25 Jul 2009 23:03:39 -0400
+Subject: [PATCH] Add lvm_vg_remove_lv liblvm function.
+In-Reply-To: <1248577419-25724-1-git-send-email-dwysocha@redhat.com>
+References: <1248577419-25724-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248577419-25724-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add the most straightforward 'get' functions required for anaconda.
-These are the ones that return simple uint64_t values.
-The other more complex ones involve the lv_attr bits.  These will
-come in a separate patch series since each lv_attr bit will be returned
-in a separate API instred of returning the string and requiring the
-user to parse it.
+Add a very simple version of lvm_vg_remove_lv.
+Since we currently can only create linear LVs, this simple remove function
+is adequate.  We must refactor lvremove_single a bit.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/lvm.h    |   15 +++++++++++++++
- liblvm/lvm_lv.c |    3 +++
- liblvm/lvm_pv.c |   11 +++++++++++
- liblvm/lvm_vg.c |   20 ++++++++++++++++++++
- 4 files changed, 49 insertions(+), 0 deletions(-)
+ liblvm/.exported_symbols |    1 +
+ liblvm/lvm.h             |   11 +++++++++++
+ liblvm/lvm_lv.c          |    6 ++++++
+ 3 files changed, 18 insertions(+), 0 deletions(-)
 
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index 3d42cc7..eb3aee9 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -22,3 +22,4 @@ lvm_vg_list_lvs
+ lvm_list_vg_names
+ lvm_list_vg_ids
+ lvm_vg_create_lv_linear
++lvm_vg_remove_lv
 diff --git a/liblvm/lvm.h b/liblvm/lvm.h
-index f2080f7..a39f198 100644
+index a39f198..2bb36ee 100644
 --- a/liblvm/lvm.h
 +++ b/liblvm/lvm.h
-@@ -243,6 +243,21 @@ char *lvm_vg_get_name(const vg_t *vg);
- char *lvm_lv_get_name(const lv_t *lv);
+@@ -117,6 +117,17 @@ int lvm_reload_config(lvm_t libh);
+ lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
  
  /**
-+ * Get various pv, vg, or lv properties.
-+ * For full description of each property, consult the man pages for pvs,
-+ * vgs, and lvs.
-+ * FIXME: What value to return for invalid handle or other errors?
++ * Remove a logical volume from a volume group.
++ * This API commits the change to disk and does _not_ require calling
++ * lvm_vg_write.
++ * Currently only removing linear LVs are possible.
++ *
++ * FIXME: This API should probably not commit to disk but require calling
++ * lvm_vg_write.
 + */
-+uint64_t lvm_pv_get_mda_count(const pv_t *pv);
-+uint64_t lvm_vg_get_size(const vg_t *vg);
-+uint64_t lvm_vg_get_free(const vg_t *vg);
-+uint64_t lvm_vg_get_extent_size(const vg_t *vg);
-+uint64_t lvm_vg_get_extent_count(const vg_t *vg);
-+uint64_t lvm_vg_get_free_count(const vg_t *vg);
-+uint64_t lvm_vg_get_pv_count(const vg_t *vg);
-+uint64_t lvm_lv_get_size(const lv_t *lv);
++int lvm_vg_remove_lv(lv_t *lv);
 +
 +/**
-  * Close a VG opened with lvm_vg_create
+  * Return stored error no describing last LVM API error.
   *
-  * This API releases a VG handle and any resources associated with the handle.
+  * Users of liblvm should use lvm_errno to determine success or failure
 diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index e914d6c..5b1b213 100644
+index 5b1b213..a0ee136 100644
 --- a/liblvm/lvm_lv.c
 +++ b/liblvm/lvm_lv.c
-@@ -20,6 +20,9 @@
- #include "segtype.h"
- #include <string.h>
- 
-+inline uint64_t lvm_lv_get_size(const lv_t *lv)
-+{ return (uint64_t) lv->size; }
-+
- char *lvm_lv_get_uuid(const lv_t *lv)
- {
- 	char uuid[64] __attribute((aligned(8)));
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 0618a84..19d0ce6 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -16,6 +16,8 @@
- #include "lvm.h"
- #include "metadata-exported.h"
- #include "lvm-string.h"
-+#include "uuid.h"
-+#include "lvmcache.h"
- 
- char *lvm_pv_get_uuid(const pv_t *pv)
- {
-@@ -38,3 +40,12 @@ char *lvm_pv_get_name(const pv_t *pv)
- 	return name;
+@@ -93,3 +93,9 @@ lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size)
+ 	return lvl->lv;
  }
  
-+/* FIXME: have pvmdas_disp call this function */
-+uint64_t lvm_pv_get_mda_count(const pv_t *pv)
++int lvm_vg_remove_lv(lv_t *lv)
 +{
-+	struct lvmcache_info *info;
-+	const char *pvid = (const char *)pv->id.uuid;
-+
-+	info = info_from_pvid(pvid, 0);
-+	return info ? dm_list_size(&info->mdas) : UINT64_C(0);
++	if (!lv || !lv->vg || vg_read_error(lv->vg))
++		return 0;
++	return lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT);
 +}
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index bd6b36d..e64e3f9 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -194,6 +194,26 @@ struct dm_list *lvm_vg_list_lvs(vg_t *vg)
- 	return list;
- }
- 
-+/* FIXME: have *_disp functions from report.c call these functions */
-+/* FIXME: invalid handle? return INTMAX? */
-+inline uint64_t lvm_vg_get_size(const vg_t *vg)
-+{ return (uint64_t) vg->extent_count * vg->extent_size; }
-+
-+inline uint64_t lvm_vg_get_free(const vg_t *vg)
-+{ return (uint64_t) vg->free_count * vg->extent_size; }
-+
-+inline uint64_t lvm_vg_get_extent_size(const vg_t *vg)
-+{ return (uint64_t) vg->extent_size; }
-+
-+inline uint64_t lvm_vg_get_extent_count(const vg_t *vg)
-+{ return (uint64_t) vg->extent_count; }
-+
-+inline uint64_t lvm_vg_get_free_count(const vg_t *vg)
-+{ return (uint64_t) vg->free_count; }
-+
-+inline uint64_t lvm_vg_get_pv_count(const vg_t *vg)
-+{ return (uint64_t) vg->pv_count; }
-+
- char *lvm_vg_get_uuid(const vg_t *vg)
- {
- 	char uuid[64] __attribute((aligned(8)));
 -- 
 1.6.0.6
 
