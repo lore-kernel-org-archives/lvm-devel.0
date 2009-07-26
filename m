@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 13:08:00 -0000
-Subject: LVM2/test/api test.c
-Message-ID: <20090726130800.7194.qmail@sourceware.org>
+Date: 26 Jul 2009 14:36:53 -0000
+Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c
+Message-ID: <20090726143653.16658.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 13:08:00
+Changes by:	wysochanski at sourceware.org	2009-07-26 14:36:52
 
 Modified files:
-	test/api       : test.c 
+	liblvm         : .exported_symbols lvm.h lvm_lv.c 
 
 Log message:
-	Update test/api/test.c - correct list_vg_names and list_vg_ids.
+	Add lvm_vg_remove_lv liblvm function.
+	
+	Add a very simple version of lvm_vg_remove_lv.
+	Since we currently can only create linear LVs, this simple remove function
+	is adequate.  We must refactor lvremove_single a bit.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/test/api/test.c	2009/07/26 13:07:41	1.8
-+++ LVM2/test/api/test.c	2009/07/26 13:08:00	1.9
-@@ -54,9 +54,9 @@
- 	       "Create a linear LV\n");
- 	printf("'scan_vgs': "
- 	       "Scan the system for LVM metadata\n");
--	printf("'vg_list_names': "
-+	printf("'list_vg_names': "
- 	       "List the names of the VGs that exist in the system\n");
--	printf("'vg_list_ids': "
-+	printf("'list_vg_ids': "
- 	       "List the uuids of the VGs that exist in the system\n");
- 	printf("'vg_list_pvs vgname': "
- 	       "List the PVs that exist in VG vgname\n");
-@@ -247,7 +247,7 @@
- 	lvm_scan_vgs(libh);
+--- LVM2/liblvm/.exported_symbols	2009/07/26 13:06:59	1.10
++++ LVM2/liblvm/.exported_symbols	2009/07/26 14:36:52	1.11
+@@ -30,3 +30,4 @@
+ lvm_list_vg_names
+ lvm_list_vg_ids
+ lvm_vg_create_lv_linear
++lvm_vg_remove_lv
+--- LVM2/liblvm/lvm.h	2009/07/26 13:06:59	1.15
++++ LVM2/liblvm/lvm.h	2009/07/26 14:36:52	1.16
+@@ -117,6 +117,17 @@
+ lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
+ 
+ /**
++ * Remove a logical volume from a volume group.
++ * This API commits the change to disk and does _not_ require calling
++ * lvm_vg_write.
++ * Currently only removing linear LVs are possible.
++ *
++ * FIXME: This API should probably not commit to disk but require calling
++ * lvm_vg_write.
++ */
++int lvm_vg_remove_lv(lv_t *lv);
++
++/**
+  * Return stored error no describing last LVM API error.
+  *
+  * Users of liblvm should use lvm_errno to determine success or failure
+--- LVM2/liblvm/lvm_lv.c	2009/07/26 13:06:59	1.3
++++ LVM2/liblvm/lvm_lv.c	2009/07/26 14:36:52	1.4
+@@ -96,3 +96,9 @@
+ 	return lvl->lv;
  }
  
--static void _vg_list_names(lvm_t libh)
-+static void _list_vg_names(lvm_t libh)
- {
- 	struct dm_list *list;
- 	struct lvm_str_list *strl;
-@@ -261,7 +261,7 @@
- 	}
- }
- 
--static void _vg_list_ids(lvm_t libh)
-+static void _list_vg_ids(lvm_t libh)
- {
- 	struct dm_list *list;
- 	struct lvm_str_list *strl;
-@@ -368,10 +368,10 @@
- 			_pvs_in_vg(argv, argc);
- 		} else if (!strcmp(argv[0], "vg_list_lvs")) {
- 			_lvs_in_vg(argv, argc);
--		} else if (!strcmp(argv[0], "vg_list_names")) {
--			_vg_list_names(libh);
--		} else if (!strcmp(argv[0], "vg_list_ids")) {
--			_vg_list_ids(libh);
-+		} else if (!strcmp(argv[0], "list_vg_names")) {
-+			_list_vg_names(libh);
-+		} else if (!strcmp(argv[0], "list_vg_ids")) {
-+			_list_vg_ids(libh);
- 		} else if (!strcmp(argv[0], "scan_vgs")) {
- 			_scan_vgs(libh);
- 		} else if (!strcmp(argv[0], "vg_create_lv_linear")) {
++int lvm_vg_remove_lv(lv_t *lv)
++{
++	if (!lv || !lv->vg || vg_read_error(lv->vg))
++		return 0;
++	return lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT);
++}
 
 
