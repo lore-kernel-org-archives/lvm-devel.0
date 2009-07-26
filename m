@@ -1,76 +1,140 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Jul 2009 00:05:51 -0400
-Subject: [PATCH 6/8] Update vgcreate and vgextend man pages to clarify implicit pvcreate.
-In-Reply-To: <1248235553-13519-6-git-send-email-dwysocha@redhat.com>
-References: <1248235553-13519-1-git-send-email-dwysocha@redhat.com>
-	<1248235553-13519-2-git-send-email-dwysocha@redhat.com>
-	<1248235553-13519-3-git-send-email-dwysocha@redhat.com>
-	<1248235553-13519-4-git-send-email-dwysocha@redhat.com>
-	<1248235553-13519-5-git-send-email-dwysocha@redhat.com>
-	<1248235553-13519-6-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248235553-13519-7-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 26 Jul 2009 20:57:38 -0000
+Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c
+Message-ID: <20090726205738.32677.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-vgcreate and vgextend now implicitly call pvcreate on devices not
-currently initialized for LVM use.  Previously these commands would
-fail with an error, so clarify the new behavior in the man page.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-26 20:57:38
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- man/vgcreate.8.in |   14 ++++++++------
- man/vgextend.8.in |    5 +++++
- 2 files changed, 13 insertions(+), 6 deletions(-)
+Modified files:
+	liblvm         : .exported_symbols lvm.h lvm_lv.c 
 
-diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
-index 71bc136..6ec1d8e 100644
---- a/man/vgcreate.8.in
-+++ b/man/vgcreate.8.in
-@@ -21,16 +21,18 @@ vgcreate \- create a volume group
- .RB [ \-t | \-\-test ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
--.I VolumeGroupName PhysicalVolumePath
--.RI [ PhysicalVolumePath ...]
-+.I VolumeGroupName PhysicalDevicePath
-+.RI [ PhysicalDevicePath ...]
- .SH DESCRIPTION
- .B vgcreate
- creates a new volume group called
- .I VolumeGroupName
--using the block special device
--.IR PhysicalVolumePath
--previously configured for LVM with
--.BR pvcreate (8).
-+using the block special device \fIPhysicalDevicePath\fP.
-+If \fIPhysicalDevicePath\fP was not previously configured for LVM with
-+\fBpvcreate (8)\fP, the device will be initialized with the same
-+default values used with \fBpvcreate\fP.  If non-default
-+\fPpvcreate\fP values are are desired, \fBpvcreate\fP should be explicitly
-+called prior to calling \fBvgcreate\fP.
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .TP
-diff --git a/man/vgextend.8.in b/man/vgextend.8.in
-index 682cc5a..deb1cf3 100644
---- a/man/vgextend.8.in
-+++ b/man/vgextend.8.in
-@@ -11,6 +11,11 @@ VolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]
- vgextend allows you to add one or more initialized physical volumes ( see
- .B pvcreate(8)
- ) to an existing volume group to extend it in size.
-+If \fIPhysicalDevicePath\fP was not previously configured for LVM with
-+\fBpvcreate (8)\fP, the device will be initialized with the same
-+default values used with \fBpvcreate\fP.  If non-default
-+\fPpvcreate\fP values are are desired, \fBpvcreate\fP should be explicitly
-+called prior to calling \fBvgcreate\fP.
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .SH Examples
--- 
-1.6.0.6
+Log message:
+	Implement lvm_lv_activate and lvm_lv_deactivate liblvm calls.
+	
+	Limited implementation but other types of activation should probably have
+	separate calls.  We also currently do not handle pvmoves or lvconverts.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+
+--- LVM2/liblvm/.exported_symbols	2009/07/26 16:44:05	1.15
++++ LVM2/liblvm/.exported_symbols	2009/07/26 20:57:37	1.16
+@@ -12,6 +12,8 @@
+ lvm_vg_get_extent_count
+ lvm_vg_get_free_extent_count
+ lvm_vg_get_pv_count
++lvm_lv_activate
++lvm_lv_deactivate
+ lvm_lv_get_uuid
+ lvm_lv_get_name
+ lvm_lv_get_size
+--- LVM2/liblvm/lvm.h	2009/07/26 20:28:59	1.24
++++ LVM2/liblvm/lvm.h	2009/07/26 20:57:37	1.25
+@@ -443,6 +443,31 @@
+ lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
+ 
+ /**
++ * Activate a logical volume.
++ *
++ * This API is the equivalent of the lvm command "lvchange -ay".
++ *
++ * NOTE: This API cannot currently handle LVs with an in-progress pvmove or
++ * lvconvert.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  0 (success) or -1 (failure).
++ */
++int lvm_lv_activate(lv_t *lv);
++
++/**
++ * Deactivate a logical volume.
++ *
++ * This API is the equivalent of the lvm command "lvchange -an".
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  0 (success) or -1 (failure).
++ */
++int lvm_lv_deactivate(lv_t *lv);
++
++/**
+  * Remove a logical volume from a volume group.
+  *
+  * This function commits the change to disk and does _not_ require calling
+--- LVM2/liblvm/lvm_lv.c	2009/07/26 20:28:59	1.5
++++ LVM2/liblvm/lvm_lv.c	2009/07/26 20:57:37	1.6
+@@ -18,6 +18,8 @@
+ #include "lvm-string.h"
+ #include "defaults.h"
+ #include "segtype.h"
++#include "locking.h"
++
+ #include <string.h>
+ 
+ /* FIXME: have lib/report/report.c _disp function call lv_size()? */
+@@ -104,3 +106,51 @@
+ 		return -1;
+ 	return 0;
+ }
++
++int lvm_lv_activate(lv_t *lv)
++{
++	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
++		return -1;
++
++	/* FIXME: handle pvmove stuff later */
++	if (lv->status & LOCKED) {
++		log_error("Unable to activate locked LV\n");
++		return -1;
++	}
++
++	/* FIXME: handle lvconvert stuff later */
++	if (lv->status & CONVERTING) {
++		log_error("Unable to activate LV with in-progress lvconvert\n");
++		return -1;
++	}
++
++	if (lv_is_origin(lv)) {
++		log_verbose("Activating logical volume \"%s\" "
++			    "exclusively", lv->name);
++		if (!activate_lv_excl(lv->vg->cmd, lv)) {
++			log_error("Activate exclusive failed.\n");
++			return -1;
++		}
++	} else {
++		log_verbose("Activating logical volume \"%s\"",
++			    lv->name);
++		if (!activate_lv(lv->vg->cmd, lv)) {
++			log_error("Activate failed.\n");
++			return -1;
++		}
++	}
++	return 0;
++}
++
++int lvm_lv_deactivate(lv_t *lv)
++{
++	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
++		return -1;
++
++	log_verbose("Deactivating logical volume \"%s\"", lv->name);
++	if (!deactivate_lv(lv->vg->cmd, lv)) {
++		log_error("Deactivate failed.\n");
++		return -1;
++	}
++	return 0;
++}
 
 
