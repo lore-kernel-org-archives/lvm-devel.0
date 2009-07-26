@@ -1,133 +1,105 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun, 26 Jul 2009 15:13:03 -0400
-Subject: [PATCH 1/4] Implement lvm_lv_activate and lvm_lv_deactivate liblvm calls.
-In-Reply-To: <1248635586-8139-1-git-send-email-dwysocha@redhat.com>
+Date: Sun, 26 Jul 2009 15:13:04 -0400
+Subject: [PATCH 2/4] Add lvm_lv_is_active and lvm_lv_is_suspended.
+In-Reply-To: <1248635586-8139-2-git-send-email-dwysocha@redhat.com>
 References: <1248635586-8139-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248635586-8139-2-git-send-email-dwysocha@redhat.com>
+	<1248635586-8139-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248635586-8139-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Limited implementation but other types of activation should probably have
-separate calls.  We also currently do not handle pvmoves or lvconverts.
+Return whether an LV is active in the kernel (live table) or suspended
+(table suspend).
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
  liblvm/.exported_symbols |    2 ++
- liblvm/lvm.h             |   25 +++++++++++++++++++++++++
- liblvm/lvm_lv.c          |   44 ++++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 71 insertions(+), 0 deletions(-)
+ liblvm/lvm.h             |   18 ++++++++++++++++++
+ liblvm/lvm_lv.c          |   19 +++++++++++++++++++
+ 3 files changed, 39 insertions(+), 0 deletions(-)
 
 diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
-index d0e87df..6708154 100644
+index 6708154..9911423 100644
 --- a/liblvm/.exported_symbols
 +++ b/liblvm/.exported_symbols
-@@ -12,6 +12,8 @@ lvm_vg_get_extent_size
- lvm_vg_get_extent_count
- lvm_vg_get_free_extent_count
- lvm_vg_get_pv_count
-+lvm_lv_activate
-+lvm_lv_deactivate
+@@ -17,6 +17,8 @@ lvm_lv_deactivate
  lvm_lv_get_uuid
  lvm_lv_get_name
  lvm_lv_get_size
++lvm_lv_is_active
++lvm_lv_is_suspended
+ lvm_vg_create
+ lvm_vg_extend
+ lvm_vg_set_extent_size
 diff --git a/liblvm/lvm.h b/liblvm/lvm.h
-index ac64ca2..c5c4486 100644
+index c5c4486..2e8d5c6 100644
 --- a/liblvm/lvm.h
 +++ b/liblvm/lvm.h
-@@ -441,6 +441,31 @@ struct dm_list *lvm_vg_list_lvs(vg_t *vg);
- lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
+@@ -514,6 +514,24 @@ char *lvm_lv_get_name(const lv_t *lv);
+  */
+ uint64_t lvm_lv_get_size(const lv_t *lv);
+ 
++/**
++ * Get the current activation state of a logical volume.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  1 if the LV is active in the kernel, 0 if not
++ */
++uint64_t lvm_lv_is_active(const lv_t *lv);
++
++/**
++ * Get the current suspended state of a logical volume.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \return  1 if the LV is suspended in the kernel, 0 if not
++ */
++uint64_t lvm_lv_is_suspended(const lv_t *lv);
++
+ /************************** physical volume handling ************************/
  
  /**
-+ * Activate a logical volume.
-+ *
-+ * This API is the equivalent of the lvm command "lvchange -ay".
-+ *
-+ * NOTE: This API cannot currently handle LVs with an in-progress pvmove or
-+ * lvconvert.
-+ *
-+ * \param   lv
-+ *          Logical volume handle.
-+ * \return  Status code of 1 (success) or 0 (failure).
-+ */
-+int lvm_lv_activate(lv_t *lv);
-+
-+/**
-+ * Deactivate a logical volume.
-+ *
-+ * This API is the equivalent of the lvm command "lvchange -an".
-+ *
-+ * \param   lv
-+ *          Logical volume handle.
-+ * \return  Status code of 1 (success) or 0 (failure).
-+ */
-+int lvm_lv_deactivate(lv_t *lv);
-+
-+/**
-  * Remove a logical volume from a volume group.
-  *
-  * This function commits the change to disk and does _not_ require calling
 diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 556d457..4a12030 100644
+index 4a12030..7d0ec01 100644
 --- a/liblvm/lvm_lv.c
 +++ b/liblvm/lvm_lv.c
-@@ -18,6 +18,8 @@
- #include "lvm-string.h"
+@@ -19,6 +19,7 @@
  #include "defaults.h"
  #include "segtype.h"
-+#include "locking.h"
-+
+ #include "locking.h"
++#include "activate.h"
+ 
  #include <string.h>
  
- /* FIXME: have lib/report/report.c _disp function call lv_size()? */
-@@ -102,3 +104,45 @@ int lvm_vg_remove_lv(lv_t *lv)
- 		return 0;
- 	return lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT);
+@@ -49,6 +50,24 @@ char *lvm_lv_get_name(const lv_t *lv)
+ 	return name;
  }
-+
-+int lvm_lv_activate(lv_t *lv)
+ 
++uint64_t lvm_lv_is_active(const lv_t *lv)
 +{
-+	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
-+		return 0;
-+
-+	/* FIXME: handle pvmove stuff later */
-+	if (lv->status & LOCKED) {
-+		log_error("Unable to activate locked LV\n");
-+		return 0;
-+	}
-+
-+	/* FIXME: handle lvconvert stuff later */
-+	if (lv->status & CONVERTING) {
-+		log_error("Unable to activate LV with in-progress lvconvert\n");
-+		return 0;
-+	}
-+
-+	if (lv_is_origin(lv)) {
-+		log_verbose("Activating logical volume \"%s\" "
-+			    "exclusively", lv->name);
-+		if (!activate_lv_excl(lv->vg->cmd, lv))
-+			return_0;
-+	} else {
-+		log_verbose("Activating logical volume \"%s\"",
-+			    lv->name);
-+		if (!activate_lv(lv->vg->cmd, lv))
-+			return_0;
-+	}
-+	return 1;
++	struct lvinfo info;
++	if (lv_info(lv->vg->cmd, lv, &info, 1, 0) &&
++	    info.exists && info.live_table)
++		return 1;
++	return 0;
 +}
 +
-+int lvm_lv_deactivate(lv_t *lv)
++uint64_t lvm_lv_is_suspended(const lv_t *lv)
 +{
-+	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
-+		return 0;
-+
-+	log_verbose("Deactivating logical volume \"%s\"", lv->name);
-+	if (!deactivate_lv(lv->vg->cmd, lv))
-+		return_0;
-+	return 1;
++	struct lvinfo info;
++	if (lv_info(lv->vg->cmd, lv, &info, 1, 0) &&
++	    info.exists && info.suspended)
++		return 1;
++	return 0;
 +}
++
+ /* Set defaults for non-segment specific LV parameters */
+ static void _lv_set_default_params(struct lvcreate_params *lp,
+ 				   vg_t *vg, const char *lvname,
 -- 
 1.6.0.6
 
