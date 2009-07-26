@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 02:34:10 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
-Message-ID: <20090726023410.16989.qmail@sourceware.org>
+Date: 26 Jul 2009 02:34:36 -0000
+Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c
+Message-ID: <20090726023436.17181.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,120 +10,123 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 02:34:09
+Changes by:	wysochanski at sourceware.org	2009-07-26 02:34:36
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
-	tools          : lvcreate.c 
+	liblvm         : .exported_symbols lvm.h lvm_lv.c 
 
 Log message:
-	Move extents_from_size from lvcreate into internal library so we can reuse.
+	Add lvm_vg_create_lv_linear liblvm function.
+	
+	Create a default linear logical volume from a volume group.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.100&r2=1.101
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.266&r2=1.267
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.206&r2=1.207
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/lib/metadata/metadata-exported.h	2009/07/26 02:33:35	1.100
-+++ LVM2/lib/metadata/metadata-exported.h	2009/07/26 02:34:09	1.101
-@@ -495,6 +495,9 @@
- int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	      const char *new_name);
+--- LVM2/liblvm/.exported_symbols	2009/07/24 12:48:21	1.8
++++ LVM2/liblvm/.exported_symbols	2009/07/26 02:34:36	1.9
+@@ -21,3 +21,4 @@
+ lvm_vg_list_lvs
+ lvm_list_vg_names
+ lvm_list_vg_ids
++lvm_vg_create_lv_linear
+--- LVM2/liblvm/lvm.h	2009/07/26 01:54:40	1.13
++++ LVM2/liblvm/lvm.h	2009/07/26 02:34:36	1.14
+@@ -97,6 +97,26 @@
+ int lvm_reload_config(lvm_t libh);
  
-+uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
-+			   uint32_t extent_size);
+ /**
++ * Create a linear logical volume.
++ * This API commits the change to disk and does _not_ require calling
++ * lvm_vg_write.
++ * FIXME: This API should probably not commit to disk but require calling
++ * lvm_vg_write.  However, this appears to be non-trivial change until
++ * lv_create_single is refactored by segtype.
++ *
++ * \param   vg
++ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \param   name
++ *          Name of logical volume to create.
++ *
++ * \param   size
++ *          Size of logical volume in extents.
++ *
++ */
++lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
 +
- /* FIXME: refactor and reduce the size of this struct! */
- struct lvcreate_params {
- 	/* flags */
---- LVM2/lib/metadata/metadata.c	2009/07/26 02:02:22	1.266
-+++ LVM2/lib/metadata/metadata.c	2009/07/26 02:34:09	1.267
-@@ -680,6 +680,28 @@
- 	return NULL;
++/**
+  * Return stored error no describing last LVM API error.
+  *
+  * Users of liblvm should use lvm_errno to determine success or failure
+--- LVM2/liblvm/lvm_lv.c	2009/07/23 23:40:05	1.1
++++ LVM2/liblvm/lvm_lv.c	2009/07/26 02:34:36	1.2
+@@ -16,6 +16,9 @@
+ #include "lvm.h"
+ #include "metadata-exported.h"
+ #include "lvm-string.h"
++#include "defaults.h"
++#include "segtype.h"
++#include <string.h>
+ 
+ char *lvm_lv_get_uuid(const lv_t *lv)
+ {
+@@ -38,3 +41,52 @@
+ 	return name;
  }
  
-+uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
-+			   uint32_t extent_size)
++/* Set defaults for non-segment specific LV parameters */
++static void _lv_set_default_params(struct lvcreate_params *lp,
++				   vg_t *vg, const char *lvname,
++				   uint64_t extents)
 +{
-+	if (size % extent_size) {
-+		size += extent_size - size % extent_size;
-+		log_print("Rounding up size to full physical extent %s",
-+			  display_size(cmd, size));
-+	}
++	lp->zero = 1;
++	lp->major = -1;
++	lp->minor = -1;
++	lp->vg_name = vg->name;
++	lp->lv_name = lvname; /* FIXME: check this for safety */
++	lp->pvh = &vg->pvs;
 +
-+	if (size > (uint64_t) UINT32_MAX * extent_size) {
-+		log_error("Volume too large (%s) for extent size %s. "
-+			  "Upper limit is %s.",
-+			  display_size(cmd, size),
-+			  display_size(cmd, (uint64_t) extent_size),
-+			  display_size(cmd, (uint64_t) UINT32_MAX *
-+				       extent_size));
-+		return 0;
-+	}
-+
-+	return (uint64_t) size / extent_size;
++	lp->extents = extents;
++	lp->permission = LVM_READ | LVM_WRITE;
++	lp->read_ahead = DM_READ_AHEAD_NONE;
++	lp->alloc = ALLOC_INHERIT;
++	lp->tag = NULL;
 +}
 +
- static int _recalc_extents(uint32_t *extents, const char *desc1,
- 			   const char *desc2, uint32_t old_size,
- 			   uint32_t new_size)
---- LVM2/tools/lvcreate.c	2009/07/26 02:33:35	1.206
-+++ LVM2/tools/lvcreate.c	2009/07/26 02:34:09	1.207
-@@ -25,9 +25,6 @@
- 	int pv_count;
- };
- 
--static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
--				   uint32_t extent_size);
--
- static int _lvcreate_name_params(struct lvcreate_params *lp,
- 				 struct cmd_context *cmd,
- 				 int *pargc, char ***pargv)
-@@ -136,12 +133,12 @@
- 	uint32_t pv_extent_count;
- 
- 	if (lcp->size &&
--	    !(lp->extents = _extents_from_size(vg->cmd, lcp->size,
-+	    !(lp->extents = extents_from_size(vg->cmd, lcp->size,
- 					       vg->extent_size)))
- 		return_0;
- 
- 	if (lp->voriginsize &&
--	    !(lp->voriginextents = _extents_from_size(vg->cmd, lp->voriginsize,
-+	    !(lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
- 						      vg->extent_size)))
- 		return_0;
- 
-@@ -573,28 +570,6 @@
- 	return 1;
- }
- 
--static uint64_t _extents_from_size(struct cmd_context *cmd, uint64_t size,
--				   uint32_t extent_size)
--{
--	if (size % extent_size) {
--		size += extent_size - size % extent_size;
--		log_print("Rounding up size to full physical extent %s",
--			  display_size(cmd, size));
--	}
--
--	if (size > (uint64_t) UINT32_MAX * extent_size) {
--		log_error("Volume too large (%s) for extent size %s. "
--			  "Upper limit is %s.",
--			  display_size(cmd, size),
--			  display_size(cmd, (uint64_t) extent_size),
--			  display_size(cmd, (uint64_t) UINT32_MAX *
--				       extent_size));
--		return 0;
--	}
--
--	return (uint64_t) size / extent_size;
--}
--
- int lvcreate(struct cmd_context *cmd, int argc, char **argv)
- {
- 	int r = ECMD_PROCESSED;
++/* Set default for linear segment specific LV parameters */
++static void _lv_set_default_linear_params(struct cmd_context *cmd,
++					  struct lvcreate_params *lp)
++{
++	lp->segtype = get_segtype_from_string(cmd, "striped");
++	lp->stripes = 1;
++	lp->stripe_size = DEFAULT_STRIPESIZE * 2;
++}
++
++lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size)
++{
++	struct lvcreate_params lp;
++	uint64_t extents;
++	struct lv_list *lvl;
++
++	/* FIXME: check for proper VG access */
++	if (vg_read_error(vg))
++		return NULL;
++	memset(&lp, 0, sizeof(lp));
++	extents = extents_from_size(vg->cmd, size, vg->extent_size);
++	_lv_set_default_params(&lp, vg, name, extents);
++	_lv_set_default_linear_params(vg->cmd, &lp);
++	if (!lv_create_single(vg, &lp))
++		return NULL;
++	lvl = find_lv_in_vg(vg, name);
++	if (!lvl)
++		return NULL;
++	return lvl->lv;
++}
++
 
 
