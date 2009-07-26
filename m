@@ -1,153 +1,130 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Sat, 25 Jul 2009 18:14:56 -0400
-Subject: [PATCH 6/6] Add MD, partition and topology tests to the LVM2 test-suite
-In-Reply-To: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
-References: <1248560096-28641-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1248560096-28641-7-git-send-email-snitzer@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 26 Jul 2009 01:52:19 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20090726015219.5263.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add MD, partition, and topology tests to the LVM2 test-suite.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-26 01:52:19
 
-Added MD devices to the filter in test-utils.sh:prepare_lvmconf()
+Modified files:
+	lib/metadata   : metadata.c 
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- test/t-pvcreate-operation-md.sh |   86 ++++++++++++++++++++++++++++++++++++++++
- test/t-pvcreate-usage.sh        |   12 +++++
- test/test-utils.sh              |    2 
- 3 files changed, 99 insertions(+), 1 deletion(-)
- create mode 100644 test/t-pvcreate-operation-md.sh
+Log message:
+	Remove unneeded pv_create wrapper function.
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
-Index: LVM2/test/t-pvcreate-operation-md.sh
-===================================================================
---- /dev/null
-+++ LVM2/test/t-pvcreate-operation-md.sh
-@@ -0,0 +1,86 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# skip this test if mdadm or sfdisk aren't available
-+which mdadm || exit 200
-+which sfdisk || exit 200
-+
-+. ./test-utils.sh
-+
-+aux prepare_devs 2
-+
-+# Have MD use a non-standard name to avoid colliding with an existing MD device
-+mddev=/dev/md_lvm_test0
-+mddev_p=${mddev}p1
-+
-+cleanup_md() {
-+    mdadm --stop $mddev
-+    rm -f $mddev
-+    teardown
-+}
-+
-+# create 2 disk MD raid0 array (stripe_width=128K)
-+[ -b "$mddev" ] && exit 200
-+mdadm --create $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 $dev1 $dev2
-+trap 'aux cleanup_md' EXIT # cleanup this MD device at the end of the test
-+
-+# Test alignment of PV on MD without any MD-aware or topology-aware detection
-+# - should treat $mddev just like any other block device
-+pv_align="192.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
-+    $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# Test md_chunk_alignment independent of topology-aware detection
-+pv_align="256.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
-+    $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# Test newer topology-aware alignment detection
-+pv_align="256.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices { md_chunk_alignment=0 }' $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# partition MD array directly, depends on blkext in Linux >= 2.6.28
-+linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
-+if [ $linux_minor -gt 27 ]; then
-+    sfdisk $mddev <<EOF
-+,,83
-+EOF
-+    # make sure partition on MD is _not_ removed
-+    # - tests partition -> parent lookup via sysfs paths
-+    not pvcreate --metadatasize 128k $mddev
-+
-+    # verify alignment_offset padding is accounted for in pe_start
-+    # - topology infrastructure is available in Linux >= 2.6.31
-+    # - also tests partition -> parent lookup via sysfs paths
-+    base_mddev=`basename $mddev`
-+    base_mddev_p=`basename $mddev_p`
-+    sysfs_alignment_offset=/sys/block/${base_mddev}/${base_mddev_p}/alignment_offset
-+    [ -f "$sysfs_alignment_offset" ] && \
-+	alignment_offset=`cat $sysfs_alignment_offset` || \
-+	alignment_offset=0
-+
-+    if [ "$alignment_offset" = "512" ]; then
-+	pv_align="256.50K"
-+	pvcreate --metadatasize 128k $mddev_p
-+	check_pv_field_ $mddev_p pe_start $pv_align
-+	pvremove $mddev_p
-+    elif [ "$alignment_offset" = "2048" ]; then
-+	pv_align="258.00K"
-+	pvcreate --metadatasize 128k $mddev_p
-+	check_pv_field_ $mddev_p pe_start $pv_align
-+	pvremove $mddev_p
-+    fi
-+fi
-Index: LVM2/test/t-pvcreate-usage.sh
-===================================================================
---- LVM2.orig/test/t-pvcreate-usage.sh
-+++ LVM2/test/t-pvcreate-usage.sh
-@@ -116,6 +116,18 @@ check_pv_field_ $dev1 pe_start $pv_align
- pvcreate --metadatasize 128k --metadatacopies 2 --dataalignment 3.5k $dev1
- check_pv_field_ $dev1 pe_start $pv_align
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.260&r2=1.261
+
+--- LVM2/lib/metadata/metadata.c	2009/07/24 15:15:26	1.260
++++ LVM2/lib/metadata/metadata.c	2009/07/26 01:52:19	1.261
+@@ -44,16 +44,6 @@
+ 					uint64_t *label_sector,
+ 					int warnings, int scan_label_only);
  
-+# data area is aligned to 64k by default,
-+# data area has additional padding before its start
-+pv_align="195.50K"
-+pvcreate --metadatasize 128k --dataalignmentoffset 7s $dev1
-+check_pv_field_ $dev1 pe_start $pv_align
-+
-+# 2nd metadata area is created without problems when
-+# additional data area padding is used
-+pvcreate --metadatasize 128k --metadatacopies 2 --dataalignmentoffset 7s $dev1
-+check_pv_field_ $dev1 pv_mda_count 2
-+# FIXME: compare start of 2nd mda with and without --dataalignmentoffset
-+
- #COMM 'pv with LVM1 compatible data alignment can be convereted'
- #compatible == LVM1_PE_ALIGN == 64k
- pvcreate --dataalignment 256k $dev1
-Index: LVM2/test/test-utils.sh
-===================================================================
---- LVM2.orig/test/test-utils.sh
-+++ LVM2/test/test-utils.sh
-@@ -182,7 +182,7 @@ prepare_lvmconf() {
-   devices {
-     dir = "$G_dev_"
-     scan = "$G_dev_"
--    filter = [ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
-+    filter = [ "a|/dev/md.*|", "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
-     cache_dir = "$G_root_/etc"
-     sysfs_scan = 0
-   }
+-static struct physical_volume *_pv_create(const struct format_type *fmt,
+-				  struct device *dev,
+-				  struct id *id, uint64_t size,
+-				  unsigned long data_alignment,
+-				  uint64_t pe_start,
+-				  uint32_t existing_extent_count,
+-				  uint32_t existing_extent_size,
+-				  int pvmetadatacopies,
+-				  uint64_t pvmetadatasize, struct dm_list *mdas);
+-
+ static int _pv_write(struct cmd_context *cmd __attribute((unused)),
+ 		     struct physical_volume *pv,
+ 	     	     struct dm_list *mdas, int64_t label_sector);
+@@ -964,44 +954,6 @@
+ 	return 1;
+ }
+ 
+-/**
+- * pv_create - initialize a physical volume for use with a volume group
+- * @fmt: format type
+- * @dev: PV device to initialize
+- * @id: PV UUID to use for initialization
+- * @size: size of the PV in sectors
+- * @data_alignment: requested alignment of data
+- * @pe_start: physical extent start
+- * @existing_extent_count
+- * @existing_extent_size
+- * @pvmetadatacopies
+- * @pvmetadatasize
+- * @mdas
+- *
+- * Returns:
+- *   PV handle - physical volume initialized successfully
+- *   NULL - invalid parameter or problem initializing the physical volume
+- *
+- * Note:
+- *   FIXME - liblvm todo - tidy up arguments for external use (fmt, mdas, etc)
+- */
+-pv_t *pv_create(const struct cmd_context *cmd,
+-		struct device *dev,
+-		struct id *id, uint64_t size,
+-		unsigned long data_alignment,
+-		uint64_t pe_start,
+-		uint32_t existing_extent_count,
+-		uint32_t existing_extent_size,
+-		int pvmetadatacopies,
+-		uint64_t pvmetadatasize, struct dm_list *mdas)
+-{
+-	return _pv_create(cmd->fmt, dev, id, size, data_alignment, pe_start,
+-			  existing_extent_count,
+-			  existing_extent_size,
+-			  pvmetadatacopies,
+-			  pvmetadatasize, mdas);
+-}
+-
+ static void _free_pv(struct dm_pool *mem, struct physical_volume *pv)
+ {
+ 	dm_pool_free(mem, pv);
+@@ -1035,8 +987,28 @@
+ 	return pv;
+ }
+ 
+-/* Sizes in sectors */
+-static struct physical_volume *_pv_create(const struct format_type *fmt,
++/**
++ * pv_create - initialize a physical volume for use with a volume group
++ *
++ * @fmt: format type
++ * @dev: PV device to initialize
++ * @size: size of the PV in sectors
++ * @data_alignment: requested alignment of data
++ * @pe_start: physical extent start
++ * @existing_extent_count
++ * @existing_extent_size
++ * @pvmetadatacopies
++ * @pvmetadatasize
++ * @mdas
++ *
++ * Returns:
++ *   PV handle - physical volume initialized successfully
++ *   NULL - invalid parameter or problem initializing the physical volume
++ *
++ * Note:
++ *   FIXME: shorten argument list and replace with explict 'set' functions
++ */
++struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  struct device *dev,
+ 				  struct id *id, uint64_t size,
+ 				  unsigned long data_alignment,
+@@ -1046,6 +1018,7 @@
+ 				  int pvmetadatacopies,
+ 				  uint64_t pvmetadatasize, struct dm_list *mdas)
+ {
++	const struct format_type *fmt = cmd->fmt;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = _alloc_pv(mem, dev);
+ 
 
 
