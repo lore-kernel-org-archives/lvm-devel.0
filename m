@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Jul 2009 14:36:53 -0000
-Subject: LVM2/liblvm .exported_symbols lvm.h lvm_lv.c
-Message-ID: <20090726143653.16658.qmail@sourceware.org>
+Date: 26 Jul 2009 14:37:16 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20090726143716.16821.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,112 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-26 14:36:52
+Changes by:	wysochanski at sourceware.org	2009-07-26 14:37:15
 
 Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_lv.c 
+	test/api       : test.c 
 
 Log message:
-	Add lvm_vg_remove_lv liblvm function.
-	
-	Add a very simple version of lvm_vg_remove_lv.
-	Since we currently can only create linear LVs, this simple remove function
-	is adequate.  We must refactor lvremove_single a bit.
+	Update test/api/test.c to call lvm_lv_remove.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
 
---- LVM2/liblvm/.exported_symbols	2009/07/26 13:06:59	1.10
-+++ LVM2/liblvm/.exported_symbols	2009/07/26 14:36:52	1.11
-@@ -30,3 +30,4 @@
- lvm_list_vg_names
- lvm_list_vg_ids
- lvm_vg_create_lv_linear
-+lvm_vg_remove_lv
---- LVM2/liblvm/lvm.h	2009/07/26 13:06:59	1.15
-+++ LVM2/liblvm/lvm.h	2009/07/26 14:36:52	1.16
-@@ -117,6 +117,17 @@
- lv_t *lvm_vg_create_lv_linear(vg_t *vg, const char *name, uint64_t size);
+--- LVM2/test/api/test.c	2009/07/26 13:08:00	1.9
++++ LVM2/test/api/test.c	2009/07/26 14:37:15	1.10
+@@ -50,6 +50,8 @@
  
- /**
-+ * Remove a logical volume from a volume group.
-+ * This API commits the change to disk and does _not_ require calling
-+ * lvm_vg_write.
-+ * Currently only removing linear LVs are possible.
-+ *
-+ * FIXME: This API should probably not commit to disk but require calling
-+ * lvm_vg_write.
-+ */
-+int lvm_vg_remove_lv(lv_t *lv);
-+
-+/**
-  * Return stored error no describing last LVM API error.
-  *
-  * Users of liblvm should use lvm_errno to determine success or failure
---- LVM2/liblvm/lvm_lv.c	2009/07/26 13:06:59	1.3
-+++ LVM2/liblvm/lvm_lv.c	2009/07/26 14:36:52	1.4
-@@ -96,3 +96,9 @@
- 	return lvl->lv;
+ static void _show_help(void)
+ {
++	printf("'vg_remove_lv vgname lvname': "
++	       "Remove a LV\n");
+ 	printf("'vg_create_lv_linear vgname lvname size_in_bytes': "
+ 	       "Create a linear LV\n");
+ 	printf("'scan_vgs': "
+@@ -116,6 +118,23 @@
+ 	return 1;
  }
  
-+int lvm_vg_remove_lv(lv_t *lv)
++/* FIXME: this should be per vg */
++static lv_t *_lookup_lv_by_name(const char *name)
 +{
-+	if (!lv || !lv->vg || vg_read_error(lv->vg))
-+		return 0;
-+	return lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT);
++	lv_t *lv;
++
++	if (!name) {
++		printf ("Invalid LV name\n");
++		return NULL;
++	}
++	if (!(lv = dm_hash_lookup(_lvname_hash, name))) {
++		printf ("Can't find %s in LVs - run vg_create_lv first\n",
++			name);
++		return NULL;
++	}
++	return lv;
 +}
++
+ static vg_t *_lookup_vg_by_name(char **argv, int argc)
+ {
+ 	vg_t *vg;
+@@ -206,6 +225,7 @@
+ 		dm_hash_remove(_vgname_hash, lvm_vg_get_name(vg));
+ 		lvm_vg_close(vg);
+ 	}
++	/* FIXME: remove LVs from lvname_hash */
+ }
+ 
+ static void _show_one_vg(vg_t *vg)
+@@ -297,6 +317,26 @@
+ 	}
+ }
+ 
++static void _vg_remove_lv(char **argv, int argc)
++{
++	lv_t *lv;
++
++	if (argc < 3) {
++		printf("Please enter vgname, lvname\n");
++		return;
++	}
++	if (!(lv = _lookup_lv_by_name(argv[2])))
++		return;
++	if (!lvm_vg_remove_lv(lv))
++		printf("Error ");
++	else {
++		printf("Success ");
++		dm_hash_remove(_lvname_hash, argv[2]);
++	}
++	printf("removing LV %s in VG %s\n",
++		argv[2], argv[1]);
++}
++
+ static void _vg_create_lv_linear(char **argv, int argc)
+ {
+ 	vg_t *vg;
+@@ -311,10 +351,12 @@
+ 	lv = lvm_vg_create_lv_linear(vg, argv[2], atol(argv[3]));
+ 	if (!lv)
+ 		printf("Error ");
+-	else
++	else {
+ 		printf("Success ");
++		dm_hash_insert(_lvname_hash, argv[2], lv);
++	}
+ 	printf("creating LV %s in VG %s\n",
+-		argv[2], lvm_vg_get_name(vg));
++		argv[2], argv[1]);
+ }
+ 
+ static int lvmapi_test_shell(lvm_t libh)
+@@ -362,6 +404,8 @@
+ 			_vg_open(argv, argc, libh);
+ 		} else if (!strcmp(argv[0], "vg_close")) {
+ 			_vg_close(argv, argc);
++		} else if (!strcmp(argv[0], "vg_remove_lv")) {
++			_vg_remove_lv(argv, argc);
+ 		} else if (!strcmp(argv[0], "vgs_open")) {
+ 			_list_open_vgs();
+ 		} else if (!strcmp(argv[0], "vg_list_pvs")) {
 
 
