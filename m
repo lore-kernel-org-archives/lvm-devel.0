@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 27 Jul 2009 17:44:29 -0000
-Subject: LVM2/liblvm .exported_symbols lvm.h lvm_vg.c
-Message-ID: <20090727174429.22237.qmail@sourceware.org>
+Date: 27 Jul 2009 17:44:58 -0000
+Subject: LVM2/test/api vgtest.c
+Message-ID: <20090727174458.22424.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,21 +10,13 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-27 17:44:29
+Changes by:	wysochanski at sourceware.org	2009-07-27 17:44:58
 
 Modified files:
-	liblvm         : .exported_symbols lvm.h lvm_vg.c 
+	test/api       : vgtest.c 
 
 Log message:
-	Add lvm_vg_reduce to liblvm2app
-	
-	Extend lvm_vg_write to remove pvs removed in lvm_vg_reduce. The lvm
-	volume_group internal structure removed_pvs is used for that. The list is
-	empty afterwards.
-	
-	Add new test for vg->pvs emptyness to lvm_vg_write to prevent to write empty
-	vgs. This is needed because of lvm_vg_reduce and lv_vg_create, which creates
-	empty vgs.
+	Update test/api/vgtest.c to include lvm_vg_reduce.
 	
 	Signed-off-by: Thomas Woerner <twoerner@redhat.com>
 	Acked-by: Dave Wysochanski <dwysocha@redhat.com>
@@ -32,106 +24,154 @@ Log message:
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.17&r2=1.18
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/liblvm/.exported_symbols	2009/07/26 20:58:11	1.17
-+++ LVM2/liblvm/.exported_symbols	2009/07/27 17:44:29	1.18
-@@ -21,6 +21,7 @@
- lvm_lv_is_suspended
- lvm_vg_create
- lvm_vg_extend
-+lvm_vg_reduce
- lvm_vg_set_extent_size
- lvm_vg_write
- lvm_vg_open
---- LVM2/liblvm/lvm.h	2009/07/27 11:00:18	1.29
-+++ LVM2/liblvm/lvm.h	2009/07/27 17:44:29	1.30
-@@ -331,6 +331,24 @@
- int lvm_vg_extend(vg_t *vg, const char *device);
+--- LVM2/test/api/vgtest.c	2009/07/26 20:29:56	1.5
++++ LVM2/test/api/vgtest.c	2009/07/27 17:44:58	1.6
+@@ -26,8 +26,63 @@
+ vg_t *vg;
+ const char *vg_name = "my_vg";
+ const char *device = "/dev/loop3";
++const char *device2 = "/dev/loop4";
+ uint64_t size = 1024;
  
- /**
-+ * Reduce a VG by removing an unused device.
-+ *
-+ * This API requires calling lvm_vg_write to commit the change to disk.
-+ * After successfully removing a device, use lvm_vg_write to commit the new VG
-+ * to disk.  Upon failure, retry the operation or release the VG handle with
-+ * lvm_vg_close.
-+ *
-+ * \param   vg
-+ *          VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ *
-+ * \param   device
-+ *          Name of device to remove from VG.
-+ *
-+ * \return  0 (success) or -1 (failure).
-+ */
-+int lvm_vg_reduce(vg_t *vg, const char *device);
++#define vg_create(vg_name) \
++	printf("Creating VG %s\n", vg_name); \
++	vg = lvm_vg_create(handle, vg_name); \
++	if (!vg) { \
++		fprintf(stderr, "Error creating volume group %s\n", vg_name); \
++		goto bad; \
++	}
++#define vg_extend(vg, dev) \
++	printf("Extending VG %s by %s\n", vg_name, dev); \
++	status = lvm_vg_extend(vg, dev); \
++	if (status) { \
++		fprintf(stderr, "Error extending volume group %s " \
++			"with device %s\n", vg_name, dev); \
++		goto bad; \
++	}
++#define vg_commit(vg) \
++	printf("Committing VG %s to disk\n", vg_name); \
++	status = lvm_vg_write(vg); \
++	if (status) { \
++		fprintf(stderr, "Creation of volume group '%s' on " \
++			"device '%s' failed\n", \
++			lvm_vg_get_name(vg), device); \
++		goto bad; \
++	}
++#define vg_open(vg_name, mode) \
++	printf("Opening VG %s %s\n", vg_name, mode); \
++	vg = lvm_vg_open(handle, vg_name, mode, 0); \
++	if (!vg) { \
++		fprintf(stderr, "Error opening volume group %s\n", vg_name); \
++		goto bad; \
++	}
++#define vg_close(vg) \
++	printf("Closing VG %s\n", vg_name); \
++	if (lvm_vg_close(vg)) { \
++		fprintf(stderr, "Error closing volume group %s\n", vg_name); \
++		goto bad; \
++	}
++#define vg_reduce(vg, dev) \
++	printf("Reducing VG %s by %s\n", vg_name, dev); \
++	status = lvm_vg_reduce(vg, dev); \
++	if (status) { \
++		fprintf(stderr, "Error reducing volume group %s " \
++			"by device %s\n", vg_name, dev); \
++		goto bad; \
++	}
++#define vg_remove(vg) \
++	printf("Removing VG %s from system\n", vg_name); \
++	status = lvm_vg_remove(vg); \
++	if (status) { \
++		fprintf(stderr, "Revmoval of volume group '%s' failed\n", \
++			vg_name); \
++		goto bad; \
++	}
 +
-+/**
-  * Set the extent size of a VG.
-  *
-  * This API requires calling lvm_vg_write to commit the change to disk.
---- LVM2/liblvm/lvm_vg.c	2009/07/27 11:00:18	1.18
-+++ LVM2/liblvm/lvm_vg.c	2009/07/27 17:44:29	1.19
-@@ -68,6 +68,16 @@
- 	return 0;
- }
- 
-+int lvm_vg_reduce(vg_t *vg, const char *device)
-+{
-+	if (vg_read_error(vg))
-+		return -1;
-+
-+	if (!vg_reduce(vg, (char *)device))
-+		return -1;
-+	return 0;
-+}
-+
- int lvm_vg_set_extent_size(vg_t *vg, uint32_t new_size)
+ int main(int argc, char *argv[])
  {
- 	if (vg_read_error(vg))
-@@ -80,15 +90,40 @@
+ 	int status;
+@@ -41,20 +96,8 @@
+ 		goto bad;
+ 	}
  
- int lvm_vg_write(vg_t *vg)
- {
-+	struct pv_list *pvl;
-+
- 	if (vg_read_error(vg))
- 		return -1;
+-	printf("Creating VG %s\n", vg_name);
+-	vg = lvm_vg_create(handle, vg_name);
+-	if (!vg) {
+-		fprintf(stderr, "Error creating volume group %s\n", vg_name);
+-		goto bad;
+-	}
+-
+-	printf("Extending VG %s\n", vg_name);
+-	status = lvm_vg_extend(vg, device);
+-	if (status) {
+-		fprintf(stderr, "Error extending volume group %s "
+-			"with device %s\n", vg_name, device);
+-		goto bad;
+-	}
++	vg_create(vg_name);
++	vg_extend(vg, device);
  
-+	if (dm_list_empty(&vg->pvs)) {
-+		log_error("Volume group %s does not contain any "
-+			  "physical volumes.\n", vg->name);
-+		return -1;
-+	}
-+
-+	if (! dm_list_empty(&vg->removed_pvs)) {
-+		if (!lock_vol(vg->cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-+			log_error("Can't get lock for orphan PVs");
-+			return 0;
-+		}
-+	}
-+
- 	if (!archive(vg))
- 		return -1;
+ 	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
+ 	status = lvm_vg_set_extent_size(vg, size);
+@@ -65,38 +108,27 @@
+ 		goto bad;
+ 	}
  
- 	/* Store VG on disk(s) */
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return -1;
-+
-+	if (! dm_list_empty(&vg->removed_pvs)) {
-+		dm_list_iterate_items(pvl, &vg->removed_pvs) {
-+			pv_write_orphan(vg->cmd, pvl->pv);
-+			/* FIXME: do pvremove / label_remove()? */
-+		}
-+		dm_list_init(&vg->removed_pvs);
-+		unlock_vg(vg->cmd, VG_ORPHANS);
-+	}
-+
- 	return 0;
- }
+-	printf("Committing VG %s to disk\n", vg_name);
+-	status = lvm_vg_write(vg);
+-	if (status) {
+-		fprintf(stderr, "Creation of volume group '%s' on "
+-			"device '%s' failed\n",
+-			vg_name, device);
+-		goto bad;
+-	}
++	vg_commit(vg);
++	vg_close(vg);
  
+-	printf("Closing VG %s\n", vg_name);
+-	if (lvm_vg_close(vg))
+-		goto bad;
+-	printf("Re-opening VG %s for reading\n", vg_name);
+-	vg = lvm_vg_open(handle, vg_name, "r", 0);
+-	if (!vg)
+-		goto bad;
+-	printf("Closing VG %s\n", vg_name);
+-	if (lvm_vg_close(vg))
+-		goto bad;
+-	printf("Re-opening VG %s for writing\n", vg_name);
+-	vg = lvm_vg_open(handle, vg_name, "w", 0);
+-	if (!vg)
+-		goto bad;
+-	printf("Removing VG %s from system\n", vg_name);
+-	status = lvm_vg_remove(vg);
+-	if (status) {
+-		fprintf(stderr, "Revmoval of volume group '%s' failed\n",
+-			vg_name);
+-		goto bad;
+-	}
++	vg_open(vg_name, "r");
++	vg_close(vg);
++
++	vg_open(vg_name, "w");
++	vg_extend(vg, device2);
++	vg_reduce(vg, device);
++	vg_commit(vg);
++	vg_close(vg);
++
++	vg_open(vg_name, "w");
++	vg_extend(vg, device);
++	vg_commit(vg);
++	vg_close(vg);
++
++	vg_open(vg_name, "w");
++	vg_remove(vg);
++	vg_close(vg);
+ 
+-	lvm_vg_close(vg);
+ 	lvm_destroy(handle);
+ 	printf("liblvm vgcreate unit test PASS\n");
+ 	_exit(0);
 
 
