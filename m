@@ -1,132 +1,97 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 27 Jul 2009 17:45:23 -0000
-Subject: LVM2/test/api test.c
-Message-ID: <20090727174523.23110.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 27 Jul 2009 14:27:04 -0400
+Subject: [PATCH] Add skeletons of lvm_lv_resize and lvm_pv_resize - not yet implemented.
+Message-ID: <1248719224-6658-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-27 17:45:22
+From: Thomas Woerner <twoerner@redhat.com>
 
-Modified files:
-	test/api       : test.c 
+These lower-priority interfaces are not currently implemented in liblvm
+but are on the TODO list in the near term.
 
-Log message:
-	Update test/api/test.c to include lvm_vg_reduce and lvm_vg_extend.
-	
-	Author: Dave Wysochanski <dwysocha@redhat.com>
+Author: Thomas Woerner <twoerner@redhat.com>
+Acked-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ liblvm/lvm.h    |   24 ++++++++++++++++++++++++
+ liblvm/lvm_lv.c |    7 +++++++
+ liblvm/lvm_pv.c |    7 +++++++
+ 3 files changed, 38 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-
---- LVM2/test/api/test.c	2009/07/26 20:59:02	1.16
-+++ LVM2/test/api/test.c	2009/07/27 17:45:21	1.17
-@@ -72,6 +72,10 @@
- 	       "List the VGs that are currently open\n");
- 	printf("'vgs': "
- 	       "List all VGs known to the system\n");
-+	printf("'vg_extend vgname device: "
-+	       "Issue a lvm_vg_extend() API call on VG 'vgname'\n");
-+	printf("'vg_reduce vgname device: "
-+	       "Issue a lvm_vg_reduce() API call on VG 'vgname'\n");
- 	printf("'vg_open vgname ['r' | 'w']': "
- 	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
- 	printf("'vg_close vgname': "
-@@ -172,6 +176,80 @@
- 	}
- }
+diff --git a/liblvm/lvm.h b/liblvm/lvm.h
+index 1247d44..0602e1b 100644
+--- a/liblvm/lvm.h
++++ b/liblvm/lvm.h
+@@ -565,6 +565,18 @@ uint64_t lvm_lv_is_active(const lv_t *lv);
+  */
+ uint64_t lvm_lv_is_suspended(const lv_t *lv);
  
-+static void _remove_device_from_pvname_hash(struct dm_list *pvs, const char *name)
++/**
++ * Resize logical volume to new_size bytes.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \param   new_size
++ *          New size in bytes.
++ * \return  0 (success) or -1 (failure).
++ *
++ */
++int lvm_lv_resize(const lv_t *lv, uint64_t new_size);
++
+ /************************** physical volume handling ************************/
+ 
+ /**
+@@ -616,4 +628,16 @@ char *lvm_pv_get_name(const pv_t *pv);
+  */
+ uint64_t lvm_pv_get_mda_count(const pv_t *pv);
+ 
++/**
++ * Resize physical volume to new_size bytes.
++ *
++ * \param   pv
++ *          Physical volume handle.
++ * \param   new_size
++ *          New size in bytes.
++ * \return  0 (success) or -1 (failure).
++ *
++ */
++int lvm_pv_resize(const pv_t *pv, uint64_t new_size);
++
+ #endif /* _LIB_LVM_H */
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index a2436ed..08865ec 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -173,3 +173,10 @@ int lvm_lv_deactivate(lv_t *lv)
+ 	}
+ 	return 0;
+ }
++
++int lvm_lv_resize(const lv_t *lv, uint64_t new_size)
 +{
-+	struct lvm_pv_list *pvl;
-+	dm_list_iterate_items(pvl, pvs) {
-+		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
-+			dm_hash_remove(_pvname_hash, name);
-+	}
++	/* FIXME: add lv resize code here */
++	log_error("NOT IMPLEMENTED YET\n");
++	return -1;
 +}
-+static void _add_device_to_pvname_hash(struct dm_list *pvs, const char *name)
-+{
-+	struct lvm_pv_list *pvl;
-+	dm_list_iterate_items(pvl, pvs) {
-+		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
-+			dm_hash_insert(_pvname_hash, name, pvl->pv);
-+	}
-+}
-+static void _vg_reduce(char **argv, int argc, lvm_t libh)
-+{
-+	vg_t *vg;
-+	struct dm_list *pvs;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
-+	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
-+		printf ("VG not open\n");
-+		return;
-+	}
-+	if (lvm_vg_reduce(vg, argv[2])) {
-+		printf("Error reducing %s by %s\n", argv[1], argv[2]);
-+		return;
-+	}
-+
-+	printf("Success reducing vg %s by %s\n", argv[1], argv[2]);
-+
-+	/*
-+	 * Add the device into the hashes for lookups
-+	 */
-+	pvs = lvm_vg_list_pvs(vg);
-+	if (pvs && !dm_list_empty(pvs))
-+		_remove_device_from_pvname_hash(pvs, argv[2]);
-+}
-+
-+static void _vg_extend(char **argv, int argc, lvm_t libh)
-+{
-+	vg_t *vg;
-+	struct dm_list *pvs;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
-+	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
-+		printf ("VG not open\n");
-+		return;
-+	}
-+	if (lvm_vg_extend(vg, argv[2])) {
-+		printf("Error extending %s with %s\n", argv[1], argv[2]);
-+		return;
-+	}
-+
-+	printf("Success extending vg %s with %s\n", argv[1], argv[2]);
-+
-+	/*
-+	 * Add the device into the hashes for lookups
-+	 */
-+	pvs = lvm_vg_list_pvs(vg);
-+	if (pvs && !dm_list_empty(pvs))
-+		_add_device_to_pvname_hash(pvs, argv[2]);
-+}
-+
- static void _vg_open(char **argv, int argc, lvm_t libh)
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index ea3cee3..872412c 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -42,3 +42,10 @@ uint64_t lvm_pv_get_mda_count(const pv_t *pv)
  {
- 	vg_t *vg;
-@@ -443,6 +521,10 @@
- 			break;
- 		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
- 			_show_help();
-+		} else if (!strcmp(argv[0], "vg_extend")) {
-+			_vg_extend(argv, argc, libh);
-+		} else if (!strcmp(argv[0], "vg_reduce")) {
-+			_vg_reduce(argv, argc, libh);
- 		} else if (!strcmp(argv[0], "vg_open")) {
- 			_vg_open(argv, argc, libh);
- 		} else if (!strcmp(argv[0], "vg_close")) {
+ 	return (uint64_t) pv_mda_count(pv);
+ }
++
++int lvm_pv_resize(const pv_t *pv, uint64_t new_size)
++{
++	/* FIXME: add pv resize code here */
++	log_error("NOT IMPLEMENTED YET\n");
++	return -1;
++}
+-- 
+1.6.0.6
 
 
