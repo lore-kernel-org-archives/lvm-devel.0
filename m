@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 27 Jul 2009 21:03:15 -0000
-Subject: LVM2/liblvm lvm_lv.c lvm_pv.c lvm_vg.c
-Message-ID: <20090727210315.18525.qmail@sourceware.org>
+Date: 27 Jul 2009 21:10:30 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20090727211030.21131.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,136 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-27 21:03:15
+Changes by:	wysochanski at sourceware.org	2009-07-27 21:10:30
 
 Modified files:
-	liblvm         : lvm_lv.c lvm_pv.c lvm_vg.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Remove unnecessary \n's from log_error in liblvm.
+	Update WHATS_NEW for latest liblvm changes
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1204&r2=1.1205
 
---- LVM2/liblvm/lvm_lv.c	2009/07/27 21:00:50	1.8
-+++ LVM2/liblvm/lvm_lv.c	2009/07/27 21:03:15	1.9
-@@ -133,13 +133,13 @@
- 
- 	/* FIXME: handle pvmove stuff later */
- 	if (lv->status & LOCKED) {
--		log_error("Unable to activate locked LV\n");
-+		log_error("Unable to activate locked LV");
- 		return -1;
- 	}
- 
- 	/* FIXME: handle lvconvert stuff later */
- 	if (lv->status & CONVERTING) {
--		log_error("Unable to activate LV with in-progress lvconvert\n");
-+		log_error("Unable to activate LV with in-progress lvconvert");
- 		return -1;
- 	}
- 
-@@ -147,14 +147,14 @@
- 		log_verbose("Activating logical volume \"%s\" "
- 			    "exclusively", lv->name);
- 		if (!activate_lv_excl(lv->vg->cmd, lv)) {
--			log_error("Activate exclusive failed.\n");
-+			log_error("Activate exclusive failed.");
- 			return -1;
- 		}
- 	} else {
- 		log_verbose("Activating logical volume \"%s\"",
- 			    lv->name);
- 		if (!activate_lv(lv->vg->cmd, lv)) {
--			log_error("Activate failed.\n");
-+			log_error("Activate failed.");
- 			return -1;
- 		}
- 	}
-@@ -168,7 +168,7 @@
- 
- 	log_verbose("Deactivating logical volume \"%s\"", lv->name);
- 	if (!deactivate_lv(lv->vg->cmd, lv)) {
--		log_error("Deactivate failed.\n");
-+		log_error("Deactivate failed.");
- 		return -1;
- 	}
- 	return 0;
-@@ -177,6 +177,6 @@
- int lvm_lv_resize(const lv_t *lv, uint64_t new_size)
- {
- 	/* FIXME: add lv resize code here */
--	log_error("NOT IMPLEMENTED YET\n");
-+	log_error("NOT IMPLEMENTED YET");
- 	return -1;
- }
---- LVM2/liblvm/lvm_pv.c	2009/07/27 21:00:50	1.3
-+++ LVM2/liblvm/lvm_pv.c	2009/07/27 21:03:15	1.4
-@@ -46,6 +46,6 @@
- int lvm_pv_resize(const pv_t *pv, uint64_t new_size)
- {
- 	/* FIXME: add pv resize code here */
--	log_error("NOT IMPLEMENTED YET\n");
-+	log_error("NOT IMPLEMENTED YET");
- 	return -1;
- }
---- LVM2/liblvm/lvm_vg.c	2009/07/27 17:44:29	1.19
-+++ LVM2/liblvm/lvm_vg.c	2009/07/27 21:03:15	1.20
-@@ -51,7 +51,7 @@
- 	/* If device not initialized, pvcreate it */
- 	if (!pv_by_path(vg->cmd, device) &&
- 	   (!pvcreate_single(vg->cmd, device, NULL))) {
--		log_error("Unable to initialize device for LVM use\n");
-+		log_error("Unable to initialize device for LVM use");
- 		unlock_vg(vg->cmd, VG_ORPHANS);
- 		return -1;
- 	}
-@@ -97,7 +97,7 @@
- 
- 	if (dm_list_empty(&vg->pvs)) {
- 		log_error("Volume group %s does not contain any "
--			  "physical volumes.\n", vg->name);
-+			  "physical volumes.", vg->name);
- 		return -1;
- 	}
- 
-@@ -179,7 +179,7 @@
- 		return NULL;
- 
- 	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.\n");
-+		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
- 		return NULL;
- 	}
- 	dm_list_init(list);
-@@ -187,7 +187,7 @@
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		if (!(pvs = dm_pool_zalloc(vg->vgmem, sizeof(*pvs)))) {
- 			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_pv_list.\n");
-+				"Memory allocation fail for lvm_pv_list.");
- 			return NULL;
- 		}
- 		pvs->pv = pvl->pv;
-@@ -206,7 +206,7 @@
- 		return NULL;
- 
- 	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.\n");
-+		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
- 		return NULL;
- 	}
- 	dm_list_init(list);
-@@ -214,7 +214,7 @@
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
- 			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_lv_list.\n");
-+				"Memory allocation fail for lvm_lv_list.");
- 			return NULL;
- 		}
- 		lvs->lv = lvl->lv;
+--- LVM2/WHATS_NEW	2009/07/26 22:19:14	1.1204
++++ LVM2/WHATS_NEW	2009/07/27 21:10:30	1.1205
+@@ -1,5 +1,17 @@
+ Version 2.02.50 - 
+ ================================
++  Remove unnecessary \n's from log_error in liblvm.
++  Add config_reload and config_override to test.c, change prompt.
++  Add lvm_config_override - allow caller to override LVM config.
++  Refactor _override_settings into override_config_tree_from_string and move.
++  Add skeletons of lvm_lv_resize and lvm_pv_resize - not yet implemented.
++  Update test/api/test.c to include lvm_vg_reduce and lvm_vg_extend.
++  Add lvm_vg_reduce to liblvm.
++  Add vg_reduce to metadata.c and metadata-exported.h.
++  Update error return and comments for lvm_list_vg_names/uuids.
++  Rename lvm_reload_config to lvm_config_reload.
++  Update display.c to use vg_free(vg) instead of duplicating the calculation.
++  More liblvm header file cleanups.
+   Update liblvm unit tests in test/api for latest liblvm changes.
+   Add lvm_lv_is_active and lvm_lv_is_suspended liblvm APIs.
+   Add lvm_lv_activate and lvm_lv_deactivate liblvm APIs.
 
 
