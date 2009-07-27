@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 27 Jul 2009 21:01:59 -0000
-Subject: LVM2 lib/config/config.c lib/config/config.h t ...
-Message-ID: <20090727210159.2082.qmail@sourceware.org>
+Date: 27 Jul 2009 21:02:19 -0000
+Subject: LVM2/liblvm .exported_symbols lvm.h lvm_base.c
+Message-ID: <20090727210219.4604.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,86 +10,85 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-27 21:01:59
+Changes by:	wysochanski at sourceware.org	2009-07-27 21:02:19
 
 Modified files:
-	lib/config     : config.c config.h 
-	tools          : lvmcmdline.c 
+	liblvm         : .exported_symbols lvm.h lvm_base.c 
 
 Log message:
-	Rename _override_settings into override_config_tree_from_string and move.
+	Add lvm_config_override - allow caller to override config, similar to --config.
 	
-	Move _override_settings from tools/lvmcmdline.c into lib/config/config.c
-	and export so we can re-use in liblvm.
+	Allowing the caller to override the LVM configuration with an API will
+	enable them to use things such as device filters.
+	While very flexible, there is some danger to this API in that it will
+	make it harder to debug setups that have a changing config and deduce
+	what might have happened.  At some point we may want to limit the scope
+	of this API but for now it is as open as the --config option to lvm commands.
+	
+	Update exported symbols.  When I renamed lvm_reload_config to lvm_config_reload
+	I forgot to rename so I renamed that one here.
+	
+	This I believe is the last liblvm API for now.  ;-)
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.h.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/lib/config/config.c	2009/07/09 11:29:00	1.74
-+++ LVM2/lib/config/config.c	2009/07/27 21:01:56	1.75
-@@ -186,6 +186,17 @@
- 	return cft;
+--- LVM2/liblvm/.exported_symbols	2009/07/27 17:44:29	1.18
++++ LVM2/liblvm/.exported_symbols	2009/07/27 21:02:17	1.19
+@@ -1,6 +1,7 @@
+ lvm_create
+ lvm_destroy
+-lvm_reload_config
++lvm_config_reload
++lvm_config_override
+ lvm_pv_get_name
+ lvm_pv_get_uuid
+ lvm_pv_get_mda_count
+--- LVM2/liblvm/lvm.h	2009/07/27 21:00:50	1.31
++++ LVM2/liblvm/lvm.h	2009/07/27 21:02:17	1.32
+@@ -149,6 +149,22 @@
+ int lvm_config_reload(lvm_t libh);
+ 
+ /**
++ * Override the LVM configuration with a configuration string.
++ *
++ * This API is equivalent to the --config option on lvm commands.
++ * FIXME: submit a patch to document the --config option
++ * Once this API has been used to over-ride the configuration,
++ * you should use lvm_config_reload to apply the new settings.
++ * \param   libh
++ *          Handle obtained from lvm_create.
++ * \param   config_settings
++ *          LVM configuration string to apply.  See the lvm.conf file man page
++ *          for the format of the config string.
++ * \return  0 (success) or -1 (failure).
++ */
++int lvm_config_override(lvm_t libh, const char *config_string);
++
++/**
+  * Return stored error no describing last LVM API error.
+  *
+  * Users of liblvm should use lvm_errno to determine success or failure
+--- LVM2/liblvm/lvm_base.c	2009/07/27 10:18:51	1.6
++++ LVM2/liblvm/lvm_base.c	2009/07/27 21:02:17	1.7
+@@ -72,6 +72,14 @@
+ 	return 0;
  }
  
-+int override_config_tree_from_string(struct cmd_context *cmd,
-+				     const char *config_settings)
++int lvm_config_override(lvm_t libh, const char *config_settings)
 +{
-+	if (!(cmd->cft_override = create_config_tree_from_string(cmd,config_settings))) {
-+		log_error("Failed to set overridden configuration entries.");
-+		return 1;
-+	}
-+
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++	if (override_config_tree_from_string(cmd, config_settings))
++		return -1;
 +	return 0;
 +}
 +
- int read_config_fd(struct config_tree *cft, struct device *dev,
- 		   off_t offset, size_t size, off_t offset2, size_t size2,
- 		   checksum_fn_t checksum_fn, uint32_t checksum)
---- LVM2/lib/config/config.h	2009/07/09 11:29:00	1.27
-+++ LVM2/lib/config/config.h	2009/07/27 21:01:58	1.28
-@@ -56,6 +56,8 @@
- struct config_tree *create_config_tree(const char *filename, int keep_open);
- struct config_tree *create_config_tree_from_string(struct cmd_context *cmd,
- 						   const char *config_settings);
-+int override_config_tree_from_string(struct cmd_context *cmd,
-+				     const char *config_settings);
- void destroy_config_tree(struct config_tree *cft);
- 
- typedef uint32_t (*checksum_fn_t) (uint32_t initial, const void *buf, uint32_t size);
---- LVM2/tools/lvmcmdline.c	2009/07/27 21:01:36	1.103
-+++ LVM2/tools/lvmcmdline.c	2009/07/27 21:01:58	1.104
-@@ -887,16 +887,6 @@
- 	return ret;
- }
- 
--static int _override_settings(struct cmd_context *cmd, const char *config_settings)
--{
--	if (!(cmd->cft_override = create_config_tree_from_string(cmd, config_settings))) {
--		log_error("Failed to set overridden configuration entries.");
--		return EINVALID_CMD_LINE;
--	}
--
--	return 0;
--}
--
- static void _apply_settings(struct cmd_context *cmd)
+ int lvm_errno(lvm_t libh)
  {
- 	init_debug(cmd->current_settings.debug);
-@@ -986,9 +976,11 @@
- 	set_cmd_name(cmd->command->name);
- 
- 	if (arg_count(cmd, config_ARG))
--		if ((ret = _override_settings(cmd,
--				arg_str_value(cmd, config_ARG, ""))))
-+		if ((ret = override_config_tree_from_string(cmd,
-+			     arg_str_value(cmd, config_ARG, "")))) {
-+			ret = EINVALID_CMD_LINE;
- 			goto_out;
-+		}
- 
- 	if (arg_count(cmd, config_ARG) || !cmd->config_valid || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
+ 	return stored_errno();
 
 
