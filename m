@@ -1,98 +1,49 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 27 Jul 2009 16:01:44 -0400
-Subject: [PATCH] Add skeletons of lvm_lv_resize and lvm_pv_resize - not yet implemented.
-In-Reply-To: <1248724909-20369-1-git-send-email-dwysocha@redhat.com>
+Date: Mon, 27 Jul 2009 16:01:45 -0400
+Subject: [PATCH] Refactor _override_settings to take the new config string as input.
+In-Reply-To: <1248724909-20369-2-git-send-email-dwysocha@redhat.com>
 References: <1248724909-20369-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248724909-20369-2-git-send-email-dwysocha@redhat.com>
+	<1248724909-20369-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1248724909-20369-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Thomas Woerner <twoerner@redhat.com>
+We will re-use this function from liblvm.
 
-These lower-priority interfaces are not currently implemented in liblvm
-but are on the TODO list in the near term.
-
-Author: Thomas Woerner <twoerner@redhat.com>
-Acked-by: Dave Wysochanski <dwysocha@redhat.com>
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/lvm.h    |   24 ++++++++++++++++++++++++
- liblvm/lvm_lv.c |    7 +++++++
- liblvm/lvm_pv.c |    7 +++++++
- 3 files changed, 38 insertions(+), 0 deletions(-)
+ tools/lvmcmdline.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/liblvm/lvm.h b/liblvm/lvm.h
-index 1247d44..0602e1b 100644
---- a/liblvm/lvm.h
-+++ b/liblvm/lvm.h
-@@ -565,6 +565,18 @@ uint64_t lvm_lv_is_active(const lv_t *lv);
-  */
- uint64_t lvm_lv_is_suspended(const lv_t *lv);
- 
-+/**
-+ * Resize logical volume to new_size bytes.
-+ *
-+ * \param   lv
-+ *          Logical volume handle.
-+ * \param   new_size
-+ *          New size in bytes.
-+ * \return  0 (success) or -1 (failure).
-+ *
-+ */
-+int lvm_lv_resize(const lv_t *lv, uint64_t new_size);
-+
- /************************** physical volume handling ************************/
- 
- /**
-@@ -616,4 +628,16 @@ char *lvm_pv_get_name(const pv_t *pv);
-  */
- uint64_t lvm_pv_get_mda_count(const pv_t *pv);
- 
-+/**
-+ * Resize physical volume to new_size bytes.
-+ *
-+ * \param   pv
-+ *          Physical volume handle.
-+ * \param   new_size
-+ *          New size in bytes.
-+ * \return  0 (success) or -1 (failure).
-+ *
-+ */
-+int lvm_pv_resize(const pv_t *pv, uint64_t new_size);
-+
- #endif /* _LIB_LVM_H */
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index a2436ed..08865ec 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -173,3 +173,10 @@ int lvm_lv_deactivate(lv_t *lv)
- 	}
- 	return 0;
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 81adfce..3ca75a7 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -887,9 +887,9 @@ int help(struct cmd_context *cmd __attribute((unused)), int argc, char **argv)
+ 	return ret;
  }
-+
-+int lvm_lv_resize(const lv_t *lv, uint64_t new_size)
-+{
-+	/* FIXME: add lv resize code here */
-+	log_error("NOT IMPLEMENTED YET\n");
-+	return -1;
-+}
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index ea3cee3..872412c 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -42,3 +42,10 @@ uint64_t lvm_pv_get_mda_count(const pv_t *pv)
+ 
+-static int _override_settings(struct cmd_context *cmd)
++static int _override_settings(struct cmd_context *cmd, const char *config_settings)
  {
- 	return (uint64_t) pv_mda_count(pv);
- }
-+
-+int lvm_pv_resize(const pv_t *pv, uint64_t new_size)
-+{
-+	/* FIXME: add pv resize code here */
-+	log_error("NOT IMPLEMENTED YET\n");
-+	return -1;
-+}
+-	if (!(cmd->cft_override = create_config_tree_from_string(cmd, arg_str_value(cmd, config_ARG, "")))) {
++	if (!(cmd->cft_override = create_config_tree_from_string(cmd, config_settings))) {
+ 		log_error("Failed to set overridden configuration entries.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+@@ -986,7 +986,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	set_cmd_name(cmd->command->name);
+ 
+ 	if (arg_count(cmd, config_ARG))
+-		if ((ret = _override_settings(cmd)))
++		if ((ret = _override_settings(cmd,
++				arg_str_value(cmd, config_ARG, ""))))
+ 			goto_out;
+ 
+ 	if (arg_count(cmd, config_ARG) || !cmd->config_valid || config_files_changed(cmd)) {
 -- 
 1.6.0.6
 
