@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 27 Jul 2009 17:44:58 -0000
-Subject: LVM2/test/api vgtest.c
-Message-ID: <20090727174458.22424.qmail@sourceware.org>
+Date: 27 Jul 2009 17:45:23 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20090727174523.23110.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,168 +10,123 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-27 17:44:58
+Changes by:	wysochanski at sourceware.org	2009-07-27 17:45:22
 
 Modified files:
-	test/api       : vgtest.c 
+	test/api       : test.c 
 
 Log message:
-	Update test/api/vgtest.c to include lvm_vg_reduce.
-	
-	Signed-off-by: Thomas Woerner <twoerner@redhat.com>
-	Acked-by: Dave Wysochanski <dwysocha@redhat.com>
+	Update test/api/test.c to include lvm_vg_reduce and lvm_vg_extend.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/test/api/vgtest.c	2009/07/26 20:29:56	1.5
-+++ LVM2/test/api/vgtest.c	2009/07/27 17:44:58	1.6
-@@ -26,8 +26,63 @@
- vg_t *vg;
- const char *vg_name = "my_vg";
- const char *device = "/dev/loop3";
-+const char *device2 = "/dev/loop4";
- uint64_t size = 1024;
+--- LVM2/test/api/test.c	2009/07/26 20:59:02	1.16
++++ LVM2/test/api/test.c	2009/07/27 17:45:21	1.17
+@@ -72,6 +72,10 @@
+ 	       "List the VGs that are currently open\n");
+ 	printf("'vgs': "
+ 	       "List all VGs known to the system\n");
++	printf("'vg_extend vgname device: "
++	       "Issue a lvm_vg_extend() API call on VG 'vgname'\n");
++	printf("'vg_reduce vgname device: "
++	       "Issue a lvm_vg_reduce() API call on VG 'vgname'\n");
+ 	printf("'vg_open vgname ['r' | 'w']': "
+ 	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
+ 	printf("'vg_close vgname': "
+@@ -172,6 +176,80 @@
+ 	}
+ }
  
-+#define vg_create(vg_name) \
-+	printf("Creating VG %s\n", vg_name); \
-+	vg = lvm_vg_create(handle, vg_name); \
-+	if (!vg) { \
-+		fprintf(stderr, "Error creating volume group %s\n", vg_name); \
-+		goto bad; \
++static void _remove_device_from_pvname_hash(struct dm_list *pvs, const char *name)
++{
++	struct lvm_pv_list *pvl;
++	dm_list_iterate_items(pvl, pvs) {
++		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
++			dm_hash_remove(_pvname_hash, name);
 +	}
-+#define vg_extend(vg, dev) \
-+	printf("Extending VG %s by %s\n", vg_name, dev); \
-+	status = lvm_vg_extend(vg, dev); \
-+	if (status) { \
-+		fprintf(stderr, "Error extending volume group %s " \
-+			"with device %s\n", vg_name, dev); \
-+		goto bad; \
++}
++static void _add_device_to_pvname_hash(struct dm_list *pvs, const char *name)
++{
++	struct lvm_pv_list *pvl;
++	dm_list_iterate_items(pvl, pvs) {
++		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
++			dm_hash_insert(_pvname_hash, name, pvl->pv);
 +	}
-+#define vg_commit(vg) \
-+	printf("Committing VG %s to disk\n", vg_name); \
-+	status = lvm_vg_write(vg); \
-+	if (status) { \
-+		fprintf(stderr, "Creation of volume group '%s' on " \
-+			"device '%s' failed\n", \
-+			lvm_vg_get_name(vg), device); \
-+		goto bad; \
++}
++static void _vg_reduce(char **argv, int argc, lvm_t libh)
++{
++	vg_t *vg;
++	struct dm_list *pvs;
++
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return;
 +	}
-+#define vg_open(vg_name, mode) \
-+	printf("Opening VG %s %s\n", vg_name, mode); \
-+	vg = lvm_vg_open(handle, vg_name, mode, 0); \
-+	if (!vg) { \
-+		fprintf(stderr, "Error opening volume group %s\n", vg_name); \
-+		goto bad; \
++	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
++	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
++		printf ("VG not open\n");
++		return;
 +	}
-+#define vg_close(vg) \
-+	printf("Closing VG %s\n", vg_name); \
-+	if (lvm_vg_close(vg)) { \
-+		fprintf(stderr, "Error closing volume group %s\n", vg_name); \
-+		goto bad; \
-+	}
-+#define vg_reduce(vg, dev) \
-+	printf("Reducing VG %s by %s\n", vg_name, dev); \
-+	status = lvm_vg_reduce(vg, dev); \
-+	if (status) { \
-+		fprintf(stderr, "Error reducing volume group %s " \
-+			"by device %s\n", vg_name, dev); \
-+		goto bad; \
-+	}
-+#define vg_remove(vg) \
-+	printf("Removing VG %s from system\n", vg_name); \
-+	status = lvm_vg_remove(vg); \
-+	if (status) { \
-+		fprintf(stderr, "Revmoval of volume group '%s' failed\n", \
-+			vg_name); \
-+		goto bad; \
++	if (lvm_vg_reduce(vg, argv[2])) {
++		printf("Error reducing %s by %s\n", argv[1], argv[2]);
++		return;
 +	}
 +
- int main(int argc, char *argv[])
++	printf("Success reducing vg %s by %s\n", argv[1], argv[2]);
++
++	/*
++	 * Add the device into the hashes for lookups
++	 */
++	pvs = lvm_vg_list_pvs(vg);
++	if (pvs && !dm_list_empty(pvs))
++		_remove_device_from_pvname_hash(pvs, argv[2]);
++}
++
++static void _vg_extend(char **argv, int argc, lvm_t libh)
++{
++	vg_t *vg;
++	struct dm_list *pvs;
++
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return;
++	}
++	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
++	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
++		printf ("VG not open\n");
++		return;
++	}
++	if (lvm_vg_extend(vg, argv[2])) {
++		printf("Error extending %s with %s\n", argv[1], argv[2]);
++		return;
++	}
++
++	printf("Success extending vg %s with %s\n", argv[1], argv[2]);
++
++	/*
++	 * Add the device into the hashes for lookups
++	 */
++	pvs = lvm_vg_list_pvs(vg);
++	if (pvs && !dm_list_empty(pvs))
++		_add_device_to_pvname_hash(pvs, argv[2]);
++}
++
+ static void _vg_open(char **argv, int argc, lvm_t libh)
  {
- 	int status;
-@@ -41,20 +96,8 @@
- 		goto bad;
- 	}
- 
--	printf("Creating VG %s\n", vg_name);
--	vg = lvm_vg_create(handle, vg_name);
--	if (!vg) {
--		fprintf(stderr, "Error creating volume group %s\n", vg_name);
--		goto bad;
--	}
--
--	printf("Extending VG %s\n", vg_name);
--	status = lvm_vg_extend(vg, device);
--	if (status) {
--		fprintf(stderr, "Error extending volume group %s "
--			"with device %s\n", vg_name, device);
--		goto bad;
--	}
-+	vg_create(vg_name);
-+	vg_extend(vg, device);
- 
- 	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
- 	status = lvm_vg_set_extent_size(vg, size);
-@@ -65,38 +108,27 @@
- 		goto bad;
- 	}
- 
--	printf("Committing VG %s to disk\n", vg_name);
--	status = lvm_vg_write(vg);
--	if (status) {
--		fprintf(stderr, "Creation of volume group '%s' on "
--			"device '%s' failed\n",
--			vg_name, device);
--		goto bad;
--	}
-+	vg_commit(vg);
-+	vg_close(vg);
- 
--	printf("Closing VG %s\n", vg_name);
--	if (lvm_vg_close(vg))
--		goto bad;
--	printf("Re-opening VG %s for reading\n", vg_name);
--	vg = lvm_vg_open(handle, vg_name, "r", 0);
--	if (!vg)
--		goto bad;
--	printf("Closing VG %s\n", vg_name);
--	if (lvm_vg_close(vg))
--		goto bad;
--	printf("Re-opening VG %s for writing\n", vg_name);
--	vg = lvm_vg_open(handle, vg_name, "w", 0);
--	if (!vg)
--		goto bad;
--	printf("Removing VG %s from system\n", vg_name);
--	status = lvm_vg_remove(vg);
--	if (status) {
--		fprintf(stderr, "Revmoval of volume group '%s' failed\n",
--			vg_name);
--		goto bad;
--	}
-+	vg_open(vg_name, "r");
-+	vg_close(vg);
-+
-+	vg_open(vg_name, "w");
-+	vg_extend(vg, device2);
-+	vg_reduce(vg, device);
-+	vg_commit(vg);
-+	vg_close(vg);
-+
-+	vg_open(vg_name, "w");
-+	vg_extend(vg, device);
-+	vg_commit(vg);
-+	vg_close(vg);
-+
-+	vg_open(vg_name, "w");
-+	vg_remove(vg);
-+	vg_close(vg);
- 
--	lvm_vg_close(vg);
- 	lvm_destroy(handle);
- 	printf("liblvm vgcreate unit test PASS\n");
- 	_exit(0);
+ 	vg_t *vg;
+@@ -443,6 +521,10 @@
+ 			break;
+ 		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
+ 			_show_help();
++		} else if (!strcmp(argv[0], "vg_extend")) {
++			_vg_extend(argv, argc, libh);
++		} else if (!strcmp(argv[0], "vg_reduce")) {
++			_vg_reduce(argv, argc, libh);
+ 		} else if (!strcmp(argv[0], "vg_open")) {
+ 			_vg_open(argv, argc, libh);
+ 		} else if (!strcmp(argv[0], "vg_close")) {
 
 
