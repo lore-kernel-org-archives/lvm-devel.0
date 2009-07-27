@@ -1,103 +1,97 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 27 Jul 2009 16:01:49 -0400
-Subject: [PATCH] Add config_reload and config_override to test.c.
-In-Reply-To: <1248724909-20369-6-git-send-email-dwysocha@redhat.com>
-References: <1248724909-20369-1-git-send-email-dwysocha@redhat.com>
-	<1248724909-20369-2-git-send-email-dwysocha@redhat.com>
-	<1248724909-20369-3-git-send-email-dwysocha@redhat.com>
-	<1248724909-20369-4-git-send-email-dwysocha@redhat.com>
-	<1248724909-20369-5-git-send-email-dwysocha@redhat.com>
-	<1248724909-20369-6-git-send-email-dwysocha@redhat.com>
-Message-ID: <1248724909-20369-7-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 27 Jul 2009 21:00:52 -0000
+Subject: LVM2/liblvm lvm.h lvm_lv.c lvm_pv.c
+Message-ID: <20090727210052.32557.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-  PV         PV UUID                                VG
-  /dev/loop1 A95EvV-iqmb-ZFuJ-u8MV-Npwn-wlc2-Ul1Mnn vg1
-  /dev/loop0 R16FDG-OmoS-HNGt-LSZY-OAlC-7qeU-t2gztp vg1
-lvm> config_override loop0
-Success overriding LVM configuration
-lvm> config_reload
-Success reloading LVM configuration
-lvm> vg_open vg1
-Couldn't find device with uuid 'A95EvV-iqmb-ZFuJ-u8MV-Npwn-wlc2-Ul1Mnn'.
-Success opening vg vg1
-lvm> vg_close vg1
-lvm> quit
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-27 21:00:51
 
-Maybe a bug in lvm_vg_open for missing pvs but the filter seems to work.
+Modified files:
+	liblvm         : lvm.h lvm_lv.c lvm_pv.c 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/api/test.c |   37 +++++++++++++++++++++++++++++++++++++
- 1 files changed, 37 insertions(+), 0 deletions(-)
+Log message:
+	Add skeletons of lvm_lv_resize and lvm_pv_resize - not yet implemented.
+	
+	These lower-priority interfaces are not currently implemented in liblvm
+	but are on the TODO list in the near term.
+	
+	Author: Thomas Woerner <twoerner@redhat.com>
+	Acked-by: Dave Wysochanski <dwysocha@redhat.com>
 
-diff --git a/test/api/test.c b/test/api/test.c
-index 3234beb..7ed339b 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -80,6 +80,10 @@ static void _show_help(void)
- 	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
- 	printf("'vg_close vgname': "
- 	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
-+	printf("'config_reload': "
-+	       "Issue a lvm_config_reload() API to reload LVM config\n");
-+	printf("'config_override' device: "
-+	       "Issue a lvm_config_override() with accept device filter\n");
- 	printf("'quit': exit the program\n");
- }
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm.h.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+
+--- LVM2/liblvm/lvm.h	2009/07/27 17:44:29	1.30
++++ LVM2/liblvm/lvm.h	2009/07/27 21:00:50	1.31
+@@ -565,6 +565,18 @@
+  */
+ uint64_t lvm_lv_is_suspended(const lv_t *lv);
  
-@@ -221,6 +225,35 @@ static void _vg_reduce(char **argv, int argc, lvm_t libh)
- 		_remove_device_from_pvname_hash(pvs, argv[2]);
- }
++/**
++ * Resize logical volume to new_size bytes.
++ *
++ * \param   lv
++ *          Logical volume handle.
++ * \param   new_size
++ *          New size in bytes.
++ * \return  0 (success) or -1 (failure).
++ *
++ */
++int lvm_lv_resize(const lv_t *lv, uint64_t new_size);
++
+ /************************** physical volume handling ************************/
  
-+static void _config_override(char **argv, int argc, lvm_t libh)
+ /**
+@@ -616,4 +628,16 @@
+  */
+ uint64_t lvm_pv_get_mda_count(const pv_t *pv);
+ 
++/**
++ * Resize physical volume to new_size bytes.
++ *
++ * \param   pv
++ *          Physical volume handle.
++ * \param   new_size
++ *          New size in bytes.
++ * \return  0 (success) or -1 (failure).
++ *
++ */
++int lvm_pv_resize(const pv_t *pv, uint64_t new_size);
++
+ #endif /* _LIB_LVM_H */
+--- LVM2/liblvm/lvm_lv.c	2009/07/26 20:58:11	1.7
++++ LVM2/liblvm/lvm_lv.c	2009/07/27 21:00:50	1.8
+@@ -173,3 +173,10 @@
+ 	}
+ 	return 0;
+ }
++
++int lvm_lv_resize(const lv_t *lv, uint64_t new_size)
 +{
-+	int rc;
-+	char tmp[64];
-+
-+	if (argc < 2) {
-+		printf ("Please enter device\n");
-+		return;
-+	}
-+	snprintf(tmp, 63, "devices{filter=[\"a|%s|\", \"r|.*|\"]}", argv[1]);
-+	rc = lvm_config_override(libh, tmp);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("overriding LVM configuration\n");
++	/* FIXME: add lv resize code here */
++	log_error("NOT IMPLEMENTED YET\n");
++	return -1;
 +}
-+
-+static void _config_reload(char **argv, int argc, lvm_t libh)
-+{
-+	int rc;
-+	rc = lvm_config_reload(libh);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("reloading LVM configuration\n");
-+}
-+
- static void _vg_extend(char **argv, int argc, lvm_t libh)
+--- LVM2/liblvm/lvm_pv.c	2009/07/26 13:06:59	1.2
++++ LVM2/liblvm/lvm_pv.c	2009/07/27 21:00:50	1.3
+@@ -42,3 +42,10 @@
  {
- 	vg_t *vg;
-@@ -521,6 +554,10 @@ static int lvmapi_test_shell(lvm_t libh)
- 			break;
- 		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
- 			_show_help();
-+		} else if (!strcmp(argv[0], "config_reload")) {
-+			_config_reload(argv, argc, libh);
-+		} else if (!strcmp(argv[0], "config_override")) {
-+			_config_override(argv, argc, libh);
- 		} else if (!strcmp(argv[0], "vg_extend")) {
- 			_vg_extend(argv, argc, libh);
- 		} else if (!strcmp(argv[0], "vg_reduce")) {
--- 
-1.6.0.6
+ 	return (uint64_t) pv_mda_count(pv);
+ }
++
++int lvm_pv_resize(const pv_t *pv, uint64_t new_size)
++{
++	/* FIXME: add pv resize code here */
++	log_error("NOT IMPLEMENTED YET\n");
++	return -1;
++}
 
 
