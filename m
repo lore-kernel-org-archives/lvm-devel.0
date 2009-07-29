@@ -1,59 +1,48 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 30 Jul 2009 19:07:11 -0400
-Subject: Re: [PATCH 0/3] LVM2 topology support (patchset 1)
-In-Reply-To: <1248995081-19092-1-git-send-email-snitzer@redhat.com>
-References: <1248995081-19092-1-git-send-email-snitzer@redhat.com>
-Message-ID: <20090730230711.GA19123@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 29 Jul 2009 18:38:28 -0000
+Subject: LVM2/liblvm lvm2app.h lvm_base.c
+Message-ID: <20090729183828.31831.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-07-29 18:38:27
 
-Err, redundant push from the wrong subdirectory... correct patchset (#2)
-push to follow.
+Modified files:
+	liblvm         : lvm2app.h lvm_base.c 
 
-Sorry for the noise.
+Log message:
+	Don't include lvm-version.h in exported liblvm file!
+	
+	Move include of lvm-version.h into lvm_base.c where it belongs.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
 
-On Thu, Jul 30 2009 at  7:04pm -0400,
-Mike Snitzer <snitzer@redhat.com> wrote:
-
-> Split the overall LVM2 topology patchset into 2 sets.
-> This first patchset is the core of the LVM2 topology support; the second
-> patchset is more straight-forward.
-> 
-> First 2 patches are just fixes.
-> 
-> The --dataalignmentoffset patch (3) now adds the dataalignmentoffset to
-> the first mda (rather than leaving an unused gap between the first mda
-> and pe_start).  _text_pv_setup() was updated to make certain there isn't
-> a double-adjustment of pe_start.
-> 
-> Mike Snitzer (3):
->   Formalize pe_start policy as split between .pv_setup and .pv_write.
->   Fix _mda_setup() to not check first mda's size before pe_align rounding.
->   Add --dataalignmentoffset to pvcreate to shift start of aligned data area.
-> 
->  WHATS_NEW                        |    3 ++
->  lib/format1/format1.c            |    1 +
->  lib/format_pool/format_pool.c    |    1 +
->  lib/format_text/archiver.c       |    2 +-
->  lib/format_text/format-text.c    |   60 +++++++++++++++++++++++++++++++------
->  lib/metadata/metadata-exported.h |    3 ++
->  lib/metadata/metadata.c          |   30 +++++++++++++++++--
->  lib/metadata/metadata.h          |    3 ++
->  man/pvcreate.8.in                |   20 +++++++++++--
->  tools/args.h                     |    1 +
->  tools/commands.h                 |    7 ++--
->  tools/pvcreate.c                 |   21 ++++++++++++-
->  tools/vgconvert.c                |    2 +-
->  13 files changed, 132 insertions(+), 22 deletions(-)
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+--- LVM2/liblvm/lvm2app.h	2009/07/29 13:26:01	1.1
++++ LVM2/liblvm/lvm2app.h	2009/07/29 18:38:27	1.2
+@@ -14,7 +14,6 @@
+ #ifndef _LIB_LVM2APP_H
+ #define _LIB_LVM2APP_H
+ 
+-#include "lvm-version.h"
+ #include "libdevmapper.h"
+ 
+ #include <stdint.h>
+--- LVM2/liblvm/lvm_base.c	2009/07/29 13:26:01	1.12
++++ LVM2/liblvm/lvm_base.c	2009/07/29 18:38:27	1.13
+@@ -16,6 +16,7 @@
+ #include "lvm2app.h"
+ #include "toolcontext.h"
+ #include "locking.h"
++#include "lvm-version.h"
+ 
+ const char *lvm_library_get_version(void)
+ {
 
 
