@@ -1,65 +1,77 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Wed, 29 Jul 2009 16:46:17 -0400
-Subject: [PATCH 1/3] Formalize pe_start policy as split between .pv_setup and .pv_write.
+Date: Wed, 29 Jul 2009 16:46:18 -0400
+Subject: [PATCH 2/3] Fix _mda_setup() to not check first mda's size before pe_align rounding.
 In-Reply-To: <1248900379-28002-1-git-send-email-snitzer@redhat.com>
 References: <1248900379-28002-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1248900379-28002-2-git-send-email-snitzer@redhat.com>
+Message-ID: <1248900379-28002-3-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Document existing pe_start policy.
-Fix issue in _text_pv_setup() where existing pe_start case could have
-the pv->pe_start set to pv->pe_align even though pe_start shouldn't ever
-change.
+Without this fix rounding the end of the first mda to a pe_align
+boundary could silently exceed the disk_size.
+
+Final 'if (start1 + mda_size1 > disk_size)' block serves as a safety
+net.
 
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
  WHATS_NEW                     |    1 +
- lib/format_text/format-text.c |   10 +++++++---
- 2 files changed, 8 insertions(+), 3 deletions(-)
+ lib/format_text/format-text.c |   17 ++++++++++++-----
+ 2 files changed, 13 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index e31ebdf..2630177 100644
+index 2630177..548cfc9 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.51 - 
  ================================
-+  Formalize pe_start policy as split between .pv_setup and .pv_write.
++  Fix _mda_setup() to not check first mda's size before pe_align rounding.
+   Formalize pe_start policy as split between .pv_setup and .pv_write.
    Fix lvm2app.pc installation filename.
    Remove pv_t, vg_t & lv_t handles from lib.  Only liblvm uses them.
-   Rename lvm.h to lvm2app.h for now.
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index d8e03f0..a5e6664 100644
+index a5e6664..9ff141a 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -1595,6 +1595,13 @@ static struct metadata_area_ops _metadata_text_raw_ops = {
- };
+@@ -1214,6 +1214,14 @@ static int _mda_setup(const struct format_type *fmt,
+ 			start1 += (pagesize - mda_adjustment);
+ 	}
  
- /* pvmetadatasize in sectors */
-+/*
-+ * pe_start policy:
-+ * - In cases where a pre-existing pe_start is provided (pvcreate --restorefile
-+ *   and vgconvert): pe_start must not be changed (so pv->pe_start = pe_start).
-+ * - In cases where pe_start is 0: leave pv->pe_start as 0 and defer the
-+ *   setting of pv->pe_start to .pv_write
-+ */
- static int _text_pv_setup(const struct format_type *fmt,
- 		     uint64_t pe_start, uint32_t extent_count,
- 		     uint32_t extent_size, unsigned long data_alignment,
-@@ -1702,9 +1709,6 @@ static int _text_pv_setup(const struct format_type *fmt,
- 				 "%lu sectors (requested %lu sectors)",
- 				 pv_dev_name(pv), pv->pe_align, data_alignment);
++	/* Round up to pe_align boundary */
++	mda_adjustment = (mda_size1 + start1) % alignment;
++	if (mda_adjustment) {
++		mda_size1 += (alignment - mda_adjustment);
++		if (start1 + mda_size1 > disk_size)
++			mda_size1 -= (alignment - mda_adjustment);
++	}
++
+ 	/* Ensure it's not going to be bigger than the disk! */
+ 	if (start1 + mda_size1 > disk_size) {
+ 		log_warn("WARNING: metadata area fills disk leaving no "
+@@ -1221,15 +1229,14 @@ static int _mda_setup(const struct format_type *fmt,
+ 		/* Leave some free space for rounding */
+ 		/* Avoid empty data area as could cause tools problems */
+ 		mda_size1 = disk_size - start1 - alignment * 2;
++		/* Round up to pe_align boundary */
++		mda_adjustment = (mda_size1 + start1) % alignment;
++		if (mda_adjustment)
++			mda_size1 += (alignment - mda_adjustment);
+ 		/* Only have 1 mda in this case */
+ 		pvmetadatacopies = 1;
+ 	}
  
--		if (pv->pe_start < pv->pe_align)
--			pv->pe_start = pv->pe_align;
+-	/* Round up to pe_align() boundary */
+-	mda_adjustment = (mda_size1 + start1) % alignment;
+-	if (mda_adjustment)
+-		mda_size1 += (alignment - mda_adjustment);
 -
- 		if (extent_count)
- 			pe_end = pe_start + extent_count * extent_size - 1;
- 		if (!_mda_setup(fmt, pe_start, pe_end, pvmetadatacopies,
+ 	/* If we already have PEs, avoid overlap */
+ 	if (pe_start || pe_end) {
+ 		if (pe_start <= start1)
 -- 
 1.6.2.5
 
