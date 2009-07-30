@@ -1,88 +1,89 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 11 Oct 2010 20:13:00 +0200
-Subject: [PATCH 03/14] Refactor and add code for (lv) 'origin_size' get function.
-In-Reply-To: <1286810078-25769-4-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Mon, 11 Oct 2010 11:14:27 -0400")
-References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-4-git-send-email-dwysocha@redhat.com>
-Message-ID: <87pqvg38er.fsf@twilight.int.mornfall.net.>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 30 Jul 2009 17:42:36 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/format-text.c
+Message-ID: <20090730174236.27606.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2009-07-30 17:42:34
 
-> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-Reviewed-By: Petr Rockai <prockai@redhat.com>
+Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: format-text.c 
 
-> --- a/lib/metadata/lv.c
-> +++ b/lib/metadata/lv.c
-> @@ -18,6 +18,19 @@
->  #include "activate.h"
->  #include "toolcontext.h"
->  
-> +uint64_t lv_origin_size(const struct logical_volume *lv)
-> +{
-> +	uint64_t size;
-> +
-> +	if (lv_is_cow(lv))
-> +		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-> +	else if (lv_is_origin(lv))
-> +		size = lv->size;
-> +	else
-> +		size = UINT64_C(0);
-> +	return size;
-> +}
-You don't need the UINT64_C there. size = 0 will work, you know. :)
-Also, I would be inclined to write instead:
+Log message:
+	Preserve pe_start in .pv_setup and .pv_write if pe_start was supplied.
+	
+	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 
-uint64_t lv_origin_size(const struct logical_volume *lv)
-{
-	if (lv_is_cow(lv))
-		return (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-	if (lv_is_origin(lv))
-		return lv->size;
-	return 0;
-}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1214&r2=1.1215
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
 
-which has the same effect.
-
-[snip]
-
-> --- a/lib/report/properties.c
-> +++ b/lib/report/properties.c
-> @@ -123,7 +123,7 @@ GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
->  #define _seg_count_set _not_implemented_set
->  #define _origin_get _not_implemented_get
->  #define _origin_set _not_implemented_set
-> -#define _origin_size_get _not_implemented_get
-> +GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
->  #define _origin_size_set _not_implemented_set
->  #define _snap_percent_get _not_implemented_get
->  #define _snap_percent_set _not_implemented_set
-> diff --git a/lib/report/report.c b/lib/report/report.c
-> index 32559b8..83216b2 100644
-> --- a/lib/report/report.c
-> +++ b/lib/report/report.c
-> @@ -570,12 +570,7 @@ static int _originsize_disp(struct dm_report *rh, struct dm_pool *mem,
->  	const struct logical_volume *lv = (const struct logical_volume *) data;
->  	uint64_t size;
->  
-> -	if (lv_is_cow(lv))
-> -		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-> -	else if (lv_is_origin(lv))
-> -		size = lv->size;
-> -	else
-> -		size = UINT64_C(0);
-> +	size = lv_origin_size(lv);
->  
->  	return _size64_disp(rh, mem, field, &size, private);
->  }
-Ok.
-
-Yours,
-   Petr.
+--- LVM2/WHATS_NEW	2009/07/30 17:19:31	1.1214
++++ LVM2/WHATS_NEW	2009/07/30 17:42:33	1.1215
+@@ -1,5 +1,6 @@
+ Version 2.02.51 - 
+ ================================
++  Preserve pe_start in .pv_setup and .pv_write if pe_start was supplied.
+   Fix _mda_setup() to not check first mda's size before pe_align rounding.
+   Formalize pe_start policy as split between .pv_setup and .pv_write.
+   Document -I option of clvmd in the man page.
+--- LVM2/lib/format_text/format-text.c	2009/07/30 17:41:01	1.109
++++ LVM2/lib/format_text/format-text.c	2009/07/30 17:42:33	1.110
+@@ -1368,12 +1368,17 @@
+ 	else
+ 		dm_list_init(&info->das);
+ 
++	if (pv->pe_start) {
++		log_very_verbose("%s: preserving pe_start=%lu",
++				 pv_dev_name(pv), pv->pe_start);
++		goto preserve_pe_start;
++	}
++
+ 	/*
+ 	 * If pe_start is still unset, set it to first aligned
+ 	 * sector after any metadata areas that begin before pe_start.
+ 	 */
+-	if (!pv->pe_start)
+-		pv->pe_start = pv->pe_align;
++	pv->pe_start = pv->pe_align;
+ 	dm_list_iterate_items(mda, &info->mdas) {
+ 		mdac = (struct mda_context *) mda->metadata_locn;
+ 		if (pv->dev == mdac->area.dev &&
+@@ -1389,6 +1394,8 @@
+ 				pv->pe_start += pv->pe_align - adjustment;
+ 		}
+ 	}
++
++ preserve_pe_start:
+ 	if (!add_da
+ 	    (NULL, &info->das, pv->pe_start << SECTOR_SHIFT, UINT64_C(0)))
+ 		return_0;
+@@ -1700,8 +1707,10 @@
+ 		/* FIXME Default from config file? vgextend cmdline flag? */
+ 		pv->status |= ALLOCATABLE_PV;
+ 	} else {
+-		if (pe_start)
++		if (pe_start) {
+ 			pv->pe_start = pe_start;
++			goto preserve_pe_start;
++		}
+ 
+ 		if (!data_alignment)
+ 			data_alignment = find_config_tree_int(pv->fmt->cmd,
+@@ -1714,6 +1723,7 @@
+ 				 "%lu sectors (requested %lu sectors)",
+ 				 pv_dev_name(pv), pv->pe_align, data_alignment);
+ 
++	preserve_pe_start:
+ 		if (extent_count)
+ 			pe_end = pe_start + extent_count * extent_size - 1;
+ 		if (!_mda_setup(fmt, pe_start, pe_end, pvmetadatacopies,
 
 
