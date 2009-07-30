@@ -1,48 +1,42 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 29 Jul 2009 18:38:28 -0000
-Subject: LVM2/liblvm lvm2app.h lvm_base.c
-Message-ID: <20090729183828.31831.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Thu, 30 Jul 2009 19:07:14 -0400
+Subject: [PATCH 0/5] LVM2 topology autodetect support (patchset 2)
+Message-ID: <1248995239-19128-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-07-29 18:38:27
+This is the second LVM2 topology patchset; it adds the ability to
+autodetect Linux's I/O topology attributes that are associated with a
+device.
 
-Modified files:
-	liblvm         : lvm2app.h lvm_base.c 
+It should be noted that the changes to lib/device/device.c were the
+basis for the upstream libblkid's topology support.  Moving forward we
+may look to use libblkid directly but the topology-aware libblkkid isn't
+yet available upstream.
 
-Log message:
-	Don't include lvm-version.h in exported liblvm file!
-	
-	Move include of lvm-version.h into lvm_base.c where it belongs.
+Mike Snitzer (5):
+  Add devices/data_alignment_offset_detection to lvm.conf.
+  Add devices/data_alignment_detection to lvm.conf.
+  Improve ability to lookup primary device associated with partition.
+  Retrieve MD sysfs attributes for MD partitions.
+  Add MD, partition and topology tests to the LVM2 test-suite.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-
---- LVM2/liblvm/lvm2app.h	2009/07/29 13:26:01	1.1
-+++ LVM2/liblvm/lvm2app.h	2009/07/29 18:38:27	1.2
-@@ -14,7 +14,6 @@
- #ifndef _LIB_LVM2APP_H
- #define _LIB_LVM2APP_H
- 
--#include "lvm-version.h"
- #include "libdevmapper.h"
- 
- #include <stdint.h>
---- LVM2/liblvm/lvm_base.c	2009/07/29 13:26:01	1.12
-+++ LVM2/liblvm/lvm_base.c	2009/07/29 18:38:27	1.13
-@@ -16,6 +16,7 @@
- #include "lvm2app.h"
- #include "toolcontext.h"
- #include "locking.h"
-+#include "lvm-version.h"
- 
- const char *lvm_library_get_version(void)
- {
+ WHATS_NEW                       |    2 +
+ doc/example.conf                |   21 ++++-
+ lib/config/defaults.h           |    2 +
+ lib/device/dev-md.c             |   13 ++-
+ lib/device/device.c             |  193 +++++++++++++++++++++++++++++++++++++++
+ lib/device/device.h             |   12 +++
+ lib/format_text/format-text.c   |    6 +-
+ lib/metadata/metadata.c         |   27 ++++++
+ man/lvm.conf.5.in               |   22 ++++-
+ test/t-pvcreate-operation-md.sh |   91 ++++++++++++++++++
+ test/t-pvcreate-usage.sh        |   12 +++
+ test/test-utils.sh              |    2 +-
+ 12 files changed, 392 insertions(+), 11 deletions(-)
+ create mode 100644 test/t-pvcreate-operation-md.sh
 
 
