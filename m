@@ -1,35 +1,53 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu,  7 Oct 2010 16:06:35 +0200
-Subject: [PATCH 5/9] Fix wrong default value setting for lvm
-In-Reply-To: <cover.1286460218.git.zkabelac@redhat.com>
-References: <cover.1286460218.git.zkabelac@redhat.com>
-Message-ID: <562eb00c58152985355ebb23f10a64adf2426612.1286460218.git.zkabelac@redhat.com>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 30 Jul 2009 13:32:40 -0000
+Subject: LVM2 ./WHATS_NEW man/clvmd.8.in
+Message-ID: <20090730133240.6783.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	ccaulfield at sourceware.org	2009-07-30 13:32:39
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- scripts/fsadm.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	man            : clvmd.8.in 
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 1393bc6..73b6779 100644
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -50,7 +50,7 @@ FSCK=fsck
- XFS_CHECK=xfs_check
- 
- # user may override lvm location by setting LVM_BINARY
--LVM=${LVM_BINARY-lvm}
-+LVM=${LVM_BINARY:-lvm}
- 
- YES=${_FSADM_YES}
- DRY=0
--- 
-1.7.3.1
+Log message:
+	Document the -I option to clvmd
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1211&r2=1.1212
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/clvmd.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+
+--- LVM2/WHATS_NEW	2009/07/30 12:25:42	1.1211
++++ LVM2/WHATS_NEW	2009/07/30 13:32:38	1.1212
+@@ -1,5 +1,6 @@
+ Version 2.02.51 - 
+ ================================
++  Document -I option of clvmd in the man page.
+   Fix configure script to handle multiple clvmd selections.
+   Fix lvm2app.pc installation filename.
+   Remove pv_t, vg_t & lv_t handles from lib.  Only liblvm uses them.
+--- LVM2/man/clvmd.8.in	2008/10/08 12:50:13	1.1
++++ LVM2/man/clvmd.8.in	2009/07/30 13:32:39	1.2
+@@ -74,6 +74,14 @@
+ re-read the lvm configuration file. This command should be run whenever the
+ devices on a cluster system are changed.
+ .TP
++.I \-I
++Selects the cluster manager to use for locking and internal communications,
++the available managers will be listed as part of the 'clvmd -h' output.
++clvmd will use the first cluster manager that succeeds, and it checks them
++in the order cman,gulm,corosync,openais. As it is quite possible to have
++(eg) corosync and cman available on the same system you might have to
++manually specify this option to override the search.
++.TP
+ .I \-V
+ Display the version of the cluster LVM daemon.
+ .SH SEE ALSO
 
 
