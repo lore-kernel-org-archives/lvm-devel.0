@@ -1,91 +1,87 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:27 -0400
-Subject: [PATCH 03/14] Refactor and add code for (lv) 'origin_size' get function.
-In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-4-git-send-email-dwysocha@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 30 Jul 2009 17:19:33 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/format-text.c
+Message-ID: <20090730171933.19164.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2009-07-30 17:19:31
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/lv.c       |   13 +++++++++++++
- lib/metadata/lv.h       |    1 +
- lib/report/properties.c |    2 +-
- lib/report/report.c     |    7 +------
- 4 files changed, 16 insertions(+), 7 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: format-text.c 
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index f750f54..ae8a4fb 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -18,6 +18,19 @@
- #include "activate.h"
- #include "toolcontext.h"
+Log message:
+	Fix _mda_setup() to not check first mda's size before pe_align rounding.
+	
+	Without this fix rounding the end of the first mda to a pe_align
+	boundary could silently exceed the disk_size.
+	
+	Final 'if (start1 + mda_size1 > disk_size)' block serves as a safety
+	net.
+	
+	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1213&r2=1.1214
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
+
+--- LVM2/WHATS_NEW	2009/07/30 17:18:03	1.1213
++++ LVM2/WHATS_NEW	2009/07/30 17:19:31	1.1214
+@@ -1,5 +1,6 @@
+ Version 2.02.51 - 
+ ================================
++  Fix _mda_setup() to not check first mda's size before pe_align rounding.
+   Formalize pe_start policy as split between .pv_setup and .pv_write.
+   Document -I option of clvmd in the man page.
+   Fix configure script to handle multiple clvmd selections.
+--- LVM2/lib/format_text/format-text.c	2009/07/30 17:18:08	1.107
++++ LVM2/lib/format_text/format-text.c	2009/07/30 17:19:31	1.108
+@@ -1214,6 +1214,15 @@
+ 			start1 += (pagesize - mda_adjustment);
+ 	}
  
-+uint64_t lv_origin_size(const struct logical_volume *lv)
-+{
-+	uint64_t size;
++	/* Round up to pe_align boundary */
++	mda_adjustment = (mda_size1 + start1) % alignment;
++	if (mda_adjustment) {
++		mda_size1 += (alignment - mda_adjustment);
++		/* Revert if it's now too large */
++		if (start1 + mda_size1 > disk_size)
++			mda_size1 -= (alignment - mda_adjustment);
++	}
 +
-+	if (lv_is_cow(lv))
-+		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-+	else if (lv_is_origin(lv))
-+		size = lv->size;
-+	else
-+		size = UINT64_C(0);
-+	return size;
-+}
-+
- char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
- {
- 	char *repstr;
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index eee2811..69c4077 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -53,5 +53,6 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_uuid_dup(const struct logical_volume *lv);
- char *lv_tags_dup(const struct logical_volume *lv);
- char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+uint64_t lv_origin_size(const struct logical_volume *lv);
+ 	/* Ensure it's not going to be bigger than the disk! */
+ 	if (start1 + mda_size1 > disk_size) {
+ 		log_warn("WARNING: metadata area fills disk leaving no "
+@@ -1221,15 +1230,19 @@
+ 		/* Leave some free space for rounding */
+ 		/* Avoid empty data area as could cause tools problems */
+ 		mda_size1 = disk_size - start1 - alignment * 2;
++		if (start1 + mda_size1 > disk_size) {
++			log_error("Insufficient space for first mda on %s",
++				  pv_dev_name(pv));
++			return 0;
++		}
++		/* Round up to pe_align boundary */
++		mda_adjustment = (mda_size1 + start1) % alignment;
++		if (mda_adjustment)
++			mda_size1 += (alignment - mda_adjustment);
+ 		/* Only have 1 mda in this case */
+ 		pvmetadatacopies = 1;
+ 	}
  
- #endif
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 8890e27..27503a9 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -123,7 +123,7 @@ GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
- #define _seg_count_set _not_implemented_set
- #define _origin_get _not_implemented_get
- #define _origin_set _not_implemented_set
--#define _origin_size_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
- #define _origin_size_set _not_implemented_set
- #define _snap_percent_get _not_implemented_get
- #define _snap_percent_set _not_implemented_set
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 32559b8..83216b2 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -570,12 +570,7 @@ static int _originsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	uint64_t size;
- 
--	if (lv_is_cow(lv))
--		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
--	else if (lv_is_origin(lv))
--		size = lv->size;
--	else
--		size = UINT64_C(0);
-+	size = lv_origin_size(lv);
- 
- 	return _size64_disp(rh, mem, field, &size, private);
- }
--- 
-1.7.2.2
+-	/* Round up to pe_align() boundary */
+-	mda_adjustment = (mda_size1 + start1) % alignment;
+-	if (mda_adjustment)
+-		mda_size1 += (alignment - mda_adjustment);
+-
+ 	/* If we already have PEs, avoid overlap */
+ 	if (pe_start || pe_end) {
+ 		if (pe_start <= start1)
 
 
