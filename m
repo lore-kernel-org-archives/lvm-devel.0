@@ -1,161 +1,203 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 30 Jul 2009 19:07:19 -0400
-Subject: [PATCH 5/5] Add MD, partition and topology tests to the LVM2 test-suite
-In-Reply-To: <1248995239-19128-1-git-send-email-snitzer@redhat.com>
-References: <1248995239-19128-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1248995239-19128-6-git-send-email-snitzer@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 31 Jul 2009 11:49:55 -0000
+Subject: LVM2 ./WHATS_NEW ./make.tmpl.in ./configure.in ...
+Message-ID: <20090731114955.23039.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add MD, partition, and topology tests to the LVM2 test-suite.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-07-31 11:49:54
 
-Added MD devices to the filter in test-utils.sh:prepare_lvmconf()
+Modified files:
+	.              : WHATS_NEW make.tmpl.in configure.in Makefile.in 
+	lib/misc       : configure.h.in 
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- test/t-pvcreate-operation-md.sh |   91 +++++++++++++++++++++++++++++++++++++++
- test/t-pvcreate-usage.sh        |   12 +++++
- test/test-utils.sh              |    2 +-
- 3 files changed, 104 insertions(+), 1 deletions(-)
- create mode 100644 test/t-pvcreate-operation-md.sh
+Log message:
+	Prepare for udev synchronisation code.  (options don't work yet)
 
-diff --git a/test/t-pvcreate-operation-md.sh b/test/t-pvcreate-operation-md.sh
-new file mode 100644
-index 0000000..89053b8
---- /dev/null
-+++ b/test/t-pvcreate-operation-md.sh
-@@ -0,0 +1,91 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# skip this test if mdadm or sfdisk aren't available
-+which mdadm || exit 200
-+which sfdisk || exit 200
-+
-+. ./test-utils.sh
-+
-+aux prepare_devs 2
-+
-+# Have MD use a non-standard name to avoid colliding with an existing MD device
-+mddev=/dev/md_lvm_test0
-+
-+cleanup_md() {
-+    mdadm --stop $mddev
-+    rm -f $mddev
-+    teardown
-+}
-+
-+# create 2 disk MD raid0 array (stripe_width=128K)
-+[ -b "$mddev" ] && exit 200
-+mdadm --create $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 $dev1 $dev2
-+trap 'aux cleanup_md' EXIT # cleanup this MD device at the end of the test
-+
-+# Test alignment of PV on MD without any MD-aware or topology-aware detection
-+# - should treat $mddev just like any other block device
-+pv_align="192.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
-+    $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# Test md_chunk_alignment independent of topology-aware detection
-+pv_align="256.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
-+    $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# Test newer topology-aware alignment detection
-+pv_align="256.00K"
-+pvcreate --metadatasize 128k \
-+    --config 'devices { md_chunk_alignment=0 }' $mddev
-+check_pv_field_ $mddev pe_start $pv_align
-+
-+# partition MD array directly, depends on blkext in Linux >= 2.6.28
-+linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
-+if [ $linux_minor -gt 27 ]; then
-+    # create one partition
-+    sfdisk $mddev <<EOF
-+,,83
-+EOF
-+    # make sure partition on MD is _not_ removed
-+    # - tests partition -> parent lookup via sysfs paths
-+    not pvcreate --metadatasize 128k $mddev
-+
-+    # verify alignment_offset is accounted for in pe_start
-+    # - topology infrastructure is available in Linux >= 2.6.31
-+    # - also tests partition -> parent lookup via sysfs paths
-+
-+    # Oh joy: need to lookup /sys/block/md127 rather than /sys/block/md_lvm_test0
-+    mddev_maj_min=$(ls -l $mddev | awk '{ print $5 $6 }' | tr , :)
-+    mddev_p_sysfs_name=$(echo /sys/dev/block/${mddev_maj_min}/*p1)
-+    base_mddev_p=`basename $mddev_p_sysfs_name`
-+    mddev_p=/dev/${base_mddev_p}
-+
-+    sysfs_alignment_offset=$(ls /sys/dev/block/${mddev_maj_min}/${base_mddev_p}/alignment_offset)
-+    [ -f $sysfs_alignment_offset ] && \
-+	alignment_offset=`cat $sysfs_alignment_offset` || \
-+	alignment_offset=0
-+
-+    if [ "$alignment_offset" = "512" ]; then
-+	pv_align="256.50K"
-+	pvcreate --metadatasize 128k $mddev_p
-+	check_pv_field_ $mddev_p pe_start $pv_align
-+	pvremove $mddev_p
-+    elif [ "$alignment_offset" = "2048" ]; then
-+	pv_align="258.00K"
-+	pvcreate --metadatasize 128k $mddev_p
-+	check_pv_field_ $mddev_p pe_start $pv_align
-+	pvremove $mddev_p
-+    fi
-+fi
-diff --git a/test/t-pvcreate-usage.sh b/test/t-pvcreate-usage.sh
-index 3fee4c1..d545786 100755
---- a/test/t-pvcreate-usage.sh
-+++ b/test/t-pvcreate-usage.sh
-@@ -116,6 +116,18 @@ check_pv_field_ $dev1 pe_start $pv_align
- pvcreate --metadatasize 128k --metadatacopies 2 --dataalignment 3.5k $dev1
- check_pv_field_ $dev1 pe_start $pv_align
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1218&r2=1.1219
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.68&r2=1.69
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/configure.h.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+
+--- LVM2/WHATS_NEW	2009/07/30 21:15:17	1.1218
++++ LVM2/WHATS_NEW	2009/07/31 11:49:53	1.1219
+@@ -1,5 +1,7 @@
+ Version 2.02.51 - 
+ ================================
++  Added configure --enable-udev_rules --enable-udev_sync --with-udev-prefix.
++  Added udev dir to hold udev rules.
+   Add --dataalignmentoffset to pvcreate to shift start of aligned data area.
+   Fix _mda_setup() to not check first mda's size before pe_align rounding.
+   Document -I option of clvmd in the man page.
+--- LVM2/make.tmpl.in	2009/07/22 20:01:29	1.68
++++ LVM2/make.tmpl.in	2009/07/31 11:49:53	1.69
+@@ -39,6 +39,7 @@
+ # Setup directory variables
+ prefix = @prefix@
+ exec_prefix = @exec_prefix@
++udev_prefix = @udev_prefix@
+ bindir = $(DESTDIR)@bindir@
+ confdir = $(DESTDIR)@CONFDIR@/lvm
+ includedir = $(DESTDIR)@includedir@
+@@ -50,6 +51,7 @@
+ mandir = $(DESTDIR)@mandir@
+ localedir = $(DESTDIR)@LOCALEDIR@
+ staticdir = $(DESTDIR)@STATICDIR@
++udevdir = $(DESTDIR)@udevdir@
  
-+# data area is aligned to 64k by default,
-+# data area start is shifted by the specified alignment_offset
-+pv_align="195.50K"
-+pvcreate --metadatasize 128k --dataalignmentoffset 7s $dev1
-+check_pv_field_ $dev1 pe_start $pv_align
+ interface = @interface@
+ interfacedir = $(top_srcdir)/libdm/$(interface)
+--- LVM2/configure.in	2009/07/30 12:31:45	1.103
++++ LVM2/configure.in	2009/07/31 11:49:53	1.104
+@@ -403,6 +403,23 @@
+ fi
+ 
+ ################################################################################
++dnl -- Enable udev synchronisation
++AC_MSG_CHECKING(whether to enable synchronisation with udev processing)
++AC_ARG_ENABLE(udev_sync, [  --enable-udev_sync      Enable synchronisation with udev processing],
++UDEV_SYNC=$enableval, UDEV_SYNC=no)
++AC_MSG_RESULT($UDEV_SYNC)
 +
-+# 2nd metadata area is created without problems when
-+# data area start is shifted by the specified alignment_offset
-+pvcreate --metadatasize 128k --metadatacopies 2 --dataalignmentoffset 7s $dev1
-+check_pv_field_ $dev1 pv_mda_count 2
-+# FIXME: compare start of 2nd mda with and without --dataalignmentoffset
++if test x$UDEV_SYNC = xyes; then
++	AC_DEFINE([UDEV_SYNC_SUPPORT], 1, [Define to 1 to enable synchronisation with udev processing.])
++fi
 +
- #COMM 'pv with LVM1 compatible data alignment can be convereted'
- #compatible == LVM1_PE_ALIGN == 64k
- pvcreate --dataalignment 256k $dev1
-diff --git a/test/test-utils.sh b/test/test-utils.sh
-index 7055701..43c3ec6 100644
---- a/test/test-utils.sh
-+++ b/test/test-utils.sh
-@@ -182,7 +182,7 @@ prepare_lvmconf() {
-   devices {
-     dir = "$G_dev_"
-     scan = "$G_dev_"
--    filter = [ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
-+    filter = [ "a|/dev/md.*|", "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
-     cache_dir = "$G_root_/etc"
-     sysfs_scan = 0
-   }
--- 
-1.6.2.5
++dnl -- Enable udev rules
++AC_MSG_CHECKING(whether to enable installation of udev rules required for synchronisation)
++AC_ARG_ENABLE(udev_rules, [  --enable-udev_rules     Install rule files needed for udev synchronisation],
++UDEV_RULES=$enableval, UDEV_RULES=$UDEV_SYNC)
++AC_MSG_RESULT($UDEV_RULES)
++
++################################################################################
+ dnl -- Compatibility mode
+ AC_ARG_ENABLE(compat,   [  --enable-compat         Enable support for old device-mapper versions],
+   DM_COMPAT=$enableval, DM_COMPAT=no)
+@@ -646,12 +663,12 @@
+ 
+ ################################################################################
+ AC_ARG_WITH(confdir,
+-	    [  --with-confdir=DIR      Configuration files in DIR [/etc]],
++	    [  --with-confdir=DIR      Configuration files in DIR [[/etc]]],
+ 	    [ CONFDIR="$withval" ],
+ 	    [ CONFDIR='/etc' ])
+ 
+ AC_ARG_WITH(staticdir,
+-	    [  --with-staticdir=DIR    Static binary in DIR [EXEC_PREFIX/sbin]],
++	    [  --with-staticdir=DIR    Static binary in DIR [[EPREFIX/sbin]]],
+ 	    [ STATICDIR="$withval" ],
+ 	    [ STATICDIR='${exec_prefix}/sbin' ])
+ 
+@@ -666,6 +683,14 @@
+ 	    [ usrsbindir='${prefix}/sbin' ])
+ 
+ ################################################################################
++AC_ARG_WITH(udev_prefix,
++	    [  --with-udev-prefix=UPREFIX      Install udev rule files in UPREFIX [[EPREFIX]]],
++            [ udev_prefix="$withval"],
++            [ udev_prefix='${exec_prefix}' ])
++
++udevdir='${udev_prefix}/lib/udev/rules.d'
++
++################################################################################
+ dnl -- Ensure additional headers required
+ if test x$READLINE = xyes; then
+ 	AC_CHECK_HEADERS(readline/readline.h readline/history.h,,AC_MSG_ERROR(bailing out))
+@@ -696,6 +721,10 @@
+ 	AC_CHECK_HEADERS(selinux/selinux.h,,AC_MSG_ERROR(bailing out))
+ fi
+ 
++if test x$UDEV_SYNC = xyes; then
++	AC_CHECK_HEADERS(sys/ipc.h sys/sem.h,,AC_MSG_ERROR(bailing out))
++fi
++
+ ################################################################################
+ AC_PATH_PROG(MODPROBE_CMD, modprobe)
+ 
+@@ -723,7 +752,7 @@
+                 dmeventd_prefix=""
+         fi
+ 	AC_ARG_WITH(dmeventd-path,
+-		    [  --with-dmeventd-path=PATH       dmeventd path [[${exec_prefix}/sbin/dmeventd]] ],
++		    [  --with-dmeventd-path=PATH       dmeventd path [[EPREFIX/sbin/dmeventd]] ],
+ 		    [ AC_DEFINE_UNQUOTED(DMEVENTD_PATH,"$withval") ],
+ 		    [ AC_DEFINE_UNQUOTED(DMEVENTD_PATH,"$dmeventd_prefix/sbin/dmeventd") ])
+ fi
+@@ -818,12 +847,15 @@
+ AC_SUBST(SNAPSHOTS)
+ AC_SUBST(STATICDIR)
+ AC_SUBST(STATIC_LINK)
++AC_SUBST(UDEV_RULES)
+ AC_SUBST([LIB_PTHREAD])
+ AC_SUBST(interface)
+ AC_SUBST(kerneldir)
+ AC_SUBST(missingkernel)
+ AC_SUBST(kernelvsn)
+ AC_SUBST(tmpdir)
++AC_SUBST(udev_prefix)
++AC_SUBST(udevdir)
+ AC_SUBST(usrlibdir)
+ AC_SUBST(usrsbindir)
+ 
+@@ -860,6 +892,7 @@
+ test/Makefile
+ test/api/Makefile
+ tools/Makefile
++udev/Makefile
+ ])
+ AC_OUTPUT
+ 
+--- LVM2/Makefile.in	2009/05/22 14:44:59	1.33
++++ LVM2/Makefile.in	2009/07/31 11:49:53	1.34
+@@ -18,6 +18,10 @@
+ 
+ SUBDIRS = doc include man scripts
+ 
++ifeq ("@UDEV_RULES@", "yes")
++  SUBDIRS += udev
++endif
++
+ ifeq ("@INTL@", "yes")
+   SUBDIRS += po
+ endif
+--- LVM2/lib/misc/configure.h.in	2008/11/10 21:25:45	1.9
++++ LVM2/lib/misc/configure.h.in	2009/07/31 11:49:53	1.10
+@@ -268,6 +268,9 @@
+ /* Define to 1 if you have the <sys/ioctl.h> header file. */
+ #undef HAVE_SYS_IOCTL_H
+ 
++/* Define to 1 if you have the <sys/ipc.h> header file. */
++#undef HAVE_SYS_IPC_H
++
+ /* Define to 1 if you have the <sys/mman.h> header file. */
+ #undef HAVE_SYS_MMAN_H
+ 
+@@ -287,6 +290,9 @@
+ /* Define to 1 if you have the <sys/select.h> header file. */
+ #undef HAVE_SYS_SELECT_H
+ 
++/* Define to 1 if you have the <sys/sem.h> header file. */
++#undef HAVE_SYS_SEM_H
++
+ /* Define to 1 if you have the <sys/socket.h> header file. */
+ #undef HAVE_SYS_SOCKET_H
+ 
+@@ -417,6 +423,9 @@
+ /* Define to 1 if your <sys/time.h> declares `struct tm'. */
+ #undef TM_IN_SYS_TIME
+ 
++/* Define to 1 to enable synchronisation with udev processing. */
++#undef UDEV_SYNC_SUPPORT
++
+ /* Define to empty if `const' does not conform to ANSI C. */
+ #undef const
+ 
 
 
