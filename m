@@ -1,63 +1,120 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 31 Aug 2009 18:08:35 -0400
-Subject: rebased snapshot-merge patches
-Message-ID: <20090831220834.GA15126@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 1 Aug 2009 17:09:48 -0000
+Subject: LVM2/lib/device device.c
+Message-ID: <20090801170948.2513.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I've updated both the DM and LVM2 snapshot-merge patches to the latest
-upstream Linux and LVM2.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2009-08-01 17:09:48
 
-All patches (both Linux and LVM2) have been tested to pass the LVM2
-testsuite.  There is more work to be done on these patches but I wanted
-to make others aware of them sooner rather than later.
+Modified files:
+	lib/device     : device.c 
 
-The basis for the DM snapshot-merge patches is Linux 2.6.31-rc8 + the
-remaining DM fixes that Alasdair should be pushing to Linus this week:
-http://people.redhat.com/msnitzer/patches/dm-2.6.31-rc-fixes/
+Log message:
+	Improve ability to lookup primary device associated with a partition
+	
+	Improve lib/device/device.c:_primary_dev()'s ability to look up the
+	primary device associated with all partitions; including blkext
+	(e.g. partitions directly on MD).  The same will also work for obscure
+	sysfs paths; e.g.: paths with mangled names like the HP cciss driver
+	uses: /sys/block/cciss!c0d0/cciss!c0d0p1/
+	
+	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 
-The DM snapshot-merge patches are here:
-http://people.redhat.com/msnitzer/patches/snapshot-merge/kernel/2.6.31/
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
 
-The LVM2 snapshot-merge patches are here:
-http://people.redhat.com/msnitzer/patches/snapshot-merge/lvm2/LVM2-2.02.52-cvs/
-
-I threw some real work at snapshot-merge by taking a snap _before_
-formatting a 100G LV with ext3.  Then merged all the exceptions.  One
-observation is that the merge process is _quite_ slow in comparison to
-how long it took to format the LV (with associated snapshot exception
-copy-out).  Will need to look at this further shortly... it's likely a
-function of using minimal system resources during the merge via kcopyd;
-whereas the ext3 format puts excessive pressure on the system's page
-cache to queue work for mkfs's immediate writeback.
-
-# lvcreate -n testlv -L 100G test
-# lvcreate -n testlv_snap -s -L 20G test/testlv
-# lvs
-  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
-  testlv      test owi-a- 100.00G
-  testlv_snap test swi-a-  20.00G testlv   0.00
-# mkfs.ext3 /dev/test/testlv
-# lvs
-  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
-  testlv      test owi-a- 100.00G
-  testlv_snap test swi-a-  20.00G testlv   8.52
-# lvconvert -M test/testlv_snap
-  Merging of volume testlv_snap started.
-  testlv: Merged: 8.5%
-  testlv: Merged: 8.4%
-  testlv: Merged: 8.4%
-  testlv: Merged: 8.3%
-  ...
-  testlv: Merged: 7.2%
-  ...
-  testlv: Merged: 0.0%
-  testlv: Merged: 0.0%
-  testlv: Merged: 0.0%
-  Merge into logical volume testlv finished.
-  Logical volume "snapshot1" successfully removed
+--- LVM2/lib/device/device.c	2009/08/01 17:08:44	1.29
++++ LVM2/lib/device/device.c	2009/08/01 17:09:48	1.30
+@@ -13,6 +13,7 @@
+  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
+ 
++#include <libgen.h> /* dirname, basename */
+ #include "lib.h"
+ #include "lvm-types.h"
+ #include "device.h"
+@@ -289,21 +290,71 @@
+ 			struct device *dev, dev_t *result)
+ {
+ 	char path[PATH_MAX+1];
++	char temp_path[PATH_MAX+1];
++	char buffer[64];
+ 	struct stat info;
++	FILE *fp;
++	uint32_t pri_maj, pri_min;
++	int ret = 0;
+ 
+ 	/* check if dev is a partition */
+ 	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/partition",
+ 			sysfs_dir, (int)MAJOR(dev->dev), (int)MINOR(dev->dev)) < 0) {
+ 		log_error("dm_snprintf partition failed");
+-		return 0;
++		return ret;
+ 	}
+ 
+ 	if (stat(path, &info) < 0)
+-		return 0;
++		return ret;
+ 
+-	*result = dev->dev -
+-		(MINOR(dev->dev) % max_partitions(MAJOR(dev->dev)));
+-	return 1;
++	/*
++	 * extract parent's path from the partition's symlink, e.g.:
++	 * - readlink /sys/dev/block/259:0 = ../../block/md0/md0p1
++	 * - dirname ../../block/md0/md0p1 = ../../block/md0
++	 * - basename ../../block/md0/md0  = md0
++	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
++	 */
++	if (readlink(dirname(path), temp_path, PATH_MAX) < 0) {
++		log_sys_error("readlink", path);
++		return ret;
++	}
++
++	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/dev",
++			sysfs_dir, basename(dirname(temp_path))) < 0) {
++		log_error("dm_snprintf dev failed");
++		return ret;
++	}
++
++	/* finally, parse 'dev' attribute and create corresponding dev_t */
++	if (stat(path, &info) < 0) {
++		log_error("sysfs file %s does not exist", path);
++		return ret;
++	}
++
++	fp = fopen(path, "r");
++	if (!fp) {
++		log_sys_error("fopen", path);
++		return ret;
++	}
++
++	if (!fgets(buffer, sizeof(buffer), fp)) {
++		log_sys_error("fgets", path);
++		goto out;
++	}
++
++	if (sscanf(buffer, "%d:%d", &pri_maj, &pri_min) != 2) {
++		log_error("sysfs file %s not in expected MAJ:MIN format: %s",
++			  path, buffer);
++		goto out;
++	}
++	*result = MKDEV(pri_maj, pri_min);
++	ret = 1;
++
++out:
++	if (fclose(fp))
++		log_sys_error("fclose", path);
++
++	return ret;
+ }
+ 
+ static unsigned long _dev_topology_attribute(const char *attribute,
 
 
