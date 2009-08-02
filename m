@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 2 Aug 2009 21:56:30 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20090802215630.11769.qmail@sourceware.org>
+Date: 2 Aug 2009 21:59:21 -0000
+Subject: LVM2 ./WHATS_NEW test/t-mirror-lvconvert.sh to ...
+Message-ID: <20090802215921.13790.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,110 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-08-02 21:56:29
+Changes by:	mornfall at sourceware.org	2009-08-02 21:59:21
 
 Modified files:
+	.              : WHATS_NEW 
+	test           : t-mirror-lvconvert.sh 
 	tools          : lvconvert.c 
 
 Log message:
-	Slightly refactor mirror log conversions in lvconvert.
+	Make lvconvert honour log mirror options combined with downconversion.
+	(RHBZ 463272)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.89&r2=1.90
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1227&r2=1.1228
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
 
---- LVM2/tools/lvconvert.c	2009/07/15 05:47:55	1.89
-+++ LVM2/tools/lvconvert.c	2009/08/02 21:56:29	1.90
-@@ -496,6 +496,33 @@
- 	}
- }
- 
-+static int _using_corelog(struct logical_volume *lv)
-+{
-+	return !first_seg(_original_lv(lv))->log_lv;
-+}
+--- LVM2/WHATS_NEW	2009/08/02 21:03:09	1.1227
++++ LVM2/WHATS_NEW	2009/08/02 21:59:21	1.1228
+@@ -1,5 +1,6 @@
+ Version 2.02.51 - 
+ ================================
++  Make lvconvert honour log mirror options combined with downconversion.
+   Allow LV suspend while --ignorelockingfailure is in force.
+   Update synopsis in lvconvert manpage to mention --repair.
+   Set cookies in activation code and wait for udev to complete processing.
+--- LVM2/test/t-mirror-lvconvert.sh	2009/06/01 14:43:28	1.10
++++ LVM2/test/t-mirror-lvconvert.sh	2009/08/02 21:59:21	1.11
+@@ -321,3 +321,9 @@
+ check_mirror_count_ $vg/$lv1 2
+ check_mirror_log_ $vg/$lv1
+ check_and_cleanup_lvs_
 +
-+static int _lv_update_log_type(struct cmd_context *cmd,
-+			       struct lvconvert_params *lp,
-+			       struct logical_volume *lv,
-+			       int corelog)
-+{
-+	struct logical_volume *original_lv = _original_lv(lv);
-+	if (_using_corelog(lv) && !corelog) {
-+		if (!add_mirror_log(cmd, original_lv, 1,
-+				    adjusted_mirror_region_size(
-+					lv->vg->extent_size,
-+					lv->le_count,
-+					lp->region_size),
-+				    lp->pvh, lp->alloc))
++# BZ 463272: disk log mirror convert option is lost if downconvert option is also given
++prepare_lvs_
++lvcreate -l1 -m2 --corelog -n $lv1 $vg
++lvconvert -m1 --mirrorlog disk $vg/$lv1
++check_mirror_log_ $vg/$lv1
+--- LVM2/tools/lvconvert.c	2009/08/02 21:56:29	1.90
++++ LVM2/tools/lvconvert.c	2009/08/02 21:59:21	1.91
+@@ -673,6 +673,9 @@
+ 				       (corelog || lp->mirrors == 1) ? 1U : 0U,
+ 				       remove_pvs, 0))
+ 			return_0;
++		if (lp->mirrors > 1 &&
++		    !_lv_update_log_type(cmd, lp, lv, corelog))
 +			return_0;
-+	} else if (!_using_corelog(lv) && corelog) {
-+		if (!remove_mirror_log(cmd, original_lv,
-+				       lp->pv_count ? lp->pvh : NULL))
-+			return_0;
-+	}
-+	return 1;
-+}
-+
- static int _lvconvert_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
- 			      struct lvconvert_params *lp)
- {
-@@ -503,7 +530,6 @@
- 	uint32_t existing_mirrors;
- 	const char *mirrorlog;
- 	unsigned corelog = 0;
--	struct logical_volume *original_lv;
- 	int r = 0;
- 	struct logical_volume *log_lv;
- 	int failed_mirrors = 0, failed_log = 0;
-@@ -688,20 +714,8 @@
- 		 * insertion to make the end result consistent with
- 		 * linear-to-mirror conversion.
- 		 */
--		original_lv = _original_lv(lv);
--		if (!first_seg(original_lv)->log_lv && !corelog) {
--			if (!add_mirror_log(cmd, original_lv, 1,
--					    adjusted_mirror_region_size(
--							lv->vg->extent_size,
--							lv->le_count,
--							lp->region_size),
--					    lp->pvh, lp->alloc))
--				return_0;
--		} else if (first_seg(original_lv)->log_lv && corelog) {
--			if (!remove_mirror_log(cmd, original_lv,
--					       lp->pv_count ? lp->pvh : NULL))
--				return_0;
--		}
-+		if (!_lv_update_log_type(cmd, lp, lv, corelog))
-+			return_0;
- 		/* Insert a temporary layer for syncing,
- 		 * only if the original lv is using disk log. */
- 		if (seg->log_lv && !_insert_lvconvert_layer(cmd, lv)) {
-@@ -722,24 +736,10 @@
- 	}
- 
- 	if (lp->mirrors == existing_mirrors) {
--		/*
--		 * Convert Mirror log type
--		 */
--		original_lv = _original_lv(lv);
--		if (!first_seg(original_lv)->log_lv && !corelog) {
--			if (!add_mirror_log(cmd, original_lv, 1,
--					    adjusted_mirror_region_size(
--							lv->vg->extent_size,
--							lv->le_count,
--							lp->region_size),
--					    lp->pvh, lp->alloc))
--				return_0;
--		} else if (first_seg(original_lv)->log_lv && corelog) {
--			if (!remove_mirror_log(cmd, original_lv,
--					       lp->pv_count ? lp->pvh : NULL))
-+		if (_using_corelog(lv) != corelog) {
-+			if (!_lv_update_log_type(cmd, lp, lv, corelog))
- 				return_0;
- 		} else {
--			/* No change */
- 			log_error("Logical volume %s already has %"
- 				  PRIu32 " mirror(s).", lv->name,
- 				  lp->mirrors - 1);
+ 	} else if (!(lv->status & MIRRORED)) {
+ 		/*
+ 		 * Converting from linear to mirror
 
 
