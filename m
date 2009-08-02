@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 2 Aug 2009 21:03:09 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/no_locking.c
-Message-ID: <20090802210309.20342.qmail@sourceware.org>
+Date: 2 Aug 2009 21:45:45 -0000
+Subject: LVM2/test test-utils.sh t-vgsplit-stacked.sh
+Message-ID: <20090802214545.8477.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,61 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-08-02 21:03:09
+Changes by:	mornfall at sourceware.org	2009-08-02 21:45:45
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : no_locking.c 
+	test           : test-utils.sh 
+Added files:
+	test           : t-vgsplit-stacked.sh 
 
 Log message:
-	Allow LV suspend while --ignorelockingfailure is in force.
+	Add test for RHBZ 481793 (passing, thanks to vg_read changes checked in
+	previously).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1226&r2=1.1227
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/no_locking.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-stacked.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.13&r2=1.14
 
---- LVM2/WHATS_NEW	2009/08/02 21:01:51	1.1226
-+++ LVM2/WHATS_NEW	2009/08/02 21:03:09	1.1227
-@@ -1,5 +1,6 @@
- Version 2.02.51 - 
- ================================
-+  Allow LV suspend while --ignorelockingfailure is in force.
-   Update synopsis in lvconvert manpage to mention --repair.
-   Set cookies in activation code and wait for udev to complete processing.
-   Added configure --enable-udev_rules --enable-udev_sync.
---- LVM2/lib/locking/no_locking.c	2009/07/15 06:11:25	1.17
-+++ LVM2/lib/locking/no_locking.c	2009/08/02 21:03:09	1.18
-@@ -70,7 +70,8 @@
- 				   const char *resource,
- 				   uint32_t flags)
- {
--	if ((flags & LCK_TYPE_MASK) == LCK_WRITE) {
-+	if ((flags & LCK_TYPE_MASK) == LCK_WRITE &&
-+	    (flags & LCK_SCOPE_MASK) == LCK_VG) {
- 		log_error("Write locks are prohibited with --ignorelockingfailure.");
- 		return 0;
- 	}
+/cvs/lvm2/LVM2/test/t-vgsplit-stacked.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-vgsplit-stacked.sh
++++ -	2009-08-02 21:45:45.854012000 +0000
+@@ -0,0 +1,18 @@
++. ./test-utils.sh
++
++prepare_lvmconf '[ "a/dev\/mirror/", "a/dev\/mapper\/.*$/", "r/.*/" ]'
++aux prepare_devs 3
++
++pvcreate $devs
++vgcreate $vg1 $dev1 $dev2
++lvcreate -n $lv1 -l 100%FREE $vg1
++
++#top VG
++pvcreate $G_dev_/$vg1/$lv1
++vgcreate $vg $G_dev_/$vg1/$lv1 $dev3
++
++vgchange -a n $vg
++vgchange -a n $vg1
++
++# this should fail but not segfault, RHBZ 481793.
++not vgsplit $vg $vg1 $dev3
+--- LVM2/test/test-utils.sh	2009/05/13 21:29:10	1.13
++++ LVM2/test/test-utils.sh	2009/08/02 21:45:45	1.14
+@@ -178,11 +178,14 @@
+ }
+ 
+ prepare_lvmconf() {
++	local filter="$1"
++	test -z "$filter" && \
++		filter='[ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]'
+ 	cat > $G_root_/etc/lvm.conf <<-EOF
+   devices {
+     dir = "$G_dev_"
+     scan = "$G_dev_"
+-    filter = [ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]
++    filter = $filter
+     cache_dir = "$G_root_/etc"
+     sysfs_scan = 0
+   }
 
 
