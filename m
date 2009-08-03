@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 3 Aug 2009 18:09:26 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20090803180926.10360.qmail@sourceware.org>
+Date: 3 Aug 2009 18:31:53 -0000
+Subject: LVM2/lib/activate fs.c
+Message-ID: <20090803183153.21886.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-08-03 18:09:26
+Changes by:	agk at sourceware.org	2009-08-03 18:31:53
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
+	lib/activate   : fs.c 
 
 Log message:
-	Only create LV symlinks on ACTIVATE not PRELOAD.
-	(This is the udev behaviour - but does this change break anything?)
+	Add warnings to check udev did what it was meant to.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1228&r2=1.1229
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.156&r2=1.157
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
 
---- LVM2/WHATS_NEW	2009/08/02 21:59:21	1.1228
-+++ LVM2/WHATS_NEW	2009/08/03 18:09:25	1.1229
-@@ -1,5 +1,6 @@
- Version 2.02.51 - 
- ================================
-+  Only change LV symlinks on ACTIVATE not PRELOAD.
-   Make lvconvert honour log mirror options combined with downconversion.
-   Allow LV suspend while --ignorelockingfailure is in force.
-   Update synopsis in lvconvert manpage to mention --repair.
---- LVM2/lib/activate/dev_manager.c	2009/08/03 18:01:45	1.156
-+++ LVM2/lib/activate/dev_manager.c	2009/08/03 18:09:26	1.157
-@@ -1212,12 +1212,12 @@
- 				stack;
- 			if (!r)
- 				goto_out;
-+			if (!_create_lv_symlinks(dm, root)) {
-+				log_error("Failed to create symlinks for %s.", lv->name);
-+				goto out;
-+			}
- 		}
+--- LVM2/lib/activate/fs.c	2008/12/19 14:22:48	1.44
++++ LVM2/lib/activate/fs.c	2009/08/03 18:31:53	1.45
+@@ -194,9 +194,14 @@
+ 		return 0;
+ 	}
  
--		if (!_create_lv_symlinks(dm, root)) {
--			log_error("Failed to create symlinks for %s.", lv->name);
--			goto out;
--		}
- 		break;
- 	default:
- 		log_error("_tree_action: Action %u not supported.", action);
+-	if (lstat(lv_path, &buf) || !S_ISLNK(buf.st_mode)) {
+-		if (errno == ENOENT)
+-			return 1;
++	if (lstat(lv_path, &buf) && errno == ENOENT)
++		return 1;
++	else if (dm_udev_get_sync_support())
++		log_warn("The link %s should have been removed by udev "
++			 "but it is still present. Falling back to "
++			 "direct link removal.", lv_path);
++
++	if (!S_ISLNK(buf.st_mode)) {
+ 		log_error("%s not symbolic link - not removing", lv_path);
+ 		return 0;
+ 	}
 
 
