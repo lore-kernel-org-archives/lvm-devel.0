@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 3 Aug 2009 11:20:17 -0000
-Subject: LVM2 tools/dmsetup.c libdm/libdm-common.c lib/ ...
-Message-ID: <20090803112017.17487.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 3 Aug 2009 12:11:45 -0000
+Subject: LVM2/liblvm lvm2app.h lvm_vg.c
+Message-ID: <20090803121145.22909.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,109 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-08-03 11:20:16
+Changes by:	wysochanski at sourceware.org	2009-08-03 12:11:45
 
 Modified files:
-	tools          : dmsetup.c 
-	libdm          : libdm-common.c 
-	lib/activate   : dev_manager.c 
+	liblvm         : lvm2app.h lvm_vg.c 
 
 Log message:
-	cleanup some ignored return values & 'stack's
+	Move FIXME from user visible lvm2app.h to lvm_vg.c
+	
+	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.154&r2=1.155
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
 
---- LVM2/tools/dmsetup.c	2009/07/31 17:51:46	1.118
-+++ LVM2/tools/dmsetup.c	2009/08/03 11:20:15	1.119
-@@ -593,7 +593,7 @@
- 		goto out;
- 	}
+--- LVM2/liblvm/lvm2app.h	2009/07/29 18:38:27	1.2
++++ LVM2/liblvm/lvm2app.h	2009/08/03 12:11:45	1.3
+@@ -265,7 +265,6 @@
  
--	dm_udev_wait(cookie);
-+	(void) dm_udev_wait(cookie);
- 
- 	r = 1;
- 
-@@ -631,7 +631,7 @@
- 		goto out;
- 	}
- 
--	dm_udev_wait(cookie);
-+	(void) dm_udev_wait(cookie);
- 
- 	r = 1;
- 
---- LVM2/libdm/libdm-common.c	2009/08/03 11:01:26	1.70
-+++ LVM2/libdm/libdm-common.c	2009/08/03 11:20:16	1.71
-@@ -1065,7 +1065,7 @@
- 		return 1;
- 
- 	if (!_get_cookie_sem(cookie, &semid))
--		return 0;
-+		return_0;
- 
- 	return _udev_notify_sem_destroy(semid, cookie);
+ /**
+  * Scan all devices on the system for VGs and LVM metadata.
+- * FIXME: Elaborate on when to use, side-effects, .cache file, etc
+  *
+  * \return
+  * 0 (success) or -1 (failure).
+--- LVM2/liblvm/lvm_vg.c	2009/07/29 13:26:01	1.24
++++ LVM2/liblvm/lvm_vg.c	2009/08/03 12:11:45	1.25
+@@ -309,6 +309,9 @@
+ 	return get_vgids((struct cmd_context *)libh, 0);
  }
---- LVM2/lib/activate/dev_manager.c	2009/07/31 18:30:31	1.154
-+++ LVM2/lib/activate/dev_manager.c	2009/08/03 11:20:16	1.155
-@@ -1133,10 +1133,11 @@
  
- 		dm_tree_set_cookie(root, 0);
- 		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid))) {
--			dm_udev_cleanup(dm_tree_get_cookie(root));
-+			(void) dm_udev_cleanup(dm_tree_get_cookie(root));
- 			return_0;
- 		}
--		dm_udev_wait(dm_tree_get_cookie(root));
-+		if (!dm_udev_wait(dm_tree_get_cookie(root)))
-+			stack;
- 	}
- 
- 	return 1;
-@@ -1171,10 +1172,11 @@
-  		/* Deactivate LV and all devices it references that nothing else has open. */
- 		dm_tree_set_cookie(root, 0);
- 		if (!dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1)) {
--			dm_udev_cleanup(dm_tree_get_cookie(root));
-+			(void) dm_udev_cleanup(dm_tree_get_cookie(root));
- 			goto_out;
- 		}
--		dm_udev_wait(dm_tree_get_cookie(root));
-+		if (!dm_udev_wait(dm_tree_get_cookie(root)))
-+			stack;
- 		if (!_remove_lv_symlinks(dm, root))
- 			log_error("Failed to remove all device symlinks associated with %s.", lv->name);
- 		break;
-@@ -1195,10 +1197,11 @@
- 		/* Preload any devices required before any suspensions */
- 		dm_tree_set_cookie(root, 0);
- 		if (!dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1)) {
--			dm_udev_cleanup(dm_tree_get_cookie(root));
-+			(void) dm_udev_cleanup(dm_tree_get_cookie(root));
- 			goto_out;
- 		}
--		dm_udev_wait(dm_tree_get_cookie(root));
-+		if (!dm_udev_wait(dm_tree_get_cookie(root)))
-+			stack;
- 
- 		if (dm_tree_node_size_changed(root))
- 			dm->flush_required = 1;
-@@ -1206,10 +1209,11 @@
- 		if (action == ACTIVATE) {
- 			dm_tree_set_cookie(root, 0);
- 			if (!dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1)) {
--				dm_udev_cleanup(dm_tree_get_cookie(root));
-+				(void) dm_udev_cleanup(dm_tree_get_cookie(root));
- 				goto_out;
- 			}
--			dm_udev_wait(dm_tree_get_cookie(root));
-+			if (!dm_udev_wait(dm_tree_get_cookie(root)))
-+				stack;
- 		}
- 
- 		if (!_create_lv_symlinks(dm, root)) {
++/*
++ * FIXME: Elaborate on when to use, side-effects, .cache file, etc
++ */
+ int lvm_scan(lvm_t libh)
+ {
+ 	if (!lvmcache_label_scan((struct cmd_context *)libh, 2))
 
 
