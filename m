@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 3 Aug 2009 18:31:53 -0000
-Subject: LVM2/lib/activate fs.c
-Message-ID: <20090803183153.21886.qmail@sourceware.org>
+Date: 3 Aug 2009 18:33:08 -0000
+Subject: LVM2/libdm libdm-common.c
+Message-ID: <20090803183308.23850.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-08-03 18:31:53
+Changes by:	agk at sourceware.org	2009-08-03 18:33:08
 
 Modified files:
-	lib/activate   : fs.c 
+	libdm          : libdm-common.c 
 
 Log message:
-	Add warnings to check udev did what it was meant to.
+	Add udev checks.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
 
---- LVM2/lib/activate/fs.c	2008/12/19 14:22:48	1.44
-+++ LVM2/lib/activate/fs.c	2009/08/03 18:31:53	1.45
-@@ -194,9 +194,14 @@
- 		return 0;
- 	}
+--- LVM2/libdm/libdm-common.c	2009/08/03 18:01:47	1.72
++++ LVM2/libdm/libdm-common.c	2009/08/03 18:33:08	1.73
+@@ -355,7 +355,9 @@
+ 				  dev_name);
+ 			return 0;
+ 		}
+-	}
++	} else if (dm_udev_get_sync_support())
++		log_warn("%s not set up by udev: Falling back to direct "
++			 "node creation.", path);
  
--	if (lstat(lv_path, &buf) || !S_ISLNK(buf.st_mode)) {
--		if (errno == ENOENT)
--			return 1;
-+	if (lstat(lv_path, &buf) && errno == ENOENT)
-+		return 1;
+ 	old_mask = umask(0);
+ 	if (mknod(path, S_IFBLK | mode, dev) < 0) {
+@@ -426,6 +428,9 @@
+ 
+ 	if (stat(path, &info) < 0)
+ 		return 1;
 +	else if (dm_udev_get_sync_support())
-+		log_warn("The link %s should have been removed by udev "
-+			 "but it is still present. Falling back to "
-+			 "direct link removal.", lv_path);
-+
-+	if (!S_ISLNK(buf.st_mode)) {
- 		log_error("%s not symbolic link - not removing", lv_path);
- 		return 0;
- 	}
++		log_warn("Node %s was not removed by udev. "
++			 "Falling back to direct node removal.", path);
+ 
+ 	if (unlink(path) < 0) {
+ 		log_error("Unable to unlink device node for '%s'", dev_name);
 
 
