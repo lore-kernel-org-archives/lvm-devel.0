@@ -1,14 +1,14 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 05 Aug 2009 12:28:14 -0500
-Subject: [PATCH] Fix clvmd segfault
-Message-ID: <1249493294.15327.9.camel@hydrogen.msp.redhat.com>
+Date: Wed, 05 Aug 2009 13:17:59 -0500
+Subject: PATCH REPOST] Fix clvmd segfault
+Message-ID: <1249496279.15327.12.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-bug 506986
+My last patch failed to include the pthread unlock.
 
  brassow
 
@@ -61,13 +61,13 @@ client=0x114f6090, msg=(nil), len=0, csid=(nil), xid=10574
 
 Is the file descriptor being lost, corrupted, etc?
 
-This patch is a band-aid for the problem.
+This patch is a bandaid for the problem.
 
 Index: LVM2/daemons/clvmd/lvm-functions.c
 ===================================================================
 --- LVM2.orig/daemons/clvmd/lvm-functions.c
 +++ LVM2/daemons/clvmd/lvm-functions.c
-@@ -593,20 +593,21 @@ int do_check_lvm1(const char *vgname)
+@@ -593,20 +593,23 @@ int do_check_lvm1(const char *vgname)
  
  int do_refresh_cache()
  {
@@ -78,8 +78,10 @@ Index: LVM2/daemons/clvmd/lvm-functions.c
  	pthread_mutex_lock(&lvm_lock);
  
 -	ret = refresh_toolcontext(cmd);
-+	if (!refresh_toolcontext(cmd))
++	if (!refresh_toolcontext(cmd)) {
++		pthread_mutex_unlock(&lvm_lock);
 +		return -1;
++	}
 +
  	init_full_scan_done(0);
  	lvmcache_label_scan(cmd, 2);
