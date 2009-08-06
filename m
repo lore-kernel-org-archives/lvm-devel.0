@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 5 Aug 2009 19:50:09 -0000
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 6 Aug 2009 15:00:26 -0000
 Subject: LVM2/libdm libdm-common.c
-Message-ID: <20090805195009.6429.qmail@sourceware.org>
+Message-ID: <20090806150026.12694.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,173 +10,110 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-08-05 19:50:08
+Changes by:	prajnoha at sourceware.org	2009-08-06 15:00:25
 
 Modified files:
 	libdm          : libdm-common.c 
 
 Log message:
-	Additional logging
+	Detect udev problems in _rename_dev_node.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
 
---- LVM2/libdm/libdm-common.c	2009/08/03 18:33:08	1.73
-+++ LVM2/libdm/libdm-common.c	2009/08/05 19:50:08	1.74
-@@ -854,41 +854,50 @@
- 	return 0;
- }
- 
--static int _udev_notify_sem_inc(int semid)
-+static int _udev_notify_sem_inc(uint32_t cookie, int semid)
- {
- 	struct sembuf sb = {0, 1, 0};
- 
- 	if (semop(semid, &sb, 1) < 0) {
--		log_error("semid %d: semop failed: %s", semid, strerror(errno));
-+		log_error("semid %d: semop failed for cookie 0x%" PRIx32 ": %s",
-+			  semid, cookie, strerror(errno));
- 		return 0;
- 	}
- 
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) incremented",
-+		  cookie, semid);
-+
+--- LVM2/libdm/libdm-common.c	2009/08/05 19:50:08	1.74
++++ LVM2/libdm/libdm-common.c	2009/08/06 15:00:25	1.75
+@@ -381,6 +381,29 @@
  	return 1;
  }
  
--static int _udev_notify_sem_dec(int semid)
-+static int _udev_notify_sem_dec(uint32_t cookie, int semid)
++static int _rm_dev_node(const char *dev_name)
++{
++	char path[PATH_MAX];
++	struct stat info;
++
++	_build_dev_path(path, sizeof(path), dev_name);
++
++	if (stat(path, &info) < 0)
++		return 1;
++	else if (dm_udev_get_sync_support())
++		log_warn("Node %s was not removed by udev. "
++			 "Falling back to direct node removal.", path);
++
++	if (unlink(path) < 0) {
++		log_error("Unable to unlink device node for '%s'", dev_name);
++		return 0;
++	}
++
++	log_debug("Removed %s", path);
++
++	return 1;
++}
++
+ static int _rename_dev_node(const char *old_name, const char *new_name)
  {
- 	struct sembuf sb = {0, -1, IPC_NOWAIT};
- 
- 	if (semop(semid, &sb, 1) < 0) {
- 		switch (errno) {
- 			case EAGAIN:
--				log_error("semid %d: semop failed: "
-+				log_error("semid %d: semop failed for cookie "
-+					  "0x%" PRIx32 ": "
- 					  "incorrect semaphore state",
--					  semid);
-+					  semid, cookie);
- 				break;
- 			default:
--				log_error("semid %d: semop failed: %s",
--					  semid, strerror(errno));
-+				log_error("semid %d: semop failed for cookie "
-+					  "0x%" PRIx32 ": %s",
-+					  semid, cookie, strerror(errno));
- 				break;
+ 	char oldpath[PATH_MAX];
+@@ -396,6 +419,19 @@
+ 				  "is already present", newpath);
+ 			return 0;
  		}
- 		return 0;
- 	}
++		else if (dm_udev_get_sync_support()) {
++			if (stat(oldpath, &info) < 0 &&
++				 errno == ENOENT)
++				/* assume udev already deleted this */
++				return 1;
++			else {
++				log_warn("The node %s should have been renamed to %s "
++					 "by udev but old node is still present. "
++					 "Falling back to direct old node removal.",
++					 oldpath, newpath);
++				return _rm_dev_node(old_name);
++			}
++		}
  
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) decremented",
-+		  cookie, semid);
-+
- 	return 1;
- }
- 
--static int _udev_notify_sem_destroy(int semid, uint32_t cookie)
-+static int _udev_notify_sem_destroy(uint32_t cookie, int semid)
- {
- 	if (semctl(semid, 0, IPC_RMID, 0) < 0) {
- 		log_error("Could not cleanup notification semaphore "
-@@ -897,6 +906,9 @@
- 		return 0;
- 	}
- 
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) destroyed", cookie,
-+		  semid);
-+
- 	return 1;
- }
- 
-@@ -950,14 +962,20 @@
+ 		if (unlink(newpath) < 0) {
+ 			if (errno == EPERM) {
+@@ -407,6 +443,11 @@
+ 			return 0;
  		}
- 	} while (!base_cookie);
- 
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) created",
-+		  gen_cookie, gen_semid);
-+
- 	if (semctl(gen_semid, 0, SETVAL, 1) < 0) {
- 		log_error("semid %d: semctl failed: %s", gen_semid, strerror(errno));
- 		/* We have to destroy just created semaphore
- 		 * so it won't stay in the system. */
--		(void) _udev_notify_sem_destroy(gen_semid, gen_cookie);
-+		(void) _udev_notify_sem_destroy(gen_cookie, gen_semid);
- 		goto bad;
  	}
++	else if (dm_udev_get_sync_support())
++		log_warn("The node %s should have been renamed to %s "
++			 "by udev but new node is not present. "
++			 "Falling back to direct node rename.",
++			 oldpath, newpath);
  
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) incremented",
-+		  gen_cookie, gen_semid);
-+
- 	if (close(fd))
- 		stack;
- 
-@@ -990,7 +1008,7 @@
- 	} else if (!_udev_notify_sem_create(cookie, &semid))
- 		goto_bad;
- 
--	if (!_udev_notify_sem_inc(semid)) {
-+	if (!_udev_notify_sem_inc(*cookie, semid)) {
- 		log_error("Could not set notification semaphore "
- 			  "identified by cookie value %" PRIu32 " (0x%x)",
- 			  *cookie, *cookie);
-@@ -999,6 +1017,10 @@
- 
- 	dmt->event_nr = *cookie;
- 	dmt->cookie_set = 1;
-+
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task",
-+		  dmt->event_nr, semid);
-+
+ 	if (rename(oldpath, newpath) < 0) {
+ 		log_error("Unable to rename device node from '%s' to '%s'",
+@@ -419,29 +460,6 @@
  	return 1;
- 
- bad:
-@@ -1016,7 +1038,7 @@
- 	if (!_get_cookie_sem(cookie, &semid))
- 		return_0;
- 
--	if (!_udev_notify_sem_dec(semid)) {
-+	if (!_udev_notify_sem_dec(cookie, semid)) {
- 		log_error("Could not signal waiting process using notification "
- 			  "semaphore identified by cookie value %" PRIu32 " (0x%x)",
- 			  cookie, cookie);
-@@ -1037,15 +1059,18 @@
- 	if (!_get_cookie_sem(cookie, &semid))
- 		return_0;
- 
--	if (!_udev_notify_sem_dec(semid)) {
-+	if (!_udev_notify_sem_dec(cookie, semid)) {
- 		log_error("Failed to set a proper state for notification "
- 			  "semaphore identified by cookie value %" PRIu32 " (0x%x) "
- 			  "to initialize waiting for incoming notifications.",
- 			  cookie, cookie);
--		(void) _udev_notify_sem_destroy(semid, cookie);
-+		(void) _udev_notify_sem_destroy(cookie, semid);
- 		return 0;
- 	}
- 
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d): Waiting for zero",
-+		  cookie, semid);
-+
- repeat_wait:
- 	if (semop(semid, &sb, 1) < 0) {
- 		if (errno == EINTR)
-@@ -1053,11 +1078,11 @@
- 		log_error("Could not set wait state for notification semaphore "
- 			  "identified by cookie value %" PRIu32 " (0x%x): %s",
- 			  cookie, cookie, strerror(errno));
--		(void) _udev_notify_sem_destroy(semid, cookie);
-+		(void) _udev_notify_sem_destroy(cookie, semid);
- 		return 0;
- 	}
- 
--	return _udev_notify_sem_destroy(semid, cookie);
-+	return _udev_notify_sem_destroy(cookie, semid);
  }
  
- #endif		/* UDEV_SYNC_SUPPORT */
+-static int _rm_dev_node(const char *dev_name)
+-{
+-	char path[PATH_MAX];
+-	struct stat info;
+-
+-	_build_dev_path(path, sizeof(path), dev_name);
+-
+-	if (stat(path, &info) < 0)
+-		return 1;
+-	else if (dm_udev_get_sync_support())
+-		log_warn("Node %s was not removed by udev. "
+-			 "Falling back to direct node removal.", path);
+-
+-	if (unlink(path) < 0) {
+-		log_error("Unable to unlink device node for '%s'", dev_name);
+-		return 0;
+-	}
+-
+-	log_debug("Removed %s", path);
+-
+-	return 1;
+-}
+-
+ #ifdef linux
+ static int _open_dev_node(const char *dev_name)
+ {
 
 
