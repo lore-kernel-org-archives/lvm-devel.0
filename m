@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 6 Aug 2009 15:05:11 -0000
-Subject: LVM2/tools dmsetup.c
-Message-ID: <20090806150511.30932.qmail@sourceware.org>
+Date: 6 Aug 2009 15:10:59 -0000
+Subject: LVM2/udev 12-dm-permissions.rules
+Message-ID: <20090806151059.2607.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,80 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-08-06 15:05:11
+Changes by:	prajnoha at sourceware.org	2009-08-06 15:10:58
 
-Modified files:
-	tools          : dmsetup.c 
+Added files:
+	udev           : 12-dm-permissions.rules 
 
 Log message:
-	Add 'udevcookies' command for dmsetup.
+	Rename template rule file 11-dm-permissions.rules to 12-dm-permissions.rules.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/12-dm-permissions.rules.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/tools/dmsetup.c	2009/08/06 15:04:30	1.121
-+++ LVM2/tools/dmsetup.c	2009/08/06 15:05:10	1.122
-@@ -36,6 +36,7 @@
- #include <sys/param.h>
- #include <locale.h>
- #include <langinfo.h>
-+#include <time.h>
- 
- #include <fcntl.h>
- #include <sys/stat.h>
-@@ -853,6 +854,45 @@
- }
- #endif
- 
-+static int _udevcookies(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
-+{
-+	int max_id, id, sid;
-+	struct seminfo sinfo;
-+	struct semid_ds sdata;
-+	int val;
-+	char *time_str;
+/cvs/lvm2/LVM2/udev/12-dm-permissions.rules,v  -->  standard output
+revision 1.1
+--- LVM2/udev/12-dm-permissions.rules
++++ -	2009-08-06 15:10:58.968635000 +0000
+@@ -0,0 +1,18 @@
++# Udev rules for device-mapper devices.
++#
++# These rules set permissions for DM devices. There are some environment
++# variables set that can be used:
++#   DM_NAME - actual DM device's name
++#   DM_UUID - UUID set for DM device (blank if not specified)
++#   DM_SUSPENDED - suspended state of DM device (0 or 1)
++#   DM_LV_NAME - logical volume name (not set if LVM device not present)
++#   DM_VG_NAME - volume group name (not set if LVM device not present)
++#   DM_LV_LAYER - logical volume layer (not set if LVM device not present)
 +
-+	if ((max_id = semctl(0, 0, SEM_INFO, &sinfo)) < 0) {
-+		log_sys_error("sem_ctl", "SEM_INFO");
-+		return 0;
-+	}
++SUBSYSTEM!="block", GOTO="dm_end"
++KERNEL!="dm-[0-9]*", GOTO="dm_end"
++ACTION!="change", GOTO="dm_end"
 +
-+	printf("cookie       semid      value      last_semop_time\n");
++#ENV{DM_NAME}=="my_device", OWNER:="peter", GROUP:="peter", MODE:="644"
 +
-+	for (id = 0; id <= max_id; id++) {
-+		if ((sid = semctl(id, 0, SEM_STAT, &sdata)) < 0)
-+			continue;
-+
-+		if (sdata.sem_perm.__key >> 16 == DM_COOKIE_MAGIC) {
-+			if ((val = semctl(sid, 0, GETVAL)) < 0) {
-+				log_error("semid %d: sem_ctl failed for "
-+					  "cookie 0x%" PRIx32 ": %s",
-+					  sid, sdata.sem_perm.__key,
-+					  strerror(errno));
-+				continue;
-+			}
-+
-+			time_str = ctime((const time_t *) &sdata.sem_otime);
-+
-+			printf("0x%-10x %-10d %-10d %s", sdata.sem_perm.__key,
-+				sid, val, time_str ? time_str : "unknown");
-+		}
-+	}
-+
-+	return 1;
-+}
-+
-+
- static int _version(int argc __attribute((unused)), char **argv __attribute((unused)), void *data __attribute((unused)))
- {
- 	char version[80];
-@@ -2385,6 +2425,7 @@
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
- 	{"udevcomplete", "<cookie>", 1, 1, _udevcomplete},
- 	{"udevcomplete_all", "", 0, 0, _udevcomplete_all},
-+	{"udevcookies", "", 0, 0, _udevcookies},
- 	{"targets", "", 0, 0, _targets},
- 	{"version", "", 0, 0, _version},
- 	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
++LABEL="dm_end"
 
 
