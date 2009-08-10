@@ -1,59 +1,70 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 10 Aug 2009 14:08:23 -0400
-Subject: [PATCH 2/4] Update vg_remove_single_* functions to use the removed_pvs list.
-In-Reply-To: <1249927705-28528-2-git-send-email-dwysocha@redhat.com>
+Date: Mon, 10 Aug 2009 14:08:24 -0400
+Subject: [PATCH 3/4] Update lvm_vg_write() to handle the deferred commit of lvm_vg_write().
+In-Reply-To: <1249927705-28528-3-git-send-email-dwysocha@redhat.com>
 References: <1249927705-28528-1-git-send-email-dwysocha@redhat.com>
 	<1249927705-28528-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <1249927705-28528-3-git-send-email-dwysocha@redhat.com>
+	<1249927705-28528-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1249927705-28528-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Now that we've split vg_remove_single into two routines, in the first routine
-that only manipulates memory, we move the PVs from the vg->pvs list to the
-vg->removed_pvs list.  Then later, we iterate through this list to write the
-removed PVs to disk, which removes them from the volume group and places them
-into the internal ORPHAN VG.
+Now that we've refactored the internal library functions that do the
+vg_remove, we can handle the deferred commit of a lvm_vg_remove() inside
+lvm_vg_write().  This makes the VG create/remove API more consistent in
+terms of disk commits - they now both require an lvm_vg_write() to commit
+the create or remove to disk.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ liblvm/lvm2app.h |    4 ++--
+ liblvm/lvm_vg.c  |    8 +++-----
+ 2 files changed, 5 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6767668..0f53832 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -471,6 +471,7 @@ int remove_lvs_in_vg(struct cmd_context *cmd,
- int vg_remove_check(struct volume_group *vg)
- {
- 	unsigned lv_count;
-+	struct pv_list *pvl, *tpvl;
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index e509ceb..b1f3999 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -394,8 +394,8 @@ int lvm_vg_write(vg_t *vg);
+ /**
+  * Remove a VG from the system.
+  *
+- * This function commits the change to disk and does not require calling
+- * lvm_vg_write.
++ * This function removes a Volume Group object in memory, and requires
++ * calling lvm_vg_write to commit the removal to disk.
+  *
+  * \param   vg
+  * VG handle obtained from lvm_vg_create or lvm_vg_open.
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index a659e27..2e93dd0 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -106,9 +106,9 @@ int lvm_vg_write(vg_t *vg)
+ 		return -1;
  
- 	if (vg_read_error(vg) || vg_missing_pv_count(vg)) {
- 		log_error("Volume group \"%s\" not found, is inconsistent "
-@@ -494,6 +495,10 @@ int vg_remove_check(struct volume_group *vg)
- 	if (!archive(vg))
- 		return 0;
- 
-+	dm_list_iterate_items_safe(pvl, tpvl, &vg->pvs) {
-+		dm_list_del(&pvl->list);
-+		dm_list_add(&vg->removed_pvs, &pvl->list);
-+	}
- 	return 1;
- }
- 
-@@ -515,7 +520,7 @@ int vg_remove_ondisk(struct volume_group *vg)
+ 	if (dm_list_empty(&vg->pvs)) {
+-		log_error("Volume group %s does not contain any "
+-			  "physical volumes.", vg->name);
+-		return -1;
++		if (!vg_remove_ondisk(vg))
++			return -1;
++		return 0;
  	}
  
- 	/* init physical volumes */
--	dm_list_iterate_items(pvl, &vg->pvs) {
-+	dm_list_iterate_items(pvl, &vg->removed_pvs) {
- 		pv = pvl->pv;
- 		log_verbose("Removing physical volume \"%s\" from "
- 			    "volume group \"%s\"", pv_dev_name(pv), vg->name);
+ 	if (! dm_list_empty(&vg->removed_pvs)) {
+@@ -156,8 +156,6 @@ int lvm_vg_remove(vg_t *vg)
+ 	if (!vg_remove_check(vg))
+ 		return -1;
+ 
+-	if (!vg_remove_ondisk(vg))
+-		return -1;
+ 	return 0;
+ }
+ 
 -- 
 1.6.0.6
 
