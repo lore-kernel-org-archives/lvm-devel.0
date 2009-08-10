@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Aug 2009 21:22:38 -0000
-Subject: LVM2/test/api test.c
-Message-ID: <20090807212238.32206.qmail@sourceware.org>
+Date: 10 Aug 2009 17:15:02 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20090810171502.3160.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,118 +10,57 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-08-07 21:22:37
+Changes by:	wysochanski at sourceware.org	2009-08-10 17:15:02
 
 Modified files:
-	test/api       : test.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Update test/api/test.c to call lvm_vg_create and lvm_vg_remove.
-	
-	Also fix a couple bugs.
+	Remove useless _pv_write wrapper.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.277&r2=1.278
 
---- LVM2/test/api/test.c	2009/07/29 14:06:31	1.24
-+++ LVM2/test/api/test.c	2009/08/07 21:22:37	1.25
-@@ -81,6 +81,10 @@
- 	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
- 	printf("'vg_close vgname': "
- 	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
-+	printf("'vg_create vgname: "
-+	       "Issue a lvm_vg_create() to create VG 'vgname'\n");
-+	printf("'vg_remove vgname: "
-+	       "Issue a lvm_vg_remove() to remove VG 'vgname'\n");
- 	printf("'config_reload': "
- 	       "Issue a lvm_config_reload() API to reload LVM config\n");
- 	printf("'config_override' device: "
-@@ -351,24 +355,70 @@
- 		return;
- 	}
- 	vg = _lookup_vg_by_name(argv, argc);
--	if (vg)
--		rc = lvm_vg_write(vg);
-+	if (!vg) {
-+		printf("Can't find vg_name %s\n", argv[1]);
-+		return;
-+	}
-+	rc = lvm_vg_write(vg);
- 	_lvm_status_to_pass_fail(rc);
- 	printf("writing VG %s\n", lvm_vg_get_name(vg));
+--- LVM2/lib/metadata/metadata.c	2009/08/01 17:08:44	1.277
++++ LVM2/lib/metadata/metadata.c	2009/08/10 17:15:01	1.278
+@@ -45,10 +45,6 @@
+ 					uint64_t *label_sector,
+ 					int warnings, int scan_label_only);
+ 
+-static int _pv_write(struct cmd_context *cmd __attribute((unused)),
+-		     struct physical_volume *pv,
+-	     	     struct dm_list *mdas, int64_t label_sector);
+-
+ static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
+ 			 			const char *pv_name);
+ 
+@@ -2995,18 +2991,10 @@
+ 	return _get_pvs(cmd, NULL);
  }
  
-+static void _vg_create(char **argv, int argc, lvm_t libh)
-+{
-+	vg_t *vg;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	vg = lvm_vg_create(libh, argv[1]);
-+	if (!vg || !lvm_vg_get_name(vg)) {
-+		printf("Error creating %s\n", argv[1]);
-+		return;
-+	}
-+
-+	printf("Success creating vg %s\n", argv[1]);
-+	dm_hash_insert(_vgname_hash, lvm_vg_get_name(vg), vg);
-+	dm_hash_insert(_vgid_hash, lvm_vg_get_uuid(vg), vg);
-+}
-+
-+static void _vg_remove(char **argv, int argc)
-+{
-+	vg_t *vg;
-+	int rc = 0;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return;
-+	}
-+	vg = _lookup_vg_by_name(argv, argc);
-+	if (!vg) {
-+		printf("Can't find vg_name %s\n", argv[1]);
-+		return;
-+	}
-+	rc = lvm_vg_remove(vg);
-+	_lvm_status_to_pass_fail(rc);
-+	printf("removing VG\n");
-+}
-+
- static void _vg_close(char **argv, int argc)
+-/* FIXME: liblvm todo - make into function that takes handle */
+ int pv_write(struct cmd_context *cmd __attribute((unused)),
+ 	     struct physical_volume *pv,
+ 	     struct dm_list *mdas, int64_t label_sector)
  {
- 	vg_t *vg;
-+	int rc = 0;
- 
- 	if (argc < 2) {
- 		printf ("Please enter vg_name\n");
- 		return;
+-	return _pv_write(cmd, pv, mdas, label_sector);
+-}
+-
+-static int _pv_write(struct cmd_context *cmd __attribute((unused)),
+-		     struct physical_volume *pv,
+-	     	     struct dm_list *mdas, int64_t label_sector)
+-{
+ 	if (!pv->fmt->ops->pv_write) {
+ 		log_error("Format does not support writing physical volumes");
+ 		return 0;
+@@ -3037,7 +3025,7 @@
+ 		return 0;
  	}
- 	vg = _lookup_and_remove_vg(argv[1]);
--	if (vg)
--		lvm_vg_close(vg);
--	/* FIXME: remove LVs from lvname_hash */
-+	if (!vg) {
-+		printf("Can't find vg_name %s\n", argv[1]);
-+		return;
-+	}
-+	rc = lvm_vg_close(vg);
-+	_lvm_status_to_pass_fail(rc);
-+	printf("closing VG\n");
- }
  
- static void _show_one_vg(vg_t *vg)
-@@ -593,6 +643,10 @@
- 			_vg_open(argv, argc, libh);
- 		} else if (!strcmp(argv[0], "vg_close")) {
- 			_vg_close(argv, argc);
-+		} else if (!strcmp(argv[0], "vg_create")) {
-+			_vg_create(argv, argc, libh);
-+		} else if (!strcmp(argv[0], "vg_remove")) {
-+			_vg_remove(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_activate")) {
- 			_lv_activate(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_deactivate")) {
+-	if (!_pv_write(cmd, pv, NULL, INT64_C(-1))) {
++	if (!pv_write(cmd, pv, NULL, INT64_C(-1))) {
+ 		log_error("Failed to clear metadata from physical "
+ 			  "volume \"%s\" after removal from \"%s\"",
+ 			  pv_dev_name(pv), old_vg_name);
 
 
