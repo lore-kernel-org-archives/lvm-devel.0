@@ -1,46 +1,50 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 13 Aug 2009 17:27:03 -0400
-Subject: [PATCH 9/9] Change vgsplit behavior to open/lock first vg based on alphabetical ordering.
-In-Reply-To: <1250198823-11591-9-git-send-email-dwysocha@redhat.com>
+Date: Thu, 13 Aug 2009 17:57:27 -0400
+Subject: [PATCH 10/13] Refactor vgmerge - introduce lock_vg_from_first flag.
+In-Reply-To: <1250198823-11591-1-git-send-email-dwysocha@redhat.com>
 References: <1250198823-11591-1-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-2-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-3-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-4-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-5-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-6-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-7-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-8-git-send-email-dwysocha@redhat.com>
-	<1250198823-11591-9-git-send-email-dwysocha@redhat.com>
-Message-ID: <1250198823-11591-10-git-send-email-dwysocha@redhat.com>
+Message-ID: <1250200650-12896-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the destination vgname comes before the source vgname, we must open the
-destination first because of the locking rules.  Thus, do a strcmp and set
-the flag based on the comparison.
+Should be no functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/vgsplit.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ tools/vgmerge.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index ef1ab2c..a8e525d 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -314,6 +314,9 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 	}
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 37f6bd7..39032fb 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -21,6 +21,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 	struct volume_group *vg_to, *vg_from;
+ 	struct lv_list *lvl1, *lvl2;
+ 	int r = ECMD_FAILED;
++	int lock_vg_from_first = 0;
  
-+	if (strcmp(vg_name_to, vg_name_from) < 0)
-+		lock_vg_from_first = 0;
-+
- 	if (lock_vg_from_first) {
- 		vg_from = _vgsplit_from(cmd, vg_name_from);
- 		if (!vg_from)
+ 	if (!strcmp(vg_name_to, vg_name_from)) {
+ 		log_error("Duplicate volume group name \"%s\"", vg_name_from);
+@@ -116,8 +117,13 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		  vg_from->name, vg_to->name);
+ 	r = ECMD_PROCESSED;
+ bad:
+-	unlock_and_release_vg(cmd, vg_from, vg_name_from);
+-	unlock_and_release_vg(cmd, vg_to, vg_name_to);
++	if (lock_vg_from_first) {
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++	} else {
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++	}
+ 	return r;
+ }
+ 
 -- 
 1.6.0.6
 
