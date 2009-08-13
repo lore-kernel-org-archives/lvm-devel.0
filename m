@@ -1,7 +1,7 @@
-From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
-Date: 13 Aug 2009 10:39:42 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
-Message-ID: <20090813103942.13382.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 13 Aug 2009 12:03:47 -0000
+Subject: LVM2/tools vgextend.c
+Message-ID: <20090813120347.6299.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	ccaulfield at sourceware.org	2009-08-13 10:39:42
+Changes by:	wysochanski at sourceware.org	2009-08-13 12:03:47
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
+	tools          : vgextend.c 
 
 Log message:
-	Fix compilation warning in clvmd.c
+	Fix vgextend error path - if ORPHAN lock fails, unlock and release vg.
+	
+	Full changes
+	- Fix vgextend error path when lock_vol(VG_ORPHANS) fails
+	- Move lock_vol(VG_ORPHANS) before archive(vg) - safe & simpler error paths
+	- Remove legacy comment/code that no longer applies
+	
+	Found in review - Milan Broz <mbroz@redhat.com>
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1234&r2=1.1235
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
---- LVM2/WHATS_NEW	2009/08/06 19:32:26	1.1234
-+++ LVM2/WHATS_NEW	2009/08/13 10:39:41	1.1235
-@@ -1,5 +1,6 @@
- Version 2.02.52 -
- =================================
-+  Fix compile warning in clvmd.
+--- LVM2/tools/vgextend.c	2009/07/24 15:01:44	1.48
++++ LVM2/tools/vgextend.c	2009/08/13 12:03:46	1.49
+@@ -43,21 +43,15 @@
+ 		return ECMD_FAILED;
+ 	}
  
- Version 2.02.51 - 6th August 2009
- =================================
---- LVM2/daemons/clvmd/clvmd.c	2009/06/15 12:15:23	1.59
-+++ LVM2/daemons/clvmd/clvmd.c	2009/08/13 10:39:41	1.60
-@@ -110,6 +110,8 @@
+-/********** FIXME
+-	log_print("maximum logical volume size is %s",
+-		  (dummy = lvm_show_size(LVM_LV_SIZE_MAX(vg) / 2, LONG)));
+-	dm_free(dummy);
+-	dummy = NULL;
+-**********/
+-
+-	if (!archive(vg))
+-		goto error;
+-
+ 	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
+ 		log_error("Can't get lock for orphan PVs");
++		unlock_and_release_vg(cmd, vg, vg_name);
+ 		return ECMD_FAILED;
+ 	}
  
- typedef enum {IF_AUTO, IF_CMAN, IF_GULM, IF_OPENAIS, IF_COROSYNC} if_type_t;
- 
-+typedef void *(lvm_pthread_fn_t)(void*);
++	if (!archive(vg))
++		goto error;
 +
- /* Prototypes for code further down */
- static void sigusr2_handler(int sig);
- static void sighup_handler(int sig);
-@@ -138,7 +140,7 @@
- static int local_rendezvous_callback(struct local_client *thisfd, char *buf,
- 				     int len, const char *csid,
- 				     struct local_client **new_client);
--static void *lvm_thread_fn(void *);
-+static void lvm_thread_fn(void *) __attribute__ ((noreturn));
- static int add_to_lvmqueue(struct local_client *client, struct clvm_header *msg,
- 			   int msglen, const char *csid);
- static int distribute_command(struct local_client *thisfd);
-@@ -461,7 +463,7 @@
- 
- 	/* Don't let anyone else to do work until we are started */
- 	pthread_mutex_lock(&lvm_start_mutex);
--	pthread_create(&lvm_thread, NULL, lvm_thread_fn,
-+	pthread_create(&lvm_thread, NULL, (lvm_pthread_fn_t*)lvm_thread_fn,
- 			(void *)(long)using_gulm);
- 
- 	/* Tell the rest of the cluster our version number */
-@@ -1797,7 +1799,7 @@
- /*
-  * Routine that runs in the "LVM thread".
-  */
--static __attribute__ ((noreturn)) void *lvm_thread_fn(void *arg)
-+static void lvm_thread_fn(void *arg)
- {
- 	struct dm_list *cmdl, *tmp;
- 	sigset_t ss;
+ 	/* extend vg */
+ 	if (!vg_extend(vg, argc, argv))
+ 		goto error;
 
 
