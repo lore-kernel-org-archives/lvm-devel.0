@@ -1,95 +1,74 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 13 Aug 2009 12:02:29 +0200
-Subject: [PATCH] DRAFT! write lock priority
-In-Reply-To: <20090812225043.GR7033@agk-dp.fab.redhat.com>
-References: <87skfxtr89.fsf@twilight.int.mornfall.net.>	<20090812223551.GQ7033@agk-dp.fab.redhat.com>
-	<20090812225043.GR7033@agk-dp.fab.redhat.com>
-Message-ID: <4A83E4B5.4020808@redhat.com>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 13 Aug 2009 10:39:42 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20090813103942.13382.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-And I do not see reason why do aux lock name exercise when write priority is not used,
-see patch (on top of Alasdair's change).
-Milan
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	ccaulfield at sourceware.org	2009-08-13 10:39:42
 
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
---- file_locking.c.old	2009-08-13 11:09:26.000000000 +0200
-+++ file_locking.c	2009-08-13 11:54:37.000000000 +0200
-@@ -170,15 +170,9 @@ static int _do_flock(const char *file, i
- 	return_0; // AGK FIXME Note this bug fix in WHATS_NEW.
- }
+Log message:
+	Fix compilation warning in clvmd.c
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1234&r2=1.1235
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
+
+--- LVM2/WHATS_NEW	2009/08/06 19:32:26	1.1234
++++ LVM2/WHATS_NEW	2009/08/13 10:39:41	1.1235
+@@ -1,5 +1,6 @@
+ Version 2.02.52 -
+ =================================
++  Fix compile warning in clvmd.
  
--static int _lock_file(const char *file, uint32_t flags)
-+static int _do_write_priority_flock(const char *file, int *fd, int operation, uint32_t nonblock)
+ Version 2.02.51 - 6th August 2009
+ =================================
+--- LVM2/daemons/clvmd/clvmd.c	2009/06/15 12:15:23	1.59
++++ LVM2/daemons/clvmd/clvmd.c	2009/08/13 10:39:41	1.60
+@@ -110,6 +110,8 @@
+ 
+ typedef enum {IF_AUTO, IF_CMAN, IF_GULM, IF_OPENAIS, IF_COROSYNC} if_type_t;
+ 
++typedef void *(lvm_pthread_fn_t)(void*);
++
+ /* Prototypes for code further down */
+ static void sigusr2_handler(int sig);
+ static void sighup_handler(int sig);
+@@ -138,7 +140,7 @@
+ static int local_rendezvous_callback(struct local_client *thisfd, char *buf,
+ 				     int len, const char *csid,
+ 				     struct local_client **new_client);
+-static void *lvm_thread_fn(void *);
++static void lvm_thread_fn(void *) __attribute__ ((noreturn));
+ static int add_to_lvmqueue(struct local_client *client, struct clvm_header *msg,
+ 			   int msglen, const char *csid);
+ static int distribute_command(struct local_client *thisfd);
+@@ -461,7 +463,7 @@
+ 
+ 	/* Don't let anyone else to do work until we are started */
+ 	pthread_mutex_lock(&lvm_start_mutex);
+-	pthread_create(&lvm_thread, NULL, lvm_thread_fn,
++	pthread_create(&lvm_thread, NULL, (lvm_pthread_fn_t*)lvm_thread_fn,
+ 			(void *)(long)using_gulm);
+ 
+ 	/* Tell the rest of the cluster our version number */
+@@ -1797,7 +1799,7 @@
+ /*
+  * Routine that runs in the "LVM thread".
+  */
+-static __attribute__ ((noreturn)) void *lvm_thread_fn(void *arg)
++static void lvm_thread_fn(void *arg)
  {
--	int operation;
--	int fd_aux = -1;
--	uint32_t nonblock = flags & LCK_NONBLOCK;
--	int r;
--
--	struct lock_list *ll;
--	char state;
-+	int r, fd_aux = -1;
- 	char *file_aux = alloca(strlen(file) + 5);
- 
- 	strcpy(file_aux, file);
-@@ -187,6 +181,28 @@ static int _lock_file(const char *file, 
- 	strcat(file_aux, "aux_");
- 	strcat(file_aux, strrchr(file, '/') + 1);
- 
-+	if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, 0))) {
-+		if (operation == LOCK_EX) {
-+			r = _do_flock(file, fd, operation, nonblock);
-+			_undo_flock(file_aux, fd_aux);
-+		} else {
-+			_undo_flock(file_aux, fd_aux);
-+			r = _do_flock(file, fd, operation, nonblock);
-+		}
-+	}
-+
-+	return r;
-+}
-+
-+static int _lock_file(const char *file, uint32_t flags)
-+{
-+	int operation;
-+	uint32_t nonblock = flags & LCK_NONBLOCK;
-+	int r;
-+
-+	struct lock_list *ll;
-+	char state;
-+
- 	switch (flags & LCK_TYPE_MASK) {
- 	case LCK_READ:
- 		operation = LOCK_SH;
-@@ -216,21 +232,10 @@ static int _lock_file(const char *file, 
- 	log_very_verbose("Locking %s %c%c", ll->res, state,
- 			 nonblock ? ' ' : 'B');
- 
--	if (!_prioritise_write_locks)
-+	if (_prioritise_write_locks)
-+		r = _do_write_priority_flock(file, &ll->lf, operation, nonblock);
-+	else 
- 		r = _do_flock(file, &ll->lf, operation, nonblock);
--	else {
--		if (flags & LCK_WRITE) {
--			if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, 0))) {
--				r = _do_flock(file, &ll->lf, operation, nonblock);
--				_undo_flock(file_aux, fd_aux);
--			}
--		} else {
--			if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, 0))) {
--				_undo_flock(file_aux, fd_aux);
--				r = _do_flock(file, &ll->lf, operation, nonblock);
--			}
--		}
--	}
- 
- 	if (r)
- 		dm_list_add(&_lock_list, &ll->list);
-
+ 	struct dm_list *cmdl, *tmp;
+ 	sigset_t ss;
 
 
