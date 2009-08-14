@@ -1,39 +1,38 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 14 Aug 2009 00:01:06 +0100
-Subject: LVM2 ./WHATS_NEW tools/lvchange.c
-In-Reply-To: <20090813142733.24308.qmail@sourceware.org>
-References: <20090813142733.24308.qmail@sourceware.org>
-Message-ID: <20090813230106.GX7033@agk-dp.fab.redhat.com>
+From: Daniel Mierswa <impulze@impulze.org>
+Date: Fri, 14 Aug 2009 11:42:50 +0200
+Subject: [PATCH] use /sbin/blkid from util-linux-ng for newer udev
+Message-ID: <4A85319A.8030608@impulze.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Aug 13, 2009 at 02:27:33PM -0000, mornfall at sourceware.org wrote:
-> 	Make lvchange --refresh only take a read lock on volume group.
+udev no longer provides vol_id and uses /sbin/blkid from util-linux-ng
+(util-linux won't work)
+
+see:
+http://git.kernel.org/?p=linux/hotplug/udev.git;a=commitdiff;h=f07996885dab45102492d7f16e7e2997e264c725
+
+Signed-off-by: Daniel Mierswa <impulze@impulze.org>
+---
+ udev/12-dm-disk.rules |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/udev/12-dm-disk.rules b/udev/12-dm-disk.rules
+index 4b81420..b1e6cd2 100644
+--- a/udev/12-dm-disk.rules
++++ b/udev/12-dm-disk.rules
+@@ -21,7 +21,7 @@ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
  
-> +  Make lvchange --refresh only take a read lock on volume group.
-
-Declare the other changes in WHATS_NEW too?
-  Patch now does this for --monitor too?
-  --refresh is now permitted with --ignorelockingfailure?
-
-> -	int avail_only =
-> +	int avail_only = /* i.e. only one of -a or --refresh is given */
-
---monitor?
-
->  	    !(arg_count(cmd, contiguous_ARG) || arg_count(cmd, permission_ARG) ||
->  	     arg_count(cmd, readahead_ARG) || arg_count(cmd, persistent_ARG) ||
->  	     arg_count(cmd, addtag_ARG) || arg_count(cmd, deltag_ARG) ||
-> -	     arg_count(cmd, refresh_ARG) || arg_count(cmd, alloc_ARG) ||
-> -	     arg_count(cmd, resync_ARG));
-> +	     arg_count(cmd, resync_ARG) || arg_count(cmd, alloc_ARG));
->  
->  	if (arg_count(cmd, ignorelockingfailure_ARG) && !avail_only) {
->  		log_error("Only -a permitted with --ignorelockingfailure");
+ ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
  
-Alasdair
+-IMPORT{program}="vol_id --export $tempnode"
++IMPORT{program}="/sbin/blkid -o udev -p $tempnode"
+ OPTIONS="link_priority=-100"
+ ENV{DM_LV_LAYER}=="?*", OPTIONS="link_priority=-90"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+-- 
+1.6.4
 
 
