@@ -1,39 +1,30 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 14 Aug 2009 18:12:34 +0100
-Subject: Re: [PATCH] Re: [linux-lvm] Clarifications wanted about locking process
-In-Reply-To: <87my62sjie.fsf_-_@twilight.int.mornfall.net.>
-References: <7fcd249b0908131713x6aeddd5bm8975df94d3c3a39a@mail.gmail.com>
-	<20090814082407.GY7033@agk-dp.fab.redhat.com>
-	<87my62sjie.fsf_-_@twilight.int.mornfall.net.>
-Message-ID: <20090814171234.GA7033@agk-dp.fab.redhat.com>
+Date: Fri, 14 Aug 2009 18:16:55 +0100
+Subject: [PATCH] DRAFT! write lock priority
+In-Reply-To: <87fxbusglm.fsf@twilight.int.mornfall.net.>
+References: <87skfxtr89.fsf@twilight.int.mornfall.net.>
+	<20090812223551.GQ7033@agk-dp.fab.redhat.com>
+	<20090812225043.GR7033@agk-dp.fab.redhat.com>
+	<874osbu5c8.fsf@twilight.int.mornfall.net.>
+	<87fxbusglm.fsf@twilight.int.mornfall.net.>
+Message-ID: <20090814171655.GB7033@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Aug 14, 2009 at 01:49:13PM +0200, Peter Rockai wrote:
-> The attached patch should fix the issue. I believe that taking a global write
-> lock while scanning is a mistake (I consulted with Milan, he says it only
-> serves to enable metadata caching).
+On Fri, Aug 14, 2009 at 02:52:05PM +0200, Peter Rockai wrote:
+> As for orphan/global locks, even if we don't strictly *need* the new behaviour,
+> it wouldn't hurt -- and it buys us consistency to have all file locks go this
+> route.
  
-Well only one instance of pvscan and/or vgscan is allowed to run at once,
-and IIRC VG_GLOBAL with LCK_VG_WRITE is what enforces that.
+Milan and I discussed it yesterday and concluded we *did* actually desire the
+new behaviour for those locks:-)
 
-IOW The write lock is correct.  
-
-See the comment in toollib:
-
-/*
- * If the lock_type is LCK_VG_READ (used only in reporting commands),
- * we lock VG_GLOBAL to enable use of metadata cache.
- * This can pause alongide pvscan or vgscan process for a while.
- */
-
-I don't want to touch the VG_GLOBAL logic here at this stage.
-
-Are there any problems with just excluding an already-held VG_GLOBAL from the
-test that generates this error message?
+> Ok to apply?
+ 
+Ack.
 
 Alasdair
 
