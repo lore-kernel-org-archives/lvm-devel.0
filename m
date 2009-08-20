@@ -1,51 +1,66 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Wed, 19 Aug 2009 11:43:21 -0400
-Subject: [PATCH] change the location of mirror device monitored message
-Message-ID: <4A8C1D99.1010309@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 20 Aug 2009 07:03:03 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20090820070303.8181.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-08-20 07:03:02
 
-This patch moves the message telling that a mirror device is monitored
-just before incrementing the usage counter so that the message is
-displayed only when a mirror device is successfully registered.
-The new location of the message is consistent with snapshot.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
 
+Log message:
+	Fix uuid warning in pvcreate to use terminated (and dash formatted) UUID string.
+	
+	# pvcreate -u udwxr7-BoKY-EeKM-r033-xK6o-4og7-F13sGi /dev/sdc
+	uuid udwxr7BoKYEeKMr033xK6o4og7F13sGi|????????? already in use on "/dev/sdb1"
+	is now
+	# pvcreate -u udwxr7-BoKY-EeKM-r033-xK6o-4og7-F13sGi /dev/sdc
+	uuid udwxr7-BoKY-EeKM-r033-xK6o-4og7-F13sGi already in use on "/dev/sdb1"
 
-Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
----
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |    4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1242&r2=1.1243
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.278&r2=1.279
 
-Index: LVM2.02.52-20090818/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-===================================================================
---- LVM2.02.52-20090818.orig/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ LVM2.02.52-20090818/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -241,8 +241,6 @@ int register_device(const char *device,
+--- LVM2/WHATS_NEW	2009/08/19 15:34:33	1.1242
++++ LVM2/WHATS_NEW	2009/08/20 07:03:02	1.1243
+@@ -1,5 +1,6 @@
+ Version 2.02.52 -
+ =================================
++  Fix pvcreate string termination in duplicate uuid warning message.
+   Fix pvcreate on a partition (2.02.51).
+   Fix vgcfgrestore error paths when locking fails (2.02.49).
+   Added configure --enable-clogd to conditionally build the cluster log daemon.
+--- LVM2/lib/metadata/metadata.c	2009/08/10 17:15:01	1.278
++++ LVM2/lib/metadata/metadata.c	2009/08/20 07:03:02	1.279
+@@ -1264,6 +1264,7 @@
+ 	struct device *dev;
+ 	struct dm_list mdas;
+ 	struct pvcreate_params default_pp;
++	char buffer[64] __attribute((aligned(8)));
  
- 	pthread_mutex_lock(&_register_mutex);
- 
--	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
--
- 	/*
- 	 * Need some space for allocations.  1024 should be more
- 	 * than enough for what we need (device mapper name splitting)
-@@ -262,6 +260,8 @@ int register_device(const char *device,
- 		lvm2_run(_lvm_handle, "_memlock_inc");
+ 	fill_default_pvcreate_params(&default_pp);
+ 	if (!pp)
+@@ -1272,8 +1273,11 @@
+ 	if (pp->idp) {
+ 		if ((dev = device_from_pvid(cmd, pp->idp)) &&
+ 		    (dev != dev_cache_get(pv_name, cmd->filter))) {
+-			log_error("uuid %s already in use on \"%s\"",
+-				  pp->idp->uuid, dev_name(dev));
++			if (!id_write_format((const struct id*)&pp->idp->uuid,
++			    buffer, sizeof(buffer)))
++				return_NULL;
++			log_error("uuid %s already in use on \"%s\"", buffer,
++				  dev_name(dev));
+ 			return NULL;
+ 		}
  	}
- 
-+	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
-+
- 	_register_count++;
- 	r = 1;
- 
-
--- 
-Takahiro Yasui
-Hitachi Computer Products (America), Inc.
 
 
