@@ -1,47 +1,64 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 24 Aug 2009 11:37:21 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20090824113721.12644.qmail@sourceware.org>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Tue, 25 Aug 2009 07:55:01 +0200
+Subject: [PATCH 1/1] Fix Makefile distclean targets
+In-Reply-To: <1251179701-10229-1-git-send-email-fdinitto@redhat.com>
+References: <1251179701-10229-1-git-send-email-fdinitto@redhat.com>
+Message-ID: <a277d00b8eaaa67fa3e5eed331366a4947323fa1.1251179617.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-08-24 11:37:21
+Remove unwanted Makefiles and don't purge lvm2.po that's
+under RCS.
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
+---
+:100644 100644 683021e... d6eec79... M	Makefile.in
+:100644 100644 305cef5... 1d2b707... M	liblvm/Makefile.in
+:100644 100644 5db9ab5... 3902303... M	make.tmpl.in
+ Makefile.in        |    2 ++
+ liblvm/Makefile.in |    1 +
+ make.tmpl.in       |    2 +-
+ 3 files changed, 4 insertions(+), 1 deletions(-)
 
-Log message:
-	Fix global locking in PV reporting commands (2.02.49).
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1243&r2=1.1244
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.166&r2=1.167
-
---- LVM2/WHATS_NEW	2009/08/20 07:03:02	1.1243
-+++ LVM2/WHATS_NEW	2009/08/24 11:37:20	1.1244
-@@ -1,5 +1,6 @@
- Version 2.02.52 -
- =================================
-+  Fix global locking in PV reporting commands (2.02.49).
-   Fix pvcreate string termination in duplicate uuid warning message.
-   Fix pvcreate on a partition (2.02.51).
-   Fix vgcfgrestore error paths when locking fails (2.02.49).
---- LVM2/tools/toollib.c	2009/07/21 11:10:49	1.166
-+++ LVM2/tools/toollib.c	2009/08/24 11:37:21	1.167
-@@ -643,7 +643,7 @@
+diff --git a/Makefile.in b/Makefile.in
+index 683021e..d6eec79 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -42,6 +42,8 @@ ifeq ($(MAKECMDGOALS),distclean)
+ 	     lib/locking \
+ 	     lib/mirror \
+ 	     lib/snapshot \
++	     liblvm \
++	     udev \
+ 	     test/api \
+ 	     test \
+ 	     po
+diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
+index 305cef5..1d2b707 100644
+--- a/liblvm/Makefile.in
++++ b/liblvm/Makefile.in
+@@ -93,3 +93,4 @@ distclean_lib:
+ 	$(RM) $(LIB_NAME).pc
  
- 	dm_list_init(&tags);
+ distclean: distclean_lib
++	$(RM) -f Makefile
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 5db9ab5..3902303 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -250,7 +250,7 @@ distclean: $(SUBDIRS.distclean)
+ 	      $(SOURCES:%.c=%.gcda) $(LDDEPS) \
+ 	      config.cache config.log config.status \
+ 	      Makefile make.tmpl core \
+-	      lvm-version.h lvm2.po
++	      lvm-version.h
  
--	if (lock_global && !lock_vol(cmd, VG_GLOBAL, LCK_READ)) {
-+	if (lock_global && !lock_vol(cmd, VG_GLOBAL, LCK_VG_READ)) {
- 		log_error("Unable to obtain global lock.");
- 		return ECMD_FAILED;
- 	}
+ .export.sym: .exported_symbols
+ 	set -e; (echo "Base {"; echo "	global:"; \
+-- 
+1.5.4.3
 
 
