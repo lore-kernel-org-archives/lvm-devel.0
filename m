@@ -1,82 +1,58 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 27 Aug 2009 11:07:31 +0200
-Subject: [PATCH 10/15] clvmd: improve cman build
+Date: Thu, 27 Aug 2009 11:07:32 +0200
+Subject: [PATCH 11/15] clvmd: improve corosync build
 In-Reply-To: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
 References: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <bc1a4df1b6b85543f98b8fc23d2fa72d50230701.1251363523.git.fdinitto@redhat.com>
+Message-ID: <8afd34775b03937e044dbfa9d0f6933b5e67f65b.1251363523.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add sanity checks for libcman.
-
-Propagate the build info in a more consisten way.
+Use common library check infrastructure.
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 ac3c009... 2b35462... M	configure.in
-:100644 100644 5e35522... 3baa4b9... M	daemons/clvmd/Makefile.in
- configure.in              |   13 +++++++++++++
- daemons/clvmd/Makefile.in |    6 ++++--
- 2 files changed, 17 insertions(+), 2 deletions(-)
+:100644 100644 2b35462... 5211add... M	configure.in
+ configure.in |   23 +++++++++++++----------
+ 1 files changed, 13 insertions(+), 10 deletions(-)
 
 diff --git a/configure.in b/configure.in
-index ac3c009..2b35462 100644
+index 2b35462..5211add 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -403,6 +403,17 @@ if test x$BUILDGULM = xyes; then
- 		GULM_LIBS="-lgulm"])
+@@ -414,17 +414,20 @@ if test x$BUILDCMAN = xyes; then
+ 	CHECKDLM=yes
  fi
  
-+dnl -- Look for cman libraries if required.
-+if test x$BUILDCMAN = xyes; then
-+	PKG_CHECK_MODULES(CMAN, libcman, [],
-+		[AC_CHECK_HEADERS(libcman.h,,AC_MSG_ERROR(bailing out))
-+		check_lib_no_libs cman cman_init
-+		AC_MSG_RESULT([no pkg for libcman library, using -lcman])
-+		CMAN_LIBS="-lcman"])
++dnl -- Look for corosync that's required also for openais build
++dnl -- only enough recent version of corosync ship pkg-config files.
++dnl -- We can safely rely on that to detect the correct bits.
++if test x$BUILDCOROSYNC = xyes || \
++   test x$BUILDOPENAIS = xyes; then
++	PKG_CHECK_MODULES(COROSYNC, corosync)
 +	CHECKCONFDB=yes
-+	CHECKDLM=yes
 +fi
 +
  dnl -- Look for corosync libraries if required.
- if [[ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
- 	PKG_CHECK_MODULES(QUORUM, libquorum, [],
-@@ -925,6 +936,8 @@ AC_SUBST(CLDWHOLEARCHIVE)
- AC_SUBST(CLUSTER)
- AC_SUBST(CLVMD)
- AC_SUBST(CLOGD)
-+AC_SUBST(CMAN_CFLAGS)
-+AC_SUBST(CMAN_LIBS)
- AC_SUBST(CMDLIB)
- AC_SUBST(CONFDB_CFLAGS)
- AC_SUBST(CONFDB_LIBS)
-diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index 5e35522..3baa4b9 100644
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -17,6 +17,8 @@ VPATH = @srcdir@
+-if [[ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
+-	PKG_CHECK_MODULES(QUORUM, libquorum, [],
+-		[AC_MSG_RESULT([no pkg for quorum library, using -lquorum]);
+-		QUORUM_LIBS="-lquorum"])
+-	PKG_CHECK_MODULES(CONFDB, libconfdb, [],
+-		[AC_MSG_RESULT([no pkg for confdb library, using -lconfdb]);
+-		CONFDB_LIBS="-lconfdb"])
+-	PKG_CHECK_MODULES(CPG, libcpg, [],
+-		[AC_MSG_RESULT([no pkg for libcpg library, using -lcpg]);
+-		CPG_LIBS="-lcpg"])
++if test x$BUILDCOROSYNC = xyes; then
++	PKG_CHECK_MODULES(QUORUM, libquorum)
++	CHECKCPG=yes
++	CHECKDLM=yes
+ fi
  
- CCS_LIBS = @CCS_LIBS@
- CCS_CFLAGS = @CCS_CFLAGS@
-+CMAN_LIBS = @CMAN_LIBS@
-+CMAN_CFLAGS = @CMAN_CFLAGS@
- CONFDB_LIBS = @CONFDB_LIBS@
- CONFDB_CFLAGS = @CONFDB_CFLAGS@
- CPG_LIBS = @CPG_LIBS@
-@@ -70,8 +72,8 @@ endif
- 
- ifeq ("$(CMAN)", "yes")
- 	SOURCES += clvmd-cman.c
--	LMLIBS += $(CONFDB_LIBS) $(DLM_LIBS) -lcman
--	CFLAGS += $(CONFDB_CFLAGS) $(DLM_CFLAGS)
-+	LMLIBS += $(CMAN_LIBS) $(CONFDB_LIBS) $(DLM_LIBS)
-+	CFLAGS += $(CMAN_CFLAGS) $(CONFDB_CFLAGS) $(DLM_CFLAGS)
- 	DEFS += -DUSE_CMAN
- endif
- 
+ dnl -- Below are checks for libraries common to more than one build.
 -- 
 1.5.4.3
 
