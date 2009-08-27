@@ -1,44 +1,38 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 27 Aug 2009 11:07:23 +0200
-Subject: [PATCH 02/15] configure.in: define clvmd build types
+Date: Thu, 27 Aug 2009 11:07:24 +0200
+Subject: [PATCH 03/15] configure.in: Add sanity check for requested clvmd build
 In-Reply-To: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
 References: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <fbd116febb183e0c1392488efc1e3366dcdfc54c.1251363523.git.fdinitto@redhat.com>
+Message-ID: <125f74b28d6f7a7dd88917acb9010972aada6db5.1251363523.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-set variables we will use later on to do multiple sanity
-checks on the clvmd build
+Start restricting the combinations of backends that can be built
+within clvmd.
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 f9e5d8d... c58bb95... M	configure.in
- configure.in |   14 ++++++++++++++
- 1 files changed, 14 insertions(+), 0 deletions(-)
+:100644 100644 c58bb95... a6d90e7... M	configure.in
+ configure.in |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
 diff --git a/configure.in b/configure.in
-index f9e5d8d..c58bb95 100644
+index c58bb95..a6d90e7 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -344,6 +344,20 @@ if  test x$CLVMD != xnone && test x$CLUSTER = xnone; then
- 	CLUSTER=internal
+@@ -358,6 +358,14 @@ if [[ `expr x"$CLVMD" : '.*cman.*'` != 0 ]]; then
+ 	BUILDCMAN=yes
  fi
  
-+dnl -- define build types
-+if [[ `expr x"$CLVMD" : '.*gulm.*'` != 0 ]]; then
-+	BUILDGULM=yes
-+fi
-+if [[ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
-+	BUILDCOROSYNC=yes
-+fi
-+if [[ `expr x"$CLVMD" : '.*openais.*'` != 0 ]]; then
-+	BUILDOPENAIS=yes
-+fi
-+if [[ `expr x"$CLVMD" : '.*cman.*'` != 0 ]]; then
-+	BUILDCMAN=yes
++dnl -- sanity check around user selection
++if test x$BUILDGULM = xyes; then
++	if test x$BUILDCOROSYNC = xyes || \
++	   test x$BUILDOPENAIS = xyes; then
++		AC_MSG_ERROR([requested clvmd configuration is not valid])
++	fi
 +fi
 +
  dnl -- Look for corosync libraries if required.
