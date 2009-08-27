@@ -1,89 +1,80 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 27 Aug 2009 11:07:30 +0200
-Subject: [PATCH 09/15] clvmd: improve libdlm check
+Date: Thu, 27 Aug 2009 11:07:31 +0200
+Subject: [PATCH 10/15] clvmd: improve cman build
 In-Reply-To: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
 References: <1251364056-24149-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <8176cab28b75f6ffce17896d1cbcc1e404bba7cb.1251363523.git.fdinitto@redhat.com>
+Message-ID: <bc1a4df1b6b85543f98b8fc23d2fa72d50230701.1251363523.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add sanity checks for libdlm.
+Add sanity checks for libcman.
 
 Propagate the build info in a more consisten way.
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 81379c0... ac3c009... M	configure.in
-:100644 100644 2c9915c... 5e35522... M	daemons/clvmd/Makefile.in
- configure.in              |   11 +++++++++++
- daemons/clvmd/Makefile.in |   10 ++++++----
- 2 files changed, 17 insertions(+), 4 deletions(-)
+:100644 100644 ac3c009... 2b35462... M	configure.in
+:100644 100644 5e35522... 3baa4b9... M	daemons/clvmd/Makefile.in
+ configure.in              |   13 +++++++++++++
+ daemons/clvmd/Makefile.in |    6 ++++--
+ 2 files changed, 17 insertions(+), 2 deletions(-)
 
 diff --git a/configure.in b/configure.in
-index 81379c0..ac3c009 100644
+index ac3c009..2b35462 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -447,6 +447,15 @@ if test x$CHECKCPG = xyes; then
- 	PKG_CHECK_MODULES(CPG, libcpg)
+@@ -403,6 +403,17 @@ if test x$BUILDGULM = xyes; then
+ 		GULM_LIBS="-lgulm"])
  fi
  
-+dnl -- Check dlm library.
-+if test x$CHECKDLM = xyes; then
-+	PKG_CHECK_MODULES(DLM, libdlm, [],
-+		[AC_CHECK_HEADERS(libdlm.h,,AC_MSG_ERROR(bailing out))
-+		check_lib_no_libs dlm dlm_lock -lpthread
-+		AC_MSG_RESULT([no pkg for libdlm library, using -ldlm -lpthread])
-+		DLM_LIBS="-ldlm -lpthread"])
++dnl -- Look for cman libraries if required.
++if test x$BUILDCMAN = xyes; then
++	PKG_CHECK_MODULES(CMAN, libcman, [],
++		[AC_CHECK_HEADERS(libcman.h,,AC_MSG_ERROR(bailing out))
++		check_lib_no_libs cman cman_init
++		AC_MSG_RESULT([no pkg for libcman library, using -lcman])
++		CMAN_LIBS="-lcman"])
++	CHECKCONFDB=yes
++	CHECKDLM=yes
 +fi
 +
- ################################################################################
- dnl -- Build cluster log daemon
- AC_MSG_CHECKING(whether to build cluster log daemon)
-@@ -926,6 +935,8 @@ AC_SUBST(CPG_LIBS)
- AC_SUBST(CSCOPE_CMD)
- AC_SUBST(DEBUG)
- AC_SUBST(DEVMAPPER)
-+AC_SUBST(DLM_CFLAGS)
-+AC_SUBST(DLM_LIBS)
- AC_SUBST(DMEVENTD)
- AC_SUBST(DM_COMPAT)
- AC_SUBST(DM_DEVICE_GID)
+ dnl -- Look for corosync libraries if required.
+ if [[ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
+ 	PKG_CHECK_MODULES(QUORUM, libquorum, [],
+@@ -925,6 +936,8 @@ AC_SUBST(CLDWHOLEARCHIVE)
+ AC_SUBST(CLUSTER)
+ AC_SUBST(CLVMD)
+ AC_SUBST(CLOGD)
++AC_SUBST(CMAN_CFLAGS)
++AC_SUBST(CMAN_LIBS)
+ AC_SUBST(CMDLIB)
+ AC_SUBST(CONFDB_CFLAGS)
+ AC_SUBST(CONFDB_LIBS)
 diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index 2c9915c..5e35522 100644
+index 5e35522..3baa4b9 100644
 --- a/daemons/clvmd/Makefile.in
 +++ b/daemons/clvmd/Makefile.in
-@@ -21,6 +21,8 @@ CONFDB_LIBS = @CONFDB_LIBS@
+@@ -17,6 +17,8 @@ VPATH = @srcdir@
+ 
+ CCS_LIBS = @CCS_LIBS@
+ CCS_CFLAGS = @CCS_CFLAGS@
++CMAN_LIBS = @CMAN_LIBS@
++CMAN_CFLAGS = @CMAN_CFLAGS@
+ CONFDB_LIBS = @CONFDB_LIBS@
  CONFDB_CFLAGS = @CONFDB_CFLAGS@
  CPG_LIBS = @CPG_LIBS@
- CPG_CFLAGS = @CPG_CFLAGS@
-+DLM_LIBS = @DLM_LIBS@
-+DLM_CFLAGS = @DLM_CFLAGS@
- GULM_LIBS = @GULM_LIBS@
- GULM_CFLAGS = @GULM_CFLAGS@
- QUORUM_LIBS = @QUORUM_LIBS@
-@@ -68,8 +70,8 @@ endif
+@@ -70,8 +72,8 @@ endif
  
  ifeq ("$(CMAN)", "yes")
  	SOURCES += clvmd-cman.c
--	LMLIBS += $(CONFDB_LIBS) -ldlm -lcman
--	CFLAGS += $(CONFDB_CFLAGS)
-+	LMLIBS += $(CONFDB_LIBS) $(DLM_LIBS) -lcman
-+	CFLAGS += $(CONFDB_CFLAGS) $(DLM_CFLAGS)
+-	LMLIBS += $(CONFDB_LIBS) $(DLM_LIBS) -lcman
+-	CFLAGS += $(CONFDB_CFLAGS) $(DLM_CFLAGS)
++	LMLIBS += $(CMAN_LIBS) $(CONFDB_LIBS) $(DLM_LIBS)
++	CFLAGS += $(CMAN_CFLAGS) $(CONFDB_CFLAGS) $(DLM_CFLAGS)
  	DEFS += -DUSE_CMAN
- endif
- 
-@@ -82,8 +84,8 @@ endif
- 
- ifeq ("$(COROSYNC)", "yes")
- 	SOURCES += clvmd-corosync.c
--	LMLIBS += $(CONFDB_LIBS) $(CPG_LIBS) $(QUORUM_LIBS) -ldlm
--	CFLAGS += $(CONFDB_CFLAGS) $(CPG_CFLAGS) $(QUORUM_CFLAGS)
-+	LMLIBS += $(CONFDB_LIBS) $(CPG_LIBS) $(DLM_LIBS) $(QUORUM_LIBS)
-+	CFLAGS += $(CONFDB_CFLAGS) $(CPG_CFLAGS) $(DLM_CFLAGS) $(QUORUM_CFLAGS)
- 	DEFS += -DUSE_COROSYNC
  endif
  
 -- 
