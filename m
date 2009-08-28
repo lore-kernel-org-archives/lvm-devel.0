@@ -1,31 +1,74 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 27 Aug 2009 11:24:18 +0200
-Subject: [PATCH 14/15] set clvmd build to default to cman locking backend
-In-Reply-To: <20090827091638.GK643@agk-dp.fab.redhat.com>
-References: <fb6b50860da53ea726698ce206000cb30a3e7381.1251363523.git.fdinitto@redhat.com>
-	<b8bfce666620d1c5abea8deedd4646cd36a4bcbc.1251363523.git.fdinitto@redhat.com>
-	<20090827091638.GK643@agk-dp.fab.redhat.com>
-Message-ID: <1251365058.8148.269.camel@cerberus.int.fabbione.net>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 28 Aug 2009 05:27:09 -0000
+Subject: LVM2/daemons/clogd functions.c
+Message-ID: <20090828052709.12553.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, 2009-08-27 at 10:16 +0100, Alasdair G Kergon wrote:
-> On Thu, Aug 27, 2009 at 11:07:35AM +0200, Fabio M. Di Nitto wrote:
-> > build all, as previously suggested, does not make sense.
-> > Allow all to be set to avoid breaking backward compatibility,
-> > but use cman instead.
->  
-> How easy would it be for 'all' to build all the ones
-> that can be built on a given system based on the checks
-> for libs required for each?
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2009-08-28 05:27:09
 
-Probably not too difficult.
+Modified files:
+	daemons/clogd  : functions.c 
 
-I'll need to investigate it and come back to you with a patch.
+Log message:
+	cluster log daemon (clogd): Adjust for kernel CTR arg reordering
+	
+	We have moved the internally generated mirror-device-size
+	parameter from the end of the CTR string to the begining.
+	This change adjusts for that.
 
-Fabio
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clogd/functions.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+
+--- LVM2/daemons/clogd/functions.c	2009/08/13 16:34:07	1.8
++++ LVM2/daemons/clogd/functions.c	2009/08/28 05:27:09	1.9
+@@ -540,6 +540,7 @@
+ {
+ 	int argc, i, r = 0;
+ 	char *p, **argv = NULL;
++	char *dev_size_str;
+ 	uint64_t device_size;
+ 
+ 	/* Sanity checks */
+@@ -559,14 +560,16 @@
+ 	}
+ 
+ 	/* Split up args */
+-	for (argc = 1, p = rq->data; (p = strstr(p, " ")); p++, argc++)
++	for (argc = 0, p = rq->data; (p = strstr(p, " ")); p++, argc++)
+ 		*p = '\0';
+ 
+ 	argv = malloc(argc * sizeof(char *));
+ 	if (!argv)
+ 		return -ENOMEM;
+ 
+-	for (i = 0, p = rq->data; i < argc; i++, p = p + strlen(p) + 1)
++	p = dev_size_str = rq->data;
++	p += strlen(p) + 1;
++	for (i = 0; i < argc; i++, p = p + strlen(p) + 1)
+ 		argv[i] = p;
+ 
+ 	if (strcmp(argv[0], "clustered_disk") &&
+@@ -576,13 +579,12 @@
+ 		return -EINVAL;
+ 	}
+ 
+-	if (!(device_size = strtoll(argv[argc - 1], &p, 0)) || *p) {
+-		LOG_ERROR("Invalid device size argument: %s", argv[argc - 1]);
++	if (!(device_size = strtoll(dev_size_str, &p, 0)) || *p) {
++		LOG_ERROR("Invalid device size argument: %s", dev_size_str);
+ 		free(argv);
+ 		return -EINVAL;
+ 	}
+ 
+-	argc--;  /* We pass in the device_size separate */
+ 	r = _clog_ctr(rq->uuid, rq->luid, argc - 1, argv + 1, device_size);
+ 
+ 	/* We join the CPG when we resume */
 
 
