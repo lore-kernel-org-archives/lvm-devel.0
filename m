@@ -1,49 +1,63 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 31 Aug 2009 08:35:00 +0200
-Subject: [PATCH 1/1] configure.in: fix --with-clvmd=all when no backends are available
-In-Reply-To: <1251700500-15207-1-git-send-email-fdinitto@redhat.com>
-References: <1251700500-15207-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <36e1fdaced74da8d39f62665ca6fae21bfb7bb5b.1251700391.git.fdinitto@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Mon, 31 Aug 2009 18:08:35 -0400
+Subject: rebased snapshot-merge patches
+Message-ID: <20090831220834.GA15126@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Initialize NEWCLVMD var properly so that clvmd is not built in case
-there are no backends available.
+I've updated both the DM and LVM2 snapshot-merge patches to the latest
+upstream Linux and LVM2.
 
-Also report to the user if we were unable to detect any backend.
+All patches (both Linux and LVM2) have been tested to pass the LVM2
+testsuite.  There is more work to be done on these patches but I wanted
+to make others aware of them sooner rather than later.
 
-Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
----
-:100644 100644 cf74d07... 55f66d8... M	configure.in
- configure.in |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+The basis for the DM snapshot-merge patches is Linux 2.6.31-rc8 + the
+remaining DM fixes that Alasdair should be pushing to Linus this week:
+http://people.redhat.com/msnitzer/patches/dm-2.6.31-rc-fixes/
 
-diff --git a/configure.in b/configure.in
-index cf74d07..55f66d8 100644
---- a/configure.in
-+++ b/configure.in
-@@ -522,6 +522,7 @@ fi
- dnl -- If we are autodetecting, we need to re-create
- dnl -- the depedencies checks and set a proper CLVMD.
- if test x$CLVMD = xall; then
-+	NEWCLVMD=none
- 	if test x$HAVE_CCS = xyes && \
- 	   test x$HAVE_GULM = xyes; then
- 		AC_MSG_RESULT([Enabling clvmd gulm backend])
-@@ -547,6 +548,9 @@ if test x$CLVMD = xall; then
- 		NEWCLVMD="$NEWCLVMD,openais"
- 	fi
- 	CLVMD="$NEWCLVMD"
-+	if test x$CLVMD = xnone; then
-+		AC_MSG_RESULT([Disabling clvmd build. No backends detected.])
-+	fi
- fi
- 
- ################################################################################
--- 
-1.5.4.3
+The DM snapshot-merge patches are here:
+http://people.redhat.com/msnitzer/patches/snapshot-merge/kernel/2.6.31/
+
+The LVM2 snapshot-merge patches are here:
+http://people.redhat.com/msnitzer/patches/snapshot-merge/lvm2/LVM2-2.02.52-cvs/
+
+I threw some real work at snapshot-merge by taking a snap _before_
+formatting a 100G LV with ext3.  Then merged all the exceptions.  One
+observation is that the merge process is _quite_ slow in comparison to
+how long it took to format the LV (with associated snapshot exception
+copy-out).  Will need to look at this further shortly... it's likely a
+function of using minimal system resources during the merge via kcopyd;
+whereas the ext3 format puts excessive pressure on the system's page
+cache to queue work for mkfs's immediate writeback.
+
+# lvcreate -n testlv -L 100G test
+# lvcreate -n testlv_snap -s -L 20G test/testlv
+# lvs
+  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
+  testlv      test owi-a- 100.00G
+  testlv_snap test swi-a-  20.00G testlv   0.00
+# mkfs.ext3 /dev/test/testlv
+# lvs
+  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
+  testlv      test owi-a- 100.00G
+  testlv_snap test swi-a-  20.00G testlv   8.52
+# lvconvert -M test/testlv_snap
+  Merging of volume testlv_snap started.
+  testlv: Merged: 8.5%
+  testlv: Merged: 8.4%
+  testlv: Merged: 8.4%
+  testlv: Merged: 8.3%
+  ...
+  testlv: Merged: 7.2%
+  ...
+  testlv: Merged: 0.0%
+  testlv: Merged: 0.0%
+  testlv: Merged: 0.0%
+  Merge into logical volume testlv finished.
+  Logical volume "snapshot1" successfully removed
 
 
