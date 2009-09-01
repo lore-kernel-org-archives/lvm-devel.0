@@ -1,133 +1,217 @@
-From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
-Date: 1 Sep 2009 09:48:02 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
-Message-ID: <20090901094802.8532.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Tue, 1 Sep 2009 13:03:48 -0400
+Subject: [RFC][PATCH] lvm2 test for snapshots on a 4K drive
+Message-ID: <20090901170347.GB18124@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	ccaulfield at sourceware.org	2009-09-01 09:48:01
+This patch adds a generic way to establish a scsi_debug-based 4K drive
+for use by an LVM2 test (rather than using the traditional loop device).
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
+t-4k-drive.sh shows how this new 'prepare_scsi_debug_dev' function can
+be used repeatedly (within a script) to test LVM2 ontop of a
+ramdisk-based SCSI device w/ arbitrary scsi_debug features.
 
-Log message:
-	Add some code to clvmd to look in the corosync confdb to see what cluster
-	interface it should be using, it can still be overriden with -I.
-	
-	If corosync isn't running or there is no information then the usual
-	checking will happen.
-	
-	This code only builds if corosync is available.
+prepare_scsi_debug_dev currently assumes exclussive access to the
+scsi_debug module.  Any script will be skipped if it tries to use
+prepare_scsi_debug_dev when scsi_debug is unavailable or already loaded
+into the kernel.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1246&r2=1.1247
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 
---- LVM2/WHATS_NEW	2009/08/28 20:51:40	1.1246
-+++ LVM2/WHATS_NEW	2009/09/01 09:48:01	1.1247
-@@ -1,5 +1,6 @@
- Version 2.02.52 -
- =================================
-+  Make clvmd check corosync to see what cluster interface it should use.
-   Rewrite clvmd configuration code to cope with all combinations of libs.
-   Fix global locking in PV reporting commands (2.02.49).
-   Fix pvcreate string termination in duplicate uuid warning message.
---- LVM2/daemons/clvmd/clvmd.c	2009/08/13 10:39:41	1.60
-+++ LVM2/daemons/clvmd/clvmd.c	2009/09/01 09:48:01	1.61
-@@ -44,7 +44,9 @@
- #include <syslog.h>
- #include <errno.h>
- #include <limits.h>
--#include <libdlm.h>
-+#ifdef HAVE_COROSYNC_CONFDB_H
-+#include <corosync/confdb.h>
-+#endif
- 
- #include "clvmd-comms.h"
- #include "lvm-functions.h"
-@@ -149,6 +151,7 @@
- static void add_reply_to_list(struct local_client *client, int status,
- 			      const char *csid, const char *buf, int len);
- static if_type_t parse_cluster_interface(char *ifname);
-+static if_type_t get_cluster_type(void);
- 
- static void usage(char *prog, FILE *file)
- {
-@@ -392,6 +395,9 @@
- 	init_lvhash();
- 
- 	/* Start the cluster interface */
-+	if (cluster_iface == IF_AUTO)
-+		cluster_iface = get_cluster_type();
+---
+diff --git a/test/t-4k-drive.sh b/test/t-4k-drive.sh
+new file mode 100644
+index 0000000..8e06388
+--- /dev/null
++++ b/test/t-4k-drive.sh
+@@ -0,0 +1,98 @@
++# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
- #ifdef USE_CMAN
- 	if ((cluster_iface == IF_AUTO || cluster_iface == IF_CMAN) && (clops = init_cman_cluster())) {
- 		max_csid_len = CMAN_MAX_CSID_LEN;
-@@ -2060,3 +2066,59 @@
- 
- 	return iface;
- }
++which awk || exit 200
++which mkfs.ext3 || exit 200
 +
-+/*
-+ * Try and find a cluster system in corosync's objdb, if it is running. This is
-+ * only called if the command-line option is not present, and if it fails
-+ * we still try the interfaces in order.
-+ */
-+static if_type_t get_cluster_type()
++. ./test-utils.sh
++
++check_logical_block_size()
 +{
-+#ifdef HAVE_COROSYNC_CONFDB_H
-+	confdb_handle_t handle;
-+	if_type_t type = IF_AUTO;
-+	int result;
-+	char buf[255];
-+	size_t namelen = sizeof(buf);
-+	hdb_handle_t cluster_handle;
-+	hdb_handle_t clvmd_handle;
-+	confdb_callbacks_t callbacks = {
-+		.confdb_key_change_notify_fn = NULL,
-+		.confdb_object_create_change_notify_fn = NULL,
-+		.confdb_object_delete_change_notify_fn = NULL
-+	};
-+
-+	result = confdb_initialize (&handle, &callbacks);
-+        if (result != CS_OK)
-+		return type;
-+
-+        result = confdb_object_find_start(handle, OBJECT_PARENT_HANDLE);
-+	if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_object_find(handle, OBJECT_PARENT_HANDLE, (void *)"cluster", strlen("cluster"), &cluster_handle);
-+        if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_object_find_start(handle, cluster_handle);
-+	if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_object_find(handle, cluster_handle, (void *)"clvmd", strlen("clvmd"), &clvmd_handle);
-+        if (result != CS_OK)
-+		goto out;
-+
-+        result = confdb_key_get(handle, clvmd_handle, (void *)"interface", strlen("interface"), buf, &namelen);
-+        if (result != CS_OK)
-+		goto out;
-+
-+	buf[namelen] = '\0';
-+	type = parse_cluster_interface(buf);
-+	DEBUGLOG("got interface type '%s' from confdb\n", buf);
-+out:
-+	confdb_finalize(handle);
-+	return type;
-+#else
-+	return IF_AUTO;
-+#endif
++    local DEV_=$1
++    local LOGICAL_BS=$2
++    # Verify logical_block_size - requires Linux >= 2.6.31
++    SYSFS_LOGICAL_BLOCK_SIZE=`echo /sys/block/$(basename $DEV_)/queue/logical_block_size`
++    if [ -f "$SYSFS_LOGICAL_BLOCK_SIZE" ] ; then
++	ACTUAL_LOGICAL_BLOCK_SIZE=`cat $SYSFS_LOGICAL_BLOCK_SIZE`
++	test $ACTUAL_LOGICAL_BLOCK_SIZE = $LOGICAL_BS
++    fi
 +}
++
++lvdev_() 
++{
++    echo "$G_dev_/$1/$2"
++}
++
++test_snapshot_mount()
++{
++    lvcreate -L 16M -n $lv1 $vg $dev1
++    mkfs.ext3 $(lvdev_ $vg $lv1)
++    mkdir test_mnt
++    mount $(lvdev_ $vg $lv1) test_mnt
++    lvcreate -L 16M -n $lv2 -s $vg/$lv1
++    umount test_mnt
++    # mount the origin
++    mount $(lvdev_ $vg $lv1) test_mnt
++    umount test_mnt
++    # mount the snapshot
++    mount $(lvdev_ $vg $lv2) test_mnt
++    umount test_mnt
++    rm -r test_mnt
++    #sleep 1 # needed so 'vgchange -an' works reliably within KVM (cache=off)
++    vgchange -an $vg
++    #sleep 1 # needed so 'lvremove -f' works reliably within KVM (cache=off)
++    lvremove -f $vg/$lv2
++    lvremove -f $vg/$lv1
++}
++
++
++NUM_DEVS=1
++PER_DEV_SIZE=33
++DEV_SIZE=$(($NUM_DEVS*$PER_DEV_SIZE))
++
++# ---------------------------------------------
++# Create "desktop-class" 4K drive
++# (logical_block_size=512, physical_block_size=4096, alignment_offset=0):
++LOGICAL_BLOCK_SIZE=512
++prepare_scsi_debug_dev $DEV_SIZE \
++    sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=3
++check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
++
++aux prepare_vg $NUM_DEVS $PER_DEV_SIZE
++test_snapshot_mount
++vgremove $vg
++
++cleanup_scsi_debug_dev
++
++# ---------------------------------------------
++# Create "desktop-class" 4K drive w/ 63-sector DOS partition compensation
++# (logical_block_size=512, physical_block_size=4096, alignment_offset=3584):
++LOGICAL_BLOCK_SIZE=512
++prepare_scsi_debug_dev $DEV_SIZE \
++    sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=3 lowest_aligned=7
++check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
++
++aux prepare_vg $NUM_DEVS $PER_DEV_SIZE
++test_snapshot_mount
++vgremove $vg
++
++cleanup_scsi_debug_dev
++
++# ---------------------------------------------
++# Create "enterprise-class" 4K drive
++# (logical_block_size=4096, physical_block_size=4096, alignment_offset=0):
++LOGICAL_BLOCK_SIZE=4096
++prepare_scsi_debug_dev $DEV_SIZE \
++    sector_size=$LOGICAL_BLOCK_SIZE
++check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
++
++prepare_vg $NUM_DEVS $PER_DEV_SIZE
++test_snapshot_mount
++vgremove $vg
+diff --git a/test/test-utils.sh b/test/test-utils.sh
+index fa1f2c5..19478b5 100644
+--- a/test/test-utils.sh
++++ b/test/test-utils.sh
+@@ -40,8 +40,13 @@ teardown() {
+ 		done
+ 	}
+ 
+-	test -n "$LOOP" && losetup -d $LOOP
+-	test -n "$LOOPFILE" && rm -f $LOOPFILE
++	if [ -n "$SCSI_DEBUG_DEV" ] ; then
++		modprobe -r scsi_debug
++	elif [ -n "$LOOP" ] ; then
++		losetup -d $LOOP
++		test -n "$LOOPFILE" && rm -f $LOOPFILE
++	fi	
++	unset devs # devs is set in prepare_devs()
+ }
+ 
+ teardown_() {
+@@ -94,6 +99,65 @@ prepare_loop() {
+ 	exit 1 # should not happen
+ }
+ 
++get_sd_devs_()
++{
++    # prepare_scsi_debug_dev() requires the ability to lookup
++    # the scsi_debug created SCSI device in /dev/
++    local _devs=$(lvmdiskscan --config 'devices { filter = [ "a|/dev/sd.*|", "r|.*|" ] scan = "/dev/" }' | grep /dev/sd | awk '{ print $1 }')
++    echo $_devs
++}
++
++# A drop-in replacement for prepare_loop() that uses scsi_debug to create
++# a ramdisk-based SCSI device upon which all LVM devices will be created
++# - scripts must take care not to use a DEV_SIZE that will enduce OOM-killer
++prepare_scsi_debug_dev()
++{
++    local DEV_SIZE="$1"
++    shift
++    local SCSI_DEBUG_PARAMS="$@"
++
++    test -n "$SCSI_DEBUG_DEV" && return 0
++    trap 'aux teardown_' EXIT # don't forget to clean up
++    trap 'set +vex; STACKTRACE; set -vex' ERR
++
++    # Skip test if scsi_debug module is unavailable or is already in use
++    modinfo scsi_debug || exit 200
++    lsmod | grep -q scsi_debug && exit 200
++
++    # Create the scsi_debug device and determine the new scsi device's name
++    local devs_before=`get_sd_devs_`
++    # NOTE: it will _never_ make sense to pass num_tgts param;
++    # last param wins.. so num_tgts=1 is imposed
++    modprobe scsi_debug dev_size_mb=$DEV_SIZE $SCSI_DEBUG_PARAMS num_tgts=1
++    sleep 2 # allow for async Linux SCSI device registration
++
++    local devs_after=`get_sd_devs_`
++    for dev1 in $devs_after; do
++	FOUND=0
++	for dev2 in $devs_before; do
++	    if [ "$dev1" = "$dev2" ]; then
++		FOUND=1
++		break
++	    fi
++	done
++	if [ $FOUND -eq 0 ]; then
++	    # Create symlink to scsi_debug device in $G_dev_
++	    SCSI_DEBUG_DEV=$G_dev_/$(basename $dev1)
++	    # Setting $LOOP provides means for prepare_devs() override
++	    LOOP=$SCSI_DEBUG_DEV
++	    ln -snf $dev1 $SCSI_DEBUG_DEV
++	    return 0
++	fi
++    done
++    exit 1 # should not happen
++}
++
++cleanup_scsi_debug_dev()
++{
++    aux teardown
++    unset SCSI_DEBUG_DEV
++}
++
+ prepare_devs() {
+ 	local n="$1"
+ 	test -z "$n" && n=3
 
 
