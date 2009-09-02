@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 2 Sep 2009 18:31:12 -0000
-Subject: LVM2/test t-vgmerge-usage.sh t-vgrename-usage. ...
-Message-ID: <20090902183112.18984.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 2 Sep 2009 19:32:38 -0000
+Subject: LVM2 configure configure.in
+Message-ID: <20090902193238.4352.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,83 +10,48 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-09-02 18:31:11
+Changes by:	agk at sourceware.org	2009-09-02 19:32:37
 
 Modified files:
-	test           : t-vgmerge-usage.sh t-vgrename-usage.sh 
-	                 t-vgsplit-usage.sh 
+	.              : configure configure.in 
 
 Log message:
-	Add alphabetical vgname ordering tests for vgsplit, vgmerge, vgrename.
+	clogd->cmirrord
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgmerge-usage.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgrename-usage.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-usage.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.110&r2=1.111
 
---- LVM2/test/t-vgmerge-usage.sh	2008/10/06 16:47:07	1.5
-+++ LVM2/test/t-vgmerge-usage.sh	2009/09/02 18:31:11	1.6
-@@ -16,10 +16,15 @@
- aux prepare_pvs 4
+--- LVM2/configure	2009/09/01 19:11:45	1.103
++++ LVM2/configure	2009/09/02 19:32:37	1.104
+@@ -15155,7 +15155,7 @@
  
- # 'vgmerge normal operation'
-+# ensure ordering does not matter
- vgcreate $vg1 $dev1 $dev2 
- vgcreate $vg2 $dev3 $dev4 
- vgmerge $vg1 $vg2 
- vgremove $vg1
-+vgcreate $vg2 $dev1 $dev2
-+vgcreate $vg1 $dev3 $dev4
-+vgmerge $vg2 $vg1
-+vgremove $vg2
  
- # 'vgmerge rejects duplicate vg name'
- vgcreate $vg1 $dev1 $dev2 
---- LVM2/test/t-vgrename-usage.sh	2009/06/05 10:42:22	1.4
-+++ LVM2/test/t-vgrename-usage.sh	2009/09/02 18:31:11	1.5
-@@ -15,10 +15,14 @@
- pvcreate --metadatacopies 0 $dev3 $dev4
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/clogd/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makefile"
  
- # vgrename normal operation - rename vg1 to vg2
-+# vgrename normal operation - rename vg2 to vg1
-+# ensure name ordering does not matter
- vgcreate $vg1 $dev1 $dev2
- vgrename $vg1 $vg2
- check_vg_field_ $vg2 vg_name $vg2
--vgremove $vg2
-+vgrename $vg2 $vg1
-+check_vg_field_ $vg1 vg_name $vg1
-+vgremove $vg1
- 
- # vgrename by uuid (bz231187)
- vgcreate $vg1 $dev1 $dev3
---- LVM2/test/t-vgsplit-usage.sh	2008/11/10 12:43:35	1.12
-+++ LVM2/test/t-vgsplit-usage.sh	2009/09/02 18:31:11	1.13
-@@ -15,15 +15,21 @@
- 
- aux prepare_devs 5
- 
--# FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
--# fine with lvm1 metadata as well; for now, just add disks 5 and 6 as lvm1
--# metadata
--
- for mdatype in 1 2
- do
- 
- pvcreate -M$mdatype $devs
- 
-+# ensure name order does not matter
-+vgcreate -M$mdatype $vg1 $devs
-+vgsplit $vg1 $vg2 $dev1
-+vgremove $vg1
-+vgremove $vg2
-+vgcreate -M$mdatype $vg2 $devs
-+vgsplit $vg2 $vg1 $dev1
-+vgremove $vg1
-+vgremove $vg2
-+
- # vgsplit accepts new vg as destination of split
- # lvm1 -- bz244792
- vgcreate -M$mdatype $vg1 $devs
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -15758,7 +15758,7 @@
+     "make.tmpl") CONFIG_FILES="$CONFIG_FILES make.tmpl" ;;
+     "daemons/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/Makefile" ;;
+     "daemons/clvmd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/clvmd/Makefile" ;;
+-    "daemons/clogd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/clogd/Makefile" ;;
++    "daemons/cmirrord/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/cmirrord/Makefile" ;;
+     "daemons/dmeventd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/Makefile" ;;
+     "daemons/dmeventd/libdevmapper-event.pc") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/libdevmapper-event.pc" ;;
+     "daemons/dmeventd/plugins/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/Makefile" ;;
+--- LVM2/configure.in	2009/09/01 19:11:46	1.110
++++ LVM2/configure.in	2009/09/02 19:32:37	1.111
+@@ -1112,7 +1112,7 @@
+ make.tmpl
+ daemons/Makefile
+ daemons/clvmd/Makefile
+-daemons/clogd/Makefile
++daemons/cmirrord/Makefile
+ daemons/dmeventd/Makefile
+ daemons/dmeventd/libdevmapper-event.pc
+ daemons/dmeventd/plugins/Makefile
 
 
