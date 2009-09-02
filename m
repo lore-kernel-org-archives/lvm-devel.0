@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 2 Sep 2009 21:27:40 -0000
-Subject: LVM2/tools vgsplit.c
-Message-ID: <20090902212740.12877.qmail@sourceware.org>
+Date: 2 Sep 2009 21:27:55 -0000
+Subject: LVM2/tools vgmerge.c
+Message-ID: <20090902212755.13004.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-09-02 21:27:39
+Changes by:	wysochanski at sourceware.org	2009-09-02 21:27:55
 
 Modified files:
-	tools          : vgsplit.c 
+	tools          : vgmerge.c 
 
 Log message:
-	Change vgsplit behavior to open/lock first vg based on alphabetical ordering.
+	Refactor vgmerge - introduce lock_vg_from_first flag.
 	
-	If the destination vgname comes before the source vgname, we must open the
-	destination first because of the locking rules.  Thus, do a strcmp and set
-	the flag based on the comparison.
+	Should be no functional change.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.92&r2=1.93
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
 
---- LVM2/tools/vgsplit.c	2009/09/02 21:27:22	1.92
-+++ LVM2/tools/vgsplit.c	2009/09/02 21:27:39	1.93
-@@ -314,6 +314,9 @@
- 		return ECMD_FAILED;
- 	}
+--- LVM2/tools/vgmerge.c	2009/07/08 14:33:17	1.60
++++ LVM2/tools/vgmerge.c	2009/09/02 21:27:55	1.61
+@@ -21,6 +21,7 @@
+ 	struct volume_group *vg_to, *vg_from;
+ 	struct lv_list *lvl1, *lvl2;
+ 	int r = ECMD_FAILED;
++	int lock_vg_from_first = 0;
  
-+	if (strcmp(vg_name_to, vg_name_from) < 0)
-+		lock_vg_from_first = 0;
-+
- 	if (lock_vg_from_first) {
- 		vg_from = _vgsplit_from(cmd, vg_name_from);
- 		if (!vg_from)
+ 	if (!strcmp(vg_name_to, vg_name_from)) {
+ 		log_error("Duplicate volume group name \"%s\"", vg_name_from);
+@@ -116,8 +117,13 @@
+ 		  vg_from->name, vg_to->name);
+ 	r = ECMD_PROCESSED;
+ bad:
+-	unlock_and_release_vg(cmd, vg_from, vg_name_from);
+-	unlock_and_release_vg(cmd, vg_to, vg_name_to);
++	if (lock_vg_from_first) {
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++	} else {
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++	}
+ 	return r;
+ }
+ 
 
 
