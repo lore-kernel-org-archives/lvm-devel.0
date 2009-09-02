@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 2 Sep 2009 21:26:50 -0000
+Date: 2 Sep 2009 21:27:06 -0000
 Subject: LVM2/tools vgsplit.c
-Message-ID: <20090902212650.12487.qmail@sourceware.org>
+Message-ID: <20090902212706.12632.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-09-02 21:26:50
+Changes by:	wysochanski at sourceware.org	2009-09-02 21:27:06
 
 Modified files:
 	tools          : vgsplit.c 
 
 Log message:
-	Refactor vgsplit - create _vgsplit_from function to open source vg.
+	Refactor vgsplit: _vgsplit_from or _vgsplit_to failure cleanup depends on order.
 	
-	Should be no functional change and allows future reorder of source and dest
-	vgs.
+	Should be no functional change.
 	
 	Author: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.89&r2=1.90
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
 
---- LVM2/tools/vgsplit.c	2009/09/02 21:26:34	1.89
-+++ LVM2/tools/vgsplit.c	2009/09/02 21:26:50	1.90
-@@ -244,6 +244,27 @@
- }
- 
- /*
-+ * Open the source of the vgsplit operation.
-+ * Returns
-+ * - non-NULL: VG handle w/VG lock held
-+ * - NULL: no VG lock held
-+ */
-+static struct volume_group *_vgsplit_from(struct cmd_context *cmd,
-+					  const char *vg_name_from)
-+{
-+	struct volume_group *vg_from;
-+
-+	log_verbose("Checking for volume group \"%s\"", vg_name_from);
-+
-+	vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0);
-+	if (vg_read_error(vg_from)) {
-+		vg_release(vg_from);
-+		return NULL;
-+	}
-+	return vg_from;
-+}
-+
-+/*
-  * Has the user given an option related to a new vg as the split destination?
-  */
- static int new_vg_option_specified(struct cmd_context *cmd)
-@@ -293,13 +314,9 @@
- 		return ECMD_FAILED;
+--- LVM2/tools/vgsplit.c	2009/09/02 21:26:50	1.90
++++ LVM2/tools/vgsplit.c	2009/09/02 21:27:05	1.91
+@@ -315,8 +315,11 @@
  	}
  
--	log_verbose("Checking for volume group \"%s\"", vg_name_from);
--
--	vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0);
--	if (vg_read_error(vg_from)) {
--		vg_release(vg_from);
-+	vg_from = _vgsplit_from(cmd, vg_name_from);
-+	if (!vg_from)
+ 	vg_from = _vgsplit_from(cmd, vg_name_from);
+-	if (!vg_from)
++	if (!vg_from) {
++		if (!lock_vg_from_first)
++			unlock_and_release_vg(cmd, vg_to, vg_name_to);
  		return ECMD_FAILED;
--	}
++	}
  
  	/*
  	 * Set metadata format of original VG.
+@@ -327,7 +330,8 @@
+ 
+ 	vg_to = _vgsplit_to(cmd, vg_name_to, &existing_vg);
+ 	if (!vg_to) {
+-		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++		if (lock_vg_from_first)
++			unlock_and_release_vg(cmd, vg_from, vg_name_from);
+ 		return ECMD_FAILED;
+ 	}
+ 	if (existing_vg) {
 
 
