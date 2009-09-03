@@ -1,65 +1,33 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  3 Sep 2009 13:15:09 -0400
-Subject: [PATCH] Add lvm2app.sh to nightly testsuite.
-Message-ID: <1251998109-6867-1-git-send-email-dwysocha@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 3 Sep 2009 18:19:08 -0000
+Subject: LVM2/liblvm Makefile.in
+Message-ID: <20090903181908.14985.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-More tests to come but for now just call into vgtest.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-09-03 18:19:08
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/Makefile.in  |    2 +-
- test/t-lvm2app.sh |   23 +++++++++++++++++++++++
- 2 files changed, 24 insertions(+), 1 deletions(-)
- create mode 100755 test/t-lvm2app.sh
+Modified files:
+	liblvm         : Makefile.in 
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index aa4bab4..6fb09d9 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -40,7 +40,7 @@ init.sh: Makefile.in .bin-dir-stamp bin/not bin/harness
- 	echo 'abs_top_builddir=$(abs_top_builddir)' >> $@-t
- 	echo 'abs_top_srcdir=$(abs_top_builddir)' >> $@-t
- 	echo 'PATH=$(abs_top_builddir)/test/bin:$$PATH' >> $@-t
--	echo 'export LD_LIBRARY_PATH="$(abs_top_builddir)/libdm:$(abs_top_builddir)/dmeventd"' >> $@-t
-+	echo 'export LD_LIBRARY_PATH="$(abs_top_builddir)/libdm:$(abs_top_builddir)/liblvm:$(abs_top_builddir)/dmeventd"' >> $@-t
- 	echo 'abs_srcdir=$(abs_srcdir)' >> $@-t
- 	echo 'abs_builddir=$(abs_builddir)' >> $@-t
- 	echo 'export PATH' >> $@-t
-diff --git a/test/t-lvm2app.sh b/test/t-lvm2app.sh
-new file mode 100755
-index 0000000..1a9372b
---- /dev/null
-+++ b/test/t-lvm2app.sh
-@@ -0,0 +1,23 @@
-+# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+#
-+# tests lvm2app library
-+#
-+
-+. ./test-utils.sh
-+
-+aux prepare_devs 2
-+
-+pvcreate $dev1 $dev2
-+
-+echo `pwd`
-+ls -lR `pwd`
-+../api/vgtest $vg1 $dev1 $dev2
--- 
-1.6.0.6
+Log message:
+	Do not override the distclean target in liblvm's Makefile, it annoys make and
+	the make.tmpl-included distclean should work better anyway.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+
+--- LVM2/liblvm/Makefile.in	2009/09/01 18:11:14	1.14
++++ LVM2/liblvm/Makefile.in	2009/09/03 18:19:07	1.15
+@@ -93,4 +93,3 @@
+ 	$(RM) $(LIB_NAME).pc
+ 
+ distclean: distclean_lib
+-	$(RM) -f Makefile
 
 
