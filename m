@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 4 Sep 2009 14:26:17 -0000
-Subject: LVM2/test lvm2app.sh
-Message-ID: <20090904142617.27442.qmail@sourceware.org>
+Date: 4 Sep 2009 19:17:46 -0000
+Subject: LVM2/test/api vgtest.c
+Message-ID: <20090904191746.4520.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-09-04 14:26:17
+Changes by:	wysochanski at sourceware.org	2009-09-04 19:17:46
 
 Modified files:
-	test           : lvm2app.sh 
+	test/api       : vgtest.c 
 
 Log message:
-	Fix path to test/api/vgtest in nightly testsuite.
+	Update lvm2app unit test vgtest - fix remove bug.
+	
+	We now must commit to disk after lvm_vg_remove().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm2app.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/vgtest.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
 
---- LVM2/test/lvm2app.sh	2009/09/04 12:54:23	1.1
-+++ LVM2/test/lvm2app.sh	2009/09/04 14:26:16	1.2
-@@ -20,4 +20,4 @@
+--- LVM2/test/api/vgtest.c	2009/09/04 12:54:23	1.12
++++ LVM2/test/api/vgtest.c	2009/09/04 19:17:46	1.13
+@@ -49,9 +49,8 @@
+ 	printf("Committing VG %s to disk\n", vg_name); \
+ 	status = lvm_vg_write(vg); \
+ 	if (status) { \
+-		fprintf(stderr, "Creation of volume group '%s' on " \
+-			"device '%s' failed\n", \
+-			lvm_vg_get_name(vg), device[0]); \
++		fprintf(stderr, "Commit of volume group '%s' failed\n", \
++			lvm_vg_get_name(vg)); \
+ 		goto bad; \
+ 	}
+ #define vg_open(vg_name, mode) \
+@@ -147,6 +146,7 @@
  
- echo `pwd`
- ls -lR `pwd`
--../api/vgtest $vg1 $dev1 $dev2
-+$abs_srcdir/api/vgtest $vg1 $dev1 $dev2
+ 	vg_open(vg_name, "w");
+ 	vg_remove(vg);
++	vg_commit(vg);
+ 	vg_close(vg);
+ 
+ 	lvm_quit(handle);
 
 
