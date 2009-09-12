@@ -1,67 +1,40 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 11 Sep 2009 16:11:25 -0000
-Subject: LVM2/libdm libdm-common.c
-Message-ID: <20090911161125.8140.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Sat, 12 Sep 2009 02:56:08 -0400
+Subject: Re: rebased snapshot-merge patches
+In-Reply-To: <20090911065135.GA3210@redhat.com>
+References: <20090831220834.GA15126@redhat.com>
+	<Pine.LNX.4.64.0909081002540.26574@hs20-bc2-1.build.redhat.com>
+	<20090911065135.GA3210@redhat.com>
+Message-ID: <20090912065608.GA1864@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-09-11 16:11:25
+On Fri, Sep 11 2009 at  2:51am -0400,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Modified files:
-	libdm          : libdm-common.c 
+> Mikulas,
+> 
+> I ran with your suggestion and it works quite well (results below).
+...
+> The changes are detailed at the end of this mail.  I still have a "TODO"
+> that you'll see in the patch that speaks to needing to have
+> snapshot_merge_process() check all origin chunks via __chunk_is_tracked()
+> rather than just the one check of the first chunk.  Your feedback here
+> would be much appreciated.  I'm not completely clear on the intent of
+> the __chunk_is_tracked() check there and what it now needs to do.
 
-Log message:
-	Move dm_cookie_supported check into dm_udev_get_sync_supprt function.
-	
-	We don't have to call dm_cookie_supported with dm_udev_get_sync_support
-	this way. Also, it's necessary for the current code to work properly on
-	systems without cookie support (older kernels).
+I believe I've sorted this out.  The TODO should've read something like:
+snapshot_merge_process() should delay the merging of _all_ chunks
+that have in-progress writes; not just the first chunk in the region
+that is to be merged.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
+The revised patch (relative to Jon's unified snapshot tree) is here:
+http://people.redhat.com/msnitzer/patches/snapshot-merge/kernel_unified/2.6.31/dm-snapshot-merge-use-larger-io-when-merging.patch
 
---- LVM2/libdm/libdm-common.c	2009/09/11 15:57:51	1.79
-+++ LVM2/libdm/libdm-common.c	2009/09/11 16:11:25	1.80
-@@ -881,7 +881,7 @@
- 	if (_udev_running < 0)
- 		_udev_running = _check_udev_is_running();
- 
--	return _udev_running && _sync_with_udev;
-+	return dm_cookie_supported() && _udev_running && _sync_with_udev;
- }
- 
- static int _get_cookie_sem(uint32_t cookie, int *semid)
-@@ -1064,7 +1064,7 @@
- {
- 	int semid;
- 
--	if (!dm_udev_get_sync_support() || !dm_cookie_supported()) {
-+	if (!dm_udev_get_sync_support()) {
- 		dmt->event_nr = *cookie = 0;
- 		return 1;
- 	}
-@@ -1099,7 +1099,7 @@
- {
- 	int semid;
- 
--	if (!cookie || !dm_udev_get_sync_support() || !dm_cookie_supported())
-+	if (!cookie || !dm_udev_get_sync_support())
- 		return 1;
- 
- 	if (!_get_cookie_sem(cookie, &semid))
-@@ -1120,7 +1120,7 @@
- 	int semid;
- 	struct sembuf sb = {0, 0, 0};
- 
--	if (!cookie || !dm_udev_get_sync_support() || !dm_cookie_supported())
-+	if (!cookie || !dm_udev_get_sync_support())
- 		return 1;
- 
- 	if (!_get_cookie_sem(cookie, &semid))
+Pretty sure it _should_ work; but can't test until we get this unified
+snapshot patchset working properly.
 
 
