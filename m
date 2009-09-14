@@ -1,49 +1,114 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 14 Sep 2009 15:14:48 -0400
-Subject: [PATCH 1/3] Update lvm and vgs man pages to clarify 'partial' is a VG missing PVs.
-In-Reply-To: <1252955690-25500-1-git-send-email-dwysocha@redhat.com>
+Date: Mon, 14 Sep 2009 15:14:49 -0400
+Subject: [PATCH 2/3] Add most relevant vg_attr fields as lvm2app 'get' functions.
+In-Reply-To: <1252955690-25500-2-git-send-email-dwysocha@redhat.com>
 References: <1252955690-25500-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1252955690-25500-2-git-send-email-dwysocha@redhat.com>
+	<1252955690-25500-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1252955690-25500-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Of the vgs field vg_attr, a few of the most likely to be used attributes
+are clustered, exported, and partial.  This patch adds the following 3
+functions:
+uint64_t lvm_vg_is_clustered(const vg_t vg)
+uint64_t lvm_vg_is_exported(const vg_t vg)
+uint64_t lvm_vg_is_partial(const vg_t vg)
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- man/lvm.8.in |    3 ++-
- man/vgs.8.in |    2 +-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ lib/metadata/metadata-exported.h |    1 +
+ liblvm/lvm2app.h                 |   35 +++++++++++++++++++++++++++++++++++
+ liblvm/lvm_vg.c                  |   15 +++++++++++++++
+ 3 files changed, 51 insertions(+), 0 deletions(-)
 
-diff --git a/man/lvm.8.in b/man/lvm.8.in
-index 247b241..2c4c0ce 100644
---- a/man/lvm.8.in
-+++ b/man/lvm.8.in
-@@ -182,7 +182,8 @@ See
- .TP
- \fB-P | --partial\fP
- When set, the tools will do their best to provide access to volume groups
--that are only partially available.  Where part of a logical volume is 
-+that are only partially available (one or more physical volumes are
-+missing from the system).  Where part of a logical volume is
- missing, \fB/dev/ioerror\fP will be substituted, and you could use
- \fBdmsetup (8)\fP to set this up to return I/O errors when accessed,
- or create it as a large block device of nulls.  Metadata may not be
-diff --git a/man/vgs.8.in b/man/vgs.8.in
-index c05a05a..2cb66cd 100644
---- a/man/vgs.8.in
-+++ b/man/vgs.8.in
-@@ -60,7 +60,7 @@ Resi(z)eable
- .IP 3 3
- E(x)ported
- .IP 4 3
--(p)artial
-+(p)artial: one or more physical volumes are missing from the system
- .IP 5 3
- Allocation policy: (c)ontiguous, c(l)ing, (n)ormal, (a)nywhere, (i)nherited
- .IP 6 3
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 1393aae..0861f4d 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -721,6 +721,7 @@ uint64_t vg_max_pv(const struct volume_group *vg);
+ uint64_t vg_max_lv(const struct volume_group *vg);
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
++#define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
+ 
+ struct vgcreate_params {
+ 	char *vg_name;
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index d6b67ce..8a3452e 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -481,6 +481,41 @@ int lvm_vg_reduce(vg_t vg, const char *device);
+ int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size);
+ 
+ /**
++ * Get whether or not a volume group is clustered.
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \return
++ * 1 if the VG is clustered, 0 if not
++ */
++uint64_t lvm_vg_is_clustered(vg_t vg);
++
++/**
++ * Get whether or not a volume group is exported.
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \return
++ * 1 if the VG is exported, 0 if not
++ */
++uint64_t lvm_vg_is_exported(vg_t vg);
++
++/**
++ * Get whether or not a volume group is a partial volume group.
++ *
++ * A partial volume group is missing one or more physical volumes.
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \return
++ * 1 if the VG is PVs, 0 if not
++ */
++uint64_t lvm_vg_is_partial(vg_t vg);
++
++/**
+  * Get the current metadata sequence number of a volume group.
+  *
+  * The metadata sequence number is incrented for each metadata change.
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index dcfd722..a0a7b1f 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -243,6 +243,21 @@ uint64_t lvm_vg_get_seqno(const vg_t vg)
+ 	return vg_seqno(vg);
+ }
+ 
++uint64_t lvm_vg_is_clustered(const vg_t vg)
++{
++	return vg_is_clustered(vg);
++}
++
++uint64_t lvm_vg_is_exported(const vg_t vg)
++{
++	return vg_is_exported(vg);
++}
++
++uint64_t lvm_vg_is_partial(const vg_t vg)
++{
++	return (vg_missing_pv_count(vg) != 0);
++}
++
+ /* FIXME: invalid handle? return INTMAX? */
+ uint64_t lvm_vg_get_size(const vg_t vg)
+ {
 -- 
 1.6.0.6
 
