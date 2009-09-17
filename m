@@ -1,99 +1,82 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 17 Sep 2009 17:25:43 +0200
-Subject: [PATCH 2/3] Fix possible lost of temporary devices in pvmove.
-Message-ID: <4AB254F7.5050509@redhat.com>
+Date: Thu, 17 Sep 2009 17:26:16 +0200
+Subject: [PATCH 3/3] Warn if pvmove --abort detect lost temporary device.
+Message-ID: <4AB25518.9070801@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix possible lost of temporary devices in pvmove.
+Warn if pvmove --abort detect lost temporary device.
 
-If some process locks temporary pvmove device (udev scan etc),
-the code do not detect that device remains in kernel.
-Because device is removed from lvm metadata, subsequent
-pvmove will crash leaving suspended devices.
+pvmove --abort never remove device not referenced in metadata.
+But if something bad happened, it is possible that temporary device
+is present in kernel and can interfere with subsequent pvmove
+(at least there is name collision).
 
-Fix consists from these steps:
- - with previous patch we can detect that lv_deactivate failed.
- 
- - instead of creating empty pvmove layer in remove_layers_for_segments_all
- replace this device with error target.
- (which btw means that number of segments for active kernel device is still
- the same as size in metadata - now we have activated mirror and zero size
- LV in metadata)
- 
- - if pvmove fails, try to sleep some time and retry. Usually device is locked
- by scan from wrong udev rule and remapping to error target causes all scanning
- programs to quickly fail.
- (This is real hack, but it was proved in cryptsetup in similar situation
- that it helps.)
+Warn user, that system is in inconsistent state. I would prefer
+not forcibly remove device here (and I found no easy and clean way
+how to do it without lvm layer violation:-)
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/metadata/lv_manip.c |    2 +-
- tools/pvmove.c          |   27 ++++++++++++++++++++++-----
- 2 files changed, 23 insertions(+), 6 deletions(-)
+ tools/polldaemon.c |   35 +++++++++++++++++++++++++++++++++++
+ 1 files changed, 35 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 70d9da2..33be952 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2351,7 +2351,7 @@ int remove_layers_for_segments_all(struct cmd_context *cmd,
- 			return_0;
- 	}
- 
--	if (!lv_empty(layer_lv))
-+	if (!replace_lv_with_error_segment(layer_lv))
- 		return_0;
- 
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 6b7cd5b..94288bc 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -176,6 +176,38 @@ static int _wait_for_single_mirror(struct cmd_context *cmd, const char *name, co
  	return 1;
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 2490863..364b084 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -456,6 +456,26 @@ out:
- 	return r;
  }
  
-+#define TEMP_DEVICE_REMOVAL_RETRIES 3
-+static int retry_deactivate_lv(struct cmd_context *cmd,
-+				struct logical_volume *lv_mirr)
++static void _check_orphaned_pmvove_devices(struct cmd_context *cmd,
++					   struct volume_group *vg)
 +{
-+	int retries = 0;
++	char *name, dname[NAME_LEN];
++	struct lvinfo info;
++	struct logical_volume orphaned_lv = {
++		.vg = vg,
++		.status = VISIBLE_LV,
++		.major = -1,
++		.minor = -1,
++	};
 +
-+	while (!deactivate_lv(cmd, lv_mirr)) {
-+		log_debug("Temporary pvmove volume %s locked, retrying...",
-+			  lv_mirr->name);
-+		sleep(1);
-+		if (++retries > TEMP_DEVICE_REMOVAL_RETRIES) {
-+			log_error("ABORTING: Unable to deactivate temporary logical "
-+			"volume %s", lv_mirr->name);
-+			return 0;
-+		}
++	/*
++	 * Allocate new pvmove name, also check that there is no such LV in vg
++	 */
++	if (!generate_lv_name(vg, "pvmove%d", dname, sizeof(dname)))
++		return;
++
++	/*
++	 * Check if such device does not exists
++	 */
++	orphaned_lv.name = dname;
++	if (lv_info(vg->cmd, &orphaned_lv, &info, 0, 0) && info.exists) {
++		if (!(name = build_dm_name(vg->vgmem, vg->name, dname, NULL)))
++			return;
++		log_warn("WARNING: There is still existing temporary pvmove device %s "
++			 "which do not belongs to volume group %s.", name, vg->name);
++		log_warn("WARNING: To manually remove it, consider using dmsetup remove "
++			 "%s.", name);
 +	}
-+
-+	return 1;
 +}
 +
- static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
- 			  struct logical_volume *lv_mirr,
- 			  struct dm_list *lvs_changed)
-@@ -517,11 +537,8 @@ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
- 	resume_lvs(cmd, lvs_changed);
+ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		    struct volume_group *vg, void *handle)
+ {
+@@ -198,6 +230,9 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 			parms->outstanding_count++;
+ 	}
  
- 	/* Deactivate mirror LV */
--	if (!deactivate_lv(cmd, lv_mirr)) {
--		log_error("ABORTING: Unable to deactivate temporary logical "
--			  "volume \"%s\"", lv_mirr->name);
--		r = 0;
--	}
-+	if (!retry_deactivate_lv(cmd, lv_mirr))
-+		return 0;
++	if (parms->aborting)
++		_check_orphaned_pmvove_devices(cmd, vg);
++
+ 	return ECMD_PROCESSED;
  
- 	log_verbose("Removing temporary pvmove LV");
- 	if (!lv_remove(lv_mirr)) {
+ }
 
 
 
