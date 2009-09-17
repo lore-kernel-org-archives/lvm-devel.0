@@ -1,65 +1,62 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 16 Sep 2009 23:48:42 -0000
-Subject: LVM2 ./WHATS_NEW doc/example.conf
-Message-ID: <20090916234842.19152.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 16 Sep 2009 22:06:24 -0400
+Subject: [PATCH] update dmeventd plugins to use proper lvm2_log_fn_t
+Message-ID: <20090917020623.GA7271@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-09-16 23:48:42
+The dmeventd plugins provide their own _temporary_log_fn.  But they were
+not updated when lvm2_log_fn_t was last updated, see:
+http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=0ed40c04c
 
-Modified files:
-	.              : WHATS_NEW 
-	doc            : example.conf 
+I verified this patch fixes a SEGV seen in the dmeventd snapshot plugin:
 
-Log message:
-	Enable dmeventd monitoring section of config file by default.
+# lvs
+  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
+  testlv      test owi-a- 300.00M
+  testlv_snap test swi-ao  52.00M testlv  92.68
+# vgchange --monitor y test
+  2 logical volume(s) in volume group "test" monitored
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1268&r2=1.1269
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+and messages file shows:
 
---- LVM2/WHATS_NEW	2009/09/16 23:22:40	1.1268
-+++ LVM2/WHATS_NEW	2009/09/16 23:48:41	1.1269
-@@ -1,5 +1,6 @@
- Version 2.02.53 - 
- =====================================
-+  Enable dmeventd monitoring section of config file by default.
-   Update lvm2 monitoring script to lvm2_monitoring_init_red_hat.in.
-   Fix lvm2app test to run under test/api subdirectory only when configured.
-   Add vg_is_resizeable() and cleanup reference to VG_RESIZEABLE.
---- LVM2/doc/example.conf	2009/09/15 13:49:11	1.48
-+++ LVM2/doc/example.conf	2009/09/16 23:48:41	1.49
-@@ -435,7 +435,7 @@
+Sep 16 21:15:05 really-raw dmeventd[12522]: dmeventd ready for processing.
+Sep 16 21:15:11 really-raw lvm[12522]: Monitoring snapshot test-testlv_snap
+Sep 16 21:15:15 really-raw lvm[12522]: Snapshot test-testlv_snap is now 92% full.
+
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+
+---
+diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+index 8869e80..503ec0d 100644
+--- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -126,8 +126,10 @@ out_parse:
+ 	return ME_IGNORE;
+ }
  
- # Event daemon
- #
--# dmeventd {
-+dmeventd {
-     # mirror_library is the library used when monitoring a mirror device.
-     #
-     # "libdevmapper-event-lvm2mirror.so" attempts to recover from
-@@ -443,7 +443,7 @@
-     # reconfigures a mirror as necessary. If no mirror library is
-     # provided, mirrors are not monitored through dmeventd.
- 
--    # mirror_library = "libdevmapper-event-lvm2mirror.so"
-+    mirror_library = "libdevmapper-event-lvm2mirror.so"
- 
-     # snapshot_library is the library used when monitoring a snapshot device.
-     #
-@@ -452,6 +452,5 @@
-     # snapshot exceedes 80%. The warning is repeated when 85%, 90% and
-     # 95% of the snapshot are filled.
- 
--    # snapshot_library = "libdevmapper-event-lvm2snapshot.so"
--#}
--
-+    snapshot_library = "libdevmapper-event-lvm2snapshot.so"
-+}
+-static void _temporary_log_fn(int level, const char *file __attribute((unused)),
++static void _temporary_log_fn(int level,
++			      const char *file __attribute((unused)),
+ 			      int line __attribute((unused)),
++			      int dm_errno __attribute((unused)),
+ 			      const char *format)
+ {
+ 	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index 3e250af..96c4688 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -57,6 +57,7 @@ static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
+ static void _temporary_log_fn(int level,
+ 			      const char *file __attribute((unused)),
+ 			      int line __attribute((unused)),
++			      int dm_errno __attribute((unused)),
+ 			      const char *format)
+ {
+ 	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
 
 
