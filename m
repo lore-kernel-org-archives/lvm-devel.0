@@ -1,62 +1,42 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Sep 2009 10:37:25 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/plugins/mirr ...
-Message-ID: <20090917103725.10678.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu, 17 Sep 2009 17:25:35 +0200
+Subject: [PATCH 1/3] Return fail if lv_deactivate did not removed device from kernel.
+Message-ID: <4AB254EF.2080008@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-09-17 10:37:24
+Return fail if lv_deactivate did not removed device from kernel.
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
-	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
+lv_deactivate now returns always success, because tree deactivation
+functions (see dm_tree_deactivate_children) always returns success.
 
-Log message:
-	Fix dmeventd _temporary_log_fn parameters. (2.02.50)
+Because code should return failure in lv_deactivate at least,
+fix it by checking for device existence after real deactivation call.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1269&r2=1.1270
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+(After discussion this was preferred solution to dm tree function rewrite
+which affects snapshots and mirrors.)
 
---- LVM2/WHATS_NEW	2009/09/16 23:48:41	1.1269
-+++ LVM2/WHATS_NEW	2009/09/17 10:37:23	1.1270
-@@ -1,5 +1,6 @@
- Version 2.02.53 - 
- =====================================
-+  Fix dmeventd _temporary_log_fn parameters. (2.02.50)
-   Enable dmeventd monitoring section of config file by default.
-   Update lvm2 monitoring script to lvm2_monitoring_init_red_hat.in.
-   Fix lvm2app test to run under test/api subdirectory only when configured.
---- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/06/30 18:39:31	1.25
-+++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/09/17 10:37:24	1.26
-@@ -126,8 +126,10 @@
- 	return ME_IGNORE;
- }
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/activate/activate.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index aa75e5b..724c1fe 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1017,6 +1017,8 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	memlock_dec();
+ 	fs_unlock();
  
--static void _temporary_log_fn(int level, const char *file __attribute((unused)),
-+static void _temporary_log_fn(int level,
-+			      const char *file __attribute((unused)),
- 			      int line __attribute((unused)),
-+			      int dm_errno __attribute((unused)),
- 			      const char *format)
- {
- 	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
---- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2008/10/13 12:06:30	1.3
-+++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2009/09/17 10:37:24	1.4
-@@ -57,6 +57,7 @@
- static void _temporary_log_fn(int level,
- 			      const char *file __attribute((unused)),
- 			      int line __attribute((unused)),
-+			      int dm_errno __attribute((unused)),
- 			      const char *format)
- {
- 	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
++	if (!lv_info(cmd, lv, &info, 1, 0) || info.exists)
++		r = 0;
+ out:
+ 	if (lv)
+ 		vg_release(lv->vg);
+
 
 
