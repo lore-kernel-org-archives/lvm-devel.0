@@ -1,40 +1,42 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Wed, 16 Sep 2009 22:06:24 -0400
-Subject: [PATCH] update dmeventd plugins to use proper lvm2_log_fn_t
-Message-ID: <20090917020623.GA7271@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 17 Sep 2009 10:37:25 -0000
+Subject: LVM2 ./WHATS_NEW daemons/dmeventd/plugins/mirr ...
+Message-ID: <20090917103725.10678.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The dmeventd plugins provide their own _temporary_log_fn.  But they were
-not updated when lvm2_log_fn_t was last updated, see:
-http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=0ed40c04c
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-09-17 10:37:24
 
-I verified this patch fixes a SEGV seen in the dmeventd snapshot plugin:
+Modified files:
+	.              : WHATS_NEW 
+	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
+	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
 
-# lvs
-  LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
-  testlv      test owi-a- 300.00M
-  testlv_snap test swi-ao  52.00M testlv  92.68
-# vgchange --monitor y test
-  2 logical volume(s) in volume group "test" monitored
+Log message:
+	Fix dmeventd _temporary_log_fn parameters. (2.02.50)
 
-and messages file shows:
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1269&r2=1.1270
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
-Sep 16 21:15:05 really-raw dmeventd[12522]: dmeventd ready for processing.
-Sep 16 21:15:11 really-raw lvm[12522]: Monitoring snapshot test-testlv_snap
-Sep 16 21:15:15 really-raw lvm[12522]: Snapshot test-testlv_snap is now 92% full.
-
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
-
----
-diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-index 8869e80..503ec0d 100644
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -126,8 +126,10 @@ out_parse:
+--- LVM2/WHATS_NEW	2009/09/16 23:48:41	1.1269
++++ LVM2/WHATS_NEW	2009/09/17 10:37:23	1.1270
+@@ -1,5 +1,6 @@
+ Version 2.02.53 - 
+ =====================================
++  Fix dmeventd _temporary_log_fn parameters. (2.02.50)
+   Enable dmeventd monitoring section of config file by default.
+   Update lvm2 monitoring script to lvm2_monitoring_init_red_hat.in.
+   Fix lvm2app test to run under test/api subdirectory only when configured.
+--- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/06/30 18:39:31	1.25
++++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/09/17 10:37:24	1.26
+@@ -126,8 +126,10 @@
  	return ME_IGNORE;
  }
  
@@ -46,11 +48,9 @@ index 8869e80..503ec0d 100644
  			      const char *format)
  {
  	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index 3e250af..96c4688 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -57,6 +57,7 @@ static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
+--- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2008/10/13 12:06:30	1.3
++++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2009/09/17 10:37:24	1.4
+@@ -57,6 +57,7 @@
  static void _temporary_log_fn(int level,
  			      const char *file __attribute((unused)),
  			      int line __attribute((unused)),
