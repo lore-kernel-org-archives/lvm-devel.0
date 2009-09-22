@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Sep 2009 13:32:40 -0000
-Subject: LVM2 Makefile.in
-Message-ID: <20090922133240.11672.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 22 Sep 2009 16:26:59 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20090922162659.5217.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,78 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2009-09-22 13:32:39
+Changes by:	jbrassow at sourceware.org	2009-09-22 16:26:59
 
 Modified files:
-	.              : Makefile.in 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Minor replace of of ${top_srcdir} with $(top_srcdir) for lcov target
+	'_emit_areas_line' returns 1 for success and 0 for failure.  This always
+	confuses me, so I've added a comment at the top of the function to
+	remind me of this.
+	
+	I also found that 'mirror_emit_segment_line' was returning 0 (return_0)
+	on failure /and/ success.  It now returns 1 for success and 0 for failure -
+	just like '_emit_areas_line' and its calling function, '_emit_segment_line'.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
 
---- LVM2/Makefile.in	2009/09/15 15:37:12	1.38
-+++ LVM2/Makefile.in	2009/09/22 13:32:39	1.39
-@@ -105,7 +105,7 @@
- lcov: all
- 	$(RM) -rf $(LCOV_REPORTS_DIR)
- 	$(MKDIR_P) $(LCOV_REPORTS_DIR)
--	$(LCOV) -b ${top_srcdir}/libdm -d $(top_srcdir)/libdm -c -o $(LCOV_REPORTS_DIR)/libdm.info
-+	$(LCOV) -b $(top_srcdir)/libdm -d $(top_srcdir)/libdm -c -o $(LCOV_REPORTS_DIR)/libdm.info
- 	$(LCOV) -b $(top_srcdir)/lib -d $(top_srcdir)/lib -c -o $(LCOV_REPORTS_DIR)/lib.info
- 	$(LCOV) -b $(top_srcdir)/tools -d $(top_srcdir)/tools -c -o $(LCOV_REPORTS_DIR)/tools.info
- 	DMEVENTD_INFO="$(LCOV_REPORTS_DIR)/dmeventd.info" ;\
+--- LVM2/libdm/libdm-deptree.c	2009/08/13 16:31:01	1.56
++++ LVM2/libdm/libdm-deptree.c	2009/09/22 16:26:59	1.57
+@@ -1258,6 +1258,11 @@
+ 	p += w;\
+ } while (0)
+ 
++/*
++ * _emit_areas_line
++ *
++ * Returns: 1 on success, 0 on failure
++ */
+ static int _emit_areas_line(struct dm_task *dmt __attribute((unused)),
+ 			    struct load_segment *seg, char *params,
+ 			    size_t paramsize, int *pos)
+@@ -1279,6 +1284,11 @@
+ 	return 1;
+ }
+ 
++/*
++ * mirror_emit_segment_line
++ *
++ * Returns: 1 on success, 0 on failure
++ */
+ static int mirror_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 				    uint32_t minor, struct load_segment *seg,
+ 				    uint64_t *seg_start, char *params,
+@@ -1386,15 +1396,13 @@
+ 
+ 	EMIT_PARAMS(pos, " %u ", seg->mirror_area_count);
+ 
+-	if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
+-		stack;
+-		return r;
+-	}
++	if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0)
++		return_0;
+ 
+ 	if (handle_errors)
+ 		EMIT_PARAMS(pos, " 1 handle_errors");
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+@@ -1415,8 +1423,8 @@
+ 		/* Mirrors are pretty complicated - now in separate function */
+ 		r = mirror_emit_segment_line(dmt, major, minor, seg, seg_start,
+ 					     params, paramsize);
+-		if (r)
+-			return r;
++		if (!r)
++			return_0;
+ 		break;
+ 	case SEG_SNAPSHOT:
+ 		if (!_build_dev_string(originbuf, sizeof(originbuf), seg->origin))
 
 
