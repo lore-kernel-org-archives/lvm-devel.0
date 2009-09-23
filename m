@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 22 Sep 2009 16:26:59 -0000
-Subject: LVM2/libdm libdm-deptree.c
-Message-ID: <20090922162659.5217.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 23 Sep 2009 12:52:53 -0000
+Subject: LVM2 man/dmsetup.8.in udev/12-dm-permissions.rules
+Message-ID: <20090923125253.1442.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,78 +10,115 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2009-09-22 16:26:59
+Changes by:	prajnoha at sourceware.org	2009-09-23 12:52:53
 
 Modified files:
-	libdm          : libdm-deptree.c 
+	man            : dmsetup.8.in 
+	udev           : 12-dm-permissions.rules 
 
 Log message:
-	'_emit_areas_line' returns 1 for success and 0 for failure.  This always
-	confuses me, so I've added a comment at the top of the function to
-	remind me of this.
-	
-	I also found that 'mirror_emit_segment_line' was returning 0 (return_0)
-	on failure /and/ success.  It now returns 1 for success and 0 for failure -
-	just like '_emit_areas_line' and its calling function, '_emit_segment_line'.
+	Add more hints in 12-dm-permissions.rules. Add 'dmsetup splitname' and 'y|--yes' to dmsetup manpage.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/12-dm-permissions.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/libdm/libdm-deptree.c	2009/08/13 16:31:01	1.56
-+++ LVM2/libdm/libdm-deptree.c	2009/09/22 16:26:59	1.57
-@@ -1258,6 +1258,11 @@
- 	p += w;\
- } while (0)
+--- LVM2/man/dmsetup.8.in	2009/09/11 16:06:31	1.25
++++ LVM2/man/dmsetup.8.in	2009/09/23 12:52:52	1.26
+@@ -78,6 +78,10 @@
+ .B dmsetup setgeometry
+ .I device_name cyl head sect start
+ .br
++.B dmsetup splitname
++.I device_name
++.I [subsystem]
++.br
  
-+/*
-+ * _emit_areas_line
-+ *
-+ * Returns: 1 on success, 0 on failure
-+ */
- static int _emit_areas_line(struct dm_task *dmt __attribute((unused)),
- 			    struct load_segment *seg, char *params,
- 			    size_t paramsize, int *pos)
-@@ -1279,6 +1284,11 @@
- 	return 1;
- }
+ .B devmap_name
+ .I major minor
+@@ -138,6 +142,9 @@
+ .IP \fB-u|--uuid
+ .br
+ Specify the uuid.
++.IP \fB-y|--yes
++.br
++Answer yes to all prompts automatically.
+ .IP \fB-v|--verbose\ [-v|--verbose]
+ .br
+ Produce additional output.
+@@ -260,6 +267,12 @@
+ .I device_name cyl head sect start
+ .br
+ Sets the device geometry to C/H/S.
++.IP \fBsplitname
++.I device_name
++.I [subsystem]
++.br
++Splits given device name into subsystem constituents.
++Default subsystem is LVM.
+ .IP \fBstatus
+ .I [--target target_type]
+ .I [device_name]
+--- LVM2/udev/12-dm-permissions.rules	2009/09/22 12:03:32	1.3
++++ LVM2/udev/12-dm-permissions.rules	2009/09/23 12:52:52	1.4
+@@ -20,7 +20,56 @@
+ ACTION!="change", GOTO="dm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
  
-+/*
-+ * mirror_emit_segment_line
-+ *
-+ * Returns: 1 on success, 0 on failure
-+ */
- static int mirror_emit_segment_line(struct dm_task *dmt, uint32_t major,
- 				    uint32_t minor, struct load_segment *seg,
- 				    uint64_t *seg_start, char *params,
-@@ -1386,15 +1396,13 @@
+-# Just an example...
+-# ENV{DM_NAME}=="my_device", OWNER:="peter", GROUP:="peter", MODE:="644"
++# A few demonstrational examples...
++
++
++# PLAIN DM DEVICES
++#
++# Set permissions for a DM device named 'my_device' exactly
++# ENV{DM_NAME}=="my_device", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for all DM devices having 'MY_UUID-' UUID prefix
++# ENV{DM_UUID}=="MY_UUID-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++
++# LVM DEVICES
++#
++# Set permissions for all LVM devices
++# ENV{DM_UUID}=="LVM-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for all devices that belong to one LVM VG
++# ENV{DM_VG_NAME}=="VolGroup00", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for an LVM device with VG named VolGroup00 and LV named LogVol00 exactly
++# ENV{DM_VG_NAME}=="VolGroup00", ENV{DM_LV_NAME}=="LogVol00", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for all LVM devices that does not belong to a VG named VolGroup00
++# ENV{DM_VG_NAME}!="VolGroup00", OWNER:="root", GROUP:="root", MODE:="660"
++
++
++# ENCRYPTED DEVICES (using cryptsetup >= 1.1)
++#
++# Set permissions for all encrypted devices created by cryptsetup (plain devices)
++# ENV{DM_UUID}=="CRYPT-PLAIN-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for all encrypted devices created by cryptsetup (LUKS extension)
++# ENV{DM_UUID}=="CRYPT-LUKS1-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for an encrypted device created by cryptsetup and having an exact luks UUID
++# ENV{DM_UUID}=="CRYPT-LUKS1-22fce5c8313c43c68d84b50a3b0fee78-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++
++# MULTIPATH DEVICES
++#
++# Set permissions for all multipath devices
++# ENV{DM_UUID}=="mpath-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++# Set permissions for first two partitions created on a multipath device (and detected by kpartx)
++# ENV{DM_UUID}=="part[1-2]-mpath-?*", OWNER:="root", GROUP:="root", MODE:="660"
++
++
++# ...you can use any combination of the comparisons with the environment variables
++# listed at the beginning of this file (udev provides simple pattern matching by
++# using *, ? and [] that you can use, see 'man udev' for more information).
  
- 	EMIT_PARAMS(pos, " %u ", seg->mirror_area_count);
- 
--	if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
--		stack;
--		return r;
--	}
-+	if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0)
-+		return_0;
- 
- 	if (handle_errors)
- 		EMIT_PARAMS(pos, " 1 handle_errors");
- 
--	return 0;
-+	return 1;
- }
- 
- static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
-@@ -1415,8 +1423,8 @@
- 		/* Mirrors are pretty complicated - now in separate function */
- 		r = mirror_emit_segment_line(dmt, major, minor, seg, seg_start,
- 					     params, paramsize);
--		if (r)
--			return r;
-+		if (!r)
-+			return_0;
- 		break;
- 	case SEG_SNAPSHOT:
- 		if (!_build_dev_string(originbuf, sizeof(originbuf), seg->origin))
+ LABEL="dm_end"
 
 
