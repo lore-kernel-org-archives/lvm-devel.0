@@ -1,63 +1,111 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 4 Mar 2019 12:27:31 -0500
-Subject: stable-2.02 - io: increase the default io memory from 4 to 8 MiB
-Message-ID: <201903041727.x24HRVY7005072@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Fri, 25 Sep 2009 18:15:54 -0400
+Subject: [PATCH] update dmeventd plugins to use proper lvm2_log_fn_t
+In-Reply-To: <20090917020623.GA7271@redhat.com>
+References: <20090917020623.GA7271@redhat.com>
+Message-ID: <4ABD411A.9070701@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=590a1ebcf78b8aae2a1e5ebaba1ac24a54435690
-Commit:        590a1ebcf78b8aae2a1e5ebaba1ac24a54435690
-Parent:        863a2e693ee95b95463d60fa8b21f4c7c084292c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 4 11:18:34 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 4 11:18:34 2019 -0600
+Hi Mike,
 
-io: increase the default io memory from 4 to 8 MiB
+I built the latest lvm2 but the following error messages were
+displayed.
 
-This is the default bcache size that is created at the
-start of the command.  It needs to be large enough to
-hold a single copy of metadata for a given VG, or the
-VG cannot be read or written (since the entire VG would
-not fit into available memory.)
+dmeventd_mirror.c: In function 'register_device':
+dmeventd_mirror.c:256: warning: passing argument 1 of 'lvm2_log_fn' from incompatible pointer type
+...
+dmeventd_snapshot.c: In function 'register_device':
+dmeventd_snapshot.c:170: warning: passing argument 1 of 'lvm2_log_fn' from incompatible pointer type
 
-Increasing the default reduces the chances of anyone
-needing to increase the default to use their VG.
+The prototype definition in lvm2cmd.h also needs to be updated.
 
-The size can be set in lvm.conf global/io_memory_size;
-the lower limit is 4 MiB and the upper limit is 128 MiB.
+Thanks,
+Taka
+
+-- 
+Takahiro Yasui
+Hitachi Computer Products (America), Inc.
+
+
+Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
 ---
- lib/config/defaults.h |    2 +-
- lib/label/label.c     |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ tools/lvm2cmd.h |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 3b4438a..9e398d7 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -269,6 +269,6 @@
- 
- #define DEFAULT_SCAN_LVS 0
- 
--#define DEFAULT_IO_MEMORY_SIZE_KB 4096
-+#define DEFAULT_IO_MEMORY_SIZE_KB 8192
- 
- #endif				/* _LVM_DEFAULTS_H */
-diff --git a/lib/label/label.c b/lib/label/label.c
-index e96a7fe..4f8e135 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -791,7 +791,7 @@ out:
-  * the metadata size.)
-  */
- 
--#define MIN_BCACHE_BLOCKS 32    /* 4MB, currently matches DEFAULT_IO_MEMORY_SIZE_KB */
-+#define MIN_BCACHE_BLOCKS 32    /* 4MB */
- #define MAX_BCACHE_BLOCKS 1024
- 
- static int _setup_bcache(int num_devs)
+Index: LVM2.02.53-20090925/tools/lvm2cmd.h
+===================================================================
+--- LVM2.02.53-20090925.orig/tools/lvm2cmd.h
++++ LVM2.02.53-20090925/tools/lvm2cmd.h
+@@ -18,7 +18,7 @@
+
+ #ifndef _LVM_LOG_H
+ typedef void (*lvm2_log_fn_t) (int level, const char *file, int line,
+-                              const char *message);
++                              int dm_errno, const char *message);
+ #endif
+
+ #define LVM2_LOG_SUPPRESS      0
+
+
+Mike Snitzer wrote:
+> The dmeventd plugins provide their own _temporary_log_fn.  But they were
+> not updated when lvm2_log_fn_t was last updated, see:
+> http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=0ed40c04c
+> 
+> I verified this patch fixes a SEGV seen in the dmeventd snapshot plugin:
+> 
+> # lvs
+>   LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
+>   testlv      test owi-a- 300.00M
+>   testlv_snap test swi-ao  52.00M testlv  92.68
+> # vgchange --monitor y test
+>   2 logical volume(s) in volume group "test" monitored
+> 
+> and messages file shows:
+> 
+> Sep 16 21:15:05 really-raw dmeventd[12522]: dmeventd ready for processing.
+> Sep 16 21:15:11 really-raw lvm[12522]: Monitoring snapshot test-testlv_snap
+> Sep 16 21:15:15 really-raw lvm[12522]: Snapshot test-testlv_snap is now 92% full.
+> 
+> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+> 
+> ---
+> diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+> index 8869e80..503ec0d 100644
+> --- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+> +++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+> @@ -126,8 +126,10 @@ out_parse:
+>  	return ME_IGNORE;
+>  }
+>  
+> -static void _temporary_log_fn(int level, const char *file __attribute((unused)),
+> +static void _temporary_log_fn(int level,
+> +			      const char *file __attribute((unused)),
+>  			      int line __attribute((unused)),
+> +			      int dm_errno __attribute((unused)),
+>  			      const char *format)
+>  {
+>  	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
+> diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+> index 3e250af..96c4688 100644
+> --- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+> +++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+> @@ -57,6 +57,7 @@ static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
+>  static void _temporary_log_fn(int level,
+>  			      const char *file __attribute((unused)),
+>  			      int line __attribute((unused)),
+> +			      int dm_errno __attribute((unused)),
+>  			      const char *format)
+>  {
+>  	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
