@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Sep 2009 18:30:28 -0000
-Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM libdm/libdm-de ...
-Message-ID: <20090925183028.8618.qmail@sourceware.org>
+Date: 25 Sep 2009 18:32:22 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20090925183222.10150.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,76 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-09-25 18:30:27
+Changes by:	agk at sourceware.org	2009-09-25 18:32:22
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM 
-	libdm          : libdm-deptree.c 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
 	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1270&r2=1.1271
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.301&r2=1.302
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.209&r2=1.210
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1271&r2=1.1272
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.302&r2=1.303
 
---- LVM2/WHATS_NEW	2009/09/17 10:37:23	1.1270
-+++ LVM2/WHATS_NEW	2009/09/25 18:30:26	1.1271
-@@ -1,6 +1,5 @@
--Version 2.02.53 - 
-+Version 2.02.53 - 25th September 2009
+--- LVM2/VERSION	2009/09/15 13:54:28	1.209
++++ LVM2/VERSION	2009/09/25 18:32:22	1.210
+@@ -1 +1 @@
+-2.02.53(1)-cvs (2009-09-15)
++2.02.53(1)-cvs (2009-09-25)
+--- LVM2/VERSION_DM	2009/09/15 13:54:28	1.21
++++ LVM2/VERSION_DM	2009/09/25 18:32:22	1.22
+@@ -1 +1 @@
+-1.02.38-cvs (2009-09-15)
++1.02.38-cvs (2009-09-25)
+--- LVM2/WHATS_NEW	2009/09/25 18:30:26	1.1271
++++ LVM2/WHATS_NEW	2009/09/25 18:32:22	1.1272
+@@ -1,5 +1,6 @@
+ Version 2.02.53 - 25th September 2009
  =====================================
--  Fix dmeventd _temporary_log_fn parameters. (2.02.50)
++  Create any directories in /dev with DM_DEV_DIR_UMASK (022).
    Enable dmeventd monitoring section of config file by default.
    Update lvm2 monitoring script to lvm2_monitoring_init_red_hat.in.
    Fix lvm2app test to run under test/api subdirectory only when configured.
---- LVM2/WHATS_NEW_DM	2009/09/25 18:08:04	1.301
-+++ LVM2/WHATS_NEW_DM	2009/09/25 18:30:26	1.302
-@@ -1,6 +1,10 @@
--Version 1.02.38 - 
-+Version 1.02.38 - 25th September 2009
+--- LVM2/WHATS_NEW_DM	2009/09/25 18:30:26	1.302
++++ LVM2/WHATS_NEW_DM	2009/09/25 18:32:22	1.303
+@@ -1,5 +1,6 @@
+ Version 1.02.38 - 25th September 2009
  =====================================
--  Handle any path supplied to dm_task_set_name() by looking up in /dev/mapper.
-+  Handle any path supplied to dm_task_set_name by looking up in /dev/mapper.
-+  Add several examples to 12-dm-permissions.rules.
-+  Add splitname and --yes to dmsetup man page.
-+  Fix _mirror_emit_segment_line return code.
-+  Fix dmeventd _temporary_log_fn parameters. (2.02.50)
- 
- Version 1.02.37 - 15th September 2009
- =====================================
---- LVM2/libdm/libdm-deptree.c	2009/09/22 16:26:59	1.57
-+++ LVM2/libdm/libdm-deptree.c	2009/09/25 18:30:27	1.58
-@@ -1285,14 +1285,12 @@
- }
- 
- /*
-- * mirror_emit_segment_line
-- *
-  * Returns: 1 on success, 0 on failure
-  */
--static int mirror_emit_segment_line(struct dm_task *dmt, uint32_t major,
--				    uint32_t minor, struct load_segment *seg,
--				    uint64_t *seg_start, char *params,
--				    size_t paramsize)
-+static int _mirror_emit_segment_line(struct dm_task *dmt, uint32_t major,
-+				     uint32_t minor, struct load_segment *seg,
-+				     uint64_t *seg_start, char *params,
-+				     size_t paramsize)
- {
- 	int r;
- 	int block_on_error = 0;
-@@ -1421,8 +1419,8 @@
- 		break;
- 	case SEG_MIRRORED:
- 		/* Mirrors are pretty complicated - now in separate function */
--		r = mirror_emit_segment_line(dmt, major, minor, seg, seg_start,
--					     params, paramsize);
-+		r = _mirror_emit_segment_line(dmt, major, minor, seg, seg_start,
-+					      params, paramsize);
- 		if (!r)
- 			return_0;
- 		break;
++  Export DM_DEV_DIR_UMASK, the default umask for /dev directories created.
+   Handle any path supplied to dm_task_set_name by looking up in /dev/mapper.
+   Add several examples to 12-dm-permissions.rules.
+   Add splitname and --yes to dmsetup man page.
 
 
