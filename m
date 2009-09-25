@@ -1,71 +1,38 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Wed, 30 Sep 2009 17:19:01 -0400
-Subject: [RFC][PATCH 1/5] support command string with space
-In-Reply-To: <878wfwdvuj.fsf@twilight.int.mornfall.net.>
-References: <4AC2A619.50404@redhat.com>
-	<878wfwdvuj.fsf@twilight.int.mornfall.net.>
-Message-ID: <4AC3CB45.1040503@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 25 Sep 2009 18:19:09 -0000
+Subject: LVM2/libdm libdm-common.c
+Message-ID: <20090925181909.32662.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/30/09 16:24, Petr Rockai wrote:
-> Takahiro Yasui <tyasui@redhat.com> writes:
-> 
->> Support escaped space by backslash in the command line string passed
->> through lvm2 command interface, lvm2_run(). This is used to handle
->> "--config" option which contains multiple parameters.
->>
->> e.g. lvconvert --repair --use-policies --config \
->>      devices{ignore_suspended_devices=1\ filter=[...]} vg/lv
->>
->>
->> Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
->> ---
->>  tools/lvmcmdline.c |    9 ++++++++-
->>  1 file changed, 8 insertions(+), 1 deletion(-)
->>
->> Index: LVM2.02.54-20090928/tools/lvmcmdline.c
->> ===================================================================
->> --- LVM2.02.54-20090928.orig/tools/lvmcmdline.c
->> +++ LVM2.02.54-20090928/tools/lvmcmdline.c
->> @@ -1070,8 +1070,15 @@ int lvm_split(char *str, int *argc, char
->>  			break;
->>  
->>  		e = b;
->> -		while (*e && !isspace(*e))
->> +		while (*e && !isspace(*e)) {
->> +			/*
->> +			 * 'backslash' is treated as a escape character
->> +			 * and the string isn't split at 'backslash + space.'
->> +			 */
->> +			if (*e == '\\' && isspace(*(e+1)))
->> +				*e++ = ' ';
->>  			e++;
->> +		}
->>  
->>  		argv[(*argc)++] = b;
->>  		if (!*e)
-> IIUIC, the code will replace "\ " with "  " (double space) -- which may or may
-> not be correct, depending on where the space appears. It also breaks any code
-> that may have previously expected "\ " to have no special meaning, even though I
-> doubt any exists.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-09-25 18:19:09
 
-Yes, this approach replace "\ " with "  ", and it will work correctly unless
-"\ " is used for other purpose previously. Current lvm codes use lvm_split()
-only in early stage to split options and there is no case you concerns.
+Modified files:
+	libdm          : libdm-common.c 
 
-> Anyway, a more correct solution would entail a lvm2_runv (or similarly named)
-> function, that would take char **argv -- no escaping issues to care
-> about. Since this just adds to the library, it should be backwards compatible
-> just fine.
+Log message:
+	ensure dm_strdup succeeds
 
-I can add an interface like lvm2_runv. But there is another approach using
-single-quotes around an option with spaces as we do in a shell (e.g. bash).
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
 
-Thanks,
-Taka
+--- LVM2/libdm/libdm-common.c	2009/09/25 18:13:17	1.83
++++ LVM2/libdm/libdm-common.c	2009/09/25 18:19:09	1.84
+@@ -217,7 +217,9 @@
+ 			continue;
+ 
+ 		if (buf.st_rdev == st_rdev) {
+-			new_name = dm_strdup(name);
++			if (!(new_name = dm_strdup(name)))
++				log_error("dm_task_set_name: strdup(%s) failed",
++					  name);
+ 			break;
+ 		}
+ 	}
 
 
