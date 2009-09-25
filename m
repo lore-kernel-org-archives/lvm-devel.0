@@ -1,123 +1,74 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 29 Sep 2009 11:22:57 -0400
-Subject: [PATCH 4/4] Move activation of background polling processes to a common function.
-In-Reply-To: <1254237777-30501-1-git-send-email-snitzer@redhat.com>
-References: <1254237777-30501-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1254237777-30501-5-git-send-email-snitzer@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 25 Sep 2009 11:58:01 -0000
+Subject: LVM2 lib/activate/fs.c libdm/libdevmapper.h li ...
+Message-ID: <20090925115801.11275.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move activation of background polling processes to a common function.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2009-09-25 11:58:01
 
-Avoids code duplication and fixes an associated where vgchange would
-only restart pvmove and _not_ lvconvert (lvchange would restart
-both).
+Modified files:
+	lib/activate   : fs.c 
+	libdm          : libdevmapper.h 
+	libdm/ioctl    : libdm-iface.c 
 
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-Reviewed-by: Mike Snitzer <snitzer@redhat.com>
+Log message:
+	Use the same default umask for /dev dirs (DM_DEV_DIR_UMASK).
 
----
- tools/lvchange.c |   33 ++++++++++++++++++++-------------
- tools/tools.h    |    1 +
- tools/vgchange.c |   10 ++--------
- 3 files changed, 23 insertions(+), 21 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.96&r2=1.97
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
 
-Index: lvm2/tools/lvchange.c
-===================================================================
---- lvm2.orig/tools/lvchange.c
-+++ lvm2/tools/lvchange.c
-@@ -101,11 +101,29 @@ static int lvchange_monitoring(struct cm
+--- LVM2/lib/activate/fs.c	2009/08/05 09:12:44	1.47
++++ LVM2/lib/activate/fs.c	2009/09/25 11:58:00	1.48
+@@ -29,6 +29,7 @@
+ static int _mk_dir(const char *dev_dir, const char *vg_name)
+ {
+ 	char vg_path[PATH_MAX];
++	mode_t old_umask;
+ 
+ 	if (dm_snprintf(vg_path, sizeof(vg_path), "%s%s",
+ 			 dev_dir, vg_name) == -1) {
+@@ -41,10 +42,14 @@
+ 		return 1;
+ 
+ 	log_very_verbose("Creating directory %s", vg_path);
++
++	old_umask = umask(DM_DEV_DIR_UMASK);
+ 	if (mkdir(vg_path, 0777)) {
+ 		log_sys_error("mkdir", vg_path);
++		umask(old_umask);
+ 		return 0;
+ 	}
++	umask(old_umask);
+ 
  	return 1;
  }
+--- LVM2/libdm/libdevmapper.h	2009/08/06 15:04:30	1.96
++++ LVM2/libdm/libdevmapper.h	2009/09/25 11:58:00	1.97
+@@ -1026,4 +1026,6 @@
+ int dm_udev_complete(uint32_t cookie);
+ int dm_udev_wait(uint32_t cookie);
  
-+void lvchange_activate_background_polling(struct cmd_context *cmd,
-+					  struct logical_volume *lv)
-+{
-+	const char *pvname;
++#define DM_DEV_DIR_UMASK 0022
 +
-+	if ((lv->status & LOCKED) &&
-+	    (pvname = get_pvmove_pvname_from_lv(lv))) {
-+		log_verbose("Spawning background pvmove process for %s",
-+			    pvname);
-+		pvmove_poll(cmd, pvname, 1);
-+	}
-+
-+	if (lv->status & CONVERTING) {
-+		log_verbose("Spawning background lvconvert process for %s",
-+			    lv->name);
-+		lvconvert_poll(cmd, lv, 1);
-+	}
-+}
-+
- static int lvchange_availability(struct cmd_context *cmd,
- 				 struct logical_volume *lv)
- {
- 	int activate;
--	const char *pvname;
+ #endif				/* LIB_DEVICE_MAPPER_H */
+--- LVM2/libdm/ioctl/libdm-iface.c	2009/08/06 15:02:01	1.61
++++ LVM2/libdm/ioctl/libdm-iface.c	2009/09/25 11:58:00	1.62
+@@ -234,7 +234,7 @@
+ 	if (!major)
+ 		return 0;
  
- 	activate = arg_uint_value(cmd, available_ARG, 0);
+-	old_umask = umask(0022);
++	old_umask = umask(DM_DEV_DIR_UMASK);
+ 	ret = dm_create_dir(dm_dir());
+ 	umask(old_umask);
  
-@@ -136,18 +154,7 @@ static int lvchange_availability(struct 
- 				return_0;
- 		}
- 
--		if ((lv->status & LOCKED) &&
--		    (pvname = get_pvmove_pvname_from_lv(lv))) {
--			log_verbose("Spawning background pvmove process for %s",
--				    pvname);
--			pvmove_poll(cmd, pvname, 1);
--		}
--
--		if (lv->status & CONVERTING) {
--			log_verbose("Spawning background lvconvert process for %s",
--				    lv->name);
--			lvconvert_poll(cmd, lv, 1);
--		}
-+		lvchange_activate_background_polling(cmd, lv);
- 	}
- 
- 	return 1;
-Index: lvm2/tools/tools.h
-===================================================================
---- lvm2.orig/tools/tools.h
-+++ lvm2/tools/tools.h
-@@ -169,5 +169,6 @@ const char *command_name(struct cmd_cont
- 
- int pvmove_poll(struct cmd_context *cmd, const char *pv, unsigned background);
- int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned background);
-+void lvchange_activate_background_polling(struct cmd_context *cmd, struct logical_volume *lv);
- 
- #endif
-Index: lvm2/tools/vgchange.c
-===================================================================
---- lvm2.orig/tools/vgchange.c
-+++ lvm2/tools/vgchange.c
-@@ -56,7 +56,6 @@ static int _activate_lvs_in_vg(struct cm
- {
- 	struct lv_list *lvl;
- 	struct logical_volume *lv;
--	const char *pvname;
- 	int count = 0;
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
-@@ -91,13 +90,8 @@ static int _activate_lvs_in_vg(struct cm
- 		} else if (!activate_lv(cmd, lv))
- 			continue;
- 
--		if ((lv->status & PVMOVE) &&
--		    (pvname = get_pvmove_pvname_from_lv_mirr(lv))) {
--			log_verbose("Spawning background process for %s %s",
--				    lv->name, pvname);
--			pvmove_poll(cmd, pvname, 1);
--			continue;
--		}
-+		if (activate != CHANGE_AN && activate != CHANGE_ALN)
-+			lvchange_activate_background_polling(cmd, lv);
- 
- 		count++;
- 	}
 
 
