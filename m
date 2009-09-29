@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 25 Sep 2009 11:58:01 -0000
-Subject: LVM2 lib/activate/fs.c libdm/libdevmapper.h li ...
-Message-ID: <20090925115801.11275.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Sep 2009 18:50:29 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
+Message-ID: <20090929185029.28852.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,78 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-09-25 11:58:01
+Changes by:	agk at sourceware.org	2009-09-29 18:50:29
 
 Modified files:
-	lib/activate   : fs.c 
-	libdm          : libdevmapper.h 
-	libdm/ioctl    : libdm-iface.c 
+	.              : WHATS_NEW 
+	lib/activate   : activate.c 
 
 Log message:
-	Use the same default umask for /dev dirs (DM_DEV_DIR_UMASK).
+	Don't attempt to deactivate an LV if any of its snapshots are in use.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.96&r2=1.97
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1278&r2=1.1279
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.154&r2=1.155
 
---- LVM2/lib/activate/fs.c	2009/08/05 09:12:44	1.47
-+++ LVM2/lib/activate/fs.c	2009/09/25 11:58:00	1.48
-@@ -29,6 +29,7 @@
- static int _mk_dir(const char *dev_dir, const char *vg_name)
- {
- 	char vg_path[PATH_MAX];
-+	mode_t old_umask;
- 
- 	if (dm_snprintf(vg_path, sizeof(vg_path), "%s%s",
- 			 dev_dir, vg_name) == -1) {
-@@ -41,10 +42,14 @@
- 		return 1;
- 
- 	log_very_verbose("Creating directory %s", vg_path);
-+
-+	old_umask = umask(DM_DEV_DIR_UMASK);
- 	if (mkdir(vg_path, 0777)) {
- 		log_sys_error("mkdir", vg_path);
-+		umask(old_umask);
- 		return 0;
- 	}
-+	umask(old_umask);
- 
- 	return 1;
+--- LVM2/WHATS_NEW	2009/09/29 15:17:54	1.1278
++++ LVM2/WHATS_NEW	2009/09/29 18:50:28	1.1279
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Don't attempt to deactivate an LV if any of its snapshots are in use.
+   Return fail if lv_deactivate fails to remove device from kernel.
+   Provide alternative implementation of obsolete siginterrupt().
+   Consolidate LV allocation into alloc_lv().
+--- LVM2/lib/activate/activate.c	2009/09/29 15:17:54	1.154
++++ LVM2/lib/activate/activate.c	2009/09/29 18:50:28	1.155
+@@ -975,6 +975,29 @@
+ 	return _lv_resume(cmd, lvid_s, 1);
  }
---- LVM2/libdm/libdevmapper.h	2009/08/06 15:04:30	1.96
-+++ LVM2/libdm/libdevmapper.h	2009/09/25 11:58:00	1.97
-@@ -1026,4 +1026,6 @@
- int dm_udev_complete(uint32_t cookie);
- int dm_udev_wait(uint32_t cookie);
  
-+#define DM_DEV_DIR_UMASK 0022
++static int _lv_has_open_snapshots(struct logical_volume *lv)
++{
++	struct lv_segment *snap_seg;
++	struct lvinfo info;
++	int r = 0;
 +
- #endif				/* LIB_DEVICE_MAPPER_H */
---- LVM2/libdm/ioctl/libdm-iface.c	2009/08/06 15:02:01	1.61
-+++ LVM2/libdm/ioctl/libdm-iface.c	2009/09/25 11:58:00	1.62
-@@ -234,7 +234,7 @@
- 	if (!major)
- 		return 0;
++	dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs, origin_list) {
++		if (!lv_info(lv->vg->cmd, snap_seg->cow, &info, 1, 0)) {
++			r = 1;
++			continue;
++		}
++
++		if (info.exists && info.open_count) {
++			log_error("LV %s/%s has open snapshot %s: "
++				  "not deactivating", lv->vg->name, lv->name,
++				  snap_seg->cow->name);
++			r = 1;
++		}
++	}
++
++	return r;
++}
++
+ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ {
+ 	struct logical_volume *lv;
+@@ -1001,10 +1024,14 @@
+ 		goto out;
+ 	}
  
--	old_umask = umask(0022);
-+	old_umask = umask(DM_DEV_DIR_UMASK);
- 	ret = dm_create_dir(dm_dir());
- 	umask(old_umask);
+-	if (info.open_count && lv_is_visible(lv)) {
+-		log_error("LV %s/%s in use: not deactivating", lv->vg->name,
+-			  lv->name);
+-		goto out;
++	if (lv_is_visible(lv)) {
++		if (info.open_count) {
++			log_error("LV %s/%s in use: not deactivating",
++				  lv->vg->name, lv->name);
++			goto out;
++		}
++		if (lv_is_origin(lv) && _lv_has_open_snapshots(lv))
++			goto_out;
+ 	}
  
+ 	lv_calculate_readahead(lv, NULL);
 
 
