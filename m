@@ -1,23 +1,34 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 29 Sep 2009 12:08:12 +0100
-Subject: [PATCH 2/3] Fix possible lost of temporary devices in pvmove.
-In-Reply-To: <4AC1A586.4080303@redhat.com>
-References: <4AB254F7.5050509@redhat.com>
-	<20090928194440.GL5351@agk-dp.fab.redhat.com>
-	<4AC1A586.4080303@redhat.com>
-Message-ID: <20090929110812.GN5351@agk-dp.fab.redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 29 Sep 2009 16:42:29 +0200
+Subject: [PATCH, v2] unknown segment types
+In-Reply-To: <87vdlmhze5.fsf_-_@twilight.int.mornfall.net.> (Petr Rockai's
+	message of "Tue, 21 Jul 2009 16:41:22 +0200")
+References: <87ljmzcz28.fsf@twilight.int.mornfall.net.>
+	<4A56288F.4080604@redhat.com>
+	<87k52h8wep.fsf@twilight.int.mornfall.net.>
+	<4A564EEA.10607@redhat.com>
+	<87vdlmhze5.fsf_-_@twilight.int.mornfall.net.>
+Message-ID: <87pr99ersa.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Sep 29, 2009 at 08:13:26AM +0200, Milan Broz wrote:
-> And it leads to data corruption, see  https://bugzilla.redhat.com/show_bug.cgi?id=520913
- 
-Any data corruption is not a consequence of bogus udev rules.
-It's a consequence of incorrect error handling in the lvm2 code.
+Petr Rockai <prockai@redhat.com> writes:
+> here comes an amended patch for unknown segment types. This time, it won't let
+> people tinker with volume groups with unknown segtypes in it, but comes with
+> provisions to let tools override this safeguard when reasonable.
+a rebase of this same patch for current mainline (checked that it still works,
+too) is attached.
 
-Alasdair
+Yours,
+   Petr.
 
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unknown-segtype.diff
+Type: text/x-diff
+Size: 19394 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090929/a8dae80b/attachment.bin>
