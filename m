@@ -1,199 +1,123 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 29 Sep 2009 11:22:56 -0400
-Subject: [PATCH 3/4] Define new periodic polling method: poll_progress
+Date: Tue, 29 Sep 2009 11:22:57 -0400
+Subject: [PATCH 4/4] Move activation of background polling processes to a common function.
 In-Reply-To: <1254237777-30501-1-git-send-email-snitzer@redhat.com>
 References: <1254237777-30501-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1254237777-30501-4-git-send-email-snitzer@redhat.com>
+Message-ID: <1254237777-30501-5-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Define new polling method poll_progress that is called periodically. The method
-can return:
-0 --- error
-PROGRESS_TRY_AGAIN --- should be called again after specified interval
-PROGRESS_UPDATE_METADATA --- should call update_metadata method and continue
-			     polling
-PROGRESS_FINISHED --- should call finish_copy and exit polling
+Move activation of background polling processes to a common function.
 
-The hard-coded mirror-specific code in polldaemon was moved to function
-poll_mirror_progress. The rest of the polldaemon is mirror-free so it can be
-used for merging snapshots as well.
+Avoids code duplication and fixes an associated where vgchange would
+only restart pvmove and _not_ lvconvert (lvchange would restart
+both).
 
 Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 Reviewed-by: Mike Snitzer <snitzer@redhat.com>
 
 ---
- tools/lvconvert.c  |    1 +
- tools/polldaemon.c |   49 +++++++++++++++++++++++++++++++++++++------------
- tools/polldaemon.h |   31 +++++++++++++++++++++----------
- tools/pvmove.c     |    1 +
- 4 files changed, 60 insertions(+), 22 deletions(-)
+ tools/lvchange.c |   33 ++++++++++++++++++++-------------
+ tools/tools.h    |    1 +
+ tools/vgchange.c |   10 ++--------
+ 3 files changed, 23 insertions(+), 21 deletions(-)
 
-Index: lvm2/tools/lvconvert.c
+Index: lvm2/tools/lvchange.c
 ===================================================================
---- lvm2.orig/tools/lvconvert.c
-+++ lvm2/tools/lvconvert.c
-@@ -316,6 +316,7 @@ static struct poll_functions _lvconvert_
- 	.get_copy_vg = _get_lvconvert_vg,
- 	.get_copy_lv = _get_lvconvert_lv,
- 	.update_metadata = _update_lvconvert_mirror,
-+	.poll_progress = poll_mirror_progress,
- 	.finish_copy = _finish_lvconvert_mirror,
- };
- 
-Index: lvm2/tools/polldaemon.c
-===================================================================
---- lvm2.orig/tools/polldaemon.c
-+++ lvm2/tools/polldaemon.c
-@@ -63,6 +63,38 @@ static int _become_daemon(struct cmd_con
+--- lvm2.orig/tools/lvchange.c
++++ lvm2/tools/lvchange.c
+@@ -101,11 +101,29 @@ static int lvchange_monitoring(struct cm
  	return 1;
  }
  
-+int poll_mirror_progress(struct cmd_context *cmd, struct volume_group *vg,
-+			 struct logical_volume *lv, struct daemon_parms *parms)
++void lvchange_activate_background_polling(struct cmd_context *cmd,
++					  struct logical_volume *lv)
 +{
-+	float segment_percent = 0.0, overall_percent = 0.0;
-+	int status, overall_status;
-+	uint32_t event_nr = 0;
++	const char *pvname;
 +
-+	if (!(status = lv_mirror_percent(cmd, lv, !parms->interval,
-+					 &segment_percent, &event_nr))) {
-+		log_error("ABORTING: Mirror percentage check failed.");
-+		return 0;
++	if ((lv->status & LOCKED) &&
++	    (pvname = get_pvmove_pvname_from_lv(lv))) {
++		log_verbose("Spawning background pvmove process for %s",
++			    pvname);
++		pvmove_poll(cmd, pvname, 1);
 +	}
 +
-+	overall_status = copy_percent(lv, &overall_percent);
-+	if (parms->progress_display)
-+		log_print("%s: %s: %.1f%%", lv->name, parms->progress_title,
-+			  overall_percent);
-+	else
-+		log_verbose("%s: %s: %.1f%%", lv->name, parms->progress_title,
-+			    overall_percent);
-+
-+	if (status < TARGET_STATUS_FINISHED) {
-+		/* The only case the caller *should* try again later */
-+		return PROGRESS_TRY_AGAIN;
++	if (lv->status & CONVERTING) {
++		log_verbose("Spawning background lvconvert process for %s",
++			    lv->name);
++		lvconvert_poll(cmd, lv, 1);
 +	}
-+
-+	if (overall_status == TARGET_STATUS_FINISHED)
-+		return PROGRESS_FINISHED;
-+	else
-+		return PROGRESS_UPDATE_METADATA;
 +}
 +
- static int _check_lv_status(struct cmd_context *cmd,
- 			    struct volume_group *vg,
- 			    struct logical_volume *lv,
-@@ -70,9 +102,7 @@ static int _check_lv_status(struct cmd_c
- 			    int *finished)
+ static int lvchange_availability(struct cmd_context *cmd,
+ 				 struct logical_volume *lv)
  {
- 	struct dm_list *lvs_changed;
--	float segment_percent = 0.0, overall_percent = 0.0;
--	int status, overall_status;
--	uint32_t event_nr = 0;
-+	int r;
+ 	int activate;
+-	const char *pvname;
  
- 	/* By default, caller should not retry */
- 	*finished = 1;
-@@ -87,16 +117,11 @@ static int _check_lv_status(struct cmd_c
- 		return 0;
- 	}
+ 	activate = arg_uint_value(cmd, available_ARG, 0);
  
--	if (!(status = lv_mirror_percent(cmd, lv, !parms->interval,
--					 &segment_percent, &event_nr))) {
--		log_error("ABORTING: Mirror percentage check failed.");
-+	r = parms->poll_fns->poll_progress(cmd, vg, lv, parms);
-+	if (!r)
- 		return 0;
--	}
+@@ -136,18 +154,7 @@ static int lvchange_availability(struct 
+ 				return_0;
+ 		}
  
--	overall_status = copy_percent(lv, &overall_percent);
+-		if ((lv->status & LOCKED) &&
+-		    (pvname = get_pvmove_pvname_from_lv(lv))) {
+-			log_verbose("Spawning background pvmove process for %s",
+-				    pvname);
+-			pvmove_poll(cmd, pvname, 1);
+-		}
 -
--	if (status < TARGET_STATUS_FINISHED) {
--		/* The only case the caller *should* try again later */
-+	if (r == PROGRESS_TRY_AGAIN) {
- 		*finished = 0;
- 		return 1;
+-		if (lv->status & CONVERTING) {
+-			log_verbose("Spawning background lvconvert process for %s",
+-				    lv->name);
+-			lvconvert_poll(cmd, lv, 1);
+-		}
++		lvchange_activate_background_polling(cmd, lv);
  	}
-@@ -107,7 +132,7 @@ static int _check_lv_status(struct cmd_c
+ 
+ 	return 1;
+Index: lvm2/tools/tools.h
+===================================================================
+--- lvm2.orig/tools/tools.h
++++ lvm2/tools/tools.h
+@@ -169,5 +169,6 @@ const char *command_name(struct cmd_cont
+ 
+ int pvmove_poll(struct cmd_context *cmd, const char *pv, unsigned background);
+ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned background);
++void lvchange_activate_background_polling(struct cmd_context *cmd, struct logical_volume *lv);
+ 
+ #endif
+Index: lvm2/tools/vgchange.c
+===================================================================
+--- lvm2.orig/tools/vgchange.c
++++ lvm2/tools/vgchange.c
+@@ -56,7 +56,6 @@ static int _activate_lvs_in_vg(struct cm
+ {
+ 	struct lv_list *lvl;
+ 	struct logical_volume *lv;
+-	const char *pvname;
+ 	int count = 0;
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+@@ -91,13 +90,8 @@ static int _activate_lvs_in_vg(struct cm
+ 		} else if (!activate_lv(cmd, lv))
+ 			continue;
+ 
+-		if ((lv->status & PVMOVE) &&
+-		    (pvname = get_pvmove_pvname_from_lv_mirr(lv))) {
+-			log_verbose("Spawning background process for %s %s",
+-				    lv->name, pvname);
+-			pvmove_poll(cmd, pvname, 1);
+-			continue;
+-		}
++		if (activate != CHANGE_AN && activate != CHANGE_ALN)
++			lvchange_activate_background_polling(cmd, lv);
+ 
+ 		count++;
  	}
- 
- 	/* Finished? Or progress to next segment? */
--	if (overall_status == TARGET_STATUS_FINISHED) {
-+	if (r == PROGRESS_FINISHED) {
- 		if (!parms->poll_fns->finish_copy(cmd, vg, lv, lvs_changed))
- 			return 0;
- 	} else {
-Index: lvm2/tools/polldaemon.h
-===================================================================
---- lvm2.orig/tools/polldaemon.h
-+++ lvm2/tools/polldaemon.h
-@@ -18,6 +18,19 @@
- 
- #include "metadata-exported.h"
- 
-+struct poll_functions;
-+
-+struct daemon_parms {
-+	unsigned interval;
-+	unsigned aborting;
-+	unsigned background;
-+	unsigned outstanding_count;
-+	unsigned progress_display;
-+	const char *progress_title;
-+	uint32_t lv_type;
-+	struct poll_functions *poll_fns;
-+};
-+
- struct poll_functions {
- 	const char *(*get_copy_name_from_lv) (struct logical_volume *lv);
- 	struct volume_group *(*get_copy_vg) (struct cmd_context *cmd,
-@@ -28,6 +41,8 @@ struct poll_functions {
- 					       const char *name,
- 					       const char *uuid,
- 					       uint32_t lv_type);
-+	int (*poll_progress) (struct cmd_context *cmd, struct volume_group *vg,
-+			 struct logical_volume *lv, struct daemon_parms *parms);
- 	int (*update_metadata) (struct cmd_context *cmd,
- 				struct volume_group *vg,
- 				struct logical_volume *lv,
-@@ -38,16 +53,12 @@ struct poll_functions {
- 			    struct dm_list *lvs_changed);
- };
- 
--struct daemon_parms {
--	unsigned interval;
--	unsigned aborting;
--	unsigned background;
--	unsigned outstanding_count;
--	unsigned progress_display;
--	const char *progress_title;
--	uint32_t lv_type;
--	struct poll_functions *poll_fns;
--};
-+int poll_mirror_progress(struct cmd_context *cmd, struct volume_group *vg,
-+			 struct logical_volume *lv, struct daemon_parms *parms);
-+
-+#define PROGRESS_TRY_AGAIN		1
-+#define PROGRESS_UPDATE_METADATA	2
-+#define PROGRESS_FINISHED		3
- 
- int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
- 		unsigned background,
-Index: lvm2/tools/pvmove.c
-===================================================================
---- lvm2.orig/tools/pvmove.c
-+++ lvm2/tools/pvmove.c
-@@ -562,6 +562,7 @@ static struct poll_functions _pvmove_fns
- 	.get_copy_name_from_lv = get_pvmove_pvname_from_lv_mirr,
- 	.get_copy_vg = _get_move_vg,
- 	.get_copy_lv = find_pvmove_lv_from_pvname,
-+	.poll_progress = poll_mirror_progress,
- 	.update_metadata = _update_metadata,
- 	.finish_copy = _finish_pvmove,
- };
 
 
