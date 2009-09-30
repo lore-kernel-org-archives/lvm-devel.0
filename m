@@ -1,140 +1,45 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Tue, 29 Sep 2009 20:28:22 -0400
-Subject: [RFC][PATCH 5/5] update device lists by lvm commands
-Message-ID: <4AC2A626.50404@redhat.com>
+From: Daniel Mierswa <impulze@impulze.org>
+Date: Wed, 30 Sep 2009 03:00:02 +0200
+Subject: [PATCH 2/3] differentiate between S.I. and binary units in output
+In-Reply-To: <20090928164410.GH5351@agk-dp.fab.redhat.com>
+References: <1253979227-28051-1-git-send-email-impulze@impulze.org>
+	<1253979227-28051-2-git-send-email-impulze@impulze.org>
+	<20090928164410.GH5351@agk-dp.fab.redhat.com>
+Message-ID: <4AC2AD92.4040603@impulze.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-dmeventd keeps information of PVs which belongs to the VG and the
-information needs to be updated when the structure of VG is changed
-by LVM commands: vgextend, vgmerge, vgreduce and vgsplit.
+On 28.09.2009 18:44, Alasdair G Kergon wrote:
+> So please would you:
+>    1) Make this change conditional on a runtime check of
+> cmd->si_unit_consistency;
+Attached, hope it's bug free, somehow all things went crazy and I got 
+very busy this week but don't couldn't wait any longer to get this merged.
 
+>    2) Remove the 500-byte sector offering.
+Figured, you already did.
 
-Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
----
- tools/toollib.c  |   29 +++++++++++++++++++++++++++++
- tools/toollib.h  |    2 ++
- tools/vgextend.c |    3 +++
- tools/vgmerge.c  |    3 +++
- tools/vgreduce.c |    4 ++++
- tools/vgsplit.c  |    7 +++++++
- 6 files changed, 48 insertions(+)
+> The new-style output can be the default from 2.02.54 onwards - Fedora
+> 13, RHEL6 etc.
+We still need to tweak the documentation at places, which I can do as 
+soon as the patches are for the actual code handling are applied.
 
-Index: LVM2.02.54-20090928/tools/toollib.c
-===================================================================
---- LVM2.02.54-20090928.orig/tools/toollib.c
-+++ LVM2.02.54-20090928/tools/toollib.c
-@@ -1247,3 +1247,32 @@ int vg_refresh_visible(struct cmd_contex
- 	
- 	return r;
- }
-+
-+void vg_monitor_update(struct cmd_context *cmd, struct volume_group *vg)
-+{
-+	struct lv_list *lvl;
-+	struct logical_volume *lv;
-+	struct lvinfo info;
-+	int lv_active;
-+
-+	if (dmeventd_monitor_mode() == DMEVENTD_MONITOR_IGNORE)
-+		return;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		lv = lvl->lv;
-+
-+		if (!lv_info(cmd, lv, &info, 0, 0))
-+			lv_active = 0;
-+		else
-+			lv_active = info.exists;
-+
-+		/*
-+		 * FIXME: Need to consider all cases... PVMOVE, etc
-+		 */
-+		if ((lv->status & PVMOVE) || !lv_active)
-+			continue;
-+
-+		if (monitor_dev_for_events(cmd, lv, 0))
-+			monitor_dev_for_events(cmd, lv, 1);
-+	}
-+}
-Index: LVM2.02.54-20090928/tools/toollib.h
-===================================================================
---- LVM2.02.54-20090928.orig/tools/toollib.h
-+++ LVM2.02.54-20090928/tools/toollib.h
-@@ -105,4 +105,6 @@ int fill_vg_create_params(struct cmd_con
- 
- int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv);
- int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg);
-+
-+void vg_monitor_update(struct cmd_context *cmd, struct volume_group *vg);
- #endif
-Index: LVM2.02.54-20090928/tools/vgextend.c
-===================================================================
---- LVM2.02.54-20090928.orig/tools/vgextend.c
-+++ LVM2.02.54-20090928/tools/vgextend.c
-@@ -69,6 +69,9 @@ int vgextend(struct cmd_context *cmd, in
- 	log_print("Volume group \"%s\" successfully extended", vg_name);
- 	r = ECMD_PROCESSED;
- 
-+	/* update monitoring information */
-+	vg_monitor_update(cmd, vg);
-+
- bad:
- 	unlock_vg(cmd, VG_ORPHANS);
- 	unlock_and_release_vg(cmd, vg, vg_name);
-Index: LVM2.02.54-20090928/tools/vgmerge.c
-===================================================================
---- LVM2.02.54-20090928.orig/tools/vgmerge.c
-+++ LVM2.02.54-20090928/tools/vgmerge.c
-@@ -144,6 +144,9 @@ static int _vgmerge_single(struct cmd_co
- 	log_print("Volume group \"%s\" successfully merged into \"%s\"",
- 		  vg_from->name, vg_to->name);
- 	r = ECMD_PROCESSED;
-+
-+	/* update monitoring information */
-+	vg_monitor_update(cmd, vg_to);
- bad:
- 	if (lock_vg_from_first) {
- 		unlock_and_release_vg(cmd, vg_to, vg_name_to);
-Index: LVM2.02.54-20090928/tools/vgreduce.c
-===================================================================
---- LVM2.02.54-20090928.orig/tools/vgreduce.c
-+++ LVM2.02.54-20090928/tools/vgreduce.c
-@@ -571,6 +571,10 @@ int vgreduce(struct cmd_context *cmd, in
- 				      _vgreduce_single);
- 
- 	}
-+
-+	/* update monitoring information */
-+	vg_monitor_update(cmd, vg);
-+
- out:
- 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
- 	unlock_and_release_vg(cmd, vg, vg_name);
-Index: LVM2.02.54-20090928/tools/vgsplit.c
-===================================================================
---- LVM2.02.54-20090928.orig/tools/vgsplit.c
-+++ LVM2.02.54-20090928/tools/vgsplit.c
-@@ -488,6 +488,13 @@ int vgsplit(struct cmd_context *cmd, int
- 
- 	r = ECMD_PROCESSED;
- 
-+	/*
-+	 * update monitoring information of "vg_to"
-+	 *
-+	 * Note: update is not necessary to "vg_from" because it contains
-+	 * no active LVs.
-+	 */
-+	vg_monitor_update(cmd, vg_to);
- bad:
- 	if (lock_vg_from_first) {
- 		unlock_and_release_vg(cmd, vg_to, vg_name_to);
+> People who find problems with their scripts after an upgrade can easily
+> reinstate the old inconsistent output by using an lvm.conf setting.
+Yep, win win. Good solution in the end anyway although it requires the 
+LVM2 development team to keep "old" code around, which I prefer not to 
+if I can avoid it. ;)
 
 -- 
-Takahiro Yasui
-Hitachi Computer Products (America), Inc.
+Mierswa, Daniel
 
-
+If you still don't like it, that's ok: that's why I'm boss. I simply 
+know better than you do.
+                --- Linus Torvalds, comp.os.linux.advocacy, 1996/07/22
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: 0001-differentiate-between-S.I.-and-binary-units-in-outpu.patch
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20090930/394a27a0/attachment.ksh>
