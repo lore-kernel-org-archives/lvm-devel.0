@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 30 Sep 2009 17:43:52 -0000
-Subject: LVM2 ./WHATS_NEW tools/polldaemon.c
-Message-ID: <20090930174352.11315.qmail@sourceware.org>
+Date: 30 Sep 2009 18:15:08 -0000
+Subject: LVM2/tools lvconvert.c polldaemon.c polldaemon ...
+Message-ID: <20090930181508.21647.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,60 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-09-30 17:43:52
+Changes by:	agk at sourceware.org	2009-09-30 18:15:07
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : polldaemon.c 
+	tools          : lvconvert.c polldaemon.c polldaemon.h pvmove.c 
 
 Log message:
-	Factor out poll_mirror_progress and introduce progress_t.
+	Make poll_mirror_progress a function that can be replaced.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1283&r2=1.1284
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.92&r2=1.93
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.66&r2=1.67
 
---- LVM2/WHATS_NEW	2009/09/30 14:19:00	1.1283
-+++ LVM2/WHATS_NEW	2009/09/30 17:43:51	1.1284
-@@ -1,5 +1,6 @@
- Version 2.02.54 -
- =====================================
-+  Factor out poll_mirror_progress and introduce progress_t.
-   Distinguish between powers of 1000 and powers of 1024 in unit suffixes.
-   Restart lvconverts in vgchange by sharing lv_spawn_background_polling.
-   Generalise polldaemon code by changing mirror-specific variable names.
---- LVM2/tools/polldaemon.c	2009/09/29 19:35:26	1.24
-+++ LVM2/tools/polldaemon.c	2009/09/30 17:43:51	1.25
-@@ -63,6 +63,43 @@
+--- LVM2/tools/lvconvert.c	2009/09/14 22:47:49	1.92
++++ LVM2/tools/lvconvert.c	2009/09/30 18:15:06	1.93
+@@ -315,6 +315,7 @@
+ static struct poll_functions _lvconvert_mirror_fns = {
+ 	.get_copy_vg = _get_lvconvert_vg,
+ 	.get_copy_lv = _get_lvconvert_lv,
++	.poll_progress = poll_mirror_progress,
+ 	.update_metadata = _update_lvconvert_mirror,
+ 	.finish_copy = _finish_lvconvert_mirror,
+ };
+--- LVM2/tools/polldaemon.c	2009/09/30 17:43:51	1.25
++++ LVM2/tools/polldaemon.c	2009/09/30 18:15:06	1.26
+@@ -63,13 +63,6 @@
  	return 1;
  }
+ 
+-typedef enum {
+-	PROGRESS_CHECK_FAILED = 0,
+-	PROGRESS_UNFINISHED = 1,
+-	PROGRESS_FINISHED_SEGMENT = 2,
+-	PROGRESS_FINISHED_ALL = 3
+-} progress_t;
+-
+ progress_t poll_mirror_progress(struct cmd_context *cmd,
+ 				struct logical_volume *lv, const char *name,
+ 				struct daemon_parms *parms)
+@@ -122,7 +115,7 @@
+ 		return 0;
+ 	}
+ 
+-	progress = poll_mirror_progress(cmd, lv, name, parms);
++	progress = parms->poll_fns->poll_progress(cmd, lv, name, parms);
+ 	if (progress == PROGRESS_CHECK_FAILED)
+ 		return_0;
+ 
+--- LVM2/tools/polldaemon.h	2009/09/29 19:35:26	1.9
++++ LVM2/tools/polldaemon.h	2009/09/30 18:15:06	1.10
+@@ -18,6 +18,15 @@
+ 
+ #include "metadata-exported.h"
  
 +typedef enum {
 +	PROGRESS_CHECK_FAILED = 0,
@@ -45,83 +72,40 @@ http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lv
 +	PROGRESS_FINISHED_ALL = 3
 +} progress_t;
 +
++struct daemon_parms;
++
+ struct poll_functions {
+ 	const char *(*get_copy_name_from_lv) (struct logical_volume *lv);
+ 	struct volume_group *(*get_copy_vg) (struct cmd_context *cmd,
+@@ -28,6 +37,10 @@
+ 					       const char *name,
+ 					       const char *uuid,
+ 					       uint32_t lv_type);
++	progress_t (*poll_progress)(struct cmd_context *cmd,
++				    struct logical_volume *lv,
++				    const char *name,
++				    struct daemon_parms *parms);
+ 	int (*update_metadata) (struct cmd_context *cmd,
+ 				struct volume_group *vg,
+ 				struct logical_volume *lv,
+@@ -54,4 +67,8 @@
+ 		uint32_t lv_type, struct poll_functions *poll_fns,
+ 		const char *progress_title);
+ 
 +progress_t poll_mirror_progress(struct cmd_context *cmd,
 +				struct logical_volume *lv, const char *name,
-+				struct daemon_parms *parms)
-+{
-+	float segment_percent = 0.0, overall_percent = 0.0;
-+	uint32_t event_nr = 0;
++				struct daemon_parms *parms);
 +
-+	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
-+			       &event_nr)) {
-+		log_error("ABORTING: Mirror percentage check failed.");
-+		return PROGRESS_CHECK_FAILED;
-+	}
-+
-+	overall_percent = copy_percent(lv);
-+	if (parms->progress_display)
-+		log_print("%s: %s: %.1f%%", name, parms->progress_title,
-+			  overall_percent);
-+	else
-+		log_verbose("%s: %s: %.1f%%", name, parms->progress_title,
-+			    overall_percent);
-+
-+	if (segment_percent < 100.0)
-+		return PROGRESS_UNFINISHED;
-+
-+	if (overall_percent >= 100.0)
-+		return PROGRESS_FINISHED_ALL;
-+
-+	return PROGRESS_FINISHED_SEGMENT;
-+}
-+
- static int _check_lv_status(struct cmd_context *cmd,
- 			    struct volume_group *vg,
- 			    struct logical_volume *lv,
-@@ -70,8 +107,7 @@
- 			    int *finished)
- {
- 	struct dm_list *lvs_changed;
--	float segment_percent = 0.0, overall_percent = 0.0;
--	uint32_t event_nr = 0;
-+	progress_t progress;
- 
- 	/* By default, caller should not retry */
- 	*finished = 1;
-@@ -86,21 +122,11 @@
- 		return 0;
- 	}
- 
--	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
--			       &event_nr)) {
--		log_error("ABORTING: Mirror percentage check failed.");
--		return 0;
--	}
--
--	overall_percent = copy_percent(lv);
--	if (parms->progress_display)
--		log_print("%s: %s: %.1f%%", name, parms->progress_title,
--			  overall_percent);
--	else
--		log_verbose("%s: %s: %.1f%%", name, parms->progress_title,
--			    overall_percent);
-+	progress = poll_mirror_progress(cmd, lv, name, parms);
-+	if (progress == PROGRESS_CHECK_FAILED)
-+		return_0;
- 
--	if (segment_percent < 100.0) {
-+	if (progress == PROGRESS_UNFINISHED) {
- 		/* The only case the caller *should* try again later */
- 		*finished = 0;
- 		return 1;
-@@ -112,7 +138,7 @@
- 	}
- 
- 	/* Finished? Or progress to next segment? */
--	if (overall_percent >= 100.0) {
-+	if (progress == PROGRESS_FINISHED_ALL) {
- 		if (!parms->poll_fns->finish_copy(cmd, vg, lv, lvs_changed))
- 			return 0;
- 	} else {
+ #endif
+--- LVM2/tools/pvmove.c	2009/07/08 18:15:51	1.66
++++ LVM2/tools/pvmove.c	2009/09/30 18:15:07	1.67
+@@ -562,6 +562,7 @@
+ 	.get_copy_name_from_lv = get_pvmove_pvname_from_lv_mirr,
+ 	.get_copy_vg = _get_move_vg,
+ 	.get_copy_lv = find_pvmove_lv_from_pvname,
++	.poll_progress = poll_mirror_progress,
+ 	.update_metadata = _update_metadata,
+ 	.finish_copy = _finish_pvmove,
+ };
 
 
