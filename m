@@ -1,329 +1,291 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Tue, 29 Sep 2009 20:28:15 -0400
-Subject: [RFC][PATCH 3/5] add filtering function to dmeventd
-Message-ID: <4AC2A61F.7000204@redhat.com>
+Date: Tue, 29 Sep 2009 20:28:18 -0400
+Subject: [RFC][PATCH 4/5] dmeventd filtering failed devices
+Message-ID: <4AC2A622.4020708@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds a device structure to maintain a device list in dmeventd.
-When dmeventd detects an error, a filter string is generated and passed to
-lvconvert and vgreduce commands by "--config" option.
+This patch filters out failed devices from the device list to prevent
+those failed devices from being accessed by lvm commands, lvconvert
+and vgreduce.
 
 
 Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
 ---
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |  205 +++++++++++++++++++++-
- 1 file changed, 196 insertions(+), 9 deletions(-)
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |  112 +++++++++++++++++++++-
+ libdm/.exported_symbols                           |    1 
+ libdm/libdevmapper.h                              |    1 
+ libdm/libdm-deptree.c                             |   39 +++++++
+ 4 files changed, 151 insertions(+), 2 deletions(-)
 
 Index: LVM2.02.54-20090928/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
 ===================================================================
 --- LVM2.02.54-20090928.orig/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
 +++ LVM2.02.54-20090928/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -32,6 +32,23 @@
- #define ME_INSYNC    1
- #define ME_FAILURE   2
+@@ -14,6 +14,7 @@
  
-+#define CMD_SIZE 256	/* FIXME Use system restriction */
+ #include "lvm2cmd.h"
+ #include "errors.h"
++#include "kdev_t.h"
+ 
+ #include <libdevmapper.h>
+ #include <libdevmapper-event.h>
+@@ -42,10 +43,12 @@ struct device {
+ 	char *dname;			/* device name (ex: /dev/sda) */
+ 	unsigned int major;
+ 	unsigned int minor;
++	int failed;
+ };
+ 
+ struct device_info {
+ 	struct dm_list dev_all;		/* all devices in the vg */
++  	struct dm_list dev_failed;	/* failed devices */
+ 	char filter_str[CMD_SIZE];
+ };
+ 
+@@ -85,6 +88,9 @@ static void _build_filter_str(struct dev
+ 	int len = 0, size, ct = 0;
+ 
+ 	dm_list_iterate_items(dev, &devi->dev_all) {
++		if (dev->failed)
++			continue;
 +
+ 		size = dm_snprintf(devi->filter_str+len, CMD_SIZE-len,
+ 				   "%s\"a|%s$|\"",
+ 				   ct++ ? "," : "filter=[", dev->dname);
+@@ -106,10 +112,107 @@ err:
+ 	return;
+ }
+ 
 +/*
-+ * private data structure
++ * Register major:minor number of failed device. This function assumes to be
++ * called at most 9 times (8 mirror legs + 1 mirror log) and memory should
++ * be allocated beforehand. (360 byte = 40 byte * 9 for now)
 + */
-+struct device {
-+	struct dm_list list;
-+	char *dname;			/* device name (ex: /dev/sda) */
-+	unsigned int major;
-+	unsigned int minor;
-+};
-+
-+struct device_info {
-+	struct dm_list dev_all;		/* all devices in the vg */
-+	char filter_str[CMD_SIZE];
-+};
-+
- /*
-  * register_device() is called first and performs initialisation.
-  * Only one device may be registered or unregistered at a time.
-@@ -51,6 +68,57 @@ static void *_lvm_handle = NULL;
-  */
- static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
- 
-+
-+#define DEVICE_FILTER_STR(devi)	\
-+	((devi) && strlen((devi)->filter_str) ? (devi)->filter_str : "")
-+
-+#define DEVICE_CONFIG_PREP_STR(devi) \
-+	((devi) && strlen((devi)->filter_str) ? "--config devices{" : "")
-+
-+#define DEVICE_CONFIG_POST_STR(devi) \
-+	((devi) && strlen((devi)->filter_str) ? "}" : "")
-+
-+
-+static void _build_filter_str(struct device_info *devi)
++static void _register_failed_device(struct device_info *devi, char *dev_str)
 +{
++	unsigned int major, minor;
 +	struct device *dev;
-+	int len = 0, size, ct = 0;
 +
-+	dm_list_iterate_items(dev, &devi->dev_all) {
-+		size = dm_snprintf(devi->filter_str+len, CMD_SIZE-len,
-+				   "%s\"a|%s$|\"",
-+				   ct++ ? "," : "filter=[", dev->dname);
-+		if (size < 0)
-+			goto err;
-+		len += size;
-+	}
-+
-+	size = dm_snprintf(devi->filter_str+len, CMD_SIZE-len,
-+			   "%s\"r|.*|\"]", ct ? "," : "");
-+	if (size < 0)
-+		goto err;
-+
-+	return;
-+
-+err:
-+	syslog(LOG_ERR, "Unable to form filter string");
-+	devi->filter_str[0] = '\0';
-+	return;
-+}
-+
-+static void _create_filter(struct device_info *devi)
-+{
 +	if (!devi)
 +		return;
-+	_build_filter_str(devi);
-+}
 +
-+static void _destroy_filter(struct device_info *devi)
-+{
-+	if (devi)
-+		devi->filter_str[0] = '\0';
-+}
-+
- static int _get_mirror_event(char *params)
- {
- 	int i, r = ME_INSYNC;
-@@ -138,10 +206,9 @@ static void _temporary_log_fn(int level,
- 		syslog(LOG_DEBUG, "%s", format);
- }
- 
--static int _remove_failed_devices(const char *device)
-+static int _remove_failed_devices(const char *device, struct device_info *devi)
- {
- 	int r;
--#define CMD_SIZE 256	/* FIXME Use system restriction */
- 	char cmd_str[CMD_SIZE];
- 	char *vg = NULL, *lv = NULL, *layer = NULL;
- 
-@@ -154,10 +221,15 @@ static int _remove_failed_devices(const 
- 		return -ENOMEM;	/* FIXME Replace with generic error return - reason for failure has already got logged */
- 	}
- 
-+	_create_filter(devi);
-+
- 	/* FIXME Is any sanity-checking required on %s? */
--	if (CMD_SIZE <= snprintf(cmd_str, CMD_SIZE, "lvconvert --config devices{ignore_suspended_devices=1} --repair --use-policies %s/%s", vg, lv)) {
-+	if (CMD_SIZE <= snprintf(cmd_str, CMD_SIZE, "lvconvert --repair --use-policies "
-+				 "--config devices{ignore_suspended_devices=1\\ %s} %s/%s",
-+				 DEVICE_FILTER_STR(devi), vg, lv)) {
- 		/* this error should be caught above, but doesn't hurt to check again */
- 		syslog(LOG_ERR, "Unable to form LVM command: Device name too long");
-+		_destroy_filter(devi);
- 		dm_pool_empty(_mem_pool);  /* FIXME: not safe with multiple threads */
- 		return -ENAMETOOLONG; /* FIXME Replace with generic error return - reason for failure has already got logged */
- 	}
-@@ -165,24 +237,28 @@ static int _remove_failed_devices(const 
- 	r = lvm2_run(_lvm_handle, cmd_str);
- 
- 	if (r == ECMD_PROCESSED) {
--		snprintf(cmd_str, CMD_SIZE, "vgreduce --removemissing %s", vg);
-+		snprintf(cmd_str, CMD_SIZE, "vgreduce --removemissing %s%s%s %s",
-+			 DEVICE_CONFIG_PREP_STR(devi), DEVICE_FILTER_STR(devi),
-+			 DEVICE_CONFIG_POST_STR(devi), vg);
- 		if (lvm2_run(_lvm_handle, cmd_str) != 1)
- 			syslog(LOG_ERR, "Unable to remove failed PVs from VG %s", vg);
- 	}
- 
-+	_destroy_filter(devi);
- 	dm_pool_empty(_mem_pool);  /* FIXME: not safe with multiple threads */
- 	return (r == ECMD_PROCESSED) ? 0 : -1;
- }
- 
- void process_event(struct dm_task *dmt,
- 		   enum dm_event_mask event __attribute((unused)),
--		   void **unused __attribute((unused)))
-+		   void **private)
- {
- 	void *next = NULL;
- 	uint64_t start, length;
- 	char *target_type = NULL;
- 	char *params;
- 	const char *device = dm_task_get_name(dmt);
-+	struct device_info *devi = *private;
- 
- 	if (pthread_mutex_trylock(&_event_mutex)) {
- 		syslog(LOG_NOTICE, "Another thread is handling an event.  Waiting...");
-@@ -212,7 +288,7 @@ void process_event(struct dm_task *dmt,
- 			break;
- 		case ME_FAILURE:
- 			syslog(LOG_ERR, "Device failure in %s\n", device);
--			if (_remove_failed_devices(device))
-+			if (_remove_failed_devices(device, devi))
- 				/* FIXME Why are all the error return codes unused? Get rid of them? */
- 				syslog(LOG_ERR, "Failed to remove faulty devices in %s\n",
- 				       device);
-@@ -233,18 +309,122 @@ void process_event(struct dm_task *dmt,
- 	pthread_mutex_unlock(&_event_mutex);
- }
- 
-+static int _fetch_string(char **ptr, char **src, const int delimiter)
-+{
-+	char *p;
-+	size_t len;
-+
-+	if (!(p = strchr(*src, delimiter)))
-+		return 0;
-+	*p = '\0';
-+
-+	len = strlen(*src);
-+	if (len && !(*ptr = dm_strdup(*src))) {
-+		*p = delimiter;
-+		return 0;
++	if (sscanf(dev_str, "%u:%u", &major, &minor) != 2) {
++		syslog(LOG_ERR, "Unrecognized device number (%s)\n",
++		       dev_str);
++		return;
 +	}
 +
-+	*p = delimiter;
-+	*src = p + 1;
++	if (!(dev = dm_malloc(sizeof(*dev))))
++		return;
 +
-+	return 1;
++	dev->major = major;
++	dev->minor = minor;
++
++	dm_list_add(&devi->dev_failed, &dev->list);
 +}
 +
-+static int _fetch_number(unsigned int *ptr, char **src, const int delimiter)
-+{
-+	char *p;
-+
-+	if (!(p = strchr(*src, delimiter)))
-+		return 0;
-+	*p = '\0';
-+
-+	*ptr = strtoul(*src, NULL, 10);
-+
-+	*p = delimiter;
-+	*src = p + 1;
-+
-+	return 1;
-+}
-+
-+static struct device_info *alloc_device_info(void)
-+{
-+	struct device_info *devi;
-+
-+	devi = dm_malloc(sizeof(*devi));
-+	if (!devi)
-+		return NULL;
-+
-+	dm_list_init(&devi->dev_all);
-+
-+	return devi;
-+}
-+
-+static int set_device_info(struct device_info *devi, char *dev_list)
-+{
-+	struct device *dev;
-+	char *p = dev_list;
-+
-+	/* format: {/dev/sdx,major:minor;}[1,] */
-+	while (strchr(p, ';')) {
-+		dev = dm_malloc(sizeof(*dev));
-+		if (!dev)
-+			return 0;
-+		memset(dev, 0, sizeof(*dev));
-+
-+		if (!_fetch_string(&dev->dname, &p, ',') ||
-+		    !_fetch_number(&dev->major, &p, ':') ||
-+		    !_fetch_number(&dev->minor, &p, ';')) {
-+			if (dev->dname)
-+				dm_free(dev->dname);
-+			dm_free(dev);
-+			return 0;
-+		}
-+		dm_list_add(&devi->dev_all, &dev->list);
-+	}
-+
-+	return 1;
-+}
-+
-+static void free_device_info(struct device_info *devi)
++static void _release_failed_list(struct device_info *devi)
 +{
 +	struct device *dev, *devt;
 +
 +	if (!devi)
 +		return;
 +
-+	dm_list_iterate_items_safe(dev, devt, &devi->dev_all) {
++	dm_list_iterate_items_safe(dev, devt, &devi->dev_failed) {
 +		dm_list_del(&dev->list);
-+		dm_free(dev->dname);
 +		dm_free(dev);
 +	}
-+
-+	dm_free(devi);
 +}
 +
- int register_device(const char *device,
- 		    const char *uuid __attribute((unused)),
- 		    int major __attribute((unused)),
- 		    int minor __attribute((unused)),
--		    void **priv_ptr __attribute((unused)),
--		    void *priv_data __attribute((unused)))
-+  		    void **priv_ptr, void *priv_data)
- {
-+	struct device_info *devi;
- 	int r = 0;
- 
- 	pthread_mutex_lock(&_register_mutex);
- 
--	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
-+	/*
-+	 * allocate device_info
-+	 */
-+	if (priv_data) {
-+		devi = alloc_device_info();
-+		if (!devi)
-+			goto out;
++static void _mark_device_disabled(struct device_info *devi,
++				  unsigned int major, unsigned int minor)
++{
++	struct device *dev;
 +
-+		*priv_ptr = devi;
-+
-+		if (!set_device_info(devi, priv_data))
-+			goto out;
++	dm_list_iterate_items(dev, &devi->dev_all) {
++		if (dev->major == major && dev->minor == minor)
++			dev->failed = 1;
 +	}
++}
++
++static void _walk_tree_and_disable_devices(struct dm_tree_node *node,
++					   struct device_info *devi)
++{
++	struct dm_tree_node *child;
++	void *handle = NULL;
++	const struct dm_info *info;
++
++	while ((child = dm_tree_next_child(&handle, node, 0))) {
++		if (dm_tree_node_num_children(child, 0))
++			_walk_tree_and_disable_devices(child, devi);
++		else {
++			info = dm_tree_node_get_info(child);
++			_mark_device_disabled(devi, info->major, info->minor);
++		}
++	}
++}
++
++static void _disable_devices(struct device_info *devi, struct dm_tree *dtree,
++			     unsigned int major, unsigned int minor)
++{
++	struct dm_tree_node *node;
++
++	if (!(node = dm_tree_find_node(dtree, major, minor))) {
++		syslog(LOG_ERR, "device (%u:%u) doesn't exist.\n",
++		       major, minor);
++		return;
++	}
++
++	_walk_tree_and_disable_devices(node, devi);
++}
++
+ static void _create_filter(struct device_info *devi)
+ {
++	struct dm_tree *dtree;
++	struct device *dev;
++
+ 	if (!devi)
+ 		return;
++
++	if (!(dtree = dm_build_deptree())) {
++		syslog(LOG_ERR, "Failed to get device information\n");
++		return;
++	}
++
++	dm_list_iterate_items(dev, &devi->dev_failed)
++		_disable_devices(devi, dtree, dev->major, dev->minor);
++
++	dm_tree_free(dtree);
++
+ 	_build_filter_str(devi);
+ }
  
- 	/*
- 	 * Need some space for allocations.  1024 should be more
-@@ -265,10 +445,15 @@ int register_device(const char *device,
- 		lvm2_run(_lvm_handle, "_memlock_inc");
+@@ -119,7 +222,7 @@ static void _destroy_filter(struct devic
+ 		devi->filter_str[0] = '\0';
+ }
+ 
+-static int _get_mirror_event(char *params)
++static int _get_mirror_event(char *params, struct device_info *devi)
+ {
+ 	int i, r = ME_INSYNC;
+ 	char **args = NULL;
+@@ -160,6 +263,7 @@ static int _get_mirror_event(char *param
+ 	for (i = 0; i < num_devs; i++)
+ 		if (dev_status_str[i] == 'D') {
+ 			syslog(LOG_ERR, "Mirror device, %s, has failed.\n", args[i]);
++			_register_failed_device(devi, args[i]);
+ 			r = ME_FAILURE;
+ 		}
+ 
+@@ -167,6 +271,7 @@ static int _get_mirror_event(char *param
+ 	if (log_argc > 1 && log_status_str[0] == 'D') {
+ 		syslog(LOG_ERR, "Log device, %s, has failed.\n",
+ 		       args[2 + num_devs + log_argc]);
++		_register_failed_device(devi, args[2 + num_devs + log_argc]);
+ 		r = ME_FAILURE;
  	}
  
-+	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
+@@ -278,7 +383,7 @@ void process_event(struct dm_task *dmt,
+ 			continue;
+ 		}
+ 
+-		switch(_get_mirror_event(params)) {
++		switch(_get_mirror_event(params, devi)) {
+ 		case ME_INSYNC:
+ 			/* FIXME: all we really know is that this
+ 			   _part_ of the device is in sync
+@@ -304,6 +409,8 @@ void process_event(struct dm_task *dmt,
+ 			/* FIXME Provide value then! */
+ 			syslog(LOG_INFO, "Unknown event received.\n");
+ 		}
 +
- 	_register_count++;
- 	r = 1;
++		_release_failed_list(devi);
+ 	} while (next);
  
- out:
-+	if (!r)
-+		free_device_info(*priv_ptr);
+ 	pthread_mutex_unlock(&_event_mutex);
+@@ -355,6 +462,7 @@ static struct device_info *alloc_device_
+ 		return NULL;
+ 
+ 	dm_list_init(&devi->dev_all);
++	dm_list_init(&devi->dev_failed);
+ 
+ 	return devi;
+ }
+Index: LVM2.02.54-20090928/libdm/.exported_symbols
+===================================================================
+--- LVM2.02.54-20090928.orig/libdm/.exported_symbols
++++ LVM2.02.54-20090928/libdm/.exported_symbols
+@@ -81,6 +81,7 @@ dm_tree_skip_lockfs
+ dm_tree_use_no_flush_suspend
+ dm_tree_set_cookie
+ dm_tree_get_cookie
++dm_build_deptree
+ dm_is_dm_major
+ dm_mknodes
+ dm_malloc_aux
+Index: LVM2.02.54-20090928/libdm/libdevmapper.h
+===================================================================
+--- LVM2.02.54-20090928.orig/libdm/libdevmapper.h
++++ LVM2.02.54-20090928/libdm/libdevmapper.h
+@@ -435,6 +435,7 @@ void dm_tree_node_set_read_ahead(struct 
+ 
+ void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie);
+ uint32_t dm_tree_get_cookie(struct dm_tree_node *node);
++struct dm_tree *dm_build_deptree(void);
+ 
+ /*****************************************************************************
+  * Library functions
+Index: LVM2.02.54-20090928/libdm/libdm-deptree.c
+===================================================================
+--- LVM2.02.54-20090928.orig/libdm/libdm-deptree.c
++++ LVM2.02.54-20090928/libdm/libdm-deptree.c
+@@ -1948,3 +1948,42 @@ uint32_t dm_tree_get_cookie(struct dm_tr
+ {
+ 	return node->dtree->cookie;
+ }
 +
- 	pthread_mutex_unlock(&_register_mutex);
- 
- 	return r;
-@@ -293,6 +478,8 @@ int unregister_device(const char *device
- 		_lvm_handle = NULL;
- 	}
- 
-+	free_device_info(*priv_ptr);
++struct dm_tree *dm_build_deptree(void)
++{
++	struct dm_tree *dtree;
++	struct dm_names *names;
++	struct dm_task *dmt = NULL;
++	unsigned next = 0;
 +
- 	pthread_mutex_unlock(&_register_mutex);
- 
- 	return 1;
++	if (!(dtree = dm_tree_create()))
++		return NULL;
++
++	if (!(dmt = dm_task_create(DM_DEVICE_LIST)))
++		goto err;
++
++	if (!dm_task_run(dmt))
++		goto err;
++
++	if (!(names = dm_task_get_names(dmt)))
++		goto err;
++
++	if (!names->dev)
++		goto err;
++
++	do {
++		names = (void *)names + next;
++		if (!dm_tree_add_dev(dtree,
++				     (unsigned)MAJOR(names->dev),
++				     (unsigned)MINOR(names->dev)))
++			goto err;
++		next = names->next;
++	} while (next);
++
++	return dtree;
++err:
++	if (dmt)
++		dm_task_destroy(dmt);
++	dm_tree_free(dtree);
++	return NULL;
++}
 
 -- 
 Takahiro Yasui
