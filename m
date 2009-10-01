@@ -1,118 +1,50 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 1 Oct 2009 01:04:28 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
-Message-ID: <20091001010428.2480.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 01 Oct 2009 07:54:15 +0200
+Subject: [RFC][PATCH 1/5] support command string with space
+In-Reply-To: <4AC3CB45.1040503@redhat.com> (Takahiro Yasui's message of "Wed, 
+	30 Sep 2009 17:19:01 -0400")
+References: <4AC2A619.50404@redhat.com>
+	<878wfwdvuj.fsf@twilight.int.mornfall.net.>
+	<4AC3CB45.1040503@redhat.com>
+Message-ID: <87zl8bd5h4.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-10-01 01:04:27
+Takahiro Yasui <tyasui@redhat.com> writes:
 
-Modified files:
-	lib/metadata   : metadata-exported.h mirror.c 
-	lib/report     : report.c 
-	tools          : polldaemon.c 
+> On 09/30/09 16:24, Petr Rockai wrote:
+>> IIUIC, the code will replace "\ " with "  " (double space) -- which may or may
+>> not be correct, depending on where the space appears. It also breaks any code
+>> that may have previously expected "\ " to have no special meaning, even though I
+>> doubt any exists.
+>
+> Yes, this approach replace "\ " with "  ", and it will work correctly unless
+> "\ " is used for other purpose previously. Current lvm codes use lvm_split()
+> only in early stage to split options and there is no case you concerns.
+There may not be *right now* -- I still think this is a bug waiting to
+happen. Shell scripts are full of escaping bugs and in dmeventd we have a
+simple way around (see below). One example for all -- I know it may be sick,
+but you can have device node paths with spaces in them, and I expect this will
+break -- either you forget to escape them, or the un-escaping produces wrong
+paths. (And as surprising as it may sound, spaces in device names work with
+current code -- I can create PVs and VGs on them and I can filter them out or
+in.)
 
-Log message:
-	Add percent_range to copy_percent too.
+>> Anyway, a more correct solution would entail a lvm2_runv (or similarly named)
+>> function, that would take char **argv -- no escaping issues to care
+>> about. Since this just adds to the library, it should be backwards compatible
+>> just fine.
+>
+> I can add an interface like lvm2_runv. But there is another approach using
+> single-quotes around an option with spaces as we do in a shell (e.g. bash).
+And how you quote single-quotes then? Doesn't work. Please use something
+reliable and robust -- like passing argv, or using varargs function (like
+execl). This eliminates all quoting bugs quite simply.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.113&r2=1.114
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-
---- LVM2/lib/metadata/metadata-exported.h	2009/10/01 00:35:29	1.113
-+++ LVM2/lib/metadata/metadata-exported.h	2009/10/01 01:04:27	1.114
-@@ -691,7 +691,8 @@
- 						  uint32_t lv_type);
- const char *get_pvmove_pvname_from_lv(struct logical_volume *lv);
- const char *get_pvmove_pvname_from_lv_mirr(struct logical_volume *lv_mirr);
--float copy_percent(struct logical_volume *lv_mirr);
-+float copy_percent(struct logical_volume *lv_mirr,
-+		   percent_range_t *percent_range);
- struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
- 			  struct logical_volume *lv);
- 
---- LVM2/lib/metadata/mirror.c	2009/10/01 00:35:29	1.90
-+++ LVM2/lib/metadata/mirror.c	2009/10/01 01:04:27	1.91
-@@ -1114,7 +1114,8 @@
- 	return lvs;
- }
- 
--float copy_percent(struct logical_volume *lv_mirr)
-+float copy_percent(struct logical_volume *lv_mirr,
-+		   percent_range_t *percent_range)
- {
- 	uint32_t numerator = 0u, denominator = 0u;
- 	struct lv_segment *seg;
-@@ -1128,6 +1129,13 @@
- 			numerator += seg->area_len;
- 	}
- 
-+	if (!denominator || (numerator == denominator))
-+		*percent_range = PERCENT_100;
-+	else if (numerator == 0)
-+		*percent_range = PERCENT_0;
-+	else
-+		*percent_range = PERCENT_0_TO_100;
-+		
- 	return denominator ? (float) numerator *100 / denominator : 100.0;
- }
- 
---- LVM2/lib/report/report.c	2009/10/01 00:35:30	1.103
-+++ LVM2/lib/report/report.c	2009/10/01 01:04:27	1.104
-@@ -1054,7 +1054,8 @@
- 	return 1;
- }
- 
--static int _copypercent_disp(struct dm_report *rh __attribute((unused)), struct dm_pool *mem,
-+static int _copypercent_disp(struct dm_report *rh __attribute((unused)),
-+			     struct dm_pool *mem,
- 			     struct dm_report_field *field,
- 			     const void *data, void *private __attribute((unused)))
- {
-@@ -1077,7 +1078,7 @@
- 		return 1;
- 	}
- 
--	percent = copy_percent(lv);
-+	percent = copy_percent(lv, &percent_range);
- 
- 	if (!(repstr = dm_pool_zalloc(mem, 8))) {
- 		log_error("dm_pool_alloc failed");
---- LVM2/tools/polldaemon.c	2009/10/01 00:35:30	1.27
-+++ LVM2/tools/polldaemon.c	2009/10/01 01:04:27	1.28
-@@ -68,7 +68,7 @@
- 				struct daemon_parms *parms)
- {
- 	float segment_percent = 0.0, overall_percent = 0.0;
--	percent_range_t percent_range;
-+	percent_range_t percent_range, overall_percent_range;
- 	uint32_t event_nr = 0;
- 
- 	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
-@@ -78,7 +78,7 @@
- 		return PROGRESS_CHECK_FAILED;
- 	}
- 
--	overall_percent = copy_percent(lv);
-+	overall_percent = copy_percent(lv, &overall_percent_range);
- 	if (parms->progress_display)
- 		log_print("%s: %s: %.1f%%", name, parms->progress_title,
- 			  overall_percent);
-@@ -89,7 +89,7 @@
- 	if (percent_range != PERCENT_100)
- 		return PROGRESS_UNFINISHED;
- 
--	if (overall_percent >= 100.0)
-+	if (overall_percent_range == PERCENT_100)
- 		return PROGRESS_FINISHED_ALL;
- 
- 	return PROGRESS_FINISHED_SEGMENT;
+Yours,
+   Petr.
 
 
