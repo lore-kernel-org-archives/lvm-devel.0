@@ -1,50 +1,111 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 01 Oct 2009 07:54:15 +0200
-Subject: [RFC][PATCH 1/5] support command string with space
-In-Reply-To: <4AC3CB45.1040503@redhat.com> (Takahiro Yasui's message of "Wed, 
-	30 Sep 2009 17:19:01 -0400")
-References: <4AC2A619.50404@redhat.com>
-	<878wfwdvuj.fsf@twilight.int.mornfall.net.>
-	<4AC3CB45.1040503@redhat.com>
-Message-ID: <87zl8bd5h4.fsf@twilight.int.mornfall.net.>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 1 Oct 2009 14:14:18 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
+Message-ID: <20091001141418.8108.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Takahiro Yasui <tyasui@redhat.com> writes:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	ccaulfield at sourceware.org	2009-10-01 14:14:18
 
-> On 09/30/09 16:24, Petr Rockai wrote:
->> IIUIC, the code will replace "\ " with "  " (double space) -- which may or may
->> not be correct, depending on where the space appears. It also breaks any code
->> that may have previously expected "\ " to have no special meaning, even though I
->> doubt any exists.
->
-> Yes, this approach replace "\ " with "  ", and it will work correctly unless
-> "\ " is used for other purpose previously. Current lvm codes use lvm_split()
-> only in early stage to split options and there is no case you concerns.
-There may not be *right now* -- I still think this is a bug waiting to
-happen. Shell scripts are full of escaping bugs and in dmeventd we have a
-simple way around (see below). One example for all -- I know it may be sick,
-but you can have device node paths with spaces in them, and I expect this will
-break -- either you forget to escape them, or the un-escaping produces wrong
-paths. (And as surprising as it may sound, spaces in device names work with
-current code -- I can create PVs and VGs on them and I can filter them out or
-in.)
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : lvm-functions.c 
 
->> Anyway, a more correct solution would entail a lvm2_runv (or similarly named)
->> function, that would take char **argv -- no escaping issues to care
->> about. Since this just adds to the library, it should be backwards compatible
->> just fine.
->
-> I can add an interface like lvm2_runv. But there is another approach using
-> single-quotes around an option with spaces as we do in a shell (e.g. bash).
-And how you quote single-quotes then? Doesn't work. Please use something
-reliable and robust -- like passing argv, or using varargs function (like
-execl). This eliminates all quoting bugs quite simply.
+Log message:
+	Stop clvmd from automatically doing lock conversions. Now, if a lock
+	is granted at one mode and an attempt to convert it wthout the LCK_CONVERT
+	flag set then it will return errno=EBUSY.
+	
+	This fixes a pretty bad bug in which an LV could be activated exclusively on
+	one node and lvchange -ay on another would convert it to shared!
+	
+	It might break some things in other areas, but I doubt it.
 
-Yours,
-   Petr.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1285&r2=1.1286
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
+
+--- LVM2/WHATS_NEW	2009/10/01 00:35:29	1.1285
++++ LVM2/WHATS_NEW	2009/10/01 14:14:17	1.1286
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Only do lock conversions in clvmd if we are explicitly asked for one.
+   Introduce percent_range_t and centralise snapshot full/mirror in-sync checks.
+   Factor out poll_mirror_progress and introduce progress_t.
+   Distinguish between powers of 1000 and powers of 1024 in unit suffixes.
+--- LVM2/daemons/clvmd/lvm-functions.c	2009/08/05 14:18:35	1.68
++++ LVM2/daemons/clvmd/lvm-functions.c	2009/10/01 14:14:17	1.69
+@@ -143,10 +143,11 @@
+ {
+ 	static char buf[128];
+ 
+-	sprintf(buf, "0x%x (%s%s%s)", flags,
++	sprintf(buf, "0x%x (%s%s%s%s)", flags,
+ 		flags & LCK_PARTIAL_MODE	  ? "PARTIAL_MODE " : "",
+ 		flags & LCK_MIRROR_NOSYNC_MODE	  ? "MIRROR_NOSYNC " : "",
+-		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR " : "");
++		flags & LCK_DMEVENTD_MONITOR_MODE ? "DMEVENTD_MONITOR " : "",
++		flags & LCK_CONVERT ? "CONVERT " : "");
+ 
+ 	return buf;
+ }
+@@ -239,13 +240,20 @@
+ 	int saved_errno;
+ 	struct lv_info *lvi;
+ 
+-	flags &= LKF_NOQUEUE;	/* Only LKF_NOQUEUE is valid here */
++	/* Mask off invalid options */
++	flags &= LKF_NOQUEUE | LKF_CONVERT;
+ 
+-	if ((lvi = lookup_info(resource))) {
++	lvi = lookup_info(resource);
++
++	/* Only allow explicit conversions */
++	if (lvi && !(flags & LKF_CONVERT)) {
++		errno = EBUSY;
++		return -1;
++	}
++	if (lvi) {
+ 		/* Already exists - convert it */
+ 		status =
+-		    sync_lock(resource, mode, LKF_CONVERT | flags,
+-			      &lvi->lock_id);
++		    sync_lock(resource, mode, flags, &lvi->lock_id);
+ 		saved_errno = errno;
+ 		if (!status)
+ 			lvi->lock_mode = mode;
+@@ -337,7 +345,7 @@
+ 
+ 	/* Try to get the lock if it's a clustered volume group */
+ 	if (lock_flags & LCK_CLUSTER_VG) {
+-		status = hold_lock(resource, mode, LKF_NOQUEUE);
++		status = hold_lock(resource, mode, LKF_NOQUEUE | (lock_flags & LCK_CONVERT?LKF_CONVERT:0));
+ 		if (status) {
+ 			/* Return an LVM-sensible error for this.
+ 			 * Forcing EIO makes the upper level return this text
+@@ -538,7 +546,7 @@
+ 		DEBUGLOG("pre_lock_lv: resource '%s', cmd = %s, flags = %s\n",
+ 			 resource, decode_locking_cmd(command), decode_flags(lock_flags));
+ 
+-		if (hold_lock(resource, LKM_PWMODE, LKF_NOQUEUE))
++		if (hold_lock(resource, LKM_PWMODE, LKF_NOQUEUE| (lock_flags & LCK_CONVERT?LKF_CONVERT:0)))
+ 			return errno;
+ 	}
+ 	return 0;
+@@ -570,7 +578,7 @@
+ 				return EIO;
+ 
+ 			if (lvi.exists) {
+-				if (hold_lock(resource, LKM_CRMODE, 0))
++				if (hold_lock(resource, LKM_CRMODE, lock_flags & LCK_CONVERT?LKF_CONVERT:0))
+ 					return errno;
+ 			} else {
+ 				if (hold_unlock(resource))
 
 
