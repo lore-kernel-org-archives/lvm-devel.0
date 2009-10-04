@@ -1,34 +1,74 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun,  4 Oct 2009 19:11:37 -0400
-Subject: [PATCH 0/10]: Add implicit pvcreate support in vgcreate / vgextend.
-Message-ID: <1254697907-16448-1-git-send-email-dwysocha@redhat.com>
+Date: Sun,  4 Oct 2009 19:11:38 -0400
+Subject: [PATCH 01/10] Refactor vg_extend - add vg_extend_single_pv.
+In-Reply-To: <1254697907-16448-1-git-send-email-dwysocha@redhat.com>
+References: <1254697907-16448-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1254697907-16448-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Simple refactor to setup future changes related to implicit pvcreates.
+Should be no functional change.
 
-This patch set is a rebase and rewrite of the earlier implicit pvcreate
-patchset.  These patches should address most, if not all, feedback to date,
-and include updated tests.  Once these patches are in, a user should no
-longer need pvcreate, except in rare recovery scenarios (usage of 
---uuid, --restorefile, and --physicalvolumesize are not supported with
-vgcreate and vgextend).
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata.c |   30 +++++++++++++++++++++++-------
+ 1 files changed, 23 insertions(+), 7 deletions(-)
 
-Patches 1-7 are just refactoring of existing code and should not change
-functionality.  Patch 8 changes the behavior of vgcreate and vgextend to
-implicitly pvcreate if a device is not already initialized.  Patch 9
-updates the man pages and patch 10 the nightly tests.
-
-One issue that has yet to be addressed is PV vs VG metadatacopies.
-A separate patch should address this soon after this patchset.
-
-Applies cleanly and passes testsuite on the following commit:
-commit 60ba4943ecb0cf6375de1d6711b4de9ea668d68b
-Author: Zden?k Kabel?? <zkabelac@redhat.com>
-Date:   Fri Oct 2 11:41:54 2009 +0000
-
-    Update distclean target for rename clogd to cmirrord. (2.02.52)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 263c705..07af5b1 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -553,22 +553,38 @@ int vg_remove(struct volume_group *vg)
+ 	return ret;
+ }
+ 
++/*
++ * Extend a VG by a single PV / device path
++ *
++ * Parameters:
++ * - vg: handle of volume group to extend by 'pv_name'
++ * - pv_name: device path of PV to add to VG
++ *
++ */
++static int vg_extend_single_pv(struct volume_group *vg, char *pv_name)
++{
++	struct physical_volume *pv;
++
++	if (!(pv = pv_by_path(vg->fid->fmt->cmd, pv_name))) {
++		log_error("%s not identified as an existing "
++			  "physical volume", pv_name);
++		return 0;
++	}
++	if (!add_pv_to_vg(vg, pv_name, pv))
++		return 0;
++	return 1;
++}
++
+ int vg_extend(struct volume_group *vg, int pv_count, char **pv_names)
+ {
+ 	int i;
+-	struct physical_volume *pv;
+ 
+ 	if (_vg_bad_status_bits(vg, RESIZEABLE_VG))
+ 		return 0;
+ 
+ 	/* attach each pv */
+ 	for (i = 0; i < pv_count; i++) {
+-		if (!(pv = pv_by_path(vg->fid->fmt->cmd, pv_names[i]))) {
+-			log_error("%s not identified as an existing "
+-				  "physical volume", pv_names[i]);
+-			goto bad;
+-		}
+-		if (!add_pv_to_vg(vg, pv_names[i], pv))
++		if (!vg_extend_single_pv(vg, pv_names[i]))
+ 			goto bad;
+ 	}
+ 
+-- 
+1.6.0.6
 
 
