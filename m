@@ -1,154 +1,97 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun,  4 Oct 2009 19:11:42 -0400
-Subject: [PATCH 05/10] Refactor pvcreate - split pvcreate_validate_params into recovery/non-recovery.
-In-Reply-To: <1254697907-16448-5-git-send-email-dwysocha@redhat.com>
+Date: Sun,  4 Oct 2009 19:11:43 -0400
+Subject: [PATCH 06/10] Refactor vgcreate/vgextend validation of vgname/pvname(s).
+In-Reply-To: <1254697907-16448-6-git-send-email-dwysocha@redhat.com>
 References: <1254697907-16448-1-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-2-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-3-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-4-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1254697907-16448-6-git-send-email-dwysocha@redhat.com>
+	<1254697907-16448-6-git-send-email-dwysocha@redhat.com>
+Message-ID: <1254697907-16448-7-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Split pvcreate_validate_params into recovery and non-recovery parameters.
-This is necessary so we can call the non-recovery validate function from
-vgextend / vgcreate.  Note in the pvcreate tool case, we must call the
-recovery validation function first (see treatment of pe_start and --zero),
-and that we add a call to fill_default_pvcreate_params before the validation
-functions.
+Decrement argc and increment argv in a consistent way to allow for later
+code-sharing.  Should be no functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |    2 +-
- tools/pvcreate.c        |   62 ++++++++++++++++++++++++++++-------------------
- 2 files changed, 38 insertions(+), 26 deletions(-)
+ tools/vgcreate.c |   11 ++++++++---
+ tools/vgextend.c |   10 +++++-----
+ 2 files changed, 13 insertions(+), 8 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 341128d..1bee7d0 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1275,7 +1275,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- void fill_default_pvcreate_params(struct pvcreate_params *pp)
- {
- 	memset(pp, 0, sizeof(*pp));
--	pp->zero = 0;
-+	pp->zero = 1;
- 	pp->size = 0;
- 	pp->data_alignment = UINT64_C(0);
- 	pp->data_alignment_offset = UINT64_C(0);
-diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index 9949631..ead1f46 100644
---- a/tools/pvcreate.c
-+++ b/tools/pvcreate.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -17,29 +17,20 @@
- #include "metadata-exported.h"
- 
- /*
-- * Intial sanity checking of command-line arguments and fill in 'pp' fields.
-- *
-- * Input arguments:
-- * cmd, argc, argv
-+ * Intial sanity checking of recovery-related command-line arguments.
-+ * These args are: --restorefile, --uuid, and --physicalvolumesize
-  *
-  * Output arguments:
-  * pp: structure allocated by caller, fields written / validated here
-  */
--static int pvcreate_validate_params(struct cmd_context *cmd,
--				    int argc, char **argv,
--				    struct pvcreate_params *pp)
-+static int pvcreate_validate_restore_params(struct cmd_context *cmd,
-+					    int argc, char **argv,
-+					    struct pvcreate_params *pp)
- {
- 	const char *uuid = NULL;
- 	void *existing_pv;
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index d171026..3d4b1b7 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -22,6 +22,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
  	struct volume_group *vg;
+ 	const char *tag;
+ 	const char *clustered_message = "";
++	char *vg_name;
  
--	memset(pp, 0, sizeof(*pp));
--
--	if (!argc) {
--		log_error("Please enter a physical volume path");
--		return 0;
--	}
--
- 	if (arg_count(cmd, restorefile_ARG) && !arg_count(cmd, uuidstr_ARG)) {
- 		log_error("--uuid is required with --restorefile");
- 		return 0;
-@@ -76,6 +67,32 @@ static int pvcreate_validate_params(struct cmd_context *cmd,
- 		vg_release(vg);
- 	}
- 
-+	if (arg_sign_value(cmd, physicalvolumesize_ARG, 0) == SIGN_MINUS) {
-+		log_error("Physical volume size may not be negative");
-+		return 0;
-+	}
-+	pp->size = arg_uint64_value(cmd, physicalvolumesize_ARG, UINT64_C(0));
-+
-+	if (arg_count(cmd, restorefile_ARG) || arg_count(cmd, uuidstr_ARG))
-+		pp->zero = 0;
-+	return 1;
-+}
-+
-+/*
-+ * Intial sanity checking of non-recovery related command-line arguments.
-+ *
-+ * Output arguments:
-+ * pp: structure allocated by caller, fields written / validated here
-+ */
-+static int pvcreate_validate_params(struct cmd_context *cmd,
-+				    int argc, char **argv,
-+				    struct pvcreate_params *pp)
-+{
-+	if (!argc) {
-+		log_error("Please enter a physical volume path");
-+		return 0;
-+	}
-+
- 	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
- 		log_error("Option y can only be given with option f");
- 		return 0;
-@@ -111,16 +128,6 @@ static int pvcreate_validate_params(struct cmd_context *cmd,
- 
- 	if (arg_count(cmd, zero_ARG))
- 		pp->zero = strcmp(arg_str_value(cmd, zero_ARG, "y"), "n");
--	else if (arg_count(cmd, restorefile_ARG) || arg_count(cmd, uuidstr_ARG))
--		pp->zero = 0;
--	else
--		pp->zero = 1;
--
--	if (arg_sign_value(cmd, physicalvolumesize_ARG, 0) == SIGN_MINUS) {
--		log_error("Physical volume size may not be negative");
--		return 0;
--	}
--	pp->size = arg_uint64_value(cmd, physicalvolumesize_ARG, UINT64_C(0));
- 
- 	if (arg_sign_value(cmd, dataalignment_ARG, 0) == SIGN_MINUS) {
- 		log_error("Physical volume data alignment may not be negative");
-@@ -185,6 +192,11 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
- 	int ret = ECMD_PROCESSED;
- 	struct pvcreate_params pp;
- 
-+	fill_default_pvcreate_params(&pp);
-+
-+	if (!pvcreate_validate_restore_params(cmd, argc, argv, &pp)) {
-+		return EINVALID_CMD_LINE;
-+	}
- 	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
+ 	if (!argc) {
+ 		log_error("Please provide volume group name and "
+@@ -29,7 +30,11 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
  		return EINVALID_CMD_LINE;
  	}
+ 
+-	if (argc == 1) {
++	vg_name = argv[0];
++	argc--;
++	argv++;
++
++	if (argc == 0) {
+ 		log_error("Please enter physical volume name(s)");
+ 		return EINVALID_CMD_LINE;
+ 	}
+@@ -40,7 +45,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	vp_def.max_lv = DEFAULT_MAX_LV;
+ 	vp_def.alloc = DEFAULT_ALLOC_POLICY;
+ 	vp_def.clustered = DEFAULT_CLUSTERED;
+-	if (fill_vg_create_params(cmd, argv[0], &vp_new, &vp_def))
++	if (fill_vg_create_params(cmd, vg_name, &vp_new, &vp_def))
+ 		return EINVALID_CMD_LINE;
+ 
+ 	if (validate_vg_create_params(cmd, &vp_new))
+@@ -63,7 +68,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	}
+ 
+ 	/* attach the pv's */
+-	if (!vg_extend(vg, argc - 1, argv + 1, NULL))
++	if (!vg_extend(vg, argc, argv, NULL))
+ 		goto_bad;
+ 
+ 	if (vp_new.max_lv != vg->max_lv)
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index 9fa7d31..c97b3bb 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -27,15 +27,15 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (argc == 1) {
+-		log_error("Please enter physical volume(s)");
+-		return EINVALID_CMD_LINE;
+-	}
+-
+ 	vg_name = skip_dev_dir(cmd, argv[0], NULL);
+ 	argc--;
+ 	argv++;
+ 
++	if (argc == 0) {
++		log_error("Please enter physical volume(s)");
++		return EINVALID_CMD_LINE;
++	}
++
+ 	log_verbose("Checking for volume group \"%s\"", vg_name);
+ 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 	if (vg_read_error(vg)) {
 -- 
 1.6.0.6
 
