@@ -1,126 +1,88 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Sun,  4 Oct 2009 19:11:40 -0400
-Subject: [PATCH 03/10] Add pvcreate_params to vg_extend.
-In-Reply-To: <1254697907-16448-3-git-send-email-dwysocha@redhat.com>
+Date: Sun,  4 Oct 2009 19:11:41 -0400
+Subject: [PATCH 04/10] Allow calling fill_default_pvcreate_params from tools.
+In-Reply-To: <1254697907-16448-4-git-send-email-dwysocha@redhat.com>
 References: <1254697907-16448-1-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-2-git-send-email-dwysocha@redhat.com>
 	<1254697907-16448-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1254697907-16448-4-git-send-email-dwysocha@redhat.com>
+	<1254697907-16448-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1254697907-16448-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Another refactoring for implicit pvcreate support.  We need to get
-the pvcreate parameters somehow to the vg_extend routine.  Options
-seemed to be:
-1. Attach the parameters to struct volume_group.  I personally
-did not like this idea in most cases, though one could make an
-agrument why it might be ok at least for some of the parameters
-(e.g. metadatacopies).
-2. Pass them in to the extend routine.  This second route seemed
-to be the best approach given the constraints.
+We need defaults for pvcreate_params at a higher level - this will
+allow us to use a common function from the tools to take defaults,
+then fill in any non-defaults from the commandline.
 
-Future patches will parse the command line and fill in the actual
-values for the pvcreate_single call.
-Should be no functional change.
+Future patches will refactor vgcreate/vgextend to call this function
+if one or more pvcreate parameters are given on the commandline.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    3 ++-
- lib/metadata/metadata.c          |   15 +++++++++++++--
- liblvm/lvm_vg.c                  |    2 +-
- tools/vgcreate.c                 |    2 +-
- tools/vgextend.c                 |    2 +-
- 5 files changed, 18 insertions(+), 6 deletions(-)
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |    2 +-
+ liblvm/lvm_vg.c                  |   13 ++++---------
+ 3 files changed, 6 insertions(+), 10 deletions(-)
 
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index bf830aa..ebaea92 100644
+index ebaea92..b67afd0 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -453,7 +453,8 @@ int vg_remove_check(struct volume_group *vg);
- int vg_remove(struct volume_group *vg);
- int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
- 	      const char *new_name);
--int vg_extend(struct volume_group *vg, int pv_count, char **pv_names);
-+int vg_extend(struct volume_group *vg, int pv_count, char **pv_names,
-+	      struct pvcreate_params *pp);
- int vg_reduce(struct volume_group *vg, char *pv_name);
- int vg_set_extent_size(struct volume_group *vg, uint32_t new_extent_size);
- int vg_set_max_lv(struct volume_group *vg, uint32_t max_lv);
+@@ -371,6 +371,7 @@ struct pvcreate_params {
+ struct physical_volume *pvcreate_single(struct cmd_context *cmd,
+ 					const char *pv_name,
+ 					struct pvcreate_params *pp);
++void fill_default_pvcreate_params(struct pvcreate_params *pp);
+ 
+ /*
+ * Utility functions
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b6f84d7..5f65d26 100644
+index 5f65d26..341128d 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -582,7 +582,18 @@ static int vg_extend_single_pv(struct volume_group *vg, char *pv_name,
+@@ -1272,7 +1272,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
  	return 1;
  }
  
--int vg_extend(struct volume_group *vg, int pv_count, char **pv_names)
-+/*
-+ * Extend a VG by a single PV / device path
-+ *
-+ * Parameters:
-+ * - vg: handle of volume group to extend by 'pv_name'
-+ * - pv_count: count of device paths of PVs
-+ * - pv_names: device paths of PVs to add to VG
-+ * - pp: parameters to pass to implicit pvcreate; if NULL, do not pvcreate
-+ *
-+ */
-+int vg_extend(struct volume_group *vg, int pv_count, char **pv_names,
-+	      struct pvcreate_params *pp)
+-static void fill_default_pvcreate_params(struct pvcreate_params *pp)
++void fill_default_pvcreate_params(struct pvcreate_params *pp)
  {
- 	int i;
- 
-@@ -591,7 +602,7 @@ int vg_extend(struct volume_group *vg, int pv_count, char **pv_names)
- 
- 	/* attach each pv */
- 	for (i = 0; i < pv_count; i++) {
--		if (!vg_extend_single_pv(vg, pv_names[i], NULL))
-+		if (!vg_extend_single_pv(vg, pv_names[i], pp))
- 			goto bad;
- 	}
- 
+ 	memset(pp, 0, sizeof(*pp));
+ 	pp->zero = 0;
 diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index a0a7b1f..0c097c0 100644
+index 0c097c0..4b4d7f6 100644
 --- a/liblvm/lvm_vg.c
 +++ b/liblvm/lvm_vg.c
-@@ -60,7 +60,7 @@ int lvm_vg_extend(vg_t vg, const char *device)
+@@ -41,6 +41,8 @@ vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
+ 
+ int lvm_vg_extend(vg_t vg, const char *device)
+ {
++	struct pvcreate_params pp;
++
+ 	if (vg_read_error(vg))
+ 		return -1;
+ 
+@@ -52,15 +54,8 @@ int lvm_vg_extend(vg_t vg, const char *device)
  		return -1;
  	}
  
--	if (!vg_extend(vg, 1, (char **) &device)) {
-+	if (!vg_extend(vg, 1, (char **) &device, NULL)) {
+-	/* If device not initialized, pvcreate it */
+-	if (!pv_by_path(vg->cmd, device) &&
+-	   (!pvcreate_single(vg->cmd, device, NULL))) {
+-		log_error("Unable to initialize device for LVM use");
+-		unlock_vg(vg->cmd, VG_ORPHANS);
+-		return -1;
+-	}
+-
+-	if (!vg_extend(vg, 1, (char **) &device, NULL)) {
++	fill_default_pvcreate_params(&pp);
++	if (!vg_extend(vg, 1, (char **) &device, &pp)) {
  		unlock_vg(vg->cmd, VG_ORPHANS);
  		return -1;
  	}
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index 2100877..d171026 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -63,7 +63,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	/* attach the pv's */
--	if (!vg_extend(vg, argc - 1, argv + 1))
-+	if (!vg_extend(vg, argc - 1, argv + 1, NULL))
- 		goto_bad;
- 
- 	if (vp_new.max_lv != vg->max_lv)
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index b659492..9fa7d31 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -54,7 +54,7 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
- 		goto_bad;
- 
- 	/* extend vg */
--	if (!vg_extend(vg, argc, argv))
-+	if (!vg_extend(vg, argc, argv, NULL))
- 		goto_bad;
- 
- 	/* ret > 0 */
 -- 
 1.6.0.6
 
