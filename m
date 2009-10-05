@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 5 Oct 2009 20:04:21 -0000
-Subject: LVM2/man vgcreate.8.in vgextend.8.in
-Message-ID: <20091005200421.29373.qmail@sourceware.org>
+Date: 5 Oct 2009 20:04:41 -0000
+Subject: LVM2 ./WHATS_NEW test/t-vgcreate-usage.sh
+Message-ID: <20091005200441.425.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,130 +10,92 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-10-05 20:04:21
+Changes by:	wysochanski at sourceware.org	2009-10-05 20:04:41
 
 Modified files:
-	man            : vgcreate.8.in vgextend.8.in 
+	.              : WHATS_NEW 
+	test           : t-vgcreate-usage.sh 
 
 Log message:
-	Update vgcreate and vgextend man pages to clarify implicit pvcreate.
+	Add implicit tests for implicit pvcreate during vgcreate and vgextend.
 	
-	vgcreate and vgextend now implicitly call pvcreate on devices not
-	currently initialized for LVM use.  Previously these commands would
-	fail with an error, so clarify the new behavior in the man page.
+	Update tests and WHATS_NEW for implicit pvcreate support.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgcreate.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgextend.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1290&r2=1.1291
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgcreate-usage.sh.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/man/vgcreate.8.in	2009/07/13 11:25:36	1.3
-+++ LVM2/man/vgcreate.8.in	2009/10/05 20:04:21	1.4
-@@ -21,16 +21,24 @@
- .RB [ \-t | \-\-test ]
- .RB [ \-v | \-\-verbose ]
- .RB [ \-\-version ]
--.I VolumeGroupName PhysicalVolumePath
--.RI [ PhysicalVolumePath ...]
-+.RB [ PHYSICAL DEVICE OPTIONS ]
-+.I VolumeGroupName PhysicalDevicePath
-+.RI [ PhysicalDevicePath ...]
- .SH DESCRIPTION
- .B vgcreate
- creates a new volume group called
- .I VolumeGroupName
--using the block special device
--.IR PhysicalVolumePath
--previously configured for LVM with
--.BR pvcreate (8).
-+using the block special device \fIPhysicalDevicePath\fP.
-+.sp
-+If \fIPhysicalDevicePath\fP was not previously configured for LVM with
-+\fBpvcreate (8)\fP, the device will be initialized with the same
-+default values used with \fBpvcreate\fP.  If non-default
-+\fPpvcreate\fP values are are desired, they may be given on the
-+commandline with the same options as \fPpvcreate\fP.  See
-+\fBPHYSICAL DEVICE OPTIONS\fP for available options.  Note
-+that the restore-related options such as --restorefile, --uuid,
-+and --physicalvolumesize are not available.  If a restore operation
-+is needed, use \fBpvcreate (8)\fP and \fBvgcfgrestore (8)\fP.
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .TP
-@@ -86,6 +94,25 @@
- impact on I/O performance to the logical volume.  The smallest PE is 1KB.
- 
- The 2.4 kernel has a limitation of 2TB per block device.
-+.SH PHYSICAL DEVICE OPTIONS
-+The following options are available for initializing physical devices in the
-+volume group.  These options are further described in the pvcreate man page.
-+.TP
-+.BR \-f ", " \-\-force
-+.TP
-+.BR \-y ", " \-\-yes
-+.TP
-+.BR \-Z ", " \-\-zero " y|n"
-+.TP
-+.BR \-\-labelsector " sector"
-+.TP
-+.BR \-\-metadatasize " size"
-+.TP
-+.BR \-\-metadatacopies " copies"
-+.TP
-+.BR \-\-dataalignment " alignment"
-+.TP
-+.BR \-\-dataalignmentoffset " alignment_offset"
- .SH EXAMPLES
- To create a volume group named
- .B test_vg 
---- LVM2/man/vgextend.8.in	2008/11/12 15:01:36	1.2
-+++ LVM2/man/vgextend.8.in	2009/10/05 20:04:21	1.3
-@@ -6,13 +6,47 @@
- [\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-h|\-?|\-\-help] 
- [\-t|\-\-test]
- [\-v|\-\-verbose]
-+.RB [ PHYSICAL DEVICE OPTIONS ]
- VolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]
- .SH DESCRIPTION
- vgextend allows you to add one or more initialized physical volumes ( see
- .B pvcreate(8)
- ) to an existing volume group to extend it in size.
-+.sp
-+If \fIPhysicalDevicePath\fP was not previously configured for LVM with
-+\fBpvcreate (8)\fP, the device will be initialized with the same
-+default values used with \fBpvcreate\fP.  If non-default
-+\fPpvcreate\fP values are are desired, they may be given on the
-+commandline with the same options as \fPpvcreate\fP.  See
-+\fBPHYSICAL DEVICE OPTIONS\fP for available options.  Note
-+that the restore-related options such as --restorefile, --uuid,
-+and --physicalvolumesize are not available.  If a restore operation
-+is needed, use \fBpvcreate (8)\fP and \fBvgcfgrestore (8)\fP.
-+\fBpvcreate (8)\fP, the device will be initialized with the same
-+default values used with \fBpvcreate\fP.  If non-default
-+\fPpvcreate\fP values are are desired, \fBpvcreate\fP should be explicitly
-+called prior to calling \fBvgcreate\fP.
- .SH OPTIONS
- See \fBlvm\fP for common options.
-+.SH PHYSICAL DEVICE OPTIONS
-+The following options are available for initializing physical devices in the
-+volume group.  These options are further described in the pvcreate man page.
-+.TP
-+.BR \-f ", " \-\-force
-+.TP
-+.BR \-y ", " \-\-yes
-+.TP
-+.BR \-Z ", " \-\-zero " y|n"
-+.TP
-+.BR \-\-labelsector " sector"
-+.TP
-+.BR \-\-metadatasize " size"
-+.TP
-+.BR \-\-metadatacopies " copies"
-+.TP
-+.BR \-\-dataalignment " alignment"
-+.TP
-+.BR \-\-dataalignmentoffset " alignment_offset"
- .SH Examples
- "vgextend vg00 /dev/sda4 /dev/sdn1" tries to extend the existing volume
- group "vg00" by the new physical volumes (see
+--- LVM2/WHATS_NEW	2009/10/05 12:44:20	1.1290
++++ LVM2/WHATS_NEW	2009/10/05 20:04:40	1.1291
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Add implict pvcreate support to vgcreate and vgextend.
+   Correct example.conf to indicate that lvm2 not lvm1 is the default format.
+   Remove an unused stray LVM1_SUPPORT ifdef.
+   Only include selinux libs in libdevmapper.pc when selinux build enabled.
+--- LVM2/test/t-vgcreate-usage.sh	2009/09/30 16:13:53	1.10
++++ LVM2/test/t-vgcreate-usage.sh	2009/10/05 20:04:40	1.11
+@@ -87,3 +87,60 @@
+ check_vg_field_ $vg max_pv 0
+ check_vg_field_ $vg vg_attr "wz--n-"
+ vgremove -ff $vg
++
++# Implicit pvcreate tests, test pvcreate options on vgcreate
++# --force, --yes, --metadata{size|copies|type}, --zero
++# --dataalignment[offset]
++pvremove $dev1 $dev2
++vgcreate --force --yes --zero y $vg $dev1 $dev2
++vgremove -f $vg
++pvremove -f $dev1
++
++for i in 0 1 2 3
++do
++# vgcreate (lvm2) succeeds writing LVM label at sector $i
++    vgcreate --labelsector $i $vg $dev1
++    dd if=$dev1 bs=512 skip=$i count=1 2>/dev/null | strings | grep -q LABELONE;
++    vgremove -f $vg
++    pvremove -f $dev1
++done
++
++# metadatacopies
++for i in 1 2
++do
++    vgcreate --metadatacopies $i $vg $dev1
++    check_pv_field_ $dev1 pv_mda_count $i
++    vgremove -f $vg
++    pvremove -f $dev1
++done
++not vgcreate --metadatacopies 0 $vg $dev1
++pvcreate --metadatacopies 1 $dev2
++vgcreate --metadatacopies 0 $vg $dev1 $dev2
++check_pv_field_ $dev1 pv_mda_count 0
++check_pv_field_ $dev2 pv_mda_count 1
++vgremove -f $vg
++pvremove -f $dev1
++
++# metadatasize, dataalignment, dataalignmentoffset
++#COMM 'pvcreate sets data offset next to mda area'
++vgcreate --metadatasize 100k --dataalignment 100k $vg $dev1
++check_pv_field_ $dev1 pe_start 200.00k
++vgremove -f $vg
++pvremove -f $dev1
++
++# data area is aligned to 64k by default,
++# data area start is shifted by the specified alignment_offset
++pv_align="195.50k"
++vgcreate --metadatasize 128k --dataalignmentoffset 7s $vg $dev1
++check_pv_field_ $dev1 pe_start $pv_align
++vgremove -f $vg
++pvremove -f $dev1
++
++# metadatatype
++for i in 1 2
++do
++    vgcreate -M $i $vg $dev1
++    check_vg_field_ $vg vg_fmt lvm$i
++    vgremove -f $vg
++    pvremove -f $dev1
++done
 
 
