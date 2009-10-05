@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 5 Oct 2009 20:04:09 -0000
-Subject: LVM2/tools commands.h vgcreate.c vgextend.c
-Message-ID: <20091005200409.27381.qmail@sourceware.org>
+Date: 5 Oct 2009 20:04:21 -0000
+Subject: LVM2/man vgcreate.8.in vgextend.8.in
+Message-ID: <20091005200421.29373.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,107 +10,130 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-10-05 20:04:08
+Changes by:	wysochanski at sourceware.org	2009-10-05 20:04:21
 
 Modified files:
-	tools          : commands.h vgcreate.c vgextend.c 
+	man            : vgcreate.8.in vgextend.8.in 
 
 Log message:
-	Add implicit pvcreate support to vgcreate and vgextend.
+	Update vgcreate and vgextend man pages to clarify implicit pvcreate.
 	
-	Adds implicit pvcreate support when calling vgcreate or vgextend with
-	device paths that are not yet PVs.  This changes the behavior of vgcreate
-	and vgextend from failing with an error message to implicitly pvcreating.
+	vgcreate and vgextend now implicitly call pvcreate on devices not
+	currently initialized for LVM use.  Previously these commands would
+	fail with an error, so clarify the new behavior in the man page.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.131&r2=1.132
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgcreate.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgextend.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/tools/commands.h	2009/08/04 15:53:04	1.131
-+++ LVM2/tools/commands.h	2009/10/05 20:04:08	1.132
-@@ -757,7 +757,9 @@
-    "\tVolumeGroupName PhysicalVolume [PhysicalVolume...]\n",
+--- LVM2/man/vgcreate.8.in	2009/07/13 11:25:36	1.3
++++ LVM2/man/vgcreate.8.in	2009/10/05 20:04:21	1.4
+@@ -21,16 +21,24 @@
+ .RB [ \-t | \-\-test ]
+ .RB [ \-v | \-\-verbose ]
+ .RB [ \-\-version ]
+-.I VolumeGroupName PhysicalVolumePath
+-.RI [ PhysicalVolumePath ...]
++.RB [ PHYSICAL DEVICE OPTIONS ]
++.I VolumeGroupName PhysicalDevicePath
++.RI [ PhysicalDevicePath ...]
+ .SH DESCRIPTION
+ .B vgcreate
+ creates a new volume group called
+ .I VolumeGroupName
+-using the block special device
+-.IR PhysicalVolumePath
+-previously configured for LVM with
+-.BR pvcreate (8).
++using the block special device \fIPhysicalDevicePath\fP.
++.sp
++If \fIPhysicalDevicePath\fP was not previously configured for LVM with
++\fBpvcreate (8)\fP, the device will be initialized with the same
++default values used with \fBpvcreate\fP.  If non-default
++\fPpvcreate\fP values are are desired, they may be given on the
++commandline with the same options as \fPpvcreate\fP.  See
++\fBPHYSICAL DEVICE OPTIONS\fP for available options.  Note
++that the restore-related options such as --restorefile, --uuid,
++and --physicalvolumesize are not available.  If a restore operation
++is needed, use \fBpvcreate (8)\fP and \fBvgcfgrestore (8)\fP.
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
+ .TP
+@@ -86,6 +94,25 @@
+ impact on I/O performance to the logical volume.  The smallest PE is 1KB.
  
-    addtag_ARG, alloc_ARG, autobackup_ARG, clustered_ARG, maxlogicalvolumes_ARG,
--   maxphysicalvolumes_ARG, metadatatype_ARG, physicalextentsize_ARG, test_ARG)
-+   maxphysicalvolumes_ARG, metadatatype_ARG, physicalextentsize_ARG, test_ARG,
-+   force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatasize_ARG,
-+   metadatacopies_ARG, dataalignment_ARG, dataalignmentoffset_ARG)
- 
- xx(vgdisplay,
-    "Display volume group information",
-@@ -820,7 +822,10 @@
-    "\t[--version]" "\n"
-    "\tVolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]\n",
- 
--   autobackup_ARG, test_ARG)
-+   autobackup_ARG, test_ARG,
-+   force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatatype_ARG,
-+   metadatasize_ARG, metadatacopies_ARG, dataalignment_ARG,
-+   dataalignmentoffset_ARG)
- 
- xx(vgimport,
-    "Register exported volume group with system",
---- LVM2/tools/vgcreate.c	2009/10/05 20:03:37	1.68
-+++ LVM2/tools/vgcreate.c	2009/10/05 20:04:08	1.69
-@@ -23,6 +23,7 @@
- 	const char *tag;
- 	const char *clustered_message = "";
- 	char *vg_name;
-+	struct pvcreate_params pp;
- 
- 	if (!argc) {
- 		log_error("Please provide volume group name and "
-@@ -34,8 +35,8 @@
- 	argc--;
- 	argv++;
- 
--	if (argc == 0) {
--		log_error("Please enter physical volume name(s)");
-+	fill_default_pvcreate_params(&pp);
-+	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
- 	}
- 
-@@ -68,7 +69,7 @@
- 	}
- 
- 	/* attach the pv's */
--	if (!vg_extend(vg, argc, argv, NULL))
-+	if (!vg_extend(vg, argc, argv, &pp))
- 		goto_bad;
- 
- 	if (vp_new.max_lv != vg->max_lv)
---- LVM2/tools/vgextend.c	2009/10/05 20:03:37	1.52
-+++ LVM2/tools/vgextend.c	2009/10/05 20:04:08	1.53
-@@ -20,6 +20,7 @@
- 	char *vg_name;
- 	struct volume_group *vg = NULL;
- 	int r = ECMD_FAILED;
-+	struct pvcreate_params pp;
- 
- 	if (!argc) {
- 		log_error("Please enter volume group name and "
-@@ -31,8 +32,8 @@
- 	argc--;
- 	argv++;
- 
--	if (argc == 0) {
--		log_error("Please enter physical volume(s)");
-+	fill_default_pvcreate_params(&pp);
-+	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
- 	}
- 
-@@ -54,7 +55,7 @@
- 		goto_bad;
- 
- 	/* extend vg */
--	if (!vg_extend(vg, argc, argv, NULL))
-+	if (!vg_extend(vg, argc, argv, &pp))
- 		goto_bad;
- 
- 	/* ret > 0 */
+ The 2.4 kernel has a limitation of 2TB per block device.
++.SH PHYSICAL DEVICE OPTIONS
++The following options are available for initializing physical devices in the
++volume group.  These options are further described in the pvcreate man page.
++.TP
++.BR \-f ", " \-\-force
++.TP
++.BR \-y ", " \-\-yes
++.TP
++.BR \-Z ", " \-\-zero " y|n"
++.TP
++.BR \-\-labelsector " sector"
++.TP
++.BR \-\-metadatasize " size"
++.TP
++.BR \-\-metadatacopies " copies"
++.TP
++.BR \-\-dataalignment " alignment"
++.TP
++.BR \-\-dataalignmentoffset " alignment_offset"
+ .SH EXAMPLES
+ To create a volume group named
+ .B test_vg 
+--- LVM2/man/vgextend.8.in	2008/11/12 15:01:36	1.2
++++ LVM2/man/vgextend.8.in	2009/10/05 20:04:21	1.3
+@@ -6,13 +6,47 @@
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-h|\-?|\-\-help] 
+ [\-t|\-\-test]
+ [\-v|\-\-verbose]
++.RB [ PHYSICAL DEVICE OPTIONS ]
+ VolumeGroupName PhysicalDevicePath [PhysicalDevicePath...]
+ .SH DESCRIPTION
+ vgextend allows you to add one or more initialized physical volumes ( see
+ .B pvcreate(8)
+ ) to an existing volume group to extend it in size.
++.sp
++If \fIPhysicalDevicePath\fP was not previously configured for LVM with
++\fBpvcreate (8)\fP, the device will be initialized with the same
++default values used with \fBpvcreate\fP.  If non-default
++\fPpvcreate\fP values are are desired, they may be given on the
++commandline with the same options as \fPpvcreate\fP.  See
++\fBPHYSICAL DEVICE OPTIONS\fP for available options.  Note
++that the restore-related options such as --restorefile, --uuid,
++and --physicalvolumesize are not available.  If a restore operation
++is needed, use \fBpvcreate (8)\fP and \fBvgcfgrestore (8)\fP.
++\fBpvcreate (8)\fP, the device will be initialized with the same
++default values used with \fBpvcreate\fP.  If non-default
++\fPpvcreate\fP values are are desired, \fBpvcreate\fP should be explicitly
++called prior to calling \fBvgcreate\fP.
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
++.SH PHYSICAL DEVICE OPTIONS
++The following options are available for initializing physical devices in the
++volume group.  These options are further described in the pvcreate man page.
++.TP
++.BR \-f ", " \-\-force
++.TP
++.BR \-y ", " \-\-yes
++.TP
++.BR \-Z ", " \-\-zero " y|n"
++.TP
++.BR \-\-labelsector " sector"
++.TP
++.BR \-\-metadatasize " size"
++.TP
++.BR \-\-metadatacopies " copies"
++.TP
++.BR \-\-dataalignment " alignment"
++.TP
++.BR \-\-dataalignmentoffset " alignment_offset"
+ .SH Examples
+ "vgextend vg00 /dev/sda4 /dev/sdn1" tries to extend the existing volume
+ group "vg00" by the new physical volumes (see
 
 
