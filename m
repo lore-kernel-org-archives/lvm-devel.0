@@ -1,99 +1,47 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 13 Oct 2009 16:21:32 -0500
-Subject: [PATCH 1 of 2] LVM: add split capability to _remove_mirror_images
-Message-ID: <200910132121.n9DLLWPo017083@hydrogen.msp.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon,  5 Oct 2009 16:00:32 +0200
+Subject: [PATCH 05/13] Replicator: use dm_tree_suspend_children
+In-Reply-To: <1254751240-17431-4-git-send-email-zkabelac@redhat.com>
+References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-2-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-3-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-4-git-send-email-zkabelac@redhat.com>
+Message-ID: <1254751240-17431-5-git-send-email-zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-add-split-capability-to-_remove_mirror_images.patch
+Before of suspend/deactivation of replicator_dev node
+the suspend of replicator node is mandatory.
 
-This patch adds the capability to split off a mirror leg
-to the _remove_mirror_images function.  Essentially, we
-replace the function that pulls a leg from a mirror and
-frees it with just the function that pulls it.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/activate/dev_manager.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -472,6 +472,8 @@ struct logical_volume *detach_mirror_log
-  *                  mirror layer and merge mirrors to the original LV.
-  *                  removable_pvs should be NULL and num_removed should be
-  *                  seg->area_count - 1.
-+ *   split:	    if non-zero, split the mimage off rather than removing
-+ *		    it.  (Note:  It will still be named '<lv>_mimage_%d'.
-  *   removed:       if non NULL, the number of removed mirror images is set
-  *                  as a result
-  *
-@@ -486,7 +488,9 @@ struct logical_volume *detach_mirror_log
- static int _remove_mirror_images(struct logical_volume *lv,
- 				 uint32_t num_removed,
- 				 struct dm_list *removable_pvs,
--				 unsigned remove_log, unsigned collapse,
-+				 unsigned remove_log,
-+				 unsigned collapse,
-+				 unsigned split,
- 				 uint32_t *removed)
- {
- 	uint32_t m;
-@@ -537,13 +541,20 @@ static int _remove_mirror_images(struct 
- 	for (m = new_area_count; m < mirrored_seg->area_count; m++) {
- 		seg_lv(mirrored_seg, m)->status &= ~MIRROR_IMAGE;
- 		lv_set_visible(seg_lv(mirrored_seg, m));
--		if (!(lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl)))) {
--			log_error("lv_list alloc failed");
--			return 0;
-+		if (!split) {
-+			lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl));
-+			if (!lvl) {
-+				log_error("lv_list alloc failed");
-+				return 0;
-+			}
-+			lvl->lv = seg_lv(mirrored_seg, m);
-+			dm_list_add(&tmp_orphan_lvs, &lvl->list);
-+			release_lv_segment_area(mirrored_seg, m,
-+						mirrored_seg->area_len);
-+			continue;
- 		}
--		lvl->lv = seg_lv(mirrored_seg, m);
--		dm_list_add(&tmp_orphan_lvs, &lvl->list);
--		release_lv_segment_area(mirrored_seg, m, mirrored_seg->area_len);
-+		remove_seg_from_segs_using_this_lv(seg_lv(mirrored_seg, m),
-+						   mirrored_seg);
- 	}
- 	mirrored_seg->area_count = new_area_count;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 19deab8..55daf14 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1169,6 +1169,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root)
+ 			continue;
  
-@@ -671,7 +682,7 @@ int remove_mirror_images(struct logical_
- 			removed_once = first_seg(next_lv)->area_count - 1;
- 
- 		if (!_remove_mirror_images(next_lv, removed_once,
--					   removable_pvs, remove_log, 0, &r))
-+					   removable_pvs, remove_log, 0, 0, &r))
- 			return_0;
- 
- 		if (r < removed_once) {
-@@ -745,7 +756,7 @@ int collapse_mirrored_lv(struct logical_
- 
- 		if (!_remove_mirror_images(mirror_seg->lv,
- 					   mirror_seg->area_count - 1,
--					   NULL, 1, 1, NULL)) {
-+					   NULL, 1, 1, 0, NULL)) {
- 			log_error("Failed to release mirror images");
- 			return 0;
- 		}
-@@ -866,7 +877,7 @@ int reconfigure_mirror_images(struct lv_
- 	init_mirror_in_sync(in_sync);
- 
- 	r = _remove_mirror_images(mirrored_seg->lv, old_num_mirrors - num_mirrors,
--				  removable_pvs, remove_log, 0, NULL);
-+				  removable_pvs, remove_log, 0, 0, NULL);
- 	if (!r)
- 		/* Unable to remove bad devices */
- 		return 0;
+ 		dm_tree_set_cookie(root, 0);
++		dm_tree_suspend_children(root, uuid, strlen(uuid), 1);
+ 		r = dm_tree_deactivate_children(root, uuid, strlen(uuid));
+ 		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+ 			stack;
+@@ -1208,6 +1209,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv, actio
+ 	case DEACTIVATE:
+  		/* Deactivate LV and all devices it references that nothing else has open. */
+ 		dm_tree_set_cookie(root, 0);
++		dm_tree_suspend_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1, 1);
+ 		r = dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+ 		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+ 			stack;
+-- 
+1.6.5.rc2
 
 
