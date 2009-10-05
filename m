@@ -1,26 +1,47 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 14 Oct 2009 13:58:13 -0500
-Subject: Re: [PATCH 2 of 10] LVM: make log_area a list
-In-Reply-To: <20091014171609.GA9054@us.ibm.com>
-References: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
-	<20091013014820.GA27349@us.ibm.com>
-	<0FBED8C9-24F0-48D7-81E5-A041AA11F03D@redhat.com>
-	<20091014171609.GA9054@us.ibm.com>
-Message-ID: <02C2BD80-BFCD-47EB-9685-43EB20ABD053@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon,  5 Oct 2009 16:00:33 +0200
+Subject: [PATCH 06/13] Replicator: extend _lv_each_dependency() rep. deps
+In-Reply-To: <1254751240-17431-5-git-send-email-zkabelac@redhat.com>
+References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-2-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-3-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-4-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-5-git-send-email-zkabelac@redhat.com>
+Message-ID: <1254751240-17431-6-git-send-email-zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/metadata/metadata.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-On Oct 14, 2009, at 12:16 PM, malahal at us.ibm.com wrote:
-
-> My understanding is that the current code executes the inner loop to
-> completion every time.
-
-I see what you are saying.  Ok, fixed in my local patch.
-
-  brassow
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 263c705..feb7cc1 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1850,6 +1850,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
+ 	struct lv_segment *lvseg;
+ 
+ 	struct logical_volume *deps[] = {
++		(lv->rdevice && lv != lv->rdevice->lv) ? lv->rdevice->lv : 0,
++		(lv->rdevice && lv != lv->rdevice->slog) ? lv->rdevice->slog : 0,
+ 		lv->snapshot ? lv->snapshot->origin : 0,
+ 		lv->snapshot ? lv->snapshot->cow : 0 };
+ 	for (i = 0; i < sizeof(deps) / sizeof(*deps); ++i) {
+@@ -1860,6 +1862,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
+ 	dm_list_iterate_items(lvseg, &lv->segments) {
+ 		if (lvseg->log_lv && !fn(lvseg->log_lv, data))
+ 			return_0;
++		if (lvseg->rlog_lv && !fn(lvseg->rlog_lv, data))
++			return_0;
+ 		for (s = 0; s < lvseg->area_count; ++s) {
+ 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
+ 				return_0;
+-- 
+1.6.5.rc2
 
 
