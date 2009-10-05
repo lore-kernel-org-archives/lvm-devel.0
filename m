@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 5 Oct 2009 20:03:38 -0000
-Subject: LVM2/tools vgcreate.c vgextend.c
-Message-ID: <20091005200338.22737.qmail@sourceware.org>
+Date: 5 Oct 2009 20:03:55 -0000
+Subject: LVM2/tools pvcreate.c toollib.c toollib.h
+Message-ID: <20091005200355.25378.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,84 +10,264 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-10-05 20:03:37
+Changes by:	wysochanski at sourceware.org	2009-10-05 20:03:55
 
 Modified files:
-	tools          : vgcreate.c vgextend.c 
+	tools          : pvcreate.c toollib.c toollib.h 
 
 Log message:
-	Refactor vgcreate/vgextend validation of vgname/pvname(s).
+	Move pvcreate_validate_params into toollib to allow calling from mutiple tools.
 	
-	Decrement argc and increment argv in a consistent way to allow for later
-	code-sharing.  Should be no functional change.
+	For implicit pvcreate support, we need to call this from vgcreate and vgextend,
+	so move it into toollib.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.172&r2=1.173
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.64&r2=1.65
 
---- LVM2/tools/vgcreate.c	2009/10/05 20:02:48	1.67
-+++ LVM2/tools/vgcreate.c	2009/10/05 20:03:37	1.68
-@@ -22,6 +22,7 @@
- 	struct volume_group *vg;
- 	const char *tag;
- 	const char *clustered_message = "";
-+	char *vg_name;
+--- LVM2/tools/pvcreate.c	2009/10/05 20:03:25	1.86
++++ LVM2/tools/pvcreate.c	2009/10/05 20:03:54	1.87
+@@ -78,114 +78,6 @@
+ 	return 1;
+ }
  
- 	if (!argc) {
- 		log_error("Please provide volume group name and "
-@@ -29,7 +30,11 @@
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	if (argc == 1) {
-+	vg_name = argv[0];
-+	argc--;
-+	argv++;
-+
-+	if (argc == 0) {
- 		log_error("Please enter physical volume name(s)");
- 		return EINVALID_CMD_LINE;
- 	}
-@@ -40,7 +45,7 @@
- 	vp_def.max_lv = DEFAULT_MAX_LV;
- 	vp_def.alloc = DEFAULT_ALLOC_POLICY;
- 	vp_def.clustered = DEFAULT_CLUSTERED;
--	if (fill_vg_create_params(cmd, argv[0], &vp_new, &vp_def))
-+	if (fill_vg_create_params(cmd, vg_name, &vp_new, &vp_def))
- 		return EINVALID_CMD_LINE;
- 
- 	if (validate_vg_create_params(cmd, &vp_new))
-@@ -63,7 +68,7 @@
- 	}
- 
- 	/* attach the pv's */
--	if (!vg_extend(vg, argc - 1, argv + 1, NULL))
-+	if (!vg_extend(vg, argc, argv, NULL))
- 		goto_bad;
- 
- 	if (vp_new.max_lv != vg->max_lv)
---- LVM2/tools/vgextend.c	2009/10/05 20:02:49	1.51
-+++ LVM2/tools/vgextend.c	2009/10/05 20:03:37	1.52
-@@ -27,15 +27,15 @@
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	if (argc == 1) {
--		log_error("Please enter physical volume(s)");
--		return EINVALID_CMD_LINE;
+-/*
+- * Intial sanity checking of non-recovery related command-line arguments.
+- *
+- * Output arguments:
+- * pp: structure allocated by caller, fields written / validated here
+- */
+-static int pvcreate_validate_params(struct cmd_context *cmd,
+-				    int argc, char **argv,
+-				    struct pvcreate_params *pp)
+-{
+-	if (!argc) {
+-		log_error("Please enter a physical volume path");
+-		return 0;
 -	}
 -
- 	vg_name = skip_dev_dir(cmd, argv[0], NULL);
- 	argc--;
- 	argv++;
- 
-+	if (argc == 0) {
-+		log_error("Please enter physical volume(s)");
-+		return EINVALID_CMD_LINE;
+-	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
+-		log_error("Option y can only be given with option f");
+-		return 0;
+-	}
+-
+-	pp->yes = arg_count(cmd, yes_ARG);
+-	pp->force = arg_count(cmd, force_ARG);
+-
+-	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
+-		log_error("labelsector must be less than %lu",
+-			  LABEL_SCAN_SECTORS);
+-		return 0;
+-	} else {
+-		pp->labelsector = arg_int64_value(cmd, labelsector_ARG,
+-						  DEFAULT_LABELSECTOR);
+-	}
+-
+-	if (!(cmd->fmt->features & FMT_MDAS) &&
+-	    (arg_count(cmd, metadatacopies_ARG) ||
+-	     arg_count(cmd, metadatasize_ARG)   ||
+-	     arg_count(cmd, dataalignment_ARG)  ||
+-	     arg_count(cmd, dataalignmentoffset_ARG))) {
+-		log_error("Metadata and data alignment parameters only "
+-			  "apply to text format.");
+-		return 0;
+-	}
+-
+-	if (arg_count(cmd, metadatacopies_ARG) &&
+-	    arg_int_value(cmd, metadatacopies_ARG, -1) > 2) {
+-		log_error("Metadatacopies may only be 0, 1 or 2");
+-		return 0;
+-	}
+-
+-	if (arg_count(cmd, zero_ARG))
+-		pp->zero = strcmp(arg_str_value(cmd, zero_ARG, "y"), "n");
+-
+-	if (arg_sign_value(cmd, dataalignment_ARG, 0) == SIGN_MINUS) {
+-		log_error("Physical volume data alignment may not be negative");
+-		return 0;
+-	}
+-	pp->data_alignment = arg_uint64_value(cmd, dataalignment_ARG, UINT64_C(0));
+-
+-	if (pp->data_alignment > ULONG_MAX) {
+-		log_error("Physical volume data alignment is too big.");
+-		return 0;
+-	}
+-
+-	if (pp->data_alignment && pp->pe_start) {
+-		if (pp->pe_start % pp->data_alignment)
+-			log_warn("WARNING: Ignoring data alignment %" PRIu64
+-				 " incompatible with --restorefile value (%"
+-				 PRIu64").", pp->data_alignment, pp->pe_start);
+-		pp->data_alignment = 0;
+-	}
+-
+-	if (arg_sign_value(cmd, dataalignmentoffset_ARG, 0) == SIGN_MINUS) {
+-		log_error("Physical volume data alignment offset may not be negative");
+-		return 0;
+-	}
+-	pp->data_alignment_offset = arg_uint64_value(cmd, dataalignmentoffset_ARG, UINT64_C(0));
+-
+-	if (pp->data_alignment_offset > ULONG_MAX) {
+-		log_error("Physical volume data alignment offset is too big.");
+-		return 0;
+-	}
+-
+-	if (pp->data_alignment_offset && pp->pe_start) {
+-		log_warn("WARNING: Ignoring data alignment offset %" PRIu64
+-			 " incompatible with --restorefile value (%"
+-			 PRIu64").", pp->data_alignment_offset, pp->pe_start);
+-		pp->data_alignment_offset = 0;
+-	}
+-
+-	if (arg_sign_value(cmd, metadatasize_ARG, 0) == SIGN_MINUS) {
+-		log_error("Metadata size may not be negative");
+-		return 0;
+-	}
+-
+-	pp->pvmetadatasize = arg_uint64_value(cmd, metadatasize_ARG, UINT64_C(0));
+-	if (!pp->pvmetadatasize)
+-		pp->pvmetadatasize = find_config_tree_int(cmd,
+-						 "metadata/pvmetadatasize",
+-						 DEFAULT_PVMETADATASIZE);
+-
+-	pp->pvmetadatacopies = arg_int_value(cmd, metadatacopies_ARG, -1);
+-	if (pp->pvmetadatacopies < 0)
+-		pp->pvmetadatacopies = find_config_tree_int(cmd,
+-						   "metadata/pvmetadatacopies",
+-						   DEFAULT_PVMETADATACOPIES);
+-
+-	return 1;
+-}
+-
+ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	int i;
+--- LVM2/tools/toollib.c	2009/09/29 20:33:49	1.172
++++ LVM2/tools/toollib.c	2009/10/05 20:03:54	1.173
+@@ -1271,3 +1271,112 @@
+ 		lvconvert_poll(cmd, lv, 1);
+ 	}
+ }
++
++/*
++ * Intial sanity checking of non-recovery related command-line arguments.
++ *
++ * Output arguments:
++ * pp: structure allocated by caller, fields written / validated here
++ */
++int pvcreate_validate_params(struct cmd_context *cmd,
++			     int argc, char **argv,
++			     struct pvcreate_params *pp)
++{
++	if (!argc) {
++		log_error("Please enter a physical volume path");
++		return 0;
 +	}
 +
- 	log_verbose("Checking for volume group \"%s\"", vg_name);
- 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
- 	if (vg_read_error(vg)) {
++	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
++		log_error("Option y can only be given with option f");
++		return 0;
++	}
++
++	pp->yes = arg_count(cmd, yes_ARG);
++	pp->force = arg_count(cmd, force_ARG);
++
++	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
++		log_error("labelsector must be less than %lu",
++			  LABEL_SCAN_SECTORS);
++		return 0;
++	} else {
++		pp->labelsector = arg_int64_value(cmd, labelsector_ARG,
++						  DEFAULT_LABELSECTOR);
++	}
++
++	if (!(cmd->fmt->features & FMT_MDAS) &&
++	    (arg_count(cmd, metadatacopies_ARG) ||
++	     arg_count(cmd, metadatasize_ARG)   ||
++	     arg_count(cmd, dataalignment_ARG)  ||
++	     arg_count(cmd, dataalignmentoffset_ARG))) {
++		log_error("Metadata and data alignment parameters only "
++			  "apply to text format.");
++		return 0;
++	}
++
++	if (arg_count(cmd, metadatacopies_ARG) &&
++	    arg_int_value(cmd, metadatacopies_ARG, -1) > 2) {
++		log_error("Metadatacopies may only be 0, 1 or 2");
++		return 0;
++	}
++
++	if (arg_count(cmd, zero_ARG))
++		pp->zero = strcmp(arg_str_value(cmd, zero_ARG, "y"), "n");
++
++	if (arg_sign_value(cmd, dataalignment_ARG, 0) == SIGN_MINUS) {
++		log_error("Physical volume data alignment may not be negative");
++		return 0;
++	}
++	pp->data_alignment = arg_uint64_value(cmd, dataalignment_ARG, UINT64_C(0));
++
++	if (pp->data_alignment > ULONG_MAX) {
++		log_error("Physical volume data alignment is too big.");
++		return 0;
++	}
++
++	if (pp->data_alignment && pp->pe_start) {
++		if (pp->pe_start % pp->data_alignment)
++			log_warn("WARNING: Ignoring data alignment %" PRIu64
++				 " incompatible with --restorefile value (%"
++				 PRIu64").", pp->data_alignment, pp->pe_start);
++		pp->data_alignment = 0;
++	}
++
++	if (arg_sign_value(cmd, dataalignmentoffset_ARG, 0) == SIGN_MINUS) {
++		log_error("Physical volume data alignment offset may not be negative");
++		return 0;
++	}
++	pp->data_alignment_offset = arg_uint64_value(cmd, dataalignmentoffset_ARG, UINT64_C(0));
++
++	if (pp->data_alignment_offset > ULONG_MAX) {
++		log_error("Physical volume data alignment offset is too big.");
++		return 0;
++	}
++
++	if (pp->data_alignment_offset && pp->pe_start) {
++		log_warn("WARNING: Ignoring data alignment offset %" PRIu64
++			 " incompatible with --restorefile value (%"
++			 PRIu64").", pp->data_alignment_offset, pp->pe_start);
++		pp->data_alignment_offset = 0;
++	}
++
++	if (arg_sign_value(cmd, metadatasize_ARG, 0) == SIGN_MINUS) {
++		log_error("Metadata size may not be negative");
++		return 0;
++	}
++
++	pp->pvmetadatasize = arg_uint64_value(cmd, metadatasize_ARG, UINT64_C(0));
++	if (!pp->pvmetadatasize)
++		pp->pvmetadatasize = find_config_tree_int(cmd,
++						 "metadata/pvmetadatasize",
++						 DEFAULT_PVMETADATASIZE);
++
++	pp->pvmetadatacopies = arg_int_value(cmd, metadatacopies_ARG, -1);
++	if (pp->pvmetadatacopies < 0)
++		pp->pvmetadatacopies = find_config_tree_int(cmd,
++						   "metadata/pvmetadatacopies",
++						   DEFAULT_PVMETADATACOPIES);
++
++	return 1;
++}
++
+--- LVM2/tools/toollib.h	2009/09/29 20:22:35	1.64
++++ LVM2/tools/toollib.h	2009/10/05 20:03:55	1.65
+@@ -107,5 +107,8 @@
+ int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg);
+ void lv_spawn_background_polling(struct cmd_context *cmd,
+ 				 struct logical_volume *lv);
++int pvcreate_validate_params(struct cmd_context *cmd,
++			     int argc, char **argv,
++			     struct pvcreate_params *pp);
+ 
+ #endif
 
 
