@@ -1,308 +1,282 @@
 From: Fabio M. Di Nitto <fabbione@fabbione.net>
-Date: Thu,  8 Oct 2009 14:49:16 +0200
-Subject: [PATCH 09/11] debian: libs cleanup
+Date: Thu,  8 Oct 2009 14:49:09 +0200
+Subject: [PATCH 02/11] debian: drop realtime
 In-Reply-To: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
 References: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
-Message-ID: <92cd1d679dfcdf03bc47ab18a5540b3b62550580.1255002311.git.fdinitto@redhat.com>
+Message-ID: <ed17d1525f4431ee900974ee84df19a351b005b5.1255002311.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+Message-ID: <20091008124909.BtD2MfrgFLeRyyheuPoM2nTYnj1XXl3FhJyL7uwrBr4@z>
 
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
 
-patch with several changes on how libs are found and used
-(selinux and readline)
-
-patch is not clean or ready for submission
+the realtime support is completely unused and just includes another library
+dependency
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 06759b6... ad871fd... M	configure.in
-:100644 100644 207c0e2... 2a14ba6... M	daemons/dmeventd/Makefile.in
-:100644 100644 4273eeb... f20ad5d... M	lib/misc/configure.h.in
-:100644 100644 6dd25ff... 191e2ae... M	libdm/Makefile.in
-:100644 100644 6d12920... 5464188... M	make.tmpl.in
-:100644 100644 5702f4f... 4f8be22... M	tools/Makefile.in
- configure.in                 |   57 +++++------------------------------------
- daemons/dmeventd/Makefile.in |    2 +-
- lib/misc/configure.h.in      |   14 +++-------
- libdm/Makefile.in            |    4 +-
- make.tmpl.in                 |    5 +--
- tools/Makefile.in            |   14 +++++-----
- 6 files changed, 23 insertions(+), 73 deletions(-)
+:100644 100644 b4e7f28... 45dc2c9... M	configure.in
+:100644 100644 2bd6fba... d4e24d4... M	lib/Makefile.in
+:100644 000000 62e1be8... 0000000... D	lib/misc/timestamp.c
+:100644 000000 50e2a85... 0000000... D	lib/misc/timestamp.h
+ configure.in         |   23 ---------
+ lib/Makefile.in      |    1 -
+ lib/misc/timestamp.c |  130 --------------------------------------------------
+ lib/misc/timestamp.h |   33 -------------
+ 4 files changed, 0 insertions(+), 187 deletions(-)
 
 diff --git a/configure.in b/configure.in
-index 06759b6..ad871fd 100644
+index b4e7f28..45dc2c9 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -34,7 +34,6 @@ case "$host_os" in
- 		CLDWHOLEARCHIVE="-Wl,-whole-archive"
- 		CLDNOWHOLEARCHIVE="-Wl,-no-whole-archive"
- 		LDDEPS="$LDDEPS .export.sym"
--		LDFLAGS="$LDFLAGS -Wl,--export-dynamic"
- 		LIB_SUFFIX=so
- 		DEVMAPPER=yes
+@@ -40,7 +40,6 @@ case "$host_os" in
  		ODIRECT=yes
-@@ -779,24 +778,6 @@ if [[ "x$exec_prefix" = xNONE -a "x$prefix" = xNONE ]];
- fi;
+ 		DM_IOCTLS=yes
+ 		SELINUX=yes
+-		REALTIME=yes
+ 		CLUSTER=internal
+ 		FSADM=yes
+ 		;;
+@@ -55,7 +54,6 @@ case "$host_os" in
+ 		ODIRECT=no
+ 		DM_IOCTLS=no
+ 		SELINUX=no
+-		REALTIME=no
+ 		CLUSTER=none
+ 		FSADM=no
+ 		;;
+@@ -316,13 +314,6 @@ AC_ARG_ENABLE([readline],
+ AC_MSG_RESULT($READLINE)
  
  ################################################################################
--dnl -- Check for termcap (Shamelessly copied from parted 1.4.17)
--if test x$READLINE != xno; then
--	AC_SEARCH_LIBS([tgetent], [tinfo ncurses curses termcap termlib],
--	  [tg_found=yes], [tg_found=no])
--	test x$READLINE:$tg_found = xyes:no &&
--	  AC_MSG_ERROR(
--termcap could not be found which is required for the
----enable-readline option (which is enabled by default).  Either disable readline
--support with --disable-readline or download and install termcap from:
--	ftp.gnu.org/gnu/termcap
--Note: if you are using precompiled packages you will also need the development
--  package as well (which may be called termcap-devel or something similar).
--Note: (n)curses also seems to work as a substitute for termcap.  This was
--  not found either - but you could try installing that as well.
--)
--fi
+-dnl -- Disable realtime clock support
+-AC_MSG_CHECKING(whether to enable realtime support)
+-AC_ARG_ENABLE(realtime, [  --disable-realtime      Disable realtime clock support],
+-REALTIME=$enableval)
+-AC_MSG_RESULT($REALTIME)
 -
 -################################################################################
- dnl -- Check for dlopen
- AC_CHECK_LIB(dl, dlopen, HAVE_LIBDL=yes, HAVE_LIBDL=no)
- 
-@@ -827,35 +808,9 @@ AC_MSG_RESULT($SELINUX)
- ################################################################################
- dnl -- Check for selinux
- if test x$SELINUX = xyes; then
--	AC_CHECK_LIB(sepol, sepol_check_context, HAVE_SEPOL=yes, HAVE_SEPOL=no)
--
--	if test x$HAVE_SEPOL = xyes; then
--		AC_DEFINE([HAVE_SEPOL], 1,
--		  [Define to 1 if sepol_check_context is available.])
--		SELINUX_LIBS="-lsepol $SELINUX_LIBS"
--	fi
--
--	AC_CHECK_LIB(selinux, is_selinux_enabled, HAVE_SELINUX=yes, HAVE_SELINUX=no)
--
--	if test x$HAVE_SELINUX = xyes; then
--		AC_DEFINE([HAVE_SELINUX], 1, [Define to 1 to include support for selinux.])
--		SELINUX_LIBS="-lselinux $SELINUX_LIBS"
--	else
--		AC_MSG_WARN(Disabling selinux)
--	fi
--	LIBS="$SELINUX_LIBS $LIBS"
--
--	# With --enable-static_link and selinux enabled, linking
--	# fails on at least Debian unstable due to unsatisfied references
--	# to pthread_mutex_lock and _unlock.  See if we need -lpthread.
--	if test "$STATIC_LINK-$HAVE_SELINUX" = yes-yes; then
--		lvm_saved_libs=$LIBS
--		LIBS="$LIBS -static"
--		AC_SEARCH_LIBS([pthread_mutex_lock], [pthread],
--		  [test "$ac_cv_search_pthread_mutex_lock" = "none required" ||
--				LIB_PTHREAD=-lpthread])
--		LIBS=$lvm_saved_libs
--	fi
-+	AC_DEFINE([HAVE_SELINUX], 1, [Define to 1 to include support for selinux.])
-+	LIBS_SELINUX="$(pkg-config --libs libselinux)"
-+	LIBS_SELINUX_STATIC="$(pkg-config --libs --static libselinux)"
+ dnl -- Init pkg-config with dummy invokation:
+ dnl -- this is required because PKG_CHECK_MODULES macro is expanded
+ dnl -- to initialize the pkg-config environment only at the first invokation,
+@@ -868,19 +859,6 @@ if test x$SELINUX = xyes; then
  fi
  
  ################################################################################
-@@ -866,7 +821,7 @@ AC_CHECK_HEADERS(getopt.h, AC_DEFINE([HAVE_GETOPTLONG], 1, [Define to 1 if getop
- dnl -- Check for readline (Shamelessly copied from parted 1.4.17)
- if test x$READLINE != xno; then
- 	rl_found=yes
--	AC_CHECK_LIB([readline], [readline], , [rl_found=no])
-+	AC_CHECK_LIB([readline], [readline], [LIBS_READLINE="-lreadline $LIBS_READLINE"], [rl_found=no])
- 	test x$READLINE:$rl_found = xyes:no &&
- 	  AC_MSG_ERROR(
- GNU Readline could not be found which is required for the
-@@ -1078,6 +1033,9 @@ AC_SUBST(INTL_PACKAGE)
- AC_SUBST(JOBS)
- AC_SUBST(LDDEPS)
- AC_SUBST(LIBS)
-+AC_SUBST(LIBS_READLINE)
-+AC_SUBST(LIBS_SELINUX)
-+AC_SUBST(LIBS_SELINUX_STATIC)
- AC_SUBST(LIB_SUFFIX)
- AC_SUBST(LOCALEDIR)
- AC_SUBST(LVM1)
-@@ -1105,7 +1063,6 @@ AC_SUBST(SNAPSHOTS)
- AC_SUBST(STATICDIR)
- AC_SUBST(STATIC_LINK)
- AC_SUBST(UDEV_RULES)
--AC_SUBST([LIB_PTHREAD])
- AC_SUBST(interface)
- AC_SUBST(kerneldir)
- AC_SUBST(missingkernel)
-diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
-index 207c0e2..2a14ba6 100644
---- a/daemons/dmeventd/Makefile.in
-+++ b/daemons/dmeventd/Makefile.in
-@@ -46,7 +46,7 @@ LIBS += -ldl -ldevmapper -lpthread
- 
- dmeventd: $(LIB_SHARED) $(VERSIONED_SHLIB) dmeventd.o
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ dmeventd.o \
--	-L. -ldevmapper-event $(LIBS) -rdynamic
-+	-L. -ldevmapper-event
- 
- .PHONY: install_dynamic install_static install_include \
- 	install_pkgconfig install_dmeventd
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 4273eeb..f20ad5d 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -120,9 +120,6 @@
- /* Define to 1 if you have the <libintl.h> header file. */
- #undef HAVE_LIBINTL_H
- 
--/* Define to 1 if you have the `readline' library (-lreadline). */
--#undef HAVE_LIBREADLINE
+-dnl -- Check for realtime clock support
+-if test x$REALTIME = xyes; then
+-	AC_CHECK_LIB(rt, clock_gettime, HAVE_REALTIME=yes, HAVE_REALTIME=no)
 -
- /* Define to 1 if you have the <limits.h> header file. */
- #undef HAVE_LIMITS_H
- 
-@@ -185,9 +182,6 @@
- /* Define to 1 if you have the <readline/readline.h> header file. */
- #undef HAVE_READLINE_READLINE_H
- 
--/* Define to 1 to include support for realtime clock. */
--#undef HAVE_REALTIME
+-	if test x$HAVE_REALTIME = xyes; then
+-		AC_DEFINE([HAVE_REALTIME], 1, [Define to 1 to include support for realtime clock.])
+-		LIBS="-lrt $LIBS"
+-	else
+-		AC_MSG_WARN(Disabling realtime clock)
+-	fi
+-fi
 -
- /* Define to 1 if you have the `rl_completion_matches' function. */
- #undef HAVE_RL_COMPLETION_MATCHES
+-################################################################################
+ dnl -- Check for getopt
+ AC_CHECK_HEADERS(getopt.h, AC_DEFINE([HAVE_GETOPTLONG], 1, [Define to 1 if getopt_long is available.]))
  
-@@ -206,9 +200,6 @@
- /* Define to 1 if you have the <selinux/selinux.h> header file. */
- #undef HAVE_SELINUX_SELINUX_H
- 
--/* Define to 1 if sepol_check_context is available. */
--#undef HAVE_SEPOL
+@@ -1098,7 +1076,6 @@ AC_SUBST(GROUP)
+ AC_SUBST(GULM_CFLAGS)
+ AC_SUBST(GULM_LIBS)
+ AC_SUBST(HAVE_LIBDL)
+-AC_SUBST(HAVE_REALTIME)
+ AC_SUBST(HAVE_SELINUX)
+ AC_SUBST(INTL)
+ AC_SUBST(INTL_PACKAGE)
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 2bd6fba..d4e24d4 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -82,7 +82,6 @@ SOURCES =\
+ 	misc/lvm-globals.c \
+ 	misc/lvm-string.c \
+ 	misc/lvm-wrappers.c \
+-	misc/timestamp.c \
+ 	misc/util.c \
+ 	mm/memlock.c \
+ 	report/report.c \
+diff --git a/lib/misc/timestamp.c b/lib/misc/timestamp.c
+deleted file mode 100644
+index 62e1be8..0000000
+--- a/lib/misc/timestamp.c
++++ /dev/null
+@@ -1,130 +0,0 @@
+-/*
+- * Copyright (C) 2006 Rackable Systems All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
 -
- /* Define to 1 if you have the `setlocale' function. */
- #undef HAVE_SETLOCALE
- 
-@@ -273,7 +264,7 @@
- /* Define to 1 if you have the `strtoul' function. */
- #undef HAVE_STRTOUL
- 
--/* Define to 1 if `st_rdev' is member of `struct stat'. */
-+/* Define to 1 if `struct stat' is a member of `st_rdev'. */
- #undef HAVE_STRUCT_STAT_ST_RDEV
- 
- /* Define to 1 if you have the <syslog.h> header file. */
-@@ -410,6 +401,9 @@
- /* Define to the one symbol short name of this package. */
- #undef PACKAGE_TARNAME
- 
-+/* Define to the home page for this package. */
-+#undef PACKAGE_URL
-+
- /* Define to the version of this package. */
- #undef PACKAGE_VERSION
- 
-diff --git a/libdm/Makefile.in b/libdm/Makefile.in
-index 6dd25ff..191e2ae 100644
---- a/libdm/Makefile.in
-+++ b/libdm/Makefile.in
-@@ -35,9 +35,7 @@ SOURCES =\
- 
- INCLUDES = -I$(srcdir)/$(interface) -I$(srcdir)
- 
--ifeq ("@STATIC_LINK@", "yes")
- LIB_STATIC = $(interface)/libdevmapper.a
--endif
- 
- ifeq ("@LIB_SUFFIX@","dylib")
-   LIB_SHARED = $(interface)/libdevmapper.dylib
-@@ -47,6 +45,8 @@ endif
- VERSIONED_SHLIB = libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
- LIB_VERSION = $(LIB_VERSION_DM)
- 
-+LDFLAGS += @LIBS_SELINUX@
-+
- DEFS += -DDM_DEVICE_UID=@DM_DEVICE_UID@ -DDM_DEVICE_GID=@DM_DEVICE_GID@ \
- 	-DDM_DEVICE_MODE=@DM_DEVICE_MODE@
- 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 6d12920..5464188 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -105,7 +105,6 @@ endif
- #DEFS += -DBOUNDS_CHECK
- 
- #CFLAGS += -pg
--#LDFLAGS += -pg
- 
- STRIP=
- #STRIP = -s
-@@ -209,13 +208,13 @@ $(TARGETS): $(OBJECTS)
- ifeq ("@LIB_SUFFIX@","so")
- $(LIB_SHARED): $(OBJECTS) $(LDDEPS)
- 	$(CC) -shared -Wl,-soname,$(notdir $@).$(LIB_VERSION) \
--	$(CFLAGS) $(CLDFLAGS) $(OBJECTS) $(LIBS) -o $@
-+	$(CFLAGS) $(LDFLAGS) $(CLDFLAGS) $(OBJECTS) -o $@
- endif
- 
- ifeq ("@LIB_SUFFIX@","dylib")
- $(LIB_SHARED): $(OBJECTS) $(LDDEPS)
- 	$(CC) -dynamiclib -dylib_current_version,$(LIB_VERSION) \
--	$(CFLAGS) $(CLDFLAGS) $(OBJECTS) $(LIBS) -o $@
-+	$(CFLAGS) $(LDFLAGS) $(CLDFLAGS) $(OBJECTS) -o $@
- endif
- 
- %.so: %.a
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 5702f4f..4f8be22 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -17,8 +17,6 @@ top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- VPATH = @srcdir@
- 
--LIB_PTHREAD = @LIB_PTHREAD@
+-/*
+- * Abstract out the time methods used so they can be adjusted later -
+- * the results of these routines should stay in-core.  This implementation
+- * requires librt.
+- */
 -
- SOURCES =\
- 	dumpconfig.c \
- 	formats.c \
-@@ -105,6 +103,9 @@ endif
- 
- LVMLIBS += -ldevmapper
- 
-+LDFLAGS_DMSETUP_STATIC = @LIBS_SELINUX_STATIC@
-+LDFLAGS_LVM = @LIBS_READLINE@
-+
- DEFS += -DLVM_SHARED_PATH=\"$(exec_prefix)/sbin/lvm\"
- 
- include ../make.tmpl
-@@ -113,22 +114,21 @@ device-mapper: $(TARGETS_DM)
- 
- dmsetup: dmsetup.o $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ dmsetup.o \
--	      -L$(top_builddir)/libdm -ldevmapper $(LIBS) $(LIB_PTHREAD)
-+	      -L$(top_builddir)/libdm -ldevmapper $(LIBS)
- 
- dmsetup.static: dmsetup.o $(interfacedir)/libdevmapper.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ dmsetup.o -static \
--	      -L$(interfacedir) -ldevmapper $(LIBS) \
--	      $(LIB_PTHREAD)
-+	      -L$(interfacedir) -ldevmapper $(LIBS) $(LDFLAGS_DMSETUP_STATIC)
- 
- all: device-mapper
- 
- lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) lvm.o \
--		$(LVMLIBS) $(LIBS) $(LIB_PTHREAD) -rdynamic
-+		$(LDFLAGS) $(LVMLIBS) $(LIBS) $(LDFLAGS_LVM) -rdynamic
- 
- lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a  $(interfacedir)/libdevmapper.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) lvm-static.o -static \
--		-L$(interfacedir) $(LVMLIBS) $(LIBS) $(LIB_PTHREAD) -rdynamic
-+		-L$(interfacedir) $(LVMLIBS) $(LIBS) -rdynamic
- 
- liblvm2cmd.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.o lvm2cmd.o
- 	cat $(top_builddir)/lib/liblvm-internal.a > $@
+-#include "lib.h"
+-#include <stdlib.h>
+-
+-#include "timestamp.h"
+-
+-/*
+- * The realtime section uses clock_gettime with the CLOCK_MONOTONIC
+- * parameter to prevent issues with time warps
+- */
+-#ifdef HAVE_REALTIME
+-
+-#include <time.h>
+-#include <bits/time.h>
+-
+-struct timestamp {
+-	struct timespec t;
+-};
+-
+-struct timestamp *get_timestamp(void)
+-{
+-	struct timestamp *ts = NULL;
+-
+-	if (!(ts = dm_malloc(sizeof(*ts))))
+-		return_NULL;
+-
+-	if (clock_gettime(CLOCK_MONOTONIC, &ts->t)) {
+-		log_sys_error("clock_gettime", "get_timestamp");
+-		return NULL;
+-	}
+-
+-	return ts;
+-}
+-
+-/* cmp_timestamp: Compare two timestamps
+- *
+- * Return: -1 if t1 is less than t2
+- *          0 if t1 is equal to t2
+- *          1 if t1 is greater than t2
+- */
+-int cmp_timestamp(struct timestamp *t1, struct timestamp *t2)
+-{
+-	if(t1->t.tv_sec < t2->t.tv_sec)
+-		return -1;
+-	if(t1->t.tv_sec > t2->t.tv_sec)
+-		return 1;
+-
+-	if(t1->t.tv_nsec < t2->t.tv_nsec)
+-		return -1;
+-	if(t1->t.tv_nsec > t2->t.tv_nsec)
+-		return 1;
+-
+-	return 0;
+-}
+-
+-#else /* ! HAVE_REALTIME */
+-
+-/*
+- * The !realtime section just uses gettimeofday and is therefore subject
+- * to ntp-type time warps - not sure if should allow that.
+- */
+-
+-#include <sys/time.h>
+-
+-struct timestamp {
+-	struct timeval t;
+-};
+-
+-struct timestamp *get_timestamp(void)
+-{
+-	struct timestamp *ts = NULL;
+-
+-	if (!(ts = dm_malloc(sizeof(*ts))))
+-		return_NULL;
+-
+-	if (gettimeofday(&ts->t, NULL)) {
+-		log_sys_error("gettimeofday", "get_timestamp");
+-		return NULL;
+-	}
+-
+-	return ts;
+-}
+-
+-/* cmp_timestamp: Compare two timestamps
+- *
+- * Return: -1 if t1 is less than t2
+- *          0 if t1 is equal to t2
+- *          1 if t1 is greater than t2
+- */
+-int cmp_timestamp(struct timestamp *t1, struct timestamp *t2)
+-{
+-	if(t1->t.tv_sec < t2->t.tv_sec)
+-		return -1;
+-	if(t1->t.tv_sec > t2->t.tv_sec)
+-		return 1;
+-
+-	if(t1->t.tv_usec < t2->t.tv_usec)
+-		return -1;
+-	if(t1->t.tv_usec > t2->t.tv_usec)
+-		return 1;
+-
+-	return 0;
+-}
+-
+-#endif /* HAVE_REALTIME */
+-
+-void destroy_timestamp(struct timestamp *t)
+-{
+-	if (t)
+-		dm_free(t);
+-}
+diff --git a/lib/misc/timestamp.h b/lib/misc/timestamp.h
+deleted file mode 100644
+index 50e2a85..0000000
+--- a/lib/misc/timestamp.h
++++ /dev/null
+@@ -1,33 +0,0 @@
+-/*
+- * Copyright (C) 2006 Rackable Systems All rights reserved.  
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
+-
+-#ifndef _LVM_TIMESTAMP_H
+-#define _LVM_TIMESTAMP_H
+-
+-struct timestamp;
+-
+-struct timestamp *get_timestamp(void);
+-
+-/* cmp_timestamp: Compare two timestamps
+- * 
+- * Return: -1 if t1 is less than t2
+- *  	    0 if t1 is equal to t2
+- *          1 if t1 is greater than t2
+- */
+-int cmp_timestamp(struct timestamp *t1, struct timestamp *t2);
+-
+-void destroy_timestamp(struct timestamp *t);
+-
+-#endif /* _LVM_TIMESTAMP_H */
+-
 -- 
 1.5.4.3
 
