@@ -1,34 +1,38 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu,  8 Oct 2009 13:54:53 +0200
-Subject: RFC - Debian patches
-Message-ID: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>
+Date: Thu,  8 Oct 2009 13:54:54 +0200
+Subject: [PATCH 01/11] debian: fix library search path in example.conf
+In-Reply-To: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>
+References: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>
+Message-ID: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi guys,
+this patch is debian specific and sets the library search path
+to /lib/lvm2 to avoid cluttering /lib
 
-I was asked to look into the patch set Debian carries around to see what
-we can merge upstream and what not, to try to reduce the delta between
-distributions and upstream.
+Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
+---
+:100644 100644 1067665... 46c4dba... M	doc/example.conf
+ doc/example.conf |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-This morning I had a very pleasent talk with Bastian Blank (Debian maintainer
-for lvm2) and this is the full patch queue rebased on latest CVS.
-
-Debian at this point is at 2.02.53 from released tarball.
-
-Bastian gave me explanations on all the patches.
-
-This patch set is neutral (it means I am not asking inclusion of any patch
-right away) but only review of ideas and possible bug fixes behind the patches.
-
-Once we settled on what patches could be included and what changes need
-to be done to merge them upstream, we will take appropriate steps, with
-repost and extra review, etc.
-
-Thanks
-Fabio
+diff --git a/doc/example.conf b/doc/example.conf
+index 1067665..46c4dba 100644
+--- a/doc/example.conf
++++ b/doc/example.conf
+@@ -312,7 +312,7 @@ global {
+     # Full pathnames can be given.
+ 
+     # Search this directory first for shared libraries.
+-    #   library_dir = "/lib"
++    #   library_dir = "/lib/lvm2"
+ 
+     # The external locking library to load if locking_type is set to 2.
+     #   locking_library = "liblvm2clusterlock.so"
+-- 
+1.5.4.3
 
 
