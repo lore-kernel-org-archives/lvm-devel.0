@@ -1,50 +1,31 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed,  7 Oct 2009 21:44:28 -0400
-Subject: [PATCH] Minor fixes to t-unknown-segment.sh.
-In-Reply-To: <87k4z79b9p.fsf_-_@twilight.int.mornfall.net>
-References: <87k4z79b9p.fsf_-_@twilight.int.mornfall.net>
-Message-ID: <1254966268-21710-1-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 08 Oct 2009 10:56:47 +0200
+Subject: [PATCH 03/13] Replicator: add lvm support
+In-Reply-To: <20091007150734.GD3054@agk-dp.fab.redhat.com>
+References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-2-git-send-email-zkabelac@redhat.com>
+	<1254751240-17431-3-git-send-email-zkabelac@redhat.com>
+	<20091007150734.GD3054@agk-dp.fab.redhat.com>
+Message-ID: <4ACDA94F.4080405@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Need to grep out "Generated" line or the test failed for me.
-Qualify vgcfgbackup to only backup the vg we've created.
+Dne 7.10.2009 17:07, Alasdair G Kergon napsal(a):
+> On Mon, Oct 05, 2009 at 04:00:30PM +0200, Zdenek Kabelac wrote:
+>>  lib/metadata/replicator.c        |  339 ++++++++++++++
+>>  lib/replicator/replicator.c      |  912 ++++++++++++++++++++++++++++++++++++++
+> 
+> Filenames need to be globally unique in this tree: one of those needs
+> renaming.
+> 
+> Alasdair
+> 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/t-unknown-segment.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+lib/metadata/replicator.c  ->  lib/metadata/replicator_manip.c ?
 
-diff --git a/test/t-unknown-segment.sh b/test/t-unknown-segment.sh
-index 30d6f6d..542257f 100644
---- a/test/t-unknown-segment.sh
-+++ b/test/t-unknown-segment.sh
-@@ -16,16 +16,16 @@ aux prepare_vg 4
- lvcreate -l 1 -n $lv1 $vg
- lvcreate -l 2 -m 1 -n $lv2 $vg
- 
--vgcfgbackup -f bak0
-+vgcfgbackup -f bak0 $vg
- sed -e 's,striped,unstriped,;s,mirror,unmirror,' -i.orig bak0
- vgcfgrestore -f bak0 $vg
- 
--vgcfgbackup -f bak1
-+vgcfgbackup -f bak1 $vg
- cat bak1
- sed -e 's,unstriped,striped,;s,unmirror,mirror,' -i.orig bak1
- vgcfgrestore -f bak1 $vg
--vgcfgbackup -f bak2
-+vgcfgbackup -f bak2 $vg
- 
--egrep -v 'description|seqno|creation_time' < bak0.orig > a
--egrep -v 'description|seqno|creation_time' < bak2 > b
-+egrep -v 'description|seqno|creation_time|Generated' < bak0.orig > a
-+egrep -v 'description|seqno|creation_time|Generated' < bak2 > b
- diff -u a b
--- 
-1.6.0.6
+Zdenek
 
 
