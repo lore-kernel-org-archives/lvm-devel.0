@@ -1,9 +1,9 @@
 From: Fabio M. Di Nitto <fabbione@fabbione.net>
-Date: Thu,  8 Oct 2009 14:49:12 +0200
-Subject: [PATCH 05/11] debian: keep libdm-abi consistent
+Date: Thu,  8 Oct 2009 14:49:14 +0200
+Subject: [PATCH 07/11] debian: workaround for broken kernel headers
 In-Reply-To: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
 References: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
-Message-ID: <58b1e4d3fbc50afac900c970b6d1fa6819391946.1255002311.git.fdinitto@redhat.com>
+Message-ID: <5afd58961d2c413baaa3d970daa59999c0cc3daf.1255002311.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,71 +12,63 @@ Content-Transfer-Encoding: 7bit
 
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
 
-don't change the ABI of libdm on selinux enable, just make the selinux
-function a NOP
-
-Also noted by Alasdair that some other feature set affects the libdm ABI.
+this patch might be debian specific and needs more investigation.
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 e412cff... 6e4f91a... M	lib/activate/fs.c
-:100644 100644 175d8d1... 248d3ac... M	libdm/libdm-common.c
- lib/activate/fs.c    |    2 --
- libdm/libdm-common.c |    6 ++----
- 2 files changed, 2 insertions(+), 6 deletions(-)
+:100644 100644 5ba63ce... a8edf55... M	libdm/ioctl/libdm-compat.h
+:100644 100644 5fcda74... ec990d7... M	libdm/misc/kdev_t.h
+ libdm/ioctl/libdm-compat.h |    5 +++--
+ libdm/misc/kdev_t.h        |    4 ++++
+ 2 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/fs.c b/lib/activate/fs.c
-index e412cff..6e4f91a 100644
---- a/lib/activate/fs.c
-+++ b/lib/activate/fs.c
-@@ -201,10 +201,8 @@ static int _mk_link(const char *dev_dir, const char *vg_name,
- 		return 0;
- 	}
+diff --git a/libdm/ioctl/libdm-compat.h b/libdm/ioctl/libdm-compat.h
+index 5ba63ce..a8edf55 100644
+--- a/libdm/ioctl/libdm-compat.h
++++ b/libdm/ioctl/libdm-compat.h
+@@ -19,6 +19,7 @@
+ #include "kdev_t.h"
+ #include "dm-ioctl.h"
+ #include <inttypes.h>
++#include <linux/types.h>
+ #include <sys/ioctl.h>
  
--#ifdef HAVE_SELINUX
- 	if (!dm_set_selinux_context(lv_path, S_IFLNK))
- 		return_0;
--#endif
+ struct dm_task;
+@@ -40,7 +41,7 @@ struct dm_ioctl_v1 {
+ 	int32_t open_count;	/* out */
+ 	uint32_t flags;		/* in/out */
  
- 	return 1;
- }
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 175d8d1..248d3ac 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -373,9 +373,9 @@ int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
- 	return 1;
- }
+-	__kernel_dev_t dev;	/* in/out */
++	devmapper_kernel_dev_t dev;	/* in/out */
  
--#ifdef HAVE_SELINUX
- int dm_set_selinux_context(const char *path, mode_t mode)
- {
-+#ifdef HAVE_SELINUX
- 	security_context_t scontext;
+ 	char name[DM_NAME_LEN];	/* device name */
+ 	char uuid[DM_UUID_LEN];	/* unique identifier for
+@@ -60,7 +61,7 @@ struct dm_target_spec_v1 {
+ struct dm_target_deps_v1 {
+ 	uint32_t count;
  
- 	if (is_selinux_enabled() <= 0)
-@@ -396,9 +396,9 @@ int dm_set_selinux_context(const char *path, mode_t mode)
- 	}
+-	__kernel_dev_t dev[0];	/* out */
++	devmapper_kernel_dev_t dev[0];	/* out */
+ };
  
- 	freecon(scontext);
-+#endif
- 	return 1;
- }
--#endif
+ enum {
+diff --git a/libdm/misc/kdev_t.h b/libdm/misc/kdev_t.h
+index 5fcda74..ec990d7 100644
+--- a/libdm/misc/kdev_t.h
++++ b/libdm/misc/kdev_t.h
+@@ -15,8 +15,12 @@
+ #ifndef _LIBDM_KDEV_H
+ #define _LIBDM_KDEV_H
  
- static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
- 			 uid_t uid, gid_t gid, mode_t mode)
-@@ -445,10 +445,8 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
++#include <linux/types.h>
++
+ #define MAJOR(dev)      ((dev & 0xfff00) >> 8)
+ #define MINOR(dev)      ((dev & 0xff) | ((dev >> 12) & 0xfff00))
+ #define MKDEV(ma,mi)    ((mi & 0xff) | (ma << 8) | ((mi & ~0xff) << 12))
  
- 	log_debug("Created %s", path);
- 
--#ifdef HAVE_SELINUX
- 	if (!dm_set_selinux_context(path, S_IFBLK))
- 		return 0;
--#endif
- 
- 	return 1;
- }
++typedef __u32 devmapper_kernel_dev_t;
++
+ #endif
 -- 
 1.5.4.3
 
