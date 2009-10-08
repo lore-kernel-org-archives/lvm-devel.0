@@ -1,21 +1,18 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 9 Oct 2009 00:35:22 +0100
-Subject: [PATCH 05/11] debian: keep libdm-abi consistent
-In-Reply-To: <58b1e4d3fbc50afac900c970b6d1fa6819391946.1255002311.git.fdinitto@redhat.com>
+Date: Fri, 9 Oct 2009 00:39:58 +0100
+Subject: [PATCH 06/11] debian/ubuntu: make the device node creation more atomic
+In-Reply-To: <e9a3bd65858c5f5ba4e839c7402a5cbd22b475df.1255002311.git.fdinitto@redhat.com>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<58b1e4d3fbc50afac900c970b6d1fa6819391946.1255002311.git.fdinitto@redhat.com>
-Message-ID: <20091008233522.GT3054@agk-dp.fab.redhat.com>
+	<e9a3bd65858c5f5ba4e839c7402a5cbd22b475df.1255002311.git.fdinitto@redhat.com>
+Message-ID: <20091008233958.GU3054@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Oct 08, 2009 at 02:49:12PM +0200, Fabio M. Di Nitto wrote:
-> don't change the ABI of libdm on selinux enable, just make the selinux
-> function a NOP
- 
-Clearly this needs fixing upstream.
+This one needs a fresh review.  (I think I bounced it for further changes
+when it was originally submitted, but don't recall seeing a revised version.)
 
 Alasdair
 
