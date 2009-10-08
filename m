@@ -1,38 +1,48 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 08 Oct 2009 16:14:34 -0500
-Subject: [PATCH 0 of 10] LVM: Mirrored log support
-Message-ID: <1255036474.12319.16.camel@hydrogen.msp.redhat.com>
+Date: Thu, 8 Oct 2009 16:18:25 -0500
+Subject: [PATCH 1 of 10] LVM: mirrored log remove prevention checks
+Message-ID: <200910082118.n98LIPqF014214@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I spent the last few days looking over the mirror allocation code.  I
-wanted to understand why 'log_count' was being treated generically in
-most places... as if the idea of mirrored logs were already thought of.
-I mostly discovered that it was possible to push what looked like
-incomplete code towards completion.  The following patches represent
-where I would like the mirrored log support to start from.
+Patch name: lvm-mirrored-log-remove-prevention-checks.patch
 
-These patches are a replacement to the proposed patches - a fresh start.
-They address a couple problems that I saw with the old patches: 1)
-Allocation policies are respected and behave the same as today for other
-log types.
-2) The on-disk layout of the previous version - when given only two
-disks to allocate from - would put the log on the front of one device
-and the back of another.  This virtually ensures a performance hit.
-These patches put the logs in the same place WRT the images.
-3) The new patches reduce parameter bloat.  I think the previous patches
-required the extra parameters because they were using functions deep in
-the code that were from higher levels... adding parameters and
-"spaghettifying" the code.
+In preparation for redundant (mirrored) mirror logs, remove the
+checks that prevent this sort of processing.
 
-These patches should be considered a starting point.  While 'lvcreate'
-works, 'lvconvert' does not handle all transitions.  In fact,
-'lvconvert' will only handle 'core' -> 'disk/redundant' and
-'disk/redundant' -> 'core'.  It will not handle 'disk' <-> 'redundant'.
+RFC: Jonathan Brassow <jbrassow@redhat.com>
 
- brassow
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -1301,11 +1301,6 @@ static struct logical_volume *_set_up_mi
+ 
+ 	init_mirror_in_sync(in_sync);
+ 
+-	if (log_count != 1) {
+-		log_error("log_count != 1 is not supported.");
+-		return NULL;
+-	}
+-
+ 	/* Mirror log name is lv_name + suffix, determined as the following:
+ 	 *   1. suffix is:
+ 	 *        o "_mlog" for the original mirror LV.
+@@ -1368,12 +1363,6 @@ int add_mirror_log(struct cmd_context *c
+ 	struct lvinfo info;
+ 	int r = 0;
+ 
+-	/* Unimplemented features */
+-	if (log_count > 1) {
+-		log_error("log_count > 1 is not supported");
+-		return 0;
+-	}
+-
+ 	if (dm_list_size(&lv->segments) != 1) {
+ 		log_error("Multiple-segment mirror is not supported");
+ 		return 0;
 
 
