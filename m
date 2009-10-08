@@ -1,48 +1,34 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 08 Oct 2009 13:02:05 +0200
-Subject: [PATCH 01/13] Replicator: export out_ function for modules
-In-Reply-To: <20091007150503.GC3054@agk-dp.fab.redhat.com>
-References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
-	<20091007150503.GC3054@agk-dp.fab.redhat.com>
-Message-ID: <4ACDC6AD.2090207@redhat.com>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Thu,  8 Oct 2009 13:54:53 +0200
+Subject: RFC - Debian patches
+Message-ID: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 7.10.2009 17:05, Alasdair G Kergon napsal(a):
-> On Mon, Oct 05, 2009 at 04:00:28PM +0200, Zdenek Kabelac wrote:
->> +/* insert new line */
->> +int out_newline(struct formatter *f)
->> +{
->> +	outnl(f);
->> +	return 0;
-> 
-> Should return 1 here, and the caller has to check that.
+Hi guys,
 
-true
+I was asked to look into the patch set Debian carries around to see what
+we can merge upstream and what not, to try to reduce the delta between
+distributions and upstream.
 
-> Instead, I think the outnl macro should be changed to work like the outf one.
-> (make the 'f->nl' part internal to an export.c function instead of the header file)
-> The idea was that the callers would be using this so frequently, it was
-> clearer just writing 'outf(...)'  than 'if (!out_text(...)) return_0;' everywhere.
-> 
-> Alasdair
-> 
+This morning I had a very pleasent talk with Bastian Blank (Debian maintainer
+for lvm2) and this is the full patch queue rebased on latest CVS.
 
-So how about this:
+Debian at this point is at 2.02.53 from released tarball.
 
-+/* insert new line */
-+int out_newline(struct formatter *f)
-+{
-+	return f->nl(f);
-+}
-+
+Bastian gave me explanations on all the patches.
 
-I think this will be the easiest way - nl() is virtual function thus it can't
-be easily 'macro-ised'.
+This patch set is neutral (it means I am not asking inclusion of any patch
+right away) but only review of ideas and possible bug fixes behind the patches.
 
-Zdenek
+Once we settled on what patches could be included and what changes need
+to be done to merge them upstream, we will take appropriate steps, with
+repost and extra review, etc.
+
+Thanks
+Fabio
 
 
