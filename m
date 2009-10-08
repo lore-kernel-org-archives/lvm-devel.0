@@ -1,40 +1,43 @@
 From: Fabio M. Di Nitto <fabbione@fabbione.net>
-Date: Thu,  8 Oct 2009 14:49:08 +0200
-Subject: [PATCH 01/11] debian: fix library search path in example.conf
+Date: Thu,  8 Oct 2009 14:49:10 +0200
+Subject: [PATCH 03/11] debian: force modprobe
 In-Reply-To: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
 References: <1255006158-8053-1-git-send-email-fabbione@fabbione.net>
-Message-ID: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
+Message-ID: <eaddb1c0b80c3d362cef5ced6bd556dee82b9e46.1255002311.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
-Message-ID: <20091008124908.bdv8TpWuxGozxtad0AOzO49o6DNQ6MqS7VXzWhAJIGo@z>
 
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
 
-this patch is debian specific and sets the library search path
-to /lib/lvm2 to avoid cluttering /lib
+well, a linux system without modprobe can't use any modules.
+so this just assumes that it is available in a real system
 
 Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
-:100644 100644 1067665... 46c4dba... M	doc/example.conf
- doc/example.conf |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+:100644 100644 45dc2c9... 06759b6... M	configure.in
+ configure.in |    6 +-----
+ 1 files changed, 1 insertions(+), 5 deletions(-)
 
-diff --git a/doc/example.conf b/doc/example.conf
-index 1067665..46c4dba 100644
---- a/doc/example.conf
-+++ b/doc/example.conf
-@@ -312,7 +312,7 @@ global {
-     # Full pathnames can be given.
+diff --git a/configure.in b/configure.in
+index 45dc2c9..06759b6 100644
+--- a/configure.in
++++ b/configure.in
+@@ -974,11 +974,7 @@ if test x$UDEV_SYNC = xyes; then
+ fi
  
-     # Search this directory first for shared libraries.
--    #   library_dir = "/lib"
-+    #   library_dir = "/lib/lvm2"
+ ################################################################################
+-AC_PATH_PROG(MODPROBE_CMD, modprobe)
+-
+-if test x$MODPROBE_CMD != x; then
+-	AC_DEFINE_UNQUOTED([MODPROBE_CMD], ["$MODPROBE_CMD"], [The path to 'modprobe', if available.])
+-fi
++AC_DEFINE_UNQUOTED([MODPROBE_CMD], ["/sbin/modprobe"], [The path to 'modprobe', if available.])
  
-     # The external locking library to load if locking_type is set to 2.
-     #   locking_library = "liblvm2clusterlock.so"
+ ################################################################################
+ dnl -- dmeventd pidfile and executable path
 -- 
 1.5.4.3
 
