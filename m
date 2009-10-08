@@ -1,66 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon,  5 Oct 2009 16:00:28 +0200
-Subject: [PATCH 01/13] Replicator: export out_ function for modules
-Message-ID: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Thu,  8 Oct 2009 13:58:22 +0200
+Subject: [PATCH 01/11] debian: fix library search path in example.conf
+In-Reply-To: <1255003112-6427-1-git-send-email-fdinitto@redhat.com>
+References: <1255003112-6427-1-git-send-email-fdinitto@redhat.com>
+Message-ID: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+Message-ID: <20091008115822.cTzNn_gb71s6Zz2XhCh7Xqla5l5OmuREKnyEhQePjlA@z>
 
-Exporting functions out_inc_indent(), out_dec_indent(), out_newline()
-for creating indented metadata lines.
+this patch is debian specific and sets the library search path
+to /lib/lvm2 to avoid cluttering /lib
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
 ---
- lib/format_text/export.c      |   19 +++++++++++++++++++
- lib/format_text/text_export.h |    4 ++++
- 2 files changed, 23 insertions(+), 0 deletions(-)
+:100644 100644 1067665... 46c4dba... M	doc/example.conf
+ doc/example.conf |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 482eea9..49cf785 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -235,6 +235,25 @@ static int _sectors_to_units(uint64_t sectors, char *buffer, size_t s)
- 	return dm_snprintf(buffer, s, "# %g %s", d, _units[i]) > 0;
- }
+diff --git a/doc/example.conf b/doc/example.conf
+index 1067665..46c4dba 100644
+--- a/doc/example.conf
++++ b/doc/example.conf
+@@ -312,7 +312,7 @@ global {
+     # Full pathnames can be given.
  
-+/* increment indention level */
-+void out_inc_indent(struct formatter *f)
-+{
-+	_inc_indent(f);
-+}
-+
-+/* decrement indention level */
-+void out_dec_indent(struct formatter *f)
-+{
-+	_dec_indent(f);
-+}
-+
-+/* insert new line */
-+int out_newline(struct formatter *f)
-+{
-+	outnl(f);
-+	return 0;
-+}
-+
- /*
-  * Appends a comment giving a size in more easily
-  * readable form (eg, 4M instead of 8096).
-diff --git a/lib/format_text/text_export.h b/lib/format_text/text_export.h
-index 2f2b531..12a8691 100644
---- a/lib/format_text/text_export.h
-+++ b/lib/format_text/text_export.h
-@@ -34,4 +34,8 @@ int out_text(struct formatter *f, const char *fmt, ...)
- int out_areas(struct formatter *f, const struct lv_segment *seg,
- 	      const char *type);
+     # Search this directory first for shared libraries.
+-    #   library_dir = "/lib"
++    #   library_dir = "/lib/lvm2"
  
-+void out_inc_indent(struct formatter *f);
-+void out_dec_indent(struct formatter *f);
-+int out_newline(struct formatter *f);
-+
- #endif
+     # The external locking library to load if locking_type is set to 2.
+     #   locking_library = "liblvm2clusterlock.so"
 -- 
-1.6.5.rc2
+1.5.4.3
 
 
