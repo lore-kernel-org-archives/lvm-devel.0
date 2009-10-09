@@ -1,23 +1,36 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 9 Oct 2009 13:59:52 +0100
-Subject: [PATCH 01/13] Replicator: export out_ function for modules
-In-Reply-To: <4ACF30EE.9000901@redhat.com>
-References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
-	<20091007150503.GC3054@agk-dp.fab.redhat.com>
-	<4ACDC6AD.2090207@redhat.com> <4ACF30EE.9000901@redhat.com>
-Message-ID: <20091009125952.GD3054@agk-dp.fab.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Oct 2009 15:55:33 -0000
+Subject: LVM2 make.tmpl.in
+Message-ID: <20091009155533.1886.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Oct 09, 2009 at 02:47:42PM +0200, Zdenek Kabelac wrote:
-> -#define outnl(f) do {if (!f->nl(f)) return_0;} while (0)
-> +#define outnl(f) do {if (!out_newline(f)) return_0;} while (0)
- 
-That was what I was thinking, yes.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-10-09 15:55:32
 
-Alasdair
+Modified files:
+	.              : make.tmpl.in 
+
+Log message:
+	linking parms missing from o->so conversion.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+
+--- LVM2/make.tmpl.in	2009/10/02 19:10:32	1.72
++++ LVM2/make.tmpl.in	2009/10/09 15:55:31	1.73
+@@ -204,7 +204,7 @@
+ 		$(DEFS) $(CFLAGS) $< > $@
+ 
+ %.so: %.o
+-	$(CC) -c $(INCLUDES) $(DEFS) $(CFLAGS) $< -o $@
++	$(CC) -c $(INCLUDES) $(DEFS) $(CFLAGS) $(CLDFLAGS) $< $(LIBS) -o $@
+ 
+ ifeq ("@LIB_SUFFIX@","so")
+ $(LIB_SHARED): $(OBJECTS) $(LDDEPS)
 
 
