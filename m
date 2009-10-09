@@ -1,24 +1,48 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 9 Oct 2009 17:29:14 +0100
-Subject: [PATCH 11/11] debian: drop concept of OWNER/GROUP and let install do it's job for permissions
-In-Reply-To: <20091009150148.GC6904@wavehammer.waldi.eu.org>
-References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<f3faad08f59b098ed7ae0019db660d0e15797cbe.1255002311.git.fdinitto@redhat.com>
-	<20091009000134.GY3054@agk-dp.fab.redhat.com>
-	<20091009150148.GC6904@wavehammer.waldi.eu.org>
-Message-ID: <20091009162914.GH3054@agk-dp.fab.redhat.com>
+From: malahal@us.ibm.com <malahal@us.ibm.com>
+Date: Fri, 9 Oct 2009 10:56:47 -0700
+Subject: Re: [PATCH 0 of 10] LVM: Mirrored log support
+In-Reply-To: <1255036474.12319.16.camel@hydrogen.msp.redhat.com>
+References: <1255036474.12319.16.camel@hydrogen.msp.redhat.com>
+Message-ID: <20091009175647.GA7737@us.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Oct 09, 2009 at 05:01:48PM +0200, Bastian Blank wrote:
-> why is it used by
-> default? 
+Jonathan Brassow [jbrassow at redhat.com] wrote:
+> These patches are a replacement to the proposed patches - a fresh start.
+> They address a couple problems that I saw with the old patches: 1)
+> Allocation policies are respected and behave the same as today for other
+> log types.
+> 2) The on-disk layout of the previous version - when given only two
+> disks to allocate from - would put the log on the front of one device
+> and the back of another.  This virtually ensures a performance hit.
+> These patches put the logs in the same place WRT the images.
+> 3) The new patches reduce parameter bloat.  I think the previous patches
+> required the extra parameters because they were using functions deep in
+> the code that were from higher levels... adding parameters and
+> "spaghettifying" the code.
 
-I'm open to changing that default.
+Thank you, Jonathan. I tested creating mirrored volumes with the new
+patchset and was able to activate/deactivate with the old patchset and
+vice-versa. I was able to create mirrored volumes with new patchset and
+was able to activate/deactivate with the virgin 2.02.53 LVM code.
+ 
+> These patches should be considered a starting point.  While 'lvcreate'
+> works, 'lvconvert' does not handle all transitions.  In fact,
+> 'lvconvert' will only handle 'core' -> 'disk/redundant' and
+> 'disk/redundant' -> 'core'.  It will not handle 'disk' <-> 'redundant'.
 
-Alasdair
+I haven't tried these, will try next. Initially, I thought anyone
+wishing to go from 'disk' to 'redundant' can go to 'disk -> core' and
+then 'core -> redundant'. The only problem is they may lose the 'sync'
+status and the second conversion may sync the mirror data. We can either
+choose to support 'disk <-> redundant' OR supply '--nosync' option to
+lvconvert. What do you think?
+
+Thank you again for the patchset.
+
+--Malahal.
 
 
