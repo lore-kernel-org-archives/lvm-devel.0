@@ -1,24 +1,44 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 9 Oct 2009 01:02:27 +0100
-Subject: [PATCH 09/11] debian: libs cleanup
-In-Reply-To: <92cd1d679dfcdf03bc47ab18a5540b3b62550580.1255002311.git.fdinitto@redhat.com>
-References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<92cd1d679dfcdf03bc47ab18a5540b3b62550580.1255002311.git.fdinitto@redhat.com>
-Message-ID: <20091009000227.GZ3054@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 09 Oct 2009 12:26:39 +0200
+Subject: [PATCH] Never activate hidden volumes directly in vgchange.
+Message-ID: <4ACF0FDF.7080705@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Oct 08, 2009 at 02:49:16PM +0200, Fabio M. Di Nitto wrote:
-> patch with several changes on how libs are found and used
-> (selinux and readline)
-> patch is not clean or ready for submission
- 
-Yes, this one needs picking through carefully to see what needs changing
-and then to decide how.
+Never activate hidden volumes directly in vgchange.
 
-Alasdair
+All hidden (not visible) volumes should be activated through
+other visible volumes.
+
+(There are already exceptions like snapshot, mirror log and image,
+which should be cleaned one day...)
+
+This solves problems for future types of hidden volumes,
+which can have special meaning and must not be activated implicitly
+(e.g. key store volume).
+
+Signed-off-by: Milan Broz<mbroz@redhat.com>
+---
+  tools/vgchange.c |    3 +++
+  1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 07d5262..9445263 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -61,6 +61,9 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+  	dm_list_iterate_items(lvl,&vg->lvs) {
+  		lv = lvl->lv;
+
++		if (!lv_is_visible(lv))
++			continue;
++
+  		/* Only request activation of snapshot origin devices */
+  		if ((lv->status&  SNAPSHOT) || lv_is_cow(lv))
+  			continue;
+
 
 
