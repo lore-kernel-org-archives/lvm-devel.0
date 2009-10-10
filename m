@@ -1,49 +1,49 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 9 Oct 2009 16:17:46 -0400
-Subject: [PATCH] use snapshot metadata usage to determine if snapshot is empty
-Message-ID: <20091009201745.GA26233@redhat.com>
+From: Bastian Blank <bastian@waldi.eu.org>
+Date: Sat, 10 Oct 2009 11:16:54 +0200
+Subject: Usage of sysV semaphores
+Message-ID: <20091010091654.GA26029@wavehammer.waldi.eu.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Hi
 
-Future dm-snapshot will append metadata sectors used to a snapshot's
-status.  This patch allows LVM2 to accurately determine if the snapshot
-store is empty.  Knowing when a snapshot store is empty is important in
-the context of snapshot-merge (means merge is complete).
+Yesterday I tried to understand the udev sync code and played with it.
+I'm not impressed as it broke rather spectacular.
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index d5bac31..6c61cf0 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -95,15 +95,17 @@ static int _snap_target_percent(void **target_state __attribute((unused)),
- 				char *params, uint64_t *total_numerator,
- 				uint64_t *total_denominator)
- {
--	uint64_t numerator, denominator;
-+	uint64_t total_sectors, sectors_allocated, metadata_sectors = 0;
-+	int r;
- 
--	if (sscanf(params, "%" PRIu64 "/%" PRIu64,
--		   &numerator, &denominator) == 2) {
--		*total_numerator += numerator;
--		*total_denominator += denominator;
--		if (!numerator)
-+	r = sscanf(params, "%" PRIu64 "/%" PRIu64 " %" PRIu64, 
-+		   &sectors_allocated, &total_sectors, &metadata_sectors);
-+	if (r == 2 || r == 3) {
-+		*total_numerator += sectors_allocated;
-+		*total_denominator += total_sectors;
-+		if (sectors_allocated == metadata_sectors)
- 			*percent_range = PERCENT_0;
--		else if (numerator == denominator)
-+		else if (sectors_allocated == total_sectors)
- 			*percent_range = PERCENT_100;
- 		else
- 			*percent_range = PERCENT_0_TO_100;
+Okay, lets start.
+
+It uses a 32 bit value to synchronize itself. This value needs to make
+two things possible: find our own values and distiguish between them.
+- Find our own values
+  This is done by a 16 bit magic, so a truly random value have a 1/2**16
+  probability to reach the dm namespace. This is not good but okay.
+- Distiguish between them
+  Because of the birthday paradox the probability of conflicting values
+  becomes 0.5 with only 2**8 concurent events. Peter spoke about
+  hundreds or even thousands of possible flying events, so this is
+  relevant and will produce busy looping to find a free one.
+
+SysV semaphore operations are not interruptible. So if something goes
+wrong, and according to Murphy it will, the user is left with a process
+that can only be killed by SIGKILL and is then not able to clean up
+after itself. I'm not sure why, but this was one of the first things
+that happened to me during testing.
+
+SysV semaphores are a restricted ressource because they are not cleaned
+up upon process exit. So random devmapper usage can just fail with a
+message about a, from the user view, completely unrelated ressource.
+
+This problems are bad from the user perspective, because he gets
+non-responding or even unkillable processed. If he was able to kill
+them, they will leave global ressources behind.
+
+Bastian
+
+-- 
+Killing is wrong.
+		-- Losira, "That Which Survives", stardate unknown
 
 
