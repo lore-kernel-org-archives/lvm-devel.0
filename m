@@ -1,49 +1,40 @@
 From: Bastian Blank <bastian@waldi.eu.org>
-Date: Sat, 10 Oct 2009 11:16:54 +0200
-Subject: Usage of sysV semaphores
-Message-ID: <20091010091654.GA26029@wavehammer.waldi.eu.org>
+Date: Sat, 10 Oct 2009 11:21:04 +0200
+Subject: [PATCH 02/11] debian: drop realtime
+In-Reply-To: <20091009162448.GG3054@agk-dp.fab.redhat.com>
+References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
+	<ed17d1525f4431ee900974ee84df19a351b005b5.1255002311.git.fdinitto@redhat.com>
+	<20091008232825.GQ3054@agk-dp.fab.redhat.com>
+	<20091009150311.GE6904@wavehammer.waldi.eu.org>
+	<20091009162448.GG3054@agk-dp.fab.redhat.com>
+Message-ID: <20091010092104.GB26029@wavehammer.waldi.eu.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+On Fri, Oct 09, 2009 at 05:24:48PM +0100, Alasdair G Kergon wrote:
+> On Fri, Oct 09, 2009 at 05:03:11PM +0200, Bastian Blank wrote:
+> > The code is not used. Why is it there?
+> This is an upstream development tree and instead of having multiple
+> branches, we keep the code in one place but exclude or disable code that
+> is not used.
 
-Yesterday I tried to understand the udev sync code and played with it.
-I'm not impressed as it broke rather spectacular.
+The code
+* is enabled by default,
+* is unused in the published code since a long time and
+* is not marked in any way.
+=> Can be removed.
 
-Okay, lets start.
+>               The code that needed to use that particular feature has
+> not been finished.
 
-It uses a 32 bit value to synchronize itself. This value needs to make
-two things possible: find our own values and distiguish between them.
-- Find our own values
-  This is done by a 16 bit magic, so a truly random value have a 1/2**16
-  probability to reach the dm namespace. This is not good but okay.
-- Distiguish between them
-  Because of the birthday paradox the probability of conflicting values
-  becomes 0.5 with only 2**8 concurent events. Peter spoke about
-  hundreds or even thousands of possible flying events, so this is
-  relevant and will produce busy looping to find a free one.
-
-SysV semaphore operations are not interruptible. So if something goes
-wrong, and according to Murphy it will, the user is left with a process
-that can only be killed by SIGKILL and is then not able to clean up
-after itself. I'm not sure why, but this was one of the first things
-that happened to me during testing.
-
-SysV semaphores are a restricted ressource because they are not cleaned
-up upon process exit. So random devmapper usage can just fail with a
-message about a, from the user view, completely unrelated ressource.
-
-This problems are bad from the user perspective, because he gets
-non-responding or even unkillable processed. If he was able to kill
-them, they will leave global ressources behind.
+Then it can be handled as part of that particular feature.
 
 Bastian
 
 -- 
-Killing is wrong.
-		-- Losira, "That Which Survives", stardate unknown
+Well, Jim, I'm not much of an actor either.
 
 
