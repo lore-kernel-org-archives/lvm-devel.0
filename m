@@ -1,29 +1,25 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 12 Oct 2009 06:07:30 +0200
-Subject: [PATCH 05/11] debian: keep libdm-abi consistent
-In-Reply-To: <20091008233522.GT3054@agk-dp.fab.redhat.com>
+Date: Mon, 12 Oct 2009 08:11:11 +0200
+Subject: [PATCH 06/11] debian/ubuntu: make the device node creation more atomic
+In-Reply-To: <20091008233958.GU3054@agk-dp.fab.redhat.com>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<58b1e4d3fbc50afac900c970b6d1fa6819391946.1255002311.git.fdinitto@redhat.com>
-	<20091008233522.GT3054@agk-dp.fab.redhat.com>
-Message-ID: <1255320450.10932.19.camel@cerberus.int.fabbione.net>
+	<e9a3bd65858c5f5ba4e839c7402a5cbd22b475df.1255002311.git.fdinitto@redhat.com>
+	<20091008233958.GU3054@agk-dp.fab.redhat.com>
+Message-ID: <1255327871.10932.21.camel@cerberus.int.fabbione.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 2009-10-09 at 00:35 +0100, Alasdair G Kergon wrote:
-> On Thu, Oct 08, 2009 at 02:49:12PM +0200, Fabio M. Di Nitto wrote:
-> > don't change the ABI of libdm on selinux enable, just make the selinux
-> > function a NOP
->  
-> Clearly this needs fixing upstream.
+On Fri, 2009-10-09 at 00:39 +0100, Alasdair G Kergon wrote:
+> This one needs a fresh review.  (I think I bounced it for further changes
+> when it was originally submitted, but don't recall seeing a revised version.)
 
-I have merged this one in CVS.
+Do you have a reference to the original submission? I can't find it on
+either lvm-devel or linux-lvm mailing lists.
 
-It appears to be the only bit missing from libdm to retain ABI
-consistency.
-
+Thanks
 Fabio
 
 
