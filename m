@@ -1,40 +1,33 @@
-From: Bastian Blank <bastian@waldi.eu.org>
-Date: Mon, 12 Oct 2009 12:54:29 +0200
-Subject: [PATCH 11/11] debian: drop concept of OWNER/GROUP and let install do it's job for permissions
-In-Reply-To: <20091012101457.GM19397@agk-dp.fab.redhat.com>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Mon, 12 Oct 2009 13:42:08 +0200
+Subject: [PATCH 06/11] debian/ubuntu: make the device node creation more atomic
+In-Reply-To: <20091012100455.GL19397@agk-dp.fab.redhat.com>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<f3faad08f59b098ed7ae0019db660d0e15797cbe.1255002311.git.fdinitto@redhat.com>
-	<20091009000134.GY3054@agk-dp.fab.redhat.com>
-	<20091009150148.GC6904@wavehammer.waldi.eu.org>
-	<20091009162914.GH3054@agk-dp.fab.redhat.com>
-	<1255339830.10932.52.camel@cerberus.int.fabbione.net>
-	<20091012101457.GM19397@agk-dp.fab.redhat.com>
-Message-ID: <20091012105429.GC4166@wavehammer.waldi.eu.org>
+	<e9a3bd65858c5f5ba4e839c7402a5cbd22b475df.1255002311.git.fdinitto@redhat.com>
+	<20091008233958.GU3054@agk-dp.fab.redhat.com>
+	<1255327871.10932.21.camel@cerberus.int.fabbione.net>
+	<20091012100455.GL19397@agk-dp.fab.redhat.com>
+Message-ID: <1255347728.10932.55.camel@cerberus.int.fabbione.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Oct 12, 2009 at 11:14:57AM +0100, Alasdair G Kergon wrote:
-> If I run this outside a packaging framework I still need the permissions
-> to be set.
+On Mon, 2009-10-12 at 11:04 +0100, Alasdair G Kergon wrote:
+> On Mon, Oct 12, 2009 at 08:11:11AM +0200, Fabio M. Di Nitto wrote:
+> > Do you have a reference to the original submission? I can't find it on
+> > either lvm-devel or linux-lvm mailing lists.
+>  
+> Forwarded.  Debian bug 402132.
 
-Hu? All it changes is to make them writable for the user. Having
-unwritable files does not really make fun.
+The old patch had hardcoded temporary file names.
 
-> So then leave this unchanged, and there is no point in Debian or any other
-> packaging system removing the existing permission setting because the packaging
-> system is going to override it afterwards anyway.
+This new one address the problem by using mktemp(3) and also the only
+comment you had on the Debian bug.
 
-It still is, because it breaks my assumptions of the development process
-to have unwritable files en masse.
+I think it's safe to pull it in.
 
-Bastian
-
--- 
-Each kiss is as the first.
-		-- Miramanee, Kirk's wife, "The Paradise Syndrome",
-		   stardate 4842.6
+Fabio
 
 
