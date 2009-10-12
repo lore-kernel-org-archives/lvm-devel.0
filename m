@@ -1,55 +1,56 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 12 Oct 2009 10:07:54 +0200
-Subject: [PATCH 04/11] debian: fix implicit pointer
-In-Reply-To: <20091011202033.GC21726@wavehammer.waldi.eu.org>
-References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<3b7fddbbcca36451e4b8e3617ab54c6e5839877a.1255002311.git.fdinitto@redhat.com>
-	<20091008233412.GS3054@agk-dp.fab.redhat.com>
-	<1255282176.10932.13.camel@cerberus.int.fabbione.net>
-	<20091011202033.GC21726@wavehammer.waldi.eu.org>
-Message-ID: <1255334874.10932.25.camel@cerberus.int.fabbione.net>
+From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
+Date: 12 Oct 2009 08:33:31 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20091012083331.20044.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, 2009-10-11 at 22:20 +0200, Bastian Blank wrote:
-> On Sun, Oct 11, 2009 at 07:29:36PM +0200, Fabio M. Di Nitto wrote:
-> > Bastian, I'd like to investigate this further. Can you please me provide
-> > me with details of your test machine? Debian SID? x86? x86_64? tool
-> > chain version? etc.
-> 
-> http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=516867
-> https://buildd.debian.org/fetch.cgi?&pkg=lvm2&ver=2.02.44-1&arch=ia64&stamp=1235444991&file=log
-> 
-> Actually configure was not able to find rl_completion_matches but it was
-> usable.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	ccaulfield at sourceware.org	2009-10-12 08:33:30
 
-This seems to be a bug introduced by Debian autoreconf.
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
-Using upstream configure:
+Log message:
+	Make clvmd return 0 on success rather than 1.
 
-configure:13440: checking for rl_completion_matches
-configure:13496: gcc -o conftest    -Wl,--export-dynamic conftest.c
--lreadline -lrt -lselinux -lsepol  -ldl -lncurses  >&5
-configure:13503: $? = 0
-configure:13525: result: yes
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1292&r2=1.1293
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
 
-Using Debian regenerated configure:
-
-configure:8220: checking for rl_completion_matches
-configure:8220: gcc -o conftest -g -O2   conftest.c -ldl  >&5
-/tmp/ccUvvocx.o: In function `main':
-/root/lvm2-2.02.53/debian/build/build-deb/conftest.c:142: undefined
-reference to
- `rl_completion_matches'
-collect2: ld returned 1 exit status
-configure:8220: $? = 1
-
-Maybe it's a regression introduced by autoconf 2.64 that's not available
-in Fedora yet.
-
-Fabio
+--- LVM2/WHATS_NEW	2009/10/05 20:55:56	1.1292
++++ LVM2/WHATS_NEW	2009/10/12 08:33:30	1.1293
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Make clvmd return 0 on success rather than 1.
+   Add --pvmetadatacopies for pvcreate, vgcreate, vgextend, vgconvert.
+   Add implict pvcreate support to vgcreate and vgextend.
+   Correct example.conf to indicate that lvm2 not lvm1 is the default format.
+--- LVM2/daemons/clvmd/clvmd.c	2009/09/01 09:48:01	1.61
++++ LVM2/daemons/clvmd/clvmd.c	2009/10/12 08:33:30	1.62
+@@ -303,7 +303,7 @@
+ 			exit(0);
+ 
+ 		case 'R':
+-			return refresh_clvmd();
++			return refresh_clvmd()==1?0:1;
+ 
+ 		case 'C':
+ 			clusterwide_opt = 1;
+@@ -354,7 +354,7 @@
+ 		/* Sending to stderr makes no sense for a detached daemon */
+ 		if (debug == DEBUG_STDERR)
+ 			debug = DEBUG_SYSLOG;
+-		return debug_clvmd(debug, clusterwide_opt);
++		return debug_clvmd(debug, clusterwide_opt)==1?0:1;
+ 	}
+ 
+ 	/* Fork into the background (unless requested not to) */
 
 
