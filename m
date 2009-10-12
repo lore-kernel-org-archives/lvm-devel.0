@@ -1,45 +1,42 @@
-From: Fabio M. Di Nitto <fabbione@fabbione.net>
-Date: Mon, 12 Oct 2009 11:06:58 +0200
-Subject: [PATCH 08/11] debian: use selinux pkgconfig info instead of hardcoding
-In-Reply-To: <20091008234450.GW3054@agk-dp.fab.redhat.com>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Mon, 12 Oct 2009 11:14:26 +0200
+Subject: [PATCH 04/11] debian: fix implicit pointer
+In-Reply-To: <20091011202033.GC21726@wavehammer.waldi.eu.org>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<afcb9c9c64ef9416639b7c508add1e519a62fbb7.1255002311.git.fdinitto@redhat.com>
-	<20091008234450.GW3054@agk-dp.fab.redhat.com>
-Message-ID: <1255338418.10932.38.camel@cerberus.int.fabbione.net>
+	<3b7fddbbcca36451e4b8e3617ab54c6e5839877a.1255002311.git.fdinitto@redhat.com>
+	<20091008233412.GS3054@agk-dp.fab.redhat.com>
+	<1255282176.10932.13.camel@cerberus.int.fabbione.net>
+	<20091011202033.GC21726@wavehammer.waldi.eu.org>
+Message-ID: <1255338866.10932.44.camel@cerberus.int.fabbione.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 2009-10-09 at 00:44 +0100, Alasdair G Kergon wrote:
-> On Thu, Oct 08, 2009 at 02:49:15PM +0200, Fabio M. Di Nitto wrote:
-> > use selinux pkgconfig file instead of hardcoding the contents
->  
-> I don't think this patch goes far enough...
-> The build should be using the pc file too (if present), as we now do for clvmd!
+On Sun, 2009-10-11 at 22:20 +0200, Bastian Blank wrote:
+> On Sun, Oct 11, 2009 at 07:29:36PM +0200, Fabio M. Di Nitto wrote:
+> > Bastian, I'd like to investigate this further. Can you please me provide
+> > me with details of your test machine? Debian SID? x86? x86_64? tool
+> > chain version? etc.
+> 
+> http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=516867
+> https://buildd.debian.org/fetch.cgi?&pkg=lvm2&ver=2.02.44-1&arch=ia64&stamp=1235444991&file=log
+> 
+> Actually configure was not able to find rl_completion_matches but it was
+> usable.
 
-We need to differentiate as Bastian said.
+Found it...
 
-For the internal view, we can switch to use PKG_CONFIG inside our
-configure.in, but that means:
+The regression comes from libs-cleanup.patch:
 
-1) it will be a hard dependency (and we recently agreed to avoid that).
+-       AC_CHECK_LIB([readline], [readline], , [rl_found=no])
++       AC_CHECK_LIB([readline], [readline], [LIBS_READLINE="-lreadline
+$LIBS_READLINE"], [rl_found=no])
 
-2) we assume that lvm2 developers and packagers will build/ship with
-recent enough build dependencies to guarantee working pkg-config files.
+by overriding default [ACTION-IF-FOUND], -lreadline is not part of LIBS=
+that's used later on by AC_CHECK_FUNC and the test fails.
 
-While I am generally ok with this approach as it will make our
-configure.in a lot simpler, it will kill the option to build on older
-distro (I believe we only lose RHEL4 at this point, but it would require
-cross-checking).
-
-For the external view, as it is now, we can create the correct .pc file.
-If we detect that selinux has pkg-config support, then we use the
-"Requires.private: libselinux" that will automatically expand via
-pkg-config. If we don't have selinux pkg-config, then we can hardcode as
-we do now.
-
-Fabio
+Fabio 
 
 
