@@ -1,50 +1,38 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 12 Oct 2009 11:30:30 +0200
-Subject: [PATCH 11/11] debian: drop concept of OWNER/GROUP and let install do it's job for permissions
-In-Reply-To: <20091009162914.GH3054@agk-dp.fab.redhat.com>
-References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<f3faad08f59b098ed7ae0019db660d0e15797cbe.1255002311.git.fdinitto@redhat.com>
-	<20091009000134.GY3054@agk-dp.fab.redhat.com>
-	<20091009150148.GC6904@wavehammer.waldi.eu.org>
-	<20091009162914.GH3054@agk-dp.fab.redhat.com>
-Message-ID: <1255339830.10932.52.camel@cerberus.int.fabbione.net>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 12 Oct 2009 11:03:59 +0100
+Subject: [PATCH 01/11] debian: fix library search path in example.conf
+In-Reply-To: <1255320125.10932.17.camel@cerberus.int.fabbione.net>
+References: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>
+	<8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
+	<20091008232725.GP3054@agk-dp.fab.redhat.com>
+	<1255280941.10932.6.camel@cerberus.int.fabbione.net>
+	<20091011202347.GD21726@wavehammer.waldi.eu.org>
+	<1255320125.10932.17.camel@cerberus.int.fabbione.net>
+Message-ID: <20091012100359.GK19397@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 2009-10-09 at 17:29 +0100, Alasdair G Kergon wrote:
-> On Fri, Oct 09, 2009 at 05:01:48PM +0200, Bastian Blank wrote:
-> > why is it used by
-> > default? 
-> 
-> I'm open to changing that default.
+On Mon, Oct 12, 2009 at 06:02:05AM +0200, Fabio M. Di Nitto wrote:
+> On Sun, 2009-10-11 at 22:23 +0200, Bastian Blank wrote:
+> > Its currently unused. The cluster locking lib was the only used external
+> > lib.
+ 
+> Alasdair, given that cluster locking lib is gone, do we have a use case
+> to keep this option configurable? 
 
-Let's split this patch in 2:
+It's used for all lvm2 external libraries and needs to stay.  The
+commented-out example is only worth making configurable if people are
+actually installing libraries into private directories (and arguably it
+should then be hard-coded into the source too).
 
-1) OWNER/GROUP defaults, I'd say we should change the default to "".
+We only stopped building the cluster locking library externally on Red
+Hat distributions because of some complexities of the Red Hat build
+system.  If they get resolved (as I hope they will be with RHEL6) then
+we will probably reinstate it.  
 
-Both Fedora and Debian drops it, all packaging systems I have seen
-around expect to build/install as user and then convert to proper
-owner/group as mandate by distribution policies.
-I don't see a real good reason to force a default, and as upstream we
-would still allow override via configure options.
-
-2) install permissions.
-
-I have more or less the same comment as #1. All distribution packaging
-do a permission cleanup after "make install" by forcing distribution
-policies.
-
-Unless there is a real security concern behind it, I think we can
-delegate such tasks to install and packagers.
-
-The Debian defaults seem sane enough to me, but I am open to
-suggestions.
-
-Making it a configurable set of options seems a bit overkilling.
-
-Fabio
+Alasdair
 
 
