@@ -1,42 +1,50 @@
 From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 12 Oct 2009 11:14:26 +0200
-Subject: [PATCH 04/11] debian: fix implicit pointer
-In-Reply-To: <20091011202033.GC21726@wavehammer.waldi.eu.org>
+Date: Mon, 12 Oct 2009 11:30:30 +0200
+Subject: [PATCH 11/11] debian: drop concept of OWNER/GROUP and let install do it's job for permissions
+In-Reply-To: <20091009162914.GH3054@agk-dp.fab.redhat.com>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<3b7fddbbcca36451e4b8e3617ab54c6e5839877a.1255002311.git.fdinitto@redhat.com>
-	<20091008233412.GS3054@agk-dp.fab.redhat.com>
-	<1255282176.10932.13.camel@cerberus.int.fabbione.net>
-	<20091011202033.GC21726@wavehammer.waldi.eu.org>
-Message-ID: <1255338866.10932.44.camel@cerberus.int.fabbione.net>
+	<f3faad08f59b098ed7ae0019db660d0e15797cbe.1255002311.git.fdinitto@redhat.com>
+	<20091009000134.GY3054@agk-dp.fab.redhat.com>
+	<20091009150148.GC6904@wavehammer.waldi.eu.org>
+	<20091009162914.GH3054@agk-dp.fab.redhat.com>
+Message-ID: <1255339830.10932.52.camel@cerberus.int.fabbione.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, 2009-10-11 at 22:20 +0200, Bastian Blank wrote:
-> On Sun, Oct 11, 2009 at 07:29:36PM +0200, Fabio M. Di Nitto wrote:
-> > Bastian, I'd like to investigate this further. Can you please me provide
-> > me with details of your test machine? Debian SID? x86? x86_64? tool
-> > chain version? etc.
+On Fri, 2009-10-09 at 17:29 +0100, Alasdair G Kergon wrote:
+> On Fri, Oct 09, 2009 at 05:01:48PM +0200, Bastian Blank wrote:
+> > why is it used by
+> > default? 
 > 
-> http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=516867
-> https://buildd.debian.org/fetch.cgi?&pkg=lvm2&ver=2.02.44-1&arch=ia64&stamp=1235444991&file=log
-> 
-> Actually configure was not able to find rl_completion_matches but it was
-> usable.
+> I'm open to changing that default.
 
-Found it...
+Let's split this patch in 2:
 
-The regression comes from libs-cleanup.patch:
+1) OWNER/GROUP defaults, I'd say we should change the default to "".
 
--       AC_CHECK_LIB([readline], [readline], , [rl_found=no])
-+       AC_CHECK_LIB([readline], [readline], [LIBS_READLINE="-lreadline
-$LIBS_READLINE"], [rl_found=no])
+Both Fedora and Debian drops it, all packaging systems I have seen
+around expect to build/install as user and then convert to proper
+owner/group as mandate by distribution policies.
+I don't see a real good reason to force a default, and as upstream we
+would still allow override via configure options.
 
-by overriding default [ACTION-IF-FOUND], -lreadline is not part of LIBS=
-that's used later on by AC_CHECK_FUNC and the test fails.
+2) install permissions.
 
-Fabio 
+I have more or less the same comment as #1. All distribution packaging
+do a permission cleanup after "make install" by forcing distribution
+policies.
+
+Unless there is a real security concern behind it, I think we can
+delegate such tasks to install and packagers.
+
+The Debian defaults seem sane enough to me, but I am open to
+suggestions.
+
+Making it a configurable set of options seems a bit overkilling.
+
+Fabio
 
 
