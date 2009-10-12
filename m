@@ -1,23 +1,42 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 12 Oct 2009 11:04:55 +0100
-Subject: [PATCH 06/11] debian/ubuntu: make the device node creation more atomic
-In-Reply-To: <1255327871.10932.21.camel@cerberus.int.fabbione.net>
+Date: Mon, 12 Oct 2009 11:14:57 +0100
+Subject: [PATCH 11/11] debian: drop concept of OWNER/GROUP and let install do it's job for permissions
+In-Reply-To: <1255339830.10932.52.camel@cerberus.int.fabbione.net>
 References: <8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>
-	<e9a3bd65858c5f5ba4e839c7402a5cbd22b475df.1255002311.git.fdinitto@redhat.com>
-	<20091008233958.GU3054@agk-dp.fab.redhat.com>
-	<1255327871.10932.21.camel@cerberus.int.fabbione.net>
-Message-ID: <20091012100455.GL19397@agk-dp.fab.redhat.com>
+	<f3faad08f59b098ed7ae0019db660d0e15797cbe.1255002311.git.fdinitto@redhat.com>
+	<20091009000134.GY3054@agk-dp.fab.redhat.com>
+	<20091009150148.GC6904@wavehammer.waldi.eu.org>
+	<20091009162914.GH3054@agk-dp.fab.redhat.com>
+	<1255339830.10932.52.camel@cerberus.int.fabbione.net>
+Message-ID: <20091012101457.GM19397@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Oct 12, 2009 at 08:11:11AM +0200, Fabio M. Di Nitto wrote:
-> Do you have a reference to the original submission? I can't find it on
-> either lvm-devel or linux-lvm mailing lists.
+On Mon, Oct 12, 2009 at 11:30:30AM +0200, Fabio M. Di Nitto wrote:
+> 1) OWNER/GROUP defaults, I'd say we should change the default to "".
+
+Yes.
  
-Forwarded.  Debian bug 402132.
+> 2) install permissions.
+> 
+> I have more or less the same comment as #1. All distribution packaging
+> do a permission cleanup after "make install" by forcing distribution
+> policies.
+> 
+> Unless there is a real security concern behind it, I think we can
+> delegate such tasks to install and packagers.
+> 
+> Making it a configurable set of options seems a bit overkilling.
+ 
+If I run this outside a packaging framework I still need the permissions
+to be set.
+
+So then leave this unchanged, and there is no point in Debian or any other
+packaging system removing the existing permission setting because the packaging
+system is going to override it afterwards anyway.
 
 Alasdair
 
