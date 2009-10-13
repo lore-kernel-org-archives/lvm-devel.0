@@ -1,40 +1,78 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 13 Oct 2009 12:39:37 +0100
-Subject: [PATCH 2/2] make the device node creation more atomic
-In-Reply-To: <ba48c85095b6949cf2ad2a3c414c324e1452d04a.1255411548.git.fdinitto@redhat.com>
-References: <65a458b2db3a9e79318281c38f94672e4cc585dc.1255411547.git.fdinitto@redhat.com>
-	<ba48c85095b6949cf2ad2a3c414c324e1452d04a.1255411548.git.fdinitto@redhat.com>
-Message-ID: <20091013113937.GH16950@agk-dp.fab.redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 13 Oct 2009 16:20:42 -0500
+Subject: [PATCH 0 of 2] LVM: Split mirror capability
+Message-ID: <1255468842.16495.21.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Oct 13, 2009 at 07:28:38AM +0200, Fabio M. Di Nitto wrote:
-> +	_build_dev_path(tmppath, sizeof(tmppath), ".XXXXXX");
-> +	mktemp(tmppath);
+Adding code to allow users to split legs off of a mirror wasn't all that
+hard.  However, I could use some help regarding the nature of the
+arguments that should be used to invoke this action.
 
-Unfortunately this still looks to have races because the actual lock is
-not acquired by the mktemp function, but only later, and there is no
-retry mechanism in this patch - if two parallel mktemps picked the same
-name the code would fail, introducing a failure mode that is not present
-in the existing code.
+The following patches introduce a new (horrible) argument '--split' to
+lvconvert that signals the intent to split and keep a desired leg of a
+mirror.  Example run:
 
-Normally you would use mkstemp rather than mktemp.
+[root at bp-01 ~]# lvcreate -m2 -L 500M -n lv vg
+  Logical volume "lv" created
+[root at bp-01 ~]# lvs -a -o name,copy_percent,devices
+  LV            Copy%  Devices
+  LogVol00             /dev/sda2(0)
+  LogVol01             /dev/sda2(4451)
+  lv            100.00 lv_mimage_0(0),lv_mimage_1(0),lv_mimage_2(0)
+  [lv_mimage_0]        /dev/sdb1(0)
+  [lv_mimage_1]        /dev/sdc1(0)
+  [lv_mimage_2]        /dev/sdd1(0)
+  [lv_mlog]            /dev/sdi1(0)
+[root at bp-01 ~]# lvconvert -m1 --split vg/lv /dev/sdc1
+  Logical volume lv converted.
+[root at bp-01 ~]# lvs
+  LV          VG         Attr   LSize   Origin Snap%  Move Log     Copy%  Convert
+  LogVol00    VolGroup00 -wi-ao 139.09g
+  LogVol01    VolGroup00 -wi-ao   9.81g
+  lv          vg         mwi-a- 500.00m                    lv_mlog 100.00
+  lv_mimage_1 vg         -wi-a- 500.00m
 
-Options: 
-  (1) introduce a ugly collision detection + retry mechanism;
-  (2) use mkstemp() to lock a related filename in a new namespace
-e.g. .XXXXXX.lock and .XXXXXX.node and do the mknod on .XXXXXX.node
-while using the unique .XXXXXX.lock regular file as an exclusive lock;
-  (3) use the existing create_temp_name() function (moving it to libdm)
-or write a variant that does mknod() checking for EEXIST instead of open();
-  (4) find some other solution.
+You can see from the above that I went as far as to specify the leg I
+wanted split off.
 
-My current preferrence would be (3) - to encapsulate the functionality
-required in a new 'create_temp_node' function.
+Aside from the new '--split' argument not being very good, we also end
+up with a new logical volume named, 'lv_mimage_1', which also isn't very
+good.  Should I change the name via s/_mimage_1/-copy-%d/, or should I
+allow the name to be specified (or left alone)?
 
-Alasdair
+Here is the current syntax and some others I have thought of:
+
+# New '--split' argument.
+# This is suppose to give the user the ability to signify a split
+# of the mirror, rather than a reduction/increase in mirror images.
+# However, something like '--keep_images' might better signify that
+# although we are reducing the number of mirror legs, we want to
+# have them presented rather than removed.
+prompt> lvconvert -m <n> --split vg/lv <removable device(s)>
+
+# New '--splitmirror <n>' argument
+# Replaces '-m <n> --split', and rather than specifying the number
+# of legs you want remaining in the mirror when finished, you specify
+# the number of legs you want split off.
+#
+# BTW, you can only split off one leg at a time right now, but I
+# don't see a reason why we couldn't split a 4-way mirror into
+# 2 2-way mirrors at some point in the future.  (Being able to
+# specify the removable devices also allows us to choose every
+# other device if we chose to.)
+prompt> lvconvert --splitmirror 1 vg/lv <removable device(s)>
+
+Please added better ideas if you have them... I am leaning toward the
+second example (even though I implemented the 1st in the patches).
+
+Concerning the naming of the newly split off device, we could use the
+'-n <name>' argument.  If unspecified, we would have to choose some
+default.
+
+ brassow
 
 
