@@ -1,9 +1,9 @@
 From: malahal@us.ibm.com <malahal@us.ibm.com>
-Date: Mon, 12 Oct 2009 18:48:20 -0700
-Subject: Re: [PATCH 2 of 10] LVM: make log_area a list
-In-Reply-To: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
-References: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
-Message-ID: <20091013014820.GA27349@us.ibm.com>
+Date: Mon, 12 Oct 2009 18:55:43 -0700
+Subject: Re: [PATCH 3 of 10] LVM: build log_area list
+In-Reply-To: <200910082118.n98LIkFp014360@hydrogen.msp.redhat.com>
+References: <200910082118.n98LIkFp014360@hydrogen.msp.redhat.com>
+Message-ID: <20091013015543.GB27349@us.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,67 +11,38 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 Jonathan Brassow [jbrassow at redhat.com] wrote:
-> Patch name: lvm-make-log_area-a-list.patch
+> Patch name: lvm-build-log_area-list.patch
 > 
-> The 'alloc_handle' structure only has space for one log_area.
-> We change that to a list to allow an arbitrary number of
-> log areas.
+> Now that we have change the allocation handle structure to be
+> able to store a list of log areas, fill them in and utilize
+> them based on the 'log_count' parameter.  (log_count will
+> be generalized in subsequent patches, but it is still just
+> '1' or '0' for now... meaning nothing has changed at this
+> point.)
 > 
 > RFC: Jonathan Brassow <jbrassow@redhat.com>
-> 
-> @@ -1061,10 +1065,14 @@ static int _find_parallel_space(struct a
->  				continue;	/* Next PV */
+> @@ -763,12 +763,14 @@ static int _alloc_parallel_area(struct a
+>  	for (s = 0; s < ah->area_count; s++)
+>  		consume_pv_area(areas[s], area_len);
 >  
->  			if (alloc != ALLOC_ANYWHERE) {
-> -				/* Don't allocate onto the log pv */
-> -				if (ah->log_count &&
-> -				    pvm->pv == ah->log_area.pv)
-> -					continue;	/* Next PV */
-> +				/* Don't allocate onto the log pvs */
-> +				dm_list_iterate_items(aa, &ah->log_areas)
-> +					if (pvm->pv == aa->pv)
-> +						skip = 1;
+> -	if (log_area) {
+> -		aa[s].pv = log_area->map->pv;
+> -		aa[s].pe = log_area->start;
+> +	for (i = 0, s = ah->area_count;
+> +	     log_areas && (s < ah->area_count + ah->log_count);
 
-                                       You can 'break' soon after setting skip.
+log_areas should be set based on log_count, right? Can't we just remove
+the log_areas check?
 
-> @@ -1199,6 +1208,7 @@ static int _allocate(struct alloc_handle
->  	struct dm_list *pvms;
->  	uint32_t areas_size;
->  	alloc_policy_t alloc;
-> +	struct alloced_area *aa;
->  
->  	if (allocated >= new_extents && !ah->log_count) {
->  		log_error("_allocate called with no work to do!");
-> @@ -1264,12 +1274,13 @@ static int _allocate(struct alloc_handle
->  		goto out;
+> +	     s++, i++) {
+> +		aa[s].pv = log_areas[i]->map->pv;
+> +		aa[s].pe = log_areas[i]->start;
+>  		aa[s].len = log_len;
+>  		dm_list_add(&ah->log_areas, &aa[s].list);
+> -		consume_pv_area(log_area, log_len);
+> +		consume_pv_area(log_areas[i], log_len);
 >  	}
 >  
-> -	if (ah->log_count && !ah->log_area.len) {
-> -		log_error("Insufficient extents for log allocation "
-> -			  "for logical volume %s.",
-> -			  lv ? lv->name : "");
-> -		goto out;
-> -	}
-> +	dm_list_iterate_items(aa, &ah->log_areas)
-> +		if (ah->log_count && !aa->len) {
-
-ah->log_count can be checked outside of the list iterate.
-
-> +			log_error("Insufficient extents for log allocation "
-> +				  "for logical volume %s.",
-> +				  lv ? lv->name : "");
-> +			goto out;
-> +		}
->  int lv_add_log_segment(struct alloc_handle *ah, struct logical_volume *log_lv)
->  {
->  	struct lv_segment *seg;
-> +	struct alloced_area *log_area;
-> +
-> +	dm_list_iterate_items(log_area, &ah->log_areas)
-> +		break;
-
-        Using the list iterator to get the first element looks odd!
-	Should we use dm_list_first and dm_list_item? Or just have
-	dm_list_first_item()???
+>  	*ix += area_len * ah->area_multiple;
 
 
