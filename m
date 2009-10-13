@@ -1,88 +1,61 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Tue, 13 Oct 2009 07:28:38 +0200
-Subject: [PATCH 2/2] make the device node creation more atomic
-In-Reply-To: <1255411718-12077-1-git-send-email-fdinitto@redhat.com>
-References: <1255411718-12077-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <ba48c85095b6949cf2ad2a3c414c324e1452d04a.1255411548.git.fdinitto@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 13 Oct 2009 10:14:06 +0200
+Subject: LVM2 daemons/dmeventd/Makefile.in tools/Makefi ...
+In-Reply-To: <20091013013111.23965.qmail@sourceware.org>
+References: <20091013013111.23965.qmail@sourceware.org>
+Message-ID: <4AD436CE.5080608@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
----
-:100644 100644 248d3ac... 90e0907... M	libdm/libdm-common.c
- libdm/libdm-common.c |   32 ++++++++++++++++++++++++--------
- 1 files changed, 24 insertions(+), 8 deletions(-)
+Dne 13.10.2009 03:31, agk at sourceware.org napsal(a):
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	agk at sourceware.org	2009-10-13 01:31:10
+> 
+> Modified files:
+> 	daemons/dmeventd: Makefile.in 
+> 	tools          : Makefile.in 
+> 
+> Log message:
+> 	More build cleanups (linker parameter ordering).
+> 
+> Patches:
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+> 
+> --- LVM2/daemons/dmeventd/Makefile.in	2009/10/05 13:46:01	1.27
+> +++ LVM2/daemons/dmeventd/Makefile.in	2009/10/13 01:31:10	1.28
+> @@ -45,8 +45,8 @@
+>  LIBS += -ldl -ldevmapper -lpthread
+>  
+>  dmeventd: $(LIB_SHARED) $(VERSIONED_SHLIB) dmeventd.o
+> -	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ dmeventd.o \
+> -	-L. -ldevmapper-event $(LIBS) -rdynamic
+> +	$(CC) $(CFLAGS) $(LDFLAGS) -L. -o $@ dmeventd.o \
+> +	-ldevmapper-event $(LIBS) -rdynamic
+>  
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 248d3ac..90e0907 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -403,12 +403,19 @@ int dm_set_selinux_context(const char *path, mode_t mode)
- static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
- 			 uid_t uid, gid_t gid, mode_t mode)
- {
--	char path[PATH_MAX];
-+	char path[PATH_MAX], tmppath[PATH_MAX];
- 	struct stat info;
- 	dev_t dev = MKDEV(major, minor);
- 	mode_t old_mask;
- 
- 	_build_dev_path(path, sizeof(path), dev_name);
-+	_build_dev_path(tmppath, sizeof(tmppath), ".XXXXXX");
-+
-+	mktemp(tmppath);
-+	if (strlen(tmppath) == 0) {
-+		log_error("Unable to create name of temporary file");
-+		return 0;
-+	}
- 
- 	if (stat(path, &info) >= 0) {
- 		if (!S_ISBLK(info.st_mode)) {
-@@ -431,24 +438,33 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
- 			 "node creation.", path);
- 
- 	old_mask = umask(0);
--	if (mknod(path, S_IFBLK | mode, dev) < 0) {
-+	if (mknod(tmppath, S_IFBLK | mode, dev) < 0) {
- 		umask(old_mask);
- 		log_error("Unable to make device node for '%s'", dev_name);
--		return 0;
-+		goto error;
- 	}
- 	umask(old_mask);
- 
--	if (chown(path, uid, gid) < 0) {
-+	if (chown(tmppath, uid, gid) < 0) {
- 		log_sys_error("chown", path);
--		return 0;
-+		goto error;
- 	}
- 
--	log_debug("Created %s", path);
-+	if (!dm_set_selinux_context(tmppath, S_IFBLK))
-+		goto error;
- 
--	if (!dm_set_selinux_context(path, S_IFBLK))
--		return 0;
-+	if (rename(tmppath, path) < 0) {
-+		log_error("Unable to replace device node for '%s'", dev_name);
-+		goto error;
-+	}
-+
-+	log_debug("Created %s", path);
- 
- 	return 1;
-+
-+error:
-+	unlink(tmppath);
-+	return 0;
- }
- 
- static int _rm_dev_node(const char *dev_name)
--- 
-1.5.4.3
+Hmm - why moving '-L' library path in before '-o' option?
+
+I think the '-L' should be rather right before '-l' library
+(i.e. part of LVMLIBS)
+LVMLIBS += -L. -ldevmapper-event -lpthread -ldevmapper
+
+or maybe even more complex (eventually partially placed in make.tmpl.in)
+
+DEVMAPLIBS = -L. -ldevmapper
+DEVMAPELIBS = -L. -ldevmapper-event -lpthread
+
+LVMLIBS += $(DEVMAPELIBS) $(DEVMAPLIBS)
+
+And actually - why the -L. is used ? We are already changing LDFLAGS in
+make.tmpl to support separate build directory. Thus I think -L. should be
+possibly avoided in this case ?
+
+
+Zdenek
 
 
