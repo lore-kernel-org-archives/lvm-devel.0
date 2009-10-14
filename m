@@ -1,48 +1,56 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 14 Oct 2009 14:55:46 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20091014145546.10036.qmail@sourceware.org>
+From: malahal@us.ibm.com <malahal@us.ibm.com>
+Date: Wed, 14 Oct 2009 10:16:09 -0700
+Subject: Re: [PATCH 2 of 10] LVM: make log_area a list
+In-Reply-To: <0FBED8C9-24F0-48D7-81E5-A041AA11F03D@redhat.com>
+References: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
+	<20091013014820.GA27349@us.ibm.com>
+	<0FBED8C9-24F0-48D7-81E5-A041AA11F03D@redhat.com>
+Message-ID: <20091014171609.GA9054@us.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2009-10-14 14:55:45
+Jonathan Brassow [jbrassow at redhat.com] wrote:
+>
+> On Oct 12, 2009, at 8:48 PM, malahal at us.ibm.com wrote:
+>
+>> Jonathan Brassow [jbrassow at redhat.com] wrote:
+>>> Patch name: lvm-make-log_area-a-list.patch
+>>>
+>>> The 'alloc_handle' structure only has space for one log_area.
+>>> We change that to a list to allow an arbitrary number of
+>>> log areas.
+>>>
+>>> RFC: Jonathan Brassow <jbrassow@redhat.com>
+>>>
+>>> @@ -1061,10 +1065,14 @@ static int _find_parallel_space(struct a
+>>> 				continue;	/* Next PV */
+>>>
+>>> 			if (alloc != ALLOC_ANYWHERE) {
+>>> -				/* Don't allocate onto the log pv */
+>>> -				if (ah->log_count &&
+>>> -				    pvm->pv == ah->log_area.pv)
+>>> -					continue;	/* Next PV */
+>>> +				/* Don't allocate onto the log pvs */
+>>> +				dm_list_iterate_items(aa, &ah->log_areas)
+>>> +					if (pvm->pv == aa->pv)
+>>> +						skip = 1;
+>>
+>>                                       You can 'break' soon after setting 
+>> skip.
+>
+> If I use 'break' won't that break out of the 'dm_list_iterate_items' and 
+> not the enclosing loop - giving an incorrect result?
 
-Modified files:
-	lib/metadata   : mirror.c 
+IIRC, there are two dm_list_iterate_items loops. You can 'break' from the
+inner loop after setting 'skip=1' and the next statement will check that
+skip is set and execute 'continue' for the outer loop.
 
-Log message:
-	I saw this in a bug report:
-	[root at xxxx-01 ~]# lvconvert -m 1 --corelog VG/cmirror
-	Unable to convert the log of inactive cluster mirror cmirror
-	
-	I've tried to clean-up the message a little more, so the name
-	of the mirror stands out more while preserving the sense that
-	it's not a problem with the specific device, but the fact that
-	it is inactive that is causing the problem.
-	
-	New msg:
-	Unable to convert the log of an inactive cluster mirror, cmirror
+My understanding is that the current code executes the inner loop to
+completion every time.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
-
---- LVM2/lib/metadata/mirror.c	2009/10/01 01:04:27	1.91
-+++ LVM2/lib/metadata/mirror.c	2009/10/14 14:55:44	1.92
-@@ -1228,8 +1228,8 @@
- 			return 0;
- 		}
- 	} else if (vg_is_clustered(vg)) {
--		log_error("Unable to convert the log of inactive "
--			  "cluster mirror %s", lv->name);
-+		log_error("Unable to convert the log of an inactive "
-+			  "cluster mirror, %s", lv->name);
- 		return 0;
- 	} else if (yes_no_prompt("Full resync required to convert "
- 				 "inactive mirror %s to core log. "
+Thanks, Malahal.
 
 
