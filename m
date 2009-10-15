@@ -1,47 +1,101 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon,  5 Oct 2009 16:00:33 +0200
-Subject: [PATCH 06/13] Replicator: extend _lv_each_dependency() rep. deps
-In-Reply-To: <1254751240-17431-5-git-send-email-zkabelac@redhat.com>
-References: <1254751240-17431-1-git-send-email-zkabelac@redhat.com>
-	<1254751240-17431-2-git-send-email-zkabelac@redhat.com>
-	<1254751240-17431-3-git-send-email-zkabelac@redhat.com>
-	<1254751240-17431-4-git-send-email-zkabelac@redhat.com>
-	<1254751240-17431-5-git-send-email-zkabelac@redhat.com>
-Message-ID: <1254751240-17431-6-git-send-email-zkabelac@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 15 Oct 2009 10:07:30 -0400
+Subject: [PATCH] Change process_each_lv_in_vg() iterator to only process non-hidden LVs.
+Message-ID: <1255615650-3655-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/metadata/metadata.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+Unless the "--all" flag is given, the iterator functions should not be
+processing hidden LVs.  I have checked all the tools and this seems to
+be how they all behave.  Somehow before I missed the fact I could re-use
+the "--all" flag to qualify the hidden LV check (perhaps it's because
+the all flag is not documented well).  If there are things I've overlooked
+I can deal with them in another patch.  I am working on patches to clarify
+and document the usage of "--all".
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 263c705..feb7cc1 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1850,6 +1850,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	struct lv_segment *lvseg;
+Remove redundant checks in a few tools.
+
+This addresses rhbz 232499 (benign error messages when lvchange used
+with VG containing hidden LVs).
+
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/lvdisplay.c |    3 ---
+ tools/lvscan.c    |    3 ---
+ tools/reporter.c  |    6 ------
+ tools/toollib.c   |    3 +++
+ 4 files changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
+index f5531cb..65c1012 100644
+--- a/tools/lvdisplay.c
++++ b/tools/lvdisplay.c
+@@ -18,9 +18,6 @@
+ static int _lvdisplay_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			     void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
+-
+ 	if (arg_count(cmd, colon_ARG))
+ 		lvdisplay_colons(lv);
+ 	else {
+diff --git a/tools/lvscan.c b/tools/lvscan.c
+index a65bd1d..a4f419d 100644
+--- a/tools/lvscan.c
++++ b/tools/lvscan.c
+@@ -28,9 +28,6 @@ static int lvscan_single(struct cmd_context *cmd, struct logical_volume *lv,
  
- 	struct logical_volume *deps[] = {
-+		(lv->rdevice && lv != lv->rdevice->lv) ? lv->rdevice->lv : 0,
-+		(lv->rdevice && lv != lv->rdevice->slog) ? lv->rdevice->slog : 0,
- 		lv->snapshot ? lv->snapshot->origin : 0,
- 		lv->snapshot ? lv->snapshot->cow : 0 };
- 	for (i = 0; i < sizeof(deps) / sizeof(*deps); ++i) {
-@@ -1860,6 +1862,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		if (lvseg->log_lv && !fn(lvseg->log_lv, data))
- 			return_0;
-+		if (lvseg->rlog_lv && !fn(lvseg->rlog_lv, data))
-+			return_0;
- 		for (s = 0; s < lvseg->area_count; ++s) {
- 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
- 				return_0;
+ 	const char *active_str, *snapshot_str;
+ 
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
+-
+ 	inkernel = lv_info(cmd, lv, &info, 1, 0) && info.exists;
+ 	if (lv_is_origin(lv)) {
+ 		dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs,
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 1e93689..6186d5b 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -33,9 +33,6 @@ static int _vgs_single(struct cmd_context *cmd __attribute((unused)),
+ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
+-
+ 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL)) {
+ 		stack;
+ 		return ECMD_FAILED;
+@@ -116,9 +113,6 @@ static int _pvsegs_sub_single(struct cmd_context *cmd,
+ static int _lvsegs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			  void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
+-
+ 	return process_each_segment_in_lv(cmd, lv, handle, _segs_single);
+ }
+ 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index d14dc77..d85f731 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -122,6 +122,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		if (lvl->lv->status & SNAPSHOT)
+ 			continue;
+ 
++		if (!lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
++			continue;
++
+ 		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
+ 			continue;
+ 
 -- 
-1.6.5.rc2
+1.6.0.6
 
 
