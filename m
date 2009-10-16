@@ -1,61 +1,68 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 16 Oct 2009 11:05:04 +0200
-Subject: [PATCH] Change process_each_lv_in_vg() iterator to only process non-hidden LVs.
-In-Reply-To: <1255615650-3655-1-git-send-email-dwysocha@redhat.com>
-References: <1255615650-3655-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <4AD83740.5070704@redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Fri, 16 Oct 2009 11:46:28 -0400
+Subject: [RFC][PATCH 0/5] dmeventd device filtering
+In-Reply-To: <874oqkdunv.fsf@twilight.int.mornfall.net.>
+References: <4AC2A616.9060705@redhat.com>
+	<874oqkdunv.fsf@twilight.int.mornfall.net.>
+Message-ID: <4AD89554.6030406@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/15/2009 04:07 PM, Dave Wysochanski wrote:
-> Unless the "--all" flag is given, the iterator functions should not be
-> processing hidden LVs.  I have checked all the tools and this seems to
-> be how they all behave.  Somehow before I missed the fact I could re-use
-> the "--all" flag to qualify the hidden LV check (perhaps it's because
-> the all flag is not documented well).  If there are things I've overlooked
-> I can deal with them in another patch.  I am working on patches to clarify
-> and document the usage of "--all".
+>> To generate filter option, dmeventd requires a list of devices included
+>> in the VG. When a LV is registered as a monitoring device, a device list
+>> of the VG are passed to dmeventd. This information needs to be updated if
+>> the VG structure is changed by adding or removing devices to/from the VG
+>> by vgextend, vgreduce or other lvm commands, dmeventd gets a new device
+>> list.
+>>
+>> A failed device list is generated when an error is notified. dmeventd gets
+>> devices included in failed mirror leg or log from kernel through device-mapper
+>> interface.
+> Hmm. Does this introduce some race conditions? When a bad sequence of metadata
+> edits and failures happens, could this lead to bad behaviour? I have skimmed
+> the patches and I think following may happen:
+> 
+> - vgextend a volume group (adding say /dev/sde)
+> - metadata is written and committed
+> - dmeventd notices a failure, but its device list is out of date 
+> - lvconvert does its job, but when writing metadata, it marks the /dev/sde PV
+>   as missing, since it can't find it
+> - dmeventd triggers vgreduce, which removes /dev/sde from the volume group
+> 
+> It is not a fatal problem, but definitely surprising. Maybe we could fix it,
+> although I'm not entirely sure how.
+> 
+> Also, I'm a little worried that this is something that may rather easily go out
+> of sync -- keeping a cached copy of data like this around is always
+> dangerous. Fortunately, the worst that should happen is that an automatic
+> recovery fails or that empty PVs are removed from the volume group (like above)
+> -- it shouldn't be possible to trick dmeventd into clobbering any data this
+> way. Either way -- I am not sure it is a showstopper, but it's definitely not
+> very nice. Thoughts?
 
-Ack for the intention (see my previous patch) but nack to use of all_ARG :-)
+I'm very sorry for my late response. You are right. This method needs to keep 
+data integrity between dmeventd and lvm metadata on disk and the sequence you
+described should be handled in some way.
 
-We should really document --all first, missing in man pages
-(lvs, lvdisplay, lvscan, pvs, pvdisplay, vgs)
+I don't have perfect solution right now, but stopping monitoring during VG
+update would be one of the solutions. Stopping and starting monitoring is
+not a perfect solution, but it is the same as LV is changed. Anyway, I will
+look into solutions, and I appreciate if you could give me some idea.
 
+> PS: Another thing crossed my mind -- how safe it is to use device node names
+> here? Would it make more sense to use major/minor numbers? If device nodes get
+> re-arranged between registration and a failure, this could cause some woes as
+> well. The gap could easily be many months. Maybe not likely, but definitely not
+> impossible...
 
-> --- a/tools/toollib.c
-> +++ b/tools/toollib.c
-> @@ -122,6 +122,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
->  		if (lvl->lv->status & SNAPSHOT)
->  			continue;
->  
-> +		if (!lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
-> +			continue;
-> +
+I understand your point. It is not impossible but it is not likely. I believe
+it is the base idea on which the current filtering method or device-cache
+are implemented.
 
-This function is used used in process_each_lv().
-
-If you do this and command uses all_ARG, caller can activate hidden
-volumes directly (see lvchange).
-
-But you cannot remove hidden volumes now (see lvremove, it has no all arg).
-
-I think that
-
- - not visible (hidden) volumes must be always be activated through some
-visible LV or other operation
-(I have special hidden keystore volume and I never want user to activate it
-explicitly for example.)
-
- - we should allow user to remove hidden volume (if it is unreferenced),
-(like hidden orphaned mirror log when something went wrong)
-
-- also see my previous patch for vgchange, it should be cleaned similar way
-(adding exceptions for every type of hidden volume is not ideal,
-lv_is_visible() seems to be ok here)
-
-Milan
+Thanks,
+Taka
 
 
