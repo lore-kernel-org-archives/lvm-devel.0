@@ -1,42 +1,61 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 16 Oct 2009 00:18:09 +0100
-Subject: [PATCH 2 of 10] LVM: make log_area a list
-In-Reply-To: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
-References: <200910082118.n98LIaik014287@hydrogen.msp.redhat.com>
-Message-ID: <20091015231808.GD16950@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 16 Oct 2009 11:05:04 +0200
+Subject: [PATCH] Change process_each_lv_in_vg() iterator to only process non-hidden LVs.
+In-Reply-To: <1255615650-3655-1-git-send-email-dwysocha@redhat.com>
+References: <1255615650-3655-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <4AD83740.5070704@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Oct 08, 2009 at 04:18:36PM -0500, Jon Brassow wrote:
-> -	struct alloced_area log_area;	/* Extent used for log */
-> +	struct dm_list log_areas;	/* Extents used for logs */
->  	struct dm_list alloced_areas[0];	/* Lists of areas in each stripe */
+On 10/15/2009 04:07 PM, Dave Wysochanski wrote:
+> Unless the "--all" flag is given, the iterator functions should not be
+> processing hidden LVs.  I have checked all the tools and this seems to
+> be how they all behave.  Somehow before I missed the fact I could re-use
+> the "--all" flag to qualify the hidden LV check (perhaps it's because
+> the all flag is not documented well).  If there are things I've overlooked
+> I can deal with them in another patch.  I am working on patches to clarify
+> and document the usage of "--all".
 
-Rather than storing the log areas differently (in a list) from the other areas
-(in an array), I'd prefer them all to be stored the same way.
+Ack for the intention (see my previous patch) but nack to use of all_ARG :-)
 
-I.e. In a simple contiguous 2-leg mirror plus mirrored log, you'd get
-  leg1 as first item on alloced_areas[0] list,
-  leg2 as first item on alloced_areas[1] list,
-  log leg1 as first item on log_areas list, 
-  log leg2 as second item on log_areas list.
+We should really document --all first, missing in man pages
+(lvs, lvdisplay, lvscan, pvs, pvdisplay, vgs)
 
-I'd prefer to see:
-  leg1 as first item on alloced_areas[0] list,
-  leg2 as first item on alloced_areas[1] list,
-  log leg1 as first item on log_areas[0] list, 
-  log leg2 as first item on log_areas[1] list.
-and of course log_areas[0] can be the same as alloced_areas[2].
 
-This should be both simpler (logs are less of a special case and 
-like any other area may include more than 1 segment) and more general
-(we're asking to allocate several parallel areas, with different lengths
-but sorted largest first and with different allocation constraints
-applying to some of them).
+> --- a/tools/toollib.c
+> +++ b/tools/toollib.c
+> @@ -122,6 +122,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+>  		if (lvl->lv->status & SNAPSHOT)
+>  			continue;
+>  
+> +		if (!lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
+> +			continue;
+> +
 
-Alasdair
+This function is used used in process_each_lv().
+
+If you do this and command uses all_ARG, caller can activate hidden
+volumes directly (see lvchange).
+
+But you cannot remove hidden volumes now (see lvremove, it has no all arg).
+
+I think that
+
+ - not visible (hidden) volumes must be always be activated through some
+visible LV or other operation
+(I have special hidden keystore volume and I never want user to activate it
+explicitly for example.)
+
+ - we should allow user to remove hidden volume (if it is unreferenced),
+(like hidden orphaned mirror log when something went wrong)
+
+- also see my previous patch for vgchange, it should be cleaned similar way
+(adding exceptions for every type of hidden volume is not ideal,
+lv_is_visible() seems to be ok here)
+
+Milan
 
 
