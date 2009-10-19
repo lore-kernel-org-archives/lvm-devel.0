@@ -1,281 +1,189 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 19 Oct 2009 13:46:42 +0200
-Subject: [PATCH 2/4] Use udev flags in LVM
-Message-ID: <4ADC51A2.6010901@redhat.com>
+Date: Mon, 19 Oct 2009 13:46:57 +0200
+Subject: [PATCH 3/4] Edit udev rules to use new udev flags and a cleanup
+Message-ID: <4ADC51B1.2040704@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We don't want to create the symlinks in /dev/<vgname> and /dev/disk for invisible or
-non-top-level devices. However, we still need some of them to be initialised, so we
-need them to be visible for a while (for example the "_mlog"). But we can't distinguish
-this situation without any further information in udev rules (so we don't know when
-the symlinks should be and when it should not be created). Therefore, we use the udev
-flags encoded in the cookie value to pass this information into the udev rules.
+Changes in udev rules:
 
-Also, we need to increase the symlink priority for origin devices so they won't be
-overwritten by snapshots when the symlink has the same name (e.g. a symlink name
-based on FS UUID in /dev/disk/by-uuid directory).
+10-dm.rules
+  - we need to decode the flags first, so we call "dmsetup udevflags"
+  - I've removed OPTIONS+="last_rule" based for inappropriate devices
+    that should not be processed further (like temporary-cryptsetup).
 
-I've added and exported a function called "dm_tree_add_new_dev_udev_flags" which 
-is a wrapper around "dm_tree_add_new_dev". The flags are stored in tree node
-structure (for each device separately) so when the tree is traversed we can
-pass this information into dm_task_set_cookie then.
+    Also, I've added ENV{DM_UUID}=="mpath-?*", ENV{DM_ACTION}=="PATH_FAILED", GOTO="dm_disable",
+    this one is issued on PATH_FAIL and we definitely don't want to process this (...and
+    call blkid on this one, as an example). I use the flags instead of OPTIONS+="last_rule".
+
+    There is a potential danger here and that is when someone does not check the flags
+    to filter out these events (in contrast to OPTIONS+="last_rule"). However, the use
+    of OPTIONS+="last_rule" is controversial and a source of potential disputes.
+    I'm still not convinced about withdrawing the last_rule, I'll probably ask someone
+    from udev directly to get the opinion...
+
+11-lvm.rules:
+  - since we have DM_UDEV_RULES_VSN that is defined only when 10-dm.rules is processed,
+    we don't need to do a filter on SUBSYSTEM and KERNEL again. Also, we don't need
+    to check again the situation with the coldplug.
+
+12-dm-disk.rules:
+  - the same as with 11-lvm.rules...
+  - we set higher priority for the symlink with the possibility of the same name
+    (/dev/disk/by-uuid that is based on FS UUID).
+  - (it does not work now because of the bug in udevd/libudev - patch is on a way
+     to udev team :) )
+
+12-dm-permissions.rules:
+  - the same as with 11-lvm.rules...
+
+95-dm-notify.rules:
+  - I've removed the setting for default permission root:root/0600 based on the feedback
+    I got. I should leave the permissions to be set based on default udev rules installed
+    in the system (which is 50-udev-default.rules in Fedora that sets the group to "disk").
+    If there's anyone who wants to change this, he can use 12-dm-permissions to set different
+    default rules.
 
 Peter
 
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 13cec36..96928f6 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1003,6 +1003,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	uint32_t max_stripe_size = UINT32_C(0);
- 	uint32_t read_ahead = lv->read_ahead;
- 	uint32_t read_ahead_flags = UINT32_C(0);
-+	uint16_t udev_flags = DM_UDEV_FLAG_NULL;
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index 1386b40..901f219 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -20,6 +20,9 @@ ENV{DM_SBIN_PATH}="/sbin"
+ TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
+ TEST!="$env{DM_SBIN_PATH}/dmsetup", GOTO="dm_end"
  
- 	if (!(name = build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
- 		return_0;
-@@ -1022,18 +1023,26 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 
- 	lvlayer->lv = lv;
- 
-+	if (layer || !lv_is_visible(lv))
-+		udev_flags |= DM_UDEV_FLAG_DISABLE_SUBSYSTEM_RULES |
-+			      DM_UDEV_FLAG_DISABLE_DISK_RULES;
++# Decode udev control flags and set environment variables appropriately.
++ENV{DM_COOKIE}=="?*", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup udevflags $env{DM_COOKIE}"
 +
-+	if (lv->origin_count)
-+		udev_flags |= DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY;
+ ACTION!="add|change", GOTO="dm_end"
+ 
+ # Normally, we operate on "change" events only. But when
+@@ -57,15 +60,15 @@ ENV{DM_UDEV_RULES_VSN}="1"
+ 
+ ENV{DM_NAME}=="?*", NAME="$kernel", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
+ 
+-# We have to ignore further rule application for temporary
+-# cryptsetup devices. But don't forget to send the notification!
+-ENV{DM_UUID}=="CRYPT-TEMP-?*", GOTO="dm_last_rule"
+-ENV{DM_UUID}!="?*", ENV{DM_NAME}=="temporary-cryptsetup-?*", GOTO="dm_last_rule"
++# Try to not process inappropriate devices (events) in the rules further.
++ENV{DM_UUID}=="mpath-?*", ENV{DM_ACTION}=="PATH_FAILED", GOTO="dm_disable"
++ENV{DM_UUID}=="CRYPT-TEMP-?*", GOTO="dm_disable"
++ENV{DM_UUID}!="?*", ENV{DM_NAME}=="temporary-cryptsetup-?*", GOTO="dm_disable"
+ 
+ GOTO="dm_end"
+ 
+-LABEL="dm_last_rule"
+-ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
+-OPTIONS+="last_rule"
++LABEL="dm_disable"
++ENV{DM_UDEV_FLAG_DISABLE_SUBSYTEM_RULES}="1"
++ENV{DM_UDEV_FLAG_DISABLE_DISK_RULES}="1"
+ 
+ LABEL="dm_end"
+diff --git a/udev/11-lvm.rules b/udev/11-lvm.rules
+index 8ac6525..dc4a9e5 100644
+--- a/udev/11-lvm.rules
++++ b/udev/11-lvm.rules
+@@ -8,17 +8,11 @@
+ #   DM_VG_NAME - volume group name
+ #   DM_LV_LAYER - logical volume layer (blank if not set)
+ 
+-SUBSYSTEM!="block", GOTO="lvm_end"
+-KERNEL!="dm-[0-9]*", GOTO="lvm_end"
++# "add" event is processed on coldplug only!
+ ACTION!="add|change", GOTO="lvm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
+ ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
+-
+-# Normally, we operate on "change" events only. But when
+-# coldplugging, there's an "add" event present. We have
+-# to recognize this and do our actions in this particular
+-# situation, too.
+-ACTION=="add", ENV{STARTUP}!="1", GOTO="lvm_end"
++ENV{DM_UDEV_FLAG_DISABLE_SUBSYSTEM_RULES}=="1", GOTO="lvm_end"
+ 
+ # Use DM name and split it up into its VG/LV/layer constituents.
+ IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
+diff --git a/udev/12-dm-disk.rules b/udev/12-dm-disk.rules
+index b110064..92ffce8 100644
+--- a/udev/12-dm-disk.rules
++++ b/udev/12-dm-disk.rules
+@@ -5,16 +5,10 @@
+ # label and uuid are created only if the device is not
+ # suspended.
+ 
+-SUBSYSTEM!="block", GOTO="dm_end"
+-KERNEL!="dm-[0-9]*", GOTO="dm_end"
++# "add" event is processed on coldplug only!
+ ACTION!="add|change", GOTO="dm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
+-
+-# Normally, we operate on "change" events only. But when
+-# coldplugging, there's an "add" event present. We have to
+-# recognize this and do our actions in this particular
+-# situation, too.
+-ACTION=="add", ENV{STARTUP}!="1", GOTO="dm_end"
++ENV{DM_UDEV_FLAG_DISABLE_DISK_RULES}=="1", GOTO="dm_end"
+ 
+ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
+ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+@@ -23,7 +17,7 @@ ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
+ 
+ IMPORT{program}="$env{DM_SBIN_PATH}/blkid -o udev -p $tempnode"
+ OPTIONS="link_priority=-100"
+-ENV{DM_LV_LAYER}=="?*", OPTIONS="link_priority=-90"
++ENV{DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY}=="1", OPTIONS="link_priority=-90"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
+ 
+diff --git a/udev/12-dm-permissions.rules b/udev/12-dm-permissions.rules
+index cc3e4cf..9ceb8f8 100644
+--- a/udev/12-dm-permissions.rules
++++ b/udev/12-dm-permissions.rules
+@@ -15,9 +15,8 @@
+ #   DM_VG_NAME - volume group name (not set if LVM device not present)
+ #   DM_LV_LAYER - logical volume layer (not set if LVM device not present)
+ 
+-SUBSYSTEM!="block", GOTO="dm_end"
+-KERNEL!="dm-[0-9]*", GOTO="dm_end"
+-ACTION!="change", GOTO="dm_end"
++# "add" event is processed on coldplug only!
++ACTION!="add|change", GOTO="dm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
+ 
+ # A few demonstrational examples...
+@@ -72,4 +71,7 @@ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
+ # listed at the beginning of this file (udev provides simple pattern matching by
+ # using *, ? and [] that you can use, see 'man udev' for more information).
+ 
++# Set default permissions for all DM devices if not set before.
++# OWNER:="root", GROUP:="root", MODE:="660"
 +
- 	/*
- 	 * Add LV to dtree.
- 	 * If we're working with precommitted metadata, clear any
- 	 * existing inactive table left behind.
- 	 * Major/minor settings only apply to the visible layer.
- 	 */
--	if (!(dnode = dm_tree_add_new_dev(dtree, name, dlid,
-+	if (!(dnode = dm_tree_add_new_dev_udev_flags(dtree, name, dlid,
- 					     layer ? UINT32_C(0) : (uint32_t) lv->major,
- 					     layer ? UINT32_C(0) : (uint32_t) lv->minor,
- 					     _read_only_lv(lv),
- 					     (lv->vg->status & PRECOMMITTED) ? 1 : 0,
--					     lvlayer)))
-+					     lvlayer,
-+					     udev_flags)))
- 		return_0;
+ LABEL="dm_end"
+diff --git a/udev/95-dm-notify.rules b/udev/95-dm-notify.rules
+index 5834239..085313b 100644
+--- a/udev/95-dm-notify.rules
++++ b/udev/95-dm-notify.rules
+@@ -4,13 +4,11 @@
+ # waiting for completion of udev rules. The process is identified by
+ # a cookie value sent within "change" and "remove" events (the cookie
+ # value is set before by that process for every action requested).
+-# Also, it sets default permissions for DM devices if not set already.
  
- 	/* Store existing name so we can do rename later */
-diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index c357131..733804c 100644
---- a/libdm/.exported_symbols
-+++ b/libdm/.exported_symbols
-@@ -50,6 +50,7 @@ dm_tree_create
- dm_tree_free
- dm_tree_add_dev
- dm_tree_add_new_dev
-+dm_tree_add_new_dev_udev_flags
- dm_tree_node_get_name
- dm_tree_node_get_uuid
- dm_tree_node_get_info
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index a40a843..6640268 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -277,6 +277,14 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *tree,
- 					 int read_only,
- 					 int clear_inactive,
- 					 void *context);
-+struct dm_tree_node *dm_tree_add_new_dev_udev_flags(struct dm_tree *tree,
-+						    const char *name,
-+						    const char *uuid,
-+						    uint32_t major, uint32_t minor,
-+						    int read_only,
-+						    int clear_inactive,
-+						    void *context,
-+						    uint16_t udev_flags);
+ SUBSYSTEM!="block", GOTO="dm_end"
+ KERNEL!="dm-[0-9]*", GOTO="dm_end"
+ ACTION!="change|remove", GOTO="dm_end"
  
- /*
-  * Search for a node in the tree.
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 4b8ffc9..8511c03 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -130,6 +130,8 @@ struct dm_tree_node {
+-ACTION=="change", OWNER:="root", GROUP:="root", MODE:="600"
+ ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
  
- 	int activation_priority;	/* 0 gets activated first */
- 
-+	uint16_t udev_flags;		/* Udev control flags */
-+
- 	void *context;			/* External supplied context */
- 
- 	struct load_properties props;	/* For creation/table (re)load */
-@@ -301,7 +303,8 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
- 						 const char *name,
- 						 const char *uuid,
- 						 struct dm_info *info,
--						 void *context)
-+						 void *context,
-+						 uint16_t udev_flags)
- {
- 	struct dm_tree_node *node;
- 	uint64_t dev;
-@@ -317,6 +320,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
- 	node->uuid = uuid;
- 	node->info = *info;
- 	node->context = context;
-+	node->udev_flags = udev_flags;
- 	node->activation_priority = 0;
- 
- 	dm_list_init(&node->uses);
-@@ -466,8 +470,8 @@ static struct dm_tree_node *_add_dev(struct dm_tree *dtree,
- 		if (!_deps(&dmt, dtree->mem, major, minor, &name, &uuid, &info, &deps))
- 			return_NULL;
- 
--		if (!(node = _create_dm_tree_node(dtree, name, uuid,
--						  &info, NULL)))
-+		if (!(node = _create_dm_tree_node(dtree, name, uuid, &info,
-+						  NULL, DM_UDEV_FLAG_NULL)))
- 			goto_out;
- 		new = 1;
- 	}
-@@ -585,8 +589,8 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *dtree,
- 		info.inactive_table = 0;
- 		info.read_only = 0;
- 
--		if (!(dnode = _create_dm_tree_node(dtree, name2, uuid2,
--						   &info, context)))
-+		if (!(dnode = _create_dm_tree_node(dtree, name2, uuid2, &info,
-+						   context, DM_UDEV_FLAG_NULL)))
- 			return_NULL;
- 
- 		/* Attach to root node until a table is supplied */
-@@ -613,10 +617,30 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *dtree,
- 		return_NULL;
- 
- 	dnode->context = context;
-+	dnode->udev_flags = DM_UDEV_FLAG_NULL;
- 
- 	return dnode;
- }
- 
-+struct dm_tree_node *dm_tree_add_new_dev_udev_flags(struct dm_tree *dtree,
-+						    const char *name,
-+						    const char *uuid,
-+						    uint32_t major, uint32_t minor,
-+						    int read_only,
-+						    int clear_inactive,
-+						    void *context,
-+						    uint16_t udev_flags)
-+{
-+	struct dm_tree_node *node;
-+
-+	if ((node = dm_tree_add_new_dev(dtree, name, uuid, major, minor, read_only,
-+				       clear_inactive, context)))
-+		node->udev_flags = udev_flags;
-+
-+	return node;
-+}
-+
-+
- void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
- 				 uint32_t read_ahead,
- 				 uint32_t read_ahead_flags)
-@@ -821,7 +845,8 @@ static int _info_by_dev(uint32_t major, uint32_t minor, int with_open_count,
- 	return r;
- }
- 
--static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, uint32_t *cookie)
-+static int _deactivate_node(const char *name, uint32_t major, uint32_t minor,
-+			    uint32_t *cookie, uint16_t udev_flags)
- {
- 	struct dm_task *dmt;
- 	int r = 0;
-@@ -841,7 +866,7 @@ static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, ui
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
- 
--	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
-+	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
- 		goto out;
- 
- 	r = dm_task_run(dmt);
-@@ -858,7 +883,7 @@ out:
- }
- 
- static int _rename_node(const char *old_name, const char *new_name, uint32_t major,
--			uint32_t minor, uint32_t *cookie)
-+			uint32_t minor, uint32_t *cookie, uint16_t udev_flags)
- {
- 	struct dm_task *dmt;
- 	int r = 0;
-@@ -881,7 +906,7 @@ static int _rename_node(const char *old_name, const char *new_name, uint32_t maj
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
- 
--	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
-+	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
- 		goto out;
- 
- 	r = dm_task_run(dmt);
-@@ -895,7 +920,8 @@ out:
- /* FIXME Merge with _suspend_node? */
- static int _resume_node(const char *name, uint32_t major, uint32_t minor,
- 			uint32_t read_ahead, uint32_t read_ahead_flags,
--			struct dm_info *newinfo, uint32_t *cookie)
-+			struct dm_info *newinfo, uint32_t *cookie,
-+			uint16_t udev_flags)
- {
- 	struct dm_task *dmt;
- 	int r = 0;
-@@ -924,7 +950,7 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
- 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
- 		log_error("Failed to set read ahead");
- 
--	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
-+	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
- 		goto out;
- 
- 	if ((r = dm_task_run(dmt)))
-@@ -1011,7 +1037,8 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
- 		    !info.exists || info.open_count)
- 			continue;
- 
--		if (!_deactivate_node(name, info.major, info.minor, &dnode->dtree->cookie)) {
-+		if (!_deactivate_node(name, info.major, info.minor,
-+				      &dnode->dtree->cookie, dnode->udev_flags)) {
- 			log_error("Unable to deactivate %s (%" PRIu32
- 				  ":%" PRIu32 ")", name, info.major,
- 				  info.minor);
-@@ -1156,7 +1183,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
- 			/* Rename? */
- 			if (child->props.new_name) {
- 				if (!_rename_node(name, child->props.new_name, child->info.major,
--						  child->info.minor, &child->dtree->cookie)) {
-+						  child->info.minor, &child->dtree->cookie,
-+						  child->udev_flags)) {
- 					log_error("Failed to rename %s (%" PRIu32
- 						  ":%" PRIu32 ") to %s", name, child->info.major,
- 						  child->info.minor, child->props.new_name);
-@@ -1171,7 +1199,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
- 
- 			if (!_resume_node(child->name, child->info.major, child->info.minor,
- 					  child->props.read_ahead, child->props.read_ahead_flags,
--					  &newinfo, &child->dtree->cookie)) {
-+					  &newinfo, &child->dtree->cookie, child->udev_flags)) {
- 				log_error("Unable to resume %s (%" PRIu32
- 					  ":%" PRIu32 ")", child->name, child->info.major,
- 					  child->info.minor);
-@@ -1622,7 +1650,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 
- 		if (!_resume_node(child->name, child->info.major, child->info.minor,
- 				  child->props.read_ahead, child->props.read_ahead_flags,
--				  &newinfo, &child->dtree->cookie)) {
-+				  &newinfo, &child->dtree->cookie, child->udev_flags)) {
- 			log_error("Unable to resume %s (%" PRIu32
- 				  ":%" PRIu32 ")", child->name, child->info.major,
- 				  child->info.minor);
+ LABEL="dm_end"
 
 
