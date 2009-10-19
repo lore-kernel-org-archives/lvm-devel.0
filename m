@@ -1,277 +1,281 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 19 Oct 2009 13:46:26 +0200
-Subject: [PATCH 1/4] Introduce flags to control udev rules
-Message-ID: <4ADC5192.7050607@redhat.com>
+Date: Mon, 19 Oct 2009 13:46:42 +0200
+Subject: [PATCH 2/4] Use udev flags in LVM
+Message-ID: <4ADC51A2.6010901@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch add flag support to control udev rules. The cookie value
-consists of a prefix (16 bits) and a base (16 bits). We can use the
-prefix to store the flags. These flags are sent to kernel within
-given dm task. When returned back to userspace in DM_COOKIE udev
-environment variable, we can control several aspects of udev rules we
-use by decoding the cookie prefix. When doing the notification, we
-replace the cookie prefix with DM_COOKIE_MAGIC, so we notify the right
-semaphore.
+We don't want to create the symlinks in /dev/<vgname> and /dev/disk for invisible or
+non-top-level devices. However, we still need some of them to be initialised, so we
+need them to be visible for a while (for example the "_mlog"). But we can't distinguish
+this situation without any further information in udev rules (so we don't know when
+the symlinks should be and when it should not be created). Therefore, we use the udev
+flags encoded in the cookie value to pass this information into the udev rules.
 
-The flags themselves are divided in two parts -- DM related flags (8 bits)
-and subsystem related flags (8bits) But we can discuss this allocation.
-any comments are welcome as well as any tips for adding more flags for
-any other special situations.
+Also, we need to increase the symlink priority for origin devices so they won't be
+overwritten by snapshots when the symlink has the same name (e.g. a symlink name
+based on FS UUID in /dev/disk/by-uuid directory).
 
-I've defined these flags for now:
-
-DM_UDEV_FLAG_NULL
-  - not a flag in a sense to be processed in udev rule, but used just
-    for initialisation throughout the code.
-
-DM_UDEV_FLAG_DISABLE_SUBSYSTEM_RULES
-  - general DM udev rules are applied (10-dm.rules), but instructs the
-    all the subsystem rules to be skipped
-
-DM_UDEV_FLAG_DISABLE_DISK_RULES
-  - disables general "/dev/disk" rules (12-dm-disk.rules)
-
-DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY
-  - instructs the rules to give higher priority for symlinks of the
-    device being processed that could have the same name as another
-    device (example scenario: symlink names based on FS UUID and
-    origin/snapshot situation -- we don't want the symlink for the
-    snapshot to overwrite the symlink for the origin)
-
-The flags are passed in with dm_task_set_cookie function call. To decode
-the flag so it can be imported into udev environment as a variable, we
-call "dmsetup udevflags <cookie>". The format here is:
-
-DM_UDEV_FLAG_<flag_name>='1' (for DM flags with symbolic names)
-DM_UDEV_FLAG_<flag_position>='1' (for DM flags without symbolic names)
-DM_SUBSYSTEM_UDEV_FLAG_<flag_position>='1' (for all subsystem flags, these
-ones don't have a symbolic names assigned)
+I've added and exported a function called "dm_tree_add_new_dev_udev_flags" which 
+is a wrapper around "dm_tree_add_new_dev". The flags are stored in tree node
+structure (for each device separately) so when the tree is traversed we can
+pass this information into dm_task_set_cookie then.
 
 Peter
 
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 861c009..090e35c 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1492,8 +1492,13 @@ static int _mknodes_v4(struct dm_task *dmt)
-  */
- static int _udev_complete(struct dm_task *dmt)
- {
--	if (dmt->cookie_set)
--		return dm_udev_complete(dmt->event_nr);
-+	uint32_t cookie;
-+
-+	if (dmt->cookie_set) {
-+		/* strip flags from the cookie and use cookie magic instead */
-+		cookie = (dmt->event_nr & 0x0000FFFF) | (DM_COOKIE_MAGIC << 16);
-+		return dm_udev_complete(cookie);
-+	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 13cec36..96928f6 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1003,6 +1003,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	uint32_t max_stripe_size = UINT32_C(0);
+ 	uint32_t read_ahead = lv->read_ahead;
+ 	uint32_t read_ahead_flags = UINT32_C(0);
++	uint16_t udev_flags = DM_UDEV_FLAG_NULL;
  
- 	return 1;
- }
+ 	if (!(name = build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
+ 		return_0;
+@@ -1022,18 +1023,26 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 
+ 	lvlayer->lv = lv;
+ 
++	if (layer || !lv_is_visible(lv))
++		udev_flags |= DM_UDEV_FLAG_DISABLE_SUBSYSTEM_RULES |
++			      DM_UDEV_FLAG_DISABLE_DISK_RULES;
++
++	if (lv->origin_count)
++		udev_flags |= DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY;
++
+ 	/*
+ 	 * Add LV to dtree.
+ 	 * If we're working with precommitted metadata, clear any
+ 	 * existing inactive table left behind.
+ 	 * Major/minor settings only apply to the visible layer.
+ 	 */
+-	if (!(dnode = dm_tree_add_new_dev(dtree, name, dlid,
++	if (!(dnode = dm_tree_add_new_dev_udev_flags(dtree, name, dlid,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->major,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->minor,
+ 					     _read_only_lv(lv),
+ 					     (lv->vg->status & PRECOMMITTED) ? 1 : 0,
+-					     lvlayer)))
++					     lvlayer,
++					     udev_flags)))
+ 		return_0;
+ 
+ 	/* Store existing name so we can do rename later */
+diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
+index c357131..733804c 100644
+--- a/libdm/.exported_symbols
++++ b/libdm/.exported_symbols
+@@ -50,6 +50,7 @@ dm_tree_create
+ dm_tree_free
+ dm_tree_add_dev
+ dm_tree_add_new_dev
++dm_tree_add_new_dev_udev_flags
+ dm_tree_node_get_name
+ dm_tree_node_get_uuid
+ dm_tree_node_get_info
 diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 204372a..a40a843 100644
+index a40a843..6640268 100644
 --- a/libdm/libdevmapper.h
 +++ b/libdm/libdevmapper.h
-@@ -164,7 +164,7 @@ int dm_task_set_major_minor(struct dm_task *dmt, int major, int minor, int allow
- int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
- int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
- int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie);
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags);
- int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
- int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
- int dm_task_set_message(struct dm_task *dmt, const char *message);
-@@ -1014,7 +1014,33 @@ int dm_report_field_uint64(struct dm_report *rh, struct dm_report_field *field,
- void dm_report_field_set_value(struct dm_report_field *field, const void *value,
- 			       const void *sortvalue);
+@@ -277,6 +277,14 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *tree,
+ 					 int read_only,
+ 					 int clear_inactive,
+ 					 void *context);
++struct dm_tree_node *dm_tree_add_new_dev_udev_flags(struct dm_tree *tree,
++						    const char *name,
++						    const char *uuid,
++						    uint32_t major, uint32_t minor,
++						    int read_only,
++						    int clear_inactive,
++						    void *context,
++						    uint16_t udev_flags);
  
-+/* Cookie prefixes.
-+ * The cookie value consists of a prefix (16 bits) and a base (16 bits).
-+ * We can use the prefix to store the flags. These flags are sent to
-+ * kernel within given dm task. When returned back to userspace in
-+ * DM_COOKIE udev enviroment variable, we can control several aspects
-+ * of udev rules we use by decoding the cookie prefix. When doing the
-+ * notification, we replace the cookie prefix with DM_COOKIE_MAGIC,
-+ * so we notify the right semaphore.
-+ */
- #define DM_COOKIE_MAGIC 0x0D4D
-+#define DM_UDEV_FLAG_NULL 0x0000
-+/*
-+ * DM_UDEV_FLAG_DISABLE_SUBSYTEM_RULES flag is set in case we need to disable
-+ * subsystem udev rules, but still we need the general DM udev rules to
-+ * be applied (to create the nodes and symlinks in DM directory under /dev).
-+ */
-+#define DM_UDEV_FLAG_DISABLE_SUBSYSTEM_RULES 0x0001
-+/*
-+ * DM_UDEV_FLAG_DISABLE_DISK_RULES flag is set in case we need to disable
-+ * general DM rules that set symlinks in /dev/disk directory.
-+ */
-+#define DM_UDEV_FLAG_DISABLE_DISK_RULES 0x0002
-+/*
-+ * DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY flag is set in case we need to instruct the
-+ * udev rules to give higher priority to the symlinks being created for a device.
-+ */
-+#define DM_UDEV_FLAG_HIGH_SYMLINK_PRIORITY 0x0004
- 
- int dm_cookie_supported(void);
- 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 248d3ac..3079c24 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -876,7 +876,7 @@ int dm_udev_get_sync_support(void)
- 	return 0;
- }
- 
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie)
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- {
- 	*cookie = 0;
- 
-@@ -1129,7 +1129,7 @@ bad:
- 	return 0;
- }
- 
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie)
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- {
- 	int semid;
- 
-@@ -1151,11 +1151,11 @@ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie)
- 		goto bad;
- 	}
- 
--	dmt->event_nr = *cookie;
-+	dmt->event_nr = (0x0000FFFF & *cookie) | (flags << 16);
- 	dmt->cookie_set = 1;
- 
--	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task",
--		  dmt->event_nr, semid);
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task "
-+		  "with flags 0x%" PRIx16, *cookie, semid, flags);
- 
- 	return 1;
- 
+ /*
+  * Search for a node in the tree.
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 75fb201..4b8ffc9 100644
+index 4b8ffc9..8511c03 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -841,7 +841,7 @@ static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, ui
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
+@@ -130,6 +130,8 @@ struct dm_tree_node {
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
- 		goto out;
+ 	int activation_priority;	/* 0 gets activated first */
  
- 	r = dm_task_run(dmt);
-@@ -881,7 +881,7 @@ static int _rename_node(const char *old_name, const char *new_name, uint32_t maj
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
++	uint16_t udev_flags;		/* Udev control flags */
++
+ 	void *context;			/* External supplied context */
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
- 		goto out;
+ 	struct load_properties props;	/* For creation/table (re)load */
+@@ -301,7 +303,8 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ 						 const char *name,
+ 						 const char *uuid,
+ 						 struct dm_info *info,
+-						 void *context)
++						 void *context,
++						 uint16_t udev_flags)
+ {
+ 	struct dm_tree_node *node;
+ 	uint64_t dev;
+@@ -317,6 +320,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ 	node->uuid = uuid;
+ 	node->info = *info;
+ 	node->context = context;
++	node->udev_flags = udev_flags;
+ 	node->activation_priority = 0;
  
- 	r = dm_task_run(dmt);
-@@ -924,7 +924,7 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
- 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
- 		log_error("Failed to set read ahead");
+ 	dm_list_init(&node->uses);
+@@ -466,8 +470,8 @@ static struct dm_tree_node *_add_dev(struct dm_tree *dtree,
+ 		if (!_deps(&dmt, dtree->mem, major, minor, &name, &uuid, &info, &deps))
+ 			return_NULL;
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
- 		goto out;
+-		if (!(node = _create_dm_tree_node(dtree, name, uuid,
+-						  &info, NULL)))
++		if (!(node = _create_dm_tree_node(dtree, name, uuid, &info,
++						  NULL, DM_UDEV_FLAG_NULL)))
+ 			goto_out;
+ 		new = 1;
+ 	}
+@@ -585,8 +589,8 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *dtree,
+ 		info.inactive_table = 0;
+ 		info.read_only = 0;
  
- 	if ((r = dm_task_run(dmt)))
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index c3539a7..dda5063 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -595,7 +595,7 @@ static int _create(int argc, char **argv, void *data __attribute((unused)))
- 	if (_switches[NOTABLE_ARG])
- 		dm_udev_set_sync_support(0);
+-		if (!(dnode = _create_dm_tree_node(dtree, name2, uuid2,
+-						   &info, context)))
++		if (!(dnode = _create_dm_tree_node(dtree, name2, uuid2, &info,
++						   context, DM_UDEV_FLAG_NULL)))
+ 			return_NULL;
  
--	if (!dm_task_set_cookie(dmt, &cookie) ||
-+	if (!dm_task_set_cookie(dmt, &cookie, DM_UDEV_FLAG_NULL) ||
- 	    !dm_task_run(dmt))
- 		goto out;
+ 		/* Attach to root node until a table is supplied */
+@@ -613,10 +617,30 @@ struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *dtree,
+ 		return_NULL;
  
-@@ -630,7 +630,7 @@ static int _rename(int argc, char **argv, void *data __attribute((unused)))
- 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
- 		goto out;
+ 	dnode->context = context;
++	dnode->udev_flags = DM_UDEV_FLAG_NULL;
  
--	if (!dm_task_set_cookie(dmt, &cookie) ||
-+	if (!dm_task_set_cookie(dmt, &cookie, DM_UDEV_FLAG_NULL) ||
- 	    !dm_task_run(dmt))
- 		goto out;
+ 	return dnode;
+ }
  
-@@ -758,6 +758,34 @@ static int _splitname(int argc, char **argv, void *data __attribute((unused)))
++struct dm_tree_node *dm_tree_add_new_dev_udev_flags(struct dm_tree *dtree,
++						    const char *name,
++						    const char *uuid,
++						    uint32_t major, uint32_t minor,
++						    int read_only,
++						    int clear_inactive,
++						    void *context,
++						    uint16_t udev_flags)
++{
++	struct dm_tree_node *node;
++
++	if ((node = dm_tree_add_new_dev(dtree, name, uuid, major, minor, read_only,
++				       clear_inactive, context)))
++		node->udev_flags = udev_flags;
++
++	return node;
++}
++
++
+ void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+ 				 uint32_t read_ahead,
+ 				 uint32_t read_ahead_flags)
+@@ -821,7 +845,8 @@ static int _info_by_dev(uint32_t major, uint32_t minor, int with_open_count,
  	return r;
  }
  
-+static int _udevflags(int args, char **argv, void *data __attribute((unused)))
-+{
-+	uint16_t flags;
-+	char *p;
-+	uint32_t i;
-+	static const char *dm_flag_names[] = {"DISABLE_SUBSYSTEM_RULES",
-+					      "DISABLE_DISK_RULES",
-+					      "HIGH_SYMLINK_PRIORITY",
-+					       0, 0, 0, 0, 0};
-+
-+	if (!(flags = (uint16_t) (strtoul(argv[1], &p, 0) >> 16)) || *p) {
-+		err("Incorrect cookie value");
-+		return 0;
-+	}
-+
-+	for (i = 0; i < 16; i++)
-+		if (1 << i & flags) {
-+			if (i < 8 && dm_flag_names[i])
-+				printf("DM_UDEV_FLAG_%s='1'\n", dm_flag_names[i]);
-+			else if (i < 8)
-+				printf("DM_UDEV_FLAG_%d='1'\n", i);
-+			else
-+				printf("DM_SUBSYSTEM_UDEV_FLAG_%d='1'\n", i - 8);
-+		}
-+
-+	return 1;
-+}
-+
- static int _udevcomplete(int argc, char **argv, void *data __attribute((unused)))
+-static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, uint32_t *cookie)
++static int _deactivate_node(const char *name, uint32_t major, uint32_t minor,
++			    uint32_t *cookie, uint16_t udev_flags)
  {
- 	uint32_t cookie;
-@@ -768,6 +796,9 @@ static int _udevcomplete(int argc, char **argv, void *data __attribute((unused))
- 		return 0;
- 	}
+ 	struct dm_task *dmt;
+ 	int r = 0;
+@@ -841,7 +866,7 @@ static int _deactivate_node(const char *name, uint32_t major, uint32_t minor, ui
+ 	if (!dm_task_no_open_count(dmt))
+ 		log_error("Failed to disable open_count");
  
-+	/* strip flags from the cookie and use cookie magic instead */
-+	cookie = (cookie & 0x0000FFFF) | (DM_COOKIE_MAGIC << 16);
-+
- 	return dm_udev_complete(cookie);
- }
- 
-@@ -953,7 +984,7 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
- 				    _read_ahead_flags))
- 		goto out;
- 
--	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie))
-+	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, DM_UDEV_FLAG_NULL))
+-	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
++	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
  		goto out;
  
  	r = dm_task_run(dmt);
-@@ -2436,6 +2467,7 @@ static struct command _commands[] = {
- 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, 1, _status},
- 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
-+	{"udevflags", "<cookie>", 1, 1, _udevflags},
- 	{"udevcomplete", "<cookie>", 1, 1, _udevcomplete},
- 	{"udevcomplete_all", "", 0, 0, _udevcomplete_all},
- 	{"udevcookies", "", 0, 0, _udevcookies},
+@@ -858,7 +883,7 @@ out:
+ }
+ 
+ static int _rename_node(const char *old_name, const char *new_name, uint32_t major,
+-			uint32_t minor, uint32_t *cookie)
++			uint32_t minor, uint32_t *cookie, uint16_t udev_flags)
+ {
+ 	struct dm_task *dmt;
+ 	int r = 0;
+@@ -881,7 +906,7 @@ static int _rename_node(const char *old_name, const char *new_name, uint32_t maj
+ 	if (!dm_task_no_open_count(dmt))
+ 		log_error("Failed to disable open_count");
+ 
+-	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
++	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
+ 		goto out;
+ 
+ 	r = dm_task_run(dmt);
+@@ -895,7 +920,8 @@ out:
+ /* FIXME Merge with _suspend_node? */
+ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 			uint32_t read_ahead, uint32_t read_ahead_flags,
+-			struct dm_info *newinfo, uint32_t *cookie)
++			struct dm_info *newinfo, uint32_t *cookie,
++			uint16_t udev_flags)
+ {
+ 	struct dm_task *dmt;
+ 	int r = 0;
+@@ -924,7 +950,7 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
+ 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
+ 		log_error("Failed to set read ahead");
+ 
+-	if (!dm_task_set_cookie(dmt, cookie, DM_UDEV_FLAG_NULL))
++	if (!dm_task_set_cookie(dmt, cookie, udev_flags))
+ 		goto out;
+ 
+ 	if ((r = dm_task_run(dmt)))
+@@ -1011,7 +1037,8 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 		    !info.exists || info.open_count)
+ 			continue;
+ 
+-		if (!_deactivate_node(name, info.major, info.minor, &dnode->dtree->cookie)) {
++		if (!_deactivate_node(name, info.major, info.minor,
++				      &dnode->dtree->cookie, dnode->udev_flags)) {
+ 			log_error("Unable to deactivate %s (%" PRIu32
+ 				  ":%" PRIu32 ")", name, info.major,
+ 				  info.minor);
+@@ -1156,7 +1183,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 			/* Rename? */
+ 			if (child->props.new_name) {
+ 				if (!_rename_node(name, child->props.new_name, child->info.major,
+-						  child->info.minor, &child->dtree->cookie)) {
++						  child->info.minor, &child->dtree->cookie,
++						  child->udev_flags)) {
+ 					log_error("Failed to rename %s (%" PRIu32
+ 						  ":%" PRIu32 ") to %s", name, child->info.major,
+ 						  child->info.minor, child->props.new_name);
+@@ -1171,7 +1199,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 
+ 			if (!_resume_node(child->name, child->info.major, child->info.minor,
+ 					  child->props.read_ahead, child->props.read_ahead_flags,
+-					  &newinfo, &child->dtree->cookie)) {
++					  &newinfo, &child->dtree->cookie, child->udev_flags)) {
+ 				log_error("Unable to resume %s (%" PRIu32
+ 					  ":%" PRIu32 ")", child->name, child->info.major,
+ 					  child->info.minor);
+@@ -1622,7 +1650,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 
+ 		if (!_resume_node(child->name, child->info.major, child->info.minor,
+ 				  child->props.read_ahead, child->props.read_ahead_flags,
+-				  &newinfo, &child->dtree->cookie)) {
++				  &newinfo, &child->dtree->cookie, child->udev_flags)) {
+ 			log_error("Unable to resume %s (%" PRIu32
+ 				  ":%" PRIu32 ")", child->name, child->info.major,
+ 				  child->info.minor);
 
 
