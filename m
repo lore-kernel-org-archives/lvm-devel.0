@@ -1,65 +1,39 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 21 Oct 2009 17:05:42 -0500
-Subject: [PATCH] Enable (already implemented?) snapshots of mirrors
-In-Reply-To: <20091021130847.GB10165@agk-dp.fab.redhat.com>
-References: <1255637948.16495.26.camel@hydrogen.msp.redhat.com>
-	<20091021130847.GB10165@agk-dp.fab.redhat.com>
-Message-ID: <13B333BC-2DD2-4176-8AD9-73FE0AFC2A27@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 21 Oct 2009 22:19:39 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20091021221939.30572.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2009-10-21 22:19:39
 
-On Oct 21, 2009, at 8:08 AM, Alasdair G Kergon wrote:
+Modified files:
+	tools          : lvconvert.c 
 
-> On Thu, Oct 15, 2009 at 03:19:08PM -0500, Jon Brassow wrote:
->> I just wanted to get a feel for where things were at WRT snapshots of
->> mirrors.  Pulling out the prevention check (patch provided below),
->> things seem to work just fine.  Is there something I am missing?
->
-> Well the check was inserted because the code was untested.
->
-> All the newly-possible combinations of commands need to be tested  
-> before
-> it can be removed, and other 'unsupported' messages can be placed
-> where things don't work correctly.
->
-> (Basically you check through all the options of all the commands
-> one-by-one and test every aspect which might behave differently
-> in respect of snapshots of mirrors.  This includes checking the  
-> dmeventd
-> plugins as well as 'partial' VGs, and ensuring there are no ways of
-> manipulating the 'in-use' mirror that conflict with the fact it is
-> an origin, and ensuring display tools remain comprehensible.)
+Log message:
+	Clarify message:
+	"  Mirror status: 1/2 images failed."
+	
+	Half of an image?  Half of the images?  No, 1 of 2 images.
 
-Ok, I'll get things started.  You can tell me if I miss anything.(?)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
 
-lvcreate:
-+ snapshot of mirror
-
-lvresize:
-+ grow the mirror origin (but only if inactive)
-+ grow the snapshot exception store
-+ Warning message given when trying to shrink origin
-+ able to shrink exception store (warning is given and asks to proceed)
-
-lvchange:
-+ '-an <origin>' deactivates origin and all snapshots
-+ '-ay <origin>' activates origin and all snapshots
-
-lvconvert:
-+ Error message notifying you cannot convert an LV under a snapshot  
-(this could be removed?)
-
-dmeventd:
-- since you can't convert an lv under a snapshot, you cannot repair a  
-mirror when a device fails
-
-So far, it seems like the 'dmeventd' issue must be fixed before a  
-possible check-in.
-
-  brassow
+--- LVM2/tools/lvconvert.c	2009/09/30 18:15:06	1.93
++++ LVM2/tools/lvconvert.c	2009/10/21 22:19:39	1.94
+@@ -584,7 +584,7 @@
+ 		if ((failed_mirrors = _failed_mirrors_count(lv)) < 0)
+ 			return_0;
+ 		lp->mirrors -= failed_mirrors;
+-		log_error("Mirror status: %d/%d images failed.",
++		log_error("Mirror status: %d of %d images failed.",
+ 			  failed_mirrors, existing_mirrors);
+ 		old_pvh = lp->pvh;
+ 		if (!(lp->pvh = _failed_pv_list(lv->vg)))
 
 
