@@ -1,46 +1,32 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 21 Oct 2009 13:51:47 +0100
-Subject: [PATCH] Document --all option in man pages, cleanup lvdisplay/pvdisplay man page.
-In-Reply-To: <1256097493-7756-1-git-send-email-dwysocha@redhat.com>
-References: <4AD83740.5070704@redhat.com>
-	<1256097493-7756-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20091021125147.GA10165@agk-dp.fab.redhat.com>
+Date: Wed, 21 Oct 2009 14:08:47 +0100
+Subject: [PATCH] Enable (already implemented?) snapshots of mirrors
+In-Reply-To: <1255637948.16495.26.camel@hydrogen.msp.redhat.com>
+References: <1255637948.16495.26.camel@hydrogen.msp.redhat.com>
+Message-ID: <20091021130847.GB10165@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Oct 20, 2009 at 11:58:13PM -0400, Dave Wysochanski wrote:
->  lvdisplay \- display attributes of a logical volume
+On Thu, Oct 15, 2009 at 03:19:08PM -0500, Jon Brassow wrote:
+> I just wanted to get a feel for where things were at WRT snapshots of
+> mirrors.  Pulling out the prevention check (patch provided below),
+> things seem to work just fine.  Is there something I am missing?
+ 
+Well the check was inserted because the code was untested.
 
-> +.B lvdisplay \-\-columns | \-C
+All the newly-possible combinations of commands need to be tested before
+it can be removed, and other 'unsupported' messages can be placed
+where things don't work correctly.
 
-Still doesn't match the --help text, which shows which arguments
-go with which form of the command.
-
->  \fBlvs\fP (8) is an alternative that provides the same information 
->  in the style of \fBps\fP (1).  \fBlvs\fP is recommended over
-> -\fBlvdisplay\fP.
-> +\fBlvdisplay\fP.  \fBlvdisplay --columns\fP is the equivalent
-> +of calling \fBlvs\fP.
-
-Mention that under -C in the OPTIONS section.
-"Calling X is the equivalent of calling Y" ('Running' or 'Executing'?)
-or better, just "X is equivalent to Y".
-  
->  .B lvs
-> +[\-a|\-\-all]
-
-> +Process all logical volumes, even hidden/internal ones.
-
-Replace 'process' with a more descriptive verb based on what
-'lvs' does.
-
-Replace 'hidden/internal' with a better description of what
-is meant.  I can spot no existing references to 'internal'
-in this context in the man pages, and only one to 'implemented by
-creating a hidden virtual device'.
+(Basically you check through all the options of all the commands
+one-by-one and test every aspect which might behave differently
+in respect of snapshots of mirrors.  This includes checking the dmeventd
+plugins as well as 'partial' VGs, and ensuring there are no ways of
+manipulating the 'in-use' mirror that conflict with the fact it is
+an origin, and ensuring display tools remain comprehensible.)
 
 Alasdair
 
