@@ -1,36 +1,47 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 21 Oct 2009 10:29:14 +0200
-Subject: [PATCH 3/4] Edit udev rules to use new udev flags and a cleanup
-In-Reply-To: <4ADC51B1.2040704@redhat.com>
-References: <4ADC51B1.2040704@redhat.com>
-Message-ID: <4ADEC65A.5030202@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 21 Oct 2009 13:51:47 +0100
+Subject: [PATCH] Document --all option in man pages, cleanup lvdisplay/pvdisplay man page.
+In-Reply-To: <1256097493-7756-1-git-send-email-dwysocha@redhat.com>
+References: <4AD83740.5070704@redhat.com>
+	<1256097493-7756-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <20091021125147.GA10165@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/19/2009 01:46 PM, Peter Rajnoha wrote:
->     However, the use
->     of OPTIONS+="last_rule" is controversial and a source of potential disputes.
->     I'm still not convinced about withdrawing the last_rule, I'll probably ask someone
->     from udev directly to get the opinion...
+On Tue, Oct 20, 2009 at 11:58:13PM -0400, Dave Wysochanski wrote:
+>  lvdisplay \- display attributes of a logical volume
 
-Just for the record, the statement I got from Kay Sievers from udev about this is that
-we shouldn't use the "last_rule" at all because it could create an "inconsistent behavior"
-and it should be removed.
+> +.B lvdisplay \-\-columns | \-C
 
-The truth is that with "last_rule" some of the problems could stay hidden forever, because
-only when something really breaks, people will react promptly :) So if we're going to play
-udev rules, others should play device-mapper rules as well and do not try to process dm
-devices when they are instructed to do so by means of checking certain environment variables
-we set for them.
+Still doesn't match the --help text, which shows which arguments
+go with which form of the command.
 
-(Basically, there are two options - either we check the state and use last_rule and other
-rules won't be processed or we rely on others checking these flags/env vars.)
+>  \fBlvs\fP (8) is an alternative that provides the same information 
+>  in the style of \fBps\fP (1).  \fBlvs\fP is recommended over
+> -\fBlvdisplay\fP.
+> +\fBlvdisplay\fP.  \fBlvdisplay --columns\fP is the equivalent
+> +of calling \fBlvs\fP.
 
-Any comments are welcome..
+Mention that under -C in the OPTIONS section.
+"Calling X is the equivalent of calling Y" ('Running' or 'Executing'?)
+or better, just "X is equivalent to Y".
+  
+>  .B lvs
+> +[\-a|\-\-all]
 
-Peter
+> +Process all logical volumes, even hidden/internal ones.
+
+Replace 'process' with a more descriptive verb based on what
+'lvs' does.
+
+Replace 'hidden/internal' with a better description of what
+is meant.  I can spot no existing references to 'internal'
+in this context in the man pages, and only one to 'implemented by
+creating a hidden virtual device'.
+
+Alasdair
 
 
