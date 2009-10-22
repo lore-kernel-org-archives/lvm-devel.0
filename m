@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 22 Oct 2009 10:40:42 -0000
-Subject: LVM2/daemons/dmeventd/plugins/mirror dmeventd_ ...
-Message-ID: <20091022104042.13658.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Oct 2009 11:25:47 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20091022112547.16273.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-10-22 10:40:41
+Changes by:	agk at sourceware.org	2009-10-22 11:25:47
 
 Modified files:
-	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Only announce mirror monitoring to syslog after initialisation succeeds.
+	.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1297&r2=1.1298
 
---- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/09/17 10:37:24	1.26
-+++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/10/22 10:40:41	1.27
-@@ -243,8 +243,6 @@
- 
- 	pthread_mutex_lock(&_register_mutex);
- 
--	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
--
- 	/*
- 	 * Need some space for allocations.  1024 should be more
- 	 * than enough for what we need (device mapper name splitting)
-@@ -264,6 +262,8 @@
- 		lvm2_run(_lvm_handle, "_memlock_inc");
- 	}
- 
-+	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
-+
- 	_register_count++;
- 	r = 1;
- 
+--- LVM2/WHATS_NEW	2009/10/16 17:41:49	1.1297
++++ LVM2/WHATS_NEW	2009/10/22 11:25:46	1.1298
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Delay announcing mirror monitoring to syslog until initialisation succeeded.
+   Handle metadata with unknown segment types more gracefully.
+   Set default owner and group to null.
+   Add dmeventd.static to the build.
 
 
