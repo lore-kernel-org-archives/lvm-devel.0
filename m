@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 22 Oct 2009 10:38:08 -0000
-Subject: LVM2/lib config/config.c config/config.h unkno ...
-Message-ID: <20091022103808.13165.qmail@sourceware.org>
+Date: 22 Oct 2009 10:40:42 -0000
+Subject: LVM2/daemons/dmeventd/plugins/mirror dmeventd_ ...
+Message-ID: <20091022104042.13658.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-10-22 10:38:07
+Changes by:	mornfall at sourceware.org	2009-10-22 10:40:41
 
 Modified files:
-	lib/config     : config.c config.h 
-	lib/unknown    : unknown.c 
+	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
 
 Log message:
-	Fix the "const discarded" warnings introduced in the unknown segment patch.
+	Only announce mirror monitoring to syslog after initialisation succeeds.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.h.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/unknown/unknown.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
 
---- LVM2/lib/config/config.c	2009/10/16 17:41:51	1.76
-+++ LVM2/lib/config/config.c	2009/10/22 10:38:07	1.77
-@@ -451,7 +451,7 @@
- 	return 1;
- }
+--- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/09/17 10:37:24	1.26
++++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2009/10/22 10:40:41	1.27
+@@ -243,8 +243,6 @@
  
--static int _write_config(struct config_node *n, int only_one,
-+static int _write_config(const struct config_node *n, int only_one,
- 			 struct output_line *outline, int level)
- {
- 	char space[MAX_INDENT + 1];
-@@ -504,7 +504,7 @@
- 	return 1;
- }
+ 	pthread_mutex_lock(&_register_mutex);
  
--int write_config_node(struct config_node *cn, putline_fn putline, void *baton)
-+int write_config_node(const struct config_node *cn, putline_fn putline, void *baton)
- {
- 	struct output_line outline;
- 	outline.fp = NULL;
---- LVM2/lib/config/config.h	2009/10/16 17:41:51	1.29
-+++ LVM2/lib/config/config.h	2009/10/22 10:38:07	1.30
-@@ -71,7 +71,7 @@
- 		      int argc, char **argv);
+-	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
+-
+ 	/*
+ 	 * Need some space for allocations.  1024 should be more
+ 	 * than enough for what we need (device mapper name splitting)
+@@ -264,6 +262,8 @@
+ 		lvm2_run(_lvm_handle, "_memlock_inc");
+ 	}
  
- typedef int (*putline_fn)(const char *line, void *baton);
--int write_config_node(struct config_node *cn, putline_fn putline, void *baton);
-+int write_config_node(const struct config_node *cn, putline_fn putline, void *baton);
++	syslog(LOG_INFO, "Monitoring mirror device %s for events\n", device);
++
+ 	_register_count++;
+ 	r = 1;
  
- time_t config_file_timestamp(struct config_tree *cft);
- int config_file_changed(struct config_tree *cft);
---- LVM2/lib/unknown/unknown.c	2009/10/16 17:41:52	1.1
-+++ LVM2/lib/unknown/unknown.c	2009/10/22 10:38:07	1.2
-@@ -35,7 +35,8 @@
- static int _unknown_text_import(struct lv_segment *seg, const struct config_node *sn,
- 				struct dm_hash_table *pv_hash)
- {
--	struct config_node *new, *last = NULL, *current, *head = NULL;
-+	struct config_node *new, *last = NULL, *head = NULL;
-+	const struct config_node *current;
- 	log_verbose("importing unknown segment");
- 	for (current = sn; current != NULL; current = current->sib) {
- 		if (!strcmp(current->key, "type") || !strcmp(current->key, "start_extent") ||
 
 
