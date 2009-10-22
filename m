@@ -1,458 +1,163 @@
-From: Bastian Blank <bastian@waldi.eu.org>
-Date: Fri, 30 Oct 2009 14:36:28 +0100
-Subject: [PATCH] debian: move owner and group setup, use sane permissions
-Message-ID: <20091030133627.GA20856@wavehammer.waldi.eu.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 22 Oct 2009 13:11:34 -0000
+Subject: LVM2 ./WHATS_NEW_DM udev/10-dm.rules.in udev/1 ...
+Message-ID: <20091022131134.2584.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move the OWNER and GROUP setup into the configure script. Move
-permission definitions into the make setup, use sane values by default.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2009-10-22 13:11:33
 
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -165,22 +165,17 @@
- endif
+Modified files:
+	.              : WHATS_NEW_DM 
+	udev           : 10-dm.rules.in 11-lvm.rules 12-dm-disk.rules 
+	                 12-dm-permissions.rules 95-dm-notify.rules 
+
+Log message:
+	Use udev flags in the rules and cleanup the rules:
+	- remove default permissions set in 95-dm-notify.rules (and add a hint in 12-dm-permissions.rules to set it by the user directly)
+	- add multipath DM_ACTION=="PATH_FAILED" filter
+	- remove unnecessary filters in the headers of the rules (we can simply use DM_UDEV_RULES_VSN instead)
+	- fix symlink priorities in /dev/disk/ (snapshot volumes have low priority for FS UUID symlinks so it will not overwrite symlinks for the origin)
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.306&r2=1.307
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/10-dm.rules.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/11-lvm.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/12-dm-disk.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/12-dm-permissions.rules.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/95-dm-notify.rules.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+
+--- LVM2/WHATS_NEW_DM	2009/10/22 12:55:47	1.306
++++ LVM2/WHATS_NEW_DM	2009/10/22 13:11:33	1.307
+@@ -1,5 +1,6 @@
+ Version 1.02.39 - 
+ =====================================
++  Remove strict default permissions for DM devices from 95-dm-notify.rules.
+   Add dmsetup udevflags command to decode udev flags in given cookie value.
+   Add udev flags support in libdevmapper.
+   Make libdm ABI consistent when built with/without selinux support.
+--- LVM2/udev/10-dm.rules.in	2009/09/11 16:05:20	1.3
++++ LVM2/udev/10-dm.rules.in	2009/10/22 13:11:33	1.4
+@@ -20,6 +20,9 @@
+ TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
+ TEST!="$env{DM_SBIN_PATH}/dmsetup", GOTO="dm_end"
  
- install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION)
- 	$(LN_S) -f liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION) $(libdir)/liblvm2cmd.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
--		$(includedir)/lvm2cmd.h
-+	$(INSTALL_DATA) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
++# Decode udev control flags and set environment variables appropriately.
++ENV{DM_COOKIE}=="?*", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup udevflags $env{DM_COOKIE}"
++
+ ACTION!="add|change", GOTO="dm_end"
  
- install_cmdlib_static: liblvm2cmd-static.a
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2cmd.a.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2cmd.a.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2cmd.a.$(LIB_VERSION) $(libdir)/liblvm2cmd.a
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
--		$(includedir)/lvm2cmd.h
-+	$(INSTALL) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
+ # Normally, we operate on "change" events only. But when
+@@ -55,10 +58,11 @@
+ # possible future changes.
+ ENV{DM_UDEV_RULES_VSN}="1"
  
- install_tools_dynamic: lvm .commands
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm \
--		$(sbindir)/lvm
-+	$(INSTALL) -D lvm $(sbindir)/lvm
- 	@echo Creating symbolic links for individual commands in $(sbindir)
- 	@( \
- 		for v in `cat $(srcdir)/.commands`; do \
-@@ -190,14 +185,13 @@
- 	)
+-ENV{DM_NAME}=="?*", NAME="$kernel", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
++ENV{DM_NAME}=="?*", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
  
- install_tools_static: lvm.static
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(staticdir)/lvm.static
-+	$(INSTALL) -D $< $(staticdir)/$<
+-# We have to ignore further rule application for temporary
+-# cryptsetup devices. But don't forget to send the notification!
++# We have to ignore further rule application for inappropriate events
++# and devices. But still send the notification if cookie exists.
++ENV{DM_UUID}=="mpath-?*", ENV{DM_ACTION}=="PATH_FAILED", GOTO="dm_last_rule"
+ ENV{DM_UUID}=="CRYPT-TEMP-?*", GOTO="dm_last_rule"
+ ENV{DM_UUID}!="?*", ENV{DM_NAME}=="temporary-cryptsetup-?*", GOTO="dm_last_rule"
  
- install_dmsetup_dynamic: dmsetup
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
-+	$(INSTALL) -D $< $(sbindir)/$<
+--- LVM2/udev/11-lvm.rules	2009/09/11 16:05:20	1.3
++++ LVM2/udev/11-lvm.rules	2009/10/22 13:11:33	1.4
+@@ -8,17 +8,11 @@
+ #   DM_VG_NAME - volume group name
+ #   DM_LV_LAYER - logical volume layer (blank if not set)
  
- install_dmsetup_static: dmsetup.static
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
-+	$(INSTALL) -D $< $(sbindir)/$<
- 
- install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
- 
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -98,8 +98,8 @@
- .PHONY: install_clvmd
- 
- install_clvmd: $(TARGETS)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) clvmd \
--		$(usrsbindir)/clvmd
-+	$(INSTALL) -D clvmd \
-+		$(sbindir)/clvmd
- 
- install: $(INSTALL_TARGETS)
- 
---- a/lib/format1/Makefile.in
-+++ b/lib/format1/Makefile.in
-@@ -32,7 +32,6 @@
- include ../../make.tmpl
- 
- install: liblvm2format1.so
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2format1.so.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2format1.so.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2format1.so.$(LIB_VERSION) $(libdir)/liblvm2format1.so
- 
---- a/lib/format_pool/Makefile.in
-+++ b/lib/format_pool/Makefile.in
-@@ -29,8 +29,7 @@
- include ../../make.tmpl
- 
- install: liblvm2formatpool.so
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2formatpool.so.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2formatpool.so.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2formatpool.so.$(LIB_VERSION) \
- 		$(libdir)/liblvm2formatpool.so
- 
---- a/lib/locking/Makefile.in
-+++ b/lib/locking/Makefile.in
-@@ -25,8 +25,7 @@
- include ../../make.tmpl
- 
- install install_cluster: liblvm2clusterlock.so
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2clusterlock.so.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2clusterlock.so.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2clusterlock.so.$(LIB_VERSION) \
- 		$(libdir)/liblvm2clusterlock.so
- 
---- a/lib/mirror/Makefile.in
-+++ b/lib/mirror/Makefile.in
-@@ -25,7 +25,6 @@
- include ../../make.tmpl
- 
- install: liblvm2mirror.so
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2mirror.so.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2mirror.so.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2mirror.so.$(LIB_VERSION) $(libdir)/liblvm2mirror.so
- 
---- a/lib/snapshot/Makefile.in
-+++ b/lib/snapshot/Makefile.in
-@@ -25,8 +25,7 @@
- include ../../make.tmpl
- 
- install: liblvm2snapshot.so
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/liblvm2snapshot.so.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/liblvm2snapshot.so.$(LIB_VERSION)
- 	$(LN_S) -f liblvm2snapshot.so.$(LIB_VERSION) \
- 		$(libdir)/liblvm2snapshot.so
- 
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -63,14 +63,14 @@
- 	@for f in $(MAN8); \
- 	do \
- 	   $(RM) $(MAN8DIR)/$$f; \
--	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
-+	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
- 	done
- 
- 	@echo "Installing $(MAN5) in $(MAN5DIR)"
- 	@for f in $(MAN5); \
- 	do \
- 	   $(RM) $(MAN5DIR)/$$f; \
--	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN5DIR)/$$f; \
-+	   $(INSTALL_DATA) -D $$f $(MAN5DIR)/$$f; \
- 	done
- 
- install_cluster:
-@@ -78,7 +78,7 @@
- 	@for f in $(MAN8CLUSTER); \
- 	do \
- 	   $(RM) $(MAN8DIR)/$$f; \
--	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
-+	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
- 	done
- 
- install_device-mapper:
-@@ -86,7 +86,7 @@
- 	@for f in $(MAN8DM); \
- 	do \
- 	   $(RM) $(MAN8DIR)/$$f; \
--	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
-+	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
- 	done
- 
- install: install_lvm2 install_device-mapper
---- a/libdm/Makefile.in
-+++ b/libdm/Makefile.in
-@@ -73,7 +69,7 @@
- install_device-mapper: install
- 
- install_include:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper.h \
-+	$(INSTALL_DATA) $(srcdir)/libdevmapper.h \
- 		$(includedir)/libdevmapper.h
- 
- install_dynamic: install_ at interface@
-@@ -81,19 +77,16 @@
- 		$(libdir)/libdevmapper.$(LIB_SUFFIX)
- 
- install_static: install_@interface@_static
--	$(LN_S) -f libdevmapper.a.$(LIB_VERSION_DM) $(libdir)/libdevmapper.a
- 
- install_ioctl: ioctl/libdevmapper.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
-+	$(INSTALL) -D $< $(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
- 
- install_pkgconfig:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper.pc \
-+	$(INSTALL_DATA) -D libdevmapper.pc \
- 		$(usrlibdir)/pkgconfig/devmapper.pc
- 
- install_ioctl_static: ioctl/libdevmapper.a
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/libdevmapper.a.$(LIB_VERSION_DM)
-+	$(INSTALL) -D $< $(usrlibdir)/libdevmapper.a
- 
- $(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_DM): $(interface)/%.$(LIB_SUFFIX)
- 	rm -f $@
---- a/daemons/dmeventd/Makefile.in
-+++ b/daemons/dmeventd/Makefile.in
-@@ -73,31 +73,29 @@
- endif
- 
- install_include:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper-event.h \
-+	$(INSTALL_DATA) $(srcdir)/libdevmapper-event.h \
- 		$(includedir)/libdevmapper-event.h
- 
- install_pkgconfig:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.pc \
-+	$(INSTALL_DATA) libdevmapper-event.pc \
- 		$(usrlibdir)/pkgconfig/devmapper-event.pc
- 
- install_lib_dynamic: libdevmapper-event.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION)
- 	$(LN_S) -f libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION) \
- 		$(libdir)/libdevmapper-event.$(LIB_SUFFIX)
- 
- install_lib_static: libdevmapper-event.a
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/libdevmapper-event.a.$(LIB_VERSION)
-+	$(INSTALL) -D $< $(libdir)/libdevmapper-event.a.$(LIB_VERSION)
- 	$(LN_S) -f libdevmapper-event.a.$(LIB_VERSION) $(libdir)/libdevmapper-event.a
- 
- install_lib: $(INSTALL_LIB_TARGETS)
- 
- install_dmeventd_dynamic: dmeventd
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
-+	$(INSTALL) -D $< $(sbindir)/$<
- 
- install_dmeventd_static: dmeventd.static
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
-+	$(INSTALL) -D $< $(sbindir)/$<
- 
- install_dmeventd: $(INSTALL_DMEVENTD_TARGETS)
- 
---- a/daemons/dmeventd/plugins/mirror/Makefile.in
-+++ b/daemons/dmeventd/plugins/mirror/Makefile.in
-@@ -35,7 +35,7 @@
- LIBS += -ldevmapper @LIB_PTHREAD@ @LVM2CMD_LIB@
- 
- install_lvm2: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-+	$(INSTALL) -D $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
- 
---- a/daemons/dmeventd/plugins/snapshot/Makefile.in
-+++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
-@@ -35,7 +35,7 @@
- LIBS += -ldevmapper @LIB_PTHREAD@ @LVM2CMD_LIB@
- 
- install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-+	$(INSTALL) -D $< \
- 		$(libdir)/$<.$(LIB_VERSION)
- 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
- 
---- a/doc/Makefile.in
-+++ b/doc/Makefile.in
-@@ -24,7 +24,7 @@
- install_lvm2: $(CONFSRC)
- 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
- 		echo "Installing $(CONFSRC) as $(confdir)/$(CONFDEST)"; \
--		@INSTALL@ -D $(OWNER) $(GROUP) -m 644 $< \
-+		$(INSTALL_DATA) -D $< \
- 			$(confdir)/$(CONFDEST); \
- 	fi
- 
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -21,6 +21,7 @@
- RANLIB = @RANLIB@
- SHELL = /bin/sh
- INSTALL = @INSTALL@
-+INSTALL_DATA = @INSTALL@ -m 644
- MKDIR_P = @MKDIR_P@
- MSGFMT = @MSGFMT@
- LCOV = @LCOV@
-@@ -56,11 +57,6 @@
- interface = @interface@
- interfacedir = $(top_srcdir)/libdm/$(interface)
- 
--# setup misc variables
--# define the ownership variables for the binaries and man pages
--OWNER = @OWNER@
--GROUP = @GROUP@
+-SUBSYSTEM!="block", GOTO="lvm_end"
+-KERNEL!="dm-[0-9]*", GOTO="lvm_end"
++# "add" event is processed on coldplug only!
+ ACTION!="add|change", GOTO="lvm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
+ ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
 -
- # The number of jobs to run, if blank, defaults to the make standard
- ifndef MAKEFLAGS
- MAKEFLAGS = @JOBS@
-@@ -107,9 +103,6 @@
- #CFLAGS += -pg
- #LDFLAGS += -pg
+-# Normally, we operate on "change" events only. But when
+-# coldplugging, there's an "add" event present. We have
+-# to recognize this and do our actions in this particular
+-# situation, too.
+-ACTION=="add", ENV{STARTUP}!="1", GOTO="lvm_end"
++ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
  
--STRIP=
--#STRIP = -s
+ # Use DM name and split it up into its VG/LV/layer constituents.
+ IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
+--- LVM2/udev/12-dm-disk.rules	2009/09/11 16:05:20	1.3
++++ LVM2/udev/12-dm-disk.rules	2009/10/22 13:11:33	1.4
+@@ -5,16 +5,10 @@
+ # label and uuid are created only if the device is not
+ # suspended.
+ 
+-SUBSYSTEM!="block", GOTO="dm_end"
+-KERNEL!="dm-[0-9]*", GOTO="dm_end"
++# "add" event is processed on coldplug only!
+ ACTION!="add|change", GOTO="dm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
 -
- LVM_VERSION := $(shell cat $(top_srcdir)/VERSION)
+-# Normally, we operate on "change" events only. But when
+-# coldplugging, there's an "add" event present. We have to
+-# recognize this and do our actions in this particular
+-# situation, too.
+-ACTION=="add", ENV{STARTUP}!="1", GOTO="dm_end"
++ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
  
- LIB_VERSION_LVM := $(shell cat $(top_srcdir)/VERSION | \
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -19,13 +19,10 @@
- include ../make.tmpl
+ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
+ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+@@ -22,8 +16,7 @@
+ ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
  
- install:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/lvm_dump.sh \
--		$(sbindir)/lvmdump
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/vgimportclone.sh \
--		$(sbindir)/vgimportclone
-+	$(INSTALL) -D $(srcdir)/lvm_dump.sh $(sbindir)/lvmdump
-+	$(INSTALL) -D $(srcdir)/vgimportclone.sh $(sbindir)/vgimportclone
- ifeq ("@FSADM@", "yes")
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/fsadm.sh \
--		$(sbindir)/fsadm
-+	$(INSTALL) -D $(srcdir)/fsadm.sh $(sbindir)/fsadm
- endif
+ IMPORT{program}="$env{DM_SBIN_PATH}/blkid -o udev -p $tempnode"
+-OPTIONS="link_priority=-100"
+-ENV{DM_LV_LAYER}=="?*", OPTIONS="link_priority=-90"
++ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
  
- install_lvm2: install
---- a/po/Makefile.in
-+++ b/po/Makefile.in
-@@ -54,13 +54,13 @@
- 	@echo Installing translation files in $(localedir)
- 	@( \
- 		for lang in $(LANGS); do \
--			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
-+			$(INSTALL_DATA) -D $$lang.mo \
- 			    $(localedir)/$$lang/LC_MESSAGES/lvm2.mo;\
- 	  done; \
- 	)
- 	@( \
- 		for lang in $(LANGS); do \
--			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
-+			$(INSTALL_DATA) -D $$lang.mo \
- 			    $(localedir)/$$lang/LC_MESSAGES/device-mapper.mo;\
- 	  done; \
- 	)
---- a/liblvm/Makefile.in
-+++ b/liblvm/Makefile.in
-@@ -67,22 +67,19 @@
- install: $(INSTALL_TYPE) install_include
+--- LVM2/udev/12-dm-permissions.rules	2009/09/23 12:52:52	1.4
++++ LVM2/udev/12-dm-permissions.rules	2009/10/22 13:11:33	1.5
+@@ -15,9 +15,8 @@
+ #   DM_VG_NAME - volume group name (not set if LVM device not present)
+ #   DM_LV_LAYER - logical volume layer (not set if LVM device not present)
  
- install_include:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
-+	$(INSTALL_DATA) -D $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
+-SUBSYSTEM!="block", GOTO="dm_end"
+-KERNEL!="dm-[0-9]*", GOTO="dm_end"
+-ACTION!="change", GOTO="dm_end"
++# "add" event is processed on coldplug only!
++ACTION!="add|change", GOTO="dm_end"
+ ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
  
- install_dynamic: $(LIB_SHARED)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
-+	$(INSTALL) -D $< $(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
- 	$(LN_S) -f $(LIB_SHARED).$(LIB_VERSION_APP) \
- 		$(libdir)/$(LIB_SHARED)
+ # A few demonstrational examples...
+@@ -72,4 +71,7 @@
+ # listed at the beginning of this file (udev provides simple pattern matching by
+ # using *, ? and [] that you can use, see 'man udev' for more information).
  
- install_static: $(LIB_STATIC)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
--		$(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
-+	$(INSTALL) -D $< $(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
- 	$(LN_S) -f $(LIB_STATIC).$(LIB_VERSION_APP) $(libdir)/$(LIB_STATIC)
++# Set default permissions for all DM devices if not set before.
++# OWNER:="root", GROUP:="root", MODE:="660"
++
+ LABEL="dm_end"
+--- LVM2/udev/95-dm-notify.rules	2009/09/11 16:05:20	1.2
++++ LVM2/udev/95-dm-notify.rules	2009/10/22 13:11:33	1.3
+@@ -4,13 +4,11 @@
+ # waiting for completion of udev rules. The process is identified by
+ # a cookie value sent within "change" and "remove" events (the cookie
+ # value is set before by that process for every action requested).
+-# Also, it sets default permissions for DM devices if not set already.
  
- install_pkgconfig:
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(LIB_NAME).pc \
--		$(usrlibdir)/pkgconfig/lvm2app.pc
-+	$(INSTALL_DATA) -D $(LIB_NAME).pc $(usrlibdir)/pkgconfig/lvm2app.pc
+ SUBSYSTEM!="block", GOTO="dm_end"
+ KERNEL!="dm-[0-9]*", GOTO="dm_end"
+ ACTION!="change|remove", GOTO="dm_end"
  
- liblvm.cflow: $(SOURCES)
- 	set -e; (echo -n "SOURCES += "; \
---- a/daemons/cmirrord/Makefile.in
-+++ b/daemons/cmirrord/Makefile.in
-@@ -36,5 +36,4 @@
- 		$(LVMLIBS) $(LMLIBS) $(LIBS)
+-ACTION=="change", OWNER:="root", GROUP:="root", MODE:="600"
+ ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
  
- install: $(TARGETS)
--	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) cmirrord \
--		$(usrsbindir)/cmirrord
-+	$(INSTALL) -D cmirrord $(usrsbindir)/cmirrord
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -32,7 +32,7 @@
- 	@for f in $(LVM_RULES); \
- 	do \
- 	   $(RM) $(udevdir)/$$f; \
--	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $(srcdir)/$$f $(udevdir)/$$f; \
-+	   $(INSTALL_DATA) -c -D $(srcdir)/$$f $(udevdir)/$$f; \
- 	done
- 
- install_device-mapper: $(DM_RULES)
-@@ -40,7 +40,7 @@
- 	@for f in $(DM_RULES); \
- 	do \
- 	   $(RM) $(udevdir)/$$f; \
--	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $(srcdir)/$$f $(udevdir)/$$f; \
-+	   $(INSTALL_DATA) -c -D $(srcdir)/$$f $(udevdir)/$$f; \
- 	done
- 
- install: install_lvm2 install_device-mapper
---- a/configure.in
-+++ b/configure.in
-@@ -144,28 +144,25 @@
- ################################################################################
- dnl -- Setup the ownership of the files
- AC_MSG_CHECKING(file owner)
--OWNER=""
--
- AC_ARG_WITH(user,
-   [  --with-user=USER        Set the owner of installed files [[USER=]] ],
-   [ OWNER="$withval" ])
- AC_MSG_RESULT($OWNER)
- 
- if test x$OWNER != x; then
--	OWNER="-o $OWNER"
-+	INSTALL="$INSTALL -o $OWNER"
- fi
- 
- ################################################################################
- dnl -- Setup the group ownership of the files
- AC_MSG_CHECKING(group owner)
--GROUP=""
- AC_ARG_WITH(group,
-   [  --with-group=GROUP      Set the group owner of installed files [[GROUP=]] ],
-   [ GROUP="$withval" ])
- AC_MSG_RESULT($GROUP)
- 
- if test x$GROUP != x; then
--	GROUP="-g $GROUP"
-+	INSTALL="$INSTALL -g $GROUP"
- fi
- 
- ################################################################################
-@@ -1092,7 +1089,6 @@
- AC_SUBST(DM_LIB_VERSION)
- AC_SUBST(DM_LIB_PATCHLEVEL)
- AC_SUBST(FSADM)
--AC_SUBST(GROUP)
- AC_SUBST(GULM_CFLAGS)
- AC_SUBST(GULM_LIBS)
- AC_SUBST(HAVE_LIBDL)
-@@ -1116,7 +1112,6 @@
- AC_SUBST(LVM_RELEASE_DATE)
- AC_SUBST(MIRRORS)
- AC_SUBST(MSGFMT)
--AC_SUBST(OWNER)
- AC_SUBST(PKGCONFIG)
- AC_SUBST(POOL)
- AC_SUBST(QUORUM_CFLAGS)
--- 
-Each kiss is as the first.
-		-- Miramanee, Kirk's wife, "The Paradise Syndrome",
-		   stardate 4842.6
+ LABEL="dm_end"
 
 
