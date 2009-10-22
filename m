@@ -1,39 +1,31 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 21 Oct 2009 22:19:39 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20091021221939.30572.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 22 Oct 2009 01:01:36 +0100
+Subject: [PATCH] Enable (already implemented?) snapshots of mirrors
+In-Reply-To: <13B333BC-2DD2-4176-8AD9-73FE0AFC2A27@redhat.com>
+References: <1255637948.16495.26.camel@hydrogen.msp.redhat.com>
+	<20091021130847.GB10165@agk-dp.fab.redhat.com>
+	<13B333BC-2DD2-4176-8AD9-73FE0AFC2A27@redhat.com>
+Message-ID: <20091022000136.GD10165@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2009-10-21 22:19:39
+On Wed, Oct 21, 2009 at 05:05:42PM -0500, Jon Brassow wrote:
+> On Oct 21, 2009, at 8:08 AM, Alasdair G Kergon wrote:
+>> (Basically you check through all the options of all the commands
+>> one-by-one and test every aspect which might behave differently
+>> in respect of snapshots of mirrors
 
-Modified files:
-	tools          : lvconvert.c 
+> Ok, I'll get things started.  You can tell me if I miss anything.(?)
 
-Log message:
-	Clarify message:
-	"  Mirror status: 1/2 images failed."
-	
-	Half of an image?  Half of the images?  No, 1 of 2 images.
+Well when I do this, I list all the commands (alphabetically) in the
+tools dir, and then run each in turn with -h to remind me of the complete
+functionality of the command, and test anything I think needs testing.
+(Most commands get eliminated very quickly of course, then you're normally just
+left with a small number of scenarios to set up and test.)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
-
---- LVM2/tools/lvconvert.c	2009/09/30 18:15:06	1.93
-+++ LVM2/tools/lvconvert.c	2009/10/21 22:19:39	1.94
-@@ -584,7 +584,7 @@
- 		if ((failed_mirrors = _failed_mirrors_count(lv)) < 0)
- 			return_0;
- 		lp->mirrors -= failed_mirrors;
--		log_error("Mirror status: %d/%d images failed.",
-+		log_error("Mirror status: %d of %d images failed.",
- 			  failed_mirrors, existing_mirrors);
- 		old_pvh = lp->pvh;
- 		if (!(lp->pvh = _failed_pv_list(lv->vg)))
+Alasdair
 
 
