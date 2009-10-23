@@ -1,40 +1,70 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Tue, 17 Nov 2020 19:20:49 +0800
-Subject: [QUESTION] VG refresh: remove disk and reinsert disk, VG not refresh
-In-Reply-To: <20201116164102.GA10385@redhat.com>
-References: <7b0ca534-c927-7e15-a6ce-52edc5a1805d@huawei.com>
-	<20201116164102.GA10385@redhat.com>
-Message-ID: <82ce604b-a2aa-4591-1f10-a5f37352b406@huawei.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 23 Oct 2009 01:24:18 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
+Message-ID: <20091023012418.20664.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Thank you for your answer, we will solve this problem in our own way.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-10-23 01:24:17
 
-? 2020/11/17 0:41, David Teigland ??:
-> On Mon, Nov 16, 2020 at 11:15:50AM +0800, Wu Guanghao wrote:
->> So I want to know how to add vg refresh function in the 2.02.187 and
->> later to keep it the same as 2.02.181, and why delete vg refresh
->> function?
-> 
-> Sorry, I don't think I quite knew what a proper use of that looked like
-> when removing it.  All the cases I saw were unnecessary or were causing
-> problems.  The motivation was numerous problems reported about failed
-> activation during boot, some involving unwanted refreshes.  A better fix
-> might have found a way to preserve it in the stable branch.
-> 
-> If you're compiling your own lvm it would be simple to restore, enable the
-> if 0 section in pvscan.c.
-> 
-> More generally, refresh didn't fit correctly where it was implemented.  It
-> depended on lvmetad (now removed), and was not really related to
-> autoactivation.  If an automatic refresh feature is warranted, it should
-> be designed and implemented to stand on its own.
-> 
-> Dave
-> 
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvconvert.c 
 
+Log message:
+	Cleanup mimagetmp LV if allocation fails for new lvconvert mimage.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1301&r2=1.1302
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.94&r2=1.95
+
+--- LVM2/WHATS_NEW	2009/10/22 17:45:23	1.1301
++++ LVM2/WHATS_NEW	2009/10/23 01:24:17	1.1302
+@@ -1,5 +1,6 @@
+ Version 2.02.54 -
+ =====================================
++  Cleanup mimagetmp LV if allocation fails for new lvconvert mimage.
+   Fix clvmd segfault when refresh_toolcontext fails.
+   Remember to clear 'global lock held during cache refresh' state after use.
+   Use udev flags support in LVM.
+--- LVM2/tools/lvconvert.c	2009/10/21 22:19:39	1.94
++++ LVM2/tools/lvconvert.c	2009/10/23 01:24:17	1.95
+@@ -532,7 +532,7 @@
+ 	const char *mirrorlog;
+ 	unsigned corelog = 0;
+ 	int r = 0;
+-	struct logical_volume *log_lv;
++	struct logical_volume *log_lv, *layer_lv;
+ 	int failed_mirrors = 0, failed_log = 0;
+ 	struct dm_list *old_pvh = NULL, *remove_pvs = NULL;
+ 
+@@ -733,8 +733,21 @@
+ 						lv->le_count,
+ 						lp->region_size),
+ 				    0U, lp->pvh, lp->alloc,
+-				    MIRROR_BY_LV))
++				    MIRROR_BY_LV)) {
++			layer_lv = seg_lv(first_seg(lv), 0);
++			if (!remove_layer_from_lv(lv, layer_lv) ||
++			    !deactivate_lv(cmd, layer_lv) ||
++			    !lv_remove(layer_lv) || !vg_write(lv->vg) ||
++			    !vg_commit(lv->vg)) {
++				log_error("ABORTING: Failed to remove "
++					  "temporary mirror layer %s.",
++					  layer_lv->name);
++				log_error("Manual cleanup with vgcfgrestore "
++					  "and dmsetup may be required.");
++				return 0;
++			}
+ 			return_0;
++		}
+ 		lv->status |= CONVERTING;
+ 		lp->need_polling = 1;
+ 	}
 
 
