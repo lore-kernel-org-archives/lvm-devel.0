@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Oct 2009 22:42:08 -0000
-Subject: LVM2/udev 11-dm-lvm.rules 12-dm-permissions.ru ...
-Message-ID: <20091026224208.20280.qmail@sourceware.org>
+Date: 27 Oct 2009 00:52:46 -0000
+Subject: LVM2 WHATS_NEW WHATS_NEW_DM
+Message-ID: <20091027005246.28329.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,60 +10,48 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-10-26 22:42:07
+Changes by:	agk at sourceware.org	2009-10-27 00:52:45
 
 Modified files:
-	udev           : 11-dm-lvm.rules 12-dm-permissions.rules 
-	                 13-dm-disk.rules 95-dm-notify.rules 
+	.              : WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	add copyright lines
+	.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/11-dm-lvm.rules.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/12-dm-permissions.rules.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/95-dm-notify.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1305&r2=1.1306
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.308&r2=1.309
 
---- LVM2/udev/11-dm-lvm.rules	2009/10/26 14:29:34	1.2
-+++ LVM2/udev/11-dm-lvm.rules	2009/10/26 22:42:07	1.3
-@@ -1,3 +1,7 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
- # Udev rules for LVM.
- #
- # These rules create symlinks for LVM logical volumes in
---- LVM2/udev/12-dm-permissions.rules	2009/10/22 13:11:33	1.5
-+++ LVM2/udev/12-dm-permissions.rules	2009/10/26 22:42:07	1.6
-@@ -1,3 +1,7 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
- # Udev rules for device-mapper devices.
- #
- # These rules set permissions for DM devices.
---- LVM2/udev/13-dm-disk.rules	2009/10/26 21:38:35	1.3
-+++ LVM2/udev/13-dm-disk.rules	2009/10/26 22:42:07	1.4
-@@ -1,3 +1,7 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
- # Udev rules for device-mapper devices.
- #
- # These rules create symlinks in /dev/disk directory.
---- LVM2/udev/95-dm-notify.rules	2009/10/22 13:11:33	1.3
-+++ LVM2/udev/95-dm-notify.rules	2009/10/26 22:42:07	1.4
-@@ -1,3 +1,7 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
- # Udev rules for device-mapper devices.
- #
- # These rules are responsible for sending a notification to a process
+--- LVM2/WHATS_NEW	2009/10/26 21:56:23	1.1305
++++ LVM2/WHATS_NEW	2009/10/27 00:52:45	1.1306
+@@ -6,7 +6,7 @@
+   Cleanup mimagetmp LV if allocation fails for new lvconvert mimage.
+   Fix clvmd segfault when refresh_toolcontext fails.
+   Remember to clear 'global lock held during cache refresh' state after use.
+-  Use udev flags support in LVM.
++  Use udev flags support in LVM and apply various fixes to udev rules.
+   Delay announcing mirror monitoring to syslog until initialisation succeeded.
+   Handle metadata with unknown segment types more gracefully.
+   Set default owner and group to null.
+@@ -27,7 +27,7 @@
+   Restart lvconverts in vgchange by sharing lv_spawn_background_polling.
+   Generalise polldaemon code by changing mirror-specific variable names.
+   Don't attempt to deactivate an LV if any of its snapshots are in use.
+-  Return fail if lv_deactivate fails to remove device from kernel.
++  Return error if lv_deactivate fails to remove device from kernel.
+   Provide alternative implementation of obsolete siginterrupt().
+   Consolidate LV allocation into alloc_lv().
+   Treat input units of both 's' and 'S' as 512-byte sectors.  (2.02.49)
+--- LVM2/WHATS_NEW_DM	2009/10/26 21:56:23	1.308
++++ LVM2/WHATS_NEW_DM	2009/10/27 00:52:45	1.309
+@@ -2,7 +2,7 @@
+ ===================================
+   Remove strict default permissions for DM devices from 95-dm-notify.rules.
+   Add dmsetup udevflags command to decode udev flags in given cookie value.
+-  Add udev flags support in libdevmapper.
++  Support udev flags in libdevmapper incl. dm_tree_add_new_dev_with_udev_flags.
+   Make libdm ABI consistent when built with/without selinux support.
+ 
+ Version 1.02.38 - 25th September 2009
 
 
