@@ -1,287 +1,458 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 22 Oct 2009 12:55:49 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
-Message-ID: <20091022125549.3590.qmail@sourceware.org>
+From: Bastian Blank <bastian@waldi.eu.org>
+Date: Fri, 30 Oct 2009 14:36:28 +0100
+Subject: [PATCH] debian: move owner and group setup, use sane permissions
+Message-ID: <20091030133627.GA20856@wavehammer.waldi.eu.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-10-22 12:55:48
+Move the OWNER and GROUP setup into the configure script. Move
+permission definitions into the make setup, use sane values by default.
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h libdm-common.c libdm-deptree.c 
-	libdm/ioctl    : libdm-iface.c 
-	tools          : dmsetup.c 
-
-Log message:
-	Add udev flags support in libdevmapper and provide 'dmsetup udevflags' command to decode them.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.305&r2=1.306
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.97&r2=1.98
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.124&r2=1.125
-
---- LVM2/WHATS_NEW_DM	2009/10/12 04:06:42	1.305
-+++ LVM2/WHATS_NEW_DM	2009/10/22 12:55:47	1.306
-@@ -1,5 +1,7 @@
- Version 1.02.39 - 
- =====================================
-+  Add dmsetup udevflags command to decode udev flags in given cookie value.
-+  Add udev flags support in libdevmapper.
-   Make libdm ABI consistent when built with/without selinux support.
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -165,22 +165,17 @@
+ endif
  
- Version 1.02.38 - 25th September 2009
---- LVM2/libdm/libdevmapper.h	2009/09/25 11:58:00	1.97
-+++ LVM2/libdm/libdevmapper.h	2009/10/22 12:55:47	1.98
-@@ -164,7 +164,7 @@
- int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
- int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
- int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie);
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags);
- int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
- int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
- int dm_task_set_message(struct dm_task *dmt, const char *message);
-@@ -1014,7 +1014,38 @@
- void dm_report_field_set_value(struct dm_report_field *field, const void *value,
- 			       const void *sortvalue);
+ install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION) $(libdir)/liblvm2cmd.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
+-		$(includedir)/lvm2cmd.h
++	$(INSTALL_DATA) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
  
-+/* Cookie prefixes.
-+ * The cookie value consists of a prefix (16 bits) and a base (16 bits).
-+ * We can use the prefix to store the flags. These flags are sent to
-+ * kernel within given dm task. When returned back to userspace in
-+ * DM_COOKIE udev environment variable, we can control several aspects
-+ * of udev rules we use by decoding the cookie prefix. When doing the
-+ * notification, we replace the cookie prefix with DM_COOKIE_MAGIC,
-+ * so we notify the right semaphore.
-+ */
- #define DM_COOKIE_MAGIC 0x0D4D
-+#define DM_UDEV_FLAGS_MASK 0xFFFF0000
-+#define DM_UDEV_FLAGS_SHIFT 16
-+/*
-+ * DM_UDEV_DISABLE_SUBSYTEM_RULES_FLAG is set in case we need to disable
-+ * subsystem udev rules, but still we need the general DM udev rules to
-+ * be applied (to create the nodes and symlinks under /dev and /dev/disk).
-+ */
-+#define DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG 0x0001
-+/*
-+ * DM_UDEV_DISABLE_DISK_RULES_FLAG is set in case we need to disable
-+ * general DM rules that set symlinks in /dev/disk directory.
-+ */
-+#define DM_UDEV_DISABLE_DISK_RULES_FLAG 0x0002
-+/*
-+ * DM_UDEV_LOW_PRIORITY_FLAG is set in case we need to instruct the
-+ * udev rules to give low priority to the device that is currently
-+ * processed. For example, this provides a way to select which symlinks
-+ * could be overwritten by high priority ones if their names are equal.
-+ * Common situation is a name based on FS UUID while using origin and
-+ * snapshot devices.
-+ */
-+#define DM_UDEV_LOW_PRIORITY_FLAG 0x0004
+ install_cmdlib_static: liblvm2cmd-static.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2cmd.a.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2cmd.a.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2cmd.a.$(LIB_VERSION) $(libdir)/liblvm2cmd.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
+-		$(includedir)/lvm2cmd.h
++	$(INSTALL) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
  
- int dm_cookie_supported(void);
+ install_tools_dynamic: lvm .commands
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm \
+-		$(sbindir)/lvm
++	$(INSTALL) -D lvm $(sbindir)/lvm
+ 	@echo Creating symbolic links for individual commands in $(sbindir)
+ 	@( \
+ 		for v in `cat $(srcdir)/.commands`; do \
+@@ -190,14 +185,13 @@
+ 	)
  
---- LVM2/libdm/libdm-common.c	2009/10/12 04:06:42	1.86
-+++ LVM2/libdm/libdm-common.c	2009/10/22 12:55:47	1.87
-@@ -876,7 +876,7 @@
- 	return 0;
- }
+ install_tools_static: lvm.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(staticdir)/lvm.static
++	$(INSTALL) -D $< $(staticdir)/$<
  
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie)
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- {
- 	*cookie = 0;
+ install_dmsetup_dynamic: dmsetup
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL) -D $< $(sbindir)/$<
  
-@@ -1129,7 +1129,7 @@
- 	return 0;
- }
+ install_dmsetup_static: dmsetup.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL) -D $< $(sbindir)/$<
  
--int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie)
-+int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- {
- 	int semid;
+ install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
  
-@@ -1151,11 +1151,11 @@
- 		goto bad;
- 	}
+--- a/daemons/clvmd/Makefile.in
++++ b/daemons/clvmd/Makefile.in
+@@ -98,8 +98,8 @@
+ .PHONY: install_clvmd
  
--	dmt->event_nr = *cookie;
-+	dmt->event_nr = (0x0000FFFF & *cookie) | (flags << 16);
- 	dmt->cookie_set = 1;
+ install_clvmd: $(TARGETS)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) clvmd \
+-		$(usrsbindir)/clvmd
++	$(INSTALL) -D clvmd \
++		$(sbindir)/clvmd
  
--	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task",
--		  dmt->event_nr, semid);
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task "
-+		  "with flags 0x%" PRIx16, *cookie, semid, flags);
+ install: $(INSTALL_TARGETS)
  
- 	return 1;
+--- a/lib/format1/Makefile.in
++++ b/lib/format1/Makefile.in
+@@ -32,7 +32,6 @@
+ include ../../make.tmpl
  
---- LVM2/libdm/libdm-deptree.c	2009/09/25 18:30:27	1.58
-+++ LVM2/libdm/libdm-deptree.c	2009/10/22 12:55:48	1.59
-@@ -841,7 +841,7 @@
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
+ install: liblvm2format1.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2format1.so.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2format1.so.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2format1.so.$(LIB_VERSION) $(libdir)/liblvm2format1.so
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, 0))
- 		goto out;
+--- a/lib/format_pool/Makefile.in
++++ b/lib/format_pool/Makefile.in
+@@ -29,8 +29,7 @@
+ include ../../make.tmpl
  
- 	r = dm_task_run(dmt);
-@@ -881,7 +881,7 @@
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
+ install: liblvm2formatpool.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2formatpool.so.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2formatpool.so.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2formatpool.so.$(LIB_VERSION) \
+ 		$(libdir)/liblvm2formatpool.so
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, 0))
- 		goto out;
+--- a/lib/locking/Makefile.in
++++ b/lib/locking/Makefile.in
+@@ -25,8 +25,7 @@
+ include ../../make.tmpl
  
- 	r = dm_task_run(dmt);
-@@ -924,7 +924,7 @@
- 	if (!dm_task_set_read_ahead(dmt, read_ahead, read_ahead_flags))
- 		log_error("Failed to set read ahead");
+ install install_cluster: liblvm2clusterlock.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2clusterlock.so.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2clusterlock.so.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2clusterlock.so.$(LIB_VERSION) \
+ 		$(libdir)/liblvm2clusterlock.so
  
--	if (!dm_task_set_cookie(dmt, cookie))
-+	if (!dm_task_set_cookie(dmt, cookie, 0))
- 		goto out;
+--- a/lib/mirror/Makefile.in
++++ b/lib/mirror/Makefile.in
+@@ -25,7 +25,6 @@
+ include ../../make.tmpl
  
- 	if ((r = dm_task_run(dmt)))
---- LVM2/libdm/ioctl/libdm-iface.c	2009/09/25 11:58:00	1.62
-+++ LVM2/libdm/ioctl/libdm-iface.c	2009/10/22 12:55:48	1.63
-@@ -1492,8 +1492,14 @@
-  */
- static int _udev_complete(struct dm_task *dmt)
- {
--	if (dmt->cookie_set)
--		return dm_udev_complete(dmt->event_nr);
-+	uint32_t cookie;
-+
-+	if (dmt->cookie_set) {
-+		/* strip flags from the cookie and use cookie magic instead */
-+		cookie = (dmt->event_nr & ~DM_UDEV_FLAGS_MASK) |
-+			  (DM_COOKIE_MAGIC << DM_UDEV_FLAGS_SHIFT);
-+		return dm_udev_complete(cookie);
-+	}
+ install: liblvm2mirror.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2mirror.so.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2mirror.so.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2mirror.so.$(LIB_VERSION) $(libdir)/liblvm2mirror.so
  
- 	return 1;
- }
---- LVM2/tools/dmsetup.c	2009/09/11 15:53:58	1.124
-+++ LVM2/tools/dmsetup.c	2009/10/22 12:55:48	1.125
-@@ -595,7 +595,7 @@
- 	if (_switches[NOTABLE_ARG])
- 		dm_udev_set_sync_support(0);
+--- a/lib/snapshot/Makefile.in
++++ b/lib/snapshot/Makefile.in
+@@ -25,8 +25,7 @@
+ include ../../make.tmpl
  
--	if (!dm_task_set_cookie(dmt, &cookie) ||
-+	if (!dm_task_set_cookie(dmt, &cookie, 0) ||
- 	    !dm_task_run(dmt))
- 		goto out;
+ install: liblvm2snapshot.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2snapshot.so.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/liblvm2snapshot.so.$(LIB_VERSION)
+ 	$(LN_S) -f liblvm2snapshot.so.$(LIB_VERSION) \
+ 		$(libdir)/liblvm2snapshot.so
  
-@@ -630,7 +630,7 @@
- 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
- 		goto out;
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -63,14 +63,14 @@
+ 	@for f in $(MAN8); \
+ 	do \
+ 	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
  
--	if (!dm_task_set_cookie(dmt, &cookie) ||
-+	if (!dm_task_set_cookie(dmt, &cookie, 0) ||
- 	    !dm_task_run(dmt))
- 		goto out;
+ 	@echo "Installing $(MAN5) in $(MAN5DIR)"
+ 	@for f in $(MAN5); \
+ 	do \
+ 	   $(RM) $(MAN5DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN5DIR)/$$f; \
++	   $(INSTALL_DATA) -D $$f $(MAN5DIR)/$$f; \
+ 	done
  
-@@ -758,15 +758,70 @@
- 	return r;
- }
+ install_cluster:
+@@ -78,7 +78,7 @@
+ 	@for f in $(MAN8CLUSTER); \
+ 	do \
+ 	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
  
--static int _udevcomplete(int argc, char **argv, void *data __attribute((unused)))
-+static uint32_t _get_cookie_value(char *str_value)
- {
--	uint32_t cookie;
-+	unsigned long int value;
- 	char *p;
+ install_device-mapper:
+@@ -86,7 +86,7 @@
+ 	@for f in $(MAN8DM); \
+ 	do \
+ 	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
  
--	if (!(cookie = (uint32_t) strtoul(argv[1], &p, 0)) || *p) {
-+	if (!(value = strtoul(str_value, &p, 0)) ||
-+	    *p ||
-+	    (value == ULONG_MAX && errno == ERANGE) ||
-+	    value > 0xFFFFFFFF) {
- 		err("Incorrect cookie value");
- 		return 0;
- 	}
-+	else
-+		return (uint32_t) value;
-+}
-+
-+static int _udevflags(int args, char **argv, void *data __attribute((unused)))
-+{
-+	uint32_t cookie;
-+	uint16_t flags;
-+	int i;
-+	static const char *dm_flag_names[] = {"DISABLE_SUBSYSTEM_RULES",
-+					      "DISABLE_DISK_RULES",
-+					      "LOW_PRIORITY",
-+					       0, 0, 0, 0, 0};
-+
-+	if (!(cookie = _get_cookie_value(argv[1])))
-+		return 0;
-+
-+	flags = cookie >> DM_UDEV_FLAGS_SHIFT;
-+
-+	for (i = 0; i < DM_UDEV_FLAGS_SHIFT; i++)
-+		if (1 << i & flags) {
-+			if (i < DM_UDEV_FLAGS_SHIFT / 2 && dm_flag_names[i])
-+				printf("DM_UDEV_%s_FLAG='1'\n", dm_flag_names[i]);
-+			else if (i < DM_UDEV_FLAGS_SHIFT / 2)
-+				/*
-+				 * This is just a fallback. Each new DM flag
-+				 * should have its symbolic name assigned.
-+				 */
-+				printf("DM_UDEV_FLAG%d='1'\n", i);
-+			else
-+				/*
-+				 * We can't assign symbolic names to subsystem
-+				 * flags. Their semantics vary based on the
-+				 * subsystem that is currently used.
-+				 */
-+				printf("DM_SUBSYSTEM_UDEV_FLAG%d='1'\n",
-+					i - DM_UDEV_FLAGS_SHIFT / 2);
-+		}
-+
-+	return 1;
-+}
-+
-+static int _udevcomplete(int argc, char **argv, void *data __attribute((unused)))
-+{
-+	uint32_t cookie;
-+
-+	if (!(cookie = _get_cookie_value(argv[1])))
-+		return 0;
-+
-+	/* strip flags from the cookie and use cookie magic instead */
-+	cookie = (cookie & ~DM_UDEV_FLAGS_MASK) |
-+		  (DM_COOKIE_MAGIC << DM_UDEV_FLAGS_SHIFT);
+ install: install_lvm2 install_device-mapper
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -73,7 +69,7 @@
+ install_device-mapper: install
  
- 	return dm_udev_complete(cookie);
- }
-@@ -953,7 +1008,7 @@
- 				    _read_ahead_flags))
- 		goto out;
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper.h \
++	$(INSTALL_DATA) $(srcdir)/libdevmapper.h \
+ 		$(includedir)/libdevmapper.h
  
--	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie))
-+	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, 0))
- 		goto out;
+ install_dynamic: install_ at interface@
+@@ -81,19 +77,16 @@
+ 		$(libdir)/libdevmapper.$(LIB_SUFFIX)
  
- 	r = dm_task_run(dmt);
-@@ -2436,6 +2491,7 @@
- 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, 1, _status},
- 	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
- 	{"mknodes", "[<device>]", 0, 1, _mknodes},
-+	{"udevflags", "<cookie>", 1, 1, _udevflags},
- 	{"udevcomplete", "<cookie>", 1, 1, _udevcomplete},
- 	{"udevcomplete_all", "", 0, 0, _udevcomplete_all},
- 	{"udevcookies", "", 0, 0, _udevcookies},
+ install_static: install_@interface@_static
+-	$(LN_S) -f libdevmapper.a.$(LIB_VERSION_DM) $(libdir)/libdevmapper.a
+ 
+ install_ioctl: ioctl/libdevmapper.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
++	$(INSTALL) -D $< $(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
+ 
+ install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper.pc \
++	$(INSTALL_DATA) -D libdevmapper.pc \
+ 		$(usrlibdir)/pkgconfig/devmapper.pc
+ 
+ install_ioctl_static: ioctl/libdevmapper.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper.a.$(LIB_VERSION_DM)
++	$(INSTALL) -D $< $(usrlibdir)/libdevmapper.a
+ 
+ $(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_DM): $(interface)/%.$(LIB_SUFFIX)
+ 	rm -f $@
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -73,31 +73,29 @@
+ endif
+ 
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper-event.h \
++	$(INSTALL_DATA) $(srcdir)/libdevmapper-event.h \
+ 		$(includedir)/libdevmapper-event.h
+ 
+ install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.pc \
++	$(INSTALL_DATA) libdevmapper-event.pc \
+ 		$(usrlibdir)/pkgconfig/devmapper-event.pc
+ 
+ install_lib_dynamic: libdevmapper-event.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION)
+ 	$(LN_S) -f libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION) \
+ 		$(libdir)/libdevmapper-event.$(LIB_SUFFIX)
+ 
+ install_lib_static: libdevmapper-event.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper-event.a.$(LIB_VERSION)
++	$(INSTALL) -D $< $(libdir)/libdevmapper-event.a.$(LIB_VERSION)
+ 	$(LN_S) -f libdevmapper-event.a.$(LIB_VERSION) $(libdir)/libdevmapper-event.a
+ 
+ install_lib: $(INSTALL_LIB_TARGETS)
+ 
+ install_dmeventd_dynamic: dmeventd
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL) -D $< $(sbindir)/$<
+ 
+ install_dmeventd_static: dmeventd.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL) -D $< $(sbindir)/$<
+ 
+ install_dmeventd: $(INSTALL_DMEVENTD_TARGETS)
+ 
+--- a/daemons/dmeventd/plugins/mirror/Makefile.in
++++ b/daemons/dmeventd/plugins/mirror/Makefile.in
+@@ -35,7 +35,7 @@
+ LIBS += -ldevmapper @LIB_PTHREAD@ @LVM2CMD_LIB@
+ 
+ install_lvm2: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
++	$(INSTALL) -D $< \
+ 		$(libdir)/$<.$(LIB_VERSION)
+ 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
+ 
+--- a/daemons/dmeventd/plugins/snapshot/Makefile.in
++++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
+@@ -35,7 +35,7 @@
+ LIBS += -ldevmapper @LIB_PTHREAD@ @LVM2CMD_LIB@
+ 
+ install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
++	$(INSTALL) -D $< \
+ 		$(libdir)/$<.$(LIB_VERSION)
+ 	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
+ 
+--- a/doc/Makefile.in
++++ b/doc/Makefile.in
+@@ -24,7 +24,7 @@
+ install_lvm2: $(CONFSRC)
+ 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+ 		echo "Installing $(CONFSRC) as $(confdir)/$(CONFDEST)"; \
+-		@INSTALL@ -D $(OWNER) $(GROUP) -m 644 $< \
++		$(INSTALL_DATA) -D $< \
+ 			$(confdir)/$(CONFDEST); \
+ 	fi
+ 
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -21,6 +21,7 @@
+ RANLIB = @RANLIB@
+ SHELL = /bin/sh
+ INSTALL = @INSTALL@
++INSTALL_DATA = @INSTALL@ -m 644
+ MKDIR_P = @MKDIR_P@
+ MSGFMT = @MSGFMT@
+ LCOV = @LCOV@
+@@ -56,11 +57,6 @@
+ interface = @interface@
+ interfacedir = $(top_srcdir)/libdm/$(interface)
+ 
+-# setup misc variables
+-# define the ownership variables for the binaries and man pages
+-OWNER = @OWNER@
+-GROUP = @GROUP@
+-
+ # The number of jobs to run, if blank, defaults to the make standard
+ ifndef MAKEFLAGS
+ MAKEFLAGS = @JOBS@
+@@ -107,9 +103,6 @@
+ #CFLAGS += -pg
+ #LDFLAGS += -pg
+ 
+-STRIP=
+-#STRIP = -s
+-
+ LVM_VERSION := $(shell cat $(top_srcdir)/VERSION)
+ 
+ LIB_VERSION_LVM := $(shell cat $(top_srcdir)/VERSION | \
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -19,13 +19,10 @@
+ include ../make.tmpl
+ 
+ install:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/lvm_dump.sh \
+-		$(sbindir)/lvmdump
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/vgimportclone.sh \
+-		$(sbindir)/vgimportclone
++	$(INSTALL) -D $(srcdir)/lvm_dump.sh $(sbindir)/lvmdump
++	$(INSTALL) -D $(srcdir)/vgimportclone.sh $(sbindir)/vgimportclone
+ ifeq ("@FSADM@", "yes")
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/fsadm.sh \
+-		$(sbindir)/fsadm
++	$(INSTALL) -D $(srcdir)/fsadm.sh $(sbindir)/fsadm
+ endif
+ 
+ install_lvm2: install
+--- a/po/Makefile.in
++++ b/po/Makefile.in
+@@ -54,13 +54,13 @@
+ 	@echo Installing translation files in $(localedir)
+ 	@( \
+ 		for lang in $(LANGS); do \
+-			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
++			$(INSTALL_DATA) -D $$lang.mo \
+ 			    $(localedir)/$$lang/LC_MESSAGES/lvm2.mo;\
+ 	  done; \
+ 	)
+ 	@( \
+ 		for lang in $(LANGS); do \
+-			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
++			$(INSTALL_DATA) -D $$lang.mo \
+ 			    $(localedir)/$$lang/LC_MESSAGES/device-mapper.mo;\
+ 	  done; \
+ 	)
+--- a/liblvm/Makefile.in
++++ b/liblvm/Makefile.in
+@@ -67,22 +67,19 @@
+ install: $(INSTALL_TYPE) install_include
+ 
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
++	$(INSTALL_DATA) -D $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
+ 
+ install_dynamic: $(LIB_SHARED)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
++	$(INSTALL) -D $< $(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
+ 	$(LN_S) -f $(LIB_SHARED).$(LIB_VERSION_APP) \
+ 		$(libdir)/$(LIB_SHARED)
+ 
+ install_static: $(LIB_STATIC)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
++	$(INSTALL) -D $< $(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
+ 	$(LN_S) -f $(LIB_STATIC).$(LIB_VERSION_APP) $(libdir)/$(LIB_STATIC)
+ 
+ install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(LIB_NAME).pc \
+-		$(usrlibdir)/pkgconfig/lvm2app.pc
++	$(INSTALL_DATA) -D $(LIB_NAME).pc $(usrlibdir)/pkgconfig/lvm2app.pc
+ 
+ liblvm.cflow: $(SOURCES)
+ 	set -e; (echo -n "SOURCES += "; \
+--- a/daemons/cmirrord/Makefile.in
++++ b/daemons/cmirrord/Makefile.in
+@@ -36,5 +36,4 @@
+ 		$(LVMLIBS) $(LMLIBS) $(LIBS)
+ 
+ install: $(TARGETS)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) cmirrord \
+-		$(usrsbindir)/cmirrord
++	$(INSTALL) -D cmirrord $(usrsbindir)/cmirrord
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -32,7 +32,7 @@
+ 	@for f in $(LVM_RULES); \
+ 	do \
+ 	   $(RM) $(udevdir)/$$f; \
+-	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $(srcdir)/$$f $(udevdir)/$$f; \
++	   $(INSTALL_DATA) -c -D $(srcdir)/$$f $(udevdir)/$$f; \
+ 	done
+ 
+ install_device-mapper: $(DM_RULES)
+@@ -40,7 +40,7 @@
+ 	@for f in $(DM_RULES); \
+ 	do \
+ 	   $(RM) $(udevdir)/$$f; \
+-	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $(srcdir)/$$f $(udevdir)/$$f; \
++	   $(INSTALL_DATA) -c -D $(srcdir)/$$f $(udevdir)/$$f; \
+ 	done
+ 
+ install: install_lvm2 install_device-mapper
+--- a/configure.in
++++ b/configure.in
+@@ -144,28 +144,25 @@
+ ################################################################################
+ dnl -- Setup the ownership of the files
+ AC_MSG_CHECKING(file owner)
+-OWNER=""
+-
+ AC_ARG_WITH(user,
+   [  --with-user=USER        Set the owner of installed files [[USER=]] ],
+   [ OWNER="$withval" ])
+ AC_MSG_RESULT($OWNER)
+ 
+ if test x$OWNER != x; then
+-	OWNER="-o $OWNER"
++	INSTALL="$INSTALL -o $OWNER"
+ fi
+ 
+ ################################################################################
+ dnl -- Setup the group ownership of the files
+ AC_MSG_CHECKING(group owner)
+-GROUP=""
+ AC_ARG_WITH(group,
+   [  --with-group=GROUP      Set the group owner of installed files [[GROUP=]] ],
+   [ GROUP="$withval" ])
+ AC_MSG_RESULT($GROUP)
+ 
+ if test x$GROUP != x; then
+-	GROUP="-g $GROUP"
++	INSTALL="$INSTALL -g $GROUP"
+ fi
+ 
+ ################################################################################
+@@ -1092,7 +1089,6 @@
+ AC_SUBST(DM_LIB_VERSION)
+ AC_SUBST(DM_LIB_PATCHLEVEL)
+ AC_SUBST(FSADM)
+-AC_SUBST(GROUP)
+ AC_SUBST(GULM_CFLAGS)
+ AC_SUBST(GULM_LIBS)
+ AC_SUBST(HAVE_LIBDL)
+@@ -1116,7 +1112,6 @@
+ AC_SUBST(LVM_RELEASE_DATE)
+ AC_SUBST(MIRRORS)
+ AC_SUBST(MSGFMT)
+-AC_SUBST(OWNER)
+ AC_SUBST(PKGCONFIG)
+ AC_SUBST(POOL)
+ AC_SUBST(QUORUM_CFLAGS)
+-- 
+Each kiss is as the first.
+		-- Miramanee, Kirk's wife, "The Paradise Syndrome",
+		   stardate 4842.6
 
 
