@@ -1,16 +1,19 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 30 Oct 2009 16:50:56 -0500
-Subject: [PATCH 2 of 2] LVM: use new split capability
-Message-ID: <200910302150.n9ULou5a005346@hydrogen.msp.redhat.com>
+Date: Fri, 30 Oct 2009 18:23:02 -0500
+Subject: [PATCH 1 of 1] LVM: add split capability
+Message-ID: <200910302323.n9UNN2nV009157@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-use-new-split-capability.patch
+Patch name: lvm-add-split-capability.patch
 
-Percolate the ability split off a leg up to the user.
+This patch adds the capability to split off a mirror leg.
+Essentially, we replace the function that pulls a leg
+from a mirror and frees it with just the function that
+pulls it.
 
 The following command line interface is enforced:
   prompt> lvconvert --splitmirror <n> -n <name> <VG>/<LV>
@@ -39,20 +42,49 @@ a default name should be.  [Perhaps we will make a better
 informed decision on that when we begin to implement
 '--track_deltas'.]
 
+*********************************************************
+This patch combines the two previous split mirror patches.
+
+It cleans up the comments and removes the error I made of
+adding code in the first patch that was being removed in
+the second.  The 'splitmirror' argument is changed to
+'splitmirrors'.  (splitmirror will still work.)  Man page
+language clean-up.  Fix bug introduce in the initialization
+of 'lp->alloc'.
+*********************************************************
+
 Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
 Index: LVM2/lib/metadata/mirror.c
 ===================================================================
 --- LVM2.orig/lib/metadata/mirror.c
 +++ LVM2/lib/metadata/mirror.c
-@@ -541,24 +541,36 @@ static int _remove_mirror_images(struct 
+@@ -472,6 +472,9 @@ static int _is_mirror_image_removable(st
+  *                  mirror layer and merge mirrors to the original LV.
+  *                  removable_pvs should be NULL and num_removed should be
+  *                  seg->area_count - 1.
++ *   split:	    if non-NULL, split the mimage off rather than removing
++ *		    it, making this argument its name (only one leg can be
++ *                  split off at a time).
+  *   removed:       if non NULL, the number of removed mirror images is set
+  *                  as a result
+  *
+@@ -486,7 +489,9 @@ static int _is_mirror_image_removable(st
+ static int _remove_mirror_images(struct logical_volume *lv,
+ 				 uint32_t num_removed,
+ 				 struct dm_list *removable_pvs,
+-				 unsigned remove_log, unsigned collapse,
++				 unsigned remove_log,
++				 unsigned collapse,
++				 const char *split,
+ 				 uint32_t *removed)
+ {
+ 	uint32_t m;
+@@ -537,13 +542,30 @@ static int _remove_mirror_images(struct 
  	for (m = new_area_count; m < mirrored_seg->area_count; m++) {
  		seg_lv(mirrored_seg, m)->status &= ~MIRROR_IMAGE;
  		lv_set_visible(seg_lv(mirrored_seg, m));
--		if (!split) {
--			lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl));
--			if (!lvl) {
--				log_error("lv_list alloc failed");
+-		if (!(lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl)))) {
 +
 +		if (split) {
 +			remove_seg_from_segs_using_this_lv(seg_lv(mirrored_seg, m),
@@ -62,40 +94,53 @@ Index: LVM2/lib/metadata/mirror.c
 +			sub_lv->name = dm_pool_strdup(lv->vg->cmd->mem, split);
 +			if (!sub_lv->name) {
 +				log_error("Unable to rename newly split LV");
- 				return 0;
- 			}
--			lvl->lv = seg_lv(mirrored_seg, m);
--			dm_list_add(&tmp_orphan_lvs, &lvl->list);
--			release_lv_segment_area(mirrored_seg, m,
--						mirrored_seg->area_len);
--			continue;
++				return 0;
++			}
 +
-+			/*
-+			 * By putting this 'break' here, it should be
-+			 * obvious that only one leg can be split off
-+			 * with the code as written - consistent with
-+			 * the level of functionality currently offered.
-+			 */
 +			break;
- 		}
--		remove_seg_from_segs_using_this_lv(seg_lv(mirrored_seg, m),
--						   mirrored_seg);
--		if (!lv_rename(lv->vg->cmd, seg_lv(mirrored_seg, m), split)) {
--			log_error("Unable to rename newly split LV");
++		}
 +
 +		lvl = dm_pool_alloc(lv->vg->cmd->mem, sizeof(*lvl));
 +		if (!lvl) {
-+			log_error("lv_list alloc failed");
+ 			log_error("lv_list alloc failed");
  			return 0;
  		}
-+		lvl->lv = seg_lv(mirrored_seg, m);
-+		dm_list_add(&tmp_orphan_lvs, &lvl->list);
+ 		lvl->lv = seg_lv(mirrored_seg, m);
+ 		dm_list_add(&tmp_orphan_lvs, &lvl->list);
+-		release_lv_segment_area(mirrored_seg, m, mirrored_seg->area_len);
 +		release_lv_segment_area(mirrored_seg, m,
 +					mirrored_seg->area_len);
  	}
  	mirrored_seg->area_count = new_area_count;
  
-@@ -1611,6 +1623,42 @@ int lv_add_mirrors(struct cmd_context *c
+@@ -671,7 +693,7 @@ int remove_mirror_images(struct logical_
+ 			removed_once = first_seg(next_lv)->area_count - 1;
+ 
+ 		if (!_remove_mirror_images(next_lv, removed_once,
+-					   removable_pvs, remove_log, 0, &r))
++					   removable_pvs, remove_log, 0, 0, &r))
+ 			return_0;
+ 
+ 		if (r < removed_once) {
+@@ -745,7 +767,7 @@ int collapse_mirrored_lv(struct logical_
+ 
+ 		if (!_remove_mirror_images(mirror_seg->lv,
+ 					   mirror_seg->area_count - 1,
+-					   NULL, 1, 1, NULL)) {
++					   NULL, 1, 1, 0, NULL)) {
+ 			log_error("Failed to release mirror images");
+ 			return 0;
+ 		}
+@@ -866,7 +888,7 @@ int reconfigure_mirror_images(struct lv_
+ 	init_mirror_in_sync(in_sync);
+ 
+ 	r = _remove_mirror_images(mirrored_seg->lv, old_num_mirrors - num_mirrors,
+-				  removable_pvs, remove_log, 0, NULL);
++				  removable_pvs, remove_log, 0, 0, NULL);
+ 	if (!r)
+ 		/* Unable to remove bad devices */
+ 		return 0;
+@@ -1596,6 +1618,49 @@ int lv_add_mirrors(struct cmd_context *c
  	return 0;
  }
  
@@ -105,6 +150,8 @@ Index: LVM2/lib/metadata/mirror.c
 +	int r;
 +
 +	/*
++	 * FIXME: Need ability to split off more than one mirror leg
++	 *
 +	 * Right now, we only allow the user to split a single
 +	 * leg off at a time.  In the future, we might allow a
 +	 * 4-way mirror to be split into 2 2-way mirrors, but
@@ -122,8 +169,14 @@ Index: LVM2/lib/metadata/mirror.c
 +	}
 +
 +	/*
++	 * FIXME: Generate default name when not supplied.
++	 *
 +	 * If we were going to generate a default name, we would
-+	 * do it here, but I am not interested in default names.
++	 * do it here.  Better to wait for a decision on the form
++	 * of the default name when '--track_deltas' (the ability
++	 * to merge a split leg back in and only copy the changes)
++	 * is being implemented.  For now, we force the user to
++	 * come up with a name for their LV.
 +	 */
 +	r = _remove_mirror_images(lv, split_count,
 +				  removable_pvs, 0, 0,
@@ -131,13 +184,90 @@ Index: LVM2/lib/metadata/mirror.c
 +	if (!r)
 +		return 0;
 +
-+	/* Rename split leg here? */
 +	return 1;
 +}
 +
  /*
   * Generic interface for removing mirror and/or mirror log.
   * 'mirror' is the number of mirrors to be removed.
+Index: LVM2/man/lvconvert.8.in
+===================================================================
+--- LVM2.orig/man/lvconvert.8.in
++++ LVM2/man/lvconvert.8.in
+@@ -16,6 +16,13 @@ LogicalVolume[Path] [PhysicalVolume[Path
+ 
+ .br
+ .B lvconvert
++\-\-splitmirrors Images \-n SplitLogicalVolumeName
++.br
++MirrorLogicalVolume[Path] [SplittablePhysicalVolume[Path][:PE[-PE]]...]
++.br
++
++.br
++.B lvconvert
+ \-s|\-\-snapshot [\-c|\-\-chunksize ChunkSize]
+ [\-h|\-?|\-\-help]
+ [\-\-noudevsync]
+@@ -47,7 +54,7 @@ the freed extents come first from the sp
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
+ .br
+-Exactly one of \-\-mirrors, \-\-repair or \-\-snapshot arguments required.
++Exactly one of \-\-splitmirrors, \-\-mirrors, \-\-repair or \-\-snapshot arguments required.
+ .br
+ .TP
+ .I \-m, \-\-mirrors Mirrors
+@@ -86,16 +93,23 @@ process will not wait for notification f
+ It will continue irrespective of any possible udev processing
+ in the background.  You should only use this if udev is not running
+ or has rules that ignore the devices LVM2 creates.
++.br
++
++
+ .TP
+-.I \-\-repair
+-Repair a mirror after suffering a disk failure. The mirror will be brought back
+-into a consistent state.  By default, the original number of mirrors will be
+-restored if possible.  Specify \-y on the command line to skip the prompts.
+-Use \-f if you do not want any replacement.  Additionally, you may use
+-\-\-use-policies to use the device replacement policy specified in lvm.conf,
+-viz. activation/mirror_log_fault_policy or
+-activation/mirror_device_fault_policy.
++.I \-\-splitmirrors Images
++Specifies how many Images, or legs, of a mirror you wish to split
++off and form a new logical volume from.  A name must be supplied
++for the newly-split-off logical volume using the \-\-name argument.
++Only one image can be split off at this time (i.e. \-\-splitmirrors 1).
++
++.TP
++.I \-n Name
++The name to apply to a logical volume which has been split off from
++a mirror logical volume.
+ .br
++
++
+ .TP
+ .I \-s, \-\-snapshot
+ Create a snapshot from existing logical volume using another
+@@ -108,6 +122,18 @@ Power of 2 chunk size for the snapshot l
+ Controls zeroing of the first KB of data in the snapshot.
+ If the volume is read-only the snapshot will not be zeroed.
+ .br
++
++
++.TP
++.I \-\-repair
++Repair a mirror after suffering a disk failure. The mirror will be brought back
++into a consistent state.  By default, the original number of mirrors will be
++restored if possible.  Specify \-y on the command line to skip the prompts.
++Use \-f if you do not want any replacement.  Additionally, you may use
++\-\-use-policies to use the device replacement policy specified in lvm.conf,
++viz. activation/mirror_log_fault_policy or
++activation/mirror_device_fault_policy.
++.br
+ .SH Examples
+ "lvconvert -m1 vg00/lvol1"
+ .br
 Index: LVM2/tools/args.h
 ===================================================================
 --- LVM2.orig/tools/args.h
@@ -146,7 +276,7 @@ Index: LVM2/tools/args.h
  arg(resync_ARG, '\0', "resync", NULL, 0)
  arg(corelog_ARG, '\0', "corelog", NULL, 0)
  arg(mirrorlog_ARG, '\0', "mirrorlog", string_arg, 0)
-+arg(splitmirror_ARG, '\0', "splitmirror", int_arg, 0)
++arg(splitmirrors_ARG, '\0', "splitmirrors", int_arg, 0)
  arg(repair_ARG, '\0', "repair", NULL, 0)
  arg(use_policies_ARG, '\0', "use-policies", NULL, 0)
  arg(monitor_ARG, '\0', "monitor", yes_no_arg, 0)
@@ -158,7 +288,7 @@ Index: LVM2/tools/commands.h
     0,
     "lvconvert "
     "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|redundant}|--corelog}]]\n"
-+   "[--splitmirror Count -n SplitLogicalVolumeName]\n"
++   "[--splitmirrors Images -n SplitLogicalVolumeName]\n"
     "\t[--repair [--use-policies]]\n"
     "\t[-R|--regionsize MirrorLogRegionSize]\n"
     "\t[--alloc AllocationPolicy]\n"
@@ -168,7 +298,7 @@ Index: LVM2/tools/commands.h
     alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
 -   mirrorlog_ARG, mirrors_ARG, noudevsync_ARG, regionsize_ARG, repair_ARG,
 -   snapshot_ARG, test_ARG, use_policies_ARG, yes_ARG, force_ARG, zero_ARG)
-+   splitmirror_ARG, name_ARG, mirrorlog_ARG, mirrors_ARG, noudevsync_ARG,
++   splitmirrors_ARG, name_ARG, mirrorlog_ARG, mirrors_ARG, noudevsync_ARG,
 +   regionsize_ARG, repair_ARG, snapshot_ARG, test_ARG, use_policies_ARG,
 +   yes_ARG, force_ARG, zero_ARG)
  
@@ -210,18 +340,19 @@ Index: LVM2/tools/lvconvert.c
  	if (arg_count(cmd, snapshot_ARG))
  		lp->snapshot = 1;
  
-+	if (arg_count(cmd, splitmirror_ARG) && arg_count(cmd, mirrors_ARG)) {
-+		log_error("--mirrors (-m) argument and --splitmirror arguments"
-+			  " are mutually exclusive");
++	if (arg_count(cmd, splitmirrors_ARG) && arg_count(cmd, mirrors_ARG)) {
++		log_error("--mirrors (-m) and --splitmirrors are "
++			  "mutually exclusive");
 +		return 0;
 +	}
 +
 +	/*
-+	 * The --splitmirror argument is essentially the inverse of
-+	 * the --mirrors argument with the additional intention of keeping
-+	 * the leg that is split off.
++	 * The '--splitmirrors n' argument is equivalent to '--mirrors -n'
++	 * (note the minus sign), except that it signifies the additional
++	 * intent to keep the mimage that is detached, rather than
++	 * discarding it.
 +	 */
-+	if (arg_count(cmd, splitmirror_ARG)) {
++	if (arg_count(cmd, splitmirrors_ARG)) {
 +		if (!arg_count(cmd, name_ARG)) {
 +			log_error("The split off mirror image requires a name");
 +			return 0;
@@ -233,32 +364,32 @@ Index: LVM2/tools/lvconvert.c
 +
 +		lp->mirror_flags |= MIRROR_FLAG_KEEP_IMAGES;
 +		if (arg_sign_value(cmd, mirrors_ARG, 0) == SIGN_MINUS) {
-+			log_error("Argument to --splitmirror"
++			log_error("Argument to --splitmirrors"
 +				  " cannot be negative");
 +			return 0;
 +		}
-+		lp->mirrors = arg_uint_value(cmd, splitmirror_ARG, 0);
++		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
 +		lp->mirrors_sign = SIGN_MINUS;
 +	} else if (arg_count(cmd, name_ARG)) {
 +		log_error("The 'name' argument is only valid"
-+			  " with --splitmirror");
++			  " with --splitmirrors");
 +		return 0;
 +	}
 +
  	if (arg_count(cmd, mirrors_ARG)) {
 +		/*
-+		 * We could also add an argument that would compliment the
-+		 * meaning of --mirrors to also keep removed legs, but I'm
-+		 * not going to do that.
++		 * --splitmirrors has been chosen as the mechanism for
++		 * specifying the intent of detaching and keeping a mimage
++		 * versus an argument such as '--keep' being added here.
 +		 */
  		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0);
  		lp->mirrors_sign = arg_sign_value(cmd, mirrors_ARG, 0);
  	}
  
 -	lp->alloc = ALLOC_INHERIT;
- 	if (arg_count(cmd, alloc_ARG))
+-	if (arg_count(cmd, alloc_ARG))
 -		lp->alloc = arg_uint_value(cmd, alloc_ARG, lp->alloc);
-+		lp->alloc = arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
++	lp->alloc = arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
  
  	if (lp->snapshot) {
  		if (arg_count(cmd, regionsize_ARG)) {
@@ -267,7 +398,7 @@ Index: LVM2/tools/lvconvert.c
  	if (!arg_count(cmd, mirrors_ARG) && !arg_count(cmd, mirrorlog_ARG) &&
  	    !arg_count(cmd, corelog_ARG) && !arg_count(cmd, regionsize_ARG) &&
 -	    !repair) {
-+	    !arg_count(cmd, splitmirror_ARG) && !repair) {
++	    !arg_count(cmd, splitmirrors_ARG) && !repair) {
  		if (find_temporary_mirror(lv) || (lv->status & CONVERTING))
  			lp->need_polling = 1;
  		return 1;
@@ -276,7 +407,7 @@ Index: LVM2/tools/lvconvert.c
  	 * the logging type.
  	 */
 -	if (!arg_count(cmd, mirrors_ARG))
-+	if (!arg_count(cmd, mirrors_ARG) && !arg_count(cmd, splitmirror_ARG))
++	if (!arg_count(cmd, mirrors_ARG) && !arg_count(cmd, splitmirrors_ARG))
  		lp->mirrors = existing_mirrors;
  	else if (lp->mirrors_sign == SIGN_PLUS)
  		lp->mirrors = existing_mirrors + lp->mirrors;
@@ -301,95 +432,5 @@ Index: LVM2/tools/lvconvert.c
  		if (lp->mirrors > 1 &&
  		    !_lv_update_log_type(cmd, lp, lv, log_count))
  			return_0;
-Index: LVM2/lib/metadata/metadata-exported.h
-===================================================================
---- LVM2.orig/lib/metadata/metadata-exported.h
-+++ LVM2/lib/metadata/metadata-exported.h
-@@ -651,6 +651,8 @@ int lv_add_mirrors(struct cmd_context *c
- 		   uint32_t mirrors, uint32_t stripes,
- 		   uint32_t region_size, uint32_t log_count,
- 		   struct dm_list *pvs, alloc_policy_t alloc, uint32_t flags);
-+int lv_split_mirror_images(struct logical_volume *lv, const char *split_lv_name,
-+			   uint32_t split_count, struct dm_list *removable_pvs);
- int lv_remove_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
- 		      uint32_t mirrors, uint32_t log_count,
- 		      struct dm_list *pvs, uint32_t status_mask);
-Index: LVM2/man/lvconvert.8.in
-===================================================================
---- LVM2.orig/man/lvconvert.8.in
-+++ LVM2/man/lvconvert.8.in
-@@ -16,6 +16,13 @@ LogicalVolume[Path] [PhysicalVolume[Path
- 
- .br
- .B lvconvert
-+\-\-splitmirror Images \-n SplitLogicalVolumeName
-+.br
-+MirrorLogicalVolume[Path] [SplittablePhysicalVolume[Path][:PE[-PE]]...]
-+.br
-+
-+.br
-+.B lvconvert
- \-s|\-\-snapshot [\-c|\-\-chunksize ChunkSize]
- [\-h|\-?|\-\-help]
- [\-\-noudevsync]
-@@ -47,7 +54,7 @@ the freed extents come first from the sp
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .br
--Exactly one of \-\-mirrors, \-\-repair or \-\-snapshot arguments required.
-+Exactly one of \-\-splitmirror, \-\-mirrors, \-\-repair or \-\-snapshot arguments required.
- .br
- .TP
- .I \-m, \-\-mirrors Mirrors
-@@ -86,16 +93,22 @@ process will not wait for notification f
- It will continue irrespective of any possible udev processing
- in the background.  You should only use this if udev is not running
- or has rules that ignore the devices LVM2 creates.
-+.br
-+
-+
- .TP
--.I \-\-repair
--Repair a mirror after suffering a disk failure. The mirror will be brought back
--into a consistent state.  By default, the original number of mirrors will be
--restored if possible.  Specify \-y on the command line to skip the prompts.
--Use \-f if you do not want any replacement.  Additionally, you may use
--\-\-use-policies to use the device replacement policy specified in lvm.conf,
--viz. activation/mirror_log_fault_policy or
--activation/mirror_device_fault_policy.
-+.I \-\-splitmirror Images
-+Specifies how many images, or legs, of a mirror you wish to split
-+off and form a new logical volume from.  It is required that a user
-+provide a name for the newly split off logical volume, using the \-n
-+argument.
-+.TP
-+.I \-n Name
-+The name to apply to a logical volume which has been split off from
-+a mirror logical volume.
- .br
-+
-+
- .TP
- .I \-s, \-\-snapshot
- Create a snapshot from existing logical volume using another
-@@ -108,6 +121,18 @@ Power of 2 chunk size for the snapshot l
- Controls zeroing of the first KB of data in the snapshot.
- If the volume is read-only the snapshot will not be zeroed.
- .br
-+
-+
-+.TP
-+.I \-\-repair
-+Repair a mirror after suffering a disk failure. The mirror will be brought back
-+into a consistent state.  By default, the original number of mirrors will be
-+restored if possible.  Specify \-y on the command line to skip the prompts.
-+Use \-f if you do not want any replacement.  Additionally, you may use
-+\-\-use-policies to use the device replacement policy specified in lvm.conf,
-+viz. activation/mirror_log_fault_policy or
-+activation/mirror_device_fault_policy.
-+.br
- .SH Examples
- "lvconvert -m1 vg00/lvol1"
- .br
 
 
