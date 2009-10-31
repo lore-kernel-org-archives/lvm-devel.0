@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 31 Oct 2009 16:43:07 -0000
-Subject: LVM2/test t-vgcreate-usage.sh t-vgextend-usage.sh
-Message-ID: <20091031164307.6813.qmail@sourceware.org>
+Date: 31 Oct 2009 17:26:14 -0000
+Subject: LVM2/lib metadata/metadata-exported.h metadata ...
+Message-ID: <20091031172614.9150.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,68 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-10-31 16:43:07
+Changes by:	wysochanski at sourceware.org	2009-10-31 17:26:14
 
 Modified files:
-	test           : t-vgcreate-usage.sh t-vgextend-usage.sh 
+	lib/metadata   : metadata-exported.h metadata.c 
+	lib/report     : report.c 
 
 Log message:
-	Add to vgcreate and vgextend nightly tests.
+	Add vg_mda_count library function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgcreate-usage.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgextend-usage.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.117&r2=1.118
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.291&r2=1.292
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.105&r2=1.106
 
---- LVM2/test/t-vgcreate-usage.sh	2009/10/05 20:55:57	1.12
-+++ LVM2/test/t-vgcreate-usage.sh	2009/10/31 16:43:07	1.13
-@@ -144,3 +144,18 @@
-     vgremove -f $vg
-     pvremove -f $dev1
- done
-+
-+# vgcreate fails if pv belongs to existing vg
-+vgcreate $vg1 $dev1 $dev2
-+not vgcreate $vg2 $dev2
-+vgremove -f $vg1
-+pvremove -f $dev1 $dev2
-+
-+# all PVs exist in the VG after created
-+pvcreate $dev1
-+vgcreate $vg1 $dev1 $dev2 $dev3
-+check_pv_field_ $dev1 vg_name $vg1
-+check_pv_field_ $dev2 vg_name $vg1
-+check_pv_field_ $dev3 vg_name $vg1
-+vgremove -f $vg1
-+pvremove -f $dev1 $dev2 $dev3
---- LVM2/test/t-vgextend-usage.sh	2009/10/05 20:55:57	1.2
-+++ LVM2/test/t-vgextend-usage.sh	2009/10/31 16:43:07	1.3
-@@ -75,3 +75,27 @@
- vgremove -f $vg
- pvremove -f $dev1
+--- LVM2/lib/metadata/metadata-exported.h	2009/10/16 17:41:52	1.117
++++ LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:26:13	1.118
+@@ -730,6 +730,7 @@
+ uint64_t vg_pv_count(const struct volume_group *vg);
+ uint64_t vg_max_pv(const struct volume_group *vg);
+ uint64_t vg_max_lv(const struct volume_group *vg);
++uint32_t vg_mda_count(const struct volume_group *vg);
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
+ #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
+--- LVM2/lib/metadata/metadata.c	2009/10/16 17:41:52	1.291
++++ LVM2/lib/metadata/metadata.c	2009/10/31 17:26:13	1.292
+@@ -3611,6 +3611,11 @@
+ 	return (uint64_t) vg->max_lv;
+ }
  
-+# vgextend fails if pv belongs to existing vg
-+vgcreate $vg1 $dev1 $dev3
-+vgcreate $vg2 $dev2
-+not vgextend $vg2 $dev3
-+vgremove -f $vg1
-+vgremove -f $vg2
-+pvremove -f $dev1 $dev2 $dev3
++uint32_t vg_mda_count(const struct volume_group *vg)
++{
++	return dm_list_size(&vg->fid->metadata_areas);
++}
 +
-+#vgextend fails if vg is not resizeable
-+vgcreate $vg1 $dev1 $dev2
-+vgchange --resizeable n $vg1
-+not vgextend $vg1 $dev3
-+vgremove -f $vg1
-+pvremove -f $dev1 $dev2
-+
-+# all PVs exist in the VG after extended
-+pvcreate $dev1
-+vgcreate $vg1 $dev2
-+vgextend $vg1 $dev1 $dev3
-+check_pv_field_ $dev1 vg_name $vg1
-+check_pv_field_ $dev2 vg_name $vg1
-+check_pv_field_ $dev3 vg_name $vg1
-+vgremove -f $vg1
-+pvremove -f $dev1 $dev2 $dev3
+ uint64_t lv_size(const struct logical_volume *lv)
+ {
+ 	return lv->size;
+--- LVM2/lib/report/report.c	2009/10/26 10:01:57	1.105
++++ LVM2/lib/report/report.c	2009/10/31 17:26:14	1.106
+@@ -870,7 +870,7 @@
+ 	const struct volume_group *vg = (const struct volume_group *) data;
+ 	uint32_t count;
+ 
+-	count = dm_list_size(&vg->fid->metadata_areas);
++	count = vg_mda_count(vg);
+ 
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
 
 
