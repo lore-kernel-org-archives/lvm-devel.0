@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 31 Oct 2009 17:26:14 -0000
-Subject: LVM2/lib metadata/metadata-exported.h metadata ...
-Message-ID: <20091031172614.9150.qmail@sourceware.org>
+Date: 31 Oct 2009 17:30:52 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
+Message-ID: <20091031173052.10444.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,54 +10,101 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-10-31 17:26:14
+Changes by:	wysochanski at sourceware.org	2009-10-31 17:30:52
 
 Modified files:
 	lib/metadata   : metadata-exported.h metadata.c 
-	lib/report     : report.c 
+	tools          : vgchange.c 
 
 Log message:
-	Add vg_mda_count library function.
+	Add vg_set_clustered() - move logic from vgchange.
+	
+	Similar to other vg_set_* functions, we create a vg_set_clustered() function
+	which does a few checks and sets a flag.  This is where we check for
+	any limitations of clusters.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.117&r2=1.118
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.291&r2=1.292
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.105&r2=1.106
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.118&r2=1.119
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.292&r2=1.293
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
 
---- LVM2/lib/metadata/metadata-exported.h	2009/10/16 17:41:52	1.117
-+++ LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:26:13	1.118
-@@ -730,6 +730,7 @@
- uint64_t vg_pv_count(const struct volume_group *vg);
- uint64_t vg_max_pv(const struct volume_group *vg);
- uint64_t vg_max_lv(const struct volume_group *vg);
-+uint32_t vg_mda_count(const struct volume_group *vg);
- int vg_check_write_mode(struct volume_group *vg);
- #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
- #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
---- LVM2/lib/metadata/metadata.c	2009/10/16 17:41:52	1.291
-+++ LVM2/lib/metadata/metadata.c	2009/10/31 17:26:13	1.292
-@@ -3611,6 +3611,11 @@
- 	return (uint64_t) vg->max_lv;
+--- LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:26:13	1.118
++++ LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:30:52	1.119
+@@ -462,6 +462,7 @@
+ int vg_set_max_lv(struct volume_group *vg, uint32_t max_lv);
+ int vg_set_max_pv(struct volume_group *vg, uint32_t max_pv);
+ int vg_set_alloc_policy(struct volume_group *vg, alloc_policy_t alloc);
++int vg_set_clustered(struct volume_group *vg, int clustered);
+ int vg_split_mdas(struct cmd_context *cmd, struct volume_group *vg_from,
+ 		  struct volume_group *vg_to);
+ 
+--- LVM2/lib/metadata/metadata.c	2009/10/31 17:26:13	1.292
++++ LVM2/lib/metadata/metadata.c	2009/10/31 17:30:52	1.293
+@@ -1127,6 +1127,26 @@
+ 	return 1;
  }
  
-+uint32_t vg_mda_count(const struct volume_group *vg)
++int vg_set_clustered(struct volume_group *vg, int clustered)
 +{
-+	return dm_list_size(&vg->fid->metadata_areas);
-+}
++	struct lv_list *lvl;
++	if (clustered) {
++		dm_list_iterate_items(lvl, &vg->lvs) {
++			if (lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) {
++				log_error("Volume group %s contains snapshots "
++					  "that are not yet supported.",
++					  vg->name);
++				return 0;
++			}
++		}
++	}
 +
- uint64_t lv_size(const struct logical_volume *lv)
++	if (clustered)
++		vg->status |= CLUSTERED;
++	else
++		vg->status &= ~CLUSTERED;
++	return 1;
++}
+ 
+ /*
+  * Separate metadata areas after splitting a VG.
+--- LVM2/tools/vgchange.c	2009/09/30 12:05:25	1.88
++++ LVM2/tools/vgchange.c	2009/10/31 17:30:52	1.89
+@@ -245,7 +245,6 @@
+ 			       struct volume_group *vg)
  {
- 	return lv->size;
---- LVM2/lib/report/report.c	2009/10/26 10:01:57	1.105
-+++ LVM2/lib/report/report.c	2009/10/31 17:26:14	1.106
-@@ -870,7 +870,7 @@
- 	const struct volume_group *vg = (const struct volume_group *) data;
- 	uint32_t count;
+ 	int clustered = !strcmp(arg_str_value(cmd, clustered_ARG, "n"), "y");
+-	struct lv_list *lvl;
  
--	count = dm_list_size(&vg->fid->metadata_areas);
-+	count = vg_mda_count(vg);
+ 	if (clustered && (vg_is_clustered(vg))) {
+ 		log_error("Volume group \"%s\" is already clustered",
+@@ -259,26 +258,13 @@
+ 		return ECMD_FAILED;
+ 	}
  
- 	return _uint32_disp(rh, mem, field, &count, private);
- }
+-	if (clustered) {
+-		dm_list_iterate_items(lvl, &vg->lvs) {
+-			if (lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) {
+-				log_error("Volume group %s contains snapshots "
+-					  "that are not yet supported.",
+-					  vg->name);
+-				return ECMD_FAILED;
+-			}
+-		}
+-	}
+-
+ 	if (!archive(vg)) {
+ 		stack;
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if (clustered)
+-		vg->status |= CLUSTERED;
+-	else
+-		vg->status &= ~CLUSTERED;
++	if (!vg_set_clustered(vg, clustered))
++		return ECMD_FAILED;
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg)) {
+ 		stack;
 
 
