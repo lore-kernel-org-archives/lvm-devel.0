@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 1 Nov 2009 18:01:32 -0000
-Subject: LVM2/udev 10-dm.rules.in 11-dm-lvm.rules 95-dm ...
-Message-ID: <20091101180132.31649.qmail@sourceware.org>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 1 Nov 2009 19:51:56 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
+Message-ID: <20091101195156.24908.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,72 +10,147 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-11-01 18:01:31
+Changes by:	wysochanski at sourceware.org	2009-11-01 19:51:55
 
 Modified files:
-	udev           : 10-dm.rules.in 11-dm-lvm.rules 
-	                 95-dm-notify.rules 
+	lib/metadata   : metadata-exported.h metadata.c 
+	liblvm         : lvm_vg.c 
+	tools          : pvcreate.c toollib.c toollib.h vgcreate.c 
+	                 vgextend.c 
 
 Log message:
-	More cleanup in udev rules:
+	Rename pvcreate_params processing functions to better match <object><action>.
 	
-	- add copyright notice for 10-dm.rules.in,
-	
-	- set DM_UDEV_DISABLE_{DISK, OTHER}_RULES_FLAG in 11-dm-lvm.rules directly
-	for inappropriate and non-top-level subdevices in case we use older kernels
-	where DM_COOKIE is not used (and therefore there are no flags passed from
-	the LVM process itself). This applies for older kernels (version < 2.6.31),
-	
-	- remove unnecessary filters in 95-dm-notify.rules - the DM_COOKIE env var
-	itself is set for change/remove udev events and for DM devices only so
-	there's no need to double-check this.
+	Rename fill_default_pvcreate_params to pvcreate_params_set_defaults.
+	Rename pvcreate_validate_restore_params to pvcreate_restore_params_validate.
+	Rename pvcreate_validate_params to pvcreate_params_validate.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/10-dm.rules.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/11-dm-lvm.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/95-dm-notify.rules.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.119&r2=1.120
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.293&r2=1.294
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.87&r2=1.88
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.65&r2=1.66
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
 
---- LVM2/udev/10-dm.rules.in	2009/10/26 14:29:34	1.5
-+++ LVM2/udev/10-dm.rules.in	2009/11/01 18:01:31	1.6
-@@ -1,3 +1,7 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
- # Udev rules for device-mapper devices.
- #
- # These rules create a DM control node in /dev/(DM_DIR) directory.
---- LVM2/udev/11-dm-lvm.rules	2009/10/26 22:42:07	1.3
-+++ LVM2/udev/11-dm-lvm.rules	2009/11/01 18:01:31	1.4
-@@ -22,9 +22,14 @@
- IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
+--- LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:30:52	1.119
++++ LVM2/lib/metadata/metadata-exported.h	2009/11/01 19:51:54	1.120
+@@ -372,7 +372,7 @@
+ struct physical_volume *pvcreate_single(struct cmd_context *cmd,
+ 					const char *pv_name,
+ 					struct pvcreate_params *pp);
+-void fill_default_pvcreate_params(struct pvcreate_params *pp);
++void pvcreate_params_set_defaults(struct pvcreate_params *pp);
  
- # Do not create symlinks for inappropriate subdevices.
--ENV{DM_LV_NAME}=="?*_mimage_[0-9]*|pvmove?*|?*_vorigin", GOTO="lvm_end"
-+ENV{DM_LV_NAME}=="?*_mimage_[0-9]*|pvmove?*|?*_vorigin", GOTO="lvm_disable"
-+ENV{DM_LV_LAYER}=="?*", GOTO="lvm_disable"
+ /*
+ * Utility functions
+--- LVM2/lib/metadata/metadata.c	2009/10/31 17:30:52	1.293
++++ LVM2/lib/metadata/metadata.c	2009/11/01 19:51:54	1.294
+@@ -1314,7 +1314,7 @@
+ 	return 1;
+ }
  
- # Create symlinks for top-level devices only.
--ENV{DM_VG_NAME}=="?*", ENV{DM_LV_NAME}=="?*", ENV{DM_LV_LAYER}!="?*", SYMLINK+="$env{DM_VG_NAME}/$env{DM_LV_NAME}"
-+ENV{DM_VG_NAME}=="?*", ENV{DM_LV_NAME}=="?*", SYMLINK+="$env{DM_VG_NAME}/$env{DM_LV_NAME}", GOTO="lvm_end"
-+
-+LABEL="lvm_disable"
-+ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}="1"
-+ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="1"
+-void fill_default_pvcreate_params(struct pvcreate_params *pp)
++void pvcreate_params_set_defaults(struct pvcreate_params *pp)
+ {
+ 	memset(pp, 0, sizeof(*pp));
+ 	pp->zero = 1;
+@@ -1354,7 +1354,7 @@
+ 	struct pvcreate_params default_pp;
+ 	char buffer[64] __attribute((aligned(8)));
  
- LABEL="lvm_end"
---- LVM2/udev/95-dm-notify.rules	2009/10/26 22:42:07	1.4
-+++ LVM2/udev/95-dm-notify.rules	2009/11/01 18:01:31	1.5
-@@ -9,10 +9,4 @@
- # a cookie value sent within "change" and "remove" events (the cookie
- # value is set before by that process for every action requested).
+-	fill_default_pvcreate_params(&default_pp);
++	pvcreate_params_set_defaults(&default_pp);
+ 	if (!pp)
+ 		pp = &default_pp;
  
--SUBSYSTEM!="block", GOTO="dm_end"
--KERNEL!="dm-[0-9]*", GOTO="dm_end"
--ACTION!="change|remove", GOTO="dm_end"
--
- ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
--
--LABEL="dm_end"
+--- LVM2/liblvm/lvm_vg.c	2009/10/05 20:03:08	1.32
++++ LVM2/liblvm/lvm_vg.c	2009/11/01 19:51:55	1.33
+@@ -54,7 +54,7 @@
+ 		return -1;
+ 	}
+ 
+-	fill_default_pvcreate_params(&pp);
++	pvcreate_params_set_defaults(&pp);
+ 	if (!vg_extend(vg, 1, (char **) &device, &pp)) {
+ 		unlock_vg(vg->cmd, VG_ORPHANS);
+ 		return -1;
+--- LVM2/tools/pvcreate.c	2009/10/05 20:03:54	1.87
++++ LVM2/tools/pvcreate.c	2009/11/01 19:51:55	1.88
+@@ -23,7 +23,7 @@
+  * Output arguments:
+  * pp: structure allocated by caller, fields written / validated here
+  */
+-static int pvcreate_validate_restore_params(struct cmd_context *cmd,
++static int pvcreate_restore_params_validate(struct cmd_context *cmd,
+ 					    int argc, char **argv,
+ 					    struct pvcreate_params *pp)
+ {
+@@ -84,12 +84,12 @@
+ 	int ret = ECMD_PROCESSED;
+ 	struct pvcreate_params pp;
+ 
+-	fill_default_pvcreate_params(&pp);
++	pvcreate_params_set_defaults(&pp);
+ 
+-	if (!pvcreate_validate_restore_params(cmd, argc, argv, &pp)) {
++	if (!pvcreate_restore_params_validate(cmd, argc, argv, &pp)) {
+ 		return EINVALID_CMD_LINE;
+ 	}
+-	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
++	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+--- LVM2/tools/toollib.c	2009/10/06 16:00:38	1.175
++++ LVM2/tools/toollib.c	2009/11/01 19:51:55	1.176
+@@ -1278,7 +1278,7 @@
+  * Output arguments:
+  * pp: structure allocated by caller, fields written / validated here
+  */
+-int pvcreate_validate_params(struct cmd_context *cmd,
++int pvcreate_params_validate(struct cmd_context *cmd,
+ 			     int argc, char **argv,
+ 			     struct pvcreate_params *pp)
+ {
+--- LVM2/tools/toollib.h	2009/10/05 20:03:55	1.65
++++ LVM2/tools/toollib.h	2009/11/01 19:51:55	1.66
+@@ -107,7 +107,7 @@
+ int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg);
+ void lv_spawn_background_polling(struct cmd_context *cmd,
+ 				 struct logical_volume *lv);
+-int pvcreate_validate_params(struct cmd_context *cmd,
++int pvcreate_params_validate(struct cmd_context *cmd,
+ 			     int argc, char **argv,
+ 			     struct pvcreate_params *pp);
+ 
+--- LVM2/tools/vgcreate.c	2009/10/31 17:39:22	1.71
++++ LVM2/tools/vgcreate.c	2009/11/01 19:51:55	1.72
+@@ -40,8 +40,8 @@
+ 			  "use --pvmetadatacopies instead.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+-	fill_default_pvcreate_params(&pp);
+-	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
++	pvcreate_params_set_defaults(&pp);
++	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+--- LVM2/tools/vgextend.c	2009/10/05 20:55:57	1.54
++++ LVM2/tools/vgextend.c	2009/11/01 19:51:55	1.55
+@@ -37,8 +37,8 @@
+ 			  "use --pvmetadatacopies instead.");
+ 		return EINVALID_CMD_LINE;
+ 	}
+-	fill_default_pvcreate_params(&pp);
+-	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
++	pvcreate_params_set_defaults(&pp);
++	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
 
 
