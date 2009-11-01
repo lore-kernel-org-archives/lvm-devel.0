@@ -1,40 +1,43 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 13 Jan 2016 13:47:00 +0000 (UTC)
-Subject: master - WHATS_NEW: reports and invisible devices
-Message-ID: <20160113134700.059CD607C6@fedorahosted.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sun, 01 Nov 2009 13:21:17 +0100
+Subject: [PATCH]: Enable snapshots of mirrors
+In-Reply-To: <1256237661.14726.3.camel@hydrogen.msp.redhat.com> (Jonathan
+	Brassow's message of "Thu, 22 Oct 2009 13:54:21 -0500")
+References: <1256237661.14726.3.camel@hydrogen.msp.redhat.com>
+Message-ID: <87iqdusaf6.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d2d5c5e6c995b34ba36c026c8da7cdd316b69ee5
-Commit:        d2d5c5e6c995b34ba36c026c8da7cdd316b69ee5
-Parent:        efab21b4115d1cc79c3b02c64cd15f360176c3cb
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jan 13 14:45:49 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 13 14:45:49 2016 +0100
+Hi,
 
-WHATS_NEW: reports and invisible devices
+it would be great if you could convert your tests into actual testcase code,
+maybe gathered all under test/t-snapshots-of-mirrors.sh -- this would help
+prevent any possible regressions in the future. It would also mean we remember
+all the information you needed to gather to conduct these tests.
 
----
- WHATS_NEW |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+May you need any assistance with writing the tests, please don't hesitate to
+contact me (IRC probably works best).
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 93e0dd5..fb485b3 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,7 +1,8 @@
- Version 2.02.140 -
- ===================================
-+  Add report/mark_invisible_devices to lvm.conf.
-+  Use brackets consistently in report fields to mark invisible devices.
-   Restore background polling processing during auto-activation (2.02.119).
--  Use brackets to signify LVs which are not visible when reporting lv_parent.
-   Fix invalid memory read when reporting cache LV policy_name (2.02.126).
- 
- Version 2.02.139 - 8th January 2016
+Also,
+
+Jonathan Brassow <jbrassow@redhat.com> writes:
+> lvconvert:
+> + down convert works (mirror to linear)
+> + down convert works (mirror to mirror)
+> + up convert works (linear to mirror) - both background and foreground
+> - up convert doesn't work (mirror to mirror) - disabled in lvconvert and
+> err msg added
+> + convert between log types works (core <-> disk/redundant)
+could you please check what lvconvert --repair does under a snapshot? I would
+probably look into the mirror->mirror upconversion, although that's only
+relevant for a repair of 3+-way mirror.
+
+The t-lvconvert-repair.sh script should aid you in constructing a testcase.
+
+Thanks!
+   Petr.
 
 
