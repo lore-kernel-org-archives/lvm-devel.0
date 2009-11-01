@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 1 Nov 2009 19:51:56 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
-Message-ID: <20091101195156.24908.qmail@sourceware.org>
+Date: 1 Nov 2009 20:02:33 -0000
+Subject: LVM2/tools toollib.c toollib.h vgcreate.c vgsp ...
+Message-ID: <20091101200233.27147.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,147 +10,95 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-11-01 19:51:55
+Changes by:	wysochanski at sourceware.org	2009-11-01 20:02:32
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
-	liblvm         : lvm_vg.c 
-	tools          : pvcreate.c toollib.c toollib.h vgcreate.c 
-	                 vgextend.c 
+	tools          : toollib.c toollib.h vgcreate.c vgsplit.c 
 
 Log message:
-	Rename pvcreate_params processing functions to better match <object><action>.
+	Add vgcreate_params_set_defaults().
 	
-	Rename fill_default_pvcreate_params to pvcreate_params_set_defaults.
-	Rename pvcreate_validate_restore_params to pvcreate_restore_params_validate.
-	Rename pvcreate_validate_params to pvcreate_params_validate.
+	Add function to set default vgcreate parameters based on existing VG or
+	internal defaults.  Should be no functional change.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.119&r2=1.120
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.293&r2=1.294
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.87&r2=1.88
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.65&r2=1.66
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgextend.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.176&r2=1.177
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.66&r2=1.67
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.96&r2=1.97
 
---- LVM2/lib/metadata/metadata-exported.h	2009/10/31 17:30:52	1.119
-+++ LVM2/lib/metadata/metadata-exported.h	2009/11/01 19:51:54	1.120
-@@ -372,7 +372,7 @@
- struct physical_volume *pvcreate_single(struct cmd_context *cmd,
- 					const char *pv_name,
- 					struct pvcreate_params *pp);
--void fill_default_pvcreate_params(struct pvcreate_params *pp);
-+void pvcreate_params_set_defaults(struct pvcreate_params *pp);
- 
- /*
- * Utility functions
---- LVM2/lib/metadata/metadata.c	2009/10/31 17:30:52	1.293
-+++ LVM2/lib/metadata/metadata.c	2009/11/01 19:51:54	1.294
-@@ -1314,7 +1314,7 @@
- 	return 1;
+--- LVM2/tools/toollib.c	2009/11/01 19:51:55	1.176
++++ LVM2/tools/toollib.c	2009/11/01 20:02:32	1.177
+@@ -1183,6 +1183,26 @@
+ 	return rc;
  }
  
--void fill_default_pvcreate_params(struct pvcreate_params *pp)
-+void pvcreate_params_set_defaults(struct pvcreate_params *pp)
- {
- 	memset(pp, 0, sizeof(*pp));
- 	pp->zero = 1;
-@@ -1354,7 +1354,7 @@
- 	struct pvcreate_params default_pp;
- 	char buffer[64] __attribute((aligned(8)));
++void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
++				  struct volume_group *vg)
++{
++	if (vg) {
++		vp_def->vg_name = NULL;
++		vp_def->extent_size = vg->extent_size;
++		vp_def->max_pv = vg->max_pv;
++		vp_def->max_lv = vg->max_lv;
++		vp_def->alloc = vg->alloc;
++		vp_def->clustered = vg_is_clustered(vg);
++	} else {
++		vp_def->vg_name = NULL;
++		vp_def->extent_size = DEFAULT_EXTENT_SIZE * 2;
++		vp_def->max_pv = DEFAULT_MAX_PV;
++		vp_def->max_lv = DEFAULT_MAX_LV;
++		vp_def->alloc = DEFAULT_ALLOC_POLICY;
++		vp_def->clustered = DEFAULT_CLUSTERED;
++	}
++}
++
+ /*
+  * Set members of struct vgcreate_params from cmdline.
+  * Do preliminary validation with arg_*() interface.
+--- LVM2/tools/toollib.h	2009/11/01 19:51:55	1.66
++++ LVM2/tools/toollib.h	2009/11/01 20:02:32	1.67
+@@ -99,6 +99,8 @@
+ int apply_lvname_restrictions(const char *name);
+ int is_reserved_lvname(const char *name);
  
--	fill_default_pvcreate_params(&default_pp);
-+	pvcreate_params_set_defaults(&default_pp);
- 	if (!pp)
- 		pp = &default_pp;
- 
---- LVM2/liblvm/lvm_vg.c	2009/10/05 20:03:08	1.32
-+++ LVM2/liblvm/lvm_vg.c	2009/11/01 19:51:55	1.33
-@@ -54,7 +54,7 @@
- 		return -1;
- 	}
- 
--	fill_default_pvcreate_params(&pp);
-+	pvcreate_params_set_defaults(&pp);
- 	if (!vg_extend(vg, 1, (char **) &device, &pp)) {
- 		unlock_vg(vg->cmd, VG_ORPHANS);
- 		return -1;
---- LVM2/tools/pvcreate.c	2009/10/05 20:03:54	1.87
-+++ LVM2/tools/pvcreate.c	2009/11/01 19:51:55	1.88
-@@ -23,7 +23,7 @@
-  * Output arguments:
-  * pp: structure allocated by caller, fields written / validated here
-  */
--static int pvcreate_validate_restore_params(struct cmd_context *cmd,
-+static int pvcreate_restore_params_validate(struct cmd_context *cmd,
- 					    int argc, char **argv,
- 					    struct pvcreate_params *pp)
- {
-@@ -84,12 +84,12 @@
- 	int ret = ECMD_PROCESSED;
- 	struct pvcreate_params pp;
- 
--	fill_default_pvcreate_params(&pp);
-+	pvcreate_params_set_defaults(&pp);
- 
--	if (!pvcreate_validate_restore_params(cmd, argc, argv, &pp)) {
-+	if (!pvcreate_restore_params_validate(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
- 	}
--	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
-+	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
++void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
++				 struct volume_group *vg);
+ int fill_vg_create_params(struct cmd_context *cmd,
+ 			  char *vg_name, struct vgcreate_params *vp_new,
+ 			  struct vgcreate_params *vp_def);
+--- LVM2/tools/vgcreate.c	2009/11/01 19:51:55	1.72
++++ LVM2/tools/vgcreate.c	2009/11/01 20:02:32	1.73
+@@ -45,12 +45,7 @@
  		return EINVALID_CMD_LINE;
  	}
  
---- LVM2/tools/toollib.c	2009/10/06 16:00:38	1.175
-+++ LVM2/tools/toollib.c	2009/11/01 19:51:55	1.176
-@@ -1278,7 +1278,7 @@
-  * Output arguments:
-  * pp: structure allocated by caller, fields written / validated here
-  */
--int pvcreate_validate_params(struct cmd_context *cmd,
-+int pvcreate_params_validate(struct cmd_context *cmd,
- 			     int argc, char **argv,
- 			     struct pvcreate_params *pp)
- {
---- LVM2/tools/toollib.h	2009/10/05 20:03:55	1.65
-+++ LVM2/tools/toollib.h	2009/11/01 19:51:55	1.66
-@@ -107,7 +107,7 @@
- int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg);
- void lv_spawn_background_polling(struct cmd_context *cmd,
- 				 struct logical_volume *lv);
--int pvcreate_validate_params(struct cmd_context *cmd,
-+int pvcreate_params_validate(struct cmd_context *cmd,
- 			     int argc, char **argv,
- 			     struct pvcreate_params *pp);
+-	vp_def.vg_name = NULL;
+-	vp_def.extent_size = DEFAULT_EXTENT_SIZE * 2;
+-	vp_def.max_pv = DEFAULT_MAX_PV;
+-	vp_def.max_lv = DEFAULT_MAX_LV;
+-	vp_def.alloc = DEFAULT_ALLOC_POLICY;
+-	vp_def.clustered = DEFAULT_CLUSTERED;
++	vgcreate_params_set_defaults(&vp_def, NULL);
+ 	if (fill_vg_create_params(cmd, vg_name, &vp_new, &vp_def))
+ 		return EINVALID_CMD_LINE;
  
---- LVM2/tools/vgcreate.c	2009/10/31 17:39:22	1.71
-+++ LVM2/tools/vgcreate.c	2009/11/01 19:51:55	1.72
-@@ -40,8 +40,8 @@
- 			  "use --pvmetadatacopies instead.");
- 		return EINVALID_CMD_LINE;
- 	}
--	fill_default_pvcreate_params(&pp);
--	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
-+	pvcreate_params_set_defaults(&pp);
-+	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
- 	}
- 
---- LVM2/tools/vgextend.c	2009/10/05 20:55:57	1.54
-+++ LVM2/tools/vgextend.c	2009/11/01 19:51:55	1.55
-@@ -37,8 +37,8 @@
- 			  "use --pvmetadatacopies instead.");
- 		return EINVALID_CMD_LINE;
- 	}
--	fill_default_pvcreate_params(&pp);
--	if (!pvcreate_validate_params(cmd, argc, argv, &pp)) {
-+	pvcreate_params_set_defaults(&pp);
-+	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
- 	}
- 
+--- LVM2/tools/vgsplit.c	2009/10/31 17:43:57	1.96
++++ LVM2/tools/vgsplit.c	2009/11/01 20:02:32	1.97
+@@ -366,13 +366,7 @@
+ 		if (!vgs_are_compatible(cmd, vg_from,vg_to))
+ 			goto_bad;
+ 	} else {
+-		vp_def.vg_name = NULL;
+-		vp_def.extent_size = vg_from->extent_size;
+-		vp_def.max_pv = vg_from->max_pv;
+-		vp_def.max_lv = vg_from->max_lv;
+-		vp_def.alloc = vg_from->alloc;
+-		vp_def.clustered = vg_is_clustered(vg_from);
+-
++		vgcreate_params_set_defaults(&vp_def, vg_from);
+ 		if (fill_vg_create_params(cmd, vg_name_to, &vp_new, &vp_def)) {
+ 			r = EINVALID_CMD_LINE;
+ 			goto_bad;
 
 
