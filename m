@@ -1,20 +1,35 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 3 Nov 2009 16:22:11 +0000
-Subject: [PATCH] fix processing of %PVS arg in lvcreate
-In-Reply-To: <4AF05811.20600@redhat.com>
-References: <4AF05811.20600@redhat.com>
-Message-ID: <20091103162211.GL13375@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 03 Nov 2009 17:32:22 +0100
+Subject: [PATCH] Fix segfault if %PVS is used in lvresize without PVs list
+Message-ID: <4AF05B16.5070504@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Nov 03, 2009 at 05:19:29PM +0100, Milan Broz wrote:
-> Fix lvcreate processing of %PVS argument.
+Fix segfault if %PVS in lvresize without PVs list.
 
-Ack.
+... and use the all available PVs instaed.
 
-Alasdair
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 033078f..36c1717 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -367,8 +367,11 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 			lp->extents = lp->extents * lv->le_count / 100;
+ 			break;
+ 		case PERCENT_PVS:
+-			pv_extent_count = pv_list_extents_free(pvh);
+-			lp->extents = lp->extents * pv_extent_count / 100;
++			if (lp->argc) {
++				pv_extent_count = pv_list_extents_free(pvh);
++				lp->extents = lp->extents * pv_extent_count / 100;
++			} else
++				lp->extents = lp->extents * vg->extent_count / 100;
+ 			break;
+ 		case PERCENT_NONE:
+ 			break;
+
 
 
