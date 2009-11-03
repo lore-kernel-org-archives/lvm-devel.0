@@ -1,30 +1,49 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 3 Nov 2009 00:48:50 +0000
-Subject: Re: [dm-devel] Segment fault in datastruct/hash.c
-In-Reply-To: <1cafab770910272052v4a9ec931v893b4925dd0e2e12@mail.gmail.com>
-References: <1cafab770910272052v4a9ec931v893b4925dd0e2e12@mail.gmail.com>
-Message-ID: <20091103004850.GJ13375@agk-dp.fab.redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 3 Nov 2009 10:50:58 -0000
+Subject: LVM2 ./WHATS_NEW lib/display/display.c
+Message-ID: <20091103105058.22155.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Oct 28, 2009 at 11:52:52AM +0800, Xinwei Hu wrote:
->   I generate a patch against the latest git tree. Please consider it
-> for inclusion.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2009-11-03 10:50:57
+
+Modified files:
+	.              : WHATS_NEW 
+	lib/display    : display.c 
+
+Log message:
+	Add fflush for the case the log is redirected to the buffered file.
+	
+	Without this patch it have not been obvious, why the application
+	waits on the stdin as the prompt might be still buffered in memory.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1310&r2=1.1311
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+
+--- LVM2/WHATS_NEW	2009/10/31 17:43:57	1.1310
++++ LVM2/WHATS_NEW	2009/11/03 10:50:57	1.1311
+@@ -1,5 +1,6 @@
+ Version 2.02.55 -
+ ===================================
++  Flush stdout after yes/no prompt.
+   Update vgsplit and vgcreate to use vg_set_clustered.
+   Add vg_mda_count and vg_set_clustered library function.
+   Add more vgcreate and vgsplit nightly tests.
+--- LVM2/lib/display/display.c	2009/10/26 10:01:57	1.106
++++ LVM2/lib/display/display.c	2009/11/03 10:50:57	1.107
+@@ -824,6 +824,7 @@
+ 			va_start(ap, prompt);
+ 			vprintf(prompt, ap);
+ 			va_end(ap);
++			fflush(stdout);
+ 		}
  
-Applied.
-
-> --- a/libdm/datastruct/hash.c
-> +++ b/libdm/datastruct/hash.c
-> @@ -143,9 +143,13 @@ static struct dm_hash_node **_find(struct dm_hash_table *t, const char *key,
-
-> +		if ((*c)->keylen != len)
-> +			continue
-                                ^
-(Did you try the patch?)
-
-Alasdair
+ 		if ((c = getchar()) == EOF) {
 
 
