@@ -1,39 +1,39 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 13 Jan 2016 15:44:11 +0000 (UTC)
-Subject: master - cleanup: rename 'invisible devices' to 'hidden devices'
-Message-ID: <20160113154411.8691F60972@fedorahosted.org>
+From: Xinwei Hu <hxinwei@gmail.com>
+Date: Tue, 3 Nov 2009 11:34:58 +0800
+Subject: Re: [dm-devel] Segment fault in datastruct/hash.c
+In-Reply-To: <20091103004850.GJ13375@agk-dp.fab.redhat.com>
+References: <1cafab770910272052v4a9ec931v893b4925dd0e2e12@mail.gmail.com>
+	<20091103004850.GJ13375@agk-dp.fab.redhat.com>
+Message-ID: <1cafab770911021934q8106j73d871d79a644b9b@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=04d1a8a5e41bd9fbcaa885b0b13faba85db532d9
-Commit:        04d1a8a5e41bd9fbcaa885b0b13faba85db532d9
-Parent:        939d29652579e4759d445c87dc21d1a6b37fd97d
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jan 13 16:43:25 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 13 16:43:25 2016 +0100
+2009/11/3 Alasdair G Kergon <agk@redhat.com>:
+> On Wed, Oct 28, 2009 at 11:52:52AM +0800, Xinwei Hu wrote:
+>> ? I generate a patch against the latest git tree. Please consider it
+>> for inclusion.
+>
+> Applied.
+>
+>> --- a/libdm/datastruct/hash.c
+>> +++ b/libdm/datastruct/hash.c
+>> @@ -143,9 +143,13 @@ static struct dm_hash_node **_find(struct dm_hash_table *t, const char *key,
+>
+>> + ? ? ? ? ? ? if ((*c)->keylen != len)
+>> + ? ? ? ? ? ? ? ? ? ? continue
+> ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?^
+Sorry about that.
+I copied tested patch into git manually at that time.
+Thought it's too simple to make a mistake, but I'm wrong -_-!!
 
-cleanup: rename 'invisible devices' to 'hidden devices'
-
----
- test/lib/aux.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 51dba36..439d79e 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -880,7 +880,7 @@ log/level = 9
- log/overwrite = 1
- log/syslog = 0
- log/verbose = 0
--report/mark_invisible_devices=0
-+report/mark_hidden_devices=0
- EOF
- 	}
- 
+> (Did you try the patch?)
+>
+Yes, the original patch is tested and worked.
+> Alasdair
+>
+>
 
 
