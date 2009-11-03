@@ -1,34 +1,23 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Nov 2009 11:17:47 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20091103111747.17846.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 3 Nov 2009 14:27:06 +0000
+Subject: [PATCH 1 of 1] LVM: add split capability
+In-Reply-To: <200910302323.n9UNN2nV009157@hydrogen.msp.redhat.com>
+References: <200910302323.n9UNN2nV009157@hydrogen.msp.redhat.com>
+Message-ID: <20091103142706.GK13375@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2009-11-03 11:17:46
+On Fri, Oct 30, 2009 at 06:23:02PM -0500, Jon Brassow wrote:
+> Patch name: lvm-add-split-capability.patch
+ 
+Patch doesn't apply/compile - log_count undefined, and lv_split_mirror_images
+not exported.
 
-Modified files:
-	.              : WHATS_NEW 
+Please fix and repost.
 
-Log message:
-	Update for outnl and indent functions
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1311&r2=1.1312
-
---- LVM2/WHATS_NEW	2009/11/03 10:50:57	1.1311
-+++ LVM2/WHATS_NEW	2009/11/03 11:17:46	1.1312
-@@ -1,5 +1,6 @@
- Version 2.02.55 -
- ===================================
-+  Export outnl and indent functions for modules.
-   Flush stdout after yes/no prompt.
-   Update vgsplit and vgcreate to use vg_set_clustered.
-   Add vg_mda_count and vg_set_clustered library function.
+Alasdair
 
 
