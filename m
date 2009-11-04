@@ -1,28 +1,31 @@
 From: Bastian Blank <bastian@waldi.eu.org>
-Date: Wed, 4 Nov 2009 12:25:38 +0100
-Subject: [PATCH] Do not support dmsetup udev{flags, complete, complete_all, cookies} when udev_sync is disabled and tiny fix for udevcomplete
-In-Reply-To: <4AF15D87.5010507@redhat.com>
-References: <4AF15D87.5010507@redhat.com>
-Message-ID: <20091104112538.GA17814@wavehammer.waldi.eu.org>
+Date: Wed, 4 Nov 2009 12:26:55 +0100
+Subject: [PATCH] udev: move notify rule
+In-Reply-To: <4AEB0C50.7090500@redhat.com>
+References: <20091030145125.GA21583@wavehammer.waldi.eu.org>
+	<4AEB0C50.7090500@redhat.com>
+Message-ID: <20091104112655.GB17814@wavehammer.waldi.eu.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Nov 04, 2009 at 11:55:03AM +0100, Peter Rajnoha wrote:
-> Just a tiny cleanup - we should be consistent here and disable dmsetup udev{flags,complete,
-> complete_all,cookies} commands if udev_sync is disabled, not udevcomplete_all and
-> udevcookies only.
+On Fri, Oct 30, 2009 at 04:54:56PM +0100, Peter Rajnoha wrote:
+> On 10/30/2009 03:51 PM, Bastian Blank wrote:
+> > Move notify rule into the first rules file. The RUN commands is executed
+> > after everything is finished, so it makes no difference if it is set
+> > early or late.
+> yes, this is true with respect to all the other udev processing. But the point of having
+> it as 95-dm.rules is that there could be some other RUN+="..." line in the other rules.
 
-What exactly are you trying to do? udevflags and udevcomplete is used in
-your udev rules, which can be used without udev sync enabled at all.
+And there are no constraints about the order of this executions. If you
+know more then the udev docu, fix it there.
 
 Bastian
 
 -- 
-Our missions are peaceful -- not for conquest.  When we do battle, it
-is only because we have no choice.
-		- Kirk, "The Squire of Gothos", stardate 2124.5
+Where there's no emotion, there's no motive for violence.
+		-- Spock, "Dagger of the Mind", stardate 2715.1
 
 
