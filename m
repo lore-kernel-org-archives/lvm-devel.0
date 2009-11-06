@@ -1,60 +1,45 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 13 Jan 2016 16:12:28 +0000 (UTC)
-Subject: master - lv: fix check for NULL origin_lv in _do_lv_origin_dup, cleanup _do_lvconvert_lv_dup
-Message-ID: <20160113161228.60E4960A3E@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 6 Nov 2009 01:41:00 -0000
+Subject: LVM2/man dmsetup.8.in
+Message-ID: <20091106014100.26891.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=63d59254d95e29a4e6ca47cadfb15cf821ec7479
-Commit:        63d59254d95e29a4e6ca47cadfb15cf821ec7479
-Parent:        04d1a8a5e41bd9fbcaa885b0b13faba85db532d9
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jan 13 17:11:00 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jan 13 17:11:05 2016 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-11-06 01:40:59
 
-lv: fix check for NULL origin_lv in _do_lv_origin_dup, cleanup _do_lvconvert_lv_dup
+Modified files:
+	man            : dmsetup.8.in 
 
----
- lib/metadata/lv.c |   15 +++++++--------
- 1 files changed, 7 insertions(+), 8 deletions(-)
+Log message:
+	.
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 96f6f5c..6575cc9 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -273,7 +273,7 @@ static char *_do_lv_origin_dup(struct dm_pool *mem, const struct logical_volume
- {
- 	struct logical_volume *origin_lv = lv_origin_lv(lv);
- 
--	if (!lv)
-+	if (!origin_lv)
- 		return NULL;
- 
- 	if (uuid)
-@@ -533,14 +533,13 @@ static char *_do_lv_convert_lv_dup(struct dm_pool *mem, const struct logical_vol
- {
- 	struct logical_volume *convert_lv = lv_convert_lv(lv);
- 
--	if (convert_lv) {
--		if (uuid)
--			return lv_uuid_dup(mem, convert_lv);
--		else
--			return lv_name_dup(mem, convert_lv);
--	}
-+	if (!convert_lv)
-+		return NULL;
- 
--	return NULL;
-+	if (uuid)
-+		return lv_uuid_dup(mem, convert_lv);
-+	else
-+		return lv_name_dup(mem, convert_lv);
- }
- 
- char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+
+--- LVM2/man/dmsetup.8.in	2009/11/06 00:43:09	1.28
++++ LVM2/man/dmsetup.8.in	2009/11/06 01:40:59	1.29
+@@ -282,7 +282,7 @@
+ Splits given device name into subsystem constituents.
+ Default subsystem is LVM.
+ .IP \fBstatus
+-.I [--target target_type] [--inactive]
++.I [--target target_type]
+ .I [device_name]
+ .br
+ Outputs status information for each of the device's targets.
+@@ -301,7 +301,7 @@
+ the --noflush option.  This lets outstanding I/O that has not yet reached the
+ device to remain unflushed.
+ .IP \fBtable
+-.I [--target target_type] [--inactive]
++.I [--target target_type]
+ .I [device_name]
+ .br
+ Outputs the current table for the device in a format that can be fed
 
 
