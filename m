@@ -1,44 +1,46 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 6 Nov 2009 15:37:43 -0500
-Subject: Re: dm snapshot: allow live exception store handover between tables
-In-Reply-To: <20091106200739.GU13375@agk-dp.fab.redhat.com>
-References: <1257532814-17100-1-git-send-email-snitzer@redhat.com>
-	<20091106184642.GC13427@redhat.com>
-	<20091106192620.GD13427@redhat.com>
-	<20091106194136.GT13375@agk-dp.fab.redhat.com>
-	<20091106195429.GE13427@redhat.com>
-	<20091106200739.GU13375@agk-dp.fab.redhat.com>
-Message-ID: <20091106203742.GF13427@redhat.com>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Mon, 09 Nov 2009 16:28:23 +0100
+Subject: [PATCH 01/11] debian: fix library search path in example.conf
+In-Reply-To: <20091012100359.GK19397@agk-dp.fab.redhat.com>
+References: <1255002904-6226-1-git-send-email-fdinitto@redhat.com>	<8d71f1ff1c7ef3fa6f9c3e193a94aec8251d8407.1255002311.git.fdinitto@redhat.com>	<20091008232725.GP3054@agk-dp.fab.redhat.com>	<1255280941.10932.6.camel@cerberus.int.fabbione.net>	<20091011202347.GD21726@wavehammer.waldi.eu.org>	<1255320125.10932.17.camel@cerberus.int.fabbione.net>
+	<20091012100359.GK19397@agk-dp.fab.redhat.com>
+Message-ID: <4AF83517.1050204@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Nov 06 2009 at  3:07pm -0500,
-Alasdair G Kergon <agk@redhat.com> wrote:
-
-> On Fri, Nov 06, 2009 at 02:54:30PM -0500, Mike Snitzer wrote:
-> > Alasdair G Kergon <agk@redhat.com> wrote:
-> > > On Fri, Nov 06, 2009 at 02:26:21PM -0500, Mike Snitzer wrote:
-> > > > OK, actually in practice 'lvchange --refresh' is:
-> > > > old->suspend
-> > > > new->ctr
-> > > Those two need to be swapped.
-> > Why do they _need_ to be swapped?
+Alasdair G Kergon wrote:
+> On Mon, Oct 12, 2009 at 06:02:05AM +0200, Fabio M. Di Nitto wrote:
+>> On Sun, 2009-10-11 at 22:23 +0200, Bastian Blank wrote:
+>>> Its currently unused. The cluster locking lib was the only used external
+>>> lib.
 >  
-> old->suspend stops I/O to the device.
-> new->ctr allocates memory and in a bad case might lead to waiting for I/O to
-> the device we've just suspended.
+>> Alasdair, given that cluster locking lib is gone, do we have a use case
+>> to keep this option configurable? 
+> 
+> It's used for all lvm2 external libraries and needs to stay.  The
+> commented-out example is only worth making configurable if people are
+> actually installing libraries into private directories (and arguably it
+> should then be hard-coded into the source too).
+> 
+> We only stopped building the cluster locking library externally on Red
+> Hat distributions because of some complexities of the Red Hat build
+> system.  If they get resolved (as I hope they will be with RHEL6) then
+> we will probably reinstate it.  
+> 
 
-Ouch, yes good point.
+The patch in attachment:
+- allows lvm2libdir to be configurable
+- dynamically update docs and man pages
+- changes get_shared_library_path to understand LVM2_LIB_DIR
+- make get_shared_library_path returns error (void to int)
+- update get_shared_library_path users
 
-So I'll put the following on my lvm2 TODO:
+Fabio
 
-- establish a REFRESH flag (set on lvchange --refresh)
-- if REFRESH is set then _lv_suspend() will treat the live metadata as
-  if it is precommitted metadata
-
-Mike
-
-
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: lvm2libdir.diff
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091109/2204a72c/attachment.ksh>
