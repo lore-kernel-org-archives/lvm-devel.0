@@ -1,57 +1,106 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 24 Nov 2009 16:13:04 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20091124161304.24066.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 13 Nov 2009 21:39:11 +0100
+Subject: [PATCH] Fix pvmove region_size overflow for very large PVs.
+In-Reply-To: <1258131620-31470-1-git-send-email-mbroz@redhat.com>
+References: <1258131620-31470-1-git-send-email-mbroz@redhat.com>
+Message-ID: <4AFDC3EF.6030502@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-11-24 16:13:03
+As usually, I forgot that we must support separate
+loadable target module here, so duplicating the code is inevitable...
+Milan
+---
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+Fix pvmove region_size overflow for very large PVs.
 
-Log message:
-	Do not try to unlock VG which is not locked.
-	
-	If the vg_read() returned error, no lock was taken,
-	so always call vg_release().
-	
-	Otherwise this can happen because of missing FAILED_*:
-	
-	# vgchange -a y x --ignorelockingfailure
-	Volume group "x" not found
-	Internal error: Attempt to unlock unlocked VG x
+Fixes problem reported in
+https://www.redhat.com/archives/dm-devel/2009-November/msg00104.html
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1325&r2=1.1326
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.178&r2=1.179
+The region size multiplication can overflow when using 32bit integer.
 
---- LVM2/WHATS_NEW	2009/11/24 16:11:37	1.1325
-+++ LVM2/WHATS_NEW	2009/11/24 16:13:02	1.1326
+(Also moving the warning message into verbose level.)
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ WHATS_NEW             |    1 +
+ lib/mirror/mirrored.c |   35 ++++++++++++++++++++++-------------
+ 2 files changed, 23 insertions(+), 13 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b16bcb4..30e26d9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.02.56 - 
- ====================================
-+  Do not try to unlock VG which is not locked in _process_one_vg.
-   Move persistent filter dump to more appropriate place.
-   Refresh device filters before full device rescan in lvmcache.
-   Return error status if vgchange fails to activate some volume.
---- LVM2/tools/toollib.c	2009/11/01 20:03:24	1.178
-+++ LVM2/tools/toollib.c	2009/11/24 16:13:03	1.179
-@@ -452,8 +452,7 @@
- 		ret_max = ret;
+ Version 2.02.55 -
+ ===================================
++  Fix pvmove region_size oveflow for very large PVs.
+   Fix lvcreate and lvresize processing of %PVS argument.
+   Tidy some uses of arg_count and introduce arg_is_set.
+   Export outnl and indent functions for modules.
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index e93ed0b..12e3041 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -280,6 +280,22 @@ static int _add_log(struct dev_manager *dm, struct lv_segment *seg,
+ 	return dm_tree_node_add_mirror_target_log(node, region_size, clustered, log_dlid, area_count, log_flags);
+ }
  
- out:
--	if ((vg_read_error(vg) == FAILED_ALLOCATION)||
--	    (vg_read_error(vg) == FAILED_LOCKING))
-+	if (vg_read_error(vg))
- 		vg_release(vg);
- 	else
- 		unlock_and_release_vg(cmd, vg, vg_name);
++uint32_t _adjusted_mirror_region_size(uint32_t extent_size, uint32_t extents,
++				     uint32_t region_size)
++{
++	uint64_t region_max;
++
++	region_max = (1 << (ffs((int)extents) - 1)) * (uint64_t) extent_size;
++
++	if (region_max < UINT32_MAX && region_size > region_max) {
++		region_size = (uint32_t) region_max;
++		log_verbose("Using reduced mirror region size of %" PRIu32
++			    " sectors", region_size);
++	}
++
++	return region_size;
++}
++
+ static int _mirrored_add_target_line(struct dev_manager *dm, struct dm_pool *mem,
+ 				struct cmd_context *cmd, void **target_state,
+ 				struct lv_segment *seg,
+@@ -290,7 +306,7 @@ static int _mirrored_add_target_line(struct dev_manager *dm, struct dm_pool *mem
+ 	uint32_t area_count = seg->area_count;
+ 	unsigned start_area = 0u;
+ 	int mirror_status = MIRR_RUNNING;
+-	uint32_t region_size, region_max;
++	uint32_t region_size;
+ 	int r;
+ 
+ 	if (!*target_state)
+@@ -333,18 +349,11 @@ static int _mirrored_add_target_line(struct dev_manager *dm, struct dm_pool *mem
+ 			return 0;
+ 		}
+ 		region_size = seg->region_size;
+-	} else {
+-		/* Find largest power of 2 region size unit we can use */
+-		region_max = (1 << (ffs((int)seg->area_len) - 1)) *
+-		      seg->lv->vg->extent_size;
+-
+-		region_size = mirr_state->default_region_size;
+-		if (region_max < region_size) {
+-			region_size = region_max;
+-			log_verbose("Using reduced mirror region size of %u sectors",
+-				    region_size);
+-		}
+-	}
++
++	} else
++		region_size = _adjusted_mirror_region_size(seg->lv->vg->extent_size,
++							   seg->area_len,
++							   mirr_state->default_region_size);
+ 
+ 	if (!dm_tree_node_add_mirror_target(node, len))
+ 		return_0;
+
 
 
