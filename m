@@ -1,220 +1,93 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 20 Nov 2009 16:29:11 -0500
-Subject: [PATCH 4/5] lvm-stack-on-resume-and-suspend-failures
-In-Reply-To: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
-References: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1258752552-1589-4-git-send-email-snitzer@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 13 Nov 2009 12:33:28 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h udev/ ...
+Message-ID: <20091113123328.23060.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add missing 'stack;' for all suspend_lv and resume_lv callers.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2009-11-13 12:33:27
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- lib/locking/locking.c   |    6 ++++--
- lib/metadata/lv_manip.c |    3 ++-
- lib/metadata/mirror.c   |    5 +++--
- tools/lvchange.c        |    6 ++++--
- tools/lvconvert.c       |    3 ++-
- tools/lvresize.c        |    3 ++-
- tools/pvmove.c          |   21 ++++++++++++++-------
- tools/toollib.c         |   13 ++++++++++++-
- 8 files changed, 43 insertions(+), 17 deletions(-)
+Modified files:
+	.              : WHATS_NEW_DM 
+	libdm          : libdevmapper.h 
+	udev           : 13-dm-disk.rules 
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 9d86433..de890b2 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -439,7 +439,8 @@ int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs)
- 	struct lv_list *lvl;
+Log message:
+	Remove 'last_rule' from udev rules.
+	
+	'last_rule' option has been removed from udev (version >= 147).
+	
+	From now on, we require foreign rules to check and honor
+	ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG} instead. Foreign
+	rules should be skipped totally when this flag is set.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.312&r2=1.313
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+
+--- LVM2/WHATS_NEW_DM	2009/11/06 00:43:08	1.312
++++ LVM2/WHATS_NEW_DM	2009/11/13 12:33:27	1.313
+@@ -1,5 +1,6 @@
+ Version 1.02.40 - 
+ ===================================
++  Remove 'last_rule' from udev rules: honor ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}.
+   Add dmsetup --inactive support.
+   Add dm_task_query_inactive_table to libdevmapper for kernel driver >= 4.16.
+   Fix hash lookup segfault when keys compared are different lengths.
+--- LVM2/libdm/libdevmapper.h	2009/11/06 00:43:08	1.101
++++ LVM2/libdm/libdevmapper.h	2009/11/13 12:33:27	1.102
+@@ -1058,9 +1058,9 @@
+ /*
+  * DM_UDEV_DISABLE_OTHER_RULES_FLAG is set in case we need to disable
+  * all the other rules that are not general device-mapper nor subsystem
+- * related (the rules belong to other software or packages). Use this
+- * flag with care since it will cutoff the rule processing after the
+- * last device-mapper/subsytem rule is applied.
++ * related (the rules belong to other software or packages). All foreign
++ * rules should check this flag directly and they should ignore further
++ * rule processing for such event.
+  */
+ #define DM_UDEV_DISABLE_OTHER_RULES_FLAG 0x0008
+ /*
+--- LVM2/udev/13-dm-disk.rules	2009/10/26 22:42:07	1.4
++++ LVM2/udev/13-dm-disk.rules	2009/11/13 12:33:27	1.5
+@@ -10,27 +10,18 @@
+ # suspended.
  
- 	dm_list_iterate_items(lvl, lvs)
--		resume_lv(cmd, lvl->lv);
-+		if (!resume_lv(cmd, lvl->lv))
-+			stack;
+ # "add" event is processed on coldplug only!
+-ACTION!="add|change", GOTO="dm_other"
+-ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_other"
+-ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_other"
++ACTION!="add|change", GOTO="dm_end"
++ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
++ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
  
- 	return 1;
- }
-@@ -455,7 +456,8 @@ int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs)
- 			log_error("Failed to suspend %s", lvl->lv->name);
- 			dm_list_uniterate(lvh, lvs, &lvl->list) {
- 				lvl = dm_list_item(lvh, struct lv_list);
--				resume_lv(cmd, lvl->lv);
-+				if (!resume_lv(cmd, lvl->lv))
-+					stack;
- 			}
+ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
+ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
  
- 			return 0;
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 5041fd8..260a9ee 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1822,7 +1822,8 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (!(r = vg_commit(vg)))
- 		stack;
+-ENV{DM_SUSPENDED}=="1", GOTO="dm_other"
++ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
  
--	resume_lvs(cmd, &lvs_changed);
-+	if (!resume_lvs(cmd, &lvs_changed))
-+		stack;
- out:
- 	backup(vg);
- 	return r;
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 6936e8c..d53a219 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -596,8 +596,9 @@ static int _remove_mirror_images(struct logical_volume *lv,
- 	}
+ IMPORT{program}="$env{DM_SBIN_PATH}/blkid -o udev -p $tempnode"
+ ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
  
- 	if (!vg_commit(mirrored_seg->lv->vg)) {
--		resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv);
--		return 0;
-+		if (!resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv))
-+			stack;
-+		return_0;
- 	}
- 
- 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index ab4dc33..ce94101 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -64,7 +64,8 @@ static int lvchange_permission(struct cmd_context *cmd,
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
-@@ -385,7 +386,8 @@ static int lvchange_readahead(struct cmd_context *cmd,
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 0821c30..d1b86bf 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -790,7 +790,8 @@ static int _lvconvert_mirrors(struct cmd_context *cmd, struct logical_volume *lv
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 3b3a2eb..761ed27 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -638,7 +638,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 
- 	if (!vg_commit(vg)) {
- 		stack;
--		resume_lv(cmd, lock_lv);
-+		if (!resume_lv(cmd, lock_lv))
-+			stack;
- 		backup(vg);
- 		return ECMD_FAILED;
- 	}
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index ac09d6a..a56e377 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -292,7 +292,8 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 	/* Suspend mirrors on subsequent calls */
- 	if (!first_time) {
- 		if (!suspend_lv(cmd, lv_mirr)) {
--			resume_lvs(cmd, lvs_changed);
-+			if (!resume_lvs(cmd, lvs_changed))
-+				stack;
- 			vg_revert(vg);
- 			goto_out;
- 		}
-@@ -302,8 +303,10 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 	if (!vg_commit(vg)) {
- 		log_error("ABORTING: Volume group metadata update failed.");
- 		if (!first_time)
--			resume_lv(cmd, lv_mirr);
--		resume_lvs(cmd, lvs_changed);
-+			if (!resume_lv(cmd, lv_mirr))
-+				stack;
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		goto out;
- 	}
- 
-@@ -327,7 +330,8 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 	} else if (!resume_lv(cmd, lv_mirr)) {
- 		log_error("Unable to reactivate logical volume \"%s\"",
- 			  lv_mirr->name);
--		resume_lvs(cmd, lvs_changed);
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		goto out;
- 	}
- 
-@@ -501,8 +505,10 @@ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
- 		log_error("ABORTING: Failed to write new data locations "
- 			  "to disk.");
- 		vg_revert(vg);
--		resume_lv(cmd, lv_mirr);
--		resume_lvs(cmd, lvs_changed);
-+		if (!resume_lv(cmd, lv_mirr))
-+			stack;
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		return 0;
- 	}
- 
-@@ -514,7 +520,8 @@ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
- 	}
- 
- 	/* Unsuspend LVs */
--	resume_lvs(cmd, lvs_changed);
-+	if (!resume_lvs(cmd, lvs_changed))
-+		stack;
- 
- 	/* Deactivate mirror LV */
- 	if (!deactivate_lv(cmd, lv_mirr)) {
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 39a6d69..ada1302 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1252,7 +1252,18 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 
- int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
- {
--	return suspend_lv(cmd, lv) && resume_lv(cmd, lv);
-+	int r = 0;
-+
-+	r = suspend_lv(cmd, lv);
-+	if (!r)
-+		goto_out;
-+
-+	r = resume_lv(cmd, lv);
-+	if (!r)
-+		goto_out;
-+
-+out:
-+	return r;
- }
- 
- int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg)
--- 
-1.6.5.2
+-# Cutoff all subsequent rules if instructed by a flag.
+-# This flag should be used in well-founded situations only to prevent
+-# any problems that could arise when processing this event further by
+-# foreign rules (various temporary and hidden devices mostly).
+-LABEL="dm_other"
+-ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}!="1", GOTO="dm_end"
+-ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
+-OPTIONS+="last_rule"
+-
+ LABEL="dm_end"
 
 
