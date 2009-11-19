@@ -1,51 +1,25 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 30 Nov 2009 12:37:15 +0100
-Subject: [PATCH 15/23] Replicator: using vgs_missed for error count
-In-Reply-To: <1259581043-15308-15-git-send-email-zkabelac@redhat.com>
-References: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-2-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-3-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-4-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-5-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-6-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-7-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-8-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-9-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-10-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-11-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-12-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-13-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-14-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-15-git-send-email-zkabelac@redhat.com>
-Message-ID: <1259581043-15308-16-git-send-email-zkabelac@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 19 Nov 2009 01:33:03 +0100
+Subject: [PATCH] Separate the memlock counters for in-command use and for dmeventd.
+In-Reply-To: <874oorxtjt.fsf@twilight.int.mornfall.net.> (Petr Rockai's
+	message of "Thu, 19 Nov 2009 01:11:18 +0100")
+References: <874oorxtjt.fsf@twilight.int.mornfall.net.>
+Message-ID: <87y6m3wdz4.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Lower expected_count for the case of missed VGs so no error is printed
-in case the remote VGs are not opened. Currently it's needed only for
-Replicator target.
+Amended patch below.
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/vgchange.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: memlock.diff
+Type: text/x-diff
+Size: 3599 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091119/79e53e48/attachment.bin>
+-------------- next part --------------
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index f791e53..9da877e 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -102,6 +102,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- 		count++;
- 	}
- 
-+	expected_count -= cmd->vgs_missed;
- 	if (expected_count)
- 		log_verbose("%s %d logical volumes in volume group %s",
- 			    activate ? "Activated" : "Deactivated",
--- 
-1.6.5.3
-
-
+Petr.
