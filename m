@@ -1,109 +1,58 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 11 Nov 2009 21:35:34 -0600
-Subject: [PATCH] LVM: Mirror down-convert bug fix.
-Message-ID: <1257996934.4390.10.camel@hydrogen.msp.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 19 Nov 2009 19:00:37 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20091119190037.23032.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Noticed this while working on multi-leg split mirror support.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2009-11-19 19:00:35
 
- brassow
+Modified files:
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
-Down-convert is not properly handling image removal when specific
-PVs are specified.
+Log message:
+	pre-release
 
-Old bad behavior:
-[root at bp-01 LVM2]# !lvs
-lvs -a -o name,copy_percent,devices
-  LV            Copy%  Devices
-  LogVol00             /dev/sda2(0)
-  LogVol01             /dev/sda2(4451)
-  lv             36.00 lv_mimage_0(0),lv_mimage_1(0),lv_mimage_2(0),lv_mimage_3(0)
-  [lv_mimage_0]        /dev/sdb1(0)
-  [lv_mimage_1]        /dev/sdc1(0)
-  [lv_mimage_2]        /dev/sdd1(0)
-  [lv_mimage_3]        /dev/sde1(0)
-  [lv_mlog]            /dev/sdi1(0)
-[root at bp-01 LVM2]# !lvco
-lvconvert -m0 vg/lv /dev/sd[ceb]1
-  Logical volume lv converted.
-[root at bp-01 LVM2]# !lvs
-lvs -a -o name,copy_percent,devices
-  LV       Copy%  Devices
-  LogVol00        /dev/sda2(0)
-  LogVol01        /dev/sda2(4451)
-  lv              /dev/sdc1(0)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.213&r2=1.214
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1317&r2=1.1318
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.315&r2=1.316
 
-Note how sdc1 is the remaining device, even though we specifically said
-to remove that one....
-
-New good behaviour:
-[root at bp-01 LVM2]# !lvs
-lvs -a -o name,copy_percent,devices
-  LV            Copy%  Devices
-  LogVol00             /dev/sda2(0)
-  LogVol01             /dev/sda2(4451)
-  lv            100.00 lv_mimage_0(0),lv_mimage_1(0),lv_mimage_2(0),lv_mimage_3(0)
-  [lv_mimage_0]        /dev/sdb1(0)
-  [lv_mimage_1]        /dev/sdc1(0)
-  [lv_mimage_2]        /dev/sdd1(0)
-  [lv_mimage_3]        /dev/sde1(0)
-  [lv_mlog]            /dev/sdi1(0)
-[root at bp-01 LVM2]# lvconvert -m0 vg/lv /dev/sd[ceb]1
-  Logical volume lv converted.
-[root at bp-01 LVM2]# !lvs
-lvs -a -o name,copy_percent,devices
-  LV       Copy%  Devices
-  LogVol00        /dev/sda2(0)
-  LogVol01        /dev/sda2(4451)
-  lv              /dev/sdd1(0)
-
-I would have like to use _move_removable_mimages_to_end, but that is an all or
-nothing behaviour.  The way down-convert has been working allows for specifying
-some, but not all, devices to be removed.  I'm not sure if this is the intended
-behaviour.  If it is, then this patch does the job.  If it isn't, then we
-should probably be sharing '_move_removable_mimages_to_end' with 'split_mirror_images'.
-
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-
-
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -753,15 +753,19 @@ static int _remove_mirror_images(struct 
- 
- 	/* Move removable_pvs to end of array */
- 	if (removable_pvs) {
--		for (s = 0; s < mirrored_seg->area_count &&
--			    old_area_count - new_area_count < num_removed; s++) {
--			sub_lv = seg_lv(mirrored_seg, s);
--
--			if (!is_temporary_mirror_layer(sub_lv) &&
--			    _is_mirror_image_removable(sub_lv, removable_pvs)) {
--				if (!shift_mirror_images(mirrored_seg, s))
--					return_0;
--				new_area_count--;
-+		for (m = mirrored_seg->area_count;
-+		     m && ((old_area_count - new_area_count) < num_removed); m--) {
-+			for (s = 0; s < m; s++) {
-+				sub_lv = seg_lv(mirrored_seg, s);
-+
-+				if (!is_temporary_mirror_layer(sub_lv) &&
-+				    _is_mirror_image_removable(sub_lv,
-+							       removable_pvs)) {
-+					if (!shift_mirror_images(mirrored_seg, s))
-+						return_0;
-+					new_area_count--;
-+					break;
-+				}
- 			}
- 		}
- 		if (num_removed && old_area_count == new_area_count)
-
+--- LVM2/VERSION	2009/10/27 01:13:20	1.213
++++ LVM2/VERSION	2009/11/19 19:00:34	1.214
+@@ -1 +1 @@
+-2.02.55(1)-cvs (2009-10-26)
++2.02.55(1)-cvs (2009-11-19)
+--- LVM2/VERSION_DM	2009/10/27 01:13:20	1.25
++++ LVM2/VERSION_DM	2009/11/19 19:00:34	1.26
+@@ -1 +1 @@
+-1.02.40-cvs (2009-10-26)
++1.02.40-cvs (2009-11-19)
+--- LVM2/WHATS_NEW	2009/11/19 01:17:01	1.1317
++++ LVM2/WHATS_NEW	2009/11/19 19:00:34	1.1318
+@@ -1,5 +1,5 @@
+-Version 2.02.55 -
+-===================================
++Version 2.02.55 - 19th November 2009
++====================================
+   Fix a possible deadlock in mirror code due to memlock refcount mismatch.
+   Enable dmeventd event handlers to properly scan devices.
+   Do not activate directly not visible volumes in vgchange.
+--- LVM2/WHATS_NEW_DM	2009/11/13 12:48:01	1.315
++++ LVM2/WHATS_NEW_DM	2009/11/19 19:00:34	1.316
+@@ -1,5 +1,5 @@
+-Version 1.02.40 - 
+-===================================
++Version 1.02.40 - 19th November 2009
++====================================
+   Fix install_device-mapper Makefile target to not build dmeventd plugins.
+   Support udev flags even when udev_sync is disabled or not compiled in.
+   Remove 'last_rule' from udev rules: honor ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}.
 
 
