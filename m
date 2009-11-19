@@ -1,36 +1,35 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 04 Nov 2009 12:40:30 -0000
-Subject: [PATCH] udev: move notify rule
-In-Reply-To: <20091104112655.GB17814@wavehammer.waldi.eu.org>
-References: <20091030145125.GA21583@wavehammer.waldi.eu.org>	<4AEB0C50.7090500@redhat.com>
-	<20091104112655.GB17814@wavehammer.waldi.eu.org>
-Message-ID: <4AF1761D.9030305@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 19 Nov 2009 01:17:02 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20091119011702.32554.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 11/04/2009 12:26 PM, Bastian Blank wrote:
-> On Fri, Oct 30, 2009 at 04:54:56PM +0100, Peter Rajnoha wrote:
->> On 10/30/2009 03:51 PM, Bastian Blank wrote:
->>> Move notify rule into the first rules file. The RUN commands is executed
->>> after everything is finished, so it makes no difference if it is set
->>> early or late.
->> yes, this is true with respect to all the other udev processing. But the point of having
->> it as 95-dm.rules is that there could be some other RUN+="..." line in the other rules.
-> 
-> And there are no constraints about the order of this executions. If you
-> know more then the udev docu, fix it there.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-11-19 01:17:01
 
-OK, maybe I should assure myself with udev guys so we're 100% sure
-(it's not so essential now, but it could be in the future - there
-are more plans for udev usage with respect to LVM, so I need to be
-sure about this ordering, that's true...).
+Modified files:
+	.              : WHATS_NEW 
 
-But this is the behaviour I observed when I tested this. But you're
-right, I'll make sure...
+Log message:
+	What's new.
 
-Peter
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1316&r2=1.1317
+
+--- LVM2/WHATS_NEW	2009/11/18 17:20:18	1.1316
++++ LVM2/WHATS_NEW	2009/11/19 01:17:01	1.1317
+@@ -1,5 +1,7 @@
+ Version 2.02.55 -
+ ===================================
++  Fix a possible deadlock in mirror code due to memlock refcount mismatch.
++  Enable dmeventd event handlers to properly scan devices.
+   Do not activate directly not visible volumes in vgchange.
+   Fix pvmove region_size oveflow for very large PVs.
+   Fix lvcreate and lvresize processing of %PVS argument.
 
 
