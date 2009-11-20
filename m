@@ -1,93 +1,117 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 13 Nov 2009 12:33:28 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h udev/ ...
-Message-ID: <20091113123328.23060.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 20 Nov 2009 16:29:12 -0500
+Subject: [PATCH 5/5] lvm-stack-on-activate-and-deactivate-failures
+In-Reply-To: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
+References: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
+Message-ID: <1258752552-1589-5-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-11-13 12:33:27
+Add missing 'stack;' for all activate_lv and deactivate_lv callers.
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h 
-	udev           : 13-dm-disk.rules 
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ lib/activate/activate.c |    3 ++-
+ lib/locking/locking.c   |    3 ++-
+ tools/pvmove.c          |   11 +++++++++--
+ tools/vgchange.c        |   20 +++++++++++++++-----
+ 4 files changed, 28 insertions(+), 9 deletions(-)
 
-Log message:
-	Remove 'last_rule' from udev rules.
-	
-	'last_rule' option has been removed from udev (version >= 147).
-	
-	From now on, we require foreign rules to check and honor
-	ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG} instead. Foreign
-	rules should be skipped totally when this flag is set.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.312&r2=1.313
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.101&r2=1.102
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-
---- LVM2/WHATS_NEW_DM	2009/11/06 00:43:08	1.312
-+++ LVM2/WHATS_NEW_DM	2009/11/13 12:33:27	1.313
-@@ -1,5 +1,6 @@
- Version 1.02.40 - 
- ===================================
-+  Remove 'last_rule' from udev rules: honor ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}.
-   Add dmsetup --inactive support.
-   Add dm_task_query_inactive_table to libdevmapper for kernel driver >= 4.16.
-   Fix hash lookup segfault when keys compared are different lengths.
---- LVM2/libdm/libdevmapper.h	2009/11/06 00:43:08	1.101
-+++ LVM2/libdm/libdevmapper.h	2009/11/13 12:33:27	1.102
-@@ -1058,9 +1058,9 @@
- /*
-  * DM_UDEV_DISABLE_OTHER_RULES_FLAG is set in case we need to disable
-  * all the other rules that are not general device-mapper nor subsystem
-- * related (the rules belong to other software or packages). Use this
-- * flag with care since it will cutoff the rule processing after the
-- * last device-mapper/subsytem rule is applied.
-+ * related (the rules belong to other software or packages). All foreign
-+ * rules should check this flag directly and they should ignore further
-+ * rule processing for such event.
-  */
- #define DM_UDEV_DISABLE_OTHER_RULES_FLAG 0x0008
- /*
---- LVM2/udev/13-dm-disk.rules	2009/10/26 22:42:07	1.4
-+++ LVM2/udev/13-dm-disk.rules	2009/11/13 12:33:27	1.5
-@@ -10,27 +10,18 @@
- # suspended.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index b3a70db..7256dab 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -710,7 +710,8 @@ int lv_is_active(struct logical_volume *lv)
+ 	 * FIXME: check status to not deactivate already activate device
+ 	 */
+ 	if (activate_lv_excl(lv->vg->cmd, lv)) {
+-		deactivate_lv(lv->vg->cmd, lv);
++		if (!deactivate_lv(lv->vg->cmd, lv))
++			stack;
+ 		return 0;
+ 	}
  
- # "add" event is processed on coldplug only!
--ACTION!="add|change", GOTO="dm_other"
--ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_other"
--ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_other"
-+ACTION!="add|change", GOTO="dm_end"
-+ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
-+ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index de890b2..8b89b23 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -483,7 +483,8 @@ int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs, unsigned exclusiv
+ 			log_error("Failed to activate %s", lvl->lv->name);
+ 			dm_list_uniterate(lvh, lvs, &lvl->list) {
+ 				lvl = dm_list_item(lvh, struct lv_list);
+-				activate_lv(cmd, lvl->lv);
++				if (!activate_lv(cmd, lvl->lv))
++					stack;
+ 			}
+ 			return 0;
+ 		}
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index a56e377..0819746 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -261,10 +261,17 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
+ 			unsigned exclusive)
+ {
++	int r = 0;
++
+ 	if (exclusive)
+-		return activate_lv_excl(cmd, lv_mirr);
++		r = activate_lv_excl(cmd, lv_mirr);
++	else
++		r = activate_lv(cmd, lv_mirr);
  
- SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+-	return activate_lv(cmd, lv_mirr);
++	if (!r)
++		stack;
++
++	return r;
+ }
  
--ENV{DM_SUSPENDED}=="1", GOTO="dm_other"
-+ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
+ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 80ac6e7..c1aa5cf 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -79,19 +79,29 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 			continue;
  
- IMPORT{program}="$env{DM_SBIN_PATH}/blkid -o udev -p $tempnode"
- ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
- ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
- ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
+ 		if (activate == CHANGE_AN) {
+-			if (!deactivate_lv(cmd, lv))
++			if (!deactivate_lv(cmd, lv)) {
++				stack;
+ 				continue;
++			}
+ 		} else if (activate == CHANGE_ALN) {
+-			if (!deactivate_lv_local(cmd, lv))
++			if (!deactivate_lv_local(cmd, lv)) {
++				stack;
+ 				continue;
++			}
+ 		} else if (lv_is_origin(lv) || (activate == CHANGE_AE)) {
+-			if (!activate_lv_excl(cmd, lv))
++			if (!activate_lv_excl(cmd, lv)) {
++				stack;
+ 				continue;
++			}
+ 		} else if (activate == CHANGE_ALY) {
+-			if (!activate_lv_local(cmd, lv))
++			if (!activate_lv_local(cmd, lv)) {
++				stack;
+ 				continue;
+-		} else if (!activate_lv(cmd, lv))
++			}
++		} else if (!activate_lv(cmd, lv)) {
++			stack;
+ 			continue;
++		}
  
--# Cutoff all subsequent rules if instructed by a flag.
--# This flag should be used in well-founded situations only to prevent
--# any problems that could arise when processing this event further by
--# foreign rules (various temporary and hidden devices mostly).
--LABEL="dm_other"
--ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}!="1", GOTO="dm_end"
--ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
--OPTIONS+="last_rule"
--
- LABEL="dm_end"
+ 		if (activate != CHANGE_AN && activate != CHANGE_ALN &&
+ 		    (lv->status & (PVMOVE|CONVERTING)))
+-- 
+1.6.5.2
 
 
