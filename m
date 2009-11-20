@@ -1,56 +1,31 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Nov 2009 19:53:58 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20091119195358.7693.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 20 Nov 2009 18:04:17 +0100
+Subject: Patch for opening remote VG for replicator target
+Message-ID: <4B06CC11.7090100@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-11-19 19:53:58
+Here is a small patch preview to resolve the problem of opening remote VG for
+replicator target. It has still one 'minor' problem - thus I'll send full
+patch set once I resolve that as well.
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+For now -
 
-Log message:
-	post-release
+If remote VG is not active - than activation of local + remote VG successeds.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.214&r2=1.215
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.26&r2=1.27
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1319&r2=1.1320
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.317&r2=1.318
+If remote VG is active - code currently fails and I'm trying to resolve
+related problems.
 
---- LVM2/VERSION	2009/11/19 19:00:34	1.214
-+++ LVM2/VERSION	2009/11/19 19:53:58	1.215
-@@ -1 +1 @@
--2.02.55(1)-cvs (2009-11-19)
-+2.02.56(1)-cvs (2009-11-19)
---- LVM2/VERSION_DM	2009/11/19 19:00:34	1.26
-+++ LVM2/VERSION_DM	2009/11/19 19:53:58	1.27
-@@ -1 +1 @@
--1.02.40-cvs (2009-11-19)
-+1.02.41-cvs (2009-11-19)
---- LVM2/WHATS_NEW	2009/11/19 19:42:57	1.1319
-+++ LVM2/WHATS_NEW	2009/11/19 19:53:58	1.1320
-@@ -1,3 +1,6 @@
-+Version 2.02.56 - 
-+====================================
-+
- Version 2.02.55 - 19th November 2009
- ====================================
-   Fix deadlock when changing mirrors due to unpaired memlock refcount changes.
---- LVM2/WHATS_NEW_DM	2009/11/19 19:42:57	1.317
-+++ LVM2/WHATS_NEW_DM	2009/11/19 19:53:58	1.318
-@@ -1,3 +1,6 @@
-+Version 1.02.41 - 
-+====================================
-+
- Version 1.02.40 - 19th November 2009
- ====================================
-   Fix install_device-mapper Makefile target to not build dmeventd plugins.
+No extra flags seems to be required at this moment. If there is need for
+remote VG during _process_one_vg() call than there is loop which tries to
+resolve those dependencies. Hopefully this solution does not influence any
+other tool or command right now.
 
-
+Zdenek
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: pat
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091120/9b6f7033/attachment.ksh>
