@@ -1,34 +1,54 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 20 Nov 2009 23:48:16 +0100
-Subject: [PATCH] Un-export vg_read_internal.
-In-Reply-To: <4B0535F0.4020301@redhat.com>
-References: <87eiohq6et.fsf@twilight.int.mornfall.net.>
-	<4B0535F0.4020301@redhat.com>
-Message-ID: <4B071CB0.7040904@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 20 Nov 2009 23:51:48 +0100
+Subject: [PATCH 1/5] libdm-deptree-return-failure-activate-and-preload-children
+In-Reply-To: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
+References: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
+Message-ID: <4B071D84.5060500@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 11/19/2009 01:11 PM, Milan Broz wrote:
-> On 11/02/2009 04:43 PM, Petr Rockai wrote:
->> this was waiting a fairly long time for a round tuit, but here it is. This
->> should properly banish vg_read_internal into confinement in metadata.c. Should
->> be fairly obvious, I am just being paranoid here. (I made sure clvmd still
->> compiles this time, too.)
+Dne 20.11.2009 22:29, Mike Snitzer napsal(a):
+> Return error immediately to dm_tree_preload_children() and
+> dm_tree_activate_children() callers.
 > 
->> @@ -780,9 +780,9 @@ void lvm_do_backup(const char *vgname)
->>  
->> 	pthread_mutex_lock(&lvm_lock);
->>  
->> -	vg = vg_read_internal(cmd, vgname, NULL /*vgid*/, &consistent);
->> +	vg = vg_read(cmd, vgname, NULL /*vgid*/, 0 /*flags*/);
+> Otherwise resume_lv and its variants can fail silently.
+> 
+> Catching these failures is especially important now that dm targets like
+> crypt and snapshot-merge can fail in .preresume
+> 
 
-post-mortem NACK
+Similar case applies for replicator - and I'm using similar code in my own
+patch set.
 
-we cannot take lock inside vg_read here. it kills clvmd.
+So it's definitely needed.
 
-Milan
+Ack
+
+
+> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+> ---
+>  libdm/libdm-deptree.c |   10 ++++++----
+>  1 files changed, 6 insertions(+), 4 deletions(-)
+> 
+> diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+> index 1465fd3..bb10fe5 100644
+> --- a/libdm/libdm-deptree.c
+> +++ b/libdm/libdm-deptree.c
+> @@ -1158,7 +1158,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+>  			continue;
+>  
+>  		if (dm_tree_node_num_children(child, 0))
+> -			dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len);
+> +			if (!dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len))
+> +				return_0;
+>  	}
+>  
+>  	handle = NULL;
+> @@ -1204,7 +1205,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+>  				log_error("Unable to resume %s (%" PRIu32
+>  					  ":%" PRIu32 ")", child->name, child->info.major,
 
 
