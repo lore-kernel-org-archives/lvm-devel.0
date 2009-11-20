@@ -1,9 +1,9 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 20 Nov 2009 17:35:50 -0500
-Subject: [PATCH 10/15] lvm-merge-background-poll
+Date: Fri, 20 Nov 2009 17:35:51 -0500
+Subject: [PATCH 11/15] lvm-merge-background-poll-on-lvvgchange
 In-Reply-To: <1258756555-14486-1-git-send-email-snitzer@redhat.com>
 References: <1258756555-14486-1-git-send-email-snitzer@redhat.com>
-Message-ID: <1258756555-14486-11-git-send-email-snitzer@redhat.com>
+Message-ID: <1258756555-14486-12-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,143 +12,63 @@ Content-Transfer-Encoding: 7bit
 
 From: Mikulas Patocka <mpatocka@redhat.com>
 
-Background poll for lvconvert --merge command.
-The merging snapshot is removed when the merge finishes.
+Start background polling of merging stores on:
+- lvchange -ay or vgchange -ay.
+- lvchange --refresh or vgchange --refresh.
 
 Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- tools/lvconvert.c |   73 ++++++++++++++++++++++++++++++++++++++++++++++++++---
- 1 files changed, 69 insertions(+), 4 deletions(-)
+ tools/toollib.c  |   14 +++++++++++++-
+ tools/vgchange.c |    3 ++-
+ 2 files changed, 15 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 49b22a7..7447007 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -41,6 +41,8 @@ struct lvconvert_params {
- 	int pv_count;
- 	char **pvs;
- 	struct dm_list *pvh;
-+
-+	struct logical_volume *lv_to_poll;
- };
+diff --git a/tools/toollib.c b/tools/toollib.c
+index ada1302..85220eb 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1262,6 +1262,18 @@ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+ 	if (!r)
+ 		goto_out;
  
- static int _lvconvert_name_params(struct lvconvert_params *lp,
-@@ -329,6 +331,54 @@ out:
++	/*
++	 * check if snapshot merge should be polled
++	 * - unfortunately: even though the dev_manager will clear
++	 *   the lv's merge attributes if a merge is not possible;
++	 *   it is clearing a different instance of the lv (as
++	 *   retrieved with lv_from_lvid)
++	 * - fortunately: polldaemon will immediately shutdown if the
++	 *   origin doesn't have a status with a snapshot percentage
++	 */
++	if (lv_is_origin(lv) && lv->merging_snapshot)
++		lv_spawn_background_polling(cmd, lv);
++
+ out:
  	return r;
  }
- 
-+static int _finish_lvconvert_merge(struct cmd_context *cmd,
-+				   struct volume_group *vg,
-+				   struct logical_volume *lv,
-+				   struct dm_list *lvs_changed __attribute((unused)))
-+{
-+	struct lv_segment *snap_seg = lv->merging_snapshot;
-+	if (!snap_seg) {
-+		log_error("Logical volume %s has no merging snapshot.", lv->name);
-+		return 0;
-+	}
-+
-+	log_print("Merge into logical volume %s finished.", lv->name);
-+	if (!lv_remove_single(cmd, snap_seg->cow, DONT_PROMPT)) {
-+		log_error("Could not remove snapshot %s merged into %s.",
-+			  snap_seg->cow->name, lv->name);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+static progress_t _poll_merge_progress(struct cmd_context *cmd,
-+				       struct logical_volume *lv,
-+				       const char *name __attribute((unused)),
-+				       struct daemon_parms *parms)
-+{
-+	float percent = 0.0;
-+	percent_range_t percent_range;
-+
-+	if (!lv_snapshot_percent(lv, &percent, &percent_range)) {
-+		log_error("%s: Failed query for merging percentage", lv->name);
-+		return PROGRESS_CHECK_FAILED;
-+	} else if (percent_range == PERCENT_INVALID) {
-+		log_error("%s: Merging snapshot invalidated, aborting merge", lv->name);
-+		return PROGRESS_CHECK_FAILED;
-+	}
-+
-+	if (parms->progress_display)
-+		log_print("%s: %s: %.1f%%", lv->name, parms->progress_title, percent);
-+	else
-+		log_verbose("%s: %s: %.1f%%", lv->name, parms->progress_title, percent);
-+
-+	if (percent_range == PERCENT_0)
-+		return PROGRESS_FINISHED_ALL;
-+
-+	return PROGRESS_UNFINISHED;
-+}
-+
- static struct poll_functions _lvconvert_mirror_fns = {
- 	.get_copy_vg = _get_lvconvert_vg,
- 	.get_copy_lv = _get_lvconvert_lv,
-@@ -337,6 +387,13 @@ static struct poll_functions _lvconvert_mirror_fns = {
- 	.finish_copy = _finish_lvconvert_mirror,
- };
- 
-+static struct poll_functions _lvconvert_merge_fns = {
-+	.get_copy_vg = _get_lvconvert_vg,
-+	.get_copy_lv = _get_lvconvert_lv,
-+	.poll_progress = _poll_merge_progress,
-+	.finish_copy = _finish_lvconvert_merge,
-+};
-+
- int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv,
- 		   unsigned background)
- {
-@@ -353,8 +410,12 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv,
- 
- 	memcpy(uuid, &lv->lvid, sizeof(lv->lvid));
- 
--	return poll_daemon(cmd, lv_full_name, uuid, background, 0,
--			   &_lvconvert_mirror_fns, "Converted");
-+	if (!lv->merging_snapshot)
-+		return poll_daemon(cmd, lv_full_name, uuid, background, 0,
-+				   &_lvconvert_mirror_fns, "Converted");
-+	else
-+		return poll_daemon(cmd, lv_full_name, uuid, background, 0,
-+				   &_lvconvert_merge_fns, "Merged");
- }
- 
- static int _insert_lvconvert_layer(struct cmd_context *cmd,
-@@ -987,6 +1048,9 @@ static int lvconvert_merge(struct cmd_context *cmd,
- 		/* merge is running regardless of this deactivation failure */
+@@ -1296,7 +1308,7 @@ void lv_spawn_background_polling(struct cmd_context *cmd,
+ 		pvmove_poll(cmd, pvname, 1);
  	}
  
-+	lp->need_polling = 1;
-+	lp->lv_to_poll = origin;
-+
- 	r = 1;
- 	log_print("Merging of volume %s started.", lv->name);
- out:
-@@ -1099,17 +1163,18 @@ int lvconvert(struct cmd_context * cmd, int argc, char **argv)
- 	} else
- 		lp.pvh = &vg->pvs;
- 
-+	lp.lv_to_poll = lvl->lv;
- 	ret = lvconvert_single(cmd, lvl->lv, &lp);
- 
- bad:
- 	unlock_vg(cmd, lp.vg_name);
- 
- 	if (ret == ECMD_PROCESSED && lp.need_polling) {
--		if (!lv_info(cmd, lvl->lv, &info, 1, 0) || !info.exists) {
-+		if (!lv_info(cmd, lp.lv_to_poll, &info, 1, 0) || !info.exists) {
- 			log_print("Conversion starts after activation");
- 			goto out;
+-	if (lv->status & CONVERTING) {
++	if (lv->status & CONVERTING || lv->merging_snapshot) {
+ 		log_verbose("Spawning background lvconvert process for %s",
+ 			lv->name);
+ 		lvconvert_poll(cmd, lv, 1);
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index c1aa5cf..de1f418 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -104,7 +104,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
  		}
--		ret = lvconvert_poll(cmd, lvl->lv,
-+		ret = lvconvert_poll(cmd, lp.lv_to_poll,
- 				     lp.wait_completion ? 0 : 1U);
- 	}
- out:
+ 
+ 		if (activate != CHANGE_AN && activate != CHANGE_ALN &&
+-		    (lv->status & (PVMOVE|CONVERTING)))
++		    (lv->status & (PVMOVE|CONVERTING) ||
++		     lv->merging_snapshot))
+ 			lv_spawn_background_polling(cmd, lv);
+ 
+ 		count++;
 -- 
 1.6.5.2
 
