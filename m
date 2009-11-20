@@ -1,149 +1,69 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 20 Nov 2009 20:35:36 +0100
-Subject: [PATCH] Fix memory lock imbalance in locking code.
-In-Reply-To: <1258739361-17361-1-git-send-email-mbroz@redhat.com>
-References: <1258739361-17361-1-git-send-email-mbroz@redhat.com>
-Message-ID: <4B06EF88.2050802@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 20 Nov 2009 16:29:08 -0500
+Subject: [PATCH 1/5] libdm-deptree-return-failure-activate-and-preload-children
+Message-ID: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-[another try after discussion]
+Return error immediately to dm_tree_preload_children() and
+dm_tree_activate_children() callers.
 
-Fix memory lock imbalance in locking code.
+Otherwise resume_lv and its variants can fail silently.
 
-(This affects only cluster locking because only cluster
-locking module set LCK_PRE_MEMLOCK.)
+Catching these failures is especially important now that dm targets like
+crypt and snapshot-merge can fail in .preresume
 
-With currect code you get
-# vgchange -a n
-  Internal error: _memlock_count has dropped below 0.
-when using cluster locking.
-
-It is caused by _unlock_memory calls here
-
-  if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_RESUME)
-	memlock_dec();
-
-Unfortunately it is also (wrongly) called in immediate unlock
-(when LCK_HOLD is not set) from lock_vol
-(LCK_UNLOCK is misinterpreted as LCK_LV_RESUME).
-
-Avoid this by comparing original flags and provide memlock
-code type of operation (suspend/resume).
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- lib/locking/locking.c |   37 ++++++++++++++++++++++++++++---------
- 1 files changed, 28 insertions(+), 9 deletions(-)
+ libdm/libdm-deptree.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 9d86433..7bf3f78 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -42,6 +42,12 @@ static volatile sig_atomic_t _handler_installed;
- static struct sigaction _oldhandler;
- static int _oldmasked;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 1465fd3..bb10fe5 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1158,7 +1158,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 			continue;
  
-+typedef enum {
-+        LV_NOOP,
-+        LV_SUSPEND,
-+        LV_RESUME
-+} lv_operation_t;
-+
- static void _catch_sigint(int unused __attribute__((unused)))
- {
- 	_sigint_caught = 1;
-@@ -159,21 +165,21 @@ static void _unblock_signals(void)
- 	return;
- }
- 
--static void _lock_memory(uint32_t flags)
-+static void _lock_memory(lv_operation_t lv_op)
- {
- 	if (!(_locking.flags & LCK_PRE_MEMLOCK))
- 		return;
- 
--	if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_SUSPEND)
-+	if (lv_op == LV_SUSPEND)
- 		memlock_inc();
- }
- 
--static void _unlock_memory(uint32_t flags)
-+static void _unlock_memory(lv_operation_t lv_op)
- {
- 	if (!(_locking.flags & LCK_PRE_MEMLOCK))
- 		return;
- 
--	if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_RESUME)
-+	if (lv_op == LV_RESUME)
- 		memlock_dec();
- }
- 
-@@ -336,12 +342,13 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname)
-  * VG locking is by VG name.
-  * FIXME This should become VG uuid.
-  */
--static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t flags)
-+static int _lock_vol(struct cmd_context *cmd, const char *resource,
-+		     uint32_t flags, lv_operation_t lv_op)
- {
- 	int ret = 0;
- 
- 	_block_signals(flags);
--	_lock_memory(flags);
-+	_lock_memory(lv_op);
- 
- 	assert(resource);
- 
-@@ -368,7 +375,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t fla
- 		_update_vg_lock_count(resource, flags);
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len);
++			if (!dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len))
++				return_0;
  	}
  
--	_unlock_memory(flags);
-+	_unlock_memory(lv_op);
- 	_unblock_signals();
+ 	handle = NULL;
+@@ -1204,7 +1205,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 				log_error("Unable to resume %s (%" PRIu32
+ 					  ":%" PRIu32 ")", child->name, child->info.major,
+ 					  child->info.minor);
+-				continue;
++				return 0;
+ 			}
  
- 	return ret;
-@@ -377,6 +384,18 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t fla
- int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
- {
- 	char resource[258] __attribute((aligned(8)));
-+	lv_operation_t lv_op;
-+
-+	switch (flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) {
-+		case LCK_LV_SUSPEND:
-+				lv_op = LV_SUSPEND;
-+				break;
-+		case LCK_LV_RESUME:
-+				lv_op = LV_RESUME;
-+				break;
-+		default:	lv_op = LV_NOOP;
-+	}
-+
+ 			/* Update cached info */
+@@ -1621,7 +1622,8 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			continue;
  
- 	if (flags == LCK_NONE) {
- 		log_debug("Internal error: %s: LCK_NONE lock requested", vol);
-@@ -416,7 +435,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len);
++			if (!dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len))
++				return_0;
  
- 	strncpy(resource, vol, sizeof(resource));
+ 		/* FIXME Cope if name exists with no uuid? */
+ 		if (!child->info.exists) {
+@@ -1655,7 +1657,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 			log_error("Unable to resume %s (%" PRIu32
+ 				  ":%" PRIu32 ")", child->name, child->info.major,
+ 				  child->info.minor);
+-			continue;
++			return 0;
+ 		}
  
--	if (!_lock_vol(cmd, resource, flags))
-+	if (!_lock_vol(cmd, resource, flags, lv_op))
- 		return 0;
- 
- 	/*
-@@ -426,7 +445,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
- 	if (!(flags & LCK_CACHE) && !(flags & LCK_HOLD) &&
- 	    ((flags & LCK_TYPE_MASK) != LCK_UNLOCK)) {
- 		if (!_lock_vol(cmd, resource,
--			       (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK))
-+			       (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK, lv_op))
- 			return 0;
- 	}
- 
-
+ 		/* Update cached info */
+-- 
+1.6.5.2
 
 
