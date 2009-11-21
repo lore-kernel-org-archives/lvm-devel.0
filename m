@@ -1,50 +1,54 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 20 Nov 2009 21:06:08 -0500
-Subject: Re: [PATCH 02/15] lvm-merge-metadata
-In-Reply-To: <4B0725BF.3060707@redhat.com>
-References: <1258756555-14486-1-git-send-email-snitzer@redhat.com>
-	<1258756555-14486-3-git-send-email-snitzer@redhat.com>
-	<4B0725BF.3060707@redhat.com>
-Message-ID: <20091121020608.GA32715@redhat.com>
+Date: Fri, 20 Nov 2009 21:26:31 -0500
+Subject: Re: [PATCH 2/5] libdm-deptree-return-failure-suspend-children
+In-Reply-To: <4B071ECD.4090500@redhat.com>
+References: <1258752552-1589-1-git-send-email-snitzer@redhat.com>
+	<1258752552-1589-2-git-send-email-snitzer@redhat.com>
+	<4B071ECD.4090500@redhat.com>
+Message-ID: <20091121022631.GB32715@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Nov 20 2009 at  6:26pm -0500,
+On Fri, Nov 20 2009 at  5:57pm -0500,
 Zdenek Kabelac <zkabelac@redhat.com> wrote:
 
-> Dne 20.11.2009 23:35, Mike Snitzer napsal(a):
-> > From: Mikulas Patocka <mpatocka@redhat.com>
+> Dne 20.11.2009 22:29, Mike Snitzer napsal(a):
+> > Return error immediately to dm_tree_suspend_children() callers.
 > > 
-> > Add 'SNAPSHOT_MERGE' lv_segment 'status' flag.
+> > Otherwise suspend_lv and its variants can fail silently.
 > > 
-> > Make 'merging_snapshot' pointer that points from the origin to the
-> > segment that represents the merging snapshot.
+> > Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+> > ---
+> >  libdm/libdm-deptree.c |    5 +++--
+> >  1 files changed, 3 insertions(+), 2 deletions(-)
 > > 
-> > Import/export 'merging_store' metadata.
-> > 
-> > Do not allow creating snapshots while another snapshot is merging.
-> > Snapshot created in this state would certainly contain invalid data.
-> > 
-> > diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-> > index e9a3d5d..30073d3 100644
-> > --- a/lib/metadata/metadata-exported.h
-> > +++ b/lib/metadata/metadata-exported.h
-> > @@ -60,6 +60,7 @@
-> >  //#define ACTIVATE_EXCL		0x00100000U	/* LV - internal use only */
-> >  //#define PRECOMMITTED		0x00200000U	/* VG - internal use only */
-> >  #define CONVERTING		0x00400000U	/* LV */
-> > +#define SNAPSHOT_MERGE		0x00800000U	/* SEG */
-> >  
-> >  #define MISSING_PV              0x00800000U	/* PV */
+> > diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+> > index bb10fe5..6f5355d 100644
+> > --- a/libdm/libdm-deptree.c
+> > +++ b/libdm/libdm-deptree.c
+> > @@ -1109,7 +1109,7 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
+> >  			log_error("Unable to suspend %s (%" PRIu32
+> >  				  ":%" PRIu32 ")", name, info.major,
+> >  				  info.minor);
+> > -			continue;
+> > +			return 0;
+> >  		}
 > 
-> I think reusing these bitfields might lead to unexpected troubles.
+> 
+> This is a bit hard to tell what's the right way here - either to continue
+> suspending  'the rest of the monster' or to stop with the first failure.
+> 
+> In case of the replicator - when suspend of one head would fail - I would
+> probably prefer to see the code to continue suspending remaing heads.
 
-Nice catch, surprised I missed that.
+OK, the other possibility that Alasdair and I discussed is that we could
+return failure once all nodes at the same level have been processed.
 
-Looks like I'll go with:
-#define SNAPSHOT_MERGE          0x10000000U
+Would that work for replicator?  Are all heads at the same level in the tree?
+
+Mike
 
 
