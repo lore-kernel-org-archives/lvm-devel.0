@@ -1,47 +1,60 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 13 Nov 2009 12:48:02 -0000
-Subject: LVM2 ./WHATS_NEW_DM daemons/dmeventd/Makefile.in
-Message-ID: <20091113124802.31139.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 22 Nov 2009 21:31:23 +0100
+Subject: Re: [PATCH 2/5] libdm-deptree-return-failure-suspend-children
+In-Reply-To: <20091121022631.GB32715@redhat.com>
+References: <1258752552-1589-1-git-send-email-snitzer@redhat.com>	<1258752552-1589-2-git-send-email-snitzer@redhat.com>	<4B071ECD.4090500@redhat.com>
+	<20091121022631.GB32715@redhat.com>
+Message-ID: <4B099F9B.7060200@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-11-13 12:48:01
+Dne 21.11.2009 03:26, Mike Snitzer napsal(a):
+> On Fri, Nov 20 2009 at  5:57pm -0500,
+> Zdenek Kabelac <zkabelac@redhat.com> wrote:
+> 
+>> Dne 20.11.2009 22:29, Mike Snitzer napsal(a):
+>>> Return error immediately to dm_tree_suspend_children() callers.
+>>>
+>>> Otherwise suspend_lv and its variants can fail silently.
+>>>
+>>> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+>>> ---
+>>>  libdm/libdm-deptree.c |    5 +++--
+>>>  1 files changed, 3 insertions(+), 2 deletions(-)
+>>>
+>>> diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+>>> index bb10fe5..6f5355d 100644
+>>> --- a/libdm/libdm-deptree.c
+>>> +++ b/libdm/libdm-deptree.c
+>>> @@ -1109,7 +1109,7 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
+>>>  			log_error("Unable to suspend %s (%" PRIu32
+>>>  				  ":%" PRIu32 ")", name, info.major,
+>>>  				  info.minor);
+>>> -			continue;
+>>> +			return 0;
+>>>  		}
+>>
+>>
+>> This is a bit hard to tell what's the right way here - either to continue
+>> suspending  'the rest of the monster' or to stop with the first failure.
+>>
+>> In case of the replicator - when suspend of one head would fail - I would
+>> probably prefer to see the code to continue suspending remaing heads.
+> 
+> OK, the other possibility that Alasdair and I discussed is that we could
+> return failure once all nodes at the same level have been processed.
+> 
+> Would that work for replicator?  Are all heads at the same level in the tree?
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	daemons/dmeventd: Makefile.in 
+Yes - that would probably work well for replicator (though the error in the
+suspend as rather hypothetical in this case anyway)
 
-Log message:
-	Fix install_device-mapper Makefile target to not build dmeventd plugins.
+But - still - is it the best thing to stop suspending elements from tree - if
+one path fails?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.314&r2=1.315
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-
---- LVM2/WHATS_NEW_DM	2009/11/13 12:43:21	1.314
-+++ LVM2/WHATS_NEW_DM	2009/11/13 12:48:01	1.315
-@@ -1,5 +1,6 @@
- Version 1.02.40 - 
- ===================================
-+  Fix install_device-mapper Makefile target to not build dmeventd plugins.
-   Support udev flags even when udev_sync is disabled or not compiled in.
-   Remove 'last_rule' from udev rules: honor ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}.
-   Add dmsetup --inactive support.
---- LVM2/daemons/dmeventd/Makefile.in	2009/10/13 02:35:26	1.29
-+++ LVM2/daemons/dmeventd/Makefile.in	2009/11/13 12:48:01	1.30
-@@ -103,7 +103,7 @@
- 
- install: install_include install_lib install_dmeventd
- 
--install_device-mapper: install
-+install_device-mapper: install_include install_lib install_dmeventd
- 
- .PHONY: distclean_lib distclean
- 
+Zdenek
 
 
