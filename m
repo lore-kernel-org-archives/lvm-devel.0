@@ -1,105 +1,68 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 23 Nov 2009 12:52:50 +0100
-Subject: [PATCH] Return error status if vgchange fails to activate some volume.
-Message-ID: <1258977170-9080-1-git-send-email-mbroz@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Mon, 23 Nov 2009 09:30:58 -0500
+Subject: Re: [PATCH 02/15] lvm-merge-metadata
+In-Reply-To: <4B09A261.9020302@redhat.com>
+References: <1258756555-14486-1-git-send-email-snitzer@redhat.com>
+	<1258756555-14486-3-git-send-email-snitzer@redhat.com>
+	<4B0725BF.3060707@redhat.com> <20091121020608.GA32715@redhat.com>
+	<4B09A261.9020302@redhat.com>
+Message-ID: <20091123143058.GA11479@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I know that there is ongoing discussion about that,
-but in cluster we have now this situation
-(on one node a storage connection failed):
+On Sun, Nov 22 2009 at  3:43pm -0500,
+Zdenek Kabelac <zkabelac@redhat.com> wrote:
 
-# vgchange -a y vg_bar ; echo $?
-  Error locking on node bar-02: Refusing activation of partial LV lv1. Use --partial to override.
-    1 logical volume(s) in volume group "vg_bar" now active
-    0
+> Dne 21.11.2009 03:06, Mike Snitzer napsal(a):
+> > On Fri, Nov 20 2009 at  6:26pm -0500,
+> > Zdenek Kabelac <zkabelac@redhat.com> wrote:
+> > 
+> >> Dne 20.11.2009 23:35, Mike Snitzer napsal(a):
+> >>> From: Mikulas Patocka <mpatocka@redhat.com>
+> >>>
+> >>> Add 'SNAPSHOT_MERGE' lv_segment 'status' flag.
+> >>>
+> >>> Make 'merging_snapshot' pointer that points from the origin to the
+> >>> segment that represents the merging snapshot.
+> >>>
+> >>> Import/export 'merging_store' metadata.
+> >>>
+> >>> Do not allow creating snapshots while another snapshot is merging.
+> >>> Snapshot created in this state would certainly contain invalid data.
+> >>>
+> >>> diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+> >>> index e9a3d5d..30073d3 100644
+> >>> --- a/lib/metadata/metadata-exported.h
+> >>> +++ b/lib/metadata/metadata-exported.h
+> >>> @@ -60,6 +60,7 @@
+> >>>  //#define ACTIVATE_EXCL		0x00100000U	/* LV - internal use only */
+> >>>  //#define PRECOMMITTED		0x00200000U	/* VG - internal use only */
+> >>>  #define CONVERTING		0x00400000U	/* LV */
+> >>> +#define SNAPSHOT_MERGE		0x00800000U	/* SEG */
+> >>>  
+> >>>  #define MISSING_PV              0x00800000U	/* PV */
+> >>
+> >> I think reusing these bitfields might lead to unexpected troubles.
+> > 
+> > Nice catch, surprised I missed that.
+> > 
+> > Looks like I'll go with:
+> > #define SNAPSHOT_MERGE          0x10000000U
+> > 
+> 
+> Yes - one small step for you :), but we run out-of-bits here - for replicator
+> I've tried to reduces bit usage just for 2 bits (instead of using separate bit
+> for  _rimage, _rlog, _slog, replicator-dev) - but together with crypto we are
+> out-of-space.
+> 
+> So either we might switch to 64bit status (simple) - or use some solution
+> based on function  calls instead of bit checks.
 
-So activation fails on one node, error is correctly printed but
-status code is wrong.
+Right, I think we should just switch to 64-bit status.
 
-This patch fixes the top level (vgchange) to return proper code
-(and print # of activated LVs).
-
-N.B. unification of lvchange/vgchange and fixing the low level
-(unroll the transaction if anything failed) is still to be solved.
-
-But I think this trivial solution can be used for short term.
-(lvchange returns error properly here.)
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- tools/vgchange.c |   23 ++++++++++++-----------
- 1 files changed, 12 insertions(+), 11 deletions(-)
-
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 80ac6e7..f791e53 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -56,7 +56,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- {
- 	struct lv_list *lvl;
- 	struct logical_volume *lv;
--	int count = 0;
-+	int count = 0, expected_count = 0;
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv = lvl->lv;
-@@ -78,6 +78,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- 		    ((lv->status & PVMOVE) ))
- 			continue;
- 
-+		expected_count++;
-+
- 		if (activate == CHANGE_AN) {
- 			if (!deactivate_lv(cmd, lv))
- 				continue;
-@@ -100,7 +102,12 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- 		count++;
- 	}
- 
--	return count;
-+	if (expected_count)
-+		log_verbose("%s %d logical volumes in volume group %s",
-+			    activate ? "Activated" : "Deactivated",
-+			    count, vg->name);
-+
-+	return (expected_count != count) ? ECMD_FAILED : ECMD_PROCESSED;
- }
- 
- static int _vgchange_monitoring(struct cmd_context *cmd, struct volume_group *vg)
-@@ -121,7 +128,7 @@ static int _vgchange_monitoring(struct cmd_context *cmd, struct volume_group *vg
- static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
- {
- 	int lv_open, active, monitored;
--	int available;
-+	int available, ret;
- 	int activate = 1;
- 
- 	/*
-@@ -158,17 +165,11 @@ static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
- 		}
- 	}
- 
--	if (activate && _activate_lvs_in_vg(cmd, vg, available))
--		log_verbose("Activated logical volumes in "
--			    "volume group \"%s\"", vg->name);
--
--	if (!activate && _activate_lvs_in_vg(cmd, vg, available))
--		log_verbose("Deactivated logical volumes in "
--			    "volume group \"%s\"", vg->name);
-+	ret = _activate_lvs_in_vg(cmd, vg, available);
- 
- 	log_print("%d logical volume(s) in volume group \"%s\" now active",
- 		  lvs_in_vg_activated(vg), vg->name);
--	return ECMD_PROCESSED;
-+	return ret;
- }
- 
- static int _vgchange_alloc(struct cmd_context *cmd, struct volume_group *vg)
--- 
-1.6.5.3
+Mike
 
 
