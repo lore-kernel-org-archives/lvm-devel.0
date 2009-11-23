@@ -1,68 +1,23 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 23 Nov 2009 09:30:58 -0500
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 23 Nov 2009 14:37:41 +0000
 Subject: Re: [PATCH 02/15] lvm-merge-metadata
-In-Reply-To: <4B09A261.9020302@redhat.com>
+In-Reply-To: <20091123143058.GA11479@redhat.com>
 References: <1258756555-14486-1-git-send-email-snitzer@redhat.com>
 	<1258756555-14486-3-git-send-email-snitzer@redhat.com>
 	<4B0725BF.3060707@redhat.com> <20091121020608.GA32715@redhat.com>
-	<4B09A261.9020302@redhat.com>
-Message-ID: <20091123143058.GA11479@redhat.com>
+	<4B09A261.9020302@redhat.com> <20091123143058.GA11479@redhat.com>
+Message-ID: <20091123143741.GA26546@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Nov 22 2009 at  3:43pm -0500,
-Zdenek Kabelac <zkabelac@redhat.com> wrote:
+On Mon, Nov 23, 2009 at 09:30:58AM -0500, Mike Snitzer wrote:
+> Right, I think we should just switch to 64-bit status.
+ 
+Ack.
 
-> Dne 21.11.2009 03:06, Mike Snitzer napsal(a):
-> > On Fri, Nov 20 2009 at  6:26pm -0500,
-> > Zdenek Kabelac <zkabelac@redhat.com> wrote:
-> > 
-> >> Dne 20.11.2009 23:35, Mike Snitzer napsal(a):
-> >>> From: Mikulas Patocka <mpatocka@redhat.com>
-> >>>
-> >>> Add 'SNAPSHOT_MERGE' lv_segment 'status' flag.
-> >>>
-> >>> Make 'merging_snapshot' pointer that points from the origin to the
-> >>> segment that represents the merging snapshot.
-> >>>
-> >>> Import/export 'merging_store' metadata.
-> >>>
-> >>> Do not allow creating snapshots while another snapshot is merging.
-> >>> Snapshot created in this state would certainly contain invalid data.
-> >>>
-> >>> diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-> >>> index e9a3d5d..30073d3 100644
-> >>> --- a/lib/metadata/metadata-exported.h
-> >>> +++ b/lib/metadata/metadata-exported.h
-> >>> @@ -60,6 +60,7 @@
-> >>>  //#define ACTIVATE_EXCL		0x00100000U	/* LV - internal use only */
-> >>>  //#define PRECOMMITTED		0x00200000U	/* VG - internal use only */
-> >>>  #define CONVERTING		0x00400000U	/* LV */
-> >>> +#define SNAPSHOT_MERGE		0x00800000U	/* SEG */
-> >>>  
-> >>>  #define MISSING_PV              0x00800000U	/* PV */
-> >>
-> >> I think reusing these bitfields might lead to unexpected troubles.
-> > 
-> > Nice catch, surprised I missed that.
-> > 
-> > Looks like I'll go with:
-> > #define SNAPSHOT_MERGE          0x10000000U
-> > 
-> 
-> Yes - one small step for you :), but we run out-of-bits here - for replicator
-> I've tried to reduces bit usage just for 2 bits (instead of using separate bit
-> for  _rimage, _rlog, _slog, replicator-dev) - but together with crypto we are
-> out-of-space.
-> 
-> So either we might switch to 64bit status (simple) - or use some solution
-> based on function  calls instead of bit checks.
-
-Right, I think we should just switch to 64-bit status.
-
-Mike
+Alasdair
 
 
