@@ -1,159 +1,105 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 23 Nov 2009 10:55:14 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/locking.c
-Message-ID: <20091123105514.5325.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 23 Nov 2009 12:52:50 +0100
+Subject: [PATCH] Return error status if vgchange fails to activate some volume.
+Message-ID: <1258977170-9080-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-11-23 10:55:14
+I know that there is ongoing discussion about that,
+but in cluster we have now this situation
+(on one node a storage connection failed):
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : locking.c 
+# vgchange -a y vg_bar ; echo $?
+  Error locking on node bar-02: Refusing activation of partial LV lv1. Use --partial to override.
+    1 logical volume(s) in volume group "vg_bar" now active
+    0
 
-Log message:
-	Fix memory lock imbalance in locking code.
-	
-	(This affects only cluster locking because only cluster
-	locking module set LCK_PRE_MEMLOCK.)
-	
-	With currect code you get
-	# vgchange -a n
-	Internal error: _memlock_count has dropped below 0.
-	when using cluster locking.
-	
-	It is caused by _unlock_memory calls here
-	
-	if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_RESUME)
-	memlock_dec();
-	
-	Unfortunately it is also (wrongly) called in immediate unlock
-	(when LCK_HOLD is not set) from lock_vol
-	(LCK_UNLOCK is misinterpreted as LCK_LV_RESUME).
-	
-	Avoid this by comparing original flags and provide memlock
-	code type of operation (suspend/resume).
+So activation fails on one node, error is correctly printed but
+status code is wrong.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1321&r2=1.1322
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.66&r2=1.67
+This patch fixes the top level (vgchange) to return proper code
+(and print # of activated LVs).
 
---- LVM2/WHATS_NEW	2009/11/23 10:44:50	1.1321
-+++ LVM2/WHATS_NEW	2009/11/23 10:55:14	1.1322
-@@ -1,5 +1,6 @@
- Version 2.02.56 - 
- ====================================
-+  Fix memory lock imbalance in locking code.
-   Revert vg_read_internal change, clvmd cannot use vg_read now. (2.02.55)
+N.B. unification of lvchange/vgchange and fixing the low level
+(unroll the transaction if anything failed) is still to be solved.
+
+But I think this trivial solution can be used for short term.
+(lvchange returns error properly here.)
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ tools/vgchange.c |   23 ++++++++++++-----------
+ 1 files changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 80ac6e7..f791e53 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -56,7 +56,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ {
+ 	struct lv_list *lvl;
+ 	struct logical_volume *lv;
+-	int count = 0;
++	int count = 0, expected_count = 0;
  
- Version 2.02.55 - 19th November 2009
---- LVM2/lib/locking/locking.c	2009/09/14 22:47:49	1.66
-+++ LVM2/lib/locking/locking.c	2009/11/23 10:55:14	1.67
-@@ -42,6 +42,12 @@
- static struct sigaction _oldhandler;
- static int _oldmasked;
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		lv = lvl->lv;
+@@ -78,6 +78,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		    ((lv->status & PVMOVE) ))
+ 			continue;
  
-+typedef enum {
-+        LV_NOOP,
-+        LV_SUSPEND,
-+        LV_RESUME
-+} lv_operation_t;
++		expected_count++;
 +
- static void _catch_sigint(int unused __attribute__((unused)))
- {
- 	_sigint_caught = 1;
-@@ -159,21 +165,21 @@
- 	return;
- }
- 
--static void _lock_memory(uint32_t flags)
-+static void _lock_memory(lv_operation_t lv_op)
- {
- 	if (!(_locking.flags & LCK_PRE_MEMLOCK))
- 		return;
- 
--	if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_SUSPEND)
-+	if (lv_op == LV_SUSPEND)
- 		memlock_inc();
- }
- 
--static void _unlock_memory(uint32_t flags)
-+static void _unlock_memory(lv_operation_t lv_op)
- {
- 	if (!(_locking.flags & LCK_PRE_MEMLOCK))
- 		return;
- 
--	if ((flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_RESUME)
-+	if (lv_op == LV_RESUME)
- 		memlock_dec();
- }
- 
-@@ -336,12 +342,13 @@
-  * VG locking is by VG name.
-  * FIXME This should become VG uuid.
-  */
--static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t flags)
-+static int _lock_vol(struct cmd_context *cmd, const char *resource,
-+		     uint32_t flags, lv_operation_t lv_op)
- {
- 	int ret = 0;
- 
- 	_block_signals(flags);
--	_lock_memory(flags);
-+	_lock_memory(lv_op);
- 
- 	assert(resource);
- 
-@@ -368,7 +375,7 @@
- 		_update_vg_lock_count(resource, flags);
+ 		if (activate == CHANGE_AN) {
+ 			if (!deactivate_lv(cmd, lv))
+ 				continue;
+@@ -100,7 +102,12 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		count++;
  	}
  
--	_unlock_memory(flags);
-+	_unlock_memory(lv_op);
- 	_unblock_signals();
+-	return count;
++	if (expected_count)
++		log_verbose("%s %d logical volumes in volume group %s",
++			    activate ? "Activated" : "Deactivated",
++			    count, vg->name);
++
++	return (expected_count != count) ? ECMD_FAILED : ECMD_PROCESSED;
+ }
  
- 	return ret;
-@@ -377,6 +384,18 @@
- int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
+ static int _vgchange_monitoring(struct cmd_context *cmd, struct volume_group *vg)
+@@ -121,7 +128,7 @@ static int _vgchange_monitoring(struct cmd_context *cmd, struct volume_group *vg
+ static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
  {
- 	char resource[258] __attribute((aligned(8)));
-+	lv_operation_t lv_op;
-+
-+	switch (flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) {
-+		case LCK_LV_SUSPEND:
-+				lv_op = LV_SUSPEND;
-+				break;
-+		case LCK_LV_RESUME:
-+				lv_op = LV_RESUME;
-+				break;
-+		default:	lv_op = LV_NOOP;
-+	}
-+
- 
- 	if (flags == LCK_NONE) {
- 		log_debug("Internal error: %s: LCK_NONE lock requested", vol);
-@@ -416,7 +435,7 @@
- 
- 	strncpy(resource, vol, sizeof(resource));
- 
--	if (!_lock_vol(cmd, resource, flags))
-+	if (!_lock_vol(cmd, resource, flags, lv_op))
- 		return 0;
+ 	int lv_open, active, monitored;
+-	int available;
++	int available, ret;
+ 	int activate = 1;
  
  	/*
-@@ -426,7 +445,7 @@
- 	if (!(flags & LCK_CACHE) && !(flags & LCK_HOLD) &&
- 	    ((flags & LCK_TYPE_MASK) != LCK_UNLOCK)) {
- 		if (!_lock_vol(cmd, resource,
--			       (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK))
-+			       (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK, lv_op))
- 			return 0;
+@@ -158,17 +165,11 @@ static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
+ 		}
  	}
  
+-	if (activate && _activate_lvs_in_vg(cmd, vg, available))
+-		log_verbose("Activated logical volumes in "
+-			    "volume group \"%s\"", vg->name);
+-
+-	if (!activate && _activate_lvs_in_vg(cmd, vg, available))
+-		log_verbose("Deactivated logical volumes in "
+-			    "volume group \"%s\"", vg->name);
++	ret = _activate_lvs_in_vg(cmd, vg, available);
+ 
+ 	log_print("%d logical volume(s) in volume group \"%s\" now active",
+ 		  lvs_in_vg_activated(vg), vg->name);
+-	return ECMD_PROCESSED;
++	return ret;
+ }
+ 
+ static int _vgchange_alloc(struct cmd_context *cmd, struct volume_group *vg)
+-- 
+1.6.5.3
 
 
