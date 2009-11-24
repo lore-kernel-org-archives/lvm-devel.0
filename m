@@ -1,36 +1,48 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 24 Nov 2009 09:36:53 -0600
-Subject: [PATCH] Improve mirror DSO's failure logging
-In-Reply-To: <4B0B0617.9010001@redhat.com>
-References: <c107c082a3a5ab4f4a95.1258760198@localhost>
-	<4B0B0617.9010001@redhat.com>
-Message-ID: <DFD1FB5B-6254-43C4-A6AE-90858A44831B@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 24 Nov 2009 16:44:11 +0100
+Subject: [PATCH] Do not try to unlock VG which is not locked.
+In-Reply-To: <1259077083-707-1-git-send-email-mbroz@redhat.com> (Milan Broz's
+	message of "Tue, 24 Nov 2009 16:38:03 +0100")
+References: <1259077083-707-1-git-send-email-mbroz@redhat.com>
+Message-ID: <87ocmsudv8.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Hi,
 
-On Nov 23, 2009, at 4:00 PM, Takahiro Yasui wrote:
-
-> I'm afraid that only an error status of the device with the smallest  
-> index
-> of the dev_status_str[] array will be reported. For example, if the  
-> status
-> is "ARD," "r" will have a value, ME_READ_FAILURE. Then, a write  
-> failure
-> event (ME_PRIMARY_WRITE_FAILURE and ME_SECONDARY_WRITE_FAILURE)  
-> won't be
-> detected in process_event(). I think that "WRITE_FAILURE" events  
-> should
-> have priority.
+Milan Broz <mbroz@redhat.com> writes:
+> # vgchange -a y x --ignorelockingfailure
+>   Volume group "x" not found
+>   Internal error: Attempt to unlock unlocked VG x
 >
-> Thanks,
-> Taka
+> Signed-off-by: Milan Broz <mbroz@redhat.com>
+> ---
+>  tools/toollib.c |    3 +--
+>  1 files changed, 1 insertions(+), 2 deletions(-)
+>
+> diff --git a/tools/toollib.c b/tools/toollib.c
+> index 39a6d69..33daf30 100644
+> --- a/tools/toollib.c
+> +++ b/tools/toollib.c
+> @@ -452,8 +452,7 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+>  		ret_max = ret;
+>  
+>  out:
+> -	if ((vg_read_error(vg) == FAILED_ALLOCATION)||
+> -	    (vg_read_error(vg) == FAILED_LOCKING))
+> +	if (vg_read_error(vg))
+>  		vg_release(vg);
+>  	else
+>  		unlock_and_release_vg(cmd, vg, vg_name);
+looks good to me. The error path in vg_read (metadata.c) makes sure that
+the VG is unlocked if any errors have happened.
 
-Good catch Taka, I agree.  Otherwise, I welcome this patch.
+=> ACK.
 
-  brassow
+Yours,
+    Petr.
 
 
