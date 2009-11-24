@@ -1,10 +1,10 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 24 Nov 2009 08:00:31 -0500
+Date: Tue, 24 Nov 2009 08:21:25 -0500
 Subject: Re: data alignment of structures with 'status'
 In-Reply-To: <20091123234425.GE26546@agk-dp.fab.redhat.com>
 References: <20091123232344.GA16119@redhat.com>
 	<20091123234425.GE26546@agk-dp.fab.redhat.com>
-Message-ID: <20091124130031.GA29044@redhat.com>
+Message-ID: <20091124132123.GA30655@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -38,9 +38,7 @@ Alasdair G Kergon <agk@redhat.com> wrote:
 > to the front instead?  I.e. rotating 3 uint32_t fields in what you've posted
 > here.
 
-Sure, I'll work through it.  I didn't look too closely at which field
-was moved from the end of the struct to fill the hole.  I'll only fill
-holes if it doesn't disrupt the grouping.
+Your chunk_size suggestion works perfectly.  I'll run with that.
 
 Mike
 
