@@ -1,76 +1,608 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 18 Nov 2009 16:48:11 -0000
-Subject: LVM2 ./WHATS_NEW lib/mirror/mirrored.c
-Message-ID: <20091118164811.30581.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 25 Nov 2009 11:27:40 -0500
+Subject: [PATCH] Remove unnecessary / duplicate dm_list macros and functions.
+Message-ID: <1259166460-10790-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-11-18 16:48:10
+These are no longer used by anyone.  The dm_list defines are all in
+libdevmapper.h and libdm/datastruct/list.c contains any function definitions.
+There is some code in "old-tests" that still use this but this code is not
+being maintained.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/mirror     : mirrored.c 
+Thanks to Zdenek for spotting this.
+---
+ lib/datastruct/list.c   |  145 ---------------------------------
+ lib/datastruct/list.h   |  208 -----------------------------------------------
+ libdm/datastruct/list.h |  208 -----------------------------------------------
+ 3 files changed, 0 insertions(+), 561 deletions(-)
+ delete mode 100644 lib/datastruct/list.c
+ delete mode 100644 lib/datastruct/list.h
+ delete mode 100644 libdm/datastruct/list.h
 
-Log message:
-	Fix pvmove region_size overflow for very large PVs.
-	
-	Fixes problem reported in
-	https://www.redhat.com/archives/dm-devel/2009-November/msg00104.html
-	
-	The region size multiplication can overflow when using 32bit integer.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1314&r2=1.1315
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
-
---- LVM2/WHATS_NEW	2009/11/04 14:47:27	1.1314
-+++ LVM2/WHATS_NEW	2009/11/18 16:48:10	1.1315
-@@ -1,5 +1,6 @@
- Version 2.02.55 -
- ===================================
-+  Fix pvmove region_size oveflow for very large PVs.
-   Fix lvcreate and lvresize processing of %PVS argument.
-   Tidy some uses of arg_count and introduce arg_is_set.
-   Export outnl and indent functions for modules.
---- LVM2/lib/mirror/mirrored.c	2009/10/01 00:35:30	1.64
-+++ LVM2/lib/mirror/mirrored.c	2009/11/18 16:48:10	1.65
-@@ -290,7 +290,7 @@
- 	uint32_t area_count = seg->area_count;
- 	unsigned start_area = 0u;
- 	int mirror_status = MIRR_RUNNING;
--	uint32_t region_size, region_max;
-+	uint32_t region_size;
- 	int r;
- 
- 	if (!*target_state)
-@@ -333,18 +333,11 @@
- 			return 0;
- 		}
- 		region_size = seg->region_size;
--	} else {
--		/* Find largest power of 2 region size unit we can use */
--		region_max = (1 << (ffs((int)seg->area_len) - 1)) *
--		      seg->lv->vg->extent_size;
+diff --git a/lib/datastruct/list.c b/lib/datastruct/list.c
+deleted file mode 100644
+index cacebda..0000000
+--- a/lib/datastruct/list.c
++++ /dev/null
+@@ -1,145 +0,0 @@
+-/*
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
 -
--		region_size = mirr_state->default_region_size;
--		if (region_max < region_size) {
--			region_size = region_max;
--			log_verbose("Using reduced mirror region size of %u sectors",
--				    region_size);
--		}
--	}
-+
-+	} else
-+		region_size = adjusted_mirror_region_size(seg->lv->vg->extent_size,
-+							  seg->area_len,
-+							  mirr_state->default_region_size);
- 
- 	if (!dm_tree_node_add_mirror_target(node, len))
- 		return_0;
+-#include "lib.h"
+-
+-/*
+- * Initialise a list before use.
+- * The list head's next and previous pointers point back to itself.
+- */
+-void dm_list_init(struct dm_list *head)
+-{
+-	head->n = head->p = head;
+-}
+-
+-/*
+- * Insert an element before 'head'.
+- * If 'head' is the list head, this adds an element to the end of the list.
+- */
+-void dm_list_add(struct dm_list *head, struct dm_list *elem)
+-{
+-	assert(head->n);
+-
+-	elem->n = head;
+-	elem->p = head->p;
+-
+-	head->p->n = elem;
+-	head->p = elem;
+-}
+-
+-/*
+- * Insert an element after 'head'.
+- * If 'head' is the list head, this adds an element to the front of the list.
+- */
+-void dm_list_add_h(struct dm_list *head, struct dm_list *elem)
+-{
+-	assert(head->n);
+-
+-	elem->n = head->n;
+-	elem->p = head;
+-
+-	head->n->p = elem;
+-	head->n = elem;
+-}
+-
+-/*
+- * Delete an element from its list.
+- * Note that this doesn't change the element itself - it may still be safe
+- * to follow its pointers.
+- */
+-void dm_list_del(struct dm_list *elem)
+-{
+-	elem->n->p = elem->p;
+-	elem->p->n = elem->n;
+-}
+-
+-/*
+- * Remove an element from existing list and insert before 'head'.
+- */
+-void dm_list_move(struct dm_list *head, struct dm_list *elem)
+-{
+-        dm_list_del(elem);
+-        dm_list_add(head, elem);
+-}
+-
+-/*
+- * Is the list empty?
+- */
+-int dm_list_empty(const struct dm_list *head)
+-{
+-	return head->n == head;
+-}
+-
+-/*
+- * Is this the first element of the list?
+- */
+-int dm_list_start(const struct dm_list *head, const struct dm_list *elem)
+-{
+-	return elem->p == head;
+-}
+-
+-/*
+- * Is this the last element of the list?
+- */
+-int dm_list_end(const struct dm_list *head, const struct dm_list *elem)
+-{
+-	return elem->n == head;
+-}
+-
+-/*
+- * Return first element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_first(const struct dm_list *head)
+-{
+-	return (dm_list_empty(head) ? NULL : head->n);
+-}
+-
+-/*
+- * Return last element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_last(const struct dm_list *head)
+-{
+-	return (dm_list_empty(head) ? NULL : head->p);
+-}
+-
+-/*
+- * Return the previous element of the list, or NULL if we've reached the start.
+- */
+-struct dm_list *dm_list_prev(const struct dm_list *head, const struct dm_list *elem)
+-{
+-	return (dm_list_start(head, elem) ? NULL : elem->p);
+-}
+-
+-/*
+- * Return the next element of the list, or NULL if we've reached the end.
+- */
+-struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *elem)
+-{
+-	return (dm_list_end(head, elem) ? NULL : elem->n);
+-}
+-
+-/*
+- * Return the number of elements in a list by walking it.
+- */
+-unsigned int dm_list_size(const struct dm_list *head)
+-{
+-	unsigned int s = 0;
+-	const struct dm_list *v;
+-
+-	dm_list_iterate(v, head)
+-	    s++;
+-
+-	return s;
+-}
+diff --git a/lib/datastruct/list.h b/lib/datastruct/list.h
+deleted file mode 100644
+index 46a17bd..0000000
+--- a/lib/datastruct/list.h
++++ /dev/null
+@@ -1,208 +0,0 @@
+-/*
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
+-
+-#ifndef _LVM_LIST_H
+-#define _LVM_LIST_H
+-
+-#include <assert.h>
+-
+-/*
+- * A list consists of a list head plus elements.
+- * Each element has 'next' and 'previous' pointers.
+- * The list head's pointers point to the first and the last element.
+- */
+-
+-struct dm_list {
+-	struct dm_list *n, *p;
+-};
+-
+-/*
+- * Initialise a list before use.
+- * The list head's next and previous pointers point back to itself.
+- */
+-#define DM_LIST_INIT(name)	struct dm_list name = { &(name), &(name) }
+-void dm_list_init(struct dm_list *head);
+-
+-/*
+- * Insert an element before 'head'.
+- * If 'head' is the list head, this adds an element to the end of the list.
+- */
+-void dm_list_add(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Insert an element after 'head'.
+- * If 'head' is the list head, this adds an element to the front of the list.
+- */
+-void dm_list_add_h(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Delete an element from its list.
+- * Note that this doesn't change the element itself - it may still be safe
+- * to follow its pointers.
+- */
+-void dm_list_del(struct dm_list *elem);
+-
+-/*
+- * Remove an element from existing list and insert before 'head'.
+- */
+-void dm_list_move(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Is the list empty?
+- */
+-int dm_list_empty(const struct dm_list *head);
+-
+-/*
+- * Is this the first element of the list?
+- */
+-int dm_list_start(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Is this the last element of the list?
+- */
+-int dm_list_end(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Return first element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_first(const struct dm_list *head);
+-
+-/*
+- * Return last element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_last(const struct dm_list *head);
+-
+-/*
+- * Return the previous element of the list, or NULL if we've reached the start.
+- */
+-struct dm_list *dm_list_prev(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Return the next element of the list, or NULL if we've reached the end.
+- */
+-struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Given the address v of an instance of 'struct dm_list' called 'head' 
+- * contained in a structure of type t, return the containing structure.
+- */
+-#define dm_list_struct_base(v, t, head) \
+-    ((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->head))
+-
+-/*
+- * Given the address v of an instance of 'struct dm_list list' contained in
+- * a structure of type t, return the containing structure.
+- */
+-#define dm_list_item(v, t) dm_list_struct_base((v), t, list)
+-
+-/*
+- * Given the address v of one known element e in a known structure of type t,
+- * return another element f.
+- */
+-#define dm_struct_field(v, t, e, f) \
+-    (((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->e))->f)
+-
+-/*
+- * Given the address v of a known element e in a known structure of type t,
+- * return the list head 'list'
+- */
+-#define dm_list_head(v, t, e) dm_struct_field(v, t, e, list)
+-
+-/*
+- * Set v to each element of a list in turn.
+- */
+-#define dm_list_iterate(v, head) \
+-	for (v = (head)->n; v != head; v = v->n)
+-
+-/*
+- * Set v to each element in a list in turn, starting from the element 
+- * in front of 'start'.
+- * You can use this to 'unwind' a list_iterate and back out actions on
+- * already-processed elements.
+- * If 'start' is 'head' it walks the list backwards.
+- */
+-#define dm_list_uniterate(v, head, start) \
+-	for (v = (start)->p; v != head; v = v->p)
+-
+-/*
+- * A safe way to walk a list and delete and free some elements along
+- * the way.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_safe(v, t, head) \
+-	for (v = (head)->n, t = v->n; v != head; v = t, t = v->n)
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- */
+-#define dm_list_iterate_items_gen(v, head, field) \
+-	for (v = dm_list_struct_base((head)->n, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = dm_list_struct_base(v->field.n, typeof(*v), field))
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- */
+-#define dm_list_iterate_items(v, head) dm_list_iterate_items_gen(v, (head), list)
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_items_gen_safe(v, t, head, field) \
+-	for (v = dm_list_struct_base((head)->n, typeof(*v), field), \
+-	     t = dm_list_struct_base(v->field.n, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = t, t = dm_list_struct_base(v->field.n, typeof(*v), field))
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_items_safe(v, t, head) \
+-	dm_list_iterate_items_gen_safe(v, t, (head), list)
+-
+-/*
+- * Walk a list backwards, setting 'v' in turn to the containing structure 
+- * of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- */
+-#define dm_list_iterate_back_items_gen(v, head, field) \
+-	for (v = dm_list_struct_base((head)->p, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = dm_list_struct_base(v->field.p, typeof(*v), field))
+-
+-/*
+- * Walk a list backwards, setting 'v' in turn to the containing structure 
+- * of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- */
+-#define dm_list_iterate_back_items(v, head) dm_list_iterate_back_items_gen(v, (head), list)
+-
+-/*
+- * Return the number of elements in a list by walking it.
+- */
+-unsigned int dm_list_size(const struct dm_list *head);
+-
+-#endif
+diff --git a/libdm/datastruct/list.h b/libdm/datastruct/list.h
+deleted file mode 100644
+index 46a17bd..0000000
+--- a/libdm/datastruct/list.h
++++ /dev/null
+@@ -1,208 +0,0 @@
+-/*
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+- */
+-
+-#ifndef _LVM_LIST_H
+-#define _LVM_LIST_H
+-
+-#include <assert.h>
+-
+-/*
+- * A list consists of a list head plus elements.
+- * Each element has 'next' and 'previous' pointers.
+- * The list head's pointers point to the first and the last element.
+- */
+-
+-struct dm_list {
+-	struct dm_list *n, *p;
+-};
+-
+-/*
+- * Initialise a list before use.
+- * The list head's next and previous pointers point back to itself.
+- */
+-#define DM_LIST_INIT(name)	struct dm_list name = { &(name), &(name) }
+-void dm_list_init(struct dm_list *head);
+-
+-/*
+- * Insert an element before 'head'.
+- * If 'head' is the list head, this adds an element to the end of the list.
+- */
+-void dm_list_add(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Insert an element after 'head'.
+- * If 'head' is the list head, this adds an element to the front of the list.
+- */
+-void dm_list_add_h(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Delete an element from its list.
+- * Note that this doesn't change the element itself - it may still be safe
+- * to follow its pointers.
+- */
+-void dm_list_del(struct dm_list *elem);
+-
+-/*
+- * Remove an element from existing list and insert before 'head'.
+- */
+-void dm_list_move(struct dm_list *head, struct dm_list *elem);
+-
+-/*
+- * Is the list empty?
+- */
+-int dm_list_empty(const struct dm_list *head);
+-
+-/*
+- * Is this the first element of the list?
+- */
+-int dm_list_start(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Is this the last element of the list?
+- */
+-int dm_list_end(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Return first element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_first(const struct dm_list *head);
+-
+-/*
+- * Return last element of the list or NULL if empty
+- */
+-struct dm_list *dm_list_last(const struct dm_list *head);
+-
+-/*
+- * Return the previous element of the list, or NULL if we've reached the start.
+- */
+-struct dm_list *dm_list_prev(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Return the next element of the list, or NULL if we've reached the end.
+- */
+-struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *elem);
+-
+-/*
+- * Given the address v of an instance of 'struct dm_list' called 'head' 
+- * contained in a structure of type t, return the containing structure.
+- */
+-#define dm_list_struct_base(v, t, head) \
+-    ((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->head))
+-
+-/*
+- * Given the address v of an instance of 'struct dm_list list' contained in
+- * a structure of type t, return the containing structure.
+- */
+-#define dm_list_item(v, t) dm_list_struct_base((v), t, list)
+-
+-/*
+- * Given the address v of one known element e in a known structure of type t,
+- * return another element f.
+- */
+-#define dm_struct_field(v, t, e, f) \
+-    (((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->e))->f)
+-
+-/*
+- * Given the address v of a known element e in a known structure of type t,
+- * return the list head 'list'
+- */
+-#define dm_list_head(v, t, e) dm_struct_field(v, t, e, list)
+-
+-/*
+- * Set v to each element of a list in turn.
+- */
+-#define dm_list_iterate(v, head) \
+-	for (v = (head)->n; v != head; v = v->n)
+-
+-/*
+- * Set v to each element in a list in turn, starting from the element 
+- * in front of 'start'.
+- * You can use this to 'unwind' a list_iterate and back out actions on
+- * already-processed elements.
+- * If 'start' is 'head' it walks the list backwards.
+- */
+-#define dm_list_uniterate(v, head, start) \
+-	for (v = (start)->p; v != head; v = v->p)
+-
+-/*
+- * A safe way to walk a list and delete and free some elements along
+- * the way.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_safe(v, t, head) \
+-	for (v = (head)->n, t = v->n; v != head; v = t, t = v->n)
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- */
+-#define dm_list_iterate_items_gen(v, head, field) \
+-	for (v = dm_list_struct_base((head)->n, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = dm_list_struct_base(v->field.n, typeof(*v), field))
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- */
+-#define dm_list_iterate_items(v, head) dm_list_iterate_items_gen(v, (head), list)
+-
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_items_gen_safe(v, t, head, field) \
+-	for (v = dm_list_struct_base((head)->n, typeof(*v), field), \
+-	     t = dm_list_struct_base(v->field.n, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = t, t = dm_list_struct_base(v->field.n, typeof(*v), field))
+-/*
+- * Walk a list, setting 'v' in turn to the containing structure of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- * t must be defined as a temporary variable of the same type as v.
+- */
+-#define dm_list_iterate_items_safe(v, t, head) \
+-	dm_list_iterate_items_gen_safe(v, t, (head), list)
+-
+-/*
+- * Walk a list backwards, setting 'v' in turn to the containing structure 
+- * of each item.
+- * The containing structure should be the same type as 'v'.
+- * The 'struct dm_list' variable within the containing structure is 'field'.
+- */
+-#define dm_list_iterate_back_items_gen(v, head, field) \
+-	for (v = dm_list_struct_base((head)->p, typeof(*v), field); \
+-	     &v->field != (head); \
+-	     v = dm_list_struct_base(v->field.p, typeof(*v), field))
+-
+-/*
+- * Walk a list backwards, setting 'v' in turn to the containing structure 
+- * of each item.
+- * The containing structure should be the same type as 'v'.
+- * The list should be 'struct dm_list list' within the containing structure.
+- */
+-#define dm_list_iterate_back_items(v, head) dm_list_iterate_back_items_gen(v, (head), list)
+-
+-/*
+- * Return the number of elements in a list by walking it.
+- */
+-unsigned int dm_list_size(const struct dm_list *head);
+-
+-#endif
+-- 
+1.6.0.6
 
 
