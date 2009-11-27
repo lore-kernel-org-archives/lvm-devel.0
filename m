@@ -1,47 +1,153 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Nov 2009 20:44:08 -0000
-Subject: LVM2 ./WHATS_NEW lib/datastruct/list.c lib/dat ...
-Message-ID: <20091125204408.6469.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 27 Nov 2009 15:01:57 +0100
+Subject: [PATCH 1/2] Use locking_type 3 (compiled in cluster locking) in lvmconf.
+Message-ID: <1259330518-18390-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-11-25 20:44:07
+---
+ scripts/lvmconf.sh |   53 +++++++++++++++++++++++++++------------------------
+ 1 files changed, 28 insertions(+), 25 deletions(-)
 
-Modified files:
-	.              : WHATS_NEW 
-Removed files:
-	lib/datastruct : list.c list.h 
-	libdm/datastruct: list.h 
-
-Log message:
-	Remove unnecessary / duplicate dm_list macros and functions.
-	
-	These are no longer used by anyone.  The dm_list defines are all in
-	libdevmapper.h and libdm/datastruct/list.c contains any function definitions.
-	There is some code in "old-tests" that still use this but this code is not
-	being maintained.
-	
-	Thanks to Zdenek for spotting this.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/list.c.diff?cvsroot=lvm2&r1=1.5&r2=NONE
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/list.h.diff?cvsroot=lvm2&r1=1.28&r2=NONE
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/datastruct/list.h.diff?cvsroot=lvm2&r1=1.28&r2=NONE
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1332&r2=1.1333
-
---- LVM2/WHATS_NEW	2009/11/25 15:59:07	1.1332
-+++ LVM2/WHATS_NEW	2009/11/25 20:44:07	1.1333
-@@ -1,5 +1,6 @@
- Version 2.02.57 -
- ====================================
-+  Remove duplicate dm_list macros and functions.
-   Log failure type and recognise type 'F' (flush) in dmeventd mirror plugin.
-   Extend internal PV/VG/LV/segment status variables from 32-bit to 64-bit.
+diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
+index f5c4313..bf1494b 100644
+--- a/scripts/lvmconf.sh
++++ b/scripts/lvmconf.sh
+@@ -1,6 +1,6 @@
+ #!/bin/sh
+ #
+-# Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of the lvm2-cluster package.
+ #
+@@ -36,7 +36,7 @@ function parse_args
+     while [ -n "$1" ]; do
+         case $1 in
+             --enable-cluster)
+-                LOCKING_TYPE=2
++                LOCKING_TYPE=3
+                 shift
+                 ;;
+             --disable-cluster)
+@@ -94,20 +94,18 @@ function validate_args
  
+     if [ -n "$LOCKINGLIBDIR" ]; then
+ 
+-        [ -z "$LOCKINGLIB" ] && LOCKINGLIB="liblvm2clusterlock.so"
+-            
+         if [ "${LOCKINGLIBDIR:0:1}" != "/" ]
+             then
+             echo "Prefix must be an absolute path name (starting with a /)"
+             exit 12
+         fi
+-    
+-        if [ ! -f "$LOCKINGLIBDIR/$LOCKINGLIB" ]
++
++        if [ -n "$LOCKINGLIB" ] && [ ! -f "$LOCKINGLIBDIR/$LOCKINGLIB" ]
+             then
+             echo "$LOCKINGLIBDIR/$LOCKINGLIB does not exist, did you do a \"make install\" ?"
+             exit 11
+         fi
+-        
++
+     fi
+ 
+     if [ "$LOCKING_TYPE" = "1" ] && [ -n "$LOCKINGLIBDIR" -o -n "$LOCKINGLIB" ]; then
+@@ -149,7 +147,7 @@ then
+     # See if we can find it...
+     grep -q '^[[:blank:]]*global[[:blank:]]*{' $CONFIGFILE
+     have_global=$?
+-    
++
+     if [ "$have_global" = "1" ] 
+ 	then
+ 	echo "global keys but no 'global {' found, can't edit file"
+@@ -170,13 +168,29 @@ then
+     if [ -z "$LOCKING_TYPE" ]; then
+ 	LOCKING_TYPE=1
+     fi
+-    if [ "$LOCKING_TYPE" = "2" ]; then
++    if [ "$LOCKING_TYPE" = "3" ] || [ "$LOCKING_TYPE" = "2" ]; then
+         cat $CONFIGFILE - <<EOF > $TMPFILE
+ global {
+     # Enable locking for cluster LVM
+     locking_type = $LOCKING_TYPE
+     library_dir = "$LOCKINGLIBDIR"
++EOF
++        if [ $? != 0 ]
++        then
++    	    echo "failed to create temporary config file, $CONFIGFILE not updated"
++	    exit 14
++        fi
++	if [ -n "$LOCKINGLIB" ]; then
++	    cat - <<EOF >> $TMPFILE
+     locking_library = "$LOCKINGLIB"
++EOF
++            if [ $? != 0 ]
++            then
++	        echo "failed to create temporary config file, $CONFIGFILE not updated"
++	        exit 16
++            fi
++	fi
++	cat - <<EOF >> $TMPFILE
+ }
+ EOF
+     fi # if we aren't setting cluster locking, we don't need to create a global section
+@@ -184,7 +198,7 @@ EOF
+     if [ $? != 0 ]
+     then
+ 	echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	exit 14
++	exit 17
+     fi
+ else
+     #
+@@ -200,7 +214,7 @@ else
+ 	    SEDCMD=" /global[[:blank:]]*{/a\ \ \ \ locking_type = $LOCKING_TYPE"
+ 	fi
+     fi
+-    
++
+     if [ -n "$LOCKINGLIBDIR" ]; then
+         if [ "$have_dir" = "0" ] 
+             then
+@@ -208,8 +222,10 @@ else
+         else
+             SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ library_dir = \"$LOCKINGLIBDIR\""
+         fi
++    fi
+ 
+-        if [ "$have_library" = "0" ] 
++    if [ -n "$LOCKINGLIB" ]; then
++        if [ "$have_library" = "0" ]
+             then
+             SEDCMD="${SEDCMD}\ns/^[[:blank:]]*locking_library[[:blank:]]*=.*/\ \ \ \ locking_library = \"$LOCKINGLIB\"/g"
+         else
+@@ -217,19 +233,6 @@ else
+         fi
+     fi
+ 
+-    if [ "$LOCKING_TYPE" = "1" ]; then
+-        # if we're not using cluster locking, remove the library dir and locking library name
+-        if [ "$have_dir" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\n/^[[:blank:]]*library_dir[[:blank:]]*=.*/d"
+-        fi
+-
+-        if [ "$have_library" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\n/^[[:blank:]]*locking_library[[:blank:]]*=.*/d"
+-        fi
+-    fi
+-
+     echo -e $SEDCMD > $SCRIPTFILE
+     sed  <$CONFIGFILE >$TMPFILE -f $SCRIPTFILE
+     if [ $? != 0 ]
+-- 
+1.6.5.3
 
 
