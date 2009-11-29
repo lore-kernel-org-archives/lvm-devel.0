@@ -1,30 +1,35 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 29 Nov 2009 20:26:49 +0100
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 29 Nov 2009 21:34:11 +0100
 Subject: [PATCH] Optionally abort on internal errors.
-Message-ID: <87ocml3zeu.fsf@twilight.int.mornfall.net.>
+In-Reply-To: <87ocml3zeu.fsf@twilight.int.mornfall.net.>
+References: <87ocml3zeu.fsf@twilight.int.mornfall.net.>
+Message-ID: <4B12DAC3.2030305@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On 11/29/2009 08:26 PM, Petr Rockai wrote:
+> a fairly straightforward patch adding a configure option that will
+> abort() the process in case it encounters an internal
+> error. Undocumented so far and not sure it's appropriate to expose --
+> but maybe we have a policy of no undocumented options?
 
-a fairly straightforward patch adding a configure option that will
-abort() the process in case it encounters an internal
-error. Undocumented so far and not sure it's appropriate to expose --
-but maybe we have a policy of no undocumented options?
+I like that idea, very useful for test suite.
 
-Anyway, patch attached. (It also makes the testsuite set this option, so
-it'll catch any internal errors that may happen during the tests.)
+ACK from me.
 
-Yours,
-    Petr.
+just some nitpicking changes like
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: internal-errors.diff
-Type: text/x-diff
-Size: 3081 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091129/c5c559a0/attachment.bin>
++	if (level <= _LOG_ERR && !strncmp(format, "Internal error:",
++					  strlen("Internal error:")))
+(why strlen? just len or better #define the string)
+
+- should it be in log section (global?)
+
+- maybe only activate that when in debug (verbose mode)?
+
+Milan
+
+
