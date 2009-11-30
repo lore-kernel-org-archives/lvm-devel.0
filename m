@@ -1,7 +1,7 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 30 Nov 2009 12:37:18 +0100
-Subject: [PATCH 18/23] Replicator: do not remove of replicators' LVs
-In-Reply-To: <1259581043-15308-18-git-send-email-zkabelac@redhat.com>
+Date: Mon, 30 Nov 2009 12:37:19 +0100
+Subject: [PATCH 19/23] Replicator: activate change for vgchange
+In-Reply-To: <1259581043-15308-19-git-send-email-zkabelac@redhat.com>
 References: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
 	<1259581043-15308-2-git-send-email-zkabelac@redhat.com>
 	<1259581043-15308-3-git-send-email-zkabelac@redhat.com>
@@ -20,38 +20,37 @@ References: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
 	<1259581043-15308-16-git-send-email-zkabelac@redhat.com>
 	<1259581043-15308-17-git-send-email-zkabelac@redhat.com>
 	<1259581043-15308-18-git-send-email-zkabelac@redhat.com>
-Message-ID: <1259581043-15308-19-git-send-email-zkabelac@redhat.com>
+	<1259581043-15308-19-git-send-email-zkabelac@redhat.com>
+Message-ID: <1259581043-15308-20-git-send-email-zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Activate only the first replicator-dev LV, that activates all other
+related LVs from Replicator.
+
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/lv_manip.c |    9 +++++++++
- 1 files changed, 9 insertions(+), 0 deletions(-)
+ tools/vgchange.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1c8e37a..3e08f34 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2084,6 +2084,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 3a4ceca..c224633 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -72,6 +72,10 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
+ 			continue;
  
-+	if (lv_is_replicator_dev(lv) ||
-+	    lv_is_rimage(lv) ||
-+	    lv_is_rlog(lv) ||
-+	    lv_is_slog(lv)) {
-+		log_error("Can't remove logical volume %s used by a replicator",
-+			  lv->name);
-+		return 0;
-+	}
++		/* Only request activation of the first replicator-dev LV */
++		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
++			continue;
 +
- 	if (lv->status & LOCKED) {
- 		log_error("Can't remove locked LV %s", lv->name);
- 		return 0;
+ 		/* Can't deactivate a pvmove LV */
+ 		/* FIXME There needs to be a controlled way of doing this */
+ 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
 -- 
 1.6.5.3
 
