@@ -1,44 +1,39 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 30 Nov 2009 16:58:53 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20091130165853.4882.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Mon, 30 Nov 2009 12:06:28 -0500
+Subject: [PATCH] Improve mirror DSO's failure logging
+In-Reply-To: <20091130103209.GA8300@us.ibm.com>
+References: <c107c082a3a5ab4f4a95.1258760198@localhost>	<4B0B0617.9010001@redhat.com>
+	<20091130103209.GA8300@us.ibm.com>
+Message-ID: <4B13FB94.4090504@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-11-30 16:58:53
+On 11/30/09 05:32, malahal at us.ibm.com wrote:
+> Takahiro Yasui [tyasui at redhat.com] wrote:
+>> I'm afraid that only an error status of the device with the smallest index
+>> of the dev_status_str[] array will be reported. For example, if the status
+>> is "ARD," "r" will have a value, ME_READ_FAILURE. Then, a write failure
+>> event (ME_PRIMARY_WRITE_FAILURE and ME_SECONDARY_WRITE_FAILURE) won't be
+>> detected in process_event(). I think that "WRITE_FAILURE" events should
+>> have priority.
+> 
+> Thank you, Takahiro. Just posted a patch fixing the above issue. I used
+> them as flags to fix it. Let me know what you think.
+> 
+> See
+> http://permalink.gmane.org/gmane.linux.kernel.device-mapper.devel/10675
+> for details.
 
-Modified files:
-	test           : Makefile.in 
+I'm afraid that you need to refresh this patch set on top of the recent
+lvm2 source. The patch similar to your patch #1 has been merged recently.
 
-Log message:
-	The sourcedir instances of the test scripts are not PHONY.
+Please see this link.
+http://permalink.gmane.org/gmane.linux.lvm.devel/2312
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
-
---- LVM2/test/Makefile.in	2009/11/30 16:56:42	1.23
-+++ LVM2/test/Makefile.in	2009/11/30 16:58:53	1.24
-@@ -65,9 +65,6 @@
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
- 
--#$(T): init.sh
--#	./bin/harness $@
--
- .bin-dir-stamp: lvm-wrapper
- 	rm -rf bin
- 	mkdir bin
-@@ -93,5 +90,5 @@
- distclean: clean
- 	rm -f Makefile
- 
--.PHONY: $(T) clean distclean
-+.PHONY: clean distclean
- .NOTPARALLEL:
+Thanks,
+Taka
 
 
