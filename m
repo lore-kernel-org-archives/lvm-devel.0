@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 19 Nov 2009 01:11:58 -0000
-Subject: LVM2 tools/lvmcmdlib.c lib/mm/memlock.h lib/mm ...
-Message-ID: <20091119011158.31472.qmail@sourceware.org>
+Date: 30 Nov 2009 15:12:35 -0000
+Subject: LVM2/test/api Makefile.in
+Message-ID: <20091130151235.11121.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,123 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-11-19 01:11:57
+Changes by:	mornfall at sourceware.org	2009-11-30 15:12:34
 
 Modified files:
-	tools          : lvmcmdlib.c 
-	lib/mm         : memlock.h memlock.c 
+	test/api       : Makefile.in 
 
 Log message:
-	Fix another bug in memlock handling, this time the "global" dmeventd memlock
-	was preventing device scans in lvconvert --repair running from inside dmeventd.
+	Fix test/api to work with srcdir != builddir.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdlib.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/tools/lvmcmdlib.c	2009/02/22 22:11:59	1.9
-+++ LVM2/tools/lvmcmdlib.c	2009/11/19 01:11:57	1.10
-@@ -82,9 +82,9 @@
- 	/* FIXME Temporary - move to libdevmapper */
- 	ret = ECMD_PROCESSED;
- 	if (!strcmp(cmdline, "_memlock_inc"))
--		memlock_inc();
-+		memlock_inc_daemon();
- 	else if (!strcmp(cmdline, "_memlock_dec"))
--		memlock_dec();
-+		memlock_dec_daemon();
- 	else
- 		ret = lvm_run_command(cmd, argc, argv);
+--- LVM2/test/api/Makefile.in	2009/10/02 19:10:38	1.10
++++ LVM2/test/api/Makefile.in	2009/11/30 15:12:34	1.11
+@@ -26,17 +26,17 @@
+ INCLUDES += -I../../include
  
---- LVM2/lib/mm/memlock.h	2007/08/20 20:55:27	1.4
-+++ LVM2/lib/mm/memlock.h	2009/11/19 01:11:57	1.5
-@@ -20,6 +20,8 @@
+ LVMLIBS = @LVM2APP_LIB@ -ldevmapper
+-DEPLIBS = $(top_srcdir)/liblvm/liblvm2app.so $(top_srcdir)/libdm/libdevmapper.so
++DEPLIBS = $(top_builddir)/liblvm/liblvm2app.so $(top_builddir)/libdm/libdevmapper.so
  
- void memlock_inc(void);
- void memlock_dec(void);
-+void memlock_inc_daemon(void);
-+void memlock_dec_daemon(void);
- int memlock(void);
- void memlock_init(struct cmd_context *cmd);
+ DEFS += -D_REENTRANT
  
---- LVM2/lib/mm/memlock.c	2009/11/18 18:22:32	1.13
-+++ LVM2/lib/mm/memlock.c	2009/11/19 01:11:57	1.14
-@@ -53,6 +53,7 @@
+-include $(top_srcdir)/make.tmpl
++include $(top_builddir)/make.tmpl
  
- static void *_malloc_mem = NULL;
- static int _memlock_count = 0;
-+static int _memlock_count_daemon = 0;
- static int _priority;
- static int _default_priority;
+-LDFLAGS = -L$(top_srcdir)/libdm -L$(top_srcdir)/liblvm
++LDFLAGS = -L$(top_builddir)/libdm -L$(top_builddir)/liblvm
  
-@@ -123,22 +124,61 @@
- 			  strerror(errno));
- }
+ ifeq ("@DMEVENTD@", "yes")
+ 	LVMLIBS += -ldevmapper-event -lpthread
+-	LDFLAGS += -L$(top_srcdir)/daemons/dmeventd
++	LDFLAGS += -L$(top_builddir)/daemons/dmeventd
+ endif
  
-+static void _lock_mem_if_needed(void) {
-+	if ((_memlock_count + _memlock_count_daemon) == 1)
-+		_lock_mem();
-+}
-+
-+static void _unlock_mem_if_possible(void) {
-+	if ((_memlock_count + _memlock_count_daemon) == 0)
-+		_unlock_mem();
-+}
-+
- void memlock_inc(void)
- {
--	if (!_memlock_count++)
--		_lock_mem();
-+	++_memlock_count;
-+	_lock_mem_if_needed();
- 	log_debug("memlock_count inc to %d", _memlock_count);
- }
- 
- void memlock_dec(void)
- {
--	if (_memlock_count && (!--_memlock_count))
--		_unlock_mem();
--	log_debug("memlock_count dec to %d", _memlock_count);
--	if (_memlock_count < 0)
-+	if (!_memlock_count)
- 		log_error("Internal error: _memlock_count has dropped below 0.");
-+	--_memlock_count;
-+	_unlock_mem_if_possible();
-+	log_debug("memlock_count dec to %d", _memlock_count);
- }
- 
-+/*
-+ * The memlock_*_daemon functions will force the mlockall() call that we need
-+ * to stay in memory, but they will have no effect on device scans (unlike
-+ * normal memlock_inc and memlock_dec). Memory is kept locked as long as either
-+ * of memlock or memlock_daemon is in effect.
-+ */
-+
-+void memlock_inc_daemon(void)
-+{
-+	++_memlock_count_daemon;
-+	_lock_mem_if_needed();
-+	log_debug("memlock_count_daemon inc to %d", _memlock_count_daemon);
-+}
-+
-+void memlock_dec_daemon(void)
-+{
-+	if (!_memlock_count_daemon)
-+		log_error("Internal error: _memlock_count_daemon has dropped below 0.");
-+	--_memlock_count_daemon;
-+	_unlock_mem_if_possible();
-+	log_debug("memlock_count_daemon dec to %d", _memlock_count_daemon);
-+}
-+
-+/*
-+ * This disregards the daemon (dmeventd) locks, since we use memlock() to check
-+ * whether it is safe to run a device scan, which would normally coincide with
-+ * !memlock() -- but the daemon global memory lock breaks this assumption, so
-+ * we do not take those into account here.
-+ */
- int memlock(void)
- {
- 	return _memlock_count;
+ test_OBJECTS = $(test_SOURCES:.c=.o)
 
 
