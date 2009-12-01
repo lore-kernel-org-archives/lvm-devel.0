@@ -1,23 +1,100 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 02 Dec 2009 15:18:56 -0500
-Subject: [PATCH 00/23] Replicator lvm support
-In-Reply-To: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
-References: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
-Message-ID: <1259785136.2281.18.camel@f10-node1>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 1 Dec 2009 13:54:28 -0000
+Subject: LVM2/lib/log log.c
+Message-ID: <20091201135428.24475.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2009-11-30 at 12:37 +0100, Zdenek Kabelac wrote:
-> Set of patches to introduce LVM support for dm target replicator.
-> Patches without Replicator: prefix are generic simple patches 
-> or some minor code cleanups - they are here just to get accurate diffs.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2009-12-01 13:54:28
 
-Ack to the first 6 - reviewed them and compiled.
-I have been looking at the other LVM patches.
-I will probably skip over the dm stuff for now and focus on those.
+Modified files:
+	lib/log        : log.c 
+
+Log message:
+	If aborting due to an internal error, always print the message causing this.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+
+--- LVM2/lib/log/log.c	2009/11/30 17:17:12	1.53
++++ LVM2/lib/log/log.c	2009/12/01 13:54:27	1.54
+@@ -183,7 +183,8 @@
+ 
+ 	level &= ~_LOG_STDERR;
+ 
+-	if (!strncmp(format, "Internal error:",
++	if (_abort_on_internal_errors &&
++	    !strncmp(format, "Internal error:",
+ 		     strlen("Internal error:")))
+ 		internal_error = 1;
+ 
+@@ -244,7 +245,7 @@
+ 			if (!strcmp("<backtrace>", format) &&
+ 			    verbose_level() <= _LOG_DEBUG)
+ 				break;
+-			if (verbose_level() >= _LOG_DEBUG) {
++			if (internal_error || verbose_level() >= _LOG_DEBUG) {
+ 				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+ 					_msg_prefix);
+ 				if (_indent)
+@@ -255,7 +256,7 @@
+ 			break;
+ 
+ 		case _LOG_INFO:
+-			if (verbose_level() >= _LOG_INFO) {
++			if (internal_error || verbose_level() >= _LOG_INFO) {
+ 				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+ 					_msg_prefix);
+ 				if (_indent)
+@@ -265,7 +266,7 @@
+ 			}
+ 			break;
+ 		case _LOG_NOTICE:
+-			if (verbose_level() >= _LOG_NOTICE) {
++			if (internal_error || verbose_level() >= _LOG_NOTICE) {
+ 				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+ 					_msg_prefix);
+ 				if (_indent)
+@@ -275,7 +276,7 @@
+ 			}
+ 			break;
+ 		case _LOG_WARN:
+-			if (verbose_level() >= _LOG_WARN) {
++			if (internal_error || verbose_level() >= _LOG_WARN) {
+ 				fprintf(use_stderr ? stderr : stdout, "%s%s",
+ 					log_command_name(), _msg_prefix);
+ 				vfprintf(use_stderr ? stderr : stdout, trformat, ap);
+@@ -283,7 +284,7 @@
+ 			}
+ 			break;
+ 		case _LOG_ERR:
+-			if (verbose_level() >= _LOG_ERR) {
++			if (internal_error || verbose_level() >= _LOG_ERR) {
+ 				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+ 					_msg_prefix);
+ 				vfprintf(stderr, trformat, ap);
+@@ -292,7 +293,7 @@
+ 			break;
+ 		case _LOG_FATAL:
+ 		default:
+-			if (verbose_level() >= _LOG_FATAL) {
++			if (internal_error || verbose_level() >= _LOG_FATAL) {
+ 				fprintf(stderr, "%s%s%s", locn, log_command_name(),
+ 					_msg_prefix);
+ 				vfprintf(stderr, trformat, ap);
+@@ -303,7 +304,7 @@
+ 		va_end(ap);
+ 	}
+ 
+-	if (internal_error && _abort_on_internal_errors)
++	if (internal_error)
+ 		abort();
+ 
+ 	if (level > debug_level())
 
 
