@@ -1,28 +1,32 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 3 Dec 2009 18:45:56 -0500
-Subject: Re: Update a few more uint64_t's related to the 64-bit status change.
-In-Reply-To: <1259882816-25310-1-git-send-email-dwysocha@redhat.com>
-References: <1259882816-25310-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20091203234555.GA12543@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 01 Dec 2009 15:45:14 +0100
+Subject: [PATCH] Give better message for pvmove when all data is skipped
+In-Reply-To: <4B1526C4.2010900@redhat.com>
+References: <4B1526C4.2010900@redhat.com>
+Message-ID: <4B152BFA.5030904@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Dec 03 2009 at  6:26pm -0500,
-Dave Wysochanski <dwysocha@redhat.com> wrote:
+On 12/01/2009 03:23 PM, Peter Rajnoha wrote:
+> Just a little thing - better message in pvmove, maybe :) 
+> BZ #500898/#500899
 
-> At this point they probably do not matter but going forward they
-> may - depends on future patches for replicator, etc.  I think
-> these probably got missed because they were 'flags' so I changed
-> the name to 'status' to be consistent.  So the on-disk
-> things 'flags' and the in structure 'status' (bits).
-> 
-> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+("mention skipped LVs in pvmove error message")
 
-Ah, thanks Dave!
+Ack.
 
-Acked-by: Mike Snitzer <snitzer@redhat.com>
+> +			log_error("All data on source PV skipped. "
+> +				  "It contains locked, hidden or "
+> +				  "non-top level LVs only.");
+
+This message probably need some better formulation (remove lvm internals?),
+please contact our lvm language dept. ;-)
+
+Milan
+--
+mbroz at redhat.com
 
 
