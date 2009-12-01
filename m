@@ -1,47 +1,46 @@
-From: malahal@us.ibm.com <malahal@us.ibm.com>
-Date: Wed, 2 Dec 2009 18:36:30 -0800
-Subject: [PATCH 2 of 2] [RFC] handle a temporary secondary mirror device failure
-In-Reply-To: <4B16FF95.6010603@redhat.com>
-References: <patchbomb.1259576548@localhost>
-	<a0324c61e9fc527d6a9d.1259576550@localhost>
-	<4B16FF95.6010603@redhat.com>
-Message-ID: <20091203023630.GA15001@us.ibm.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 01 Dec 2009 15:11:49 +0100
+Subject: [PATCH] Disable udev rules on change event with DISK_RO=1
+Message-ID: <4B152425.4090506@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Takahiro Yasui [tyasui at redhat.com] wrote:
-> On 11/30/09 05:22, Malahal Naineni wrote:
-> > If "retry" policy is selected, then the mirror DSO uses "dmsetup"
-> > command to restart a resync. Right now, it is done immediately but we
-> > should do it after a configured time. Also, this is done endlessly but
-> > should be done only few configured times.
-> 
-> It sounds good to me. This feature would work in a variety of
-> environments by adding configurable parameter as you mentioned.
-> 
-> > Calling 'lvchange --refresh' to re-integrate the secondary mirror upon a
-> > leg failure works if there are no device failures while the "lvchange"
-> > is running.  Otherwise, the failed device is replaced with "error"
-> > target which is not what we want. For now, this patch calls "dmsetup",
-> > but should be replaced with a suitable "LVM" command.
-> 
-> > +	snprintf(cmd_str, CMD_SIZE, "dmsetup suspend %s-%s", vg, lv);
-> > +	syslog(LOG_ERR, "Running command: %s", cmd_str);
-> 
-> We need to re-queue blocked I/Os instead of finishing them by -EIO.
-> I think that "--noflush" option is necessary for "dmsetup suspend."
+There's a new change udev event generated since kernel 2.6.32 that
+notifies userspace about a change in read-only attribute for block
+devices (with DISK_RO=1 environment variable set):
 
-Yes, you are right. I tested this with existing code dm-raid1 module
-which doesn't hold any I/O's, so it worked fine. But I think we should
-use some LVM command (or create one if such a command doesn't exist)
-instead of "dmsetup" command.
+http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=e3264a4d7de147677f1995f119eba05c9abe9c1c
 
-Thank you for looking into it.
+We need to detect this and disable the rule application so the
+meaning of this change event is not interchanged with the regular
+change event used while resuming/renaming DM devices.
 
+If there's anybody awaiting this notification in foreign rules,
+he can still check for this env var and do the appropriate actions
+separately.
 
-Thanks, Malahal.
+Peter
+
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index aba0bf4..7cffc0b 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -19,6 +19,13 @@ KERNEL=="device-mapper", NAME="(DM_DIR)/control"
+ SUBSYSTEM!="block", GOTO="dm_end"
+ KERNEL!="dm-[0-9]*", GOTO="dm_end"
+ 
++# There is a new change event generated in block layer since kernel
++# version 2.6.32. It adds notification for changes in read-only
++# attribute. We don't want to misinterpret the regular meaning of change
++# events for DM devices and we don't want to apply the rules prematurely,
++# therefore we disable them in this situation.
++ENV{DISK_RO}=="1", GOTO="dm_disable"
++
+ # Set proper sbin path, /sbin has higher priority than /usr/sbin.
+ ENV{DM_SBIN_PATH}="/sbin"
+ TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
 
 
