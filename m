@@ -1,39 +1,46 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 9 Dec 2009 18:16:39 -0000
-Subject: LVM2/lib/locking cluster_locking.c
-Message-ID: <20091209181639.27500.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed,  2 Dec 2009 14:49:34 -0500
+Subject: [PATCH 2/2] Add tests to check for readahead value in lvcreate.
+In-Reply-To: <1259783374-16394-2-git-send-email-dwysocha@redhat.com>
+References: <1259783374-16394-1-git-send-email-dwysocha@redhat.com>
+	<1259783374-16394-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1259783374-16394-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-12-09 18:16:38
 
-Modified files:
-	lib/locking    : cluster_locking.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ test/t-lvcreate-usage.sh |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
 
-Log message:
-	Get rid of hardcoded 0xffdf cluster lock flag.
-	
-	There is hidded change - the upper flags (0xffff0000)
-	and now not cleared, but there are unused anyway.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-
---- LVM2/lib/locking/cluster_locking.c	2009/06/12 08:30:19	1.36
-+++ LVM2/lib/locking/cluster_locking.c	2009/12/09 18:16:38	1.37
-@@ -415,7 +415,7 @@
- 		clvmd_cmd = CLVMD_CMD_LOCK_LV;
- 		strcpy(lockname, resource);
- 		lock_scope = "LV";
--		flags &= 0xffdf;	/* Mask off HOLD flag */
-+		flags &= ~LCK_HOLD;	/* Mask off HOLD flag */
- 		break;
- 
- 	default:
+diff --git a/test/t-lvcreate-usage.sh b/test/t-lvcreate-usage.sh
+index 14b6ecb..62cf151 100755
+--- a/test/t-lvcreate-usage.sh
++++ b/test/t-lvcreate-usage.sh
+@@ -125,3 +125,18 @@ lvcreate -s --virtualoriginsize 64m -L 32m -n $lv1 $vg
+ lvchange -a n $vg/$lv1
+ lvremove $vg/$lv1
+ lvremove -ff $vg
++
++# readahead default (auto), none, #, auto
++lvcreate -L 32m -n $lv $vg
++check_lv_field_ $vg/$lv lv_read_ahead "auto"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead none $vg
++check_lv_field_ $vg/$lv lv_read_ahead "0"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead 8k $vg
++check_lv_field_ $vg/$lv lv_read_ahead "8.00k"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead auto $vg
++check_lv_field_ $vg/$lv lv_read_ahead "auto"
++lvremove -ff $vg
++
+-- 
+1.6.0.6
 
 
