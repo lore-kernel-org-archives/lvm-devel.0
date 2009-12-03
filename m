@@ -1,56 +1,78 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 28 Dec 2009 20:09:09 +0100
-Subject: [PATCH] Do not set precommitted flag in cache when precommitted metadata does not exist.
-Message-ID: <1262027349-19048-1-git-send-email-mbroz@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 3 Dec 2009 09:58:31 -0000
+Subject: LVM2 lib/activate/dev_manager.c libdm/libdm-de ...
+Message-ID: <20091203095831.9522.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The use_precommited flag indicates that we want to use precommited metadata
-(used in suspend call to preload table with precommitted data).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2009-12-03 09:58:30
 
-But if there are no such data, committed metadata are read, but the cache
-still contains precommitted flag.
+Modified files:
+	lib/activate   : dev_manager.c 
+	libdm          : libdm-deptree.c 
 
-(The problem is that later possible drop_metadata call will not invalidate
-device in cache.)
+Log message:
+	minor whitespace indentation
 
-The wrong precomitted state is stored on remote nodes during normal
-suspend/resume cycle _without_ involving vg_write/commit.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.163&r2=1.164
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
 
-Use the PRECOMMITED VG status flag here instead (which is always set if using
-precommited metadata here).
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/metadata/metadata.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index f2ff8ac..c24bbda 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2620,7 +2620,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			if (!inconsistent_pvs) {
- 				log_debug("Updating cache for PVs without mdas "
- 					  "in VG %s.", vgname);
--				lvmcache_update_vg(correct_vg, use_precommitted);
-+				lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
+--- LVM2/lib/activate/dev_manager.c	2009/11/04 14:56:35	1.163
++++ LVM2/lib/activate/dev_manager.c	2009/12/03 09:58:30	1.164
+@@ -783,7 +783,7 @@
  
- 				if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid)))
- 					return_NULL;
-@@ -2721,7 +2721,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			return_NULL;
- 	}
+ 	sprintf(errid, "missing_%d_%d", segno, s);
  
--	lvmcache_update_vg(correct_vg, use_precommitted);
-+	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
+-	if (!(id = build_dlid(dm, seg->lv->lvid.s, errid))) 
++	if (!(id = build_dlid(dm, seg->lv->lvid.s, errid)))
+ 		return_NULL;
  
- 	if (inconsistent) {
- 		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
--- 
-1.6.5.7
+ 	if (!(name = build_dm_name(dm->mem, seg->lv->vg->name,
+@@ -1269,7 +1269,7 @@
+ 	default:
+ 		log_error("_tree_action: Action %u not supported.", action);
+ 		goto out;
+-	}	
++	}
+ 
+ 	r = 1;
+ 
+--- LVM2/libdm/libdm-deptree.c	2009/11/13 12:43:22	1.62
++++ LVM2/libdm/libdm-deptree.c	2009/12/03 09:58:30	1.63
+@@ -645,7 +645,7 @@
+ void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+ 				 uint32_t read_ahead,
+ 				 uint32_t read_ahead_flags)
+-{                          
++{
+ 	dnode->props.read_ahead = read_ahead;
+ 	dnode->props.read_ahead_flags = read_ahead_flags;
+ }
+@@ -1064,8 +1064,8 @@
+ }
+ 
+ int dm_tree_suspend_children(struct dm_tree_node *dnode,
+-				   const char *uuid_prefix,
+-				   size_t uuid_prefix_len)
++			     const char *uuid_prefix,
++			     size_t uuid_prefix_len)
+ {
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child = dnode;
+@@ -1849,7 +1849,7 @@
+ 
+ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+ 					  uint32_t region_size,
+-					  unsigned clustered, 
++					  unsigned clustered,
+ 					  const char *log_uuid,
+ 					  unsigned area_count,
+ 					  uint32_t flags)
 
 
