@@ -1,40 +1,46 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Thu,  3 Dec 2009 15:31:41 +0100
-Subject: [PATCH] Print error if VG already exist.
-Message-ID: <1259850701-32101-1-git-send-email-mbroz@redhat.com>
+Date: Thu,  3 Dec 2009 16:36:22 +0100
+Subject: [PATCH] Fix pvmove test mode to not fail and do not poll.
+Message-ID: <1259854582-2701-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This test have to be moved because of new vg read error handling.
+Test mode should not fail nor try to poll non-existent devices.
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- tools/vgcreate.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+ tools/pvmove.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index b1b0c63..8aef7a2 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -55,8 +55,13 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index ac09d6a..745f5ca 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -312,8 +312,10 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
+ 	/* FIXME: Add option to use a log */
+ 	if (first_time) {
+ 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+-			if (test_mode())
++			if (test_mode()) {
++				r = 1;
+ 				goto out;
++			}
  
- 	/* Create the new VG */
- 	vg = vg_create(cmd, vp_new.vg_name);
--	if (vg_read_error(vg))
--		goto_bad;
-+	if (vg_read_error(vg)) {
-+		if (vg_read_error(vg) == FAILED_EXIST)
-+			log_error("A volume group called %s already exists.", vp_new.vg_name);
-+		else
-+			log_error("Can't get lock for %s", vp_new.vg_name);
-+		goto bad;
-+	}
- 
- 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
- 	    !vg_set_max_lv(vg, vp_new.max_lv) ||
+ 			/*
+ 			 * Nothing changed yet, try to revert pvmove.
+@@ -570,6 +572,9 @@ static struct poll_functions _pvmove_fns = {
+ int pvmove_poll(struct cmd_context *cmd, const char *pv_name,
+ 		unsigned background)
+ {
++	if (test_mode())
++		return ECMD_PROCESSED;
++
+ 	return poll_daemon(cmd, pv_name, NULL, background, PVMOVE, &_pvmove_fns,
+ 			   "Moved");
+ }
 -- 
 1.6.5.3
 
