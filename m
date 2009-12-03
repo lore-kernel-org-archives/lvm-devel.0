@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 3 Dec 2009 19:20:49 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgcreate.c
-Message-ID: <20091203192049.26423.qmail@sourceware.org>
+Date: 3 Dec 2009 19:22:25 -0000
+Subject: LVM2 ./WHATS_NEW tools/pvmove.c
+Message-ID: <20091203192225.27023.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-12-03 19:20:49
+Changes by:	mbroz at sourceware.org	2009-12-03 19:22:24
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : vgcreate.c 
+	tools          : pvmove.c 
 
 Log message:
-	Print error if VG already exist.
+	Fix pvmove test mode to not fail and do not poll.
 	
-	This test have to be moved because of new vg read error handling.
+	Test mode should not fail nor try to poll non-existent devices.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1338&r2=1.1339
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1339&r2=1.1340
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
 
---- LVM2/WHATS_NEW	2009/12/03 19:18:33	1.1338
-+++ LVM2/WHATS_NEW	2009/12/03 19:20:48	1.1339
+--- LVM2/WHATS_NEW	2009/12/03 19:20:48	1.1339
++++ LVM2/WHATS_NEW	2009/12/03 19:22:24	1.1340
 @@ -1,5 +1,6 @@
  Version 2.02.57 -
  ====================================
-+  Fix error message if VG already exist in vgcreate.
++  Fix pvmove test mode to not fail and do not poll.
+   Fix error message if VG already exist in vgcreate.
    Fix tools to use log_error when stopped by user.
    Fix lvcreate --readahead.
-   Fix clvmd memory leak in lv_info_by_lvid.
---- LVM2/tools/vgcreate.c	2009/11/01 20:05:17	1.75
-+++ LVM2/tools/vgcreate.c	2009/12/03 19:20:49	1.76
-@@ -55,8 +55,13 @@
+--- LVM2/tools/pvmove.c	2009/11/03 15:50:44	1.68
++++ LVM2/tools/pvmove.c	2009/12/03 19:22:24	1.69
+@@ -312,8 +312,10 @@
+ 	/* FIXME: Add option to use a log */
+ 	if (first_time) {
+ 		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+-			if (test_mode())
++			if (test_mode()) {
++				r = 1;
+ 				goto out;
++			}
  
- 	/* Create the new VG */
- 	vg = vg_create(cmd, vp_new.vg_name);
--	if (vg_read_error(vg))
--		goto_bad;
-+	if (vg_read_error(vg)) {
-+		if (vg_read_error(vg) == FAILED_EXIST)
-+			log_error("A volume group called %s already exists.", vp_new.vg_name);
-+		else
-+			log_error("Can't get lock for %s.", vp_new.vg_name);
-+		goto bad;
-+	}
- 
- 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
- 	    !vg_set_max_lv(vg, vp_new.max_lv) ||
+ 			/*
+ 			 * Nothing changed yet, try to revert pvmove.
+@@ -570,6 +572,9 @@
+ int pvmove_poll(struct cmd_context *cmd, const char *pv_name,
+ 		unsigned background)
+ {
++	if (test_mode())
++		return ECMD_PROCESSED;
++
+ 	return poll_daemon(cmd, pv_name, NULL, background, PVMOVE, &_pvmove_fns,
+ 			   "Moved");
+ }
 
 
