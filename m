@@ -1,27 +1,52 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 01 Dec 2009 15:18:33 +0100
-Subject: [PATCH] #define and use INTERNAL_ERROR
-Message-ID: <87eine4w1y.fsf@twilight.int.mornfall.net.>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu,  3 Dec 2009 17:23:20 +0100
+Subject: [PATCH] Fix memory lock imbalance in lv_suspend if already suspended.
+In-Reply-To: <1259857073-5036-1-git-send-email-mbroz@redhat.com>
+References: <1259857073-5036-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1259857400-5778-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+(well, this time correct version)
 
-patch attached to #define an INTERNAL_ERROR macro and use it throughout
-LVM. There's a couple of internal errors in libdm as well, and it seems
-that the log_error used by libdm actually comes from lib/ (i.e. LVM) so
-it may make sense to convert those as well.
+pvmove suspends all moved LVs + pvmoveX mirrored LV itself.
 
-Yours,
-    Petr.
+This suspends even underlying pvmoveX and following explicit
+suspend call is just noop.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: internal-err-define.diff
-Type: text/x-diff
-Size: 14524 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091201/ccccc6fb/attachment.bin>
+But in resume the pvmoveX volume is no longer underlying
+device for moved LVs, so it performs full resume with memlock
+decrease.
+
+Code must call memlock_inc() if suspend is requested, volume
+is already suspended and error is not requested.
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/activate/activate.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
+
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 1aaa16c..cfd2953 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -879,7 +879,11 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		goto_out;
+ 
+ 	if (!info.exists || info.suspended) {
+-		r = error_if_not_suspended ? 0 : 1;
++		if (!error_if_not_suspended) {
++			r = 1;
++			if (info.suspended)
++				memlock_inc();
++		}
+ 		goto out;
+ 	}
+ 
+-- 
+1.6.5.3
+
+
