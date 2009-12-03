@@ -1,28 +1,53 @@
-From: malahal@us.ibm.com <malahal@us.ibm.com>
-Date: Fri, 18 Dec 2009 09:01:19 -0800
-Subject: [PATCH 1 of 4] Add more error codes in mirror DSO
-In-Reply-To: <3F1215A5-8BF2-4DBD-99A6-6CD56352ABD4@redhat.com>
-References: <patchbomb.1260695922@localhost>
-	<a74600c6163e6640d0ca.1260695923@localhost>
-	<3F1215A5-8BF2-4DBD-99A6-6CD56352ABD4@redhat.com>
-Message-ID: <20091218170119.GA23025@us.ibm.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 3 Dec 2009 01:47:34 -0000
+Subject: LVM2 lib/metadata/lv_manip.c tools/lvcreate.c
+Message-ID: <20091203014734.3260.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jonathan Brassow [jbrassow at redhat.com] wrote:
-> Is there a reason you bumped ME_IGNORE from 0 to 1?
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-12-03 01:47:34
 
-It is actually a bit-field value rather than an absolute value, so I
-couldn't have anything with zero.
+Modified files:
+	lib/metadata   : lv_manip.c 
+	tools          : lvcreate.c 
 
-> Did you forget about ME_IGNORE in 'process_event' (causing it to fall  
-> through to the final else)?
+Log message:
+	Fix setting of readahead in lvcreate.
+	
+	The default comes from the configuration settings, with possible
+	commandline override.
 
-Yes! Thank you. Unknown errors are handled as 'fatal' errors in the
-existing code, so process_event will never get an unknown error code (it
-has to be ME_IGNORE). I will fix it.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.186&r2=1.187
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.211&r2=1.212
+
+--- LVM2/lib/metadata/lv_manip.c	2009/11/24 22:55:56	1.186
++++ LVM2/lib/metadata/lv_manip.c	2009/12/03 01:47:33	1.187
+@@ -3019,7 +3019,7 @@
+ 				   status, lp->alloc, vg)))
+ 		return_0;
+ 
+-	if (lp->read_ahead) {
++	if (lp->read_ahead != lv->read_ahead) {
+ 		log_verbose("Setting read ahead sectors");
+ 		lv->read_ahead = lp->read_ahead;
+ 	}
+--- LVM2/tools/lvcreate.c	2009/11/27 14:35:39	1.211
++++ LVM2/tools/lvcreate.c	2009/12/03 01:47:34	1.212
+@@ -509,7 +509,8 @@
+ 	/*
+ 	 * Read ahead.
+ 	 */
+-	lp->read_ahead = arg_uint_value(cmd, readahead_ARG, DM_READ_AHEAD_NONE);
++	lp->read_ahead = arg_uint_value(cmd, readahead_ARG,
++					cmd->default_settings.read_ahead);
+ 	pagesize = lvm_getpagesize() >> SECTOR_SHIFT;
+ 	if (lp->read_ahead != DM_READ_AHEAD_AUTO &&
+ 	    lp->read_ahead != DM_READ_AHEAD_NONE &&
 
 
