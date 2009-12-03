@@ -1,31 +1,57 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 20 Dec 2009 15:45:56 +0100
-Subject: [PATCH] Rename mirror_device_fault_policy to mirror_image_fault policy
-Message-ID: <87my1demaj.fsf@twilight.int.mornfall.net.>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 3 Dec 2009 01:48:07 -0000
+Subject: LVM2 ./WHATS_NEW test/t-lvcreate-usage.sh
+Message-ID: <20091203014807.5443.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This should be quite simple, but I have thrown in a simple testcase as
-well, for a good measure. There is some code duplication, but I'll
-address that separately, since the old codepath (which does not really
-do any upconversion, just logs suggestions) is still employed by
-vgreduce --removemissing --force. This ought to be simplified to just
-remove the faulty images/logs without looking at the policy or writing
-any hints (vgreduce --removemissing should issue a hint about lvconvert
---repair instead).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2009-12-03 01:48:07
 
-This should fix RHBZ 538620.
+Modified files:
+	.              : WHATS_NEW 
+	test           : t-lvcreate-usage.sh 
 
-Yours,
-   Petr.
+Log message:
+	Add tests to check for readahead value in lvcreate.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: mirror_image_fault_policy.diff
-Type: text/x-diff
-Size: 4171 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20091220/51717728/attachment.bin>
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1336&r2=1.1337
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+
+--- LVM2/WHATS_NEW	2009/12/01 19:10:23	1.1336
++++ LVM2/WHATS_NEW	2009/12/03 01:48:05	1.1337
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Fix lvcreate --readahead.
+   Fix clvmd memory leak in lv_info_by_lvid.
+   Do not allow creating mirrors of more than 8 images.
+   Use locking_type 3 (compiled in cluster locking) in lvmconf.
+--- LVM2/test/t-lvcreate-usage.sh	2009/09/30 16:13:53	1.16
++++ LVM2/test/t-lvcreate-usage.sh	2009/12/03 01:48:07	1.17
+@@ -125,3 +125,18 @@
+ lvchange -a n $vg/$lv1
+ lvremove $vg/$lv1
+ lvremove -ff $vg
++
++# readahead default (auto), none, #, auto
++lvcreate -L 32m -n $lv $vg
++check_lv_field_ $vg/$lv lv_read_ahead "auto"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead none $vg
++check_lv_field_ $vg/$lv lv_read_ahead "0"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead 8k $vg
++check_lv_field_ $vg/$lv lv_read_ahead "8.00k"
++lvremove -ff $vg
++lvcreate -L 32m -n $lv --readahead auto $vg
++check_lv_field_ $vg/$lv lv_read_ahead "auto"
++lvremove -ff $vg
++
+
+
