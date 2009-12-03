@@ -1,49 +1,38 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Dec 2009 13:04:30 -0000
-Subject: LVM2/tools dmsetup.c
-Message-ID: <20091211130430.15673.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Wed, 02 Dec 2009 19:00:21 -0500
+Subject: [PATCH 2 of 2] [RFC] handle a temporary secondary mirror device failure
+In-Reply-To: <a0324c61e9fc527d6a9d.1259576550@localhost>
+References: <patchbomb.1259576548@localhost>
+	<a0324c61e9fc527d6a9d.1259576550@localhost>
+Message-ID: <4B16FF95.6010603@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2009-12-11 13:04:30
+On 11/30/09 05:22, Malahal Naineni wrote:
+> If "retry" policy is selected, then the mirror DSO uses "dmsetup"
+> command to restart a resync. Right now, it is done immediately but we
+> should do it after a configured time. Also, this is done endlessly but
+> should be done only few configured times.
 
-Modified files:
-	tools          : dmsetup.c 
+It sounds good to me. This feature would work in a variety of
+environments by adding configurable parameter as you mentioned.
 
-Log message:
-	Fix coredump and memory leak for 'dmsetup help -c'
+> Calling 'lvchange --refresh' to re-integrate the secondary mirror upon a
+> leg failure works if there are no device failures while the "lvchange"
+> is running.  Otherwise, the failed device is replaced with "error"
+> target which is not what we want. For now, this patch calls "dmsetup",
+> but should be replaced with a suitable "LVM" command.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+> +	snprintf(cmd_str, CMD_SIZE, "dmsetup suspend %s-%s", vg, lv);
+> +	syslog(LOG_ERR, "Running command: %s", cmd_str);
 
---- LVM2/tools/dmsetup.c	2009/11/13 12:43:22	1.128
-+++ LVM2/tools/dmsetup.c	2009/12/11 13:04:30	1.129
-@@ -2402,7 +2402,7 @@
- 	size_t len = 0;
- 	int r = 0;
- 
--	if (!strcmp(c->name, "splitname"))
-+	if (c && !strcmp(c->name, "splitname"))
- 		options = (char *) splitname_report_options;
- 
- 	/* emulate old dmsetup behaviour */
-@@ -2591,7 +2591,11 @@
- 		_switches[OPTIONS_ARG] = 1;
- 		_string_args[OPTIONS_ARG] = (char *) "help";
- 		_switches[SORT_ARG] = 0;
--	
-+
-+		if (_report) {
-+			dm_report_free(_report);
-+			_report = NULL;
-+		}
- 		(void) _report_init(NULL);
- 	}
- 
+We need to re-queue blocked I/Os instead of finishing them by -EIO.
+I think that "--noflush" option is necessary for "dmsetup suspend."
+
+Thanks,
+Taka
 
 
