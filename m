@@ -1,47 +1,64 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 03 Dec 2009 12:15:54 -0500
-Subject: [PATCH] Print error if VG already exist.
-In-Reply-To: <1259850701-32101-1-git-send-email-mbroz@redhat.com>
-References: <1259850701-32101-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1259860554.2283.0.camel@f10-node1>
+Date: Thu, 03 Dec 2009 12:49:37 -0500
+Subject: [PATCH] Remove newly created log volume if initial deactivation fails.
+In-Reply-To: <1259847079-23268-1-git-send-email-mbroz@redhat.com>
+References: <1259847079-23268-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1259862577.2283.7.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, 2009-12-03 at 15:31 +0100, Milan Broz wrote:
-> This test have to be moved because of new vg read error handling.
+On Thu, 2009-12-03 at 14:31 +0100, Milan Broz wrote:
+> If there is problem deactivate LV and
+> _init_mirror_log is called with remove_on_failure = 1,
+> remove the newly created log LV from metadata.
+> 
+> (This can happen if there is active device with the same name
+> but different UUID.)
 > 
 > Signed-off-by: Milan Broz <mbroz@redhat.com>
 > ---
->  tools/vgcreate.c |    9 +++++++--
->  1 files changed, 7 insertions(+), 2 deletions(-)
+>  lib/metadata/mirror.c |    4 ++--
+>  1 files changed, 2 insertions(+), 2 deletions(-)
 > 
-> diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-> index b1b0c63..8aef7a2 100644
-> --- a/tools/vgcreate.c
-> +++ b/tools/vgcreate.c
-> @@ -55,8 +55,13 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+> diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+> index c331e0e..4c24058 100644
+> --- a/lib/metadata/mirror.c
+> +++ b/lib/metadata/mirror.c
+> @@ -256,7 +256,7 @@ static int _init_mirror_log(struct cmd_context *cmd,
+>  	/* If the LV is active, deactivate it first. */
+>  	if (lv_info(cmd, log_lv, &info, 0, 0) && info.exists) {
+>  		if (!deactivate_lv(cmd, log_lv))
+> -			return_0;
+> +			goto revert_new_lv;
+>  		was_active = 1;
+>  	}
 >  
->  	/* Create the new VG */
->  	vg = vg_create(cmd, vp_new.vg_name);
-> -	if (vg_read_error(vg))
-> -		goto_bad;
-> +	if (vg_read_error(vg)) {
-> +		if (vg_read_error(vg) == FAILED_EXIST)
-> +			log_error("A volume group called %s already exists.", vp_new.vg_name);
-> +		else
-> +			log_error("Can't get lock for %s", vp_new.vg_name);
-> +		goto bad;
-> +	}
+
+This doesn't look right based on my read of the function.
+First, if we goto revert_new_lv, we do all this recovery which is based
+on things that have not happened.  Also, later in the function we have
+this:
+	if (!deactivate_lv(cmd, log_lv)) {
+		log_error("Aborting. Failed to deactivate mirror log. "
+			  "Manual intervention required.");
+		return 0;
+	}
+
+Do we just need a log_error() in your place above or is the recovery wrong later?
+
+
+> @@ -1354,7 +1354,7 @@ static struct logical_volume *_set_up_mirror_log(struct cmd_context *cmd,
+>  	}
 >  
->  	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
->  	    !vg_set_max_lv(vg, vp_new.max_lv) ||
+>  	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
+> -		log_error("Failed to create mirror log.");
+> +		log_error("Failed to initialise mirror log.");
+>  		return NULL;
+>  	}
+>  
 
-Ack.
-
-Some more cleanup probably warranted but another time and there are
-already FIXMEs in the code.
 
 
