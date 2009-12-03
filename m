@@ -1,68 +1,56 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 01 Dec 2009 15:23:00 +0100
-Subject: [PATCH] Give better message for pvmove when all data is skipped
-Message-ID: <4B1526C4.2010900@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 3 Dec 2009 19:20:49 -0000
+Subject: LVM2 ./WHATS_NEW tools/vgcreate.c
+Message-ID: <20091203192049.26423.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Just a little thing - better message in pvmove, maybe :) 
-BZ #500898/#500899
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-12-03 19:20:49
 
-Peter
+Modified files:
+	.              : WHATS_NEW 
+	tools          : vgcreate.c 
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index ac09d6a..cc20320 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -180,6 +180,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 	struct lv_list *lvl;
- 	uint32_t log_count = 0;
- 	int lv_found = 0;
-+	int lv_skipped = 0;
+Log message:
+	Print error if VG already exist.
+	
+	This test have to be moved because of new vg read error handling.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1338&r2=1.1339
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+
+--- LVM2/WHATS_NEW	2009/12/03 19:18:33	1.1338
++++ LVM2/WHATS_NEW	2009/12/03 19:20:48	1.1339
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Fix error message if VG already exist in vgcreate.
+   Fix tools to use log_error when stopped by user.
+   Fix lvcreate --readahead.
+   Fix clvmd memory leak in lv_info_by_lvid.
+--- LVM2/tools/vgcreate.c	2009/11/01 20:05:17	1.75
++++ LVM2/tools/vgcreate.c	2009/12/03 19:20:49	1.76
+@@ -55,8 +55,13 @@
  
- 	/* FIXME Cope with non-contiguous => splitting existing segments */
- 	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
-@@ -209,22 +210,27 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			lv_found = 1;
- 		}
- 		if (lv_is_origin(lv) || lv_is_cow(lv)) {
-+			lv_skipped = 1;
- 			log_print("Skipping snapshot-related LV %s", lv->name);
- 			continue;
- 		}
- 		if (lv->status & MIRRORED) {
-+			lv_skipped = 1;
- 			log_print("Skipping mirror LV %s", lv->name);
- 			continue;
- 		}
- 		if (lv->status & MIRROR_LOG) {
-+			lv_skipped = 1;
- 			log_print("Skipping mirror log LV %s", lv->name);
- 			continue;
- 		}
- 		if (lv->status & MIRROR_IMAGE) {
-+			lv_skipped = 1;
- 			log_print("Skipping mirror image LV %s", lv->name);
- 			continue;
- 		}
- 		if (lv->status & LOCKED) {
-+			lv_skipped = 1;
- 			log_print("Skipping locked LV %s", lv->name);
- 			continue;
- 		}
-@@ -240,6 +246,10 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 	/* Create the new VG */
+ 	vg = vg_create(cmd, vp_new.vg_name);
+-	if (vg_read_error(vg))
+-		goto_bad;
++	if (vg_read_error(vg)) {
++		if (vg_read_error(vg) == FAILED_EXIST)
++			log_error("A volume group called %s already exists.", vp_new.vg_name);
++		else
++			log_error("Can't get lock for %s.", vp_new.vg_name);
++		goto bad;
++	}
  
- 	/* Is temporary mirror empty? */
- 	if (!lv_mirr->le_count) {
-+		if (lv_skipped)
-+			log_error("All data on source PV skipped. "
-+				  "It contains locked, hidden or "
-+				  "non-top level LVs only.");
- 		log_error("No data to move for %s", vg->name);
- 		return NULL;
- 	}
+ 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
+ 	    !vg_set_max_lv(vg, vp_new.max_lv) ||
 
 
