@@ -1,35 +1,28 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 16 Dec 2009 19:26:21 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20091216192621.24022.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 3 Dec 2009 01:14:38 +0000
+Subject: [PATCH] #define and use INTERNAL_ERROR
+In-Reply-To: <87eine4w1y.fsf@twilight.int.mornfall.net.>
+References: <87eine4w1y.fsf@twilight.int.mornfall.net.>
+Message-ID: <20091203011438.GQ22702@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2009-12-16 19:26:21
-
-Modified files:
-	lib/metadata   : metadata.c 
-
-Log message:
-	Revert unintended change that slipped in with last checkin.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.303&r2=1.304
-
---- LVM2/lib/metadata/metadata.c	2009/12/16 19:22:12	1.303
-+++ LVM2/lib/metadata/metadata.c	2009/12/16 19:26:20	1.304
-@@ -3520,7 +3520,6 @@
+On Tue, Dec 01, 2009 at 03:18:33PM +0100, Peter Rockai wrote:
+> patch attached to #define an INTERNAL_ERROR macro and use it throughout
+> LVM. There's a couple of internal errors in libdm as well, and it seems
+> that the log_error used by libdm actually comes from lib/ (i.e. LVM) so
+> it may make sense to convert those as well.
  
- 	/* Found vgname so cannot reserve. */
- 	unlock_vg(cmd, vgname);
--	log_error("A volume group called '%s' already exists.", vg_name);
- 	return FAILED_EXIST;
- }
- 
+Ack.
+
+Each source file includes (normally via another header) either
+dm-logging.h or lvm-logging.h which deals with routing the messages to
+the right logging function and with the right set of parameters.  log.h
+contains the part they have in common.
+
+Alasdair
 
 
