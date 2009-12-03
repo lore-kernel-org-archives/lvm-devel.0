@@ -1,64 +1,150 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 03 Dec 2009 12:49:37 -0500
-Subject: [PATCH] Remove newly created log volume if initial deactivation fails.
-In-Reply-To: <1259847079-23268-1-git-send-email-mbroz@redhat.com>
-References: <1259847079-23268-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1259862577.2283.7.camel@f10-node1>
+Date: Thu, 03 Dec 2009 12:56:46 -0500
+Subject: [PATCH] Fix tools to report error when stopped by user.
+In-Reply-To: <1259849609-26973-1-git-send-email-mbroz@redhat.com>
+References: <1259849609-26973-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1259863006.2283.9.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, 2009-12-03 at 14:31 +0100, Milan Broz wrote:
-> If there is problem deactivate LV and
-> _init_mirror_log is called with remove_on_failure = 1,
-> remove the newly created log LV from metadata.
-> 
-> (This can happen if there is active device with the same name
-> but different UUID.)
+On Thu, 2009-12-03 at 15:13 +0100, Milan Broz wrote:
+> (And do not produce internal error message.)
 > 
 > Signed-off-by: Milan Broz <mbroz@redhat.com>
 > ---
->  lib/metadata/mirror.c |    4 ++--
->  1 files changed, 2 insertions(+), 2 deletions(-)
+>  lib/format_text/archive.c |    2 +-
+>  lib/metadata/lv_manip.c   |    2 +-
+>  lib/metadata/metadata.c   |    2 +-
+>  tools/lvchange.c          |    4 ++--
+>  tools/lvmchange.c         |    2 +-
+>  tools/lvresize.c          |    2 +-
+>  tools/pvremove.c          |    2 +-
+>  tools/vgremove.c          |    2 +-
+>  8 files changed, 9 insertions(+), 9 deletions(-)
 > 
-> diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-> index c331e0e..4c24058 100644
-> --- a/lib/metadata/mirror.c
-> +++ b/lib/metadata/mirror.c
-> @@ -256,7 +256,7 @@ static int _init_mirror_log(struct cmd_context *cmd,
->  	/* If the LV is active, deactivate it first. */
->  	if (lv_info(cmd, log_lv, &info, 0, 0) && info.exists) {
->  		if (!deactivate_lv(cmd, log_lv))
-> -			return_0;
-> +			goto revert_new_lv;
->  		was_active = 1;
+> diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
+> index 7fb2a48..3bc14bf 100644
+> --- a/lib/format_text/archive.c
+> +++ b/lib/format_text/archive.c
+> @@ -317,7 +317,7 @@ static void _display_archive(struct cmd_context *cmd, struct archive_file *af)
+>  	 */
+>  	/* FIXME Use variation on _vg_read */
+>  	if (!(vg = text_vg_import_file(tf, af->path, &when, &desc))) {
+> -		log_print("Unable to read archive file.");
+> +		log_error("Unable to read archive file.");
+>  		tf->fmt->ops->destroy_instance(tf);
+>  		return;
+>  	}
+> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+> index c440278..b020cf5 100644
+> --- a/lib/metadata/lv_manip.c
+> +++ b/lib/metadata/lv_manip.c
+> @@ -2103,7 +2103,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+>  				  "%slogical volume %s? [y/n]: ",
+>  				  vg_is_clustered(vg) ? "clustered " : "",
+>  				  lv->name) == 'n') {
+> -			log_print("Logical volume %s not removed", lv->name);
+> +			log_error("Logical volume %s not removed", lv->name);
+>  			return 0;
+>  		}
+>  	}
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index d38f9ac..9d5b1ae 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
+> @@ -1223,7 +1223,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+>  	/* prompt */
+>  	if (pv && !is_orphan(pv) && !pp->yes &&
+>  	    yes_no_prompt(_really_init, name, pv_vg_name(pv)) == 'n') {
+> -		log_print("%s: physical volume not initialized", name);
+> +		log_error("%s: physical volume not initialized", name);
+>  		return 0;
 >  	}
 >  
-
-This doesn't look right based on my read of the function.
-First, if we goto revert_new_lv, we do all this recovery which is based
-on things that have not happened.  Also, later in the function we have
-this:
-	if (!deactivate_lv(cmd, log_lv)) {
-		log_error("Aborting. Failed to deactivate mirror log. "
-			  "Manual intervention required.");
-		return 0;
-	}
-
-Do we just need a log_error() in your place above or is the recovery wrong later?
-
-
-> @@ -1354,7 +1354,7 @@ static struct logical_volume *_set_up_mirror_log(struct cmd_context *cmd,
+> diff --git a/tools/lvchange.c b/tools/lvchange.c
+> index ab4dc33..f43b07a 100644
+> --- a/tools/lvchange.c
+> +++ b/tools/lvchange.c
+> @@ -183,7 +183,7 @@ static int lvchange_resync(struct cmd_context *cmd,
+>  			    yes_no_prompt("Do you really want to deactivate "
+>  					  "logical volume %s to resync it? [y/n]: ",
+>  					  lv->name) == 'n') {
+> -				log_print("Logical volume \"%s\" not resynced",
+> +				log_error("Logical volume \"%s\" not resynced",
+>  					  lv->name);
+>  				return 0;
+>  			}
+> @@ -433,7 +433,7 @@ static int lvchange_persistent(struct cmd_context *cmd,
+>  		    yes_no_prompt("Logical volume %s will be "
+>  				  "deactivated temporarily. "
+>  				  "Continue? [y/n]: ", lv->name) == 'n') {
+> -			log_print("%s device number not changed.",
+> +			log_error("%s device number not changed.",
+>  				  lv->name);
+>  			return 0;
+>  		}
+> diff --git a/tools/lvmchange.c b/tools/lvmchange.c
+> index 8997d89..c4417c3 100644
+> --- a/tools/lvmchange.c
+> +++ b/tools/lvmchange.c
+> @@ -18,6 +18,6 @@
+>  int lvmchange(struct cmd_context *cmd __attribute((unused)),
+>  	      int argc __attribute((unused)), char **argv __attribute((unused)))
+>  {
+> -	log_print("With LVM2 and the device mapper, this program is obsolete.");
+> +	log_error("With LVM2 and the device mapper, this program is obsolete.");
+>  	return ECMD_FAILED;
+>  }
+> diff --git a/tools/lvresize.c b/tools/lvresize.c
+> index 3b3a2eb..5adaf3c 100644
+> --- a/tools/lvresize.c
+> +++ b/tools/lvresize.c
+> @@ -120,7 +120,7 @@ static int _request_confirmation(struct cmd_context *cmd,
+>  	if (!arg_count(cmd, force_ARG)) {
+>  		if (yes_no_prompt("Do you really want to reduce %s? [y/n]: ",
+>  				  lp->lv_name) == 'n') {
+> -			log_print("Logical volume %s NOT reduced", lp->lv_name);
+> +			log_error("Logical volume %s NOT reduced", lp->lv_name);
+>  			return 0;
+>  		}
+>  		if (sigint_caught())
+> diff --git a/tools/pvremove.c b/tools/pvremove.c
+> index 3d75480..34b7214 100644
+> --- a/tools/pvremove.c
+> +++ b/tools/pvremove.c
+> @@ -74,7 +74,7 @@ static int pvremove_check(struct cmd_context *cmd, const char *name)
+>  	/* prompt */
+>  	if (!arg_count(cmd, yes_ARG) &&
+>  	    yes_no_prompt(_really_wipe, name, pv_vg_name(pv)) == 'n') {
+> -		log_print("%s: physical volume label not removed", name);
+> +		log_error("%s: physical volume label not removed", name);
+>  		return 0;
 >  	}
 >  
->  	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
-> -		log_error("Failed to create mirror log.");
-> +		log_error("Failed to initialise mirror log.");
->  		return NULL;
->  	}
->  
+> diff --git a/tools/vgremove.c b/tools/vgremove.c
+> index bc29d99..ecb130d 100644
+> --- a/tools/vgremove.c
+> +++ b/tools/vgremove.c
+> @@ -36,7 +36,7 @@ static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
+>  				   "group \"%s\" containing %u "
+>  				   "logical volumes? [y/n]: ",
+>  				   vg_name, lv_count) == 'n')) {
+> -			log_print("Volume group \"%s\" not removed", vg_name);
+> +			log_error("Volume group \"%s\" not removed", vg_name);
+>  			return ECMD_FAILED;
+>  		}
+>  		if (!remove_lvs_in_vg(cmd, vg, force)) {
+
+Ack.
+
+Not sure why there was a discrepancy between the failure return code and
+log_print/log_error of the yes_no_prompt() entries, but clearly the
+safest thing to do is leave the return codes as they are (failure even
+if you confirm you don't want to remove, etc), and just fix the
+log_print as you've done.
 
 
 
