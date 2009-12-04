@@ -1,139 +1,36 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  4 Dec 2009 15:04:53 +0100
-Subject: [PATCH 12/22] Replicator: update _create_partial_dtree()
+Date: Fri,  4 Dec 2009 15:04:55 +0100
+Subject: [PATCH 13/22] Replicator: using vgs_missed for error count
 In-Reply-To: <cover.1259934415.git.zkabelac@redhat.com>
 References: <cover.1259934415.git.zkabelac@redhat.com>
-Message-ID: <8b3cddad95c881f4ade6613c05e91e51817bd51c.1259934415.git.zkabelac@redhat.com>
+Message-ID: <7b59ffbdf49355d59c4cc9b77b9a7d8f8819638f.1259934415.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Creating partial tree for Replicator target.
-Using dm_tree_set_priority() to set higher priority for Replicator.
+Lower expected_count for the case of missed VGs so no error is printed
+in case the remote VGs are not opened. Currently it's needed only for
+Replicator target.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   98 ++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 98 insertions(+), 0 deletions(-)
+ tools/vgchange.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 3071772..7363e46 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -725,6 +725,98 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree, struc
- 	return 1;
- }
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index f791e53..9da877e 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -102,6 +102,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		count++;
+ 	}
  
-+/*
-+ * Add devices from replicator
-+ * use _add_dev_to_dtree() directly instead of _add_lv_to_dtree()
-+ * no need to extend its check with  _slog, _rlog, _rimage
-+ */
-+static int _create_partial_replicator(struct dev_manager *dm,
-+				      struct dm_tree *dtree,
-+				      struct lv_segment *seg)
-+{
-+	struct replicator_device *rdev;
-+	struct replicator_site *rsite;
-+	struct vg_name_list *vnl;
-+	const char *replicator_dlid;
-+	int vg_missing = 0;
-+
-+	if (!lv_is_active_replicator_dev(seg->lv)) {
-+		if (!_add_dev_to_dtree(dm, dtree, seg->lv->rdevice->lv,
-+				       NULL))
-+			return_0;
-+		return 1;
-+	}
-+
-+	/* Check and fill needed VGs */
-+	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+		if (!rsite->vg_name)
-+			continue;
-+
-+		if (!(vnl = vg_name_list_add(dm->cmd->mem, &dm->cmd->vgs_list,
-+					     rsite->vg_name)))
-+			return_0;
-+
-+		if ((rsite->vg = vnl->vg))
-+			continue;
-+
-+		vg_missing++;
-+		log_verbose("VG %s added as missing.", rsite->vg_name);
-+	}
-+
-+	if (vg_missing) {
-+		dm->cmd->vgs_missed++;
-+		log_very_verbose("Some VGs are missing, retry with them.");
-+		return 0;
-+	}
-+
-+	/* Add all related devs for replicator */
-+	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+		dm_list_iterate_items(rdev, &rsite->rdevices) {
-+			if (rsite->state == REPLICATOR_STATE_ACTIVE) {
-+				/* Add _rimage LV */
-+				if (rdev->lv &&
-+				    !_add_dev_to_dtree(dm, dtree,
-+						       rdev->lv, NULL))
-+					return_0;
-+
-+				/* Add replicator-dev LV */
-+				if (seg->lv != rdev->replicator_dev->lv &&
-+				    !_add_dev_to_dtree(dm, dtree,
-+						       rdev->replicator_dev->lv,
-+						       NULL))
-+					return_0;
-+			}
-+
-+			/* Add _slog LV */
-+			if (rdev->slog &&
-+			    !_add_dev_to_dtree(dm, dtree, rdev->slog, NULL))
-+				return_0;
-+
-+			/* Resolve and add remote LV  */
-+			if (rdev->rsite->vg && rdev->name &&
-+			    (!(rdev->lv = find_lv(rdev->rsite->vg, rdev->name)) ||
-+			     !_add_dev_to_dtree(dm, dtree, rdev->lv, NULL)))
-+				return_0;
-+		}
-+	}
-+
-+	/* Add rlog and replicator devices */
-+	if (first_seg(seg->replicator)->rlog_lv &&
-+	    !_add_dev_to_dtree(dm, dtree, first_seg(seg->replicator)->rlog_lv,
-+			       NULL))
-+		return_0;
-+	if (!_add_dev_to_dtree(dm, dtree, seg->replicator, NULL))
-+		return_0;
-+
-+	/* Set suspend priority for replicator device */
-+	if (!(replicator_dlid = build_dlid(dm, seg->replicator->lvid.s, NULL)))
-+		return_0;
-+	if (!dm_tree_set_replicator_suspend(dtree, replicator_dlid))
-+		return_0;
-+
-+	return 1;
-+}
-+
- static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logical_volume *lv)
- {
- 	struct dm_tree *dtree;
-@@ -745,6 +837,12 @@ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logi
- 		if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow))
- 			goto_bad;
- 
-+	/* Add any replicator-dev LVs of this LV */
-+	dm_list_iterate_items(seg, &lv->segments)
-+		if (seg_is_replicator_dev(seg) &&
-+		    !_create_partial_replicator(dm, dtree, seg))
-+			goto_bad;
-+
- 	/* Add any LVs used by segments in this LV */
- 	dm_list_iterate_items(seg, &lv->segments)
- 		for (s = 0; s < seg->area_count; s++)
++	expected_count -= cmd->vgs_missed;
+ 	if (expected_count)
+ 		log_verbose("%s %d logical volumes in volume group %s",
+ 			    activate ? "Activated" : "Deactivated",
 -- 
 1.6.5.3
 
