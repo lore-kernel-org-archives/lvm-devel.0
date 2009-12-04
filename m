@@ -1,167 +1,139 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  4 Dec 2009 15:04:51 +0100
-Subject: [PATCH 11/22] Replicator: use str_list for process_each_lv_in_vg
+Date: Fri,  4 Dec 2009 15:04:53 +0100
+Subject: [PATCH 12/22] Replicator: update _create_partial_dtree()
 In-Reply-To: <cover.1259934415.git.zkabelac@redhat.com>
 References: <cover.1259934415.git.zkabelac@redhat.com>
-Message-ID: <86490327c39d08d5f7e1588a398bba01f08e99c8.1259934415.git.zkabelac@redhat.com>
+Message-ID: <8b3cddad95c881f4ade6613c05e91e51817bd51c.1259934415.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As for _process_one_vg() we need similar retry loop for
-process_each_lv_in_vg(). This patch tries to collect missed LVs and
-then reopens collected VGs and process only selected LVs again.
-
-Patch does not add any extra repeated invocations if there is no missed VG
-during LV processing.
-
-cmd_context is extended to avoid API change with vgs_lvs_retry list.
+Creating partial tree for Replicator target.
+Using dm_tree_set_priority() to set higher priority for Replicator.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/commands/toolcontext.c |    1 +
- lib/commands/toolcontext.h |    1 +
- tools/toollib.c            |   74 ++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 74 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c |   98 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 98 insertions(+), 0 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 55cc46e..aa16fb0 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1099,6 +1099,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	dm_list_init(&cmd->tags);
- 	dm_list_init(&cmd->config_files);
- 	dm_list_init(&cmd->vgs_list);
-+	dm_list_init(&cmd->vgs_lvs_retry);
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 3071772..7363e46 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -725,6 +725,98 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree, struc
+ 	return 1;
+ }
  
- 	/* FIXME Make this configurable? */
- 	reset_lvm_errno(1);
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index d01c4f7..c48276c 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -61,6 +61,7 @@ struct cmd_context {
- 	struct dm_list formats;	/* Available formats */
- 	struct dm_list segtypes;	/* Available segment types */
- 	struct dm_list vgs_list;	/* Required read-only VGs */
-+	struct dm_list vgs_lvs_retry;	/* Retry LVs with more VGs */
- 	int vgs_missed;			/* Missed VGs */
- 	const char *hostname;
- 	const char *kernel_vsn;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index bea7a98..f76879f 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -118,6 +118,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		process_all = 1;
- 	}
- 
-+	dm_list_init(&cmd->vgs_lvs_retry);
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (lvl->lv->status & SNAPSHOT)
- 			continue;
-@@ -147,7 +148,17 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (!process_lv)
- 			continue;
- 
-+		cmd->vgs_missed = 0;
- 		ret = process_single(cmd, lvl->lv, handle);
-+		if (cmd->vgs_missed) {
-+			if (!str_list_add(cmd->mem, &cmd->vgs_lvs_retry,
-+					  dm_pool_strdup(cmd->mem,
-+							 lvl->lv->name))) {
-+				log_error("Allocation failed for str_list .");
-+				return ECMD_FAILED;
-+			}
-+			ret = 0;
-+		}
- 		if (ret > ret_max)
- 			ret_max = ret;
- 		if (sigint_caught())
-@@ -175,8 +186,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 
- 	struct dm_list *tags_arg;
- 	struct dm_list *vgnames;	/* VGs to process */
--	struct str_list *sll, *strl;
--	struct volume_group *vg;
-+	struct str_list *sll, *strl, *sllt;
-+	struct volume_group *vg, *rvg;
++/*
++ * Add devices from replicator
++ * use _add_dev_to_dtree() directly instead of _add_lv_to_dtree()
++ * no need to extend its check with  _slog, _rlog, _rimage
++ */
++static int _create_partial_replicator(struct dev_manager *dm,
++				      struct dm_tree *dtree,
++				      struct lv_segment *seg)
++{
++	struct replicator_device *rdev;
++	struct replicator_site *rsite;
 +	struct vg_name_list *vnl;
- 	struct dm_list tags, lvnames;
- 	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
- 	char *vglv;
-@@ -321,11 +333,69 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 			}
- 		}
- 
-+		dm_list_init(&cmd->vgs_list);
- 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
- 					    handle, process_single);
- 		unlock_and_release_vg(cmd, vg, vgname);
- 		if (ret > ret_max)
- 			ret_max = ret;
++	const char *replicator_dlid;
++	int vg_missing = 0;
 +
-+		while (!sigint_caught() &&
-+		       !dm_list_empty(&cmd->vgs_lvs_retry)) {
-+			/*
-+			 * Try again with missed LVs in this VG
-+			 * Use retry list as list of LVs to be processed
-+			 * CHECKME: maybe add support dm_list_splice()
-+			 */
-+			dm_list_init(&lvnames);
-+			dm_list_iterate_items_safe(sll, sllt,
-+						   &cmd->vgs_lvs_retry)
-+				dm_list_move(&lvnames, &sll->list);
++	if (!lv_is_active_replicator_dev(seg->lv)) {
++		if (!_add_dev_to_dtree(dm, dtree, seg->lv->rdevice->lv,
++				       NULL))
++			return_0;
++		return 1;
++	}
 +
-+			if (!vg_name_list_add(cmd->mem, &cmd->vgs_list,
-+					      vgname)) {
-+				stack;
-+				return ECMD_FAILED;
++	/* Check and fill needed VGs */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		if (!rsite->vg_name)
++			continue;
++
++		if (!(vnl = vg_name_list_add(dm->cmd->mem, &dm->cmd->vgs_list,
++					     rsite->vg_name)))
++			return_0;
++
++		if ((rsite->vg = vnl->vg))
++			continue;
++
++		vg_missing++;
++		log_verbose("VG %s added as missing.", rsite->vg_name);
++	}
++
++	if (vg_missing) {
++		dm->cmd->vgs_missed++;
++		log_very_verbose("Some VGs are missing, retry with them.");
++		return 0;
++	}
++
++	/* Add all related devs for replicator */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rsite->state == REPLICATOR_STATE_ACTIVE) {
++				/* Add _rimage LV */
++				if (rdev->lv &&
++				    !_add_dev_to_dtree(dm, dtree,
++						       rdev->lv, NULL))
++					return_0;
++
++				/* Add replicator-dev LV */
++				if (seg->lv != rdev->replicator_dev->lv &&
++				    !_add_dev_to_dtree(dm, dtree,
++						       rdev->replicator_dev->lv,
++						       NULL))
++					return_0;
 +			}
 +
-+			vg = NULL;
-+			dm_list_iterate_items(vnl, &cmd->vgs_list) {
-+				if (!vg && strcmp(vnl->name, vgname) == 0)
-+					rvg = vg = vg_read(cmd, vgname,
-+							   NULL, flags);
-+				else
-+					/*
-+					 * CHECKME: Use different flags
-+					 *          for remote vg ??
-+					 */
-+					rvg = vg_read(cmd, vnl->name,
-+						      NULL, flags);
++			/* Add _slog LV */
++			if (rdev->slog &&
++			    !_add_dev_to_dtree(dm, dtree, rdev->slog, NULL))
++				return_0;
 +
-+				if (vg_read_error(rvg)) {
-+					vg_release(rvg);
-+					log_error("Skipping volume group %s.",
-+						  vnl->name);
-+					vg = NULL;
-+					break;
-+				}
-+				vnl->vg = rvg; /* Only correctly opened */
-+			}
-+
-+			ret = (!vg) ? ECMD_FAILED :
-+				process_each_lv_in_vg(cmd, vg, &lvnames,
-+						      tags_arg, handle,
-+						      process_single);
-+
-+			dm_list_iterate_back_items(vnl, &cmd->vgs_list)
-+				if (vnl->vg) {
-+					unlock_and_release_vg(cmd, vnl->vg,
-+							      vnl->name);
-+					vnl->vg = NULL;
-+				}
-+			if (ret > ret_max)
-+				ret_max = ret;
++			/* Resolve and add remote LV  */
++			if (rdev->rsite->vg && rdev->name &&
++			    (!(rdev->lv = find_lv(rdev->rsite->vg, rdev->name)) ||
++			     !_add_dev_to_dtree(dm, dtree, rdev->lv, NULL)))
++				return_0;
 +		}
++	}
 +
- 		if (sigint_caught())
- 			break;
- 	}
++	/* Add rlog and replicator devices */
++	if (first_seg(seg->replicator)->rlog_lv &&
++	    !_add_dev_to_dtree(dm, dtree, first_seg(seg->replicator)->rlog_lv,
++			       NULL))
++		return_0;
++	if (!_add_dev_to_dtree(dm, dtree, seg->replicator, NULL))
++		return_0;
++
++	/* Set suspend priority for replicator device */
++	if (!(replicator_dlid = build_dlid(dm, seg->replicator->lvid.s, NULL)))
++		return_0;
++	if (!dm_tree_set_replicator_suspend(dtree, replicator_dlid))
++		return_0;
++
++	return 1;
++}
++
+ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logical_volume *lv)
+ {
+ 	struct dm_tree *dtree;
+@@ -745,6 +837,12 @@ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logi
+ 		if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow))
+ 			goto_bad;
+ 
++	/* Add any replicator-dev LVs of this LV */
++	dm_list_iterate_items(seg, &lv->segments)
++		if (seg_is_replicator_dev(seg) &&
++		    !_create_partial_replicator(dm, dtree, seg))
++			goto_bad;
++
+ 	/* Add any LVs used by segments in this LV */
+ 	dm_list_iterate_items(seg, &lv->segments)
+ 		for (s = 0; s < seg->area_count; s++)
 -- 
 1.6.5.3
 
