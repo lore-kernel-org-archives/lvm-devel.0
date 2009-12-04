@@ -1,102 +1,40 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  4 Dec 2009 15:04:58 +0100
-Subject: [PATCH 15/22] Replicator: add replicator to dtree
+Date: Fri,  4 Dec 2009 15:05:55 +0100
+Subject: [PATCH 16/22] Replicator: do not remove of replicators' LVs
 In-Reply-To: <cover.1259934415.git.zkabelac@redhat.com>
 References: <cover.1259934415.git.zkabelac@redhat.com>
-Message-ID: <fdc9d9200a744325e075dcfd9f82fda06c1020ef.1259934415.git.zkabelac@redhat.com>
+Message-ID: <8e5be3f2e16443b97669edac3f9fac96e7d40ff7.1259934415.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding all replicator related LVs to dtree.
-Start of one replicator_dev initiate start of all other related.
-
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   60 +++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 59 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 7363e46..9fb8b2e 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1024,6 +1024,58 @@ static int _add_target_to_dtree(struct dev_manager *dm,
- static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 				  struct logical_volume *lv, const char *layer);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 1a2404c..99aa8f9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2084,6 +2084,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
-+/* Add all replicators' LVs from active segment */
-+static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
-+					       struct dm_tree *dtree,
-+					       struct lv_segment *seg)
-+{
-+	const struct replicator_device *rdev;
-+	struct replicator_site *rsite;
-+
-+	/* Only active replicator */
-+	if (!lv_is_active_replicator_dev(seg->lv)) {
-+		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv->rdevice->lv, NULL))
-+			return_0;
-+		return 1;
++	if (lv_is_replicator_dev(lv) ||
++	    lv_is_rimage(lv) ||
++	    lv_is_rlog(lv) ||
++	    lv_is_slog(lv)) {
++		log_error("Can't remove logical volume %s used by a "
++			  "replicator.", lv->name);
++		return 0;
 +	}
 +
-+	/* Activation of one replicator node activate all other nodes */
-+	if (!seg->replicator ||
-+	    !_add_new_lv_to_dtree(dm, dtree, seg->replicator, NULL))
-+		return_0;
-+
-+	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+		dm_list_iterate_items(rdev, &rsite->rdevices) {
-+			if (!rdev->lv || /* Resolved in _partial */
-+			    !_add_new_lv_to_dtree(dm, dtree,
-+						  rdev->lv, NULL))
-+				return_0;
-+
-+			if (rdev->slog &&
-+			    !_add_new_lv_to_dtree(dm, dtree,
-+						  rdev->slog, NULL))
-+				return_0;
-+		}
-+	}
-+	/* Add remaining replicator-dev nodes in the second loop
-+	 * to avoid multiple retries for inserting all elements */
-+	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+		if (rsite->state != REPLICATOR_STATE_ACTIVE)
-+			continue;
-+		dm_list_iterate_items(rdev, &rsite->rdevices) {
-+			if (rdev->replicator_dev->lv == seg->lv)
-+				continue;
-+			if (!rdev->replicator_dev->lv ||
-+			    !_add_new_lv_to_dtree(dm, dtree,
-+						  rdev->replicator_dev->lv,
-+						  NULL))
-+				return_0;
-+		}
-+	}
-+
-+	return 1;
-+}
-+
- static int _add_segment_to_dtree(struct dev_manager *dm,
- 				   struct dm_tree *dtree,
- 				   struct dm_tree_node *dnode,
-@@ -1054,8 +1106,14 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
- 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, NULL))
- 		return_0;
- 
-+	if (seg_is_replicator_dev(seg)) {
-+		if (!_add_replicator_dev_target_to_dtree(dm, dtree, seg))
-+			return_0;
-+	} else if (seg_is_replicator(seg) && seg->rlog_lv) {
-+		if (!_add_new_lv_to_dtree(dm, dtree, seg->rlog_lv, NULL))
-+			return_0;
- 	/* If this is a snapshot origin, add real LV */
--	if (lv_is_origin(seg->lv) && !layer) {
-+	} else if (lv_is_origin(seg->lv) && !layer) {
- 		if (vg_is_clustered(seg->lv->vg)) {
- 			log_error("Clustered snapshots are not yet supported");
- 			return 0;
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
+ 		return 0;
 -- 
 1.6.5.3
 
