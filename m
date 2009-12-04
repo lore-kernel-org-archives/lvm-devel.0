@@ -1,61 +1,109 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 1 Dec 2009 19:10:24 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
-Message-ID: <20091201191024.9255.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri,  4 Dec 2009 15:04:43 +0100
+Subject: [PATCH 07/22] Replicator: validation of replicator segments
+In-Reply-To: <cover.1259934415.git.zkabelac@redhat.com>
+References: <cover.1259934415.git.zkabelac@redhat.com>
+Message-ID: <6140108197e882ff39ce2e71649b51e04657dd27.1259934415.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-12-01 19:10:23
+Validate segments with Replicator content
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/metadata/metadata.c |   68 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 68 insertions(+), 0 deletions(-)
 
-Log message:
-	Fix memory leak in lv_info_by_lvid
-	
-	The lv_from_lvid calls internally vg_read(),
-	we must release vg structure afterwards.
-	
-	Code is called only from clvmd.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1335&r2=1.1336
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.158&r2=1.159
-
---- LVM2/WHATS_NEW	2009/11/27 14:35:38	1.1335
-+++ LVM2/WHATS_NEW	2009/12/01 19:10:23	1.1336
-@@ -1,5 +1,6 @@
- Version 2.02.57 -
- ====================================
-+  Fix clvmd memory leak in lv_info_by_lvid.
-   Do not allow creating mirrors of more than 8 images.
-   Use locking_type 3 (compiled in cluster locking) in lvmconf.
-   Remove duplicate dm_list macros and functions.
---- LVM2/lib/activate/activate.c	2009/10/30 13:07:49	1.158
-+++ LVM2/lib/activate/activate.c	2009/12/01 19:10:23	1.159
-@@ -486,12 +486,16 @@
- int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
- 		    struct lvinfo *info, int with_open_count, int with_read_ahead)
- {
-+	int r;
- 	struct logical_volume *lv;
- 
- 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
- 		return 0;
- 
--	return _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
-+	r = _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
-+	vg_release(lv->vg);
-+
-+	return r;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 8feb6fc..5b46c25 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2088,6 +2088,71 @@ void lv_calculate_readahead(const struct logical_volume *lv, uint32_t *read_ahea
+ 	}
  }
  
- /*
++/*
++ * Check for duplicate
++ *  site name
++ *  site index
++ *  device name
++ *  device index
++ */
++static int _replicator_validate(const struct logical_volume *lv)
++{
++	const struct replicator_site *rsite, *rsiteb;
++	const struct replicator_device *rdev, *rdevb;
++	int r = 1;
++
++	dm_list_iterate_items(rsite, &lv->rsites) {
++		dm_list_iterate_items(rsiteb, &lv->rsites) {
++			if (rsite == rsiteb)
++				break;
++			if (strcasecmp(rsite->name, rsiteb->name) == 0) {
++				log_error("Internal error: Duplicate site name"
++					  " %s detected for replicator %s.",
++					  rsite->name, lv->name);
++				r = 0;
++			}
++			if (rsite->site_index == rsiteb->site_index) {
++				log_error("Internal error: Duplicate site index"
++					  " %d detected for replicator %s/%s.",
++					  rsite->site_index, lv->name,
++					  rsite->name);
++				r = 0;
++			}
++		}
++
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			dm_list_iterate_items(rdevb, &rsite->rdevices) {
++				if (rdev == rdevb)
++					break;
++				if (rdev->slog && (rdev->slog == rdevb->slog)) {
++					log_error("Internal error: Duplicate "
++						  "sync log %s detected for "
++						  "replicator %s.",
++						  rdev->slog->name, lv->name);
++					r = 0;
++				}
++				if (strcasecmp(rdev->name, rdevb->name) == 0) {
++					log_error("Internal error: Duplicate "
++						  "device name %s detected "
++						  "for replicator %s.",
++						  rdev->name, lv->name);
++					r = 0;
++				}
++				if (rdev->device_index == rdevb->device_index) {
++					log_error("Internal error: Duplicate "
++						  "device index %" PRId64
++						  " detected for replicator "
++						  "%s/%s.", rdev->device_index,
++						  lv->name, rsite->name);
++					r = 0;
++				}
++			}
++		}
++	}
++
++	return r;
++}
++
+ int vg_validate(struct volume_group *vg)
+ {
+ 	struct pv_list *pvl, *pvl2;
+@@ -2188,6 +2253,9 @@ int vg_validate(struct volume_group *vg)
+ 				r = 0;
+ 			}
+ 		}
++
++		if (lv_is_replicator(lvl->lv) && !_replicator_validate(lvl->lv))
++			r = 0;
+ 	}
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+-- 
+1.6.5.3
 
 
