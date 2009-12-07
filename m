@@ -1,64 +1,40 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 7 Dec 2009 12:03:47 -0000
-Subject: LVM2 ./WHATS_NEW_DM udev/10-dm.rules.in
-Message-ID: <20091207120347.20090.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 07 Dec 2009 13:24:08 +0100
+Subject: [PATCH] Disable udev rules on change event with DISK_RO=1
+In-Reply-To: <4B152425.4090506@redhat.com>
+References: <4B152425.4090506@redhat.com>
+Message-ID: <4B1CF3E8.7010509@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2009-12-07 12:03:47
+On 12/01/2009 03:11 PM, Peter Rajnoha wrote:
+> We need to detect this and disable the rule application so the
+> meaning of this change event is not interchanged with the regular
+> change event used while resuming/renaming DM devices.
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	udev           : 10-dm.rules.in 
+Just for the record so we know about this...
 
-Log message:
-	Disable udev rules on change event with DISK_RO=1.
-	
-	There's a new change udev event generated since kernel 2.6.32 that
-	notifies userspace about a change in read-only attribute for block
-	devices (with DISK_RO=1 environment variable set).
-	
-	We need to detect this and disable the rule application so the
-	meaning of this change event is not interchanged with the regular
-	change event used while resuming/renaming DM devices.
-	
-	If there's anybody awaiting this notification in foreign rules,
-	he can still check for this env var and do the appropriate actions
-	separately.
+Disabling the rules is not quite without any consequences. When we skip the rules for
+symlink creation then udevd removes existing ones by default. That's very similar to a
+problem with running "udevadm trigger" which generates ADD events and we suppress
+the rules for this event unless ENV{STARTUP}=1 is defined.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.320&r2=1.321
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/10-dm.rules.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+But for now, we're OK in the situation with DISK_RO change event - this one is always
+followed by regular change event (do_resume fn in kernel - we call set_disk_ro which
+generates this DISK_RO change event and then we generate our own regular change event
+afterwards). So we always have our nodes/symlinks in place as a result of such action.
 
---- LVM2/WHATS_NEW_DM	2009/11/24 19:04:23	1.320
-+++ LVM2/WHATS_NEW_DM	2009/12/07 12:03:47	1.321
-@@ -1,5 +1,6 @@
- Version 1.02.41 -
- ====================================
-+  Disable udev rules for change events with DISK_RO set.
- 
- Version 1.02.40 - 19th November 2009
- ====================================
---- LVM2/udev/10-dm.rules.in	2009/11/01 18:01:31	1.6
-+++ LVM2/udev/10-dm.rules.in	2009/12/07 12:03:47	1.7
-@@ -19,6 +19,13 @@
- SUBSYSTEM!="block", GOTO="dm_end"
- KERNEL!="dm-[0-9]*", GOTO="dm_end"
- 
-+# There is a new change event generated in block layer since kernel
-+# version 2.6.32. It adds notification for changes in read-only
-+# attribute. We don't want to misinterpret the regular meaning of change
-+# events for DM devices and we don't want to apply the rules prematurely,
-+# therefore we disable them in this situation.
-+ENV{DISK_RO}=="1", GOTO="dm_disable"
-+
- # Set proper sbin path, /sbin has higher priority than /usr/sbin.
- ENV{DM_SBIN_PATH}="/sbin"
- TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
+If such events (events not originated in device-mapper code) were used anytime then
+we would have a problem and that would need a fix from udev side as well.
+
+(I think udev should not remove those nodes/events even when the rules are skipped on
+add/change events - it should remove them on regular remove events only. That's exactly
+what I tried to ask udev people about two months ago - whether this default behaviour
+could be changed but I did not get any clear answer till now :) )
+
+Peter
 
 
