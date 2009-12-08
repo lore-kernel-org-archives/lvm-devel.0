@@ -1,45 +1,46 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 7 Dec 2009 19:32:29 -0000
-Subject: LVM2/tools vgchange.c
-Message-ID: <20091207193229.28094.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue,  8 Dec 2009 16:38:43 +0100
+Subject: [PATCH 00/10] Fixes related to mirror repair in clustered environment
+Message-ID: <cover.1260284754.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-12-07 19:32:28
+These are patches I created when trying to reproduce fails with
+recent mirror repair changes.
 
-Modified files:
-	tools          : vgchange.c 
+Because it touch the core cluster locking parts, I separated it
+to several simple patches to review it separately.
 
-Log message:
-	Fix activated/deactivated log_verbose message
-	
-	I see "Deactivated" message when I activate and "Activated" message when
-	I deactivate.  The code uses "activate" as boolean but it can be any one
-	of the enum values from CHANGE_AY, CHANGE_AN, CHANGE_AE, etc.
-	
-	Signed-off-by: Malahal Naineni <malahal@us.ibm.com>
-	Acked-by: Dave Wysochanski <dwysocha@redhat.com>
+Please review and comment it - it is curretnly test blocker for clustering.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+(If there is better way how to fix described problems - please let me know,
+I am quite desperate after debugging this code ;-)
 
---- LVM2/tools/vgchange.c	2009/11/24 16:08:49	1.91
-+++ LVM2/tools/vgchange.c	2009/12/07 19:32:28	1.92
-@@ -104,8 +104,8 @@
- 
- 	if (expected_count)
- 		log_verbose("%s %d logical volumes in volume group %s",
--			    activate ? "Activated" : "Deactivated",
--			    count, vg->name);
-+			    (activate == CHANGE_AN || activate == CHANGE_ALN)?
-+			    "Deactivated" : "Activated", count, vg->name);
- 
- 	return (expected_count != count) ? ECMD_FAILED : ECMD_PROCESSED;
- }
+Milan
+
+
+Milan Broz (10):
+  Remove newly created log volume if initial deactivation fails.
+  Get rid of hardcoded 0xffdf cluster lock flag.
+  Get rid of magic masks in cluster locking code.
+  Get rid of magic masks in cluster locking code - clvmd part.
+  Allow implicit "convert" to the same lock mode.
+  Allow manipulation with precommited metadata even when a PV is
+    missing.
+  Call explicitly suspend for temporary mirror layer.
+  Allow implicit lock conversion for pre/post callbacks.
+  Never ever use distributed lock for LV in non-clustered VG.
+  Add memlock information to do_lock_lv debug output.
+
+ daemons/clvmd/clvmd-command.c |   10 ++++----
+ daemons/clvmd/lvm-functions.c |   38 +++++++++++++++++++++---------------
+ lib/locking/cluster_locking.c |    7 +++--
+ lib/locking/locking.h         |    3 ++
+ lib/metadata/metadata.c       |    4 +-
+ lib/metadata/mirror.c         |   42 +++++++++++++++++++++-------------------
+ 6 files changed, 58 insertions(+), 46 deletions(-)
 
 
