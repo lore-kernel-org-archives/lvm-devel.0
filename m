@@ -1,36 +1,55 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue,  8 Dec 2009 16:39:05 +0100
-Subject: [PATCH 02/10] Get rid of hardcoded 0xffdf cluster lock flag.
+Date: Tue,  8 Dec 2009 16:39:14 +0100
+Subject: [PATCH 03/10] Get rid of magic masks in cluster locking code.
 In-Reply-To: <cover.1260284754.git.mbroz@redhat.com>
 References: <cover.1260284754.git.mbroz@redhat.com>
-Message-ID: <0fc994ad580d6e479a89c904d88d23a296240bcc.1260284754.git.mbroz@redhat.com>
+Message-ID: <3fb7d099249e6e8e0b7fc963405e95adbb1402c4.1260284754.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-There is hidded change - the upper flags (0xffff0000)
-and now not cleared, but there are unused anyway.
+Patch should not cause any problems, only real change is
+removing LCK_LOCAL bit from lock type flag, it is never used there.
+(LCK_LOCAL is part arg[1] bits anyway.)
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/locking/cluster_locking.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/locking/cluster_locking.c |    5 +++--
+ lib/locking/locking.h         |    3 +++
+ 2 files changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index eb09241..b031f12 100644
+index b031f12..b079195 100644
 --- a/lib/locking/cluster_locking.c
 +++ b/lib/locking/cluster_locking.c
-@@ -415,7 +415,7 @@ int lock_resource(struct cmd_context *cmd, const char *resource, uint32_t flags)
- 		clvmd_cmd = CLVMD_CMD_LOCK_LV;
- 		strcpy(lockname, resource);
- 		lock_scope = "LV";
--		flags &= 0xffdf;	/* Mask off HOLD flag */
-+		flags &= ~LCK_HOLD;	/* Mask off HOLD flag */
- 		break;
+@@ -317,8 +317,9 @@ static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
+ 	args = alloca(len);
+ 	strcpy(args + 2, name);
  
- 	default:
+-	args[0] = flags & 0x7F; /* Maskoff lock flags */
+-	args[1] = flags & 0xC0; /* Bitmap flags */
++	/* Maskoff lock flags */
++	args[0] = flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK | LCK_HOLD_MASK); 
++	args[1] = flags & LCK_AREA_MASK;
+ 
+ 	if (mirror_in_sync())
+ 		args[1] |= LCK_MIRROR_NOSYNC_MODE;
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index 50101d1..0dce827 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -78,6 +78,9 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ /*
+  * Lock bits
+  */
++#define LCK_HOLD_MASK	0x00000030U	/* NONBLOCK + HOLD bits */
++#define LCK_AREA_MASK	0x000000C0U	/* LOCAL + CLUSTER_VG bits */
++
+ #define LCK_NONBLOCK	0x00000010U	/* Don't block waiting for lock? */
+ #define LCK_HOLD	0x00000020U	/* Hold lock when lock_vol returns? */
+ #define LCK_LOCAL	0x00000040U	/* Don't propagate to other nodes */
 -- 
 1.6.5.4
 
