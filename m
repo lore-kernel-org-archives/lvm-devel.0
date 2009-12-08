@@ -1,55 +1,78 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue,  8 Dec 2009 16:39:14 +0100
-Subject: [PATCH 03/10] Get rid of magic masks in cluster locking code.
+Date: Tue,  8 Dec 2009 16:39:23 +0100
+Subject: [PATCH 04/10] Get rid of magic masks in cluster locking code - clvmd part.
 In-Reply-To: <cover.1260284754.git.mbroz@redhat.com>
 References: <cover.1260284754.git.mbroz@redhat.com>
-Message-ID: <3fb7d099249e6e8e0b7fc963405e95adbb1402c4.1260284754.git.mbroz@redhat.com>
+Message-ID: <c523359ee428aac9fdf03946ea93cb2e051005d7.1260284754.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch should not cause any problems, only real change is
-removing LCK_LOCAL bit from lock type flag, it is never used there.
-(LCK_LOCAL is part arg[1] bits anyway.)
+- do_command and lock_vg expect flags including HOLD_MASK (no change here)
+
+Bug fixes:
+- lock_vg should check for NONBLOCK on lock_cmd, flgas have this bit masked-out
+
+- do_pre/post_command expect do not mask flag at all, this causes that
+the code inside is never run! (see following patches, thes functions
+expect plain command without HOLD flags)
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/locking/cluster_locking.c |    5 +++--
- lib/locking/locking.h         |    3 +++
- 2 files changed, 6 insertions(+), 2 deletions(-)
+ daemons/clvmd/clvmd-command.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index b031f12..b079195 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -317,8 +317,9 @@ static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
- 	args = alloca(len);
- 	strcpy(args + 2, name);
+diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
+index 2266a2b..e11f864 100644
+--- a/daemons/clvmd/clvmd-command.c
++++ b/daemons/clvmd/clvmd-command.c
+@@ -132,7 +132,7 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
  
--	args[0] = flags & 0x7F; /* Maskoff lock flags */
--	args[1] = flags & 0xC0; /* Bitmap flags */
-+	/* Maskoff lock flags */
-+	args[0] = flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK | LCK_HOLD_MASK); 
-+	args[1] = flags & LCK_AREA_MASK;
+ 	case CLVMD_CMD_LOCK_LV:
+ 		/* This is the biggie */
+-		lock_cmd = args[0] & 0x3F;
++		lock_cmd = args[0] & (LCK_HOLD_MASK | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+ 		lock_flags = args[1];
+ 		lockname = &args[2];
+ 		status = do_lock_lv(lock_cmd, lock_flags, lockname);
+@@ -214,7 +214,7 @@ static int lock_vg(struct local_client *client)
+ 	client->bits.localsock.private = (void *)lock_hash;
+     }
  
- 	if (mirror_in_sync())
- 		args[1] |= LCK_MIRROR_NOSYNC_MODE;
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 50101d1..0dce827 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -78,6 +78,9 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- /*
-  * Lock bits
-  */
-+#define LCK_HOLD_MASK	0x00000030U	/* NONBLOCK + HOLD bits */
-+#define LCK_AREA_MASK	0x000000C0U	/* LOCAL + CLUSTER_VG bits */
-+
- #define LCK_NONBLOCK	0x00000010U	/* Don't block waiting for lock? */
- #define LCK_HOLD	0x00000020U	/* Hold lock when lock_vol returns? */
- #define LCK_LOCAL	0x00000040U	/* Don't propagate to other nodes */
+-    lock_cmd = args[0] & 0x3F;
++    lock_cmd = args[0] & (LCK_HOLD_MASK | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+     lock_flags = args[1];
+     lockname = &args[2];
+     DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
+@@ -237,7 +237,7 @@ static int lock_vg(struct local_client *client)
+ 	    lock_cmd &= ~LCK_TYPE_MASK;
+ 	    lock_cmd |= LCK_PREAD;
+ 	}
+-	status = sync_lock(lockname, (int)lock_cmd, (lock_flags & LCK_NONBLOCK) ? LKF_NOQUEUE : 0, &lkid);
++	status = sync_lock(lockname, (int)lock_cmd, (lock_cmd & LCK_NONBLOCK) ? LKF_NOQUEUE : 0, &lkid);
+ 	if (status)
+ 	    status = errno;
+ 	else
+@@ -277,7 +277,7 @@ int do_pre_command(struct local_client *client)
+ 		break;
+ 
+ 	case CLVMD_CMD_LOCK_LV:
+-		lock_cmd = args[0];
++		lock_cmd = args[0] & (LCK_SCOPE_MASK | LCK_TYPE_MASK);
+ 		lock_flags = args[1];
+ 		lockname = &args[2];
+ 		status = pre_lock_lv(lock_cmd, lock_flags, lockname);
+@@ -323,7 +323,7 @@ int do_post_command(struct local_client *client)
+ 		break;
+ 
+ 	case CLVMD_CMD_LOCK_LV:
+-		lock_cmd = args[0];
++		lock_cmd = args[0] & (LCK_SCOPE_MASK | LCK_TYPE_MASK);
+ 		lock_flags = args[1];
+ 		lockname = &args[2];
+ 		status = post_lock_lv(lock_cmd, lock_flags, lockname);
 -- 
 1.6.5.4
 
