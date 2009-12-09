@@ -1,56 +1,90 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Tue, 08 Dec 2009 16:12:27 -0500
-Subject: [PATCH 2 of 2] [RFC] handle a temporary secondary mirror device failure
-In-Reply-To: <20091203023630.GA15001@us.ibm.com>
-References: <patchbomb.1259576548@localhost>	<a0324c61e9fc527d6a9d.1259576550@localhost>	<4B16FF95.6010603@redhat.com>
-	<20091203023630.GA15001@us.ibm.com>
-Message-ID: <4B1EC13B.3060304@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 9 Dec 2009 18:09:53 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20091209180953.24797.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/02/09 21:36, malahal at us.ibm.com wrote:
-> Takahiro Yasui [tyasui at redhat.com] wrote:
->> On 11/30/09 05:22, Malahal Naineni wrote:
->>> If "retry" policy is selected, then the mirror DSO uses "dmsetup"
->>> command to restart a resync. Right now, it is done immediately but we
->>> should do it after a configured time. Also, this is done endlessly but
->>> should be done only few configured times.
->>
->> It sounds good to me. This feature would work in a variety of
->> environments by adding configurable parameter as you mentioned.
->>
->>> Calling 'lvchange --refresh' to re-integrate the secondary mirror upon a
->>> leg failure works if there are no device failures while the "lvchange"
->>> is running.  Otherwise, the failed device is replaced with "error"
->>> target which is not what we want. For now, this patch calls "dmsetup",
->>> but should be replaced with a suitable "LVM" command.
->>
->>> +	snprintf(cmd_str, CMD_SIZE, "dmsetup suspend %s-%s", vg, lv);
->>> +	syslog(LOG_ERR, "Running command: %s", cmd_str);
->>
->> We need to re-queue blocked I/Os instead of finishing them by -EIO.
->> I think that "--noflush" option is necessary for "dmsetup suspend."
-> 
-> Yes, you are right. I tested this with existing code dm-raid1 module
-> which doesn't hold any I/O's, so it worked fine. But I think we should
-> use some LVM command (or create one if such a command doesn't exist)
-> instead of "dmsetup" command.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2009-12-09 18:09:53
 
-lvm commands have an unwelcome behavior to scan all devices except for
-ones filtered out by lvm configuration as I described before.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-https://www.redhat.com/archives/lvm-devel/2009-April/msg00014.html
+Log message:
+	Remove newly created log volume if initial deactivation fails.
+	
+	If there is problem deactivate LV and
+	_init_mirror_log is called with remove_on_failure = 1,
+	remove the newly created log LV from metadata.
+	
+	(This can happen if there is active device with the same name
+	but different UUID.)
+	
+	The main reason for this "workaround" patch is to
+	- do not keep _mlog volume in metadata, so user can repeat the action
+	- print better error message describing the real problem
+	
+	# lvcreate -m 2 -n lv1 -l 1 --nosync vg_bar
+	WARNING: New mirror won't be synchronised. Don't read what you didn't write!
+	/dev/vg_bar/lv1_mlog: not found: device not cleared
+	Aborting. Failed to wipe mirror log.
+	Error locking on node bar-01: Input/output error
+	Unable to deactivate mirror log LV. Manual intervention required.
+	Failed to create mirror log.
+	
+	# lvcreate -m 2 -n lv1 -l 1 --nosync vg_bar
+	WARNING: New mirror won't be synchronised. Don't read what you didn't write!
+	Aborting. Unable to deactivate mirror log.
+	Failed to initialise mirror log.
 
-If "refresh" is just an action in the device-mapper layer, I rather hope
-that it will be implemented without lvm commands as you did. It would
-avoid extra time by issuing unnecessary I/Os and achieve quick recovery.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1342&r2=1.1343
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.96&r2=1.97
 
-It is best that this device scanning issue of lvm commands is solved. :)
-
-Thanks,
-Taka
+--- LVM2/WHATS_NEW	2009/12/04 14:26:22	1.1342
++++ LVM2/WHATS_NEW	2009/12/09 18:09:52	1.1343
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Remove log volume from metadata if initial deactivation fails.
+   Give better error message for pvmove when all data is skipped.
+   Fix memory lock imbalance in lv_suspend if already suspended.
+   Fix pvmove test mode to not fail and do not poll.
+--- LVM2/lib/metadata/mirror.c	2009/11/24 22:55:56	1.96
++++ LVM2/lib/metadata/mirror.c	2009/12/09 18:09:52	1.97
+@@ -255,8 +255,16 @@
+ 
+ 	/* If the LV is active, deactivate it first. */
+ 	if (lv_info(cmd, log_lv, &info, 0, 0) && info.exists) {
+-		if (!deactivate_lv(cmd, log_lv))
+-			return_0;
++		(void)deactivate_lv(cmd, log_lv);
++		/*
++		 * FIXME: workaround to fail early
++		 * Ensure that log is really deactivated because deactivate_lv
++		 * on cluster do not fail if there is log_lv with different UUID.
++		 */
++		if (lv_info(cmd, log_lv, &info, 0, 0) && info.exists) {
++			log_error("Aborting. Unable to deactivate mirror log.");
++			goto revert_new_lv;
++		}
+ 		was_active = 1;
+ 	}
+ 
+@@ -1354,7 +1362,7 @@
+ 	}
+ 
+ 	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
+-		log_error("Failed to create mirror log.");
++		log_error("Failed to initialise mirror log.");
+ 		return NULL;
+ 	}
+ 
 
 
