@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 9 Dec 2009 19:01:28 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
-Message-ID: <20091209190128.30634.qmail@sourceware.org>
+Date: 9 Dec 2009 19:29:04 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20091209192904.24058.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,82 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-12-09 19:01:28
+Changes by:	mbroz at sourceware.org	2009-12-09 19:29:04
 
 Modified files:
 	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Add memlock information to do_lock_lv debug output.
+	Allow manipulation with precommited metadata even when a PV is missing.
 	
-	This helps a lot to detect that something strange happened.
+	The new recovery code first tries to repair LV and then removes failed PV
+	from VG. It means that during operation there can be VG with PV missing,
+	and vg_read code handles it like not consistent VG.
+	
+	We already allows returning "inconsistent" commited metadata,
+	for mirror repair we need this for precommited too.
+	(The suspend call prepares precommited metadata to inactive table on
+	other cluster nodes.)
+	
+	"Inconsistent" here means - correct metadata, just with some metadata areas
+	not found (obviously on missing or failed PVs).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1347&r2=1.1348
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1348&r2=1.1349
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.300&r2=1.301
 
---- LVM2/WHATS_NEW	2009/12/09 19:00:16	1.1347
-+++ LVM2/WHATS_NEW	2009/12/09 19:01:27	1.1348
+--- LVM2/WHATS_NEW	2009/12/09 19:01:27	1.1348
++++ LVM2/WHATS_NEW	2009/12/09 19:29:04	1.1349
 @@ -1,5 +1,6 @@
  Version 2.02.57 -
  ====================================
-+  Add memlock information to do_lock_lv debug output.
++  Allow use precommited metadata when a PV is missing.
+   Add memlock information to do_lock_lv debug output.
    Never use distributed lock for LV in non-clustered VG.
    Allow implicit lock conversion in pre/post callbacks on local node.
-   Allow implicit convert to the same cluster lock mode.
---- LVM2/daemons/clvmd/lvm-functions.c	2009/12/09 19:00:16	1.76
-+++ LVM2/daemons/clvmd/lvm-functions.c	2009/12/09 19:01:28	1.77
-@@ -477,8 +477,8 @@
- {
- 	int status = 0;
- 
--	DEBUGLOG("do_lock_lv: resource '%s', cmd = %s, flags = %s\n",
--		 resource, decode_locking_cmd(command), decode_flags(lock_flags));
-+	DEBUGLOG("do_lock_lv: resource '%s', cmd = %s, flags = %s, memlock = %d\n",
-+		 resource, decode_locking_cmd(command), decode_flags(lock_flags), memlock());
- 
- 	if (!cmd->config_valid || config_files_changed(cmd)) {
- 		/* Reinitialise various settings inc. logging, filters */
-@@ -541,7 +541,7 @@
- 	dm_pool_empty(cmd->mem);
- 	pthread_mutex_unlock(&lvm_lock);
- 
--	DEBUGLOG("Command return is %d\n", status);
-+	DEBUGLOG("Command return is %d, memlock is %d\n", status, memlock());
- 	return status;
- }
- 
+--- LVM2/lib/metadata/metadata.c	2009/12/03 19:18:34	1.300
++++ LVM2/lib/metadata/metadata.c	2009/12/09 19:29:04	1.301
+@@ -2481,6 +2481,7 @@
+ 	int inconsistent = 0;
+ 	int inconsistent_vgid = 0;
+ 	int inconsistent_pvs = 0;
++	int inconsistent_seqno = 0;
+ 	unsigned use_precommitted = precommitted;
+ 	unsigned saved_handles_missing_pvs = cmd->handles_missing_pvs;
+ 	struct dm_list *pvids;
+@@ -2556,6 +2557,7 @@
+ 		/* FIXME Also ensure contents same - checksum compare? */
+ 		if (correct_vg->seqno != vg->seqno) {
+ 			inconsistent = 1;
++			inconsistent_seqno = 1;
+ 			if (vg->seqno > correct_vg->seqno) {
+ 				vg_release(correct_vg);
+ 				correct_vg = vg;
+@@ -2679,6 +2681,7 @@
+ 			/* FIXME Also ensure contents same - checksums same? */
+ 			if (correct_vg->seqno != vg->seqno) {
+ 				inconsistent = 1;
++				inconsistent_seqno = 1;
+ 				if (!_update_pv_list(cmd->mem, &all_pvs, vg)) {
+ 					vg_release(vg);
+ 					vg_release(correct_vg);
+@@ -2706,6 +2709,16 @@
+ 		if (use_precommitted) {
+ 			log_error("Inconsistent pre-commit metadata copies "
+ 				  "for volume group %s", vgname);
++			/* FIXME: during repair, there is inconsistent flag set because some metadata areas
++			 * are missing (on missing PVs). Code should create list of missing PVs, compare it
++			 * with PV marked missing in metadata and if equals, use it as consistent vg.
++			 * For now, return precommited metadata if remainng seq match here to allow
++			 * preloading table in suspend call.
++			 */
++			if (!inconsistent_seqno) {
++				*consistent = 0;
++				return correct_vg;
++			}
+ 			vg_release(correct_vg);
+ 			return NULL;
+ 		}
 
 
