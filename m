@@ -1,37 +1,46 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 10 Dec 2009 13:53:53 +0100
-Subject: [PATCH 0/4] Fixes and cleanups
-Message-ID: <cover.1260449368.git.zkabelac@redhat.com>
+Date: Thu, 10 Dec 2009 13:53:56 +0100
+Subject: [PATCH 1/4] Fix coredump and memory leak for 'dmsetup help -c'
+In-Reply-To: <cover.1260449368.git.zkabelac@redhat.com>
+References: <cover.1260449368.git.zkabelac@redhat.com>
+Message-ID: <fc67f51ffd717cb4b6a70e96e5b18ea9d55ae42d.1260449368.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Zdenek Kabelac (4):
-  Fix coredump and memory leak for 'dmsetup help -c'
-  Fix unlocking for vgrelease for error paths
-  Skip 'return' keyword for void() functions
-  Call dm_pool_destroy on allocation error path
 
- lib/display/display.c           |   11 -----------
- lib/filters/filter-persistent.c |    2 --
- lib/filters/filter.c            |    1 -
- lib/format1/format1.c           |    1 -
- lib/format1/lvm1-label.c        |    1 -
- lib/format_pool/format_pool.c   |    1 -
- lib/format_pool/pool_label.c    |    1 -
- lib/format_text/format-text.c   |    1 -
- lib/locking/locking.c           |    4 ----
- lib/locking/no_locking.c        |    2 --
- lib/metadata/metadata.c         |    2 +-
- lib/misc/lvm-string.c           |    2 +-
- libdm/libdm-deptree.c           |    4 ++--
- tools/dmsetup.c                 |    7 ++++---
- tools/lvmcmdlib.c               |    2 --
- tools/pvresize.c                |    8 ++++++--
- tools/pvscan.c                  |    1 -
- tools/toollib.c                 |    6 +++---
- 18 files changed, 17 insertions(+), 40 deletions(-)
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ tools/dmsetup.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 888edff..b5568f0 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -2402,7 +2402,7 @@ static int _report_init(struct command *c)
+ 	size_t len = 0;
+ 	int r = 0;
+ 
+-	if (!strcmp(c->name, "splitname"))
++	if (c && !strcmp(c->name, "splitname"))
+ 		options = (char *) splitname_report_options;
+ 
+ 	/* emulate old dmsetup behaviour */
+@@ -2591,7 +2591,9 @@ static int _help(int argc __attribute((unused)),
+ 		_switches[OPTIONS_ARG] = 1;
+ 		_string_args[OPTIONS_ARG] = (char *) "help";
+ 		_switches[SORT_ARG] = 0;
+-	
++
++		if (_report)
++			dm_report_free(_report);
+ 		(void) _report_init(NULL);
+ 	}
+ 
+-- 
+1.6.5.3
 
 
