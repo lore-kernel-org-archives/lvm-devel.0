@@ -1,36 +1,46 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 10 Dec 2009 22:06:15 -0000
-Subject: LVM2/test t-mirror-lvconvert.sh
-Message-ID: <20091210220615.13274.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 11 Dec 2009 11:37:51 +0100
+Subject: [PATCH 0/4] Fixes and cleanups
+In-Reply-To: <cover.1260449368.git.zkabelac@redhat.com>
+References: <cover.1260449368.git.zkabelac@redhat.com>
+Message-ID: <4B2220FF.2090701@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2009-12-10 22:06:15
+Well, these are all cleanup patches + segfault fix,
+ACK.
 
-Modified files:
-	test           : t-mirror-lvconvert.sh 
+Milan
 
-Log message:
-	s/=/==/  Typo was causing sub test to always return success.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-
---- LVM2/test/t-mirror-lvconvert.sh	2009/08/02 21:59:21	1.11
-+++ LVM2/test/t-mirror-lvconvert.sh	2009/12/10 22:06:15	1.12
-@@ -87,7 +87,7 @@
- {
-   local lv=$1
-   local mlog=$(lvs --noheadings -omirror_log $lv | sed -e 's/ //g')
--  [ "$(basename $lv)_mlog" = "$mlog" ]
-+  [ "$(basename $lv)_mlog" == "$mlog" ]
- }
- 
- wait_conversion_()
+On 12/10/2009 01:53 PM, Zdenek Kabelac wrote:
+> Zdenek Kabelac (4):
+>   Fix coredump and memory leak for 'dmsetup help -c'
+>   Fix unlocking for vgrelease for error paths
+>   Skip 'return' keyword for void() functions
+>   Call dm_pool_destroy on allocation error path
+> 
+>  lib/display/display.c           |   11 -----------
+>  lib/filters/filter-persistent.c |    2 --
+>  lib/filters/filter.c            |    1 -
+>  lib/format1/format1.c           |    1 -
+>  lib/format1/lvm1-label.c        |    1 -
+>  lib/format_pool/format_pool.c   |    1 -
+>  lib/format_pool/pool_label.c    |    1 -
+>  lib/format_text/format-text.c   |    1 -
+>  lib/locking/locking.c           |    4 ----
+>  lib/locking/no_locking.c        |    2 --
+>  lib/metadata/metadata.c         |    2 +-
+>  lib/misc/lvm-string.c           |    2 +-
+>  libdm/libdm-deptree.c           |    4 ++--
+>  tools/dmsetup.c                 |    7 ++++---
+>  tools/lvmcmdlib.c               |    2 --
+>  tools/pvresize.c                |    8 ++++++--
+>  tools/pvscan.c                  |    1 -
+>  tools/toollib.c                 |    6 +++---
+>  18 files changed, 17 insertions(+), 40 deletions(-)
 
 
