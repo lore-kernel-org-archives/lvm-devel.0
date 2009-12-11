@@ -1,46 +1,49 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 11 Dec 2009 11:37:51 +0100
-Subject: [PATCH 0/4] Fixes and cleanups
-In-Reply-To: <cover.1260449368.git.zkabelac@redhat.com>
-References: <cover.1260449368.git.zkabelac@redhat.com>
-Message-ID: <4B2220FF.2090701@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 11 Dec 2009 13:04:30 -0000
+Subject: LVM2/tools dmsetup.c
+Message-ID: <20091211130430.15673.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Well, these are all cleanup patches + segfault fix,
-ACK.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2009-12-11 13:04:30
 
-Milan
+Modified files:
+	tools          : dmsetup.c 
 
+Log message:
+	Fix coredump and memory leak for 'dmsetup help -c'
 
-On 12/10/2009 01:53 PM, Zdenek Kabelac wrote:
-> Zdenek Kabelac (4):
->   Fix coredump and memory leak for 'dmsetup help -c'
->   Fix unlocking for vgrelease for error paths
->   Skip 'return' keyword for void() functions
->   Call dm_pool_destroy on allocation error path
-> 
->  lib/display/display.c           |   11 -----------
->  lib/filters/filter-persistent.c |    2 --
->  lib/filters/filter.c            |    1 -
->  lib/format1/format1.c           |    1 -
->  lib/format1/lvm1-label.c        |    1 -
->  lib/format_pool/format_pool.c   |    1 -
->  lib/format_pool/pool_label.c    |    1 -
->  lib/format_text/format-text.c   |    1 -
->  lib/locking/locking.c           |    4 ----
->  lib/locking/no_locking.c        |    2 --
->  lib/metadata/metadata.c         |    2 +-
->  lib/misc/lvm-string.c           |    2 +-
->  libdm/libdm-deptree.c           |    4 ++--
->  tools/dmsetup.c                 |    7 ++++---
->  tools/lvmcmdlib.c               |    2 --
->  tools/pvresize.c                |    8 ++++++--
->  tools/pvscan.c                  |    1 -
->  tools/toollib.c                 |    6 +++---
->  18 files changed, 17 insertions(+), 40 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+
+--- LVM2/tools/dmsetup.c	2009/11/13 12:43:22	1.128
++++ LVM2/tools/dmsetup.c	2009/12/11 13:04:30	1.129
+@@ -2402,7 +2402,7 @@
+ 	size_t len = 0;
+ 	int r = 0;
+ 
+-	if (!strcmp(c->name, "splitname"))
++	if (c && !strcmp(c->name, "splitname"))
+ 		options = (char *) splitname_report_options;
+ 
+ 	/* emulate old dmsetup behaviour */
+@@ -2591,7 +2591,11 @@
+ 		_switches[OPTIONS_ARG] = 1;
+ 		_string_args[OPTIONS_ARG] = (char *) "help";
+ 		_switches[SORT_ARG] = 0;
+-	
++
++		if (_report) {
++			dm_report_free(_report);
++			_report = NULL;
++		}
+ 		(void) _report_init(NULL);
+ 	}
+ 
 
 
