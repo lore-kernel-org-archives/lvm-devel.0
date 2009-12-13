@@ -1,240 +1,177 @@
 From: Malahal Naineni <malahal@us.ibm.com>
-Date: Sun, 13 Dec 2009 01:18:43 -0800
-Subject: [PATCH 1 of 4] Add more error codes in mirror DSO
+Date: Sun, 13 Dec 2009 01:18:45 -0800
+Subject: [PATCH 3 of 4] Add dm_event_set_timeout/dm_event_unset_timeout interface
 In-Reply-To: <patchbomb.1260695922@localhost>
 References: <patchbomb.1260695922@localhost>
-Message-ID: <a74600c6163e6640d0ca.1260695923@localhost>
+Message-ID: <1c364c686b5e7794e994.1260695925@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The mirror DSO (daemons/dmeventd/plugins/mirror/dmeventd_mirror.c) logs
-various device failure codes but only handles one failure, 'ME_FAILURE'.
-This patchs adds more error codes to handle multiple types of device
-failures.
+Will be used in mirror DSO to handle transient device failures.
 
 Signed-off-by: Malahal Naineni <malahal@us.ibm.com>
 
-diff -r a48a5f0eea85 -r a74600c6163e daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	Sun Dec 06 23:04:13 2009 -0800
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	Sun Dec 13 01:16:51 2009 -0800
-@@ -30,9 +30,17 @@
- /* FIXME Replace most syslogs with log_error() style messages and add complete context. */
- /* FIXME Reformat to 80 char lines. */
- 
--#define ME_IGNORE    0
--#define ME_INSYNC    1
--#define ME_FAILURE   2
-+/* 
-+ * An event may contain more than one error type. The following are bit
-+ * flags that indicate each error type.
-+ */
-+#define ME_IGNORE    			0x01U
-+#define ME_INSYNC    			0x02U
-+#define ME_READ_FAILURE   		0x04U
-+#define ME_SYNC_FAILURE   		0x08U
-+#define ME_LOG_FAILURE 			0x10U
-+#define ME_SECONDARY_WRITE_FAILURE	0x20U
-+#define ME_PRIMARY_WRITE_FAILURE	0x40U
- 
- /*
-  * register_device() is called first and performs initialisation.
-@@ -53,45 +61,68 @@ static void *_lvm_handle = NULL;
-  */
- static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
- 
--static int _process_status_code(const char status_code, const char *dev_name,
--				const char *dev_type, int r)
-+static int _process_status_code(const char *mirror, const char *device,
-+			        const char status_code, int dev_index)
+diff -r 1e369d480df0 -r 1c364c686b5e daemons/dmeventd/.exported_symbols
+--- a/daemons/dmeventd/.exported_symbols	Sun Dec 13 01:17:52 2009 -0800
++++ b/daemons/dmeventd/.exported_symbols	Sun Dec 13 01:17:57 2009 -0800
+@@ -17,3 +17,5 @@ dm_event_unregister_handler
+ dm_event_get_registered_device
+ dm_event_handler_set_timeout
+ dm_event_handler_get_timeout
++dm_event_set_timeout
++dm_event_unset_timeout
+diff -r 1e369d480df0 -r 1c364c686b5e daemons/dmeventd/dmeventd.c
+--- a/daemons/dmeventd/dmeventd.c	Sun Dec 13 01:17:52 2009 -0800
++++ b/daemons/dmeventd/dmeventd.c	Sun Dec 13 01:17:57 2009 -0800
+@@ -1164,13 +1164,25 @@ static int _get_next_registered_device(s
+ static int _set_timeout(struct message_data *message_data)
  {
--	/*
--	 *    A => Alive - No failures
--	 *    D => Dead - A write failure occurred leaving mirror out-of-sync
--	 *    F => Flush failed.
--	 *    S => Sync - A sychronization failure occurred, mirror out-of-sync
--	 *    R => Read - A read failure occurred, mirror data unaffected
--	 *    U => Unclassified failure (bug)
--	 */ 
--	if (status_code == 'F') {
--		syslog(LOG_ERR, "%s device %s flush failed.\n",
--		       dev_type, dev_name);
--		r = ME_FAILURE;
--	} else if (status_code == 'S')
--		syslog(LOG_ERR, "%s device %s sync failed.\n",
--		       dev_type, dev_name);
--	else if (status_code == 'R')
--		syslog(LOG_ERR, "%s device %s read failed.\n",
--		       dev_type, dev_name);
--	else if (status_code != 'A') {
--		syslog(LOG_ERR, "%s device %s has failed (%c).\n",
--		       dev_type, dev_name, status_code);
--		r = ME_FAILURE;
-+	int r;
-+	const char *error_string;
-+	const char *dev_type = dev_index ? "Secondary" : "Primary";
-+
-+	switch (status_code) {
-+	default:
-+	case 'U': /* Unclassified failure (bug) */
-+	case 'D': /* Write failure occurred leaving mirror out-of-sync */
-+	case 'F': /* Flush failure, handled as write failure */
-+		if (status_code == 'D')
-+			error_string = "write";
-+		else if (status_code == 'F')
-+			error_string = "flush";
-+		else if (status_code == 'U')
-+			error_string = "unclassified";
-+		else {
-+			syslog(LOG_ERR, "Unknown device status code (%c).\n",
-+					status_code);
-+			error_string = "unknown";
-+		}
-+
-+		syslog(LOG_ERR, "Mirror device: %s, %s leg: %s had a %s "
-+				"failure.\n", mirror, dev_type, device,
-+				error_string);
-+
-+		r = dev_index? ME_SECONDARY_WRITE_FAILURE :
-+			ME_PRIMARY_WRITE_FAILURE;
-+		break;
-+
-+	case 'S': /* Sychronization failure occurred, mirror out-of-sync */
-+		syslog(LOG_ERR, "Mirror device: %s, %s leg: %s had "
-+				"sync failure.\n", mirror, dev_type, device);
-+		r = ME_SYNC_FAILURE;
-+		break;
-+
-+	case 'R': /* Read failure occurred, mirror data unaffected */
-+		syslog(LOG_ERR, "Mirror device: %s, %s leg: %s had a "
-+				"read failure.\n", mirror, dev_type, device);
-+		r = ME_READ_FAILURE;
-+		break;
-+
-+	case 'A': /* Active, a good status */
-+		r = 0;
-+		break;
- 	}
+ 	struct thread_status *thread;
++	int ret = 0;
  
- 	return r;
+ 	_lock_mutex();
+-	if ((thread = _lookup_thread_status(message_data)))
+-		thread->timeout = message_data->timeout.secs;
++	if ((thread = _lookup_thread_status(message_data))) {
++		/* INT_MAX timeout is used to unregister timeout,
++		 * register timeout for any other value. */
++		thread->events &= ~DM_EVENT_TIMEOUT;
++		_unregister_for_timeout(thread);
++		if (message_data->timeout.secs == INT_MAX) {
++			thread->timeout = 0;
++		} else {
++			thread->events |= DM_EVENT_TIMEOUT;
++			thread->timeout = message_data->timeout.secs;
++			ret = _register_for_timeout(thread);
++		}
++	}
+ 	_unlock_mutex();
+ 
+-	return thread ? 0 : -ENODEV;
++	return (thread && ret == 0) ? 0 : -ENODEV;
  }
  
--static int _get_mirror_event(char *params)
-+static int _get_mirror_event(const char *mirror, char *params)
- {
--	int i, r = ME_INSYNC;
-+	int i;
- 	char **args = NULL;
- 	char *dev_status_str;
- 	char *log_status_str;
- 	char *sync_str;
- 	char *p = NULL;
- 	int log_argc, num_devs;
-+	int retval = 0;
+ static int _get_timeout(struct message_data *message_data)
+diff -r 1e369d480df0 -r 1c364c686b5e daemons/dmeventd/libdevmapper-event.c
+--- a/daemons/dmeventd/libdevmapper-event.c	Sun Dec 13 01:17:52 2009 -0800
++++ b/daemons/dmeventd/libdevmapper-event.c	Sun Dec 13 01:17:57 2009 -0800
+@@ -770,27 +770,90 @@ int dm_event_get_registered_device(struc
+ 	return ret;
+ }
  
- 	/*
- 	 * dm core parms:	     0 409600 mirror
-@@ -122,23 +153,25 @@ static int _get_mirror_event(char *param
- 
- 	/* Check for bad mirror devices */
- 	for (i = 0; i < num_devs; i++)
--		r = _process_status_code(dev_status_str[i], args[i],
--			i ? "Secondary mirror" : "Primary mirror", r);
-+		retval |= _process_status_code(mirror, args[i],
-+					       dev_status_str[i], i);
- 
- 	/* Check for bad disk log device */
--	if (log_argc > 1)
--		r = _process_status_code(log_status_str[0],
--					 args[2 + num_devs + log_argc],
--					 "Log", r);
-+	if (log_argc > 1 && log_status_str[0] == 'D') {
-+		syslog(LOG_ERR, "Mirror device: %s, log device: %s failed.\n",
-+				mirror, args[2 + num_devs + log_argc]);
-+		retval = retval | ME_LOG_FAILURE;
+-#if 0				/* left out for now */
++/* Get uuid of a device */
++static struct dm_task *_get_device_info_by_name(const char *dev_name)
++{
++	struct dm_task *dmt;
++	struct dm_info info;
++
++	if (!(dmt = dm_task_create(DM_DEVICE_INFO))) {
++		log_error("_get_device_info: dm_task creation for info failed");
++		return NULL;
 +	}
++
++	dm_task_set_name(dmt, dev_name);
++
++	/* FIXME Add name or uuid or devno to messages */
++	if (!dm_task_run(dmt)) {
++		log_error("_get_device_info: dm_task_run() failed");
++		goto failed;
++	}
++
++	if (!dm_task_get_info(dmt, &info)) {
++		log_error("_get_device_info: failed to get info for device");
++		goto failed;
++	}
++
++	if (!info.exists) {
++		log_error("_get_device_info: device not found");
++		goto failed;
++	}
++
++	return dmt;
++
++failed:
++	dm_task_destroy(dmt);
++	return NULL;
++}
++
++int dm_event_unset_timeout(const char *dev_name)
++{
++	/* timeout of INT_MAX is used as no timeout that removes the
++	 * timer.  INT_MAX is chosen instead of -1 as atoi() is used in
++	 * dmeventd.c */
++	return dm_event_set_timeout(dev_name, INT_MAX);
++}
++
++int dm_event_set_timeout(const char *dev_name, uint32_t timeout)
++{
++	int ret = 1, err;
++	const char *uuid;
++	struct dm_task *dmt;
++	struct dm_event_daemon_message msg = { 0, 0, NULL };
++
++	if (!(dmt = _get_device_info_by_name(dev_name))) {
++		stack;
++		return 0;
++	}
++
++	uuid = dm_task_get_uuid(dmt);
++
++	if ((err = _do_event(DM_EVENT_CMD_SET_TIMEOUT, &msg,
++			     NULL, uuid, 0, timeout)) < 0) {
++		log_error("%s: event set timeout failed: %s",
++			  dm_task_get_name(dmt),
++			  msg.data ? msg.data : strerror(-err));
++		ret = 0;
++	}
++
++	if (msg.data)
++		dm_free(msg.data);
++
++	dm_task_destroy(dmt);
++
++	return ret;
++}
++
++#if 0
  
--	if (r == ME_FAILURE)
-+	if (retval)	/* A failure occurred */
- 		goto out;
+ static char *_skip_string(char *src, const int delimiter)
+ {
+-	src = srtchr(src, delimiter);
++	src = strchr(src, delimiter);
+ 	if (src && *(src + 1))
+ 		return src + 1;
+ 	return NULL;
+ }
  
-+	retval = ME_INSYNC;	/* assume INSYNC event */
- 	p = strstr(sync_str, "/");
- 	if (p) {
- 		p[0] = '\0';
- 		if (strcmp(sync_str, p+1))
--			r = ME_IGNORE;
-+			retval = ME_IGNORE;
- 		p[0] = '/';
- 	} else
- 		goto out_parse;
-@@ -146,7 +179,7 @@ static int _get_mirror_event(char *param
- out:
- 	if (args)
- 		dm_free(args);
--	return r;
-+	return retval;
- 	
- out_parse:
- 	if (args)
-@@ -212,6 +245,7 @@ void process_event(struct dm_task *dmt,
- 	char *target_type = NULL;
- 	char *params;
- 	const char *device = dm_task_get_name(dmt);
-+	int error;
+-int dm_event_set_timeout(const char *device_path, uint32_t timeout)
+-{
+-	struct dm_event_daemon_message msg = { 0, 0, NULL };
+-
+-	if (!device_exists(device_path))
+-		return -ENODEV;
+-
+-	return _do_event(DM_EVENT_CMD_SET_TIMEOUT, &msg,
+-			 NULL, device_path, 0, timeout);
+-}
+-
+ int dm_event_get_timeout(const char *device_path, uint32_t *timeout)
+ {
+ 	int ret;
+diff -r 1e369d480df0 -r 1c364c686b5e daemons/dmeventd/libdevmapper-event.h
+--- a/daemons/dmeventd/libdevmapper-event.h	Sun Dec 13 01:17:52 2009 -0800
++++ b/daemons/dmeventd/libdevmapper-event.h	Sun Dec 13 01:17:57 2009 -0800
+@@ -102,5 +102,7 @@ void process_event(struct dm_task *dmt, 
+ int register_device(const char *device_name, const char *uuid, int major, int minor, void **user);
+ int unregister_device(const char *device_name, const char *uuid, int major,
+ 		      int minor, void **user);
++int dm_event_set_timeout(const char *dev_name, uint32_t timeout);
++int dm_event_unset_timeout(const char *dev_name);
  
- 	if (pthread_mutex_trylock(&_event_mutex)) {
- 		syslog(LOG_NOTICE, "Another thread is handling an event.  Waiting...");
-@@ -231,17 +265,11 @@ void process_event(struct dm_task *dmt,
- 			continue;
- 		}
- 
--		switch(_get_mirror_event(params)) {
--		case ME_INSYNC:
--			/* FIXME: all we really know is that this
--			   _part_ of the device is in sync
--			   Also, this is not an error
--			*/
--			syslog(LOG_NOTICE, "%s is now in-sync\n", device);
--			break;
--		case ME_FAILURE:
--			syslog(LOG_ERR, "Device failure in %s\n", device);
--			if (_remove_failed_devices(device))
-+		error = _get_mirror_event(device, params);
-+		if (error & ME_LOG_FAILURE ||
-+		    error & ME_PRIMARY_WRITE_FAILURE ||
-+		    error & ME_SECONDARY_WRITE_FAILURE) {
-+			if (_remove_failed_devices(device)) {
- 				/* FIXME Why are all the error return codes unused? Get rid of them? */
- 				syslog(LOG_ERR, "Failed to remove faulty devices in %s\n",
- 				       device);
-@@ -250,13 +278,18 @@ void process_event(struct dm_task *dmt,
- 				syslog(LOG_NOTICE, "%s is now a linear device.\n",
- 					device);
- 			*/
--			break;
--		case ME_IGNORE:
--			break;
--		default:
--			/* FIXME Provide value then! */
--			syslog(LOG_INFO, "Unknown event received.\n");
--		}
-+			}
-+		} else if (error & ME_INSYNC) {
-+			/* FIXME: all we really know is that this
-+			   _part_ of the device is in sync
-+			   Also, this is not an error
-+			*/
-+			syslog(LOG_NOTICE, "%s is now in-sync\n", device);
-+		} else if (error & ME_READ_FAILURE ||
-+			   error & ME_SYNC_FAILURE) {
-+			/* Ignore these for now */
-+		} else
-+			syslog(LOG_INFO, "Unknown event:%u received.\n", error);
- 	} while (next);
- 
- 	pthread_mutex_unlock(&_event_mutex);
+ #endif
 
 
