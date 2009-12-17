@@ -1,28 +1,47 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 3 Dec 2009 01:14:38 +0000
-Subject: [PATCH] #define and use INTERNAL_ERROR
-In-Reply-To: <87eine4w1y.fsf@twilight.int.mornfall.net.>
-References: <87eine4w1y.fsf@twilight.int.mornfall.net.>
-Message-ID: <20091203011438.GQ22702@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 17 Dec 2009 10:39:46 +0100
+Subject: Re: LVM2 lib/activate/dev_manager.c lib/cache/lvmc ...
+In-Reply-To: <20091216192214.22164.qmail@sourceware.org>
+References: <20091216192214.22164.qmail@sourceware.org>
+Message-ID: <4B29FC62.4000003@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Dec 01, 2009 at 03:18:33PM +0100, Peter Rockai wrote:
-> patch attached to #define an INTERNAL_ERROR macro and use it throughout
-> LVM. There's a couple of internal errors in libdm as well, and it seems
-> that the log_error used by libdm actually comes from lib/ (i.e. LVM) so
-> it may make sense to convert those as well.
- 
-Ack.
+Dne 16.12.2009 20:22, mornfall at sourceware.org napsal(a):
+> Modified files:
+> 	lib/activate   : dev_manager.c 
+> 	lib/cache      : lvmcache.c 
+> 	lib/format_text: export.c text_label.c 
+> 	lib/locking    : locking.c 
+> 	lib/log        : log.c log.h 
+> 	lib/metadata   : metadata.c 
+> 	lib/mm         : memlock.c 
+> 	lib/striped    : striped.c 
+> 	tools          : lvm.c lvmcmdline.c 
+> 
+> Log message:
+> 	#define an INTERNAL_ERROR macro and use it throughout LVM.
+> 
+> > -		log_error("Internal error: Nested locking attempted on VG %s.",
+> +		log_error(INTERNAL_ERROR "Nested locking attempted on VG %s.",
+>  			  vgname);
 
-Each source file includes (normally via another header) either
-dm-logging.h or lvm-logging.h which deals with routing the messages to
-the right logging function and with the right set of parameters.  log.h
-contains the part they have in common.
+Maybe we could introduce new macro
 
-Alasdair
+
+log_IERROR() & log_IDEBUG() to prepend string INTERNAL_ERROR and make the line
+shorter and more readable ?
+
+
+And check for abort() on internal error could be used only in case of these
+macros. (thus simplify  print_log() function)
+
+Also - it looks like when _log_suppress == 2 and abort_on_internal_errors is
+set - the abort() is skipped - is this bug or features ?
+
+Zdenek
 
 
