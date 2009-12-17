@@ -1,29 +1,40 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 17 Dec 2009 14:49:06 +0100
-Subject: [PATCH] Also clean up MISSING devices in --removemissing --force
-In-Reply-To: <87iqc5g8vw.fsf@twilight.int.mornfall.net.>
-References: <87iqc5g8vw.fsf@twilight.int.mornfall.net.>
-Message-ID: <4B2A36D2.9090002@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 17 Dec 2009 14:51:29 +0100
+Subject: [PATCH] Fix removal of multiple devices from a mirror.
+Message-ID: <871vitg13y.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Hi,
 
-On 12/17/2009 12:03 PM, Petr Rockai wrote:
-> this is a simple patch that makes --removemissing --force treat
-> MISSING_PV devices the same way as --removemissing (without --force)
-> does. This should fix the last bit of RHBZ 537954.
+the code for removing mirror images, as it is, shifts the first failed
+leg twice and fails to shift the second failed one at all, which
+reorders the mirror image array in such a way that a wrong leg is
+removed as a result.
 
-> -		if (pvl->pv->dev)
-> +		if (pvl->pv->dev && !(pvl->pv->status & MISSING_PV))
->  			continue;
->  		if (!_remove_pv(vg, pvl, 0))
->  			return_0;
+The trivial patch below fixes that behaviour by adjusting the array
+pointer to accommodate for the shift. Fixes RHBZ 543225.
 
-ack.
+Yours,
+   Petr.
 
-Milan
+Index: lib/metadata/mirror.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/lib/metadata/mirror.c,v
+retrieving revision 1.99
+diff -u -p -r1.99 mirror.c
+--- lib/metadata/mirror.c	9 Dec 2009 19:53:39 -0000	1.99
++++ lib/metadata/mirror.c	17 Dec 2009 13:43:30 -0000
+@@ -533,6 +533,7 @@ static int _remove_mirror_images(struct 
+ 			    _is_mirror_image_removable(sub_lv, removable_pvs)) {
+ 				if (!shift_mirror_images(mirrored_seg, s))
+ 					return_0;
++				s--; /* adjust counter after shifting */
+ 				new_area_count--;
+ 			}
+ 		}
 
 
