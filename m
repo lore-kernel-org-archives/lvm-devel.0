@@ -1,34 +1,56 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 3 Dec 2009 01:25:22 +0000
-Subject: [PATCH 04/23] Export outsz() and outhnt() for modules
-In-Reply-To: <1259581043-15308-5-git-send-email-zkabelac@redhat.com>
-References: <1259581043-15308-1-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-2-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-3-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-4-git-send-email-zkabelac@redhat.com>
-	<1259581043-15308-5-git-send-email-zkabelac@redhat.com>
-Message-ID: <20091203012522.GR22702@agk-dp.fab.redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 17 Dec 2009 09:34:33 -0600
+Subject: [PATCH] lvconvert fix
+Message-ID: <1261064073.22282.3.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Nov 30, 2009 at 12:37:04PM +0100, Zdenek Kabelac wrote:
-> Adding macro outsz() for out_size() and outhnt() for out_hint()
-> that checks for error in a similar way as outf() does for out_text()
+	brassow
 
-> +#define outsz(args...) do {if (!out_size(args)) return_0;} while (0)
-> +#define outhnt(args...) do {if (!out_hint(args)) return_0;} while (0)
->  #define outf(args...) do {if (!out_text(args)) return_0;} while (0)
->  #define outnl(f) do {if (!out_newline(f)) return_0;} while (0)
-  
-But outsz and outhnt are ugly, so if we can't think of better names,
-let's at least add another patch to swap over all 4 names so the
-exported versions are the 'nice' ones.
+The patch fixes some lvconvert issues (WRT mirror <-> mirror).
 
- #define out_newline(f) do {if (!outnl(f)) return_0;} while (0)
+The default log option for a mirror is 'disk'.  If the log
+type is not explicitly stated on the command line when
+converting from an X-way mirror to a Y-way mirror, 'disk'
+is chosen.  So, if you have a 'core' log mirror and you
+convert, your result will contain a 'disk' log.
 
-Alasdair
+This patch remembers what the old log type was.  If the
+user is merely trying to switch the number of mirror
+images, the log type is now kept the same.
+
+There is one historical behaviour I left in place...
+If you have a 2-way, core-log mirror and you use lvconvert to
+specify you want a 2-way mirror - without specifying the
+log type - you will get a 2-way, disk-log mirror.
+
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -577,6 +577,17 @@ static int _lvconvert_mirrors(struct cmd
+ 		return 0;
+ 	}
+ 
++	/*
++	 * If we are converting from one type of mirror to another, and
++	 * the type of log wasn't specified, then let's keep the log type
++	 * the same.
++	 */
++	if (existing_mirrors && lp->mirrors &&
++	    (lp->mirrors != existing_mirrors) &&
++	    !arg_count(cmd, mirrorlog_ARG) && !arg_count(cmd, corelog_ARG)) {
++		corelog = first_seg(lv)->log_lv ? 0 : 1;
++	}
++
+ 	if (repair) {
+ 		cmd->handles_missing_pvs = 1;
+ 		cmd->partial_activation = 1;
+
 
 
