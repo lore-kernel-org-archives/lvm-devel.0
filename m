@@ -1,57 +1,43 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 3 Dec 2009 01:48:07 -0000
-Subject: LVM2 ./WHATS_NEW test/t-lvcreate-usage.sh
-Message-ID: <20091203014807.5443.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 20 Dec 2009 16:32:56 +0100
+Subject: [PATCH] Invalidate devices in cache after precommited metadata was wiped.
+Message-ID: <1261323176-13839-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2009-12-03 01:48:07
+The only place when vginfo->precommited is set is during
+metadata store in cache.
 
-Modified files:
-	.              : WHATS_NEW 
-	test           : t-lvcreate-usage.sh 
+It means that if we store precommited metadata in cache,
+then call drop_cached_metadata without subsequent storing
+commited metadata, cache is not invalidated on drop cache call.
 
-Log message:
-	Add tests to check for readahead value in lvcreate.
+If there is no cached metadata, invalidate device info always.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1336&r2=1.1337
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+This is real fix for bug 547842.
 
---- LVM2/WHATS_NEW	2009/12/01 19:10:23	1.1336
-+++ LVM2/WHATS_NEW	2009/12/03 01:48:05	1.1337
-@@ -1,5 +1,6 @@
- Version 2.02.57 -
- ====================================
-+  Fix lvcreate --readahead.
-   Fix clvmd memory leak in lv_info_by_lvid.
-   Do not allow creating mirrors of more than 8 images.
-   Use locking_type 3 (compiled in cluster locking) in lvmconf.
---- LVM2/test/t-lvcreate-usage.sh	2009/09/30 16:13:53	1.16
-+++ LVM2/test/t-lvcreate-usage.sh	2009/12/03 01:48:07	1.17
-@@ -125,3 +125,18 @@
- lvchange -a n $vg/$lv1
- lvremove $vg/$lv1
- lvremove -ff $vg
-+
-+# readahead default (auto), none, #, auto
-+lvcreate -L 32m -n $lv $vg
-+check_lv_field_ $vg/$lv lv_read_ahead "auto"
-+lvremove -ff $vg
-+lvcreate -L 32m -n $lv --readahead none $vg
-+check_lv_field_ $vg/$lv lv_read_ahead "0"
-+lvremove -ff $vg
-+lvcreate -L 32m -n $lv --readahead 8k $vg
-+check_lv_field_ $vg/$lv lv_read_ahead "8.00k"
-+lvremove -ff $vg
-+lvcreate -L 32m -n $lv --readahead auto $vg
-+check_lv_field_ $vg/$lv lv_read_ahead "auto"
-+lvremove -ff $vg
-+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/cache/lvmcache.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 358cd80..fa6daee 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -173,7 +173,7 @@ static void _drop_metadata(const char *vgname)
+ 	 * and we must not do it again.
+ 	 */
+ 
+-	if (!vginfo->precommitted)
++	if (!vginfo->precommitted || !vginfo->vgmetadata)
+ 		dm_list_iterate_items(info, &vginfo->infos)
+ 			info->status |= CACHE_INVALID;
+ 
+-- 
+1.6.5.7
 
 
