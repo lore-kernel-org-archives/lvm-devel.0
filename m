@@ -1,46 +1,28 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 01 Dec 2009 15:11:49 +0100
-Subject: [PATCH] Disable udev rules on change event with DISK_RO=1
-Message-ID: <4B152425.4090506@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Tue, 22 Dec 2009 18:14:38 -0500
+Subject: latest LVM2 snapshot-merge patches in quilt tree
+Message-ID: <20091222231438.GA24696@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-There's a new change udev event generated since kernel 2.6.32 that
-notifies userspace about a change in read-only attribute for block
-devices (with DISK_RO=1 environment variable set):
+Alasdair,
 
-http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=e3264a4d7de147677f1995f119eba05c9abe9c1c
+I decided to leave the LVM2 patches in the quilt tree I've been
+maintaining rather than post them all to lvm-devel.
 
-We need to detect this and disable the rule application so the
-meaning of this change event is not interchanged with the regular
-change event used while resuming/renaming DM devices.
+The main reason for this is that the first 10 patches aren't _really_
+pure snapshot-merge changes.  But the series builds on them.  Anyway I
+figured you could pull the patches out of my quilt tree just fine.
 
-If there's anybody awaiting this notification in foreign rules,
-he can still check for this env var and do the appropriate actions
-separately.
+The quilt tree is available here:
+http://people.redhat.com/msnitzer/patches/snapshot-merge/lvm2/LVM2-2.02.57/
 
-Peter
+lvm-background-poll-flag.patch still has a TODO in the patch header; but
+I never got any feedback on this RFC patch.
 
-diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
-index aba0bf4..7cffc0b 100644
---- a/udev/10-dm.rules.in
-+++ b/udev/10-dm.rules.in
-@@ -19,6 +19,13 @@ KERNEL=="device-mapper", NAME="(DM_DIR)/control"
- SUBSYSTEM!="block", GOTO="dm_end"
- KERNEL!="dm-[0-9]*", GOTO="dm_end"
- 
-+# There is a new change event generated in block layer since kernel
-+# version 2.6.32. It adds notification for changes in read-only
-+# attribute. We don't want to misinterpret the regular meaning of change
-+# events for DM devices and we don't want to apply the rules prematurely,
-+# therefore we disable them in this situation.
-+ENV{DISK_RO}=="1", GOTO="dm_disable"
-+
- # Set proper sbin path, /sbin has higher priority than /usr/sbin.
- ENV{DM_SBIN_PATH}="/sbin"
- TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
+If you'd rather I post the patches to lvm-devel just let me know.
 
 
