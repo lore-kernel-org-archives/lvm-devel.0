@@ -1,46 +1,49 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 28 Dec 2009 18:34:46 -0000
-Subject: LVM2/tools vgcreate.c
-Message-ID: <20091228183446.17181.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 28 Dec 2009 20:08:51 +0100
+Subject: [PATCH] Resume volumes in reverse order to preserve memlock pairing.
+Message-ID: <1262027331-19005-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2009-12-28 18:34:46
+If renaming snapshot with virtual origin, the origin is renamed too.
+But the code must resume LVs in reverse order to properly
+pair memlock (in cluster locking).
 
-Modified files:
-	tools          : vgcreate.c 
+(The resume of snapshot resumes origin too and later resume
+is ignored otherwise.)
 
-Log message:
-	Fix previous vgcreate commit to not call unpaired unlock.
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/metadata/lv_manip.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcreate.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
-
---- LVM2/tools/vgcreate.c	2009/12/03 19:20:49	1.76
-+++ LVM2/tools/vgcreate.c	2009/12/28 18:34:45	1.77
-@@ -60,7 +60,8 @@
- 			log_error("A volume group called %s already exists.", vp_new.vg_name);
- 		else
- 			log_error("Can't get lock for %s.", vp_new.vg_name);
--		goto bad;
-+		vg_release(vg);
-+		return ECMD_FAILED;
- 	}
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7a0171e..041ed08 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1767,7 +1767,7 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+ 	struct volume_group *vg = lv->vg;
+ 	struct lv_names lv_names;
+ 	DM_LIST_INIT(lvs_changed);
+-	struct lv_list lvl, lvl2;
++	struct lv_list lvl, lvl2, *lvlp;
+ 	int r = 0;
  
- 	if (!vg_set_extent_size(vg, vp_new.extent_size) ||
-@@ -68,7 +69,7 @@
- 	    !vg_set_max_pv(vg, vp_new.max_pv) ||
- 	    !vg_set_alloc_policy(vg, vp_new.alloc) ||
- 	    !vg_set_clustered(vg, vp_new.clustered))
--		goto_bad;
-+		goto bad_orphan;
+ 	/* rename is not allowed on sub LVs */
+@@ -1822,7 +1822,8 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (!(r = vg_commit(vg)))
+ 		stack;
  
- 	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
- 		log_error("Can't get lock for orphan PVs");
+-	resume_lvs(cmd, &lvs_changed);
++	dm_list_iterate_back_items(lvlp, &lvs_changed)
++		resume_lv(cmd, lvlp->lv);
+ out:
+ 	backup(vg);
+ 	return r;
+-- 
+1.6.5.7
 
 
