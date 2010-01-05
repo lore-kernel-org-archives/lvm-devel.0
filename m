@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 5 Jan 2010 21:08:35 -0000
-Subject: LVM2 lib/activate/activate.c lib/locking/locki ...
-Message-ID: <20100105210835.25514.qmail@sourceware.org>
+Date: 5 Jan 2010 21:14:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/snapshot/snapshot.c
+Message-ID: <20100105211405.31122.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,106 +10,75 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-05 21:08:35
+Changes by:	snitzer at sourceware.org	2010-01-05 21:14:05
 
 Modified files:
-	lib/activate   : activate.c 
-	lib/locking    : locking.c 
-	tools          : pvmove.c vgchange.c 
+	.              : WHATS_NEW 
+	lib/snapshot   : snapshot.c 
 
 Log message:
-	Add missing 'stack;' for all activate_lv and deactivate_lv callers.
+	Use snapshot metadata usage to determine if snapshot is empty
+	
+	Version >= 1.8.0 of the DM snapshot target appends metadata sectors used
+	to a snapshot's status.  This patch allows LVM2 to accurately determine
+	if the snapshot store is empty.  Knowing when a snapshot store is empty
+	is important in the context of snapshot-merge (means merge is complete).
+	
+	Also update LVM2 to be aware of the possibility for "Merge failed" in
+	the snapshot-merge target's status.
 	
 	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.160&r2=1.161
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.71&r2=1.72
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1362&r2=1.1363
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
 
---- LVM2/lib/activate/activate.c	2009/12/03 19:23:40	1.160
-+++ LVM2/lib/activate/activate.c	2010/01/05 21:08:34	1.161
-@@ -714,7 +714,8 @@
- 	 * FIXME: check status to not deactivate already activate device
- 	 */
- 	if (activate_lv_excl(lv->vg->cmd, lv)) {
--		deactivate_lv(lv->vg->cmd, lv);
-+		if (!deactivate_lv(lv->vg->cmd, lv))
-+			stack;
- 		return 0;
- 	}
- 
---- LVM2/lib/locking/locking.c	2010/01/05 21:07:31	1.70
-+++ LVM2/lib/locking/locking.c	2010/01/05 21:08:34	1.71
-@@ -498,7 +498,8 @@
- 			log_error("Failed to activate %s", lvl->lv->name);
- 			dm_list_uniterate(lvh, lvs, &lvl->list) {
- 				lvl = dm_list_item(lvh, struct lv_list);
--				activate_lv(cmd, lvl->lv);
-+				if (!activate_lv(cmd, lvl->lv))
-+					stack;
- 			}
- 			return 0;
- 		}
---- LVM2/tools/pvmove.c	2010/01/05 21:07:31	1.71
-+++ LVM2/tools/pvmove.c	2010/01/05 21:08:34	1.72
-@@ -271,10 +271,17 @@
- static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
- 			unsigned exclusive)
+--- LVM2/WHATS_NEW	2010/01/05 20:56:51	1.1362
++++ LVM2/WHATS_NEW	2010/01/05 21:14:04	1.1363
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Use snapshot metadata usage to determine if a snapshot is empty.
+   Add --poll flag to vgchange and lvchange.
+   Propagate commit and revert metadata notification to other nodes in cluster.
+   Use proper mask for VG lock mode in clvmd.
+--- LVM2/lib/snapshot/snapshot.c	2009/10/01 00:35:30	1.38
++++ LVM2/lib/snapshot/snapshot.c	2010/01/05 21:14:05	1.39
+@@ -95,19 +95,27 @@
+ 				char *params, uint64_t *total_numerator,
+ 				uint64_t *total_denominator)
  {
-+	int r = 0;
-+
- 	if (exclusive)
--		return activate_lv_excl(cmd, lv_mirr);
-+		r = activate_lv_excl(cmd, lv_mirr);
-+	else
-+		r = activate_lv(cmd, lv_mirr);
+-	uint64_t numerator, denominator;
++	uint64_t total_sectors, sectors_allocated, metadata_sectors;
++	int r;
  
--	return activate_lv(cmd, lv_mirr);
-+	if (!r)
-+		stack;
-+
-+	return r;
- }
- 
- static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
---- LVM2/tools/vgchange.c	2010/01/05 20:56:52	1.93
-+++ LVM2/tools/vgchange.c	2010/01/05 21:08:34	1.94
-@@ -114,19 +114,29 @@
- 		expected_count++;
- 
- 		if (activate == CHANGE_AN) {
--			if (!deactivate_lv(cmd, lv))
-+			if (!deactivate_lv(cmd, lv)) {
-+				stack;
- 				continue;
-+			}
- 		} else if (activate == CHANGE_ALN) {
--			if (!deactivate_lv_local(cmd, lv))
-+			if (!deactivate_lv_local(cmd, lv)) {
-+				stack;
- 				continue;
-+			}
- 		} else if (lv_is_origin(lv) || (activate == CHANGE_AE)) {
--			if (!activate_lv_excl(cmd, lv))
-+			if (!activate_lv_excl(cmd, lv)) {
-+				stack;
- 				continue;
-+			}
- 		} else if (activate == CHANGE_ALY) {
--			if (!activate_lv_local(cmd, lv))
-+			if (!activate_lv_local(cmd, lv)) {
-+				stack;
- 				continue;
--		} else if (!activate_lv(cmd, lv))
-+			}
-+		} else if (!activate_lv(cmd, lv)) {
-+			stack;
- 			continue;
-+		}
- 
- 		if (background_polling() &&
- 		    activate != CHANGE_AN && activate != CHANGE_ALN &&
+-	if (sscanf(params, "%" PRIu64 "/%" PRIu64,
+-		   &numerator, &denominator) == 2) {
+-		*total_numerator += numerator;
+-		*total_denominator += denominator;
+-		if (!numerator)
++	/*
++	 * snapshot target's percent format:
++	 * <= 1.7.0: <sectors_allocated>/<total_sectors>
++	 * >= 1.8.0: <sectors_allocated>/<total_sectors> <metadata_sectors>
++	 */
++	r = sscanf(params, "%" PRIu64 "/%" PRIu64 " %" PRIu64,
++		   &sectors_allocated, &total_sectors, &metadata_sectors);
++	if (r == 2 || r == 3) {
++		*total_numerator += sectors_allocated;
++		*total_denominator += total_sectors;
++		if (r == 3 && sectors_allocated == metadata_sectors)
+ 			*percent_range = PERCENT_0;
+-		else if (numerator == denominator)
++		else if (sectors_allocated == total_sectors)
+ 			*percent_range = PERCENT_100;
+ 		else
+ 			*percent_range = PERCENT_0_TO_100;
+-	} else if (!strcmp(params, "Invalid"))
++	} else if (!strcmp(params, "Invalid") ||
++		   !strcmp(params, "Merge failed"))
+ 		*percent_range = PERCENT_INVALID;
+ 	else
+ 		return 0;
 
 
