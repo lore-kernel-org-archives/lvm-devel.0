@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 6 Jan 2010 13:27:08 -0000
-Subject: LVM2 ./WHATS_NEW doc/example.conf lib/config/d ...
-Message-ID: <20100106132708.21880.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 6 Jan 2010 19:08:58 -0000
+Subject: LVM2 man/lvchange.8.in man/vgchange.8.in tools ...
+Message-ID: <20100106190858.23346.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,86 +10,95 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-01-06 13:27:07
+Changes by:	snitzer at sourceware.org	2010-01-06 19:08:58
 
 Modified files:
-	.              : WHATS_NEW 
-	doc            : example.conf 
-	lib/config     : defaults.h 
-	lib/metadata   : mirror.c 
-	tools          : lvconvert.c 
+	man            : lvchange.8.in vgchange.8.in 
+	tools          : lvchange.c vgchange.c 
 
 Log message:
-	Rename mirror_device_fault_policy to mirror_image_fault policy
+	. update documentation for --poll in the vgchange and lvchange man pages
+	. add high-level --poll FIXMEs to vgchange.c and lvchange.c
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1366&r2=1.1367
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.52&r2=1.53
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.102&r2=1.103
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.100&r2=1.101
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvchange.8.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgchange.8.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.94&r2=1.95
 
---- LVM2/WHATS_NEW	2010/01/06 13:26:21	1.1366
-+++ LVM2/WHATS_NEW	2010/01/06 13:27:06	1.1367
-@@ -1,5 +1,6 @@
- Version 2.02.57 -
- ====================================
-+  Rename mirror_device_fault_policy to mirror_image_fault policy.
-   Remove empty PV devices if lvconvert --repair is using defined policies.
-   Use fixed buffer to prevent stack overflow in persistent filter dump.
-   Use snapshot metadata usage to determine if a snapshot is empty.
---- LVM2/doc/example.conf	2009/11/30 17:17:11	1.52
-+++ LVM2/doc/example.conf	2010/01/06 13:27:07	1.53
-@@ -405,7 +405,7 @@
-     #            be allocated for the replacement.
+--- LVM2/man/lvchange.8.in	2010/01/05 20:56:51	1.5
++++ LVM2/man/lvchange.8.in	2010/01/06 19:08:58	1.6
+@@ -64,12 +64,12 @@
+ set in \fBlvm.conf\fP.
+ .TP
+ .I \-\-poll y|n
+-Controls whether or not a logical volume's progress is polled.  It may
+-not be appropriate to immediately poll the progress of a logical
+-volume's transformation when it is activated (for example, when merging
+-a snapshot into the root FS).  The progress polling of an incomplete
+-pvmove or lvconvert can be deferred using \fB--poll n\fP and restarted
+-using \fB--poll y\fP.
++Without polling a logical volume's backgrounded transformation process
++will never complete.  If there is an incomplete pvmove or lvconvert (for
++example, on rebooting after a crash), use \fB--poll y\fP to restart the
++process from its last checkpoint.  However, it may not be appropriate to
++immediately poll a logical volume when it is activated, use \fB--poll
++n\fP to defer and then \fB--poll y\fP to restart the process.
+ .TP
+ .I \-\-noudevsync
+ Disable udev synchronisation. The
+--- LVM2/man/vgchange.8.in	2010/01/05 20:56:51	1.6
++++ LVM2/man/vgchange.8.in	2010/01/06 19:08:58	1.7
+@@ -89,12 +89,12 @@
+ .BR lvm.conf (5).
+ .TP
+ .BR \-\-poll " " { y | n }
+-Controls whether or not a logical volume's progress is polled.  It may
+-not be appropriate to immediately poll the progress of a logical
+-volume's transformation when it is activated (for example, when merging
+-a snapshot into the root FS).  The progress polling of an incomplete
+-pvmove or lvconvert can be deferred using \fB--poll n\fP and restarted
+-using \fB--poll y\fP.
++Without polling a logical volume's backgrounded transformation process
++will never complete.  If there is an incomplete pvmove or lvconvert (for
++example, on rebooting after a crash), use \fB--poll y\fP to restart the
++process from its last checkpoint.  However, it may not be appropriate to
++immediately poll a logical volume when it is activated, use \fB--poll
++n\fP to defer and then \fB--poll y\fP to restart the process.
+ .TP
+ .BR \-\-noudevsync
+ Disable udev synchronisation. The
+--- LVM2/tools/lvchange.c	2010/01/05 21:07:31	1.115
++++ LVM2/tools/lvchange.c	2010/01/06 19:08:58	1.116
+@@ -596,6 +596,13 @@
+ 					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
+ 					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
  
-     mirror_log_fault_policy = "allocate"
--    mirror_device_fault_policy = "remove"
-+    mirror_image_fault_policy = "remove"
- }
++	/*
++	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
++	 * If --poll is explicitly provided use it; otherwise polling
++	 * should only be started if the LV is not already active. So:
++	 * 1) change the activation code to say if the LV was actually activated
++	 * 2) make polling of an LV tightly coupled with LV activation
++	 */
+ 	init_background_polling(arg_int_value(cmd, poll_ARG,
+ 					      DEFAULT_BACKGROUND_POLLING));
  
+--- LVM2/tools/vgchange.c	2010/01/05 21:08:34	1.94
++++ LVM2/tools/vgchange.c	2010/01/06 19:08:58	1.95
+@@ -548,6 +548,13 @@
+ 					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
+ 					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
  
---- LVM2/lib/config/defaults.h	2010/01/05 20:56:51	1.56
-+++ LVM2/lib/config/defaults.h	2010/01/06 13:27:07	1.57
-@@ -46,7 +46,7 @@
++	/*
++	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
++	 * If --poll is explicitly provided use it; otherwise polling
++	 * should only be started if the LV is not already active. So:
++	 * 1) change the activation code to say if the LV was actually activated
++	 * 2) make polling of an LV tightly coupled with LV activation
++	 */
+ 	init_background_polling(arg_int_value(cmd, poll_ARG,
+ 					      DEFAULT_BACKGROUND_POLLING));
  
- #define DEFAULT_MIRRORLOG "disk"
- #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
--#define DEFAULT_MIRROR_DEV_FAULT_POLICY "remove"
-+#define DEFAULT_MIRROR_IMAGE_FAULT_POLICY "remove"
- #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
- #define DEFAULT_DMEVENTD_MIRROR_LIB "libdevmapper-event-lvm2mirror.so"
- #define DEFAULT_DMEVENTD_MONITOR 1
---- LVM2/lib/metadata/mirror.c	2010/01/05 21:07:31	1.102
-+++ LVM2/lib/metadata/mirror.c	2010/01/06 13:27:07	1.103
-@@ -783,9 +783,13 @@
- 	if (log_policy)
- 		policy = find_config_str(NULL, "activation/mirror_log_fault_policy",
- 					 DEFAULT_MIRROR_LOG_FAULT_POLICY);
--	else
--		policy = find_config_str(NULL, "activation/mirror_device_fault_policy",
--					 DEFAULT_MIRROR_DEV_FAULT_POLICY);
-+	else {
-+		policy = find_config_str(NULL, "activation/mirror_image_fault_policy",
-+					 NULL);
-+		if (!policy)
-+			policy = find_config_str(NULL, "activation/mirror_device_fault_policy",
-+						 DEFAULT_MIRROR_IMAGE_FAULT_POLICY);
-+	}
- 
- 	if (!strcmp(policy, "remove"))
- 		return MIRROR_REMOVE;
---- LVM2/tools/lvconvert.c	2010/01/06 13:26:21	1.100
-+++ LVM2/tools/lvconvert.c	2010/01/06 13:27:07	1.101
-@@ -475,6 +475,9 @@
- 
- 	if (arg_count(cmd, use_policies_ARG)) {
- 		leg_policy = find_config_tree_str(cmd,
-+					"activation/mirror_image_fault_policy", NULL);
-+		if (!leg_policy)
-+			leg_policy = find_config_tree_str(cmd,
- 					"activation/mirror_device_fault_policy",
- 					DEFAULT_MIRROR_DEVICE_FAULT_POLICY);
- 		log_policy = find_config_tree_str(cmd,
 
 
