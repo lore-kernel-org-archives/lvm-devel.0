@@ -1,23 +1,40 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed,  6 Jan 2010 13:20:52 +0100
-Subject: [PATCH] Use static buffer to prevent stack overflow in persistent filter dump.
-Message-ID: <1262780452-27329-1-git-send-email-mbroz@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 6 Jan 2010 13:25:37 -0000
+Subject: LVM2 ./WHATS_NEW lib/filters/filter-persistent.c
+Message-ID: <20100106132537.20443.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/filters/filter-persistent.c |   11 +++--------
- 1 files changed, 3 insertions(+), 8 deletions(-)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2010-01-06 13:25:36
 
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index d91ed13..9243a94 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -143,7 +143,7 @@ static void _write_array(struct pfilter *pf, FILE *fp, const char *path,
+Modified files:
+	.              : WHATS_NEW 
+	lib/filters    : filter-persistent.c 
+
+Log message:
+	Use fixed buffer to prevent stack overflow in persistent filter dump.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1364&r2=1.1365
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-persistent.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+
+--- LVM2/WHATS_NEW	2010/01/05 21:32:59	1.1364
++++ LVM2/WHATS_NEW	2010/01/06 13:25:36	1.1365
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Use fixed buffer to prevent stack overflow in persistent filter dump.
+   Use snapshot metadata usage to determine if a snapshot is empty.
+   Insert missing stack macros to all activate_lv and deactivate_lv callers.
+   Insert missing stack macros to all suspend_lv and resume_lv callers.
+--- LVM2/lib/filters/filter-persistent.c	2009/12/11 13:16:38	1.39
++++ LVM2/lib/filters/filter-persistent.c	2010/01/06 13:25:36	1.40
+@@ -143,7 +143,7 @@
  {
  	void *d;
  	int first = 1;
@@ -26,7 +43,7 @@ index d91ed13..9243a94 100644
  	struct dm_hash_node *n;
  
  	for (n = dm_hash_get_first(pf->devices); n;
-@@ -160,13 +160,8 @@ static void _write_array(struct pfilter *pf, FILE *fp, const char *path,
+@@ -160,13 +160,8 @@
  			first = 0;
  		}
  
@@ -42,7 +59,5 @@ index d91ed13..9243a94 100644
  	}
  
  	if (!first)
--- 
-1.6.5.7
 
 
