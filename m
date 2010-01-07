@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 7 Jan 2010 14:37:12 -0000
-Subject: LVM2 ./WHATS_NEW lib/report/report.c
-Message-ID: <20100107143712.25368.qmail@sourceware.org>
+Date: 7 Jan 2010 14:40:47 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/export.c lib/ ...
+Message-ID: <20100107144047.26345.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,77 +10,95 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-01-07 14:37:12
+Changes by:	zkabelac at sourceware.org	2010-01-07 14:40:46
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/report     : report.c 
+	lib/format_text: export.c text_export.h 
 
 Log message:
-	Use offsetof() macro and avoid defining dummy static union for FIELD() macro.
-	Makes it compilable by clang compiler.
+	Add macros outsize() for out_size() and outhint() for out_hint() that check
+	for errors in a similar way as outf() for out_text().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1367&r2=1.1368
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1368&r2=1.1369
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/export.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_export.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/WHATS_NEW	2010/01/06 13:27:06	1.1367
-+++ LVM2/WHATS_NEW	2010/01/07 14:37:11	1.1368
+--- LVM2/WHATS_NEW	2010/01/07 14:37:11	1.1368
++++ LVM2/WHATS_NEW	2010/01/07 14:40:46	1.1369
 @@ -1,5 +1,6 @@
  Version 2.02.57 -
  ====================================
-+  Use offsetof() macro for FIELD() macro in lib/report/report.c.
++  Add macros outsize() and outhint().
+   Use offsetof() macro for FIELD() macro in lib/report/report.c.
    Rename mirror_device_fault_policy to mirror_image_fault policy.
    Remove empty PV devices if lvconvert --repair is using defined policies.
-   Use fixed buffer to prevent stack overflow in persistent filter dump.
---- LVM2/lib/report/report.c	2009/10/31 17:26:14	1.106
-+++ LVM2/lib/report/report.c	2010/01/07 14:37:12	1.107
-@@ -24,6 +24,8 @@
- #include "str_list.h"
- #include "lvmcache.h"
+--- LVM2/lib/format_text/export.c	2009/12/16 19:22:12	1.73
++++ LVM2/lib/format_text/export.c	2010/01/07 14:40:46	1.74
+@@ -386,9 +386,8 @@
+ 	if (vg->system_id && *vg->system_id)
+ 		outf(f, "system_id = \"%s\"", vg->system_id);
  
-+#include <stddef.h> /* offsetof() */
-+
- struct lvm_report_object {
- 	struct volume_group *vg;
- 	struct logical_volume *lv;
-@@ -32,17 +34,6 @@
- 	struct pv_segment *pvseg;
- };
+-	if (!out_size(f, (uint64_t) vg->extent_size, "extent_size = %u",
+-		      vg->extent_size))
+-		return_0;
++	outsize(f, (uint64_t) vg->extent_size, "extent_size = %u",
++		vg->extent_size);
+ 	outf(f, "max_lv = %u", vg->max_lv);
+ 	outf(f, "max_pv = %u", vg->max_pv);
  
--/*
-- * For macro use
-- */
--static union {
--	struct physical_volume _pv;
--	struct logical_volume _lv;
--	struct volume_group _vg;
--	struct lv_segment _seg;
--	struct pv_segment _pvseg;
--} _dummy;
--
- static char _alloc_policy_char(alloc_policy_t alloc)
- {
- 	switch (alloc) {
-@@ -1156,9 +1147,17 @@
+@@ -453,9 +452,8 @@
+ 			return 0;
+ 		}
  
- #define STR DM_REPORT_FIELD_TYPE_STRING
- #define NUM DM_REPORT_FIELD_TYPE_NUMBER
--#define FIELD(type, strct, sorttype, head, field, width, func, id, desc) {type, sorttype, (off_t)((uintptr_t)&_dummy._ ## strct.field - (uintptr_t)&_dummy._ ## strct), width, id, head, &_ ## func ## _disp, desc},
-+#define FIELD(type, strct, sorttype, head, field, width, func, id, desc) \
-+	{type, sorttype, offsetof(type_ ## strct, field), width, \
-+	 id, head, &_ ## func ## _disp, desc},
-+
-+typedef struct physical_volume type_pv;
-+typedef struct logical_volume type_lv;
-+typedef struct volume_group type_vg;
-+typedef struct lv_segment type_seg;
-+typedef struct pv_segment type_pvseg;
+-		if (!out_hint(f, "device = \"%s\"",
+-			      escape_double_quotes(buf, pv_dev_name(pv))))
+-			return_0;
++		outhint(f, "device = \"%s\"",
++			escape_double_quotes(buf, pv_dev_name(pv)));
+ 		outnl(f);
  
--static struct dm_report_field_type _fields[] = {
-+static const struct dm_report_field_type _fields[] = {
- #include "columns.h"
- {0, 0, 0, 0, "", "", NULL, NULL},
- };
+ 		if (!_print_flag_config(f, pv->status, PV_FLAGS))
+@@ -467,13 +465,11 @@
+ 			outf(f, "tags = %s", buffer);
+ 		}
+ 
+-		if (!out_size(f, pv->size, "dev_size = %" PRIu64, pv->size))
+-			return_0;
++		outsize(f, pv->size, "dev_size = %" PRIu64, pv->size);
+ 
+ 		outf(f, "pe_start = %" PRIu64, pv->pe_start);
+-		if (!out_size(f, vg->extent_size * (uint64_t) pv->pe_count,
+-			      "pe_count = %u", pv->pe_count))
+-			return_0;
++		outsize(f, vg->extent_size * (uint64_t) pv->pe_count,
++			"pe_count = %u", pv->pe_count);
+ 
+ 		_dec_indent(f);
+ 		outf(f, "}");
+@@ -493,9 +489,8 @@
+ 	_inc_indent(f);
+ 
+ 	outf(f, "start_extent = %u", seg->le);
+-	if (!out_size(f, (uint64_t) seg->len * vg->extent_size,
+-		      "extent_count = %u", seg->len))
+-		return_0;
++	outsize(f, (uint64_t) seg->len * vg->extent_size,
++		"extent_count = %u", seg->len);
+ 
+ 	outnl(f);
+ 	outf(f, "type = \"%s\"", seg->segtype->name);
+--- LVM2/lib/format_text/text_export.h	2009/11/03 11:00:46	1.6
++++ LVM2/lib/format_text/text_export.h	2010/01/07 14:40:46	1.7
+@@ -16,6 +16,8 @@
+ #ifndef _LVM_TEXT_EXPORT_H
+ #define _LVM_TEXT_EXPORT_H
+ 
++#define outsize(args...) do {if (!out_size(args)) return_0;} while (0)
++#define outhint(args...) do {if (!out_hint(args)) return_0;} while (0)
+ #define outf(args...) do {if (!out_text(args)) return_0;} while (0)
+ #define outnl(f) do {if (!out_newline(f)) return_0;} while (0)
+ 
 
 
