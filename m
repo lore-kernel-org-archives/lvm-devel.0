@@ -1,41 +1,57 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 6 Mar 2018 09:46:39 -0500
-Subject: master - tests: skipping test waiting for fixed kernel
-Message-ID: <201803061446.w26EkdIg027197@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 7 Jan 2010 14:30:48 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-report.c
+Message-ID: <20100107143048.23697.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=15b6793528de99a70e988d09502ca33ad1d7c575
-Commit:        15b6793528de99a70e988d09502ca33ad1d7c575
-Parent:        b05caca77e3df828d69d13ef52f43cc1531d6481
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 6 15:32:27 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 6 15:42:49 2018 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-01-07 14:30:47
 
-tests: skipping test waiting for fixed kernel
+Modified files:
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-report.c 
 
-Once working kernel is released, reenable me...
----
- .../lvconvert-raid-reshape-stripes-load-fail.sh    |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+Log message:
+	Show all fields for 'dmsetup info -c -o all'.
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-index 38af778..3fac9a4 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-@@ -15,6 +15,9 @@ SKIP_WITH_LVMPOLLD=1
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.323&r2=1.324
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+
+--- LVM2/WHATS_NEW_DM	2010/01/05 21:32:59	1.323
++++ LVM2/WHATS_NEW_DM	2010/01/07 14:30:47	1.324
+@@ -1,5 +1,6 @@
+ Version 1.02.41 -
+ ====================================
++  Update code to show all fields for 'dmsetup info -c -o all'.
+   Return error from dm_tree_deactivate_children().
+   Return error from dm_tree_suspend_children().
+   Return error from dm_tree_preload_children() and dm_tree_activate_children().
+--- LVM2/libdm/libdm-report.c	2009/02/09 09:45:49	1.30
++++ LVM2/libdm/libdm-report.c	2010/01/07 14:30:47	1.31
+@@ -26,6 +26,8 @@
+ struct dm_report {
+ 	struct dm_pool *mem;
  
- . lib/inittest
++	/* To report all available types */
++#define REPORT_TYPES_ALL	UINT32_MAX
+ 	uint32_t report_types;
+ 	const char *output_field_name_prefix;
+ 	const char *field_prefix;
+@@ -379,7 +381,8 @@
+ 			       _all_match(rh, prefixed_all,
+ 					  strlen(prefixed_all));
+ 		} else
+-			return rh->report_types;
++			return (rh->report_types)
++				? rh->report_types : REPORT_TYPES_ALL;
+ 	}
  
-+# FIXME - skippping until properly kernel is released
-+skip
-+
- # Test reshaping under io load
- 
- which mkfs.ext4 || skip
+ 	for (t = rh->types; t->data_fn; t++) {
 
 
