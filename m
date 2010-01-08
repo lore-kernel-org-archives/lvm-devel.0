@@ -1,80 +1,169 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 8 Jan 2010 14:03:55 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgremove.c
-Message-ID: <20100108140355.25433.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 08 Jan 2010 15:52:47 +0100
+Subject: [PATCH 0/4] Add support for libdevmapper and dmsetup to disable udev checking on request
+Message-ID: <4B4746BF.7090300@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-01-08 14:03:55
+Per discussion with Dave, we've gathered a few things that would be quite fine to have
+cleaned up while udev_sync is enabled...
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : vgremove.c 
+Sometimes it is really needed to switch off udev checking and the warnings we show when
+we detect that udev has not done its job right - the messages like "Udev should have done
+this and that. Falling back to direct node creation/removal. " etc.
 
-Log message:
-	Allow vgremove of a VG with PVs missing.
+This would be especially handy while setting DM_DEV_DIR env var that could be set to a
+different location than standard /dev (udev can't create nodes/symlinks out of that one
+directory that is configured into udevd). The exact same situation happens while we're
+running our tests so the output is full of those warning messages which is a little bit
+irritating :)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1373&r2=1.1374
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgremove.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+So now, you can disable these checks globally with dm_udev_set_checking(0).
 
---- LVM2/WHATS_NEW	2010/01/07 20:55:01	1.1373
-+++ LVM2/WHATS_NEW	2010/01/08 14:03:54	1.1374
-@@ -1,5 +1,6 @@
- Version 2.02.57 -
- ====================================
-+  Allow vgremove of a VG with PVs missing.
-   Keep log type consistent when changing mirror image count.
-   Always set environment variables for an LVM2 device in 11-dm-lvm.rules.
-   Add activation/udev_rules config option in lvm.conf.
---- LVM2/tools/vgremove.c	2009/12/03 19:18:34	1.58
-+++ LVM2/tools/vgremove.c	2010/01/08 14:03:55	1.59
-@@ -19,7 +19,7 @@
- 			   struct volume_group *vg,
- 			   void *handle __attribute((unused)))
- {
--	unsigned lv_count;
-+	unsigned lv_count, missing;
- 	force_t force;
+This patch adds support for libdevmapper and dmsetup which tries to read
+DM_UDEV_DISABLE_CHECKING=1 env var and sets this option globally in libdevmapper then.
+
+(just a proposal)
+
+Peter
+
+
+diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
+index 1555e42..22fe7f8 100644
+--- a/libdm/.exported_symbols
++++ b/libdm/.exported_symbols
+@@ -163,5 +163,7 @@ dm_list_size
+ dm_cookie_supported
+ dm_udev_set_sync_support
+ dm_udev_get_sync_support
++dm_udev_set_checking
++dm_udev_get_checking
+ dm_udev_complete
+ dm_udev_wait
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 4c4734f..dee3347 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -1086,6 +1086,8 @@ int dm_cookie_supported(void);
+  */
+ void dm_udev_set_sync_support(int sync_with_udev);
+ int dm_udev_get_sync_support(void);
++void dm_udev_set_checking(int checking);
++int dm_udev_get_checking(void);
+ int dm_udev_complete(uint32_t cookie);
+ int dm_udev_wait(uint32_t cookie);
  
- 	if (!vg_check_status(vg, EXPORTED_VG)) {
-@@ -31,13 +31,17 @@
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 43ef63a..36a60c3 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -52,6 +52,7 @@ static int _verbose = 0;
+ #ifdef UDEV_SYNC_SUPPORT
+ static int _udev_running = -1;
+ static int _sync_with_udev = 1;
++static int _udev_checking = 1;
+ #endif
  
- 	force = arg_count(cmd, force_ARG);
- 	if (lv_count) {
--		if ((force == PROMPT) &&
--		    (yes_no_prompt("Do you really want to remove volume "
--				   "group \"%s\" containing %u "
--				   "logical volumes? [y/n]: ",
--				   vg_name, lv_count) == 'n')) {
--			log_error("Volume group \"%s\" not removed", vg_name);
--			return ECMD_FAILED;
-+		if (force == PROMPT) {
-+			if ((missing = vg_missing_pv_count(vg)))
-+				log_warn("WARNING: %d physical volumes are currently missing "
-+					 "from the system.", missing);
-+			if (yes_no_prompt("Do you really want to remove volume "
-+					  "group \"%s\" containing %u "
-+					  "logical volumes? [y/n]: ",
-+					  vg_name, lv_count) == 'n') {
-+				log_error("Volume group \"%s\" not removed", vg_name);
-+				return ECMD_FAILED;
-+			}
+ /*
+@@ -428,7 +429,8 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
+ 				  dev_name);
+ 			return 0;
  		}
- 		if (!remove_lvs_in_vg(cmd, vg, force)) {
- 			stack;
-@@ -67,6 +71,7 @@
- 		return EINVALID_CMD_LINE;
- 	}
+-	} else if (dm_udev_get_sync_support() && check_udev)
++	} else if (dm_udev_get_sync_support() && dm_udev_get_checking() &&
++		   check_udev)
+ 		log_warn("%s not set up by udev: Falling back to direct "
+ 			 "node creation.", path);
  
-+	cmd->handles_missing_pvs = 1;
- 	ret = process_each_vg(cmd, argc, argv,
- 			      READ_FOR_UPDATE,
- 			      NULL, &vgremove_single);
+@@ -462,7 +464,8 @@ static int _rm_dev_node(const char *dev_name, int check_udev)
+ 
+ 	if (stat(path, &info) < 0)
+ 		return 1;
+-	else if (dm_udev_get_sync_support() && check_udev)
++	else if (dm_udev_get_sync_support() && dm_udev_get_checking() &&
++		 check_udev)
+ 		log_warn("Node %s was not removed by udev. "
+ 			 "Falling back to direct node removal.", path);
+ 
+@@ -492,7 +495,8 @@ static int _rename_dev_node(const char *old_name, const char *new_name,
+ 				  "is already present", newpath);
+ 			return 0;
+ 		}
+-		else if (dm_udev_get_sync_support() && check_udev) {
++		else if (dm_udev_get_sync_support() && dm_udev_get_checking() &&
++			 check_udev) {
+ 			if (stat(oldpath, &info) < 0 &&
+ 				 errno == ENOENT)
+ 				/* assume udev already deleted this */
+@@ -516,7 +520,8 @@ static int _rename_dev_node(const char *old_name, const char *new_name,
+ 			return 0;
+ 		}
+ 	}
+-	else if (dm_udev_get_sync_support() && check_udev)
++	else if (dm_udev_get_sync_support() && dm_udev_get_checking() &&
++		 check_udev)
+ 		log_warn("The node %s should have been renamed to %s "
+ 			 "by udev but new node is not present. "
+ 			 "Falling back to direct node rename.",
+@@ -884,6 +889,15 @@ int dm_udev_get_sync_support(void)
+ 	return 0;
+ }
+ 
++void dm_udev_set_checking(int checking)
++{
++}
++
++int dm_udev_get_checking(void)
++{
++	return 0;
++}
++
+ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
+ {
+ 	if (dm_cookie_supported())
+@@ -963,6 +977,16 @@ int dm_udev_get_sync_support(void)
+ 	return dm_cookie_supported() && _udev_running && _sync_with_udev;
+ }
+ 
++void dm_udev_set_checking(int checking)
++{
++	_udev_checking = checking;
++}
++
++int dm_udev_get_checking(void)
++{
++	return _udev_checking;
++}
++
+ static int _get_cookie_sem(uint32_t cookie, int *semid)
+ {
+ 	if (cookie >> 16 != DM_COOKIE_MAGIC) {
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index d81032b..1475e1a 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -3158,6 +3158,7 @@ int main(int argc, char **argv)
+ 	struct command *c;
+ 	int r = 1;
+ 	const char *dev_dir;
++	const char *disable_udev_checking;
+ 
+ 	(void) setlocale(LC_ALL, "");
+ 
+@@ -3170,6 +3171,11 @@ int main(int argc, char **argv)
+ 	} else
+ 		dev_dir = DEFAULT_DM_DEV_DIR;
+ 
++	disable_udev_checking = getenv("DM_UDEV_DISABLE_CHECKING");
++	if ((disable_udev_checking && *disable_udev_checking) &&
++	    !strcmp(disable_udev_checking, "1"))
++		dm_udev_set_checking(0);
++
+ 	if (!_process_switches(&argc, &argv, dev_dir)) {
+ 		fprintf(stderr, "Couldn't process command line.\n");
+ 		goto out;
 
 
