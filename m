@@ -1,54 +1,32 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 08 Jan 2010 15:53:17 +0100
-Subject: [PATCH 3/4] Set env vars for tests to disable udev checking
-Message-ID: <4B4746DD.4070102@redhat.com>
+Date: Fri, 08 Jan 2010 15:53:27 +0100
+Subject: [PATCH 4/4] Show warning message when libudev not found and we're using --enable-udev_sync
+Message-ID: <4B4746E7.3000304@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When configured with --enable-udev_sync, set env vars to disable udev checking for our tests
-since they use their own location for nodes and symlinks.
+We use libudev to get the udev state and if it's not running, we just disable the udev sync
+code. If the library function we need is not found, we just assume that udev is not running.
+But that could be misleading if we don't spot the "no" in the configure process. So it's
+better to show a warning to emphasize it a little...
 
 Peter
 
 diff --git a/configure.in b/configure.in
-index 834fd6e..8db301c 100644
+index 8db301c..68edb5f 100644
 --- a/configure.in
 +++ b/configure.in
-@@ -1130,6 +1130,7 @@ AC_SUBST(SNAPSHOTS)
- AC_SUBST(STATICDIR)
- AC_SUBST(STATIC_LINK)
- AC_SUBST(UDEV_RULES)
-+AC_SUBST(UDEV_SYNC)
- AC_SUBST([LIB_PTHREAD])
- AC_SUBST(interface)
- AC_SUBST(kerneldir)
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 75366fd..6b7c76a 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -30,6 +30,11 @@ SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
+@@ -669,6 +669,8 @@ if test x$UDEV_SYNC = xyes; then
+ 			AC_DEFINE([HAVE_UDEV_QUEUE_GET_UDEV_IS_ACTIVE], 1,
+ 			  [Define to 1 if libudev's udev_queue_get_udev_is_active function is available.])
+ 			LIBS="-ludev $LIBS"
++		else
++			AC_MSG_WARN(It won't be possible to get udev state. We will assume that udev is not running.)
+ 		fi
+ fi
  
- T = $(wildcard $(srcdir)/t-*.sh)
- 
-+ifeq ("@UDEV_SYNC@", "yes")
-+dm_udev_disable_checking = 1
-+lvm_udev_disable_checking = 1
-+endif
-+
- ifeq ("@APPLIB@", "yes")
- T += $(srcdir)/lvm2app.sh
- all: api/vgtest
-@@ -56,6 +61,8 @@ init.sh: $(srcdir)/Makefile.in $(srcdir)/test-utils.sh .bin-dir-stamp bin/not bi
- 	echo 'abs_srcdir=$(abs_srcdir)' >> $@-t
- 	echo 'abs_builddir=$(abs_builddir)' >> $@-t
- 	echo 'export PATH' >> $@-t
-+	echo 'export DM_UDEV_DISABLE_CHECKING=$(dm_udev_disable_checking)' >> $@-t
-+	echo 'export LVM_UDEV_DISABLE_CHECKING=$(lvm_udev_disable_checking)' >> $@-t
- 	chmod a-w $@-t
- 	mv $@-t $@
- 	if test "$(srcdir)" != "."; then cp $(srcdir)/test-utils.sh \
 
 
