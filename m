@@ -1,70 +1,169 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 11 Jan 2010 09:41:08 -0500
-Subject: [RFC][PATCH] exit backgrounded polldaemon on completion
-Message-ID: <20100111144107.GA9999@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 11 Jan 2010 21:20:20 -0000
+Subject: LVM2 lib/metadata/lv_manip.c test/t-mirror-lvc ...
+Message-ID: <20100111212020.11101.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the polldaemon is executed in the background (the child) it will go
-on to duplicate the work that poll_daemon() caller (the parent) already
-performed.  So for example, "vgchange -ay" will spawn backgrounded
-polldaemons that will complete and then go on to spawn additional
-polldaemon(s) because it duplicates the parent's "vgchange -ay" work.
-The backgrounded polldaemon should exit() on completion.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-01-11 21:20:19
 
-This is an RFC because if the backgrounded polldaemon is made to exit()
-there is some log noise about memory leaks (from memory the child
-inherited from the parent, more specific in patch below).  In that we
-exit() the leaks aren't a huge probloem; but the user won't know that.
+Modified files:
+	lib/metadata   : lv_manip.c 
+	test           : t-mirror-lvconvert.sh 
+	tools          : lvconvert.c 
 
-Cleaning up such memory (vg->vgmem) would require specialized calls to
-vg_release() from _become_daemon() -- which doesn't have access to the
-vg.  So this would seem to warrant further discussion.
+Log message:
+	Testsuite updates and fixes for recently added features.
+	
+	1. Found bug in 'redundant log' implementation that caused
+	problems when converting a linear that spanned multiple
+	devices to a mirror (wasn't checking for NULL value of
+	provided parameter in _alloc_parallel_area)
+	
+	2. Testsuite was failing to perform tests when 'not' modifier
+	was used.  This allowed a couple issues to slip through.
+	Added a 'not_sh' modifier that negates tests performed by
+	functions defined in the shell source file.
+	
+	3. Was initializing a variable to far down, which cause
+	previously set value to be overridden.  (This was the
+	result of the collision of the "redundant log" and
+	lvconvert fix patches.)
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index b4d6ebb..32fe4b0 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -238,6 +238,7 @@ int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
- 		const char *progress_title)
- {
- 	struct daemon_parms parms;
-+	int ret = ECMD_PROCESSED;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.194&r2=1.195
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
+
+--- LVM2/lib/metadata/lv_manip.c	2010/01/10 20:44:09	1.194
++++ LVM2/lib/metadata/lv_manip.c	2010/01/11 21:20:19	1.195
+@@ -762,7 +762,7 @@
+ 		consume_pv_area(areas[s], area_len);
  
- 	parms.aborting = arg_is_set(cmd, abort_ARG);
- 	parms.background = background;
-@@ -273,10 +274,27 @@ int poll_daemon(struct cmd_context *cmd, const char *name, const char *uuid,
- 	if (name) {
- 		if (!_wait_for_single_lv(cmd, name, uuid, &parms)) {
- 			stack;
--			return ECMD_FAILED;
-+			ret = ECMD_FAILED;
- 		}
- 	} else
- 		_poll_for_all_vgs(cmd, &parms);
- 
--	return ECMD_PROCESSED;
-+	if (parms.background) {
-+		/*
-+		 * background polldaemon must not return to the caller
-+		 * because it will redundantly continue performing the
-+		 * caller's task (that the parent already performed)
-+		 */
-+		fin_locking();
-+		dm_pool_empty(cmd->mem);
-+		lvm_fin(cmd);
-+		/*
-+		 * FIXME child's memory that was inherited from parent
-+		 * (e.g. "lvm2 vg_read" mempool) will leak on exit;
-+		 * other than the log_error() noise do we care?
-+		 */
-+		exit(ret == ECMD_PROCESSED ? 0 : ret);
-+	}
-+
-+	return ret;
+ 	for (i = 0, s = ah->area_count;
+-	     (s < ah->area_count + ah->log_count);
++	     log_areas && (s < ah->area_count + ah->log_count);
+ 	     s++, i++) {
+ 		aa[s].pv = log_areas[i]->map->pv;
+ 		aa[s].pe = log_areas[i]->start;
+--- LVM2/test/t-mirror-lvconvert.sh	2009/12/10 22:06:15	1.12
++++ LVM2/test/t-mirror-lvconvert.sh	2010/01/11 21:20:19	1.13
+@@ -128,6 +128,12 @@
+ 	fi
  }
+ 
++not_sh ()
++{
++    "$@" && exit 1 || :;
++}
++
++
+ prepare_lvs_
+ check_and_cleanup_lvs_
+ 
+@@ -149,6 +155,19 @@
+ mirrorlog_is_on_ $vg/$lv1 $dev3
+ check_and_cleanup_lvs_
+ 
++# remove 1 mirror from corelog'ed mirror
++#  should retain 'core' log type
++prepare_lvs_
++lvcreate -l2 -m2 --corelog -n $lv1 $vg
++check_mirror_count_ $vg/$lv1 3
++not_sh check_mirror_log_ $vg/$lv1
++lvconvert -m -1 -i1 $vg/$lv1
++check_no_tmplvs_ $vg/$lv1
++check_mirror_count_ $vg/$lv1 2
++mimages_are_redundant_ $vg $lv1
++not_sh check_mirror_log_ $vg/$lv1
++check_and_cleanup_lvs_
++
+ # add 2 mirrors
+ prepare_lvs_
+ lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
+@@ -161,27 +180,41 @@
+ mirrorlog_is_on_ $vg/$lv1 $dev3
+ check_and_cleanup_lvs_
+ 
+-# add 1 mirror to core log mirror
++# add 1 mirror to core log mirror,
++#  explicitly keep log as 'core'
+ prepare_lvs_
+ lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
+ check_mirror_count_ $vg/$lv1 2
+-not check_mirror_log_ $vg/$lv1
++not_sh check_mirror_log_ $vg/$lv1
+ lvconvert -m+1 -i1 --mirrorlog core $vg/$lv1 $dev4 
+ check_no_tmplvs_ $vg/$lv1 
+ check_mirror_count_ $vg/$lv1 3 
+-not check_mirror_log_ $vg/$lv1
++not_sh check_mirror_log_ $vg/$lv1
+ mimages_are_redundant_ $vg $lv1 
+ check_and_cleanup_lvs_
+ 
++# add 1 mirror to core log mirror, but
++#  implicitly keep log as 'core'
++prepare_lvs_
++lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
++check_mirror_count_ $vg/$lv1 2
++not_sh check_mirror_log_ $vg/$lv1
++lvconvert -m +1 -i1 $vg/$lv1
++check_no_tmplvs_ $vg/$lv1
++check_mirror_count_ $vg/$lv1 3
++not_sh check_mirror_log_ $vg/$lv1
++mimages_are_redundant_ $vg $lv1
++check_and_cleanup_lvs_
++
+ # add 2 mirrors to core log mirror" 
+ prepare_lvs_ 
+ lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2 
+ check_mirror_count_ $vg/$lv1 2 
+-not check_mirror_log_ $vg/$lv1 
++not_sh check_mirror_log_ $vg/$lv1 
+ lvconvert -m+2 -i1 --mirrorlog core $vg/$lv1 $dev4 $dev5 
+ check_no_tmplvs_ $vg/$lv1 
+ check_mirror_count_ $vg/$lv1 4 
+-not check_mirror_log_ $vg/$lv1
++not_sh check_mirror_log_ $vg/$lv1
+ mimages_are_redundant_ $vg $lv1 
+ check_and_cleanup_lvs_
+ 
+@@ -208,7 +241,7 @@
+ prepare_lvs_ 
+ lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2 
+ check_mirror_count_ $vg/$lv1 2 
+-not check_mirror_log_ $vg/$lv1 
++not_sh check_mirror_log_ $vg/$lv1 
+ lvconvert -m+1 --mirrorlog disk -i1 $vg/$lv1 $dev4 $dev3:0-1 
+ check_no_tmplvs_ $vg/$lv1 
+ check_mirror_count_ $vg/$lv1 3 
+--- LVM2/tools/lvconvert.c	2010/01/11 17:13:45	1.107
++++ LVM2/tools/lvconvert.c	2010/01/11 21:20:19	1.108
+@@ -613,7 +613,7 @@
+ 	struct lv_segment *seg;
+ 	uint32_t existing_mirrors;
+ 	const char *mirrorlog;
+-	unsigned log_count = 0;
++	unsigned log_count = 1;
+ 	int r = 0;
+ 	struct logical_volume *log_lv, *layer_lv;
+ 	int failed_mirrors = 0, failed_log = 0;
+@@ -710,11 +710,6 @@
+ 		/*
+ 		 * Adjust log type
+ 		 */
+-		/*
+-		 * This param used to be 'corelog' and was initialized to '0'.
+-		 * We initially set to '1' here so as not to screw the logic.
+-		 */
+-		log_count = 1;
+ 		if (arg_count(cmd, corelog_ARG))
+ 			log_count = 0;
+ 
 
 
