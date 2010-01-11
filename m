@@ -1,39 +1,33 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 19 Jan 2010 17:06:51 -0000
-Subject: LVM2/test t-topology-support.sh
-Message-ID: <20100119170651.31641.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 11 Jan 2010 18:52:21 +0100
+Subject: [PATCH] Fix clvmd automatic target module load to not segfault.
+Message-ID: <1263232341-5960-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-19 17:06:50
+---
+ lib/locking/locking.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-Modified files:
-	test           : t-topology-support.sh 
-
-Log message:
-	test/t-topology-support.sh requires scsi_debug from >= 2.6.31
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-topology-support.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-
---- LVM2/test/t-topology-support.sh	2010/01/19 16:44:57	1.1
-+++ LVM2/test/t-topology-support.sh	2010/01/19 17:06:50	1.2
-@@ -10,6 +10,11 @@
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index e1881af..4d1d845 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -186,7 +186,9 @@ void reset_locking(void)
+ 	_vg_lock_count = 0;
+ 	_vg_write_lock_held = 0;
  
- which mkfs.ext3 || exit 200
+-	_locking.reset_locking();
++	/* FIXME: clvmd/exec_cmd calls that without locking set */
++	if (_locking.reset_locking)
++		_locking.reset_locking();
  
-+# Get linux minor version
-+linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
-+
-+test $linux_minor -ge 31 || exit 200
-+
- . ./test-utils.sh
- 
- check_logical_block_size()
+ 	if (was_locked)
+ 		_unblock_signals();
+-- 
+1.6.6
 
 
