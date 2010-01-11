@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 15 Jan 2010 16:18:15 -0000
-Subject: LVM2 WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100115161815.23562.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 11 Jan 2010 15:51:45 -0000
+Subject: LVM2 configure.in
+Message-ID: <20100111155145.15738.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,35 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-01-15 16:18:14
+Changes by:	prajnoha at sourceware.org	2010-01-11 15:51:44
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM 
+	.              : configure.in 
 
 Log message:
-	udpate WHATS_NEW*
+	Show a warning message when libudev not found and we're using --enable-udev_sync.
+	
+	Just to emphasize what one can expect - we won't be able to get udev state
+	and we will consider that udev is not running at all.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1388&r2=1.1389
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.337&r2=1.338
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.121&r2=1.122
 
---- LVM2/WHATS_NEW	2010/01/14 14:42:06	1.1388
-+++ LVM2/WHATS_NEW	2010/01/15 16:18:14	1.1389
-@@ -1,5 +1,6 @@
- Version 2.02.59 - 
- ===================================
-+  Fix difference between CTR table built and expected for cluster log.
+--- LVM2/configure.in	2010/01/11 15:48:49	1.121
++++ LVM2/configure.in	2010/01/11 15:51:44	1.122
+@@ -669,6 +669,8 @@
+ 			AC_DEFINE([HAVE_UDEV_QUEUE_GET_UDEV_IS_ACTIVE], 1,
+ 			  [Define to 1 if libudev's udev_queue_get_udev_is_active function is available.])
+ 			LIBS="-ludev $LIBS"
++		else
++			AC_MSG_WARN(It won't be possible to get udev state. We will assume that udev is not running.)
+ 		fi
+ fi
  
- Version 2.02.58 - 14th January 2010
- ===================================
---- LVM2/WHATS_NEW_DM	2010/01/14 14:42:06	1.337
-+++ LVM2/WHATS_NEW_DM	2010/01/15 16:18:14	1.338
-@@ -1,5 +1,6 @@
- Version 1.02.43 - 
- ===================================
-+  Fix off-by-one error causing bad cluster mirror table construction.
- 
- Version 1.02.42 - 14th January 2010
- ===================================
 
 
