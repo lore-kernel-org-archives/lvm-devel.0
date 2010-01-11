@@ -1,87 +1,54 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 19 Jan 2010 13:23:45 +0100
-Subject: [PATCH] Never scan suspended devices in clvmd.
-Message-ID: <1263903825-907-1-git-send-email-mbroz@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 11 Jan 2010 17:13:46 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20100111171346.23132.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-For mirror repair (and similar tasks) it can happen that full
-device rescan is issued from clvmd.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-01-11 17:13:46
 
-Because code can be in the middle of repair (calling suspend)
-clvmd should never try to scan suspended devices
-(otherwise it causes deadlock).
+Modified files:
+	tools          : lvconvert.c 
 
-Also code must not change ignore_suspended_device flag when
-doing refresh_filters (called from lvmcache scan code).
+Log message:
+	Found 2 problems with my previous check-in:
+	
+	date: 2010/01/07 20:42:55;  author: jbrassow;  state: Exp;  lines: +11 -0
+	The patch fixes some lvconvert issues (WRT mirror <-> mirror).
+	
+	1) 'exisiting_mirrors' and 'lp->mirrors' where taken to be in 'n-1'
+	notation (i.e a 2-way mirror is '1' and a linear is '0'), but the
+	variables were in 'n' notation.
+	2) After adding the redundant mirror log support, I was calculating
+	log_count by looking at the mirror log LV, but didn't take into
+	account the fact that there could be no mirror log!
+	
+	Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- daemons/clvmd/lvm-functions.c |    5 +++++
- lib/commands/toolcontext.c    |   11 ++++++++++-
- 2 files changed, 15 insertions(+), 1 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index afe93e2..74c660e 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -499,6 +499,9 @@ int do_lock_lv(unsigned char command, unsigned char lock_flags, char *resource)
- 
- 	cmd->partial_activation = (lock_flags & LCK_PARTIAL_MODE) ? 1 : 0;
- 
-+	/* clvmd should never try to read suspended device */
-+	init_ignore_suspended_devices(1);
-+
- 	switch (command & LCK_MASK) {
- 	case LCK_LV_EXCLUSIVE:
- 		status = do_activate_lv(resource, lock_flags, LKM_EXMODE);
-@@ -627,6 +630,7 @@ int do_refresh_cache()
+--- LVM2/tools/lvconvert.c	2010/01/08 22:32:35	1.106
++++ LVM2/tools/lvconvert.c	2010/01/11 17:13:45	1.107
+@@ -668,10 +668,11 @@
+ 	 * the type of log wasn't specified, then let's keep the log type
+ 	 * the same.
+ 	 */
+-	if (existing_mirrors && lp->mirrors &&
+-	    (lp->mirrors != existing_mirrors) &&
++	if ((existing_mirrors > 1) && (lp->mirrors > 1) &&
++	    (lp->mirrors != existing_mirrors) && !(lv->status & CONVERTING) &&
+ 	    !arg_count(cmd, mirrorlog_ARG) && !arg_count(cmd, corelog_ARG)) {
+-		log_count = lv_mirror_count(first_seg(lv)->log_lv);
++		log_count = (first_seg(lv)->log_lv) ?
++			lv_mirror_count(first_seg(lv)->log_lv) : 0;
  	}
  
- 	init_full_scan_done(0);
-+	init_ignore_suspended_devices(1);
- 	lvmcache_label_scan(cmd, 2);
- 	dm_pool_empty(cmd->mem);
- 
-@@ -860,6 +864,7 @@ int init_lvm(int using_gulm)
- 
- 	/* Check lvm.conf is setup for cluster-LVM */
- 	check_config();
-+	init_ignore_suspended_devices(1);
- 
- 	/* Remove any non-LV locks that may have been left around */
- 	if (using_gulm)
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index a076e93..99db7d0 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1231,12 +1231,21 @@ skip_dlclose:
- 
- int refresh_filters(struct cmd_context *cmd)
- {
-+	int r, saved_ignore_suspended_devices = ignore_suspended_devices();
-+
- 	if (cmd->filter) {
- 		cmd->filter->destroy(cmd->filter);
- 		cmd->filter = NULL;
- 	}
- 
--	return _init_filters(cmd, 0);
-+	r = _init_filters(cmd, 0);
-+
-+	/*
-+	 * During repair code must not reset suspended flag.
-+	 */
-+	init_ignore_suspended_devices(saved_ignore_suspended_devices);
-+
-+	return r;
- }
- 
- int refresh_toolcontext(struct cmd_context *cmd)
--- 
-1.6.6
+ 	if (repair) {
 
 
