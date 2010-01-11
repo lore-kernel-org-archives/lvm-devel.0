@@ -1,168 +1,156 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 13 Jan 2010 14:42:11 +0100
-Subject: [PATCH 07/18] Replicator: use str_list for process_each_lv_in_vg
-In-Reply-To: <cover.1263389894.git.zkabelac@redhat.com>
-References: <cover.1263389894.git.zkabelac@redhat.com>
-Message-ID: <807c525f475978c69cfb96ada998ccd31f680463.1263389894.git.zkabelac@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 11 Jan 2010 15:40:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/fs.c lib/misc/lv ...
+Message-ID: <20100111154005.1810.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As for _process_one_vg() we need similar retry loop for
-process_each_lv_in_vg(). This patch tries to collect missed LVs and
-then reopens collected VGs and process only selected LVs again.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2010-01-11 15:40:04
 
-Patch does not add any extra repeated invocations if there is no missed VG
-during LV processing.
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : fs.c 
+	lib/misc       : lvm-globals.c lvm-globals.h 
+	tools          : lvmcmdline.c 
 
-cmd_context is extended to avoid API change with vgs_lvs_retry list.
+Log message:
+	Add support to disable udev checking: LVM_UDEV_DISABLE_CHECKING=1 env. var.
+	
+	LVM_UDEV_DISABLE_CHECKING=1 applies for /dev/<vgname> content only.
+	We still need to define DM_UDEV_DISABLE_CHECKING=1 for /dev/mapper content.
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/commands/toolcontext.c |    1 +
- lib/commands/toolcontext.h |    1 +
- tools/toollib.c            |   74 ++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 74 insertions(+), 2 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1377&r2=1.1378
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-globals.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-globals.h.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 8af765e..e0ffcd1 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1103,6 +1103,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	dm_list_init(&cmd->tags);
- 	dm_list_init(&cmd->config_files);
- 	dm_list_init(&cmd->vgs_list);
-+	dm_list_init(&cmd->vgs_lvs_retry);
- 
- 	/* FIXME Make this configurable? */
- 	reset_lvm_errno(1);
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 0fe8eac..c7333f6 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -62,6 +62,7 @@ struct cmd_context {
- 	struct dm_list formats;	/* Available formats */
- 	struct dm_list segtypes;	/* Available segment types */
- 	struct dm_list vgs_list;	/* Required read-only VGs */
-+	struct dm_list vgs_lvs_retry;	/* Retry LVs with more VGs */
- 	int vgs_missed;			/* Missed VGs */
- 	const char *hostname;
- 	const char *kernel_vsn;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 343b417..6243600 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -118,6 +118,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		process_all = 1;
- 	}
- 
-+	dm_list_init(&cmd->vgs_lvs_retry);
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (lvl->lv->status & SNAPSHOT)
- 			continue;
-@@ -147,7 +148,17 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (!process_lv)
- 			continue;
- 
-+		cmd->vgs_missed = 0;
- 		ret = process_single(cmd, lvl->lv, handle);
-+		if (cmd->vgs_missed) {
-+			if (!str_list_add(cmd->mem, &cmd->vgs_lvs_retry,
-+					  dm_pool_strdup(cmd->mem,
-+							 lvl->lv->name))) {
-+				log_error("Allocation failed for str_list .");
-+				return ECMD_FAILED;
-+			}
-+			ret = 0;
-+		}
- 		if (ret > ret_max)
- 			ret_max = ret;
- 		if (sigint_caught())
-@@ -175,8 +186,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 
- 	struct dm_list *tags_arg;
- 	struct dm_list *vgnames;	/* VGs to process */
--	struct str_list *sll, *strl;
--	struct volume_group *vg;
-+	struct str_list *sll, *strl, *sllt;
-+	struct volume_group *vg, *rvg;
-+	struct vg_name_list *vnl;
- 	struct dm_list tags, lvnames;
- 	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
- 	char *vglv;
-@@ -321,11 +333,69 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 			}
+--- LVM2/WHATS_NEW	2010/01/08 22:32:35	1.1377
++++ LVM2/WHATS_NEW	2010/01/11 15:40:03	1.1378
+@@ -1,5 +1,6 @@
+ Version 2.02.57 -
+ ====================================
++  Add support to disable udev checking: LVM_UDEV_DISABLE_CHECKING=1 env. var.
+   Add redundant mirror log option.
+   Add capability to split off and keep mirror legs to lvconvert.
+   Change background polldaemon's process name to "(lvm2)".
+--- LVM2/lib/activate/fs.c	2010/01/07 19:54:21	1.50
++++ LVM2/lib/activate/fs.c	2010/01/11 15:40:03	1.51
+@@ -166,7 +166,7 @@
+ 			return 0;
  		}
  
-+		dm_list_init(&cmd->vgs_list);
- 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
- 					    handle, process_single);
- 		unlock_and_release_vg(cmd, vg, vgname);
- 		if (ret > ret_max)
- 			ret_max = ret;
+-		if (dm_udev_get_sync_support() && check_udev) {
++		if (dm_udev_get_sync_support() && udev_checking() && check_udev) {
+ 			/* Check udev created the correct link. */
+ 			if (!stat(link_path, &buf_lp) &&
+ 			    !stat(lv_path, &buf)) {
+@@ -190,7 +190,7 @@
+ 			log_sys_error("unlink", lv_path);
+ 			return 0;
+ 		}
+-	} else if (dm_udev_get_sync_support() && check_udev)
++	} else if (dm_udev_get_sync_support() && udev_checking() && check_udev)
+ 		log_warn("The link %s should had been created by udev "
+ 			  "but it was not found. Falling back to "
+ 			  "direct link creation.", lv_path);
+@@ -221,7 +221,7 @@
+ 
+ 	if (lstat(lv_path, &buf) && errno == ENOENT)
+ 		return 1;
+-	else if (dm_udev_get_sync_support() && check_udev)
++	else if (dm_udev_get_sync_support() && udev_checking() && check_udev)
+ 		log_warn("The link %s should have been removed by udev "
+ 			 "but it is still present. Falling back to "
+ 			 "direct link removal.", lv_path);
+--- LVM2/lib/misc/lvm-globals.c	2010/01/05 20:56:51	1.4
++++ LVM2/lib/misc/lvm-globals.c	2010/01/11 15:40:04	1.5
+@@ -39,6 +39,7 @@
+ static int _ignore_suspended_devices = 0;
+ static int _error_message_produced = 0;
+ static unsigned _is_static = 0;
++static int _udev_checking = 1;
+ 
+ void init_verbose(int level)
+ {
+@@ -112,6 +113,14 @@
+ 	_is_static = value;
+ }
+ 
++void init_udev_checking(int checking)
++{
++	if ((_udev_checking = checking))
++		log_debug("LVM udev checking enabled");
++	else
++		log_debug("LVM udev checking disabled");
++}
 +
-+		while (!sigint_caught() &&
-+		       !dm_list_empty(&cmd->vgs_lvs_retry)) {
-+			/*
-+			 * Try again with missed LVs in this VG
-+			 * Use retry list as list of LVs to be processed
-+			 * CHECKME: maybe add support dm_list_splice()
-+			 */
-+			dm_list_init(&lvnames);
-+			dm_list_iterate_items_safe(sll, sllt,
-+						   &cmd->vgs_lvs_retry)
-+				dm_list_move(&lvnames, &sll->list);
+ void set_cmd_name(const char *cmd)
+ {
+ 	strncpy(_cmd_name, cmd, sizeof(_cmd_name));
+@@ -210,3 +219,8 @@
+ {
+ 	return _is_static;
+ }
 +
-+			if (!vg_name_list_add(cmd->mem, &cmd->vgs_list,
-+					      vgname)) {
-+				stack;
-+				return ECMD_FAILED;
-+			}
++int udev_checking(void)
++{
++	return _udev_checking;
++}
+--- LVM2/lib/misc/lvm-globals.h	2010/01/05 20:56:51	1.5
++++ LVM2/lib/misc/lvm-globals.h	2010/01/11 15:40:04	1.6
+@@ -36,6 +36,7 @@
+ void init_ignore_suspended_devices(int ignore);
+ void init_error_message_produced(int produced);
+ void init_is_static(unsigned value);
++void init_udev_checking(int checking);
+ 
+ void set_cmd_name(const char *cmd_name);
+ 
+@@ -54,6 +55,7 @@
+ int ignore_suspended_devices(void);
+ const char *log_command_name(void);
+ unsigned is_static(void);
++int udev_checking(void);
+ 
+ #define DMEVENTD_MONITOR_IGNORE -1
+ int dmeventd_monitor_mode(void);
+--- LVM2/tools/lvmcmdline.c	2009/12/16 19:22:13	1.109
++++ LVM2/tools/lvmcmdline.c	2010/01/11 15:40:04	1.110
+@@ -909,6 +909,19 @@
+ 	cmd->handles_missing_pvs = 0;
+ }
+ 
++static void _set_udev_checking()
++{
++	const char *e;
 +
-+			vg = NULL;
-+			dm_list_iterate_items(vnl, &cmd->vgs_list) {
-+				if (!vg && strcmp(vnl->name, vgname) == 0)
-+					rvg = vg = vg_read(cmd, vgname,
-+							   NULL, flags);
-+				else
-+					/*
-+					 * CHECKME: Use different flags
-+					 *          for remote vg ??
-+					 */
-+					rvg = vg_read(cmd, vnl->name,
-+						      NULL, flags);
++	if ((e = getenv("DM_UDEV_DISABLE_CHECKING")) &&
++		!strcmp(e, "1"))
++		dm_udev_set_checking(0);
 +
-+				if (vg_read_error(rvg)) {
-+					vg_release(rvg);
-+					log_error("Skipping volume group %s.",
-+						  vnl->name);
-+					vg = NULL;
-+					break;
-+				}
-+				vnl->vg = rvg; /* Only correctly opened */
-+			}
++	if ((e = getenv("LVM_UDEV_DISABLE_CHECKING")) &&
++		!strcmp(e, "1"))
++		init_udev_checking(0);
++}
 +
-+			ret = (!vg) ? ECMD_FAILED :
-+				process_each_lv_in_vg(cmd, vg, &lvnames,
-+						      tags_arg, handle,
-+						      process_single);
+ static const char *_copy_command_line(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	int i, space;
+@@ -1003,6 +1016,8 @@
+ 	log_debug("O_DIRECT will be used");
+ #endif
+ 
++	_set_udev_checking();
 +
-+			dm_list_iterate_back_items(vnl, &cmd->vgs_list)
-+				if (vnl->vg) {
-+					unlock_and_release_vg(cmd, vnl->vg,
-+							      vnl->name);
-+					vnl->vg = NULL;
-+				}
-+			if (ret > ret_max)
-+				ret_max = ret;
-+		}
-+
- 		if (sigint_caught())
- 			break;
- 	}
--- 
-1.6.6
+ 	if ((ret = _process_common_commands(cmd)))
+ 		goto_out;
+ 
 
 
