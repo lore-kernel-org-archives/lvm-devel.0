@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Jan 2010 10:15:24 -0000
-Subject: LVM2 libdm/libdevmapper.h libdm/libdm-deptree. ...
-Message-ID: <20100114101524.30492.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 11 Jan 2010 15:48:51 -0000
+Subject: LVM2 ./WHATS_NEW_DM ./configure.in test/Makefi ...
+Message-ID: <20100111154851.11056.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,163 +10,64 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-01-14 10:15:23
+Changes by:	prajnoha at sourceware.org	2010-01-11 15:48:50
 
 Modified files:
-	libdm          : libdevmapper.h libdm-deptree.c 
-	tools          : dmsetup.c 
+	.              : WHATS_NEW_DM configure.in 
+	test           : Makefile.in 
 
 Log message:
-	Cleanup gcc warning: cast discards qualifiers from pointer target type
+	Define {DM, LVM}_UDEV_DISABLE_CHECKING=1 env. variables for tests.
 	
-	API of the library should remain the same as the 'const' is not
-	mangled into the function name in C.
+	We need to disable udev checking for our tests since they use their own
+	location for device nodes and symlinks.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.107&r2=1.108
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.328&r2=1.329
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.24&r2=1.25
 
---- LVM2/libdm/libdevmapper.h	2010/01/14 10:12:44	1.107
-+++ LVM2/libdm/libdevmapper.h	2010/01/14 10:15:23	1.108
-@@ -307,23 +307,23 @@
-  * Set inverted to use inverted tree.
-  */
- struct dm_tree_node *dm_tree_next_child(void **handle,
--					   struct dm_tree_node *parent,
--					   uint32_t inverted);
-+					const struct dm_tree_node *parent,
-+					uint32_t inverted);
+--- LVM2/WHATS_NEW_DM	2010/01/11 15:43:19	1.328
++++ LVM2/WHATS_NEW_DM	2010/01/11 15:48:49	1.329
+@@ -1,5 +1,6 @@
+ Version 1.02.41 -
+ ====================================
++  Define {DM, LVM}_UDEV_DISABLE_CHECKING=1 env. variables for tests.
+   Enable udev_sync and udev_rules in lvm.conf by default while running tests.
+   Add support to disable udev checking: DM_UDEV_DISABLE_CHECKING=1 env. variable.
+   Add dm_tree_add_dev_with_udev_flags to provide wider support for udev flags.
+--- LVM2/configure.in	2009/10/14 04:10:41	1.120
++++ LVM2/configure.in	2010/01/11 15:48:49	1.121
+@@ -1130,6 +1130,7 @@
+ AC_SUBST(STATICDIR)
+ AC_SUBST(STATIC_LINK)
+ AC_SUBST(UDEV_RULES)
++AC_SUBST(UDEV_SYNC)
+ AC_SUBST([LIB_PTHREAD])
+ AC_SUBST(interface)
+ AC_SUBST(kerneldir)
+--- LVM2/test/Makefile.in	2009/11/30 16:58:53	1.24
++++ LVM2/test/Makefile.in	2010/01/11 15:48:50	1.25
+@@ -30,6 +30,11 @@
  
- /*
-  * Get properties of a node.
-  */
--const char *dm_tree_node_get_name(struct dm_tree_node *node);
--const char *dm_tree_node_get_uuid(struct dm_tree_node *node);
--const struct dm_info *dm_tree_node_get_info(struct dm_tree_node *node);
--void *dm_tree_node_get_context(struct dm_tree_node *node);
--int dm_tree_node_size_changed(struct dm_tree_node *dnode);
-+const char *dm_tree_node_get_name(const struct dm_tree_node *node);
-+const char *dm_tree_node_get_uuid(const struct dm_tree_node *node);
-+const struct dm_info *dm_tree_node_get_info(const struct dm_tree_node *node);
-+void *dm_tree_node_get_context(const struct dm_tree_node *node);
-+int dm_tree_node_size_changed(const struct dm_tree_node *dnode);
+ T = $(wildcard $(srcdir)/t-*.sh)
  
- /*
-  * Returns the number of children of the given node (excluding the root node).
-  * Set inverted for the number of parents.
-  */
--int dm_tree_node_num_children(struct dm_tree_node *node, uint32_t inverted);
-+int dm_tree_node_num_children(const struct dm_tree_node *node, uint32_t inverted);
- 
- /*
-  * Deactivate a device plus all dependencies.
---- LVM2/libdm/libdm-deptree.c	2010/01/13 01:39:45	1.69
-+++ LVM2/libdm/libdm-deptree.c	2010/01/14 10:15:23	1.70
-@@ -201,8 +201,8 @@
- 	dm_free(dtree);
- }
- 
--static int _nodes_are_linked(struct dm_tree_node *parent,
--			     struct dm_tree_node *child)
-+static int _nodes_are_linked(const struct dm_tree_node *parent,
-+			     const struct dm_tree_node *child)
- {
- 	struct dm_tree_link *dlink;
- 
-@@ -665,32 +665,32 @@
- 	return _add_dev(dtree, &dtree->root, major, minor, udev_flags) ? 1 : 0;
- }
- 
--const char *dm_tree_node_get_name(struct dm_tree_node *node)
-+const char *dm_tree_node_get_name(const struct dm_tree_node *node)
- {
- 	return node->info.exists ? node->name : "";
- }
- 
--const char *dm_tree_node_get_uuid(struct dm_tree_node *node)
-+const char *dm_tree_node_get_uuid(const struct dm_tree_node *node)
- {
- 	return node->info.exists ? node->uuid : "";
- }
- 
--const struct dm_info *dm_tree_node_get_info(struct dm_tree_node *node)
-+const struct dm_info *dm_tree_node_get_info(const struct dm_tree_node *node)
- {
- 	return &node->info;
- }
- 
--void *dm_tree_node_get_context(struct dm_tree_node *node)
-+void *dm_tree_node_get_context(const struct dm_tree_node *node)
- {
- 	return node->context;
- }
- 
--int dm_tree_node_size_changed(struct dm_tree_node *dnode)
-+int dm_tree_node_size_changed(const struct dm_tree_node *dnode)
- {
- 	return dnode->props.size_changed;
- }
- 
--int dm_tree_node_num_children(struct dm_tree_node *node, uint32_t inverted)
-+int dm_tree_node_num_children(const struct dm_tree_node *node, uint32_t inverted)
- {
- 	if (inverted) {
- 		if (_nodes_are_linked(&node->dtree->root, node))
-@@ -806,11 +806,11 @@
-  * Set inverted to invert the tree.
-  */
- struct dm_tree_node *dm_tree_next_child(void **handle,
--					   struct dm_tree_node *parent,
--					   uint32_t inverted)
-+					const struct dm_tree_node *parent,
-+					uint32_t inverted)
- {
- 	struct dm_list **dlink = (struct dm_list **) handle;
--	struct dm_list *use_list;
-+	const struct dm_list *use_list;
- 
- 	if (inverted)
- 		use_list = &parent->used_by;
---- LVM2/tools/dmsetup.c	2010/01/11 15:36:25	1.132
-+++ LVM2/tools/dmsetup.c	2010/01/14 10:15:23	1.133
-@@ -2094,7 +2094,7 @@
- 			       void *private)
- {
- 	char buf[DM_MAX_TYPE_NAME], *repstr;
--	struct dm_info *info = (struct dm_info *) data;
-+	const struct dm_info *info = data;
- 
- 	if (!dm_pool_begin_object(mem, 8)) {
- 		log_error("dm_pool_begin_object failed");
-@@ -2125,7 +2125,8 @@
- 			  struct dm_report_field *field, const void *data,
- 			  void *private, unsigned inverted)
- {
--	struct dm_tree_node *node = (struct dm_tree_node *) data, *parent;
-+	const struct dm_tree_node *node = data;
-+	struct dm_tree_node *parent;
- 	void *t = NULL;
- 	const char *name;
- 	int first_node = 1;
-@@ -2186,7 +2187,8 @@
- 				      struct dm_report_field *field,
- 				      const void *data, void *private)
- {
--	struct dm_tree_node *node = (struct dm_tree_node *) data, *parent;
-+	const struct dm_tree_node *node = data;
-+	struct dm_tree_node *parent;
- 	void *t = NULL;
- 	const struct dm_info *info;
- 	int first_node = 1;
-@@ -2237,7 +2239,7 @@
- 				       struct dm_report_field *field,
- 				       const void *data, void *private)
- {
--	struct dm_tree_node *node = (struct dm_tree_node *) data;
-+	const struct dm_tree_node *node = data;
- 	int num_parent = dm_tree_node_num_children(node, 1);
- 
- 	return dm_report_field_int(rh, field, &num_parent);
++ifeq ("@UDEV_SYNC@", "yes")
++dm_udev_disable_checking = 1
++lvm_udev_disable_checking = 1
++endif
++
+ ifeq ("@APPLIB@", "yes")
+ T += $(srcdir)/lvm2app.sh
+ all: api/vgtest
+@@ -56,6 +61,8 @@
+ 	echo 'abs_srcdir=$(abs_srcdir)' >> $@-t
+ 	echo 'abs_builddir=$(abs_builddir)' >> $@-t
+ 	echo 'export PATH' >> $@-t
++	echo 'export DM_UDEV_DISABLE_CHECKING=$(dm_udev_disable_checking)' >> $@-t
++	echo 'export LVM_UDEV_DISABLE_CHECKING=$(lvm_udev_disable_checking)' >> $@-t
+ 	chmod a-w $@-t
+ 	mv $@-t $@
+ 	if test "$(srcdir)" != "."; then cp $(srcdir)/test-utils.sh \
 
 
