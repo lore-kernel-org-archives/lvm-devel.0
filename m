@@ -1,35 +1,25 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 10 Jan 2010 20:44:10 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20100110204410.24606.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 11 Jan 2010 13:53:15 +0100
+Subject: [PATCH 0/4] Add support for libdevmapper and dmsetup to disable udev checking on request
+In-Reply-To: <20100108180807.GF6042@agk-dp.fab.redhat.com>
+References: <4B4746BF.7090300@redhat.com>
+	<20100108180807.GF6042@agk-dp.fab.redhat.com>
+Message-ID: <4B4B1F3B.9090101@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-10 20:44:09
+On 01/08/2010 07:08 PM, Alasdair G Kergon wrote:
+> Looks OK, but please could we have some suitable messages when this environment
+> option got set?
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+You mean some simple log_debug("{DM, LVM} udev checking disabled") when the
+{DM, LVM}_UDEV_DISABLE_CHECKING=1 env var is set?
 
-Log message:
-	remove unused variable 'i' that was recently introduced in lv_add_segment
+(Then I would also need to move it further in the code after logging is properly set...)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.193&r2=1.194
-
---- LVM2/lib/metadata/lv_manip.c	2010/01/08 23:06:36	1.193
-+++ LVM2/lib/metadata/lv_manip.c	2010/01/10 20:44:09	1.194
-@@ -1390,7 +1390,6 @@
- 		   uint32_t region_size,
- 		   struct logical_volume *log_lv)
- {
--	int i;
- 	struct dm_list *aa_list;
- 
- 	/*
+Peter
 
 
