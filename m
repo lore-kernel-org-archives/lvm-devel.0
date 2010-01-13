@@ -1,46 +1,39 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 13 Jan 2010 14:35:54 +0100
-Subject: [PATCH 3/6] Cleanup compiler warning with passing NULL to execvp
+Date: Wed, 13 Jan 2010 14:35:55 +0100
+Subject: [PATCH 4/6] Cleanup compiler pointer cast warning
 In-Reply-To: <cover.1263389392.git.zkabelac@redhat.com>
 References: <cover.1263389392.git.zkabelac@redhat.com>
-Message-ID: <855ac0b71271c2ce62d85a3f43e97975d20ad45f.1263389392.git.zkabelac@redhat.com>
+Message-ID: <4ebf8824b6fcb8281be105a4fa1559077617e50f.1263389392.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Cleanup gcc warning: null argument where non-null required (arg.2)
-As the const declaration of execvp is a bit weird, using local
-dmeventdpath string.
+Cleanup gcc warning: cast from function call of type 'struct dm_list *'
+to non-matching type 'long unsigned int'
+
+Casting pointer to long and back to pointer could be easily
+handled with just pointer arithmetic.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/libdevmapper-event.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ libdm/libdevmapper.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 20d925e..4dfdf69 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -398,6 +398,8 @@ static int _start_daemon(struct dm_event_fifos *fifos)
- 	int pid, ret = 0;
- 	int status;
- 	struct stat statbuf;
-+	char dmeventdpath[] = DMEVENTD_PATH; /* const type for execvp */
-+	char * const args[] = { dmeventdpath, NULL };
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index d4c02ca..579cc14 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -754,7 +754,7 @@ struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *e
+  * contained in a structure of type t, return the containing structure.
+  */
+ #define dm_list_struct_base(v, t, head) \
+-    ((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->head))
++    ((t *)((char*)(v) - (char*)&((t *) 0)->head))
  
- 	if (stat(fifos->client_path, &statbuf))
- 		goto start_server;
-@@ -437,7 +439,7 @@ static int _start_daemon(struct dm_event_fifos *fifos)
- 		log_error("Unable to fork.");
- 
- 	else if (!pid) {
--		execvp(DMEVENTD_PATH, NULL);
-+		execvp(args[0], args);
- 		_exit(EXIT_FAILURE);
- 	} else {
- 		if (waitpid(pid, &status, 0) < 0)
+ /*
+  * Given the address v of an instance of 'struct dm_list list' contained in
 -- 
 1.6.6
 
