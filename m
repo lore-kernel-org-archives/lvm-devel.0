@@ -1,40 +1,38 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 13 Jan 2010 14:42:17 +0100
-Subject: [PATCH 13/18] Replicator: no crash lvresize if area_count is 0
+Date: Wed, 13 Jan 2010 14:42:18 +0100
+Subject: [PATCH 14/18] Replicator: activate change for vgchange
 In-Reply-To: <cover.1263389894.git.zkabelac@redhat.com>
 References: <cover.1263389894.git.zkabelac@redhat.com>
-Message-ID: <55f96f06618ff9eea70421743f060c8d29a4358d.1263389894.git.zkabelac@redhat.com>
+Message-ID: <ba7aa934633ede9db1983f4e67e39892a7005c00.1263389894.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Currently with replicator-dev LV we get area_count=0 for lvresize request.
-The original reason needs to be exploread, meanwhile avoid crash,
-but stopping processing if count is 0.
+Activate only the first replicator-dev LV, that activates all other
+related LVs from Replicator.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/lv_manip.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ tools/vgchange.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index abd3a8c..b3800cc 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1367,6 +1367,11 @@ int lv_add_segment(struct alloc_handle *ah,
- 		return 0;
- 	}
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 068f12b..48cc4b5 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -104,6 +104,10 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
+ 			continue;
  
-+	if (!ah->area_count) {
-+		log_error("Allocated areas are empty.");
-+		return 0;
-+	}
++		/* Only request activation of the first replicator-dev LV */
++		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
++			continue;
 +
- 	if (!_setup_alloced_segments(lv, &ah->alloced_areas[first_area],
- 				     num_areas, status,
- 				     stripe_size, segtype,
+ 		/* Can't deactivate a pvmove LV */
+ 		/* FIXME There needs to be a controlled way of doing this */
+ 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
 -- 
 1.6.6
 
