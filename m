@@ -1,35 +1,46 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 13 Jan 2010 20:45:38 +0100
-Subject: [PATCH] dmeventd logging
-Message-ID: <878wc1eql9.fsf@twilight.int.mornfall.net.>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 13 Jan 2010 21:48:39 -0000
+Subject: LVM2 WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100113214839.11044.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-01-13 21:48:39
 
-the attached patch makes dmeventd bridge the LVM log output to
-syslog. If you run dmeventd as usual, only warnings and errors from LVM
-will be sent to syslog, using appropriate syslog levels. If you pass -D
-or -d to dmeventd (first will run it in daemon mode, second in
-foreground), all LVM logging, up to notices (I believe this corresponds
-to log_very_verbose, but I haven't checked), will be sent to syslog,
-using the LOG_DEBUG level.
+Modified files:
+	.              : WHATS_NEW WHATS_NEW_DM 
 
-If we can get thusly patched dmeventd, with -D, running on Corey's test
-cluster, this should bring some insight into the lvconvert --repair
-failures we have been seeing on cmirror. Without -D, this should still
-be helpful when diagnosing problems on customers' systems.
+Log message:
+	update WHATS_NEW and WHATS_NEW_DM to include snapshot-merge changes
 
-Yours,
-   Petr.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1384&r2=1.1385
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.334&r2=1.335
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: dmeventd-logging.diff
-Type: text/x-diff
-Size: 3617 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100113/12b2ad1c/attachment.bin>
+--- LVM2/WHATS_NEW	2010/01/13 17:40:17	1.1384
++++ LVM2/WHATS_NEW	2010/01/13 21:48:39	1.1385
+@@ -2,6 +2,7 @@
+ ===================================
+   Fix clvmd automatic target module loading crash.
+   Fix allocation code not to stop at the first area of a PV that fits.
++  Add --merge to lvconvert to merge a snapshot into its origin.
+ 
+ Version 2.02.57 - 12th January 2010
+ ===================================
+--- LVM2/WHATS_NEW_DM	2010/01/12 14:47:00	1.334
++++ LVM2/WHATS_NEW_DM	2010/01/13 21:48:39	1.335
+@@ -1,5 +1,7 @@
+ Version 1.02.42 - 
+ ===================================
++  Add support for the "snapshot-merge" target.
++  Introduce a third activation_proiority level in dm_tree_activate_children.
+ 
+ Version 1.02.41 - 12th January 2010
+ ===================================
+
+
