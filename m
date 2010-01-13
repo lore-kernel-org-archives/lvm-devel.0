@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 13 Jan 2010 01:35:50 -0000
-Subject: LVM2/lib format_text/flags.c metadata/lv_manip ...
-Message-ID: <20100113013550.1831.qmail@sourceware.org>
+Date: 13 Jan 2010 01:39:45 -0000
+Subject: LVM2 lib/snapshot/snapshot.c libdm/.exported_s ...
+Message-ID: <20100113013945.4125.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,211 +10,251 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-13 01:35:49
+Changes by:	snitzer at sourceware.org	2010-01-13 01:39:45
 
 Modified files:
-	lib/format_text: flags.c 
-	lib/metadata   : lv_manip.c metadata-exported.h snapshot_manip.c 
 	lib/snapshot   : snapshot.c 
+	libdm          : .exported_symbols libdevmapper.h 
+	                 libdm-deptree.c 
 
 Log message:
-	Add 'SNAPSHOT_MERGE' lv_segment 'status' flag.
+	Add support for "snapshot-merge" target.
 	
-	Make 'merging_snapshot' pointer that points from the origin to the
-	segment that represents the merging snapshot.
+	Introduces new libdevmapper function dm_tree_node_add_snapshot_merge_target
 	
-	Import/export 'merging_store' metadata.
+	Verifies that the kernel (dm-snapshot) provides the 'snapshot-merge'
+	target.
 	
-	Do not allow creating snapshots while another snapshot is merging.
-	Snapshot created in this state would certainly contain invalid data.
+	Activate origin LV as snapshot-merge target.  Using snapshot-origin
+	target would be pointless because the origin contains volatile data
+	while a merge is in progress.
 	
-	NOTE: patches at the end of this series will remove 'merging_snapshot'
-	and will introduce helpful wrappers and cleanups.
+	Because snapshot-merge target is activated in place of the
+	snapshot-origin target it must be resumed after all other snapshots
+	(just like snapshot-origin does) --- otherwise small window for data
+	corruption would exist.
+	
+	Ideally the merging snapshot would not be activated at all but if it is
+	to be activated (because snapshot was already active) it _must_ be done
+	after the snapshot-merge.  This insures that DM's snapshot-merge target
+	will perform exception handover in the proper order (new->resume before
+	old->resume).  DM's snapshot-merge does support handover if the reverse
+	sequence is used (old->resume before new->resume) but DM will fail to
+	resume the old snapshot; leaving it suspended.
+	
+	To insure the proper activation sequence dm_tree_activate_children() was
+	updated to accommodate an additional 'activation_priority' level.  All
+	regular snapshots are 0, snapshot-merge is 1, and merging snapshot is 2.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.197&r2=1.198
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.125&r2=1.126
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/.exported_symbols.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.105&r2=1.106
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
 
---- LVM2/lib/format_text/flags.c	2010/01/07 14:47:57	1.39
-+++ LVM2/lib/format_text/flags.c	2010/01/13 01:35:49	1.40
-@@ -61,6 +61,7 @@
- 	{MIRRORED, NULL, 0},
- 	{VIRTUAL, NULL, 0},
- 	{SNAPSHOT, NULL, 0},
-+	{SNAPSHOT_MERGE, NULL, 0},
- 	{ACTIVATE_EXCL, NULL, 0},
- 	{CONVERTING, NULL, 0},
- 	{PARTIAL_LV, NULL, 0},
---- LVM2/lib/metadata/lv_manip.c	2010/01/12 20:53:20	1.197
-+++ LVM2/lib/metadata/lv_manip.c	2010/01/13 01:35:49	1.198
-@@ -1877,6 +1877,7 @@
- 	}
- 
- 	lv->snapshot = NULL;
-+	lv->merging_snapshot = NULL;
- 	dm_list_init(&lv->snapshot_segs);
- 	dm_list_init(&lv->segments);
- 	dm_list_init(&lv->tags);
-@@ -2941,6 +2942,11 @@
- 					  "supported yet");
- 				return 0;
- 			}
-+			if (org->merging_snapshot) {
-+				log_error("Snapshots of an origin that has a "
-+					  "merging snapshot is not supported");
-+				return 0;
-+			}
- 			if ((org->status & MIRROR_IMAGE) ||
- 			    (org->status & MIRROR_LOG)) {
- 				log_error("Snapshots of mirror %ss "
---- LVM2/lib/metadata/metadata-exported.h	2010/01/08 22:32:35	1.125
-+++ LVM2/lib/metadata/metadata-exported.h	2010/01/13 01:35:49	1.126
-@@ -69,6 +69,8 @@
- //#define POSTORDER_OPEN_FLAG	0x04000000U    temporary use inside vg_read_internal. */
- //#define VIRTUAL_ORIGIN	0x08000000U	/* LV - internal use only */
- 
-+#define SNAPSHOT_MERGE		0x10000000U	/* SEG */
-+
- #define LVM_READ              	0x00000100U	/* LV VG */
- #define LVM_WRITE             	0x00000200U	/* LV VG */
- #define CLUSTERED         	0x00000400U	/* VG */
-@@ -328,6 +330,9 @@
- 	struct dm_list snapshot_segs;
- 	struct lv_segment *snapshot;
- 
-+	/* A snapshot that is merging into this origin */
-+	struct lv_segment *merging_snapshot;
-+
- 	struct dm_list segments;
- 	struct dm_list tags;
- 	struct dm_list segs_using_this_lv;
-@@ -624,7 +629,9 @@
- struct logical_volume *origin_from_cow(const struct logical_volume *lv);
- 
- void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
--		       struct logical_volume *cow, uint32_t chunk_size);
-+		       struct logical_volume *cow, uint32_t chunk_size, int merge);
-+
-+void init_snapshot_merge(struct lv_segment *cow_seg, struct logical_volume *origin);
- 
- int vg_add_snapshot(struct logical_volume *origin, struct logical_volume *cow,
- 		    union lvid *lvid, uint32_t extent_count,
---- LVM2/lib/metadata/snapshot_manip.c	2009/07/15 20:02:47	1.44
-+++ LVM2/lib/metadata/snapshot_manip.c	2010/01/13 01:35:49	1.45
-@@ -37,6 +37,9 @@
- 		if (lv_is_virtual_origin(origin_from_cow(lv)))
- 			return 1;
- 
-+		if (find_cow(lv)->status & SNAPSHOT_MERGE)
-+			return 0;
-+
- 		return lv_is_visible(origin_from_cow(lv));
- 	}
- 
-@@ -62,7 +65,7 @@
+--- LVM2/lib/snapshot/snapshot.c	2010/01/13 01:35:49	1.40
++++ LVM2/lib/snapshot/snapshot.c	2010/01/13 01:39:44	1.41
+@@ -130,17 +130,25 @@
  }
  
- void init_snapshot_seg(struct lv_segment *seg, struct logical_volume *origin,
--		       struct logical_volume *cow, uint32_t chunk_size)
-+		       struct logical_volume *cow, uint32_t chunk_size, int merge)
+ static int _snap_target_present(struct cmd_context *cmd,
+-				const struct lv_segment *seg __attribute((unused)),
++				const struct lv_segment *seg,
+ 				unsigned *attributes __attribute((unused)))
  {
- 	seg->chunk_size = chunk_size;
- 	seg->origin = origin;
-@@ -79,10 +82,30 @@
- 		origin->status |= VIRTUAL_ORIGIN;
+ 	static int _snap_checked = 0;
++	static int _snap_merge_checked = 0;
+ 	static int _snap_present = 0;
++	static int _snap_merge_present = 0;
  
- 	seg->lv->status |= (SNAPSHOT | VIRTUAL);
-+	if (merge)
-+		init_snapshot_merge(seg, origin);
+-	if (!_snap_checked)
++	if (!_snap_checked) {
+ 		_snap_present = target_present(cmd, "snapshot", 1) &&
+ 		    target_present(cmd, "snapshot-origin", 0);
++		_snap_checked = 1;
++	}
  
- 	dm_list_add(&origin->snapshot_segs, &seg->origin_list);
+-	_snap_checked = 1;
++	if (!_snap_merge_checked && seg && (seg->status & SNAPSHOT_MERGE)) {
++		_snap_merge_present = target_present(cmd, "snapshot-merge", 0);
++		_snap_merge_checked = 1;
++		return _snap_present && _snap_merge_present;
++	}
+ 
+ 	return _snap_present;
+ }
+--- LVM2/libdm/.exported_symbols	2010/01/11 15:36:24	1.47
++++ LVM2/libdm/.exported_symbols	2010/01/13 01:39:45	1.48
+@@ -71,6 +71,7 @@
+ dm_tree_children_use_uuid
+ dm_tree_node_add_snapshot_origin_target
+ dm_tree_node_add_snapshot_target
++dm_tree_node_add_snapshot_merge_target
+ dm_tree_node_add_error_target
+ dm_tree_node_add_zero_target
+ dm_tree_node_add_linear_target
+--- LVM2/libdm/libdevmapper.h	2010/01/11 15:36:24	1.105
++++ LVM2/libdm/libdevmapper.h	2010/01/13 01:39:45	1.106
+@@ -394,6 +394,12 @@
+ 					const char *cow_uuid,
+ 					int persistent,
+ 					uint32_t chunk_size);
++int dm_tree_node_add_snapshot_merge_target(struct dm_tree_node *node,
++					     uint64_t size,
++					     const char *origin_uuid,
++					     const char *cow_uuid,
++					     const char *merge_uuid,
++					     uint32_t chunk_size);
+ int dm_tree_node_add_error_target(struct dm_tree_node *node,
+ 				     uint64_t size);
+ int dm_tree_node_add_zero_target(struct dm_tree_node *node,
+--- LVM2/libdm/libdm-deptree.c	2010/01/07 19:54:22	1.68
++++ LVM2/libdm/libdm-deptree.c	2010/01/13 01:39:45	1.69
+@@ -35,6 +35,7 @@
+ 	SEG_MIRRORED,
+ 	SEG_SNAPSHOT,
+ 	SEG_SNAPSHOT_ORIGIN,
++	SEG_SNAPSHOT_MERGE,
+ 	SEG_STRIPED,
+ 	SEG_ZERO,
+ };
+@@ -51,6 +52,7 @@
+ 	{ SEG_MIRRORED, "mirror" },
+ 	{ SEG_SNAPSHOT, "snapshot" },
+ 	{ SEG_SNAPSHOT_ORIGIN, "snapshot-origin" },
++	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
+ 	{ SEG_STRIPED, "striped" },
+ 	{ SEG_ZERO, "zero"},
+ };
+@@ -81,6 +83,7 @@
+ 	uint32_t chunk_size;		/* Snapshot */
+ 	struct dm_tree_node *cow;	/* Snapshot */
+ 	struct dm_tree_node *origin;	/* Snapshot + Snapshot origin */
++	struct dm_tree_node *merge;	/* Snapshot */
+ 
+ 	struct dm_tree_node *log;	/* Mirror */
+ 	uint32_t region_size;		/* Mirror */
+@@ -1179,7 +1182,7 @@
+ 
+ 	handle = NULL;
+ 
+-	for (priority = 0; priority < 2; priority++) {
++	for (priority = 0; priority < 3; priority++) {
+ 		while ((child = dm_tree_next_child(&handle, dnode, 0))) {
+ 			if (!(uuid = dm_tree_node_get_uuid(child))) {
+ 				stack;
+@@ -1471,6 +1474,7 @@
+ 			return_0;
+ 		break;
+ 	case SEG_SNAPSHOT:
++	case SEG_SNAPSHOT_MERGE:
+ 		if (!_build_dev_string(originbuf, sizeof(originbuf), seg->origin))
+ 			return_0;
+ 		if (!_build_dev_string(cowbuf, sizeof(cowbuf), seg->cow))
+@@ -1499,6 +1503,7 @@
+ 	case SEG_ERROR:
+ 	case SEG_SNAPSHOT:
+ 	case SEG_SNAPSHOT_ORIGIN:
++	case SEG_SNAPSHOT_MERGE:
+ 	case SEG_ZERO:
+ 		break;
+ 	case SEG_CRYPT:
+@@ -1735,6 +1740,7 @@
+ 	seg->chunk_size = 0;
+ 	seg->cow = NULL;
+ 	seg->origin = NULL;
++	seg->merge = NULL;
+ 
+ 	dm_list_add(&dnode->props.segs, &seg->list);
+ 	dnode->props.segment_count++;
+@@ -1767,17 +1773,21 @@
+ 	return 1;
  }
  
-+void init_snapshot_merge(struct lv_segment *cow_seg,
-+			 struct logical_volume *origin)
-+{
-+	/*
-+	 * Even though lv_is_visible(cow_seg->lv) returns 0,
-+	 * the cow_seg->lv (name: snapshotX) is _not_ hidden;
-+	 * this is part of the lvm2 snapshot fiction.  Must
-+	 * clear VISIBLE_LV directly (lv_set_visible can't)
-+	 * - cow_seg->lv->status is used to control whether 'lv'
-+	 *   (with user provided snapshot LV name) is visible
-+	 * - this also enables vg_validate() to succeed with
-+	 *   merge metadata (cow_seg->lv is now "internal")
-+	 */
-+	cow_seg->lv->status &= ~VISIBLE_LV;
-+	cow_seg->status |= SNAPSHOT_MERGE;
-+	origin->merging_snapshot = cow_seg;
-+}
+-int dm_tree_node_add_snapshot_target(struct dm_tree_node *node,
+-                                        uint64_t size,
+-                                        const char *origin_uuid,
+-                                        const char *cow_uuid,
+-                                        int persistent,
+-                                        uint32_t chunk_size)
++static int _add_snapshot_target(struct dm_tree_node *node,
++				   uint64_t size,
++				   const char *origin_uuid,
++				   const char *cow_uuid,
++				   const char *merge_uuid,
++				   int persistent,
++				   uint32_t chunk_size)
+ {
+ 	struct load_segment *seg;
+-	struct dm_tree_node *origin_node, *cow_node;
++	struct dm_tree_node *origin_node, *cow_node, *merge_node;
++	unsigned seg_type;
 +
- int vg_add_snapshot(struct logical_volume *origin,
- 		    struct logical_volume *cow, union lvid *lvid,
- 		    uint32_t extent_count, uint32_t chunk_size)
-@@ -113,7 +136,7 @@
- 	if (!(seg = alloc_snapshot_seg(snap, 0, 0)))
++	seg_type = !merge_uuid ? SEG_SNAPSHOT : SEG_SNAPSHOT_MERGE;
+ 
+-	if (!(seg = _add_segment(node, SEG_SNAPSHOT, size)))
++	if (!(seg = _add_segment(node, seg_type, size)))
  		return_0;
  
--	init_snapshot_seg(seg, origin, cow, chunk_size);
-+	init_snapshot_seg(seg, origin, cow, chunk_size, 0);
+ 	if (!(origin_node = dm_tree_find_node_by_uuid(node->dtree, origin_uuid))) {
+@@ -1790,7 +1800,7 @@
+ 		return_0;
  
- 	return 1;
- }
-@@ -122,6 +145,8 @@
- {
- 	dm_list_del(&cow->snapshot->origin_list);
- 	cow->snapshot->origin->origin_count--;
-+	if (cow->snapshot->origin->merging_snapshot == cow->snapshot)
-+		cow->snapshot->origin->merging_snapshot = NULL;
- 
- 	if (!lv_remove(cow->snapshot->lv)) {
- 		log_error("Failed to remove internal snapshot LV %s",
---- LVM2/lib/snapshot/snapshot.c	2010/01/05 21:14:05	1.39
-+++ LVM2/lib/snapshot/snapshot.c	2010/01/13 01:35:49	1.40
-@@ -37,7 +37,7 @@
- 	uint32_t chunk_size;
- 	const char *org_name, *cow_name;
- 	struct logical_volume *org, *cow;
--	int old_suppress;
-+	int old_suppress, merge = 0;
- 
- 	if (!get_config_uint32(sn, "chunk_size", &chunk_size)) {
- 		log_error("Couldn't read chunk size for snapshot.");
-@@ -46,7 +46,10 @@
- 
- 	old_suppress = log_suppress(1);
- 
--	if (!(cow_name = find_config_str(sn, "cow_store", NULL))) {
-+	cow_name = find_config_str(sn, "merging_store", NULL);
-+	if (cow_name) {
-+		merge = 1;
-+	} else if (!(cow_name = find_config_str(sn, "cow_store", NULL))) {
- 		log_suppress(old_suppress);
- 		log_error("Snapshot cow storage not specified.");
- 		return 0;
-@@ -72,7 +75,7 @@
+ 	if (!(cow_node = dm_tree_find_node_by_uuid(node->dtree, cow_uuid))) {
+-		log_error("Couldn't find snapshot origin uuid %s.", cow_uuid);
++		log_error("Couldn't find snapshot COW device uuid %s.", cow_uuid);
  		return 0;
  	}
  
--	init_snapshot_seg(seg, org, cow, chunk_size);
-+	init_snapshot_seg(seg, org, cow, chunk_size, merge);
+@@ -1801,9 +1811,49 @@
+ 	seg->persistent = persistent ? 1 : 0;
+ 	seg->chunk_size = chunk_size;
  
++	if (merge_uuid) {
++		if (!(merge_node = dm_tree_find_node_by_uuid(node->dtree, merge_uuid))) {
++			/* not a pure error, merging snapshot may have been deactivated */
++			log_verbose("Couldn't find merging snapshot uuid %s.", merge_uuid);
++		} else {
++			seg->merge = merge_node;
++			/* must not link merging snapshot, would undermine activation_priority below */
++		}
++
++		/* Resume snapshot-merge (acting origin) after other snapshots */
++		node->activation_priority = 1;
++		if (seg->merge) {
++			/* Resume merging snapshot after snapshot-merge */
++			seg->merge->activation_priority = 2;
++		}
++	}
++
  	return 1;
  }
-@@ -81,7 +84,10 @@
+ 
++
++int dm_tree_node_add_snapshot_target(struct dm_tree_node *node,
++				     uint64_t size,
++				     const char *origin_uuid,
++				     const char *cow_uuid,
++				     int persistent,
++				     uint32_t chunk_size)
++{
++	return _add_snapshot_target(node, size, origin_uuid, cow_uuid,
++				    NULL, persistent, chunk_size);
++}
++
++int dm_tree_node_add_snapshot_merge_target(struct dm_tree_node *node,
++					   uint64_t size,
++					   const char *origin_uuid,
++					   const char *cow_uuid,
++					   const char *merge_uuid,
++					   uint32_t chunk_size)
++{
++	return _add_snapshot_target(node, size, origin_uuid, cow_uuid,
++				    merge_uuid, 1, chunk_size);
++}
++
+ int dm_tree_node_add_error_target(struct dm_tree_node *node,
+                                      uint64_t size)
  {
- 	outf(f, "chunk_size = %u", seg->chunk_size);
- 	outf(f, "origin = \"%s\"", seg->origin->name);
--	outf(f, "cow_store = \"%s\"", seg->cow->name);
-+	if (!(seg->status & SNAPSHOT_MERGE))
-+		outf(f, "cow_store = \"%s\"", seg->cow->name);
-+	else
-+		outf(f, "merging_store = \"%s\"", seg->cow->name);
- 
- 	return 1;
- }
 
 
