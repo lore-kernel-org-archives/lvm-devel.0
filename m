@@ -1,41 +1,46 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 13 Jan 2010 14:35:53 +0100
-Subject: [PATCH 2/6] Intialize cmd in the struct alloc_handle
+Date: Wed, 13 Jan 2010 14:35:54 +0100
+Subject: [PATCH 3/6] Cleanup compiler warning with passing NULL to execvp
 In-Reply-To: <cover.1263389392.git.zkabelac@redhat.com>
 References: <cover.1263389392.git.zkabelac@redhat.com>
-Message-ID: <274c0318317532443449c078aaa3d2a84c274744.1263389392.git.zkabelac@redhat.com>
+Message-ID: <855ac0b71271c2ce62d85a3f43e97975d20ad45f.1263389392.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move initialization of the 'cmd' member of the struct alloc_handle
-before the first potentional return.
+Cleanup gcc warning: null argument where non-null required (arg.2)
+As the const declaration of execvp is a bit weird, using local
+dmeventdpath string.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/lv_manip.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/dmeventd/libdevmapper-event.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 57c3d08..e54c453 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -566,11 +566,11 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 		return NULL;
- 	}
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 20d925e..4dfdf69 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -398,6 +398,8 @@ static int _start_daemon(struct dm_event_fifos *fifos)
+ 	int pid, ret = 0;
+ 	int status;
+ 	struct stat statbuf;
++	char dmeventdpath[] = DMEVENTD_PATH; /* const type for execvp */
++	char * const args[] = { dmeventdpath, NULL };
  
-+	ah->cmd = cmd;
-+
- 	if (segtype_is_virtual(segtype))
- 		return ah;
+ 	if (stat(fifos->client_path, &statbuf))
+ 		goto start_server;
+@@ -437,7 +439,7 @@ static int _start_daemon(struct dm_event_fifos *fifos)
+ 		log_error("Unable to fork.");
  
--	ah->cmd = cmd;
--
- 	if (!(ah->mem = dm_pool_create("allocation", 1024))) {
- 		log_error("allocation pool creation failed");
- 		return NULL;
+ 	else if (!pid) {
+-		execvp(DMEVENTD_PATH, NULL);
++		execvp(args[0], args);
+ 		_exit(EXIT_FAILURE);
+ 	} else {
+ 		if (waitpid(pid, &status, 0) < 0)
 -- 
 1.6.6
 
