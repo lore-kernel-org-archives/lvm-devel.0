@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 13 Jan 2010 01:55:45 -0000
-Subject: LVM2 lib/activate/activate.c lib/activate/dev_ ...
-Message-ID: <20100113015545.30631.qmail@sourceware.org>
+Date: 13 Jan 2010 01:56:20 -0000
+Subject: LVM2 lib/format_text/flags.c lib/metadata/lv_m ...
+Message-ID: <20100113015620.2686.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,352 +10,181 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-13 01:55:44
+Changes by:	snitzer at sourceware.org	2010-01-13 01:56:19
 
 Modified files:
-	lib/activate   : activate.c dev_manager.c 
+	lib/format_text: flags.c 
 	lib/metadata   : lv_manip.c metadata-exported.h snapshot_manip.c 
-	lib/report     : report.c 
-	tools          : lvconvert.c toollib.c vgchange.c 
+	lib/snapshot   : snapshot.c 
+	tools          : toollib.c vgchange.c 
 
 Log message:
-	Add snapshot merge wrappers to abstract the associations and flags used
-	to represent merging origin and snapshot volumes.
+	Rename segment and lv status flag from SNAPSHOT_MERGE to MERGING.
+	
+	Eliminate 'merging_snapshot' from 'struct logical_volume' and just use
+	'snapshot' for origin lv's reference to the merging snapshot; also set
+	MERGING in the origin lv's status.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.162&r2=1.163
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.171&r2=1.172
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.200&r2=1.201
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.126&r2=1.127
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.110&r2=1.111
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.182&r2=1.183
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.96&r2=1.97
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.201&r2=1.202
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.127&r2=1.128
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.46&r2=1.47
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.183&r2=1.184
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.97&r2=1.98
 
---- LVM2/lib/activate/activate.c	2010/01/13 01:43:32	1.162
-+++ LVM2/lib/activate/activate.c	2010/01/13 01:55:43	1.163
-@@ -754,7 +754,7 @@
- 	 * In case of a snapshot device, we monitor lv->snapshot->lv,
- 	 * not the actual LV itself.
- 	 */
--	if (lv_is_cow(lv) && !(find_cow(lv)->status & SNAPSHOT_MERGE))
-+	if (lv_is_cow(lv) && !lv_is_merging_cow(lv))
- 		return monitor_dev_for_events(cmd, lv->snapshot->lv, monitor);
+--- LVM2/lib/format_text/flags.c	2010/01/13 01:35:49	1.40
++++ LVM2/lib/format_text/flags.c	2010/01/13 01:56:18	1.41
+@@ -61,7 +61,7 @@
+ 	{MIRRORED, NULL, 0},
+ 	{VIRTUAL, NULL, 0},
+ 	{SNAPSHOT, NULL, 0},
+-	{SNAPSHOT_MERGE, NULL, 0},
++	{MERGING, NULL, 0},
+ 	{ACTIVATE_EXCL, NULL, 0},
+ 	{CONVERTING, NULL, 0},
+ 	{PARTIAL_LV, NULL, 0},
+--- LVM2/lib/metadata/lv_manip.c	2010/01/13 01:55:44	1.201
++++ LVM2/lib/metadata/lv_manip.c	2010/01/13 01:56:18	1.202
+@@ -1877,7 +1877,6 @@
+ 	}
  
- 	/*
---- LVM2/lib/activate/dev_manager.c	2010/01/13 01:54:34	1.171
-+++ LVM2/lib/activate/dev_manager.c	2010/01/13 01:55:44	1.172
-@@ -947,19 +947,20 @@
- 					       struct logical_volume *lv)
+ 	lv->snapshot = NULL;
+-	lv->merging_snapshot = NULL;
+ 	dm_list_init(&lv->snapshot_segs);
+ 	dm_list_init(&lv->segments);
+ 	dm_list_init(&lv->tags);
+--- LVM2/lib/metadata/metadata-exported.h	2010/01/13 01:55:44	1.127
++++ LVM2/lib/metadata/metadata-exported.h	2010/01/13 01:56:18	1.128
+@@ -69,7 +69,7 @@
+ //#define POSTORDER_OPEN_FLAG	0x04000000U    temporary use inside vg_read_internal. */
+ //#define VIRTUAL_ORIGIN	0x08000000U	/* LV - internal use only */
+ 
+-#define SNAPSHOT_MERGE		0x10000000U	/* SEG */
++#define MERGING			0x10000000U	/* LV SEG */
+ 
+ #define LVM_READ              	0x00000100U	/* LV VG */
+ #define LVM_WRITE             	0x00000200U	/* LV VG */
+@@ -330,9 +330,6 @@
+ 	struct dm_list snapshot_segs;
+ 	struct lv_segment *snapshot;
+ 
+-	/* A snapshot that is merging into this origin */
+-	struct lv_segment *merging_snapshot;
+-
+ 	struct dm_list segments;
+ 	struct dm_list tags;
+ 	struct dm_list segs_using_this_lv;
+--- LVM2/lib/metadata/snapshot_manip.c	2010/01/13 01:55:44	1.46
++++ LVM2/lib/metadata/snapshot_manip.c	2010/01/13 01:56:18	1.47
+@@ -25,7 +25,7 @@
+ 
+ int lv_is_cow(const struct logical_volume *lv)
  {
- 	const char *origin_dlid, *cow_dlid, *merge_dlid;
-+	struct lv_segment *merging_cow_seg = find_merging_cow(lv);
- 
- 	if (!(origin_dlid = build_dlid(dm, lv->lvid.s, "real")))
- 		return_0;
- 
--	if (!(cow_dlid = build_dlid(dm, lv->merging_snapshot->cow->lvid.s, "cow")))
-+	if (!(cow_dlid = build_dlid(dm, merging_cow_seg->cow->lvid.s, "cow")))
- 		return_0;
- 
--	if (!(merge_dlid = build_dlid(dm, lv->merging_snapshot->cow->lvid.s, NULL)))
-+	if (!(merge_dlid = build_dlid(dm, merging_cow_seg->cow->lvid.s, NULL)))
- 		return_0;
- 
- 	if (!dm_tree_node_add_snapshot_merge_target(dnode, lv->size, origin_dlid,
- 						    cow_dlid, merge_dlid,
--						    lv->merging_snapshot->chunk_size))
-+						    merging_cow_seg->chunk_size))
- 		return_0;
- 
- 	return 1;
-@@ -979,7 +980,8 @@
- 		return 0;
- 	}
- 
--	if (snap_seg->status & SNAPSHOT_MERGE)
-+	/* cow is to be merged so skip adding it */
-+	if (lv_is_merging_cow(lv))
- 		return 1;
- 
- 	if (!(origin_dlid = build_dlid(dm, snap_seg->origin->lvid.s, "real")))
-@@ -1055,9 +1057,9 @@
- 			log_error("Clustered snapshots are not yet supported");
- 			return 0;
- 		}
--		if (seg->lv->merging_snapshot) {
-+		if (lv_is_merging_origin(seg->lv)) {
- 			if (!_add_new_lv_to_dtree(dm, dtree,
--			     seg->lv->merging_snapshot->cow, "cow"))
-+			     find_merging_cow(seg->lv)->cow, "cow"))
- 				return_0;
- 			/*
- 			 * Must also add "real" LV for use when
-@@ -1080,7 +1082,7 @@
- 
- 	/* Now we've added its dependencies, we can add the target itself */
- 	if (lv_is_origin(seg->lv) && !layer) {
--		if (!seg->lv->merging_snapshot) {
-+		if (!lv_is_merging_origin(seg->lv)) {
- 			if (!_add_origin_target_to_dtree(dm, dnode, seg->lv))
- 				return_0;
- 		} else {
-@@ -1115,7 +1117,7 @@
- 	uint32_t read_ahead_flags = UINT32_C(0);
- 	uint16_t udev_flags = 0;
- 
--	if (lv_is_origin(lv) && lv->merging_snapshot && !layer) {
-+	if (lv_is_origin(lv) && lv_is_merging_origin(lv) && !layer) {
- 		/*
- 		 * Clear merge attributes if merge isn't currently possible:
- 		 * either origin or merging snapshot are open
-@@ -1125,18 +1127,15 @@
- 		 */
- 		if ((dev_manager_info(dm->mem, NULL, lv,
- 				      0, 1, 0, &dinfo, NULL) && dinfo.open_count) ||
--		    (dev_manager_info(dm->mem, NULL, lv->merging_snapshot->cow,
-+		    (dev_manager_info(dm->mem, NULL, find_merging_cow(lv)->cow,
- 				      0, 1, 0, &dinfo, NULL) && dinfo.open_count)) {
--			if (!_lv_has_target_type(dm, lv, NULL, "snapshot-merge")) {
--				/* clear merge attributes */
--				lv->merging_snapshot->status &= ~SNAPSHOT_MERGE;
--				lv->merging_snapshot = NULL;
--			}
-+			if (!_lv_has_target_type(dm, lv, NULL, "snapshot-merge"))
-+				clear_snapshot_merge(lv);
- 		}
- 	}
- 
- 	lv_name = lv->name;
--	if (lv_is_cow(lv) && find_cow(lv)->status & SNAPSHOT_MERGE) {
-+	if (lv_is_cow(lv) && lv_is_merging_cow(lv)) {
- 		if (layer) {
- 			/*
- 			 * use origin's name as basis for snapshot-merge device names;
---- LVM2/lib/metadata/lv_manip.c	2010/01/13 01:52:58	1.200
-+++ LVM2/lib/metadata/lv_manip.c	2010/01/13 01:55:44	1.201
-@@ -2127,7 +2127,7 @@
- 
- 	if (lv_is_cow(lv)) {
- 		origin = origin_from_cow(lv);
--		was_merging = !!origin->merging_snapshot;
-+		was_merging = lv_is_merging_origin(origin);
- 		log_verbose("Removing snapshot %s", lv->name);
- 		if (!vg_remove_snapshot(lv))
- 			return_0;
-@@ -2953,7 +2953,7 @@
- 					  "supported yet");
- 				return 0;
- 			}
--			if (org->merging_snapshot) {
-+			if (lv_is_merging_origin(org)) {
- 				log_error("Snapshots of an origin that has a "
- 					  "merging snapshot is not supported");
- 				return 0;
---- LVM2/lib/metadata/metadata-exported.h	2010/01/13 01:35:49	1.126
-+++ LVM2/lib/metadata/metadata-exported.h	2010/01/13 01:55:44	1.127
-@@ -616,12 +616,16 @@
- int lv_is_origin(const struct logical_volume *lv);
- int lv_is_virtual_origin(const struct logical_volume *lv);
- int lv_is_cow(const struct logical_volume *lv);
-+int lv_is_merging_origin(const struct logical_volume *origin);
-+int lv_is_merging_cow(const struct logical_volume *snapshot);
- 
- /* Test if given LV is visible from user's perspective */
- int lv_is_visible(const struct logical_volume *lv);
- 
- int pv_is_in_vg(struct volume_group *vg, struct physical_volume *pv);
- 
-+struct lv_segment *find_merging_cow(const struct logical_volume *origin);
-+
- /* Given a cow LV, return return the snapshot lv_segment that uses it */
- struct lv_segment *find_cow(const struct logical_volume *lv);
- 
-@@ -633,6 +637,8 @@
- 
- void init_snapshot_merge(struct lv_segment *cow_seg, struct logical_volume *origin);
- 
-+void clear_snapshot_merge(struct logical_volume *origin);
-+
- int vg_add_snapshot(struct logical_volume *origin, struct logical_volume *cow,
- 		    union lvid *lvid, uint32_t extent_count,
- 		    uint32_t chunk_size);
---- LVM2/lib/metadata/snapshot_manip.c	2010/01/13 01:35:49	1.45
-+++ LVM2/lib/metadata/snapshot_manip.c	2010/01/13 01:55:44	1.46
-@@ -37,7 +37,7 @@
- 		if (lv_is_virtual_origin(origin_from_cow(lv)))
- 			return 1;
- 
--		if (find_cow(lv)->status & SNAPSHOT_MERGE)
-+		if (lv_is_merging_cow(lv))
- 			return 0;
- 
- 		return lv_is_visible(origin_from_cow(lv));
-@@ -51,6 +51,21 @@
- 	return (lv->status & VIRTUAL_ORIGIN) ? 1 : 0;
+-	return lv->snapshot ? 1 : 0;
++	return (!lv_is_origin(lv) && lv->snapshot) ? 1 : 0;
  }
  
-+int lv_is_merging_origin(const struct logical_volume *origin)
-+{
-+	return origin->merging_snapshot ? 1 : 0;
-+}
-+
-+struct lv_segment *find_merging_cow(const struct logical_volume *origin)
-+{
-+	return origin->merging_snapshot;
-+}
-+
-+int lv_is_merging_cow(const struct logical_volume *snapshot)
-+{
-+	/* NOTE: use of find_cow() rather than find_merging_cow() */
-+	return (find_cow(snapshot)->status & SNAPSHOT_MERGE) ? 1 : 0;
-+}
+ int lv_is_visible(const struct logical_volume *lv)
+@@ -53,18 +53,21 @@
+ 
+ int lv_is_merging_origin(const struct logical_volume *origin)
+ {
+-	return origin->merging_snapshot ? 1 : 0;
++	return (origin->status & MERGING) ? 1 : 0;
+ }
+ 
+ struct lv_segment *find_merging_cow(const struct logical_volume *origin)
+ {
+-	return origin->merging_snapshot;
++	/* FIXME: eliminate this wrapper and just use find_cow()?
++	 * - find_merging_cow() adds to code clarity in caller
++	 */
++	return find_cow(origin);
+ }
+ 
+ int lv_is_merging_cow(const struct logical_volume *snapshot)
+ {
+-	/* NOTE: use of find_cow() rather than find_merging_cow() */
+-	return (find_cow(snapshot)->status & SNAPSHOT_MERGE) ? 1 : 0;
++	/* checks lv_segment's status to see if cow is merging */
++	return (find_cow(snapshot)->status & MERGING) ? 1 : 0;
+ }
  
  /* Given a cow LV, return the snapshot lv_segment that uses it */
- struct lv_segment *find_cow(const struct logical_volume *lv)
-@@ -106,6 +121,13 @@
- 	origin->merging_snapshot = cow_seg;
+@@ -117,15 +120,17 @@
+ 	 *   merge metadata (cow_seg->lv is now "internal")
+ 	 */
+ 	cow_seg->lv->status &= ~VISIBLE_LV;
+-	cow_seg->status |= SNAPSHOT_MERGE;
+-	origin->merging_snapshot = cow_seg;
++	cow_seg->status |= MERGING;
++	origin->snapshot = cow_seg;
++	origin->status |= MERGING;
  }
  
-+void clear_snapshot_merge(struct logical_volume *origin)
-+{
-+	/* clear merge attributes */
-+	origin->merging_snapshot->status &= ~SNAPSHOT_MERGE;
-+	origin->merging_snapshot = NULL;
-+}
-+
+ void clear_snapshot_merge(struct logical_volume *origin)
+ {
+ 	/* clear merge attributes */
+-	origin->merging_snapshot->status &= ~SNAPSHOT_MERGE;
+-	origin->merging_snapshot = NULL;
++	origin->snapshot->status &= ~MERGING;
++	origin->snapshot = NULL;
++	origin->status &= ~MERGING;
+ }
+ 
  int vg_add_snapshot(struct logical_volume *origin,
- 		    struct logical_volume *cow, union lvid *lvid,
- 		    uint32_t extent_count, uint32_t chunk_size)
-@@ -143,10 +165,12 @@
- 
- int vg_remove_snapshot(struct logical_volume *cow)
+--- LVM2/lib/snapshot/snapshot.c	2010/01/13 01:39:44	1.41
++++ LVM2/lib/snapshot/snapshot.c	2010/01/13 01:56:18	1.42
+@@ -84,7 +84,7 @@
  {
-+	struct logical_volume *origin = origin_from_cow(cow);
-+
- 	dm_list_del(&cow->snapshot->origin_list);
--	cow->snapshot->origin->origin_count--;
--	if (cow->snapshot->origin->merging_snapshot == cow->snapshot)
--		cow->snapshot->origin->merging_snapshot = NULL;
-+	origin->origin_count--;
-+	if (find_merging_cow(origin) == find_cow(cow))
-+		clear_snapshot_merge(origin_from_cow(cow));
- 
- 	if (!lv_remove(cow->snapshot->lv)) {
- 		log_error("Failed to remove internal snapshot LV %s",
---- LVM2/lib/report/report.c	2010/01/13 01:54:35	1.110
-+++ LVM2/lib/report/report.c	2010/01/13 01:55:44	1.111
-@@ -306,7 +306,7 @@
- 		repstr[0] = 'v';
- 	/* Origin takes precedence over Mirror */
- 	else if (lv_is_origin(lv)) {
--		if (lv->merging_snapshot)
-+		if (lv_is_merging_origin(lv))
- 			repstr[0] = 'O';
- 		else
- 			repstr[0] = 'o';
-@@ -324,7 +324,7 @@
- 	else if (lv->status & MIRROR_LOG)
- 		repstr[0] = 'l';
- 	else if (lv_is_cow(lv)) {
--		if (find_cow(lv)->status & SNAPSHOT_MERGE)
-+		if (lv_is_merging_cow(lv))
- 			repstr[0] = 'S';
- 		else
- 			repstr[0] = 's';
-@@ -1023,7 +1023,7 @@
- 		return 0;
- 	}
- 
--	if ((!lv_is_cow(lv) && !lv->merging_snapshot) ||
-+	if ((!lv_is_cow(lv) && !lv_is_merging_origin(lv)) ||
- 	    (lv_info(lv->vg->cmd, lv, &info, 0, 0) && !info.exists)) {
- 		*sortval = UINT64_C(0);
- 		dm_report_field_set_value(field, "", sortval);
-@@ -1032,7 +1032,7 @@
- 
- 	if (!lv_snapshot_percent(lv, &snap_percent, &percent_range) ||
- 				 (percent_range == PERCENT_INVALID)) {
--		if (!lv->merging_snapshot) {
-+		if (!lv_is_merging_origin(lv)) {
- 			*sortval = UINT64_C(100);
- 			dm_report_field_set_value(field, "100.00", sortval);
- 		} else {
---- LVM2/tools/lvconvert.c	2010/01/13 01:54:35	1.113
-+++ LVM2/tools/lvconvert.c	2010/01/13 01:55:44	1.114
-@@ -377,7 +377,7 @@
- 				   struct logical_volume *lv,
- 				   struct dm_list *lvs_changed __attribute((unused)))
- {
--	struct lv_segment *snap_seg = lv->merging_snapshot;
-+	struct lv_segment *snap_seg = find_merging_cow(lv);
- 	if (!snap_seg) {
- 		log_error("Logical volume %s has no merging snapshot.", lv->name);
- 		return 0;
-@@ -450,7 +450,7 @@
- 
- 	memcpy(uuid, &lv->lvid, sizeof(lv->lvid));
- 
--	if (!lv->merging_snapshot)
-+	if (!lv_is_merging_origin(lv))
- 		return poll_daemon(cmd, lv_full_name, uuid, background, 0,
- 				   &_lvconvert_mirror_fns, "Converted");
+ 	outf(f, "chunk_size = %u", seg->chunk_size);
+ 	outf(f, "origin = \"%s\"", seg->origin->name);
+-	if (!(seg->status & SNAPSHOT_MERGE))
++	if (!(seg->status & MERGING))
+ 		outf(f, "cow_store = \"%s\"", seg->cow->name);
  	else
-@@ -1123,13 +1123,13 @@
- 	struct lvinfo info;
- 
- 	/* Check if merge is possible */
--	if (cow_seg->status & SNAPSHOT_MERGE) {
-+	if (lv_is_merging_cow(lv)) {
- 		log_error("Snapshot %s is already merging", lv->name);
- 		return 0;
- 	}
--	if (origin->merging_snapshot) {
-+	if (lv_is_merging_origin(origin)) {
- 		log_error("Snapshot %s is already merging into the origin",
--			  origin->merging_snapshot->cow->name);
-+			  find_merging_cow(origin)->cow->name);
- 		return 0;
+ 		outf(f, "merging_store = \"%s\"", seg->cow->name);
+@@ -144,7 +144,7 @@
+ 		_snap_checked = 1;
  	}
  
---- LVM2/tools/toollib.c	2010/01/13 01:50:34	1.182
-+++ LVM2/tools/toollib.c	2010/01/13 01:55:44	1.183
-@@ -1270,7 +1270,7 @@
- 	 * - fortunately: polldaemon will immediately shutdown if the
- 	 *   origin doesn't have a status with a snapshot percentage
- 	 */
--	if (background_polling() && lv_is_origin(lv) && lv->merging_snapshot)
-+	if (background_polling() && lv_is_origin(lv) && lv_is_merging_origin(lv))
- 		lv_spawn_background_polling(cmd, lv);
- 
- out:
+-	if (!_snap_merge_checked && seg && (seg->status & SNAPSHOT_MERGE)) {
++	if (!_snap_merge_checked && seg && (seg->status & MERGING)) {
+ 		_snap_merge_present = target_present(cmd, "snapshot-merge", 0);
+ 		_snap_merge_checked = 1;
+ 		return _snap_present && _snap_merge_present;
+--- LVM2/tools/toollib.c	2010/01/13 01:55:44	1.183
++++ LVM2/tools/toollib.c	2010/01/13 01:56:18	1.184
 @@ -1307,7 +1307,7 @@
  		pvmove_poll(cmd, pvname, 1);
  	}
  
--	if (lv->status & CONVERTING || lv->merging_snapshot) {
-+	if (lv->status & CONVERTING || lv_is_merging_origin(lv)) {
+-	if (lv->status & CONVERTING || lv_is_merging_origin(lv)) {
++	if (lv->status & (CONVERTING|MERGING)) {
  		log_verbose("Spawning background lvconvert process for %s",
  			lv->name);
  		lvconvert_poll(cmd, lv, 1);
---- LVM2/tools/vgchange.c	2010/01/13 01:50:34	1.96
-+++ LVM2/tools/vgchange.c	2010/01/13 01:55:44	1.97
-@@ -70,7 +70,7 @@
+--- LVM2/tools/vgchange.c	2010/01/13 01:55:44	1.97
++++ LVM2/tools/vgchange.c	2010/01/13 01:56:18	1.98
+@@ -69,8 +69,7 @@
+ 			lv_active = info.exists;
  
  		if (lv_active &&
- 		    (lv->status & (PVMOVE|CONVERTING) ||
--		     lv->merging_snapshot)) {
-+		     lv_is_merging_origin(lv))) {
+-		    (lv->status & (PVMOVE|CONVERTING) ||
+-		     lv_is_merging_origin(lv))) {
++		    (lv->status & (PVMOVE|CONVERTING|MERGING))) {
  			lv_spawn_background_polling(cmd, lv);
  			count++;
  		}
-@@ -141,7 +141,7 @@
+@@ -140,8 +139,7 @@
+ 
  		if (background_polling() &&
  		    activate != CHANGE_AN && activate != CHANGE_ALN &&
- 		    (lv->status & (PVMOVE|CONVERTING) ||
--		     lv->merging_snapshot))
-+		     lv_is_merging_origin(lv)))
+-		    (lv->status & (PVMOVE|CONVERTING) ||
+-		     lv_is_merging_origin(lv)))
++		    (lv->status & (PVMOVE|CONVERTING|MERGING)))
  			lv_spawn_background_polling(cmd, lv);
  
  		count++;
