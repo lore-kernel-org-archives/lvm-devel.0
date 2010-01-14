@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Jan 2010 10:11:27 -0000
-Subject: LVM2/daemons/dmeventd libdevmapper-event.c
-Message-ID: <20100114101127.27933.qmail@sourceware.org>
+Date: 14 Jan 2010 10:12:45 -0000
+Subject: LVM2/libdm libdevmapper.h
+Message-ID: <20100114101245.28409.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-01-14 10:11:26
+Changes by:	zkabelac at sourceware.org	2010-01-14 10:12:44
 
 Modified files:
-	daemons/dmeventd: libdevmapper-event.c 
+	libdm          : libdevmapper.h 
 
 Log message:
-	Cleanup gcc warning: null argument where non-null required (arg.2)
-	As the const declaration of execvp is a bit weird, using local
-	dmeventdpath string.
+	Cleanup gcc warning: cast from function call of type 'struct dm_list *'
+	to non-matching type 'long unsigned int'
+	
+	Casting pointer to long and back to pointer could be easily
+	handled with just pointer arithmetic.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.106&r2=1.107
 
---- LVM2/daemons/dmeventd/libdevmapper-event.c	2009/07/13 21:26:41	1.29
-+++ LVM2/daemons/dmeventd/libdevmapper-event.c	2010/01/14 10:11:26	1.30
-@@ -398,6 +398,8 @@
- 	int pid, ret = 0;
- 	int status;
- 	struct stat statbuf;
-+	char dmeventdpath[] = DMEVENTD_PATH; /* const type for execvp */
-+	char * const args[] = { dmeventdpath, NULL };
+--- LVM2/libdm/libdevmapper.h	2010/01/13 01:39:45	1.106
++++ LVM2/libdm/libdevmapper.h	2010/01/14 10:12:44	1.107
+@@ -754,7 +754,7 @@
+  * contained in a structure of type t, return the containing structure.
+  */
+ #define dm_list_struct_base(v, t, head) \
+-    ((t *)((uintptr_t)(v) - (uintptr_t)&((t *) 0)->head))
++    ((t *)((char*)(v) - (char*)&((t *) 0)->head))
  
- 	if (stat(fifos->client_path, &statbuf))
- 		goto start_server;
-@@ -437,7 +439,7 @@
- 		log_error("Unable to fork.");
- 
- 	else if (!pid) {
--		execvp(DMEVENTD_PATH, NULL);
-+		execvp(args[0], args);
- 		_exit(EXIT_FAILURE);
- 	} else {
- 		if (waitpid(pid, &status, 0) < 0)
+ /*
+  * Given the address v of an instance of 'struct dm_list list' contained in
 
 
