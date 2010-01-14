@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Jan 2010 10:08:03 -0000
+Date: 14 Jan 2010 10:09:43 -0000
 Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20100114100803.25319.qmail@sourceware.org>
+Message-ID: <20100114100943.26015.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,54 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-01-14 10:08:03
+Changes by:	zkabelac at sourceware.org	2010-01-14 10:09:42
 
 Modified files:
 	lib/metadata   : lv_manip.c 
 
 Log message:
-	lvol%d is generated for NULL name in lv_create_empty().
-	So just avoid code duplication.
+	Move initialization of the 'cmd' member of the struct alloc_handle
+	before the first potentional return.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.202&r2=1.203
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.203&r2=1.204
 
---- LVM2/lib/metadata/lv_manip.c	2010/01/13 01:56:18	1.202
-+++ LVM2/lib/metadata/lv_manip.c	2010/01/14 10:08:03	1.203
-@@ -2852,8 +2852,6 @@
- 	uint64_t status = UINT64_C(0);
- 	struct logical_volume *lv, *org = NULL;
- 	int origin_active = 0;
--	char lv_name_buf[128];
--	const char *lv_name;
- 	struct lvinfo info;
- 
- 	if (lp->lv_name && find_lv_in_vg(vg, lp->lv_name)) {
-@@ -3008,16 +3006,6 @@
- 	if (!archive(vg))
- 		return 0;
- 
--	if (lp->lv_name)
--		lv_name = lp->lv_name;
--	else {
--		if (!generate_lv_name(vg, "lvol%d", lv_name_buf, sizeof(lv_name_buf))) {
--			log_error("Failed to generate LV name.");
--			return 0;
--		}
--		lv_name = &lv_name_buf[0];
--	}
--
- 	if (lp->tag) {
- 		if (!(vg->fid->fmt->features & FMT_TAGS)) {
- 			log_error("Volume group %s does not support tags",
-@@ -3036,7 +3024,7 @@
- 		}
+--- LVM2/lib/metadata/lv_manip.c	2010/01/14 10:08:03	1.203
++++ LVM2/lib/metadata/lv_manip.c	2010/01/14 10:09:42	1.204
+@@ -566,11 +566,11 @@
+ 		return NULL;
  	}
  
--	if (!(lv = lv_create_empty(lv_name ? lv_name : "lvol%d", NULL,
-+	if (!(lv = lv_create_empty(lp->lv_name ? lp->lv_name : "lvol%d", NULL,
- 				   status, lp->alloc, vg)))
- 		return_0;
++	ah->cmd = cmd;
++
+ 	if (segtype_is_virtual(segtype))
+ 		return ah;
  
+-	ah->cmd = cmd;
+-
+ 	if (!(ah->mem = dm_pool_create("allocation", 1024))) {
+ 		log_error("allocation pool creation failed");
+ 		return NULL;
 
 
