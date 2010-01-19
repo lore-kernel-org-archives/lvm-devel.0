@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Jan 2010 15:58:46 -0000
-Subject: LVM2/daemons/cmirrord clogd.c link_mon.c local.c
-Message-ID: <20100119155846.15479.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 19 Jan 2010 15:59:34 -0000
+Subject: LVM2/test t-pvcreate-operation-md.sh
+Message-ID: <20100119155934.15758.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,216 +10,62 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-01-19 15:58:45
+Changes by:	snitzer at sourceware.org	2010-01-19 15:59:34
 
 Modified files:
-	daemons/cmirrord: clogd.c link_mon.c local.c 
+	test           : t-pvcreate-operation-md.sh 
 
 Log message:
-	Signal handling FIXMEs.
-	A few integer type changes.
+	update test/t-pvcreate-operation-md.sh attempt loading raid0.ko if raid0
+	isn't already available (in /proc/mdstat).
+	
+	switch to requiring 2.6.33 for the alignment_offset tests; 2.6.{31,32}
+	alignment_offset values aren't reliable.  2.6.33 _should_ have mkp's
+	alignment_offset fixes but so far it doesn't (as of 2.6.33-rc4).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/clogd.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/link_mon.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/local.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation-md.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/daemons/cmirrord/clogd.c	2010/01/18 21:07:24	1.8
-+++ LVM2/daemons/cmirrord/clogd.c	2010/01/19 15:58:45	1.9
-@@ -21,9 +21,10 @@
- #include <sys/wait.h>
- #include <unistd.h>
+--- LVM2/test/t-pvcreate-operation-md.sh	2009/09/30 16:13:53	1.3
++++ LVM2/test/t-pvcreate-operation-md.sh	2010/01/19 15:59:34	1.4
+@@ -14,7 +14,9 @@
+ which perl || exit 200
+ which awk || exit 200
+ which cut || exit 200
+-test -f /proc/mdstat || exit 200
++
++test -f /proc/mdstat && grep -q raid0 /proc/mdstat || \
++modprobe raid0 || exit 200
  
--static int exit_now = 0;
-+static volatile sig_atomic_t exit_now = 0;
-+/* FIXME Review signal handling.  Should be volatile sig_atomic_t */
- static sigset_t signal_mask;
--static int signal_received;
-+static volatile sig_atomic_t signal_received;
+ . ./test-utils.sh
  
- static void process_signals(void);
- static void daemonize(void);
-@@ -96,7 +97,8 @@
+@@ -66,7 +68,8 @@
+ linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
  
- 	sprintf(buffer, "%d\n", getpid());
+ # Test newer topology-aware alignment detection
+-if [ $linux_minor -gt 31 ]; then
++# - first added to 2.6.31 but not "reliable" until 2.6.33
++if [ $linux_minor -ge 33 ]; then
+     pv_align="256.00k"
+     pvcreate --metadatasize 128k \
+ 	--config 'devices { md_chunk_alignment=0 }' $mddev
+@@ -74,7 +77,7 @@
+ fi
  
--	if(write(fd, buffer, strlen(buffer)) < strlen(buffer)){
-+	/* FIXME Handle other non-error returns without aborting */
-+	if (write(fd, buffer, strlen(buffer)) < strlen(buffer)){
- 		close(fd);
- 		unlink(lockfile);
- 		return -errno;
-@@ -107,8 +109,9 @@
+ # partition MD array directly, depends on blkext in Linux >= 2.6.28
+-if [ $linux_minor -gt 27 ]; then
++if [ $linux_minor -ge 28 ]; then
+     # create one partition
+     sfdisk $mddev <<EOF
+ ,,83
+@@ -95,7 +98,7 @@
  
- static void sig_handler(int sig)
- {
-+	/* FIXME Races - don't touch signal_mask here. */
- 	sigaddset(&signal_mask, sig);
--	++signal_received;
-+	signal_received = 1;
- }
+     # Checking for 'alignment_offset' in sysfs implies Linux >= 2.6.31
+     sysfs_alignment_offset=/sys/dev/block/${mddev_maj_min}/${base_mddev_p}/alignment_offset
+-    [ -f $sysfs_alignment_offset ] && \
++    [ -f $sysfs_alignment_offset -a $linux_minor -ge 33 ] && \
+ 	alignment_offset=`cat $sysfs_alignment_offset` || \
+ 	alignment_offset=0
  
- static void process_signal(int sig){
-@@ -225,6 +228,7 @@
- 	if (create_lockfile(CMIRRORD_PIDFILE))
- 		exit(EXIT_LOCKFILE);
- 
-+	/* FIXME Replace with sigaction. (deprecated) */
- 	signal(SIGINT, &sig_handler);
- 	signal(SIGQUIT, &sig_handler);
- 	signal(SIGTERM, &sig_handler);
---- LVM2/daemons/cmirrord/link_mon.c	2010/01/18 21:07:24	1.4
-+++ LVM2/daemons/cmirrord/link_mon.c	2010/01/19 15:58:45	1.5
-@@ -25,14 +25,14 @@
- 	struct link_callback *next;
- };
- 
--static int used_pfds = 0;
--static int free_pfds = 0;
-+static unsigned used_pfds = 0;
-+static unsigned free_pfds = 0;
- static struct pollfd *pfds = NULL;
- static struct link_callback *callbacks = NULL;
- 
- int links_register(int fd, const char *name, int (*callback)(void *data), void *data)
- {
--	int i;
-+	unsigned i;
- 	struct link_callback *lc;
- 
- 	for (i = 0; i < used_pfds; i++) {
-@@ -72,7 +72,7 @@
- 	lc->next = callbacks;
- 	callbacks = lc;
- 	LOG_DBG("Adding %s/%d", lc->name, lc->fd);
--	LOG_DBG(" used_pfds = %d, free_pfds = %d",
-+	LOG_DBG(" used_pfds = %u, free_pfds = %u",
- 		used_pfds, free_pfds);
- 
- 	return 0;
-@@ -80,7 +80,7 @@
- 
- int links_unregister(int fd)
- {
--	int i;
-+	unsigned i;
- 	struct link_callback *p, *c;
- 
- 	for (i = 0; i < used_pfds; i++)
-@@ -94,7 +94,7 @@
- 	for (p = NULL, c = callbacks; c; p = c, c = c->next)
- 		if (fd == c->fd) {
- 			LOG_DBG("Freeing up %s/%d", c->name, c->fd);
--			LOG_DBG(" used_pfds = %d, free_pfds = %d",
-+			LOG_DBG(" used_pfds = %u, free_pfds = %u",
- 				used_pfds, free_pfds);
- 			if (p)
- 				p->next = c->next;
-@@ -109,7 +109,8 @@
- 
- int links_monitor(void)
- {
--	int i, r;
-+	unsigned i;
-+	int r;
- 
- 	for (i = 0; i < used_pfds; i++) {
- 		pfds[i].revents = 0;
-@@ -134,7 +135,7 @@
- 
- int links_issue_callbacks(void)
- {
--	int i;
-+	unsigned i;
- 	struct link_callback *lc;
- 
- 	for (i = 0; i < used_pfds; i++)
---- LVM2/daemons/cmirrord/local.c	2010/01/18 21:07:24	1.7
-+++ LVM2/daemons/cmirrord/local.c	2010/01/19 15:58:45	1.8
-@@ -82,8 +82,8 @@
- static int kernel_recv(struct clog_request **rq)
- {
- 	int r = 0;
--	int len;
--	void *foo;
-+	ssize_t len;
-+	char *foo;
- 	struct cn_msg *msg;
- 	struct dm_ulog_request *u_rq;
- 	struct nlmsghdr *nlmsg_h;
-@@ -106,9 +106,9 @@
- 		goto fail;
- 	case NLMSG_DONE:
- 		msg = (struct cn_msg *)NLMSG_DATA((struct nlmsghdr *)recv_buf);
--		len -= sizeof(struct nlmsghdr);
-+		len -= (ssize_t)sizeof(struct nlmsghdr);
- 
--		if (len < sizeof(struct cn_msg)) {
-+		if (len < (ssize_t)sizeof(struct cn_msg)) {
- 			LOG_ERROR("Incomplete request from kernel received");
- 			r = -EBADE;
- 			goto fail;
-@@ -124,10 +124,10 @@
- 		if (!msg->len)
- 			LOG_ERROR("Zero length message received");
- 
--		len -= sizeof(struct cn_msg);
-+		len -= (ssize_t)sizeof(struct cn_msg);
- 
- 		if (len < msg->len)
--			LOG_ERROR("len = %d, msg->len = %d", len, msg->len);
-+			LOG_ERROR("len = %zd, msg->len = %" PRIu16, len, msg->len);
- 
- 		msg->data[msg->len] = '\0'; /* Cleaner way to ensure this? */
- 		u_rq = (struct dm_ulog_request *)msg->data;
-@@ -155,12 +155,12 @@
- 		 * beyond what is available to us, but we need only check it
- 		 * once... perhaps at compile time?
- 		 */
--		foo = u_rq;
-+		foo = (char *)u_rq;
- 		foo -= (sizeof(struct clog_request) - sizeof(struct dm_ulog_request));
--		*rq = foo;
-+		*rq = (struct clog_request *) foo;
- 
- 		/* Clear the wrapper container fields */
--		memset(*rq, 0, (char *)u_rq - (char *)(*rq));
-+		memset(*rq, 0, (size_t)((char *)u_rq - (char *)(*rq)));
- 		break;
- 	default:
- 		LOG_ERROR("Unknown nlmsg_type");
-@@ -174,7 +174,7 @@
- 	return (r == -EAGAIN) ? 0 : r;
- }
- 
--static int kernel_send_helper(void *data, int out_size)
-+static int kernel_send_helper(void *data, uint16_t out_size)
- {
- 	int r;
- 	struct nlmsghdr *nlh;
-@@ -327,12 +327,12 @@
- int kernel_send(struct dm_ulog_request *u_rq)
- {
- 	int r;
--	int size;
-+	uint16_t size;
- 
- 	if (!u_rq)
- 		return -EINVAL;
- 
--	size = sizeof(struct dm_ulog_request) + u_rq->data_size;
-+	size = (uint16_t)(sizeof(struct dm_ulog_request) + u_rq->data_size);
- 
- 	if (!u_rq->data_size && !u_rq->error) {
- 		/* An ACK is all that is needed */
-@@ -368,7 +368,7 @@
- int init_local(void)
- {
- 	int r = 0;
--	int opt;
-+	unsigned opt;
- 	struct sockaddr_nl addr;
- 
- 	cn_fd = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_CONNECTOR);
 
 
