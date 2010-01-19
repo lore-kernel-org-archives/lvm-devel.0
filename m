@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Jan 2010 18:21:04 -0000
-Subject: LVM2/daemons/cmirrord functions.c
-Message-ID: <20100119182104.2078.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 19 Jan 2010 22:55:01 -0000
+Subject: LVM2/test t-snapshot-merge.sh
+Message-ID: <20100119225501.18312.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,60 +10,112 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-01-19 18:21:04
+Changes by:	snitzer at sourceware.org	2010-01-19 22:55:01
 
-Modified files:
-	daemons/cmirrord: functions.c 
+Added files:
+	test           : t-snapshot-merge.sh 
 
 Log message:
-	Remove mknod() and add FIXMEs.
-	In the udev-world, this function should work differently.
+	add test/t-snapshot-merge.sh to provide coverage of snapshot-merge support
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-snapshot-merge.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/daemons/cmirrord/functions.c	2010/01/19 17:24:29	1.15
-+++ LVM2/daemons/cmirrord/functions.c	2010/01/19 18:21:03	1.16
-@@ -289,6 +289,7 @@
- 	return 0;
- }
- 
-+/* FIXME Rewrite this function taking advantage of the udev changes (where in use) to improve its efficiency! */
- static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_path)
- {
- 	int r;
-@@ -311,6 +312,7 @@
- 	if (r != 2)
- 		return -EINVAL;
- 
-+	/* FIXME dm_dir() */
- 	LOG_DBG("Checking /dev/mapper for device %d:%d", major, minor);
- 	/* Check /dev/mapper dir */
- 	dp = opendir("/dev/mapper");
-@@ -340,17 +342,18 @@
- 
- 	closedir(dp);
- 
-+	/* FIXME Find out why this was here and deal with underlying problem. */
- 	LOG_DBG("Path not found for %d/%d", major, minor);
--	LOG_DBG("Creating /dev/mapper/%d-%d", major, minor);
--	sprintf(path_rtn, "/dev/mapper/%d-%d", major, minor);
--	r = mknod(path_rtn, S_IFBLK | S_IRUSR | S_IWUSR, MKDEV(major, minor));
-+	return -ENOENT;
- 
-+	// LOG_DBG("Creating /dev/mapper/%d-%d", major, minor);
-+	// sprintf(path_rtn, "/dev/mapper/%d-%d", major, minor);
-+	// r = mknod(path_rtn, S_IFBLK | S_IRUSR | S_IWUSR, MKDEV(major, minor));
- 	/*
- 	 * If we have to make the path, we unlink it after we open it
- 	 */
--	*unlink_path = 1;
--
--	return r ? -errno : 0;
-+	// *unlink_path = 1;
-+	// return r ? -errno : 0;
- }
- 
- static int _clog_ctr(char *uuid, uint64_t luid,
+/cvs/lvm2/LVM2/test/t-snapshot-merge.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-snapshot-merge.sh
++++ -	2010-01-19 22:55:01.316265000 +0000
+@@ -0,0 +1,91 @@
++#!/bin/sh
++# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++set -xv
++
++which mkfs.ext3 || exit 200
++
++. ./test-utils.sh
++
++lvdev_()
++{
++    echo "$G_dev_/$1/$2"
++}
++
++snap_lv_name_() {
++    echo ${1}_snap
++}
++
++setup_merge() {
++    local VG_NAME=$1
++    local LV_NAME=$2
++    local NUM_EXTRA_SNAPS="$3"
++    test -z "$NUM_EXTRA_SNAPS" && NUM_EXTRA_SNAPS=0
++    local BASE_SNAP_LV_NAME=$(snap_lv_name_ $LV_NAME)
++
++    lvcreate -n $LV_NAME -l 50%FREE $VG_NAME
++    lvcreate -s -n $BASE_SNAP_LV_NAME -l 20%FREE ${VG_NAME}/${LV_NAME}
++    mkfs.ext3 $(lvdev_ $VG_NAME $LV_NAME)
++
++    if [ $NUM_EXTRA_SNAPS -gt 0 ]; then
++	for i in `seq 1 $NUM_EXTRA_SNAPS`; do
++	    lvcreate -s -n ${BASE_SNAP_LV_NAME}_${i} -l 20%FREE ${VG_NAME}/${LV_NAME}
++	done
++    fi
++}
++
++aux prepare_vg 1 100
++
++
++# full merge of a single LV
++setup_merge $vg $lv1
++
++# now that snapshot LV is created: test if snapshot-merge target is available
++$(dmsetup targets | grep -q snapshot-merge) || exit 200
++
++lvs -a
++lvconvert --merge $vg/$(snap_lv_name_ $lv1)
++lvremove -f $vg/$lv1
++
++
++# "onactivate merge" test -- refresh LV while FS is still mounted;
++# verify snapshot-origin target is still being used
++setup_merge $vg $lv1
++lvs -a
++mkdir test_mnt
++mount $(lvdev_ $vg $lv1) test_mnt
++lvconvert --merge $vg/$(snap_lv_name_ $lv1)
++lvchange --refresh $vg/$lv1
++umount test_mnt
++rm -r test_mnt
++# an active merge uses the "snapshot-merge" target
++dmsetup table ${vg}-${lv1} | grep -q " snapshot-origin "
++test $? = 0
++lvremove -f $vg/$lv1
++
++
++# test multiple snapshot merge; tests copy out that is driven by merge
++setup_merge $vg $lv1 1
++lvs -a
++lvconvert --merge $vg/$(snap_lv_name_ $lv1)
++lvremove -f $vg/$lv1
++
++
++# FIXME following tests would need to poll merge progress, via periodic lvs?
++# Background processes don't lend themselves to lvm testsuite...
++
++# test: onactivate merge of a single lv
++
++# test: do onactivate, deactivate the origin LV, reactivate the LV, merge should resume
++
++# test: multiple onactivate merge
++
++
++vgremove -f "$vg"
 
 
