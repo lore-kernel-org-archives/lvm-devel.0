@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 20 Jan 2010 15:17:26 -0000
-Subject: LVM2/man cmirrord.8.in
-Message-ID: <20100120151726.27631.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 20 Jan 2010 17:03:50 -0000
+Subject: LVM2/daemons/dmeventd/plugins/lvm-common
+Message-ID: <20100120170350.5334.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,14 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-01-20 15:17:25
+Changes by:	mornfall at sourceware.org	2010-01-20 17:03:50
 
-Modified files:
-	man            : cmirrord.8.in 
+LVM2/daemons/dmeventd/plugins/lvm-common
 
-Log message:
-	Fill in a little more on the man page for cmirrord
+Update of /cvs/lvm2/LVM2/daemons/dmeventd/plugins/lvm-common
+In directory sourceware.org:/tmp/cvs-serv5144/daemons/dmeventd/plugins/lvm-common
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/cmirrord.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-
---- LVM2/man/cmirrord.8.in	2010/01/19 02:04:34	1.1
-+++ LVM2/man/cmirrord.8.in	2010/01/20 15:17:25	1.2
-@@ -1,5 +1,13 @@
- .TH CMIRRORD 8 "LVM TOOLS #VERSION#" "Red Hat Inc" \" -*- nroff -*-
- .SH NAME
--cmirrord
-+cmirrord \- cluster mirror log daemon
-+
- .SH SYNOPSIS
- .B cmirrord
-+
-+.SH DESCRIPTION
-+cmirrord is the daemon that tracks mirror log information in a cluster.
-+Cluster mirrors are not possible without this daemon running.
-+
-+.SH SEE ALSO
-+.BR clvmd (8)
+Log Message:
+Directory /cvs/lvm2/LVM2/daemons/dmeventd/plugins/lvm-common added to the repository
 
 
