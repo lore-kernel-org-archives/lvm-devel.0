@@ -1,129 +1,92 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Jan 2010 02:43:20 -0000
-Subject: LVM2/daemons/cmirrord cluster.c cluster.h func ...
-Message-ID: <20100120024320.21489.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 20 Jan 2010 13:53:51 +0100
+Subject: [PATCH] dmeventd coredump fix
+In-Reply-To: <4B5065D4.10108@redhat.com>
+References: <4B4EDBDF.7070509@redhat.com> <4B5065D4.10108@redhat.com>
+Message-ID: <4B56FCDF.3060207@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-01-20 02:43:19
+Dne 15.1.2010 13:55, Zdenek Kabelac napsal(a):
+> Dne 14.1.2010 09:54, Zdenek Kabelac napsal(a):
+>> Hi
+>>
+>> I've noticed that on my test machine dmeventd generates quite often weird
+>> coredumps with somewhat strange backtraces.
+>>
+>> Thus I've searched for the reason and with valgrind trace I've noticed
+>> problem with  struct cmdline_context _cmdline
+>>
+>> Thread 2:
+>> Conditional jump or move depends on uninitialised value(s)
+>>    at 0x4C9B826: free (vg_replace_malloc.c:325)
+>>    by 0x751C86F: lvm_fin (lvmcmdline.c:1213)
+>>    by 0x7537ACC: lvm2_exit (lvmcmdlib.c:116)
+>>    by 0x7365BEE: unregister_device (dmeventd_mirror.c:316)
+>>    by 0x804AAFE: _monitor_unregister (dmeventd.c:664)
+>>    by 0x804B853: _monitor_thread (dmeventd.c:805)
+>>    by 0x4CBC584: start_thread (pthread_create.c:300)
+>>    by 0x6EA426D: clone (clone.S:130)
+>>
+>> Invalid free() / delete / delete[]
+>>    at 0x4C9B866: free (vg_replace_malloc.c:325)
+>>    by 0x751C86F: lvm_fin (lvmcmdline.c:1213)
+>>    by 0x7537ACC: lvm2_exit (lvmcmdlib.c:116)
+>>    by 0x7365BEE: unregister_device (dmeventd_mirror.c:316)
+>>    by 0x804AAFE: _monitor_unregister (dmeventd.c:664)
+>>    by 0x804B853: _monitor_thread (dmeventd.c:805)
+>>    by 0x4CBC584: start_thread (pthread_create.c:300)
+>>    by 0x6EA426D: clone (clone.S:130)
+>> Address 0x51 is not stack'd, malloc'd or (recently) free'd
+>>
+>> Crash seems to appear when mirror device is reregistered during our test suit.
+>> Not really sure if it's related to some other reported problems.
+>>
+>> Basically we need to clear commands_size & num_commands and
+>> it doesn't matter if it is in init or finish -
+>>
+>> I'm proposing this oneline patch:
+>>
+>> --- tools/lvmcmdline.c	11 Jan 2010 19:19:17 -0000	1.111
+>> +++ tools/lvmcmdline.c	14 Jan 2010 08:33:50 -0000
+>>  -1192,6 +1192,7 @@ struct cmd_context *init_lvm(void)
+>>  {
+>>  	struct cmd_context *cmd;
+>>
+>> +	memset(&_cmdline, 0, sizeof(_cmdline));
+>>  	_cmdline.the_args = &_the_args[0];
+>>
+>>  	if (!(cmd = create_toolcontext(0, NULL)))
+>>
+> 
+> Ok - patch above has some problems with order of calling lvm2_init() calls;
+> 
+> So here comes simpler version which only clears structure elements right after
+> they are being released:
+> 
+> --- tools/lvmcmdline.c	11 Jan 2010 19:19:17 -0000	1.111
+> +++ tools/lvmcmdline.c	15 Jan 2010 12:51:58 -0000
+> @@ -1213,6 +1213,10 @@ static void _fin_commands(void)
+>  		dm_free(_cmdline.commands[i].valid_args);
+> 
+>  	dm_free(_cmdline.commands);
+> +
+> +	_cmdline.commands = NULL;
+> +	_cmdline.num_commands = 0;
+> +	_cmdline.commands_size = 0;
+>  }
+> 
+>  void lvm_fin(struct cmd_context *cmd)
 
-Modified files:
-	daemons/cmirrord: cluster.c cluster.h functions.c 
+Issue is now being tracked at:
 
-Log message:
-	Deal with a few more compiler warnings.
+https://bugzilla.redhat.com/show_bug.cgi?id=557104
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.h.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+Zdenek
 
---- LVM2/daemons/cmirrord/cluster.c	2010/01/18 21:07:24	1.12
-+++ LVM2/daemons/cmirrord/cluster.c	2010/01/20 02:43:19	1.13
-@@ -436,9 +436,9 @@
- 
- 	len = snprintf((char *)(name.value), SA_MAX_NAME_LENGTH,
- 		       "bitmaps_%s_%u", SHORT_UUID(cp->uuid), cp->requester);
--	name.length = len;
-+	name.length = (SaUint16T)len;
- 
--	len = strlen(cp->recovering_region) + 1;
-+	len = (int)strlen(cp->recovering_region) + 1;
- 
- 	attr.creationFlags = SA_CKPT_WR_ALL_REPLICAS;
- 	attr.checkpointSize = cp->bitmap_size * 2 + len;
-@@ -476,7 +476,7 @@
- 	/*
- 	 * Add section for sync_bits
- 	 */
--	section_id.idLen = snprintf(buf, 32, "sync_bits");
-+	section_id.idLen = (SaUint16T)snprintf(buf, 32, "sync_bits");
- 	section_id.id = (unsigned char *)buf;
- 	section_attr.sectionId = &section_id;
- 	section_attr.expirationTime = SA_TIME_END;
-@@ -605,7 +605,7 @@
- 
- 	len = snprintf((char *)(name.value), SA_MAX_NAME_LENGTH, "bitmaps_%s_%u",
- 		       SHORT_UUID(entry->name.value), my_cluster_id);
--	name.length = len;
-+	name.length = (SaUint16T)len;
- 
- open_retry:
- 	rv = saCkptCheckpointOpen(ckpt_handle, &name, NULL,
-@@ -1157,8 +1157,8 @@
- 			      const struct cpg_address *member_list,
- 			      size_t member_list_entries)
- {
--	int i;
--	int my_pid = getpid();
-+	unsigned i;
-+	uint32_t my_pid = (uint32_t)getpid();
- 	uint32_t lowest = match->lowest_id;
- 	struct clog_request *rq;
- 	char dbuf[32];
-@@ -1178,7 +1178,7 @@
- 		goto out;
- 
- 	memset(dbuf, 0, sizeof(dbuf));
--	for (i = 0; i < (member_list_entries-1); i++)
-+	for (i = 0; i < member_list_entries - 1; i++)
- 		sprintf(dbuf+strlen(dbuf), "%u-", member_list[i].nodeid);
- 	sprintf(dbuf+strlen(dbuf), "(%u)", joined->nodeid);
- 	LOG_COND(log_checkpoint, "[%s] Joining node, %u needs checkpoint [%s]",
-@@ -1236,7 +1236,8 @@
- 			       const struct cpg_address *member_list,
- 			       size_t member_list_entries)
- {
--	int i, j, fd;
-+	unsigned i;
-+	int j, fd;
- 	uint32_t lowest = match->lowest_id;
- 	struct clog_request *rq, *n;
- 	struct checkpoint_data *p_cp, *c_cp;
-@@ -1456,7 +1457,7 @@
- int create_cluster_cpg(char *uuid, uint64_t luid)
- {
- 	int r;
--	int size;
-+	size_t size;
- 	struct clog_cpg *new = NULL;
- 	struct clog_cpg *tmp;
- 
-@@ -1480,7 +1481,7 @@
- 	size = ((strlen(uuid) + 1) > CPG_MAX_NAME_LENGTH) ?
- 		CPG_MAX_NAME_LENGTH : (strlen(uuid) + 1);
- 	strncpy(new->name.value, uuid, size);
--	new->name.length = size;
-+	new->name.length = (uint32_t)size;
- 	new->luid = luid;
- 
- 	/*
---- LVM2/daemons/cmirrord/cluster.h	2010/01/18 21:07:24	1.7
-+++ LVM2/daemons/cmirrord/cluster.h	2010/01/20 02:43:19	1.8
-@@ -15,7 +15,7 @@
- #include "dm-log-userspace.h"
- #include "libdevmapper.h"
- 
--#define DM_ULOG_RESPONSE 0x1000 /* in last byte of 32-bit value */
-+#define DM_ULOG_RESPONSE 0x1000U /* in last byte of 32-bit value */
- #define DM_ULOG_CHECKPOINT_READY 21
- #define DM_ULOG_MEMBER_JOIN      22
- 
---- LVM2/daemons/cmirrord/functions.c	2010/01/19 18:21:03	1.16
-+++ LVM2/daemons/cmirrord/functions.c	2010/01/20 02:43:19	1.17
-@@ -290,7 +290,7 @@
- }
- 
- /* FIXME Rewrite this function taking advantage of the udev changes (where in use) to improve its efficiency! */
--static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_path)
-+static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_path __attribute((unused)))
- {
- 	int r;
- 	DIR *dp;
+
 
 
