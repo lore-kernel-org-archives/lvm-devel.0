@@ -1,23 +1,38 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 20 Jan 2010 17:03:50 -0000
-Subject: LVM2/daemons/dmeventd/plugins/lvm-common
-Message-ID: <20100120170350.5334.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 20 Jan 2010 18:16:49 +0100
+Subject: [PATCH] dmeventd plugins v. LVM mutexing
+Message-ID: <87wrzc1yta.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-01-20 17:03:50
+Hi,
 
-LVM2/daemons/dmeventd/plugins/lvm-common
+the attached patch should address RHBZ 557104, in the following way:
 
-Update of /cvs/lvm2/LVM2/daemons/dmeventd/plugins/lvm-common
-In directory sourceware.org:/tmp/cvs-serv5144/daemons/dmeventd/plugins/lvm-common
+- a common library for lvm-based dmeventd plugins is added that proxies
+  the access to lvm library
+- this supersedes the per-plugin mutexing we have been using and which
+  breaks as soon as multiple plugins try to use lvm simultaneously
 
-Log Message:
-Directory /cvs/lvm2/LVM2/daemons/dmeventd/plugins/lvm-common added to the repository
+It should not affect backwards compatibility and the change is confined
+to dmeventd plugins only.
 
+Not very well tested yet (just basic check that things link and load).
 
+The patch applies on top of the debug patch I have sent previously and
+undoes part of it (but it keeps the basic (non-debug) logging, and also
+extends it to the snapshot monitoring plugin).
+
+Yours,
+   Petr.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dmeventd.diff
+Type: text/x-diff
+Size: 19720 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100120/13772d6b/attachment.bin>
