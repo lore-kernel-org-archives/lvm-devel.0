@@ -1,34 +1,25 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 19 Jan 2010 23:02:05 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100119230205.17236.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 19 Jan 2010 20:21:02 -0600
+Subject: [PATCH 0 of 10] LVM: mirrored/redundant/duplicate mirror log
+Message-ID: <1263954062.22044.9.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-19 23:02:05
+I found a bug in the previous patches that were disrupting the workings
+of 'lvconvert --repair'.  I was not properly grabbing the first item of
+a list (and checking for NULL).
 
-Modified files:
-	.              : WHATS_NEW 
+I am also having some mysterious trouble running the testsuite.  I am
+getting different results between identical runs.  I'm not sure if I
+have some old dmeventd running or what...
 
-Log message:
-	Add t-topology-support.sh and t-snapshot-merge.sh tests.
+Also, people are unhappy with "redundant" as the name of the log type.
+Other suggestions?  "mirrored"?  "duplicated"?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1395&r2=1.1396
+ brassow
 
---- LVM2/WHATS_NEW	2010/01/19 13:25:00	1.1395
-+++ LVM2/WHATS_NEW	2010/01/19 23:02:04	1.1396
-@@ -1,5 +1,6 @@
- Version 2.02.59 - 
- ===================================
-+  Add t-topology-support.sh and t-snapshot-merge.sh tests.
-   Fix clvmd to never scan suspended devices.
-   Initial version of the cmirror init script (Red Hat).
-   Initial version of the cmirrord man page.
 
 
