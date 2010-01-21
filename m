@@ -1,25 +1,32 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 21 Jan 2010 00:24:37 +0000
-Subject: [PATCH 0 of 10] LVM: mirrored/redundant/duplicate mirror log
-In-Reply-To: <4B578EC6.30104@redhat.com>
-References: <1263954062.22044.9.camel@hydrogen.msp.redhat.com>
-	<4B578EC6.30104@redhat.com>
-Message-ID: <20100121002437.GC22661@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu, 21 Jan 2010 14:34:46 +0100
+Subject: [PATCH] dmeventd coredump fix
+In-Reply-To: <4B5065D4.10108@redhat.com>
+References: <4B4EDBDF.7070509@redhat.com> <4B5065D4.10108@redhat.com>
+Message-ID: <4B5857F6.7070505@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Jan 20, 2010 at 06:16:22PM -0500, Takahiro Yasui wrote:
-> "reduntant" is used such as by "redundant system," and familiar key word
+On 01/15/2010 01:55 PM, Zdenek Kabelac wrote:
+> So here comes simpler version which only clears structure elements right after
+> they are being released:
+> 
+> --- tools/lvmcmdline.c	11 Jan 2010 19:19:17 -0000	1.111
+> +++ tools/lvmcmdline.c	15 Jan 2010 12:51:58 -0000
+> @@ -1213,6 +1213,10 @@ static void _fin_commands(void)
+>  		dm_free(_cmdline.commands[i].valid_args);
+> 
+>  	dm_free(_cmdline.commands);
+> +
+> +	_cmdline.commands = NULL;
+> +	_cmdline.num_commands = 0;
+> +	_cmdline.commands_size = 0;
 
-My point is that the log is not redundant.
+ack.
 
-There are two copies of the log data - one is necessary, the other could be
-considered redundant.  But the descriptive term here describes the *entire*
-log, only part, not all, of which is "redundant".
-
-Alasdair
+Milan
 
 
