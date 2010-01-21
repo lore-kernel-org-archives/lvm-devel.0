@@ -1,106 +1,34 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 21 Jan 2010 17:37:45 +0100
-Subject: [PATCH] Do not print "-1" as locking type if locking fails.
-Message-ID: <1264091865-4776-1-git-send-email-mbroz@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 21 Jan 2010 17:14:19 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20100121171419.801.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Move error message to locking constructor and print
-more descriptive message if locking fails instead of
-"Locking type -1 initialisation failed."
----
- lib/locking/locking.c |   16 ++++++++++++----
- liblvm/lvm_base.c     |    1 -
- tools/lvmcmdline.c    |    2 --
- 3 files changed, 12 insertions(+), 7 deletions(-)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-01-21 17:14:18
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index a2c6a3e..54e5e25 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -224,7 +224,7 @@ int init_locking(int type, struct cmd_context *cmd)
- 
- 	_blocking_supported = find_config_tree_int(cmd,
- 	    "global/wait_for_locks", DEFAULT_WAIT_FOR_LOCKS);
--	
-+
- 	switch (type) {
- 	case 0:
- 		init_no_locking(&_locking, cmd);
-@@ -236,8 +236,10 @@ int init_locking(int type, struct cmd_context *cmd)
- 		log_very_verbose("%sFile-based locking selected.",
- 				 _blocking_supported ? "" : "Non-blocking ");
- 
--		if (!init_file_locking(&_locking, cmd))
-+		if (!init_file_locking(&_locking, cmd)) {
-+			log_error("File-based locking initialisation failed.");
- 			break;
-+		}
- 		return 1;
- 
- #ifdef HAVE_LIBDL
-@@ -249,8 +251,10 @@ int init_locking(int type, struct cmd_context *cmd)
- 		}
- 		if (!find_config_tree_int(cmd, "locking/fallback_to_clustered_locking",
- 			    find_config_tree_int(cmd, "global/fallback_to_clustered_locking",
--						 DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING)))
-+						 DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING))) {
-+			log_error("External locking initialisation failed.");
- 			break;
-+		}
- #endif
- 
- #ifdef CLUSTER_LOCKING_INTERNAL
-@@ -259,8 +263,10 @@ int init_locking(int type, struct cmd_context *cmd)
- 
- 	case 3:
- 		log_very_verbose("Cluster locking selected.");
--		if (!init_cluster_locking(&_locking, cmd))
-+		if (!init_cluster_locking(&_locking, cmd)) {
-+			log_error("Internal cluster locking initialisation failed.");
- 			break;
-+		}
- 		return 1;
- #endif
- 
-@@ -285,6 +291,8 @@ int init_locking(int type, struct cmd_context *cmd)
- 			  "be inaccessible.");
- 		if (init_file_locking(&_locking, cmd))
- 			return 1;
-+		else
-+			log_error("File-based locking initialisation failed.");
- 	}
- 
- 	if (!ignorelockingfailure())
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index b4be906..ac94692 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -51,7 +51,6 @@ lvm_t lvm_init(const char *system_dir)
- 	/* initialize locking */
- 	if (!init_locking(-1, cmd)) {
- 		/* FIXME: use EAGAIN as error code here */
--		log_error("Locking initialisation failed.");
- 		lvm_quit((lvm_t) cmd);
- 		return NULL;
- 	}
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index e4b56da..ad1513d 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1027,8 +1027,6 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 		locking_type = -1;
- 
- 	if (!init_locking(locking_type, cmd)) {
--		log_error("Locking type %d initialisation failed.",
--			  locking_type);
- 		ret = ECMD_FAILED;
- 		goto out;
- 	}
--- 
-1.6.6
+Modified files:
+	.              : WHATS_NEW 
+
+Log message:
+	Log entry for the last lvmcmdline.c commit
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1396&r2=1.1397
+
+--- LVM2/WHATS_NEW	2010/01/19 23:02:04	1.1396
++++ LVM2/WHATS_NEW	2010/01/21 17:14:18	1.1397
+@@ -1,5 +1,6 @@
+ Version 2.02.59 - 
+ ===================================
++  Clear pointer and counters after their release in _fin_commands().
+   Add t-topology-support.sh and t-snapshot-merge.sh tests.
+   Fix clvmd to never scan suspended devices.
+   Initial version of the cmirror init script (Red Hat).
 
 
