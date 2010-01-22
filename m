@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 22 Jan 2010 16:19:39 -0000
-Subject: LVM2 ./WHATS_NEW scripts/cmirrord_init_red_hat.in
-Message-ID: <20100122161939.8329.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 22 Jan 2010 21:48:17 -0000
+Subject: LVM2/man cmirrord.8.in
+Message-ID: <20100122214817.29882.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-01-22 16:19:39
+Changes by:	jbrassow at sourceware.org	2010-01-22 21:48:17
 
 Modified files:
-	.              : WHATS_NEW 
-	scripts        : cmirrord_init_red_hat.in 
+	man            : cmirrord.8.in 
 
 Log message:
-	Fix syntax error in cmirror init script
-	- break cannot be used here
-	- remove CLVMDOPTS
-	- add echo to stop call
+	a little more information for the cmirrord man page
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1404&r2=1.1405
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/cmirrord_init_red_hat.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/cmirrord.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2010/01/22 15:40:31	1.1404
-+++ LVM2/WHATS_NEW	2010/01/22 16:19:38	1.1405
-@@ -1,5 +1,6 @@
- Version 2.02.60
- ===================================
-+  Fix syntax error in cmirror init script.
-   Eliminate extra ioctls just to check open_count in _add_new_lv_to_dtree.
-   Disable not thread-safe memory debugging if dmeventd is configured.
-   Fix first log message prefix in syslog for dmeventd plugins.
---- LVM2/scripts/cmirrord_init_red_hat.in	2010/01/19 02:04:35	1.3
-+++ LVM2/scripts/cmirrord_init_red_hat.in	2010/01/22 16:19:38	1.4
-@@ -24,14 +24,10 @@
- 	if ! pidof $DAEMON > /dev/null 
- 	then 
- 		echo -n "Starting $DAEMON: "
--		daemon $DAEMON $CLVMDOPTS
-+		daemon $DAEMON
- 		rtrn=$?
- 		echo
--		if [ $rtrn -ne 0 ]
--		then
--			break
--		fi
--	fi      
-+	fi
+--- LVM2/man/cmirrord.8.in	2010/01/20 15:17:25	1.2
++++ LVM2/man/cmirrord.8.in	2010/01/22 21:48:17	1.3
+@@ -7,7 +7,24 @@
  
- 	return $rtrn
- }
-@@ -41,6 +37,7 @@
- 	echo -n "Stopping $DAEMON:"
- 	killproc $DAEMON -TERM
- 	rtrn=$?
-+	echo
+ .SH DESCRIPTION
+ cmirrord is the daemon that tracks mirror log information in a cluster.
+-Cluster mirrors are not possible without this daemon running.
++It is specific to device-mapper based mirrors (and by extension, LVM
++cluster mirrors).  Cluster mirrors are not possible without this daemon
++running.
++
++This daemon relies on the cluster infrastructure provided by the
++Cluster MANager (CMAN), which must be set up and running in order for
++cmirrord to function.  (The cluster infrastructure is also required for
++clvmd.)
++
++Output is logged via syslog.  The USR1 signal can be issued to cmirrord
++to gather current status information for debugging purposes.
++
++Once started, cmirrord will run until it is shutdown via INT signal.  If
++there are still active cluster mirrors, however, the signal will be
++ignored.  Active cluster mirrors should be shutdown before stopping the
++cluster mirror log daemon.
  
- 	return $rtrn
- }
+ .SH SEE ALSO
++.BR lvm (8)
+ .BR clvmd (8)
++.BR cluster.conf (5)
+\ No newline at end of file
 
 
