@@ -1,83 +1,55 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 22 Jan 2010 08:25:35 -0500
-Subject: [PATCH 5/5] Update pvchange, pvs and vgs man pages for metadata disable.
-In-Reply-To: <1264166735-32697-5-git-send-email-dwysocha@redhat.com>
-References: <1264166735-32697-1-git-send-email-dwysocha@redhat.com>
-	<1264166735-32697-2-git-send-email-dwysocha@redhat.com>
-	<1264166735-32697-3-git-send-email-dwysocha@redhat.com>
-	<1264166735-32697-4-git-send-email-dwysocha@redhat.com>
-	<1264166735-32697-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1264166735-32697-6-git-send-email-dwysocha@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 22 Jan 2010 13:28:55 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20100122132855.12940.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Explain --metadatadisable argument to pvchange and new fields to pvs / vgs.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-01-22 13:28:55
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- man/pvchange.8.in |    6 +++++-
- man/pvs.8.in      |    3 ++-
- man/vgs.8.in      |    2 +-
- 3 files changed, 8 insertions(+), 3 deletions(-)
+Modified files:
+	lib/activate   : dev_manager.c 
 
-diff --git a/man/pvchange.8.in b/man/pvchange.8.in
-index 00c94a6..05190b9 100644
---- a/man/pvchange.8.in
-+++ b/man/pvchange.8.in
-@@ -6,6 +6,7 @@ pvchange \- change attributes of a physical volume
- [\-\-addtag Tag]
- [\-A|\-\-autobackup y|n] [\-d|\-\-debug] 
- [\-\-deltag Tag]
-+[\-\-metadatadisable y|n]
- [\-h|\-?|\-\-help]
- [\-t|\-\-test]
- [\-v|\-\-verbose] [\-a|\-\-all] [\-x|\-\-allocatable y|n]
-@@ -25,10 +26,13 @@ Generate new random UUID for specified physical volumes.
- .TP
- .I \-x, \-\-allocatable y|n
- Enable or disable allocation of physical extents on this physical volume.
-+.TP
-+.I \-\-metadatadisable y|n
-+Disable or enable metadata areas on this physical volume.
- .SH Example
- "pvchange -x n /dev/sdk1" disallows the allocation of physical extents
- on this physical volume (possibly because of disk errors, or because it will
- be removed after freeing it.
- .SH SEE ALSO
--.BR lvm (8), 
-+.BR lvm (8),
- .BR pvcreate (8)
-diff --git a/man/pvs.8.in b/man/pvs.8.in
-index fe00d2a..f594e59 100644
---- a/man/pvs.8.in
-+++ b/man/pvs.8.in
-@@ -54,7 +54,8 @@ Use \fb-o help\fP to view the full list of columns available.
- .IP
- Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
- pv_mda_size, pe_start, pv_size, pv_free, pv_used, pv_attr, pv_pe_count,
--pv_pe_alloc_count, pv_tags, pv_mda_count, pvseg_start, and pvseg_size.
-+pv_pe_alloc_count, pv_tags, pv_mda_count, pv_mda_count_disabled,
-+pvseg_start, and pvseg_size.
- .IP
- With --segments, any "pvseg_" prefixes are optional; otherwise any
- "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
-diff --git a/man/vgs.8.in b/man/vgs.8.in
-index b22d08b..040bd69 100644
---- a/man/vgs.8.in
-+++ b/man/vgs.8.in
-@@ -49,7 +49,7 @@ Use \fb-o help\fP to view the full list of columns available.
- Column names include: vg_fmt, vg_uuid, vg_name, vg_attr, vg_size, vg_free,
- vg_sysid, vg_extent_size, vg_extent_count, vg_free_count, max_lv, max_pv,
- pv_count, lv_count, snap_count, vg_seqno, vg_tags, vg_mda_count, vg_mda_free,
--and vg_mda_size.
-+and vg_mda_size, vg_mda_count_disabled.
- .IP
- Any "vg_" prefixes are optional.  Columns mentioned in either \fBpvs (8)\fP 
- or \fBlvs (8)\fP can also be chosen, but columns cannot be taken from both
--- 
-1.6.0.6
+Log message:
+	Removed inactive_table check from _lv_has_target_type.  This check
+	doesn't offer any benefit (that I can recall) and testing validates
+	that.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+
+--- LVM2/lib/activate/dev_manager.c	2010/01/15 22:58:25	1.175
++++ LVM2/lib/activate/dev_manager.c	2010/01/22 13:28:54	1.176
+@@ -327,7 +327,6 @@
+ 	return 0;
+ }
+ 
+-/* FIXME Is there anything simpler to check for instead? */
+ static int _lv_has_target_type(struct dev_manager *dm,
+ 			       struct logical_volume *lv,
+ 			       const char *layer,
+@@ -363,8 +362,7 @@
+ 					  &type, &params);
+ 		if (type && strncmp(type, target_type,
+ 				    strlen(target_type)) == 0) {
+-			/* FIXME Why the inactive test? */
+-			if (info.live_table && !info.inactive_table)
++			if (info.live_table)
+ 				r = 1;
+ 			break;
+ 		}
+@@ -1141,6 +1139,7 @@
+ 				      0, 1, 0, &dinfo, NULL) && dinfo.open_count) ||
+ 		    (dev_manager_info(dm->mem, NULL, find_merging_cow(lv)->cow,
+ 				      0, 1, 0, &dinfo, NULL) && dinfo.open_count)) {
++			/* FIXME Is there anything simpler to check for instead? */
+ 			if (!_lv_has_target_type(dm, lv, NULL, "snapshot-merge"))
+ 				clear_snapshot_merge(lv);
+ 		}
 
 
