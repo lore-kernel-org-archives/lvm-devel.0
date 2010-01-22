@@ -1,121 +1,82 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 22 Jan 2010 08:25:34 -0500
-Subject: [PATCH 4/5] Add --metadatadisable to pvchange, allowing for disabling of metadata areas.
-In-Reply-To: <1264166735-32697-4-git-send-email-dwysocha@redhat.com>
+Date: Fri, 22 Jan 2010 08:25:35 -0500
+Subject: [PATCH 5/5] Update pvchange, pvs and vgs man pages for metadata disable.
+In-Reply-To: <1264166735-32697-5-git-send-email-dwysocha@redhat.com>
 References: <1264166735-32697-1-git-send-email-dwysocha@redhat.com>
 	<1264166735-32697-2-git-send-email-dwysocha@redhat.com>
 	<1264166735-32697-3-git-send-email-dwysocha@redhat.com>
 	<1264166735-32697-4-git-send-email-dwysocha@redhat.com>
-Message-ID: <1264166735-32697-5-git-send-email-dwysocha@redhat.com>
+	<1264166735-32697-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1264166735-32697-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch just modifies pvchange to call the underlying enable/disable
-functions for mdas.
+Explain --metadatadisable argument to pvchange and new fields to pvs / vgs.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/args.h     |    1 +
- tools/commands.h |    3 ++-
- tools/pvchange.c |   28 +++++++++++++++++++++++++++-
- 3 files changed, 30 insertions(+), 2 deletions(-)
+ man/pvchange.8.in |    6 +++++-
+ man/pvs.8.in      |    3 ++-
+ man/vgs.8.in      |    2 +-
+ 3 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 981f45f..f41fbf5 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -26,6 +26,7 @@ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
-+arg(metadatadisable_ARG, '\0', "metadatadisable", yes_no_arg, 0)
- arg(restorefile_ARG, '\0', "restorefile", string_arg, 0)
- arg(labelsector_ARG, '\0', "labelsector", int_arg, 0)
- arg(driverloaded_ARG, '\0', "driverloaded", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index 72898a9..2842937 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -448,6 +448,7 @@ xx(pvchange,
-    "\t[-t|--test]\n"
-    "\t[-u|--uuid]\n"
-    "\t[-x|--allocatable y|n]\n"
-+   "\t[--metadatadisable y|n]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--deltag Tag]\n"
-@@ -455,7 +456,7 @@ xx(pvchange,
-    "\t[PhysicalVolumePath...]\n",
- 
-    all_ARG, allocatable_ARG, allocation_ARG, autobackup_ARG, deltag_ARG,
--   addtag_ARG, test_ARG, uuid_ARG)
-+   addtag_ARG, metadatadisable_ARG, test_ARG, uuid_ARG)
- 
- xx(pvresize,
-    "Resize physical volume(s)",
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index cba9dd2..6e87ac2 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -37,6 +37,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 	int allocatable = 0;
- 	int tagarg = 0;
- 	int r = 0;
-+	int mda_disable = 0;
- 
- 	if (arg_count(cmd, addtag_ARG))
- 		tagarg = addtag_ARG;
-@@ -46,6 +47,9 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 	if (arg_count(cmd, allocatable_ARG))
- 		allocatable = !strcmp(arg_str_value(cmd, allocatable_ARG, "n"),
- 				      "y");
-+	if (arg_count(cmd, metadatadisable_ARG))
-+		mda_disable = !strcmp(arg_str_value(cmd, metadatadisable_ARG, "n"),
-+				      "y");
- 	else if (tagarg && !(tag = arg_str_value(cmd, tagarg, NULL))) {
- 		log_error("Failed to get tag");
- 		return 0;
-@@ -149,6 +153,27 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 				goto out;
- 			}
- 		}
-+	} else if (arg_count(cmd, metadatadisable_ARG)) {
-+		if (mda_disable && pv_mda_is_disabled(pv)) {
-+			log_error("Physical volume \"%s\" mdas already "
-+				  "disabled", pv_name);
-+			r = 1;
-+			goto out;
-+		}
-+		if (!mda_disable && !pv_mda_is_disabled(pv)) {
-+			log_error("Physical volume \"%s\" mdas already "
-+				  "enabled", pv_name);
-+			r = 1;
-+			goto out;
-+		}
-+		if (mda_disable) {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata disable", pv_name);
-+		} else {
-+			log_verbose("Setting physical volume \"%s\" NOT "
-+				    "metadata enable", pv_name);
-+		}
-+		pv_mda_set_disabled(pv, mda_disable);
- 	} else {
- 		/* --uuid: Change PV ID randomly */
- 		if (!id_create(&pv->id)) {
-@@ -220,7 +245,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 	struct dm_list mdas;
- 
- 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
--	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
-+	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
-+	    arg_count(cmd, metadatadisable_ARG) != 1) {
- 		log_error("Please give exactly one option of -x, -uuid, "
- 			  "--addtag or --deltag");
- 		return EINVALID_CMD_LINE;
+diff --git a/man/pvchange.8.in b/man/pvchange.8.in
+index 00c94a6..05190b9 100644
+--- a/man/pvchange.8.in
++++ b/man/pvchange.8.in
+@@ -6,6 +6,7 @@ pvchange \- change attributes of a physical volume
+ [\-\-addtag Tag]
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] 
+ [\-\-deltag Tag]
++[\-\-metadatadisable y|n]
+ [\-h|\-?|\-\-help]
+ [\-t|\-\-test]
+ [\-v|\-\-verbose] [\-a|\-\-all] [\-x|\-\-allocatable y|n]
+@@ -25,10 +26,13 @@ Generate new random UUID for specified physical volumes.
+ .TP
+ .I \-x, \-\-allocatable y|n
+ Enable or disable allocation of physical extents on this physical volume.
++.TP
++.I \-\-metadatadisable y|n
++Disable or enable metadata areas on this physical volume.
+ .SH Example
+ "pvchange -x n /dev/sdk1" disallows the allocation of physical extents
+ on this physical volume (possibly because of disk errors, or because it will
+ be removed after freeing it.
+ .SH SEE ALSO
+-.BR lvm (8), 
++.BR lvm (8),
+ .BR pvcreate (8)
+diff --git a/man/pvs.8.in b/man/pvs.8.in
+index fe00d2a..f594e59 100644
+--- a/man/pvs.8.in
++++ b/man/pvs.8.in
+@@ -54,7 +54,8 @@ Use \fb-o help\fP to view the full list of columns available.
+ .IP
+ Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
+ pv_mda_size, pe_start, pv_size, pv_free, pv_used, pv_attr, pv_pe_count,
+-pv_pe_alloc_count, pv_tags, pv_mda_count, pvseg_start, and pvseg_size.
++pv_pe_alloc_count, pv_tags, pv_mda_count, pv_mda_count_disabled,
++pvseg_start, and pvseg_size.
+ .IP
+ With --segments, any "pvseg_" prefixes are optional; otherwise any
+ "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
+diff --git a/man/vgs.8.in b/man/vgs.8.in
+index b22d08b..040bd69 100644
+--- a/man/vgs.8.in
++++ b/man/vgs.8.in
+@@ -49,7 +49,7 @@ Use \fb-o help\fP to view the full list of columns available.
+ Column names include: vg_fmt, vg_uuid, vg_name, vg_attr, vg_size, vg_free,
+ vg_sysid, vg_extent_size, vg_extent_count, vg_free_count, max_lv, max_pv,
+ pv_count, lv_count, snap_count, vg_seqno, vg_tags, vg_mda_count, vg_mda_free,
+-and vg_mda_size.
++and vg_mda_size, vg_mda_count_disabled.
+ .IP
+ Any "vg_" prefixes are optional.  Columns mentioned in either \fBpvs (8)\fP 
+ or \fBlvs (8)\fP can also be chosen, but columns cannot be taken from both
 -- 
 1.6.0.6
 
