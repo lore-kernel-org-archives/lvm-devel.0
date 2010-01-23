@@ -1,50 +1,44 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Sat, 23 Jan 2010 21:58:45 +0100
-Subject: [PATCH 3/6] Unlock shared lock if activation calls failed.
+Date: Sat, 23 Jan 2010 21:58:46 +0100
+Subject: [PATCH 4/6] [RFC] Always query device by uuid only in activation calls.
 In-Reply-To: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
 References: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1264280328-8728-3-git-send-email-mbroz@redhat.com>
+Message-ID: <1264280328-8728-4-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Clvmd should unlock new lock if activation in device-mapper fails.
----
- daemons/clvmd/lvm-functions.c |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+lvm2 devices have always UUID set even if imported from lvm1 metadata.
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index 74c660e..02d401b 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -373,17 +373,22 @@ static int do_activate_lv(char *resource, unsigned char lock_flags, int mode)
+Why not use query by UUID only always?
+---
+ lib/activate/activate.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 433c8cc..83d363a 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -453,7 +453,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv, in
+ 	    !(name = build_dm_name(cmd->mem, lv->vg->name, lv->name, NULL)))
+ 		return_0;
  
- 	/* If it's suspended then resume it */
- 	if (!lv_info_by_lvid(cmd, resource, &lvi, 0, 0))
--		return EIO;
-+		goto error;
- 
- 	if (lvi.suspended)
- 		if (!lv_resume(cmd, resource))
--			return EIO;
-+			goto error;
- 
- 	/* Now activate it */
- 	if (!lv_activate(cmd, resource, exclusive))
--		return EIO;
-+		goto error;
- 
- 	return 0;
-+
-+error:
-+	if (oldmode == -1 || oldmode != mode)
-+		(void)hold_unlock(resource);
-+	return EIO;
+-	log_debug("Getting device info for %s", name);
++	log_debug("Getting device info for %s/%s", lv->vg->name, lv->name);
+ 	if (!dev_manager_info(lv->vg->cmd->mem, name, lv, with_mknodes,
+ 			      with_open_count, with_read_ahead, &dminfo,
+ 			      &info->read_ahead)) {
+@@ -480,7 +480,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv, in
+ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, struct lvinfo *info,
+ 	    int with_open_count, int with_read_ahead)
+ {
+-	return _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
++	return _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 1);
  }
  
- /* Resume the LV if it was active */
+ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
 -- 
 1.6.6
 
