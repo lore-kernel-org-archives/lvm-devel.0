@@ -1,56 +1,34 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Sat, 23 Jan 2010 21:58:43 +0100
-Subject: [PATCH 1/6] Fix return code of info callbacks.
-Message-ID: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
+Date: Sat, 23 Jan 2010 21:58:44 +0100
+Subject: [PATCH 2/6] Always query device by using uuid only and not name.
+In-Reply-To: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
+References: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1264280328-8728-2-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In dev_manager_info 0 means error and 1 info is returned,
-not that device exist (that value is part of info struct).
-
-Fix query by uuid only (no name) which returns 0 when device
-do not exist.
+Otherwise confusion with the device of the same name
+(but different UUID, e.g. non-lvm device) can happen.
 ---
- lib/activate/dev_manager.c |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ lib/activate/activate.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 25b7a10..6023574 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -209,14 +209,16 @@ static int _info(const char *name, const char *dlid, int mknodes,
- 		 int with_open_count, int with_read_ahead,
- 		 struct dm_info *info, uint32_t *read_ahead)
- {
-+	int r = 0;
-+
- 	if (!mknodes && dlid && *dlid) {
--		if (_info_run(NULL, dlid, info, read_ahead, 0, with_open_count,
--			      with_read_ahead, 0, 0) &&
-+		if ((r = _info_run(NULL, dlid, info, read_ahead, 0, with_open_count,
-+			      with_read_ahead, 0, 0)) &&
- 	    	    info->exists)
- 			return 1;
--		else if (_info_run(NULL, dlid + sizeof(UUID_PREFIX) - 1, info,
-+		else if ((r = _info_run(NULL, dlid + sizeof(UUID_PREFIX) - 1, info,
- 				   read_ahead, 0, with_open_count,
--				   with_read_ahead, 0, 0) &&
-+				   with_read_ahead, 0, 0)) &&
- 			 info->exists)
- 			return 1;
- 	}
-@@ -225,7 +227,7 @@ static int _info(const char *name, const char *dlid, int mknodes,
- 		return _info_run(name, NULL, info, read_ahead, mknodes,
- 				 with_open_count, with_read_ahead, 0, 0);
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index f18ecf9..433c8cc 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -492,7 +492,7 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+ 		return 0;
  
--	return 0;
-+	return r;
- }
+-	r = _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
++	r = _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 1);
+ 	vg_release(lv->vg);
  
- static int _info_by_dev(uint32_t major, uint32_t minor, struct dm_info *info)
+ 	return r;
 -- 
 1.6.6
 
