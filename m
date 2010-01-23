@@ -1,94 +1,71 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 29 Jan 2010 16:37:55 -0500
-Subject: [PATCH 05/12] Add flag and functions to disable mdas on a format independent basis.
-In-Reply-To: <1264801082-28132-5-git-send-email-dwysocha@redhat.com>
-References: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
-	<1264801082-28132-2-git-send-email-dwysocha@redhat.com>
-	<1264801082-28132-3-git-send-email-dwysocha@redhat.com>
-	<1264801082-28132-4-git-send-email-dwysocha@redhat.com>
-	<1264801082-28132-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1264801082-28132-6-git-send-email-dwysocha@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 23 Jan 2010 02:14:31 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100123021431.13041.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-First we add a 'flags' field to the format independent metadata_area
-structure, and a MDA_DISABLE flag.  The mda_is_disabled and
-mda_set_disabled functions are added to manage the MDA_DISABLE flag.
-Adding the flag and functions gives a library interface to
-disable / enable metadata areas independent of the underlying
-format.  The format-specific read/write functions must then handle
-any reading or writing of this flag to disk.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-01-23 02:14:30
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/format_text/text_label.c |    1 +
- lib/metadata/metadata.c      |   13 +++++++++++++
- lib/metadata/metadata.h      |    6 ++++++
- 3 files changed, 20 insertions(+), 0 deletions(-)
+Modified files:
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index c56934d..e7a58cf 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -215,6 +215,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
+Log message:
+	pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.223&r2=1.224
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1406&r2=1.1407
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.340&r2=1.341
+
+--- LVM2/VERSION	2010/01/22 01:09:09	1.223
++++ LVM2/VERSION	2010/01/23 02:14:30	1.224
+@@ -1 +1 @@
+-2.02.60(1)-cvs (2010-01-21)
++2.02.60(1)-cvs (2010-01-23)
+--- LVM2/VERSION_DM	2010/01/22 01:09:09	1.35
++++ LVM2/VERSION_DM	2010/01/23 02:14:30	1.36
+@@ -1 +1 @@
+-1.02.44-cvs (2010-01-21)
++1.02.43-cvs (2010-01-23)
+--- LVM2/WHATS_NEW	2010/01/22 21:59:42	1.1406
++++ LVM2/WHATS_NEW	2010/01/23 02:14:30	1.1407
+@@ -1,13 +1,14 @@
+-Version 2.02.60
++Version 2.02.60 - 23rd January 2010
+ ===================================
+-  Support "wait before testing" using '+' in pvmove and lvconvert interval.
+-  Default to checking LV's progress before waiting in _wait_for_single_lv.
+-  Fix syntax error in cmirror init script.
+-  Eliminate extra ioctls just to check open_count in _add_new_lv_to_dtree.
+-  Disable not thread-safe memory debugging if dmeventd is configured.
++  Extend cmirrord man page.
++  Sleep before first progress check if pvmove/lvconvert interval has prefix '+'.
++  Default to checking progress before waiting in _wait_for_single_lv.
++  Fix cmirror initscript (including syntax error).
++  Eliminate avoidable ioctls for checking open_count in _add_new_lv_to_dtree.
++  Disable memory debugging if dmeventd is configured. (Not thread-safe.)
+   Fix first log message prefix in syslog for dmeventd plugins.
+   Fix exported symbols names for dmeventd lvm2 wrapper plugin.
+-  Fix failed locking messages to be more descriptive.
++  Make failed locking initialisation messages more descriptive.
  
- 	mdal->ops = mda_lists->raw_ops;
- 	mdal->metadata_locn = mdac;
-+	mdal->flags = 0;
- 
- 	mdac->area.dev = dev;
- 	mdac->area.start = start;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 449f49c..a6f0a96 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3626,6 +3626,19 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
- 	return pv_field(pv, pe_alloc_count);
- }
- 
-+int mda_is_disabled(struct metadata_area *mda)
-+{
-+	return (mda->flags & MDA_DISABLED);
-+}
-+
-+void mda_set_disabled(struct metadata_area *mda, int value)
-+{
-+	if (value)
-+		mda->flags |= MDA_DISABLED;
-+	else
-+		mda->flags &= ~MDA_DISABLED;
-+}
-+
- uint32_t pv_mda_count(const struct physical_volume *pv)
- {
- 	struct lvmcache_info *info;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 391734b..e939217 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -158,12 +158,18 @@ struct metadata_area_ops {
- 
- };
- 
-+#define MDA_DISABLED 0x00000001
-+
- struct metadata_area {
- 	struct dm_list list;
- 	struct metadata_area_ops *ops;
- 	void *metadata_locn;
-+	uint32_t flags;
- };
- 
-+int mda_is_disabled(struct metadata_area *mda);
-+void mda_set_disabled(struct metadata_area *mda, int value);
-+
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
- #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
--- 
-1.6.0.6
+ Version 2.02.59 - 21st January 2010
+ ===================================
+--- LVM2/WHATS_NEW_DM	2010/01/22 01:09:09	1.340
++++ LVM2/WHATS_NEW_DM	2010/01/23 02:14:30	1.341
+@@ -1,6 +1,3 @@
+-Version 1.02.44
+-===================================
+-
+ Version 1.02.43 - 21st January 2010
+ ===================================
+   Remove bitset, hash and pool headers superceded by libdevmapper.h.
 
 
