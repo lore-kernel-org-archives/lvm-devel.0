@@ -1,106 +1,50 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 26 Jan 2010 16:49:05 -0500
-Subject: [PATCH] Fix display of units < 1k.
-Message-ID: <1264542545-13119-1-git-send-email-dwysocha@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 27 Jan 2010 13:24:04 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
+Message-ID: <20100127132404.9752.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Saw this problem while testing metadata area related changes
-(I filled up metadata until pv_mda_free was < 1k).
-A display of a 'size' that was 512 bytes will display as
-"512E" because of overflow of the arrays.  Simple fix is to
-just duplicate the 'byte' array values for all the 'BASE'
-types.  Not sure if there are any other fields where this
-can occur - maybe not.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2010-01-27 13:23:57
 
-Original display of 512 bytes:
-  VG           PV         1st PE  #PMda PMdaFree  PMdaSize  VMdaFree
-  vgtest       /dev/loop0 192.00k     1    64.50k   188.00k   512.00E
-  vgtest       /dev/loop1 192.00k     1    64.50k   188.00k   512.00E
-  vgtest       /dev/loop2 192.00k     1    64.50k   188.00k   512.00E
-  vgtest       /dev/loop3  64.00k     1   512.00E    60.00k   512.00E
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : activate.c 
 
-New display of 512 bytes:
-  VG           PV         1st PE  #PMda PMdaFree  PMdaSize  VMdaFree
-  vgtest       /dev/loop0 192.00k     1    64.50k   188.00k   512.00B
-  vgtest       /dev/loop1 192.00k     1    64.50k   188.00k   512.00B
-  vgtest       /dev/loop2 192.00k     1    64.50k   188.00k   512.00B
-  vgtest       /dev/loop3  64.00k     1   512.00B    60.00k   512.00B
+Log message:
+	Always query device by using uuid only and not name in clvmd.
+	
+	Otherwise confusion with the device of the same name
+	(but different UUID, e.g. non-lvm device) can happen.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/display/display.c |   41 ++++++++++++++++++++++-------------------
- 1 files changed, 22 insertions(+), 19 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1410&r2=1.1411
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.163&r2=1.164
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index a835327..1836d6c 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -149,10 +149,10 @@ alloc_policy_t get_alloc_from_string(const char *str)
+--- LVM2/WHATS_NEW	2010/01/26 08:01:18	1.1410
++++ LVM2/WHATS_NEW	2010/01/27 13:23:57	1.1411
+@@ -1,5 +1,6 @@
+ Version 2.02.60 - 23rd January 2010
+ ===================================
++  Always query device by using uuid only and not name in clvmd.
+   Add missing metadata reverts in pvmove error path.
+   Unlock shared lock in clvmd if activation calls failed.
+   Fix return code of info call for query by uuid.
+--- LVM2/lib/activate/activate.c	2010/01/13 01:55:43	1.163
++++ LVM2/lib/activate/activate.c	2010/01/27 13:23:57	1.164
+@@ -492,7 +492,7 @@
+ 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
+ 		return 0;
  
- #define BASE_UNKNOWN 0
- #define BASE_SHARED 1
--#define BASE_1024 7
--#define BASE_1000 13
--#define BASE_SPECIAL 19
--#define NUM_UNIT_PREFIXES 6
-+#define BASE_1024 8
-+#define BASE_1000 15
-+#define BASE_SPECIAL 22
-+#define NUM_UNIT_PREFIXES 7
- #define NUM_SPECIAL 3
+-	r = _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
++	r = _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 1);
+ 	vg_release(lv->vg);
  
- /* Size supplied in sectors */
-@@ -176,27 +176,30 @@ static const char *_display_size(const struct cmd_context *cmd,
- 		{" Gigabyte", " GB", "G"},	/* [4] */
- 		{" Megabyte", " MB", "M"},	/* [5] */
- 		{" Kilobyte", " KB", "K"},	/* [6] */
-+		{" Byte    ", " B ", "B"},	/* [7] */
- 
- 		/* BASE_1024 - Used if cmd->si_unit_consistency = 1 */
--		{" Exbibyte", " EiB", "e"},	/* [7] */
--		{" Pebibyte", " PiB", "p"},	/* [8] */
--		{" Tebibyte", " TiB", "t"},	/* [9] */
--		{" Gibibyte", " GiB", "g"},	/* [10] */
--		{" Mebibyte", " MiB", "m"},	/* [11] */
--		{" Kibibyte", " KiB", "k"},	/* [12] */
-+		{" Exbibyte", " EiB", "e"},	/* [8] */
-+		{" Pebibyte", " PiB", "p"},	/* [9] */
-+		{" Tebibyte", " TiB", "t"},	/* [10] */
-+		{" Gibibyte", " GiB", "g"},	/* [11] */
-+		{" Mebibyte", " MiB", "m"},	/* [12] */
-+		{" Kibibyte", " KiB", "k"},	/* [13] */
-+		{" Byte    ", " B ", "B"},	/* [14] */
- 
- 		/* BASE_1000 - Used if cmd->si_unit_consistency = 1 */
--		{" Exabyte",  " EB", "E"},	/* [13] */
--		{" Petabyte", " PB", "P"},	/* [14] */
--		{" Terabyte", " TB", "T"},	/* [15] */
--		{" Gigabyte", " GB", "G"},	/* [16] */
--		{" Megabyte", " MB", "M"},	/* [17] */
--		{" Kilobyte", " kB", "K"},	/* [18] */
-+		{" Exabyte",  " EB", "E"},	/* [15] */
-+		{" Petabyte", " PB", "P"},	/* [16] */
-+		{" Terabyte", " TB", "T"},	/* [17] */
-+		{" Gigabyte", " GB", "G"},	/* [18] */
-+		{" Megabyte", " MB", "M"},	/* [19] */
-+		{" Kilobyte", " kB", "K"},	/* [20] */
-+		{" Byte    ", " B ", "B"},	/* [21] */
- 
- 		/* BASE_SPECIAL */
--		{" Byte    ", " B ", "B"},	/* [19] */
--		{" Units   ", " Un", "U"},	/* [20] */
--		{" Sectors ", " Se", "S"},	/* [21] */
-+		{" Byte    ", " B ", "B"},	/* [22] */
-+		{" Units   ", " Un", "U"},	/* [23] */
-+		{" Sectors ", " Se", "S"},	/* [24] */
- 	};
- 
- 	if (!(size_buf = dm_pool_alloc(cmd->mem, SIZE_BUF))) {
--- 
-1.6.0.6
+ 	return r;
 
 
