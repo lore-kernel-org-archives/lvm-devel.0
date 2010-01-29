@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 29 Jan 2010 16:38:00 -0500
-Subject: [PATCH 10/12] Add --metadatadisable to pvchange, allowing for disabling of metadata areas.
-In-Reply-To: <1264801082-28132-10-git-send-email-dwysocha@redhat.com>
+Date: Fri, 29 Jan 2010 16:37:59 -0500
+Subject: [PATCH 09/12] Define new functions and vgs/pvs fields related to mda disable/enable.
+In-Reply-To: <1264801082-28132-9-git-send-email-dwysocha@redhat.com>
 References: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-2-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-3-git-send-email-dwysocha@redhat.com>
@@ -11,117 +11,209 @@ References: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-7-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-8-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-9-git-send-email-dwysocha@redhat.com>
-	<1264801082-28132-10-git-send-email-dwysocha@redhat.com>
-Message-ID: <1264801082-28132-11-git-send-email-dwysocha@redhat.com>
+Message-ID: <1264801082-28132-10-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch just modifies pvchange to call the underlying enable/disable
-functions for mdas.
+Define a new pvs field, pv_mda_count_disabled, and a new vgs field,
+vg_mda_count_disabled to match the existing pv_mda_count and vg_mda_count.
+Also define various supporting functions to implement the counting as
+well as setting the disabled flag and determining if an mda is disabled.
+These high level functions call into the lower level format independent
+mda disable functions defined by earlier patches.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/args.h     |    1 +
- tools/commands.h |    3 ++-
- tools/pvchange.c |   28 +++++++++++++++++++++++++++-
- 3 files changed, 30 insertions(+), 2 deletions(-)
+ lib/metadata/metadata-exported.h |    4 ++
+ lib/metadata/metadata.c          |   78 ++++++++++++++++++++++++++++++++++++++
+ lib/report/columns.h             |    2 +
+ lib/report/report.c              |   25 ++++++++++++
+ 4 files changed, 109 insertions(+), 0 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 981f45f..f41fbf5 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -26,6 +26,7 @@ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
-+arg(metadatadisable_ARG, '\0', "metadatadisable", yes_no_arg, 0)
- arg(restorefile_ARG, '\0', "restorefile", string_arg, 0)
- arg(labelsector_ARG, '\0', "labelsector", int_arg, 0)
- arg(driverloaded_ARG, '\0', "driverloaded", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index 72898a9..2842937 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -448,6 +448,7 @@ xx(pvchange,
-    "\t[-t|--test]\n"
-    "\t[-u|--uuid]\n"
-    "\t[-x|--allocatable y|n]\n"
-+   "\t[--metadatadisable y|n]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--deltag Tag]\n"
-@@ -455,7 +456,7 @@ xx(pvchange,
-    "\t[PhysicalVolumePath...]\n",
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index f570dd9..c5cfcf8 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -731,6 +731,9 @@ uint64_t pv_pe_start(const struct physical_volume *pv);
+ uint32_t pv_pe_count(const struct physical_volume *pv);
+ uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
+ uint32_t pv_mda_count(const struct physical_volume *pv);
++uint32_t pv_mda_count_disabled(const struct physical_volume *pv);
++uint32_t pv_mda_is_disabled(const struct physical_volume *pv);
++void pv_mda_set_disabled(const struct physical_volume *pv, int value);
  
-    all_ARG, allocatable_ARG, allocation_ARG, autobackup_ARG, deltag_ARG,
--   addtag_ARG, test_ARG, uuid_ARG)
-+   addtag_ARG, metadatadisable_ARG, test_ARG, uuid_ARG)
+ uint64_t lv_size(const struct logical_volume *lv);
  
- xx(pvresize,
-    "Resize physical volume(s)",
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index cba9dd2..6e87ac2 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -37,6 +37,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 	int allocatable = 0;
- 	int tagarg = 0;
- 	int r = 0;
-+	int mda_disable = 0;
+@@ -746,6 +749,7 @@ uint64_t vg_pv_count(const struct volume_group *vg);
+ uint64_t vg_max_pv(const struct volume_group *vg);
+ uint64_t vg_max_lv(const struct volume_group *vg);
+ uint32_t vg_mda_count(const struct volume_group *vg);
++uint32_t vg_mda_count_disabled(const struct volume_group *vg);
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
+ #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 8f634d7..33725a1 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3682,6 +3682,71 @@ uint32_t pv_mda_count(const struct physical_volume *pv)
+ 	return info ? dm_list_size(&info->mdas) : UINT64_C(0);
+ }
  
- 	if (arg_count(cmd, addtag_ARG))
- 		tagarg = addtag_ARG;
-@@ -46,6 +47,9 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 	if (arg_count(cmd, allocatable_ARG))
- 		allocatable = !strcmp(arg_str_value(cmd, allocatable_ARG, "n"),
- 				      "y");
-+	if (arg_count(cmd, metadatadisable_ARG))
-+		mda_disable = !strcmp(arg_str_value(cmd, metadatadisable_ARG, "n"),
-+				      "y");
- 	else if (tagarg && !(tag = arg_str_value(cmd, tagarg, NULL))) {
- 		log_error("Failed to get tag");
- 		return 0;
-@@ -149,6 +153,27 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
- 				goto out;
- 			}
- 		}
-+	} else if (arg_count(cmd, metadatadisable_ARG)) {
-+		if (mda_disable && pv_mda_is_disabled(pv)) {
-+			log_error("Physical volume \"%s\" mdas already "
-+				  "disabled", pv_name);
-+			r = 1;
-+			goto out;
++uint32_t pv_mda_count_disabled(const struct physical_volume *pv)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *mda_vg;
++	uint32_t count=0;
++	struct dm_list *mdas_vg;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return 0;
++	if (!is_orphan(pv)) {
++		/*
++		 * If the PV is in a VG, the mdas are attached to the 'fid'.
++		 */
++		mdas_vg = &pv->vg->fid->metadata_areas;
++		dm_list_iterate_items(mda, &info->mdas) {
++			dm_list_iterate_items(mda_vg, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg) &&
++				    mda_is_disabled(mda_vg))
++					count++;
++			}
 +		}
-+		if (!mda_disable && !pv_mda_is_disabled(pv)) {
-+			log_error("Physical volume \"%s\" mdas already "
-+				  "enabled", pv_name);
-+			r = 1;
-+			goto out;
++	} else {
++
++		dm_list_iterate_items(mda, &info->mdas) {
++			if (mda_is_disabled(mda))
++				count++;
 +		}
-+		if (mda_disable) {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata disable", pv_name);
-+		} else {
-+			log_verbose("Setting physical volume \"%s\" NOT "
-+				    "metadata enable", pv_name);
++	}
++	return count;
++}
++
++uint32_t pv_mda_is_disabled(const struct physical_volume *pv)
++{
++	return pv_mda_count_disabled(pv) ? 1 : 0;
++}
++
++void pv_mda_set_disabled(const struct physical_volume *pv, int value)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *mda_vg;
++	struct dm_list *mdas_vg;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return;
++
++	if (!is_orphan(pv)) {
++		/*
++		 * If the PV is in a VG, the mdas are attached to the 'fid'.
++		 */
++		mdas_vg = &pv->vg->fid->metadata_areas;
++		dm_list_iterate_items(mda, &info->mdas) {
++			dm_list_iterate_items(mda_vg, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg))
++					mda_set_disabled(mda_vg, value);
++			}
 +		}
-+		pv_mda_set_disabled(pv, mda_disable);
- 	} else {
- 		/* --uuid: Change PV ID randomly */
- 		if (!id_create(&pv->id)) {
-@@ -220,7 +245,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 	struct dm_list mdas;
++	} else {
++		dm_list_iterate_items(mda, &info->mdas) {
++			mda_set_disabled(mda, value);
++		}
++	}
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+@@ -3737,6 +3802,19 @@ uint32_t vg_mda_count(const struct volume_group *vg)
+ 	return dm_list_size(&vg->fid->metadata_areas);
+ }
  
- 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
--	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
-+	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
-+	    arg_count(cmd, metadatadisable_ARG) != 1) {
- 		log_error("Please give exactly one option of -x, -uuid, "
- 			  "--addtag or --deltag");
- 		return EINVALID_CMD_LINE;
++uint32_t vg_mda_count_disabled(const struct volume_group *vg)
++{
++	struct metadata_area *mda;
++	uint32_t count=0;
++
++	dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
++		if (mda_is_disabled(mda))
++			count++;
++	}
++
++	return count;
++}
++
+ uint64_t lv_size(const struct logical_volume *lv)
+ {
+ 	return lv->size;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 49ebab4..2241acf 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -92,6 +92,7 @@ FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, "pv_pe_count", "Total number of P
+ FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, "pv_pe_alloc_count", "Total number of allocated Physical Extents.")
+ FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, "pv_tags", "Tags, if any.")
+ FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, "pv_mda_count", "Number of metadata areas on this device.")
++FIELD(PVS, pv, NUM, "#PMdaDis", id, 8, pvmdas_disabled, "pv_mda_count_disabled", "Number of metadata areas disabled on this device.")
+ 
+ FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, "vg_fmt", "Type of metadata.")
+ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, "vg_uuid", "Unique identifier.")
+@@ -111,6 +112,7 @@ FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+ FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
++FIELD(VGS, vg, NUM, "#VMdaDis", cmd, 5, vgmdas_disabled, "vg_mda_count_disabled", "Number of metadata areas disabled in this VG.")
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.")
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.")
+ 
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 2cceedd..e6a5785 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -861,6 +861,19 @@ static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _pvmdas_disabled_disp(struct dm_report *rh, struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private)
++{
++	uint32_t count;
++	const struct physical_volume *pv =
++	    (const struct physical_volume *) data;
++
++	count = pv_mda_count_disabled(pv);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
+@@ -873,6 +886,18 @@ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _vgmdas_disabled_disp(struct dm_report *rh, struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++	uint32_t count;
++
++	count = vg_mda_count_disabled(vg);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private)
 -- 
 1.6.0.6
 
