@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 29 Jan 2010 16:37:58 -0500
-Subject: [PATCH 08/12] Add mda_locn_match() internal library function.
-In-Reply-To: <1264801082-28132-8-git-send-email-dwysocha@redhat.com>
+Date: Fri, 29 Jan 2010 16:38:00 -0500
+Subject: [PATCH 10/12] Add --metadatadisable to pvchange, allowing for disabling of metadata areas.
+In-Reply-To: <1264801082-28132-10-git-send-email-dwysocha@redhat.com>
 References: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-2-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-3-git-send-email-dwysocha@redhat.com>
@@ -10,134 +10,118 @@ References: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-6-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-7-git-send-email-dwysocha@redhat.com>
 	<1264801082-28132-8-git-send-email-dwysocha@redhat.com>
-Message-ID: <1264801082-28132-9-git-send-email-dwysocha@redhat.com>
+	<1264801082-28132-9-git-send-email-dwysocha@redhat.com>
+	<1264801082-28132-10-git-send-email-dwysocha@redhat.com>
+Message-ID: <1264801082-28132-11-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-A metadata_area is defined independent of the location.  One downside
-is that there is no obvious mapping from a pv to an mda.  For a PV in
-a VG, we need a way to start with a PV and end up with an MDA, if we
-are to manage mdas.  This function provides us a way to go down the
-list of PVs on a VG, and identify which ones match a particular PV.
-
-I'm not entirely happy with this approach, but it does fit into the
-existing structures in a reasonable way.
-
-A better solution might be to refactor the VG - PV interface such that
-mdas are a list tied to a PV.  However, this seemed a bit tricky since
-a PV does not come into existence until after the list of mdas is
-constructed (see _vg_read() - we create a 'fid' and attach mdas to it,
-then we go through them and attach pvs).
+This patch just modifies pvchange to call the underlying enable/disable
+functions for mdas.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format_text/format-text.c |   15 +++++++++++++++
- lib/metadata/metadata.c       |   30 ++++++++++++++++++++++++++++++
- lib/metadata/metadata.h       |    7 +++++++
- 3 files changed, 52 insertions(+), 0 deletions(-)
+ tools/args.h     |    1 +
+ tools/commands.h |    3 ++-
+ tools/pvchange.c |   28 +++++++++++++++++++++++++++-
+ 3 files changed, 30 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 42d2bf9..9c128f6 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -124,6 +124,20 @@ static int _mda_in_vg_raw(struct format_instance *fid __attribute((unused)),
- 	return 0;
- }
+diff --git a/tools/args.h b/tools/args.h
+index 981f45f..f41fbf5 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -26,6 +26,7 @@ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
+ arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
+ arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
+ arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
++arg(metadatadisable_ARG, '\0', "metadatadisable", yes_no_arg, 0)
+ arg(restorefile_ARG, '\0', "restorefile", string_arg, 0)
+ arg(labelsector_ARG, '\0', "labelsector", int_arg, 0)
+ arg(driverloaded_ARG, '\0', "driverloaded", yes_no_arg, 0)
+diff --git a/tools/commands.h b/tools/commands.h
+index 72898a9..2842937 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -448,6 +448,7 @@ xx(pvchange,
+    "\t[-t|--test]\n"
+    "\t[-u|--uuid]\n"
+    "\t[-x|--allocatable y|n]\n"
++   "\t[--metadatadisable y|n]\n"
+    "\t[-v|--verbose]\n"
+    "\t[--addtag Tag]\n"
+    "\t[--deltag Tag]\n"
+@@ -455,7 +456,7 @@ xx(pvchange,
+    "\t[PhysicalVolumePath...]\n",
  
-+static int _mda_locn_match_raw(struct metadata_area *mda1,
-+			       struct metadata_area *mda2)
-+{
-+	struct mda_context *mda1c = (struct mda_context *) mda1->metadata_locn;
-+	struct mda_context *mda2c = (struct mda_context *) mda2->metadata_locn;
-+
-+	if ((mda1c->area.dev == mda2c->area.dev) &&
-+	    (mda1c->area.start == mda2c->area.start) &&
-+	    (mda1c->area.size == mda2c->area.size))
-+		return 1;
-+
-+	return 0;
-+}
-+
- /*
-  * For circular region between region_start and region_start + region_size,
-  * back up one SECTOR_SIZE from 'region_ptr' and return the value.
-@@ -1694,6 +1708,7 @@ static struct metadata_area_ops _metadata_text_raw_ops = {
- 	.mda_total_sectors = _mda_total_sectors_raw,
- 	.mda_in_vg = _mda_in_vg_raw,
- 	.pv_analyze_mda = _pv_analyze_mda_raw,
-+	.mda_locn_match = _mda_locn_match_raw
- };
+    all_ARG, allocatable_ARG, allocation_ARG, autobackup_ARG, deltag_ARG,
+-   addtag_ARG, test_ARG, uuid_ARG)
++   addtag_ARG, metadatadisable_ARG, test_ARG, uuid_ARG)
  
- /* pvmetadatasize in sectors */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b0d0bf3..8f634d7 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3631,6 +3631,36 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
- 	return pv_field(pv, pe_alloc_count);
- }
+ xx(pvresize,
+    "Resize physical volume(s)",
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index cba9dd2..6e87ac2 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -37,6 +37,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 	int allocatable = 0;
+ 	int tagarg = 0;
+ 	int r = 0;
++	int mda_disable = 0;
  
-+/*
-+ * This function provides a way to answer the question on a format specific
-+ * basis - does the format specfic context of these two metadata areas
-+ * match?
-+ *
-+ * A metatdata_area is defined to be independent of the underlying context.
-+ * This has the benefit that we can use the same abstraction to read disks
-+ * (see _metadata_text_raw_ops) or files (see _metadata_text_file_ops).
-+ * However, one downside is there is no format-independent way to determine
-+ * whether a given metadata_area is attached to a specific device - in fact,
-+ * it may not be attached to a device at all.
-+ *
-+ * Thus, LVM is structured such that an mda is not a member of struct
-+ * physical_volume.  The location of the mda depends on whether
-+ * the PV is in a volume group.  A PV not in a VG has an mda on the
-+ * 'info->mda' list in lvmcache, while a PV in a VG has an mda on
-+ * the vg->fid->metadata_areas list.  For further details, see _vg_read(),
-+ * and the sequence of creating the format_instance with fid->metadata_areas
-+ * list, as well as the construction of the VG, with list of PVs (comes
-+ * after the construction of the fid and list of mdas).
-+ */
-+int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2)
-+{
-+	if (!mda1->ops->mda_locn_match || !mda2->ops->mda_locn_match ||
-+	    mda1->ops->mda_locn_match != mda2->ops->mda_locn_match)
-+		return 0;
-+
-+	return mda1->ops->mda_locn_match(mda1, mda2);
-+}
-+
- int mda_is_disabled(struct metadata_area *mda)
- {
- 	return (mda->flags & MDA_DISABLED);
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index e939217..06b6734 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -156,6 +156,12 @@ struct metadata_area_ops {
- 	int (*pv_analyze_mda) (const struct format_type * fmt,
- 			       struct metadata_area *mda);
+ 	if (arg_count(cmd, addtag_ARG))
+ 		tagarg = addtag_ARG;
+@@ -46,6 +47,9 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 	if (arg_count(cmd, allocatable_ARG))
+ 		allocatable = !strcmp(arg_str_value(cmd, allocatable_ARG, "n"),
+ 				      "y");
++	if (arg_count(cmd, metadatadisable_ARG))
++		mda_disable = !strcmp(arg_str_value(cmd, metadatadisable_ARG, "n"),
++				      "y");
+ 	else if (tagarg && !(tag = arg_str_value(cmd, tagarg, NULL))) {
+ 		log_error("Failed to get tag");
+ 		return 0;
+@@ -149,6 +153,27 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 				goto out;
+ 			}
+ 		}
++	} else if (arg_count(cmd, metadatadisable_ARG)) {
++		if (mda_disable && pv_mda_is_disabled(pv)) {
++			log_error("Physical volume \"%s\" mdas already "
++				  "disabled", pv_name);
++			r = 1;
++			goto out;
++		}
++		if (!mda_disable && !pv_mda_is_disabled(pv)) {
++			log_error("Physical volume \"%s\" mdas already "
++				  "enabled", pv_name);
++			r = 1;
++			goto out;
++		}
++		if (mda_disable) {
++			log_verbose("Setting physical volume \"%s\" "
++				    "metadata disable", pv_name);
++		} else {
++			log_verbose("Setting physical volume \"%s\" NOT "
++				    "metadata enable", pv_name);
++		}
++		pv_mda_set_disabled(pv, mda_disable);
+ 	} else {
+ 		/* --uuid: Change PV ID randomly */
+ 		if (!id_create(&pv->id)) {
+@@ -220,7 +245,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	struct dm_list mdas;
  
-+	/*
-+	 * Do these two metadata_areas match with respect to their underlying
-+	 * location?
-+	 */
-+	int (*mda_locn_match)(struct metadata_area *mda1,
-+			      struct metadata_area *mda2);
- };
- 
- #define MDA_DISABLED 0x00000001
-@@ -169,6 +175,7 @@ struct metadata_area {
- 
- int mda_is_disabled(struct metadata_area *mda);
- void mda_set_disabled(struct metadata_area *mda, int value);
-+int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
- 
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
+-	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
++	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
++	    arg_count(cmd, metadatadisable_ARG) != 1) {
+ 		log_error("Please give exactly one option of -x, -uuid, "
+ 			  "--addtag or --deltag");
+ 		return EINVALID_CMD_LINE;
 -- 
 1.6.0.6
 
