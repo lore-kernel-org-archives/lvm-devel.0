@@ -1,54 +1,43 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 27 Jan 2010 22:28:06 -0000
-Subject: LVM2 ./WHATS_NEW daemons/cmirrord/cluster.c
-Message-ID: <20100127222806.5541.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 29 Jan 2010 16:37:50 -0500
+Subject: [PATCH 0/12]: Add infrastructure for metadata balancing.
+Message-ID: <1264801082-28132-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-01-27 22:28:06
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/cmirrord: cluster.c 
+This patchset is a second round of the metadata balancing support.
+It adds the infrastructure to set a bit inside the mda header on
+a per-PV basis, control it from pvchange, and display the number
+of mdas with this bit set on a particular PV or VG.
 
-Log message:
-	Was using dm_list_iterate_items when I should have been using
-	*_safe.  This had the effect of segfaulting the log daemon when
-	converting a mirror from one log type to another.
-	
-	Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+The disable/enable is implemented at the low level by taking advantage
+of the 'filler' field in the mda_header structure on disk.  Normally
+this is written to 0, but I propose we change this 32-bit field to
+a 'flags' field and then define one flag that is a MDA disable.
+Much of the patchset deals with propagating the disable through the
+various LVM layers, and attempts to do this in a way that is true to
+the existing abstractions.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1412&r2=1.1413
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+This code should now work for non-orphan PVs as well as orphans.
+Note that this patchset does not actually act on the bit to ignore
+mdas with the bit set.  This should be fairly easy and will come
+in future patches.
 
---- LVM2/WHATS_NEW	2010/01/27 13:29:11	1.1412
-+++ LVM2/WHATS_NEW	2010/01/27 22:28:05	1.1413
-@@ -1,5 +1,6 @@
- Version 2.02.60 - 23rd January 2010
- ===================================
-+  Fix lvconvert issue with cluster mirrors due to un'_safe' list processing
-   Fix pvmove abort workaround to be cluster-aware when temporary mirror activation fails.
-   Always query device by using uuid only and not name in clvmd.
-   Add missing metadata reverts in pvmove error path.
---- LVM2/daemons/cmirrord/cluster.c	2010/01/20 02:43:19	1.13
-+++ LVM2/daemons/cmirrord/cluster.c	2010/01/27 22:28:06	1.14
-@@ -858,9 +858,9 @@
- static int do_cluster_work(void *data __attribute((unused)))
- {
- 	int r = SA_AIS_OK;
--	struct clog_cpg *entry;
-+	struct clog_cpg *entry, *tmp;
- 
--	dm_list_iterate_items(entry, &clog_cpg_list) {
-+	dm_list_iterate_items_safe(entry, tmp, &clog_cpg_list) {
- 		r = cpg_dispatch(entry->handle, CPG_DISPATCH_ALL);
- 		if (r != SA_AIS_OK)
- 			LOG_ERROR("cpg_dispatch failed: %s", str_ais_error(r));
+Applies cleanly on upstream:
+commit 5584f2ae4621b03dc890c6e1a9028eb8add259a1
+Author: Jonathan Earl Brassow <jbrassow@redhat.com>
+Date:   Wed Jan 27 22:28:05 2010 +0000
+
+    Was using dm_list_iterate_items when I should have been using
+    *_safe.  This had the effect of segfaulting the log daemon when
+    converting a mirror from one log type to another.
+    
+    Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+
+
 
 
