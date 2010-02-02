@@ -1,46 +1,46 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 1 Feb 2010 19:43:23 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100201194323.12195.qmail@sourceware.org>
+From: Malahal Naineni <malahal@us.ibm.com>
+Date: Mon, 01 Feb 2010 16:00:18 -0800
+Subject: [PATCH] Monitor log volume if it is a mirror
+Message-ID: <a40ce4ac6ed447ed3e5f.1265068818@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-02-01 19:43:23
+Log volume of a mirror can also be a mirror with the following patchset.
+http://thread.gmane.org/gmane.linux.kernel.device-mapper.devel/10232
+If so, monitor such log volumes.
 
-Modified files:
-	test           : test-utils.sh 
+Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
 
-Log message:
-	Remove unnecessary "dmsetup resume" after "dmsetup create".
-	
-	It is not necessary to resume after a create since the create will
-	create the table and make it active.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.18&r2=1.19
-
---- LVM2/test/test-utils.sh	2010/01/19 16:44:57	1.18
-+++ LVM2/test/test-utils.sh	2010/02/01 19:43:22	1.19
-@@ -59,7 +59,6 @@
+diff -r 15e7d25bb86a -r a40ce4ac6ed4 lib/activate/activate.c
+--- a/lib/activate/activate.c	Mon Feb 01 15:50:20 2010 -0800
++++ b/lib/activate/activate.c	Mon Feb 01 15:54:59 2010 -0800
+@@ -737,6 +737,7 @@ int monitor_dev_for_events(struct cmd_co
+ 	int r = 1;
+ 	struct dm_list *tmp, *snh, *snht;
+ 	struct lv_segment *seg;
++	struct lv_segment *log_seg;
+ 	int (*monitor_fn) (struct lv_segment *s, int e);
+ 	uint32_t s;
  
- make_ioerror() {
- 	echo 0 10000000 error | dmsetup create ioerror
--	dmsetup resume ioerror
- 	ln -s $G_dev_/mapper/ioerror $G_dev_/ioerror
- }
+@@ -772,6 +773,16 @@ int monitor_dev_for_events(struct cmd_co
+ 		return r;
+ 	}
  
-@@ -188,7 +187,6 @@
- 		devs="$devs $dev"
- 		echo 0 $size linear $LOOP $((($i-1)*$size)) > $name.table
- 		dmsetup create $name $name.table
--		dmsetup resume $name
- 	done
++	/*
++	 * If the volume is mirrored and its log is also mirrored, monitor
++	 * the log volume as well.
++	 */
++	if ((seg = first_seg(lv)) != NULL && seg->log_lv != NULL &&
++	    (log_seg = first_seg(seg->log_lv)) != NULL &&
++	    seg_is_mirrored(log_seg))
++		if (!monitor_dev_for_events(cmd, seg->log_lv, monitor))
++			r = 0;
++
+ 	dm_list_iterate(tmp, &lv->segments) {
+ 		seg = dm_list_item(tmp, struct lv_segment);
  
-     # set up some default names
 
 
