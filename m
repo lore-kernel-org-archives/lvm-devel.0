@@ -1,7 +1,7 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 04 Feb 2010 15:54:07 +0100
-Subject: New clvmd init script
-Message-ID: <4B6ADF8F.9040203@redhat.com>
+From: Fabio M. Di Nitto <fabbione@fabbione.net>
+Date: Thu, 04 Feb 2010 16:02:42 +0100
+Subject: New clvmd init script (resend.. first one seems lost)
+Message-ID: <4B6AE192.9080601@fabbione.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -35,4 +35,4 @@ Fabio
 -------------- next part --------------
 An embedded and charset-unspecified text was scrubbed...
 Name: clvmd_init.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100204/70cabc5c/attachment.ksh>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100204/645a543e/attachment.ksh>
