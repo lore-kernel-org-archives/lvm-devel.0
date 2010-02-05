@@ -1,80 +1,48 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 5 Feb 2010 14:36:34 -0600
-Subject: [PATCH 9 of 12] LVM: add mirrored log type
-Message-ID: <201002052036.o15KaYGs016810@hydrogen.msp.redhat.com>
+Date: Fri, 5 Feb 2010 14:36:44 -0600
+Subject: [PATCH 10 of 12] LVM: monitor mirrored logs
+Message-ID: <201002052036.o15KaiZX016883@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-add-mirrored-log-type.patch
+Patch name: lvm-monitor-mirrored-logs.patch
 
-Now it is trivial to add the 'mirrored' mirror log.
+Log volume of a mirror can also be a mirror with the following patchset.
+http://thread.gmane.org/gmane.linux.kernel.device-mapper.devel/10232
+If so, monitor such log volumes.
 
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
 
-Index: LVM2/tools/commands.h
-===================================================================
---- LVM2.orig/tools/commands.h
-+++ LVM2/tools/commands.h
-@@ -96,7 +96,7 @@ xx(lvconvert,
-    "Change logical volume layout",
-    0,
-    "lvconvert "
--   "[-m|--mirrors Mirrors [{--mirrorlog {disk|core}|--corelog}]]\n"
-+   "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
-    "\t[--repair [--use-policies]]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
-    "\t[--alloc AllocationPolicy]\n"
-@@ -154,7 +154,7 @@ xx(lvcreate,
-    "\t{-l|--extents LogicalExtentsNumber[%{VG|PVS|FREE}] |\n"
-    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-    "\t[-M|--persistent {y|n}] [--major major] [--minor minor]\n"
--   "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core}|--corelog}]]\n"
-+   "\t[-m|--mirrors Mirrors [--nosync] [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
-    "\t[-n|--name LogicalVolumeName]\n"
-    "\t[--noudevsync]\n"
-    "\t[-p|--permission {r|rw}]\n"
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -811,7 +811,9 @@ static int _lvconvert_mirrors(struct cmd
- 			return 0;
- 		}
+diff -r 15e7d25bb86a -r a40ce4ac6ed4 lib/activate/activate.c
+--- a/lib/activate/activate.c	Mon Feb 01 15:50:20 2010 -0800
++++ b/lib/activate/activate.c	Mon Feb 01 15:54:59 2010 -0800
+@@ -737,6 +737,7 @@ int monitor_dev_for_events(struct cmd_co
+ 	int r = 1;
+ 	struct dm_list *tmp, *snh, *snht;
+ 	struct lv_segment *seg;
++	struct lv_segment *log_seg;
+ 	int (*monitor_fn) (struct lv_segment *s, int e);
+ 	uint32_t s;
  
--		if (!strcmp("disk", mirrorlog))
-+		if (!strcmp("mirrored", mirrorlog))
-+			log_count = 2;
-+		else if (!strcmp("disk", mirrorlog))
- 			log_count = 1;
- 		else if (!strcmp("core", mirrorlog))
- 			log_count = 0;
-Index: LVM2/tools/lvcreate.c
-===================================================================
---- LVM2.orig/tools/lvcreate.c
-+++ LVM2/tools/lvcreate.c
-@@ -337,12 +337,14 @@ static int _read_mirror_params(struct lv
- 	mirrorlog = arg_str_value(cmd, mirrorlog_ARG,
- 				  corelog ? "core" : DEFAULT_MIRRORLOG);
+@@ -772,6 +773,16 @@ int monitor_dev_for_events(struct cmd_co
+ 		return r;
+ 	}
  
--	if (!strcmp("disk", mirrorlog)) {
--		if (corelog) {
--			log_error("--mirrorlog disk and --corelog "
--				  "are incompatible");
--			return 0;
--		}
-+	if (strcmp("core", mirrorlog) && corelog) {
-+		log_error("Please use only one of --mirrorlog or --corelog");
-+		return 0;
-+	}
++	/*
++	 * If the volume is mirrored and its log is also mirrored, monitor
++	 * the log volume as well.
++	 */
++	if ((seg = first_seg(lv)) != NULL && seg->log_lv != NULL &&
++	    (log_seg = first_seg(seg->log_lv)) != NULL &&
++	    seg_is_mirrored(log_seg))
++		if (!monitor_dev_for_events(cmd, seg->log_lv, monitor))
++			r = 0;
 +
-+	if (!strcmp("mirrored", mirrorlog)) {
-+		lp->log_count = 2;
-+	} else if (!strcmp("disk", mirrorlog)) {
- 		lp->log_count = 1;
- 	} else if (!strcmp("core", mirrorlog))
- 		lp->log_count = 0;
+ 	dm_list_iterate(tmp, &lv->segments) {
+ 		seg = dm_list_item(tmp, struct lv_segment);
+ 
 
 
