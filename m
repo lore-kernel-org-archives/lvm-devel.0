@@ -1,56 +1,58 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 8 Feb 2010 11:25:39 -0500
-Subject: Suppress locking initialisation failure messages when --ignorelockingfailure is used
-In-Reply-To: <4B702E6F.7050901@redhat.com>
-References: <4B700EDC.7020505@redhat.com> <4B701284.1030606@redhat.com>
-	<20100208134605.GA16433@redhat.com> <4B702169.2000405@redhat.com>
-	<20100208145515.GB20595@redhat.com> <4B7027F4.6090307@redhat.com>
-	<20100208150911.GA24305@redhat.com> <4B702E6F.7050901@redhat.com>
-Message-ID: <20100208162538.GA25318@redhat.com>
+From: David Zeuthen <david@fubar.dk>
+Date: Mon, 08 Feb 2010 13:23:33 -0500
+Subject: [PATCH 0/3] yum-utils: fs-snapshot support for LVM snapshots
+In-Reply-To: <20100208144010.GA20595@redhat.com>
+References: <1265181124-2492-1-git-send-email-snitzer@redhat.com>
+	<m3k4uujak6.fsf@pullcord.laptop.org>
+	<20100208144010.GA20595@redhat.com>
+Message-ID: <1265653413.2721.10.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Feb 08 2010 at 10:31am -0500,
-Milan Broz <mbroz@redhat.com> wrote:
-
-> On 02/08/2010 04:09 PM, Mike Snitzer wrote:
-> >>> Shouldn't rc.sysinit's "vgchange -a y --ignorelockingfailure" come
-> >>> _after_ root's rw remount?
-> >>
-> >> Exactly. It should also start volume monitoring etc.
-> >>
-> >> Note that monitoring need rw access (at least for status log to syslog,
-> >> but also if it triggers some change, it will require real lock - to perform
-> >> repair, snapshot resize or other action; metadata backups etc).
+On Mon, 2010-02-08 at 09:40 -0500, Mike Snitzer wrote:
+> > It'd be good to have your input on the gnome-disk-utility UI for
+> > snapshots too, now that we'll have more than one user for it -- we're
+> > discussing at:
 > > 
-> > The monitoring gets started, by the "lvm2-monitor" service, after
-> > rc.sysinit.  So we should be fine there.
+> > https://bugzilla.gnome.org/show_bug.cgi?id=608204
+> > http://bugs.freedesktop.org/show_bug.cgi?id=26258
 > 
-> I was just not sure if "vgchange -a y" here tries to start monitoring or not.
-> If so, what happens? (lvm2-monitor init rc skript then will just restart it?)
-> Is it what we want?
+> I'm open to helping answer any questions David might have, and making
+> any lvm changes needed to assist his effort, once he has time to look at
+> gnome-disk-utility's snapshot integration (via lvm and btrfs).
+> 
+> It would be nice if gnome-disk-utility knew to treat LVM snapshot LVs
+> that have a "yum_<date>" tag as being part of a "system rollback point"
+> or some such.  But I'm not sure of the best way for David to
+> programatically (or via lvm utility) access a snapshot LV's lvm tag(s).
+> A stop-gap would be to just rely on the suffix of the LV name to end
+> with: "_yum_<date>" (but that is fairly crude!)
 
-Gah, good point!  Though with current rc.sysinit, because of read-only 
-root, I believe monitoring will fail to start because of locking
-failure.  But I can't clearly recall; will need to trace it.
+I think some kind of "system restore/rollback point" functionality is a
+good idea. 
 
-Changing rc.sysinit's "vgchange -a y" to be after the root's remount rw
-would effectively eliminate the need for the "lvm2-monitor" initscript
-(for startup).  This could be a good thing.
+I'm not sure, however, that Palimpsest should be the UI (it's a disk
+utility, first and foremost) for this - it sounds like it might be
+better to do a dedicated system-config-restorepoint program for this. I
+don't know. That said, I think we still might want to display a list of
+snapshots in Palimpsest for both LVM and btrfs - and with good naming
+maybe that UI is good enough for rollback purposes and we don't need a
+s-c-restorepoint. I don't know.
 
-But any removal of lvm2-monitor is secondary; as there is potentially
-some value in having a script to start/stop monitoring.  Until it is
-removed/disabled, at a minimum, we expose ourselves to redundant polling
-at boot (e.g. snapshot-merge completion polling).  That is, IFF we move
-rc.sysinit's "vgchange -a y" to be after remount rw.
+Regarding the LVM tags (which we'd also like to display and allow the
+user to edit), I've already filed a bug asking for something like
 
-I'm still not seeing a reason why LVM volumes are getting activated
-before root's remount rw.  I think we should change that.  Then we're
-left having to decide on LVM monitoring (disable that service?).
+ char **lvm_vg_get_tags(const vg_t vg);
+ char **lvm_lv_get_tags(const lv_t lv);
+ char **lvm_pv_get_tags(const pv_t pv);
 
-Mike
+in liblvm2app.
+
+Thanks,
+David
+
 
 
