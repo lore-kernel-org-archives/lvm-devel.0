@@ -1,71 +1,46 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 8 Feb 2010 17:43:14 -0500
-Subject: false error messages when merging
-In-Reply-To: <20100208220326.GB21695@redhat.com>
-References: <Pine.LNX.4.64.1002081542190.13894@hs20-bc2-1.build.redhat.com>
-	<20100208212904.GA21695@redhat.com>
-	<20100208220326.GB21695@redhat.com>
-Message-ID: <20100208224314.GC21695@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 8 Feb 2010 23:28:07 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
+Message-ID: <20100208232807.5477.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Feb 08 2010 at  5:03pm -0500,
-Mike Snitzer <snitzer@redhat.com> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-02-08 23:28:06
 
-> On Mon, Feb 08 2010 at  4:29pm -0500,
-> Mike Snitzer <snitzer@redhat.com> wrote:
-> 
-> > On Mon, Feb 08 2010 at  3:49pm -0500,
-> > Mikulas Patocka <mpatocka@redhat.com> wrote:
-> > 
-> > > Hi
-> > > 
-> > > LVM2.2.02.60 writes false error messages about tree node not found when 
-> > > activating delayed merging. But it starts merging anyway.
-> > > 
-> > > [slunicko:~]# lvs
-> > >   LV   VG   Attr   LSize  Origin Snap%  Move Log Copy%  Convert
-> > >   m    vg1  -wi-a- 16.00m
-> > > [slunicko:~]# lvcreate -s -n s -c 4k -L 24M vg1/m
-> > >   Logical volume "s" created
-> > > [slunicko:~]# mount -t ext2 /dev/vg1/s /mnt/test
-> > > [slunicko:~]# lvconvert --merge /dev/vg1/s
-> > >   Can't merge when snapshot is open
-> > >   Merging of snapshot s will start next activation.
-> > > [slunicko:~]# umount /mnt/test
-> > > [slunicko:~]# lvchange -an vg1/m
-> > > [slunicko:~]# lvchange -ay vg1/m
-> > >   failed to find tree node for m
-> > >   failed to find tree node for s
-> > > [slunicko:~]#
-> > > ... the merging starts on backgound fine
-> > 
-> > I can reproduce your "failed to find tree node for" scenario using
-> > the steps you provided.
-> ...
-> > All this being said, I'm not sure what's going on with your scenario but
-> > I'll get to the bottom of it.
-> 
-> So this "failed to find tree node for" message was introduced with my
-> optimization for not issuing more ioctls than is needed for checking
-> open_count: http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=1199b48c
-> 
-> I'll dig deeper to see what I can do about the noise.
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : dev_manager.c 
 
-The following patch eliminates the false error entirely.  I'm leaning
-toward removing the message (rather than switch to log_debug()) because
-it is valid (and expected) to not have a node in the tree (for both the
-merging origin and the merging snapshot) in the case of when we're
-activating a merging origin.
+Log message:
+	Remove false "failed to find tree node for <lv>" error from _cached_info().
+	
+	When activating a merging origin it is valid, and expected, to not have
+	a node in the deptree for both the origin and its merging snapshot.  The
+	_cached_info() caller is only concerned with whether a device is open.
+	If there isn't a node in the tree the associated device is definitely
+	not open.
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 6023574..6fbc392 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -264,10 +264,9 @@ static const struct dm_info *_cached_info(struct dm_pool *mem,
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1423&r2=1.1424
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.178&r2=1.179
+
+--- LVM2/WHATS_NEW	2010/02/06 07:44:16	1.1423
++++ LVM2/WHATS_NEW	2010/02/08 23:28:06	1.1424
+@@ -1,5 +1,6 @@
+ Version 2.02.61 - 
+ ===================================
++  Remove false "failed to find tree node for" error when activating merging origin.
+   Make lvconvert --repair --use-policies exit with success when no action is needed.
+   Add multiple snapshot lv 'lvconvert --merge @tag' support via process_each_lv().
+   Fix inappropriate second resync when adding mimage to core-logged mirror.
+--- LVM2/lib/activate/dev_manager.c	2010/01/26 07:58:23	1.178
++++ LVM2/lib/activate/dev_manager.c	2010/02/08 23:28:06	1.179
+@@ -264,10 +264,9 @@
  		return NULL;
  	}
  
