@@ -1,29 +1,11 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  9 Feb 2010 17:32:24 -0500
-Subject: [PATCH 21/21] Update metadatabalance tests to include sanity checks for vgchange.
-In-Reply-To: <1265754744-17319-21-git-send-email-dwysocha@redhat.com>
-References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-2-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-3-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-4-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-5-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-6-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-7-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-8-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-9-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-10-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-11-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-12-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-13-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-14-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-15-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-16-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-17-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-18-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-19-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-20-git-send-email-dwysocha@redhat.com>
-	<1265754744-17319-21-git-send-email-dwysocha@redhat.com>
-Message-ID: <1265754744-17319-22-git-send-email-dwysocha@redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Tue, 9 Feb 2010 18:59:45 -0500 (EST)
+Subject: false error messages when merging
+In-Reply-To: <20100208224314.GC21695@redhat.com>
+References: <Pine.LNX.4.64.1002081542190.13894@hs20-bc2-1.build.redhat.com>
+	<20100208212904.GA21695@redhat.com> <20100208220326.GB21695@redhat.com>
+	<20100208224314.GC21695@redhat.com>
+Message-ID: <Pine.LNX.4.64.1002091859150.14493@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -31,57 +13,81 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/t-metadata-balance.sh |   25 +++++++++++++++++++++++++
- 1 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/test/t-metadata-balance.sh b/test/t-metadata-balance.sh
-index c0dd679..64e165b 100755
---- a/test/t-metadata-balance.sh
-+++ b/test/t-metadata-balance.sh
-@@ -28,6 +28,8 @@ for mdacp in 1 2; do
- 	if [ $pv_in_vg = 1 ]; then
- 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
- 		check_vg_field_ $vg vg_mda_count_disabled $mdacp
-+		check_vg_field_ $vg vg_mda_balance_min 1
-+		check_vg_field_ $vg vg_mda_balance_max 3
- 	fi
- 	pvchange --metadatadisable n $dev1
- 	check_pv_field_ $dev1 pv_mda_count $mdacp
-@@ -35,7 +37,30 @@ for mdacp in 1 2; do
- 	if [ $pv_in_vg = 1 ]; then
- 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
- 		check_vg_field_ $vg vg_mda_count_disabled 0
-+		check_vg_field_ $vg vg_mda_balance_min 1
-+		check_vg_field_ $vg vg_mda_balance_max 3
-+		# Sanity test of metadata balance params
-+		# 'min' threshold (1 < min <= max)
-+		# 'max' threshold (min <= max <= #pvs)
-+		not vgchange --metadatabalancemin 0 $vg
-+		not vgchange --metadatabalancemin 4 $vg
-+		vgchange --metadatabalancemin 2 $vg
-+		check_vg_field_ $vg vg_mda_balance_min 2
-+		not vgchange --metadatabalancemax 4 $vg
-+		vgchange --metadatabalancemax 2 $vg
-+		check_vg_field_ $vg vg_mda_balance_max 2
-+		vgchange --metadatabalancemax 3 $vg
-+		check_vg_field_ $vg vg_mda_balance_max 3
-+		vgchange --metadatabalancemin 3 $vg
-+		check_vg_field_ $vg vg_mda_balance_min 3
- 		vgremove -f $vg
- 	fi
- done
- done
-+
-+# Test behavior of metadata balance min / max
-+# ensure setting min/max affects underlying pv enable/disable
-+
-+# Setting a larger min value should trigger enabling mdas
-+# Setting a smaller max value should trigger disabling mdas
-+# vg_mda_count_disabled should always be consistent with min/max
-\ No newline@end of file
--- 
-1.6.0.6
+On Mon, 8 Feb 2010, Mike Snitzer wrote:
+
+> On Mon, Feb 08 2010 at  5:03pm -0500,
+> Mike Snitzer <snitzer@redhat.com> wrote:
+> 
+> > On Mon, Feb 08 2010 at  4:29pm -0500,
+> > Mike Snitzer <snitzer@redhat.com> wrote:
+> > 
+> > > On Mon, Feb 08 2010 at  3:49pm -0500,
+> > > Mikulas Patocka <mpatocka@redhat.com> wrote:
+> > > 
+> > > > Hi
+> > > > 
+> > > > LVM2.2.02.60 writes false error messages about tree node not found when 
+> > > > activating delayed merging. But it starts merging anyway.
+> > > > 
+> > > > [slunicko:~]# lvs
+> > > >   LV   VG   Attr   LSize  Origin Snap%  Move Log Copy%  Convert
+> > > >   m    vg1  -wi-a- 16.00m
+> > > > [slunicko:~]# lvcreate -s -n s -c 4k -L 24M vg1/m
+> > > >   Logical volume "s" created
+> > > > [slunicko:~]# mount -t ext2 /dev/vg1/s /mnt/test
+> > > > [slunicko:~]# lvconvert --merge /dev/vg1/s
+> > > >   Can't merge when snapshot is open
+> > > >   Merging of snapshot s will start next activation.
+> > > > [slunicko:~]# umount /mnt/test
+> > > > [slunicko:~]# lvchange -an vg1/m
+> > > > [slunicko:~]# lvchange -ay vg1/m
+> > > >   failed to find tree node for m
+> > > >   failed to find tree node for s
+> > > > [slunicko:~]#
+> > > > ... the merging starts on backgound fine
+> > > 
+> > > I can reproduce your "failed to find tree node for" scenario using
+> > > the steps you provided.
+> > ...
+> > > All this being said, I'm not sure what's going on with your scenario but
+> > > I'll get to the bottom of it.
+> > 
+> > So this "failed to find tree node for" message was introduced with my
+> > optimization for not issuing more ioctls than is needed for checking
+> > open_count: http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=1199b48c
+> > 
+> > I'll dig deeper to see what I can do about the noise.
+> 
+> The following patch eliminates the false error entirely.  I'm leaning
+> toward removing the message (rather than switch to log_debug()) because
+> it is valid (and expected) to not have a node in the tree (for both the
+> merging origin and the merging snapshot) in the case of when we're
+> activating a merging origin.
+> 
+> diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+> index 6023574..6fbc392 100644
+> --- a/lib/activate/dev_manager.c
+> +++ b/lib/activate/dev_manager.c
+> @@ -264,10 +264,9 @@ static const struct dm_info *_cached_info(struct dm_pool *mem,
+>  		return NULL;
+>  	}
+>  
+> -	if (!(dnode = dm_tree_find_node_by_uuid(dtree, dlid))) {
+> -		log_error("failed to find tree node for %s", lv->name);
+> +	/* An activating merging origin won't have a node in the tree yet */
+> +	if (!(dnode = dm_tree_find_node_by_uuid(dtree, dlid)))
+>  		return NULL;
+> -	}
+>  
+>  	if (!(dinfo = dm_tree_node_get_info(dnode))) {
+>  		log_error("failed to get info from tree node for %s", lv->name);
+> 
+
+OK.
+
+Reviewed-by: Mikulas Patocka <mpatocka@redhat.com>
+
+Mikulas
 
 
