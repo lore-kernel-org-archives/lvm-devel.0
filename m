@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  9 Feb 2010 17:32:17 -0500
-Subject: [PATCH 14/21] Add metadata balance arguments, update vgcreate man page and help.
-In-Reply-To: <1265754744-17319-14-git-send-email-dwysocha@redhat.com>
+Date: Tue,  9 Feb 2010 17:32:18 -0500
+Subject: [PATCH 15/21] Add vg metadata balance parameters with defaults.
+In-Reply-To: <1265754744-17319-15-git-send-email-dwysocha@redhat.com>
 References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-2-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-3-git-send-email-dwysocha@redhat.com>
@@ -16,109 +16,110 @@ References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-12-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-13-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-14-git-send-email-dwysocha@redhat.com>
-Message-ID: <1265754744-17319-15-git-send-email-dwysocha@redhat.com>
+	<1265754744-17319-15-git-send-email-dwysocha@redhat.com>
+Message-ID: <1265754744-17319-16-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The 3 parameters for metadata balancing are added here.  We really only
-need the 'min' and 'max' values, since the defaults are really what LVM
-does today (you must have metadata on at least on PV, and by default we
-read/write from all PVs that have metadatacopies != 0).  The only question
-is how to explain this properly, so for now I've left the main 'enable'
-parameter.
+Add 3 parameters that control vg metadata balancing.
+1) metadata_balance: enable metadata balancing; default 0 (disable)
+2) metadata_balance_min: min # of PVs to contain metadata; default 1
+3) metadata_balance_max: max # of PVs to contain metadata; default UINT_MAX
+(all PVs contain metadata)
+
+This patch just adds the parameters to the structures with the default
+values but does not modify any commands.  Should be no functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- man/vgcreate.8.in |   24 ++++++++++++++++++++++++
- tools/args.h      |    3 +++
- tools/commands.h  |    8 ++++++--
- 3 files changed, 33 insertions(+), 2 deletions(-)
+ lib/config/defaults.h            |    3 +++
+ lib/metadata/metadata-exported.h |    9 +++++++++
+ lib/metadata/metadata.c          |    3 +++
+ tools/toollib.c                  |    6 ++++++
+ 4 files changed, 21 insertions(+), 0 deletions(-)
 
-diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
-index 24d1642..66429f7 100644
---- a/man/vgcreate.8.in
-+++ b/man/vgcreate.8.in
-@@ -14,6 +14,11 @@ vgcreate \- create a volume group
- .RB [ \-l | \-\-maxlogicalvolumes
- .IR MaxLogicalVolumes ]
- .RB [ -M | \-\-metadatatype type]
-+.RB [ \-\-metadatabalance " {" y | n } ]
-+.RB [ \-\-metadatabalancemin
-+.IR NumberOfPhysicalVolumes ]
-+.RB [ \-\-metadatabalancemax
-+.IR NumberOfPhysicalVolumes ]
- .RB [ -p | \-\-maxphysicalvolumes
- .IR MaxPhysicalVolumes ]
- .RB [ \-s | \-\-physicalextentsize
-@@ -94,6 +99,25 @@ but having a large number of extents will slow down the tools but have no
- impact on I/O performance to the logical volume.  The smallest PE is 1KB.
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 94057e4..3136269 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -74,6 +74,9 @@
+ #define DEFAULT_MAX_LV 0
+ #define DEFAULT_ALLOC_POLICY ALLOC_NORMAL
+ #define DEFAULT_CLUSTERED 0
++#define DEFAULT_METADATA_BALANCE 0
++#define DEFAULT_METADATA_BALANCE_MIN 1
++#define DEFAULT_METADATA_BALANCE_MAX UINT32_MAX
  
- The 2.4 kernel has a limitation of 2TB per block device.
-+.TP
-+.BR \-\-metadatabalance " " { y | n }
-+Enables automatic metadata balancing on physical volumes in the volume group.
-+If set to \fBy\fP, LVM will use the values of \fBmetadatabalancmin\fP and
-+\fBmetadatabalancemax\fP to determine the set of physical volumes to read and
-+write metadata.  Only physical volumes created with a non-zero value of
-+\fBmetadatacopies\fP are used.  This option is useful for volume groups
-+containing large numbers of physical volumes.  The option is set to \fBn\fP
-+by default, and all physical volumes created with non-zero \fBmetadatacopies\fP
-+will contain metadata.
-+.TP
-+.BR \-\-metadatabalancemin " " \fIMinPhysicalVolumes\fR
-+Sets the minimum number of physical volumes that should contain metadata.
-+Default is 1.
-+.TP
-+.BR \-\-metadatabalancemax " " \fIMaxPhysicalVolumes\fR
-+Sets the maximum number of physical volumes that should contain metadata.
-+Default is all physical volumes.
-+\fB
- .SH PHYSICAL DEVICE OPTIONS
- The following options are available for initializing physical devices in the
- volume group.  These options are further described in the pvcreate man page.
-diff --git a/tools/args.h b/tools/args.h
-index f41fbf5..3a48d75 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -24,6 +24,9 @@ arg(physicalvolumesize_ARG, '\0', "setphysicalvolumesize", size_mb_arg, 0)
- arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", NULL, 0)
- arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
-+arg(metadatabalance_ARG, '\0', "metadatabalance", yes_no_arg, 0)
-+arg(metadatabalancemin_ARG, '\0', "metadatabalancemin", int_arg, 0)
-+arg(metadatabalancemax_ARG, '\0', "metadatabalancemax", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
- arg(metadatadisable_ARG, '\0', "metadatadisable", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index 66727d9..f04680a 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -766,6 +766,9 @@ xx(vgcreate,
-    "\t[-d|--debug]" "\n"
-    "\t[-h|--help]" "\n"
-    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
-+   "\t[--metadatabalance {y|n}] " "\n"
-+   "\t[--metadatabalancemin NumberOfPhysicalVolumes] " "\n"
-+   "\t[--metadatabalancemax NumberOfPhysicalVolumes] " "\n"
-    "\t[-M|--metadatatype 1|2] " "\n"
-    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
-    "\t[-s|--physicalextentsize PhysicalExtentSize[bBsSkKmMgGtTpPeE]] " "\n"
-@@ -778,8 +781,9 @@ xx(vgcreate,
-    addtag_ARG, alloc_ARG, autobackup_ARG, clustered_ARG, maxlogicalvolumes_ARG,
-    maxphysicalvolumes_ARG, metadatatype_ARG, physicalextentsize_ARG, test_ARG,
-    force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatasize_ARG,
--   pvmetadatacopies_ARG, metadatacopies_ARG, dataalignment_ARG,
--   dataalignmentoffset_ARG)
-+   pvmetadatacopies_ARG, metadatacopies_ARG,
-+   metadatabalance_ARG, metadatabalancemin_ARG, metadatabalancemax_ARG,
-+   dataalignment_ARG, dataalignmentoffset_ARG)
+ #define DEFAULT_MSG_PREFIX "  "
+ #define DEFAULT_CMD_NAME 0
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 1ae058e..a40ffe4 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -263,6 +263,12 @@ struct volume_group {
+ 	 * 0 for success else appropriate FAILURE_* bits set.
+ 	 */
+ 	uint32_t read_status;
++	/*
++	 * Metadata balance parameters
++	 */
++	uint32_t metadata_balance; /* 0 - disable (default); 1 - enable */
++	uint32_t metadata_balance_min; /* min # of mdas in this VG */
++	uint32_t metadata_balance_max; /* max # of mdas in this VG */
+ };
  
- xx(vgdisplay,
-    "Display volume group information",
+ /* There will be one area for each stripe */
+@@ -767,6 +773,9 @@ struct vgcreate_params {
+ 	size_t max_lv;
+ 	alloc_policy_t alloc;
+ 	int clustered; /* FIXME: put this into a 'status' variable instead? */
++	int metadata_balance;
++	uint32_t metadata_balance_max;
++	uint32_t metadata_balance_min;
+ };
+ 
+ int vgcreate_params_validate(struct cmd_context *cmd,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 95d74b4..6fe8008 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -832,6 +832,9 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	vg->max_pv = DEFAULT_MAX_PV;
+ 
+ 	vg->alloc = DEFAULT_ALLOC_POLICY;
++	vg->metadata_balance = DEFAULT_METADATA_BALANCE;
++	vg->metadata_balance_min = DEFAULT_METADATA_BALANCE_MIN;
++	vg->metadata_balance_max = DEFAULT_METADATA_BALANCE_MAX;
+ 
+ 	vg->pv_count = 0;
+ 	dm_list_init(&vg->pvs);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e4040f8..c868523 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1189,6 +1189,9 @@ void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
+ 		vp_def->max_lv = vg->max_lv;
+ 		vp_def->alloc = vg->alloc;
+ 		vp_def->clustered = vg_is_clustered(vg);
++		vp_def->metadata_balance = vg->metadata_balance;
++		vp_def->metadata_balance_min = vg->metadata_balance_min;
++		vp_def->metadata_balance_max = vg->metadata_balance_max;
+ 	} else {
+ 		vp_def->vg_name = NULL;
+ 		vp_def->extent_size = DEFAULT_EXTENT_SIZE * 2;
+@@ -1196,6 +1199,9 @@ void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
+ 		vp_def->max_lv = DEFAULT_MAX_LV;
+ 		vp_def->alloc = DEFAULT_ALLOC_POLICY;
+ 		vp_def->clustered = DEFAULT_CLUSTERED;
++		vp_def->metadata_balance = DEFAULT_METADATA_BALANCE;
++		vp_def->metadata_balance_min = DEFAULT_METADATA_BALANCE_MIN;
++		vp_def->metadata_balance_max = DEFAULT_METADATA_BALANCE_MAX;
+ 	}
+ }
+ 
 -- 
 1.6.0.6
 
