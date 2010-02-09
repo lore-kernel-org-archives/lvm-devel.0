@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  9 Feb 2010 17:32:19 -0500
-Subject: [PATCH 16/21] Add vg get/set methods for metadata balance min/max.
-In-Reply-To: <1265754744-17319-16-git-send-email-dwysocha@redhat.com>
+Date: Tue,  9 Feb 2010 17:32:20 -0500
+Subject: [PATCH 17/21] Make metadata_balance_{min|max} persistent on disk.
+In-Reply-To: <1265754744-17319-17-git-send-email-dwysocha@redhat.com>
 References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-2-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-3-git-send-email-dwysocha@redhat.com>
@@ -18,104 +18,80 @@ References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-14-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-15-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-16-git-send-email-dwysocha@redhat.com>
-Message-ID: <1265754744-17319-17-git-send-email-dwysocha@redhat.com>
+	<1265754744-17319-17-git-send-email-dwysocha@redhat.com>
+Message-ID: <1265754744-17319-18-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds the get and partially implemented set functions.
-The 'set' functions should probably enable or disable metadata areas
-based on new values.
+This patch adds the ability to read/write the metadata balance min/max
+values to the vg metadata.
+
+For existing metdata that does not have a value, we set to the default
+values for min/max.  In the case of the metadata balance max default value,
+set the max to the # of PVs.  This should preserve existing LVM behavior
+and ensure backward compatibility.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    4 +++
- lib/metadata/metadata.c          |   55 ++++++++++++++++++++++++++++++++++++++
- 2 files changed, 59 insertions(+), 0 deletions(-)
+ lib/format_text/export.c      |    2 ++
+ lib/format_text/import_vsn1.c |   14 ++++++++++++++
+ 2 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index a40ffe4..8978838 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -758,6 +758,10 @@ uint64_t vg_max_pv(const struct volume_group *vg);
- uint64_t vg_max_lv(const struct volume_group *vg);
- uint32_t vg_mda_count(const struct volume_group *vg);
- uint32_t vg_mda_count_disabled(const struct volume_group *vg);
-+uint32_t vg_mda_balance_min(const struct volume_group *vg);
-+uint32_t vg_mda_balance_max(const struct volume_group *vg);
-+int vg_set_mda_balance_min(struct volume_group *vg, uint32_t value);
-+int vg_set_mda_balance_max(struct volume_group *vg, uint32_t value);
- int vg_check_write_mode(struct volume_group *vg);
- #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
- #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6fe8008..66f404f 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -913,6 +913,61 @@ static int _recalc_extents(uint32_t *extents, const char *desc1,
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 5f02b5d..2e4d2c8 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -397,6 +397,8 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(vg->alloc));
+ 	}
++	outf(f, "metadata_balance_min = %u", vg->metadata_balance_min);
++	outf(f, "metadata_balance_max = %u", vg->metadata_balance_max);
+ 
  	return 1;
  }
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 75a61e5..436cd4d 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -23,6 +23,7 @@
+ #include "pv_alloc.h"
+ #include "segtype.h"
+ #include "text_import.h"
++#include "defaults.h"
  
-+uint32_t vg_mda_balance_min(const struct volume_group *vg)
-+{
-+	return vg->metadata_balance_min;
-+}
-+
-+uint32_t vg_mda_balance_max(const struct volume_group *vg)
-+{
-+	return vg->metadata_balance_max;
-+}
-+
-+int vg_set_mda_balance_min(struct volume_group *vg, uint32_t value)
-+{
-+	/* FIXME: add checks, etc, and set the value */
-+	if (value < 1) {
-+		log_error("Metadata balance min must be greater "
-+			  "than 0");
-+		return 0;
+ typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
+ 			   struct volume_group * vg, struct config_node * pvn,
+@@ -729,6 +730,16 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 			return_0;
+ 	}
+ 
++	if (!_read_uint32(vgn, "metadata_balance_min",
++			 &vg->metadata_balance_min)) {
++		vg->metadata_balance_min = DEFAULT_METADATA_BALANCE_MIN;
 +	}
-+	if (value > vg_mda_balance_max(vg)) {
-+		log_error("Metadata balance min must not be larger "
-+			  "than metadata balance max (%u).",
-+			  vg_mda_balance_max(vg));
-+		return 0;
-+	}
-+	/*
-+	 * FIXME: Before we set a larger value, we may need to
-+	 * enable some mdas on PVS
-+	 */
-+	vg->metadata_balance_min = value;
-+	return 1;
-+}
 +
-+int vg_set_mda_balance_max(struct volume_group *vg, uint32_t value)
-+{
-+	/* FIXME: add checks, etc, and set the value */
-+	/* FIXME: allow special value to be equivalent to all PVs */
-+	if (value > dm_list_size(&vg->pvs)) {
-+		log_error("Metadata balance max must be no greater "
-+			  "than the number of physical volumes (%u) "
-+			  "in the volume group", dm_list_size(&vg->pvs));
-+		return 0;
++	if (!_read_uint32(vgn, "metadata_balance_max",
++			 &vg->metadata_balance_max)) {
++		vg->metadata_balance_max = DEFAULT_METADATA_BALANCE_MAX;
 +	}
-+	if (value < vg_mda_balance_min(vg)) {
-+		log_error("Metadata balance max must not be smaller "
-+			  "than metadata balance min.");
-+		return 0;
-+	}
-+	/*
-+	 * FIXME: Before we set a smaller value, we may need to
-+	 * disable some mdas on PVS
-+	 */
-+	vg->metadata_balance_max = value;
-+	return 1;
-+}
 +
- int vg_set_extent_size(struct volume_group *vg, uint32_t new_size)
- {
- 	uint32_t old_size = vg->extent_size;
+ 	/*
+ 	 * The pv hash memoises the pv section names -> pv
+ 	 * structures.
+@@ -746,6 +757,9 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
++	if (vg->metadata_balance_max == DEFAULT_METADATA_BALANCE_MAX)
++		vg->metadata_balance_max = dm_list_size(&vg->pvs);
++
+ 	dm_list_init(&vg->lvs);
+ 	dm_list_init(&vg->tags);
+ 	dm_list_init(&vg->removed_pvs);
 -- 
 1.6.0.6
 
