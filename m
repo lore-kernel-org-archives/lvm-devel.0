@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  9 Feb 2010 17:32:12 -0500
-Subject: [PATCH 09/21] Add mda_locn_match() internal library function.
-In-Reply-To: <1265754744-17319-9-git-send-email-dwysocha@redhat.com>
+Date: Tue,  9 Feb 2010 17:32:13 -0500
+Subject: [PATCH 10/21] Define new functions and vgs/pvs fields related to mda disable/enable.
+In-Reply-To: <1265754744-17319-10-git-send-email-dwysocha@redhat.com>
 References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-2-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-3-git-send-email-dwysocha@redhat.com>
@@ -11,134 +11,221 @@ References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-7-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-8-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-9-git-send-email-dwysocha@redhat.com>
-Message-ID: <1265754744-17319-10-git-send-email-dwysocha@redhat.com>
+	<1265754744-17319-10-git-send-email-dwysocha@redhat.com>
+Message-ID: <1265754744-17319-11-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-A metadata_area is defined independent of the location.  One downside
-is that there is no obvious mapping from a pv to an mda.  For a PV in
-a VG, we need a way to start with a PV and end up with an MDA, if we
-are to manage mdas.  This function provides us a way to go down the
-list of PVs on a VG, and identify which ones match a particular PV.
-
-I'm not entirely happy with this approach, but it does fit into the
-existing structures in a reasonable way.
-
-A better solution might be to refactor the VG - PV interface such that
-mdas are a list tied to a PV.  However, this seemed a bit tricky since
-a PV does not come into existence until after the list of mdas is
-constructed (see _vg_read() - we create a 'fid' and attach mdas to it,
-then we go through them and attach pvs).
+Define a new pvs field, pv_mda_count_disabled, and a new vgs field,
+vg_mda_count_disabled to match the existing pv_mda_count and vg_mda_count.
+Also define various supporting functions to implement the counting as
+well as setting the disabled flag and determining if an mda is disabled.
+These high level functions call into the lower level format independent
+mda disable functions defined by earlier patches.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format_text/format-text.c |   15 +++++++++++++++
- lib/metadata/metadata.c       |   30 ++++++++++++++++++++++++++++++
- lib/metadata/metadata.h       |    7 +++++++
- 3 files changed, 52 insertions(+), 0 deletions(-)
+ lib/metadata/metadata-exported.h |    4 ++
+ lib/metadata/metadata.c          |   89 ++++++++++++++++++++++++++++++++++++++
+ lib/report/columns.h             |    2 +
+ lib/report/report.c              |   25 +++++++++++
+ 4 files changed, 120 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 4ede905..981ac97 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -121,6 +121,20 @@ static int _mda_in_vg_raw(struct format_instance *fid __attribute((unused)),
- 	return 0;
- }
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 084fc81..1ae058e 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -733,6 +733,9 @@ uint64_t pv_pe_start(const struct physical_volume *pv);
+ uint32_t pv_pe_count(const struct physical_volume *pv);
+ uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
+ uint32_t pv_mda_count(const struct physical_volume *pv);
++uint32_t pv_mda_count_disabled(const struct physical_volume *pv);
++uint32_t pv_mda_is_disabled(const struct physical_volume *pv);
++int pv_mda_set_disabled(const struct physical_volume *pv, int value);
  
-+static int _mda_locn_match_raw(struct metadata_area *mda1,
-+			       struct metadata_area *mda2)
-+{
-+	struct mda_context *mda1c = (struct mda_context *) mda1->metadata_locn;
-+	struct mda_context *mda2c = (struct mda_context *) mda2->metadata_locn;
-+
-+	if ((mda1c->area.dev == mda2c->area.dev) &&
-+	    (mda1c->area.start == mda2c->area.start) &&
-+	    (mda1c->area.size == mda2c->area.size))
-+		return 1;
-+
-+	return 0;
-+}
-+
- /*
-  * For circular region between region_start and region_start + region_size,
-  * back up one SECTOR_SIZE from 'region_ptr' and return the value.
-@@ -1705,6 +1719,7 @@ static struct metadata_area_ops _metadata_text_raw_ops = {
- 	.mda_total_sectors = _mda_total_sectors_raw,
- 	.mda_in_vg = _mda_in_vg_raw,
- 	.pv_analyze_mda = _pv_analyze_mda_raw,
-+	.mda_locn_match = _mda_locn_match_raw
- };
+ uint64_t lv_size(const struct logical_volume *lv);
  
- /* pvmetadatasize in sectors */
+@@ -748,6 +751,7 @@ uint64_t vg_pv_count(const struct volume_group *vg);
+ uint64_t vg_max_pv(const struct volume_group *vg);
+ uint64_t vg_max_lv(const struct volume_group *vg);
+ uint32_t vg_mda_count(const struct volume_group *vg);
++uint32_t vg_mda_count_disabled(const struct volume_group *vg);
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
+ #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 0a46d51..874f417 100644
+index 874f417..95d74b4 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -3633,6 +3633,36 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
- 	return pv_field(pv, pe_alloc_count);
+@@ -3684,6 +3684,82 @@ uint32_t pv_mda_count(const struct physical_volume *pv)
+ 	return info ? dm_list_size(&info->mdas) : UINT64_C(0);
  }
  
-+/*
-+ * This function provides a way to answer the question on a format specific
-+ * basis - does the format specfic context of these two metadata areas
-+ * match?
-+ *
-+ * A metatdata_area is defined to be independent of the underlying context.
-+ * This has the benefit that we can use the same abstraction to read disks
-+ * (see _metadata_text_raw_ops) or files (see _metadata_text_file_ops).
-+ * However, one downside is there is no format-independent way to determine
-+ * whether a given metadata_area is attached to a specific device - in fact,
-+ * it may not be attached to a device at all.
-+ *
-+ * Thus, LVM is structured such that an mda is not a member of struct
-+ * physical_volume.  The location of the mda depends on whether
-+ * the PV is in a volume group.  A PV not in a VG has an mda on the
-+ * 'info->mda' list in lvmcache, while a PV in a VG has an mda on
-+ * the vg->fid->metadata_areas list.  For further details, see _vg_read(),
-+ * and the sequence of creating the format_instance with fid->metadata_areas
-+ * list, as well as the construction of the VG, with list of PVs (comes
-+ * after the construction of the fid and list of mdas).
-+ */
-+int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2)
++uint32_t pv_mda_count_disabled(const struct physical_volume *pv)
 +{
-+	if (!mda1->ops->mda_locn_match || !mda2->ops->mda_locn_match ||
-+	    mda1->ops->mda_locn_match != mda2->ops->mda_locn_match)
-+		return 0;
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *mda_vg;
++	uint32_t count=0;
++	struct dm_list *mdas_vg;
 +
-+	return mda1->ops->mda_locn_match(mda1, mda2);
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return 0;
++	if (!is_orphan(pv)) {
++		/*
++		 * If the PV is in a VG, the mdas are attached to the 'fid'.
++		 */
++		mdas_vg = &pv->vg->fid->metadata_areas;
++		dm_list_iterate_items(mda, &info->mdas) {
++			dm_list_iterate_items(mda_vg, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg) &&
++				    mda_is_disabled(mda_vg))
++					count++;
++			}
++		}
++	} else {
++
++		dm_list_iterate_items(mda, &info->mdas) {
++			if (mda_is_disabled(mda))
++				count++;
++		}
++	}
++	return count;
 +}
 +
- int mda_is_disabled(struct metadata_area *mda)
++uint32_t pv_mda_is_disabled(const struct physical_volume *pv)
++{
++	return pv_mda_count_disabled(pv) ? 1 : 0;
++}
++
++int pv_mda_set_disabled(const struct physical_volume *pv, int value)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *mda_vg;
++	struct dm_list *mdas_vg;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return_0;
++
++	if (!is_orphan(pv)) {
++		/*
++		 * Do not allow disabling of the the last PV in a VG.
++		 */
++		if (!pv_mda_count_disabled(pv) &&
++		    (pv_mda_count(pv) ==
++		     vg_mda_count(pv->vg) - vg_mda_count_disabled(pv->vg))) {
++			log_error("Cannot disable metadata - volume group "
++				  "needs at least one enabled physical volume.\n");
++			return 0;
++		}
++		/*
++		 * If the PV is in a VG, the mdas are attached to the 'fid'.
++		 */
++		mdas_vg = &pv->vg->fid->metadata_areas;
++		dm_list_iterate_items(mda, &info->mdas) {
++			dm_list_iterate_items(mda_vg, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg))
++					mda_set_disabled(mda_vg, value);
++			}
++		}
++	} else {
++		dm_list_iterate_items(mda, &info->mdas) {
++			mda_set_disabled(mda, value);
++		}
++	}
++	return 1;
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
  {
- 	return (mda->flags & MDA_DISABLED);
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index e939217..06b6734 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -156,6 +156,12 @@ struct metadata_area_ops {
- 	int (*pv_analyze_mda) (const struct format_type * fmt,
- 			       struct metadata_area *mda);
+ 	return vg->seqno;
+@@ -3739,6 +3815,19 @@ uint32_t vg_mda_count(const struct volume_group *vg)
+ 	return dm_list_size(&vg->fid->metadata_areas);
+ }
  
-+	/*
-+	 * Do these two metadata_areas match with respect to their underlying
-+	 * location?
-+	 */
-+	int (*mda_locn_match)(struct metadata_area *mda1,
-+			      struct metadata_area *mda2);
- };
++uint32_t vg_mda_count_disabled(const struct volume_group *vg)
++{
++	struct metadata_area *mda;
++	uint32_t count=0;
++
++	dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
++		if (mda_is_disabled(mda))
++			count++;
++	}
++
++	return count;
++}
++
+ uint64_t lv_size(const struct logical_volume *lv)
+ {
+ 	return lv->size;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 49ebab4..9dd67d9 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -92,6 +92,7 @@ FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, "pv_pe_count", "Total number of P
+ FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, "pv_pe_alloc_count", "Total number of allocated Physical Extents.")
+ FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, "pv_tags", "Tags, if any.")
+ FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, "pv_mda_count", "Number of metadata areas on this device.")
++FIELD(PVS, pv, NUM, "#PMdaDis", id, 8, pvmdas_disabled, "pv_mda_count_disabled", "Number of metadata areas disabled on this device.")
  
- #define MDA_DISABLED 0x00000001
-@@ -169,6 +175,7 @@ struct metadata_area {
+ FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, "vg_fmt", "Type of metadata.")
+ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, "vg_uuid", "Unique identifier.")
+@@ -111,6 +112,7 @@ FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+ FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
++FIELD(VGS, vg, NUM, "#VMdaDis", cmd, 8, vgmdas_disabled, "vg_mda_count_disabled", "Number of metadata areas disabled in this VG.")
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.")
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.")
  
- int mda_is_disabled(struct metadata_area *mda);
- void mda_set_disabled(struct metadata_area *mda, int value);
-+int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 2cceedd..e6a5785 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -861,6 +861,19 @@ static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
  
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
++static int _pvmdas_disabled_disp(struct dm_report *rh, struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private)
++{
++	uint32_t count;
++	const struct physical_volume *pv =
++	    (const struct physical_volume *) data;
++
++	count = pv_mda_count_disabled(pv);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
+@@ -873,6 +886,18 @@ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _vgmdas_disabled_disp(struct dm_report *rh, struct dm_pool *mem,
++				 struct dm_report_field *field,
++				 const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++	uint32_t count;
++
++	count = vg_mda_count_disabled(vg);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private)
 -- 
 1.6.0.6
 
