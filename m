@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  9 Feb 2010 17:32:23 -0500
-Subject: [PATCH 20/21] Update vgchange tool to handle metadata balance min/max.
-In-Reply-To: <1265754744-17319-20-git-send-email-dwysocha@redhat.com>
+Date: Tue,  9 Feb 2010 17:32:24 -0500
+Subject: [PATCH 21/21] Update metadatabalance tests to include sanity checks for vgchange.
+In-Reply-To: <1265754744-17319-21-git-send-email-dwysocha@redhat.com>
 References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-2-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-3-git-send-email-dwysocha@redhat.com>
@@ -22,7 +22,8 @@ References: <1265754744-17319-1-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-18-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-19-git-send-email-dwysocha@redhat.com>
 	<1265754744-17319-20-git-send-email-dwysocha@redhat.com>
-Message-ID: <1265754744-17319-21-git-send-email-dwysocha@redhat.com>
+	<1265754744-17319-21-git-send-email-dwysocha@redhat.com>
+Message-ID: <1265754744-17319-22-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -32,111 +33,54 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/vgchange.c |   77 +++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 76 insertions(+), 1 deletions(-)
+ test/t-metadata-balance.sh |   25 +++++++++++++++++++++++++
+ 1 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index b4f5d00..ce1ace0 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -532,6 +532,74 @@ static int _vgchange_refresh(struct cmd_context *cmd, struct volume_group *vg)
- 	return ECMD_PROCESSED;
- }
- 
-+static int _vgchange_metadata_balance_min(struct cmd_context *cmd,
-+					  struct volume_group *vg)
-+{
-+	uint32_t value;
+diff --git a/test/t-metadata-balance.sh b/test/t-metadata-balance.sh
+index c0dd679..64e165b 100755
+--- a/test/t-metadata-balance.sh
++++ b/test/t-metadata-balance.sh
+@@ -28,6 +28,8 @@ for mdacp in 1 2; do
+ 	if [ $pv_in_vg = 1 ]; then
+ 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
+ 		check_vg_field_ $vg vg_mda_count_disabled $mdacp
++		check_vg_field_ $vg vg_mda_balance_min 1
++		check_vg_field_ $vg vg_mda_balance_max 3
+ 	fi
+ 	pvchange --metadatadisable n $dev1
+ 	check_pv_field_ $dev1 pv_mda_count $mdacp
+@@ -35,7 +37,30 @@ for mdacp in 1 2; do
+ 	if [ $pv_in_vg = 1 ]; then
+ 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
+ 		check_vg_field_ $vg vg_mda_count_disabled 0
++		check_vg_field_ $vg vg_mda_balance_min 1
++		check_vg_field_ $vg vg_mda_balance_max 3
++		# Sanity test of metadata balance params
++		# 'min' threshold (1 < min <= max)
++		# 'max' threshold (min <= max <= #pvs)
++		not vgchange --metadatabalancemin 0 $vg
++		not vgchange --metadatabalancemin 4 $vg
++		vgchange --metadatabalancemin 2 $vg
++		check_vg_field_ $vg vg_mda_balance_min 2
++		not vgchange --metadatabalancemax 4 $vg
++		vgchange --metadatabalancemax 2 $vg
++		check_vg_field_ $vg vg_mda_balance_max 2
++		vgchange --metadatabalancemax 3 $vg
++		check_vg_field_ $vg vg_mda_balance_max 3
++		vgchange --metadatabalancemin 3 $vg
++		check_vg_field_ $vg vg_mda_balance_min 3
+ 		vgremove -f $vg
+ 	fi
+ done
+ done
 +
-+	value = arg_uint_value(cmd, metadatabalancemin_ARG, 0);
-+	if (value == vg_mda_balance_min(vg)) {
-+		log_error("Metadata balance min of VG %s is already %u",
-+			  vg->name, value);
-+		return ECMD_PROCESSED;
-+	}
++# Test behavior of metadata balance min / max
++# ensure setting min/max affects underlying pv enable/disable
 +
-+	if (!archive(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!vg_set_mda_balance_min(vg, value)) {
-+		stack;
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (!vg_write(vg) || !vg_commit(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	backup(vg);
-+
-+	log_print("Volume group \"%s\" successfully changed", vg->name);
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+static int _vgchange_metadata_balance_max(struct cmd_context *cmd,
-+					  struct volume_group *vg)
-+{
-+	uint32_t value;
-+
-+	value = arg_uint_value(cmd, metadatabalancemax_ARG, 0);
-+	if (value == vg_mda_balance_max(vg)) {
-+		log_error("Metadata balance max of VG %s is already %u",
-+			  vg->name, value);
-+		return ECMD_PROCESSED;
-+	}
-+
-+	if (!archive(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!vg_set_mda_balance_max(vg, value)) {
-+		stack;
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (!vg_write(vg) || !vg_commit(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	backup(vg);
-+
-+	log_print("Volume group \"%s\" successfully changed", vg->name);
-+
-+	return ECMD_PROCESSED;
-+}
-+
- static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 			   struct volume_group *vg,
- 			   void *handle __attribute((unused)))
-@@ -596,6 +664,12 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 	else if (arg_count(cmd, refresh_ARG))
- 		r = _vgchange_refresh(cmd, vg);
- 
-+	else if (arg_count(cmd, metadatabalancemin_ARG))
-+		r = _vgchange_metadata_balance_min(cmd, vg);
-+
-+	else if (arg_count(cmd, metadatabalancemax_ARG))
-+		r = _vgchange_metadata_balance_max(cmd, vg);
-+
- 	return r;
- }
- 
-@@ -609,7 +683,8 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	     arg_count(cmd, physicalextentsize_ARG) +
- 	     arg_count(cmd, clustered_ARG) + arg_count(cmd, alloc_ARG) +
- 	     arg_count(cmd, monitor_ARG) + arg_count(cmd, poll_ARG) +
--	     arg_count(cmd, refresh_ARG))) {
-+	     arg_count(cmd, refresh_ARG) + arg_count(cmd, metadatabalancemin_ARG) +
-+	     arg_count(cmd, metadatabalancemax_ARG))) {
- 		log_error("Need 1 or more of -a, -c, -l, -p, -s, -x, "
- 			  "--refresh, --uuid, --alloc, --addtag, --deltag, "
- 			  "--monitor or --poll");
++# Setting a larger min value should trigger enabling mdas
++# Setting a smaller max value should trigger disabling mdas
++# vg_mda_count_disabled should always be consistent with min/max
+\ No newline@end of file
 -- 
 1.6.0.6
 
