@@ -1,86 +1,103 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:56:56 +0100
-Subject: [PATCH 10/19] Replicator: using vgs_missed for error count
+Date: Wed, 10 Feb 2010 15:56:57 +0100
+Subject: [PATCH 11/19] Replicator: add replicator to dtree
 In-Reply-To: <cover.1265813098.git.zkabelac@redhat.com>
 References: <cover.1265813098.git.zkabelac@redhat.com>
-Message-ID: <5c0611c8c27e956f3b99363f546b31ee533904ed.1265813098.git.zkabelac@redhat.com>
+Message-ID: <543c2d48d5d52f9ad27e29147e71fc4045e5e192.1265813098.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Lower expected_count for the case of missed VGs so no error is printed
-in case the remote VGs are not opened. Currently it's needed only for
-Replicator target.
+Adding all replicator related LVs to dtree.
+Start of one replicator_dev initiate start of all other related.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/commands/toolcontext.h |    1 +
- tools/toollib.c            |    7 +++++++
- tools/vgchange.c           |   12 ++++++++++--
- 3 files changed, 18 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c |   60 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 59 insertions(+), 1 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 533cd04..2723725 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -55,6 +55,7 @@ struct replicator_info {
- 	struct dm_list vgs_lvs_retry;	/* Retry LVs with more VGs */
- 	struct dm_list vgs_list;	/* Required read-only VGs */
- 	int vgs_missed;			/* Missed VGs */
-+	char *vgs_print;		/* Error case print */
- };
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 11bc146..78a70e9 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1155,6 +1155,58 @@ static int _add_target_to_dtree(struct dev_manager *dm,
+ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 				  struct logical_volume *lv, const char *layer);
  
- struct config_tree;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 34683e9..fc750e1 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -559,6 +559,13 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
- 			}
- 	}
- out:
-+	if (cmd->rep_info.vgs_print) {
-+		/* Postponed print */
-+		log_print("%s", cmd->rep_info.vgs_print);
-+		dm_free(cmd->rep_info.vgs_print);
-+		cmd->rep_info.vgs_print = NULL;
++/* Add all replicators' LVs from active segment */
++static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
++					       struct dm_tree *dtree,
++					       struct lv_segment *seg)
++{
++	struct replicator_device *rdev;
++	struct replicator_site *rsite;
++
++	/* Only active replicator */
++	if (!lv_is_active_replicator_dev(seg->lv)) {
++		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv->rdevice->lv, NULL))
++			return_0;
++		return 1;
 +	}
 +
- 	dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
- 		if (vnl->vg) {
- 			unlock_and_release_vg(cmd, vnl->vg, vnl->name);
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index b4f5d00..29d891b 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -145,6 +145,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- 		count++;
- 	}
- 
-+	expected_count -= cmd->rep_info.vgs_missed;
- 	if (expected_count)
- 		log_verbose("%s %d logical volumes in volume group %s",
- 			    (activate == CHANGE_AN || activate == CHANGE_ALN)?
-@@ -224,8 +225,15 @@ static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
- 
- 	ret = _activate_lvs_in_vg(cmd, vg, available);
- 
--	log_print("%d logical volume(s) in volume group \"%s\" now active",
--		  lvs_in_vg_activated(vg), vg->name);
-+	/* Postpone print */
-+	dm_free(cmd->rep_info.vgs_print);
-+	if (dm_asprintf(&cmd->rep_info.vgs_print,
-+			"%d logical volume(s) in volume group \"%s\" now active",
-+			lvs_in_vg_activated(vg), vg->name) < 0) {
-+		log_error("Failed to allocate memory for active message");
-+		cmd->rep_info.vgs_print = NULL;
++	/* Activation of one replicator node activate all other nodes */
++	if (!seg->replicator ||
++	    !_add_new_lv_to_dtree(dm, dtree, seg->replicator, NULL))
++		return_0;
++
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (!rdev->lv || /* Resolved in _partial */
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->lv, NULL))
++				return_0;
++
++			if (rdev->slog &&
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->slog, NULL))
++				return_0;
++		}
++	}
++	/* Add remaining replicator-dev nodes in the second loop
++	 * to avoid multiple retries for inserting all elements */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		if (rsite->state != REPLICATOR_STATE_ACTIVE)
++			continue;
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rdev->replicator_dev->lv == seg->lv)
++				continue;
++			if (!rdev->replicator_dev->lv ||
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->replicator_dev->lv,
++						  NULL))
++				return_0;
++		}
 +	}
 +
- 	return ret;
- }
++	return 1;
++}
++
+ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 				   struct dm_tree *dtree,
+ 				   struct dm_tree_node *dnode,
+@@ -1185,9 +1237,15 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, NULL))
+ 		return_0;
  
++	if (seg_is_replicator_dev(seg)) {
++		if (!_add_replicator_dev_target_to_dtree(dm, dtree, seg))
++			return_0;
++	} else if (seg_is_replicator(seg) && seg->rlog_lv) {
++		if (!_add_new_lv_to_dtree(dm, dtree, seg->rlog_lv, NULL))
++			return_0;
+ 	/* If this is a snapshot origin, add real LV */
+ 	/* If this is a snapshot origin + merging snapshot, add cow + real LV */
+-	if (lv_is_origin(seg->lv) && !layer) {
++	} else if (lv_is_origin(seg->lv) && !layer) {
+ 		if (vg_is_clustered(seg->lv->vg)) {
+ 			log_error("Clustered snapshots are not yet supported");
+ 			return 0;
 -- 
 1.6.6.1
 
