@@ -1,9 +1,9 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:55:42 +0100
-Subject: [PATCH 3/6] Clean gcc const warning
+Date: Wed, 10 Feb 2010 15:55:43 +0100
+Subject: [PATCH 4/6] Cleanup float arithmetic gcc warning
 In-Reply-To: <cover.1265812946.git.zkabelac@redhat.com>
 References: <cover.1265812946.git.zkabelac@redhat.com>
-Message-ID: <8e90ab28e6e1653b24c69d57726337379f40b09b.1265812946.git.zkabelac@redhat.com>
+Message-ID: <a4b47d75120fbb181db5586bd0809763b457f86d.1265812946.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,49 +13,31 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/report/report.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/report/report.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 2cceedd..cf037cb 100644
+index cf037cb..e27f4e1 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -66,7 +66,7 @@ static int _dev_name_disp(struct dm_report *rh, struct dm_pool *mem __attribute(
- 			  struct dm_report_field *field,
- 			  const void *data, void *private __attribute((unused)))
- {
--	const char *name = dev_name(*(const struct device **) data);
-+	const char *name = dev_name(*(const struct device * const *) data);
+@@ -1055,7 +1055,7 @@ static int _snpercent_disp(struct dm_report *rh __attribute((unused)), struct dm
+ 		return 0;
+ 	}
  
- 	return dm_report_field_string(rh, field, &name);
- }
-@@ -795,7 +795,7 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
- 			 struct dm_report_field *field,
- 			 const void *data, void *private)
- {
--	const struct device *dev = *(const struct device **) data;
-+	const struct device *dev = *(const struct device * const *) data;
- 	uint64_t size;
+-	*sortval = snap_percent * UINT64_C(1000);
++	*sortval = (uint64_t)(snap_percent * 1000.f);
+ 	dm_report_field_set_value(field, repstr, sortval);
  
- 	if (!dev_get_size(dev, &size))
-@@ -879,7 +879,7 @@ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	struct lvmcache_info *info;
- 	uint64_t freespace = UINT64_MAX, mda_free;
--	const char *pvid = (const char *)(&((struct id *) data)->uuid);
-+	const char *pvid = (const char *)(&((const struct id *) data)->uuid);
- 	struct metadata_area *mda;
+ 	return 1;
+@@ -1097,7 +1097,7 @@ static int _copypercent_disp(struct dm_report *rh __attribute((unused)),
+ 		return 0;
+ 	}
  
- 	if ((info = info_from_pvid(pvid, 0)))
-@@ -922,7 +922,7 @@ static int _pvmdasize_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	struct lvmcache_info *info;
- 	uint64_t min_mda_size = 0;
--	const char *pvid = (const char *)(&((struct id *) data)->uuid);
-+	const char *pvid = (const char *)(&((const struct id *) data)->uuid);
+-	*sortval = percent * UINT64_C(1000);
++	*sortval = (uint64_t)(percent * 1000.f);
+ 	dm_report_field_set_value(field, repstr, sortval);
  
- 	/* PVs could have 2 mdas of different sizes (rounding effect) */
- 	if ((info = info_from_pvid(pvid, 0)))
+ 	return 1;
 -- 
 1.6.6.1
 
