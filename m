@@ -1,118 +1,191 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:56:52 +0100
-Subject: [PATCH 06/19] Replicator: add sorted vg_name_list
+Date: Wed, 10 Feb 2010 15:56:53 +0100
+Subject: [PATCH 07/19] Replicator: use vg_name_list for _process_one_vg()
 In-Reply-To: <cover.1265813098.git.zkabelac@redhat.com>
 References: <cover.1265813098.git.zkabelac@redhat.com>
-Message-ID: <10f98d6f25b9dc05911d33872de33b9efd96ad94.1265813098.git.zkabelac@redhat.com>
+Message-ID: <ae93ebe34651e4aba68e5fe00e4e970d7917f91a.1265813098.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Introduce struct vg_name_list to store information about needed
-volume group name and the pointer to opened VG.
+Use the list of sorted VG names from replication_info structure
+inside cmd_context structure.
 
-VG must be opened in alphabetical order, thus elements in the list
-are being kept ordered all the time.
+Patch modifes behavior of _process_one_vg() by handling error case
+from vg_read() immeditaly and not in the 'out:' path.
 
-Introduce functions vg_name_list_add(), vg_name_list_lookup().
-They extend dm_list functionality.
+In the first pass the plain vg_read() for the given name is used.
+Replicator collects sorted list of required VG names in this run.
+If any of them is not yet opened the next loop is taken with
+alphabetically opened collected VGs.
+
+Openned VGs are released in reversed order from their open order.
+
+Extra flag vgs_missed is used to detect state, when some of VGs are
+missing.
+
+CHECKME: flags for external VGs could be probably different.
+         memory release from cmd_context list.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/metadata-exported.h |   17 ++++++++++++++
- lib/metadata/replicator_manip.c  |   45 ++++++++++++++++++++++++++++++++++++++
- 2 files changed, 62 insertions(+), 0 deletions(-)
+ lib/commands/toolcontext.c |    1 +
+ lib/commands/toolcontext.h |   12 ++++++
+ tools/toollib.c            |   89 +++++++++++++++++++++++++++++++++-----------
+ 3 files changed, 80 insertions(+), 22 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 7af272b..0b955b6 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -283,6 +283,14 @@ struct lv_segment_area {
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index b0f8fd4..52be49b 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1102,6 +1102,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 	dm_list_init(&cmd->segtypes);
+ 	dm_list_init(&cmd->tags);
+ 	dm_list_init(&cmd->config_files);
++	dm_list_init(&cmd->rep_info.vgs_list);
  
- struct segment_type;
+ 	/* FIXME Make this configurable? */
+ 	reset_lvm_errno(1);
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index eac5721..2349e64 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -46,6 +46,16 @@ struct config_info {
+ 	char _padding[1];
+ };
  
-+/* List with VG names
-+ * similar to  str_list with one extra pointer */
-+struct vg_name_list {
-+	struct dm_list list;
-+	const char *name;
-+	struct volume_group *vg;
++/*
++ * FIXME  This structure is currently used for passing parameters
++ *        between tools command and activation code
++ *        this is not functional in clustered environment
++ */
++struct replicator_info {
++	struct dm_list vgs_list;	/* Required read-only VGs */
++	int vgs_missed;			/* Missed VGs */
 +};
 +
- /* ++ replicator datatypes */
- typedef enum {
- 	REPLICATOR_STATE_PASSIVE,
-@@ -784,6 +792,15 @@ int lv_is_slog(const struct logical_volume *lv);
- /* Returns first replicator-dev in site in case the LV is replicator-dev, NULL otherwise */
- struct logical_volume *first_replicator_dev(const struct logical_volume *lv);
- /* --  metadata/replicator_manip.c */
-+/*
-+ * Maintain the alphabeticaly ordered list, avoid duplications
-+ * return either newly created or already present vg_name_list entry
-+ */
-+struct vg_name_list *vg_name_list_add(struct dm_pool *mem, struct dm_list *,
-+				      const char *name);
-+/* Find element with given name in vg_name_list list */
-+struct vg_name_list *vg_name_list_lookup(struct dm_list *, const char *name);
+ struct config_tree;
+ struct archive_params;
+ struct backup_params;
+@@ -96,6 +106,8 @@ struct cmd_context {
+ 	char dev_dir[PATH_MAX];
+ 	char proc_dir[PATH_MAX];
+ 	char sysfs_dir[PATH_MAX];
 +
++	struct replicator_info rep_info;
+ };
  
- struct logical_volume *find_pvmove_lv(struct volume_group *vg,
- 				      struct device *dev, uint32_t lv_type);
-diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
-index 0c5b9a1..afcbd86 100644
---- a/lib/metadata/replicator_manip.c
-+++ b/lib/metadata/replicator_manip.c
-@@ -314,3 +314,48 @@ struct logical_volume *first_replicator_dev(const struct logical_volume *lv)
+ /*
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e4040f8..cb7105a 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -424,36 +424,81 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 						  struct volume_group * vg,
+ 						  void *handle))
+ {
+-	struct volume_group *vg;
++	struct volume_group *vg, *rvg;
++	struct vg_name_list *vnl;
+ 	int ret = 0;
  
- 	return NULL;
- }
+ 	log_verbose("Finding volume group \"%s\"", vg_name);
+ 
+-	vg = vg_read(cmd, vg_name, vgid, flags);
+-	/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
+-	if (vg_read_error(vg) &&
+-	    !((vg_read_error(vg) == FAILED_INCONSISTENT) &&
+-	      (flags & READ_ALLOW_INCONSISTENT))) {
+-		ret_max = ECMD_FAILED;
+-		goto_out;
+-	}
++	dm_list_init(&cmd->rep_info.vgs_list);
++	if (!vg_name_list_add(cmd->mem, &cmd->rep_info.vgs_list, vg_name))
++		return_0;
+ 
+-	if (!dm_list_empty(tags)) {
+-		/* Only process if a tag matches or it's on arg_vgnames */
+-		if (!str_list_match_item(arg_vgnames, vg_name) &&
+-		    !str_list_match_list(tags, &vg->tags))
+-			goto out;
+-	}
++	while (!sigint_caught()) {
++		vg = NULL;
++		/* Iterate through alphabeticaly ordered list */
++		dm_list_iterate_items(vnl, &cmd->rep_info.vgs_list) {
++			if (!vg && strcmp(vnl->name, vg_name) == 0)
++				rvg = vg = vg_read(cmd, vg_name, vgid, flags);
++			else /* CHECKME: use different flags for remote VG? */
++				rvg = vg_read(cmd, vnl->name, NULL, flags);
 +
-+/* Add to sorted list */
-+struct vg_name_list *vg_name_list_add(struct dm_pool *mem, struct dm_list *l,
-+				      const char *name)
-+{
-+	struct vg_name_list *vnl, *ins;
++			if (vg_read_error(rvg)) {
++				if ((vg != rvg) ||
++				    /* Allow FAILED_INCONSISTENT through
++				     * only for vgcfgrestore */
++				    !((flags & READ_ALLOW_INCONSISTENT) &&
++				      (vg_read_error(vg) == FAILED_INCONSISTENT))) {
++					vg_release(vg);
++					ret_max = ECMD_FAILED;
++					goto_out;
++				}
++			} else
++				vnl->vg = rvg; /* Only correctly opened */
 +
-+	/* Is already in the list ? */
-+	if ((vnl = vg_name_list_lookup(l, name)))
-+		return vnl;
-+
-+	if (!(vnl = dm_pool_alloc(mem, sizeof(*vnl)))) {
-+		log_error("Allocation of vg_name_list failed.");
-+		return NULL;
-+	}
-+
-+	if (!(vnl->name = dm_pool_strdup(mem, name))) {
-+		dm_pool_free(mem, vnl);
-+		log_error("Allocation of name failed.");
-+		return NULL;
-+	}
-+
-+	vnl->vg = NULL;
-+	dm_list_iterate_items(ins, l)
-+		if (strcmp(name, ins->name) < 0) {
-+			l = &ins->list;
++			if (rvg == vg &&
++			    !dm_list_empty(tags) &&
++			    /* Only process if a tag matches or it's on arg_vgnames */
++			    !str_list_match_item(arg_vgnames, vg_name) &&
++			    !str_list_match_list(tags, &vg->tags)) {
++				if (vg_read_error(vg))
++					vg_release(vg);
++				break;
++			}
++		}
+ 
+-	if ((ret = process_single(cmd, vg_name, vg,
+-				  handle)) > ret_max)
+-		ret_max = ret;
++		cmd->rep_info.vgs_missed = 0;
++		if ((ret = process_single(cmd, vg_name, vg,
++					  handle)) > ret_max)
++			ret_max = ret;
+ 
++		if (vg_read_error(vg)) {
++			/* Leave for inconsistent case */
++			vg_release(vg);
 +			break;
 +		}
 +
-+	dm_list_add(l, &vnl->list);
++		if (!cmd->rep_info.vgs_missed)
++			break;
 +
-+	return vnl;
-+}
++		/* Release opened VGs in reverse order */
++		dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
++			if (vnl->vg) {
++				unlock_and_release_vg(cmd, vnl->vg, vnl->name);
++				vnl->vg = NULL;
++			}
++	}
+ out:
+-	if (vg_read_error(vg))
+-		vg_release(vg);
+-	else
+-		unlock_and_release_vg(cmd, vg, vg_name);
++	dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
++		if (vnl->vg) {
++			unlock_and_release_vg(cmd, vnl->vg, vnl->name);
++			vnl->vg = NULL;
++		}
++	/*
++	 * CHECKME: empty cmd->rep_info.vgs_list?
++	 * using dm_malloc instead of dm_pool, as the list is reordered?
++	 */
 +
-+/* Lookup element with given name in ordered vg_name_list */
-+struct vg_name_list *vg_name_list_lookup(struct dm_list *l, const char *name)
-+{
-+	struct vg_name_list *vnl;
-+
-+	dm_list_iterate_items(vnl, l)
-+		if (!strcmp(name, vnl->name))
-+			return vnl;
-+
-+	return NULL;
-+}
+ 	return ret_max;
+ }
+ 
 -- 
 1.6.6.1
 
