@@ -1,191 +1,168 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:56:53 +0100
-Subject: [PATCH 07/19] Replicator: use vg_name_list for _process_one_vg()
+Date: Wed, 10 Feb 2010 15:56:54 +0100
+Subject: [PATCH 08/19] Replicator: use str_list for process_each_lv_in_vg
 In-Reply-To: <cover.1265813098.git.zkabelac@redhat.com>
 References: <cover.1265813098.git.zkabelac@redhat.com>
-Message-ID: <ae93ebe34651e4aba68e5fe00e4e970d7917f91a.1265813098.git.zkabelac@redhat.com>
+Message-ID: <3b4c6905669b0165b9d5594e04c9011607885db3.1265813098.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use the list of sorted VG names from replication_info structure
-inside cmd_context structure.
+As for _process_one_vg() we need similar retry loop for
+process_each_lv_in_vg(). This patch tries to collect missed LVs and
+then reopens collected VGs and process only selected LVs again.
 
-Patch modifes behavior of _process_one_vg() by handling error case
-from vg_read() immeditaly and not in the 'out:' path.
+Patch does not add any extra repeated invocations if there is no missed
+VG during LV processing.
 
-In the first pass the plain vg_read() for the given name is used.
-Replicator collects sorted list of required VG names in this run.
-If any of them is not yet opened the next loop is taken with
-alphabetically opened collected VGs.
-
-Openned VGs are released in reversed order from their open order.
-
-Extra flag vgs_missed is used to detect state, when some of VGs are
-missing.
-
-CHECKME: flags for external VGs could be probably different.
-         memory release from cmd_context list.
+replication_info in cmd_context is extended to avoid API change with
+vgs_lvs_retry list.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
  lib/commands/toolcontext.c |    1 +
- lib/commands/toolcontext.h |   12 ++++++
- tools/toollib.c            |   89 +++++++++++++++++++++++++++++++++-----------
- 3 files changed, 80 insertions(+), 22 deletions(-)
+ lib/commands/toolcontext.h |    1 +
+ tools/toollib.c            |   74 ++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 74 insertions(+), 2 deletions(-)
 
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index b0f8fd4..52be49b 100644
+index 52be49b..a3bc798 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -1102,6 +1102,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 	dm_list_init(&cmd->segtypes);
+@@ -1103,6 +1103,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
  	dm_list_init(&cmd->tags);
  	dm_list_init(&cmd->config_files);
-+	dm_list_init(&cmd->rep_info.vgs_list);
+ 	dm_list_init(&cmd->rep_info.vgs_list);
++	dm_list_init(&cmd->rep_info.vgs_lvs_retry);
  
  	/* FIXME Make this configurable? */
  	reset_lvm_errno(1);
 diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index eac5721..2349e64 100644
+index 2349e64..533cd04 100644
 --- a/lib/commands/toolcontext.h
 +++ b/lib/commands/toolcontext.h
-@@ -46,6 +46,16 @@ struct config_info {
- 	char _padding[1];
+@@ -52,6 +52,7 @@ struct config_info {
+  *        this is not functional in clustered environment
+  */
+ struct replicator_info {
++	struct dm_list vgs_lvs_retry;	/* Retry LVs with more VGs */
+ 	struct dm_list vgs_list;	/* Required read-only VGs */
+ 	int vgs_missed;			/* Missed VGs */
  };
- 
-+/*
-+ * FIXME  This structure is currently used for passing parameters
-+ *        between tools command and activation code
-+ *        this is not functional in clustered environment
-+ */
-+struct replicator_info {
-+	struct dm_list vgs_list;	/* Required read-only VGs */
-+	int vgs_missed;			/* Missed VGs */
-+};
-+
- struct config_tree;
- struct archive_params;
- struct backup_params;
-@@ -96,6 +106,8 @@ struct cmd_context {
- 	char dev_dir[PATH_MAX];
- 	char proc_dir[PATH_MAX];
- 	char sysfs_dir[PATH_MAX];
-+
-+	struct replicator_info rep_info;
- };
- 
- /*
 diff --git a/tools/toollib.c b/tools/toollib.c
-index e4040f8..cb7105a 100644
+index cb7105a..34683e9 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -424,36 +424,81 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
- 						  struct volume_group * vg,
- 						  void *handle))
- {
+@@ -118,6 +118,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		process_all = 1;
+ 	}
+ 
++	dm_list_init(&cmd->rep_info.vgs_lvs_retry);
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		if (lvl->lv->status & SNAPSHOT)
+ 			continue;
+@@ -147,7 +148,17 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		if (!process_lv)
+ 			continue;
+ 
++		cmd->rep_info.vgs_missed = 0;
+ 		ret = process_single(cmd, lvl->lv, handle);
++		if (cmd->rep_info.vgs_missed) {
++			if (!str_list_add(cmd->mem, &cmd->rep_info.vgs_lvs_retry,
++					  dm_pool_strdup(cmd->mem,
++							 lvl->lv->name))) {
++				log_error("Allocation failed for str_list.");
++				return ECMD_FAILED;
++			}
++			ret = 0;
++		}
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+ 		if (sigint_caught())
+@@ -175,8 +186,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	struct dm_list *tags_arg;
+ 	struct dm_list *vgnames;	/* VGs to process */
+-	struct str_list *sll, *strl;
 -	struct volume_group *vg;
++	struct str_list *sll, *strl, *sllt;
 +	struct volume_group *vg, *rvg;
 +	struct vg_name_list *vnl;
- 	int ret = 0;
+ 	struct dm_list tags, lvnames;
+ 	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
+ 	char *vglv;
+@@ -319,11 +331,69 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 			}
+ 		}
  
- 	log_verbose("Finding volume group \"%s\"", vg_name);
- 
--	vg = vg_read(cmd, vg_name, vgid, flags);
--	/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
--	if (vg_read_error(vg) &&
--	    !((vg_read_error(vg) == FAILED_INCONSISTENT) &&
--	      (flags & READ_ALLOW_INCONSISTENT))) {
--		ret_max = ECMD_FAILED;
--		goto_out;
--	}
-+	dm_list_init(&cmd->rep_info.vgs_list);
-+	if (!vg_name_list_add(cmd->mem, &cmd->rep_info.vgs_list, vg_name))
-+		return_0;
- 
--	if (!dm_list_empty(tags)) {
--		/* Only process if a tag matches or it's on arg_vgnames */
--		if (!str_list_match_item(arg_vgnames, vg_name) &&
--		    !str_list_match_list(tags, &vg->tags))
--			goto out;
--	}
-+	while (!sigint_caught()) {
-+		vg = NULL;
-+		/* Iterate through alphabeticaly ordered list */
-+		dm_list_iterate_items(vnl, &cmd->rep_info.vgs_list) {
-+			if (!vg && strcmp(vnl->name, vg_name) == 0)
-+				rvg = vg = vg_read(cmd, vg_name, vgid, flags);
-+			else /* CHECKME: use different flags for remote VG? */
-+				rvg = vg_read(cmd, vnl->name, NULL, flags);
++		dm_list_init(&cmd->rep_info.vgs_list);
+ 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
+ 					    handle, process_single);
+ 		unlock_and_release_vg(cmd, vg, vgname);
+ 		if (ret > ret_max)
+ 			ret_max = ret;
 +
-+			if (vg_read_error(rvg)) {
-+				if ((vg != rvg) ||
-+				    /* Allow FAILED_INCONSISTENT through
-+				     * only for vgcfgrestore */
-+				    !((flags & READ_ALLOW_INCONSISTENT) &&
-+				      (vg_read_error(vg) == FAILED_INCONSISTENT))) {
-+					vg_release(vg);
-+					ret_max = ECMD_FAILED;
-+					goto_out;
++		while (!sigint_caught() &&
++		       !dm_list_empty(&cmd->rep_info.vgs_lvs_retry)) {
++			/*
++			 * Try again with missed LVs in this VG
++			 * Use retry list as list of LVs to be processed
++			 * CHECKME: maybe add support dm_list_splice()
++			 */
++			dm_list_init(&lvnames);
++			dm_list_iterate_items_safe(sll, sllt,
++						   &cmd->rep_info.vgs_lvs_retry)
++				dm_list_move(&lvnames, &sll->list);
++
++			if (!vg_name_list_add(cmd->mem, &cmd->rep_info.vgs_list,
++					      vgname)) {
++				stack;
++				return ECMD_FAILED;
++			}
++
++			vg = NULL;
++			dm_list_iterate_items(vnl, &cmd->rep_info.vgs_list) {
++				if (!vg && strcmp(vnl->name, vgname) == 0)
++					rvg = vg = vg_read(cmd, vgname,
++							   NULL, flags);
++				else
++					/*
++					 * CHECKME: Use different flags
++					 *          for remote vg ??
++					 */
++					rvg = vg_read(cmd, vnl->name,
++						      NULL, flags);
++
++				if (vg_read_error(rvg)) {
++					vg_release(rvg);
++					log_error("Skipping volume group %s.",
++						  vnl->name);
++					vg = NULL;
++					break;
 +				}
-+			} else
 +				vnl->vg = rvg; /* Only correctly opened */
-+
-+			if (rvg == vg &&
-+			    !dm_list_empty(tags) &&
-+			    /* Only process if a tag matches or it's on arg_vgnames */
-+			    !str_list_match_item(arg_vgnames, vg_name) &&
-+			    !str_list_match_list(tags, &vg->tags)) {
-+				if (vg_read_error(vg))
-+					vg_release(vg);
-+				break;
 +			}
-+		}
- 
--	if ((ret = process_single(cmd, vg_name, vg,
--				  handle)) > ret_max)
--		ret_max = ret;
-+		cmd->rep_info.vgs_missed = 0;
-+		if ((ret = process_single(cmd, vg_name, vg,
-+					  handle)) > ret_max)
-+			ret_max = ret;
- 
-+		if (vg_read_error(vg)) {
-+			/* Leave for inconsistent case */
-+			vg_release(vg);
-+			break;
++
++			ret = (!vg) ? ECMD_FAILED :
++				process_each_lv_in_vg(cmd, vg, &lvnames,
++						      tags_arg, handle,
++						      process_single);
++
++			dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
++				if (vnl->vg) {
++					unlock_and_release_vg(cmd, vnl->vg,
++							      vnl->name);
++					vnl->vg = NULL;
++				}
++			if (ret > ret_max)
++				ret_max = ret;
 +		}
 +
-+		if (!cmd->rep_info.vgs_missed)
-+			break;
-+
-+		/* Release opened VGs in reverse order */
-+		dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
-+			if (vnl->vg) {
-+				unlock_and_release_vg(cmd, vnl->vg, vnl->name);
-+				vnl->vg = NULL;
-+			}
-+	}
- out:
--	if (vg_read_error(vg))
--		vg_release(vg);
--	else
--		unlock_and_release_vg(cmd, vg, vg_name);
-+	dm_list_iterate_back_items(vnl, &cmd->rep_info.vgs_list)
-+		if (vnl->vg) {
-+			unlock_and_release_vg(cmd, vnl->vg, vnl->name);
-+			vnl->vg = NULL;
-+		}
-+	/*
-+	 * CHECKME: empty cmd->rep_info.vgs_list?
-+	 * using dm_malloc instead of dm_pool, as the list is reordered?
-+	 */
-+
- 	return ret_max;
- }
- 
+ 		if (sigint_caught())
+ 			break;
+ 	}
 -- 
 1.6.6.1
 
