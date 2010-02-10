@@ -1,9 +1,9 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:55:40 +0100
-Subject: [PATCH 1/6] Cleanup gcc warning: function declaration isn't a prototype
+Date: Wed, 10 Feb 2010 15:55:41 +0100
+Subject: [PATCH 2/6] Cleanup gcc const warning
 In-Reply-To: <cover.1265812946.git.zkabelac@redhat.com>
 References: <cover.1265812946.git.zkabelac@redhat.com>
-Message-ID: <3b6d2f241a4307c09918dd51db9e0fa0424718ad.1265812946.git.zkabelac@redhat.com>
+Message-ID: <80c74b24ed1b9290086033a7fd60a783b0700bb6.1265812946.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,21 +13,23 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvmcmdline.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/libdm-report.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 85d6ce3..4881d54 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -912,7 +912,7 @@ static void _apply_settings(struct cmd_context *cmd)
- 	cmd->handles_missing_pvs = 0;
- }
- 
--static void _set_udev_checking()
-+static void _set_udev_checking(void)
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 9925614..aead864 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -819,8 +819,8 @@ static int _report_headings(struct dm_report *rh)
+  */
+ static int _row_compare(const void *a, const void *b)
  {
- 	const char *e;
+-	const struct row *rowa = *(const struct row **) a;
+-	const struct row *rowb = *(const struct row **) b;
++	const struct row *rowa = *(const struct row * const *) a;
++	const struct row *rowb = *(const struct row * const *) b;
+ 	const struct dm_report_field *sfa, *sfb;
+ 	uint32_t cnt;
  
 -- 
 1.6.6.1
