@@ -1,34 +1,33 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 10 Feb 2010 15:56:21 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100210155621.4877.qmail@sourceware.org>
+From: Malahal Naineni <malahal@us.ibm.com>
+Date: Wed, 10 Feb 2010 09:12:48 -0800
+Subject: [PATCH] Ignore _mlog name restriction for lvconvert repair
+Message-ID: <471e224a57131c07b705.1265821968@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-02-10 15:56:21
+lvconvert --repair is done on _mlog mirrored log logical volumes from
+dmeventd if something fails.
 
-Modified files:
-	.              : WHATS_NEW 
-
-Log message:
-	Add 'fail_if_percent_unsupported' arg to _percent() and _percent_run().
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1424&r2=1.1425
-
---- LVM2/WHATS_NEW	2010/02/08 23:28:06	1.1424
-+++ LVM2/WHATS_NEW	2010/02/10 15:56:20	1.1425
-@@ -1,5 +1,6 @@
- Version 2.02.61 - 
- ===================================
-+  Add 'fail_if_percent_unsupported' arg to _percent() and _percent_run().
-   Remove false "failed to find tree node for" error when activating merging origin.
-   Make lvconvert --repair --use-policies exit with success when no action is needed.
-   Add multiple snapshot lv 'lvconvert --merge @tag' support via process_each_lv().
+diff -r 86200db56a7c -r 471e224a5713 tools/lvconvert.c
+--- a/tools/lvconvert.c	Tue Feb 09 17:49:50 2010 -0800
++++ b/tools/lvconvert.c	Wed Feb 10 09:12:11 2010 -0800
+@@ -105,8 +105,12 @@ static int _lvconvert_name_params(struct
+ 	if ((ptr = strrchr(lp->lv_name_full, '/')))
+ 		lp->lv_name = ptr + 1;
+ 
+-	if (!apply_lvname_restrictions(lp->lv_name))
+-		return_0;
++	/* _mlog is an internal name, but it could be mirrored, so
++	 * allow repairing it.
++	 */
++	if (!arg_count(cmd, repair_ARG) || !strstr(lp->lv_name, "_mlog"))
++		if (!apply_lvname_restrictions(lp->lv_name))
++			return_0;
+ 
+ 	if (*pargc && lp->snapshot) {
+ 		log_error("Too many arguments provided for snapshots");
 
 
