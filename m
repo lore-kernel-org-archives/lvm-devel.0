@@ -1,28 +1,35 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Feb 2010 15:55:39 +0100
-Subject: [PATCH 0/6] Minor fixes and updates
-Message-ID: <cover.1265812946.git.zkabelac@redhat.com>
+Date: Wed, 10 Feb 2010 15:55:40 +0100
+Subject: [PATCH 1/6] Cleanup gcc warning: function declaration isn't a prototype
+In-Reply-To: <cover.1265812946.git.zkabelac@redhat.com>
+References: <cover.1265812946.git.zkabelac@redhat.com>
+Message-ID: <3b6d2f241a4307c09918dd51db9e0fa0424718ad.1265812946.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Set of miscelaneous updates and fixes awaiting some review 
-- especially the last patch
 
-Zdenek Kabelac (6):
-  Cleanup gcc warning: function declaration isn't a prototype
-  Cleanup gcc const warning
-  Clean gcc const warning
-  Cleanup float arithmetic gcc warning
-  Fix report_uint64
-  Fix compiler warning about strict-aliasing break
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ tools/lvmcmdline.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
- lib/device/device.c  |   18 +++++++++---------
- lib/report/report.c  |   12 ++++++------
- libdm/libdm-report.c |   12 ++++++------
- tools/lvmcmdline.c   |    2 +-
- 4 files changed, 22 insertions(+), 22 deletions(-)
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 85d6ce3..4881d54 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -912,7 +912,7 @@ static void _apply_settings(struct cmd_context *cmd)
+ 	cmd->handles_missing_pvs = 0;
+ }
+ 
+-static void _set_udev_checking()
++static void _set_udev_checking(void)
+ {
+ 	const char *e;
+ 
+-- 
+1.6.6.1
 
 
