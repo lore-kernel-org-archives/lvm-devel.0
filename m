@@ -1,109 +1,43 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 16 Feb 2010 17:49:19 -0000
-Subject: LVM2/test t-tags.sh
-Message-ID: <20100216174919.26486.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Thu, 11 Feb 2010 14:55:05 -0500
+Subject: [PATCH] Ignore _mlog name restriction for lvconvert repair
+In-Reply-To: <471e224a57131c07b705.1265821968@localhost>
+References: <471e224a57131c07b705.1265821968@localhost>
+Message-ID: <4B746099.7010709@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-02-16 17:49:19
+Malahal Naineni wrote:
+> lvconvert --repair is done on _mlog mirrored log logical volumes from
+> dmeventd if something fails.
+> 
+> diff -r 86200db56a7c -r 471e224a5713 tools/lvconvert.c
+> --- a/tools/lvconvert.c	Tue Feb 09 17:49:50 2010 -0800
+> +++ b/tools/lvconvert.c	Wed Feb 10 09:12:11 2010 -0800
+> @@ -105,8 +105,12 @@ static int _lvconvert_name_params(struct
+>  	if ((ptr = strrchr(lp->lv_name_full, '/')))
+>  		lp->lv_name = ptr + 1;
+>  
+> -	if (!apply_lvname_restrictions(lp->lv_name))
+> -		return_0;
+> +	/* _mlog is an internal name, but it could be mirrored, so
+> +	 * allow repairing it.
+> +	 */
+> +	if (!arg_count(cmd, repair_ARG) || !strstr(lp->lv_name, "_mlog"))
+> +		if (!apply_lvname_restrictions(lp->lv_name))
+> +			return_0;
+>  
+>  	if (*pargc && lp->snapshot) {
+>  		log_error("Too many arguments provided for snapshots");
 
-Added files:
-	test           : t-tags.sh 
+lvname is better to be checked if a logical volume is not mirrored log
+but simple logical volume. How about using (lv->status & MIRRORED) for
+the check?
 
-Log message:
-	Add nightly test to cover vg/lv tags add/delete.
-	
-	Simple nightly test coverage for adding / deleting lv/vg tags via
-	create and change functions.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-tags.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-
-/cvs/lvm2/LVM2/test/t-tags.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-tags.sh
-+++ -	2010-02-16 17:49:19.224000000 +0000
-@@ -0,0 +1,74 @@
-+# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. ./test-utils.sh
-+
-+aux prepare_pvs 5
-+
-+# vgcreate with --addtag
-+vgcreate -c n --addtag firstvg $vg1 $dev1 $dev2
-+vgcreate -c n --addtag secondvg $vg2 $dev3 $dev4
-+check_vg_field_ $vg1 tags firstvg
-+check_vg_field_ $vg2 tags secondvg
-+vgremove -ff $vg1
-+vgremove -ff $vg2
-+
-+# vgchange with --addtag and --deltag
-+vgcreate -c n $vg1 $dev1 $dev2
-+vgcreate -c n $vg2 $dev3 $dev4
-+vgchange --addtag firstvgtag1 $vg1
-+# adding a tag multiple times is not an error
-+vgchange --addtag firstvgtag2 $vg1
-+vgchange --addtag firstvgtag2 $vg1
-+vgchange --addtag firstvgtag3 $vg1
-+vgchange --addtag secondvgtag1 $vg2
-+vgchange --addtag secondvgtag2 $vg2
-+vgchange --addtag secondvgtag3 $vg2
-+check_vg_field_ @firstvgtag2 tags "firstvgtag1,firstvgtag2,firstvgtag3"
-+check_vg_field_ @secondvgtag1 tags "secondvgtag1,secondvgtag2,secondvgtag3"
-+vgchange --deltag firstvgtag2 $vg1
-+check_vg_field_ @firstvgtag1 tags "firstvgtag1,firstvgtag3"
-+# deleting a tag multiple times is not an error
-+vgchange --deltag firstvgtag2 $vg1
-+vgchange --deltag firstvgtag1 $vg2
-+vgremove -ff $vg1
-+vgremove -ff $vg2
-+
-+# lvcreate with --addtag
-+vgcreate -c n $vg1 $dev1 $dev2
-+lvcreate --addtag firstlvtag1 -l 4 -n $lv1 $vg1
-+lvcreate --addtag secondlvtag1 -l 4 -n $lv2 $vg1
-+check_lv_field_ @firstlvtag1 tags "firstlvtag1"
-+not check_lv_field_ @secondlvtag1 tags "firstlvtag1"
-+check_lv_field_ $vg1/$lv2 tags "secondlvtag1"
-+not check_lv_field_ $vg1/$lv1 tags "secondlvtag1"
-+vgremove -ff $vg1
-+
-+# lvchange with --addtag and --deltag
-+vgcreate -c n $vg1 $dev1 $dev2
-+lvcreate -l 4 -n $lv1 $vg1
-+lvcreate -l 4 -n $lv2 $vg1
-+lvchange --addtag firstlvtag1 $vg1/$lv1
-+# adding a tag multiple times is not an error
-+lvchange --addtag firstlvtag2 $vg1/$lv1
-+lvchange --addtag firstlvtag2 $vg1/$lv1
-+lvchange --addtag firstlvtag3 $vg1/$lv1
-+lvchange --addtag secondlvtag1 $vg1/$lv2
-+lvchange --addtag secondlvtag2 $vg1/$lv2
-+lvchange --addtag secondlvtag3 $vg1/$lv2
-+check_lv_field_ $vg1/$lv1 tags "firstlvtag1,firstlvtag2,firstlvtag3"
-+not $(check_lv_field_ $vg1/$lv1 tags "secondlvtag1")
-+check_lv_field_ $vg1/$lv2 tags "secondlvtag1,secondlvtag2,secondlvtag3"
-+not $(check_lv_field_ $vg1/$lv1 tags "secondlvtag1")
-+# deleting a tag multiple times is not an error
-+lvchange --deltag firstlvtag2 $vg1/$lv1
-+lvchange --deltag firstlvtag2 $vg1/$lv1
-+check_lv_field_ $vg1/$lv1 tags "firstlvtag1,firstlvtag3"
-+check_lv_field_ $vg1/$lv2 tags "secondlvtag1,secondlvtag2,secondlvtag3"
+Thanks,
+Taka
 
 
