@@ -1,94 +1,53 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 15 Feb 2010 12:55:21 -0000
-Subject: LVM2/daemons/dmeventd/plugins/snapshot dmevent ...
-Message-ID: <20100215125521.32145.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Thu, 11 Feb 2010 20:14:11 -0500
+Subject: [PATCH] Ignore _mlog name restriction for lvconvert repair
+In-Reply-To: <20100211203827.GA27416@us.ibm.com>
+References: <471e224a57131c07b705.1265821968@localhost>	<4B746099.7010709@redhat.com>
+	<20100211203827.GA27416@us.ibm.com>
+Message-ID: <4B74AB63.9090706@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-02-15 12:55:20
+malahal at us.ibm.com wrote:
+> Takahiro Yasui [tyasui at redhat.com] wrote:
+>> Malahal Naineni wrote:
+>>> lvconvert --repair is done on _mlog mirrored log logical volumes from
+>>> dmeventd if something fails.
+>>>
+>>> diff -r 86200db56a7c -r 471e224a5713 tools/lvconvert.c
+>>> --- a/tools/lvconvert.c	Tue Feb 09 17:49:50 2010 -0800
+>>> +++ b/tools/lvconvert.c	Wed Feb 10 09:12:11 2010 -0800
+>>> @@ -105,8 +105,12 @@ static int _lvconvert_name_params(struct
+>>>  	if ((ptr = strrchr(lp->lv_name_full, '/')))
+>>>  		lp->lv_name = ptr + 1;
+>>>  
+>>> -	if (!apply_lvname_restrictions(lp->lv_name))
+>>> -		return_0;
+>>> +	/* _mlog is an internal name, but it could be mirrored, so
+>>> +	 * allow repairing it.
+>>> +	 */
+>>> +	if (!arg_count(cmd, repair_ARG) || !strstr(lp->lv_name, "_mlog"))
+>>> +		if (!apply_lvname_restrictions(lp->lv_name))
+>>> +			return_0;
+>>>  
+>>>  	if (*pargc && lp->snapshot) {
+>>>  		log_error("Too many arguments provided for snapshots");
+>> lvname is better to be checked if a logical volume is not mirrored log
+>> but simple logical volume. How about using (lv->status & MIRRORED) for
+>> the check?
+> 
+> I thought about it but such details are not available at that point. All
+> the information available at that point is derived from the command line
+> arguments!
 
-Modified files:
-	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
+Thank you for the explanation. I see we need to move this name check
+at the place where lv->status check can be used.
 
-Log message:
-	Rename "stat" to "status" in dmeventd_snapshot.c.
-	
-	Otherwise "warning: declaration of ???stat??? shadows a global declaration"
-	will appear because it shadows "stat" from stat.h.
+Thanks,
+Taka
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2010/01/22 12:48:58	1.7
-+++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2010/02/15 12:55:20	1.8
-@@ -38,7 +38,7 @@
- 
- /* FIXME possibly reconcile this with target_percent when we gain
-    access to regular LVM library here. */
--static void _parse_snapshot_params(char *params, struct snap_status *stat)
-+static void _parse_snapshot_params(char *params, struct snap_status *status)
- {
- 	char *p;
- 	/*
-@@ -46,10 +46,10 @@
- 	 * Invalid	-- snapshot invalidated
- 	 * Unknown	-- status unknown
- 	 */
--	stat->used = stat->max = 0;
-+	status->used = status->max = 0;
- 
- 	if (!strncmp(params, "Invalid", 7)) {
--		stat->invalid = 1;
-+		status->invalid = 1;
- 		return;
- 	}
- 
-@@ -66,8 +66,8 @@
- 	*p = '\0';
- 	p++;
- 
--	stat->used = atoi(params);
--	stat->max = atoi(p);
-+	status->used = atoi(params);
-+	status->max = atoi(p);
- }
- 
- void process_event(struct dm_task *dmt,
-@@ -78,7 +78,7 @@
- 	uint64_t start, length;
- 	char *target_type = NULL;
- 	char *params;
--	struct snap_status stat = { 0 };
-+	struct snap_status status = { 0 };
- 	const char *device = dm_task_get_name(dmt);
- 	int percent, *percent_warning = (int*)private;
- 
-@@ -92,18 +92,18 @@
- 	if (!target_type)
- 		goto out;
- 
--	_parse_snapshot_params(params, &stat);
-+	_parse_snapshot_params(params, &status);
- 	/*
- 	 * If the snapshot has been invalidated or we failed to parse
- 	 * the status string. Report the full status string to syslog.
- 	 */
--	if (stat.invalid || !stat.max) {
-+	if (status.invalid || !status.max) {
- 		syslog(LOG_ERR, "Snapshot %s changed state to: %s\n", device, params);
- 		*percent_warning = 0;
- 		goto out;
- 	}
- 
--	percent = 100 * stat.used / stat.max;
-+	percent = 100 * status.used / status.max;
- 	if (percent >= *percent_warning) {
- 		syslog(LOG_WARNING, "Snapshot %s is now %i%% full.\n", device, percent);
- 		/* Print warning on the next multiple of WARNING_STEP. */
 
 
