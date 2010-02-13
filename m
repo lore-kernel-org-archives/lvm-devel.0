@@ -1,95 +1,100 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 23 Feb 2010 11:12:54 +0100
-Subject: lvm and locales memory issue
-In-Reply-To: <20100223094511.GW2817@tyan-ft48-01.lab.bos.redhat.com>
-References: <4B7D4014.3010205@redhat.com> <4B7EB81D.6090405@redhat.com>
-	<20100219163008.GR27427@agk-dp.fab.redhat.com>
-	<4B8262A2.4050408@redhat.com> <4B8283B6.7000808@redhat.com>
-	<20100222181150.GA32020@agk-dp.fab.redhat.com>
-	<20100222182301.GR2817@tyan-ft48-01.lab.bos.redhat.com>
-	<4B839743.8020909@redhat.com>
-	<20100223091539.GV2817@tyan-ft48-01.lab.bos.redhat.com>
-	<4B839C8F.5030103@redhat.com>
-	<20100223094511.GW2817@tyan-ft48-01.lab.bos.redhat.com>
-Message-ID: <4B83AA26.7050808@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 12 Feb 2010 22:54:51 -0500
+Subject: [PATCH 1/3] Fix off by 512 sizes for lvm2app.
+Message-ID: <1266033293-14492-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 23.2.2010 10:45, Jakub Jelinek wrote:
-> On Tue, Feb 23, 2010 at 10:14:55AM +0100, Zdenek Kabelac wrote:
->> Well update of my rawhide usually more then 3/4 hour - so 6 minutes running in
->> background - that's really nothing.
-> 
-> Perhaps you don't care, but others do really care.
-> 
+Internally we store sizes in sectors, but lvm2app exports sizes
+in bytes.  We could get fancier and allow units configuration but
+this fix should do for now.
 
-Well the key point here is that >90% of users in fact really need 1-3 locales
-on their system - thus for majority of user they could in fact spend 6
-seconds in regenerating whole locale-archive file from scratch - and do not
-need to transfer bigger glib-common and spend a lot of time with handling
-100MB files during updates.
+Fixes rhbz561422.
 
-I simply believe that other distributions are more user friendly here.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.h          |    2 +-
+ liblvm/lvm_lv.c                  |    2 +-
+ liblvm/lvm_vg.c                  |    8 ++++----
+ 4 files changed, 7 insertions(+), 6 deletions(-)
 
-Of course I could be mistaken and there could be a big demand from Fedora
-users, to switch their locales to every single language, as nearly every
-Fedora user runs a lot of localization tests on his machine all the time daily...
-
-IMHO locale-archive data could be generated on the background during the whole
-lengthy upgrade process - to me this looks similar to ldconfig or library
-prelinking - thus the time is really not important - once the new
-locale-archive is created its switched with the old file - where exactly do
-you see the problem here?
-
-In fact glibc-common my split locale-archive file into a separate rpm - for
-those what want to safe the generation time and need all locales handy...
-
-Another note - I do care a lot about the speed - but also about the space.
-
->> And quite frankly - during the update you need to update/recompile only
->> changed files - you could copy compiled & unchanged data to new file - thus in
->> fact it would takes couple seconds - unless each glibc update changes all i18n
->> locale definition, I doubt that - isn't that what the locale-archive.tmpl is
->> already doing?
-> 
-> There is a big tree of inclusions between the locale files, so you'd need to
-> checksum them together with all the dependencies.  Anyway, that would still
-> leave us with 6 minutes (on slow machines maybe half an hour) during Fedora
-> installation.  I don't understand your sudden holy war against generated
-> data in the distro, after all the locales aren't definitely the largest (but
-
-Jakub please note - it's not a holly war against generated data in distro  -
-this thread is about searching for solution with locking large mmaped files
-into a memory for no point for mlockall() applications, when we should work in
-limited 512MB xen/kvm guest.
-
-You seem to be defending the point, that glibc has the right to mmap/lock
-large pieces of memory into application memory space on the whatever benefit
-it might bring in as the glibc knows what's 'the best' for the user - and user
-application should have no control over this action - 'We' as lvm glibc user
-tend to believe this is a wrong way -  we really cannot rewrite whole LVM just
-because 'feature of the week' in glibc leads to such and such memory
-allocation/waste - there should be some balance and control over this process.
-
-In fact we even miss some table with list of function that are supposed to be
-functional during mlockall().
-
-As far as I'm aware we use only
-open/read/write/str_funtion_handling/malloc/free/printf_familly  - at least
-for lvm  case - we have some daemons which will need probably some inspection
-for mlockall() case.
-
-
-> is something everybody has installed).  Look at stuff like kdelibs-apidocs
-> or asterisk-apidoc which are 650+ resp. 320+ MB of generated data.
-
-I don't have them installed and I could live without such piece of bloat
-easily.  But there is 'no life' without glibc-common ;)
-
-Zdenek
-
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index f8329d5..acb7b52 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -25,6 +25,7 @@
+ 
+ #define MAX_STRIPES 128U
+ #define SECTOR_SHIFT 9L
++#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
+ #define STRIPE_SIZE_MIN ( (unsigned) lvm_getpagesize() >> SECTOR_SHIFT)	/* PAGESIZE in sectors */
+ #define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ #define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 391734b..542be6e 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -28,7 +28,7 @@
+ 
+ //#define MAX_STRIPES 128U
+ //#define SECTOR_SHIFT 9L
+-#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
++//#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
+ //#define STRIPE_SIZE_MIN ( (unsigned) lvm_getpagesize() >> SECTOR_SHIFT)	/* PAGESIZE in sectors */
+ //#define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ //#define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index d28e6bd..74950e3 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -26,7 +26,7 @@
+ /* FIXME: have lib/report/report.c _disp function call lv_size()? */
+ uint64_t lvm_lv_get_size(const lv_t lv)
+ {
+-	return lv_size(lv);
++	return SECTOR_SIZE*lv_size(lv);
+ }
+ 
+ char *lvm_lv_get_uuid(const lv_t lv)
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index 9a5c239..30c7aad 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -86,7 +86,7 @@ int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size)
+ 	if (!vg_check_write_mode(vg))
+ 		return -1;
+ 
+-	if (!vg_set_extent_size(vg, new_size))
++	if (!vg_set_extent_size(vg, new_size/SECTOR_SIZE))
+ 		return -1;
+ 	return 0;
+ }
+@@ -256,17 +256,17 @@ uint64_t lvm_vg_is_partial(const vg_t vg)
+ /* FIXME: invalid handle? return INTMAX? */
+ uint64_t lvm_vg_get_size(const vg_t vg)
+ {
+-	return vg_size(vg);
++	return SECTOR_SIZE*vg_size(vg);
+ }
+ 
+ uint64_t lvm_vg_get_free_size(const vg_t vg)
+ {
+-	return vg_free(vg);
++	return SECTOR_SIZE*vg_free(vg);
+ }
+ 
+ uint64_t lvm_vg_get_extent_size(const vg_t vg)
+ {
+-	return vg_extent_size(vg);
++	return SECTOR_SIZE*vg_extent_size(vg);
+ }
+ 
+ uint64_t lvm_vg_get_extent_count(const vg_t vg)
+-- 
+1.6.0.6
 
 
