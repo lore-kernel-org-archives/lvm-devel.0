@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 24 Feb 2010 18:15:58 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20100224181558.15504.qmail@sourceware.org>
+Date: 14 Feb 2010 03:21:08 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
+Message-ID: <20100214032108.8391.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,68 +10,101 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-02-24 18:15:58
+Changes by:	wysochanski at sourceware.org	2010-02-14 03:21:07
 
 Modified files:
-	lib/metadata   : metadata.c 
+	lib/metadata   : metadata-exported.h metadata.h 
+	liblvm         : lvm_lv.c lvm_vg.c 
 
 Log message:
-	Add dm_pool_strdup to allocate memory and copy a tag in {lv|vg}_change_tag()
+	Fix off by 512 sizes for lvm2app.
 	
-	We need to allocate memory for the tag and copy the tag value before we
-	add it to the list of tags.  We could put this inside lvm2app since the
-	tools keep their memory around until vg_write/vg_commit is called, but
-	we put it inside the internal library to minimize code in lvm2app.
-	We need to copy the tag passed in by the caller to ensure the lifetime of
-	the memory until the {vg|lv} handle is released.
+	Internally we store sizes in sectors, but lvm2app exports sizes
+	in bytes.  We could get fancier and allow units configuration but
+	this fix should do for now.
+	
+	Fixes rhbz561422.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.316&r2=1.317
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.129&r2=1.130
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.199&r2=1.200
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
 
---- LVM2/lib/metadata/metadata.c	2010/02/24 18:15:49	1.316
-+++ LVM2/lib/metadata/metadata.c	2010/02/24 18:15:57	1.317
-@@ -667,6 +667,8 @@
+--- LVM2/lib/metadata/metadata-exported.h	2010/02/03 14:08:40	1.129
++++ LVM2/lib/metadata/metadata-exported.h	2010/02/14 03:21:06	1.130
+@@ -25,6 +25,7 @@
  
- int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
+ #define MAX_STRIPES 128U
+ #define SECTOR_SHIFT 9L
++#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
+ #define STRIPE_SIZE_MIN ( (unsigned) lvm_getpagesize() >> SECTOR_SHIFT)	/* PAGESIZE in sectors */
+ #define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ #define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
+--- LVM2/lib/metadata/metadata.h	2009/09/28 17:46:16	1.199
++++ LVM2/lib/metadata/metadata.h	2010/02/14 03:21:06	1.200
+@@ -28,7 +28,7 @@
+ 
+ //#define MAX_STRIPES 128U
+ //#define SECTOR_SHIFT 9L
+-#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
++//#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
+ //#define STRIPE_SIZE_MIN ( (unsigned) lvm_getpagesize() >> SECTOR_SHIFT)	/* PAGESIZE in sectors */
+ //#define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
+ //#define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
+--- LVM2/liblvm/lvm_lv.c	2009/08/13 12:17:32	1.16
++++ LVM2/liblvm/lvm_lv.c	2010/02/14 03:21:06	1.17
+@@ -26,7 +26,7 @@
+ /* FIXME: have lib/report/report.c _disp function call lv_size()? */
+ uint64_t lvm_lv_get_size(const lv_t lv)
  {
-+	char *tag_new;
-+
- 	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
- 		log_error("Logical volume %s/%s does not support tags",
- 			  lv->vg->name, lv->name);
-@@ -674,7 +676,10 @@
- 	}
+-	return lv_size(lv);
++	return SECTOR_SIZE*lv_size(lv);
+ }
  
- 	if (add_tag) {
--		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag)) {
-+		if (!(tag_new = dm_pool_strdup(lv->vg->vgmem, tag))) {
-+			return_0;
-+		}
-+		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag_new)) {
- 			log_error("Failed to add tag %s to %s/%s",
- 				  tag, lv->vg->name, lv->name);
- 			return 0;
-@@ -691,13 +696,18 @@
+ char *lvm_lv_get_uuid(const lv_t lv)
+@@ -112,7 +112,7 @@
+ 	if (!vg_check_write_mode(vg))
+ 		return NULL;
+ 	memset(&lp, 0, sizeof(lp));
+-	extents = extents_from_size(vg->cmd, size, vg->extent_size);
++	extents = extents_from_size(vg->cmd, size/SECTOR_SIZE, vg->extent_size);
+ 	_lv_set_default_params(&lp, vg, name, extents);
+ 	_lv_set_default_linear_params(vg->cmd, &lp);
+ 	if (!lv_create_single(vg, &lp))
+--- LVM2/liblvm/lvm_vg.c	2010/02/03 14:08:40	1.34
++++ LVM2/liblvm/lvm_vg.c	2010/02/14 03:21:06	1.35
+@@ -86,7 +86,7 @@
+ 	if (!vg_check_write_mode(vg))
+ 		return -1;
  
- int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag)
+-	if (!vg_set_extent_size(vg, new_size))
++	if (!vg_set_extent_size(vg, new_size/SECTOR_SIZE))
+ 		return -1;
+ 	return 0;
+ }
+@@ -256,17 +256,17 @@
+ /* FIXME: invalid handle? return INTMAX? */
+ uint64_t lvm_vg_get_size(const vg_t vg)
  {
-+	char *tag_new;
-+
- 	if (!(vg->fid->fmt->features & FMT_TAGS)) {
- 		log_error("Volume group %s does not support tags", vg->name);
- 		return 0;
- 	}
+-	return vg_size(vg);
++	return SECTOR_SIZE*vg_size(vg);
+ }
  
- 	if (add_tag) {
--		if (!str_list_add(vg->vgmem, &vg->tags, tag)) {
-+		if (!(tag_new = dm_pool_strdup(vg->vgmem, tag))) {
-+			return_0;
-+		}
-+		if (!str_list_add(vg->vgmem, &vg->tags, tag_new)) {
- 			log_error("Failed to add tag %s to volume group %s",
- 				  tag, vg->name);
- 			return 0;
+ uint64_t lvm_vg_get_free_size(const vg_t vg)
+ {
+-	return vg_free(vg);
++	return SECTOR_SIZE*vg_free(vg);
+ }
+ 
+ uint64_t lvm_vg_get_extent_size(const vg_t vg)
+ {
+-	return vg_extent_size(vg);
++	return SECTOR_SIZE*vg_extent_size(vg);
+ }
+ 
+ uint64_t lvm_vg_get_extent_count(const vg_t vg)
 
 
