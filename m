@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 15 Feb 2010 16:46:57 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/locking.c lib/log ...
-Message-ID: <20100215164657.6726.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 15 Feb 2010 18:34:01 -0000
+Subject: LVM2 lib/report/report.c libdm/libdm-report.c
+Message-ID: <20100215183401.3359.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,105 +10,60 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-02-15 16:46:56
+Changes by:	zkabelac at sourceware.org	2010-02-15 18:34:00
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : locking.c 
-	lib/log        : log.h 
+	lib/report     : report.c 
+	libdm          : libdm-report.c 
 
 Log message:
-	Add LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES environment variable to suppress error
-	and warning mesages while --ignorelockingfailure is used.
+	* add more 'const' - fixes gcc constness warning
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1429&r2=1.1430
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.h.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.112&r2=1.113
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
 
---- LVM2/WHATS_NEW	2010/02/15 16:38:22	1.1429
-+++ LVM2/WHATS_NEW	2010/02/15 16:46:56	1.1430
-@@ -1,5 +1,6 @@
- Version 2.02.61 - 
- ===================================
-+  Add LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES env. var. to suppress error and warning mesages.
-   Remove hard-coded rule to skip _mimage devices in 11-dm-lvm.rules.
-   Use udev transactions in testsuite.
-   Don't use LVM_UDEV_DISABLE_CHECKING env. var. anymore and set the state automatically.
---- LVM2/lib/locking/locking.c	2010/01/22 09:45:29	1.73
-+++ LVM2/lib/locking/locking.c	2010/02/15 16:46:56	1.74
-@@ -219,6 +219,11 @@
-  */
- int init_locking(int type, struct cmd_context *cmd)
+--- LVM2/lib/report/report.c	2010/02/14 03:21:38	1.112
++++ LVM2/lib/report/report.c	2010/02/15 18:34:00	1.113
+@@ -66,7 +66,7 @@
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private __attribute((unused)))
  {
-+	int suppress_messages = 0;
-+
-+	if (ignorelockingfailure() && getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES"))
-+		suppress_messages = 1;
-+
- 	if (type < 0)
- 		type = find_config_tree_int(cmd, "global/locking_type", 1);
+-	const char *name = dev_name(*(const struct device **) data);
++	const char *name = dev_name(*(const struct device * const *) data);
  
-@@ -237,7 +242,8 @@
- 				 _blocking_supported ? "" : "Non-blocking ");
+ 	return dm_report_field_string(rh, field, &name);
+ }
+@@ -873,7 +873,7 @@
+ {
+ 	struct lvmcache_info *info;
+ 	uint64_t freespace = UINT64_MAX, mda_free;
+-	const char *pvid = (const char *)(&((struct id *) data)->uuid);
++	const char *pvid = (const char *)(&((const struct id *) data)->uuid);
+ 	struct metadata_area *mda;
  
- 		if (!init_file_locking(&_locking, cmd)) {
--			log_error("File-based locking initialisation failed.");
-+			log_error_suppress(suppress_messages,
-+					   "File-based locking initialisation failed.");
- 			break;
- 		}
- 		return 1;
-@@ -264,7 +270,8 @@
- 	case 3:
- 		log_very_verbose("Cluster locking selected.");
- 		if (!init_cluster_locking(&_locking, cmd)) {
--			log_error("Internal cluster locking initialisation failed.");
-+			log_error_suppress(suppress_messages,
-+					   "Internal cluster locking initialisation failed.");
- 			break;
- 		}
- 		return 1;
-@@ -286,13 +293,16 @@
- 	    find_config_tree_int(cmd, "locking/fallback_to_local_locking",
- 	    	    find_config_tree_int(cmd, "global/fallback_to_local_locking",
- 					 DEFAULT_FALLBACK_TO_LOCAL_LOCKING))) {
--		log_warn("WARNING: Falling back to local file-based locking.");
--		log_warn("Volume Groups with the clustered attribute will "
--			  "be inaccessible.");
-+		log_warn_suppress(suppress_messages,
-+				  "WARNING: Falling back to local file-based locking.");
-+		log_warn_suppress(suppress_messages,
-+				  "Volume Groups with the clustered attribute will "
-+				  "be inaccessible.");
- 		if (init_file_locking(&_locking, cmd))
- 			return 1;
- 		else
--			log_error("File-based locking initialisation failed.");
-+			log_error_suppress(suppress_messages,
-+					   "File-based locking initialisation failed.");
- 	}
+ 	if ((info = info_from_pvid(pvid, 0)))
+@@ -916,7 +916,7 @@
+ {
+ 	struct lvmcache_info *info;
+ 	uint64_t min_mda_size = 0;
+-	const char *pvid = (const char *)(&((struct id *) data)->uuid);
++	const char *pvid = (const char *)(&((const struct id *) data)->uuid);
  
- 	if (!ignorelockingfailure())
---- LVM2/lib/log/log.h	2009/12/16 19:22:12	1.47
-+++ LVM2/lib/log/log.h	2010/02/15 16:46:56	1.48
-@@ -59,7 +59,9 @@
- #define log_info(x...) LOG_LINE(_LOG_INFO, x)
- #define log_notice(x...) LOG_LINE(_LOG_NOTICE, x)
- #define log_warn(x...) LOG_LINE(_LOG_WARN | _LOG_STDERR, x)
-+#define log_warn_suppress(s, x...) LOG_LINE(s ? _LOG_NOTICE : _LOG_WARN | _LOG_STDERR, x)
- #define log_err(x...) LOG_LINE_WITH_ERRNO(_LOG_ERR, EUNCLASSIFIED, x)
-+#define log_err_suppress(s, x...) LOG_LINE_WITH_ERRNO(s ? _LOG_NOTICE : _LOG_ERR, EUNCLASSIFIED, x)
- #define log_fatal(x...) LOG_LINE_WITH_ERRNO(_LOG_FATAL, EUNCLASSIFIED, x)
+ 	/* PVs could have 2 mdas of different sizes (rounding effect) */
+ 	if ((info = info_from_pvid(pvid, 0)))
+--- LVM2/libdm/libdm-report.c	2010/01/11 21:28:04	1.33
++++ LVM2/libdm/libdm-report.c	2010/02/15 18:34:00	1.34
+@@ -819,8 +819,8 @@
+  */
+ static int _row_compare(const void *a, const void *b)
+ {
+-	const struct row *rowa = *(const struct row **) a;
+-	const struct row *rowb = *(const struct row **) b;
++	const struct row *rowa = *(const struct row * const *) a;
++	const struct row *rowb = *(const struct row * const *) b;
+ 	const struct dm_report_field *sfa, *sfb;
+ 	uint32_t cnt;
  
- #define stack log_debug("<backtrace>")	/* Backtrace on error */
-@@ -67,6 +69,7 @@
- #define log_verbose(args...) log_notice(args)
- #define log_print(args...) LOG_LINE(_LOG_WARN, args)
- #define log_error(args...) log_err(args)
-+#define log_error_suppress(s, args...) log_err_suppress(s, args)
- #define log_errno(args...) LOG_LINE_WITH_ERRNO(_LOG_ERR, args)
- 
- /* System call equivalents */
 
 
