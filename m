@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Feb 2010 18:36:48 -0000
-Subject: LVM2/libdm libdm-report.c
-Message-ID: <20100215183648.3915.qmail@sourceware.org>
+Date: 15 Feb 2010 18:42:51 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20100215184251.5301.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-02-15 18:36:48
+Changes by:	zkabelac at sourceware.org	2010-02-15 18:42:51
 
 Modified files:
-	libdm          : libdm-report.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Fix dm_report_field_uint64 to really use 64bit.
-	(function is currently not in use)
+	* update for last 3 commits
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1430&r2=1.1431
 
---- LVM2/libdm/libdm-report.c	2010/02/15 18:34:00	1.34
-+++ LVM2/libdm/libdm-report.c	2010/02/15 18:36:48	1.35
-@@ -207,7 +207,7 @@
- int dm_report_field_uint64(struct dm_report *rh,
- 			   struct dm_report_field *field, const uint64_t *data)
- {
--	const int value = *data;
-+	const uint64_t value = *data;
- 	uint64_t *sortval;
- 	char *repstr;
+--- LVM2/WHATS_NEW	2010/02/15 16:46:56	1.1430
++++ LVM2/WHATS_NEW	2010/02/15 18:42:51	1.1431
+@@ -23,6 +23,8 @@
+   Add missing metadata reverts in pvmove error path.
+   Unlock shared lock in clvmd if activation calls failed.
+   Fix return code of info call for query by uuid.
++  Fix constness and floating point gcc warnings.
++  Fix dm_report_field_uint64 function.
  
-@@ -221,12 +221,12 @@
- 		return 0;
- 	}
- 
--	if (dm_snprintf(repstr, 21, "%d", value) < 0) {
--		log_error("dm_report_field_uint64: uint64 too big: %d", value);
-+	if (dm_snprintf(repstr, 21, "%" PRIu64 , value) < 0) {
-+		log_error("dm_report_field_uint64: uint64 too big: %" PRIu64, value);
- 		return 0;
- 	}
- 
--	*sortval = (const uint64_t) value;
-+	*sortval = value;
- 	field->sort_value = sortval;
- 	field->report_string = repstr;
- 
+ Version 2.02.60 - 23rd January 2010
+ ===================================
 
 
