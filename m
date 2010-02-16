@@ -1,36 +1,27 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 16 Feb 2010 01:14:34 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100216011434.24111.qmail@sourceware.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Tue, 16 Feb 2010 12:19:16 -0500 (EST)
+Subject: [PATCH] fix build of snapshot dmeventd module
+In-Reply-To: <20100212203427.GM18505@agk-dp.fab.redhat.com>
+References: <Pine.LNX.4.64.1002101833590.15802@hs20-bc2-1.build.redhat.com>
+	<20100212203427.GM18505@agk-dp.fab.redhat.com>
+Message-ID: <Pine.LNX.4.64.1002161218390.13512@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-02-16 01:14:34
+On Fri, 12 Feb 2010, Alasdair G Kergon wrote:
 
-Modified files:
-	.              : WHATS_NEW 
+> On Wed, Feb 10, 2010 at 06:53:41PM -0500, Mikulas Patocka wrote:
+> > Fix build of snapshot dmeventd module
+>  
+> Is something this still broken here that the 2nd Feb checkin didn't fix?
+> 
+> Alasdair
 
-Log message:
-	use lvm2app to refer to library now
+I have tried current CVS version now and it is OK.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1434&r2=1.1435
-
---- LVM2/WHATS_NEW	2010/02/16 00:27:01	1.1434
-+++ LVM2/WHATS_NEW	2010/02/16 01:14:34	1.1435
-@@ -17,7 +17,7 @@
-   Exit with success when lvconvert --repair --use-policies performs no action.
-   Accept a list of LVs with 'lvconvert --merge @tag' using process_each_lv.
-   Avoid unnecessary second resync when adding mimage to core-logged mirror.
--  Exclude internal VG names and uuids from lists returned through liblvm.
-+  Exclude internal VG names and uuids from lists returned through lvm2app.
-   Add %ORIGIN support to lv{create,extend,reduce,resize} --extents.
-   Add _mda_copy to clone a struct metadata_area.
-   Remove pointless versioned symlinks to dmeventd plugin libraries.
+Mikulas
 
 
