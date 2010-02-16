@@ -1,73 +1,109 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 12 Feb 2010 15:30:28 -0600
-Subject: [PATCH] Ignore _mlog name restriction for lvconvert repair
-In-Reply-To: <4B74AB63.9090706@redhat.com>
-References: <471e224a57131c07b705.1265821968@localhost>	<4B746099.7010709@redhat.com>
-	<20100211203827.GA27416@us.ibm.com> <4B74AB63.9090706@redhat.com>
-Message-ID: <CA32D663-C193-48B6-9DA8-F2376C584385@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 16 Feb 2010 14:39:43 -0500
+Subject: [PATCH 1/7] Refactor _vgchange_tag() to vg_change_tag() library function.
+In-Reply-To: <1266349189-23166-1-git-send-email-dwysocha@redhat.com>
+References: <1266349189-23166-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1266349189-23166-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Pull out common code to be called from tools as well as lvm2app.
+Leave archive() at tool level so we can use from vgcreate
+as well as vgchange.  Should be no functional change.
 
-On Feb 11, 2010, at 7:14 PM, Takahiro Yasui wrote:
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   23 +++++++++++++++++++++++
+ tools/vgchange.c                 |   20 ++------------------
+ 3 files changed, 26 insertions(+), 18 deletions(-)
 
-> malahal at us.ibm.com wrote:
->> Takahiro Yasui [tyasui at redhat.com] wrote:
->>> Malahal Naineni wrote:
->>>> lvconvert --repair is done on _mlog mirrored log logical volumes  
->>>> from
->>>> dmeventd if something fails.
->>>>
->>>> diff -r 86200db56a7c -r 471e224a5713 tools/lvconvert.c
->>>> --- a/tools/lvconvert.c	Tue Feb 09 17:49:50 2010 -0800
->>>> +++ b/tools/lvconvert.c	Wed Feb 10 09:12:11 2010 -0800
->>>> @@ -105,8 +105,12 @@ static int _lvconvert_name_params(struct
->>>> 	if ((ptr = strrchr(lp->lv_name_full, '/')))
->>>> 		lp->lv_name = ptr + 1;
->>>>
->>>> -	if (!apply_lvname_restrictions(lp->lv_name))
->>>> -		return_0;
->>>> +	/* _mlog is an internal name, but it could be mirrored, so
->>>> +	 * allow repairing it.
->>>> +	 */
->>>> +	if (!arg_count(cmd, repair_ARG) || !strstr(lp->lv_name, "_mlog"))
->>>> +		if (!apply_lvname_restrictions(lp->lv_name))
->>>> +			return_0;
->>>>
->>>> 	if (*pargc && lp->snapshot) {
->>>> 		log_error("Too many arguments provided for snapshots");
->>> lvname is better to be checked if a logical volume is not mirrored  
->>> log
->>> but simple logical volume. How about using (lv->status & MIRRORED)  
->>> for
->>> the check?
->>
->> I thought about it but such details are not available at that  
->> point. All
->> the information available at that point is derived from the command  
->> line
->> arguments!
->
-> Thank you for the explanation. I see we need to move this name check
-> at the place where lv->status check can be used.
-
-It might make sense to do it in this very spot...  If the repair_ARG  
-is present, why should we be checking lvname restrictions anyway?  No  
-new LVs are being created.
-
-Something more like:
-if (!arg_count(cmd, repair_ARG) && !apply_lvname_restrictions(lp- 
- >lv_name))
-
-Anyone see anything wrong with that?
-
-Taka, I've not been able to reproduce your seg faults with '--alloc  
-anywhere' using two devices.  Is there a special restriction you are  
-using?
-
-  brassow
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 164ce36..fae9551 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -463,6 +463,7 @@ int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
+ int vg_extend(struct volume_group *vg, int pv_count, char **pv_names,
+ 	      struct pvcreate_params *pp);
+ int vg_reduce(struct volume_group *vg, char *pv_name);
++int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag);
+ int vg_set_extent_size(struct volume_group *vg, uint32_t new_extent_size);
+ int vg_set_max_lv(struct volume_group *vg, uint32_t max_lv);
+ int vg_set_max_pv(struct volume_group *vg, uint32_t max_pv);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b3b3778..52bbc46 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -665,6 +665,29 @@ int vg_reduce(struct volume_group *vg, char *pv_name)
+ 	return 0;
+ }
+ 
++int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag)
++{
++	if (!(vg->fid->fmt->features & FMT_TAGS)) {
++		log_error("Volume group %s does not support tags", vg->name);
++		return 0;
++	}
++
++	if (add_tag) {
++		if (!str_list_add(vg->vgmem, &vg->tags, tag)) {
++			log_error("Failed to add tag %s to volume group %s",
++				  tag, vg->name);
++			return 0;
++		}
++	} else {
++		if (!str_list_del(&vg->tags, tag)) {
++			log_error("Failed to remove tag %s from volume group "
++				  "%s", tag, vg->name);
++			return 0;
++		}
++	}
++	return 1;
++}
++
+ const char *strip_dir(const char *vg_name, const char *dev_dir)
+ {
+ 	size_t len = strlen(dev_dir);
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index b4f5d00..8f4439e 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -447,29 +447,13 @@ static int _vgchange_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if (!(vg->fid->fmt->features & FMT_TAGS)) {
+-		log_error("Volume group %s does not support tags", vg->name);
+-		return ECMD_FAILED;
+-	}
+-
+ 	if (!archive(vg)) {
+ 		stack;
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	if ((arg == addtag_ARG)) {
+-		if (!str_list_add(cmd->mem, &vg->tags, tag)) {
+-			log_error("Failed to add tag %s to volume group %s",
+-				  tag, vg->name);
+-			return ECMD_FAILED;
+-		}
+-	} else {
+-		if (!str_list_del(&vg->tags, tag)) {
+-			log_error("Failed to remove tag %s from volume group "
+-				  "%s", tag, vg->name);
+-			return ECMD_FAILED;
+-		}
+-	}
++	if (!vg_change_tag(vg, tag, arg == addtag_ARG))
++		return ECMD_FAILED;
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg)) {
+ 		stack;
+-- 
+1.6.0.6
 
 
