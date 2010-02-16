@@ -1,84 +1,201 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 16 Feb 2010 14:39:46 -0500
-Subject: [PATCH 4/7] Add _tag_copy() to allocate memory and copy a tag in {lv|vg}_change_tag()
-In-Reply-To: <1266349189-23166-4-git-send-email-dwysocha@redhat.com>
+Date: Tue, 16 Feb 2010 14:39:47 -0500
+Subject: [PATCH 5/7] Add lvm_vg_get_tags(), lvm_vg_add_tag(), and lvm_vg_remove_tag().
+In-Reply-To: <1266349189-23166-5-git-send-email-dwysocha@redhat.com>
 References: <1266349189-23166-1-git-send-email-dwysocha@redhat.com>
 	<1266349189-23166-2-git-send-email-dwysocha@redhat.com>
 	<1266349189-23166-3-git-send-email-dwysocha@redhat.com>
 	<1266349189-23166-4-git-send-email-dwysocha@redhat.com>
-Message-ID: <1266349189-23166-5-git-send-email-dwysocha@redhat.com>
+	<1266349189-23166-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1266349189-23166-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We need to allocate memory for the tag and copy the tag value before we
-add it to the list of tags.  We could put this inside lvm2app since the
-tools keep their memory around until vg_write/vg_commit is called.
-Call _tag_copy() from {vg|lv}_change_tag().  We need to copy the tag passed
-in by the caller to ensure the memory until the {vg|lv} handle is released.
+Add lvm2app functions to manage VG tags.
+For lvm_vg_get_tags(), we return a list of tags, similar to other
+functions that return lists.  NULL is returned if there is no
+tags.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |   22 ++++++++++++++++++++--
- 1 files changed, 20 insertions(+), 2 deletions(-)
+ liblvm/.exported_symbols |    3 ++
+ liblvm/lvm2app.h         |   49 +++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm_vg.c          |   55 ++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 105 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 2b8a1be..e0d63c3 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -665,8 +665,22 @@ int vg_reduce(struct volume_group *vg, char *pv_name)
- 	return 0;
- }
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index c184a88..7431248 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -18,6 +18,7 @@ lvm_vg_get_extent_size
+ lvm_vg_get_extent_count
+ lvm_vg_get_free_extent_count
+ lvm_vg_get_pv_count
++lvm_vg_get_tags
+ lvm_lv_activate
+ lvm_lv_deactivate
+ lvm_lv_get_uuid
+@@ -33,6 +34,8 @@ lvm_vg_write
+ lvm_vg_open
+ lvm_vg_close
+ lvm_vg_remove
++lvm_vg_add_tag
++lvm_vg_remove_tag
+ lvm_scan
+ lvm_errno
+ lvm_errmsg
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 39bfff8..b21d0e9 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -159,10 +159,10 @@ typedef struct lvm_pv_list {
+  * Lists of these structures are returned by lvm_list_vg_names and
+  * lvm_list_vg_uuids.
+  */
+-struct lvm_str_list {
++typedef struct lvm_str_list {
+ 	struct dm_list list;
+ 	const char *str;
+-};
++} lvm_str_list_t;
  
-+static char *_tag_copy(struct dm_pool *p, const char *tag)
-+{
-+	char *tag_new;
+ /*************************** generic lvm handling ***************************/
+ /**
+@@ -458,6 +458,26 @@ int lvm_vg_extend(vg_t vg, const char *device);
+ int lvm_vg_reduce(vg_t vg, const char *device);
+ 
+ /**
++ * Add/remove a tag to/from a VG.
++ *
++ * These functions require calling lvm_vg_write to commit the change to disk.
++ * After successfully adding/removing a tag, use lvm_vg_write to commit the
++ * new VG to disk.  Upon failure, retry the operation or release the VG handle
++ * with lvm_vg_close.
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \param   tag
++ * Tag to add/remove to/from VG.
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ */
++int lvm_vg_add_tag(vg_t vg, const char *tag);
++int lvm_vg_remove_tag(vg_t vg, const char *tag);
 +
-+	/* FIXME: verify tag length */
-+	if (!(tag_new = dm_pool_alloc(p, strlen(tag)))) {
-+		log_error("Failed to alloc memory for tag %s.", tag);
-+		return NULL;
-+	}
-+	strcpy(tag_new, tag);
-+	return tag_new;
++/**
+  * Set the extent size of a VG.
+  *
+  * This function requires calling lvm_vg_write to commit the change to disk.
+@@ -644,6 +664,31 @@ uint64_t lvm_vg_get_max_pv(const vg_t vg);
+  */
+ uint64_t lvm_vg_get_max_lv(const vg_t vg);
+ 
++/**
++ * Return the list of volume group tags.
++ *
++ * The memory allocated for the list is tied to the vg_t handle and will be
++ * released when lvm_vg_close is called.
++ *
++ * To process the list, use the dm_list iterator functions.  For example:
++ *      vg_t vg;
++ *      struct dm_list *tags;
++ *      struct lvm_str_list *strl;
++ *
++ *      tags = lvm_vg_get_tags(vg);
++ *	dm_list_iterate_items(strl, tags) {
++ *		tag = strl->str;
++ *              // do something with tag
++ *      }
++ *
++ *
++ * \return
++ * A list with entries of type struct lvm_str_list, containing the
++ * tag strings attached to volume group.
++ * If no tags are attached to the given VG, NULL is returned.
++ */
++struct dm_list *lvm_vg_get_tags(const vg_t vg);
++
+ /************************** logical volume handling *************************/
+ 
+ /**
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index 0c166d5..7486154 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -25,6 +25,34 @@
+ #include <errno.h>
+ #include <string.h>
+ 
++int lvm_vg_add_tag(vg_t vg, const char *tag)
++{
++	if (vg_read_error(vg))
++		return -1;
++
++	if (!vg_check_write_mode(vg))
++		return -1;
++
++	if (!vg_change_tag(vg, tag, 1))
++		return -1;
++	return 0;
 +}
 +
- int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
- {
-+	char *tag_new;
- 	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
- 		log_error("Logical volume %s/%s does not support tags",
- 			  lv->vg->name, lv->name);
-@@ -674,7 +688,8 @@ int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
- 	}
- 
- 	if (add_tag) {
--		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag)) {
-+		tag_new = _tag_copy(lv->vg->vgmem, tag);
-+		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag_new)) {
- 			log_error("Failed to add tag %s to %s/%s",
- 				  tag, lv->vg->name, lv->name);
- 			return 0;
-@@ -691,13 +706,16 @@ int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
- 
- int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag)
- {
-+	char *tag_new;
 +
- 	if (!(vg->fid->fmt->features & FMT_TAGS)) {
- 		log_error("Volume group %s does not support tags", vg->name);
- 		return 0;
- 	}
++int lvm_vg_remove_tag(vg_t vg, const char *tag)
++{
++	if (vg_read_error(vg))
++		return -1;
++
++	if (!vg_check_write_mode(vg))
++		return -1;
++
++	if (!vg_change_tag(vg, tag, 0))
++		return -1;
++	return 0;
++}
++
++
+ vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
+ {
+ 	struct volume_group *vg;
+@@ -233,6 +261,33 @@ struct dm_list *lvm_vg_list_lvs(vg_t vg)
+ 	return list;
+ }
  
- 	if (add_tag) {
--		if (!str_list_add(vg->vgmem, &vg->tags, tag)) {
-+		tag_new = _tag_copy(vg->vgmem, tag);
-+		if (!str_list_add(vg->vgmem, &vg->tags, tag_new)) {
- 			log_error("Failed to add tag %s to volume group %s",
- 				  tag, vg->name);
- 			return 0;
++struct dm_list *lvm_vg_get_tags(const vg_t vg)
++{
++	struct dm_list *list;
++	lvm_str_list_t *lsl;
++	struct str_list *sl;
++
++	if (dm_list_empty(&vg->tags))
++		return NULL;
++
++	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
++		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
++		return NULL;
++	}
++	dm_list_init(list);
++
++	dm_list_iterate_items(sl, &vg->tags) {
++		if (!(lsl = dm_pool_zalloc(vg->vgmem, sizeof(*lsl)))) {
++			log_errno(ENOMEM,
++				"Memory allocation fail for lvm_lv_list.");
++			return NULL;
++		}
++		lsl->str = dm_pool_strdup(vg->vgmem, sl->str);
++		dm_list_add(list, &lsl->list);
++	}
++	return list;
++}
++
+ uint64_t lvm_vg_get_seqno(const vg_t vg)
+ {
+ 	return vg_seqno(vg);
 -- 
 1.6.0.6
 
