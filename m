@@ -1,27 +1,63 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 12 Feb 2010 19:51:47 -0500
-Subject: [PATCH 0/3] Add infrastructure for cleaner pv handling
-Message-ID: <1266022310-19859-1-git-send-email-dwysocha@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Wed, 17 Feb 2010 11:56:27 -0600
+Subject: [PATCH 5 of 13] LVM: remove unused parameter
+Message-ID: <201002171756.o1HHuR94004687@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Patch name: lvm-remove-unused-parameter.patch
 
-This patchset adds some infrastructure to move us more towards the
-goal of removing the standalone PV object.
+Here we get rid of completely unused parameters.  No-one
+uses them and they are confusing.  (They imply a certain
+level of processing is down by the time these functions
+are called, which is not the case.)  If they were just
+extra params, I wouldn't bother, but they add to confusion.
 
->From now on, a user that wants to get/set a PV property and
-knows only the pvname must first lookup the vgname, then obtain
-a vg handle, and finally use the pv handle to get/set the property.
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
-The last patch reworks pvchange to use this new functionality.
-It passes the testsuite but does still have one bug.  A
-setup with a VG containing a PV with metadatacopies == 0 and
-pvchange -u --all end up failing because the PV is on both the
-orphan VG and the real VG.  I think this is a bug internally
-unrelated to this patchset but I have yet to track it down.
-It should be fixed before we move the tools to this new method.
+Index: LVM2/lib/metadata/lv_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/lv_manip.c
++++ LVM2/lib/metadata/lv_manip.c
+@@ -645,8 +645,7 @@ static int _setup_alloced_segment(struct
+ 				  uint32_t stripe_size,
+ 				  const struct segment_type *segtype,
+ 				  struct alloced_area *aa,
+-				  uint32_t region_size,
+-				  struct logical_volume *log_lv __attribute((unused)))
++				  uint32_t region_size)
+ {
+ 	uint32_t s, extents, area_multiple;
+ 	struct lv_segment *seg;
+@@ -686,15 +685,14 @@ static int _setup_alloced_segments(struc
+ 				   uint64_t status,
+ 				   uint32_t stripe_size,
+ 				   const struct segment_type *segtype,
+-				   uint32_t region_size,
+-				   struct logical_volume *log_lv)
++				   uint32_t region_size)
+ {
+ 	struct alloced_area *aa;
+ 
+ 	dm_list_iterate_items(aa, &alloced_areas[0]) {
+ 		if (!_setup_alloced_segment(lv, status, area_count,
+ 					    stripe_size, segtype, aa,
+-					    region_size, log_lv))
++					    region_size))
+ 			return_0;
+ 	}
+ 
+@@ -1393,7 +1391,7 @@ int lv_add_segment(struct alloc_handle *
+ 	if (!_setup_alloced_segments(lv, &ah->alloced_areas[first_area],
+ 				     num_areas, status,
+ 				     stripe_size, segtype,
+-				     region_size, log_lv))
++				     region_size))
+ 		return_0;
+ 
+ 	if ((segtype->flags & SEG_CAN_SPLIT) && !lv_merge_segments(lv)) {
 
 
