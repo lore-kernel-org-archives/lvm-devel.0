@@ -1,18 +1,17 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 17 Feb 2010 11:56:47 -0600
-Subject: [PATCH 7 of 13] LVM: add needed params
-Message-ID: <201002171756.o1HHulOo004834@hydrogen.msp.redhat.com>
+Date: Wed, 17 Feb 2010 11:56:58 -0600
+Subject: [PATCH 8 of 13] LVM: add logic to allow mirrored log
+Message-ID: <201002171756.o1HHuw4H004907@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-add-needed-params.patch
+Patch name: lvm-add-logic-to-allow-mirrored-log.patch
 
-Here we add a couple necessary parameters to functions so
-that we can distinguish between when we are allocating
-from log_areas or alloced_areas
+Insert the couple of lines that adds the logic necessary to
+create the mirrored log.
 
 Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
@@ -20,51 +19,142 @@ Index: LVM2/lib/metadata/mirror.c
 ===================================================================
 --- LVM2.orig/lib/metadata/mirror.c
 +++ LVM2/lib/metadata/mirror.c
-@@ -1171,7 +1171,8 @@ int reconfigure_mirror_images(struct lv_
- static int _create_mimage_lvs(struct alloc_handle *ah,
- 			      uint32_t num_mirrors,
- 			      struct logical_volume *lv,
--			      struct logical_volume **img_lvs)
-+			      struct logical_volume **img_lvs,
-+			      int for_log)
+@@ -1592,7 +1592,7 @@ static struct logical_volume *_set_up_mi
+ 						 struct alloc_handle *ah,
+ 						 struct logical_volume *lv,
+ 						 uint32_t log_count,
+-						 uint32_t region_size __attribute((unused)),
++						 uint32_t region_size,
+ 						 alloc_policy_t alloc,
+ 						 int in_sync)
  {
- 	uint32_t m;
- 	char *img_name;
-@@ -1202,7 +1203,7 @@ static int _create_mimage_lvs(struct all
- 		if (!lv_add_segment(ah, m, 1, img_lvs[m],
- 				    get_segtype_from_string(lv->vg->cmd,
- 							    "striped"),
--				    0, 0, 0, NULL)) {
-+				    0, 0, 0, for_log ? lv : NULL)) {
- 			log_error("Aborting. Failed to add mirror image segment "
- 				  "to %s. Remove new LV and retry.",
- 				  img_lvs[m]->name);
-@@ -1552,7 +1553,7 @@ static struct logical_volume *_create_mi
-  */
- static int _form_mirror(struct cmd_context *cmd, struct alloc_handle *ah,
- 			struct logical_volume *lv,
--			uint32_t mirrors, uint32_t region_size)
-+			uint32_t mirrors, uint32_t region_size, int for_log)
- {
- 	struct logical_volume **img_lvs;
- 
-@@ -1573,7 +1574,7 @@ static int _form_mirror(struct cmd_conte
- 		return 0;
+@@ -1636,6 +1636,12 @@ static struct logical_volume *_set_up_mi
+ 		return NULL;
  	}
  
--	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs))
-+	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs, for_log))
- 		return 0;
++	if ((log_count > 1) &&
++	    !_form_mirror(cmd, ah, log_lv, log_count-1, region_size, 1)) {
++		log_error("Failed to form mirrored log.");
++		return NULL;
++	}
++
+ 	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
+ 		log_error("Failed to initialise mirror log.");
+ 		return NULL;
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -647,9 +647,24 @@ static void _lvconvert_mirrors_repair_as
+ 	}
+ }
  
- 	if (!lv_add_mirror_lvs(lv, img_lvs, mirrors,
-@@ -1775,7 +1776,7 @@ int add_mirror_images(struct cmd_context
- 	   So from here on, if failure occurs, the log must be explicitly
- 	   removed and the updated vg metadata should be committed. */
+-static int _using_corelog(struct logical_volume *lv)
++/*
++ * _get_log_count
++ * @lv: the mirror LV
++ *
++ * Get the number of on-disk copies of the log.
++ *  0  = 'core'
++ *  1  = 'disk'
++ *  2+ = 'mirrored'
++ */
++static int _get_log_count(struct logical_volume *lv)
+ {
+-	return !first_seg(_original_lv(lv))->log_lv;
++	struct logical_volume *log_lv;
++
++	log_lv = first_seg(_original_lv(lv))->log_lv;
++	if (!log_lv)
++		return 0;
++
++	return lv_mirror_count(log_lv);
+ }
  
--	if (!_form_mirror(cmd, ah, lv, mirrors, region_size))
-+	if (!_form_mirror(cmd, ah, lv, mirrors, region_size, 0))
- 		goto out_remove_log;
+ static int _lv_update_log_type(struct cmd_context *cmd,
+@@ -657,21 +672,48 @@ static int _lv_update_log_type(struct cm
+ 			       struct logical_volume *lv,
+ 			       int log_count)
+ {
+-	struct logical_volume *original_lv = _original_lv(lv);
+-	if (_using_corelog(lv) && log_count) {
++	uint32_t region_size;
++	int old_log_count;
++	struct logical_volume *original_lv;
++	struct logical_volume *log_lv;
++
++	old_log_count = _get_log_count(lv);
++	if (old_log_count == log_count)
++		return 1;
++
++	original_lv = _original_lv(lv);
++	region_size = adjusted_mirror_region_size(lv->vg->extent_size,
++						  lv->le_count,
++						  lp->region_size);
++
++	/* Add a log where there is none */
++	if (!old_log_count) {
+ 		if (!add_mirror_log(cmd, original_lv, log_count,
+-				    adjusted_mirror_region_size(
+-					lv->vg->extent_size,
+-					lv->le_count,
+-					lp->region_size),
+-				    lp->pvh, lp->alloc))
++				    region_size, lp->pvh, lp->alloc))
+ 			return_0;
+-	} else if (!_using_corelog(lv) && !log_count) {
++		return 1;
++	}
++
++	/* Remove an existing log completely */
++	if (!log_count) {
+ 		if (!remove_mirror_log(cmd, original_lv,
+ 				       lp->pv_count ? lp->pvh : NULL))
+ 			return_0;
++		return 1;
++	}
++
++	log_lv = first_seg(original_lv)->log_lv;
++
++	/* Adding redundancy to the log */
++	if (old_log_count < log_count) {
++		log_error("Adding log redundancy not supported yet.");
++		log_error("Try converting the log to 'core' first.");
++		return_0;
+ 	}
+-	return 1;
++
++	/* Reducing redundancy of the log */
++	return remove_mirror_images(log_lv, log_count,
++				    lp->pv_count ? lp->pvh : NULL, 1U);
+ }
  
- 	if (log_count && !attach_mirror_log(first_seg(lv), log_lv))
+ /*
+@@ -798,9 +840,15 @@ static int _lvconvert_mirrors(struct cmd
+ 			return_0;
+ 		lp->pvh = lp->failed_pvs = failed_pvs;
+ 		log_lv = first_seg(lv)->log_lv;
+-		if (!log_lv || log_lv->status & PARTIAL_LV) {
++		if (!log_lv) {
+ 			failed_log = 1;
+ 			log_count = 0;
++		} else {
++			log_count = lv_mirror_count(log_lv);
++			if (log_lv->status & PARTIAL_LV) {
++				failed_log = 1;
++				log_count -= _failed_mirrors_count(log_lv);
++			}
+ 		}
+ 	} else {
+ 		/*
+@@ -992,7 +1040,7 @@ static int _lvconvert_mirrors(struct cmd
+ 	}
+ 
+ 	if (lp->mirrors == existing_mirrors) {
+-		if (_using_corelog(lv) != !log_count) {
++		if (_get_log_count(lv) != log_count) {
+ 			if (!_lv_update_log_type(cmd, lp, lv, log_count)) {
+ 				stack;
+ 				return failure_code;
 
 
