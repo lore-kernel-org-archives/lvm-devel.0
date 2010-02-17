@@ -1,57 +1,189 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Fri, 12 Feb 2010 17:14:10 -0500
-Subject: [PATCH] Ignore _mlog name restriction for lvconvert repair
-In-Reply-To: <CA32D663-C193-48B6-9DA8-F2376C584385@redhat.com>
-References: <471e224a57131c07b705.1265821968@localhost>	<4B746099.7010709@redhat.com>	<20100211203827.GA27416@us.ibm.com>
-	<4B74AB63.9090706@redhat.com>
-	<CA32D663-C193-48B6-9DA8-F2376C584385@redhat.com>
-Message-ID: <4B75D2B2.2090809@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 17 Feb 2010 12:29:02 -0500
+Subject: [PATCH 6/8] Add lvm_vg_get_tags(), lvm_vg_add_tag(), and lvm_vg_remove_tag().
+In-Reply-To: <1266427744-30327-6-git-send-email-dwysocha@redhat.com>
+References: <1266427744-30327-1-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-2-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-3-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-4-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-5-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-6-git-send-email-dwysocha@redhat.com>
+Message-ID: <1266427744-30327-7-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Jon,
+Add lvm2app functions to manage VG tags.
+For lvm_vg_get_tags(), we return a list of tags, similar to other
+functions that return lists.  An empty list is returned if there
+are no VG tags.  NULL is returned if there is a problem obtaining
+the list of tags.
 
-> Taka, I've not been able to reproduce your seg faults with '--alloc  
-> anywhere' using two devices.  Is there a special restriction you are  
-> using?
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ liblvm/.exported_symbols |    3 ++
+ liblvm/lvm2app.h         |   51 ++++++++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm_vg.c          |   34 ++++++++++++++++++++++++++++++
+ 3 files changed, 86 insertions(+), 2 deletions(-)
 
-Here is the reproduction steps.
-
-[case 1]
-1. create VG with two devices.
-  # vgcreate vg00 /dev/sd[ab]
-
-2. create LV with mirrored log
-  # lvcreate -m1 -L12m -nlv00 --mirrorlog mirrored --alloc anywhere vg00
-
-3. disable device /dev/sdb
-  # echo offline > /sys/block/sdb/device/state
-
-4. Write data
-  # dd if=/dev/zero of=/dev/vg00/lv00 bs=4096 count=1
-  1+0 records in
-  1+0 records out
-  4096 bytes (4.1 kB) copied, 3.02835 seconds, 1.4 kB/s
-
-5. convert LV to mirrored log
-  # lvconvert -m1 --mirrorlog mirrored --alloc anywhere vg00/lv00
-    /dev/sdd: open failed: No such device or address
-  Segmentation fault
-
-[case 2]
-  # vgs
-    No volume groups found
-  # vgcreate vg00 /dev/sdc
-    Volume group "vg00" successfully created
-  # lvcreate -m1 -L12m -nlv00 --mirrorlog mirrored --alloc anywhere vg00
-  Segmentation fault
-
-I hope you could reproduce this issues.
-
-Thanks,
-Taka
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index c184a88..7431248 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -18,6 +18,7 @@ lvm_vg_get_extent_size
+ lvm_vg_get_extent_count
+ lvm_vg_get_free_extent_count
+ lvm_vg_get_pv_count
++lvm_vg_get_tags
+ lvm_lv_activate
+ lvm_lv_deactivate
+ lvm_lv_get_uuid
+@@ -33,6 +34,8 @@ lvm_vg_write
+ lvm_vg_open
+ lvm_vg_close
+ lvm_vg_remove
++lvm_vg_add_tag
++lvm_vg_remove_tag
+ lvm_scan
+ lvm_errno
+ lvm_errmsg
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 39bfff8..41ce18c 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -159,10 +159,10 @@ typedef struct lvm_pv_list {
+  * Lists of these structures are returned by lvm_list_vg_names and
+  * lvm_list_vg_uuids.
+  */
+-struct lvm_str_list {
++typedef struct lvm_str_list {
+ 	struct dm_list list;
+ 	const char *str;
+-};
++} lvm_str_list_t;
+ 
+ /*************************** generic lvm handling ***************************/
+ /**
+@@ -458,6 +458,26 @@ int lvm_vg_extend(vg_t vg, const char *device);
+ int lvm_vg_reduce(vg_t vg, const char *device);
+ 
+ /**
++ * Add/remove a tag to/from a VG.
++ *
++ * These functions require calling lvm_vg_write to commit the change to disk.
++ * After successfully adding/removing a tag, use lvm_vg_write to commit the
++ * new VG to disk.  Upon failure, retry the operation or release the VG handle
++ * with lvm_vg_close.
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create or lvm_vg_open.
++ *
++ * \param   tag
++ * Tag to add/remove to/from VG.
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ */
++int lvm_vg_add_tag(vg_t vg, const char *tag);
++int lvm_vg_remove_tag(vg_t vg, const char *tag);
++
++/**
+  * Set the extent size of a VG.
+  *
+  * This function requires calling lvm_vg_write to commit the change to disk.
+@@ -644,6 +664,33 @@ uint64_t lvm_vg_get_max_pv(const vg_t vg);
+  */
+ uint64_t lvm_vg_get_max_lv(const vg_t vg);
+ 
++/**
++ * Return the list of volume group tags.
++ *
++ * The memory allocated for the list is tied to the vg_t handle and will be
++ * released when lvm_vg_close is called.
++ *
++ * To process the list, use the dm_list iterator functions.  For example:
++ *      vg_t vg;
++ *      struct dm_list *tags;
++ *      struct lvm_str_list *strl;
++ *
++ *      tags = lvm_vg_get_tags(vg);
++ *	dm_list_iterate_items(strl, tags) {
++ *		tag = strl->str;
++ *              // do something with tag
++ *      }
++ *
++ *
++ * \return
++ * A list with entries of type struct lvm_str_list, containing the
++ * tag strings attached to volume group.
++ * If no tags are attached to the given VG, an empty list is returned
++ * (check with dm_list_empty()).
++ * If there is a problem obtaining the list of tags, NULL is returned.
++ */
++struct dm_list *lvm_vg_get_tags(const vg_t vg);
++
+ /************************** logical volume handling *************************/
+ 
+ /**
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index 0c166d5..ec829e8 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -21,10 +21,39 @@
+ #include "lvm-string.h"
+ #include "lvmcache.h"
+ #include "metadata.h"
++#include "lvm_misc.h"
+ 
+ #include <errno.h>
+ #include <string.h>
+ 
++int lvm_vg_add_tag(vg_t vg, const char *tag)
++{
++	if (vg_read_error(vg))
++		return -1;
++
++	if (!vg_check_write_mode(vg))
++		return -1;
++
++	if (!vg_change_tag(vg, tag, 1))
++		return -1;
++	return 0;
++}
++
++
++int lvm_vg_remove_tag(vg_t vg, const char *tag)
++{
++	if (vg_read_error(vg))
++		return -1;
++
++	if (!vg_check_write_mode(vg))
++		return -1;
++
++	if (!vg_change_tag(vg, tag, 0))
++		return -1;
++	return 0;
++}
++
++
+ vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
+ {
+ 	struct volume_group *vg;
+@@ -233,6 +262,11 @@ struct dm_list *lvm_vg_list_lvs(vg_t vg)
+ 	return list;
+ }
+ 
++struct dm_list *lvm_vg_get_tags(const vg_t vg)
++{
++	return tag_list_copy(vg->vgmem, &vg->tags);
++}
++
+ uint64_t lvm_vg_get_seqno(const vg_t vg)
+ {
+ 	return vg_seqno(vg);
+-- 
+1.6.0.6
 
 
