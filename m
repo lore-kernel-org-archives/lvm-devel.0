@@ -1,56 +1,63 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 17 Feb 2010 23:36:45 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20100217233645.21290.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 18 Feb 2010 09:55:06 +0100
+Subject: [PATCH 4/8] Add dm_pool_strdup to allocate memory and copy a tag in {lv|vg}_change_tag()
+In-Reply-To: <1266427744-30327-5-git-send-email-dwysocha@redhat.com>
+References: <1266427744-30327-1-git-send-email-dwysocha@redhat.com>	<1266427744-30327-2-git-send-email-dwysocha@redhat.com>	<1266427744-30327-3-git-send-email-dwysocha@redhat.com>	<1266427744-30327-4-git-send-email-dwysocha@redhat.com>
+	<1266427744-30327-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <4B7D006A.9040109@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-02-17 23:36:45
+On 17.2.2010 18:29, Dave Wysochanski wrote:
+> We need to allocate memory for the tag and copy the tag value before we
+> add it to the list of tags.  We could put this inside lvm2app since the
+> tools keep their memory around until vg_write/vg_commit is called, but
+> we put it inside the internal library to minimize code in lvm2app.
+> We need to copy the tag passed in by the caller to ensure the lifetime of
+> the memory until the {vg|lv} handle is released.
+> 
+> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> ---
+>  lib/metadata/metadata.c |   14 ++++++++++++--
+>  1 files changed, 12 insertions(+), 2 deletions(-)
+> 
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index 2b8a1be..2667e90 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
+> @@ -667,6 +667,8 @@ int vg_reduce(struct volume_group *vg, char *pv_name)
+>  
+>  int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
+>  {
+> +	char *tag_new;
+> +
+>  	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
+>  		log_error("Logical volume %s/%s does not support tags",
+>  			  lv->vg->name, lv->name);
+> @@ -674,7 +676,10 @@ int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
+>  	}
+>  
+>  	if (add_tag) {
+> -		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag)) {
+> +		if (!(tag_new = dm_pool_strdup(lv->vg->vgmem, tag))) {
+> +			return_0;
+> +		}
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+just a tiny change here:
 
-Log message:
-	Do not reload origin again in lv_remove_single() if it had a merging
-	snapshot.  vg_remove_snapshot() will have already performed the required
-	reload.
+return_0;
+prints just backtrace - however dm_pool_strdup() doesn't report allocation
+failure message so a better way would be:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.208&r2=1.209
++log_error("tag duplication failed")
++return 0;
 
---- LVM2/lib/metadata/lv_manip.c	2010/02/17 22:59:46	1.208
-+++ LVM2/lib/metadata/lv_manip.c	2010/02/17 23:36:45	1.209
-@@ -2064,6 +2064,7 @@
- 	struct volume_group *vg;
- 	struct lvinfo info;
- 	struct logical_volume *origin = NULL;
-+	int was_merging = 0;
- 
- 	vg = lv->vg;
- 
-@@ -2118,6 +2119,7 @@
- 
- 	if (lv_is_cow(lv)) {
- 		origin = origin_from_cow(lv);
-+		was_merging = lv_is_merging_origin(origin);
- 		log_verbose("Removing snapshot %s", lv->name);
- 		/* vg_remove_snapshot() will preload origin if it was merging */
- 		if (!vg_remove_snapshot(lv))
-@@ -2140,8 +2142,8 @@
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_0;
- 
--	/* If no snapshots left, reload without -real. */
--	if (origin && (!lv_is_origin(origin))) {
-+	/* If no snapshots left, and was not merging, reload without -real. */
-+	if (origin && (!lv_is_origin(origin) && !was_merging)) {
- 		if (!suspend_lv(cmd, origin)) {
- 			log_error("Failed to refresh %s without snapshot.", origin->name);
- 			return 0;
+To remain consistent with the rest of lvm code.
+
+
+Zdenek
 
 
