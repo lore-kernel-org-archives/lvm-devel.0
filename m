@@ -1,9 +1,10 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Mon, 22 Feb 2010 04:09:29 -0500
+Date: Mon, 22 Feb 2010 04:18:35 -0500
 Subject: [PATCH 0 of 13] LVM add 'mirrored' log type
-In-Reply-To: <1266429310.29358.35.camel@hydrogen.msp.redhat.com>
+In-Reply-To: <B66E0CF9-8028-4597-AE6E-3B2F1A7B213A@redhat.com>
 References: <1266429310.29358.35.camel@hydrogen.msp.redhat.com>
-Message-ID: <4B8249C9.9060602@redhat.com>
+	<B66E0CF9-8028-4597-AE6E-3B2F1A7B213A@redhat.com>
+Message-ID: <4B824BEB.60708@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,36 +12,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 Jonathan Brassow wrote:
-> I've fixed the segfaults Taka reported.  I've also begun to go through
-> and fix the remaining issues with handling device failures in the
-> various different scenarios.  I could use some help testing all the
-> different variations.  I've described below some of the different
-> permutations that will now exist.  I will be going through and testing
-> these as well.
+> I'm also testing the other approach; that is, allowing lvconvert to take
+> non-top-level LVs (e.g. "lv_mlog").  It seems to work just fine.  We
+> might want to strongly consider allowing this.
+> 
+> There are drawbacks to this approach too, however.  For example, when
+> one of the devices of the log fails, it will be treated as an 'image'
+> failure, and not a 'log' failure (I can fix that though by checking its
+> lv->status).  If we decide to go this route, we will have to decide if
+> this is the behavior we want or not.  (Once the log is linear, it will
+> behave as you would expect - either being replaced or removed according
+> to the log policy.)
 
-'lvconvert --repair' doen't work and canuses *deadlock*. when a VG contains
-two PVs and one of PVs failed; This is a situation that a mirror leg and
-one of mirrored logs broke at the same time.
-
-When one of mirrored logs broke, I/Os to mirrored log are blocked and
-kmirrord can't make forward until the log is fixed. However, lvocnvert
-command tries to fix mirror legs before a mirrored log if a mirror leg
-also broke.
-
-During the procedure to fix a mirror leg, lv_suspend() is called in
-_remove_mirror_images() and lv_suspend() which calls kernel function,
-dm_suspend(), doesn't finish. Rough call trace is as follows:
-
-  dm_suspend()
-    mirror_presuspend()
-      flush_workqueue()
-        -> waiting kmirrored
-           -> waiting I/O to its log
-
-I think that an error recovery of a log device should be done before
-mirror legs are recovered.
+This approach requires two threads in dmeventd; it is for a top-level LV,
+and another is for a mirrored log. If a leg and mirrored log failed at
+the same time, a mirrored log needs to be recovered before a top-level LV.
+I think this approach is also good if we can handle this situation.
 
 Thanks,
 Taka
+
+
 
 
