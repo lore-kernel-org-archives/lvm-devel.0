@@ -1,82 +1,33 @@
-From: Christine Caulfield <ccaulfie@redhat.com>
-Date: Mon, 22 Feb 2010 15:11:10 +0000
-Subject: [PATCH 1/2] Add "fake" cluster locking (local locking performed in clvmd) for testing.
-In-Reply-To: <1266850526-31583-1-git-send-email-mbroz@redhat.com>
-References: <1266850526-31583-1-git-send-email-mbroz@redhat.com>
-Message-ID: <4B829E8E.709@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 22 Feb 2010 18:11:50 +0000
+Subject: lvm and locales memory issue
+In-Reply-To: <4B8283B6.7000808@redhat.com>
+References: <4B7D063A.7070601@redhat.com> <4B7D372D.4060608@redhat.com>
+	<4B7D4014.3010205@redhat.com> <4B7EB81D.6090405@redhat.com>
+	<20100219163008.GR27427@agk-dp.fab.redhat.com>
+	<4B8262A2.4050408@redhat.com> <4B8283B6.7000808@redhat.com>
+Message-ID: <20100222181150.GA32020@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 22/02/10 14:55, Milan Broz wrote:
-> This patch introduces simple "cluster" locking, which basically
-> simulates only one node to allow clvmd running even withou any cluster
-> infrastucture.
->
-> The puprose of this patch is to provide very simple testin environment
-> for cluster locking.
-> Basically the locking is performed from long-running clvmd process.
->
-> Signed-off-by: Milan Broz<mbroz@redhat.com>
-> ---
->   configure.in                |    1 +
->   daemons/clvmd/Makefile.in   |    4 +
->   daemons/clvmd/clvmd-comms.h |    7 ++
->   daemons/clvmd/clvmd-fake.c  |  191 +++++++++++++++++++++++++++++++++++++++++++
->   daemons/clvmd/clvmd.c       |   16 ++++-
->   5 files changed, 218 insertions(+), 1 deletions(-)
->   create mode 100644 daemons/clvmd/clvmd-fake.c
->
+On Mon, Feb 22, 2010 at 02:16:38PM +0100, Zdenek Kabelac wrote:
+> On 22.2.2010 11:55, Zdenek Kabelac wrote:
+> > 'rm -f /usr/lib/locale/locale-archive'
+> > 'localedef -f UTF-8 -i cs_CZ /usr/lib/locale/cs_CZ.utf8'
+> > 'localedef -i cs_CZ -c -f UTF-8 -A /usr/share/locale/locale.alias cs_CZ.UTF-8'
 
+%attr(0644,root,root) %verify(not md5 size mtime mode) %ghost %config(missingok,noreplace) %{_prefix}/lib/locale/locale-archive
 
-> +static int init_comms()
-> +{
-> +	struct  sockaddr_un addr;
-> +
-> +	listen_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-> +
-> +	if (listen_fd<  0)
-> +		return -1;
-> +
-> +	memset(&addr, 0, sizeof(addr));
-> +	addr.sun_family = AF_UNIX;
-> +	strcpy(addr.sun_path, SOCKET_PATH);
-> +
-> +	unlink(SOCKET_PATH);
-> +	if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr))<  0) {
-> +		DEBUGLOG("Can't bind to port: %s\n", strerror(errno));
-> +		close(listen_fd);
-> +		return -1;
-> +	}
-> +
-> +	listen(listen_fd, 5);
-> +
-> +	/* Set Close-on-exec */
-> +	fcntl(listen_fd, F_SETFD, 1);
-> +
-> +	return 0;
+So removing/changing that file is a fully-supported process?
 
+Perhaps anaconda should automatically remove it (if it has not been customised) on
+any system with < 640MB RAM?
 
-If you only need a a dummy FD then you might as well use /dev/null 
-rather than opening a real socket.
+Or, better, the RPM could be updated not to install it on low-memory systems.
 
-
-> +#ifdef USE_FAKE
-> +	if (!clops)
-> +		if ((cluster_iface == IF_AUTO || cluster_iface == IF_FAKE)&&  (clops = init_fake_cluster())) {
-> +			max_csid_len = FAKE_CSID_LEN;
-> +			max_cluster_message = FAKE_MAX_CLUSTER_MESSAGE;
-> +			max_cluster_member_name_len = MAX_CLUSTER_MEMBER_NAME_LEN;
-> +			syslog(LOG_NOTICE, "Cluster LVM daemon started - connected to FakeCluster");
-> +		}
-> +#endif
->
-
-Please don't add it to the auto-detect list, that will only cause 
-confusion. Only enable fake if it's specified on the command-line.
-
-Chrissie
+Alasdair
 
 
