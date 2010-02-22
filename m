@@ -1,37 +1,78 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Mon, 22 Feb 2010 04:18:35 -0500
-Subject: [PATCH 0 of 13] LVM add 'mirrored' log type
-In-Reply-To: <B66E0CF9-8028-4597-AE6E-3B2F1A7B213A@redhat.com>
-References: <1266429310.29358.35.camel@hydrogen.msp.redhat.com>
-	<B66E0CF9-8028-4597-AE6E-3B2F1A7B213A@redhat.com>
-Message-ID: <4B824BEB.60708@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 22 Feb 2010 11:55:30 +0100
+Subject: lvm and locales memory issue
+In-Reply-To: <20100219163008.GR27427@agk-dp.fab.redhat.com>
+References: <4B7D063A.7070601@redhat.com>
+	<4B7D372D.4060608@redhat.com>	<4B7D4014.3010205@redhat.com>
+	<4B7EB81D.6090405@redhat.com>
+	<20100219163008.GR27427@agk-dp.fab.redhat.com>
+Message-ID: <4B8262A2.4050408@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jonathan Brassow wrote:
-> I'm also testing the other approach; that is, allowing lvconvert to take
-> non-top-level LVs (e.g. "lv_mlog").  It seems to work just fine.  We
-> might want to strongly consider allowing this.
+On 19.2.2010 17:30, Alasdair G Kergon wrote:
+> On Fri, Feb 19, 2010 at 05:11:09PM +0100, Zdenek Kabelac wrote:
+>> Jakub suggest solution to use  a tiny small forked() process with very limited
+>> funcionality to handle mlockall() task  without any usage of locales.
 > 
-> There are drawbacks to this approach too, however.  For example, when
-> one of the devices of the log fails, it will be treated as an 'image'
-> failure, and not a 'log' failure (I can fix that though by checking its
-> lv->status).  If we decide to go this route, we will have to decide if
-> this is the behavior we want or not.  (Once the log is linear, it will
-> behave as you would expect - either being replaced or removed according
-> to the log policy.)
+> Nack.  It's not tiny - it's most of the code - and it's a *state* of usage of
+> the code - a way of using the *same* code as we also use without mlockall at
+> other times - the code knows to behave slightly differently depending whether
+> or not it is in this state.
+> 
+> Surely most people don't need most of the locales - they should be able to
+> choose which ones to cache in the archive file - the ones they regularly use -
+> and take the performance hit on the occasions (if any) they want to use the
+> non-cached ones.
+> 
+> I notice the code to build the archive is in a 'fedora' subdir in the spec file
+> with hard-coded pathnames.  Is there an 'upstream' approach here or do different
+> distributions handle this differently and if so why?
+> 
+>> Eventually error reports, debugs and other things should be handled in
+>> surrounding environment - just like we have discussed already as a one
+>> potential solution.
+>  
+> Opposite way around.  The hack would be to push all the things that attempt to
+> access that locale archive file out into a subprocess.  That would first require
+> an audit of all the the glibc functions we use to determine which ones can attempt
+> to access that file.  Then we'd have to place wrappers around those functions 
+> to push them into a subprocess and avoid using them synchronously when in this
+> 'mlocked' 
 
-This approach requires two threads in dmeventd; it is for a top-level LV,
-and another is for a mirrored log. If a leg and mirrored log failed at
-the same time, a mirrored log needs to be recovered before a top-level LV.
-I think this approach is also good if we can handle this situation.
+state.
+> 
 
-Thanks,
-Taka
+Here is outcome of another chat with Jakub:
 
+It looks like there is no easy way to modify API of glibc anytime soon in the
+near future and this change would have to go through Uli first...
+(there seems to be things like 'newlocale()' which make things more complicated)
 
+As the workaround for 'memory-limited' environments here is suggested  workadound.
+
+remove cache file:
+'rm -f /usr/lib/locale/locale-archive'
+
+and create just locales you need to use:
+'localedef -f UTF-8 -i cs_CZ /usr/lib/locale/cs_CZ.utf8'
+(In this case small separate files in the directory:
+"/usr/lib/locale/cs_CZ.utf8"  are create and opened during application runtime
+- this is probably less effiecient then this second way:
+
+or eventually recreate /usr/lib/locale/locale-archive with this command:
+'localedef -i cs_CZ -c -f UTF-8 -A /usr/share/locale/locale.alias cs_CZ.UTF-8'
+(In this case only .5MB file is generated - for adding another locales - just
+another call with localedef is needed - i.e. en_US, de_DE, cs_CZ will lead to
+~3MB files at my current installation.
+
+Memory footprint for just cs_CZ test case is - i.e. main() { setlocale();
+mloockall{} } is approximately 4MB - compared to 100MB with normal - full
+locale-archive.
+
+Zdenek
 
 
