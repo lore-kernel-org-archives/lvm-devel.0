@@ -1,9 +1,9 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Mon, 22 Feb 2010 01:08:02 -0500
-Subject: [PATCH 8 of 13] LVM: add logic to allow mirrored log
-In-Reply-To: <201002171756.o1HHuw4H004907@hydrogen.msp.redhat.com>
-References: <201002171756.o1HHuw4H004907@hydrogen.msp.redhat.com>
-Message-ID: <4B821F42.8000200@redhat.com>
+Date: Mon, 22 Feb 2010 04:09:29 -0500
+Subject: [PATCH 0 of 13] LVM add 'mirrored' log type
+In-Reply-To: <1266429310.29358.35.camel@hydrogen.msp.redhat.com>
+References: <1266429310.29358.35.camel@hydrogen.msp.redhat.com>
+Message-ID: <4B8249C9.9060602@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -11,42 +11,34 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 Jonathan Brassow wrote:
->  static int _lv_update_log_type(struct cmd_context *cmd,
-> @@ -657,21 +672,48 @@ static int _lv_update_log_type(struct cm
->  			       struct logical_volume *lv,
->  			       int log_count)
->  {
-...
-> +	log_lv = first_seg(original_lv)->log_lv;
-> +
-> +	/* Adding redundancy to the log */
-> +	if (old_log_count < log_count) {
-> +		log_error("Adding log redundancy not supported yet.");
-> +		log_error("Try converting the log to 'core' first.");
-> +		return_0;
->  	}
-> -	return 1;
-> +
-> +	/* Reducing redundancy of the log */
-> +	return remove_mirror_images(log_lv, log_count,
-> +				    lp->pv_count ? lp->pvh : NULL, 1U);
->  }
+> I've fixed the segfaults Taka reported.  I've also begun to go through
+> and fix the remaining issues with handling device failures in the
+> various different scenarios.  I could use some help testing all the
+> different variations.  I've described below some of the different
+> permutations that will now exist.  I will be going through and testing
+> these as well.
 
-Should we pass lp->pvh even if lp->pv_count is 0?
+'lvconvert --repair' doen't work and canuses *deadlock*. when a VG contains
+two PVs and one of PVs failed; This is a situation that a mirror leg and
+one of mirrored logs broke at the same time.
 
-+	return remove_mirror_images(log_lv, log_count, lp->pvh, 1U);
+When one of mirrored logs broke, I/Os to mirrored log are blocked and
+kmirrord can't make forward until the log is fixed. However, lvocnvert
+command tries to fix mirror legs before a mirrored log if a mirror leg
+also broke.
 
-Looking at remove_mirror_images(), the third agrument, removable_pvs,
-is used to decide which mirror leg should be removed. When lp->pv_count
-is 0, lp->pvh has the list of PVs in the VG (see lvconvert_single())
-and the PV list needs to be passed to remove_mirror_images().
+During the procedure to fix a mirror leg, lv_suspend() is called in
+_remove_mirror_images() and lv_suspend() which calls kernel function,
+dm_suspend(), doesn't finish. Rough call trace is as follows:
 
-This issue is found during tests. When the primary leg of the mirrored
-log (e.g. vg00-lv00_mlog_mimage_0) failed, lvconvert --repair vg00/lv00
-didn't recover the vg00/lv00.
+  dm_suspend()
+    mirror_presuspend()
+      flush_workqueue()
+        -> waiting kmirrored
+           -> waiting I/O to its log
 
-With the above fix, lvconvert --repair vg00/lv00 worked well when
-the primary leg of the mirrored log failed.
+I think that an error recovery of a log device should be done before
+mirror legs are recovered.
 
 Thanks,
 Taka
