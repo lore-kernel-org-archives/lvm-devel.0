@@ -1,35 +1,47 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 23 Feb 2010 12:15:17 +0100
-Subject: [PATCH] Add mirror log to dependency tree using its UUID.
-In-Reply-To: <8763624zfz.fsf@twilight.int.mornfall.net.>
-References: <1265021478-17029-1-git-send-email-mbroz@redhat.com>
-	<8763624zfz.fsf@twilight.int.mornfall.net.>
-Message-ID: <4B83B8C5.7090207@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 23 Feb 2010 14:07:24 +0100
+Subject: lvm and locales memory issue
+In-Reply-To: <20100223091539.GV2817@tyan-ft48-01.lab.bos.redhat.com>
+References: <4B7D063A.7070601@redhat.com>
+	<4B7D372D.4060608@redhat.com>	<4B7D4014.3010205@redhat.com>
+	<4B7EB81D.6090405@redhat.com>	<20100219163008.GR27427@agk-dp.fab.redhat.com>	<4B8262A2.4050408@redhat.com>
+	<4B8283B6.7000808@redhat.com>	<20100222181150.GA32020@agk-dp.fab.redhat.com>	<20100222182301.GR2817@tyan-ft48-01.lab.bos.redhat.com>	<4B839743.8020909@redhat.com>
+	<20100223091539.GV2817@tyan-ft48-01.lab.bos.redhat.com>
+Message-ID: <4B83D30C.2000209@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 02/12/2010 09:42 AM, Petr Rockai wrote:
-> If I was a little more careful to check the patch, this could have been
-> easy... You have moved the _mlog from _add_lv_to_dtree to
-> _create_partial_dtree -- but this is not correct! The following patch
-> works:
+On 23.2.2010 10:15, Jakub Jelinek wrote:
+> On Tue, Feb 23, 2010 at 09:52:19AM +0100, Zdenek Kabelac wrote:
+>> Ok - and now I'm getting confused and lost here.
+>>
+>> >From our chat I've got impression that using 'localedef' is perfectly valid
+>> way how to create usable content for /usr/lib/locale.
+> 
+> True, but very costly one.
+> 
+> time for i in `cat /tmp/SUPPORTED`; do j=`echo $i | sed 's,/.*$,,'`; k=`echo $i | sed 's,^.*/,,'`; l=`echo $j | sed 's/\..*$//'`; localedef -A /usr/share/locale/locale.alias --no-archive -f $k -i $l -c /tmp/nyy/$j; done
+> 
+> real	6m12.985s
+> user	5m34.818s
+> sys	0m33.134s
+> 
+> Do you seriously suggest that we spend 6 minutes on very fast machines
+> during glibc-common upgrades?  You must be joking.
+> 
 
-:-)
 
-> @@ -823,7 +823,8 @@ static int _add_lv_to_dtree(struct dev_m
->  	if (!_add_dev_to_dtree(dm, dtree, lv, "cow"))
->  		return_0;
->  
-> -	if (!_add_dev_to_dtree(dm, dtree, lv, "_mlog"))
-> +	if ((lv->status & MIRRORED) && first_seg(lv)->log_lv &&
-> +	    !_add_dev_to_dtree(dm, dtree, first_seg(lv)->log_lv, NULL))
->  		return_0;
+As a side note to these timing informations - from my strace it looks like
+some major portion of this compilation time is spent in parsing translit_*
+files which seems to be the same for all locales?? - thus if there would be
+just tiny improvement in localedef, to be able to generate multiple locales at
+once, I'd assume the total compilation time could be much better....
 
-yes, this seem to be correct, ack
+So it really depends on which part do you want to optimize....
 
-Milan
+Zdenek
 
 
