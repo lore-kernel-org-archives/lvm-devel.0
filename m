@@ -1,12 +1,11 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 23 Feb 2010 14:30:25 -0500
-Subject: [PATCH 3/4] Add an example to the lvm2app.h code, which is also part of the unit testing.
-In-Reply-To: <1266953426-20955-3-git-send-email-dwysocha@redhat.com>
+Date: Tue, 23 Feb 2010 14:30:24 -0500
+Subject: [PATCH 2/4] Add Doxygen file for lvm2app to generate documentation from lvm2app.h.
+In-Reply-To: <1266953426-20955-2-git-send-email-dwysocha@redhat.com>
 References: <1266427744-30327-9-git-send-email-dwysocha@redhat.com>
 	<1266953426-20955-1-git-send-email-dwysocha@redhat.com>
 	<1266953426-20955-2-git-send-email-dwysocha@redhat.com>
-	<1266953426-20955-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1266953426-20955-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1266953426-20955-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -16,133 +15,270 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/lvm2app.h        |    4 +-
- test/api/lvm_list_all.c |  101 +++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 104 insertions(+), 1 deletions(-)
- create mode 100644 test/api/lvm_list_all.c
+ liblvm/Doxyfile |  254 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 254 insertions(+), 0 deletions(-)
+ create mode 100644 liblvm/Doxyfile
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 61ffd87..2301a9e 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -62,7 +62,9 @@
-  * whether the original "vg_seqno" obtained with READ permission matches
-  * the new one obtained with WRITE permission.
-  */
--
-+/**
-+ * \example lvm_list_all.c
-+ */
- /**
-  * Retrieve the library version.
-  *
-diff --git a/test/api/lvm_list_all.c b/test/api/lvm_list_all.c
+diff --git a/liblvm/Doxyfile b/liblvm/Doxyfile
 new file mode 100644
-index 0000000..11feac6
+index 0000000..b0b3db6
 --- /dev/null
-+++ b/test/api/lvm_list_all.c
-@@ -0,0 +1,101 @@
-+/*
-+ * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+#include <stdio.h>
-+#include <unistd.h>
-+#include <inttypes.h>
++++ b/liblvm/Doxyfile
+@@ -0,0 +1,254 @@
++# Doxyfile 1.5.7.1
 +
-+#include "lvm2app.h"
-+
-+static void _process_vg(vg_t vg);
-+/*
-+ * List all volume groups, physical volumes, and logical volumes in
-+ * the system.  Sample output:
-+ *
-+ * Opening volume group VolGroup00
-+ * vg_name: VolGroup00, vg_uuid: OQ2d4T-qzZ7-k73u-vHt8-9T33-kTk8-ZjW4qZ
-+ * - lv_name: LogVol00, lv_uuid: bFO4EU-UaDu-iuMm-N6BA-xcZc-nm3u-J5K5lu
-+ * - lv_name: LogVol01, lv_uuid: BHGsPK-PwzY-kye0-MEWa-a67z-BiYE-03ZjwM
-+ * - pv_name: /dev/sda2, pv_uuid: Be91pt-CqT0-4YJE-nGI6-Oisz-hy0N-l9CHgn
-+ * Opening volume group vgtest
-+ * vg_name: vgtest, vg_uuid: Bo3niX-gRkd-FMf2-wIdR-Hgao-MZdM-diQrxh
-+ * - lv_name: lv0, lv_uuid: x5nTlk-UvuT-GJHE-mPiL-Nc6u-O2nW-AkXpfo
-+ * - lv_name: lv1, lv_uuid: fZ6KbM-f3YT-vsR6-XPoc-XDcY-evv5-RhzlCQ
-+ * - pv_name: /dev/loop0, pv_uuid: xe6FGu-ya5h-677k-mVlc-bpok-dawg-8tIfOh
-+ * - pv_name: /dev/loop1, pv_uuid: 1voe8u-fBCz-lliH-kDFR-vNx7-sZoy-RZP7ts
-+ * - pv_name: /dev/loop2, pv_uuid: dGJvCt-fSrY-1azp-r9rG-Kxby-Shon-RWbhZI
-+ */
-+int main(int argc, char *argv[])
-+{
-+	lvm_t lvm;
-+	vg_t vg;
-+	struct dm_list *vgnames;
-+	struct lvm_str_list *strl;
-+
-+	lvm = lvm_init(NULL);
-+	if (!lvm) {
-+		fprintf(stderr, "lvm_init() failed\n");
-+		goto bad;
-+	}
-+
-+	printf("Library version: %s\n", lvm_library_get_version());
-+	vgnames = lvm_list_vg_names(lvm);
-+	if (!vgnames) {
-+		fprintf(stderr, "lvm_list_vg_names() failed\n");
-+		goto bad;
-+	}
-+	dm_list_iterate_items(strl, vgnames) {
-+		printf("Opening volume group %s\n", strl->str);
-+		vg = lvm_vg_open(lvm, strl->str, "r", 0);
-+		_process_vg(vg);
-+		lvm_vg_close(vg);
-+	}
-+	lvm_quit(lvm);
-+	_exit(0);
-+bad:
-+	if (lvm)
-+		lvm_quit(lvm);
-+	_exit(-1);
-+}
-+
-+static void _process_vg(vg_t vg)
-+{
-+	struct dm_list *lvs, *pvs;
-+	struct lvm_pv_list *pvl;
-+	struct lvm_lv_list *lvl;
-+
-+	if (!vg) {
-+		fprintf(stderr, "Error opening volume group");
-+		return;
-+	}
-+	printf("vg_name: %s, vg_uuid: %s\n", lvm_vg_get_name(vg),
-+	       lvm_vg_get_uuid(vg));
-+	lvs = lvm_vg_list_lvs(vg);
-+	if (!lvs) {
-+		fprintf(stderr, "lvm_vg_list_lvs() failed\n");
-+		return;
-+	}
-+	dm_list_iterate_items(lvl, lvs) {
-+		printf("- lv_name: %s, lv_uuid: %s\n",
-+			lvm_lv_get_name(lvl->lv), lvm_lv_get_uuid(lvl->lv));
-+	}
-+	pvs = lvm_vg_list_pvs(vg);
-+	if (!pvs) {
-+		fprintf(stderr, "lvm_vg_list_pvs() failed\n");
-+		return;
-+	}
-+	dm_list_iterate_items(pvl, pvs) {
-+		printf("- pv_name: %s, pv_uuid: %s\n",
-+			lvm_pv_get_name(pvl->pv), lvm_pv_get_uuid(pvl->pv));
-+	}
-+}
++#---------------------------------------------------------------------------
++# Project related configuration options
++#---------------------------------------------------------------------------
++DOXYFILE_ENCODING      = UTF-8
++PROJECT_NAME           = 
++PROJECT_NUMBER         = 
++OUTPUT_DIRECTORY       = doxygen-output
++CREATE_SUBDIRS         = NO
++OUTPUT_LANGUAGE        = English
++BRIEF_MEMBER_DESC      = YES
++REPEAT_BRIEF           = YES
++ABBREVIATE_BRIEF       = 
++ALWAYS_DETAILED_SEC    = NO
++INLINE_INHERITED_MEMB  = NO
++FULL_PATH_NAMES        = YES
++STRIP_FROM_PATH        = 
++STRIP_FROM_INC_PATH    = 
++SHORT_NAMES            = NO
++JAVADOC_AUTOBRIEF      = NO
++QT_AUTOBRIEF           = NO
++MULTILINE_CPP_IS_BRIEF = NO
++INHERIT_DOCS           = YES
++SEPARATE_MEMBER_PAGES  = NO
++TAB_SIZE               = 8
++ALIASES                = 
++OPTIMIZE_OUTPUT_FOR_C  = NO
++OPTIMIZE_OUTPUT_JAVA   = NO
++OPTIMIZE_FOR_FORTRAN   = NO
++OPTIMIZE_OUTPUT_VHDL   = NO
++BUILTIN_STL_SUPPORT    = NO
++CPP_CLI_SUPPORT        = NO
++SIP_SUPPORT            = NO
++IDL_PROPERTY_SUPPORT   = YES
++DISTRIBUTE_GROUP_DOC   = NO
++SUBGROUPING            = YES
++TYPEDEF_HIDES_STRUCT   = NO
++SYMBOL_CACHE_SIZE      = 0
++#---------------------------------------------------------------------------
++# Build related configuration options
++#---------------------------------------------------------------------------
++EXTRACT_ALL            = YES
++EXTRACT_PRIVATE        = YES
++EXTRACT_STATIC         = NO
++EXTRACT_LOCAL_CLASSES  = YES
++EXTRACT_LOCAL_METHODS  = NO
++EXTRACT_ANON_NSPACES   = NO
++HIDE_UNDOC_MEMBERS     = NO
++HIDE_UNDOC_CLASSES     = NO
++HIDE_FRIEND_COMPOUNDS  = NO
++HIDE_IN_BODY_DOCS      = NO
++INTERNAL_DOCS          = NO
++CASE_SENSE_NAMES       = YES
++HIDE_SCOPE_NAMES       = NO
++SHOW_INCLUDE_FILES     = YES
++INLINE_INFO            = YES
++SORT_MEMBER_DOCS       = YES
++SORT_BRIEF_DOCS        = NO
++SORT_GROUP_NAMES       = NO
++SORT_BY_SCOPE_NAME     = NO
++GENERATE_TODOLIST      = YES
++GENERATE_TESTLIST      = YES
++GENERATE_BUGLIST       = YES
++GENERATE_DEPRECATEDLIST= YES
++ENABLED_SECTIONS       = 
++MAX_INITIALIZER_LINES  = 30
++SHOW_USED_FILES        = YES
++SHOW_DIRECTORIES       = NO
++SHOW_FILES             = YES
++SHOW_NAMESPACES        = YES
++FILE_VERSION_FILTER    = 
++LAYOUT_FILE            = 
++#---------------------------------------------------------------------------
++# configuration options related to warning and progress messages
++#---------------------------------------------------------------------------
++QUIET                  = NO
++WARNINGS               = YES
++WARN_IF_UNDOCUMENTED   = YES
++WARN_IF_DOC_ERROR      = YES
++WARN_NO_PARAMDOC       = NO
++WARN_FORMAT            = "$file:$line: $text"
++WARN_LOGFILE           = 
++#---------------------------------------------------------------------------
++# configuration options related to the input files
++#---------------------------------------------------------------------------
++INPUT                  = ./
++INPUT_ENCODING         = UTF-8
++FILE_PATTERNS          = *.c \
++                         *.h
++RECURSIVE              = NO
++EXCLUDE                = 
++EXCLUDE_SYMLINKS       = NO
++EXCLUDE_PATTERNS       = 
++EXCLUDE_SYMBOLS        = 
++EXAMPLE_PATH           = ../test/api
++EXAMPLE_PATTERNS       = 
++EXAMPLE_RECURSIVE      = NO
++IMAGE_PATH             = 
++INPUT_FILTER           = 
++FILTER_PATTERNS        = 
++FILTER_SOURCE_FILES    = NO
++#---------------------------------------------------------------------------
++# configuration options related to source browsing
++#---------------------------------------------------------------------------
++SOURCE_BROWSER         = NO
++INLINE_SOURCES         = NO
++STRIP_CODE_COMMENTS    = YES
++REFERENCED_BY_RELATION = NO
++REFERENCES_RELATION    = NO
++REFERENCES_LINK_SOURCE = YES
++USE_HTAGS              = NO
++VERBATIM_HEADERS       = YES
++#---------------------------------------------------------------------------
++# configuration options related to the alphabetical class index
++#---------------------------------------------------------------------------
++ALPHABETICAL_INDEX     = NO
++COLS_IN_ALPHA_INDEX    = 5
++IGNORE_PREFIX          = 
++#---------------------------------------------------------------------------
++# configuration options related to the HTML output
++#---------------------------------------------------------------------------
++GENERATE_HTML          = YES
++HTML_OUTPUT            = html
++HTML_FILE_EXTENSION    = .html
++HTML_HEADER            = 
++HTML_FOOTER            = 
++HTML_STYLESHEET        = 
++HTML_ALIGN_MEMBERS     = YES
++HTML_DYNAMIC_SECTIONS  = NO
++GENERATE_DOCSET        = NO
++DOCSET_FEEDNAME        = "Doxygen generated docs"
++DOCSET_BUNDLE_ID       = org.doxygen.Project
++GENERATE_HTMLHELP      = NO
++CHM_FILE               = 
++HHC_LOCATION           = 
++GENERATE_CHI           = NO
++CHM_INDEX_ENCODING     = 
++BINARY_TOC             = NO
++TOC_EXPAND             = NO
++GENERATE_QHP           = NO
++QCH_FILE               = 
++QHP_NAMESPACE          = org.doxygen.Project
++QHP_VIRTUAL_FOLDER     = doc
++QHG_LOCATION           = 
++DISABLE_INDEX          = NO
++ENUM_VALUES_PER_LINE   = 4
++GENERATE_TREEVIEW      = NONE
++TREEVIEW_WIDTH         = 250
++FORMULA_FONTSIZE       = 10
++#---------------------------------------------------------------------------
++# configuration options related to the LaTeX output
++#---------------------------------------------------------------------------
++GENERATE_LATEX         = YES
++LATEX_OUTPUT           = latex
++LATEX_CMD_NAME         = latex
++MAKEINDEX_CMD_NAME     = makeindex
++COMPACT_LATEX          = NO
++PAPER_TYPE             = a4wide
++EXTRA_PACKAGES         = 
++LATEX_HEADER           = 
++PDF_HYPERLINKS         = YES
++USE_PDFLATEX           = YES
++LATEX_BATCHMODE        = NO
++LATEX_HIDE_INDICES     = NO
++#---------------------------------------------------------------------------
++# configuration options related to the RTF output
++#---------------------------------------------------------------------------
++GENERATE_RTF           = NO
++RTF_OUTPUT             = rtf
++COMPACT_RTF            = NO
++RTF_HYPERLINKS         = NO
++RTF_STYLESHEET_FILE    = 
++RTF_EXTENSIONS_FILE    = 
++#---------------------------------------------------------------------------
++# configuration options related to the man page output
++#---------------------------------------------------------------------------
++GENERATE_MAN           = YES
++MAN_OUTPUT             = man
++MAN_EXTENSION          = .3
++MAN_LINKS              = NO
++#---------------------------------------------------------------------------
++# configuration options related to the XML output
++#---------------------------------------------------------------------------
++GENERATE_XML           = NO
++XML_OUTPUT             = xml
++XML_SCHEMA             = 
++XML_DTD                = 
++XML_PROGRAMLISTING     = YES
++#---------------------------------------------------------------------------
++# configuration options for the AutoGen Definitions output
++#---------------------------------------------------------------------------
++GENERATE_AUTOGEN_DEF   = NO
++#---------------------------------------------------------------------------
++# configuration options related to the Perl module output
++#---------------------------------------------------------------------------
++GENERATE_PERLMOD       = NO
++PERLMOD_LATEX          = NO
++PERLMOD_PRETTY         = YES
++PERLMOD_MAKEVAR_PREFIX = 
++#---------------------------------------------------------------------------
++# Configuration options related to the preprocessor   
++#---------------------------------------------------------------------------
++ENABLE_PREPROCESSING   = YES
++MACRO_EXPANSION        = NO
++EXPAND_ONLY_PREDEF     = NO
++SEARCH_INCLUDES        = YES
++INCLUDE_PATH           = ../libdm
++INCLUDE_FILE_PATTERNS  =
++PREDEFINED             = 
++EXPAND_AS_DEFINED      = 
++SKIP_FUNCTION_MACROS   = YES
++#---------------------------------------------------------------------------
++# Configuration::additions related to external references   
++#---------------------------------------------------------------------------
++TAGFILES               = 
++GENERATE_TAGFILE       = 
++ALLEXTERNALS           = NO
++EXTERNAL_GROUPS        = YES
++PERL_PATH              = /usr/bin/perl
++#---------------------------------------------------------------------------
++# Configuration options related to the dot tool   
++#---------------------------------------------------------------------------
++CLASS_DIAGRAMS         = YES
++MSCGEN_PATH            = 
++HIDE_UNDOC_RELATIONS   = YES
++HAVE_DOT               = NO
++DOT_FONTNAME           = FreeSans
++DOT_FONTSIZE           = 10
++DOT_FONTPATH           = 
++CLASS_GRAPH            = YES
++COLLABORATION_GRAPH    = YES
++GROUP_GRAPHS           = YES
++UML_LOOK               = NO
++TEMPLATE_RELATIONS     = NO
++INCLUDE_GRAPH          = YES
++INCLUDED_BY_GRAPH      = YES
++CALL_GRAPH             = YES
++CALLER_GRAPH           = NO
++GRAPHICAL_HIERARCHY    = YES
++DIRECTORY_GRAPH        = YES
++DOT_IMAGE_FORMAT       = png
++DOT_PATH               = 
++DOTFILE_DIRS           = 
++DOT_GRAPH_MAX_NODES    = 50
++MAX_DOT_GRAPH_DEPTH    = 0
++DOT_TRANSPARENT        = NO
++DOT_MULTI_TARGETS      = NO
++GENERATE_LEGEND        = YES
++DOT_CLEANUP            = YES
++#---------------------------------------------------------------------------
++# Configuration::additions related to the search engine   
++#---------------------------------------------------------------------------
++SEARCHENGINE           = NO
 -- 
 1.6.0.6
 
