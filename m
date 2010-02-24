@@ -1,67 +1,61 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 24 Feb 2010 10:39:17 +0100
-Subject: lvm and locales memory issue
-In-Reply-To: <20100223162842.GC2817@tyan-ft48-01.lab.bos.redhat.com>
-References: <4B7D372D.4060608@redhat.com>
-	<4B7D4014.3010205@redhat.com>	<4B7EB81D.6090405@redhat.com>	<20100219163008.GR27427@agk-dp.fab.redhat.com>	<4B8262A2.4050408@redhat.com>
-	<4B8283B6.7000808@redhat.com>	<20100222181150.GA32020@agk-dp.fab.redhat.com>	<20100222182301.GR2817@tyan-ft48-01.lab.bos.redhat.com>	<4B839743.8020909@redhat.com>
-	<4B83F193.9020209@redhat.com>
-	<20100223162842.GC2817@tyan-ft48-01.lab.bos.redhat.com>
-Message-ID: <4B84F3C5.9060100@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 24 Feb 2010 12:46:51 +0100
+Subject: [PATCH 1/2] Always query device by uuid only.
+In-Reply-To: <20100223203902.GA31973@redhat.com>
+References: <1266932816-5621-1-git-send-email-mbroz@redhat.com>
+	<20100223203902.GA31973@redhat.com>
+Message-ID: <4B8511AB.3080305@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 23.2.2010 17:28, Jakub Jelinek wrote:
->> Another note could be - Ubuntu does not even use locale-archive file and uses
->> locales on per file basis - so now I'm getting curious, where are the tests,
-> 
-> Not everything Ubuntu does is necessarily a good idea.
-> 
->> that proves that Fedora gets some measurable performance advantage?
-> 
-> Try something trivial, like:
-> #include <locale.h>
-> 
-> int
-> main (void)
-> {
->   int i;
->   for (i = 0; i < 1000000; i++)
->     switch (i % 5)
->       {
->       case 0: setlocale (LC_ALL, "C"); break;
->       case 1: setlocale (LC_ALL, "en_US.UTF-8"); break;
->       case 2: setlocale (LC_ALL, "cs_CZ.UTF-8"); break;
->       case 3: setlocale (LC_ALL, "fr_FR.UTF-8"); break;
->       case 4: setlocale (LC_ALL, "de_DE.UTF-8"); break;
->       }
->   return 0;
-> }
-> 
-> With locale-archive 1.362s, without, using locale files, 10.355s.  And
 
+On 02/23/2010 09:39 PM, Mike Snitzer wrote:
 
->From looking into the code and keeping in mind we need to handle these
-millions of switches per second as a killer feature - there seems to be nice
-way -  instead of doing one large mmap call - how about doing several
-smaller sized mmap just for regions needed by given locale.
+> Also, _add_dev_to_dtree() is the only remaining caller of _info() that
+> passes 'name'.  Passing a NULL 'name' to _info() from _add_dev_to_dtree()
+> still allows the testsuite to pass.  What are the benefit(s) of
+> preserving _info()'s info-by-name fallback for _add_dev_to_dtree()?
 
-Once mmap-ed - it will stay in program's memory till its exit just like now...
+user for name paramater is lv_mknodes() and my patch was wrong here,
+name must be still passed into that function.
 
-So - instead of one large 100MB mmap - we would end for this 'benchmark'
-with maybe 8-10 mmap calls per setlocale - so let's say 50 mmap calls for
-small memory regions. (or less - depends on how the locale-archive is
-organized - maybe everything except LC_CTYPE & LC_COLLATE could be in on
-mmaped area)
+_add_dev_to_dtree() should use NULL for name...
 
-As a bonus - for the most common use-case - it might eat less pgt entries
-(I assume its ~190kb for x86_64 and 100MB file)
-On the opposite site - user of all locales at once would waste memory by
-having some pages mmmaped multiple times....
+Thanks.
 
-Zdenek
+Milan
+
+---
+ lib/activate/dev_manager.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 84f94ff..2ec9b6f 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -254,8 +254,8 @@ int dev_manager_info(struct dm_pool *mem, const struct logical_volume *lv,
+ 		return 0;
+ 	}
+ 
+-	log_debug("Getting device info for %s", name);
+-	r = _info(NULL, dlid, with_mknodes, with_open_count,
++	log_debug("Getting device info for %s [%s]", name, dlid);
++	r = _info(name, dlid, with_mknodes, with_open_count,
+ 		  with_read_ahead, info, read_ahead);
+ 
+ 	dm_pool_free(mem, (char*)name);
+@@ -785,7 +785,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		return_0;
+ 
+ 	log_debug("Getting device info for %s [%s]", name, dlid);
+-	if (!_info(name, dlid, 0, 1, 0, &info, NULL)) {
++	if (!_info(NULL, dlid, 0, 1, 0, &info, NULL)) {
+ 		log_error("Failed to get info for %s [%s].", name, dlid);
+ 		return 0;
+ 	}
+
 
 
