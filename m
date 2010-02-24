@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 24 Feb 2010 18:16:44 -0000
-Subject: LVM2/liblvm lvm2app.h
-Message-ID: <20100224181644.16632.qmail@sourceware.org>
+Date: 24 Feb 2010 18:16:55 -0000
+Subject: LVM2/liblvm Doxyfile lvm_misc.c lvm_misc.h
+Message-ID: <20100224181655.16912.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,938 +10,363 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-02-24 18:16:44
+Changes by:	wysochanski at sourceware.org	2010-02-24 18:16:55
 
-Modified files:
-	liblvm         : lvm2app.h 
+Added files:
+	liblvm         : Doxyfile lvm_misc.c lvm_misc.h 
 
 Log message:
-	Update doxygen comments for lvm2app.h.
+	Add Doxygen file for lvm2app to generate documentation from lvm2app.h.
 	
-	Fix add/remove tag function headers.
-	Fix a lot of little problems with doxygen comments.
-	Clarify the basic objects and their handles, and place functions with their
-	appropriate handles/objects.
-	All this cleanup moves automatic documentation of lvm2app much closer to being
-	useful as official documentation.  In the future I will add some examples
-	and plan to build the examples as part of the unit tests.
+	A simple Doxygen file for lvm2app documentation.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Doxyfile.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/liblvm/lvm2app.h	2010/02/24 18:16:26	1.13
-+++ LVM2/liblvm/lvm2app.h	2010/02/24 18:16:44	1.14
-@@ -33,7 +33,7 @@
-  * \mainpage LVM library API
-  *
-  * The API is designed around the following basic LVM objects:
-- * 1) Physical Volume (PV) 2) Volume Group (VG) 3) Logical Volume (LV).
-+ * 1) Physical Volume (pv_t) 2) Volume Group (vg_t) 3) Logical Volume (lv_t).
-  *
-  * The library provides functions to list the objects in a system,
-  * get and set object properties (such as names, UUIDs, and sizes), as well
-@@ -44,8 +44,8 @@
-  * A central object in the library is the Volume Group, represented by the
-  * VG handle, vg_t. Performing an operation on a PV or LV object first
-  * requires obtaining a VG handle. Once the vg_t has been obtained, it can
-- * be used to enumerate the pv_t's and lv_t's within that vg_t. Attributes
-- * of these objects can then be queried.
-+ * be used to enumerate the pv_t and lv_t objects within that vg_t. Attributes
-+ * of these objects can then be queried or changed.
-  *
-  * A volume group handle may be obtained with read or write permission.
-  * Any attempt to change a property of a pv_t, vg_t, or lv_t without
-@@ -94,7 +94,7 @@
- struct logical_volume;
- 
- /**
-- * lvm handle.
-+ * \class lvm_t
-  *
-  * This is the base handle that is needed to open and create objects such as
-  * volume groups and logical volumes.  In addition, this handle provides a
-@@ -105,37 +105,38 @@
- typedef struct lvm *lvm_t;
- 
- /**
-- * Volume group object.
-+ * \class vg_t
-  *
-- * This object can be either a read-only object or a read-write object
-- * depending on the mode it was returned by a function. Create functions
-- * return a read-write object, but open functions have the argument mode to
-- * define if the object can be modified or not.
-+ * The volume group object is a central object in the library, and can be
-+ * either a read-only object or a read-write object depending on the function
-+ * used to obtain the object handle. For example, lvm_vg_create() always
-+ * returns a read/write handle, while lvm_vg_open() has a "mode" argument
-+ * to define the read/write mode of the handle.
-  */
- typedef struct volume_group *vg_t;
- 
- /**
-- * Logical Volume object.
-+ * \class lv_t
-  *
-- * This object is bound to a volume group and has the same mode of the volume
-- * group.  Changes will be written to disk when the volume group gets
-- * committed to disk.
-+ * This logical volume object is bound to a vg_t and has the same
-+ * read/write mode as the vg_t.  Changes will be written to disk
-+ * when the vg_t gets committed to disk by calling lvm_vg_write().
-  */
- typedef struct logical_volume *lv_t;
- 
- /**
-- * Physical volume object.
-+ * \class pv_t
-  *
-- * This object is bound to a volume group and has the same mode of the volume
-- * group.  Changes will be written to disk when the volume group gets
-- * committed to disk.
-+ * This physical volume object is bound to a vg_t and has the same
-+ * read/write mode as the vg_t.  Changes will be written to disk
-+ * when the vg_t gets committed to disk by calling lvm_vg_write().
-  */
- typedef struct physical_volume *pv_t;
- 
- /**
-  * Logical Volume object list.
-  *
-- * Lists of these structures are returned by lvm_vg_list_pvs.
-+ * Lists of these structures are returned by lvm_vg_list_pvs().
-  */
- typedef struct lvm_lv_list {
- 	struct dm_list list;
-@@ -145,7 +146,7 @@
- /**
-  * Physical volume object list.
-  *
-- * Lists of these structures are returned by lvm_vg_list_pvs.
-+ * Lists of these structures are returned by lvm_vg_list_pvs().
-  */
- typedef struct lvm_pv_list {
- 	struct dm_list list;
-@@ -156,8 +157,8 @@
-  * String list.
-  *
-  * This string list contains read-only strings.
-- * Lists of these structures are returned by lvm_list_vg_names and
-- * lvm_list_vg_uuids.
-+ * Lists of these structures are returned by functions such as
-+ * lvm_list_vg_names() and lvm_list_vg_uuids().
-  */
- typedef struct lvm_str_list {
- 	struct dm_list list;
-@@ -168,6 +169,8 @@
- /**
-  * Create a LVM handle.
-  *
-+ * \memberof lvm_t
-+ *
-  * Once all LVM operations have been completed, use lvm_quit to release
-  * the handle and any associated resources.
-  *
-@@ -184,7 +187,9 @@
- lvm_t lvm_init(const char *system_dir);
- 
- /**
-- * Destroy a LVM handle allocated with lvm_init.
-+ * Destroy a LVM handle allocated with lvm_init().
-+ *
-+ * \memberof lvm_t
-  *
-  * This function should be used after all LVM operations are complete or after
-  * an unrecoverable error.  Destroying the LVM handle frees the memory and
-@@ -192,19 +197,21 @@
-  * cannot be used subsequently.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  */
- void lvm_quit(lvm_t libh);
- 
- /**
-  * Reload the original configuration from the system directory.
-  *
-+ * \memberof lvm_t
-+ *
-  * This function should be used when any LVM configuration changes in the LVM
-  * system_dir or by another lvm_config* function, and the change is needed by
-  * the application.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-@@ -214,12 +221,14 @@
- /**
-  * Override the LVM configuration with a configuration string.
-  *
-+ * \memberof lvm_t
-+ *
-  * This function is equivalent to the --config option on lvm commands.
-  * Once this API has been used to over-ride the configuration,
-- * use lvm_config_reload to apply the new settings.
-+ * use lvm_config_reload() to apply the new settings.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \param   config_string
-  * LVM configuration string to apply.  See the lvm.conf file man page
-@@ -233,6 +242,8 @@
- /**
-  * Return stored error no describing last LVM API error.
-  *
-+ * \memberof lvm_t
-+ *
-  * Users of liblvm should use lvm_errno to determine the details of a any
-  * failure of the last call.  A basic success or fail is always returned by
-  * every function, either by returning a 0 or -1, or a non-NULL / NULL.
-@@ -242,7 +253,7 @@
-  * returns a value.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \return
-  * An errno value describing the last LVM error.
-@@ -252,11 +263,13 @@
- /**
-  * Return stored error message describing last LVM error.
-  *
-+ * \memberof lvm_t
-+ *
-  * This function may be used in conjunction with lvm_errno to obtain more
-  * specific error information for a function that is known to have failed.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \return
-  * An error string describing the last LVM error.
-@@ -266,16 +279,18 @@
- /**
-  * Scan all devices on the system for VGs and LVM metadata.
-  *
-+ * \memberof lvm_t
-+ *
-  * \return
-  * 0 (success) or -1 (failure).
-  */
- int lvm_scan(lvm_t libh);
- 
--/*************************** volume group handling **************************/
--
- /**
-  * Return the list of volume group names.
-  *
-+ * \memberof lvm_t
-+ *
-  * The memory allocated for the list is tied to the lvm_t handle and will be
-  * released when lvm_quit is called.
-  *
-@@ -308,6 +323,8 @@
- /**
-  * Return the list of volume group uuids.
-  *
-+ * \memberof lvm_t
-+ *
-  * The memory allocated for the list is tied to the lvm_t handle and will be
-  * released when lvm_quit is called.
-  *
-@@ -315,7 +332,7 @@
-  * metadata.  To scan the system, use lvm_scan.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \return
-  * A list with entries of type struct lvm_str_list, containing the
-@@ -331,8 +348,10 @@
-  *
-  * Open a VG for reading or writing.
-  *
-+ * \memberof lvm_t
-+ *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \param   vgname
-  * Name of the VG to open.
-@@ -352,17 +371,19 @@
- /**
-  * Create a VG with default parameters.
-  *
-+ * \memberof lvm_t
-+ *
-  * This function creates a Volume Group object in memory.
-  * Upon success, other APIs may be used to set non-default parameters.
-- * For example, to set a non-default extent size, use lvm_vg_set_extent_size.
-+ * For example, to set a non-default extent size, use lvm_vg_set_extent_size().
-  * Next, to add physical storage devices to the volume group, use
-- * lvm_vg_extend for each device.
-+ * lvm_vg_extend() for each device.
-  * Once all parameters are set appropriately and all devices are added to the
-- * VG, use lvm_vg_write to commit the new VG to disk, and lvm_vg_close to
-+ * VG, use lvm_vg_write() to commit the new VG to disk, and lvm_vg_close() to
-  * release the VG handle.
-  *
-  * \param   libh
-- * Handle obtained from lvm_init.
-+ * Handle obtained from lvm_init().
-  *
-  * \param   vg_name
-  * Name of the VG to open.
-@@ -372,15 +393,47 @@
-  */
- vg_t lvm_vg_create(lvm_t libh, const char *vg_name);
- 
-- /**
-+/*************************** volume group handling **************************/
+/cvs/lvm2/LVM2/liblvm/Doxyfile,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/Doxyfile
++++ -	2010-02-24 18:16:55.288093000 +0000
+@@ -0,0 +1,254 @@
++# Doxyfile 1.5.7.1
 +
-+/**
-+ * Return a list of LV handles for a given VG handle.
++#---------------------------------------------------------------------------
++# Project related configuration options
++#---------------------------------------------------------------------------
++DOXYFILE_ENCODING      = UTF-8
++PROJECT_NAME           =
++PROJECT_NUMBER         =
++OUTPUT_DIRECTORY       = doxygen-output
++CREATE_SUBDIRS         = NO
++OUTPUT_LANGUAGE        = English
++BRIEF_MEMBER_DESC      = YES
++REPEAT_BRIEF           = YES
++ABBREVIATE_BRIEF       =
++ALWAYS_DETAILED_SEC    = NO
++INLINE_INHERITED_MEMB  = NO
++FULL_PATH_NAMES        = YES
++STRIP_FROM_PATH        =
++STRIP_FROM_INC_PATH    =
++SHORT_NAMES            = NO
++JAVADOC_AUTOBRIEF      = NO
++QT_AUTOBRIEF           = NO
++MULTILINE_CPP_IS_BRIEF = NO
++INHERIT_DOCS           = YES
++SEPARATE_MEMBER_PAGES  = NO
++TAB_SIZE               = 8
++ALIASES                =
++OPTIMIZE_OUTPUT_FOR_C  = NO
++OPTIMIZE_OUTPUT_JAVA   = NO
++OPTIMIZE_FOR_FORTRAN   = NO
++OPTIMIZE_OUTPUT_VHDL   = NO
++BUILTIN_STL_SUPPORT    = NO
++CPP_CLI_SUPPORT        = NO
++SIP_SUPPORT            = NO
++IDL_PROPERTY_SUPPORT   = YES
++DISTRIBUTE_GROUP_DOC   = NO
++SUBGROUPING            = YES
++TYPEDEF_HIDES_STRUCT   = NO
++SYMBOL_CACHE_SIZE      = 0
++#---------------------------------------------------------------------------
++# Build related configuration options
++#---------------------------------------------------------------------------
++EXTRACT_ALL            = YES
++EXTRACT_PRIVATE        = YES
++EXTRACT_STATIC         = NO
++EXTRACT_LOCAL_CLASSES  = YES
++EXTRACT_LOCAL_METHODS  = NO
++EXTRACT_ANON_NSPACES   = NO
++HIDE_UNDOC_MEMBERS     = NO
++HIDE_UNDOC_CLASSES     = NO
++HIDE_FRIEND_COMPOUNDS  = NO
++HIDE_IN_BODY_DOCS      = NO
++INTERNAL_DOCS          = NO
++CASE_SENSE_NAMES       = YES
++HIDE_SCOPE_NAMES       = NO
++SHOW_INCLUDE_FILES     = YES
++INLINE_INFO            = YES
++SORT_MEMBER_DOCS       = YES
++SORT_BRIEF_DOCS        = NO
++SORT_GROUP_NAMES       = NO
++SORT_BY_SCOPE_NAME     = NO
++GENERATE_TODOLIST      = YES
++GENERATE_TESTLIST      = YES
++GENERATE_BUGLIST       = YES
++GENERATE_DEPRECATEDLIST= YES
++ENABLED_SECTIONS       =
++MAX_INITIALIZER_LINES  = 30
++SHOW_USED_FILES        = YES
++SHOW_DIRECTORIES       = NO
++SHOW_FILES             = YES
++SHOW_NAMESPACES        = YES
++FILE_VERSION_FILTER    =
++LAYOUT_FILE            =
++#---------------------------------------------------------------------------
++# configuration options related to warning and progress messages
++#---------------------------------------------------------------------------
++QUIET                  = NO
++WARNINGS               = YES
++WARN_IF_UNDOCUMENTED   = YES
++WARN_IF_DOC_ERROR      = YES
++WARN_NO_PARAMDOC       = NO
++WARN_FORMAT            = "$file:$line: $text"
++WARN_LOGFILE           =
++#---------------------------------------------------------------------------
++# configuration options related to the input files
++#---------------------------------------------------------------------------
++INPUT                  = ./
++INPUT_ENCODING         = UTF-8
++FILE_PATTERNS          = *.c \
++                         *.h
++RECURSIVE              = NO
++EXCLUDE                =
++EXCLUDE_SYMLINKS       = NO
++EXCLUDE_PATTERNS       =
++EXCLUDE_SYMBOLS        =
++EXAMPLE_PATH           = ../test/api
++EXAMPLE_PATTERNS       =
++EXAMPLE_RECURSIVE      = NO
++IMAGE_PATH             =
++INPUT_FILTER           =
++FILTER_PATTERNS        =
++FILTER_SOURCE_FILES    = NO
++#---------------------------------------------------------------------------
++# configuration options related to source browsing
++#---------------------------------------------------------------------------
++SOURCE_BROWSER         = NO
++INLINE_SOURCES         = NO
++STRIP_CODE_COMMENTS    = YES
++REFERENCED_BY_RELATION = NO
++REFERENCES_RELATION    = NO
++REFERENCES_LINK_SOURCE = YES
++USE_HTAGS              = NO
++VERBATIM_HEADERS       = YES
++#---------------------------------------------------------------------------
++# configuration options related to the alphabetical class index
++#---------------------------------------------------------------------------
++ALPHABETICAL_INDEX     = NO
++COLS_IN_ALPHA_INDEX    = 5
++IGNORE_PREFIX          =
++#---------------------------------------------------------------------------
++# configuration options related to the HTML output
++#---------------------------------------------------------------------------
++GENERATE_HTML          = YES
++HTML_OUTPUT            = html
++HTML_FILE_EXTENSION    = .html
++HTML_HEADER            =
++HTML_FOOTER            =
++HTML_STYLESHEET        =
++HTML_ALIGN_MEMBERS     = YES
++HTML_DYNAMIC_SECTIONS  = NO
++GENERATE_DOCSET        = NO
++DOCSET_FEEDNAME        = "Doxygen generated docs"
++DOCSET_BUNDLE_ID       = org.doxygen.Project
++GENERATE_HTMLHELP      = NO
++CHM_FILE               =
++HHC_LOCATION           =
++GENERATE_CHI           = NO
++CHM_INDEX_ENCODING     =
++BINARY_TOC             = NO
++TOC_EXPAND             = NO
++GENERATE_QHP           = NO
++QCH_FILE               =
++QHP_NAMESPACE          = org.doxygen.Project
++QHP_VIRTUAL_FOLDER     = doc
++QHG_LOCATION           =
++DISABLE_INDEX          = NO
++ENUM_VALUES_PER_LINE   = 4
++GENERATE_TREEVIEW      = NONE
++TREEVIEW_WIDTH         = 250
++FORMULA_FONTSIZE       = 10
++#---------------------------------------------------------------------------
++# configuration options related to the LaTeX output
++#---------------------------------------------------------------------------
++GENERATE_LATEX         = YES
++LATEX_OUTPUT           = latex
++LATEX_CMD_NAME         = latex
++MAKEINDEX_CMD_NAME     = makeindex
++COMPACT_LATEX          = NO
++PAPER_TYPE             = a4wide
++EXTRA_PACKAGES         =
++LATEX_HEADER           =
++PDF_HYPERLINKS         = YES
++USE_PDFLATEX           = YES
++LATEX_BATCHMODE        = NO
++LATEX_HIDE_INDICES     = NO
++#---------------------------------------------------------------------------
++# configuration options related to the RTF output
++#---------------------------------------------------------------------------
++GENERATE_RTF           = NO
++RTF_OUTPUT             = rtf
++COMPACT_RTF            = NO
++RTF_HYPERLINKS         = NO
++RTF_STYLESHEET_FILE    =
++RTF_EXTENSIONS_FILE    =
++#---------------------------------------------------------------------------
++# configuration options related to the man page output
++#---------------------------------------------------------------------------
++GENERATE_MAN           = YES
++MAN_OUTPUT             = man
++MAN_EXTENSION          = .3
++MAN_LINKS              = NO
++#---------------------------------------------------------------------------
++# configuration options related to the XML output
++#---------------------------------------------------------------------------
++GENERATE_XML           = NO
++XML_OUTPUT             = xml
++XML_SCHEMA             =
++XML_DTD                =
++XML_PROGRAMLISTING     = YES
++#---------------------------------------------------------------------------
++# configuration options for the AutoGen Definitions output
++#---------------------------------------------------------------------------
++GENERATE_AUTOGEN_DEF   = NO
++#---------------------------------------------------------------------------
++# configuration options related to the Perl module output
++#---------------------------------------------------------------------------
++GENERATE_PERLMOD       = NO
++PERLMOD_LATEX          = NO
++PERLMOD_PRETTY         = YES
++PERLMOD_MAKEVAR_PREFIX =
++#---------------------------------------------------------------------------
++# Configuration options related to the preprocessor
++#---------------------------------------------------------------------------
++ENABLE_PREPROCESSING   = YES
++MACRO_EXPANSION        = NO
++EXPAND_ONLY_PREDEF     = NO
++SEARCH_INCLUDES        = YES
++INCLUDE_PATH           = ../libdm
++INCLUDE_FILE_PATTERNS  =
++PREDEFINED             =
++EXPAND_AS_DEFINED      =
++SKIP_FUNCTION_MACROS   = YES
++#---------------------------------------------------------------------------
++# Configuration::additions related to external references
++#---------------------------------------------------------------------------
++TAGFILES               =
++GENERATE_TAGFILE       =
++ALLEXTERNALS           = NO
++EXTERNAL_GROUPS        = YES
++PERL_PATH              = /usr/bin/perl
++#---------------------------------------------------------------------------
++# Configuration options related to the dot tool
++#---------------------------------------------------------------------------
++CLASS_DIAGRAMS         = YES
++MSCGEN_PATH            =
++HIDE_UNDOC_RELATIONS   = YES
++HAVE_DOT               = NO
++DOT_FONTNAME           = FreeSans
++DOT_FONTSIZE           = 10
++DOT_FONTPATH           =
++CLASS_GRAPH            = YES
++COLLABORATION_GRAPH    = YES
++GROUP_GRAPHS           = YES
++UML_LOOK               = NO
++TEMPLATE_RELATIONS     = NO
++INCLUDE_GRAPH          = YES
++INCLUDED_BY_GRAPH      = YES
++CALL_GRAPH             = YES
++CALLER_GRAPH           = NO
++GRAPHICAL_HIERARCHY    = YES
++DIRECTORY_GRAPH        = YES
++DOT_IMAGE_FORMAT       = png
++DOT_PATH               =
++DOTFILE_DIRS           =
++DOT_GRAPH_MAX_NODES    = 50
++MAX_DOT_GRAPH_DEPTH    = 0
++DOT_TRANSPARENT        = NO
++DOT_MULTI_TARGETS      = NO
++GENERATE_LEGEND        = YES
++DOT_CLEANUP            = YES
++#---------------------------------------------------------------------------
++# Configuration::additions related to the search engine
++#---------------------------------------------------------------------------
++SEARCHENGINE           = NO
+/cvs/lvm2/LVM2/liblvm/lvm_misc.c,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/lvm_misc.c
++++ -	2010-02-24 18:16:55.391693000 +0000
+@@ -0,0 +1,43 @@
++/*
++ * Copyright (C) 2008,2010 Red Hat, Inc. All rights reserved.
 + *
-+ * \memberof vg_t
++ * This file is part of LVM2.
 + *
-+ * \param   vg
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
 + *
-+ * \return
-+ * A list of lvm_lv_list structures containing lv handles for this vg.
-+ * If no LVs exist on the given VG, NULL is returned.
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
-+struct dm_list *lvm_vg_list_lvs(vg_t vg);
 +
-+/**
-+ * Return a list of PV handles for a given VG handle.
++#include "lvm_misc.h"
++
++struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
++{
++	struct dm_list *list;
++	lvm_str_list_t *lsl;
++	struct str_list *sl;
++
++	if (!(list = dm_pool_zalloc(p, sizeof(*list)))) {
++		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
++		return NULL;
++	}
++	dm_list_init(list);
++
++	dm_list_iterate_items(sl, tag_list) {
++		if (!(lsl = dm_pool_zalloc(p, sizeof(*lsl)))) {
++			log_errno(ENOMEM,
++				"Memory allocation fail for lvm_lv_list.");
++			return NULL;
++		}
++		if (!(lsl->str = dm_pool_strdup(p, sl->str))) {
++			log_errno(ENOMEM,
++				"Memory allocation fail for lvm_lv_list->str.");
++			return NULL;
++		}
++		dm_list_add(list, &lsl->list);
++	}
++	return list;
++}
+/cvs/lvm2/LVM2/liblvm/lvm_misc.h,v  -->  standard output
+revision 1.1
+--- LVM2/liblvm/lvm_misc.h
++++ -	2010-02-24 18:16:55.499866000 +0000
+@@ -0,0 +1,29 @@
++/*
++ * Copyright (C) 2008,2010 Red Hat, Inc. All rights reserved.
 + *
-+ * \memberof vg_t
++ * This file is part of LVM2.
 + *
-+ * \param   vg
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
 + *
-+ * \return
-+ * A list of lvm_pv_list structures containing pv handles for this vg.
-+ * If no PVs exist on the given VG, NULL is returned.
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
-+struct dm_list *lvm_vg_list_pvs(vg_t vg);
++#ifndef _LVM2APP_MISC_H
++#define _LVM2APP_MISC_H
 +
-+/**
-  * Write a VG to disk.
-  *
-+ * \memberof vg_t
-+ *
-  * This function commits the Volume Group object referenced by the VG handle
-  * to disk. Upon failure, retry the operation and/or release the VG handle
-- * with lvm_vg_close.
-+ * with lvm_vg_close().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-@@ -390,11 +443,13 @@
- /**
-  * Remove a VG from the system.
-  *
-+ * \memberof vg_t
-+ *
-  * This function removes a Volume Group object in memory, and requires
-- * calling lvm_vg_write to commit the removal to disk.
-+ * calling lvm_vg_write() to commit the removal to disk.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-@@ -402,13 +457,15 @@
- int lvm_vg_remove(vg_t vg);
- 
- /**
-- * Close a VG opened with lvm_vg_create or lvm_vg_open.
-+ * Close a VG opened with lvm_vg_create or lvm_vg_open().
-+ *
-+ * \memberof vg_t
-  *
-  * This function releases a VG handle and any resources associated with the
-  * handle.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-@@ -418,17 +475,19 @@
- /**
-  * Extend a VG by adding a device.
-  *
-- * This function requires calling lvm_vg_write to commit the change to disk.
-- * After successfully adding a device, use lvm_vg_write to commit the new VG
-+ * \memberof vg_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully adding a device, use lvm_vg_write() to commit the new VG
-  * to disk.  Upon failure, retry the operation or release the VG handle with
-- * lvm_vg_close.
-+ * lvm_vg_close().
-  * If the device is not initialized for LVM use, it will be initialized
-  * before adding to the VG.  Although some internal checks are done,
-  * the caller should be sure the device is not in use by other subsystems
-  * before calling lvm_vg_extend.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \param   device
-  * Absolute pathname of device to add to VG.
-@@ -441,13 +500,15 @@
- /**
-  * Reduce a VG by removing an unused device.
-  *
-- * This function requires calling lvm_vg_write to commit the change to disk.
-- * After successfully removing a device, use lvm_vg_write to commit the new VG
-+ * \memberof vg_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully removing a device, use lvm_vg_write() to commit the new VG
-  * to disk.  Upon failure, retry the operation or release the VG handle with
-- * lvm_vg_close.
-+ * lvm_vg_close().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \param   device
-  * Name of device to remove from VG.
-@@ -458,35 +519,59 @@
- int lvm_vg_reduce(vg_t vg, const char *device);
- 
- /**
-- * Add/remove a tag to/from a VG.
-+ * Add a tag to a VG.
-+ *
-+ * \memberof vg_t
-  *
-- * These functions require calling lvm_vg_write to commit the change to disk.
-- * After successfully adding/removing a tag, use lvm_vg_write to commit the
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully adding a tag, use lvm_vg_write() to commit the
-  * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close.
-+ * with lvm_vg_close().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \param   tag
-- * Tag to add/remove to/from VG.
-+ * Tag to add to the VG.
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-  */
- int lvm_vg_add_tag(vg_t vg, const char *tag);
++#include "lib.h"
++#include "lvm2app.h"
++#include "toolcontext.h"
++#include "metadata-exported.h"
++#include "archiver.h"
++#include "locking.h"
++#include "lvm-string.h"
++#include "lvmcache.h"
++#include "metadata.h"
 +
-+/**
-+ * Remove a tag from a VG.
-+ *
-+ * \memberof vg_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully removing a tag, use lvm_vg_write() to commit the
-+ * new VG to disk.  Upon failure, retry the operation or release the VG handle
-+ * with lvm_vg_close().
-+ *
-+ * \param   vg
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-+ *
-+ * \param   tag
-+ * Tag to remove from VG.
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
- int lvm_vg_remove_tag(vg_t vg, const char *tag);
- 
- /**
-  * Set the extent size of a VG.
-  *
-- * This function requires calling lvm_vg_write to commit the change to disk.
-- * After successfully setting a new extent size, use lvm_vg_write to commit
-+ * \memberof vg_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully setting a new extent size, use lvm_vg_write() to commit
-  * the new VG to disk.  Upon failure, retry the operation or release the VG
-- * handle with lvm_vg_close.
-+ * handle with lvm_vg_close().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \param   new_size
-  * New extent size in bytes.
-@@ -499,8 +584,10 @@
- /**
-  * Get whether or not a volume group is clustered.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 1 if the VG is clustered, 0 if not
-@@ -510,8 +597,10 @@
- /**
-  * Get whether or not a volume group is exported.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 1 if the VG is exported, 0 if not
-@@ -521,12 +610,14 @@
- /**
-  * Get whether or not a volume group is a partial volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * When one or more physical volumes belonging to the volume group
-  * are missing from the system the volume group is a partial volume
-  * group.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * 1 if the VG is PVs, 0 if not
-@@ -536,12 +627,14 @@
- /**
-  * Get the current metadata sequence number of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * The metadata sequence number is incrented for each metadata change.
-  * Applications may use the sequence number to determine if any LVM objects
-  * have changed from a prior query.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Metadata sequence number.
-@@ -551,11 +644,13 @@
- /**
-  * Get the current name of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Copy of the uuid string.
-@@ -565,11 +660,13 @@
- /**
-  * Get the current uuid of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Copy of the name.
-@@ -579,8 +676,10 @@
- /**
-  * Get the current size in bytes of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Size in bytes.
-@@ -590,8 +689,10 @@
- /**
-  * Get the current unallocated space in bytes of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Free size in bytes.
-@@ -601,8 +702,10 @@
- /**
-  * Get the current extent size in bytes of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Extent size in bytes.
-@@ -612,8 +715,10 @@
- /**
-  * Get the current number of total extents of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Extent count.
-@@ -623,8 +728,10 @@
- /**
-  * Get the current number of free extents of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Free extent count.
-@@ -634,8 +741,10 @@
- /**
-  * Get the current number of physical volumes of a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Physical volume count.
-@@ -645,8 +754,10 @@
- /**
-  * Get the maximum number of physical volumes allowed in a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Maximum number of physical volumes allowed in a volume group.
-@@ -656,8 +767,10 @@
- /**
-  * Get the maximum number of logical volumes allowed in a volume group.
-  *
-+ * \memberof vg_t
-+ *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \return
-  * Maximum number of logical volumes allowed in a volume group.
-@@ -667,6 +780,8 @@
- /**
-  * Return the list of volume group tags.
-  *
-+ * \memberof vg_t
-+ *
-  * The memory allocated for the list is tied to the vg_t handle and will be
-  * released when lvm_vg_close is called.
-  *
-@@ -694,26 +809,14 @@
- /************************** logical volume handling *************************/
- 
- /**
-- * Return a list of LV handles for a given VG handle.
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-- *
-- * \return
-- * A list of lv_list_t structures containing lv handles for this vg.
-- * If no LVs exist on the given VG, NULL is returned.
-- */
--struct dm_list *lvm_vg_list_lvs(vg_t vg);
--
--/**
-  * Create a linear logical volume.
-  * This function commits the change to disk and does _not_ require calling
-- * lvm_vg_write.
-+ * lvm_vg_write().
-  * NOTE: The commit behavior of this function is subject to change
-  * as the API is developed.
-  *
-  * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-+ * VG handle obtained from lvm_vg_create or lvm_vg_open().
-  *
-  * \param   name
-  * Name of logical volume to create.
-@@ -730,6 +833,8 @@
- /**
-  * Activate a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * This function is the equivalent of the lvm command "lvchange -ay".
-  *
-  * NOTE: This function cannot currently handle LVs with an in-progress pvmove or
-@@ -746,6 +851,8 @@
- /**
-  * Deactivate a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * This function is the equivalent of the lvm command "lvchange -an".
-  *
-  * \param   lv
-@@ -759,8 +866,10 @@
- /**
-  * Remove a logical volume from a volume group.
-  *
-+ * \memberof lv_t
-+ *
-  * This function commits the change to disk and does _not_ require calling
-- * lvm_vg_write.
-+ * lvm_vg_write().
-  * NOTE: The commit behavior of this function is subject to change
-  * as the API is developed.
-  * Currently only removing linear LVs are possible.
-@@ -776,6 +885,8 @@
- /**
-  * Get the current name of a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-  *
-@@ -790,6 +901,8 @@
- /**
-  * Get the current uuid of a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-  *
-@@ -804,6 +917,8 @@
- /**
-  * Get the current size in bytes of a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * \param   lv
-  * Logical volume handle.
-  *
-@@ -815,6 +930,8 @@
- /**
-  * Get the current activation state of a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * \param   lv
-  * Logical volume handle.
-  *
-@@ -826,6 +943,8 @@
- /**
-  * Get the current suspended state of a logical volume.
-  *
-+ * \memberof lv_t
-+ *
-  * \param   lv
-  * Logical volume handle.
-  *
-@@ -835,28 +954,52 @@
- uint64_t lvm_lv_is_suspended(const lv_t lv);
- 
- /**
-- * Add/remove a tag to/from a LV.
-+ * Add a tag to an LV.
-  *
-- * These functions require calling lvm_vg_write to commit the change to disk.
-- * After successfully adding/removing a tag, use lvm_vg_write to commit the
-+ * \memberof lv_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully adding a tag, use lvm_vg_write() to commit the
-  * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close.
-+ * with lvm_vg_close().
-  *
-  * \param   lv
-  * Logical volume handle.
-  *
-  * \param   tag
-- * Tag to add/remove to/from LV.
-+ * Tag to add to an LV.
-  *
-  * \return
-  * 0 (success) or -1 (failure).
-  */
- int lvm_lv_add_tag(lv_t lv, const char *tag);
++struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
 +
-+/**
-+ * Remove a tag from an LV.
-+ *
-+ * \memberof lv_t
-+ *
-+ * This function requires calling lvm_vg_write() to commit the change to disk.
-+ * After successfully removing a tag, use lvm_vg_write() to commit the
-+ * new VG to disk.  Upon failure, retry the operation or release the VG handle
-+ * with lvm_vg_close().
-+ *
-+ * \param   lv
-+ * Logical volume handle.
-+ *
-+ * \param   tag
-+ * Tag to remove from LV.
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
- int lvm_lv_remove_tag(lv_t lv, const char *tag);
- 
- /**
-  * Return the list of logical volume tags.
-  *
-+ * \memberof lv_t
-+ *
-  * The memory allocated for the list is tied to the vg_t handle and will be
-  * released when lvm_vg_close is called.
-  *
-@@ -885,6 +1028,8 @@
- /**
-  * Resize logical volume to new_size bytes.
-  *
-+ * \memberof lv_t
-+ *
-  * NOTE: This function is currently not implemented.
-  *
-  * \param   lv
-@@ -908,19 +1053,9 @@
-  */
- 
- /**
-- * Return a list of PV handles for a given VG handle.
-+ * Get the current uuid of a physical volume.
-  *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create or lvm_vg_open.
-- *
-- * \return
-- * A list of pv_list_t structures containing pv handles for this vg.
-- * If no PVs exist on the given VG, NULL is returned.
-- */
--struct dm_list *lvm_vg_list_pvs(vg_t vg);
--
--/**
-- * Get the current uuid of a logical volume.
-+ * \memberof pv_t
-  *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-@@ -934,7 +1069,9 @@
- char *lvm_pv_get_uuid(const pv_t pv);
- 
- /**
-- * Get the current name of a logical volume.
-+ * Get the current name of a physical volume.
-+ *
-+ * \memberof pv_t
-  *
-  * Memory is allocated using dm_malloc() and caller must free the memory
-  * using dm_free().
-@@ -950,6 +1087,8 @@
- /**
-  * Get the current number of metadata areas in the physical volume.
-  *
-+ * \memberof pv_t
-+ *
-  * \param   pv
-  * Physical volume handle.
-  *
-@@ -962,6 +1101,8 @@
-  * Get the current size in bytes of a device underlying a
-  * physical volume.
-  *
-+ * \memberof pv_t
-+ *
-  * \param   pv
-  * Physical volume handle.
-  *
-@@ -973,6 +1114,8 @@
- /**
-  * Get the current size in bytes of a physical volume.
-  *
-+ * \memberof pv_t
-+ *
-  * \param   pv
-  * Physical volume handle.
-  *
-@@ -984,6 +1127,8 @@
- /**
-  * Get the current unallocated space in bytes of a physical volume.
-  *
-+ * \memberof pv_t
-+ *
-  * \param   pv
-  * Physical volume handle.
-  *
-@@ -995,6 +1140,8 @@
- /**
-  * Resize physical volume to new_size bytes.
-  *
-+ * \memberof pv_t
-+ *
-  * NOTE: This function is currently not implemented.
-  *
-  * \param   pv
++#endif
 
 
