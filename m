@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 24 Feb 2010 18:15:50 -0000
-Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
-Message-ID: <20100224181550.14759.qmail@sourceware.org>
+Date: 24 Feb 2010 18:15:58 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20100224181558.15504.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,98 +10,68 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-02-24 18:15:49
+Changes by:	wysochanski at sourceware.org	2010-02-24 18:15:58
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
-	tools          : lvchange.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Refactor lvchange_tag() to call lv_change_tag() library function.
+	Add dm_pool_strdup to allocate memory and copy a tag in {lv|vg}_change_tag()
 	
-	Similar refactoring to vgchange - pull out common parts and put into
-	library function for reuse.  Should be no functional change.
+	We need to allocate memory for the tag and copy the tag value before we
+	add it to the list of tags.  We could put this inside lvm2app since the
+	tools keep their memory around until vg_write/vg_commit is called, but
+	we put it inside the internal library to minimize code in lvm2app.
+	We need to copy the tag passed in by the caller to ensure the lifetime of
+	the memory until the {vg|lv} handle is released.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.132&r2=1.133
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.315&r2=1.316
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.316&r2=1.317
 
---- LVM2/lib/metadata/metadata-exported.h	2010/02/24 18:15:05	1.132
-+++ LVM2/lib/metadata/metadata-exported.h	2010/02/24 18:15:49	1.133
-@@ -493,6 +493,8 @@
- int set_lv(struct cmd_context *cmd, struct logical_volume *lv,
-            uint64_t sectors, int value);
+--- LVM2/lib/metadata/metadata.c	2010/02/24 18:15:49	1.316
++++ LVM2/lib/metadata/metadata.c	2010/02/24 18:15:57	1.317
+@@ -667,6 +667,8 @@
  
-+int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag);
+ int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
+ {
++	char *tag_new;
 +
- /* Reduce the size of an LV by extents */
- int lv_reduce(struct logical_volume *lv, uint32_t extents);
+ 	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
+ 		log_error("Logical volume %s/%s does not support tags",
+ 			  lv->vg->name, lv->name);
+@@ -674,7 +676,10 @@
+ 	}
  
---- LVM2/lib/metadata/metadata.c	2010/02/24 18:15:05	1.315
-+++ LVM2/lib/metadata/metadata.c	2010/02/24 18:15:49	1.316
-@@ -665,6 +665,30 @@
- 	return 0;
- }
- 
-+int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
-+{
-+	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
-+		log_error("Logical volume %s/%s does not support tags",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	if (add_tag) {
-+		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag)) {
-+			log_error("Failed to add tag %s to %s/%s",
-+				  tag, lv->vg->name, lv->name);
-+			return 0;
+ 	if (add_tag) {
+-		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag)) {
++		if (!(tag_new = dm_pool_strdup(lv->vg->vgmem, tag))) {
++			return_0;
 +		}
-+	} else {
-+		if (!str_list_del(&lv->tags, tag)) {
-+			log_error("Failed to remove tag %s from %s/%s",
-+				  tag, lv->vg->name, lv->name);
-+			return 0;
-+		}
-+	}
-+	return 1;
-+}
-+
++		if (!str_list_add(lv->vg->vgmem, &lv->tags, tag_new)) {
+ 			log_error("Failed to add tag %s to %s/%s",
+ 				  tag, lv->vg->name, lv->name);
+ 			return 0;
+@@ -691,13 +696,18 @@
+ 
  int vg_change_tag(struct volume_group *vg, const char *tag, int add_tag)
  {
++	char *tag_new;
++
  	if (!(vg->fid->fmt->features & FMT_TAGS)) {
---- LVM2/tools/lvchange.c	2010/01/06 19:08:58	1.116
-+++ LVM2/tools/lvchange.c	2010/02/24 18:15:49	1.117
-@@ -500,25 +500,8 @@
+ 		log_error("Volume group %s does not support tags", vg->name);
  		return 0;
  	}
  
--	if (!(lv->vg->fid->fmt->features & FMT_TAGS)) {
--		log_error("Logical volume %s/%s does not support tags",
--			  lv->vg->name, lv->name);
--		return 0;
--	}
--
--	if ((arg == addtag_ARG)) {
--		if (!str_list_add(cmd->mem, &lv->tags, tag)) {
--			log_error("Failed to add tag %s to %s/%s",
--				  tag, lv->vg->name, lv->name);
--			return 0;
--		}
--	} else {
--		if (!str_list_del(&lv->tags, tag)) {
--			log_error("Failed to remove tag %s from %s/%s",
--				  tag, lv->vg->name, lv->name);
--			return 0;
--		}
--	}
-+	if (!lv_change_tag(lv, tag, arg == addtag_ARG))
-+		return_0;
- 
- 	log_very_verbose("Updating logical volume \"%s\" on disk(s)", lv->name);
- 
+ 	if (add_tag) {
+-		if (!str_list_add(vg->vgmem, &vg->tags, tag)) {
++		if (!(tag_new = dm_pool_strdup(vg->vgmem, tag))) {
++			return_0;
++		}
++		if (!str_list_add(vg->vgmem, &vg->tags, tag_new)) {
+ 			log_error("Failed to add tag %s to volume group %s",
+ 				  tag, vg->name);
+ 			return 0;
 
 
