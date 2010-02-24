@@ -1,75 +1,67 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 23 Feb 2010 15:39:02 -0500
-Subject: [PATCH 1/2] Always query device by uuid only.
-In-Reply-To: <1266932816-5621-1-git-send-email-mbroz@redhat.com>
-References: <1266932816-5621-1-git-send-email-mbroz@redhat.com>
-Message-ID: <20100223203902.GA31973@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 24 Feb 2010 10:39:17 +0100
+Subject: lvm and locales memory issue
+In-Reply-To: <20100223162842.GC2817@tyan-ft48-01.lab.bos.redhat.com>
+References: <4B7D372D.4060608@redhat.com>
+	<4B7D4014.3010205@redhat.com>	<4B7EB81D.6090405@redhat.com>	<20100219163008.GR27427@agk-dp.fab.redhat.com>	<4B8262A2.4050408@redhat.com>
+	<4B8283B6.7000808@redhat.com>	<20100222181150.GA32020@agk-dp.fab.redhat.com>	<20100222182301.GR2817@tyan-ft48-01.lab.bos.redhat.com>	<4B839743.8020909@redhat.com>
+	<4B83F193.9020209@redhat.com>
+	<20100223162842.GC2817@tyan-ft48-01.lab.bos.redhat.com>
+Message-ID: <4B84F3C5.9060100@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Feb 23 2010 at  8:46am -0500,
-Milan Broz <mbroz@redhat.com> wrote:
-
-> lvm2 devices have always UUID set even if imported from lvm1 metadata.
+On 23.2.2010 17:28, Jakub Jelinek wrote:
+>> Another note could be - Ubuntu does not even use locale-archive file and uses
+>> locales on per file basis - so now I'm getting curious, where are the tests,
 > 
-> Patch removes name argument from dev_manager_info call and converts
-> all activation related calls to use query by UUID.
+> Not everything Ubuntu does is necessarily a good idea.
 > 
-> Also it simplifies mknode call (which is the only user on mknodes parameter).
+>> that proves that Fedora gets some measurable performance advantage?
+> 
+> Try something trivial, like:
+> #include <locale.h>
+> 
+> int
+> main (void)
+> {
+>   int i;
+>   for (i = 0; i < 1000000; i++)
+>     switch (i % 5)
+>       {
+>       case 0: setlocale (LC_ALL, "C"); break;
+>       case 1: setlocale (LC_ALL, "en_US.UTF-8"); break;
+>       case 2: setlocale (LC_ALL, "cs_CZ.UTF-8"); break;
+>       case 3: setlocale (LC_ALL, "fr_FR.UTF-8"); break;
+>       case 4: setlocale (LC_ALL, "de_DE.UTF-8"); break;
+>       }
+>   return 0;
+> }
+> 
+> With locale-archive 1.362s, without, using locale files, 10.355s.  And
 
-Looks good, I have few questions though.
 
-> diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-> index bbf95a3..84f94ff 100644
-> --- a/lib/activate/dev_manager.c
-> +++ b/lib/activate/dev_manager.c
-> @@ -235,20 +237,29 @@ static int _info_by_dev(uint32_t major, uint32_t minor, struct dm_info *info)
->  	return _info_run(NULL, NULL, info, NULL, 0, 0, 0, major, minor);
->  }
->  
-> -int dev_manager_info(struct dm_pool *mem, const char *name,
-> -		     const struct logical_volume *lv, int with_mknodes,
-> -		     int with_open_count, int with_read_ahead,
-> +int dev_manager_info(struct dm_pool *mem, const struct logical_volume *lv,
-> +		     int with_mknodes, int with_open_count, int with_read_ahead,
->  		     struct dm_info *info, uint32_t *read_ahead)
->  {
-> -	const char *dlid;
-> +	const char *dlid, *name;
-> +	int r;
-> +
-> +	if (!(name = build_dm_name(mem, lv->vg->name, lv->name, NULL))) {
-> +		log_error("name build failed for %s", lv->name);
-> +		return 0;
-> +	}
->  
->  	if (!(dlid = _build_dlid(mem, lv->lvid.s, NULL))) {
->  		log_error("dlid build failed for %s", lv->name);
->  		return 0;
->  	}
->  
-> -	return _info(name, dlid, with_mknodes, with_open_count, with_read_ahead,
-> -		     info, read_ahead);
-> +	log_debug("Getting device info for %s", name);
-> +	r = _info(NULL, dlid, with_mknodes, with_open_count,
-> +		  with_read_ahead, info, read_ahead);
-> +
-> +	dm_pool_free(mem, (char*)name);
-> +	return r;
->  }
+>From looking into the code and keeping in mind we need to handle these
+millions of switches per second as a killer feature - there seems to be nice
+way -  instead of doing one large mmap call - how about doing several
+smaller sized mmap just for regions needed by given locale.
 
-So the debugging benefit of having 'name' here outweighs the (small)
-cost of build_dm_name/dm_pool_free?  Really not a big deal but figured
-I'd ask.
+Once mmap-ed - it will stay in program's memory till its exit just like now...
 
-Also, _add_dev_to_dtree() is the only remaining caller of _info() that
-passes 'name'.  Passing a NULL 'name' to _info() from _add_dev_to_dtree()
-still allows the testsuite to pass.  What are the benefit(s) of
-preserving _info()'s info-by-name fallback for _add_dev_to_dtree()?
+So - instead of one large 100MB mmap - we would end for this 'benchmark'
+with maybe 8-10 mmap calls per setlocale - so let's say 50 mmap calls for
+small memory regions. (or less - depends on how the locale-archive is
+organized - maybe everything except LC_CTYPE & LC_COLLATE could be in on
+mmaped area)
 
-Mike
+As a bonus - for the most common use-case - it might eat less pgt entries
+(I assume its ~190kb for x86_64 and 100MB file)
+On the opposite site - user of all locales at once would waste memory by
+having some pages mmmaped multiple times....
+
+Zdenek
 
 
