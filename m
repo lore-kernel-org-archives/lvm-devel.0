@@ -1,355 +1,141 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:04:51 +0000 (GMT)
-Subject: main - tests: rework makefile
-Message-ID: <20220907130451.B1B643858428@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 01 Mar 2010 09:43:25 +0100
+Subject: [PATCH] Make use of new DM_UEVENT_GENERATED_FLAG in dm ioctl
+Message-ID: <4B8B7E2D.4060704@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=acbeaa7a8d86acc0f0e3c04723d066d995f29fe5
-Commit:        acbeaa7a8d86acc0f0e3c04723d066d995f29fe5
-Parent:        2c7b9130499d17a657684fb3c762d608b50d139e
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 1 10:06:14 2022 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 7 14:58:01 2022 +0200
+This is user space part related to:
 
-tests: rework makefile
+[dm-devel][PATCH] dm_ioctl: Introduce DM_UEVENT_GENERATED_FLAG
+(initiated by: [dm-devel] [PATCH] dm_ioctl: Only send a change uevent when a resume ioctl changes the device.)
 
-Improve dependency tracking
-Use 'foreach()' with better tracing support
-Link whole 'shell' dir instead of linking individual *.sh files
----
- test/Makefile.in | 213 +++++++++++++++++++++++++------------------------------
- 1 file changed, 95 insertions(+), 118 deletions(-)
+We need to know whether we should wait for any uevent or not when
+using udev_sync. A patch was posted recently that changed the way
+uevents are sent on dm device resume - it is sent only if the device
+has been suspended before.
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index f69dc97b6..1cad634b8 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -28,28 +28,27 @@ datarootdir = @datarootdir@
- LVM_TEST_RESULTS ?= results
+We have two options - either we get the state of the device before
+being processed or have a possibility to get the information back in
+the ioctl return saying whether uevent was generated or not. If the
+uevent was not generated (e.g. the situation where the device is
+*not* suspended and we call a resume), we just call dm_udev_complete
+explicitly from withing libdevmapper itself.
+
+This is quite important to prevent infinite waiting for any
+non-existent notifications.
+
+Peter
+
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 4efb684..ace6d96 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1505,18 +1505,28 @@ static int _mknodes_v4(struct dm_task *dmt)
+  */
+ static int _udev_complete(struct dm_task *dmt)
+ {
+-	uint32_t cookie;
++	uint16_t base;
  
- # FIXME: resolve testing of: unit
--SOURCES = lib/not.c lib/harness.c lib/dmsecuretest.c
--CXXSOURCES = lib/runner.cpp
-+SOURCES := lib/not.c lib/harness.c lib/dmsecuretest.c
-+CXXSOURCES := lib/runner.cpp
- CXXFLAGS += $(EXTRA_EXEC_CFLAGS)
+-	if (dmt->cookie_set) {
++	if (dmt->cookie_set &&
++	    (base = dmt->event_nr & ~DM_UDEV_FLAGS_MASK))
+ 		/* strip flags from the cookie and use cookie magic instead */
+-		cookie = (dmt->event_nr & ~DM_UDEV_FLAGS_MASK) |
+-			  (DM_COOKIE_MAGIC << DM_UDEV_FLAGS_SHIFT);
+-		return dm_udev_complete(cookie);
+-	}
++		return dm_udev_complete(base | (DM_COOKIE_MAGIC <<
++						DM_UDEV_FLAGS_SHIFT));
  
- CLEAN_DIRS += dbus/__pycache__ $(LVM_TEST_RESULTS)
- ifneq (.,$(firstword $(srcdir)))
- CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF))
- endif
-+CLEAN_TARGETS += $(shell find -H lib -type l) \
-+	$(CXXSOURCES:%.cpp=%.o) $(CXXSOURCES:%.cpp=%.d) $(CXXSOURCES:%.cpp=%.gcno) $(CXXSOURCES:%.cpp=%.gcda)
+ 	return 1;
+ }
  
- CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
--	$(CMDS) clvmd dmeventd dmsetup dmstats lvmpolld \
--	harness lvmdbusd.profile thin-performance.profile fsadm \
--	dm-version-expected version-expected \
-+	clvmd harness dmeventd dmsetup dmstats lvmpolld \
-+	$(LVM_PROFILES) $(LVM_SCRIPTS) \
- 	paths-installed paths-installed-t paths-common paths-common-t)
- 
--
- include $(top_builddir)/make.tmpl
- 
- T ?= .
- S ?= @ # never match anything by default
- VERBOSE ?= 0
--ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) | $(SORT))
- comma = ,
- RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
- RUN_BASE = $(subst $(srcdir)/,,$(RUN))
-@@ -161,38 +160,32 @@ check_lvmlockd_sanlock: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-sanlock --only shell/aa-lvmlockd-sanlock-prepare.sh,$(T),shell/zz-lvmlockd-sanlock-remove.sh --skip $(S)
--endif
- 
--ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_dlm: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-dlm --only shell/aa-lvmlockd-dlm-prepare.sh,$(T),shell/zz-lvmlockd-dlm-remove.sh --skip $(S)
--endif
- 
--ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_idm: .tests-stamp lib/idm_inject_failure
- 	$(INSTALL_PROGRAM) lib/idm_inject_failure $(EXECDIR)
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-idm --only shell/aa-lvmlockd-idm-prepare.sh,$(T),shell/zz-lvmlockd-idm-remove.sh --skip $(S)
--endif
- 
--ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_test: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-test --only $(T) --skip $(S)
- endif
- 
--run-unit-test unit-test:
--	@echo "    [MAKE] $<"
--	$(Q) $(MAKE) -C $(top_builddir) $(@)
-+run-unit-test unit-test unit/unit-test:
-+	@echo "    [MAKE] $(@F)"
-+	$(Q) $(MAKE) -C $(top_builddir) $(@F)
- 
--DATADIR = $(datadir)/lvm2-testsuite
--EXECDIR = $(libexecdir)/lvm2-testsuite
-+DATADIR := $(datadir)/lvm2-testsuite
-+EXECDIR := $(libexecdir)/lvm2-testsuite
- 
--LIB_FLAVOURS = \
-+LIB_FLAVOURS :=\
-  flavour-ndev-lvmpolld\
-  flavour-ndev-vanilla\
-  flavour-ndev-devicesfile\
-@@ -203,98 +196,96 @@ LIB_FLAVOURS = \
-  flavour-udev-lvmlockd-test\
-  flavour-udev-vanilla
- 
--LIB_LVMLOCKD_CONF = \
-+LIB_LVMLOCKD_CONF :=\
-  test-corosync-conf \
-  test-dlm-conf \
-  test-sanlock-conf
- 
--LIB_MKE2FS_CONF = \
--  mke2fs.conf
-+LIB_MKE2FS_CONF := mke2fs.conf
++static int _check_uevent_generated(struct dm_ioctl *dmi)
++{
++	if (!dm_check_version() ||
++	    _dm_version < 4 ||
++	    _dm_version_minor < 17)
++		/* can't check, assume uevent is generated */
++		return 1;
 +
-+LVM_TOOLS :=\
-+ daemons/dmeventd/dmeventd\
-+ daemons/lvmpolld/lvmpolld\
-+ libdm/dm-tools/dmsetup
++	return dmi->flags & DM_UEVENT_GENERATED_FLAG;
++}
 +
-+LVM_PROFILES := $(addsuffix .profile,\
-+ cache-mq\
-+ cache-smq\
-+ lvmdbusd\
-+ thin-performance)
+ static int _create_and_load_v4(struct dm_task *dmt)
+ {
+ 	struct dm_task *task;
+@@ -1691,6 +1701,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 				     unsigned repeat_count)
+ {
+ 	struct dm_ioctl *dmi;
++	int ioctl_with_uevent;
  
--LIB_SECURETEST = securetest
--LIB_DMSECURETEST = dmsecuretest
--LIB_LOCAL = paths runner
--LIB_NOT = not
--LIB_LINK_NOT = invalid fail should
--LIB_SHARED = check aux inittest utils get lvm-wrapper
-+LIB_LINK_NOT := invalid fail should
-+LIB_LOCAL := paths runner
-+LIB_NOT := not
-+LIB_SHARED := check aux inittest utils get lvm-wrapper lvm_vdo_wrapper
-+LIB_CONF := $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF)
-+LIB_DATA := $(LIB_FLAVOURS) dm-version-expected version-expected
-+LIB_EXEC := $(LIB_NOT) dmsecuretest securetest
-+LVM_SCRIPTS := fsadm lvm_import_vdo
+ 	dmi = _flatten(dmt, repeat_count);
+ 	if (!dmi) {
+@@ -1706,6 +1717,10 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 	if (dmt->no_open_count)
+ 		dmi->flags |= DM_SKIP_BDGET_FLAG;
  
- install: .tests-stamp lib/paths-installed
--	@echo $(srcdir)
-+	$(SHOW) "    [INSTALL] tests"
- 	$(Q) $(INSTALL_DIR) $(DATADIR)/{shell,api,unit,lib,dbus} $(EXECDIR)
- 	$(Q) $(INSTALL_DATA) shell/*.sh $(DATADIR)/shell
--	$(INSTALL_DATA) api/*.sh $(DATADIR)/api
-+	$(Q) $(INSTALL_DATA) api/*.sh $(DATADIR)/api
- 	$(Q) $(INSTALL_DATA) unit/*.sh $(DATADIR)/unit
--	-$(Q) $(INSTALL_PROGRAM) unit/unit-test $(DATADIR)/unit
--	-$(Q) $(INSTALL_PROGRAM) dbus/*.py $(DATADIR)/dbus/
--	$(INSTALL_DATA) lib/paths-installed $(DATADIR)/lib/paths
--	cd lib && $(INSTALL_DATA) \
--		$(LIB_FLAVOURS) \
--		$(LIB_LVMLOCKD_CONF) \
--		$(LIB_MKE2FS_CONF) \
--		dm-version-expected \
--		version-expected \
--		$(DATADIR)/lib
--	@for i in cache-mq cache-smq thin-performance lvmdbusd ; do \
--		echo "$(INSTALL_DATA) $(abs_top_srcdir)/conf/$$i.profile $(DATADIR)/lib"; \
--		$(INSTALL_DATA) $(abs_top_srcdir)/conf/$$i.profile $(DATADIR)/lib; done
--	cd lib && $(INSTALL_SCRIPT) $(LIB_SHARED) $(DATADIR)/lib
--	@cd $(DATADIR)/lib && for i in $(CMDS); do \
--		echo "$(LN_S) -f lvm-wrapper $$i"; \
--		$(LN_S) -f lvm-wrapper $$i; done
--	$(INSTALL_PROGRAM) lib/$(LIB_NOT) lib/$(LIB_SECURETEST) lib/$(LIB_DMSECURETEST) $(EXECDIR)
--	@cd $(EXECDIR) && for i in $(LIB_LINK_NOT); do \
--		echo "$(LN_S) -f not $$i"; \
--		$(LN_S) -f not $$i; done
-+	$(Q)- $(INSTALL_PROGRAM) unit/unit-test $(DATADIR)/unit
-+	$(Q)- $(INSTALL_PROGRAM) dbus/*.py $(DATADIR)/dbus/
-+	$(Q) $(INSTALL_DATA) lib/paths-installed $(DATADIR)/lib/paths
-+	$(Q) cd lib &&\
-+		$(INSTALL_DATA) $(LIB_DATA) $(DATADIR)/lib
-+	$(Q) cd lib &&\
-+		$(INSTALL_SCRIPT) $(LIB_SHARED) $(DATADIR)/lib
-+	$(Q) cd lib &&\
-+		$(INSTALL_PROGRAM) -D $(LIB_EXEC) $(EXECDIR)
-+	$(Q) cd $(abs_top_srcdir)/conf &&\
-+		$(INSTALL_DATA) $(LVM_PROFILES) $(DATADIR)/lib
-+	$(Q) cd $(DATADIR)/lib &&\
-+		$(foreach FILE, $(CMDS), $(LN_S) -f lvm-wrapper $(FILE) $(newline))
-+	$(Q) cd $(EXECDIR) &&\
-+		$(foreach FILE, $(LIB_LINK_NOT), $(LN_S) -f $(LIB_NOT) $(FILE) $(newline))
- 	$(Q) $(INSTALL_PROGRAM) -D lib/runner $(bindir)/lvm2-testsuite
- 
--lib/should: lib/not
--	@echo "    [LN] $@"
--	$(Q) $(LN_S) -f not lib/should
--
--lib/invalid: lib/not
--	@echo "    [LN] $@"
--	$(Q) $(LN_S) -f not lib/invalid
--
--lib/fail: lib/not
--	@echo "    [LN] $@"
--	$(Q) $(LN_S) -f not lib/fail
-+lib/should lib/invalid lib/fail: lib/not
-+	$(SHOW) "    [LN] $@"
-+	$(Q) $(LN_S) -f $(<F) $@
- 
- lib/runner: lib/runner.o .lib-dir-stamp
--	@echo "    [CXX] $@"
--	$(Q) $(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
--
--lib/dmsecuretest: lib/dmsecuretest.o .lib-dir-stamp $(INTERNAL_LIBS)
--	@echo "    [CC] $@"
--	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(LIBS)
-+	$(SHOW) "    [LD] $@"
-+	$(Q) $(CXX) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
- 
- lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
--	@echo "    [CC] $@"
--	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(interfacebuilddir) -ldevmapper $(LIBS)
--
--lib/idm_inject_failure: lib/idm_inject_failure.o .lib-dir-stamp
--	@echo "    [CC] $@"
--	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(LIBS) -lseagate_ilm
-+	$(SHOW) "    [LD] $@"
-+	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(interfacebuilddir) -ldevmapper $(LIBS)
- 
-+lib/not: lib/not.o
- lib/runner.o: $(wildcard $(srcdir)/lib/*.h)
- 
--CFLAGS_runner.o += $(EXTRA_EXEC_CFLAGS)
--CFLAGS_dmsecuretest.o += $(EXTRA_EXEC_CFLAGS)
-+CFLAGS_lib/runner.o += $(EXTRA_EXEC_CFLAGS)
-+CFLAGS_lib/dmsecuretest.o += $(EXTRA_EXEC_CFLAGS)
-+LDFLAGS_lib/dmsecuretest += $(EXTRA_EXEC_LDFLAGS) $(INTERNAL_LIBS) $(LIBS)
-+LDFLAGS_lib/idm_inject_failure += $(INTERNAL_LIBS) $(LIBS) -lseagate_ilm
- 
- lib/%: lib/%.o .lib-dir-stamp
--	@echo "    [CC] $@"
--	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $<
-+	$(SHOW) "    [LD] $@"
-+	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $< $(LDFLAGS_$@)
- 
- lib/%: $(srcdir)/lib/%.sh .lib-dir-stamp
--	@echo "    [CP] $@"
-+	$(SHOW) "    [CP] $@"
-+	$(Q) cp $< $@
-+	$(Q) $(CHMOD) +x $@
++	ioctl_with_uevent = dmt->type == DM_DEVICE_RESUME ||
++			    dmt->type == DM_DEVICE_REMOVE ||
++			    dmt->type == DM_DEVICE_RENAME;
 +
-+lib/%: $(top_srcdir)/scripts/%.sh .lib-dir-stamp
-+	$(SHOW) "    [CP] $@"
- 	$(Q) cp $< $@
- 	$(Q) $(CHMOD) +x $@
- 
- lib/flavour-%: $(srcdir)/lib/flavour-%.sh .lib-dir-stamp
--	@echo "    [FLAVOUR] $<"
-+	$(SHOW) "    [FLAVOUR] $<"
- 	$(Q) cp $< $@
- 
--lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
--	@echo "    [PATHS] $@"
-+lib/paths-common: $(srcdir)/Makefile.in Makefile .lib-dir-stamp
-+	$(SHOW) "    [PATHS] $@"
- 	$(Q) echo 'DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
- 	$(Q) echo 'LVMPOLLD_PIDFILE="@LVMPOLLD_PIDFILE@"' >> $@-t
- 	$(Q) echo 'DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
-@@ -312,7 +303,7 @@ lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
- 	$(Q) mv $@-t $@
- 
- lib/paths-installed: lib/paths-common
--	@echo "    [PATHS] $@"
-+	$(SHOW) "    [PATHS] $@"
- 	$(Q) $(RM) $@-t
- 	$(Q) cat lib/paths-common > $@-t
- 	$(Q) echo 'installed_testsuite=1' >> $@-t
-@@ -320,7 +311,7 @@ lib/paths-installed: lib/paths-common
- 	$(Q) mv $@-t $@
- 
- lib/paths: lib/paths-common
--	@echo "    [PATHS] $@"
-+	$(SHOW) "    [PATHS] $@"
- 	$(Q) $(RM) $@-t
- 	$(Q) cat lib/paths-common > $@-t
- 	$(Q) echo 'top_srcdir="$(top_srcdir)"' >> $@-t
-@@ -336,44 +327,30 @@ lib/version-expected: $(top_srcdir)/VERSION .lib-dir-stamp
- lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
- 	$(Q) cut -f 1 -d ' ' <$< >$@
- 
--CMDS = lvm $(shell cat $(top_builddir)/tools/.commands 2>/dev/null)
--LIB = $(addprefix lib/, $(LIB_SECURETEST) $(LIB_DMSECURETEST) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(LIB_FLAVOURS))
--
--.tests-stamp: .lib-dir-stamp $(ALL) $(LIB) $(SUBDIRS) lib/version-expected lib/dm-version-expected unit-test
--	@echo "    [TEST-STAMP]"
--	@if test "$(srcdir)" != . ; then \
--		echo "Linking tests to builddir."; \
--		$(MKDIR_P) shell; \
--		for f in $(subst $(srcdir)/,,$(ALL)); do \
--			test -n "$(Q)" || echo "$(LN_S) -f $(abs_top_srcdir)/test/$$f $$f"; \
--			$(LN_S) -f $(abs_top_srcdir)/test/$$f $$f; \
--		done; \
--	fi
-+CMDS := lvm $(shell cat $(abs_top_builddir)/tools/.commands 2>/dev/null)
-+LIB := $(addprefix lib/, $(LVM_SCRIPTS) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_EXEC) $(LIB_LINK_NOT) $(LIB_DATA))
+ 	/*
+ 	 * Prevent udev vs. libdevmapper race when processing nodes and
+ 	 * symlinks. This can happen when the udev rules are installed and
+@@ -1715,10 +1730,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 	 * to be applied at all in this situation so we can gracefully fallback
+ 	 * to libdevmapper's node and symlink creation code.
+ 	 */
+-	if (dm_udev_get_sync_support() && !dmt->cookie_set &&
+-	    (dmt->type == DM_DEVICE_RESUME ||
+-	     dmt->type == DM_DEVICE_REMOVE ||
+-	     dmt->type == DM_DEVICE_RENAME)) {
++	if (dm_udev_get_sync_support() && !dmt->cookie_set && ioctl_with_uevent) {
+ 		log_debug("Cookie value is not set while trying to call "
+ 			  "DM_DEVICE_RESUME, DM_DEVICE_REMOVE or DM_DEVICE_RENAME "
+ 			  "ioctl. Please, consider using libdevmapper's udev "
+@@ -1774,6 +1786,10 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 			return NULL;
+ 		}
+ 	}
 +
-+.tests-stamp: .lib-dir-stamp $(LIB) $(SUBDIRS)
-+	$(SHOW) "    [TESTS-STAMP]"
-+ifneq (.,$(firstword $(srcdir)))
-+	$(SHOW) "    Linking tests to builddir."
-+	$(Q) $(LN_S) -f $(srcdir)/shell
-+endif
- 	$(Q) $(MKDIR_P) -m a=rwx $(LVM_TEST_RESULTS)
- 	$(Q) touch $@
++	if (ioctl_with_uevent && !_check_uevent_generated(dmi))
++		_udev_complete(dmt);
++
+ #else /* Userspace alternative for testing */
+ #endif
+ 	return dmi;
+diff --git a/libdm/misc/dm-ioctl.h b/libdm/misc/dm-ioctl.h
+index 7797984..64d0e1e 100644
+--- a/libdm/misc/dm-ioctl.h
++++ b/libdm/misc/dm-ioctl.h
+@@ -268,9 +268,9 @@ enum {
+ #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
  
--.lib-dir-stamp:
--	@echo "    [LIB-STAMP]"
--	$(Q) $(MKDIR_P) lib unit
-+.lib-dir-stamp: unit/unit-test
-+	$(SHOW) "    [LIB-DIR-STAMP]"
-+	$(Q) $(MKDIR_P) api lib unit
- 	$(Q) $(RM) lib/clvmd
--	@for i in $(CMDS); do \
--		test -n "$(Q)" || echo "$(LN_S) -f lvm-wrapper lib/$$i"; \
--		$(LN_S) -f lvm-wrapper lib/$$i; done
--	@for i in daemons/dmeventd/dmeventd \
--		libdm/dm-tools/dmsetup \
--		daemons/lvmpolld/lvmpolld ; do \
--		test -n "$(Q)" || echo "$(LN_S) -f $(abs_top_builddir)/$$i lib/"; \
--		$(LN_S) -f $(abs_top_builddir)/$$i lib/; done
--	$(Q) $(LN_S) -f $(abs_top_builddir)/libdm/dm-tools/dmsetup lib/dmstats
--	$(Q) $(LN_S) -f $(abs_top_srcdir)/conf/lvmdbusd.profile lib/
--	$(Q) $(LN_S) -f $(abs_top_srcdir)/conf/thin-performance.profile lib/
--	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
--	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/lvm_import_vdo.sh lib/lvm_import_vdo
--	$(Q) which vdo || $(LN_S) -f $(abs_top_srcdir)/test/lib/lvm_vdo_wrapper.sh lib/vdo
--	@test "$(srcdir)" = . || \
--		for i in $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF); do \
--			test -n "$(Q)" || echo "$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/"; \
--			$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/; done
-+	$(Q) $(LN_S) -f dmsetup lib/dmstats
-+	$(Q) $(foreach FILE, $(CMDS), $(LN_S) -f lvm-wrapper lib/$(FILE) $(newline))
-+	$(Q) $(foreach FILE, $(LVM_TOOLS), $(LN_S) -f $(abs_top_builddir)/$(FILE) lib/ $(newline))
-+	$(Q) $(LN_S) -f $(addprefix $(abs_top_srcdir)/conf/, $(LVM_PROFILES)) lib/
-+ifneq (.,$(firstword $(srcdir)))
-+	$(Q) $(LN_S) -f $(addprefix $(abs_top_srcdir)/test/lib/,\
-+			$(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF)) lib/
-+endif
- 	$(Q) touch $@
+ #define DM_VERSION_MAJOR	4
+-#define DM_VERSION_MINOR	16
++#define DM_VERSION_MINOR	17
+ #define DM_VERSION_PATCHLEVEL	0
+-#define DM_VERSION_EXTRA	"-ioctl (2009-11-05)"
++#define DM_VERSION_EXTRA	"-ioctl (2010-03-01)"
  
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+ /* Status bits */
+ #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
+@@ -318,4 +318,9 @@ enum {
+  */
+ #define DM_QUERY_INACTIVE_TABLE_FLAG	(1 << 12) /* In */
+ 
++/*
++ * Indicates whether a uevent was generated.
++ */
++#define DM_UEVENT_GENERATED_FLAG	(1 << 13) /* Out */
++
+ #endif				/* _LINUX_DM_IOCTL_H */
+
 
