@@ -1,42 +1,39 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Mar 2010 15:55:53 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20100308155553.13375.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue,  2 Mar 2010 13:07:27 +0100
+Subject: [PATCH 9/9] misc/configure.in modification
+In-Reply-To: <cover.1267529065.git.zkabelac@redhat.com>
+References: <cover.1267529065.git.zkabelac@redhat.com>
+Message-ID: <68c18baf8724b03712de4de29d115e8e21214ada.1267529065.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-08 15:55:53
+This is generated file from autoreconf.
+We no longer define HAVE_LIBREADLINE - we have not used it
+before anyway.
 
-Modified files:
-	lib/mm         : memlock.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/misc/configure.h.in |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
 
-Log message:
-	Unconditionaly ignore also Virtual Dynamically-linked Shared Object
-	(VDSO on 32bit is VSyscall on 64bit)
-	It seems it could be locked on 64bit kernels running 32bit binaries,
-	but it makes troubles on real 32bit machines where mlock() returns
-	error when trying to lock such map area. (0xffffe000)
-	Behavior of mlockall() seems to be similar.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
-
---- LVM2/lib/mm/memlock.c	2010/03/05 15:14:03	1.17
-+++ LVM2/lib/mm/memlock.c	2010/03/08 15:55:52	1.18
-@@ -59,7 +59,8 @@
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index 4273eeb..b0af63f 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -120,9 +120,6 @@
+ /* Define to 1 if you have the <libintl.h> header file. */
+ #undef HAVE_LIBINTL_H
  
- /* list of maps, that are unconditionaly ignored */
- static const char * const _ignore_maps[] = {
--    "[vsyscall]"
-+    "[vdso]",
-+    "[vsyscall]",
- };
+-/* Define to 1 if you have the `readline' library (-lreadline). */
+-#undef HAVE_LIBREADLINE
+-
+ /* Define to 1 if you have the <limits.h> header file. */
+ #undef HAVE_LIMITS_H
  
- /* default blacklist for maps */
+-- 
+1.7.0
 
 
