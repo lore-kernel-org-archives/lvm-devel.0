@@ -1,45 +1,39 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue,  2 Mar 2010 13:07:18 +0100
-Subject: [PATCH 0/9] configure update
-Message-ID: <cover.1267529065.git.zkabelac@redhat.com>
+Date: Tue,  2 Mar 2010 13:07:19 +0100
+Subject: [PATCH 1/9] Help display --disable-fsadm
+In-Reply-To: <cover.1267529065.git.zkabelac@redhat.com>
+References: <cover.1267529065.git.zkabelac@redhat.com>
+Message-ID: <fdfc56d4c31cbc0961ed1d9229da143afc5732fe.1267529065.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset tries to mainly address linking problems.
-First few patches are rather cosmetic cleanups.
+As fsadm is installed by default - it's a common practice to rather
+print help text in '--disable' form for such case.
 
-Interestings patches starts with: Readline linking update.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ configure.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-With this patchset libpthread and libselinux are linked only
-to object files which really needs this library.
-Tested it on Fedora & Debian distribution.
-
-Zdenek Kabelac (9):
-  Help display --disable-fsadm
-  Fix autoconf WARNING:
-  For Makefile vars use $() instead of ${}
-  Move include before  DEFS+=
-  Readline linking update
-  Pthread linking change
-  Remove -rdynamic
-  SELinux configure update
-  misc/configure.in  modification
-
- configure.in                                  |   91 +++++++++++--------------
- daemons/clvmd/Makefile.in                     |    4 +-
- daemons/dmeventd/Makefile.in                  |    4 +-
- daemons/dmeventd/plugins/lvm2/Makefile.in     |    4 +-
- daemons/dmeventd/plugins/mirror/Makefile.in   |    6 +-
- daemons/dmeventd/plugins/snapshot/Makefile.in |    6 +-
- lib/misc/configure.h.in                       |    3 -
- libdm/Makefile.in                             |    4 +-
- make.tmpl.in                                  |    1 +
- man/Makefile.in                               |    4 +-
- test/api/Makefile.in                          |    2 +-
- tools/Makefile.in                             |   13 ++--
- 12 files changed, 65 insertions(+), 77 deletions(-)
+diff --git a/configure.in b/configure.in
+index aaa21c6..4053f7f 100644
+--- a/configure.in
++++ b/configure.in
+@@ -737,8 +737,8 @@ AC_ARG_ENABLE(pkgconfig,   [  --enable-pkgconfig      Install pkgconfig support]
+ ################################################################################
+ dnl -- Enable fsadm
+ AC_MSG_CHECKING(whether to install fsadm)
+-AC_ARG_ENABLE(fsadm, [  --enable-fsadm          Enable fsadm],
+-FSADM=$enableval)
++AC_ARG_ENABLE(fsadm, [AC_HELP_STRING([--disable-fsadm], [Disable fsadm])],
++	FSADM=$enableval)
+ AC_MSG_RESULT($FSADM)
+ 
+ ################################################################################
+-- 
+1.7.0
 
 
