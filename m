@@ -1,169 +1,156 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 5 Mar 2010 17:58:39 -0600
-Subject: [PATCH 4 of 10] LVM: hack to make things work
-Message-ID: <201003052358.o25NwdmQ012282@hydrogen.msp.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue,  2 Mar 2010 13:07:26 +0100
+Subject: [PATCH 8/9] SELinux configure update
+In-Reply-To: <cover.1267529065.git.zkabelac@redhat.com>
+References: <cover.1267529065.git.zkabelac@redhat.com>
+Message-ID: <66328e6263b3321f7e60dc951f9577810930ea4f.1267529065.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-hack-to-make-things-work.patch
+This patch add substituted variables SELINUX_LIBS and STATIC_LIBS.
 
-This patch is somewhat of a hack to put the various pieces
-together.
+Here we have little trouble for static builds - there is the dependency
+on SELinux libraries which are not bundled automagicaly to 'ar'
+library files. So statically compiled binaries that links with
+libdevmapper needs to explicitly link $(STATIC_LIBS)
+(until better solution is found).
+Also it looks like some static builds of selinux have dependencies
+on runtime glibc libraries.
 
-Although the changes to lv_add_log_segment are clever, they
-don't create the mirror in the right way (more like what
-pvmove needs, and not like what a LV mirror needs).
+Modifies SELinux detection to use 3rd & 4th parameter for Success/Fail.
+Also removes detection of pthread from this check as we know which
+version of libdevmapper we are going to link with lvm after merge.
 
-Other changes to get functions to pull areas from the end
-of the list when creating the log.
+Move SELinux header check to the SELinux test code.
 
-RFC:
-Index: LVM2/lib/metadata/lv_manip.c
-===================================================================
---- LVM2.orig/lib/metadata/lv_manip.c
-+++ LVM2/lib/metadata/lv_manip.c
-@@ -1363,8 +1363,11 @@ int lv_add_segment(struct alloc_handle *
- 		   const struct segment_type *segtype,
- 		   uint32_t stripe_size,
- 		   uint64_t status,
--		   uint32_t region_size)
-+		   uint32_t region_size,
-+		   int reverse)
- {
-+	uint32_t fa = first_area;
-+
- 	if (!segtype) {
- 		log_error("Missing segtype in lv_add_segment().");
- 		return 0;
-@@ -1380,7 +1383,14 @@ int lv_add_segment(struct alloc_handle *
- 		return 0;
- 	}
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ configure.in                 |   39 +++++++++------------------------------
+ daemons/dmeventd/Makefile.in |    2 +-
+ libdm/Makefile.in            |    2 ++
+ tools/Makefile.in            |    4 ++--
+ 4 files changed, 14 insertions(+), 33 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index 64ef0b6..284323f 100644
+--- a/configure.in
++++ b/configure.in
+@@ -844,35 +844,19 @@ AC_MSG_RESULT($SELINUX)
+ ################################################################################
+ dnl -- Check for selinux
+ if test x$SELINUX = xyes; then
+-	AC_CHECK_LIB(sepol, sepol_check_context, HAVE_SEPOL=yes, HAVE_SEPOL=no)
++	AC_CHECK_LIB([sepol], [sepol_check_context], [
++		AC_DEFINE([HAVE_SEPOL], 1, [Define to 1 if sepol_check_context is available.])
++		SELINUX_LIBS="-lsepol $SELINUX_LIBS"])
  
--	if (!_setup_alloced_segments(lv, &ah->alloced_areas[first_area],
-+	if (reverse)
-+		fa = (ah->area_count + ah->log_area_count - 1) - first_area;
-+
-+	/* 'fa' is unsigned, so check if too large (invalid). */
-+	if (fa >= (ah->area_count + ah->log_area_count))
-+		return 0;
-+
-+	if (!_setup_alloced_segments(lv, &ah->alloced_areas[fa],
- 				     num_areas, status,
- 				     stripe_size, segtype,
- 				     region_size))
-@@ -1559,11 +1569,14 @@ int lv_add_mirror_lvs(struct logical_vol
-  */
- int lv_add_log_segment(struct alloc_handle *ah, struct logical_volume *log_lv)
- {
--	const char *segtype_name = ah->log_area_count > 1 ? "mirror" : "striped";
+-	if test x$HAVE_SEPOL = xyes; then
+-		AC_DEFINE([HAVE_SEPOL], 1,
+-		  [Define to 1 if sepol_check_context is available.])
+-		SELINUX_LIBS="-lsepol $SELINUX_LIBS"
+-	fi
 -
--	return lv_add_segment(ah, ah->area_count, ah->log_area_count, log_lv,
--			      get_segtype_from_string(log_lv->vg->cmd, segtype_name),
--			      0, MIRROR_LOG, 0);
-+	/*
-+	 * We specify the first area as starting after the areas
-+	 * allocated for the mirror.
-+	 */
-+	return lv_add_segment(ah, ah->area_count, 1, log_lv,
-+			      get_segtype_from_string(log_lv->vg->cmd,
-+						      "striped"),
-+			      0, MIRROR_LOG, 0, 0);
- }
+-	AC_CHECK_LIB(selinux, is_selinux_enabled, HAVE_SELINUX=yes, HAVE_SELINUX=no)
+-
+-	if test x$HAVE_SELINUX = xyes; then
++	AC_CHECK_LIB([selinux], [is_selinux_enabled], [
++		AC_CHECK_HEADERS([selinux/selinux.h],, [AC_MSG_ERROR(bailing out)])
+ 		AC_DEFINE([HAVE_SELINUX], 1, [Define to 1 to include support for selinux.])
+ 		SELINUX_LIBS="-lselinux $SELINUX_LIBS"
+-	else
++		HAVE_SELINUX=yes ], [
+ 		AC_MSG_WARN(Disabling selinux)
+-	fi
+-	LIBS="$SELINUX_LIBS $LIBS"
+-
+-	# With --enable-static_link and selinux enabled, linking
+-	# fails on at least Debian unstable due to unsatisfied references
+-	# to pthread_mutex_lock and _unlock.  See if we need -lpthread.
+-	if test "$STATIC_LINK-$HAVE_SELINUX" = yes-yes; then
+-		lvm_saved_libs=$LIBS
+-		LIBS="$LIBS -static"
+-		AC_SEARCH_LIBS([pthread_mutex_lock], [pthread],
+-		  [test "$ac_cv_search_pthread_mutex_lock" = "none required" ||
+-				LIB_PTHREAD=-lpthread])
+-		LIBS=$lvm_saved_libs
+-	fi
++		HAVE_SELINUX=no ])
++
++	STATIC_LIBS="$STATIC_LIBS $SELINUX_LIBS"
+ fi
  
- static int _lv_extend_mirror(struct alloc_handle *ah,
-@@ -1585,7 +1598,7 @@ static int _lv_extend_mirror(struct allo
- 		if (!lv_add_segment(ah, m++, 1, seg_lv(seg, s),
- 				    get_segtype_from_string(lv->vg->cmd,
- 							    "striped"),
--				    0, 0, 0)) {
-+				    0, 0, 0, 0)) {
- 			log_error("Aborting. Failed to extend %s.",
- 				  seg_lv(seg, s)->name);
- 			return 0;
-@@ -1623,7 +1636,7 @@ int lv_extend(struct logical_volume *lv,
+ ################################################################################
+@@ -995,10 +979,6 @@ if test x$INTL = xyes; then
+ 	AC_CHECK_HEADERS(libintl.h,,AC_MSG_ERROR(bailing out))
+ fi
  
- 	if (mirrors < 2)
- 		r = lv_add_segment(ah, 0, ah->area_count, lv, segtype,
--				   stripe_size, status, 0);
-+				   stripe_size, status, 0, 0);
- 	else
- 		r = _lv_extend_mirror(ah, lv, extents, 0);
+-if test x$HAVE_SELINUX = xyes; then
+-	AC_CHECK_HEADERS(selinux/selinux.h,,AC_MSG_ERROR(bailing out))
+-fi
+-
+ if test x$UDEV_SYNC = xyes; then
+ 	AC_CHECK_HEADERS(sys/ipc.h sys/sem.h,,AC_MSG_ERROR(bailing out))
+ fi
+@@ -1107,7 +1087,6 @@ AC_SUBST(GULM_CFLAGS)
+ AC_SUBST(GULM_LIBS)
+ AC_SUBST(HAVE_LIBDL)
+ AC_SUBST(HAVE_REALTIME)
+-AC_SUBST(HAVE_SELINUX)
+ AC_SUBST(INTL)
+ AC_SUBST(INTL_PACKAGE)
+ AC_SUBST(JOBS)
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index aacb6a4..6355eef 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -66,7 +66,7 @@ dmeventd: $(LIB_SHARED) $(VERSIONED_SHLIB) dmeventd.o
  
-Index: LVM2/lib/metadata/lv_alloc.h
-===================================================================
---- LVM2.orig/lib/metadata/lv_alloc.h
-+++ LVM2/lib/metadata/lv_alloc.h
-@@ -58,7 +58,8 @@ int lv_add_segment(struct alloc_handle *
-                    const struct segment_type *segtype,
-                    uint32_t stripe_size,
-                    uint64_t status,
--		   uint32_t region_size);
-+		   uint32_t region_size,
-+		   int reverse);
+ dmeventd.static: $(LIB_STATIC) dmeventd.o $(interfacebuilddir)/libdevmapper.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L. -L$(interfacebuilddir) -o $@ \
+-	dmeventd.o $(LVMLIBS) $(LIBS)
++	dmeventd.o $(LVMLIBS) @STATIC_LIBS@ $(LIBS)
  
- int lv_add_mirror_areas(struct alloc_handle *ah,
- 			struct logical_volume *lv, uint32_t le,
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -1171,7 +1171,8 @@ int reconfigure_mirror_images(struct lv_
- static int _create_mimage_lvs(struct alloc_handle *ah,
- 			      uint32_t num_mirrors,
- 			      struct logical_volume *lv,
--			      struct logical_volume **img_lvs)
-+			      struct logical_volume **img_lvs,
-+			      int log)
- {
- 	uint32_t m;
- 	char *img_name;
-@@ -1202,7 +1203,7 @@ static int _create_mimage_lvs(struct all
- 		if (!lv_add_segment(ah, m, 1, img_lvs[m],
- 				    get_segtype_from_string(lv->vg->cmd,
- 							    "striped"),
--				    0, 0, 0)) {
-+				    0, 0, 0, log)) {
- 			log_error("Aborting. Failed to add mirror image segment "
- 				  "to %s. Remove new LV and retry.",
- 				  img_lvs[m]->name);
-@@ -1552,7 +1553,7 @@ static struct logical_volume *_create_mi
-  */
- static int _form_mirror(struct cmd_context *cmd, struct alloc_handle *ah,
- 			struct logical_volume *lv,
--			uint32_t mirrors, uint32_t region_size)
-+			uint32_t mirrors, uint32_t region_size, int log)
- {
- 	struct logical_volume **img_lvs;
+ ifeq ("@PKGCONFIG@", "yes")
+   INSTALL_LIB_TARGETS += install_pkgconfig
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 1884b21..cde7077 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -52,6 +52,8 @@ include ../make.tmpl
+ DEFS += -DDM_DEVICE_UID=@DM_DEVICE_UID@ -DDM_DEVICE_GID=@DM_DEVICE_GID@ \
+ 	-DDM_DEVICE_MODE=@DM_DEVICE_MODE@
  
-@@ -1573,7 +1574,7 @@ static int _form_mirror(struct cmd_conte
- 		return 0;
- 	}
++LIBS += @SELINUX_LIBS@
++
+ device-mapper: all
  
--	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs))
-+	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs, log))
- 		return 0;
+ .PHONY: install_dynamic install_static install_include \
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index a8cb6aa..53bc105 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -115,7 +115,7 @@ dmsetup: dmsetup.o $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
  
- 	if (!lv_add_mirror_lvs(lv, img_lvs, mirrors,
-@@ -1636,7 +1637,7 @@ static struct logical_volume *_set_up_mi
- 	}
+ dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) \
+-	      -o $@ dmsetup.o -ldevmapper $(LIBS)
++	      -o $@ dmsetup.o -ldevmapper @STATIC_LIBS@ $(LIBS)
  
- 	if ((log_count > 1) &&
--	    !_form_mirror(cmd, ah, log_lv, log_count-1, region_size)) {
-+	    !_form_mirror(cmd, ah, log_lv, log_count-1, region_size, 1)) {
- 		log_error("Failed to form mirrored log.");
- 		return NULL;
- 	}
-@@ -1781,7 +1782,7 @@ int add_mirror_images(struct cmd_context
- 	   So from here on, if failure occurs, the log must be explicitly
- 	   removed and the updated vg metadata should be committed. */
+ all: device-mapper
  
--	if (!_form_mirror(cmd, ah, lv, mirrors, region_size))
-+	if (!_form_mirror(cmd, ah, lv, mirrors, region_size, 0))
- 		goto out_remove_log;
+@@ -125,7 +125,7 @@ lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
  
- 	if (log_count && !attach_mirror_log(first_seg(lv), log_lv))
+ lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a  $(interfacebuilddir)/libdevmapper.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) -o $@ \
+-	      $(OBJECTS) lvm-static.o $(LVMLIBS) $(LIBS)
++	      $(OBJECTS) lvm-static.o $(LVMLIBS) @STATIC_LIBS@ $(LIBS)
+ 
+ liblvm2cmd.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.o lvm2cmd.o
+ 	cat $(top_builddir)/lib/liblvm-internal.a > $@
+-- 
+1.7.0
 
 
