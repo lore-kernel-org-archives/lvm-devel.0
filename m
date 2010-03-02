@@ -1,46 +1,45 @@
-From: Konstantin Pavlov <thresh@altlinux.ru>
-Date: Tue, 2 Mar 2010 12:38:18 +0300
-Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM daemons/dmeven ...
-In-Reply-To: <20100202140918.25779.qmail@sourceware.org>
-References: <20100202140918.25779.qmail@sourceware.org>
-Message-ID: <20100302093818.GA10221@snowwhite.immo>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue,  2 Mar 2010 13:07:18 +0100
+Subject: [PATCH 0/9] configure update
+Message-ID: <cover.1267529065.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Feb 02, 2010 at 02:09:18PM -0000, agk at sourceware.org wrote:
-> --- LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/01/21 22:15:46	1.13
-> +++ LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/02/02 14:09:18	1.14
-> @@ -36,7 +36,6 @@
->  
->  install_lvm2: libdevmapper-event-lvm2mirror.$(LIB_SUFFIX)
->  	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-> -		$(libdir)/$<.$(LIB_VERSION)
-> -	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-> +		$(libdir)/$<
->  
->  install: install_lvm2
-> --- LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/01/21 22:15:46	1.9
-> +++ LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/02/02 14:09:18	1.10
-> @@ -36,7 +36,6 @@
->  
->  install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
->  	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
-> -		$(libdir)/$<.$(LIB_VERSION)
-> -	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
-> +		$(libdir)/$<
->  
->  install: install_lvm2
+This patchset tries to mainly address linking problems.
+First few patches are rather cosmetic cleanups.
 
-Keeping SONAMEs for those plugins leaves this commit pointless.
+Interestings patches starts with: Readline linking update.
 
--- 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: signature.asc
-Type: application/pgp-signature
-Size: 198 bytes
-Desc: Digital signature
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100302/cdde24d5/attachment.sig>
+With this patchset libpthread and libselinux are linked only
+to object files which really needs this library.
+Tested it on Fedora & Debian distribution.
+
+Zdenek Kabelac (9):
+  Help display --disable-fsadm
+  Fix autoconf WARNING:
+  For Makefile vars use $() instead of ${}
+  Move include before  DEFS+=
+  Readline linking update
+  Pthread linking change
+  Remove -rdynamic
+  SELinux configure update
+  misc/configure.in  modification
+
+ configure.in                                  |   91 +++++++++++--------------
+ daemons/clvmd/Makefile.in                     |    4 +-
+ daemons/dmeventd/Makefile.in                  |    4 +-
+ daemons/dmeventd/plugins/lvm2/Makefile.in     |    4 +-
+ daemons/dmeventd/plugins/mirror/Makefile.in   |    6 +-
+ daemons/dmeventd/plugins/snapshot/Makefile.in |    6 +-
+ lib/misc/configure.h.in                       |    3 -
+ libdm/Makefile.in                             |    4 +-
+ make.tmpl.in                                  |    1 +
+ man/Makefile.in                               |    4 +-
+ test/api/Makefile.in                          |    2 +-
+ tools/Makefile.in                             |   13 ++--
+ 12 files changed, 65 insertions(+), 77 deletions(-)
+
+
