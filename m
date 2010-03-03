@@ -1,36 +1,43 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:47:17 +0100
-Subject: [PATCH 24/25] Replicator: update generated lib/misc/configure.h.in
-In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
-References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <ce9f7214e1a91979d0d78229daa71f0578ad88c1.1268833246.git.zkabelac@redhat.com>
+Date: Wed,  3 Mar 2010 21:42:53 +0100
+Subject: [PATCH 07/15] Move include before DEFS+=
+In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
+References: <cover.1267648294.git.zkabelac@redhat.com>
+Message-ID: <e97025f1f34e0ffc63b63e778979954db0c7bd06.1267648294.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+This patch moves inclusion of the make.tmpl before DEFS modification,
+so it goes in the same order on the compilation line.
+(i.e. HAVE_CONFIG_H goes first)
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/misc/configure.h.in |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ libdm/Makefile.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index b0af63f..8e53fa0 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -416,6 +416,9 @@
- /* Define to 1 to include the LVM readline shell. */
- #undef READLINE_SUPPORT
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index ce3e058..6ff3bff 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -47,11 +47,11 @@ endif
+ VERSIONED_SHLIB = libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
+ LIB_VERSION = $(LIB_VERSION_DM)
  
-+/* Define to 1 to include built-in support for replicators. */
-+#undef REPLICATOR_INTERNAL
++include $(top_builddir)/make.tmpl
 +
- /* Define as the return type of signal handlers (`int' or `void'). */
- #undef RETSIGTYPE
+ DEFS += -DDM_DEVICE_UID=@DM_DEVICE_UID@ -DDM_DEVICE_GID=@DM_DEVICE_GID@ \
+ 	-DDM_DEVICE_MODE=@DM_DEVICE_MODE@
  
+-include $(top_builddir)/make.tmpl
+-
+ device-mapper: all
+ 
+ .PHONY: install_dynamic install_static install_include \
 -- 
-1.7.0.1
+1.7.0
 
 
