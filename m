@@ -1,7 +1,7 @@
-From: Heinz Mauelshagen <heinzm@redhat.com>
-Date: Wed, 10 Mar 2010 18:43:23 +0100
-Subject: vgchange.c gets dmeventd monitoring activation wrong
-Message-ID: <1268243003.3074.62.camel@o>
+From: Theodore Ts'o <tytso@mit.edu>
+Date: Wed, 03 Mar 2010 09:46:02 -0500
+Subject: [REGRESSION] Can't boot lvm on root (Ubuntu 9.10 userspace) with 2.6.33
+Message-ID: <E1Nmppq-0000sA-E1@closure.thunk.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -9,67 +9,27 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 
-Updating to Fedora 12 kernel 2.6.32.9-67.fc12.x86_64 I was left
-with no root device.
+The last kernel I could boot was 2.6.33-rc4, so this might be a
+regression.   As near as I can tell, this udev rule isn't firing:
 
-Reason was, that we don't get dmeventd device monitoring activation
-(deactivation in this case rather) right, hence causing dlopen on
-libdevemapper-event DSO(s) via the dmeventd call chain.
+SUBSYSTEM=="block", ACTION=="add|change", ENV{ID_FS_TYPE}=="lvm*|LVM*", \
+	RUN+="watershed sh -c '/sbin/lvm vgscan; /sbin/lvm vgchange -a y'"
 
-The DSOs are intentionally not part of the initramfs for obvious
-reasons, which should be respected by the fact, that we call "vgchange
---monitor n" from dracut's lvm_scan script.
+So nothing is showing up in /dev/mapper, and so the root can't be
+mounted.  After 45 seconds, it drops me into the initramfs shell, and if
+I manually run "lvm vgscan" and "lvm vgscange -ay", everything is back,
+but then I can't figure out how to restart the boot process from inside
+a failed initramfs.   And of course, the initramfs environment is so
+crappy that there are no debugging aids --- not even a working pager.
 
-This patch is a proposal to fix the dmeventd activation handling via the
+Did I mention how much I hate the whole initramfs with dynamic udev
+rules as a design?
 
-"--ignoremonitoring" and the "--monitor {y|n}"
+I'll probably kludge some kind of "sleep 10; lvm vgscan ; lvm vgchange
+-ay" into some local initramfs script, but it would be nice to know what
+happened and what the real right fix should be.  Did anything change
+recently that might have caused this to fail?
 
-options and is not tested yet.
-
-It give precedence to the "--ignoremonitoring" option over the other
-one, which makes more sense IMO and needs a vgchange(8) manual change to
-reflect this.
-Of course we should better raise a command line error if both are given,
-which is subject to future discussion.
-
-Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
----
- LVM2.2.02.53/tools/{vgchange.c.orig => vgchange.c} |   16 ++++++++++++----
- 1 files changed, 12 insertions(+), 4 deletions(-)
-
-diff --git LVM2.2.02.53/tools/vgchange.c.orig LVM2.2.02.53/tools/vgchange.c
-index 95b0b48..e789cc4 100644
---- LVM2.2.02.53/tools/vgchange.c.orig
-+++ LVM2.2.02.53/tools/vgchange.c
-@@ -494,16 +494,24 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 			   struct volume_group *vg,
- 			   void *handle __attribute((unused)))
- {
--	int r = ECMD_FAILED;
-+	int dmeventd_mode, r = ECMD_FAILED;
- 
- 	if (vg_is_exported(vg)) {
- 		log_error("Volume group \"%s\" is exported", vg_name);
- 		return ECMD_FAILED;
- 	}
- 
--	init_dmeventd_monitor(arg_int_value(cmd, monitor_ARG,
--					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
--					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
-+	/* Check conditions to activate dmeventd montoring. */
-+	if (is_static())
-+		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
-+	else if (arg_count(cmd, ignoremonitoring_ARG))
-+		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
-+	else if (!arg_int_value(cmd, monitor_ARG, 1))
-+		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
-+	else
-+		dmeventd_mode = DEFAULT_DMEVENTD_MONITOR;
-+		
-+	init_dmeventd_monitor(dmeventd_mode);
- 
- 	if (arg_count(cmd, available_ARG))
- 		r = _vgchange_available(cmd, vg);
-
+						- Ted
 
 
