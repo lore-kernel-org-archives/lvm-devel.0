@@ -1,39 +1,58 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  3 Mar 2010 21:43:01 +0100
-Subject: [PATCH 15/15] Update generated misc/configure.in
-In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
-References: <cover.1267648294.git.zkabelac@redhat.com>
-Message-ID: <6ad7098b333466407a00476cc2f6c63b19f0eb9e.1267648294.git.zkabelac@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 3 Mar 2010 17:37:40 -0500
+Subject: userspace patches for shared snapshots
+In-Reply-To: <20100226211702.GA23893@redhat.com>
+References: <Pine.LNX.4.64.1002101858410.15802@hs20-bc2-1.build.redhat.com>
+	<20100225221324.GA29946@redhat.com>
+	<Pine.LNX.4.64.1002252327100.29287@hs20-bc2-1.build.redhat.com>
+	<20100226211702.GA23893@redhat.com>
+Message-ID: <20100303223740.GA12242@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This file is generated from autoreconf.
-HAVE_LIBREADLINE is no longer defined
-- lvm does not use it anyway.
+On Fri, Feb 26 2010 at  4:17pm -0500,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/misc/configure.h.in |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+> On Thu, Feb 25 2010 at 11:52pm -0500,
+> Mikulas Patocka <mpatocka@redhat.com> wrote:
 
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 4273eeb..b0af63f 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -120,9 +120,6 @@
- /* Define to 1 if you have the <libintl.h> header file. */
- #undef HAVE_LIBINTL_H
- 
--/* Define to 1 if you have the `readline' library (-lreadline). */
--#undef HAVE_LIBREADLINE
--
- /* Define to 1 if you have the <limits.h> header file. */
- #undef HAVE_LIMITS_H
- 
--- 
-1.7.0
+> > > # lvs
+> > >   LV             VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
+> > >   testlv1        test owi-a- 4.00g                                       
+> > >   testlv1-shared test swi--- 1.00g testlv1 100.00                        
+> > > 
+> > > NOTE: strikes me as odd that the testlv1-shared Snap% is 100%.  I've
+> > > fixed the same with the snapshot-merge code before; will dig deeper in a
+> > > bit.
+> > 
+> > This is actually bug in the kernel, it starts with the smallest possible 
+> > size and extends the internal data structures when the first operation is 
+> > performed. So, if you ask for status without performing any operation, it 
+> > reports 100%.
+> > 
+> > Thanks for finding it, I overlooked it. I'l fix that.
+> 
+> Sure, I'll be interested to see your fix.  I'm not clear on what you're
+> referring to.
+
+BTW, the patches I posted earlier change this behaviour, in particular
+this patch:
+http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.62/lvm-shared-eliminate-shared_snapshot-in-lv.patch
+
+Now the -shared store is hidden:
+
+# lvs
+  LV      VG   Attr   LSize Origin Snap%  Move Log Copy%  Convert
+  testlv1 test owi-a- 4.00g                                      
+
+# lvs -a
+  LV               VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
+  testlv1          test owi-a- 4.00g                                       
+  [testlv1-shared] test swi--- 1.00g testlv1   0.00                        
+
+You'll also note that Snap% is no longer 100%
 
 
