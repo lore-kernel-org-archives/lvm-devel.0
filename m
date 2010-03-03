@@ -1,119 +1,85 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:47:08 +0100
-Subject: [PATCH 15/25] Replicator: update _create_partial_dtree()
-In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
-References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <63db06d5d7bebcec90a2a238c4b9c305b1979fd9.1268833246.git.zkabelac@redhat.com>
+Date: Wed,  3 Mar 2010 21:42:52 +0100
+Subject: [PATCH 06/15] Use $() instead of ${} for Makefile variables
+In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
+References: <cover.1267648294.git.zkabelac@redhat.com>
+Message-ID: <f33754180f40b7cab56c465377439d0915183a9f.1267648294.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding function _create_partial_replicator() to create
-partial tree for Replicator target.
-
-Using dm_tree_set_suspend_priority() for Replicator.
+Both usage forms are correct, but we should use one them
+consistenly through all Makefiles.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   75 ++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 75 insertions(+), 0 deletions(-)
+ daemons/dmeventd/plugins/lvm2/Makefile.in     |    2 +-
+ daemons/dmeventd/plugins/mirror/Makefile.in   |    4 ++--
+ daemons/dmeventd/plugins/snapshot/Makefile.in |    4 ++--
+ man/Makefile.in                               |    4 ++--
+ 4 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 5c5bc44..1adefc8 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -867,6 +867,75 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree, struc
- 	return 1;
- }
+diff --git a/daemons/dmeventd/plugins/lvm2/Makefile.in b/daemons/dmeventd/plugins/lvm2/Makefile.in
+index 96c60e0..af6807b 100644
+--- a/daemons/dmeventd/plugins/lvm2/Makefile.in
++++ b/daemons/dmeventd/plugins/lvm2/Makefile.in
+@@ -16,7 +16,7 @@ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ VPATH = @srcdir@
  
-+/*
-+ * Add devices from replicator
-+ * use _add_dev_to_dtree() directly instead of _add_lv_to_dtree()
-+ * no need to extend its check with  _slog, _rlog, _rimage
-+ */
-+static int _create_partial_replicator(struct dev_manager *dm,
-+				      struct dm_tree *dtree,
-+				      struct lv_segment *seg)
-+{
-+	struct replicator_device *rdev;
-+	struct replicator_site *rsite;
-+	const char *replicator_dlid;
-+
-+	if (!lv_is_active_replicator_dev(seg->lv)) {
-+		if (!_add_dev_to_dtree(dm, dtree, seg->lv->rdevice->lv,
-+				       NULL))
-+			return_0;
-+		return 1;
-+	}
-+
-+	/* Add all related devs for replicator */
-+	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+		dm_list_iterate_items(rdev, &rsite->rdevices) {
-+			if (rsite->state == REPLICATOR_STATE_ACTIVE) {
-+				/* Add _rimage LV */
-+				if (rdev->lv &&
-+				    !_add_dev_to_dtree(dm, dtree,
-+						       rdev->lv, NULL))
-+					return_0;
-+
-+				/* Add replicator-dev LV */
-+				if (seg->lv != rdev->replicator_dev->lv &&
-+				    !_add_dev_to_dtree(dm, dtree,
-+						       rdev->replicator_dev->lv,
-+						       NULL))
-+					return_0;
-+			}
-+
-+			if (!rdev->rsite->vg_name)
-+				continue;
-+
-+			if (rdev->lv &&
-+			    !_add_dev_to_dtree(dm, dtree, rdev->lv, NULL))
-+				return_0;
-+
-+			if (rdev->slog &&
-+			    !_add_dev_to_dtree(dm, dtree, rdev->slog, NULL))
-+				return_0;
-+
-+		}
-+	}
-+
-+	/* Add rlog and replicator devices */
-+	if (first_seg(seg->replicator)->rlog_lv &&
-+	    !_add_dev_to_dtree(dm, dtree,
-+			       first_seg(seg->replicator)->rlog_lv, NULL))
-+		return_0;
-+	if (!_add_dev_to_dtree(dm, dtree, seg->replicator, NULL))
-+		return_0;
-+
-+	/* Set suspend priority for replicator device */
-+	if (!(replicator_dlid = build_dlid(dm, seg->replicator->lvid.s, NULL)))
-+		return_0;
-+	if (!dm_tree_set_suspend_priority(dtree, replicator_dlid, 1))
-+		return_0;
-+
-+	return 1;
-+}
-+
- static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logical_volume *lv)
- {
- 	struct dm_tree *dtree;
-@@ -887,6 +956,12 @@ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logi
- 		if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow))
- 			goto_bad;
+-CLDFLAGS += -L${top_builddir}/tools
++CLDFLAGS += -L$(top_builddir)/tools
  
-+	/* Add any replicator-dev LVs of this LV */
-+	dm_list_iterate_items(seg, &lv->segments)
-+		if (seg_is_replicator_dev(seg) &&
-+		    !_create_partial_replicator(dm, dtree, seg))
-+			goto_bad;
-+
- 	/* Add any LVs used by segments in this LV */
- 	dm_list_iterate_items(seg, &lv->segments)
- 		for (s = 0; s < seg->area_count; s++)
+ SOURCES = dmeventd_lvm.c
+ 
+diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
+index a6af47f..bdb49d1 100644
+--- a/daemons/dmeventd/plugins/mirror/Makefile.in
++++ b/daemons/dmeventd/plugins/mirror/Makefile.in
+@@ -17,8 +17,8 @@ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ VPATH = @srcdir@
+ 
+-INCLUDES += -I${top_srcdir}/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L${top_builddir}/tools -L${top_builddir}/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_mirror.c
+ 
+diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
+index 133459d..4b203a0 100644
+--- a/daemons/dmeventd/plugins/snapshot/Makefile.in
++++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
+@@ -17,8 +17,8 @@ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ VPATH = @srcdir@
+ 
+-INCLUDES += -I${top_srcdir}/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
+-CLDFLAGS += -L${top_builddir}/tools -L${top_builddir}/daemons/dmeventd/plugins/lvm2
++INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
+ 
+ SOURCES = dmeventd_snapshot.c
+ 
+diff --git a/man/Makefile.in b/man/Makefile.in
+index f49d4c8..332f07f 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -43,8 +43,8 @@ ifeq ("@BUILD_CMIRRORD@", "yes")
+ endif
+ 
+ MAN8DM=dmsetup.8
+-MAN5DIR=${mandir}/man5
+-MAN8DIR=${mandir}/man8
++MAN5DIR=$(mandir)/man5
++MAN8DIR=$(mandir)/man8
+ 
+ CLEAN_TARGETS=$(MAN5) $(MAN8) $(MAN8CLUSTER) $(FSADMMAN) $(MAN8DM)
+ 
 -- 
-1.7.0.1
+1.7.0
 
 
