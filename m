@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Mar 2010 11:09:10 -0000
-Subject: LVM2 WHATS_NEW configure configure.in
-Message-ID: <20100304110910.11595.qmail@sourceware.org>
+Date: 4 Mar 2010 11:12:43 -0000
+Subject: LVM2 ./WHATS_NEW ./make.tmpl.in daemons/clvmd/ ...
+Message-ID: <20100304111243.12464.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,77 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-04 11:09:09
+Changes by:	zkabelac at sourceware.org	2010-03-04 11:12:40
 
 Modified files:
-	.              : WHATS_NEW configure configure.in 
+	.              : WHATS_NEW make.tmpl.in 
+	daemons/clvmd  : Makefile.in 
+	liblvm         : Makefile.in 
+	tools          : Makefile.in 
 
 Log message:
-	As fsadm is installed by default - it's a common practice to rather
-	print help text in '--disable' form for such case.
+	Introduce LVMINTERNAL_LIBS
+	
+	Keep dependency libraries for liblvm-internal in one place.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1447&r2=1.1448
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.115&r2=1.116
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.125&r2=1.126
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1448&r2=1.1449
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.77&r2=1.78
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/Makefile.in.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.105&r2=1.106
 
---- LVM2/WHATS_NEW	2010/03/04 09:56:01	1.1447
-+++ LVM2/WHATS_NEW	2010/03/04 11:09:08	1.1448
+--- LVM2/WHATS_NEW	2010/03/04 11:09:08	1.1448
++++ LVM2/WHATS_NEW	2010/03/04 11:12:39	1.1449
 @@ -1,5 +1,6 @@
  Version 2.02.62 -
  ====================================
-+  Help for configure prints --disable-fsadm.
++  Define and use internal makefile variable LVMINTERNAL_LIBS.
+   Help for configure prints --disable-fsadm.
    Use consistently $() instead of ${} for all Makefile variables.
    Replace CFLOW_CMD only in make.tmpl and use it as variable elsewhere.
-   Use $(top_builddir) for inclusion of make.tmpl in Makefiles.
---- LVM2/configure	2010/01/21 22:15:45	1.115
-+++ LVM2/configure	2010/03/04 11:09:08	1.116
-@@ -1524,7 +1524,7 @@
-   --enable-applib         Build application library
-   --enable-cmdlib         Build shared command library
-   --enable-pkgconfig      Install pkgconfig support
--  --enable-fsadm          Enable fsadm
-+  --disable-fsadm         Disable fsadm
-   --enable-dmeventd       Enable the device-mapper event daemon
-   --disable-selinux       Disable selinux support
-   --enable-nls            Enable Native Language Support
---- LVM2/configure.in	2010/03/04 09:46:38	1.125
-+++ LVM2/configure.in	2010/03/04 11:09:09	1.126
-@@ -737,8 +737,8 @@
- ################################################################################
- dnl -- Enable fsadm
- AC_MSG_CHECKING(whether to install fsadm)
--AC_ARG_ENABLE(fsadm, [  --enable-fsadm          Enable fsadm],
--FSADM=$enableval)
-+AC_ARG_ENABLE(fsadm, [AC_HELP_STRING([--disable-fsadm], [Disable fsadm])],
-+	FSADM=$enableval)
- AC_MSG_RESULT($FSADM)
+--- LVM2/make.tmpl.in	2010/03/04 09:53:08	1.77
++++ LVM2/make.tmpl.in	2010/03/04 11:12:39	1.78
+@@ -36,6 +36,7 @@
+ LDDEPS += @LDDEPS@
+ LDFLAGS += @LDFLAGS@
+ LIB_SUFFIX = @LIB_SUFFIX@
++LVMINTERNAL_LIBS = -llvm-internal
  
- ################################################################################
+ # Setup directory variables
+ prefix = @prefix@
+--- LVM2/daemons/clvmd/Makefile.in	2010/03/04 09:51:37	1.33
++++ LVM2/daemons/clvmd/Makefile.in	2010/03/04 11:12:39	1.34
+@@ -75,7 +75,7 @@
+ TARGETS = \
+ 	clvmd
+ 
+-LVMLIBS = -llvm-internal -lpthread
++LVMLIBS = $(LVMINTERNAL_LIBS) -lpthread
+ 
+ ifeq ("@DMEVENTD@", "yes")
+ 	LVMLIBS += -ldevmapper-event
+--- LVM2/liblvm/Makefile.in	2010/03/04 09:51:40	1.19
++++ LVM2/liblvm/Makefile.in	2010/03/04 11:12:40	1.20
+@@ -42,7 +42,7 @@
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-LIBS += -ldevmapper -llvm-internal
++LIBS += $(LVMINTERNAL_LIBS) -ldevmapper
+ 
+ ifeq ("@DMEVENTD@", "yes")
+   LIBS += -ldevmapper-event
+--- LVM2/tools/Makefile.in	2010/03/04 09:53:08	1.105
++++ LVM2/tools/Makefile.in	2010/03/04 11:12:40	1.106
+@@ -86,7 +86,7 @@
+   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
+ endif
+ 
+-LVMLIBS = -llvm-internal
++LVMLIBS = $(LVMINTERNAL_LIBS)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ CLEAN_TARGETS = liblvm2cmd.$(LIB_SUFFIX) liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
 
 
