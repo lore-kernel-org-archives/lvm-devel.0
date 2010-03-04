@@ -1,58 +1,46 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Wed, 3 Mar 2010 17:37:40 -0500
-Subject: userspace patches for shared snapshots
-In-Reply-To: <20100226211702.GA23893@redhat.com>
-References: <Pine.LNX.4.64.1002101858410.15802@hs20-bc2-1.build.redhat.com>
-	<20100225221324.GA29946@redhat.com>
-	<Pine.LNX.4.64.1002252327100.29287@hs20-bc2-1.build.redhat.com>
-	<20100226211702.GA23893@redhat.com>
-Message-ID: <20100303223740.GA12242@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 4 Mar 2010 09:46:38 -0000
+Subject: LVM2 WHATS_NEW configure.in
+Message-ID: <20100304094638.19279.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Feb 26 2010 at  4:17pm -0500,
-Mike Snitzer <snitzer@redhat.com> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-03-04 09:46:38
 
-> On Thu, Feb 25 2010 at 11:52pm -0500,
-> Mikulas Patocka <mpatocka@redhat.com> wrote:
+Modified files:
+	.              : WHATS_NEW configure.in 
 
-> > > # lvs
-> > >   LV             VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
-> > >   testlv1        test owi-a- 4.00g                                       
-> > >   testlv1-shared test swi--- 1.00g testlv1 100.00                        
-> > > 
-> > > NOTE: strikes me as odd that the testlv1-shared Snap% is 100%.  I've
-> > > fixed the same with the snapshot-merge code before; will dig deeper in a
-> > > bit.
-> > 
-> > This is actually bug in the kernel, it starts with the smallest possible 
-> > size and extends the internal data structures when the first operation is 
-> > performed. So, if you ask for status without performing any operation, it 
-> > reports 100%.
-> > 
-> > Thanks for finding it, I overlooked it. I'l fix that.
-> 
-> Sure, I'll be interested to see your fix.  I'm not clear on what you're
-> referring to.
+Log message:
+	Usage of AC_PROG_SED and AC_PROG_MKDIR_P requires autoconf version 2.61.
 
-BTW, the patches I posted earlier change this behaviour, in particular
-this patch:
-http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.62/lvm-shared-eliminate-shared_snapshot-in-lv.patch
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1442&r2=1.1443
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.124&r2=1.125
 
-Now the -shared store is hidden:
-
-# lvs
-  LV      VG   Attr   LSize Origin Snap%  Move Log Copy%  Convert
-  testlv1 test owi-a- 4.00g                                      
-
-# lvs -a
-  LV               VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
-  testlv1          test owi-a- 4.00g                                       
-  [testlv1-shared] test swi--- 1.00g testlv1   0.00                        
-
-You'll also note that Snap% is no longer 100%
+--- LVM2/WHATS_NEW	2010/03/02 21:56:14	1.1442
++++ LVM2/WHATS_NEW	2010/03/04 09:46:38	1.1443
+@@ -1,5 +1,6 @@
+ Version 2.02.62 -
+ ====================================
++  Increase AC_PREREQ version to 2.61 (for AC_PROC_SED, AC_PROG_MKDIR_P).
+   Handle a misaligned device that reports a -1 alignment_offset.
+   Extend core allocation code in preparation for mirrored log areas.
+   Rewrite clvmd init script.
+--- LVM2/configure.in	2010/01/21 22:15:45	1.124
++++ LVM2/configure.in	2010/03/04 09:46:38	1.125
+@@ -11,7 +11,7 @@
+ ## Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ ################################################################################
+ 
+-AC_PREREQ(2.57)
++AC_PREREQ(2.61)
+ ################################################################################
+ dnl -- Process this file with autoconf to produce a configure script.
+ AC_INIT
 
 
