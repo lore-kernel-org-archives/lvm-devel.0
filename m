@@ -1,17 +1,18 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 5 Mar 2010 17:58:08 -0600
-Subject: [PATCH 1 of 10] LVM: remove prevention checks for mirrored log
-Message-ID: <201003052358.o25Nw8Fg012063@hydrogen.msp.redhat.com>
+Date: Fri, 5 Mar 2010 17:58:19 -0600
+Subject: [PATCH 2 of 10] LVM: subdivide mirror creation function
+Message-ID: <201003052358.o25NwJJR012136@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-remove-prevention-checks-for-mirrored-log.patch
+Patch name: lvm-subdivide-mirror-creation-function.patch
 
-In preparation for "mirrored" mirror logs, remove the
-checks that prevent this sort of processing.
+Here we carve out a portion of the 'add_mirror_images'
+function that will be useful in more than one place
+later.
 
 Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
@@ -19,30 +20,96 @@ Index: LVM2/lib/metadata/mirror.c
 ===================================================================
 --- LVM2.orig/lib/metadata/mirror.c
 +++ LVM2/lib/metadata/mirror.c
-@@ -1563,11 +1563,6 @@ static struct logical_volume *_set_up_mi
+@@ -1547,6 +1547,46 @@ static struct logical_volume *_create_mi
+ 	return log_lv;
+ }
  
- 	init_mirror_in_sync(in_sync);
++/*
++ * Returns: 1 on success, 0 on error
++ */
++static int _form_mirror(struct cmd_context *cmd, struct alloc_handle *ah,
++			struct logical_volume *lv,
++			uint32_t mirrors, uint32_t region_size)
++{
++	struct logical_volume **img_lvs;
++
++	/*
++	 * insert a mirror layer
++	 */
++	if (dm_list_size(&lv->segments) != 1 ||
++	    seg_type(first_seg(lv), 0) != AREA_LV)
++		if (!insert_layer_for_lv(cmd, lv, 0, "_mimage_%d"))
++			return 0;
++
++	/*
++	 * create mirror image LVs
++	 */
++	if (!(img_lvs = alloca(sizeof(*img_lvs) * mirrors))) {
++		log_error("img_lvs allocation failed. "
++			  "Remove new LV and retry.");
++		return 0;
++	}
++
++	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs))
++		return 0;
++
++	if (!lv_add_mirror_lvs(lv, img_lvs, mirrors,
++			       MIRROR_IMAGE | (lv->status & LOCKED),
++			       region_size)) {
++		log_error("Aborting. Failed to add mirror segment. "
++			  "Remove new LV and retry.");
++		return 0;
++	}
++
++	return 1;
++}
++
+ static struct logical_volume *_set_up_mirror_log(struct cmd_context *cmd,
+ 						 struct alloc_handle *ah,
+ 						 struct logical_volume *lv,
+@@ -1696,7 +1736,6 @@ int add_mirror_images(struct cmd_context
+ 	struct alloc_handle *ah;
+ 	const struct segment_type *segtype;
+ 	struct dm_list *parallel_areas;
+-	struct logical_volume **img_lvs;
+ 	struct logical_volume *log_lv = NULL;
  
--	if (log_count != 1) {
--		log_error("log_count != 1 is not supported.");
--		return NULL;
+ 	if (stripes > 1) {
+@@ -1736,34 +1775,9 @@ int add_mirror_images(struct cmd_context
+ 	   So from here on, if failure occurs, the log must be explicitly
+ 	   removed and the updated vg metadata should be committed. */
+ 
+-	/*
+-	 * insert a mirror layer
+-	 */
+-	if (dm_list_size(&lv->segments) != 1 ||
+-	    seg_type(first_seg(lv), 0) != AREA_LV)
+-		if (!insert_layer_for_lv(cmd, lv, 0, "_mimage_%d"))
+-			goto out_remove_log;
+-
+-	/*
+-	 * create mirror image LVs
+-	 */
+-	if (!(img_lvs = alloca(sizeof(*img_lvs) * mirrors))) {
+-		log_error("img_lvs allocation failed. "
+-			  "Remove new LV and retry.");
+-		goto out_remove_log;
 -	}
 -
- 	/* Mirror log name is lv_name + suffix, determined as the following:
- 	 *   1. suffix is:
- 	 *        o "_mlog" for the original mirror LV.
-@@ -1630,12 +1625,6 @@ int add_mirror_log(struct cmd_context *c
- 	struct lvinfo info;
- 	int r = 0;
+-	if (!_create_mimage_lvs(ah, mirrors, lv, img_lvs))
++	if (!_form_mirror(cmd, ah, lv, mirrors, region_size))
+ 		goto out_remove_log;
  
--	/* Unimplemented features */
--	if (log_count > 1) {
--		log_error("log_count > 1 is not supported");
--		return 0;
+-	if (!lv_add_mirror_lvs(lv, img_lvs, mirrors,
+-			       MIRROR_IMAGE | (lv->status & LOCKED),
+-			       region_size)) {
+-		log_error("Aborting. Failed to add mirror segment. "
+-			  "Remove new LV and retry.");
+-		goto out_remove_images;
 -	}
 -
- 	if (dm_list_size(&lv->segments) != 1) {
- 		log_error("Multiple-segment mirror is not supported");
- 		return 0;
+ 	if (log_count && !attach_mirror_log(first_seg(lv), log_lv))
+ 		stack;
+ 
 
 
