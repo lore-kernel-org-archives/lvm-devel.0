@@ -1,59 +1,57 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 5 Mar 2010 15:14:04 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20100305151404.28936.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 5 Mar 2010 12:47:47 -0500
+Subject: edits for r16 of shared snapshot patches [was: Re: userspace patches for shared snapshots]
+In-Reply-To: <20100304132228.GA20534@redhat.com>
+References: <Pine.LNX.4.64.1002101858410.15802@hs20-bc2-1.build.redhat.com>
+	<20100225221324.GA29946@redhat.com>
+	<Pine.LNX.4.64.1002252327100.29287@hs20-bc2-1.build.redhat.com>
+	<20100226211702.GA23893@redhat.com>
+	<20100303223740.GA12242@redhat.com>
+	<Pine.LNX.4.64.1003040502020.16112@hs20-bc2-1.build.redhat.com>
+	<20100304132228.GA20534@redhat.com>
+Message-ID: <20100305174747.GA777@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-05 15:14:04
+On Thu, Mar 04 2010 at  8:22am -0500,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Modified files:
-	lib/mm         : memlock.c 
+> On Thu, Mar 04 2010 at  5:11am -0500,
+> Mikulas Patocka <mpatocka@redhat.com> wrote:
+> 
+> > I went through your kernel patch and uploaded a new version at 
+> > http://people.redhat.com/mpatocka/patches/kernel/new-snapshots/r16/ . It 
+> > contains fix for this 100% usage. It contains most of your changes (I 
+> > rolled back that cycle change).
+> 
+> OK, I have made further edits that layered ontop of my other changes
+> (primarily just making use of __func__ rather than hardcoding the
+> function name in ERROR messages).  I'll have a look at your r16 and
+> hopefully they'll apply there too.
 
-Log message:
-	Use '_' prefix for local static variable.
+I've uploaded my edits to r16 here:
+http://people.redhat.com/msnitzer/patches/multisnap/kernel/2.6.33/r16a/
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+You can see the edits here:
+http://people.redhat.com/msnitzer/patches/multisnap/kernel/2.6.33/r16a/r16_edits.patch
 
---- LVM2/lib/mm/memlock.c	2010/03/05 14:48:34	1.16
-+++ LVM2/lib/mm/memlock.c	2010/03/05 15:14:03	1.17
-@@ -79,7 +79,7 @@
- 	size_t w_size;
- 	size_t x_size;
- };
--static struct maps_stats ms; /* statistic for maps locking */
-+static struct maps_stats _ms; /* statistic for maps locking */
- 
- static void _touch_memory(void *mem, size_t size)
- {
-@@ -251,8 +251,8 @@
- {
- 	_allocate_memory();
- 
--	memset(&ms, 0, sizeof(ms));
--	if (_memlock_maps(cmd, LVM_MLOCK, &ms))
-+	memset(&_ms, 0, sizeof(_ms));
-+	if (_memlock_maps(cmd, LVM_MLOCK, &_ms))
- 		log_very_verbose("Locking memory");
- 
- 	errno = 0;
-@@ -271,9 +271,9 @@
- 	if (_memlock_maps(cmd, LVM_MUNLOCK, &ums))
- 		log_very_verbose("Unlocking memory");
- 
--	if (memcmp(&ms, &ums, sizeof(ms)))
-+	if (memcmp(&_ms, &ums, sizeof(ums)))
- 		log_error(INTERNAL_ERROR "Maps size mismatch (%ld,%ld,%ld) != (%ld,%ld,%ld)",
--			  (long)ms.r_size,  (long)ms.w_size, (long)ms.x_size,
-+			  (long)_ms.r_size, (long)_ms.w_size, (long)_ms.x_size,
- 			  (long)ums.r_size, (long)ums.w_size, (long)ums.x_size);
- 
- 	_release_memory();
+Boils down to:
+* use __func__ rather than hardcoding the function name
+  - this fixed ~3 inconsistencies (incorrect function names) and should
+    help if/when we do any function renaming in later phases of review
+* s/Tomonorig/Tomonori/
+* a few more typo fixups
+* a few more whitespace cleanups.
+
+I'd appreciate it if you pull these in for the basis of any follow-on
+release you make.
+
+Also, I'm working to improve Documentation/device-mapper/dm-multisnapshot.txt
+I'll share this a bit later (hopefully today).
+
+Mike
 
 
