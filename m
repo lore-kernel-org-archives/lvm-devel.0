@@ -1,44 +1,42 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Mon, 08 Mar 2010 00:54:35 -0500
-Subject: [PATCH 10 of 10] LVM: rework lvconvert_mirrorsuil
-In-Reply-To: <201003052359.o25Nxeg5012728@hydrogen.msp.redhat.com>
-References: <201003052359.o25Nxeg5012728@hydrogen.msp.redhat.com>
-Message-ID: <4B94911B.8030707@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Mar 2010 15:55:53 -0000
+Subject: LVM2/lib/mm memlock.c
+Message-ID: <20100308155553.13375.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jonathan Brassow wrote:
-> +static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
-> +				  struct logical_volume *lv,
-> +				  struct lvconvert_params *lp,
-> +				  struct dm_list *operable_pvs,
-> +				  uint32_t new_mimage_count,
-> +				  uint32_t new_log_count,
-> +				  int allocation_failures_ok)
-> +{
-> +	uint32_t region_size;
-> +	struct lv_segment *seg;
-...
-> +		/* Insert a temporary layer for syncing,
-> +		 * only if the original lv is using disk log. */
-> +		if (seg->log_lv && !_insert_lvconvert_layer(cmd, lv)) {
-> +			log_error("Failed to insert resync layer");
-> +			return 0;
-> +		}
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-03-08 15:55:53
 
-"seg" seems to be used uninitialized here.
+Modified files:
+	lib/mm         : memlock.c 
 
-> +static int _lvconvert_mirrors_orig(struct cmd_context *cmd,
-> +				   struct logical_volume *lv,
-> +				   struct lvconvert_params *lp)
-> +{
+Log message:
+	Unconditionaly ignore also Virtual Dynamically-linked Shared Object
+	(VDSO on 32bit is VSyscall on 64bit)
+	It seems it could be locked on 64bit kernels running 32bit binaries,
+	but it makes troubles on real 32bit machines where mlock() returns
+	error when trying to lock such map area. (0xffffe000)
+	Behavior of mlockall() seems to be similar.
 
-This function is not used anywhere...
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
 
-Thanks,
-Taka
+--- LVM2/lib/mm/memlock.c	2010/03/05 15:14:03	1.17
++++ LVM2/lib/mm/memlock.c	2010/03/08 15:55:52	1.18
+@@ -59,7 +59,8 @@
+ 
+ /* list of maps, that are unconditionaly ignored */
+ static const char * const _ignore_maps[] = {
+-    "[vsyscall]"
++    "[vdso]",
++    "[vsyscall]",
+ };
+ 
+ /* default blacklist for maps */
 
 
