@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 9 Mar 2010 10:25:51 -0000
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Mar 2010 12:31:53 -0000
 Subject: LVM2/lib/mm memlock.c
-Message-ID: <20100309102551.1173.qmail@sourceware.org>
+Message-ID: <20100309123153.15850.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-09 10:25:50
+Changes by:	agk at sourceware.org	2010-03-09 12:31:52
 
 Modified files:
 	lib/mm         : memlock.c 
 
 Log message:
-	Update comments for selecting maps
-	Use dm_snprintf and check result whether we create correct /proc path name
+	some missing debug messages
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
 
---- LVM2/lib/mm/memlock.c	2010/03/09 03:16:11	1.20
-+++ LVM2/lib/mm/memlock.c	2010/03/09 10:25:50	1.21
-@@ -78,7 +78,7 @@
- static unsigned _use_mlockall;
- static FILE *_mapsh;
- static char _procselfmaps[PATH_MAX] = "";
--static const char _selfmaps[] = "/self/maps";
-+#define SELF_MAPS "/self/maps"
- 
- struct maps_stats {
- 	size_t r_size;
-@@ -140,7 +140,7 @@
- 		return 0;
+--- LVM2/lib/mm/memlock.c	2010/03/09 10:25:50	1.21
++++ LVM2/lib/mm/memlock.c	2010/03/09 12:31:51	1.22
+@@ -141,13 +141,18 @@
  	}
  
--	/* skip  ---p,  select with r,w,x */
-+	/* Select readable maps */
- 	if (fr != 'r')
+ 	/* Select readable maps */
+-	if (fr != 'r')
++	if (fr != 'r') {
++		log_debug("mlock area unreadable '%s': Skipping.", line);
  		return 1;
++	}
  
-@@ -244,13 +244,14 @@
- 	_use_mlockall = find_config_tree_bool(cmd, "activation/use_mlockall", DEFAULT_USE_MLOCKALL);
+ 	/* always ignored areas */
+ 	for (i = 0; i < sizeof(_ignore_maps) / sizeof(_ignore_maps[0]); ++i)
+-		if (strstr(line + pos, _ignore_maps[i]))
++		if (strstr(line + pos, _ignore_maps[i])) {
++			log_debug("mlock ignore filter '%s' matches '%s': Skipping.",
++				  _ignore_maps[i], line);
+ 			return 1;
++		}
  
- 	if (!_use_mlockall) {
--		/* Initialise static variables first time */
-+		/* Reset statistic counters */
- 		memset(&_mstats, 0, sizeof(_mstats));
- 
--		if (!*_procselfmaps) {
--			_procselfmaps[PATH_MAX - 1] = '\0';
--			strncpy(_procselfmaps, cmd->proc_dir, PATH_MAX - 1);
--			strncat(_procselfmaps, _selfmaps, PATH_MAX - 1);
-+		if (!*_procselfmaps &&
-+		    dm_snprintf(_procselfmaps, sizeof(_procselfmaps),
-+				"%s" SELF_MAPS, cmd->proc_dir) < 0) {
-+			log_error("proc_dir too long");
-+			return;
- 		}
- 
- 		if (!(_mapsh = fopen(_procselfmaps, "r"))) {
+ 	sz = to - from;
+ 	if (!(cn = find_config_tree_node(cmd, "activation/mlock_filter"))) {
 
 
