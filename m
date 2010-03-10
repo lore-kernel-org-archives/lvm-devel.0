@@ -1,44 +1,75 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 10 Mar 2010 18:04:15 +0100
-Subject: [PATCH DRAFT] Automatic testing with locking_type = 3.
-Message-ID: <87mxygglbk.fsf@twilight.int.mornfall.net.>
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Wed, 10 Mar 2010 18:43:23 +0100
+Subject: vgchange.c gets dmeventd monitoring activation wrong
+Message-ID: <1268243003.3074.62.camel@o>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
 
-this patch adds the option to run our automatic testsuite with a clvmd
-configured for single-machine operation. There are still couple things
-that need to be done for this patch before checkin though:
+Updating to Fedora 12 kernel 2.6.32.9-67.fc12.x86_64 I was left
+with no root device.
 
-- rename fake to (probably) singlenode
-- clean up and double-check the _resource_(un)lock implementation
+Reason was, that we don't get dmeventd device monitoring activation
+(deactivation in this case rather) right, hence causing dlopen on
+libdevemapper-event DSO(s) via the dmeventd call chain.
 
-Currently, we only keep the locks in memory. This is wholly appropriate
-as long as clvmd is running and being used -- since all locking goes
-through this clvmd instance, there's no need for external coordination.
+The DSOs are intentionally not part of the initramfs for obvious
+reasons, which should be respected by the fact, that we call "vgchange
+--monitor n" from dracut's lvm_scan script.
 
-As things are (with the current locking implementation) the full
-testsuite passes. You can try with yourself with 
+This patch is a proposal to fix the dmeventd activation handling via the
 
-# LVM_TEST_LOCKING=3 make check
+"--ignoremonitoring" and the "--monitor {y|n}"
 
-The next step, other than above, is to integrate this into make check,
-so make check will run all the tests twice, once with locking_type 1 and
-once with locking_type 3.
+options and is not tested yet.
 
-I will send a revised patch later.
+It give precedence to the "--ignoremonitoring" option over the other
+one, which makes more sense IMO and needs a vgchange(8) manual change to
+reflect this.
+Of course we should better raise a command line error if both are given,
+which is subject to future discussion.
 
-Yours,
-   Petr.
+Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
+---
+ LVM2.2.02.53/tools/{vgchange.c.orig => vgchange.c} |   16 ++++++++++++----
+ 1 files changed, 12 insertions(+), 4 deletions(-)
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: clvmd-fake.diff
-Type: text/x-diff
-Size: 10627 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100310/21e45f80/attachment.bin>
+diff --git LVM2.2.02.53/tools/vgchange.c.orig LVM2.2.02.53/tools/vgchange.c
+index 95b0b48..e789cc4 100644
+--- LVM2.2.02.53/tools/vgchange.c.orig
++++ LVM2.2.02.53/tools/vgchange.c
+@@ -494,16 +494,24 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 			   struct volume_group *vg,
+ 			   void *handle __attribute((unused)))
+ {
+-	int r = ECMD_FAILED;
++	int dmeventd_mode, r = ECMD_FAILED;
+ 
+ 	if (vg_is_exported(vg)) {
+ 		log_error("Volume group \"%s\" is exported", vg_name);
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	init_dmeventd_monitor(arg_int_value(cmd, monitor_ARG,
+-					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
+-					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
++	/* Check conditions to activate dmeventd montoring. */
++	if (is_static())
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else if (arg_count(cmd, ignoremonitoring_ARG))
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else if (!arg_int_value(cmd, monitor_ARG, 1))
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else
++		dmeventd_mode = DEFAULT_DMEVENTD_MONITOR;
++		
++	init_dmeventd_monitor(dmeventd_mode);
+ 
+ 	if (arg_count(cmd, available_ARG))
+ 		r = _vgchange_available(cmd, vg);
+
+
+
