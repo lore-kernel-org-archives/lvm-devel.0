@@ -1,37 +1,86 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 03 Mar 2010 14:09:41 +0100
-Subject: [PATCH 7/9] Remove -rdynamic
-In-Reply-To: <ebecbe28ecbdcddf14de15dc5ff4a2a6db0ddb98.1267529065.git.zkabelac@redhat.com>
-	(Zdenek Kabelac's message of "Tue, 2 Mar 2010 13:07:25 +0100")
-References: <cover.1267529065.git.zkabelac@redhat.com>
-	<cover.1267529065.git.zkabelac@redhat.com>
-	<ebecbe28ecbdcddf14de15dc5ff4a2a6db0ddb98.1267529065.git.zkabelac@redhat.com>
-Message-ID: <87ocj5pn56.fsf@twilight.int.mornfall.net.>
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Wed, 10 Mar 2010 19:08:26 +0100
+Subject: vgchange.c gets dmeventd monitoring activation wrong
+In-Reply-To: <1268243003.3074.62.camel@o>
+References: <1268243003.3074.62.camel@o>
+Message-ID: <1268244506.3074.92.camel@o>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Zdenek Kabelac <zkabelac@redhat.com> writes:
+Next version rejecting both monitoring flags being provided.
 
-> This patch might be a bit contraversional. It removes -rdynamic from
-> linking of lvm.statis and dmeventd.static. In my understanding
-> this compiler flag (or "-Wl,--export-dynamic") is mainly useful
-> for dynamic linked libraries. It should not be needed for linking
-> of static binary. But I could be wrong here...
-(1) From man: This option is needed for some uses of "dlopen" or to
-allow obtaining backtraces from within a program.
+On Wed, 2010-03-10 at 18:43 +0100, Heinz Mauelshagen wrote:
+> Updating to Fedora 12 kernel 2.6.32.9-67.fc12.x86_64 I was left
+> with no root device.
+> 
+> Reason was, that we don't get dmeventd device monitoring activation
+> (deactivation in this case rather) right, hence causing dlopen on
+> libdevemapper-event DSO(s) via the dmeventd call chain.
+> 
+> The DSOs are intentionally not part of the initramfs for obvious
+> reasons, which should be respected by the fact, that we call "vgchange
+> --monitor n" from dracut's lvm_scan script.
+> 
+> This patch is a proposal to fix the dmeventd activation handling via the
+> 
+> "--ignoremonitoring" and the "--monitor {y|n}"
+> 
+> options and is not tested yet.
+> 
+> It give precedence to the "--ignoremonitoring" option over the other
+> one, which makes more sense IMO and needs a vgchange(8) manual change to
+> reflect this.
+> Of course we should better raise a command line error if both are given,
+> which is subject to future discussion.
 
-(2) Also according to manual, you need -rdynamic to allow dlopen'd
-things to use symbols from the "host" binary.
 
-We probably need not be concerned with (2) since we don't dlopen in
-lvm.static as far as I can tell. As for (1), as long as debuginfo (-g)
-is available, this is, as far as I can tell, redundant. So it *should*
-be safe to remove this.
+Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
+---
+ LVM2.2.02.53/tools/{vgchange.c.orig => vgchange.c} |   22 ++++++++++++++++---
+ 1 files changed, 18 insertions(+), 4 deletions(-)
 
-Yours,
-   Petr.
+diff --git LVM2.2.02.53/tools/vgchange.c.orig LVM2.2.02.53/tools/vgchange.c
+index 95b0b48..8d7fb55 100644
+--- LVM2.2.02.53/tools/vgchange.c.orig
++++ LVM2.2.02.53/tools/vgchange.c
+@@ -494,16 +494,30 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 			   struct volume_group *vg,
+ 			   void *handle __attribute((unused)))
+ {
+-	int r = ECMD_FAILED;
++	int dmeventd_mode, r = ECMD_FAILED;
+ 
+ 	if (vg_is_exported(vg)) {
+ 		log_error("Volume group \"%s\" is exported", vg_name);
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	init_dmeventd_monitor(arg_int_value(cmd, monitor_ARG,
+-					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
+-					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
++	if (arg_count(cmd, ignoremonitoring_ARG) &&
++	    arg_count(cmd, monitor_ARG)) {
++		log_error("Can't specify both monitoring flags");
++		return ECMD_FAILED;
++	}
++
++	/* Check conditions to activate dmeventd montoring. */
++	if (is_static())
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else if (arg_count(cmd, ignoremonitoring_ARG))
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else if (!arg_int_value(cmd, monitor_ARG, 1))
++		dmeventd_mode = DMEVENTD_MONITOR_IGNORE;
++	else
++		dmeventd_mode = DEFAULT_DMEVENTD_MONITOR;
++		
++	init_dmeventd_monitor(dmeventd_mode);
+ 
+ 	if (arg_count(cmd, available_ARG))
+ 		r = _vgchange_available(cmd, vg);
+
 
 
