@@ -1,204 +1,74 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 10 Mar 2010 10:26:11 +0100
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 10 Mar 2010 12:53:17 +0000
 Subject: PATCH: Replace mlockall() with interal implementation
 In-Reply-To: <Pine.LNX.4.64.1003100334531.13100@hs20-bc2-1.build.redhat.com>
-References: <4B87D947.4060300@redhat.com>
-	<4B87F062.8090407@redhat.com>	<4B90D58C.7090501@redhat.com>
+References: <4B87D947.4060300@redhat.com> <4B87F062.8090407@redhat.com>
+	<4B90D58C.7090501@redhat.com>
 	<Pine.LNX.4.64.1003100334531.13100@hs20-bc2-1.build.redhat.com>
-Message-ID: <4B9765B3.4020801@redhat.com>
+Message-ID: <20100310125317.GC27306@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10.3.2010 10:07, Mikulas Patocka wrote:
-> The whole thing is bad.
-> 
+On Wed, Mar 10, 2010 at 04:07:46AM -0500, Mikulas Patocka wrote:
 > First, you must understand the users' priorities:
-> 
 > priority #1: the computer doesn't crash
-> 
 > priority #2: lvm takes less memory
-> 
 > priority #3: the user sees localized error messages
-> 
-> 
-> The problem with this selective mlocking (mlock everything except locale) 
-> is that it is hard to review the call graph that no locale data is being 
-> accessed while the memory is locked.
-> 
-> For example, if something calls isdigit() or isalpha(), it is accessing 
-> locale. If you call sprintf or sscanf, it may access locale as well. 
-> strcasecmp accesses locale as well.
-> 
+ 
+We *require* all 3 of those.
+And you're not taking into account the relative likelihood of each, nor the
+fact that different users have different priorities and we have to cater
+for all of them.  E.g. if I have loads of memory on my system, #2 is
+irrelevant to me and #1 (for reason of 'out of memory' which is what this
+discussion is about is) may be so unlikely on my system I don't care about it.
 
-In reallity it's really not all THAT bad - the only problem here is it is a
-bit time consuming task - I'm learing a bit about cflow usage which 'should'
-be able to probably prove the thing mathematically...
+> IMPOSSIBLE to prove that there will be no locale access in future glibc 
+> versions. 
 
-Anyway here is the list of all glibc symbols we use - where only tiny fraction
-is in use while we are in 'locked' state - and again only tiny portion of them
-is influenced by locales - of course we need to audit code during the
-locked state and but it's not that hard - and we said that already...
+Of course - that's a ridiculous thing to expect!
+We are not going to say to people "Sorry, we aren't prepared to give you
+basic expected functionality X because even though it works today,
+something outside this project team's direct control may change in
+future and break it."
 
-We could easily make a wrapper around native glibc calls - and get coverage
-from our testsuit - so we know in great detail which functions are in use.
-(developers should check lcov outputs and regularly check coverage percentage
-from test-suit).
+If we get new problems in future, we address them when they occur.  Just
+as this particular problem is now being tackled.
 
-abort@@GLIBC_2.0
-access@@GLIBC_2.0
-alphasort64@@GLIBC_2.2
-__assert_fail@@GLIBC_2.0
-closedir@@GLIBC_2.0
-close@@GLIBC_2.0
-closelog@@GLIBC_2.0
-connect@@GLIBC_2.0
-ctime@@GLIBC_2.0
-ctime_r@@GLIBC_2.0
-__ctype_b_loc@@GLIBC_2.3
-__ctype_tolower_loc@@GLIBC_2.3
-__ctype_toupper_loc@@GLIBC_2.3
-dirname@@GLIBC_2.0
-dlclose@@GLIBC_2.0
-dlerror@@GLIBC_2.0
-dlopen@@GLIBC_2.1
-dlsym@@GLIBC_2.0
-__errno_location@@GLIBC_2.0
-execvp@@GLIBC_2.0
-exit@@GLIBC_2.0
-_exit@@GLIBC_2.0
-fclose@@GLIBC_2.1
-fcntl@@GLIBC_2.0
-fdopen@@GLIBC_2.1
-ferror@@GLIBC_2.0
-fflush@@GLIBC_2.0
-fgets@@GLIBC_2.0
-flock@@GLIBC_2.0
-fopen@@GLIBC_2.1
-fopen64@@GLIBC_2.1
-fork@@GLIBC_2.0
-fprintf@@GLIBC_2.0
-fputc@@GLIBC_2.0
-fputs@@GLIBC_2.0
-free@@GLIBC_2.0
-fsync@@GLIBC_2.0
-fwrite@@GLIBC_2.0
-__fxstat64@@GLIBC_2.2
-__getdelim@@GLIBC_2.0
-getenv@@GLIBC_2.0
-geteuid@@GLIBC_2.0
-gethostname@@GLIBC_2.0
-getopt_long@@GLIBC_2.0
-getpagesize@@GLIBC_2.0
-getpid@@GLIBC_2.0
-getppid@@GLIBC_2.0
-getpriority@@GLIBC_2.0
-getrlimit64@@GLIBC_2.2
-getuid@@GLIBC_2.0
-ioctl@@GLIBC_2.0
-_IO_getc@@GLIBC_2.0
-__isoc99_sscanf@@GLIBC_2.7
-__libc_start_main@@GLIBC_2.0
-link@@GLIBC_2.0
-lseek64@@GLIBC_2.1
-__lxstat64@@GLIBC_2.2
-malloc@@GLIBC_2.0
-mallopt@@GLIBC_2.0
-memcpy@@GLIBC_2.0
-memset@@GLIBC_2.0
-mkdir@@GLIBC_2.0
-mlockall@@GLIBC_2.0
-mlock@@GLIBC_2.0
-mmap64@@GLIBC_2.1
-munlockall@@GLIBC_2.0
-munlock@@GLIBC_2.0
-munmap@@GLIBC_2.0
-opendir@@GLIBC_2.0
-openlog@@GLIBC_2.0
-open64@@GLIBC_2.1
-optarg@@GLIBC_2.0
-optind@@GLIBC_2.0
-putchar@@GLIBC_2.0
-qsort@@GLIBC_2.0
-rand_r@@GLIBC_2.0
-readdir64@@GLIBC_2.2
-read@@GLIBC_2.0
-readlink@@GLIBC_2.0
-realloc@@GLIBC_2.0
-rename@@GLIBC_2.0
-rmdir@@GLIBC_2.0
-scandir64@@GLIBC_2.2
-setenv@@GLIBC_2.0
-setlocale@@GLIBC_2.0
-setpriority@@GLIBC_2.0
-setsid@@GLIBC_2.0
-sigaction@@GLIBC_2.0
-sigaddset@@GLIBC_2.0
-sigdelset@@GLIBC_2.0
-sigfillset@@GLIBC_2.0
-siginterrupt@@GLIBC_2.0
-sigismember@@GLIBC_2.0
-signal@@GLIBC_2.0
-sigprocmask@@GLIBC_2.0
-sleep@@GLIBC_2.0
-snprintf@@GLIBC_2.0
-socket@@GLIBC_2.0
-sprintf@@GLIBC_2.0
-sscanf@@GLIBC_2.0
-stderr@@GLIBC_2.0
-stdin@@GLIBC_2.0
-stdout@@GLIBC_2.0
-strcasecmp@@GLIBC_2.0
-strcat@@GLIBC_2.0
-strcmp@@GLIBC_2.0
-strcpy@@GLIBC_2.0
-__strdup@@GLIBC_2.0
-strerror@@GLIBC_2.0
-strchr@@GLIBC_2.0
-strlen@@GLIBC_2.0
-strncmp@@GLIBC_2.0
-strncpy@@GLIBC_2.0
-strrchr@@GLIBC_2.0
-strstr@@GLIBC_2.0
-strtod@@GLIBC_2.0
-strtol@@GLIBC_2.0
-strtoll@@GLIBC_2.0
-strtoul@@GLIBC_2.0
-symlink@@GLIBC_2.0
-sync@@GLIBC_2.0
-time@@GLIBC_2.0
-umask@@GLIBC_2.0
-uname@@GLIBC_2.0
-unlink@@GLIBC_2.0
-unsetenv@@GLIBC_2.0
-vfprintf@@GLIBC_2.0
-vsnprintf@@GLIBC_2.0
-vsyslog@@GLIBC_2.0
-wait4@@GLIBC_2.0
-write@@GLIBC_2.0
-__xpg_basename@@GLIBC_2.0
-__xstat@@GLIBC_2.0
-__xstat64@@GLIBC_2.2
+Defensive programming is good of course, but not taken to the extreme of
+removing useful functionality.
 
 
+> Zdenek said that Alasdair's opinion is to solve these crashes only when 
+> they happen. In my opinion, this approach is not good becase
+> 1. you already hurt the user (cause crash) before starting to solve the 
+> problem
+> 2. if such crash happens, the user has no way to find out why, so he will 
+> likely send a bug report "the machine hung when manipulating root LV and I 
+> can't reproduce it" --- so linking this crash report to the mlocking 
+> problem is impossible...
+ 
+Actually no - such crashes should have characteristic signatures.
+And as for 1, you only hurt the user if your testing didn't pick up the
+potential problem, and while you'll never trap all problems in advance,
+I am hoping we'll be able to put measures in place to give us a
+reasonable chance of spotting regressions like that.
 
-The final solution here is to reimplement those function we use during mlock()
-with internal lvm implementation - so you would be 100%  sure there is no
-future problem.
+> See for example bug 193330 --- no one knew why the system crashed and it 
+> was just closed because the crash couldn't be reproduced the developers 
+> --- the crashes due to this selective mlock will be just like this :-(
+ 
+Not so.  And that's a 2006 bug, and used '-v' which I don't think was
+supported in a 'might run out of memory' case.  It was closed because
+the reporter didn't know to obtain diagnostics from the crash.  No
+different from many other bug reports on many other projects.  But if
+failures are real software problems, they'll inevitably happen again to
+someone else who *will* obtain diagnostics.
 
-BTW even current mlockall() solution definitely doesn't cover the case, when
-glibc decides to do something unexpected during this state - i.e. open another
-acceleration mmap file.
+Anyway, enough hypotheticals for one day.
 
-
-> implementation, we can't prove that all future sprintf implementations 
-> won't call isdigit() or other is* functions when parsing the string.
-
-glibc might have bugs, kernel might have bugs, lvm might have bugs...
-even CPU, memory, disk could have hardware bugs... :)
-
-Zdenek
+Alasdair
 
 
