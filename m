@@ -1,37 +1,34 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Fri, 12 Mar 2010 11:56:51 -0500
-Subject: [PATCH] Fix segfault when destroying in-use filters in pvs -a.
-In-Reply-To: <4B994B10.9080409@redhat.com>
-References: <1268257407-16371-1-git-send-email-mbroz@redhat.com>
-	<4B994B10.9080409@redhat.com>
-Message-ID: <4B9A7253.3010201@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Fri, 12 Mar 2010 13:44:52 -0600
+Subject: [PATCH 1 of 11] LVM: agk allocation changes
+In-Reply-To: <20100312121941.GA7267@agk-dp.fab.redhat.com>
+References: <201003120029.o2C0TvC8027865@hydrogen.msp.redhat.com>
+	<20100312121941.GA7267@agk-dp.fab.redhat.com>
+Message-ID: <2D4941B1-7C28-4EEA-A7D6-03C0E4613555@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan,
 
-On 03/11/10 14:57, Takahiro Yasui wrote:
-> On 03/10/10 16:43, Milan Broz wrote:
->> Because pvs -a iterate throught the whole device cache
->> we should not refresh filters inside iteration.
->>
->> Fix it by introducing simple reference counter and test
->> it in refresh_filters() call.
->>
->> Fixes https://bugzilla.redhat.com/show_bug.cgi?id=571963
+On Mar 12, 2010, at 6:19 AM, Alasdair G Kergon wrote:
 
-This patch worked fine in my test case, but I have one question about
-your patch. I assume that you added refresh_filters() because it was
-necessary, but this patch prevents filter from being refreshed if it
-is in use.
+> On Thu, Mar 11, 2010 at 06:29:57PM -0600, Jon Brassow wrote:
+>> Patch name: lvm-agk-allocation-changes.patch
+>> agk's allocation changes.
+>
+> You deleted the part of the header that said this is an example patch
+> that has only passed one very basic test - that's why I didn't give it
+> wider circulation.  People are better off testing the patch series
+> without this patch yet.
 
-Don't we need to refresh the filter when in_use flag is decremented
-and becomes 0 after or in dev_iter_destroy()?
+Yes.  I also didn't explicitly mention that the patch was preliminary  
+- mea culpa.
 
-Thanks,
-Taka
+Still, people can test these patches as long as they don't stress the  
+'--alloc anywhere' cases.
+
+  brassow
 
 
