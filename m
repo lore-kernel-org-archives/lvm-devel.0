@@ -1,36 +1,25 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  3 Mar 2010 21:42:47 +0100
-Subject: [PATCH 01/15] Update AC_PREREQ version to 2.61
-In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
-References: <cover.1267648294.git.zkabelac@redhat.com>
-Message-ID: <53e3f7c464c3fc70069c93dad66ed0f72f9941c0.1267648294.git.zkabelac@redhat.com>
+From: Malahal Naineni <malahal@us.ibm.com>
+Date: Fri, 12 Mar 2010 16:17:56 -0800
+Subject: [PATCH] Remove the double open with same mode
+Message-ID: <ee77738483f149622d19.1268439476@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Usage of AC_PROG_SED and AC_PROG_MKDIR_P requires autoconf version 2.61.
+Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- configure.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/configure.in b/configure.in
-index aaa21c6..9ccde94 100644
---- a/configure.in
-+++ b/configure.in
-@@ -11,7 +11,7 @@
- ## Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- ################################################################################
+diff -r 8db1b9ee17a8 -r ee77738483f1 daemons/dmeventd/dmeventd.c
+--- a/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:15:25 2010 -0800
++++ b/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:16:15 2010 -0800
+@@ -1651,7 +1651,6 @@ static void _daemonize(void)
+ 		close(fd);
  
--AC_PREREQ(2.57)
-+AC_PREREQ(2.61)
- ################################################################################
- dnl -- Process this file with autoconf to produce a configure script.
- AC_INIT
--- 
-1.7.0
+ 	if ((open("/dev/null", O_RDONLY) < 0) ||
+-	    (open("/dev/null", O_WRONLY) < 0) ||
+ 	    (open("/dev/null", O_WRONLY) < 0))
+ 		exit(EXIT_DESC_OPEN_FAILURE);
+ 
 
 
