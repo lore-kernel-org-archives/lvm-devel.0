@@ -1,34 +1,26 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 12 Mar 2010 13:44:52 -0600
-Subject: [PATCH 1 of 11] LVM: agk allocation changes
-In-Reply-To: <20100312121941.GA7267@agk-dp.fab.redhat.com>
-References: <201003120029.o2C0TvC8027865@hydrogen.msp.redhat.com>
-	<20100312121941.GA7267@agk-dp.fab.redhat.com>
-Message-ID: <2D4941B1-7C28-4EEA-A7D6-03C0E4613555@redhat.com>
+From: Malahal Naineni <malahal@us.ibm.com>
+Date: Fri, 12 Mar 2010 16:17:17 -0800
+Subject: [PATCH] Use correct array size!
+Message-ID: <8db1b9ee17a8c097a7b3.1268439437@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
 
-On Mar 12, 2010, at 6:19 AM, Alasdair G Kergon wrote:
-
-> On Thu, Mar 11, 2010 at 06:29:57PM -0600, Jon Brassow wrote:
->> Patch name: lvm-agk-allocation-changes.patch
->> agk's allocation changes.
->
-> You deleted the part of the header that said this is an example patch
-> that has only passed one very basic test - that's why I didn't give it
-> wider circulation.  People are better off testing the patch series
-> without this patch yet.
-
-Yes.  I also didn't explicitly mention that the patch was preliminary  
-- mea culpa.
-
-Still, people can test these patches as long as they don't stress the  
-'--alloc anywhere' cases.
-
-  brassow
+diff -r 5d08ba4ae8e8 -r 8db1b9ee17a8 daemons/dmeventd/dmeventd.c
+--- a/daemons/dmeventd/dmeventd.c	Thu Mar 11 16:05:21 2010 -0800
++++ b/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:15:25 2010 -0800
+@@ -1369,7 +1369,7 @@ static int _handle_request(struct dm_eve
+ 		{ DM_EVENT_CMD_ACTIVE, _active},
+ 	}, *req;
+ 
+-	for (req = requests; req < requests + sizeof(requests); req++)
++	for (req = requests; req < requests + sizeof(requests) / sizeof(requests[0]); req++)
+ 		if (req->cmd == msg->cmd)
+ 			return req->f(message_data);
+ 
 
 
