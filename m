@@ -1,116 +1,217 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 15 Mar 2010 19:37:42 +0100
-Subject: [PATCH 1/2] [RFC] Run only one full device rescan.
-Message-ID: <1268678263-18037-1-git-send-email-mbroz@redhat.com>
+Date: Mon, 15 Mar 2010 19:37:43 +0100
+Subject: [PATCH 2/2] [RFC] Remove full_scan paramaters from get_vgids and get_vgnames.
+In-Reply-To: <1268678263-18037-1-git-send-email-mbroz@redhat.com>
+References: <1268678263-18037-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1268678263-18037-2-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-There is several situation when we do crazy rescans
-of all devices.
+There is only one place where it is used, replace
+for now with lvmcache_label_scan(cmd, 2).
 
-For example, VG with 20 missing pvs rescan more
-the 400 times in pvs command.
-
-This "RFC" patch just tries scan only once.
-
-Beware: there are some places in code, where we should
-put lvmcache_allow_full_scan() to allow extra rescan.
+(The intention is to keep full rescan handling internal
+to lvmcache, so code give only hints whre is rescan really needed,
+see previous patch)
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/cache/lvmcache.c |   20 ++++++++++++++++----
- lib/cache/lvmcache.h |    3 +++
- 2 files changed, 19 insertions(+), 4 deletions(-)
+ lib/cache/lvmcache.c             |    8 ++++----
+ lib/cache/lvmcache.h             |   10 ++++------
+ lib/metadata/metadata-exported.h |    5 ++---
+ lib/metadata/metadata.c          |   13 +++++++------
+ liblvm/lvm_vg.c                  |    4 ++--
+ tools/toollib.c                  |    6 +++---
+ tools/vgrename.c                 |    2 +-
+ 7 files changed, 23 insertions(+), 25 deletions(-)
 
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 35ee05b..29fd1df 100644
+index 29fd1df..c80ba6e 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -33,7 +33,7 @@ static struct dm_hash_table *_vgname_hash = NULL;
- static struct dm_hash_table *_lock_hash = NULL;
- static struct dm_list _vginfos;
- static int _scanning_in_progress = 0;
--static int _has_scanned = 0;
-+static enum { NOT_SCANNED = 0, ALLOW_RESCAN, SCANNED } _has_scanned = NOT_SCANNED;
- static int _vgs_locked = 0;
- static int _vg_global_lock_held = 0;	/* Global lock held when cache wiped? */
- 
-@@ -69,6 +69,8 @@ int lvmcache_init(void)
- 		_vg_global_lock_held = 0;
- 	}
- 
-+	lvmcache_allow_full_scan();
-+
- 	return 1;
+@@ -635,13 +635,13 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
+ 	return vg;
  }
  
-@@ -514,13 +516,18 @@ static int _scan_invalid(void)
- 	return 1;
- }
- 
-+void lvmcache_allow_full_scan(void)
-+{
-+	if (_has_scanned == SCANNED)
-+		_has_scanned = ALLOW_RESCAN;
-+}
-+
- int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
+-struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd, int full_scan,
++struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd,
+ 				    int include_internal)
  {
- 	struct label *label;
- 	struct dev_iter *iter;
- 	struct device *dev;
- 	struct format_type *fmt;
--
- 	int r = 0;
+ 	struct dm_list *vgids;
+ 	struct lvmcache_vginfo *vginfo;
  
- 	/* Avoid recursion when a PVID can't be found! */
-@@ -539,6 +546,11 @@ int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
- 		goto out;
- 	}
+-	lvmcache_label_scan(cmd, full_scan);
++	lvmcache_label_scan(cmd, 0);
  
-+	if (!cmd->is_long_lived && _has_scanned == SCANNED && full_scan) {
-+		r = _scan_invalid();
-+		goto out;
-+	}
-+
- 	if (full_scan == 2 && !refresh_filters(cmd)) {
- 		log_error("refresh filters failed");
- 		goto out;
-@@ -554,7 +566,7 @@ int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
+ 	if (!(vgids = str_list_create(cmd->mem))) {
+ 		log_error("vgids list allocation failed");
+@@ -662,13 +662,13 @@ struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd, int full_scan,
+ 	return vgids;
+ }
  
- 	dev_iter_destroy(iter);
+-struct dm_list *lvmcache_get_vgnames(struct cmd_context *cmd, int full_scan,
++struct dm_list *lvmcache_get_vgnames(struct cmd_context *cmd,
+ 				      int include_internal)
+ {
+ 	struct dm_list *vgnames;
+ 	struct lvmcache_vginfo *vginfo;
  
--	_has_scanned = 1;
-+	_has_scanned = SCANNED;
+-	lvmcache_label_scan(cmd, full_scan);
++	lvmcache_label_scan(cmd, 0);
  
- 	/* Perform any format-specific scanning e.g. text files */
- 	dm_list_iterate_items(fmt, &cmd->formats) {
-@@ -1341,7 +1353,7 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans)
- 	struct dm_hash_node *n;
- 	log_verbose("Wiping internal VG cache");
- 
--	_has_scanned = 0;
-+	_has_scanned = NOT_SCANNED;
- 
- 	if (_vgid_hash) {
- 		dm_hash_destroy(_vgid_hash);
+ 	if (!(vgnames = str_list_create(cmd->mem))) {
+ 		log_errno(ENOMEM, "vgnames list allocation failed");
 diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 2c14b6c..d37bff2 100644
+index d37bff2..e604bad 100644
 --- a/lib/cache/lvmcache.h
 +++ b/lib/cache/lvmcache.h
-@@ -68,6 +68,9 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans);
-  * 2 to rescan /dev for new devices */
- int lvmcache_label_scan(struct cmd_context *cmd, int full_scan);
+@@ -101,15 +101,13 @@ int vgs_locked(void);
+ int vgname_is_locked(const char *vgname);
  
-+int lvmcache_device_scan(struct cmd_context *cmd, struct lvmcache_info *info);
-+void lvmcache_allow_full_scan(void);
-+
- /* Add/delete a device */
- struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 				   struct device *dev,
+ /* Returns list of struct str_lists containing pool-allocated copy of vgnames */
+-/* Set full_scan to 1 to reread every filtered device label. If include_internal
+- * is not set, return only proper vg names. */
+-struct dm_list *lvmcache_get_vgnames(struct cmd_context *cmd, int full_scan,
++/* If include_internal is not set, return only proper vg names. */
++struct dm_list *lvmcache_get_vgnames(struct cmd_context *cmd,
+ 				      int include_internal);
+ 
+ /* Returns list of struct str_lists containing pool-allocated copy of vgids */
+-/* Set full_scan to 1 to reread every filtered device label. If include_internal
+- * is not set, return only proper vg ids. */
+-struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd, int full_scan,
++/* If include_internal is not set, return only proper vg ids. */
++struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd,
+ 				    int include_internal);
+ 
+ /* Returns list of struct str_lists containing pool-allocated copy of pvids */
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 9540285..13aeb41 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -398,10 +398,9 @@ int unlink_lv_from_vg(struct logical_volume *lv);
+ void lv_set_visible(struct logical_volume *lv);
+ void lv_set_hidden(struct logical_volume *lv);
+ 
+-/* Set full_scan to 1 to re-read every (filtered) device label */
+-struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan,
++struct dm_list *get_vgnames(struct cmd_context *cmd,
+ 			     int include_internal);
+-struct dm_list *get_vgids(struct cmd_context *cmd, int full_scan,
++struct dm_list *get_vgids(struct cmd_context *cmd,
+ 			   int include_internal);
+ int scan_vgs_for_pvs(struct cmd_context *cmd);
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index f079554..713f7e2 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2963,7 +2963,8 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 	 *       allowed to do a full scan here any more. */
+ 
+ 	// The slow way - full scan required to cope with vgrename
+-	if (!(vgnames = get_vgnames(cmd, 2, 0))) {
++	lvmcache_label_scan(cmd, 2);
++	if (!(vgnames = get_vgnames(cmd, 0))) {
+ 		log_error("vg_read_by_vgid: get_vgnames failed");
+ 		goto out;
+ 	}
+@@ -3099,16 +3100,16 @@ bad:
+ }
+ 
+ /* May return empty list */
+-struct dm_list *get_vgnames(struct cmd_context *cmd, int full_scan,
++struct dm_list *get_vgnames(struct cmd_context *cmd,
+ 			     int include_internal)
+ {
+-	return lvmcache_get_vgnames(cmd, full_scan, include_internal);
++	return lvmcache_get_vgnames(cmd, include_internal);
+ }
+ 
+-struct dm_list *get_vgids(struct cmd_context *cmd, int full_scan,
++struct dm_list *get_vgids(struct cmd_context *cmd,
+ 			   int include_internal)
+ {
+-	return lvmcache_get_vgids(cmd, full_scan, include_internal);
++	return lvmcache_get_vgids(cmd, include_internal);
+ }
+ 
+ static int _get_pvs(struct cmd_context *cmd, struct dm_list **pvslist)
+@@ -3134,7 +3135,7 @@ static int _get_pvs(struct cmd_context *cmd, struct dm_list **pvslist)
+ 	}
+ 
+ 	/* Get list of VGs */
+-	if (!(vgids = get_vgids(cmd, 0, 1))) {
++	if (!(vgids = get_vgids(cmd, 1))) {
+ 		log_error("get_pvs: get_vgids failed");
+ 		return 0;
+ 	}
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index ec829e8..334e906 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -351,12 +351,12 @@ char *lvm_vg_get_name(const vg_t vg)
+ 
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+ {
+-	return get_vgnames((struct cmd_context *)libh, 0, 0);
++	return get_vgnames((struct cmd_context *)libh, 0);
+ }
+ 
+ struct dm_list *lvm_list_vg_uuids(lvm_t libh)
+ {
+-	return get_vgids((struct cmd_context *)libh, 0, 0);
++	return get_vgids((struct cmd_context *)libh, 0);
+ }
+ 
+ /*
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e4040f8..8d16013 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -275,7 +275,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	if (!argc || !dm_list_empty(&tags)) {
+ 		log_verbose("Finding all logical volumes");
+-		if (!(vgnames = get_vgnames(cmd, 0, 0)) || dm_list_empty(vgnames)) {
++		if (!(vgnames = get_vgnames(cmd, 0)) || dm_list_empty(vgnames)) {
+ 			log_error("No volume groups found");
+ 			return ret_max;
+ 		}
+@@ -518,7 +518,7 @@ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	if (!argc || !dm_list_empty(&tags)) {
+ 		log_verbose("Finding all volume groups");
+-		if (!(vgids = get_vgids(cmd, 0, 0)) || dm_list_empty(vgids)) {
++		if (!(vgids = get_vgids(cmd, 0)) || dm_list_empty(vgids)) {
+ 			log_error("No volume groups found");
+ 			return ret_max;
+ 		}
+@@ -723,7 +723,7 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 			if (sigint_caught())
+ 				goto out;
+ 		}
+-		if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 0, 1)) &&
++		if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 1)) &&
+ 			   !dm_list_empty(vgnames)) {
+ 			dm_list_iterate_items(sll, vgnames) {
+ 				vg = vg_read(cmd, sll->str, NULL, flags);
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index a63a626..799dcb2 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -87,7 +87,7 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
+ 	log_verbose("Checking for existing volume group \"%s\"", vg_name_old);
+ 
+ 	/* Avoid duplicates */
+-	if (!(vgids = get_vgids(cmd, 0, 0)) || dm_list_empty(vgids)) {
++	if (!(vgids = get_vgids(cmd, 0)) || dm_list_empty(vgids)) {
+ 		log_error("No complete volume groups found");
+ 		return 0;
+ 	}
 -- 
 1.7.0
 
