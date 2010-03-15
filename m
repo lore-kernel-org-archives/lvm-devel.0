@@ -1,31 +1,39 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 15 Mar 2010 09:59:30 +0100
-Subject: [PATCH] Remove the double open with same mode
-In-Reply-To: <20100313041826.GB7267@agk-dp.fab.redhat.com>
-References: <ee77738483f149622d19.1268439476@localhost>
-	<20100313041826.GB7267@agk-dp.fab.redhat.com>
-Message-ID: <4B9DF6F2.5040403@redhat.com>
+Date: Mon, 15 Mar 2010 10:03:46 +0100
+Subject: [PATCH] Use correct array size!
+In-Reply-To: <8db1b9ee17a8c097a7b3.1268439437@localhost>
+References: <8db1b9ee17a8c097a7b3.1268439437@localhost>
+Message-ID: <4B9DF7F2.4010304@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 13.3.2010 05:18, Alasdair G Kergon wrote:
-> On Fri, Mar 12, 2010 at 04:17:56PM -0800, Malahal Naineni wrote:
->>  	if ((open("/dev/null", O_RDONLY) < 0) ||
->> -	    (open("/dev/null", O_WRONLY) < 0) ||
->>  	    (open("/dev/null", O_WRONLY) < 0))
->>  		exit(EXIT_DESC_OPEN_FAILURE);
+On 13.3.2010 01:17, Malahal Naineni wrote:
+> Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
 > 
-> stdin, stdout, stderr
-> 
-> Alasdair
-> 
+> diff -r 5d08ba4ae8e8 -r 8db1b9ee17a8 daemons/dmeventd/dmeventd.c
+> --- a/daemons/dmeventd/dmeventd.c	Thu Mar 11 16:05:21 2010 -0800
+> +++ b/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:15:25 2010 -0800
+> @@ -1369,7 +1369,7 @@ static int _handle_request(struct dm_eve
+>  		{ DM_EVENT_CMD_ACTIVE, _active},
+>  	}, *req;
+>  
+> -	for (req = requests; req < requests + sizeof(requests); req++)
+> +	for (req = requests; req < requests + sizeof(requests) / sizeof(requests[0]); req++)
+>  		if (req->cmd == msg->cmd)
+>  			return req->f(message_data);
 
-IMHO it's probably worth to add comment to code, so there will not be similar
-'optimizations' proposed in the future.
 
-Zdenek.
+NACK
+
+Moving via pointers - thus you need to check whether pointer passes
+array boundary (just like C++ vector() iterator)
+
+see the difference:
+for(req = 0; i < sizeof(requests) / sizeof(requests[0]); req++0
+
+Zdenek
 
 
