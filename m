@@ -1,39 +1,41 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  3 Mar 2010 21:42:48 +0100
-Subject: [PATCH 02/15] Help display --disable-fsadm
-In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
-References: <cover.1267648294.git.zkabelac@redhat.com>
-Message-ID: <552f4e1262733334e53990f8ddc7505c02741d8d.1267648294.git.zkabelac@redhat.com>
+From: malahal@us.ibm.com <malahal@us.ibm.com>
+Date: Mon, 15 Mar 2010 10:41:33 -0700
+Subject: [PATCH] Remove the double open with same mode
+In-Reply-To: <20100313041826.GB7267@agk-dp.fab.redhat.com>
+References: <ee77738483f149622d19.1268439476@localhost>
+	<20100313041826.GB7267@agk-dp.fab.redhat.com>
+Message-ID: <20100315174133.GA3188@us.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As fsadm is installed by default - it's a common practice to rather
-print help text in '--disable' form for such case.
+Alasdair G Kergon [agk at redhat.com] wrote:
+> On Fri, Mar 12, 2010 at 04:17:56PM -0800, Malahal Naineni wrote:
+> >  	if ((open("/dev/null", O_RDONLY) < 0) ||
+> > -	    (open("/dev/null", O_WRONLY) < 0) ||
+> >  	    (open("/dev/null", O_WRONLY) < 0))
+> >  		exit(EXIT_DESC_OPEN_FAILURE);
+> 
+> stdin, stdout, stderr
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- configure.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+Then how about this:
 
-diff --git a/configure.in b/configure.in
-index 9ccde94..a973590 100644
---- a/configure.in
-+++ b/configure.in
-@@ -737,8 +737,8 @@ AC_ARG_ENABLE(pkgconfig,   [  --enable-pkgconfig      Install pkgconfig support]
- ################################################################################
- dnl -- Enable fsadm
- AC_MSG_CHECKING(whether to install fsadm)
--AC_ARG_ENABLE(fsadm, [  --enable-fsadm          Enable fsadm],
--FSADM=$enableval)
-+AC_ARG_ENABLE(fsadm, [AC_HELP_STRING([--disable-fsadm], [Disable fsadm])],
-+	FSADM=$enableval)
- AC_MSG_RESULT($FSADM)
+diff -r 8db1b9ee17a8 daemons/dmeventd/dmeventd.c
+--- a/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:15:25 2010 -0800
++++ b/daemons/dmeventd/dmeventd.c	Mon Mar 15 10:38:49 2010 -0700
+@@ -1650,9 +1650,10 @@ static void _daemonize(void)
+ 	for (--fd; fd >= 0; fd--)
+ 		close(fd);
  
- ################################################################################
--- 
-1.7.0
+-	if ((open("/dev/null", O_RDONLY) < 0) ||
+-	    (open("/dev/null", O_WRONLY) < 0) ||
+-	    (open("/dev/null", O_WRONLY) < 0))
++	/* open stdin, stdout, stderr */
++	if ((open("/dev/null", O_RDONLY) != 0) ||
++	    (open("/dev/null", O_WRONLY) != 1) ||
++	    (open("/dev/null", O_WRONLY) != 2))
+ 		exit(EXIT_DESC_OPEN_FAILURE);
 
 
