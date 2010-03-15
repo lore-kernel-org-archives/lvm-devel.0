@@ -1,40 +1,39 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 15 Mar 2010 14:18:17 +0100
-Subject: [PATCH] Fix pvcreate device check.
-In-Reply-To: <1268658848-24437-1-git-send-email-mbroz@redhat.com>
-References: <1268658848-24437-1-git-send-email-mbroz@redhat.com>
-Message-ID: <4B9E3399.2020800@redhat.com>
+From: Bryn M. Reeves <bmr@redhat.com>
+Date: Mon, 15 Mar 2010 15:37:28 +0000
+Subject: [PATCH] Remove the double open with same mode
+In-Reply-To: <4B9DF6F2.5040403@redhat.com>
+References: <ee77738483f149622d19.1268439476@localhost>
+	<20100313041826.GB7267@agk-dp.fab.redhat.com>
+	<4B9DF6F2.5040403@redhat.com>
+Message-ID: <1268667448.2802.1.camel@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+On Mon, 2010-03-15 at 09:59 +0100, Zdenek Kabelac wrote:
+> On 13.3.2010 05:18, Alasdair G Kergon wrote:
+> > On Fri, Mar 12, 2010 at 04:17:56PM -0800, Malahal Naineni wrote:
+> >>  	if ((open("/dev/null", O_RDONLY) < 0) ||
+> >> -	    (open("/dev/null", O_WRONLY) < 0) ||
+> >>  	    (open("/dev/null", O_WRONLY) < 0))
+> >>  		exit(EXIT_DESC_OPEN_FAILURE);
+> > 
+> > stdin, stdout, stderr
+> > 
+> > Alasdair
+> > 
+> 
+> IMHO it's probably worth to add comment to code, so there will not be similar
+> 'optimizations' proposed in the future.
 
-On 03/15/2010 02:14 PM, Milan Broz wrote:
-> @@ -1294,17 +1294,9 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
->  
->  	/* Is there an md superblock here? */
->  	if (!dev && md_filtering()) {
-> -		unlock_vg(cmd, VG_ORPHANS);
-> -
-> -		persistent_filter_wipe(cmd->filter);
-> -		lvmcache_destroy(cmd, 1);
-> -
-> +		refresh_filters(cmd);
->  		init_md_filtering(0);
-> -		if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
-> -			log_error("Can't get lock for orphan PVs");
-> -			init_md_filtering(1);
-> -			return 0;
-> -		}
+Or dup(2) stdout onto stderr - iirc this is how the code in init/main.c
+in the kernel is organised and it does make things a little bit more
+obvious / readable.
 
+Regards,
+Bryn.
 
-> +		lvmcache_label_scan(cmd, 0);
-
-even this rescan line is not needed, device must be in cache already,
-just it is filtered out by MD filter.
-
-Milan
 
 
