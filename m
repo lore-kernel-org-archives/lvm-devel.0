@@ -1,10 +1,10 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 15 Mar 2010 10:05:13 +0100
+Date: Mon, 15 Mar 2010 10:10:16 +0100
 Subject: [PATCH] Use correct array size!
 In-Reply-To: <4B9DF7F2.4010304@redhat.com>
 References: <8db1b9ee17a8c097a7b3.1268439437@localhost>
 	<4B9DF7F2.4010304@redhat.com>
-Message-ID: <4B9DF849.5040600@redhat.com>
+Message-ID: <4B9DF978.1080004@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -35,12 +35,12 @@ On 15.3.2010 10:03, Zdenek Kabelac wrote:
 > 
 > see the difference:
 > for(req = 0; i < sizeof(requests) / sizeof(requests[0]); req++0
-> 
-> Zdenek
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+
+Ahh, I've confused myself.
+
+as req is pointer of the same type, pointer arithmetic applies here as well,
+so the patch is correct. We need to add number of array elements.
+
+Zdenek
 
 
