@@ -1,46 +1,41 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 15 Mar 2010 10:10:16 +0100
-Subject: [PATCH] Use correct array size!
-In-Reply-To: <4B9DF7F2.4010304@redhat.com>
-References: <8db1b9ee17a8c097a7b3.1268439437@localhost>
-	<4B9DF7F2.4010304@redhat.com>
-Message-ID: <4B9DF978.1080004@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 15 Mar 2010 11:37:33 +0100
+Subject: [PATCH] Fix segfault when destroying in-use filters in pvs -a.
+In-Reply-To: <4B9A7253.3010201@redhat.com>
+References: <1268257407-16371-1-git-send-email-mbroz@redhat.com>	<4B994B10.9080409@redhat.com>
+	<4B9A7253.3010201@redhat.com>
+Message-ID: <4B9E0DED.6040104@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 15.3.2010 10:03, Zdenek Kabelac wrote:
-> On 13.3.2010 01:17, Malahal Naineni wrote:
->> Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
->>
->> diff -r 5d08ba4ae8e8 -r 8db1b9ee17a8 daemons/dmeventd/dmeventd.c
->> --- a/daemons/dmeventd/dmeventd.c	Thu Mar 11 16:05:21 2010 -0800
->> +++ b/daemons/dmeventd/dmeventd.c	Fri Mar 12 16:15:25 2010 -0800
->> @@ -1369,7 +1369,7 @@ static int _handle_request(struct dm_eve
->>  		{ DM_EVENT_CMD_ACTIVE, _active},
->>  	}, *req;
->>  
->> -	for (req = requests; req < requests + sizeof(requests); req++)
->> +	for (req = requests; req < requests + sizeof(requests) / sizeof(requests[0]); req++)
->>  		if (req->cmd == msg->cmd)
->>  			return req->f(message_data);
+On 03/12/2010 05:56 PM, Takahiro Yasui wrote:
+>>> Fix it by introducing simple reference counter and test
+>>> it in refresh_filters() call.
+>>>
+>>> Fixes https://bugzilla.redhat.com/show_bug.cgi?id=571963
 > 
+> This patch worked fine in my test case, but I have one question about
+> your patch. I assume that you added refresh_filters() because it was
+> necessary, but this patch prevents filter from being refreshed if it
+> is in use.
 > 
-> NACK
-> 
-> Moving via pointers - thus you need to check whether pointer passes
-> array boundary (just like C++ vector() iterator)
-> 
-> see the difference:
-> for(req = 0; i < sizeof(requests) / sizeof(requests[0]); req++0
+> Don't we need to refresh the filter when in_use flag is decremented
+> and becomes 0 after or in dev_iter_destroy()?
 
-Ahh, I've confused myself.
+well, the patch is workaround. It should be correct fot _this_
+one place.
 
-as req is pointer of the same type, pointer arithmetic applies here as well,
-so the patch is correct. We need to add number of array elements.
+The full refresh (including filter refresh) should be done in
+scan_vgs_for_pvs() (before the iteration loop) so later refresh
+should not be needed.
+(So we should fix code to not full scan here in the first place...)
 
-Zdenek
+I see several more problems with repeated full refresh now,
+so maybe some more intrusive solution will be needed.
+
+Milan
 
 
