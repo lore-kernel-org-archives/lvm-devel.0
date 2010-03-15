@@ -1,11 +1,11 @@
-From: Bryn M. Reeves <bmr@redhat.com>
-Date: Mon, 15 Mar 2010 15:37:28 +0000
+From: Tim Post <echo@echoreply.us>
+Date: Tue, 16 Mar 2010 00:58:51 +0800
 Subject: [PATCH] Remove the double open with same mode
 In-Reply-To: <4B9DF6F2.5040403@redhat.com>
 References: <ee77738483f149622d19.1268439476@localhost>
 	<20100313041826.GB7267@agk-dp.fab.redhat.com>
 	<4B9DF6F2.5040403@redhat.com>
-Message-ID: <1268667448.2802.1.camel@localhost>
+Message-ID: <1268672331.4261.88.camel@tpost-desktop>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -27,13 +27,13 @@ On Mon, 2010-03-15 at 09:59 +0100, Zdenek Kabelac wrote:
 > 
 > IMHO it's probably worth to add comment to code, so there will not be similar
 > 'optimizations' proposed in the future.
+> 
+> Zdenek.
 
-Or dup(2) stdout onto stderr - iirc this is how the code in init/main.c
-in the kernel is organised and it does make things a little bit more
-obvious / readable.
+I don't see how its confusing?
 
 Regards,
-Bryn.
+--Tim
 
 
 
