@@ -1,42 +1,55 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Mon, 15 Mar 2010 22:37:05 -0400
-Subject: [PATCH 0 of 10] LVM: mirrored log patches
-In-Reply-To: <1267833465.10315.3.camel@hydrogen.msp.redhat.com>
-References: <1267833465.10315.3.camel@hydrogen.msp.redhat.com>
-Message-ID: <4B9EEED1.5060606@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 16 Mar 2010 08:47:51 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/Makefile.in
+Message-ID: <20100316084751.6027.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jonathan Brassow wrote:
-> There will likely be at least one more round of these patches - mostly
-> to clean-up the last patch I've been working on.
-> 
-> This round includes changes to the _lvconvert_mirrors function to allow
-> it to handle the repair conversions necessary for 'lvconvert' to accept
-> only top-level LVs.  It also includes suggested changes from Taka
-> (thanks for those!).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2010-03-16 08:47:47
 
-I checked your patch set. It seems that one of my suggestion has not
-been implemented yet, and some of my tests failed.
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : Makefile.in 
 
-https://www.redhat.com/archives/lvm-devel/2010-February/msg00214.html
+Log message:
+	Fix clvmd Makefile to not overwrite LIBS from template definition
 
-In this patch set, _lvconvert_mirrors_aux() repairs in the order
-of mirror images and mirror log. As I explained in the above url,
-mirror log should be repaired before mirror images are repaired
-because the repair procedure of the mirror image calls suspend_lv()
-and that causes deadlock. The deadlock happens because suspending
-LV with failed log device doesn't finish.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1459&r2=1.1460
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/Makefile.in.diff?cvsroot=lvm2&r1=1.35&r2=1.36
 
-What do you think calling _lv_update_log_type() before and after
-repairing mirror legs in _lvconvert_mirrors_aux()?
-
-Other tests worked well so far. Thank you for fixing issues.
-
-Thanks,
-Taka
+--- LVM2/WHATS_NEW	2010/03/09 14:01:47	1.1459
++++ LVM2/WHATS_NEW	2010/03/16 08:47:46	1.1460
+@@ -1,5 +1,6 @@
+ Version 2.02.63 - 
+ ================================
++  Fix clvmd Makefile to not overwrite LIBS from template definition.
+ 
+ Version 2.02.62 - 9th March 2010
+ ================================
+--- LVM2/daemons/clvmd/Makefile.in	2010/03/04 11:21:05	1.35
++++ LVM2/daemons/clvmd/Makefile.in	2010/03/16 08:47:47	1.36
+@@ -81,14 +81,14 @@
+ 	LVMLIBS += -ldevmapper-event
+ endif
+  
++include $(top_builddir)/make.tmpl
++
+ LVMLIBS += -ldevmapper
+ LIBS += $(PTHREAD_LIBS)
+ 
+ DEFS += -D_REENTRANT
+ CFLAGS += -fno-strict-aliasing
+ 
+-include $(top_builddir)/make.tmpl
+-
+ INSTALL_TARGETS = \
+ 	install_clvmd
+ 
 
 
