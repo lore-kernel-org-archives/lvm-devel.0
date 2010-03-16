@@ -1,59 +1,42 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 15 Mar 2010 18:01:37 -0400
-Subject: lv-shared
-In-Reply-To: <Pine.LNX.4.64.1003151600470.17728@hs20-bc2-1.build.redhat.com>
-References: <Pine.LNX.4.64.1003151453350.4733@hs20-bc2-1.build.redhat.com>
-	<20100315192925.GA29389@redhat.com>
-	<Pine.LNX.4.64.1003151600470.17728@hs20-bc2-1.build.redhat.com>
-Message-ID: <20100315220136.GA3461@redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Mon, 15 Mar 2010 22:37:05 -0400
+Subject: [PATCH 0 of 10] LVM: mirrored log patches
+In-Reply-To: <1267833465.10315.3.camel@hydrogen.msp.redhat.com>
+References: <1267833465.10315.3.camel@hydrogen.msp.redhat.com>
+Message-ID: <4B9EEED1.5060606@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Mar 15 2010 at  4:06pm -0400,
-Mikulas Patocka <mpatocka@redhat.com> wrote:
-
-> On Mon, 15 Mar 2010, Mike Snitzer wrote:
+Jonathan Brassow wrote:
+> There will likely be at least one more round of these patches - mostly
+> to clean-up the last patch I've been working on.
 > 
-> > On Mon, Mar 15 2010 at  3:00pm -0400,
-> > Mikulas Patocka <mpatocka@redhat.com> wrote:
-> > 
-> > > Hi
-> > > 
-> > > Why did you hide the "lv-shared" volume? With this hidden, the size and 
-> > > percentage can't be seen.
-> > 
-> > You can still see it with: lvs -a
-> > 
-> > I'll have to revisit why I made it hidden (aside from the fact that the
-> > associated DM device is also hidden).  There was some subtle reason that
-> > had to do with the refactoring of associations when I eliminated the
-> > distinct ->shared_snapshot pointer (otherwise the vg_validate() method
-> > would fail).
-> 
-> I know it can be seen with lvs -a, but I think it's inconvenient for the 
-> admin:
-> - the admin won't see that there is a shared store taking up space
-> - the admin won't see that the origin is a shared snapshot, he sees 'o', 
-> but nothing that refers to that 'o'
-> - the percentage usage of the shared snapshot is hidden
-> 
-> I think this information is important and should be displayed with plain 
-> "lvs" command without any flags. (for example, the percentage usage is 
-> critical, because it can overflow) --- so "lv-shared" shouldn't be hidden.
+> This round includes changes to the _lvconvert_mirrors function to allow
+> it to handle the repair conversions necessary for 'lvconvert' to accept
+> only top-level LVs.  It also includes suggested changes from Taka
+> (thanks for those!).
 
-Sure, not a problem.
+I checked your patch set. It seems that one of my suggestion has not
+been implemented yet, and some of my tests failed.
 
-I've updated the relevant patch, see:
-http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.62/lvm-shared-eliminate-shared_snapshot-in-lv.patch
+https://www.redhat.com/archives/lvm-devel/2010-February/msg00214.html
 
-The lib/metadata/metadata.c:snapshot_count() changes in this updated
-patch address the vg_validate() issue I was seeing.  The -shared cow was
-considered to be a normal "snapshot"; as such the vg_validate() checks
-failed.
+In this patch set, _lvconvert_mirrors_aux() repairs in the order
+of mirror images and mirror log. As I explained in the above url,
+mirror log should be repaired before mirror images are repaired
+because the repair procedure of the mirror image calls suspend_lv()
+and that causes deadlock. The deadlock happens because suspending
+LV with failed log device doesn't finish.
 
-Mike
+What do you think calling _lv_update_log_type() before and after
+repairing mirror legs in _lvconvert_mirrors_aux()?
+
+Other tests worked well so far. Thank you for fixing issues.
+
+Thanks,
+Taka
 
 
