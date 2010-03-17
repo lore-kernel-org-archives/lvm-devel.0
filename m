@@ -1,55 +1,69 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue,  2 Mar 2010 13:07:25 +0100
-Subject: [PATCH 7/9] Remove -rdynamic
-In-Reply-To: <cover.1267529065.git.zkabelac@redhat.com>
-References: <cover.1267529065.git.zkabelac@redhat.com>
-Message-ID: <ebecbe28ecbdcddf14de15dc5ff4a2a6db0ddb98.1267529065.git.zkabelac@redhat.com>
+Date: Wed, 17 Mar 2010 14:47:06 +0100
+Subject: [PATCH 13/25] Replicator: lock_vol update replicator LV
+In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
+References: <cover.1268833246.git.zkabelac@redhat.com>
+Message-ID: <ac7a5396d35dce68e3f7c57b5238196d9e20fead.1268833246.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch might be a bit contraversional. It removes -rdynamic from
-linking of lvm.statis and dmeventd.static. In my understanding
-this compiler flag (or "-Wl,--export-dynamic") is mainly useful
-for dynamic linked libraries. It should not be needed for linking
-of static binary. But I could be wrong here...
+Add LCK_MISSING_VG flag to sinal missing VG to _lock_vol function.
+This way we easily detect whether we still need to lock more VGs
+while having all data available - it would be ackware to resolve it
+from resource uuid string. In the case  missing VG is found,
+whole whole operation must be retried - this usually requires to
+release all locks, and take them again in the alphabetic order.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/Makefile.in |    2 +-
- tools/Makefile.in            |    3 +--
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ lib/locking/locking.c |    3 +++
+ lib/locking/locking.h |    7 ++++++-
+ 2 files changed, 9 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
-index eaf897a..aacb6a4 100644
---- a/daemons/dmeventd/Makefile.in
-+++ b/daemons/dmeventd/Makefile.in
-@@ -66,7 +66,7 @@ dmeventd: $(LIB_SHARED) $(VERSIONED_SHLIB) dmeventd.o
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 76dbda5..57b7ba9 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -362,6 +362,9 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ {
+ 	int ret = 0;
  
- dmeventd.static: $(LIB_STATIC) dmeventd.o $(interfacebuilddir)/libdevmapper.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L. -L$(interfacebuilddir) -o $@ \
--	dmeventd.o $(LVMLIBS) $(LIBS) -rdynamic
-+	dmeventd.o $(LVMLIBS) $(LIBS)
++	if (flags & LCK_MISSING_VG)
++		return_0;
++
+ 	_block_signals(flags);
+ 	_lock_memory(cmd, lv_op);
  
- ifeq ("@PKGCONFIG@", "yes")
-   INSTALL_LIB_TARGETS += install_pkgconfig
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 974abd2..a8cb6aa 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -125,8 +125,7 @@ lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index e7f25b9..da442ec 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -86,6 +86,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ #define LCK_LOCAL	0x00000040U	/* Don't propagate to other nodes */
+ #define LCK_CLUSTER_VG	0x00000080U	/* VG is clustered */
+ #define LCK_CACHE	0x00000100U	/* Operation on cache only using P_ lock */
++#define LCK_MISSING_VG	0x00000200U	/* 'Remote' VG misses lock for this LV */
  
- lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a  $(interfacebuilddir)/libdevmapper.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) -o $@ \
--	      $(OBJECTS) lvm-static.o $(LVMLIBS) $(LIBS) \
--	      -rdynamic
-+	      $(OBJECTS) lvm-static.o $(LVMLIBS) $(LIBS)
+ /*
+  * Additional lock bits for cluster communication
+@@ -128,8 +129,12 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ #define LCK_LV_CLUSTERED(lv)	\
+ 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
  
- liblvm2cmd.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.o lvm2cmd.o
- 	cat $(top_builddir)/lib/liblvm-internal.a > $@
++#define LCK_CHECK_MISSING_VG(lv)	\
++	(lv_replicator_sites_check_vg((lv)) ? 0 : LCK_MISSING_VG)
++
+ #define lock_lv_vol(cmd, lv, flags)	\
+-	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
++	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv) | \
++		 LCK_CHECK_MISSING_VG(lv))
+ 
+ #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
+ #define unlock_and_release_vg(cmd, vg, vol) \
 -- 
-1.7.0
+1.7.0.1
 
 
