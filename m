@@ -1,101 +1,104 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 17 Mar 2010 11:51:46 -0400
-Subject: [PATCH 1/3] Add a couple of lvmcache functions to aid in lookups by pvname.
-In-Reply-To: <1268841108-19327-1-git-send-email-dwysocha@redhat.com>
+Date: Wed, 17 Mar 2010 11:51:47 -0400
+Subject: [PATCH 2/3] Add find_vgname_from_pvname() function using lvmcache functions.
+In-Reply-To: <1268841108-19327-2-git-send-email-dwysocha@redhat.com>
 References: <1268841108-19327-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1268841108-19327-2-git-send-email-dwysocha@redhat.com>
+	<1268841108-19327-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1268841108-19327-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-It would be nice to clean up some of the pv handling and move away from
-the pv as a standalone object.  To this end, I introduce a couple helper
-functions from lvmcache which allow us to lookup a vgname from a pvname
-and an info struct from a pvname.  These functions will be used later
-in a library function that we will export and will aid in cleaning
-up the pv handling.
+Some commands start with a pvname, but we'd like to force users to
+start with a vg handle to obtain a pv handle.  Our best option seems
+to be providing a way to look up the vgname from the pvname, and then
+requiring them to use vg_read/vg_open.  Similarly, we could hide the
+vgname lookup function inside a higher level API such as 'pv_open()',
+which would take a pvname or pvid, and do the necessary lookups to
+find the vgname, then do a vg_open(), and return the proper pv handle
+attached to the VG.  In any case, we need this supporting function.
 
-Note: Inside lvmcache, we cannot handle the case of the PV with no mdas
-that is in a VG.  The reason is the lvmcache 'info' only gets updated
-by calling higher-level _vg_read() function, which calls
-lvmcache_update_vg().  I did not think it was a good design to parse
-per-format metadata inside lvmcache, or call vg_read() from inside
-lvmcache.  It seems clear to me the proper place for the additional
-scanning calls is at an upper layer, which will be the next patch.
+This find function first does an intial scan, then asks lvmcache for
+the vgname.  If the vgname is an orphan, we then check to see if
+there are metadata areas, and if not, we scan every PV on the system by
+calling scan_vgs_for_pvs().  In most cases we should not need to do
+this, and by using the info->mdas count, we avoid calling pv_read()
+as prior code did.  So this patch is a bit cleaner IMO and should
+allow us to refactor more of the pv code.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/cache/lvmcache.c |   40 ++++++++++++++++++++++++++++++++++++++++
- lib/cache/lvmcache.h |    3 +++
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |   42 ++++++++++++++++++++++++++++++++++++++
  2 files changed, 43 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 35ee05b..40dc2a1 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -499,6 +499,46 @@ struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only)
- 	return info;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 9540285..eb2576c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -609,6 +609,7 @@ struct logical_volume *find_lv(const struct volume_group *vg,
+ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+ 					const char *pv_name);
+ 
++char *find_vgname_from_pvname(struct cmd_context *cmd, const char *pvname);
+ /* Find LV segment containing given LE */
+ struct lv_segment *first_seg(const struct logical_volume *lv);
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index f1b90a7..5d98091 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3031,6 +3031,48 @@ out:
+ 	return NULL;
  }
  
-+struct lvmcache_info *info_from_pvname(struct cmd_context *cmd,
-+				       const char *pvname)
++
++char *find_vgname_from_pvname(struct cmd_context *cmd, const char *pvname)
 +{
-+	struct lvmcache_info *info;
-+	struct device *dev;
-+	struct label *label;
-+
-+	if (!(dev = dev_cache_get(pvname, cmd->filter))) {
-+		log_error("%s: Couldn't find device.  "
-+			  "Check your filters?", pvname);
-+		return NULL;
-+	}
-+	if (dev->pvid[0] == '\0')
-+		label_read(dev, &label, UINT64_C(0));
-+
-+	info = info_from_pvid(dev->pvid, 0);
-+	if (!info || dev != info->dev) {
-+		log_error("Couldn't find %s in lvmcache.", pvname);
-+		return NULL;
-+	}
-+	return info;
-+}
-+
-+char *lvmcache_vgname_from_pvname(struct cmd_context *cmd, const char *pvname)
-+{
-+	struct lvmcache_info *info;
 +	char *vgname;
++	struct lvmcache_info *info;
 +
-+	info = info_from_pvname(cmd, pvname);
-+	if (!info)
-+		return_NULL;
++	/*
++	 * Initially, all we have is a pv name - we don't know the VG name.
++	 * Try to look the name up in lvmcache.
++	 */
++	lvmcache_label_scan(cmd, 0);
++	vgname = lvmcache_vgname_from_pvname(cmd, pvname);
 +
-+	if (!(vgname = dm_pool_alloc(cmd->mem, NAME_LEN+1))) {
-+		log_errno(ENOMEM, "vgname allocation failed");
-+		return NULL;
++	if (is_orphan_vg(vgname)) {
++		/*
++		 * If it's an orphan though, we need to do more work,
++		 * if there's no mdas.
++		 */
++		if (!(info = info_from_pvname(cmd, pvname))) {
++			return_NULL;
++		}
++		/*
++		 * If a PV has no MDAs it may appear to be an
++		 * orphan until the metadata is read off
++		 * another PV in the same VG.  Detecting this
++		 * means checking every VG by scanning every
++		 * PV on the system.
++		 */
++		if (!dm_list_size(&info->mdas)) {
++			if (!scan_vgs_for_pvs(cmd)) {
++				log_error("Rescan for PVs without "
++					  "metadata areas failed.");
++				return NULL;
++			}
++		}
++		/* Ask lvmcache again - we may have a non-orphan name now */
++		vgname = lvmcache_vgname_from_pvname(cmd, pvname);
 +	}
-+	strncpy(vgname, info->vginfo->vgname, NAME_LEN);
++
 +	return vgname;
 +}
 +
- static void _rescan_entry(struct lvmcache_info *info)
- {
- 	struct label *label;
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 2c14b6c..ba620ba 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -94,6 +94,9 @@ struct lvmcache_vginfo *vginfo_from_vgid(const char *vgid);
- struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only);
- const char *vgname_from_vgid(struct dm_pool *mem, const char *vgid);
- struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid);
-+char *lvmcache_vgname_from_pvname(struct cmd_context *cmd, const char *pvname);
-+struct lvmcache_info *info_from_pvname(struct cmd_context *cmd,
-+				       const char *pvname);
- int vgs_locked(void);
- int vgname_is_locked(const char *vgname);
- 
+ /**
+  * pv_read - read and return a handle to a physical volume
+  * @cmd: LVM command initiating the pv_read
 -- 
 1.6.0.6
 
