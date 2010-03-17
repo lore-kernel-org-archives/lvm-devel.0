@@ -1,59 +1,56 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Wed, 17 Mar 2010 03:30:41 -0400 (EDT)
-Subject: lv-shared
-In-Reply-To: <20100315202843.GA1034@redhat.com>
-References: <Pine.LNX.4.64.1003151453350.4733@hs20-bc2-1.build.redhat.com>
-	<20100315192925.GA29389@redhat.com> <20100315202843.GA1034@redhat.com>
-Message-ID: <Pine.LNX.4.64.1003170330001.9115@hs20-bc2-1.build.redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 17 Mar 2010 11:07:04 +0100
+Subject: [PATCH] testsuite: get stacktrace if test drops core
+In-Reply-To: <20100316204454.GA25921@redhat.com> (Mike Snitzer's message of
+	"Tue, 16 Mar 2010 16:44:54 -0400")
+References: <20100316204454.GA25921@redhat.com>
+Message-ID: <87vdcv8do7.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Hi,
 
+Mike Snitzer <snitzer@redhat.com> writes:
+> Requires lvm be built with debugging (-g).
+> Also requires ulimit -c be non-zero (to drop core file).
+>
+> diff --git a/test/test-utils.sh b/test/test-utils.sh
+> index 6606c56..06b9636 100644
+> --- a/test/test-utils.sh
+> +++ b/test/test-utils.sh
+> @@ -24,6 +24,21 @@ STACKTRACE() {
+>  		echo "$i ${FUNC}() called from ${BASH_SOURCE[$i]}:${BASH_LINENO[$i]}"
+>  		i=$(($i + 1));
+>  	done
+> +
+> +	# Attempt to get a stacktrace if a core file exists
+> +	# and the lvm binary was built with debugging
+> +	TEST_LVM_BINARY=$(dirname $(which lvm))/../../tools/lvm
+> +	TEST_LVM_CORE=`ls core* | head -1`
+> +	GDB_BINARY=`which gdb`
+> +	READELF_BINARY=`which readelf`
+> +	if [ -n "$TEST_LVM_CORE" -a -n "$GDB_BINARY" -a -n "$READELF_BINARY" ]; then
+> +		if $READELF_BINARY -S $TEST_LVM_BINARY 2>&1 | grep -q .debug_info; then
+> +			echo bt > gdb_commands.txt
+> +			echo l >> gdb_commands.txt
+> +			echo quit >> gdb_commands.txt
+> +			$GDB_BINARY -batch -c $TEST_LVM_CORE -x gdb_commands.txt $TEST_LVM_BINARY
+> +		fi
+> +	fi
+>  }
+>  
+>  init_udev_transaction() {
+Looks good to me. Maybe change "bt" to "bt full"? That would also list
+local variables on the stack, so more useful data. (Maybe even make it
+"thread apply all bt full", although we don't currently use threads here
+and we don't handle dmeventd coredumps either... maybe later.)
 
-On Mon, 15 Mar 2010, Mike Snitzer wrote:
+Otherwise, ACK.
 
-> On Mon, Mar 15 2010 at  3:29pm -0400,
-> Mike Snitzer <snitzer@redhat.com> wrote:
-> 
-> > On Mon, Mar 15 2010 at  3:00pm -0400,
-> > Mikulas Patocka <mpatocka@redhat.com> wrote:
-> > 
-> > > Also, your changes to 2.02.62 broke shared store resizing.
-> > > lvresize -L 132M vgs/lv-shared no longer works
-> > 
-> > OK, I can have a look but some of my changes also made it so that
-> > info-by-uuid based multisnapshot cleanup actually works (needed for lvm2
-> > >= 2.02.62).
-> 
-> I cannot reproduce this:
-> 
-> # lvcreate -L 1G --sharedstore mikulas -s test/testlv1
->   Logical volume "testlv1-shared" created
-> 
-> # lvs -a
->   LV               VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
->   testlv1          test owi-a- 4.00g                                       
->   [testlv1-shared] test swi--- 1.00g testlv1   0.00                        
-> 
-> # lvcreate -s -n testlv1_snap test/testlv1
->   Logical volume "testlv1_snap" created
-> 
-> # lvresize -L 1.5G test/testlv1-shared
->   Extending logical volume testlv1-shared to 1.50 GiB
->   Logical volume testlv1-shared successfully resized
-> 
-> # lvs -a
->   LV               VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
->   testlv1          test owi-a- 4.00g                                       
->   [testlv1-shared] test swi--- 1.50g testlv1   0.00                        
->   testlv1_snap     test swi-a- 4.00g testlv1                               
-
-Now I can't reproduce it too with the same code, so I don't know what 
-happened :-(
-
-Mikulas
+Yours,
+   Petr.
 
 
