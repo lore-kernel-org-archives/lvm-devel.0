@@ -1,252 +1,211 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:47:14 +0100
-Subject: [PATCH 21/25] Replicator: add new options for replicator
+Date: Wed, 17 Mar 2010 14:47:15 +0100
+Subject: [PATCH 22/25] Replicator: man pages for lvcreate, lvchange
 In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
 References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <225bb3d288a0682bd36c33b88fe4e23eb129f245.1268833246.git.zkabelac@redhat.com>
+Message-ID: <809dc3a8bcab0bcdbbb06f2ef6afabbfde65c401.1268833246.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-New options: addsite, delsite, replicator,
-replicatorlog, replicatorlogtype.
+Update man pages to cover basic usage of lvcreate and lvchange
+utility to handle basic replicator commands.
+
+Current desriptions shows how to create replicator,
+add site, add replicated device.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/config/defaults.h            |    1 +
- lib/metadata/metadata-exported.h |    1 +
- tools/args.h                     |   13 ++++++++
- tools/commands.h                 |   10 +++++-
- tools/lvcreate.c                 |   58 +++++++++++++++++++++++++++++++++++++-
- tools/lvmcmdline.c               |    9 ++++++
- tools/tools.h                    |    1 +
- 7 files changed, 90 insertions(+), 3 deletions(-)
+ man/lvchange.8.in |   60 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ man/lvcreate.8.in |   55 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 114 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 22a085d..4ef94ff 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -108,6 +108,7 @@
+diff --git a/man/lvchange.8.in b/man/lvchange.8.in
+index 08a83c4..0d091c9 100644
+--- a/man/lvchange.8.in
++++ b/man/lvchange.8.in
+@@ -3,10 +3,18 @@
+ lvchange \- change attributes of a logical volume
+ .SH SYNOPSIS
+ .B lvchange
++[\-\-addsite Site]
+ [\-\-addtag Tag]
+ [\-A|\-\-autobackup y|n] [\-a|\-\-available y|n|ey|en|ly|ln]
+ [\-\-alloc AllocationPolicy]
+ [\-C|\-\-contiguous y|n] [\-d|\-\-debug] [\-\-deltag Tag]
++[\-\-delsite Site]
++[[\-\-fallbehinddata Size[bBsSkKmMgGtTpPeE]] |
++[\-\-fallbehindios  IOS] |
++[\-\-fallbehindtimeout sec]]
++[\-\-sitemode [sync|warn|stall|drop|fail]
++[\-\-activesite Site]
++[\-\-passivesite Site]
+ [\-\-resync]
+ [\-h|\-?|\-\-help]
+ [\-\-ignorelockingfailure]
+@@ -19,7 +27,9 @@ lvchange \- change attributes of a logical volume
+ [\-p|\-\-permission r|rw] [\-r/\-\-readahead ReadAheadSectors|auto|none]
+ [\-\-refresh]
+ [\-t|\-\-test]
+-[\-v|\-\-verbose] LogicalVolumePath [LogicalVolumePath...]
++[\-v|\-\-verbose]
++[\-\-remotevolumegroup VolumeGroupName]
++LogicalVolumePath [LogicalVolumePath...]
+ .SH DESCRIPTION
+ lvchange allows you to change the attributes of a logical volume
+ including making them known to the kernel ready for use.
+@@ -102,10 +112,58 @@ If the logical volume is active, reload its metadata.
+ This is not necessary in normal operation, but may be useful
+ if something has gone wrong or if you're doing clustering 
+ manually without a clustered lock manager.
++.TP
++.I \-\-addsite
++Add new site to given replicator LV.
++.TP
++.I \-\-delsite
++Remove given site from replicator LV.
++.TP
++.I \-\-fallbehinddata
++How many data could get replicator behind. Cannot be mixed
++with --fallbehindios or --fallbehindtimeout.
++.TP
++.I \-\-fallbehindios 
++How many io operation could be queued in replicator backing store device.
++Cannot be mixed with --fallbehinddata or --fallbehindtimeout.
++.TP
++.I \-\-fallbehindtimeout
++How many seconds could be replicator behind actual data. Cannot be mixed
++with --fallbehinddata or --fallbehindios.
++.TP
++.I \-\-sitemode
++Select replication mode. Default is Warn.
++Sync is synchronous mode. Warn,Stall,Drop,Fail are asynchronous modes.
++Warn issues warning when remote site is switched to sync log.
++Stall stalls replicator until remote site is back in range.
++Drop drops whole remote site, if it get too behind.
++Fail whole replicator fails is remote sites gets too behind.
++Local site works usually in stall mode. There is no synclog for local
++replicated volumes.
++.TP
++.I \-\-activesite 
++Marks site as active. Note: Only one site from replicator could be 
++marked active with actual implementation and this site must be 
++local site.
++.TP
++.I \-\-passivesite 
++Marks site as passive which is default.
++.TP
++.I \-\-remotevolumegroup 
++Selects remote volume group for remote site that contains logical volumes
++with same names for replication as the local site. Local site inside
++replicator's is assumed if remotevolumegroup is not specified.
++.TP
+ .SH Examples
+ "lvchange -pr vg00/lvol1" changes the permission on 
+ volume lvol1 in volume group vg00 to be read-only.
  
- #define DEFAULT_STRIPE_FILLER "error"
- #define DEFAULT_MIRROR_REGION_SIZE 512	/* KB */
-+#define DEFAULT_REPLICATOR_REGION_SIZE 512	/* KB */
- #define DEFAULT_INTERVAL 15
- 
- #ifdef READLINE_SUPPORT
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index cf73bf8..3c49b7b 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -596,6 +596,7 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
- struct lvcreate_params {
- 	/* flags */
- 	int snapshot; /* snap */
-+	int replicator; /* replicator */
- 	int zero; /* all */
- 	int major; /* all */
- 	int minor; /* all */
-diff --git a/tools/args.h b/tools/args.h
-index 981f45f..4623ff6 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -66,6 +66,19 @@ arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", size_mb_arg, 0)
- arg(virtualsize_ARG, '\0', "virtualsize", size_mb_arg, 0)
- arg(noudevsync_ARG, '\0', "noudevsync", NULL, 0)
- arg(poll_ARG, '\0', "poll", yes_no_arg, 0)
-+arg(replicator_ARG, '\0', "replicator", NULL, 0)
-+arg(replicatordev_ARG, '\0', "replicatordev", NULL, 0)
-+arg(replicatorlog_ARG, '\0', "replicatorlog", NULL, 0)
-+arg(replicatorlogtype_ARG, '\0', "replicatorlogtype", NULL, 0)
-+arg(addsite_ARG, '\0', "addsite", site_arg, 0)
-+arg(delsite_ARG, '\0', "delsite", site_arg, 0)
-+arg(fallbehinddata_ARG, '\0', "fallbehinddata", size_mb_arg, 0)
-+arg(fallbehindios_ARG, '\0', "fallbehindios", int_arg, 0)
-+arg(fallbehindtimeout_ARG, '\0', "fallbehindtimeout", int_arg, 0)
-+arg(sitemode_ARG, '\0', "sitemode", string_arg, 0)
-+arg(activesite_ARG, '\0', "activesite", string_arg, 0)
-+arg(passivesite_ARG, '\0', "passivesite", string_arg, 0)
-+arg(remotevolumegroup_ARG, '\0', "remotevolumegroup", string_arg, 0)
- 
- /* Allow some variations */
- arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index ad0b385..44c5a21 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -62,10 +62,12 @@ xx(lvchange,
-    "lvchange\n"
-    "\t[-A|--autobackup y|n]\n"
-    "\t[-a|--available [e|l]y|n]\n"
-+   "\t[--addsite Site]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--alloc AllocationPolicy]\n"
-    "\t[-C|--contiguous y|n]\n"
-    "\t[-d|--debug]\n"
-+   "\t[--delsite Site]\n"
-    "\t[--deltag Tag]\n"
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-@@ -90,7 +92,7 @@ xx(lvchange,
-    ignorelockingfailure_ARG, ignoremonitoring_ARG, major_ARG, minor_ARG,
-    monitor_ARG, noudevsync_ARG, partial_ARG, permission_ARG, persistent_ARG,
-    poll_ARG, readahead_ARG, resync_ARG, refresh_ARG, addtag_ARG, deltag_ARG,
--   test_ARG, yes_ARG)
-+   test_ARG, addsite_ARG, delsite_ARG, yes_ARG)
- 
- xx(lvconvert,
-    "Change logical volume layout",
-@@ -160,6 +162,9 @@ xx(lvcreate,
-    "\t[-p|--permission {r|rw}]\n"
-    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
-+   "\t[--replicator]\n"
-+   "\t[--replicatorlog LogicalVolumeName]\n"
-+   "\t[--replicatorlogtype ringbuffer]\n"
-    "\t[-t|--test]\n"
-    "\t[--type VolumeType]\n"
-    "\t[-v|--verbose]\n"
-@@ -194,7 +199,8 @@ xx(lvcreate,
-    addtag_ARG, alloc_ARG, autobackup_ARG, chunksize_ARG, contiguous_ARG,
-    corelog_ARG, extents_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG,
-    name_ARG, nosync_ARG, noudevsync_ARG, permission_ARG, persistent_ARG,
--   readahead_ARG, regionsize_ARG, size_ARG, snapshot_ARG, stripes_ARG,
-+   readahead_ARG, regionsize_ARG, replicator_ARG, replicatorlog_ARG,
-+   replicatorlogtype_ARG, size_ARG, snapshot_ARG, stripes_ARG,
-    stripesize_ARG, test_ARG, type_ARG, virtualoriginsize_ARG, virtualsize_ARG,
-    zero_ARG)
- 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 211cfeb..45a1c72 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -379,6 +379,36 @@ static int _read_mirror_params(struct lvcreate_params *lp,
- 	return 1;
- }
- 
-+static int _read_replicator_params(struct lvcreate_params *lp,
-+				   struct cmd_context *cmd)
-+{
-+	int region_size;
-+	const char *mirrorlog;
++"lvchange --addsite NewYork vg00/replicator0"
++adds new local site NewYork in replicator vg00/replicator0.
 +
-+	if (arg_count(cmd, regionsize_ARG)) {
-+		if (arg_sign_value(cmd, regionsize_ARG, 0) == SIGN_MINUS) {
-+			log_error("Negative regionsize is invalid.");
-+			return 0;
-+		}
-+		lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0);
-+	} else {
-+		region_size = 2 * find_config_tree_int(cmd,
-+						       "activation/replicator_region_size",
-+						       DEFAULT_REPLICATOR_REGION_SIZE);
-+		if (region_size < 0) {
-+			log_error("Negative replicator_region_size in configuration "
-+				  "file is invalid.");
-+			return 0;
-+		}
-+		lp->region_size = region_size;
-+	}
++"lvchange --activesite NewYork vg00/replicator0"
++marks site NewYork in replicator vg00/replicator0 as active.
 +
-+	if (!_validate_mirror_params(cmd, lp)) /* reuse ? */
-+		return 0;
+ .SH SEE ALSO
+ .BR lvm (8), 
+ .BR lvcreate (8),
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index 314c354..decbf37 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -13,6 +13,8 @@ lvcreate \- create a logical volume in an existing volume group
+ [\-M|\-\-persistent y|n] [\-\-minor minor]
+ [\-m|\-\-mirrors Mirrors [\-\-nosync] [\-\-mirrorlog {disk|core}] [\-\-corelog]
+ [\-R|\-\-regionsize MirrorLogRegionSize]]
++[[\-\-replicatordev ReplicatedLogicalVolumeName] [\-\-site Site]]
++[\-R|\-\-regionsize ReplicatorSyncLogRegionSize]]
+ [\-n|\-\-name LogicalVolumeName]
+ [\-p|\-\-permission r|rw] [\-r|\-\-readahead ReadAheadSectors|auto|none]
+ [\-t|\-\-test]
+@@ -31,6 +33,22 @@ VolumeGroupName [PhysicalVolumePath[:PE[-PE]]...]
+ OriginalLogicalVolumePath | 
+ [\-s|\-\-snapshot]
+ VolumeGroupName \-\-virtualsize VirtualSize}
++.br
 +
-+	return 1;
-+}
++.br
++.B lvcreate
++{\-l|\-\-extents LogicalExtentsNumber[%{VG|FREE|ORIGIN}] |
++ \-L|\-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE] |
++ \-\-replicatorlog ReplicatorLogLV}
++[\-\-replicatorlogtype ReplicatorLogType]
++[\-\-replicatorsynclog {disk|core}]
++[\-R|\-\-regionsize ReplicatorSyncLogRegionSize]]
++[\-\-nosync]
++\-n|\-\-name ReplicatorLogicalVolumeName
++\-\-replicator
++VolumeGroupName 
++.br
 +
- static int _lvcreate_params(struct lvcreate_params *lp,
- 			    struct lvcreate_cmdline_params *lcp,
- 			    struct cmd_context *cmd,
-@@ -386,6 +416,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- {
- 	int contiguous;
- 	unsigned pagesize;
-+	int i;
+ .SH DESCRIPTION
+ lvcreate creates a new logical volume in a volume group ( see
+ .B vgcreate(8), vgchange(8)
+@@ -114,6 +132,38 @@ by copying the data from the first device again each time the
+ device is activated, for example, after every reboot.
  
- 	memset(lp, 0, sizeof(*lp));
- 	memset(lcp, 0, sizeof(*lcp));
-@@ -411,6 +442,9 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	if (seg_is_mirrored(lp))
- 		lp->mirrors = 2;
+ The optional argument --corelog is equivalent to --mirrorlog core.
++.TP
++.I \-\-replicator
++Creates empty replicator logical volume. ( see
++.B lvchange(8)
++) for options, how to customize created replicator LV.
++
++Specifying optional argument --nosync will cause the creation
++of the replicator to skip the initial resynchronization. Any data written
++afterwards will be replicator, but the original contents will not be
++copied.  This is useful for skipping a potentially long and resource
++intensive initial sync of an empty device.
++
++The optional argument --replicatorsynclog specifies the type of synclog to be 
++used. The default is disk, which is persistent and requires a small amount of
++storage space, usually on a separate device from the data being replicated.
++Using core means the replicator is regenerated by copying the data from the
++first device again each time the device is activated, for example, after every
++reboot.
++
++The optional argument --replicatorlog specifies the LogicalVolumeName of the
++LV to be used as the main backing store device for keeping replicator master
++log. If not specified, log is allocated with given -L|--size. Note: This
++backing store device should be very fast and reliable and storage (i.e. raid1),
++so should be selected with special care.
++
++The optional argument --replicatorlogtype specifies type of the backing store
++log. The default and currently the only valid and supported type is ringbuffer.
++
++.TP
++.I \-\-replicatordev
++Creates empty replicated logical volume. If the --site is not specified, local
++site is found inside replicator LV.
  
-+	if (seg_is_replicator(lp) || arg_count(cmd, replicator_ARG))
-+		lp->replicator = 1;
-+
- 	if (arg_count(cmd, mirrors_ARG)) {
- 		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0) + 1;
- 		if (lp->mirrors == 1)
-@@ -475,6 +509,27 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 		}
- 	}
+ .TP
+ .I \-n, \-\-name LogicalVolumeName
+@@ -220,10 +270,15 @@ under 100MB of actual data on it.
+ creates a linear logical volume "vg00/lvol1" using physical extents
+ /dev/sda:0-7 and /dev/sdb:0-7 for allocation of extents.
  
-+	if (lp->replicator) {
-+		log_error("--replicator for replicators");
-+
-+	} else {
-+		static const struct {
-+			const char *str;
-+			int argname;
-+		} repargs[] = {
-+			{ "replicatorlog", replicatorlog_ARG },
-+			{ "replicatorlog", replicatorlog_ARG },
-+			{ "remotevolumegroup", remotevolumegroup_ARG }
-+		};
-+
-+		for (i = 0; i < sizeof(repargs)/sizeof(repargs[0]); ++i)
-+			if (arg_count(cmd, repargs[i].argname)) {
-+			log_error("--%s is only available "
-+				  "with replicators.", repargs[i].str);
-+			return 0;
-+		}
-+	}
-+
- 	if (activation() && lp->segtype->ops->target_present &&
- 	    !lp->segtype->ops->target_present(cmd, NULL, NULL)) {
- 		log_error("%s: Required device-mapper target(s) not "
-@@ -485,7 +540,8 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !_read_stripe_params(lp, cmd) ||
--	    !_read_mirror_params(lp, cmd))
-+	    !_read_mirror_params(lp, cmd) ||
-+	    !_read_replicator_params(lp, cmd))
- 		return_0;
++"lvcreate -L 1G -n replicator0 vg00"
++.br
++creates an empty replicator logical volume "vg00/replicator0" and hidden backing
++store volume vg00/replicator0_rlog of size 1G.
  
- 	/*
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 69e2c87..41204a4 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -488,6 +488,15 @@ int readahead_arg(struct cmd_context *cmd __attribute((unused)), struct arg *a)
- 	return 1;
- }
- 
-+int site_arg(struct cmd_context *cmd __attribute((unused)), struct arg *a)
-+{
-+	char *pos = a->value;
-+	if (!validate_name(pos))
-+		return 0;
-+
-+	return 1;
-+}
-+
- static void __alloc(int size)
- {
- 	if (!(_cmdline.commands = dm_realloc(_cmdline.commands, sizeof(*_cmdline.commands) * size))) {
-diff --git a/tools/tools.h b/tools/tools.h
-index 75575e7..8dbabbc 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -152,6 +152,7 @@ int units_arg(struct cmd_context *cmd, struct arg *a);
- int segtype_arg(struct cmd_context *cmd, struct arg *a);
- int alloc_arg(struct cmd_context *cmd, struct arg *a);
- int readahead_arg(struct cmd_context *cmd, struct arg *a);
-+int site_arg(struct cmd_context *cmd, struct arg *a);
- 
- /* we use the enums to access the switches */
- unsigned arg_count(const struct cmd_context *cmd, int a);
+ .SH SEE ALSO
+ .BR lvm (8), 
+ .BR vgcreate (8), 
++.BR lvchange (8)
+ .BR lvremove (8), 
+ .BR lvrename (8)
+ .BR lvextend (8), 
 -- 
 1.7.0.1
 
