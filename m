@@ -1,42 +1,38 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:46:59 +0100
-Subject: [PATCH 06/25] Replicator: extend _lv_each_dependency() rep. deps
+Date: Wed, 17 Mar 2010 14:47:00 +0100
+Subject: [PATCH 07/25] Replicator: extend VG with list of opened vgs
 In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
 References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <c3daab28e7bfd97091113e70598f081d3d6da9f2.1268833246.git.zkabelac@redhat.com>
+Message-ID: <a3659426c881df34280c487330634d2b1c1da590.1268833246.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add linked list of opened VGs and counter for missing VGs.
+Needed for replicator target.
+
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/metadata.c |    4 ++++
+ lib/metadata/metadata-exported.h |    4 ++++
  1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a3c855c..822e6d1 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1977,6 +1977,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	struct lv_segment *lvseg;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index cc4221e..ac0681e 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -250,6 +250,10 @@ struct volume_group {
  
- 	struct logical_volume *deps[] = {
-+		(lv->rdevice && lv != lv->rdevice->lv) ? lv->rdevice->lv : 0,
-+		(lv->rdevice && lv != lv->rdevice->slog) ? lv->rdevice->slog : 0,
- 		lv->snapshot ? lv->snapshot->origin : 0,
- 		lv->snapshot ? lv->snapshot->cow : 0 };
- 	for (i = 0; i < sizeof(deps) / sizeof(*deps); ++i) {
-@@ -1987,6 +1989,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		if (lvseg->log_lv && !fn(lvseg->log_lv, data))
- 			return_0;
-+		if (lvseg->rlog_lv && !fn(lvseg->rlog_lv, data))
-+			return_0;
- 		for (s = 0; s < lvseg->area_count; ++s) {
- 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
- 				return_0;
+ 	struct dm_list tags;
+ 
++        /* List of locked and opened VGs */
++	struct dm_list vgs;
++	uint32_t missing_vgs;
++
+ 	/*
+ 	 * FIXME: Move the next fields into a different struct?
+ 	 */
 -- 
 1.7.0.1
 
