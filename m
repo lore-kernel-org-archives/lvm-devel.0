@@ -1,77 +1,216 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  3 Mar 2010 21:42:54 +0100
-Subject: [PATCH 08/15] Introduce LVMINTERNAL_LIBS
-In-Reply-To: <cover.1267648294.git.zkabelac@redhat.com>
-References: <cover.1267648294.git.zkabelac@redhat.com>
-Message-ID: <50a2becdb9d3525cf0918f26a69d03540f645921.1267648294.git.zkabelac@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 17 Mar 2010 11:51:48 -0400
+Subject: [PATCH 3/3] Update pvchange to always obtain a vg handle for each pv to process.
+In-Reply-To: <1268841108-19327-3-git-send-email-dwysocha@redhat.com>
+References: <1268841108-19327-1-git-send-email-dwysocha@redhat.com>
+	<1268841108-19327-2-git-send-email-dwysocha@redhat.com>
+	<1268841108-19327-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1268841108-19327-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Keep dependency libraries for liblvm-internal in one place.
+Earlier patches added some infrastructure to lookup a vgname from
+a pvname.  We now can cleanup some of the pvchange and other code
+by requiring callers that want to modify some pv property:
+1) lookup the vgname by the pvname
+2) use the vgname to obtain a vg handle
+3) get the pv handle from the vg handle
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+This should work going forward and be a much cleaner interface,
+as we move away from pvs as standalone objects.
+
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- daemons/clvmd/Makefile.in |    2 +-
- liblvm/Makefile.in        |    2 +-
- make.tmpl.in              |    1 +
- tools/Makefile.in         |    2 +-
- 4 files changed, 4 insertions(+), 3 deletions(-)
+ tools/pvchange.c |  116 +++++++++++++++++++++--------------------------------
+ 1 files changed, 46 insertions(+), 70 deletions(-)
 
-diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index 905f1c9..40d1da4 100644
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -75,7 +75,7 @@ endif
- TARGETS = \
- 	clvmd
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index cba9dd2..0cf1c98 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -17,13 +17,10 @@
  
--LVMLIBS = -llvm-internal -lpthread
-+LVMLIBS = $(LVMINTERNAL_LIBS) -lpthread
+ /* FIXME Locking.  PVs in VG. */
  
- ifeq ("@DMEVENTD@", "yes")
- 	LVMLIBS += -ldevmapper-event
-diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
-index 25906e1..1b2b474 100644
---- a/liblvm/Makefile.in
-+++ b/liblvm/Makefile.in
-@@ -42,7 +42,7 @@ CLEAN_TARGETS += liblvm.cflow
+-static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
++static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
++			    struct physical_volume *pv,
+ 			    void *handle __attribute((unused)))
+ {
+-	struct volume_group *vg = NULL;
+-	const char *vg_name = NULL;
+-	struct pv_list *pvl;
+-	uint64_t sector;
+ 	uint32_t orig_pe_alloc_count;
+ 	/* FIXME Next three only required for format1. */
+ 	uint32_t orig_pe_count, orig_pe_size;
+@@ -53,21 +50,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
  
- include $(top_builddir)/make.tmpl
+ 	/* If in a VG, must change using volume group. */
+ 	if (!is_orphan(pv)) {
+-		vg_name = pv_vg_name(pv);
+-
+-		log_verbose("Finding volume group %s of physical volume %s",
+-			    vg_name, pv_name);
+-		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+-		if (vg_read_error(vg)) {
+-			vg_release(vg);
+-			return_0;
+-		}
+-
+-		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+-			log_error("Unable to find \"%s\" in volume group \"%s\"",
+-				  pv_name, vg->name);
+-			goto out;
+-		}
+ 		if (tagarg && !(vg->fid->fmt->features & FMT_TAGS)) {
+ 			log_error("Volume group containing %s does not "
+ 				  "support tags", pv_name);
+@@ -78,7 +60,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 				  "logical volumes", pv_name);
+ 			goto out;
+ 		}
+-		pv = pvl->pv;
+ 		if (!archive(vg))
+ 			goto out;
+ 	} else {
+@@ -87,19 +68,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 				  "in volume group", pv_name);
+ 			return 0;
+ 		}
+-
+-		vg_name = VG_ORPHANS;
+-
+-		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+-			log_error("Can't get lock for orphans");
+-			return 0;
+-		}
+-
+-		if (!(pv = pv_read(cmd, pv_name, NULL, &sector, 1, 0))) {
+-			unlock_vg(cmd, vg_name);
+-			log_error("Unable to read PV \"%s\"", pv_name);
+-			return 0;
+-		}
+ 	}
  
--LIBS += -ldevmapper -llvm-internal
-+LIBS += $(LVMINTERNAL_LIBS) -ldevmapper
+ 	if (arg_count(cmd, allocatable_ARG)) {
+@@ -201,7 +169,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 	log_print("Physical volume \"%s\" changed", pv_name);
+ 	r = 1;
+ out:
+-	unlock_and_release_vg(cmd, vg, vg_name);
+ 	return r;
  
- ifeq ("@DMEVENTD@", "yes")
-   LIBS += -ldevmapper-event
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 5b8476f..4b3ac17 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -36,6 +36,7 @@ CLDFLAGS += @CLDFLAGS@
- LDDEPS += @LDDEPS@
- LDFLAGS += @LDFLAGS@
- LIB_SUFFIX = @LIB_SUFFIX@
-+LVMINTERNAL_LIBS = -llvm-internal
+ }
+@@ -212,12 +179,12 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	int done = 0;
+ 	int total = 0;
  
- # Setup directory variables
- prefix = @prefix@
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 41c20db..efdf699 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -86,7 +86,7 @@ ifeq ("@STATIC_LINK@", "yes")
-   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
- endif
+-	struct physical_volume *pv;
+-	char *pv_name;
++	struct volume_group *vg;
++	const char *pv_name, *vg_name;
  
--LVMLIBS = -llvm-internal
-+LVMLIBS = $(LVMINTERNAL_LIBS)
- LIB_VERSION = $(LIB_VERSION_LVM)
+ 	struct pv_list *pvl;
+-	struct dm_list *pvslist;
+-	struct dm_list mdas;
++	struct dm_list *vgnames;
++	struct str_list *sll;
  
- CLEAN_TARGETS = liblvm2cmd.$(LIB_SUFFIX) liblvm2cmd.a liblvm2cmd-static.a lvm lvm.o \
+ 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
+ 	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
+@@ -240,47 +207,56 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 		log_verbose("Using physical volume(s) on command line");
+ 		for (; opt < argc; opt++) {
+ 			pv_name = argv[opt];
+-			dm_list_init(&mdas);
+-			if (!(pv = pv_read(cmd, pv_name, &mdas, NULL, 1, 0))) {
++			vg_name = find_vgname_from_pvname(cmd, pv_name);
++			if (!vg_name) {
+ 				log_error("Failed to read physical volume %s",
+ 					  pv_name);
+ 				continue;
+ 			}
+-			/*
+-			 * If a PV has no MDAs it may appear to be an
+-			 * orphan until the metadata is read off
+-			 * another PV in the same VG.  Detecting this
+-			 * means checking every VG by scanning every
+-			 * PV on the system.
+-			 */
+-			if (is_orphan(pv) && !dm_list_size(&mdas)) {
+-				if (!scan_vgs_for_pvs(cmd)) {
+-					log_error("Rescan for PVs without "
+-						  "metadata areas failed.");
+-					continue;
+-				}
+-				if (!(pv = pv_read(cmd, pv_name,
+-						   NULL, NULL, 1, 0))) {
+-					log_error("Failed to read "
+-						  "physical volume %s",
+-						  pv_name);
+-					continue;
+-				}
++			vg = vg_read_for_update(cmd, vg_name, NULL, 0);
++			if (vg_read_error(vg)) {
++				vg_release(vg);
++				stack;
++				continue;
++			}
++			pvl = find_pv_in_vg(vg, pv_name);
++			if (!pvl || !pvl->pv) {
++				log_error("Unable to find %s in %s",
++					  pv_name, vg_name);
++				continue;
+ 			}
+ 
+ 			total++;
+-			done += _pvchange_single(cmd, pv, NULL);
++			done += _pvchange_single(cmd, vg,
++						 pvl->pv, NULL);
++			/* FIXME: we should be using #orphans_lvm2 everwhere */
++			if (is_orphan_vg(vg->name))
++				vg_name = VG_ORPHANS;
++			unlock_and_release_vg(cmd, vg, vg_name);
+ 		}
+ 	} else {
+ 		log_verbose("Scanning for physical volume names");
+-		if (!(pvslist = get_pvs(cmd))) {
+-			stack;
+-			return ECMD_FAILED;
+-		}
+-
+-		dm_list_iterate_items(pvl, pvslist) {
+-			total++;
+-			done += _pvchange_single(cmd, pvl->pv, NULL);
++		/* FIXME: share code with toollib */
++		if ((vgnames = get_vgnames(cmd, 0, 1)) &&
++		    !dm_list_empty(vgnames)) {
++			dm_list_iterate_items(sll, vgnames) {
++				vg = vg_read_for_update(cmd, sll->str, NULL, 0);
++				if (vg_read_error(vg)) {
++					vg_release(vg);
++					stack;
++					continue;
++				}
++				dm_list_iterate_items(pvl, &vg->pvs) {
++					total++;
++					done += _pvchange_single(cmd, vg,
++								 pvl->pv,
++								 NULL);
++				}
++				/* FIXME: we should be using #orphans_lvm2 everwhere */
++				if (is_orphan_vg(vg->name))
++					vg_name = VG_ORPHANS;
++				unlock_and_release_vg(cmd, vg, vg_name);
++			}
+ 		}
+ 	}
+ 
 -- 
-1.7.0
+1.6.0.6
 
 
