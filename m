@@ -1,68 +1,93 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:47:06 +0100
-Subject: [PATCH 13/25] Replicator: lock_vol update replicator LV
+Date: Wed, 17 Mar 2010 14:47:07 +0100
+Subject: [PATCH 14/25] Replicator: extend activate with rsite resolving
 In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
 References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <ac7a5396d35dce68e3f7c57b5238196d9e20fead.1268833246.git.zkabelac@redhat.com>
+Message-ID: <bf0e9ee80949ea706c039a7f13e134f3fe433e3a.1268833246.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add LCK_MISSING_VG flag to sinal missing VG to _lock_vol function.
-This way we easily detect whether we still need to lock more VGs
-while having all data available - it would be ackware to resolve it
-from resource uuid string. In the case  missing VG is found,
-whole whole operation must be retried - this usually requires to
-release all locks, and take them again in the alphabetic order.
+Activation code needs to have all remote lv pointers resolved.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/locking/locking.c |    3 +++
- lib/locking/locking.h |    7 ++++++-
- 2 files changed, 9 insertions(+), 1 deletions(-)
+ lib/activate/activate.c |   22 ++++++++++++++++++----
+ 1 files changed, 18 insertions(+), 4 deletions(-)
 
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 76dbda5..57b7ba9 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -362,6 +362,9 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
- {
- 	int ret = 0;
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index eb94ac0..6c28c4f 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -854,6 +854,9 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		goto out;
+ 	}
  
-+	if (flags & LCK_MISSING_VG)
-+		return_0;
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
 +
- 	_block_signals(flags);
- 	_lock_memory(cmd, lv_op);
+ 	lv_calculate_readahead(lv, NULL);
  
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index e7f25b9..da442ec 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -86,6 +86,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- #define LCK_LOCAL	0x00000040U	/* Don't propagate to other nodes */
- #define LCK_CLUSTER_VG	0x00000080U	/* VG is clustered */
- #define LCK_CACHE	0x00000100U	/* Operation on cache only using P_ lock */
-+#define LCK_MISSING_VG	0x00000200U	/* 'Remote' VG misses lock for this LV */
+ 	/* If VG was precommitted, preload devices for the LV */
+@@ -883,9 +886,10 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ out:
+ 	if (lv_pre)
+ 		vg_release(lv_pre->vg);
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
+-
++	}
+ 	return r;
+ }
  
- /*
-  * Additional lock bits for cluster communication
-@@ -128,8 +129,12 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- #define LCK_LV_CLUSTERED(lv)	\
- 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
+@@ -1014,6 +1018,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 			goto_out;
+ 	}
  
-+#define LCK_CHECK_MISSING_VG(lv)	\
-+	(lv_replicator_sites_check_vg((lv)) ? 0 : LCK_MISSING_VG)
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
 +
- #define lock_lv_vol(cmd, lv, flags)	\
--	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
-+	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv) | \
-+		 LCK_CHECK_MISSING_VG(lv))
+ 	lv_calculate_readahead(lv, NULL);
  
- #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
- #define unlock_and_release_vg(cmd, vg, vol) \
+ 	if (!monitor_dev_for_events(cmd, lv, 0))
+@@ -1027,8 +1034,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	if (!lv_info(cmd, lv, &info, 1, 0) || info.exists)
+ 		r = 0;
+ out:
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
++	}
+ 
+ 	return r;
+ }
+@@ -1107,6 +1116,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 		goto out;
+ 	}
+ 
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
++
+ 	lv_calculate_readahead(lv, NULL);
+ 
+ 	if (exclusive)
+@@ -1122,8 +1134,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 		stack;
+ 
+ out:
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
++	}
+ 
+ 	return r;
+ }
 -- 
 1.7.0.1
 
