@@ -1,101 +1,104 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 Mar 2010 14:47:03 +0100
-Subject: [PATCH 10/25] Replicator: add read/release VG for rsites
+Date: Wed, 17 Mar 2010 14:47:04 +0100
+Subject: [PATCH 11/25] Replicator: use vg_name_list for _process_one_vg()
 In-Reply-To: <cover.1268833246.git.zkabelac@redhat.com>
 References: <cover.1268833246.git.zkabelac@redhat.com>
-Message-ID: <ff943e8f13986e09f475316f6a8e50905316a051.1268833246.git.zkabelac@redhat.com>
+Message-ID: <384e162515c8b750c75d8e4177a06270fecfe166.1268833246.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add function to read/release remote VGs from replicator sites
-in activation context.
+Patch modifes behavior of _process_one_vg().
+
+In the first pass the plain vg_read() for the given VG is used.
+Replicator collects sorted list of additional VGs during lock_vol.
+If any needed VG is not yet opened the next iteration loop is taken
+with collected VGs.
+
+Flag vg->missing_vgs detects missing VGs.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    2 +
- lib/metadata/replicator_manip.c  |   56 ++++++++++++++++++++++++++++++++++++++
- 2 files changed, 58 insertions(+), 0 deletions(-)
+ tools/toollib.c |   56 ++++++++++++++++++++++++++++++++----------------------
+ 1 files changed, 33 insertions(+), 23 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 3e1da12..cf73bf8 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -801,6 +801,8 @@ void vg_name_list_release(struct dm_list *vgs_list,
- 			  struct vg_name_list *vnl_vg);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 972d077..066fbfd 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -424,37 +424,47 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 						  struct volume_group * vg,
+ 						  void *handle))
+ {
+-	struct volume_group *vg;
++	struct dm_list vgs_list;
++	struct vg_name_list *vnl_vg;
+ 	int ret = 0;
  
- int lv_replicator_sites_check_vg(struct logical_volume *lv);
-+int lv_replicator_sites_read(struct logical_volume *lv);
-+void lv_replicator_sites_release(struct logical_volume *lv);
+ 	log_verbose("Finding volume group \"%s\"", vg_name);
  
- struct logical_volume *find_pvmove_lv(struct volume_group *vg,
- 				      struct device *dev, uint32_t lv_type);
-diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
-index d5e3cda..57e0346 100644
---- a/lib/metadata/replicator_manip.c
-+++ b/lib/metadata/replicator_manip.c
-@@ -518,3 +518,59 @@ int lv_replicator_sites_check_vg(struct logical_volume *lv)
- 
- 	return ret;
- }
+-	vg = vg_read(cmd, vg_name, vgid, flags);
+-	/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
+-	if (vg_read_error(vg) &&
+-	    !((vg_read_error(vg) == FAILED_INCONSISTENT) &&
+-	      (flags & READ_ALLOW_INCONSISTENT))) {
+-		ret_max = ECMD_FAILED;
+-		goto_out;
+-	}
++	dm_list_init(&vgs_list);
++	vnl_vg = vg_name_list_add(cmd->mem, &vgs_list, vg_name, vgid, flags);
++	if (!vnl_vg)
++		return_0;
 +
-+/**
-+ * Resolve all remote VGs from replicator sites
-+ * This function is used in activation context and needs all VGs already locked
-+ */
-+int lv_replicator_sites_read(struct logical_volume *lv)
-+{
-+	struct replicator_device *rdev;
-+	struct replicator_site *rsite;
-+	struct volume_group *vg;
-+
-+	if (!lv_is_replicator_dev(lv))
-+		return 1;
-+
-+	dm_list_iterate_items(rsite, &first_seg(lv)->replicator->rsites) {
-+		if (!rsite->vg_name)
-+			continue;
-+		vg = vg_read(lv->vg->cmd, rsite->vg_name, 0, 0); // READ_WITHOUT_LOCK
-+		if (vg_read_error(vg)) {
-+			log_error("Unable to read volume group %s",
-+				  rsite->vg_name);
-+			goto bad;
-+		}
-+		rsite->vg = vg;
-+		/* CHECKME: handling missing LVs needs to be better */
-+		dm_list_iterate_items(rdev, &rsite->rdevices)
-+			if (!(rdev->lv = find_lv(vg, rdev->name))) {
-+				log_error("Unable to find %s in volume group %s",
-+					  rdev->name, rsite->vg_name);
-+				goto bad;
++	while (!sigint_caught()) {
++		if (!vg_name_list_read(cmd, &vgs_list, vnl_vg))
++			/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
++			if (vg_read_error(vnl_vg->vg) &&
++			    (!((flags & READ_ALLOW_INCONSISTENT) &&
++			       (vg_read_error(vnl_vg->vg) == FAILED_INCONSISTENT)))) {
++				ret = ECMD_FAILED;
++				break;
 +			}
-+	}
 +
-+	return 1;
-+bad:
-+	lv_replicator_sites_release(lv);
-+	return 0;
-+}
++		if (!dm_list_empty(tags) &&
++		    /* Only process if a tag matches or it's on arg_vgnames */
++		    !str_list_match_item(arg_vgnames, vg_name) &&
++		    !str_list_match_list(tags, &vnl_vg->vg->tags))
++			break;
+ 
+-	if (!dm_list_empty(tags)) {
+-		/* Only process if a tag matches or it's on arg_vgnames */
+-		if (!str_list_match_item(arg_vgnames, vg_name) &&
+-		    !str_list_match_list(tags, &vg->tags))
+-			goto out;
++		ret = process_single(cmd, vg_name, vnl_vg->vg, handle);
 +
-+/**
-+ * Release all VG reources taken by replicator sites
-+ * This function is used in activation context and needs all VGs already locked
-+ */
-+void lv_replicator_sites_release(struct logical_volume *lv)
-+{
-+	struct replicator_site *rsite;
++		if (vg_read_error(vnl_vg->vg)) /* FAILED_INCONSISTENT */
++			break;
 +
-+	if (!lv_is_replicator_dev(lv))
-+		return;
++		if (!vnl_vg->vg->missing_vgs)
++			break;
 +
-+	dm_list_iterate_back_items(rsite, &first_seg(lv)->replicator->rsites)
-+		if (rsite->vg_name && rsite->vg) {
-+			vg_release(rsite->vg);
-+			rsite->vg = NULL;
-+		}
-+}
++		vg_name_list_release(&vgs_list, vnl_vg);
+ 	}
+ 
+-	if ((ret = process_single(cmd, vg_name, vg,
+-				  handle)) > ret_max)
+-		ret_max = ret;
++	vg_name_list_release(&vgs_list, vnl_vg);
+ 
+-out:
+-	if (vg_read_error(vg))
+-		vg_release(vg);
+-	else
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-	return ret_max;
++	return (ret > ret_max) ? ret : ret_max;
+ }
+ 
+ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
 -- 
 1.7.0.1
 
