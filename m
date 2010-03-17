@@ -1,36 +1,38 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 17 Mar 2010 12:50:48 -0400
-Subject: [PATCH 2/3] Add find_vgname_from_pvname() function using lvmcache functions.
-In-Reply-To: <1268841108-19327-3-git-send-email-dwysocha@redhat.com>
-References: <1268841108-19327-1-git-send-email-dwysocha@redhat.com>
-	<1268841108-19327-2-git-send-email-dwysocha@redhat.com>
-	<1268841108-19327-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1268844648.2476.1.camel@f10-node1>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 17 Mar 2010 17:02:02 -0000
+Subject: LVM2/test t-pvchange-usage.sh
+Message-ID: <20100317170202.25416.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2010-03-17 at 11:51 -0400, Dave Wysochanski wrote:
-> +char *find_vgname_from_pvname(struct cmd_context *cmd, const char
-> *pvname)
-> +{
-> +       char *vgname;
-> +       struct lvmcache_info *info;
-> +
-> +       /*
-> +        * Initially, all we have is a pv name - we don't know the VG
-> name.
-> +        * Try to look the name up in lvmcache.
-> +        */
-> +       lvmcache_label_scan(cmd, 0);
-> +       vgname = lvmcache_vgname_from_pvname(cmd, pvname);
-> +
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-03-17 17:02:01
 
-Actually the lvmcache_label_scan() should not be necessary here.
+Modified files:
+	test           : t-pvchange-usage.sh 
 
-We read the label for the device later and the expensive scans if
-necessary (orphan and no mdas).
+Log message:
+	Add pvchange -u --all to testsuite.
+	
+	This can be an interesting test case when using PVs with --metadatacopies 0.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvchange-usage.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+
+--- LVM2/test/t-pvchange-usage.sh	2008/10/06 16:47:07	1.3
++++ LVM2/test/t-pvchange-usage.sh	2010/03/17 17:02:01	1.4
+@@ -46,6 +46,8 @@
+ pvchange -u $dev1 
+ pvchange -u $dev2 
+ vg_validate_pvlv_counts_ $vg1 2 0 0
++pvchange -u --all
++vg_validate_pvlv_counts_ $vg1 2 0 0
+ 
+ # "pvchange rejects uuid change under an active lv" 
+ lvcreate -l 16 -i 2 -n $lv --alloc anywhere $vg1 
 
 
