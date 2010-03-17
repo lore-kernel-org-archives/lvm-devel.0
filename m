@@ -1,10 +1,10 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 17 Mar 2010 11:07:04 +0100
-Subject: [PATCH] testsuite: get stacktrace if test drops core
-In-Reply-To: <20100316204454.GA25921@redhat.com> (Mike Snitzer's message of
-	"Tue, 16 Mar 2010 16:44:54 -0400")
-References: <20100316204454.GA25921@redhat.com>
-Message-ID: <87vdcv8do7.fsf@twilight.int.mornfall.net.>
+Date: Wed, 17 Mar 2010 11:17:12 +0100
+Subject: [PATCH] Avoid scanning all pvs in the system if pvcreating on a device with mdas.
+In-Reply-To: <1268778829-18908-1-git-send-email-dwysocha@redhat.com> (Dave
+	Wysochanski's message of "Tue, 16 Mar 2010 18:33:49 -0400")
+References: <1268778829-18908-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <87r5nj8d7b.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,42 +13,52 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-Mike Snitzer <snitzer@redhat.com> writes:
-> Requires lvm be built with debugging (-g).
-> Also requires ulimit -c be non-zero (to drop core file).
->
-> diff --git a/test/test-utils.sh b/test/test-utils.sh
-> index 6606c56..06b9636 100644
-> --- a/test/test-utils.sh
-> +++ b/test/test-utils.sh
-> @@ -24,6 +24,21 @@ STACKTRACE() {
->  		echo "$i ${FUNC}() called from ${BASH_SOURCE[$i]}:${BASH_LINENO[$i]}"
->  		i=$(($i + 1));
->  	done
-> +
-> +	# Attempt to get a stacktrace if a core file exists
-> +	# and the lvm binary was built with debugging
-> +	TEST_LVM_BINARY=$(dirname $(which lvm))/../../tools/lvm
-> +	TEST_LVM_CORE=`ls core* | head -1`
-> +	GDB_BINARY=`which gdb`
-> +	READELF_BINARY=`which readelf`
-> +	if [ -n "$TEST_LVM_CORE" -a -n "$GDB_BINARY" -a -n "$READELF_BINARY" ]; then
-> +		if $READELF_BINARY -S $TEST_LVM_BINARY 2>&1 | grep -q .debug_info; then
-> +			echo bt > gdb_commands.txt
-> +			echo l >> gdb_commands.txt
-> +			echo quit >> gdb_commands.txt
-> +			$GDB_BINARY -batch -c $TEST_LVM_CORE -x gdb_commands.txt $TEST_LVM_BINARY
-> +		fi
-> +	fi
->  }
->  
->  init_udev_transaction() {
-Looks good to me. Maybe change "bt" to "bt full"? That would also list
-local variables on the stack, so more useful data. (Maybe even make it
-"thread apply all bt full", although we don't currently use threads here
-and we don't handle dmeventd coredumps either... maybe later.)
+Dave Wysochanski <dwysocha@redhat.com> writes:
+> Other areas of the code check whether there are mdas on an orphan pv before
+> doing the expensive scan of the system.  This patch adds this check to pvcreate
+> as well, and so will avoid the unnecessary scan if pvcreate on a device that
+> is an orphan PV.
+Looks OK to me. As far as I can tell, it should never happen that the
+metadata is out-of-date and we overwrite a non-orphan PV mistakenly.
 
-Otherwise, ACK.
+This would require that the metadata on the PV claim this is an orphan
+but a newer copy of the metadata elsewhere claims this is part of a
+VG. That would mean that vgextend (or similar) failed to update the
+metadata on the new PV, which would presumably lead to overall vgextend
+failure and no new metadata on the pre-existing PVs either. So this
+should be safe.
+
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index 2cab0b6..fff7a61 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
+> @@ -1254,11 +1254,14 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+>  	struct device *dev;
+>  	uint64_t md_superblock, swap_signature;
+>  	int wipe_md, wipe_swap;
+> +	struct dm_list mdas;
+> +
+> +	dm_list_init(&mdas);
+>  
+>  	/* FIXME Check partition type is LVM unless --force is given */
+>  
+>  	/* Is there a pv here already? */
+> -	pv = pv_read(cmd, name, NULL, NULL, 0, 0);
+> +	pv = pv_read(cmd, name, &mdas, NULL, 0, 0);
+>  
+>  	/*
+>  	 * If a PV has no MDAs it may appear to be an orphan until the
+> @@ -1266,7 +1269,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+>  	 * this means checking every VG by scanning every PV on the
+>  	 * system.
+>  	 */
+> -	if (pv && is_orphan(pv)) {
+> +	if (pv && is_orphan(pv) && !dm_list_size(&mdas)) {
+>  		if (!scan_vgs_for_pvs(cmd))
+>  			return_0;
+>  		pv = pv_read(cmd, name, NULL, NULL, 0, 0);
+
+ACK.
 
 Yours,
    Petr.
