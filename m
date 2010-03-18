@@ -1,104 +1,40 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 18 Mar 2010 15:54:49 -0500
-Subject: [PATCH 12 of 12] LVM: testsuite additions for mirrored log
-Message-ID: <201003182054.o2IKsni1025189@hydrogen.msp.redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Thu, 18 Mar 2010 19:23:13 -0400 (EDT)
+Subject: [PATCH] dmeventd: don't kill the parent if not forking
+Message-ID: <Pine.LNX.4.64.1003181921450.25153@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-testsuite-additions-for-mirrored-log.patch
+Don't kill the parent if debugging and not forking.
 
-Testsuite additions for 'mirrored' log type.
+If dmeventd runs with -d flag, it doesn't fork into backgroud.
+The command kill(getppid(), SIGTERM) attempts to kill the parent dmeventd
+process, however, if there is no parent, it kills whatever process spawned
+dmeventd. In case of debugging with gdb, the parent is gdb, thus
+kill(getppid(), SIGTERM) kills the debugger.
 
-Index: LVM2/test/t-snapshots-of-mirrors.sh
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+
+---
+ daemons/dmeventd/dmeventd.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+Index: LVM2/daemons/dmeventd/dmeventd.c
 ===================================================================
---- LVM2.orig/test/t-snapshots-of-mirrors.sh
-+++ LVM2/test/t-snapshots-of-mirrors.sh
-@@ -21,11 +21,11 @@ not lvconvert -m2 $vg/lv
- # Log conversion (disk -> core)
- lvconvert --mirrorlog core $vg/lv
+--- LVM2.orig/daemons/dmeventd/dmeventd.c	2010-03-19 00:12:00.000000000 +0100
++++ LVM2/daemons/dmeventd/dmeventd.c	2010-03-19 00:13:15.000000000 +0100
+@@ -1734,7 +1734,8 @@ int main(int argc, char *argv[])
+ 		exit(EXIT_FIFO_FAILURE);
  
--# Log conversion (core -> redundant)
--not lvconvert --mirrorlog redundant $vg/lv
-+# Log conversion (core -> mirrored)
-+lvconvert --mirrorlog mirrored $vg/lv
+ 	/* Signal parent, letting them know we are ready to go. */
+-	kill(getppid(), SIGTERM);
++	if (!_debug)
++		kill(getppid(), SIGTERM);
+ 	syslog(LOG_NOTICE, "dmeventd ready for processing.");
  
--# Log conversion (redundant -> core)
--# lvconvert --mirrorlog core $vg/lv
-+# Log conversion (mirrored -> core)
-+lvconvert --mirrorlog core $vg/lv
- 
- # Log conversion (core -> disk)
- lvconvert --mirrorlog disk $vg/lv
-Index: LVM2/test/t-mirror-lvconvert.sh
-===================================================================
---- LVM2.orig/test/t-mirror-lvconvert.sh
-+++ LVM2/test/t-mirror-lvconvert.sh
-@@ -252,6 +252,38 @@ mirrorlog_is_on_ $vg/$lv1 $dev3 
- check_and_cleanup_lvs_
- 
- # ---
-+# core log to mirrored log
-+
-+# change the log type from 'core' to 'mirrored'
-+prepare_lvs_
-+lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
-+check_mirror_count_ $vg/$lv1 2
-+not_sh check_mirror_log_ $vg/$lv1
-+lvconvert --mirrorlog mirrored -i1 $vg/$lv1 $dev3 $dev4
-+check_no_tmplvs_ $vg/$lv1
-+check_mirror_log_ $vg/$lv1
-+mimages_are_redundant_ $vg $lv1
-+
-+# ---
-+# mirrored log to core log
-+
-+# change the log type from 'mirrored' to 'core'
-+lvconvert --mirrorlog core -i1 $vg/$lv1 $dev3 $dev4
-+check_no_tmplvs_ $vg/$lv1
-+not_sh check_mirror_log_ $vg/$lv1
-+mimages_are_redundant_ $vg $lv1
-+check_and_cleanup_lvs_
-+
-+# ---
-+# Linear to mirror with mirrored log using --alloc anywhere
-+prepare_lvs_
-+lvcreate -l2 -n $lv1 $vg $dev1
-+lvconvert -m +1 --mirrorlog mirrored $vg/$lv1 $dev1 $dev2 --alloc anywhere
-+mimages_are_redundant_ $vg $lv1
-+check_and_cleanup_lvs_
-+
-+
-+# ---
- # check polldaemon restarts
- 
- # convert inactive mirror and start polling
-Index: LVM2/test/t-lvcreate-operation.sh
-===================================================================
---- LVM2.orig/test/t-lvcreate-operation.sh
-+++ LVM2/test/t-lvcreate-operation.sh
-@@ -25,9 +25,18 @@ aux prepare_pvs 2
- aux pvcreate --metadatacopies 0 $dev1
- aux vgcreate -c n $vg $devs
- 
--#COMM create snapshots of LVs on --metadatacopies 0 PV (bz450651)
-+# ---
-+# Create snapshots of LVs on --metadatacopies 0 PV (bz450651)
- lvcreate -n$lv1 -l4 $vg $dev1
- lvcreate -n$lv2 -l4 -s $vg/$lv1
--#lvremove -f $vg/$lv2
- cleanup_lvs
- 
-+# ---
-+# Create mirror on two devices with mirrored log using --alloc anywhere
-+lvcreate -m 1 -l4 -n $lv1 --mirrorlog mirrored $vg --alloc anywhere $dev1 $dev2
-+cleanup_lvs
-+
-+# --
-+# Create mirror on one dev with mirrored log using --alloc anywhere, should fail
-+lvcreate -m 1 -l4 -n $lv1 --mirrorlog mirrored $vg --alloc anywhere $dev1
-+cleanup_lvs
+ 	while (!_exit_now) {
 
 
