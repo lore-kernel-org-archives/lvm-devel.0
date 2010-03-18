@@ -1,28 +1,40 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 18 Mar 2010 00:47:46 +0000
-Subject: [PATCH] Avoid scanning all pvs in the system if operating on a device with mdas.
-In-Reply-To: <1268848742-27785-1-git-send-email-dwysocha@redhat.com>
-References: <1268847147.2476.2.camel@f10-node1>
-	<1268848742-27785-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20100318004746.GC17615@agk-dp.fab.redhat.com>
+Date: Thu, 18 Mar 2010 01:05:10 +0000
+Subject: [PATCH] Avoid scanning all pvs in the system if pvcreating on a device with mdas.
+In-Reply-To: <87r5nj8d7b.fsf@twilight.int.mornfall.net.>
+References: <1268778829-18908-1-git-send-email-dwysocha@redhat.com>
+	<87r5nj8d7b.fsf@twilight.int.mornfall.net.>
+Message-ID: <20100318010510.GD17615@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Mar 17, 2010 at 01:59:02PM -0400, Dave Wysochanski wrote:
-> When we pv_read() a device that has an orphan vgname, we might need to scan
-> the system to be sure this is true.  However, if the PV has mdas, there's
-> no way possible for it to have an orphan vgname unless it is a true orphan.
-> Some areas of the code were optimized to take advantage of this fact, while
-> others were not (we would still do the expensive scan if a device had mdas
-> but had an orphan VG).
-> This patch unifies the code so that every place we are operating on such
-> a PV, we skip the expensive scan if there are mdas.
+On Wed, Mar 17, 2010 at 11:17:12AM +0100, Peter Rockai wrote:
+> Looks OK to me. As far as I can tell, it should never happen that the
+> metadata is out-of-date and we overwrite a non-orphan PV mistakenly.
+> This would require that the metadata on the PV claim this is an orphan
+> but a newer copy of the metadata elsewhere claims this is part of a
+> VG. That would mean that vgextend (or similar) failed to update the
+> metadata on the new PV, which would presumably lead to overall vgextend
+> failure and no new metadata on the pre-existing PVs either. So this
+> should be safe.
  
-Makes sense.
-Ack.
+There is actually a failure mode when this can happen.
+The VG metadata is considered committed when the *first* vg_commit
+occurs.  If the process dies at that point, the next vg_read of the VG
+does automatic recovery which completes writing the correct VG metadata
+to the remaining devices including the newly-added one.
+
+So the optimisation in this patch assumes that if a process doing a
+vgextend died at exactly the wrong point, there would be a vg_read
+before this pv* code.  With a reboot or any sort of display command
+a sysadmin would want to run after failure to check the state of
+the system, this would happen.
+
+So I'm not particularly concerned about that failure mode, and the logic
+may change anyway when mdas are allowed to be empty.
 
 Alasdair
 
