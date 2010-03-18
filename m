@@ -1,51 +1,35 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 31 Mar 2010 16:05:08 +0200
-Subject: [PATCH] Always use blocking lock for VGs and orphan locks.
-Message-ID: <1270044308-30885-1-git-send-email-mbroz@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 18 Mar 2010 15:54:28 -0500
+Subject: [PATCH 10 of 12] LVM: mirrored log monitor fixes
+Message-ID: <201003182054.o2IKsSHF025041@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Because we have now strong rule for lock ordering:
- - VG locks must be taken in alphabetical order
- - ORPHAN locks must be the last
-vgs_locked() is now not needed.
+Patch name: lvm-mirrored-log-monitor-fixes.patch
 
-This fixes problem with orphan locking, e.g.
-vgremove VG1    |    vgremove VG2
-lock(VG1)       |    lock(VG2)
-lock(ORPHAN)    |    lock(ORPHAN) -> fail, non-blocking
+If an event is received on a mirrored LV which also happens to
+be the log of a mirror, strip off the '_mlog' component extension
+of the name and pass the encapsulating LV to 'lvconvert --repair'.
 
-https://bugzilla.redhat.com/show_bug.cgi?id=578413
 
-(More similar places in code.)
-
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/locking/locking.c |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
-
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 76dbda5..cf0d3ae 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -420,11 +420,9 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags)
- 	switch (flags & LCK_SCOPE_MASK) {
- 	case LCK_VG:
- 		/*
--		 * Automatically set LCK_NONBLOCK if one or more VGs locked.
--		 * This will enforce correctness and prevent deadlocks rather
--		 * than relying on the caller to set the flag properly.
-+		 * VG locks alphabetical, ORPHAN lock last
- 		 */
--		if (!_blocking_supported || vgs_locked())
-+		if (!_blocking_supported)
- 			flags |= LCK_NONBLOCK;
+Index: LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+===================================================================
+--- LVM2.orig/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -148,6 +148,11 @@ static int _remove_failed_devices(const 
+ 		return -ENOMEM;	/* FIXME Replace with generic error return - reason for failure has already got logged */
+ 	}
  
- 		if (vol[0] != '#' &&
--- 
-1.7.0.3
++	/* strip off the mirror component designations */
++	layer = strstr(lv, "_mlog");
++	if (layer)
++		*layer = '\0';
++
+ 	/* FIXME Is any sanity-checking required on %s? */
+ 	if (CMD_SIZE <= snprintf(cmd_str, CMD_SIZE, "lvconvert --config devices{ignore_suspended_devices=1} --repair --use-policies %s/%s", vg, lv)) {
+ 		/* this error should be caught above, but doesn't hurt to check again */
 
 
