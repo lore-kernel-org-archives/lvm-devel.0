@@ -1,94 +1,49 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 30 Mar 2010 17:17:16 +0200
-Subject: [PATCH 15/22] Replicator: extend activate with rsite resolving
-In-Reply-To: <cover.1269961680.git.zkabelac@redhat.com>
-References: <cover.1269961680.git.zkabelac@redhat.com>
-Message-ID: <8784465d4b72050ac9145ac677e479364a3ee06e.1269961680.git.zkabelac@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 18 Mar 2010 15:54:08 -0500
+Subject: [PATCH 8 of 12] LVM: monitor mirrored logs
+Message-ID: <201003182054.o2IKs8hs024895@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Activation code needs to have all remote lv pointers resolved.
+Patch name: lvm-monitor-mirrored-logs.patch
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/activate/activate.c |   22 ++++++++++++++++++----
- 1 files changed, 18 insertions(+), 4 deletions(-)
+Log volume of a mirror can also be a mirror with the following patchset.
+http://thread.gmane.org/gmane.linux.kernel.device-mapper.devel/10232
+If so, monitor such log volumes.
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 1844cea..8224be0 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -865,6 +865,9 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 		goto out;
+Signed-off-by: Malahal Naineni (malahal at us.ibm.com)
+
+Index: LVM2/lib/activate/activate.c
+===================================================================
+--- LVM2.orig/lib/activate/activate.c
++++ LVM2/lib/activate/activate.c
+@@ -703,6 +703,7 @@ int monitor_dev_for_events(struct cmd_co
+ 	int r = 1;
+ 	struct dm_list *tmp, *snh, *snht;
+ 	struct lv_segment *seg;
++	struct lv_segment *log_seg;
+ 	int (*monitor_fn) (struct lv_segment *s, int e);
+ 	uint32_t s;
+ 
+@@ -738,6 +739,16 @@ int monitor_dev_for_events(struct cmd_co
+ 		return r;
  	}
  
-+	if (!lv_replicator_sites_read(lv))
-+		goto_out;
++	/*
++	 * If the volume is mirrored and its log is also mirrored, monitor
++	 * the log volume as well.
++	 */
++	if ((seg = first_seg(lv)) != NULL && seg->log_lv != NULL &&
++	    (log_seg = first_seg(seg->log_lv)) != NULL &&
++	    seg_is_mirrored(log_seg))
++		if (!monitor_dev_for_events(cmd, seg->log_lv, monitor))
++			r = 0;
 +
- 	lv_calculate_readahead(lv, NULL);
+ 	dm_list_iterate(tmp, &lv->segments) {
+ 		seg = dm_list_item(tmp, struct lv_segment);
  
- 	/* If VG was precommitted, preload devices for the LV */
-@@ -894,9 +897,10 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- out:
- 	if (lv_pre)
- 		vg_release(lv_pre->vg);
--	if (lv)
-+	if (lv) {
-+		lv_replicator_sites_release(lv);
- 		vg_release(lv->vg);
--
-+	}
- 	return r;
- }
- 
-@@ -1025,6 +1029,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 			goto_out;
- 	}
- 
-+	if (!lv_replicator_sites_read(lv))
-+		goto_out;
-+
- 	lv_calculate_readahead(lv, NULL);
- 
- 	if (!monitor_dev_for_events(cmd, lv, 0))
-@@ -1038,8 +1045,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 	if (!lv_info(cmd, lv, &info, 1, 0) || info.exists)
- 		r = 0;
- out:
--	if (lv)
-+	if (lv) {
-+		lv_replicator_sites_release(lv);
- 		vg_release(lv->vg);
-+	}
- 
- 	return r;
- }
-@@ -1118,6 +1127,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 		goto out;
- 	}
- 
-+	if (!lv_replicator_sites_read(lv))
-+		goto_out;
-+
- 	lv_calculate_readahead(lv, NULL);
- 
- 	if (exclusive)
-@@ -1133,8 +1145,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 		stack;
- 
- out:
--	if (lv)
-+	if (lv) {
-+		lv_replicator_sites_release(lv);
- 		vg_release(lv->vg);
-+	}
- 
- 	return r;
- }
--- 
-1.7.0.1
 
 
