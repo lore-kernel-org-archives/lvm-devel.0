@@ -1,47 +1,87 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Mar 2010 18:33:56 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/libdevmapper ...
-Message-ID: <20100319183356.30453.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 19 Mar 2010 15:39:08 -0400
+Subject: lv-shared
+In-Reply-To: <20100315220136.GA3461@redhat.com>
+References: <Pine.LNX.4.64.1003151453350.4733@hs20-bc2-1.build.redhat.com>
+	<20100315192925.GA29389@redhat.com>
+	<Pine.LNX.4.64.1003151600470.17728@hs20-bc2-1.build.redhat.com>
+	<20100315220136.GA3461@redhat.com>
+Message-ID: <20100319193908.GB7345@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-19 18:33:55
+On Mon, Mar 15 2010 at  6:01pm -0400,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/dmeventd: libdevmapper-event.pc.in 
+> On Mon, Mar 15 2010 at  4:06pm -0400,
+> Mikulas Patocka <mpatocka@redhat.com> wrote:
+> 
+> > On Mon, 15 Mar 2010, Mike Snitzer wrote:
+> > 
+> > > On Mon, Mar 15 2010 at  3:00pm -0400,
+> > > Mikulas Patocka <mpatocka@redhat.com> wrote:
+> > > 
+> > > > Hi
+> > > > 
+> > > > Why did you hide the "lv-shared" volume? With this hidden, the size and 
+> > > > percentage can't be seen.
+> > > 
+> > > You can still see it with: lvs -a
+> > > 
+> > > I'll have to revisit why I made it hidden (aside from the fact that the
+> > > associated DM device is also hidden).  There was some subtle reason that
+> > > had to do with the refactoring of associations when I eliminated the
+> > > distinct ->shared_snapshot pointer (otherwise the vg_validate() method
+> > > would fail).
+> > 
+> > I know it can be seen with lvs -a, but I think it's inconvenient for the 
+> > admin:
+> > - the admin won't see that there is a shared store taking up space
+> > - the admin won't see that the origin is a shared snapshot, he sees 'o', 
+> > but nothing that refers to that 'o'
+> > - the percentage usage of the shared snapshot is hidden
+> > 
+> > I think this information is important and should be displayed with plain 
+> > "lvs" command without any flags. (for example, the percentage usage is 
+> > critical, because it can overflow) --- so "lv-shared" shouldn't be hidden.
+> 
+> Sure, not a problem.
+> 
+> I've updated the relevant patch, see:
+> http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.62/lvm-shared-eliminate-shared_snapshot-in-lv.patch
+> 
+> The lib/metadata/metadata.c:snapshot_count() changes in this updated
+> patch address the vg_validate() issue I was seeing.  The -shared cow was
+> considered to be a normal "snapshot"; as such the vg_validate() checks
+> failed.
 
-Log message:
-	Fix libdevmapper-event pkgconfig version string to match libdevmapper.
+Mikulas,
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1470&r2=1.1471
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.pc.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+I've cleaned up my patches that layer on your a bit, and updated to
+2.02.63:
+http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.63/
 
---- LVM2/WHATS_NEW	2010/03/18 17:32:25	1.1470
-+++ LVM2/WHATS_NEW	2010/03/19 18:33:55	1.1471
-@@ -1,5 +1,6 @@
- Version 2.02.63 - 
- ================================
-+  Fix libdevmapper-event pkgconfig version string to match libdevmapper.
-   Avoid scanning all pvs in the system if operating on a device with mdas.
-   Add configure --with-clvmd=singlenode to use clvmd w/o cluster infrastructure.
-   Get stacktrace if testsuite test drops core and lvm was built with debugging.
---- LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2006/04/19 15:23:10	1.1
-+++ LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2010/03/19 18:33:55	1.2
-@@ -5,7 +5,7 @@
- 
- Name: devmapper-event
- Description: device-mapper event library
--Version: @DM_LIB_VERSION@
-+Version: @DM_LIB_PATCHLEVEL@
- Requires: devmapper
- Cflags: -I${includedir}
- Libs: -L${libdir} -ldevmapper-event
+This patch saw some changes becuase I moved some functions around:
+http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.63/lvm-shared-additional-wrappers.patch
+
+One fix associated with the changes is detailed at the end of the
+following patch's header:
+http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.63/lvm-shared-eliminate-shared_snapshot-in-lv.patch
+
+And I implemented the ACCESS_HIDDEN_LV flag we talked about with this
+patch:
+http://people.redhat.com/msnitzer/patches/multisnap/lvm2/LVM2-2.02.63/lvm-shared-add-ACCESS_HIDDEN_LV-flag.patch
+
+With the result being:
+# lvs
+  LV               VG   Attr   LSize Origin  Snap%  Move Log Copy%  Convert
+  testlv1          test owi-a- 4.00g                                       
+  [testlv1-shared] test swi--- 1.00g testlv1   0.01                        
+  testlv1_snap     test swi-a- 4.00g testlv1                
+
+Mike
 
 
