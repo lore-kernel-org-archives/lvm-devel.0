@@ -1,58 +1,47 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Thu, 18 Mar 2010 19:53:37 -0400 (EDT)
-Subject: [PAYCH] Don't allow resizing of internal logical volumes
-Message-ID: <Pine.LNX.4.64.1003181950140.29893@hs20-bc2-1.build.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 19 Mar 2010 18:33:56 -0000
+Subject: LVM2 ./WHATS_NEW daemons/dmeventd/libdevmapper ...
+Message-ID: <20100319183356.30453.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-03-19 18:33:55
 
-This patch prevents resizing of internal volumes.
+Modified files:
+	.              : WHATS_NEW 
+	daemons/dmeventd: libdevmapper-event.pc.in 
 
-BTW.: do you think that *-shared should be treated as a reseved logical 
-volume name?
-It is really the internal volume name, but the potential problem with it 
-is that there may be some systems with existing names *-shared, and 
-reserving the name breaks those systems.
+Log message:
+	Fix libdevmapper-event pkgconfig version string to match libdevmapper.
 
-Mikulas
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1470&r2=1.1471
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.pc.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
----
-
-Don't allow resizing of internal logical volumes.
-
-This patch prevents lvresize from being able to resize internal LVs: mirror
-legs (*_mimage_*), mirror log (*_mlog), snapshot placeholder LVs (snapshot*)
-and others. Resizing these would leads to unexpected metadata and sometimes
-crashes (in case of growing snapshot*).
-
-Note that test for VISIBLE_LV is not sufficient because snapshot0 volumes
-have the VISIBLE_LV flag set. So we test the name instead of the flags.
-
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-
----
- tools/lvresize.c |    5 +++++
- 1 file changed, 5 insertions(+)
-
-Index: LVM2/tools/lvresize.c
-===================================================================
---- LVM2.orig/tools/lvresize.c	2010-03-19 00:25:31.000000000 +0100
-+++ LVM2/tools/lvresize.c	2010-03-19 00:44:52.000000000 +0100
-@@ -323,6 +323,11 @@ static int _lvresize(struct cmd_context 
+--- LVM2/WHATS_NEW	2010/03/18 17:32:25	1.1470
++++ LVM2/WHATS_NEW	2010/03/19 18:33:55	1.1471
+@@ -1,5 +1,6 @@
+ Version 2.02.63 - 
+ ================================
++  Fix libdevmapper-event pkgconfig version string to match libdevmapper.
+   Avoid scanning all pvs in the system if operating on a device with mdas.
+   Add configure --with-clvmd=singlenode to use clvmd w/o cluster infrastructure.
+   Get stacktrace if testsuite test drops core and lvm was built with debugging.
+--- LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2006/04/19 15:23:10	1.1
++++ LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2010/03/19 18:33:55	1.2
+@@ -5,7 +5,7 @@
  
- 	lv = lvl->lv;
- 
-+	if (is_reserved_lvname(lv->name)) {
-+		log_error("Can't resize internal logical volume %s", lv->name);
-+		return ECMD_FAILED;
-+	}
-+
- 	if (lv->status & LOCKED) {
- 		log_error("Can't resize locked LV %s", lv->name);
- 		return ECMD_FAILED;
+ Name: devmapper-event
+ Description: device-mapper event library
+-Version: @DM_LIB_VERSION@
++Version: @DM_LIB_PATCHLEVEL@
+ Requires: devmapper
+ Cflags: -I${includedir}
+ Libs: -L${libdir} -ldevmapper-event
 
 
