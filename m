@@ -1,58 +1,55 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 19 Mar 2010 22:04:46 -0400
-Subject: Don't allow resizing of internal logical volumes
-In-Reply-To: <20100319234417.GB31274@redhat.com>
-References: <Pine.LNX.4.64.1003181950140.29893@hs20-bc2-1.build.redhat.com>
-	<20100319200807.GC7345@redhat.com>
-	<Pine.LNX.4.64.1003191823570.7833@hs20-bc2-1.build.redhat.com>
-	<20100319234417.GB31274@redhat.com>
-Message-ID: <20100320020445.GA13275@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 20 Mar 2010 03:44:04 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvresize.c
+Message-ID: <20100320034404.3220.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Mar 19 2010 at  7:44pm -0400,
-Mike Snitzer <snitzer@redhat.com> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-03-20 03:44:04
 
-> On Fri, Mar 19 2010 at  6:27pm -0400,
-> Mikulas Patocka <mpatocka@redhat.com> wrote:
-> 
-> > OK. It is cleaner than my patch that checks the name, so commit it (except 
-> > !lv_is_accessible_hidden(lv), because that has to wait until we commit 
-> > shared snapshots).
-> > 
-> > I tested it and it refuses "snapshotX" volumes.
-> 
-> But as you said above: "snapshot0 volumes have the VISIBLE_LV flag set."
-> 
-> That said, I do see that in practice the existing lvm2 code does reject
-> resizing "snapshot" type snapshot0 using !lv_is_visible(lv).  I'll have
-> a closer look to understand that.
+Modified files:
+	.              : WHATS_NEW 
+	tools          : lvresize.c 
 
-lv_is_visible() prevents resize on "snapshot" type snapshot0 because of
-this out: (lv->status & SNAPSHOT)
+Log message:
+	Don't allow resizing of internal logical volumes.
+	
+	Prevent lvresize from being able to resize internal LVs: mirror legs
+	(*_mimage_*), mirror log (*_mlog), snapshot placeholder LVs (snapshot*)
+	and others.  Resizing these would leads to unexpected metadata and
+	sometimes crashes (in case of growing snapshot*).
 
-As you suggested, I'll commit the lv_is_visible() change to tools/lvresize.c
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1471&r2=1.1472
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.119&r2=1.120
 
-> But when I tried it with the "multisnapshot" type snapshot0 (w/
-> multisnap enabled LVM2 2.02.63 from my people page + the above patch)
-> lvresize allowed it and then crashed in _setup_alloced_segment():
-
-I've added the same out in lv_is_accessible_hidden() and this prevents
-the "multisnapshot" type snapshot0 from being resized:
-
-int lv_is_accessible_hidden(const struct logical_volume *lv)
-{
-        if (lv->status & SNAPSHOT)
-                return 0;
-
-        if (lv_is_cow(lv))
-                return (find_cow(lv)->lv->status & ACCESS_HIDDEN_LV) ? 1 : 0;
-
-        return (lv->status & ACCESS_HIDDEN_LV) ? 1 : 0;
-}
-
+--- LVM2/WHATS_NEW	2010/03/19 18:33:55	1.1471
++++ LVM2/WHATS_NEW	2010/03/20 03:44:04	1.1472
+@@ -1,5 +1,6 @@
+ Version 2.02.63 - 
+ ================================
++  Don't allow resizing of internal logical volumes.
+   Fix libdevmapper-event pkgconfig version string to match libdevmapper.
+   Avoid scanning all pvs in the system if operating on a device with mdas.
+   Add configure --with-clvmd=singlenode to use clvmd w/o cluster infrastructure.
+--- LVM2/tools/lvresize.c	2010/02/03 03:58:08	1.119
++++ LVM2/tools/lvresize.c	2010/03/20 03:44:04	1.120
+@@ -323,6 +323,11 @@
+ 
+ 	lv = lvl->lv;
+ 
++	if (!lv_is_visible(lv)) {
++		log_error("Can't resize internal logical volume %s", lv->name);
++		return ECMD_FAILED;
++	}
++
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't resize locked LV %s", lv->name);
+ 		return ECMD_FAILED;
 
 
