@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 23 Mar 2010 14:35:10 -0000
-Subject: LVM2/daemons/clvmd clvmd-comms.h
-Message-ID: <20100323143510.31787.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 23 Mar 2010 14:38:38 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c ...
+Message-ID: <20100323143838.1204.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,143 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-23 14:35:09
+Changes by:	prajnoha at sourceware.org	2010-03-23 14:38:38
 
 Modified files:
-	daemons/clvmd  : clvmd-comms.h 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
+	libdm/misc     : dm-ioctl.h 
 
 Log message:
-	Avoid duplicate definitions.
+	Add support for ioctl's DM_UEVENT_GENERATED_FLAG.
+	
+	We need to know whether we should wait for any uevent or not when
+	using udev_sync. A kernel patch was posted recently that changed the
+	way uevents are sent on dm device resume - it is sent only if the
+	device has been suspended before. There's also a new DM_UEVENT_GENERATED_FLAG
+	in the ioctl to notify userspace whether the event was generated.
+	
+	If the uevent was not generated (e.g. the situation where the device is
+	*not* suspended and we call a resume), we just call dm_udev_complete
+	explicitly from within libdevmapper itself to prevent infinite waiting
+	while trying to synchronise with udev processing.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-comms.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.350&r2=1.351
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/misc/dm-ioctl.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/daemons/clvmd/clvmd-comms.h	2010/03/18 09:19:31	1.11
-+++ LVM2/daemons/clvmd/clvmd-comms.h	2010/03/23 14:35:08	1.12
-@@ -112,9 +112,13 @@
+--- LVM2/WHATS_NEW_DM	2010/03/09 14:01:47	1.350
++++ LVM2/WHATS_NEW_DM	2010/03/23 14:38:37	1.351
+@@ -1,5 +1,6 @@
+ Version 1.02.46 - 
+ ================================
++  Add support for ioctl's DM_UEVENT_GENERATED_FLAG.
  
- #ifdef USE_SINGLENODE
- #  define SINGLENODE_CSID_LEN (sizeof(int))
--#  define MAX_CLUSTER_MEMBER_NAME_LEN       64
-+#  ifndef MAX_CLUSTER_MEMBER_NAME_LEN
-+#    define MAX_CLUSTER_MEMBER_NAME_LEN       64
-+#  endif
- #  define SINGLENODE_MAX_CLUSTER_MESSAGE          65535
--#  define MAX_CSID_LEN sizeof(int)
-+#  ifndef MAX_CSID_LEN
-+#    define MAX_CSID_LEN sizeof(int)
-+#  endif
- struct cluster_ops *init_singlenode_cluster(void);
+ Version 1.02.45 - 9th March 2010
+ ================================
+--- LVM2/libdm/ioctl/libdm-iface.c	2010/02/15 16:21:34	1.67
++++ LVM2/libdm/ioctl/libdm-iface.c	2010/03/23 14:38:37	1.68
+@@ -1505,18 +1505,28 @@
+  */
+ static int _udev_complete(struct dm_task *dmt)
+ {
+-	uint32_t cookie;
++	uint16_t base;
+ 
+-	if (dmt->cookie_set) {
++	if (dmt->cookie_set &&
++	    (base = dmt->event_nr & ~DM_UDEV_FLAGS_MASK))
+ 		/* strip flags from the cookie and use cookie magic instead */
+-		cookie = (dmt->event_nr & ~DM_UDEV_FLAGS_MASK) |
+-			  (DM_COOKIE_MAGIC << DM_UDEV_FLAGS_SHIFT);
+-		return dm_udev_complete(cookie);
+-	}
++		return dm_udev_complete(base | (DM_COOKIE_MAGIC <<
++						DM_UDEV_FLAGS_SHIFT));
+ 
+ 	return 1;
+ }
+ 
++static int _check_uevent_generated(struct dm_ioctl *dmi)
++{
++	if (!dm_check_version() ||
++	    _dm_version < 4 ||
++	    _dm_version_minor < 17)
++		/* can't check, assume uevent is generated */
++		return 1;
++
++	return dmi->flags & DM_UEVENT_GENERATED_FLAG;
++}
++
+ static int _create_and_load_v4(struct dm_task *dmt)
+ {
+ 	struct dm_task *task;
+@@ -1691,6 +1701,7 @@
+ 				     unsigned repeat_count)
+ {
+ 	struct dm_ioctl *dmi;
++	int ioctl_with_uevent;
+ 
+ 	dmi = _flatten(dmt, repeat_count);
+ 	if (!dmi) {
+@@ -1706,6 +1717,10 @@
+ 	if (dmt->no_open_count)
+ 		dmi->flags |= DM_SKIP_BDGET_FLAG;
+ 
++	ioctl_with_uevent = dmt->type == DM_DEVICE_RESUME ||
++			    dmt->type == DM_DEVICE_REMOVE ||
++			    dmt->type == DM_DEVICE_RENAME;
++
+ 	/*
+ 	 * Prevent udev vs. libdevmapper race when processing nodes and
+ 	 * symlinks. This can happen when the udev rules are installed and
+@@ -1715,10 +1730,7 @@
+ 	 * to be applied at all in this situation so we can gracefully fallback
+ 	 * to libdevmapper's node and symlink creation code.
+ 	 */
+-	if (dm_udev_get_sync_support() && !dmt->cookie_set &&
+-	    (dmt->type == DM_DEVICE_RESUME ||
+-	     dmt->type == DM_DEVICE_REMOVE ||
+-	     dmt->type == DM_DEVICE_RENAME)) {
++	if (dm_udev_get_sync_support() && !dmt->cookie_set && ioctl_with_uevent) {
+ 		log_debug("Cookie value is not set while trying to call "
+ 			  "DM_DEVICE_RESUME, DM_DEVICE_REMOVE or DM_DEVICE_RENAME "
+ 			  "ioctl. Please, consider using libdevmapper's udev "
+@@ -1774,6 +1786,10 @@
+ 			return NULL;
+ 		}
+ 	}
++
++	if (ioctl_with_uevent && !_check_uevent_generated(dmi))
++		_udev_complete(dmt);
++
+ #else /* Userspace alternative for testing */
  #endif
+ 	return dmi;
+--- LVM2/libdm/misc/dm-ioctl.h	2009/11/06 00:43:09	1.3
++++ LVM2/libdm/misc/dm-ioctl.h	2010/03/23 14:38:38	1.4
+@@ -268,9 +268,9 @@
+ #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
  
+ #define DM_VERSION_MAJOR	4
+-#define DM_VERSION_MINOR	16
++#define DM_VERSION_MINOR	17
+ #define DM_VERSION_PATCHLEVEL	0
+-#define DM_VERSION_EXTRA	"-ioctl (2009-11-05)"
++#define DM_VERSION_EXTRA	"-ioctl (2010-03-05)"
+ 
+ /* Status bits */
+ #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
+@@ -318,4 +318,9 @@
+  */
+ #define DM_QUERY_INACTIVE_TABLE_FLAG	(1 << 12) /* In */
+ 
++/*
++ * If set, a uevent was generated for which the caller may need to wait.
++ */
++#define DM_UEVENT_GENERATED_FLAG	(1 << 13) /* Out */
++
+ #endif				/* _LINUX_DM_IOCTL_H */
 
 
