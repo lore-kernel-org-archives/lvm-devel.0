@@ -1,45 +1,58 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 23 Mar 2010 17:27:35 +0100
-Subject: [PATCH 2/6] Query make.tmpl variable
+Date: Tue, 23 Mar 2010 17:27:36 +0100
+Subject: [PATCH 3/6] Fix cleanup of libdevmapper-event.a and dmeventd
 In-Reply-To: <cover.1269361453.git.zkabelac@redhat.com>
 References: <cover.1269361453.git.zkabelac@redhat.com>
-Message-ID: <3e4113eb36cd0e26da4f9b66199d12963b9e7444.1269361453.git.zkabelac@redhat.com>
+Message-ID: <0b700093a39897556fe078a4d42a5d05032f97f2.1269361453.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Avoid hard sed replacement - i.e. quick test change in make.tmpl
-could avoid recofiguration steps in same debug cases.
+Add $(LIB_STATIC) to TARGETS so it's cleaned in the same way
+as other libraries in project.
+Add dmeventd.gcda dmeventd.gcno to CLEAN_TARGETS.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- Makefile.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/dmeventd/Makefile.in |   11 ++++++-----
+ 1 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index a4b1d78..593500e 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -88,7 +88,7 @@ endif
- check: all
- 	$(MAKE) -C test all
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index dc48f0d..948d908 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -26,9 +26,10 @@ TARGETS = dmeventd
+ INSTALL_DMEVENTD_TARGETS = install_dmeventd_dynamic
+ INSTALL_LIB_TARGETS = install_lib_dynamic
  
--ifneq ("@LCOV@", "")
-+ifneq ("$(LCOV)", "")
- .PHONY: lcov-reset lcov lcov-dated
++LIB_NAME = libdevmapper-event
+ ifeq ("@STATIC_LINK@", "yes")
+-  LIB_STATIC = libdevmapper-event.a
+-  TARGETS += dmeventd.static
++  LIB_STATIC = $(LIB_NAME).a
++  TARGETS += $(LIB_STATIC) dmeventd.static
+   INSTALL_DMEVENTD_TARGETS += install_dmeventd_static
+   INSTALL_LIB_TARGETS += install_lib_static
+ endif
+@@ -36,13 +37,13 @@ endif
+ LIB_VERSION = $(LIB_VERSION_DM)
  
- ifeq ($(MAKECMDGOALS),lcov-dated)
-@@ -116,7 +116,7 @@ lcov: all
- 		-a $(LCOV_REPORTS_DIR)/libdm.info \
- 		-a $(LCOV_REPORTS_DIR)/tools.info \
- 		-o $(LCOV_REPORTS_DIR)/lvm.info
--ifneq ("@GENHTML@", "")
-+ifneq ("$(GENHTML)", "")
- 	$(GENHTML) -o $(LCOV_REPORTS_DIR) -p $(top_srcdir) $(LCOV_REPORTS_DIR)/lvm.info
+ ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = libdevmapper-event.dylib
++  LIB_SHARED = $(LIB_NAME).dylib
+ else
+-  LIB_SHARED = libdevmapper-event.so
++  LIB_SHARED = $(LIB_NAME).so
+   VERSIONED_SHLIB = $(LIB_SHARED).$(LIB_VERSION)
  endif
  
+-CLEAN_TARGETS = dmeventd.o dmeventd.static
++CLEAN_TARGETS = dmeventd.o dmeventd.static dmeventd.gcda dmeventd.gcno
+ 
+ ifneq ($(MAKECMDGOALS),device-mapper)
+   SUBDIRS+=plugins
 -- 
 1.7.0.1
 
