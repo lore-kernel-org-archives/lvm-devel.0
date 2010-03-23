@@ -1,34 +1,43 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 23 Mar 2010 17:27:33 +0100
-Subject: [PATCH 0/6] Makefile updates
-Message-ID: <cover.1269361453.git.zkabelac@redhat.com>
+Date: Tue, 23 Mar 2010 17:27:34 +0100
+Subject: [PATCH 1/6] Reuse clean target for distclean
+In-Reply-To: <cover.1269361453.git.zkabelac@redhat.com>
+References: <cover.1269361453.git.zkabelac@redhat.com>
+Message-ID: <fc778d3aa7c00eb91ea33a7fb142680c1409b581.1269361453.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch set fixes few minor Makefile errors mostly
-around clean & distclean targets. Major topic is the update 
-of cflow rules.
+Instead of duplicating clean target inside distclean target,
+just use it as a subtarget and avoid add duplicating code.
 
-Zdenek Kabelac (6):
-  Reuse clean target for distclean
-  Query make.tmpl variable
-  Fix cleanup of libdevmapper-event.a and dmeventd
-  Fix run of cscope in $(builddir)
-  Fix distclean error for subtargets
-  Update cflow
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ make.tmpl.in |    7 ++-----
+ 1 files changed, 2 insertions(+), 5 deletions(-)
 
- Makefile.in                                 |   25 ++++-------
- daemons/Makefile.in                         |    9 ++++-
- daemons/dmeventd/Makefile.in                |   27 ++++++++++---
- daemons/dmeventd/plugins/mirror/Makefile.in |   11 ++++-
- include/Makefile.in                         |    3 +-
- lib/Makefile.in                             |   21 ++++++----
- libdm/Makefile.in                           |    4 ++
- make.tmpl.in                                |   58 +++++++++++++++++++++++----
- tools/Makefile.in                           |   23 ++++-------
- 9 files changed, 122 insertions(+), 59 deletions(-)
+diff --git a/make.tmpl.in b/make.tmpl.in
+index ff4d1b2..df4eafa 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -257,12 +257,9 @@ clean: $(SUBDIRS.clean)
+ 	      $(SOURCES2:%.c=%.d) $(SOURCES:%.c=%.pot) $(SOURCES:%.c=%.gcno) \
+ 	      $(SOURCES:%.c=%.gcda) $(LDDEPS)
+ 
+-distclean: $(SUBDIRS.distclean)
++distclean: $(SUBDIRS.clean) $(SUBDIRS.distclean)
+ 	$(RM) -rf $(DISTCLEAN_DIRS)
+-	$(RM) $(DISTCLEAN_TARGETS) \
+-	      $(OBJECTS) $(TARGETS) $(CLEAN_TARGETS) $(SOURCES:%.c=%.d) \
+-	      $(SOURCES2:%.c=%.d) $(SOURCES:%.c=%.pot) $(SOURCES:%.c=%.gcno) \
+-	      $(SOURCES:%.c=%.gcda) $(LDDEPS) \
++	$(RM) $(DISTCLEAN_TARGETS)  \
+ 	      config.cache config.log config.status \
+ 	      Makefile make.tmpl core \
+ 	      lvm-version.h
+-- 
+1.7.0.1
 
 
