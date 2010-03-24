@@ -1,43 +1,32 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Mar 2010 11:36:49 -0000
-Subject: LVM2/daemons/dmeventd libdevmapper-event.c
-Message-ID: <20100324113649.29723.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 24 Mar 2010 09:07:37 -0400
+Subject: [PATCH v2] improve activation monitoring option processing
+In-Reply-To: <4BA9D905.9090107@redhat.com>
+References: <1269372233-4199-1-git-send-email-snitzer@redhat.com>
+	<4BA9D905.9090107@redhat.com>
+Message-ID: <20100324130736.GA19258@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-24 11:36:49
+On Wed, Mar 24 2010 at  5:19am -0400,
+Milan Broz <mbroz@redhat.com> wrote:
 
-Modified files:
-	daemons/dmeventd: libdevmapper-event.c 
+> 
+> 
+> On 03/23/2010 08:23 PM, Mike Snitzer wrote:
+> > Add "monitoring" option to "activation" section of lvm.conf
+> >
+> > Have clvmd consult the lvm.conf "activation/monitoring" too.
+> please do it something like this... (untested)
 
-Log message:
-	Move declaration of struct dm_info info to declaration block.
+OK, I already committed that other patch (got ack to do so).
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+Your patch looks good.  I had some doubts about checking lvm.conf like I
+did in do_lock_query (but didn't explicitly share as much).
 
---- LVM2/daemons/dmeventd/libdevmapper-event.c	2010/01/14 10:11:26	1.30
-+++ LVM2/daemons/dmeventd/libdevmapper-event.c	2010/03/24 11:36:48	1.31
-@@ -688,6 +688,7 @@
- 	enum dm_event_mask reply_mask = 0;
- 	struct dm_task *dmt = NULL;
- 	struct dm_event_daemon_message msg = { 0, 0, NULL };
-+	struct dm_info info;
- 
- 	if (!(dmt = _get_device_info(dmevh))) {
- 		stack;
-@@ -746,7 +747,6 @@
- 		goto fail;
- 	}
- 
--	struct dm_info info;
- 	if (!dm_task_get_info(dmt, &info)) {
- 		ret = -1;
- 		goto fail;
+Mike
 
 
