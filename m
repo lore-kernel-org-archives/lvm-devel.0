@@ -1,325 +1,239 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 23 Mar 2010 22:30:23 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c ...
-Message-ID: <20100323223023.23696.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 24 Mar 2010 02:40:00 +0000
+Subject: [PATCH 1 of 11] LVM: agk allocation changes
+In-Reply-To: <2D4941B1-7C28-4EEA-A7D6-03C0E4613555@redhat.com>
+References: <201003120029.o2C0TvC8027865@hydrogen.msp.redhat.com>
+	<20100312121941.GA7267@agk-dp.fab.redhat.com>
+	<2D4941B1-7C28-4EEA-A7D6-03C0E4613555@redhat.com>
+Message-ID: <20100324024000.GN5259@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-03-23 22:30:20
+On Fri, Mar 12, 2010 at 01:44:52PM -0600, Jon Brassow wrote:
+> Still, people can test these patches as long as they don't stress the  
+> '--alloc anywhere' cases.
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
-	doc            : example.conf 
-	lib/metadata   : lv_manip.c metadata-exported.h 
-	liblvm         : lvm_lv.c 
-	man            : lvchange.8.in lvcreate.8.in vgchange.8.in 
-	tools          : commands.h lvchange.c lvcreate.c toollib.c 
-	                 toollib.h vgchange.c 
+Latest version of this patch.  Still not properly unit tested.
 
-Log message:
-	Improve activation monitoring option processing
-	
-	. Add "monitoring" option to "activation" section of lvm.conf
-	. Have clvmd consult the lvm.conf "activation/monitoring" too.
-	. Introduce toollib.c:get_activation_monitoring_mode().
-	. Error out when both --monitor and --ignoremonitoring are provided.
-	. Add --monitor and --ignoremonitoring support to lvcreate.  Update
-	lvcreate man page accordingly.
-	. Clarify that '--monitor' controls the start and stop of monitoring in
-	the {vg,lv}change man pages.
-	
-	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+Alasdair
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1475&r2=1.1476
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.84&r2=1.85
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.diff?cvsroot=lvm2&r1=1.55&r2=1.56
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.211&r2=1.212
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.136&r2=1.137
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvchange.8.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgchange.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.141&r2=1.142
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.215&r2=1.216
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.189&r2=1.190
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.69&r2=1.70
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.99&r2=1.100
 
---- LVM2/WHATS_NEW	2010/03/23 15:07:55	1.1475
-+++ LVM2/WHATS_NEW	2010/03/23 22:30:18	1.1476
-@@ -1,5 +1,8 @@
- Version 2.02.63 - 
- ================================
-+  Add "monitoring" option to "activation" section of lvm.conf.
-+  Have clvmd consult the lvm.conf "activation/monitoring".
-+  Add --monitor and --ignoremonitoring support to lvcreate.
-   Allow dynamic extension of array of areas selected as allocation candidates.
-   Export and use only valid cookie value in test suite.
-   Remove const modifier for struct volume_group* from process_each_lv_in_vg().
---- LVM2/daemons/clvmd/lvm-functions.c	2010/01/26 08:00:03	1.84
-+++ LVM2/daemons/clvmd/lvm-functions.c	2010/03/23 22:30:19	1.85
-@@ -542,8 +542,12 @@
- 	if (lock_flags & LCK_MIRROR_NOSYNC_MODE)
- 		init_mirror_in_sync(0);
- 
--	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
--		init_dmeventd_monitor(DEFAULT_DMEVENTD_MONITOR);
-+	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE)) {
-+		int dmeventd_mode =
-+			find_config_tree_bool(cmd, "activation/monitoring",
-+					      DEFAULT_DMEVENTD_MONITOR);
-+		init_dmeventd_monitor(dmeventd_mode);
-+	}
- 
- 	cmd->partial_activation = 0;
- 
---- LVM2/doc/example.conf	2010/03/05 14:48:33	1.55
-+++ LVM2/doc/example.conf	2010/03/23 22:30:19	1.56
-@@ -428,6 +428,10 @@
-     # which used mlockall() to pin the whole process's memory while activating
-     # devices.
-     # use_mlockall = 0
-+
-+    # Monitoring is enabled by default when activating logical volumes.
-+    # Set to 0 to disable monitoring or use the --ignoremonitoring option.
-+    # monitoring = 1
- }
- 
- 
---- LVM2/lib/metadata/lv_manip.c	2010/03/23 15:07:55	1.211
-+++ LVM2/lib/metadata/lv_manip.c	2010/03/23 22:30:19	1.212
-@@ -3061,6 +3061,8 @@
- 
- 	backup(vg);
- 
-+	init_dmeventd_monitor(lp->activation_monitoring);
-+
- 	if (lp->snapshot) {
- 		if (!activate_lv_excl(cmd, lv)) {
- 			log_error("Aborting. Failed to activate snapshot "
---- LVM2/lib/metadata/metadata-exported.h	2010/03/16 16:57:04	1.136
-+++ LVM2/lib/metadata/metadata-exported.h	2010/03/23 22:30:19	1.137
-@@ -535,6 +535,7 @@
- 	int minor; /* all */
- 	int log_count; /* mirror */
- 	int nosync; /* mirror */
-+	int activation_monitoring; /* all */
- 
- 	char *origin; /* snap */
- 	const char *vg_name; /* all */
---- LVM2/liblvm/lvm_lv.c	2010/02/24 18:16:26	1.19
-+++ LVM2/liblvm/lvm_lv.c	2010/03/23 22:30:19	1.20
-@@ -111,6 +111,7 @@
- 	lp->zero = 1;
- 	lp->major = -1;
- 	lp->minor = -1;
-+	lp->activation_monitoring = DEFAULT_DMEVENTD_MONITOR;
- 	lp->vg_name = vg->name;
- 	lp->lv_name = lvname; /* FIXME: check this for safety */
- 	lp->pvh = &vg->pvs;
---- LVM2/man/lvchange.8.in	2010/01/06 19:08:58	1.6
-+++ LVM2/man/lvchange.8.in	2010/03/23 22:30:20	1.7
-@@ -56,7 +56,7 @@
- Set the minor number.
- .TP
- .I \-\-monitor y|n
--Controls whether or not a mirrored logical volume is monitored by
-+Start or stop monitoring a mirrored or snapshot logical volume with
- dmeventd, if it is installed.
- If a device used by a monitored mirror reports an I/O error,
- the failure is handled according to 
---- LVM2/man/lvcreate.8.in	2010/02/03 03:58:08	1.15
-+++ LVM2/man/lvcreate.8.in	2010/03/23 22:30:20	1.16
-@@ -7,6 +7,8 @@
- [\-\-alloc AllocationPolicy]
- [\-A|\-\-autobackup y|n] [\-C|\-\-contiguous y|n] [\-d|\-\-debug]
- [\-h|\-?|\-\-help] [\-\-noudevsync]
-+[\-\-ignoremonitoring]
-+[\-\-monitor {y|n}]
- [\-i|\-\-stripes Stripes [\-I|\-\-stripesize StripeSize]]
- {\-l|\-\-extents LogicalExtentsNumber[%{VG|PVS|FREE}] |
-  \-L|\-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
-@@ -26,6 +28,8 @@
-  \-L|\-\-size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
- [\-c|\-\-chunksize ChunkSize]
- [\-\-noudevsync]
-+[\-\-ignoremonitoring]
-+[\-\-monitor {y|n}]
- \-n|\-\-name SnapshotLogicalVolumeName
- {{\-s|\-\-snapshot}
- OriginalLogicalVolumePath | 
-@@ -129,6 +133,18 @@
- in the background.  You should only use this if udev is not running
- or has rules that ignore the devices LVM2 creates.
- .TP
-+.I \-\-monitor y|n
-+Start or avoid monitoring a mirrored or snapshot logical volume with
-+dmeventd, if it is installed. 
-+If a device used by a monitored mirror reports an I/O error,
-+the failure is handled according to 
-+\fBmirror_image_fault_policy\fP and \fBmirror_log_fault_policy\fP
-+set in \fBlvm.conf\fP.
-+.TP
-+.I \-\-ignoremonitoring
-+Make no attempt to interact with dmeventd unless \-\-monitor
-+is specified.
-+.TP
- .I \-p, \-\-permission r|rw
- Set access permissions to read only or read and write.
- .br
---- LVM2/man/vgchange.8.in	2010/01/06 19:08:58	1.7
-+++ LVM2/man/vgchange.8.in	2010/03/23 22:30:20	1.8
-@@ -78,7 +78,7 @@
- Generate new random UUID for specified Volume Groups.
- .TP
- .BR \-\-monitor " " { y | n }
--Controls whether or not a mirrored logical volume is monitored by
-+Start or stop monitoring a mirrored or snapshot logical volume with
- dmeventd, if it is installed.
- If a device used by a monitored mirror reports an I/O error,
- the failure is handled according to 
---- LVM2/tools/commands.h	2010/02/03 03:58:08	1.141
-+++ LVM2/tools/commands.h	2010/03/23 22:30:20	1.142
-@@ -150,6 +150,8 @@
-    "\t[-C|--contiguous {y|n}]\n"
-    "\t[-d|--debug]\n"
-    "\t[-h|-?|--help]\n"
-+   "\t[--ignoremonitoring]\n"
-+   "\t[--monitor {y|n}]\n"
-    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
-    "\t{-l|--extents LogicalExtentsNumber[%{VG|PVS|FREE}] |\n"
-    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-@@ -177,6 +179,8 @@
-    "\t[-C|--contiguous {y|n}]\n"
-    "\t[-d|--debug]\n"
-    "\t[-h|-?|--help]\n"
-+   "\t[--ignoremonitoring]\n"
-+   "\t[--monitor {y|n}]\n"
-    "\t[-i|--stripes Stripes [-I|--stripesize StripeSize]]\n"
-    "\t{-l|--extents LogicalExtentsNumber[%{VG|FREE|ORIGIN}] |\n"
-    "\t -L|--size LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-@@ -192,11 +196,11 @@
-    "\t[PhysicalVolumePath...]\n\n",
- 
-    addtag_ARG, alloc_ARG, autobackup_ARG, chunksize_ARG, contiguous_ARG,
--   corelog_ARG, extents_ARG, major_ARG, minor_ARG, mirrorlog_ARG, mirrors_ARG,
--   name_ARG, nosync_ARG, noudevsync_ARG, permission_ARG, persistent_ARG,
--   readahead_ARG, regionsize_ARG, size_ARG, snapshot_ARG, stripes_ARG,
--   stripesize_ARG, test_ARG, type_ARG, virtualoriginsize_ARG, virtualsize_ARG,
--   zero_ARG)
-+   corelog_ARG, extents_ARG, ignoremonitoring_ARG, major_ARG, minor_ARG,
-+   mirrorlog_ARG, mirrors_ARG, monitor_ARG, name_ARG, nosync_ARG, noudevsync_ARG,
-+   permission_ARG, persistent_ARG, readahead_ARG, regionsize_ARG, size_ARG,
-+   snapshot_ARG, stripes_ARG, stripesize_ARG, test_ARG, type_ARG,
-+   virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
- 
- xx(lvdisplay,
-    "Display information about a logical volume",
---- LVM2/tools/lvchange.c	2010/02/24 18:15:49	1.117
-+++ LVM2/tools/lvchange.c	2010/03/23 22:30:20	1.118
-@@ -518,7 +518,7 @@
- 			   void *handle __attribute((unused)))
- {
- 	int doit = 0, docmds = 0;
--	int archived = 0;
-+	int dmeventd_mode, archived = 0;
- 	struct logical_volume *origin;
- 
- 	if (!(lv->vg->status & LVM_WRITE) &&
-@@ -575,9 +575,10 @@
- 		return ECMD_FAILED;
- 	}
- 
--	init_dmeventd_monitor(arg_int_value(cmd, monitor_ARG,
--					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
--					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
-+	if (!get_activation_monitoring_mode(cmd, &dmeventd_mode))
-+		return ECMD_FAILED;
-+
-+	init_dmeventd_monitor(dmeventd_mode);
- 
- 	/*
- 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
---- LVM2/tools/lvcreate.c	2010/02/03 03:58:08	1.215
-+++ LVM2/tools/lvcreate.c	2010/03/23 22:30:20	1.216
-@@ -482,6 +482,9 @@
- 		return 0;
- 	}
- 
-+	if (!get_activation_monitoring_mode(cmd, &lp->activation_monitoring))
-+		return_0;
-+
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !_read_stripe_params(lp, cmd) ||
---- LVM2/tools/toollib.c	2010/03/23 14:24:04	1.189
-+++ LVM2/tools/toollib.c	2010/03/23 22:30:20	1.190
-@@ -1423,3 +1423,24 @@
+Index: lib/metadata/lv_manip.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/lib/metadata/lv_manip.c,v
+retrieving revision 1.212
+diff -u -p -r1.212 lv_manip.c
+--- lib/metadata/lv_manip.c	23 Mar 2010 22:30:19 -0000	1.212
++++ lib/metadata/lv_manip.c	24 Mar 2010 02:33:51 -0000
+@@ -985,6 +985,13 @@ static int _check_contiguous(struct cmd_
  	return 1;
  }
  
-+int get_activation_monitoring_mode(struct cmd_context *cmd,
-+				   int *monitoring_mode)
-+{
-+	*monitoring_mode = DEFAULT_DMEVENTD_MONITOR;
++/* FIXME In future if this function is called multiple times with
++ * ALLOC_ANYWHERE after aborted allocation attempts, pv maps will need
++ * re-sorting.
++ * Walk all pv_areas and if remaining != count, set remaining =
++ * count and reinsert_reduced_pv_area.
++ */
 +
-+	if (arg_count(cmd, monitor_ARG) &&
-+	    arg_count(cmd, ignoremonitoring_ARG)) {
-+		log_error("Conflicting monitor and ignoremonitoring options");
-+		return 0;
-+	}
-+
-+	if (arg_count(cmd, monitor_ARG))
-+		*monitoring_mode = arg_int_value(cmd, monitor_ARG,
-+						 DEFAULT_DMEVENTD_MONITOR);
-+	else if (is_static() || arg_count(cmd, ignoremonitoring_ARG) ||
-+		 !find_config_tree_bool(cmd, "activation/monitoring",
-+					DEFAULT_DMEVENTD_MONITOR))
-+		*monitoring_mode = DMEVENTD_MONITOR_IGNORE;
-+	
-+	return 1;
-+}
---- LVM2/tools/toollib.h	2010/03/23 14:24:04	1.69
-+++ LVM2/tools/toollib.h	2010/03/23 22:30:20	1.70
-@@ -112,4 +112,7 @@
- 			     int argc, char **argv,
- 			     struct pvcreate_params *pp);
+ /*
+  * Choose sets of parallel areas to use, respecting any constraints.
+  */
+@@ -999,12 +1006,13 @@ static int _find_parallel_space(struct a
+ 	struct pv_list *pvl;
+ 	unsigned already_found_one = 0;
+ 	unsigned contiguous = 0, cling = 0, preferred_count = 0;
+-	unsigned ix;
++	unsigned ix, last_ix;
+ 	unsigned ix_offset = 0;	/* Offset for non-preferred allocations */
+ 	unsigned ix_log_offset; /* Offset to start of areas to use for log */
+ 	unsigned too_small_for_log_count; /* How many too small for log? */
+ 	uint32_t max_parallel;	/* Maximum extents to allocate */
+ 	uint32_t next_le;
++	uint32_t required;	/* Extents we're trying to obtain from this area */
+ 	struct seg_pvs *spvs;
+ 	struct dm_list *parallel_pvs;
+ 	uint32_t free_pes;
+@@ -1062,6 +1070,9 @@ static int _find_parallel_space(struct a
+ 			}
+ 		}
  
-+int get_activation_monitoring_mode(struct cmd_context *cmd,
-+				   int *monitoring_mode);
++do {
++		/* Safety check to detect when ALLOC_ANYWHERE made no further progress. */
++		last_ix = ix;
+ 		/*
+ 		 * Put the smallest area of each PV that is at least the
+ 		 * size we need into areas array.  If there isn't one
+@@ -1089,6 +1100,7 @@ static int _find_parallel_space(struct a
+ 
+ 			already_found_one = 0;
+ 			/* First area in each list is the largest */
++//		retry_pv:
+ 			dm_list_iterate_items(pva, &pvm->areas) {
+ 				if (contiguous) {
+ 					if (prev_lvseg &&
+@@ -1114,13 +1126,17 @@ static int _find_parallel_space(struct a
+ 				}
+ 
+ 				/* Is it big enough on its own? */
+-				if (pva->count * ah->area_multiple <
++				if (pva->remaining * ah->area_multiple <
+ 				    max_parallel - *allocated &&
+ 				    ((!can_split && !ah->log_area_count) ||
+ 				     (already_found_one &&
+ 				      !(alloc == ALLOC_ANYWHERE))))
+ 					goto next_pv;
+ 
++				/*
++				 * Except with ALLOC_ANYWHERE, replace first area with this 
++				 * one which is smaller but still big enough.
++				 */
+ 				if (!already_found_one ||
+ 				    alloc == ALLOC_ANYWHERE) {
+ 					ix++;
+@@ -1133,11 +1149,27 @@ static int _find_parallel_space(struct a
+ 					*areas_ptr = dm_realloc(*areas_ptr, sizeof(**areas_ptr) * (*areas_size_ptr));
+ 				}
+ 				(*areas_ptr)[ix + ix_offset - 1] = pva;
 +
- #endif
---- LVM2/tools/vgchange.c	2010/02/24 18:15:06	1.99
-+++ LVM2/tools/vgchange.c	2010/03/23 22:30:20	1.100
-@@ -522,16 +522,17 @@
- 			   struct volume_group *vg,
- 			   void *handle __attribute((unused)))
++				/* Update amount remaining - effectively splitting an area into two or more parts */
++				if (alloc == ALLOC_ANYWHERE) {
++					required = (max_parallel - *allocated) / ah->area_multiple;
++					if (required >= pva->remaining)
++						pva->remaining = 0;
++					else {
++						pva->remaining -= required;
++						reinsert_reduced_pv_area(pva);
++// ALLOC_ANYWHERE alternative:  don't retry the PV.
++//   At the end of this loop, we have one area per PV.  If we haven't enough, repeat the whole loop (all PVs) taking the next largest from each.
++						// goto retry_pv;  TEMP REMOVAL
++					}
++				}
+ 			}
+ 		next_pv:
+ 			if (ix >= *areas_size_ptr)
+ 				break;
+ 		}
++} while(ix < *areas_size_ptr && alloc == ALLOC_ANYWHERE && last_ix != ix);
++
+ 
+ 		if ((contiguous || cling) && (preferred_count < ix_offset))
+ 			break;
+@@ -1174,7 +1206,6 @@ static int _find_parallel_space(struct a
+ 		if (ix + ix_offset < ah->area_count +
+ 		    (log_needs_allocating ? ah->log_area_count +
+ 					    too_small_for_log_count : 0))
+-			/* FIXME With ALLOC_ANYWHERE, need to split areas */
+ 			break;
+ 
+ 		if (!_alloc_parallel_area(ah, max_parallel, *areas_ptr, allocated,
+Index: lib/metadata/pv_map.c
+===================================================================
+RCS file: /cvs/lvm2/LVM2/lib/metadata/pv_map.c,v
+retrieving revision 1.35
+diff -u -p -r1.35 pv_map.c
+--- lib/metadata/pv_map.c	16 Mar 2010 14:37:38 -0000	1.35
++++ lib/metadata/pv_map.c	24 Mar 2010 02:33:51 -0000
+@@ -24,19 +24,25 @@
+  *
+  * FIXME Cope with overlap.
+  */
+-static void _insert_area(struct dm_list *head, struct pv_area *a)
++static void _insert_area(struct dm_list *head, struct pv_area *a, unsigned reduced)
  {
--	int r = ECMD_FAILED;
-+	int dmeventd_mode, r = ECMD_FAILED;
+ 	struct pv_area *pva;
+-
+-	dm_list_iterate_items(pva, head) {
+-		if (a->count > pva->count)
++	uint32_t count = reduced ? a->remaining : a->count;
++		
++	dm_list_iterate_items(pva, head)
++		if (count > pva->count)
+ 			break;
+-	}
  
- 	if (vg_is_exported(vg)) {
- 		log_error("Volume group \"%s\" is exported", vg_name);
- 		return ECMD_FAILED;
- 	}
+ 	dm_list_add(&pva->list, &a->list);
+ 	a->map->pe_count += a->count;
+ }
  
--	init_dmeventd_monitor(arg_int_value(cmd, monitor_ARG,
--					    (is_static() || arg_count(cmd, ignoremonitoring_ARG)) ?
--					    DMEVENTD_MONITOR_IGNORE : DEFAULT_DMEVENTD_MONITOR));
-+	if (!get_activation_monitoring_mode(cmd, &dmeventd_mode))
-+		return ECMD_FAILED;
++static void _remove_area(struct pv_area *a)
++{
++	dm_list_del(&a->list);
++	a->map->pe_count -= a->count;
++}
 +
-+	init_dmeventd_monitor(dmeventd_mode);
+ static int _create_single_area(struct dm_pool *mem, struct pv_map *pvm,
+ 			       uint32_t start, uint32_t length)
+ {
+@@ -50,7 +56,8 @@ static int _create_single_area(struct dm
+ 	pva->map = pvm;
+ 	pva->start = start;
+ 	pva->count = length;
+-	_insert_area(&pvm->areas, pva);
++	pva->remaining = pva->count;
++	_insert_area(&pvm->areas, pva, 0);
  
- 	/*
- 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
+ 	return 1;
+ }
+@@ -184,8 +191,7 @@ struct dm_list *create_pv_maps(struct dm
+ 
+ void consume_pv_area(struct pv_area *pva, uint32_t to_go)
+ {
+-	dm_list_del(&pva->list);
+-	pva->map->pe_count -= pva->count;
++	_remove_area(pva);
+ 
+ 	assert(to_go <= pva->count);
+ 
+@@ -193,10 +199,21 @@ void consume_pv_area(struct pv_area *pva
+ 		/* split the area */
+ 		pva->start += to_go;
+ 		pva->count -= to_go;
+-		_insert_area(&pva->map->areas, pva);
++		pva->remaining = pva->count;
++		_insert_area(&pva->map->areas, pva, 0);
+ 	}
+ }
+ 
++/*
++ * Remove an area from list and reinsert it based on its new smaller size
++ * after a provisional allocation.
++ */
++void reinsert_reduced_pv_area(struct pv_area *pva)
++{
++	_remove_area(pva);
++	_insert_area(&pva->map->areas, pva, 1);
++}
++
+ uint32_t pv_maps_size(struct dm_list *pvms)
+ {
+ 	struct pv_map *pvm;
+Index: lib/metadata/pv_map.h
+===================================================================
+RCS file: /cvs/lvm2/LVM2/lib/metadata/pv_map.h,v
+retrieving revision 1.10
+diff -u -p -r1.10 pv_map.h
+--- lib/metadata/pv_map.h	3 Nov 2008 22:14:29 -0000	1.10
++++ lib/metadata/pv_map.h	24 Mar 2010 02:33:51 -0000
+@@ -31,6 +31,8 @@ struct pv_area {
+ 	uint32_t start;
+ 	uint32_t count;
+ 
++	uint32_t remaining;	/* Number of extents remaining unallocated during allocation number alloc_seqno */
++
+ 	struct dm_list list;		/* pv_map.areas */
+ };
+ 
+@@ -49,6 +51,7 @@ struct dm_list *create_pv_maps(struct dm
+ 			    struct dm_list *allocatable_pvs);
+ 
+ void consume_pv_area(struct pv_area *area, uint32_t to_go);
++void reinsert_reduced_pv_area(struct pv_area *pva);
+ 
+ uint32_t pv_maps_size(struct dm_list *pvms);
+ 
 
 
