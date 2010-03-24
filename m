@@ -1,77 +1,86 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 24 Mar 2010 15:28:21 +0100
-Subject: [PATCH] Do not open PVs with no metadata areas if memory is locked.
-Message-ID: <1269440901-22549-1-git-send-email-mbroz@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 24 Mar 2010 11:44:05 -0400
+Subject: [PATCH v2] improve activation monitoring option processing
+In-Reply-To: <20100324130736.GA19258@redhat.com>
+References: <1269372233-4199-1-git-send-email-snitzer@redhat.com>
+	<4BA9D905.9090107@redhat.com> <20100324130736.GA19258@redhat.com>
+Message-ID: <20100324154359.GA845@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If there is LV across a PV without mda, this warning appears:
- # lvchange -p rw vg_test/lv1 -v
-   ...
-   Suspending vg_test-lv1 (254:0) with device flush
-   WARNING: dev_open(/dev/sdc) called while suspended
+On Wed, Mar 24 2010 at  9:07am -0400,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Because PVs without mdas are attached to proper vginfo
-late in vg_read, it can happen that code closes file descriptor
-for these PVs and later rescan issues this warning.
+> On Wed, Mar 24 2010 at  5:19am -0400,
+> Milan Broz <mbroz@redhat.com> wrote:
+> 
+> > 
+> > 
+> > On 03/23/2010 08:23 PM, Mike Snitzer wrote:
+> > > Add "monitoring" option to "activation" section of lvm.conf
+> > >
+> > > Have clvmd consult the lvm.conf "activation/monitoring" too.
+> > please do it something like this... (untested)
+> 
+> OK, I already committed that other patch (got ack to do so).
+> 
+> Your patch looks good.  I had some doubts about checking lvm.conf like I
+> did in do_lock_query (but didn't explicitly share as much).
 
-Fix (wonderful hack!) it by not only keeping PVs of locked
-VGs open, but also keep open PVs without mdas if some VG is locked.
+Update _process_config() to establish '_dmeventd_monitor' global based
+on lvm.conf.  This allows clvmd's calls to create_toolcontext() and
+refresh_toolcontext() to (re)establish dmeventd monitoring based on
+lvm.conf (rather than always using DEFAULT_DMEVENTD_MONITOR).
 
-It will be closed when Vg lock count drops to zero (dev_close_all())
+clvmd's do_lock_lv() already properly controls dmeventd monitoring based
+on LCK_DMEVENTD_MONITOR_MODE in lock_flags -- which currently gets set
+based on the '_dmeventd_monitor' global.
 
-Also fix minor things
- - remove old unused prototype
- - do not query hash table if key is empty string
+Follow-on work will tie command line overrides into the command context
+to allow clvmd's dmeventd monitoring to be controlled from the
+commandline.  So clvmd will consult the command context for dmeventd
+monitoring mode rather than looking at the global (which is process
+specific).
+
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
 ---
- lib/cache/lvmcache.c |    2 +-
- lib/cache/lvmcache.h |    1 -
- lib/device/dev-io.c  |    3 ++-
- 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 0ce034a..4b310b7 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -484,7 +484,7 @@ struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only)
- 	struct lvmcache_info *info;
- 	char id[ID_LEN + 1] __attribute((aligned(8)));
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index 60b6db4..3060954 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -542,12 +542,8 @@ int do_lock_lv(unsigned char command, unsigned char lock_flags, char *resource)
+ 	if (lock_flags & LCK_MIRROR_NOSYNC_MODE)
+ 		init_mirror_in_sync(0);
  
--	if (!_pvid_hash || !pvid)
-+	if (!_pvid_hash || !pvid || !*pvid)
- 		return NULL;
+-	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE)) {
+-		int dmeventd_mode =
+-			find_config_tree_bool(cmd, "activation/monitoring",
+-					      DEFAULT_DMEVENTD_MONITOR);
+-		init_dmeventd_monitor(dmeventd_mode);
+-	}
++	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
++		init_dmeventd_monitor(1);
  
- 	strncpy(&id[0], pvid, ID_LEN);
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 8eeb495..1504e21 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -74,7 +74,6 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 				   const char *vgname, const char *vgid,
- 				   uint32_t vgstatus);
- int lvmcache_add_orphan_vginfo(const char *vgname, struct format_type *fmt);
--void lvmcache_del(struct lvmcache_info *info);
+ 	cmd->partial_activation = 0;
  
- /* Update things */
- int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 06675e2..63c57c8 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -566,7 +566,8 @@ static int _dev_close(struct device *dev, int immediate)
- 	    (dev->open_count < 1 &&
- 	     (!(info = info_from_pvid(dev->pvid, 0)) ||
- 	      !info->vginfo ||
--	      !vgname_is_locked(info->vginfo->vgname))))
-+	      (!is_orphan_vg(info->vginfo->vgname) && !vgname_is_locked(info->vginfo->vgname)) ||
-+	      (is_orphan_vg(info->vginfo->vgname) && !vgs_locked()))))
- 		_close(dev);
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 7aac361..94375de 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -281,6 +281,10 @@ static int _process_config(struct cmd_context *cmd)
+ 						  "activation/missing_stripe_filler",
+ 						  DEFAULT_STRIPE_FILLER);
  
- 	return 1;
--- 
-1.7.0.2
++	init_dmeventd_monitor(find_config_tree_bool(cmd,
++						    "activation/monitoring",
++						    DEFAULT_DMEVENTD_MONITOR));
++
+ 	/* FIXME Missing error code checks from the stats, not log_warn?, notify if setting overridden, delay message/check till it is actually used (eg consider if lvm shell - file could appear later after this check)? */
+ 	if (!strcmp(cmd->stripe_filler, "/dev/ioerror") &&
+ 	    stat(cmd->stripe_filler, &st))
 
 
