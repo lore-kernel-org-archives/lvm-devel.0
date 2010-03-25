@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Mar 2010 12:16:18 -0000
-Subject: LVM2/test t-mirror-vgreduce-removemissing.sh
-Message-ID: <20100325121618.31293.qmail@sourceware.org>
+Date: 25 Mar 2010 12:17:10 -0000
+Subject: LVM2/test lvm-utils.sh
+Message-ID: <20100325121710.31623.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-25 12:16:17
+Changes by:	agk at sourceware.org	2010-03-25 12:17:10
 
 Modified files:
-	test           : t-mirror-vgreduce-removemissing.sh 
+	test           : lvm-utils.sh 
 
 Log message:
 	more diagnostics
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-vgreduce-removemissing.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.21&r2=1.22
 
---- LVM2/test/t-mirror-vgreduce-removemissing.sh	2010/03/25 11:42:17	1.6
-+++ LVM2/test/t-mirror-vgreduce-removemissing.sh	2010/03/25 12:16:17	1.7
-@@ -25,7 +25,7 @@
- 	rm -f out1 out2
- 	echo $pvs | sed 's/ /\n/g' | sort | uniq > out1
+--- LVM2/test/lvm-utils.sh	2010/03/25 11:57:16	1.21
++++ LVM2/test/lvm-utils.sh	2010/03/25 12:17:10	1.22
+@@ -161,7 +161,7 @@
+ 	local num_lvs=$3
+ 	local num_snaps=$4
  
--	lvs -a -odevices --noheadings $lv
-+	lvs -a -o+devices $lv
- 	lvs -a -odevices --noheadings $lv | \
- 	sed 's/([^)]*)//g; s/[ ,]/\n/g' | sort | uniq > out2
+-	lvs -a -odevices $local_vg
++	lvs -a -o+devices $local_vg
  
-@@ -48,7 +48,7 @@
- 		sed 's/\[//g; s/\]//g')
- 	for i in $mimages; do
- 		echo "Checking $vg/$i"
--		lvs -a -odevices --noheadings $vg/$i
-+		lvs -a -o+devices $vg/$i
- 		lvs -a -odevices --noheadings $vg/$i | \
- 			sed 's/([^)]*)//g; s/ //g; s/,/ /g' | sort | uniq >> out2
- 	done
+ 	check_vg_field_ $local_vg pv_count $num_pvs &&
+ 	check_vg_field_ $local_vg lv_count $num_lvs &&
 
 
