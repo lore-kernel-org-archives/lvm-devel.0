@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Mar 2010 11:48:55 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100325114855.5320.qmail@sourceware.org>
+Date: 25 Mar 2010 11:57:16 -0000
+Subject: LVM2/test lvm-utils.sh
+Message-ID: <20100325115716.8454.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-25 11:48:55
+Changes by:	agk at sourceware.org	2010-03-25 11:57:16
 
 Modified files:
-	.              : WHATS_NEW 
+	test           : lvm-utils.sh 
 
 Log message:
-	.
+	add debug mesg
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1478&r2=1.1479
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.20&r2=1.21
 
---- LVM2/WHATS_NEW	2010/03/25 02:31:48	1.1478
-+++ LVM2/WHATS_NEW	2010/03/25 11:48:54	1.1479
-@@ -1,4 +1,4 @@
--Version 2.02.63 - 
-+Version 2.02.63 -  
- ================================
-   Introduce pv_area_used into allocation algorithm and add debug messages.
-   Add activation/monitoring to lvm.conf.
+--- LVM2/test/lvm-utils.sh	2010/02/16 17:48:46	1.20
++++ LVM2/test/lvm-utils.sh	2010/03/25 11:57:16	1.21
+@@ -161,6 +161,8 @@
+ 	local num_lvs=$3
+ 	local num_snaps=$4
+ 
++	lvs -a -odevices $local_vg
++
+ 	check_vg_field_ $local_vg pv_count $num_pvs &&
+ 	check_vg_field_ $local_vg lv_count $num_lvs &&
+ 	check_vg_field_ $local_vg snap_count $num_snaps
 
 
