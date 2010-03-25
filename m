@@ -1,36 +1,67 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Mar 2010 12:17:10 -0000
-Subject: LVM2/test lvm-utils.sh
-Message-ID: <20100325121710.31623.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Thu, 25 Mar 2010 13:15:02 -0400
+Subject: [PATCH] use a real socket for singlenode clvmd
+Message-ID: <1269537302-8866-1-git-send-email-snitzer@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-25 12:17:10
+Using /dev/null caused clvmd to consume 100% cpu.
 
-Modified files:
-	test           : lvm-utils.sh 
-
-Log message:
-	more diagnostics
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.21&r2=1.22
-
---- LVM2/test/lvm-utils.sh	2010/03/25 11:57:16	1.21
-+++ LVM2/test/lvm-utils.sh	2010/03/25 12:17:10	1.22
-@@ -161,7 +161,7 @@
- 	local num_lvs=$3
- 	local num_snaps=$4
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index ead2031..c7114f2 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -17,6 +17,7 @@
  
--	lvs -a -odevices $local_vg
-+	lvs -a -o+devices $local_vg
+ #include <netinet/in.h>
+ #include <sys/un.h>
++#include <sys/socket.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <configure.h>
+@@ -31,18 +32,37 @@
+ #include "lvm-functions.h"
+ #include "clvmd.h"
  
- 	check_vg_field_ $local_vg pv_count $num_pvs &&
- 	check_vg_field_ $local_vg lv_count $num_lvs &&
++static const char SINGLENODE_CLVMD_SOCKNAME[] = "\0singlenode_clvmd";
+ static int listen_fd = -1;
+ 
+ static int init_comms()
+ {
+-	listen_fd = open("/dev/null", O_RDWR);
++	struct sockaddr_un addr;
+ 
+-	if (listen_fd < 0)
++	listen_fd = socket(PF_UNIX, SOCK_STREAM, 0);
++	if (listen_fd < 0) {
++		DEBUGLOG("Can't create local socket: %s\n", strerror(errno));
+ 		return -1;
+-
++	}
+ 	/* Set Close-on-exec */
+ 	fcntl(listen_fd, F_SETFD, 1);
+ 
++	memset(&addr, 0, sizeof(addr));
++	memcpy(addr.sun_path, SINGLENODE_CLVMD_SOCKNAME,
++	       sizeof(SINGLENODE_CLVMD_SOCKNAME));
++	addr.sun_family = AF_UNIX;
++
++	if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
++		DEBUGLOG("Can't bind local socket: %s\n", strerror(errno));
++		close(listen_fd);
++		return -1;
++	}
++	if (listen(listen_fd, 10) < 0) {
++		DEBUGLOG("Can't listen local socket: %s\n", strerror(errno));
++		close(listen_fd);
++		return -1;
++	}
++
+ 	return 0;
+ }
+ 
 
 
