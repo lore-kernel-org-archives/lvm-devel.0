@@ -1,67 +1,27 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 25 Mar 2010 13:15:02 -0400
-Subject: [PATCH] use a real socket for singlenode clvmd
-Message-ID: <1269537302-8866-1-git-send-email-snitzer@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 25 Mar 2010 18:13:44 +0000
+Subject: [PATCH 0/6] Makefile updates
+In-Reply-To: <cover.1269361453.git.zkabelac@redhat.com>
+References: <cover.1269361453.git.zkabelac@redhat.com>
+Message-ID: <20100325181344.GP5259@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Using /dev/null caused clvmd to consume 100% cpu.
+On Tue, Mar 23, 2010 at 05:27:33PM +0100, Zdenek Kabelac wrote:
+> This patch set fixes few minor Makefile errors mostly
+> around clean & distclean targets. Major topic is the update 
+> of cflow rules.
+ 
+Go for it - check them in.
 
-diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
-index ead2031..c7114f2 100644
---- a/daemons/clvmd/clvmd-singlenode.c
-+++ b/daemons/clvmd/clvmd-singlenode.c
-@@ -17,6 +17,7 @@
- 
- #include <netinet/in.h>
- #include <sys/un.h>
-+#include <sys/socket.h>
- #include <unistd.h>
- #include <fcntl.h>
- #include <configure.h>
-@@ -31,18 +32,37 @@
- #include "lvm-functions.h"
- #include "clvmd.h"
- 
-+static const char SINGLENODE_CLVMD_SOCKNAME[] = "\0singlenode_clvmd";
- static int listen_fd = -1;
- 
- static int init_comms()
- {
--	listen_fd = open("/dev/null", O_RDWR);
-+	struct sockaddr_un addr;
- 
--	if (listen_fd < 0)
-+	listen_fd = socket(PF_UNIX, SOCK_STREAM, 0);
-+	if (listen_fd < 0) {
-+		DEBUGLOG("Can't create local socket: %s\n", strerror(errno));
- 		return -1;
--
-+	}
- 	/* Set Close-on-exec */
- 	fcntl(listen_fd, F_SETFD, 1);
- 
-+	memset(&addr, 0, sizeof(addr));
-+	memcpy(addr.sun_path, SINGLENODE_CLVMD_SOCKNAME,
-+	       sizeof(SINGLENODE_CLVMD_SOCKNAME));
-+	addr.sun_family = AF_UNIX;
-+
-+	if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-+		DEBUGLOG("Can't bind local socket: %s\n", strerror(errno));
-+		close(listen_fd);
-+		return -1;
-+	}
-+	if (listen(listen_fd, 10) < 0) {
-+		DEBUGLOG("Can't listen local socket: %s\n", strerror(errno));
-+		close(listen_fd);
-+		return -1;
-+	}
-+
- 	return 0;
- }
- 
+It's a bit of a hack, but 'make distclean' attempts to clean up everything
+regardless of what configuration options were used last time the
+configure script was run: it has to try to clean up stuff that was
+created by previous configure options.
+
+Alasdair
 
 
