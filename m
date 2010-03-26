@@ -1,63 +1,40 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 25 Mar 2010 22:59:07 -0400
-Subject: [PATCH] allow disabled dmeventd monitoring to propagate via clvmd
-In-Reply-To: <20100325215100.GA27929@redhat.com>
-References: <1269372233-4199-1-git-send-email-snitzer@redhat.com>
-	<4BA9D905.9090107@redhat.com> <20100324130736.GA19258@redhat.com>
-	<20100324154359.GA845@redhat.com>
-	<20100325215100.GA27929@redhat.com>
-Message-ID: <20100326025907.GA17663@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 26 Mar 2010 13:21:28 -0000
+Subject: LVM2/test lvm-utils.sh
+Message-ID: <20100326132128.1572.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The lvm commands that control dmeventd monitoring (lvchange, vgchange,
-lvcreate) now properly establish the '_dmeventd_monitor' via commandline
-of lvm.conf -- they in turn pass their setting on to clvmd through
-_lock_for_cluster().
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-03-26 13:21:28
 
-So we really don't have a need to init_dmeventd_monitor() based on
-lvm.conf when creating or refreshing the toolcontext -- especially not
-for clvmd's benefit.
+Modified files:
+	test           : lvm-utils.sh 
 
-And all existing dmeventd_monitor_mode() callers properly account for it
-returning tri-state (except for _lock_for_cluster() -- it treating it as
-a binary return didn't dawn on me until I wasted too much time tracing
-this issue).
+Log message:
+	Updates .so links for plugins
 
-I've tested this minimalist patch quite a bit:
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lvm-utils.sh.diff?cvsroot=lvm2&r1=1.22&r2=1.23
 
-
-clvmd's do_lock_lv() already properly controls dmeventd monitoring based
-on LCK_DMEVENTD_MONITOR_MODE in lock_flags -- though one small fix was
-needed for this to work: _lock_for_cluster() must treat
-dmeventd_monitor_mode()'s return as a tri-state value.
-
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index b82b077..f98f445 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -307,6 +307,7 @@ static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
- 	char *args;
- 	const char *node = "";
- 	int len;
-+	int dmeventd_mode;
- 	int saved_errno = errno;
- 	lvm_response_t *response = NULL;
- 	int num_responses;
-@@ -324,7 +325,8 @@ static int _lock_for_cluster(struct cmd_context *cmd, unsigned char clvmd_cmd,
- 	if (mirror_in_sync())
- 		args[1] |= LCK_MIRROR_NOSYNC_MODE;
- 
--	if (dmeventd_monitor_mode())
-+	dmeventd_mode = dmeventd_monitor_mode();
-+	if (dmeventd_mode != DMEVENTD_MONITOR_IGNORE && dmeventd_mode)
- 		args[1] |= LCK_DMEVENTD_MONITOR_MODE;
- 
- 	if (cmd->partial_activation)
+--- LVM2/test/lvm-utils.sh	2010/03/25 12:17:10	1.22
++++ LVM2/test/lvm-utils.sh	2010/03/26 13:21:28	1.23
+@@ -196,10 +196,10 @@
+   for i in 0 1 2 3 4 5 6 7; do
+     mknod $G_root_/dev/loop$i b 7 $i
+   done
+-  for i in $abs_top_builddir/dmeventd/mirror/*.so $abs_top_builddir/dmeventd/snapshot/*.so
++  for i in $abs_top_builddir/daemons/dmeventd/plugins/*/*.so
+   do
+     # NOTE: This check is necessary because the loop above will give us the value
+-    # "$abs_top_builddir/dmeventd/mirror/*.so" if no files ending in 'so' exist.
++    # "$abs_top_builddir/daemons/dmeventd/plugins/*/*.so" if no files ending in 'so' exist.
+     # This is the best way I could quickly determine to skip over this bogus value.
+     if [ -f $i ]; then
+       echo Setting up symlink from $i to $G_root_/lib
 
 
