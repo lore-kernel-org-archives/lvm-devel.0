@@ -1,109 +1,95 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 26 Mar 2010 14:56:47 +0100
-Subject: [PATCH] Fix vg_write/vg_commit to not reset position in metadata ring buffer on vgrename
-Message-ID: <4BACBD1F.80101@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 26 Mar 2010 15:40:15 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c ...
+Message-ID: <20100326154015.1322.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We should write metadata into next position in the ring buffer while calling vgrename.
-At this code level (_vg_write_raw), we're not able to determine if this is a rename
-or not. If yes, then accompanying VG structure passed here has a new name set,
-not the old one.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-03-26 15:40:14
 
-When looking for a location where to put metadata next, we're given a NULL value because
-of failed VG name comparison (in _find_vg_rlocn) between the name in existing metadata
-and metadata we're just about to write.
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : lvm-functions.c 
+	lib/locking    : cluster_locking.c 
 
-This resets the position in the ring buffer, overwriting any existing metadata
-(and also incorrectly updates the cache to "orphan" afterwards).
+Log message:
+	Fix clvmd cluster propagation of dmeventd monitoring mode.
+	
+	clvmd's do_lock_lv() already properly controls dmeventd monitoring based
+	on LCK_DMEVENTD_MONITOR_MODE in lock_flags -- though one small fix was
+	needed for this to work: _lock_for_cluster() must treat
+	dmeventd_monitor_mode()'s return as a tri-state value.
+	
+	Also cleanup do_lock_lv() to:
+	- explicitly init_dmeventd_monitor() based on LCK_DMEVENTD_MONITOR_MODE
+	- no longer reset init_dmeventd_monitor() to default at the end of
+	do_lock_lv() -- it is unnecessary
 
-This patch just adds old_name item in struct volume_group that we can check and use
-if necessary and detect renames at lower layers as well.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1482&r2=1.1483
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
 
-Peter
-
- lib/format_text/format-text.c    |   17 +++++++++++++----
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |    2 ++
- 3 files changed, 16 insertions(+), 4 deletions(-)
-
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index ad4db34..4856d07 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -380,6 +380,10 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
- 	} else
- 		*precommitted = 0;
+--- LVM2/WHATS_NEW	2010/03/25 21:19:26	1.1482
++++ LVM2/WHATS_NEW	2010/03/26 15:40:13	1.1483
+@@ -1,5 +1,6 @@
+ Version 2.02.63 -  
+ ================================
++  Fix clvmd cluster propagation of dmeventd monitoring mode.
+   Allow ALLOC_ANYWHERE to split contiguous areas.
+   Use INTERNAL_ERROR for internal errors throughout tree.
+   Add some assertions to allocation code.
+--- LVM2/daemons/clvmd/lvm-functions.c	2010/03/24 22:25:11	1.86
++++ LVM2/daemons/clvmd/lvm-functions.c	2010/03/26 15:40:14	1.87
+@@ -499,7 +499,9 @@
+ 	if (lock_flags & LCK_MIRROR_NOSYNC_MODE)
+ 		init_mirror_in_sync(1);
  
-+	/* Do not check non-existent metadata. */
-+	if (!rlocn->offset && !rlocn->size)
-+		return NULL;
-+
- 	/* FIXME Loop through rlocns two-at-a-time.  List null-terminated. */
- 	/* FIXME Ignore if checksum incorrect!!! */
- 	if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
-@@ -387,9 +391,11 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
- 		goto_bad;
- 
- 	if (!strncmp(vgnamebuf, vgname, len = strlen(vgname)) &&
--	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{')) {
-+	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
- 		return rlocn;
--	}
+-	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
++	if (lock_flags & LCK_DMEVENTD_MONITOR_MODE)
++		init_dmeventd_monitor(1);
 +	else
-+		log_debug("Volume group name found in metadata does "
-+			  "not match expected name %s.", vgname);
+ 		init_dmeventd_monitor(0);
  
-       bad:
- 	if ((info = info_from_pvid(dev_area->dev->pvid, 0)))
-@@ -542,7 +548,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if (!(mdah = _raw_read_mda_header(fid->fmt, &mdac->area)))
- 		goto_out;
+ 	cmd->partial_activation = (lock_flags & LCK_PARTIAL_MODE) ? 1 : 0;
+@@ -542,9 +544,6 @@
+ 	if (lock_flags & LCK_MIRROR_NOSYNC_MODE)
+ 		init_mirror_in_sync(0);
  
--	rlocn = _find_vg_rlocn(&mdac->area, mdah, vg->name, &noprecommit);
-+	rlocn = _find_vg_rlocn(&mdac->area, mdah,
-+			vg->old_name ? vg->old_name : vg->name, &noprecommit);
- 	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah);
+-	if (!(lock_flags & LCK_DMEVENTD_MONITOR_MODE))
+-		init_dmeventd_monitor(DEFAULT_DMEVENTD_MONITOR);
+-
+ 	cmd->partial_activation = 0;
  
- 	if (!fidtc->raw_metadata_buf &&
-@@ -647,7 +654,9 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
- 	if (!(mdah = _raw_read_mda_header(fid->fmt, &mdac->area)))
- 		goto_out;
+ 	/* clean the pool for another command */
+--- LVM2/lib/locking/cluster_locking.c	2010/01/05 16:07:57	1.40
++++ LVM2/lib/locking/cluster_locking.c	2010/03/26 15:40:14	1.41
+@@ -307,6 +307,7 @@
+ 	char *args;
+ 	const char *node = "";
+ 	int len;
++	int dmeventd_mode;
+ 	int saved_errno = errno;
+ 	lvm_response_t *response = NULL;
+ 	int num_responses;
+@@ -324,7 +325,12 @@
+ 	if (mirror_in_sync())
+ 		args[1] |= LCK_MIRROR_NOSYNC_MODE;
  
--	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, vg->name, &noprecommit))) {
-+	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah,
-+				     vg->old_name ? vg->old_name : vg->name,
-+				     &noprecommit))) {
- 		mdah->raw_locns[0].offset = 0;
- 		mdah->raw_locns[0].size = 0;
- 		mdah->raw_locns[0].checksum = 0;
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 2f1405f..855ab47 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -216,6 +216,7 @@ struct volume_group {
+-	if (dmeventd_monitor_mode())
++	/*
++	 * Must handle tri-state return from dmeventd_monitor_mode.
++	 * But DMEVENTD_MONITOR_IGNORE is not propagated across the cluster.
++	 */
++	dmeventd_mode = dmeventd_monitor_mode();
++	if (dmeventd_mode != DMEVENTD_MONITOR_IGNORE && dmeventd_mode)
+ 		args[1] |= LCK_DMEVENTD_MONITOR_MODE;
  
- 	struct id id;
- 	char *name;
-+	char *old_name;
- 	char *system_id;
- 
- 	uint32_t extent_size;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 020e897..867e004 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -437,6 +437,8 @@ int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
- 	struct dm_pool *mem = vg->vgmem;
- 	struct pv_list *pvl;
- 
-+	vg->old_name = vg->name;
-+
- 	if (!(vg->name = dm_pool_strdup(mem, new_name))) {
- 		log_error("vg->name allocation failed for '%s'", new_name);
- 		return 0;
+ 	if (cmd->partial_activation)
 
 
