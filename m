@@ -1,44 +1,43 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 29 Mar 2010 11:13:44 -0400
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-singlenode.c
-In-Reply-To: <871vf3b3cb.fsf@twilight.int.mornfall.net.>
-References: <20100326154537.2860.qmail@sourceware.org>
-	<871vf3b3cb.fsf@twilight.int.mornfall.net.>
-Message-ID: <20100329151343.GA20880@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 29 Mar 2010 17:27:18 +0200
+Subject: [PATCH 0/7] dmevent mlockall() fixes
+Message-ID: <cover.1269876115.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Mar 29 2010 at 10:38am -0400,
-Petr Rockai <prockai@redhat.com> wrote:
+This patch set tries to fix dmeventd.
 
-> Hi!
-> 
-> snitzer at sourceware.org writes:
-> > Modified files:
-> > 	.              : WHATS_NEW 
-> > 	daemons/clvmd  : clvmd-singlenode.c 
-> >
-> > Log message:
-> > 	Use a real socket for singlenode clvmd to fix clvmd's high cpu load.
-> Interesting. Is this because /dev/null is always "ready" for reading?
+Dmeventd got actually broken with our new mlock() code.
+There is no big chance to make current architecture with threads usable
+with mlock() code - so mlockall() is used for daemon case.
 
-Yes, daemons/clvmd/clvmd.c:main_loop's select() on /dev/null appears to
-be the problem.  If I set the associated listen_fd to be nonblocking the
-CPU load goes from 100%+ to ~80%.  But with the committed "fix" cpu load
-(when clvmd is idle) is now ~1% (on my f12 kvm guest).
+Snapshot plugin current doesn't use cmd_context and doesn't need memory
+locking.
 
-> Is there a less complicated workaround for that problem?
+Mirror plugin uses memlock_inc_daemon() and locks while binary to memory.
 
-I haven't looked for an alternative.  Not really seeing the current fix
-as overly complicated.  Its pretty standard socket code, which Milan
-started, that I then refined to be modeled after
-daemons/clvmd/clvmd.c:open_local_sock().  For that matter, we could have
-a single function that is used for both (reducing the perceived
-complexity of the clvmd-singlenode.c:init_comms).
+C locales are enforced to avoid loading of 100MB locale-archive file.
 
-Mike
+Few minor fixes for syslog message and resource leaks in error path.
+
+Statistic for mlock() could be based on readable sizes.
+
+Zdenek Kabelac (7):
+  Remove mlockall() form dmeventd
+  Fix resouces leak in error path
+  Release pool in the same reversed order
+  Updated syslog messages
+  Force C locale
+  Update memlock
+  Count only readable size for memlock stats.
+
+ daemons/dmeventd/dmeventd.c                       |   14 ++---
+ daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c      |    4 +-
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c |   28 +++++-----
+ lib/mm/memlock.c                                  |   64 ++++++++++-----------
+ 4 files changed, 51 insertions(+), 59 deletions(-)
 
 
