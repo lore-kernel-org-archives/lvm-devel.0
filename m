@@ -1,36 +1,37 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 18 Mar 2010 09:27:40 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100318092740.13415.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 29 Mar 2010 17:27:23 +0200
+Subject: [PATCH 5/7] Force C locale
+In-Reply-To: <cover.1269876115.git.zkabelac@redhat.com>
+References: <cover.1269876115.git.zkabelac@redhat.com>
+Message-ID: <03ae6ffc85481c0cc1f995d5102fe365da2c5f91.1269876115.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-03-18 09:27:40
+As we need to use mlockall() enforce "C" locales for dmeventd.
 
-Modified files:
-	test           : test-utils.sh 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ daemons/dmeventd/dmeventd.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-Log message:
-	Skip locking_type 3 tests instead of failing when system-wide clvmd is running.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.23&r2=1.24
-
---- LVM2/test/test-utils.sh	2010/03/18 09:19:33	1.23
-+++ LVM2/test/test-utils.sh	2010/03/18 09:27:39	1.24
-@@ -61,7 +61,7 @@
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index f4b664b..0958e21 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1698,6 +1698,9 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
  
- 	if pgrep clvmd ; then
- 		echo "Cannot use fake cluster locking with real clvmd ($(pgrep clvmd)) running."
--		exit 1
-+		exit 200
- 	fi
++	/* Force C locale */
++	setenv("LANG", "C", 1);
++
+ 	if (!_debug)
+ 		_daemonize();
  
- 	# skip if we don't have our own clvmd...
+-- 
+1.7.0.1
 
 
