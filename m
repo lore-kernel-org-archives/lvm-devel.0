@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Mar 2010 14:06:06 -0000
-Subject: LVM2 Makefile.in
-Message-ID: <20100329140606.16583.qmail@sourceware.org>
+Date: 29 Mar 2010 14:07:02 -0000
+Subject: LVM2/daemons/dmeventd Makefile.in
+Message-ID: <20100329140702.16895.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-29 14:06:06
+Changes by:	zkabelac at sourceware.org	2010-03-29 14:07:01
 
 Modified files:
-	.              : Makefile.in 
+	daemons/dmeventd: Makefile.in 
 
 Log message:
-	Avoid hard sed replacement - i.e. quick test change in make.tmpl
-	could avoid recofiguration steps in same debug cases.
+	Add $(LIB_STATIC) to TARGETS so it's cleaned in the same way
+	as other libraries in project.
+	Add dmeventd.gcda dmeventd.gcno to CLEAN_TARGETS.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.36&r2=1.37
 
---- LVM2/Makefile.in	2009/10/02 19:10:31	1.42
-+++ LVM2/Makefile.in	2010/03/29 14:06:06	1.43
-@@ -88,7 +88,7 @@
- check: all
- 	$(MAKE) -C test all
+--- LVM2/daemons/dmeventd/Makefile.in	2010/03/04 12:10:41	1.36
++++ LVM2/daemons/dmeventd/Makefile.in	2010/03/29 14:07:01	1.37
+@@ -26,9 +26,10 @@
+ INSTALL_DMEVENTD_TARGETS = install_dmeventd_dynamic
+ INSTALL_LIB_TARGETS = install_lib_dynamic
  
--ifneq ("@LCOV@", "")
-+ifneq ("$(LCOV)", "")
- .PHONY: lcov-reset lcov lcov-dated
++LIB_NAME = libdevmapper-event
+ ifeq ("@STATIC_LINK@", "yes")
+-  LIB_STATIC = libdevmapper-event.a
+-  TARGETS += dmeventd.static
++  LIB_STATIC = $(LIB_NAME).a
++  TARGETS += $(LIB_STATIC) dmeventd.static
+   INSTALL_DMEVENTD_TARGETS += install_dmeventd_static
+   INSTALL_LIB_TARGETS += install_lib_static
+ endif
+@@ -36,13 +37,13 @@
+ LIB_VERSION = $(LIB_VERSION_DM)
  
- ifeq ($(MAKECMDGOALS),lcov-dated)
-@@ -116,7 +116,7 @@
- 		-a $(LCOV_REPORTS_DIR)/libdm.info \
- 		-a $(LCOV_REPORTS_DIR)/tools.info \
- 		-o $(LCOV_REPORTS_DIR)/lvm.info
--ifneq ("@GENHTML@", "")
-+ifneq ("$(GENHTML)", "")
- 	$(GENHTML) -o $(LCOV_REPORTS_DIR) -p $(top_srcdir) $(LCOV_REPORTS_DIR)/lvm.info
+ ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = libdevmapper-event.dylib
++  LIB_SHARED = $(LIB_NAME).dylib
+ else
+-  LIB_SHARED = libdevmapper-event.so
++  LIB_SHARED = $(LIB_NAME).so
+   VERSIONED_SHLIB = $(LIB_SHARED).$(LIB_VERSION)
  endif
  
+-CLEAN_TARGETS = dmeventd.o dmeventd.static
++CLEAN_TARGETS = dmeventd.o dmeventd.static dmeventd.gcda dmeventd.gcno
+ 
+ ifneq ($(MAKECMDGOALS),device-mapper)
+   SUBDIRS+=plugins
 
 
