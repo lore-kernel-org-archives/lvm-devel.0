@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Mar 2010 14:05:19 -0000
-Subject: LVM2/daemons/cmirrord clogd.c
-Message-ID: <20100329140519.16365.qmail@sourceware.org>
+Date: 29 Mar 2010 14:06:06 -0000
+Subject: LVM2 Makefile.in
+Message-ID: <20100329140606.16583.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-29 14:05:17
+Changes by:	zkabelac at sourceware.org	2010-03-29 14:06:06
 
 Modified files:
-	daemons/cmirrord: clogd.c 
+	.              : Makefile.in 
 
 Log message:
-	Fixing compilation warning: implicit declaration of function ???umask???
+	Avoid hard sed replacement - i.e. quick test change in make.tmpl
+	could avoid recofiguration steps in same debug cases.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/clogd.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.42&r2=1.43
 
---- LVM2/daemons/cmirrord/clogd.c	2010/01/19 15:58:45	1.9
-+++ LVM2/daemons/cmirrord/clogd.c	2010/03/29 14:05:17	1.10
-@@ -18,6 +18,7 @@
- #include <errno.h>
- #include <fcntl.h>
- #include <sys/socket.h>
-+#include <sys/stat.h>
- #include <sys/wait.h>
- #include <unistd.h>
+--- LVM2/Makefile.in	2009/10/02 19:10:31	1.42
++++ LVM2/Makefile.in	2010/03/29 14:06:06	1.43
+@@ -88,7 +88,7 @@
+ check: all
+ 	$(MAKE) -C test all
+ 
+-ifneq ("@LCOV@", "")
++ifneq ("$(LCOV)", "")
+ .PHONY: lcov-reset lcov lcov-dated
+ 
+ ifeq ($(MAKECMDGOALS),lcov-dated)
+@@ -116,7 +116,7 @@
+ 		-a $(LCOV_REPORTS_DIR)/libdm.info \
+ 		-a $(LCOV_REPORTS_DIR)/tools.info \
+ 		-o $(LCOV_REPORTS_DIR)/lvm.info
+-ifneq ("@GENHTML@", "")
++ifneq ("$(GENHTML)", "")
+ 	$(GENHTML) -o $(LCOV_REPORTS_DIR) -p $(top_srcdir) $(LCOV_REPORTS_DIR)/lvm.info
+ endif
  
 
 
