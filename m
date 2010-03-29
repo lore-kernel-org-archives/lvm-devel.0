@@ -1,36 +1,66 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 28 Mar 2010 15:52:05 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100328155205.29791.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 29 Mar 2010 15:12:53 +0200
+Subject: [PATCH 0/5] Fix some scaling problems for large VGs (many LVs)
+Message-ID: <cover.1269866168.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-03-28 15:52:04
+This patches fixes some problems in code when processing large VGs.
 
-Modified files:
-	test           : test-utils.sh 
+An example: VG with one PVs and 2000LVs
+(I was not able to test more LVs without patches, swapped to death...)
 
-Log message:
-	When a scsi_debug modprobe fails, skip the test instead of failing it.
+# vgs vg_test
+  VG      #PV #LV  #SN Attr   VSize  VFree
+  vg_test   1 2000   0 wz--n- 18.53g 10.71g
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+Before (intentionally do not run any in-kernel operations -t test mode):
 
---- LVM2/test/test-utils.sh	2010/03/23 14:47:35	1.25
-+++ LVM2/test/test-utils.sh	2010/03/28 15:52:04	1.26
-@@ -188,7 +188,7 @@
-     local devs_before=`get_sd_devs_`
-     # NOTE: it will _never_ make sense to pass num_tgts param;
-     # last param wins.. so num_tgts=1 is imposed
--    modprobe scsi_debug dev_size_mb=$DEV_SIZE $SCSI_DEBUG_PARAMS num_tgts=1
-+    modprobe scsi_debug dev_size_mb=$DEV_SIZE $SCSI_DEBUG_PARAMS num_tgts=1 || exit 200
-     sleep 2 # allow for async Linux SCSI device registration
- 
-     local devs_after=`get_sd_devs_`
+# time vgchange -t -a n vg_test
+  Test mode: Metadata will NOT be updated.
+    0 logical volume(s) in volume group "vg_test" now active
+
+    real    9m31.463s
+    user    9m29.841s
+    sys     0m1.251s
+
+After (patches applied):
+# time vgchange -t -a n vg_test
+  Test mode: Metadata will NOT be updated.
+   0 logical volume(s) in volume group "vg_test" now active
+
+    real    1m22.852s
+    user    1m14.805s
+    sys     0m7.961s
+
+
+Memory use (cca, it oscillates according to vg_release) 
+before:
+root     24664 99.9 17.9 355588 350340 pts/0   R+   14:43   9:34 vgchange -t -a n vg_test
+after:
+root     31022 98.5  0.2   7736   5084 pts/0   R+   14:57   1:21 vgchange -t -a n vg_test
+
+...
+
+Milan Broz (5):
+  Use hash table for quick lv reference when reading metadata.
+  Remove vg_validate call when parsing cached metadata.
+  Optimise PV segments search.
+  Do not traverse PV segment list twice.
+  Fix all segments memory is allocated from vg private mempool.
+
+ lib/cache/lvmcache.c          |    3 +-
+ lib/format_text/import.c      |    2 +-
+ lib/format_text/import_vsn1.c |   42 +++++++++++++++++++++-------
+ lib/metadata/lv_manip.c       |    2 +-
+ lib/metadata/merge.c          |    4 +-
+ lib/metadata/metadata.c       |   12 --------
+ lib/metadata/metadata.h       |    3 --
+ lib/metadata/pv_alloc.h       |    4 ++-
+ lib/metadata/pv_manip.c       |   60 ++++++++++++++++++++++++++++------------
+ 9 files changed, 81 insertions(+), 51 deletions(-)
 
 
