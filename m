@@ -1,38 +1,103 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 30 Mar 2010 17:17:18 +0200
-Subject: [PATCH 17/22] Replicator: vg with missing_vgs does not print
+Date: Tue, 30 Mar 2010 17:17:19 +0200
+Subject: [PATCH 18/22] Replicator: add replicator to dtree
 In-Reply-To: <cover.1269961680.git.zkabelac@redhat.com>
 References: <cover.1269961680.git.zkabelac@redhat.com>
-Message-ID: <7233e0e917fa820b3b058dd81cdb512dbd090ee9.1269961680.git.zkabelac@redhat.com>
+Message-ID: <f51ba49f88e2faff3af574b614b33cbc95b93f35.1269961680.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If missed VGs do not print message and wait for retry.
+Adding all replicator related LVs to dtree.
+Start of one replicator_dev initiate start of all other related.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/vgchange.c |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c |   60 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 59 insertions(+), 1 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 81c95d1..68fac86 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -224,8 +224,9 @@ static int _vgchange_available(struct cmd_context *cmd, struct volume_group *vg)
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 1adefc8..451ba2b 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1173,6 +1173,61 @@ static int _add_target_to_dtree(struct dev_manager *dm,
+ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 				  struct logical_volume *lv, const char *layer);
  
- 	ret = _activate_lvs_in_vg(cmd, vg, available);
++/* Add all replicators' LVs from active segment */
++static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
++					       struct dm_tree *dtree,
++					       struct lv_segment *seg)
++{
++	struct replicator_device *rdev;
++	struct replicator_site *rsite;
++
++	/* Only active replicator */
++	if (!lv_is_active_replicator_dev(seg->lv)) {
++		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv->rdevice->lv, NULL))
++			return_0;
++		return 1;
++	}
++
++	/* Add rlog and replicator nodes */
++	if (!seg->replicator ||
++            !first_seg(seg->replicator)->rlog_lv ||
++	    !_add_new_lv_to_dtree(dm, dtree,
++				  first_seg(seg->replicator)->rlog_lv, NULL) ||
++	    !_add_new_lv_to_dtree(dm, dtree, seg->replicator, NULL))
++	    return_0;
++
++	/* Activation of one replicator_dev node activates all other nodes */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rdev->lv &&
++			    !_add_new_lv_to_dtree(dm, dtree, rdev->lv, NULL))
++				return_0;
++
++			if (rdev->slog &&
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->slog, NULL))
++				return_0;
++		}
++	}
++	/* Add remaining replicator-dev nodes in the second loop
++	 * to avoid multiple retries for inserting all elements */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		if (rsite->state != REPLICATOR_STATE_ACTIVE)
++			continue;
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rdev->replicator_dev->lv == seg->lv)
++				continue;
++			if (!rdev->replicator_dev->lv ||
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->replicator_dev->lv,
++						  NULL))
++				return_0;
++		}
++	}
++
++	return 1;
++}
++
+ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 				   struct dm_tree *dtree,
+ 				   struct dm_tree_node *dnode,
+@@ -1203,9 +1258,12 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, NULL))
+ 		return_0;
  
--	log_print("%d logical volume(s) in volume group \"%s\" now active",
--		  lvs_in_vg_activated(vg), vg->name);
-+	if (!vg->missing_vgs)
-+		log_print("%d logical volume(s) in volume group \"%s\" now active",
-+			  lvs_in_vg_activated(vg), vg->name);
- 	return ret;
- }
- 
++	if (seg_is_replicator_dev(seg)) {
++		if (!_add_replicator_dev_target_to_dtree(dm, dtree, seg))
++			return_0;
+ 	/* If this is a snapshot origin, add real LV */
+ 	/* If this is a snapshot origin + merging snapshot, add cow + real LV */
+-	if (lv_is_origin(seg->lv) && !layer) {
++	} else if (lv_is_origin(seg->lv) && !layer) {
+ 		if (vg_is_clustered(seg->lv->vg)) {
+ 			log_error("Clustered snapshots are not yet supported");
+ 			return 0;
 -- 
 1.7.0.1
 
