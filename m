@@ -1,72 +1,99 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 30 Mar 2010 17:17:02 +0200
-Subject: [PATCH 01/22] Add dm_list_splice() for list join.
+Date: Tue, 30 Mar 2010 17:17:03 +0200
+Subject: [PATCH 02/22] API change for args of process_each_lv_in_vg()
 In-Reply-To: <cover.1269961680.git.zkabelac@redhat.com>
 References: <cover.1269961680.git.zkabelac@redhat.com>
-Message-ID: <937f1841cac71f510c2eb12f500735d4253b3b46.1269961680.git.zkabelac@redhat.com>
+Message-ID: <668562192f05e5c71b26e4d105f4e1927add2213.1269961680.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Introduce dm_list_splice to join two lists.
+Patch adds failed_lvs to the list of parameters for process_each_lv_in_vg().
+If the list is not NULL it will be filled with lv_names of failing LVs
+during function execution.
+
+Application could later reiterate only on failed LVs.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/.exported_symbols |    1 +
- libdm/datastruct/list.c |   12 ++++++++++++
- libdm/libdevmapper.h    |    5 +++++
- 3 files changed, 18 insertions(+), 0 deletions(-)
+ tools/toollib.c   |   14 +++++++++++++-
+ tools/toollib.h   |    1 +
+ tools/vgdisplay.c |    2 +-
+ 3 files changed, 15 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index fd9d0b9..ea65c8b 100644
---- a/libdm/.exported_symbols
-+++ b/libdm/.exported_symbols
-@@ -153,6 +153,7 @@ dm_list_add
- dm_list_add_h
- dm_list_del
- dm_list_move
-+dm_list_splice
- dm_list_empty
- dm_list_start
- dm_list_end
-diff --git a/libdm/datastruct/list.c b/libdm/datastruct/list.c
-index 3d9ca8b..a7f9324 100644
---- a/libdm/datastruct/list.c
-+++ b/libdm/datastruct/list.c
-@@ -144,3 +144,15 @@ unsigned int dm_list_size(const struct dm_list *head)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 52ea4a6..c31315c 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -86,6 +86,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 			  struct volume_group *vg,
+ 			  const struct dm_list *arg_lvnames,
+ 			  const struct dm_list *tags,
++			  struct dm_list *failed_lvs,
+ 			  void *handle,
+ 			  process_single_lv_fn_t process_single)
+ {
+@@ -99,6 +100,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
  
- 	return s;
- }
-+
-+void dm_list_splice(struct dm_list *list, struct dm_list *head)
-+{
-+	struct dm_list *first = list->n;
-+	struct dm_list *last = list->p;
-+	struct dm_list *at = head->n;
-+
-+	first->p = head;
-+	head->n = first;
-+	last->n = at;
-+	at->p = last;
-+}
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 1ae930f..aa8ad5c 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -715,6 +715,11 @@ void dm_list_del(struct dm_list *elem);
- void dm_list_move(struct dm_list *head, struct dm_list *elem);
+ 	struct lv_list *lvl;
  
- /*
-+ * Join 'list' to 'head'.
-+ */
-+void dm_list_splice(struct dm_list *list, struct dm_list *head);
++	if (failed_lvs)
++		dm_list_init(failed_lvs);
 +
-+/*
-  * Is the list empty?
-  */
- int dm_list_empty(const struct dm_list *head);
+ 	if (!vg_check_status(vg, EXPORTED_VG))
+ 		return ECMD_FAILED;
+ 
+@@ -148,6 +152,14 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 			continue;
+ 
+ 		ret = process_single(cmd, lvl->lv, handle);
++		if (ret != ECMD_PROCESSED && failed_lvs) {
++			if (!str_list_add(cmd->mem, failed_lvs,
++					  dm_pool_strdup(cmd->mem,
++							 lvl->lv->name))) {
++				log_error("Allocation failed for str_list.");
++				return ECMD_FAILED;
++			}
++		}
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+ 		if (sigint_caught())
+@@ -320,7 +332,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 		}
+ 
+ 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
+-					    handle, process_single);
++					    NULL, handle, process_single);
+ 		unlock_and_release_vg(cmd, vg, vgname);
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 0ea7eba..8f22cc4 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -79,6 +79,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 			  struct volume_group *vg,
+ 			  const struct dm_list *arg_lvnames,
+ 			  const struct dm_list *tags,
++			  struct dm_list *failed_lvs,
+ 			  void *handle,
+ 			  process_single_lv_fn_t process_single);
+ 
+diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
+index 29bc7f1..954e456 100644
+--- a/tools/vgdisplay.c
++++ b/tools/vgdisplay.c
+@@ -37,7 +37,7 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (arg_count(cmd, verbose_ARG)) {
+ 		vgdisplay_extents(vg);
+ 
+-		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL,
++		process_each_lv_in_vg(cmd, vg, NULL, NULL, NULL, NULL,
+ 				      (process_single_lv_fn_t)lvdisplay_full);
+ 
+ 		log_print("--- Physical volumes ---");
 -- 
 1.7.0.1
 
