@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Mar 2010 17:59:47 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20100329175947.24414.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 30 Mar 2010 14:35:41 -0000
+Subject: LVM2/daemons/dmeventd dmeventd.c
+Message-ID: <20100330143541.15773.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,43 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-03-29 17:59:47
+Changes by:	zkabelac at sourceware.org	2010-03-30 14:35:41
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
+	daemons/dmeventd: dmeventd.c 
 
 Log message:
-	Fix --alloc contiguous policy only to allocate one set of parallel areas.
+	Remove mlockall() form dmeventd
+	
+	As the header file <sys/mman.h> was not included in dmeventd.c
+	thus missed definition of MCL_CURRENT so this patch only makes
+	it obvious we were not locking memory here.
+	
+	This patch has no functional change.
+	Later part of this patch set handles mlockall() via memlock_inc_daemon().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1487&r2=1.1488
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.217&r2=1.218
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
 
---- LVM2/WHATS_NEW	2010/03/29 16:09:40	1.1487
-+++ LVM2/WHATS_NEW	2010/03/29 17:59:46	1.1488
-@@ -1,10 +1,10 @@
- Version 2.02.63 -  
- ================================
-+  Fix --alloc contiguous policy only to allocate one set of parallel areas.
-   Do not allow {vg|lv}change --ignoremonitoring if on clustered VG.
-   Improved dependency tracking for dmeventd and liblvm2cmd sources.
-   Improved Makefile rules for distclean and cflow targets.
-   Add ability to create mirrored logs for mirror LVs.
--  Use a real socket for singlenode clvmd to fix clvmd's high cpu load.
-   Fix clvmd cluster propagation of dmeventd monitoring mode.
-   Allow ALLOC_ANYWHERE to split contiguous areas.
-   Use INTERNAL_ERROR for internal errors throughout tree.
---- LVM2/lib/metadata/lv_manip.c	2010/03/26 22:15:43	1.217
-+++ LVM2/lib/metadata/lv_manip.c	2010/03/29 17:59:46	1.218
-@@ -1243,7 +1243,7 @@
- 					  log_needs_allocating, ix_log_offset))
- 			return_0;
+--- LVM2/daemons/dmeventd/dmeventd.c	2008/11/04 15:07:44	1.54
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/03/30 14:35:40	1.55
+@@ -1725,11 +1725,6 @@
  
--	} while (!contiguous && *allocated != needed && can_split);
-+	} while ((alloc != ALLOC_CONTIGUOUS) && *allocated != needed && can_split);
+ 	pthread_mutex_init(&_global_mutex, NULL);
  
- 	return 1;
- }
+-#ifdef MCL_CURRENT
+-	if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
+-		exit(EXIT_FAILURE);
+-#endif
+-
+ 	if ((ret = _open_fifos(&fifos)))
+ 		exit(EXIT_FIFO_FAILURE);
+ 
+@@ -1749,9 +1744,6 @@
+ 
+ 	_exit_dm_lib();
+ 
+-#ifdef MCL_CURRENT
+-	munlockall();
+-#endif
+ 	pthread_mutex_destroy(&_global_mutex);
+ 
+ 	syslog(LOG_NOTICE, "dmeventd shutting down.");
 
 
