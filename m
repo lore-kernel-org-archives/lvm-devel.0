@@ -1,40 +1,38 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 30 Mar 2010 17:17:20 +0200
-Subject: [PATCH 19/22] Replicator: do not remove of replicators' LVs
+Date: Tue, 30 Mar 2010 17:17:21 +0200
+Subject: [PATCH 20/22] Replicator: activate change for vgchange
 In-Reply-To: <cover.1269961680.git.zkabelac@redhat.com>
 References: <cover.1269961680.git.zkabelac@redhat.com>
-Message-ID: <bcf6d07bc19205aaf55a641d5232a7d4271d70fb.1269961680.git.zkabelac@redhat.com>
+Message-ID: <3551b58d93e99c5ab6bef48ba2cc7424ac339b11.1269961680.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Activate only the first replicator-dev LV, that activates all other
+related LVs from Replicator.
+
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/lv_manip.c |    9 +++++++++
- 1 files changed, 9 insertions(+), 0 deletions(-)
+ tools/vgchange.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index de82718..d20b426 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2177,6 +2177,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 68fac86..139a1a5 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -104,6 +104,10 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
+ 			continue;
  
-+	if (lv_is_replicator_dev(lv) ||
-+	    lv_is_rimage(lv) ||
-+	    lv_is_rlog(lv) ||
-+	    lv_is_slog(lv)) {
-+		log_error("Can't remove logical volume %s used by a "
-+			  "replicator.", lv->name);
-+		return 0;
-+	}
++		/* Only request activation of the first replicator-dev LV */
++		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
++			continue;
 +
- 	if (lv->status & LOCKED) {
- 		log_error("Can't remove locked LV %s", lv->name);
- 		return 0;
+ 		/* Can't deactivate a pvmove LV */
+ 		/* FIXME There needs to be a controlled way of doing this */
+ 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
 -- 
 1.7.0.1
 
