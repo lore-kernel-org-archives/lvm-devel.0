@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Mar 2010 14:35:41 -0000
+Date: 30 Mar 2010 14:37:28 -0000
 Subject: LVM2/daemons/dmeventd dmeventd.c
-Message-ID: <20100330143541.15773.qmail@sourceware.org>
+Message-ID: <20100330143728.17451.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-30 14:35:41
+Changes by:	zkabelac at sourceware.org	2010-03-30 14:37:28
 
 Modified files:
 	daemons/dmeventd: dmeventd.c 
 
 Log message:
-	Remove mlockall() form dmeventd
+	Fix resouce leak in error path
 	
-	As the header file <sys/mman.h> was not included in dmeventd.c
-	thus missed definition of MCL_CURRENT so this patch only makes
-	it obvious we were not locking memory here.
-	
-	This patch has no functional change.
-	Later part of this patch set handles mlockall() via memlock_inc_daemon().
+	If the error path of _register_for_event() calls _free_thread_status()
+	_lib_put() call is missing.
+	To make thing simpler move this _lib_put() into common error path code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.55&r2=1.56
 
---- LVM2/daemons/dmeventd/dmeventd.c	2008/11/04 15:07:44	1.54
-+++ LVM2/daemons/dmeventd/dmeventd.c	2010/03/30 14:35:40	1.55
-@@ -1725,11 +1725,6 @@
+--- LVM2/daemons/dmeventd/dmeventd.c	2010/03/30 14:35:40	1.55
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/03/30 14:37:28	1.56
+@@ -243,8 +243,10 @@
+ 	return ret;
+ }
  
- 	pthread_mutex_init(&_global_mutex, NULL);
- 
--#ifdef MCL_CURRENT
--	if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
--		exit(EXIT_FAILURE);
--#endif
--
- 	if ((ret = _open_fifos(&fifos)))
- 		exit(EXIT_FIFO_FAILURE);
- 
-@@ -1749,9 +1744,6 @@
- 
- 	_exit_dm_lib();
- 
--#ifdef MCL_CURRENT
--	munlockall();
--#endif
- 	pthread_mutex_destroy(&_global_mutex);
- 
- 	syslog(LOG_NOTICE, "dmeventd shutting down.");
++static void _lib_put(struct dso_data *data);
+ static void _free_thread_status(struct thread_status *thread)
+ {
++	_lib_put(thread->dso_data);
+ 	if (thread->current_task)
+ 		dm_task_destroy(thread->current_task);
+ 	dm_free(thread->device.uuid);
+@@ -1481,7 +1483,6 @@
+ 		if (thread->status == DM_THREAD_DONE) {
+ 			dm_list_del(l);
+ 			pthread_join(thread->thread, NULL);
+-			_lib_put(thread->dso_data);
+ 			_free_thread_status(thread);
+ 		}
+ 	}
 
 
