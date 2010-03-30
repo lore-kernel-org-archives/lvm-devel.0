@@ -1,37 +1,93 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 30 Mar 2010 17:17:15 +0200
-Subject: [PATCH 14/22] Replicator: lock_vol update replicator LV
+Date: Tue, 30 Mar 2010 17:17:16 +0200
+Subject: [PATCH 15/22] Replicator: extend activate with rsite resolving
 In-Reply-To: <cover.1269961680.git.zkabelac@redhat.com>
 References: <cover.1269961680.git.zkabelac@redhat.com>
-Message-ID: <fd414a12bb907e4e8a18e0c35935d272dcb0023e.1269961680.git.zkabelac@redhat.com>
+Message-ID: <8784465d4b72050ac9145ac677e479364a3ee06e.1269961680.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Check for all needed VGs before calling lock_vol()
+Activation code needs to have all remote lv pointers resolved.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/locking/locking.h |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/activate/activate.c |   22 ++++++++++++++++++----
+ 1 files changed, 18 insertions(+), 4 deletions(-)
 
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index e7f25b9..045300d 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -129,7 +129,9 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 1844cea..8224be0 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -865,6 +865,9 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 		goto out;
+ 	}
  
- #define lock_lv_vol(cmd, lv, flags)	\
--	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
-+	(lv_replicator_sites_check_vg((lv)) ? \
-+		lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv)) : \
-+		0)
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
++
+ 	lv_calculate_readahead(lv, NULL);
  
- #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
- #define unlock_and_release_vg(cmd, vg, vol) \
+ 	/* If VG was precommitted, preload devices for the LV */
+@@ -894,9 +897,10 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ out:
+ 	if (lv_pre)
+ 		vg_release(lv_pre->vg);
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
+-
++	}
+ 	return r;
+ }
+ 
+@@ -1025,6 +1029,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 			goto_out;
+ 	}
+ 
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
++
+ 	lv_calculate_readahead(lv, NULL);
+ 
+ 	if (!monitor_dev_for_events(cmd, lv, 0))
+@@ -1038,8 +1045,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	if (!lv_info(cmd, lv, &info, 1, 0) || info.exists)
+ 		r = 0;
+ out:
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
++	}
+ 
+ 	return r;
+ }
+@@ -1118,6 +1127,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 		goto out;
+ 	}
+ 
++	if (!lv_replicator_sites_read(lv))
++		goto_out;
++
+ 	lv_calculate_readahead(lv, NULL);
+ 
+ 	if (exclusive)
+@@ -1133,8 +1145,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 		stack;
+ 
+ out:
+-	if (lv)
++	if (lv) {
++		lv_replicator_sites_release(lv);
+ 		vg_release(lv->vg);
++	}
+ 
+ 	return r;
+ }
 -- 
 1.7.0.1
 
