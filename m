@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 31 Mar 2010 17:23:57 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/locking.c
-Message-ID: <20100331172357.1067.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 31 Mar 2010 20:26:04 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20100331202604.19745.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,61 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-03-31 17:23:57
+Changes by:	agk at sourceware.org	2010-03-31 20:26:04
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : locking.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Always use blocking lock for VGs and orphan locks.
-	
-	Because we have now strong rule for lock ordering:
-	- VG locks must be taken in alphabetical order
-	- ORPHAN locks must be the last
-	vgs_locked() is now not needed.
-	
-	This fixes problem with orphan locking, e.g.
-	vgremove VG1    |    vgremove VG2
-	lock(VG1)       |    lock(VG2)
-	lock(ORPHAN)    |    lock(ORPHAN) -> fail, non-blocking
-	
-	https://bugzilla.redhat.com/show_bug.cgi?id=578413
-	
-	(More similar places in code.)
+	Attempt to fix non-ALLOC_ANYWHERE allocation code after recent changes broke
+	The preference given to the PVs with the largest free areas.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1497&r2=1.1498
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.219&r2=1.220
 
---- LVM2/WHATS_NEW	2010/03/31 17:23:18	1.1497
-+++ LVM2/WHATS_NEW	2010/03/31 17:23:56	1.1498
-@@ -1,5 +1,6 @@
- Version 2.02.63 -  
- ================================
-+  Always use blocking lock for VGs and orphan locks.
-   Allocate all segments memory from vg private mempool.
-   Return newly allocated PV segment after segment split.
-   Optimise PV segments search for the most last segment search case.
---- LVM2/lib/locking/locking.c	2010/03/05 14:48:34	1.75
-+++ LVM2/lib/locking/locking.c	2010/03/31 17:23:57	1.76
-@@ -420,11 +420,9 @@
- 	switch (flags & LCK_SCOPE_MASK) {
- 	case LCK_VG:
- 		/*
--		 * Automatically set LCK_NONBLOCK if one or more VGs locked.
--		 * This will enforce correctness and prevent deadlocks rather
--		 * than relying on the caller to set the flag properly.
-+		 * VG locks alphabetical, ORPHAN lock last
- 		 */
--		if (!_blocking_supported || vgs_locked())
-+		if (!_blocking_supported)
- 			flags |= LCK_NONBLOCK;
+--- LVM2/lib/metadata/lv_manip.c	2010/03/31 17:23:19	1.219
++++ LVM2/lib/metadata/lv_manip.c	2010/03/31 20:26:04	1.220
+@@ -877,8 +877,8 @@
  
- 		if (vol[0] != '#' &&
+ static int _comp_area(const void *l, const void *r)
+ {
+-	const struct pv_area_used *lhs = *((const struct pv_area_used * const *) l);
+-	const struct pv_area_used *rhs = *((const struct pv_area_used * const *) r);
++	const struct pv_area_used *lhs = (const struct pv_area_used *) l;
++	const struct pv_area_used *rhs = (const struct pv_area_used *) r;
+ 
+ 	if (lhs->used < rhs->used)
+ 		return 1;
+@@ -1166,10 +1166,7 @@
+ 						already_found_one = 1;
+ 					}
+ 
+-					if (ix + ix_offset - 1 < ah->area_count)
+-						required = (max_parallel - *allocated) / ah->area_multiple;
+-					else
+-						required = ah->log_len;
++					required = (max_parallel - *allocated) / ah->area_multiple;
+ 
+ 					if (alloc == ALLOC_ANYWHERE) {
+ 						/*
+@@ -1177,6 +1174,8 @@
+ 						 * into two or more parts.  If the whole stripe doesn't fit,
+ 						 * reduce amount we're looking for.
+ 						 */
++						if (ix + ix_offset - 1 >= ah->area_count)
++							required = ah->log_len;
+ 						if (required >= pva->unreserved) {
+ 							required = pva->unreserved;
+ 							pva->unreserved = 0;
+@@ -1200,7 +1199,8 @@
+ 						  (alloc == ALLOC_ANYWHERE) ? pva->unreserved : pva->count - required);
+ 				}
+ 			next_pv:
+-				if (ix + ix_offset >= ah->area_count + (log_needs_allocating ? ah->log_area_count : 0))
++				if (alloc == ALLOC_ANYWHERE &&
++				    ix + ix_offset >= ah->area_count + (log_needs_allocating ? ah->log_area_count : 0))
+ 					break;
+ 			}
+ 		} while (alloc == ALLOC_ANYWHERE && last_ix != ix && ix < ah->area_count + (log_needs_allocating ? ah->log_area_count : 0));
 
 
