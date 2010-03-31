@@ -1,57 +1,41 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 31 Mar 2010 14:25:40 +0200
-Subject: [PATCH 2/5] Remove vg_validate call when parsing cached metadata.
-In-Reply-To: <59763531708170fbd57e63cc407e7a7f7557c1b2.1269866168.git.mbroz@redhat.com>
+Date: Wed, 31 Mar 2010 14:35:34 +0200
+Subject: [PATCH 0/5] Fix some scaling problems for large VGs (many LVs)
+In-Reply-To: <cover.1269866168.git.mbroz@redhat.com>
 References: <cover.1269866168.git.mbroz@redhat.com>
-	<59763531708170fbd57e63cc407e7a7f7557c1b2.1269866168.git.mbroz@redhat.com>
-Message-ID: <4BB33F44.6040702@redhat.com>
+Message-ID: <4BB34196.6070403@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 29.3.2010 15:12, Milan Broz wrote:
-> vg_validate call is an adept to optimisation, it is very
-> ineeficient and slow.
+..
 > 
-> Anyway, we should call it only before writing data to disk.
+> Milan Broz (5):
+>   Use hash table for quick lv reference when reading metadata.
+>   Remove vg_validate call when parsing cached metadata.
+>   Optimise PV segments search.
+>   Do not traverse PV segment list twice.
+>   Fix all segments memory is allocated from vg private mempool.
 > 
-> The call in lvmcache was just temporary validation,
-> we realy do not need to revalidate cached metadata
-> every time.
-> (Actually, I added that there just to prove that cache works
-> properly and forgot to remove it.)
+>  lib/cache/lvmcache.c          |    3 +-
+>  lib/format_text/import.c      |    2 +-
+>  lib/format_text/import_vsn1.c |   42 +++++++++++++++++++++-------
+>  lib/metadata/lv_manip.c       |    2 +-
+>  lib/metadata/merge.c          |    4 +-
+>  lib/metadata/metadata.c       |   12 --------
+>  lib/metadata/metadata.h       |    3 --
+>  lib/metadata/pv_alloc.h       |    4 ++-
+>  lib/metadata/pv_manip.c       |   60 ++++++++++++++++++++++++++++------------
+>  9 files changed, 81 insertions(+), 51 deletions(-)
 > 
-> Patch removes it from lvmcache completely, this can hit only
-> internal bug in export function (and this bug must
-> be detected in any vg_write call anyway before).
 > 
-> Signed-off-by: Milan Broz <mbroz@redhat.com>
-> ---
->  lib/cache/lvmcache.c |    3 +--
->  1 files changed, 1 insertions(+), 2 deletions(-)
-> 
-> diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-> index 0ce034a..9caa216 100644
-> --- a/lib/cache/lvmcache.c
-> +++ b/lib/cache/lvmcache.c
-> @@ -610,8 +610,7 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
->  						      vgid, NULL)))
->  		return_NULL;
->  
-> -	if (!(vg = import_vg_from_buffer(vginfo->vgmetadata, fid)) ||
-> -	    !vg_validate(vg)) {
-> +	if (!(vg = import_vg_from_buffer(vginfo->vgmetadata, fid))) {
->  		_free_cached_vgmetadata(vginfo);
->  		vg_release(vg);
->  		return_NULL;
 
-
-Ack
-
-
-We control metadata before write.
+Patch set goes to right direction - but still there is probably more complex
+solution - In activation we could keep locked & parsed VG data in volume_group
+structure in memory - instead of parsing them for each LV again.
+(for the case of having like 3000LV in one VG)
 
 Zdenek
 
