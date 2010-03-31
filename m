@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 31 Mar 2010 23:05:21 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20100331230521.3093.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 31 Mar 2010 23:11:13 -0000
+Subject: LVM2/test harness.c
+Message-ID: <20100331231113.12075.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-03-31 23:05:21
+Changes by:	mornfall at sourceware.org	2010-03-31 23:11:13
 
 Modified files:
-	test           : Makefile.in 
+	test           : harness.c 
 
 Log message:
-	Missed to convert T -> SCRIPTS
+	Do not pass NULL to setenv in the test harness.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/test/Makefile.in	2010/03/29 15:53:11	1.32
-+++ LVM2/test/Makefile.in	2010/03/31 23:05:20	1.33
-@@ -55,7 +55,7 @@
- bin/harness: $(srcdir)/harness.c .bin-dir-stamp
- 	$(CC) -o bin/harness $<
+--- LVM2/test/harness.c	2010/03/31 22:18:17	1.5
++++ LVM2/test/harness.c	2010/03/31 23:11:12	1.6
+@@ -128,7 +128,8 @@
+ 	status = alloca(sizeof(int)*argc);
+ 	char *config = getenv("LVM_TEST_CONFIG"),
+ 	     *config_debug;
+-	asprintf(&config_debug, "%s\n%s", config ? config : "", "log {\n verbose=4\n }");
++	config = config ? config : "";
++	asprintf(&config_debug, "%s\n%s\n", config, "log { verbose=4 }");
  
--init.sh: $(srcdir)/Makefile.in $(srcdir)/test-utils.sh .bin-dir-stamp bin/not bin/harness $(T)
-+init.sh: $(srcdir)/Makefile.in .bin-dir-stamp bin/not bin/harness $(SCRIPTS)
- 	rm -f $@-t $@
- 	echo 'top_srcdir=$(top_srcdir)' >> $@-t
- 	echo 'abs_top_builddir=$(abs_top_builddir)' >> $@-t
+ 	if (socketpair(PF_UNIX, SOCK_STREAM, 0, fds)) {
+ 		perror("socketpair");
 
 
