@@ -1,62 +1,58 @@
-From: mpatocka@sourceware.org <mpatocka@sourceware.org>
-Date: 31 Mar 2010 12:06:32 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/merge.c lib/meta ...
-Message-ID: <20100331120632.12787.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 31 Mar 2010 14:25:40 +0200
+Subject: [PATCH 2/5] Remove vg_validate call when parsing cached metadata.
+In-Reply-To: <59763531708170fbd57e63cc407e7a7f7557c1b2.1269866168.git.mbroz@redhat.com>
+References: <cover.1269866168.git.mbroz@redhat.com>
+	<59763531708170fbd57e63cc407e7a7f7557c1b2.1269866168.git.mbroz@redhat.com>
+Message-ID: <4BB33F44.6040702@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mpatocka at sourceware.org	2010-03-31 12:06:31
+On 29.3.2010 15:12, Milan Broz wrote:
+> vg_validate call is an adept to optimisation, it is very
+> ineeficient and slow.
+> 
+> Anyway, we should call it only before writing data to disk.
+> 
+> The call in lvmcache was just temporary validation,
+> we realy do not need to revalidate cached metadata
+> every time.
+> (Actually, I added that there just to prove that cache works
+> properly and forgot to remove it.)
+> 
+> Patch removes it from lvmcache completely, this can hit only
+> internal bug in export function (and this bug must
+> be detected in any vg_write call anyway before).
+> 
+> Signed-off-by: Milan Broz <mbroz@redhat.com>
+> ---
+>  lib/cache/lvmcache.c |    3 +--
+>  1 files changed, 1 insertions(+), 2 deletions(-)
+> 
+> diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+> index 0ce034a..9caa216 100644
+> --- a/lib/cache/lvmcache.c
+> +++ b/lib/cache/lvmcache.c
+> @@ -610,8 +610,7 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
+>  						      vgid, NULL)))
+>  		return_NULL;
+>  
+> -	if (!(vg = import_vg_from_buffer(vginfo->vgmetadata, fid)) ||
+> -	    !vg_validate(vg)) {
+> +	if (!(vg = import_vg_from_buffer(vginfo->vgmetadata, fid))) {
+>  		_free_cached_vgmetadata(vginfo);
+>  		vg_release(vg);
+>  		return_NULL;
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : merge.c metadata.c 
 
-Log message:
-	A missing space in the error message.
-	Add missing parentheses to an error message
-	
-	Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+Ack
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1491&r2=1.1492
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/merge.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.324&r2=1.325
 
---- LVM2/WHATS_NEW	2010/03/31 12:01:49	1.1491
-+++ LVM2/WHATS_NEW	2010/03/31 12:06:30	1.1492
-@@ -1,5 +1,6 @@
- Version 2.02.63 -  
- ================================
-+  Fix two messages, add a whitespace and parentheses
-   When dmeventd is not forking because of -d flag, don't kill the parent process
-   Fix 'make install' when $(builddir) is different from $(srcdir).
-   Fix dso resource leak in error path of dmeventd.
---- LVM2/lib/metadata/merge.c	2008/11/03 22:14:29	1.36
-+++ LVM2/lib/metadata/merge.c	2010/03/31 12:06:30	1.37
-@@ -233,7 +233,7 @@
- 			}
- 		if (!seg_found) {
- 			log_error("LV segment %s:%" PRIu32 "-%" PRIu32
--				  "is incorrectly listed as being used by LV %s",
-+				  " is incorrectly listed as being used by LV %s",
- 				  seg->lv->name, seg->le, seg->le + seg->len - 1,
- 				  lv->name);
- 			r = 0;
---- LVM2/lib/metadata/metadata.c	2010/03/18 17:29:12	1.324
-+++ LVM2/lib/metadata/metadata.c	2010/03/31 12:06:30	1.325
-@@ -2207,7 +2207,7 @@
- 	if (((uint32_t) dm_list_size(&vg->lvs)) !=
- 	    vg_visible_lvs(vg) + snapshot_count(vg) + hidden_lv_count) {
- 		log_error(INTERNAL_ERROR "#internal LVs (%u) != #LVs (%"
--			  PRIu32 ") + #snapshots (%" PRIu32 ") + #internal LVs %u in VG %s",
-+			  PRIu32 ") + #snapshots (%" PRIu32 ") + #internal LVs (%u) in VG %s",
- 			  dm_list_size(&vg->lvs), vg_visible_lvs(vg),
- 			  snapshot_count(vg), hidden_lv_count, vg->name);
- 		r = 0;
+We control metadata before write.
+
+Zdenek
 
 
