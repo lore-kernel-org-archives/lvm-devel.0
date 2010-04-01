@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Apr 2010 14:53:52 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20100401145352.17934.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 1 Apr 2010 14:54:38 -0000
+Subject: LVM2/lib/metadata mirror.c
+Message-ID: <20100401145438.18583.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,28 +10,67 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-04-01 14:53:48
+Changes by:	agk at sourceware.org	2010-04-01 14:54:38
 
 Modified files:
-	lib/mm         : memlock.c 
+	lib/metadata   : mirror.c 
 
 Log message:
-	Better debug message for Un/Locked memory size.
+	A few more log_error to log_warn changes for mirrors.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
 
---- LVM2/lib/mm/memlock.c	2010/04/01 13:43:12	1.25
-+++ LVM2/lib/mm/memlock.c	2010/04/01 14:53:47	1.26
-@@ -228,7 +228,8 @@
+--- LVM2/lib/metadata/mirror.c	2010/03/26 22:15:43	1.109
++++ LVM2/lib/metadata/mirror.c	2010/04/01 14:54:37	1.110
+@@ -1080,15 +1080,15 @@
+ 	/* FIXME: Use lvconvert rather than duplicating its code */
  
- 	free(line);
+ 	if (mirrored_seg->area_count < num_mirrors) {
+-		log_error("WARNING: Failed to replace mirror device in %s/%s",
+-			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
++		log_warn("WARNING: Failed to replace mirror device in %s/%s",
++			 mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
  
--	log_debug("Mapped size: %ld", (long)*mstats);
-+	log_debug("%socked %ld bytes",
-+		  (lock == LVM_MLOCK) ? "L" : "Unl", (long)*mstats);
+ 		if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv)
+-			log_error("WARNING: Use 'lvconvert -m %d %s/%s --corelog' to replace failed devices",
+-				  num_mirrors - 1, lv->vg->name, lv->name);
++			log_warn("WARNING: Use 'lvconvert -m %d %s/%s --corelog' to replace failed devices",
++				 num_mirrors - 1, lv->vg->name, lv->name);
+ 		else
+-			log_error("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
+-				  num_mirrors - 1, lv->vg->name, lv->name);
++			log_warn("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
++				 num_mirrors - 1, lv->vg->name, lv->name);
+ 		r = 0;
  
- 	return ret;
- }
+ 		/* REMEMBER/FIXME: set in_sync to 0 if a new mirror device was added */
+@@ -1101,11 +1101,11 @@
+ 	 */
+ 	if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv &&
+ 	    (log_policy != MIRROR_REMOVE)) {
+-		log_error("WARNING: Failed to replace mirror log device in %s/%s",
+-			  lv->vg->name, lv->name);
++		log_warn("WARNING: Failed to replace mirror log device in %s/%s",
++			 lv->vg->name, lv->name);
+ 
+-		log_error("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
+-			  mirrored_seg->area_count - 1 , lv->vg->name, lv->name);
++		log_warn("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
++			 mirrored_seg->area_count - 1 , lv->vg->name, lv->name);
+ 		r = 0;
+ 	}
+ 
+@@ -1150,8 +1150,8 @@
+ 
+ 	if (!r)
+ 		/* Failed to replace device(s) */
+-		log_error("WARNING: Unable to find substitute device for mirror volume, %s/%s",
+-			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
++		log_warn("WARNING: Unable to find substitute device for mirror volume, %s/%s",
++			 mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
+ 	else if (r > 0)
+ 		/* Success in replacing device(s) */
+ 		log_warn("WARNING: Mirror volume, %s/%s restored - substitute for failed device found.",
 
 
