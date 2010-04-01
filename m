@@ -1,76 +1,68 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 1 Apr 2010 14:54:38 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20100401145438.18583.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu,  1 Apr 2010 11:56:43 -0400
+Subject: [PATCH] Add blocking/non-blocking test for vgremove.
+Message-ID: <1270137403-4090-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-01 14:54:38
+While a big ugly, this tests Milan's recent fix to take blocking orphan
+locks when wait_for_locks = 1, the fix that addressed:
+https://bugzilla.redhat.com/show_bug.cgi?id=578413
 
-Modified files:
-	lib/metadata   : mirror.c 
+Other ways to test this sort of functionality are certainly welcomed.
+This patch is at least a start at test coverage of such blocking/non-blocking
+functionality.
 
-Log message:
-	A few more log_error to log_warn changes for mirrors.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ test/t-blocking-nonblocking.sh |   34 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 34 insertions(+), 0 deletions(-)
+ create mode 100755 test/t-blocking-nonblocking.sh
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
-
---- LVM2/lib/metadata/mirror.c	2010/03/26 22:15:43	1.109
-+++ LVM2/lib/metadata/mirror.c	2010/04/01 14:54:37	1.110
-@@ -1080,15 +1080,15 @@
- 	/* FIXME: Use lvconvert rather than duplicating its code */
- 
- 	if (mirrored_seg->area_count < num_mirrors) {
--		log_error("WARNING: Failed to replace mirror device in %s/%s",
--			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
-+		log_warn("WARNING: Failed to replace mirror device in %s/%s",
-+			 mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
- 
- 		if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv)
--			log_error("WARNING: Use 'lvconvert -m %d %s/%s --corelog' to replace failed devices",
--				  num_mirrors - 1, lv->vg->name, lv->name);
-+			log_warn("WARNING: Use 'lvconvert -m %d %s/%s --corelog' to replace failed devices",
-+				 num_mirrors - 1, lv->vg->name, lv->name);
- 		else
--			log_error("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
--				  num_mirrors - 1, lv->vg->name, lv->name);
-+			log_warn("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
-+				 num_mirrors - 1, lv->vg->name, lv->name);
- 		r = 0;
- 
- 		/* REMEMBER/FIXME: set in_sync to 0 if a new mirror device was added */
-@@ -1101,11 +1101,11 @@
- 	 */
- 	if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv &&
- 	    (log_policy != MIRROR_REMOVE)) {
--		log_error("WARNING: Failed to replace mirror log device in %s/%s",
--			  lv->vg->name, lv->name);
-+		log_warn("WARNING: Failed to replace mirror log device in %s/%s",
-+			 lv->vg->name, lv->name);
- 
--		log_error("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
--			  mirrored_seg->area_count - 1 , lv->vg->name, lv->name);
-+		log_warn("WARNING: Use 'lvconvert -m %d %s/%s' to replace failed devices",
-+			 mirrored_seg->area_count - 1 , lv->vg->name, lv->name);
- 		r = 0;
- 	}
- 
-@@ -1150,8 +1150,8 @@
- 
- 	if (!r)
- 		/* Failed to replace device(s) */
--		log_error("WARNING: Unable to find substitute device for mirror volume, %s/%s",
--			  mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
-+		log_warn("WARNING: Unable to find substitute device for mirror volume, %s/%s",
-+			 mirrored_seg->lv->vg->name, mirrored_seg->lv->name);
- 	else if (r > 0)
- 		/* Success in replacing device(s) */
- 		log_warn("WARNING: Mirror volume, %s/%s restored - substitute for failed device found.",
+diff --git a/test/t-blocking-nonblocking.sh b/test/t-blocking-nonblocking.sh
+new file mode 100755
+index 0000000..81a6c2e
+--- /dev/null
++++ b/test/t-blocking-nonblocking.sh
+@@ -0,0 +1,34 @@
++#!/bin/sh
++# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='test some blocking / non-blocking multi-vg operations'
++
++. ./test-utils.sh
++
++aux prepare_devs 3
++pvcreate $dev1 $dev2
++vgcreate $vg $dev1 $dev2
++
++# if wait_for_locks set, vgremove should wait for orphan lock
++# flock process should have exited by the time first vgremove completes
++flock -w 5 $G_root_/var/lock/lvm/P_orphans -c "sleep 15"&
++flock_pid=`jobs -p`
++vgremove --config 'global { wait_for_locks = 1 }' $vg
++not vgremove --config 'global { wait_for_locks = 1 }' $vg
++not ps $flock_pid
++
++# if wait_for_locks not set, vgremove should fail on non-blocking lock
++# we must wait for flock process at the end - vgremove won't wait
++vgcreate $vg $dev1 $dev2
++flock -w 5 $G_root_/var/lock/lvm/P_orphans -c "sleep 10"&
++flock_pid=`jobs -p`
++not vgremove --config 'global { wait_for_locks = 0 }' $vg
++wait $flock_pid
+-- 
+1.6.0.6
 
 
