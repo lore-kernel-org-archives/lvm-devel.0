@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 1 Apr 2010 10:34:12 -0000
-Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c lib/comm ...
-Message-ID: <20100401103412.555.qmail@sourceware.org>
+Date: 1 Apr 2010 11:43:28 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20100401114328.13587.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,219 +10,127 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-01 10:34:11
+Changes by:	agk at sourceware.org	2010-04-01 11:43:27
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/cache      : lvmcache.c 
-	lib/commands   : toolcontext.c 
-	lib/config     : config.c 
-	lib/device     : dev-io.c 
-	lib/format1    : import-export.c 
-	lib/format_text: import_vsn1.c 
-	lib/locking    : locking.c 
-	lib/metadata   : lv_manip.c 
-	tools          : pvscan.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Change most remaining log_error WARNING messages to log_warn.
+	Improve vg_validate to detect some loops in lists.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1498&r2=1.1499
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.92&r2=1.93
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-io.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/import-export.c.diff?cvsroot=lvm2&r1=1.110&r2=1.111
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.76&r2=1.77
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.220&r2=1.221
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvscan.c.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1499&r2=1.1500
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.326&r2=1.327
 
---- LVM2/WHATS_NEW	2010/03/31 17:23:56	1.1498
-+++ LVM2/WHATS_NEW	2010/04/01 10:34:09	1.1499
+--- LVM2/WHATS_NEW	2010/04/01 10:34:09	1.1499
++++ LVM2/WHATS_NEW	2010/04/01 11:43:24	1.1500
 @@ -1,5 +1,6 @@
  Version 2.02.63 -  
  ================================
-+  Change most remaining log_error WARNING messages to log_warn.
++  Improve vg_validate to detect some loops in lists.
+   Change most remaining log_error WARNING messages to log_warn.
    Always use blocking lock for VGs and orphan locks.
    Allocate all segments memory from vg private mempool.
-   Return newly allocated PV segment after segment split.
---- LVM2/lib/cache/lvmcache.c	2010/03/31 17:20:44	1.83
-+++ LVM2/lib/cache/lvmcache.c	2010/04/01 10:34:09	1.84
-@@ -903,37 +903,37 @@
- 		 */
- 		if (!(primary_vginfo->status & EXPORTED_VG) &&
- 		    (vgstatus & EXPORTED_VG))
--			log_error("WARNING: Duplicate VG name %s: "
--				  "Existing %s takes precedence over "
--				  "exported %s", new_vginfo->vgname,
--				  uuid_primary, uuid_new);
-+			log_warn("WARNING: Duplicate VG name %s: "
-+				 "Existing %s takes precedence over "
-+				 "exported %s", new_vginfo->vgname,
-+				 uuid_primary, uuid_new);
- 		else if ((primary_vginfo->status & EXPORTED_VG) &&
- 			   !(vgstatus & EXPORTED_VG)) {
--			log_error("WARNING: Duplicate VG name %s: "
--				  "%s takes precedence over exported %s",
--				  new_vginfo->vgname, uuid_new,
--				  uuid_primary);
-+			log_warn("WARNING: Duplicate VG name %s: "
-+				 "%s takes precedence over exported %s",
-+				 new_vginfo->vgname, uuid_new,
-+				 uuid_primary);
- 			use_new = 1;
- 		} else if (primary_vginfo->creation_host &&
- 			   !strcmp(primary_vginfo->creation_host,
- 				   primary_vginfo->fmt->cmd->hostname))
--			log_error("WARNING: Duplicate VG name %s: "
--				  "Existing %s (created here) takes precedence "
--				  "over %s", new_vginfo->vgname, uuid_primary,
--				  uuid_new);
-+			log_warn("WARNING: Duplicate VG name %s: "
-+				 "Existing %s (created here) takes precedence "
-+				 "over %s", new_vginfo->vgname, uuid_primary,
-+				 uuid_new);
- 		else if (!primary_vginfo->creation_host && creation_host) {
--			log_error("WARNING: Duplicate VG name %s: "
--				  "%s (with creation_host) takes precedence over %s",
--				  new_vginfo->vgname, uuid_new,
--				  uuid_primary);
-+			log_warn("WARNING: Duplicate VG name %s: "
-+				 "%s (with creation_host) takes precedence over %s",
-+				 new_vginfo->vgname, uuid_new,
-+				 uuid_primary);
- 			use_new = 1;
- 		} else if (creation_host &&
- 			   !strcmp(creation_host,
- 				   primary_vginfo->fmt->cmd->hostname)) {
--			log_error("WARNING: Duplicate VG name %s: "
--				  "%s (created here) takes precedence over %s",
--				  new_vginfo->vgname, uuid_new,
--				  uuid_primary);
-+			log_warn("WARNING: Duplicate VG name %s: "
-+				 "%s (created here) takes precedence over %s",
-+				 new_vginfo->vgname, uuid_new,
-+				 uuid_primary);
- 			use_new = 1;
- 		}
+--- LVM2/lib/metadata/metadata.c	2010/03/31 17:21:40	1.326
++++ LVM2/lib/metadata/metadata.c	2010/04/01 11:43:26	1.327
+@@ -2129,12 +2129,28 @@
+ 	struct lv_list *lvl, *lvl2;
+ 	char uuid[64] __attribute((aligned(8)));
+ 	int r = 1;
+-	uint32_t hidden_lv_count = 0;
++	uint32_t hidden_lv_count = 0, lv_count = 0, lv_visible_count = 0;
++	uint32_t pv_count = 0;
++	uint32_t num_snapshots = 0;
++	uint32_t loop_counter1, loop_counter2;
  
---- LVM2/lib/commands/toolcontext.c	2010/03/09 03:16:11	1.92
-+++ LVM2/lib/commands/toolcontext.c	2010/04/01 10:34:09	1.93
-@@ -233,8 +233,8 @@
+ 	/* FIXME Also check there's no data/metadata overlap */
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (++pv_count > vg->pv_count) {
++			log_error(INTERNAL_ERROR "PV list corruption detected in VG %s.", vg->name);
++			/* FIXME Dump list structure? */
++			r = 0;
++		}
++	}
+ 
++	loop_counter1 = loop_counter2 = 0;
++	/* FIXME Use temp hash table instead? */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (++loop_counter1 > pv_count)
++			break;
+ 		dm_list_iterate_items(pvl2, &vg->pvs) {
++			if (++loop_counter2 > pv_count)
++				break;
+ 			if (pvl == pvl2)
+ 				break;
+ 			if (id_equal(&pvl->pv->id,
+@@ -2167,6 +2183,14 @@
+ 	 * Count all non-snapshot invisible LVs
+ 	 */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
++		lv_count++;
++
++		if (lv_is_cow(lvl->lv))
++			num_snapshots++;
++
++		if (lv_is_visible(lvl->lv))
++			lv_visible_count++;
++
+ 		if (lvl->lv->status & VISIBLE_LV)
+ 			continue;
+ 
+@@ -2192,17 +2216,22 @@
+ 	/*
+ 	 * all volumes = visible LVs + snapshot_cows + invisible LVs
+ 	 */
+-	if (((uint32_t) dm_list_size(&vg->lvs)) !=
+-	    vg_visible_lvs(vg) + snapshot_count(vg) + hidden_lv_count) {
++	if (lv_count != lv_visible_count + num_snapshots + hidden_lv_count) {
+ 		log_error(INTERNAL_ERROR "#internal LVs (%u) != #LVs (%"
+ 			  PRIu32 ") + #snapshots (%" PRIu32 ") + #internal LVs (%u) in VG %s",
+-			  dm_list_size(&vg->lvs), vg_visible_lvs(vg),
+-			  snapshot_count(vg), hidden_lv_count, vg->name);
++			  lv_count, lv_visible_count,
++			  num_snapshots, hidden_lv_count, vg->name);
+ 		r = 0;
  	}
  
- 	if (*cmd->proc_dir && !dir_exists(cmd->proc_dir)) {
--		log_error("WARNING: proc dir %s not found - some checks will be bypassed",
--			  cmd->proc_dir);
-+		log_warn("WARNING: proc dir %s not found - some checks will be bypassed",
-+			 cmd->proc_dir);
- 		cmd->proc_dir[0] = '\0';
- 	}
- 
---- LVM2/lib/config/config.c	2009/10/22 10:38:07	1.77
-+++ LVM2/lib/config/config.c	2010/04/01 10:34:09	1.78
-@@ -911,9 +911,9 @@
- 				if (!cn_found)
- 					cn_found = cn;
- 				else
--					log_error("WARNING: Ignoring duplicate"
--						  " config node: %s ("
--						  "seeking %s)", cn->key, path);
-+					log_warn("WARNING: Ignoring duplicate"
-+						 " config node: %s ("
-+						 "seeking %s)", cn->key, path);
++	loop_counter1 = loop_counter2 = 0;
++	/* FIXME Use temp hash table instead? */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (++loop_counter1 > lv_count)
++			break;
+ 		dm_list_iterate_items(lvl2, &vg->lvs) {
++			if (++loop_counter2 > lv_count)
++				break;
+ 			if (lvl == lvl2)
+ 				break;
+ 			if (!strcmp(lvl->lv->name, lvl2->lv->name)) {
+@@ -2223,9 +2252,7 @@
+ 				r = 0;
  			}
- 
- 			cn = cn->sib;
---- LVM2/lib/device/dev-io.c	2009/05/20 11:09:49	1.65
-+++ LVM2/lib/device/dev-io.c	2010/04/01 10:34:10	1.66
-@@ -383,8 +383,8 @@
- 
- 		if (dev->open_count && !need_excl) {
- 			/* FIXME Ensure we never get here */
--			log_debug("WARNING: %s already opened read-only",
--				  dev_name(dev));
-+			log_error(INTERNAL_ERROR "%s already opened read-only",
-+				 dev_name(dev));
- 			dev->open_count++;
  		}
+-	}
  
-@@ -392,8 +392,8 @@
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		if (!check_lv_segments(lvl->lv, 1)) {
+ 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
+ 				  lvl->lv->name);
+@@ -2889,6 +2916,15 @@
  	}
  
- 	if (memlock())
--		log_error("WARNING: dev_open(%s) called while suspended",
--			  dev_name(dev));
-+		log_error(INTERNAL_ERROR "dev_open(%s) called while suspended",
-+			 dev_name(dev));
- 
- 	if (dev->flags & DEV_REGULAR)
- 		name = dev_name(dev);
---- LVM2/lib/format1/import-export.c	2009/09/28 17:46:16	1.110
-+++ LVM2/lib/format1/import-export.c	2010/04/01 10:34:10	1.111
-@@ -110,9 +110,9 @@
- 			size = pv->pe_count * (uint64_t) vg->extent_size +
- 			       pv->pe_start;
- 			if (size > pv->size)
--				log_error("WARNING: Physical Volume %s is too "
--					  "large for underlying device",
--					  pv_dev_name(pv));
-+				log_warn("WARNING: Physical Volume %s is too "
-+					 "large for underlying device",
-+					 pv_dev_name(pv));
- 		}
- 	}
- 
---- LVM2/lib/format_text/import_vsn1.c	2010/03/31 17:20:03	1.70
-+++ LVM2/lib/format_text/import_vsn1.c	2010/04/01 10:34:10	1.71
-@@ -264,9 +264,9 @@
- 			size = pv->pe_count * (uint64_t) vg->extent_size +
- 			       pv->pe_start;
- 			if (size > pv->size)
--				log_error("WARNING: Physical Volume %s is too "
--					  "large for underlying device",
--					  pv_dev_name(pv));
-+				log_warn("WARNING: Physical Volume %s is too "
-+					 "large for underlying device",
-+					 pv_dev_name(pv));
- 		}
- 	}
- 
---- LVM2/lib/locking/locking.c	2010/03/31 17:23:57	1.76
-+++ LVM2/lib/locking/locking.c	2010/04/01 10:34:10	1.77
-@@ -293,8 +293,7 @@
- 	    find_config_tree_int(cmd, "locking/fallback_to_local_locking",
- 	    	    find_config_tree_int(cmd, "global/fallback_to_local_locking",
- 					 DEFAULT_FALLBACK_TO_LOCAL_LOCKING))) {
--		log_warn_suppress(suppress_messages,
--				  "WARNING: Falling back to local file-based locking.");
-+		log_warn_suppress(suppress_messages, "WARNING: Falling back to local file-based locking.");
- 		log_warn_suppress(suppress_messages,
- 				  "Volume Groups with the clustered attribute will "
- 				  "be inaccessible.");
---- LVM2/lib/metadata/lv_manip.c	2010/03/31 20:26:04	1.220
-+++ LVM2/lib/metadata/lv_manip.c	2010/04/01 10:34:10	1.221
-@@ -3172,7 +3172,7 @@
- 	}
- 
- 	if (!lp->zero && !lp->snapshot)
--		log_error("WARNING: \"%s\" not zeroed", lv->name);
-+		log_warn("WARNING: \"%s\" not zeroed", lv->name);
- 	else if (!set_lv(cmd, lv, UINT64_C(0), 0)) {
- 		log_error("Aborting. Failed to wipe %s.",
- 			  lp->snapshot ? "snapshot exception store" :
---- LVM2/tools/pvscan.c	2009/12/11 13:16:39	1.49
-+++ LVM2/tools/pvscan.c	2010/04/01 10:34:11	1.50
-@@ -152,7 +152,7 @@
- 		/* Also check for MD use? */
- /*******
- 		if (MAJOR(pv_create_kdev_t(pv[p]->pv_name)) != MD_MAJOR) {
--			log_print
-+			log_warn
- 			    ("WARNING: physical volume \"%s\" belongs to a meta device",
- 			     pv[p]->pv_name);
- 		}
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (!check_lv_segments(lvl->lv, 0)) {
++			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
++				  lvl->lv->name);
++			vg_release(vg);
++			return NULL;
++		}
++		/*
++		 * Checks that cross-reference other LVs.
++		 */
+ 		if (!check_lv_segments(lvl->lv, 1)) {
+ 			log_error(INTERNAL_ERROR "LV segments corrupted in %s.",
+ 				  lvl->lv->name);
 
 
