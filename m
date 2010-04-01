@@ -1,39 +1,48 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  1 Apr 2010 17:57:32 -0400
-Subject: [PATCH 6/6] RFC: Change lvm2app version number from 1 to 2.
-In-Reply-To: <1270159052-1181-6-git-send-email-dwysocha@redhat.com>
+Date: Thu,  1 Apr 2010 17:57:28 -0400
+Subject: [PATCH 2/6] Refactor _read_pv() code adding pv to vg->pvs and updating vg counts.
+In-Reply-To: <1270159052-1181-2-git-send-email-dwysocha@redhat.com>
 References: <1270159052-1181-1-git-send-email-dwysocha@redhat.com>
 	<1270159052-1181-2-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-3-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-4-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-5-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-6-git-send-email-dwysocha@redhat.com>
-Message-ID: <1270159052-1181-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <1270159052-1181-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This version number change reflects the memory handling change
-for string-based pv/vg/lv string based attributes.
-In addition, when adding support for tags, I forgot to increase
-the version number.  Also, it might be nice to have a short list
-of what has changed in the API since the last version, apart from
-the WHATS_NEW lvm file.
+Simple refactor to group code that adds a pv to the vg->vgs and updates
+related vg counts.  No functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- VERSION |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/format_text/import_vsn1.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index d96250e..204b86d 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.63(1)-cvs (2010-03-09)
-+2.02.63(2)-cvs (2010-03-09)
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index ae9742a..cf2c9df 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -241,10 +241,6 @@ static int _read_pv(struct format_instance *fid, struct dm_pool *mem,
+ 		return 0;
+ 	}
+ 
+-	/* adjust the volume group. */
+-	vg->extent_count += pv->pe_count;
+-	vg->free_count += pv->pe_count;
+-
+ 	pv->pe_size = vg->extent_size;
+ 
+ 	pv->pe_alloc_count = 0;
+@@ -273,6 +269,8 @@ static int _read_pv(struct format_instance *fid, struct dm_pool *mem,
+ 	if (!alloc_pv_segment_whole_pv(mem, pv))
+ 		return_0;
+ 
++	vg->extent_count += pv->pe_count;
++	vg->free_count += pv->pe_count;
+ 	vg->pv_count++;
+ 	dm_list_add(&vg->pvs, &pvl->list);
+ 
 -- 
 1.6.0.6
 
