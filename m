@@ -1,35 +1,45 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 2 Apr 2010 01:35:35 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20100402013535.19654.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 02 Apr 2010 13:39:38 +0200
+Subject: [PATCH 6/6] RFC: Change lvm2app version number from 1 to 2.
+In-Reply-To: <1270159052-1181-7-git-send-email-dwysocha@redhat.com>
+References: <1270159052-1181-1-git-send-email-dwysocha@redhat.com>	<1270159052-1181-2-git-send-email-dwysocha@redhat.com>	<1270159052-1181-3-git-send-email-dwysocha@redhat.com>	<1270159052-1181-4-git-send-email-dwysocha@redhat.com>	<1270159052-1181-5-git-send-email-dwysocha@redhat.com>	<1270159052-1181-6-git-send-email-dwysocha@redhat.com>
+	<1270159052-1181-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <4BB5D77A.2090409@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-02 01:35:35
+On 04/01/2010 11:57 PM, Dave Wysochanski wrote:
+> This version number change reflects the memory handling change
+> for string-based pv/vg/lv string based attributes.
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+Maybe it is better idea to use VG mempool, maybe not for
+VG attributes.
 
-Log message:
-	remove compiler warning
+But change it now, it means that application using
+calls which previously deallocates these attributes with dm_free
+will now crash, because the memory returned is now owned
+by library.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.223&r2=1.224
+I really do not like changing API this way in every release...
 
---- LVM2/lib/metadata/lv_manip.c	2010/04/01 13:58:13	1.223
-+++ LVM2/lib/metadata/lv_manip.c	2010/04/02 01:35:34	1.224
-@@ -1269,7 +1269,6 @@
- 	struct dm_list *pvms;
- 	uint32_t areas_size;
- 	alloc_policy_t alloc;
--	struct alloced_area *aa;
- 	unsigned log_needs_allocating = 0;
- 
- 	if (allocated >= ah->new_extents && !ah->log_area_count) {
+I see three API possibilities
+
+ - define buffer parameter, so all memory allocations are
+in user application
+
+ - return strings/parameters *CONST* and define that lvm2app
+owns memory
+
+ - use dm_malloc, and require dm_free in user aplications.
+
+But please do not change this later!
+
+It is extremely confusing for library users,
+no warning that API is not stable will not help here...
+
+Milan
 
 
