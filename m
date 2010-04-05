@@ -1,98 +1,99 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon,  5 Apr 2010 15:51:38 -0400
-Subject: [PATCH 4/5] Add add_pvl_to_vgs() - helper function to add a pv to a vg list.
-In-Reply-To: <1270497099-13259-4-git-send-email-dwysocha@redhat.com>
+Date: Mon,  5 Apr 2010 15:51:39 -0400
+Subject: [PATCH 5/5] Add pv->vg to solidify link between a pv and a vg.
+In-Reply-To: <1270497099-13259-5-git-send-email-dwysocha@redhat.com>
 References: <1270497099-13259-1-git-send-email-dwysocha@redhat.com>
 	<1270497099-13259-2-git-send-email-dwysocha@redhat.com>
 	<1270497099-13259-3-git-send-email-dwysocha@redhat.com>
 	<1270497099-13259-4-git-send-email-dwysocha@redhat.com>
-Message-ID: <1270497099-13259-5-git-send-email-dwysocha@redhat.com>
+	<1270497099-13259-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1270497099-13259-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Small refactor of main places in the code where a pv is added to a
-vg into a small function which adds the pv to the list and updates
-the vg counts.
+lvm2app needs a link back to the vg in order to use the vg handle for
+memory allocations as well as other things.  This patch adds the field
+to struct physical_volume, and sets pv->vg when reading a vg from disk or
+extending a vg by using the helper function previously added,
+add_pvl_to_vgs().  Moves and renames are handled with separate code
+inside move_pv() and vgmerge().  Add pv->vg check to vg_validate().
+
+NOTE: Unfortunately in the case of pv_read() callers, we cannot set
+this pv->vg field properly, since the vg it belongs to may not be
+known by just reading a single device, and no VG is in existence at
+the time of pv_read().  Significant refactorings related to
+lvmcache, PVs with 0 mdas, etc, are required to set this field
+for callers of pv_read().  For now we assume that if the field is
+NULL, the pv is not associated with a complete VG (as returned
+by vg_read()).
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format1/import-export.c   |    3 +--
- lib/format_text/import_vsn1.c |    3 +--
- lib/metadata/metadata.c       |   11 ++++++++---
- lib/metadata/metadata.h       |    1 +
- 4 files changed, 11 insertions(+), 7 deletions(-)
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/metadata.c          |    8 ++++++++
+ tools/vgmerge.c                  |    1 +
+ 3 files changed, 10 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format1/import-export.c b/lib/format1/import-export.c
-index 2ffc19e..e37d59e 100644
---- a/lib/format1/import-export.c
-+++ b/lib/format1/import-export.c
-@@ -437,8 +437,7 @@ int import_pvs(const struct format_type *fmt, struct dm_pool *mem,
- 			return_0;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index b02a22c..ef6d1ef 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -184,6 +184,7 @@ struct physical_volume {
+ 	const char *vg_name;
+ 	struct id vgid;
  
- 		pvl->pv->fmt = fmt;
--		dm_list_add(&vg->pvs, &pvl->list);
--		vg->pv_count++;
-+		add_pvl_to_vgs(vg, pvl);
- 	}
++	struct volume_group *vg;
+ 	uint64_t status;
+ 	uint64_t size;
  
- 	return 1;
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index cf2c9df..ed508cf 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -271,8 +271,7 @@ static int _read_pv(struct format_instance *fid, struct dm_pool *mem,
- 
- 	vg->extent_count += pv->pe_count;
- 	vg->free_count += pv->pe_count;
--	vg->pv_count++;
--	dm_list_add(&vg->pvs, &pvl->list);
-+	add_pvl_to_vgs(vg, pvl);
- 
- 	return 1;
- }
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 9e6d9ba..6ceb793 100644
+index 6ceb793..70debf4 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -136,6 +136,13 @@ out:
- 	return pv->pe_align_offset;
+@@ -140,6 +140,7 @@ void add_pvl_to_vgs(struct volume_group *vg, struct pv_list *pvl)
+ {
+ 	dm_list_add(&vg->pvs, &pvl->list);
+ 	vg->pv_count++;
++	pvl->pv->vg = vg;
  }
  
-+void add_pvl_to_vgs(struct volume_group *vg, struct pv_list *pvl)
-+{
-+	dm_list_add(&vg->pvs, &pvl->list);
-+	vg->pv_count++;
-+}
-+
-+
- /**
-  * add_pv_to_vg - Add a physical volume to a volume group
-  * @vg - volume group to add to
-@@ -230,9 +237,7 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+ 
+@@ -336,6 +337,7 @@ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+ 
+ 	vg_from->pv_count--;
+ 	vg_to->pv_count++;
++	pvl->pv->vg = vg_to;
+ 
+ 	pv = pvl->pv;
+ 
+@@ -2146,6 +2148,12 @@ int vg_validate(struct volume_group *vg)
+ 			/* FIXME Dump list structure? */
+ 			r = 0;
+ 		}
++		if (pvl->pv->vg != vg) {
++			log_error(INTERNAL_ERROR "VG %s PV list entry points "
++				  "to different VG %s", vg->name,
++				  pvl->pv->vg ? pvl->pv->vg->name : "NULL");
++			r = 0;
++		}
  	}
  
- 	pvl->pv = pv;
--	dm_list_add(&vg->pvs, &pvl->list);
--
--	vg->pv_count++;
-+	add_pvl_to_vgs(vg, pvl);
- 	vg->extent_count += pv->pe_count;
- 	vg->free_count += pv->pe_count;
+ 	loop_counter1 = loop_counter2 = 0;
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 4a6721d..0acdbb9 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -90,6 +90,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
  
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 782d300..1496252 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -377,5 +377,6 @@ struct id pv_vgid(const struct physical_volume *pv);
- struct physical_volume *pv_by_path(struct cmd_context *cmd, const char *pv_name);
- int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 		 struct physical_volume *pv);
-+void add_pvl_to_vgs(struct volume_group *vg, struct pv_list *pvl);
+ 		pv = dm_list_item(pvh, struct pv_list)->pv;
+ 		pv->vg_name = dm_pool_strdup(cmd->mem, vg_to->name);
++		pv->vg = vg_to;
+ 	}
+ 	vg_to->pv_count += vg_from->pv_count;
  
- #endif
 -- 
 1.6.0.6
 
