@@ -1,40 +1,34 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 05 Apr 2010 11:13:09 -0400
-Subject: [PATCH 4/6] Add pv->vg to solidify link between a pv and a vg.
-In-Reply-To: <20100402012345.GX11377@agk-dp.fab.redhat.com>
-References: <1270159052-1181-1-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-2-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-3-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-4-git-send-email-dwysocha@redhat.com>
-	<1270159052-1181-5-git-send-email-dwysocha@redhat.com>
-	<20100402012345.GX11377@agk-dp.fab.redhat.com>
-Message-ID: <1270480389.14700.1.camel@f10-node1>
+Date: Mon,  5 Apr 2010 15:51:34 -0400
+Subject: [PATCH 0/5] Add pv->vg link, v2
+Message-ID: <1270497099-13259-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 2010-04-02 at 02:23 +0100, Alasdair G Kergon wrote:
-> On Thu, Apr 01, 2010 at 05:57:30PM -0400, Dave Wysochanski wrote:
-> > lvm2app needs a link back to the vg in order to use the vg handle for
-> > memory allocations as well as other things.  This patch adds the field
-> > to struct physical_volume, and sets the field when returning from
-> > vg_read() internal library call.
->  
-> > +	struct volume_group *vg; /* FIXME: Only valid when used with lvm2app. */
-> 
-> Please make it generally applicable and always internally consistent i.e.
-> always pointing back to the VG struct which contains the list it is on.
-> 
 
-Oh - this FIXME is an erroneous comment - sorry.  Originally I had
-approached it this way, then changed it to be more general.  I could
-have missed something though.
+This patchset refactors and adds a pv->vg link.  The previous patchset
+missed a few cases, namely vgsplit, vgmerge, vgrename, and format1 code.
+This patcheset I believe addresses all cases.  I dropped the lvm2app
+patches that utilize this link for pv/vg/lv properties - will be submitted
+in another patchset.
 
-> Also update vg_validate whenever extending the core metadata structs.
-> 
+It would be nice to refactor further if possible, in particular
+the pv->vgname should probably be set inside the add_pvl_to_vgs()
+function or something similar, but for now this refactoring is
+a step in the right direction.
 
-Will do so - thanks for the reminder.
+Although the testsuite is still failing on the latest commits,
+these patches passed the testsuite when rebased on the following commit:
+commit f9554c7d27930d2ad404b4473ec13aa77f0e53d0
+Author: Mike Snitzer <snitzer@redhat.com>
+Date:   Wed Mar 24 22:25:11 2010 +0000
+
+    Revert having clvmd consult the lvm.conf "activation/monitoring".
+    Correctly implementing the intent of this change requires more
+    analysis.
+
 
 
