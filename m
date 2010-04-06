@@ -1,100 +1,99 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon,  5 Apr 2010 15:51:39 -0400
-Subject: [PATCH 5/5] Add pv->vg to solidify link between a pv and a vg.
-In-Reply-To: <1270497099-13259-5-git-send-email-dwysocha@redhat.com>
-References: <1270497099-13259-1-git-send-email-dwysocha@redhat.com>
-	<1270497099-13259-2-git-send-email-dwysocha@redhat.com>
-	<1270497099-13259-3-git-send-email-dwysocha@redhat.com>
-	<1270497099-13259-4-git-send-email-dwysocha@redhat.com>
-	<1270497099-13259-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1270497099-13259-6-git-send-email-dwysocha@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 6 Apr 2010 09:50:08 -0000
+Subject: LVM2 Makefile.in
+Message-ID: <20100406095008.6183.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvm2app needs a link back to the vg in order to use the vg handle for
-memory allocations as well as other things.  This patch adds the field
-to struct physical_volume, and sets pv->vg when reading a vg from disk or
-extending a vg by using the helper function previously added,
-add_pvl_to_vgs().  Moves and renames are handled with separate code
-inside move_pv() and vgmerge().  Add pv->vg check to vg_validate().
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-04-06 09:50:07
 
-NOTE: Unfortunately in the case of pv_read() callers, we cannot set
-this pv->vg field properly, since the vg it belongs to may not be
-known by just reading a single device, and no VG is in existence at
-the time of pv_read().  Significant refactorings related to
-lvmcache, PVs with 0 mdas, etc, are required to set this field
-for callers of pv_read().  For now we assume that if the field is
-NULL, the pv is not associated with a complete VG (as returned
-by vg_read()).
+Modified files:
+	.              : Makefile.in 
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |    8 ++++++++
- tools/vgmerge.c                  |    1 +
- 3 files changed, 10 insertions(+), 0 deletions(-)
+Log message:
+	Fix lcov target
+	
+	Patch fixes generation of coverage files for dmeventd and adds support for clvmd.
+	Path names are stripped, so the the html looks better.
+	Frames 'previews' is enabled for generated pages.
+	Using top_srcdir was wrong here - though we still can't easily use builddir.
+	Requiers using shell variables before execution of binaries build outside
+	of srcdir.
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index b02a22c..ef6d1ef 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -184,6 +184,7 @@ struct physical_volume {
- 	const char *vg_name;
- 	struct id vgid;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+
+--- LVM2/Makefile.in	2010/03/29 14:17:59	1.47
++++ LVM2/Makefile.in	2010/04/06 09:50:07	1.48
+@@ -78,38 +78,41 @@
+ check: all
+ 	$(MAKE) -C test all
  
-+	struct volume_group *vg;
- 	uint64_t status;
- 	uint64_t size;
++LCOV_TRACES = libdm.info lib.info tools.info \
++	daemons/dmeventd.info daemons/clvmd.info
++CLEAN_TARGETS += $(LCOV_TRACES)
++
+ ifneq ("$(LCOV)", "")
+-.PHONY: lcov-reset lcov lcov-dated
++.PHONY: lcov-reset lcov lcov-dated $(LCOV_TRACES)
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6ceb793..70debf4 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -140,6 +140,7 @@ void add_pvl_to_vgs(struct volume_group *vg, struct pv_list *pvl)
- {
- 	dm_list_add(&vg->pvs, &pvl->list);
- 	vg->pv_count++;
-+	pvl->pv->vg = vg;
- }
+ ifeq ($(MAKECMDGOALS),lcov-dated)
+-LCOV_REPORTS_DIR=$(top_srcdir)/lcov_reports-$(shell date +%Y%m%d%k%M%S)
++LCOV_REPORTS_DIR := lcov_reports-$(shell date +%Y%m%d%k%M%S)
++lcov-dated: lcov
+ else
+-LCOV_REPORTS_DIR=$(top_srcdir)/lcov_reports
++LCOV_REPORTS_DIR := lcov_reports
+ endif
  
+ lcov-reset:
+-	$(LCOV) -d $(top_srcdir)/dmeventd --zerocounters
+-	$(LCOV) -d $(top_srcdir)/libdm --zerocounters
+-	$(LCOV) -d $(top_srcdir)/lib --zerocounters
+-	$(LCOV) -d $(top_srcdir)/tools --zerocounters
++	$(LCOV) --zerocounters $(addprefix -d , $(basename $(LCOV_TRACES)))
++
++# maybe use subdirs processing to create tracefiles...
++$(LCOV_TRACES):
++	$(LCOV) -b $(top_srcdir)/$(basename $@) \
++		-d $(basename $@) -c -o - | $(SED) \
++		-e "s/\(dmeventd_lvm.[ch]\)/plugins\/lvm2\/\1/" \
++		-e "s/\(dmeventd_mirror.c\)/plugins\/mirror\/\1/" \
++		-e "s/\(dmeventd_snapshot.c\)/plugins\/snapshot\/\1/" \
++		>$@
  
-@@ -336,6 +337,7 @@ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+-lcov: all
+-	$(RM) -rf $(LCOV_REPORTS_DIR)
+-	$(MKDIR_P) $(LCOV_REPORTS_DIR)
+-	$(LCOV) -b $(top_srcdir)/libdm -d $(top_srcdir)/libdm -c -o $(LCOV_REPORTS_DIR)/libdm.info
+-	$(LCOV) -b $(top_srcdir)/lib -d $(top_srcdir)/lib -c -o $(LCOV_REPORTS_DIR)/lib.info
+-	$(LCOV) -b $(top_srcdir)/tools -d $(top_srcdir)/tools -c -o $(LCOV_REPORTS_DIR)/tools.info
+-	DMEVENTD_INFO="$(LCOV_REPORTS_DIR)/dmeventd.info" ;\
+-	DMEVENTD_INFO_A="-a $$DMEVENTDINFO" ;\
+-	$(LCOV) -b $(top_srcdir)/dmeventd -d $(top_srcdir)/dmeventd -c -o $$DMEVENTD_INFO || DMEVENTD_INFO_A="" ;\
+-	$(LCOV) $$DMEVENTD_INFO_A -a $(LCOV_REPORTS_DIR)/lib.info \
+-		-a $(LCOV_REPORTS_DIR)/libdm.info \
+-		-a $(LCOV_REPORTS_DIR)/tools.info \
+-		-o $(LCOV_REPORTS_DIR)/lvm.info
+ ifneq ("$(GENHTML)", "")
+-	$(GENHTML) -o $(LCOV_REPORTS_DIR) -p $(top_srcdir) $(LCOV_REPORTS_DIR)/lvm.info
++lcov: $(LCOV_TRACES)
++	$(RM) -r $(LCOV_REPORTS_DIR)
++	$(MKDIR_P) $(LCOV_REPORTS_DIR)
++	for i in $(LCOV_TRACES); do \
++		test -s $$i && lc="$$lc $$i"; \
++	done; \
++	test -z "$$lc" || $(GENHTML) --frames -p @abs_top_builddir@ \
++		-o $(LCOV_REPORTS_DIR) $$lc
+ endif
  
- 	vg_from->pv_count--;
- 	vg_to->pv_count++;
-+	pvl->pv->vg = vg_to;
- 
- 	pv = pvl->pv;
- 
-@@ -2146,6 +2148,12 @@ int vg_validate(struct volume_group *vg)
- 			/* FIXME Dump list structure? */
- 			r = 0;
- 		}
-+		if (pvl->pv->vg != vg) {
-+			log_error(INTERNAL_ERROR "VG %s PV list entry points "
-+				  "to different VG %s", vg->name,
-+				  pvl->pv->vg ? pvl->pv->vg->name : "NULL");
-+			r = 0;
-+		}
- 	}
- 
- 	loop_counter1 = loop_counter2 = 0;
-diff --git a/tools/vgmerge.c b/tools/vgmerge.c
-index 4a6721d..0acdbb9 100644
---- a/tools/vgmerge.c
-+++ b/tools/vgmerge.c
-@@ -90,6 +90,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
- 
- 		pv = dm_list_item(pvh, struct pv_list)->pv;
- 		pv->vg_name = dm_pool_strdup(cmd->mem, vg_to->name);
-+		pv->vg = vg_to;
- 	}
- 	vg_to->pv_count += vg_from->pv_count;
- 
--- 
-1.6.0.6
+-lcov-dated: lcov
+-
+ endif
 
 
