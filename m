@@ -1,52 +1,37 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 7 Apr 2010 21:38:01 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100407213801.18602.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 08 Apr 2010 00:31:44 +0200
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM libdm/libdm-de ...
+In-Reply-To: <20100407200443.26841.qmail@sourceware.org> (agk@sourceware.org's
+	message of "7 Apr 2010 20:04:43 -0000")
+References: <20100407200443.26841.qmail@sourceware.org>
+Message-ID: <87iq826gj3.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-07 21:38:01
+Hi,
 
-Modified files:
-	test           : test-utils.sh 
+agk at sourceware.org writes:
+> --- LVM2/libdm/libdm-deptree.c	2010/03/25 18:22:04	1.72
+> +++ LVM2/libdm/libdm-deptree.c	2010/04/07 20:04:42	1.73
+> @@ -1047,9 +1047,14 @@
+>  
+>  		/* Refresh open_count */
+>  		if (!_info_by_dev(dinfo->major, dinfo->minor, 1, &info) ||
+> -		    !info.exists || info.open_count)
+> +		    !info.exists)
+>  			continue;
+>  
+> +		if (info.open_count) {
+> +			r = 0;
+> +			continue;
+> +		}
+As far as I can tell, this r = 0 is new behaviour that breaks a number
+of tests and may break user scripts. Is it necessary?
 
-Log message:
-	Don't forget to cd into $TESTDIR in test-utils.sh / prepare_testdir.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-
---- LVM2/test/test-utils.sh	2010/04/07 21:19:20	1.32
-+++ LVM2/test/test-utils.sh	2010/04/07 21:38:01	1.33
-@@ -86,6 +86,8 @@
- 	export DM_DEV_DIR=$TESTDIR/dev
- 	mkdir $LVM_SYSTEM_DIR $DM_DEV_DIR $DM_DEV_DIR/mapper $TESTDIR/lib
- 
-+	cd $TESTDIR
-+
- 	for i in `find $abs_top_builddir/daemons/dmeventd/plugins/ -name \*.so`; do
- 		echo Setting up symlink from $i to $TESTDIR/lib
- 		ln -s $i $TESTDIR/lib
-@@ -381,7 +383,6 @@
- 	prepare_testroot
- 	prepare_lvmconf
- 	prepare_clvmd
--	source ./lvm-utils.sh
- }
- 
- LANG=C
-@@ -390,6 +391,7 @@
- unset CDPATH
- 
- . ./init.sh || { echo >&2 you must run make first; exit 1; }
-+. ./lvm-utils.sh
- 
- set -vexE -o pipefail
- aux prepare
+Yours,
+   Petr.
 
 
