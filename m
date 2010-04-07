@@ -1,382 +1,880 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Apr 2010 14:28:35 +0200
-Subject: [PATCH 1/3] Do not use VPATH
+Date: Wed,  7 Apr 2010 14:28:36 +0200
+Subject: [PATCH 2/3] INSTALL rules updates
 In-Reply-To: <cover.1270641130.git.zkabelac@redhat.com>
 References: <cover.1270641130.git.zkabelac@redhat.com>
-Message-ID: <f7692ceb422eb13dfc7d000870b018cae01d973d.1270641130.git.zkabelac@redhat.com>
+Message-ID: <2d1095fa1e90a75c0358d836e54d4bb364c34703.1270641130.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Usage of VPATH makes troubles when used with builddir.
-Not only source files are being found through VPATH,
-but targets as well. (make --debug=v)
+Patch tries to address multiple issues.
+It is inspired from Debians separe patch but makes things more correct.
 
-Thus if user builds the code in $(srcdir) and also in some $(builddir)
-he gets mangled results as some generated files (i.e. .export.sym)
-are 'reused' from $(srcdir) instead of $(builddir).
-
-This patch switches to use vpath were we could explicitly name
-suffixes that should be looked via vpath - we must take care,
-we do not generate files with these suffixes:
-.c, .in, .po, .exported_symbols
+- removes OWNER & GROUP make vars they are parts of INSTALL command.
+- adds INSTALL_PROGRAM for executable, uses $(INSTALL)
+- adds INSTALL_DATA for non-executable data, uses ($INSTALL)
+- adds INSTALL_WDATA for writable non-executable data, uses ($INSTALL)
+- adds configure option --enable-write_install - to support writable
+  files installation mode used by distribution
+- replaces usage of ifeq @LIB_SUFFIX@ with $(LIB_SUFFIX)
+- installs .a files from static builds without executable flag
+- installs .a files to $(usrlibdir) instead of $(libdir)
+- create .so links for devel package in $(usrlibdir) instead of
+  $(libdir)
+- makes only .so files within builddir (version is added to
+  installed .so files)
+- removes VERSIONED_SHLIB
+- prints whole 'install' command during installation instead of less
+  informative "Installing  $(something) $(somewhere)"
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- Makefile.in                                   |    1 -
- daemons/Makefile.in                           |    1 -
- daemons/clvmd/Makefile.in                     |    1 -
- daemons/cmirrord/Makefile.in                  |    1 -
- daemons/dmeventd/Makefile.in                  |    1 -
- daemons/dmeventd/plugins/Makefile.in          |    1 -
- daemons/dmeventd/plugins/lvm2/Makefile.in     |    1 -
- daemons/dmeventd/plugins/mirror/Makefile.in   |    1 -
- daemons/dmeventd/plugins/snapshot/Makefile.in |    1 -
- doc/Makefile.in                               |    3 +--
- lib/Makefile.in                               |    1 -
- lib/format1/Makefile.in                       |    1 -
- lib/format_pool/Makefile.in                   |    1 -
- lib/locking/Makefile.in                       |    1 -
- lib/mirror/Makefile.in                        |    1 -
- lib/snapshot/Makefile.in                      |    1 -
- libdm/Makefile.in                             |    1 -
- liblvm/Makefile.in                            |    1 -
- make.tmpl.in                                  |    6 ++++++
- man/Makefile.in                               |    1 -
- po/Makefile.in                                |    1 -
- scripts/Makefile.in                           |    1 -
- test/api/Makefile.in                          |    1 -
- tools/Makefile.in                             |    3 +--
- udev/Makefile.in                              |    3 ++-
- 25 files changed, 10 insertions(+), 26 deletions(-)
+ configure.in                                  |   16 +++++----
+ daemons/clvmd/Makefile.in                     |    3 +-
+ daemons/cmirrord/Makefile.in                  |    7 ++--
+ daemons/dmeventd/Makefile.in                  |   40 ++++++---------------
+ daemons/dmeventd/plugins/lvm2/Makefile.in     |   14 +++-----
+ daemons/dmeventd/plugins/mirror/Makefile.in   |   12 ++-----
+ daemons/dmeventd/plugins/snapshot/Makefile.in |   12 ++-----
+ doc/Makefile.in                               |    5 +--
+ lib/Makefile.in                               |    2 +-
+ lib/format1/Makefile.in                       |   11 +++---
+ lib/format_pool/Makefile.in                   |   14 +++-----
+ lib/locking/Makefile.in                       |   13 +++----
+ lib/mirror/Makefile.in                        |   12 +++----
+ lib/snapshot/Makefile.in                      |   13 +++----
+ libdm/Makefile.in                             |   46 ++++++++-----------------
+ liblvm/Makefile.in                            |   17 +++------
+ make.tmpl.in                                  |   20 +++++++---
+ man/Makefile.in                               |   35 +++++++------------
+ po/Makefile.in                                |    4 +-
+ scripts/Makefile.in                           |   11 ++----
+ test/Makefile.in                              |    2 +-
+ tools/Makefile.in                             |   38 ++++++++------------
+ 22 files changed, 133 insertions(+), 214 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index e81160c..5e584e2 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+diff --git a/configure.in b/configure.in
+index ede1a74..ed9e631 100644
+--- a/configure.in
++++ b/configure.in
+@@ -144,28 +144,25 @@ AC_PREFIX_DEFAULT(/usr)
+ ################################################################################
+ dnl -- Setup the ownership of the files
+ AC_MSG_CHECKING(file owner)
+-OWNER=""
+-
+ AC_ARG_WITH(user,
+   [  --with-user=USER        Set the owner of installed files [[USER=]] ],
+   [ OWNER="$withval" ])
+ AC_MSG_RESULT($OWNER)
  
- SUBDIRS = doc include man scripts
+ if test x$OWNER != x; then
+-	OWNER="-o $OWNER"
++	INSTALL="$INSTALL -o $OWNER"
+ fi
  
-diff --git a/daemons/Makefile.in b/daemons/Makefile.in
-index 2f5837a..ce400d7 100644
---- a/daemons/Makefile.in
-+++ b/daemons/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+ ################################################################################
+ dnl -- Setup the group ownership of the files
+ AC_MSG_CHECKING(group owner)
+-GROUP=""
+ AC_ARG_WITH(group,
+   [  --with-group=GROUP      Set the group owner of installed files [[GROUP=]] ],
+   [ GROUP="$withval" ])
+ AC_MSG_RESULT($GROUP)
  
- .PHONY: dmeventd clvmd cmirrord
+ if test x$GROUP != x; then
+-	GROUP="-g $GROUP"
++	INSTALL="$INSTALL -g $GROUP"
+ fi
  
+ ################################################################################
+@@ -733,6 +730,12 @@ AC_ARG_ENABLE(pkgconfig,   [  --enable-pkgconfig      Install pkgconfig support]
+   PKGCONFIG=$enableval, PKGCONFIG=no)
+ 
+ ################################################################################
++dnl -- Enable installation of writable files by user
++AC_ARG_ENABLE(write_install, AC_HELP_STRING([--enable-write_install],
++	[Install user writable files]), 
++	[WRITE_INSTALL=$enableval], [WRITE_INSTALL=no])
++
++################################################################################
+ dnl -- Enable fsadm
+ AC_MSG_CHECKING(whether to install fsadm)
+ AC_ARG_ENABLE(fsadm, [AC_HELP_STRING([--disable-fsadm], [Disable fsadm])],
+@@ -1080,7 +1083,6 @@ AC_SUBST(DM_IOCTLS)
+ AC_SUBST(DM_LIB_VERSION)
+ AC_SUBST(DM_LIB_PATCHLEVEL)
+ AC_SUBST(FSADM)
+-AC_SUBST(GROUP)
+ AC_SUBST(GULM_CFLAGS)
+ AC_SUBST(GULM_LIBS)
+ AC_SUBST(HAVE_LIBDL)
+@@ -1103,7 +1105,6 @@ AC_SUBST(LVM_RELEASE)
+ AC_SUBST(LVM_RELEASE_DATE)
+ AC_SUBST(MIRRORS)
+ AC_SUBST(MSGFMT)
+-AC_SUBST(OWNER)
+ AC_SUBST(PKGCONFIG)
+ AC_SUBST(POOL)
+ AC_SUBST(PTHREAD_LIBS)
+@@ -1121,6 +1122,7 @@ AC_SUBST(STATIC_LINK)
+ AC_SUBST(UDEV_LIBS)
+ AC_SUBST(UDEV_RULES)
+ AC_SUBST(UDEV_SYNC)
++AC_SUBST(WRITE_INSTALL)
+ AC_SUBST(interface)
+ AC_SUBST(kerneldir)
+ AC_SUBST(missingkernel)
 diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index e3f70d5..773c368 100644
+index 773c368..3af25a0 100644
 --- a/daemons/clvmd/Makefile.in
 +++ b/daemons/clvmd/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -110,8 +110,7 @@ clvmd: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
+ .PHONY: install_clvmd
  
- CCS_LIBS = @CCS_LIBS@
- CCS_CFLAGS = @CCS_CFLAGS@
+ install_clvmd: $(TARGETS)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) clvmd \
+-		$(usrsbindir)/clvmd
++	$(INSTALL_PROGRAM) -D clvmd $(sbindir)/clvmd
+ 
+ install: $(INSTALL_TARGETS)
+ 
 diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
-index b8928c7..583c454 100644
+index 583c454..67c5331 100644
 --- a/daemons/cmirrord/Makefile.in
 +++ b/daemons/cmirrord/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2009-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -31,9 +31,8 @@ LMLIBS += $(CPG_LIBS) $(SACKPT_LIBS)
+ CFLAGS += $(CPG_CFLAGS) $(SACKPT_CFLAGS)
  
- CPG_LIBS = @CPG_LIBS@
- CPG_CFLAGS = @CPG_CFLAGS@
+ cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o cmirrord $(OBJECTS) \
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
+ 		$(LVMLIBS) $(LMLIBS) $(LIBS)
+ 
+ install: $(TARGETS)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) cmirrord \
+-		$(usrsbindir)/cmirrord
++	$(INSTALL_PROGRAM) -D $< $(usrsbindir)/$<
 diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
-index cd2a4d3..e0a6349 100644
+index e0a6349..cde9bf0 100644
 --- a/daemons/dmeventd/Makefile.in
 +++ b/daemons/dmeventd/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -36,13 +36,7 @@ ifeq ("@STATIC_LINK@", "yes")
+ endif
  
- SOURCES = libdevmapper-event.c
- SOURCES2 = dmeventd.c
-diff --git a/daemons/dmeventd/plugins/Makefile.in b/daemons/dmeventd/plugins/Makefile.in
-index 6b25235..45176ad 100644
---- a/daemons/dmeventd/plugins/Makefile.in
-+++ b/daemons/dmeventd/plugins/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+ LIB_VERSION = $(LIB_VERSION_DM)
+-
+-ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = $(LIB_NAME).dylib
+-else
+-  LIB_SHARED = $(LIB_NAME).so
+-  VERSIONED_SHLIB = $(LIB_SHARED).$(LIB_VERSION)
+-endif
++LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
  
- SUBDIRS += lvm2 mirror snapshot
+ CLEAN_TARGETS = dmeventd.static $(LIB_NAME).a
  
+@@ -61,11 +55,7 @@ device-mapper: $(TARGETS)
+ 
+ LVMLIBS += -ldevmapper-event -ldevmapper $(PTHREAD_LIBS)
+ 
+-$(VERSIONED_SHLIB): $(LIB_SHARED)
+-	$(RM) -f $@
+-	$(LN_S) $(LIB_SHARED) $@
+-
+-dmeventd: $(LIB_SHARED) $(VERSIONED_SHLIB) dmeventd.o
++dmeventd: $(LIB_SHARED) dmeventd.o
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -L. -o $@ dmeventd.o \
+ 	$(DL_LIBS) $(LVMLIBS) $(LIBS) -rdynamic
+ 
+@@ -87,31 +77,28 @@ CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
+ endif
+ 
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper-event.h \
++	$(INSTALL_DATA) -D $(srcdir)/libdevmapper-event.h \
+ 		$(includedir)/libdevmapper-event.h
+ 
+ install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.pc \
++	$(INSTALL_DATA) -D libdevmapper-event.pc \
+ 		$(usrlibdir)/pkgconfig/devmapper-event.pc
+ 
+ install_lib_dynamic: libdevmapper-event.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION)
+-	$(LN_S) -f libdevmapper-event.$(LIB_SUFFIX).$(LIB_VERSION) \
+-		$(libdir)/libdevmapper-event.$(LIB_SUFFIX)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(INSTALL) -d $(usrlibdir)
++	$(LN_S) -f $(libdir)/$<.$(LIB_VERSION) $(usrlibdir)/$<
+ 
+ install_lib_static: libdevmapper-event.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper-event.a.$(LIB_VERSION)
+-	$(LN_S) -f libdevmapper-event.a.$(LIB_VERSION) $(libdir)/libdevmapper-event.a
++	$(INSTALL_DATA) -D $< $(usrlibdir)/$<
+ 
+ install_lib: $(INSTALL_LIB_TARGETS)
+ 
+ install_dmeventd_dynamic: dmeventd
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL_PROGRAM) -D $< $(sbindir)/$<
+ 
+ install_dmeventd_static: dmeventd.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL_PROGRAM) -D $< $(sbindir)/$<
+ 
+ install_dmeventd: $(INSTALL_DMEVENTD_TARGETS)
+ 
+@@ -119,9 +106,4 @@ install: install_include install_lib install_dmeventd
+ 
+ install_device-mapper: install_include install_lib install_dmeventd
+ 
+-.PHONY: distclean_lib
+-
+-distclean_lib: 
+-	$(RM) libdevmapper-event.pc
+-
+-distclean: distclean_lib
++DISTCLEAN_TARGETS += libdevmapper-event.pc
 diff --git a/daemons/dmeventd/plugins/lvm2/Makefile.in b/daemons/dmeventd/plugins/lvm2/Makefile.in
-index 0f23c84..f44a562 100644
+index f44a562..09de4f0 100644
 --- a/daemons/dmeventd/plugins/lvm2/Makefile.in
 +++ b/daemons/dmeventd/plugins/lvm2/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -19,20 +19,16 @@ CLDFLAGS += -L$(top_builddir)/tools
  
- CLDFLAGS += -L$(top_builddir)/tools
+ SOURCES = dmeventd_lvm.c
  
-diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
-index 02c4e24..3dfc3a2 100644
---- a/daemons/dmeventd/plugins/mirror/Makefile.in
-+++ b/daemons/dmeventd/plugins/mirror/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
- INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
- CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
-index 793fd38..0f202b3 100644
---- a/daemons/dmeventd/plugins/snapshot/Makefile.in
-+++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
- INCLUDES += -I$(top_srcdir)/tools -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
- CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
-diff --git a/doc/Makefile.in b/doc/Makefile.in
-index ce66209..61b32e9 100644
---- a/doc/Makefile.in
-+++ b/doc/Makefile.in
-@@ -14,9 +14,8 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
--CONFSRC=example.conf
-+CONFSRC=$(srcdir)/example.conf
- CONFDEST=lvm.conf
+-ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = libdevmapper-event-lvm2.dylib
+-else
+-  LIB_SHARED = libdevmapper-event-lvm2.so
+-endif
++LIB_SHARED = libdevmapper-event-lvm2.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
  
  include $(top_builddir)/make.tmpl
+ 
+ LIBS += @LVM2CMD_LIB@ -ldevmapper $(PTHREAD_LIBS)
+ 
+-install_lvm2: libdevmapper-event-lvm2.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$<.$(LIB_VERSION)
+-	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
++install_lvm2: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(INSTALL) -d $(usrlibdir)
++	$(LN_S) -f $(libdir)/$<.$(LIB_VERSION) $(usrlibdir)/$<
+ 
+ install: install_lvm2
+diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
+index 3dfc3a2..5dfcf7e 100644
+--- a/daemons/dmeventd/plugins/mirror/Makefile.in
++++ b/daemons/dmeventd/plugins/mirror/Makefile.in
+@@ -22,12 +22,7 @@ CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/l
+ SOURCES = dmeventd_mirror.c
+ 
+ LIB_NAME = libdevmapper-event-lvm2mirror
+-ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = $(LIB_NAME).dylib
+-else
+-  LIB_SHARED = $(LIB_NAME).so
+-endif
+-
++LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ CFLOW_LIST = $(SOURCES)
+@@ -37,8 +32,7 @@ include $(top_builddir)/make.tmpl
+ 
+ LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
+ 
+-install_lvm2: $(LIB_NAME).$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$<
++install_lvm2: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<
+ 
+ install: install_lvm2
+diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
+index 0f202b3..3908ed1 100644
+--- a/daemons/dmeventd/plugins/snapshot/Makefile.in
++++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
+@@ -21,20 +21,14 @@ CLDFLAGS += -L$(top_builddir)/tools -L$(top_builddir)/daemons/dmeventd/plugins/l
+ 
+ SOURCES = dmeventd_snapshot.c
+ 
+-ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = libdevmapper-event-lvm2snapshot.dylib
+-else
+-  LIB_SHARED = libdevmapper-event-lvm2snapshot.so
+-endif
+-
++LIB_SHARED = libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+ LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
+ 
+-install_lvm2: libdevmapper-event-lvm2snapshot.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$<
++install_lvm2: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<
+ 
+ install: install_lvm2
+diff --git a/doc/Makefile.in b/doc/Makefile.in
+index 61b32e9..31baab6 100644
+--- a/doc/Makefile.in
++++ b/doc/Makefile.in
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -23,8 +23,7 @@ include $(top_builddir)/make.tmpl
+ install_lvm2: $(CONFSRC)
+ 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+ 		echo "Installing $(CONFSRC) as $(confdir)/$(CONFDEST)"; \
+-		@INSTALL@ -D $(OWNER) $(GROUP) -m 644 $< \
+-			$(confdir)/$(CONFDEST); \
++		$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST); \
+ 	fi
+ 
+ install: install_lvm2
 diff --git a/lib/Makefile.in b/lib/Makefile.in
-index acfb23e..9662120 100644
+index 9662120..3498141 100644
 --- a/lib/Makefile.in
 +++ b/lib/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
- ifeq ("@LVM1@", "shared")
-   SUBDIRS = format1
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
 diff --git a/lib/format1/Makefile.in b/lib/format1/Makefile.in
-index f62ab7c..327a1c2 100644
+index 327a1c2..f7e8c4c 100644
 --- a/lib/format1/Makefile.in
 +++ b/lib/format1/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -25,13 +25,12 @@ SOURCES =\
+ 	lvm1-label.c \
+ 	vg_number.c
  
- SOURCES =\
- 	disk-rep.c \
+-LIB_SHARED = liblvm2format1.so
++LIB_SHARED = liblvm2format1.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-install: liblvm2format1.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2format1.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2format1.so.$(LIB_VERSION) $(libdir)/liblvm2format1.so
++install: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
+ 
 diff --git a/lib/format_pool/Makefile.in b/lib/format_pool/Makefile.in
-index b0ebc36..d9cedf0 100644
+index d9cedf0..8621fb5 100644
 --- a/lib/format_pool/Makefile.in
 +++ b/lib/format_pool/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -22,15 +22,11 @@ SOURCES =\
+ 	import_export.c \
+ 	pool_label.c
  
- SOURCES =\
- 	disk_rep.c \
+-LIB_SHARED = liblvm2formatpool.so
++LIB_SHARED = liblvm2formatpool.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-install: liblvm2formatpool.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2formatpool.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2formatpool.so.$(LIB_VERSION) \
+-		$(libdir)/liblvm2formatpool.so
+-
+-
++install: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
 diff --git a/lib/locking/Makefile.in b/lib/locking/Makefile.in
-index 399b0af..99cc206 100644
+index 99cc206..b38a8b3 100644
 --- a/lib/locking/Makefile.in
 +++ b/lib/locking/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -18,14 +18,11 @@ top_builddir = @top_builddir@
  
  SOURCES = cluster_locking.c
  
+-LIB_SHARED = liblvm2clusterlock.so
++LIB_SHARED = liblvm2clusterlock.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-install install_cluster: liblvm2clusterlock.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2clusterlock.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2clusterlock.so.$(LIB_VERSION) \
+-		$(libdir)/liblvm2clusterlock.so
+-
++install install_cluster: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
 diff --git a/lib/mirror/Makefile.in b/lib/mirror/Makefile.in
-index 038399a..233fa96 100644
+index 233fa96..dcb6e18 100644
 --- a/lib/mirror/Makefile.in
 +++ b/lib/mirror/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -18,13 +18,11 @@ top_builddir = @top_builddir@
  
  SOURCES = mirrored.c
  
+-LIB_SHARED = liblvm2mirror.so
++LIB_SHARED = liblvm2mirror.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-install: liblvm2mirror.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2mirror.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2mirror.so.$(LIB_VERSION) $(libdir)/liblvm2mirror.so
+-
++install: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
 diff --git a/lib/snapshot/Makefile.in b/lib/snapshot/Makefile.in
-index 80728c7..e2c2b10 100644
+index e2c2b10..6ee3528 100644
 --- a/lib/snapshot/Makefile.in
 +++ b/lib/snapshot/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -18,14 +18,11 @@ top_builddir = @top_builddir@
  
  SOURCES = snapshot.c
  
+-LIB_SHARED = liblvm2snapshot.so
++LIB_SHARED = liblvm2snapshot.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_LVM)
+ 
+ include $(top_builddir)/make.tmpl
+ 
+-install: liblvm2snapshot.so
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2snapshot.so.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2snapshot.so.$(LIB_VERSION) \
+-		$(libdir)/liblvm2snapshot.so
+-
++install: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(LN_S) -f $<.$(LIB_VERSION) $(libdir)/$<
 diff --git a/libdm/Makefile.in b/libdm/Makefile.in
-index 63e6603..1e9284a 100644
+index 1e9284a..3e51981 100644
 --- a/libdm/Makefile.in
 +++ b/libdm/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of the device-mapper userspace tools.
+ #
+@@ -38,13 +38,9 @@ ifeq ("@STATIC_LINK@", "yes")
+ LIB_STATIC = $(interface)/libdevmapper.a
+ endif
  
- SOURCES =\
- 	datastruct/bitset.c \
+-ifeq ("@LIB_SUFFIX@","dylib")
+-  LIB_SHARED = $(interface)/libdevmapper.dylib
+-else
+-  LIB_SHARED = $(interface)/libdevmapper.so
+-endif
+-VERSIONED_SHLIB = libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
++LIB_SHARED = $(interface)/libdevmapper.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_DM)
++TARGETS += libdevmapper.$(LIB_SUFFIX)
+ 
+ CFLOW_LIST = $(SOURCES)
+ CFLOW_LIST_TARGET = libdevmapper.cflow
+@@ -58,6 +54,9 @@ LIBS += $(SELINUX_LIBS) $(UDEV_LIBS)
+ 
+ device-mapper: all
+ 
++libdevmapper.$(LIB_SUFFIX): $(LIB_SHARED)
++	$(LN_S) -f $< $@
++
+ .PHONY: install_dynamic install_static install_include \
+ 	install_ioctl install_ioctl_static \
+ 	install_pkgconfig
+@@ -77,39 +76,24 @@ install: $(INSTALL_TYPE) install_include
+ install_device-mapper: install
+ 
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/libdevmapper.h \
++	$(INSTALL_DATA) -D $(srcdir)/libdevmapper.h \
+ 		$(includedir)/libdevmapper.h
+ 
+ install_dynamic: install_ at interface@
+-	$(LN_S) -f libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM) \
+-		$(libdir)/libdevmapper.$(LIB_SUFFIX)
++	$(INSTALL) -d $(usrlibdir)
++	$(LN_S) -f $(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM) \
++		$(usrlibdir)/libdevmapper.$(LIB_SUFFIX)
+ 
+ install_static: install_@interface@_static
+-	$(LN_S) -f libdevmapper.a.$(LIB_VERSION_DM) $(libdir)/libdevmapper.a
+ 
+ install_ioctl: ioctl/libdevmapper.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION_DM)
+ 
+-install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper.pc \
+-		$(usrlibdir)/pkgconfig/devmapper.pc
++install_pkgconfig: libdevmapper.pc
++	$(INSTALL_DATA) -D libdevmapper.pc $(usrlibdir)/pkgconfig/devmapper.pc
+ 
+ install_ioctl_static: ioctl/libdevmapper.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/libdevmapper.a.$(LIB_VERSION_DM)
+-
+-$(VERSIONED_SHLIB): %.$(LIB_SUFFIX).$(LIB_VERSION_DM): $(interface)/%.$(LIB_SUFFIX)
+-	rm -f $@
+-	$(LN_S) $< $@
+-	rm -f libdevmapper.$(LIB_SUFFIX)
+-	$(LN_S) $< libdevmapper.$(LIB_SUFFIX)
++	$(INSTALL_DATA) -D $< $(usrlibdir)/libdevmapper.a
+ 
+ CLEAN_TARGETS += libdevmapper.$(LIB_SUFFIX) ioctl/libdevmapper.a
+-
+-.PHONY: distclean_lib
+-
+-distclean_lib:
+-	$(RM) libdevmapper.pc
+-
+-distclean: distclean_lib
++DISTCLEAN_TARGETS += libdevmapper.pc
 diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
-index 1b2b474..165ce46 100644
+index 165ce46..d7d5aa7 100644
 --- a/liblvm/Makefile.in
 +++ b/liblvm/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -67,22 +67,17 @@ endif
+ install: $(INSTALL_TYPE) install_include
  
- SOURCES =\
- 	lvm_misc.c \
+ install_include:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
++	$(INSTALL_DATA) -D $(srcdir)/lvm2app.h $(includedir)/lvm2app.h
+ 
+ install_dynamic: $(LIB_SHARED)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$(LIB_SHARED).$(LIB_VERSION_APP)
+-	$(LN_S) -f $(LIB_SHARED).$(LIB_VERSION_APP) \
+-		$(libdir)/$(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION_APP)
++	$(LN_S) -f $<.$(LIB_VERSION_APP) $(libdir)/$<
+ 
+ install_static: $(LIB_STATIC)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/$(LIB_STATIC).$(LIB_VERSION_APP)
+-	$(LN_S) -f $(LIB_STATIC).$(LIB_VERSION_APP) $(libdir)/$(LIB_STATIC)
++	$(INSTALL_PROGRAM) -D $< $(usrlibdir)/$<
+ 
+ install_pkgconfig:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(LIB_NAME).pc \
+-		$(usrlibdir)/pkgconfig/lvm2app.pc
++	$(INSTALL_DATA) -D $(LIB_NAME).pc $(usrlibdir)/pkgconfig/lvm2app.pc
+ 
+ liblvm.cflow: $(SOURCES)
+ 	set -e; (echo -n "SOURCES += "; \
 diff --git a/make.tmpl.in b/make.tmpl.in
-index b42358a..5d8169c 100644
+index 5d8169c..0316f58 100644
 --- a/make.tmpl.in
 +++ b/make.tmpl.in
-@@ -63,6 +63,12 @@ localedir = $(DESTDIR)@LOCALEDIR@
- staticdir = $(DESTDIR)@STATICDIR@
- udevdir = $(DESTDIR)@udevdir@
- 
-+# Setup vpath search paths for some suffixes
-+vpath %.c $(srcdir)
-+vpath %.in $(srcdir)
-+vpath %.po $(srcdir)
-+vpath %.exported_symbols $(srcdir)
-+
+@@ -72,16 +72,24 @@ vpath %.exported_symbols $(srcdir)
  interface = @interface@
  interfacebuilddir = $(top_builddir)/libdm/$(interface)
  
+-# setup misc variables
+-# define the ownership variables for the binaries and man pages
+-OWNER = @OWNER@
+-GROUP = @GROUP@
+-
+ # The number of jobs to run, if blank, defaults to the make standard
+ ifndef MAKEFLAGS
+ MAKEFLAGS = @JOBS@
+ endif
+ 
++# Handle installation of files
++ifeq ("@WRITE_INSTALL@", "yes")
++# leaving defaults
++M_INSTALL_PROGRAM =
++M_INSTALL_DATA = -m 644
++else
++M_INSTALL_PROGRAM = -m 555
++M_INSTALL_DATA = -m 444
++endif
++INSTALL_PROGRAM = $(INSTALL) $(M_INSTALL_PROGRAM) $(STRIP)
++INSTALL_DATA = $(INSTALL) -p $(M_INSTALL_DATA)
++INSTALL_WDATA = $(INSTALL) -p -m 644
++
+ .SUFFIXES: .c .d .o .so .a .po .pot .mo .dylib
+ 
+ CFLAGS += -fPIC -Wall -Wundef -Wshadow -Wcast-align -Wwrite-strings -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -Winline -Wmissing-noreturn -Wformat-security
+@@ -166,7 +174,7 @@ SUBDIRS.cflow := $(SUBDIRS:=.cflow)
+ SUBDIRS.clean := $(SUBDIRS:=.clean)
+ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
+ 
+-TARGETS += $(LIB_SHARED) $(LIB_STATIC) $(VERSIONED_SHLIB)
++TARGETS += $(LIB_SHARED) $(LIB_STATIC)
+ 
+ all: $(SUBDIRS) $(TARGETS)
+ 
 diff --git a/man/Makefile.in b/man/Makefile.in
-index 446bbe6..f34014e 100644
+index f34014e..39a7c59 100644
 --- a/man/Makefile.in
 +++ b/man/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -71,34 +71,25 @@ $(MAN5) $(MAN8) $(MAN8CLUSTER):	Makefile
+ 	esac
  
- ifeq ("@FSADM@", "yes")
- FSADMMAN = fsadm.8
+ install_lvm2:
+-	@echo "Installing $(MAN8) in $(MAN8DIR)"
+-	@for f in $(MAN8); \
+-	do \
+-	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	@for f in $(MAN8); do \
++	   echo "$(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f"; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
+-
+-	@echo "Installing $(MAN5) in $(MAN5DIR)"
+-	@for f in $(MAN5); \
+-	do \
+-	   $(RM) $(MAN5DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN5DIR)/$$f; \
++	@for f in $(MAN5); do \
++	   echo "$(INSTALL_DATA) -D $$f $(MAN5DIR)/$$f"; \
++	   $(INSTALL_DATA) -D $$f $(MAN5DIR)/$$f; \
+ 	done
+ 
+ install_cluster:
+-	@echo "Installing $(MAN8CLUSTER) in $(MAN8DIR)"
+-	@for f in $(MAN8CLUSTER); \
+-	do \
+-	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	@for f in $(MAN8CLUSTER); do \
++	   echo "$(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f"; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
+ 
+ install_device-mapper:
+-	@echo "Installing $(MAN8DM) in $(MAN8DIR)"
+-	@for f in $(MAN8DM); \
+-	do \
+-	   $(RM) $(MAN8DIR)/$$f; \
+-	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
++	@for f in $(MAN8DM); do \
++	   echo "$(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f"; \
++	   $(INSTALL_DATA) -D $$f $(MAN8DIR)/$$f; \
+ 	done
+ 
+ install: install_lvm2 install_device-mapper
 diff --git a/po/Makefile.in b/po/Makefile.in
-index 22184f1..79bd340 100644
+index 79bd340..a4f57a6 100644
 --- a/po/Makefile.in
 +++ b/po/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
- LANGS=de
- 
+@@ -53,13 +53,13 @@ install: $(TARGETS)
+ 	@echo Installing translation files in $(localedir)
+ 	@( \
+ 		for lang in $(LANGS); do \
+-			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
++			$(INSTALL_DATA) -D $$lang.mo \
+ 			    $(localedir)/$$lang/LC_MESSAGES/lvm2.mo;\
+ 	  done; \
+ 	)
+ 	@( \
+ 		for lang in $(LANGS); do \
+-			$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $$lang.mo \
++			$(INSTALL_DATA) -D $$lang.mo \
+ 			    $(localedir)/$$lang/LC_MESSAGES/device-mapper.mo;\
+ 	  done; \
+ 	)
 diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index b79d312..4b1ab7f 100644
+index 4b1ab7f..d441402 100644
 --- a/scripts/Makefile.in
 +++ b/scripts/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
- 
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2006 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2006-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -18,13 +18,10 @@ top_builddir = @top_builddir@
  include $(top_builddir)/make.tmpl
  
-diff --git a/test/api/Makefile.in b/test/api/Makefile.in
-index 605da33..d373ff8 100644
---- a/test/api/Makefile.in
-+++ b/test/api/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+ install:
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/lvm_dump.sh \
+-		$(sbindir)/lvmdump
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/vgimportclone.sh \
+-		$(sbindir)/vgimportclone
++	$(INSTALL_PROGRAM) -D $(srcdir)/lvm_dump.sh $(sbindir)/lvmdump
++	$(INSTALL_PROGRAM) -D $(srcdir)/vgimportclone.sh $(sbindir)/vgimportclone
+ ifeq ("@FSADM@", "yes")
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(srcdir)/fsadm.sh \
+-		$(sbindir)/fsadm
++	$(INSTALL_PROGRAM) -D $(srcdir)/fsadm.sh $(sbindir)/fsadm
+ endif
  
- ifeq ("@DEBUG@", "yes")
- 	DEFS += -DDEBUG
+ install_lvm2: install
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 6ea6224..1e8d8a7 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
 diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 8cab5c4..b048fad 100644
+index b048fad..864559e 100644
 --- a/tools/Makefile.in
 +++ b/tools/Makefile.in
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+@@ -92,7 +92,7 @@ LVMLIBS = $(LVMINTERNAL_LIBS)
+ LIB_VERSION = $(LIB_VERSION_LVM)
  
- SOURCES =\
- 	dumpconfig.c \
-@@ -146,7 +145,7 @@ liblvm2cmd-static.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.
+ CLEAN_TARGETS = liblvm2cmd.$(LIB_SUFFIX) $(TARGETS_DM) \
+-	liblvm2cmd-static.a dmsetup.static lvm.static
++	liblvm2cmd-static.a dmsetup.static lvm.static lvm-static.o
  
- liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
+ ifeq ("@CMDLIB@", "yes")
+ 	TARGETS += liblvm2cmd.$(LIB_SUFFIX)
+@@ -160,39 +160,31 @@ endif
+ 	install_dmsetup_dynamic install_dmsetup_static
  
--.commands: commands.h cmdnames.h Makefile
-+.commands: $(srcdir)/commands.h $(srcdir)/cmdnames.h Makefile
- 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
- 		egrep -v '^ *(|#.*|dumpconfig|formats|help|pvdata|segtypes|version) *$$' > .commands
+ install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION)
+-	$(LN_S) -f liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION) $(libdir)/liblvm2cmd.$(LIB_SUFFIX)
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
+-		$(includedir)/lvm2cmd.h
++	$(INSTALL_PROGRAM) -D $< $(libdir)/$<.$(LIB_VERSION)
++	$(INSTALL) -d $(usrlibdir)
++	$(LN_S) -f $(libdir)/$<.$(LIB_VERSION) $(usrlibdir)/$<
++	$(INSTALL_DATA) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
  
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index 0d9e2ec..2511cf8 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -14,7 +14,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+ install_cmdlib_static: liblvm2cmd-static.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(libdir)/liblvm2cmd.a.$(LIB_VERSION)
+-	$(LN_S) -f liblvm2cmd.a.$(LIB_VERSION) $(libdir)/liblvm2cmd.a
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 $(srcdir)/lvm2cmd.h \
+-		$(includedir)/lvm2cmd.h
++	$(INSTALL_DATA) -D $< $(usrlibdir)/liblvm2cmd.a
++	$(INSTALL_DATA) -D $(srcdir)/lvm2cmd.h $(includedir)/lvm2cmd.h
  
- DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
- LVM_RULES=11-dm-lvm.rules
-@@ -24,6 +23,8 @@ CLEAN_TARGETS=10-dm.rules
+ install_tools_dynamic: lvm .commands
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm \
+-		$(sbindir)/lvm
++	$(INSTALL_PROGRAM) -D lvm $(sbindir)/lvm
+ 	@echo Creating symbolic links for individual commands in $(sbindir)
+-	@( \
+-		for v in `cat .commands`; do \
+-			cd $(sbindir); \
+-			$(LN_S) -f lvm $$v; \
+-		done; \
+-	)
++	@for v in `cat .commands`; do \
++		echo "$(LN_S) -f lvm $(sbindir)/$$v"; \
++		$(LN_S) -f lvm $(sbindir)/$$v; \
++	done;
  
- include $(top_builddir)/make.tmpl
+ install_tools_static: lvm.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< \
+-		$(staticdir)/lvm.static
++	$(INSTALL_PROGRAM) -D $< $(staticdir)/$<
  
-+vpath %.rules $(srcdir)
-+
- %: %.in
- 	$(SED) -e "s/(DM_DIR)/$(DM_DIR)/" $< >$@
+ install_dmsetup_dynamic: dmsetup
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL_PROGRAM) -D $< $(sbindir)/$<
+ 
+ install_dmsetup_static: dmsetup.static
+-	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	$(INSTALL_PROGRAM) -D $< $(sbindir)/$<
+ 
+ install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
  
 -- 
 1.7.0.1
