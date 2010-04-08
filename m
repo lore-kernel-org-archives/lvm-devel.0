@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Apr 2010 00:56:27 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20100408005627.21193.qmail@sourceware.org>
+Date: 8 Apr 2010 01:43:46 -0000
+Subject: LVM2/test t-pvmove-basic.sh
+Message-ID: <20100408014346.9191.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-08 00:56:26
+Changes by:	agk at sourceware.org	2010-04-08 01:43:46
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	test           : t-pvmove-basic.sh 
 
 Log message:
-	missing ?:
+	another incorrect test that should have been failing before
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.226&r2=1.227
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvmove-basic.sh.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/lib/metadata/lv_manip.c	2010/04/08 00:52:41	1.226
-+++ LVM2/lib/metadata/lv_manip.c	2010/04/08 00:56:26	1.227
-@@ -2096,7 +2096,7 @@
- 		if (!_for_each_pv(cmd, use_pvmove_parent_lv ? seg->pvmove_source_seg->lv : lv,
- 				  use_pvmove_parent_lv ? seg->pvmove_source_seg->le : current_le,
- 				  use_pvmove_parent_lv ? spvs->len * calc_area_multiple(seg->pvmove_source_seg->segtype, seg->pvmove_source_seg->area_count) : spvs->len,
--				  seg->pvmove_source_seg,
-+				  use_pvmove_parent_lv ? seg->pvmove_source_seg : NULL,
- 				  &spvs->len,
- 				  0, 0, -1, 0, _add_pvs, (void *) spvs))
- 			return_NULL;
+--- LVM2/test/t-pvmove-basic.sh	2010/04/07 16:00:19	1.8
++++ LVM2/test/t-pvmove-basic.sh	2010/04/08 01:43:46	1.9
+@@ -236,7 +236,7 @@
+ 
+ #COMM "destination split into 3: from pv2:0-2 to {pv3,4,5}:5-5"
+ prepare_lvs_ 
+-pvmove -i1 $dev2:0-2 $dev3:5-5 $dev4:5-5 $dev5:5-5 
++pvmove -i1 --alloc anywhere $dev2:0-2 $dev3:5-5 $dev4:5-5 $dev5:5-5 
+ lv_not_changed_ $vg/$lv1 
+ lv_is_on_ $vg/$lv2 $dev3 $dev4 $dev5 $dev3 $dev4 
+ lv_not_changed_ $vg/$lv3 
 
 
