@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Apr 2010 01:58:07 -0000
-Subject: LVM2/test t-pvmove-basic.sh
-Message-ID: <20100408015807.30715.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Apr 2010 09:15:39 -0000
+Subject: LVM2 make.tmpl.in
+Message-ID: <20100408091539.5924.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-08 01:58:07
+Changes by:	zkabelac at sourceware.org	2010-04-08 09:15:38
 
 Modified files:
-	test           : t-pvmove-basic.sh 
+	.              : make.tmpl.in 
 
 Log message:
-	And another test that should have been failing - normal allocation policy
-	does not put stripes on the same disk as each other!
+	Add cleandir target.
+	
+	Using non-recursive cleandir target for resursive distclean and clean.
+	Avoids duplicated clean invocation during distclean.
+	Indent $(RM) parameters.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvmove-basic.sh.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.87&r2=1.88
 
---- LVM2/test/t-pvmove-basic.sh	2010/04/08 01:43:46	1.9
-+++ LVM2/test/t-pvmove-basic.sh	2010/04/08 01:58:06	1.10
-@@ -228,7 +228,7 @@
+--- LVM2/make.tmpl.in	2010/04/06 09:54:11	1.87
++++ LVM2/make.tmpl.in	2010/04/08 09:15:37	1.88
+@@ -144,8 +144,8 @@
+ OBJECTS = $(SOURCES:%.c=%.o)
+ POTFILES = $(SOURCES:%.c=%.pot)
  
- #COMM "destination split into 2: from pv2:0-2 to pv5:5-5 and pv4:5-6"
- prepare_lvs_ 
--pvmove -i1 $dev2:0-2 $dev5:5-5 $dev4:5-6 
-+pvmove -i1 --alloc anywhere $dev2:0-2 $dev5:5-5 $dev4:5-6 
- lv_not_changed_ $vg/$lv1 
- lv_is_on_ $vg/$lv2 $dev5 $dev4 $dev3 $dev4 
- lv_not_changed_ $vg/$lv3 
-@@ -266,7 +266,7 @@
- prepare_lvs_ 
- pvmove -i1 --alloc anywhere $dev3:0-2 $dev3:5-7 $dev5:5-6 $dev4:5-5 
- lv_not_changed_ $vg/$lv1 
--lv_is_on_ $vg/$lv2 $dev2 $dev5 $dev4 $dev4 
-+#lv_is_on_ $vg/$lv2 $dev2 $dev5 $dev4 $dev4 
- lv_not_changed_ $vg/$lv3 
- check_and_cleanup_lvs_
+-.PHONY: all install install_cluster pofile distclean clean cflow device-mapper 
+-.PHONY: install_device-mapper install_lvm2
++.PHONY: all pofile distclean clean cleandir cflow device-mapper
++.PHONY: install install_cluster install_device-mapper install_lvm2
+ .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
+ .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
+ .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
+@@ -300,12 +300,14 @@
+ %.mo: %.po
+ 	$(MSGFMT) -o $@ $<
+ 
+-clean: $(SUBDIRS.clean)
++cleandir:
+ 	$(RM) $(OBJECTS) $(TARGETS) $(CLEAN_TARGETS) $(CLEAN_CFLOW) $(LDDEPS) \
+-	$(POTFILES) $(SOURCES:%.c=%.d) $(SOURCES:%.c=%.gcno) $(SOURCES:%.c=%.gcda) \
+-	$(SOURCES2:%.c=%.o) $(SOURCES2:%.c=%.d) $(SOURCES2:%.c=%.gcno) $(SOURCES2:%.c=%.gcda)
++	  $(POTFILES) $(SOURCES:%.c=%.d) $(SOURCES:%.c=%.gcno) $(SOURCES:%.c=%.gcda) \
++	  $(SOURCES2:%.c=%.o) $(SOURCES2:%.c=%.d) $(SOURCES2:%.c=%.gcno) $(SOURCES2:%.c=%.gcda)
+ 
+-distclean: clean $(SUBDIRS.distclean)
++clean: $(SUBDIRS.clean) cleandir
++
++distclean: cleandir $(SUBDIRS.distclean)
+ 	test -z "$(DISTCLEAN_DIRS)" || $(RM) -r $(DISTCLEAN_DIRS)
+ 	$(RM) $(DISTCLEAN_TARGETS) Makefile core
  
 
 
