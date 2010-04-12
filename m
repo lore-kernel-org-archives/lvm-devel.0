@@ -1,75 +1,63 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 9 Apr 2010 21:44:29 -0000
-Subject: LVM2/udev Makefile.in
-Message-ID: <20100409214429.13811.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 12 Apr 2010 00:01:46 -0400
+Subject: [PATCH] Use del_pvl_from_vgs() in vgreduce paths.
+In-Reply-To: <1270598000-9771-5-git-send-email-dwysocha@redhat.com>
+References: <1270598000-9771-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1271044906-3080-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-04-09 21:44:28
+Somehow these got missed in earlier patches.
 
-Modified files:
-	udev           : Makefile.in 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata.c |    3 +--
+ tools/vgreduce.c        |    3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
 
-Log message:
-	Update install rules for udev.
-	
-	Fix unwanted modification of $(top_builddir)/make.tmpl.
-	
-	Using dependency rules to install rules for udev.
-	There is minor problem, with concurent usage of builddir
-	and srcdir could lead to missuse of 10-dm.rules which
-	could be found in VPATH from different builddir.
-	However current solution uses intermediate target so
-	the generated 10-dm.rules exists only for short period of time
-	during make install execution.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/Makefile.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-
---- LVM2/udev/Makefile.in	2010/04/09 21:34:32	1.7
-+++ LVM2/udev/Makefile.in	2010/04/09 21:44:28	1.8
-@@ -1,5 +1,5 @@
- #
--# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2009-2010 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -25,24 +25,13 @@
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a7b9e18..8e2faad 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -667,12 +667,11 @@ int vg_reduce(struct volume_group *vg, char *pv_name)
+ 		goto bad;
+ 	}
  
- vpath %.rules $(srcdir)
+-	vg->pv_count--;
+ 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
+ 	vg->extent_count -= pv_pe_count(pv);
++	del_pvl_from_vgs(vg, pvl);
  
--%: %.in
-+%.rules: %.rules.in
- 	$(SED) -e "s/(DM_DIR)/$(DM_DIR)/" $< >$@
+ 	/* add pv to the remove_pvs list */
+-	dm_list_del(&pvl->list);
+ 	dm_list_add(&vg->removed_pvs, &pvl->list);
  
--install_lvm2: $(LVM_RULES)
--	@echo "Installing $(LVM_RULES) in $(udevdir)"
--	@for f in $(LVM_RULES); \
--	do \
--	   $(RM) $(udevdir)/$$f; \
--	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $(srcdir)/$$f $(udevdir)/$$f; \
--	done
--
--install_device-mapper: $(DM_RULES)
--	@echo "Installing $(DM_RULES) in $(udevdir)"
--	@for f in $(DM_RULES); \
--	do \
--	   $(RM) $(udevdir)/$$f; \
--	   if test -f $$f; then file=$$f; else file=$(srcdir)/$$f; fi; \
--	   $(INSTALL) -c -D $(OWNER) $(GROUP) -m 644 $$file $(udevdir)/$$f; \
--	done
-+%_install: %.rules
-+	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
-+
-+install_device-mapper: $(DM_RULES:.rules=_install)
-+install_lvm2: $(LVM_RULES:.rules=_install)
+ 	return 1;
+diff --git a/tools/vgreduce.c b/tools/vgreduce.c
+index 287db41..0cbe4b0 100644
+--- a/tools/vgreduce.c
++++ b/tools/vgreduce.c
+@@ -407,7 +407,7 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	log_verbose("Removing \"%s\" from volume group \"%s\"", name, vg->name);
  
- install: install_lvm2 install_device-mapper
+ 	if (pvl)
+-		dm_list_del(&pvl->list);
++		del_pvl_from_vgs(vg, pvl);
+ 
+ 	pv->vg_name = vg->fid->fmt->orphan_vg_name;
+ 	pv->status = ALLOCATABLE_PV;
+@@ -417,7 +417,6 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		goto bad;
+ 	}
+ 
+-	vg->pv_count--;
+ 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
+ 	vg->extent_count -= pv_pe_count(pv);
+ 
+-- 
+1.6.0.6
 
 
