@@ -1,478 +1,144 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Apr 2010 17:21:31 +0200
-Subject: [PATCH 03/22] Replicator: add libdm support
+Date: Mon, 12 Apr 2010 17:21:32 +0200
+Subject: [PATCH 04/22] Replicator: suspend/deactivate replicator
 In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
 References: <cover.1271085009.git.zkabelac@redhat.com>
-Message-ID: <5f5187a4b0884a93f84ce1a9c7a6baca75c9842d.1271085009.git.zkabelac@redhat.com>
+Message-ID: <8cdf29a77f10fb00c32a51fb4cefbb60657a65b7.1271085009.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Introducing dm_tree_node_add_replicator_target() and
-dm_tree_node_add_replicator_dev_target().
-Define typedef dm_replicator_mode_t
+Introducing dm_tree_set_suspend_priority() for suspending replicator
+control target before deactivation of replicator-dev target.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/.exported_symbols |    2 +
- libdm/libdevmapper.h    |   31 +++++
- libdm/libdm-deptree.c   |  297 ++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 325 insertions(+), 5 deletions(-)
+ libdm/.exported_symbols |    1 +
+ libdm/libdevmapper.h    |    2 +
+ libdm/libdm-deptree.c   |   62 +++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 65 insertions(+), 0 deletions(-)
 
 diff --git a/libdm/.exported_symbols b/libdm/.exported_symbols
-index ea65c8b..d9ef125 100644
+index d9ef125..b977383 100644
 --- a/libdm/.exported_symbols
 +++ b/libdm/.exported_symbols
-@@ -80,6 +80,8 @@ dm_tree_node_add_crypt_target
- dm_tree_node_add_mirror_target
- dm_tree_node_add_mirror_target_log
+@@ -82,6 +82,7 @@ dm_tree_node_add_mirror_target_log
  dm_tree_node_add_target_area
-+dm_tree_node_add_replicator_target
-+dm_tree_node_add_replicator_dev_target
+ dm_tree_node_add_replicator_target
+ dm_tree_node_add_replicator_dev_target
++dm_tree_set_suspend_priority
  dm_tree_node_set_read_ahead
  dm_tree_skip_lockfs
  dm_tree_use_no_flush_suspend
 diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index aa8ad5c..3ab5ea2 100644
+index 3ab5ea2..52f594c 100644
 --- a/libdm/libdevmapper.h
 +++ b/libdm/libdevmapper.h
-@@ -439,6 +439,37 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
- 					  const char *log_uuid,
- 					  unsigned area_count,
- 					  uint32_t flags);
-+
-+/* Replicator operation mode */
-+typedef enum {
-+	DM_REPLICATOR_SYNC,			/* Synchronous replication */
-+	DM_REPLICATOR_ASYNC_WARN,		/* Warn if async replicator is slow */
-+	DM_REPLICATOR_ASYNC_STALL,		/* Stall replicator if not fast enough */
-+	DM_REPLICATOR_ASYNC_DROP,		/* Drop sites out of sync */
-+	DM_REPLICATOR_ASYNC_FAIL,		/* Fail replicator if slow */
-+	NUM_DM_REPLICATOR_MODES
-+} dm_replicator_mode_t;
-+
-+int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
-+				       uint64_t size,
-+				       const char *rlog_uuid,
-+				       const char *rlog_type,
-+				       unsigned rsite_index,
-+				       dm_replicator_mode_t mode,
-+				       uint32_t async_timeout,
-+				       uint64_t fall_behind_data,
-+				       uint32_t fall_behind_ios);
-+
-+int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
-+					   uint64_t size,
-+					   const char *replicator_uuid,	/* Replicator control device */
-+					   uint64_t rdevice_index,
-+					   const char *rdev_uuid,	/* Rimage device name/uuid */
-+					   unsigned rsite_index,
-+					   const char *slog_uuid,
-+					   uint32_t slog_flags,		/* Mirror log flags */
-+					   uint32_t slog_region_size);
+@@ -470,6 +470,8 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+ 					   uint32_t slog_flags,		/* Mirror log flags */
+ 					   uint32_t slog_region_size);
+ 
++int dm_tree_set_suspend_priority(struct dm_tree *dtree, const char *uuid, int priority);
 +
  int dm_tree_node_add_target_area(struct dm_tree_node *node,
  				    const char *dev_name,
  				    const char *dlid,
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index eb74340..c9255d5 100644
+index c9255d5..477cbcb 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -33,6 +33,8 @@ enum {
- 	SEG_ERROR,
- 	SEG_LINEAR,
- 	SEG_MIRRORED,
-+	SEG_REPLICATOR,
-+	SEG_REPLICATOR_DEV,
- 	SEG_SNAPSHOT,
- 	SEG_SNAPSHOT_ORIGIN,
- 	SEG_SNAPSHOT_MERGE,
-@@ -50,6 +52,8 @@ struct {
- 	{ SEG_ERROR, "error" },
- 	{ SEG_LINEAR, "linear" },
- 	{ SEG_MIRRORED, "mirror" },
-+	{ SEG_REPLICATOR, "replicator" },
-+	{ SEG_REPLICATOR_DEV, "replicator-dev" },
- 	{ SEG_SNAPSHOT, "snapshot" },
- 	{ SEG_SNAPSHOT_ORIGIN, "snapshot-origin" },
- 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
-@@ -64,6 +68,23 @@ struct seg_area {
- 	struct dm_tree_node *dev_node;
+@@ -160,6 +160,7 @@ struct dm_tree_node {
+         struct dm_list used_by;    	/* Nodes that use this node */
  
- 	uint64_t offset;
-+
-+	unsigned rsite_index;		/* Replicator site index */
-+	struct dm_tree_node *slog;	/* Replicator sync log node */
-+	uint64_t region_size;		/* Replicator sync log size */
-+	uint32_t flags;			/* Replicator sync log flags */
-+};
-+
-+/* Replicator-log has a list of sites */
-+/* CHECKME: maybe move to seg_area too? */
-+struct replicator_site {
-+	struct dm_list list;
-+
-+	unsigned rsite_index;
-+	dm_replicator_mode_t mode;
-+	uint32_t async_timeout;
-+	uint32_t fall_behind_ios;
-+	uint64_t fall_behind_data;
- };
+ 	int activation_priority;	/* 0 gets activated first */
++	int suspend_priority;		/* 1 gets suspend first */
  
- /* Per-segment properties */
-@@ -74,8 +95,8 @@ struct load_segment {
+ 	uint16_t udev_flags;		/* Udev control flags */
  
- 	uint64_t size;
- 
--	unsigned area_count;		/* Linear + Striped + Mirrored + Crypt */
--	struct dm_list areas;		/* Linear + Striped + Mirrored + Crypt */
-+	unsigned area_count;		/* Linear + Striped + Mirrored + Crypt + Replicator */
-+	struct dm_list areas;		/* Linear + Striped + Mirrored + Crypt + Replicator */
- 
- 	uint32_t stripe_size;		/* Striped */
- 
-@@ -85,7 +106,7 @@ struct load_segment {
- 	struct dm_tree_node *origin;	/* Snapshot + Snapshot origin */
- 	struct dm_tree_node *merge;	/* Snapshot */
- 
--	struct dm_tree_node *log;	/* Mirror */
-+	struct dm_tree_node *log;	/* Mirror + Replicator */
- 	uint32_t region_size;		/* Mirror */
- 	unsigned clustered;		/* Mirror */
- 	unsigned mirror_area_count;	/* Mirror */
-@@ -97,6 +118,13 @@ struct load_segment {
- 	const char *iv;			/* Crypt */
- 	uint64_t iv_offset;		/* Crypt */
- 	const char *key;		/* Crypt */
-+
-+	const char *rlog_type;		/* Replicator */
-+	struct dm_list rsites;		/* Replicator */
-+	unsigned rsite_count;		/* Replicator */
-+	unsigned rdevice_count;		/* Replicator */
-+	struct dm_tree_node *replicator;/* Replicator-dev */
-+	uint64_t rdevice_index;		/* Replicator-dev */
- };
- 
- /* Per-device properties */
-@@ -1342,13 +1370,51 @@ static int _emit_areas_line(struct dm_task *dmt __attribute((unused)),
- 	struct seg_area *area;
- 	char devbuf[DM_FORMAT_DEV_BUFSIZE];
- 	unsigned first_time = 1;
-+	const char *logtype;
-+	unsigned log_parm_count;
- 
- 	dm_list_iterate_items(area, &seg->areas) {
- 		if (!_build_dev_string(devbuf, sizeof(devbuf), area->dev_node))
- 			return_0;
- 
--		EMIT_PARAMS(*pos, "%s%s %" PRIu64, first_time ? "" : " ",
--			    devbuf, area->offset);
-+		switch (seg->type) {
-+		case SEG_REPLICATOR_DEV:
-+			EMIT_PARAMS(*pos, " %d 1 %s", area->rsite_index, devbuf);
-+			if (first_time)
-+				EMIT_PARAMS(*pos, " nolog 0");
-+			else {
-+				/* Remote devices */
-+				log_parm_count = (area->flags &
-+						  (DM_NOSYNC | DM_FORCESYNC)) ? 2 : 1;
-+
-+				if (!area->slog) {
-+					devbuf[0] = 0;		/* Only core log parameters */
-+					logtype = "core";
-+				} else {
-+					devbuf[0] = ' ';	/* Extra space before device name */
-+					if (!_build_dev_string(devbuf + 1,
-+							       sizeof(devbuf) - 1,
-+							       area->slog))
-+						return_0;
-+					logtype = "disk";
-+					log_parm_count++;	/* Extra sync log device name parameter */
-+				}
-+
-+				EMIT_PARAMS(*pos, " %s %u%s %" PRIu64, logtype,
-+					    log_parm_count, devbuf, area->region_size);
-+
-+				logtype = (area->flags & DM_NOSYNC) ?
-+					" nosync" : (area->flags & DM_FORCESYNC) ?
-+					" sync" : NULL;
-+
-+				if (logtype)
-+					EMIT_PARAMS(*pos, logtype);
-+			}
-+			break;
-+		default:
-+			EMIT_PARAMS(*pos, "%s%s %" PRIu64, first_time ? "" : " ",
-+				    devbuf, area->offset);
-+		}
- 
- 		first_time = 0;
- 	}
-@@ -1356,6 +1422,42 @@ static int _emit_areas_line(struct dm_task *dmt __attribute((unused)),
- 	return 1;
+@@ -682,6 +683,18 @@ void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+ 	dnode->props.read_ahead_flags = read_ahead_flags;
  }
  
-+static int _replicator_emit_segment_line(const struct load_segment *seg, char *params,
-+					 size_t paramsize, int *pos)
++int dm_tree_set_suspend_priority(struct dm_tree *dtree, const char *uuid, int priority)
 +{
-+	const struct load_segment *rlog_seg;
-+	struct replicator_site *rsite;
-+	char rlogbuf[DM_FORMAT_DEV_BUFSIZE];
-+	unsigned parm_count;
++	struct dm_tree_node *dnode;
 +
-+	if (!seg->log || !_build_dev_string(rlogbuf, sizeof(rlogbuf), seg->log))
-+		return_0;
++	if ((dnode = dm_tree_find_node_by_uuid(dtree, uuid))) {
++		log_verbose("Setting suspend priority for %s.", dnode->name);
++		dnode->suspend_priority = priority;
++	}
 +
-+	rlog_seg = dm_list_item(dm_list_last(&seg->log->props.segs),
-+				struct load_segment);
++	return 1;
++}
 +
-+	EMIT_PARAMS(*pos, "%s 4 %s 0 auto %" PRIu64,
-+		    seg->rlog_type, rlogbuf, rlog_seg->size);
+ int dm_tree_add_dev(struct dm_tree *dtree, uint32_t major, uint32_t minor)
+ {
+ 	return _add_dev(dtree, &dtree->root, major, minor, 0) ? 1 : 0;
+@@ -1041,6 +1054,52 @@ static int _suspend_node(const char *name, uint32_t major, uint32_t minor,
+ 	return r;
+ }
+ 
++static int _suspend_parent(struct dm_tree_node *dnode, const char *uuid_prefix,
++			   size_t uuid_prefix_len)
++{
++	struct dm_info info;
++	const struct dm_info *dinfo;
++	const char *name;
++	const char *uuid;
++	struct dm_tree_link *dlink;
 +
-+	dm_list_iterate_items(rsite, &seg->rsites) {
-+		parm_count = (rsite->fall_behind_data
-+			      || rsite->fall_behind_ios
-+			      || rsite->async_timeout) ? 4 : 2;
++	dm_list_iterate_items(dlink, &dnode->uses) {
++		if (!dlink->node->suspend_priority)
++			continue;
 +
-+		EMIT_PARAMS(*pos, " blockdev %u %u %s", parm_count, rsite->rsite_index,
-+			    (rsite->mode == DM_REPLICATOR_SYNC) ? "synchronous" : "asynchronous");
++		if (!(uuid = dm_tree_node_get_uuid(dlink->node))) {
++			stack;
++			continue;
++		}
++		/* Ignore if it doesn't belong to this VG */
++		if (!_uuid_prefix_matches(uuid, uuid_prefix, uuid_prefix_len))
++			continue;
 +
-+		if (rsite->fall_behind_data)
-+			EMIT_PARAMS(*pos, " data %" PRIu64, rsite->fall_behind_data);
-+		else if (rsite->fall_behind_ios)
-+			EMIT_PARAMS(*pos, " ios %" PRIu32, rsite->fall_behind_ios);
-+		else if (rsite->async_timeout)
-+			EMIT_PARAMS(*pos, " timeout %" PRIu32, rsite->async_timeout);
++		if (!(dinfo = dm_tree_node_get_info(dlink->node))) {
++			stack;
++			continue;
++		}
++
++		if (dinfo->suspended)
++			continue;
++
++		if (!(name = dm_tree_node_get_name(dlink->node))) {
++			stack;
++			continue;
++		}
++
++		if (!_suspend_node(name, dinfo->major, dinfo->minor,
++				   1, 1, &info)) {
++			log_error("Unable to suspend %s (%" PRIu32
++				  ":%" PRIu32 ").", name, dinfo->major,
++				  dinfo->minor);
++			return 0;
++		}
 +	}
 +
 +	return 1;
 +}
 +
  /*
-  * Returns: 1 on success, 0 on failure
+  * FIXME Don't attempt to deactivate known internal dependencies.
   */
-@@ -1499,6 +1601,21 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
- 		if (!r)
- 			return_0;
- 		break;
-+	case SEG_REPLICATOR:
-+		if ((r = _replicator_emit_segment_line(seg, params, paramsize,
-+						       &pos)) <= 0) {
-+			stack;
-+			return r;
-+		}
-+		break;
-+	case SEG_REPLICATOR_DEV:
-+		if (!seg->replicator || !_build_dev_string(originbuf,
-+							   sizeof(originbuf),
-+							   seg->replicator))
-+			return_0;
-+
-+		EMIT_PARAMS(pos, "%s %" PRIu64, originbuf, seg->rdevice_index);
-+		break;
- 	case SEG_SNAPSHOT:
- 	case SEG_SNAPSHOT_MERGE:
- 		if (!_build_dev_string(originbuf, sizeof(originbuf), seg->origin))
-@@ -1527,6 +1644,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
- 
- 	switch(seg->type) {
- 	case SEG_ERROR:
-+	case SEG_REPLICATOR:
- 	case SEG_SNAPSHOT:
- 	case SEG_SNAPSHOT_ORIGIN:
- 	case SEG_SNAPSHOT_MERGE:
-@@ -1534,6 +1652,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
- 		break;
- 	case SEG_CRYPT:
- 	case SEG_LINEAR:
-+	case SEG_REPLICATOR_DEV:
- 	case SEG_STRIPED:
- 		if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
- 			stack;
-@@ -1688,6 +1807,9 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			}
+@@ -1093,6 +1152,9 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 			continue;
  		}
  
-+		if (child->activation_priority != 0)
++		if (!_suspend_parent(child, uuid_prefix, uuid_prefix_len))
 +			continue;
 +
- 		/* Propagate device size change change */
- 		if (child->props.size_changed)
- 			dnode->props.size_changed = 1;
-@@ -1996,6 +2118,171 @@ int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
- 	return 1;
- }
- 
-+int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
-+				       uint64_t size,
-+				       const char *rlog_uuid,
-+				       const char *rlog_type,
-+				       unsigned rsite_index,
-+				       dm_replicator_mode_t mode,
-+				       uint32_t async_timeout,
-+				       uint64_t fall_behind_data,
-+				       uint32_t fall_behind_ios)
-+{
-+	struct load_segment *rseg;
-+	struct replicator_site *rsite;
-+
-+	/* Local site0 - adds replicator segment and links rlog device */
-+	if (rsite_index == 0) {
-+		if (node->props.segment_count) {
-+			log_error(INTERNAL_ERROR "Attempt to add replicator segment to already used node.");
-+			return 0;
-+		}
-+
-+		if (!(rseg = _add_segment(node, SEG_REPLICATOR, size)))
-+			return_0;
-+
-+		if (!(rseg->log = dm_tree_find_node_by_uuid(node->dtree, rlog_uuid))) {
-+			log_error("Missing replicator log uuid %s.", rlog_uuid);
-+			return 0;
-+		}
-+
-+		if (!_link_tree_nodes(node, rseg->log))
-+			return_0;
-+
-+		if (strcmp(rlog_type, "ringbuffer") != 0) {
-+			log_error("Unsupported rlog type %s.", rlog_type);
-+			return 0;
-+		}
-+
-+		if (!(rseg->rlog_type = dm_pool_strdup(node->dtree->mem, rlog_type)))
-+			return_0;
-+
-+		dm_list_init(&rseg->rsites);
-+		rseg->rdevice_count = 0;
-+		node->activation_priority = 1;
-+	}
-+
-+	/* Add site to segment */
-+	if (mode == DM_REPLICATOR_SYNC
-+	    && (async_timeout || fall_behind_ios || fall_behind_data)) {
-+		log_error("Async parameters passed for synchronnous replicator.");
-+		return 0;
-+	}
-+
-+	if (node->props.segment_count != 1) {
-+		log_error(INTERNAL_ERROR "Attempt to add remote site area before setting replog.");
-+		return 0;
-+	}
-+
-+	rseg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+	if (rseg->type != SEG_REPLICATOR) {
-+		log_error(INTERNAL_ERROR "Attempt to use non replicator segment %s.",
-+			  dm_segtypes[rseg->type].target);
-+		return 0;
-+	}
-+
-+	if (!(rsite = dm_pool_zalloc(node->dtree->mem, sizeof(*rsite)))) {
-+		log_error("Failed to allocate remote site segment.");
-+		return 0;
-+	}
-+
-+	dm_list_add(&rseg->rsites, &rsite->list);
-+	rseg->rsite_count++;
-+
-+	rsite->mode = mode;
-+	rsite->async_timeout = async_timeout;
-+	rsite->fall_behind_data = fall_behind_data;
-+	rsite->fall_behind_ios = fall_behind_ios;
-+	rsite->rsite_index = rsite_index;
-+
-+	return 1;
-+}
-+
-+/* Appends device node to Replicator */
-+int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
-+					   uint64_t size,
-+					   const char *replicator_uuid,
-+					   uint64_t rdevice_index,
-+					   const char *rdev_uuid,
-+					   unsigned rsite_index,
-+					   const char *slog_uuid,
-+					   uint32_t slog_flags,
-+					   uint32_t slog_region_size)
-+{
-+	struct seg_area *area;
-+	struct load_segment *rseg;
-+	struct load_segment *rep_seg;
-+
-+	if (rsite_index == 0) {
-+		/* Site index for local target */
-+		if (!(rseg = _add_segment(node, SEG_REPLICATOR_DEV, size)))
-+			return_0;
-+
-+		if (!(rseg->replicator = dm_tree_find_node_by_uuid(node->dtree, replicator_uuid))) {
-+			log_error("Missing replicator uuid %s.", replicator_uuid);
-+			return 0;
-+		}
-+
-+		/* Local slink 0 for replicator must be always initialized first */
-+		if (rseg->replicator->props.segment_count != 1) {
-+			log_error(INTERNAL_ERROR "Attempt to use non replicator segment.");
-+			return 0;
-+		}
-+
-+		rep_seg = dm_list_item(dm_list_last(&rseg->replicator->props.segs), struct load_segment);
-+		if (rep_seg->type != SEG_REPLICATOR) {
-+			log_error(INTERNAL_ERROR "Attempt to use non replicator segment %s.",
-+				  dm_segtypes[rep_seg->type].target);
-+			return 0;
-+		}
-+		rep_seg->rdevice_count++;
-+
-+		if (!_link_tree_nodes(node, rseg->replicator))
-+			return_0;
-+
-+		rseg->rdevice_index = rdevice_index;
-+	} else {
-+		if (node->props.segment_count != 1) {
-+			/* Local slink 0 for replicator must be always initialized first */
-+			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment.");
-+			return 0;
-+		}
-+
-+		rseg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
-+		if (rseg->type != SEG_REPLICATOR_DEV) {
-+			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment %s.",
-+				  dm_segtypes[rseg->type].target);
-+			return 0;
-+		}
-+	}
-+
-+	if (!(slog_flags & DM_CORELOG) && !slog_uuid) {
-+		log_error("Unspecified sync log uuid.");
-+		return 0;
-+	}
-+
-+	if (!dm_tree_node_add_target_area(node, NULL, rdev_uuid, 0))
-+		return_0;
-+
-+	area = dm_list_item(dm_list_last(&rseg->areas), struct seg_area);
-+
-+	if (!(slog_flags & DM_CORELOG)) {
-+		if (!(area->slog = dm_tree_find_node_by_uuid(node->dtree, slog_uuid))) {
-+			log_error("Couldn't find sync log uuid %s.", slog_uuid);
-+			return 0;
-+		}
-+
-+		if (!_link_tree_nodes(node, area->slog))
-+			return_0;
-+	}
-+
-+	area->flags = slog_flags;
-+	area->region_size = slog_region_size;
-+	area->rsite_index = rsite_index;
-+
-+	return 1;
-+}
-+
- static int _add_area(struct dm_tree_node *node, struct load_segment *seg, struct dm_tree_node *dev_node, uint64_t offset)
- {
- 	struct seg_area *area;
+ 		if (!_deactivate_node(name, info.major, info.minor,
+ 				      &child->dtree->cookie, child->udev_flags)) {
+ 			log_error("Unable to deactivate %s (%" PRIu32
 -- 
 1.7.0.1
 
