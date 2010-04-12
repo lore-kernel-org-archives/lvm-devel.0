@@ -1,34 +1,41 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 14 Apr 2010 11:20:59 -0400
-Subject: [PATCH 2/2] Change lvm2app version number from 1 to 2.
-In-Reply-To: <1271258459-14505-2-git-send-email-dwysocha@redhat.com>
-References: <1271258459-14505-1-git-send-email-dwysocha@redhat.com>
-	<1271258459-14505-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <1271258459-14505-3-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 12 Apr 2010 17:21:47 +0200
+Subject: [PATCH 19/22] Replicator: do not remove of replicators' LVs
+In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
+References: <cover.1271085009.git.zkabelac@redhat.com>
+Message-ID: <2fb9976888f3221b67e45e75bc1477dd2a7f99da.1271085009.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This version number change reflects the memory handling change
-for string-based pv/vg/lv string based attributes.
-In addition, when adding support for tags, I forgot to increase
-the version number.
-
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- VERSION |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index d96250e..204b86d 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.63(1)-cvs (2010-03-09)
-+2.02.63(2)-cvs (2010-03-09)
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 43ca423..55040cc 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2230,6 +2230,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
+ 
++	if (lv_is_replicator_dev(lv) ||
++	    lv_is_rimage(lv) ||
++	    lv_is_rlog(lv) ||
++	    lv_is_slog(lv)) {
++		log_error("Can't remove logical volume %s used by a "
++			  "replicator.", lv->name);
++		return 0;
++	}
++
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
+ 		return 0;
 -- 
-1.6.0.6
+1.7.0.1
 
 
