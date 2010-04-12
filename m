@@ -1,63 +1,74 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 12 Apr 2010 00:01:46 -0400
-Subject: [PATCH] Use del_pvl_from_vgs() in vgreduce paths.
-In-Reply-To: <1270598000-9771-5-git-send-email-dwysocha@redhat.com>
-References: <1270598000-9771-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1271044906-3080-1-git-send-email-dwysocha@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 12 Apr 2010 11:52:54 -0000
+Subject: LVM2 ./WHATS_NEW lib/locking/locking.c lib/con ...
+Message-ID: <20100412115254.13954.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Somehow these got missed in earlier patches.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-04-12 11:52:54
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/metadata.c |    3 +--
- tools/vgreduce.c        |    3 +--
- 2 files changed, 2 insertions(+), 4 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/locking    : locking.c 
+	lib/config     : config.c 
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a7b9e18..8e2faad 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -667,12 +667,11 @@ int vg_reduce(struct volume_group *vg, char *pv_name)
- 		goto bad;
+Log message:
+	Don't ignore error if resuming any LV fails in resume_lvs.
+	Skip closing persistent filter cache file if open failed.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1509&r2=1.1510
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+
+--- LVM2/WHATS_NEW	2010/04/09 21:42:48	1.1509
++++ LVM2/WHATS_NEW	2010/04/12 11:52:53	1.1510
+@@ -1,5 +1,7 @@
+ Version 2.02.63 -  
+ ================================
++  Don't ignore error if resuming any LV fails in resume_lvs.
++  Skip closing persistent filter cache file if open failed.
+   Install .a .so links to $(usrlibdir).
+   Add --enable-write_install options to install user writable files.
+   Use INSTALL_PROGRAM/DATA/WDATA target.
+--- LVM2/lib/locking/locking.c	2010/04/01 10:34:10	1.77
++++ LVM2/lib/locking/locking.c	2010/04/12 11:52:53	1.78
+@@ -468,12 +468,15 @@
+ int resume_lvs(struct cmd_context *cmd, struct dm_list *lvs)
+ {
+ 	struct lv_list *lvl;
++	int r = 1;
+ 
+ 	dm_list_iterate_items(lvl, lvs)
+-		if (!resume_lv(cmd, lvl->lv))
++		if (!resume_lv(cmd, lvl->lv)) {
++			r = 0;
+ 			stack;
++		}
+ 
+-	return 1;
++	return r;
+ }
+ 
+ /* Lock a list of LVs */
+--- LVM2/lib/config/config.c	2010/04/01 10:34:09	1.78
++++ LVM2/lib/config/config.c	2010/04/12 11:52:53	1.79
+@@ -295,8 +295,10 @@
+ 		if (!(c->dev = dev_create_file(c->filename, NULL, NULL, 1)))
+ 			return_0;
+ 
+-		if (!dev_open_flags(c->dev, O_RDONLY, 0, 0))
++		if (!dev_open_flags(c->dev, O_RDONLY, 0, 0)) {
++			c->dev = 0;
+ 			return_0;
++		}
  	}
  
--	vg->pv_count--;
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
-+	del_pvl_from_vgs(vg, pvl);
- 
- 	/* add pv to the remove_pvs list */
--	dm_list_del(&pvl->list);
- 	dm_list_add(&vg->removed_pvs, &pvl->list);
- 
- 	return 1;
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index 287db41..0cbe4b0 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -407,7 +407,7 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 	log_verbose("Removing \"%s\" from volume group \"%s\"", name, vg->name);
- 
- 	if (pvl)
--		dm_list_del(&pvl->list);
-+		del_pvl_from_vgs(vg, pvl);
- 
- 	pv->vg_name = vg->fid->fmt->orphan_vg_name;
- 	pv->status = ALLOCATABLE_PV;
-@@ -417,7 +417,6 @@ static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 		goto bad;
- 	}
- 
--	vg->pv_count--;
- 	vg->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
- 	vg->extent_count -= pv_pe_count(pv);
- 
--- 
-1.6.0.6
+ 	r = read_config_fd(cft, c->dev, 0, (size_t) info.st_size, 0, 0,
 
 
