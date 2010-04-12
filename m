@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Apr 2010 20:15:01 -0000
-Subject: LVM2/libdm/regex parse_rx.c
-Message-ID: <20100422201501.29657.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 12 Apr 2010 19:33:58 -0000
+Subject: LVM2/test check.sh
+Message-ID: <20100412193358.4116.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,67 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-22 20:15:01
+Changes by:	mornfall at sourceware.org	2010-04-12 19:33:58
 
 Modified files:
-	libdm/regex    : parse_rx.c 
+	test           : check.sh 
 
 Log message:
-	avoid ORs rightmost
+	More testsuite helpers for check.sh.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/check.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/libdm/regex/parse_rx.c	2010/04/22 17:42:38	1.9
-+++ LVM2/libdm/regex/parse_rx.c	2010/04/22 20:15:00	1.10
-@@ -421,16 +421,10 @@
- static unsigned _depth(struct rx_node *r, unsigned leftmost)
+--- LVM2/test/check.sh	2010/04/12 19:02:59	1.1
++++ LVM2/test/check.sh	2010/04/12 19:33:58	1.2
+@@ -26,14 +26,33 @@
+   }
+ }
+ 
++mirror_images_on() {
++	lv=$1
++
++	for i in `lvdevices $lv`; do
++		shift
++		lv_on $lv $1
++	done
++}
++
++lv_on()
++{
++	lv="$1"
++	lvdevices $lv | grep -F "$2" || {
++		echo "LV $lv expected on $2 but is not:" >&2
++		lvdevices $lv >&2
++		exit 1
++	}
++	test `lvdevices $lv | grep -vF "$2" | wc -l` -eq 0 || {
++		echo "LV $lv contains unexpected devices:" >&2
++		lvdevices $lv >&2
++		exit 1
++	}
++}
++
+ mirror_log_on()
  {
- 	int count = 1;
--	int or_count = 0;
+-  lv="$1"_mlog
+-  lvdevices $lv | grep -F "$2" || {
+-	  echo "mirror log $lv expected on $2 but found on:" >&2
+-	  lvdevices $lv >&2
+-	  exit 1
+-  }
++	lv_on "${1}_mlog" "$2"
+ }
  
--	while (r->type != CHARSET && LEFT(r)) {
-+	while (r->type != CHARSET && LEFT(r) && (leftmost || r->type != OR)) {
- 		count++;
- 		r = LEFT(r);
--		/* Stop if we pass another OR */
--		if (or_count)
--			break;
--		if (r->type == OR)
--			or_count++;
- 	}
+ lv_is_contiguous()
+@@ -81,7 +100,7 @@
  
- 	return count;
+ linear() {
+ 	lv="$1/$2"
+-	lvs -ostripes "$lv" | grep "1" || {
++	lvs -ostripes "$lv" | grep -q "1" || {
+ 		echo "$lv expected linear, but is not:"
+ 		lvs -a "$lv" -o+devices
+ 		exit 1
 
 
