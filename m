@@ -1,88 +1,36 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 26 Apr 2010 16:44:47 -0500
-Subject: [PATCH] LVM2: Proposal #2 to fix bug 586021
-Message-ID: <1272318287.29386.30.camel@hydrogen.msp.redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 13 Apr 2010 06:24:21 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20100413062421.12969.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch - in contrast to the first proposal - takes the approach that
-the behavior to remove images from a mirror that were not specified when
-a list of PVs was given is wrong.  The code was not adequately prepared
-for this behavior change and was therefore buggy.  This patch tries to
-keep the behavior change and clean-up the bugs.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-04-13 06:24:21
 
-Some of the decisions made in this patch have room for debate (e.g.
-changing what is considered a failure for remove_mirror_images).
+Modified files:
+	test           : test-utils.sh 
 
- brassow
+Log message:
+	For the testsuite, set a default polling interval to 0 in lvm.conf. Cuts down
+	testing time considerably.
 
-Two things have been corrected in this patch to allow the
-partial fulfillment of a request to reduce the number of
-mirror images when an insufficient number of PVs are
-specified.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.33&r2=1.34
 
-1) _lvconvert_mirrors_aux was passing in the 'new log count'
-   to a parameter in lv_remove_mirrors that was used to
-   signify whether a log should be removed or not.  So, if
-   the log count signified 'disk' or 'mirrored', it would be
-   telling lv_remove_mirrors to remove the log - exactly
-   opposite of what we want.  Further, the log type is adjusted
-   after calling lv_remove_mirrors anyway, and should be left
-   up to later code if a mirror still exists after
-   lv_remove_mirrors.
-
-2) remove_mirror_images checks if all the images it asked
-   for have been removed.  If not, it returns an error.
-   This error stops the processing of the images that have
-   successfully been extracted from the mirror - leaving
-   then lying around after completion of the command.  I
-   changed the return value to success if the command had
-   partial success.  If this is the desired behavior, then
-   success should be returned.  This allows the process to
-   continue and clean-up the images extracted from the mirror.
-
-RFC-by Jonathan Brassow <jbrassow@redhat.com>
-
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -1063,7 +1063,7 @@ static int _lvconvert_mirrors_aux(struct
- 			if (!lv_split_mirror_images(lv, lp->lv_split_name,
- 						    nmc, operable_pvs))
- 				return 0;
--		} else if (!lv_remove_mirrors(cmd, lv, nmc, nlc,
-+		} else if (!lv_remove_mirrors(cmd, lv, nmc, !nlc,
- 					      operable_pvs, 0))
- 			return_0;
- 
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -972,14 +972,13 @@ int remove_mirror_images(struct logical_
- 	} while (next_lv && num_removed);
- 
- 	if (num_removed) {
--		if (num_removed == existing_mirrors - num_mirrors)
-+		if (num_removed == existing_mirrors - num_mirrors) {
- 			log_error("No mirror images found using specified PVs.");
--		else {
--			log_error("%u images are removed out of requested %u.",
--				  existing_mirrors - lv_mirror_count(lv),
--				  existing_mirrors - num_mirrors);
-+			return 0;
- 		}
--		return 0;
-+		log_error("%u images are removed out of requested %u.",
-+			  existing_mirrors - lv_mirror_count(lv),
-+			  existing_mirrors - num_mirrors);
- 	}
- 
- 	return 1;
-
+--- LVM2/test/test-utils.sh	2010/04/07 21:38:01	1.33
++++ LVM2/test/test-utils.sh	2010/04/13 06:24:20	1.34
+@@ -373,6 +373,7 @@
+   activation {
+     udev_sync = 1
+     udev_rules = 1
++    polling_interval = 0
+   }
+ EOF
+ 	cat $TESTDIR/etc/lvm.conf
 
 
