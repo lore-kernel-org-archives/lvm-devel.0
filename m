@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 13 Apr 2010 06:45:54 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20100413064554.19866.qmail@sourceware.org>
+Date: 13 Apr 2010 07:02:15 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20100413070215.17786.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-13 06:45:53
+Changes by:	mornfall at sourceware.org	2010-04-13 07:02:15
 
 Modified files:
-	test           : Makefile.in 
+	test           : test-utils.sh 
 
 Log message:
-	Make it easy to run just a subset of tests by saying `make check T="regex"`.
+	Disable the rather-dangerous prepare_scsi_debug_dev in the testsuite.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.36&r2=1.37
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.34&r2=1.35
 
---- LVM2/test/Makefile.in	2010/04/12 19:02:59	1.36
-+++ LVM2/test/Makefile.in	2010/04/13 06:45:53	1.37
-@@ -25,6 +25,9 @@
- abs_top_builddir = @abs_top_builddir@
- abs_top_srcdir = @abs_top_srcdir@
- 
-+T ?= .
-+RUN = $(shell find -regextype posix-egrep -name t-\*.sh -and -regex ".*($(T)).*")
+--- LVM2/test/test-utils.sh	2010/04/13 06:24:20	1.34
++++ LVM2/test/test-utils.sh	2010/04/13 07:02:14	1.35
+@@ -194,6 +194,12 @@
+ # - scripts must take care not to use a DEV_SIZE that will enduce OOM-killer
+ prepare_scsi_debug_dev()
+ {
++    # FIXME this is extremely fragile and can cause data loss if an unrelated
++    # SCSI device appears at a wrong time... we need the code to reliably
++    # identify the scsi_debug device it has created before we can re-include
++    # this in the testsuite
++    exit 200
 +
- # Shell quote;
- SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
- 
-@@ -45,9 +48,9 @@
- 
- all: init.sh
- 	@echo Testing with locking_type 1
--	./bin/harness t-*.sh
-+	./bin/harness $(RUN)
- 	@echo Testing with locking_type 3
--	LVM_TEST_LOCKING=3 ./bin/harness t-*.sh
-+	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
- 
- bin/not: $(srcdir)/not.c .bin-dir-stamp
- 	$(CC) -o bin/not $<
-@@ -74,7 +77,7 @@
- 	echo 'export DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
- 	chmod a-w $@-t
- 	mv $@-t $@
--	if test "$(srcdir)" != . ; then  cp $(SCRIPTS) . ; fi
-+	@if test "$(srcdir)" != . ; then echo "Copying tests to builddir."; cp $(SCRIPTS) . ; fi
- 
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+     local DEV_SIZE="$1"
+     shift
+     local SCSI_DEBUG_PARAMS="$@"
 
 
