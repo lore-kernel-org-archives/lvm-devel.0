@@ -1,132 +1,58 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Apr 2010 17:21:41 +0200
-Subject: [PATCH 13/22] Replicator: use vgs_list for process_each_lv_in_vg()
-In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-Message-ID: <b2d4e0e3bceee25133589cbdc3f032eb34857c6f.1271085009.git.zkabelac@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 13 Apr 2010 06:45:54 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20100413064554.19866.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As for _process_one_vg() we need similar retry loop for
-process_each_lv_in_vg(). This patch retries to process
-failed LVs with reopened VGs.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-04-13 06:45:53
 
-Patch does not add any extra repeated invocations if there is not
-any missing VG during LV processing.
+Modified files:
+	test           : Makefile.in 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/toollib.c |   47 +++++++++++++++++++++++++++++++++++++----------
- 1 files changed, 37 insertions(+), 10 deletions(-)
+Log message:
+	Make it easy to run just a subset of tests by saying `make check T="regex"`.
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 2c5ba63..598710b 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -151,6 +151,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 		if (!process_lv)
- 			continue;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.36&r2=1.37
+
+--- LVM2/test/Makefile.in	2010/04/12 19:02:59	1.36
++++ LVM2/test/Makefile.in	2010/04/13 06:45:53	1.37
+@@ -25,6 +25,9 @@
+ abs_top_builddir = @abs_top_builddir@
+ abs_top_srcdir = @abs_top_srcdir@
  
-+		lvl->lv->vg->missing_vgs = 0;
- 		ret = process_single(cmd, lvl->lv, handle);
- 		if (ret != ECMD_PROCESSED && failed_lvs) {
- 			if (!str_list_add(cmd->mem, failed_lvs,
-@@ -159,6 +160,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
- 				log_error("Allocation failed for str_list.");
- 				return ECMD_FAILED;
- 			}
-+			if (lvl->lv->vg->missing_vgs)
-+				ret = ECMD_PROCESSED;
- 		}
- 		if (ret > ret_max)
- 			ret_max = ret;
-@@ -188,7 +191,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 	struct dm_list *tags_arg;
- 	struct dm_list *vgnames;	/* VGs to process */
- 	struct str_list *sll, *strl;
--	struct volume_group *vg;
-+	struct vgs_list *vgs_vg;
-+	struct dm_list vgs_list;
-+	struct dm_list failed_lvs;
- 	struct dm_list tags, lvnames;
- 	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
- 	char *vglv;
-@@ -198,6 +203,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 
- 	dm_list_init(&tags);
- 	dm_list_init(&arg_lvnames);
-+	dm_list_init(&failed_lvs);
- 
- 	if (argc) {
- 		struct dm_list arg_vgnames;
-@@ -293,13 +299,17 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 		}
- 	}
- 
--	vg = NULL;
- 	dm_list_iterate_items(strl, vgnames) {
- 		vgname = strl->str;
--		vg = vg_read(cmd, vgname, NULL, flags);
-+		dm_list_init(&vgs_list);
-+		if (!(vgs_vg = vgs_list_add(cmd->mem, &vgs_list,
-+					    vgname, NULL, flags))) {
-+			stack;
-+			return ECMD_FAILED;
-+		}
- 
--		if (vg_read_error(vg)) {
--			vg_release(vg);
-+		if (!vgs_list_read(cmd, &vgs_list, vgs_vg)) {
-+			vgs_list_release(&vgs_list, vgs_vg);
- 			if (ret_max < ECMD_FAILED) {
- 				log_error("Skipping volume group %s", vgname);
- 				ret_max = ECMD_FAILED;
-@@ -325,19 +335,36 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
- 						  dm_pool_strdup(cmd->mem,
- 							      lv_name + 1))) {
- 					log_error("strlist allocation failed");
--					unlock_and_release_vg(cmd, vg, vgname);
-+					vgs_list_release(&vgs_list,vgs_vg);
- 					return ECMD_FAILED;
- 				}
- 			}
- 		}
- 
--		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
--					    NULL, handle, process_single);
--		unlock_and_release_vg(cmd, vg, vgname);
-+		while (!sigint_caught()) {
-+			ret = process_each_lv_in_vg(cmd, vgs_vg->vg, &lvnames,
-+						    tags_arg, &failed_lvs,
-+						    handle, process_single);
-+			if (ret != ECMD_PROCESSED ||
-+			    dm_list_empty(&failed_lvs))
-+				break;
++T ?= .
++RUN = $(shell find -regextype posix-egrep -name t-\*.sh -and -regex ".*($(T)).*")
 +
-+			/* Try again with failed LVs in this VG */
-+			dm_list_init(&lvnames);
-+			dm_list_splice(&failed_lvs, &lvnames);
-+
-+			vgs_list_release(&vgs_list, vgs_vg);
-+			if (!vgs_list_read(cmd, &vgs_list, vgs_vg)) {
-+				ret = ECMD_FAILED; /* break */
-+				break;
-+			}
-+		}
- 		if (ret > ret_max)
- 			ret_max = ret;
-+
-+		vgs_list_release(&vgs_list, vgs_vg);
- 		if (sigint_caught())
--			break;
-+			return ECMD_FAILED;
- 	}
+ # Shell quote;
+ SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
  
- 	return ret_max;
--- 
-1.7.0.1
+@@ -45,9 +48,9 @@
+ 
+ all: init.sh
+ 	@echo Testing with locking_type 1
+-	./bin/harness t-*.sh
++	./bin/harness $(RUN)
+ 	@echo Testing with locking_type 3
+-	LVM_TEST_LOCKING=3 ./bin/harness t-*.sh
++	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
+ 
+ bin/not: $(srcdir)/not.c .bin-dir-stamp
+ 	$(CC) -o bin/not $<
+@@ -74,7 +77,7 @@
+ 	echo 'export DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
+ 	chmod a-w $@-t
+ 	mv $@-t $@
+-	if test "$(srcdir)" != . ; then  cp $(SCRIPTS) . ; fi
++	@if test "$(srcdir)" != . ; then echo "Copying tests to builddir."; cp $(SCRIPTS) . ; fi
+ 
+ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+ 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 
 
