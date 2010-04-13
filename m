@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 13 Apr 2010 07:02:15 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100413070215.17786.qmail@sourceware.org>
+Date: 13 Apr 2010 07:33:35 -0000
+Subject: LVM2/test harness.c
+Message-ID: <20100413073335.21140.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-13 07:02:15
+Changes by:	mornfall at sourceware.org	2010-04-13 07:33:34
 
 Modified files:
-	test           : test-utils.sh 
+	test           : harness.c 
 
 Log message:
-	Disable the rather-dangerous prepare_scsi_debug_dev in the testsuite.
+	Optionally disable the verbose repeat of a failed test (export
+	LVM_TEST_NOVERBOSE=1).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/test/test-utils.sh	2010/04/13 06:24:20	1.34
-+++ LVM2/test/test-utils.sh	2010/04/13 07:02:14	1.35
-@@ -194,6 +194,12 @@
- # - scripts must take care not to use a DEV_SIZE that will enduce OOM-killer
- prepare_scsi_debug_dev()
- {
-+    # FIXME this is extremely fragile and can cause data loss if an unrelated
-+    # SCSI device appears at a wrong time... we need the code to reliably
-+    # identify the scsi_debug device it has created before we can re-include
-+    # this in the testsuite
-+    exit 200
-+
-     local DEV_SIZE="$1"
-     shift
-     local SCSI_DEBUG_PARAMS="$@"
+--- LVM2/test/harness.c	2010/04/07 09:48:11	1.8
++++ LVM2/test/harness.c	2010/04/13 07:33:34	1.9
+@@ -133,6 +133,7 @@
+ 
+ int main(int argc, char **argv) {
+ 	int i;
++	int repeat = getenv("LVM_TEST_NOVERBOSE") ? 0 : 1;
+ 
+ 	if (argc >= MAX) {
+ 		fprintf(stderr, "Sorry, my head exploded. Please increase MAX.\n");
+@@ -168,7 +169,7 @@
+ 		run(i, argv[i]);
+ 		if (die)
+ 			break;
+-		if ( s.status[i] == FAILED ) {
++		if ( repeat && s.status[i] == FAILED ) {
+ 			backup = s;
+ 			setenv("LVM_TEST_CONFIG", config_debug, 1);
+ 			run(i, argv[i]);
 
 
