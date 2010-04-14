@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 Apr 2010 18:10:33 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100414181033.30414.qmail@sourceware.org>
+Date: 14 Apr 2010 18:53:05 -0000
+Subject: LVM2/daemons clvmd/clvmd.c dmeventd/dmeventd.c
+Message-ID: <20100414185305.307.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-14 18:10:30
+Changes by:	agk at sourceware.org	2010-04-14 18:53:05
 
 Modified files:
-	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
+	daemons/dmeventd: dmeventd.c 
 
 Log message:
-	.
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1522&r2=1.1523
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
 
---- LVM2/WHATS_NEW	2010/04/14 17:50:49	1.1522
-+++ LVM2/WHATS_NEW	2010/04/14 18:10:30	1.1523
-@@ -8,12 +8,12 @@
-   Use typedefs for toollib process_each functions.
-   Use C locales and use_mlockall for clvmd.
-   Refactor code related to vg->pvs list and add pv->vg link.
--  Mask LCK_HOLD flag in cluster VG locks for compatibility reasons.
-+  Mask LCK_HOLD flag in cluster VG locks for backwards compatibility.
-   Add activation/polling_interval to lvm.conf as --interval default.
-   Don't ignore error if resuming any LV fails in resume_lvs.
-   Skip closing persistent filter cache file if open failed.
--  Install .a .so links to $(usrlibdir).
--  Add --enable-write_install options to install user writable files.
-+  Install .a and .so links into $(usrlibdir).
-+  Add --enable-write_install options to install user-writable files.
-   Use INSTALL_PROGRAM/DATA/WDATA target.
-   Switch from using VPATH  to vpath in Makefiles.
-   Permit mimage LVs to be striped in lvcreate, lvresize and lvconvert.
-@@ -27,13 +27,13 @@
-   Improve vg_validate to detect some loops in lists.
-   Change most remaining log_error WARNING messages to log_warn.
-   Always use blocking lock for VGs and orphan locks.
--  Allocate all segments memory from vg private mempool.
-+  Allocate all memory for segments from private VG mempool.
-   Return newly allocated PV segment after segment split.
--  Optimise PV segments search for the most last segment search case.
-+  Optimise searching PV segments for seeking the most recently-added.
-   Remove vg_validate call when parsing cached metadata.
-   Use hash table of LVs to speed up parsing of text metadata with many LVs.
--  Fix two messages, add a whitespace and parentheses
--  When dmeventd is not forking because of -d flag, don't kill the parent process
-+  Fix two vg_validate messages, adding whitespace and parentheses.
-+  When dmeventd is not forking because of -d flag, don't kill parent process.
-   Fix 'make install' when $(builddir) is different from $(srcdir).
-   Fix dso resource leak in error path of dmeventd.
-   Use C locales and use_mlockall for dmeventd.
+--- LVM2/daemons/clvmd/clvmd.c	2010/04/13 20:54:57	1.67
++++ LVM2/daemons/clvmd/clvmd.c	2010/04/14 18:53:04	1.68
+@@ -366,7 +366,7 @@
+ 	 * Daemon currently needs to use mlockall().
+ 	 */
+ 	if (setenv("LANG", "C", 1) != 0)
+-		perror("Can not set LANG to C");
++		perror("Cannot set LANG to C");
+ 
+ 	/* Fork into the background (unless requested not to) */
+ 	if (debug != DEBUG_STDERR) {
+--- LVM2/daemons/dmeventd/dmeventd.c	2010/04/13 20:54:58	1.59
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/04/14 18:53:05	1.60
+@@ -1703,8 +1703,8 @@
+ 	 * used by some glibc (on some distributions it takes over 100MB).
+ 	 * Daemon currently needs to use mlockall().
+ 	 */
+-	if (setenv("LANG", "C", 1) != 0)
+-		perror("Can not set LANG to C");
++	if (!setenv("LANG", "C", 1))
++		perror("Cannot set LANG to C");
+ 
+ 	if (!_debug)
+ 		_daemonize();
 
 
