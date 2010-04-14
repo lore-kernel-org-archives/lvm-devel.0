@@ -1,52 +1,56 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 Apr 2010 02:19:50 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c
-Message-ID: <20100414021950.27930.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 14 Apr 2010 13:38:25 +0200
+Subject: [PATCH 01/22] Add dm_list_splice() for list join.
+In-Reply-To: <d80e727dc920a3a77dc38a43125a2bc1b226a125.1271085009.git.zkabelac@redhat.com>
+	(Zdenek Kabelac's message of "Mon, 12 Apr 2010 17:21:29 +0200")
+References: <cover.1271085009.git.zkabelac@redhat.com>
+	<cover.1271085009.git.zkabelac@redhat.com>
+	<d80e727dc920a3a77dc38a43125a2bc1b226a125.1271085009.git.zkabelac@redhat.com>
+Message-ID: <87y6gq1cy6.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-14 02:19:49
+Zdenek Kabelac <zkabelac@redhat.com> writes:
+> --- a/libdm/datastruct/list.c
+> +++ b/libdm/datastruct/list.c
+> @@ -144,3 +144,15 @@ unsigned int dm_list_size(const struct dm_list *head)
+>  
+>  	return s;
+>  }
+> +
+> +void dm_list_splice(struct dm_list *list, struct dm_list *head)
+> +{
+> +	struct dm_list *first = list->n;
+> +	struct dm_list *last = list->p;
+> +	struct dm_list *at = head->n;
+> +
+> +	first->p = head;
+> +	head->n = first;
+> +	last->n = at;
+> +	at->p = last;
+> +}
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : toollib.c 
+> --- a/libdm/libdevmapper.h
+> +++ b/libdm/libdevmapper.h
+> @@ -715,6 +715,11 @@ void dm_list_del(struct dm_list *elem);
+>  void dm_list_move(struct dm_list *head, struct dm_list *elem);
+>  
+>  /*
+> + * Join 'list' to 'head'.
+> + */
+> +void dm_list_splice(struct dm_list *list, struct dm_list *head);
+> +
+> +/*
+>   * Is the list empty?
+>   */
+>  int dm_list_empty(const struct dm_list *head);
 
-Log message:
-	Only pass visible LVs to tools in cmdline VG name/tag expansions without -a
+Ack. Please check in.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1516&r2=1.1517
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.193&r2=1.194
-
---- LVM2/WHATS_NEW	2010/04/13 23:57:41	1.1516
-+++ LVM2/WHATS_NEW	2010/04/14 02:19:49	1.1517
-@@ -1,5 +1,6 @@
- Version 2.02.63 -  
- ================================
-+  Only pass visible LVs to tools in cmdline VG name/tag expansions without -a.
-   Use typedefs for toollib process_each functions.
-   Use C locales and use_mlockall for clvmd.
-   Refactor code related to vg->pvs list and add pv->vg link.
---- LVM2/tools/toollib.c	2010/04/13 23:57:41	1.193
-+++ LVM2/tools/toollib.c	2010/04/14 02:19:49	1.194
-@@ -125,6 +125,13 @@
- 		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
- 			continue;
- 
-+		/*
-+		 * Only let hidden LVs through it --all was used or the LVs 
-+		 * were specifically named on the command line.
-+		 */
-+		if (!lvargs_supplied && !lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
-+			continue;
-+
- 		/* Should we process this LV? */
- 		if (process_all)
- 			process_lv = 1;
+Yours,
+   Petr.
 
 
