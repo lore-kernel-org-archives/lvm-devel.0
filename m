@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 Apr 2010 18:54:38 -0000
-Subject: LVM2/daemons clvmd/clvmd.c dmeventd/dmeventd.c
-Message-ID: <20100414185438.2117.qmail@sourceware.org>
+Date: 14 Apr 2010 20:03:17 -0000
+Subject: LVM2 ./WHATS_NEW scripts/Makefile.in
+Message-ID: <20100414200317.11837.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-14 18:54:37
+Changes by:	agk at sourceware.org	2010-04-14 20:03:16
 
 Modified files:
-	daemons/clvmd  : clvmd.c 
-	daemons/dmeventd: dmeventd.c 
+	.              : WHATS_NEW 
+	scripts        : Makefile.in 
 
 Log message:
-	pre-release
+	fix broken 'make install' for lvm_dump.sh
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1523&r2=1.1524
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/Makefile.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/daemons/clvmd/clvmd.c	2010/04/14 18:53:04	1.68
-+++ LVM2/daemons/clvmd/clvmd.c	2010/04/14 18:54:37	1.69
-@@ -365,7 +365,7 @@
- 	 * used by some glibc (on some distributions it takes over 100MB).
- 	 * Daemon currently needs to use mlockall().
- 	 */
--	if (setenv("LANG", "C", 1) != 0)
-+	if (setenv("LANG", "C", 1))
- 		perror("Cannot set LANG to C");
+--- LVM2/WHATS_NEW	2010/04/14 18:10:30	1.1523
++++ LVM2/WHATS_NEW	2010/04/14 20:03:15	1.1524
+@@ -1,5 +1,6 @@
+ Version 2.02.63 - 14th April 2010
+ =================================
++  Rename lvm_dump.sh to lvmdump.sh.
+   Allow incomplete mirror restore in lvconvert --repair upon insufficient space.
+   Do not reset position in metadata ring buffer on vgrename and vgcfgrestore.
+   Allow VGs with active LVs to be renamed.
+--- LVM2/scripts/Makefile.in	2010/04/09 21:42:51	1.15
++++ LVM2/scripts/Makefile.in	2010/04/14 20:03:16	1.16
+@@ -17,7 +17,7 @@
  
- 	/* Fork into the background (unless requested not to) */
---- LVM2/daemons/dmeventd/dmeventd.c	2010/04/14 18:53:05	1.60
-+++ LVM2/daemons/dmeventd/dmeventd.c	2010/04/14 18:54:37	1.61
-@@ -1703,7 +1703,7 @@
- 	 * used by some glibc (on some distributions it takes over 100MB).
- 	 * Daemon currently needs to use mlockall().
- 	 */
--	if (!setenv("LANG", "C", 1))
-+	if (setenv("LANG", "C", 1))
- 		perror("Cannot set LANG to C");
+ include $(top_builddir)/make.tmpl
  
- 	if (!_debug)
+-SCRIPTS = lvm_dump.sh vgimportclone.sh
++SCRIPTS = lvmdump.sh vgimportclone.sh
+ ifeq ("@FSADM@", "yes")
+ 	SCRIPTS += fsadm.sh
+ endif
 
 
