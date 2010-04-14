@@ -1,39 +1,36 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Apr 2010 17:21:48 +0200
-Subject: [PATCH 20/22] Replicator: activate change for vgchange
-In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-Message-ID: <aa843f04830a5507f2e3290cbbc9f6a429f69578.1271085009.git.zkabelac@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 14 Apr 2010 20:03:48 -0000
+Subject: LVM2/scripts lvmdump.sh
+Message-ID: <20100414200348.18028.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Activate only the first replicator-dev LV, that activates all other
-related LVs from Replicator.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-04-14 20:03:47
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/vgchange.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+Modified files:
+	scripts        : lvmdump.sh 
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 68fac86..139a1a5 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -104,6 +104,10 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
- 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
- 			continue;
+Log message:
+	touch file
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvmdump.sh.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+
+--- LVM2/scripts/lvmdump.sh	2009/01/06 18:02:58	1.14
++++ LVM2/scripts/lvmdump.sh	2010/04/14 20:03:46	1.15
+@@ -1,7 +1,7 @@
+ #!/bin/bash
+ # We use some bash-isms (getopts?)
  
-+		/* Only request activation of the first replicator-dev LV */
-+		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
-+			continue;
-+
- 		/* Can't deactivate a pvmove LV */
- 		/* FIXME There needs to be a controlled way of doing this */
- 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
--- 
-1.7.0.1
+-# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
 
 
