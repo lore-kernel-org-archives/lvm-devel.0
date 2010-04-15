@@ -1,47 +1,62 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 15 Apr 2010 19:15:05 -0000
-Subject: LVM2 ./WHATS_NEW scripts/lvm2_monitoring_init_ ...
-Message-ID: <20100415191505.31010.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 15 Apr 2010 16:39:58 -0400
+Subject: [PATCH] Add creation of dev/mapper/control to nightly tests.
+Message-ID: <1271363998-4897-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-15 19:15:04
+This works around a problem with using the /tmp directory for
+the dev/mapper/control node.  The failure I saw was this.
+When LVM_TEST_DIR was rooted at /tmp/..., the first dmsetup
+command would fail with this error:
+/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control: matchpathcon 0020000 failed:
 
-Modified files:
-	.              : WHATS_NEW 
-	scripts        : lvm2_monitoring_init_red_hat.in 
+The second dmsetup command would always succeed though.  Also,
+when LVM_TEST_DIR was rooted at /root/..., this failure would not
+occur.
 
-Log message:
-	Change daemon lock filename from lvm2_monitor to lvm2-monitor for consistency.
+I stepped through this in gdb and found that mknod was indeed
+creating the control node correctly, however, matchpathcon
+would fail.  The reason it did not fail the second or subsequent
+iterations of dmsetup is that the control node was already there,
+and dmsetup does not try to set the selinux security context
+in that case.  One clue may be in the fact that it seems the
+default security context for files in /tmp/... is <<none>>:
+ matchpathcon /root/LVMTEST26998.J29FayOVWy/dev/mapper/control
+/root/LVMTEST26998.J29FayOVWy/dev/mapper/control        system_u:object_r:admin_home_t:s0
+ matchpathcon /tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control
+/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control <<none>>
+ matchpathcon /tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control
+/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control <<none>>
+ matchpathcon /dev/mapper/control
+/dev/mapper/control     system_u:object_r:lvm_control_t:s0
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1528&r2=1.1529
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_init_red_hat.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+I would imagine this is why the matchpathcon() call fails.
+There may be a better fix for this but at this point for the
+nightly tests we can create the 'control' node explicitly.
 
---- LVM2/WHATS_NEW	2010/04/15 15:12:20	1.1528
-+++ LVM2/WHATS_NEW	2010/04/15 19:15:03	1.1529
-@@ -1,5 +1,6 @@
- Version 2.02.64 -
- =================================
-+  Change daemon lock filename from lvm2_monitor to lvm2-monitor for consistency.
-   Added awk script relpath.awk to calculate relative paths.
-   Fix double DESTDIR usage for infodir and mandir.
-   Install symbolic .so links with relative paths between usrlibdir and libdir.
---- LVM2/scripts/lvm2_monitoring_init_red_hat.in	2010/01/05 20:56:52	1.3
-+++ LVM2/scripts/lvm2_monitoring_init_red_hat.in	2010/04/15 19:15:04	1.4
-@@ -31,7 +31,7 @@
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ test/test-utils.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/test/test-utils.sh b/test/test-utils.sh
+index c2755c6..92b5047 100644
+--- a/test/test-utils.sh
++++ b/test/test-utils.sh
+@@ -83,6 +83,8 @@ prepare_testroot() {
+ 	export LVM_SYSTEM_DIR=$TESTDIR/etc
+ 	export DM_DEV_DIR=$TESTDIR/dev
+ 	mkdir $LVM_SYSTEM_DIR $DM_DEV_DIR $DM_DEV_DIR/mapper $TESTDIR/lib
++	minor=`cat /proc/misc | grep device-mapper | awk '{print $1}'`
++	mknod $DM_DEV_DIR/mapper/control c 10 $minor
  
- . /etc/init.d/functions
+ 	cd $TESTDIR
  
--DAEMON=lvm2_monitor
-+DAEMON=lvm2-monitor
- 
- exec_prefix=@exec_prefix@
- sbindir=@sbindir@
+-- 
+1.6.2.5
 
 
