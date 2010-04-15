@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Apr 2010 15:12:24 -0000
-Subject: LVM2 ./WHATS_NEW ./make.tmpl.in tools/Makefile.in
-Message-ID: <20100415151224.14710.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 15 Apr 2010 19:15:05 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvm2_monitoring_init_ ...
+Message-ID: <20100415191505.31010.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,60 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-04-15 15:12:20
+Changes by:	agk at sourceware.org	2010-04-15 19:15:04
 
 Modified files:
-	.              : WHATS_NEW make.tmpl.in 
-	tools          : Makefile.in 
+	.              : WHATS_NEW 
+	scripts        : lvm2_monitoring_init_red_hat.in 
 
 Log message:
-	Install symbolic .so links with relative paths between usrlibdir and libdir.
+	Change daemon lock filename from lvm2_monitor to lvm2-monitor for consistency.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1527&r2=1.1528
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.91&r2=1.92
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1528&r2=1.1529
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_init_red_hat.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/WHATS_NEW	2010/04/15 15:09:35	1.1527
-+++ LVM2/WHATS_NEW	2010/04/15 15:12:20	1.1528
-@@ -2,6 +2,7 @@
+--- LVM2/WHATS_NEW	2010/04/15 15:12:20	1.1528
++++ LVM2/WHATS_NEW	2010/04/15 19:15:03	1.1529
+@@ -1,5 +1,6 @@
+ Version 2.02.64 -
  =================================
++  Change daemon lock filename from lvm2_monitor to lvm2-monitor for consistency.
    Added awk script relpath.awk to calculate relative paths.
    Fix double DESTDIR usage for infodir and mandir.
-+  Install symbolic .so links with relative paths between usrlibdir and libdir.
+   Install symbolic .so links with relative paths between usrlibdir and libdir.
+--- LVM2/scripts/lvm2_monitoring_init_red_hat.in	2010/01/05 20:56:52	1.3
++++ LVM2/scripts/lvm2_monitoring_init_red_hat.in	2010/04/15 19:15:04	1.4
+@@ -31,7 +31,7 @@
  
- Version 2.02.63 - 14th April 2010
- =================================
---- LVM2/make.tmpl.in	2010/04/15 15:09:35	1.91
-+++ LVM2/make.tmpl.in	2010/04/15 15:12:20	1.92
-@@ -62,6 +62,8 @@
- localedir = $(DESTDIR)@LOCALEDIR@
- staticdir = $(DESTDIR)@STATICDIR@
- udevdir = $(DESTDIR)@udevdir@
-+USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
-+  awk -f $(top_srcdir)/scripts/relpath.awk)
+ . /etc/init.d/functions
  
- # Setup vpath search paths for some suffixes
- vpath %.c $(srcdir)
-@@ -301,7 +303,7 @@
- install_lib_shared: $(LIB_SHARED)
- 	$(INSTALL_PROGRAM) -D $< $(libdir)/$(<F).$(LIB_VERSION)
- 	$(INSTALL) -d $(usrlibdir)
--	$(LN_S) -f $(libdir)/$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
-+	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
+-DAEMON=lvm2_monitor
++DAEMON=lvm2-monitor
  
- # FIXME: plugins are currently installed with .so suffix only
- install_lib_shared_plugin: $(LIB_SHARED)
---- LVM2/tools/Makefile.in	2010/04/09 21:42:51	1.116
-+++ LVM2/tools/Makefile.in	2010/04/15 15:12:20	1.117
-@@ -169,7 +169,7 @@
- install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
- 	$(INSTALL_PROGRAM) -D $< $(libdir)/$(<F).$(LIB_VERSION)
- 	$(INSTALL) -d $(usrlibdir)
--	$(LN_S) -f $(libdir)/$<.$(LIB_VERSION) $(usrlibdir)/$(<F)
-+	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
- 
- install_cmdlib_static: liblvm2cmd-static.a
- 	$(INSTALL_DATA) -D $< $(usrlibdir)/liblvm2cmd.a
+ exec_prefix=@exec_prefix@
+ sbindir=@sbindir@
 
 
