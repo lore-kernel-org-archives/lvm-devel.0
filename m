@@ -1,62 +1,45 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 15 Apr 2010 16:39:58 -0400
-Subject: [PATCH] Add creation of dev/mapper/control to nightly tests.
-Message-ID: <1271363998-4897-1-git-send-email-dwysocha@redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Thu, 15 Apr 2010 17:13:34 -0400
+Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
+Message-ID: <4BC7817E.7080407@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This works around a problem with using the /tmp directory for
-the dev/mapper/control node.  The failure I saw was this.
-When LVM_TEST_DIR was rooted at /tmp/..., the first dmsetup
-command would fail with this error:
-/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control: matchpathcon 0020000 failed:
+Alasdair,
 
-The second dmsetup command would always succeed though.  Also,
-when LVM_TEST_DIR was rooted at /root/..., this failure would not
-occur.
+I tested the latest lvm2 and found that mirror legs were allocated
+in the same PV when "--alloc anywhere" was specified. This happens
+for mirrored log as well.
 
-I stepped through this in gdb and found that mknod was indeed
-creating the control node correctly, however, matchpathcon
-would fail.  The reason it did not fail the second or subsequent
-iterations of dmsetup is that the control node was already there,
-and dmsetup does not try to set the selinux security context
-in that case.  One clue may be in the fact that it seems the
-default security context for files in /tmp/... is <<none>>:
- matchpathcon /root/LVMTEST26998.J29FayOVWy/dev/mapper/control
-/root/LVMTEST26998.J29FayOVWy/dev/mapper/control        system_u:object_r:admin_home_t:s0
- matchpathcon /tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control
-/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control <<none>>
- matchpathcon /tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control
-/tmp/LVMTEST26998.J29FayOVWy/dev/mapper/control <<none>>
- matchpathcon /dev/mapper/control
-/dev/mapper/control     system_u:object_r:lvm_control_t:s0
+# /sbin/lvm.static version
+  LVM version:     2.02.64(1)-cvs (2010-04-14)
+  Library version: 1.02.47-cvs (2010-04-14)
+  Driver version:  4.11.5
+# pvs
+  PV         VG   Fmt  Attr PSize  PFree
+  /dev/sdc   vg00 lvm2 a-   16.00G 16.00G
+  /dev/sdd   vg00 lvm2 a-   16.00G 16.00G
+# lvcreate -m1 -L12m -nlv00 --mirrorlog disk --alloc anywhere vg00
+  Logical volume "lv00" created
+# dmsetup ls --tree
+vg00-lv00 (253:3)
+ |-vg00-lv00_mimage_1 (253:2)
+ |  `- (8:32)
+ |-vg00-lv00_mimage_0 (253:1)
+ |  `- (8:32)
+ `-vg00-lv00_mlog (253:0)
+    `- (8:48)
 
-I would imagine this is why the matchpathcon() call fails.
-There may be a better fix for this but at this point for the
-nightly tests we can create the 'control' node explicitly.
+The workaround in this case is to create a mirror device with a core
+log, and then to convert it to a mirror with a disk log.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/test-utils.sh |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+Is "--alloc anywhere" feature still under development? Or is this a
+new behavior?
 
-diff --git a/test/test-utils.sh b/test/test-utils.sh
-index c2755c6..92b5047 100644
---- a/test/test-utils.sh
-+++ b/test/test-utils.sh
-@@ -83,6 +83,8 @@ prepare_testroot() {
- 	export LVM_SYSTEM_DIR=$TESTDIR/etc
- 	export DM_DEV_DIR=$TESTDIR/dev
- 	mkdir $LVM_SYSTEM_DIR $DM_DEV_DIR $DM_DEV_DIR/mapper $TESTDIR/lib
-+	minor=`cat /proc/misc | grep device-mapper | awk '{print $1}'`
-+	mknod $DM_DEV_DIR/mapper/control c 10 $minor
- 
- 	cd $TESTDIR
- 
--- 
-1.6.2.5
+Thanks,
+Taka
 
 
