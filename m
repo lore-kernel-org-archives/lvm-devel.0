@@ -1,54 +1,22 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 19 Apr 2010 17:34:04 +0200
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 19 Apr 2010 18:06:28 +0100
 Subject: LVM2/liblvm lvm2app.h lvm_lv.c lvm_pv.c lvm_vg.c
-In-Reply-To: <20100419152225.3141.qmail@sourceware.org>
+In-Reply-To: <4BCC77EC.30005@redhat.com>
 References: <20100419152225.3141.qmail@sourceware.org>
-Message-ID: <4BCC77EC.30005@redhat.com>
+	<4BCC77EC.30005@redhat.com>
+Message-ID: <20100419170628.GE4828@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 19.4.2010 17:22, wysochanski at sourceware.org wrote:
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	wysochanski at sourceware.org	2010-04-19 15:22:24
-> 
-> Modified files:
-> 	liblvm         : lvm2app.h lvm_lv.c lvm_pv.c lvm_vg.c 
-> 
-> Log message:
-> 	Use vg->vgmem to allocate vg/lv/pv string properties instead of dm_malloc/fr
-> 	
-> 	Everywhere else in the API the caller can rely on lvm2app taking care of
-> 	memory allocation and free, so make the 'name' and 'uuid' properties of a
-> 	vg/lv/pv use the vg handle to allocate memory.
-> 	
-> 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+On Mon, Apr 19, 2010 at 05:34:04PM +0200, Zdenek Kabelac wrote:
+> Either we should return   const char*  return vg->name;
 
-> -char *lvm_vg_get_name(const vg_t vg)
-> +const char *lvm_vg_get_name(const vg_t vg)
->  {
-> -	char *name;
-> -
-> -	name = dm_malloc(NAME_LEN + 1);
-> -	strncpy(name, (const char *)vg->name, NAME_LEN);
-> -	name[NAME_LEN] = '\0';
-> -	return name;
-> +	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
->  }
+But then we have to guarantee that vg->name remains const - which we are
+unable to do.  (We can't impose limits on vgrename.)
 
-
-Either we should return   const char*  return vg->name;
-or we should  char* return strdup(vg->name) and user could do whatever he
-wants to do with the string.
-
-I'd prefer 1.) for efficiency, but I don't see any point in current code.
-Usually user wants to make a quick check for something - he will use const
-char*, or he want to keep it for later and he fill duplicate string with his
-own memory allocation routines (i.e. C++ new.... )
-
-Zdenek
+Alasdair
 
 
