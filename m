@@ -1,38 +1,19 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Apr 2010 17:21:42 +0200
-Subject: [PATCH 14/22] Replicator: lock_vol() finds missing VGs
-In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-Message-ID: <0b30da7dc1a4273e1dcf60c3a831a3c116307ee8.1271085009.git.zkabelac@redhat.com>
+From: Christine Caulfield <ccaulfie@redhat.com>
+Date: Mon, 19 Apr 2010 13:51:24 +0100
+Subject: [PATCH] Add restart option to clvmd
+Message-ID: <4BCC51CC.6070407@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Find and check for all needed VGs before calling lock_vol().
+This patch adds a restart command to clvmd (clvmd -S) that restarts the 
+daemon preserving exclusive locks. This will not work if clvmd is 
+downgraded because the old clvmd does not understand the -E switches.
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/locking/locking.h |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
-
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index e7f25b9..8f6f52b 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -129,7 +129,9 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
- 
- #define lock_lv_vol(cmd, lv, flags)	\
--	lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv))
-+	(find_replicator_vgs((lv)) ? \
-+		lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv)) : \
-+		0)
- 
- #define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
- #define unlock_and_release_vg(cmd, vg, vol) \
--- 
-1.7.0.1
-
-
+Chrissie
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: clvmd-restart.patch
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100419/6c867540/attachment.ksh>
