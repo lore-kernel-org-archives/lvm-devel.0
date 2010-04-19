@@ -1,65 +1,69 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 19 Apr 2010 14:03:13 -0500
-Subject: [PATCH] Prevent simultaneous mirror up-converts (bug 582251)
-Message-ID: <1271703793.9666.4.camel@hydrogen.msp.redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 19 Apr 2010 15:34:58 -0400
+Subject: LVM2/liblvm lvm2app.h lvm_lv.c lvm_pv.c lvm_vg.c
+In-Reply-To: <4BCC77EC.30005@redhat.com>
+References: <20100419152225.3141.qmail@sourceware.org>
+	<4BCC77EC.30005@redhat.com>
+Message-ID: <1271705698.2480.335.camel@f10-node1>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch fixes bug 582251 by disallowing the addition of
-another image to a mirror when it is already in the process
-of adding an image.
+On Mon, 2010-04-19 at 17:34 +0200, Zdenek Kabelac wrote:
+> On 19.4.2010 17:22, wysochanski at sourceware.org wrote:
+> > CVSROOT:	/cvs/lvm2
+> > Module name:	LVM2
+> > Changes by:	wysochanski at sourceware.org	2010-04-19 15:22:24
+> > 
+> > Modified files:
+> > 	liblvm         : lvm2app.h lvm_lv.c lvm_pv.c lvm_vg.c 
+> > 
+> > Log message:
+> > 	Use vg->vgmem to allocate vg/lv/pv string properties instead of dm_malloc/fr
+> > 	
+> > 	Everywhere else in the API the caller can rely on lvm2app taking care of
+> > 	memory allocation and free, so make the 'name' and 'uuid' properties of a
+> > 	vg/lv/pv use the vg handle to allocate memory.
+> > 	
+> > 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> 
+> > -char *lvm_vg_get_name(const vg_t vg)
+> > +const char *lvm_vg_get_name(const vg_t vg)
+> >  {
+> > -	char *name;
+> > -
+> > -	name = dm_malloc(NAME_LEN + 1);
+> > -	strncpy(name, (const char *)vg->name, NAME_LEN);
+> > -	name[NAME_LEN] = '\0';
+> > -	return name;
+> > +	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+> >  }
+> 
+> 
+> Either we should return   const char*  return vg->name;
+> or we should  char* return strdup(vg->name) and user could do whatever he
+> wants to do with the string.
+> 
+> I'd prefer 1.) for efficiency, but I don't see any point in current code.
+> Usually user wants to make a quick check for something - he will use const
+> char*, or he want to keep it for later and he fill duplicate string with his
+> own memory allocation routines (i.e. C++ new.... )
+> 
 
-The fix forces a user to wait for the first conversion to
-complete before starting another one.
+I thought I answered this in my other mail, but you never responded.
 
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+I guess you are not as concerned about a misbehaving application as I
+am.  Returning pointers to internal LVM data seems dangerous to me, but
+perhaps I'm overly paranoid.
 
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -996,6 +996,16 @@ static int _lvconvert_mirrors_aux(struct
- 		}
- 
- 		/*
-+		 * Is there already a convert in progress?  We do not
-+		 * currently allow more than one.
-+		 */
-+		if (find_temporary_mirror(lv) || (lv->status & CONVERTING)) {
-+			log_error("%s is already being converted.  Unable to start another conversion.",
-+				  lv->name);
-+			return 0;
-+		}
-+
-+		/*
- 		 * Log addition/removal should be done before the layer
- 		 * insertion to make the end result consistent with
- 		 * linear-to-mirror conversion.
-Index: LVM2/test/t-mirror-lvconvert.sh
-===================================================================
---- LVM2.orig/test/t-mirror-lvconvert.sh
-+++ LVM2/test/t-mirror-lvconvert.sh
-@@ -155,11 +155,15 @@ check_and_cleanup_lvs_
- # add 1 mirror
- prepare_lvs_
- lvs -a -o+devices $vg
--lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0
-+lvcreate -l5 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0
- lvs -a -o+devices $vg
- check_mirror_count_ $vg/$lv1 2
- check_mirror_log_ $vg/$lv1
--lvconvert -m+1 -i1 $vg/$lv1 $dev4
-+lvconvert -m+1 -b $vg/$lv1 $dev4
-+# FIXME:  Next test is a bit time dependent
-+#  The test /could/ succeed if the previous conversion
-+#  happens quickly enough.
-+not lvconvert -m+1 -b $vg/$lv1 $dev5
- lvs -a -o+devices $vg
- check_no_tmplvs_ $vg/$lv1
- check_mirror_count_ $vg/$lv1 3
+Indeed, 'const' should be enough to tell the application "this is a
+snapshot of the present state, don't modify it".  But what if he does -
+then we have a potential for corrupt metadata.  I'd like to take #1
+approach, but it just doesn't seem safe.
 
+If you copy memory but don't use 'const', then I would think this sends
+the wrong message to applications using the API.
 
 
