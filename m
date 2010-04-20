@@ -1,46 +1,37 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Apr 2010 10:58:19 -0000
-Subject: LVM2/libdm .exported_symbols libdevmapper.h
-Message-ID: <20100420105819.4586.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 20 Apr 2010 13:59:19 +0200
+Subject: [PATCH] fix topology test to work again
+In-Reply-To: <20100419225312.GA23512@redhat.com> (Mike Snitzer's message of
+	"Mon, 19 Apr 2010 18:53:12 -0400")
+References: <20100419225312.GA23512@redhat.com>
+Message-ID: <87sk6qz65k.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-20 10:58:18
+Hi,
 
-Modified files:
-	libdm          : .exported_symbols libdevmapper.h 
+Mike Snitzer <snitzer@redhat.com> writes:
+> Reintroduce teardown_() because t-topology-support.sh only needs a
+> subset of the full teardown() between each iteration of the topology
+> tests -- in particular the $TESTDIR must not get removed between each
+> topology test iteration.
 
-Log message:
-	missed files from last commit
+I would prefer to have prepare_scsi_debug_dev changed to drop the
+devices and re-create them when invoked for the second time than to bend
+the teardown mechanism for something it is not intended for. Also,
+teardown/teardown_ is a poor distinction and does not say much about
+intended usage. You can of course re-use parts of teardown in your
+implementation, but please name the new function(s) appropriately in
+that case.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/.exported_symbols.diff?cvsroot=lvm2&r1=1.49&r2=1.50
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.109&r2=1.110
+> Also fix (and simplify) the unsafe scsi-debug device discovery in
+> prepare_scsi_debug_dev().
+Looks better indeed.
 
---- LVM2/libdm/.exported_symbols	2010/02/15 16:21:33	1.49
-+++ LVM2/libdm/.exported_symbols	2010/04/20 10:58:18	1.50
-@@ -109,6 +109,7 @@
- dm_pool_zalloc
- dm_bitset_create
- dm_bitset_destroy
-+dm_bit_and
- dm_bit_union
- dm_bit_get_first
- dm_bit_get_next
---- LVM2/libdm/libdevmapper.h	2010/02/15 16:21:33	1.109
-+++ LVM2/libdm/libdevmapper.h	2010/04/20 10:58:18	1.110
-@@ -600,6 +600,7 @@
- dm_bitset_t dm_bitset_create(struct dm_pool *mem, unsigned num_bits);
- void dm_bitset_destroy(dm_bitset_t bs);
- 
-+void dm_bit_and(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
- void dm_bit_union(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
- int dm_bit_get_first(dm_bitset_t bs);
- int dm_bit_get_next(dm_bitset_t bs, int last_bit);
+Yours,
+   Petr.
 
 
