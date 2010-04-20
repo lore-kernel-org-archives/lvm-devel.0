@@ -1,7 +1,7 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 20 Apr 2010 18:18:59 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100420181859.1573.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 20 Apr 2010 22:31:23 -0000
+Subject: LVM2/libdm/regex parse_rx.c
+Message-ID: <20100420223123.5775.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,166 +10,220 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-04-20 18:18:59
+Changes by:	agk at sourceware.org	2010-04-20 22:31:22
 
 Modified files:
-	test           : test-utils.sh 
+	libdm/regex    : parse_rx.c 
 
 Log message:
-	Re-enable t-topology-support.sh
-	
-	Reintroduce split teardown (teardown() calls teardown_devs()) because
-	t-topology-support.sh only needs the teardown_devs() subset of the full
-	teardown() between each iteration of the topology tests -- in particular
-	the $TESTDIR must not get removed between each topology test iteration.
-	
-	prepare_loop() must return if prepare_scsi_debug_dev() already
-	established $LOOP.
-	
-	Also fix (and simplify) the unsafe scsi-debug device discovery in
-	prepare_scsi_debug_dev().
+	Add a regex optimisation pass for shared character prefixes.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.37&r2=1.38
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/test/test-utils.sh	2010/04/14 12:04:23	1.37
-+++ LVM2/test/test-utils.sh	2010/04/20 18:18:59	1.38
-@@ -92,16 +92,7 @@
- 	done
+--- LVM2/libdm/regex/parse_rx.c	2008/11/03 18:59:59	1.3
++++ LVM2/libdm/regex/parse_rx.c	2010/04/20 22:31:22	1.4
+@@ -329,19 +329,182 @@
+ 	return n;
  }
  
--teardown() {
--	echo $LOOP
--	echo $PREFIX
--
--	test -n "$LOCAL_CLVMD" && {
--		kill "$LOCAL_CLVMD"
--		sleep .1
--		kill -9 "$LOCAL_CLVMD" || true
--	}
--
-+teardown_devs() {
- 	test -n "$PREFIX" && {
- 		rm -rf $TESTDIR/dev/$PREFIX*
- 
-@@ -124,6 +115,19 @@
- 		test -n "$LOOPFILE" && rm -f $LOOPFILE
- 	fi
- 	unset devs # devs is set in prepare_devs()
-+}
++/*----------------------------------------------------------------*/
 +
-+teardown() {
-+	echo $LOOP
-+	echo $PREFIX
++/*
++ * The optimiser spots common prefixes on either side of an 'or' node, and
++ * lifts them outside the 'or' with a 'cat'.
++ */
++static unsigned _leftmost_depth(struct rx_node *r)
++{
++	int count = 1;
 +
-+	test -n "$LOCAL_CLVMD" && {
-+		kill "$LOCAL_CLVMD"
-+		sleep .1
-+		kill -9 "$LOCAL_CLVMD" || true
++	while (r->type != CHARSET) {
++		count++;
++		r = r->left;
 +	}
 +
-+	teardown_devs
- 
- 	test -n "$TESTDIR" && {
- 		cd $OLDPWD
-@@ -145,6 +149,11 @@
- 	size=$1
- 	test -n "$size" || size=32
- 
-+	# skip if prepare_scsi_debug_dev() was used
-+	if [ -n "$SCSI_DEBUG_DEV" -a -n "$LOOP" ]; then
-+		return 0
-+	fi
++	return count;
++}
 +
- 	test -z "$LOOP"
- 	test -n "$DM_DEV_DIR"
- 
-@@ -183,71 +192,50 @@
- 	exit 1 # should not happen
- }
- 
--get_sd_devs_()
--{
--    # prepare_scsi_debug_dev() requires the ability to lookup
--    # the scsi_debug created SCSI device in /dev/
--    local _devs=$(lvmdiskscan --config 'devices { filter = [ "a|/dev/sd.*|", "r|.*|" ] scan = "/dev/" }' | grep /dev/sd | awk '{ print $1 }')
--    echo $_devs
--}
--
- # A drop-in replacement for prepare_loop() that uses scsi_debug to create
- # a ramdisk-based SCSI device upon which all LVM devices will be created
- # - scripts must take care not to use a DEV_SIZE that will enduce OOM-killer
- prepare_scsi_debug_dev()
++/*
++ * FIXME: a unique key could be built up as part of the parse, to make the
++ * comparison quick.  Alternatively we could use cons-hashing, and then
++ * this would simply be a pointer comparison.
++ */
++static int _nodes_equal(struct rx_node *l, struct rx_node *r)
++{
++	if (l->type != r->type)
++		return 0;
++
++	switch (l->type) {
++	case CAT:
++	case OR:
++		return _nodes_equal(l->left, r->left) &&
++			_nodes_equal(l->right, r->right);
++
++	case STAR:
++	case PLUS:
++	case QUEST:
++		return _nodes_equal(l->left, r->left);
++
++	case CHARSET:
++		return dm_bitset_equal(l->charset, r->charset);
++	}
++
++	/* NOTREACHED */
++	return_0;
++}
++
++static int _find_leftmost_common(struct rx_node *or,
++                                 struct rx_node **l,
++                                 struct rx_node **r)
++{
++	struct rx_node *left = or->left, *right = or->right;
++	unsigned left_depth = _leftmost_depth(left);
++	unsigned right_depth = _leftmost_depth(right);
++
++	while (left_depth > right_depth) {
++		left = left->left;
++		left_depth--;
++	}
++
++	while (right_depth > left_depth) {
++		right = right->left;
++		right_depth--;
++	}
++
++	while (left_depth) {
++		if (left->type == CAT && right->type == CAT) {
++			if (_nodes_equal(left->left, right->left)) {
++				*l = left;
++				*r = right;
++				return 1;
++			}
++		}
++		left = left->left;
++		right = right->left;
++		left_depth--;
++	}
++
++	return 0;
++}
++
++static struct rx_node *_pass(struct dm_pool *mem,
++                             struct rx_node *r,
++                             int *changed)
++{
++	/*
++	 * walk the tree, optimising every 'or' node.
++	 */
++	switch (r->type) {
++	case CAT:
++		if (!(r->left = _pass(mem, r->left, changed)))
++			return_NULL;
++
++		if (!(r->right = _pass(mem, r->right, changed)))
++			return_NULL;
++
++		break;
++
++	case STAR:
++	case PLUS:
++	case QUEST:
++		if (!(r->left = _pass(mem, r->left, changed)))
++			return_NULL;
++		break;
++
++	case OR:
++		/* It's important we optimise sub nodes first */
++		if (!(r->left = _pass(mem, r->left, changed)))
++			return_NULL;
++
++		if (!(r->right = _pass(mem, r->right, changed)))
++			return_NULL;
++
++		{
++			struct rx_node *left, *right;
++
++			if (_find_leftmost_common(r, &left, &right)) {
++				struct rx_node *new_r = _node(mem, CAT, left->left, r);
++
++				if (!new_r)
++					return_NULL;
++
++				memcpy(left, left->right, sizeof(*left));
++				memcpy(right, right->right, sizeof(*right));
++
++				r = new_r;
++
++				*changed = 1;
++			}
++		}
++		break;
++
++	case CHARSET:
++		break;
++	}
++
++	return r;
++}
++
++static struct rx_node *_optimise(struct dm_pool *mem, struct rx_node *r)
++{
++	/*
++	 * We're looking for (or (... (cat <foo> a)) (... (cat <foo> b)))
++	 * and want to turn it into (cat <foo> (or (... a) (... b)))
++	 */
++
++	/*
++	 * Initially done as an inefficient multipass algorithm.
++	 */
++	int changed;
++
++	do {
++		changed = 0;
++		r = _pass(mem, r, &changed);
++	} while (r && changed);
++
++	return r;
++}
++
++/*----------------------------------------------------------------*/
++
+ struct rx_node *rx_parse_tok(struct dm_pool *mem,
+ 			     const char *begin, const char *end)
  {
--    # FIXME this is extremely fragile and can cause data loss if an unrelated
--    # SCSI device appears at a wrong time... we need the code to reliably
--    # identify the scsi_debug device it has created before we can re-include
--    # this in the testsuite
--    exit 200
--
-     local DEV_SIZE="$1"
-     shift
-     local SCSI_DEBUG_PARAMS="$@"
+ 	struct rx_node *r;
+ 	struct parse_sp *ps = dm_pool_zalloc(mem, sizeof(*ps));
  
-     test -n "$SCSI_DEBUG_DEV" && return 0
-+    test -z "$LOOP"
-+    test -n "$DM_DEV_DIR"
+-	if (!ps) {
+-		stack;
+-		return NULL;
+-	}
++	if (!ps)
++		return_NULL;
+ 
+ 	ps->mem = mem;
+-	ps->charset = dm_bitset_create(mem, 256);
++	if (!(ps->charset = dm_bitset_create(mem, 256))) {
++		log_error("Regex charset allocation failed");
++		dm_pool_free(mem, ps);
++		return NULL;
++	}
+ 	ps->cursor = begin;
+ 	ps->rx_end = end;
+ 	_rx_get_token(ps);		/* load the first token */
+@@ -349,6 +512,13 @@
+ 	if (!(r = _or_term(ps))) {
+ 		log_error("Parse error in regex");
+ 		dm_pool_free(mem, ps);
++		return NULL;
++	}
 +
-     trap_teardown
++	if (!(r = _optimise(mem, r))) {
++		log_error("Regex optimisation error");
++		dm_pool_free(mem, ps);
++		return NULL;
+ 	}
  
-     # Skip test if awk isn't available (required for get_sd_devs_)
-     which awk || exit 200
- 
-     # Skip test if scsi_debug module is unavailable or is already in use
--    modinfo scsi_debug || exit 200
-+    modprobe --dry-run scsi_debug || exit 200
-     lsmod | grep -q scsi_debug && exit 200
- 
-     # Create the scsi_debug device and determine the new scsi device's name
--    local devs_before=`get_sd_devs_`
-     # NOTE: it will _never_ make sense to pass num_tgts param;
-     # last param wins.. so num_tgts=1 is imposed
-     modprobe scsi_debug dev_size_mb=$DEV_SIZE $SCSI_DEBUG_PARAMS num_tgts=1 || exit 200
-     sleep 2 # allow for async Linux SCSI device registration
- 
--    local devs_after=`get_sd_devs_`
--    for dev1 in $devs_after; do
--	FOUND=0
--	for dev2 in $devs_before; do
--	    if [ "$dev1" = "$dev2" ]; then
--		FOUND=1
--		break
--	    fi
--	done
--	if [ $FOUND -eq 0 ]; then
--	    # Create symlink to scsi_debug device in $DM_DEV_DIR
--	    SCSI_DEBUG_DEV=$DM_DEV_DIR/$(basename $dev1)
--	    # Setting $LOOP provides means for prepare_devs() override
--	    LOOP=$SCSI_DEBUG_DEV
--	    ln -snf $dev1 $SCSI_DEBUG_DEV
--	    return 0
--	fi
--    done
--    exit 1 # should not happen
-+    local DEBUG_DEV=/dev/$(grep scsi_debug /sys/block/*/device/model | cut -f4 -d /)
-+    [ -b $DEBUG_DEV ] || exit 1 # should not happen
-+
-+    # Create symlink to scsi_debug device in $DM_DEV_DIR
-+    SCSI_DEBUG_DEV=$DM_DEV_DIR/$(basename $DEBUG_DEV)
-+    # Setting $LOOP provides means for prepare_devs() override
-+    LOOP=$SCSI_DEBUG_DEV
-+    ln -snf $DEBUG_DEV $SCSI_DEBUG_DEV
-+    return 0
- }
- 
- cleanup_scsi_debug_dev()
- {
--    aux teardown
-+    aux teardown_devs
-     unset SCSI_DEBUG_DEV
-+    unset LOOP
- }
- 
- prepare_devs() {
+ 	return r;
 
 
