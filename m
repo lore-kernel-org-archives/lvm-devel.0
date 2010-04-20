@@ -1,33 +1,44 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 20 Apr 2010 00:25:10 +0100
-Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM libdm/libdm-de ...
-In-Reply-To: <20100419223820.GA11273@redhat.com>
-References: <20100407200443.26841.qmail@sourceware.org>
-	<20100419223820.GA11273@redhat.com>
-Message-ID: <20100419232509.GG4828@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 20 Apr 2010 12:27:14 +0200
+Subject: [PATCH] Remove -n argument from vgcfgrestore.
+Message-ID: <1271759234-32254-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Apr 19, 2010 at 06:38:20PM -0400, Mike Snitzer wrote:
-> On Wed, Apr 07 2010 at  4:04pm -0400,
-> agk at sourceware.org <agk@sourceware.org> wrote:
+This is old lvm1 syntax, because arguments changed
+frpm PVs to VGs compatibility is broken already.
+
+name_ARG is not used in code.
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ tools/commands.h |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/tools/commands.h b/tools/commands.h
+index 5e44cb2..7d0185b 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -688,14 +688,13 @@ xx(vgcfgrestore,
+    "\t[-f|--file filename] " "\n"
+    "\t[-l[l]|--list [--list]]" "\n"
+    "\t[-M|--metadatatype 1|2]" "\n"
+-   "\t[-n|--name VolumeGroupName] " "\n"
+    "\t[-h|--help]" "\n"
+    "\t[-t|--test] " "\n"
+    "\t[-v|--verbose]" "\n"
+    "\t[--version] " "\n"
+    "\tVolumeGroupName",
  
-> >  		/* Refresh open_count */
-> >  		if (!_info_by_dev(dinfo->major, dinfo->minor, 1, &info) ||
-> > -		    !info.exists || info.open_count)
-> > +		    !info.exists)
-> >  			continue;
-> >  
-> > +		if (info.open_count) {
-
-> It would appear that the non-zero open_count associated with the -real
-> device is stale (during lvremove's dm_tree_deactivate_children).  
-
-Shouldn't be - it follows a 'refresh'.
-
-Alasdair
+-   file_ARG, list_ARG, metadatatype_ARG, name_ARG, test_ARG)
++   file_ARG, list_ARG, metadatatype_ARG, test_ARG)
+ 
+ xx(vgchange,
+    "Change volume group attributes",
+-- 
+1.7.0.4
 
 
