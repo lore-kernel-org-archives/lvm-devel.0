@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Apr 2010 08:01:53 -0000
-Subject: LVM2/old-tests/regex Makefile.in matcher_t.c p ...
-Message-ID: <20100421080153.30933.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 21 Apr 2010 13:55:09 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c test/t- ...
+Message-ID: <20100421135509.15735.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,238 +10,121 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-04-21 08:01:52
+Changes by:	jbrassow at sourceware.org	2010-04-21 13:55:08
 
 Modified files:
-	old-tests/regex: Makefile.in matcher_t.c parse_t.c 
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
+	test           : t-lvconvert-mirror.sh t-mirror-lvconvert.sh 
 
 Log message:
-	Make matcher_t and parse_t compilable
-	
-	These two old-test/regex utils are usable for testing output of regex
-	processing at core level. For getting them usable configure need to create
-	Makefile. This is currently disable by default.
+	Disallow the primary mirror image from being removed when the
+	mirror is not in-sync.  This restriction is not extended to
+	repair operations (i.e. it will not limit what 'lvconvert --repair'
+	can do).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/old-tests/regex/Makefile.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/old-tests/regex/matcher_t.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/old-tests/regex/parse_t.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1532&r2=1.1533
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.23&r2=1.24
 
---- LVM2/old-tests/regex/Makefile.in	2010/03/04 09:51:41	1.6
-+++ LVM2/old-tests/regex/Makefile.in	2010/04/21 08:01:51	1.7
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -15,7 +15,6 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--VPATH = @srcdir@
+--- LVM2/WHATS_NEW	2010/04/20 18:17:56	1.1532
++++ LVM2/WHATS_NEW	2010/04/21 13:55:08	1.1533
+@@ -1,5 +1,6 @@
+ Version 2.02.64 -
+ =================================
++  Disallow primary mirror image removal when mirror is not in-sync.
+   Remove obsolete --name parameter from vgcfgrestore.
+   Add -S command to clvmd to restart the daemon preserving exclusive locks.
+   Increment lvm2app version from 1 to 2.
+--- LVM2/lib/metadata/mirror.c	2010/04/20 12:14:28	1.113
++++ LVM2/lib/metadata/mirror.c	2010/04/21 13:55:08	1.114
+@@ -751,7 +751,7 @@
+ 				 uint32_t *removed)
+ {
+ 	uint32_t m;
+-	uint32_t s;
++	int32_t s;
+ 	int removable_pvs_specified;
+ 	struct logical_volume *sub_lv;
+ 	struct logical_volume *detached_log_lv = NULL;
+@@ -781,15 +781,25 @@
  
- SOURCES=\
- 	parse_t.c \
-@@ -27,9 +26,12 @@
+ 	/* Move removable_pvs to end of array */
+ 	if (removable_pvs_specified) {
+-		for (s = 0; s < mirrored_seg->area_count &&
+-			    old_area_count - new_area_count < num_removed; s++) {
++		for (s = mirrored_seg->area_count - 1;
++		     s >= 0 && old_area_count - new_area_count < num_removed;
++		     s--) {
+ 			sub_lv = seg_lv(mirrored_seg, s);
  
- include $(top_builddir)/make.tmpl
- 
--parse_t: parse_t.o $(top_builddir)/lib/liblvm.a
--	$(CC) -o parse_t parse_t.o -L$(top_builddir)/lib -llvm
-+INCLUDES += -I$(top_srcdir)/libdm
-+DM_DEPS = $(top_builddir)/libdm/libdevmapper.so
-+DM_LIBS = -ldevmapper $(LIBS)
- 
--matcher_t: matcher_t.o $(top_builddir)/lib/liblvm.a
--	$(CC) -o matcher_t matcher_t.o -L$(top_builddir)/lib -llvm
-+parse_t: parse_t.o $(DM_DEPS)
-+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ parse_t.o $(DM_LIBS)
- 
-+matcher_t: matcher_t.o $(DM_DEPS)
-+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ matcher_t.o $(DM_LIBS)
---- LVM2/old-tests/regex/matcher_t.c	2005/10/16 23:03:59	1.4
-+++ LVM2/old-tests/regex/matcher_t.c	2010/04/21 08:01:51	1.5
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -13,7 +13,7 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
--#include "matcher.h"
-+#include "libdevmapper.h"
- #include "log.h"
- 
- #include <stdio.h>
-@@ -31,7 +31,7 @@
- 	char buffer[1024], *start, *ptr;
- 	FILE *fp = fopen(file, "r");
- 	int asize = 100;
--	char **rx = dbg_malloc(sizeof(*rx) * asize);
-+	char **rx = dm_malloc(sizeof(*rx) * asize);
- 	int nr = 0;
- 
- 	if (!fp)
-@@ -60,7 +60,7 @@
- 				return 0;
+ 			if (!is_temporary_mirror_layer(sub_lv) &&
+ 			    _is_mirror_image_removable(sub_lv, removable_pvs)) {
++				/*
++				 * Check if the user is trying to pull the
++				 * primary mirror image when the mirror is
++				 * not in-sync.
++				 */
++				if ((s == 0) && !_mirrored_lv_in_sync(lv) &&
++				    !(lv->status & PARTIAL_LV)) {
++					log_error("Unable to remove primary mirror image while mirror is not in-sync");
++					return_0;
++				}
+ 				if (!shift_mirror_images(mirrored_seg, s))
+ 					return_0;
+-				s--; /* adjust counter after shifting */
+ 				new_area_count--;
  			}
- 
--			rx[nr] = dbg_malloc((ptr - start) + 1);
-+			rx[nr] = dm_malloc((ptr - start) + 1);
- 			strncpy(rx[nr], start, ptr - start);
- 			rx[nr][ptr - start] = '\0';
- 			nr++;
-@@ -81,12 +81,12 @@
- {
- 	int i;
- 	for (i = 0; i < nregex; i++)
--		dbg_free(regex[i]);
-+		dm_free(regex[i]);
- 
--	dbg_free(regex);
-+	dm_free(regex);
- }
- 
--static void _scan_input(struct matcher *m, char **regex)
-+static void _scan_input(struct dm_regex *m, char **regex)
- {
- 	char buffer[256], *ptr;
- 	int r;
-@@ -95,7 +95,7 @@
- 		if ((ptr = strchr(buffer, '\n')))
- 			*ptr = '\0';
- 
--		r = matcher_run(m, buffer);
-+		r = dm_regex_match(m, buffer);
- 
- 		if (r >= 0)
- 			printf("%s : %s\n", buffer, regex[r]);
-@@ -105,39 +105,41 @@
- int main(int argc, char **argv)
- {
- 	struct dm_pool *mem;
--	struct matcher *scanner;
-+	struct dm_regex *scanner;
- 	char **regex;
- 	int nregex;
-+	int ret = 0;
- 
- 	if (argc < 2) {
- 		fprintf(stderr, "Usage : %s <pattern_file>\n", argv[0]);
- 		exit(1);
- 	}
- 
--	init_log(stderr);
--	init_debug(_LOG_DEBUG);
-+	dm_log_init_verbose(_LOG_DEBUG);
- 
--	if (!(mem = dm_pool_create(10 * 1024))) {
-+	if (!(mem = dm_pool_create("match_regex", 10 * 1024))) {
- 		fprintf(stderr, "Couldn't create pool\n");
--		exit(2);
-+		ret = 2;
-+		goto err;
- 	}
- 
- 	if (!_read_spec(argv[1], &regex, &nregex)) {
- 		fprintf(stderr, "Couldn't read the lex specification\n");
--		exit(3);
-+		ret = 3;
-+		goto err;
- 	}
- 
--	if (!(scanner = matcher_create(mem, (const char **) regex, nregex))) {
-+	if (!(scanner = dm_regex_create(mem, (const char **)regex, nregex))) {
- 		fprintf(stderr, "Couldn't build the lexer\n");
--		exit(4);
-+		ret = 4;
-+		goto err;
- 	}
- 
- 	_scan_input(scanner, regex);
- 	_free_regex(regex, nregex);
-+
-+    err:
- 	dm_pool_destroy(mem);
- 
--	dump_memory();
--	fin_log();
--	return 0;
-+	return ret;
- }
--
---- LVM2/old-tests/regex/parse_t.c	2005/10/16 23:03:59	1.3
-+++ LVM2/old-tests/regex/parse_t.c	2010/04/21 08:01:51	1.4
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -13,8 +13,8 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
--#include "log.h"
--#include "../../lib/regex/parse_rx.h"
-+/* hack - using unexported internal function */
-+#include "regex/parse_rx.c"
- 
- #include <stdio.h>
- #include <ctype.h>
-@@ -50,7 +50,7 @@
- 	case CHARSET:
- 		printf("Charset : ");
- 		for (i = 0; i < 256; i++) {
--			if (bit(rx->charset, i) && isprint(i))
-+			if (dm_bit(rx->charset, i) && isprint(i))
- 				printf("%c", (char) i);
  		}
- 		break;
-@@ -67,7 +67,6 @@
- 		_pretty_print(rx->right, depth + 1);
- }
+--- LVM2/test/t-lvconvert-mirror.sh	2010/04/12 19:32:58	1.2
++++ LVM2/test/t-lvconvert-mirror.sh	2010/04/21 13:55:08	1.3
+@@ -61,10 +61,20 @@
+ not lvconvert -m+1 --mirrorlog core $vg/$lv1 $dev1
+ lvremove -ff $vg
  
+-lvcreate -l2 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
++# Start w/ 3-way mirror
++# Test pulling primary image before mirror in-sync (should fail)
++# Test pulling primary image after mirror in-sync (should work)
++# Test that the correct devices remain in the mirror
++lvcreate -l8 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
++# FIXME:
++#  This is somewhat timing dependent - sync /could/ finish before
++#  we get a chance to have this command fail
++not lvconvert -m-1 $vg/$lv1 $dev1
++while [ `lvs --noheadings -o copy_percent $vg/$lv1` != "100.00" ]; do
++	sleep 1
++done
+ lvconvert -m-1 $vg/$lv1 $dev1
+ check mirror_images_on $lv1 $dev2 $dev4
+ lvconvert -m-1 $vg/$lv1 $dev2
+ check linear $vg $lv1
+ check lv_on $vg/$lv1 $dev4
 -
- int main(int argc, char **argv)
- {
- 	struct dm_pool *mem;
-@@ -78,15 +77,15 @@
- 		exit(0);
- 	}
- 
--	init_log(stderr);
--	init_debug(_LOG_INFO);
-+	dm_log_init_verbose(_LOG_DEBUG);
- 
--	if (!(mem = dm_pool_create(1024))) {
-+	if (!(mem = dm_pool_create("parse_regex", 1024))) {
- 		fprintf(stderr, "Couldn't create pool\n");
- 		exit(1);
- 	}
- 
- 	if (!(rx = rx_parse_str(mem, argv[1]))) {
-+		dm_pool_destroy(mem);
- 		fprintf(stderr, "Couldn't parse regex\n");
- 		exit(1);
- 	}
-@@ -94,7 +93,5 @@
- 	_pretty_print(rx, 0);
- 	dm_pool_destroy(mem);
- 
--	dump_memory();
--	fin_log();
- 	return 0;
+--- LVM2/test/t-mirror-lvconvert.sh	2010/04/07 16:00:19	1.23
++++ LVM2/test/t-mirror-lvconvert.sh	2010/04/21 13:55:08	1.24
+@@ -98,6 +98,12 @@
+   while (lvs --noheadings -oattr "$lv" | grep -q '^ *c'); do sleep 1; done
  }
+ 
++wait_sync_()
++{
++  local lv=$1
++  while [ `lvs --noheadings -o copy_percent $lv` != "100.00" ]; do sleep 1; done
++}
++
+ check_no_tmplvs_()
+ {
+   local lv=$1
+@@ -404,6 +410,7 @@
+ lvs -a -o+devices $vg
+ check_mirror_count_ $vg/$lv1 2 
+ check_mirror_log_ $vg/$lv1 
++wait_sync_ $vg/$lv1 # cannot pull primary unless mirror in-sync
+ lvconvert -m0 $vg/$lv1 $dev1 
+ lvs -a -o+devices $vg
+ check_no_tmplvs_ $vg/$lv1 
 
 
