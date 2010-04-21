@@ -1,169 +1,107 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 20 Apr 2010 21:13:47 -0500
-Subject: [PATCH] Prevent primary image removal from non-sync'ed mirror (bug 581611)
-Message-ID: <1271816027.18449.24.camel@hydrogen.msp.redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 21 Apr 2010 02:35:04 -0400
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM libdm/libdm-de ...
+In-Reply-To: <20100419232509.GG4828@agk-dp.fab.redhat.com>
+References: <20100407200443.26841.qmail@sourceware.org>
+	<20100419223820.GA11273@redhat.com>
+	<20100419232509.GG4828@agk-dp.fab.redhat.com>
+Message-ID: <20100421063504.GA10083@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Taking mornfall's suggestion and working the loop backwards allows for a
-much cleaner patch - removing the need to alter lvconvert.c.
+On Mon, Apr 19 2010 at  7:25pm -0400,
+Alasdair G Kergon <agk@redhat.com> wrote:
 
- brassow
+> On Mon, Apr 19, 2010 at 06:38:20PM -0400, Mike Snitzer wrote:
+> > On Wed, Apr 07 2010 at  4:04pm -0400,
+> > agk at sourceware.org <agk@sourceware.org> wrote:
+>  
+> > >  		/* Refresh open_count */
+> > >  		if (!_info_by_dev(dinfo->major, dinfo->minor, 1, &info) ||
+> > > -		    !info.exists || info.open_count)
+> > > +		    !info.exists)
+> > >  			continue;
+> > >  
+> > > +		if (info.open_count) {
+> 
+> > It would appear that the non-zero open_count associated with the -real
+> > device is stale (during lvremove's dm_tree_deactivate_children).  
+> 
+> Shouldn't be - it follows a 'refresh'.
 
-This patch fixes bug 581611.
+You're right, it's not stale at all.
 
-This patch disallows removing the primary image of a mirror
-when the mirror set is not in-sync.  Data loss is the likely
-result if this action is not forbidden.
+So the 2 issues I've found:
+1) removal of snapshot with pending onactivate merge doesn't cleanup
+   snapshot like normal (normal being "case A" below) -- it does "case B"
+2) completely tangential but: when a merge is active the merging
+   snapshot LV is accessible (by user with lvremove); so removing the
+   merging snapshot is currently allowed (stops merge, deletes
+   snapshot); should it be allowed?
 
-I didn't want to change the way the repair actions were
-happening.  So, this patch dis-allows users from pulling the
-primary device when a mirror is not in sync, but it does not
-impose these restrictions on the repair operations.
+The following is more of a "note to self" that I've collected while
+looking into this.. but feel free to review it ("case B" below
+elaborates on why the t-snapshot-merge.sh test was failing).
 
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+"case B" preloads the origin when cleaning up for a merge (I believe
+this explains why we attempt to cleanup -real early).  See commit
+eaef92b02f968856 -- the vg_remove_snapshot changes in particular. 
 
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -516,6 +516,21 @@ static int _move_removable_mimages_to_en
- 	return !count;
- }
- 
-+static int _mirrored_lv_in_sync(struct logical_volume *lv)
-+{
-+	float sync_percent;
-+	percent_range_t percent_range;
-+
-+	if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent,
-+			       &percent_range, NULL)) {
-+		log_error("Unable to determine mirror sync status of %s/%s.",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	return (percent_range == PERCENT_100) ? 1 : 0;
-+}
-+
- /*
-  * Split off 'split_count' legs from a mirror
-  *
-@@ -736,7 +751,7 @@ static int _remove_mirror_images(struct 
- 				 uint32_t *removed)
- {
- 	uint32_t m;
--	uint32_t s;
-+	int32_t s;
- 	int removable_pvs_specified;
- 	struct logical_volume *sub_lv;
- 	struct logical_volume *detached_log_lv = NULL;
-@@ -766,15 +781,25 @@ static int _remove_mirror_images(struct 
- 
- 	/* Move removable_pvs to end of array */
- 	if (removable_pvs_specified) {
--		for (s = 0; s < mirrored_seg->area_count &&
--			    old_area_count - new_area_count < num_removed; s++) {
-+		for (s = mirrored_seg->area_count - 1;
-+		     s >= 0 && old_area_count - new_area_count < num_removed;
-+		     s--) {
- 			sub_lv = seg_lv(mirrored_seg, s);
- 
- 			if (!is_temporary_mirror_layer(sub_lv) &&
- 			    _is_mirror_image_removable(sub_lv, removable_pvs)) {
-+				/*
-+				 * Check if the user is trying to pull the
-+				 * primary mirror image when the mirror is
-+				 * not in-sync.
-+				 */
-+				if ((s == 0) && !_mirrored_lv_in_sync(lv) &&
-+				    !(lv->status & PARTIAL_LV)) {
-+					log_error("Unable to remove primary mirror image while mirror is not in-sync");
-+					return_0;
-+				}
- 				if (!shift_mirror_images(mirrored_seg, s))
- 					return_0;
--				s--; /* adjust counter after shifting */
- 				new_area_count--;
- 			}
- 		}
-@@ -960,21 +985,6 @@ int remove_mirror_images(struct logical_
- 	return 1;
- }
- 
--static int _mirrored_lv_in_sync(struct logical_volume *lv)
--{
--	float sync_percent;
--	percent_range_t percent_range;
--
--	if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent,
--			       &percent_range, NULL)) {
--		log_error("Unable to determine mirror sync status of %s/%s.",
--			  lv->vg->name, lv->name);
--		return 0;
--	}
--
--	return (percent_range == PERCENT_100) ? 1 : 0;
--}
--
- /*
-  * Collapsing temporary mirror layers.
-  *
-Index: LVM2/test/t-lvconvert-mirror.sh
-===================================================================
---- LVM2.orig/test/t-lvconvert-mirror.sh
-+++ LVM2/test/t-lvconvert-mirror.sh
-@@ -61,10 +61,20 @@ lvcreate -l2 -n $lv1 $vg $dev1
- not lvconvert -m+1 --mirrorlog core $vg/$lv1 $dev1
- lvremove -ff $vg
- 
--lvcreate -l2 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
-+# Start w/ 3-way mirror
-+# Test pulling primary image before mirror in-sync (should fail)
-+# Test pulling primary image after mirror in-sync (should work)
-+# Test that the correct devices remain in the mirror
-+lvcreate -l8 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
-+# FIXME:
-+#  This is somewhat timing dependent - sync /could/ finish before
-+#  we get a chance to have this command fail
-+not lvconvert -m-1 $vg/$lv1 $dev1
-+while [ `lvs --noheadings -o copy_percent $vg/$lv1` != "100.00" ]; do
-+	sleep 1
-+done
- lvconvert -m-1 $vg/$lv1 $dev1
- check mirror_images_on $lv1 $dev2 $dev4
- lvconvert -m-1 $vg/$lv1 $dev2
- check linear $vg $lv1
- check lv_on $vg/$lv1 $dev4
--
-Index: LVM2/test/t-mirror-lvconvert.sh
-===================================================================
---- LVM2.orig/test/t-mirror-lvconvert.sh
-+++ LVM2/test/t-mirror-lvconvert.sh
-@@ -98,6 +98,12 @@ wait_conversion_()
-   while (lvs --noheadings -oattr "$lv" | grep -q '^ *c'); do sleep 1; done
- }
- 
-+wait_sync_()
-+{
-+  local lv=$1
-+  while [ `lvs --noheadings -o copy_percent $lv` != "100.00" ]; do sleep 1; done
-+}
-+
- check_no_tmplvs_()
- {
-   local lv=$1
-@@ -404,6 +410,7 @@ lvcreate -l`pvs --noheadings -ope_count 
- lvs -a -o+devices $vg
- check_mirror_count_ $vg/$lv1 2 
- check_mirror_log_ $vg/$lv1 
-+wait_sync_ $vg/$lv1 # cannot pull primary unless mirror in-sync
- lvconvert -m0 $vg/$lv1 $dev1 
- lvs -a -o+devices $vg
- check_no_tmplvs_ $vg/$lv1 
+I've yet to arrive at a fix for the attempt to cleanup -real too early
+in case B (which triggers the _dm_tree_deactivate_children: r = 0); it
+involves metadata/deptree associations not reflecting the kernel
+(because of pending onactivate merge metadata) -- so vg_remove_snapshot
+preloads origin.
 
+
+A)
+Here is a normal snapshot deactivate/remove:
+
+# lvremove -f test/testlv1_snap
+  _dm_tree_deactivate_children: deactivate test-testlv1_snap (253:3) level=0, open_count=0
+  _dm_tree_deactivate_children: deactivate test-testlv1-real (253:4) level=1, open_count=1
+  _dm_tree_deactivate_children: deactivate test-testlv1_snap-cow (253:5) level=1, open_count=0
+  _dm_tree_deactivate_children: deactivate test-testlv1-real (253:4) level=0, open_count=0
+  Logical volume "testlv1_snap" successfully removed
+
+NOTE that the -real's level changes from 1 to 0 (this is because
+snapshot-origin is still active).
+
+Also NOTE that -real's open_count=1 above because test-testlv1 (still
+using snapshot-origin) doesn't get reloaded to use the linear target
+until the end (origin is _not_ preloaded by vg_remove_snapshot in this
+case).
+
+
+B)
+Here is the sequence for the t-snapshot-merge.sh case that returns 0
+from _dm_tree_deactivate_children (though I commented out the r = 0).
+I refresh'd while the origin device was still mounted then lvremove; so
+it has snapshot-merge metadata but snapshot is active in the kernel:
+
++ dmsetup table
+LVMTEST9035vg-LV1: 0 98304 snapshot-origin 253:6
+LVMTEST9035vg-LV1_snap: 0 98304 snapshot 253:6 253:7 P 8
+LVMTEST9035vg-LV1_snap-cow: 0 16384 linear 253:3 98688
+LVMTEST9035vg-LV1-real: 0 98304 linear 253:3 384
+
+NOTE: first thing the following lvremove does is reload
+LVMTEST9035vg-LV1 to use linear target, prior to reload
+LVMTEST9035vg-LV1's only dep was -real.  But because of
+snapshot-merge metadata LVMTEST9035vg-LV1-real has level=0 (because of
+preload).
+
++ lvremove -f LVMTEST9035vg/LV1_snap
+  _dm_tree_deactivate_children: deactivate LVMTEST9035vg-LV1-real (253:6) level=0, open_count=1
+  Unable to deactivate open LVMTEST9035vg-LV1-real (253:6)
+  _dm_tree_deactivate_children: deactivate LVMTEST9035vg-LV1_snap (253:5) level=0, open_count=0
+  _dm_tree_deactivate_children: deactivate LVMTEST9035vg-LV1-real (253:6) level=1, open_count=0
+  _dm_tree_deactivate_children: deactivate LVMTEST9035vg-LV1_snap-cow (253:7) level=1, open_count=0
+  Logical volume "LV1_snap" successfully removed
+
+NOTE that the -real's level changes from 0 to 1.
 
 
