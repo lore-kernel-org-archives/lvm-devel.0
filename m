@@ -1,214 +1,200 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 Apr 2010 19:16:25 -0000
-Subject: LVM2/test t-lvconvert-mirror.sh t-lvcreate-mir ...
-Message-ID: <20100412191625.30453.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 21 Apr 2010 13:59:00 -0400
+Subject: [PATCH] conditionally avoid preloading the origin in vg_remove_snapshot
+In-Reply-To: <20100421063504.GA10083@redhat.com>
+References: <20100407200443.26841.qmail@sourceware.org>
+	<20100419223820.GA11273@redhat.com>
+	<20100419232509.GG4828@agk-dp.fab.redhat.com>
+	<20100421063504.GA10083@redhat.com>
+Message-ID: <20100421175859.GA19594@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-12 19:16:25
+On Wed, Apr 21 2010 at  2:35am -0400,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-Added files:
-	test           : t-lvconvert-mirror.sh t-lvcreate-mirror.sh 
-	                 t-lvresize-mirror.sh t-lvchange-mirror.sh 
-Removed files:
-	test           : t-mirror-basic.sh 
+> On Mon, Apr 19 2010 at  7:25pm -0400,
+> Alasdair G Kergon <agk@redhat.com> wrote:
+> 
+> > On Mon, Apr 19, 2010 at 06:38:20PM -0400, Mike Snitzer wrote:
+> > > On Wed, Apr 07 2010 at  4:04pm -0400,
+> > > agk at sourceware.org <agk@sourceware.org> wrote:
+> >  
+> > > >  		/* Refresh open_count */
+> > > >  		if (!_info_by_dev(dinfo->major, dinfo->minor, 1, &info) ||
+> > > > -		    !info.exists || info.open_count)
+> > > > +		    !info.exists)
+> > > >  			continue;
+> > > >  
+> > > > +		if (info.open_count) {
+> > 
+> > > It would appear that the non-zero open_count associated with the -real
+> > > device is stale (during lvremove's dm_tree_deactivate_children).  
+> > 
+> > Shouldn't be - it follows a 'refresh'.
+> 
+> You're right, it's not stale at all.
+> 
+> So the 2 issues I've found:
+> 1) removal of snapshot with pending onactivate merge doesn't cleanup
+>    snapshot like normal (normal being "case A" below) -- it does "case B"
+> 2) completely tangential but: when a merge is active the merging
+>    snapshot LV is accessible (by user with lvremove); so removing the
+>    merging snapshot is currently allowed (stops merge, deletes
+>    snapshot); should it be allowed?
+> 
+> The following is more of a "note to self" that I've collected while
+> looking into this.. but feel free to review it ("case B" below
+> elaborates on why the t-snapshot-merge.sh test was failing).
+> 
+> "case B" preloads the origin when cleaning up for a merge (I believe
+> this explains why we attempt to cleanup -real early).  See commit
+> eaef92b02f968856 -- the vg_remove_snapshot changes in particular. 
+> 
+> I've yet to arrive at a fix for the attempt to cleanup -real too early
+> in case B (which triggers the _dm_tree_deactivate_children: r = 0); it
+> involves metadata/deptree associations not reflecting the kernel
+> (because of pending onactivate merge metadata) -- so vg_remove_snapshot
+> preloads origin.
 
-Log message:
-	Explode t-mirror-basic into a number of smaller tests.
+Here is a fix:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-mirror.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvresize-mirror.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvchange-mirror.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.9&r2=NONE
+Avoid preloading the origin, when removing a snapshot, if snapshot-merge
+target is not active.
 
-/cvs/lvm2/LVM2/test/t-lvconvert-mirror.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-mirror.sh
-+++ -	2010-04-12 19:16:25.320603000 +0000
-@@ -0,0 +1,57 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+[This adds a 2nd consumer of lv_has_target_type().  I'm still not seeing
+ an alternative way to test if snapshot-merge was performed.]
+
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ lib/activate/activate.h       |    3 +++
+ lib/activate/dev_manager.c    |   10 ++++------
+ lib/metadata/snapshot_manip.c |   21 +++++++++++++++------
+ test/t-snapshot-merge.sh      |   17 +++++++++++++++++
+ 4 files changed, 39 insertions(+), 12 deletions(-)
+
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 32d9a5c..019f44c 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -95,6 +95,9 @@ int lvs_in_vg_opened(const struct volume_group *vg);
+ 
+ int lv_is_active(struct logical_volume *lv);
+ 
++int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
++		       const char *layer, const char *target_type);
 +
-+. ./test-utils.sh
-+aux prepare_vg 5 80
+ int monitor_dev_for_events(struct cmd_context *cmd,
+ 			    struct logical_volume *lv, int do_reg);
+ 
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 66cc94c..cc4e046 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -329,10 +329,8 @@ static int _status(const char *name, const char *uuid,
+ 	return 0;
+ }
+ 
+-static int _lv_has_target_type(struct dev_manager *dm,
+-			       struct logical_volume *lv,
+-			       const char *layer,
+-			       const char *target_type)
++int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
++		       const char *layer, const char *target_type)
+ {
+ 	int r = 0;
+ 	char *dlid;
+@@ -343,7 +341,7 @@ static int _lv_has_target_type(struct dev_manager *dm,
+ 	char *type = NULL;
+ 	char *params = NULL;
+ 
+-	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
++	if (!(dlid = build_dm_uuid(mem, lv->lvid.s, layer)))
+ 		return_0;
+ 
+ 	if (!(dmt = _setup_task(NULL, dlid, 0,
+@@ -1183,7 +1181,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		    ((dinfo = _cached_info(dm->mem, find_merging_cow(lv)->cow,
+ 					   dtree)) && dinfo->open_count)) {
+ 			/* FIXME Is there anything simpler to check for instead? */
+-			if (!_lv_has_target_type(dm, lv, NULL, "snapshot-merge"))
++			if (!lv_has_target_type(dm->mem, lv, NULL, "snapshot-merge"))	
+ 				clear_snapshot_merge(lv);
+ 		}
+ 	}
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index f7218c2..cb5df6b 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -18,6 +18,7 @@
+ #include "locking.h"
+ #include "toolcontext.h"
+ #include "lv_alloc.h"
++#include "activate.h"
+ 
+ int lv_is_origin(const struct logical_volume *lv)
+ {
+@@ -176,16 +177,24 @@ int vg_remove_snapshot(struct logical_volume *cow)
+ 
+ 	dm_list_del(&cow->snapshot->origin_list);
+ 	origin->origin_count--;
 +
-+# convert from linear to 2-way mirror
-+lvcreate -l2 -n $lv1 $vg $dev1
-+lvconvert -i1 -m+1 $vg/$lv1 $dev2 $dev3:0-1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
+ 	if (find_merging_cow(origin) == find_cow(cow)) {
+ 		clear_snapshot_merge(origin);
+ 		/*
+-		 * preload origin to:
+-		 * - allow proper release of -cow
+-		 * - avoid allocations with other devices suspended
+-		 *   when transitioning from "snapshot-merge" to
+-		 *   "snapshot-origin after a merge completes.
++		 * preload origin IFF "snapshot-merge" target is active
++		 * - IMPORTANT: avoids preload if onactivate merge is pending
+ 		 */
+-		preload_origin = 1;
++		if (lv_has_target_type(origin->vg->cmd->mem, origin, NULL,
++				       "snapshot-merge")) {
++			/*
++			 * preload origin to:
++			 * - allow proper release of -cow
++			 * - avoid allocations with other devices suspended
++			 *   when transitioning from "snapshot-merge" to
++			 *   "snapshot-origin after a merge completes.
++			 */
++			preload_origin = 1;
++		}
+ 	}
+ 
+ 	if (!lv_remove(cow->snapshot->lv)) {
+diff --git a/test/t-snapshot-merge.sh b/test/t-snapshot-merge.sh
+index ff78f14..d7239b9 100755
+--- a/test/t-snapshot-merge.sh
++++ b/test/t-snapshot-merge.sh
+@@ -76,6 +76,23 @@ dmsetup table ${vg}-${lv1} | grep -q " snapshot-merge "
+ lvremove -f $vg/$lv1
+ 
+ 
++# "onactivate merge" test
++# -- deactivate/remove after disallowed merge attempt, tests
++#    to make sure preload of origin's metadata is _not_ performed
++setup_merge $vg $lv1
++lvs -a
++mkdir test_mnt
++mount $(lvdev_ $vg $lv1) test_mnt
++lvconvert --merge $vg/$(snap_lv_name_ $lv1)
++# -- refresh LV while FS is still mounted (merge must not start),
++#    verify 'snapshot-origin' target is still being used
++lvchange --refresh $vg/$lv1
++umount test_mnt
++rm -r test_mnt
++dmsetup table ${vg}-${lv1} | grep -q " snapshot-origin "
++lvremove -f $vg/$lv1
 +
-+# convert from 2-way mirror to linear
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvconvert -m-1 $vg/$lv1
-+check linear $vg $lv1
-+lvremove -ff $vg
 +
-+# convert from disklog to corelog, active
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvconvert -f --mirrorlog core $vg/$lv1
-+check mirror $vg $lv1 ""
-+lvremove -ff $vg
-+
-+# convert from corelog to disklog, active
-+lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
-+lvconvert --mirrorlog disk $vg/$lv1 $dev3:0-1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
-+
-+# bz192865: lvconvert log of an inactive mirror lv
-+# convert from disklog to corelog, inactive
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvchange -an $vg/$lv1
-+echo y | lvconvert -f --mirrorlog core $vg/$lv1
-+check mirror $vg $lv1 ""
-+lvremove -ff $vg
-+
-+# convert from corelog to disklog, inactive
-+lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
-+lvchange -an $vg/$lv1
-+lvconvert --mirrorlog disk $vg/$lv1 $dev3:0-1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
-+
-+# convert linear to 2-way mirror with 1 PV
-+lvcreate -l2 -n $lv1 $vg $dev1
-+not lvconvert -m+1 --mirrorlog core $vg/$lv1 $dev1
-+lvremove -ff $vg
-/cvs/lvm2/LVM2/test/t-lvcreate-mirror.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvcreate-mirror.sh
-+++ -	2010-04-12 19:16:25.407102000 +0000
-@@ -0,0 +1,39 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. ./test-utils.sh
-+aux prepare_vg 5 80
-+
-+# 2-way mirror with corelog, 2 PVs
-+lvcreate -l2 -m1 --mirrorlog core -n $lv1 $vg $dev1 $dev2
-+check mirror_images_redundant $vg $lv1
-+lvremove -ff $vg
-+
-+# 2-way mirror with disklog, 3 PVs
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+check mirror_images_redundant $vg $lv1
-+check mirror_log_on $vg/$lv1 $dev3
-+lvremove -ff $vg
-+
-+# 3-way mirror with disklog, 4 PVs
-+lvcreate -l2 -m2 --mirrorlog disk -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
-+check mirror_images_redundant $vg $lv1
-+check mirror_log_on $vg/$lv1 $dev3
-+lvremove -ff $vg
-+
-+# lvcreate --nosync is in 100% sync after creation (bz429342)
-+lvcreate -l2 -m1 --nosync -n $lv1 $vg $dev1 $dev2 $dev3:0-1 2>out
-+grep "New mirror won't be synchronised." out
-+lvs -o copy_percent --noheadings $vg/$lv1 | grep 100.00
-+lvremove -ff $vg
-+
-+# creating 2-way mirror with disklog from 2 PVs fails
-+not lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2
-/cvs/lvm2/LVM2/test/t-lvresize-mirror.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvresize-mirror.sh
-+++ -	2010-04-12 19:16:25.487661000 +0000
-@@ -0,0 +1,38 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. ./test-utils.sh
-+aux prepare_vg 5 80
-+
-+# extend 2-way mirror
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvchange -an $vg/$lv1
-+lvextend -l+2 $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+check mirror_images_contiguous $vg $lv1
-+lvremove -ff $vg
-+
-+# reduce 2-way mirror
-+lvcreate -l4 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvchange -an $vg/$lv1
-+lvreduce -l-2 $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
-+
-+# extend 2-way mirror (cling if not contiguous)
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvcreate -l1 -n $lv2 $vg $dev1
-+lvcreate -l1 -n $lv3 $vg $dev2
-+lvchange -an $vg/$lv1
-+lvextend -l+2 $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+check mirror_images_clung $vg $lv1
-+lvremove -ff $vg
-/cvs/lvm2/LVM2/test/t-lvchange-mirror.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvchange-mirror.sh
-+++ -	2010-04-12 19:16:25.569964000 +0000
-@@ -0,0 +1,28 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. ./test-utils.sh
-+aux prepare_vg 3
-+
-+# force resync 2-way active mirror
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+check mirror $vg $lv1 $dev3
-+echo y | lvchange --resync $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
-+
-+# force resync 2-way inactive mirror
-+lvcreate -l2 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0-1
-+lvchange -an $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+lvchange --resync $vg/$lv1
-+check mirror $vg $lv1 $dev3
-+lvremove -ff $vg
+ # test multiple snapshot merge; tests copy out that is driven by merge
+ setup_merge $vg $lv1 1
+ lvs -a
 
 
