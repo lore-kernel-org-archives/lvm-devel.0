@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 22 Apr 2010 15:39:44 -0000
-Subject: LVM2/test t-lvconvert-mirror.sh t-mirror-lvcon ...
-Message-ID: <20100422153944.876.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 22 Apr 2010 17:42:39 -0000
+Subject: LVM2 libdm/regex/parse_rx.c old-tests/regex/pa ...
+Message-ID: <20100422174239.28460.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,75 +10,245 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-04-22 15:39:43
+Changes by:	agk at sourceware.org	2010-04-22 17:42:38
 
 Modified files:
-	test           : t-lvconvert-mirror.sh t-mirror-lvconvert.sh 
+	libdm/regex    : parse_rx.c 
+	old-tests/regex: parse_t.c 
 
 Log message:
-	The following tests in the testsuite have race conditions:
-	1) Test that the primary mirror image cannot be removed while
-	the mirror set is sync'ing.
-	2) Test that you cannot start a second mirror up-convert while
-	one is already in progress.
-	
-	The trouble is that if the sync/conversion finishes before the
-	tests occur, the tests will fail by why of success where there
-	should have been failure.  This means the sync/conversion must
-	happen very quickly, but this is possible because the test
-	mirrors we are creating are so small.
-	
-	In order to decrease the likelyhood of these test failing (or
-	more correctly, failing to test the right thing), I've increase
-	the size of the mirrors.  It will still be remotely possible that
-	the tests will fail (by way of failing to test the right thing).
-	If this continues to happen, more involved mechanisms will need
-	to be put in place.  (Perhaps these will still be created, but
-	this change should be a remedy until that time.)
+	Move regex printing code from test to main tree (may use in debug messages).
+	Yet another optimiser fix attempt.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-lvconvert.sh.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/old-tests/regex/parse_t.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/test/t-lvconvert-mirror.sh	2010/04/21 13:55:08	1.3
-+++ LVM2/test/t-lvconvert-mirror.sh	2010/04/22 15:39:40	1.4
-@@ -10,7 +10,7 @@
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/libdm/regex/parse_rx.c	2010/04/22 14:33:14	1.8
++++ LVM2/libdm/regex/parse_rx.c	2010/04/22 17:42:38	1.9
+@@ -16,6 +16,85 @@
+ #include "dmlib.h"
+ #include "parse_rx.h"
  
- . ./test-utils.sh
--aux prepare_vg 5 80
-+aux prepare_vg 5 200
++#ifdef DEBUG
++#include <ctype.h>
++
++static void _regex_print(struct rx_node *rx, int depth, unsigned show_nodes)
++{
++	int i, numchars;
++
++	if (rx->left) {
++		if (rx->left->type != CHARSET && (show_nodes || (!((rx->type == CAT || rx->type == OR) && rx->left->type == CAT))))
++			printf("(");
++
++		_regex_print(rx->left, depth + 1, show_nodes);
++
++		if (rx->left->type != CHARSET && (show_nodes || (!((rx->type == CAT || rx->type == OR) && rx->left->type == CAT))))
++			printf(")");
++	}
++
++	/* display info about the node */
++	switch (rx->type) {
++	case CAT:
++		break;
++
++	case OR:
++		printf("|");
++		break;
++
++	case STAR:
++		printf("*");
++		break;
++
++	case PLUS:
++		printf("+");
++		break;
++
++	case QUEST:
++		printf("?");
++		break;
++
++	case CHARSET:
++		numchars = 0;
++		for (i = 0; i < 256; i++)
++			if (dm_bit(rx->charset, i) && (isprint(i) || i == HAT_CHAR || i == DOLLAR_CHAR))
++				numchars++;
++		if (numchars == 97) {
++			printf(".");
++			break;
++		}
++		if (numchars > 1)
++			printf("[");
++		for (i = 0; i < 256; i++)
++			if (dm_bit(rx->charset, i)) {
++				if isprint(i)
++					printf("%c", (char) i);
++				else if (i == HAT_CHAR)
++					printf("^");
++				else if (i == DOLLAR_CHAR)
++					printf("$");
++			}
++		if (numchars > 1)
++			printf("]");
++		break;
++
++	default:
++		fprintf(stderr, "Unknown type");
++	}
++
++	if (rx->right) {
++		if (rx->right->type != CHARSET && (show_nodes || (!(rx->type == CAT && rx->right->type == CAT) && rx->right->right)))
++			printf("(");
++		_regex_print(rx->right, depth + 1, show_nodes);
++		if (rx->right->type != CHARSET && (show_nodes || (!(rx->type == CAT && rx->right->type == CAT) && rx->right->right)))
++			printf(")");
++	}
++
++	if (!depth)
++		printf("\n");
++}
++#endif /* DEBUG */
++
+ struct parse_sp {		/* scratch pad for the parsing process */
+ 	struct dm_pool *mem;
+ 	int type;		/* token type, 0 indicates a charset */
+@@ -342,10 +421,16 @@
+ static unsigned _depth(struct rx_node *r, unsigned leftmost)
+ {
+ 	int count = 1;
++	int or_count = 0;
  
- # convert from linear to 2-way mirror
- lvcreate -l2 -n $lv1 $vg $dev1
-@@ -65,7 +65,7 @@
- # Test pulling primary image before mirror in-sync (should fail)
- # Test pulling primary image after mirror in-sync (should work)
- # Test that the correct devices remain in the mirror
--lvcreate -l8 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0-1
-+lvcreate -l20 -m2 -n $lv1 $vg $dev1 $dev2 $dev4 $dev3:0
- # FIXME:
- #  This is somewhat timing dependent - sync /could/ finish before
- #  we get a chance to have this command fail
---- LVM2/test/t-mirror-lvconvert.sh	2010/04/21 14:04:26	1.25
-+++ LVM2/test/t-mirror-lvconvert.sh	2010/04/22 15:39:40	1.26
-@@ -112,7 +112,7 @@
-   ! grep tmp out
+ 	while (r->type != CHARSET && LEFT(r)) {
+ 		count++;
+ 		r = LEFT(r);
++		/* Stop if we pass another OR */
++		if (or_count)
++			break;
++		if (r->type == OR)
++			or_count++;
+ 	}
+ 
+ 	return count;
+--- LVM2/old-tests/regex/parse_t.c	2010/04/22 03:42:00	1.6
++++ LVM2/old-tests/regex/parse_t.c	2010/04/22 17:42:38	1.7
+@@ -14,6 +14,7 @@
+  */
+ 
+ /* hack - using unexported internal function */
++#define DEBUG
+ #include "regex/parse_rx.c"
+ 
+ #include <stdio.h>
+@@ -67,86 +68,12 @@
+ 		_pretty_print(rx->right, depth + 1);
  }
  
--aux prepare_vg 5
-+aux prepare_vg 5 200
+-static void _regex_print(struct rx_node *rx, int depth)
+-{
+-	int i, numchars;
+-	int left_and_right = (rx->left && rx->right);
+-
+-	if (left_and_right && rx->type == CAT && rx->left->type == OR)
+-		printf("(");
+-
+-	if (rx->left)
+-		_regex_print(rx->left, depth + 1);
+-
+-	if (left_and_right && rx->type == CAT && rx->left->type == OR)
+-		printf(")");
+-
+-	/* display info about the node */
+-	switch (rx->type) {
+-	case CAT:
+-		//printf("Cat");
+-		break;
+-
+-	case OR:
+-		printf("|");
+-		break;
+-
+-	case STAR:
+-		printf("*");
+-		break;
+-
+-	case PLUS:
+-		printf("+");
+-		break;
+-
+-	case QUEST:
+-		printf("?");
+-		break;
+-
+-	case CHARSET:
+-		numchars = 0;
+-		for (i = 0; i < 256; i++)
+-			if (dm_bit(rx->charset, i) && (isprint(i) || i == HAT_CHAR || i == DOLLAR_CHAR))
+-				numchars++;
+-		if (numchars == 97) {
+-			printf(".");
+-			break;
+-		}
+-		if (numchars > 1)
+-			printf("[");
+-		for (i = 0; i < 256; i++)
+-			if (dm_bit(rx->charset, i)) {
+-				if (isprint(i))
+-					printf("%c", (char) i);
+-				else if (i == HAT_CHAR)
+-					printf("^");
+-				else if (i == DOLLAR_CHAR)
+-					printf("$");
+-			}
+-		if (numchars > 1)
+-			printf("]");
+-		break;
+-
+-	default:
+-		fprintf(stderr, "Unknown type");
+-	}
+-
+-	if (left_and_right && rx->type == CAT && rx->right->type == OR)
+-		printf("(");
+-	if (rx->right)
+-		_regex_print(rx->right, depth + 1);
+-	if (left_and_right && rx->type == CAT && rx->right->type == OR)
+-		printf(")");
+-
+-	if (!depth)
+-		printf("\n");
+-}
+-
+ int main(int argc, char **argv)
+ {
+ 	struct dm_pool *mem;
+ 	struct rx_node *rx;
+ 	int regex_print = 0;
++	int show_nodes = 0;
+ 	int regex_arg = 1;
  
- # ---------------------------------------------------------------------
- # Common environment setup/cleanup for each sub testcases
-@@ -155,7 +155,7 @@
- # add 1 mirror
- prepare_lvs_
- lvs -a -o+devices $vg
--lvcreate -l5 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0
-+lvcreate -l15 -m1 -n $lv1 $vg $dev1 $dev2 $dev3:0
- lvs -a -o+devices $vg
- check_mirror_count_ $vg/$lv1 2
- check_mirror_log_ $vg/$lv1
+ 	if (argc == 3 && !strcmp(argv[1], "-r")) {
+@@ -155,6 +82,13 @@
+ 		argc--;
+ 	}
+ 
++	if (argc == 3 && !strcmp(argv[1], "-R")) {
++		regex_print++;
++		show_nodes++;
++		regex_arg++;
++		argc--;
++	}
++
+ 	if (argc != 2) {
+ 		fprintf(stderr, "Usage : %s [-r] <regex>\n", argv[0]);
+ 		exit(0);
+@@ -174,7 +108,7 @@
+ 	}
+ 
+ 	if (regex_print)
+-		_regex_print(rx, 0);
++		_regex_print(rx, 0, show_nodes);
+ 	else
+ 		_pretty_print(rx, 0);
+ 
 
 
