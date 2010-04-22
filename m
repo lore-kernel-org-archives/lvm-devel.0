@@ -1,24 +1,23 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 23 Apr 2010 00:36:05 +0100
-Subject: Allowing an actively merging snapshot to be removed?
-In-Reply-To: <Pine.LNX.4.64.1004211951340.24723@hs20-bc2-1.build.redhat.com>
-References: <20100407200443.26841.qmail@sourceware.org>
-	<20100419223820.GA11273@redhat.com>
-	<20100419232509.GG4828@agk-dp.fab.redhat.com>
-	<20100421063504.GA10083@redhat.com>
-	<20100421193804.GA28717@redhat.com>
-	<Pine.LNX.4.64.1004211951340.24723@hs20-bc2-1.build.redhat.com>
-Message-ID: <20100422233605.GB23791@agk-dp.fab.redhat.com>
+Date: Fri, 23 Apr 2010 00:38:57 +0100
+Subject: [PATCH] Utilize new IMPORT{db} udev rule to repopulate udev db for spurious events
+In-Reply-To: <4BCDBF80.3010902@redhat.com>
+References: <4BCDBF80.3010902@redhat.com>
+Message-ID: <20100422233856.GC23791@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Apr 21, 2010 at 08:01:32PM -0400, Mikulas Patocka wrote:
-> I think the merging snapshot LV shouldn't be accessible 
+On Tue, Apr 20, 2010 at 04:51:44PM +0200, Peter Rajnoha wrote:
+> @@ -44,6 +44,28 @@ ENV{DM_COOKIE}=="?*", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup udevflags $env
+  
+> +IMPORT{db}="DM_UDEV_DISABLE_DM_RULES_FLAG"
 
-Ack.  We are past the user-generated 'commit' point at which it goes.
+How does this cope if an older version of udev is installed?
+
+Do we need to install/activate it conditionally?
 
 Alasdair
 
