@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Apr 2010 20:35:25 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/regex/matcher.c
-Message-ID: <20100422203525.8828.qmail@sourceware.org>
+Date: 22 Apr 2010 23:09:22 -0000
+Subject: LVM2/libdm/regex matcher.c parse_rx.c parse_rx.h
+Message-ID: <20100422230922.27702.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,58 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-22 20:35:24
+Changes by:	agk at sourceware.org	2010-04-22 23:09:20
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm/regex    : matcher.c 
+	libdm/regex    : matcher.c parse_rx.c parse_rx.h 
 
 Log message:
-	Cache bitset locations to speed up _calc_states. (kabi)
+	don't optimise anything with TARGET_TRANS to avoid intefering with the matcher's counting
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.361&r2=1.362
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/matcher.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/matcher.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW_DM	2010/04/20 22:31:36	1.361
-+++ LVM2/WHATS_NEW_DM	2010/04/22 20:35:24	1.362
-@@ -1,5 +1,6 @@
- Version 1.02.47 -
- =================================
-+  Cache bitset locations to speed up _calc_states.
-   Add a regex optimisation pass for shared character prefixes.
-   Add dm_bit_and and dm_bitset_equal to libdevmapper.
-   Simplify dm_bitset_create.
---- LVM2/libdm/regex/matcher.c	2010/03/25 18:22:04	1.4
-+++ LVM2/libdm/regex/matcher.c	2010/04/22 20:35:24	1.5
-@@ -212,6 +212,8 @@
- 	/* prime the queue */
- 	h = t = _create_state_queue(m->scratch, dfa, rx->firstpos);
- 	while (h) {
-+		int elems, j, idx[h->bits[0]];
-+
- 		/* pop state off front of the queue */
- 		dfa = h->s;
- 		dfa_bits = h->bits;
-@@ -219,10 +221,17 @@
+--- LVM2/libdm/regex/matcher.c	2010/04/22 20:35:24	1.5
++++ LVM2/libdm/regex/matcher.c	2010/04/22 23:09:18	1.6
+@@ -37,8 +37,6 @@
+ 	struct dm_pool *scratch, *mem;
+ };
  
- 		/* iterate through all the inputs for this state */
- 		dm_bit_clear_all(bs);
+-#define TARGET_TRANS '\0'
+-
+ static int _count_nodes(struct rx_node *rx)
+ {
+ 	int r = 1;
+--- LVM2/libdm/regex/parse_rx.c	2010/04/22 20:15:00	1.10
++++ LVM2/libdm/regex/parse_rx.c	2010/04/22 23:09:18	1.11
+@@ -452,7 +452,12 @@
+ 		return _nodes_equal(l->left, r->left);
+ 
+ 	case CHARSET:
+-		return dm_bitset_equal(l->charset, r->charset);
++		/*
++		 * Never change anything containing TARGET_TRANS
++		 * used by matcher as boundary marker between concatenated
++		 * expressions.
++		 */
++		return (!dm_bit(l->charset, TARGET_TRANS) && dm_bitset_equal(l->charset, r->charset));
+ 	}
+ 
+ 	/* NOTREACHED */
+--- LVM2/libdm/regex/parse_rx.h	2007/08/21 16:26:07	1.2
++++ LVM2/libdm/regex/parse_rx.h	2010/04/22 23:09:18	1.3
+@@ -33,6 +33,8 @@
+ #define HAT_CHAR 0x2
+ #define DOLLAR_CHAR 0x3
+ 
++#define TARGET_TRANS '\0'
 +
-+		/* Cache list of locations of bits */
-+		elems = 0;
-+		for (i = dm_bit_get_first(dfa_bits);
-+		     i >= 0; i = dm_bit_get_next(dfa_bits, i))
-+			idx[elems++] = i;
-+
- 		for (a = 0; a < 256; a++) {
- 			/* iterate through all the states in firstpos */
--			for (i = dm_bit_get_first(dfa_bits);
--			     i >= 0; i = dm_bit_get_next(dfa_bits, i)) {
-+			for (j = 0; j < elems; j++) {
-+				i = idx[j];
- 				if (dm_bit(m->nodes[i]->charset, a)) {
- 					if (a == TARGET_TRANS)
- 						dfa->final = m->nodes[i]->final;
+ struct rx_node {
+ 	int type;
+ 	dm_bitset_t charset;
 
 
