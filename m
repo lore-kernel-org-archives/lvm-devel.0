@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Apr 2010 03:12:03 -0000
-Subject: LVM2/old-tests/regex parse_t.c
-Message-ID: <20100422031203.25025.qmail@sourceware.org>
+Date: 22 Apr 2010 03:24:27 -0000
+Subject: LVM2/libdm/regex parse_rx.c
+Message-ID: <20100422032427.31640.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,136 +10,149 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-22 03:12:02
+Changes by:	agk at sourceware.org	2010-04-22 03:24:25
 
 Modified files:
-	old-tests/regex: parse_t.c 
+	libdm/regex    : parse_rx.c 
 
 Log message:
-	add -r to print out closer to original regex format
+	Still not satisfactory...
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/old-tests/regex/parse_t.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/old-tests/regex/parse_t.c	2010/04/21 08:01:51	1.4
-+++ LVM2/old-tests/regex/parse_t.c	2010/04/22 03:12:01	1.5
-@@ -67,13 +67,96 @@
- 		_pretty_print(rx->right, depth + 1);
- }
+--- LVM2/libdm/regex/parse_rx.c	2010/04/20 22:31:22	1.4
++++ LVM2/libdm/regex/parse_rx.c	2010/04/22 03:24:24	1.5
+@@ -331,17 +331,19 @@
  
-+static void _regex_print(struct rx_node *rx, int depth)
-+{
-+	int i, numchars;
-+	int left_and_right = (rx->left && rx->right);
+ /*----------------------------------------------------------------*/
+ 
++#define L_OR_R(a) (leftmost ? (a)->left : (a)->right)
 +
-+	if (left_and_right && rx->type == CAT && rx->left->type == OR)
-+		printf("(");
-+
-+	if (rx->left)
-+		_regex_print(rx->left, depth + 1);
-+
-+	if (left_and_right && rx->type == CAT && rx->left->type == OR)
-+		printf(")");
-+
-+	/* display info about the node */
-+	switch (rx->type) {
-+	case CAT:
-+		//printf("Cat");
-+		break;
-+
-+	case OR:
-+		printf("|");
-+		break;
-+
-+	case STAR:
-+		printf("*");
-+		break;
-+
-+	case PLUS:
-+		printf("+");
-+		break;
-+
-+	case QUEST:
-+		printf("?");
-+		break;
-+
-+	case CHARSET:
-+		numchars = 0;
-+		for (i = 0; i < 256; i++)
-+			if (dm_bit(rx->charset, i) && (isprint(i) || i == HAT_CHAR || i == DOLLAR_CHAR))
-+				numchars++;
-+		if (numchars == 97) {
-+			printf(".");
-+			break;
-+		}
-+		if (numchars > 1)
-+			printf("[");
-+		for (i = 0; i < 256; i++)
-+			if (dm_bit(rx->charset, i)) {
-+				if isprint(i)
-+					printf("%c", (char) i);
-+				else if (i == HAT_CHAR)
-+					printf("^");
-+				else if (i == DOLLAR_CHAR)
-+					printf("$");
-+			}
-+		if (numchars > 1)
-+			printf("]");
-+		break;
-+
-+	default:
-+		fprintf(stderr, "Unknown type");
-+	}
-+
-+	if (left_and_right && rx->type == CAT && rx->right->type == OR)
-+		printf("(");
-+	if (rx->right)
-+		_regex_print(rx->right, depth + 1);
-+	if (left_and_right && rx->type == CAT && rx->right->type == OR)
-+		printf(")");
-+
-+	if (!depth)
-+		printf("\n");
-+}
-+
- int main(int argc, char **argv)
+ /*
+  * The optimiser spots common prefixes on either side of an 'or' node, and
+  * lifts them outside the 'or' with a 'cat'.
+  */
+-static unsigned _leftmost_depth(struct rx_node *r)
++static unsigned _depth(struct rx_node *r, unsigned leftmost)
  {
- 	struct dm_pool *mem;
- 	struct rx_node *rx;
-+	int regex_print = 0;
-+	int regex_arg = 1;
-+
-+	if (argc == 3 && !strcmp(argv[1], "-r")) {
-+		regex_print++;
-+		regex_arg++;
-+		argc--;
-+	}
+ 	int count = 1;
  
- 	if (argc != 2) {
--		fprintf(stderr, "Usage : %s <regex>\n", argv[0]);
-+		fprintf(stderr, "Usage : %s [-r] <regex>\n", argv[0]);
- 		exit(0);
+ 	while (r->type != CHARSET) {
+ 		count++;
+-		r = r->left;
++		r = L_OR_R(r);
  	}
  
-@@ -84,13 +167,17 @@
- 		exit(1);
+ 	return count;
+@@ -378,38 +380,69 @@
+ 
+ static int _find_leftmost_common(struct rx_node *or,
+                                  struct rx_node **l,
+-                                 struct rx_node **r)
++                                 struct rx_node **r,
++				 unsigned leftmost)
+ {
+ 	struct rx_node *left = or->left, *right = or->right;
+-	unsigned left_depth = _leftmost_depth(left);
+-	unsigned right_depth = _leftmost_depth(right);
++	unsigned left_depth = _depth(left, leftmost);
++	unsigned right_depth = _depth(right, leftmost);
+ 
+ 	while (left_depth > right_depth) {
+-		left = left->left;
++		left = L_OR_R(left);
+ 		left_depth--;
  	}
  
--	if (!(rx = rx_parse_str(mem, argv[1]))) {
-+	if (!(rx = rx_parse_str(mem, argv[regex_arg]))) {
- 		dm_pool_destroy(mem);
- 		fprintf(stderr, "Couldn't parse regex\n");
- 		exit(1);
+ 	while (right_depth > left_depth) {
+-		right = right->left;
++		right = L_OR_R(right);
+ 		right_depth--;
  	}
  
--	_pretty_print(rx, 0);
-+	if (regex_print)
-+		_regex_print(rx, 0);
-+	else
-+		_pretty_print(rx, 0);
-+
- 	dm_pool_destroy(mem);
+ 	while (left_depth) {
+ 		if (left->type == CAT && right->type == CAT) {
+-			if (_nodes_equal(left->left, right->left)) {
++			if (_nodes_equal(L_OR_R(left), L_OR_R(right))) {
+ 				*l = left;
+ 				*r = right;
+ 				return 1;
+ 			}
+ 		}
+-		left = left->left;
+-		right = right->left;
++		left = L_OR_R(left);
++		right = L_OR_R(right);
+ 		left_depth--;
+ 	}
  
  	return 0;
+ }
+ 
++static struct rx_node *_exchange_nodes(struct dm_pool *mem, struct rx_node *r, struct rx_node *left_cat, struct rx_node *right_cat, unsigned leftmost)
++{
++	struct rx_node *new_r, *new_cat;
++
++	/* FIXME Clean up leftmost */
++	if (leftmost) {
++		new_r = r->right;
++		new_cat = _node(mem, CAT, left_cat->left, r);
++		if (!new_cat)
++			return_NULL;
++		new_r->left = new_cat;
++
++		memcpy(left_cat, left_cat->right, sizeof(*left_cat));
++		r->right = right_cat->right;
++
++		/* FIXME Avoid this */
++		if (new_r->right == right_cat->right)
++			new_r = new_r->left;
++	} else {
++		new_r = _node(mem, CAT, r, right_cat->right);
++		if (!new_r)
++			return_NULL;
++
++		memcpy(left_cat, left_cat->left, sizeof(*left_cat));
++		memcpy(right_cat, right_cat->left, sizeof(*right_cat));
++	}
++
++	return new_r;
++}
++
+ static struct rx_node *_pass(struct dm_pool *mem,
+                              struct rx_node *r,
+                              int *changed)
+@@ -445,16 +478,12 @@
+ 		{
+ 			struct rx_node *left, *right;
+ 
+-			if (_find_leftmost_common(r, &left, &right)) {
+-				struct rx_node *new_r = _node(mem, CAT, left->left, r);
++			if (_find_leftmost_common(r, &left, &right, 1)) {
++				r = _exchange_nodes(mem, r, left, right, 1);
+ 
+-				if (!new_r)
+-					return_NULL;
+-
+-				memcpy(left, left->right, sizeof(*left));
+-				memcpy(right, right->right, sizeof(*right));
+-
+-				r = new_r;
++				*changed = 1;
++			} else if (_find_leftmost_common(r, &left, &right, 0)) {
++				r = _exchange_nodes(mem, r, left, right, 0);
+ 
+ 				*changed = 1;
+ 			}
+@@ -473,6 +502,8 @@
+ 	/*
+ 	 * We're looking for (or (... (cat <foo> a)) (... (cat <foo> b)))
+ 	 * and want to turn it into (cat <foo> (or (... a) (... b)))
++	 *
++	 * (fa)|(fb) becomes f(a|b)
+ 	 */
+ 
+ 	/*
 
 
