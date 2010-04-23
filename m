@@ -1,59 +1,41 @@
-From: brem belguebli <brem.belguebli@gmail.com>
-Date: Fri, 23 Apr 2010 23:09:47 +0200
-Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
-In-Reply-To: <4BD1ECEB.9010504@redhat.com>
-References: <4BC7817E.7080407@redhat.com>
-	<20100415220308.GO13021@agk-dp.fab.redhat.com>	<4BC88002.10803@redhat.com>
-	<1271495752.5449.53.camel@localhost>	<4BCF1761.7080805@redhat.com>
-	<s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
-	<t2i29ae894c1004230901qe3e4fa75of26e8d39e0d8c7cd@mail.gmail.com>
-	<4BD1ECEB.9010504@redhat.com>
-Message-ID: <1272056987.2983.2.camel@localhost>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 23 Apr 2010 19:10:22 -0000
+Subject: LVM2/tools reporter.c
+Message-ID: <20100423191022.12193.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Taka,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-04-23 19:10:21
 
+Modified files:
+	tools          : reporter.c 
 
-On Fri, 2010-04-23 at 14:54 -0400, Takahiro Yasui wrote:
-> Hi Brem,
-> 
-> On 04/23/10 12:01, brem belguebli wrote:
-> > I've read in the RHEL 5.5 technical datasheet that the shipped LVM
-> > version 2.02.56 was alraedy capable of mirrored log.
-> 
-> As far as I see lvm2 code, I don't think lvm2 in RHEL5.5 has
-> mirrored log feature. I'm not sure which document you referred to.
-> Could you tell me the exact name of "RHEL 5.5 technical datasheet"?
+Log message:
+	Remove redundant check in _lvs_single now that the caller
+	(process_each_lv_in_vg) provides it.
+	
+	Also, removing this check from _lvs_single now allows displaying hidden
+	LVs that are specifically named on the command line.
 
-http://www.redhat.com/f/pdf/rhel/RHEL_5_5_TechOverview_wp_web.pdf
-page 4, LVM
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
 
-" LVM ? the Logical Volume Management storage suite has been augmented
-to provide hot sparing
- for mirror journals, enabling automatic replacement or removal of
-failed logging devices.
-"
-> 
-> Can we see that document in the following URL?
-> http://www.redhat.com/docs/manuals/enterprise/
-> 
-> Thanks,
-> Taka
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-
-I may misunderstand the sentence, or someone at RedHat Marketing may
-have written something not yet in the pipe for mainstream...
-
-Regards
-
-Brem	
+--- LVM2/tools/reporter.c	2010/03/16 15:30:49	1.59
++++ LVM2/tools/reporter.c	2010/04/23 19:10:20	1.60
+@@ -33,9 +33,6 @@
+ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       void *handle)
+ {
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
+-
+ 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL)) {
+ 		stack;
+ 		return ECMD_FAILED;
 
 
