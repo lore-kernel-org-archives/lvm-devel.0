@@ -1,162 +1,77 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 23 Apr 2010 10:48:08 -0400
-Subject: Allowing an actively merging snapshot to be removed?
-In-Reply-To: <20100422233605.GB23791@agk-dp.fab.redhat.com>
-References: <20100407200443.26841.qmail@sourceware.org>
-	<20100419223820.GA11273@redhat.com>
-	<20100419232509.GG4828@agk-dp.fab.redhat.com>
-	<20100421063504.GA10083@redhat.com>
-	<20100421193804.GA28717@redhat.com>
-	<Pine.LNX.4.64.1004211951340.24723@hs20-bc2-1.build.redhat.com>
-	<20100422233605.GB23791@agk-dp.fab.redhat.com>
-Message-ID: <20100423144808.GA21974@redhat.com>
+Date: Fri, 23 Apr 2010 11:39:29 -0400
+Subject: LVM2 ./WHATS_NEW tools/toollib.c
+In-Reply-To: <20100414021950.27930.qmail@sourceware.org>
+References: <20100414021950.27930.qmail@sourceware.org>
+Message-ID: <20100423153929.GA26872@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Apr 22 2010 at  7:36pm -0400,
-Alasdair G Kergon <agk@redhat.com> wrote:
+On Tue, Apr 13 2010 at 10:19pm -0400,
+agk at sourceware.org <agk@sourceware.org> wrote:
 
-> On Wed, Apr 21, 2010 at 08:01:32PM -0400, Mikulas Patocka wrote:
-> > I think the merging snapshot LV shouldn't be accessible 
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	agk at sourceware.org	2010-04-14 02:19:49
 > 
-> Ack.  We are past the user-generated 'commit' point at which it goes.
+> Modified files:
+> 	.              : WHATS_NEW 
+> 	tools          : toollib.c 
+> 
+> Log message:
+> 	Only pass visible LVs to tools in cmdline VG name/tag expansions without -a
+> 
+> Patches:
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1516&r2=1.1517
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.193&r2=1.194
+> 
+> --- LVM2/WHATS_NEW	2010/04/13 23:57:41	1.1516
+> +++ LVM2/WHATS_NEW	2010/04/14 02:19:49	1.1517
+> @@ -1,5 +1,6 @@
+>  Version 2.02.63 -  
+>  ================================
+> +  Only pass visible LVs to tools in cmdline VG name/tag expansions without -a.
+>    Use typedefs for toollib process_each functions.
+>    Use C locales and use_mlockall for clvmd.
+>    Refactor code related to vg->pvs list and add pv->vg link.
+> --- LVM2/tools/toollib.c	2010/04/13 23:57:41	1.193
+> +++ LVM2/tools/toollib.c	2010/04/14 02:19:49	1.194
+> @@ -125,6 +125,13 @@
+>  		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
+>  			continue;
+>  
+> +		/*
+> +		 * Only let hidden LVs through it --all was used or the LVs 
+> +		 * were specifically named on the command line.
+> +		 */
+> +		if (!lvargs_supplied && !lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
+> +			continue;
+> +
+>  		/* Should we process this LV? */
+>  		if (process_all)
+>  			process_lv = 1;
 
-The following patch is one way to address this bug.  Given the current
-merge support in lvm2 this is the most straight-forward fix.  I've
-tested this to work well.  Does the following seem reasonable?
+Given that you've now made this check at a higher level I believe the
+following check in _lvs_single() is redundant.  It also serves to
+disallow displaying hidden LVs that were specifically named on the
+command line:
 
-
-Disallow the direct removal of a merging snapshot.
-
-Allow lv_remove_with_dependencies() to know the top-level LV that was
-requested to be removed (before it recurses and loses context).
-
-A merging snapshot cannot be removed directly but the associated origin
-can be.  Disallow removal of a merging snapshot unless the associated
-origin is also being removed.
-
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- lib/metadata/lv_manip.c          |   17 +++++++++++++----
- lib/metadata/metadata-exported.h |    2 +-
- lib/metadata/metadata.c          |    2 +-
- test/t-snapshot-merge.sh         |   12 +++++++++---
- tools/lvremove.c                 |    2 +-
- 5 files changed, 25 insertions(+), 10 deletions(-)
-
-Index: lvm2/lib/metadata/lv_manip.c
-===================================================================
---- lvm2.orig/lib/metadata/lv_manip.c
-+++ lvm2/lib/metadata/lv_manip.c
-@@ -2306,16 +2306,25 @@ int lv_remove_single(struct cmd_context 
-  * remove LVs with its dependencies - LV leaf nodes should be removed first
-  */
- int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *lv,
--				const force_t force)
-+				const force_t force, unsigned level)
+diff --git a/tools/reporter.c b/tools/reporter.c
+index bd3c116..1332cc3 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -33,9 +33,6 @@ static int _vgs_single(struct cmd_context *cmd __attribute((unused)),
+ static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		       void *handle)
  {
- 	struct dm_list *snh, *snht;
- 
--        if (lv_is_origin(lv)) {
-+	if (lv_is_cow(lv)) {
-+		/* A merging snapshot cannot be removed directly */
-+		if (lv_is_merging_cow(lv) && !level) {
-+			log_error("Can't remove merging snapshot logical volume \"%s\"",
-+				  lv->name);
-+			return 0;
-+		}
-+	}
-+
-+	if (lv_is_origin(lv)) {
- 		/* remove snapshot LVs first */
- 		dm_list_iterate_safe(snh, snht, &lv->snapshot_segs) {
- 			if (!lv_remove_with_dependencies(cmd, dm_list_struct_base(snh, struct lv_segment,
--									       origin_list)->cow,
--							 force))
-+										  origin_list)->cow,
-+							 force, level + 1))
- 				return 0;
- 		}
- 	}
-Index: lvm2/test/t-snapshot-merge.sh
-===================================================================
---- lvm2.orig/test/t-snapshot-merge.sh
-+++ lvm2/test/t-snapshot-merge.sh
-@@ -44,17 +44,22 @@ setup_merge() {
- aux prepare_vg 1 100
- 
- 
--# full merge of a single LV
-+# test full merge of a single LV
- setup_merge $vg $lv1
+-	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+-		return ECMD_PROCESSED;
 -
- # now that snapshot LV is created: test if snapshot-merge target is available
- $(dmsetup targets | grep -q snapshot-merge) || exit 200
--
- lvs -a
- lvconvert --merge $vg/$(snap_lv_name_ $lv1)
- lvremove -f $vg/$lv1
- 
- 
-+# test that an actively merging snapshot may not be removed
-+setup_merge $vg $lv1
-+lvconvert -i+100 --merge --background $vg/$(snap_lv_name_ $lv1)
-+not lvremove -f $vg/$(snap_lv_name_ $lv1)
-+lvremove -f $vg/$lv1
-+
-+
- # "onactivate merge" test
- setup_merge $vg $lv1
- lvs -a
-@@ -99,6 +104,7 @@ lvs -a
- lvconvert --merge $vg/$(snap_lv_name_ $lv1)
- lvremove -f $vg/$lv1
- 
-+
- # test merging multiple snapshots that share the same tag
- setup_merge $vg $lv1
- setup_merge $vg $lv2
-Index: lvm2/lib/metadata/metadata-exported.h
-===================================================================
---- lvm2.orig/lib/metadata/metadata-exported.h
-+++ lvm2/lib/metadata/metadata-exported.h
-@@ -534,7 +534,7 @@ int lv_remove_single(struct cmd_context 
- 		     force_t force);
- 
- int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *lv,
--				force_t force);
-+				force_t force, unsigned level);
- 
- int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	      const char *new_name);
-Index: lvm2/lib/metadata/metadata.c
-===================================================================
---- lvm2.orig/lib/metadata/metadata.c
-+++ lvm2/lib/metadata/metadata.c
-@@ -484,7 +484,7 @@ int remove_lvs_in_vg(struct cmd_context 
- 
- 	while ((lst = dm_list_first(&vg->lvs))) {
- 		lvl = dm_list_item(lst, struct lv_list);
--		if (!lv_remove_with_dependencies(cmd, lvl->lv, force))
-+		if (!lv_remove_with_dependencies(cmd, lvl->lv, force, 0))
- 		    return 0;
- 	}
- 
-Index: lvm2/tools/lvremove.c
-===================================================================
---- lvm2.orig/tools/lvremove.c
-+++ lvm2/tools/lvremove.c
-@@ -26,7 +26,7 @@ static int lvremove_single(struct cmd_co
-         if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
-                 lv = origin;
- 
--	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG))) {
-+	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG), 0)) {
+ 	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL)) {
  		stack;
  		return ECMD_FAILED;
- 	}
 
 
