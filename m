@@ -1,24 +1,26 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 23 Apr 2010 01:04:10 +0100
-Subject: Using glibc regex
-In-Reply-To: <20100422235931.GD23791@agk-dp.fab.redhat.com>
-References: <4BCDB504.2080104@redhat.com>
-	<20100422235931.GD23791@agk-dp.fab.redhat.com>
-Message-ID: <20100423000409.GE23791@agk-dp.fab.redhat.com>
+Date: Fri, 23 Apr 2010 01:11:43 +0100
+Subject: [PATCH] conditionally avoid preloading the origin in vg_remove_snapshot
+In-Reply-To: <20100421175859.GA19594@redhat.com>
+References: <20100407200443.26841.qmail@sourceware.org>
+	<20100419223820.GA11273@redhat.com>
+	<20100419232509.GG4828@agk-dp.fab.redhat.com>
+	<20100421063504.GA10083@redhat.com>
+	<20100421175859.GA19594@redhat.com>
+Message-ID: <20100423001143.GF23791@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Apr 23, 2010 at 12:59:31AM +0100, Alasdair G Kergon wrote:
->    1) current cvs with optimiser
->    2) new ejt dfa changes
->    3) glibc regex
-
-Or for testing purposes or where the current slowness doesn't matter,
-     4) current cvs without optimiser
-and in the event of disagreement, that answer trumps the others.
+On Wed, Apr 21, 2010 at 01:59:00PM -0400, Mike Snitzer wrote:
+> Avoid preloading the origin, when removing a snapshot, if snapshot-merge
+> target is not active.
+> [This adds a 2nd consumer of lv_has_target_type().  I'm still not seeing
+>  an alternative way to test if snapshot-merge was performed.]
+ 
+If it works, exporting that is fine for now.
 
 Alasdair
 
