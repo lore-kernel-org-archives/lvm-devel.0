@@ -1,87 +1,85 @@
-From: brem belguebli <brem.belguebli@gmail.com>
-Date: Fri, 23 Apr 2010 18:01:19 +0200
-Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
-In-Reply-To: <s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
-References: <4BC7817E.7080407@redhat.com>
-	<20100415220308.GO13021@agk-dp.fab.redhat.com>
-	<4BC88002.10803@redhat.com> <1271495752.5449.53.camel@localhost>
-	<4BCF1761.7080805@redhat.com>
-	<s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
-Message-ID: <t2i29ae894c1004230901qe3e4fa75of26e8d39e0d8c7cd@mail.gmail.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 23 Apr 2010 14:19:47 -0400
+Subject: LVM2 ./WHATS_NEW tools/toollib.c
+In-Reply-To: <20100423153929.GA26872@redhat.com>
+References: <20100414021950.27930.qmail@sourceware.org>
+	<20100423153929.GA26872@redhat.com>
+Message-ID: <20100423181947.GA8698@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On Fri, Apr 23 2010 at 11:39am -0400,
+Mike Snitzer <snitzer@redhat.com> wrote:
 
-I've read in the RHEL 5.5 technical datasheet that the shipped LVM
-version 2.02.56 was alraedy capable of mirrored log.
+> On Tue, Apr 13 2010 at 10:19pm -0400,
+> agk at sourceware.org <agk@sourceware.org> wrote:
+> 
+> > CVSROOT:	/cvs/lvm2
+> > Module name:	LVM2
+> > Changes by:	agk at sourceware.org	2010-04-14 02:19:49
+> > 
+> > Modified files:
+> > 	.              : WHATS_NEW 
+> > 	tools          : toollib.c 
+> > 
+> > Log message:
+> > 	Only pass visible LVs to tools in cmdline VG name/tag expansions without -a
+> > 
+> > Patches:
+> > http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1516&r2=1.1517
+> > http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.193&r2=1.194
+> > 
+> > --- LVM2/WHATS_NEW	2010/04/13 23:57:41	1.1516
+> > +++ LVM2/WHATS_NEW	2010/04/14 02:19:49	1.1517
+> > @@ -1,5 +1,6 @@
+> >  Version 2.02.63 -  
+> >  ================================
+> > +  Only pass visible LVs to tools in cmdline VG name/tag expansions without -a.
+> >    Use typedefs for toollib process_each functions.
+> >    Use C locales and use_mlockall for clvmd.
+> >    Refactor code related to vg->pvs list and add pv->vg link.
+> > --- LVM2/tools/toollib.c	2010/04/13 23:57:41	1.193
+> > +++ LVM2/tools/toollib.c	2010/04/14 02:19:49	1.194
+> > @@ -125,6 +125,13 @@
+> >  		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
+> >  			continue;
+> >  
+> > +		/*
+> > +		 * Only let hidden LVs through it --all was used or the LVs 
+> > +		 * were specifically named on the command line.
+> > +		 */
+> > +		if (!lvargs_supplied && !lv_is_visible(lvl->lv) && !arg_count(cmd, all_ARG))
+> > +			continue;
+> > +
+> >  		/* Should we process this LV? */
+> >  		if (process_all)
+> >  			process_lv = 1;
+> 
+> Given that you've now made this check at a higher level I believe the
+> following check in _lvs_single() is redundant.  It also serves to
+> disallow displaying hidden LVs that were specifically named on the
+> command line:
 
-Do you confirm that , as both the man pages (lvcreate, etc...) and the
-lvcreate -h do not show the option to do so.
+After further testing I'm completely confident that this is the case; so
+I'm going to go ahead and commit this patch.
 
-Regards
-
-Brem
-
-2010/4/21 brem belguebli <brem.belguebli@gmail.com>:
-> Yes, Thanks.
->
-> Mirrored-log allocated right on the 2 (or more) PV legs is something
-> we've been expecting for long now, and I'm sure I'm not the only one
-> in this case.
->
-> We had to hack-build our mirrored disks by layering MD over LVM, which
-> is not that friendly in terms of integration, MD not being
-> device-mapper friendly (it may have changed now) and in terms of
-> debugging it's not always easy.
->
-> Hope you'll get it right, that'll make a lot of people life easier.
->
-> Brem
->
-> 2010/4/21 Takahiro Yasui <tyasui@redhat.com>:
->> On 04/17/10 05:15, brem belguebli wrote:
->>> I think things are not clear about this one, and everyone is confused.
->>
->> I believe that we agreed on what was our goal through this thread.
->>
->>> Malahal (from IBM) and you have posted a few weeks ago design proposals
->>> and patches to add mirrored log capabilities and also the fact that it
->>> could be located on the mirror legs (pv in our cases) by using
->>> alloc_anywhere.
->>>
->>> alloc_anywhere, as described in the man page is to let LVM put the data
->>> logical extents where ever it wants (not strict allocation policy) which
->>> is, in case a mirror is expected completely a nonsense.
->>
->> Yes, you are right. We can't expect where logical extents are
->> allocated for '--alloc anywhere'
->>
->>> You may, (this is a suggestion), when lvcreating a mirror with
->>> mirrored-log
->>> - force strict allocation for the LE's (otherwise it' nonsense)
->>> - put the mirrored log leg on each PV
->>> - And may be disable alloc anywhare when creating mirrors ?
->>
->> I think that 'mirrored log' capability is very useful and enhancing
->> availability is our next step. It is helpful if users can directly
->> build a mirror volume, which has a mirrored log and is built on two
->> physical devices and also each physical device contains a mirror
->> leg and a mirror log, by a simple command line.
->>
->> I hope this explanation would be helpful.
->>
->> Thanks,
->> Taka
->>
->> --
->> lvm-devel mailing list
->> lvm-devel at redhat.com
->> https://www.redhat.com/mailman/listinfo/lvm-devel
->>
->
+> diff --git a/tools/reporter.c b/tools/reporter.c
+> index bd3c116..1332cc3 100644
+> --- a/tools/reporter.c
+> +++ b/tools/reporter.c
+> @@ -33,9 +33,6 @@ static int _vgs_single(struct cmd_context *cmd __attribute((unused)),
+>  static int _lvs_single(struct cmd_context *cmd, struct logical_volume *lv,
+>  		       void *handle)
+>  {
+> -	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+> -		return ECMD_PROCESSED;
+> -
+>  	if (!report_object(handle, lv->vg, lv, NULL, NULL, NULL)) {
+>  		stack;
+>  		return ECMD_FAILED;
+> 
 
 
