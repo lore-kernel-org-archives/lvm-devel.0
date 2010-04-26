@@ -1,52 +1,37 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 26 Apr 2010 16:12:48 +0200
-Subject: [PATCH 03/22] Replicator: add libdm support
-In-Reply-To: <20100426134655.GM23791@agk-dp.fab.redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>	<5f5187a4b0884a93f84ce1a9c7a6baca75c9842d.1271085009.git.zkabelac@redhat.com>
-	<20100426134655.GM23791@agk-dp.fab.redhat.com>
-Message-ID: <4BD59F60.5060107@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 26 Apr 2010 15:26:51 +0100
+Subject: [PATCH 08/22] Replicator: extend volume_group with list of VGs
+In-Reply-To: <bc8252d38b689d788689562d40751a4f31c0daf1.1271085009.git.zkabelac@redhat.com>
+References: <cover.1271085009.git.zkabelac@redhat.com>
+	<bc8252d38b689d788689562d40751a4f31c0daf1.1271085009.git.zkabelac@redhat.com>
+Message-ID: <20100426142651.GP23791@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 26.4.2010 15:46, Alasdair G Kergon napsal(a):
-> On Mon, Apr 12, 2010 at 05:21:31PM +0200, Zdenek Kabelac wrote:
->> index aa8ad5c..3ab5ea2 100644
->> --- a/libdm/libdevmapper.h
->> +++ b/libdm/libdevmapper.h
->> @@ -439,6 +439,37 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
->>  					  const char *log_uuid,
->>  					  unsigned area_count,
->>  					  uint32_t flags);
-> 
-> Add comment lines that clearly separate out this section of the header file,
-> indicating that the functionality and API are not yet frozen.
-> 
->> +
->> +/* Replicator operation mode */
->> +typedef enum {
-> 
->> +/* Replicator-log has a list of sites */
->> +/* CHECKME: maybe move to seg_area too? */
-> 
-> Stick with 'FIXME' for anything like that.
-> 
->> @@ -1688,6 +1807,9 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
->>  			}
->>  		}
->>  
->> +		if (child->activation_priority != 0)
->> +			continue;
->> +
-> 
-> That change could affect non-replicator code: please separate it out and
-> explain the reasoning.
+On Mon, Apr 12, 2010 at 05:21:36PM +0200, Zdenek Kabelac wrote:
+> Add linked list of opened VGs. List keeps the information
+> about needed and locked and opened VGs for replicator target.
+> Also add missing_vgs status information for quick check and
+> also for possible continuos process_each_lv() where we need
+> to detect whether failure has been caused by missing VG or
+> some other reason.
+ 
+> diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+> index 6d40365..9c73dba 100644
+> --- a/lib/metadata/metadata-exported.h
+> +++ b/lib/metadata/metadata-exported.h
+> @@ -250,6 +250,10 @@ struct volume_group {
+> +        /* List of wanted/locked and opened VGs */
+> +	struct dm_list vgs;
+> +	uint32_t missing_vgs;
 
-True - this code seems to be no longer needed - as it's been hack to avoid
-some strange tree loading in some past versions of replicator.
+Can we think up more-specific names?
 
-Zdenek
+vg->vgs isn't very informative.
+
+Alasdair
 
 
