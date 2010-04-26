@@ -1,32 +1,47 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 26 Apr 2010 14:01:21 -0400
-Subject: [PATCH 09/22] Replicator: add sorted vgs_list
-In-Reply-To: <4BD5A982.80602@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-	<4ac472dac5d9b6fe6833e169e5ccddceab1fa014.1271085009.git.zkabelac@redhat.com>
-	<20100426143404.GR23791@agk-dp.fab.redhat.com>
-	<4BD5A982.80602@redhat.com>
-Message-ID: <1272304881.2478.3.camel@f10-node1>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 26 Apr 2010 18:12:47 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20100426181247.17458.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2010-04-26 at 16:56 +0200, Zdenek Kabelac wrote:
-> Dne 26.4.2010 16:34, Alasdair G Kergon napsal(a):
-> > On Mon, Apr 12, 2010 at 05:21:37PM +0200, Zdenek Kabelac wrote:
-> >> Introduce struct vgs_list to store information about needed
-> >> volume group name, vgid, flags and the pointer to opened VG.
-> >  
-> > Why does this need a new structure?
-> 
-> We don't have any similar one - I would be aware of.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-04-26 18:12:44
 
-It will likely also be very useful for certain library operations that
-involve multiple VGs (vgsplit, vgmerge) - I started looking at
-refactoring the vgsplit/vgmerge code to use this new structure (or
-something very close to it).
+Modified files:
+	tools          : lvconvert.c 
+
+Log message:
+	add comments
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+
+--- LVM2/tools/lvconvert.c	2010/04/21 14:04:26	1.130
++++ LVM2/tools/lvconvert.c	2010/04/26 18:12:40	1.131
+@@ -1195,6 +1195,9 @@
+ 	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs, new_log_count))
+ 		return 0;
+ 
++	/*
++	 * Remove all failed_pvs
++	 */
+ 	if (!_lvconvert_mirrors_aux(cmd, lv, lp, failed_pvs,
+ 				    lp->mirrors, new_log_count))
+ 		return 0;
+@@ -1570,6 +1573,9 @@
+ 	if (!lv)
+ 		goto_out;
+ 
++	/*
++	 * lp->pvh holds the list of PVs available for allocation or removal
++	 */
+ 	if (lp->pv_count) {
+ 		if (!(lp->pvh = create_pv_list(cmd->mem, lv->vg, lp->pv_count,
+ 					      lp->pvs, 0)))
 
 
