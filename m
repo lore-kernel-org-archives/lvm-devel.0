@@ -1,36 +1,36 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 13 Apr 2010 06:24:21 -0000
-Subject: LVM2/test test-utils.sh
-Message-ID: <20100413062421.12969.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 26 Apr 2010 22:59:39 +0100
+Subject: [PATCH] LVM2: Proposal #1 to fix bug 586021
+In-Reply-To: <1272318274.29386.29.camel@hydrogen.msp.redhat.com>
+References: <1272318274.29386.29.camel@hydrogen.msp.redhat.com>
+Message-ID: <20100426215939.GU23791@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-13 06:24:21
+On Mon, Apr 26, 2010 at 04:44:34PM -0500, Jon Brassow wrote:
+> specified, only those images can be used for removal.  However, when
+> more images are specified for removal than PVs given to satisfy the
+> request, things become somewhat ambiguous.  The buggy code that existed
+> prior to the fix for 581611 would take a hybrid approach to the problem
+> - ensuring the specified PVs where among those removed, but satisfying
+> the balance of the request from the remaining unspecified PVs.  It has
+> been assumed that this was the designed behavior, 
 
-Modified files:
-	test           : test-utils.sh 
+That was the intended behaviour: all PVs specified should be removed.
+If any specified are not removed (e.g. due to a conflict with the
+-m parameter), then you get the error message:
 
-Log message:
-	For the testsuite, set a default polling interval to 0 in lvm.conf. Cuts down
-	testing time considerably.
+> Messages like 'remove_mirror_images()log_error("%u images are removed
+> out of requested %u."...)' and other logic in the code seem to suggest
+> that this is /not/ the desired behavior.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.33&r2=1.34
-
---- LVM2/test/test-utils.sh	2010/04/07 21:38:01	1.33
-+++ LVM2/test/test-utils.sh	2010/04/13 06:24:20	1.34
-@@ -373,6 +373,7 @@
-   activation {
-     udev_sync = 1
-     udev_rules = 1
-+    polling_interval = 0
-   }
- EOF
- 	cat $TESTDIR/etc/lvm.conf
+But the previous behaviour *was* inconsistent - either the command
+should have changed nothing and given the error, or it should have
+just given a warning level message, not an error.
+ 
+Alasdair
 
 
