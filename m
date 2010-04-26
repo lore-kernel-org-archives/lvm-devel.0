@@ -1,45 +1,52 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 26 Apr 2010 15:10:13 +0100
-Subject: [PATCH 05/22] Replicator: add lvm support
-In-Reply-To: <e64618ea60a4d950d0483f4f1f959806fb8a86b9.1271085009.git.zkabelac@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-	<e64618ea60a4d950d0483f4f1f959806fb8a86b9.1271085009.git.zkabelac@redhat.com>
-Message-ID: <20100426141013.GO23791@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 26 Apr 2010 16:12:48 +0200
+Subject: [PATCH 03/22] Replicator: add libdm support
+In-Reply-To: <20100426134655.GM23791@agk-dp.fab.redhat.com>
+References: <cover.1271085009.git.zkabelac@redhat.com>	<5f5187a4b0884a93f84ce1a9c7a6baca75c9842d.1271085009.git.zkabelac@redhat.com>
+	<20100426134655.GM23791@agk-dp.fab.redhat.com>
+Message-ID: <4BD59F60.5060107@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Apr 12, 2010 at 05:21:33PM +0200, Zdenek Kabelac wrote:
-> Adding configure.in support for Replicators.
-> Adding basic lib lvm support for Replicators.
-> Adding flags REPLICATOR and REPLICATOR_LOG.
-> Adding segments SEG_REPLICATOR and SEG_REPLICATOR_DEV.
-> Adding basic methods for handling replicator metadata.
- 
-> +++ b/lib/metadata/replicator_manip.c
+Dne 26.4.2010 15:46, Alasdair G Kergon napsal(a):
+> On Mon, Apr 12, 2010 at 05:21:31PM +0200, Zdenek Kabelac wrote:
+>> index aa8ad5c..3ab5ea2 100644
+>> --- a/libdm/libdevmapper.h
+>> +++ b/libdm/libdevmapper.h
+>> @@ -439,6 +439,37 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+>>  					  const char *log_uuid,
+>>  					  unsigned area_count,
+>>  					  uint32_t flags);
+> 
+> Add comment lines that clearly separate out this section of the header file,
+> indicating that the functionality and API are not yet frozen.
+> 
+>> +
+>> +/* Replicator operation mode */
+>> +typedef enum {
+> 
+>> +/* Replicator-log has a list of sites */
+>> +/* CHECKME: maybe move to seg_area too? */
+> 
+> Stick with 'FIXME' for anything like that.
+> 
+>> @@ -1688,6 +1807,9 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+>>  			}
+>>  		}
+>>  
+>> +		if (child->activation_priority != 0)
+>> +			continue;
+>> +
+> 
+> That change could affect non-replicator code: please separate it out and
+> explain the reasoning.
 
-> +#include <inttypes.h>
-> +#include <sys/types.h>
-> +#include "libdevmapper.h"
-> +#include "lvm-types.h"
-> +
-> +#include "activate.h"
-> +#include "archiver.h"
-> +#include "defaults.h"
-> +#include "label.h"
-> +#include "lib.h"
-> +#include "locking.h"
-> +#include "lv_alloc.h"
-> +#include "lvm-string.h"
-> +#include "metadata.h"
-> +#include "segtype.h"
-> +#include "toolcontext.h"
+True - this code seems to be no longer needed - as it's been hack to avoid
+some strange tree loading in some past versions of replicator.
 
-Please clean up those includes: First one is required to be "lib.h" and then
-you'll find several of the others listed are already included!
-
-Alasdair
+Zdenek
 
 
