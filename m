@@ -1,65 +1,85 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Apr 2010 18:31:59 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
-Message-ID: <20100426183159.28003.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Mon, 26 Apr 2010 16:44:34 -0500
+Subject: [PATCH] LVM2: Proposal #1 to fix bug 586021
+Message-ID: <1272318274.29386.29.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-26 18:31:59
+Bug 586021 ("2 leg down convert request with only one PV specified
+behavior changed") was exposed by the fix for 581611 ("disallow removal
+of primary image when a mirror in not in-sync").  Interestingly, the
+code went from doing the wrong thing and producing the right results to
+doing the right thing and producing the wrong results.
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : lvconvert.c 
+These bugs partially depend on what we consider to be correct behavior
+when we are asked to remove mirror images but are given insufficient
+specified PVs.  When no PVs are specified, the code is free to select
+any of the images in the mirror to satisfy the request.  When PVs are
+specified, only those images can be used for removal.  However, when
+more images are specified for removal than PVs given to satisfy the
+request, things become somewhat ambiguous.  The buggy code that existed
+prior to the fix for 581611 would take a hybrid approach to the problem
+- ensuring the specified PVs where among those removed, but satisfying
+the balance of the request from the remaining unspecified PVs.  It has
+been assumed that this was the designed behavior, but I'm not so sure.
+Messages like 'remove_mirror_images()log_error("%u images are removed
+out of requested %u."...)' and other logic in the code seem to suggest
+that this is /not/ the desired behavior.
 
-Log message:
-	Fix lvconvert error message when existing mirrored LV is not found.
+I've produced two preliminary patches.  This first patch keeps the
+historical, but arguably incorrect behavior.  The second patch will
+follow in my next e-mail.  I have not yet written the necessary tests to
+stress these approaches.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1537&r2=1.1538
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+ brassow
 
---- LVM2/WHATS_NEW	2010/04/23 19:27:10	1.1537
-+++ LVM2/WHATS_NEW	2010/04/26 18:31:58	1.1538
-@@ -1,5 +1,6 @@
- Version 2.02.64 -
- =================================
-+  Fix lvconvert error message when existing mirrored LV is not found.
-   Disallow the direct removal of a merging snapshot.
-   Set appropriate udev flags for reserved LVs.
-   Don't preload the origin when removing a snapshot whose merge is pending.
---- LVM2/tools/lvconvert.c	2010/04/26 18:12:40	1.131
-+++ LVM2/tools/lvconvert.c	2010/04/26 18:31:58	1.132
-@@ -1533,12 +1533,11 @@
- 	vg = _get_lvconvert_vg(cmd, vg_name, NULL);
- 	if (vg_read_error(vg)) {
- 		vg_release(vg);
--		log_error("ABORTING: Can't reread VG for %s", vg_name);
--		return NULL;
-+		return_NULL;
- 	}
- 
- 	if (!(lv = _get_lvconvert_lv(cmd, vg, lv_name, NULL, 0))) {
--		log_error("ABORTING: Can't find LV %s in VG %s", lv_name, vg_name);
-+		log_error("Can't find LV %s in VG %s", lv_name, vg_name);
- 		unlock_and_release_vg(cmd, vg, vg_name);
- 		return NULL;
- 	}
-@@ -1616,8 +1615,10 @@
- 	vg_name = lv->vg->name;
- 	unlock_vg(cmd, vg_name);
- 	refreshed_lv = get_vg_lock_and_logical_volume(cmd, vg_name, lv->name);
--	if (!refreshed_lv)
-+	if (!refreshed_lv) {
-+		log_error("ABORTING: Can't reread LV %s/%s", vg_name, lv->name);
- 		return ECMD_FAILED;
+Patch to fix bug 586021 and mantain historical behavior of
+being able to remove more images from a mirror than the
+number of PVs directly specified for removal.
+
+The effort to fix bug 581611 corrected a bug that was unnoticed
+at the time.  The loop in _remove_mirror_images that looks over
+the specified PVs was allowing devices that were previously
+counted and moved to the end of the list to be double-counted.
+This resulted in the number of devices needed for removal always
+being satisfied - even if the user did not specify enough PVs
+for removal to satisfy the request.  When 581611 was fixed, this
+double-counting no longer took place and the result was to remove
+only the minimum of the number of PVs specified or the number
+that was asked to be removed.
+
+By simply always setting 'new_area_count' (as used to be done
+only in the else statement), we return to the previous behavior.
+Indeed, this is exactly what the double-counting was allowing
+to happen before the fix of 581611.
+
+RFC-by: Jonathan Brassow <jbrassow@redhat.com>
+
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -805,8 +805,15 @@ static int _remove_mirror_images(struct 
+ 		}
+ 		if (num_removed && old_area_count == new_area_count)
+ 			return 1;
+-	} else
+-		new_area_count = old_area_count - num_removed;
 +	}
++
++	/*
++	 * If removable_pvs were specified, then they have been shifted
++	 * to the end to ensure they are removed.  The remaining balance
++	 * of images left to remove will be taken from the unspecified.
++	 * This may not be correct behavior, but it is historical.
++	 */
++	new_area_count = old_area_count - num_removed;
  
- 	lp->lv_to_poll = refreshed_lv;
- 	ret = _lvconvert_single(cmd, refreshed_lv, lp);
+ 	/* Remove mimage LVs from the segment */
+ 	dm_list_init(&tmp_orphan_lvs);
+
 
 
