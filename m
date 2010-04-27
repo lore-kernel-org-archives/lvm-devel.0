@@ -1,94 +1,48 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 12 Apr 2010 17:21:43 +0200
-Subject: [PATCH 15/22] Replicator: activate checks for missing vgs
-In-Reply-To: <cover.1271085009.git.zkabelac@redhat.com>
-References: <cover.1271085009.git.zkabelac@redhat.com>
-Message-ID: <63d547b05e12868836f3c54eaf20ad01bce1552e.1271085009.git.zkabelac@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 27 Apr 2010 15:26:59 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20100427152659.26143.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Activation needs to have all remote VGs locked to pass for replicator.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-04-27 15:26:59
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/activate/activate.c |   22 ++++++++++++++++++----
- 1 files changed, 18 insertions(+), 4 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 1844cea..4aabc38 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -865,6 +865,9 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 		goto out;
- 	}
+Log message:
+	Fix comment from last commit.  Additionally, there is no need
+	to put a comment into the WHATS_NEW file if it is a regression
+	that was created and fixed inside the same release window.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1539&r2=1.1540
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
+
+--- LVM2/WHATS_NEW	2010/04/27 14:57:49	1.1539
++++ LVM2/WHATS_NEW	2010/04/27 15:26:58	1.1540
+@@ -1,6 +1,5 @@
+ Version 2.02.64 -
+ =================================
+-  Fix regression in down-convert of mirror images with partial PV specification.
+   Fix lvconvert error message when existing mirrored LV is not found.
+   Disallow the direct removal of a merging snapshot.
+   Set appropriate udev flags for reserved LVs.
+--- LVM2/lib/metadata/mirror.c	2010/04/27 14:57:49	1.115
++++ LVM2/lib/metadata/mirror.c	2010/04/27 15:26:59	1.116
+@@ -811,7 +811,6 @@
+ 	 * If removable_pvs were specified, then they have been shifted
+ 	 * to the end to ensure they are removed.  The remaining balance
+ 	 * of images left to remove will be taken from the unspecified.
+-	 * This may not be correct behavior, but it is historical.
+ 	 */
+ 	new_area_count = old_area_count - num_removed;
  
-+	if (!lv_read_replicator_vgs(lv))
-+		goto_out;
-+
- 	lv_calculate_readahead(lv, NULL);
- 
- 	/* If VG was precommitted, preload devices for the LV */
-@@ -894,9 +897,10 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- out:
- 	if (lv_pre)
- 		vg_release(lv_pre->vg);
--	if (lv)
-+	if (lv) {
-+		lv_release_replicator_vgs(lv);
- 		vg_release(lv->vg);
--
-+	}
- 	return r;
- }
- 
-@@ -1025,6 +1029,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 			goto_out;
- 	}
- 
-+	if (!lv_read_replicator_vgs(lv))
-+		goto_out;
-+
- 	lv_calculate_readahead(lv, NULL);
- 
- 	if (!monitor_dev_for_events(cmd, lv, 0))
-@@ -1038,8 +1045,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 	if (!lv_info(cmd, lv, &info, 1, 0) || info.exists)
- 		r = 0;
- out:
--	if (lv)
-+	if (lv) {
-+		lv_release_replicator_vgs(lv);
- 		vg_release(lv->vg);
-+	}
- 
- 	return r;
- }
-@@ -1118,6 +1127,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 		goto out;
- 	}
- 
-+	if (!lv_read_replicator_vgs(lv))
-+		goto_out;
-+
- 	lv_calculate_readahead(lv, NULL);
- 
- 	if (exclusive)
-@@ -1133,8 +1145,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 		stack;
- 
- out:
--	if (lv)
-+	if (lv) {
-+		lv_release_replicator_vgs(lv);
- 		vg_release(lv->vg);
-+	}
- 
- 	return r;
- }
--- 
-1.7.0.1
 
 
