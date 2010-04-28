@@ -1,36 +1,41 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Apr 2010 01:48:22 -0000
-Subject: LVM2 WHATS_NEW_DM
-Message-ID: <20100429014822.26788.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 28 Apr 2010 14:34:24 +0200
+Subject: [PATCH 09/23] Replicator: extend volume_group with list of VGs
+In-Reply-To: <cover.1272457502.git.zkabelac@redhat.com>
+References: <cover.1272457502.git.zkabelac@redhat.com>
+Message-ID: <bc701a23b0167a91218bf6749845242f49202eb9.1272457502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-04-29 01:48:19
+Add pointer to linked list of opened VGs. List temporarily keeps
+the information about needed or locked and opened VGs for replicator target.
+Also add cmd_missing_vgs status information for quick check and
+also for possible continuos process_each_lv() where we need
+to detect whether failure has been caused by missing VG or
+some other reason.
 
-Modified files:
-	.              : WHATS_NEW_DM 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/metadata/metadata-exported.h |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-Log message:
-	.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.364&r2=1.365
-
---- LVM2/WHATS_NEW_DM	2010/04/28 13:37:36	1.364
-+++ LVM2/WHATS_NEW_DM	2010/04/29 01:48:19	1.365
-@@ -4,7 +4,7 @@
-   Add DM_UDEV_PRIMARY_SOURCE_FLAG udev flag to recognize proper DM events.
-   Also include udev libs in libdevmapper.pc when udev_sync is enabled.
-   Cache bitset locations to speed up _calc_states.
--  Add a regex optimisation pass for shared character prefixes.
-+  Add a regex optimisation pass for shared prefixes and suffixes.
-   Add dm_bit_and and dm_bitset_equal to libdevmapper.
-   Simplify dm_bitset_create.
-   Speed up dm_bit_get_next with ffs().
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 37588aa..da1a230 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -223,6 +223,8 @@ struct volume_group {
+ 	struct cmd_context *cmd;
+ 	struct dm_pool *vgmem;
+ 	struct format_instance *fid;
++	struct dm_list *cmd_vgs;	/* List of wanted/locked and opened VGs */
++	uint32_t cmd_missing_vgs;
+ 	uint32_t seqno;		/* Metadata sequence number */
+ 
+ 	alloc_policy_t alloc;
+-- 
+1.7.0.1
 
 
