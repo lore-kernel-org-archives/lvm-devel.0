@@ -1,5 +1,5 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Apr 2010 14:34:29 +0200
+Date: Wed, 28 Apr 2010 14:57:42 +0200
 Subject: [PATCH 14/23] Replicator: use cmd_vg for process_each_lv_in_vg()
 In-Reply-To: <cover.1272457502.git.zkabelac@redhat.com>
 References: <cover.1272457502.git.zkabelac@redhat.com>
@@ -9,6 +9,7 @@ To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+Message-ID: <20100428125742.DlxHm8VEE0cJgnaAP143lx5tBH6EGsijfyZOoWZJZrE@z>
 
 As for _process_one_vg() we need similar retry loop for
 process_each_lv_in_vg(). This patch retries to process
