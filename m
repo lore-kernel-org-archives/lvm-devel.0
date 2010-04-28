@@ -1,5 +1,5 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Apr 2010 14:57:43 +0200
+Date: Wed, 28 Apr 2010 14:37:43 +0200
 Subject: [PATCH 21/23] Replicator: activate change for vgchange
 In-Reply-To: <cover.1272457502.git.zkabelac@redhat.com>
 References: <cover.1272457502.git.zkabelac@redhat.com>
@@ -9,6 +9,7 @@ To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+Message-ID: <20100428123743.aIqJFCIWL7es4uy__ebfibGe6u8GMDfpcOm5EdMBzvY@z>
 
 Activate only the first replicator-dev LV, that activates all other
 related LVs from Replicator.
