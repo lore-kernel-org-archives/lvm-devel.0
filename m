@@ -1,65 +1,60 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 28 Apr 2010 11:55:38 -0400
-Subject: [PATCH 1/5] Add pvid_from_devname() lvmcache function.
-In-Reply-To: <1272470142-13843-1-git-send-email-dwysocha@redhat.com>
+Date: Wed, 28 Apr 2010 11:55:39 -0400
+Subject: [PATCH 2/5] Add lvmcache function to lookup a vgname from a pvid.
+In-Reply-To: <1272470142-13843-2-git-send-email-dwysocha@redhat.com>
 References: <1272470142-13843-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1272470142-13843-2-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1272470142-13843-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add supporting function for mappings from devname -> pvid -> vgname.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/cache/lvmcache.c |   21 +++++++++++++++++++++
- lib/cache/lvmcache.h |    2 ++
- 2 files changed, 23 insertions(+), 0 deletions(-)
+ lib/cache/lvmcache.c |   17 +++++++++++++++++
+ lib/cache/lvmcache.h |    1 +
+ 2 files changed, 18 insertions(+), 0 deletions(-)
 
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 73102ec..f53b4c3 100644
+index f53b4c3..653b13e 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -747,6 +747,27 @@ struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
- 	return NULL;
+@@ -499,6 +499,23 @@ struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only)
+ 	return info;
  }
  
-+const char *pvid_from_devname(struct cmd_context *cmd,
-+			      const char *devname)
++char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
 +{
-+	struct device *dev;
-+	struct label *label;
 +	struct lvmcache_info *info;
++	char *vgname;
 +
-+	if (!(dev = dev_cache_get(devname, cmd->filter))) {
-+		log_error("%s: Couldn't find device.  Check your filters?",
-+			  devname);
++	info = info_from_pvid(pvid, 0);
++	if (!info)
++		return_NULL;
++
++	if (!(vgname = dm_pool_alloc(cmd->mem, NAME_LEN+1))) {
++		log_errno(ENOMEM, "vgname allocation failed");
 +		return NULL;
 +	}
-+
-+	if (!(label_read(dev, &label, UINT64_C(0))))
-+		return NULL;
-+
-+	info = (struct lvmcache_info *) label->info;
-+	return dev->pvid;
++	strncpy(vgname, info->vginfo->vgname, NAME_LEN);
++	return vgname;
 +}
 +
-+
- static int _free_vginfo(struct lvmcache_vginfo *vginfo)
+ static void _rescan_entry(struct lvmcache_info *info)
  {
- 	struct lvmcache_vginfo *primary_vginfo, *vginfo2;
+ 	struct label *label;
 diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 8eeb495..5b0ca73 100644
+index 5b0ca73..55c2e7a 100644
 --- a/lib/cache/lvmcache.h
 +++ b/lib/cache/lvmcache.h
-@@ -95,6 +95,8 @@ struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only);
- const char *vgname_from_vgid(struct dm_pool *mem, const char *vgid);
- struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
+@@ -97,6 +97,7 @@ struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
  				unsigned *scan_done_once);
-+const char *pvid_from_devname(struct cmd_context *cmd,
-+			      const char *dev_name);
+ const char *pvid_from_devname(struct cmd_context *cmd,
+ 			      const char *dev_name);
++char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid);
  int vgs_locked(void);
  int vgname_is_locked(const char *vgname);
  
