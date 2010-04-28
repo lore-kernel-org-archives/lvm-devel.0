@@ -1,78 +1,101 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Apr 2010 14:34:26 +0200
-Subject: [PATCH 11/23] Replicator: add find_replicator_vgs
+Date: Wed, 28 Apr 2010 14:34:27 +0200
+Subject: [PATCH 12/23] Replicator: add read and release VGs for rsites
 In-Reply-To: <cover.1272457502.git.zkabelac@redhat.com>
 References: <cover.1272457502.git.zkabelac@redhat.com>
-Message-ID: <6dc1961ed79771cea0f927928e4dc11f543ac2e0.1272457502.git.zkabelac@redhat.com>
+Message-ID: <c78310fa7fc19b8257365d8d9acc9a1b162766ff.1272457502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding function find_replicator_vgs() to find all needed
-VGs for replicator.
-
-This function is later called before taking lock_vol().
+Add function to read and release remote VGs for replicator sites
+in activation context.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    2 ++
- lib/metadata/replicator_manip.c  |   32 ++++++++++++++++++++++++++++++++
- 2 files changed, 34 insertions(+), 0 deletions(-)
+ lib/metadata/metadata-exported.h |    3 ++
+ lib/metadata/replicator_manip.c  |   56 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index c5a31d6..4c70626 100644
+index 4c70626..09c83a4 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -809,6 +809,8 @@ struct cmd_vg *cmd_vg_lookup(struct dm_list *cmd_vgs,
- int cmd_vg_read(struct cmd_context *cmd, struct dm_list *cmd_vgs);
- void cmd_vg_release(struct dm_list *cmd_vgs);
+@@ -811,6 +811,9 @@ void cmd_vg_release(struct dm_list *cmd_vgs);
  
-+int find_replicator_vgs(struct logical_volume *lv);
+ int find_replicator_vgs(struct logical_volume *lv);
+ 
++int lv_read_replicator_vgs(struct logical_volume *lv);
++void lv_release_replicator_vgs(struct logical_volume *lv);
 +
  struct logical_volume *find_pvmove_lv(struct volume_group *vg,
  				      struct device *dev, uint32_t lv_type);
  struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
 diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
-index 82ce23c..abd34b3 100644
+index abd34b3..ba9ddcd 100644
 --- a/lib/metadata/replicator_manip.c
 +++ b/lib/metadata/replicator_manip.c
-@@ -602,3 +602,35 @@ void cmd_vg_release(struct dm_list *cmd_vgs)
- 		cvl->vg = NULL;
- 	}
+@@ -634,3 +634,59 @@ int find_replicator_vgs(struct logical_volume *lv)
+ 
+ 	return ret;
  }
 +
 +/**
-+ * Find all needed remote VGs for processing given LV.
-+ * Missing VGs are added to VG's vgs list.
++ * Resolve all remote VGs from replicators' sites
++ * This function is used in activation context and needs all VGs already locked
 + */
-+int find_replicator_vgs(struct logical_volume *lv)
++int lv_read_replicator_vgs(struct logical_volume *lv)
 +{
++	struct replicator_device *rdev;
 +	struct replicator_site *rsite;
-+	int ret = 1;
++	struct volume_group *vg;
 +
 +	if (!lv_is_replicator_dev(lv))
 +		return 1;
 +
 +	dm_list_iterate_items(rsite, &first_seg(lv)->replicator->rsites) {
-+		if (!rsite->vg_name || !lv->vg->cmd_vgs ||
-+		    cmd_vg_lookup(lv->vg->cmd_vgs, rsite->vg_name, NULL))
++		if (!rsite->vg_name)
 +			continue;
-+		ret = 0;
-+		/* Using cmd memory pool for cmd_vg list allocation */
-+		if (!cmd_vg_add(lv->vg->cmd->mem, lv->vg->cmd_vgs,
-+				rsite->vg_name, NULL, 0)) {
-+			lv->vg->cmd_missing_vgs = 0; /* do not retry */
-+			stack;
-+			break;
++		vg = vg_read(lv->vg->cmd, rsite->vg_name, 0, 0); // READ_WITHOUT_LOCK
++		if (vg_read_error(vg)) {
++			log_error("Unable to read volume group %s",
++				  rsite->vg_name);
++			goto bad;
 +		}
-+
-+		log_debug("VG: %s added as missing.", rsite->vg_name);
-+		lv->vg->cmd_missing_vgs++;
++		rsite->vg = vg;
++		/* FIXME: handling missing LVs needs to be better */
++		dm_list_iterate_items(rdev, &rsite->rdevices)
++			if (!(rdev->lv = find_lv(vg, rdev->name))) {
++				log_error("Unable to find %s in volume group %s",
++					  rdev->name, rsite->vg_name);
++				goto bad;
++			}
 +	}
 +
-+	return ret;
++	return 1;
++bad:
++	lv_release_replicator_vgs(lv);
++	return 0;
++}
++
++/**
++ * Release all VG resources taken by replicators' sites
++ * This function is used in activation context and needs all VGs already locked
++ */
++void lv_release_replicator_vgs(struct logical_volume *lv)
++{
++	struct replicator_site *rsite;
++
++	if (!lv_is_replicator_dev(lv))
++		return;
++
++	dm_list_iterate_back_items(rsite, &first_seg(lv)->replicator->rsites)
++		if (rsite->vg_name && rsite->vg) {
++			vg_release(rsite->vg);
++			rsite->vg = NULL;
++		}
 +}
 -- 
 1.7.0.1
