@@ -1,112 +1,228 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 28 Apr 2010 11:55:40 -0400
-Subject: [PATCH 3/5] Add find_vgname_from_{pvname|pvid} functions.
-In-Reply-To: <1272470142-13843-3-git-send-email-dwysocha@redhat.com>
+Date: Wed, 28 Apr 2010 11:55:41 -0400
+Subject: [PATCH 4/5] Update pvchange to always obtain a vg handle for each pv to process.
+In-Reply-To: <1272470142-13843-4-git-send-email-dwysocha@redhat.com>
 References: <1272470142-13843-1-git-send-email-dwysocha@redhat.com>
 	<1272470142-13843-2-git-send-email-dwysocha@redhat.com>
 	<1272470142-13843-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1272470142-13843-4-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1272470142-13843-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Some commands start with a pvname, but we'd like to force users to
-start with a vg handle to obtain a pv handle.  Our best option seems
-to be providing a way to look up the vgname from the pvname, and then
-require them to use vg_read/vg_open.
+Earlier patches added some infrastructure to lookup a vgname from
+a pvname.  We now can cleanup some of the pvchange and other code
+by requiring callers that want to modify some pv property:
+1) lookup the vgname by the pvname
+2) use the vgname to obtain a vg handle
+3) get the pv handle from the vg handle
 
-In addition to the pvname lookup function, this patch also provides a
-lookup by pvid.  The lookup by pvid can be used in conjunction with
-lvmcache_get_pvids to process all pvs in the system.
-
-The pvid find function first calls lvmcache_vgname_from_pvid, which may
-cause the label to be read if it is not in the cache.  If the vgname is
-returned is an orphan, we then check to see if there are metadata areas,
-and if not, we scan every PV on the system by calling scan_vgs_for_pvs().
-In most cases we should not need to do this, and by using the info->mdas
-count, we avoid calling pv_read() as prior code did.  So this patch is a
-bit cleaner and should allow us to refactor more of the pv code.
+This should work going forward and be a much cleaner interface,
+as we move away from pvs as standalone objects.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    4 +++
- lib/metadata/metadata.c          |   46 ++++++++++++++++++++++++++++++++++++++
- 2 files changed, 50 insertions(+), 0 deletions(-)
+ tools/pvchange.c |  122 ++++++++++++++++++++++++-----------------------------
+ 1 files changed, 55 insertions(+), 67 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 3c5f8a3..b3d6a06 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -624,6 +624,10 @@ struct logical_volume *find_lv(const struct volume_group *vg,
- struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
- 					const char *pv_name);
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index cba9dd2..cfec448 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -17,13 +17,10 @@
  
-+const char *find_vgname_from_pvname(struct cmd_context *cmd,
-+				    const char *pvname);
-+const char *find_vgname_from_pvid(struct cmd_context *cmd,
-+				  const char *pvid);
- /* Find LV segment containing given LE */
- struct lv_segment *first_seg(const struct logical_volume *lv);
+ /* FIXME Locking.  PVs in VG. */
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 16d80a2..1769a45 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3092,6 +3092,52 @@ out:
- 	return NULL;
+-static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
++static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
++			    struct physical_volume *pv,
+ 			    void *handle __attribute((unused)))
+ {
+-	struct volume_group *vg = NULL;
+-	const char *vg_name = NULL;
+-	struct pv_list *pvl;
+-	uint64_t sector;
+ 	uint32_t orig_pe_alloc_count;
+ 	/* FIXME Next three only required for format1. */
+ 	uint32_t orig_pe_count, orig_pe_size;
+@@ -53,21 +50,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 
+ 	/* If in a VG, must change using volume group. */
+ 	if (!is_orphan(pv)) {
+-		vg_name = pv_vg_name(pv);
+-
+-		log_verbose("Finding volume group %s of physical volume %s",
+-			    vg_name, pv_name);
+-		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+-		if (vg_read_error(vg)) {
+-			vg_release(vg);
+-			return_0;
+-		}
+-
+-		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+-			log_error("Unable to find \"%s\" in volume group \"%s\"",
+-				  pv_name, vg->name);
+-			goto out;
+-		}
+ 		if (tagarg && !(vg->fid->fmt->features & FMT_TAGS)) {
+ 			log_error("Volume group containing %s does not "
+ 				  "support tags", pv_name);
+@@ -78,7 +60,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 				  "logical volumes", pv_name);
+ 			goto out;
+ 		}
+-		pv = pvl->pv;
+ 		if (!archive(vg))
+ 			goto out;
+ 	} else {
+@@ -87,19 +68,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 				  "in volume group", pv_name);
+ 			return 0;
+ 		}
+-
+-		vg_name = VG_ORPHANS;
+-
+-		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+-			log_error("Can't get lock for orphans");
+-			return 0;
+-		}
+-
+-		if (!(pv = pv_read(cmd, pv_name, NULL, &sector, 1, 0))) {
+-			unlock_vg(cmd, vg_name);
+-			log_error("Unable to read PV \"%s\"", pv_name);
+-			return 0;
+-		}
+ 	}
+ 
+ 	if (arg_count(cmd, allocatable_ARG)) {
+@@ -201,7 +169,6 @@ static int _pvchange_single(struct cmd_context *cmd, struct physical_volume *pv,
+ 	log_print("Physical volume \"%s\" changed", pv_name);
+ 	r = 1;
+ out:
+-	unlock_and_release_vg(cmd, vg, vg_name);
+ 	return r;
+ 
  }
+@@ -212,12 +179,12 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 	int done = 0;
+ 	int total = 0;
  
-+
-+const char *find_vgname_from_pvid(struct cmd_context *cmd,
-+				  const char *pvid)
-+{
-+	char *vgname;
-+	struct lvmcache_info *info;
-+
-+	vgname = lvmcache_vgname_from_pvid(cmd, pvid);
-+
-+	if (is_orphan_vg(vgname)) {
-+		if (!(info = info_from_pvid(pvid, 0))) {
-+			return_NULL;
-+		}
-+		/*
-+		 * If an orphan PV has no MDAs it may appear to be an
-+		 * orphan until the metadata is read off another PV in
-+		 * the same VG.  Detecting this means checking every VG
-+		 * by scanning every PV on the system.
-+		 */
-+		if (!dm_list_size(&info->mdas)) {
-+			if (!scan_vgs_for_pvs(cmd)) {
-+				log_error("Rescan for PVs without "
-+					  "metadata areas failed.");
-+				return NULL;
+-	struct physical_volume *pv;
+-	char *pv_name;
++	struct volume_group *vg;
++	const char *pv_name, *vg_name;
+ 
+ 	struct pv_list *pvl;
+-	struct dm_list *pvslist;
+-	struct dm_list mdas;
++	struct dm_list *vgnames;
++	struct str_list *sll;
+ 
+ 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
+ 	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
+@@ -240,50 +207,71 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
+ 		log_verbose("Using physical volume(s) on command line");
+ 		for (; opt < argc; opt++) {
+ 			pv_name = argv[opt];
+-			dm_list_init(&mdas);
+-			if (!(pv = pv_read(cmd, pv_name, &mdas, NULL, 1, 0))) {
++			vg_name = find_vgname_from_pvname(cmd, pv_name);
++			if (!vg_name) {
+ 				log_error("Failed to read physical volume %s",
+ 					  pv_name);
+ 				continue;
+ 			}
+-			/*
+-			 * If a PV has no MDAs it may appear to be an
+-			 * orphan until the metadata is read off
+-			 * another PV in the same VG.  Detecting this
+-			 * means checking every VG by scanning every
+-			 * PV on the system.
+-			 */
+-			if (is_orphan(pv) && !dm_list_size(&mdas)) {
+-				if (!scan_vgs_for_pvs(cmd)) {
+-					log_error("Rescan for PVs without "
+-						  "metadata areas failed.");
+-					continue;
+-				}
+-				if (!(pv = pv_read(cmd, pv_name,
+-						   NULL, NULL, 1, 0))) {
+-					log_error("Failed to read "
+-						  "physical volume %s",
+-						  pv_name);
+-					continue;
+-				}
++			vg = vg_read_for_update(cmd, vg_name, NULL, 0);
++			if (vg_read_error(vg)) {
++				vg_release(vg);
++				stack;
++				continue;
 +			}
-+		}
-+		/* Ask lvmcache again - we may have a non-orphan name now */
-+		vgname = lvmcache_vgname_from_pvid(cmd, pvid);
-+	}
-+	return vgname;
-+}
-+
-+
-+const char *find_vgname_from_pvname(struct cmd_context *cmd,
-+				    const char *pvname)
-+{
-+	const char *pvid;
-+
-+	pvid = pvid_from_devname(cmd, pvname);
-+	if (!pvid)
-+		/* Not a PV */
-+		return NULL;
-+
-+	return find_vgname_from_pvid(cmd, pvid);
-+}
-+
- /**
-  * pv_read - read and return a handle to a physical volume
-  * @cmd: LVM command initiating the pv_read
++			pvl = find_pv_in_vg(vg, pv_name);
++			if (!pvl || !pvl->pv) {
++				log_error("Unable to find %s in %s",
++					  pv_name, vg_name);
++				continue;
+ 			}
+ 
+ 			total++;
+-			done += _pvchange_single(cmd, pv, NULL);
++			done += _pvchange_single(cmd, vg,
++						 pvl->pv, NULL);
++			/* FIXME: we should be using #orphans_lvm2 everwhere */
++			if (is_orphan_vg(vg->name))
++				vg_name = VG_ORPHANS;
++			unlock_and_release_vg(cmd, vg, vg_name);
+ 		}
+ 	} else {
+ 		log_verbose("Scanning for physical volume names");
+-		if (!(pvslist = get_pvs(cmd))) {
+-			stack;
++		/* FIXME: share code with toollib */
++		/*
++		 * Take the global lock here so the lvmcache remains
++		 * consistent across orphan/non-orphan vg locks.  If we don't
++		 * take the lock here, pvs with 0 mdas in a non-orphan VG will
++		 * be processed twice.
++		 */
++		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE)) {
++			log_error("Unable to obtain global lock.");
+ 			return ECMD_FAILED;
+ 		}
+ 
+-		dm_list_iterate_items(pvl, pvslist) {
+-			total++;
+-			done += _pvchange_single(cmd, pvl->pv, NULL);
++		if ((vgnames = get_vgnames(cmd, 1)) &&
++		    !dm_list_empty(vgnames)) {
++			dm_list_iterate_items(sll, vgnames) {
++				vg = vg_read_for_update(cmd, sll->str, NULL, 0);
++				if (vg_read_error(vg)) {
++					vg_release(vg);
++					stack;
++					continue;
++				}
++				dm_list_iterate_items(pvl, &vg->pvs) {
++					total++;
++					done += _pvchange_single(cmd, vg,
++								 pvl->pv,
++								 NULL);
++				}
++				/* FIXME: we should be using #orphans_lvm2 everwhere */
++				if (is_orphan_vg(vg->name))
++					sll->str = VG_ORPHANS;
++				unlock_and_release_vg(cmd, vg, sll->str);
++			}
+ 		}
+ 	}
+ 
++	unlock_vg(cmd, VG_GLOBAL);
+ 	log_print("%d physical volume%s changed / %d physical volume%s "
+ 		  "not changed",
+ 		  done, done == 1 ? "" : "s",
 -- 
 1.6.0.6
 
