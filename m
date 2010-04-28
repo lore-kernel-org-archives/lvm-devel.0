@@ -1,52 +1,36 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 27 Apr 2010 23:32:06 +0200
-Subject: [RFC PATCH] Reduce noise about missing devices.
-Message-ID: <87k4rsa8fd.fsf@twilight.int.mornfall.net.>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 28 Apr 2010 12:23:13 -0000
+Subject: LVM2/tools toollib.c
+Message-ID: <20100428122313.24392.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-04-28 12:23:12
 
-this is not intended to be directly applied, but more to start a
-discussion. One problem with our handling of missing devices is the huge
-amount of log noise each missing device produces. In a single run of
-lvconvert --repair, I get multiple screens of "read error" and "Couldn't
-find device with uuid"...
+Modified files:
+	tools          : toollib.c 
 
-The attached patch reduces that noise by only reporting these things
-once per run. I have used two different approaches for read errors and
-for uuid's. Neither is perfect...
+Log message:
+	Small indent change
 
-Another possible approach (one that I would probably prefer) is to add a
-global log_error_once to log.c that would maintain a dm_hash_table of
-error messages and downgrade already-reported errors to log_debug or
-log_very_verbose automatically. A few error paths could use this.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.195&r2=1.196
 
-The downside of all these approaches is that this is sort of global
-knowledge, but I guess that's hard to avoid. Presumably, adding a call
-to erase the hashtable to _init_logging would solve most of the problems
-with this. I suspect that threading a toolcontext pointer through
-everything so it could be passed to logging functions is not a viable
-option.
+--- LVM2/tools/toollib.c	2010/04/23 14:16:33	1.195
++++ LVM2/tools/toollib.c	2010/04/28 12:23:11	1.196
+@@ -316,7 +316,7 @@
+ 				   strlen(vgname) == (size_t) (lv_name - vg_name)) {
+ 				if (!str_list_add(cmd->mem, &lvnames,
+ 						  dm_pool_strdup(cmd->mem,
+-							      lv_name + 1))) {
++								 lv_name + 1))) {
+ 					log_error("strlist allocation failed");
+ 					unlock_and_release_vg(cmd, vg, vgname);
+ 					return ECMD_FAILED;
 
-About the device read errors, I am ambivalent what exactly to report as
-log_error. It makes sense to only report first error per device, but it
-also makes sense to report all unique errors per device. The global
-log_error_once approach would give the latter, which I think may be
-actually preferable.
 
-Opinions?
-
-Yours,
-   Petr.
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: reduce-dup-errors.diff
-Type: text/x-diff
-Size: 3559 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100427/824c0fca/attachment.bin>
