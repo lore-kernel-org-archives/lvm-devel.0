@@ -1,43 +1,133 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Apr 2010 14:34:23 +0200
-Subject: [PATCH 08/23] Replicator: extend _lv_each_dependency() rep. deps
-In-Reply-To: <cover.1272457502.git.zkabelac@redhat.com>
-References: <cover.1272457502.git.zkabelac@redhat.com>
-Message-ID: <290a8174d428af529db73ecee1a9810550ae7ef5.1272457502.git.zkabelac@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 28 Apr 2010 11:55:42 -0400
+Subject: [PATCH 5/5] Add lvm2app interfaces to lookup a vgname from a pvid and pvname.
+In-Reply-To: <1272470142-13843-5-git-send-email-dwysocha@redhat.com>
+References: <1272470142-13843-1-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-2-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-3-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-4-git-send-email-dwysocha@redhat.com>
+	<1272470142-13843-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1272470142-13843-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/metadata/metadata.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+lvm2app forces applications to start with a volume group name,
+open the volume group, then operate on individual pvs.  In some
+cases the application may want to start with a device name rather
+than the volume group name.  Today, if an application wants to
+do this, it must iterate through all the volume groups to find
+the volume group that the specific device is attached to.
+These new interfaces allow the application to avoid such overhead.
+Bump the lvm2app version number to 3.
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 16d80a2..fb829d5 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1983,6 +1983,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	struct lv_segment *lvseg;
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ VERSION                  |    2 +-
+ liblvm/.exported_symbols |    2 ++
+ liblvm/lvm2app.h         |   41 ++++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm_base.c        |   13 +++++++++++++
+ 4 files changed, 56 insertions(+), 2 deletions(-)
+
+diff --git a/VERSION b/VERSION
+index bbe50a4..6acf46d 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.64(2)-cvs (2010-04-14)
++2.02.64(3)-cvs (2010-04-14)
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+index 9b61d45..546a3a3 100644
+--- a/liblvm/.exported_symbols
++++ b/liblvm/.exported_symbols
+@@ -48,3 +48,5 @@ lvm_list_vg_names
+ lvm_list_vg_uuids
+ lvm_vg_create_lv_linear
+ lvm_vg_remove_lv
++lvm_vgname_from_pvid
++lvm_vgname_from_pvname
+\ No newline at end of file
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index ed86665..d792398 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2008,2009,2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -344,6 +344,45 @@ struct dm_list *lvm_list_vg_names(lvm_t libh);
+ struct dm_list *lvm_list_vg_uuids(lvm_t libh);
  
- 	struct logical_volume *deps[] = {
-+		(lv->rdevice && lv != lv->rdevice->lv) ? lv->rdevice->lv : 0,
-+		(lv->rdevice && lv != lv->rdevice->slog) ? lv->rdevice->slog : 0,
- 		lv->snapshot ? lv->snapshot->origin : 0,
- 		lv->snapshot ? lv->snapshot->cow : 0 };
- 	for (i = 0; i < sizeof(deps) / sizeof(*deps); ++i) {
-@@ -1993,6 +1995,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		if (lvseg->log_lv && !fn(lvseg->log_lv, data))
- 			return_0;
-+		if (lvseg->rlog_lv && !fn(lvseg->rlog_lv, data))
-+			return_0;
- 		for (s = 0; s < lvseg->area_count; ++s) {
- 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
- 				return_0;
+ /**
++ * Return the volume group name given a PV UUID
++ *
++ * \memberof lvm_t
++ *
++ * The memory allocated for the name is tied to the lvm_t handle and will be
++ * released when lvm_quit is called.
++ *
++ * NOTE: This function may scan devices in the system for LVM metadata.
++ *
++ * \param   libh
++ * Handle obtained from lvm_init().
++ *
++ * \return
++ * The volume group name for the given PV UUID.
++ * NULL is returned if the PV UUID is not associated with a volume group.
++ */
++const char *lvm_vgname_from_pvid(lvm_t *libh, const char *pvid)
++
++/**
++ * Return the volume group name given a device name
++ *
++ * \memberof lvm_t
++ *
++ * The memory allocated for the name is tied to the lvm_t handle and will be
++ * released when lvm_quit is called.
++ *
++ * NOTE: This function may scan devices in the system for LVM metadata.
++ *
++ * \param   libh
++ * Handle obtained from lvm_init().
++ *
++ * \return
++ * The volume group name for the given device name.
++ * NULL is returned if the device is not an LVM device.
++ *
++ */
++const char *lvm_vgname_from_device(lvm_t *libh, const char *device)
++
++/**
+  * Open an existing VG.
+  *
+  * Open a VG for reading or writing.
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+index 733d4d5..7d83543 100644
+--- a/liblvm/lvm_base.c
++++ b/liblvm/lvm_base.c
+@@ -98,3 +98,16 @@ const char *lvm_errmsg(lvm_t libh)
+ {
+ 	return stored_errmsg();
+ }
++
++const char *lvm_vgname_from_pvid(lvm_t *libh, const char *pvid)
++{
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++	return find_vgname_from_pvid(cmd, pvid);
++}
++
++const char *lvm_vgname_from_device(struct cmd_context *cmd,
++				   const char *device)
++{
++	struct cmd_context *cmd = (struct cmd_context *)libh;
++	return find_vgname_from_pvname(cmd, device);
++}
 -- 
-1.7.0.1
+1.6.0.6
 
 
