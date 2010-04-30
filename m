@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Apr 2010 12:31:35 -0000
-Subject: LVM2 ./WHATS_NEW lib/filters/filter-regex.c
-Message-ID: <20100430123135.21822.qmail@sourceware.org>
+Date: 30 Apr 2010 12:37:07 -0000
+Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c
+Message-ID: <20100430123707.23496.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,59 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-04-30 12:31:33
+Changes by:	zkabelac at sourceware.org	2010-04-30 12:37:05
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/filters    : filter-regex.c 
+	lib/commands   : toolcontext.c 
 
 Log message:
-	Show string with invalid pattern
-	and start error message with capital letter.
+	Release pools for regex if there is error during processing
+	(fixes error messages about unreleased pools).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1542&r2=1.1543
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-regex.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1543&r2=1.1544
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.94&r2=1.95
 
---- LVM2/WHATS_NEW	2010/04/29 01:45:30	1.1542
-+++ LVM2/WHATS_NEW	2010/04/30 12:31:32	1.1543
+--- LVM2/WHATS_NEW	2010/04/30 12:31:32	1.1543
++++ LVM2/WHATS_NEW	2010/04/30 12:37:04	1.1544
 @@ -1,5 +1,6 @@
  Version 2.02.64 -
  =================================
-+  Display invalid regex pattern for filter configuration in case of error.
++  Fix memory leak for invalid regex pattern input.
+   Display invalid regex pattern for filter configuration in case of error.
    Remove no-longer-used arg_ptr_value.
    Fix -M and --type to use strings not pointers that change on config refresh.
-   Fix lvconvert error message when existing mirrored LV is not found.
---- LVM2/lib/filters/filter-regex.c	2008/11/03 22:14:28	1.26
-+++ LVM2/lib/filters/filter-regex.c	2010/04/30 12:31:33	1.27
-@@ -103,7 +103,7 @@
- 	 */
- 	for (v = val; v; v = v->next) {
- 		if (v->type != CFG_STRING) {
--			log_error("filter patterns must be enclosed in quotes");
-+			log_error("Filter patterns must be enclosed in quotes.");
- 			goto out;
- 		}
+--- LVM2/lib/commands/toolcontext.c	2010/04/29 01:38:14	1.94
++++ LVM2/lib/commands/toolcontext.c	2010/04/30 12:37:05	1.95
+@@ -639,14 +639,14 @@
  
-@@ -128,7 +128,7 @@
- 	 */
- 	for (v = val, i = count - 1; v; v = v->next, i--)
- 		if (!_extract_pattern(scratch, v->v.str, regex, rf->accept, i)) {
--			log_error("invalid filter pattern");
-+			log_error("Invalid filter pattern \"%s\".", v->v.str);
- 			goto out;
- 		}
+ 	else if (!(filters[nr_filt++] = regex_filter_create(cn->v))) {
+ 		log_error("Failed to create regex device filter");
+-		return NULL;
++		goto err;
+ 	}
  
+ 	/* device type filter. Required. */
+ 	cn = find_config_tree_node(cmd, "devices/types");
+ 	if (!(filters[nr_filt++] = lvm_type_filter_create(cmd->proc_dir, cn))) {
+ 		log_error("Failed to create lvm type filter");
+-		return NULL;
++		goto err;
+ 	}
+ 
+ 	/* md component filter. Optional, non-critical. */
+@@ -660,6 +660,11 @@
+ 	/* Only build a composite filter if we really need it. */
+ 	return (nr_filt == 1) ?
+ 	    filters[0] : composite_filter_create(nr_filt, filters);
++err:
++	nr_filt--; /* skip NULL */
++	while (nr_filt-- > 0)
++		 filters[nr_filt]->destroy(filters[nr_filt]);
++	return NULL;
+ }
+ 
+ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
 
 
