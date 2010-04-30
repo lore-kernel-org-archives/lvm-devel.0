@@ -1,133 +1,139 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 30 Apr 2010 14:33:40 -0000
-Subject: LVM2/test Makefile.in harness.c not.c
-Message-ID: <20100430143340.21085.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 30 Apr 2010 16:36:55 +0200
+Subject: Makefile updates for plugin installation
+Message-ID: <4BDAEB07.5030402@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-04-30 14:33:39
+Author: Zdenek Kabelac <zkabelac@redhat.com>
+Date:   Fri Apr 30 16:32:30 2010 +0200
 
-Modified files:
-	test           : Makefile.in harness.c not.c 
+    Install plugins to subdirs.
 
-Log message:
-	Add a "should" alongside "not" to the test utilities. When a "should" command
-	fails, the test will carry on but will issue a warning. The harness detects
-	such warnings from tests and marks tests that passed with warnings with a
-	special status.
+    install_dm_plugin  install files to libdir/device-mapper
+    install_lvm2_plugin install files to libdir/lvm2
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/not.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+    Both targets creates relative links to libdir to keep the code
+    compatible with current dlopen handling.
 
---- LVM2/test/Makefile.in	2010/04/13 13:28:53	1.38
-+++ LVM2/test/Makefile.in	2010/04/30 14:33:39	1.39
-@@ -62,6 +62,7 @@
- 
- bin/not: $(srcdir)/not.c .bin-dir-stamp
- 	$(CC) -o bin/not $<
-+	ln -sf not bin/should
- 
- bin/harness: $(srcdir)/harness.c .bin-dir-stamp
- 	$(CC) -o bin/harness $<
---- LVM2/test/harness.c	2010/04/13 07:34:19	1.10
-+++ LVM2/test/harness.c	2010/04/30 14:33:39	1.11
-@@ -15,6 +15,7 @@
- 	int nfailed;
- 	int nskipped;
- 	int npassed;
-+	int nwarned;
- 	int status[MAX];
- };
- 
-@@ -29,6 +30,7 @@
- #define PASSED 0
- #define SKIPPED 1
- #define FAILED 2
-+#define WARNED 3
- 
- void handler( int s ) {
- 	signal( s, SIG_DFL );
-@@ -59,13 +61,20 @@
- 			exit(205);
- 		memcpy(readbuf + readbuf_used, buf, sz);
- 		readbuf_used += sz;
-+		readbuf[readbuf_used] = 0;
- 	}
- }
- 
- void passed(int i, char *f) {
--	++ s.npassed;
--	s.status[i] = PASSED;
--	printf("passed.\n");
-+	if (strstr(readbuf, "TEST WARNING")) {
-+		++s.nwarned;
-+		s.status[i] = WARNED;
-+		printf("warnings\n");
-+	} else {
-+		++ s.npassed;
-+		s.status[i] = PASSED;
-+		printf("passed.\n");
-+	}
- }
- 
- void skipped(int i, char *f) {
-@@ -140,7 +149,7 @@
- 		exit(1);
- 	}
- 
--	s.nfailed = s.npassed = s.nskipped = 0;
-+	s.nwarned = s.nfailed = s.npassed = s.nskipped = 0;
- 
- 	char *config = getenv("LVM_TEST_CONFIG"),
- 	     *config_debug;
-@@ -178,8 +187,9 @@
- 		}
- 	}
- 
--	printf("\n## %d tests: %d OK, %d failed, %d skipped\n",
--	       s.npassed + s.nfailed + s.nskipped, s.npassed, s.nfailed, s.nskipped);
-+	printf("\n## %d tests: %d OK, %d warnings, %d failures; %d skipped\n",
-+	       s.nwarned + s.npassed + s.nfailed + s.nskipped,
-+	       s.npassed, s.nwarned, s.nfailed, s.nskipped);
- 
- 	/* print out a summary */
- 	if (s.nfailed || s.nskipped) {
---- LVM2/test/not.c	2009/02/17 19:37:28	1.2
-+++ LVM2/test/not.c	2010/04/30 14:33:39	1.3
-@@ -4,6 +4,16 @@
- #include <sys/types.h>
- #include <sys/wait.h>
- 
-+int finished(const char *cmd, int status) {
-+	if (!strcmp(cmd, "not"))
-+		return !status;
-+	if (!strcmp(cmd, "should")) {
-+		fprintf(stderr, "TEST WARNING: Ignoring command failure.\n");
-+		return 0;
-+	}
-+	return 6;
-+}
+    Once we will be able to read plugins from subdir, links
+    could be removed.
+
+    Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+
+diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in
+b/daemons/dmeventd/plugins/mirror/Makefile.in
+index 146361f..5966f24 100644
+--- a/daemons/dmeventd/plugins/mirror/Makefile.in
++++ b/daemons/dmeventd/plugins/mirror/Makefile.in
+@@ -32,6 +32,6 @@ include $(top_builddir)/make.tmpl
+
+ LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
+
+-install_lvm2: install_lib_shared_plugin
++install_lvm2: install_dm_plugin
+
+ install: install_lvm2
+diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in
+b/daemons/dmeventd/plugins/snapshot/Makefile.in
+index f36f916..32a74af 100644
+--- a/daemons/dmeventd/plugins/snapshot/Makefile.in
++++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
+@@ -28,6 +28,6 @@ include $(top_builddir)/make.tmpl
+
+ LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
+
+-install_lvm2: install_lib_shared_plugin
++install_lvm2: install_dm_plugin
+
+ install: install_lvm2
+diff --git a/lib/format1/Makefile.in b/lib/format1/Makefile.in
+index f0f04d2..e102fe8 100644
+--- a/lib/format1/Makefile.in
++++ b/lib/format1/Makefile.in
+@@ -30,4 +30,4 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+
+ include $(top_builddir)/make.tmpl
+
+-install: install_lib_shared_plugin
++install: install_lvm2_plugin
+diff --git a/lib/format_pool/Makefile.in b/lib/format_pool/Makefile.in
+index 0671ee8..be5195c 100644
+--- a/lib/format_pool/Makefile.in
++++ b/lib/format_pool/Makefile.in
+@@ -27,4 +27,4 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+
+ include $(top_builddir)/make.tmpl
+
+-install: install_lib_shared_plugin
++install: install_lvm2_plugin
+diff --git a/lib/locking/Makefile.in b/lib/locking/Makefile.in
+index fee0382..1aae878 100644
+--- a/lib/locking/Makefile.in
++++ b/lib/locking/Makefile.in
+@@ -23,4 +23,4 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+
+ include $(top_builddir)/make.tmpl
+
+-install install_cluster: install_lib_shared_plugin
++install install_cluster: install_lvm2_plugin
+diff --git a/lib/mirror/Makefile.in b/lib/mirror/Makefile.in
+index 2769d44..5168eda 100644
+--- a/lib/mirror/Makefile.in
++++ b/lib/mirror/Makefile.in
+@@ -23,4 +23,4 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+
+ include $(top_builddir)/make.tmpl
+
+-install: install_lib_shared_plugin
++install: install_lvm2_plugin
+diff --git a/lib/snapshot/Makefile.in b/lib/snapshot/Makefile.in
+index 7f8a544..72399f3 100644
+--- a/lib/snapshot/Makefile.in
++++ b/lib/snapshot/Makefile.in
+@@ -23,4 +23,4 @@ LIB_VERSION = $(LIB_VERSION_LVM)
+
+ include $(top_builddir)/make.tmpl
+
+-install: install_lib_shared_plugin
++install: install_lvm2_plugin
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 48b0419..a88830f 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -162,7 +162,7 @@ POTFILES = $(SOURCES:%.c=%.pot)
+
+ .PHONY: all pofile distclean clean cleandir cflow device-mapper
+ .PHONY: install install_cluster install_device-mapper install_lvm2
+-.PHONY: install_lib_shared install_lib_shared_plugin
++.PHONY: install_lib_shared install_dm_plugin install_lvm2_plugin
+ .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
+ .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
+ .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
+@@ -305,9 +305,18 @@ install_lib_shared: $(LIB_SHARED)
+ 	$(INSTALL) -d $(usrlibdir)
+ 	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
+
+-# FIXME: plugins are currently installed with .so suffix only
+-install_lib_shared_plugin: $(LIB_SHARED)
+-	$(INSTALL_PROGRAM) -D $< $(libdir)/$(<F)
++# FIXME: plugins are installed to subdirs
++#        and for compatibility links in libdir are created
++#        when the code is fixed links could be removed.
++install_dm_plugin: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/device-mapper/$(<F)
++	$(LN_S) -f device-mapper/$(<F) $(libdir)/$(<F)
++	$(LN_S) -f $(<F) $(libdir)/$(<F).$(LIB_VERSION)
 +
- int main(int args, char **argv) {
- 	pid_t pid;
- 	int status;
-@@ -32,8 +42,8 @@
- 			/* did not exit correctly */
- 			return FAILURE;
- 		}
--		/* return the opposite */
--		return !WEXITSTATUS(status);
-+
-+		return finished(argv[0], WEXITSTATUS(status));
- 	}
- 	/* not accessible */
- 	return FAILURE;
++install_lvm2_plugin: $(LIB_SHARED)
++	$(INSTALL_PROGRAM) -D $< $(libdir)/lvm2/$(<F)
++	$(LN_S) -f lvm2/$(<F) $(libdir)/$(<F)
++	$(LN_S) -f $(<F) $(libdir)/$(<F).$(LIB_VERSION)
+ endif
+
+ %.so: %.a
 
 
