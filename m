@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 30 Apr 2010 13:28:46 -0000
+Date: 30 Apr 2010 13:47:11 -0000
 Subject: LVM2/tools lvmcmdline.c
-Message-ID: <20100430132846.16698.qmail@sourceware.org>
+Message-ID: <20100430134711.30441.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-04-30 13:28:45
+Changes by:	prajnoha at sourceware.org	2010-04-30 13:47:11
 
 Modified files:
 	tools          : lvmcmdline.c 
 
 Log message:
-	Don't run any complex initialisation for the "version" lvm2 command.
-	
-	We can use it even in read-only environment where a try to initialise
-	file-based locking fails (not to mention other processing related with
-	lvm2 init). Simply, we want to output the version only, nothing else.
-	And this should always work.
+	And be consistent with return code as well (previous commit).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.119&r2=1.120
 
---- LVM2/tools/lvmcmdline.c	2010/04/29 01:38:14	1.118
-+++ LVM2/tools/lvmcmdline.c	2010/04/30 13:28:44	1.119
-@@ -1364,6 +1364,10 @@
- 		unsetenv("LVM_DID_EXEC");
- 	}
+--- LVM2/tools/lvmcmdline.c	2010/04/30 13:28:44	1.119
++++ LVM2/tools/lvmcmdline.c	2010/04/30 13:47:11	1.120
+@@ -1366,7 +1366,7 @@
  
-+	/* "version" command is simple enough so it doesn't need any complex init */
-+	if (!alias && argc > 1 && !strcmp(argv[1], "version"))
-+		return version(NULL, argc, argv);
-+
+ 	/* "version" command is simple enough so it doesn't need any complex init */
+ 	if (!alias && argc > 1 && !strcmp(argv[1], "version"))
+-		return version(NULL, argc, argv);
++		return lvm_return_code(version(NULL, argc, argv));
+ 
  	if (!(cmd = init_lvm()))
  		return -1;
- 
 
 
