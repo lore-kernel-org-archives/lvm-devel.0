@@ -1,38 +1,87 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 17 Feb 2022 14:20:42 +0100
-Subject: [PATCH] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
-In-Reply-To: <e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
-References: <20220216205914.7575-1-mwilck@suse.com>
-	<164504936873.10228.7361167610237544463@noble.neil.brown.name>
-	<e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
-Message-ID: <20220217132042.dmmkhecvvylnyc3b@alatyr-rpi.brq.redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Wed, 05 May 2010 11:26:14 -0400
+Subject: dmeventd doesn't handle failures during mirror resync.
+In-Reply-To: <18865F70-312F-4B17-844C-24BEA6B3A7E7@redhat.com>
+References: <20100429170140.777db964@notabene.brown>	<874oim3h5i.fsf@twilight.int.mornfall.net.>
+	<18865F70-312F-4B17-844C-24BEA6B3A7E7@redhat.com>
+Message-ID: <4BE18E16.3060007@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu 17 Feb 2022 11:58, Martin Wilck wrote:
-> The main reason is that SYSTEMD_READY=0 is set too late, in 99-systemd-
-> rules, and only on "add" events:
-> https://github.com/systemd/systemd/blob/bfae960e53f6986f1c4d234ea82681d0acad57df/rules.d/99-systemd.rules.in#L18
+On 05/05/10 09:22, Jonathan Brassow wrote:
+> On May 5, 2010, at 3:08 AM, Petr Rockai wrote:
+>> Neil Brown <neilb@suse.de> writes:
+>>
+>>> I was surprised to discover that while a normal write error is
+>>> handled properly - dmeventd runs 'lvconvert' to fix the array up,
+>>> this does not happen in response to a write error while syncing
+>>> the array.
+>>>
+>>> If I arrange for the new device to die, then
+>>>          lvconvert --repair --use-policies
+>>>
+>>> will fix it up as I would expect, but dmeventd never asks it to do
+>>> this.
+>>>
+>>> This seems to be a deliberate decision:  in _process_status_code
+>>> in dmeventd_mirror.c, a status of 'F' will cause lvconvert to be
+>>> run while 'S' and 'R' (sync and read errors) will not.
+>>>
+>>> Is there a reason for this?
+>> I think the rationale is that:
+>>
+>> For read errors, we should *not* strip the mirror leg, since we want  
+>> to
+>> keep as much redundancy as possible in this scenario. The failure  
+>> should
+>> be logged, but I think that's it.
+>>
+>> For sync, I am not sure. It may be that the reason for this is that  
+>> sync
+>> is usually related to manual action and dmeventd intervention may be
+>> unexpected and unwanted in this case. But that case could be argued.
+>>
+>>> Can we change dmeventd to response to sync (and read) errors in the  
+>>> same
+>>> way that it responds to write errors?
+>> I think it's a bad idea for read errors, unless maybe we could have a
+>> new feature for that -- one that'd upconvert the mirror first (if
+>> there's a hotspare) and only if that finishes OK, kill the bad leg.  
+>> Just
+>> log the error if there are no hotspares.
+>>
+>> For sync errors, I am ambivalent. Any further opinions?
 > 
-> I guess the device-mapper rules themselves could be setting
-> SYSTEMD_READY="0". @Peter Rajnoha, do you want to comment on that? My
-> concern wrt such a change would be possible side effects. Setting
-> SYSTEMD_READY=0 on "change" events could actually be wrong, see below.
+> I think for sync errors, we should restart the sync.  This can be done  
+> by a suspend/resume of the mirror device.  Effectively, we are  
+> assuming a transient failure.  Perhaps if we have tried to clear the  
+> fault a couple times, then we could remove the failed device.
+> 
+> Read errors I would definitely leave alone.  Drives can often relocate  
+> bad sectors, but that is done on writes.  If the relocation fails, we  
+> will know about it when the write fails.
 
-We need to be very careful with SYSTEMD_READY as switching that from 1
-to 0 would cause the systemd device unit to stop. And services can be
-bound to device existence (that is, systemd device unit). If we just
-temporarily suspend a DM device and not completely removing it, then
-we might get out-of-sync easily when it comes to notion of device
-presence in various parts of the system.
+Read errors can't be handled with the current device-mapper in kernel.
+Sync error is reported by both read and write errors. Read error
+occurs by reading a default mirror device and write error occurs
+by writing data in non-default mirror devices. If sync error was
+the one reported by read error, we will lose a default mirror, which
+contains a valid data. Think a sync error when new disk is added.
+If it is a transient error, we could save data by retrying sync,
+for example as Jon suggested.
 
-One thing is device presence, the other are various sub-states that
-a single SYSTEMD_READY is not covering, like the suspended state...
+Also, I proposed the following patch a half year ago. The patch
+handles only "write sync error." This approach could improve
+an error handling, although this patch should be improved to
+consider the case that a default mirror changed.
 
--- 
-Peter
+lvm2: sync error handling on secondary mirror in dmeventd
+https://www.redhat.com/archives/lvm-devel/2009-November/msg00179.html
+
+Thanks,
+Taka
 
 
