@@ -1,85 +1,50 @@
 From: Takahiro Yasui <tyasui@redhat.com>
-Date: Wed, 05 May 2010 11:26:14 -0400
-Subject: dmeventd doesn't handle failures during mirror resync.
-In-Reply-To: <18865F70-312F-4B17-844C-24BEA6B3A7E7@redhat.com>
-References: <20100429170140.777db964@notabene.brown>	<874oim3h5i.fsf@twilight.int.mornfall.net.>
-	<18865F70-312F-4B17-844C-24BEA6B3A7E7@redhat.com>
-Message-ID: <4BE18E16.3060007@redhat.com>
+Date: Wed, 05 May 2010 11:31:51 -0400
+Subject: [PATCH] handle transient errors in lvconvert --repair
+In-Reply-To: <87pr1a3i4w.fsf@twilight.int.mornfall.net.>
+References: <87y6g99bbg.fsf@twilight.int.mornfall.net.>	<4BD88E71.3040902@redhat.com>
+	<87pr1a3i4w.fsf@twilight.int.mornfall.net.>
+Message-ID: <4BE18F67.9080005@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/05/10 09:22, Jonathan Brassow wrote:
-> On May 5, 2010, at 3:08 AM, Petr Rockai wrote:
->> Neil Brown <neilb@suse.de> writes:
->>
->>> I was surprised to discover that while a normal write error is
->>> handled properly - dmeventd runs 'lvconvert' to fix the array up,
->>> this does not happen in response to a write error while syncing
->>> the array.
->>>
->>> If I arrange for the new device to die, then
->>>          lvconvert --repair --use-policies
->>>
->>> will fix it up as I would expect, but dmeventd never asks it to do
->>> this.
->>>
->>> This seems to be a deliberate decision:  in _process_status_code
->>> in dmeventd_mirror.c, a status of 'F' will cause lvconvert to be
->>> run while 'S' and 'R' (sync and read errors) will not.
->>>
->>> Is there a reason for this?
->> I think the rationale is that:
->>
->> For read errors, we should *not* strip the mirror leg, since we want  
->> to
->> keep as much redundancy as possible in this scenario. The failure  
->> should
->> be logged, but I think that's it.
->>
->> For sync, I am not sure. It may be that the reason for this is that  
->> sync
->> is usually related to manual action and dmeventd intervention may be
->> unexpected and unwanted in this case. But that case could be argued.
->>
->>> Can we change dmeventd to response to sync (and read) errors in the  
->>> same
->>> way that it responds to write errors?
->> I think it's a bad idea for read errors, unless maybe we could have a
->> new feature for that -- one that'd upconvert the mirror first (if
->> there's a hotspare) and only if that finishes OK, kill the bad leg.  
->> Just
->> log the error if there are no hotspares.
->>
->> For sync errors, I am ambivalent. Any further opinions?
+Hi Petr,
+
+On 05/05/10 03:46, Petr Rockai wrote:
+> Takahiro Yasui <tyasui@redhat.com> writes:
+>> It is very grad that the patch to fix this issue was being developed.
+>> I have not thoroughly read it, but I found one issue. It doesn't work
+>> for a "mirrored" log, while it looks good for a "core" or "disk" log.
+> [snip]
 > 
-> I think for sync errors, we should restart the sync.  This can be done  
-> by a suspend/resume of the mirror device.  Effectively, we are  
-> assuming a transient failure.  Perhaps if we have tried to clear the  
-> fault a couple times, then we could remove the failed device.
+> this is not really an issue with the new code per se. What needs to be
+> done is that lvconvert --repair itself needs to be changed to handle
+> mirrored logs correctly.
 > 
-> Read errors I would definitely leave alone.  Drives can often relocate  
-> bad sectors, but that is done on writes.  If the relocation fails, we  
-> will know about it when the write fails.
+> What needs to be done is to call the repair recursively on the log
+> device if it is a mirror.
 
-Read errors can't be handled with the current device-mapper in kernel.
-Sync error is reported by both read and write errors. Read error
-occurs by reading a default mirror device and write error occurs
-by writing data in non-default mirror devices. If sync error was
-the one reported by read error, we will lose a default mirror, which
-contains a valid data. Think a sync error when new disk is added.
-If it is a transient error, we could save data by retrying sync,
-for example as Jon suggested.
+I understand. I will wait and test your updated patch.
 
-Also, I proposed the following patch a half year ago. The patch
-handles only "write sync error." This approach could improve
-an error handling, although this patch should be improved to
-consider the case that a default mirror changed.
+>> The current code calls lv_check_transient() at the beginning of
+>> _lvconvert_mirrors_repair() but I think that lv_check_transient()
+>> needs to be called in functions which repairs a mirror log,
+>> such as _lv_update_log_type(), too.
+> (see above)
+> 
+>> Also this patch works well not only for a transient error but
+>> also a medium error, therefore, function names with '_transient'
+>> could be '_status' or '_status_string'. (e.g. lv_check_status())
+> I chose transient not because of "transient error", but because of the
+> relation to the transient, in-kernel, status of the device -- as opposed
+> to persistent, i.e. in metadata. Maybe something with "active" or
+> "activation" in it would be better though...
 
-lvm2: sync error handling on secondary mirror in dmeventd
-https://www.redhat.com/archives/lvm-devel/2009-November/msg00179.html
+I see your point. I just thought 'a medium error' is persistent
+and commented, but I will follow your decision.
 
 Thanks,
 Taka
