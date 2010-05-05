@@ -1,44 +1,49 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 3 May 2010 22:08:39 -0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-Message-ID: <20100503220839.5670.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 05 May 2010 09:46:55 +0200
+Subject: [PATCH] handle transient errors in lvconvert --repair
+In-Reply-To: <4BD88E71.3040902@redhat.com> (Takahiro Yasui's message of "Wed, 
+	28 Apr 2010 15:37:21 -0400")
+References: <87y6g99bbg.fsf@twilight.int.mornfall.net.>
+	<4BD88E71.3040902@redhat.com>
+Message-ID: <87pr1a3i4w.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-05-03 22:08:39
+Hi Taka,
 
-Modified files:
-	libdm/ioctl    : libdm-iface.c 
+Takahiro Yasui <tyasui@redhat.com> writes:
+> It is very grad that the patch to fix this issue was being developed.
+> I have not thoroughly read it, but I found one issue. It doesn't work
+> for a "mirrored" log, while it looks good for a "core" or "disk" log.
+[snip]
 
-Log message:
-	Specify exactly which ioctl doesn't have a cookie set (for better debugging).
+this is not really an issue with the new code per se. What needs to be
+done is that lvconvert --repair itself needs to be changed to handle
+mirrored logs correctly.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+What needs to be done is to call the repair recursively on the log
+device if it is a mirror.
 
---- LVM2/libdm/ioctl/libdm-iface.c	2010/05/03 21:06:53	1.72
-+++ LVM2/libdm/ioctl/libdm-iface.c	2010/05/03 22:08:38	1.73
-@@ -1770,11 +1770,13 @@
- 		 * libdevmapper's node and symlink creation code.
- 		 */
- 		if (!dmt->cookie_set && dm_udev_get_sync_support()) {
--			log_debug("Cookie value is not set while trying to call "
--				  "DM_DEVICE_RESUME, DM_DEVICE_REMOVE or DM_DEVICE_RENAME "
-+			log_debug("Cookie value is not set while trying to call %s "
- 				  "ioctl. Please, consider using libdevmapper's udev "
- 				  "synchronisation interface or disable it explicitly "
--				  "by calling dm_udev_set_sync_support(0).");
-+				  "by calling dm_udev_set_sync_support(0).",
-+				  dmt->type == DM_DEVICE_RESUME ? "DM_DEVICE_RESUME" :
-+				  dmt->type == DM_DEVICE_REMOVE ? "DM_DEVICE_REMOVE" :
-+								  "DM_DEVICE_RENAME");
- 			log_debug("Switching off device-mapper and all subsystem related "
- 				  "udev rules. Falling back to libdevmapper node creation.");
- 			/*
+> The current code calls lv_check_transient() at the beginning of
+> _lvconvert_mirrors_repair() but I think that lv_check_transient()
+> needs to be called in functions which repairs a mirror log,
+> such as _lv_update_log_type(), too.
+(see above)
+
+> Also this patch works well not only for a transient error but
+> also a medium error, therefore, function names with '_transient'
+> could be '_status' or '_status_string'. (e.g. lv_check_status())
+I chose transient not because of "transient error", but because of the
+relation to the transient, in-kernel, status of the device -- as opposed
+to persistent, i.e. in metadata. Maybe something with "active" or
+"activation" in it would be better though...
+
+And, thanks for looking through the patch.
+
+Yours,
+   Petr.
 
 
