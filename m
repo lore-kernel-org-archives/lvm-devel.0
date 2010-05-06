@@ -1,35 +1,46 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 06 May 2010 10:13:15 +0200
-Subject: [PATCH 01/23] Return ECMD_FAILED for break
-In-Reply-To: <20100506011019.GJ27027@agk-dp.fab.redhat.com>
+Date: Thu, 06 May 2010 10:14:02 +0200
+Subject: [PATCH 03/23] API change for args of process_each_lv_in_vg()
+In-Reply-To: <20100506013908.GL27027@agk-dp.fab.redhat.com>
 References: <cover.1272457502.git.zkabelac@redhat.com>
-	<1c89a9d6ba2bfb863fb66b02743ccd9fa00f97e5.1272457502.git.zkabelac@redhat.com>
-	<20100506011019.GJ27027@agk-dp.fab.redhat.com>
-Message-ID: <4BE27A1B.5040503@redhat.com>
+	<a14874903122bdacdcc40bf9dd46d9c62e063ce4.1272457502.git.zkabelac@redhat.com>
+	<20100506013908.GL27027@agk-dp.fab.redhat.com>
+Message-ID: <4BE27A4A.7030503@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 6.5.2010 03:10, Alasdair G Kergon napsal(a):
-> On Wed, Apr 28, 2010 at 02:27:20PM +0200, Zdenek Kabelac wrote:
->> Return ECMD_FAILED when sigint has been caught.
+Dne 6.5.2010 03:39, Alasdair G Kergon napsal(a):
+> On Wed, Apr 28, 2010 at 02:27:22PM +0200, Zdenek Kabelac wrote:
+>> Patch adds failed_lvnames to the list of parameters for process_each_lv_in_vg().
+>> If the list is not NULL it will be filled with LV names of failing LVs
+>> during function execution.
+> 
+> Ack.
 >  
-> Might seem reasonable, but this condition is also checked in many other places.
-> If we're going to override the return code when a command might have been
-> interrupted before it completed, shouldn't we do it consistently everywhere?
+>> +++ b/tools/toollib.c
+>> @@ -86,6 +86,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+>>  			  struct volume_group *vg,
+>>  			  const struct dm_list *arg_lvnames,
+>>  			  const struct dm_list *tags,
+>> +			  struct dm_list *failed_lvnames,
+>>  			  void *handle,
+>>  			  process_single_lv_fn_t process_single_lv)
+>>  {
+>> @@ -99,6 +100,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+>>  
+>>  	struct lv_list *lvl;
+>>  
+>> +	if (failed_lvnames)
+>> +		dm_list_init(failed_lvnames);
+> 
+> I'd prefer the caller to initialise it, which is what we tend to do
+> elsewhere, so that we don't pass 'undefined' values into functions.
 > 
 
-Yes there are more inconsitencies like this through the code - but in my
-replicator case I've added 'extra' loop around this interrupt check - thus
-I've added this fix at this place.
-
-The problem with interrupt check may be possibly bigger - as the semantic is
-not really clear - should we always return 'error' when Ctrl+C is hit by the
-user? - maybe we should check for sigint before we actually want to iterate
-next loop - thus if the 'break' was noticed after processing last loop - we
-return 'OK' like no break was seen ?
+Ok
 
 Zdenek
 
