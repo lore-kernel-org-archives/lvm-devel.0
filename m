@@ -1,67 +1,23 @@
-From: brem belguebli <brem.belguebli@gmail.com>
-Date: Thu, 06 May 2010 03:44:29 +0200
-Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
-In-Reply-To: <87fx26zba5.fsf@twilight.int.mornfall.net.>
-References: <4BC7817E.7080407@redhat.com>
-	<20100415220308.GO13021@agk-dp.fab.redhat.com>
-	<4BC88002.10803@redhat.com>
-	<1271495752.5449.53.camel@localhost> <4BCF1761.7080805@redhat.com>
-	<s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
-	<t2i29ae894c1004230901qe3e4fa75of26e8d39e0d8c7cd@mail.gmail.com>
-	<4BD1ECEB.9010504@redhat.com> <1272056987.2983.2.camel@localhost>
-	<4BD1F9C0.8090108@redhat.com>
-	<87fx26zba5.fsf@twilight.int.mornfall.net.>
-Message-ID: <1273110269.2544.3.camel@localhost>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 6 May 2010 02:10:19 +0100
+Subject: [PATCH 01/23] Return ECMD_FAILED for break
+In-Reply-To: <1c89a9d6ba2bfb863fb66b02743ccd9fa00f97e5.1272457502.git.zkabelac@redhat.com>
+References: <cover.1272457502.git.zkabelac@redhat.com>
+	<1c89a9d6ba2bfb863fb66b02743ccd9fa00f97e5.1272457502.git.zkabelac@redhat.com>
+Message-ID: <20100506011019.GJ27027@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Petr,
+On Wed, Apr 28, 2010 at 02:27:20PM +0200, Zdenek Kabelac wrote:
+> Return ECMD_FAILED when sigint has been caught.
+ 
+Might seem reasonable, but this condition is also checked in many other places.
+If we're going to override the return code when a command might have been
+interrupted before it completed, shouldn't we do it consistently everywhere?
 
-
-
-On Wed, 2010-05-05 at 16:13 +0200, Petr Rockai wrote:
-> Takahiro Yasui <tyasui@redhat.com> writes:
-> > On 04/23/10 17:09, brem belguebli wrote:
-> >> On Fri, 2010-04-23 at 14:54 -0400, Takahiro Yasui wrote:
-> >>> On 04/23/10 12:01, brem belguebli wrote:
-> >>>> I've read in the RHEL 5.5 technical datasheet that the shipped LVM
-> >>>> version 2.02.56 was alraedy capable of mirrored log.
-> >>>
-> >>> As far as I see lvm2 code, I don't think lvm2 in RHEL5.5 has
-> >>> mirrored log feature. I'm not sure which document you referred to.
-> >>> Could you tell me the exact name of "RHEL 5.5 technical datasheet"?
-> >> 
-> >> http://www.redhat.com/f/pdf/rhel/RHEL_5_5_TechOverview_wp_web.pdf
-> >> page 4, LVM
-> >> 
-> >> " LVM ??? the Logical Volume Management storage suite has been augmented
-> >> to provide hot sparing
-> >>  for mirror journals, enabling automatic replacement or removal of
-> >> failed logging devices.
-> >> "
-> >
-> > Thanks for the information, but I am not sure if this sentence is
-> > telling 'mirrored log.' What I can say is the lvm2-2.02.56-8 doesn't
-> > have 'mirrored log' feature. I hope someone may give you a explanation...
-> For all I can tell, this means that if the log fails, it is
-> automatically replaced when there's a hotspare. Which is true, but it
-> does not imply mirroring.
-> 
-I have never seen this documented anywhere, could you provide any link
-to this hotspare based log replacement?
-> Yours,
->    Petr.
-> 
-Thanks 
-
-Brem
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-
+Alasdair
 
 
