@@ -1,48 +1,57 @@
-From: mwilck@suse.com <mwilck@suse.com>
-Date: Thu, 17 Feb 2022 15:58:29 +0100
-Subject: [PATCH v2] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
-Message-ID: <20220217145829.19227-1-mwilck@suse.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Thu, 06 May 2010 19:42:47 -0400
+Subject: [RFC PATCH] Reduce noise about missing devices.
+In-Reply-To: <20100505190119.GF27027@agk-dp.fab.redhat.com>
+References: <87k4rsa8fd.fsf@twilight.int.mornfall.net.>
+	<20100505190119.GF27027@agk-dp.fab.redhat.com>
+Message-ID: <4BE353F7.3040305@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Martin Wilck <mwilck@suse.com>
+On 05/05/10 15:01, Alasdair G Kergon wrote:
+> On Tue, Apr 27, 2010 at 11:32:06PM +0200, Peter Rockai wrote:
+>> this is not intended to be directly applied, but more to start a
+>> discussion. One problem with our handling of missing devices is the huge
+>> amount of log noise each missing device produces. In a single run of
+>> lvconvert --repair, I get multiple screens of "read error" and "Couldn't
+>> find device with uuid"...
+>  
+> Well my first question before suppressing messages would be: Are all the
+> repeated accesses that generate the messages actually necessary?
+> Or are the messages just a symptom of other problems which should be
+> addressed instead?
 
-device-mapper sets the flag DM_UDEV_DISABLE_OTHER_RULES_FLAG to 1 for
-devices which are unusable. They may be no set up yet, suspended, or
-otherwise unusable (e.g. multipath maps without usable path). This
-flag does not necessarily imply SYSTEMD_READY=0 and must therefore
-be tested separately.
+I checked how many times a broken device was accessed by the lvconvert
+command when 'lvconvert --repair' is executed using the following lvm
+environment:
 
-Signed-off-by: Martin Wilck <mwilck@suse.com>
+  VG: 3PVs
+  LV: mirror composed of 2 legs and 1 disk log
 
----
-Changes in v2:
- - Moved the check further up; DM_UDEV_DISABLE_OTHER_RULES_FLAG must
-   be checked before ID_FS_TYPE to be effective
+  vg00-lv00 (253:3)
+   |-vg00-lv00_mimage_1 (253:2)
+   |  `- (8:48)
+   |-vg00-lv00_mimage_0 (253:1)
+   |  `- (8:32)
+   `-vg00-lv00_mlog (253:0)
+      `- (8:64)
 
----
- udev-md-raid-assembly.rules | 3 +++
- 1 file changed, 3 insertions(+)
+When a primary leg is broken, 'lvconvert --repair' accesses the primary
+leg by '47 times.' I think what we should do is to suppress 'access to
+a broken device' instead of suppressing 'displaying error messages.'
 
-diff --git a/udev-md-raid-assembly.rules b/udev-md-raid-assembly.rules
-index d668cdd..bc9679f 100644
---- a/udev-md-raid-assembly.rules
-+++ b/udev-md-raid-assembly.rules
-@@ -9,6 +9,9 @@ SUBSYSTEM!="block", GOTO="md_inc_end"
- 
- # skip non-initialized devices
- ENV{SYSTEMD_READY}=="0", GOTO="md_inc_end"
-+# device mapper sets DM_UDEV_DISABLE_OTHER_RULES_FLAG for devices which
-+# aren't ready to use
-+KERNEL=="dm-*", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="md_inc_end"
- 
- # handle potential components of arrays (the ones supported by md)
- ENV{ID_FS_TYPE}=="linux_raid_member", GOTO="md_inc"
--- 
-2.35.1
+Suppress error messages might be friendly to some users, but other users
+might not notice how often a broken device is accessed by the lvconvert
+command.
 
+Do we need to access a broken device so many times? If lvm commands
+detects errors on a device a few times, my opinion is that lvm
+commands should quit accessing the device.
+
+Thanks,
+Taka
 
 
