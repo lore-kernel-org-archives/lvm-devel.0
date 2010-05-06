@@ -1,98 +1,67 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 17 Feb 2022 11:23:22 +0100
-Subject: Reg auto metadata drive growth
-In-Reply-To: <CAFe+wq32gErNeFgy0YAm3DQ-0dcTbYDtKGfv=pY5VXwU-Yi_nA@mail.gmail.com>
-References: <CAFe+wq32gErNeFgy0YAm3DQ-0dcTbYDtKGfv=pY5VXwU-Yi_nA@mail.gmail.com>
-Message-ID: <fd3598a4-57aa-39f0-0354-e9187b75484f@redhat.com>
+From: brem belguebli <brem.belguebli@gmail.com>
+Date: Thu, 06 May 2010 03:44:29 +0200
+Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
+In-Reply-To: <87fx26zba5.fsf@twilight.int.mornfall.net.>
+References: <4BC7817E.7080407@redhat.com>
+	<20100415220308.GO13021@agk-dp.fab.redhat.com>
+	<4BC88002.10803@redhat.com>
+	<1271495752.5449.53.camel@localhost> <4BCF1761.7080805@redhat.com>
+	<s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
+	<t2i29ae894c1004230901qe3e4fa75of26e8d39e0d8c7cd@mail.gmail.com>
+	<4BD1ECEB.9010504@redhat.com> <1272056987.2983.2.camel@localhost>
+	<4BD1F9C0.8090108@redhat.com>
+	<87fx26zba5.fsf@twilight.int.mornfall.net.>
+Message-ID: <1273110269.2544.3.camel@localhost>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 16. 02. 22 v 17:52 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team!
-> A very good?day to you.
->
-> I am currently using a dm thin pool/volume in my setup.
-> I initially created a metadata device that is about 2G with a chunk size 64K.
->
-> I refer to the link below for some follow up queries.
-> https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/configuring_and_managing_logical_volumes/assembly_thinly-provisioned-logical-volumes_configuring-and-managing-logical-volumes
->
-> <snip begin>
->
-> By default, |lvm2|?starts with a 64KiB chunk size and increases its value 
-> when the resulting size of the thin pool metadata device grows above 128MiB, 
-> this keeps <snip end>
->
-
-This is some form of 'selecting' reasonable 'default' - but it needs to be 
-seen this precalculated? default will not likely fit everyone's use.
-
-I'd say we target something that will not give a user 'terrible' results - but 
-user should always learn himself about the thin-provisioning technology ahead 
-of actual usage. Once the user gets familiar with configurable knobs he can 
-for 100% pick better settings for his planed workflow/hw...
+Hi Petr,
 
 
-> a) I read that for each TiB of supported thin volume, ~15.8GiB of metadata 
-> volume gets used. I believe this condition is computed based on the default 
-> chunk size at 64K. So if the chunk size doubles, then I would assume that 
-> only ~8GiB for each TiB.
->
-> b) What is the max supported thin volume size?
 
-You can easily create EiB thin volumes - but sooner or later you will face a 
-problem of having backend support for this size.
+On Wed, 2010-05-05 at 16:13 +0200, Petr Rockai wrote:
+> Takahiro Yasui <tyasui@redhat.com> writes:
+> > On 04/23/10 17:09, brem belguebli wrote:
+> >> On Fri, 2010-04-23 at 14:54 -0400, Takahiro Yasui wrote:
+> >>> On 04/23/10 12:01, brem belguebli wrote:
+> >>>> I've read in the RHEL 5.5 technical datasheet that the shipped LVM
+> >>>> version 2.02.56 was alraedy capable of mirrored log.
+> >>>
+> >>> As far as I see lvm2 code, I don't think lvm2 in RHEL5.5 has
+> >>> mirrored log feature. I'm not sure which document you referred to.
+> >>> Could you tell me the exact name of "RHEL 5.5 technical datasheet"?
+> >> 
+> >> http://www.redhat.com/f/pdf/rhel/RHEL_5_5_TechOverview_wp_web.pdf
+> >> page 4, LVM
+> >> 
+> >> " LVM ??? the Logical Volume Management storage suite has been augmented
+> >> to provide hot sparing
+> >>  for mirror journals, enabling automatic replacement or removal of
+> >> failed logging devices.
+> >> "
+> >
+> > Thanks for the information, but I am not sure if this sentence is
+> > telling 'mirrored log.' What I can say is the lvm2-2.02.56-8 doesn't
+> > have 'mirrored log' feature. I hope someone may give you a explanation...
+> For all I can tell, this means that if the log fails, it is
+> automatically replaced when there's a hotspare. Which is true, but it
+> does not imply mirroring.
+> 
+I have never seen this documented anywhere, could you provide any link
+to this hotspare based log replacement?
+> Yours,
+>    Petr.
+> 
+Thanks 
 
-It's always about what you can address by metadata size.? Lvm prints 
-addressable size for any set of your passed args - so i.e. in you example - 
-that's the amount? thin volume can physically map in your thin-pool. However 
-virtual size of thin volume could be much bigger - but once you run past the 
-supported physical mapping size - you will get errors on block provisioning time.
-
-The slight complexity comes with combination of? VG extent size -? since all 
-LV sizes are expressed (ATM) in #extent_size - so default extent_size? (4MiB)? 
-limits max LV size to 16PiB. And while extent size has no other impact on 
-virtual thin volume size, this could be seen as slight limiting factor? - so 
-if you do want to play? in Exa world,? just create your VG with? 4GiB extent 
-size, but it will limit granularity of your LV sizes (min LV size is 4G, next 
-8G.....)
-
-> c) What is the max supported metadata volume size?
->
-~15.8GiB - that's real physical limitation size lvm2 informs you in that message.
-
-> Also, under some scenarios over a period?of time I observe that the thin 
-> metadata volume gets full. Under those condition:
->
-> 1/ Is it possible to manually resize?the metadata volume alone?
-
-Yes, although after many? user failure cases - we decided to tight the resize 
-of thin-pool data volume to also enforce metadata resize.? You could opt-out 
-from this - but you then need to be a good expert on whole usage.
-
-> 2/ Is it possible to automatically resize the metadata volume as it reaches 
-> a critical limit?
-
-Of course - you can? set lvm.conf 'thin_pool_autoextend_threshold' bellow 
-100%? - and use monitoring via dmeventd to automatically extend data & 
-metadata size.
-
-But note - once the size gets biggers - we do not support thin-pool reduction 
-- so even if you remove/discard your thin volumes later - it will not shrink 
-thin-pool data nor metadata later. And clearly if there is no free space in 
-your VG, resize will no longer work....
-
-> Can I please have some clarification on the above?
-
-'man lvmthin' ? should be the good resource for most of your questions.
+Brem
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
-Regards
 
-Zdenek
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220217/ab435258/attachment.htm>
