@@ -1,49 +1,55 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  7 May 2010 16:14:47 +0200
-Subject: [PATCH 0/9] Makefile and Require cleanups
-Message-ID: <cover.1273241256.git.zkabelac@redhat.com>
+Date: Fri,  7 May 2010 16:14:48 +0200
+Subject: [PATCH 1/9] Not using pthread library functions here
+In-Reply-To: <cover.1273241256.git.zkabelac@redhat.com>
+References: <cover.1273241256.git.zkabelac@redhat.com>
+Message-ID: <520603bf9c7a30660bb4f1aa66619c559eb867ea.1273241256.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset tries to address few things:
 
-it should be fixing Gentoo linkage bug
-https://bugs.gentoo.org/show_bug.cgi?id=318513
-But properly linking needed librarie to .so files.
-Another part is cleanup Require.private in .pc file.
-2 patches are touching pthread cleanups.
-One patch cleans the 'extra' cat command call from Makefile.
-And the last patch introduces pkgconfigdir so user could easily
-overwrite his favourite locate of .pc installation dir.
-
-Zdenek Kabelac (9):
-  Not using pthread library functions here
-  Link liblvm2cmd.so with their depending libraries
-  Fix linking libdevmapper-event.so
-  Plugins do not use pthread or lvm2cmd directly
-  Skip unneeded 'cat' command
-  Use Require.private: field
-  Add UDEV_PC and SELINUX_PC subst variables
-  Requires.private: update
-  Use pkgconfigdir for placement of .pc files
-
- configure                                          |    8 +++++++-
- configure.in                                       |    8 +++++++-
- daemons/dmeventd/Makefile.in                       |    5 +++--
- daemons/dmeventd/libdevmapper-event.pc.in          |    3 +--
- daemons/dmeventd/plugins/mirror/Makefile.in        |    2 +-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
  daemons/dmeventd/plugins/mirror/dmeventd_mirror.c  |    2 --
- daemons/dmeventd/plugins/snapshot/Makefile.in      |    2 +-
  .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    3 +--
- libdm/Makefile.in                                  |    2 +-
- libdm/libdevmapper.pc.in                           |    2 +-
- liblvm/Makefile.in                                 |    2 +-
- liblvm/liblvm2app.pc.in                            |    2 +-
- make.tmpl.in                                       |   15 ++++-----------
- tools/Makefile.in                                  |    3 +++
- 14 files changed, 32 insertions(+), 27 deletions(-)
+ 2 files changed, 1 insertions(+), 4 deletions(-)
+
+diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+index 4d2eee5..788f9f5 100644
+--- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
++++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
+@@ -19,8 +19,6 @@
+ #include "libdevmapper-event.h"
+ #include "dmeventd_lvm.h"
+ 
+-#include <pthread.h>
+-
+ #include <syslog.h> /* FIXME Replace syslog with multilog */
+ /* FIXME Missing openlog? */
+ /* FIXME Replace most syslogs with log_error() style messages and add complete context. */
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index 01bb2c2..3c85c6d 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2007-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -21,7 +21,6 @@
+ 
+ #include "lvm-string.h"
+ 
+-#include <pthread.h>
+ #include <syslog.h> /* FIXME Replace syslog with multilog */
+ /* FIXME Missing openlog? */
+ 
+-- 
+1.7.0.1
 
 
