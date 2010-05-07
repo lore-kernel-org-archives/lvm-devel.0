@@ -1,33 +1,54 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 7 May 2010 02:18:50 +0100
-Subject: [PATCH] In dmeventd, bridge LVM error log output to syslog.
-In-Reply-To: <87mxwcq2ue.fsf@twilight.int.mornfall.net.>
-References: <87mxwcq2ue.fsf@twilight.int.mornfall.net.>
-Message-ID: <20100507011850.GR27027@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 07 May 2010 09:22:48 +0200
+Subject: LVM2/test Makefile.in test-utils.sh
+In-Reply-To: <20100506185453.2064.qmail@sourceware.org>
+References: <20100506185453.2064.qmail@sourceware.org>
+Message-ID: <4BE3BFC8.6070608@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, May 06, 2010 at 08:53:13PM +0200, Peter Rockai wrote:
-> as discussed, this is the first part of dmeventd logging. I am not
-> touching any options related to debugging, that will come as a separate
-> patch later. This patch provides the necessary minimum for any useful
-> diagnostics of dmeventd/lvconvert --repair issues.
- 
-Sorry, but I don't understand this yet.
-What changes are you intending to make to the log messages?
+Dne 6.5.2010 20:54, mornfall at sourceware.org napsal(a):
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	mornfall at sourceware.org	2010-05-06 18:54:52
+> 
+> Modified files:
+> 	test           : Makefile.in test-utils.sh 
+> 
+> Log message:
+> 	Add some basic provisions for automated testing of dmeventd.
+> 
+> Patches:
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+> 
+> --- LVM2/test/Makefile.in	2010/04/30 14:33:39	1.39
+> +++ LVM2/test/Makefile.in	2010/05/06 18:54:51	1.40
+> @@ -78,7 +78,11 @@
+>  	echo 'abs_top_srcdir=$(abs_top_builddir)' >> $@-t
+>  	echo 'PATH=$$abs_top_builddir/test/bin:$$PATH' >> $@-t
+>  	LDLPATH="\$$abs_top_builddir/libdm"; \
+> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/tools"; \
+>  	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd"; \
+> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/lvm2"; \
+> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/mirror"; \
+> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/snapshot"; \
 
-Previously *all* messages got logged, but only as either CRIT or as DEBUG,
-so the sysadmin had a choice of seeing all messages (including trival ones)
-or only the most critical messages.
 
-The new patch appears to drop some messages instead of logging them!
+Oh - I've had this one in my tree for some time - but as we do not test
+dmeventd - I've been not pushing it upstream - as we need a better solution.
 
-I'd prefer to see a patch that adds a middle category, taking some of
-the DEBUG messages and logging them as ERR or WARN.
+daemons/dmeventd/plugins/mirror daemons/dmeventd/plugins/snapshot shouldn't be
+here at all - these should be loaded via configurable plugin path - and we
+need some more updates even on dlopen part of code (as we move plugins to
+subdir of libdir.  Another thing that needs to be changed is the configurable
+comunication fifo.
 
-Alasdair
+At this moment dmeventd is not yet ready for parallel testing.
+
+Zdenek
 
 
