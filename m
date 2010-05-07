@@ -1,52 +1,37 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  7 May 2010 16:14:51 +0200
-Subject: [PATCH 4/9] Plugins do not use pthread or lvm2cmd directly
+Date: Fri,  7 May 2010 16:14:50 +0200
+Subject: [PATCH 3/9] Fix linking libdevmapper-event.so
 In-Reply-To: <cover.1273241256.git.zkabelac@redhat.com>
 References: <cover.1273241256.git.zkabelac@redhat.com>
-Message-ID: <2cbe6ea0335a50025be3ee2373ce07772007a5b9.1273241256.git.zkabelac@redhat.com>
+Message-ID: <0811f42cc975560dc399366eebfe761b9b1493bd.1273241256.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Plugins are using pthread and lvm2cmd library indirectly
-via devmapper-event-lvm2.
-
-Thus skip the linkage of these libs to created .so plugins.
+As for now LIB_SHARED links $(LIBS) so use this to add .so dependency on
+libdevmapper.so during creation of shared library.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/plugins/mirror/Makefile.in   |    2 +-
- daemons/dmeventd/plugins/snapshot/Makefile.in |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/dmeventd/Makefile.in |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/mirror/Makefile.in b/daemons/dmeventd/plugins/mirror/Makefile.in
-index 5966f24..3c3d468 100644
---- a/daemons/dmeventd/plugins/mirror/Makefile.in
-+++ b/daemons/dmeventd/plugins/mirror/Makefile.in
-@@ -30,7 +30,7 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index fb4f8f5..f9afdb6 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -53,7 +53,8 @@ include $(top_builddir)/make.tmpl
+ all: device-mapper
+ device-mapper: $(TARGETS)
  
- include $(top_builddir)/make.tmpl
+-LVMLIBS += -ldevmapper-event -ldevmapper $(PTHREAD_LIBS)
++LIBS += -ldevmapper
++LVMLIBS += -ldevmapper-event $(PTHREAD_LIBS)
  
--LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
- 
- install_lvm2: install_dm_plugin
- 
-diff --git a/daemons/dmeventd/plugins/snapshot/Makefile.in b/daemons/dmeventd/plugins/snapshot/Makefile.in
-index 32a74af..87a55e7 100644
---- a/daemons/dmeventd/plugins/snapshot/Makefile.in
-+++ b/daemons/dmeventd/plugins/snapshot/Makefile.in
-@@ -26,7 +26,7 @@ LIB_VERSION = $(LIB_VERSION_LVM)
- 
- include $(top_builddir)/make.tmpl
- 
--LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
- 
- install_lvm2: install_dm_plugin
- 
+ dmeventd: $(LIB_SHARED) dmeventd.o
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -L. -o $@ dmeventd.o \
 -- 
 1.7.0.1
 
