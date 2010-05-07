@@ -1,54 +1,49 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 07 May 2010 09:22:48 +0200
-Subject: LVM2/test Makefile.in test-utils.sh
-In-Reply-To: <20100506185453.2064.qmail@sourceware.org>
-References: <20100506185453.2064.qmail@sourceware.org>
-Message-ID: <4BE3BFC8.6070608@redhat.com>
+Date: Fri,  7 May 2010 16:14:47 +0200
+Subject: [PATCH 0/9] Makefile and Require cleanups
+Message-ID: <cover.1273241256.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 6.5.2010 20:54, mornfall at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	mornfall at sourceware.org	2010-05-06 18:54:52
-> 
-> Modified files:
-> 	test           : Makefile.in test-utils.sh 
-> 
-> Log message:
-> 	Add some basic provisions for automated testing of dmeventd.
-> 
-> Patches:
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-> 
-> --- LVM2/test/Makefile.in	2010/04/30 14:33:39	1.39
-> +++ LVM2/test/Makefile.in	2010/05/06 18:54:51	1.40
-> @@ -78,7 +78,11 @@
->  	echo 'abs_top_srcdir=$(abs_top_builddir)' >> $@-t
->  	echo 'PATH=$$abs_top_builddir/test/bin:$$PATH' >> $@-t
->  	LDLPATH="\$$abs_top_builddir/libdm"; \
-> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/tools"; \
->  	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd"; \
-> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/lvm2"; \
-> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/mirror"; \
-> +	LDLPATH="$$LDLPATH:\$$abs_top_builddir/daemons/dmeventd/plugins/snapshot"; \
+This patchset tries to address few things:
 
+it should be fixing Gentoo linkage bug
+https://bugs.gentoo.org/show_bug.cgi?id=318513
+But properly linking needed librarie to .so files.
+Another part is cleanup Require.private in .pc file.
+2 patches are touching pthread cleanups.
+One patch cleans the 'extra' cat command call from Makefile.
+And the last patch introduces pkgconfigdir so user could easily
+overwrite his favourite locate of .pc installation dir.
 
-Oh - I've had this one in my tree for some time - but as we do not test
-dmeventd - I've been not pushing it upstream - as we need a better solution.
+Zdenek Kabelac (9):
+  Not using pthread library functions here
+  Link liblvm2cmd.so with their depending libraries
+  Fix linking libdevmapper-event.so
+  Plugins do not use pthread or lvm2cmd directly
+  Skip unneeded 'cat' command
+  Use Require.private: field
+  Add UDEV_PC and SELINUX_PC subst variables
+  Requires.private: update
+  Use pkgconfigdir for placement of .pc files
 
-daemons/dmeventd/plugins/mirror daemons/dmeventd/plugins/snapshot shouldn't be
-here at all - these should be loaded via configurable plugin path - and we
-need some more updates even on dlopen part of code (as we move plugins to
-subdir of libdir.  Another thing that needs to be changed is the configurable
-comunication fifo.
-
-At this moment dmeventd is not yet ready for parallel testing.
-
-Zdenek
+ configure                                          |    8 +++++++-
+ configure.in                                       |    8 +++++++-
+ daemons/dmeventd/Makefile.in                       |    5 +++--
+ daemons/dmeventd/libdevmapper-event.pc.in          |    3 +--
+ daemons/dmeventd/plugins/mirror/Makefile.in        |    2 +-
+ daemons/dmeventd/plugins/mirror/dmeventd_mirror.c  |    2 --
+ daemons/dmeventd/plugins/snapshot/Makefile.in      |    2 +-
+ .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    3 +--
+ libdm/Makefile.in                                  |    2 +-
+ libdm/libdevmapper.pc.in                           |    2 +-
+ liblvm/Makefile.in                                 |    2 +-
+ liblvm/liblvm2app.pc.in                            |    2 +-
+ make.tmpl.in                                       |   15 ++++-----------
+ tools/Makefile.in                                  |    3 +++
+ 14 files changed, 32 insertions(+), 27 deletions(-)
 
 
