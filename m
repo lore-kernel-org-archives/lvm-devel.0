@@ -1,47 +1,37 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 7 May 2010 15:24:19 -0000
-Subject: LVM2 ./WHATS_NEW tools/pvscan.c
-Message-ID: <20100507152419.4673.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri,  7 May 2010 16:14:53 +0200
+Subject: [PATCH 6/9] Use Require.private: field
+In-Reply-To: <cover.1273241256.git.zkabelac@redhat.com>
+References: <cover.1273241256.git.zkabelac@redhat.com>
+Message-ID: <9e64344dfc93664471d823834bf59683b95df332.1273241256.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-07 15:24:18
+Move devmapper to Require.private: field.
+Remove unneeded libs from Libs.private:
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : pvscan.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ daemons/dmeventd/libdevmapper-event.pc.in |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-Log message:
-	Fix truncated total size displayed by pvscan.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1549&r2=1.1550
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvscan.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
-
---- LVM2/WHATS_NEW	2010/05/06 11:15:55	1.1549
-+++ LVM2/WHATS_NEW	2010/05/07 15:24:17	1.1550
-@@ -1,5 +1,6 @@
- Version 2.02.65 - 
- =================================
-+  Fix truncated total size displayed by pvscan.
-   Add new --sysinit option for vgchange and lvchange.
-   Suppress duplicate error messages about read failures and missing devices.
-   Install plugins to $(libdir)/device-mapper and $(libdir)/lvm2.
---- LVM2/tools/pvscan.c	2010/04/01 10:34:11	1.50
-+++ LVM2/tools/pvscan.c	2010/05/07 15:24:18	1.51
-@@ -166,7 +166,7 @@
- 			size_new += pv_size(pv);
- 			size_total += pv_size(pv);
- 		} else
--			size_total += pv_pe_count(pv) * pv_pe_size(pv);
-+			size_total += (uint64_t) pv_pe_count(pv) * pv_pe_size(pv);
- 	}
- 
- 	/* find maximum pv name length */
+diff --git a/daemons/dmeventd/libdevmapper-event.pc.in b/daemons/dmeventd/libdevmapper-event.pc.in
+index 49cad5a..839433f 100644
+--- a/daemons/dmeventd/libdevmapper-event.pc.in
++++ b/daemons/dmeventd/libdevmapper-event.pc.in
+@@ -6,7 +6,6 @@ includedir=@includedir@
+ Name: devmapper-event
+ Description: device-mapper event library
+ Version: @DM_LIB_PATCHLEVEL@
+-Requires: devmapper
+ Cflags: -I${includedir}
+ Libs: -L${libdir} -ldevmapper-event
+-Libs.private: -lpthread -ldl
++Requires.private: devmapper
+-- 
+1.7.0.1
 
 
