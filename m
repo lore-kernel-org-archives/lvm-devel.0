@@ -1,54 +1,54 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  7 May 2010 16:14:48 +0200
-Subject: [PATCH 1/9] Not using pthread library functions here
+Date: Fri,  7 May 2010 16:14:49 +0200
+Subject: [PATCH 2/9] Link liblvm2cmd.so with their depending libraries
 In-Reply-To: <cover.1273241256.git.zkabelac@redhat.com>
 References: <cover.1273241256.git.zkabelac@redhat.com>
-Message-ID: <520603bf9c7a30660bb4f1aa66619c559eb867ea.1273241256.git.zkabelac@redhat.com>
+Message-ID: <d3582ef6c48cc7e50a02504d25f7c3c327608e84.1273241256.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Link liblvm2cmd.so with devmapper-event and devmapper libs.
+Remove generic %.so: %.a target.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/plugins/mirror/dmeventd_mirror.c  |    2 --
- .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    3 +--
- 2 files changed, 1 insertions(+), 4 deletions(-)
+ make.tmpl.in      |    5 -----
+ tools/Makefile.in |    3 +++
+ 2 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-index 4d2eee5..788f9f5 100644
---- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-+++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-@@ -19,8 +19,6 @@
- #include "libdevmapper-event.h"
- #include "dmeventd_lvm.h"
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 2375e18..69fab00 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -320,11 +320,6 @@ install_lvm2_plugin: $(LIB_SHARED)
+ 	$(LN_S) -f $(<F) $(libdir)/$(<F).$(LIB_VERSION)
+ endif
  
--#include <pthread.h>
+-%.so: %.a
+-	$(CC) -shared -Wl,-soname,$(notdir $@).$(LIB_VERSION) \
+-	$(CFLAGS) $(CLDFLAGS) $(LIBS) -o $@ \
+-	@CLDWHOLEARCHIVE@ $< @CLDNOWHOLEARCHIVE@
 -
- #include <syslog.h> /* FIXME Replace syslog with multilog */
- /* FIXME Missing openlog? */
- /* FIXME Replace most syslogs with log_error() style messages and add complete context. */
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index 01bb2c2..3c85c6d 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2007-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -21,7 +21,6 @@
+ $(LIB_STATIC): $(OBJECTS)
+ 	$(RM) $@
+ 	$(AR) rs $@ $(OBJECTS)
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index 47fa2db..e7b9b6a 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -145,6 +145,9 @@ liblvm2cmd-static.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.
+ 	$(AR) rs $@ $(OBJECTS) lvmcmdlib.o lvm2cmd-static.o
  
- #include "lvm-string.h"
+ liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
++	$(CC) -shared -Wl,-soname,$@.$(LIB_VERSION) \
++	$(CFLAGS) $(CLDFLAGS) -o $@ $(LVMLIBS) $(LIBS) \
++		@CLDWHOLEARCHIVE@ liblvm2cmd.a @CLDNOWHOLEARCHIVE@
  
--#include <pthread.h>
- #include <syslog.h> /* FIXME Replace syslog with multilog */
- /* FIXME Missing openlog? */
- 
+ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
+ 	$(LN_S) -f $< $@
 -- 
 1.7.0.1
 
