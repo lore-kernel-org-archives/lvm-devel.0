@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 May 2010 08:32:23 -0000
-Subject: LVM2/daemons/dmeventd/plugins mirror/dmeventd_ ...
-Message-ID: <20100511083223.32427.qmail@sourceware.org>
+Date: 11 May 2010 08:34:41 -0000
+Subject: LVM2 ./WHATS_NEW ./make.tmpl.in tools/Makefile.in
+Message-ID: <20100511083441.1146.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-11 08:32:23
+Changes by:	zkabelac at sourceware.org	2010-05-11 08:34:39
 
 Modified files:
-	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
-	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
+	.              : WHATS_NEW make.tmpl.in 
+	tools          : Makefile.in 
 
 Log message:
-	Headerfile <pthread.h> is no longer needed here
+	Link liblvm2cmd.so with devmapper-event and devmapper libs.
+	and remove generic %.so: %.a target.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1550&r2=1.1551
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.94&r2=1.95
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.117&r2=1.118
 
---- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/03/30 14:39:55	1.33
-+++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/05/11 08:32:22	1.34
-@@ -19,8 +19,6 @@
- #include "libdevmapper-event.h"
- #include "dmeventd_lvm.h"
+--- LVM2/WHATS_NEW	2010/05/07 15:24:17	1.1550
++++ LVM2/WHATS_NEW	2010/05/11 08:34:38	1.1551
+@@ -1,5 +1,6 @@
+ Version 2.02.65 - 
+ =================================
++  Link liblvm2cmd.so with devmapper-event and devmapper libs.
+   Fix truncated total size displayed by pvscan.
+   Add new --sysinit option for vgchange and lvchange.
+   Suppress duplicate error messages about read failures and missing devices.
+--- LVM2/make.tmpl.in	2010/05/06 10:07:46	1.94
++++ LVM2/make.tmpl.in	2010/05/11 08:34:38	1.95
+@@ -320,11 +320,6 @@
+ 	$(LN_S) -f $(<F) $(libdir)/$(<F).$(LIB_VERSION)
+ endif
  
--#include <pthread.h>
+-%.so: %.a
+-	$(CC) -shared -Wl,-soname,$(notdir $@).$(LIB_VERSION) \
+-	$(CFLAGS) $(CLDFLAGS) $(LIBS) -o $@ \
+-	@CLDWHOLEARCHIVE@ $< @CLDNOWHOLEARCHIVE@
 -
- #include <syslog.h> /* FIXME Replace syslog with multilog */
- /* FIXME Missing openlog? */
- /* FIXME Replace most syslogs with log_error() style messages and add complete context. */
---- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2010/02/15 12:55:20	1.8
-+++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2010/05/11 08:32:22	1.9
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2007-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -21,7 +21,6 @@
+ $(LIB_STATIC): $(OBJECTS)
+ 	$(RM) $@
+ 	$(AR) rs $@ $(OBJECTS)
+--- LVM2/tools/Makefile.in	2010/04/15 15:12:20	1.117
++++ LVM2/tools/Makefile.in	2010/05/11 08:34:38	1.118
+@@ -145,6 +145,9 @@
+ 	$(AR) rs $@ $(OBJECTS) lvmcmdlib.o lvm2cmd-static.o
  
- #include "lvm-string.h"
+ liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
++	$(CC) -shared -Wl,-soname,$@.$(LIB_VERSION) \
++	$(CFLAGS) $(CLDFLAGS) -o $@ $(LVMLIBS) $(LIBS) \
++		@CLDWHOLEARCHIVE@ liblvm2cmd.a @CLDNOWHOLEARCHIVE@
  
--#include <pthread.h>
- #include <syslog.h> /* FIXME Replace syslog with multilog */
- /* FIXME Missing openlog? */
- 
+ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
+ 	$(LN_S) -f $< $@
 
 
