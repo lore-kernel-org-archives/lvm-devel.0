@@ -1,67 +1,107 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 11 May 2010 16:35:00 +0200
-Subject: [PATCH] In dmeventd, bridge LVM error log output to syslog.
-In-Reply-To: <20100507011850.GR27027@agk-dp.fab.redhat.com> (Alasdair
-	G. Kergon's message of "Fri, 7 May 2010 02:18:50 +0100")
-References: <87mxwcq2ue.fsf@twilight.int.mornfall.net.>
-	<20100507011850.GR27027@agk-dp.fab.redhat.com>
-Message-ID: <874oield63.fsf@twilight.int.mornfall.net.>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 11 May 2010 16:36:52 -0500
+Subject: [PATCH] LVM2: Disallow cluster attr change if mirror or snapshot is active
+Message-ID: <1273613812.31265.3.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+The new function 'lv_is_mirror' is not /really/ necessary, but I thought
+it made sense given the similar snapshot functions.  However, this
+probably means I need to find everywhere that the status of an LV is
+checked for MIRRORED and replace it with the function.  I can go either
+way...
 
-Alasdair G Kergon <agk@redhat.com> writes:
-> On Thu, May 06, 2010 at 08:53:13PM +0200, Peter Rockai wrote:
->> as discussed, this is the first part of dmeventd logging. I am not
->> touching any options related to debugging, that will come as a separate
->> patch later. This patch provides the necessary minimum for any useful
->> diagnostics of dmeventd/lvconvert --repair issues.
->
-> Sorry, but I don't understand this yet.
-> What changes are you intending to make to the log messages?
->
-> Previously *all* messages got logged, but only as either CRIT or as DEBUG,
-> so the sysadmin had a choice of seeing all messages (including trival ones)
-> or only the most critical messages.
+ brassow
 
-Now this is interesting...
+Disallow toggling the cluster attribute of a volume group if there
+are active mirrors or snapshots.
 
-> The new patch appears to drop some messages instead of logging them!
+We don't have the mechanisms in place to change the device-mapper
+tables for those targets that have behavioral differences between
+cluster and single machine instances.  Allowing users to change
+the attribute but not changing the target's behavior can lead to
+data corruption.
 
-!
+The following bugs are fixed/avoided by this patch:
+235123 - vgchange -c [ny] do not change target types when necessary
+289331 - RFE: switching from cluster domain to local domain needs to deactivate volume somehow
+289541 - when changing from local to cluster, volumes can not appear to be deactivated
 
-There used to be this:
--               lvm2_log_level(_lvm_handle, LVM2_LOG_SUPPRESS);
--               /* FIXME Temporary: move to dmeventd core */
 
-but that disappeared with this patch:
+Index: LVM2/lib/metadata/metadata-exported.h
+===================================================================
+--- LVM2.orig/lib/metadata/metadata-exported.h
++++ LVM2/lib/metadata/metadata-exported.h
+@@ -691,6 +691,7 @@ int lv_remove_mirrors(struct cmd_context
+ 
+ int is_temporary_mirror_layer(const struct logical_volume *lv);
+ struct logical_volume * find_temporary_mirror(const struct logical_volume *lv);
++int lv_is_mirror(const struct logical_volume *lv);
+ uint32_t lv_mirror_count(const struct logical_volume *lv);
+ uint32_t adjusted_mirror_region_size(uint32_t extent_size, uint32_t extents,
+                                     uint32_t region_size);
+Index: LVM2/lib/metadata/metadata.c
+===================================================================
+--- LVM2.orig/lib/metadata/metadata.c
++++ LVM2/lib/metadata/metadata.c
+@@ -1208,8 +1208,19 @@ int vg_set_alloc_policy(struct volume_gr
+ int vg_set_clustered(struct volume_group *vg, int clustered)
+ {
+ 	struct lv_list *lvl;
+-	if (clustered) {
+-		dm_list_iterate_items(lvl, &vg->lvs) {
++
++	/*
++	 * We do not currently support switching the cluster attribute
++	 * on active mirrors or snapshots.
++	 */
++	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (lv_is_mirror(lvl->lv) && lv_is_active(lvl->lv)) {
++			log_error("Mirror logical volumes must be inactive "
++				  "when changing the cluster attribute.");
++			return 0;
++		}
++
++		if (clustered) {
+ 			if (lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) {
+ 				log_error("Volume group %s contains snapshots "
+ 					  "that are not yet supported.",
+@@ -1217,6 +1228,13 @@ int vg_set_clustered(struct volume_group
+ 				return 0;
+ 			}
+ 		}
++
++		if ((lv_is_origin(lvl->lv) || lv_is_cow(lvl->lv)) &&
++		    lv_is_active(lvl->lv)) {
++			log_error("Snapshot logical volumes must be inactive "
++				  "when changing the cluster attribute.");
++			return 0;
++		}
+ 	}
+ 
+ 	if (clustered)
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -72,6 +72,14 @@ struct logical_volume *find_temporary_mi
+ 	return NULL;
+ }
+ 
++int lv_is_mirror(const struct logical_volume *lv)
++{
++	if (lv->status & MIRRORED)
++		return 1;
++
++	return 0;
++}
++
+ /*
+  * Returns the number of mirrors of the LV
+  */
 
-    Thu Jan 21 23:15:46 CET 2010  agk
-      Add libdevmapper-event-lvm2.so to serialise dmeventd plugin liblvm2cmd use.
-
-so it seems that versions of dmeventd since this patch spam syslog with
-everything, unconditionally. I wasn't aware of this behaviour
-change. Either way, I think what we have now is wrong -- a couple of
-dmeventd events produced something like 2 megabytes of logs.
-
-What we had *originally* (before end of January) was to log nothing, now
-we log everything as DEBUG. This patch logs things at their right
-priority and suppresses -vvvv-style output to syslog, which I think is a
-good thing (this will likely bog down some syslog implementations).
-
-> I'd prefer to see a patch that adds a middle category, taking some of
-> the DEBUG messages and logging them as ERR or WARN.
-
-I will submit a patch later that changes the commandline options, so we
-can optionally enable the DEBUG logs to syslog with a -d-style option to
-dmeventd. For users, it doesn't make any sense to be logging at the most
-verbose level, to syslog.
-
-Yours,
-   Petr.
 
 
