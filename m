@@ -1,29 +1,67 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 11 May 2010 08:36:04 -0400
-Subject: [PATCH 0/6] Add infrastructure for cleaner pv handling, v7
-Message-ID: <1273581370-13528-1-git-send-email-dwysocha@redhat.com>
+Date: Tue, 11 May 2010 08:36:05 -0400
+Subject: [PATCH 1/6] Add pvid_from_devname() lvmcache function.
+In-Reply-To: <1273581370-13528-1-git-send-email-dwysocha@redhat.com>
+References: <1273581370-13528-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1273581370-13528-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add supporting function for mappings from devname -> pvid -> vgname.
 
-This patchset replaces the last patchset submitted on
-Wed, 28 Apr 2010 11:55:37.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/cache/lvmcache.c |   19 +++++++++++++++++++
+ lib/cache/lvmcache.h |    2 ++
+ 2 files changed, 21 insertions(+), 0 deletions(-)
 
->From now on, a user that wants to get/set a PV property and
-knows only the pvname must first lookup the vgname, then obtain
-a vg handle, and finally use the pv handle to get/set the property.
-
-Early patches add internal functions to lookup a vgname from a device name
-and pvid, respecting the order of lookup.  In cases where we lookup by
-pvid or there are no mdas, we may need to do increasingly expensive scans
-to provide the answer.  Once the internal functions are given, pvchange
-is reworked to use this new functionality, and lvm2app interfaces are
-added to lookup a vgname from a pvname and pvid, which will be useful
-for udisks and other applications that may not know the vgname but want
-information on a specific device/PV.  The new functionality is tested by
-running the nightly tests and some lvm2app specific tests.
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 0e31a4e..2a5f2d7 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -747,6 +747,25 @@ struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
+ 	return NULL;
+ }
+ 
++const char *pvid_from_devname(struct cmd_context *cmd,
++			      const char *devname)
++{
++	struct device *dev;
++	struct label *label;
++
++	if (!(dev = dev_cache_get(devname, cmd->filter))) {
++		log_error("%s: Couldn't find device.  Check your filters?",
++			  devname);
++		return NULL;
++	}
++
++	if (!(label_read(dev, &label, UINT64_C(0))))
++		return NULL;
++
++	return dev->pvid;
++}
++
++
+ static int _free_vginfo(struct lvmcache_vginfo *vginfo)
+ {
+ 	struct lvmcache_vginfo *primary_vginfo, *vginfo2;
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 8eeb495..5b0ca73 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -95,6 +95,8 @@ struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only);
+ const char *vgname_from_vgid(struct dm_pool *mem, const char *vgid);
+ struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
+ 				unsigned *scan_done_once);
++const char *pvid_from_devname(struct cmd_context *cmd,
++			      const char *dev_name);
+ int vgs_locked(void);
+ int vgname_is_locked(const char *vgname);
+ 
+-- 
+1.6.0.6
 
 
