@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 May 2010 08:42:00 -0000
-Subject: LVM2/daemons/dmeventd/plugins mirror/Makefile. ...
-Message-ID: <20100511084200.4848.qmail@sourceware.org>
+Date: 11 May 2010 08:43:19 -0000
+Subject: LVM2 make.tmpl.in
+Message-ID: <20100511084319.5529.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,43 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-11 08:42:00
+Changes by:	zkabelac at sourceware.org	2010-05-11 08:43:18
 
 Modified files:
-	daemons/dmeventd/plugins/mirror: Makefile.in 
-	daemons/dmeventd/plugins/snapshot: Makefile.in 
+	.              : make.tmpl.in 
 
 Log message:
-	Plugins do not use pthread or lvm2cmd directly.
-	
-	Plugins are using pthread and lvm2cmd libraries indirectly
-	through devmapper-event-lvm2, so link only with libraries used by them.
+	Skip unneeded 'cat' command execution.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/Makefile.in.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.95&r2=1.96
 
---- LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/05/06 10:07:47	1.20
-+++ LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/05/11 08:41:58	1.21
-@@ -30,7 +30,7 @@
+--- LVM2/make.tmpl.in	2010/05/11 08:34:38	1.95
++++ LVM2/make.tmpl.in	2010/05/11 08:43:18	1.96
+@@ -142,14 +142,11 @@
  
- include $(top_builddir)/make.tmpl
+ LVM_VERSION := $(shell cat $(top_srcdir)/VERSION)
  
--LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
+-LIB_VERSION_LVM := $(shell cat $(top_srcdir)/VERSION | \
+-		     $(AWK) -F '.' '{printf "%s.%s",$$1,$$2}')
++LIB_VERSION_LVM := $(shell $(AWK) -F '.' '{printf "%s.%s",$$1,$$2}' $(top_srcdir)/VERSION)
  
- install_lvm2: install_dm_plugin
+-LIB_VERSION_DM := $(shell cat $(top_srcdir)/VERSION_DM | \
+-		    $(AWK) -F '.' '{printf "%s.%s",$$1,$$2}')
++LIB_VERSION_DM := $(shell $(AWK) -F '.' '{printf "%s.%s",$$1,$$2}' $(top_srcdir)/VERSION_DM)
  
---- LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/05/06 10:07:47	1.15
-+++ LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/05/11 08:41:59	1.16
-@@ -26,7 +26,7 @@
+-LIB_VERSION_APP := $(shell cat $(top_srcdir)/VERSION | \
+-		     $(AWK) -F '[(). ]' '{printf "%s.%s",$$1,$$4}')
++LIB_VERSION_APP := $(shell $(AWK) -F '[(). ]' '{printf "%s.%s",$$1,$$4}' $(top_srcdir)/VERSION)
  
- include $(top_builddir)/make.tmpl
- 
--LIBS += @LVM2CMD_LIB@ -ldevmapper-event-lvm2 -ldevmapper $(PTHREAD_LIBS)
-+LIBS += -ldevmapper-event-lvm2 -ldevmapper
- 
- install_lvm2: install_dm_plugin
+ INCLUDES += -I. -I$(top_builddir)/include
  
 
 
