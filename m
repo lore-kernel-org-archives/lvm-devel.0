@@ -1,33 +1,29 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 11 May 2010 14:21:37 +0200
-Subject: LVM2/test Makefile.in test-utils.sh
-In-Reply-To: <4BE3BFC8.6070608@redhat.com> (Zdenek Kabelac's message of "Fri, 
-	07 May 2010 09:22:48 +0200")
-References: <20100506185453.2064.qmail@sourceware.org>
-	<4BE3BFC8.6070608@redhat.com>
-Message-ID: <87bpcmljce.fsf@twilight.int.mornfall.net.>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 11 May 2010 08:36:04 -0400
+Subject: [PATCH 0/6] Add infrastructure for cleaner pv handling, v7
+Message-ID: <1273581370-13528-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Zdenek Kabelac <zkabelac@redhat.com> writes:
 
-> daemons/dmeventd/plugins/mirror daemons/dmeventd/plugins/snapshot shouldn't be
-> here at all - these should be loaded via configurable plugin path - and we
-> need some more updates even on dlopen part of code (as we move plugins to
-> subdir of libdir.  Another thing that needs to be changed is the configurable
-> comunication fifo.
-Feel free to fix it.
+This patchset replaces the last patchset submitted on
+Wed, 28 Apr 2010 11:55:37.
 
-> At this moment dmeventd is not yet ready for parallel testing.
-Who cares? The tests skip if any dmeventd is running in the system --
-the same approach as with clvmd. You can't run two clvmd tests in
-parallel either... It works for what I need it for. If you need more,
-patches welcome of course.
+>From now on, a user that wants to get/set a PV property and
+knows only the pvname must first lookup the vgname, then obtain
+a vg handle, and finally use the pv handle to get/set the property.
 
-Yours,
-   Petr.
+Early patches add internal functions to lookup a vgname from a device name
+and pvid, respecting the order of lookup.  In cases where we lookup by
+pvid or there are no mdas, we may need to do increasingly expensive scans
+to provide the answer.  Once the internal functions are given, pvchange
+is reworked to use this new functionality, and lvm2app interfaces are
+added to lookup a vgname from a pvname and pvid, which will be useful
+for udisks and other applications that may not know the vgname but want
+information on a specific device/PV.  The new functionality is tested by
+running the nightly tests and some lvm2app specific tests.
 
 
