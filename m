@@ -1,91 +1,95 @@
-From: Neil Brown <neilb@suse.de>
-Date: Thu, 13 May 2010 09:19:20 +1000
-Subject: dmeventd doesn't handle failures during mirror resync.
-In-Reply-To: <874oim3h5i.fsf@twilight.int.mornfall.net.>
-References: <20100429170140.777db964@notabene.brown>
-	<874oim3h5i.fsf@twilight.int.mornfall.net.>
-Message-ID: <20100513091920.251e4731@notabene.brown>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu, 13 May 2010 14:52:45 +0200
+Subject: [PATCH] Do not merge old device cache after we run full scan.
+Message-ID: <1273755165-12018-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Thanks for the reply,
+Courrently if clvmd is running and user issues vgscan,
+the device cache file is dumped both in vgscan and clvmd process.
 
-On Wed, 05 May 2010 10:08:09 +0200
-Petr Rockai <prockai@redhat.com> wrote:
+Unfortunately, clvmd calls lvmcache_label_scan,
+it properly destroys persistent filter, but during
+persistent_filter_dump it merges old cache content back!
 
-> Neil Brown <neilb@suse.de> writes:
-> 
-> > I was surprised to discover that while a normal write error is
-> > handled properly - dmeventd runs 'lvconvert' to fix the array up,
-> > this does not happen in response to a write error while syncing
-> > the array.
-> >
-> > If I arrange for the new device to die, then 
-> >           lvconvert --repair --use-policies
-> >
-> > will fix it up as I would expect, but dmeventd never asks it to do
-> > this.
-> >
-> > This seems to be a deliberate decision:  in _process_status_code 
-> > in dmeventd_mirror.c, a status of 'F' will cause lvconvert to be
-> > run while 'S' and 'R' (sync and read errors) will not.
-> >
-> > Is there a reason for this?
-> I think the rationale is that:
-> 
-> For read errors, we should *not* strip the mirror leg, since we want to
-> keep as much redundancy as possible in this scenario. The failure should
-> be logged, but I think that's it.
+This causes that change in filters is not properly propagated
+into device cache after vgscan on cluster.
+(Only new devices are added.)
 
-In general I would agree, though there are cases where you would want to
-strip a leg based only on read errors.  If a drive is failing in a way that
-all read attempts cause multiple retries and timeouts, then having that
-device remain in the array can kill performance.
+https://bugzilla.redhat.com/show_bug.cgi?id=591861
 
-It seems therefore that this should be a policy based decision, possibly
-involving extra testing, and the place for this would seem to be in lvconvert.
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/cache/lvmcache.c            |    2 +-
+ lib/commands/toolcontext.c      |    2 +-
+ lib/filters/filter-persistent.c |    4 ++--
+ lib/filters/filter-persistent.h |    2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
 
-Hence the thrust of my argument, which is that dmeventd should always run
-lvconvert on any event that is at all suspect, and lvconvert should make the
-correct decision, which may be to leave the array alone.
-
-Maybe lvconvert doesn't currently always make the 'correct' decision so
-changing dmeventd might be premature, but I would like to know if you agree
-that this is the best long-term strategy.
-
-> 
-> For sync, I am not sure. It may be that the reason for this is that sync
-> is usually related to manual action and dmeventd intervention may be
-> unexpected and unwanted in this case. But that case could be argued.
-> 
-
-If you are using dmeventd, then a write failure could easily cause lvconvert
-to kick off a sync on a new device, so it could easily not be a manual action.
-
-
-The main problem I see with the current arrangement is that if a device goes
-missing during a sync and we don't 'lvconvert repair', then the next restart
-will not succeed with "--partial" and that would cause problems rebooting.
-
-Thanks,
-NeilBrown
-
-
-(please Cc: me, I'm not subscribed).
-
-> > Can we change dmeventd to response to sync (and read) errors in the same
-> > way that it responds to write errors?
-> I think it's a bad idea for read errors, unless maybe we could have a
-> new feature for that -- one that'd upconvert the mirror first (if
-> there's a hotspare) and only if that finishes OK, kill the bad leg. Just
-> log the error if there are no hotspares.
-> 
-> For sync errors, I am ambivalent. Any further opinions?
-> 
-> Yours,
->    Petr.
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 0e31a4e..940c61f 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -567,7 +567,7 @@ int lvmcache_label_scan(struct cmd_context *cmd, int full_scan)
+ 	 * device cache for the benefit of short-lived processes.
+ 	 */
+ 	if (full_scan == 2 && cmd->is_long_lived && cmd->dump_filter)
+-		persistent_filter_dump(cmd->filter);
++		persistent_filter_dump(cmd->filter, 0);
+ 
+ 	r = 1;
+ 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 69c79e7..c780d26 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1341,7 +1341,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ void destroy_toolcontext(struct cmd_context *cmd)
+ {
+ 	if (cmd->dump_filter)
+-		persistent_filter_dump(cmd->filter);
++		persistent_filter_dump(cmd->filter, 1);
+ 
+ 	archive_exit(cmd);
+ 	backup_exit(cmd);
+diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
+index 9243a94..4cb0d7d 100644
+--- a/lib/filters/filter-persistent.c
++++ b/lib/filters/filter-persistent.c
+@@ -168,7 +168,7 @@ static void _write_array(struct pfilter *pf, FILE *fp, const char *path,
+ 		fprintf(fp, "\n\t]\n");
+ }
+ 
+-int persistent_filter_dump(struct dev_filter *f)
++int persistent_filter_dump(struct dev_filter *f, int merge_existing)
+ {
+ 	struct pfilter *pf;
+ 	char *tmp_file;
+@@ -220,7 +220,7 @@ int persistent_filter_dump(struct dev_filter *f)
+ 	/*
+ 	 * If file contents changed since we loaded it, merge new contents
+ 	 */
+-	if (info.st_ctime != pf->ctime)
++	if (merge_existing && info.st_ctime != pf->ctime)
+ 		/* Keep cft open to avoid losing lock */
+ 		persistent_filter_load(f, &cft);
+ 
+diff --git a/lib/filters/filter-persistent.h b/lib/filters/filter-persistent.h
+index 4b0fc55..a7f1245 100644
+--- a/lib/filters/filter-persistent.h
++++ b/lib/filters/filter-persistent.h
+@@ -23,6 +23,6 @@ struct dev_filter *persistent_filter_create(struct dev_filter *f,
+ 
+ int persistent_filter_wipe(struct dev_filter *f);
+ int persistent_filter_load(struct dev_filter *f, struct config_tree **cft_out);
+-int persistent_filter_dump(struct dev_filter *f);
++int persistent_filter_dump(struct dev_filter *f, int merge_existing);
+ 
+ #endif
+-- 
+1.7.1
 
 
