@@ -1,54 +1,104 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Wed, 19 May 2010 16:35:21 -0400
-Subject: [PATCH] handle transient errors in lvconvert --repair
-In-Reply-To: <87zkzv3aqq.fsf@twilight.int.mornfall.net.>
-References: <87y6g99bbg.fsf@twilight.int.mornfall.net.>	<87pr1kai2k.fsf@twilight.int.mornfall.net.>	<87y6fxos3x.fsf@twilight.int.mornfall.net.>	<4BEDD432.4010800@redhat.com>
-	<4BF1CAD9.1050005@redhat.com>	<87ljbg3xkt.fsf@twilight.int.mornfall.net.>	<4BF3FE5C.8070906@redhat.com>	<874oi34ubd.fsf@twilight.int.mornfall.net.>	<4BF43FFD.30504@redhat.com>
-	<87zkzv3aqq.fsf@twilight.int.mornfall.net.>
-Message-ID: <4BF44B89.2070309@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:08 +0200
+Subject: [PATCH 13/23] Replicator: use cmd_vg list for _process_one_vg()
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <d20bfa4d84f66255fffc233860380ccb1cc871c0.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/19/10 16:19, Petr Rockai wrote:
-> Takahiro Yasui <tyasui@redhat.com> writes:
-> 
->>> +++ cvs-upstream/tools/lvconvert.c	2010-05-19 20:18:40.000000000 +0200
->>> @@ -1225,11 +1225,11 @@
->>> 		if (!lv_remove_mirrors(cmd, lv, failed_mirrors, new_log_count,
->>> 				       _is_partial_lv, NULL, 0))
->>> 			return 0;
->>
->> As I posted in the previous mail, the argument, new_log_count, is
->> correct here? The argument is used to check if a log should be removed.
->> I think that failed_log comes here instead of new_log_count.
-...
-> ... now this was probably not being noticed, since in most cases, the
-> mistakenly removed log would be re-created right away by later
-> code. I'll fix this in my local patch.
+Patch modifes behavior of _process_one_vg().
 
-Yeah, that valuable name is very confusing. :-<
-Anyway thanks to fixing this.
+In the first pass vg_read() collect for replicator sorted list of
+additional VGs during lock_vol().
+If any VG needed by a replicator is not yet opened then next iteration
+loop is taken with all collected VGs.
 
->> Or the value such as nlc in _lvconvert_mirrors_aux() comes.
->>
->>                 uint32_t nlc = (!new_log_count || lp->mirrors == 1) ? 1U : 0U;
->> 		...
->> 		} else if (!lv_remove_mirrors(cmd, lv, nmc, nlc,
->>                                               is_mirror_image_removable, operable_pvs, 0))
-> 
-> Ugh, nlc sounds like short for new_log_count to me, which is *extremely
-> confusing*, since it's actually quite opposite: nlc = 1 means remove
-> log, nlc = 0 means retain the log. Is that right?
+Flag vg->cmd_missing_vgs detects missing VGs.
 
-Yes, it is. It is similarly used as the previous parameter, nmc.
-nmc tells the number of mirrors which will be removed. So as for
-nlc, it is easier to think nlc the log number which should be removed.
-(0: not removed, 1: removed)
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ tools/toollib.c |   55 ++++++++++++++++++++++++++++++++-----------------------
+ 1 files changed, 32 insertions(+), 23 deletions(-)
 
-Thanks,
-Taka
+diff --git a/tools/toollib.c b/tools/toollib.c
+index c9ba8ac..b1750a2 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -430,37 +430,46 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
+ 			   uint32_t flags, void *handle, int ret_max,
+ 			   process_single_vg_fn_t process_single_vg)
+ {
+-	struct volume_group *vg;
++	struct dm_list cmd_vgs;
++	struct cmd_vg *cvl_vg;
+ 	int ret = 0;
+ 
+ 	log_verbose("Finding volume group \"%s\"", vg_name);
+ 
+-	vg = vg_read(cmd, vg_name, vgid, flags);
+-	/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
+-	if (vg_read_error(vg) &&
+-	    !((vg_read_error(vg) == FAILED_INCONSISTENT) &&
+-	      (flags & READ_ALLOW_INCONSISTENT))) {
+-		ret_max = ECMD_FAILED;
+-		goto_out;
+-	}
++	dm_list_init(&cmd_vgs);
++	if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs, vg_name, vgid, flags)))
++		return_0;
++
++	while (!sigint_caught()) {
++		if (!cmd_vg_read(cmd, &cmd_vgs))
++			/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
++			if (vg_read_error(cvl_vg->vg) &&
++			    (!((flags & READ_ALLOW_INCONSISTENT) &&
++			       (vg_read_error(cvl_vg->vg) == FAILED_INCONSISTENT)))) {
++				ret = ECMD_FAILED;
++				break;
++			}
++
++		if (!dm_list_empty(tags) &&
++		    /* Only process if a tag matches or it's on arg_vgnames */
++		    !str_list_match_item(arg_vgnames, vg_name) &&
++		    !str_list_match_list(tags, &cvl_vg->vg->tags))
++			break;
+ 
+-	if (!dm_list_empty(tags)) {
+-		/* Only process if a tag matches or it's on arg_vgnames */
+-		if (!str_list_match_item(arg_vgnames, vg_name) &&
+-		    !str_list_match_list(tags, &vg->tags))
+-			goto out;
++		ret = process_single_vg(cmd, vg_name, cvl_vg->vg, handle);
++
++		if (vg_read_error(cvl_vg->vg)) /* FAILED_INCONSISTENT */
++			break;
++
++		if (!cvl_vg->vg->cmd_missing_vgs)
++			break;
++
++		cmd_vg_release(&cmd_vgs);
+ 	}
+ 
+-	if ((ret = process_single_vg(cmd, vg_name, vg,
+-				  handle)) > ret_max)
+-		ret_max = ret;
++	cmd_vg_release(&cmd_vgs);
+ 
+-out:
+-	if (vg_read_error(vg))
+-		vg_release(vg);
+-	else
+-		unlock_and_release_vg(cmd, vg, vg_name);
+-	return ret_max;
++	return (ret > ret_max) ? ret : ret_max;
+ }
+ 
+ int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+-- 
+1.7.0.1
 
 
