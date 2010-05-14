@@ -1,76 +1,41 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:09 -0400
-Subject: [PATCH 07/18] Ensure in-memory state matches on-disk state of mda ignore bit.
-In-Reply-To: <1274882540-6181-7-git-send-email-dwysocha@redhat.com>
-References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-4-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-5-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-6-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-7-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-8-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:15 +0200
+Subject: [PATCH 20/23] Replicator: do not remove of replicators' LVs
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <d3163376cb7b13ac2cb58b6ce96a9788e48e3b18.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format_text/format-text.c |    3 +++
- lib/format_text/text_label.c  |    2 ++
- 2 files changed, 5 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 06b7b9b..d9a0fc1 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -720,6 +720,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
- 			  "header at %" PRIu64, vg->name,
- 			  dev_name(mdac->area.dev), mdac->area.start);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5e4a674..d50ce53 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2230,6 +2230,15 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
-+	rlocn_set_ignored(mdah->raw_locns, mda_is_ignored(mda));
- 	if (!_raw_write_mda_header(fid->fmt, mdac->area.dev, mdac->area.start,
- 				   mdah)) {
- 		dm_pool_free(fid->fmt->cmd->mem, mdah);
-@@ -802,6 +803,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
- 	rlocn->offset = 0;
- 	rlocn->size = 0;
- 	rlocn->checksum = 0;
-+	rlocn_set_ignored(mdah->raw_locns, mda_is_ignored(mda));
- 
- 	if (!_raw_write_mda_header(fid->fmt, mdac->area.dev, mdac->area.start,
- 				   mdah)) {
-@@ -1505,6 +1507,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
- 		mdac = mda->metadata_locn;
- 		memset(&buf, 0, sizeof(buf));
- 		mdah->size = mdac->area.size;
-+		rlocn_set_ignored(mdah->raw_locns, mda_is_ignored(mda));
- 		if (!_raw_write_mda_header(fmt, mdac->area.dev,
- 					   mdac->area.start, mdah)) {
- 			if (!dev_close(pv->dev))
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 7083b89..ab9f595 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -301,6 +301,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 	dm_list_iterate_items(mda, &info->mdas) {
- 		mdac = (struct mda_context *) mda->metadata_locn;
- 		if (!dev_open(mdac->area.dev)) {
-+			mda_set_ignored(mda, 1);
- 			stack;
- 			continue;
- 		}
-@@ -308,6 +309,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 			stack;
- 			goto close_dev;
- 		}
-+		mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
- 
- 		if ((vgname = vgname_from_mda(info->fmt, mdah,
- 					      &mdac->area,
++	if (lv_is_replicator_dev(lv) ||
++	    lv_is_rimage(lv) ||
++	    lv_is_rlog(lv) ||
++	    lv_is_slog(lv)) {
++		log_error("Can't remove logical volume %s used by a "
++			  "replicator.", lv->name);
++		return 0;
++	}
++
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
+ 		return 0;
 -- 
-1.6.0.6
+1.7.0.1
 
 
