@@ -1,29 +1,103 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 19 May 2010 09:22:53 -0400
-Subject: LVM2/liblvm .exported_symbols lvm2app.h lvm_base.c
-In-Reply-To: <20100519122904.GD3991@agk-dp.fab.redhat.com>
-References: <20100519115317.25417.qmail@sourceware.org>
-	<20100519122904.GD3991@agk-dp.fab.redhat.com>
-Message-ID: <1274275373.2487.3.camel@f10-node1>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:07 +0200
+Subject: [PATCH 12/23] Replicator: add read and release VGs for rsites
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <d5d9cb4736bc3c242ad593bd2fa28908400f8f9d.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2010-05-19 at 13:29 +0100, Alasdair G Kergon wrote:
-> On Wed, May 19, 2010 at 11:53:17AM -0000, wysochanski at sourceware.org wrote:
-> > 	Bump the lvm2app version number to 3.
-> 
-> We discussed this and agreed not to do it.
-> 
-> That version number will only be incremented if there is a change that
-> makes existing compiled code incompatible with the new compiled
-> shared object.
-> 
-> Alasdair
-> 
+Add function to read and release remote VGs for replicator sites
+in activation context.
 
-Ack - just forgot to update the commit msg.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/metadata/metadata-exported.h |    3 ++
+ lib/metadata/replicator_manip.c  |   56 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 0 deletions(-)
+
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 4c70626..09c83a4 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -811,6 +811,9 @@ void cmd_vg_release(struct dm_list *cmd_vgs);
+ 
+ int find_replicator_vgs(struct logical_volume *lv);
+ 
++int lv_read_replicator_vgs(struct logical_volume *lv);
++void lv_release_replicator_vgs(struct logical_volume *lv);
++
+ struct logical_volume *find_pvmove_lv(struct volume_group *vg,
+ 				      struct device *dev, uint32_t lv_type);
+ struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
+diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
+index abd34b3..ba9ddcd 100644
+--- a/lib/metadata/replicator_manip.c
++++ b/lib/metadata/replicator_manip.c
+@@ -634,3 +634,59 @@ int find_replicator_vgs(struct logical_volume *lv)
+ 
+ 	return ret;
+ }
++
++/**
++ * Resolve all remote VGs from replicators' sites
++ * This function is used in activation context and needs all VGs already locked
++ */
++int lv_read_replicator_vgs(struct logical_volume *lv)
++{
++	struct replicator_device *rdev;
++	struct replicator_site *rsite;
++	struct volume_group *vg;
++
++	if (!lv_is_replicator_dev(lv))
++		return 1;
++
++	dm_list_iterate_items(rsite, &first_seg(lv)->replicator->rsites) {
++		if (!rsite->vg_name)
++			continue;
++		vg = vg_read(lv->vg->cmd, rsite->vg_name, 0, 0); // READ_WITHOUT_LOCK
++		if (vg_read_error(vg)) {
++			log_error("Unable to read volume group %s",
++				  rsite->vg_name);
++			goto bad;
++		}
++		rsite->vg = vg;
++		/* FIXME: handling missing LVs needs to be better */
++		dm_list_iterate_items(rdev, &rsite->rdevices)
++			if (!(rdev->lv = find_lv(vg, rdev->name))) {
++				log_error("Unable to find %s in volume group %s",
++					  rdev->name, rsite->vg_name);
++				goto bad;
++			}
++	}
++
++	return 1;
++bad:
++	lv_release_replicator_vgs(lv);
++	return 0;
++}
++
++/**
++ * Release all VG resources taken by replicators' sites
++ * This function is used in activation context and needs all VGs already locked
++ */
++void lv_release_replicator_vgs(struct logical_volume *lv)
++{
++	struct replicator_site *rsite;
++
++	if (!lv_is_replicator_dev(lv))
++		return;
++
++	dm_list_iterate_back_items(rsite, &first_seg(lv)->replicator->rsites)
++		if (rsite->vg_name && rsite->vg) {
++			vg_release(rsite->vg);
++			rsite->vg = NULL;
++		}
++}
+-- 
+1.7.0.1
 
 
