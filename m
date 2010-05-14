@@ -1,92 +1,65 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 14 May 2010 10:28:25 +0200
-Subject: [PATCH 1/1] Use /bin/bash instead of /bin/sh
-In-Reply-To: <cover.1273825538.git.zkabelac@redhat.com>
-References: <cover.1273825538.git.zkabelac@redhat.com>
-Message-ID: <68fd26e48c7d6d792d4d1af9551a0ba070e022d4.1273825538.git.zkabelac@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 14 May 2010 11:00:58 +0200
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.h lib/a ...
+In-Reply-To: <20100513234711.GP2377@agk-dp.fab.redhat.com>
+References: <20100513183841.1542.qmail@sourceware.org>
+	<20100513234711.GP2377@agk-dp.fab.redhat.com>
+Message-ID: <4BED114A.1090507@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use /bin/bash for scripts using bashisms.
-For all of them 'checkbashisms' command reports miscelanous things
-available only in nonstandard shell extensions like bash.
+On 05/14/2010 01:47 AM, Alasdair G Kergon wrote:
+> Mixing up types there.
+> name is a dm device name
+>
+>   
+yep. ok with that patch? (we have no mempool available there, that's why
+dm_strdup)
 
-For more details check i.e.: https://wiki.ubuntu.com/DashAsBinSh
-
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- scripts/clvmd_fix_conf.sh       |    2 +-
- scripts/fsadm.sh                |    2 +-
- scripts/last_cvs_update.sh      |    2 +-
- scripts/lvmconf.sh              |    2 +-
- scripts/lvmconf_lockingtype2.sh |    2 +-
- scripts/vgimportclone.sh        |    2 +-
- 6 files changed, 6 insertions(+), 6 deletions(-)
-
-diff --git a/scripts/clvmd_fix_conf.sh b/scripts/clvmd_fix_conf.sh
-index a00263c..cc2c50d 100644
---- a/scripts/clvmd_fix_conf.sh
-+++ b/scripts/clvmd_fix_conf.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- #
- # Edit an lvm.conf file to enable cluster locking.
- #
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 13b48a0..90a93ee 100644
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- #
- # Copyright (C) 2007-2009 Red Hat, Inc. All rights reserved.
- #
-diff --git a/scripts/last_cvs_update.sh b/scripts/last_cvs_update.sh
-index e38d0ec..7b5afea 100755
---- a/scripts/last_cvs_update.sh
-+++ b/scripts/last_cvs_update.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- #$Header$
- ################################################################################
- ##
-diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
-index bf1494b..3caaf91 100644
---- a/scripts/lvmconf.sh
-+++ b/scripts/lvmconf.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- #
- # Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
- #
-diff --git a/scripts/lvmconf_lockingtype2.sh b/scripts/lvmconf_lockingtype2.sh
-index f5c4313..b823a43 100644
---- a/scripts/lvmconf_lockingtype2.sh
-+++ b/scripts/lvmconf_lockingtype2.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- #
- # Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
- #
-diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
-index ecf0546..731b860 100755
---- a/scripts/vgimportclone.sh
-+++ b/scripts/vgimportclone.sh
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 710b3ae..d01bd63 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -133,7 +133,7 @@ int device_is_usable(struct device *dev)
+ 	const char *name, *uuid;
+ 	uint64_t start, length;
+ 	char *target_type = NULL;
+-	char *params;
++	char *params, *vgname = NULL, *lvname, *layer;
+ 	void *next = NULL;
+ 	int r = 0;
  
- # Copyright (C) 2009 Chris Procter All rights reserved.
- # Copyright (C) 2009 Red Hat, Inc. All rights reserved.
--- 
-1.7.0.1
+@@ -175,15 +175,23 @@ int device_is_usable(struct device *dev)
+ 	/* FIXME Also check dependencies? */
+ 
+ 	/* Check internal lvm devices */
+-	if (is_reserved_lvname(name) && uuid &&
+-	    !strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) {
+-		log_debug("%s: Reserved internal LVM device not usable.", dev_name(dev));
+-		goto out;
++	if (uuid && !strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) {
++		if (!(vgname = dm_strdup(name)) ||
++		    !dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &layer))
++			goto_out;
++
++		if (lvname && is_reserved_lvname(lvname)) {
++			log_debug("%s: Reserved internal LV device %s/%s not usable.",
++				  dev_name(dev), vgname, lvname);
++			goto out;
++		}
+ 	}
+ 
+ 	r = 1;
+ 
+       out:
++	if (vgname)
++		dm_free(vgname);
+ 	dm_task_destroy(dmt);
+ 	return r;
+ }
+
 
 
