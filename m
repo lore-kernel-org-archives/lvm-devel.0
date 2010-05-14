@@ -1,41 +1,104 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 May 2010 08:40:38 -0000
-Subject: LVM2/libdm libdm-deptree.c
-Message-ID: <20100525084038.27701.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:14 +0200
+Subject: [PATCH 19/23] Replicator: add replicator to dtree
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <e6aa986e0a21b3c61f77378308c8010dea60c58f.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-25 08:40:37
+Adding all replicator related LVs to dtree.
+Start of one replicator_dev initiate start of all other related.
 
-Modified files:
-	libdm          : libdm-deptree.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/activate/dev_manager.c |   60 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 59 insertions(+), 1 deletions(-)
 
-Log message:
-	Fix copy&paste detection of kernel release version.
-	Add log_error to avoid return_0 without log_error.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.81&r2=1.82
-
---- LVM2/libdm/libdm-deptree.c	2010/05/24 23:11:35	1.81
-+++ LVM2/libdm/libdm-deptree.c	2010/05/25 08:40:36	1.82
-@@ -1542,8 +1542,10 @@
- 	const char *logtype;
- 	unsigned kmaj, kmin, krel;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 8acb5fa..18b1809 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1195,6 +1195,61 @@ static int _add_target_to_dtree(struct dev_manager *dm,
+ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 				  struct logical_volume *lv, const char *layer);
  
--	if (!uname(&uts) || sscanf(uts.release, "%u.%u.%u", &kmaj, &kmin, &krel) != 3)
--		return_0;
-+	if (uname(&uts) == -1 || sscanf(uts.release, "%u.%u.%u", &kmaj, &kmin, &krel) != 3) {
-+		log_error("Cannot read kernel release version");
-+		return 0;
++/* Add all replicators' LVs from active segment */
++static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
++					       struct dm_tree *dtree,
++					       struct lv_segment *seg)
++{
++	struct replicator_device *rdev;
++	struct replicator_site *rsite;
++
++	/* Only active replicator */
++	if (!lv_is_active_replicator_dev(seg->lv)) {
++		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv->rdevice->lv, NULL))
++			return_0;
++		return 1;
 +	}
++
++	/* Add rlog and replicator nodes */
++	if (!seg->replicator ||
++            !first_seg(seg->replicator)->rlog_lv ||
++	    !_add_new_lv_to_dtree(dm, dtree,
++				  first_seg(seg->replicator)->rlog_lv, NULL) ||
++	    !_add_new_lv_to_dtree(dm, dtree, seg->replicator, NULL))
++	    return_0;
++
++	/* Activation of one replicator_dev node activates all other nodes */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rdev->lv &&
++			    !_add_new_lv_to_dtree(dm, dtree, rdev->lv, NULL))
++				return_0;
++
++			if (rdev->slog &&
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->slog, NULL))
++				return_0;
++		}
++	}
++	/* Add remaining replicator-dev nodes in the second loop
++	 * to avoid multiple retries for inserting all elements */
++	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++		if (rsite->state != REPLICATOR_STATE_ACTIVE)
++			continue;
++		dm_list_iterate_items(rdev, &rsite->rdevices) {
++			if (rdev->replicator_dev->lv == seg->lv)
++				continue;
++			if (!rdev->replicator_dev->lv ||
++			    !_add_new_lv_to_dtree(dm, dtree,
++						  rdev->replicator_dev->lv,
++						  NULL))
++				return_0;
++		}
++	}
++
++	return 1;
++}
++
+ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 				   struct dm_tree *dtree,
+ 				   struct dm_tree_node *dnode,
+@@ -1225,9 +1280,12 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, NULL))
+ 		return_0;
  
- 	if ((seg->flags & DM_BLOCK_ON_ERROR)) {
- 		/*
++	if (seg_is_replicator_dev(seg)) {
++		if (!_add_replicator_dev_target_to_dtree(dm, dtree, seg))
++			return_0;
+ 	/* If this is a snapshot origin, add real LV */
+ 	/* If this is a snapshot origin + merging snapshot, add cow + real LV */
+-	if (lv_is_origin(seg->lv) && !layer) {
++	} else if (lv_is_origin(seg->lv) && !layer) {
+ 		if (vg_is_clustered(seg->lv->vg)) {
+ 			log_error("Clustered snapshots are not yet supported");
+ 			return 0;
+-- 
+1.7.0.1
 
 
