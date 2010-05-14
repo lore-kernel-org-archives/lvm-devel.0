@@ -1,481 +1,222 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 24 Feb 2022 23:22:54 +0000 (GMT)
-Subject: main - devices: drop incorrect paths from aliases list
-Message-ID: <20220224232254.66F173858402@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 14 May 2010 14:56:40 -0000
+Subject: LVM2 ./WHATS_NEW_DM daemons/dmeventd/dmeventd. ...
+Message-ID: <20100514145640.17416.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e70041e324e1a4d49134a93323072e1b6ec661f
-Commit:        7e70041e324e1a4d49134a93323072e1b6ec661f
-Parent:        1126be8f8dbce482e82d8f98a7e7f4b7cd2cac34
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 24 16:03:21 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 24 17:22:03 2022 -0600
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-05-14 14:56:40
 
-devices: drop incorrect paths from aliases list
+Modified files:
+	.              : WHATS_NEW_DM 
+	daemons/dmeventd: dmeventd.c 
+	daemons/dmeventd/plugins/lvm2: dmeventd_lvm.c 
+	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
+	test           : test-utils.sh 
 
-along with some basic checks for cases when a device
-has no aliases.
+Log message:
+	Use -d to control level of messages sent to syslog by dmeventd.
+	Change -d to -f to run dmeventd in foreground.
+	(mornfall)
 
-lvm itself creates many situations where a struct device
-has no valid paths, when it activates and opens an LV,
-does something with it, e.g. zeroing, and then closes
-and deactivates it.  (dev-cache is intended for PVs, and
-the use of LVs should be moved out of dev-cache in a
-future patch.)
----
- lib/device/dev-cache.c | 223 +++++++++++++++++++++++++++++++------------------
- lib/device/dev-cache.h |   2 +-
- lib/device/dev-io.c    |  34 +++++---
- lib/device/device.h    |   3 -
- 4 files changed, 164 insertions(+), 98 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.368&r2=1.369
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.42&r2=1.43
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 1777628a8..8db28bd84 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -351,7 +351,7 @@ static int _add_alias(struct device *dev, const char *path, enum add_hash hash)
- 			goto out;
- 		}
+--- LVM2/WHATS_NEW_DM	2010/05/13 13:31:30	1.368
++++ LVM2/WHATS_NEW_DM	2010/05/14 14:56:39	1.369
+@@ -1,5 +1,7 @@
+ Version 1.02.48 -
+ =================================
++  Use -d to control level of messages sent to syslog by dmeventd.
++  Change -d to -f to run dmeventd in foreground.
+   Do not print encryption key in message debug output (cryptsetup luksResume).
  
--	if (!(path = dm_pool_strdup(_cache.mem, path)) ||
-+	if (!(path = _strdup(path)) ||
- 	    !(sl = _zalloc(sizeof(*sl)))) {
- 		log_error("Failed to add allias to dev cache.");
- 		return 0;
-@@ -1162,6 +1162,17 @@ static int _insert(const char *path, const struct stat *info,
- 	return 1;
+ Version 1.02.47 - 30th April 2010
+--- LVM2/daemons/dmeventd/dmeventd.c	2010/04/14 18:54:37	1.61
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/05/14 14:56:39	1.62
+@@ -54,7 +54,6 @@
+ 
+ static volatile sig_atomic_t _exit_now = 0;	/* set to '1' when signal is given to exit */
+ static volatile sig_atomic_t _thread_registries_empty = 1;	/* registries are empty initially */
+-static int _debug = 0;
+ 
+ /* List (un)link macros. */
+ #define	LINK(x, head)		dm_list_add(head, &(x)->list)
+@@ -98,6 +97,9 @@
+ 
+ #define DEBUGLOG(fmt, args...) _debuglog(fmt, ## args)
+ 
++int dmeventd_debug = 0;
++static int _foreground = 0;
++
+ /* Data kept about a DSO. */
+ struct dso_data {
+ 	struct dm_list list;
+@@ -204,7 +206,7 @@
+         time_t P;
+         va_list ap;
+  
+-        if (!_debug)
++        if (!_foreground)
+                 return;
+  
+         va_start(ap,fmt);
+@@ -1662,11 +1664,12 @@
+ static void usage(char *prog, FILE *file)
+ {
+ 	fprintf(file, "Usage:\n");
+-	fprintf(file, "%s [Vhd]\n", prog);
++	fprintf(file, "%s [-V] [-h] [-d] [-d] [-d] [-f]\n", prog);
+ 	fprintf(file, "\n");
+ 	fprintf(file, "   -V       Show version of dmeventd\n");
+ 	fprintf(file, "   -h       Show this help information\n");
+-	fprintf(file, "   -d       Don't fork, run in the foreground\n");
++	fprintf(file, "   -d       Log debug messages to syslog (-d, -dd, -ddd)\n");
++	fprintf(file, "   -f       Don't fork, run in the foreground\n");
+ 	fprintf(file, "\n");
  }
  
-+static void _drop_all_aliases(struct device *dev)
-+{
-+	struct dm_str_list *strl, *strl2;
-+
-+	dm_list_iterate_items_safe(strl, strl2, &dev->aliases) {
-+		log_debug("Drop alias for %d:%d %s.", (int)MAJOR(dev->dev), (int)MINOR(dev->dev), strl->str);
-+		dm_hash_remove(_cache.names, strl->str);
-+		dm_list_del(&strl->list);
-+	}
-+}
-+
- void dev_cache_scan(struct cmd_context *cmd)
- {
- 	log_debug_devs("Creating list of system devices.");
-@@ -1371,59 +1382,6 @@ int dev_cache_add_dir(const char *path)
- 	return 1;
- }
+@@ -1680,7 +1683,7 @@
+ 	opterr = 0;
+ 	optind = 0;
  
--/* Check cached device name is still valid before returning it */
--/* This should be a rare occurrence */
--/* set quiet if the cache is expected to be out-of-date */
--/* FIXME Make rest of code pass/cache struct device instead of dev_name */
--const char *dev_name_confirmed(struct device *dev, int quiet)
--{
--	struct stat buf;
--	const char *name;
--	int r;
--
--	if ((dev->flags & DEV_REGULAR))
--		return dev_name(dev);
--
--	while ((r = stat(name = dm_list_item(dev->aliases.n,
--					  struct dm_str_list)->str, &buf)) ||
--	       (buf.st_rdev != dev->dev)) {
--		if (r < 0) {
--			if (quiet)
--				log_sys_debug("stat", name);
--			else
--				log_sys_error("stat", name);
--		}
--		if (quiet)
--			log_debug_devs("Path %s no longer valid for device(%d,%d)",
--				       name, (int) MAJOR(dev->dev),
--				       (int) MINOR(dev->dev));
--		else
--			log_warn("Path %s no longer valid for device(%d,%d)",
--				 name, (int) MAJOR(dev->dev),
--				 (int) MINOR(dev->dev));
--
--		/* Remove the incorrect hash entry */
--		dm_hash_remove(_cache.names, name);
--
--		/* Leave list alone if there isn't an alternative name */
--		/* so dev_name will always find something to return. */
--		/* Otherwise add the name to the correct device. */
--		if (dm_list_size(&dev->aliases) > 1) {
--			dm_list_del(dev->aliases.n);
--			if (!r)
--				_insert(name, &buf, 0, obtain_device_list_from_udev());
--			continue;
--		}
--
--		/* Scanning issues this inappropriately sometimes. */
--		log_debug_devs("Aborting - please provide new pathname for what "
--			       "used to be %s", name);
--		return NULL;
--	}
--
--	return dev_name(dev);
--}
--
- struct device *dev_hash_get(const char *name)
- {
- 	return (struct device *) dm_hash_lookup(_cache.names, name);
-@@ -1452,26 +1410,23 @@ static void _remove_alias(struct device *dev, const char *name)
-  * deactivated LV.  Those old paths are all invalid and are dropped here.
+-	while ((opt = getopt(argc, argv, "?hVd")) != EOF) {
++	while ((opt = getopt(argc, argv, "?fhVd")) != EOF) {
+ 		switch (opt) {
+ 		case 'h':
+ 			usage(argv[0], stdout);
+@@ -1688,8 +1691,11 @@
+ 		case '?':
+ 			usage(argv[0], stderr);
+ 			exit(0);
++		case 'f':
++			_foreground++;
++			break;
+ 		case 'd':
+-			_debug++;
++			dmeventd_debug++;
+ 			break;
+ 		case 'V':
+ 			printf("dmeventd version: %s\n", DM_LIB_VERSION);
+@@ -1706,7 +1712,7 @@
+ 	if (setenv("LANG", "C", 1))
+ 		perror("Cannot set LANG to C");
+ 
+-	if (!_debug)
++	if (!_foreground)
+ 		_daemonize();
+ 
+ 	openlog("dmeventd", LOG_PID, LOG_DAEMON);
+@@ -1738,7 +1744,7 @@
+ 		exit(EXIT_FIFO_FAILURE);
+ 
+ 	/* Signal parent, letting them know we are ready to go. */
+-	if (!_debug)
++	if (!_foreground)
+ 		kill(getppid(), SIGTERM);
+ 	syslog(LOG_NOTICE, "dmeventd ready for processing.");
+ 
+--- LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2010/03/30 14:38:56	1.2
++++ LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2010/05/14 14:56:39	1.3
+@@ -13,6 +13,7 @@
   */
  
--static void _verify_aliases(struct device *dev, const char *newname)
-+static void _verify_aliases(struct device *dev)
- {
- 	struct dm_str_list *strl, *strl2;
- 	struct stat st;
+ #include "lib.h"
++#include "log.h"
  
- 	dm_list_iterate_items_safe(strl, strl2, &dev->aliases) {
--		/* newname was just stat'd and added by caller */
--		if (newname && !strcmp(strl->str, newname))
--			continue;
--
- 		if (stat(strl->str, &st) || (st.st_rdev != dev->dev)) {
--			log_debug("Drop invalid path %s for %d:%d (new path %s).",
--				  strl->str, (int)MAJOR(dev->dev), (int)MINOR(dev->dev), newname ?: "");
-+			log_debug("Drop alias for %d:%d invalid path %s %d:%d.",
-+				  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), strl->str,
-+				  (int)MAJOR(st.st_rdev), (int)MINOR(st.st_rdev));
- 			dm_hash_remove(_cache.names, strl->str);
- 			dm_list_del(&strl->list);
- 		}
- 	}
+ #include "lvm2cmd.h"
+ #include "errors.h"
+@@ -22,6 +23,8 @@
+ #include <pthread.h>
+ #include <syslog.h>
+ 
++extern int dmeventd_debug;
++
+ /*
+  * register_device() is called first and performs initialisation.
+  * Only one device may be registered or unregistered at a time.
+@@ -40,19 +43,41 @@
+  */
+ static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
+ 
+-/* FIXME Remove this: Pass messages back to dmeventd core for processing. */
++/*
++ * FIXME Do not pass things directly to syslog, rather use the existing logging
++ * facilities to sort logging ... however that mechanism needs to be somehow
++ * configurable and we don't have that option yet
++ */
+ static void _temporary_log_fn(int level,
+ 			      const char *file __attribute((unused)),
+ 			      int line __attribute((unused)),
+ 			      int dm_errno __attribute((unused)),
+-			      const char *format)
++			      const char *message)
+ {
+-	level &= ~_LOG_STDERR;
++	level &= ~(_LOG_STDERR | _LOG_ONCE);
+ 
+-	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
+-		syslog(LOG_CRIT, "%s", format);
+-	else
+-		syslog(LOG_DEBUG, "%s", format);
++	switch (level) {
++	case _LOG_DEBUG:
++		if (dmeventd_debug >= 3)
++			syslog(LOG_DEBUG, "%s", message);
++		break;
++	case _LOG_INFO:
++		if (dmeventd_debug >= 2)
++			syslog(LOG_INFO, "%s", message);
++		break;
++	case _LOG_NOTICE:
++		if (dmeventd_debug >= 1)
++			syslog(LOG_NOTICE, "%s", message);
++		break;
++	case _LOG_WARN:
++		syslog(LOG_WARNING, "%s", message);
++		break;
++	case _LOG_ERR:
++		syslog(LOG_ERR, "%s", message);
++		break;
++	default:
++		syslog(LOG_CRIT, "%s", message);
++	}
  }
  
--struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f)
-+static struct device *_dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f, int existing)
- {
- 	struct device *dev = (struct device *) dm_hash_lookup(_cache.names, name);
- 	struct stat st;
-@@ -1485,13 +1440,18 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 	if (dev && (dev->flags & DEV_REGULAR))
- 		return dev;
+ void dmeventd_lvm2_lock(void)
+--- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/05/11 08:32:22	1.34
++++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/05/14 14:56:39	1.35
+@@ -160,7 +160,8 @@
  
-+	if (dev && dm_list_empty(&dev->aliases)) {
-+		/* shouldn't happen */
-+		log_warn("Ignoring dev with no valid paths for %s.", name);
-+		return NULL;
-+	}
-+
- 	/*
--	 * The requested path is invalid, remove any dev-cache
--	 * info for it.
-+	 * The requested path is invalid, remove any dev-cache info for it.
- 	 */
- 	if (stat(name, &st)) {
- 		if (dev) {
--			log_print("Device path %s is invalid for %d:%d %s.",
-+			log_debug("Device path %s is invalid for %d:%d %s.",
- 				  name, (int)MAJOR(dev->dev), (int)MINOR(dev->dev), dev_name(dev));
+ 	r = dmeventd_lvm2_run(cmd_str);
  
- 			dm_hash_remove(_cache.names, name);
-@@ -1499,11 +1459,17 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 			_remove_alias(dev, name);
+-	syslog(LOG_INFO, "Repair of mirrored LV %s/%s %s.", vg, lv, (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
++	syslog(LOG_INFO, "Repair of mirrored LV %s/%s %s.", vg, lv,
++	       (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
  
- 			/* Remove any other names in dev->aliases that are incorrect. */
--			_verify_aliases(dev, NULL);
-+			_verify_aliases(dev);
- 		}
- 		return NULL;
- 	}
+ 	return (r == ECMD_PROCESSED) ? 0 : -1;
+ }
+--- LVM2/test/test-utils.sh	2010/05/12 11:58:51	1.42
++++ LVM2/test/test-utils.sh	2010/05/14 14:56:40	1.43
+@@ -87,9 +87,8 @@
  
-+	if (dev && dm_list_empty(&dev->aliases)) {
-+		/* shouldn't happen */
-+		log_warn("Ignoring dev with no valid paths for %s.", name);
-+		return NULL;
-+	}
-+
- 	if (!S_ISBLK(st.st_mode)) {
- 		log_debug("Not a block device %s.", name);
- 		return NULL;
-@@ -1514,26 +1480,110 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 	 * Remove incorrect info and then add new dev-cache entry.
- 	 */
- 	if (dev && (st.st_rdev != dev->dev)) {
--		log_debug("Device path %s does not match %d:%d %s.",
--			  name, (int)MAJOR(dev->dev), (int)MINOR(dev->dev), dev_name(dev));
-+		struct device *dev_by_devt = (struct device *) btree_lookup(_cache.devices, (uint32_t) st.st_rdev);
-+
-+		/*
-+		 * lvm commands create this condition when they
-+		 * activate/deactivate LVs combined with creating new LVs.
-+		 * The command does not purge dev structs when deactivating
-+		 * an LV (which it probably should do), but the better
-+		 * approach would be not using dev-cache at all for LVs.
-+		 */
+ 	trap_teardown
  
--		dm_hash_remove(_cache.names, name);
-+		log_debug("Dropping aliases for device entry %d:%d %s for new device %d:%d %s.",
-+			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), dev_name(dev),
-+			  (int)MAJOR(st.st_rdev), (int)MINOR(st.st_rdev), name);
- 
--		_remove_alias(dev, name);
-+		_drop_all_aliases(dev);
- 
--		/* Remove any other names in dev->aliases that are incorrect. */
--		_verify_aliases(dev, NULL);
-+		if (dev_by_devt) {
-+			log_debug("Dropping aliases for device entry %d:%d %s for new device %d:%d %s.",
-+				   (int)MAJOR(dev_by_devt->dev), (int)MINOR(dev_by_devt->dev), dev_name(dev_by_devt),
-+				   (int)MAJOR(st.st_rdev), (int)MINOR(st.st_rdev), name);
- 
--		/* Add new dev-cache entry next. */
--		dev = NULL;
-+			_drop_all_aliases(dev_by_devt);
-+		}
-+
-+#if 0
-+		/*
-+		 * I think only lvm's own dm devs should be added here, so use
-+		 * a warning to look for any other unknown cases.
-+		 */
-+		if (MAJOR(st.st_rdev) != cmd->dev_types->device_mapper_major) {
-+			log_warn("WARNING: new device appeared %d:%d %s",
-+				  (int)MAJOR(st.st_rdev), (int)(MINOR(st.st_rdev)), name);
-+		}
-+#endif
-+
-+		if (!_insert_dev(name, st.st_rdev))
-+			return_NULL;
-+
-+		/* Get the struct dev that was just added. */
-+		dev = (struct device *) dm_hash_lookup(_cache.names, name);
-+
-+		if (!dev) {
-+			log_error("Failed to get device %s", name);
-+			return NULL;
-+		}
-+
-+		goto out;
- 	}
- 
-+	if (dev && dm_list_empty(&dev->aliases)) {
-+		/* shouldn't happen */
-+		log_warn("Ignoring dev with no valid paths for %s.", name);
-+		return NULL;
-+	}
-+
-+	if (!dev && existing)
-+		return_NULL;
-+
- 	/*
--	 * Either add a new struct dev for st_rdev and name,
--	 * or add name as a new alias for an existing struct dev
--	 * for st_rdev.
-+	 * This case should never be hit for a PV. It should only
-+	 * happen when the command is opening a new LV it has created.
-+	 * Add an arg to all callers indicating when the arg should be
-+	 * new (for an LV) and not existing.
-+	 * FIXME: fix this further by not using dev-cache struct devs
-+	 * at all for new dm devs (LVs) that lvm uses.  Make the
-+	 * dev-cache contain only devs for PVs.
-+	 * Places to fix that use a dev for LVs include:
-+	 * . lv_resize opening lv to discard
-+	 * . wipe_lv opening lv to zero it
-+	 * . _extend_sanlock_lv opening lv to extend it
-+	 * . _write_log_header opening lv to write header
-+	 * Also, io to LVs should not go through bcache.
-+	 * bcache should contain only labels and metadata
-+	 * scanned from PVs.
- 	 */
- 	if (!dev) {
-+		/*
-+		 * This case should only be used for new devices created by this
-+		 * command (opening LVs it's created), so if a dev exists for the
-+		 * dev_t referenced by the name, then drop all aliases for before
-+		 * _insert_dev adds the new name.  lvm commands actually hit this
-+		 * fairly often when it uses some LV, deactivates the LV, then
-+		 * creates some new LV which ends up with the same major:minor.
-+		 * Without dropping the aliases, it's plausible that lvm commands
-+		 * could end up using the wrong dm device.
-+		 */
-+		struct device *dev_by_devt = (struct device *) btree_lookup(_cache.devices, (uint32_t) st.st_rdev);
-+		if (dev_by_devt) {
-+			log_debug("Dropping aliases for %d:%d before adding new path %s.",
-+				  (int)MAJOR(st.st_rdev), (int)(MINOR(st.st_rdev)), name);
-+			_drop_all_aliases(dev_by_devt);
-+		}
-+
-+#if 0
-+		/*
-+		 * I think only lvm's own dm devs should be added here, so use
-+		 * a warning to look for any other unknown cases.
-+		 */
-+		if (MAJOR(st.st_rdev) != cmd->dev_types->device_mapper_major) {
-+			log_warn("WARNING: new device appeared %d:%d %s",
-+				  (int)MAJOR(st.st_rdev), (int)(MINOR(st.st_rdev)), name);
-+		}
-+#endif
-+
- 		if (!_insert_dev(name, st.st_rdev))
- 			return_NULL;
- 
-@@ -1544,10 +1594,9 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 			log_error("Failed to get device %s", name);
- 			return NULL;
- 		}
--
--		_verify_aliases(dev, name);
- 	}
- 
-+ out:
- 	/*
- 	 * The caller passed a filter if they only want the dev if it
- 	 * passes filters.
-@@ -1577,6 +1626,16 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 	return dev;
+-	dmeventd -d &
++	dmeventd -f &
+ 	LOCAL_DMEVENTD="$!"
+-	strace -p $LOCAL_DMEVENTD &
  }
  
-+struct device *dev_cache_get_existing(struct cmd_context *cmd, const char *name, struct dev_filter *f)
-+{
-+	return _dev_cache_get(cmd, name, f, 1);
-+}
-+
-+struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f)
-+{
-+	return _dev_cache_get(cmd, name, f, 0);
-+}
-+
- struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt)
- {
- 	struct device *dev = (struct device *) btree_lookup(_cache.devices, (uint32_t) devt);
-@@ -1653,8 +1712,10 @@ int dev_fd(struct device *dev)
- 
- const char *dev_name(const struct device *dev)
- {
--	return (dev && dev->aliases.n) ? dm_list_item(dev->aliases.n, struct dm_str_list)->str :
--	    unknown_device_name();
-+	if (dev && dev->aliases.n && !dm_list_empty(&dev->aliases))
-+		return dm_list_item(dev->aliases.n, struct dm_str_list)->str;
-+	else
-+		return unknown_device_name();
- }
- 
- bool dev_cache_has_md_with_end_superblock(struct dev_types *dt)
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index a88e3c282..622335982 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -53,7 +53,7 @@ int dev_cache_has_scanned(void);
- 
- int dev_cache_add_dir(const char *path);
- struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f);
--
-+struct device *dev_cache_get_existing(struct cmd_context *cmd, const char *name, struct dev_filter *f);
- struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt);
- 
- struct device *dev_hash_get(const char *name);
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index b4f1930b1..811ad8978 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -58,6 +58,9 @@ static int _dev_get_size_file(struct device *dev, uint64_t *size)
- 	const char *name = dev_name(dev);
- 	struct stat info;
- 
-+	if (dm_list_empty(&dev->aliases))
-+		return_0;
-+
- 	if (dev->size_seqno == _dev_size_seqno) {
- 		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
- 				 name, dev->size);
-@@ -87,7 +90,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
- 	int do_close = 0;
- 
- 	if (dm_list_empty(&dev->aliases))
--		return 0;
-+		return_0;
- 
- 	if (dev->size_seqno == _dev_size_seqno) {
- 		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
-@@ -305,6 +308,13 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 	if ((flags & O_EXCL))
- 		need_excl = 1;
- 
-+	if (dm_list_empty(&dev->aliases)) {
-+		/* shouldn't happen */
-+		log_print("Cannot open device %d:%d with no valid paths.", (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
-+		return 0;
-+	}
-+	name = dev_name(dev);
-+
- 	if (dev->fd >= 0) {
- 		if (((dev->flags & DEV_OPENED_RW) || !need_rw) &&
- 		    ((dev->flags & DEV_OPENED_EXCL) || !need_excl)) {
-@@ -314,7 +324,7 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 
- 		if (dev->open_count && !need_excl)
- 			log_debug_devs("%s: Already opened read-only. Upgrading "
--				       "to read-write.", dev_name(dev));
-+				       "to read-write.", name);
- 
- 		/* dev_close_immediate will decrement this */
- 		dev->open_count++;
-@@ -327,11 +337,7 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 
- 	if (critical_section())
- 		/* FIXME Make this log_error */
--		log_verbose("dev_open(%s) called while suspended",
--			    dev_name(dev));
--
--	if (!(name = dev_name_confirmed(dev, quiet)))
--		return_0;
-+		log_verbose("dev_open(%s) called while suspended", name);
- 
- #ifdef O_DIRECT_SUPPORT
- 	if (direct) {
-@@ -372,9 +378,9 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 		}
- #endif
- 		if (quiet)
--			log_sys_debug("open", name);
-+			log_debug("Failed to open device path %s (%d).", name, errno);
- 		else
--			log_sys_error("open", name);
-+			log_error("Failed to open device path %s (%d).", name, errno);
- 
- 		dev->flags |= DEV_OPEN_FAILURE;
- 		return 0;
-@@ -415,10 +421,12 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
- 	if ((flags & O_CREAT) && !(flags & O_TRUNC))
- 		dev->end = lseek(dev->fd, (off_t) 0, SEEK_END);
- 
--	log_debug_devs("Opened %s %s%s%s", dev_name(dev),
--		       dev->flags & DEV_OPENED_RW ? "RW" : "RO",
--		       dev->flags & DEV_OPENED_EXCL ? " O_EXCL" : "",
--		       dev->flags & DEV_O_DIRECT ? " O_DIRECT" : "");
-+	if (!quiet) {
-+		log_debug_devs("Opened %s %s%s%s", name,
-+				dev->flags & DEV_OPENED_RW ? "RW" : "RO",
-+				dev->flags & DEV_OPENED_EXCL ? " O_EXCL" : "",
-+				dev->flags & DEV_O_DIRECT ? " O_DIRECT" : "");
-+	}
- 
- 	dev->flags &= ~DEV_OPEN_FAILURE;
- 	return 1;
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 8c3a8c30e..572994bb9 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -204,9 +204,6 @@ struct device *dev_create_file(const char *filename, struct device *dev,
- 			       struct dm_str_list *alias, int use_malloc);
- void dev_destroy_file(struct device *dev);
- 
--/* Return a valid device name from the alias list; NULL otherwise */
--const char *dev_name_confirmed(struct device *dev, int quiet);
--
- int dev_mpath_init(const char *config_wwids_file);
- void dev_mpath_exit(void);
- 
+ prepare_testroot() {
 
 
