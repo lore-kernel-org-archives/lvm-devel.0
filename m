@@ -1,91 +1,39 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:15 -0400
-Subject: [PATCH 13/18] Update pvchange, pvs and vgs man pages for metadata ignore.
-In-Reply-To: <1274882540-6181-13-git-send-email-dwysocha@redhat.com>
-References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-4-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-5-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-6-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-7-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-8-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-9-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-10-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-11-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-12-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-13-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-14-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:16 +0200
+Subject: [PATCH 21/23] Replicator: activate change for vgchange
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <3f9c1586968e7276514c3aa3882ba3371bdc0543.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Explain --metadataignore argument to pvchange, add new fields to pvs / vgs.
+Activate only the first replicator-dev LV, that activates all other
+related LVs from Replicator.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- man/pvchange.8.in |    6 +++++-
- man/pvs.8.in      |    3 ++-
- man/vgs.8.in      |    2 +-
- 3 files changed, 8 insertions(+), 3 deletions(-)
+ tools/vgchange.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/man/pvchange.8.in b/man/pvchange.8.in
-index 00c94a6..621b16d 100644
---- a/man/pvchange.8.in
-+++ b/man/pvchange.8.in
-@@ -6,6 +6,7 @@ pvchange \- change attributes of a physical volume
- [\-\-addtag Tag]
- [\-A|\-\-autobackup y|n] [\-d|\-\-debug] 
- [\-\-deltag Tag]
-+[\-\-metadataignore y|n]
- [\-h|\-?|\-\-help]
- [\-t|\-\-test]
- [\-v|\-\-verbose] [\-a|\-\-all] [\-x|\-\-allocatable y|n]
-@@ -25,10 +26,13 @@ Generate new random UUID for specified physical volumes.
- .TP
- .I \-x, \-\-allocatable y|n
- Enable or disable allocation of physical extents on this physical volume.
-+.TP
-+.I \-\-metadataignore y|n
-+Ingore or un-ignore metadata areas on this physical volume.
- .SH Example
- "pvchange -x n /dev/sdk1" disallows the allocation of physical extents
- on this physical volume (possibly because of disk errors, or because it will
- be removed after freeing it.
- .SH SEE ALSO
--.BR lvm (8), 
-+.BR lvm (8),
- .BR pvcreate (8)
-diff --git a/man/pvs.8.in b/man/pvs.8.in
-index fe00d2a..55892cc 100644
---- a/man/pvs.8.in
-+++ b/man/pvs.8.in
-@@ -54,7 +54,8 @@ Use \fb-o help\fP to view the full list of columns available.
- .IP
- Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
- pv_mda_size, pe_start, pv_size, pv_free, pv_used, pv_attr, pv_pe_count,
--pv_pe_alloc_count, pv_tags, pv_mda_count, pvseg_start, and pvseg_size.
-+pv_pe_alloc_count, pv_tags, pv_mda_count, pv_mda_count_ignored,
-+pvseg_start, and pvseg_size.
- .IP
- With --segments, any "pvseg_" prefixes are optional; otherwise any
- "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
-diff --git a/man/vgs.8.in b/man/vgs.8.in
-index b22d08b..7475f77 100644
---- a/man/vgs.8.in
-+++ b/man/vgs.8.in
-@@ -49,7 +49,7 @@ Use \fb-o help\fP to view the full list of columns available.
- Column names include: vg_fmt, vg_uuid, vg_name, vg_attr, vg_size, vg_free,
- vg_sysid, vg_extent_size, vg_extent_count, vg_free_count, max_lv, max_pv,
- pv_count, lv_count, snap_count, vg_seqno, vg_tags, vg_mda_count, vg_mda_free,
--and vg_mda_size.
-+and vg_mda_size, vg_mda_count_ignored.
- .IP
- Any "vg_" prefixes are optional.  Columns mentioned in either \fBpvs (8)\fP 
- or \fBlvs (8)\fP can also be chosen, but columns cannot be taken from both
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 1d4303e..7226c38 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -104,6 +104,10 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+ 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
+ 			continue;
+ 
++		/* Only request activation of the first replicator-dev LV */
++		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
++			continue;
++
+ 		/* Can't deactivate a pvmove LV */
+ 		/* FIXME There needs to be a controlled way of doing this */
+ 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
 -- 
-1.6.0.6
+1.7.0.1
 
 
