@@ -1,222 +1,110 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 May 2010 14:56:40 -0000
-Subject: LVM2 ./WHATS_NEW_DM daemons/dmeventd/dmeventd. ...
-Message-ID: <20100514145640.17416.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:18:55 +0200
+Subject: [PATCH 00/23] Replicator 100514
+Message-ID: <cover.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-14 14:56:40
+Rebased set of replicator patches.
+Log creation code is still kept separately as many changes
+are still on going in this code.
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	daemons/dmeventd: dmeventd.c 
-	daemons/dmeventd/plugins/lvm2: dmeventd_lvm.c 
-	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
-	test           : test-utils.sh 
+Updated parts:
+* Modified  suspend_priority -> presuspend_children node pointer
+  - which enhances dtree with direct link to children node.
+* failed_lvnames API change requires to pass initilized list head.
+* hack for proper resume order is kept outside with the hope kernel driver
+  will be able to match this design.
 
-Log message:
-	Use -d to control level of messages sent to syslog by dmeventd.
-	Change -d to -f to run dmeventd in foreground.
-	(mornfall)
+* Updated dm_splice_list() API.
+* Removed old code from dm_tree_preload_children().
+* Renamed failed_lvs -> failed_lvnames.
+* Switched vgs_list to cmd_vg and updated API slightly
+* Extracted nonrelated change in front of patchset (return ECMD_FAILED)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.368&r2=1.369
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+* Previous set had wrong month number.
+* Converted Makefiles.
+* Renamed some functions (removed lvm_ prefix).
+* Renamed vg_name_list -> vgs_list.
+* Roved code from validation to segment checking.
 
---- LVM2/WHATS_NEW_DM	2010/05/13 13:31:30	1.368
-+++ LVM2/WHATS_NEW_DM	2010/05/14 14:56:39	1.369
-@@ -1,5 +1,7 @@
- Version 1.02.48 -
- =================================
-+  Use -d to control level of messages sent to syslog by dmeventd.
-+  Change -d to -f to run dmeventd in foreground.
-   Do not print encryption key in message debug output (cryptsetup luksResume).
- 
- Version 1.02.47 - 30th April 2010
---- LVM2/daemons/dmeventd/dmeventd.c	2010/04/14 18:54:37	1.61
-+++ LVM2/daemons/dmeventd/dmeventd.c	2010/05/14 14:56:39	1.62
-@@ -54,7 +54,6 @@
- 
- static volatile sig_atomic_t _exit_now = 0;	/* set to '1' when signal is given to exit */
- static volatile sig_atomic_t _thread_registries_empty = 1;	/* registries are empty initially */
--static int _debug = 0;
- 
- /* List (un)link macros. */
- #define	LINK(x, head)		dm_list_add(head, &(x)->list)
-@@ -98,6 +97,9 @@
- 
- #define DEBUGLOG(fmt, args...) _debuglog(fmt, ## args)
- 
-+int dmeventd_debug = 0;
-+static int _foreground = 0;
-+
- /* Data kept about a DSO. */
- struct dso_data {
- 	struct dm_list list;
-@@ -204,7 +206,7 @@
-         time_t P;
-         va_list ap;
-  
--        if (!_debug)
-+        if (!_foreground)
-                 return;
-  
-         va_start(ap,fmt);
-@@ -1662,11 +1664,12 @@
- static void usage(char *prog, FILE *file)
- {
- 	fprintf(file, "Usage:\n");
--	fprintf(file, "%s [Vhd]\n", prog);
-+	fprintf(file, "%s [-V] [-h] [-d] [-d] [-d] [-f]\n", prog);
- 	fprintf(file, "\n");
- 	fprintf(file, "   -V       Show version of dmeventd\n");
- 	fprintf(file, "   -h       Show this help information\n");
--	fprintf(file, "   -d       Don't fork, run in the foreground\n");
-+	fprintf(file, "   -d       Log debug messages to syslog (-d, -dd, -ddd)\n");
-+	fprintf(file, "   -f       Don't fork, run in the foreground\n");
- 	fprintf(file, "\n");
- }
- 
-@@ -1680,7 +1683,7 @@
- 	opterr = 0;
- 	optind = 0;
- 
--	while ((opt = getopt(argc, argv, "?hVd")) != EOF) {
-+	while ((opt = getopt(argc, argv, "?fhVd")) != EOF) {
- 		switch (opt) {
- 		case 'h':
- 			usage(argv[0], stdout);
-@@ -1688,8 +1691,11 @@
- 		case '?':
- 			usage(argv[0], stderr);
- 			exit(0);
-+		case 'f':
-+			_foreground++;
-+			break;
- 		case 'd':
--			_debug++;
-+			dmeventd_debug++;
- 			break;
- 		case 'V':
- 			printf("dmeventd version: %s\n", DM_LIB_VERSION);
-@@ -1706,7 +1712,7 @@
- 	if (setenv("LANG", "C", 1))
- 		perror("Cannot set LANG to C");
- 
--	if (!_debug)
-+	if (!_foreground)
- 		_daemonize();
- 
- 	openlog("dmeventd", LOG_PID, LOG_DAEMON);
-@@ -1738,7 +1744,7 @@
- 		exit(EXIT_FIFO_FAILURE);
- 
- 	/* Signal parent, letting them know we are ready to go. */
--	if (!_debug)
-+	if (!_foreground)
- 		kill(getppid(), SIGTERM);
- 	syslog(LOG_NOTICE, "dmeventd ready for processing.");
- 
---- LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2010/03/30 14:38:56	1.2
-+++ LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2010/05/14 14:56:39	1.3
-@@ -13,6 +13,7 @@
-  */
- 
- #include "lib.h"
-+#include "log.h"
- 
- #include "lvm2cmd.h"
- #include "errors.h"
-@@ -22,6 +23,8 @@
- #include <pthread.h>
- #include <syslog.h>
- 
-+extern int dmeventd_debug;
-+
- /*
-  * register_device() is called first and performs initialisation.
-  * Only one device may be registered or unregistered at a time.
-@@ -40,19 +43,41 @@
-  */
- static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
- 
--/* FIXME Remove this: Pass messages back to dmeventd core for processing. */
-+/*
-+ * FIXME Do not pass things directly to syslog, rather use the existing logging
-+ * facilities to sort logging ... however that mechanism needs to be somehow
-+ * configurable and we don't have that option yet
-+ */
- static void _temporary_log_fn(int level,
- 			      const char *file __attribute((unused)),
- 			      int line __attribute((unused)),
- 			      int dm_errno __attribute((unused)),
--			      const char *format)
-+			      const char *message)
- {
--	level &= ~_LOG_STDERR;
-+	level &= ~(_LOG_STDERR | _LOG_ONCE);
- 
--	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
--		syslog(LOG_CRIT, "%s", format);
--	else
--		syslog(LOG_DEBUG, "%s", format);
-+	switch (level) {
-+	case _LOG_DEBUG:
-+		if (dmeventd_debug >= 3)
-+			syslog(LOG_DEBUG, "%s", message);
-+		break;
-+	case _LOG_INFO:
-+		if (dmeventd_debug >= 2)
-+			syslog(LOG_INFO, "%s", message);
-+		break;
-+	case _LOG_NOTICE:
-+		if (dmeventd_debug >= 1)
-+			syslog(LOG_NOTICE, "%s", message);
-+		break;
-+	case _LOG_WARN:
-+		syslog(LOG_WARNING, "%s", message);
-+		break;
-+	case _LOG_ERR:
-+		syslog(LOG_ERR, "%s", message);
-+		break;
-+	default:
-+		syslog(LOG_CRIT, "%s", message);
-+	}
- }
- 
- void dmeventd_lvm2_lock(void)
---- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/05/11 08:32:22	1.34
-+++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2010/05/14 14:56:39	1.35
-@@ -160,7 +160,8 @@
- 
- 	r = dmeventd_lvm2_run(cmd_str);
- 
--	syslog(LOG_INFO, "Repair of mirrored LV %s/%s %s.", vg, lv, (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
-+	syslog(LOG_INFO, "Repair of mirrored LV %s/%s %s.", vg, lv,
-+	       (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
- 
- 	return (r == ECMD_PROCESSED) ? 0 : -1;
- }
---- LVM2/test/test-utils.sh	2010/05/12 11:58:51	1.42
-+++ LVM2/test/test-utils.sh	2010/05/14 14:56:40	1.43
-@@ -87,9 +87,8 @@
- 
- 	trap_teardown
- 
--	dmeventd -d &
-+	dmeventd -f &
- 	LOCAL_DMEVENTD="$!"
--	strace -p $LOCAL_DMEVENTD &
- }
- 
- prepare_testroot() {
+* Added dm_list_splice
+* Changed API for process_each_lv_in_vg()
+* lock_lv_vol() detects missing VGs before calling lock_vol().
+
+* Using common typedef between dm and lvm part for operation mode.
+* Minor code reoganization based on review
+* Extended validation code.
+* Added manpages updates to patches to document API
+  still this is ongoing task to make all the options working.
+* API around vg_name_list which is now autonomous entity.
+* Processed VG contains list of opened VGs and flag for missing VGs.
+
+Zdenek Kabelac (23):
+  Return ECMD_FAILED for break     Return ECMD_FAILED when sigint has
+    been caught.
+  API change for args of process_each_lv_in_vg()
+  Replicator: libdm support
+  Replicator: suspend/deactivate replicator
+  Replicator: use open_count for all related heads
+  Replicator: lvm2 support
+  Replicator: check replicator segment
+  Replicator: extend _lv_each_dependency() rep. deps
+  Replicator: extend volume_group with list of VGs
+  Replicator: add sorted cmd_vg list
+  Replicator: add find_replicator_vgs
+  Replicator: add read and release VGs for rsites
+  Replicator: use cmd_vg list for _process_one_vg()
+  Replicator: use cmd_vg for process_each_lv_in_vg()
+  Replicator: lock_vol() finds missing VGs
+  Replicator: activate checks for missing vgs
+  Replicator: update _create_partial_dtree()
+  Replicator: vg with cmd_missing_vgs does not print
+  Replicator: add replicator to dtree
+  Replicator: do not remove of replicators' LVs
+  Replicator: activate change for vgchange
+  Replicator: add new options for replicator
+  Replicator: man pages for lvcreate, lvchange
+
+ configure.in                     |   17 +
+ lib/Makefile.in                  |   10 +
+ lib/activate/activate.c          |   21 +-
+ lib/activate/dev_manager.c       |  138 +++++++-
+ lib/commands/toolcontext.c       |    5 +
+ lib/config/defaults.h            |    1 +
+ lib/format_text/flags.c          |    2 +
+ lib/locking/locking.h            |    4 +-
+ lib/metadata/lv_manip.c          |   10 +
+ lib/metadata/merge.c             |   17 +
+ lib/metadata/metadata-exported.h |   98 +++++-
+ lib/metadata/metadata.c          |    4 +
+ lib/metadata/metadata.h          |    6 +
+ lib/metadata/replicator_manip.c  |  692 +++++++++++++++++++++++++++++++++
+ lib/metadata/segtype.h           |    8 +
+ lib/replicator/.exported_symbols |    1 +
+ lib/replicator/Makefile.in       |   25 ++
+ lib/replicator/replicator.c      |  790 ++++++++++++++++++++++++++++++++++++++
+ libdm/.exported_symbols          |    3 +
+ libdm/libdevmapper.h             |   38 ++
+ libdm/libdm-deptree.c            |  351 +++++++++++++++++-
+ man/lvchange.8.in                |   56 +++
+ man/lvcreate.8.in                |   63 +++-
+ tools/args.h                     |   13 +
+ tools/commands.h                 |    7 +
+ tools/lvcreate.c                 |   58 +++-
+ tools/lvmcmdline.c               |    9 +
+ tools/toollib.c                  |  113 ++++--
+ tools/toollib.h                  |    1 +
+ tools/tools.h                    |    1 +
+ tools/vgchange.c                 |    9 +-
+ tools/vgdisplay.c                |    2 +-
+ 32 files changed, 2522 insertions(+), 51 deletions(-)
+ create mode 100644 lib/metadata/replicator_manip.c
+ create mode 100644 lib/replicator/.exported_symbols
+ create mode 100644 lib/replicator/Makefile.in
+ create mode 100644 lib/replicator/replicator.c
 
 
