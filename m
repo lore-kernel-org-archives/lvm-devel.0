@@ -1,64 +1,129 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 May 2010 22:27:27 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100520222727.14892.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 14 May 2010 17:19:09 +0200
+Subject: [PATCH 14/23] Replicator: use cmd_vg for process_each_lv_in_vg()
+In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
+References: <cover.1273849980.git.zkabelac@redhat.com>
+Message-ID: <8ea483dc1d9e360d54f35627c6aab6425f6a4811.1273849980.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-20 22:27:26
+As for _process_one_vg() we need similar retry loop for
+process_each_lv_in_vg(). This patch retries to process
+failed LVs with reopened VGs.
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+Patch does not add any extra repeated invocations if there is not
+found any missing VG during LV processing.
 
-Log message:
-	pre-release
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ tools/toollib.c |   45 ++++++++++++++++++++++++++++++++++++---------
+ 1 files changed, 36 insertions(+), 9 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.236&r2=1.237
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.47&r2=1.48
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1572&r2=1.1573
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.371&r2=1.372
-
---- LVM2/VERSION	2010/05/17 20:18:13	1.236
-+++ LVM2/VERSION	2010/05/20 22:27:26	1.237
-@@ -1 +1 @@
--2.02.66(2)-cvs (2010-05-17)
-+2.02.66(2)-cvs (2010-05-20)
---- LVM2/VERSION_DM	2010/05/17 20:18:13	1.47
-+++ LVM2/VERSION_DM	2010/05/20 22:27:26	1.48
-@@ -1 +1 @@
--1.02.49-cvs (2010-05-17)
-+1.02.48-cvs (2010-05-20)
---- LVM2/WHATS_NEW	2010/05/20 22:24:33	1.1572
-+++ LVM2/WHATS_NEW	2010/05/20 22:27:26	1.1573
-@@ -1,4 +1,4 @@
--Version 2.02.66 - 
-+Version 2.02.66 - 20th May 2010
- ===============================
-   If unable to obtain snapshot percentage leave value blank on reports.
-   Add install_system_dirs and install_initscripts makefile targets.
-@@ -9,7 +9,7 @@
-   Add tests for lvm_vgname_from_{pvid|device}.
-   Add lvm2app interfaces to lookup a vgname from a pvid and pvname.
-   Update pvchange to always obtain a vg handle for each pv to process.
--  Add Add find_vgname_from_{pvname|pvid} functions.
-+  Add find_vgname_from_{pvname|pvid} functions.
-   Add pvid_from_devname and lvmcache_vgname_from_pvid lvmcache functions.
-   Validate orphan and VG_GLOBAL lock order too.
-   Accept orphan VG names as parameters to lock_vol() and related functions.
---- LVM2/WHATS_NEW_DM	2010/05/17 20:18:13	1.371
-+++ LVM2/WHATS_NEW_DM	2010/05/20 22:27:26	1.372
-@@ -1,6 +1,3 @@
--Version 1.02.49 - 
--================================
--
- Version 1.02.48 - 17th May 2010
- ================================
-   Use -d to control level of messages sent to syslog by dmeventd.
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b1750a2..b39eefc 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -155,6 +155,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 		if (!process_lv)
+ 			continue;
+ 
++		lvl->lv->vg->cmd_missing_vgs = 0;
+ 		ret = process_single_lv(cmd, lvl->lv, handle);
+ 		if (ret != ECMD_PROCESSED && failed_lvnames) {
+ 			if (!str_list_add(cmd->mem, failed_lvnames,
+@@ -163,6 +164,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 				log_error("Allocation failed for str_list.");
+ 				return ECMD_FAILED;
+ 			}
++			if (lvl->lv->vg->cmd_missing_vgs)
++				ret = ECMD_PROCESSED;
+ 		}
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+@@ -190,7 +193,9 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 	struct dm_list *tags_arg;
+ 	struct dm_list *vgnames;	/* VGs to process */
+ 	struct str_list *sll, *strl;
+-	struct volume_group *vg;
++	struct cmd_vg *cvl_vg;
++	struct dm_list cmd_vgs;
++	struct dm_list failed_lvnames;
+ 	struct dm_list tags, lvnames;
+ 	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
+ 	char *vglv;
+@@ -200,6 +205,7 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	dm_list_init(&tags);
+ 	dm_list_init(&arg_lvnames);
++	dm_list_init(&failed_lvnames);
+ 
+ 	if (argc) {
+ 		struct dm_list arg_vgnames;
+@@ -295,13 +301,17 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 		}
+ 	}
+ 
+-	vg = NULL;
+ 	dm_list_iterate_items(strl, vgnames) {
+ 		vgname = strl->str;
+-		vg = vg_read(cmd, vgname, NULL, flags);
++		dm_list_init(&cmd_vgs);
++		if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs,
++					  vgname, NULL, flags))) {
++			stack;
++			return ECMD_FAILED;
++		}
+ 
+-		if (vg_read_error(vg)) {
+-			vg_release(vg);
++		if (!cmd_vg_read(cmd, &cmd_vgs)) {
++			cmd_vg_release(&cmd_vgs);
+ 			if (ret_max < ECMD_FAILED) {
+ 				log_error("Skipping volume group %s", vgname);
+ 				ret_max = ECMD_FAILED;
+@@ -327,17 +337,34 @@ int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
+ 						  dm_pool_strdup(cmd->mem,
+ 								 lv_name + 1))) {
+ 					log_error("strlist allocation failed");
+-					unlock_and_release_vg(cmd, vg, vgname);
++					cmd_vg_release(&cmd_vgs);
+ 					return ECMD_FAILED;
+ 				}
+ 			}
+ 		}
+ 
+-		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
+-					    NULL, handle, process_single_lv);
+-		unlock_and_release_vg(cmd, vg, vgname);
++		while (!sigint_caught()) {
++			ret = process_each_lv_in_vg(cmd, cvl_vg->vg, &lvnames,
++						    tags_arg, &failed_lvnames,
++						    handle, process_single_lv);
++			if (ret != ECMD_PROCESSED ||
++			    dm_list_empty(&failed_lvnames))
++				break;
++
++			/* Try again with failed LVs in this VG */
++			dm_list_init(&lvnames);
++			dm_list_splice(&lvnames, &failed_lvnames);
++
++			cmd_vg_release(&cmd_vgs);
++			if (!cmd_vg_read(cmd, &cmd_vgs)) {
++				ret = ECMD_FAILED; /* break */
++				break;
++			}
++		}
+ 		if (ret > ret_max)
+ 			ret_max = ret;
++
++		cmd_vg_release(&cmd_vgs);
+ 		if (sigint_caught())
+ 			return ECMD_FAILED;
+ 	}
+-- 
+1.7.0.1
 
 
