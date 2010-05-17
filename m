@@ -1,56 +1,56 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 May 2010 20:18:16 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100517201816.1404.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Mon, 17 May 2010 19:01:45 -0400
+Subject: [PATCH] handle transient errors in lvconvert --repair
+In-Reply-To: <4BEDD432.4010800@redhat.com>
+References: <87y6g99bbg.fsf@twilight.int.mornfall.net.>	<87pr1kai2k.fsf@twilight.int.mornfall.net.>	<87y6fxos3x.fsf@twilight.int.mornfall.net.>
+	<4BEDD432.4010800@redhat.com>
+Message-ID: <4BF1CAD9.1050005@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-17 20:18:15
+Hi Petr,
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+On 05/14/10 18:52, Takahiro Yasui wrote:
+>> I have rebased the patch against current CVS. Also, I have added a guard
+>> to _mirrored_transient_status to ensure that we alloca() only very
+>> modest (and, more importantly, bounded) amount of memory.
+> 
+> This patch is just a rebase against current CVS, so it doesn't support
+> mirrored log, yet. Do you have a plan to support mirrored log?
+> 
+> I also tested this patch for a lvm mirror with core/disk log. When
+> a mirror log failed, the mirror log was removed from a mirror volume,
+> but a log voluem is not removed from its volume group. This always
+> happens both on a transient and persistent error.
 
-Log message:
-	post-release
+This issue seems related to this part of your patch.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.235&r2=1.236
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.46&r2=1.47
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1561&r2=1.1562
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.370&r2=1.371
-
---- LVM2/VERSION	2010/05/17 18:39:01	1.235
-+++ LVM2/VERSION	2010/05/17 20:18:13	1.236
-@@ -1 +1 @@
--2.02.65(2)-cvs (2010-05-17)
-+2.02.66(2)-cvs (2010-05-17)
---- LVM2/VERSION_DM	2010/05/17 18:39:01	1.46
-+++ LVM2/VERSION_DM	2010/05/17 20:18:13	1.47
-@@ -1 +1 @@
--1.02.48-cvs (2010-05-17)
-+1.02.49-cvs (2010-05-17)
---- LVM2/WHATS_NEW	2010/05/17 18:39:01	1.1561
-+++ LVM2/WHATS_NEW	2010/05/17 20:18:13	1.1562
-@@ -1,3 +1,6 @@
-+Version 2.02.66 - 
-+===============================
+@@ -1139,6 +1163,8 @@ static int _lvconvert_mirrors_repair(str
+...
+-	/*
+-	 * Remove all failed_pvs
+-	 */
+-	if (!_lvconvert_mirrors_aux(cmd, lv, lp, failed_pvs,
+-				    lp->mirrors, new_log_count))
+-		return 0;
++	if (failed_mirrors) {
++		if (!lv_remove_mirrors(cmd, lv, failed_mirrors, new_log_count,
++				       _is_partial_lv, NULL, 0))
++			return 0;
 +
- Version 2.02.65 - 17th May 2010
- ===============================
-   Fix clvmd init script never to deactivate non-clustered volume groups.
---- LVM2/WHATS_NEW_DM	2010/05/17 18:39:01	1.370
-+++ LVM2/WHATS_NEW_DM	2010/05/17 20:18:13	1.371
-@@ -1,3 +1,6 @@
-+Version 1.02.49 - 
-+================================
-+
- Version 1.02.48 - 17th May 2010
- ================================
-   Use -d to control level of messages sent to syslog by dmeventd.
++		if (!_reload_lv(cmd, lv))
++			return 0;
++	}
+
+When I removed this modification, a log volume was removed as expected.
+And also other my test cases also passed.
+
+I hope this information would be helpful.
+
+Thanks,
+Taka
 
 
