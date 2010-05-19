@@ -1,80 +1,68 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 14 May 2010 17:19:06 +0200
-Subject: [PATCH 11/23] Replicator: add find_replicator_vgs
-In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
-References: <cover.1273849980.git.zkabelac@redhat.com>
-Message-ID: <74b3a35976488a7dc2e5147b2f8735d56e372b05.1273849980.git.zkabelac@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 19 May 2010 11:52:21 -0000
+Subject: LVM2/lib/cache lvmcache.c lvmcache.h
+Message-ID: <20100519115221.24898.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding function find_replicator_vgs() to find all needed
-VGs for replicator.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-05-19 11:52:21
 
-This function is later called before taking lock_vol().
+Modified files:
+	lib/cache      : lvmcache.c lvmcache.h 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/metadata/metadata-exported.h |    2 ++
- lib/metadata/replicator_manip.c  |   32 ++++++++++++++++++++++++++++++++
- 2 files changed, 34 insertions(+), 0 deletions(-)
+Log message:
+	Add lvmcache_vgname_from_pvid().
+	
+	Add lvmcache function to lookup a vgname from a pvid.
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index c5a31d6..4c70626 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -809,6 +809,8 @@ struct cmd_vg *cmd_vg_lookup(struct dm_list *cmd_vgs,
- int cmd_vg_read(struct cmd_context *cmd, struct dm_list *cmd_vgs);
- void cmd_vg_release(struct dm_list *cmd_vgs);
- 
-+int find_replicator_vgs(struct logical_volume *lv);
-+
- struct logical_volume *find_pvmove_lv(struct volume_group *vg,
- 				      struct device *dev, uint32_t lv_type);
- struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
-diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
-index 82ce23c..abd34b3 100644
---- a/lib/metadata/replicator_manip.c
-+++ b/lib/metadata/replicator_manip.c
-@@ -602,3 +602,35 @@ void cmd_vg_release(struct dm_list *cmd_vgs)
- 		cvl->vg = NULL;
- 	}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.h.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+
+--- LVM2/lib/cache/lvmcache.c	2010/05/19 11:52:07	1.90
++++ LVM2/lib/cache/lvmcache.c	2010/05/19 11:52:21	1.91
+@@ -509,6 +509,27 @@
+ 	return info;
  }
-+
-+/**
-+ * Find all needed remote VGs for processing given LV.
-+ * Missing VGs are added to VG's vgs list.
-+ */
-+int find_replicator_vgs(struct logical_volume *lv)
+ 
++char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
 +{
-+	struct replicator_site *rsite;
-+	int ret = 1;
++	struct lvmcache_info *info;
++	char *vgname;
 +
-+	if (!lv_is_replicator_dev(lv))
-+		return 1;
-+
-+	dm_list_iterate_items(rsite, &first_seg(lv)->replicator->rsites) {
-+		if (!rsite->vg_name || !lv->vg->cmd_vgs ||
-+		    cmd_vg_lookup(lv->vg->cmd_vgs, rsite->vg_name, NULL))
-+			continue;
-+		ret = 0;
-+		/* Using cmd memory pool for cmd_vg list allocation */
-+		if (!cmd_vg_add(lv->vg->cmd->mem, lv->vg->cmd_vgs,
-+				rsite->vg_name, NULL, 0)) {
-+			lv->vg->cmd_missing_vgs = 0; /* do not retry */
-+			stack;
-+			break;
-+		}
-+
-+		log_debug("VG: %s added as missing.", rsite->vg_name);
-+		lv->vg->cmd_missing_vgs++;
++	if (!device_from_pvid(cmd, (struct id *)pvid, NULL)) {
++		log_error("Couldn't find device with uuid %s.", pvid);
++		return NULL;
 +	}
 +
-+	return ret;
++	info = info_from_pvid(pvid, 0);
++	if (!info)
++		return_NULL;
++
++	if (!(vgname = dm_pool_strdup(cmd->mem, info->vginfo->vgname))) {
++		log_errno(ENOMEM, "vgname allocation failed");
++		return NULL;
++	}
++	return vgname;
 +}
--- 
-1.7.0.1
++
+ static void _rescan_entry(struct lvmcache_info *info)
+ {
+ 	struct label *label;
+--- LVM2/lib/cache/lvmcache.h	2010/05/19 11:52:07	1.32
++++ LVM2/lib/cache/lvmcache.h	2010/05/19 11:52:21	1.33
+@@ -98,6 +98,7 @@
+ 				unsigned *scan_done_once);
+ const char *pvid_from_devname(struct cmd_context *cmd,
+ 			      const char *dev_name);
++char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid);
+ int vgs_locked(void);
+ int vgname_is_locked(const char *vgname);
+ 
 
 
