@@ -1,24 +1,40 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 19 May 2010 13:29:04 +0100
-Subject: LVM2/liblvm .exported_symbols lvm2app.h lvm_base.c
-In-Reply-To: <20100519115317.25417.qmail@sourceware.org>
-References: <20100519115317.25417.qmail@sourceware.org>
-Message-ID: <20100519122904.GD3991@agk-dp.fab.redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 19 May 2010 13:21:13 -0000
+Subject: LVM2/tools pvchange.c
+Message-ID: <20100519132113.5655.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, May 19, 2010 at 11:53:17AM -0000, wysochanski at sourceware.org wrote:
-> 	Bump the lvm2app version number to 3.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-05-19 13:21:11
 
-We discussed this and agreed not to do it.
+Modified files:
+	tools          : pvchange.c 
 
-That version number will only be incremented if there is a change that
-makes existing compiled code incompatible with the new compiled
-shared object.
+Log message:
+	Remove hack in pvchange to unlock orphan VG.
+	
+	With agk's recent changes, the lock/unlock APIs can properly handle
+	orphan VG names.
 
-Alasdair
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+
+--- LVM2/tools/pvchange.c	2010/05/19 11:53:00	1.74
++++ LVM2/tools/pvchange.c	2010/05/19 13:21:09	1.75
+@@ -263,9 +263,6 @@
+ 								 pvl->pv,
+ 								 NULL);
+ 				}
+-				/* FIXME: we should be using #orphans_lvm2 everwhere */
+-				if (is_orphan_vg(vg->name))
+-					sll->str = VG_ORPHANS;
+ 				unlock_and_release_vg(cmd, vg, sll->str);
+ 			}
+ 		}
 
 
