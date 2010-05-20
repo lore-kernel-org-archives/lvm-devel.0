@@ -1,104 +1,49 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 14 May 2010 17:19:08 +0200
-Subject: [PATCH 13/23] Replicator: use cmd_vg list for _process_one_vg()
-In-Reply-To: <cover.1273849980.git.zkabelac@redhat.com>
-References: <cover.1273849980.git.zkabelac@redhat.com>
-Message-ID: <d20bfa4d84f66255fffc233860380ccb1cc871c0.1273849980.git.zkabelac@redhat.com>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Wed, 19 May 2010 20:49:47 -0400
+Subject: [PATCH] handle transient errors in lvconvert --repair
+In-Reply-To: <874oi34ubd.fsf@twilight.int.mornfall.net.>
+References: <87y6g99bbg.fsf@twilight.int.mornfall.net.>	<87pr1kai2k.fsf@twilight.int.mornfall.net.>	<87y6fxos3x.fsf@twilight.int.mornfall.net.>	<4BEDD432.4010800@redhat.com>
+	<4BF1CAD9.1050005@redhat.com>	<87ljbg3xkt.fsf@twilight.int.mornfall.net.>	<4BF3FE5C.8070906@redhat.com>
+	<874oi34ubd.fsf@twilight.int.mornfall.net.>
+Message-ID: <4BF4872B.5060204@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch modifes behavior of _process_one_vg().
+Hi Petr,
 
-In the first pass vg_read() collect for replicator sorted list of
-additional VGs during lock_vol().
-If any VG needed by a replicator is not yet opened then next iteration
-loop is taken with all collected VGs.
+On 05/19/10 14:31, Petr Rockai wrote:
+> The attached patch is on top of the previous one -- it should apply
+> cleanly on top of current CVS + the lvconvert-repair-transient.diff I
+> have sent previously. It also fixes a bug in messages, where it would
+> claim that it failed to replace things even if it never tried to in the
+> first place.
+> 
+> Please test and let me know if you run into any other issues.
 
-Flag vg->cmd_missing_vgs detects missing VGs.
+I tested your two patches and all my test cases for 'disk' log
+passed. As for 'mirrored' log, we need to check the state for
+log_lv. Here is the sample code.
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/toollib.c |   55 ++++++++++++++++++++++++++++++++-----------------------
- 1 files changed, 32 insertions(+), 23 deletions(-)
+_lvconvert_mirrors_repair()
+...
+        lv_check_transient(lv); /* TODO check this in lib for all commands? */
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index c9ba8ac..b1750a2 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -430,37 +430,46 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
- 			   uint32_t flags, void *handle, int ret_max,
- 			   process_single_vg_fn_t process_single_vg)
- {
--	struct volume_group *vg;
-+	struct dm_list cmd_vgs;
-+	struct cmd_vg *cvl_vg;
- 	int ret = 0;
- 
- 	log_verbose("Finding volume group \"%s\"", vg_name);
- 
--	vg = vg_read(cmd, vg_name, vgid, flags);
--	/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
--	if (vg_read_error(vg) &&
--	    !((vg_read_error(vg) == FAILED_INCONSISTENT) &&
--	      (flags & READ_ALLOW_INCONSISTENT))) {
--		ret_max = ECMD_FAILED;
--		goto_out;
--	}
-+	dm_list_init(&cmd_vgs);
-+	if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs, vg_name, vgid, flags)))
-+		return_0;
+-       if (!(lv->status & PARTIAL_LV)) {
++       log_lv = first_seg(lv)->log_lv;
++       if (log_lv && log_lv->status & MIRRORED)
++               lv_check_transient(log_lv);
 +
-+	while (!sigint_caught()) {
-+		if (!cmd_vg_read(cmd, &cmd_vgs))
-+			/* Allow FAILED_INCONSISTENT through only for vgcfgrestore */
-+			if (vg_read_error(cvl_vg->vg) &&
-+			    (!((flags & READ_ALLOW_INCONSISTENT) &&
-+			       (vg_read_error(cvl_vg->vg) == FAILED_INCONSISTENT)))) {
-+				ret = ECMD_FAILED;
-+				break;
-+			}
-+
-+		if (!dm_list_empty(tags) &&
-+		    /* Only process if a tag matches or it's on arg_vgnames */
-+		    !str_list_match_item(arg_vgnames, vg_name) &&
-+		    !str_list_match_list(tags, &cvl_vg->vg->tags))
-+			break;
- 
--	if (!dm_list_empty(tags)) {
--		/* Only process if a tag matches or it's on arg_vgnames */
--		if (!str_list_match_item(arg_vgnames, vg_name) &&
--		    !str_list_match_list(tags, &vg->tags))
--			goto out;
-+		ret = process_single_vg(cmd, vg_name, cvl_vg->vg, handle);
-+
-+		if (vg_read_error(cvl_vg->vg)) /* FAILED_INCONSISTENT */
-+			break;
-+
-+		if (!cvl_vg->vg->cmd_missing_vgs)
-+			break;
-+
-+		cmd_vg_release(&cmd_vgs);
- 	}
- 
--	if ((ret = process_single_vg(cmd, vg_name, vg,
--				  handle)) > ret_max)
--		ret_max = ret;
-+	cmd_vg_release(&cmd_vgs);
- 
--out:
--	if (vg_read_error(vg))
--		vg_release(vg);
--	else
--		unlock_and_release_vg(cmd, vg, vg_name);
--	return ret_max;
-+	return (ret > ret_max) ? ret : ret_max;
- }
- 
- int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
--- 
-1.7.0.1
++       if (!(lv->status & PARTIAL_LV) && !log_lv &&
++           !(log_lv->status & PARTIAL_LV)) {
+...
+        new_log_count = old_log_count;
+-       log_lv = first_seg(lv)->log_lv;
+        if (log_lv) {
+
+Thanks,
+Taka
 
 
