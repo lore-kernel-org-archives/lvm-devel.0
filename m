@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 May 2010 22:54:59 -0000
-Subject: LVM2 make.tmpl.in
-Message-ID: <20100520225459.6200.qmail@sourceware.org>
+Date: 20 May 2010 23:21:56 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100520232156.32743.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-20 22:54:59
+Changes by:	agk at sourceware.org	2010-05-20 23:21:54
 
 Modified files:
-	.              : make.tmpl.in 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	Fix $(INSTALL_SCRIPT)
+	post-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.237&r2=1.238
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1573&r2=1.1574
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.372&r2=1.373
 
---- LVM2/make.tmpl.in	2010/05/20 14:45:14	1.101
-+++ LVM2/make.tmpl.in	2010/05/20 22:54:58	1.102
-@@ -103,7 +103,7 @@
- INSTALL_DIR = $(INSTALL) -m 0755 -d
- INSTALL_ROOT_DIR = $(INSTALL) -m 0700 -d
- INSTALL_ROOT_DATA = $(INSTALL) -m 0600
--INSTALL_SCRIPT = $(INSTALL) -p -m $(M_INSTALL_PROGRAM)
-+INSTALL_SCRIPT = $(INSTALL) -p $(M_INSTALL_PROGRAM)
- 
- .SUFFIXES: .c .d .o .so .a .po .pot .mo .dylib
- 
+--- LVM2/VERSION	2010/05/20 22:27:26	1.237
++++ LVM2/VERSION	2010/05/20 23:21:53	1.238
+@@ -1 +1 @@
+-2.02.66(2)-cvs (2010-05-20)
++2.02.67(2)-cvs (2010-05-20)
+--- LVM2/VERSION_DM	2010/05/20 22:27:26	1.48
++++ LVM2/VERSION_DM	2010/05/20 23:21:53	1.49
+@@ -1 +1 @@
+-1.02.48-cvs (2010-05-20)
++1.02.49-cvs (2010-05-20)
+--- LVM2/WHATS_NEW	2010/05/20 22:27:26	1.1573
++++ LVM2/WHATS_NEW	2010/05/20 23:21:53	1.1574
+@@ -1,3 +1,6 @@
++Version 2.02.67 -
++===============================
++
+ Version 2.02.66 - 20th May 2010
+ ===============================
+   If unable to obtain snapshot percentage leave value blank on reports.
+--- LVM2/WHATS_NEW_DM	2010/05/20 22:27:26	1.372
++++ LVM2/WHATS_NEW_DM	2010/05/20 23:21:53	1.373
+@@ -1,3 +1,6 @@
++Version 1.02.49 - 
++================================
++
+ Version 1.02.48 - 17th May 2010
+ ================================
+   Use -d to control level of messages sent to syslog by dmeventd.
 
 
