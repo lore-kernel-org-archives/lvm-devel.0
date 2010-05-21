@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 May 2010 23:21:56 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100520232156.32743.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 21 May 2010 12:19:23 -0000
+Subject: LVM2 ./WHATS_NEW tools/toollib.c
+Message-ID: <20100521121923.4031.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,51 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-20 23:21:54
+Changes by:	zkabelac at sourceware.org	2010-05-21 12:19:23
 
 Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+	.              : WHATS_NEW 
+	tools          : toollib.c 
 
 Log message:
-	post-release
+	Return ECMD_FAILED for break in process_each_lv() and process_each_segment_in_lv()
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.237&r2=1.238
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.48&r2=1.49
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1573&r2=1.1574
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.372&r2=1.373
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1574&r2=1.1575
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.197&r2=1.198
 
---- LVM2/VERSION	2010/05/20 22:27:26	1.237
-+++ LVM2/VERSION	2010/05/20 23:21:53	1.238
-@@ -1 +1 @@
--2.02.66(2)-cvs (2010-05-20)
-+2.02.67(2)-cvs (2010-05-20)
---- LVM2/VERSION_DM	2010/05/20 22:27:26	1.48
-+++ LVM2/VERSION_DM	2010/05/20 23:21:53	1.49
-@@ -1 +1 @@
--1.02.48-cvs (2010-05-20)
-+1.02.49-cvs (2010-05-20)
---- LVM2/WHATS_NEW	2010/05/20 22:27:26	1.1573
-+++ LVM2/WHATS_NEW	2010/05/20 23:21:53	1.1574
-@@ -1,3 +1,6 @@
-+Version 2.02.67 -
-+===============================
-+
+--- LVM2/WHATS_NEW	2010/05/20 23:21:53	1.1574
++++ LVM2/WHATS_NEW	2010/05/21 12:19:22	1.1575
+@@ -1,5 +1,6 @@
+ Version 2.02.67 -
+ ===============================
++  Return ECMD_FAILED for break in process_each_lv() and process_each_segment_in_lv().
+ 
  Version 2.02.66 - 20th May 2010
  ===============================
-   If unable to obtain snapshot percentage leave value blank on reports.
---- LVM2/WHATS_NEW_DM	2010/05/20 22:27:26	1.372
-+++ LVM2/WHATS_NEW_DM	2010/05/20 23:21:53	1.373
-@@ -1,3 +1,6 @@
-+Version 1.02.49 - 
-+================================
-+
- Version 1.02.48 - 17th May 2010
- ================================
-   Use -d to control level of messages sent to syslog by dmeventd.
+--- LVM2/tools/toollib.c	2010/05/06 11:15:56	1.197
++++ LVM2/tools/toollib.c	2010/05/21 12:19:22	1.198
+@@ -329,8 +329,9 @@
+ 		unlock_and_release_vg(cmd, vg, vgname);
+ 		if (ret > ret_max)
+ 			ret_max = ret;
++		/* FIXME: logic for breaking command is not consistent */
+ 		if (sigint_caught())
+-			break;
++			return ECMD_FAILED;
+ 	}
+ 
+ 	return ret_max;
+@@ -408,8 +409,9 @@
+ 		ret = process_single_seg(cmd, seg, handle);
+ 		if (ret > ret_max)
+ 			ret_max = ret;
++		/* FIXME: logic for breaking command is not consistent */
+ 		if (sigint_caught())
+-			break;
++			return ECMD_FAILED;
+ 	}
+ 
+ 	return ret_max;
 
 
