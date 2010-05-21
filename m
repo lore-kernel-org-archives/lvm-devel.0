@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 May 2010 12:45:23 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20100521124523.17360.qmail@sourceware.org>
+Date: 21 May 2010 12:47:48 -0000
+Subject: LVM2/lib/metadata metadata-exported.h
+Message-ID: <20100521124748.18423.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-21 12:45:19
+Changes by:	zkabelac at sourceware.org	2010-05-21 12:47:47
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata.c 
+	lib/metadata   : metadata-exported.h 
 
 Log message:
-	Replicator: extend _lv_each_dependency() with dependencies for Replicator devices
+	Replicator: extend volume_group with list of VGs and flag
+	
+	Add pointer to linked list of opened VGs. List temporarily keeps
+	the information about needed or locked and opened VGs for replicator target.
+	
+	Also add cmd_missing_vgs flag information for quick check and
+	also for possible continuos process_each_lv() usage where we need
+	to detect whether failure has been caused by missing VG or
+	some other reason.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1581&r2=1.1582
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.343&r2=1.344
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.147&r2=1.148
 
---- LVM2/WHATS_NEW	2010/05/21 12:43:02	1.1581
-+++ LVM2/WHATS_NEW	2010/05/21 12:45:18	1.1582
-@@ -1,6 +1,7 @@
- Version 2.02.67 -
- ===============================
--  Add check_replicator_segment() for catching internal replicator errors.
-+  Extend _lv_each_dependency() with Replicator dependencies.
-+  Add check_replicator_segment() for catching internal Replicator errors.
-   Initial lvm2 support for Replicator metadata handling.
-   Checking open_count in all parents of presuspend_node.
-   Added dm_tree_node_set_presuspend_node() to presuspend child in deactivate.
---- LVM2/lib/metadata/metadata.c	2010/05/19 11:52:37	1.343
-+++ LVM2/lib/metadata/metadata.c	2010/05/21 12:45:19	1.344
-@@ -2001,6 +2001,8 @@
- 	struct lv_segment *lvseg;
+--- LVM2/lib/metadata/metadata-exported.h	2010/05/21 12:36:31	1.147
++++ LVM2/lib/metadata/metadata-exported.h	2010/05/21 12:47:46	1.148
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -223,6 +223,8 @@
+ 	struct cmd_context *cmd;
+ 	struct dm_pool *vgmem;
+ 	struct format_instance *fid;
++	struct dm_list *cmd_vgs;/* List of wanted/locked and opened VGs */
++	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
+ 	uint32_t seqno;		/* Metadata sequence number */
  
- 	struct logical_volume *deps[] = {
-+		(lv->rdevice && lv != lv->rdevice->lv) ? lv->rdevice->lv : 0,
-+		(lv->rdevice && lv != lv->rdevice->slog) ? lv->rdevice->slog : 0,
- 		lv->snapshot ? lv->snapshot->origin : 0,
- 		lv->snapshot ? lv->snapshot->cow : 0 };
- 	for (i = 0; i < sizeof(deps) / sizeof(*deps); ++i) {
-@@ -2011,6 +2013,8 @@
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		if (lvseg->log_lv && !fn(lvseg->log_lv, data))
- 			return_0;
-+		if (lvseg->rlog_lv && !fn(lvseg->rlog_lv, data))
-+			return_0;
- 		for (s = 0; s < lvseg->area_count; ++s) {
- 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
- 				return_0;
+ 	alloc_policy_t alloc;
 
 
