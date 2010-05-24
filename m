@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 May 2010 16:30:18 -0000
-Subject: LVM2 ./WHATS_NEW lib/mirror/mirrored.c
-Message-ID: <20100524163018.26663.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 24 May 2010 16:33:22 -0000
+Subject: LVM2/test t-lvconvert-repair-transient.sh
+Message-ID: <20100524163322.28557.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-05-24 16:30:16
+Changes by:	mornfall at sourceware.org	2010-05-24 16:33:21
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/mirror     : mirrored.c 
+	test           : t-lvconvert-repair-transient.sh 
 
 Log message:
-	Update clustered log kernel module name to log-userspace.
+	t-lvconvert-repair-transient hangs on .33 and on RHEL6 kernel -> disable
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1594&r2=1.1595
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-transient.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2010/05/24 09:03:39	1.1594
-+++ LVM2/WHATS_NEW	2010/05/24 16:30:15	1.1595
-@@ -1,5 +1,6 @@
- Version 2.02.67 -
- ===============================
-+  Update clustered log kernel module name to log-userspace.
-   Activate only first head of Replicator for vgchange -ay.
-   Add Replicators' LVs to dtree for activation.
-   Avoid print activation message if there is a missing VG (Replicator).
---- LVM2/lib/mirror/mirrored.c	2010/05/24 15:32:21	1.68
-+++ LVM2/lib/mirror/mirrored.c	2010/05/24 16:30:16	1.69
-@@ -503,7 +503,7 @@
- 	 * FIXME: Fails incorrectly if cmirror was built into kernel.
- 	 */
- 	if (attributes) {
--		if (!_mirror_attributes && module_present(cmd, "log-clustered"))
-+		if (!_mirror_attributes && module_present(cmd, "log-userspace"))
- 			_mirror_attributes |= MIRROR_LOG_CLUSTERED;
- 		*attributes = _mirror_attributes;
- 	}
+--- LVM2/test/t-lvconvert-repair-transient.sh	2010/05/24 15:32:21	1.1
++++ LVM2/test/t-lvconvert-repair-transient.sh	2010/05/24 16:33:21	1.2
+@@ -13,6 +13,8 @@
+ 
+ prepare_vg 5
+ 
++exit 200 # this breaks upstream .33 and RHEL6 kernel :(
++
+ # fail multiple devices
+ 
+ lvcreate -m 3 --ig -L 1 -n 4way $vg
 
 
