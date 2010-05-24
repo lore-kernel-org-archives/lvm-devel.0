@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 24 May 2010 16:33:22 -0000
-Subject: LVM2/test t-lvconvert-repair-transient.sh
-Message-ID: <20100524163322.28557.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 24 May 2010 17:18:25 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20100524171825.32344.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-05-24 16:33:21
+Changes by:	mbroz at sourceware.org	2010-05-24 17:18:12
 
 Modified files:
-	test           : t-lvconvert-repair-transient.sh 
+	test           : test-utils.sh 
 
 Log message:
-	t-lvconvert-repair-transient hangs on .33 and on RHEL6 kernel -> disable
+	Replace lvm.conf instead of truncating it.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-transient.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.44&r2=1.45
 
---- LVM2/test/t-lvconvert-repair-transient.sh	2010/05/24 15:32:21	1.1
-+++ LVM2/test/t-lvconvert-repair-transient.sh	2010/05/24 16:33:21	1.2
-@@ -13,6 +13,8 @@
+--- LVM2/test/test-utils.sh	2010/05/24 15:32:21	1.44
++++ LVM2/test/test-utils.sh	2010/05/24 17:18:05	1.45
+@@ -358,7 +358,7 @@
+ 		filter='[ "a/dev\/mirror/", "a/dev\/mapper\/.*pv[0-9_]*$/", "r/.*/" ]'
+         locktype=
+ 	if test -n "$LVM_TEST_LOCKING"; then locktype="locking_type = $LVM_TEST_LOCKING"; fi
+-	cat > $TESTDIR/etc/lvm.conf <<-EOF
++	cat > $TESTDIR/etc/lvm.conf.new <<-EOF
+   $LVM_TEST_CONFIG
+   devices {
+     dir = "$DM_DEV_DIR"
+@@ -391,6 +391,8 @@
+     polling_interval = 0
+   }
+ EOF
++	# FIXME remove this workaround after mmap & truncating file problems solved
++	mv $TESTDIR/etc/lvm.conf.new $TESTDIR/etc/lvm.conf
+ 	cat $TESTDIR/etc/lvm.conf
+ }
  
- prepare_vg 5
- 
-+exit 200 # this breaks upstream .33 and RHEL6 kernel :(
-+
- # fail multiple devices
- 
- lvcreate -m 3 --ig -L 1 -n 4way $vg
 
 
