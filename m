@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 May 2010 09:03:42 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgchange.c
-Message-ID: <20100524090342.15596.qmail@sourceware.org>
+Date: 24 May 2010 09:04:28 -0000
+Subject: LVM2 ./Makefile.in lib/activate/dev_manager.c ...
+Message-ID: <20100524090428.24732.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,61 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-24 09:03:39
+Changes by:	zkabelac at sourceware.org	2010-05-24 09:04:28
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : vgchange.c 
+	.              : Makefile.in 
+	lib/activate   : dev_manager.c 
+	lib/metadata   : segtype.h 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Replicator: update activate code for vgchange
-	
-	Activate only the first replicator-dev LV, that activates all other
-	related LVs from Replicator. In case of error during this activation,
-	it will not retry again for other heads (less confusing error log).
+	Update Copyright date for resently modifed files
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1593&r2=1.1594
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.54&r2=1.55
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.193&r2=1.194
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
 
---- LVM2/WHATS_NEW	2010/05/24 09:01:05	1.1593
-+++ LVM2/WHATS_NEW	2010/05/24 09:03:39	1.1594
-@@ -1,5 +1,6 @@
- Version 2.02.67 -
- ===============================
-+  Activate only first head of Replicator for vgchange -ay.
-   Add Replicators' LVs to dtree for activation.
-   Avoid print activation message if there is a missing VG (Replicator).
-   Fixed scripts/relpath.awk to work in mawk
---- LVM2/tools/vgchange.c	2010/05/24 08:59:30	1.103
-+++ LVM2/tools/vgchange.c	2010/05/24 09:03:39	1.104
-@@ -104,6 +104,11 @@
- 		if ((lv->status & MIRROR_IMAGE) || (lv->status & MIRROR_LOG))
- 			continue;
- 
-+		/* Only request activation of the first replicator-dev LV */
-+		/* Avoids retry with all heads in case of failure */
-+		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
-+			continue;
-+
- 		/* Can't deactivate a pvmove LV */
- 		/* FIXME There needs to be a controlled way of doing this */
- 		if (((activate == CHANGE_AN) || (activate == CHANGE_ALN)) &&
+--- LVM2/Makefile.in	2010/05/20 14:45:14	1.54
++++ LVM2/Makefile.in	2010/05/24 09:04:27	1.55
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+--- LVM2/lib/activate/dev_manager.c	2010/05/24 09:01:05	1.193
++++ LVM2/lib/activate/dev_manager.c	2010/05/24 09:04:27	1.194
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+--- LVM2/lib/metadata/segtype.h	2010/05/21 12:36:31	1.28
++++ LVM2/lib/metadata/segtype.h	2010/05/24 09:04:27	1.29
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+--- LVM2/libdm/libdm-deptree.c	2010/05/21 12:30:35	1.78
++++ LVM2/libdm/libdm-deptree.c	2010/05/24 09:04:27	1.79
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2005-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2005-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
 
 
