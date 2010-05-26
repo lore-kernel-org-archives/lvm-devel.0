@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:17 -0400
-Subject: [PATCH 15/18] Add mdas_empty_or_ignored() helper function.
-In-Reply-To: <1274882540-6181-15-git-send-email-dwysocha@redhat.com>
+Date: Wed, 26 May 2010 10:02:16 -0400
+Subject: [PATCH 14/18] Implement ignore of mda if bit set by skipping r/w of metadata.
+In-Reply-To: <1274882540-6181-14-git-send-email-dwysocha@redhat.com>
 References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
@@ -16,62 +16,43 @@ References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-12-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-13-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-14-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-15-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-16-git-send-email-dwysocha@redhat.com>
+Message-ID: <1274882540-6181-15-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add a helper function to consolidate checking for an empty mdas list
-or ignored mdas.  Ignored mdas should behave almost identically to
-an empty mda list - the metadata areas should not be read or written
-to.  This function will make it easier to implement metadata balancing
-and easier to track pvs with an empty mda list or ignored mdas.
+We implement ignore of an mda at label_read time by checking for
+the ignore bit, and then skipping the reading of the vgname and
+other information in the metadata.  This will have an effect similar
+to a PV found with no mdas.  Thus, it will look like an orphan in the
+cache until we scan the rest of the system and find a PV with
+metadata, and the mda will not be on the vg->fid->metadata_areas
+list so no read/writes will be done to the metadata area.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |   13 +++++++++++++
- lib/metadata/metadata.h |    1 +
- 2 files changed, 14 insertions(+), 0 deletions(-)
+ lib/format_text/text_label.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a988cb4..ddfe9e3 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4034,6 +4034,19 @@ int pv_mda_set_ignored(const struct physical_volume *pv, int value)
- 	return 1;
- }
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index ab9f595..70aba3f 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -311,6 +311,12 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
+ 		}
+ 		mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
  
-+int mdas_empty_or_ignored(struct dm_list *mdas)
-+{
-+	struct metadata_area *mda;
++		if (mda_is_ignored(mda)) {
++			if (!dev_close(mdac->area.dev))
++				stack;
++			continue;
++		}
 +
-+	if (!dm_list_size(mdas))
-+		return 1;
-+	dm_list_iterate_items(mda, mdas) {
-+		if (mda_is_ignored(mda))
-+			return 1;
-+	}
-+	return 0;
-+}
-+
- uint32_t vg_seqno(const struct volume_group *vg)
- {
- 	return vg->seqno;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 8cf5a58..0e5eebe 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -185,6 +185,7 @@ void mda_set_ignored(struct metadata_area *mda, int value);
- int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
- void fid_add_mda(struct format_instance *fid, struct metadata_area *mda);
- int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas);
-+int mdas_empty_or_ignored(struct dm_list *mdas);
- 
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ 		if ((vgname = vgname_from_mda(info->fmt, mdah,
+ 					      &mdac->area,
+ 					      &vgid, &vgstatus, &creation_host,
 -- 
 1.6.0.6
 
