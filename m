@@ -1,41 +1,108 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:02 -0400
-Subject: [PATCH 00/18] Add infrastructure for metadata balancing, v4.
-Message-ID: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
+Date: Wed, 26 May 2010 10:02:04 -0400
+Subject: [PATCH 02/18] Add text format specific 'rlocn' ignore flag and access functions.
+In-Reply-To: <1274882540-6181-2-git-send-email-dwysocha@redhat.com>
+References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
+	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1274882540-6181-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Adding a flag to the 'rlocn' structure in the mda header of the
+text format allows us to flip a bit to ignore an area on disk that
+stores the metadata via the text format specific mda_header.
+This patch defines the flag and access functions to manage the flag.
+Other patches will manage the ignore on a format-independent basis,
+by using a flag in the metadata_area structure.
 
-This patchset is a fourth round of the metadata balancing support,
-and builds on the third round of patches already submitted (2/9/2010).
-It adds the infrastructure to set a bit inside the mda header on
-a per-PV basis, control it from pvchange, display the number
-of mdas with this bit set on a particular PV or VG, but skips
-the VG-based parameters to control the per-PV bits.  The vg-based
-parameters and control is best dealt with in another patchset.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ include/.symlinks.in          |    1 +
+ lib/format_text/format-text.c |   13 +++++++++++++
+ lib/format_text/format-text.h |    1 +
+ lib/format_text/layout.h      |   10 ++++++++++
+ 4 files changed, 25 insertions(+), 0 deletions(-)
 
-Changes from the third round start around patch 9 and include:
-1) Renamed 'disable' to 'ignore' everywhere, per the last review,
-and incorporate review comments.
-2) Separate 'metadata_area_ignored' list on the 'fid' structure.
-This seemed to simplify and isolate the ignored code from existing
-code and should be less risky than checking for a flag in the
-vg_write() path.
-3) MDA ignore/unignore now implemented.  If the bit is set on disk,
-at _text_read() time we treat it as a PV with 0 mdas.  This means
-that when we _vg_read() and construct the VG, we will adjust the
-lvmcache and mda lists based on another PVs metadata.
-4) Added various helper functions to refactor and simplify code.
-These include fid_add_mda() and fid_add_mdas(), and
-mdas_empty_or_ignored(), and a location specific mda copy
-constructor.
-5) Various bugs fixed from the third round of patches.
-
-Still TODO:
-1) Submit vg-based parameters and control.  For now we can control on
-a per-PV basis and this should be adequate for the first release.
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index 5a7e556..415bf82 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -26,6 +26,7 @@
+ @top_srcdir@/lib/format_text/format-text.h
+ @top_srcdir@/lib/format_text/text_export.h
+ @top_srcdir@/lib/format_text/text_import.h
++ at top_srcdir@/lib/format_text/layout.h
+ @top_srcdir@/lib/label/label.h
+ @top_srcdir@/lib/locking/locking.h
+ @top_srcdir@/lib/log/log.h
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 829b13f..39457e8 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -66,6 +66,19 @@ struct text_context {
+ 	char *desc;		/* Description placed inside file */
+ };
+ 
++int rlocn_is_ignored(const struct raw_locn *rlocn)
++{
++	return (rlocn->flags & RAW_LOCN_IGNORED ? 1 : 0);
++}
++
++void rlocn_set_ignored(struct raw_locn *rlocn, int value)
++{
++	if (value)
++		rlocn->flags |= RAW_LOCN_IGNORED;
++	else
++		rlocn->flags &= ~RAW_LOCN_IGNORED;
++}
++
+ /*
+  * NOTE: Currently there can be only one vg per text file.
+  */
+diff --git a/lib/format_text/format-text.h b/lib/format_text/format-text.h
+index 9750ffa..17997cc 100644
+--- a/lib/format_text/format-text.h
++++ b/lib/format_text/format-text.h
+@@ -17,6 +17,7 @@
+ #define _LVM_FORMAT_TEXT_H
+ 
+ #include "lvm-types.h"
++#include "layout.h"
+ #include "metadata.h"
+ 
+ #define FMT_TEXT_NAME "lvm2"
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index 444a500..b7b2f2b 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -46,6 +46,13 @@ struct pv_header {
+ 	struct disk_locn disk_areas_xl[0];	/* Two lists */
+ } __attribute__ ((packed));
+ 
++/*
++ * Ignore this raw location.  This allows us to
++ * ignored metadata areas easily, and thus balance
++ * metadata across VGs with many PVs.
++ */
++#define RAW_LOCN_IGNORED 0x00000001
++
+ /* On disk */
+ struct raw_locn {
+ 	uint64_t offset;	/* Offset in bytes to start sector */
+@@ -54,6 +61,9 @@ struct raw_locn {
+ 	uint32_t flags;
+ } __attribute__ ((packed));
+ 
++int rlocn_is_ignored(const struct raw_locn *rlocn);
++void rlocn_set_ignored(struct raw_locn *rlocn, int value);
++
+ /* On disk */
+ /* Structure size limited to one sector */
+ struct mda_header {
+-- 
+1.6.0.6
 
 
