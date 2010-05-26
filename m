@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:14 -0400
-Subject: [PATCH 12/18] Add --metadataignore to pvchange, allowing for ignoring of metadata areas.
-In-Reply-To: <1274882540-6181-12-git-send-email-dwysocha@redhat.com>
+Date: Wed, 26 May 2010 10:02:17 -0400
+Subject: [PATCH 15/18] Add mdas_empty_or_ignored() helper function.
+In-Reply-To: <1274882540-6181-15-git-send-email-dwysocha@redhat.com>
 References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
@@ -14,118 +14,64 @@ References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-10-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-11-git-send-email-dwysocha@redhat.com>
 	<1274882540-6181-12-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-13-git-send-email-dwysocha@redhat.com>
+	<1274882540-6181-13-git-send-email-dwysocha@redhat.com>
+	<1274882540-6181-14-git-send-email-dwysocha@redhat.com>
+	<1274882540-6181-15-git-send-email-dwysocha@redhat.com>
+Message-ID: <1274882540-6181-16-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch just modifies pvchange to call the underlying ignore
-functions for mdas.
+Add a helper function to consolidate checking for an empty mdas list
+or ignored mdas.  Ignored mdas should behave almost identically to
+an empty mda list - the metadata areas should not be read or written
+to.  This function will make it easier to implement metadata balancing
+and easier to track pvs with an empty mda list or ignored mdas.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/args.h     |    1 +
- tools/commands.h |    3 ++-
- tools/pvchange.c |   30 +++++++++++++++++++++++++++++-
- 3 files changed, 32 insertions(+), 2 deletions(-)
+ lib/metadata/metadata.c |   13 +++++++++++++
+ lib/metadata/metadata.h |    1 +
+ 2 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 76146ee..d343689 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -25,6 +25,7 @@ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
-+arg(metadataignore_ARG, '\0', "metadataignore", yes_no_arg, 0)
- arg(restorefile_ARG, '\0', "restorefile", string_arg, 0)
- arg(labelsector_ARG, '\0', "labelsector", int_arg, 0)
- arg(driverloaded_ARG, '\0', "driverloaded", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index e33cadc..6d8d2c0 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -455,6 +455,7 @@ xx(pvchange,
-    "\t[-t|--test]\n"
-    "\t[-u|--uuid]\n"
-    "\t[-x|--allocatable y|n]\n"
-+   "\t[--metadataignore y|n]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--deltag Tag]\n"
-@@ -462,7 +463,7 @@ xx(pvchange,
-    "\t[PhysicalVolumePath...]\n",
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index a988cb4..ddfe9e3 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4034,6 +4034,19 @@ int pv_mda_set_ignored(const struct physical_volume *pv, int value)
+ 	return 1;
+ }
  
-    all_ARG, allocatable_ARG, allocation_ARG, autobackup_ARG, deltag_ARG,
--   addtag_ARG, test_ARG, uuid_ARG)
-+   addtag_ARG, metadataignore_ARG, test_ARG, uuid_ARG)
++int mdas_empty_or_ignored(struct dm_list *mdas)
++{
++	struct metadata_area *mda;
++
++	if (!dm_list_size(mdas))
++		return 1;
++	dm_list_iterate_items(mda, mdas) {
++		if (mda_is_ignored(mda))
++			return 1;
++	}
++	return 0;
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 8cf5a58..0e5eebe 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -185,6 +185,7 @@ void mda_set_ignored(struct metadata_area *mda, int value);
+ int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
+ void fid_add_mda(struct format_instance *fid, struct metadata_area *mda);
+ int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas);
++int mdas_empty_or_ignored(struct dm_list *mdas);
  
- xx(pvresize,
-    "Resize physical volume(s)",
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index 5486b73..2203b65 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -34,6 +34,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 	int allocatable = 0;
- 	int tagarg = 0;
- 	int r = 0;
-+	int mda_ignore = 0;
- 
- 	if (arg_count(cmd, addtag_ARG))
- 		tagarg = addtag_ARG;
-@@ -43,6 +44,9 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 	if (arg_count(cmd, allocatable_ARG))
- 		allocatable = !strcmp(arg_str_value(cmd, allocatable_ARG, "n"),
- 				      "y");
-+	if (arg_count(cmd, metadataignore_ARG))
-+		mda_ignore = !strcmp(arg_str_value(cmd, metadataignore_ARG, "n"),
-+				      "y");
- 	else if (tagarg && !(tag = arg_str_value(cmd, tagarg, NULL))) {
- 		log_error("Failed to get tag");
- 		return 0;
-@@ -117,6 +121,29 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 				goto out;
- 			}
- 		}
-+	} else if (arg_count(cmd, metadataignore_ARG)) {
-+		if (mda_ignore && pv_mda_is_ignored(pv)) {
-+			log_error("Physical volume \"%s\" metadata already "
-+				  "ignored", pv_name);
-+			r = 1;
-+			goto out;
-+		}
-+		if (!mda_ignore && !pv_mda_is_ignored(pv)) {
-+			log_error("Physical volume \"%s\" metadata already "
-+				  "not ignored", pv_name);
-+			r = 1;
-+			goto out;
-+		}
-+		if (mda_ignore) {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata ignored", pv_name);
-+		} else {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata not ignored", pv_name);
-+		}
-+		if (!pv_mda_set_ignored(pv, mda_ignore)) {
-+			goto out;
-+		}
- 	} else {
- 		/* --uuid: Change PV ID randomly */
- 		if (!id_create(&pv->id)) {
-@@ -187,7 +214,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 	struct str_list *sll;
- 
- 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
--	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
-+	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
-+	    arg_count(cmd, metadataignore_ARG) != 1) {
- 		log_error("Please give exactly one option of -x, -uuid, "
- 			  "--addtag or --deltag");
- 		return EINVALID_CMD_LINE;
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
+ #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
 -- 
 1.6.0.6
 
