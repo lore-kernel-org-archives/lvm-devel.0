@@ -1,104 +1,41 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:07 -0400
-Subject: [PATCH 05/18] Move dev_open/dev_close outside vgname_from_mda().
-In-Reply-To: <1274882540-6181-5-git-send-email-dwysocha@redhat.com>
+Date: Wed, 26 May 2010 10:02:03 -0400
+Subject: [PATCH 01/18] Change 'filler' to 'flags' in on-disk 'raw_locn' structure.
+In-Reply-To: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
 References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-4-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-6-git-send-email-dwysocha@redhat.com>
+Message-ID: <1274882540-6181-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Refactor vgname_from_mda() so caller must open/close the device.
-Should be no functional change.
+Future patches will make use of a specific flag in the on-disk 'raw_locn'
+structure to enable/disable metadata areas, and facilitate metadata
+balancing.
+
+Note that 'filler' is always set to '0' (see add_mda() - memset),
+so use of this area as a non-zero flags field is a safe way to
+provide future code features.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format_text/format-text.c |   20 +++++++-------------
- lib/format_text/text_label.c  |    6 ++++++
- 2 files changed, 13 insertions(+), 13 deletions(-)
+ lib/format_text/layout.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index fdc5e8d..d5e7ff2 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1093,9 +1093,6 @@ const char *vgname_from_mda(const struct format_type *fmt,
- 	if (mda_free_sectors)
- 		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index b023e92..444a500 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -51,7 +51,7 @@ struct raw_locn {
+ 	uint64_t offset;	/* Offset in bytes to start sector */
+ 	uint64_t size;		/* Bytes */
+ 	uint32_t checksum;
+-	uint32_t filler;
++	uint32_t flags;
+ } __attribute__ ((packed));
  
--	if (!dev_open(dev_area->dev))
--		return_NULL;
--
- 	if (!(mdah = _raw_read_mda_header(fmt, dev_area)))
- 		goto_out;
- 
-@@ -1173,9 +1170,6 @@ const char *vgname_from_mda(const struct format_type *fmt,
- 	}
- 
-       out:
--	if (!dev_close(dev_area->dev))
--		stack;
--
- 	return vgname;
- }
- 
-@@ -1196,20 +1190,20 @@ static int _scan_raw(const struct format_type *fmt)
- 
- 	dm_list_iterate_items(rl, raw_list) {
- 		/* FIXME We're reading mdah twice here... */
-+		if (!dev_open(rl->dev_area.dev)) {
-+			stack;
-+			continue;
-+		}
-+
- 		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
- 					      NULL, NULL))) {
--			if (!dev_open(rl->dev_area.dev)) {
--				stack;
--				continue;
--			}
--
- 			vg = _vg_read_raw_area(&fid, vgname, &rl->dev_area, 0);
- 			if (vg)
- 				lvmcache_update_vg(vg, 0);
- 
--			if (!dev_close(rl->dev_area.dev))
--				stack;
- 		}
-+		if (!dev_close(rl->dev_area.dev))
-+			stack;
- 	}
- 
- 	return 1;
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 15758d6..6f897e1 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -299,6 +299,10 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 
- 	dm_list_iterate_items(mda, &info->mdas) {
- 		mdac = (struct mda_context *) mda->metadata_locn;
-+		if (!dev_open(mdac->area.dev)) {
-+			stack;
-+			continue;
-+		}
- 		if ((vgname = vgname_from_mda(info->fmt, &mdac->area,
- 					      &vgid, &vgstatus, &creation_host,
- 					      &mdac->free_sectors)) &&
-@@ -306,6 +310,8 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 						   (char *) &vgid, vgstatus,
- 						   creation_host))
- 			return_0;
-+		if (!dev_close(mdac->area.dev))
-+			stack;
- 	}
- 
- 	info->status &= ~CACHE_INVALID;
+ /* On disk */
 -- 
 1.6.0.6
 
