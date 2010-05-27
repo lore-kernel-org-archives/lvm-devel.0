@@ -1,135 +1,79 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 26 May 2010 10:02:18 -0400
-Subject: [PATCH 16/18] Use mdas_is_empty_or_ignored() in place of checks for empty mda list.
-In-Reply-To: <1274882540-6181-16-git-send-email-dwysocha@redhat.com>
-References: <1274882540-6181-1-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-2-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-3-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-4-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-5-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-6-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-7-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-8-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-9-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-10-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-11-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-12-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-13-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-14-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-15-git-send-email-dwysocha@redhat.com>
-	<1274882540-6181-16-git-send-email-dwysocha@redhat.com>
-Message-ID: <1274882540-6181-17-git-send-email-dwysocha@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 27 May 2010 15:02:58 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c
+Message-ID: <20100527150258.3489.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-With the addition of ignored mdas, we replace all checks for an empty
-mda list with a new function to look for either an empty mda list or
-ignored mdas.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2010-05-27 15:02:57
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/cache/lvmcache.c    |    3 ++-
- lib/metadata/metadata.c |   31 ++++++++++++++++++-------------
- 2 files changed, 20 insertions(+), 14 deletions(-)
+Modified files:
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-common.c 
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 213f3cf..a7b11cc 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1197,7 +1197,8 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
- 	}
+Log message:
+	Use expected union semun for arguments in selected semaphore operations.
+	
+	This is standard and expected use. It also prevents errors related with
+	misalignment of the arguments for semaphore operations on some architectures.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.373&r2=1.374
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
+
+--- LVM2/WHATS_NEW_DM	2010/05/20 23:21:53	1.373
++++ LVM2/WHATS_NEW_DM	2010/05/27 15:02:56	1.374
+@@ -1,5 +1,6 @@
+ Version 1.02.49 - 
+ ================================
++  Use expected union semun for arguments in selected semaphore operations.
  
- 	/* If PV without mdas is already in a real VG, don't make it orphan */
--	if (is_orphan_vg(vgname) && info->vginfo && !dm_list_size(&info->mdas) &&
-+	if (is_orphan_vg(vgname) && info->vginfo &&
-+	    mdas_empty_or_ignored(&info->mdas) &&
- 	    !is_orphan_vg(info->vginfo->vgname) && memlock())
- 		return 1;
+ Version 1.02.48 - 17th May 2010
+ ================================
+--- LVM2/libdm/libdm-common.c	2010/05/03 21:06:53	1.95
++++ LVM2/libdm/libdm-common.c	2010/05/27 15:02:56	1.96
+@@ -43,6 +43,18 @@
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index ddfe9e3..df64615 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1305,7 +1305,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	 * this means checking every VG by scanning every PV on the
- 	 * system.
- 	 */
--	if (pv && is_orphan(pv) && !dm_list_size(&mdas)) {
-+	if (pv && is_orphan(pv) && mdas_empty_or_ignored(&mdas)) {
- 		if (!scan_vgs_for_pvs(cmd))
- 			return_0;
- 		pv = pv_read(cmd, name, NULL, NULL, 0, 0);
-@@ -1798,7 +1798,7 @@ static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
- 		return NULL;
- 	}
+ #define DEV_DIR "/dev/"
  
--	if (is_orphan_vg(pv->vg_name) && !dm_list_size(&mdas)) {
-+	if (is_orphan_vg(pv->vg_name) && mdas_empty_or_ignored(&mdas)) {
- 		/* If a PV has no MDAs - need to search all VGs for it */
- 		if (!scan_vgs_for_pvs(cmd))
- 			return_NULL;
-@@ -2718,8 +2718,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	/* Ensure every PV in the VG was in the cache */
- 	if (correct_vg) {
- 		/*
--		 * If the VG has PVs without mdas, they may still be
--		 * orphans in the cache: update the cache state here.
-+		 * If the VG has PVs without mdas, or ignored mdas, they may
-+		 * still be orphans in the cache: update the cache state here.
- 		 */
- 		if (!inconsistent &&
- 		    dm_list_size(&correct_vg->pvs) > dm_list_size(pvids)) {
-@@ -2734,11 +2734,12 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
++#ifdef UDEV_SYNC_SUPPORT
++#ifdef _SEM_SEMUN_UNDEFINED
++union semun
++{
++	int val;			/* value for SETVAL */
++	struct semid_ds *buf;		/* buffer for IPC_STAT & IPC_SET */
++	unsigned short int *array;	/* array for GETALL & SETALL */
++	struct seminfo *__buf;		/* buffer for IPC_INFO */
++};
++#endif
++#endif
++
+ static char _dm_dir[PATH_MAX] = DEV_DIR DM_DIR;
  
- 				/*
- 				 * PV not marked as belonging to this VG in cache.
--				 * Check it's an orphan without metadata area.
-+				 * Check it's an orphan without metadata area
-+				 * not ignored.
- 				 */
- 				if (!(info = info_from_pvid(pvl->pv->dev->pvid, 1)) ||
- 				   !info->vginfo || !is_orphan_vg(info->vginfo->vgname) ||
--				   dm_list_size(&info->mdas)) {
-+				   !mdas_empty_or_ignored(&info->mdas)) {
- 					inconsistent_pvs = 1;
- 					break;
- 				}
-@@ -3124,20 +3125,24 @@ const char *find_vgname_from_pvid(struct cmd_context *cmd,
- 			return_NULL;
- 		}
- 		/*
--		 * If an orphan PV has no MDAs it may appear to be an
--		 * orphan until the metadata is read off another PV in
--		 * the same VG.  Detecting this means checking every VG
--		 * by scanning every PV on the system.
-+		 * If an orphan PV has no MDAs, or it has MDAs but the
-+		 * MDA is ignored, it may appear to be an orphan until
-+		 * the metadata is read off another PV in the same VG.
-+		 * Detecting this means checking every VG by scanning
-+		 * every PV on the system.
- 		 */
--		if (!dm_list_size(&info->mdas)) {
-+		if (mdas_empty_or_ignored(&info->mdas)) {
- 			if (!scan_vgs_for_pvs(cmd)) {
- 				log_error("Rescan for PVs without "
- 					  "metadata areas failed.");
- 				return NULL;
- 			}
-+			/*
-+			 * Ask lvmcache again - we may have a non-orphan
-+			 * name now
-+			 */
-+			vgname = lvmcache_vgname_from_pvid(cmd, pvid);
- 		}
--		/* Ask lvmcache again - we may have a non-orphan name now */
--		vgname = lvmcache_vgname_from_pvid(cmd, pvid);
- 	}
- 	return vgname;
- }
--- 
-1.6.0.6
+ static int _verbose = 0;
+@@ -1076,6 +1088,7 @@
+ 	int gen_semid;
+ 	uint16_t base_cookie;
+ 	uint32_t gen_cookie;
++	union semun sem_arg;
+ 
+ 	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
+ 		log_error("Failed to open /dev/urandom "
+@@ -1123,7 +1136,9 @@
+ 	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) created",
+ 		  gen_cookie, gen_semid);
+ 
+-	if (semctl(gen_semid, 0, SETVAL, 1) < 0) {
++	sem_arg.val = 1;
++
++	if (semctl(gen_semid, 0, SETVAL, sem_arg) < 0) {
+ 		log_error("semid %d: semctl failed: %s", gen_semid, strerror(errno));
+ 		/* We have to destroy just created semaphore
+ 		 * so it won't stay in the system. */
 
 
