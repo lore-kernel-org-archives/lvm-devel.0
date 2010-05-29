@@ -1,72 +1,38 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 28 May 2010 03:50:19 -0000
-Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM man/lvcreate.8.in
-Message-ID: <20100528035019.20553.qmail@sourceware.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Sat, 29 May 2010 01:25:09 -0400 (EDT)
+Subject: md_component_detection bug
+Message-ID: <Pine.LNX.4.64.1005290111560.15553@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-05-28 03:50:19
+Hi
 
-Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM 
-	man            : lvcreate.8.in 
+I looked at that bug when lvm accesses devices with md metadata. I tracked 
+it to lvm device cache.
 
-Log message:
-	Add --type parameter description to the lvcreate man page.
+The problem is this: I have /dev/md0 that is raid0 on two devices: 
+/dev/sdc1 and /dev/sdd1 with 256KiB stripe. I have one pv and one vg on 
+it. If I unload /dev/md0, lvm reads the metadata from /dev/sdc1 and starts 
+thinking that /dev/sdc1 is the physical volume. Any manipulation with vg 
+in this state may cause data corruption because the sector numbers on 
+/dev/sdc1 don't match sector numbers on original /dev/md0.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1599&r2=1.1600
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.374&r2=1.375
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+Lvm has a filter that should suppress accessing devices with md 
+superblocks, the filter is turned on with "md_component_detection = 1" and 
+it is on by default.
 
---- LVM2/WHATS_NEW	2010/05/27 19:00:14	1.1599
-+++ LVM2/WHATS_NEW	2010/05/28 03:50:15	1.1600
-@@ -1,6 +1,6 @@
- Version 2.02.67 -
- ===============================
--  Document 'clear' in dmsetup man page.
-+  Add --type parameter description to the lvcreate man page.
-   Replace strncmp kernel version number checks with proper ones.
-   Avoid selecting names under /dev/block if there is an alternative.
-   Update clustered log kernel module name to log-userspace for 2.6.31 onwards.
---- LVM2/WHATS_NEW_DM	2010/05/27 15:02:56	1.374
-+++ LVM2/WHATS_NEW_DM	2010/05/28 03:50:15	1.375
-@@ -1,5 +1,6 @@
- Version 1.02.49 - 
- ================================
-+  Document 'clear' in dmsetup man page.
-   Use expected union semun for arguments in selected semaphore operations.
- 
- Version 1.02.48 - 17th May 2010
---- LVM2/man/lvcreate.8.in	2010/03/26 22:15:43	1.17
-+++ LVM2/man/lvcreate.8.in	2010/05/28 03:50:18	1.18
-@@ -18,6 +18,7 @@
- [\-n|\-\-name LogicalVolumeName]
- [\-p|\-\-permission r|rw] [\-r|\-\-readahead ReadAheadSectors|auto|none]
- [\-t|\-\-test]
-+[\-\-type SegmentType]
- [\-v|\-\-verbose] [\-Z|\-\-zero y|n]
- VolumeGroupName [PhysicalVolumePath[:PE[-PE]]...]
- .br
-@@ -183,6 +184,14 @@
- rate at which the snapshot data is growing so you can avoid running out
- of space.
- .TP
-+.I \-\-type SegmentType
-+Create a logical volume that uses the specified segment type
-+(e.g. "mirror", "snapshot", "striped").  Especially useful when no
-+existing commandline switch alias enables the use of the desired type
-+(e.g. "error" or "zero" types).  Many segment types already have a
-+commandline switch alias that will enable their use (-s is an alias for
-+--type snapshot).
-+.TP
- .I \-\-virtualsize VirtualSize
- Create a sparse device of the given size (in MB by default) using a snapshot.  
- Anything written to the device will be returned when reading from it.
+However, the filter badly interacts with device cache 
+/etc/lvm/cache/.cache, if the device is listed as valid in the cache, the 
+md filter is not run on the device and lvm thinks that the device is 
+valid. Thus, in my case, if I had "/dev/sdc1" in the cache, lvm skipped 
+the check for md metadata and accessed the device as a valid pv.
+
+I think Milan wrote the device cache, so I'm sending this to you, if not, 
+forward it to the person who maintains the cache code.
+
+Mikulas
 
 
