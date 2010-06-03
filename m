@@ -1,42 +1,55 @@
-From: Brem Belguebli <brem.belguebli@gmail.com>
-Date: Thu, 03 Jun 2010 22:57:29 +0200
-Subject: [PATCH] fix some issues in clvmd initscript
-In-Reply-To: <20100603203426.GF30522@agk-dp.fab.redhat.com>
-References: <4BFD1B92.9080403@redhat.com> <4C07543C.5040908@redhat.com>
-	<4C077B2B.5030206@redhat.com> <4C079571.1050409@redhat.com>
-	<AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
-	<20100603195112.GC30522@agk-dp.fab.redhat.com>
-	<1275596112.14349.4.camel@newgen.localdomain>
-	<20100603202049.GE30522@agk-dp.fab.redhat.com>
-	<1275596736.14349.8.camel@newgen.localdomain>
-	<20100603203426.GF30522@agk-dp.fab.redhat.com>
-Message-ID: <1275598649.14349.15.camel@newgen.localdomain>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 3 Jun 2010 21:03:54 -0000
+Subject: LVM2 ./WHATS_NEW scripts/clvmd_init_red_hat.in
+Message-ID: <20100603210354.32723.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, 2010-06-03 at 21:34 +0100, Alasdair G Kergon wrote:
-> On Thu, Jun 03, 2010 at 10:25:36PM +0200, Brem Belguebli wrote:
-> > It looked so real I thought you were pushing me back to my seat.
->  
-> Nah, I just typed that directly into the email.
-> 
-> We'll capture it into bugzilla, and I'm hoping we won't hit too many
-> gotchas and it will be quick and easy to implement.
-> 
-Great, thanks
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2010-06-03 21:03:54
 
-By the way, not trying to being rude, but it would be great if you could
-"re" consider the resource script provided by Rafael Mico Miranda
-https://www.redhat.com/archives/linux-cluster/2009-June/msg00002.html,
-to see if it can be integrated to Cluster Suite, having Redhat's seal on
-it would be a must.
+Modified files:
+	.              : WHATS_NEW 
+	scripts        : clvmd_init_red_hat.in 
 
-   
-> Alasdair
+Log message:
+	Fix clvmd initscript restart command to start clvmd if not yet running.
 
-Brem
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1605&r2=1.1606
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/clvmd_init_red_hat.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+
+--- LVM2/WHATS_NEW	2010/06/03 13:50:26	1.1605
++++ LVM2/WHATS_NEW	2010/06/03 21:03:53	1.1606
+@@ -1,5 +1,6 @@
+ Version 2.02.67 -
+ ===============================
++  Fix clvmd initscript restart command to start clvmd if not yet running.
+   Use absolute paths for clvmd restart.
+   Require partial option in lvchange --refresh for partial LVs.
+   Do not fail lvm_init() if init_logging() or _init_rand() generates an errno.
+--- LVM2/scripts/clvmd_init_red_hat.in	2010/05/17 03:18:28	1.7
++++ LVM2/scripts/clvmd_init_red_hat.in	2010/06/03 21:03:54	1.8
+@@ -152,13 +152,15 @@
+ 
+ 	# Try to get clvmd to restart itself. This will preserve 
+ 	# exclusive LV locks
+-	action "Restarting $DAEMON: " $DAEMON -S || return $?
++	action "Restarting $DAEMON: " $DAEMON -S
+ 
+ 	# If that fails then do a normal stop & restart
+ 	if  [ $? != 0 ]; then
+ 	    stop && start
++	    return $?
+ 	else
+ 	    touch $LOCK_FILE
++	    return 0
+ 	fi
+ }
+ 
 
 
