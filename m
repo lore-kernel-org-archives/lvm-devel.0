@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Jun 2010 12:19:58 -0000
-Subject: LVM2 ./WHATS_NEW liblvm/.exported_symbols libl ...
-Message-ID: <20100625121958.20229.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 3 Jun 2010 13:52:22 -0000
+Subject: LVM2 ./make.tmpl.in tools/Makefile.in
+Message-ID: <20100603135222.2542.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,142 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-06-25 12:19:55
+Changes by:	zkabelac at sourceware.org	2010-06-03 13:52:22
 
 Modified files:
-	.              : WHATS_NEW 
-	liblvm         : .exported_symbols Makefile.in 
+	.              : make.tmpl.in 
+	tools          : Makefile.in 
 
 Log message:
-	Update liblvm2app exported symbols.
-	Add Makefile target to generate current list of lvm2app.h functions.
+	Use INSTALL_DIR to create directories
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1635&r2=1.1636
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/.exported_symbols.diff?cvsroot=lvm2&r1=1.26&r2=1.27
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.102&r2=1.103
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.118&r2=1.119
 
---- LVM2/WHATS_NEW	2010/06/24 08:29:30	1.1635
-+++ LVM2/WHATS_NEW	2010/06/25 12:19:52	1.1636
-@@ -1,5 +1,7 @@
- Version 2.02.69 - 
- ================================
-+  Update liblvm2app exported symbols.
-+  Add manual Makefile target to generate current list of lvm2app.h functions.
-   Preload libc locale messages to prevent reading it in memory locked state.
-   Fix handling of simultaneous mirror image and mirrored log image failure.
+--- LVM2/make.tmpl.in	2010/05/20 22:54:58	1.102
++++ LVM2/make.tmpl.in	2010/06/03 13:52:21	1.103
+@@ -312,7 +312,7 @@
  
---- LVM2/liblvm/.exported_symbols	2010/05/19 11:53:12	1.26
-+++ LVM2/liblvm/.exported_symbols	2010/06/25 12:19:54	1.27
-@@ -1,52 +1,59 @@
--lvm_library_get_version
--lvm_init
--lvm_quit
--lvm_config_reload
- lvm_config_override
--lvm_pv_get_dev_size
--lvm_pv_get_size
--lvm_pv_get_free
--lvm_pv_get_name
--lvm_pv_get_uuid
--lvm_pv_get_mda_count
--lvm_vg_get_seqno
--lvm_vg_get_name
--lvm_vg_get_uuid
--lvm_vg_get_size
--lvm_vg_get_free_size
--lvm_vg_get_extent_size
--lvm_vg_get_extent_count
--lvm_vg_get_free_extent_count
--lvm_vg_get_pv_count
--lvm_vg_get_tags
-+lvm_config_reload
-+lvm_errmsg
-+lvm_errno
-+lvm_init
-+lvm_library_get_version
-+lvm_list_vg_names
-+lvm_list_vg_uuids
- lvm_lv_activate
-+lvm_lv_add_tag
- lvm_lv_deactivate
--lvm_lv_get_uuid
- lvm_lv_get_name
- lvm_lv_get_size
-+lvm_lv_get_tags
-+lvm_lv_get_uuid
- lvm_lv_is_active
- lvm_lv_is_suspended
--lvm_lv_add_tag
- lvm_lv_remove_tag
--lvm_lv_get_tags
-+lvm_lv_resize
-+lvm_pv_get_dev_size
-+lvm_pv_get_free
-+lvm_pv_get_mda_count
-+lvm_pv_get_name
-+lvm_pv_get_size
-+lvm_pv_get_uuid
-+lvm_pv_resize
-+lvm_quit
-+lvm_scan
-+lvm_vg_add_tag
-+lvm_vg_close
- lvm_vg_create
-+lvm_vg_create_lv_linear
- lvm_vg_extend
--lvm_vg_reduce
--lvm_vg_set_extent_size
--lvm_vg_write
-+lvm_vg_get_extent_count
-+lvm_vg_get_extent_size
-+lvm_vg_get_free_extent_count
-+lvm_vg_get_free_size
-+lvm_vg_get_max_lv
-+lvm_vg_get_max_pv
-+lvm_vg_get_name
-+lvm_vg_get_pv_count
-+lvm_vg_get_seqno
-+lvm_vg_get_size
-+lvm_vg_get_tags
-+lvm_vg_get_uuid
-+lvm_vg_is_clustered
-+lvm_vg_is_exported
-+lvm_vg_is_partial
-+lvm_vg_list_lvs
-+lvm_vg_list_pvs
-+lvm_vgname_from_device
-+lvm_vgname_from_pvid
- lvm_vg_open
--lvm_vg_close
-+lvm_vg_reduce
- lvm_vg_remove
--lvm_vg_add_tag
--lvm_vg_remove_tag
--lvm_scan
--lvm_errno
--lvm_errmsg
--lvm_vg_list_pvs
--lvm_vg_list_lvs
--lvm_list_vg_names
--lvm_list_vg_uuids
--lvm_vg_create_lv_linear
- lvm_vg_remove_lv
--lvm_vgname_from_pvid
--lvm_vgname_from_device
-+lvm_vg_remove_tag
-+lvm_vg_set_extent_size
-+lvm_vg_write
---- LVM2/liblvm/Makefile.in	2010/05/11 08:57:03	1.23
-+++ LVM2/liblvm/Makefile.in	2010/06/25 12:19:55	1.24
-@@ -75,4 +75,8 @@
+ install_lib_shared: $(LIB_SHARED)
+ 	$(INSTALL_PROGRAM) -D $< $(libdir)/$(<F).$(LIB_VERSION)
+-	$(INSTALL) -d $(usrlibdir)
++	$(INSTALL_DIR) $(usrlibdir)
+ 	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
  
- cflow: liblvm.cflow
+ # FIXME: plugins are installed to subdirs 
+--- LVM2/tools/Makefile.in	2010/05/11 08:34:38	1.118
++++ LVM2/tools/Makefile.in	2010/06/03 13:52:21	1.119
+@@ -171,7 +171,7 @@
  
-+.exported_symbols_new: $(srcdir)/lvm2app.h
-+	$(CPP) -P $< | \
-+	$(SED) -ne '/^(typedef|})/!s/.*[ \*]\(lvm_[a-z_]*\)(.*/\1/p' > $@
-+
- DISTCLEAN_TARGETS += $(LIB_NAME).pc
+ install_cmdlib_dynamic: liblvm2cmd.$(LIB_SUFFIX)
+ 	$(INSTALL_PROGRAM) -D $< $(libdir)/$(<F).$(LIB_VERSION)
+-	$(INSTALL) -d $(usrlibdir)
++	$(INSTALL_DIR) $(usrlibdir)
+ 	$(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION) $(usrlibdir)/$(<F)
+ 
+ install_cmdlib_static: liblvm2cmd-static.a
 
 
