@@ -1,60 +1,66 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:46 -0400
-Subject: [PATCH 15/38] Implement ignore of mda if bit set by skipping r/w of metadata.
-In-Reply-To: <1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-16-git-send-email-dwysocha@redhat.com>
+From: Brem Belguebli <brem.belguebli@gmail.com>
+Date: Thu, 03 Jun 2010 22:15:12 +0200
+Subject: [PATCH] fix some issues in clvmd initscript
+In-Reply-To: <20100603195112.GC30522@agk-dp.fab.redhat.com>
+References: <4BFD1B92.9080403@redhat.com> <4C07543C.5040908@redhat.com>
+	<4C077B2B.5030206@redhat.com> <4C079571.1050409@redhat.com>
+	<AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
+	<20100603195112.GC30522@agk-dp.fab.redhat.com>
+Message-ID: <1275596112.14349.4.camel@newgen.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We implement ignore of an mda at label_read time by checking for
-the ignore bit, and then skipping the reading of the vgname and
-other information in the metadata.  This will have an effect similar
-to a PV found with no mdas.  Thus, it will look like an orphan in the
-cache until we scan the rest of the system and find a PV with
-metadata, and the mda will not be on the vg->fid->metadata_areas
-list so no read/writes will be done to the metadata area.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/format_text/text_label.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+On Thu, 2010-06-03 at 20:51 +0100, Alasdair G Kergon wrote:
+> On Thu, Jun 03, 2010 at 08:31:22PM +0200, brem belguebli wrote:
+> > started, as it tries to activate all the clustered VG's whether or not
+> > they're already active  on another node.
+>  
+> /etc/sysconfig/clvmd perhaps?
+> 
+Exactly what I was hopping....you're so reactive gentlemen... ;-)
+> 
+> Something like:
+> 
+> # Specifies whether or not to activate clustered LVs after starting up clvmd.
+> # Note that this file only controls which 'lvchange' commands get run
+> # and it cannot override lvm.conf.
+> ACTIVATE=yes
+> 
+> # Space-separated lists of LVs to activate when starting CLVMD.
+> # Specifying a VG will activate all the LVs within it.
+> 
+> # Clustered LVs activated with "lvchange -aey" on this machine.
+> # E.g. EXCLUSIVE_LVS="vg1/lvol0 vg1/lvol1 vg2"
+> EXCLUSIVE_LVS=
+> 
+> # Clustered LVs activated with "lvchange -aly" on this machine.
+> LOCAL_LVS=
+> 
+> # Clustered LVs activated with "lvchange -ay".
+> # If all 3 variables (LOCAL_LVS, EXCLUSIVE_LVS & SHARED_LVS) are unset
+> # or empty and ACTIVATE is "yes" then all clustered LVs visible on the system
+> # are activated as shared.
+> SHARED_LVS=
+> 
+> 
 
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index ab9f595..70aba3f 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -311,6 +311,12 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 		}
- 		mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
- 
-+		if (mda_is_ignored(mda)) {
-+			if (!dev_close(mdac->area.dev))
-+				stack;
-+			continue;
-+		}
-+
- 		if ((vgname = vgname_from_mda(info->fmt, mdah,
- 					      &mdac->area,
- 					      &vgid, &vgstatus, &creation_host,
--- 
-1.6.0.6
+
+Next time I'll read more carefully the man pages / init scripts /
+sysconfig configurations
+
+Sorry .
+
+Brem
+> Alasdair
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+
 
 
