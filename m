@@ -1,82 +1,86 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:33 -0400
-Subject: [PATCH 02/38] Add text format specific 'rlocn' ignore flag and access functions.
-In-Reply-To: <1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+From: brem belguebli <brem.belguebli@gmail.com>
+Date: Thu, 3 Jun 2010 20:31:22 +0200
+Subject: [PATCH] fix some issues in clvmd initscript
+In-Reply-To: <4C079571.1050409@redhat.com>
+References: <4BFD1B92.9080403@redhat.com> <4C07543C.5040908@redhat.com>
+	<4C077B2B.5030206@redhat.com> <4C079571.1050409@redhat.com>
+Message-ID: <AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding a flag to the 'rlocn' structure in the mda header of the
-text format allows us to flip a bit to ignore an area on disk that
-stores the metadata via the text format specific mda_header.
-This patch defines the flag and access functions to manage the flag.
-Other patches will manage the ignore on a format-independent basis,
-by using a flag in the metadata_area structure.
+Hi,
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/format_text/format-text.c |   13 +++++++++++++
- lib/format_text/layout.h      |   10 ++++++++++
- 2 files changed, 23 insertions(+), 0 deletions(-)
+just a suggestion, but, in case one wants to use clvm in a
+active/passive maner, there is a problem with the way clvmd is
+started, as it tries to activate all the clustered VG's whether or not
+they're already active  on another node.
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index b6f70c0..3a032ea 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -66,6 +66,19 @@ struct text_context {
- 	char *desc;		/* Description placed inside file */
- };
- 
-+int rlocn_is_ignored(const struct raw_locn *rlocn)
-+{
-+	return (rlocn->flags & RAW_LOCN_IGNORED ? 1 : 0);
-+}
-+
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value)
-+{
-+	if (value)
-+		rlocn->flags |= RAW_LOCN_IGNORED;
-+	else
-+		rlocn->flags &= ~RAW_LOCN_IGNORED;
-+}
-+
- /*
-  * NOTE: Currently there can be only one vg per text file.
-  */
-diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
-index 444a500..b7b2f2b 100644
---- a/lib/format_text/layout.h
-+++ b/lib/format_text/layout.h
-@@ -46,6 +46,13 @@ struct pv_header {
- 	struct disk_locn disk_areas_xl[0];	/* Two lists */
- } __attribute__ ((packed));
- 
-+/*
-+ * Ignore this raw location.  This allows us to
-+ * ignored metadata areas easily, and thus balance
-+ * metadata across VGs with many PVs.
-+ */
-+#define RAW_LOCN_IGNORED 0x00000001
-+
- /* On disk */
- struct raw_locn {
- 	uint64_t offset;	/* Offset in bytes to start sector */
-@@ -54,6 +61,9 @@ struct raw_locn {
- 	uint32_t flags;
- } __attribute__ ((packed));
- 
-+int rlocn_is_ignored(const struct raw_locn *rlocn);
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value);
-+
- /* On disk */
- /* Structure size limited to one sector */
- struct mda_header {
--- 
-1.6.0.6
+In case of active/passive setup, by the means of exclusive activation,
+this activation returns an error  (as of LMV2.0.56, cf
+https://bugzilla.redhat.com/show_bug.cgi?id=517900, errata
+http://rhn.redhat.com/errata/RHBA-2010-0299.html)
+
+Another scenario being, when using exclusive activation, the cluster
+resources can be managed by a "custom" cluster resource script (cf
+https://www.redhat.com/archives/linux-cluster/2009-June/msg00002.html),
+the resource script fails to start as clvmd init script has already
+activated the VG's.
+
+My suggestion would be to be able to forbid (via an exclusion list)
+clvmd init script to activate automatically what's in this blacklist.
+
+Regards
+
+Brem
+
+
+2010/6/3 Fabio M. Di Nitto <fdinitto@redhat.com>:
+> On 6/3/2010 11:51 AM, Milan Broz wrote:
+>> On 06/03/2010 09:05 AM, Fabio M. Di Nitto wrote:
+>>> On 5/26/2010 3:01 PM, Milan Broz wrote:
+>>>> - if daemon is already running, do nothing (and not reactivate VGs)
+>>>>
+>>>> - always explicitly return exit code in reload()
+>>>>
+>>>> - fix restart() so it really tries full start & stop and returns exit code
+>>>> ? if clvmd -S fails and also touch lockfile afterwards
+>>>>
+>>>> --- clvmd.old ? ? ? 2010-05-26 14:21:15.000000000 +0200
+>>>> +++ clvmd ? 2010-05-26 14:55:17.671245376 +0200
+>>>> @@ -63,11 +63,12 @@ rh_status_q() {
+>>>>
+>>>> ?start()
+>>>> ?{
+>>>> - ? if ! rh_status_q; then
+>>>> - ? ? ? ? ? echo -n "Starting $DAEMON: "
+>>>> - ? ? ? ? ? daemon $DAEMON $CLVMDOPTS || return $?
+>>>> - ? ? ? ? ? echo
+>>>> - ? fi
+>>>> +
+>>>> + ? rh_status_q && return 0
+>>>> +
+>>>> + ? echo -n "Starting $DAEMON: "
+>>>> + ? daemon $DAEMON $CLVMDOPTS || return $?
+>>>> + ? echo
+>>>
+>>> careful with this change as it modifies the behavior compared to the old
+>>> init script.
+>>
+>> So you want reactivate LVs even if clvmd is already running?
+>
+> Let me get this right :) I don?t care either way. Whatever the team
+> wants is fine. I am only noticing that this a behavior change vs the old
+> init script.
+>
+> Fabio
+>
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+>
 
 
