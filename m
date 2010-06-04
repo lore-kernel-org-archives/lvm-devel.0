@@ -1,38 +1,46 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 1 Jun 2010 21:46:29 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20100601214629.19296.qmail@sourceware.org>
+From: Piter Punk <piterpunk@unitednerds.org>
+Date: Fri, 4 Jun 2010 17:42:05 -0300
+Subject: [PATCH] Clean up cluster lock mode and flags definition.
+In-Reply-To: <1275664291-18424-1-git-send-email-mbroz@redhat.com>
+References: <1275664291-18424-1-git-send-email-mbroz@redhat.com>
+Message-ID: <0b317eee0dca47b32fca3586db6a5ee0.squirrel@webmail.unitednerds.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-01 21:46:29
 
-Modified files:
-	lib/commands   : toolcontext.c 
+On Fri, June 4, 2010 12:11 pm, Milan Broz wrote:
+> Code is mixing up internal DLM and LVM definitions of lock
+> modes and flags.
+>
+> OpenAIS and singlenode locking do not depend on DLM but
+> code currently cannot be compiled without libdlm.h!
+>
+> LCK_* flags is LVM abstraction, used through all the code.
+> Only low-level backend (clvmd-cmac etc) should use DLM definitions,
+> also this code should do all needed conversions.
+>
+> Because there are two DLM flags used in generic code
+> (NOQUEUE, CONVERT) we define it similar way like lock modes.
+> (So all needed binary-compatible flags are on one place in locking.h)
 
-Log message:
-	Do not fail lvm_init() if init_logging() generates an errno.
-	
-	Revert to original behavior of lvm commands if init_logging() generated an
-	errno.  Fixes rhbz 592967.
+Thanks!
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.98&r2=1.99
+When I send the patch to fix this issue:
 
---- LVM2/lib/commands/toolcontext.c	2010/05/21 12:36:31	1.98
-+++ LVM2/lib/commands/toolcontext.c	2010/06/01 21:46:29	1.99
-@@ -195,6 +195,7 @@
- 	dm_log_with_errno_init(print_log);
- #endif
- 	reset_log_duplicated();
-+	reset_lvm_errno(1);
- }
- 
- static int _process_config(struct cmd_context *cmd)
+https://www.redhat.com/archives/lvm-devel/2010-May/msg00180.html
+
+I change all references to use <linux/dlm.h> avoiding <libdlm.h>.
+I didn?t know we have the same definitions (with internal names) on
+locking.h.
+
+With your fix I can continue compiling clvmd+openais without the
+need of libdlm and, now, without the need of patching the sources.
+
+Thanks again!
+
+Piter Punk
 
 
