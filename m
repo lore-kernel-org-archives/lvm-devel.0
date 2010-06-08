@@ -1,34 +1,93 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 7 Jun 2010 14:39:18 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100607143918.18450.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 08 Jun 2010 14:27:11 +0200
+Subject: [PATCH] Introduce immediate_dev_node flag for dm tree items to support immediate node creation on demand
+Message-ID: <4C0E371F.5020507@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-06-07 14:39:18
+Sometimes we need the nodes to be visible in /dev/mapper even during processing a tree,
+just like we need in case of processing mirrors in clustered environment by cmirror daemon
+(rhbz #568137). Normally, we synchronize with udev and create nodes (as a fallback, if
+udev has not done so yet) at the end of processing the whole tree only.
 
-Modified files:
-	.              : WHATS_NEW 
+So let's use a flag (or "load_property") called "immediate_dev_node" for such a dm tree
+node which triggers immediate synchronisation with udev and node creation when needed.
 
-Log message:
-	Update WHATS_NEW  for last commit
+(Unfortunately, this still does not solve the problem with searching the right node
+by comparing the whole /dev/mapper content since we do not have a name provided in
+dm log request sent from kernel which cmirror daemon tries to process.)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1610&r2=1.1611
+Peter
+---
 
---- LVM2/WHATS_NEW	2010/06/07 13:52:52	1.1610
-+++ LVM2/WHATS_NEW	2010/06/07 14:39:18	1.1611
-@@ -1,5 +1,6 @@
- Version 2.02.68 -
- ===============================
-+  Fix wrong lvm path creation from configure introduced in previous release.
-   Fix segfault in clvmd -R if no response from daemon received.
+ libdm/libdm-deptree.c |   27 +++++++++++++++++++++++++++
+ 1 files changed, 27 insertions(+), 0 deletions(-)
+
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index e1813b4..38565e5 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -143,6 +143,13 @@ struct load_properties {
+ 	struct dm_list segs;
  
- Version 2.02.67 - 4th June 2010
+ 	const char *new_name;
++
++	/* If immediate_dev_node is set to 1, try to create the dev node
++	 * as soon as possible (e.g. in preload stage even during traversal
++	 * and processing of dm tree). This will also flush all stacked dev
++	 * node operations, synchronizing with udev.
++	 */
++	int immediate_dev_node;
+ };
+ 
+ /* Two of these used to join two nodes with uses and used_by. */
+@@ -1843,6 +1850,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 	void *handle = NULL;
+ 	struct dm_tree_node *child;
+ 	struct dm_info newinfo;
++	int update_devs_flag = 0;
+ 
+ 	/* Preload children first */
+ 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
+@@ -1897,10 +1905,26 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
+ 
+ 		/* Update cached info */
+ 		child->info = newinfo;
++
++		/*
++		 * Prepare for immediate synchronization with udev and flush all stacked
++		 * dev node operations if requested by immediate_dev_node property. But
++		 * finish processing current level in the tree first.
++		 */
++		if (child->props.immediate_dev_node)
++			update_devs_flag = 1;
++
+ 	}
+ 
+ 	handle = NULL;
+ 
++	if (update_devs_flag) {
++		if (!dm_udev_wait(dm_tree_get_cookie(dnode)))
++			stack;
++		dm_tree_set_cookie(dnode, 0);
++		dm_task_update_nodes();
++	}
++
+ 	return r;
+ }
+ 
+@@ -2157,6 +2181,9 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+ 				return 0;
+ 			}
+ 
++			if (clustered)
++				log_node->props.immediate_dev_node = 1;
++
+ 			if (!_link_tree_nodes(node, log_node))
+ 				return_0;
+ 		}
 
 
