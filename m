@@ -1,52 +1,130 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 16 Jun 2010 13:03:52 -0000
-Subject: LVM2 ./WHATS_NEW doc/example_cmdlib.c
-Message-ID: <20100616130352.29460.qmail@sourceware.org>
+From: Takahiro Yasui <tyasui@redhat.com>
+Date: Wed, 16 Jun 2010 15:52:51 -0400
+Subject: [PATCH][RFC] Fix lvconvert repair at mirror leg and log failure
+Message-ID: <4C192B93.7070403@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-06-16 13:03:51
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	doc            : example_cmdlib.c 
+I found a case that lvconvert command can't repair failed lvm
+mirror volume. When a mirror leg and a mirror log failed at the
+same time, lvconvert --repair can't handle the error.
 
-Log message:
-	Fix lvm2cmd example in documentation.
+Before mirrored log function was introduced, the sequence of
+repair was
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1612&r2=1.1613
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example_cmdlib.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+  1. Fix mirror legs ... lv_remove_mirrors()
+  2. Fix mirror log  ... _lv_update_log_type()
 
---- LVM2/WHATS_NEW	2010/06/16 13:01:25	1.1612
-+++ LVM2/WHATS_NEW	2010/06/16 13:03:48	1.1613
-@@ -1,5 +1,6 @@
- Version 2.02.68 -
- ===============================
-+  Fix lvm2cmd example in documentation.
-   Allow use of lvm2app and lvm2cmd headers in C++ mode.
-   Fix wrong lvm path creation from configure introduced in previous release.
-   Fix segfault in clvmd -R if no response from daemon received.
---- LVM2/doc/example_cmdlib.c	2009/07/15 23:57:55	1.2
-+++ LVM2/doc/example_cmdlib.c	2010/06/16 13:03:50	1.3
-@@ -13,10 +13,11 @@
-  */
+and after mirrored log function was introduced, the sequence was
+changed as follows because a recovery of mirror log should be done
+before a recovery of mirror leg is done.
+
+  1. Fix mirror log  ... _lv_update_log_type()
+  2. Fix mirror legs ... lv_remove_mirrors()
+
+It seems to introduced this issue. In _lv_update_log_type() function
+handles not only mirror log but also mirror leg and it does not seem
+to work properly.
+
+One of the solutions to fix this issue is to change the sequence as
+the one before mirror log function was introduced and to add
+a function to handle a failure of mirrored log before mirror leg is
+recovered.
+
+  1. Fix mirrored log ... _lv_update_log() <NEW function>
+     _lv_update_log() handles errors inside mirrored log and doesn't
+     change an original lv.
+  2. Fix mirror legs  ... lv_remove_mirrors()
+  3. Fix mirror log   ... _lv_update_log_type()
+
+I created a RFC patch and it worked well for my test cases.
+
+Appreciate your review and comments.
+
+Thanks,
+Taka
+
+
+Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
+---
+ tools/lvconvert.c |   32 +++++++++++++++++++++++++++-----
+ 1 file changed, 27 insertions(+), 5 deletions(-)
+
+Index: LVM2-2.02.67/tools/lvconvert.c
+===================================================================
+--- LVM2-2.02.67.orig/tools/lvconvert.c
++++ LVM2-2.02.67/tools/lvconvert.c
+@@ -689,6 +689,27 @@ static int _get_log_count(struct logical
+ 	return lv_mirror_count(log_lv);
+ }
  
- #include "lvm2cmd.h"
-+#include <stdio.h>
++static int _lv_update_log(struct cmd_context *cmd,
++			  struct lvconvert_params *lp,
++			  struct logical_volume *lv,
++			  struct dm_list *operable_pvs,
++			  int log_count)
++{
++	int old_log_count;
++	struct logical_volume *log_lv;
++
++	log_lv = first_seg(_original_lv(lv))->log_lv;
++	if (!log_lv || !(log_lv->status & MIRRORED))
++		return 1;
++
++	old_log_count = _get_log_count(lv);
++	if (old_log_count == log_count)
++		return 1;
++
++	/* Reducing redundancy of the log */
++	return remove_mirror_images(log_lv, log_count, is_mirror_image_removable, operable_pvs, 0U);
++}
++
+ static int _lv_update_log_type(struct cmd_context *cmd,
+ 			       struct lvconvert_params *lp,
+ 			       struct logical_volume *lv,
+@@ -717,6 +738,8 @@ static int _lv_update_log_type(struct cm
+ 		return 1;
+ 	}
  
- /* All output gets passed to this function line-by-line */
--void test_log_fn(int level, int dm_errno, const char *file, int line,
--		 const char *format)
-+void test_log_fn(int level, const char *file, int line,
-+		 int dm_errno, const char *format)
- {
- 	/* Extract and process output here rather than printing it */
++	log_lv = first_seg(original_lv)->log_lv;
++
+ 	/* Remove an existing log completely */
+ 	if (!log_count) {
+ 		if (!remove_mirror_log(cmd, original_lv, operable_pvs))
+@@ -724,8 +747,6 @@ static int _lv_update_log_type(struct cm
+ 		return 1;
+ 	}
  
+-	log_lv = first_seg(original_lv)->log_lv;
+-
+ 	/* Adding redundancy to the log */
+ 	if (old_log_count < log_count) {
+ 		log_error("Adding log redundancy not supported yet.");
+@@ -1218,16 +1239,17 @@ static int _lvconvert_mirrors_repair(str
+ 	 * We must adjust the log first, or the entire mirror
+ 	 * will get stuck during a suspend.
+ 	 */
+-	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs, new_log_count))
++	if (!_lv_update_log(cmd, lp, lv, failed_pvs, new_log_count))
+ 		return 0;
+ 
+ 	if (failed_mirrors) {
+-		if (!lv_remove_mirrors(cmd, lv, failed_mirrors, new_log_count,
++		if (!lv_remove_mirrors(cmd, lv, failed_mirrors,
++				       new_log_count ? 0 : 1,
+ 				       _is_partial_lv, NULL, 0))
+ 			return 0;
+ 	}
+ 
+-	if (!_reload_lv(cmd, lv))
++	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs, new_log_count))
+ 		return 0;
+ 
+ 	/*
 
 
