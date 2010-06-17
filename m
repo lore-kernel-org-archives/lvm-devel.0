@@ -1,34 +1,46 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  1 Jun 2010 14:07:56 -0400
-Subject: [PATCH 1/2] Do not fail lvm_init() if init_logging() generates an errno.
-Message-ID: <1275415677-22814-1-git-send-email-dwysocha@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 17 Jun 2010 17:10:32 -0500
+Subject: Patch for adding --resize to manpage
+In-Reply-To: <4C0E4304.9030601@redhat.com>
+References: <4C0E4304.9030601@redhat.com>
+Message-ID: <98BA4E4E-36F1-4A2F-9F1B-326C85F3BFE0@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Revert to original behavior of lvm commands if init_logging() generated an
-errno.  Fixes rhbz 592967.
+Under lvextend/'--force', s/without any question/without any questions/.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/commands/toolcontext.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+Under lvextend/'--resizefs', The sentence about 'fsadm' seems to imply  
+that it is necessary in addition to the argument.  Is this the case?   
+If not, perhaps we could say something like, "fsadm can be used to  
+resize a filesystem separately if this option is not used."
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 890da3e..33e682b 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -195,6 +195,7 @@ static void _init_logging(struct cmd_context *cmd)
- 	dm_log_with_errno_init(print_log);
- #endif
- 	reset_log_duplicated();
-+	reset_lvm_errno(1);
- }
- 
- static int _process_config(struct cmd_context *cmd)
--- 
-1.6.0.6
+Under lvreduce, is there no '--force' option?  If not, we should  
+probably remove a reference to in in '--nofsck'.
+
+Under lvreduce/'--resize', same comment concerning fsadm.
+
+Under lvresize/'--force', s/question/questions/
+
+Under lvresize/'--resize', same as above
+
+Otherwise, seems fine.
+  brassow
+
+On Jun 8, 2010, at 8:17 AM, Zdenek Kabelac wrote:
+
+> Here is proposal for adding documentation about --resizefs, -- 
+> nofsck,--force option for lvextend, lvresize, lvreduce.
+>
+> It should resolve: https://bugzilla.redhat.com/show_bug.cgi?id=592428
+>
+> Zdenek
+>
+> <Man-page-update-for-lvresize-resizefs.patch>--
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
