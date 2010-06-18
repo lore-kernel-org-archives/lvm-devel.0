@@ -1,104 +1,53 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 18 Jun 2010 14:02:43 -0500
-Subject: [PATCH][RFC] Fix lvconvert repair at mirror leg and log failure (v2)
-In-Reply-To: <4C19567F.8070409@redhat.com>
-References: <4C19567F.8070409@redhat.com>
-Message-ID: <6FD7555F-5D43-40AC-BAA8-FD6506D9FA7F@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 18 Jun 2010 20:58:04 -0000
+Subject: LVM2 ./WHATS_NEW daemons/cmirrord/functions.c
+Message-ID: <20100618205804.9372.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-looks good.  I'll try to generate a test rpm for corey.  He can then  
-try it out against the bug he filed too (bug 596453)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-06-18 20:58:04
 
-  brassow
+Modified files:
+	.              : WHATS_NEW 
+	daemons/cmirrord: functions.c 
 
-On Jun 16, 2010, at 5:55 PM, Takahiro Yasui wrote:
+Log message:
+	daemons/cmirrord/functions.c (part of cmirrord) was referencing
+	linux/kdev_t.h even though it wasn't needed.  Strangely, it seems
+	to be causing problems on various architectures (i686) in the
+	function daemons/cmirrord/functions.c:disk_status_info()->sprintf.
+	
+	I'm not sure why this is a problem since none of the macros in
+	kdev_t.h are used in that code, but it certainly doesn't hurt to
+	pull an unnecessary header and it seems to fix the problem.
 
-> Hi,
->
-> Fixed some issues in the previous patch.
->
-> v2 changes:
->  - rename _lv_update_log() to _lv_update_mirrored_log()
->  - restore _reload_lv() in _lv_update_mirrored_log()
->  - pass an updated new_log_count value to _lv_update_mirrored_log()
->
-> Appreciate your review and comments.
->
-> Thanks,
-> Taka
->
->
-> Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
-> ---
-> tools/lvconvert.c |   33 +++++++++++++++++++++++++++++++--
-> 1 file changed, 31 insertions(+), 2 deletions(-)
->
-> Index: LVM2-2.02.67/tools/lvconvert.c
-> ===================================================================
-> --- LVM2-2.02.67.orig/tools/lvconvert.c
-> +++ LVM2-2.02.67/tools/lvconvert.c
-> @@ -689,6 +689,27 @@ static int _get_log_count(struct logical
-> 	return lv_mirror_count(log_lv);
-> }
->
-> +static int _lv_update_mirrored_log(struct logical_volume *lv,
-> +				   struct dm_list *operable_pvs,
-> +				   int log_count)
-> +{
-> +	int old_log_count;
-> +	struct logical_volume *log_lv;
-> +
-> +	log_lv = first_seg(_original_lv(lv))->log_lv;
-> +	if (!log_lv || !(log_lv->status & MIRRORED))
-> +		return 1;
-> +
-> +	old_log_count = _get_log_count(lv);
-> +	if (old_log_count == log_count)
-> +		return 1;
-> +
-> +	/* Reducing redundancy of the log */
-> +	return remove_mirror_images(log_lv, log_count,
-> +				    is_mirror_image_removable,
-> +				    operable_pvs, 0U);
-> +}
-> +
-> static int _lv_update_log_type(struct cmd_context *cmd,
-> 			       struct lvconvert_params *lp,
-> 			       struct logical_volume *lv,
-> @@ -1218,15 +1239,23 @@ static int _lvconvert_mirrors_repair(str
-> 	 * We must adjust the log first, or the entire mirror
-> 	 * will get stuck during a suspend.
-> 	 */
-> -	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs, new_log_count))
-> +	if (!_lv_update_mirrored_log(lv, failed_pvs, new_log_count))
-> 		return 0;
->
-> +	if (lp->mirrors == 1)
-> +		new_log_count = 0;
-> +
-> 	if (failed_mirrors) {
-> -		if (!lv_remove_mirrors(cmd, lv, failed_mirrors, new_log_count,
-> +		if (!lv_remove_mirrors(cmd, lv, failed_mirrors,
-> +				       new_log_count ? 0U : 1U,
-> 				       _is_partial_lv, NULL, 0))
-> 			return 0;
-> 	}
->
-> +	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs,
-> +				 new_log_count))
-> +		return 0;
-> +
-> 	if (!_reload_lv(cmd, lv))
-> 		return 0;
->
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1618&r2=1.1619
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+
+--- LVM2/WHATS_NEW	2010/06/18 10:19:29	1.1618
++++ LVM2/WHATS_NEW	2010/06/18 20:58:04	1.1619
+@@ -1,5 +1,6 @@
+ Version 2.02.68 -
+ ===============================
++  Unneeded kdev_t.h reference causing harm for cmirrord on some archs.
+   Add man pages for lvmconf and unsupported lvmsadc and lvmsar tools.
+   Fix exit code when requesting help using documented -o help option.
+   Do not use internal DLM lock definitions in generic LVM2 clvmd code.
+--- LVM2/daemons/cmirrord/functions.c	2010/01/22 00:43:28	1.18
++++ LVM2/daemons/cmirrord/functions.c	2010/06/18 20:58:04	1.19
+@@ -15,7 +15,6 @@
+ #include <dirent.h>
+ #include <errno.h>
+ #include <fcntl.h>
+-#include <linux/kdev_t.h>
+ #include <signal.h>
+ #include <sys/stat.h>
+ #include <time.h>
 
 
