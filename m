@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:05:57 -0400
-Subject: [PATCH 24/35] Add vg get/set methods for VG metadata copies.
-In-Reply-To: <1277175968-9661-24-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:58 -0400
+Subject: [PATCH 25/35] Make vg->mda_copies persistent in on disk vg metadata.
+In-Reply-To: <1277175968-9661-25-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
@@ -26,63 +26,64 @@ References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-22-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-23-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-24-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-25-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-25-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-26-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds the get and partially implemented set function.
-The 'set' function should probably ignore or un-ignore metadata areas
-based on new values.
+This patch adds the ability to read/write the vg->mda_copies values
+from/to the vg metadata.
+
+If we read the VG metadata and this field does not exist, we set
+mda_copies to the default value of 0.  Later in the code, we use
+this special '0' value to indicate a disable of metadata balancing.
+This should preserve existing LVM behavior and ensure metadata balancing
+can be turned off should the need arise.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata-exported.h |    2 ++
- lib/metadata/metadata.c          |   16 ++++++++++++++++
- 2 files changed, 18 insertions(+), 0 deletions(-)
+ lib/format_text/export.c      |    1 +
+ lib/format_text/import_vsn1.c |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 4388587..b444e34 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -877,6 +877,8 @@ uint64_t vg_max_pv(const struct volume_group *vg);
- uint64_t vg_max_lv(const struct volume_group *vg);
- uint32_t vg_mda_count(const struct volume_group *vg);
- uint32_t vg_mda_count_ignored(const struct volume_group *vg);
-+uint32_t vg_mda_copies(const struct volume_group *vg);
-+int vg_set_mda_copies(struct volume_group *vg, uint32_t value);
- int vg_check_write_mode(struct volume_group *vg);
- #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
- #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5c74893..a597f3c 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -989,6 +989,22 @@ static int _recalc_extents(uint32_t *extents, const char *desc1,
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 5f02b5d..52ae11c 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -397,6 +397,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(vg->alloc));
+ 	}
++	outf(f, "metadata_copies = %u", vg->mda_copies);
+ 
  	return 1;
  }
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 316adb5..62bcbec 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -23,6 +23,7 @@
+ #include "pv_alloc.h"
+ #include "segtype.h"
+ #include "text_import.h"
++#include "defaults.h"
  
-+uint32_t vg_mda_copies(const struct volume_group *vg)
-+{
-+	return vg->mda_copies;
-+}
+ typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
+ 			   struct volume_group * vg, struct config_node * pvn,
+@@ -745,6 +746,10 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 			return_0;
+ 	}
+ 
++	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
++		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
++	}
 +
-+int vg_set_mda_copies(struct volume_group *vg, uint32_t value)
-+{
-+	/* FIXME: add checks, etc, and set the value */
-+	/*
-+	 * FIXME: Before we set a larger value, we may need to
-+	 * enable some mdas on PVS
-+	 */
-+	vg->mda_copies = value;
-+	return 1;
-+}
-+
- int vg_set_extent_size(struct volume_group *vg, uint32_t new_size)
- {
- 	uint32_t old_size = vg->extent_size;
+ 	/*
+ 	 * The pv hash memorises the pv section names -> pv
+ 	 * structures.
 -- 
 1.6.0.6
 
