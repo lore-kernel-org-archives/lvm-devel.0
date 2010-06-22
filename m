@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:05:55 -0400
-Subject: [PATCH 22/35] Define vgmetadatacopies in vgchange man page.
-In-Reply-To: <1277175968-9661-22-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:56 -0400
+Subject: [PATCH 23/35] Add mda_copies to VG structures and initialization.
+In-Reply-To: <1277175968-9661-23-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
@@ -24,83 +24,94 @@ References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-20-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-21-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-22-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-23-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-23-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-24-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds a vgmetadatacopies parameter for metadata balancing.
-This parameter provides a simple way for users to create a policy for
-placing metadata on PVs automatically by LVM.  The behavior is implemented
-inside LVM by managing the 'ignore' mda bits.  We chose the name
-'vgmetadatacopies' as this is a natural extension to the existing parameter
-'pvmetadatacopies' / 'metadatacopies' in pvcreate.
+Add a field to struct volume_group to later implement metadata
+balancing:
+- mda_copies: target # of non-ignored mdas in the VG; default 0 (do
+not control pv 'ignore mdas' bit.
 
-This is a first step at VG parameter based metadata balancing.  Most users
-will probably want to state that they want a certain number of PVs to contai
-metadata, and they may be less concerned about a specific number of metadata
-copies in the volume group.  However, for default values (pvmetadatacopies
-is 1 by default), the number of metadatacopies in the volume group, and the
-number of PVs with metadata are the same.  In the future we could add
-vgmetadatacopiespvs to define more specifically the number of pvs in the
-VG that contain metadata, but for now we start with this parameter.
-
-Another possible future extension would be to define a specific pv tag
-to mark the set of PVs that should be used for metadata balancing.  This
-tag based approach could be used in conjunction with 'vgmetadatacopies'.
+This patch just adds the parameter to the structures with the default
+values but does not modify any commands.  Should be no functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- man/vgchange.8.in |   27 ++++++++++++++++++++-------
- 1 files changed, 20 insertions(+), 7 deletions(-)
+ lib/config/defaults.h            |    1 +
+ lib/metadata/metadata-exported.h |    2 ++
+ lib/metadata/metadata.c          |    1 +
+ tools/toollib.c                  |    2 ++
+ 4 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/man/vgchange.8.in b/man/vgchange.8.in
-index 2fc0f8b..eb4e4b9 100644
---- a/man/vgchange.8.in
-+++ b/man/vgchange.8.in
-@@ -25,6 +25,8 @@ vgchange \- change attributes of a volume group
- .IR MaxLogicalVolumes ]
- .RB [ -p | \-\-maxphysicalvolumes
- .IR MaxPhysicalVolumes ]
-+.RB [ \-\-[vg]metadatacopies ]
-+.IR copies ]
- .RB [ \-P | \-\-partial]
- .RB [ \-s | \-\-physicalextentsize
- .IR PhysicalExtentSize [ \fBbBsSkKmMgGtTpPeE\fR ]]
-@@ -127,13 +129,24 @@ volume group.
- Changes the maximum number of physical volumes that can belong
- to this volume group.
- For volume groups with metadata in lvm1 format, the limit is 255.
--If the metadata uses lvm2 format, the value 0
--removes this restriction: there is then no limit.
--If you have a large number of physical volumes in
--a volume group with metadata in lvm2 format,
--for tool performance reasons, you should consider
--some use of \fB--pvmetadatacopies 0\fP
--as described in \fBpvcreate(8)\fP.
-+If the metadata uses lvm2 format, the value 0 removes this restriction:
-+there is then no limit.  If you have a large number of physical volumes in
-+a volume group with metadata in lvm2 format, for tool performance reasons,
-+you should consider some use of \fB--pvmetadatacopies 0\fP as described in
-+\fBpvcreate(8)\fP, and/or use \fB--vgmetadatacopies\fP.
-+.TP
-+.BR \-\-vgmetadatacopies " " \fI#copies\fR
-+Sets the targetted number of metadata copies in the volume group.
-+If set to a non-zero value, LVM will attempt to use \fB#copies\fP to
-+determine the set of physical volumes on which to read and write metadata.
-+LVM manages the set automatically by setting or clearing the 'metadataignore'
-+flag on the physical volumes (see \fBpvchange\fP), and in this way balances
-+metadata across PVs in the volume group.  Only physical volumes created
-+with a non-zero value of \fBmetadatacopies\fP are used in the set of physical
-+volumes.  This option is useful for volume groups containing large numbers
-+of physical volumes containing metadata as it may be used to minimize metadata
-+read and write overhead.
-+Setting \fB--vgmetadatacopies\fP to 0 disables LVM metadata balancing.
- .TP
- .BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBbBsSkKmMgGtTpPeE\fR]
- Changes the physical extent size on physical volumes of this volume group.
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 3c383d0..0d8cb9c 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -61,6 +61,7 @@
+ #define DEFAULT_STRIPESIZE 64	/* KB */
+ #define DEFAULT_PVMETADATASIZE 255
+ #define DEFAULT_PVMETADATACOPIES 1
++#define DEFAULT_VGMETADATACOPIES 0
+ #define DEFAULT_LABELSECTOR UINT64_C(1)
+ #define DEFAULT_READ_AHEAD "auto"
+ #define DEFAULT_UDEV_RULES 1
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 8c12f36..4388587 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -281,6 +281,7 @@ struct volume_group {
+ 	 * 0 for success else appropriate FAILURE_* bits set.
+ 	 */
+ 	uint32_t read_status;
++	uint32_t mda_copies; /* target number of mdas for this VG */
+ };
+ 
+ /* There will be one area for each stripe */
+@@ -891,6 +892,7 @@ struct vgcreate_params {
+ 	size_t max_lv;
+ 	alloc_policy_t alloc;
+ 	int clustered; /* FIXME: put this into a 'status' variable instead? */
++	uint32_t metadata_copies;
+ };
+ 
+ int vgcreate_params_validate(struct cmd_context *cmd,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 51356b9..5c74893 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -910,6 +910,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	vg->max_pv = DEFAULT_MAX_PV;
+ 
+ 	vg->alloc = DEFAULT_ALLOC_POLICY;
++	vg->mda_copies = DEFAULT_VGMETADATACOPIES;
+ 
+ 	vg->pv_count = 0;
+ 	dm_list_init(&vg->pvs);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e6791e2..02b06fd 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1187,6 +1187,7 @@ void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
+ 		vp_def->max_lv = vg->max_lv;
+ 		vp_def->alloc = vg->alloc;
+ 		vp_def->clustered = vg_is_clustered(vg);
++		vp_def->metadata_copies = vg->mda_copies;
+ 	} else {
+ 		vp_def->vg_name = NULL;
+ 		vp_def->extent_size = DEFAULT_EXTENT_SIZE * 2;
+@@ -1194,6 +1195,7 @@ void vgcreate_params_set_defaults(struct vgcreate_params *vp_def,
+ 		vp_def->max_lv = DEFAULT_MAX_LV;
+ 		vp_def->alloc = DEFAULT_ALLOC_POLICY;
+ 		vp_def->clustered = DEFAULT_CLUSTERED;
++		vp_def->metadata_copies = DEFAULT_VGMETADATACOPIES;
+ 	}
+ }
+ 
 -- 
 1.6.0.6
 
