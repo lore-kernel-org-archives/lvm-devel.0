@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:05:51 -0400
-Subject: [PATCH 18/35] Update _vg_read and _text_create_text_instance to use fid_add_mda[s].
-In-Reply-To: <1277175968-9661-18-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:52 -0400
+Subject: [PATCH 19/35] Refactor vg_commit() to add _vg_commit_mdas().
+In-Reply-To: <1277175968-9661-19-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
@@ -20,117 +20,69 @@ References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-16-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-17-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-18-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-19-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-19-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-20-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When we are constructing the vg, we may need to adjust the list of
-metadata_areas if there are ignored mdas.  At label read time, we
-do not read the metadata of ignored mdas, and as a result, they do
-not get placed on vg->fid->metadata_areas inside _text_create_text_instance
-since lvmcache does not have these areas attached to vginfo->infos.
-However, when we're checking the pvids inside _vg_read, after having
-read another metadata area from another PV, we do have the opportunity
-to update the metadata_area and metadata_areas_ignored lists based
-on the read metadata_area.  We need accurate mda lists for the reporting
-functions that count the ignored mdas, as well as general correctness
-of mda balancing.
+Factor out calling mda->ops->vg_commit() for each mda.
+No functional change.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format_text/format-text.c |   20 +++++++-------------
- lib/metadata/metadata.c       |    6 +++++-
- 2 files changed, 12 insertions(+), 14 deletions(-)
+ lib/metadata/metadata.c |   26 +++++++++++++++++---------
+ 1 files changed, 17 insertions(+), 9 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index bbee7f0..cb91992 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1886,11 +1886,11 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- {
- 	struct format_instance *fid;
- 	struct text_fid_context *fidtc;
--	struct metadata_area *mda, *mda_new;
-+	struct metadata_area *mda;
- 	struct mda_context *mdac;
- 	struct dir_list *dl;
- 	struct raw_list *rl;
--	struct dm_list *dir_list, *raw_list, *mdas;
-+	struct dm_list *dir_list, *raw_list;
- 	char path[PATH_MAX];
- 	struct lvmcache_vginfo *vginfo;
- 	struct lvmcache_info *info;
-@@ -1918,7 +1918,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 			return_NULL;
- 		mda->ops = &_metadata_text_file_backup_ops;
- 		mda->metadata_locn = context;
--		dm_list_add(&fid->metadata_areas, &mda->list);
-+		fid_add_mda(fid, mda);
- 	} else {
- 		dir_list = &((struct mda_lists *) fmt->private)->dirs;
- 
-@@ -1935,7 +1935,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 				return_NULL;
- 			mda->ops = &_metadata_text_file_ops;
- 			mda->metadata_locn = context;
--			dm_list_add(&fid->metadata_areas, &mda->list);
-+			fid_add_mda(fid, mda);
- 		}
- 
- 		raw_list = &((struct mda_lists *) fmt->private)->raws;
-@@ -1955,7 +1955,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 			memcpy(&mdac->area, &rl->dev_area, sizeof(mdac->area));
- 			mda->ops = &_metadata_text_raw_ops;
- 			/* FIXME MISTAKE? mda->metadata_locn = context; */
--			dm_list_add(&fid->metadata_areas, &mda->list);
-+			fid_add_mda(fid, mda);
- 		}
- 
- 		/* Scan PVs in VG for any further MDAs */
-@@ -1963,14 +1963,8 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 		if (!(vginfo = vginfo_from_vgname(vgname, vgid)))
- 			goto_out;
- 		dm_list_iterate_items(info, &vginfo->infos) {
--			mdas = &info->mdas;
--			dm_list_iterate_items(mda, mdas) {
--				/* FIXME Check it holds this VG */
--				mda_new = mda_copy(fmt->cmd->mem, mda);
--				if (!mda_new)
--					return_NULL;
--				dm_list_add(&fid->metadata_areas, &mda_new->list);
--			}
-+			if (!fid_add_mdas(fid, &info->mdas))
-+				return_NULL;
- 		}
- 		/* FIXME Check raw metadata area count - rescan if required */
- 	}
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index d1d2fed..99b4147 100644
+index 99b4147..304522d 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -2723,7 +2723,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	if (correct_vg) {
- 		/*
- 		 * If the VG has PVs without mdas, or ignored mdas, they may
--		 * still be orphans in the cache: update the cache state here.
-+		 * still be orphans in the cache: update the cache state here,
-+		 * and update the metadata lists in the vg.
- 		 */
- 		if (!inconsistent &&
- 		    dm_list_size(&correct_vg->pvs) > dm_list_size(pvids)) {
-@@ -2747,6 +2748,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 					inconsistent_pvs = 1;
- 					break;
- 				}
-+				if (dm_list_size(&info->mdas) &&
-+				    !fid_add_mdas(fid, &info->mdas))
-+					return_NULL;
- 			}
+@@ -2424,18 +2424,11 @@ int vg_write(struct volume_group *vg)
+ 	return 1;
+ }
  
- 			/* If the check passed, let's update VG and recalculate pvids */
+-/* Commit pending changes */
+-int vg_commit(struct volume_group *vg)
++static int _vg_commit_mdas(struct volume_group *vg)
+ {
+ 	struct metadata_area *mda;
+-	int cache_updated = 0;
+ 	int failed = 0;
+-
+-	if (!vgname_is_locked(vg->name)) {
+-		log_error(INTERNAL_ERROR "Attempt to write new VG metadata "
+-			  "without locking %s", vg->name);
+-		return cache_updated;
+-	}
++	int cache_updated = 0;
+ 
+ 	/* Commit to each copy of the metadata area */
+ 	dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
+@@ -2451,6 +2444,21 @@ int vg_commit(struct volume_group *vg)
+ 			cache_updated = 1;
+ 		}
+ 	}
++	return cache_updated;
++}
++
++/* Commit pending changes */
++int vg_commit(struct volume_group *vg)
++{
++	int cache_updated = 0;
++
++	if (!vgname_is_locked(vg->name)) {
++		log_error(INTERNAL_ERROR "Attempt to write new VG metadata "
++			  "without locking %s", vg->name);
++		return cache_updated;
++	}
++
++	cache_updated = _vg_commit_mdas(vg);
+ 
+ 	if (cache_updated) {
+ 		/* Instruct remote nodes to upgrade cached metadata. */
 -- 
 1.6.0.6
 
