@@ -1,107 +1,92 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:05:35 -0400
-Subject: [PATCH 02/35] Add text format specific 'rlocn' ignore flag and access functions.
-In-Reply-To: <1277175968-9661-2-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:36 -0400
+Subject: [PATCH 03/35] Add location independent flag and functions to ignore mdas.
+In-Reply-To: <1277175968-9661-3-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-3-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding a flag to the 'rlocn' structure in the mda header of the
-text format allows us to flip a bit to ignore an area on disk that
-stores the metadata via the text format specific mda_header.
-This patch defines the flag and access functions to manage the flag.
-Other patches will manage the ignore on a format-independent basis,
-by using a flag in the metadata_area structure.
+First we add a 'flags' field to the location independent
+metadata_area structure, and a MDA_IGNORE flag.  The
+mda_is_ignored and mda_set_ignored functions are added to
+manage the flag.  Adding the flag and functions gives a
+library interface to ignore metadata areas independent of
+the underlying location (disk, file, etc).  The location
+specific read/write functions must then handle the specifics
+of what this flag means to the location.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- include/.symlinks.in          |    1 +
- lib/format_text/format-text.c |   13 +++++++++++++
- lib/format_text/format-text.h |    1 +
- lib/format_text/layout.h      |   10 ++++++++++
- 4 files changed, 25 insertions(+), 0 deletions(-)
+ lib/format_text/text_label.c |    1 +
+ lib/metadata/metadata.c      |   13 +++++++++++++
+ lib/metadata/metadata.h      |    6 ++++++
+ 3 files changed, 20 insertions(+), 0 deletions(-)
 
-diff --git a/include/.symlinks.in b/include/.symlinks.in
-index 5a7e556..415bf82 100644
---- a/include/.symlinks.in
-+++ b/include/.symlinks.in
-@@ -26,6 +26,7 @@
- @top_srcdir@/lib/format_text/format-text.h
- @top_srcdir@/lib/format_text/text_export.h
- @top_srcdir@/lib/format_text/text_import.h
-+ at top_srcdir@/lib/format_text/layout.h
- @top_srcdir@/lib/label/label.h
- @top_srcdir@/lib/locking/locking.h
- @top_srcdir@/lib/log/log.h
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 6e02f12..9599626 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -66,6 +66,19 @@ struct text_context {
- 	char *desc;		/* Description placed inside file */
- };
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 7f02fc6..15758d6 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -215,6 +215,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
  
-+int rlocn_is_ignored(const struct raw_locn *rlocn)
+ 	mdal->ops = mda_lists->raw_ops;
+ 	mdal->metadata_locn = mdac;
++	mdal->flags = 0;
+ 
+ 	mdac->area.dev = dev;
+ 	mdac->area.start = start;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d76a910..68f7436 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3855,6 +3855,19 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
+ 	return pv_field(pv, pe_alloc_count);
+ }
+ 
++int mda_is_ignored(struct metadata_area *mda)
 +{
-+	return (rlocn->flags & RAW_LOCN_IGNORED ? 1 : 0);
++	return (mda->flags & MDA_IGNORED);
 +}
 +
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value)
++void mda_set_ignored(struct metadata_area *mda, int value)
 +{
 +	if (value)
-+		rlocn->flags |= RAW_LOCN_IGNORED;
++		mda->flags |= MDA_IGNORED;
 +	else
-+		rlocn->flags &= ~RAW_LOCN_IGNORED;
++		mda->flags &= ~MDA_IGNORED;
 +}
 +
- /*
-  * NOTE: Currently there can be only one vg per text file.
-  */
-diff --git a/lib/format_text/format-text.h b/lib/format_text/format-text.h
-index 9750ffa..17997cc 100644
---- a/lib/format_text/format-text.h
-+++ b/lib/format_text/format-text.h
-@@ -17,6 +17,7 @@
- #define _LVM_FORMAT_TEXT_H
+ uint32_t pv_mda_count(const struct physical_volume *pv)
+ {
+ 	struct lvmcache_info *info;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 3a3979d..71c562a 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -158,12 +158,18 @@ struct metadata_area_ops {
  
- #include "lvm-types.h"
-+#include "layout.h"
- #include "metadata.h"
+ };
  
- #define FMT_TEXT_NAME "lvm2"
-diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
-index 444a500..b7b2f2b 100644
---- a/lib/format_text/layout.h
-+++ b/lib/format_text/layout.h
-@@ -46,6 +46,13 @@ struct pv_header {
- 	struct disk_locn disk_areas_xl[0];	/* Two lists */
- } __attribute__ ((packed));
- 
-+/*
-+ * Ignore this raw location.  This allows us to
-+ * ignored metadata areas easily, and thus balance
-+ * metadata across VGs with many PVs.
-+ */
-+#define RAW_LOCN_IGNORED 0x00000001
++#define MDA_IGNORED 0x00000001
 +
- /* On disk */
- struct raw_locn {
- 	uint64_t offset;	/* Offset in bytes to start sector */
-@@ -54,6 +61,9 @@ struct raw_locn {
- 	uint32_t flags;
- } __attribute__ ((packed));
+ struct metadata_area {
+ 	struct dm_list list;
+ 	struct metadata_area_ops *ops;
+ 	void *metadata_locn;
++	uint32_t flags;
+ };
  
-+int rlocn_is_ignored(const struct raw_locn *rlocn);
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value);
++int mda_is_ignored(struct metadata_area *mda);
++void mda_set_ignored(struct metadata_area *mda, int value);
 +
- /* On disk */
- /* Structure size limited to one sector */
- struct mda_header {
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
+ #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
 -- 
 1.6.0.6
 
