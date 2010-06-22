@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:06:01 -0400
-Subject: [PATCH 28/35] Implement _vg_metadata_balance and call from vg_write() path.
-In-Reply-To: <1277175968-9661-28-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:06:02 -0400
+Subject: [PATCH 29/35] Set vg_mda_copies when pvchange --metadataignore is given.
+In-Reply-To: <1277175968-9661-29-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
@@ -30,138 +30,47 @@ References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-26-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-27-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-28-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-29-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-29-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-30-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Implement metadata balancing by comparing the value of the
-newly added vg_mda_copies field (--vgmetadatacopies parameter)
-with the current count of of non-ignored mdas and ignoring or
-unignoring mdas as necessary to get to the target count.
-Also, as a safety check before returning, ensure we have at
-least one mda enabled.
+When a user explicitly sets a new mda ignore value for a PV, we
+should update vg_mda_copies accordingly.  When the VG is written
+out, the user would not want the new ignore state to get lost as
+a result of the metadata balancing policy.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |   88 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 88 insertions(+), 0 deletions(-)
+ tools/pvchange.c |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a597f3c..6f4cf60 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -58,6 +58,8 @@ static struct pv_list *_find_pv_in_vg_by_uuid(const struct volume_group *vg,
- static uint32_t _vg_bad_status_bits(const struct volume_group *vg,
- 				    uint64_t status);
- 
-+static int _vg_metadata_balance(struct volume_group *vg);
-+
- const char _really_init[] =
-     "Really INITIALIZE physical volume \"%s\" of volume group \"%s\" [y/n]? ";
- 
-@@ -989,6 +991,91 @@ static int _recalc_extents(uint32_t *extents, const char *desc1,
- 	return 1;
- }
- 
-+static int _vg_ignore_mdas(struct volume_group *vg, uint32_t count)
-+{
-+	struct metadata_area *mda;
-+
-+	if (!count)
-+		return 1;
-+	/* FIXME: flip bits on random mdas */
-+	dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
-+		if (!mda_is_ignored(mda)) {
-+			mda_set_ignored(mda, 1);
-+			count--;
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index ba196d6..7f02073 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -147,6 +147,18 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		if (!pv_mda_set_ignored(pv, mda_ignore)) {
+ 			goto out;
+ 		}
++		/*
++		 * Update vg_mda_copies based on the mdas in this PV.
++		 * This is most likely what the usre would expect - if they
++		 * specify a specific PV to be ignored/un-ignored, they will
++		 * most likely not want LVM to turn around and change the
++		 * ignore / un-ignore value when it writes the VG to disk.
++		 * This does not guarantee this PV's ignore bits will be
++		 * preserved in future operations.
++		 */
++		if (!is_orphan(pv) && vg_mda_copies(vg)) {
++			vg_set_mda_copies(vg, vg_mda_copies(vg));
 +		}
-+		if (!count)
-+			return 1;
-+	}
-+	log_error("Unable to find %"PRIu32" metadata areas to ignore "
-+		  "on volume group %s", count, vg->name);
-+	return 0;
-+}
-+
-+static int _vg_unignore_mdas(struct volume_group *vg, uint32_t count)
-+{
-+	struct metadata_area *mda, *tmda;
-+
-+	if (!count)
-+		return 1;
-+	/* FIXME: flip bits on random mdas */
-+	dm_list_iterate_items_safe(mda, tmda, &vg->fid->metadata_areas_ignored) {
-+		if (mda_is_ignored(mda)) {
-+			mda_set_ignored(mda, 0);
-+			dm_list_move(&vg->fid->metadata_areas, &mda->list);
-+			count--;
-+		}
-+		if (!count)
-+			return 1;
-+	}
-+	dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
-+		if (mda_is_ignored(mda)) {
-+			mda_set_ignored(mda, 0);
-+			count--;
-+		}
-+		if (!count)
-+			return 1;
-+	}
-+	log_error("Unable to find %"PRIu32" metadata areas to un-ignore "
-+		  "on volume group %s", count, vg->name);
-+	return 0;
-+}
-+
-+static int _vg_metadata_balance(struct volume_group *vg)
-+{
-+	uint32_t mda_copies, count;
-+	int ret = 1;
-+
-+	mda_copies = vg_mda_count(vg) - vg_mda_count_ignored(vg);
-+	if (!vg->mda_copies)
-+		goto skip_balance;
-+
-+	if (mda_copies > vg->mda_copies) {
-+		ret = _vg_ignore_mdas(vg, mda_copies - vg->mda_copies);
-+	} else if (mda_copies < vg->mda_copies) {
-+		/* not an error to have vg_mda_count larger than total mdas */
-+		if (vg->mda_copies >= vg_mda_count(vg))
-+			count = vg_mda_count_ignored(vg);
-+		else
-+			count = vg->mda_copies - mda_copies;
-+		ret = _vg_unignore_mdas(vg, count);
-+	}
-+	if (!ret)
-+		return ret;
-+
-+skip_balance:
-+	/*
-+	 * Ensure at least one enabled mda.
-+	 * FIXME: check size of fid->metadata_areas; reason is because of how
-+	 * pv_setup works in the case of a pv with 2 mdas, one ignored and
-+	 * another not ignored; function needs refactoring to be correct.
-+	 */
-+	if (!dm_list_size(&vg->fid->metadata_areas) ||
-+	    vg_mda_count(vg) == vg_mda_count_ignored(vg)) {
-+		ret = _vg_unignore_mdas(vg, 1);
-+	}
-+	return ret;
-+}
-+
- uint32_t vg_mda_copies(const struct volume_group *vg)
- {
- 	return vg->mda_copies;
-@@ -2378,6 +2465,7 @@ int vg_write(struct volume_group *vg)
- 		return 0;
- 	}
- 
-+	_vg_metadata_balance(vg);
- 
- 	if (dm_list_empty(&vg->fid->metadata_areas)) {
- 		log_error("Aborting vg_write: No metadata areas to write to!");
+ 	} else {
+ 		/* --uuid: Change PV ID randomly */
+ 		if (!id_create(&pv->id)) {
 -- 
 1.6.0.6
 
