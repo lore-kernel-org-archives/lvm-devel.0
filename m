@@ -1,69 +1,101 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 3 Jun 2010 12:45:12 -0000
-Subject: LVM2 ./WHATS_NEW test/t-activate-partial.sh to ...
-Message-ID: <20100603124512.20343.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:06:07 -0400
+Subject: [PATCH 34/35] Add --vgmetadatacopies to vgsplit man page and command.
+In-Reply-To: <1277175968-9661-34-git-send-email-dwysocha@redhat.com>
+References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-4-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-5-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-6-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-7-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-8-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-9-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-10-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-11-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-12-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-13-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-14-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-15-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-16-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-17-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-18-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-19-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-20-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-21-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-22-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-23-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-24-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-25-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-26-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-27-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-28-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-29-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-30-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-31-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-32-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-33-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-34-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-35-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-06-03 12:45:09
 
-Modified files:
-	.              : WHATS_NEW 
-	test           : t-activate-partial.sh 
-	tools          : toollib.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/commands.h |    3 ++-
+ tools/vgsplit.c  |    6 ++++--
+ 2 files changed, 6 insertions(+), 3 deletions(-)
 
-Log message:
-	Require partial option in lvchange --refresh for partials LVs.
-	
-	We must not refresh LV if some PVs are missing and partial activation
-	was not requested.
-	
-	Fixes https://bugzilla.redhat.com/show_bug.cgi?id=598886
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1603&r2=1.1604
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-activate-partial.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.201&r2=1.202
-
---- LVM2/WHATS_NEW	2010/06/01 21:47:57	1.1603
-+++ LVM2/WHATS_NEW	2010/06/03 12:45:05	1.1604
-@@ -1,5 +1,6 @@
- Version 2.02.67 -
- ===============================
-+  Require partial option in lvchange --refresh for partial LVs.
-   Do not fail lvm_init() if init_logging() or _init_rand() generates an errno.
-   Don't merge unchanged persistent cache file before dumping if tool scanned.
-   Fix incorrect memory pool deallocation while using vg_read for files.
---- LVM2/test/t-activate-partial.sh	2010/05/12 05:59:24	1.1
-+++ LVM2/test/t-activate-partial.sh	2010/06/03 12:45:09	1.2
-@@ -9,6 +9,8 @@
- not vgreduce --removemissing $vg
- not lvchange -v -a y $vg/mirror
- lvchange -v --partial -a y $vg/mirror
-+not lvchange -v --refresh $vg/mirror
-+lvchange -v --refresh --partial $vg/mirror
+diff --git a/tools/commands.h b/tools/commands.h
+index 8f5ff3a..aa012a7 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -1007,6 +1007,7 @@ xx(vgsplit,
+    "\t[-h|--help] " "\n"
+    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
+    "\t[-M|--metadatatype 1|2] " "\n"
++   "\t[--[vg]metadatacopies #copies] " "\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
+    "\t[-t|--test] " "\n"
+@@ -1017,7 +1018,7 @@ xx(vgsplit,
  
- # also check that vgchange works
- vgchange -a n --partial $vg
---- LVM2/tools/toollib.c	2010/05/21 14:15:39	1.201
-+++ LVM2/tools/toollib.c	2010/06/03 12:45:09	1.202
-@@ -1248,6 +1248,12 @@
- {
- 	int r = 0;
+    alloc_ARG, autobackup_ARG, clustered_ARG,
+    maxlogicalvolumes_ARG, maxphysicalvolumes_ARG,
+-   metadatatype_ARG, name_ARG, test_ARG)
++   metadatatype_ARG, vgmetadatacopies_ARG, name_ARG, test_ARG)
  
-+	if (!cmd->partial_activation && (lv->status & PARTIAL_LV)) {
-+		log_error("Refusing refresh of partial LV %s. Use --partial to override.",
-+			  lv->name);
-+		goto out;
-+	}
-+
- 	r = suspend_lv(cmd, lv);
- 	if (!r)
- 		goto_out;
+ xx(version,
+    "Display software and driver version information",
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 1fa3d00..988c334 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -272,7 +272,8 @@ static int new_vg_option_specified(struct cmd_context *cmd)
+ 	return(arg_count(cmd, clustered_ARG) ||
+ 	       arg_count(cmd, alloc_ARG) ||
+ 	       arg_count(cmd, maxphysicalvolumes_ARG) ||
+-	       arg_count(cmd, maxlogicalvolumes_ARG));
++	       arg_count(cmd, maxlogicalvolumes_ARG) ||
++	       arg_count(cmd, vgmetadatacopies_ARG));
+ }
+ 
+ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+@@ -382,7 +383,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		    !vg_set_max_lv(vg_to, vp_new.max_lv) ||
+ 		    !vg_set_max_pv(vg_to, vp_new.max_pv) ||
+ 		    !vg_set_alloc_policy(vg_to, vp_new.alloc) ||
+-		    !vg_set_clustered(vg_to, vp_new.clustered))
++		    !vg_set_clustered(vg_to, vp_new.clustered) ||
++		    !vg_set_mda_copies(vg_to, vp_new.metadata_copies))
+ 			goto_bad;
+ 	}
+ 
+-- 
+1.6.0.6
 
 
