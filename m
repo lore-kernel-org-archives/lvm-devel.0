@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:06:07 -0400
-Subject: [PATCH 34/35] Add --vgmetadatacopies to vgsplit man page and command.
-In-Reply-To: <1277175968-9661-34-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:06:08 -0400
+Subject: [PATCH 35/35] Update tests to handle phase 2 (vg based) metadata balance.
+In-Reply-To: <1277175968-9661-35-git-send-email-dwysocha@redhat.com>
 References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
@@ -36,65 +36,202 @@ References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-32-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-33-git-send-email-dwysocha@redhat.com>
 	<1277175968-9661-34-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277175968-9661-35-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-35-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-36-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Test vgcreate/vgchange --vgmetadatacopies, vgextend, vgreduce,
+vgsplit, vgmerge.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/commands.h |    3 ++-
- tools/vgsplit.c  |    6 ++++--
- 2 files changed, 6 insertions(+), 3 deletions(-)
+ test/t-metadata-balance.sh |  153 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 151 insertions(+), 2 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 8f5ff3a..aa012a7 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -1007,6 +1007,7 @@ xx(vgsplit,
-    "\t[-h|--help] " "\n"
-    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
-    "\t[-M|--metadatatype 1|2] " "\n"
-+   "\t[--[vg]metadatacopies #copies] " "\n"
-    "\t[-n|--name LogicalVolumeName]\n"
-    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
-    "\t[-t|--test] " "\n"
-@@ -1017,7 +1018,7 @@ xx(vgsplit,
+diff --git a/test/t-metadata-balance.sh b/test/t-metadata-balance.sh
+index 2321771..95764a8 100755
+--- a/test/t-metadata-balance.sh
++++ b/test/t-metadata-balance.sh
+@@ -10,9 +10,9 @@
  
-    alloc_ARG, autobackup_ARG, clustered_ARG,
-    maxlogicalvolumes_ARG, maxphysicalvolumes_ARG,
--   metadatatype_ARG, name_ARG, test_ARG)
-+   metadatatype_ARG, vgmetadatacopies_ARG, name_ARG, test_ARG)
+ . ./test-utils.sh
  
- xx(version,
-    "Display software and driver version information",
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 1fa3d00..988c334 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -272,7 +272,8 @@ static int new_vg_option_specified(struct cmd_context *cmd)
- 	return(arg_count(cmd, clustered_ARG) ||
- 	       arg_count(cmd, alloc_ARG) ||
- 	       arg_count(cmd, maxphysicalvolumes_ARG) ||
--	       arg_count(cmd, maxlogicalvolumes_ARG));
-+	       arg_count(cmd, maxlogicalvolumes_ARG) ||
-+	       arg_count(cmd, vgmetadatacopies_ARG));
- }
+-aux prepare_devs 5
++aux prepare_devs 6
  
- int vgsplit(struct cmd_context *cmd, int argc, char **argv)
-@@ -382,7 +383,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		    !vg_set_max_lv(vg_to, vp_new.max_lv) ||
- 		    !vg_set_max_pv(vg_to, vp_new.max_pv) ||
- 		    !vg_set_alloc_policy(vg_to, vp_new.alloc) ||
--		    !vg_set_clustered(vg_to, vp_new.clustered))
-+		    !vg_set_clustered(vg_to, vp_new.clustered) ||
-+		    !vg_set_mda_copies(vg_to, vp_new.metadata_copies))
- 			goto_bad;
- 	}
- 
+-#  Make sure we can ignore / un-ignore mdas on a per-PV basis
++echo Make sure we can ignore / un-ignore mdas on a per-PV basis
+ for pv_in_vg in 1 0; do
+ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp $dev1 $dev2
+@@ -28,6 +28,7 @@ for mdacp in 1 2; do
+ 	if [ $pv_in_vg = 1 ]; then
+ 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
+ 		check_vg_field_ $vg vg_mda_count_ignored $mdacp
++		check_vg_field_ $vg vg_mda_copies 0
+ 	fi
+ 	pvchange --metadataignore n $dev1
+ 	check_pv_field_ $dev1 pv_mda_count $mdacp
+@@ -35,7 +36,155 @@ for mdacp in 1 2; do
+ 	if [ $pv_in_vg = 1 ]; then
+ 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
+ 		check_vg_field_ $vg vg_mda_count_ignored 0
++		check_vg_field_ $vg vg_mda_copies 0
+ 		vgremove -f $vg
+ 	fi
+ done
+ done
++
++# Check if a PV has non-ignored mdas, and if so, ignore
++pvignore_ () {
++	pv_ignored=$(get_pv_field "$1" pv_mda_count_ignored)
++	if [ $pv_ignored = 0 ]; then
++	    pvchange --metadataignore y $1
++	fi
++}
++
++pvunignore_ () {
++	pv_ignored=$(get_pv_field "$1" pv_mda_count_ignored)
++	if [ $pv_ignored != 0 ]; then
++	    pvchange --metadataignore n $1
++	fi
++}
++
++echo Test of vgmetadatacopies with vgcreate and vgchange
++for mdacp in 1 2; do
++	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev4 $dev5
++	check_pv_field_ $dev1 pv_mda_count_ignored 0
++	check_pv_field_ $dev2 pv_mda_count_ignored 0
++	check_pv_field_ $dev4 pv_mda_count_ignored 0
++	check_pv_field_ $dev5 pv_mda_count_ignored 0
++	pvcreate --metadatacopies 0 $dev3
++	vgcreate -c n "$vg" $dev1 $dev2 $dev3
++	check_vg_field_ $vg vg_mda_copies 0
++	echo ensure both --vgmetadatacopies and --metadatacopies accepted
++	vgchange --metadatacopies $(($mdacp * 1)) $vg
++	echo --vgmetadatacopies is persistent on disk
++	echo --vgmetadatacopies affects underlying pv mda ignore
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
++	check_vg_field_ $vg vg_mda_count_ignored $(($mdacp * 1))
++	vgchange --vgmetadatacopies $(($mdacp * 2)) $vg
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 2))
++	check_vg_field_ $vg vg_mda_count_ignored 0
++	echo allow setting metadatacopies larger than number of PVs
++	vgchange --vgmetadatacopies $(($mdacp * 5)) $vg
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
++	check_vg_field_ $vg vg_mda_count_ignored 0
++	echo setting to 0 disables automatic balancing
++	vgchange --vgmetadatacopies 0 $vg
++	check_vg_field_ $vg vg_mda_copies 0
++	vgremove -f $vg
++	echo vgcreate succeeds even when creating a VG w/all ignored mdas
++	pvchange --metadataignore y $dev1 $dev2
++	check_pv_field_ $dev1 pv_mda_count $mdacp
++	check_pv_field_ $dev2 pv_mda_count_ignored $mdacp
++	vgcreate -c n "$vg" $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies 0
++	vgremove -f $vg
++	echo vgcreate succeeds with a specific number of metadata copies
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 2)) "$vg" $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 2))
++	vgremove -f $vg
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) "$vg" $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
++	vgremove -f $vg
++	echo vgcreate succeeds with a larger value than total metadatacopies
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 5)) "$vg" $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
++	vgremove -f $vg
++	echo vgcreate succeeds with --vgmetadatacopies 0
++	vgcreate -c n --vgmetadatacopies 0 "$vg" $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies 0
++	vgremove -f $vg
++	pvunignore_ $dev1
++	pvunignore_ $dev2
++	pvunignore_ $dev4
++	pvunignore_ $dev5
++	echo vgcreate succeds with small value of --metadatacopies, ignores mdas
++	vgcreate -c n --vgmetadatacopies 1 "$vg" $dev1 $dev2 $dev4 $dev5
++	check_vg_field_ $vg vg_mda_copies 1
++	check_vg_field_ $vg vg_mda_count $(($mdacp * 4))
++	check_vg_field_ $vg vg_mda_count_ignored $(($mdacp * 4 - 1))
++	echo Setting a larger value should trigger non-ignore of mdas
++	vgchange --metadatacopies 3 $vg
++	check_vg_field_ $vg vg_mda_copies 3
++	check_vg_field_ $vg vg_mda_count_ignored $(($mdacp * 4 - 3))
++	echo Setting a smaller value should trigger ignore of mdas
++	vgremove -f $vg
++done
++
++echo Test vgextend / vgreduce with vgmetadatacopies
++for mdacp in 1 2; do
++	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev4 $dev5
++	pvcreate --metadatacopies 0 $dev3
++	echo Set a large value of vgmetadatacopies
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 5)) "$vg" $dev1 $dev2 $dev3
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
++	echo Ignore mdas on devices to be used for vgextend
++	echo Large value of vgetadatacopies should automatically un-ignore mdas
++	pvchange --metadataignore y $dev4 $dev5
++	check_pv_field_ $dev4 pv_mda_count_ignored $mdacp
++	vgextend $vg $dev4 $dev5
++	check_pv_field_ $dev4 pv_mda_count_ignored 0
++	check_pv_field_ $dev5 pv_mda_count_ignored 0
++	vgremove -f $vg
++	echo Set a small value of vgmetadatacopies
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) "$vg" $dev1 $dev2 $dev3
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
++	echo Ignore mdas on devices to be used for vgextend
++	echo Small value of vgetadatacopies should leave mdas as ignored
++	pvchange --metadataignore y $dev4 $dev5
++	check_pv_field_ $dev4 pv_mda_count_ignored $mdacp
++	vgextend $vg $dev4 $dev5
++	check_pv_field_ $dev4 pv_mda_count_ignored $mdacp
++	check_pv_field_ $dev5 pv_mda_count_ignored $mdacp
++	echo vgreduce of ignored pv w/mda should not trigger any change to ignore bits
++	vgreduce $vg $dev4
++	check_pv_field_ $dev4 pv_mda_count_ignored $mdacp
++	check_pv_field_ $dev5 pv_mda_count_ignored $mdacp
++	echo vgreduce of un-ignored pv w/mda should trigger un-ignore on an mda
++	vgreduce $vg $dev1 $dev2 $dev3
++	check_pv_field_ $dev5 pv_mda_count_ignored 0
++	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
++	pvunignore_ $dev1
++	pvunignore_ $dev2
++	echo setting vgmetadatacopies to 0 should allow vgextend to add w/out balancing
++	vgchange --vgmetadatacopies 0 $vg
++	vgextend $vg $dev1 $dev2
++	check_vg_field_ $vg vg_mda_copies 0
++	check_vg_field_ $vg vg_mda_count $(($mdacp * 3))
++	check_vg_field_ $vg vg_mda_count_ignored 0
++	check_pv_field_ $dev1 pv_mda_count_ignored 0
++	check_pv_field_ $dev2 pv_mda_count_ignored 0
++	vgremove -f $vg
++done
++
++echo Test special situations, vgsplit, vgmerge, etc
++for mdacp in 1 2; do
++	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev3 $dev4 $dev5
++	vgcreate -c n --vgmetadatacopies 2 $vg1 $dev1 $dev2 $dev3
++	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) $vg2 $dev4 $dev5
++	echo vgsplit/vgmerge preserves value of metadata copies
++	check_vg_field_ $vg1 vg_mda_copies 2
++	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 1))
++	vgsplit $vg1 $vg2 $dev1
++	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 1))
++	vgmerge $vg1 $vg2
++	check_vg_field_ $vg1 vg_mda_copies 2
++	check_vg_field_ $vg1 vg_mda_count $(($mdacp * 5))
++	echo vgsplit into new vg sets proper value of vgmetadatacopies
++	vgsplit --vgmetadatacopies $(($mdacp * 2)) $vg1 $vg2 $dev1 $dev2
++	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 2))
++	vgremove -f $vg1
++	vgremove -f $vg2
++done
 -- 
 1.6.0.6
 
