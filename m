@@ -1,52 +1,31 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 20:39:24 -0400
-Subject: error using the lvm library in C++
-In-Reply-To: <201006211640.13309.benscott@nwlink.com>
-References: <201006211640.13309.benscott@nwlink.com>
-Message-ID: <1277167164.10260.37.camel@f10-node1>
+Date: Mon, 21 Jun 2010 23:05:33 -0400
+Subject: [PATCH 00/35] Add full metadata balancing support, v5.
+Message-ID: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2010-06-21 at 16:40 -0700, ben scott wrote:
-> I am still running into trouble using the lvm library. Following the example 
-> in lvm2app.h I tried:
-> 
-> 
->     dm_list *vgnames;
->     lvm_str_list *strl;
-> 
->     vgnames = lvm_list_vg_names( lvm_pointer );
-> 
->     dm_list_iterate_items(strl, vgnames) {
->         qDebug() << QString( strl->str );
->     }
-> 
-> I get this error:
-> 
-> masterlist.cpp:83: error: ?typeof? was not declared in this scope
-> masterlist.cpp:83: error: expected primary-expression before ?)? token
-> masterlist.cpp:83: error: expected primary-expression before ?)? token
-> masterlist.cpp:83: error: expected ?)? before numeric constant
-> masterlist.cpp:83: error: expected ?)? before ?;? token
-> etc...
-> 
-> Is it coming from the file libdevmapper.h?
-> 
+This patchset is a fifth round of the metadata balancing support,
+makes minor revisions and builds on the fourth round of patches
+submitted (5/26/2010).  There are still some definite warts and
+FIXMEs in the code but this is now a complete patchset for the
+metadata balance feature.
 
-Can you post your code?
-
-Attached is a sample C++ hack that works for me with upstream lvm + dm
-CVS.  Make sure you are pointing at the right header files and linking
-to the correct libraries.
+Changes from the fourth round start around patch 19 and include:
+1) Sort mdas so that ignored mdas get committed to disk first.
+This reduces the time that we may get an inconsistent on-disk
+state that would require auto-repair.
+2) Fixed a few bugs in pv-based metadata balance patchset.
+3) Add "phase 2" (vg-based) of metadata balance.  Define one
+function which implements the metadata balancing and call it from
+the vg_write() path.  In most cases, this works just fine, but
+there are a few checks that need updated for the new 'fid' list
+of ignored mdas.
+4) Update nightly test cases to include all "phase 2" commands
+such as vgcreate, vgchange, vgsplit, etc.
 
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: masterlist.cpp
-Type: text/x-c++src
-Size: 812 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100621/2b221678/attachment.bin>
+
