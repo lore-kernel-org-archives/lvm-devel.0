@@ -1,47 +1,38 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 22 Jun 2010 13:11:32 -0000
-Subject: LVM2 ./WHATS_NEW libdm/misc/dm-log-userspace.h
-Message-ID: <20100622131132.3835.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 22 Jun 2010 15:04:05 +0100
+Subject: [PATCH 25/35] Make vg->mda_copies persistent in on disk vg metadata.
+In-Reply-To: <1277203009.2484.66.camel@f10-node1>
+References: <1277175968-9661-19-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-20-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-21-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-22-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-23-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-24-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-25-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-26-git-send-email-dwysocha@redhat.com>
+	<4C2071F0.1030204@redhat.com> <1277203009.2484.66.camel@f10-node1>
+Message-ID: <20100622140405.GA14902@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-06-22 13:11:32
+Indeed, that version number would only be changed if chose to make a major
+change that broke compatibility.
 
-Modified files:
-	.              : WHATS_NEW 
-	libdm/misc     : dm-log-userspace.h 
+Generally, if people access LVM metadata with older tools than the ones
+used to write it they can expect any new features in the metadata to get
+dropped - but the code should still work OK.  Sometimes there'll be
+warning messages; other times not.
 
-Log message:
-	Use flexible data[] in cmirrord request to prevent abort in runtime size checks.
+We do try to phase-in new features, so code goes in that recognises the
+new feature several releases before the feature can be enabled by default.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1623&r2=1.1624
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/misc/dm-log-userspace.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+So for now, this new feature will require positive action by the
+sysadmin to enable.  (E.g. editing lvm.conf or using new cmdline
+options.)
 
---- LVM2/WHATS_NEW	2010/06/21 16:12:33	1.1623
-+++ LVM2/WHATS_NEW	2010/06/22 13:11:29	1.1624
-@@ -1,5 +1,6 @@
- Version 2.02.68 -
- ===============================
-+  Use flexible data[] in cmirrord request to prevent abort in runtime size checks.
-   Honor log argument when down-converting stacked mirror.
-   Sleep to workaround clvmd -S race: socket closed early and server drops cmd.
-   Use early udev synchronisation and update of dev nodes for clustered mirrors.
---- LVM2/libdm/misc/dm-log-userspace.h	2010/01/19 01:10:47	1.2
-+++ LVM2/libdm/misc/dm-log-userspace.h	2010/06/22 13:11:32	1.3
-@@ -391,7 +391,7 @@
- 	uint32_t request_type;  /* DM_ULOG_* defined above */
- 	uint32_t data_size;     /* How much data (not including this struct) */
- 
--	char data[0];
-+	char data[];
- };
- 
- #endif /* __DM_LOG_USERSPACE_H__ */
+Alasdair
 
 
