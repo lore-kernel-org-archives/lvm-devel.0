@@ -1,35 +1,22 @@
-From: ben scott <benscott@nwlink.com>
-Date: Mon, 21 Jun 2010 16:40:13 -0700
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 22 Jun 2010 01:35:07 +0100
 Subject: error using the lvm library in C++
-Message-ID: <201006211640.13309.benscott@nwlink.com>
+In-Reply-To: <201006211640.13309.benscott@nwlink.com>
+References: <201006211640.13309.benscott@nwlink.com>
+Message-ID: <20100622003507.GH26395@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I am still running into trouble using the lvm library. Following the example 
-in lvm2app.h I tried:
+It's easier to get a response if you can supply a standalone snippet of code
+when reporting something like this so other people can try compiling it
+directly.
 
+First thing to try is to compile with -E and see how the pre-processed output
+looks.
 
-    dm_list *vgnames;
-    lvm_str_list *strl;
-
-    vgnames = lvm_list_vg_names( lvm_pointer );
-
-    dm_list_iterate_items(strl, vgnames) {
-        qDebug() << QString( strl->str );
-    }
-
-I get this error:
-
-masterlist.cpp:83: error: ?typeof? was not declared in this scope
-masterlist.cpp:83: error: expected primary-expression before ?)? token
-masterlist.cpp:83: error: expected primary-expression before ?)? token
-masterlist.cpp:83: error: expected ?)? before numeric constant
-masterlist.cpp:83: error: expected ?)? before ?;? token
-etc...
-
-Is it coming from the file libdevmapper.h?
+Alasdair
 
 
