@@ -1,53 +1,110 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed,  2 Jun 2010 18:19:49 +0200
-Subject: [PATCH] Require partial option in lvchange --refresh for partials LVs.
-Message-ID: <1275495589-15705-1-git-send-email-mbroz@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:37 -0400
+Subject: [PATCH 04/35] Move dev_open / dev_close outside _vg_read_raw_area().
+In-Reply-To: <1277175968-9661-4-git-send-email-dwysocha@redhat.com>
+References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We must not refresh LV if some PVs are missing and partial activation
-was not requested.
+This refactoring moves the device open/close up one level to the caller of
+_vg_read_raw_area().  Should be no functional change and facilitate future
+changes related to metadata balancing.
 
-Fix https://bugzilla.redhat.com/show_bug.cgi?id=598886
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- test/t-activate-partial.sh |    2 ++
- tools/toollib.c            |    6 ++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ lib/format_text/format-text.c |   40 ++++++++++++++++++++++++++++++----------
+ 1 files changed, 30 insertions(+), 10 deletions(-)
 
-diff --git a/test/t-activate-partial.sh b/test/t-activate-partial.sh
-index dd978f5..f0a95c5 100644
---- a/test/t-activate-partial.sh
-+++ b/test/t-activate-partial.sh
-@@ -9,6 +9,8 @@ disable_dev $dev1
- not vgreduce --removemissing $vg
- not lvchange -v -a y $vg/mirror
- lvchange -v --partial -a y $vg/mirror
-+not lvchange -v --refresh $vg/mirror
-+lvchange -v --refresh --partial $vg/mirror
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 9599626..9411f93 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -477,9 +477,6 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+ 	char *desc;
+ 	uint32_t wrap = 0;
  
- # also check that vgchange works
- vgchange -a n --partial $vg
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 4022a32..e6791e2 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1248,6 +1248,12 @@ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
- {
- 	int r = 0;
- 
-+	if (!cmd->partial_activation && (lv->status & PARTIAL_LV)) {
-+		log_error("Refusing refresh of partial LV %s. Use --partial to override.",
-+			  lv->name);
-+		goto out;
-+	}
-+
- 	r = suspend_lv(cmd, lv);
- 	if (!r)
+-	if (!dev_open(area->dev))
+-		return_NULL;
+-
+ 	if (!(mdah = _raw_read_mda_header(fid->fmt, area)))
  		goto_out;
+ 
+@@ -514,9 +511,6 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+ 		vg->status |= PRECOMMITTED;
+ 
+       out:
+-	if (!dev_close(area->dev))
+-		stack;
+-
+ 	return vg;
+ }
+ 
+@@ -525,8 +519,17 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
+ 					 struct metadata_area *mda)
+ {
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
+ 
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 0);
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
++
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 0);
++
++	if (!dev_close(mdac->area.dev))
++		stack;
++
++	return vg;
+ }
+ 
+ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
+@@ -534,8 +537,17 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
+ 						   struct metadata_area *mda)
+ {
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
++
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
++
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++
++	if (!dev_close(mdac->area.dev))
++		stack;
+ 
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++	return vg;
+ }
+ 
+ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+@@ -1186,9 +1198,17 @@ static int _scan_raw(const struct format_type *fmt)
+ 		/* FIXME We're reading mdah twice here... */
+ 		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
+ 					      NULL, NULL))) {
+-			if ((vg = _vg_read_raw_area(&fid, vgname,
+-						    &rl->dev_area, 0)))
++			if (!dev_open(rl->dev_area.dev)) {
++				stack;
++				continue;
++			}
++
++			vg = _vg_read_raw_area(&fid, vgname, &rl->dev_area, 0);
++			if (vg)
+ 				lvmcache_update_vg(vg, 0);
++
++			if (!dev_close(rl->dev_area.dev))
++				stack;
+ 		}
+ 	}
+ 
 -- 
-1.7.1
+1.6.0.6
 
 
