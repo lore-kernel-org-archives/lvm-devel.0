@@ -1,48 +1,79 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Thu, 03 Jun 2010 09:05:32 +0200
-Subject: [PATCH] fix some issues in clvmd initscript
-In-Reply-To: <4BFD1B92.9080403@redhat.com>
-References: <4BFD1B92.9080403@redhat.com>
-Message-ID: <4C07543C.5040908@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:49 -0400
+Subject: [PATCH 16/35] Add mdas_empty_or_ignored() helper function.
+In-Reply-To: <1277175968-9661-16-git-send-email-dwysocha@redhat.com>
+References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-2-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-3-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-4-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-5-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-6-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-7-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-8-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-9-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-10-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-11-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-12-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-13-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-14-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-15-git-send-email-dwysocha@redhat.com>
+	<1277175968-9661-16-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-17-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 5/26/2010 3:01 PM, Milan Broz wrote:
-> - if daemon is already running, do nothing (and not reactivate VGs)
-> 
-> - always explicitly return exit code in reload()
-> 
-> - fix restart() so it really tries full start & stop and returns exit code
->   if clvmd -S fails and also touch lockfile afterwards
-> 
-> --- clvmd.old	2010-05-26 14:21:15.000000000 +0200
-> +++ clvmd	2010-05-26 14:55:17.671245376 +0200
-> @@ -63,11 +63,12 @@ rh_status_q() {
->  
->  start()
->  {
-> -	if ! rh_status_q; then
-> -		echo -n "Starting $DAEMON: "
-> -		daemon $DAEMON $CLVMDOPTS || return $?
-> -		echo
-> -	fi
-> +
-> +	rh_status_q && return 0
-> +
-> +	echo -n "Starting $DAEMON: "
-> +	daemon $DAEMON $CLVMDOPTS || return $?
-> +	echo
+Add a helper function to consolidate checking for an empty mdas list
+or ignored mdas.  Ignored mdas should behave almost identically to
+an empty mda list - the metadata areas should not be read or written
+to.  This function will make it easier to implement metadata balancing
+and easier to track pvs with an empty mda list or ignored mdas.
 
-careful with this change as it modifies the behavior compared to the old
-init script.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata.c |   13 +++++++++++++
+ lib/metadata/metadata.h |    1 +
+ 2 files changed, 14 insertions(+), 0 deletions(-)
 
-In the transition from old to new, we didn?t really want to modify what
-the script does.
-
-Cheers
-Fabio
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b52447a..6b7931e 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4045,6 +4045,19 @@ int pv_mda_set_ignored(const struct physical_volume *pv, int value)
+ 	return 1;
+ }
+ 
++int mdas_empty_or_ignored(struct dm_list *mdas)
++{
++	struct metadata_area *mda;
++
++	if (!dm_list_size(mdas))
++		return 1;
++	dm_list_iterate_items(mda, mdas) {
++		if (mda_is_ignored(mda))
++			return 1;
++	}
++	return 0;
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index fd89423..63f9f72 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -185,6 +185,7 @@ void mda_set_ignored(struct metadata_area *mda, int value);
+ int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
+ void fid_add_mda(struct format_instance *fid, struct metadata_area *mda);
+ int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas);
++int mdas_empty_or_ignored(struct dm_list *mdas);
+ 
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
+ #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+-- 
+1.6.0.6
 
 
