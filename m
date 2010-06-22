@@ -1,31 +1,42 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 21 Jun 2010 23:05:33 -0400
-Subject: [PATCH 00/35] Add full metadata balancing support, v5.
-Message-ID: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+Date: Mon, 21 Jun 2010 23:05:34 -0400
+Subject: [PATCH 01/35] Change 'filler' to 'flags' in on-disk 'raw_locn' structure.
+In-Reply-To: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+References: <1277175968-9661-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277175968-9661-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset is a fifth round of the metadata balancing support,
-makes minor revisions and builds on the fourth round of patches
-submitted (5/26/2010).  There are still some definite warts and
-FIXMEs in the code but this is now a complete patchset for the
-metadata balance feature.
+Future patches will make use of a specific flag in the on-disk 'raw_locn'
+structure to enable/disable metadata areas, and facilitate metadata
+balancing.
 
-Changes from the fourth round start around patch 19 and include:
-1) Sort mdas so that ignored mdas get committed to disk first.
-This reduces the time that we may get an inconsistent on-disk
-state that would require auto-repair.
-2) Fixed a few bugs in pv-based metadata balance patchset.
-3) Add "phase 2" (vg-based) of metadata balance.  Define one
-function which implements the metadata balancing and call it from
-the vg_write() path.  In most cases, this works just fine, but
-there are a few checks that need updated for the new 'fid' list
-of ignored mdas.
-4) Update nightly test cases to include all "phase 2" commands
-such as vgcreate, vgchange, vgsplit, etc.
+Note that 'filler' is always set to '0' (see add_mda() - memset),
+so use of this area as a non-zero flags field is a safe way to
+provide future code features.
 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/format_text/layout.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index b023e92..444a500 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -51,7 +51,7 @@ struct raw_locn {
+ 	uint64_t offset;	/* Offset in bytes to start sector */
+ 	uint64_t size;		/* Bytes */
+ 	uint32_t checksum;
+-	uint32_t filler;
++	uint32_t flags;
+ } __attribute__ ((packed));
+ 
+ /* On disk */
+-- 
+1.6.0.6
 
 
