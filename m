@@ -1,41 +1,63 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue,  1 Jun 2010 14:07:57 -0400
-Subject: [PATCH 2/2] Revert _init_rand() to reset errno - restores original init behavior.
-In-Reply-To: <1275415677-22814-1-git-send-email-dwysocha@redhat.com>
-References: <1275415677-22814-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1275415677-22814-2-git-send-email-dwysocha@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 23 Jun 2010 13:30:07 +0200
+Subject: [PATCH] Fix clvmd init script status
+Message-ID: <1277292607-29658-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+- s/Active clustred VG/clustered VG/ (only LV can be active)
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+- print only active LVs (not all) in status command
+(In the lvdisplay form /dev/vg/lv.)
+
+For now, still use awk (already used in clustered_vgs).
+
+https://bugzilla.redhat.com/show_bug.cgi?id=598495
 ---
- lib/commands/toolcontext.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ scripts/clvmd_init_red_hat.in |   11 ++++++-----
+ 1 files changed, 6 insertions(+), 5 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 33e682b..7c5e379 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1084,10 +1084,13 @@ static int _init_backup(struct cmd_context *cmd)
+diff --git a/scripts/clvmd_init_red_hat.in b/scripts/clvmd_init_red_hat.in
+index 1a03984..da09a34 100644
+--- a/scripts/clvmd_init_red_hat.in
++++ b/scripts/clvmd_init_red_hat.in
+@@ -25,7 +25,7 @@ sbindir=@sbindir@
+ lvm_vgchange=${sbindir}/vgchange
+ lvm_vgdisplay=${sbindir}/vgdisplay
+ lvm_vgscan=${sbindir}/vgscan
+-lvm_lvs=${sbindir}/lvs
++lvm_lvdisplay=${sbindir}/lvdisplay
  
- static void _init_rand(struct cmd_context *cmd)
- {
--	if (read_urandom(&cmd->rand_seed, sizeof(cmd->rand_seed)))
-+	if (read_urandom(&cmd->rand_seed, sizeof(cmd->rand_seed))) {
-+		reset_lvm_errno(1);
- 		return;
-+	}
+ CLVMDOPTS="-T30"
  
- 	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
-+	reset_lvm_errno(1);
+@@ -47,9 +47,10 @@ clustered_vgs() {
+ 		awk 'BEGIN {RS="VG Name"} {if (/Clustered/) print $1;}'
  }
  
- static void _init_globals(struct cmd_context *cmd)
+-clustered_lvs() {
++clustered_active_lvs() {
+ 	for i in $(clustered_vgs); do
+-		${lvm_lvs} -o lv_name --noheadings $i
++		${lvm_lvdisplay} $i 2>/dev/null | \
++		awk 'BEGIN {RS="LV Name"} {if (/[^N^O^T] available/) print $1;}'
+ 	done
+ }
+ 
+@@ -197,8 +198,8 @@ case "$1" in
+ 	rtrn=$?
+ 	if [ $rtrn = 0 ]; then
+ 		cvgs="$(clustered_vgs)"
+-		echo Active clustered Volume Groups: ${cvgs:-"(none)"}
+-		clvs="$(clustered_lvs)"
++		echo Clustered Volume Groups: ${cvgs:-"(none)"}
++		clvs="$(clustered_active_lvs)"
+ 		echo Active clustered Logical Volumes: ${clvs:-"(none)"}
+ 	fi
+ 	;;
 -- 
-1.6.0.6
+1.7.1
 
 
