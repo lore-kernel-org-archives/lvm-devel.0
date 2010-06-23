@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 23 Jun 2010 13:57:29 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20100623135729.10042.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 23 Jun 2010 14:16:01 -0000
+Subject: LVM2/man vgimportclone.8.in
+Message-ID: <20100623141601.4301.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-06-23 13:57:26
+Changes by:	snitzer at sourceware.org	2010-06-23 14:15:58
 
 Modified files:
-	lib/metadata   : mirror.c 
+	man            : vgimportclone.8.in 
 
 Log message:
-	The function that runs to compress a stacked mirror after
-	converting from 2-way to 3-way mirror (collapse_mirrored_lv)
-	was calling '_remove_mirror_images' with the 'remove_log'
-	parameter set.  When the code was put in to fix 599898 to
-	honor log parameters during conversion, this argument was
-	suddenly being honored.  Thus, when someone would convert from
-	a 2-way to 3-way mirror, the log would get removed.
-	
-	'collapse_mirrored_lv' should not be calling '_remove_mirror_images'
-	with 'remove_log' set.
+	Cleanup sentences of the example provided in the vgimportclone man page
+	(motivated by a patch that Debian was carrying).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.119&r2=1.120
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgimportclone.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/lib/metadata/mirror.c	2010/06/21 16:12:34	1.119
-+++ LVM2/lib/metadata/mirror.c	2010/06/23 13:57:26	1.120
-@@ -1038,7 +1038,7 @@
+--- LVM2/man/vgimportclone.8.in	2009/05/14 16:46:13	1.1
++++ LVM2/man/vgimportclone.8.in	2010/06/23 14:15:55	1.2
+@@ -33,13 +33,12 @@
+ The LVM2 binary to use.
+ Defaults to "lvm".
+ .SH EXAMPLES
+-If origin VG
+-.B test_vg 
+-has PVs 
++The origin VG
++.B test_vg
++has origin PVs
+ .BR /dev/loop0 " and " /dev/loop1
+-and 
+-.BR /dev/loop2 " and " /dev/loop3
+-are respective snapshot PVs of the origin PVs.
++and the respective snapshot PVs are
++.BR /dev/loop2 " and " /dev/loop3 "."
+ To rename the VG
+ associated with
+ .BR /dev/loop2 " and " /dev/loop3
+@@ -47,7 +46,7 @@
+ .B test_vg
+ to
+ .B test_vg_snap
+-(and change associated VG and PV UUIDs):
++(and to change associated VG and PV UUIDs) do:
+ .nf
  
- 		if (!_remove_mirror_images(mirror_seg->lv,
- 					   mirror_seg->area_count - 1,
--					   _no_removable_images, NULL, 1, 1, NULL)) {
-+					   _no_removable_images, NULL, 0, 1, NULL)) {
- 			log_error("Failed to release mirror images");
- 			return 0;
- 		}
+ \	vgimportclone --basevgname test_vg_snap /dev/loop2 /dev/loop3
 
 
