@@ -1,38 +1,36 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 23 Jun 2010 10:34:39 +0200
-Subject: [PATCH] Fix typo in vgchange command
-In-Reply-To: <4C214C09.9010808@redhat.com>
-References: <4C214C09.9010808@redhat.com>
-Message-ID: <4C21C71F.2070602@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 23 Jun 2010 10:21:00 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20100623102100.7590.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 23.6.2010 01:49, Takahiro Yasui napsal(a):
-> Fix typo: premitted ->  permitted
->
-> Signed-off-by: Takahiro Yasui<tyasui@redhat.com>
-> ---
->   tools/vgchange.c |    2 +-
->   1 file changed, 1 insertion(+), 1 deletion(-)
->
-> Index: LVM2-2.02.67/tools/vgchange.c
-> ===================================================================
-> --- LVM2-2.02.67.orig/tools/vgchange.c
-> +++ LVM2-2.02.67/tools/vgchange.c
-> @@ -627,7 +627,7 @@ int vgchange(struct cmd_context *cmd, in
->
->   	if ((arg_count(cmd, ignorelockingfailure_ARG) ||
->   	     arg_count(cmd, sysinit_ARG))&&  !arg_count(cmd, available_ARG)) {
-> -		log_error("Only -a premitted with --ignorelockingfailure and --sysinit");
-> +		log_error("Only -a permitted with --ignorelockingfailure and --sysinit");
->   		return EINVALID_CMD_LINE;
->   	}
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-06-23 10:21:00
 
-Ack
+Modified files:
+	.              : WHATS_NEW 
 
-Zdenek
+Log message:
+	Better WHATS_NEW message - as we still have not fixed 'make exec_prefix' build
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1626&r2=1.1627
+
+--- LVM2/WHATS_NEW	2010/06/22 21:10:53	1.1626
++++ LVM2/WHATS_NEW	2010/06/23 10:21:00	1.1627
+@@ -16,7 +16,7 @@
+   Allow use of lvm2app and lvm2cmd headers in C++ code.
+   Remove some unused #includes from clvmd files.
+   Use #include "" for libdevmapper.h and configure.h throughout tree.
+-  Fix 'make exec_prefix' with LVM_PATH / DMEVENTD_PATH. (2.02.67)
++  Fix LVM_PATH expansion when exec_prefix=NONE (2.02.67).
+   Fix segfault in clvmd -R if no response from daemon received.
+ 
+ Version 2.02.67 - 4th June 2010
 
 
