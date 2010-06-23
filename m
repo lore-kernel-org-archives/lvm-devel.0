@@ -1,83 +1,57 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 23 Jun 2010 11:39:37 -0400
-Subject: [PATCH 1/1] Only write metadata_copies to vg metadata if read or non-zero.
-In-Reply-To: <1277307577-20552-1-git-send-email-dwysocha@redhat.com>
-References: <1277307577-20552-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277307577-20552-2-git-send-email-dwysocha@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 23 Jun 2010 16:12:34 -0000
+Subject: LVM2/man vgimportclone.8.in
+Message-ID: <20100623161234.943.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If already present on disk, or the user sets the value, enable writing
-the value out to disk.  Otherwise, skip committing metadata_copies
-to the vg metadata.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-06-23 16:12:31
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/format_text/export.c         |    6 +++++-
- lib/format_text/import_vsn1.c    |    2 ++
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |    1 +
- 4 files changed, 9 insertions(+), 1 deletions(-)
+Modified files:
+	man            : vgimportclone.8.in 
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index 52ae11c..297a47d 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -397,7 +397,11 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 		outf(f, "allocation_policy = \"%s\"",
- 		     get_alloc_string(vg->alloc));
- 	}
--	outf(f, "metadata_copies = %u", vg->mda_copies);
-+	/*
-+	 * Only write to the metadata if the value is valid or non-zero.
-+	 */
-+	if (vg->mda_copies_valid || vg->mda_copies)
-+		outf(f, "metadata_copies = %u", vg->mda_copies);
+Log message:
+	Use more standard naming for PVs and VG in vgimportclone example.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgimportclone.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+
+--- LVM2/man/vgimportclone.8.in	2010/06/23 14:15:55	1.2
++++ LVM2/man/vgimportclone.8.in	2010/06/23 16:12:30	1.3
+@@ -34,22 +34,22 @@
+ Defaults to "lvm".
+ .SH EXAMPLES
+ The origin VG
+-.B test_vg
++.B vg00
+ has origin PVs
+-.BR /dev/loop0 " and " /dev/loop1
++.BR /dev/sda " and " /dev/sdb
+ and the respective snapshot PVs are
+-.BR /dev/loop2 " and " /dev/loop3 "."
++.BR /dev/sdc " and " /dev/sdd "."
+ To rename the VG
+ associated with
+-.BR /dev/loop2 " and " /dev/loop3
++.BR /dev/sdc " and " /dev/sdd
+ from
+-.B test_vg
++.B vg00
+ to
+-.B test_vg_snap
++.B vg00_snap
+ (and to change associated VG and PV UUIDs) do:
+ .nf
  
- 	return 1;
- }
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 62bcbec..be4e7d4 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -746,7 +746,9 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 			return_0;
- 	}
+-\	vgimportclone --basevgname test_vg_snap /dev/loop2 /dev/loop3
++\	vgimportclone --basevgname vg00_snap /dev/sdc /dev/sdd
  
-+	vg->mda_copies_valid = 1;
- 	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
-+		vg->mda_copies_valid = 0;
- 		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
- 	}
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index b444e34..3414d8c 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -282,6 +282,7 @@ struct volume_group {
- 	 */
- 	uint32_t read_status;
- 	uint32_t mda_copies; /* target number of mdas for this VG */
-+	uint32_t mda_copies_valid; /* 1 if user enables feature */
- };
- 
- /* There will be one area for each stripe */
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index e2b36ea..2b72335 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1105,6 +1105,7 @@ int vg_set_mda_copies(struct volume_group *vg, uint32_t value)
- 	 * enable some mdas on PVS
- 	 */
- 	vg->mda_copies = value;
-+	vg->mda_copies_valid = 1;
- 	return 1;
- }
- 
--- 
-1.6.0.6
+ .fi
+ .SH SEE ALSO
 
 
