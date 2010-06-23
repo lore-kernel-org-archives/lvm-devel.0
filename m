@@ -1,57 +1,50 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 23 Jun 2010 16:12:34 -0000
-Subject: LVM2/man vgimportclone.8.in
-Message-ID: <20100623161234.943.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 23 Jun 2010 12:14:06 -0400
+Subject: [PATCH] Ensure --metadatacopies parameter gets interpreted based on command.
+Message-ID: <1277309646-24343-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-06-23 16:12:31
+Now that we have both --pvmetadatacopies and --vgmetadatacopies,
+we need to make sure --metadatacopies gets interpreted correctly.
 
-Modified files:
-	man            : vgimportclone.8.in 
+For pv commands, --metadatacopies should imply --pvmetadatacopies,
+and for vg commands, --vgmetadatacopies.
 
-Log message:
-	Use more standard naming for PVs and VG in vgimportclone example.
+Note: this will change the behavior of vgcreate with --metadatacopies
+to be a synonym for --vgmetadatacopies.  Previously, --metadatacopies
+would apply to any PVs given with vgcreate that needed an implicit
+pvcreate.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgimportclone.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/lvmcmdline.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
---- LVM2/man/vgimportclone.8.in	2010/06/23 14:15:55	1.2
-+++ LVM2/man/vgimportclone.8.in	2010/06/23 16:12:30	1.3
-@@ -34,22 +34,22 @@
- Defaults to "lvm".
- .SH EXAMPLES
- The origin VG
--.B test_vg
-+.B vg00
- has origin PVs
--.BR /dev/loop0 " and " /dev/loop1
-+.BR /dev/sda " and " /dev/sdb
- and the respective snapshot PVs are
--.BR /dev/loop2 " and " /dev/loop3 "."
-+.BR /dev/sdc " and " /dev/sdd "."
- To rename the VG
- associated with
--.BR /dev/loop2 " and " /dev/loop3
-+.BR /dev/sdc " and " /dev/sdd
- from
--.B test_vg
-+.B vg00
- to
--.B test_vg_snap
-+.B vg00_snap
- (and to change associated VG and PV UUIDs) do:
- .nf
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 6a5479d..45762b5 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -827,8 +827,13 @@ static int _get_settings(struct cmd_context *cmd)
+ 	if (!_merge_synonym(cmd, resizable_ARG, resizeable_ARG) ||
+ 	    !_merge_synonym(cmd, allocation_ARG, allocatable_ARG) ||
+ 	    !_merge_synonym(cmd, allocation_ARG, resizeable_ARG) ||
+-	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG) ||
+-	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG))
++	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG))
++		return EINVALID_CMD_LINE;
++
++	if ((!strncmp(cmd->command->name, "pv", 2) &&
++	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG)) ||
++	    (!strncmp(cmd->command->name, "vg", 2) &&
++	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
+ 		return EINVALID_CMD_LINE;
  
--\	vgimportclone --basevgname test_vg_snap /dev/loop2 /dev/loop3
-+\	vgimportclone --basevgname vg00_snap /dev/sdc /dev/sdd
- 
- .fi
- .SH SEE ALSO
+ 	/* Zero indicates success */
+-- 
+1.6.0.6
 
 
