@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Jun 2010 08:18:55 -0000
-Subject: LVM2/man lvmdump.8.in
-Message-ID: <20100624081855.30418.qmail@sourceware.org>
+Date: 24 Jun 2010 08:29:34 -0000
+Subject: LVM2 ./WHATS_NEW lib/mm/memlock.c
+Message-ID: <20100624082934.5824.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,35 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-06-24 08:18:54
+Changes by:	zkabelac at sourceware.org	2010-06-24 08:29:31
 
 Modified files:
-	man            : lvmdump.8.in 
+	.              : WHATS_NEW 
+	lib/mm         : memlock.c 
 
 Log message:
-	Add few missing information about what is this script doing.
-	(based upon Debian bugzilla suggestion)
+	Preload libc locale messages.
+	
+	Preload libc.mo file for localized lvm before taking memory lock - this way
+	we prevent disk access for some error paths in libdm, that prints localized
+	errno messages while they are still in memory locked state.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvmdump.8.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1634&r2=1.1635
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
 
---- LVM2/man/lvmdump.8.in	2008/10/08 12:50:13	1.1
-+++ LVM2/man/lvmdump.8.in	2010/06/24 08:18:54	1.2
-@@ -14,10 +14,14 @@
- .br
- - recent entries from /var/log/messages (containing system messages)
- .br
--- complete lvm configuration and cache
-+- complete lvm configuration and cache (content of /etc/lvm)
- .br
- - list of device nodes present under /dev
- .br
-+- list of files present /sys/block
-+.br
-+- list of files present /sys/devices/virtual/block
-+.br
- - if enabled with -m, metadata dump will be also included
- .br
- - if enabled with -a, debug output of vgscan, pvscan and list of all available volume groups, physical volumes and logical volumes will be included
+--- LVM2/WHATS_NEW	2010/06/23 21:01:42	1.1634
++++ LVM2/WHATS_NEW	2010/06/24 08:29:30	1.1635
+@@ -1,5 +1,6 @@
+ Version 2.02.69 - 
+ ================================
++  Preload libc locale messages to prevent reading it in memory locked state.
+   Fix handling of simultaneous mirror image and mirrored log image failure.
+ 
+ Version 2.02.68 - 23rd June 2010
+--- LVM2/lib/mm/memlock.c	2010/04/01 14:53:47	1.26
++++ LVM2/lib/mm/memlock.c	2010/06/24 08:29:31	1.27
+@@ -216,6 +216,9 @@
+ #endif
+ 	}
+ 
++	/* Force libc.mo load */
++	if (lock == LVM_MLOCK)
++		(void)strerror(0);
+ 	/* Reset statistic counters */
+ 	*mstats = 0;
+ 	rewind(_mapsh);
 
 
