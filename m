@@ -1,17 +1,26 @@
 From: ben scott <benscott@nwlink.com>
-Date: Thu, 24 Jun 2010 15:39:57 -0700
-Subject: lvm2app library question about attributes and policies
-Message-ID: <201006241539.57382.benscott@nwlink.com>
+Date: Thu, 24 Jun 2010 19:30:49 -0700
+Subject: undefined references in lvm2app
+Message-ID: <201006241930.49495.benscott@nwlink.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Looking at lvm2app.h I  don't see anything about attributes such as resizable 
-or read only. I also didn't see anything about allocation policy like anywhere 
-or contiguous. 
+I have run into an odd problem with lvm2app (cvs).
 
-Is there any plan to add these. Thank you.
+During linking I get:
+volgroup.cpp:33: undefined reference to `lvm_vg_get_max_pv'
+volgroup.cpp:40: undefined reference to `lvm_vg_get_max_lv'
+volgroup.cpp:48: undefined reference to `lvm_vg_is_exported'
+etc....
+
+However some of the functions work fine, such as:
+lvm_vg_get_extent_size(m_vg);
+lvm_vg_get_extent_count(m_vg);
+
+Any idea how this can happen? I have looked for old libraries BTW, everthing 
+seems to be up to date.
 
 
