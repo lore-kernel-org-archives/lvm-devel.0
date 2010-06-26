@@ -1,48 +1,43 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 3 Jun 2010 20:51:12 +0100
-Subject: [PATCH] fix some issues in clvmd initscript
-In-Reply-To: <AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
-References: <4BFD1B92.9080403@redhat.com> <4C07543C.5040908@redhat.com>
-	<4C077B2B.5030206@redhat.com> <4C079571.1050409@redhat.com>
-	<AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
-Message-ID: <20100603195112.GC30522@agk-dp.fab.redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:41 -0400
+Subject: [PATCH 10/38] Use vg_mda_count() in vgdisplay.
+In-Reply-To: <1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-11-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Jun 03, 2010 at 08:31:22PM +0200, brem belguebli wrote:
-> started, as it tries to activate all the clustered VG's whether or not
-> they're already active  on another node.
- 
-/etc/sysconfig/clvmd perhaps?
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/display/display.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-
-Something like:
-
-# Specifies whether or not to activate clustered LVs after starting up clvmd.
-# Note that this file only controls which 'lvchange' commands get run
-# and it cannot override lvm.conf.
-ACTIVATE=yes
-
-# Space-separated lists of LVs to activate when starting CLVMD.
-# Specifying a VG will activate all the LVs within it.
-
-# Clustered LVs activated with "lvchange -aey" on this machine.
-# E.g. EXCLUSIVE_LVS="vg1/lvol0 vg1/lvol1 vg2"
-EXCLUSIVE_LVS=
-
-# Clustered LVs activated with "lvchange -aly" on this machine.
-LOCAL_LVS=
-
-# Clustered LVs activated with "lvchange -ay".
-# If all 3 variables (LOCAL_LVS, EXCLUSIVE_LVS & SHARED_LVS) are unset
-# or empty and ACTIVATE is "yes" then all clustered LVs visible on the system
-# are activated as shared.
-SHARED_LVS=
-
-
-Alasdair
+diff --git a/lib/display/display.c b/lib/display/display.c
+index a835327..7a8e325 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -664,7 +664,7 @@ void vgdisplay_full(const struct volume_group *vg)
+ 	log_print("Format                %s", vg->fid->fmt->name);
+ 	if (vg->fid->fmt->features & FMT_MDAS) {
+ 		log_print("Metadata Areas        %d",
+-			  dm_list_size(&vg->fid->metadata_areas));
++			  vg_mda_count(vg));
+ 		log_print("Metadata Sequence No  %d", vg->seqno);
+ 	}
+ 	access_str = vg->status & (LVM_READ | LVM_WRITE);
+-- 
+1.6.0.6
 
 
