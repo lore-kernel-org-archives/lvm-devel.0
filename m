@@ -1,86 +1,93 @@
-From: brem belguebli <brem.belguebli@gmail.com>
-Date: Thu, 3 Jun 2010 20:31:22 +0200
-Subject: [PATCH] fix some issues in clvmd initscript
-In-Reply-To: <4C079571.1050409@redhat.com>
-References: <4BFD1B92.9080403@redhat.com> <4C07543C.5040908@redhat.com>
-	<4C077B2B.5030206@redhat.com> <4C079571.1050409@redhat.com>
-Message-ID: <AANLkTimKDciNUgF1sxYeoZDYLeAmCTqVOUlWtoksj7nr@mail.gmail.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:34 -0400
+Subject: [PATCH 03/38] Add location independent flag and functions to ignore mdas.
+In-Reply-To: <1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+First we add a 'flags' field to the location independent
+metadata_area structure, and a MDA_IGNORE flag.  The
+mda_is_ignored and mda_set_ignored functions are added to
+manage the flag.  Adding the flag and functions gives a
+library interface to ignore metadata areas independent of
+the underlying location (disk, file, etc).  The location
+specific read/write functions must then handle the specifics
+of what this flag means to the location.
 
-just a suggestion, but, in case one wants to use clvm in a
-active/passive maner, there is a problem with the way clvmd is
-started, as it tries to activate all the clustered VG's whether or not
-they're already active  on another node.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/format_text/text_label.c |    1 +
+ lib/metadata/metadata.c      |   13 +++++++++++++
+ lib/metadata/metadata.h      |    6 ++++++
+ 3 files changed, 20 insertions(+), 0 deletions(-)
 
-In case of active/passive setup, by the means of exclusive activation,
-this activation returns an error  (as of LMV2.0.56, cf
-https://bugzilla.redhat.com/show_bug.cgi?id=517900, errata
-http://rhn.redhat.com/errata/RHBA-2010-0299.html)
-
-Another scenario being, when using exclusive activation, the cluster
-resources can be managed by a "custom" cluster resource script (cf
-https://www.redhat.com/archives/linux-cluster/2009-June/msg00002.html),
-the resource script fails to start as clvmd init script has already
-activated the VG's.
-
-My suggestion would be to be able to forbid (via an exclusion list)
-clvmd init script to activate automatically what's in this blacklist.
-
-Regards
-
-Brem
-
-
-2010/6/3 Fabio M. Di Nitto <fdinitto@redhat.com>:
-> On 6/3/2010 11:51 AM, Milan Broz wrote:
->> On 06/03/2010 09:05 AM, Fabio M. Di Nitto wrote:
->>> On 5/26/2010 3:01 PM, Milan Broz wrote:
->>>> - if daemon is already running, do nothing (and not reactivate VGs)
->>>>
->>>> - always explicitly return exit code in reload()
->>>>
->>>> - fix restart() so it really tries full start & stop and returns exit code
->>>> ? if clvmd -S fails and also touch lockfile afterwards
->>>>
->>>> --- clvmd.old ? ? ? 2010-05-26 14:21:15.000000000 +0200
->>>> +++ clvmd ? 2010-05-26 14:55:17.671245376 +0200
->>>> @@ -63,11 +63,12 @@ rh_status_q() {
->>>>
->>>> ?start()
->>>> ?{
->>>> - ? if ! rh_status_q; then
->>>> - ? ? ? ? ? echo -n "Starting $DAEMON: "
->>>> - ? ? ? ? ? daemon $DAEMON $CLVMDOPTS || return $?
->>>> - ? ? ? ? ? echo
->>>> - ? fi
->>>> +
->>>> + ? rh_status_q && return 0
->>>> +
->>>> + ? echo -n "Starting $DAEMON: "
->>>> + ? daemon $DAEMON $CLVMDOPTS || return $?
->>>> + ? echo
->>>
->>> careful with this change as it modifies the behavior compared to the old
->>> init script.
->>
->> So you want reactivate LVs even if clvmd is already running?
->
-> Let me get this right :) I don?t care either way. Whatever the team
-> wants is fine. I am only noticing that this a behavior change vs the old
-> init script.
->
-> Fabio
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
->
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 7f02fc6..15758d6 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -215,6 +215,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
+ 
+ 	mdal->ops = mda_lists->raw_ops;
+ 	mdal->metadata_locn = mdac;
++	mdal->flags = 0;
+ 
+ 	mdac->area.dev = dev;
+ 	mdac->area.start = start;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 4c6fe9e..9764fb7 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3855,6 +3855,19 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
+ 	return pv_field(pv, pe_alloc_count);
+ }
+ 
++int mda_is_ignored(struct metadata_area *mda)
++{
++	return (mda->flags & MDA_IGNORED);
++}
++
++void mda_set_ignored(struct metadata_area *mda, int value)
++{
++	if (value)
++		mda->flags |= MDA_IGNORED;
++	else
++		mda->flags &= ~MDA_IGNORED;
++}
++
+ uint32_t pv_mda_count(const struct physical_volume *pv)
+ {
+ 	struct lvmcache_info *info;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 3a3979d..71c562a 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -158,12 +158,18 @@ struct metadata_area_ops {
+ 
+ };
+ 
++#define MDA_IGNORED 0x00000001
++
+ struct metadata_area {
+ 	struct dm_list list;
+ 	struct metadata_area_ops *ops;
+ 	void *metadata_locn;
++	uint32_t flags;
+ };
+ 
++int mda_is_ignored(struct metadata_area *mda);
++void mda_set_ignored(struct metadata_area *mda, int value);
++
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
+ #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
+-- 
+1.6.0.6
 
 
