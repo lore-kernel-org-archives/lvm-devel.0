@@ -1,92 +1,109 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:34 -0400
-Subject: [PATCH 03/38] Add location independent flag and functions to ignore mdas.
-In-Reply-To: <1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:35 -0400
+Subject: [PATCH 04/38] Move dev_open / dev_close outside _vg_read_raw_area().
+In-Reply-To: <1277520789-6808-4-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-First we add a 'flags' field to the location independent
-metadata_area structure, and a MDA_IGNORE flag.  The
-mda_is_ignored and mda_set_ignored functions are added to
-manage the flag.  Adding the flag and functions gives a
-library interface to ignore metadata areas independent of
-the underlying location (disk, file, etc).  The location
-specific read/write functions must then handle the specifics
-of what this flag means to the location.
+This refactoring moves the device open/close up one level to the caller of
+_vg_read_raw_area().  Should be no functional change and facilitate future
+changes related to metadata balancing.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format_text/text_label.c |    1 +
- lib/metadata/metadata.c      |   13 +++++++++++++
- lib/metadata/metadata.h      |    6 ++++++
- 3 files changed, 20 insertions(+), 0 deletions(-)
+ lib/format_text/format-text.c |   40 ++++++++++++++++++++++++++++++----------
+ 1 files changed, 30 insertions(+), 10 deletions(-)
 
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 7f02fc6..15758d6 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -215,6 +215,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 3a032ea..fdddae5 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -483,9 +483,6 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+ 	char *desc;
+ 	uint32_t wrap = 0;
  
- 	mdal->ops = mda_lists->raw_ops;
- 	mdal->metadata_locn = mdac;
-+	mdal->flags = 0;
+-	if (!dev_open(area->dev))
+-		return_NULL;
+-
+ 	if (!(mdah = _raw_read_mda_header(fid->fmt, area)))
+ 		goto_out;
  
- 	mdac->area.dev = dev;
- 	mdac->area.start = start;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 4c6fe9e..9764fb7 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3855,6 +3855,19 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
- 	return pv_field(pv, pe_alloc_count);
+@@ -520,9 +517,6 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+ 		vg->status |= PRECOMMITTED;
+ 
+       out:
+-	if (!dev_close(area->dev))
+-		stack;
+-
+ 	return vg;
  }
  
-+int mda_is_ignored(struct metadata_area *mda)
-+{
-+	return (mda->flags & MDA_IGNORED);
-+}
-+
-+void mda_set_ignored(struct metadata_area *mda, int value)
-+{
-+	if (value)
-+		mda->flags |= MDA_IGNORED;
-+	else
-+		mda->flags &= ~MDA_IGNORED;
-+}
-+
- uint32_t pv_mda_count(const struct physical_volume *pv)
+@@ -531,8 +525,17 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
+ 					 struct metadata_area *mda)
  {
- 	struct lvmcache_info *info;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 3a3979d..71c562a 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -158,12 +158,18 @@ struct metadata_area_ops {
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
  
- };
- 
-+#define MDA_IGNORED 0x00000001
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 0);
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
 +
- struct metadata_area {
- 	struct dm_list list;
- 	struct metadata_area_ops *ops;
- 	void *metadata_locn;
-+	uint32_t flags;
- };
- 
-+int mda_is_ignored(struct metadata_area *mda);
-+void mda_set_ignored(struct metadata_area *mda, int value);
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 0);
 +
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
- #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
++	if (!dev_close(mdac->area.dev))
++		stack;
++
++	return vg;
+ }
+ 
+ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
+@@ -540,8 +543,17 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
+ 						   struct metadata_area *mda)
+ {
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
++
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
++
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++
++	if (!dev_close(mdac->area.dev))
++		stack;
+ 
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++	return vg;
+ }
+ 
+ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+@@ -1192,9 +1204,17 @@ static int _scan_raw(const struct format_type *fmt)
+ 		/* FIXME We're reading mdah twice here... */
+ 		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
+ 					      NULL, NULL))) {
+-			if ((vg = _vg_read_raw_area(&fid, vgname,
+-						    &rl->dev_area, 0)))
++			if (!dev_open(rl->dev_area.dev)) {
++				stack;
++				continue;
++			}
++
++			vg = _vg_read_raw_area(&fid, vgname, &rl->dev_area, 0);
++			if (vg)
+ 				lvmcache_update_vg(vg, 0);
++
++			if (!dev_close(rl->dev_area.dev))
++				stack;
+ 		}
+ 	}
+ 
 -- 
 1.6.0.6
 
