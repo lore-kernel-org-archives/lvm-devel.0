@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:53:08 -0400
-Subject: [PATCH 37/38] Update example.conf.in to describe vgmetadatacopies.
-In-Reply-To: <1277520789-6808-37-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:56 -0400
+Subject: [PATCH 25/38] Make vg->mda_copies persistent in on disk vg metadata.
+In-Reply-To: <1277520789-6808-25-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
@@ -27,58 +27,63 @@ References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-30-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-31-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-32-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-33-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-34-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-35-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-36-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-37-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-38-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-26-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Update example.conf to note the string value.  Special care
-must be taken with the string and numeric value - the numbers
-must be enclosed in "'s, so this is noted in the comments.
+This patch adds the ability to read/write the vg->mda_copies values
+from/to the vg metadata.
+
+If we read the VG metadata and this field does not exist, we set
+mda_copies to the default value of 0.  Later in the code, we use
+this special '0' value to indicate a disable of metadata balancing.
+This should preserve existing LVM behavior and ensure metadata balancing
+can be turned off should the need arise.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- doc/example.conf.in |   13 +++++++++++++
- 1 files changed, 13 insertions(+), 0 deletions(-)
+ lib/format_text/export.c      |    1 +
+ lib/format_text/import_vsn1.c |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index 5318571..5b1f12f 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -456,6 +456,19 @@ activation {
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 5f02b5d..52ae11c 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -397,6 +397,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(vg->alloc));
+ 	}
++	outf(f, "metadata_copies = %u", vg->mda_copies);
  
-     # pvmetadatacopies = 1
+ 	return 1;
+ }
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 316adb5..62bcbec 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -23,6 +23,7 @@
+ #include "pv_alloc.h"
+ #include "segtype.h"
+ #include "text_import.h"
++#include "defaults.h"
  
-+    # Default number of copies of metadata to hold on each VG.
-+    # If set to a non-zero value, LVM automatically manages the PV
-+    # 'metadataignore' flags (see pvchange) to achieve the requested
-+    # copies of metadata.  It not an error to set a value larger than
-+    # the sum of all metadata areas on all physical volumes.  This value
-+    # can be overridden on the command line of various commands. The
-+    # default value of "unmanaged" indicates that LVM should not
-+    # automatically manage the 'metadataignore' flags.  Note that
-+    # this is a string value, so any numbers must be enclosed in '"'s,
-+    # for example, vgmetadatacopies = "5".
+ typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
+ 			   struct volume_group * vg, struct config_node * pvn,
+@@ -745,6 +746,10 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 			return_0;
+ 	}
+ 
++	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
++		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
++	}
 +
-+    # vgmetadatacopies = "unmanaged"
-+
-     # Approximate default size of on-disk metadata areas in sectors.
-     # You should increase this if you have large volume groups or
-     # you want to retain a large on-disk history of your metadata changes.
+ 	/*
+ 	 * The pv hash memorises the pv section names -> pv
+ 	 * structures.
 -- 
 1.6.0.6
 
