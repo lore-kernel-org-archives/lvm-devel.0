@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:42 -0400
-Subject: [PATCH 11/38] Add metadata_areas_ignored list and functions to manage ignored mdas.
-In-Reply-To: <1277520789-6808-11-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:43 -0400
+Subject: [PATCH 12/38] Define new functions and vgs/pvs fields related to mda ignore.
+In-Reply-To: <1277520789-6808-12-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
@@ -13,148 +13,258 @@ References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-13-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add a second mda list, metadata_areas_ignored to fid, and a couple
-functions, fid_add_mda() and fid_add_mdas() to help manage the lists.
+Define a new pvs field, pv_mda_used_count, and a new vgs field,
+vg_mda_used_count to match the existing pv_mda_count and vg_mda_count.
+These new fields count the number of mdas that have the 'ignored' bit
+clear (they are in use on the PV / VG).  Also define various supporting
+functions to implement the counting as well as setting the ignored
+flag and determining if an mda is ignored.  These high level functions
+call into the lower level location independent mda ignore functions
+defined by earlier patches.
 
-These functions are needed to properly count the ignored mdas and
-manage the lists attached to the 'fid' and ultimately the 'vg'.
+Note that counting ignored mdas in a vg requires traversing both lists
+and checking for the ignored bit on the mda.  The count of 'ignored'
+mdas then is defined by having the bit set, not by which list the mda
+is on.  The list does determine whether LVM actually does read/write to
+the mda, though we must count the bits in order to return accurate numbers
+for the various counts.  Also, pv_mda_set_ignored must search both vg
+lists for ignored mda.  If the state changes and needs to be committed
+to disk, the ignored mda will be on the non-ignored list.
 
-Ensure metadata_areas_ignored is initialized in other formats, even
-if the list is never used.
+Note also in pv_mda_set_ignored(), we must properly manage the mda lists.
+If we change the ignored state of an mda, we must change any mdas on
+vg->fid->metadata_areas that correspond to this pv.  Also, we may
+need to allocate a copy of the mda, as is done when fid->metadata_areas
+is populated from _vg_read(), if we are un-ignoring an ignored mda.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/format1/format1.c            |    1 +
- lib/format_pool/format_pool.c    |    1 +
- lib/format_text/format-text.c    |    2 ++
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/metadata.c          |   23 +++++++++++++++++++++++
- lib/metadata/metadata.h          |    2 ++
- lib/report/report.c              |    1 +
- 7 files changed, 31 insertions(+), 0 deletions(-)
+ lib/metadata/metadata-exported.h |    3 +
+ lib/metadata/metadata.c          |  110 +++++++++++++++++++++++++++++++++++++-
+ lib/report/columns.h             |    2 +
+ lib/report/report.c              |   25 +++++++++
+ 4 files changed, 139 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 1167e04..f0b323c 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -464,6 +464,7 @@ static struct format_instance *_format1_create_instance(const struct format_type
- 
- 	fid->fmt = fmt;
- 	dm_list_init(&fid->metadata_areas);
-+	dm_list_init(&fid->metadata_areas_ignored);
- 
- 	/* Define a NULL metadata area */
- 	if (!(mda = dm_pool_alloc(fmt->cmd->mem, sizeof(*mda)))) {
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index d8a09ec..d3f5fd6 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -263,6 +263,7 @@ static struct format_instance *_pool_create_instance(const struct format_type *f
- 
- 	fid->fmt = fmt;
- 	dm_list_init(&fid->metadata_areas);
-+	dm_list_init(&fid->metadata_areas_ignored);
- 
- 	/* Define a NULL metadata area */
- 	if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda)))) {
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index a3a43ab..6428703 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1207,6 +1207,7 @@ static int _scan_raw(const struct format_type *fmt)
- 
- 	fid.fmt = fmt;
- 	dm_list_init(&fid.metadata_areas);
-+	dm_list_init(&fid.metadata_areas_ignored);
- 
- 	dm_list_iterate_items(rl, raw_list) {
- 		/* FIXME We're reading mdah twice here... */
-@@ -1916,6 +1917,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 
- 	fid->fmt = fmt;
- 	dm_list_init(&fid->metadata_areas);
-+	dm_list_init(&fid->metadata_areas_ignored);
- 
- 	if (!vgname) {
- 		if (!(mda = dm_pool_alloc(fmt->cmd->mem, sizeof(*mda))))
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index dbac0f2..d0e10e6 100644
+index d0e10e6..7a66743 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -216,6 +216,7 @@ struct physical_volume {
- struct format_instance {
- 	const struct format_type *fmt;
- 	struct dm_list metadata_areas;	/* e.g. metadata locations */
-+	struct dm_list metadata_areas_ignored;
- 	void *private;
- };
+@@ -857,6 +857,8 @@ uint64_t pv_pe_start(const struct physical_volume *pv);
+ uint32_t pv_pe_count(const struct physical_volume *pv);
+ uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
+ uint32_t pv_mda_count(const struct physical_volume *pv);
++uint32_t pv_mda_used_count(const struct physical_volume *pv);
++int pv_mda_set_ignored(const struct physical_volume *pv, int value);
  
+ uint64_t lv_size(const struct logical_volume *lv);
+ 
+@@ -872,6 +874,7 @@ uint64_t vg_pv_count(const struct volume_group *vg);
+ uint64_t vg_max_pv(const struct volume_group *vg);
+ uint64_t vg_max_lv(const struct volume_group *vg);
+ uint32_t vg_mda_count(const struct volume_group *vg);
++uint32_t vg_mda_used_count(const struct volume_group *vg);
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
+ #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 117bef8..cef3773 100644
+index cef3773..525c360 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -3855,6 +3855,29 @@ uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
- 	return pv_field(pv, pe_alloc_count);
+@@ -3954,6 +3954,91 @@ uint32_t pv_mda_count(const struct physical_volume *pv)
+ 	return info ? dm_list_size(&info->mdas) : UINT64_C(0);
  }
  
-+void fid_add_mda(struct format_instance *fid, struct metadata_area *mda)
++uint32_t pv_mda_used_count(const struct physical_volume *pv)
 +{
-+	if (mda_is_ignored(mda))
-+		dm_list_add(&fid->metadata_areas_ignored,
-+			    &mda->list);
-+	else
-+		dm_list_add(&fid->metadata_areas,
-+			    &mda->list);
++	struct lvmcache_info *info;
++	struct metadata_area *mda;
++	uint32_t count=0;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return 0;
++	dm_list_iterate_items(mda, &info->mdas) {
++		if (mda_is_ignored(mda))
++			count++;
++	}
++	return pv_mda_count(pv) - count;
 +}
 +
-+int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas)
++int pv_mda_set_ignored(const struct physical_volume *pv, int value)
 +{
-+	struct metadata_area *mda, *mda_new;
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *mda_vg, *tmda;
++	struct dm_list *mdas_vg, *mdas_vg_ignored;
 +
-+	dm_list_iterate_items(mda, mdas) {
-+		mda_new = mda_copy(fid->fmt->cmd->mem, mda);
-+		if (!mda_new)
-+			return_0;
-+		fid_add_mda(fid, mda_new);
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return_0;
++
++	if (is_orphan(pv)) {
++		dm_list_iterate_items(mda, &info->mdas) {
++			mda_set_ignored(mda, value);
++		}
++		return 1;
++	}
++
++	/*
++	 * Do not allow disabling of the the last PV in a VG.
++	 */
++	if (pv_mda_used_count(pv) &&
++	    (pv_mda_count(pv) == vg_mda_used_count(pv->vg))) {
++		log_error("Cannot disable metadata - volume group "
++			  "needs at least one enabled physical volume.\n");
++		return 0;
++	}
++
++	/*
++	 * Non-orphan case is more complex.
++	 * If the PV's mdas are ignored, and we wish to un-ignore,
++	 * we clear the bit and move them from the ignored mda list to the
++	 * non-ignored list, ensuring the new state will get written to disk
++	 * in the vg_write() path.
++	 * If the PV's mdas are not ignored, and we are setting
++	 * them to ignored, we set the bit but leave them on the non-ignored
++	 * list, ensuring the new state will get written to disk in the
++	 * vg_write() path.
++	 */
++	mdas_vg = &pv->vg->fid->metadata_areas;
++	mdas_vg_ignored = &pv->vg->fid->metadata_areas_ignored;
++	dm_list_iterate_items(mda, &info->mdas) {
++		if (mda_is_ignored(mda) && !value) {
++			/* If the mda is ignored, it could be on either list */
++			dm_list_iterate_items_safe(mda_vg, tmda, mdas_vg_ignored) {
++				if (mda_locn_match(mda, mda_vg)) {
++					mda_set_ignored(mda_vg, value);
++					dm_list_move(mdas_vg, &mda_vg->list);
++				}
++			}
++			dm_list_iterate_items_safe(mda_vg, tmda, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg)) {
++					mda_set_ignored(mda_vg, value);
++					dm_list_move(mdas_vg, &mda_vg->list);
++				}
++			}
++		} else if (!mda_is_ignored(mda) && value) {
++			dm_list_iterate_items_safe(mda_vg, tmda, mdas_vg) {
++				if (mda_locn_match(mda, mda_vg)) {
++					mda_set_ignored(mda_vg, value);
++					/* don't move mda - needs written to
++					   disk */
++				}
++			}
++		}
++		mda_set_ignored(mda, value);
 +	}
 +	return 1;
 +}
 +
- /*
-  * Copy constructor for a metadata_area.
-  */
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 86314b2..fd89423 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -183,6 +183,8 @@ struct metadata_area *mda_copy(struct dm_pool *mem,
- int mda_is_ignored(struct metadata_area *mda);
- void mda_set_ignored(struct metadata_area *mda, int value);
- int mda_locn_match(struct metadata_area *mda1, struct metadata_area *mda2);
-+void fid_add_mda(struct format_instance *fid, struct metadata_area *mda);
-+int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas);
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+@@ -4006,7 +4091,30 @@ uint64_t vg_max_lv(const struct volume_group *vg)
  
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ uint32_t vg_mda_count(const struct volume_group *vg)
+ {
+-	return dm_list_size(&vg->fid->metadata_areas);
++	return dm_list_size(&vg->fid->metadata_areas) +
++		dm_list_size(&vg->fid->metadata_areas_ignored);
++}
++
++uint32_t vg_mda_used_count(const struct volume_group *vg)
++{
++       uint32_t count = 0;
++       struct metadata_area *mda;
++
++       /*
++	* Ignored mdas could be on either list - the reason being the state
++	* may have changed from ignored to un-ignored and we need to write
++	* the state to disk.
++	*/
++       dm_list_iterate_items(mda, &vg->fid->metadata_areas) {
++	       if (mda_is_ignored(mda))
++		       count++;
++       }
++       dm_list_iterate_items(mda, &vg->fid->metadata_areas_ignored) {
++	       if (mda_is_ignored(mda))
++		       count++;
++       }
++
++       return vg_mda_count(vg) - count;
+ }
+ 
+ uint64_t lv_size(const struct logical_volume *lv)
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index a1d419c..96e8112 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -93,6 +93,7 @@ FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, "pv_pe_count", "Total number of P
+ FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, "pv_pe_alloc_count", "Total number of allocated Physical Extents.")
+ FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, "pv_tags", "Tags, if any.")
+ FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, "pv_mda_count", "Number of metadata areas on this device.")
++FIELD(PVS, pv, NUM, "#PMdaUse", id, 8, pvmdas_used, "pv_mda_used_count", "Number of metadata areas in use on this device.")
+ 
+ FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, "vg_fmt", "Type of metadata.")
+ FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, "vg_uuid", "Unique identifier.")
+@@ -112,6 +113,7 @@ FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+ FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
++FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdas_used, "vg_mda_used_count", "Number of metadata areas in use on this VG.")
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.")
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.")
+ 
 diff --git a/lib/report/report.c b/lib/report/report.c
-index f71a46f..37530ca 100644
+index 37530ca..e993a1e 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -1127,6 +1127,7 @@ static int _copypercent_disp(struct dm_report *rh __attribute((unused)),
- /* necessary for displaying something for PVs not belonging to VG */
- static struct format_instance _dummy_fid = {
- 	.metadata_areas = { &(_dummy_fid.metadata_areas), &(_dummy_fid.metadata_areas) },
-+	.metadata_areas_ignored = { &(_dummy_fid.metadata_areas_ignored), &(_dummy_fid.metadata_areas_ignored) },
- };
+@@ -880,6 +880,19 @@ static int _pvmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
  
- static struct volume_group _dummy_vg = {
++static int _pvmdas_used_disp(struct dm_report *rh, struct dm_pool *mem,
++			     struct dm_report_field *field,
++			     const void *data, void *private)
++{
++	uint32_t count;
++	const struct physical_volume *pv =
++	    (const struct physical_volume *) data;
++
++	count = pv_mda_used_count(pv);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
+@@ -892,6 +905,18 @@ static int _vgmdas_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _uint32_disp(rh, mem, field, &count, private);
+ }
+ 
++static int _vgmdas_used_disp(struct dm_report *rh, struct dm_pool *mem,
++			     struct dm_report_field *field,
++			     const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++	uint32_t count;
++
++	count = vg_mda_used_count(vg);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private)
 -- 
 1.6.0.6
 
