@@ -1,140 +1,163 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:31:39 -0000
-Subject: LVM2/lib format_text/format-text.c metadata/me ...
-Message-ID: <20100628203139.14218.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:58 -0400
+Subject: [PATCH 27/38] Update vgchange tool to accept --vgmetadatacopies.
+In-Reply-To: <1277520789-6808-27-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-28-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:31:39
+Update logic in vgchange to handle --vgmetadatacopies, allow
+--metadatacopies as a synonym to --vgmetadatacopies,
+and add these parameters to args.h and commands.h
 
-Modified files:
-	lib/format_text: format-text.c 
-	lib/metadata   : metadata.c metadata.h 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/args.h     |    1 +
+ tools/commands.h |    4 +++-
+ tools/vgchange.c |   49 +++++++++++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 51 insertions(+), 3 deletions(-)
 
-Log message:
-	Add mda_locns_match() internal library function for mapping pv/device to VG mda.
-	
-	A metadata_area is defined independent of the location.  One downside
-	is that there is no obvious mapping from a pv to an mda.  For a PV in
-	a VG, we need a way to start with a PV and end up with an MDA, if we
-	are to manage mdas starting with a device/pv.  This function provides
-	us a way to go down the list of PVs on a VG, and identify which ones
-	match a particular PV.
-	
-	I'm not entirely happy with this approach, but it does fit into the
-	existing structures in a reasonable way.
-	
-	An alternative solution might be to refactor the VG - PV interface such
-	that mdas are a list tied to a PV.  However, this seemed a bit tricky since
-	a PV does not come into existence until after the list of mdas is
-	constructed (see _vg_read() - we create a 'fid' and attach mdas to it,
-	then we go through them and attach pvs).
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-	Reviewed-by: Alasdair G Kergon <agk@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.347&r2=1.348
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.206&r2=1.207
-
---- LVM2/lib/format_text/format-text.c	2010/06/28 20:31:18	1.128
-+++ LVM2/lib/format_text/format-text.c	2010/06/28 20:31:38	1.129
-@@ -121,6 +121,20 @@
- 	return 0;
+diff --git a/tools/args.h b/tools/args.h
+index d343689..60d99d1 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -23,6 +23,7 @@ arg(physicalvolumesize_ARG, '\0', "setphysicalvolumesize", size_mb_arg, 0)
+ arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", NULL, 0)
+ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
+ arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
++arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", int_arg, 0)
+ arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
+ arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
+ arg(metadataignore_ARG, '\0', "metadataignore", yes_no_arg, 0)
+diff --git a/tools/commands.h b/tools/commands.h
+index 6d8d2c0..62a684b 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -710,6 +710,7 @@ xx(vgchange,
+    "\t[--ignorelockingfailure]\n"
+    "\t[--ignoremonitoring]\n"
+    "\t[--monitor {y|n}]\n"
++   "\t[--[vg]metadatacopies #copies] " "\n"
+    "\t[--poll {y|n}]\n"
+    "\t[--noudevsync]\n"
+    "\t[--refresh]\n"
+@@ -731,7 +732,8 @@ xx(vgchange,
+    addtag_ARG, alloc_ARG, allocation_ARG, autobackup_ARG, available_ARG,
+    clustered_ARG, deltag_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
+    logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG, noudevsync_ARG,
+-   partial_ARG, physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
++   metadatacopies_ARG, vgmetadatacopies_ARG, partial_ARG,
++   physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
+    resizable_ARG, sysinit_ARG, test_ARG, uuid_ARG)
+ 
+ xx(vgck,
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 40f64eb..12c0ec9 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -525,6 +525,45 @@ static int _vgchange_refresh(struct cmd_context *cmd, struct volume_group *vg)
+ 	return ECMD_PROCESSED;
  }
  
-+static unsigned _mda_locns_match_raw(struct metadata_area *mda1,
-+				     struct metadata_area *mda2)
++static int _vgchange_metadata_copies(struct cmd_context *cmd,
++				     struct volume_group *vg)
 +{
-+	struct mda_context *mda1c = (struct mda_context *) mda1->metadata_locn;
-+	struct mda_context *mda2c = (struct mda_context *) mda2->metadata_locn;
++	uint32_t value;
 +
-+	if ((mda1c->area.dev == mda2c->area.dev) &&
-+	    (mda1c->area.start == mda2c->area.start) &&
-+	    (mda1c->area.size == mda2c->area.size))
-+		return 1;
++	if (arg_count(cmd, vgmetadatacopies_ARG))
++		value = arg_uint_value(cmd, vgmetadatacopies_ARG,
++			DEFAULT_VGMETADATACOPIES);
++	else if (arg_count(cmd, metadatacopies_ARG))
++		value = arg_uint_value(cmd, metadatacopies_ARG,
++			DEFAULT_VGMETADATACOPIES);
++	if (value == vg_mda_copies(vg)) {
++		log_error("Metadata copies of VG %s is already %u",
++			  vg->name, value);
++		return ECMD_PROCESSED;
++	}
 +
-+	return 0;
++	if (!archive(vg)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	if (!vg_set_mda_copies(vg, value)) {
++		stack;
++		return EINVALID_CMD_LINE;
++	}
++
++	if (!vg_write(vg) || !vg_commit(vg)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	backup(vg);
++
++	log_print("Volume group \"%s\" successfully changed", vg->name);
++
++	return ECMD_PROCESSED;
 +}
 +
- /*
-  * For circular region between region_start and region_start + region_size,
-  * back up one SECTOR_SIZE from 'region_ptr' and return the value.
-@@ -1732,6 +1746,7 @@
- 	.mda_total_sectors = _mda_total_sectors_raw,
- 	.mda_in_vg = _mda_in_vg_raw,
- 	.pv_analyze_mda = _pv_analyze_mda_raw,
-+	.mda_locns_match = _mda_locns_match_raw
- };
+ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 			   struct volume_group *vg,
+ 			   void *handle __attribute((unused)))
+@@ -593,6 +632,10 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 	else if (arg_count(cmd, refresh_ARG))
+ 		r = _vgchange_refresh(cmd, vg);
  
- /* pvmetadatasize in sectors */
---- LVM2/lib/metadata/metadata.c	2010/06/28 20:30:14	1.347
-+++ LVM2/lib/metadata/metadata.c	2010/06/28 20:31:38	1.348
-@@ -3855,6 +3855,36 @@
- 	return pv_field(pv, pe_alloc_count);
++	else if (arg_count(cmd, vgmetadatacopies_ARG) ||
++		 arg_count(cmd, metadatacopies_ARG))
++		r = _vgchange_metadata_copies(cmd, vg);
++
+ 	return r;
  }
  
-+/*
-+ * This function provides a way to answer the question on a format specific
-+ * basis - does the format specfic context of these two metadata areas
-+ * match?
-+ *
-+ * A metatdata_area is defined to be independent of the underlying context.
-+ * This has the benefit that we can use the same abstraction to read disks
-+ * (see _metadata_text_raw_ops) or files (see _metadata_text_file_ops).
-+ * However, one downside is there is no format-independent way to determine
-+ * whether a given metadata_area is attached to a specific device - in fact,
-+ * it may not be attached to a device at all.
-+ *
-+ * Thus, LVM is structured such that an mda is not a member of struct
-+ * physical_volume.  The location of the mda depends on whether
-+ * the PV is in a volume group.  A PV not in a VG has an mda on the
-+ * 'info->mda' list in lvmcache, while a PV in a VG has an mda on
-+ * the vg->fid->metadata_areas list.  For further details, see _vg_read(),
-+ * and the sequence of creating the format_instance with fid->metadata_areas
-+ * list, as well as the construction of the VG, with list of PVs (comes
-+ * after the construction of the fid and list of mdas).
-+ */
-+unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2)
-+{
-+	if (!mda1->ops->mda_locns_match || !mda2->ops->mda_locns_match ||
-+	    mda1->ops->mda_locns_match != mda2->ops->mda_locns_match)
-+		return 0;
-+
-+	return mda1->ops->mda_locns_match(mda1, mda2);
-+}
-+
- unsigned mda_is_ignored(struct metadata_area *mda)
- {
- 	return (mda->flags & MDA_IGNORED);
---- LVM2/lib/metadata/metadata.h	2010/06/28 20:30:14	1.206
-+++ LVM2/lib/metadata/metadata.h	2010/06/28 20:31:38	1.207
-@@ -156,6 +156,12 @@
- 	int (*pv_analyze_mda) (const struct format_type * fmt,
- 			       struct metadata_area *mda);
+@@ -606,10 +649,12 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
+ 	     arg_count(cmd, physicalextentsize_ARG) +
+ 	     arg_count(cmd, clustered_ARG) + arg_count(cmd, alloc_ARG) +
+ 	     arg_count(cmd, monitor_ARG) + arg_count(cmd, poll_ARG) +
+-	     arg_count(cmd, refresh_ARG))) {
++	     arg_count(cmd, refresh_ARG) + arg_count(cmd, metadatacopies_ARG) +
++	     arg_count(cmd, vgmetadatacopies_ARG))) {
+ 		log_error("Need 1 or more of -a, -c, -l, -p, -s, -x, "
+ 			  "--refresh, --uuid, --alloc, --addtag, --deltag, "
+-			  "--monitor or --poll");
++			  "--monitor, --poll, --vgmetadatacopies or "
++			  "--metadatacopies");
+ 		return EINVALID_CMD_LINE;
+ 	}
  
-+	/*
-+	 * Do these two metadata_areas match with respect to their underlying
-+	 * location?
-+	 */
-+	unsigned (*mda_locns_match)(struct metadata_area *mda1,
-+				    struct metadata_area *mda2);
- };
- 
- #define MDA_IGNORED 0x00000001
-@@ -169,6 +175,7 @@
- 
- unsigned mda_is_ignored(struct metadata_area *mda);
- void mda_set_ignored(struct metadata_area *mda, int value);
-+unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2);
- 
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+-- 
+1.6.0.6
 
 
