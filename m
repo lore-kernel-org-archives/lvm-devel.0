@@ -1,70 +1,77 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:39:40 -0000
-Subject: LVM2 test/t-vgcreate-usage.sh tools/lvmcmdline.c
-Message-ID: <20100628203940.20665.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:53:00 -0400
+Subject: [PATCH 29/38] Set vg_mda_copies when pvchange --metadataignore is given.
+In-Reply-To: <1277520789-6808-29-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-30-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:39:39
+When a user explicitly sets a new mda ignore value for a PV, we
+should update vg_mda_copies accordingly.  When the VG is written
+out, the user would not want the new ignore state to get lost as
+a result of the metadata balancing policy.
 
-Modified files:
-	test           : t-vgcreate-usage.sh 
-	tools          : lvmcmdline.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/pvchange.c |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
 
-Log message:
-	Ensure --metadatacopies parameter gets interpreted based on command.
-	
-	Now that we have both --pvmetadatacopies and --vgmetadatacopies,
-	we need to make sure --metadatacopies gets interpreted correctly.
-	
-	For pv commands, --metadatacopies should imply --pvmetadatacopies,
-	and for vg commands, --vgmetadatacopies.
-	
-	Note: this will change the behavior of vgcreate with --metadatacopies
-	to be a synonym for --vgmetadatacopies.  Previously, --metadatacopies
-	would apply to any PVs given with vgcreate that needed an implicit
-	pvcreate.  As a result, one small change is needed to one of the nightly
-	tests - t-vgcreate-usage.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgcreate-usage.sh.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
-
---- LVM2/test/t-vgcreate-usage.sh	2010/05/12 10:08:36	1.15
-+++ LVM2/test/t-vgcreate-usage.sh	2010/06/28 20:39:39	1.16
-@@ -115,7 +115,7 @@
-     vgremove -f $vg
-     pvremove -f $dev1
- done
--not vgcreate -c n --metadatacopies 0 $vg $dev1
-+not vgcreate -c n --pvmetadatacopies 0 $vg $dev1
- pvcreate --metadatacopies 1 $dev2
- vgcreate -c n --pvmetadatacopies 0 $vg $dev1 $dev2
- check_pv_field_ $dev1 pv_mda_count 0
---- LVM2/tools/lvmcmdline.c	2010/05/06 11:15:56	1.122
-+++ LVM2/tools/lvmcmdline.c	2010/06/28 20:39:39	1.123
-@@ -827,8 +827,13 @@
- 	if (!_merge_synonym(cmd, resizable_ARG, resizeable_ARG) ||
- 	    !_merge_synonym(cmd, allocation_ARG, allocatable_ARG) ||
- 	    !_merge_synonym(cmd, allocation_ARG, resizeable_ARG) ||
--	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG) ||
--	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG))
-+	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG))
-+		return EINVALID_CMD_LINE;
-+
-+	if ((!strncmp(cmd->command->name, "pv", 2) &&
-+	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG)) ||
-+	    (!strncmp(cmd->command->name, "vg", 2) &&
-+	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
- 		return EINVALID_CMD_LINE;
- 
- 	/* Zero indicates success */
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index 2298851..7b956fa 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -147,6 +147,18 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		if (!pv_mda_set_ignored(pv, mda_ignore)) {
+ 			goto out;
+ 		}
++		/*
++		 * Update vg_mda_copies based on the mdas in this PV.
++		 * This is most likely what the user would expect - if they
++		 * specify a specific PV to be ignored/un-ignored, they will
++		 * most likely not want LVM to turn around and change the
++		 * ignore / un-ignore value when it writes the VG to disk.
++		 * This does not guarantee this PV's ignore bits will be
++		 * preserved in future operations.
++		 */
++		if (!is_orphan(pv) && vg_mda_copies(vg)) {
++			vg_set_mda_copies(vg, vg_mda_used_count(vg));
++		}
+ 	} else {
+ 		/* --uuid: Change PV ID randomly */
+ 		if (!id_create(&pv->id)) {
+-- 
+1.6.0.6
 
 
