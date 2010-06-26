@@ -1,46 +1,100 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Jun 2010 22:22:00 -0000
-Subject: LVM2/test t-metadata-balance.sh
-Message-ID: <20100630222200.4695.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:53:05 -0400
+Subject: [PATCH 34/38] Add --vgmetadatacopies to vgsplit man page and command.
+In-Reply-To: <1277520789-6808-34-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-30-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-31-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-32-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-33-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-34-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-35-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-30 22:22:00
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/commands.h |    3 ++-
+ tools/vgsplit.c  |    6 ++++--
+ 2 files changed, 6 insertions(+), 3 deletions(-)
 
-Modified files:
-	test           : t-metadata-balance.sh 
-
-Log message:
-	Update metadata-balance test for --vgmetadatacopies 0.
-	
-	Should be equivalent to "unmanaged".
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-metadata-balance.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-
---- LVM2/test/t-metadata-balance.sh	2010/06/28 20:40:27	1.2
-+++ LVM2/test/t-metadata-balance.sh	2010/06/30 22:22:00	1.3
-@@ -126,10 +126,13 @@
- 	check_vg_field_ $vg vg_mda_count $(($mdacp * 4))
- 	check_vg_field_ $vg vg_mda_copies unmanaged
- 	check_vg_field_ $vg vg_mda_used_count $(($mdacp * 4))
--	echo --vgmetadatacopies 0 should be rejected for vgchange and vgcreate
--	not vgchange --vgmetadatacopies 0 $vg
-+	echo --vgmetadatacopies 0 should be unmanaged for vgchange and vgcreate
-+	vgchange --vgmetadatacopies 0 $vg
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	vgremove -f $vg
-+	vgcreate -c n --vgmetadatacopies 0 "$vg" $dev1 $dev2 $dev4 $dev5
-+	check_vg_field_ $vg vg_mda_copies unmanaged
- 	vgremove -f $vg
--	not vgcreate -c n --vgmetadatacopies 0 "$vg" $dev1 $dev2 $dev4 $dev5
- done
+diff --git a/tools/commands.h b/tools/commands.h
+index 8f5ff3a..aa012a7 100644
+--- a/tools/commands.h
++++ b/tools/commands.h
+@@ -1007,6 +1007,7 @@ xx(vgsplit,
+    "\t[-h|--help] " "\n"
+    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
+    "\t[-M|--metadatatype 1|2] " "\n"
++   "\t[--[vg]metadatacopies #copies] " "\n"
+    "\t[-n|--name LogicalVolumeName]\n"
+    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
+    "\t[-t|--test] " "\n"
+@@ -1017,7 +1018,7 @@ xx(vgsplit,
  
- echo Test vgextend / vgreduce with vgmetadatacopies
+    alloc_ARG, autobackup_ARG, clustered_ARG,
+    maxlogicalvolumes_ARG, maxphysicalvolumes_ARG,
+-   metadatatype_ARG, name_ARG, test_ARG)
++   metadatatype_ARG, vgmetadatacopies_ARG, name_ARG, test_ARG)
+ 
+ xx(version,
+    "Display software and driver version information",
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 1fa3d00..988c334 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -272,7 +272,8 @@ static int new_vg_option_specified(struct cmd_context *cmd)
+ 	return(arg_count(cmd, clustered_ARG) ||
+ 	       arg_count(cmd, alloc_ARG) ||
+ 	       arg_count(cmd, maxphysicalvolumes_ARG) ||
+-	       arg_count(cmd, maxlogicalvolumes_ARG));
++	       arg_count(cmd, maxlogicalvolumes_ARG) ||
++	       arg_count(cmd, vgmetadatacopies_ARG));
+ }
+ 
+ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+@@ -382,7 +383,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		    !vg_set_max_lv(vg_to, vp_new.max_lv) ||
+ 		    !vg_set_max_pv(vg_to, vp_new.max_pv) ||
+ 		    !vg_set_alloc_policy(vg_to, vp_new.alloc) ||
+-		    !vg_set_clustered(vg_to, vp_new.clustered))
++		    !vg_set_clustered(vg_to, vp_new.clustered) ||
++		    !vg_set_mda_copies(vg_to, vp_new.metadata_copies))
+ 			goto_bad;
+ 	}
+ 
+-- 
+1.6.0.6
 
 
