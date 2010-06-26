@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:53:05 -0400
-Subject: [PATCH 34/38] Add --vgmetadatacopies to vgsplit man page and command.
-In-Reply-To: <1277520789-6808-34-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:53:06 -0400
+Subject: [PATCH 35/38] Ensure --metadatacopies parameter gets interpreted based on command.
+In-Reply-To: <1277520789-6808-35-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
@@ -36,64 +36,65 @@ References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-32-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-33-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-34-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-35-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-35-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-36-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Now that we have both --pvmetadatacopies and --vgmetadatacopies,
+we need to make sure --metadatacopies gets interpreted correctly.
+
+For pv commands, --metadatacopies should imply --pvmetadatacopies,
+and for vg commands, --vgmetadatacopies.
+
+Note: this will change the behavior of vgcreate with --metadatacopies
+to be a synonym for --vgmetadatacopies.  Previously, --metadatacopies
+would apply to any PVs given with vgcreate that needed an implicit
+pvcreate.  As a result, one small change is needed to one of the nightly
+tests - t-vgcreate-usage.
+
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/commands.h |    3 ++-
- tools/vgsplit.c  |    6 ++++--
- 2 files changed, 6 insertions(+), 3 deletions(-)
+ test/t-vgcreate-usage.sh |    2 +-
+ tools/lvmcmdline.c       |    9 +++++++--
+ 2 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 8f5ff3a..aa012a7 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -1007,6 +1007,7 @@ xx(vgsplit,
-    "\t[-h|--help] " "\n"
-    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
-    "\t[-M|--metadatatype 1|2] " "\n"
-+   "\t[--[vg]metadatacopies #copies] " "\n"
-    "\t[-n|--name LogicalVolumeName]\n"
-    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
-    "\t[-t|--test] " "\n"
-@@ -1017,7 +1018,7 @@ xx(vgsplit,
+diff --git a/test/t-vgcreate-usage.sh b/test/t-vgcreate-usage.sh
+index ffdad53..0253cc3 100755
+--- a/test/t-vgcreate-usage.sh
++++ b/test/t-vgcreate-usage.sh
+@@ -115,7 +115,7 @@ do
+     vgremove -f $vg
+     pvremove -f $dev1
+ done
+-not vgcreate -c n --metadatacopies 0 $vg $dev1
++not vgcreate -c n --pvmetadatacopies 0 $vg $dev1
+ pvcreate --metadatacopies 1 $dev2
+ vgcreate -c n --pvmetadatacopies 0 $vg $dev1 $dev2
+ check_pv_field_ $dev1 pv_mda_count 0
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 6a5479d..45762b5 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -827,8 +827,13 @@ static int _get_settings(struct cmd_context *cmd)
+ 	if (!_merge_synonym(cmd, resizable_ARG, resizeable_ARG) ||
+ 	    !_merge_synonym(cmd, allocation_ARG, allocatable_ARG) ||
+ 	    !_merge_synonym(cmd, allocation_ARG, resizeable_ARG) ||
+-	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG) ||
+-	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG))
++	    !_merge_synonym(cmd, virtualoriginsize_ARG, virtualsize_ARG))
++		return EINVALID_CMD_LINE;
++
++	if ((!strncmp(cmd->command->name, "pv", 2) &&
++	    !_merge_synonym(cmd, metadatacopies_ARG, pvmetadatacopies_ARG)) ||
++	    (!strncmp(cmd->command->name, "vg", 2) &&
++	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
+ 		return EINVALID_CMD_LINE;
  
-    alloc_ARG, autobackup_ARG, clustered_ARG,
-    maxlogicalvolumes_ARG, maxphysicalvolumes_ARG,
--   metadatatype_ARG, name_ARG, test_ARG)
-+   metadatatype_ARG, vgmetadatacopies_ARG, name_ARG, test_ARG)
- 
- xx(version,
-    "Display software and driver version information",
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 1fa3d00..988c334 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -272,7 +272,8 @@ static int new_vg_option_specified(struct cmd_context *cmd)
- 	return(arg_count(cmd, clustered_ARG) ||
- 	       arg_count(cmd, alloc_ARG) ||
- 	       arg_count(cmd, maxphysicalvolumes_ARG) ||
--	       arg_count(cmd, maxlogicalvolumes_ARG));
-+	       arg_count(cmd, maxlogicalvolumes_ARG) ||
-+	       arg_count(cmd, vgmetadatacopies_ARG));
- }
- 
- int vgsplit(struct cmd_context *cmd, int argc, char **argv)
-@@ -382,7 +383,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
- 		    !vg_set_max_lv(vg_to, vp_new.max_lv) ||
- 		    !vg_set_max_pv(vg_to, vp_new.max_pv) ||
- 		    !vg_set_alloc_policy(vg_to, vp_new.alloc) ||
--		    !vg_set_clustered(vg_to, vp_new.clustered))
-+		    !vg_set_clustered(vg_to, vp_new.clustered) ||
-+		    !vg_set_mda_copies(vg_to, vp_new.metadata_copies))
- 			goto_bad;
- 	}
- 
+ 	/* Zero indicates success */
 -- 
 1.6.0.6
 
