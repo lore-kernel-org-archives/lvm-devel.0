@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:44 -0400
-Subject: [PATCH 13/38] Add --metadataignore to pvchange, allowing for ignoring of metadata areas.
-In-Reply-To: <1277520789-6808-13-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:45 -0400
+Subject: [PATCH 14/38] Update pvchange, pvs and vgs man pages for metadata ignore.
+In-Reply-To: <1277520789-6808-14-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
@@ -15,123 +15,81 @@ References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-15-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch just modifies pvchange to call the underlying ignore
-functions for mdas.  Ensure special cases do not reflect changes
-in metadata (PVs with 0 mdas, setting ignored when already ignored,
-clearing ignored when not ignored).
+Explain --metadataignore argument to pvchange, add new fields to pvs / vgs.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- tools/args.h     |    1 +
- tools/commands.h |    3 ++-
- tools/pvchange.c |   33 ++++++++++++++++++++++++++++++++-
- 3 files changed, 35 insertions(+), 2 deletions(-)
+ man/pvchange.8.in |   10 +++++++++-
+ man/pvs.8.in      |    3 ++-
+ man/vgs.8.in      |    2 +-
+ 3 files changed, 12 insertions(+), 3 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 76146ee..d343689 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -25,6 +25,7 @@ arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
-+arg(metadataignore_ARG, '\0', "metadataignore", yes_no_arg, 0)
- arg(restorefile_ARG, '\0', "restorefile", string_arg, 0)
- arg(labelsector_ARG, '\0', "labelsector", int_arg, 0)
- arg(driverloaded_ARG, '\0', "driverloaded", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index e33cadc..6d8d2c0 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -455,6 +455,7 @@ xx(pvchange,
-    "\t[-t|--test]\n"
-    "\t[-u|--uuid]\n"
-    "\t[-x|--allocatable y|n]\n"
-+   "\t[--metadataignore y|n]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--addtag Tag]\n"
-    "\t[--deltag Tag]\n"
-@@ -462,7 +463,7 @@ xx(pvchange,
-    "\t[PhysicalVolumePath...]\n",
- 
-    all_ARG, allocatable_ARG, allocation_ARG, autobackup_ARG, deltag_ARG,
--   addtag_ARG, test_ARG, uuid_ARG)
-+   addtag_ARG, metadataignore_ARG, test_ARG, uuid_ARG)
- 
- xx(pvresize,
-    "Resize physical volume(s)",
-diff --git a/tools/pvchange.c b/tools/pvchange.c
-index 5486b73..2298851 100644
---- a/tools/pvchange.c
-+++ b/tools/pvchange.c
-@@ -34,6 +34,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 	int allocatable = 0;
- 	int tagarg = 0;
- 	int r = 0;
-+	int mda_ignore = 0;
- 
- 	if (arg_count(cmd, addtag_ARG))
- 		tagarg = addtag_ARG;
-@@ -43,6 +44,9 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 	if (arg_count(cmd, allocatable_ARG))
- 		allocatable = !strcmp(arg_str_value(cmd, allocatable_ARG, "n"),
- 				      "y");
-+	if (arg_count(cmd, metadataignore_ARG))
-+		mda_ignore = !strcmp(arg_str_value(cmd, metadataignore_ARG, "n"),
-+				      "y");
- 	else if (tagarg && !(tag = arg_str_value(cmd, tagarg, NULL))) {
- 		log_error("Failed to get tag");
- 		return 0;
-@@ -117,6 +121,32 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
- 				goto out;
- 			}
- 		}
-+	} else if (arg_count(cmd, metadataignore_ARG)) {
-+		if (mda_ignore && (pv_mda_used_count(pv) == 0)) {
-+			log_error("Physical volume \"%s\" metadata already "
-+				  "ignored", pv_name);
-+			goto out;
-+		}
-+		if (!mda_ignore && (pv_mda_used_count(pv) == pv_mda_count(pv))) {
-+			log_error("Physical volume \"%s\" metadata already "
-+				  "not ignored", pv_name);
-+			goto out;
-+		}
-+		if (!pv_mda_count(pv)) {
-+			log_error("Physical volume \"%s\" has no metadata "
-+				  "areas ", pv_name);
-+			goto out;
-+		}
-+		if (mda_ignore) {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata ignored", pv_name);
-+		} else {
-+			log_verbose("Setting physical volume \"%s\" "
-+				    "metadata not ignored", pv_name);
-+		}
-+		if (!pv_mda_set_ignored(pv, mda_ignore)) {
-+			goto out;
-+		}
- 	} else {
- 		/* --uuid: Change PV ID randomly */
- 		if (!id_create(&pv->id)) {
-@@ -187,7 +217,8 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
- 	struct str_list *sll;
- 
- 	if (arg_count(cmd, allocatable_ARG) + arg_count(cmd, addtag_ARG) +
--	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) != 1) {
-+	    arg_count(cmd, deltag_ARG) + arg_count(cmd, uuid_ARG) +
-+	    arg_count(cmd, metadataignore_ARG) != 1) {
- 		log_error("Please give exactly one option of -x, -uuid, "
- 			  "--addtag or --deltag");
- 		return EINVALID_CMD_LINE;
+diff --git a/man/pvchange.8.in b/man/pvchange.8.in
+index 00c94a6..7585306 100644
+--- a/man/pvchange.8.in
++++ b/man/pvchange.8.in
+@@ -6,6 +6,7 @@ pvchange \- change attributes of a physical volume
+ [\-\-addtag Tag]
+ [\-A|\-\-autobackup y|n] [\-d|\-\-debug] 
+ [\-\-deltag Tag]
++[\-\-metadataignore y|n]
+ [\-h|\-?|\-\-help]
+ [\-t|\-\-test]
+ [\-v|\-\-verbose] [\-a|\-\-all] [\-x|\-\-allocatable y|n]
+@@ -25,10 +26,17 @@ Generate new random UUID for specified physical volumes.
+ .TP
+ .I \-x, \-\-allocatable y|n
+ Enable or disable allocation of physical extents on this physical volume.
++.TP
++.I \-\-metadataignore y|n
++Ingore or un-ignore metadata areas on this physical volume.  If metadata
++areas on a physical volume are ignored, LVM will treat the physical volume
++as though it has been created with \fB\-\-pvmetadatacopies\fP of 0.  LVM
++operations that would normally result in reading or writing of metadata
++will skip over any ignored metadata areas on physical volumes.
+ .SH Example
+ "pvchange -x n /dev/sdk1" disallows the allocation of physical extents
+ on this physical volume (possibly because of disk errors, or because it will
+ be removed after freeing it.
+ .SH SEE ALSO
+-.BR lvm (8), 
++.BR lvm (8),
+ .BR pvcreate (8)
+diff --git a/man/pvs.8.in b/man/pvs.8.in
+index fe00d2a..55892cc 100644
+--- a/man/pvs.8.in
++++ b/man/pvs.8.in
+@@ -54,7 +54,8 @@ Use \fb-o help\fP to view the full list of columns available.
+ .IP
+ Column names include: pv_fmt, pv_uuid, dev_size, pv_name, pv_mda_free,
+ pv_mda_size, pe_start, pv_size, pv_free, pv_used, pv_attr, pv_pe_count,
+-pv_pe_alloc_count, pv_tags, pv_mda_count, pvseg_start, and pvseg_size.
++pv_pe_alloc_count, pv_tags, pv_mda_count, pv_mda_count_ignored,
++pvseg_start, and pvseg_size.
+ .IP
+ With --segments, any "pvseg_" prefixes are optional; otherwise any
+ "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
+diff --git a/man/vgs.8.in b/man/vgs.8.in
+index b22d08b..7475f77 100644
+--- a/man/vgs.8.in
++++ b/man/vgs.8.in
+@@ -49,7 +49,7 @@ Use \fb-o help\fP to view the full list of columns available.
+ Column names include: vg_fmt, vg_uuid, vg_name, vg_attr, vg_size, vg_free,
+ vg_sysid, vg_extent_size, vg_extent_count, vg_free_count, max_lv, max_pv,
+ pv_count, lv_count, snap_count, vg_seqno, vg_tags, vg_mda_count, vg_mda_free,
+-and vg_mda_size.
++and vg_mda_size, vg_mda_count_ignored.
+ .IP
+ Any "vg_" prefixes are optional.  Columns mentioned in either \fBpvs (8)\fP 
+ or \fBlvs (8)\fP can also be chosen, but columns cannot be taken from both
 -- 
 1.6.0.6
 
