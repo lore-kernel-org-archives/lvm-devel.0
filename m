@@ -1,7 +1,7 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:48 -0400
-Subject: [PATCH 17/38] Use mdas_empty_or_ignored() in place of checks for empty mda list.
-In-Reply-To: <1277520789-6808-17-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:49 -0400
+Subject: [PATCH 18/38] Update _vg_read and _text_create_text_instance to use fid_add_mda[s].
+In-Reply-To: <1277520789-6808-18-git-send-email-dwysocha@redhat.com>
 References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
@@ -19,117 +19,118 @@ References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
 	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-19-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-With the addition of ignored mdas, we replace all checks for an empty
-mda list with a new function to look for either an empty mda list or
-ignored mdas.
+When we are constructing the vg, we may need to adjust the list of
+metadata_areas if there are ignored mdas.  At label read time, we
+do not read the metadata of ignored mdas, and as a result, they do
+not get placed on vg->fid->metadata_areas inside _text_create_text_instance
+since lvmcache does not have these areas attached to vginfo->infos.
+However, when we're checking the pvids inside _vg_read, after having
+read another metadata area from another PV, we do have the opportunity
+to update the metadata_area and metadata_areas_ignored lists based
+on the read metadata_area.  We need accurate mda lists for the reporting
+functions that count the ignored mdas, as well as general correctness
+of mda balancing.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/cache/lvmcache.c    |    3 ++-
- lib/metadata/metadata.c |   31 ++++++++++++++++++-------------
- 2 files changed, 20 insertions(+), 14 deletions(-)
+ lib/format_text/format-text.c |   20 +++++++-------------
+ lib/metadata/metadata.c       |    6 +++++-
+ 2 files changed, 12 insertions(+), 14 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 213f3cf..a7b11cc 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1197,7 +1197,8 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 6428703..01c286e 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1892,11 +1892,11 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ {
+ 	struct format_instance *fid;
+ 	struct text_fid_context *fidtc;
+-	struct metadata_area *mda, *mda_new;
++	struct metadata_area *mda;
+ 	struct mda_context *mdac;
+ 	struct dir_list *dl;
+ 	struct raw_list *rl;
+-	struct dm_list *dir_list, *raw_list, *mdas;
++	struct dm_list *dir_list, *raw_list;
+ 	char path[PATH_MAX];
+ 	struct lvmcache_vginfo *vginfo;
+ 	struct lvmcache_info *info;
+@@ -1924,7 +1924,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 			return_NULL;
+ 		mda->ops = &_metadata_text_file_backup_ops;
+ 		mda->metadata_locn = context;
+-		dm_list_add(&fid->metadata_areas, &mda->list);
++		fid_add_mda(fid, mda);
+ 	} else {
+ 		dir_list = &((struct mda_lists *) fmt->private)->dirs;
+ 
+@@ -1941,7 +1941,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 				return_NULL;
+ 			mda->ops = &_metadata_text_file_ops;
+ 			mda->metadata_locn = context;
+-			dm_list_add(&fid->metadata_areas, &mda->list);
++			fid_add_mda(fid, mda);
+ 		}
+ 
+ 		raw_list = &((struct mda_lists *) fmt->private)->raws;
+@@ -1961,7 +1961,7 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 			memcpy(&mdac->area, &rl->dev_area, sizeof(mdac->area));
+ 			mda->ops = &_metadata_text_raw_ops;
+ 			/* FIXME MISTAKE? mda->metadata_locn = context; */
+-			dm_list_add(&fid->metadata_areas, &mda->list);
++			fid_add_mda(fid, mda);
+ 		}
+ 
+ 		/* Scan PVs in VG for any further MDAs */
+@@ -1969,14 +1969,8 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 		if (!(vginfo = vginfo_from_vgname(vgname, vgid)))
+ 			goto_out;
+ 		dm_list_iterate_items(info, &vginfo->infos) {
+-			mdas = &info->mdas;
+-			dm_list_iterate_items(mda, mdas) {
+-				/* FIXME Check it holds this VG */
+-				mda_new = mda_copy(fmt->cmd->mem, mda);
+-				if (!mda_new)
+-					return_NULL;
+-				dm_list_add(&fid->metadata_areas, &mda_new->list);
+-			}
++			if (!fid_add_mdas(fid, &info->mdas))
++				return_NULL;
+ 		}
+ 		/* FIXME Check raw metadata area count - rescan if required */
  	}
- 
- 	/* If PV without mdas is already in a real VG, don't make it orphan */
--	if (is_orphan_vg(vgname) && info->vginfo && !dm_list_size(&info->mdas) &&
-+	if (is_orphan_vg(vgname) && info->vginfo &&
-+	    mdas_empty_or_ignored(&info->mdas) &&
- 	    !is_orphan_vg(info->vginfo->vgname) && memlock())
- 		return 1;
- 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index ee419ba..58cd2e3 100644
+index 58cd2e3..5ec78f0 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -1305,7 +1305,7 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	 * this means checking every VG by scanning every PV on the
- 	 * system.
- 	 */
--	if (pv && is_orphan(pv) && !dm_list_size(&mdas)) {
-+	if (pv && is_orphan(pv) && mdas_empty_or_ignored(&mdas)) {
- 		if (!scan_vgs_for_pvs(cmd))
- 			return_0;
- 		pv = pv_read(cmd, name, NULL, NULL, 0, 0);
-@@ -1798,7 +1798,7 @@ static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
- 		return NULL;
- 	}
- 
--	if (is_orphan_vg(pv->vg_name) && !dm_list_size(&mdas)) {
-+	if (is_orphan_vg(pv->vg_name) && mdas_empty_or_ignored(&mdas)) {
- 		/* If a PV has no MDAs - need to search all VGs for it */
- 		if (!scan_vgs_for_pvs(cmd))
- 			return_NULL;
-@@ -2722,8 +2722,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	/* Ensure every PV in the VG was in the cache */
+@@ -2723,7 +2723,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
  	if (correct_vg) {
  		/*
--		 * If the VG has PVs without mdas, they may still be
--		 * orphans in the cache: update the cache state here.
-+		 * If the VG has PVs without mdas, or ignored mdas, they may
-+		 * still be orphans in the cache: update the cache state here.
+ 		 * If the VG has PVs without mdas, or ignored mdas, they may
+-		 * still be orphans in the cache: update the cache state here.
++		 * still be orphans in the cache: update the cache state here,
++		 * and update the metadata lists in the vg.
  		 */
  		if (!inconsistent &&
  		    dm_list_size(&correct_vg->pvs) > dm_list_size(pvids)) {
-@@ -2738,11 +2738,12 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 
- 				/*
- 				 * PV not marked as belonging to this VG in cache.
--				 * Check it's an orphan without metadata area.
-+				 * Check it's an orphan without metadata area
-+				 * not ignored.
- 				 */
- 				if (!(info = info_from_pvid(pvl->pv->dev->pvid, 1)) ||
- 				   !info->vginfo || !is_orphan_vg(info->vginfo->vgname) ||
--				   dm_list_size(&info->mdas)) {
-+				   !mdas_empty_or_ignored(&info->mdas)) {
+@@ -2747,6 +2748,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
  					inconsistent_pvs = 1;
  					break;
  				}
-@@ -3128,20 +3129,24 @@ const char *find_vgname_from_pvid(struct cmd_context *cmd,
- 			return_NULL;
- 		}
- 		/*
--		 * If an orphan PV has no MDAs it may appear to be an
--		 * orphan until the metadata is read off another PV in
--		 * the same VG.  Detecting this means checking every VG
--		 * by scanning every PV on the system.
-+		 * If an orphan PV has no MDAs, or it has MDAs but the
-+		 * MDA is ignored, it may appear to be an orphan until
-+		 * the metadata is read off another PV in the same VG.
-+		 * Detecting this means checking every VG by scanning
-+		 * every PV on the system.
- 		 */
--		if (!dm_list_size(&info->mdas)) {
-+		if (mdas_empty_or_ignored(&info->mdas)) {
- 			if (!scan_vgs_for_pvs(cmd)) {
- 				log_error("Rescan for PVs without "
- 					  "metadata areas failed.");
- 				return NULL;
++				if (dm_list_size(&info->mdas) &&
++				    !fid_add_mdas(fid, &info->mdas))
++					return_NULL;
  			}
-+			/*
-+			 * Ask lvmcache again - we may have a non-orphan
-+			 * name now
-+			 */
-+			vgname = lvmcache_vgname_from_pvid(cmd, pvid);
- 		}
--		/* Ask lvmcache again - we may have a non-orphan name now */
--		vgname = lvmcache_vgname_from_pvid(cmd, pvid);
- 	}
- 	return vgname;
- }
+ 
+ 			/* If the check passed, let's update VG and recalculate pvids */
 -- 
 1.6.0.6
 
