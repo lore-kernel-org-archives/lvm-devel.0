@@ -1,42 +1,42 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:31 -0400
-Subject: [PATCH 00/38] Add full metadata balancing support, v6.
-Message-ID: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:32 -0400
+Subject: [PATCH 01/38] Change 'filler' to 'flags' in on-disk 'raw_locn' structure.
+In-Reply-To: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset is a sixth (and hopefully last) round of the metadata
-balancing support, makes minor revisions and builds on the fifth
-round of patches submitted (6/21/2010).  There are still some
-FIXMEs in the code but this is now a complete patchset for the
-metadata balance feature.
+Future patches will make use of a specific flag in the on-disk 'raw_locn'
+structure to enable/disable metadata areas, and facilitate metadata
+balancing.
 
-Changes from the fifth round are spread around but mostly start
-around patch 22 and involve the vg support:
-1) vgmetadatacopies valid values.
-On the commandline of vgcreate/vgchange, we will accept a
-non-zero value, "all", and "unmanaged".  See the vgcreate,
-vgchange, and lvm.conf man pages for a full description.
-The default value of "unmanaged" means LVM will not attempt
-to change the 'metadataignore' flags.
-2) vgs and pvs report fields.
-The fields in the previous patches were called 'pv_mda_count_ignored'
-and 'vg_mda_count_ignored'.  This has been changed to reverse
-logic of 'vg_mda_used_count' and 'pv_mda_used_count', which counts
-the number of mdas in use (not ignored).  This is most likely what
-users would care about.
-3) Fixed interaction with vgmetadatacopies and pvchange --metadataignore.
-Users may want to specify which PVs they want to ignore mdas.  If they
-do this, the value of vgmetadatacopies stored on disk is updated to
-vg_mda_used_count, that is, if the mdas are being unignored, the
-count of in-use mdas is increased, and if they are being ignored,
-the count is reduced.
-4) More test cases added.
+Note that 'filler' is always set to '0' (see add_mda() - memset),
+so use of this area as a non-zero flags field is a safe way to
+provide future code features.
 
-Passes full test suite, and I manually checked a few values with
-lvm.conf, including "unmanaged" and a numeric value for vgmetadatacopies.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/format_text/layout.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index b023e92..444a500 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -51,7 +51,7 @@ struct raw_locn {
+ 	uint64_t offset;	/* Offset in bytes to start sector */
+ 	uint64_t size;		/* Bytes */
+ 	uint32_t checksum;
+-	uint32_t filler;
++	uint32_t flags;
+ } __attribute__ ((packed));
+ 
+ /* On disk */
+-- 
+1.6.0.6
 
 
