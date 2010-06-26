@@ -1,40 +1,79 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Jun 2010 19:55:44 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20100630195544.29141.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:53:04 -0400
+Subject: [PATCH 33/38] Update _vgmerge_single() to move fid->metadata_areas_ignored.
+In-Reply-To: <1277520789-6808-33-git-send-email-dwysocha@redhat.com>
+References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-30-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-31-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-32-git-send-email-dwysocha@redhat.com>
+	<1277520789-6808-33-git-send-email-dwysocha@redhat.com>
+Message-ID: <1277520789-6808-34-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-30 19:55:44
+When vgmerge is called we move the mdas from the source to the
+destination.  With metadata balancing we now have another mda
+list, fid->metadata_areas_ignored, so move the mdas on this list
+as well.
 
-Modified files:
-	lib/metadata   : metadata.c 
+This patch should not matter as the code is written today.  However
+we include it for completeness in the case that _vgmerge_single()
+is refactored and/or moved into a library function.
 
-Log message:
-	Check for missing_pv in vg_remove loop.
-	
-	If a pv is missing, we should just skip it rather than checking the
-	device size and failing the vgremove.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ tools/vgmerge.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.376&r2=1.377
-
---- LVM2/lib/metadata/metadata.c	2010/06/30 19:28:35	1.376
-+++ LVM2/lib/metadata/metadata.c	2010/06/30 19:55:43	1.377
-@@ -566,6 +566,9 @@
- 	/* init physical volumes */
- 	dm_list_iterate_items(pvl, &vg->removed_pvs) {
- 		pv = pvl->pv;
-+		if (is_missing_pv(pv))
-+			continue;
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 299bed7..ff74705 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -126,6 +126,12 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		dm_list_move(&vg_to->fid->metadata_areas, mdah);
+ 	}
+ 
++	while (!dm_list_empty(&vg_from->fid->metadata_areas_ignored)) {
++		struct dm_list *mdah = vg_from->fid->metadata_areas_ignored.n;
 +
- 		log_verbose("Removing physical volume \"%s\" from "
- 			    "volume group \"%s\"", pv_dev_name(pv), vg->name);
- 		pv->vg_name = vg->fid->fmt->orphan_vg_name;
++		dm_list_move(&vg_to->fid->metadata_areas_ignored, mdah);
++	}
++
+ 	vg_to->extent_count += vg_from->extent_count;
+ 	vg_to->free_count += vg_from->free_count;
+ 
+-- 
+1.6.0.6
 
 
