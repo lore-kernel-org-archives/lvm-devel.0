@@ -1,46 +1,42 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Jun 2010 18:23:11 -0000
-Subject: LVM2/tools .exported_symbols Makefile.in
-Message-ID: <20100625182311.5568.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 25 Jun 2010 22:52:31 -0400
+Subject: [PATCH 00/38] Add full metadata balancing support, v6.
+Message-ID: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-06-25 18:23:11
+This patchset is a sixth (and hopefully last) round of the metadata
+balancing support, makes minor revisions and builds on the fifth
+round of patches submitted (6/21/2010).  There are still some
+FIXMEs in the code but this is now a complete patchset for the
+metadata balance feature.
 
-Modified files:
-	tools          : .exported_symbols Makefile.in 
+Changes from the fifth round are spread around but mostly start
+around patch 22 and involve the vg support:
+1) vgmetadatacopies valid values.
+On the commandline of vgcreate/vgchange, we will accept a
+non-zero value, "all", and "unmanaged".  See the vgcreate,
+vgchange, and lvm.conf man pages for a full description.
+The default value of "unmanaged" means LVM will not attempt
+to change the 'metadataignore' flags.
+2) vgs and pvs report fields.
+The fields in the previous patches were called 'pv_mda_count_ignored'
+and 'vg_mda_count_ignored'.  This has been changed to reverse
+logic of 'vg_mda_used_count' and 'pv_mda_used_count', which counts
+the number of mdas in use (not ignored).  This is most likely what
+users would care about.
+3) Fixed interaction with vgmetadatacopies and pvchange --metadataignore.
+Users may want to specify which PVs they want to ignore mdas.  If they
+do this, the value of vgmetadatacopies stored on disk is updated to
+vg_mda_used_count, that is, if the mdas are being unignored, the
+count of in-use mdas is increased, and if they are being ignored,
+the count is reduced.
+4) More test cases added.
 
-Log message:
-	generate liblvm2cmd exported symbols too
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/.exported_symbols.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.119&r2=1.120
-
---- LVM2/tools/.exported_symbols	2004/03/26 14:51:23	1.1
-+++ LVM2/tools/.exported_symbols	2010/06/25 18:23:10	1.2
-@@ -1,5 +0,0 @@
--lvm2_init
--lvm2_run
--lvm2_log_level
--lvm2_log_fn
--lvm2_exit
---- LVM2/tools/Makefile.in	2010/06/03 13:52:21	1.119
-+++ LVM2/tools/Makefile.in	2010/06/25 18:23:10	1.120
-@@ -106,6 +106,9 @@
- 
- LVMLIBS += -ldevmapper
- 
-+EXPORTED_HEADER = $(srcdir)/lvm2cmd.h
-+EXPORTED_FN_PREFIX = lvm2
-+
- DEFS += -DLVM_SHARED_PATH=\"$(exec_prefix)/sbin/lvm\"
- 
- CFLOW_LIST = lvmcmdlib.c lvm2cmd.c
+Passes full test suite, and I manually checked a few values with
+lvm.conf, including "unmanaged" and a numeric value for vgmetadatacopies.
 
 
