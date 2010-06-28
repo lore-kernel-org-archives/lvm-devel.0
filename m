@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:37:10 -0000
-Subject: LVM2/lib/format_text export.c import_vsn1.c
-Message-ID: <20100628203710.18258.qmail@sourceware.org>
+Date: 28 Jun 2010 20:37:23 -0000
+Subject: LVM2/lib/report columns.h report.c
+Message-ID: <20100628203723.18396.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:37:10
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:37:23
 
 Modified files:
-	lib/format_text: export.c import_vsn1.c 
+	lib/report     : columns.h report.c 
 
 Log message:
-	Make vg->mda_copies persistent in on disk vg metadata.
-	
-	This patch adds the ability to read/write the vg->mda_copies values
-	from/to the vg metadata.
-	
-	If we read the VG metadata and this field does not exist, we set
-	mda_copies to the default value of 0.  Later in the code, we use
-	this special '0' value to indicate a disable of metadata balancing.
-	This should preserve existing LVM behavior and ensure metadata balancing
-	can be turned off should the need arise.
+	Add vg_mda_copies display field to 'vgs' command.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/export.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.120&r2=1.121
 
---- LVM2/lib/format_text/export.c	2010/01/07 14:45:28	1.75
-+++ LVM2/lib/format_text/export.c	2010/06/28 20:37:10	1.76
-@@ -397,6 +397,7 @@
- 		outf(f, "allocation_policy = \"%s\"",
- 		     get_alloc_string(vg->alloc));
- 	}
-+	outf(f, "metadata_copies = %u", vg->mda_copies);
+--- LVM2/lib/report/columns.h	2010/06/28 20:33:44	1.40
++++ LVM2/lib/report/columns.h	2010/06/28 20:37:23	1.41
+@@ -116,6 +116,7 @@
+ FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, "vg_mda_used_count", "Number of metadata areas in use on this VG.")
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.")
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.")
++FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, "vg_mda_copies", "Target number of in use metadata areas in the VG.")
  
- 	return 1;
+ FIELD(SEGS, seg, STR, "Type", list, 4, segtype, "segtype", "Type of LV segment.")
+ FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, "stripes", "Number of stripes or mirror legs.")
+--- LVM2/lib/report/report.c	2010/06/28 20:33:44	1.120
++++ LVM2/lib/report/report.c	2010/06/28 20:37:23	1.121
+@@ -917,6 +917,18 @@
+ 	return _uint32_disp(rh, mem, field, &count, private);
  }
---- LVM2/lib/format_text/import_vsn1.c	2010/05/05 22:37:53	1.75
-+++ LVM2/lib/format_text/import_vsn1.c	2010/06/28 20:37:10	1.76
-@@ -23,6 +23,7 @@
- #include "pv_alloc.h"
- #include "segtype.h"
- #include "text_import.h"
-+#include "defaults.h"
  
- typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
- 			   struct volume_group * vg, struct config_node * pvn,
-@@ -745,6 +746,10 @@
- 			return_0;
- 	}
- 
-+	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
-+		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
-+	}
++static int _vgmdacopies_disp(struct dm_report *rh, struct dm_pool *mem,
++				   struct dm_report_field *field,
++				   const void *data, void *private)
++{
++	const struct volume_group *vg = (const struct volume_group *) data;
++	uint32_t count;
 +
- 	/*
- 	 * The pv hash memorises the pv section names -> pv
- 	 * structures.
++	count = vg_mda_copies(vg);
++
++	return _uint32_disp(rh, mem, field, &count, private);
++}
++
+ static int _pvmdafree_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			   struct dm_report_field *field,
+ 			   const void *data, void *private)
 
 
