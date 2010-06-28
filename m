@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:30:15 -0000
-Subject: LVM2/lib format_text/text_label.c metadata/met ...
-Message-ID: <20100628203015.13340.qmail@sourceware.org>
+Date: 28 Jun 2010 20:30:31 -0000
+Subject: LVM2/lib/format_text format-text.c
+Message-ID: <20100628203031.13507.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,84 +10,102 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:30:14
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:30:31
 
 Modified files:
-	lib/format_text: text_label.c 
-	lib/metadata   : metadata.c metadata.h 
+	lib/format_text: format-text.c 
 
 Log message:
-	Add location independent flag and functions to ignore mdas.
+	Move dev_open / dev_close outside _vg_read_raw_area().
 	
-	First we add a 'flags' field to the location independent
-	metadata_area structure, and a MDA_IGNORE flag.  The
-	mda_is_ignored and mda_set_ignored functions are added to
-	manage the flag.  Adding the flag and functions gives a
-	library interface to ignore metadata areas independent of
-	the underlying location (disk, file, etc).  The location
-	specific read/write functions must then handle the specifics
-	of what this flag means to the location.
+	This refactoring moves the device open/close up one level to the caller of
+	_vg_read_raw_area().  Should be no functional change and facilitate future
+	changes related to metadata balancing.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-	Reviewed-by: Alasdair G Kergon <agk@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_label.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.346&r2=1.347
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.205&r2=1.206
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.124&r2=1.125
 
---- LVM2/lib/format_text/text_label.c	2009/12/16 19:22:12	1.27
-+++ LVM2/lib/format_text/text_label.c	2010/06/28 20:30:14	1.28
-@@ -215,6 +215,7 @@
+--- LVM2/lib/format_text/format-text.c	2010/06/28 20:29:57	1.124
++++ LVM2/lib/format_text/format-text.c	2010/06/28 20:30:30	1.125
+@@ -483,9 +483,6 @@
+ 	char *desc;
+ 	uint32_t wrap = 0;
  
- 	mdal->ops = mda_lists->raw_ops;
- 	mdal->metadata_locn = mdac;
-+	mdal->flags = 0;
+-	if (!dev_open(area->dev))
+-		return_NULL;
+-
+ 	if (!(mdah = _raw_read_mda_header(fid->fmt, area)))
+ 		goto_out;
  
- 	mdac->area.dev = dev;
- 	mdac->area.start = start;
---- LVM2/lib/metadata/metadata.c	2010/06/22 21:10:53	1.346
-+++ LVM2/lib/metadata/metadata.c	2010/06/28 20:30:14	1.347
-@@ -3855,6 +3855,19 @@
- 	return pv_field(pv, pe_alloc_count);
+@@ -520,9 +517,6 @@
+ 		vg->status |= PRECOMMITTED;
+ 
+       out:
+-	if (!dev_close(area->dev))
+-		stack;
+-
+ 	return vg;
  }
  
-+unsigned mda_is_ignored(struct metadata_area *mda)
-+{
-+	return (mda->flags & MDA_IGNORED);
-+}
-+
-+void mda_set_ignored(struct metadata_area *mda, int value)
-+{
-+	if (value)
-+		mda->flags |= MDA_IGNORED;
-+	else
-+		mda->flags &= ~MDA_IGNORED;
-+}
-+
- uint32_t pv_mda_count(const struct physical_volume *pv)
+@@ -531,8 +525,17 @@
+ 					 struct metadata_area *mda)
  {
- 	struct lvmcache_info *info;
---- LVM2/lib/metadata/metadata.h	2010/05/24 15:32:20	1.205
-+++ LVM2/lib/metadata/metadata.h	2010/06/28 20:30:14	1.206
-@@ -158,12 +158,18 @@
- 
- };
- 
-+#define MDA_IGNORED 0x00000001
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
 +
- struct metadata_area {
- 	struct dm_list list;
- 	struct metadata_area_ops *ops;
- 	void *metadata_locn;
-+	uint32_t flags;
- };
- 
-+unsigned mda_is_ignored(struct metadata_area *mda);
-+void mda_set_ignored(struct metadata_area *mda, int value);
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
 +
- #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
- #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
- #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 0);
+ 
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 0);
++	if (!dev_close(mdac->area.dev))
++		stack;
++
++	return vg;
+ }
+ 
+ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
+@@ -540,8 +543,17 @@
+ 						   struct metadata_area *mda)
+ {
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
++	struct volume_group *vg;
+ 
+-	return _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++	if (!dev_open(mdac->area.dev))
++		return_NULL;
++
++	vg = _vg_read_raw_area(fid, vgname, &mdac->area, 1);
++
++	if (!dev_close(mdac->area.dev))
++		stack;
++
++	return vg;
+ }
+ 
+ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+@@ -1192,9 +1204,17 @@
+ 		/* FIXME We're reading mdah twice here... */
+ 		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
+ 					      NULL, NULL))) {
+-			if ((vg = _vg_read_raw_area(&fid, vgname,
+-						    &rl->dev_area, 0)))
++			if (!dev_open(rl->dev_area.dev)) {
++				stack;
++				continue;
++			}
++
++			vg = _vg_read_raw_area(&fid, vgname, &rl->dev_area, 0);
++			if (vg)
+ 				lvmcache_update_vg(vg, 0);
++
++			if (!dev_close(rl->dev_area.dev))
++				stack;
+ 		}
+ 	}
+ 
 
 
