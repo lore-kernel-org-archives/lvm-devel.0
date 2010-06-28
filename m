@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:40:28 -0000
-Subject: LVM2/test t-metadata-balance.sh
-Message-ID: <20100628204028.21329.qmail@sourceware.org>
+Date: 28 Jun 2010 21:35:01 -0000
+Subject: LVM2/tools vgchange.c
+Message-ID: <20100628213501.9852.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,238 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:40:27
+Changes by:	wysochanski at sourceware.org	2010-06-28 21:35:00
 
 Modified files:
-	test           : t-metadata-balance.sh 
+	tools          : vgchange.c 
 
 Log message:
-	Update tests to handle phase 2 (vg based) metadata balance.
-	
-	Test vgcreate/vgchange --vgmetadatacopies, vgextend, vgreduce,
-	vgsplit, vgmerge.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Fix compile warning in vgchange.c regarding mda_copies initialization.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-metadata-balance.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
 
---- LVM2/test/t-metadata-balance.sh	2010/06/28 20:36:06	1.1
-+++ LVM2/test/t-metadata-balance.sh	2010/06/28 20:40:27	1.2
-@@ -10,9 +10,9 @@
+--- LVM2/tools/vgchange.c	2010/06/28 20:37:37	1.106
++++ LVM2/tools/vgchange.c	2010/06/28 21:35:00	1.107
+@@ -528,7 +528,7 @@
+ static int _vgchange_metadata_copies(struct cmd_context *cmd,
+ 				     struct volume_group *vg)
+ {
+-	uint32_t mda_copies;
++	uint32_t mda_copies = DEFAULT_VGMETADATACOPIES;
  
- . ./test-utils.sh
- 
--aux prepare_devs 5
-+aux prepare_devs 6
- 
--#  Make sure we can ignore / un-ignore mdas on a per-PV basis
-+echo Make sure we can ignore / un-ignore mdas on a per-PV basis
- for pv_in_vg in 1 0; do
- for mdacp in 1 2; do
- 	pvcreate --metadatacopies $mdacp $dev1 $dev2
-@@ -28,6 +28,7 @@
- 	if [ $pv_in_vg = 1 ]; then
- 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
- 		check_vg_field_ $vg vg_mda_used_count $mdacp
-+		check_vg_field_ $vg vg_mda_copies unmanaged
- 	fi
- 	pvchange --metadataignore n $dev1
- 	check_pv_field_ $dev1 pv_mda_count $mdacp
-@@ -35,7 +36,194 @@
- 	if [ $pv_in_vg = 1 ]; then
- 		check_vg_field_ $vg vg_mda_count $(($mdacp * 2))
- 		check_vg_field_ $vg vg_mda_used_count $(($mdacp * 2))
-+		check_vg_field_ $vg vg_mda_copies unmanaged
- 		vgremove -f $vg
- 	fi
- done
- done
-+
-+# Check if a PV has unignored (used) mdas, and if so, ignore
-+pvignore_ () {
-+	pv_mda_used_count=$(get_pv_field "$1" pv_mda_used_count)
-+	if [ $pv_mda_used_count -ne 0 ]; then
-+	    pvchange --metadataignore y $1
-+	fi
-+}
-+
-+# Check if a PV has ignored mdas, and if so, unignore (make used)
-+pvunignore_ () {
-+	pv_mda_count=$(get_pv_field "$1" pv_mda_count)
-+	pv_mda_used_count=$(get_pv_field "$1" pv_mda_used_count)
-+	if [ $pv_mda_count -gt $pv_mda_used_count ]; then
-+	    pvchange --metadataignore n $1
-+	fi
-+}
-+
-+echo Test of vgmetadatacopies with vgcreate and vgchange
-+for mdacp in 1 2; do
-+	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev4 $dev5
-+	check_pv_field_ $dev1 pv_mda_used_count $mdacp
-+	check_pv_field_ $dev2 pv_mda_used_count $mdacp
-+	check_pv_field_ $dev4 pv_mda_used_count $mdacp
-+	check_pv_field_ $dev5 pv_mda_used_count $mdacp
-+	pvcreate --metadatacopies 0 $dev3
-+	vgcreate -c n "$vg" $dev1 $dev2 $dev3
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	echo ensure both --vgmetadatacopies and --metadatacopies accepted
-+	vgchange --metadatacopies $(($mdacp * 1)) $vg
-+	echo --vgmetadatacopies is persistent on disk
-+	echo --vgmetadatacopies affects underlying pv mda ignore
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
-+	check_vg_field_ $vg vg_mda_used_count $(($mdacp * 1))
-+	vgchange --vgmetadatacopies $(($mdacp * 2)) $vg
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 2))
-+	check_vg_field_ $vg vg_mda_used_count $(($mdacp * 2))
-+	echo allow setting metadatacopies larger than number of PVs
-+	vgchange --vgmetadatacopies $(($mdacp * 5)) $vg
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
-+	check_vg_field_ $vg vg_mda_used_count $(($mdacp * 2))
-+	echo setting to 0 disables automatic balancing
-+	vgchange --vgmetadatacopies unmanaged $vg
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	vgremove -f $vg
-+	echo vgcreate succeeds even when creating a VG w/all ignored mdas
-+	pvchange --metadataignore y $dev1 $dev2
-+	check_pv_field_ $dev1 pv_mda_count $mdacp
-+	check_pv_field_ $dev2 pv_mda_used_count 0
-+	vgcreate -c n "$vg" $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	vgremove -f $vg
-+	echo vgcreate succeeds with a specific number of metadata copies
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 2)) "$vg" $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 2))
-+	vgremove -f $vg
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) "$vg" $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
-+	vgremove -f $vg
-+	echo vgcreate succeeds with a larger value than total metadatacopies
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 5)) "$vg" $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
-+	vgremove -f $vg
-+	echo vgcreate succeeds with --vgmetadatacopies unmanaged
-+	vgcreate -c n --vgmetadatacopies unmanaged "$vg" $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	vgremove -f $vg
-+	pvunignore_ $dev1
-+	pvunignore_ $dev2
-+	pvunignore_ $dev4
-+	pvunignore_ $dev5
-+	echo vgcreate succeds with small value of --metadatacopies, ignores mdas
-+	vgcreate -c n --vgmetadatacopies 1 "$vg" $dev1 $dev2 $dev4 $dev5
-+	check_vg_field_ $vg vg_mda_copies 1
-+	check_vg_field_ $vg vg_mda_count $(($mdacp * 4))
-+	check_vg_field_ $vg vg_mda_used_count 1
-+	echo Setting a larger value should trigger non-ignore of mdas
-+	vgchange --metadatacopies 3 $vg
-+	check_vg_field_ $vg vg_mda_copies 3
-+	check_vg_field_ $vg vg_mda_used_count 3
-+	echo Setting all should trigger unignore of all mdas
-+	vgchange --vgmetadatacopies all $vg
-+	check_vg_field_ $vg vg_mda_count $(($mdacp * 4))
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	check_vg_field_ $vg vg_mda_used_count $(($mdacp * 4))
-+	echo --vgmetadatacopies 0 should be rejected for vgchange and vgcreate
-+	not vgchange --vgmetadatacopies 0 $vg
-+	vgremove -f $vg
-+	not vgcreate -c n --vgmetadatacopies 0 "$vg" $dev1 $dev2 $dev4 $dev5
-+done
-+
-+echo Test vgextend / vgreduce with vgmetadatacopies
-+for mdacp in 1 2; do
-+	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev4 $dev5
-+	pvcreate --metadatacopies 0 $dev3
-+	echo Set a large value of vgmetadatacopies
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 5)) "$vg" $dev1 $dev2 $dev3
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 5))
-+	echo Ignore mdas on devices to be used for vgextend
-+	echo Large value of vgetadatacopies should automatically un-ignore mdas
-+	pvchange --metadataignore y $dev4 $dev5
-+	check_pv_field_ $dev4 pv_mda_used_count 0
-+	vgextend $vg $dev4 $dev5
-+	check_pv_field_ $dev4 pv_mda_used_count $mdacp
-+	check_pv_field_ $dev5 pv_mda_used_count $mdacp
-+	vgremove -f $vg
-+	echo Set a small value of vgmetadatacopies
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) "$vg" $dev1 $dev2 $dev3
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
-+	echo Ignore mdas on devices to be used for vgextend
-+	echo Small value of vgetadatacopies should leave mdas as ignored
-+	pvchange --metadataignore y $dev4 $dev5
-+	check_pv_field_ $dev4 pv_mda_used_count 0
-+	vgextend $vg $dev4 $dev5
-+	check_pv_field_ $dev4 pv_mda_used_count 0
-+	check_pv_field_ $dev5 pv_mda_used_count 0
-+	echo vgreduce of ignored pv w/mda should not trigger any change to ignore bits
-+	vgreduce $vg $dev4
-+	check_pv_field_ $dev4 pv_mda_used_count 0
-+	check_pv_field_ $dev5 pv_mda_used_count 0
-+	echo vgreduce of un-ignored pv w/mda should trigger un-ignore on an mda
-+	vgreduce $vg $dev1 $dev2 $dev3
-+	check_pv_field_ $dev5 pv_mda_used_count $mdacp
-+	check_vg_field_ $vg vg_mda_copies $(($mdacp * 1))
-+	pvunignore_ $dev1
-+	pvunignore_ $dev2
-+	echo setting vgmetadatacopies to unmanaged should allow vgextend to add w/out balancing
-+	vgchange --vgmetadatacopies unmanaged $vg
-+	vgextend $vg $dev1 $dev2
-+	check_vg_field_ $vg vg_mda_copies unmanaged
-+	check_vg_field_ $vg vg_mda_count $(($mdacp * 3))
-+	check_vg_field_ $vg vg_mda_used_count $((mdacp * 3))
-+	check_pv_field_ $dev1 pv_mda_used_count $mdacp
-+	check_pv_field_ $dev2 pv_mda_used_count $mdacp
-+	vgremove -f $vg
-+done
-+
-+echo Test special situations, vgsplit, vgmerge, etc
-+for mdacp in 1 2; do
-+	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev3 $dev4 $dev5
-+	vgcreate -c n --vgmetadatacopies 2 $vg1 $dev1 $dev2 $dev3
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) $vg2 $dev4 $dev5
-+	echo vgsplit/vgmerge preserves value of metadata copies
-+	check_vg_field_ $vg1 vg_mda_copies 2
-+	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 1))
-+	vgsplit $vg1 $vg2 $dev1
-+	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 1))
-+	vgmerge $vg1 $vg2
-+	check_vg_field_ $vg1 vg_mda_copies 2
-+	check_vg_field_ $vg1 vg_mda_count $(($mdacp * 5))
-+	echo vgsplit into new vg sets proper value of vgmetadatacopies
-+	vgsplit --vgmetadatacopies $(($mdacp * 2)) $vg1 $vg2 $dev1 $dev2
-+	check_vg_field_ $vg2 vg_mda_copies $(($mdacp * 2))
-+	echo vgchange fails if given both vgmetadatacopies and metadatacopies
-+	not vgchange --vgmetadatacopies 5 --metadatacopies 7 $vg2
-+	vgremove -f $vg1
-+	vgremove -f $vg2
-+done
-+
-+echo Test combination of --vgmetadatacopies and pvchange --metadataignore
-+for mdacp in 1 2; do
-+	pvcreate --metadatacopies $mdacp $dev1 $dev2 $dev3 $dev4 $dev5
-+	vgcreate -c n --vgmetadatacopies $(($mdacp * 1)) $vg1 $dev1 $dev2
-+	check_vg_field_ $vg1 vg_mda_copies $(($mdacp * 1))
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 1))
-+	pvignore_ $dev3
-+	echo Ensure vgextend of PVs with ignored MDAs does not add to vg_mda_used_count
-+	vgextend $vg1 $dev3
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 1))
-+	echo Using pvchange to unignore should update vg_mda_used_count
-+	pvchange --metadataignore n $dev3
-+	check_pv_field_ $dev3 pv_mda_used_count $mdacp
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 2))
-+	echo Set unmanaged on the vg should keep ignore bits the same during vgextend
-+	vgchange --vgmetadatacopies unmanaged $vg1
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 2))
-+	pvunignore_ $dev4
-+	vgextend $vg1 $dev4
-+	check_pv_field_ $dev4 pv_mda_used_count $mdacp
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 3))
-+	echo Using pvchange to ignore should update vg_mda_used_count
-+	pvchange --metadataignore y $dev4
-+	check_pv_field_ $dev4 pv_mda_used_count 0
-+	check_vg_field_ $vg1 vg_mda_used_count $(($mdacp * 2))
-+	vgremove -f $vg1
-+done
+ 	if (arg_count(cmd, vgmetadatacopies_ARG))
+ 		mda_copies = arg_uint_value(cmd, vgmetadatacopies_ARG,
 
 
