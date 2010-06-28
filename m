@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:29:57 -0000
-Subject: LVM2/lib/format_text format-text.c layout.h
-Message-ID: <20100628202957.12913.qmail@sourceware.org>
+Date: 28 Jun 2010 20:30:15 -0000
+Subject: LVM2/lib format_text/text_label.c metadata/met ...
+Message-ID: <20100628203015.13340.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,74 +10,84 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:29:57
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:30:14
 
 Modified files:
-	lib/format_text: format-text.c layout.h 
+	lib/format_text: text_label.c 
+	lib/metadata   : metadata.c metadata.h 
 
 Log message:
-	Add text format specific 'rlocn' ignore flag and access functions.
+	Add location independent flag and functions to ignore mdas.
 	
-	Adding a flag to the 'rlocn' structure in the mda header of the
-	text format allows us to flip a bit to ignore an area on disk that
-	stores the metadata via the text format specific mda_header.
-	This patch defines the flag and access functions to manage the flag.
-	Other patches will manage the ignore on a format-independent basis,
-	by using a flag in the metadata_area structure.
+	First we add a 'flags' field to the location independent
+	metadata_area structure, and a MDA_IGNORE flag.  The
+	mda_is_ignored and mda_set_ignored functions are added to
+	manage the flag.  Adding the flag and functions gives a
+	library interface to ignore metadata areas independent of
+	the underlying location (disk, file, etc).  The location
+	specific read/write functions must then handle the specifics
+	of what this flag means to the location.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Reviewed-by: Alasdair G Kergon <agk@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/layout.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_label.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.346&r2=1.347
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.205&r2=1.206
 
---- LVM2/lib/format_text/format-text.c	2010/06/22 19:18:27	1.123
-+++ LVM2/lib/format_text/format-text.c	2010/06/28 20:29:57	1.124
-@@ -66,6 +66,19 @@
- 	char *desc;		/* Description placed inside file */
- };
+--- LVM2/lib/format_text/text_label.c	2009/12/16 19:22:12	1.27
++++ LVM2/lib/format_text/text_label.c	2010/06/28 20:30:14	1.28
+@@ -215,6 +215,7 @@
  
-+int rlocn_is_ignored(const struct raw_locn *rlocn)
+ 	mdal->ops = mda_lists->raw_ops;
+ 	mdal->metadata_locn = mdac;
++	mdal->flags = 0;
+ 
+ 	mdac->area.dev = dev;
+ 	mdac->area.start = start;
+--- LVM2/lib/metadata/metadata.c	2010/06/22 21:10:53	1.346
++++ LVM2/lib/metadata/metadata.c	2010/06/28 20:30:14	1.347
+@@ -3855,6 +3855,19 @@
+ 	return pv_field(pv, pe_alloc_count);
+ }
+ 
++unsigned mda_is_ignored(struct metadata_area *mda)
 +{
-+	return (rlocn->flags & RAW_LOCN_IGNORED ? 1 : 0);
++	return (mda->flags & MDA_IGNORED);
 +}
 +
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value)
++void mda_set_ignored(struct metadata_area *mda, int value)
 +{
 +	if (value)
-+		rlocn->flags |= RAW_LOCN_IGNORED;
++		mda->flags |= MDA_IGNORED;
 +	else
-+		rlocn->flags &= ~RAW_LOCN_IGNORED;
++		mda->flags &= ~MDA_IGNORED;
 +}
 +
- /*
-  * NOTE: Currently there can be only one vg per text file.
-  */
---- LVM2/lib/format_text/layout.h	2010/06/28 20:29:42	1.10
-+++ LVM2/lib/format_text/layout.h	2010/06/28 20:29:57	1.11
-@@ -46,6 +46,13 @@
- 	struct disk_locn disk_areas_xl[0];	/* Two lists */
- } __attribute__ ((packed));
+ uint32_t pv_mda_count(const struct physical_volume *pv)
+ {
+ 	struct lvmcache_info *info;
+--- LVM2/lib/metadata/metadata.h	2010/05/24 15:32:20	1.205
++++ LVM2/lib/metadata/metadata.h	2010/06/28 20:30:14	1.206
+@@ -158,12 +158,18 @@
  
-+/*
-+ * Ignore this raw location.  This allows us to
-+ * ignored metadata areas easily, and thus balance
-+ * metadata across VGs with many PVs.
-+ */
-+#define RAW_LOCN_IGNORED 0x00000001
-+
- /* On disk */
- struct raw_locn {
- 	uint64_t offset;	/* Offset in bytes to start sector */
-@@ -54,6 +61,9 @@
- 	uint32_t flags;
- } __attribute__ ((packed));
+ };
  
-+int rlocn_is_ignored(const struct raw_locn *rlocn);
-+void rlocn_set_ignored(struct raw_locn *rlocn, int value);
++#define MDA_IGNORED 0x00000001
 +
- /* On disk */
- /* Structure size limited to one sector */
- struct mda_header {
+ struct metadata_area {
+ 	struct dm_list list;
+ 	struct metadata_area_ops *ops;
+ 	void *metadata_locn;
++	uint32_t flags;
+ };
+ 
++unsigned mda_is_ignored(struct metadata_area *mda);
++void mda_set_ignored(struct metadata_area *mda, int value);
++
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
+ #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
+ #define seg_pe(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pe
 
 
