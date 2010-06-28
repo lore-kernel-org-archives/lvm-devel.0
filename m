@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:30:46 -0000
-Subject: LVM2/lib/format_text format-text.c text_label.c
-Message-ID: <20100628203046.13658.qmail@sourceware.org>
+Date: 28 Jun 2010 20:31:02 -0000
+Subject: LVM2/lib/format_text format-text.c format-text ...
+Message-ID: <20100628203102.13827.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,94 +10,238 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:30:46
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:31:02
 
 Modified files:
-	lib/format_text: format-text.c text_label.c 
+	lib/format_text: format-text.c format-text.h layout.h 
+	                 text_label.c 
 
 Log message:
-	Move dev_open/dev_close outside vgname_from_mda().
+	Allow raw_read_mda_header to be called from text_label.c.
 	
-	Refactor vgname_from_mda() so caller must open/close the device.
-	Should be no functional change.
+	We'd like to pass in mda_header to vgname_from_mda().  In order to
+	do this, we need to call raw_read_mda_header() from text_label.c,
+	_text_read(), which gets called from the label_read() path, and
+	peers into the metadata and update vginfo cache.  We should check
+	the disable bit here, and if set, not peer into the vg metadata,
+	thus reducing the I/O to disk.
+	
+	In the process, move vgname_from_mda() to layout.h, since the fn
+	only gets called from format_text code, and we need the mda_header
+	definition from the private layout.h.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.125&r2=1.126
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_label.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.h.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/layout.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_label.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
 
---- LVM2/lib/format_text/format-text.c	2010/06/28 20:30:30	1.125
-+++ LVM2/lib/format_text/format-text.c	2010/06/28 20:30:46	1.126
-@@ -1099,9 +1099,6 @@
+--- LVM2/lib/format_text/format-text.c	2010/06/28 20:30:46	1.126
++++ LVM2/lib/format_text/format-text.c	2010/06/28 20:31:01	1.127
+@@ -37,9 +37,6 @@
+ #include <dirent.h>
+ #include <ctype.h>
+ 
+-static struct mda_header *_raw_read_mda_header(const struct format_type *fmt,
+-					       struct device_area *dev_area);
+-
+ static struct format_instance *_text_create_text_instance(const struct format_type
+ 						     *fmt, const char *vgname,
+ 						     const char *vgid,
+@@ -181,7 +178,7 @@
+ 	if (!dev_open(area->dev))
+ 		return_0;
+ 
+-	if (!(mdah = _raw_read_mda_header(fmt, area)))
++	if (!(mdah = raw_read_mda_header(fmt, area)))
+ 		goto_out;
+ 
+ 	rlocn = mdah->raw_locns;
+@@ -308,8 +305,8 @@
+ 	}
+ }
+ 
+-static struct mda_header *_raw_read_mda_header(const struct format_type *fmt,
+-					       struct device_area *dev_area)
++struct mda_header *raw_read_mda_header(const struct format_type *fmt,
++				       struct device_area *dev_area)
+ {
+ 	struct mda_header *mdah;
+ 
+@@ -459,7 +456,7 @@
+ 	if (!dev_open(dev_area->dev))
+ 		return_0;
+ 
+-	if (!(mdah = _raw_read_mda_header(fid->fmt, dev_area)))
++	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area)))
+ 		return_0;
+ 
+ 	if (_find_vg_rlocn(dev_area, mdah, vgname, &noprecommit))
+@@ -483,7 +480,7 @@
+ 	char *desc;
+ 	uint32_t wrap = 0;
+ 
+-	if (!(mdah = _raw_read_mda_header(fid->fmt, area)))
++	if (!(mdah = raw_read_mda_header(fid->fmt, area)))
+ 		goto_out;
+ 
+ 	if (!(rlocn = _find_vg_rlocn(area, mdah, vgname, &precommitted))) {
+@@ -583,7 +580,7 @@
+ 	if (!dev_open(mdac->area.dev))
+ 		return_0;
+ 
+-	if (!(mdah = _raw_read_mda_header(fid->fmt, &mdac->area)))
++	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+ 		goto_out;
+ 
+ 	rlocn = _find_vg_rlocn(&mdac->area, mdah,
+@@ -689,7 +686,7 @@
+ 	if (!found)
+ 		return 1;
+ 
+-	if (!(mdah = _raw_read_mda_header(fid->fmt, &mdac->area)))
++	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+ 		goto_out;
+ 
+ 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah,
+@@ -800,7 +797,7 @@
+ 	if (!dev_open(mdac->area.dev))
+ 		return_0;
+ 
+-	if (!(mdah = _raw_read_mda_header(fid->fmt, &mdac->area)))
++	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+ 		goto_out;
+ 
+ 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, vg->name, &noprecommit))) {
+@@ -1083,12 +1080,12 @@
+ }
+ 
+ const char *vgname_from_mda(const struct format_type *fmt,
++			    struct mda_header *mdah,
+ 			    struct device_area *dev_area, struct id *vgid,
+ 			    uint64_t *vgstatus, char **creation_host,
+ 			    uint64_t *mda_free_sectors)
+ {
+ 	struct raw_locn *rlocn;
+-	struct mda_header *mdah;
+ 	uint32_t wrap = 0;
+ 	const char *vgname = NULL;
+ 	unsigned int len = 0;
+@@ -1099,8 +1096,10 @@
  	if (mda_free_sectors)
  		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
  
--	if (!dev_open(dev_area->dev))
--		return_NULL;
--
- 	if (!(mdah = _raw_read_mda_header(fmt, dev_area)))
+-	if (!(mdah = _raw_read_mda_header(fmt, dev_area)))
++	if (!mdah) {
++		log_error(INTERNAL_ERROR "vgname_from_mda called with NULL pointer for mda_header");
  		goto_out;
++	}
  
-@@ -1179,9 +1176,6 @@
- 	}
+ 	/* FIXME Cope with returning a list */
+ 	rlocn = mdah->raw_locns;
+@@ -1188,6 +1187,7 @@
+ 	struct format_instance fid;
+ 	struct id vgid;
+ 	uint64_t vgstatus;
++	struct mda_header *mdah;
  
-       out:
--	if (!dev_close(dev_area->dev))
--		stack;
--
- 	return vgname;
- }
+ 	raw_list = &((struct mda_lists *) fmt->private)->raws;
  
-@@ -1202,20 +1196,20 @@
+@@ -1201,13 +1201,20 @@
+ 			continue;
+ 		}
  
- 	dm_list_iterate_items(rl, raw_list) {
- 		/* FIXME We're reading mdah twice here... */
-+		if (!dev_open(rl->dev_area.dev)) {
+-		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
++		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area))) {
 +			stack;
-+			continue;
++			goto close_dev;
 +		}
 +
- 		if ((vgname = vgname_from_mda(fmt, &rl->dev_area, &vgid, &vgstatus,
++		if ((vgname = vgname_from_mda(fmt, mdah,
++					      &rl->dev_area, &vgid, &vgstatus,
  					      NULL, NULL))) {
--			if (!dev_open(rl->dev_area.dev)) {
--				stack;
--				continue;
--			}
--
  			vg = _vg_read_raw_area(&fid, vgname, &rl->dev_area, 0);
  			if (vg)
  				lvmcache_update_vg(vg, 0);
  
--			if (!dev_close(rl->dev_area.dev))
--				stack;
  		}
-+		if (!dev_close(rl->dev_area.dev))
-+			stack;
++	close_dev:
+ 		if (!dev_close(rl->dev_area.dev))
+ 			stack;
  	}
+--- LVM2/lib/format_text/format-text.h	2009/11/24 22:55:56	1.26
++++ LVM2/lib/format_text/format-text.h	2010/06/28 20:31:01	1.27
+@@ -59,9 +59,4 @@
+ 	    struct device *dev, uint64_t start, uint64_t size);
+ void del_mdas(struct dm_list *mdas);
  
- 	return 1;
---- LVM2/lib/format_text/text_label.c	2010/06/28 20:30:14	1.28
-+++ LVM2/lib/format_text/text_label.c	2010/06/28 20:30:46	1.29
-@@ -299,6 +299,10 @@
+-const char *vgname_from_mda(const struct format_type *fmt,
+-			    struct device_area *dev_area, struct id *vgid,
+-			    uint64_t *vgstatus, char **creation_host,
+-			    uint64_t *mda_free_sectors);
+-
+ #endif
+--- LVM2/lib/format_text/layout.h	2010/06/28 20:29:57	1.11
++++ LVM2/lib/format_text/layout.h	2010/06/28 20:31:01	1.12
+@@ -76,6 +76,9 @@
+ 	struct raw_locn raw_locns[0];	/* NULL-terminated list */
+ } __attribute__ ((packed));
  
- 	dm_list_iterate_items(mda, &info->mdas) {
- 		mdac = (struct mda_context *) mda->metadata_locn;
-+		if (!dev_open(mdac->area.dev)) {
++struct mda_header *raw_read_mda_header(const struct format_type *fmt,
++				       struct device_area *dev_area);
++
+ struct mda_lists {
+ 	struct dm_list dirs;
+ 	struct dm_list raws;
+@@ -96,4 +99,11 @@
+ #define LVM2_LABEL "LVM2 001"
+ #define MDA_SIZE_MIN (8 * (unsigned) lvm_getpagesize())
+ 
++
++const char *vgname_from_mda(const struct format_type *fmt,
++			    struct mda_header *mdah,
++			    struct device_area *dev_area, struct id *vgid,
++			    uint64_t *vgstatus, char **creation_host,
++			    uint64_t *mda_free_sectors);
++
+ #endif
+--- LVM2/lib/format_text/text_label.c	2010/06/28 20:30:46	1.29
++++ LVM2/lib/format_text/text_label.c	2010/06/28 20:31:01	1.30
+@@ -262,6 +262,7 @@
+ 	const char *vgname;
+ 	uint64_t vgstatus;
+ 	char *creation_host;
++	struct mda_header *mdah;
+ 
+ 	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
+ 
+@@ -303,13 +304,23 @@
+ 			stack;
+ 			continue;
+ 		}
+-		if ((vgname = vgname_from_mda(info->fmt, &mdac->area,
++		if (!(mdah = raw_read_mda_header(info->fmt, &mdac->area))) {
 +			stack;
-+			continue;
++			goto close_dev;
 +		}
- 		if ((vgname = vgname_from_mda(info->fmt, &mdac->area,
++
++		if ((vgname = vgname_from_mda(info->fmt, mdah,
++					      &mdac->area,
  					      &vgid, &vgstatus, &creation_host,
  					      &mdac->free_sectors)) &&
-@@ -306,6 +310,8 @@
+ 		    !lvmcache_update_vgname_and_id(info, vgname,
  						   (char *) &vgid, vgstatus,
- 						   creation_host))
+-						   creation_host))
++						   creation_host)) {
++			if (!dev_close(mdac->area.dev))
++					stack;
  			return_0;
-+		if (!dev_close(mdac->area.dev))
-+			stack;
++		}
++	close_dev:
+ 		if (!dev_close(mdac->area.dev))
+ 			stack;
  	}
- 
- 	info->status &= ~CACHE_INVALID;
 
 
