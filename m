@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 21:35:01 -0000
-Subject: LVM2/tools vgchange.c
-Message-ID: <20100628213501.9852.qmail@sourceware.org>
+Date: 28 Jun 2010 21:49:31 -0000
+Subject: LVM2/test t-covercmd.sh
+Message-ID: <20100628214931.25206.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 21:35:00
+Changes by:	wysochanski at sourceware.org	2010-06-28 21:49:31
 
 Modified files:
-	tools          : vgchange.c 
+	test           : t-covercmd.sh 
 
 Log message:
-	Fix compile warning in vgchange.c regarding mda_copies initialization.
+	Update t-covercmd pvck to take proper device argument.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-covercmd.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/tools/vgchange.c	2010/06/28 20:37:37	1.106
-+++ LVM2/tools/vgchange.c	2010/06/28 21:35:00	1.107
-@@ -528,7 +528,7 @@
- static int _vgchange_metadata_copies(struct cmd_context *cmd,
- 				     struct volume_group *vg)
- {
--	uint32_t mda_copies;
-+	uint32_t mda_copies = DEFAULT_VGMETADATACOPIES;
+--- LVM2/test/t-covercmd.sh	2009/07/07 19:28:57	1.7
++++ LVM2/test/t-covercmd.sh	2010/06/28 21:49:31	1.8
+@@ -63,7 +63,7 @@
+     lvchange -$i "$vg"/"$lv"
+ done
  
- 	if (arg_count(cmd, vgmetadatacopies_ARG))
- 		mda_copies = arg_uint_value(cmd, vgmetadatacopies_ARG,
+-pvck "$d1"
++pvck "$dev1"
+ vgck "$vg"
+ lvrename "$vg" "$lv" "$lv-rename"
+ vgcfgbackup -f "$(pwd)/backup.$$" "$vg"
 
 
