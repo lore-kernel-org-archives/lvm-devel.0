@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 28 Jun 2010 20:36:57 -0000
-Subject: LVM2/lib/metadata metadata-exported.h metadata.c
-Message-ID: <20100628203657.18117.qmail@sourceware.org>
+Date: 28 Jun 2010 20:37:10 -0000
+Subject: LVM2/lib/format_text export.c import_vsn1.c
+Message-ID: <20100628203710.18258.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,59 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-28 20:36:56
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:37:10
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c 
+	lib/format_text: export.c import_vsn1.c 
 
 Log message:
-	Add vg get/set methods for VG metadata copies.
+	Make vg->mda_copies persistent in on disk vg metadata.
 	
-	This patch adds the get and partially implemented set function.
-	The 'set' function should probably ignore or un-ignore metadata areas
-	based on new values.
+	This patch adds the ability to read/write the vg->mda_copies values
+	from/to the vg metadata.
+	
+	If we read the VG metadata and this field does not exist, we set
+	mda_copies to the default value of 0.  Later in the code, we use
+	this special '0' value to indicate a disable of metadata balancing.
+	This should preserve existing LVM behavior and ensure metadata balancing
+	can be turned off should the need arise.
 	
 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.156&r2=1.157
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.358&r2=1.359
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/export.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.75&r2=1.76
 
---- LVM2/lib/metadata/metadata-exported.h	2010/06/28 20:36:37	1.156
-+++ LVM2/lib/metadata/metadata-exported.h	2010/06/28 20:36:56	1.157
-@@ -882,6 +882,8 @@
- uint64_t vg_max_lv(const struct volume_group *vg);
- uint32_t vg_mda_count(const struct volume_group *vg);
- uint32_t vg_mda_used_count(const struct volume_group *vg);
-+uint32_t vg_mda_copies(const struct volume_group *vg);
-+int vg_set_mda_copies(struct volume_group *vg, uint32_t value);
- int vg_check_write_mode(struct volume_group *vg);
- #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
- #define vg_is_exported(vg) (vg_status((vg)) & EXPORTED_VG)
---- LVM2/lib/metadata/metadata.c	2010/06/28 20:36:37	1.358
-+++ LVM2/lib/metadata/metadata.c	2010/06/28 20:36:56	1.359
-@@ -989,6 +989,22 @@
+--- LVM2/lib/format_text/export.c	2010/01/07 14:45:28	1.75
++++ LVM2/lib/format_text/export.c	2010/06/28 20:37:10	1.76
+@@ -397,6 +397,7 @@
+ 		outf(f, "allocation_policy = \"%s\"",
+ 		     get_alloc_string(vg->alloc));
+ 	}
++	outf(f, "metadata_copies = %u", vg->mda_copies);
+ 
  	return 1;
  }
+--- LVM2/lib/format_text/import_vsn1.c	2010/05/05 22:37:53	1.75
++++ LVM2/lib/format_text/import_vsn1.c	2010/06/28 20:37:10	1.76
+@@ -23,6 +23,7 @@
+ #include "pv_alloc.h"
+ #include "segtype.h"
+ #include "text_import.h"
++#include "defaults.h"
  
-+uint32_t vg_mda_copies(const struct volume_group *vg)
-+{
-+	return vg->mda_copies;
-+}
+ typedef int (*section_fn) (struct format_instance * fid, struct dm_pool * mem,
+ 			   struct volume_group * vg, struct config_node * pvn,
+@@ -745,6 +746,10 @@
+ 			return_0;
+ 	}
+ 
++	if (!_read_uint32(vgn, "metadata_copies", &vg->mda_copies)) {
++		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
++	}
 +
-+int vg_set_mda_copies(struct volume_group *vg, uint32_t value)
-+{
-+	/* FIXME: add checks, etc, and set the value */
-+	/*
-+	 * FIXME: Before we set a larger value, we may need to
-+	 * enable some mdas on PVS
-+	 */
-+	vg->mda_copies = value;
-+	return 1;
-+}
-+
- int vg_set_extent_size(struct volume_group *vg, uint32_t new_size)
- {
- 	uint32_t old_size = vg->extent_size;
+ 	/*
+ 	 * The pv hash memorises the pv section names -> pv
+ 	 * structures.
 
 
