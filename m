@@ -1,163 +1,172 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:52:58 -0400
-Subject: [PATCH 27/38] Update vgchange tool to accept --vgmetadatacopies.
-In-Reply-To: <1277520789-6808-27-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-28-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 28 Jun 2010 20:32:00 -0000
+Subject: LVM2/lib format_text/format-text.c metadata/me ...
+Message-ID: <20100628203200.14575.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Update logic in vgchange to handle --vgmetadatacopies, allow
---metadatacopies as a synonym to --vgmetadatacopies,
-and add these parameters to args.h and commands.h
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-06-28 20:31:59
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- tools/args.h     |    1 +
- tools/commands.h |    4 +++-
- tools/vgchange.c |   49 +++++++++++++++++++++++++++++++++++++++++++++++--
- 3 files changed, 51 insertions(+), 3 deletions(-)
+Modified files:
+	lib/format_text: format-text.c 
+	lib/metadata   : metadata.c metadata.h 
 
-diff --git a/tools/args.h b/tools/args.h
-index d343689..60d99d1 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -23,6 +23,7 @@ arg(physicalvolumesize_ARG, '\0', "setphysicalvolumesize", size_mb_arg, 0)
- arg(ignorelockingfailure_ARG, '\0', "ignorelockingfailure", NULL, 0)
- arg(nolocking_ARG, '\0', "nolocking", NULL, 0)
- arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", int_arg, 0)
-+arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", int_arg, 0)
- arg(metadatacopies_ARG, '\0', "metadatacopies", int_arg, 0)
- arg(metadatasize_ARG, '\0', "metadatasize", size_mb_arg, 0)
- arg(metadataignore_ARG, '\0', "metadataignore", yes_no_arg, 0)
-diff --git a/tools/commands.h b/tools/commands.h
-index 6d8d2c0..62a684b 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -710,6 +710,7 @@ xx(vgchange,
-    "\t[--ignorelockingfailure]\n"
-    "\t[--ignoremonitoring]\n"
-    "\t[--monitor {y|n}]\n"
-+   "\t[--[vg]metadatacopies #copies] " "\n"
-    "\t[--poll {y|n}]\n"
-    "\t[--noudevsync]\n"
-    "\t[--refresh]\n"
-@@ -731,7 +732,8 @@ xx(vgchange,
-    addtag_ARG, alloc_ARG, allocation_ARG, autobackup_ARG, available_ARG,
-    clustered_ARG, deltag_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
-    logicalvolume_ARG, maxphysicalvolumes_ARG, monitor_ARG, noudevsync_ARG,
--   partial_ARG, physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
-+   metadatacopies_ARG, vgmetadatacopies_ARG, partial_ARG,
-+   physicalextentsize_ARG, poll_ARG, refresh_ARG, resizeable_ARG,
-    resizable_ARG, sysinit_ARG, test_ARG, uuid_ARG)
- 
- xx(vgck,
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 40f64eb..12c0ec9 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -525,6 +525,45 @@ static int _vgchange_refresh(struct cmd_context *cmd, struct volume_group *vg)
- 	return ECMD_PROCESSED;
+Log message:
+	Add mda location specific mda_copy constructor.
+	
+	Because of the way mdas are handled internally, where a PV in a VG
+	has mdas on both info->mdas and vg->fid->metadata_areas list, we
+	need a location independent copy constructor for struct
+	metadata_area.  Break up the existing format-text specific copy
+	constructor into a format independent piece and a format dependent
+	piece.
+	
+	This function is necessary to properly implement pv_set_mda_ignored().
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+	Reviewed-by: Alasdair G Kergon <agk@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.348&r2=1.349
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.207&r2=1.208
+
+--- LVM2/lib/format_text/format-text.c	2010/06/28 20:31:38	1.129
++++ LVM2/lib/format_text/format-text.c	2010/06/28 20:31:59	1.130
+@@ -1622,32 +1622,20 @@
  }
  
-+static int _vgchange_metadata_copies(struct cmd_context *cmd,
-+				     struct volume_group *vg)
-+{
-+	uint32_t value;
-+
-+	if (arg_count(cmd, vgmetadatacopies_ARG))
-+		value = arg_uint_value(cmd, vgmetadatacopies_ARG,
-+			DEFAULT_VGMETADATACOPIES);
-+	else if (arg_count(cmd, metadatacopies_ARG))
-+		value = arg_uint_value(cmd, metadatacopies_ARG,
-+			DEFAULT_VGMETADATACOPIES);
-+	if (value == vg_mda_copies(vg)) {
-+		log_error("Metadata copies of VG %s is already %u",
-+			  vg->name, value);
-+		return ECMD_PROCESSED;
-+	}
-+
-+	if (!archive(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!vg_set_mda_copies(vg, value)) {
-+		stack;
-+		return EINVALID_CMD_LINE;
-+	}
-+
-+	if (!vg_write(vg) || !vg_commit(vg)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	backup(vg);
-+
-+	log_print("Volume group \"%s\" successfully changed", vg->name);
-+
-+	return ECMD_PROCESSED;
-+}
-+
- static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 			   struct volume_group *vg,
- 			   void *handle __attribute((unused)))
-@@ -593,6 +632,10 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 	else if (arg_count(cmd, refresh_ARG))
- 		r = _vgchange_refresh(cmd, vg);
+ /*
+- * Copy constructor for a metadata_area.
++ * Copy constructor for a metadata_locn.
+  */
+-static struct metadata_area *_mda_copy(struct dm_pool *mem,
+-				       struct metadata_area *mda)
++static void *_metadata_locn_copy_raw(struct dm_pool *mem, void *metadata_locn)
+ {
+-	struct metadata_area *mda_new;
+ 	struct mda_context *mdac, *mdac_new;
  
-+	else if (arg_count(cmd, vgmetadatacopies_ARG) ||
-+		 arg_count(cmd, metadatacopies_ARG))
-+		r = _vgchange_metadata_copies(cmd, vg);
-+
- 	return r;
- }
- 
-@@ -606,10 +649,12 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	     arg_count(cmd, physicalextentsize_ARG) +
- 	     arg_count(cmd, clustered_ARG) + arg_count(cmd, alloc_ARG) +
- 	     arg_count(cmd, monitor_ARG) + arg_count(cmd, poll_ARG) +
--	     arg_count(cmd, refresh_ARG))) {
-+	     arg_count(cmd, refresh_ARG) + arg_count(cmd, metadatacopies_ARG) +
-+	     arg_count(cmd, vgmetadatacopies_ARG))) {
- 		log_error("Need 1 or more of -a, -c, -l, -p, -s, -x, "
- 			  "--refresh, --uuid, --alloc, --addtag, --deltag, "
--			  "--monitor or --poll");
-+			  "--monitor, --poll, --vgmetadatacopies or "
-+			  "--metadatacopies");
- 		return EINVALID_CMD_LINE;
+-	if (!(mda_new = dm_pool_alloc(mem, sizeof(*mda_new)))) {
+-		log_error("metadata_area allocation failed");
+-		return NULL;
+-	}
+-	/* FIXME: Should have a per-format constructor here */
+-	mdac = (struct mda_context *) mda->metadata_locn;
++	mdac = (struct mda_context *) metadata_locn;
+ 	if (!(mdac_new = dm_pool_alloc(mem, sizeof(*mdac_new)))) {
+ 		log_error("mda_context allocation failed");
+-		dm_pool_free(mem, mda_new);
+ 		return NULL;
  	}
+-	memcpy(mda_new, mda, sizeof(*mda));
+ 	memcpy(mdac_new, mdac, sizeof(*mdac));
+-	mda_new->metadata_locn = mdac_new;
+-
+-	/* FIXME mda 'list' left invalid here */
  
--- 
-1.6.0.6
+-	return mda_new;
++	return mdac_new;
+ }
+ 
+ 
+@@ -1675,7 +1663,7 @@
+ 
+ 	/* Add copy of mdas to supplied list */
+ 	dm_list_iterate_items(mda, &info->mdas) {
+-		mda_new = _mda_copy(fmt->cmd->mem, mda);
++		mda_new = mda_copy(fmt->cmd->mem, mda);
+ 		if (!mda_new)
+ 			return 0;
+ 		dm_list_add(mdas, &mda_new->list);
+@@ -1742,6 +1730,7 @@
+ 	.vg_precommit = _vg_precommit_raw,
+ 	.vg_commit = _vg_commit_raw,
+ 	.vg_revert = _vg_revert_raw,
++	.mda_metadata_locn_copy = _metadata_locn_copy_raw,
+ 	.mda_free_sectors = _mda_free_sectors_raw,
+ 	.mda_total_sectors = _mda_total_sectors_raw,
+ 	.mda_in_vg = _mda_in_vg_raw,
+@@ -1812,7 +1801,7 @@
+ 				if (found)
+ 					continue;
+ 
+-				mda_new = _mda_copy(fmt->cmd->mem, mda);
++				mda_new = mda_copy(fmt->cmd->mem, mda);
+ 				if (!mda_new)
+ 					return_0;
+ 				dm_list_add(mdas, &mda_new->list);
+@@ -1980,7 +1969,7 @@
+ 			mdas = &info->mdas;
+ 			dm_list_iterate_items(mda, mdas) {
+ 				/* FIXME Check it holds this VG */
+-				mda_new = _mda_copy(fmt->cmd->mem, mda);
++				mda_new = mda_copy(fmt->cmd->mem, mda);
+ 				if (!mda_new)
+ 					return_NULL;
+ 				dm_list_add(&fid->metadata_areas, &mda_new->list);
+--- LVM2/lib/metadata/metadata.c	2010/06/28 20:31:38	1.348
++++ LVM2/lib/metadata/metadata.c	2010/06/28 20:31:59	1.349
+@@ -3856,6 +3856,32 @@
+ }
+ 
+ /*
++ * Copy constructor for a metadata_area.
++ */
++struct metadata_area *mda_copy(struct dm_pool *mem,
++			       struct metadata_area *mda)
++{
++	struct metadata_area *mda_new;
++
++	if (!(mda_new = dm_pool_alloc(mem, sizeof(*mda_new)))) {
++		log_error("metadata_area allocation failed");
++		return NULL;
++	}
++	memcpy(mda_new, mda, sizeof(*mda));
++	if (mda->ops->mda_metadata_locn_copy && mda->metadata_locn) {
++		mda_new->metadata_locn =
++			mda->ops->mda_metadata_locn_copy(mem, mda->metadata_locn);
++		if (!mda_new->metadata_locn) {
++			dm_pool_free(mem, mda_new);
++			return NULL;
++		}
++	}
++
++	/* FIXME mda 'list' left invalid here */
++
++	return mda_new;
++}
++/*
+  * This function provides a way to answer the question on a format specific
+  * basis - does the format specfic context of these two metadata areas
+  * match?
+--- LVM2/lib/metadata/metadata.h	2010/06/28 20:31:38	1.207
++++ LVM2/lib/metadata/metadata.h	2010/06/28 20:31:59	1.208
+@@ -136,6 +136,11 @@
+ 			  struct metadata_area * mda);
+ 
+ 	/*
++	 * Per location copy constructor.
++	 */
++	void *(*mda_metadata_locn_copy) (struct dm_pool *mem, void *metadata_locn);
++
++	/*
+ 	 * Returns number of free sectors in given metadata area.
+ 	 */
+ 	uint64_t (*mda_free_sectors) (struct metadata_area *mda);
+@@ -172,6 +177,8 @@
+ 	void *metadata_locn;
+ 	uint32_t flags;
+ };
++struct metadata_area *mda_copy(struct dm_pool *mem,
++			       struct metadata_area *mda);
+ 
+ unsigned mda_is_ignored(struct metadata_area *mda);
+ void mda_set_ignored(struct metadata_area *mda, int value);
 
 
