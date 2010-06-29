@@ -1,96 +1,106 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:53:02 -0400
-Subject: [PATCH 31/38] Ensure fid mda lists are populated correctly during vgextend.
-In-Reply-To: <1277520789-6808-31-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-30-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-31-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-32-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 29 Jun 2010 22:37:33 -0000
+Subject: LVM2/lib format_text/format-text.c metadata/me ...
+Message-ID: <20100629223733.9488.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The vgextend path calls add_pv_to_vg().  Inside add_pv_to_vg(),
-we must ensure we pass the correct mdas list into pv_setup(), as
-copies of mdas are placed on the vg->fid list.  If we don't place
-the mdas on the correct vg->fid list, the various counts may be
-incorrect and the metadata balance algorithm will not work when
-called from vg_write() path.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-06-29 22:37:32
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/metadata.c |   18 +++++++++++++++++-
- 1 files changed, 17 insertions(+), 1 deletions(-)
+Modified files:
+	lib/format_text: format-text.c 
+	lib/metadata   : metadata.c metadata.h 
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b9e4e39..58060f7 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -174,6 +174,7 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 	struct format_instance *fid = vg->fid;
- 	struct dm_pool *mem = vg->vgmem;
- 	char uuid[64] __attribute((aligned(8)));
-+	struct dm_list *mdas;
+Log message:
+	Improve logging for metadata ignore by printing device name.
+	
+	Print device name when setting or clearing metadata ignore bit.
+	Example:
+	label/label.c:160       /dev/loop2: lvm2 label detected
+	cache/lvmcache.c:1136         lvmcache: /dev/loop2: now in VG #orphans_lvm2 (#orphans_lvm2)
+	metadata/metadata.c:4142     Setting mda ignored flag for metadata_locn /dev/loop2.
+	format_text/text_label.c:318     Skipping mda with ignored flag on device /dev/loop2 at offset 4096
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.365&r2=1.366
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.212&r2=1.213
+
+--- LVM2/lib/format_text/format-text.c	2010/06/29 14:52:57	1.135
++++ LVM2/lib/format_text/format-text.c	2010/06/29 22:37:32	1.136
+@@ -1639,6 +1639,17 @@
+ 	return mdac_new;
+ }
  
- 	log_verbose("Adding physical volume '%s' to volume group '%s'",
- 		    pv_name, vg->name);
-@@ -217,9 +218,24 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 	 */
- 	pv->pe_alloc_count = 0;
- 
-+	/*
-+	 * FIXME: this does not work entirely correctly in the case where a PV
-+	 * has 2 mdas and only one is ignored; ideally all non-ignored mdas
-+	 * should be placed on metadata_areas list and ignored on the
-+	 * metadata_areas_ignored list; however this requires another
-+	 * fairly complex refactoring to remove the 'mdas' parameter from both
-+	 * pv_setup and pv_write.  For now, we only put ignored mdas on the
-+	 * metadata_areas_ignored list if all mdas in the PV are ignored;
-+	 * otherwise, we use the non-ignored list.
-+	 */
-+	if (!pv_mda_used_count(pv))
-+		mdas = &fid->metadata_areas_ignored;
-+	else
-+		mdas = &fid->metadata_areas;
++/*
++ * Return a string description of the metadata location.
++ */
++static const char * _metadata_locn_desc_raw(void *metadata_locn)
++{
++	struct mda_context *mdac;
 +
- 	if (!fid->fmt->ops->pv_setup(fid->fmt, UINT64_C(0), 0,
- 				     vg->extent_size, 0, 0, 0UL, UINT64_C(0),
--				     &fid->metadata_areas, pv, vg)) {
-+				     mdas, pv, vg)) {
- 		log_error("Format-specific setup of physical volume '%s' "
- 			  "failed.", pv_name);
- 		return 0;
--- 
-1.6.0.6
++	mdac = (struct mda_context *) metadata_locn;
++	return dev_name(mdac->area.dev);
++}
++
+ 
+ static int _text_pv_read(const struct format_type *fmt, const char *pv_name,
+ 		    struct physical_volume *pv, struct dm_list *mdas,
+@@ -1732,6 +1743,7 @@
+ 	.vg_commit = _vg_commit_raw,
+ 	.vg_revert = _vg_revert_raw,
+ 	.mda_metadata_locn_copy = _metadata_locn_copy_raw,
++	.mda_metadata_locn_desc = _metadata_locn_desc_raw,
+ 	.mda_free_sectors = _mda_free_sectors_raw,
+ 	.mda_total_sectors = _mda_total_sectors_raw,
+ 	.mda_in_vg = _mda_in_vg_raw,
+--- LVM2/lib/metadata/metadata.c	2010/06/29 22:25:58	1.365
++++ LVM2/lib/metadata/metadata.c	2010/06/29 22:37:32	1.366
+@@ -4119,15 +4119,23 @@
+ 
+ void mda_set_ignored(struct metadata_area *mda, unsigned ignored)
+ {
++	void *locn = mda->metadata_locn;
++
+ 	if (ignored) {
+ 		mda->flags |= MDA_IGNORED;
+-		log_verbose("Setting mda ignored flag for metadata_locn %p.",
+-			mda->metadata_locn);
+ 	} else {
+ 		mda->flags &= ~MDA_IGNORED;
+-		log_verbose("Clearing mda ignored flag for metadata_locn %p.",
+-			mda->metadata_locn);
+ 	}
++	if (mda->ops->mda_metadata_locn_desc)
++		log_verbose("%s mda ignored flag for "
++			    "metadata_locn %s.",
++			    ignored ? "Setting" : "Clearing",
++			    mda->ops->mda_metadata_locn_desc(locn));
++	else
++		log_verbose("%s mda ignored flag for "
++			    "metadata_locn %p.",
++			    ignored ? "Setting" : "Clearing",
++			    locn);
+ }
+ 
+ uint32_t pv_mda_count(const struct physical_volume *pv)
+--- LVM2/lib/metadata/metadata.h	2010/06/29 22:25:58	1.212
++++ LVM2/lib/metadata/metadata.h	2010/06/29 22:37:32	1.213
+@@ -139,6 +139,10 @@
+ 	 * Per location copy constructor.
+ 	 */
+ 	void *(*mda_metadata_locn_copy) (struct dm_pool *mem, void *metadata_locn);
++	/*
++	 * Per location description - useful for logging.
++	 */
++	const char *(*mda_metadata_locn_desc) (void *metadata_locn);
+ 
+ 	/*
+ 	 * Returns number of free sectors in given metadata area.
 
 
