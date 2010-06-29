@@ -1,246 +1,455 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 25 Jun 2010 22:53:01 -0400
-Subject: [PATCH 30/38] Add --vgmetadatacopies to vgcreate man page, command, and lvm.conf.
-In-Reply-To: <1277520789-6808-30-git-send-email-dwysocha@redhat.com>
-References: <1277520789-6808-1-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-2-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-3-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-4-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-5-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-6-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-7-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-8-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-9-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-10-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-11-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-12-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-13-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-14-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-15-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-16-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-17-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-18-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-19-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-20-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-21-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-22-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-23-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-24-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-25-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-26-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-27-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-28-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-29-git-send-email-dwysocha@redhat.com>
-	<1277520789-6808-30-git-send-email-dwysocha@redhat.com>
-Message-ID: <1277520789-6808-31-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 29 Jun 2010 18:26:07 +0200
+Subject: [PATCH 07/12] Replicator: add new options for replicator
+In-Reply-To: <cover.1277828149.git.zkabelac@redhat.com>
+References: <cover.1277828149.git.zkabelac@redhat.com>
+Message-ID: <ee6e38c10d7bf375bdad0f7b74af0bf8e9438cb6.1277828149.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Allow parsing of --vgmetadatacopies for vgcreate.  Accept
---metadatacopies as a synonym for --vgmetadatacopies.  Other
-patches will add balancing algorithm before the metadata is
-written in vg_write().
+New options for lvcreate:
+replicator, replicatordev, replicatorlogtype, replicatorsynclog,
+remotevg, site, sitemode
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/config/defaults.h |    1 +
- man/lvm.conf.5.in     |   24 +++++++++++++++++++++++-
- man/vgcreate.8.in     |   27 ++++++++++++++++++++-------
- tools/commands.h      |    5 +++--
- tools/toollib.c       |   20 ++++++++++++++++++++
- tools/vgcreate.c      |    8 ++------
- 6 files changed, 69 insertions(+), 16 deletions(-)
+ lib/config/defaults.h            |    8 ++
+ lib/metadata/metadata-exported.h |   46 +++++++++++--
+ tools/args.h                     |   10 +++
+ tools/commands.h                 |   15 ++++
+ tools/lvcreate.c                 |  134 +++++++++++++++++++++++++++++++++++++-
+ tools/lvmcmdline.c               |   10 +++
+ tools/tools.h                    |    1 +
+ 7 files changed, 213 insertions(+), 11 deletions(-)
 
 diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 0d8cb9c..d7539de 100644
+index 0d8cb9c..644809d 100644
 --- a/lib/config/defaults.h
 +++ b/lib/config/defaults.h
-@@ -62,6 +62,7 @@
- #define DEFAULT_PVMETADATASIZE 255
- #define DEFAULT_PVMETADATACOPIES 1
- #define DEFAULT_VGMETADATACOPIES 0
-+#define DEFAULT_VGMETADATACOPIES_STR "unmanaged"
- #define DEFAULT_LABELSECTOR UINT64_C(1)
- #define DEFAULT_READ_AHEAD "auto"
- #define DEFAULT_UDEV_RULES 1
-diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
-index 02ebb2a..b787e74 100644
---- a/man/lvm.conf.5.in
-+++ b/man/lvm.conf.5.in
-@@ -386,7 +386,7 @@ to store on each physical volume.
- Currently it can be set to 0, 1 or 2.  The default is 1.  
- If set to 2, one copy is placed at the beginning of the disk
- and the other is placed at the end.
--It can be overridden on the command line with \fB--metadatacopies\fP.
-+It can be overridden on the command line with \fB--pvmetadatacopies\fP.
- If creating a volume group with just one physical volume, it's a
- good idea to have 2 copies.  If creating a large volume group with
- many physical volumes, you may decide that 3 copies of the metadata
-@@ -406,6 +406,28 @@ The metadata areas are treated as circular buffers, so
- unused space becomes filled with an archive of the most recent
- previous versions of the metadata.
- .IP
-+\fBvgmetadatacopies\fP \(em When creating a volume group using the
-+LVM2 metadata format, this is the default number of copies of metadata
-+desired across all the physical volumes in the volume group.  If set to
-+a non-zero value, LVM will automatically set or clear the metadataignore
-+flag on the physical volumes (see \fBpvchange --metadataignore\fP) in order
-+to achieve the desired number of metadata copies.  In order to maintain
-+the desired number of copies, automatic set or clear of the metadataignore
-+flags may be triggered by an LVM command that adds or removes physical
-+volumes (\fBvgextend\fP or \fBvgreduce\fP, \fBvgsplit\fP, \fBvgmerge\fP),
-+when physical volumes go missing or reappear, or when a new value is
-+explicity set (See \fBvgchange --vgmetadatacopies\fP).  Setting
-+\fBvgmetadatacopies\fP to "unmanaged" indicates to LVM not to automatically
-+manage the metadata ignore flags.  It is not an error to set a value larger
-+than the sum of all metadata areas on all physical volumes.  The value can
-+be overridden on the command line with \fB--vgmetadatacopies\fP for various
-+commands (for example, \fBvgcreate\fP and \fBvgchange\fP), and can be
-+queryied with the \fBvg_mda_copies\fP field of \fBvgs\fP.  This option
-+is useful for volume groups containing large numbers of physical volumes
-+with metadata as it may be used to minimize metadata read and write overhead.
-+Note that this is a string value, so any numbers must be enclosed in '"'s,
-+for example, vgmetadatacopies = "5".
-+.IP
- \fBdirs\fP \(em List of directories holding live copies of LVM2
- metadata as text files.  These directories must not be on logical
- volumes.  It is possible to use LVM2 with a couple of directories
-diff --git a/man/vgcreate.8.in b/man/vgcreate.8.in
-index 06e0006..e3d970e 100644
---- a/man/vgcreate.8.in
-+++ b/man/vgcreate.8.in
-@@ -16,6 +16,8 @@ vgcreate \- create a volume group
- .RB [ -M | \-\-metadatatype type]
- .RB [ -p | \-\-maxphysicalvolumes
- .IR MaxPhysicalVolumes ]
-+.RB [ \-\-[vg]metadatacopies ]
-+.IR NumberOfCopies|unmanaged|all ]
- .RB [ \-s | \-\-physicalextentsize
- .IR PhysicalExtentSize [ \fBbBsSkKmMgGtTpPeE\fR ]]
- .RB [ \-t | \-\-test ]
-@@ -66,13 +68,24 @@ to this volume group.
- The setting can be changed with \fBvgchange\fP.
- For volume groups with metadata in lvm1 format, the limit
- and default value is 255.  
--If the metadata uses lvm2 format, the default value is 0
--which removes this restriction: there is then no limit.
--If you have a large number of physical volumes in
--a volume group with metadata in lvm2 format, 
--for tool performance reasons, you should consider 
--some use of \fB--pvmetadatacopies 0\fP
--as described in \fBpvcreate(8)\fP.
-+If the metadata uses lvm2 format, the value 0 removes this restriction:
-+there is then no limit.  If you have a large number of physical volumes in
-+a volume group with metadata in lvm2 format, for tool performance reasons,
-+you should consider some use of \fB--pvmetadatacopies 0\fP as described in
-+\fBpvcreate(8)\fP, and/or use \fB--vgmetadatacopies\fP.
-+.TP
-+.BR \-\-vgmetadatacopies " " \fINumberOfCopies|unmanaged|all\fP
-+Sets the desired number of metadata copies in the volume group.  If set to
-+a non-zero value, LVM will automatically manage the 'metadataignore'
-+flags on the physical volumes (see \fBpvchange --metadataignore\fP) in order
-+to achieve \fINumberOfCopies\fP copies of metadata.  If set to \fIunmanaged\fP,
-+LVM will not automatically manage the 'metadataignore' flags.  If set to
-+\fIall\fP, LVM will first clear all of the 'metadataignore' flags on all
-+metadata areas in the volume group, then set the value to \fIunmanaged\fP.
-+The \fBvgmetadatacopies\fP option is useful for volume groups containing
-+large numbers of physical volumes with metadata as it may be used to
-+minimize metadata read and write overhead.
-+The default value is \fIunmanaged\fP.
- .TP
- .BR \-s ", " \-\-physicalextentsize " " \fIPhysicalExtentSize\fR[\fBbBsSkKmMgGtTpPeE\fR]
- Sets the physical extent size on physical volumes of this volume group.
+@@ -48,6 +48,13 @@
+ #define DEFAULT_DMEVENTD_MONITOR 1
+ #define DEFAULT_BACKGROUND_POLLING 1
+ 
++#define DEFAULT_REPLICATOR_SYNCLOG "disk"
++#define DEFAULT_REPLICATOR_LOG_TYPE "ringbuffer"
++#define DEFAULT_REPLICATOR_LOCAL_SITE_NAME "local"
++#define DEFAULT_REPLICATOR_FALL_BEHIND_DATA 0
++#define DEFAULT_REPLICATOR_FALL_BEHIND_IOS 0
++#define DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT 0
++
+ #define DEFAULT_UMASK 0077
+ 
+ #ifdef LVM1_FALLBACK
+@@ -104,6 +111,7 @@
+ 
+ #define DEFAULT_STRIPE_FILLER "error"
+ #define DEFAULT_MIRROR_REGION_SIZE 512	/* KB */
++#define DEFAULT_REPLICATOR_REGION_SIZE 512	/* KB */
+ #define DEFAULT_INTERVAL 15
+ 
+ #ifdef READLINE_SUPPORT
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 26ba545..8b2dd66 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -74,6 +74,7 @@
+ 
+ #define REPLICATOR		0x20000000U	/* LV -internal use only for replicator */
+ #define REPLICATOR_LOG		0x40000000U	/* LV -internal use only for replicator-dev */
++#define REPLICATOR_NOTSYNCED   	0x80000000U	/* LV -internal use only for replicator */
+ 
+ #define LVM_READ              	0x00000100U	/* LV VG */
+ #define LVM_WRITE             	0x00000200U	/* LV VG */
+@@ -349,7 +350,7 @@ struct replicator_device {
+ 	const char *name;		/* Device LV name */
+ 	struct logical_volume *lv;	/* LV from replicator site's VG */
+ 	struct logical_volume *slog;	/* Synclog lv from VG  */
+-	const char *slog_name;		/* Debug - specify size of core synclog */
++	uint32_t slog_core;		/* Corelog size */
+ };
+ /* -- Replicator datatypes */
+ 
+@@ -617,6 +618,8 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ struct lvcreate_params {
+ 	/* flags */
+ 	int snapshot; /* snap */
++	const char *replicator; /* replicator */
++	int replicator_dev; /* replicator-dev */
+ 	int zero; /* all */
+ 	int major; /* all */
+ 	int minor; /* all */
+@@ -635,6 +638,9 @@ struct lvcreate_params {
+ 
+ 	uint32_t mirrors; /* mirror */
+ 
++	const char *rlog_type; /* replicator */
++	struct replicator_site rsite; /* replicator, use only parameters */
++
+ 	const struct segment_type *segtype; /* all */
+ 
+ 	/* size */
+@@ -798,17 +804,22 @@ int collapse_mirrored_lv(struct logical_volume *lv);
+ int shift_mirror_images(struct lv_segment *mirrored_seg, unsigned mimage);
+ 
+ /* ++  metadata/replicator_manip.c */
+-int replicator_add_replicator_dev(struct logical_volume *replicator_lv,
++int replicator_site_add_device(struct replicator_site *rsite,
++			       struct lv_segment *replicator_dev_seg,
++			       const char *name,
++			       struct logical_volume *rimage_lv,
++			       uint32_t slog_core,
++			       struct logical_volume *slog_lv,
++			       uint64_t device_index);
++int replicator_site_remove_device(struct replicator_device *rdev);
++int replicator_add_replicator_dev(struct logical_volume *replicator,
+ 				  struct lv_segment *rdev_seg);
+ struct logical_volume *replicator_remove_replicator_dev(struct lv_segment *rdev_seg);
+ int replicator_add_rlog(struct lv_segment *replicator_seg, struct logical_volume *rlog_lv);
+ struct logical_volume *replicator_remove_rlog(struct lv_segment *replicator_seg);
+-
+-int replicator_dev_add_slog(struct replicator_device *rdev, struct logical_volume *slog_lv);
+-struct logical_volume *replicator_dev_remove_slog(struct replicator_device *rdev);
+-int replicator_dev_add_rimage(struct replicator_device *rdev, struct logical_volume *lv);
+-struct logical_volume *replicator_dev_remove_rimage(struct replicator_device *rdev);
+-
++struct replicator_site *replicator_add_site(struct logical_volume *replicator,
++					    const char *site_name);
++int replicator_remove_site(struct replicator_site *rsite);
+ int lv_is_active_replicator_dev(const struct logical_volume *lv);
+ int lv_is_replicator(const struct logical_volume *lv);
+ int lv_is_replicator_dev(const struct logical_volume *lv);
+@@ -816,6 +827,25 @@ int lv_is_rimage(const struct logical_volume *lv);
+ int lv_is_rlog(const struct logical_volume *lv);
+ int lv_is_slog(const struct logical_volume *lv);
+ struct logical_volume *first_replicator_dev(const struct logical_volume *lv);
++int vg_prepare_replicator(struct volume_group *vg,
++			  const struct lvcreate_params *lp);
++int vg_add_replicator(struct logical_volume *replicator,
++		      const char *rlog_type,
++		      uint32_t region_size);
++int vg_remove_replicator(struct logical_volume *replicator);
++int lv_add_sync_log(struct logical_volume *replicator,
++		    unsigned site_index,
++		    uint64_t device_index,
++		    struct dm_list *allocatable_pvs,
++		    alloc_policy_t alloc);
++int lv_add_replicator_dev(struct logical_volume *replicator,
++			  struct logical_volume *lv);
++int lv_remove_replicator_dev(struct logical_volume *replicator_dev);
++int lv_add_replicator_site(struct logical_volume *replicator,
++			   const struct replicator_site *rsite);
++int lv_remove_replicator_site(struct logical_volume *replicator, const char *site_name);
++struct replicator_site *find_site_in_replicator(struct logical_volume *replicator,
++						const char *site_name);
+ /* --  metadata/replicator_manip.c */
+ struct cmd_vg *cmd_vg_add(struct dm_pool *mem, struct dm_list *cmd_vgs,
+ 			  const char *vg_name, const char *vgid,
+diff --git a/tools/args.h b/tools/args.h
+index ebce252..eab9b51 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -69,6 +69,16 @@ arg(noudevsync_ARG, '\0', "noudevsync", NULL, 0)
+ arg(poll_ARG, '\0', "poll", yes_no_arg, 0)
+ arg(stripes_long_ARG, '\0', "stripes", int_arg, 0)
+ arg(sysinit_ARG, '\0', "sysinit", NULL, 0)
++arg(replicator_ARG, '\0', "replicator", string_arg, 0)
++arg(replicatordev_ARG, '\0', "replicatordev", NULL, 0)
++arg(replicatorsynclog_ARG, '\0', "replicatorsynclog", string_arg, 0)
++arg(replicatorlogtype_ARG, '\0', "replicatorlogtype", string_arg, 0)
++arg(site_ARG, '\0', "site", site_arg, 0)
++arg(fallbehinddata_ARG, '\0', "fallbehinddata", size_mb_arg, 0)
++arg(fallbehindios_ARG, '\0', "fallbehindios", int_arg, 0)
++arg(fallbehindtimeout_ARG, '\0', "fallbehindtimeout", int_arg, 0)
++arg(sitemode_ARG, '\0', "sitemode", string_arg, 0)
++arg(remotevg_ARG, '\0', "remotevg", string_arg, 0)
+ 
+ /* Allow some variations */
+ arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
 diff --git a/tools/commands.h b/tools/commands.h
-index 62a684b..8f5ff3a 100644
+index aa012a7..a300774 100644
 --- a/tools/commands.h
 +++ b/tools/commands.h
-@@ -776,6 +776,7 @@ xx(vgcreate,
-    "\t[-h|--help]" "\n"
-    "\t[-l|--maxlogicalvolumes MaxLogicalVolumes]" "\n"
-    "\t[-M|--metadatatype 1|2] " "\n"
-+   "\t[--[vg]metadatacopies #copies] " "\n"
-    "\t[-p|--maxphysicalvolumes MaxPhysicalVolumes] " "\n"
-    "\t[-s|--physicalextentsize PhysicalExtentSize[bBsSkKmMgGtTpPeE]] " "\n"
-    "\t[-t|--test] " "\n"
-@@ -787,8 +788,8 @@ xx(vgcreate,
-    addtag_ARG, alloc_ARG, autobackup_ARG, clustered_ARG, maxlogicalvolumes_ARG,
-    maxphysicalvolumes_ARG, metadatatype_ARG, physicalextentsize_ARG, test_ARG,
-    force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatasize_ARG,
--   pvmetadatacopies_ARG, metadatacopies_ARG, dataalignment_ARG,
--   dataalignmentoffset_ARG)
-+   pvmetadatacopies_ARG, metadatacopies_ARG, vgmetadatacopies_ARG,
-+   dataalignment_ARG, dataalignmentoffset_ARG)
+@@ -118,6 +118,12 @@ xx(lvconvert,
+    "\tLogicalVolume[Path] [SplittablePhysicalVolume[Path]...]\n\n"
  
- xx(vgdisplay,
-    "Display volume group information",
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 02b06fd..a41c113 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1209,6 +1209,8 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 				  struct vgcreate_params *vp_new,
- 				  struct vgcreate_params *vp_def)
- {
-+	const char *metadata_copies_str;
+    "lvconvert "
++   "--replicator\n"
++   "\t[-d|--debug]\n"
++   "\t[-h|-?|--help]\n"
++   "\t[-v|--verbose]\n"
 +
- 	vp_new->vg_name = skip_dev_dir(cmd, vp_def->vg_name, NULL);
- 	vp_new->max_lv = arg_uint_value(cmd, maxlogicalvolumes_ARG,
- 					vp_def->max_lv);
-@@ -1243,6 +1245,24 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 		return 1;
++   "lvconvert "
+    "[-s|--snapshot]\n"
+    "\t[-c|--chunksize]\n"
+    "\t[-d|--debug]\n"
+@@ -165,6 +171,12 @@ xx(lvcreate,
+    "\t[-p|--permission {r|rw}]\n"
+    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
+    "\t[-R|--regionsize MirrorLogRegionSize]\n"
++   "\t[--replicator [ReplicatorName] [--replicatorlogtype ringbuffer]\n"
++   "\t[{--replicatorsynclog {disk|core}|--corelog}]\n"
++   "\t[--site LocalSiteName [--sitemode {sync|warn|stall|drop|fail}]\n"
++   "\t  [--remotevg RemoteVGName] [{--fallbehinddata Size[bBsSkKmMgG]|\n"
++   "\t    --fallbehindios IOCount|--fallbehindtimeout Secs}]]\n"
++   "\t[--replicatordev]\n"
+    "\t[-t|--test]\n"
+    "\t[--type VolumeType]\n"
+    "\t[-v|--verbose]\n"
+@@ -203,6 +215,9 @@ xx(lvcreate,
+    mirrorlog_ARG, mirrors_ARG, monitor_ARG, name_ARG, nosync_ARG, noudevsync_ARG,
+    permission_ARG, persistent_ARG, readahead_ARG, regionsize_ARG, size_ARG,
+    snapshot_ARG, stripes_ARG, stripesize_ARG, test_ARG, type_ARG,
++   replicator_ARG, replicatordev_ARG, replicatorlogtype_ARG,
++   remotevg_ARG, site_ARG, sitemode_ARG,
++   fallbehinddata_ARG, fallbehindios_ARG, fallbehindtimeout_ARG,
+    virtualoriginsize_ARG, virtualsize_ARG, zero_ARG)
+ 
+ xx(lvdisplay,
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 9e167aa..8cb1e24 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -60,7 +60,10 @@ static int _lvcreate_name_params(struct lvcreate_params *lp,
+ 		 * environment.
+ 		 */
+ 		if (!argc) {
+-			if (!(lp->vg_name = extract_vgname(cmd, lp->lv_name))) {
++			if (!(lp->vg_name = extract_vgname(cmd, lp->lv_name)) &&
++			    /* try to detect vg name from --replicator arg */
++			    (lp->replicator &&
++			     !(lp->vg_name = extract_vgname(cmd, lp->replicator)))) {
+ 				log_error("Please provide a volume group name");
+ 				return 0;
+ 			}
+@@ -73,6 +76,11 @@ static int _lvcreate_name_params(struct lvcreate_params *lp,
+ 				return 0;
+ 			}
+ 
++			if (!lp->lv_name &&
++			    !lp->replicator_dev &&
++			    lp->replicator &&
++			    strlen(lp->replicator))
++				lp->lv_name = lp->replicator;
+ 			/*
+ 			 * Ensure lv_name doesn't contain a
+ 			 * different VG.
+@@ -116,6 +124,20 @@ static int _lvcreate_name_params(struct lvcreate_params *lp,
+ 		}
  	}
  
-+	if (arg_count(cmd, metadatacopies_ARG)) {
-+		vp_new->metadata_copies = arg_int_value(cmd, metadatacopies_ARG,
-+							DEFAULT_VGMETADATACOPIES);
-+	} else if (arg_count(cmd, vgmetadatacopies_ARG)) {
-+		vp_new->metadata_copies = arg_int_value(cmd, vgmetadatacopies_ARG,
-+							DEFAULT_VGMETADATACOPIES);
-+	} else {
-+		metadata_copies_str = find_config_tree_str(cmd,
-+						   "metadata/vgmetadatacopies",
-+						   DEFAULT_VGMETADATACOPIES_STR);
-+		if (!strcmp(metadata_copies_str, DEFAULT_VGMETADATACOPIES_STR))
-+			vp_new->metadata_copies = DEFAULT_VGMETADATACOPIES;
-+		else
-+			vp_new->metadata_copies = strtoul(metadata_copies_str,
-+							  NULL,
-+							  10);
++	if (lp->replicator) {
++		if ((ptr = strrchr(lp->replicator, '/')))
++			lp->replicator = ptr + 1;
++
++		if (!apply_lvname_restrictions(lp->replicator))
++			return_0;
++
++		if (!validate_name(lp->replicator)) {
++			log_error("Logical volume name \"%s\" is invalid",
++				  lp->replicator);
++			return 0;
++		}
 +	}
 +
- 	return 0;
+ 	return 1;
  }
  
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index 6087145..3bb500f 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -35,11 +35,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 	argc--;
- 	argv++;
+@@ -315,7 +337,82 @@ static int _read_mirror_params(struct lvcreate_params *lp,
+ 	}
  
--	if (arg_count(cmd, metadatacopies_ARG)) {
--		log_error("Invalid option --metadatacopies, "
--			  "use --pvmetadatacopies instead.");
--		return EINVALID_CMD_LINE;
--	}
- 	pvcreate_params_set_defaults(&pp);
- 	if (!pvcreate_params_validate(cmd, argc, argv, &pp)) {
- 		return EINVALID_CMD_LINE;
-@@ -68,7 +63,8 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 	    !vg_set_max_lv(vg, vp_new.max_lv) ||
- 	    !vg_set_max_pv(vg, vp_new.max_pv) ||
- 	    !vg_set_alloc_policy(vg, vp_new.alloc) ||
--	    !vg_set_clustered(vg, vp_new.clustered))
-+	    !vg_set_clustered(vg, vp_new.clustered) ||
-+	    !vg_set_mda_copies(vg, vp_new.metadata_copies))
- 		goto bad_orphan;
+ 	if (!_validate_mirror_params(cmd, lp))
++		return_0;
++
++	return 1;
++}
++
++static int _read_replicator_params(struct lvcreate_params *lp,
++				   struct cmd_context *cmd)
++{
++	int region_size;
++	const char *replicatorsynclog;
++	int corelog = arg_count(cmd, corelog_ARG);
++
++	if (arg_count(cmd, sitemode_ARG)) {
++		log_error("FIXME: Sorry, sitemode parameter is not yet supported.");
++		return 0;
++	}
++
++	replicatorsynclog = arg_str_value(cmd, replicatorsynclog_ARG,
++					  corelog ? "core" : DEFAULT_REPLICATOR_SYNCLOG);
++
++	if (strcmp("core", replicatorsynclog) && corelog) {
++		log_error("Please use only one of --replicatorlog or --corelog");
+ 		return 0;
++	}
++
++	if (!strcmp("disk", replicatorsynclog))
++		lp->log_count = 1;
++	else if (!strcmp("core", replicatorsynclog))
++		lp->log_count = 0;
++	else {
++		log_error("Unknown replicatorsynclog type: %s", replicatorsynclog);
++		return 0;
++	}
++
++	log_verbose("Setting sync logging type to %s", replicatorsynclog);
++	if (arg_count(cmd, regionsize_ARG)) {
++		if (arg_sign_value(cmd, regionsize_ARG, 0) == SIGN_MINUS) {
++			log_error("Negative regionsize is invalid.");
++			return 0;
++		}
++		lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0);
++	} else {
++		region_size = 2 * find_config_tree_int(cmd,
++						       "activation/replicator_region_size",
++						       DEFAULT_REPLICATOR_REGION_SIZE);
++		if (region_size < 0) {
++			log_error("Negative replicator_region_size in configuration "
++				  "file is invalid.");
++			return 0;
++		}
++		lp->region_size = region_size;
++	}
++
++	if (!_validate_mirror_params(cmd, lp)) /* reuse for mirror's region_size */
++		return 0;
++
++	lp->rlog_type = arg_str_value(cmd, replicatorlogtype_ARG,
++				      DEFAULT_REPLICATOR_LOG_TYPE);
++
++	if (strcmp(lp->rlog_type, DEFAULT_REPLICATOR_LOG_TYPE)) {
++		log_error("Unsupported replicator log type %s", lp->rlog_type);
++		return 0;
++	}
++
++	lp->rsite.fall_behind_data = arg_uint64_value(cmd, fallbehinddata_ARG,
++						      DEFAULT_REPLICATOR_FALL_BEHIND_DATA);
++	lp->rsite.fall_behind_ios = arg_uint_value(cmd, fallbehindios_ARG,
++						   DEFAULT_REPLICATOR_FALL_BEHIND_IOS);
++	lp->rsite.fall_behind_timeout = arg_uint_value(cmd, fallbehindtimeout_ARG,
++						       DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT);
++
++	if (arg_count(cmd, site_ARG))
++		lp->rsite.name = arg_str_value(cmd, site_ARG,
++					       DEFAULT_REPLICATOR_LOCAL_SITE_NAME);
++	if (arg_count(cmd, remotevg_ARG))
++		lp->rsite.vg_name = arg_str_value(cmd, remotevg_ARG, NULL);
  
- 	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE)) {
+ 	return 1;
+ }
+@@ -327,6 +424,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ {
+ 	int contiguous;
+ 	unsigned pagesize;
++	int i;
+ 
+ 	memset(lp, 0, sizeof(*lp));
+ 	memset(lcp, 0, sizeof(*lcp));
+@@ -346,6 +444,12 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 	if (seg_is_mirrored(lp))
+ 		lp->mirrors = 2;
+ 
++	if (seg_is_replicator(lp) || arg_count(cmd, replicator_ARG))
++		lp->replicator = arg_str_value(cmd, replicator_ARG, "");
++
++	if (seg_is_replicator_dev(lp) || arg_count(cmd, replicatordev_ARG))
++		lp->replicator_dev = 1;
++
+ 	if (arg_count(cmd, mirrors_ARG)) {
+ 		lp->mirrors = arg_uint_value(cmd, mirrors_ARG, 0) + 1;
+ 		if (lp->mirrors == 1)
+@@ -383,7 +487,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 		}
+ 	}
+ 
+-	if (lp->mirrors > 1) {
++	if (lp->mirrors > 1 || lp->replicator) {
+ 		if (lp->snapshot) {
+ 			log_error("mirrors and snapshots are currently "
+ 				  "incompatible");
+@@ -409,6 +513,29 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 		}
+ 	}
+ 
++	if (!lp->replicator) {
++		static const struct {
++			const char *str;
++			int argname;
++		} repargs[] = {
++			{ "fallbehinddata", fallbehinddata_ARG },
++			{ "fallbehindios", fallbehindios_ARG },
++			{ "fallbehindtimeout", fallbehindtimeout_ARG },
++			{ "remotevg", remotevg_ARG },
++			{ "replicatorlogtype", replicatorlogtype_ARG },
++			{ "replicatorsynclog", replicatorsynclog_ARG },
++			{ "site", site_ARG },
++			{ "sitemode", sitemode_ARG }
++		};
++
++		for (i = 0; i < sizeof(repargs)/sizeof(repargs[0]); ++i)
++			if (arg_count(cmd, repargs[i].argname)) {
++				log_error("--%s is only available "
++					  "with replicators.", repargs[i].str);
++				return 0;
++			}
++	}
++
+ 	if (activation() && lp->segtype->ops->target_present &&
+ 	    !lp->segtype->ops->target_present(cmd, NULL, NULL)) {
+ 		log_error("%s: Required device-mapper target(s) not "
+@@ -423,6 +550,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
+ 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
+ 	    !_read_size_params(lp, lcp, cmd) ||
+ 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
++	    !_read_replicator_params(lp, cmd) ||
+ 	    !_read_mirror_params(lp, cmd))
+ 		return_0;
+ 
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 4652888..f4f9d86 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -473,6 +473,16 @@ int readahead_arg(struct cmd_context *cmd __attribute((unused)), struct arg *a)
+ 	return 1;
+ }
+ 
++int site_arg(struct cmd_context *cmd __attribute((unused)), struct arg *a)
++{
++	if (!validate_name(a->value)) {
++		log_error("Invalid site name.");
++		return 0;
++	}
++
++	return 1;
++}
++
+ /*
+  * Non-zero, positive integer, "all", or "unmanaged"
+  */
+diff --git a/tools/tools.h b/tools/tools.h
+index a09fa8e..c615b09 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -152,6 +152,7 @@ int units_arg(struct cmd_context *cmd, struct arg *a);
+ int segtype_arg(struct cmd_context *cmd, struct arg *a);
+ int alloc_arg(struct cmd_context *cmd, struct arg *a);
+ int readahead_arg(struct cmd_context *cmd, struct arg *a);
++int site_arg(struct cmd_context *cmd, struct arg *a);
+ int vgmetadatacopies_arg(struct cmd_context *cmd __attribute((unused)),
+ 			 struct arg *a);
+ 
 -- 
-1.6.0.6
+1.7.1
 
 
