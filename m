@@ -1,50 +1,80 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 29 Jun 2010 18:26:03 +0200
-Subject: [PATCH 03/12] Replicator: reserved names
+Date: Tue, 29 Jun 2010 18:26:04 +0200
+Subject: [PATCH 04/12] Replicator: add _replicator_in_sync
 In-Reply-To: <cover.1277828149.git.zkabelac@redhat.com>
 References: <cover.1277828149.git.zkabelac@redhat.com>
-Message-ID: <0d6a1127783f6a8ccd6efb37c9b66de3e60de349.1277828149.git.zkabelac@redhat.com>
+Message-ID: <7c1d3225910396c33dcd974789fc1d913ccb91d0.1277828149.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add function init_replicator_in_sync() to be similar as mirror.
+For now this function is not functional.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/misc/lvm-string.c |   18 ++++++++++++++++++
- 1 files changed, 18 insertions(+), 0 deletions(-)
+ lib/misc/lvm-globals.c |   11 +++++++++++
+ lib/misc/lvm-globals.h |    2 ++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
 
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index 7eed799..fb73674 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -275,6 +275,24 @@ int apply_lvname_restrictions(const char *name)
- 		return 0;
- 	}
- 
-+	if (strstr(name, "_slog")) {
-+		log_error("Names including \"_slog\" are reserved. "
-+			  "Please choose a different LV name.");
-+		return 0;
-+	}
-+
-+	if (strstr(name, "_rlog")) {
-+		log_error("Names including \"_rlog\" are reserved. "
-+			  "Please choose a different LV name.");
-+		return 0;
-+	}
-+
-+	if (strstr(name, "_rimage")) {
-+		log_error("Names including \"_rimage\" are reserved. "
-+			  "Please choose a different LV name.");
-+		return 0;
-+	}
-+
- 	return 1;
+diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
+index 8dc2b02..5334691 100644
+--- a/lib/misc/lvm-globals.c
++++ b/lib/misc/lvm-globals.c
+@@ -34,6 +34,7 @@ static int _ignorelockingfailure = 0;
+ static int _security_level = SECURITY_LEVEL;
+ static char _cmd_name[30] = "";
+ static int _mirror_in_sync = 0;
++static int _replicator_in_sync = 0;
+ static int _dmeventd_monitor = DEFAULT_DMEVENTD_MONITOR;
+ static int _background_polling = DEFAULT_BACKGROUND_POLLING;
+ static int _ignore_suspended_devices = 0;
+@@ -88,6 +89,11 @@ void init_mirror_in_sync(int in_sync)
+ 	_mirror_in_sync = in_sync;
  }
  
++void init_replicator_in_sync(int in_sync)
++{
++	_replicator_in_sync = in_sync;
++}
++
+ void init_dmeventd_monitor(int reg)
+ {
+ 	_dmeventd_monitor = reg;
+@@ -190,6 +196,11 @@ int mirror_in_sync(void)
+ 	return _mirror_in_sync;
+ }
+ 
++int replicator_in_sync(void)
++{
++	return _replicator_in_sync;
++}
++
+ int dmeventd_monitor_mode(void)
+ {
+ 	return _dmeventd_monitor;
+diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
+index 0134c32..c08aa2e 100644
+--- a/lib/misc/lvm-globals.h
++++ b/lib/misc/lvm-globals.h
+@@ -31,6 +31,7 @@ void init_ignorelockingfailure(int level);
+ void init_lockingfailed(int level);
+ void init_security_level(int level);
+ void init_mirror_in_sync(int in_sync);
++void init_replicator_in_sync(int in_sync);
+ void init_dmeventd_monitor(int reg);
+ void init_background_polling(int polling);
+ void init_ignore_suspended_devices(int ignore);
+@@ -51,6 +52,7 @@ int ignorelockingfailure(void);
+ int lockingfailed(void);
+ int security_level(void);
+ int mirror_in_sync(void);
++int replicator_in_sync(void);
+ int background_polling(void);
+ int ignore_suspended_devices(void);
+ const char *log_command_name(void);
 -- 
 1.7.1
 
