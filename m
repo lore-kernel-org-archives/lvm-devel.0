@@ -1,36 +1,50 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 29 Jun 2010 18:26:02 +0200
-Subject: [PATCH 02/12] Replicator: check for active replicator
+Date: Tue, 29 Jun 2010 18:26:03 +0200
+Subject: [PATCH 03/12] Replicator: reserved names
 In-Reply-To: <cover.1277828149.git.zkabelac@redhat.com>
 References: <cover.1277828149.git.zkabelac@redhat.com>
-Message-ID: <f894bd252ba537f593cbaeb09bc08f0595e89141.1277828149.git.zkabelac@redhat.com>
+Message-ID: <0d6a1127783f6a8ccd6efb37c9b66de3e60de349.1277828149.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Skip activation of other heads only for a active replicator.
-For inactive active all heads with linear overlay mapping
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/vgchange.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/misc/lvm-string.c |   18 ++++++++++++++++++
+ 1 files changed, 18 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 1d3e321..5a9edd8 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -106,7 +106,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd,
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index 7eed799..fb73674 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -275,6 +275,24 @@ int apply_lvname_restrictions(const char *name)
+ 		return 0;
+ 	}
  
- 		/* Only request activation of the first replicator-dev LV */
- 		/* Avoids retry with all heads in case of failure */
--		if (lv_is_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
-+		if (lv_is_active_replicator_dev(lv) && (lv != first_replicator_dev(lv)))
- 			continue;
++	if (strstr(name, "_slog")) {
++		log_error("Names including \"_slog\" are reserved. "
++			  "Please choose a different LV name.");
++		return 0;
++	}
++
++	if (strstr(name, "_rlog")) {
++		log_error("Names including \"_rlog\" are reserved. "
++			  "Please choose a different LV name.");
++		return 0;
++	}
++
++	if (strstr(name, "_rimage")) {
++		log_error("Names including \"_rimage\" are reserved. "
++			  "Please choose a different LV name.");
++		return 0;
++	}
++
+ 	return 1;
+ }
  
- 		/* Can't deactivate a pvmove LV */
 -- 
 1.7.1
 
