@@ -1,80 +1,142 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 29 Jun 2010 18:26:12 +0200
-Subject: [PATCH 12/12] Replicator: man pages for lvchange.8
-In-Reply-To: <cover.1277828149.git.zkabelac@redhat.com>
-References: <cover.1277828149.git.zkabelac@redhat.com>
-Message-ID: <6c750b86c5c5d51afc6f316e0123b5966db24f14.1277828149.git.zkabelac@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 29 Jun 2010 21:32:45 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
+Message-ID: <20100629213245.19471.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- man/lvchange.8.in |   37 +++++++++++++++++++++++++++++++++++++
- 1 files changed, 37 insertions(+), 0 deletions(-)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-06-29 21:32:44
 
-diff --git a/man/lvchange.8.in b/man/lvchange.8.in
-index e269802..33196c9 100644
---- a/man/lvchange.8.in
-+++ b/man/lvchange.8.in
-@@ -7,6 +7,12 @@ lvchange \- change attributes of a logical volume
- [\-A|\-\-autobackup y|n] [\-a|\-\-available y|n|ey|en|ly|ln]
- [\-\-alloc AllocationPolicy]
- [\-C|\-\-contiguous y|n] [\-d|\-\-debug] [\-\-deltag Tag]
-+[[\-\-site Site]
-+{[\-\-fallbehinddata Size[bBsSkKmMgGtTpPeE]] |
-+[\-\-fallbehindios  IOS] |
-+[\-\-fallbehindtimeout sec]}
-+[\-\-sitemode [sync|warn|stall|drop|fail]
-+[\-\-remotevg RemoteVolumeGroupName]]
- [\-\-resync]
- [\-h|\-?|\-\-help]
- [\-\-ignorelockingfailure]
-@@ -112,10 +118,41 @@ If the logical volume is active, reload its metadata.
- This is not necessary in normal operation, but may be useful
- if something has gone wrong or if you're doing clustering 
- manually without a clustered lock manager.
-+.TP
-+.I \-\-fallbehinddata
-+How many data could get replicator behind. Cannot be mixed
-+with --fallbehindios or --fallbehindtimeout.
-+.TP
-+.I \-\-fallbehindios
-+How many io operation could be queued in replicator backing store device.
-+Cannot be mixed with --fallbehinddata or --fallbehindtimeout.
-+.TP
-+.I \-\-fallbehindtimeout
-+How many seconds could be replicator behind actual data. Cannot be mixed
-+with --fallbehinddata or --fallbehindios.
-+.TP
-+.I \-\-sitemode
-+Select replication mode. Default is Warn.
-+Sync is synchronous mode. Warn,Stall,Drop,Fail are asynchronous modes.
-+Warn issues warning when remote site is switched to sync log.
-+Stall stalls replicator until remote site is back in range.
-+Drop drops whole remote site, if it get too behind.
-+Fail whole replicator fails is remote sites gets too behind.
-+Local site works usually in stall mode. There is no synclog for local
-+replicated volumes.
-+.TP
-+.I \-\-remotevg
-+Selects remote volume group for remote site that contains logical volumes
-+with same names for replication as the volume group for site. Local site
-+for replicator is assumed if remotevolumegroup is not specified.
-+.TP
- .SH Examples
- "lvchange -pr vg00/lvol1" changes the permission on 
- volume lvol1 in volume group vg00 to be read-only.
+Modified files:
+	lib/metadata   : metadata-exported.h metadata.c 
+	tools          : pvchange.c 
+
+Log message:
+	Move code into pv_change_metadataignore library function.
+	
+	In preparation to call this from both pvcreate as well as pvchange,
+	move the guts of metadataignore into a library function.
+	
+	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.158&r2=1.159
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.363&r2=1.364
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+
+--- LVM2/lib/metadata/metadata-exported.h	2010/06/28 20:40:01	1.158
++++ LVM2/lib/metadata/metadata-exported.h	2010/06/29 21:32:44	1.159
+@@ -866,6 +866,7 @@
+ uint32_t pv_mda_count(const struct physical_volume *pv);
+ uint32_t pv_mda_used_count(const struct physical_volume *pv);
+ unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned ignored);
++int pv_change_metadataignore(struct physical_volume *pv, uint32_t mda_ignore);
  
-+"lvchange --site Berlin -ay vg00/L1"
-+marks site Berlin for LV vg00/L1 as active.
+ uint64_t lv_size(const struct logical_volume *lv);
+ 
+--- LVM2/lib/metadata/metadata.c	2010/06/28 20:40:01	1.363
++++ LVM2/lib/metadata/metadata.c	2010/06/29 21:32:44	1.364
+@@ -4223,6 +4223,50 @@
+ 	return 0;
+ }
+ 
++int pv_change_metadataignore(struct physical_volume *pv, uint32_t mda_ignore)
++{
++	const char *pv_name = pv_dev_name(pv);
 +
- .SH SEE ALSO
- .BR lvm (8), 
- .BR lvcreate (8),
--- 
-1.7.1
++	if (mda_ignore && (pv_mda_used_count(pv) == 0)) {
++		log_error("Physical volume \"%s\" metadata already "
++			  "ignored", pv_name);
++		return 0;
++	}
++	if (!mda_ignore && (pv_mda_used_count(pv) == pv_mda_count(pv))) {
++		log_error("Physical volume \"%s\" metadata already "
++			  "not ignored", pv_name);
++		return 0;
++	}
++	if (!pv_mda_count(pv)) {
++		log_error("Physical volume \"%s\" has no metadata "
++			  "areas ", pv_name);
++		return 0;
++	}
++	if (mda_ignore) {
++		log_verbose("Setting physical volume \"%s\" "
++			    "metadata ignored", pv_name);
++	} else {
++		log_verbose("Setting physical volume \"%s\" "
++			    "metadata not ignored", pv_name);
++	}
++	if (!pv_mda_set_ignored(pv, mda_ignore)) {
++		return 0;
++	}
++	/*
++	 * Update vg_mda_copies based on the mdas in this PV.
++	 * This is most likely what the user would expect - if they
++	 * specify a specific PV to be ignored/un-ignored, they will
++	 * most likely not want LVM to turn around and change the
++	 * ignore / un-ignore value when it writes the VG to disk.
++	 * This does not guarantee this PV's ignore bits will be
++	 * preserved in future operations.
++	 */
++	if (!is_orphan(pv) && vg_mda_copies(pv->vg)) {
++		vg_set_mda_copies(pv->vg, vg_mda_used_count(pv->vg));
++	}
++	return 1;
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+--- LVM2/tools/pvchange.c	2010/06/28 20:38:06	1.78
++++ LVM2/tools/pvchange.c	2010/06/29 21:32:44	1.79
+@@ -122,42 +122,8 @@
+ 			}
+ 		}
+ 	} else if (arg_count(cmd, metadataignore_ARG)) {
+-		if (mda_ignore && (pv_mda_used_count(pv) == 0)) {
+-			log_error("Physical volume \"%s\" metadata already "
+-				  "ignored", pv_name);
++		if (!pv_change_metadataignore(pv, mda_ignore))
+ 			goto out;
+-		}
+-		if (!mda_ignore && (pv_mda_used_count(pv) == pv_mda_count(pv))) {
+-			log_error("Physical volume \"%s\" metadata already "
+-				  "not ignored", pv_name);
+-			goto out;
+-		}
+-		if (!pv_mda_count(pv)) {
+-			log_error("Physical volume \"%s\" has no metadata "
+-				  "areas ", pv_name);
+-			goto out;
+-		}
+-		if (mda_ignore) {
+-			log_verbose("Setting physical volume \"%s\" "
+-				    "metadata ignored", pv_name);
+-		} else {
+-			log_verbose("Setting physical volume \"%s\" "
+-				    "metadata not ignored", pv_name);
+-		}
+-		if (!pv_mda_set_ignored(pv, mda_ignore)) {
+-			goto out;
+-		}
+-		/*
+-		 * Update vg_mda_copies based on the mdas in this PV.
+-		 * This is most likely what the user would expect - if they
+-		 * specify a specific PV to be ignored/un-ignored, they will
+-		 * most likely not want LVM to turn around and change the
+-		 * ignore / un-ignore value when it writes the VG to disk.
+-		 * This does not guarantee this PV's ignore bits will be
+-		 * preserved in future operations.
+-		 */
+-		if (!is_orphan(pv) && vg_mda_copies(vg))
+-			vg_set_mda_copies(vg, vg_mda_used_count(vg));
+ 	} else {
+ 		/* --uuid: Change PV ID randomly */
+ 		if (!id_create(&pv->id)) {
 
 
