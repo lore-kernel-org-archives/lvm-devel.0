@@ -1,7 +1,7 @@
 From: Takahiro Yasui <takahiro.yasui@hds.com>
-Date: Mon, 28 Jun 2010 23:32:58 -0400
-Subject: [RFC][PATCH] lvm2: limit accesses to broken devices
-Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228864BB@USINDEVS02.corp.hds.com>
+Date: Tue, 29 Jun 2010 03:26:15 -0400
+Subject: [RFC][PATCH] lvm2: limit accesses to broken devices (v2)
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,11 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-This is a patch to limit the number of accesses to broken devices.
+This is a updated patch (v2) to limit accesses to broken devices.
 
-
-* Issues and solution
-
-lvm commands accesses same devices repeatedly  even if they are
-broken and read or write I/Os fail. For example, lvconvert command
-accesses 70 times to a broken device. lvconvert is used to recover
-a mirror volume when an error is reported, and unnecessary access
-to broken devices might prolong a recovery time.
-
-As a solution, this patch introduces a new configuration parameter,
-devices/dev_max_error_count. The number of errors on a device is
-counted and the device is desabled when the count reaches the value
-specified by the parameter, devices/dev_max_error_count. If a value
-(-1) is set to the parameter, no access control to a device is done.
-
-
-* Effectiveness of this patch
-
-This test result shows the number of accesses to a broken device
-(8:48) when the parameter, devices/dev_max_error_count is set to 1.
-
-- Environment
-  # vgs
-    VG   #PV #LV #SN Attr   VSize  VFree
-    vg00   4   1   0 wz--n- 63.98G 63.95G
-  # dmsetup ls --tree -o ascii
-  vg00-lv00 (253:5)
-   |-vg00-lv00_mimage_1 (253:2)
-   |  `- (8:48)
-   |-vg00-lv00_mimage_0 (253:1)
-   |  `- (8:64)
-   `-vg00-lv00_mlog (253:4)
-      |-vg00-lv00_mlog_mimage_1 (253:3)
-      |  `- (8:32)
-      `-vg00-lv00_mlog_mimage_0 (253:0)
-         `- (8:80)
-
-- Result
-  lvconvert --repair --use-policies vg00/lv00   70 times -> 1 time
-  vgs                                            9 times -> 1 time
-  lvs                                            7 times -> 1 time
-  vgchange -an vg00                              7 times -> 1 time
-
+* v2 changes:
+  - reset error count whenever lvm command is executed
+  - change default value from -1 to 0
 
 Appreciate your review and comments.
 
@@ -65,14 +25,17 @@ Taka
 Signed-off-by: Takahiro Yasui <takahiro.yasui@hds.com>
 ---
  doc/example.conf.in        |    5 +++++
- lib/commands/toolcontext.c |    5 +++++
- lib/device/dev-cache.c     |    3 +++
+ lib/commands/toolcontext.c |    4 ++++
+ lib/config/defaults.h      |    2 ++
+ lib/device/dev-cache.c     |   21 +++++++++++++++++++++
+ lib/device/dev-cache.h     |    2 ++
  lib/device/dev-io.c        |   34 ++++++++++++++++++++++++++++++++--
  lib/device/device.h        |    2 ++
  lib/misc/lvm-globals.c     |   11 +++++++++++
- lib/misc/lvm-globals.h     |    2 ++
+ lib/misc/lvm-globals.h     |    4 ++++
  man/lvm.conf.5.in          |    5 +++++
- 8 files changed, 65 insertions(+), 2 deletions(-)
+ tools/lvmcmdline.c         |    3 +++
+ 11 files changed, 91 insertions(+), 2 deletions(-)
 
 Index: LVM2-2.02.68/doc/example.conf.in
 ===================================================================
@@ -85,8 +48,8 @@ Index: LVM2-2.02.68/doc/example.conf.in
 +
 +    # Maximum number of error counts per device before disabling the device.
 +    # This option prevents a broken device from being accessed repeatedly.
-+    # Set to -1 to disable the error number control.
-+    dev_max_error_count = -1
++    # Set to 0 to disable the error number control.
++    dev_max_error_count = 0
  }
  
  # This section that allows you to configure the nature of the
@@ -94,25 +57,30 @@ Index: LVM2-2.02.68/lib/commands/toolcontext.c
 ===================================================================
 --- LVM2-2.02.68.orig/lib/commands/toolcontext.c
 +++ LVM2-2.02.68/lib/commands/toolcontext.c
-@@ -603,6 +603,8 @@ static int _init_dev_cache(struct cmd_co
- 		}
- 	}
+@@ -558,6 +558,10 @@ static int _init_dev_cache(struct cmd_co
+ 	const struct config_node *cn;
+ 	struct config_value *cv;
  
 +	init_dev_max_error_count(
-+		find_config_tree_int(cmd, "devices/dev_max_error_count", -1));
- 
- 	return 1;
- }
-@@ -1166,6 +1168,9 @@ struct cmd_context *create_toolcontext(u
- 
- 	_init_logging(cmd);
- 
-+	init_dev_max_error_count(
-+		find_config_tree_int(cmd, "devices/dev_max_error_count", -1));
++		find_config_tree_int(cmd, "devices/dev_max_error_count",
++				     DEFAULT_MAX_ERROR_COUNT));
 +
- 	if (!_init_hostname(cmd))
- 		goto_out;
+ 	if (!dev_cache_init(cmd))
+ 		return_0;
  
+Index: LVM2-2.02.68/lib/config/defaults.h
+===================================================================
+--- LVM2-2.02.68.orig/lib/config/defaults.h
++++ LVM2-2.02.68/lib/config/defaults.h
+@@ -109,6 +109,8 @@
+ #  define DEFAULT_MAX_HISTORY 100
+ #endif
+ 
++#define DEFAULT_MAX_ERROR_COUNT	NO_DEV_ERROR_COUNT_LIMIT
++
+ #define DEFAULT_REP_ALIGNED 1
+ #define DEFAULT_REP_BUFFERED 1
+ #define DEFAULT_REP_COLUMNS_AS_ROWS 0
 Index: LVM2-2.02.68/lib/device/dev-cache.c
 ===================================================================
 --- LVM2-2.02.68.orig/lib/device/dev-cache.c
@@ -122,7 +90,7 @@ Index: LVM2-2.02.68/lib/device/dev-cache.c
  	dev->fd = -1;
  	dev->open_count = 0;
 +	dev->error_count = 0;
-+	dev->max_error_count = -1;
++	dev->max_error_count = NO_DEV_ERROR_COUNT_LIMIT;
  	dev->block_size = -1;
  	dev->read_ahead = -1;
  	memset(dev->pvid, 0, sizeof(dev->pvid));
@@ -134,6 +102,42 @@ Index: LVM2-2.02.68/lib/device/dev-cache.c
  	dev->block_size = -1;
  	dev->read_ahead = -1;
  	dev->end = UINT64_C(0);
+@@ -791,6 +794,24 @@ struct device *dev_iter_get(struct dev_i
+ 	return NULL;
+ }
+ 
++int dev_reset_error_count(struct cmd_context *cmd)
++{
++	struct dev_iter *iter;
++	struct device *dev;
++
++	if (!(iter = dev_iter_create(cmd->filter, 0))) {
++		log_error("dev_iter_create failed");
++		return 0;
++	}
++
++	for (dev = dev_iter_get(iter); dev; dev = dev_iter_get(iter))
++		dev->error_count = 0;
++
++	dev_iter_destroy(iter);
++
++	return 1;
++}
++
+ int dev_fd(struct device *dev)
+ {
+ 	return dev->fd;
+Index: LVM2-2.02.68/lib/device/dev-cache.h
+===================================================================
+--- LVM2-2.02.68.orig/lib/device/dev-cache.h
++++ LVM2-2.02.68/lib/device/dev-cache.h
+@@ -52,4 +52,6 @@ struct dev_iter *dev_iter_create(struct 
+ void dev_iter_destroy(struct dev_iter *iter);
+ struct device *dev_iter_get(struct dev_iter *iter);
+ 
++int dev_reset_error_count(struct cmd_context *cmd);
++
+ #endif
 Index: LVM2-2.02.68/lib/device/dev-io.c
 ===================================================================
 --- LVM2-2.02.68.orig/lib/device/dev-io.c
@@ -144,7 +148,7 @@ Index: LVM2-2.02.68/lib/device/dev-io.c
  
 +static inline int _dev_is_valid(struct device *dev)
 +{
-+	return (dev->max_error_count == -1 ||
++	return (dev->max_error_count == NO_DEV_ERROR_COUNT_LIMIT ||
 +		dev->error_count < dev->max_error_count);
 +}
 +
@@ -228,7 +232,7 @@ Index: LVM2-2.02.68/lib/misc/lvm-globals.c
  static int _error_message_produced = 0;
  static unsigned _is_static = 0;
  static int _udev_checking = 1;
-+static int _dev_max_error_count = -1;
++static int _dev_max_error_count = DEFAULT_MAX_ERROR_COUNT;
  
  void init_verbose(int level)
  {
@@ -265,7 +269,7 @@ Index: LVM2-2.02.68/lib/misc/lvm-globals.h
  
  void set_cmd_name(const char *cmd_name);
  
-@@ -56,6 +57,7 @@ int ignore_suspended_devices(void);
+@@ -56,8 +57,11 @@ int ignore_suspended_devices(void);
  const char *log_command_name(void);
  unsigned is_static(void);
  int udev_checking(void);
@@ -273,6 +277,10 @@ Index: LVM2-2.02.68/lib/misc/lvm-globals.h
  
  #define DMEVENTD_MONITOR_IGNORE -1
  int dmeventd_monitor_mode(void);
+ 
++#define NO_DEV_ERROR_COUNT_LIMIT 0
++
+ #endif
 Index: LVM2-2.02.68/man/lvm.conf.5.in
 ===================================================================
 --- LVM2-2.02.68.orig/man/lvm.conf.5.in
@@ -284,11 +292,25 @@ Index: LVM2-2.02.68/man/lvm.conf.5.in
 +.IP
 +\fBdev_max_error_count\fP \(em Maximum number of error counts per device
 +before disabling devices. This option prevents a broken device from
-+being accessed repeatedly. If set to -1, no access control to devices is
++being accessed repeatedly. If set to 0, no access control to devices is
 +done.
  .TP
  \fBlog\fP \(em Default log settings
  .IP
+Index: LVM2-2.02.68/tools/lvmcmdline.c
+===================================================================
+--- LVM2-2.02.68.orig/tools/lvmcmdline.c
++++ LVM2-2.02.68/tools/lvmcmdline.c
+@@ -1020,6 +1020,9 @@ int lvm_run_command(struct cmd_context *
+ 			goto_out;
+ 		}
+ 
++	if (!dev_reset_error_count(cmd))
++		goto_out;
++
+ 	if (arg_count(cmd, config_ARG) || !cmd->config_valid || config_files_changed(cmd)) {
+ 		/* Reinitialise various settings inc. logging, filters */
+ 		if (!refresh_toolcontext(cmd)) {
 
 -- 
 Takahiro Yasui
