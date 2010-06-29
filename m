@@ -1,39 +1,94 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 29 Jun 2010 15:04:00 -0000
-Subject: LVM2/lib/format_text archiver.c
-Message-ID: <20100629150400.658.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 29 Jun 2010 18:26:00 +0200
+Subject: [PATCH 00/12] Replicator 100629
+Message-ID: <cover.1277828149.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-29 15:03:59
+This patchset enhances lvm with replicator metadata construction.
+It should not influence other commands thus should be safe to insert to
+source tree.
 
-Modified files:
-	lib/format_text: archiver.c 
+At this moment patch doesn't contain lvchange (not yet cleaned)
+Idea is to enable replicator with
 
-Log message:
-	Add error message if backup_to_file fails because of empty in_use mdas list.
+lvchange --site Berlin --replicator my/rep  -ay
+or 
+lvchange --site Berlin my/L1  -ay
+(still undecided??)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+Use case example:
 
---- LVM2/lib/format_text/archiver.c	2010/06/28 20:32:46	1.31
-+++ LVM2/lib/format_text/archiver.c	2010/06/29 15:03:59	1.32
-@@ -396,6 +396,11 @@
- 		return 0;
- 	}
- 
-+	if (!dm_list_size(&tf->metadata_areas_in_use)) {
-+		log_error(INTERNAL_ERROR "No in use metadata areas to write.");
-+		return 0;
-+	}
-+
- 	/* Write and commit the metadata area */
- 	dm_list_iterate_items(mda, &tf->metadata_areas_in_use) {
- 		if (!(r = mda->ops->vg_write(tf, vg, mda))) {
+# build remote devices
+vgcreate vg_ny /dev/loop1
+vgcreate vg_paris /dev/loop2
+
+lvcreate -L10M -n L1 vg_ny
+lvcreate -L10M -n L1 vg_paris
+lvcreate -L20M -n L2 vg_ny
+lvcreate -L20M -n L2 vg_paris
+
+# build local replicator
+vgcreate my /dev/loop0
+lvcreate --replicator rep -L20M my
+
+lvcreate --site Berlin --replicator my/rep
+lvcreate --site NY --remotevg vg_ny --replicator my/rep
+lvcreate --site Paris --remotevg vg_paris --replicator my/rep
+
+lvcreate --replicatordev -L10M -n L1 --replicator my/rep
+lvcreate --replicatordev -L20M -n L2 --replicator my/rep
+
+lvcreate --replicator rep -L20M my || exit 1
+lvcreate --replicatordev -L10M -n L1 --replicator my/rep
+
+
+lvremove my/L1
+
+Note: after removing 'L1'  LV  'L1_rimage' and '_slog' devices
+are left in VG Ideally user should use  own 'VG'
+and for removal just run:
+
+vgremove my
+
+
+Zdenek Kabelac (12):
+  Allow the user to not specify a size when creating snapshot.
+  Replicator: check for active replicator
+  Replicator: reserved names
+  Replicator: add _replicator_in_sync
+  Replicator: improve detection of replicator-dev
+  Replicator: lvcreate, lvm  man pages
+  Replicator: add new options for replicator
+  Replicator: lv_manip - create replicator
+  Replicator: add report for replicator targets
+  Replicator: replicator_manip changes
+  Replicator: replicator.c changes
+  Replicator: man pages for lvchange.8
+
+ lib/config/defaults.h            |    8 +
+ lib/metadata/lv_manip.c          |  126 ++++++-
+ lib/metadata/merge.c             |   18 +-
+ lib/metadata/metadata-exported.h |   46 ++-
+ lib/metadata/replicator_manip.c  |  806 +++++++++++++++++++++++++++++++++++---
+ lib/misc/lvm-globals.c           |   11 +
+ lib/misc/lvm-globals.h           |    2 +
+ lib/misc/lvm-string.c            |   18 +
+ lib/replicator/replicator.c      |  124 +++----
+ lib/report/columns.h             |    2 +
+ lib/report/report.c              |   32 ++
+ man/lvchange.8.in                |   37 ++
+ man/lvcreate.8.in                |   66 +++
+ man/lvm.8.in                     |    3 +-
+ tools/args.h                     |   10 +
+ tools/commands.h                 |   15 +
+ tools/lvcreate.c                 |  138 +++++++-
+ tools/lvmcmdline.c               |   10 +
+ tools/tools.h                    |    1 +
+ tools/vgchange.c                 |    2 +-
+ 20 files changed, 1312 insertions(+), 163 deletions(-)
 
 
