@@ -1,34 +1,28 @@
-From: Takahiro Yasui <takahiro.yasui@hds.com>
-Date: Wed, 30 Jun 2010 12:25:00 -0400
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 30 Jun 2010 17:46:24 +0100
 Subject: [PATCH] Fix read-only warning for partial volume
-In-Reply-To: <20100630004903.GM23989@agk-dp.fab.redhat.com>
-References: <5C30BE7ED8B03E448B2E104602D4848A59228864C1@USINDEVS02.corp.hds.com>,
-	<20100630004903.GM23989@agk-dp.fab.redhat.com>
-Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228864C3@USINDEVS02.corp.hds.com>
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228864C3@USINDEVS02.corp.hds.com>
+References: <20100630004903.GM23989@agk-dp.fab.redhat.com>
+	<5C30BE7ED8B03E448B2E104602D4848A59228864C3@USINDEVS02.corp.hds.com>
+Message-ID: <20100630164624.GP23989@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alasdair,
+On Wed, Jun 30, 2010 at 12:25:00PM -0400, Takahiro Yasui wrote:
+>   Partial mode. Incomplete volumes will be activated.
 
-On 06/29/10 20:49, Alasdair G Kergon wrote:
->>  Partial mode. Incomplete volume groups will be activated read-only.
-> We should probably replace that with a more-accurate description.
+log_print("Partial mode. Incomplete logical volumes will be processed.");
 
-Incomplete volumes aren't be necessarily activated in read-only mode.
-So just removing a word "read-only" is fine to me. Other point is this
-message is displayed not only by "vgchange -ay" but also "lvchange -ay"
-and a word "groups" is not necessary.
+Yes, the focus is on LVs not VGs
 
-My suggestion is
+Or, "Logical volumes that have parts missing may still get processed."
+ 
+As MISSING_PV handling has become default behaviour, what *extra* does
+--partial offer?
 
-  Partial mode. Incomplete volumes will be activated.
-
-Appreciate your comments.
-
-Thanks,
-Taka
+Alasdair
 
 
