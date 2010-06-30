@@ -1,88 +1,61 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 30 Jun 2010 14:54:57 +0200
-Subject: [RFC][PATCH] lvm2: limit accesses to broken devices (v2)
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
-	(Takahiro Yasui's message of "Tue, 29 Jun 2010 03:26:15 -0400")
-References: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
-Message-ID: <8739w4lly6.fsf@twilight.int.mornfall.net.>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 30 Jun 2010 13:03:50 -0000
+Subject: LVM2 man/lvm.conf.5.in man/vgextend.8.in tools ...
+Message-ID: <20100630130350.9442.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Taka,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-06-30 13:03:49
 
-Takahiro Yasui <takahiro.yasui@hds.com> writes:
->  int dev_read(struct device *dev, uint64_t offset, size_t len, void *buffer)
->  {
->  	struct device_area where;
-> +	int ret;
->  
->  	if (!dev->open_count)
->  		return_0;
->  
-> +	if (!_dev_is_valid(dev))
-> +		return 0;
-Maybe return_0 here?
+Modified files:
+	man            : lvm.conf.5.in vgextend.8.in 
+	tools          : commands.h 
 
-> +
->  	where.dev = dev;
->  	where.start = offset;
->  	where.size = len;
->  
-> -	return _aligned_io(&where, buffer, 0);
-> +	ret = _aligned_io(&where, buffer, 0);
-> +	if (!ret)
-> +		_dev_inc_error_count(dev);
-> +
-> +	return ret;
->  }
->  
->  /*
-> @@ -662,17 +684,25 @@ int dev_append(struct device *dev, size_
->  int dev_write(struct device *dev, uint64_t offset, size_t len, void *buffer)
->  {
->  	struct device_area where;
-> +	int ret;
->  
->  	if (!dev->open_count)
->  		return_0;
->  
-> +	if (!_dev_is_valid(dev))
-> +		return 0;
-(and here)
+Log message:
+	Add --metadataignore to vgextend and man pages.
 
-> +
->  	where.dev = dev;
->  	where.start = offset;
->  	where.size = len;
->  
->  	dev->flags |= DEV_ACCESSED_W;
->  
-> -	return _aligned_io(&where, buffer, 1);
-> +	ret = _aligned_io(&where, buffer, 1);
-> +	if (!ret)
-> +		_dev_inc_error_count(dev);
-> +
-> +	return ret;
-Hmm. Should write errors count towards this? What happens if the device
-just rejects writes -- could this break code by yanking the device
-completely? This means, IIUIC, that any subsequent rescan that may
-happen won't see the device even if the failure was due to failing
-writes and the device reads just fine.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgextend.8.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.151&r2=1.152
 
-I guess this is a corner case, but I would be surprised if there were
-any significant use-cases for tracking write errors for this purpose:
-the primary reason for the code is repeated read errors, I believe?
-
-Of course, not writing to the device that cannot be read is certainly
-prudent -- do not remove the check near the top of dev_write if you
-decide to not track write errors as per above.
-
-Other than this, I think the patch looks OK.
-
-Yours,
-   Petr.
+--- LVM2/man/lvm.conf.5.in	2010/06/30 12:49:29	1.10
++++ LVM2/man/lvm.conf.5.in	2010/06/30 13:03:48	1.11
+@@ -411,7 +411,7 @@
+ The default is "n".  If metadata areas on a physical volume are ignored,
+ LVM will not not store metadata in the metadata areas present on newly
+ created Physical Volumes.  The option can be overridden on the command
+-line with \fB--pvmetadataignore\fP.  Metadata areas cannot be created
++line with \fB--metadataignore\fP.  Metadata areas cannot be created
+ or extended after Logical Volumes have been allocated on the device.
+ If you do not want to store metadata on this device, it is still wise
+ always to allocate a metadata area (use a non-zero value for
+--- LVM2/man/vgextend.8.in	2009/11/03 15:58:02	1.6
++++ LVM2/man/vgextend.8.in	2010/06/30 13:03:48	1.7
+@@ -38,6 +38,8 @@
+ .TP
+ .BR \-\-metadatasize " size"
+ .TP
++.RB [ \-\-metadataignore y|n ]
++.TP
+ .BR \-\-pvmetadatacopies " copies"
+ .TP
+ .BR \-\-dataalignment " alignment"
+--- LVM2/tools/commands.h	2010/06/30 12:17:25	1.151
++++ LVM2/tools/commands.h	2010/06/30 13:03:48	1.152
+@@ -856,7 +856,7 @@
+    autobackup_ARG, test_ARG,
+    force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatatype_ARG,
+    metadatasize_ARG, pvmetadatacopies_ARG, metadatacopies_ARG,
+-   dataalignment_ARG, dataalignmentoffset_ARG)
++   metadataignore_ARG, dataalignment_ARG, dataalignmentoffset_ARG)
+ 
+ xx(vgimport,
+    "Register exported volume group with system",
 
 
