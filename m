@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Jun 2010 13:03:50 -0000
-Subject: LVM2 man/lvm.conf.5.in man/vgextend.8.in tools ...
-Message-ID: <20100630130350.9442.qmail@sourceware.org>
+Date: 30 Jun 2010 13:05:00 -0000
+Subject: LVM2/test t-vgextend-usage.sh
+Message-ID: <20100630130500.14565.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-30 13:03:49
+Changes by:	wysochanski at sourceware.org	2010-06-30 13:04:59
 
 Modified files:
-	man            : lvm.conf.5.in vgextend.8.in 
-	tools          : commands.h 
+	test           : t-vgextend-usage.sh 
 
 Log message:
-	Add --metadataignore to vgextend and man pages.
+	Update nightly tests for vgextend --metadataignore.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/vgextend.8.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.151&r2=1.152
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgextend-usage.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/man/lvm.conf.5.in	2010/06/30 12:49:29	1.10
-+++ LVM2/man/lvm.conf.5.in	2010/06/30 13:03:48	1.11
-@@ -411,7 +411,7 @@
- The default is "n".  If metadata areas on a physical volume are ignored,
- LVM will not not store metadata in the metadata areas present on newly
- created Physical Volumes.  The option can be overridden on the command
--line with \fB--pvmetadataignore\fP.  Metadata areas cannot be created
-+line with \fB--metadataignore\fP.  Metadata areas cannot be created
- or extended after Logical Volumes have been allocated on the device.
- If you do not want to store metadata on this device, it is still wise
- always to allocate a metadata area (use a non-zero value for
---- LVM2/man/vgextend.8.in	2009/11/03 15:58:02	1.6
-+++ LVM2/man/vgextend.8.in	2010/06/30 13:03:48	1.7
-@@ -38,6 +38,8 @@
- .TP
- .BR \-\-metadatasize " size"
- .TP
-+.RB [ \-\-metadataignore y|n ]
-+.TP
- .BR \-\-pvmetadatacopies " copies"
- .TP
- .BR \-\-dataalignment " alignment"
---- LVM2/tools/commands.h	2010/06/30 12:17:25	1.151
-+++ LVM2/tools/commands.h	2010/06/30 13:03:48	1.152
-@@ -856,7 +856,7 @@
-    autobackup_ARG, test_ARG,
-    force_ARG, yes_ARG, zero_ARG, labelsector_ARG, metadatatype_ARG,
-    metadatasize_ARG, pvmetadatacopies_ARG, metadatacopies_ARG,
--   dataalignment_ARG, dataalignmentoffset_ARG)
-+   metadataignore_ARG, dataalignment_ARG, dataalignmentoffset_ARG)
- 
- xx(vgimport,
-    "Register exported volume group with system",
+--- LVM2/test/t-vgextend-usage.sh	2009/10/31 16:43:07	1.3
++++ LVM2/test/t-vgextend-usage.sh	2010/06/30 13:04:59	1.4
+@@ -99,3 +99,31 @@
+ check_pv_field_ $dev3 vg_name $vg1
+ vgremove -f $vg1
+ pvremove -f $dev1 $dev2 $dev3
++
++echo test vgextend --metadataignore
++for mdacp in 1 2; do
++for ignore in y n; do
++	echo vgextend --metadataignore has proper mda_count and mda_used_count
++	vgcreate $vg $dev3
++	vgextend --metadataignore $ignore --pvmetadatacopies $mdacp $vg $dev1 $dev2
++	check_pv_field_ $dev1 pv_mda_count $mdacp
++	check_pv_field_ $dev2 pv_mda_count $mdacp
++	if [ $ignore = y ]; then
++		check_pv_field_ $dev1 pv_mda_used_count 0
++		check_pv_field_ $dev2 pv_mda_used_count 0
++	else
++		check_pv_field_ $dev1 pv_mda_used_count $mdacp
++		check_pv_field_ $dev2 pv_mda_used_count $mdacp
++	fi
++	echo vg has proper vg_mda_count and vg_mda_used_count
++	check_vg_field_ $vg vg_mda_count $(($mdacp * 2 + 1))
++	if [ $ignore = y ]; then
++		check_vg_field_ $vg vg_mda_used_count 1
++	else
++		check_vg_field_ $vg vg_mda_used_count $(($mdacp * 2 + 1))
++	fi
++	check_vg_field_ $vg vg_mda_copies unmanaged
++	vgremove $vg
++	pvremove -ff $dev1 $dev2 $dev3
++done
++done
 
 
