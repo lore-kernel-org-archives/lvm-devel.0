@@ -1,90 +1,88 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Jun 2010 12:49:31 -0000
-Subject: LVM2 lib/config/defaults.h man/lvm.conf.5.in m ...
-Message-ID: <20100630124931.31513.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 30 Jun 2010 14:54:57 +0200
+Subject: [RFC][PATCH] lvm2: limit accesses to broken devices (v2)
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
+	(Takahiro Yasui's message of "Tue, 29 Jun 2010 03:26:15 -0400")
+References: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
+Message-ID: <8739w4lly6.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-06-30 12:49:29
+Hello Taka,
 
-Modified files:
-	lib/config     : defaults.h 
-	man            : lvm.conf.5.in pvcreate.8.in 
-	tools          : toollib.c 
+Takahiro Yasui <takahiro.yasui@hds.com> writes:
+>  int dev_read(struct device *dev, uint64_t offset, size_t len, void *buffer)
+>  {
+>  	struct device_area where;
+> +	int ret;
+>  
+>  	if (!dev->open_count)
+>  		return_0;
+>  
+> +	if (!_dev_is_valid(dev))
+> +		return 0;
+Maybe return_0 here?
 
-Log message:
-	Add pvmetadatacopies to lvm.conf and pvcreate man pages.
+> +
+>  	where.dev = dev;
+>  	where.start = offset;
+>  	where.size = len;
+>  
+> -	return _aligned_io(&where, buffer, 0);
+> +	ret = _aligned_io(&where, buffer, 0);
+> +	if (!ret)
+> +		_dev_inc_error_count(dev);
+> +
+> +	return ret;
+>  }
+>  
+>  /*
+> @@ -662,17 +684,25 @@ int dev_append(struct device *dev, size_
+>  int dev_write(struct device *dev, uint64_t offset, size_t len, void *buffer)
+>  {
+>  	struct device_area where;
+> +	int ret;
+>  
+>  	if (!dev->open_count)
+>  		return_0;
+>  
+> +	if (!_dev_is_valid(dev))
+> +		return 0;
+(and here)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.62&r2=1.63
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvcreate.8.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.205&r2=1.206
+> +
+>  	where.dev = dev;
+>  	where.start = offset;
+>  	where.size = len;
+>  
+>  	dev->flags |= DEV_ACCESSED_W;
+>  
+> -	return _aligned_io(&where, buffer, 1);
+> +	ret = _aligned_io(&where, buffer, 1);
+> +	if (!ret)
+> +		_dev_inc_error_count(dev);
+> +
+> +	return ret;
+Hmm. Should write errors count towards this? What happens if the device
+just rejects writes -- could this break code by yanking the device
+completely? This means, IIUIC, that any subsequent rescan that may
+happen won't see the device even if the failure was due to failing
+writes and the device reads just fine.
 
---- LVM2/lib/config/defaults.h	2010/06/30 12:17:24	1.62
-+++ LVM2/lib/config/defaults.h	2010/06/30 12:49:28	1.63
-@@ -60,6 +60,7 @@
- 
- #define DEFAULT_STRIPESIZE 64	/* KB */
- #define DEFAULT_PVMETADATAIGNORE 0
-+#define DEFAULT_PVMETADATAIGNORE_STR "n"
- #define DEFAULT_PVMETADATASIZE 255
- #define DEFAULT_PVMETADATACOPIES 1
- #define DEFAULT_VGMETADATACOPIES 0
---- LVM2/man/lvm.conf.5.in	2010/06/28 20:38:23	1.9
-+++ LVM2/man/lvm.conf.5.in	2010/06/30 12:49:29	1.10
-@@ -406,6 +406,18 @@
- unused space becomes filled with an archive of the most recent
- previous versions of the metadata.
- .IP
-+\fBpvmetadataignore\fP When creating a physical volume using the LVM2
-+metadata format, this states whether metadata areas should be ignored.
-+The default is "n".  If metadata areas on a physical volume are ignored,
-+LVM will not not store metadata in the metadata areas present on newly
-+created Physical Volumes.  The option can be overridden on the command
-+line with \fB--pvmetadataignore\fP.  Metadata areas cannot be created
-+or extended after Logical Volumes have been allocated on the device.
-+If you do not want to store metadata on this device, it is still wise
-+always to allocate a metadata area (use a non-zero value for
-+\fB--pvmetadatacopies) in case you need it in the future and to use
-+this option to instruct LVM2 to ignore it.
-+.IP
- \fBvgmetadatacopies\fP \(em When creating a volume group using the
- LVM2 metadata format, this is the default number of copies of metadata
- desired across all the physical volumes in the volume group.  If set to
---- LVM2/man/pvcreate.8.in	2009/10/05 20:55:57	1.5
-+++ LVM2/man/pvcreate.8.in	2010/06/30 12:49:29	1.6
-@@ -13,6 +13,7 @@
- .RB [ \-M | \-\-metadatatype type ]
- .RB [ \-\-[pv]metadatacopies #copies ]
- .RB [ \-\-metadatasize size ]
-+.RB [ \-\-metadataignore y|n ]
- .RB [ \-\-dataalignment alignment ]
- .RB [ \-\-dataalignmentoffset alignment_offset ]
- .RB [ \-\-restorefile file ]
---- LVM2/tools/toollib.c	2010/06/30 12:17:25	1.205
-+++ LVM2/tools/toollib.c	2010/06/30 12:49:29	1.206
-@@ -1379,8 +1379,14 @@
- 
- 	if (arg_count(cmd, metadataignore_ARG)) {
- 		pp->mda_ignore = !strcmp(arg_str_value(cmd,
--						       metadataignore_ARG,
--						       "n"), "y");
-+						metadataignore_ARG,
-+						DEFAULT_PVMETADATAIGNORE_STR),
-+					 "y");
-+	} else {
-+		pp->mda_ignore = !strcmp(find_config_tree_str(cmd,
-+					"metadata/pvmetadataignore",
-+					DEFAULT_PVMETADATAIGNORE_STR),
-+					"y");
- 	}
- 	if (arg_count(cmd, pvmetadatacopies_ARG) &&
- 	    !arg_int_value(cmd, pvmetadatacopies_ARG, -1) &&
+I guess this is a corner case, but I would be surprised if there were
+any significant use-cases for tracking write errors for this purpose:
+the primary reason for the code is repeated read errors, I believe?
+
+Of course, not writing to the device that cannot be read is certainly
+prudent -- do not remove the check near the top of dev_write if you
+decide to not track write errors as per above.
+
+Other than this, I think the patch looks OK.
+
+Yours,
+   Petr.
 
 
