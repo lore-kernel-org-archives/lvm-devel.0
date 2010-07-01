@@ -1,48 +1,69 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 01 Jul 2010 12:07:58 +0200
-Subject: [RFC][PATCH] lvm2: limit accesses to broken devices (v2)
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228864C9@USINDEVS02.corp.hds.com>
-	(Takahiro Yasui's message of "Wed, 30 Jun 2010 17:20:36 -0400")
-References: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
-	<8739w4lly6.fsf@twilight.int.mornfall.net.>
-	<5C30BE7ED8B03E448B2E104602D4848A59228864C9@USINDEVS02.corp.hds.com>
-Message-ID: <87wrtfikg1.fsf@twilight.int.mornfall.net.>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 1 Jul 2010 10:10:52 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20100701101052.19929.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Takahiro Yasui <takahiro.yasui@hds.com> writes:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-07-01 10:10:52
 
-> As far as I understand, return_0 is for debugging of unexpected errors.
-> This is not a logical error, so I didn't used "return_0" here.
-Well, actually, return_0 is useful to track why something is failing. I
-would say that situations may arise where someone will be wondering why
-is that particular read failing (the notice about disabling the device
-may be buried a long way ahead of the failing read).
+Modified files:
+	tools          : lvconvert.c 
 
->> Hmm. Should write errors count towards this? What happens if the device
->> just rejects writes -- could this break code by yanking the device
->> completely? This means, IIUIC, that any subsequent rescan that may
->> happen won't see the device even if the failure was due to failing
->> writes and the device reads just fine.
->
-> I haven't seen the case that a device accepts read I/Os but rejects
-> write I/Os, but the opposite case could happen. I heard that some
-> devices re-allocated a bad sector when a write I/O came to devices.
-You are probably right -- I was probably thinking of a device going
-read-only for some reason, but if you say this does not happen in
-practice, I won't oppose: you have certainly more experience with
-real-life hardware.
+Log message:
+	Restore the "removemissing" behaviour of lvconvert --repair --use-policies.
 
-> Again, thank you for reviewing this patch, Petr.
-With the provision that the default stays to 0 (unlimited), I guess the
-patch is OK to go in.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
 
-Reviewed-By: Petr Rockai <prockai@redhat.com>
-
-Yours,
-   Petr.
+--- LVM2/tools/lvconvert.c	2010/06/23 20:32:29	1.135
++++ LVM2/tools/lvconvert.c	2010/07/01 10:10:52	1.136
+@@ -790,7 +790,6 @@
+ 			stack;
+ 			return;
+ 		}
+-
+ 		log_warn("%d missing and now unallocated Physical Volumes removed from VG.", removed);
+ 	}
+ }
+@@ -1177,7 +1176,6 @@
+ 	int replace_log = 0;
+ 	int replace_mirrors = 0;
+ 	uint32_t new_log_count, log_count;
+-	struct dm_list *failed_pvs = NULL;
+ 	struct logical_volume *log_lv;
+ 
+ 	cmd->handles_missing_pvs = 1;
+@@ -1232,14 +1230,14 @@
+ 	/*
+ 	 * First phase - remove faulty devices
+ 	 */
+-	if (!(failed_pvs = _failed_pv_list(lv->vg)))
++	if (!(lp->failed_pvs = _failed_pv_list(lv->vg)))
+ 		return_0;
+ 
+ 	/*
+ 	 * We must adjust the log first, or the entire mirror
+ 	 * will get stuck during a suspend.
+ 	 */
+-	if (!_lv_update_mirrored_log(lv, failed_pvs, new_log_count))
++	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, new_log_count))
+ 		return 0;
+ 
+ 	if (lp->mirrors == 1)
+@@ -1252,7 +1250,7 @@
+ 			return 0;
+ 	}
+ 
+-	if (!_lv_update_log_type(cmd, lp, lv, failed_pvs,
++	if (!_lv_update_log_type(cmd, lp, lv, lp->failed_pvs,
+ 				 new_log_count))
+ 		return 0;
+ 
 
 
