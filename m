@@ -1,49 +1,41 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 1 Jul 2010 21:46:10 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/refresh_clvmd.c
-Message-ID: <20100701214610.947.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 01 Jul 2010 16:47:52 -0500
+Subject: [Patch]: Handle both devices of a mirrored log failing (bug 607347)
+Message-ID: <1278020872.7956.1.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-07-01 21:46:09
+ brassow
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : refresh_clvmd.c 
+Fix for bug 607347: failing both redundant mirror log legs...
 
-Log message:
-	Fix another segfault in clvmd -R if no response from daemon received.
-	
-	Missed the same problem in another function...
+Rather than attempting to remove all the images of a mirrored
+log volume via remove_mirror_images, simply remove the log
+if all its devices have failed.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1647&r2=1.1648
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/refresh_clvmd.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -705,9 +705,12 @@ static int _lv_update_mirrored_log(struc
+ 		return 1;
+ 
+ 	/* Reducing redundancy of the log */
+-	return remove_mirror_images(log_lv, log_count,
+-				    is_mirror_image_removable,
+-				    operable_pvs, 0U);
++	if (log_count)
++		return remove_mirror_images(log_lv, log_count,
++					    is_mirror_image_removable,
++					    operable_pvs, 0U);
++
++	return remove_mirror_log(lv->vg->cmd, lv, operable_pvs);
+ }
+ 
+ static int _lv_update_log_type(struct cmd_context *cmd,
 
---- LVM2/WHATS_NEW	2010/07/01 21:23:47	1.1647
-+++ LVM2/WHATS_NEW	2010/07/01 21:46:09	1.1648
-@@ -1,5 +1,6 @@
- Version 2.02.70 - 
- ================================
-+  Fix another segfault in clvmd -R if no response from daemon received. (2.02.68)
-   Remove superfluous suspended device counter from clvmd.
-   Fix lvm shell crash when input is entirely whitespace.
-   Update partial mode warning message.
---- LVM2/daemons/clvmd/refresh_clvmd.c	2010/06/21 15:56:58	1.12
-+++ LVM2/daemons/clvmd/refresh_clvmd.c	2010/07/01 21:46:09	1.13
-@@ -285,7 +285,7 @@
- {
- 	int num_responses;
- 	char args[1]; // No args really.
--	lvm_response_t *response;
-+	lvm_response_t *response = NULL;
- 	int saved_errno;
- 	int status;
- 	int i;
 
 
