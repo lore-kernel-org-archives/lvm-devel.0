@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 1 Jul 2010 10:57:04 -0000
-Subject: LVM2 ./WHATS_NEW_DM man/Makefile.in
-Message-ID: <20100701105704.15183.qmail@sourceware.org>
+Date: 1 Jul 2010 11:04:59 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvm.c
+Message-ID: <20100701110459.31253.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-01 10:57:03
+Changes by:	agk at sourceware.org	2010-07-01 11:04:58
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	man            : Makefile.in 
+	.              : WHATS_NEW 
+	tools          : lvm.c 
 
 Log message:
-	Move dmeventd man page from install_lvm2 to install_device-mapper. (1.02.50)
+	Fix lvm shell crash when input is entirely whitespace.  (Xinwei Hu)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.385&r2=1.386
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1645&r2=1.1646
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvm.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
 
---- LVM2/WHATS_NEW_DM	2010/06/30 14:50:32	1.385
-+++ LVM2/WHATS_NEW_DM	2010/07/01 10:57:03	1.386
+--- LVM2/WHATS_NEW	2010/06/30 21:58:13	1.1645
++++ LVM2/WHATS_NEW	2010/07/01 11:04:58	1.1646
 @@ -1,5 +1,6 @@
- Version 1.02.52 -
+ Version 2.02.70 - 
  ================================
-+  Move dmeventd man page from install_lvm2 to install_device-mapper. (1.02.50)
++  Fix lvm shell crash when input is entirely whitespace.
+   Update partial mode warning message.
+   Preserve memlock balance in clvmd when activation triggers a resume.
  
- Version 1.02.51 - 30th June 2010
- ================================
---- LVM2/man/Makefile.in	2010/06/18 10:19:30	1.39
-+++ LVM2/man/Makefile.in	2010/07/01 10:57:03	1.40
-@@ -36,7 +36,7 @@
- 	pvresize.8 pvs.8 pvscan.8 vgcfgbackup.8 vgcfgrestore.8 vgchange.8 \
- 	vgck.8 vgcreate.8 vgconvert.8 vgdisplay.8 vgexport.8 vgextend.8 \
- 	vgimport.8 vgimportclone.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 \
--	vgrename.8 vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN) $(DMEVENTDMAN)
-+	vgrename.8 vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN)
+--- LVM2/tools/lvm.c	2009/12/16 19:22:13	1.111
++++ LVM2/tools/lvm.c	2010/07/01 11:04:58	1.112
+@@ -217,6 +217,9 @@
+ 			continue;
+ 		}
  
- ifneq ("@CLVMD@", "none")
-   MAN8CLUSTER=clvmd.8
-@@ -47,7 +47,7 @@
-   MAN8CLUSTER+=cmirrord.8
- endif
- 
--MAN8DM=dmsetup.8
-+MAN8DM=dmsetup.8 $(DMEVENTDMAN)
- MAN5DIR=$(mandir)/man5
- MAN8DIR=$(mandir)/man8
- 
++		if (!argc)
++			continue;
++
+ 		if (!strcmp(argv[0], "lvm")) {
+ 			argv++;
+ 			argc--;
 
 
