@@ -1,35 +1,44 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 2 Jul 2010 10:25:17 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20100702102517.31074.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 2 Jul 2010 11:46:56 +0100
+Subject: LVM2 ./WHATS_NEW doc/example.conf.in lib/comma ...
+In-Reply-To: <87aaqai7be.fsf@twilight.int.mornfall.net.>
+References: <20100702020959.8357.qmail@sourceware.org>
+	<87aaqai7be.fsf@twilight.int.mornfall.net.>
+Message-ID: <20100702104656.GI23989@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-02 10:25:16
+On Fri, Jul 02, 2010 at 11:03:49AM +0200, Peter Rockai wrote:
+> Have you forgotten to cvs add filter-suspended.[hc]?
 
-Modified files:
-	lib/commands   : toolcontext.c 
+Rather - forgot to remove the #include line after deciding it was
+pointless bloat to make it into a separate filter.
 
-Log message:
-	remove unneeded header
+> hand, I am not convinced that it helps in Mikul??'s case (RHBZ
+> 598135). 
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+I already fixed that bug, which was a case where the cache became
+internally inconsistent.
 
---- LVM2/lib/commands/toolcontext.c	2010/07/02 02:09:57	1.101
-+++ LVM2/lib/commands/toolcontext.c	2010/07/02 10:25:16	1.102
-@@ -24,7 +24,6 @@
- #include "filter-md.h"
- #include "filter-persistent.h"
- #include "filter-regex.h"
--#include "filter-suspended.h"
- #include "filter-sysfs.h"
- #include "label.h"
- #include "lvm-file.h"
+> In his case, the device would still end up in valid_devices in
+> the persistent cache and as long as it was just a regular (non-dm) block
+> device or partition, the appearance of MD metadata could go unnoticed.
+
+That's a different case from the one he reported and not a problem
+(apart from the races I already mentioned): before LVM takes a
+non-dm block device and turns it into a PV it checks for MD metadata
+as part of the 'pvcreate' functionality.
+Neil will be adding a reciprocal check into mdadm, which is the only
+way to stop the opposite problem of mdadm clobbering a PV.
+ 
+But without system-wide locking and co-operation between all the admin
+tools there are always going to be races possible if admins perform
+conflicting commands.  All of the caching code is about choosing a
+delicate compromise.
+
+Alasdair
 
 
