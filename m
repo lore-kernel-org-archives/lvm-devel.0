@@ -1,43 +1,35 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 2 Jul 2010 11:46:56 +0100
-Subject: LVM2 ./WHATS_NEW doc/example.conf.in lib/comma ...
-In-Reply-To: <87aaqai7be.fsf@twilight.int.mornfall.net.>
-References: <20100702020959.8357.qmail@sourceware.org>
-	<87aaqai7be.fsf@twilight.int.mornfall.net.>
-Message-ID: <20100702104656.GI23989@agk-dp.fab.redhat.com>
+Date: Fri, 2 Jul 2010 14:01:31 +0100
+Subject: LVM fault handling policies
+In-Reply-To: <459C937F-B3C8-4E8D-8894-AA97F0AB8E2B@redhat.com>
+References: <459C937F-B3C8-4E8D-8894-AA97F0AB8E2B@redhat.com>
+Message-ID: <20100702130130.GJ23989@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jul 02, 2010 at 11:03:49AM +0200, Peter Rockai wrote:
-> Have you forgotten to cvs add filter-suspended.[hc]?
-
-Rather - forgot to remove the #include line after deciding it was
-pointless bloat to make it into a separate filter.
-
-> hand, I am not convinced that it helps in Mikul??'s case (RHBZ
-> 598135). 
-
-I already fixed that bug, which was a case where the cache became
-internally inconsistent.
-
-> In his case, the device would still end up in valid_devices in
-> the persistent cache and as long as it was just a regular (non-dm) block
-> device or partition, the appearance of MD metadata could go unnoticed.
-
-That's a different case from the one he reported and not a problem
-(apart from the races I already mentioned): before LVM takes a
-non-dm block device and turns it into a PV it checks for MD metadata
-as part of the 'pvcreate' functionality.
-Neil will be adding a reciprocal check into mdadm, which is the only
-way to stop the opposite problem of mdadm clobbering a PV.
+On Thu, Jul 01, 2010 at 03:22:20PM -0500, Jon Brassow wrote:
+> Note, while most LVM commands
+> will automatically update the metadata on a restored devices, the
+> following exceptions exist:
+> - pvs (because it does not read/update VG metadata)
  
-But without system-wide locking and co-operation between all the admin
-tools there are always going to be races possible if admins perform
-conflicting commands.  All of the caching code is about choosing a
-delicate compromise.
+It depends what fields have been requested to be displayed:
+some are stored in the VG metadata so have to be read from there.
+
+> (a 'dmsetup suspend/resume' works equally well).  
+
+Let's not encourage use of dmsetup alongside LVM tools - all sorts of
+other things can go wrong then.  If it's a useful thing to be able to
+do, lvm should offer it in a properly-controlled way.  (lvchange
+--refresh?)
+
+> before proceeding.  This is simply another case, I think, where it
+
+Avoid writing it as a personal opinion:)  Write it in the form of
+an option to consider.
 
 Alasdair
 
