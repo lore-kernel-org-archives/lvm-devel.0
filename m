@@ -1,35 +1,55 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 2 Jul 2010 17:44:18 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100702174418.14692.qmail@sourceware.org>
+From: Takahiro Yasui <takahiro.yasui@hds.com>
+Date: Fri, 2 Jul 2010 14:56:51 -0400
+Subject: [PATCH] Fix prototype of mda_metadata_locn_offset()
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228864D4@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-07-02 17:44:17
+Fix prototype of mda_metadata_locn_offset() to remove a lot of
+warning messages as below duirng build.
 
-Modified files:
-	.              : WHATS_NEW 
+metadata/metadata.h:147: warning:
+type qualifiers ignored on function return type
 
-Log message:
-	.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1649&r2=1.1650
+Signed-off-by: Takahiro Yasui <takahiro.yasui@hds.com>
+---
+ lib/format_text/format-text.c |    2 +-
+ lib/metadata/metadata.h       |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
---- LVM2/WHATS_NEW	2010/07/02 02:09:57	1.1649
-+++ LVM2/WHATS_NEW	2010/07/02 17:44:17	1.1650
-@@ -7,6 +7,7 @@
-   Fix lvm shell crash when input is entirely whitespace.
-   Update partial mode warning message.
-   Preserve memlock balance in clvmd when activation triggers a resume.
-+  Restore the "removemissing" behaviour of lvconvert --repair --use-policies.
+Index: LVM2-2.02.69-20100702/lib/format_text/format-text.c
+===================================================================
+--- LVM2-2.02.69-20100702.orig/lib/format_text/format-text.c
++++ LVM2-2.02.69-20100702/lib/format_text/format-text.c
+@@ -1649,7 +1649,7 @@ static const char *_metadata_locn_name_r
+ 	return dev_name(mdac->area.dev);
+ }
  
- Version 2.02.69 - 30th June 2010
- ================================
+-static uint64_t const _metadata_locn_offset_raw(void *metadata_locn)
++static uint64_t _metadata_locn_offset_raw(void *metadata_locn)
+ {
+ 	struct mda_context *mdac = (struct mda_context *) metadata_locn;
+ 
+Index: LVM2-2.02.69-20100702/lib/metadata/metadata.h
+===================================================================
+--- LVM2-2.02.69-20100702.orig/lib/metadata/metadata.h
++++ LVM2-2.02.69-20100702/lib/metadata/metadata.h
+@@ -144,7 +144,7 @@ struct metadata_area_ops {
+ 	 * Per location description for logging.
+ 	 */
+ 	const char *(*mda_metadata_locn_name) (void *metadata_locn);
+-	uint64_t const (*mda_metadata_locn_offset) (void *metadata_locn);
++	uint64_t (*mda_metadata_locn_offset) (void *metadata_locn);
+ 
+ 	/*
+ 	 * Returns number of free sectors in given metadata area.
+
+-- 
+Takahiro Yasui
+Hitachi Data Systems
 
 
