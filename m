@@ -1,35 +1,45 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 2 Jul 2010 14:01:31 +0100
-Subject: LVM fault handling policies
-In-Reply-To: <459C937F-B3C8-4E8D-8894-AA97F0AB8E2B@redhat.com>
-References: <459C937F-B3C8-4E8D-8894-AA97F0AB8E2B@redhat.com>
-Message-ID: <20100702130130.GJ23989@agk-dp.fab.redhat.com>
+Date: Fri, 2 Jul 2010 14:32:41 +0100
+Subject: [RFC][PATCH] lvm2: limit accesses to broken devices (v2)
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
+References: <5C30BE7ED8B03E448B2E104602D4848A59228864BC@USINDEVS02.corp.hds.com>
+Message-ID: <20100702133241.GK23989@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Jul 01, 2010 at 03:22:20PM -0500, Jon Brassow wrote:
-> Note, while most LVM commands
-> will automatically update the metadata on a restored devices, the
-> following exceptions exist:
-> - pvs (because it does not read/update VG metadata)
+On Tue, Jun 29, 2010 at 03:26:15AM -0400, Takahiro Yasui wrote:
+> This is a updated patch (v2) to limit accesses to broken devices.
  
-It depends what fields have been requested to be displayed:
-some are stored in the VG metadata so have to be read from there.
+As I mentioned on IRC when you first posted this, my main concern is whether
+this introduces new metadata corruption modes (or makes existing ones more
+likely to cause problems in given circumstances) if the decision about whether
+or not to use a device is per-process and not global (machine and cluster-wide).
 
-> (a 'dmsetup suspend/resume' works equally well).  
+Currently the code tries to maintain the list of PVs as a global list which all
+instances of LVM tools share.
 
-Let's not encourage use of dmsetup alongside LVM tools - all sorts of
-other things can go wrong then.  If it's a useful thing to be able to
-do, lvm should offer it in a properly-controlled way.  (lvchange
---refresh?)
+What is proposed here is to start caching the failure information within a
+single process.  But for how long can we safely cache it before revalidating
+it?  Can there be races between processes?
 
-> before proceeding.  This is simply another case, I think, where it
+For example, how do we cope when bad sectors (or transient I/O failures) cause
+one LVM process to consider a device as missing while another process (using
+different sectors) still thinks it's perfectly OK?
 
-Avoid writing it as a personal opinion:)  Write it in the form of
-an option to consider.
+Shouldn't there be global decisions about this?
+
+Perhaps decisions to start ignoring devices should be protected by the existing
+locks: after dropping whichever lock protects the device, the state is reset and
+next time the device is needed it will get retried again.  (In other words the
+scope of the 'stop using this device because there were errors' flag is limited
+to a single transaction - and of course within that transaction the tool could have
+set the MISSING_PV flag to inform other processes to stop using the device.)
+
+Anyway, I agree that we need to do something like this patch, but I think more
+complex scenarios need to be considered first.
 
 Alasdair
 
