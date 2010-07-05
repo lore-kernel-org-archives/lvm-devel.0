@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 12 Jul 2010 12:38:36 -0000
-Subject: LVM2/lib/activate activate.c
-Message-ID: <20100712123836.1759.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 5 Jul 2010 22:56:32 -0000
+Subject: LVM2/tools dmsetup.c
+Message-ID: <20100705225632.18217.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-07-12 12:38:35
+Changes by:	agk at sourceware.org	2010-07-05 22:56:32
 
 Modified files:
-	lib/activate   : activate.c 
+	tools          : dmsetup.c 
 
 Log message:
-	Addendum for previous patch - show VG/LV name everywhere so the messages
-	are consistent.
+	Fix dmlosetup snprintf %llu compiler warning.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.172&r2=1.173
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
 
---- LVM2/lib/activate/activate.c	2010/07/12 11:37:50	1.172
-+++ LVM2/lib/activate/activate.c	2010/07/12 12:38:35	1.173
-@@ -263,7 +263,8 @@
+--- LVM2/tools/dmsetup.c	2010/04/28 13:37:37	1.138
++++ LVM2/tools/dmsetup.c	2010/07/05 22:56:31	1.139
+@@ -2942,7 +2942,7 @@
+ 	close(fd);
  
- 	if (!(cn = find_config_tree_node(cmd, "activation/volume_list"))) {
- 		log_verbose("activation/volume_list configuration setting "
--			    "not defined, checking host tags only");
-+			    "not defined, checking only host tags for %s/%s",
-+			    lv->vg->name, lv->name);
+ 	if (dm_snprintf(table, tlen, "%llu %llu loop %s %llu\n", 0ULL,
+-			(long long unsigned)sectors, file, off) < 0)
++			(long long unsigned)sectors, file, (long long unsigned)off) < 0)
+ 		return 0;
  
- 		/* If no host tags defined, activate */
- 		if (dm_list_empty(&cmd->tags))
+ 	if (_switches[VERBOSE_ARG] > 1)
+@@ -2956,8 +2956,6 @@
+ 	return 0;
+ }
+ 
+-
+-
+ static int _process_losetup_switches(const char *base, int *argc, char ***argv,
+ 				     const char *dev_dir)
+ {
 
 
