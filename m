@@ -1,41 +1,45 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:29:34 +0200
-Subject: [PATCH 4/6] Do not show backtrace
+Date: Wed,  7 Jul 2010 14:29:35 +0200
+Subject: [PATCH 5/6] Better alligned debug message - memlock
 In-Reply-To: <cover.1278505444.git.zkabelac@redhat.com>
 References: <cover.1278505444.git.zkabelac@redhat.com>
-Message-ID: <586511efb594eefc986c474da62905754d3d34ca.1278505444.git.zkabelac@redhat.com>
+Message-ID: <7279c49cc495586ad959774a958cc00241c8586a.1278505444.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When we expect this state and behavior is correct.
-
-FIXME: Add resonable error message instead of 'goto_out'
-
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/activate.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ lib/mm/memlock.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 2128c41..7edd728 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -961,8 +961,10 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
- 		goto_out;
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index bc18c0d..de1f777 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -137,7 +137,8 @@ static int _maps_line(struct cmd_context *cmd, lvmlock_t lock,
  
- 	if (!info.exists || !info.suspended) {
--		r = error_if_not_active ? 0 : 1;
--		goto_out;
-+		if (error_if_not_active)
-+			goto_out;
-+		r = 1;
-+		goto out;
+ 	/* Select readable maps */
+ 	if (fr != 'r') {
+-		log_debug("mlock area unreadable '%s': Skipping.", line);
++		log_debug("m%slock area unreadable %s : Skipping.",
++			  (lock == LVM_MLOCK) ? "" : "un", line);
+ 		return 1;
  	}
  
- 	if (!_lv_activate_lv(lv))
+@@ -171,8 +172,8 @@ static int _maps_line(struct cmd_context *cmd, lvmlock_t lock,
+ 	}
+ 
+ 	*mstats += sz;
+-	log_debug("%s %10ldKiB %12lx - %12lx %c%c%c%c %s",
+-		  (lock == LVM_MLOCK) ? "mlock" : "munlock",
++	log_debug("m%slock %10ldKiB %12lx - %12lx %c%c%c%c%s",
++		  (lock == LVM_MLOCK) ? "" : "un",
+ 		  ((long)sz + 1023) / 1024, from, to, fr, fw, fx, fp, line + pos);
+ 
+ 	if (lock == LVM_MLOCK) {
 -- 
 1.7.1.1
 
