@@ -1,39 +1,48 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:34:35 +0200
-Subject: [PATCH 01/22] Add units to passed parameters data & timeout Use size
+Date: Wed,  7 Jul 2010 14:34:36 +0200
+Subject: [PATCH 02/22] Allow the user to not specify a size when creating snapshot.
 In-Reply-To: <cover.1278505885.git.zkabelac@redhat.com>
 References: <cover.1278505885.git.zkabelac@redhat.com>
-Message-ID: <ce72aa1e436dc4981e07ce04c9e0c87b656009b6.1278505885.git.zkabelac@redhat.com>
+Message-ID: <23459f864cd232fe1877c6dfbad9ce87f8e6d59a.1278505885.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+For shared snapshot, the size is not required. If the user creates other
+volume than a shared snapshot, zero size will be rejected in
+lv_create_single.
 
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+Reviewed-by: Zdenek Kabelac <zkabelac@redhat.com>
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdm-deptree.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/lvcreate.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index fac9d21..ff714d9 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1520,11 +1520,11 @@ static int _replicator_emit_segment_line(const struct load_segment *seg, char *p
- 			    (rsite->mode == DM_REPLICATOR_SYNC) ? "synchronous" : "asynchronous");
- 
- 		if (rsite->fall_behind_data)
--			EMIT_PARAMS(*pos, " data %" PRIu64, rsite->fall_behind_data);
-+			EMIT_PARAMS(*pos, " size %" PRIu64 "s", rsite->fall_behind_data);
- 		else if (rsite->fall_behind_ios)
- 			EMIT_PARAMS(*pos, " ios %" PRIu32, rsite->fall_behind_ios);
- 		else if (rsite->async_timeout)
--			EMIT_PARAMS(*pos, " timeout %" PRIu32, rsite->async_timeout);
-+			EMIT_PARAMS(*pos, " timeout %" PRIu32 "s", rsite->async_timeout);
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index d0e962f..9e167aa 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -191,6 +191,9 @@ static int _read_size_params(struct lvcreate_params *lp,
+ 			     struct lvcreate_cmdline_params *lcp,
+ 			     struct cmd_context *cmd)
+ {
++	if (!arg_count(cmd, extents_ARG) && !arg_count(cmd, size_ARG))
++		goto skip_size_arg;
++
+ 	if (arg_count(cmd, extents_ARG) + arg_count(cmd, size_ARG) != 1) {
+ 		log_error("Please specify either size or extents (not both)");
+ 		return 0;
+@@ -215,6 +218,7 @@ static int _read_size_params(struct lvcreate_params *lp,
+ 		lcp->percent = PERCENT_NONE;
  	}
  
- 	return 1;
++skip_size_arg:
+ 	/* Size returned in kilobyte units; held in sectors */
+ 	if (arg_count(cmd, virtualsize_ARG)) {
+ 		if (arg_sign_value(cmd, virtualsize_ARG, 0) == SIGN_MINUS) {
 -- 
 1.7.1.1
 
