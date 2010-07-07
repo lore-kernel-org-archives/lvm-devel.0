@@ -1,155 +1,237 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:34:50 +0200
-Subject: [PATCH 16/22] Replicator: read site_params
+Date: Wed,  7 Jul 2010 14:34:51 +0200
+Subject: [PATCH 17/22] Replicator: lv_manip - create replicator
 In-Reply-To: <cover.1278505885.git.zkabelac@redhat.com>
 References: <cover.1278505885.git.zkabelac@redhat.com>
-Message-ID: <c562a163231bcec800c9e794d1f4768eaa17c141.1278505885.git.zkabelac@redhat.com>
+Message-ID: <b803e9f9215ea91fece1cc6e5dc78a21e0a6390f.1278505885.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Common function for parsing replicator site parameters.
-It's used by lvcreate and lvchange command in later patch.
-
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/toollib.c |  111 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- tools/toollib.h |    3 +
- 2 files changed, 114 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c |  126 ++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 125 insertions(+), 1 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index bdb52d5..f1da944 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1551,3 +1551,114 @@ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes, uint32_t *stri
- 	return _validate_stripe_params(cmd, stripes, stripe_size);
- }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5e4a674..e59f264 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -418,6 +418,8 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 			/* FIXME Check this is safe */
+ 			if (seg->log_lv && !lv_remove(seg->log_lv))
+ 				return_0;
++			if (seg->rlog_lv && !lv_remove(seg->rlog_lv))
++				return_0;
+ 			dm_list_del(&seg->list);
+ 			reduction = seg->len;
+ 		} else
+@@ -2205,6 +2207,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	struct volume_group *vg;
+ 	struct lvinfo info;
+ 	struct logical_volume *origin = NULL;
++	struct logical_volume *replicator = NULL;
+ 	int was_merging = 0;
  
-+/**
-+ * Parse parameters for replicator site
-+ *
-+ * \param cmd
-+ * \param rsite
-+ * \param changed
-+ */
-+int get_replicator_site_params(struct cmd_context *cmd,
-+			       struct replicator_site *rsite,
-+			       int *changed)
-+{
-+	struct replicator_site nrsite;
-+
-+	if (arg_count(cmd, fallbehinddata_ARG)) {
-+		nrsite.fall_behind_data =
-+			arg_uint64_value(cmd, fallbehinddata_ARG,
-+					 DEFAULT_REPLICATOR_FALL_BEHIND_DATA);
-+		if (rsite->fall_behind_data != nrsite.fall_behind_data) {
-+			rsite->fall_behind_data = nrsite.fall_behind_data;
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+		}
-+	}
-+
-+	if (arg_count(cmd, fallbehindios_ARG)) {
-+		if (arg_count(cmd, fallbehinddata_ARG)) {
-+			log_error("Only one asynchronous parameter can be used.");
-+			return 0;
-+		}
-+		nrsite.fall_behind_ios =
-+			arg_uint_value(cmd, fallbehindios_ARG,
-+				       DEFAULT_REPLICATOR_FALL_BEHIND_IOS);
-+
-+		if (rsite->fall_behind_ios != nrsite.fall_behind_ios) {
-+			rsite->fall_behind_data = 0;
-+			rsite->fall_behind_ios = nrsite.fall_behind_ios;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+		}
-+	}
-+
-+	if (arg_count(cmd, fallbehindtimeout_ARG)) {
-+		if (arg_count(cmd, fallbehinddata_ARG) ||
-+		    arg_count(cmd, fallbehindios_ARG)) {
-+			log_error("Only one asynchronous parameter can be used.");
-+			return 0;
-+		}
-+		nrsite.fall_behind_timeout =
-+			arg_uint_value(cmd, fallbehindtimeout_ARG,
-+				       DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT);
-+
-+		if (rsite->fall_behind_timeout != nrsite.fall_behind_timeout) {
-+			rsite->fall_behind_data = 0;
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_timeout = nrsite.fall_behind_timeout;
-+			(*changed)++;
-+		}
-+	}
-+
-+	nrsite.op_mode = NUM_DM_REPLICATOR_MODES;
-+	if (arg_count(cmd, sitemode_ARG)) {
-+		nrsite.op_mode = arg_uint_value(cmd, sitemode_ARG,
-+						DEFAULT_REPLICATOR_ASYNC_MODE);
-+		if ((nrsite.op_mode == DM_REPLICATOR_SYNC) &&
-+		    !arg_count(cmd, fallbehinddata_ARG) &&
-+		    !arg_count(cmd, fallbehindios_ARG) &&
-+		    !arg_count(cmd, fallbehindtimeout_ARG) &&
-+		    (rsite->fall_behind_data ||
-+		     rsite->fall_behind_ios ||
-+		     rsite->fall_behind_timeout)) {
-+			rsite->fall_behind_data = 0;
-+			rsite->fall_behind_ios = 0;
-+			rsite->fall_behind_timeout = 0;
-+			(*changed)++;
-+			log_debug("Clearing asynchronous parameters synchronous site.");
-+		}
-+	}
-+
-+	if (rsite->fall_behind_data ||
-+	    rsite->fall_behind_ios ||
-+	    rsite->fall_behind_timeout) {
-+		if (!rsite->vg_name) {
-+			log_error("Cannot set asynchronous parameters for "
-+				  "the local site %s.", rsite->name);
-+			return 0;
-+		}
-+		if (nrsite.op_mode == DM_REPLICATOR_SYNC) {
-+			log_error("For synchronous site mode all asynchronous "
-+				  "parameters must be deleted.");
-+			return 0;
-+		} else if (nrsite.op_mode == NUM_DM_REPLICATOR_MODES)
-+			nrsite.op_mode = (rsite->op_mode == DM_REPLICATOR_SYNC) ?
-+				DEFAULT_REPLICATOR_ASYNC_MODE : rsite->op_mode;
-+	} else {
-+		if (nrsite.op_mode != NUM_DM_REPLICATOR_MODES &&
-+		    nrsite.op_mode != DM_REPLICATOR_SYNC) {
-+			log_error("For asynchronous site mode an asynchronous "
-+				  "non-zero parameter must be specified.");
-+			return 0;
-+		}
-+		nrsite.op_mode = DM_REPLICATOR_SYNC;
-+	}
-+
-+	if (rsite->op_mode != nrsite.op_mode) {
-+		rsite->op_mode = nrsite.op_mode;
-+		(*changed)++;
-+	}
-+
-+	return 1;
-+}
-diff --git a/tools/toollib.h b/tools/toollib.h
-index daab95a..1d3d3c1 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -118,4 +118,7 @@ int get_activation_monitoring_mode(struct cmd_context *cmd,
- int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
- 		      uint32_t *stripe_size);
+ 	vg = lv->vg;
+@@ -2230,6 +2233,12 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
-+int get_replicator_site_params(struct cmd_context *cmd,
-+			       struct replicator_site *rsite,
-+			       int *changed);
- #endif
++	if (lv_is_rimage(lv) || lv_is_rlog(lv) || lv_is_slog(lv)) {
++		log_error("Can't remove logical volume %s used by a "
++			  "replicator.", lv->name);
++		return 0;
++	}
++
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
+ 		return 0;
+@@ -2267,6 +2276,14 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			return_0;
+ 	}
+ 
++	if (lv_is_replicator_dev(lv)) {
++                replicator = first_seg(lv)->replicator;
++		if (!lv_remove_replicator_dev(lv)) {
++			log_error("Unable to remove replicator-dev %s", lv->name);
++			return 0;
++		}
++	}
++
+ 	if (!deactivate_lv(cmd, lv)) {
+ 		log_error("Unable to deactivate logical volume \"%s\"",
+ 			  lv->name);
+@@ -2295,6 +2312,17 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		}
+ 	}
+ 
++	if (replicator) {
++		if (!suspend_lv(cmd, replicator)) {
++			log_error("Failed to refresh replicator %s.", replicator->name);
++			return 0;
++		}
++		if (!resume_lv(cmd, replicator)) {
++			log_error("Failed to resume replicator %s.", replicator->name);
++			return 0;
++		}
++	}
++
+ 	backup(vg);
+ 
+ 	if (lv_is_visible(lv))
+@@ -2310,6 +2338,8 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 				const force_t force, unsigned level)
+ {
+ 	struct dm_list *snh, *snht;
++	struct replicator_site *rsite;
++	struct replicator_device *rdev;
+ 
+ 	if (lv_is_cow(lv)) {
+ 		/* A merging snapshot cannot be removed directly */
+@@ -2320,6 +2350,18 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 		}
+ 	}
+ 
++	if (lv_is_replicator(lv)) {
++		/* Remove replicators' head LVs first */
++		dm_list_iterate_items(rsite, &lv->rsites) {
++			if (rsite->site_index != 0)
++				continue;
++			dm_list_iterate_items(rdev, &rsite->rdevices)
++				if (!lv_remove_with_dependencies(cmd, rdev->lv,
++								 force, level + 1))
++					return_0;
++		}
++	}
++
+ 	if (lv_is_origin(lv)) {
+ 		/* remove snapshot LVs first */
+ 		dm_list_iterate_safe(snh, snht, &lv->snapshot_segs) {
+@@ -2998,6 +3040,7 @@ int lv_create_single(struct volume_group *vg,
+ 	struct logical_volume *lv, *org = NULL;
+ 	int origin_active = 0;
+ 	struct lvinfo info;
++	struct logical_volume *replicator;
+ 
+ 	if (lp->lv_name && find_lv_in_vg(vg, lp->lv_name)) {
+ 		log_error("Logical volume \"%s\" already exists in "
+@@ -3118,6 +3161,13 @@ int lv_create_single(struct volume_group *vg,
+ 		}
+ 	}
+ 
++	if (lp->replicator) {
++		if (!vg_prearrange_replicator(vg, lp))
++			return_0;
++		if (lp->rsite.name && !lp->replicator_dev)
++			return 1; /* Do not create any LV this time */
++	}
++
+ 	if (!lp->extents) {
+ 		log_error("Unable to create new logical volume with no extents");
+ 		return 0;
+@@ -3169,6 +3219,19 @@ int lv_create_single(struct volume_group *vg,
+ 		}
+ 	}
+ 
++	if (lp->replicator_dev) {
++		init_replicator_in_sync(lp->nosync);
++
++		if (lp->nosync) {
++			log_error("FIXME: Unsupported.");
++			return 0;
++
++			log_warn("WARNING: New replicator won't be synchronised. "
++				  "Don't read what you didn't write!");
++			status |= REPLICATOR_NOTSYNCED;
++		}
++	}
++
+ 	if (!(lv = lv_create_empty(lp->lv_name ? lp->lv_name : "lvol%d", NULL,
+ 				   status, lp->alloc, vg)))
+ 		return_0;
+@@ -3225,6 +3288,12 @@ int lv_create_single(struct volume_group *vg,
+ 				  "exception store.");
+ 			goto revert_new_lv;
+ 		}
++	} else if (lp->replicator_dev || lp->replicator) {
++		if (!activate_lv_excl(cmd, lv)) {
++			log_error("Aborting. Failed to activate replicator "
++				  "device.");
++			goto revert_new_lv;
++		}
+ 	} else if (!activate_lv(cmd, lv)) {
+ 		if (lp->zero) {
+ 			log_error("Aborting. Failed to activate new LV to wipe "
+@@ -3240,10 +3309,65 @@ int lv_create_single(struct volume_group *vg,
+ 	else if (!set_lv(cmd, lv, UINT64_C(0), 0)) {
+ 		log_error("Aborting. Failed to wipe %s.",
+ 			  lp->snapshot ? "snapshot exception store" :
+-					 "start of new LV");
++			  lp->replicator ? "replicator backing store" :
++					   "start of new LV");
+ 		goto deactivate_and_revert_new_lv;
+ 	}
+ 
++	if (!lp->replicator_dev && lp->replicator) {
++		if (!deactivate_lv(cmd, lv)) {
++			log_error("Aborting. Couldn't deactivate replicator log."
++				  " Manual intervention required.");
++			return 0;
++		}
++		if (!vg_add_replicator(lv, lp->rlog_type, lp->region_size)) {
++			log_error("Could not create replicator.");
++			goto revert_new_lv;
++		}
++		/* store vg on disk(s) */
++		if (!vg_write(vg) || !vg_commit(vg))
++			return_0;
++	}
++
++	if (lp->replicator_dev) {
++		if (!lp->replicator) {
++			log_error("Replicator is not specified.");
++			return 0;
++		}
++		if (!deactivate_lv(cmd, lv)) {
++			log_error("Aborting. Could not deactivate new LV.");
++			return 0;
++		}
++
++		if (!(replicator = find_lv(vg, lp->replicator))) {
++			log_error("Could not find replicator.");
++			goto revert_new_lv;
++		}
++
++		if (!lv_add_replicator_dev(replicator, lv)) {
++			log_error("Could not insert replicator device to replicator.");
++			goto revert_new_lv;
++		}
++
++		/* store vg on disk(s) */
++		if (!vg_write(vg))
++			return_0;
++
++		if (!suspend_lv(cmd, replicator)) {
++			log_error("Failed to suspend replicator %s", replicator->name);
++			vg_revert(vg);
++			return 0;
++		}
++
++		if (!vg_commit(vg))
++			return_0;
++
++		if (!resume_lv(cmd, replicator)) {
++			log_error("Problem reactivating replicator %s", replicator->name);
++			return 0;
++		}
++	}
++
+ 	if (lp->snapshot) {
+ 		/* Reset permission after zeroing */
+ 		if (!(lp->permission & LVM_WRITE))
 -- 
 1.7.1.1
 
