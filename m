@@ -1,89 +1,53 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:34:42 +0200
-Subject: [PATCH 08/22] Replicator: add report for replicator targets
+Date: Wed,  7 Jul 2010 14:34:43 +0200
+Subject: [PATCH 09/22] Replicator: improve detection of replicator-dev
 In-Reply-To: <cover.1278505885.git.zkabelac@redhat.com>
 References: <cover.1278505885.git.zkabelac@redhat.com>
-Message-ID: <95a009c342542dc23a8e2bba7dee6d8675a9d326.1278505885.git.zkabelac@redhat.com>
+Message-ID: <22bec2578d04b16f01c3a28e28b88906cc3e4dbc.1278505885.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Elementary reporting tool for replicator and replicato-dev LVs.
-Replicator uses free flag 'q'.
-Replicator-dev  'r' for normal, 'R' for unsynchronized replicator.
-Note: unsychronized status not yet written.
+Check for NULL replicator pointer in replicator-dev segment.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/report/columns.h |    2 ++
- lib/report/report.c  |   32 ++++++++++++++++++++++++++++++++
- 2 files changed, 34 insertions(+), 0 deletions(-)
+ lib/metadata/merge.c |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 823ce2c..b6e00ef 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -76,6 +76,8 @@ FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, "convert_lv", "For lvconvert,
- FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, "lv_tags", "Tags, if any.")
- FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, "mirror_log", "For mirrors, the LV holding the synchronisation log.")
- FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, "modules", "Kernel device-mapper modules required for this LV.")
-+FIELD(LVS, lv, STR, "RImage", lvid, 7, rimage, "rimage", "For replicators, the replicated image of this LV.")
-+FIELD(LVS, lv, STR, "Replicator", lvid, 7, replicator, "replicator", "For replicators, the replicator control LV.")
- 
- FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, "pv_fmt", "Type of metadata.")
- FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, "pv_uuid", "Unique identifier.")
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 9a76334..b7fb15b 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -303,6 +303,10 @@ static int _lvstatus_disp(struct dm_report *rh __attribute((unused)), struct dm_
- 		repstr[0] = 'p';
- 	else if (lv->status & CONVERTING)
- 		repstr[0] = 'c';
-+	else if (lv_is_replicator(lv))
-+		repstr[0] = 'q';
-+	else if (lv_is_replicator_dev(lv))
-+		repstr[0] = (lv->status & REPLICATOR_NOTSYNCED) ? 'R' : 'r';
- 	else if (lv->status & VIRTUAL)
- 		repstr[0] = 'v';
- 	/* Origin takes precedence over Mirror */
-@@ -605,6 +609,34 @@ static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
- 	return 1;
- }
- 
-+static int _rimage_disp(struct dm_report *rh, struct dm_pool *mem,
-+			struct dm_report_field *field,
-+			const void *data, void *private)
-+{
-+	const struct logical_volume *lv = (const struct logical_volume *) data;
-+
-+	if (lv_is_replicator_dev(lv))
-+		return _lvname_disp(rh, mem, field, lv->rdevice->lv, private);
-+
-+	dm_report_field_set_value(field, "", NULL);
-+
-+	return 1;
-+}
-+
-+static int _replicator_disp(struct dm_report *rh, struct dm_pool *mem,
-+			struct dm_report_field *field,
-+			const void *data, void *private)
-+{
-+	const struct logical_volume *lv = (const struct logical_volume *) data;
-+
-+	if (lv_is_replicator_dev(lv))
-+		return _lvname_disp(rh, mem, field, lv->rdevice->rsite->replicator, private);
-+
-+	dm_report_field_set_value(field, "", NULL);
-+
-+	return 1;
-+}
-+
- static int _size32_disp(struct dm_report *rh __attribute((unused)), struct dm_pool *mem,
- 			struct dm_report_field *field,
- 			const void *data, void *private)
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index 3b8895c..11c58f9 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -219,14 +219,20 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
+ 				seg_found++;
+ 		}
+ 		if (seg_is_replicator_dev(seg)) {
+-			dm_list_iterate_items(rsite, &seg->replicator->rsites) {
+-				dm_list_iterate_items(rdev, &rsite->rdevices) {
+-					if (lv == rdev->lv || lv == rdev->slog)
+-						seg_found++;
++			if (!seg->replicator) {
++				log_error("LV %s has replicator-dev segment "
++					  "without replicator", lv->name);
++				inc_error_count;
++			} else {
++				dm_list_iterate_items(rsite, &seg->replicator->rsites) {
++					dm_list_iterate_items(rdev, &rsite->rdevices) {
++						if (lv == rdev->lv || lv == rdev->slog)
++							seg_found++;
++					}
+ 				}
++				if (lv == seg->replicator)
++					seg_found++;
+ 			}
+-			if (lv == seg->replicator)
+-				seg_found++;
+ 		}
+ 		if (seg_is_replicator(seg) && lv == seg->rlog_lv)
+ 				seg_found++;
 -- 
 1.7.1.1
 
