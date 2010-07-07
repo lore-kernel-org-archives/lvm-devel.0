@@ -1,84 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:34:56 +0200
-Subject: [PATCH 22/22] Replicator: lvremove implementation
-In-Reply-To: <cover.1278505885.git.zkabelac@redhat.com>
-References: <cover.1278505885.git.zkabelac@redhat.com>
-Message-ID: <61754846135651f97cee27b80b5330781e7609c4.1278505885.git.zkabelac@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 7 Jul 2010 14:43:59 -0000
+Subject: LVM2/test t-inconsistent-metadata.sh
+Message-ID: <20100707144359.23408.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/commands.h |    3 ++-
- tools/lvremove.c |   19 ++++++++++++++++++-
- 2 files changed, 20 insertions(+), 2 deletions(-)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-07-07 14:43:58
 
-diff --git a/tools/commands.h b/tools/commands.h
-index 9e27ad9..73bede8 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -365,12 +365,13 @@ xx(lvremove,
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-    "\t[--noudevsync]\n"
-+   "\t[--site SiteName]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]" "\n"
-    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
- 
--   autobackup_ARG, force_ARG, noudevsync_ARG, test_ARG)
-+   autobackup_ARG, force_ARG, noudevsync_ARG, site_ARG, test_ARG)
- 
- xx(lvrename,
-    "Rename a logical volume",
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index dbf2f1d..15005c3 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -19,6 +19,8 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			   void *handle __attribute((unused)))
- {
- 	struct logical_volume *origin;
-+	struct logical_volume *replicator;
-+	const char *site_name;
- 
- 	/*
- 	 * If this is a sparse device, remove its origin too.
-@@ -26,6 +28,21 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
-         if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
-                 lv = origin;
- 
-+	if ((lv_is_replicator_dev(lv) || lv_is_replicator(lv)) &&
-+	    arg_count(cmd, site_ARG)) {
-+		replicator = lv_is_replicator(lv) ? lv : first_seg(lv)->replicator;
-+		site_name = arg_str_value(cmd, site_ARG,
-+					  DEFAULT_REPLICATOR_LOCAL_SITE_NAME);
+Modified files:
+	test           : t-inconsistent-metadata.sh 
+
+Log message:
+	Test failed commit of mda on new pv - failed vgextend.
+	
+	Test the auto-repair capability when we fail committing to an mda
+	on a new pv adding to a vg.  This test should fail until we fix
+	the auto-repair in this case.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-inconsistent-metadata.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+
+--- LVM2/test/t-inconsistent-metadata.sh	2009/07/01 17:06:04	1.3
++++ LVM2/test/t-inconsistent-metadata.sh	2010/07/07 14:43:57	1.4
+@@ -63,3 +63,13 @@
+ vgs 2>&1 | tee cmd.out
+ not grep "Inconsistent metadata found for VG $vg" cmd.out
+ check
 +
-+		log_error("REMOVE SITE  %s   of %s", site_name, replicator->name);
-+		if (!lv_remove_replicator_site(replicator, site_name)) {
-+			stack;
-+			return ECMD_FAILED;
-+		}
-+
-+		return ECMD_PROCESSED;
-+	}
-+
- 	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG), 0)) {
- 		stack;
- 		return ECMD_FAILED;
--- 
-1.7.1.1
++echo Check auto-repair of failed vgextend - metadata written to original pv but not new pv
++vgremove -f $vg
++pvremove -ff $devs
++pvcreate $devs
++backup_dev $dev2
++vgcreate $vg $dev1
++vgextend $vg $dev2
++restore_dev $dev2
++should compare_two_fields_ vgs $vg vg_mda_count pvs $dev2 vg_mda_count
 
 
