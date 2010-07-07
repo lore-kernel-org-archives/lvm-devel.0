@@ -1,48 +1,40 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  7 Jul 2010 14:34:36 +0200
-Subject: [PATCH 02/22] Allow the user to not specify a size when creating snapshot.
+Date: Wed,  7 Jul 2010 14:34:37 +0200
+Subject: [PATCH 03/22] Skip check missing rem.VGs for non-activate locks
 In-Reply-To: <cover.1278505885.git.zkabelac@redhat.com>
 References: <cover.1278505885.git.zkabelac@redhat.com>
-Message-ID: <23459f864cd232fe1877c6dfbad9ce87f8e6d59a.1278505885.git.zkabelac@redhat.com>
+Message-ID: <96f03cef00342e69b9409b0f1b706afdb8aa62f5.1278505885.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-For shared snapshot, the size is not required. If the user creates other
-volume than a shared snapshot, zero size will be rejected in
-lv_create_single.
+Skip call for checking whether this LV needs to locks some
+more remote VGs (applies to replicator_dev devices).
 
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-Reviewed-by: Zdenek Kabelac <zkabelac@redhat.com>
+The effect is, that deactivation of replicator-dev devices does
+not require to take a lock for remote VGs, so avoids repeated invoke
+of deactivate_lv.
+
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvcreate.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/locking/locking.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index d0e962f..9e167aa 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -191,6 +191,9 @@ static int _read_size_params(struct lvcreate_params *lp,
- 			     struct lvcreate_cmdline_params *lcp,
- 			     struct cmd_context *cmd)
- {
-+	if (!arg_count(cmd, extents_ARG) && !arg_count(cmd, size_ARG))
-+		goto skip_size_arg;
-+
- 	if (arg_count(cmd, extents_ARG) + arg_count(cmd, size_ARG) != 1) {
- 		log_error("Please specify either size or extents (not both)");
- 		return 0;
-@@ -215,6 +218,7 @@ static int _read_size_params(struct lvcreate_params *lp,
- 		lcp->percent = PERCENT_NONE;
- 	}
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index 488d194..dde1a08 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -136,7 +136,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
  
-+skip_size_arg:
- 	/* Size returned in kilobyte units; held in sectors */
- 	if (arg_count(cmd, virtualsize_ARG)) {
- 		if (arg_sign_value(cmd, virtualsize_ARG, 0) == SIGN_MINUS) {
+ #define lock_lv_vol(cmd, lv, flags)	\
+-	(find_replicator_vgs((lv)) ? \
++	((!((flags) & LCK_READ) || find_replicator_vgs((lv))) ? \
+ 		lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv)) : \
+ 		0)
+ 
 -- 
 1.7.1.1
 
