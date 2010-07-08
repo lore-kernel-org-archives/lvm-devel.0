@@ -1,39 +1,39 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 8 Jul 2010 17:41:46 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20100708174146.7500.qmail@sourceware.org>
+From: Fabio M. Di Nitto <fdinitto@redhat.com>
+Date: Thu, 08 Jul 2010 20:18:31 +0200
+Subject: [PATCH] clvmd should create its own pid file
+In-Reply-To: <20100708145916.GT22664@agk-dp.fab.redhat.com>
+References: <4C35CCEB.4020300@redhat.com>
+	<20100708145916.GT22664@agk-dp.fab.redhat.com>
+Message-ID: <4C361677.2030904@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-07-08 17:41:46
+On 07/08/2010 04:59 PM, Alasdair G Kergon wrote:
+> Does this work OK with clvmd -S?
 
-Modified files:
-	lib/metadata   : metadata.c 
+Yes. It appears to be working fine.
 
-Log message:
-	Init mda->list in mda_copy.
-	
-	This patch should be no functional change as all callers initialize
-	mda->list.
+> Should we have FD_CLOEXEC ?
+>
+> (See pidfile.c in multipathd.)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.385&r2=1.386
+I don't have any special preference. I noticed that the pid file 
+implementations in other daemons (within lvm2) don't use it nor unlink 
+the pid file on exit.
 
---- LVM2/lib/metadata/metadata.c	2010/07/07 18:59:45	1.385
-+++ LVM2/lib/metadata/metadata.c	2010/07/08 17:41:46	1.386
-@@ -4207,7 +4207,7 @@
- 		}
- 	}
- 
--	/* FIXME mda 'list' left invalid here */
-+	dm_list_init(&mda_new->list);
- 
- 	return mda_new;
- }
+> Also, let's make it library code rather than copying it from cmirrord.
+
+Works for me.
+
+I am going to make it a lib call and cleanup both cmirrord/dmeventd/clvmd.
+
+Do you have anything against atexit() handler? That's what we use in 
+cluster daemons to unlink the pid files.
+
+Cheers
+Fabio
 
 
