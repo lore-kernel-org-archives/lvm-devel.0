@@ -1,36 +1,23 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Jul 2010 14:47:47 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20100708144747.23027.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Thu, 8 Jul 2010 15:59:16 +0100
+Subject: [PATCH] clvmd should create its own pid file
+In-Reply-To: <4C35CCEB.4020300@redhat.com>
+References: <4C35CCEB.4020300@redhat.com>
+Message-ID: <20100708145916.GT22664@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-07-08 14:47:47
+Does this work OK with clvmd -S?
 
-Modified files:
-	lib/mm         : memlock.c 
+Should we have FD_CLOEXEC ?
 
-Log message:
-	Fix format string from patch apply mistake
+(See pidfile.c in multipathd.)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
+Also, let's make it library code rather than copying it from cmirrord.
 
---- LVM2/lib/mm/memlock.c	2010/07/08 13:05:27	1.28
-+++ LVM2/lib/mm/memlock.c	2010/07/08 14:47:46	1.29
-@@ -137,7 +137,7 @@
- 
- 	/* Select readable maps */
- 	if (fr != 'r') {
--		log_debug("% area unreadable %s : Skipping.",
-+		log_debug("%s area unreadable %s : Skipping.",
- 			  (lock == LVM_MLOCK) ? "mlock" : "munlock", line);
- 		return 1;
- 	}
+Alasdair
 
 
