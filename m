@@ -1,42 +1,46 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Fri, 09 Jul 2010 11:04:04 +0200
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 9 Jul 2010 14:09:51 +0100
 Subject: [PATCH] pid files cleanup
-Message-ID: <4C36E604.6090106@redhat.com>
+In-Reply-To: <4C36E604.6090106@redhat.com>
+References: <4C36E604.6090106@redhat.com>
+Message-ID: <20100709130950.GX22664@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi all,
+On Fri, Jul 09, 2010 at 11:04:04AM +0200, Fabio M. Di Nitto wrote:
+> +	/* Create pidfile */
+> +	if (create_lockfile(CLVMD_PIDFILE) < 0) {
 
-as previously discussed, the patch:
+For functions in lvm, our convention is to return 1 on success or 0 on failure.
 
-- adds a generic create_lockfile fn to lvm-file.{c,h}. Based on
-multipathd/pidfile.c
-- adds --clvmd-pidfile configure option (autoreconf on F-12)
-- make clvmd use the new create_lockfile
-- make cmirrord use the new create_lockfile and drop duplicate code
-- unlink pidfiles on exit (note that because of the atexit() behavior
-this has to be done locally in the daemon and cannot be generalized in
-the library).
+> +++ b/daemons/cmirrord/Makefile.in
 
-NOTES:
+> +LVMLIBS = $(LVMINTERNAL_LIBS)
 
-- I had some issues to build dmeventd that I need to investigate
-locally. dmeventd also needs to be ported (if possible) to use the
-library implementation of create_lockfile().
+Hmmm.
 
-- create_lockfile can probably use fcntl_lock_file, but I am not
-entirely sure about its behavior yet (specially the waiting note in the
-header), so I choose a safe path for now and use a known (to me)
-implementation.
+We still have already:
+  cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
 
-- WHATS_NEW will be updated once patch is ACK.
+- Does the definition above mean this bit can come out?
 
-Thanks
-Fabio
--------------- next part --------------
-An embedded and charset-unspecified text was scrubbed...
-Name: pid_files.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100709/b8252385/attachment.ksh>
+> +++ b/lib/misc/lvm-file.c
+> +	return 0;
+
+return 1;
+
+> +	return -errno;
+
+return 0;
+
+(This function already handled/reported errno appropriately.)
+
+Looks good - ack.
+
+Alasdair
+
+
+
