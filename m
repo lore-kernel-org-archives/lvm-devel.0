@@ -1,31 +1,81 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Mon, 12 Jul 2010 11:37:50 +0200
-Subject: [PATCH] pid files cleanup take 2
-Message-ID: <4C3AE26E.40900@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 12 Jul 2010 11:37:50 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
+Message-ID: <20100712113750.27091.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi all,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2010-07-12 11:37:50
 
-this new patch moves create_lockfile to dm_create_lockfile (dm-file.c),
-addresses the return code issue and switch also dmeventd to use the
-generic implementation.
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : activate.c 
 
-autoreconf executed on F-12.
+Log message:
+	Add more verbose messages while checking volume_list and hosttags settings.
+	
+	This should bring less confusion when there are some settings left and
+	people just forgot about it and then they run into problems. These messages
+	should give them a hint of what's really going on.
 
-NOTE: dmeventd has, in its current implementation, a slightly more
-detailed error handling of the pid file. See the 2 return codes that are
-not necessary any longer by using dm_create_lock.
-If current behavior of dmeventd has to be retained, then we can simply
-modify dm_create_lockfile to return different values depending on the
-error and dmeventd can simply re-map them for its needs.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1663&r2=1.1664
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.171&r2=1.172
 
-Cheers
-Fabio
--------------- next part --------------
-An embedded and charset-unspecified text was scrubbed...
-Name: pid_files2.diff
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100712/3ad8768a/attachment.ksh>
+--- LVM2/WHATS_NEW	2010/07/09 17:01:11	1.1663
++++ LVM2/WHATS_NEW	2010/07/12 11:37:49	1.1664
+@@ -1,5 +1,6 @@
+ Version 2.02.71 -
+ ===============================
++  Add more verbose messages while checking volume_list and hosttags settings.
+   Add log_error when strdup fails in {vg|lv}_change_tag().
+   Remove unnecessary includes in liblvm files.
+   Use __attribute__ consistently throughout.
+--- LVM2/lib/activate/activate.c	2010/07/08 12:24:04	1.171
++++ LVM2/lib/activate/activate.c	2010/07/12 11:37:50	1.172
+@@ -262,6 +262,9 @@
+ 	char path[PATH_MAX];
+ 
+ 	if (!(cn = find_config_tree_node(cmd, "activation/volume_list"))) {
++		log_verbose("activation/volume_list configuration setting "
++			    "not defined, checking host tags only");
++
+ 		/* If no host tags defined, activate */
+ 		if (dm_list_empty(&cmd->tags))
+ 			return 1;
+@@ -271,11 +274,18 @@
+ 		    str_list_match_list(&cmd->tags, &lv->vg->tags))
+ 			return 1;
+ 
++		log_verbose("No host tag matches %s/%s",
++			    lv->vg->name, lv->name);
++
+ 		/* Don't activate */
+ 		return 0;
+ 	}
+ 
+ 	for (cv = cn->v; cv; cv = cv->next) {
++		log_verbose("activation/volume_list configuration setting "
++			    "defined, checking the list to match %s/%s",
++			    lv->vg->name, lv->name);
++
+ 		if (cv->type != CFG_STRING) {
+ 			log_error("Ignoring invalid string in config file "
+ 				  "activation/volume_list");
+@@ -330,6 +340,9 @@
+ 			return 1;
+ 	}
+ 
++	log_verbose("No item supplied in activation/volume_list configuration "
++		    "setting matches %s/%s", lv->vg->name, lv->name);
++
+ 	return 0;
+ }
+ 
+
+
