@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 13 Jul 2010 22:04:37 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20100713220437.6239.qmail@sourceware.org>
+Date: 13 Jul 2010 22:24:40 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20100713222440.15949.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-07-13 22:04:36
+Changes by:	jbrassow at sourceware.org	2010-07-13 22:24:40
 
 Modified files:
-	tools          : lvconvert.c 
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
 Log message:
-	Fix reversal of LV list before performing a split mirror.
+	Fix for bug 614164: No check for existing name when splitting mirror
 	
-	When splitting off mirror images from a mirror, we always take
-	LVs from the end of a list.  For example, if the mirror sub-devices
-	are lv_mimage_[012], we should select lv_mimage_2 if splitting off
-	one image.  However, lv_mimage_0 was being selected instead.
-	
-	The problem came from calling '_move_removable_mimages_to_end'
-	when it was unnecessary to do so.  When the user /does/ specify
-	specific devices to be removed, this function properly moved the
-	appropriate LVs to the end of the list for extraction.  However,
-	if the user /doesn't/ give any specific PVs, the function should
-	do nothing.  '_move_removable_mimages_to_end' was keying off of
-	whether 'removable_pvs' was NULL or not and this value was
-	improperly being populated with the set of all available PVs.
-	This was causing '_move_removable_mimages_to_end' to completely
-	reverse the list, which in turn caused us to extract the
-	hithertofore front-of-the-list LVs.
+	The user could use the same name as an existing LV when specifying a
+	name for an LV split off from a mirror.  This causes all sorts of
+	issues.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.139&r2=1.140
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1667&r2=1.1668
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
 
---- LVM2/tools/lvconvert.c	2010/07/13 21:53:07	1.139
-+++ LVM2/tools/lvconvert.c	2010/07/13 22:04:36	1.140
-@@ -1002,7 +1002,7 @@
- 						  lv->le_count,
- 						  lp->region_size);
+--- LVM2/WHATS_NEW	2010/07/13 21:48:16	1.1667
++++ LVM2/WHATS_NEW	2010/07/13 22:24:39	1.1668
+@@ -1,5 +1,6 @@
+ Version 2.02.71 -
+ ===============================
++  Check if LV with specified name already exists when splitting a mirror.
+   Fix suspend/resume logic for LVs resulting from splitting a mirror.
+   Switch cmirrord and clvmd to use dm_create_lockfile.
+   Allow clvmd pidfile to be configurable.
+--- LVM2/lib/metadata/mirror.c	2010/07/13 21:48:17	1.126
++++ LVM2/lib/metadata/mirror.c	2010/07/13 22:24:39	1.127
+@@ -1982,6 +1982,12 @@
+ {
+ 	int r;
  
--	if (!operable_pvs)
-+	if (!operable_pvs && !lp->keep_mimages)
- 		operable_pvs = lp->pvh;
- 
- 	seg = first_seg(lv);
++	if (find_lv_in_vg(lv->vg, split_name)) {
++		log_error("Logical Volume \"%s\" already exists in "
++			  "volume group \"%s\"", split_name, lv->vg->name);
++		return 0;
++	}
++
+ 	/* Can't split a mirror that is not in-sync... unless force? */
+ 	if (!_mirrored_lv_in_sync(lv)) {
+ 		log_error("Unable to split mirror that is not in-sync.");
 
 
