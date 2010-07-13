@@ -1,55 +1,24 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 13 Jul 2010 22:24:40 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
-Message-ID: <20100713222440.15949.qmail@sourceware.org>
+From: Takahiro Yasui <takahiro.yasui@hds.com>
+Date: Tue, 13 Jul 2010 18:45:37 -0400
+Subject: [Patch]: Handle both devices of a mirrored log failing (bug 607347) - additional fix
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A592288651C@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-07-13 22:24:40
+Jon,
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : mirror.c 
+On 07/08/10 17:48, Jonathan Brassow wrote:
+> There was still potential for a hang after the last check-in to handle
+> the scenario where both images of a mirrored log fail.  Taka, this
+> should fix the hang you were seeing.
 
-Log message:
-	Fix for bug 614164: No check for existing name when splitting mirror
-	
-	The user could use the same name as an existing LV when specifying a
-	name for an LV split off from a mirror.  This causes all sorts of
-	issues.
+I found that this patch fixed the bug I was seeing.
+Thank you for fixing it.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1667&r2=1.1668
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
-
---- LVM2/WHATS_NEW	2010/07/13 21:48:16	1.1667
-+++ LVM2/WHATS_NEW	2010/07/13 22:24:39	1.1668
-@@ -1,5 +1,6 @@
- Version 2.02.71 -
- ===============================
-+  Check if LV with specified name already exists when splitting a mirror.
-   Fix suspend/resume logic for LVs resulting from splitting a mirror.
-   Switch cmirrord and clvmd to use dm_create_lockfile.
-   Allow clvmd pidfile to be configurable.
---- LVM2/lib/metadata/mirror.c	2010/07/13 21:48:17	1.126
-+++ LVM2/lib/metadata/mirror.c	2010/07/13 22:24:39	1.127
-@@ -1982,6 +1982,12 @@
- {
- 	int r;
- 
-+	if (find_lv_in_vg(lv->vg, split_name)) {
-+		log_error("Logical Volume \"%s\" already exists in "
-+			  "volume group \"%s\"", split_name, lv->vg->name);
-+		return 0;
-+	}
-+
- 	/* Can't split a mirror that is not in-sync... unless force? */
- 	if (!_mirrored_lv_in_sync(lv)) {
- 		log_error("Unable to split mirror that is not in-sync.");
+Thanks,
+Taka
 
 
