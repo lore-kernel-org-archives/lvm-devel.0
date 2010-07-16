@@ -1,46 +1,26 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Jul 2010 14:14:00 -0000
-Subject: LVM2 WHATS_NEW make.tmpl.in
-Message-ID: <20100731141400.16913.qmail@sourceware.org>
+From: chen <songluweiyue@gmail.com>
+Date: Fri, 16 Jul 2010 08:39:12 -0000
+Subject: How to use liblvm
+Message-ID: <AANLkTimUy56snQvsm-_T9mep1Z_wdfeYA5OS3lVhQRpf@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-31 14:13:59
+Hi,
 
-Modified files:
-	.              : WHATS_NEW make.tmpl.in 
+I am new to lvm programming and want to use API instead of CLI,
 
-Log message:
-	Drop explicit 'Base' version from exported symbols.
+I have scanned all functions in lvm2app.h,
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1679&r2=1.1680
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+but I couldn't find one function that can match the command "*pvcreate*" and
+I don't know where to use "*physical_volume*".
 
---- LVM2/WHATS_NEW	2010/07/31 00:43:41	1.1679
-+++ LVM2/WHATS_NEW	2010/07/31 14:13:59	1.1680
-@@ -1,5 +1,6 @@
- Version 2.02.73 - 
- ================================
-+  Drop explicit 'Base' version from exported symbols.
-   Fix configure to supply DEFAULT_RUN_DIR to Makefiles.
-   Fix wrong number of mirror log at allocate policy
- 
---- LVM2/make.tmpl.in	2010/07/20 14:38:44	1.106
-+++ LVM2/make.tmpl.in	2010/07/31 14:13:59	1.107
-@@ -366,7 +366,7 @@
- 	) > $@
- 
- .export.sym: .exported_symbols_generated
--	set -e; (echo "Base {"; echo "	global:"; \
-+	set -e; (echo "{"; echo "	global:"; \
- 		 sed "s/^/		/;s/$$/;/" < $<; \
- 		 echo "	local:"; echo "		*;"; echo "};") > $@
- 
+Could you give me an example about how to build a * *logical volume and its
+snapshot using *"liblvm"*?
 
-
+Thank you very much!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100716/5cbcfe26/attachment.htm>
