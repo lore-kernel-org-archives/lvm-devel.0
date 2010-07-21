@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 Jul 2010 12:54:22 -0000
-Subject: LVM2 configure
-Message-ID: <20100721125422.27913.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 21 Jul 2010 13:40:24 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c lib/mir ...
+Message-ID: <20100721134024.11008.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,179 +10,176 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-21 12:54:22
+Changes by:	jbrassow at sourceware.org	2010-07-21 13:40:22
 
 Modified files:
-	.              : configure 
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
+	lib/mirror     : mirrored.c 
+	libdm          : libdevmapper.h libdm-file.c 
 
 Log message:
-	update configure
+	It's not enough to check for the kernel module in the case of cluster
+	mirrors, we must also check that the log daemon (cmirrord) is running.
+	The log module can be auto-loaded, but the daemon cannot be
+	"auto-started".  Failing to check for the daemon produces cryptic
+	messages that customers have a hard time deciphering.  (The system
+	messages do report that the log daemon is not running, but people
+	don't seem to find this message easily.)
+	
+	Here are examples of what is printed when the module is available,
+	but the log daemon has not been started.
+	
+	[root at bp-01 LVM2]# lvcreate -m1 -l1 -n lv vg
+	Shared cluster mirrors are not available.
+	
+	[root at bp-01 LVM2]# lvcreate -m1 -l1 -n lv vg -v
+	Setting logging type to disk
+	Finding volume group "vg"
+	Archiving volume group "vg" metadata (seqno 3).
+	Creating logical volume lv
+	Executing: /sbin/modprobe dm-log-userspace
+	Cluster mirror log daemon is not running
+	Shared cluster mirrors are not available.
+	Creating volume group backup "/etc/lvm/backup/vg" (seqno 4).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.135&r2=1.136
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1668&r2=1.1669
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.127&r2=1.128
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.123&r2=1.124
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-file.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
 
---- LVM2/configure	2010/07/13 13:51:01	1.135
-+++ LVM2/configure	2010/07/21 12:54:21	1.136
-@@ -651,6 +651,7 @@
- UDEV_RULES
- UDEV_PC
- UDEV_LIBS
-+TESTING
- STATIC_LINK
- STATICDIR
- SNAPSHOTS
-@@ -711,6 +712,8 @@
- MSGFMT
- LVM2CMD_LIB
- LVM2APP_LIB
-+VALGRIND
-+RUBY19
- GENPNG
- GENHTML
- LCOV
-@@ -835,6 +838,7 @@
- enable_debug
- with_optimisation
- enable_profiling
-+enable_testing
- enable_devmapper
- enable_udev_sync
- enable_udev_rules
-@@ -1531,6 +1535,7 @@
-   --enable-cmirrord       enable the cluster mirror log daemon
-   --enable-debug          enable debugging
-   --enable-profiling      gather gcov profiling data
-+  --enable-testing        enable testing targets in the makefile
-   --disable-devmapper     disable LVM2 device-mapper interaction
-   --enable-udev_sync      enable synchronisation with udev processing
-   --enable-udev_rules     install rule files needed for udev synchronisation
-@@ -14298,6 +14303,107 @@
- fi
+--- LVM2/WHATS_NEW	2010/07/13 22:24:39	1.1668
++++ LVM2/WHATS_NEW	2010/07/21 13:40:21	1.1669
+@@ -1,5 +1,6 @@
+ Version 2.02.71 -
+ ===============================
++  Check if cluster log daemon is running before allowing cmirror create.
+   Check if LV with specified name already exists when splitting a mirror.
+   Fix suspend/resume logic for LVs resulting from splitting a mirror.
+   Switch cmirrord and clvmd to use dm_create_lockfile.
+--- LVM2/lib/metadata/mirror.c	2010/07/13 22:24:39	1.127
++++ LVM2/lib/metadata/mirror.c	2010/07/21 13:40:22	1.128
+@@ -81,6 +81,36 @@
+ }
  
- ################################################################################
-+{ $as_echo "$as_me:$LINENO: checking whether to enable unit testing" >&5
-+$as_echo_n "checking whether to enable unit testing... " >&6; }
-+# Check whether --enable-testing was given.
-+if test "${enable_testing+set}" = set; then
-+  enableval=$enable_testing; TESTING=$enableval
-+else
-+  TESTING=no
-+fi
+ /*
++ * cluster_mirror_is_available
++ *
++ * Check if the proper kernel module and log daemon are running.
++ * Caller should check for 'vg_is_clustered(lv->vg)' before making
++ * this call.
++ *
++ * Returns: 1 if available, 0 otherwise
++ */
++static int cluster_mirror_is_available(struct logical_volume *lv)
++{
++       unsigned attr = 0;
++       struct cmd_context *cmd = lv->vg->cmd;
++       const struct segment_type *segtype;
 +
-+{ $as_echo "$as_me:$LINENO: result: $TESTING" >&5
-+$as_echo "$TESTING" >&6; }
++       if (!(segtype = get_segtype_from_string(cmd, "mirror")))
++               return_0;
 +
-+if test "$TESTING" = yes; then
-+   # Extract the first word of "ruby1.9", so it can be a program name with args.
-+set dummy ruby1.9; ac_word=$2
-+{ $as_echo "$as_me:$LINENO: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if test "${ac_cv_path_RUBY19+set}" = set; then
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $RUBY19 in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_RUBY19="$RUBY19" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+  for ac_exec_ext in '' $ac_executable_extensions; do
-+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-+    ac_cv_path_RUBY19="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+done
-+IFS=$as_save_IFS
++       if (!segtype->ops->target_present)
++               return_0;
 +
-+  ;;
-+esac
-+fi
-+RUBY19=$ac_cv_path_RUBY19
-+if test -n "$RUBY19"; then
-+  { $as_echo "$as_me:$LINENO: result: $RUBY19" >&5
-+$as_echo "$RUBY19" >&6; }
-+else
-+  { $as_echo "$as_me:$LINENO: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
++       if (!segtype->ops->target_present(lv->vg->cmd, NULL, &attr))
++               return_0;
 +
++       if (!(attr & MIRROR_LOG_CLUSTERED))
++               return 0;
 +
-+   # Extract the first word of "valgrind", so it can be a program name with args.
-+set dummy valgrind; ac_word=$2
-+{ $as_echo "$as_me:$LINENO: checking for $ac_word" >&5
-+$as_echo_n "checking for $ac_word... " >&6; }
-+if test "${ac_cv_path_VALGRIND+set}" = set; then
-+  $as_echo_n "(cached) " >&6
-+else
-+  case $VALGRIND in
-+  [\\/]* | ?:[\\/]*)
-+  ac_cv_path_VALGRIND="$VALGRIND" # Let the user override the test with a path.
-+  ;;
-+  *)
-+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-+for as_dir in $PATH
-+do
-+  IFS=$as_save_IFS
-+  test -z "$as_dir" && as_dir=.
-+  for ac_exec_ext in '' $ac_executable_extensions; do
-+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_test_x "$as_dir/$ac_word$ac_exec_ext"; }; then
-+    ac_cv_path_VALGRIND="$as_dir/$ac_word$ac_exec_ext"
-+    $as_echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
-+    break 2
-+  fi
-+done
-+done
-+IFS=$as_save_IFS
++       return 1;
++}
 +
-+  ;;
-+esac
-+fi
-+VALGRIND=$ac_cv_path_VALGRIND
-+if test -n "$VALGRIND"; then
-+  { $as_echo "$as_me:$LINENO: result: $VALGRIND" >&5
-+$as_echo "$VALGRIND" >&6; }
-+else
-+  { $as_echo "$as_me:$LINENO: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+
-+
-+   if test -z "$RUBY19" -o -z "$VALGRIND"; then
-+       { { $as_echo "$as_me:$LINENO: error: ruby1.9 and valgrind are required for testing" >&5
-+$as_echo "$as_me: error: ruby1.9 and valgrind are required for testing" >&2;}
-+   { (exit 1); exit 1; }; }
-+   fi
-+fi
-+
-+################################################################################
- { $as_echo "$as_me:$LINENO: checking whether to use device-mapper" >&5
- $as_echo_n "checking whether to use device-mapper... " >&6; }
- # Check whether --enable-devmapper was given.
-@@ -17919,8 +18025,9 @@
++/*
+  * Returns the number of mirrors of the LV
+  */
+ uint32_t lv_mirror_count(const struct logical_volume *lv)
+@@ -1940,6 +1970,12 @@
+ 		return 0;
+ 	}
  
- 
- 
++	if (vg_is_clustered(lv->vg) &&  !(lv->status & ACTIVATE_EXCL) &&
++	    !cluster_mirror_is_available(lv)) {
++		log_error("Shared cluster mirrors are not available.");
++		return 0;
++	}
 +
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile"
+ 	/* For corelog mirror, activation code depends on
+ 	 * the global mirror_in_sync status. As we are adding
+ 	 * a new mirror, it should be set as 'out-of-sync'
+--- LVM2/lib/mirror/mirrored.c	2010/07/09 15:34:45	1.72
++++ LVM2/lib/mirror/mirrored.c	2010/07/21 13:40:22	1.73
+@@ -519,6 +519,19 @@
+ 					_mirror_attributes |= MIRROR_LOG_CLUSTERED;
+ 			} else if (module_present(cmd, "log-userspace"))
+ 				_mirror_attributes |= MIRROR_LOG_CLUSTERED;
++
++                        if (!(_mirror_attributes & MIRROR_LOG_CLUSTERED))
++                                log_verbose("Cluster mirror log module is not available");
++
++                        /*
++                         * The cluster mirror log daemon must be running,
++                         * otherwise, the kernel module will fail to make
++                         * contact.
++                         */
++                        if (!dm_daemon_is_running(CMIRRORD_PIDFILE)) {
++                                log_verbose("Cluster mirror log daemon is not running");
++                                _mirror_attributes &= ~MIRROR_LOG_CLUSTERED;
++                        }
+ 		}
+ 		*attributes = _mirror_attributes;
+ 	}
+--- LVM2/libdm/libdevmapper.h	2010/07/21 12:09:12	1.123
++++ LVM2/libdm/libdevmapper.h	2010/07/21 13:40:22	1.124
+@@ -988,6 +988,13 @@
+  */
+ int dm_create_lockfile(const char* lockfile);
  
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -18556,6 +18663,8 @@
-     "test/api/Makefile") CONFIG_FILES="$CONFIG_FILES test/api/Makefile" ;;
-     "tools/Makefile") CONFIG_FILES="$CONFIG_FILES tools/Makefile" ;;
-     "udev/Makefile") CONFIG_FILES="$CONFIG_FILES udev/Makefile" ;;
-+    "unit-tests/datastruct/Makefile") CONFIG_FILES="$CONFIG_FILES unit-tests/datastruct/Makefile" ;;
-+    "unit-tests/regex/Makefile") CONFIG_FILES="$CONFIG_FILES unit-tests/regex/Makefile" ;;
++/*
++ * Query whether a daemon is running based on its lockfile
++ *
++ * Returns: 1 if running, 0 if not
++ */
++int dm_daemon_is_running(const char* lockfile);
++
+ /*********************
+  * regular expressions
+  *********************/
+--- LVM2/libdm/libdm-file.c	2010/07/13 13:51:03	1.11
++++ LVM2/libdm/libdm-file.c	2010/07/21 13:40:22	1.12
+@@ -166,3 +166,29 @@
  
-   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
- $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}
+ 	return 0;
+ }
++
++int dm_daemon_is_running(const char* lockfile)
++{
++       int fd;
++       struct flock lock;
++
++       if((fd = open(lockfile, O_RDONLY)) < 0)
++               return 0;
++
++       lock.l_type = F_WRLCK;
++       lock.l_start = 0;
++       lock.l_whence = SEEK_SET;
++       lock.l_len = 0;
++       if (fcntl(fd, F_GETLK, &lock) < 0) {
++               log_error("Cannot check lock status of lockfile [%s], error was [%s]",
++                         lockfile, strerror(errno));
++               if (close(fd))
++                       stack;
++               return 0;
++       }
++
++       if (close(fd))
++               stack;
++
++       return (lock.l_type == F_UNLCK) ? 0 : 1;
++}
 
 
