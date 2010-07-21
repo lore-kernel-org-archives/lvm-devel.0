@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 21 Jul 2010 14:12:48 -0000
-Subject: LVM2/test t-pvcreate-operation-md.sh
-Message-ID: <20100721141248.14596.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 21 Jul 2010 15:21:25 -0000
+Subject: LVM2/lib/mirror mirrored.c
+Message-ID: <20100721152125.8173.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-07-21 14:12:48
+Changes by:	jbrassow at sourceware.org	2010-07-21 15:21:25
 
 Modified files:
-	test           : t-pvcreate-operation-md.sh 
+	lib/mirror     : mirrored.c 
 
 Log message:
-	Don't fail t-pvcreate-operation-md if mdadm is broken.
+	Building without the '--enable-cmirrord' option means that
+	CMIRRORD_PIDFILE is not defined.  This makes the build fail.
+	Therefore, we need to conditionalize the check for cmirrord
+	based on if CMIRRORD_PIDFILE is defined.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation-md.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
 
---- LVM2/test/t-pvcreate-operation-md.sh	2010/05/24 15:28:45	1.6
-+++ LVM2/test/t-pvcreate-operation-md.sh	2010/07/21 14:12:47	1.7
-@@ -35,7 +35,7 @@
-     # sleeps offer hack to defeat: 'md: md127 still in use'
-     # see: https://bugzilla.redhat.com/show_bug.cgi?id=509908#c25
-     sleep 2
--    mdadm --stop $mddev
-+    mdadm --stop $mddev || true
-     if [ -b "$mddev" ]; then
-         # mdadm doesn't always cleanup the device node
- 	sleep 2
+--- LVM2/lib/mirror/mirrored.c	2010/07/21 13:40:22	1.73
++++ LVM2/lib/mirror/mirrored.c	2010/07/21 15:21:24	1.74
+@@ -528,10 +528,15 @@
+                          * otherwise, the kernel module will fail to make
+                          * contact.
+                          */
++#ifdef CMIRRORD_PIDFILE
+                         if (!dm_daemon_is_running(CMIRRORD_PIDFILE)) {
+                                 log_verbose("Cluster mirror log daemon is not running");
+                                 _mirror_attributes &= ~MIRROR_LOG_CLUSTERED;
+                         }
++#else
++			log_verbose("Cluster mirror log daemon not included in build");
++			_mirror_attributes &= ~MIRROR_LOG_CLUSTERED;
++#endif
+ 		}
+ 		*attributes = _mirror_attributes;
+ 	}
 
 
