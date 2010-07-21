@@ -1,43 +1,51 @@
-From: Takahiro Yasui <takahiro.yasui@hds.com>
-Date: Wed, 21 Jul 2010 11:57:29 -0400
-Subject: [PATCH] Handle a failure of all mirror devices but one mirror leg
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
-References: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
-Message-ID: <5C30BE7ED8B03E448B2E104602D4848A5922886560@USINDEVS02.corp.hds.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 21 Jul 2010 19:44:28 -0000
+Subject: LVM2 lib/report/columns.h ./WHATS_NEW
+Message-ID: <20100721194428.6019.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 07/19/10 18:09, Takahiro Yasui wrote:
-> - With Jon's second patch, we think that we don't have to call
->   remove_mirror_log() in _lv_update_mirrored_log() because will be
->   handled remove_mirror_images() in _lvconvert_mirrors_repaire().
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-07-21 19:44:25
 
-Additional comment on remove_mirror_log().
+Modified files:
+	lib/report     : columns.h 
+	.              : WHATS_NEW 
 
-Calling remove_mirror_log() in _lv_update_mirrored_log() is not good.
-The reason is that remove_mirror_log() calls suspend_lv() and resume_lv()
-for an original mirror volume which contains the broken mirrored log when
-VG metadata is updated in _remove_mirror_images(), but there is a problem
-when there is a broken mirror leg.
+Log message:
+	Clarify help text for vg_mda_count.
 
-suspend_lv() and resume_lv() will suspend and resume an original LV with
-broken legs. When the original mirror volume is resumed, recovery process
-is executed in kernel according to the state of log. This time, mirror volume
-is fixed in termes of *log* but not in terms of mirror legs. So I'm afraid the
-recovery process will fail. We need to resume an original mirror volume only
-after its mirror legs are completely fixed.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1669&r2=1.1670
 
-When I introduced _lv_update_mirrored_log(), it called remove_mirror_images()
-for a mirrored log. This means that suspend and resume are executed only
-for a mirrored log but not for original volume.
-
-With this information, I appreciate your review of this patch.
-https://www.redhat.com/archives/lvm-devel/2010-July/msg00131.html
-
-Thanks,
-Taka
+--- LVM2/lib/report/columns.h	2010/06/28 20:37:23	1.41
++++ LVM2/lib/report/columns.h	2010/07/21 19:44:25	1.42
+@@ -112,7 +112,7 @@
+ FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots.")
+ FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.")
+ FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.")
+-FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas in use by this VG.")
++FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas on this VG.")
+ FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, "vg_mda_used_count", "Number of metadata areas in use on this VG.")
+ FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.")
+ FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.")
+--- LVM2/WHATS_NEW	2010/07/21 13:40:21	1.1669
++++ LVM2/WHATS_NEW	2010/07/21 19:44:25	1.1670
+@@ -1,8 +1,10 @@
+ Version 2.02.71 -
+ ===============================
++  Clarify help text for vg_mda_count.
+   Check if cluster log daemon is running before allowing cmirror create.
+   Check if LV with specified name already exists when splitting a mirror.
+   Fix suspend/resume logic for LVs resulting from splitting a mirror.
++  Update pvcreate, {pv|vg}change, and lvm.conf man pages about metadataignore.
+   Switch cmirrord and clvmd to use dm_create_lockfile.
+   Allow clvmd pidfile to be configurable.
+   Update comments about memory handling in lvm2app.h.
 
 
