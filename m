@@ -1,46 +1,43 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 21 Jul 2010 15:21:25 -0000
-Subject: LVM2/lib/mirror mirrored.c
-Message-ID: <20100721152125.8173.qmail@sourceware.org>
+From: Takahiro Yasui <takahiro.yasui@hds.com>
+Date: Wed, 21 Jul 2010 11:57:29 -0400
+Subject: [PATCH] Handle a failure of all mirror devices but one mirror leg
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
+References: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A5922886560@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-07-21 15:21:25
+On 07/19/10 18:09, Takahiro Yasui wrote:
+> - With Jon's second patch, we think that we don't have to call
+>   remove_mirror_log() in _lv_update_mirrored_log() because will be
+>   handled remove_mirror_images() in _lvconvert_mirrors_repaire().
 
-Modified files:
-	lib/mirror     : mirrored.c 
+Additional comment on remove_mirror_log().
 
-Log message:
-	Building without the '--enable-cmirrord' option means that
-	CMIRRORD_PIDFILE is not defined.  This makes the build fail.
-	Therefore, we need to conditionalize the check for cmirrord
-	based on if CMIRRORD_PIDFILE is defined.
+Calling remove_mirror_log() in _lv_update_mirrored_log() is not good.
+The reason is that remove_mirror_log() calls suspend_lv() and resume_lv()
+for an original mirror volume which contains the broken mirrored log when
+VG metadata is updated in _remove_mirror_images(), but there is a problem
+when there is a broken mirror leg.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+suspend_lv() and resume_lv() will suspend and resume an original LV with
+broken legs. When the original mirror volume is resumed, recovery process
+is executed in kernel according to the state of log. This time, mirror volume
+is fixed in termes of *log* but not in terms of mirror legs. So I'm afraid the
+recovery process will fail. We need to resume an original mirror volume only
+after its mirror legs are completely fixed.
 
---- LVM2/lib/mirror/mirrored.c	2010/07/21 13:40:22	1.73
-+++ LVM2/lib/mirror/mirrored.c	2010/07/21 15:21:24	1.74
-@@ -528,10 +528,15 @@
-                          * otherwise, the kernel module will fail to make
-                          * contact.
-                          */
-+#ifdef CMIRRORD_PIDFILE
-                         if (!dm_daemon_is_running(CMIRRORD_PIDFILE)) {
-                                 log_verbose("Cluster mirror log daemon is not running");
-                                 _mirror_attributes &= ~MIRROR_LOG_CLUSTERED;
-                         }
-+#else
-+			log_verbose("Cluster mirror log daemon not included in build");
-+			_mirror_attributes &= ~MIRROR_LOG_CLUSTERED;
-+#endif
- 		}
- 		*attributes = _mirror_attributes;
- 	}
+When I introduced _lv_update_mirrored_log(), it called remove_mirror_images()
+for a mirrored log. This means that suspend and resume are executed only
+for a mirrored log but not for original volume.
+
+With this information, I appreciate your review of this patch.
+https://www.redhat.com/archives/lvm-devel/2010-July/msg00131.html
+
+Thanks,
+Taka
 
 
