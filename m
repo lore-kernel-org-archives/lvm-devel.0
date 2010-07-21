@@ -1,38 +1,91 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Jul 2010 20:09:39 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20100706200939.7274.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 21 Jul 2010 09:56:15 -0400
+Subject: [PATCH 4/4] Add tests for lvm_vg_get_attr_value().
+In-Reply-To: <1279720575-27485-4-git-send-email-dwysocha@redhat.com>
+References: <1279720575-27485-1-git-send-email-dwysocha@redhat.com>
+	<1279720575-27485-2-git-send-email-dwysocha@redhat.com>
+	<1279720575-27485-3-git-send-email-dwysocha@redhat.com>
+	<1279720575-27485-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1279720575-27485-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-06 20:09:38
 
-Modified files:
-	lib/metadata   : metadata.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ test/api/test.c |   34 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 34 insertions(+), 0 deletions(-)
 
-Log message:
-	fix code in 2nd mda unignore loop to match 1st loop
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.382&r2=1.383
-
---- LVM2/lib/metadata/metadata.c	2010/07/06 17:29:50	1.382
-+++ LVM2/lib/metadata/metadata.c	2010/07/06 20:09:38	1.383
-@@ -1133,8 +1133,8 @@
- 		}
+diff --git a/test/api/test.c b/test/api/test.c
+index f89840c..d51ffc2 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -18,6 +18,7 @@
+ #include <readline/readline.h>
  
- 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use)
--		if (mda_is_ignored(mda) &&
--		    dm_bit(mda_to_unignore_bs, num_to_unignore - 1)) {
-+		if (mda_is_ignored(mda) && (--mda_free_count,
-+		    dm_bit(mda_to_unignore_bs, mda_free_count))) {
- 			mda_set_ignored(mda, 0);
- 			if (!--num_to_unignore)
- 				goto out;
+ #include "lvm2app.h"
++#include "libdevmapper.h"
+ 
+ #define MAX_ARGS 64
+ 
+@@ -91,6 +92,8 @@ static void _show_help(void)
+ 	       "Issue a lvm_config_override() with accept device filter\n");
+ 	printf("'vg_get_tags vgname': "
+ 	       "List the tags of a VG\n");
++	printf("'vg_get_attr_value vgname attr_name': "
++	       "Display the value of VG attribute\n");
+ 	printf("'lv_get_tags vgname lvname': "
+ 	       "List the tags of a LV\n");
+ 	printf("'vg_{add|remove}_tag vgname tag': "
+@@ -546,6 +549,35 @@ static void _vg_tag(char **argv, int argc, int add)
+ 	       add ? "adding":"removing", argv[2], argv[1]);
+ }
+ 
++static void _vg_get_attr_value(char **argv, int argc)
++{
++	vg_t vg;
++	struct dm_report_field_value_type value;
++	int rc;
++
++	if (argc < 3) {
++		printf("Please enter vgname, field_id\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	rc = lvm_vg_get_attr_value(vg, argv[2], &value);
++	if (rc)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("Obtaining value of field %s in VG %s",
++	       argv[2], argv[1]);
++	if (rc) {
++		printf("\n");
++		return;
++	}
++	if (value.is_string)
++		printf(", value = %s\n", value.u.s_val);
++	else
++		printf(", value = %"PRIu64"\n", value.u.n_val);
++}
++
+ static void _lv_get_tags(char **argv, int argc)
+ {
+ 	lv_t lv;
+@@ -796,6 +828,8 @@ static int lvmapi_test_shell(lvm_t libh)
+ 			_vg_tag(argv, argc, 0);
+ 		} else if (!strcmp(argv[0], "vg_get_tags")) {
+ 			_vg_get_tags(argv, argc);
++		} else if (!strcmp(argv[0], "vg_get_attr_value")) {
++			_vg_get_attr_value(argv, argc);
+ 		} else if (!strcmp(argv[0], "lv_add_tag")) {
+ 			_lv_tag(argv, argc, 1);
+ 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+-- 
+1.6.0.6
 
 
