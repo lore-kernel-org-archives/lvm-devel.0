@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 27 Jul 2010 21:56:15 -0000
-Subject: LVM2/libdm libdm-file.c
-Message-ID: <20100727215615.11638.qmail@sourceware.org>
+Date: 27 Jul 2010 21:57:37 -0000
+Subject: LVM2 WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100727215737.12389.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,100 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-27 21:56:14
+Changes by:	agk at sourceware.org	2010-07-27 21:57:37
 
 Modified files:
-	libdm          : libdm-file.c 
+	.              : WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	Fix dm_create_lockfile error paths - incorrectly unlinked in-use lockfile.
-	(Jan Friesse)
+	.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-file.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1671&r2=1.1672
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.395&r2=1.396
 
---- LVM2/libdm/libdm-file.c	2010/07/21 13:40:22	1.12
-+++ LVM2/libdm/libdm-file.c	2010/07/27 21:56:14	1.13
-@@ -104,21 +104,29 @@
- 	lock.l_start = 0;
- 	lock.l_whence = SEEK_SET;
- 	lock.l_len = 0;
-+retry_fcntl:
- 	if (fcntl(fd, F_SETLK, &lock) < 0) {
--		if (errno != EACCES && errno != EAGAIN)
-+		switch (errno) {
-+		case EINTR:
-+			goto retry_fcntl;
-+			break;
-+		case EACCES:
-+		case EAGAIN:
- 			log_error("Cannot lock lockfile [%s], error was [%s]",
- 				   lockfile, strerror(errno));
--		else
-+			break;
-+		default:
- 			log_error("process is already running");
-+		}
+--- LVM2/WHATS_NEW	2010/07/27 20:05:30	1.1671
++++ LVM2/WHATS_NEW	2010/07/27 21:57:37	1.1672
+@@ -1,8 +1,12 @@
+ Version 2.02.71 -
+ ===============================
++  Document LVM fault handling in doc/lvm_fault_handling.txt.
+   Make vgck warn about missing PVs.
+   Clarify help text for vg_mda_count.
+   Check if cluster log daemon is running before allowing cmirror create.
++  Add unit-tests dir.
++  Add configure --enable-testing and reports and report-generators dirs.
++  Correct LV list order used by lvconvert when splitting a mirror.
+   Check if LV with specified name already exists when splitting a mirror.
+   Fix suspend/resume logic for LVs resulting from splitting a mirror.
+   Update pvcreate, {pv|vg}change, and lvm.conf man pages about metadataignore.
+@@ -14,9 +18,9 @@
+   Remove unnecessary includes in liblvm files.
+   Use __attribute__ consistently throughout.
+   Fix redundant declarations and always compile with -Wredundant-decls.
++  Fix possible hang when all mirror images of a mirrored log fail.
+   Pass metadataignore to pv_create, pv_setup, _mda_setup, and add_mda.
+   Init mda->list in mda_copy.
+-  Fix possible hang when all mirror images of a mirrored log fail.
+   Do not log backtrace in valid _lv_resume() code path.
+   Cleanup help strings in configure.in.
+   Prompt if metadataignore with vgextend or pvchange would adjust vg_mda_copies.
+--- LVM2/WHATS_NEW_DM	2010/07/13 13:51:01	1.395
++++ LVM2/WHATS_NEW_DM	2010/07/27 21:57:37	1.396
+@@ -2,6 +2,10 @@
+ ===============================
+   Switch dmeventd to use dm_create_lockfile and drop duplicate code.
+   Add dm_create_lockfile to libdm to handle pidfiles for all daemons.
++  Replace lookup with next in struct dfa_state & calculate states on demand.
++  Improve the regex matcher, reducing the number of charset nodes used.
++  Add dm_regex_fingerprint to facilitate regex testing.
++  Skip ffs(0) in _test_word in bitset functions.
+   Use "nowatch" udev rule for inappropriate devices.
  
--		goto fail;
-+		goto fail_close;
- 	}
- 
- 	if (ftruncate(fd, 0) < 0) {
- 		log_error("Cannot truncate pidfile [%s], error was [%s]",
- 			  lockfile, strerror(errno));
- 
--		goto fail;
-+		goto fail_close_unlink;
- 	}
- 
- 	memset(buffer, 0, sizeof(buffer));
-@@ -131,7 +139,7 @@
- 		log_error("Cannot write pid to pidfile [%s], error was [%s]",
- 			  lockfile, strerror(errno));
- 
--		goto fail;
-+		goto fail_close_unlink;
- 	}
- 
- 	if ((write_out == 0) || (write_out < bufferlen)) {
-@@ -139,30 +147,31 @@
- 			  "[%" PRIsize_t "] bytes, expected [%" PRIsize_t "]\n",
- 			  lockfile, write_out, bufferlen);
- 
--		goto fail;
-+		goto fail_close_unlink;
- 	}
- 
- 	if ((value = fcntl(fd, F_GETFD, 0)) < 0) {
- 		log_error("Cannot get close-on-exec flag from pidfile [%s], "
- 			  "error was [%s]", lockfile, strerror(errno));
- 
--		goto fail;
-+		goto fail_close_unlink;
- 	}
- 	value |= FD_CLOEXEC;
- 	if (fcntl(fd, F_SETFD, value) < 0) {
- 		log_error("Cannot set close-on-exec flag from pidfile [%s], "
- 			  "error was [%s]", lockfile, strerror(errno));
- 
--		goto fail;
-+		goto fail_close_unlink;
- 	}
- 
- 	return 1;
- 
--fail:
--	if (close(fd))
--		stack;
-+fail_close_unlink:
- 	if (unlink(lockfile))
- 		stack;
-+fail_close:
-+	if (close(fd))
-+		stack;
- 
- 	return 0;
- }
+ Version 1.02.52 - 6th July 2010
 
 
