@@ -1,252 +1,199 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 26 Jul 2010 20:31:54 -0000
-Subject: LVM2/doc lvm_fault_handling.txt
-Message-ID: <20100726203154.32752.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 27 Jul 2010 11:44:59 +0200
+Subject: [PATCH] Give preference to /dev/mapper/* aliases in device cache (modified)
+In-Reply-To: <4C4056E0.6010507@redhat.com>
+References: <4C4056E0.6010507@redhat.com>
+Message-ID: <4C4EAA9B.1030203@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-07-26 20:31:54
+D?a 16.07.2010 14:56, Peter Rajnoha  wrote / nap?sal(a):
+> This is a little patch that tries to give preference to aliases in dev cache (/dev/mapper
+> content instead of /dev/dm-X or /dev/disk or anything else).
+> 
+> First, I thought it would be a good idea to have a possibility to give preference to
+> /dev/<vgname>/<lvname> if used and detected somehow. The thing is that the detection
+> is not so straightforward :)
+> 
+> Anyway, I think that having a preference for /dev/mapper content is general enough and
+> does its job as well, it's probably not worth to fiddle with the code more.
 
-Added files:
-	doc            : lvm_fault_handling.txt 
+OK, so after a short discussion with Alasdair, we've concluded that giving a priority
+to /dev/mapper content is not the right way to go - that would break the original idea
+of how the preference to aliases should be given.
 
-Log message:
-	Initial import of document describing LVM's policies
-	surrounding device faults/failures.
+This version of the patch tries to achieve the ordering while processing the aliases:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/lvm_fault_handling.txt.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+    /dev/block/* < /dev/dm-* < /dev/disk/* < /dev/mapper/* < anything else
 
-/cvs/lvm2/LVM2/doc/lvm_fault_handling.txt,v  -->  standard output
-revision 1.1
---- LVM2/doc/lvm_fault_handling.txt
-+++ -	2010-07-26 20:31:54.280508000 +0000
-@@ -0,0 +1,221 @@
-+LVM device fault handling
-+=========================
+For that "anything else", former rules should be applied. It means, giving a priority
+to a path with less slashes. If there are aliases@the same level of directory
+hierarchy (the same number of slashes), the preference should be given by taking the
+alphabetical order rule (this is the very last rule that is applied).
+
+(Maybe we should even document these built-in rules in the man page somewhere so
+people know exactly what will be displayed to them, e.g. in pvs output - with udev,
+people can create any number of custom symlinks anywhere... People should know
+there is a little bit of determinism here :) )
+
+So here's the updated and modified patch. I'll update the man page too if this
+patch is accepted...
+
+Peter
+---
+ lib/device/dev-cache.c |  123 +++++++++++++++++++++++++++++++++++++++++-------
+ 1 files changed, 106 insertions(+), 17 deletions(-)
+
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index f6c8a46..1bfc014 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -147,6 +147,108 @@ void dev_set_preferred_name(struct str_list *sl, struct device *dev)
+ 	dm_list_add_h(&dev->aliases, &sl->list);
+ }
+ 
++/*
++ * Checks whether path0 is preferred over path1. Path containing
++ * the subpath wins (return 0 or 1). If both (or none) of them
++ * contain the subpath, we're not able to decide which one is
++ * preferred (return -1).
++ */
++static int _builtin_preference(const char *path0, const char *path1,
++			  size_t skip_prefix_count, const char *subpath)
++{
++	size_t subpath_len;
 +
-+Introduction
-+------------
-+This document is to serve as the definitive source for information
-+regarding the policies and procedures surrounding device failures
-+in LVM.  It codifies LVM's responses to device failures as well as
-+the responsibilities of administrators.
++	subpath_len = strlen(subpath);
 +
-+Device failures can be permanent or transient.  A permanent failure
-+is one where a device becomes inaccessible and will never be
-+revived.  A transient failure is a failure that can be recovered
-+from (e.g. a power failure, intermittent network outage, block
-+relocation, etc).  The policies for handling both types of failures
-+is described herein.
++	if (!strncmp(path0 + skip_prefix_count, subpath, subpath_len)) {
++		if (strncmp(path1 + skip_prefix_count, subpath, subpath_len))
++			/* path0 wins */
++			return 0;
++	} else if (!strncmp(path1 + skip_prefix_count, subpath, subpath_len))
++		/* path1 wins */
++		return 1;
 +
-+Available Operations During a Device Failure
-+--------------------------------------------
-+When there is a device failure, LVM behaves somewhat differently because
-+only a subset of the available devices will be found for the particular
-+volume group.  The number of operations available to the administrator
-+is diminished.  It is not possible to create new logical volumes while
-+PVs cannot be accessed, for example.  Operations that create, convert, or
-+resize logical volumes are disallowed, such as:
-+- lvcreate
-+- lvresize
-+- lvreduce
-+- lvextend
-+- lvconvert (unless '--repair' is used)
-+Operations that activate, deactivate, remove, report, or repair logical
-+volumes are allowed, such as:
-+- lvremove
-+- vgremove (will remove all LVs, but not the VG until consistent)
-+- pvs
-+- vgs
-+- lvs
-+- lvchange -a [yn]
-+- vgchange -a [yn]
-+Operations specific to the handling of failed devices are allowed and
-+are as follows:
++	/* we're not able to decide */
++	return -1;
++}
 +
-+- 'vgreduce --removemissing <VG>':  This action is designed to remove
-+  the reference of a failed device from the LVM metadata stored on the
-+  remaining devices.  If there are (portions of) logical volumes on the
-+  failed devices, the ability of the operation to proceed will depend
-+  on the type of logical volumes found.  If an image (i.e leg or side)
-+  of a mirror is located on the device, that image/leg of the mirror
-+  is eliminated along with the failed device.  The result of such a
-+  mirror reduction could be a no-longer-redundant linear device.  If
-+  a linear, stripe, or snapshot device is located on the failed device
-+  the command will not proceed without a '--force' option.  The result
-+  of using the '--force' option is the entire removal and complete
-+  loss of the non-redundant logical volume.  Once this operation is
-+  complete, the volume group will again have a complete and consistent
-+  view of the devices it contains.  Thus, all operations will be
-+  permitted - including creation, conversion, and resizing operations.
++/*
++ * Checks whether path0 is preferred over path1 while path0 must contain
++ * subpath0 and path1 must contain subpath1. Returns 0 if path0 contains
++ * subpath0 and path1 contains subpath1. Returns 1 if found in reverse.
++ * Returns -1 if not applicable (and so we're not able to decide).
++ */
++static int _builtin_pair_preference(const char *path0, size_t skip_prefix_count0, const char *subpath0,
++				    const char *path1, size_t skip_prefix_count1, const char *subpath1)
++{
++	size_t subpath0_len, subpath1_len;
 +
-+- 'lvconvert --repair <VG/LV>':  This action is designed specifically
-+  to operate on mirrored logical volumes.  It is used on logical volumes
-+  individually and does not remove the faulty device from the volume
-+  group.  If, for example, a failed device happened to contain the
-+  images of four distinct mirrors, it would be necessary to run
-+  'lvconvert --repair' on each of them.  The ultimate result is to leave
-+  the faulty device in the volume group, but have no logical volumes
-+  referencing it.  In addition to removing mirror images that reside
-+  on failed devices, 'lvconvert --repair' can also replace the failed
-+  device if there are spare devices available in the volume group.  The
-+  user is prompted whether to simply remove the failed portions of the
-+  mirror or to also allocate a replacement, if run from the command-line.
-+  Optionally, the '--use-policies' flag can be specified which will
-+  cause the operation not to prompt the user, but instead respect
-+  the policies outlined in the LVM configuration file - usually,
-+  /etc/lvm/lvm.conf.  Once this operation is complete, mirrored logical
-+  volumes will be consistent and I/O will be allowed to continue.
-+  However, the volume group will still be inconsistent -  due to the
-+  refernced-but-missing device/PV - and operations will still be
-+  restricted to the aformentioned actions until either the device is
-+  restored or 'vgreduce --removemissing' is run.
++	subpath0_len = strlen(subpath0);
++	subpath1_len = strlen(subpath1);
 +
-+Device Revival (transient failures):
-+------------------------------------
-+During a device failure, the above section describes what limitations
-+a user can expect.  However, if the device returns after a period of
-+time, what to expect will depend on what has happened during the time
-+period when the device was failed.  If no automated actions (described
-+below) or user actions were necessary or performed, then no change in
-+operations or logical volume layout will occur.  However, if an
-+automated action or one of the aforementioned repair commands was
-+manually run, the returning device will be perceived as having stale
-+LVM metadata.  In this case, the user can expect to see a warning
-+concerning inconsistent metadata.  The metadata on the returning
-+device will be automatically replaced with the latest copy of the
-+LVM metadata - restoring consistency.  Note, while most LVM commands
-+will automatically update the metadata on a restored devices, the
-+following possible exceptions exist:
-+- pvs (when it does not read/update VG metadata)
++	if (!strncmp(path0 + skip_prefix_count0, subpath0, subpath0_len) &&
++	    !strncmp(path1 + skip_prefix_count1, subpath1, subpath1_len))
++		/* path0 wins */
++		return 0;
 +
-+Automated Target Response to Failures:
-+--------------------------------------
-+The only LVM target type (i.e. "personality") that has an automated
-+response to failures is a mirrored logical volume.  The other target
-+types (linear, stripe, snapshot, etc) will simply propagate the failure.
-+[A snapshot becomes invalid if its underlying device fails, but the
-+origin will remain valid - presuming the origin device has not failed.]
-+There are three types of errors that a mirror can suffer - read, write,
-+and resynchronization errors.  Each is described in depth below.
++	if (!strncmp(path1 + skip_prefix_count1, subpath0, subpath0_len) &&
++	    !strncmp(path0 + skip_prefix_count0, subpath1, subpath1_len))
++		/* path1 wins */
++		return 1;
 +
-+Mirror read failures:
-+If a mirror is 'in-sync' (i.e. all images have been initialized and
-+are identical), a read failure will only produce a warning.  Data is
-+simply pulled from one of the other images and the fault is recorded.
-+Sometimes - like in the case of bad block relocation - read errors can
-+be recovered from by the storage hardware.  Therefore, it is up to the
-+user to decide whether to reconfigure the mirror and remove the device
-+that caused the error.  Managing the composition of a mirror is done with
-+'lvconvert' and removing a device from a volume group can be done with
-+'vgreduce'.
++	/* we're not able to decide */
++	return -1;
++}
 +
-+If a mirror is not 'in-sync', a read failure will produce an I/O error.
-+This error will propagate all the way up to the applications above the
-+logical volume (e.g. the file system).  No automatic intervention will
-+take place in this case either.  It is up to the user to decide what
-+can be done/salvaged in this senario.  If the user is confident that the
-+images of the mirror are the same (or they are willing to simply attempt
-+to retreive whatever data they can), 'lvconvert' can be used to eliminate
-+the failed image and proceed.
++static int _apply_builtin_path_preference_rules(const char *path0, const char *path1)
++{
++	size_t devdir_len;
++	int r;
 +
-+Mirror resynchronization errors:
-+A resynchronization error is one that occurs when trying to initialize
-+all mirror images to be the same.  It can happen due to a failure to
-+read the primary image (the image considered to have the 'good' data), or
-+due to a failure to write the secondary images.  This type of failure
-+only produces a warning, and it is up to the user to take action in this
-+case.  If the error is transient, the user can simply reactivate the
-+mirrored logical volume to make another attempt at resynchronization.
-+If attempts to finish resynchronization fail, 'lvconvert' can be used to
-+remove the faulty device from the mirror.
++	devdir_len = strlen(_cache.dev_dir);
 +
-+TODO...
-+Some sort of response to this type of error could be automated.
-+Since this document is the definitive source for how to handle device
-+failures, the process should be defined here.  If the process is defined
-+but not implemented, it should be noted as such.  One idea might be to
-+make a single attempt to suspend/resume the mirror in an attempt to
-+redo the sync operation that failed.  On the other hand, if there is
-+a permanent failure, it may simply be best to wait for the user or the
-+automated response that is sure to follow from a write failure.
-+...TODO
++	if (!strncmp(path0, _cache.dev_dir, devdir_len) &&
++	    !strncmp(path1, _cache.dev_dir, devdir_len)) {
++		/*
++		 * We're trying to achieve the ordering:
++		 *	/dev/block/ < /dev/dm-* < /dev/disk/ < /dev/mapper/ < anything else
++		 */
 +
-+Mirror write failures:
-+When a write error occurs on a mirror constituent device, an attempt
-+to handle the failure is automatically made.  This is done by calling
-+'lvconvert --repair --use-policies'.  The policies implied by this
-+command are set in the LVM configuration file.  They are:
-+- mirror_log_fault_policy:  This defines what action should be taken
-+  if the device containing the log fails.  The available options are
-+  "remove" and "allocate".  Either of these options will cause the
-+  faulty log device to be removed from the mirror.  The "allocate"
-+  policy will attempt the further action of trying to replace the
-+  failed disk log by using space that might be available in the
-+  volume group.  If the allocation fails (or the "remove" policy
-+  is specified), the mirror log will be maintained in memory.  Should
-+  the machine be rebooted or the logical volume deactivated, a
-+  complete resynchronization of the mirror will be necessary upon
-+  the follow activation - such is the nature of a mirror with a 'core'
-+  log.  The default policy for handling log failures is "allocate".
-+  The service disruption incurred by replacing the failed log is
-+  negligible, while the benefits of having persistent log is
-+  pronounced.
-+- mirror_image_fault_policy:  This defines what action should be taken
-+  if a device containing an image fails.  Again, the available options
-+  are "remove" and "allocate".  Both of these options will cause the
-+  faulty image device to be removed - adjusting the logical volume
-+  accordingly.  For example, if one image of a 2-way mirror fails, the
-+  mirror will be converted to a linear device.  If one image of a
-+  3-way mirror fails, the mirror will be converted to a 2-way mirror.
-+  The "allocate" policy takes the further action of trying to replace
-+  the failed image using space that is available in the volume group.
-+  Replacing a failed mirror image will incure the cost of
-+  resynchronizing - degrading the performance of the mirror.  The
-+  default policy for handling an image failure is "remove".  This
-+  allows the mirror to still function, but gives the administrator the
-+  choice of when to incure the extra performance costs of replacing
-+  the failed image.
++		/* Prefer any other path over /dev/block/ path. */
++		if ((r = _builtin_preference(path0, path1, devdir_len, "block/")) >= 0)
++			return !r;
 +
-+TODO...
-+The appropriate time to take permanent corrective action on a mirror
-+should be driven by policy.  There should be a directive that takes
-+a time or percentage argument.  Something like the following:
-+- mirror_fault_policy_WHEN = "10sec"/"10%"
-+A time value would signal the amount of time to wait for transient
-+failures to resolve themselves.  The percentage value would signal the
-+amount a mirror could become out-of-sync before the faulty device is
-+removed.
++		/* Prefer /dev/mapper/ path over /dev/disk/ path. */
++		if ((r = _builtin_pair_preference(path0, 0, dm_dir(),
++						  path1, devdir_len, "disk/")) >= 0)
++			return r;
 +
-+A mirror cannot be used unless /some/ corrective action is taken,
-+however.  One option is to replace the failed mirror image with an
-+error target, forgo the use of 'handle_errors', and simply let the
-+out-of-sync regions accumulate and be tracked by the log.  Mirrors
-+that have more than 2 images would have to "stack" to perform the
-+tracking, as each failed image would have to be associated with a
-+log.  If the failure is transient, the device would replace the
-+error target that was holding its spot and the log that was tracking
-+the deltas would be used to quickly restore the portions that changed.
++		/* Prefer /dev/mapper/ path over /dev/dm-* path. */
++		if ((r = _builtin_pair_preference(path0, 0, dm_dir(),
++						  path1, devdir_len, "dm-")) >= 0)
++			return r;
 +
-+One unresolved issue with the above scheme is how to know which
-+regions of the mirror are out-of-sync when a problem occurs.  When
-+a write failure occurs in the kernel, the log will contain those
-+regions that are not in-sync.  If the log is a disk log, that log
-+could continue to be used to track differences.  However, if the
-+log was a core log - or if the log device failed at the same time
-+as an image device - there would be no way to determine which
-+regions are out-of-sync to begin with as we start to track the
-+deltas for the failed image.  I don't have a solution for this
-+problem other than to only be able to handle errors in this way
-+if conditions are right.  These issues will have to be ironed out
-+before proceeding.  This could be another case, where it is better
-+to handle failures in the kernel by allowing the kernel to store
-+updates in various metadata areas.
-+...TODO
++		/* Prefer /dev/disk/ path over /dev/dm-* path. */
++		if ((r = _builtin_pair_preference(path0, devdir_len, "disk/",
++						  path1, devdir_len, "dm-")) >= 0)
++			return r;
++
++		/* Prefer any other path over /dev/dm-* path. */
++		if ((r = _builtin_preference(path0, path1, devdir_len, "dm-")) >= 0)
++			return !r;
++
++		/* Prefer any other path over /dev/disk/ path. */
++		if ((r = _builtin_preference(path0, path1, devdir_len, "disk/")) >= 0)
++			return !r;
++
++		/* Prefer any other path over /dev/mapper/ path. */
++		if ((r = _builtin_preference(path0, path1, 0, dm_dir())) >= 0)
++			return !r;
++	}
++
++	return -1;
++}
++
+ /* Return 1 if we prefer path1 else return 0 */
+ static int _compare_paths(const char *path0, const char *path1)
+ {
+@@ -156,7 +258,7 @@ static int _compare_paths(const char *path0, const char *path1)
+ 	char p0[PATH_MAX], p1[PATH_MAX];
+ 	char *s0, *s1;
+ 	struct stat stat0, stat1;
+-	size_t devdir_len;
++	int r;
+ 
+ 	/*
+ 	 * FIXME Better to compare patterns one-at-a-time against all names.
+@@ -177,22 +279,9 @@ static int _compare_paths(const char *path0, const char *path1)
+ 		}
+ 	}
+ 
+-	/*
+-	 * Built-in rules.
+-	 */
+-
+-	/*
+-	 * Anything beats /dev/block.
+-	 */
+-	devdir_len = strlen(_cache.dev_dir);
+-	if (!strncmp(path0, _cache.dev_dir, devdir_len) &&
+-	    !strncmp(path1, _cache.dev_dir, devdir_len)) {
+-		if (!strncmp(path0 + devdir_len, "block/", 6)) {
+-			if (strncmp(path1 + devdir_len, "block/", 6))
+-				return 1;
+-		} else if (!strncmp(path1 + devdir_len, "block/", 6))
+-			return 0;
+-	}
++	/* Apply built-in preference rules first. */
++	if ((r = _apply_builtin_path_preference_rules(path0, path1)) >= 0)
++		return r;
+ 
+ 	/* Return the path with fewer slashes */
+ 	for (p = path0; p++; p = (const char *) strchr(p, '/'))
 
 
