@@ -1,45 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Jul 2010 11:15:59 +0200
-Subject: [PATCH 13/14] Reorder read_ahead check
-In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
-References: <cover.1280307502.git.zkabelac@redhat.com>
-Message-ID: <5286d44287ec2037f99f13c2721a63165a5c78a3.1280307502.git.zkabelac@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 27 Jul 2010 21:06:31 +0200
+Subject: [PATCH] Handle a failure of all mirror devices but one mirror leg
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
+	(Takahiro Yasui's message of "Mon, 19 Jul 2010 18:09:43 -0400")
+References: <5C30BE7ED8B03E448B2E104602D4848A5922886542@USINDEVS02.corp.hds.com>
+Message-ID: <87vd80922w.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Wait for udev for debug print - otherwise read_ahead check tries
-to access device not yet available through udev.
+Hi,
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/dmsetup.c |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+Takahiro Yasui <takahiro.yasui@hds.com> writes:
+> In addition, I added following three changes.
+>
+> - Removed tmp_orphan_lvs handling procedure
+>   It seems that _delete_lv() can handle detached_log_lv properly
+>   without adding mirror legs in mirrored log to tmp_orphan_lvs.
+>   Therefore, I removed the procedure.
+>
+> - Removed vg_write()/vg_commit()
+>   Metadata is saved by vg_write()/vg_commit() just after detached_log_lv
+>   is handled. Therefore, I removed vg_write()/vg_commit().
+>
+> - With Jon's second patch, we think that we don't have to call
+>   remove_mirror_log() in _lv_update_mirrored_log() because will be
+>   handled remove_mirror_images() in _lvconvert_mirrors_repaire().
+>
+> Appreciate your reviews and comments.
+for what it's worth, I like that the patch simplifies the spaghetti in
+_remove_mirror_images and overall I don't see anything clearly wrong
+about it. Nevertheless, I do think that the patch needs careful testing,
+especially in cluster. (I have checked that the testsuite passes, but
+unfortunately it doesn't have sufficient coverage of various failure
+scenarios, especially with cluster...)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 10b9e0b..2af9c28 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -633,9 +633,16 @@ static int _create(int argc, char **argv, void *data __attribute__((unused)))
- 
- 	r = 1;
- 
-+	if (!_udev_cookie)
-+		(void) dm_udev_wait(cookie);
-+
- 	if (_switches[VERBOSE_ARG])
- 		r = _display_info(dmt);
- 
-+	dm_task_destroy(dmt);
-+
-+	return r;
-+
-       out:
- 	if (!_udev_cookie)
- 		(void) dm_udev_wait(cookie);
--- 
-1.7.2
+Yours,
+   Petr.
+
+Reviewed-By: Petr Rockai <prockai@redhat.com>
 
 
