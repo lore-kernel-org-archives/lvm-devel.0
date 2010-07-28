@@ -1,96 +1,51 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Jul 2010 11:16:00 +0200
-Subject: [PATCH 14/14] Proposal of different check for udev dir
-In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
-References: <cover.1280307502.git.zkabelac@redhat.com>
-Message-ID: <055c01a96f6775c4fe3372c0ac64538f275d2b0d.1280307502.git.zkabelac@redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 28 Jul 2010 12:12:54 +0200
+Subject: [PATCH] Revert unsuccessful table load preparation in combined "create, load and resume" scenario
+Message-ID: <4C5002A6.1050705@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is rather test code to check differently for 'udev' dir usage.
-Upstream implementation doesn't allow to use directories like
-/dev/shm as normal /tmp dirs as it thinks it starts with /dev so
-it is udev 'dev' dir.
+Per discussion with Zdenek, there's missing "revert" call in
+_create_and_load_v4 fn while the preparation for table load ends
+up with failure in create/load/resume sequence. Otherwise we could
+end up with a device being created, but not table-loaded nor
+resumed.
 
-Note - few different approaches are here - my prefered version
-is the one in dmsetup #if 1
+Even though the table is not loaded and the device is not resumed
+at this stage, we still need to synchronize with udev when calling
+the revert "remove" ioctl - there's still a remove uevent generated!
+Current "revert" code does exactly that.
 
-New code allows only  'devdir' or 'devdir/' and simplifies code around.
-
-Also as this code seems to be needed for  dmsetup & lvm - it should be
-probably moved as a dm library function usable by both.
-
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+Peter
 ---
- tools/dmsetup.c    |   26 +++++++++++++++++++++++---
- tools/lvmcmdline.c |    4 +++-
- 2 files changed, 26 insertions(+), 4 deletions(-)
+ libdm/ioctl/libdm-iface.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 2af9c28..3be96b4 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -978,11 +978,30 @@ static int _set_up_udev_support(const char *dev_dir)
- 	 * races between udev and libdevmapper but only in case udev "dev path"
- 	 * is the same as "dev path" used by libdevmapper.
- 	 */
--
- 	/* There's always a slash at the end of dev_dir. But check udev_dev_dir! */
--	if (udev_dev_dir[udev_dev_dir_len - 1] != '/')
-+#if 1
-+	if ((strncmp(dev_dir, udev_dev_dir, udev_dev_dir_len) == 0) &&
-+	    (dev_dir[udev_dev_dir_len] == '\0' ||
-+	     (dev_dir[udev_dev_dir_len] == '/' &&
-+	      dev_dir[udev_dev_dir_len + 1] == '\0'))) {
-+		_udev_only = _udev_cookie;
-+	} else {
-+		log_debug("The path %s used for creating device nodes that is "
-+			  "set via DM_DEV_DIR environment variable differs from "
-+			  "the path %s that is used by udev. All warnings "
-+			  "about udev not working correctly while processing "
-+			  "particular nodes will be suppressed. These nodes "
-+			  "and symlinks will be managed in each directory "
-+			  "separately.", dev_dir, udev_dev_dir);
-+		dm_udev_set_checking(0);
-+		_udev_only = 0;
-+	}
-+#else
-+	if (udev_dev_dir_len > 0 &&
-+	    udev_dev_dir[udev_dev_dir_len - 1] != '/' &&
-+	    strlen(dev_dir) == (udev_dev_dir_len + 1)) {
- 		dirs_diff = strncmp(dev_dir, udev_dev_dir, udev_dev_dir_len);
--	else
-+	} else
- 		dirs_diff = strcmp(dev_dir, udev_dev_dir);
- 
- 	_udev_only = _udev_cookie && !dirs_diff;
-@@ -997,6 +1016,7 @@ static int _set_up_udev_support(const char *dev_dir)
- 			  "separately.", dev_dir, udev_dev_dir);
- 		dm_udev_set_checking(0);
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 5f71098..50cdec8 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1655,14 +1655,16 @@ static int _create_and_load_v4(struct dm_task *dmt)
+ 	if (!(task = dm_task_create(DM_DEVICE_RELOAD))) {
+ 		log_error("Failed to create device-mapper task struct");
+ 		_udev_complete(dmt);
+-		return 0;
++		r = 0;
++		goto revert;
  	}
-+#endif
  
- 	udev_unref(udev);
- 	return 1;
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 6c66fab..7a29e02 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -945,7 +945,9 @@ static int _set_udev_checking(struct cmd_context *cmd)
- 	udev_dev_dir_len = strlen(udev_dev_dir);
+ 	/* Copy across relevant fields */
+ 	if (dmt->dev_name && !dm_task_set_name(task, dmt->dev_name)) {
+ 		dm_task_destroy(task);
+ 		_udev_complete(dmt);
+-		return 0;
++		r = 0;
++		goto revert;
+ 	}
  
- 	/* There's always a slash at the end of dev_dir. But check udev_dev_dir! */
--	if (udev_dev_dir[udev_dev_dir_len - 1] != '/')
-+	if (strlen(cmd->dev_dir) > udev_dev_dir_len)
-+		dirs_diff = 1;
-+	else if (udev_dev_dir[udev_dev_dir_len - 1] != '/')
- 		dirs_diff = strncmp(cmd->dev_dir, udev_dev_dir,
- 				    udev_dev_dir_len);
- 	else
--- 
-1.7.2
+ 	task->read_only = dmt->read_only;
 
 
