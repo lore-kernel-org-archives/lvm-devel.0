@@ -1,87 +1,84 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Fri,  7 May 2021 10:25:16 +0800
-Subject: [LVM2 RFCv2 5/5] tools: Add support for "idm" lock type
-In-Reply-To: <20210507022516.143385-1-leo.yan@linaro.org>
-References: <20210507022516.143385-1-leo.yan@linaro.org>
-Message-ID: <20210507022516.143385-6-leo.yan@linaro.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 28 Jul 2010 11:15:48 +0200
+Subject: [PATCH 02/14] Testsuit: Shell &&||
+In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
+References: <cover.1280307502.git.zkabelac@redhat.com>
+Message-ID: <5b080c4d0409d304b4ce4403db9e52a4dba835b6.1280307502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch is to update the comment and code to support "idm" lock type
-which is used for LVM toolkit.
+Visually better align lines which are executed as a result of true
+or false result of previous command.
 
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvconvert.c |  2 ++
- tools/toollib.c   | 11 ++++++-----
- 2 files changed, 8 insertions(+), 5 deletions(-)
+ test/lvm-utils.sh      |    6 +++---
+ test/t-000-basic.sh    |    4 ++--
+ test/t-pvmove-basic.sh |    7 +++----
+ 3 files changed, 8 insertions(+), 9 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 4c159b01e..1f2178ce5 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3415,6 +3415,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 				pool_lv->lock_args = "pending";
- 			else if (!strcmp(vg->lock_type, "dlm"))
- 				pool_lv->lock_args = "dlm";
-+			else if (!strcmp(vg->lock_type, "idm"))
-+				pool_lv->lock_args = "idm";
- 			/* The lock_args will be set in vg_write(). */
- 		}
- 	}
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 67fbbdaa0..cda6d74f3 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -591,15 +591,15 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 	 * new VG, and is it compatible with current lvm.conf settings.
- 	 *
- 	 * The end result is to set vp_new->lock_type to:
--	 * none | clvm | dlm | sanlock.
-+	 * none | clvm | dlm | sanlock | idm.
- 	 *
- 	 * If 'vgcreate --lock-type <arg>' is set, the answer is given
--	 * directly by <arg> which is one of none|clvm|dlm|sanlock.
-+	 * directly by <arg> which is one of none|clvm|dlm|sanlock|idm.
- 	 *
- 	 * 'vgcreate --clustered y' is the way to create clvm VGs.
- 	 *
- 	 * 'vgcreate --shared' is the way to create lockd VGs.
--	 * lock_type of sanlock or dlm is selected based on
-+	 * lock_type of sanlock, dlm or idm is selected based on
- 	 * which lock manager is running.
- 	 *
- 	 *
-@@ -646,7 +646,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 	 * - lvmlockd is used
- 	 * - VGs with CLUSTERED set are ignored (requires clvmd)
- 	 * - VGs with lockd type can be used
--	 * - vgcreate can create new VGs with lock_type sanlock or dlm
-+	 * - vgcreate can create new VGs with lock_type sanlock, dlm or idm
- 	 * - 'vgcreate --clustered y' fails
- 	 * - 'vgcreate --shared' works
- 	 * - 'vgcreate' (neither option) creates a local VG
-@@ -658,7 +658,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 		lock_type = arg_str_value(cmd, locktype_ARG, "");
+diff --git a/test/lvm-utils.sh b/test/lvm-utils.sh
+index 39d52fd..6c00084 100644
+--- a/test/lvm-utils.sh
++++ b/test/lvm-utils.sh
+@@ -129,9 +129,9 @@ vg_validate_pvlv_counts_()
  
- 		if (arg_is_set(cmd, shared_ARG) && !is_lockd_type(lock_type)) {
--			log_error("The --shared option requires lock type sanlock or dlm.");
-+			log_error("The --shared option requires lock type sanlock, dlm or idm.");
- 			return 0;
- 		}
+ 	lvs -a -o+devices $local_vg
  
-@@ -697,6 +697,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+-	check_vg_field_ $local_vg pv_count $num_pvs &&
+-	check_vg_field_ $local_vg lv_count $num_lvs &&
+-	check_vg_field_ $local_vg snap_count $num_snaps
++	check_vg_field_ $local_vg pv_count $num_pvs && \
++	  check_vg_field_ $local_vg lv_count $num_lvs && \
++	  check_vg_field_ $local_vg snap_count $num_snaps
+ }
  
- 	case LOCK_TYPE_SANLOCK:
- 	case LOCK_TYPE_DLM:
-+	case LOCK_TYPE_IDM:
- 		if (!use_lvmlockd) {
- 			log_error("Using a shared lock type requires lvmlockd.");
- 			return 0;
+ dmsetup_has_dm_devdir_support_()
+diff --git a/test/t-000-basic.sh b/test/t-000-basic.sh
+index c70a7f8..ed76a6f 100755
+--- a/test/t-000-basic.sh
++++ b/test/t-000-basic.sh
+@@ -20,9 +20,9 @@ lvm pvmove --version|sed -n "1s/.*: *\([0-9][^ ]*\) .*/\1/p" > actual
+ # ensure they are the same
+ diff -u actual expected
+ 
+-mknod $DM_DEV_DIR/null c 1 3 ||
++mknod $DM_DEV_DIR/null c 1 3 || \
+   error "Can't create nodes on filesystem"
+-echo >$DM_DEV_DIR/null || 
++echo >$DM_DEV_DIR/null || \
+   error "Filesystem for tests does not allow using device nodes (check nodev)"
+ 
+ # ensure we can create devices (uses dmsetup, etc)
+diff --git a/test/t-pvmove-basic.sh b/test/t-pvmove-basic.sh
+index cc2145b..44b533c 100755
+--- a/test/t-pvmove-basic.sh
++++ b/test/t-pvmove-basic.sh
+@@ -33,8 +33,7 @@ lv_is_on_() {
+ }
+ 
+ save_dev_sum_() {
+-  mkfs.ext3 $1 > /dev/null &&
+-  md5sum $1 > md5.$(basename $1)
++  mkfs.ext3 $1 > /dev/null && md5sum $1 > md5.$(basename $1)
+ }
+ 
+ check_dev_sum_() {
+@@ -83,8 +82,8 @@ check_and_cleanup_lvs_() {
+   lvs -a -o name $vg > out && ! grep ^pvmove out
+   lvremove -ff $vg
+ 	if ! dmsetup table|not grep $vg; then
+-		echo "ERROR: lvremove did leave some some mappings in DM behind!" &&
+-		return 1
++		echo "ERROR: lvremove did leave some some mappings in DM behind!" && \
++			return 1
+ 	fi
+ 	:
+ }
 -- 
-2.25.1
+1.7.2
 
 
