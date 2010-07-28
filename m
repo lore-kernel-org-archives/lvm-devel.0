@@ -1,57 +1,37 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Fri,  7 May 2021 10:25:11 +0800
-Subject: [LVM2 RFCv2 0/5] Enable In-Drive-Mutex Locking scheme
-Message-ID: <20210507022516.143385-1-leo.yan@linaro.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 28 Jul 2010 11:15:47 +0200
+Subject: [PATCH 01/14] Skip VPATH usage
+In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
+References: <cover.1280307502.git.zkabelac@redhat.com>
+Message-ID: <1bcc8c3d176c6fc011bfbf3d9ac832592ccc1393.1280307502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch set enables the In-Drive-Mutex (IDM) locking scheme.  The
-previous patch series [1] have given a briefly introduction for IDM and
-it's associated locking manager and lib.
+Do not use VPATH as we may get wrong builds when $srcdir has
+complete build and different $builddir is used later.
+Files from $builddir need to be used.
 
-This series follows up Dave's comments and refines the patches.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ include/Makefile.in |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-And this patch series has been tested with IDM/sanlock/DLM locking
-schemes for VG and LV creating, removing, activating and deactivating,
-these operations can work as expected for all of these three locking
-schemes.
-
-[1] https://listman.redhat.com/archives/lvm-devel/2021-April/msg00111.html
-
-Changes from RFCv1:
-* Updated commit log for LVB (Dave);
-* Refined the change to only pass PV list for IDM lock type (Dave);
-* Refined retriving PV list with function lv_is_on_pv() (Dave);
-* Added condition checking for passing PV list in lvmlockd after found
-  a regression on sanlock locking scheme.
-
-
-Leo Yan (5):
-  lvmlockd: idm: Introduce new locking scheme
-  lvmlockd: idm: Hook Seagate IDM wrapper APIs
-  lib: locking: Add new type "idm"
-  lib: locking: Parse PV list for IDM locking
-  tools: Add support for "idm" lock type
-
- configure                            | 173 ++++++
- configure.ac                         |  20 +
- daemons/lvmlockd/Makefile.in         |   5 +
- daemons/lvmlockd/lvmlockd-core.c     | 281 ++++++++-
- daemons/lvmlockd/lvmlockd-idm.c      | 837 +++++++++++++++++++++++++++
- daemons/lvmlockd/lvmlockd-internal.h | 110 ++++
- lib/display/display.c                |   4 +
- lib/locking/lvmlockd.c               | 330 ++++++++++-
- lib/metadata/metadata-exported.h     |   1 +
- lib/metadata/metadata.c              |  12 +-
- tools/lvconvert.c                    |   2 +
- tools/toollib.c                      |  11 +-
- 12 files changed, 1726 insertions(+), 60 deletions(-)
- create mode 100644 daemons/lvmlockd/lvmlockd-idm.c
-
+diff --git a/include/Makefile.in b/include/Makefile.in
+index 3023d4a..0354d2e 100644
+--- a/include/Makefile.in
++++ b/include/Makefile.in
+@@ -17,7 +17,6 @@ SHELL = /bin/sh
+ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+-VPATH = @srcdir@
+ 
+ LN_S = @LN_S@
+ 
 -- 
-2.25.1
+1.7.2
 
 
