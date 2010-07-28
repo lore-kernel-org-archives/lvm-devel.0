@@ -1,172 +1,33 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 24 May 2021 21:09:55 +0000 (GMT)
-Subject: main - lvremove: fix removing thin pool with writecache on data
-Message-ID: <20210524210955.A13CF3893646@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 28 Jul 2010 11:15:51 +0200
+Subject: [PATCH 05/14] Testsuit: speedup
+In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
+References: <cover.1280307502.git.zkabelac@redhat.com>
+Message-ID: <3e5e833c49ae138f10ec68dfb393fbf661499eca.1280307502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a746f7ffcc8e61c9cb5ce9f9e8a061d1ef6b28e
-Commit:        4a746f7ffcc8e61c9cb5ce9f9e8a061d1ef6b28e
-Parent:        a65f8e0a62b9ab3c2fc909a63abfa0e933619a8c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon May 24 16:08:27 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon May 24 16:09:35 2021 -0500
+Instead of waiting for flock end kill lock.
 
-lvremove: fix removing thin pool with writecache on data
-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/lv_manip.c                | 19 +++++++++
- lib/metadata/metadata-exported.h       |  2 +
- lib/metadata/thin_manip.c              | 12 ++++++
- test/shell/lvremove-thindata-caches.sh | 71 ++++++++++++++++++++++++++++++++++
- 4 files changed, 104 insertions(+)
+ test/t-lock-blocking.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 508f78c13..37dd3611d 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6692,6 +6692,25 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			return_0;
- 	}
- 
-+	/* if thin pool data lv is writecache, then detach and remove the writecache */
-+	if (lv_is_thin_pool(lv)) {
-+		struct logical_volume *data_lv = data_lv_from_thin_pool(lv);
-+
-+		if (data_lv && lv_is_writecache(data_lv)) {
-+			struct logical_volume *cachevol_lv = first_seg(data_lv)->writecache;
-+
-+			if (!lv_detach_writecache_cachevol(data_lv, 1)) {
-+				log_error("Failed to detach writecache from %s", display_lvname(data_lv));
-+				return 0;
-+			}
-+
-+			if (!lv_remove_single(cmd, cachevol_lv, force, 1)) {
-+				log_error("Failed to remove cachevol %s.", display_lvname(cachevol_lv));
-+				return 0;
-+			}
-+		}
-+	}
-+
- 	if (lv_is_writecache(lv)) {
- 		struct logical_volume *cachevol_lv = first_seg(lv)->writecache;
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 52062a100..9ac3c677e 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -928,6 +928,8 @@ int handle_pool_metadata_spare(struct volume_group *vg, uint32_t extents,
- int vg_set_pool_metadata_spare(struct logical_volume *lv);
- int vg_remove_pool_metadata_spare(struct volume_group *vg);
- 
-+struct logical_volume *data_lv_from_thin_pool(struct logical_volume *pool_lv);
-+
- int attach_thin_external_origin(struct lv_segment *seg,
- 				struct logical_volume *external_lv);
- int detach_thin_external_origin(struct lv_segment *seg);
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 451c38260..6ce88bd3d 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -21,6 +21,18 @@
- #include "lib/config/defaults.h"
- #include "lib/display/display.h"
- 
-+struct logical_volume *data_lv_from_thin_pool(struct logical_volume *pool_lv)
-+{
-+	struct lv_segment *seg_thinpool = first_seg(pool_lv);
-+
-+	if (!seg_thinpool || !seg_is_thin_pool(seg_thinpool)) {
-+		log_error(INTERNAL_ERROR "data_lv_from_thin_pool arg not thin pool %s", pool_lv->name);
-+		return NULL;
-+	}
-+
-+	return seg_thinpool->areas[0].u.lv.lv;
-+}
-+
- /* TODO: drop unused no_update */
- int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
- 			struct logical_volume *lv, uint32_t delete_id,
-diff --git a/test/shell/lvremove-thindata-caches.sh b/test/shell/lvremove-thindata-caches.sh
-new file mode 100644
-index 000000000..ba099c373
---- /dev/null
-+++ b/test/shell/lvremove-thindata-caches.sh
-@@ -0,0 +1,71 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2017-2020 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_cache 1 10 0 || skip
-+aux have_writecache 1 0 0 || skip
-+which mkfs.xfs || skip
-+
-+aux prepare_devs 6 70 # want 64M of usable space from each dev
-+
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-+
-+# lv1 is thinpool LV: 128M
-+# lv2 is fast LV:      64M
-+# lv3 is thin LV:       1G
-+
-+#
-+# Test lvremove of a thinpool that uses cache|writecache on data
-+#
-+
-+# attach writecache to thinpool data
-+lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
-+lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
-+lvchange -ay $vg/$lv1
-+lvs -a $vg
-+mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv3"
-+lvremove -y $vg/$lv1
-+
-+# attach cache/writeback (cachevol) to thinpool data
-+lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
-+lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+lvchange -ay $vg/$lv1
-+mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv3"
-+lvremove -y $vg/$lv1
-+
-+# attach cache/writethrough (cachevol) to thinpool data
-+lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
-+lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+lvchange -ay $vg/$lv1
-+mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv3"
-+lvremove -y $vg/$lv1
-+
-+# attach cache (cachepool) to thinpool data
-+lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
-+lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
-+lvcreate -y --type cache-pool -n $lv2 -L64M --poolmetadataspare n $vg "$dev3" "$dev6"
-+lvconvert -y --type cache --cachepool $lv2 --poolmetadataspare n $vg/$lv1
-+lvchange -ay $vg/$lv1
-+mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv3"
-+lvremove -y $vg/$lv1
-+
-+vgremove -f $vg
-+
+diff --git a/test/t-lock-blocking.sh b/test/t-lock-blocking.sh
+index 7e5321e..166340c 100644
+--- a/test/t-lock-blocking.sh
++++ b/test/t-lock-blocking.sh
+@@ -33,4 +33,4 @@ flock -w 5 $TESTDIR/var/lock/lvm/P_orphans -c "sleep 10" &
+ flock_pid=`jobs -p`
+ not vgremove --config 'global { wait_for_locks = 0 }' $vg
+ ps $flock_pid # still running
+-wait $flock_pid
++kill $flock_pid
+-- 
+1.7.2
 
 
