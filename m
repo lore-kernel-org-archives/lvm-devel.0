@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Jul 2010 12:20:47 -0000
-Subject: LVM2 report-generators/memcheck.rb report-gene ...
-Message-ID: <20100728122047.13367.qmail@sourceware.org>
+Date: 28 Jul 2010 13:55:48 -0000
+Subject: LVM2 ./Makefile.in ./VERSION ./WHATS_NEW ./con ...
+Message-ID: <20100728135548.16522.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,510 +10,291 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-28 12:20:41
+Changes by:	agk at sourceware.org	2010-07-28 13:55:43
 
 Modified files:
-	report-generators: memcheck.rb title_page.rb unit_test.rb 
-	report-generators/lib: log.rb report_templates.rb reports.rb 
-	                       schedule_file.rb string-store.rb 
-	report-generators/test: tc_log.rb tc_schedule_file.rb 
-	                        tc_string_store.rb ts.rb 
-	test           : check.sh harness.c harness.sh not.c 
-	                 t-activate-missing.sh t-activate-partial.sh 
-	                 t-lvconvert-mirror-basic-0.sh 
-	                 t-lvconvert-mirror-basic-1.sh 
-	                 t-lvconvert-mirror-basic-2.sh 
-	                 t-lvconvert-mirror-basic-3.sh 
-	                 t-lvconvert-mirror-basic.sh t-nomda-missing.sh 
-	                 t-snapshots-of-mirrors.sh t-vgsplit-stacked.sh 
-	unit-tests/datastruct: bitset_t.c 
+	.              : Makefile.in VERSION WHATS_NEW configure 
+	                 configure.in 
+	daemons/clvmd  : clvm.h clvmd.c clvmd.h 
+	lib/misc       : configure.h.in 
 
 Log message:
-	add copyright notices to new files
+	Change clvmd to communicate with lvm via a socket in /var/run/lvm.   (mbroz)
+	
+	https://bugzilla.redhat.com/show_bug.cgi?id=614248 [CVE-2010-2526]
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/memcheck.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/title_page.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/unit_test.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/lib/log.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/lib/report_templates.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/lib/reports.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/lib/schedule_file.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/lib/string-store.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/test/tc_log.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/test/tc_schedule_file.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/test/tc_string_store.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/report-generators/test/ts.rb.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/check.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/not.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-activate-missing.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-activate-partial.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-0.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-1.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-2.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-3.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-nomda-missing.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-snapshots-of-mirrors.sh.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-stacked.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/unit-tests/datastruct/bitset_t.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.248&r2=1.249
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1674&r2=1.1675
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.136&r2=1.137
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.149&r2=1.150
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvm.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/configure.h.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
 
---- LVM2/report-generators/memcheck.rb	2010/07/20 14:38:44	1.1
-+++ LVM2/report-generators/memcheck.rb	2010/07/28 12:20:38	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # Reads the schedule files given on the command line.  Runs them and
- # generates the reports.
+--- LVM2/Makefile.in	2010/07/20 15:25:39	1.58
++++ LVM2/Makefile.in	2010/07/28 13:55:42	1.59
+@@ -84,6 +84,7 @@
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_BACKUP_DIR)
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_CACHE_DIR)
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_LOCK_DIR)
++	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_RUN_DIR)
+ 	$(INSTALL_ROOT_DATA) /dev/null $(DESTDIR)$(DEFAULT_CACHE_DIR)/.cache
  
---- LVM2/report-generators/title_page.rb	2010/07/20 14:38:44	1.1
-+++ LVM2/report-generators/title_page.rb	2010/07/28 12:20:38	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ install_initscripts: 
+--- LVM2/VERSION	2010/07/28 11:49:42	1.248
++++ LVM2/VERSION	2010/07/28 13:55:42	1.249
+@@ -1 +1 @@
+-2.02.71(2)-cvs (2010-07-28)
++2.02.72(2)-cvs (2010-07-28)
+--- LVM2/WHATS_NEW	2010/07/28 11:49:42	1.1674
++++ LVM2/WHATS_NEW	2010/07/28 13:55:42	1.1675
+@@ -1,3 +1,9 @@
++Version 2.02.72 - 28th July 2010  [CVE-2010-2526]
++=================================================
++  Change clvmd to communicate with lvm2 via a socket in /var/run/lvm.
++  Return controlled error if clvmd is run by non-root user.
++  Add configure --default-run-dir for /var/run/lvm.
 +
- # This generates the index for the reports, including generation
- # times.
+ Version 2.02.71 - 28th July 2010
+ ================================
+   Document LVM fault handling in doc/lvm_fault_handling.txt.
+--- LVM2/configure	2010/07/21 12:54:21	1.136
++++ LVM2/configure	2010/07/28 13:55:42	1.137
+@@ -863,6 +863,7 @@
+ with_udevdir
+ with_dmeventd_pidfile
+ with_dmeventd_path
++with_default_run_dir
+ with_default_system_dir
+ with_default_archive_subdir
+ with_default_backup_subdir
+@@ -1599,6 +1600,7 @@
+                           dmeventd pidfile [/var/run/dmeventd.pid]
+   --with-dmeventd-path=PATH
+                           dmeventd path [EPREFIX/sbin/dmeventd]
++  --with-default-run-dir=DIR       Default run directory [/var/run/lvm]
+   --with-default-system-dir=DIR
+                           default LVM system directory [/etc/lvm]
+   --with-default-archive-subdir=SUBDIR
+@@ -17816,6 +17818,21 @@
  
---- LVM2/report-generators/unit_test.rb	2010/07/20 14:38:44	1.1
-+++ LVM2/report-generators/unit_test.rb	2010/07/28 12:20:38	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # Reads the schedule files given on the command line.  Runs them and
- # generates the reports.
+ fi
  
---- LVM2/report-generators/lib/log.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/lib/log.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
- # Merely wraps the logger library with a bit of standard policy.
- require 'logger'
++
++
++# Check whether --with-default-run-dir was given.
++if test "${with_default_run_dir+set}" = set; then
++  withval=$with_default_run_dir;  DEFAULT_RUN_DIR="$withval"
++else
++   DEFAULT_RUN_DIR="/var/run/lvm"
++fi
++
++cat >>confdefs.h <<_ACEOF
++#define DEFAULT_RUN_DIR "$DEFAULT_RUN_DIR"
++_ACEOF
++
++
+ ################################################################################
  
---- LVM2/report-generators/lib/report_templates.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/lib/report_templates.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # Policy for the location of report templates
- require 'string-store'
+ # Check whether --with-default-system-dir was given.
+--- LVM2/configure.in	2010/07/20 15:25:39	1.149
++++ LVM2/configure.in	2010/07/28 13:55:42	1.150
+@@ -1127,6 +1127,13 @@
+ 			   [Path to dmeventd binary.])
+ fi
  
---- LVM2/report-generators/lib/reports.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/lib/reports.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++AH_TEMPLATE(DEFAULT_RUN_DIR, [Name of default run directory.])
++AC_ARG_WITH(default-run-dir,
++	    [  --with-default-run-dir=DIR       Default run directory [[/var/run/lvm]] ],
++	    [ DEFAULT_RUN_DIR="$withval" ],
++	    [ DEFAULT_RUN_DIR="/var/run/lvm" ])
++AC_DEFINE_UNQUOTED(DEFAULT_RUN_DIR,["$DEFAULT_RUN_DIR"] )
 +
- # Data about the various reports we support
- require 'log'
- require 'pathname'
---- LVM2/report-generators/lib/schedule_file.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/lib/schedule_file.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # Parses the simple colon delimited test schedule files.
+ ################################################################################
+ dnl -- various defaults
+ AC_ARG_WITH(default-system-dir,
+--- LVM2/daemons/clvmd/clvm.h	2010/04/20 14:07:38	1.8
++++ LVM2/daemons/clvmd/clvm.h	2010/07/28 13:55:43	1.9
+@@ -22,6 +22,8 @@
+ #ifndef _CLVM_H
+ #define _CLVM_H
  
- ScheduledTest = Struct.new(:desc, :command_line, :status, :output)
---- LVM2/report-generators/lib/string-store.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/lib/string-store.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++#include "configure.h"
 +
- # Provides a simple way of accessing the contents of files by a symbol
- # name.  Useful for erb templates.
+ struct clvm_header {
+ 	uint8_t  cmd;	        /* See below */
+ 	uint8_t  flags;	        /* See below */
+@@ -45,9 +47,8 @@
+ #define CLVMD_FLAG_SYSTEMLV     2	/* Data in system LV under my node name */
+ #define CLVMD_FLAG_NODEERRS     4       /* Reply has errors in node-specific portion */
  
---- LVM2/report-generators/test/tc_log.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/test/tc_log.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- require 'test/unit'
- require 'stringio'
- require 'log'
---- LVM2/report-generators/test/tc_schedule_file.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/test/tc_schedule_file.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- require 'test/unit'
- require 'pathname'
- require 'schedule_file'
---- LVM2/report-generators/test/tc_string_store.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/test/tc_string_store.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- require 'string-store'
- require 'test/unit'
+-/* Name of the local socket to communicate between libclvm and clvmd */
+-//static const char CLVMD_SOCKNAME[]="/var/run/clvmd";
+-static const char CLVMD_SOCKNAME[] = "\0clvmd";
++/* Name of the local socket to communicate between lvm and clvmd */
++static const char CLVMD_SOCKNAME[]= DEFAULT_RUN_DIR "/clvmd.sock";
  
---- LVM2/report-generators/test/ts.rb	2010/07/20 14:38:45	1.1
-+++ LVM2/report-generators/test/ts.rb	2010/07/28 12:20:40	1.2
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- require 'tc_log'
- require 'tc_string_store'
- require 'tc_schedule_file'
---- LVM2/test/check.sh	2010/05/12 10:08:35	1.5
-+++ LVM2/test/check.sh	2010/07/28 12:20:41	1.6
-@@ -1,5 +1,15 @@
- #!/bin/bash
+ /* Internal commands & replies */
+ #define CLVMD_CMD_REPLY    1
+--- LVM2/daemons/clvmd/clvmd.c	2010/07/13 13:51:02	1.73
++++ LVM2/daemons/clvmd/clvmd.c	2010/07/28 13:55:43	1.74
+@@ -123,6 +123,7 @@
+ static int process_reply(const struct clvm_header *msg, int msglen,
+ 			 const char *csid);
+ static int open_local_sock(void);
++static void close_local_sock(int local_socket);
+ static int check_local_clvmd(void);
+ static struct local_client *find_client(int clientid);
+ static void main_loop(int local_sock, int cmd_timeout);
+@@ -276,6 +277,23 @@
+ 	unlink(CLVMD_PIDFILE);
+ }
  
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # check.sh: assert various things about volumes
- 
- # USAGE
---- LVM2/test/harness.c	2010/05/12 11:23:16	1.12
-+++ LVM2/test/harness.c	2010/07/28 12:20:41	1.13
-@@ -1,3 +1,17 @@
 +/*
-+ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU General Public License v.2.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ * clvmd require dm-ioctl capability for operation
 + */
++static void check_permissions()
++{
++	if (getuid() || geteuid()) {
++		log_error("Cannot run as a non-root user.");
 +
- #include <fcntl.h>
- #include <string.h>
- #include <stdio.h>
---- LVM2/test/harness.sh	2008/11/04 14:37:51	1.5
-+++ LVM2/test/harness.sh	2010/07/28 12:20:41	1.6
-@@ -1,5 +1,15 @@
- #!/bin/sh
++		 /*
++		  * Fail cleanly here if not run as root, instead of failing
++		  * later when attempting a root-only operation 
++		  * Preferred exit code from an initscript for this.
++		  */
++		exit(4);
++	}
++}
++
+ int main(int argc, char *argv[])
+ {
+ 	int local_sock;
+@@ -305,9 +323,11 @@
+ 			exit(0);
  
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- tests="$@"
- test -z "$tests" && tests=`echo t-*.sh`
+ 		case 'R':
++			check_permissions();
+ 			return refresh_clvmd(1)==1?0:1;
  
---- LVM2/test/not.c	2010/05/12 05:55:42	1.4
-+++ LVM2/test/not.c	2010/07/28 12:20:41	1.5
-@@ -1,3 +1,17 @@
-+/*
-+ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU General Public License v.2.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
- #include <unistd.h>
- #include <stdio.h>
- #include <stdarg.h>
---- LVM2/test/t-activate-missing.sh	2010/07/27 20:05:29	1.2
-+++ LVM2/test/t-activate-missing.sh	2010/07/28 12:20:41	1.3
-@@ -1,5 +1,15 @@
- #!/bin/bash
+ 		case 'S':
++			check_permissions();
+ 			return restart_clvmd(clusterwide_opt)==1?0:1;
  
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- # Test activation behaviour with devices missing.
- # - snapshots and their origins are only activated together; if one fails, both
- #   fail
---- LVM2/test/t-activate-partial.sh	2010/06/30 14:01:39	1.3
-+++ LVM2/test/t-activate-partial.sh	2010/07/28 12:20:41	1.4
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./test-utils.sh
+ 		case 'C':
+@@ -353,6 +373,8 @@
+ 		}
+ 	}
  
- aux prepare_vg 3
-@@ -17,4 +27,4 @@
- vgchange -a y --partial $vg
++	check_permissions();
++
+ 	/* Setting debug options on an existing clvmd */
+ 	if (debug_opt && !check_local_clvmd()) {
  
- # check vgremove
--vgremove -f $vg
-\ No newline at end of file
-+vgremove -f $vg
---- LVM2/test/t-lvconvert-mirror-basic-0.sh	2010/05/12 13:15:38	1.1
-+++ LVM2/test/t-lvconvert-mirror-basic-0.sh	2010/07/28 12:20:41	1.2
-@@ -1,2 +1,12 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./t-lvconvert-mirror-basic.sh
- test_many 0
---- LVM2/test/t-lvconvert-mirror-basic-1.sh	2010/05/12 13:15:38	1.1
-+++ LVM2/test/t-lvconvert-mirror-basic-1.sh	2010/07/28 12:20:41	1.2
-@@ -1,2 +1,12 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./t-lvconvert-mirror-basic.sh
- test_many 1
---- LVM2/test/t-lvconvert-mirror-basic-2.sh	2010/05/12 13:15:38	1.1
-+++ LVM2/test/t-lvconvert-mirror-basic-2.sh	2010/07/28 12:20:41	1.2
-@@ -1,2 +1,12 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./t-lvconvert-mirror-basic.sh
- test_many 2
---- LVM2/test/t-lvconvert-mirror-basic-3.sh	2010/05/12 13:15:38	1.1
-+++ LVM2/test/t-lvconvert-mirror-basic-3.sh	2010/07/28 12:20:41	1.2
-@@ -1,2 +1,12 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./t-lvconvert-mirror-basic.sh
- test_many 3
---- LVM2/test/t-lvconvert-mirror-basic.sh	2010/06/28 19:13:33	1.3
-+++ LVM2/test/t-lvconvert-mirror-basic.sh	2010/07/28 12:20:41	1.4
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
- . ./test-utils.sh
+@@ -521,6 +543,7 @@
+ 	/* Do some work */
+ 	main_loop(local_sock, cmd_timeout);
  
- log_name_to_count()
---- LVM2/test/t-nomda-missing.sh	2010/07/27 21:08:32	1.2
-+++ LVM2/test/t-nomda-missing.sh	2010/07/28 12:20:41	1.3
-@@ -1,5 +1,15 @@
- #!/bin/bash
++	close_local_sock(local_sock);
+ 	destroy_lvm();
  
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 	return 0;
+@@ -864,7 +887,6 @@
+ 
+       closedown:
+ 	clops->cluster_closedown();
+-	close(local_sock);
+ }
+ 
+ static __attribute__ ((noreturn)) void wait_for_child(int c_pipe, int timeout)
+@@ -1963,20 +1985,30 @@
+ 	return ret;
+ }
+ 
++static void close_local_sock(int local_socket)
++{
++	if (local_socket != -1 && close(local_socket))
++		stack;
 +
- . ./test-utils.sh
++	if (CLVMD_SOCKNAME[0] != '\0' && unlink(CLVMD_SOCKNAME))
++		stack;
++}
  
- prepare_devs 4
---- LVM2/test/t-snapshots-of-mirrors.sh	2010/03/26 22:15:44	1.4
-+++ LVM2/test/t-snapshots-of-mirrors.sh	2010/07/28 12:20:41	1.5
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ /* Open the local socket, that's the one we talk to libclvm down */
+ static int open_local_sock()
+ {
+-	int local_socket;
++	int local_socket = -1;
+ 	struct sockaddr_un sockaddr;
++	mode_t old_mask;
 +
- . ./test-utils.sh
++	close_local_sock(local_socket);
++	old_mask = umask(0077);
  
- prepare_vg 4
---- LVM2/test/t-vgsplit-stacked.sh	2010/04/07 14:46:27	1.3
-+++ LVM2/test/t-vgsplit-stacked.sh	2010/07/28 12:20:41	1.4
-@@ -1,3 +1,13 @@
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 	/* Open local socket */
+-	if (CLVMD_SOCKNAME[0] != '\0')
+-		unlink(CLVMD_SOCKNAME);
+ 	local_socket = socket(PF_UNIX, SOCK_STREAM, 0);
+ 	if (local_socket < 0) {
+ 		log_error("Can't create local socket: %m");
+-		return -1;
++		goto error;
+ 	}
+ 
+ 	/* Set Close-on-exec & non-blocking */
+@@ -1989,18 +2021,19 @@
+ 	sockaddr.sun_family = AF_UNIX;
+ 	if (bind(local_socket, (struct sockaddr *) &sockaddr, sizeof(sockaddr))) {
+ 		log_error("can't bind local socket: %m");
+-		close(local_socket);
+-		return -1;
++		goto error;
+ 	}
+ 	if (listen(local_socket, 1) != 0) {
+ 		log_error("listen local: %m");
+-		close(local_socket);
+-		return -1;
++		goto error;
+ 	}
+-	if (CLVMD_SOCKNAME[0] != '\0')
+-		chmod(CLVMD_SOCKNAME, 0600);
+ 
++	umask(old_mask);
+ 	return local_socket;
++error:
++	close_local_sock(local_socket);
++	umask(old_mask);
++	return -1;
+ }
+ 
+ void process_message(struct local_client *client, const char *buf, int len,
+--- LVM2/daemons/clvmd/clvmd.h	2007/08/17 11:51:23	1.11
++++ LVM2/daemons/clvmd/clvmd.h	2010/07/28 13:55:43	1.12
+@@ -20,9 +20,6 @@
+ #define CLVMD_MINOR_VERSION 2
+ #define CLVMD_PATCH_VERSION 1
+ 
+-/* Name of the cluster LVM admin lock */
+-#define ADMIN_LOCK_NAME "CLVMD_ADMIN"
+-
+ /* Default time (in seconds) we will wait for all remote commands to execute
+    before declaring them dead */
+ #define DEFAULT_CMD_TIMEOUT 60
+--- LVM2/lib/misc/configure.h.in	2010/07/13 13:51:03	1.25
++++ LVM2/lib/misc/configure.h.in	2010/07/28 13:55:43	1.26
+@@ -35,6 +35,9 @@
+ /* Name of default locking directory. */
+ #undef DEFAULT_LOCK_DIR
+ 
++/* Name of default run directory. */
++#undef DEFAULT_RUN_DIR
 +
- . ./test-utils.sh
+ /* Define to 0 to reinstate the pre-2.02.54 handling of unit suffixes. */
+ #undef DEFAULT_SI_UNIT_CONSISTENCY
  
- prepare_lvmconf '[ "a/dev\/mirror/", "a/dev\/mapper\/.*$/", "a/dev\/LVMTEST/", "r/.*/" ]'
---- LVM2/unit-tests/datastruct/bitset_t.c	2010/07/20 15:28:22	1.3
-+++ LVM2/unit-tests/datastruct/bitset_t.c	2010/07/28 12:20:41	1.4
-@@ -1,3 +1,17 @@
-+/*
-+ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU General Public License v.2.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
- #include "libdevmapper.h"
- 
- #include <assert.h>
 
 
