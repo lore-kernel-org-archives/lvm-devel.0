@@ -1,65 +1,36 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri,  7 May 2021 21:15:13 +0000 (GMT)
-Subject: main - post-release
-Message-ID: <20210507211513.4D0D8389440C@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 28 Jul 2010 11:15:49 +0200
+Subject: [PATCH 03/14] Testsuit: create empty files
+In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
+References: <cover.1280307502.git.zkabelac@redhat.com>
+Message-ID: <e5b439b0bc65424f55cf53f34c80449e861da5f2.1280307502.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e2f09d78b64719e6c3d403fb1c6f93b06d80335
-Commit:        3e2f09d78b64719e6c3d403fb1c6f93b06d80335
-Parent:        01b05cf51dd547354b4ad70e7f8f4ff7ff0bb152
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri May 7 22:36:56 2021 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri May 7 23:09:15 2021 +0200
+Using count=0 is sufficient for creation of zeroed files.
 
-post-release
-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- VERSION      | 2 +-
- VERSION_DM   | 2 +-
- WHATS_NEW    | 3 +++
- WHATS_NEW_DM | 3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ test/test-utils.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index d9c3e2336..6e36bd169 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.03.12(2) (2021-05-07)
-+2.03.13(2)-git (2021-05-07)
-diff --git a/VERSION_DM b/VERSION_DM
-index 6105a0ff1..df334e09b 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.177 (2021-05-07)
-+1.02.179-git (2021-05-07)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6f339a509..4b5b23072 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.03.13 - 
-+===============================
-+
- Version 2.03.12 - 07th May 2021
- ===============================
-   Allow attaching cache to thin data volume.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index fe4310509..9de74dfe2 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.179 - 
-+================================
-+
- Version 1.02.177 - 07th May 2021
- ================================
-   Configure proceeds without libaio to allow build of device-mapper only.
+diff --git a/test/test-utils.sh b/test/test-utils.sh
+index b3ee6f6..c044de0 100644
+--- a/test/test-utils.sh
++++ b/test/test-utils.sh
+@@ -187,7 +187,7 @@ prepare_loop() {
+ 	done
+ 
+ 	LOOPFILE="$PWD/test.img"
+-	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=1 seek=$(($size-1))
++	dd if=/dev/zero of="$LOOPFILE" bs=$((1024*1024)) count=0 seek=$(($size-1))
+ 	if LOOP=`losetup -s -f "$LOOPFILE" 2>/dev/null`; then
+ 		return 0
+ 	elif LOOP=`losetup -f` && losetup $LOOP "$LOOPFILE"; then
+-- 
+1.7.2
 
 
