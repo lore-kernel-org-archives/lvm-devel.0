@@ -1,65 +1,59 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 29 Jul 2010 12:54:15 +0200
-Subject: [PATCH] Fix log disk disappear with mirror allocate policy
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228865A8@USINDEVS02.corp.hds.com>
-	(Takahiro Yasui's message of "Wed, 28 Jul 2010 19:49:36 -0400")
-References: <5C30BE7ED8B03E448B2E104602D4848A59228865A8@USINDEVS02.corp.hds.com>
-Message-ID: <874ofi8so8.fsf@twilight.int.mornfall.net.>
+Date: Thu, 29 Jul 2010 18:49:34 +0200
+Subject: Handle transient errors for mirrored log in lvconvert --repair
+In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228865AB@USINDEVS02.corp.hds.com>
+	(Takahiro Yasui's message of "Wed, 28 Jul 2010 23:43:58 -0400")
+References: <5C30BE7ED8B03E448B2E104602D4848A59228865AB@USINDEVS02.corp.hds.com>
+Message-ID: <87zkxa6xnl.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Hi Taka,
 
 Takahiro Yasui <takahiro.yasui@hds.com> writes:
-> With mirror_log_fault_policy of 'remove' and mirror_image_fault_policy
-> of 'allocate', the log type of the mirror volume is converted from
-> 'disk' or 'mirrored' to 'core' when all mirror legs but one in a mirror
-> volume broke.
-I see.
+> As shown above, I hope this kind of code to be added to check the status
+> of a log volume.
 
-> --- LVM2-2.02.71.orig/tools/lvconvert.c
-> +++ LVM2-2.02.71/tools/lvconvert.c
-> @@ -1237,25 +1237,27 @@ static int _lvconvert_mirrors_repair(str
->  	if (!(lp->failed_pvs = _failed_pv_list(lv->vg)))
->  		return_0;
->  
-> +	log_count = new_log_count;
-> +
->  	/*
->  	 * We must adjust the log first, or the entire mirror
->  	 * will get stuck during a suspend.
->  	 */
-> -	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, new_log_count))
-> +	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, log_count))
->  		return 0;
->  
->  	if (lp->mirrors == 1)
-> -		new_log_count = 0;
-> +		log_count = 0;
-Here we used to overwrite new_log_count which is later used for
-restoring the mirror (i.e. when allocating new legs).
+[snip]
 
->  	if (failed_mirrors) {
->  		if (!lv_remove_mirrors(cmd, lv, failed_mirrors,
-> -				       new_log_count ? 0U : 1U,
-> +				       log_count ? 0U : 1U,
->  				       _is_partial_lv, NULL, 0))
->  			return 0;
->  	}
->  
->  	if (!_lv_update_log_type(cmd, lp, lv, lp->failed_pvs,
-> -				 new_log_count))
-> +				 log_count))
->  		return 0;
->  
->  	if (!_reload_lv(cmd, lv))
+> I understand your concern that this doesn't cover all cases. For example,
+> there might be a problem when mirror_{log|mirror}_fault_policy is set
+> to 'allocate' instead of 'removed.'
 
-Ack.
+> Here is a discussion. We can rescue a case that 'removed' policy is set to
+> mirror_{log|mirror}_fault_policy by adding lv_check_transient() for a mirrored
+> log volume, while application will hang up when a transient error or medium
+> error occurred on mirrored log without this patch.
 
-Reviewed-By: Petr Rockai <prockai@redhat.com>
+> How about adding the patch for a short term solution to save in the case of
+> 'removed' policy? We have already made a decision when the first patch is
+> committed.
+
+I think the main concern is that a sync over a partially failing PV will
+make things a lot worse. On the other hand, I agree that having multiple
+failing devices is a rare situation. I would concede to the following:
+
+If a transient error is detected, repair the mirror as usual through
+down-conversion, but refuse to do any allocation. This is the same
+situation as when there are no spare PVs available. This is a
+conservative over-approximation that is always correct. We are issuing a
+log_warn that the mirror could not be restored to its previous state,
+which should end up in syslog. From there, this is a matter of the
+sysadmin to take action. The mirror should keep operating in a reduced
+mode in the meantime.
+
+If this was noted in documentation, I think this would be appropriate
+for RHEL6. The check wouldn't be very hard to do, I believe: Count the
+number of partial LVs in the VG before the transient check and count
+again after, if the numbers differ, forbid any new allocations.
+
+Would you find such a solution acceptable? Overall, it in the case of a
+transient failure, it will work as if "remove" was specified regardless
+of actual lvm.conf setting. For permanent failures, the policy is
+respected as previously.
 
 Yours,
    Petr.
