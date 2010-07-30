@@ -1,83 +1,39 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 30 Jul 2010 09:39:53 -0500
-Subject: [PATCH] Disallow mirrored log type for cluster mirrors
-Message-ID: <1280500793.20453.1.camel@hydrogen.msp.redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 30 Jul 2010 16:47:28 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20100730164728.27658.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-	brassow
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-07-30 16:47:27
 
-Disallow mirrored logs in cluster mirrors.
+Modified files:
+	lib/metadata   : metadata.c 
 
-The cluster log daemon (cmirrord) is not multi-threaded and
-can handle only one request at a time.  When a log is stacked
-on top of a mirror (which itself contains a 'core' log), it
-creates a situation that cannot be solved without threading.
+Log message:
+	Remove irrelevant comments relating to vg_mda_copies.
 
-When the top level mirror issues a "resume", the log daemon
-attempts to read from the log device to retrieve the log
-state.  However, the log is a mirror which, before issuing
-the read, attempts to determine the 'sync' status of the
-region of the mirror which is to be read.  This sync status
-request cannot be completed by the daemon because it is
-blocked on a read I/O to the very mirror requesting the
-sync status.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.389&r2=1.390
 
- brassow
-
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -1970,10 +1970,21 @@ int lv_add_mirrors(struct cmd_context *c
- 		return 0;
- 	}
+--- LVM2/lib/metadata/metadata.c	2010/07/09 16:57:44	1.389
++++ LVM2/lib/metadata/metadata.c	2010/07/30 16:47:27	1.390
+@@ -1199,11 +1199,6 @@
  
--	if (vg_is_clustered(lv->vg) &&  !(lv->status & ACTIVATE_EXCL) &&
--	    !cluster_mirror_is_available(lv)) {
--		log_error("Shared cluster mirrors are not available.");
--		return 0;
-+	if (vg_is_clustered(lv->vg)) {
-+		if (!(lv->status & ACTIVATE_EXCL) &&
-+		    !cluster_mirror_is_available(lv)) {
-+			log_error("Shared cluster mirrors are not available.");
-+			return 0;
-+		}
-+
-+		/*
-+		 * No mirrored logs for cluster mirrors until
-+		 * log daemon is multi-threaded.
-+		 */
-+		if (log_count > 1) {
-+			log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
-+			return 0;
-+		}
- 	}
+ int vg_set_mda_copies(struct volume_group *vg, uint32_t mda_copies)
+ {
+-	/* FIXME: add checks, etc, and set the value */
+-	/*
+-	 * FIXME: Before we set a larger value, we may need to
+-	 * enable some mdas on PVS
+-	 */
+ 	vg->mda_copies = mda_copies;
  
- 	/* For corelog mirror, activation code depends on
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -919,6 +919,15 @@ static int _lvconvert_mirrors_parse_para
- 		return 0;
- 	}
- 
-+	/*
-+	 * No mirrored logs for cluster mirrors until
-+	 * log daemon is multi-threaded.
-+	 */
-+	if ((*new_log_count == 2) && vg_is_clustered(lv->vg)) {
-+		log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
-+		return 0;
-+	}
-+
- 	log_verbose("Setting logging type to %s", mirrorlog);
- 
- 	/*
-
+ 	/* FIXME Use log_verbose when this is due to specific cmdline request. */
 
 
