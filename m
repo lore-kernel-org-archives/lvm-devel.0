@@ -1,39 +1,83 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 29 Jul 2010 21:54:31 +0200
-Subject: [PATCH] Handle transient errors for mirrored log in lvconvert --repair
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228865B4@USINDEVS02.corp.hds.com>
-	(Takahiro Yasui's message of "Thu, 29 Jul 2010 14:07:51 -0400")
-References: <5C30BE7ED8B03E448B2E104602D4848A59228865AB@USINDEVS02.corp.hds.com>
-	<87zkxa6xnl.fsf@twilight.int.mornfall.net.>
-	<5C30BE7ED8B03E448B2E104602D4848A59228865B4@USINDEVS02.corp.hds.com>
-Message-ID: <87pqy66p3c.fsf_-_@twilight.int.mornfall.net.>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Fri, 30 Jul 2010 09:39:53 -0500
+Subject: [PATCH] Disallow mirrored log type for cluster mirrors
+Message-ID: <1280500793.20453.1.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi again,
+	brassow
 
-Takahiro Yasui <takahiro.yasui@hds.com> writes:
-> Yes, this solution is acceptable to me. As a long term, we can introduce
-> a kind of logic to keep the information of a bad segment or device and
-> extend cases for 'allocate' policy.
-great. I am attaching a patch proposal that would implement the outlined
-policy. I have tucked in a warning for a good measure.
+Disallow mirrored logs in cluster mirrors.
 
-The patch still needs some testing, which I'd appreciate if you could
-carry out. I will be away from internet starting tomorrow noon CEST and
-should be back approximately Tuesday evening next week (still CEST). I
-am afraid I won't have more time for this until after I return.
+The cluster log daemon (cmirrord) is not multi-threaded and
+can handle only one request at a time.  When a log is stacked
+on top of a mirror (which itself contains a 'core' log), it
+creates a situation that cannot be solved without threading.
 
-Yours,
-   Petr.
+When the top level mirror issues a "resume", the log daemon
+attempts to read from the log device to retrieve the log
+state.  However, the log is a mirror which, before issuing
+the read, attempts to determine the 'sync' status of the
+region of the mirror which is to be read.  This sync status
+request cannot be completed by the daemon because it is
+blocked on a read I/O to the very mirror requesting the
+sync status.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvconvert-transient-mirroredlog.diff
-Type: text/x-diff
-Size: 3862 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100729/f4687d7b/attachment.bin>
+ brassow
+
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -1970,10 +1970,21 @@ int lv_add_mirrors(struct cmd_context *c
+ 		return 0;
+ 	}
+ 
+-	if (vg_is_clustered(lv->vg) &&  !(lv->status & ACTIVATE_EXCL) &&
+-	    !cluster_mirror_is_available(lv)) {
+-		log_error("Shared cluster mirrors are not available.");
+-		return 0;
++	if (vg_is_clustered(lv->vg)) {
++		if (!(lv->status & ACTIVATE_EXCL) &&
++		    !cluster_mirror_is_available(lv)) {
++			log_error("Shared cluster mirrors are not available.");
++			return 0;
++		}
++
++		/*
++		 * No mirrored logs for cluster mirrors until
++		 * log daemon is multi-threaded.
++		 */
++		if (log_count > 1) {
++			log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
++			return 0;
++		}
+ 	}
+ 
+ 	/* For corelog mirror, activation code depends on
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -919,6 +919,15 @@ static int _lvconvert_mirrors_parse_para
+ 		return 0;
+ 	}
+ 
++	/*
++	 * No mirrored logs for cluster mirrors until
++	 * log daemon is multi-threaded.
++	 */
++	if ((*new_log_count == 2) && vg_is_clustered(lv->vg)) {
++		log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
++		return 0;
++	}
++
+ 	log_verbose("Setting logging type to %s", mirrorlog);
+ 
+ 	/*
+
+
+
