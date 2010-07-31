@@ -1,7 +1,7 @@
-From: taka@sourceware.org <taka@sourceware.org>
-Date: 30 Jul 2010 17:50:17 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
-Message-ID: <20100730175017.23464.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 31 Jul 2010 00:43:42 -0000
+Subject: LVM2 WHATS_NEW configure configure.in
+Message-ID: <20100731004342.789.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,73 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	taka at sourceware.org	2010-07-30 17:50:16
+Changes by:	agk at sourceware.org	2010-07-31 00:43:42
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : lvconvert.c 
+	.              : WHATS_NEW configure configure.in 
 
 Log message:
-	Fix wrong number of mirror log at allocate policy
-	
-	With mirror_log_fault_policy of 'remove' and mirror_image_fault_policy
-	of 'allocate', the log type of the mirror volume is converted from
-	'disk' or 'mirrored' to 'core' when all mirror legs but one in a mirror
-	volume broke.
-	
-	Keep new_log_count as a number of valid log devices by using log_count
-	variable for a temporary usage in the first phase of error recovery
-	in _lvconvert_mirrors_repair().
-	
-	Signed-off-by: Takahiro Yasui <takahiro.yasui@hds.com>
-	Reviewed-by: Petr Rockai <prockai@redhat.com>
+	Fix configure to supply DEFAULT_RUN_DIR to Makefiles.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1677&r2=1.1678
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.140&r2=1.141
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1678&r2=1.1679
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.137&r2=1.138
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.150&r2=1.151
 
---- LVM2/WHATS_NEW	2010/07/28 21:58:08	1.1677
-+++ LVM2/WHATS_NEW	2010/07/30 17:50:15	1.1678
+--- LVM2/WHATS_NEW	2010/07/30 17:50:15	1.1678
++++ LVM2/WHATS_NEW	2010/07/31 00:43:41	1.1679
 @@ -1,5 +1,6 @@
  Version 2.02.73 - 
  ================================
-+  Fix wrong number of mirror log at allocate policy
++  Fix configure to supply DEFAULT_RUN_DIR to Makefiles.
+   Fix wrong number of mirror log at allocate policy
  
  Version 2.02.72 - 28th July 2010  [CVE-2010-2526]
- =================================================
---- LVM2/tools/lvconvert.c	2010/07/13 22:04:36	1.140
-+++ LVM2/tools/lvconvert.c	2010/07/30 17:50:16	1.141
-@@ -1237,25 +1237,27 @@
- 	if (!(lp->failed_pvs = _failed_pv_list(lv->vg)))
- 		return_0;
+--- LVM2/configure	2010/07/28 13:55:42	1.137
++++ LVM2/configure	2010/07/31 00:43:41	1.138
+@@ -691,6 +691,7 @@
+ DMEVENTD
+ DL_LIBS
+ DEVMAPPER
++DEFAULT_RUN_DIR
+ DEFAULT_LOCK_DIR
+ DEFAULT_CACHE_SUBDIR
+ DEFAULT_BACKUP_SUBDIR
+@@ -18043,6 +18044,7 @@
  
-+	log_count = new_log_count;
+ 
+ 
 +
- 	/*
- 	 * We must adjust the log first, or the entire mirror
- 	 * will get stuck during a suspend.
- 	 */
--	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, new_log_count))
-+	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, log_count))
- 		return 0;
+ ################################################################################
+ ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile"
  
- 	if (lp->mirrors == 1)
--		new_log_count = 0;
-+		log_count = 0;
- 
- 	if (failed_mirrors) {
- 		if (!lv_remove_mirrors(cmd, lv, failed_mirrors,
--				       new_log_count ? 0U : 1U,
-+				       log_count ? 0U : 1U,
- 				       _is_partial_lv, NULL, 0))
- 			return 0;
- 	}
- 
- 	if (!_lv_update_log_type(cmd, lp, lv, lp->failed_pvs,
--				 new_log_count))
-+				 log_count))
- 		return 0;
- 
- 	if (!_reload_lv(cmd, lv))
+--- LVM2/configure.in	2010/07/28 13:55:42	1.150
++++ LVM2/configure.in	2010/07/31 00:43:42	1.151
+@@ -1232,6 +1232,7 @@
+ AC_SUBST(DEFAULT_BACKUP_SUBDIR)
+ AC_SUBST(DEFAULT_CACHE_SUBDIR)
+ AC_SUBST(DEFAULT_LOCK_DIR)
++AC_SUBST(DEFAULT_RUN_DIR)
+ AC_SUBST(DEVMAPPER)
+ AC_SUBST(DLM_CFLAGS)
+ AC_SUBST(DLM_LIBS)
 
 
