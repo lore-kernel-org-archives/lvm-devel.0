@@ -1,46 +1,96 @@
-From: Thanos Makatos <thanos.makatos@citrix.com>
-Date: Thu, 30 Jan 2014 15:50:19 +0000
-Subject: [PATCH] Return non-zero on violation of global/metadata_read_only
-In-Reply-To: <1389720145-29182-1-git-send-email-thanos.makatos@citrix.com>
-References: <1389720145-29182-1-git-send-email-thanos.makatos@citrix.com>
-Message-ID: <2368A3FCF9F7214298E53C823B0A48EC11EF2F@AMSPEX01CL02.citrite.net>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 02 Aug 2010 21:24:57 +0200
+Subject: [PATCH] Add check for semaphore kernel support
+Message-ID: <4C571B89.2030309@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+We also need to check for kernel semaphore support (part of System V IPC,
+kernel's CONFIG_SYSVIPC). If not compiled in the kernel, we need to disable
+udev synchronisation code and show a warning message at least (so one knows
+that it should be added in the kernel or that libdebmapper should be compiled
+without udev_sync alternatively).
 
-> -----Original Message-----
-> From: Thanos Makatos [mailto:thanos.makatos at citrix.com]
-> Sent: 14 January 2014 17:22
-> To: lvm-devel at redhat.com
-> Cc: Thanos Makatos
-> Subject: [PATCH] Return non-zero on violation of
-> global/metadata_read_only
-> 
-> Signed-off-by: Thanos Makatos <thanos.makatos@citrix.com>
-> ---
->  tools/lvmcmdline.c |    1 +
->  1 file changed, 1 insertion(+)
-> 
-> diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c index
-> 6fe4670..c87cf4e 100644
-> --- a/tools/lvmcmdline.c
-> +++ b/tools/lvmcmdline.c
-> @@ -1163,6 +1163,7 @@ int lvm_run_command(struct cmd_context *cmd, int
-> argc, char **argv)
->  	    !(cmd->command->flags & PERMITTED_READ_ONLY)) {
->  		log_error("%s: Command not permitted while
-> global/metadata_read_only "
->  			  "is set.", cmd->cmd_line);
-> +		ret = ECMD_FAILED;
->  		goto out;
->  	}
-> 
-> --
-> 1.7.9.5
+Inspired by util-linux-ng's ipcs code.
 
-Ping?
+Initiated by the problem reported here:
+http://bugs.gentoo.org/show_bug.cgi?id=330375
+
+Peter
+---
+ libdm/libdm-common.c |   33 +++++++++++++++++++++++++++++----
+ 1 files changed, 29 insertions(+), 4 deletions(-)
+
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 438e461..23dd761 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -60,6 +60,7 @@ static char _dm_dir[PATH_MAX] = DEV_DIR DM_DIR;
+ static int _verbose = 0;
+ 
+ #ifdef UDEV_SYNC_SUPPORT
++static int _semaphore_supported = -1;
+ static int _udev_running = -1;
+ static int _sync_with_udev = 1;
+ static int _udev_checking = 1;
+@@ -929,6 +930,23 @@ int dm_udev_wait(uint32_t cookie)
+ 
+ #else		/* UDEV_SYNC_SUPPORT */
+ 
++static int _check_semaphore_is_supported()
++{
++	int maxid;
++	union semun arg;
++	struct seminfo seminfo;
++
++	arg.array = (unsigned short int *) (void *) &seminfo;
++	maxid = semctl(0, 0, SEM_INFO, arg);
++
++	if (maxid < 0) {
++		log_warn("Kernel not configured for semaphores (System V IPC). "
++			 "Not using udev synchronisation code.");
++		return 0;
++	}
++
++	return 1;
++}
+ 
+ static int _check_udev_is_running(void)
+ {
+@@ -958,20 +976,27 @@ bad:
+ 	return 0;
+ }
+ 
+-void dm_udev_set_sync_support(int sync_with_udev)
++static void _check_udev_sync_requirements_once()
+ {
++	if (_semaphore_supported < 0)
++		_semaphore_supported = _check_semaphore_is_supported();
++
+ 	if (_udev_running < 0)
+ 		_udev_running = _check_udev_is_running();
++}
+ 
++void dm_udev_set_sync_support(int sync_with_udev)
++{
++	_check_udev_sync_requirements_once();
+ 	_sync_with_udev = sync_with_udev;
+ }
+ 
+ int dm_udev_get_sync_support(void)
+ {
+-	if (_udev_running < 0)
+-		_udev_running = _check_udev_is_running();
++	_check_udev_sync_requirements_once();
+ 
+-	return dm_cookie_supported() && _udev_running && _sync_with_udev;
++	return _semaphore_supported && dm_cookie_supported() &&
++		_udev_running && _sync_with_udev;
+ }
+ 
+ void dm_udev_set_checking(int checking)
 
 
