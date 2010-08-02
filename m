@@ -1,55 +1,52 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 30 Jan 2014 12:50:55 +0000 (UTC)
-Subject: master - hosttags: add missing file to define "hosttags" cmd
-Message-ID: <20140130125055.5598D6151A@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 2 Aug 2010 12:10:37 -0000
+Subject: LVM2 WHATS_NEW Makefile.in
+Message-ID: <20100802121037.31606.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c27e1503a6eed2faa2300e1b25c8910c6346eda5
-Commit:        c27e1503a6eed2faa2300e1b25c8910c6346eda5
-Parent:        7a9e7a57e37d6fbab2dcd3c03192fd092811756f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jan 30 13:49:47 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jan 30 13:49:47 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-08-02 12:10:36
 
-hosttags: add missing file to define "hosttags" cmd
+Modified files:
+	.              : WHATS_NEW Makefile.in 
 
----
- tools/hosttags.c |   23 +++++++++++++++++++++++
- 1 files changed, 23 insertions(+), 0 deletions(-)
+Log message:
+	Make liblvm.device-mapper wait for include file generation.
 
-diff --git a/tools/hosttags.c b/tools/hosttags.c
-new file mode 100644
-index 0000000..11fa7ef
---- /dev/null
-+++ b/tools/hosttags.c
-@@ -0,0 +1,23 @@
-+/*
-+ * Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+#include "tools.h"
-+
-+int hosttags(struct cmd_context *cmd, int argc __attribute__((unused)),
-+	    char **argv __attribute__((unused)))
-+{
-+	display_hosttags(cmd);
-+
-+	return ECMD_PROCESSED;
-+}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1680&r2=1.1681
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.59&r2=1.60
+
+--- LVM2/WHATS_NEW	2010/07/31 14:13:59	1.1680
++++ LVM2/WHATS_NEW	2010/08/02 12:10:35	1.1681
+@@ -1,5 +1,6 @@
+ Version 2.02.73 - 
+ ================================
++  Make liblvm.device-mapper wait for include file generation.
+   Drop explicit 'Base' version from exported symbols.
+   Fix configure to supply DEFAULT_RUN_DIR to Makefiles.
+   Fix wrong number of mirror log at allocate policy
+--- LVM2/Makefile.in	2010/07/28 13:55:42	1.59
++++ LVM2/Makefile.in	2010/08/02 12:10:36	1.60
+@@ -50,6 +50,7 @@
+ po: tools daemons
+ 
+ libdm.device-mapper: include.device-mapper
++liblvm.device-mapper: include.device-mapper
+ daemons.device-mapper: libdm.device-mapper
+ tools.device-mapper: libdm.device-mapper
+ device-mapper: tools.device-mapper daemons.device-mapper man.device-mapper
+@@ -149,4 +150,4 @@
+ 
+ ruby-test:
+ 	$(RUBY) report-generators/test/ts.rb
+-endif
+\ No newline at end of file
++endif
 
 
