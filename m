@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Aug 2010 13:13:01 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20100803131301.26264.qmail@sourceware.org>
+Date: 3 Aug 2010 13:16:22 -0000
+Subject: LVM2 ./WHATS_NEW libdm/ioctl/libdm-iface.c
+Message-ID: <20100803131622.11846.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-08-03 13:13:01
+Changes by:	zkabelac at sourceware.org	2010-08-03 13:16:21
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
+	Fix 'void*' arithmetic warning in some functions from libdm-iface.c.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1690&r2=1.1691
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.196&r2=1.197
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1691&r2=1.1692
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
 
---- LVM2/WHATS_NEW	2010/08/03 13:09:21	1.1690
-+++ LVM2/WHATS_NEW	2010/08/03 13:13:01	1.1691
-@@ -1,6 +1,7 @@
+--- LVM2/WHATS_NEW	2010/08/03 13:13:01	1.1691
++++ LVM2/WHATS_NEW	2010/08/03 13:16:21	1.1692
+@@ -1,5 +1,6 @@
  Version 2.02.73 - 
  ================================
--  Fix constness warning in archive_file structure from archive.c.
-+  Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
-+  Fix const warning in archive_file structure from archive.c.
++  Fix 'void*' arithmetic warning in some functions from libdm-iface.c.
+   Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
+   Fix const warning in archive_file structure from archive.c.
    Clean generated files .exported_symbols_generated, example.conf for distclean.
-   Handle failure of all mirrored log devices and all but one mirror leg. 
-   Disallow 'mirrored' log type for cluster mirrors.
---- LVM2/lib/activate/dev_manager.c	2010/07/09 15:34:42	1.196
-+++ LVM2/lib/activate/dev_manager.c	2010/08/03 13:13:01	1.197
-@@ -220,7 +220,7 @@
- 		     int with_open_count, int with_read_ahead,
- 		     struct dm_info *info, uint32_t *read_ahead)
- {
--	const char *dlid, *name;
-+	char *dlid, *name;
- 	int r;
+--- LVM2/libdm/ioctl/libdm-iface.c	2010/08/03 13:06:36	1.78
++++ LVM2/libdm/ioctl/libdm-iface.c	2010/08/03 13:16:21	1.79
+@@ -1104,7 +1104,7 @@
+ 		return _dm_task_get_deps_v1(dmt);
+ #endif
  
- 	if (!(name = build_dm_name(mem, lv->vg->name, lv->name, NULL))) {
-@@ -236,7 +236,7 @@
- 	log_debug("Getting device info for %s [%s]", name, dlid);
- 	r = _info(dlid, with_open_count, with_read_ahead, info, read_ahead);
- 
--	dm_pool_free(mem, (char*)name);
-+	dm_pool_free(mem, name);
- 	return r;
+-	return (struct dm_deps *) (((void *) dmt->dmi.v4) +
++	return (struct dm_deps *) (((char *) dmt->dmi.v4) +
+ 				   dmt->dmi.v4->data_start);
  }
  
-@@ -812,7 +812,7 @@
- int dev_manager_mknodes(const struct logical_volume *lv)
+@@ -1115,13 +1115,13 @@
+ 		return _dm_task_get_names_v1(dmt);
+ #endif
+ 
+-	return (struct dm_names *) (((void *) dmt->dmi.v4) +
++	return (struct dm_names *) (((char *) dmt->dmi.v4) +
+ 				    dmt->dmi.v4->data_start);
+ }
+ 
+ struct dm_versions *dm_task_get_versions(struct dm_task *dmt)
  {
- 	struct dm_info dminfo;
--	const char *name;
-+	char *name;
- 	int r = 0;
- 
- 	if (!(name = build_dm_name(lv->vg->cmd->mem, lv->vg->name, lv->name, NULL)))
-@@ -826,7 +826,7 @@
- 			r = _dev_manager_lv_rmnodes(lv);
- 	}
- 
--	dm_pool_free(lv->vg->cmd->mem, (char*)name);
-+	dm_pool_free(lv->vg->cmd->mem, name);
- 	return r;
+-	return (struct dm_versions *) (((void *) dmt->dmi.v4) +
++	return (struct dm_versions *) (((char *) dmt->dmi.v4) +
+ 				       dmt->dmi.v4->data_start);
  }
  
 
