@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Aug 2010 13:00:47 -0000
-Subject: LVM2 ./WHATS_NEW doc/Makefile.in libdm/Makefil ...
-Message-ID: <20100803130047.29679.qmail@sourceware.org>
+Date: 3 Aug 2010 13:04:33 -0000
+Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
+Message-ID: <20100803130433.4922.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,48 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-08-03 13:00:46
+Changes by:	zkabelac at sourceware.org	2010-08-03 13:04:32
 
 Modified files:
-	.              : WHATS_NEW 
-	doc            : Makefile.in 
-	libdm          : Makefile.in 
-	liblvm         : Makefile.in 
-	tools          : Makefile.in 
+	.              : WHATS_NEW_DM 
+	tools          : dmsetup.c 
 
 Log message:
-	Clean generated files .exported_symbols_generated, example.conf for distclean.
+	Wait for node creation before displaying debug info in dmsetup.
+	
+	Readahead check needs to see created node - so wait till udev gets in sync.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1688&r2=1.1689
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/Makefile.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/Makefile.in.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/Makefile.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.402&r2=1.403
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.143&r2=1.144
 
---- LVM2/WHATS_NEW	2010/08/02 21:07:40	1.1688
-+++ LVM2/WHATS_NEW	2010/08/03 13:00:45	1.1689
+--- LVM2/WHATS_NEW_DM	2010/08/03 12:56:00	1.402
++++ LVM2/WHATS_NEW_DM	2010/08/03 13:04:32	1.403
 @@ -1,5 +1,6 @@
- Version 2.02.73 - 
+ Version 1.02.54 - 
  ================================
-+  Clean generated files .exported_symbols_generated, example.conf for distclean.
-   Handle failure of all mirrored log devices and all but one mirror leg. 
-   Disallow 'mirrored' log type for cluster mirrors.
-   Do not use VPATH in include/Makefile.
---- LVM2/doc/Makefile.in	2010/05/20 11:45:57	1.10
-+++ LVM2/doc/Makefile.in	2010/08/03 13:00:45	1.11
-@@ -27,3 +27,5 @@
- 	fi
++  Wait for node creation before displaying debug info in dmsetup.
+   Fix return status 0 for "dmsetup info -c -o help".
+   Add check for kernel semaphore support and disable udev_sync if not available.
  
- install: install_lvm2
+--- LVM2/tools/dmsetup.c	2010/08/03 12:56:00	1.143
++++ LVM2/tools/dmsetup.c	2010/08/03 13:04:32	1.144
+@@ -633,9 +633,16 @@
+ 
+ 	r = 1;
+ 
++	if (!_udev_cookie)
++		(void) dm_udev_wait(cookie);
 +
-+DISTCLEAN_TARGETS += $(CONFSRC)
---- LVM2/libdm/Makefile.in	2010/06/25 18:17:39	1.56
-+++ LVM2/libdm/Makefile.in	2010/08/03 13:00:46	1.57
-@@ -94,4 +94,4 @@
- 	$(INSTALL_DATA) -D $< $(usrlibdir)/$(<F)
+ 	if (_switches[VERBOSE_ARG])
+ 		r = _display_info(dmt);
  
- CLEAN_TARGETS += ioctl/libdevmapper.a
--DISTCLEAN_TARGETS += libdevmapper.pc
-+DISTCLEAN_TARGETS += libdevmapper.pc .exported_symbols_generated
---- LVM2/liblvm/Makefile.in	2010/06/25 18:17:39	1.25
-+++ LVM2/liblvm/Makefile.in	2010/08/03 13:00:46	1.26
-@@ -78,4 +78,4 @@
- 
- cflow: liblvm.cflow
- 
--DISTCLEAN_TARGETS += $(LIB_NAME).pc
-+DISTCLEAN_TARGETS += $(LIB_NAME).pc .exported_symbols_generated
---- LVM2/tools/Makefile.in	2010/06/25 18:23:10	1.120
-+++ LVM2/tools/Makefile.in	2010/08/03 13:00:46	1.121
-@@ -202,3 +202,5 @@
- install_lvm2: $(INSTALL_LVM_TARGETS)
- 
- install: install_lvm2 install_device-mapper
++	dm_task_destroy(dmt);
 +
-+DISTCLEAN_TARGETS += .exported_symbols_generated
++	return r;
++
+       out:
+ 	if (!_udev_cookie)
+ 		(void) dm_udev_wait(cookie);
 
 
