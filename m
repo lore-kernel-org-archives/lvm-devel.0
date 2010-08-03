@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 3 Aug 2010 18:19:44 -0000
-Subject: LVM2 lib/format_text/format-text.c ./WHATS_NEW
-Message-ID: <20100803181944.1724.qmail@sourceware.org>
+Date: 3 Aug 2010 20:22:32 -0000
+Subject: LVM2 ./WHATS_NEW test/t-snapshot-merge.sh tool ...
+Message-ID: <20100803202232.16049.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-08-03 18:19:43
+Changes by:	snitzer at sourceware.org	2010-08-03 20:22:32
 
 Modified files:
-	lib/format_text: format-text.c 
 	.              : WHATS_NEW 
+	test           : t-snapshot-merge.sh 
+	tools          : lvconvert.c 
 
 Log message:
-	Avoid changing aligned pe_start as a side-effect of very verbose logging.
+	Require logical volume(s) to be explicitly named for lvconvert --merge.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1693&r2=1.1694
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1694&r2=1.1695
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-snapshot-merge.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.143&r2=1.144
 
---- LVM2/lib/format_text/format-text.c	2010/07/09 15:34:44	1.141
-+++ LVM2/lib/format_text/format-text.c	2010/08/03 18:19:42	1.142
-@@ -1498,7 +1498,7 @@
- 				adjustment =
- 				(pv->pe_start - pv->pe_align_offset) % pv->pe_align;
- 				if (adjustment)
--					pv->pe_start += pv->pe_align - adjustment;
-+					pv->pe_start += (pv->pe_align - adjustment);
- 
- 				log_very_verbose("%s: setting pe_start=%" PRIu64
- 					 " (orig_pe_start=%" PRIu64 ", "
-@@ -1506,7 +1506,7 @@
- 					 "adjustment=%" PRIu64 ")",
- 					 pv_dev_name(pv), pv->pe_start,
- 					 (adjustment ?
--					  pv->pe_start -= pv->pe_align - adjustment :
-+					  pv->pe_start - (pv->pe_align - adjustment) :
- 					  pv->pe_start),
- 					 pv->pe_align, pv->pe_align_offset, adjustment);
- 			}
---- LVM2/WHATS_NEW	2010/08/03 13:24:07	1.1693
-+++ LVM2/WHATS_NEW	2010/08/03 18:19:43	1.1694
+--- LVM2/WHATS_NEW	2010/08/03 18:19:43	1.1694
++++ LVM2/WHATS_NEW	2010/08/03 20:22:31	1.1695
 @@ -1,5 +1,6 @@
  Version 2.02.73 - 
  ================================
-+  Avoid changing aligned pe_start as a side-effect of very verbose logging.
++  Require logical volume(s) to be explicitly named for lvconvert --merge.
+   Avoid changing aligned pe_start as a side-effect of very verbose logging.
    Fix 'void*' arithmetic warnings in dbg_malloc.c.
    Fix 'void*' arithmetic warning in some functions from libdm-iface.c.
-   Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
+--- LVM2/test/t-snapshot-merge.sh	2010/04/23 19:27:11	1.6
++++ LVM2/test/t-snapshot-merge.sh	2010/08/03 20:22:31	1.7
+@@ -49,6 +49,8 @@
+ # now that snapshot LV is created: test if snapshot-merge target is available
+ $(dmsetup targets | grep -q snapshot-merge) || exit 200
+ lvs -a
++# make sure lvconvert --merge requires explicit LV listing
++not lvconvert --merge 2>err
+ lvconvert --merge $vg/$(snap_lv_name_ $lv1)
+ lvremove -f $vg/$lv1
+ 
+--- LVM2/tools/lvconvert.c	2010/08/02 21:07:41	1.143
++++ LVM2/tools/lvconvert.c	2010/08/03 20:22:31	1.144
+@@ -1738,9 +1738,14 @@
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	if (lp.merge)
++	if (lp.merge) {
++		if (!argc) {
++			log_error("Please provide logical volume path");
++			return EINVALID_CMD_LINE;
++		}
+ 		return process_each_lv(cmd, argc, argv, READ_FOR_UPDATE, &lp,
+ 				       &lvconvert_merge_single);
++	}
+ 
+ 	return lvconvert_single(cmd, &lp);
+ }
 
 
