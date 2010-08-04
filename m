@@ -1,37 +1,48 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 4 Aug 2010 15:55:04 -0000
-Subject: LVM2/lib/mirror mirrored.c
-Message-ID: <20100804155504.18703.qmail@sourceware.org>
+From: Takahiro Yasui <takahiro.yasui@hds.com>
+Date: Wed, 4 Aug 2010 12:23:19 -0400
+Subject: [PATCH] Handle transient errors for mirrored log in lvconvert --repair
+In-Reply-To: <87pqy66p3c.fsf_-_@twilight.int.mornfall.net.>
+References: <5C30BE7ED8B03E448B2E104602D4848A59228865AB@USINDEVS02.corp.hds.com>
+	<87zkxa6xnl.fsf@twilight.int.mornfall.net.>
+	<5C30BE7ED8B03E448B2E104602D4848A59228865B4@USINDEVS02.corp.hds.com>,
+	<87pqy66p3c.fsf_-_@twilight.int.mornfall.net.>
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228865DF@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-08-04 15:55:03
+On 07/29/10 15:54, Petr Rockai wrote:
+> Takahiro Yasui <takahiro.yasui@hds.com> writes:
+>> Yes, this solution is acceptable to me. As a long term, we can introduce
+>> a kind of logic to keep the information of a bad segment or device and
+>> extend cases for 'allocate' policy.
+> great. I am attaching a patch proposal that would implement the outlined
+> policy. I have tucked in a warning for a good measure.
 
-Modified files:
-	lib/mirror     : mirrored.c 
+>@@ -696,6 +703,13 @@ static int _lv_update_mirrored_log(struc
+>@@ -705,12 +719,9 @@ static int _lv_update_mirrored_log(struc
 
-Log message:
-	Reduce severity of the "mirror transient status" log message (this was never
-	intended to be a log_error).
+I believe that two changes in _lv_update_mirror_log() are not for solving
+this issue, and they are already checked in. :)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+>@@ -1179,14 +1201,22 @@ static int _lvconvert_mirrors_repair(str
+>+	if (log_lv)
+>+		lv_check_transient(log_lv);
+>+
+>+	partial_count += _partial_lv_count(lv->vg);
 
---- LVM2/lib/mirror/mirrored.c	2010/07/21 15:21:24	1.74
-+++ LVM2/lib/mirror/mirrored.c	2010/08/04 15:55:03	1.75
-@@ -254,7 +254,7 @@
- 	int failed = 0;
- 	char *status;
- 
--	log_error("Mirrored transient status: \"%s\"", params);
-+	log_very_verbose("Mirrored transient status: \"%s\"", params);
- 
- 	/* number of devices */
- 	if (!dm_split_words(params, 1, 0, &p))
+If the log LV is not a mirrored log, we don't need to check the transient status.
+I see that lv_check_transient() can handle both a disk log and a mirrored log
+but checking its status as below reduces code steps to be executed.
+
++       if (log_lv && log_lv->status & MIRRORED)
++               lv_check_transient(log_lv);
+
+Other than that, your patch looks OK to me.
+
+Thanks,
+Taka
 
 
