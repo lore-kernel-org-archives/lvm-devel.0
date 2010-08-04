@@ -1,67 +1,55 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 3 Aug 2010 20:22:32 -0000
-Subject: LVM2 ./WHATS_NEW test/t-snapshot-merge.sh tool ...
-Message-ID: <20100803202232.16049.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 04 Aug 2010 17:51:46 +0200
+Subject: [PATCH] Never scan internal LVM devices.
+Message-ID: <878w4mnzot.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-08-03 20:22:32
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	test           : t-snapshot-merge.sh 
-	tools          : lvconvert.c 
+the attached patch disables scanning for any LVM-created internal
+devices, such as mirror images, mirror logs, snapshot COW areas etc.
 
-Log message:
-	Require logical volume(s) to be explicitly named for lvconvert --merge.
+There are two reasons for this: First, scanning these devices can
+disrupt more complex operations (primarily lvconvert) involving
+deactivation of these internal devices. See BZs 596453, 606931 and
+607316.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1694&r2=1.1695
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-snapshot-merge.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.143&r2=1.144
+Second that even if such a device contains a PV label (or an MDA), it
+should never be used by LVM as a PV. Since these logical volumes are
+never visible to the user (disregarding any bugs in LVM) and they cannot
+be created by the user, they always exist as a part of a composite
+logical volume.
 
---- LVM2/WHATS_NEW	2010/08/03 18:19:43	1.1694
-+++ LVM2/WHATS_NEW	2010/08/03 20:22:31	1.1695
-@@ -1,5 +1,6 @@
- Version 2.02.73 - 
- ================================
-+  Require logical volume(s) to be explicitly named for lvconvert --merge.
-   Avoid changing aligned pe_start as a side-effect of very verbose logging.
-   Fix 'void*' arithmetic warnings in dbg_malloc.c.
-   Fix 'void*' arithmetic warning in some functions from libdm-iface.c.
---- LVM2/test/t-snapshot-merge.sh	2010/04/23 19:27:11	1.6
-+++ LVM2/test/t-snapshot-merge.sh	2010/08/03 20:22:31	1.7
-@@ -49,6 +49,8 @@
- # now that snapshot LV is created: test if snapshot-merge target is available
- $(dmsetup targets | grep -q snapshot-merge) || exit 200
- lvs -a
-+# make sure lvconvert --merge requires explicit LV listing
-+not lvconvert --merge 2>err
- lvconvert --merge $vg/$(snap_lv_name_ $lv1)
- lvremove -f $vg/$lv1
- 
---- LVM2/tools/lvconvert.c	2010/08/02 21:07:41	1.143
-+++ LVM2/tools/lvconvert.c	2010/08/03 20:22:31	1.144
-@@ -1738,9 +1738,14 @@
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	if (lp.merge)
-+	if (lp.merge) {
-+		if (!argc) {
-+			log_error("Please provide logical volume path");
-+			return EINVALID_CMD_LINE;
-+		}
- 		return process_each_lv(cmd, argc, argv, READ_FOR_UPDATE, &lp,
- 				       &lvconvert_merge_single);
-+	}
- 
- 	return lvconvert_single(cmd, &lp);
- }
+Even if a PV was stacked in an LV, and this LV was composite (so it is
+using some internal LVs as its components), it is desirable that this
+*and only* this composite LV is seen by LVM as a PV. If the PV label or
+MDA is propagated into the component LVs (such as mimages) and these are
+found during a scan, this would lead to the PV being found multiple
+times which is certainly undesirable. Cf. the situation with MD
+component devices, which is analogous.
 
+For all I can tell, this patch would fix all the above-mentioned BZs,
+which are all high-priority test blockers.
 
+Yours,
+   Petr.
+
+PS: There are other options to address the disruption issue that is
+causing all the above bugzillas. Nevertheless, all other options seem to
+be too complex to implement and would run a high risk of regressions in
+unrelated areas of functionality -- we have discussed this last week
+with Alasdair. I believe the proposed patch is relatively simple and
+does not introduce any bad behaviours (nor eliminates any desirable
+behaviours).
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: never-scan-internal-devices.diff
+Type: text/x-diff
+Size: 3010 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100804/09657755/attachment.bin>
