@@ -1,44 +1,95 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 5 Aug 2010 17:16:32 -0500
-Subject: [PATCH] Specified PVs being ignored when performing mirror split (bug 619221)
-In-Reply-To: <5C30BE7ED8B03E448B2E104602D4848A59228865E7@USINDEVS02.corp.hds.com>
-References: <5C30BE7ED8B03E448B2E104602D4848A59228865E3@USINDEVS02.corp.hds.com>,
-	<5918B730-E0D8-4B4E-BCC4-D5F9E2143438@redhat.com>
-	<5C30BE7ED8B03E448B2E104602D4848A59228865E7@USINDEVS02.corp.hds.com>
-Message-ID: <7C138C2B-45EE-4BB2-B4DC-3594A43A87FC@redhat.com>
+Date: Thu, 05 Aug 2010 17:23:27 -0500
+Subject: [PATCH] Specified PVs being ignored when performing mirror split (repost)
+Message-ID: <1281047007.19786.4.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Thanks to Taka for his suggestions for improvement...
+ brassow
 
-On Aug 5, 2010, at 5:09 PM, Takahiro Yasui wrote:
+Fix for bug 619221 - log device splitting regression
 
-> On 08/05/10 17:49, Jonathan Brassow wrote:
->> Whether my patch works or not may be irrelevant if your patch is
->> better.  I had considered going through the list backwards to save
->> some processing, but decided to go with the other method...  If this
->> works equally well, let's do it this way instead, yes?
->
-> Let me tell you the difference of behavior of yours and mine. When
-> the original volume has five devices, A,B,C,D,E and D and E are
-> specified as removable devices:
->
-> Your patch generates:
->    orginal volume -> A,B,C
->    new volume -> D,E
->
-> My suggestion generates:
->    orginal volume -> A,B,C
->    new volume -> E,D
->
-> If we have to care the order of new devices, I think your patch is  
-> better.
+An incorrect fix an annoyance has caused a regression.  The offending
+check-in was: 
+http://sources.redhat.com/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c?cvsroot=lvm2&f=h#rev1.140
 
-I don't think we do because they get renamed along with the new  
-volume.  Will repost new patch shortly.
+This check-in caused any PVs specified on the command line to be
+ignored when performing a mirror split.
 
-  brassow
+This patch reverses the aforementioned check-in (solving the regressions)
+and posits a new solution to the list reversal problem.  The original
+problem was that we would always take the lowest mimage LVs from a mirror
+when performing a split, but what we really want is to take the highest
+mimage LVs.  This patch accomplishes that by working through the list in
+reverse order - choosing the higher numbered mimages first.  (This also
+reduces the amount of processing necessary.)
+
+
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -524,34 +524,22 @@ static int _move_removable_mimages_to_en
+ 					  uint32_t count,
+ 					  struct dm_list *removable_pvs)
+ {
+-	int i, images;
++	int i;
+ 	struct logical_volume *sub_lv;
+ 	struct lv_segment *mirrored_seg = first_seg(lv);
+ 
+ 	if (!removable_pvs)
+ 		return 1;
+ 
+-	/*
+-	 * When we shift an image to the end, we must start from
+-	 * the begining of the list again.  We must visit the
+-	 * images up to the last one we just moved.
+-	 */
+-	for (images = mirrored_seg->area_count; images && count; images--) {
+-		for (i = 0; i < images; i++) {
+-			sub_lv = seg_lv(mirrored_seg, i);
+-
+-			if (!is_temporary_mirror_layer(sub_lv) &&
+-			    is_mirror_image_removable(sub_lv, removable_pvs)) {
+-				if (!shift_mirror_images(mirrored_seg, i))
+-					return_0;
+-				count--;
+-				break;
+-			}
+-		}
++	for (i = mirrored_seg->area_count - 1; (i >= 0) && count; i--) {
++		sub_lv = seg_lv(mirrored_seg, i);
+ 
+-		/* Did we shift any images? */
+-		if (i == images)
+-			return 0;
++		if (!is_temporary_mirror_layer(sub_lv) &&
++		    is_mirror_image_removable(sub_lv, removable_pvs)) {
++			if (!shift_mirror_images(mirrored_seg, i))
++				return_0;
++			count--;
++		}
+ 	}
+ 
+ 	return !count;
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -1015,7 +1015,7 @@ static int _lvconvert_mirrors_aux(struct
+ 						  lv->le_count,
+ 						  lp->region_size);
+ 
+-	if (!operable_pvs && !lp->keep_mimages)
++	if (!operable_pvs)
+ 		operable_pvs = lp->pvh;
+ 
+ 	seg = first_seg(lv);
+
 
 
