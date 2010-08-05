@@ -1,40 +1,37 @@
 From: Takahiro Yasui <takahiro.yasui@hds.com>
-Date: Thu, 5 Aug 2010 17:59:46 -0400
+Date: Thu, 5 Aug 2010 18:09:45 -0400
 Subject: [PATCH] Specified PVs being ignored when performing mirror split (bug 619221)
-In-Reply-To: <B9814ACC-9FBA-43B6-814E-4E64992E1EDD@redhat.com>
+In-Reply-To: <5918B730-E0D8-4B4E-BCC4-D5F9E2143438@redhat.com>
 References: <5C30BE7ED8B03E448B2E104602D4848A59228865E3@USINDEVS02.corp.hds.com>,
-	<B9814ACC-9FBA-43B6-814E-4E64992E1EDD@redhat.com>
-Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228865E6@USINDEVS02.corp.hds.com>
+	<5918B730-E0D8-4B4E-BCC4-D5F9E2143438@redhat.com>
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228865E7@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> On Aug 5, 2010, at 4:31 PM, Takahiro Yasui wrote:
->> # lvconvert --splitmirrors 1 --name new vg/org /dev/sda /dev/sdb
->>    vg/org: Mirror volume consists of legs C, D and A   (leg C is  
->> primary)
->>    vg/new: Linear volume consists of B
->>
->> Is this change OK? If the answer is yes, I just ask you to change  
->> the comments
->> of _move_removable_mimages_to_end().
-> 
-> Are you sure?  I've just tried this on my test box, and it behaves as  
-> expected...
-> 
-> I had thought that I tested your scenario only with one PV specified,  
-> and that perhaps it was the second (unnecessary) one that was throwing  
-> off the logic.  However, that doesn't seem to be the case.
+On 08/05/10 17:49, Jonathan Brassow wrote:
+> Whether my patch works or not may be irrelevant if your patch is  
+> better.  I had considered going through the list backwards to save  
+> some processing, but decided to go with the other method...  If this  
+> works equally well, let's do it this way instead, yes?
 
-You are right. It behaves as expected if one PV is specified. Specifying
-two PVs to split just one PV might not be usual, but I just wanted to ask
-you if it is not a problem, because it changes the structure of the original
-mirror. If you think it is OK, I ask you to update comments of
-_move_removable_mimages_to_end().
+Let me tell you the difference of behavior of yours and mine. When
+the original volume has five devices, A,B,C,D,E and D and E are
+specified as removable devices:
 
-Thank you for your reply.
+Your patch generates:
+    orginal volume -> A,B,C
+    new volume -> D,E
+
+My suggestion generates:
+    orginal volume -> A,B,C
+    new volume -> E,D
+
+If we have to care the order of new devices, I think your patch is better.
+
+Thanks,
 Taka
 
 
