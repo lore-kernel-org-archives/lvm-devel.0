@@ -1,72 +1,112 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Thu, 5 Aug 2010 15:10:01 -0400
-Subject: [RFC PATCH] change default alignment of pe_start to 1MB
-Message-ID: <20100805191001.GA27237@redhat.com>
+From: Takahiro Yasui <takahiro.yasui@hds.com>
+Date: Thu, 5 Aug 2010 17:31:56 -0400
+Subject: [PATCH] Specified PVs being ignored when performing mirror split (bug 619221)
+Message-ID: <5C30BE7ED8B03E448B2E104602D4848A59228865E3@USINDEVS02.corp.hds.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The new standard in the storage industry is to default alignment of data
-areas to 1MB.  fdisk, parted, and mdadm have all been updated to this
-default.
+Hi Jon,
 
-Update LVM to align the PV's data area start (pe_start) to 1MB.  This
-provides a more useful default than the previous default of 64K (which
-generally ended up being a 192K pe_start once the first metadata area
-was created).
+On 08/04/10 18:51, Jonathan Brassow wrote:
+...
+> This patch reverses the aforementioned check-in (solving the regressions)
+> and posits a new solution to the list reversal problem.  The original
+> problem was that we would always take the lowest mimage LVs from a mirror
+> when performing a split, but what we really want is to take the highest
+> mimage LVs.  This patch accomplishes that by simply not short-circuiting
+> the processing done in _move_removable_mimages_to_end.  This function
+> would start from the beginning of the mirror sub-lv list and work its
+> way to the end - quiting when it found just enough to cover the requested
+> amount.  This would always leave the least desirable LVs to be removed
+> at the end of the list.
 
-Having recently boasted about the new 1MB default in the Linux storage
-stack I was soon faced with the harsh reality that LVM was a weak link
-(on legacy hardware that doesn't export I/O topology limits).
+If I understand correctly, the expected result with the following examples are:
 
-This meant that an 8 disk HW raid0 array (with 64K chunk_size) ended up
-having a PV pe_start that was not aligned on a full-stripe boundary.
-The array would've been configured optimally "out of the box" had LVM
-used a default alignment of 1MB.
+* Mirror volume (vg/org) consists of legs A (sda), B (sdb), C (sdc) and D (sdd)
 
-Before this patch:
-# pvs -o name,vg_mda_size,pe_start
-  PV         VMdaSize  1st PE 
-  /dev/sdd     188.00k 192.00k
+(1) lvconvert --splitmirrors 1 --name new vg/org
+    vg/org: Mirror volume consists of legs A, B, and C    (leg A is primary)
+    vg/new: Linear volume consists of D
 
-After this patch:
-# pvs -o name,vg_mda_size,pe_start
-  PV         VMdaSize  1st PE 
-  /dev/sdd    1020.00k   1.00m
+(2) lvconvert --splitmirrors 2 --name new vg/org
+    vg/org: Mirror volume consists of legs A and B      (leg A is primary)
+    vg/new: Mirror volume consists of legs C and D
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
----
- doc/example.conf.in     |    2 +-
- lib/metadata/metadata.c |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+(3) lvconvert --splitmirrors 1 --name new vg/org /dev/sda
+    vg/org: Mirror volume consists of legs B, C and D    (leg B is primary)
+    vg/new: Linear volume consists of A
 
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index 850b7e2..f7dcc63 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -113,7 +113,7 @@ devices {
-     # Alignment (in KB) of start of data area when creating a new PV.
-     # If a PV is placed directly upon an md device and md_chunk_alignment or
-     # data_alignment_detection is enabled this parameter is ignored.
--    # Set to 0 for the default alignment of 64KB or page size, if larger.
-+    # Set to 0 for the default alignment of 1MB or page size, if larger.
-     data_alignment = 0
- 
-     # By default, the start of the PV's aligned data area will be shifted by
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index d7edf54..887c8bc 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -70,7 +70,7 @@ unsigned long set_pe_align(struct physical_volume *pv, unsigned long data_alignm
- 	if (data_alignment)
- 		pv->pe_align = data_alignment;
- 	else
--		pv->pe_align = MAX(65536UL, lvm_getpagesize()) >> SECTOR_SHIFT;
-+		pv->pe_align = MAX(1048576UL, lvm_getpagesize()) >> SECTOR_SHIFT;
- 
- 	if (!pv->dev)
- 		goto out;
+(4) lvconvert --splitmirrors 2 --name new vg/org /dev/sda /dev/sdb
+    vg/org: Mirror volume consists of legs C and D    (leg C is primary)
+    vg/new: Mirror volume consists of legs A and B
+
+(5) lvconvert --splitmirrors 1 --name new vg/org /dev/sda /dev/sdb
+    vg/org: Mirror volume consists of legs A, C and D    (leg A is primary)
+    vg/new: Linear volume consists of B
+
+Without a PV list in the command line, your patch works well. The new logic
+desn't change the order of mirror volumes because
+_move_removable_mimages_to_end() reorders all mirror legs and generates
+the same order as original.
+
+With a PV list in the command line, on the other hand, this logic shifts mirror
+legs more than needed. For example, a user wants to split vg/new (linear)
+from vg/org and specifies /dev/sda and /dev/sdb as removable PVs.
+In this case, the structure of vg/org is changed as follows.
+
+# lvconvert --splitmirrors 1 --name new vg/org /dev/sda /dev/sdb
+    vg/org: Mirror volume consists of legs C, D and A   (leg C is primary)
+    vg/new: Linear volume consists of B
+
+Is this change OK? If the answer is yes, I just ask you to change the comments
+of _move_removable_mimages_to_end().
+
+/*                                                                                                               
+ * _move_removable_mimages_to_end                                                                                
+ *                                                                                                               
+ * We always detach mimage LVs from the end of the areas array.                                                  
+ * This function will push 'count' mimages to the end of the array                                               
+ * based on if their PVs are removable.                                                                          
+ *                                                                                                               
+ * This is an all or nothing function.  Either the user specifies                                                
+ * enough removable PVs to satisfy count, or they don't specify                                                  
+ * any removable_pvs at all (in which case all PVs in the mirror                                                 
+ * are considered removable).                                                                                    
+ */
+
+
+However, if the answer is no, we need to update the patch, for example, as
+follows.
+
+static int _move_removable_mimages_to_end(struct logical_volume *lv,
+                                          uint32_t count,
+                                          struct dm_list *removable_pvs)
+{
+        struct logical_volume *sub_lv;
+        struct lv_segment *mirrored_seg = first_seg(lv);
+        int i;
+
+        if (!removable_pvs)
+                return 1;
+
+        for (i = mirrored_seg->area_count - 1; i >= 0; i--) {
+                sub_lv = seg_lv(mirrored_seg, i);
+                if (!is_temporary_mirror_layer(sub_lv) &&
+                    is_mirror_image_removable(sub_lv, removable_pvs)) {
+                        if (!shift_mirror_images(mirrored_seg, i))
+                                return_0;
+                        if (!--count)
+                                break;
+                }
+        }
+
+        return !count;
+}
+
+Thanks,
+Taka
 
 
