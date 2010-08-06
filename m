@@ -1,111 +1,94 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 6 Aug 2010 15:38:35 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c tools/l ...
-Message-ID: <20100806153835.29635.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Fri, 06 Aug 2010 21:24:05 +0200
+Subject: [PATCH] Don't use floor() in _bitset_with_random_bits
+In-Reply-To: <20100730170535.GA21519@pld-linux.org> (Przemyslaw Iskra's
+	message of "Fri, 30 Jul 2010 19:05:35 +0200")
+References: <20100730170535.GA21519@pld-linux.org>
+Message-ID: <87hbj7k0iy.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-08-06 15:38:33
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : mirror.c 
-	tools          : lvconvert.c 
+Przemyslaw Iskra <sparky@pld-linux.org> writes:
+> Use _even_rand() function instead of floor() in
+> _bitset_with_random_bits(). floor() function is missing in dietlibc (on
+> architectures other than x86). Moreover using floor() to clip rand
+> results does not assure even result distribution.
+> _even_rand() uses integer arithmetic only and is designed to return evenly
+> distributed results.
+>
+> Signed-off-by: Przemyslaw Iskra <sparky@pld-linux.org>
 
-Log message:
-	Fix for bug 619221 - log device splitting regression
-	
-	An incorrect fix on July 13, 2010 for an annoyance has caused a regression.
-	The offending check-in was part of the 2.02.71 release of LVM.  That
-	check-in caused any PVs specified on the command line to be ignored when
-	performing a mirror split.
-	
-	This patch reverses the aforementioned check-in (solving the regressions)
-	and posits a new solution to the list reversal problem.  The original
-	problem was that we would always take the lowest mimage LVs from a mirror
-	when performing a split, but what we really want is to take the highest
-	mimage LVs.  This patch accomplishes that by working through the list in
-	reverse order - choosing the higher numbered mimages first.  (This also
-	reduces the amount of processing necessary.)
-	
-	Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-	Reviewed-by: Takahiro Yasui <takahiro.yasui@hds.com>
+Reviewed-by: Petr Rockai <prockai@redhat.com>
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1696&r2=1.1697
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
+Looks OK to me. It took a while to decipher what is the exact meaning of
+the loop in _even_rand (to a non-pseudorandomness-expert) but I am
+fairly comfortable with it now. If I understand this correctly, it
+rejects numbers that come from an "incomplete" slice of the RAND_MAX
+space (considering the number space [0, RAND_MAX] is divided into some
+"max"-sized slices and at most a single smaller slice, between [n*max,
+RAND_MAX] for suitable n -- numbers from this last slice are discarded
+because they could distort the distribution in favour of smaller
+numbers).
 
---- LVM2/WHATS_NEW	2010/08/04 18:18:18	1.1696
-+++ LVM2/WHATS_NEW	2010/08/06 15:38:32	1.1697
-@@ -1,5 +1,6 @@
- Version 2.02.73 - 
- ================================
-+  Split-mirror operations were ignoring user-specified PVs.
-   Fix data corruption bug in cluster mirrors.
-   Require logical volume(s) to be explicitly named for lvconvert --merge.
-   Avoid changing aligned pe_start as a side-effect of very verbose logging.
---- LVM2/lib/metadata/mirror.c	2010/08/02 21:07:41	1.130
-+++ LVM2/lib/metadata/mirror.c	2010/08/06 15:38:32	1.131
-@@ -524,34 +524,22 @@
- 					  uint32_t count,
- 					  struct dm_list *removable_pvs)
- {
--	int i, images;
-+	int i;
- 	struct logical_volume *sub_lv;
- 	struct lv_segment *mirrored_seg = first_seg(lv);
- 
- 	if (!removable_pvs)
- 		return 1;
- 
--	/*
--	 * When we shift an image to the end, we must start from
--	 * the begining of the list again.  We must visit the
--	 * images up to the last one we just moved.
--	 */
--	for (images = mirrored_seg->area_count; images && count; images--) {
--		for (i = 0; i < images; i++) {
--			sub_lv = seg_lv(mirrored_seg, i);
--
--			if (!is_temporary_mirror_layer(sub_lv) &&
--			    is_mirror_image_removable(sub_lv, removable_pvs)) {
--				if (!shift_mirror_images(mirrored_seg, i))
--					return_0;
--				count--;
--				break;
--			}
--		}
-+	for (i = mirrored_seg->area_count - 1; (i >= 0) && count; i--) {
-+		sub_lv = seg_lv(mirrored_seg, i);
- 
--		/* Did we shift any images? */
--		if (i == images)
--			return 0;
-+		if (!is_temporary_mirror_layer(sub_lv) &&
-+		    is_mirror_image_removable(sub_lv, removable_pvs)) {
-+			if (!shift_mirror_images(mirrored_seg, i))
-+				return_0;
-+			count--;
-+		}
- 	}
- 
- 	return !count;
---- LVM2/tools/lvconvert.c	2010/08/03 20:22:31	1.144
-+++ LVM2/tools/lvconvert.c	2010/08/06 15:38:32	1.145
-@@ -1015,7 +1015,7 @@
- 						  lv->le_count,
- 						  lp->region_size);
- 
--	if (!operable_pvs && !lp->keep_mimages)
-+	if (!operable_pvs)
- 		operable_pvs = lp->pvh;
- 
- 	seg = first_seg(lv);
+> diff --git a/configure.in b/configure.in
+> index bd56136..6f6c67e 100644
+> --- a/configure.in
+> +++ b/configure.in
+> @@ -125,8 +125,7 @@ AC_STRUCT_TM
+>  
+>  ################################################################################
+>  dnl -- Check for functions
+> -AC_SEARCH_LIBS([floor], [m], , [AC_MSG_ERROR(bailing out)])
+> -AC_CHECK_FUNCS([floor ftruncate gethostname getpagesize \
+> +AC_CHECK_FUNCS([ftruncate gethostname getpagesize \
+>    gettimeofday memset mkdir mkfifo rmdir munmap nl_langinfo setenv setlocale \
+>    strcasecmp strchr strcspn strspn strdup strncasecmp strerror strrchr \
+>    strstr strtol strtoul uname], , [AC_MSG_ERROR(bailing out)])
+
+OK, since floor is not used anywhere else in LVM.
+
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index 07222a7..6ee7731 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
+> @@ -1018,6 +1018,20 @@ static int _recalc_extents(uint32_t *extents, const char *desc1,
+>  	return 1;
+>  }
+>  
+> +/* return random integer in [0,max) interval */
+> +static unsigned _even_rand( unsigned *seed, unsigned max )
+> +{
+> +	unsigned r, ret;
+> +
+> +	/* make sure distribution is even */
+> +	do {
+> +		r = (unsigned) rand_r( seed );
+> +		ret = r % max;
+> +	} while ( r - ret >= RAND_MAX - max );
+> +
+> +	return ret;
+> +}
+OK as per above.
+
+>  static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bits,
+>  					    uint32_t num_set_bits, unsigned *seed)
+>  {
+> @@ -1040,7 +1054,7 @@ static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bi
+>  	/* Perform loop num_set_bits times, selecting one bit each time */
+>  	while (i++ < num_bits) {
+>  		/* Select a random bit between 0 and (i-1) inclusive. */
+> -		bit_selected = (unsigned) floor(i * (rand_r(seed) / (RAND_MAX + 1.0)));
+> +		bit_selected = _even_rand( seed, i );
+
+OK. Gets a random integer from [0, i). The previous code was doing the
+same thing (less efficiently and less precisely).
+
+Yours,
+   Petr.
 
 
