@@ -1,162 +1,239 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 29 Jan 2014 18:13:05 +0000 (UTC)
-Subject: master - cache/pool: Make the fns in pool_manip.c work with cache pools
-Message-ID: <20140129181305.2679260FC1@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun,  8 Aug 2010 10:57:31 +0200
+Subject: [PATCH 19/25] Replicator: lv_manip - create replicator
+In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
+References: <cover.1281256234.git.zkabelac@redhat.com>
+Message-ID: <95e0490d3f2ee78a37600e04798907c50adb8bd7.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e833d84e67f62b9be4f5900381f6e32c4ecf66ca
-Commit:        e833d84e67f62b9be4f5900381f6e32c4ecf66ca
-Parent:        70fd2139e17568e757fd66f5ebfcea2b1bb9d3f1
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Jan 28 12:25:07 2014 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Jan 28 12:25:07 2014 -0600
 
-cache/pool: Make the fns in pool_manip.c work with cache pools
-
-The functions in pool_manip.c are specific to thin pools.  It's
-now time to make them more generic and able to handle cache pools
-as well.
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/pool_manip.c |   44 +++++++++++++++++++++++++++++---------------
- 1 files changed, 29 insertions(+), 15 deletions(-)
+ lib/metadata/lv_manip.c |  124 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 124 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 18dfad5..afb77d6 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -28,14 +28,15 @@
- int attach_pool_metadata_lv(struct lv_segment *pool_seg,
- 			    struct logical_volume *metadata_lv)
- {
--	if (!seg_is_thin_pool(pool_seg)) {
-+	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
- 		log_error(INTERNAL_ERROR
- 			  "Unable to attach pool metadata LV to %s segtype.",
- 			  pool_seg->segtype->ops->name(pool_seg));
- 		return 0;
- 	}
- 	pool_seg->metadata_lv = metadata_lv;
--	metadata_lv->status |= THIN_POOL_METADATA;
-+	metadata_lv->status |= seg_is_thin_pool(pool_seg) ?
-+		THIN_POOL_METADATA : CACHE_POOL_METADATA;
- 	lv_set_hidden(metadata_lv);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 52c80c4..8375fb6 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -418,6 +418,8 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
+ 			/* FIXME Check this is safe */
+ 			if (seg->log_lv && !lv_remove(seg->log_lv))
+ 				return_0;
++			if (seg->rlog_lv && !lv_remove(seg->rlog_lv))
++				return_0;
+ 			dm_list_del(&seg->list);
+ 			reduction = seg->len;
+ 		} else
+@@ -2205,6 +2207,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	struct volume_group *vg;
+ 	struct lvinfo info;
+ 	struct logical_volume *origin = NULL;
++	struct logical_volume *replicator = NULL;
+ 	int was_merging = 0;
  
- 	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
-@@ -44,7 +45,7 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
- int attach_pool_data_lv(struct lv_segment *pool_seg,
- 			struct logical_volume *pool_data_lv)
- {
--	if (!seg_is_thin_pool(pool_seg)) {
-+	if (!seg_is_thin_pool(pool_seg) && !seg_is_cache_pool(pool_seg)) {
- 		log_error(INTERNAL_ERROR
- 			  "Unable to attach pool data LV to %s segtype.",
- 			  pool_seg->segtype->ops->name(pool_seg));
-@@ -52,10 +53,12 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
- 	}
- 
- 	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv,
--				    0, THIN_POOL_DATA))
-+				    0, seg_is_thin_pool(pool_seg) ?
-+				    THIN_POOL_DATA : CACHE_POOL_DATA))
- 		return_0;
- 
--	pool_seg->lv->status |= THIN_POOL;
-+	pool_seg->lv->status |= seg_is_thin_pool(pool_seg) ?
-+		THIN_POOL : CACHE_POOL;
- 	lv_set_hidden(pool_data_lv);
- 
- 	return 1;
-@@ -66,16 +69,16 @@ int attach_pool_lv(struct lv_segment *seg,
- 		   struct logical_volume *origin,
- 		   struct logical_volume *merge_lv)
- {
--	if (!seg_is_thin_volume(seg)) {
-+	if (!seg_is_thin_volume(seg) && !seg_is_cache(seg)) {
- 		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
--			  " that is thin volume.",
-+			  " that is not cache or thin volume.",
- 			  pool_lv->vg->name, seg->lv->name);
+ 	vg = lv->vg;
+@@ -2230,6 +2233,12 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
  		return 0;
  	}
  
- 	seg->pool_lv = pool_lv;
- 	seg->origin = origin;
--	seg->lv->status |= THIN_VOLUME;
-+	seg->lv->status |= seg_is_cache(seg) ? CACHE : THIN_VOLUME;
- 
- 	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
- 		return_0;
-@@ -108,6 +111,13 @@ int detach_pool_lv(struct lv_segment *seg)
- 		return 0;
- 	}
- 
-+	if (seg_is_cache(seg)) {
-+		if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
-+			return_0;
-+		seg->pool_lv = NULL;
-+		return 1;
++	if (lv_is_rimage(lv) || lv_is_rlog(lv) || lv_is_slog(lv)) {
++		log_error("Can't remove logical volume %s used by a "
++			  "replicator.", lv->name);
++		return 0;
 +	}
 +
- 	if (!lv_is_thin_pool(seg->pool_lv)) {
- 		log_error(INTERNAL_ERROR
- 			  "Cannot detach pool from LV %s.",
-@@ -189,9 +199,11 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
- 		return NULL;
- 	}
- 
--	if (!seg_is_thin_pool(pool_seg)) {
--		log_error("%s on %s is not a pool segment.",
--			  pool_seg->lv->name, seg->lv->name);
-+	if ((lv_is_thin_type(seg->lv) && !seg_is_thin_pool(pool_seg)) &&
-+	    !seg_is_cache_pool(pool_seg)) {
-+		log_error("%s on %s is not a %s pool segment",
-+			  pool_seg->lv->name, seg->lv->name,
-+			  lv_is_thin_type(seg->lv) ? "thin" : "cache");
- 		return NULL;
- 	}
- 
-@@ -208,7 +220,7 @@ int create_pool(struct logical_volume *pool_lv,
- 	char name[NAME_LEN];
- 
- 	if (pool_lv->le_count) {
--		log_error(INTERNAL_ERROR "Pool %s has already extents.",
-+		log_error(INTERNAL_ERROR "Pool %s already has extents.",
- 			  pool_lv->name);
+ 	if (lv->status & LOCKED) {
+ 		log_error("Can't remove locked LV %s", lv->name);
  		return 0;
+@@ -2267,6 +2276,14 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			return_0;
  	}
-@@ -259,7 +271,8 @@ int create_pool(struct logical_volume *pool_lv,
+ 
++	if (lv_is_replicated(lv)) {
++                replicator = first_seg(lv)->replicator;
++		if (!lv_remove_replicated(lv)) {
++			log_error("Unable to remove replicated logical volume \"%s\"", lv->name);
++			return 0;
++		}
++	}
++
+ 	if (!deactivate_lv(cmd, lv)) {
+ 		log_error("Unable to deactivate logical volume \"%s\"",
+ 			  lv->name);
+@@ -2295,6 +2312,17 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 		}
  	}
  
- 	if (dm_snprintf(name, sizeof(name), "%s_%s", pool_lv->name,
--			"tmeta") < 0) {
-+			(segtype_is_cache_pool(segtype)) ?
-+			"cmeta" : "tmeta") < 0) {
- 		log_error("Name is too long to be a pool name.");
- 		goto bad;
++	if (replicator) {
++		if (!suspend_lv(cmd, replicator)) {
++			log_error("Failed to refresh replicator %s.", replicator->name);
++			return 0;
++		}
++		if (!resume_lv(cmd, replicator)) {
++			log_error("Failed to resume replicator %s.", replicator->name);
++			return 0;
++		}
++	}
++
+ 	backup(vg);
+ 
+ 	if (lv_is_visible(lv))
+@@ -2310,6 +2338,8 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 				const force_t force, unsigned level)
+ {
+ 	struct dm_list *snh, *snht;
++	struct replicator_site *rsite;
++	struct replicated_device *rdev;
+ 
+ 	if (lv_is_cow(lv)) {
+ 		/* A merging snapshot cannot be removed directly */
+@@ -2320,6 +2350,18 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
+ 		}
  	}
-@@ -277,7 +290,8 @@ int create_pool(struct logical_volume *pool_lv,
  
- 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
- 					    pool_lv->status,
--					    "_tdata")))
-+					    (segtype_is_cache_pool(segtype)) ?
-+					    "_cdata" : "_tdata")))
- 		goto_bad;
++	if (lv_is_replicator(lv)) {
++		/* Remove replicators' head LVs first */
++		dm_list_iterate_items(rsite, &lv->rsites) {
++			if (rsite->site_index != 0)
++				continue;
++			dm_list_iterate_items(rdev, &rsite->rdevices)
++				if (!lv_remove_with_dependencies(cmd, rdev->lv,
++								 force, level + 1))
++					return_0;
++		}
++	}
++
+ 	if (lv_is_origin(lv)) {
+ 		/* remove snapshot LVs first */
+ 		dm_list_iterate_safe(snh, snht, &lv->snapshot_segs) {
+@@ -2998,6 +3040,7 @@ int lv_create_single(struct volume_group *vg,
+ 	struct logical_volume *lv, *org = NULL;
+ 	int origin_active = 0;
+ 	struct lvinfo info;
++	struct logical_volume *replicator;
  
- 	seg = first_seg(pool_lv);
-@@ -285,7 +299,7 @@ int create_pool(struct logical_volume *pool_lv,
- 	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
- 		goto_bad;
+ 	if (lp->lv_name && find_lv_in_vg(vg, lp->lv_name)) {
+ 		log_error("Logical volume \"%s\" already exists in "
+@@ -3118,6 +3161,13 @@ int lv_create_single(struct volume_group *vg,
+ 		}
+ 	}
  
--	seg->segtype = segtype; /* Set as thin_pool segment */
-+	seg->segtype = segtype; /* Set as thin_pool or cache_pool segment */
++	if (lp->replicator) {
++		if (!vg_prearrange_replicator(vg, lp))
++			return_0;
++		if (lp->rsite.name && !lp->replicated)
++			return 1; /* Do not create any LV this time */
++	}
++
+ 	if (!lp->extents) {
+ 		log_error("Unable to create new logical volume with no extents");
+ 		return 0;
+@@ -3169,6 +3219,19 @@ int lv_create_single(struct volume_group *vg,
+ 		}
+ 	}
  
- 	if (!attach_pool_data_lv(seg, data_lv))
- 		goto_bad;
++	if (lp->replicated) {
++		init_replicator_in_sync(lp->nosync);
++
++		if (lp->nosync) {
++			log_error("FIXME: Unsupported.");
++			return 0;
++
++			log_warn("WARNING: New replicator won't be synchronised. "
++				  "Don't read what you didn't write!");
++			status |= REPLICATOR_NOTSYNCED;
++		}
++	}
++
+ 	if (!(lv = lv_create_empty(lp->lv_name ? lp->lv_name : "lvol%d", NULL,
+ 				   status, lp->alloc, vg)))
+ 		return_0;
+@@ -3225,6 +3288,12 @@ int lv_create_single(struct volume_group *vg,
+ 				  "exception store.");
+ 			goto revert_new_lv;
+ 		}
++	} else if (lp->replicated || lp->replicator) {
++		if (!activate_lv_excl(cmd, lv)) {
++			log_error("Aborting. Failed to activate replicator "
++				  "device.");
++			goto revert_new_lv;
++		}
+ 	} else if (!activate_lv(cmd, lv)) {
+ 		if (lp->zero) {
+ 			log_error("Aborting. Failed to activate new LV to wipe "
+@@ -3239,11 +3308,66 @@ int lv_create_single(struct volume_group *vg,
+ 		log_warn("WARNING: \"%s\" not zeroed", lv->name);
+ 	else if (!set_lv(cmd, lv, UINT64_C(0), 0)) {
+ 		log_error("Aborting. Failed to wipe %s.",
++			  lp->replicator ? "replicator backing store" :
+ 			  lp->snapshot ? "snapshot exception store" :
+ 					 "start of new LV");
+ 		goto deactivate_and_revert_new_lv;
+ 	}
+ 
++	if (!lp->replicated && lp->replicator) {
++		if (!deactivate_lv(cmd, lv)) {
++			log_error("Aborting. Couldn't deactivate replicator log."
++				  " Manual intervention required.");
++			return 0;
++		}
++		if (!vg_add_replicator(lv, lp->rlog_type, lp->region_size)) {
++			log_error("Could not create replicator.");
++			goto revert_new_lv;
++		}
++		/* store vg on disk(s) */
++		if (!vg_write(vg) || !vg_commit(vg))
++			return_0;
++	}
++
++	if (lp->replicated) {
++		if (!lp->replicator) {
++			log_error("Replicator is not specified.");
++			return 0;
++		}
++		if (!deactivate_lv(cmd, lv)) {
++			log_error("Aborting. Could not deactivate new LV.");
++			return 0;
++		}
++
++		if (!(replicator = find_lv(vg, lp->replicator))) {
++			log_error("Could not find replicator.");
++			goto revert_new_lv;
++		}
++
++		if (!lv_add_replicated(replicator, lv)) {
++			log_error("Could not add replicated device to replicator.");
++			goto revert_new_lv;
++		}
++
++		/* store vg on disk(s) */
++		if (!vg_write(vg))
++			return_0;
++
++		if (!suspend_lv(cmd, replicator)) {
++			log_error("Failed to suspend replicator %s", replicator->name);
++			vg_revert(vg);
++			return 0;
++		}
++
++		if (!vg_commit(vg))
++			return_0;
++
++		if (!resume_lv(cmd, replicator)) {
++			log_error("Problem reactivating replicator %s", replicator->name);
++			return 0;
++		}
++	}
++
+ 	if (lp->snapshot) {
+ 		/* Reset permission after zeroing */
+ 		if (!(lp->permission & LVM_WRITE))
+-- 
+1.7.2.1
 
 
