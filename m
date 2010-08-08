@@ -1,80 +1,89 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:19 +0200
-Subject: [PATCH 07/25] Replicator: add _replicator_in_sync
+Date: Sun,  8 Aug 2010 10:57:20 +0200
+Subject: [PATCH 08/25] Replicator: add report for replicator/ed targets
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <d87b9a90313df001717ed7ef4244f8c530bc9fa9.1281256235.git.zkabelac@redhat.com>
+Message-ID: <bff2fb3b06589f80cf4a3fe925085dc0961b3920.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add function init_replicator_in_sync() to be similar as mirror.
-For now this function is not functional.
+Elementary reporting tool for replicator and replicato-dev LVs.
+Replicator uses free flag 'q'.
+Replicated  'r' for normal, 'R' for unsynchronized replicated LV.
+Note: unsychronized status not yet implemented.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/misc/lvm-globals.c |   11 +++++++++++
- lib/misc/lvm-globals.h |    2 ++
- 2 files changed, 13 insertions(+), 0 deletions(-)
+ lib/report/columns.h |    2 ++
+ lib/report/report.c  |   32 ++++++++++++++++++++++++++++++++
+ 2 files changed, 34 insertions(+), 0 deletions(-)
 
-diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
-index 8dc2b02..5334691 100644
---- a/lib/misc/lvm-globals.c
-+++ b/lib/misc/lvm-globals.c
-@@ -34,6 +34,7 @@ static int _ignorelockingfailure = 0;
- static int _security_level = SECURITY_LEVEL;
- static char _cmd_name[30] = "";
- static int _mirror_in_sync = 0;
-+static int _replicator_in_sync = 0;
- static int _dmeventd_monitor = DEFAULT_DMEVENTD_MONITOR;
- static int _background_polling = DEFAULT_BACKGROUND_POLLING;
- static int _ignore_suspended_devices = 0;
-@@ -88,6 +89,11 @@ void init_mirror_in_sync(int in_sync)
- 	_mirror_in_sync = in_sync;
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 9eca600..a48210e 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -76,6 +76,8 @@ FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, "convert_lv", "For lvconvert,
+ FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, "lv_tags", "Tags, if any.")
+ FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, "mirror_log", "For mirrors, the LV holding the synchronisation log.")
+ FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, "modules", "Kernel device-mapper modules required for this LV.")
++FIELD(LVS, lv, STR, "RImage", lvid, 7, rimage, "rimage", "For replicators, the replicated image of this LV.")
++FIELD(LVS, lv, STR, "Replicator", lvid, 7, replicator, "replicator", "For replicators, the replicator control LV.")
+ 
+ FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, "pv_fmt", "Type of metadata.")
+ FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, "pv_uuid", "Unique identifier.")
+diff --git a/lib/report/report.c b/lib/report/report.c
+index b3f6544..9a4d99f 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -303,6 +303,10 @@ static int _lvstatus_disp(struct dm_report *rh __attribute__((unused)), struct d
+ 		repstr[0] = 'p';
+ 	else if (lv->status & CONVERTING)
+ 		repstr[0] = 'c';
++	else if (lv_is_replicator(lv))
++		repstr[0] = 'q';
++	else if (lv_is_replicated(lv))
++		repstr[0] = (lv->status & REPLICATOR_NOTSYNCED) ? 'R' : 'r';
+ 	else if (lv->status & VIRTUAL)
+ 		repstr[0] = 'v';
+ 	/* Origin takes precedence over Mirror */
+@@ -605,6 +609,34 @@ static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
+ 	return 1;
  }
  
-+void init_replicator_in_sync(int in_sync)
++static int _rimage_disp(struct dm_report *rh, struct dm_pool *mem,
++			struct dm_report_field *field,
++			const void *data, void *private)
 +{
-+	_replicator_in_sync = in_sync;
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++
++	if (lv_is_replicated(lv))
++		return _lvname_disp(rh, mem, field, lv->rdevice->lv, private);
++
++	dm_report_field_set_value(field, "", NULL);
++
++	return 1;
 +}
 +
- void init_dmeventd_monitor(int reg)
- {
- 	_dmeventd_monitor = reg;
-@@ -190,6 +196,11 @@ int mirror_in_sync(void)
- 	return _mirror_in_sync;
- }
- 
-+int replicator_in_sync(void)
++static int _replicator_disp(struct dm_report *rh, struct dm_pool *mem,
++			struct dm_report_field *field,
++			const void *data, void *private)
 +{
-+	return _replicator_in_sync;
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++
++	if (lv_is_replicated(lv))
++		return _lvname_disp(rh, mem, field, lv->rdevice->rsite->replicator, private);
++
++	dm_report_field_set_value(field, "", NULL);
++
++	return 1;
 +}
 +
- int dmeventd_monitor_mode(void)
- {
- 	return _dmeventd_monitor;
-diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
-index 0134c32..c08aa2e 100644
---- a/lib/misc/lvm-globals.h
-+++ b/lib/misc/lvm-globals.h
-@@ -31,6 +31,7 @@ void init_ignorelockingfailure(int level);
- void init_lockingfailed(int level);
- void init_security_level(int level);
- void init_mirror_in_sync(int in_sync);
-+void init_replicator_in_sync(int in_sync);
- void init_dmeventd_monitor(int reg);
- void init_background_polling(int polling);
- void init_ignore_suspended_devices(int ignore);
-@@ -51,6 +52,7 @@ int ignorelockingfailure(void);
- int lockingfailed(void);
- int security_level(void);
- int mirror_in_sync(void);
-+int replicator_in_sync(void);
- int background_polling(void);
- int ignore_suspended_devices(void);
- const char *log_command_name(void);
+ static int _size32_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private)
 -- 
 1.7.2.1
 
