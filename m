@@ -1,162 +1,75 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:14 +0200
-Subject: [PATCH 02/25] SEG_REPLICATED dm-deptree
+Date: Sun,  8 Aug 2010 10:57:15 +0200
+Subject: [PATCH 03/25] Skip check missing rem.VGs for non-activate locks
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <a11ddab4e5108d37770265d5457db3c681a2a913.1281256235.git.zkabelac@redhat.com>
+Message-ID: <5e0428222a9ff6bc7d71745bd6e77db8d6c87447.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Skip call for checking whether this LV needs to locks some
+more remote VGs (applies to replicator_dev devices).
+
+The effect is, that deactivation of replicator-dev devices does
+not require to take a lock for remote VGs, so avoids repeated invoke
+of deactivate_lv.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdevmapper.h  |   18 +++++++++---------
- libdm/libdm-deptree.c |   40 ++++++++++++++++++++--------------------
- 2 files changed, 29 insertions(+), 29 deletions(-)
+ lib/locking/locking.h            |    2 +-
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/replicator_manip.c  |    5 ++++-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index b1bfbf3..942a30a 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -472,15 +472,15 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 				       uint64_t fall_behind_size,
- 				       uint32_t fall_behind_timeout);
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index 488d194..af02844 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -136,7 +136,7 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ 	(vg_is_clustered((lv)->vg) ? LCK_CLUSTER_VG : 0)
  
--int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
--					   uint64_t size,
--					   const char *replicator_uuid,	/* Replicator control device */
--					   uint64_t rdevice_index,
--					   const char *rdev_uuid,	/* Rimage device name/uuid */
--					   unsigned rsite_index,
--					   const char *slog_uuid,
--					   uint32_t slog_flags,		/* Mirror log flags */
--					   uint32_t slog_region_size);
-+int dm_tree_node_add_replicated_target(struct dm_tree_node *node,
-+				       uint64_t size,
-+				       const char *replicator_uuid,	/* Replicator control device */
-+				       uint64_t rdevice_index,
-+				       const char *rdev_uuid,	/* Rimage device name/uuid */
-+				       unsigned rsite_index,
-+				       const char *slog_uuid,
-+				       uint32_t slog_flags,		/* Mirror log flags */
-+				       uint32_t slog_region_size);
- /* End of Replicator API */
+ #define lock_lv_vol(cmd, lv, flags)	\
+-	(find_replicator_vgs((lv)) ? \
++	((find_replicator_vgs((lv), (flags))) ? \
+ 		lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv)) : \
+ 		0)
  
- void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 5a12c5f..c009209 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -36,7 +36,7 @@ enum {
- 	SEG_LINEAR,
- 	SEG_MIRRORED,
- 	SEG_REPLICATOR,
--	SEG_REPLICATOR_DEV,
-+	SEG_REPLICATED,
- 	SEG_SNAPSHOT,
- 	SEG_SNAPSHOT_ORIGIN,
- 	SEG_SNAPSHOT_MERGE,
-@@ -55,7 +55,7 @@ struct {
- 	{ SEG_LINEAR, "linear" },
- 	{ SEG_MIRRORED, "mirror" },
- 	{ SEG_REPLICATOR, "replicator" },
--	{ SEG_REPLICATOR_DEV, "replicator-dev" },
-+	{ SEG_REPLICATED, "replicator-dev" },
- 	{ SEG_SNAPSHOT, "snapshot" },
- 	{ SEG_SNAPSHOT_ORIGIN, "snapshot-origin" },
- 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
-@@ -125,8 +125,8 @@ struct load_segment {
- 	struct dm_list rsites;		/* Replicator */
- 	unsigned rsite_count;		/* Replicator */
- 	unsigned rdevice_count;		/* Replicator */
--	struct dm_tree_node *replicator;/* Replicator-dev */
--	uint64_t rdevice_index;		/* Replicator-dev */
-+	struct dm_tree_node *replicator;/* Replicated */
-+	uint64_t rdevice_index;		/* Replicated */
- };
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index a72a6bf..41ef566 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -831,7 +831,7 @@ struct cmd_vg *cmd_vg_lookup(struct dm_list *cmd_vgs,
+ int cmd_vg_read(struct cmd_context *cmd, struct dm_list *cmd_vgs);
+ void cmd_vg_release(struct dm_list *cmd_vgs);
  
- /* Per-device properties */
-@@ -1450,7 +1450,7 @@ static int _emit_areas_line(struct dm_task *dmt __attribute__((unused)),
- 			return_0;
+-int find_replicator_vgs(struct logical_volume *lv);
++int find_replicator_vgs(struct logical_volume *lv, uint32_t flags);
  
- 		switch (seg->type) {
--		case SEG_REPLICATOR_DEV:
-+		case SEG_REPLICATED:
- 			EMIT_PARAMS(*pos, " %d 1 %s", area->rsite_index, devbuf);
- 			if (first_time)
- 				EMIT_PARAMS(*pos, " nolog 0");
-@@ -1682,7 +1682,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
- 			return r;
- 		}
- 		break;
--	case SEG_REPLICATOR_DEV:
-+	case SEG_REPLICATED:
- 		if (!seg->replicator || !_build_dev_string(originbuf,
- 							   sizeof(originbuf),
- 							   seg->replicator))
-@@ -1726,7 +1726,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
- 		break;
- 	case SEG_CRYPT:
- 	case SEG_LINEAR:
--	case SEG_REPLICATOR_DEV:
-+	case SEG_REPLICATED:
- 	case SEG_STRIPED:
- 		if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
- 			stack;
-@@ -2292,15 +2292,15 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- }
- 
- /* Appends device node to Replicator */
--int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
--					   uint64_t size,
--					   const char *replicator_uuid,
--					   uint64_t rdevice_index,
--					   const char *rdev_uuid,
--					   unsigned rsite_index,
--					   const char *slog_uuid,
--					   uint32_t slog_flags,
--					   uint32_t slog_region_size)
-+int dm_tree_node_add_replicated_target(struct dm_tree_node *node,
-+				       uint64_t size,
-+				       const char *replicator_uuid,
-+				       uint64_t rdevice_index,
-+				       const char *rdev_uuid,
-+				       unsigned rsite_index,
-+				       const char *slog_uuid,
-+				       uint32_t slog_flags,
-+				       uint32_t slog_region_size)
+ int lv_read_replicator_vgs(struct logical_volume *lv);
+ void lv_release_replicator_vgs(struct logical_volume *lv);
+diff --git a/lib/metadata/replicator_manip.c b/lib/metadata/replicator_manip.c
+index b3a2fff..272ceac 100644
+--- a/lib/metadata/replicator_manip.c
++++ b/lib/metadata/replicator_manip.c
+@@ -608,11 +608,14 @@ void cmd_vg_release(struct dm_list *cmd_vgs)
+  * Find all needed remote VGs for processing given LV.
+  * Missing VGs are added to VG's cmd_vg list and flag cmd_missing_vgs is set.
+  */
+-int find_replicator_vgs(struct logical_volume *lv)
++int find_replicator_vgs(struct logical_volume *lv, uint32_t flags)
  {
- 	struct seg_area *area;
- 	struct load_segment *rseg;
-@@ -2308,7 +2308,7 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+ 	struct replicator_site *rsite;
+ 	int ret = 1;
  
- 	if (rsite_index == REPLICATOR_LOCAL_SITE) {
- 		/* Site index for local target */
--		if (!(rseg = _add_segment(node, SEG_REPLICATOR_DEV, size)))
-+		if (!(rseg = _add_segment(node, SEG_REPLICATED, size)))
- 			return_0;
++	if ((flags & LCK_TYPE_MASK) == LCK_READ)
++		return 1; /* no need to check for remote vgs */
++
+ 	if (!lv_is_replicator_dev(lv))
+ 		return 1;
  
- 		if (!(rseg->replicator = dm_tree_find_node_by_uuid(node->dtree, replicator_uuid))) {
-@@ -2337,13 +2337,13 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
- 	} else {
- 		/* Local slink0 for replicator must be always initialized first */
- 		if (node->props.segment_count != 1) {
--			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment.");
-+			log_error(INTERNAL_ERROR "Attempt to use non replicated segment.");
- 			return 0;
- 		}
- 
- 		rseg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
--		if (rseg->type != SEG_REPLICATOR_DEV) {
--			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment %s.",
-+		if (rseg->type != SEG_REPLICATED) {
-+			log_error(INTERNAL_ERROR "Attempt to use non replicated segment %s.",
- 				  dm_segtypes[rseg->type].target);
- 			return 0;
- 		}
 -- 
 1.7.2.1
 
