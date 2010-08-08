@@ -1,149 +1,153 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:29 +0200
-Subject: [PATCH 17/25] Replicator: update of dev_manager.c
+Date: Sun,  8 Aug 2010 10:57:30 +0200
+Subject: [PATCH 18/25] Replicator: read site_params
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <b2b1f9f28872b18a21df467c4271d08ab80a602f.1281256235.git.zkabelac@redhat.com>
+Message-ID: <51fde0b716a8e57c78d9cd1c2a065d2b9e6b6440.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Change related to replicator-dev to replicated switch.
+Common function for parsing replicator site parameters.
+It's used by lvcreate and lvchange commands.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   38 +++++++++++++++++++-------------------
- 1 files changed, 19 insertions(+), 19 deletions(-)
+ tools/toollib.c |  103 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ tools/toollib.h |    3 ++
+ 2 files changed, 105 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 9b27616..a4dc651 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -927,7 +927,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+diff --git a/tools/toollib.c b/tools/toollib.c
+index bdb52d5..6205c2f 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -1551,3 +1551,104 @@ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes, uint32_t *stri
+ 	return _validate_stripe_params(cmd, stripes, stripe_size);
  }
  
- /*
-- * Add replicator devices
-+ * Add replicated devices
-  *
-  * Using _add_dev_to_dtree() directly instead of _add_lv_to_dtree()
-  * to avoid extra checks with extensions.
-@@ -937,19 +937,19 @@ static int _add_partial_replicator_to_dtree(struct dev_manager *dm,
- 					    struct logical_volume *lv)
- {
- 	struct logical_volume *rlv = first_seg(lv)->replicator;
--	struct replicator_device *rdev;
-+	struct replicated_device *rdev;
- 	struct replicator_site *rsite;
- 	struct dm_tree_node *rep_node, *rdev_node;
- 	const char *uuid;
++/**
++ * Parse parameters for replicator site
++ *
++ * \param cmd
++ * \param rsite
++ * \param changed
++ */
++int get_replicator_site_params(struct cmd_context *cmd,
++			       struct replicator_site *rsite,
++			       int *changed)
++{
++	struct replicator_site nrsite;
++
++	if (((arg_count(cmd, fallbehindios_ARG) > 0) +
++	     (arg_count(cmd, fallbehindsize_ARG) > 0) +
++	     (arg_count(cmd, fallbehindtimeout_ARG) > 0)) > 1) {
++		log_error("Only one asynchronous parameter can be used.");
++		return 0;
++	}
++
++	if (arg_count(cmd, fallbehindios_ARG)) {
++		nrsite.fall_behind_ios =
++			arg_uint_value(cmd, fallbehindios_ARG,
++				       DEFAULT_REPLICATOR_FALL_BEHIND_IOS);
++
++		if (rsite->fall_behind_ios != nrsite.fall_behind_ios) {
++			rsite->fall_behind_ios = nrsite.fall_behind_ios;
++			rsite->fall_behind_size = 0;
++			rsite->fall_behind_timeout = 0;
++			(*changed)++;
++		}
++	} else if (arg_count(cmd, fallbehindsize_ARG)) {
++		nrsite.fall_behind_size =
++			arg_uint64_value(cmd, fallbehindsize_ARG,
++					 DEFAULT_REPLICATOR_FALL_BEHIND_SIZE);
++
++		if (rsite->fall_behind_size != nrsite.fall_behind_size) {
++			rsite->fall_behind_ios = 0;
++			rsite->fall_behind_size = nrsite.fall_behind_size;
++			rsite->fall_behind_timeout = 0;
++			(*changed)++;
++		}
++	} else if (arg_count(cmd, fallbehindtimeout_ARG)) {
++		nrsite.fall_behind_timeout =
++			arg_uint_value(cmd, fallbehindtimeout_ARG,
++				       DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT);
++
++		if (rsite->fall_behind_timeout != nrsite.fall_behind_timeout) {
++			rsite->fall_behind_ios = 0;
++			rsite->fall_behind_size = 0;
++			rsite->fall_behind_timeout = nrsite.fall_behind_timeout;
++			(*changed)++;
++		}
++	}
++
++	nrsite.policy = NUM_DM_REPLICATOR_POLICIES;
++	if (arg_count(cmd, sitepolicy_ARG)) {
++		nrsite.policy = arg_uint_value(cmd, sitepolicy_ARG,
++						DEFAULT_REPLICATOR_SITE_POLICY);
++		if ((nrsite.policy == DM_REPLICATOR_SYNC) &&
++		    !arg_count(cmd, fallbehindios_ARG) &&
++		    !arg_count(cmd, fallbehindsize_ARG) &&
++		    !arg_count(cmd, fallbehindtimeout_ARG) &&
++		    (rsite->fall_behind_ios ||
++		     rsite->fall_behind_size ||
++		     rsite->fall_behind_timeout)) {
++			rsite->fall_behind_ios = 0;
++			rsite->fall_behind_size = 0;
++			rsite->fall_behind_timeout = 0;
++			(*changed)++;
++			log_debug("Clearing asynchronous parameters synchronous site.");
++		}
++	}
++
++	if (rsite->fall_behind_ios ||
++	    rsite->fall_behind_size ||
++	    rsite->fall_behind_timeout) {
++		if (nrsite.policy == DM_REPLICATOR_SYNC) {
++			log_error("For synchronous site policy all asynchronous "
++				  "parameters must be deleted.");
++			return 0;
++		} else if (nrsite.policy == NUM_DM_REPLICATOR_POLICIES)
++			nrsite.policy = (rsite->policy == DM_REPLICATOR_SYNC) ?
++				DEFAULT_REPLICATOR_SITE_POLICY : rsite->policy;
++	} else {
++		if (nrsite.policy != NUM_DM_REPLICATOR_POLICIES &&
++		    nrsite.policy != DM_REPLICATOR_SYNC) {
++			log_error("For asynchronous site policy an asynchronous "
++				  "non-zero parameter must be specified.");
++			return 0;
++		}
++		nrsite.policy = DM_REPLICATOR_SYNC;
++	}
++
++	if (rsite->policy != nrsite.policy) {
++		rsite->policy = nrsite.policy;
++		(*changed)++;
++	}
++
++	return 1;
++}
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 71e516f..47f1d4d 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -115,4 +115,7 @@ int get_activation_monitoring_mode(struct cmd_context *cmd,
+ int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
+ 		      uint32_t *stripe_size);
  
--	if (!lv_is_active_replicator_dev(lv)) {
-+	if (!lv_is_active_replicated(lv)) {
- 		if (!_add_dev_to_dtree(dm, dtree, lv->rdevice->lv,
- 				      NULL))
- 			return_0;
- 		return 1;
- 	}
- 
--	/* Add _rlog and replicator device */
-+	/* Add _rlog and replicated device */
- 	if (!_add_dev_to_dtree(dm, dtree, first_seg(rlv)->rlog_lv, NULL))
- 		return_0;
- 
-@@ -969,16 +969,16 @@ static int _add_partial_replicator_to_dtree(struct dev_manager *dm,
- 				if (!_add_dev_to_dtree(dm, dtree, rdev->lv, NULL))
- 					return_0;
- 
--				/* Add replicator-dev LV, except of the already added one */
--				if ((lv != rdev->replicator_dev->lv) &&
-+				/* Add replicated LV, except of the already added one */
-+				if ((lv != rdev->replicated_seg->lv) &&
- 				    !_add_dev_to_dtree(dm, dtree,
--						       rdev->replicator_dev->lv, NULL))
-+						       rdev->replicated_seg->lv, NULL))
- 					return_0;
- 
- 				/* If replicator exists - try connect existing heads */
- 				if (rep_node) {
- 					uuid = build_dm_uuid(dm->mem,
--							     rdev->replicator_dev->lv->lvid.s,
-+							     rdev->replicated_seg->lv->lvid.s,
- 							     NULL);
- 					if (!uuid)
- 						return_0;
-@@ -1024,7 +1024,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree, struc
- 		return_0;
- 
- 	/* Adding LV head of replicator adds all other related devs */
--	if (lv_is_replicator_dev(lv) &&
-+	if (lv_is_replicated(lv) &&
- 	    !_add_partial_replicator_to_dtree(dm, dtree, lv))
- 		return_0;
- 
-@@ -1263,15 +1263,15 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 				  struct logical_volume *lv, const char *layer);
- 
- /* Add all replicators' LVs */
--static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
-+static int _add_replicated_seg_target_to_dtree(struct dev_manager *dm,
- 					       struct dm_tree *dtree,
- 					       struct lv_segment *seg)
- {
--	struct replicator_device *rdev;
-+	struct replicated_device *rdev;
- 	struct replicator_site *rsite;
- 
- 	/* For inactive replicator add linear mapping */
--	if (!lv_is_active_replicator_dev(seg->lv)) {
-+	if (!lv_is_active_replicated(seg->lv)) {
- 		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv->rdevice->lv, NULL))
- 			return_0;
- 		return 1;
-@@ -1285,7 +1285,7 @@ static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
- 	    !_add_new_lv_to_dtree(dm, dtree, seg->replicator, NULL))
- 	    return_0;
- 
--	/* Activation of one replicator_dev node activates all other nodes */
-+	/* Activation of one replicated node activates all other nodes */
- 	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
- 		dm_list_iterate_items(rdev, &rsite->rdevices) {
- 			if (rdev->lv &&
-@@ -1298,17 +1298,17 @@ static int _add_replicator_dev_target_to_dtree(struct dev_manager *dm,
- 				return_0;
- 		}
- 	}
--	/* Add remaining replicator-dev nodes in the second loop
-+	/* Add remaining replicated nodes in the second loop
- 	 * to avoid multiple retries for inserting all elements */
- 	dm_list_iterate_items(rsite, &seg->replicator->rsites) {
- 		if (rsite->state != REPLICATOR_STATE_ACTIVE)
- 			continue;
- 		dm_list_iterate_items(rdev, &rsite->rdevices) {
--			if (rdev->replicator_dev->lv == seg->lv)
-+			if (rdev->replicated_seg->lv == seg->lv)
- 				continue;
--			if (!rdev->replicator_dev->lv ||
-+			if (!rdev->replicated_seg->lv ||
- 			    !_add_new_lv_to_dtree(dm, dtree,
--						  rdev->replicator_dev->lv,
-+						  rdev->replicated_seg->lv,
- 						  NULL))
- 				return_0;
- 		}
-@@ -1347,8 +1347,8 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
- 	    !_add_new_lv_to_dtree(dm, dtree, seg->log_lv, NULL))
- 		return_0;
- 
--	if (seg_is_replicator_dev(seg)) {
--		if (!_add_replicator_dev_target_to_dtree(dm, dtree, seg))
-+	if (seg_is_replicated(seg)) {
-+		if (!_add_replicated_seg_target_to_dtree(dm, dtree, seg))
- 			return_0;
- 	/* If this is a snapshot origin, add real LV */
- 	/* If this is a snapshot origin + merging snapshot, add cow + real LV */
++int get_replicator_site_params(struct cmd_context *cmd,
++			       struct replicator_site *rsite,
++			       int *changed);
+ #endif
 -- 
 1.7.2.1
 
