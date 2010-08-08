@@ -1,65 +1,47 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:21 +0200
-Subject: [PATCH 09/25] Replicator: improve detection of replicated segment
+Date: Sun,  8 Aug 2010 10:57:22 +0200
+Subject: [PATCH 10/25] Replicator: new defaults
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <429fb8190b94a30694861eacfa199406de3f6c99.1281256235.git.zkabelac@redhat.com>
+Message-ID: <4f18ac45d8b4b04c38d1a6326d618bd3e3a6e784.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Switch from replicator-dev to replicated.
-Check for NULL replicator pointer in replicated segment.
-
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/merge.c |   22 ++++++++++++++--------
- 1 files changed, 14 insertions(+), 8 deletions(-)
+ lib/config/defaults.h |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 3b8895c..314a7de 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -73,7 +73,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 	struct seg_list *sl;
- 	int error_count = 0;
- 	struct replicator_site *rsite;
--	struct replicator_device *rdev;
-+	struct replicated_device *rdev;
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 3d8881c..1c9ce54 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -48,6 +48,14 @@
+ #define DEFAULT_DMEVENTD_MONITOR 1
+ #define DEFAULT_BACKGROUND_POLLING 1
  
- 	dm_list_iterate_items(seg, &lv->segments) {
- 		seg_count++;
-@@ -218,15 +218,21 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 			if (lv == seg_lv(seg, s))
- 				seg_found++;
- 		}
--		if (seg_is_replicator_dev(seg)) {
--			dm_list_iterate_items(rsite, &seg->replicator->rsites) {
--				dm_list_iterate_items(rdev, &rsite->rdevices) {
--					if (lv == rdev->lv || lv == rdev->slog)
--						seg_found++;
-+		if (seg_is_replicated(seg)) {
-+			if (!seg->replicator) {
-+				log_error("LV %s has replicated segment "
-+					  "without replicator", lv->name);
-+				inc_error_count;
-+			} else {
-+				dm_list_iterate_items(rsite, &seg->replicator->rsites) {
-+					dm_list_iterate_items(rdev, &rsite->rdevices) {
-+						if (lv == rdev->lv || lv == rdev->slog)
-+							seg_found++;
-+					}
- 				}
-+				if (lv == seg->replicator)
-+					seg_found++;
- 			}
--			if (lv == seg->replicator)
--				seg_found++;
- 		}
- 		if (seg_is_replicator(seg) && lv == seg->rlog_lv)
- 				seg_found++;
++#define DEFAULT_REPLICATOR_SYNCLOG "disk"
++#define DEFAULT_REPLICATOR_LOG_TYPE "ringbuffer"
++#define DEFAULT_REPLICATOR_LOCAL_SITE_NAME "local"
++#define DEFAULT_REPLICATOR_FALL_BEHIND_IOS 0
++#define DEFAULT_REPLICATOR_FALL_BEHIND_SIZE 0
++#define DEFAULT_REPLICATOR_FALL_BEHIND_TIMEOUT 0
++#define DEFAULT_REPLICATOR_SITE_POLICY (DM_REPLICATOR_ASYNC_WARN)
++
+ #define DEFAULT_UMASK 0077
+ 
+ #ifdef LVM1_FALLBACK
+@@ -106,6 +114,7 @@
+ 
+ #define DEFAULT_STRIPE_FILLER "error"
+ #define DEFAULT_MIRROR_REGION_SIZE 512	/* KB */
++#define DEFAULT_REPLICATOR_REGION_SIZE 512	/* KB */
+ #define DEFAULT_INTERVAL 15
+ 
+ #ifdef READLINE_SUPPORT
 -- 
 1.7.2.1
 
