@@ -1,9 +1,9 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:36 +0200
-Subject: [PATCH 24/25] Replicator: lvremove implementation
+Date: Sun,  8 Aug 2010 10:57:37 +0200
+Subject: [PATCH 25/25] Replicator: initial simple replicator testcase
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <5ada6e0660459234ab9056d30b320d3fb552a1a1.1281256235.git.zkabelac@redhat.com>
+Message-ID: <efed66a56d9dfda737fc776e7dd661cfc75fd6c1.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,71 +13,63 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/commands.h |    3 ++-
- tools/lvremove.c |   18 +++++++++++++++++-
- 2 files changed, 19 insertions(+), 2 deletions(-)
+ test/t-replicator-usage.sh |   47 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 47 insertions(+), 0 deletions(-)
+ create mode 100755 test/t-replicator-usage.sh
 
-diff --git a/tools/commands.h b/tools/commands.h
-index a2b6690..1387eda 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -365,12 +365,13 @@ xx(lvremove,
-    "\t[-f|--force]\n"
-    "\t[-h|--help]\n"
-    "\t[--noudevsync]\n"
-+   "\t[--site SiteName]\n"
-    "\t[-t|--test]\n"
-    "\t[-v|--verbose]\n"
-    "\t[--version]" "\n"
-    "\tLogicalVolume[Path] [LogicalVolume[Path]...]\n",
- 
--   autobackup_ARG, force_ARG, noudevsync_ARG, test_ARG)
-+   autobackup_ARG, force_ARG, noudevsync_ARG, site_ARG, test_ARG)
- 
- xx(lvrename,
-    "Rename a logical volume",
-diff --git a/tools/lvremove.c b/tools/lvremove.c
-index 0252149..8060146 100644
---- a/tools/lvremove.c
-+++ b/tools/lvremove.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -19,6 +19,8 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 			   void *handle __attribute__((unused)))
- {
- 	struct logical_volume *origin;
-+	struct logical_volume *replicator;
-+	const char *site_name;
- 
- 	/*
- 	 * If this is a sparse device, remove its origin too.
-@@ -26,6 +28,20 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
-         if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
-                 lv = origin;
- 
-+	if ((lv_is_replicated(lv) || lv_is_replicator(lv)) &&
-+	    arg_count(cmd, site_ARG)) {
-+		replicator = lv_is_replicator(lv) ? lv : first_seg(lv)->replicator;
-+		site_name = arg_str_value(cmd, site_ARG,
-+					  DEFAULT_REPLICATOR_LOCAL_SITE_NAME);
+diff --git a/test/t-replicator-usage.sh b/test/t-replicator-usage.sh
+new file mode 100755
+index 0000000..7abcc4f
+--- /dev/null
++++ b/test/t-replicator-usage.sh
+@@ -0,0 +1,47 @@
++#!/bin/sh
++# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+		if (!lv_remove_replicator_site(replicator, site_name)) {
-+			stack;
-+			return ECMD_FAILED;
-+		}
++test_description='Exercise some vgcreate diagnostics'
 +
-+		return ECMD_PROCESSED;
-+	}
++. ./test-utils.sh
 +
- 	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG), 0)) {
- 		stack;
- 		return ECMD_FAILED;
++aux prepare_pvs 3
++
++vgl=${PREFIX}vgl
++vgn=${PREFIX}vgn
++vgp=${PREFIX}vgp
++rep=${vgl}/rep
++
++#COMM create 3 VGs'
++vgcreate -c n $vgl $dev1
++vgcreate -c n $vgn $dev2
++vgcreate -c n $vgp $dev3
++
++#COMM remote site N
++lvcreate -l1 -n $lv1 $vgn
++lvcreate -l2 -n $lv2 $vgn
++
++#COMM remote site P
++lvcreate -l1 -n $lv1 $vgp
++lvcreate -l2 -n $lv2 $vgp
++
++lvcreate --replicator -l1 -n rep $vgl
++
++lvcreate --site Berlin --replicator $rep
++
++lvcreate --site NY --remotevg $vgn --replicator $rep
++lvcreate --site Paris --remotevg $vgp --replicator $rep
++
++lvcreate --replicated -l1 -n $lv1 $rep
++lvcreate --replicated -l2 -n $lv2 $rep
++
++# active site Berlin - using any replicated LV
++lvchange -ay --site Berlin $vgl/$lv1
 -- 
 1.7.2.1
 
