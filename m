@@ -1,155 +1,162 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:13 +0200
-Subject: [PATCH 01/25] Update libdm for replicator
+Date: Sun,  8 Aug 2010 10:57:14 +0200
+Subject: [PATCH 02/25] SEG_REPLICATED dm-deptree
 In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
 References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <b1e321fc04e86957bcdd6200379477f1a1798ca8.1281256235.git.zkabelac@redhat.com>
+Message-ID: <a11ddab4e5108d37770265d5457db3c681a2a913.1281256235.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add units to passed parameters data & timeout
-Switch fall_behind_data->fall_behind_size
-Switch async_timeout->fall_behind_timeout
-Keep ordered as in lvm library.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdevmapper.h  |   12 ++++++------
- libdm/libdm-deptree.c |   48 +++++++++++++++++++++++++-----------------------
- 2 files changed, 31 insertions(+), 29 deletions(-)
+ libdm/libdevmapper.h  |   18 +++++++++---------
+ libdm/libdm-deptree.c |   40 ++++++++++++++++++++--------------------
+ 2 files changed, 29 insertions(+), 29 deletions(-)
 
 diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index e535d2b..b1bfbf3 100644
+index b1bfbf3..942a30a 100644
 --- a/libdm/libdevmapper.h
 +++ b/libdm/libdevmapper.h
-@@ -459,18 +459,18 @@ typedef enum {
- 	DM_REPLICATOR_ASYNC_STALL,		/* Stall replicator if not fast enough */
- 	DM_REPLICATOR_ASYNC_DROP,		/* Drop sites out of sync */
- 	DM_REPLICATOR_ASYNC_FAIL,		/* Fail replicator if slow */
--	NUM_DM_REPLICATOR_MODES
--} dm_replicator_mode_t;
-+	NUM_DM_REPLICATOR_POLICIES
-+} dm_replicator_policy_t;
+@@ -472,15 +472,15 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
+ 				       uint64_t fall_behind_size,
+ 				       uint32_t fall_behind_timeout);
  
- int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 				       uint64_t size,
- 				       const char *rlog_uuid,
- 				       const char *rlog_type,
- 				       unsigned rsite_index,
--				       dm_replicator_mode_t mode,
--				       uint32_t async_timeout,
--				       uint64_t fall_behind_data,
--				       uint32_t fall_behind_ios);
-+				       dm_replicator_policy_t policy,
-+				       uint32_t fall_behind_ios,
-+				       uint64_t fall_behind_size,
-+				       uint32_t fall_behind_timeout);
+-int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+-					   uint64_t size,
+-					   const char *replicator_uuid,	/* Replicator control device */
+-					   uint64_t rdevice_index,
+-					   const char *rdev_uuid,	/* Rimage device name/uuid */
+-					   unsigned rsite_index,
+-					   const char *slog_uuid,
+-					   uint32_t slog_flags,		/* Mirror log flags */
+-					   uint32_t slog_region_size);
++int dm_tree_node_add_replicated_target(struct dm_tree_node *node,
++				       uint64_t size,
++				       const char *replicator_uuid,	/* Replicator control device */
++				       uint64_t rdevice_index,
++				       const char *rdev_uuid,	/* Rimage device name/uuid */
++				       unsigned rsite_index,
++				       const char *slog_uuid,
++				       uint32_t slog_flags,		/* Mirror log flags */
++				       uint32_t slog_region_size);
+ /* End of Replicator API */
  
- int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
- 					   uint64_t size,
+ void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
 diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 0e49127..5a12c5f 100644
+index 5a12c5f..c009209 100644
 --- a/libdm/libdm-deptree.c
 +++ b/libdm/libdm-deptree.c
-@@ -83,10 +83,10 @@ struct replicator_site {
- 	struct dm_list list;
- 
- 	unsigned rsite_index;
--	dm_replicator_mode_t mode;
--	uint32_t async_timeout;
-+	dm_replicator_policy_t policy;
- 	uint32_t fall_behind_ios;
--	uint64_t fall_behind_data;
-+	uint64_t fall_behind_size;
-+	uint32_t fall_behind_timeout;
+@@ -36,7 +36,7 @@ enum {
+ 	SEG_LINEAR,
+ 	SEG_MIRRORED,
+ 	SEG_REPLICATOR,
+-	SEG_REPLICATOR_DEV,
++	SEG_REPLICATED,
+ 	SEG_SNAPSHOT,
+ 	SEG_SNAPSHOT_ORIGIN,
+ 	SEG_SNAPSHOT_MERGE,
+@@ -55,7 +55,7 @@ struct {
+ 	{ SEG_LINEAR, "linear" },
+ 	{ SEG_MIRRORED, "mirror" },
+ 	{ SEG_REPLICATOR, "replicator" },
+-	{ SEG_REPLICATOR_DEV, "replicator-dev" },
++	{ SEG_REPLICATED, "replicator-dev" },
+ 	{ SEG_SNAPSHOT, "snapshot" },
+ 	{ SEG_SNAPSHOT_ORIGIN, "snapshot-origin" },
+ 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
+@@ -125,8 +125,8 @@ struct load_segment {
+ 	struct dm_list rsites;		/* Replicator */
+ 	unsigned rsite_count;		/* Replicator */
+ 	unsigned rdevice_count;		/* Replicator */
+-	struct dm_tree_node *replicator;/* Replicator-dev */
+-	uint64_t rdevice_index;		/* Replicator-dev */
++	struct dm_tree_node *replicator;/* Replicated */
++	uint64_t rdevice_index;		/* Replicated */
  };
  
- /* Per-segment properties */
-@@ -1512,19 +1512,19 @@ static int _replicator_emit_segment_line(const struct load_segment *seg, char *p
- 		    seg->rlog_type, rlogbuf, rlog_seg->size);
+ /* Per-device properties */
+@@ -1450,7 +1450,7 @@ static int _emit_areas_line(struct dm_task *dmt __attribute__((unused)),
+ 			return_0;
  
- 	dm_list_iterate_items(rsite, &seg->rsites) {
--		parm_count = (rsite->fall_behind_data
--			      || rsite->fall_behind_ios
--			      || rsite->async_timeout) ? 4 : 2;
-+		parm_count = (rsite->fall_behind_ios ||
-+			      rsite->fall_behind_size ||
-+			      rsite->fall_behind_timeout) ? 4 : 2;
+ 		switch (seg->type) {
+-		case SEG_REPLICATOR_DEV:
++		case SEG_REPLICATED:
+ 			EMIT_PARAMS(*pos, " %d 1 %s", area->rsite_index, devbuf);
+ 			if (first_time)
+ 				EMIT_PARAMS(*pos, " nolog 0");
+@@ -1682,7 +1682,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 			return r;
+ 		}
+ 		break;
+-	case SEG_REPLICATOR_DEV:
++	case SEG_REPLICATED:
+ 		if (!seg->replicator || !_build_dev_string(originbuf,
+ 							   sizeof(originbuf),
+ 							   seg->replicator))
+@@ -1726,7 +1726,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		break;
+ 	case SEG_CRYPT:
+ 	case SEG_LINEAR:
+-	case SEG_REPLICATOR_DEV:
++	case SEG_REPLICATED:
+ 	case SEG_STRIPED:
+ 		if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
+ 			stack;
+@@ -2292,15 +2292,15 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
+ }
  
- 		EMIT_PARAMS(*pos, " blockdev %u %u %s", parm_count, rsite->rsite_index,
--			    (rsite->mode == DM_REPLICATOR_SYNC) ? "synchronous" : "asynchronous");
-+			    (rsite->policy == DM_REPLICATOR_SYNC) ? "synchronous" : "asynchronous");
- 
--		if (rsite->fall_behind_data)
--			EMIT_PARAMS(*pos, " data %" PRIu64, rsite->fall_behind_data);
--		else if (rsite->fall_behind_ios)
-+		if (rsite->fall_behind_ios)
- 			EMIT_PARAMS(*pos, " ios %" PRIu32, rsite->fall_behind_ios);
--		else if (rsite->async_timeout)
--			EMIT_PARAMS(*pos, " timeout %" PRIu32, rsite->async_timeout);
-+		else if (rsite->fall_behind_size)
-+			EMIT_PARAMS(*pos, " size %" PRIu64 "s", rsite->fall_behind_size);
-+		else if (rsite->fall_behind_timeout)
-+			EMIT_PARAMS(*pos, " timeout %" PRIu32 "s", rsite->fall_behind_timeout);
- 	}
- 
- 	return 1;
-@@ -2214,10 +2214,10 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 				       const char *rlog_uuid,
- 				       const char *rlog_type,
- 				       unsigned rsite_index,
--				       dm_replicator_mode_t mode,
--				       uint32_t async_timeout,
--				       uint64_t fall_behind_data,
--				       uint32_t fall_behind_ios)
-+				       dm_replicator_policy_t policy,
-+				       uint32_t fall_behind_ios,
-+				       uint64_t fall_behind_size,
-+				       uint32_t fall_behind_timeout)
+ /* Appends device node to Replicator */
+-int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+-					   uint64_t size,
+-					   const char *replicator_uuid,
+-					   uint64_t rdevice_index,
+-					   const char *rdev_uuid,
+-					   unsigned rsite_index,
+-					   const char *slog_uuid,
+-					   uint32_t slog_flags,
+-					   uint32_t slog_region_size)
++int dm_tree_node_add_replicated_target(struct dm_tree_node *node,
++				       uint64_t size,
++				       const char *replicator_uuid,
++				       uint64_t rdevice_index,
++				       const char *rdev_uuid,
++				       unsigned rsite_index,
++				       const char *slog_uuid,
++				       uint32_t slog_flags,
++				       uint32_t slog_region_size)
  {
+ 	struct seg_area *area;
  	struct load_segment *rseg;
- 	struct replicator_site *rsite;
-@@ -2245,8 +2245,10 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
+@@ -2308,7 +2308,7 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+ 
+ 	if (rsite_index == REPLICATOR_LOCAL_SITE) {
+ 		/* Site index for local target */
+-		if (!(rseg = _add_segment(node, SEG_REPLICATOR_DEV, size)))
++		if (!(rseg = _add_segment(node, SEG_REPLICATED, size)))
+ 			return_0;
+ 
+ 		if (!(rseg->replicator = dm_tree_find_node_by_uuid(node->dtree, replicator_uuid))) {
+@@ -2337,13 +2337,13 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+ 	} else {
+ 		/* Local slink0 for replicator must be always initialized first */
+ 		if (node->props.segment_count != 1) {
+-			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment.");
++			log_error(INTERNAL_ERROR "Attempt to use non replicated segment.");
  			return 0;
  		}
  
--		if (!(rseg->rlog_type = dm_pool_strdup(node->dtree->mem, rlog_type)))
--			return_0;
-+		if (!(rseg->rlog_type = dm_pool_strdup(node->dtree->mem, rlog_type))) {
-+			log_error("Failed to allocate replicator log type.");
-+			return 0;
-+		}
- 
- 		dm_list_init(&rseg->rsites);
- 		rseg->rdevice_count = 0;
-@@ -2254,8 +2256,8 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 	}
- 
- 	/* Add site to segment */
--	if (mode == DM_REPLICATOR_SYNC
--	    && (async_timeout || fall_behind_ios || fall_behind_data)) {
-+	if ((policy == DM_REPLICATOR_SYNC) &&
-+	    (fall_behind_ios || fall_behind_size || fall_behind_timeout)) {
- 		log_error("Async parameters passed for synchronnous replicator.");
- 		return 0;
- 	}
-@@ -2280,10 +2282,10 @@ int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 	dm_list_add(&rseg->rsites, &rsite->list);
- 	rseg->rsite_count++;
- 
--	rsite->mode = mode;
--	rsite->async_timeout = async_timeout;
--	rsite->fall_behind_data = fall_behind_data;
-+	rsite->policy = policy;
- 	rsite->fall_behind_ios = fall_behind_ios;
-+	rsite->fall_behind_size = fall_behind_size;
-+	rsite->fall_behind_timeout = fall_behind_timeout;
- 	rsite->rsite_index = rsite_index;
- 
- 	return 1;
+ 		rseg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
+-		if (rseg->type != SEG_REPLICATOR_DEV) {
+-			log_error(INTERNAL_ERROR "Attempt to use non replicator-dev segment %s.",
++		if (rseg->type != SEG_REPLICATED) {
++			log_error(INTERNAL_ERROR "Attempt to use non replicated segment %s.",
+ 				  dm_segtypes[rseg->type].target);
+ 			return 0;
+ 		}
 -- 
 1.7.2.1
 
