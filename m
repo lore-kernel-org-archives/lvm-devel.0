@@ -1,76 +1,34 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun,  8 Aug 2010 10:57:37 +0200
-Subject: [PATCH 25/25] Replicator: initial simple replicator testcase
-In-Reply-To: <cover.1281256234.git.zkabelac@redhat.com>
-References: <cover.1281256234.git.zkabelac@redhat.com>
-Message-ID: <efed66a56d9dfda737fc776e7dd661cfc75fd6c1.1281256235.git.zkabelac@redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 09 Aug 2010 09:03:45 +0200
+Subject: Can't delete "open" snapshots
+In-Reply-To: <201008072303.34522.benscott@nwlink.com>
+References: <201008072303.34522.benscott@nwlink.com>
+Message-ID: <4C5FA851.9030204@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+On 08/08/2010 08:03 AM +0100, ben wrote:
+> Someone recently noted here that they have been having trouble deleting 
+> snapshots. I have been seeing the same behaviour with that latest CVS builds. 
+> I can create a snap, run "lvs", then try to delete the snapshot. Sometimes it 
+> will delete but more often lvremove complains the snap is "open" and refuses. 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- test/t-replicator-usage.sh |   47 ++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 47 insertions(+), 0 deletions(-)
- create mode 100755 test/t-replicator-usage.sh
+I suppose this is the same as:
+  https://bugzilla.redhat.com/show_bug.cgi?id=577798
 
-diff --git a/test/t-replicator-usage.sh b/test/t-replicator-usage.sh
-new file mode 100755
-index 0000000..7abcc4f
---- /dev/null
-+++ b/test/t-replicator-usage.sh
-@@ -0,0 +1,47 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Exercise some vgcreate diagnostics'
-+
-+. ./test-utils.sh
-+
-+aux prepare_pvs 3
-+
-+vgl=${PREFIX}vgl
-+vgn=${PREFIX}vgn
-+vgp=${PREFIX}vgp
-+rep=${vgl}/rep
-+
-+#COMM create 3 VGs'
-+vgcreate -c n $vgl $dev1
-+vgcreate -c n $vgn $dev2
-+vgcreate -c n $vgp $dev3
-+
-+#COMM remote site N
-+lvcreate -l1 -n $lv1 $vgn
-+lvcreate -l2 -n $lv2 $vgn
-+
-+#COMM remote site P
-+lvcreate -l1 -n $lv1 $vgp
-+lvcreate -l2 -n $lv2 $vgp
-+
-+lvcreate --replicator -l1 -n rep $vgl
-+
-+lvcreate --site Berlin --replicator $rep
-+
-+lvcreate --site NY --remotevg $vgn --replicator $rep
-+lvcreate --site Paris --remotevg $vgp --replicator $rep
-+
-+lvcreate --replicated -l1 -n $lv1 $rep
-+lvcreate --replicated -l2 -n $lv2 $rep
-+
-+# active site Berlin - using any replicated LV
-+lvchange -ay --site Berlin $vgl/$lv1
--- 
-1.7.2.1
+Can you try killing udev daemon temporarily with "killall udevd" and see
+if you can reproduce? What distribution do you use?
+
+Basically, we have problem supporting the "watch" rule, so you can also
+try and see if that one is used somewhere 
+
+  grep watch /lib/udev/rules.d/* /etc/udev/rules.d/*
+
+(..most of the time it's the "watch" rule set in udisks' udev rules)
+
+Peter
 
 
