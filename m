@@ -1,34 +1,44 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 9 Aug 2010 14:06:05 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20100809140605.12133.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 09 Aug 2010 18:28:17 +0200
+Subject: [RFC PATCH v2] change default alignment of pe_start to 1MB
+In-Reply-To: <20100806041138.GA29995@redhat.com>
+References: <20100805191001.GA27237@redhat.com>
+	<20100806041138.GA29995@redhat.com>
+Message-ID: <4C602CA1.3040406@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-08-09 14:06:03
+On 08/06/2010 06:11 AM, Mike Snitzer wrote:
+> The switch to a 1MB default alignment causes various tests in the LVM2
+> testsuite to fail -- not a big deal but the tests would need updating.
+> 
+> Of more concern is that the existing LVM2 set_pe_align() code doesn't
+> always properly respect the alignment determined from
+> 'devices/md_chunk_alignment' or 'devices/data_alignment_detection'.
+> 
+> With the previous default alignment of 64k it would generally do the
+> right thing -- use the detected values.  But switching the default to
+> the larger value exposes the fact that MAX() of the MD or I/O Topology
+> detected values will generally always be 1MB -- when they are compared
+> to 1MB.
+> 
+> The following revised patch changes the LVM alignment detection
+> semantics to model what fdisk has elected to do:
+> - If the default value (1MB) is a multiple of the specified/detected
+>   alignment then just use the default.
+> - Otherwise, use the specified/detected value.
+> 
+> In practice this means we'll almost always use 1MB -- that is unless:
+> - the specified --dataalignment, MD's full stripe width, or the
+>   optimal_io_size exceeds 1MB
+> - the specified/detected value is not a power-of-2
 
-Modified files:
-	.              : WHATS_NEW 
+patch not tested, but Ack for idea.
+(I just did independently the same for LUKS devices.)
 
-Log message:
-	Update WHATS_NEW.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1697&r2=1.1698
-
---- LVM2/WHATS_NEW	2010/08/06 15:38:32	1.1697
-+++ LVM2/WHATS_NEW	2010/08/09 14:06:03	1.1698
-@@ -1,5 +1,6 @@
- Version 2.02.73 - 
- ================================
-+  Never scan internal LVM devices.
-   Split-mirror operations were ignoring user-specified PVs.
-   Fix data corruption bug in cluster mirrors.
-   Require logical volume(s) to be explicitly named for lvconvert --merge.
+Milan
 
 
