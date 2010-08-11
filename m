@@ -1,16 +1,19 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Wed, 11 Aug 2010 17:43:12 -0400
-Subject: [PATCH v5 2/2] change default alignment of pe_start to 1MB
-In-Reply-To: <20100811212538.GC8422@redhat.com>
+Date: Wed, 11 Aug 2010 19:44:28 -0400
+Subject: [PATCH v6 2/2] change default alignment of pe_start to 1MB
+In-Reply-To: <20100811214311.GD8422@redhat.com>
 References: <1281479088-1553-1-git-send-email-snitzer@redhat.com>
 	<1281479088-1553-2-git-send-email-snitzer@redhat.com>
 	<20100811212538.GC8422@redhat.com>
-Message-ID: <20100811214311.GD8422@redhat.com>
+	<20100811214311.GD8422@redhat.com>
+Message-ID: <20100811234428.GA9604@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+
+[v6 adds missing --norestorefile fixes to test/t-vgcfgbackup-usage.sh]
 
 The new standard in the storage industry is to default alignment of data
 areas to 1MB.  fdisk, parted, and mdadm have all been updated to this 
@@ -52,11 +55,12 @@ Signed-off-by: Mike Snitzer <snitzer@redhat.com>
  test/t-pvcreate-operation-md.sh |   23 +++++++++--------------
  test/t-pvcreate-usage.sh        |    6 +++---
  test/t-topology-support.sh      |    2 +-
+ test/t-vgcfgbackup-usage.sh     |    4 ++--
  test/t-vgcreate-usage.sh        |    6 +++---
  test/t-vgextend-usage.sh        |    6 +++---
  test/t-vgsplit-operation.sh     |    2 +-
  test/test-utils.sh              |    2 +-
- 12 files changed, 48 insertions(+), 41 deletions(-)
+ 13 files changed, 50 insertions(+), 43 deletions(-)
 
 Index: lvm2/doc/example.conf.in
 ===================================================================
@@ -327,5 +331,18 @@ Index: lvm2/test/t-covercmd.sh
  vgcreate -c n $vg $devs
  lvcreate -n $lv -l 5 -i5 -I256 $vg
  
+Index: lvm2/test/t-vgcfgbackup-usage.sh
+===================================================================
+--- lvm2.orig/test/t-vgcfgbackup-usage.sh
++++ lvm2/test/t-vgcfgbackup-usage.sh
+@@ -37,6 +37,6 @@ pvcreate -ff -y $dev1
+ pvcreate -ff -y $dev2
+ vgcfgbackup -f "$(pwd)/backup.$$" $vg
+ sed 's/flags = \[\"MISSING\"\]/flags = \[\]/' "$(pwd)/backup.$$" > "$(pwd)/backup.$$1"
+-pvcreate -ff -y -u $pv1_uuid $dev1
+-pvcreate -ff -y -u $pv2_uuid $dev2
++pvcreate -ff -y --norestorefile -u $pv1_uuid $dev1
++pvcreate -ff -y --norestorefile -u $pv2_uuid $dev2
+ vgcfgrestore -f "$(pwd)/backup.$$1" $vg
 
 
