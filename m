@@ -1,10 +1,11 @@
 From: Mike Snitzer <snitzer@redhat.com>
-Date: Wed, 11 Aug 2010 17:25:38 -0400
-Subject: [PATCH v4 2/2] change default alignment of pe_start to 1MB
-In-Reply-To: <1281479088-1553-2-git-send-email-snitzer@redhat.com>
+Date: Wed, 11 Aug 2010 17:43:12 -0400
+Subject: [PATCH v5 2/2] change default alignment of pe_start to 1MB
+In-Reply-To: <20100811212538.GC8422@redhat.com>
 References: <1281479088-1553-1-git-send-email-snitzer@redhat.com>
 	<1281479088-1553-2-git-send-email-snitzer@redhat.com>
-Message-ID: <20100811212538.GC8422@redhat.com>
+	<20100811212538.GC8422@redhat.com>
+Message-ID: <20100811214311.GD8422@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -47,6 +48,7 @@ Signed-off-by: Mike Snitzer <snitzer@redhat.com>
  lib/config/defaults.h           |    2 ++
  lib/metadata/metadata.c         |   33 +++++++++++++++++++++------------
  test/lvm-utils.sh               |    3 ++-
+ test/t-covercmd.sh              |    2 +-
  test/t-pvcreate-operation-md.sh |   23 +++++++++--------------
  test/t-pvcreate-usage.sh        |    6 +++---
  test/t-topology-support.sh      |    2 +-
@@ -54,7 +56,7 @@ Signed-off-by: Mike Snitzer <snitzer@redhat.com>
  test/t-vgextend-usage.sh        |    6 +++---
  test/t-vgsplit-operation.sh     |    2 +-
  test/test-utils.sh              |    2 +-
- 11 files changed, 47 insertions(+), 40 deletions(-)
+ 12 files changed, 48 insertions(+), 41 deletions(-)
 
 Index: lvm2/doc/example.conf.in
 ===================================================================
@@ -311,6 +313,19 @@ Index: lvm2/lib/config/defaults.h
 +
  #define DEFAULT_ARCHIVE_ENABLED 1
  #define DEFAULT_BACKUP_ENABLED 1
+ 
+Index: lvm2/test/t-covercmd.sh
+===================================================================
+--- lvm2.orig/test/t-covercmd.sh
++++ lvm2/test/t-covercmd.sh
+@@ -30,7 +30,7 @@ pvcreate $dev1
+ pvcreate --metadatacopies 0 $dev2
+ pvcreate --metadatacopies 0 $dev3
+ pvcreate $dev4
+-pvcreate -u $TEST_UUID --metadatacopies 0 $dev5
++pvcreate --norestorefile -u $TEST_UUID --metadatacopies 0 $dev5
+ vgcreate -c n $vg $devs
+ lvcreate -n $lv -l 5 -i5 -I256 $vg
  
 
 
