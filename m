@@ -1,59 +1,60 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 12 Aug 2010 16:07:57 +0200
-Subject: [PATCH 2/4] Remove assumption that --ye must be used only in --force mode
+Date: Thu, 12 Aug 2010 16:07:58 +0200
+Subject: [PATCH 3/4] Fix file open leak in swap signature detection
 In-Reply-To: <cover.1281621747.git.mbroz@redhat.com>
 References: <cover.1281621747.git.mbroz@redhat.com>
-Message-ID: <f69e3d548ff87a130653f9d760e7d9e29c66bc4e.1281621747.git.mbroz@redhat.com>
+Message-ID: <1c20ca9189be0fedcdaf8bf67cf268998b61eab5.1281621747.git.mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is not only undocumented but is is also in violation with --help
-documentation.
-
-Using --yes without --force is useful in pvcreate when it detects
-old signature.
-
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- tools/pvremove.c |    5 -----
- tools/toollib.c  |    5 -----
- 2 files changed, 0 insertions(+), 10 deletions(-)
+ lib/device/dev-swap.c |   12 +++++-------
+ 1 files changed, 5 insertions(+), 7 deletions(-)
 
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index 8242993..c57df64 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -143,11 +143,6 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
+diff --git a/lib/device/dev-swap.c b/lib/device/dev-swap.c
+index 62c2bb5..b8ebcca 100644
+--- a/lib/device/dev-swap.c
++++ b/lib/device/dev-swap.c
+@@ -42,7 +42,7 @@ int dev_is_swap(struct device *dev, uint64_t *signature)
+ {
+ 	char buf[10];
+ 	uint64_t size;
+-	int page;
++	int page, ret = 0;
+ 
+ 	if (!dev_get_size(dev, &size)) {
+ 		stack;
+@@ -66,11 +66,12 @@ int dev_is_swap(struct device *dev, uint64_t *signature)
+ 			break;
+ 		if (!dev_read(dev, page - SIGNATURE_SIZE,
+ 			      SIGNATURE_SIZE, buf)) {
+-			stack;
+-			return -1;
++			ret = -1;
++			break;
+ 		}
+ 		if (_swap_detect_signature(buf)) {
+ 			*signature = page - SIGNATURE_SIZE;
++			ret = 1;
+ 			break;
+ 		}
  	}
+@@ -78,10 +79,7 @@ int dev_is_swap(struct device *dev, uint64_t *signature)
+ 	if (!dev_close(dev))
+ 		stack;
  
--	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
--		log_error("Option y can only be given with option f");
--		return EINVALID_CMD_LINE;
--	}
+-	if (*signature)
+-		return 1;
 -
- 	for (i = 0; i < argc; i++) {
- 		r = pvremove_single(cmd, argv[i], NULL);
- 		if (r > ret)
-diff --git a/tools/toollib.c b/tools/toollib.c
-index bdb52d5..5da30f4 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1344,11 +1344,6 @@ int pvcreate_params_validate(struct cmd_context *cmd,
- 		return 0;
- 	}
+-	return 0;
++	return ret;
+ }
  
--	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
--		log_error("Option y can only be given with option f");
--		return 0;
--	}
--
- 	pp->yes = arg_count(cmd, yes_ARG);
- 	pp->force = arg_count(cmd, force_ARG);
- 
+ #endif
 -- 
 1.7.1
 
