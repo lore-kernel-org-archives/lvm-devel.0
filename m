@@ -1,117 +1,71 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 12 Aug 2010 16:07:59 +0200
-Subject: [PATCH 4/4] Detect LUKS signature in pvcreate
-In-Reply-To: <cover.1281621747.git.mbroz@redhat.com>
-References: <cover.1281621747.git.mbroz@redhat.com>
-Message-ID: <7229a352e9de34559a9fbbf675ade154c0cbb5f7.1281621747.git.mbroz@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 12 Aug 2010 17:30:57 -0500
+Subject: [PATCH] Bug 612291: Fix splitmirrors in cluster.
+Message-ID: <1281652261.16190.5.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-One shiny day we should use libblkid here. But now using LUKS is
-very common together with LVM and pvcreate destroys LUKS completely.
+LVM commands were reporting expected results, but DM devices where not
+being renamed on remote nodes ('remote' WRT the node issuing the
+'lvconvert --splitmirrors' command).  This could cause problems more
+severe than just naming issues when the number of images split from a
+mirror was greater than 1 (like the newly split mirror never activating
+on the remote nodes).
 
-So for user's convenience, try to detect LUKS signature and allow abort.
+ brassow
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/Makefile.in         |    1 +
- lib/device/dev-luks.c   |   43 +++++++++++++++++++++++++++++++++++++++++++
- lib/device/device.h     |    1 +
- lib/metadata/metadata.c |    3 +++
- 4 files changed, 48 insertions(+), 0 deletions(-)
- create mode 100644 lib/device/dev-luks.c
+Fix for bug 612291: dm devices of split off mirror images are not removed
 
-diff --git a/lib/Makefile.in b/lib/Makefile.in
-index ae81040..1c58bdd 100644
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -47,6 +47,7 @@ SOURCES =\
- 	device/dev-io.c \
- 	device/dev-md.c \
- 	device/dev-swap.c \
-+	device/dev-luks.c \
- 	device/device.c \
- 	display/display.c \
- 	error/errseg.c \
-diff --git a/lib/device/dev-luks.c b/lib/device/dev-luks.c
-new file mode 100644
-index 0000000..6337992
---- /dev/null
-+++ b/lib/device/dev-luks.c
-@@ -0,0 +1,43 @@
-+/*
-+ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
-+
-+#include "lib.h"
-+#include "metadata.h"
-+
-+#define LUKS_SIGNATURE "LUKS\xba\xbe"
-+#define LUKS_SIGNATURE_SIZE 6
-+
-+int dev_is_luks(struct device *dev, uint64_t *signature)
-+{
-+	char buf[LUKS_SIGNATURE_SIZE];
-+	int ret = -1;
-+
-+	if (!dev_open(dev)) {
-+		stack;
-+		return -1;
-+	}
-+
-+	*signature = 0;
-+
-+	if (!dev_read(dev, 0, LUKS_SIGNATURE_SIZE, buf))
-+		goto_out;
-+
-+	ret = memcmp(buf, LUKS_SIGNATURE, LUKS_SIGNATURE_SIZE) ? 0 : 1;
-+
-+out:
-+	if (!dev_close(dev))
-+		stack;
-+
-+	return ret;
-+}
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 8bf33e6..5a59950 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -96,6 +96,7 @@ const char *dev_name_confirmed(struct device *dev, int quiet);
- /* Does device contain md superblock?  If so, where? */
- int dev_is_md(struct device *dev, uint64_t *sb);
- int dev_is_swap(struct device *dev, uint64_t *signature);
-+int dev_is_luks(struct device *dev, uint64_t *signature);
- unsigned long dev_md_stripe_width(const char *sysfs_dir, struct device *dev);
- 
- int is_partitioned_dev(struct device *dev);
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index db196d6..ed00ffa 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1640,6 +1640,9 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
- 	if (!_wipe_sb(dev, "swap signature", name, 10, pp, dev_is_swap))
+DM devices were not handled properly on nodes in a cluster that were not
+where the splitmirrors command was issued.  This was happening because
+suspend_lv/resume_lv were being used in a place where activate_lv should
+have been used.
+
+When the suspend/resume are issued on (effectively) new LVs, their
+'resource' (UUID) is not located in the lv_hash.  Thus, both operations
+turn into no-ops.  You can see this from the output of clvmd from one
+of the remote nodes:
+<snip>
+CLVMD[3c7ed710]: Aug 12 17:01:44 do_suspend_lv, lock not already held
+<snip>
+CLVMD[3c7ed710]: Aug 12 17:02:03 do_resume_lv, lock not already held
+
+'activate_lv' enjoins the other nodes in the cluster to process the lock
+and activate the new LV.  clvmd output from remote node as follows:
+CLVMD[776e5710]: Aug 12 16:53:21 do_lock_lv: resource 'zMseY7CBuO3Ty09vXlplPAHzD0Y0CovjrTdv0R1VcwggMwPdYhutHErRcwm5Nd2S', cmd = 0x19 LCK_LV_ACTIVATE (READ|LV|NONBLOCK), flags = 0x84 (DMEVENTD_MONITOR ), memlock = 1
+CLVMD[776e5710]: Aug 12 16:53:21 sync_lock: 'zMseY7CBuO3Ty09vXlplPAHzD0Y0CovjrTdv0R1VcwggMwPdYhutHErRcwm5Nd2S' mode:1 flags=1
+CLVMD[776e5710]: Aug 12 16:53:21 sync_lock: returning lkid 27b0001
+
+
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -719,19 +719,8 @@ static int _split_mirror_images(struct l
  		return 0;
+ 	}
  
-+	if (!_wipe_sb(dev, "LUKS signature", name, 8, pp, dev_is_luks))
-+		return 0;
-+
- 	if (sigint_caught())
+-	/*
+-	 * Suspend the newly split-off LV (balance memlock count
+-	 * and prepare for DM automated renaming via resume).
+-	 */
+-	if (!suspend_lv(lv->vg->cmd, new_lv)) {
+-		log_error("Failed to lock newly split LV, %s", new_lv->name);
+-		vg_revert(lv->vg);
+-		return 0;
+-	}
+-
+ 	/* Bring newly split-off LV into existence */
+-	log_very_verbose("Creating %s", new_lv->name);
+-	if (!resume_lv(lv->vg->cmd, new_lv)) {
++	if (!activate_lv(lv->vg->cmd, new_lv)) {
+ 		log_error("Failed to activate newly split LV, %s",
+ 			  new_lv->name);
  		return 0;
- 
--- 
-1.7.1
+
 
 
