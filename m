@@ -1,7 +1,7 @@
-From: fabbione@sourceware.org <fabbione@sourceware.org>
-Date: 12 Aug 2010 09:15:01 -0000
-Subject: LVM2 ./WHATS_NEW scripts/clvmd_init_red_hat.in
-Message-ID: <20100812091501.3960.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 12 Aug 2010 13:07:09 -0000
+Subject: LVM2 ./WHATS_NEW_DM udev/10-dm.rules.in
+Message-ID: <20100812130709.18389.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	fabbione at sourceware.org	2010-08-12 09:15:00
+Changes by:	prajnoha at sourceware.org	2010-08-12 13:07:08
 
 Modified files:
-	.              : WHATS_NEW 
-	scripts        : clvmd_init_red_hat.in 
+	.              : WHATS_NEW_DM 
+	udev           : 10-dm.rules.in 
 
 Log message:
-	Fix clvmd init script return code when executed as non-root user.
+	Reinstate detection of inappropriate uevent with DISK_RO set and suppress it.
 	
-	clvmd daemon itself does the right thing when invoked as non-root, by
-	returning 4.
-	
-	The patch removes the use daemon function from
-	/etc/rc.d/init.d/functions that??s unnecessary and has th bad habit to
-	mask the return codes from the real daemon.
-	
-	Add a simple and generic check to see if clvmd is executed by root or not.
-	
-	Our stop/reload/restart paths in the init script are complex and not all
-	the tools involved in the process are guaranteed to return 4 if executed
-	by non-root against a process that??s running as root (for example kill
-	-TERM will return -1 and parsing the output to catch the error is
-	suboptimal at best).
-	
-	https://bugzilla.redhat.com/show_bug.cgi?id=553381
+	We still need to detect this one! We're not so strict with CHANGE events as
+	with the ADD events while applying filters in the rules so this one would
+	pass and it would process the rules prematurely (because it appears *before*
+	the actual CHANGE event used when resuming a DM device while setting read-only
+	state at the same time).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1701&r2=1.1702
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/clvmd_init_red_hat.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.405&r2=1.406
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/10-dm.rules.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/WHATS_NEW	2010/08/12 04:11:48	1.1701
-+++ LVM2/WHATS_NEW	2010/08/12 09:14:59	1.1702
+--- LVM2/WHATS_NEW_DM	2010/08/11 13:12:31	1.405
++++ LVM2/WHATS_NEW_DM	2010/08/12 13:07:08	1.406
 @@ -1,5 +1,6 @@
- Version 2.02.73 - 
+ Version 1.02.54 - 
  ================================
-+  Fix clvmd init script exit code when executed as non-root user.
-   Change default alignment of pe_start to 1MB.
-   Add --norestorefile option to pvcreate.
-   Require --restorefile when using pvcreate --uuid.
---- LVM2/scripts/clvmd_init_red_hat.in	2010/06/23 16:24:14	1.9
-+++ LVM2/scripts/clvmd_init_red_hat.in	2010/08/12 09:15:00	1.10
-@@ -66,7 +66,7 @@
- {
- 	if ! rh_status_q; then
- 		echo -n "Starting $DAEMON: "
--		daemon $DAEMON $CLVMDOPTS || return $?
-+		$DAEMON $CLVMDOPTS || return $?
- 		echo
- 	fi
++  Reinstate detection of inappropriate uevent with DISK_RO set and suppress it.
+   Fix segfault in regex matcher with characters of ordinal value > 127.
+   Use built-in rule for device aliases: block/ < dm- < disk/ < mapper/ < other.
+   Wait for node creation before displaying debug info in dmsetup.
+--- LVM2/udev/10-dm.rules.in	2010/07/07 11:22:46	1.10
++++ LVM2/udev/10-dm.rules.in	2010/08/12 13:07:08	1.11
+@@ -42,6 +42,9 @@
+ # is not recommended.
+ ACTION!="add|change", GOTO="dm_end"
  
-@@ -165,6 +165,11 @@
- 	fi
- }
- 
-+[ "$EUID" != "0" ] && {
-+	echo "clvmd init script can only be executed as root user"
-+	exit 4
-+}
++# Rule out easy-to-detect inappropriate events first.
++ENV{DISK_RO}=="1", GOTO="dm_disable"
 +
- # See how we were called.
- case "$1" in
-   start)
+ # There is no cookie set nor any flags encoded in events not originating
+ # in libdevmapper so we need to detect this and try to behave correctly.
+ # For such spurious events, regenerate all flags from current udev database content
 
 
