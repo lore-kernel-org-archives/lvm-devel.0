@@ -1,27 +1,42 @@
-From: Jeff Chua <jeff.chua.linux@gmail.com>
-Date: Fri, 13 Aug 2010 18:02:06 -0000
-Subject: linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
-Message-ID: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
+From: Linus Torvalds <torvalds@linux-foundation.org>
+Date: Sat, 14 Aug 2010 17:48:29 -0000
+Subject: [Bug 16588] Regression introduced in 2.6.35.2 causes freezing, crashing, oopsing
+In-Reply-To: <201008141736.o7EHa1ui024187@demeter.kernel.org>
+References: <bug-16588-5873@https.bugzilla.kernel.org/>
+	<201008141736.o7EHa1ui024187@demeter.kernel.org>
+Message-ID: <AANLkTimXGb6-fFORR=Vm6gcdST6Sv3Uvsie7VZbEh2ev@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-It seems one of these commits in
-8357422d4bf33bc2c35884d4016c3fc9efbbc1d2 is causing LVM2
-(LVM2.2.02.72) to fail.
+On Sat, Aug 14, 2010 at 10:36 AM,  <bugzilla-daemon@bugzilla.kernel.org> wrote:
+>-
+> I did a git bisect run and it pointed this commit as the first bad one. Indeed,
+> if I revert it (after fixing trivial conflicts due to commit
+> 3aba3fa070fc0f38de2d41252aee), the error doesn't occur.
 
-Previously good logical volumes cannot be mounted anymore, and new one
-cannot be created. All failed with the error ...
+Hmm. Turning those "Maps lock" numbers into hex gives us
 
-"device-mapper: version ioctl failed: Inappropriate ioctl for device"
+  "Internal error: Maps lock 0xdbd000 < unlock 0xdbe000"
 
+which is a bit suggestive - it's "page aligned". I wonder if the
+"Maps" part refers to /proc/self/maps, and the process reads its own
+maps file to see where the segments are.
 
-Is there a new LVM2 for this new dm ioctl or the dm is not right?
+The whole (and only) point of the whole stack guard page patch is to
+make sure that a grow-down stack segment always has a guard page as
+it's lowest page. And that guard page obviously means that the stack
+segment is now one page bigger (downwards). If the lvcreate binary for
+some reason looks at how big its virtual mappings are, and assumes
+that they must be some particular size, then that would explain the
+error message.
 
+I wonder who knows. I'm cc'ing lvm-devel@redhat.com on this email, to
+see if I can reach somebody who knows that that "Internal error"
+means.
 
-Thanks,
-Jeff.
+                             Linus
 
 
