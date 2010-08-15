@@ -1,74 +1,69 @@
 From: Jeff Chua <jeff.chua.linux@gmail.com>
-Date: Sun, 15 Aug 2010 05:24:01 -0000
+Date: Sun, 15 Aug 2010 14:14:07 -0000
 Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
-In-Reply-To: <20100814155401.GJ26032@agk-dp.fab.redhat.com>
+In-Reply-To: <20100815130336.GA24055@agk-dp.fab.redhat.com>
 References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
 	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
-Message-ID: <AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
+	<AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
+	<20100815130336.GA24055@agk-dp.fab.redhat.com>
+Message-ID: <AANLkTinUuphqozgrSMNnrKxJrPWFp77y2TzdEwtuMD42@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sat, Aug 14, 2010 at 11:54 PM, Alasdair G Kergon <agk@redhat.com> wrote:
-> On Sat, Aug 14, 2010 at 02:01:47AM +0800, Jeff Chua wrote:
->> It seems one of these commits in
->> 8357422d4bf33bc2c35884d4016c3fc9efbbc1d2 is causing LVM2
->> (LVM2.2.02.72) to fail.
+On Sun, Aug 15, 2010 at 9:03 PM, Alasdair G Kergon <agk@redhat.com> wrote:
+>> Just a vanilla linux. No udev.
 >
-> Did you (partially) bisect that or are you just guessing?
-> The only one there possibly relevant is 7e507eb6432afdd798d4c6dccf949b8c43ef151c.
-
-Guessing only. Not bisecting yet. Prior to the git pull, everything
-was working fine. And double confirmed by going to prior to the pull,
-everything still worked.
-
-
->> Previously good logical volumes cannot be mounted anymore, and new one
->> cannot be created. All failed with the error ...
->> "device-mapper: version ioctl failed: Inappropriate ioctl for device"
+> So likely a userspace problem where udev is now assumed to be present.
 >
-> What distribution? ?What version of udev package?
+>> > Provide long listing of /dev/mapper and any dm/lvm devices in /dev.
+>
+> You can do that by running:
+> ?ls -l /dev/mapper /dev/vg01
+> Also:
+> ?cat /proc/devices
 
-Just a vanilla linux. No udev.
+253 device-mapper
+
+> ?cat /proc/misc
+
+236 device-mapper <== was@60 before the new kernel
 
 
-> 'lvm version' output?
+Got it! Sorry, it's me being _dumb_!!!
 
-  LVM version:     2.02.72(2) (2010-07-28)
-  Library version: 1.02.53 (2010-07-28)
-  Driver version:  4.17.0
+With 2.6.35++, /dev/mapper/control has moved from 60 to 236!
 
+So I fix it by recreating the control file with "mknod
+/var/mapper/control c 10 253".
 
-> Provide long listing of /dev/mapper and any dm/lvm devices in /dev.
-> Add -vvvv to your lvm command for better clues.
+I got this "internal error" when I activate/deactivate the volume
+group, but it seems ok. I could mount the volumes and so far it's all
+good.
 
-Attached. good.vg01 is from prior to the patch. bad.vg01 is the bad one.
+# vgchange -a n vg01
+  Internal error: Maps lock 14217216 < unlock 14221312
+  Internal error: Maps lock 14221312 < unlock 14225408
+  Internal error: Maps lock 14225408 < unlock 14229504
+  Internal error: Maps lock 14229504 < unlock 14233600
+  Internal error: Maps lock 14233600 < unlock 14237696
+  Internal error: Maps lock 14237696 < unlock 14241792
+  0 logical volume(s) in volume group "vg01" now active
 
->> Is there a new LVM2 for this new dm ioctl or the dm is not right?
-> There's no new dm ioctl.
+# vgchange -a y vg01
+  Internal error: Maps lock 14192640 < unlock 14196736
+  Internal error: Maps lock 14196736 < unlock 14200832
+  Internal error: Maps lock 14200832 < unlock 14204928
+  Internal error: Maps lock 14204928 < unlock 14209024
+  Internal error: Maps lock 14209024 < unlock 14213120
+  Internal error: Maps lock 14213120 < unlock 14217216
+  6 logical volume(s) in volume group "vg01" now active
 
-> I'm guessing you could have a configuration not covered by the latest userspace
-> libdevmapper - not handling some combination of kernel+userspace+initrd
-> packages correctly.  We already dealt with one udev+initrd combination that
-> failed last week.
-
-Could be. Please help.
+Hopefully those errors above means no harm.
 
 Thanks,
 Jeff
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: vg01.good
-Type: application/octet-stream
-Size: 12486 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100815/1fd79fb4/attachment.obj>
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: vg01.bad
-Type: application/octet-stream
-Size: 14373 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100815/1fd79fb4/attachment-0001.obj>
+
+
