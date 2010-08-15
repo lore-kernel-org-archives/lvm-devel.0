@@ -1,42 +1,74 @@
-From: Linus Torvalds <torvalds@linux-foundation.org>
-Date: Sat, 14 Aug 2010 17:48:29 -0000
-Subject: [Bug 16588] Regression introduced in 2.6.35.2 causes freezing, crashing, oopsing
-In-Reply-To: <201008141736.o7EHa1ui024187@demeter.kernel.org>
-References: <bug-16588-5873@https.bugzilla.kernel.org/>
-	<201008141736.o7EHa1ui024187@demeter.kernel.org>
-Message-ID: <AANLkTimXGb6-fFORR=Vm6gcdST6Sv3Uvsie7VZbEh2ev@mail.gmail.com>
+From: Jeff Chua <jeff.chua.linux@gmail.com>
+Date: Sun, 15 Aug 2010 05:24:01 -0000
+Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
+In-Reply-To: <20100814155401.GJ26032@agk-dp.fab.redhat.com>
+References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
+	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
+Message-ID: <AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sat, Aug 14, 2010 at 10:36 AM,  <bugzilla-daemon@bugzilla.kernel.org> wrote:
->-
-> I did a git bisect run and it pointed this commit as the first bad one. Indeed,
-> if I revert it (after fixing trivial conflicts due to commit
-> 3aba3fa070fc0f38de2d41252aee), the error doesn't occur.
+On Sat, Aug 14, 2010 at 11:54 PM, Alasdair G Kergon <agk@redhat.com> wrote:
+> On Sat, Aug 14, 2010 at 02:01:47AM +0800, Jeff Chua wrote:
+>> It seems one of these commits in
+>> 8357422d4bf33bc2c35884d4016c3fc9efbbc1d2 is causing LVM2
+>> (LVM2.2.02.72) to fail.
+>
+> Did you (partially) bisect that or are you just guessing?
+> The only one there possibly relevant is 7e507eb6432afdd798d4c6dccf949b8c43ef151c.
 
-Hmm. Turning those "Maps lock" numbers into hex gives us
-
-  "Internal error: Maps lock 0xdbd000 < unlock 0xdbe000"
-
-which is a bit suggestive - it's "page aligned". I wonder if the
-"Maps" part refers to /proc/self/maps, and the process reads its own
-maps file to see where the segments are.
-
-The whole (and only) point of the whole stack guard page patch is to
-make sure that a grow-down stack segment always has a guard page as
-it's lowest page. And that guard page obviously means that the stack
-segment is now one page bigger (downwards). If the lvcreate binary for
-some reason looks at how big its virtual mappings are, and assumes
-that they must be some particular size, then that would explain the
-error message.
-
-I wonder who knows. I'm cc'ing lvm-devel@redhat.com on this email, to
-see if I can reach somebody who knows that that "Internal error"
-means.
-
-                             Linus
+Guessing only. Not bisecting yet. Prior to the git pull, everything
+was working fine. And double confirmed by going to prior to the pull,
+everything still worked.
 
 
+>> Previously good logical volumes cannot be mounted anymore, and new one
+>> cannot be created. All failed with the error ...
+>> "device-mapper: version ioctl failed: Inappropriate ioctl for device"
+>
+> What distribution? ?What version of udev package?
+
+Just a vanilla linux. No udev.
+
+
+> 'lvm version' output?
+
+  LVM version:     2.02.72(2) (2010-07-28)
+  Library version: 1.02.53 (2010-07-28)
+  Driver version:  4.17.0
+
+
+> Provide long listing of /dev/mapper and any dm/lvm devices in /dev.
+> Add -vvvv to your lvm command for better clues.
+
+Attached. good.vg01 is from prior to the patch. bad.vg01 is the bad one.
+
+>> Is there a new LVM2 for this new dm ioctl or the dm is not right?
+> There's no new dm ioctl.
+
+> I'm guessing you could have a configuration not covered by the latest userspace
+> libdevmapper - not handling some combination of kernel+userspace+initrd
+> packages correctly.  We already dealt with one udev+initrd combination that
+> failed last week.
+
+Could be. Please help.
+
+Thanks,
+Jeff
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vg01.good
+Type: application/octet-stream
+Size: 12486 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100815/1fd79fb4/attachment.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vg01.bad
+Type: application/octet-stream
+Size: 14373 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20100815/1fd79fb4/attachment-0001.obj>
