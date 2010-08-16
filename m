@@ -1,42 +1,43 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 16 Aug 2010 16:55:16 +0100
-Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
-In-Reply-To: <AANLkTik0naaXsicwLgLeBUA0u2+BQQbww-44Fs_cHXHH@mail.gmail.com>
-References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
-	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
-	<AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
-	<20100815130336.GA24055@agk-dp.fab.redhat.com>
-	<AANLkTinUuphqozgrSMNnrKxJrPWFp77y2TzdEwtuMD42@mail.gmail.com>
-	<4C6943A0.9030708@redhat.com>
-	<20100816142246.GA11907@agk-dp.fab.redhat.com>
-	<AANLkTik0naaXsicwLgLeBUA0u2+BQQbww-44Fs_cHXHH@mail.gmail.com>
-Message-ID: <20100816155516.GD11907@agk-dp.fab.redhat.com>
+Date: Mon, 16 Aug 2010 17:53:44 +0100
+Subject: [PATCH 3 of 3] Handle failures of mirror devices while under snapshot origin (bug 613829)
+In-Reply-To: <1281911721.30206.11.camel@hydrogen.msp.redhat.com>
+References: <1281911721.30206.11.camel@hydrogen.msp.redhat.com>
+Message-ID: <20100816165344.GG11907@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Aug 16, 2010 at 11:32:15PM +0800, Jeff Chua wrote:
-> It'll be nice if lvm returns a more meanful message like "ioctl
-> failed. Check /proc/misc to ensure the device is mapped correctly."
+On Sun, Aug 15, 2010 at 05:35:21PM -0500, Jon Brassow wrote:
+> At the moment, I've tried to minimize my changes by detecting which
+> type of suspend is necessary based on whether the mirror is being
+> altered (and if it is progressing from PARTIAL_LV to !PARTIAL_LV).
+> Upon resuming, I simply detect if the origin is not suspended, while
+> the mirror it rests on is suspended.  So, while this solution works,
+> it is somewhat incomplete because it does not run up the stack and
+> become available to any API.
  
-No need - LVM should be quite capable of detecting/dealing with the problem.
+I'd rather see this specified explicitly: The code that initiates
+the sequence should know if it's trying to process the origin or
+the device under the origin and it should pass that information
+through.
 
-> To take care of it automatically with udev, I'm doing this in rc.S
-> if [ -f /sys/devices/virtual/misc/device-mapper/dev ]
-> then
->         NODE=$(</sys/devices/virtual/misc/device-mapper/dev)
->         rm -f /dev/mapper/control
->         mknod /dev/mapper/control c ${NODE/:/ }
+> +static int _lv_activate_lv_bypass_origin(struct logical_volume *lv)
 
-The whole point of this change was to trigger the loading of dm-mod
-automatically for people using it as a module, based on using a known
-major/minor number instead of a dynamic one only known after the module
-has been loaded.  That needs to happen regardless of whether someone is
-using udev or not.  
+I don't think we need new cloned internal functions - just add another
+parameter.  I think that makes for a smaller and simpler patch.
 
-This can all be fixed easily enough in userspace.
+> @@ -49,6 +49,7 @@ struct dev_manager {
+> +	int bypass_origin;
+  
+Wonder how that's defined precisely in the general case.
+Maybe it's bypass_top_origin - and is that struct the right place to store it?
+And is it only bypassing it for certain operations, not all of them?
+
+I'm worrying that this patch still feels too large (I don't count any parameter
+changes in its size) for what it's trying to do.
 
 Alasdair
 
