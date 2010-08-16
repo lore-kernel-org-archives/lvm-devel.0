@@ -1,73 +1,66 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 30 Aug 2010 16:22:21 +0200
-Subject: [PATCH] Add timestamp in addition to index number for VG archive file names
-Message-ID: <4C7BBE9D.5030708@redhat.com>
+From: Jeff Chua <jeff.chua.linux@gmail.com>
+Date: Mon, 16 Aug 2010 15:32:34 -0000
+Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
+In-Reply-To: <20100816142246.GA11907@agk-dp.fab.redhat.com>
+References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
+	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
+	<AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
+	<20100815130336.GA24055@agk-dp.fab.redhat.com>
+	<AANLkTinUuphqozgrSMNnrKxJrPWFp77y2TzdEwtuMD42@mail.gmail.com>
+	<4C6943A0.9030708@redhat.com>
+	<20100816142246.GA11907@agk-dp.fab.redhat.com>
+Message-ID: <AANLkTik0naaXsicwLgLeBUA0u2+BQQbww-44Fs_cHXHH@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In certain configurations, we're not under a VG rw lock while trying to write
-a new archive file with VG metadata. A common example is using "vgs" while
-having the content of backup and archive directories empty. The code scans the
-content of these directories and tries to determine the final index that should
-be used in archive name. Since we're not under a lock, we can get into a race
-while choosing the index which could end up showing errors about not being able
-to rename to final archive name. Let's add simple timestamps to these archive
-names so we can avoid the race.
+On Mon, Aug 16, 2010 at 10:22 PM, Alasdair G Kergon <agk@redhat.com> wrote:
+> On Mon, Aug 16, 2010 at 03:56:48PM +0200, Zdenek Kabelac wrote:
+>> Dne 15.8.2010 16:13, Jeff Chua napsal(a):
+>> > With 2.6.35++, /dev/mapper/control has moved from 60 to 236!
+>
+> The latest LVM package made an assumption that it would be set up
+> correctly by udev (or manually in your case). ?We are updating
+> the userspace libdevmapper code to handle your circumstances
+> automatically.
 
-This should resolve part of the problem reported here:
-https://bugzilla.redhat.com/show_bug.cgi?id=615907
+It'll be nice if lvm returns a more meanful message like "ioctl
+failed. Check /proc/misc to ensure the device is mapped correctly."
 
-Though, I still haven't found the exact cause of the other problem mentioned in
-the bug report - the appeareance of blank temporary files. I'd need more log
-information to see what happened exactly - whether the export of the vg failed
-or whatever...
+To take care of it automatically with udev, I'm doing this in rc.S
 
-Peter
----
-diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
-index 95ac49d..d12ac4d 100644
---- a/lib/format_text/archive.c
-+++ b/lib/format_text/archive.c
-@@ -26,6 +26,7 @@
- #include <unistd.h>
- #include <sys/stat.h>
- #include <sys/file.h>
-+#include <sys/time.h>
- #include <fcntl.h>
- #include <time.h>
- 
-@@ -232,6 +233,7 @@ int archive_vg(struct volume_group *vg,
- 	FILE *fp = NULL;
- 	char temp_file[PATH_MAX], archive_name[PATH_MAX];
- 	struct dm_list *archives;
-+	struct timeval t;
- 
- 	/*
- 	 * Write the vg out to a temporary file.
-@@ -264,6 +266,11 @@ int archive_vg(struct volume_group *vg,
- 	if (!(archives = _scan_archive(vg->cmd->mem, vg->name, dir)))
- 		return_0;
- 
-+	if (gettimeofday(&t, NULL)) {
-+		log_sys_error("gettimeofday", "archive_vg");
-+		return 0;
-+	}
-+
- 	if (dm_list_empty(archives))
- 		ix = 0;
- 	else {
-@@ -273,7 +280,8 @@ int archive_vg(struct volume_group *vg,
- 
- 	for (i = 0; i < 10; i++) {
- 		if (dm_snprintf(archive_name, sizeof(archive_name),
--				 "%s/%s_%05u.vg", dir, vg->name, ix) < 0) {
-+				 "%s/%s_%05u-%ld-%ld.vg", dir, vg->name,
-+				  ix, t.tv_sec, t.tv_usec) < 0) {
- 			log_error("Archive file name too long.");
- 			return 0;
- 		}
+if [ -f /sys/devices/virtual/misc/device-mapper/dev ]
+then
+        NODE=$(</sys/devices/virtual/misc/device-mapper/dev)
+        rm -f /dev/mapper/control
+        mknod /dev/mapper/control c ${NODE/:/ }
+fi
+
+
+>> > # vgchange -a n vg01
+>> > ? Internal error: Maps lock 14217216 < unlock 14221312
+>> > ? Internal error: Maps lock 14221312 < unlock 14225408
+>> > ? Internal error: Maps lock 14225408 < unlock 14229504
+>> > ? Internal error: Maps lock 14229504 < unlock 14233600
+>> > ? Internal error: Maps lock 14233600 < unlock 14237696
+>> > ? Internal error: Maps lock 14237696 < unlock 14241792
+>> > ? 0 logical volume(s) in volume group "vg01" now active
+>
+>> http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=d7824370e26325c881b665350ce64fb0a4fde24a
+>
+> For those interested, originally we used mlockall() but in non-C locales
+> on some distributions glibc is configured to map 80MB+ of locale data
+> into memory without offering any way to unmap it. ?We don't need
+> that data locked and it increased the minimum memory required to install
+> a distribution as well as slowing down the LVM tools! ?So we had to
+> write a customised version that tries to skip locking unnecessary pages
+> like those.
+
+I see that now it's fixed with that commit.
+
+Thanks,
+Jeff
 
 
