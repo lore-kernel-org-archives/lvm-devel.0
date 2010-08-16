@@ -1,59 +1,82 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 20 Aug 2010 00:48:18 +0200
-Subject: [PATCH] Fix pvmove --abort to work even for empty pvmove LV
-Message-ID: <1282258098-24500-1-git-send-email-mbroz@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 16 Aug 2010 18:02:16 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20100816180216.19180.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If pvmove crashed and metadata contains pvmove LV
-but without miorrored segments, pvmove --abort
-will not repair the situation (and finish wth success!).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-08-16 18:02:15
 
-Fix it by allowing metadata update if aborting
-(thus removing pvmove LV) even if no moved LVs detected.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-(Tested on real metadata provided by an lvm user:-)
+Log message:
+	Fix for bug 612291: dm devices of split off mirror images are not removed
+	
+	DM devices were not handled properly on nodes in a cluster that were not
+	where the splitmirrors command was issued.  This was happening because
+	suspend_lv/resume_lv were being used in a place where activate_lv should
+	have been used.
+	
+	When the suspend/resume are issued on (effectively) new LVs, their
+	'resource' (UUID) is not located in the lv_hash.  Thus, both operations
+	turn into no-ops.  You can see this from the output of clvmd from one
+	of the remote nodes:
+	<snip>
+	do_suspend_lv, lock not already held
+	<snip>
+	do_resume_lv, lock not already held
+	
+	'activate_lv' enjoins the other nodes in the cluster to process the lock
+	and activate the new LV.  clvmd output from remote node as follows:
+	do_lock_lv: resource 'zMseY7CBuO3Ty09vXlplPAHzD0Y0CovjrTdv0R1VcwggMwPdYhutHErRcwm5Nd2S', cmd = 0x19 LCK_LV_ACTIVATE (READ|LV|NONBLOCK), flags = 0x84 (DMEVENTD_MONITOR ), memlock = 1
+	sync_lock: 'zMseY7CBuO3Ty09vXlplPAHzD0Y0CovjrTdv0R1VcwggMwPdYhutHErRcwm5Nd2S' mode:1 flags=1
+	sync_lock: returning lkid 27b0001
+	
+	Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- tools/polldaemon.c |    4 +++-
- tools/pvmove.c     |    3 ++-
- 2 files changed, 5 insertions(+), 2 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1702&r2=1.1703
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index d51f4bb..147d532 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -234,8 +234,10 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
- 		lv = lvl->lv;
- 		if (!(lv->status & parms->lv_type))
- 			continue;
--		if (!(name = parms->poll_fns->get_copy_name_from_lv(lv)))
-+		name = parms->poll_fns->get_copy_name_from_lv(lv);
-+		if (!name && !parms->aborting)
- 			continue;
-+
- 		/* FIXME Need to do the activation from _set_up_pvmove here
- 		 *       if it's not running and we're not aborting */
- 		if (_check_lv_status(cmd, vg, lv, name, parms, &finished) &&
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index c8a480f..0346ca3 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -520,7 +520,8 @@ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
- {
- 	int r = 1;
- 
--	if (!_detach_pvmove_mirror(cmd, lv_mirr)) {
-+	if (!dm_list_empty(lvs_changed) &&
-+	    !_detach_pvmove_mirror(cmd, lv_mirr)) {
- 		log_error("ABORTING: Removal of temporary mirror failed");
+--- LVM2/WHATS_NEW	2010/08/12 09:14:59	1.1702
++++ LVM2/WHATS_NEW	2010/08/16 18:02:14	1.1703
+@@ -1,5 +1,6 @@
+ Version 2.02.73 - 
+ ================================
++  Fix 'lvconvert --splitmirrors' in cluster operation.
+   Fix clvmd init script exit code when executed as non-root user.
+   Change default alignment of pe_start to 1MB.
+   Add --norestorefile option to pvcreate.
+--- LVM2/lib/metadata/mirror.c	2010/08/06 15:38:32	1.131
++++ LVM2/lib/metadata/mirror.c	2010/08/16 18:02:14	1.132
+@@ -719,19 +719,8 @@
  		return 0;
  	}
--- 
-1.7.1
+ 
+-	/*
+-	 * Suspend the newly split-off LV (balance memlock count
+-	 * and prepare for DM automated renaming via resume).
+-	 */
+-	if (!suspend_lv(lv->vg->cmd, new_lv)) {
+-		log_error("Failed to lock newly split LV, %s", new_lv->name);
+-		vg_revert(lv->vg);
+-		return 0;
+-	}
+-
+ 	/* Bring newly split-off LV into existence */
+-	log_very_verbose("Creating %s", new_lv->name);
+-	if (!resume_lv(lv->vg->cmd, new_lv)) {
++	if (!activate_lv(lv->vg->cmd, new_lv)) {
+ 		log_error("Failed to activate newly split LV, %s",
+ 			  new_lv->name);
+ 		return 0;
 
 
