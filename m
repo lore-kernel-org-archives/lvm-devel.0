@@ -1,48 +1,45 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 16 Aug 2010 15:22:46 +0100
-Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
-In-Reply-To: <4C6943A0.9030708@redhat.com>
-References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
-	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
-	<AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
-	<20100815130336.GA24055@agk-dp.fab.redhat.com>
-	<AANLkTinUuphqozgrSMNnrKxJrPWFp77y2TzdEwtuMD42@mail.gmail.com>
-	<4C6943A0.9030708@redhat.com>
-Message-ID: <20100816142246.GA11907@agk-dp.fab.redhat.com>
+Date: Mon, 16 Aug 2010 16:29:56 +0100
+Subject: [PATCH 1 of 3] Handle failures of mirror devices while under snapshot origin (bug 613829)
+In-Reply-To: <1281911325.30206.3.camel@hydrogen.msp.redhat.com>
+References: <1281911325.30206.3.camel@hydrogen.msp.redhat.com>
+Message-ID: <20100816152955.GB11907@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Aug 16, 2010 at 03:56:48PM +0200, Zdenek Kabelac wrote:
-> Dne 15.8.2010 16:13, Jeff Chua napsal(a):
-> > With 2.6.35++, /dev/mapper/control has moved from 60 to 236!
+On Sun, Aug 15, 2010 at 05:28:45PM -0500, Jon Brassow wrote:
+> Index: LVM2/lib/activate/activate.c
+> ===================================================================
+> --- LVM2.orig/lib/activate/activate.c
+> +++ LVM2/lib/activate/activate.c
+> @@ -772,7 +772,8 @@ int monitor_dev_for_events(struct cmd_co
+>  			if (!monitor_dev_for_events(cmd, dm_list_struct_base(snh,
+>  				    struct lv_segment, origin_list)->cow, monitor))
+>  				r = 0;
+> -		return r;
+> +		if (!lv_is_mirrored(lv))
+> +			return r;
+>  	}
 
-The latest LVM package made an assumption that it would be set up
-correctly by udev (or manually in your case).  We are updating
-the userspace libdevmapper code to handle your circumstances
-automatically.
+Please update the comment above this function too.
 
-> > # vgchange -a n vg01
-> >   Internal error: Maps lock 14217216 < unlock 14221312
-> >   Internal error: Maps lock 14221312 < unlock 14225408
-> >   Internal error: Maps lock 14225408 < unlock 14229504
-> >   Internal error: Maps lock 14229504 < unlock 14233600
-> >   Internal error: Maps lock 14233600 < unlock 14237696
-> >   Internal error: Maps lock 14237696 < unlock 14241792
-> >   0 logical volume(s) in volume group "vg01" now active
+> Index: LVM2/lib/mirror/mirrored.c
+> ===================================================================
+> --- LVM2.orig/lib/mirror/mirrored.c
+> +++ LVM2/lib/mirror/mirrored.c
+> @@ -631,18 +631,16 @@ static int _target_set_events(struct lv_
+>  			      int evmask __attribute__((unused)), int set)
 
-> http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=d7824370e26325c881b665350ce64fb0a4fde24a
+> -	if (!(uuid = build_dm_uuid(vg->cmd->mem, lv->lvid.s, NULL)))
+> +	if (!(uuid = build_dm_uuid(vg->cmd->mem, lv->lvid.s, suffix)))
+>  		return_0;
 
-For those interested, originally we used mlockall() but in non-C locales
-on some distributions glibc is configured to map 80MB+ of locale data
-into memory without offering any way to unmap it.  We don't need
-that data locked and it increased the minimum memory required to install
-a distribution as well as slowing down the LVM tools!  So we had to
-write a customised version that tries to skip locking unnecessary pages
-like those.
- 
+Does the other instance of build_dm_uuid() in _target_monitored() need a similar change?
+
 Alasdair
+
 
 
