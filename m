@@ -1,88 +1,101 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 18 Aug 2010 09:52:02 -0400
-Subject: [PATCH 11/11] Add tests for lvm_vg_get_property().
-In-Reply-To: <1282139522-31240-1-git-send-email-dwysocha@redhat.com>
-References: <1282139522-31240-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1282139522-31240-12-git-send-email-dwysocha@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 18 Aug 2010 20:57:11 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100818205711.18086.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-08-18 20:57:11
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/api/test.c |   34 ++++++++++++++++++++++++++++++++++
- 1 files changed, 34 insertions(+), 0 deletions(-)
+Modified files:
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
-diff --git a/test/api/test.c b/test/api/test.c
-index f89840c..6a1122c 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -18,6 +18,7 @@
- #include <readline/readline.h>
+Log message:
+	pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.250&r2=1.251
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.60&r2=1.61
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1710&r2=1.1711
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.411&r2=1.412
+
+--- LVM2/VERSION	2010/07/28 21:58:08	1.250
++++ LVM2/VERSION	2010/08/18 20:57:10	1.251
+@@ -1 +1 @@
+-2.02.73(2)-cvs (2010-07-28)
++2.02.73(2)-cvs (2010-09-18)
+--- LVM2/VERSION_DM	2010/07/28 21:58:08	1.60
++++ LVM2/VERSION_DM	2010/08/18 20:57:10	1.61
+@@ -1 +1 @@
+-1.02.54-cvs (2010-07-28)
++1.02.54-cvs (2010-08-18)
+--- LVM2/WHATS_NEW	2010/08/17 23:56:23	1.1710
++++ LVM2/WHATS_NEW	2010/08/18 20:57:10	1.1711
+@@ -1,5 +1,5 @@
+-Version 2.02.73 - 
+-================================
++Version 2.02.73 - 18th August 2010
++==================================
+   Fix potential for corruption during cluster mirror device failure.
+   Use 'SINGLENODE' instead of 'dead' in clvmd singlenode messages.
+   Ignore snapshots when performing mirror recovery beneath an origin.
+@@ -13,18 +13,17 @@
+   Enable snapshot monitoring by default when dmeventd is enabled.
+   Move cloned libdevmapper-event client code from segments into lib/activate.
+   Fix 'lvconvert --splitmirrors' in cluster operation.
+-  Fix clvmd init script exit code when executed as non-root user.
++  Fix clvmd init script exit code to return 4 when executed as non-root user.
+   Change default alignment of pe_start to 1MB.
+   Add --norestorefile option to pvcreate.
+   Require --restorefile when using pvcreate --uuid.
+   Recognise and give preference to md device partitions (blkext major).
+   Never scan internal LVM devices.
+-  Split-mirror operations were ignoring user-specified PVs.
++  Don't ignore user-specified PVs in split-mirror operations. (2.02.71)
+   Fix data corruption bug in cluster mirrors.
+   Require logical volume(s) to be explicitly named for lvconvert --merge.
+   Avoid changing aligned pe_start as a side-effect of very verbose logging.
+-  Fix 'void*' arithmetic warnings in dbg_malloc.c.
+-  Fix 'void*' arithmetic warning in some functions from libdm-iface.c.
++  Use built-in rule for device aliases: block/ < dm- < disk/ < mapper/ < other.
+   Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
+   Fix const warning in archive_file structure from archive.c.
+   Clean generated files .exported_symbols_generated, example.conf for distclean.
+@@ -35,7 +34,7 @@
+   Use #include <> not "" in lvm2app.h which gets installed on the system.
+   Make lib and liblvm.device-mapper wait for include file generation.
+   Fix configure to supply DEFAULT_RUN_DIR to Makefiles.
+-  Fix wrong number of mirror log at allocate policy
++  Fix allocation of wrong number of mirror logs with 'remove' fault policy.
  
- #include "lvm2app.h"
-+#include "libdevmapper.h"
- 
- #define MAX_ARGS 64
- 
-@@ -91,6 +92,8 @@ static void _show_help(void)
- 	       "Issue a lvm_config_override() with accept device filter\n");
- 	printf("'vg_get_tags vgname': "
- 	       "List the tags of a VG\n");
-+	printf("'vg_get_property vgname property_name': "
-+	       "Display the value of VG property\n");
- 	printf("'lv_get_tags vgname lvname': "
- 	       "List the tags of a LV\n");
- 	printf("'vg_{add|remove}_tag vgname tag': "
-@@ -546,6 +549,35 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
- 
-+static void _vg_get_property(char **argv, int argc)
-+{
-+	vg_t vg;
-+	struct lvm_property_value value;
-+	int rc;
-+
-+	if (argc < 3) {
-+		printf("Please enter vgname, field_id\n");
-+		return;
-+	}
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	rc = lvm_vg_get_property(vg, argv[2], &value);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("Obtaining value of property %s in VG %s",
-+	       argv[2], argv[1]);
-+	if (rc) {
-+		printf("\n");
-+		return;
-+	}
-+	if (value.is_string)
-+		printf(", value = %s\n", value.v.s_val);
-+	else
-+		printf(", value = %"PRIu64"\n", value.v.n_val);
-+}
-+
- static void _lv_get_tags(char **argv, int argc)
- {
- 	lv_t lv;
-@@ -796,6 +828,8 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_vg_tag(argv, argc, 0);
- 		} else if (!strcmp(argv[0], "vg_get_tags")) {
- 			_vg_get_tags(argv, argc);
-+		} else if (!strcmp(argv[0], "vg_get_property")) {
-+			_vg_get_property(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_add_tag")) {
- 			_lv_tag(argv, argc, 1);
- 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
--- 
-1.7.2.1
+ Version 2.02.72 - 28th July 2010  [CVE-2010-2526]
+ =================================================
+--- LVM2/WHATS_NEW_DM	2010/08/18 13:11:56	1.411
++++ LVM2/WHATS_NEW_DM	2010/08/18 20:57:10	1.412
+@@ -1,5 +1,5 @@
+-Version 1.02.54 - 
+-================================
++Version 1.02.54 - 18th August 2010
++==================================
+   Fix dm-mod autoloading logic to not assume control node is set correctly.
+   Add dmeventd/executable to lvm.conf to test alternative dmeventd.
+   Export dm_event_handler_set_dmeventd_path to override built-in dmeventd path.
+@@ -8,8 +8,10 @@
+   Assume dm-mod autoloading support is in kernel 2.6.36 and higher, not 2.6.35.
+   Fix udev rules to support udev database content generated by older rules.
+   Reinstate detection of inappropriate uevent with DISK_RO set and suppress it.
++  Fix regex ttree off-by-one error.
++  Add --enable-valgrind-pool to configure.
+   Fix segfault in regex matcher with characters of ordinal value > 127.
+-  Use built-in rule for device aliases: block/ < dm- < disk/ < mapper/ < other.
++  Fix 'void*' arithmetic warnings in dbg_malloc.c and libdm-iface.c.
+   Wait for node creation before displaying debug info in dmsetup.
+   Fix return status 0 for "dmsetup info -c -o help".
+   Add check for kernel semaphore support and disable udev_sync if not available.
 
 
