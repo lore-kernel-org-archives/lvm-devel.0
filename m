@@ -1,204 +1,337 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 18 Aug 2010 09:51:54 -0400
-Subject: [PATCH 03/11] Remove explicit double quotes from columns.h 'id' entries.
+Date: Wed, 18 Aug 2010 09:51:56 -0400
+Subject: [PATCH 05/11] Add properties.[ch] to lib/report, defined based on columns.h.
 In-Reply-To: <1282139522-31240-1-git-send-email-dwysocha@redhat.com>
 References: <1282139522-31240-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1282139522-31240-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1282139522-31240-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The 'id' entries in columns.h are the report field names.  Since these are
-unique, we'd like to use them in generation of 'get' / 'set' functions.
-As a step towards using them for this purpose, remove the explicit double
-quotes and use the macro '#' character to add the double quotes back when
-placing them into the '_fields' array 'id' member.
+Extend the existing reporting infrastructure definitions and structures
+to include a 'get' and 'set' function for each field.  We will provide
+a 'get' and 'set' function for each of these fields, which will be utilized
+by exported lvm2app functions.
+
+Define a default _not_implemented 'get' and 'set' function that just sets
+an errno and returns 0.  Future patches will actually implement the
+specific 'get' and 'set' functions for each property.  For read-only
+properties, only the 'get' function will be implemented.
+
+Define vg_get_property() function to query a property.  We will call
+this from a lvm2app function.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/columns.h |  150 +++++++++++++++++++++++++-------------------------
- lib/report/report.c  |    2 +-
- 2 files changed, 76 insertions(+), 76 deletions(-)
+ include/.symlinks.in    |    1 +
+ lib/Makefile.in         |    1 +
+ lib/report/properties.c |  226 +++++++++++++++++++++++++++++++++++++++++++++++
+ lib/report/properties.h |   37 ++++++++
+ 4 files changed, 265 insertions(+), 0 deletions(-)
+ create mode 100644 lib/report/properties.c
+ create mode 100644 lib/report/properties.h
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index dc5dae7..65d322b 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -57,84 +57,84 @@
-  */
- 
- /* *INDENT-OFF* */
--FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, "lv_uuid", "Unique identifier.", 0)
--FIELD(LVS, lv, STR, "LV", lvid, 4, lvname, "lv_name", "Name.  LVs created for internal use are enclosed in brackets.", 0)
--FIELD(LVS, lv, STR, "Path", lvid, 4, lvpath, "lv_path", "Full pathname for LV.", 0)
--FIELD(LVS, lv, STR, "Attr", lvid, 4, lvstatus, "lv_attr", "Various attributes - see man page.", 0)
--FIELD(LVS, lv, NUM, "Maj", major, 3, int32, "lv_major", "Persistent major number or -1 if not persistent.", 0)
--FIELD(LVS, lv, NUM, "Min", minor, 3, int32, "lv_minor", "Persistent minor number or -1 if not persistent.", 0)
--FIELD(LVS, lv, NUM, "Rahead", lvid, 6, lvreadahead, "lv_read_ahead", "Read ahead setting in current units.", 0)
--FIELD(LVS, lv, STR, "KMaj", lvid, 4, lvkmaj, "lv_kernel_major", "Currently assigned major number or -1 if LV is not active.", 0)
--FIELD(LVS, lv, STR, "KMin", lvid, 4, lvkmin, "lv_kernel_minor", "Currently assigned minor number or -1 if LV is not active.", 0)
--FIELD(LVS, lv, NUM, "KRahead", lvid, 7, lvkreadahead, "lv_kernel_read_ahead", "Currently-in-use read ahead setting in current units.", 0)
--FIELD(LVS, lv, NUM, "LSize", size, 5, size64, "lv_size", "Size of LV in current units.", 0)
--FIELD(LVS, lv, NUM, "#Seg", lvid, 4, lvsegcount, "seg_count", "Number of segments in LV.", 0)
--FIELD(LVS, lv, STR, "Origin", lvid, 6, origin, "origin", "For snapshots, the origin device of this LV.", 0)
--FIELD(LVS, lv, NUM, "OSize", lvid, 5, originsize, "origin_size", "For snapshots, the size of the origin device of this LV.", 0)
--FIELD(LVS, lv, NUM, "Snap%", lvid, 6, snpercent, "snap_percent", "For snapshots, the percentage full if LV is active.", 0)
--FIELD(LVS, lv, NUM, "Copy%", lvid, 6, copypercent, "copy_percent", "For mirrors and pvmove, current percentage in-sync.", 0)
--FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, "move_pv", "For pvmove, Source PV of temporary LV created by pvmove.", 0)
--FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, "convert_lv", "For lvconvert, Name of temporary LV created by lvconvert.", 0)
--FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, "lv_tags", "Tags, if any.", 0)
--FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, "mirror_log", "For mirrors, the LV holding the synchronisation log.", 0)
--FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, "modules", "Kernel device-mapper modules required for this LV.", 0)
-+FIELD(LVS, lv, STR, "LV UUID", lvid.id[1], 38, uuid, lv_uuid, "Unique identifier.", 0)
-+FIELD(LVS, lv, STR, "LV", lvid, 4, lvname, lv_name, "Name.  LVs created for internal use are enclosed in brackets.", 0)
-+FIELD(LVS, lv, STR, "Path", lvid, 4, lvpath, lv_path, "Full pathname for LV.", 0)
-+FIELD(LVS, lv, STR, "Attr", lvid, 4, lvstatus, lv_attr, "Various attributes - see man page.", 0)
-+FIELD(LVS, lv, NUM, "Maj", major, 3, int32, lv_major, "Persistent major number or -1 if not persistent.", 0)
-+FIELD(LVS, lv, NUM, "Min", minor, 3, int32, lv_minor, "Persistent minor number or -1 if not persistent.", 0)
-+FIELD(LVS, lv, NUM, "Rahead", lvid, 6, lvreadahead, lv_read_ahead, "Read ahead setting in current units.", 0)
-+FIELD(LVS, lv, STR, "KMaj", lvid, 4, lvkmaj, lv_kernel_major, "Currently assigned major number or -1 if LV is not active.", 0)
-+FIELD(LVS, lv, STR, "KMin", lvid, 4, lvkmin, lv_kernel_minor, "Currently assigned minor number or -1 if LV is not active.", 0)
-+FIELD(LVS, lv, NUM, "KRahead", lvid, 7, lvkreadahead, lv_kernel_read_ahead, "Currently-in-use read ahead setting in current units.", 0)
-+FIELD(LVS, lv, NUM, "LSize", size, 5, size64, lv_size, "Size of LV in current units.", 0)
-+FIELD(LVS, lv, NUM, "#Seg", lvid, 4, lvsegcount, seg_count, "Number of segments in LV.", 0)
-+FIELD(LVS, lv, STR, "Origin", lvid, 6, origin, origin, "For snapshots, the origin device of this LV.", 0)
-+FIELD(LVS, lv, NUM, "OSize", lvid, 5, originsize, origin_size, "For snapshots, the size of the origin device of this LV.", 0)
-+FIELD(LVS, lv, NUM, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
-+FIELD(LVS, lv, NUM, "Copy%", lvid, 6, copypercent, copy_percent, "For mirrors and pvmove, current percentage in-sync.", 0)
-+FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
-+FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
-+FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, lv_tags, "Tags, if any.", 0)
-+FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
-+FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, modules, "Kernel device-mapper modules required for this LV.", 0)
- 
--FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, "pv_fmt", "Type of metadata.", 0)
--FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, "pv_uuid", "Unique identifier.", 0)
--FIELD(LABEL, pv, NUM, "DevSize", id, 7, devsize, "dev_size", "Size of underlying device in current units.", 0)
--FIELD(LABEL, pv, STR, "PV", dev, 10, dev_name, "pv_name", "Name.", 0)
--FIELD(LABEL, pv, NUM, "PMdaFree", id, 9, pvmdafree, "pv_mda_free", "Free metadata area space on this device in current units.", 0)
--FIELD(LABEL, pv, NUM, "PMdaSize", id, 9, pvmdasize, "pv_mda_size", "Size of smallest metadata area on this device in current units.", 0)
-+FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
-+FIELD(LABEL, pv, STR, "PV UUID", id, 38, uuid, pv_uuid, "Unique identifier.", 0)
-+FIELD(LABEL, pv, NUM, "DevSize", id, 7, devsize, dev_size, "Size of underlying device in current units.", 0)
-+FIELD(LABEL, pv, STR, "PV", dev, 10, dev_name, pv_name, "Name.", 0)
-+FIELD(LABEL, pv, NUM, "PMdaFree", id, 9, pvmdafree, pv_mda_free, "Free metadata area space on this device in current units.", 0)
-+FIELD(LABEL, pv, NUM, "PMdaSize", id, 9, pvmdasize, pv_mda_size, "Size of smallest metadata area on this device in current units.", 0)
- 
--FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, "pe_start", "Offset to the start of data on the underlying device.", 0)
--FIELD(PVS, pv, NUM, "PSize", id, 5, pvsize, "pv_size", "Size of PV in current units.", 0)
--FIELD(PVS, pv, NUM, "PFree", id, 5, pvfree, "pv_free", "Total amount of unallocated space in current units.", 0)
--FIELD(PVS, pv, NUM, "Used", id, 4, pvused, "pv_used", "Total amount of allocated space in current units.", 0)
--FIELD(PVS, pv, STR, "Attr", status, 4, pvstatus, "pv_attr", "Various attributes - see man page.", 0)
--FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, "pv_pe_count", "Total number of Physical Extents.", 0)
--FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, "pv_pe_alloc_count", "Total number of allocated Physical Extents.", 0)
--FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, "pv_tags", "Tags, if any.", 0)
--FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, "pv_mda_count", "Number of metadata areas on this device.", 0)
--FIELD(PVS, pv, NUM, "#PMdaUse", id, 8, pvmdasused, "pv_mda_used_count", "Number of metadata areas in use on this device.", 0)
-+FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, pe_start, "Offset to the start of data on the underlying device.", 0)
-+FIELD(PVS, pv, NUM, "PSize", id, 5, pvsize, pv_size, "Size of PV in current units.", 0)
-+FIELD(PVS, pv, NUM, "PFree", id, 5, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
-+FIELD(PVS, pv, NUM, "Used", id, 4, pvused, pv_used, "Total amount of allocated space in current units.", 0)
-+FIELD(PVS, pv, STR, "Attr", status, 4, pvstatus, pv_attr, "Various attributes - see man page.", 0)
-+FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, pv_pe_count, "Total number of Physical Extents.", 0)
-+FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, pv_pe_alloc_count, "Total number of allocated Physical Extents.", 0)
-+FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, pv_tags, "Tags, if any.", 0)
-+FIELD(PVS, pv, NUM, "#PMda", id, 5, pvmdas, pv_mda_count, "Number of metadata areas on this device.", 0)
-+FIELD(PVS, pv, NUM, "#PMdaUse", id, 8, pvmdasused, pv_mda_used_count, "Number of metadata areas in use on this device.", 0)
- 
--FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, "vg_fmt", "Type of metadata.", 0)
--FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, "vg_uuid", "Unique identifier.", 0)
--FIELD(VGS, vg, STR, "VG", name, 4, string, "vg_name", "Name.", 0)
--FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, "vg_attr", "Various attributes - see man page.", 0)
--FIELD(VGS, vg, NUM, "VSize", cmd, 5, vgsize, "vg_size", "Total size of VG in current units.", 0)
--FIELD(VGS, vg, NUM, "VFree", cmd, 5, vgfree, "vg_free", "Total amount of free space in current units.", 0)
--FIELD(VGS, vg, STR, "SYS ID", system_id, 6, string, "vg_sysid", "System ID indicating when and where it was created.", 0)
--FIELD(VGS, vg, NUM, "Ext", extent_size, 3, size32, "vg_extent_size", "Size of Physical Extents in current units.", 0)
--FIELD(VGS, vg, NUM, "#Ext", extent_count, 4, uint32, "vg_extent_count", "Total number of Physical Extents.", 0)
--FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, "vg_free_count", "Total number of unallocated Physical Extents.", 0)
--FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, "max_lv", "Maximum number of LVs allowed in VG or 0 if unlimited.", 0)
--FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, "max_pv", "Maximum number of PVs allowed in VG or 0 if unlimited.", 0)
--FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, "pv_count", "Number of PVs.", 0)
--FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, "lv_count", "Number of LVs.", 0)
--FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, "snap_count", "Number of snapshots.", 0)
--FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, "vg_seqno", "Revision number of internal metadata.  Incremented whenever it changes.", 0)
--FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, "vg_tags", "Tags, if any.", 0)
--FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, "vg_mda_count", "Number of metadata areas on this VG.", 0)
--FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, "vg_mda_used_count", "Number of metadata areas in use on this VG.", 0)
--FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, "vg_mda_free", "Free metadata area space for this VG in current units.", 0)
--FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, "vg_mda_size", "Size of smallest metadata area for this VG in current units.", 0)
--FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, "vg_mda_copies", "Target number of in use metadata areas in the VG.", 0)
-+FIELD(VGS, vg, STR, "Fmt", cmd, 3, vgfmt, vg_fmt, "Type of metadata.", 0)
-+FIELD(VGS, vg, STR, "VG UUID", id, 38, uuid, vg_uuid, "Unique identifier.", 0)
-+FIELD(VGS, vg, STR, "VG", name, 4, string, vg_name, "Name.", 0)
-+FIELD(VGS, vg, STR, "Attr", cmd, 5, vgstatus, vg_attr, "Various attributes - see man page.", 0)
-+FIELD(VGS, vg, NUM, "VSize", cmd, 5, vgsize, vg_size, "Total size of VG in current units.", 0)
-+FIELD(VGS, vg, NUM, "VFree", cmd, 5, vgfree, vg_free, "Total amount of free space in current units.", 0)
-+FIELD(VGS, vg, STR, "SYS ID", system_id, 6, string, vg_sysid, "System ID indicating when and where it was created.", 0)
-+FIELD(VGS, vg, NUM, "Ext", extent_size, 3, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
-+FIELD(VGS, vg, NUM, "#Ext", extent_count, 4, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
-+FIELD(VGS, vg, NUM, "Free", free_count, 4, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
-+FIELD(VGS, vg, NUM, "MaxLV", max_lv, 5, uint32, max_lv, "Maximum number of LVs allowed in VG or 0 if unlimited.", 0)
-+FIELD(VGS, vg, NUM, "MaxPV", max_pv, 5, uint32, max_pv, "Maximum number of PVs allowed in VG or 0 if unlimited.", 0)
-+FIELD(VGS, vg, NUM, "#PV", pv_count, 3, uint32, pv_count, "Number of PVs.", 0)
-+FIELD(VGS, vg, NUM, "#LV", cmd, 3, lvcount, lv_count, "Number of LVs.", 0)
-+FIELD(VGS, vg, NUM, "#SN", cmd, 3, snapcount, snap_count, "Number of snapshots.", 0)
-+FIELD(VGS, vg, NUM, "Seq", seqno, 3, uint32, vg_seqno, "Revision number of internal metadata.  Incremented whenever it changes.", 0)
-+FIELD(VGS, vg, STR, "VG Tags", tags, 7, tags, vg_tags, "Tags, if any.", 0)
-+FIELD(VGS, vg, NUM, "#VMda", cmd, 5, vgmdas, vg_mda_count, "Number of metadata areas on this VG.", 0)
-+FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, vg_mda_used_count, "Number of metadata areas in use on this VG.", 0)
-+FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, vg_mda_free, "Free metadata area space for this VG in current units.", 0)
-+FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, vg_mda_size, "Size of smallest metadata area for this VG in current units.", 0)
-+FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 0)
- 
--FIELD(SEGS, seg, STR, "Type", list, 4, segtype, "segtype", "Type of LV segment.", 0)
--FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, "stripes", "Number of stripes or mirror legs.", 0)
--FIELD(SEGS, seg, NUM, "Stripe", stripe_size, 6, size32, "stripesize", "For stripes, amount of data placed on one device before switching to the next.", 0)
--FIELD(SEGS, seg, NUM, "Stripe", stripe_size, 6, size32, "stripe_size", "For stripes, amount of data placed on one device before switching to the next.", 0)
--FIELD(SEGS, seg, NUM, "Region", region_size, 6, size32, "regionsize", "For mirrors, the unit of data copied when synchronising devices.", 0)
--FIELD(SEGS, seg, NUM, "Region", region_size, 6, size32, "region_size", "For mirrors, the unit of data copied when synchronising devices.", 0)
--FIELD(SEGS, seg, NUM, "Chunk", list, 5, chunksize, "chunksize", "For snapshots, the unit of data used when tracking changes.", 0)
--FIELD(SEGS, seg, NUM, "Chunk", list, 5, chunksize, "chunk_size", "For snapshots, the unit of data used when tracking changes.", 0)
--FIELD(SEGS, seg, NUM, "Start", list, 5, segstart, "seg_start", "Offset within the LV to the start of the segment in current units.", 0)
--FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, "seg_start_pe", "Offset within the LV to the start of the segment in physical extents.", 0)
--FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, "seg_size", "Size of segment in current units.", 0)
--FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, "seg_tags", "Tags, if any.", 0)
--FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, "seg_pe_ranges", "Ranges of Physical Extents of underlying devices in command line format.", 0)
--FIELD(SEGS, seg, STR, "Devices", list, 7, devices, "devices", "Underlying devices used with starting extent numbers.", 0)
-+FIELD(SEGS, seg, STR, "Type", list, 4, segtype, segtype, "Type of LV segment.", 0)
-+FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, stripes, "Number of stripes or mirror legs.", 0)
-+FIELD(SEGS, seg, NUM, "Stripe", stripe_size, 6, size32, stripesize, "For stripes, amount of data placed on one device before switching to the next.", 0)
-+FIELD(SEGS, seg, NUM, "Stripe", stripe_size, 6, size32, stripe_size, "For stripes, amount of data placed on one device before switching to the next.", 0)
-+FIELD(SEGS, seg, NUM, "Region", region_size, 6, size32, regionsize, "For mirrors, the unit of data copied when synchronising devices.", 0)
-+FIELD(SEGS, seg, NUM, "Region", region_size, 6, size32, region_size, "For mirrors, the unit of data copied when synchronising devices.", 0)
-+FIELD(SEGS, seg, NUM, "Chunk", list, 5, chunksize, chunksize, "For snapshots, the unit of data used when tracking changes.", 0)
-+FIELD(SEGS, seg, NUM, "Chunk", list, 5, chunksize, chunk_size, "For snapshots, the unit of data used when tracking changes.", 0)
-+FIELD(SEGS, seg, NUM, "Start", list, 5, segstart, seg_start, "Offset within the LV to the start of the segment in current units.", 0)
-+FIELD(SEGS, seg, NUM, "Start", list, 5, segstartpe, seg_start_pe, "Offset within the LV to the start of the segment in physical extents.", 0)
-+FIELD(SEGS, seg, NUM, "SSize", list, 5, segsize, seg_size, "Size of segment in current units.", 0)
-+FIELD(SEGS, seg, STR, "Seg Tags", tags, 8, tags, seg_tags, "Tags, if any.", 0)
-+FIELD(SEGS, seg, STR, "PE Ranges", list, 9, peranges, seg_pe_ranges, "Ranges of Physical Extents of underlying devices in command line format.", 0)
-+FIELD(SEGS, seg, STR, "Devices", list, 7, devices, devices, "Underlying devices used with starting extent numbers.", 0)
- 
--FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, "pvseg_start", "Physical Extent number of start of segment.", 0)
--FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, "pvseg_size", "Number of extents in segment.", 0)
-+FIELD(PVSEGS, pvseg, NUM, "Start", pe, 5, uint32, pvseg_start, "Physical Extent number of start of segment.", 0)
-+FIELD(PVSEGS, pvseg, NUM, "SSize", len, 5, uint32, pvseg_size, "Number of extents in segment.", 0)
- /* *INDENT-ON* */
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 23c362f..703060b 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1197,7 +1197,7 @@ static const struct dm_report_object_type _report_types[] = {
- #define NUM DM_REPORT_FIELD_TYPE_NUMBER
- #define FIELD(type, strct, sorttype, head, field, width, func, id, desc, writeable) \
- 	{type, sorttype, offsetof(type_ ## strct, field), width, \
--	 id, head, &_ ## func ## _disp, desc},
-+	 #id, head, &_ ## func ## _disp, desc},
- 
- typedef struct physical_volume type_pv;
- typedef struct logical_volume type_lv;
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index 5a7e556..2b15844 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -50,6 +50,7 @@
+ @top_builddir@/lib/misc/lvm-version.h
+ @top_srcdir@/lib/misc/lvm-wrappers.h
+ @top_srcdir@/lib/misc/sharedlib.h
++ at top_srcdir@/lib/report/properties.h
+ @top_srcdir@/lib/report/report.h
+ @top_srcdir@/lib/uuid/uuid.h
+ @top_srcdir@/libdm/libdevmapper.h
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index ae81040..aa84324 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -89,6 +89,7 @@ SOURCES =\
+ 	misc/lvm-wrappers.c \
+ 	misc/util.c \
+ 	mm/memlock.c \
++	report/properties.c \
+ 	report/report.c \
+ 	striped/striped.c \
+ 	uuid/uuid.c \
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+new file mode 100644
+index 0000000..a914406
+--- /dev/null
++++ b/lib/report/properties.c
+@@ -0,0 +1,226 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include <errno.h>
++
++#include "libdevmapper.h"
++#include "properties.h"
++#include "lvm-logging.h"
++#include "lvm-types.h"
++#include "metadata.h"
++
++static int _not_implemented(void *obj, struct lvm_property_type *prop)
++{
++	log_errno(ENOSYS, "Function not implemented");
++	return 0;
++}
++
++/* PV */
++#define _pv_fmt_get _not_implemented
++#define _pv_fmt_set _not_implemented
++#define _pv_uuid_get _not_implemented
++#define _pv_uuid_set _not_implemented
++#define _dev_size_get _not_implemented
++#define _dev_size_set _not_implemented
++#define _pv_name_get _not_implemented
++#define _pv_name_set _not_implemented
++#define _pv_mda_free_get _not_implemented
++#define _pv_mda_free_set _not_implemented
++#define _pv_mda_size_get _not_implemented
++#define _pv_mda_size_set _not_implemented
++#define _pe_start_get _not_implemented
++#define _pe_start_set _not_implemented
++#define _pv_size_get _not_implemented
++#define _pv_size_set _not_implemented
++#define _pv_free_get _not_implemented
++#define _pv_free_set _not_implemented
++#define _pv_used_get _not_implemented
++#define _pv_used_set _not_implemented
++#define _pv_attr_get _not_implemented
++#define _pv_attr_set _not_implemented
++#define _pv_pe_count_get _not_implemented
++#define _pv_pe_count_set _not_implemented
++#define _pv_pe_alloc_count_get _not_implemented
++#define _pv_pe_alloc_count_set _not_implemented
++#define _pv_tags_get _not_implemented
++#define _pv_tags_set _not_implemented
++#define _pv_mda_count_get _not_implemented
++#define _pv_mda_count_set _not_implemented
++#define _pv_mda_used_count_get _not_implemented
++#define _pv_mda_used_count_set _not_implemented
++
++/* LV */
++#define _lv_uuid_get _not_implemented
++#define _lv_uuid_set _not_implemented
++#define _lv_name_get _not_implemented
++#define _lv_name_set _not_implemented
++#define _lv_path_get _not_implemented
++#define _lv_path_set _not_implemented
++#define _lv_attr_get _not_implemented
++#define _lv_attr_set _not_implemented
++#define _lv_major_get _not_implemented
++#define _lv_major_set _not_implemented
++#define _lv_minor_get _not_implemented
++#define _lv_minor_set _not_implemented
++#define _lv_read_ahead_get _not_implemented
++#define _lv_read_ahead_set _not_implemented
++#define _lv_kernel_major_get _not_implemented
++#define _lv_kernel_major_set _not_implemented
++#define _lv_kernel_minor_get _not_implemented
++#define _lv_kernel_minor_set _not_implemented
++#define _lv_kernel_read_ahead_get _not_implemented
++#define _lv_kernel_read_ahead_set _not_implemented
++#define _lv_size_get _not_implemented
++#define _lv_size_set _not_implemented
++#define _seg_count_get _not_implemented
++#define _seg_count_set _not_implemented
++#define _origin_get _not_implemented
++#define _origin_set _not_implemented
++#define _origin_size_get _not_implemented
++#define _origin_size_set _not_implemented
++#define _snap_percent_get _not_implemented
++#define _snap_percent_set _not_implemented
++#define _copy_percent_get _not_implemented
++#define _copy_percent_set _not_implemented
++#define _move_pv_get _not_implemented
++#define _move_pv_set _not_implemented
++#define _convert_lv_get _not_implemented
++#define _convert_lv_set _not_implemented
++#define _lv_tags_get _not_implemented
++#define _lv_tags_set _not_implemented
++#define _mirror_log_get _not_implemented
++#define _mirror_log_set _not_implemented
++#define _modules_get _not_implemented
++#define _modules_set _not_implemented
++
++/* VG */
++#define _vg_fmt_get _not_implemented
++#define _vg_fmt_set _not_implemented
++#define _vg_uuid_get _not_implemented
++#define _vg_uuid_set _not_implemented
++#define _vg_name_get _not_implemented
++#define _vg_name_set _not_implemented
++#define _vg_attr_get _not_implemented
++#define _vg_attr_set _not_implemented
++#define _vg_size_get _not_implemented
++#define _vg_size_set _not_implemented
++#define _vg_free_get _not_implemented
++#define _vg_free_set _not_implemented
++#define _vg_sysid_get _not_implemented
++#define _vg_sysid_set _not_implemented
++#define _vg_extent_size_get _not_implemented
++#define _vg_extent_size_set _not_implemented
++#define _vg_extent_count_get _not_implemented
++#define _vg_extent_count_set _not_implemented
++#define _vg_free_count_get _not_implemented
++#define _vg_free_count_set _not_implemented
++#define _max_lv_get _not_implemented
++#define _max_lv_set _not_implemented
++#define _max_pv_get _not_implemented
++#define _max_pv_set _not_implemented
++#define _pv_count_get _not_implemented
++#define _pv_count_set _not_implemented
++#define _lv_count_get _not_implemented
++#define _lv_count_set _not_implemented
++#define _snap_count_get _not_implemented
++#define _snap_count_set _not_implemented
++#define _vg_seqno_get _not_implemented
++#define _vg_seqno_set _not_implemented
++#define _vg_tags_get _not_implemented
++#define _vg_tags_set _not_implemented
++#define _vg_mda_count_get _not_implemented
++#define _vg_mda_count_set _not_implemented
++#define _vg_mda_used_count_get _not_implemented
++#define _vg_mda_used_count_set _not_implemented
++#define _vg_mda_free_get _not_implemented
++#define _vg_mda_free_set _not_implemented
++#define _vg_mda_size_get _not_implemented
++#define _vg_mda_size_set _not_implemented
++#define _vg_mda_copies_get _not_implemented
++#define _vg_mda_copies_set _not_implemented
++
++/* LVSEG */
++#define _segtype_get _not_implemented
++#define _segtype_set _not_implemented
++#define _stripes_get _not_implemented
++#define _stripes_set _not_implemented
++#define _stripesize_get _not_implemented
++#define _stripesize_set _not_implemented
++#define _stripe_size_get _not_implemented
++#define _stripe_size_set _not_implemented
++#define _regionsize_get _not_implemented
++#define _regionsize_set _not_implemented
++#define _region_size_get _not_implemented
++#define _region_size_set _not_implemented
++#define _chunksize_get _not_implemented
++#define _chunksize_set _not_implemented
++#define _chunk_size_get _not_implemented
++#define _chunk_size_set _not_implemented
++#define _seg_start_get _not_implemented
++#define _seg_start_set _not_implemented
++#define _seg_start_pe_get _not_implemented
++#define _seg_start_pe_set _not_implemented
++#define _seg_size_get _not_implemented
++#define _seg_size_set _not_implemented
++#define _seg_tags_get _not_implemented
++#define _seg_tags_set _not_implemented
++#define _seg_pe_ranges_get _not_implemented
++#define _seg_pe_ranges_set _not_implemented
++#define _devices_get _not_implemented
++#define _devices_set _not_implemented
++
++
++/* PVSEG */
++#define _pvseg_start_get _not_implemented
++#define _pvseg_start_set _not_implemented
++#define _pvseg_size_get _not_implemented
++#define _pvseg_size_set _not_implemented
++
++
++#define STR DM_REPORT_FIELD_TYPE_STRING
++#define NUM DM_REPORT_FIELD_TYPE_NUMBER
++#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, writeable) \
++	{ #id, writeable, sorttype == STR, { .n_val = 0 }, _ ## id ## _get, _ ## id ## _set },
++
++struct lvm_property_type _properties[] = {
++#include "columns.h"
++	{ "", 0, 0, { .n_val = 0 }, _not_implemented, _not_implemented },
++};
++
++#undef STR
++#undef NUM
++#undef FIELD
++
++
++int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
++{
++	struct lvm_property_type *p;
++
++	p = _properties;
++	while (p->id[0]) {
++		if (!strcmp(p->id, prop->id))
++			break;
++		p++;
++	}
++	if (!p->id[0]) {
++		log_errno(EINVAL, "Invalid property name %s", prop->id);
++		return 0;
++	}
++
++	*prop = *p;
++	if (!p->get((void *)vg, prop)) {
++		return 0;
++	}
++	return 1;
++}
+diff --git a/lib/report/properties.h b/lib/report/properties.h
+new file mode 100644
+index 0000000..2e1381d
+--- /dev/null
++++ b/lib/report/properties.h
+@@ -0,0 +1,37 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++#ifndef _LVM_PROPERTIES_H
++#define _LVM_PROPERTIES_H
++
++#include "libdevmapper.h"
++#include "lvm-types.h"
++#include "metadata.h"
++
++#define LVM_PROPERTY_NAME_LEN DM_REPORT_FIELD_TYPE_ID_LEN
++
++struct lvm_property_type {
++	char id[LVM_PROPERTY_NAME_LEN];
++	unsigned is_writeable;
++	unsigned is_string;
++	union {
++		char *s_val;
++		uint64_t n_val;
++	} v;
++	int (*get) (void *obj, struct lvm_property_type *prop);
++	int (*set) (void *obj, struct lvm_property_type *prop);
++};
++
++int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop);
++
++#endif
 -- 
 1.7.2.1
 
