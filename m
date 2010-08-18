@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 17 Aug 2010 23:56:25 -0000
-Subject: LVM2 ./WHATS_NEW daemons/cmirrord/functions.c
-Message-ID: <20100817235625.9805.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 18 Aug 2010 13:11:58 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20100818131158.31496.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,136 +10,193 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-08-17 23:56:24
+Changes by:	prajnoha at sourceware.org	2010-08-18 13:11:57
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/cmirrord: functions.c 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Fix for bug 596453: multiple mirror image failures cause lvm repair...
+	Fix dm-mod autoloading logic to not assume control node is set correctly.
 	
-	The lvm repair issues I believe are the superficial symptoms of this
-	bug - there are worse issues that are not as clearly seen.  From my
-	inline comments:
-	* If the mirror was successfully recovered, we want to always
-	* force every machine to write to all devices - otherwise,
-	* corruption will occur.  Here's how:
-	*    Node1 suffers a failure and marks a region out-of-sync
-	*    Node2 attempts a write, gets by is_remote_recovering,
-	*          and queries the sync status of the region - finding
-	*          it out-of-sync.
-	*    Node2 thinks the write should be a nosync write, but it
-	*          hasn't suffered the drive failure that Node1 has yet.
-	*          It then issues a generic_make_request directly to
-	*          the primary image only - which is exactly the device
-	*          that has suffered the failure.
-	*    Node2 suffers a lost write - which completely bypasses the
-	*          mirror layer because it had gone through generic_m_r.
-	*    The file system will likely explode at this point due to
-	*    I/O errors.  If it wasn't the primary that failed, it is
-	*    easily possible in this case to issue writes to just one
-	*    of the remaining images - also leaving the mirror inconsistent.
-	*
-	* We let in_sync() return 1 in a cluster regardless of what is
-	* in the bitmap once recovery has successfully completed on a
-	* mirror.  This ensures the mirroring code will continue to
-	* attempt to write to all mirror images.  The worst that can
-	* happen for reads is that additional read attempts may be
-	* taken.
+	We can't rely on the fact that udev should prepare the node with right major
+	and minor number to trigger the module autoloading. We have to take into
+	account that the node could be missing or it could exist with improper
+	major and minor number assigned (e.g. from previous kernel versions in
+	an environment with static nodes and without udev). Make any corrections
+	if needed!
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1709&r2=1.1710
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.410&r2=1.411
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.80&r2=1.81
 
---- LVM2/WHATS_NEW	2010/08/17 19:25:05	1.1709
-+++ LVM2/WHATS_NEW	2010/08/17 23:56:23	1.1710
+--- LVM2/WHATS_NEW_DM	2010/08/16 22:54:35	1.410
++++ LVM2/WHATS_NEW_DM	2010/08/18 13:11:56	1.411
 @@ -1,5 +1,6 @@
- Version 2.02.73 - 
+ Version 1.02.54 - 
  ================================
-+  Fix potential for corruption during cluster mirror device failure.
-   Use 'SINGLENODE' instead of 'dead' in clvmd singlenode messages.
-   Ignore snapshots when performing mirror recovery beneath an origin.
-   Pass LCK_ORIGIN_ONLY flag around cluster.
---- LVM2/daemons/cmirrord/functions.c	2010/08/04 18:18:18	1.22
-+++ LVM2/daemons/cmirrord/functions.c	2010/08/17 23:56:24	1.23
-@@ -54,6 +54,7 @@
++  Fix dm-mod autoloading logic to not assume control node is set correctly.
+   Add dmeventd/executable to lvm.conf to test alternative dmeventd.
+   Export dm_event_handler_set_dmeventd_path to override built-in dmeventd path.
+   Generate libdevmapper-event exported symbols.
+--- LVM2/libdm/ioctl/libdm-iface.c	2010/08/16 11:13:18	1.80
++++ LVM2/libdm/ioctl/libdm-iface.c	2010/08/18 13:11:57	1.81
+@@ -58,6 +58,15 @@
  
- 	time_t delay; /* limits how fast a resume can happen after suspend */
- 	int touched;
-+	int in_sync;  /* An in-sync that stays set until suspend/resume */
- 	uint32_t region_size;
- 	uint32_t region_count;
- 	uint64_t sync_count;
-@@ -720,6 +721,7 @@
- 	if (!lc)
- 		return -EINVAL;
+ #define NUMBER_OF_MAJORS 4096
  
-+	lc->in_sync = 0;
- 	switch (lc->resume_override) {
- 	case 1000:
- 		LOG_ERROR("[%s] Additional resume issued before suspend",
-@@ -963,6 +965,42 @@
- 		return -EINVAL;
++/*
++ * Static minor number assigned since kernel version 2.6.36.
++ * The original definition is in kernel's include/linux/miscdevice.h.
++ * This number is also visible in modules.devname exported by depmod
++ * utility (support included in module-init-tools version >= 3.12).
++ */
++#define MAPPER_CTRL_MINOR 236
++#define MISC_MAJOR 10
++
+ /* dm major version no for running kernel */
+ static unsigned _dm_version = DM_VERSION_MAJOR;
+ static unsigned _dm_version_minor = 0;
+@@ -341,10 +350,23 @@
+ 		return (major == _dm_device_major) ? 1 : 0;
+ }
  
- 	*rtn = log_test_bit(lc->sync_bits, region);
+-static int _open_and_assign_control_fd(const char *control)
++static void _close_control_fd(void)
+ {
++	if (_control_fd != -1) {
++		if (close(_control_fd) < 0)
++			log_sys_error("close", "_control_fd");
++		_control_fd = -1;
++	}
++}
++
++static int _open_and_assign_control_fd(const char *control,
++				       int ignore_nodev)
++{
++	_close_control_fd();
++
+ 	if ((_control_fd = open(control, O_RDWR)) < 0) {
+-		log_sys_error("open", control);
++		if (!(ignore_nodev && errno == ENODEV))
++			log_sys_error("open", control);
+ 		return 0;
+ 	}
+ 
+@@ -356,6 +378,7 @@
+ #ifdef DM_IOCTLS
+ 	char control[PATH_MAX];
+ 	uint32_t major = 0, minor;
++	int dm_mod_autoload_support, needs_open;
+ 
+ 	if (_control_fd != -1)
+ 		return 1;
+@@ -366,45 +389,61 @@
+ 	snprintf(control, sizeof(control), "%s/%s", dm_dir(), DM_CONTROL_NODE);
+ 
+ 	/*
+-	 * Try to make use of module autoload kernel feature first.
+-	 * This is accomplished with the help of udev that will
+-	 * create static nodes based on modules.devname file extracted
+-	 * by depmod (that udev reads). The /dev/mapper/control will
+-	 * be created this way and the first access to a node will
+-	 * load dm module automatically.
+-	 *
+-	 * To check for the module autoload support, we need:
+-	 *
+-	 *   - to check if the control node was created before (this
+-	 *     should be the static node created by udev@its start)
+-	 *
+-	 *   - to check if we have recent enough kernel that is supposed
+-	 *     to support this feature (a change in dm itself). We can't
+-	 *     check dm version - we don't have a node to make an ioctl yet.
+-	 *
+-	 *   - try to open the control node (this will trigger the autoload).
+-	 *     Successfull open means the autoload was successfull.
+-	 *
+-	 * If any of these three conditions fails, we fallback to old way.
+-	 * It means we'll try to get the major:minor of control node,
+-	 * we'll check its existence (checking the exact major:minor)
+-	 * and we'll create the node if needed.
++	 * dm-mod autoloading is supported since kernel 2.6.36.
++	 * Udev daemon will try to read modules.devname file extracted
++	 * by depmod and create any static nodes needed.
++	 * The /dev/mapper/control node can be created and prepared this way.
++	 * First access to such node should load dm-mod module automatically.
+ 	 */
+-	if (!_control_exists(control, 0, 0) ||
+-	    !(KERNEL_VERSION(_kernel_major, _kernel_minor, _kernel_release) >=
+-	      KERNEL_VERSION(2, 6, 36)) ||
+-	    !_open_and_assign_control_fd(control)) {
+-		if (!_control_device_number(&major, &minor))
+-			log_error("Is device-mapper driver missing from kernel?");
++	dm_mod_autoload_support = KERNEL_VERSION(_kernel_major, _kernel_minor,
++				  _kernel_release) >= KERNEL_VERSION(2, 6, 36);
+ 
+-		if (!_control_exists(control, major, minor) &&
+-		    !_create_control(control, major, minor))
++	/*
++	 *  If dm-mod autoloading is supported and the control node exists
++	 *  already try to open it now. This should autoload dm-mod module.
++	 */
++	if (dm_mod_autoload_support) {
++		if (!_get_proc_number(PROC_DEVICES, MISC_NAME, &major))
++			/* If major not found, just fallback to hardcoded value. */
++			major = MISC_MAJOR;
++
++		/* Recreate the node with correct major and minor if needed. */
++		if (!_control_exists(control, major, MAPPER_CTRL_MINOR) &&
++		    !_create_control(control, major, MAPPER_CTRL_MINOR))
+ 			goto error;
+ 
+-		if (!_open_and_assign_control_fd(control))
+-			goto error;
++		_open_and_assign_control_fd(control, 1);
+ 	}
+ 
++	/*
++	 * Get major and minor number assigned for the control node.
++	 * In case we make use of the module autoload support, this
++	 * information should be accessible now as well.
++	 */
++	if (!_control_device_number(&major, &minor))
++		log_error("Is device-mapper driver missing from kernel?");
 +
 +	/*
-+	 * If the mirror was successfully recovered, we want to always
-+	 * force every machine to write to all devices - otherwise,
-+	 * corruption will occur.  Here's how:
-+	 *    Node1 suffers a failure and marks a region out-of-sync
-+	 *    Node2 attempts a write, gets by is_remote_recovering,
-+   	 *          and queries the sync status of the region - finding
-+	 *	    it out-of-sync.
-+	 *    Node2 thinks the write should be a nosync write, but it
-+	 *          hasn't suffered the drive failure that Node1 has yet.
-+	 *          It then issues a generic_make_request directly to
-+	 *          the primary image only - which is exactly the device
-+	 *          that has suffered the failure.
-+	 *    Node2 suffers a lost write - which completely bypasses the
-+	 *          mirror layer because it had gone through generic_m_r.
-+	 *    The file system will likely explode at this point due to
-+	 *    I/O errors.  If it wasn't the primary that failed, it is
-+	 *    easily possible in this case to issue writes to just one
-+	 *    of the remaining images - also leaving the mirror inconsistent.
-+	 *
-+	 * We let in_sync() return 1 in a cluster regardless of what is
-+	 * in the bitmap once recovery has successfully completed on a
-+	 * mirror.  This ensures the mirroring code will continue to
-+	 * attempt to write to all mirror images.  The worst that can
-+	 * happen for reads is that additional read attempts may be
-+	 * taken.
-+	 *
-+	 * Futher investigation may be required to determine if there are
-+	 * similar possible outcomes when the mirror is in the process of
-+	 * recovering.  In that case, lc->in_sync would not have been set
-+	 * yet.
++	 * Check the control node and its major and minor number.
++	 * If there's anything wrong, remove the old node and create
++	 * a correct one.
 +	 */
-+	if (!*rtn && lc->in_sync)
-+		*rtn = 1;
++	if ((needs_open = !_control_exists(control, major, minor)) &&
++	    !_create_control(control, major, minor)) {
++		_close_control_fd();
++		goto error;
++	}
 +
- 	if (*rtn)
- 		LOG_DBG("[%s] Region is in-sync: %llu",
- 			SHORT_UUID(lc->uuid), (unsigned long long)region);
-@@ -1282,7 +1320,7 @@
- 				lc->skip_bit_warning = lc->region_count;
- 
- 			if (pkg->region > (lc->skip_bit_warning + 5)) {
--				LOG_ERROR("*** Region #%llu skipped during recovery ***",
-+				LOG_SPRINT(lc, "*** Region #%llu skipped during recovery ***",
- 					  (unsigned long long)lc->skip_bit_warning);
- 				lc->skip_bit_warning = lc->region_count;
- #ifdef DEBUG
-@@ -1324,6 +1362,9 @@
- 			   "(lc->sync_count > lc->region_count) - this is bad",
- 			   rq->seq, SHORT_UUID(lc->uuid), originator);
- 
-+	if (lc->sync_count == lc->region_count)
-+		lc->in_sync = 1;
++	/*
++	 * For older kernels without dm-mod autoloading support, we always
++	 * need to open the control node here - we still haven't done that!
++	 * For newer kernels with dm-mod autoloading, we open it only if the
++	 * node was recreated and corrected in previous step.
++	 */
++	if ((!dm_mod_autoload_support || needs_open) &&
++	     !_open_and_assign_control_fd(control, 0))
++		goto error;
 +
- 	rq->data_size = 0;
- 	return 0;
+ 	if (!_create_dm_bitset()) {
+ 		log_error("Failed to set up list of device-mapper major numbers");
+ 		return 0;
+@@ -2045,10 +2084,7 @@
+ 
+ void dm_lib_release(void)
+ {
+-	if (_control_fd != -1) {
+-		close(_control_fd);
+-		_control_fd = -1;
+-	}
++	_close_control_fd();
+ 	update_devs();
  }
+ 
 
 
