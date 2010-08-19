@@ -1,47 +1,24 @@
 From: Christoph Anton Mitterer <calestyo@scientia.net>
-Date: Fri, 20 Aug 2010 01:46:58 +0200
-Subject: patch: lvdisplay, pvdisplay, vgdisplay manpages
-Message-ID: <1282261618.3337.67.camel@fermat.scientia.net>
+Date: Fri, 20 Aug 2010 01:58:37 +0200
+Subject: patch1/4: lvm manpages
+Message-ID: <1282262317.3337.94.camel@fermat.scientia.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-(2nd try ;) )
-
 Hi.
 
-In order to solve
-http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=404058
-I've provided some patches for [pv|lv|vg]display.
-
-What they'd do:
-- align the wording style used by all three
-- replace the numbers in vgcreate with "*" as used in lvcreate and
-pvcreate
-- for all, removed "logical volume", "physical volume" and "volume
-group"
-in the description, if it's clear as it's the respective manpage (e.g.
-in
-the lvdisplay manpage "logical volume size" -> "size")
-- improved the explanation in some cases (e.g. actual/current LV of the
-VG)
-- Sometimes the unit seemed to be wrong (e.g. fixed kilobytes or
-sectors,
-where actually MiB was used)... wrote "human-readable format" in that
-cases.
-
-Be warned:
-- I removed all lines, which were not there when I tried the commands,
-but
-this could just result because I do not have some options set or do not
-use
-lvm1. So _REALLY_ double check if I did not remove something which is
-actually not obsolete.
+Attached would be several patches, that (IMHO) improve the lvm(8) manpage:
 
 
-Again,.. please check whether everything is correct what I've changed.
+
+1) lvm.8.empty_LV.patch
+It seems that the current "Where a list of VGs is required but is left empty, a
+list  of  all VGs will be substituted." is also true for LVs (checked it with
+lvdisplay, which seems to lists all LVs).
+If this is true, add the patch, to reflect this in the documentation
 
 
 Cheers,
@@ -49,123 +26,19 @@ Chris.
 
 
 
---- lvdisplay.8 2010-06-24 01:05:17.488777000 +0200
-+++ lvdisplay.8 2010-06-25 11:32:13.260323003 +0200
-@@ -58,19 +58,18 @@
- 
- The values are:
- 
--* logical volume name
--* volume group name
--* logical volume access
--* logical volume status
--* internal logical volume number
--* open count of logical volume
--* logical volume size in sectors
--* current logical extents associated to logical volume
--* allocated logical extents of logical volume
--* allocation policy of logical volume
--* read ahead sectors of logical volume
--* major device number of logical volume
--* minor device number of logical volume
-+* name (device file pathname)
-+* name of the volume group the logical volume belongs to
-+* UUID
-+* access permission (r|rw)
-+* status
-+* open count
-+* size in human-readable format
-+* current number of associated logical extents
-+* number of segments
-+* allocation policy
-+* read ahead sectors
-+* major and minor device number
- 
- .fi
- .TP
 
-
-
-
---- pvdisplay.8 2010-06-25 11:32:30.187572000 +0200
-+++ pvdisplay.8 2010-06-25 11:35:17.741325151 +0200
-@@ -49,17 +49,15 @@
- 
- The values are:
- 
--* physical volume device name
--* volume group name
--* physical volume size in kilobytes
--* internal physical volume number (obsolete)
--* physical volume status
--* physical volume (not) allocatable
--* current number of logical volumes on this physical volume
--* physical extent size in kilobytes
-+* name (device file pathname)
-+* name of the volume group the physical volume belongs to
-+* usable and non-usable space sizes in human-readable format
-+* status (allocatable or not)
-+* physical extent size in human-readable format
- * total number of physical extents
--* free number of physical extents
--* allocated number of physical extents
-+* number of free physical extents
-+* number of allocated physical extents
-+* UUID
- 
- .fi
- .TP
-
-
-
-
---- vgdisplay.8 2010-06-24 01:05:11.711784000 +0200
-+++ vgdisplay.8 2010-06-25 11:46:32.165379302 +0200
-@@ -51,23 +51,25 @@
- 
- The values are:
- 
--1  volume group name
--2  volume group access
--3  volume group status
--4  internal volume group number
--5  maximum number of logical volumes
--6  current number of logical volumes
--7  open count of all logical volumes in this volume group
--8  maximum logical volume size
--9  maximum number of physical volumes
--10 current number of physical volumes
--11 actual number of physical volumes
--12 size of volume group in kilobytes
--13 physical extent size
--14 total number of physical extents for this volume group
--15 allocated number of physical extents for this volume group
--16 free number of physical extents for this volume group
--17 uuid of volume group
-+* name
-+* system ID
-+* format
-+* number of metadata areas
-+* metadate sequence number
-+* access permission (r|rw)
-+* status
-+* maximum number of logical volumes
-+* current number of logical volumes
-+* open count of all logical volumes
-+* maximum number of physical volumes
-+* current number of physical volumes (including missing phyiscal
-volumes)
-+* actual number of physical volumes (not including missing physical
-volumes)
-+* size in human-readable format
-+* physical extent size
-+* total number of physical extents
-+* number of allocated physical extents
-+* number of free physical extents
-+* UUID
- 
- .fi
- .TP
-
+--- lvm.8	2010-06-23 16:25:44.099108000 +0200
++++ lvm.8	2010-06-23 16:28:42.675357517 +0200
+@@ -24,8 +24,8 @@
+ .LP
+ Where commands take VG or LV names as arguments, the full path name is
+ optional.  An LV called "lvol0" in a VG called "vg0" can be specified
+-as "vg0/lvol0".  Where a list of VGs is required but is left empty, 
+-a list of all VGs will be substituted.  Where a list of LVs is required
++as "vg0/lvol0".  Where a list of VGs or LVs is required but left empty, 
++a list of all VGs or LVs will be substituted.  Where a list of LVs is required
+ but a VG is given, a list of all the LVs in that VG will be substituted.
+ So "lvdisplay vg0" will display all the LVs in "vg0".
+ Tags can also be used - see \fBaddtag\fP below.
 
 
