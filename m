@@ -1,56 +1,59 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Aug 2010 22:33:15 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100819223315.18426.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 20 Aug 2010 00:48:18 +0200
+Subject: [PATCH] Fix pvmove --abort to work even for empty pvmove LV
+Message-ID: <1282258098-24500-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-08-19 22:33:14
+If pvmove crashed and metadata contains pvmove LV
+but without miorrored segments, pvmove --abort
+will not repair the situation (and finish wth success!).
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+Fix it by allowing metadata update if aborting
+(thus removing pvmove LV) even if no moved LVs detected.
 
-Log message:
-	post-release
+(Tested on real metadata provided by an lvm user:-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.251&r2=1.252
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.61&r2=1.62
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1711&r2=1.1712
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.412&r2=1.413
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ tools/polldaemon.c |    4 +++-
+ tools/pvmove.c     |    3 ++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
---- LVM2/VERSION	2010/08/18 20:57:10	1.251
-+++ LVM2/VERSION	2010/08/19 22:33:14	1.252
-@@ -1 +1 @@
--2.02.73(2)-cvs (2010-09-18)
-+2.02.74(2)-cvs (2010-09-19)
---- LVM2/VERSION_DM	2010/08/18 20:57:10	1.61
-+++ LVM2/VERSION_DM	2010/08/19 22:33:14	1.62
-@@ -1 +1 @@
--1.02.54-cvs (2010-08-18)
-+1.02.55-cvs (2010-08-19)
---- LVM2/WHATS_NEW	2010/08/18 20:57:10	1.1711
-+++ LVM2/WHATS_NEW	2010/08/19 22:33:14	1.1712
-@@ -1,3 +1,6 @@
-+Version 2.02.74 - 
-+==================================
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index d51f4bb..147d532 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -234,8 +234,10 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		lv = lvl->lv;
+ 		if (!(lv->status & parms->lv_type))
+ 			continue;
+-		if (!(name = parms->poll_fns->get_copy_name_from_lv(lv)))
++		name = parms->poll_fns->get_copy_name_from_lv(lv);
++		if (!name && !parms->aborting)
+ 			continue;
 +
- Version 2.02.73 - 18th August 2010
- ==================================
-   Fix potential for corruption during cluster mirror device failure.
---- LVM2/WHATS_NEW_DM	2010/08/18 20:57:10	1.412
-+++ LVM2/WHATS_NEW_DM	2010/08/19 22:33:14	1.413
-@@ -1,3 +1,6 @@
-+Version 1.02.55 - 
-+==================================
-+
- Version 1.02.54 - 18th August 2010
- ==================================
-   Fix dm-mod autoloading logic to not assume control node is set correctly.
+ 		/* FIXME Need to do the activation from _set_up_pvmove here
+ 		 *       if it's not running and we're not aborting */
+ 		if (_check_lv_status(cmd, vg, lv, name, parms, &finished) &&
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index c8a480f..0346ca3 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -520,7 +520,8 @@ static int _finish_pvmove(struct cmd_context *cmd, struct volume_group *vg,
+ {
+ 	int r = 1;
+ 
+-	if (!_detach_pvmove_mirror(cmd, lv_mirr)) {
++	if (!dm_list_empty(lvs_changed) &&
++	    !_detach_pvmove_mirror(cmd, lv_mirr)) {
+ 		log_error("ABORTING: Removal of temporary mirror failed");
+ 		return 0;
+ 	}
+-- 
+1.7.1
 
 
