@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 19 Aug 2010 23:04:38 -0000
-Subject: LVM2 ./WHATS_NEW tools/pvremove.c tools/toollib.c
-Message-ID: <20100819230438.25296.qmail@sourceware.org>
+Date: 19 Aug 2010 23:05:45 -0000
+Subject: LVM2 ./WHATS_NEW lib/device/dev-swap.c
+Message-ID: <20100819230545.26070.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,66 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2010-08-19 23:04:38
+Changes by:	mbroz at sourceware.org	2010-08-19 23:05:45
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : pvremove.c toollib.c 
+	lib/device     : dev-swap.c 
 
 Log message:
-	Remove assumption that --yes must be used only in --force mode
-	
-	This is not only undocumented but is is also in violation with --help
-	documentation.
-	
-	Using --yes without --force is useful in pvcreate when it detects
-	old signature.
+	Fix file descriptor leak in swap signature detection
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1713&r2=1.1714
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvremove.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.207&r2=1.208
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1714&r2=1.1715
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-swap.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2010/08/19 23:03:34	1.1713
-+++ LVM2/WHATS_NEW	2010/08/19 23:04:37	1.1714
-@@ -1,6 +1,7 @@
- Version 2.02.74 - 
+--- LVM2/WHATS_NEW	2010/08/19 23:04:37	1.1714
++++ LVM2/WHATS_NEW	2010/08/19 23:05:45	1.1715
+@@ -2,6 +2,7 @@
  ==================================
    Simplify MD/swap signature detection in pvcreate and allow aborting.
-+  Remove assumption that --yes must be used only in --force mode.
+   Remove assumption that --yes must be used only in --force mode.
++  Fix file descriptor leak in swap signature detection error path.
  
  Version 2.02.73 - 18th August 2010
  ==================================
---- LVM2/tools/pvremove.c	2010/07/09 15:34:48	1.28
-+++ LVM2/tools/pvremove.c	2010/08/19 23:04:37	1.29
-@@ -143,11 +143,6 @@
- 		return EINVALID_CMD_LINE;
+--- LVM2/lib/device/dev-swap.c	2009/03/17 14:40:00	1.1
++++ LVM2/lib/device/dev-swap.c	2010/08/19 23:05:45	1.2
+@@ -42,7 +42,7 @@
+ {
+ 	char buf[10];
+ 	uint64_t size;
+-	int page;
++	int page, ret = 0;
+ 
+ 	if (!dev_get_size(dev, &size)) {
+ 		stack;
+@@ -66,11 +66,12 @@
+ 			break;
+ 		if (!dev_read(dev, page - SIGNATURE_SIZE,
+ 			      SIGNATURE_SIZE, buf)) {
+-			stack;
+-			return -1;
++			ret = -1;
++			break;
+ 		}
+ 		if (_swap_detect_signature(buf)) {
+ 			*signature = page - SIGNATURE_SIZE;
++			ret = 1;
+ 			break;
+ 		}
  	}
+@@ -78,10 +79,7 @@
+ 	if (!dev_close(dev))
+ 		stack;
  
--	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
--		log_error("Option y can only be given with option f");
--		return EINVALID_CMD_LINE;
--	}
+-	if (*signature)
+-		return 1;
 -
- 	for (i = 0; i < argc; i++) {
- 		r = pvremove_single(cmd, argv[i], NULL);
- 		if (r > ret)
---- LVM2/tools/toollib.c	2010/06/30 20:03:53	1.207
-+++ LVM2/tools/toollib.c	2010/08/19 23:04:37	1.208
-@@ -1344,11 +1344,6 @@
- 		return 0;
- 	}
+-	return 0;
++	return ret;
+ }
  
--	if (arg_count(cmd, yes_ARG) && !arg_count(cmd, force_ARG)) {
--		log_error("Option y can only be given with option f");
--		return 0;
--	}
--
- 	pp->yes = arg_count(cmd, yes_ARG);
- 	pp->force = arg_count(cmd, force_ARG);
- 
+ #endif
 
 
