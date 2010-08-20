@@ -1,56 +1,23 @@
-From: Christoph Anton Mitterer <calestyo@scientia.net>
-Date: Fri, 20 Aug 2010 01:58:46 +0200
-Subject: patch4/4: lvm manpages
-Message-ID: <1282262326.3337.97.camel@fermat.scientia.net>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 20 Aug 2010 01:22:24 +0100
+Subject: patch2/4: lvm manpages
+In-Reply-To: <1282262321.3337.95.camel@fermat.scientia.net>
+References: <1282262321.3337.95.camel@fermat.scientia.net>
+Message-ID: <20100820002223.GV11907@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-4) lvm.8.misc.patch
-- Some (IMHO) typos,... please check whether I'm really correct
-everywhere
-(especially the large->larger change).
-- For the allowed characters in VG/LV names and tags, use the same
-ordering
-in both places they're listed.
+On Fri, Aug 20, 2010 at 01:58:41AM +0200, Christoph Anton Mitterer wrote:
+> Also removed pvdata from the list of unimplemented commands, as this
 
+pvdata was an LVM1-specific command for examining LVM1 metadata.
+I doubt we'll ever implement an equivalent for LVM2 now.
+(Instead, we've been making information about the metadata 
+available in other commands where it seems appropriate.)
 
-
-
---- lvm.8	2010-06-24 00:34:43.702027000 +0200
-+++ 1	2010-06-24 00:36:10.377776836 +0200
-@@ -175,7 +175,7 @@
- If you set this to \fBn\fP, no attempt will be made to contact the
-driver.
- .TP
- \fB-A | --autobackup\fP { \fBy\fP | \fBn\fP }
--Whether or not to metadata should be backed up automatically after a
-change.  
-+Whether or not metadata should be backed up automatically after a
-change.  
- You are strongly advised not to disable this!
- See
- .B vgcfgbackup (8).
-@@ -188,7 +188,7 @@
- \fBdmsetup (8)\fP to set this up to return I/O errors when accessed,
- or create it as a large block device of nulls.  Metadata may not be
- changed with this option. To insert a replacement physical volume
--of the same or large size use \fBpvcreate -u\fP to set the uuid to 
-+of the same or larger size use \fBpvcreate -u\fP to set the uuid to 
- match the original followed by \fBvgcfgrestore (8)\fP.
- .TP
- \fB-M | --metadatatype type\fP
-@@ -266,7 +266,7 @@
- Not set by default.
- .SH VALID NAMES
- The following characters are valid for VG and LV names:
--\fBa-z A-Z 0-9 + _ . -\fP
-+\fBA-Z a-z 0-9 _ + . -\fP
- .LP
- VG and LV names cannot begin with a hyphen.
- There are also various reserved names that are used internally by lvm
-that can not be used as LV or VG names.
+Alasdair
 
 
