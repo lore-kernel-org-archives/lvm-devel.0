@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 20 Aug 2010 12:44:31 -0000
-Subject: LVM2/libdm libdevmapper.h
-Message-ID: <20100820124431.26133.qmail@sourceware.org>
+Date: 20 Aug 2010 12:44:48 -0000
+Subject: LVM2 include/.symlinks.in lib/Makefile.in
+Message-ID: <20100820124448.26335.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,51 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-08-20 12:44:31
+Changes by:	wysochanski at sourceware.org	2010-08-20 12:44:48
 
 Modified files:
-	libdm          : libdevmapper.h 
+	include        : .symlinks.in 
+	lib            : Makefile.in 
 
 Log message:
-	Add macro definitions to report infrastructure for character array length.
+	Add properties.[ch] to lib/report, defined based on columns.h.
 	
-	Rather than hard code the size of the field, use a #define, so we can re-use.
-	The #define will be needed in a future patch when we extend the reporting
-	infrastructure to have 'get' and 'set' functions for each field, allowing
-	lvm2app functions which query any report field.  In order to provide a
-	generic lookup based on the field id, we will define a type containing this
-	field id, and thus, we will need to re-use the length of this string as
-	it's defined inside libdevmapper.h.
+	Extend the existing reporting infrastructure definitions and structures
+	to include a 'get' and 'set' function for each field.  We will provide
+	a 'get' and 'set' function for each of these fields, which will be utilized
+	by exported lvm2app functions.
+	
+	Define a default _not_implemented 'get' and 'set' function that just sets
+	an errno and returns 0.  Future patches will actually implement the
+	specific 'get' and 'set' functions for each property.  For read-only
+	properties, only the 'get' function will be implemented.
+	
+	Define vg_get_property() function to query a property.  We will call
+	this from a lvm2app function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.124&r2=1.125
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/Makefile.in.diff?cvsroot=lvm2&r1=1.104&r2=1.105
 
---- LVM2/libdm/libdevmapper.h	2010/07/21 13:40:22	1.124
-+++ LVM2/libdm/libdevmapper.h	2010/08/20 12:44:30	1.125
-@@ -1048,14 +1048,19 @@
- #define DM_REPORT_FIELD_TYPE_STRING	0x00000010
- #define DM_REPORT_FIELD_TYPE_NUMBER	0x00000020
- 
-+#define DM_REPORT_FIELD_TYPE_ID_LEN 32
-+#define DM_REPORT_FIELD_TYPE_HEADING_LEN 32
-+
- struct dm_report;
- struct dm_report_field_type {
- 	uint32_t type;		/* object type id */
- 	uint32_t flags;		/* DM_REPORT_FIELD_* */
- 	uint32_t offset;	/* byte offset in the object */
- 	int32_t width;		/* default width */
--	const char id[32];	/* string used to specify the field */
--	const char heading[32];	/* string printed in header */
-+	/* string used to specify the field */
-+	const char id[DM_REPORT_FIELD_TYPE_ID_LEN];
-+	/* string printed in header */
-+	const char heading[DM_REPORT_FIELD_TYPE_HEADING_LEN];
- 	int (*report_fn)(struct dm_report *rh, struct dm_pool *mem,
- 			 struct dm_report_field *field, const void *data,
- 			 void *private_data);
+--- LVM2/include/.symlinks.in	2010/01/21 22:15:46	1.2
++++ LVM2/include/.symlinks.in	2010/08/20 12:44:47	1.3
+@@ -50,6 +50,7 @@
+ @top_builddir@/lib/misc/lvm-version.h
+ @top_srcdir@/lib/misc/lvm-wrappers.h
+ @top_srcdir@/lib/misc/sharedlib.h
++ at top_srcdir@/lib/report/properties.h
+ @top_srcdir@/lib/report/report.h
+ @top_srcdir@/lib/uuid/uuid.h
+ @top_srcdir@/libdm/libdevmapper.h
+--- LVM2/lib/Makefile.in	2010/08/19 23:08:18	1.104
++++ LVM2/lib/Makefile.in	2010/08/20 12:44:47	1.105
+@@ -90,6 +90,7 @@
+ 	misc/lvm-wrappers.c \
+ 	misc/util.c \
+ 	mm/memlock.c \
++	report/properties.c \
+ 	report/report.c \
+ 	striped/striped.c \
+ 	uuid/uuid.c \
 
 
