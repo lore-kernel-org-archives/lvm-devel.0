@@ -1,37 +1,57 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 25 Aug 2010 13:06:04 -0000
-Subject: LVM2/doc example.conf.in
-Message-ID: <20100825130604.11531.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Wed, 25 Aug 2010 09:38:08 -0500
+Subject: [PATCH] Do not scan snapshot origin for labels while 'ignore_suspended_devices()' is set
+Message-ID: <1282747088.10709.1.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-08-25 13:06:03
+This patch fixes a potential for I/O to hang and LVM commands
+to block when a mirror under a snapshot suffers a failure.
 
-Modified files:
-	doc            : example.conf.in 
+The problem has to do with label scanning.  When a mirror suffers
+a failure, the kernel blocks I/O to prevent corruption.  When
+LVM attempts to repair the mirror, it scans the devices on the
+system for LVM labels.  While mirrors are skipped during this
+scanning process, snapshot-origins are not.  When the origin is
+scanned, it kicks up I/O to the mirror (which is blocked)
+underneath - causing the label scan (an thus the repair operation)
+to hang.
 
-Log message:
-	Make example.conf description for 'default_data_alignment' more generic.
+This patch simply bypasses snapshot-origin devices when doing
+labels scans (while ignore_suspended_devices() is set).  This
+fixes the issue.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
---- LVM2/doc/example.conf.in	2010/08/20 22:24:58	1.10
-+++ LVM2/doc/example.conf.in	2010/08/25 13:06:03	1.11
-@@ -99,8 +99,7 @@
-     md_chunk_alignment = 1
+Index: LVM2/lib/activate/dev_manager.c
+===================================================================
+--- LVM2.orig/lib/activate/dev_manager.c
++++ LVM2/lib/activate/dev_manager.c
+@@ -175,6 +175,21 @@ int device_is_usable(struct device *dev)
+ 			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
+ 			goto out;
+ 		}
++
++		/*
++		 * Snapshot origin could be sitting on top of a mirror which
++		 * could be blocking I/O.  Skip snapshot origins entirely for
++		 * now.
++		 *
++		 * FIXME: rather than skipping origin, check if mirror is
++		 * underneath and if the mirror is blocking I/O.
++		 */
++		if (target_type && !strcmp(target_type, "snapshot-origin") &&
++		    ignore_suspended_devices()) {
++			log_debug("%s: Snapshot-origin device %s not usable.",
++				  dev_name(dev), name);
++			goto out;
++		}
+ 	} while (next);
  
-     # Default alignment of the start of a data area in MB.  If set to 0,
--    # a small value of 64KB will be used, which was the default until
--    # LVM2 version 2.02.73.  Set to 1 for 1MiB, 2 for 2MiB, etc.
-+    # a value of 64KB will be used.  Set to 1 for 1MiB, 2 for 2MiB, etc.
-     # default_data_alignment = @DEFAULT_DATA_ALIGNMENT@
- 
-     # By default, the start of a PV's data area will be a multiple of
+ 	/* FIXME Also check dependencies? */
+
 
 
