@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 26 Aug 2010 14:21:53 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20100826142153.7885.qmail@sourceware.org>
+Date: 26 Aug 2010 16:29:14 -0000
+Subject: LVM2 ./WHATS_NEW tools/polldaemon.c
+Message-ID: <20100826162914.23599.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2010-08-26 14:21:52
+Changes by:	jbrassow at sourceware.org	2010-08-26 16:29:13
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
+	tools          : polldaemon.c 
 
 Log message:
-	This patch fixes a potential for I/O to hang and LVM commands
-	to block when a mirror under a snapshot suffers a failure.
+	This patch fixes a problem where the mirror polling process
+	may never complete.
 	
-	The problem has to do with label scanning.  When a mirror suffers
-	a failure, the kernel blocks I/O to prevent corruption.  When
-	LVM attempts to repair the mirror, it scans the devices on the
-	system for LVM labels.  While mirrors are skipped during this
-	scanning process, snapshot-origins are not.  When the origin is
-	scanned, it kicks up I/O to the mirror (which is blocked)
-	underneath - causing the label scan (an thus the repair operation)
-	to hang.
+	If you convert from a linear to a mirror and then convert that
+	mirror back to linear /while/ the previous (up)convert is
+	taking place, the mirror polling process will never complete.
+	This is because the function that polls the mirror for
+	completion doesn't check if it is still polling a mirror and
+	the copy_percent that it gets back from the linear device is
+	certainly never 100%.
 	
-	This patch simply bypasses snapshot-origin devices when doing
-	labels scans (while ignore_suspended_devices() is set).  This
-	fixes the issue.
+	The fix is simply to check if the daemon is still looking at
+	a mirror device - if not, return PROGRESS_CHECK_FAILED.
+	
+	The user sees the following output from the first (up)convert
+	if someone else sneaks in and does a down-convert shortly
+	after their convert:
+	[root at bp-01 ~]# lvconvert -m1 vg/lv
+	vg/lv: Converted: 43.4%
+	ABORTING: Mirror percentage check failed.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1724&r2=1.1725
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.201&r2=1.202
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1725&r2=1.1726
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
 
---- LVM2/WHATS_NEW	2010/08/26 12:08:19	1.1724
-+++ LVM2/WHATS_NEW	2010/08/26 14:21:50	1.1725
+--- LVM2/WHATS_NEW	2010/08/26 14:21:50	1.1725
++++ LVM2/WHATS_NEW	2010/08/26 16:29:12	1.1726
 @@ -1,5 +1,6 @@
  Version 2.02.74 - 
  ==================================
-+  Like mirrors, don't scan origins if ignore_suspended_devices() is set.
++  Make poll_mirror_progress report PROGRESS_CHECK_FAILED if LV is not a mirror.
+   Like mirrors, don't scan origins if ignore_suspended_devices() is set.
    Fix return type qualifier to avoid compiler warning. (2.02.69)
    Automatically generate LSB Requires-Start for clvmd init script.
-   Fix return code of pvmove --abort PV.
---- LVM2/lib/activate/dev_manager.c	2010/08/17 19:25:05	1.201
-+++ LVM2/lib/activate/dev_manager.c	2010/08/26 14:21:51	1.202
-@@ -175,6 +175,21 @@
- 			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
- 			goto out;
- 		}
-+
-+		/*
-+		 * Snapshot origin could be sitting on top of a mirror which
-+		 * could be blocking I/O.  Skip snapshot origins entirely for
-+		 * now.
-+		 *
-+		 * FIXME: rather than skipping origin, check if mirror is
-+		 * underneath and if the mirror is blocking I/O.
-+		 */
-+		if (target_type && !strcmp(target_type, "snapshot-origin") &&
-+		    ignore_suspended_devices()) {
-+			log_debug("%s: Snapshot-origin device %s not usable.",
-+				  dev_name(dev), name);
-+			goto out;
-+		}
- 	} while (next);
+--- LVM2/tools/polldaemon.c	2010/08/23 11:34:41	1.36
++++ LVM2/tools/polldaemon.c	2010/08/26 16:29:12	1.37
+@@ -78,7 +78,8 @@
+ 	percent_range_t percent_range, overall_percent_range;
+ 	uint32_t event_nr = 0;
  
- 	/* FIXME Also check dependencies? */
+-	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
++	if (!lv_is_mirrored(lv) ||
++	    !lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
+ 			       &percent_range, &event_nr) ||
+ 	    (percent_range == PERCENT_INVALID)) {
+ 		log_error("ABORTING: Mirror percentage check failed.");
 
 
