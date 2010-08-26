@@ -1,34 +1,29 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Thu, 26 Aug 2010 10:10:44 +0200
-Subject: [PATCH] Do not scan snapshot origin for labels while 'ignore_suspended_devices()' is set
-In-Reply-To: <1282747088.10709.1.camel@hydrogen.msp.redhat.com>
-References: <1282747088.10709.1.camel@hydrogen.msp.redhat.com>
-Message-ID: <4C762184.9000307@redhat.com>
+Date: Thu, 26 Aug 2010 10:17:56 +0200
+Subject: [PATCH] Fix zombie mirror poll daemon (bug 585328)
+In-Reply-To: <1282772027.18079.3.camel@hydrogen.msp.redhat.com>
+References: <1282772027.18079.3.camel@hydrogen.msp.redhat.com>
+Message-ID: <4C762334.8060403@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 08/25/2010 04:38 PM, Jonathan Brassow wrote:
+On 08/25/2010 11:33 PM, Jonathan Brassow wrote:
+> -	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
+> +	if (!(lv->status & MIRRORED) ||
+> +	    !lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
+>  			       &percent_range, &event_nr) ||
+>  	    (percent_range == PERCENT_INVALID)) {
+>  		log_error("ABORTING: Mirror percentage check failed.");
 
-> +		 * Snapshot origin could be sitting on top of a mirror which
-> +		 * could be blocking I/O.  Skip snapshot origins entirely for
-> +		 * now.
-> +		 *
-> +		 * FIXME: rather than skipping origin, check if mirror is
-> +		 * underneath and if the mirror is blocking I/O.
-> +		 */
-> +		if (target_type && !strcmp(target_type, "snapshot-origin") &&
-> +		    ignore_suspended_devices()) {
-> +			log_debug("%s: Snapshot-origin device %s not usable.",
-> +				  dev_name(dev), name);
-> +			goto out;
+why not move this check inside lv_mirror_percent?
+(or is this only place where the bug can appear?)
 
-Well, if no one can find situation where this breaks some existing config,
-let's try that - we need something working in this release.
+(and it should probably use !lv_is_mirrored(lv) instead of mask)
 
-The code need rewrite here anyway... ack from me for now.
+otherwise ack
 
 Milan
 
