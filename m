@@ -1,46 +1,74 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 26 Aug 2010 14:35:45 +0200
-Subject: [PATCH] Fix zombie mirror poll daemon (bug 585328)
-In-Reply-To: <4C762334.8060403@redhat.com> (Milan Broz's message of "Thu, 26
-	Aug 2010 10:17:56 +0200")
-References: <1282772027.18079.3.camel@hydrogen.msp.redhat.com>
-	<4C762334.8060403@redhat.com>
-Message-ID: <87y6btblge.fsf@twilight.int.mornfall.net.>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 26 Aug 2010 14:21:53 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
+Message-ID: <20100826142153.7885.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2010-08-26 14:21:52
 
-> On 08/25/2010 11:33 PM, Jonathan Brassow wrote:
->> -	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
->> +	if (!(lv->status & MIRRORED) ||
->> +	    !lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
->>  			       &percent_range, &event_nr) ||
->>  	    (percent_range == PERCENT_INVALID)) {
->>  		log_error("ABORTING: Mirror percentage check failed.");
->
-> why not move this check inside lv_mirror_percent?
-> (or is this only place where the bug can appear?)
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : dev_manager.c 
 
-I think it's actually safer to fix this here at this point in
-time. Otherwise, lv_mirror_percent could start failing unexpectedly on
-some mis-behaving code and introduce new bugs.
+Log message:
+	This patch fixes a potential for I/O to hang and LVM commands
+	to block when a mirror under a snapshot suffers a failure.
+	
+	The problem has to do with label scanning.  When a mirror suffers
+	a failure, the kernel blocks I/O to prevent corruption.  When
+	LVM attempts to repair the mirror, it scans the devices on the
+	system for LVM labels.  While mirrors are skipped during this
+	scanning process, snapshot-origins are not.  When the origin is
+	scanned, it kicks up I/O to the mirror (which is blocked)
+	underneath - causing the label scan (an thus the repair operation)
+	to hang.
+	
+	This patch simply bypasses snapshot-origin devices when doing
+	labels scans (while ignore_suspended_devices() is set).  This
+	fixes the issue.
 
-> (and it should probably use !lv_is_mirrored(lv) instead of mask)
-Indeed. Please fix.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1724&r2=1.1725
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.201&r2=1.202
 
-I would personally also change the code to print a different error if
-the mirror is no longer a mirror, which would be likely less confusing
-to the user.
-
-Anyway, assuming the lv_is_mirrored change, OK.
-
-Reviewed-By: Petr Rockai <prockai@redhat.com>
-
-Yours,
-   Petr.
+--- LVM2/WHATS_NEW	2010/08/26 12:08:19	1.1724
++++ LVM2/WHATS_NEW	2010/08/26 14:21:50	1.1725
+@@ -1,5 +1,6 @@
+ Version 2.02.74 - 
+ ==================================
++  Like mirrors, don't scan origins if ignore_suspended_devices() is set.
+   Fix return type qualifier to avoid compiler warning. (2.02.69)
+   Automatically generate LSB Requires-Start for clvmd init script.
+   Fix return code of pvmove --abort PV.
+--- LVM2/lib/activate/dev_manager.c	2010/08/17 19:25:05	1.201
++++ LVM2/lib/activate/dev_manager.c	2010/08/26 14:21:51	1.202
+@@ -175,6 +175,21 @@
+ 			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
+ 			goto out;
+ 		}
++
++		/*
++		 * Snapshot origin could be sitting on top of a mirror which
++		 * could be blocking I/O.  Skip snapshot origins entirely for
++		 * now.
++		 *
++		 * FIXME: rather than skipping origin, check if mirror is
++		 * underneath and if the mirror is blocking I/O.
++		 */
++		if (target_type && !strcmp(target_type, "snapshot-origin") &&
++		    ignore_suspended_devices()) {
++			log_debug("%s: Snapshot-origin device %s not usable.",
++				  dev_name(dev), name);
++			goto out;
++		}
+ 	} while (next);
+ 
+ 	/* FIXME Also check dependencies? */
 
 
