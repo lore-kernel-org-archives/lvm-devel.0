@@ -1,50 +1,35 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 25 Aug 2010 16:33:47 -0500
-Subject: [PATCH] Fix zombie mirror poll daemon (bug 585328)
-Message-ID: <1282772027.18079.3.camel@hydrogen.msp.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu, 26 Aug 2010 10:10:44 +0200
+Subject: [PATCH] Do not scan snapshot origin for labels while 'ignore_suspended_devices()' is set
+In-Reply-To: <1282747088.10709.1.camel@hydrogen.msp.redhat.com>
+References: <1282747088.10709.1.camel@hydrogen.msp.redhat.com>
+Message-ID: <4C762184.9000307@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch fixes a problem where the mirror polling process
-may never complete.
+On 08/25/2010 04:38 PM, Jonathan Brassow wrote:
 
-If you convert from a linear to a mirror and then convert that
-mirror back to linear /while/ the previous (up)convert is
-taking place, the mirror polling process will never complete.
-This is because the function that polls the mirror for
-completion doesn't check if it is still polling a mirror and
-the copy_percent that it gets back from the linear device is
-certainly never 100%.
+> +		 * Snapshot origin could be sitting on top of a mirror which
+> +		 * could be blocking I/O.  Skip snapshot origins entirely for
+> +		 * now.
+> +		 *
+> +		 * FIXME: rather than skipping origin, check if mirror is
+> +		 * underneath and if the mirror is blocking I/O.
+> +		 */
+> +		if (target_type && !strcmp(target_type, "snapshot-origin") &&
+> +		    ignore_suspended_devices()) {
+> +			log_debug("%s: Snapshot-origin device %s not usable.",
+> +				  dev_name(dev), name);
+> +			goto out;
 
-The fix is simply to check if the daemon is still looking at
-a mirror device - if not, return PROGRESS_CHECK_FAILED.
+Well, if no one can find situation where this breaks some existing config,
+let's try that - we need something working in this release.
 
-The user sees the following output from the first (up)convert
-if someone else sneaks in and does a down-convert shortly
-after their convert:
-[root at bp-01 ~]# lvconvert -m1 vg/lv
-  vg/lv: Converted: 43.4%
-  ABORTING: Mirror percentage check failed.
+The code need rewrite here anyway... ack from me for now.
 
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-Index: LVM2/tools/polldaemon.c
-===================================================================
---- LVM2.orig/tools/polldaemon.c
-+++ LVM2/tools/polldaemon.c
-@@ -78,7 +78,8 @@ progress_t poll_mirror_progress(struct c
- 	percent_range_t percent_range, overall_percent_range;
- 	uint32_t event_nr = 0;
- 
--	if (!lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
-+	if (!(lv->status & MIRRORED) ||
-+	    !lv_mirror_percent(cmd, lv, !parms->interval, &segment_percent,
- 			       &percent_range, &event_nr) ||
- 	    (percent_range == PERCENT_INVALID)) {
- 		log_error("ABORTING: Mirror percentage check failed.");
-
+Milan
 
 
