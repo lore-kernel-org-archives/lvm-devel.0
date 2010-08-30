@@ -1,69 +1,73 @@
-From: Jeff Chua <jeff.chua.linux@gmail.com>
-Date: Sun, 15 Aug 2010 14:14:07 -0000
-Subject: [dm-devel] linux-2.6.35+ causes LVM to fail with " device-mapper: version ioctl failed: Inappropriate ioctl for device"
-In-Reply-To: <20100815130336.GA24055@agk-dp.fab.redhat.com>
-References: <AANLkTime9NS3Bk-8ZpovRNy9iEGJxwYw=-aZ38JoRa_3@mail.gmail.com>
-	<20100814155401.GJ26032@agk-dp.fab.redhat.com>
-	<AANLkTi=aJ7f5X9sMeA85KJxi+rzWhiZCZ2ZwriNEVFCT@mail.gmail.com>
-	<20100815130336.GA24055@agk-dp.fab.redhat.com>
-Message-ID: <AANLkTinUuphqozgrSMNnrKxJrPWFp77y2TzdEwtuMD42@mail.gmail.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 30 Aug 2010 16:22:21 +0200
+Subject: [PATCH] Add timestamp in addition to index number for VG archive file names
+Message-ID: <4C7BBE9D.5030708@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Aug 15, 2010 at 9:03 PM, Alasdair G Kergon <agk@redhat.com> wrote:
->> Just a vanilla linux. No udev.
->
-> So likely a userspace problem where udev is now assumed to be present.
->
->> > Provide long listing of /dev/mapper and any dm/lvm devices in /dev.
->
-> You can do that by running:
-> ?ls -l /dev/mapper /dev/vg01
-> Also:
-> ?cat /proc/devices
+In certain configurations, we're not under a VG rw lock while trying to write
+a new archive file with VG metadata. A common example is using "vgs" while
+having the content of backup and archive directories empty. The code scans the
+content of these directories and tries to determine the final index that should
+be used in archive name. Since we're not under a lock, we can get into a race
+while choosing the index which could end up showing errors about not being able
+to rename to final archive name. Let's add simple timestamps to these archive
+names so we can avoid the race.
 
-253 device-mapper
+This should resolve part of the problem reported here:
+https://bugzilla.redhat.com/show_bug.cgi?id=615907
 
-> ?cat /proc/misc
+Though, I still haven't found the exact cause of the other problem mentioned in
+the bug report - the appeareance of blank temporary files. I'd need more log
+information to see what happened exactly - whether the export of the vg failed
+or whatever...
 
-236 device-mapper <== was@60 before the new kernel
-
-
-Got it! Sorry, it's me being _dumb_!!!
-
-With 2.6.35++, /dev/mapper/control has moved from 60 to 236!
-
-So I fix it by recreating the control file with "mknod
-/var/mapper/control c 10 253".
-
-I got this "internal error" when I activate/deactivate the volume
-group, but it seems ok. I could mount the volumes and so far it's all
-good.
-
-# vgchange -a n vg01
-  Internal error: Maps lock 14217216 < unlock 14221312
-  Internal error: Maps lock 14221312 < unlock 14225408
-  Internal error: Maps lock 14225408 < unlock 14229504
-  Internal error: Maps lock 14229504 < unlock 14233600
-  Internal error: Maps lock 14233600 < unlock 14237696
-  Internal error: Maps lock 14237696 < unlock 14241792
-  0 logical volume(s) in volume group "vg01" now active
-
-# vgchange -a y vg01
-  Internal error: Maps lock 14192640 < unlock 14196736
-  Internal error: Maps lock 14196736 < unlock 14200832
-  Internal error: Maps lock 14200832 < unlock 14204928
-  Internal error: Maps lock 14204928 < unlock 14209024
-  Internal error: Maps lock 14209024 < unlock 14213120
-  Internal error: Maps lock 14213120 < unlock 14217216
-  6 logical volume(s) in volume group "vg01" now active
-
-Hopefully those errors above means no harm.
-
-Thanks,
-Jeff
+Peter
+---
+diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
+index 95ac49d..d12ac4d 100644
+--- a/lib/format_text/archive.c
++++ b/lib/format_text/archive.c
+@@ -26,6 +26,7 @@
+ #include <unistd.h>
+ #include <sys/stat.h>
+ #include <sys/file.h>
++#include <sys/time.h>
+ #include <fcntl.h>
+ #include <time.h>
+ 
+@@ -232,6 +233,7 @@ int archive_vg(struct volume_group *vg,
+ 	FILE *fp = NULL;
+ 	char temp_file[PATH_MAX], archive_name[PATH_MAX];
+ 	struct dm_list *archives;
++	struct timeval t;
+ 
+ 	/*
+ 	 * Write the vg out to a temporary file.
+@@ -264,6 +266,11 @@ int archive_vg(struct volume_group *vg,
+ 	if (!(archives = _scan_archive(vg->cmd->mem, vg->name, dir)))
+ 		return_0;
+ 
++	if (gettimeofday(&t, NULL)) {
++		log_sys_error("gettimeofday", "archive_vg");
++		return 0;
++	}
++
+ 	if (dm_list_empty(archives))
+ 		ix = 0;
+ 	else {
+@@ -273,7 +280,8 @@ int archive_vg(struct volume_group *vg,
+ 
+ 	for (i = 0; i < 10; i++) {
+ 		if (dm_snprintf(archive_name, sizeof(archive_name),
+-				 "%s/%s_%05u.vg", dir, vg->name, ix) < 0) {
++				 "%s/%s_%05u-%ld-%ld.vg", dir, vg->name,
++				  ix, t.tv_sec, t.tv_usec) < 0) {
+ 			log_error("Archive file name too long.");
+ 			return 0;
+ 		}
 
 
