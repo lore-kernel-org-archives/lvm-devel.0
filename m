@@ -1,33 +1,113 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Sep 2010 16:12:57 -0400
-Subject: [PATCH 00/12] Add lvm vg properties for lvm2app.
-Message-ID: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
+Date: Thu,  9 Sep 2010 16:12:59 -0400
+Subject: [PATCH 02/12] Refactor pvstatus_disp to take pv argument and call common pv_attr function.
+In-Reply-To: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
+References: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284063189-4908-3-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset is a continuation of the prior patchset to implement
-generic functions to query a value of a field in an lvm report.
-This patchset completes the vg-based fields of the report and adds
-a generic function, lvm_vg_get_property() to lvm2app to query the
-properties by name.
 
-For the string-based properties, memory allocation is done inside
-the individual supporting functions (i.e. vg_name(), vg_uuid(), etc).
-I decided this to be the best approach for consistency sake, and
-since some of the properties (for example, vg_attr, and vg_uuid)
-required special formatting and thus required the allocation to be
-done at the lower level.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/metadata.c |   21 +++++++++++++++++++++
+ lib/metadata/metadata.h |    1 +
+ lib/report/columns.h    |    2 +-
+ lib/report/report.c     |   17 +++--------------
+ 4 files changed, 26 insertions(+), 15 deletions(-)
 
-I'm not entirely happy with this patchset but it is close enough.
-In particular, some of the functions might be better placed inside
-a separate file in lib/report and then shared between report.c
-and properties.c.  For now I've placed most of the functions inside
-metadata.c.
-
-Once this patchset is accepted and committed, I shall continue with
-the pv and lv properties using the same approach.
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 094ffc1..86f07e7 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4598,6 +4598,27 @@ char *vg_attr(struct dm_pool *mem, const struct volume_group *vg)
+ 	return repstr;
+ }
+ 
++char *pv_attr(struct dm_pool *mem, const struct physical_volume *pv)
++{
++	char *repstr;
++
++	if (!(repstr = dm_pool_zalloc(mem, 3))) {
++		log_error("dm_pool_alloc failed");
++		return NULL;
++	}
++
++	if (pv->status & ALLOCATABLE_PV)
++		repstr[0] = 'a';
++	else
++		repstr[0] = '-';
++
++	if (pv->status & EXPORTED_VG)
++		repstr[1] = 'x';
++	else
++		repstr[1] = '-';
++	return repstr;
++}
++
+ static int _lv_mimage_in_sync(const struct logical_volume *lv)
+ {
+ 	float percent;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index f3e268c..1749f85 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -419,6 +419,7 @@ int is_mirror_image_removable(struct logical_volume *mimage_lv, void *baton);
+ uint64_t find_min_mda_size(struct dm_list *mdas);
+ uint64_t vg_mda_size(const struct volume_group *vg);
+ uint64_t vg_mda_free(const struct volume_group *vg);
++char *pv_attr(struct dm_pool *mem, const struct physical_volume *pv);
+ char *vg_attr(struct dm_pool *mem, const struct volume_group *vg);
+ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv);
+ 
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 95ad578..689f6a5 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -93,7 +93,7 @@ FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, pe_start, "Offset to the star
+ FIELD(PVS, pv, NUM, "PSize", id, 5, pvsize, pv_size, "Size of PV in current units.", 0)
+ FIELD(PVS, pv, NUM, "PFree", id, 5, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
+ FIELD(PVS, pv, NUM, "Used", id, 4, pvused, pv_used, "Total amount of allocated space in current units.", 0)
+-FIELD(PVS, pv, STR, "Attr", status, 4, pvstatus, pv_attr, "Various attributes - see man page.", 0)
++FIELD(PVS, pv, STR, "Attr", id, 4, pvstatus, pv_attr, "Various attributes - see man page.", 0)
+ FIELD(PVS, pv, NUM, "PE", pe_count, 3, uint32, pv_pe_count, "Total number of Physical Extents.", 0)
+ FIELD(PVS, pv, NUM, "Alloc", pe_alloc_count, 5, uint32, pv_pe_alloc_count, "Total number of allocated Physical Extents.", 0)
+ FIELD(PVS, pv, STR, "PV Tags", tags, 7, tags, pv_tags, "Tags, if any.", 0)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 2de78a1..b7612a1 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -266,23 +266,12 @@ static int _pvstatus_disp(struct dm_report *rh __attribute__((unused)), struct d
+ 			  struct dm_report_field *field,
+ 			  const void *data, void *private __attribute__((unused)))
+ {
+-	const uint32_t status = *(const uint32_t *) data;
++	const struct physical_volume *pv =
++	    (const struct physical_volume *) data;
+ 	char *repstr;
+ 
+-	if (!(repstr = dm_pool_zalloc(mem, 3))) {
+-		log_error("dm_pool_alloc failed");
++	if (!(repstr = pv_attr(mem, pv)))
+ 		return 0;
+-	}
+-
+-	if (status & ALLOCATABLE_PV)
+-		repstr[0] = 'a';
+-	else
+-		repstr[0] = '-';
+-
+-	if (status & EXPORTED_VG)
+-		repstr[1] = 'x';
+-	else
+-		repstr[1] = '-';
+ 
+ 	dm_report_field_set_value(field, repstr, NULL);
+ 	return 1;
+-- 
+1.7.2.1
 
 
