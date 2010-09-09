@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 9 Sep 2010 13:07:15 -0000
-Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c li ...
-Message-ID: <20100909130715.9657.qmail@sourceware.org>
+Date: 9 Sep 2010 13:13:14 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/archive.c
+Message-ID: <20100909131314.13747.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,61 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-09-09 13:07:15
+Changes by:	prajnoha at sourceware.org	2010-09-09 13:13:12
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/commands   : toolcontext.c 
-	lib/format_text: archiver.c 
+	lib/format_text: archive.c 
 
 Log message:
-	Reinitialize archive and backup handling on toolcontext refresh.
+	Add random suffix to archive file names to prevent races when being created.
 	
-	For example, when using '--config "backup { ... }"' line, the values from
-	lvm.conf (or default values) should be overridden. This patch adds
-	reinitialisation of archive and backup handling on toolcontext refresh
-	which makes these settings to be applied.
+	In certain configurations, we're not under a VG rw lock while trying to write
+	a new archive file with VG metadata. A common example is using "vgs" while
+	having the content of backup and archive directories empty. The code scans the
+	content of these directories and tries to determine the final index that should
+	be used in archive name. Since we're not under a lock, we can get into a race
+	while choosing the index which could end up showing errors about not being able
+	to rename to final archive name. Let's add random number suffix to these archive
+	file names so we can avoid the race.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1727&r2=1.1728
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1728&r2=1.1729
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
 
---- LVM2/WHATS_NEW	2010/08/30 18:37:42	1.1727
-+++ LVM2/WHATS_NEW	2010/09/09 13:07:13	1.1728
+--- LVM2/WHATS_NEW	2010/09/09 13:07:13	1.1728
++++ LVM2/WHATS_NEW	2010/09/09 13:13:12	1.1729
 @@ -1,5 +1,6 @@
  Version 2.02.74 - 
  ==================================
-+  Reinitialize archive and backup handling on toolcontext refresh.
++  Add random suffix to archive file names to prevent races when being created.
+   Reinitialize archive and backup handling on toolcontext refresh.
    Fix opprobriously slow I/O to cluster mirrors created with --nosync.
    Make poll_mirror_progress report PROGRESS_CHECK_FAILED if LV is not a mirror.
-   Like mirrors, don't scan origins if ignore_suspended_devices() is set.
---- LVM2/lib/commands/toolcontext.c	2010/08/11 12:14:23	1.103
-+++ LVM2/lib/commands/toolcontext.c	2010/09/09 13:07:14	1.104
-@@ -1343,6 +1343,9 @@
- 	if (!_init_segtypes(cmd))
- 		return 0;
- 
-+	if (!_init_backup(cmd))
-+		return 0;
-+
- 	cmd->config_valid = 1;
- 
- 	reset_lvm_errno(1);
---- LVM2/lib/format_text/archiver.c	2010/07/08 18:24:29	1.33
-+++ LVM2/lib/format_text/archiver.c	2010/09/09 13:07:14	1.34
-@@ -40,6 +40,8 @@
- 		 unsigned int keep_days, unsigned int keep_min,
- 		 int enabled)
+--- LVM2/lib/format_text/archive.c	2010/08/03 13:09:22	1.38
++++ LVM2/lib/format_text/archive.c	2010/09/09 13:13:12	1.39
+@@ -226,7 +226,7 @@
+ 	       const char *dir, const char *desc,
+ 	       uint32_t retain_days, uint32_t min_archive)
  {
-+	archive_exit(cmd);
+-	int i, fd, renamed = 0;
++	int i, fd, rnum, renamed = 0;
+ 	uint32_t ix = 0;
+ 	struct archive_file *last;
+ 	FILE *fp = NULL;
+@@ -271,9 +271,12 @@
+ 		ix = last->index + 1;
+ 	}
+ 
++	rnum = rand_r(&vg->cmd->rand_seed);
 +
- 	if (!(cmd->archive_params = dm_pool_zalloc(cmd->libmem,
- 						sizeof(*cmd->archive_params)))) {
- 		log_error("archive_params alloc failed");
-@@ -156,6 +158,8 @@
- int backup_init(struct cmd_context *cmd, const char *dir,
- 		int enabled)
- {
-+	backup_exit(cmd);
-+
- 	if (!(cmd->backup_params = dm_pool_zalloc(cmd->libmem,
- 					       sizeof(*cmd->backup_params)))) {
- 		log_error("backup_params alloc failed");
+ 	for (i = 0; i < 10; i++) {
+ 		if (dm_snprintf(archive_name, sizeof(archive_name),
+-				 "%s/%s_%05u.vg", dir, vg->name, ix) < 0) {
++				 "%s/%s_%05u-%d.vg",
++				 dir, vg->name, ix, rnum) < 0) {
+ 			log_error("Archive file name too long.");
+ 			return 0;
+ 		}
 
 
