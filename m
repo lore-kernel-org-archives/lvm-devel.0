@@ -1,36 +1,33 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 9 Sep 2010 19:38:03 -0000
-Subject: LVM2/lib/report properties.c
-Message-ID: <20100909193803.781.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu,  9 Sep 2010 16:12:57 -0400
+Subject: [PATCH 00/12] Add lvm vg properties for lvm2app.
+Message-ID: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-09-09 19:38:03
+This patchset is a continuation of the prior patchset to implement
+generic functions to query a value of a field in an lvm report.
+This patchset completes the vg-based fields of the report and adds
+a generic function, lvm_vg_get_property() to lvm2app to query the
+properties by name.
 
-Modified files:
-	lib/report     : properties.c 
+For the string-based properties, memory allocation is done inside
+the individual supporting functions (i.e. vg_name(), vg_uuid(), etc).
+I decided this to be the best approach for consistency sake, and
+since some of the properties (for example, vg_attr, and vg_uuid)
+required special formatting and thus required the allocation to be
+done at the lower level.
 
-Log message:
-	Update vg_mda_free 'get' function to multiply by SECTOR_SIZE.
+I'm not entirely happy with this patchset but it is close enough.
+In particular, some of the functions might be better placed inside
+a separate file in lib/report and then shared between report.c
+and properties.c.  For now I've placed most of the functions inside
+metadata.c.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-
---- LVM2/lib/report/properties.c	2010/08/20 13:02:39	1.3
-+++ LVM2/lib/report/properties.c	2010/09/09 19:38:03	1.4
-@@ -152,7 +152,7 @@
- #define _vg_mda_count_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
- #define _vg_mda_used_count_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_free, (vg_mda_free(vg)))
-+GET_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
- #define _vg_mda_free_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
- #define _vg_mda_size_set _not_implemented
+Once this patchset is accepted and committed, I shall continue with
+the pv and lv properties using the same approach.
 
 
