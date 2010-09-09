@@ -1,75 +1,61 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Sep 2010 16:13:06 -0400
-Subject: [PATCH 09/12] Add 'get' functions for a few vg string fields, vg_name, vg_fmt, vg_sysid.
+Date: Thu,  9 Sep 2010 16:13:04 -0400
+Subject: [PATCH 07/12] Add pv_tags, vg_tags, lv_tags functions that call tags_format_and_copy.
 In-Reply-To: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
 References: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284063189-4908-10-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284063189-4908-8-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add _vg_name_get, _vg_fmt_get, and _vg_sysid_get functions.
-Place the static functions inside properties.c to avoid namespace conflict
-with vg_name(), and as there are no other callers.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/properties.c |   23 ++++++++++++++++++++---
- 1 files changed, 20 insertions(+), 3 deletions(-)
+ lib/metadata/metadata.c |   15 +++++++++++++++
+ lib/metadata/metadata.h |    3 +++
+ 2 files changed, 18 insertions(+), 0 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 20119b3..ce7b85f 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -44,6 +44,23 @@ static int _not_implemented(void *obj, struct lvm_property_type *prop)
- 	return 0;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index ca2374d..f418c18 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4775,6 +4775,21 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
+ 	return dm_pool_end_object(mem);
  }
  
-+static char *vg_fmt(const struct volume_group *vg)
++char *pv_tags(const struct physical_volume *pv)
 +{
-+	if (!vg->fid || !vg->fid->fmt)
-+		return NULL;
-+	return dm_pool_strdup(vg->vgmem, vg->fid->fmt->name);
++	return tags_format_and_copy(pv->vg->vgmem, &pv->tags);
 +}
 +
-+static char *vg_name(const struct volume_group *vg)
++char *vg_tags(const struct volume_group *vg)
 +{
-+	return dm_pool_strdup(vg->vgmem, vg->name);
++	return tags_format_and_copy(vg->vgmem, &vg->tags);
 +}
 +
-+static char *vg_system_id(const struct volume_group *vg)
++char *lv_tags(const struct logical_volume *lv)
 +{
-+	return dm_pool_strdup(vg->vgmem, vg->system_id);
++	return tags_format_and_copy(lv->vg->vgmem, &lv->tags);
 +}
 +
- /* PV */
- #define _pv_fmt_get _not_implemented
- #define _pv_fmt_set _not_implemented
-@@ -123,11 +140,11 @@ static int _not_implemented(void *obj, struct lvm_property_type *prop)
- #define _modules_set _not_implemented
+ uint64_t lv_size(const struct logical_volume *lv)
+ {
+ 	return lv->size;
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 82adf07..9c42276 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -426,5 +426,8 @@ char *lv_uuid(struct logical_volume *lv);
+ char *vg_uuid(struct volume_group *vg);
+ char *pv_uuid(struct physical_volume *pv);
+ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags);
++char *pv_tags(const struct physical_volume *pv);
++char *vg_tags(const struct volume_group *vg);
++char *lv_tags(const struct logical_volume *lv);
  
- /* VG */
--#define _vg_fmt_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
- #define _vg_fmt_set _not_implemented
- #define _vg_uuid_get _not_implemented
- #define _vg_uuid_set _not_implemented
--#define _vg_name_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_name, vg_name(vg))
- #define _vg_name_set _not_implemented
- #define _vg_attr_get _not_implemented
- #define _vg_attr_set _not_implemented
-@@ -135,7 +152,7 @@ GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
- #define _vg_size_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
- #define _vg_free_set _not_implemented
--#define _vg_sysid_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_sysid, vg_system_id(vg))
- #define _vg_sysid_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
- #define _vg_extent_size_set _not_implemented
+ #endif
 -- 
 1.7.2.1
 
