@@ -1,104 +1,75 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Sep 2010 16:13:03 -0400
-Subject: [PATCH 06/12] Add tags_format_and_copy() common function to format tags strings.
+Date: Thu,  9 Sep 2010 16:13:06 -0400
+Subject: [PATCH 09/12] Add 'get' functions for a few vg string fields, vg_name, vg_fmt, vg_sysid.
 In-Reply-To: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
 References: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284063189-4908-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284063189-4908-10-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add _vg_name_get, _vg_fmt_get, and _vg_sysid_get functions.
+Place the static functions inside properties.c to avoid namespace conflict
+with vg_name(), and as there are no other callers.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |   24 ++++++++++++++++++++++++
- lib/metadata/metadata.h |    1 +
- lib/report/report.c     |   21 +++------------------
- 3 files changed, 28 insertions(+), 18 deletions(-)
+ lib/report/properties.c |   23 ++++++++++++++++++++---
+ 1 files changed, 20 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6fb69dc..ca2374d 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4751,6 +4751,30 @@ out:
- 	return repstr;
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 20119b3..ce7b85f 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -44,6 +44,23 @@ static int _not_implemented(void *obj, struct lvm_property_type *prop)
+ 	return 0;
  }
  
-+char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
++static char *vg_fmt(const struct volume_group *vg)
 +{
-+	struct str_list *sl;
-+
-+	if (!dm_pool_begin_object(mem, 256)) {
-+		log_error("dm_pool_begin_object failed");
++	if (!vg->fid || !vg->fid->fmt)
 +		return NULL;
-+	}
-+
-+	dm_list_iterate_items(sl, tags) {
-+		if (!dm_pool_grow_object(mem, sl->str, strlen(sl->str)) ||
-+		    (sl->list.n != tags && !dm_pool_grow_object(mem, ",", 1))) {
-+			log_error("dm_pool_grow_object failed");
-+			return NULL;
-+		}
-+	}
-+
-+	if (!dm_pool_grow_object(mem, "\0", 1)) {
-+		log_error("dm_pool_grow_object failed");
-+		return NULL;
-+	}
-+	return dm_pool_end_object(mem);
++	return dm_pool_strdup(vg->vgmem, vg->fid->fmt->name);
 +}
 +
- uint64_t lv_size(const struct logical_volume *lv)
- {
- 	return lv->size;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 4eb826a..82adf07 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -425,5 +425,6 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_uuid(struct logical_volume *lv);
- char *vg_uuid(struct volume_group *vg);
- char *pv_uuid(struct physical_volume *pv);
-+char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags);
++static char *vg_name(const struct volume_group *vg)
++{
++	return dm_pool_strdup(vg->vgmem, vg->name);
++}
++
++static char *vg_system_id(const struct volume_group *vg)
++{
++	return dm_pool_strdup(vg->vgmem, vg->system_id);
++}
++
+ /* PV */
+ #define _pv_fmt_get _not_implemented
+ #define _pv_fmt_set _not_implemented
+@@ -123,11 +140,11 @@ static int _not_implemented(void *obj, struct lvm_property_type *prop)
+ #define _modules_set _not_implemented
  
- #endif
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 940ee25..ed53fac 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -150,27 +150,12 @@ static int _tags_disp(struct dm_report *rh __attribute__((unused)), struct dm_po
- 		      const void *data, void *private __attribute__((unused)))
- {
- 	const struct dm_list *tags = (const struct dm_list *) data;
--	struct str_list *sl;
-+	char *tags_str;
- 
--	if (!dm_pool_begin_object(mem, 256)) {
--		log_error("dm_pool_begin_object failed");
--		return 0;
--	}
--
--	dm_list_iterate_items(sl, tags) {
--		if (!dm_pool_grow_object(mem, sl->str, strlen(sl->str)) ||
--		    (sl->list.n != tags && !dm_pool_grow_object(mem, ",", 1))) {
--			log_error("dm_pool_grow_object failed");
--			return 0;
--		}
--	}
--
--	if (!dm_pool_grow_object(mem, "\0", 1)) {
--		log_error("dm_pool_grow_object failed");
-+	if (!(tags_str = tags_format_and_copy(mem, tags)))
- 		return 0;
--	}
- 
--	dm_report_field_set_value(field, dm_pool_end_object(mem), NULL);
-+	dm_report_field_set_value(field, tags_str, NULL);
- 
- 	return 1;
- }
+ /* VG */
+-#define _vg_fmt_get _not_implemented
++GET_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
+ #define _vg_fmt_set _not_implemented
+ #define _vg_uuid_get _not_implemented
+ #define _vg_uuid_set _not_implemented
+-#define _vg_name_get _not_implemented
++GET_STR_PROPERTY_FN(vg_name, vg_name(vg))
+ #define _vg_name_set _not_implemented
+ #define _vg_attr_get _not_implemented
+ #define _vg_attr_set _not_implemented
+@@ -135,7 +152,7 @@ GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
+ #define _vg_size_set _not_implemented
+ GET_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
+ #define _vg_free_set _not_implemented
+-#define _vg_sysid_get _not_implemented
++GET_STR_PROPERTY_FN(vg_sysid, vg_system_id(vg))
+ #define _vg_sysid_set _not_implemented
+ GET_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
+ #define _vg_extent_size_set _not_implemented
 -- 
 1.7.2.1
 
