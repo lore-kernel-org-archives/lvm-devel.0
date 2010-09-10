@@ -1,48 +1,63 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 10 Sep 2010 11:28:25 +0200
-Subject: [PATCH 01/12] Add vg_attr() and lv_attr() functions.
-In-Reply-To: <1284063189-4908-2-git-send-email-dwysocha@redhat.com>
+Date: Fri, 10 Sep 2010 11:30:44 +0200
+Subject: [PATCH 03/12] Add id_format_and_copy() uuid function to allocate and format a uuid.
+In-Reply-To: <1284063189-4908-4-git-send-email-dwysocha@redhat.com>
 References: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
-	<1284063189-4908-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <4C89FA39.8010107@redhat.com>
+	<1284063189-4908-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <4C89FAC4.5000103@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 9.9.2010 22:12, Dave Wysochanski napsal(a):
-> Move the creating of the 'attr' strings into a common function so
-> they can be called from the 'disp' functions as well as the new
-> 'get' property functions.
+Dne 9.9.2010 22:13, Dave Wysochanski napsal(a):
+> Add supporting uuid function to allocate memory and call id_write_format.
+> Will be used from reporting functions as well as property functions.
 > 
 > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 > ---
->  lib/metadata/metadata.c |  171 +++++++++++++++++++++++++++++++++++++++++++++++
->  lib/metadata/metadata.h |    2 +
->  lib/report/report.c     |  157 +------------------------------------------
->  3 files changed, 175 insertions(+), 155 deletions(-)
+>  lib/uuid/uuid.c |   15 +++++++++++++++
+>  lib/uuid/uuid.h |    2 ++
+>  2 files changed, 17 insertions(+), 0 deletions(-)
 > 
-> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-> index d14c33c..094ffc1 100644
-> --- a/lib/metadata/metadata.c
-> +++ b/lib/metadata/metadata.c
-
-Yep - this file is already quite large (~4600 lines)
-
-> @@ -4544,6 +4544,177 @@ uint32_t vg_mda_used_count
+> diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
+> index de3f0cd..6608473 100644
+> --- a/lib/uuid/uuid.c
+> +++ b/lib/uuid/uuid.c
+> @@ -206,3 +206,18 @@ int id_read_format(struct id *id, const char *buffer)
+>  
+>  	return id_valid(id);
+>  }
 > +
-> +	if (vg->status & LVM_WRITE)
-> +		repstr[0] = 'w';
-> +	else
-> +		repstr[0] = 'r';
+> +char *id_format_and_copy(struct dm_pool *mem, struct id *id)
+> +{
+> +	char *repstr = NULL;
+> +
+> +	if (!(repstr = dm_pool_alloc(mem, 40))) {
+> +		log_error("dm_pool_alloc failed");
+> +		return NULL;
+> +	}
+> +
+> +	if (!id_write_format(id, repstr, 40))
+> +		return_NULL;
+> +
+> +	return repstr;
+> +}
+> diff --git a/lib/uuid/uuid.h b/lib/uuid/uuid.h
+> index 0029639..6c1169a 100644
+> --- a/lib/uuid/uuid.h
+> +++ b/lib/uuid/uuid.h
+> @@ -54,4 +54,6 @@ int id_write_format(const struct id *id, char *buffer, size_t size);
+>   */
+>  int id_read_format(struct id *id, const char *buffer);
+>  
+> +char *id_format_and_copy(struct dm_pool *mem, struct id *id);
 
-Shorter:
+const struct id*
 
-repstr[0] = (vg->status & LVM_WRITE) ? 'w' : 'r';
-
-(similar to other places)
-
+Please consider 'const' in case you do not plane to modify id inside this
+function.
 
 Zdenek
 
