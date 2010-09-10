@@ -1,49 +1,49 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu,  9 Sep 2010 16:13:07 -0400
-Subject: [PATCH 10/12] Add vg_uuid, vg_attr, vg_tags 'get' functions.
-In-Reply-To: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 10 Sep 2010 11:28:25 +0200
+Subject: [PATCH 01/12] Add vg_attr() and lv_attr() functions.
+In-Reply-To: <1284063189-4908-2-git-send-email-dwysocha@redhat.com>
 References: <1284063189-4908-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284063189-4908-11-git-send-email-dwysocha@redhat.com>
+	<1284063189-4908-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <4C89FA39.8010107@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Dne 9.9.2010 22:12, Dave Wysochanski napsal(a):
+> Move the creating of the 'attr' strings into a common function so
+> they can be called from the 'disp' functions as well as the new
+> 'get' property functions.
+> 
+> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> ---
+>  lib/metadata/metadata.c |  171 +++++++++++++++++++++++++++++++++++++++++++++++
+>  lib/metadata/metadata.h |    2 +
+>  lib/report/report.c     |  157 +------------------------------------------
+>  3 files changed, 175 insertions(+), 155 deletions(-)
+> 
+> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+> index d14c33c..094ffc1 100644
+> --- a/lib/metadata/metadata.c
+> +++ b/lib/metadata/metadata.c
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/report/properties.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+Yep - this file is already quite large (~4600 lines)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index ce7b85f..c4bce08 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -142,11 +142,11 @@ static char *vg_system_id(const struct volume_group *vg)
- /* VG */
- GET_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
- #define _vg_fmt_set _not_implemented
--#define _vg_uuid_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_uuid, vg_uuid(vg))
- #define _vg_uuid_set _not_implemented
- GET_STR_PROPERTY_FN(vg_name, vg_name(vg))
- #define _vg_name_set _not_implemented
--#define _vg_attr_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_attr, vg_attr(vg->vgmem, vg))
- #define _vg_attr_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
- #define _vg_size_set _not_implemented
-@@ -172,7 +172,7 @@ GET_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
- #define _snap_count_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
- #define _vg_seqno_set _not_implemented
--#define _vg_tags_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_tags, vg_tags(vg))
- #define _vg_tags_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
- #define _vg_mda_count_set _not_implemented
--- 
-1.7.2.1
+> @@ -4544,6 +4544,177 @@ uint32_t vg_mda_used_count
+> +
+> +	if (vg->status & LVM_WRITE)
+> +		repstr[0] = 'w';
+> +	else
+> +		repstr[0] = 'r';
+
+Shorter:
+
+repstr[0] = (vg->status & LVM_WRITE) ? 'w' : 'r';
+
+(similar to other places)
+
+
+Zdenek
 
 
