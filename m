@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 15 Sep 2010 11:36:10 -0400
-Subject: [PATCH 18/19] Add lvm_pv_get_property() generic function to obtain value of any pv property.
+Date: Wed, 15 Sep 2010 11:36:11 -0400
+Subject: [PATCH 19/19] Add pv_get_property to interactive test.
 In-Reply-To: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284564971-26060-19-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284564971-26060-20-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,83 +13,100 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/lvm2app.h |   26 ++++++++++++++++++++++++++
- liblvm/lvm_pv.c  |   18 ++++++++++++++++++
- 2 files changed, 44 insertions(+), 0 deletions(-)
+ test/api/test.c |   52 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 51 insertions(+), 1 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index cc839a6..634394a 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1222,6 +1222,32 @@ uint64_t lvm_pv_get_size(const pv_t pv);
- uint64_t lvm_pv_get_free(const pv_t pv);
- 
- /**
-+ * Get the value of a PV property
-+ *
-+ * \memberof pv_t
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example:
-+ *      lvm_property_value value;
-+ *
-+ *      if (lvm_pv_get_property(pv, "pv_mda_count", &value) < 0) {
-+ *              // handle error
-+ *      }
-+ *      if (value.is_string)
-+ *           printf(", value = %s\n", value.u.s_val);
-+ *	else
-+ *           printf(", value = %"PRIu64"\n", value.u.n_val);
-+ *
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
-+int lvm_pv_get_property(pv_t pv, const char *name,
-+			struct lvm_property_value *value);
-+
-+/**
-  * Resize physical volume to new_size bytes.
-  *
-  * \memberof pv_t
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index e3962e4..5fc73ba 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -16,6 +16,7 @@
- #include "lvm2app.h"
- #include "metadata.h"
- #include "lvm-string.h"
-+#include "properties.h"
- 
- const char *lvm_pv_get_uuid(const pv_t pv)
- {
-@@ -48,6 +49,23 @@ uint64_t lvm_pv_get_free(const pv_t pv)
- 	return (uint64_t) SECTOR_SIZE * pv_free(pv);
+diff --git a/test/api/test.c b/test/api/test.c
+index 4560655..2579ff0 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -93,6 +93,8 @@ static void _show_help(void)
+ 	       "List the tags of a VG\n");
+ 	printf("'vg_get_property vgname property_name': "
+ 	       "Display the value of VG property\n");
++	printf("'pv_get_property pvname property_name': "
++	       "Display the value of PV property\n");
+ 	printf("'lv_get_tags vgname lvname': "
+ 	       "List the tags of a LV\n");
+ 	printf("'vg_{add|remove}_tag vgname tag': "
+@@ -182,6 +184,23 @@ static vg_t _lookup_vg_by_name(char **argv, int argc)
+ 	}
+ 	return vg;
  }
- 
-+int lvm_pv_get_property(pv_t pv, const char *name,
-+			struct lvm_property_value *value)
-+{
-+	struct lvm_property_type prop;
 +
-+	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
-+	if (!lvm_get_property((void *)pv, &prop))
-+		return -1;
-+	value->is_writeable = prop.is_writeable;
-+	value->is_string = prop.is_string;
-+	if (value->is_string)
-+		value->v.s_val = prop.v.s_val;
-+	else
-+		value->v.n_val = prop.v.n_val;
-+	return 0;
++static pv_t _lookup_pv_by_name(char **argv, int argc)
++{
++	pv_t pv;
++
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return NULL;
++	}
++	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
++		printf ("Can't find %s in open PVs - run vg_open first\n",
++			argv[1]);
++		return NULL;
++	}
++	return pv;
 +}
 +
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+ static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
  {
- 	/* FIXME: add pv resize code here */
+ 	struct lvm_lv_list *lvl;
+@@ -548,6 +567,35 @@ static void _vg_tag(char **argv, int argc, int add)
+ 	       add ? "adding":"removing", argv[2], argv[1]);
+ }
+ 
++static void _pv_get_property(char **argv, int argc)
++{
++	pv_t pv;
++	struct lvm_property_value value;
++	int rc;
++
++	if (argc < 3) {
++		printf("Please enter vgname, field_id\n");
++		return;
++	}
++	if (!(pv = _lookup_pv_by_name(argv, argc)))
++		return;
++	rc = lvm_pv_get_property(pv, argv[2], &value);
++	if (rc)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("obtaining value of property %s in VG %s",
++	       argv[2], argv[1]);
++	if (rc) {
++		printf("\n");
++		return;
++	}
++	if (value.is_string)
++		printf(", value = %s\n", value.v.s_val);
++	else
++		printf(", value = %"PRIu64"\n", value.v.n_val);
++}
++
+ static void _vg_get_property(char **argv, int argc)
+ {
+ 	vg_t vg;
+@@ -565,7 +613,7 @@ static void _vg_get_property(char **argv, int argc)
+ 		printf("Error ");
+ 	else
+ 		printf("Success ");
+-	printf("Obtaining value of property %s in VG %s",
++	printf("obtaining value of property %s in VG %s",
+ 	       argv[2], argv[1]);
+ 	if (rc) {
+ 		printf("\n");
+@@ -829,6 +877,8 @@ static int lvmapi_test_shell(lvm_t libh)
+ 			_vg_get_tags(argv, argc);
+ 		} else if (!strcmp(argv[0], "vg_get_property")) {
+ 			_vg_get_property(argv, argc);
++		} else if (!strcmp(argv[0], "pv_get_property")) {
++			_pv_get_property(argv, argc);
+ 		} else if (!strcmp(argv[0], "lv_add_tag")) {
+ 			_lv_tag(argv, argc, 1);
+ 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
 -- 
 1.7.2.1
 
