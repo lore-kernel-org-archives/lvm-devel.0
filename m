@@ -1,138 +1,139 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 15 Sep 2010 11:36:05 -0400
-Subject: [PATCH 13/19] Simplify logic to create 'attr' strings.
+Date: Wed, 15 Sep 2010 11:36:06 -0400
+Subject: [PATCH 14/19] Make generic GET_*_PROPERTY_FN macros and define secondary macro for vg, pv, lv.
 In-Reply-To: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284564971-26060-14-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284564971-26060-15-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Will need similar macros for VG, PV and LV, so define a generic one, and just
+pass in the struct name and variable name for the specific macro.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/metadata.c |   71 ++++++++--------------------------------------
- 1 files changed, 13 insertions(+), 58 deletions(-)
+ lib/report/properties.c |   64 ++++++++++++++++++++++++++++-------------------
+ 1 files changed, 38 insertions(+), 26 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 704e77b..de878c3 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4569,32 +4569,12 @@ char *vg_attr(struct dm_pool *mem, const struct volume_group *vg)
- 		return NULL;
- 	}
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 1880ef7..0352489 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -20,23 +20,35 @@
+ #include "lvm-types.h"
+ #include "metadata.h"
  
--	if (vg->status & LVM_WRITE)
--		repstr[0] = 'w';
--	else
--		repstr[0] = 'r';
--
--	if (vg_is_resizeable(vg))
--		repstr[1] = 'z';
--	else
--		repstr[1] = '-';
--
--	if (vg_is_exported(vg))
--		repstr[2] = 'x';
--	else
--		repstr[2] = '-';
--
--	if (vg_missing_pv_count(vg))
--		repstr[3] = 'p';
--	else
--		repstr[3] = '-';
--
-+	repstr[0] = (vg->status & LVM_WRITE) ? 'w' : 'r';
-+	repstr[1] = (vg_is_resizeable(vg)) ? 'z' : '-';
-+	repstr[2] = (vg_is_exported(vg)) ? 'x' : '-';
-+	repstr[3] = (vg_missing_pv_count(vg)) ? 'p' : '-';
- 	repstr[4] = _alloc_policy_char(vg->alloc);
--
--	if (vg_is_clustered(vg))
--		repstr[5] = 'c';
--	else
--		repstr[5] = '-';
-+	repstr[5] = (vg_is_clustered(vg)) ? 'c' : '-';
- 	return repstr;
+-#define GET_NUM_PROPERTY_FN(NAME, VALUE) \
++#define GET_NUM_PROPERTY_FN(NAME, VALUE, STRUCT, VAR)			\
+ static int _ ## NAME ## _get (void *obj, struct lvm_property_type *prop) \
+ { \
+-	struct volume_group *vg = (struct volume_group *)obj; \
++	struct STRUCT *VAR = (struct STRUCT *)obj; \
+ \
+ 	prop->v.n_val = VALUE; \
+ 	return 1; \
  }
++#define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
++	GET_NUM_PROPERTY_FN(NAME, VALUE, volume_group, vg)
++#define GET_PV_NUM_PROPERTY_FN(NAME, VALUE) \
++	GET_NUM_PROPERTY_FN(NAME, VALUE, physical_volume, pv)
++#define GET_LV_NUM_PROPERTY_FN(NAME, VALUE) \
++	GET_NUM_PROPERTY_FN(NAME, VALUE, logical_volume, lv)
  
-@@ -4607,15 +4587,8 @@ char *pv_attr(struct dm_pool *mem, const struct physical_volume *pv)
- 		return NULL;
- 	}
- 
--	if (pv->status & ALLOCATABLE_PV)
--		repstr[0] = 'a';
--	else
--		repstr[0] = '-';
--
--	if (pv->status & EXPORTED_VG)
--		repstr[1] = 'x';
--	else
--		repstr[1] = '-';
-+	repstr[0] = (pv->status & ALLOCATABLE_PV) ? 'a' : '-';
-+	repstr[1] = (pv->status & EXPORTED_VG) ? 'x' : '-';
- 	return repstr;
+-#define GET_STR_PROPERTY_FN(NAME, VALUE) \
++#define GET_STR_PROPERTY_FN(NAME, VALUE, STRUCT, VAR)			\
+ static int _ ## NAME ## _get (void *obj, struct lvm_property_type *prop) \
+ { \
+-	struct volume_group *vg = (struct volume_group *)obj; \
++	struct STRUCT *VAR = (struct STRUCT *)obj; \
+ \
+ 	prop->v.s_val = (char *)VALUE;	\
+ 	return 1; \
  }
++#define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
++	GET_STR_PROPERTY_FN(NAME, VALUE, volume_group, vg)
++#define GET_PV_STR_PROPERTY_FN(NAME, VALUE) \
++	GET_STR_PROPERTY_FN(NAME, VALUE, physical_volume, pv)
++#define GET_LV_STR_PROPERTY_FN(NAME, VALUE) \
++	GET_STR_PROPERTY_FN(NAME, VALUE, logical_volume, lv)
  
-@@ -4674,28 +4647,16 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
- 		repstr[0] = 'v';
- 	/* Origin takes precedence over Mirror */
- 	else if (lv_is_origin(lv)) {
--		if (lv_is_merging_origin(lv))
--			repstr[0] = 'O';
--		else
--			repstr[0] = 'o';
-+		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
- 	}
- 	else if (lv->status & MIRRORED) {
--		if (lv->status & MIRROR_NOTSYNCED)
--			repstr[0] = 'M';
--		else
--			repstr[0] = 'm';
-+		repstr[0] = (lv->status & MIRROR_NOTSYNCED) ? 'M' : 'm';
- 	}else if (lv->status & MIRROR_IMAGE)
--		if (_lv_mimage_in_sync(lv))
--			repstr[0] = 'i';
--		else
--			repstr[0] = 'I';
-+		repstr[0] = (_lv_mimage_in_sync(lv)) ? 'i' : 'I';
- 	else if (lv->status & MIRROR_LOG)
- 		repstr[0] = 'l';
- 	else if (lv_is_cow(lv)) {
--		if (lv_is_merging_cow(lv))
--			repstr[0] = 'S';
--		else
--			repstr[0] = 's';
-+		repstr[0] = (lv_is_merging_cow(lv)) ? 'S' : 's';
- 	} else
- 		repstr[0] = '-';
+ static int _not_implemented(void *obj, struct lvm_property_type *prop)
+ {
+@@ -140,49 +152,49 @@ static char *vg_system_id(const struct volume_group *vg)
+ #define _modules_set _not_implemented
  
-@@ -4713,10 +4674,7 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
- 	if (lv->status & LOCKED)
- 		repstr[2] = toupper(repstr[2]);
+ /* VG */
+-GET_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
++GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
+ #define _vg_fmt_set _not_implemented
+-GET_STR_PROPERTY_FN(vg_uuid, vg_uuid(vg))
++GET_VG_STR_PROPERTY_FN(vg_uuid, vg_uuid(vg))
+ #define _vg_uuid_set _not_implemented
+-GET_STR_PROPERTY_FN(vg_name, vg_name(vg))
++GET_VG_STR_PROPERTY_FN(vg_name, vg_name(vg))
+ #define _vg_name_set _not_implemented
+-GET_STR_PROPERTY_FN(vg_attr, vg_attr(vg->vgmem, vg))
++GET_VG_STR_PROPERTY_FN(vg_attr, vg_attr(vg->vgmem, vg))
+ #define _vg_attr_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
+ #define _vg_size_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
+ #define _vg_free_set _not_implemented
+-GET_STR_PROPERTY_FN(vg_sysid, vg_system_id(vg))
++GET_VG_STR_PROPERTY_FN(vg_sysid, vg_system_id(vg))
+ #define _vg_sysid_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
++GET_VG_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
+ #define _vg_extent_size_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
++GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
+ #define _vg_extent_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_free_count, vg->free_count)
++GET_VG_NUM_PROPERTY_FN(vg_free_count, vg->free_count)
+ #define _vg_free_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(max_lv, vg->max_lv)
++GET_VG_NUM_PROPERTY_FN(max_lv, vg->max_lv)
+ #define _max_lv_set _not_implemented
+-GET_NUM_PROPERTY_FN(max_pv, vg->max_pv)
++GET_VG_NUM_PROPERTY_FN(max_pv, vg->max_pv)
+ #define _max_pv_set _not_implemented
+-GET_NUM_PROPERTY_FN(pv_count, vg->pv_count)
++GET_VG_NUM_PROPERTY_FN(pv_count, vg->pv_count)
+ #define _pv_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(lv_count, (vg_visible_lvs(vg)))
++GET_VG_NUM_PROPERTY_FN(lv_count, (vg_visible_lvs(vg)))
+ #define _lv_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
++GET_VG_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
+ #define _snap_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
++GET_VG_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
+ #define _vg_seqno_set _not_implemented
+-GET_STR_PROPERTY_FN(vg_tags, vg_tags(vg))
++GET_VG_STR_PROPERTY_FN(vg_tags, vg_tags(vg))
+ #define _vg_tags_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
+ #define _vg_mda_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
+ #define _vg_mda_used_count_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
+ #define _vg_mda_free_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
+ #define _vg_mda_size_set _not_implemented
+-GET_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
++GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
+ #define _vg_mda_copies_set _not_implemented
  
--	if (lv->status & FIXED_MINOR)
--		repstr[3] = 'm';	/* Fixed Minor */
--	else
--		repstr[3] = '-';
-+	repstr[3] = (lv->status & FIXED_MINOR) ? 'm' : '-';
- 
- 	if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && info.exists) {
- 		if (info.suspended)
-@@ -4739,10 +4697,7 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
- 				repstr[4] = 'I'; /* Invalid snapshot */
- 		}
- 
--		if (info.open_count)
--			repstr[5] = 'o';	/* Open */
--		else
--			repstr[5] = '-';
-+		repstr[5] = (info.open_count) ? 'o' : '-';
- 	} else {
- 		repstr[4] = '-';
- 		repstr[5] = '-';
+ /* LVSEG */
 -- 
 1.7.2.1
 
