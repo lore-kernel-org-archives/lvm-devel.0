@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 15 Sep 2010 11:36:04 -0400
-Subject: [PATCH 12/19] Add tests for lvm_vg_get_property().
+Date: Wed, 15 Sep 2010 11:36:05 -0400
+Subject: [PATCH 13/19] Simplify logic to create 'attr' strings.
 In-Reply-To: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284564971-26060-13-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284564971-26060-14-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,67 +13,126 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- test/api/test.c |   33 +++++++++++++++++++++++++++++++++
- 1 files changed, 33 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |   71 ++++++++--------------------------------------
+ 1 files changed, 13 insertions(+), 58 deletions(-)
 
-diff --git a/test/api/test.c b/test/api/test.c
-index f89840c..4560655 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -91,6 +91,8 @@ static void _show_help(void)
- 	       "Issue a lvm_config_override() with accept device filter\n");
- 	printf("'vg_get_tags vgname': "
- 	       "List the tags of a VG\n");
-+	printf("'vg_get_property vgname property_name': "
-+	       "Display the value of VG property\n");
- 	printf("'lv_get_tags vgname lvname': "
- 	       "List the tags of a LV\n");
- 	printf("'vg_{add|remove}_tag vgname tag': "
-@@ -546,6 +548,35 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 704e77b..de878c3 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4569,32 +4569,12 @@ char *vg_attr(struct dm_pool *mem, const struct volume_group *vg)
+ 		return NULL;
+ 	}
+ 
+-	if (vg->status & LVM_WRITE)
+-		repstr[0] = 'w';
+-	else
+-		repstr[0] = 'r';
+-
+-	if (vg_is_resizeable(vg))
+-		repstr[1] = 'z';
+-	else
+-		repstr[1] = '-';
+-
+-	if (vg_is_exported(vg))
+-		repstr[2] = 'x';
+-	else
+-		repstr[2] = '-';
+-
+-	if (vg_missing_pv_count(vg))
+-		repstr[3] = 'p';
+-	else
+-		repstr[3] = '-';
+-
++	repstr[0] = (vg->status & LVM_WRITE) ? 'w' : 'r';
++	repstr[1] = (vg_is_resizeable(vg)) ? 'z' : '-';
++	repstr[2] = (vg_is_exported(vg)) ? 'x' : '-';
++	repstr[3] = (vg_missing_pv_count(vg)) ? 'p' : '-';
+ 	repstr[4] = _alloc_policy_char(vg->alloc);
+-
+-	if (vg_is_clustered(vg))
+-		repstr[5] = 'c';
+-	else
+-		repstr[5] = '-';
++	repstr[5] = (vg_is_clustered(vg)) ? 'c' : '-';
+ 	return repstr;
  }
  
-+static void _vg_get_property(char **argv, int argc)
-+{
-+	vg_t vg;
-+	struct lvm_property_value value;
-+	int rc;
-+
-+	if (argc < 3) {
-+		printf("Please enter vgname, field_id\n");
-+		return;
-+	}
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	rc = lvm_vg_get_property(vg, argv[2], &value);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("Obtaining value of property %s in VG %s",
-+	       argv[2], argv[1]);
-+	if (rc) {
-+		printf("\n");
-+		return;
-+	}
-+	if (value.is_string)
-+		printf(", value = %s\n", value.v.s_val);
-+	else
-+		printf(", value = %"PRIu64"\n", value.v.n_val);
-+}
-+
- static void _lv_get_tags(char **argv, int argc)
- {
- 	lv_t lv;
-@@ -796,6 +827,8 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_vg_tag(argv, argc, 0);
- 		} else if (!strcmp(argv[0], "vg_get_tags")) {
- 			_vg_get_tags(argv, argc);
-+		} else if (!strcmp(argv[0], "vg_get_property")) {
-+			_vg_get_property(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_add_tag")) {
- 			_lv_tag(argv, argc, 1);
- 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+@@ -4607,15 +4587,8 @@ char *pv_attr(struct dm_pool *mem, const struct physical_volume *pv)
+ 		return NULL;
+ 	}
+ 
+-	if (pv->status & ALLOCATABLE_PV)
+-		repstr[0] = 'a';
+-	else
+-		repstr[0] = '-';
+-
+-	if (pv->status & EXPORTED_VG)
+-		repstr[1] = 'x';
+-	else
+-		repstr[1] = '-';
++	repstr[0] = (pv->status & ALLOCATABLE_PV) ? 'a' : '-';
++	repstr[1] = (pv->status & EXPORTED_VG) ? 'x' : '-';
+ 	return repstr;
+ }
+ 
+@@ -4674,28 +4647,16 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
+ 		repstr[0] = 'v';
+ 	/* Origin takes precedence over Mirror */
+ 	else if (lv_is_origin(lv)) {
+-		if (lv_is_merging_origin(lv))
+-			repstr[0] = 'O';
+-		else
+-			repstr[0] = 'o';
++		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
+ 	}
+ 	else if (lv->status & MIRRORED) {
+-		if (lv->status & MIRROR_NOTSYNCED)
+-			repstr[0] = 'M';
+-		else
+-			repstr[0] = 'm';
++		repstr[0] = (lv->status & MIRROR_NOTSYNCED) ? 'M' : 'm';
+ 	}else if (lv->status & MIRROR_IMAGE)
+-		if (_lv_mimage_in_sync(lv))
+-			repstr[0] = 'i';
+-		else
+-			repstr[0] = 'I';
++		repstr[0] = (_lv_mimage_in_sync(lv)) ? 'i' : 'I';
+ 	else if (lv->status & MIRROR_LOG)
+ 		repstr[0] = 'l';
+ 	else if (lv_is_cow(lv)) {
+-		if (lv_is_merging_cow(lv))
+-			repstr[0] = 'S';
+-		else
+-			repstr[0] = 's';
++		repstr[0] = (lv_is_merging_cow(lv)) ? 'S' : 's';
+ 	} else
+ 		repstr[0] = '-';
+ 
+@@ -4713,10 +4674,7 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
+ 	if (lv->status & LOCKED)
+ 		repstr[2] = toupper(repstr[2]);
+ 
+-	if (lv->status & FIXED_MINOR)
+-		repstr[3] = 'm';	/* Fixed Minor */
+-	else
+-		repstr[3] = '-';
++	repstr[3] = (lv->status & FIXED_MINOR) ? 'm' : '-';
+ 
+ 	if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && info.exists) {
+ 		if (info.suspended)
+@@ -4739,10 +4697,7 @@ char *lv_attr(struct dm_pool *mem, const struct logical_volume *lv)
+ 				repstr[4] = 'I'; /* Invalid snapshot */
+ 		}
+ 
+-		if (info.open_count)
+-			repstr[5] = 'o';	/* Open */
+-		else
+-			repstr[5] = '-';
++		repstr[5] = (info.open_count) ? 'o' : '-';
+ 	} else {
+ 		repstr[4] = '-';
+ 		repstr[5] = '-';
 -- 
 1.7.2.1
 
