@@ -1,123 +1,118 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 15 Sep 2010 14:30:15 +0200
-Subject: [PATCH] Add escape sequence for ':' in command's PV list
-Message-ID: <4C90BC57.30100@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 15 Sep 2010 11:27:41 -0400
+Subject: [PATCH] Add lvm2app example to docs directory.
+Message-ID: <1284564461-25995-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is reincarnation of simple, old and forgotten (and not so important) patch
-I sent a long long time ago but it faded away somehow. But I'd like to have
-this cleaned up finally (..to not make a mess on my desk :)).
+Add a simple example of using lvm2app to enumerate the system's
+VGs, LVs, and PVs.
+Build as follows (I tried on f13):
+$ gcc example_lvm2app.c -llvm2app -ldevmapper
 
-At that time, I used doubling of characters to escape the ":". But since
-we use "\" everywhere else, let's do it this way. (rhbz #491409)
-
-(I remember there was a discussion about adding some form of generic
-mechanism for escaping characters by means of adding a new command to
-do that. Do we still want that? Is that really necessary?)
-
-Peter
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/misc/lvm-string.c |   20 ++++++++++++++++++--
- lib/misc/lvm-string.h |    6 ++++++
- tools/toollib.c       |   15 +++++++--------
- 3 files changed, 31 insertions(+), 10 deletions(-)
+ doc/example_lvm2app.c |   87 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 87 insertions(+), 0 deletions(-)
+ create mode 100644 doc/example_lvm2app.c
 
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index 7eed799..6c1c1a5 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -105,14 +105,19 @@ static void _quote_characters(char **out, const char *src,
-  * Also unquote quote_char.
-  */
- static void _unquote_characters(char *src, const int orig_char,
--				const int quote_char)
-+				const int quote_char,
-+				char **substr_first_unquoted)
- {
- 	char *out = src;
- 
-+	*substr_first_unquoted = NULL;
+diff --git a/doc/example_lvm2app.c b/doc/example_lvm2app.c
+new file mode 100644
+index 0000000..5feba33
+--- /dev/null
++++ b/doc/example_lvm2app.c
+@@ -0,0 +1,87 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
 +
- 	while (*src) {
- 		if (*src == quote_char &&
- 		    (*(src + 1) == orig_char || *(src + 1) == quote_char))
- 			src++;
-+		else if (*src == orig_char)
-+			*substr_first_unquoted = out;
- 
- 		*out++ = *src++;
- 	}
-@@ -209,7 +214,18 @@ char *escape_double_quotes(char *out, const char *src)
-  */
- void unescape_double_quotes(char *src)
- {
--	_unquote_characters(src, '\"', '\\');
-+	char *s;
++#include "lvm2app.h"
++#include <stdio.h>
 +
-+	_unquote_characters(src, '\"', '\\', &s);
++static void _process_vg(lvm_t lvm, vg_t vg)
++{
++	struct dm_list *lvs, *pvs;
++	struct lvm_pv_list *pvl;
++	struct lvm_lv_list *lvl;
++
++	if (!vg) {
++		fprintf(stderr, "Error opening volume group");
++		return;
++	}
++	printf("vg_name: %s, vg_uuid: %s\n", lvm_vg_get_name(vg),
++	       lvm_vg_get_uuid(vg));
++	pvs = lvm_vg_list_pvs(vg);
++	if (!pvs && lvm_errno(lvm)) {
++		fprintf(stderr, "lvm_vg_list_pvs() failed\n");
++		return;
++	} else if (!pvs) {
++		fprintf(stdout, "- No PVs, error!\n");
++		return;
++	}
++	dm_list_iterate_items(pvl, pvs) {
++		printf("- pv_name: %s, pv_uuid: %s\n",
++			lvm_pv_get_name(pvl->pv), lvm_pv_get_uuid(pvl->pv));
++	}
++	lvs = lvm_vg_list_lvs(vg);
++	if (!lvs && lvm_errno(lvm)) {
++		fprintf(stderr, "lvm_vg_list_lvs() failed\n");
++		return;
++	} else if (!lvs) {
++		fprintf(stdout, "- No LVs\n");
++		return;
++	}
++	dm_list_iterate_items(lvl, lvs) {
++		printf("- lv_name: %s, lv_uuid: %s\n",
++			lvm_lv_get_name(lvl->lv), lvm_lv_get_uuid(lvl->lv));
++	}
 +}
 +
-+/*
-+ * Unescape colons in situ and save the substring starting
-+ * at the position of the first unescaped colon.
-+ */
-+void unescape_colons(char *src, char **substr_first_unquoted)
++int main(int argc, char *argv[])
 +{
-+	_unquote_characters(src, ':', '\\', substr_first_unquoted);
- }
- 
- /*
-diff --git a/lib/misc/lvm-string.h b/lib/misc/lvm-string.h
-index 35d9245..f649fdc 100644
---- a/lib/misc/lvm-string.h
-+++ b/lib/misc/lvm-string.h
-@@ -60,4 +60,10 @@ char *escape_double_quotes(char *out, const char *src);
-  */
- void unescape_double_quotes(char *src);
- 
-+/*
-+ * Unescape colons in situ and save the substring starting
-+ * at the position of the first unescaped colon.
-+ */
-+void unescape_colons(char *src, char **substr_first_unquoted);
++	lvm_t lvm;
++	vg_t vg;
++	struct dm_list *vgnames;
++	struct lvm_str_list *strl;
 +
- #endif
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 5da30f4..104f33c 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1093,7 +1093,7 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
- 	struct dm_list *r;
- 	struct pv_list *pvl;
- 	struct dm_list tags, arg_pvnames;
--	const char *pvname = NULL;
-+	char *pvname = NULL;
- 	char *colon, *tagname;
- 	int i;
- 
-@@ -1128,13 +1128,12 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
- 
- 		pvname = argv[i];
- 
--		if ((colon = strchr(pvname, ':'))) {
--			if (!(pvname = dm_pool_strndup(mem, pvname,
--						    (unsigned) (colon -
--								pvname)))) {
--				log_error("Failed to clone PV name");
--				return NULL;
--			}
-+		unescape_colons(pvname, &colon);
++	lvm = lvm_init(NULL);
++	if (!lvm) {
++		fprintf(stderr, "lvm_init() failed\n");
++		goto bad;
++	}
 +
-+		if (colon && !(pvname = dm_pool_strndup(mem, pvname,
-+					(unsigned) (colon - pvname)))) {
-+			log_error("Failed to clone PV name");
-+			return NULL;
- 		}
- 
- 		if (!(pvl = find_pv_in_vg(vg, pvname))) {
++	printf("Library version: %s\n", lvm_library_get_version());
++	vgnames = lvm_list_vg_names(lvm);
++	if (!vgnames) {
++		fprintf(stderr, "lvm_list_vg_names() failed\n");
++		goto bad;
++	}
++	dm_list_iterate_items(strl, vgnames) {
++		printf("Opening volume group %s\n", strl->str);
++		vg = lvm_vg_open(lvm, strl->str, "r", 0);
++		_process_vg(lvm, vg);
++		lvm_vg_close(vg);
++	}
++	lvm_quit(lvm);
++	exit(0);
++bad:
++	if (lvm)
++		lvm_quit(lvm);
++	exit(-1);
++}
+-- 
+1.7.2.1
 
 
