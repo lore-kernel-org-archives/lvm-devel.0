@@ -1,48 +1,121 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 15 Sep 2010 11:36:02 -0400
-Subject: [PATCH 10/19] Add vg_uuid, vg_attr, vg_tags 'get' functions.
+Date: Wed, 15 Sep 2010 11:36:03 -0400
+Subject: [PATCH 11/19] Add lvm_vg_get_property() generic vg property function.
 In-Reply-To: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284564971-26060-11-git-send-email-dwysocha@redhat.com>
+Message-ID: <1284564971-26060-12-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add a generic VG property function to lvm2app.  Call the internal library
+vg_get_property() function.  Strings are dup'd internally.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/properties.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ liblvm/lvm2app.h |   42 ++++++++++++++++++++++++++++++++++++++++++
+ liblvm/lvm_vg.c  |   19 +++++++++++++++++++
+ 2 files changed, 61 insertions(+), 0 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index fe867c0..1880ef7 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -142,11 +142,11 @@ static char *vg_system_id(const struct volume_group *vg)
- /* VG */
- GET_STR_PROPERTY_FN(vg_fmt, vg_fmt(vg))
- #define _vg_fmt_set _not_implemented
--#define _vg_uuid_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_uuid, vg_uuid(vg))
- #define _vg_uuid_set _not_implemented
- GET_STR_PROPERTY_FN(vg_name, vg_name(vg))
- #define _vg_name_set _not_implemented
--#define _vg_attr_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_attr, vg_attr(vg->vgmem, vg))
- #define _vg_attr_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
- #define _vg_size_set _not_implemented
-@@ -172,7 +172,7 @@ GET_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
- #define _snap_count_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
- #define _vg_seqno_set _not_implemented
--#define _vg_tags_get _not_implemented
-+GET_STR_PROPERTY_FN(vg_tags, vg_tags(vg))
- #define _vg_tags_set _not_implemented
- GET_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
- #define _vg_mda_count_set _not_implemented
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 47d3417..cc839a6 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -168,6 +168,22 @@ typedef struct lvm_str_list {
+ 	const char *str;
+ } lvm_str_list_t;
+ 
++/**
++ * Property Value
++ *
++ * This structure defines a single LVM property value for an LVM object.
++ * The structures are returned by functions such as
++ * lvm_vg_get_property() and lvm_vg_set_property().
++ */
++typedef struct lvm_property_value {
++	unsigned is_writeable;
++	unsigned is_string;
++	union {
++		char *s_val;
++		uint64_t n_val;
++	} v;
++} lvm_property_value_t;
++
+ /*************************** generic lvm handling ***************************/
+ /**
+  * Create a LVM handle.
+@@ -848,6 +864,32 @@ uint64_t lvm_vg_get_max_lv(const vg_t vg);
+  */
+ struct dm_list *lvm_vg_get_tags(const vg_t vg);
+ 
++/**
++ * Get the value of a VG property
++ *
++ * \memberof vg_t
++ *
++ * The memory allocated for a string property value is tied to the vg_t
++ * handle and will be released when lvm_vg_close() is called.
++ *
++ * Example:
++ *      lvm_property_value value;
++ *
++ *      if (lvm_vg_get_property(vg, "vg_mda_count", &value) < 0) {
++ *              // handle error
++ *      }
++ *      if (value.is_string)
++ *           printf(", value = %s\n", value.u.s_val);
++ *	else
++ *           printf(", value = %"PRIu64"\n", value.u.n_val);
++ *
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ */
++int lvm_vg_get_property(vg_t vg, const char *name,
++			struct lvm_property_value *value);
++
+ /************************** logical volume handling *************************/
+ 
+ /**
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index a2f8e31..9a72bec 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -20,6 +20,7 @@
+ #include "locking.h"
+ #include "lvmcache.h"
+ #include "lvm_misc.h"
++#include "properties.h"
+ 
+ int lvm_vg_add_tag(vg_t vg, const char *tag)
+ {
+@@ -335,6 +336,24 @@ const char *lvm_vg_get_name(const vg_t vg)
+ 	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+ }
+ 
++
++int lvm_vg_get_property(vg_t vg, const char *name,
++			struct lvm_property_value *value)
++{
++	struct lvm_property_type prop;
++
++	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
++	if (!vg_get_property(vg, &prop))
++		return -1;
++	value->is_writeable = prop.is_writeable;
++	value->is_string = prop.is_string;
++	if (value->is_string)
++		value->v.s_val = prop.v.s_val;
++	else
++		value->v.n_val = prop.v.n_val;
++	return 0;
++}
++
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+ {
+ 	return get_vgnames((struct cmd_context *)libh, 0);
 -- 
 1.7.2.1
 
