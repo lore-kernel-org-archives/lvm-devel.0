@@ -1,10 +1,10 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Sep 2010 10:44:57 +0200
+Date: Thu, 16 Sep 2010 10:44:48 +0200
 Subject: [PATCH 02/19] Refactor pvstatus_disp to take pv argument and call common pv_attr function.
 In-Reply-To: <1284564971-26060-3-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
 	<1284564971-26060-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <4C91D909.6070909@redhat.com>
+Message-ID: <4C91D900.2050804@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
