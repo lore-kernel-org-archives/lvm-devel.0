@@ -1,83 +1,84 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Sep 2010 10:57:03 +0200
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 16 Sep 2010 09:25:11 -0400
 Subject: [PATCH 17/19] Rename internal vg_get_property to more generic lvm_get_property.
 In-Reply-To: <4C91D82D.2080302@redhat.com>
-References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>	<1284564971-26060-18-git-send-email-dwysocha@redhat.com>
+References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
+	<1284564971-26060-18-git-send-email-dwysocha@redhat.com>
 	<4C91D82D.2080302@redhat.com>
-Message-ID: <4C91DBDF.7010508@redhat.com>
+Message-ID: <1284643511.28453.3.camel@localhost.localdomain>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 16.9.2010 10:41, Zdenek Kabelac napsal(a):
+On Thu, 2010-09-16 at 10:41 +0200, Zdenek Kabelac wrote:
 > Dne 15.9.2010 17:36, Dave Wysochanski napsal(a):
->>  lib/report/properties.c |    4 ++--
->>  lib/report/properties.h |    2 +-
->>  liblvm/lvm_vg.c         |    2 +-
->>  3 files changed, 4 insertions(+), 4 deletions(-)
->>
->> diff --git a/lib/report/properties.c b/lib/report/properties.c
->> index 0b80593..95da8ab 100644
->> --- a/lib/report/properties.c
->> +++ b/lib/report/properties.c
->> @@ -262,7 +262,7 @@ struct lvm_property_type _properties[] = {
->>  #undef FIELD
->>  
->>  
->> -int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
->> +int lvm_get_property(void *obj, struct lvm_property_type *prop)
+> >  lib/report/properties.c |    4 ++--
+> >  lib/report/properties.h |    2 +-
+> >  liblvm/lvm_vg.c         |    2 +-
+> >  3 files changed, 4 insertions(+), 4 deletions(-)
+> > 
+> > diff --git a/lib/report/properties.c b/lib/report/properties.c
+> > index 0b80593..95da8ab 100644
+> > --- a/lib/report/properties.c
+> > +++ b/lib/report/properties.c
+> > @@ -262,7 +262,7 @@ struct lvm_property_type _properties[] = {
+> >  #undef FIELD
+> >  
+> >  
+> > -int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
+> > +int lvm_get_property(void *obj, struct lvm_property_type *prop)
 > 
 > Hope vg_get_property has been marked as unstable API ?
 > 
+
+Oh this was not exported - it is in the internal library so it does
+not matter.  So far I've only committed refactorings and changes to
+internal library, no new lvm2app symbols.
+
+Perhaps the name should be changed from "lvm_*" but wasn't sure
+what to make it - perhaps just "get_property".
+
 > 
->>  {
->>  	struct lvm_property_type *p;
->>  
->> @@ -278,7 +278,7 @@ int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
->>  	}
->>  
->>  	*prop = *p;
->> -	if (!p->get((void *)vg, prop)) {
->> +	if (!p->get(obj, prop)) {
->>  		return 0;
->>  	}
->>  	return 1;
->> diff --git a/lib/report/properties.h b/lib/report/properties.h
->> index 2e1381d..0a13f39 100644
->> --- a/lib/report/properties.h
->> +++ b/lib/report/properties.h
->> @@ -32,6 +32,6 @@ struct lvm_property_type {
->>  	int (*set) (void *obj, struct lvm_property_type *prop);
->>  };
->>  
->> -int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop);
->> +int lvm_get_property(void *obj, struct lvm_property_type *prop);
->>  
->>  #endif
->> diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
->> index 9a72bec..98070dd 100644
->> --- a/liblvm/lvm_vg.c
->> +++ b/liblvm/lvm_vg.c
->> @@ -343,7 +343,7 @@ int lvm_vg_get_property(vg_t vg, const char *name,
->>  	struct lvm_property_type prop;
->>  
->>  	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
->> -	if (!vg_get_property(vg, &prop))
->> +	if (!lvm_get_property((void *)vg, &prop))
+> >  {
+> >  	struct lvm_property_type *p;
+> >  
+> > @@ -278,7 +278,7 @@ int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
+> >  	}
+> >  
+> >  	*prop = *p;
+> > -	if (!p->get((void *)vg, prop)) {
+> > +	if (!p->get(obj, prop)) {
+> >  		return 0;
+> >  	}
+> >  	return 1;
+> > diff --git a/lib/report/properties.h b/lib/report/properties.h
+> > index 2e1381d..0a13f39 100644
+> > --- a/lib/report/properties.h
+> > +++ b/lib/report/properties.h
+> > @@ -32,6 +32,6 @@ struct lvm_property_type {
+> >  	int (*set) (void *obj, struct lvm_property_type *prop);
+> >  };
+> >  
+> > -int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop);
+> > +int lvm_get_property(void *obj, struct lvm_property_type *prop);
+> >  
+> >  #endif
+> > diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+> > index 9a72bec..98070dd 100644
+> > --- a/liblvm/lvm_vg.c
+> > +++ b/liblvm/lvm_vg.c
+> > @@ -343,7 +343,7 @@ int lvm_vg_get_property(vg_t vg, const char *name,
+> >  	struct lvm_property_type prop;
+> >  
+> >  	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
+> > -	if (!vg_get_property(vg, &prop))
+> > +	if (!lvm_get_property((void *)vg, &prop))
 > 
 > No need to add cast to (void*) - it's C not C++...
 > 
 
-In fact - do we really need this functionality ?? It's quite dangerous to
-allow passing any pointer type to such global API function.
-
-I would vote for only using separate functionality and using right types and
-right function names - this C++ polymorphism in C code leads to error which
-are hard to catch as compiler will not give any warning about missused typed
-structure pointers.
-
-Zdenek
+Ok.
 
 
