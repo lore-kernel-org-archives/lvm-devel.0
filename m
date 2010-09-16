@@ -1,113 +1,109 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 15 Sep 2010 11:36:11 -0400
-Subject: [PATCH 19/19] Add pv_get_property to interactive test.
-In-Reply-To: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1284564971-26060-20-git-send-email-dwysocha@redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 15 Sep 2010 22:39:18 -0400
+Subject: LVM2/test t-pvcreate-operation-md.sh
+In-Reply-To: <20100821154346.11816.qmail@sourceware.org>
+Message-ID: <20100916023917.GA29343@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+On Sat, Aug 21 2010 at 11:43am -0400,
+snitzer at sourceware.org <snitzer@sourceware.org> wrote:
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/api/test.c |   52 +++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 files changed, 51 insertions(+), 1 deletions(-)
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	snitzer at sourceware.org	2010-08-21 15:43:45
+> 
+> Modified files:
+> 	test           : t-pvcreate-operation-md.sh 
+> 
+> Log message:
+> 	Verify that pvcreate --dataalignment really does override the topology
+> 	detected alignment.
+> 	
+> 	NOTE: lvm2 doesn't detect MD 1.2 metadata (now the default on RHEL6) so
+> 	for now I'm forcing 1.0 metadata.  This was needed to be able to reuse
+> 	the existing loop devices but recreate the md device with different
+> 	raid0 striping.
 
-diff --git a/test/api/test.c b/test/api/test.c
-index 4560655..2579ff0 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -93,6 +93,8 @@ static void _show_help(void)
- 	       "List the tags of a VG\n");
- 	printf("'vg_get_property vgname property_name': "
- 	       "Display the value of VG property\n");
-+	printf("'pv_get_property pvname property_name': "
-+	       "Display the value of PV property\n");
- 	printf("'lv_get_tags vgname lvname': "
- 	       "List the tags of a LV\n");
- 	printf("'vg_{add|remove}_tag vgname tag': "
-@@ -182,6 +184,23 @@ static vg_t _lookup_vg_by_name(char **argv, int argc)
- 	}
- 	return vg;
- }
-+
-+static pv_t _lookup_pv_by_name(char **argv, int argc)
-+{
-+	pv_t pv;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return NULL;
-+	}
-+	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-+		printf ("Can't find %s in open PVs - run vg_open first\n",
-+			argv[1]);
-+		return NULL;
-+	}
-+	return pv;
-+}
-+
- static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
- {
- 	struct lvm_lv_list *lvl;
-@@ -548,6 +567,35 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
- 
-+static void _pv_get_property(char **argv, int argc)
-+{
-+	pv_t pv;
-+	struct lvm_property_value value;
-+	int rc;
-+
-+	if (argc < 3) {
-+		printf("Please enter vgname, field_id\n");
-+		return;
-+	}
-+	if (!(pv = _lookup_pv_by_name(argv, argc)))
-+		return;
-+	rc = lvm_pv_get_property(pv, argv[2], &value);
-+	if (rc)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("obtaining value of property %s in VG %s",
-+	       argv[2], argv[1]);
-+	if (rc) {
-+		printf("\n");
-+		return;
-+	}
-+	if (value.is_string)
-+		printf(", value = %s\n", value.v.s_val);
-+	else
-+		printf(", value = %"PRIu64"\n", value.v.n_val);
-+}
-+
- static void _vg_get_property(char **argv, int argc)
- {
- 	vg_t vg;
-@@ -565,7 +613,7 @@ static void _vg_get_property(char **argv, int argc)
- 		printf("Error ");
- 	else
- 		printf("Success ");
--	printf("Obtaining value of property %s in VG %s",
-+	printf("obtaining value of property %s in VG %s",
- 	       argv[2], argv[1]);
- 	if (rc) {
- 		printf("\n");
-@@ -829,6 +877,8 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_vg_get_tags(argv, argc);
- 		} else if (!strcmp(argv[0], "vg_get_property")) {
- 			_vg_get_property(argv, argc);
-+		} else if (!strcmp(argv[0], "pv_get_property")) {
-+			_pv_get_property(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_add_tag")) {
- 			_lv_tag(argv, argc, 1);
- 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
--- 
-1.7.2.1
+Turns out there is nothing wrong with LVM2's MD 1.x superblock
+detection (1.0, 1.1, and 1.2 are detected perfectly).
+
+I figured out why using MD v1.0 metadata worked for this most recently
+added test though:
+
+MD's v1.0 superblock is placed at the end of the disk.  v1.1 and v1.2
+are placed at the beginning of the disk.
+
+If v1.1 or v1.2 superblock are used then the partition table of the
+previous MD v1.2 device is preserved.
+
+But when an MD v1.0 superblock is used for this new test it allows
+pvcreate of the new MD v1.0 device to overwrite the partition table of
+the previous v1.2 MD device.
+
+Otherwise, if/when v1.1 or v1.2 superblock are used, for the new MD
+device, you get (the failure that caused me to force the use of v1.0):
+
+#device/dev-cache.c:329         /dev/md/md_lvm_test0: Added to device cache
+#device/dev-io.c:487         Opened /dev/md/md_lvm_test0 RO
+#device/dev-io.c:260       /dev/md/md_lvm_test0: size is 131072 sectors
+#device/dev-io.c:134         /dev/md/md_lvm_test0: block size is 4096 bytes
+#filters/filter.c:167         /dev/md/md_lvm_test0: Skipping: Partition table signature found
+#device/dev-io.c:533         Closed /dev/md/md_lvm_test0
+
+
+> --- LVM2/test/t-pvcreate-operation-md.sh	2010/08/12 04:56:05	1.9
+> +++ LVM2/test/t-pvcreate-operation-md.sh	2010/08/21 15:43:45	1.10
+> @@ -41,13 +41,17 @@
+>  	sleep 2
+>  	rm -f $mddev
+>      fi
+> +}
+> +
+> +cleanup_md_and_teardown() {
+> +    cleanup_md
+>      teardown
+>  }
+>  
+>  # create 2 disk MD raid0 array (stripe_width=128K)
+>  test -b "$mddev" && exit 200
+> -mdadm --create $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 $dev1 $dev2
+> -trap 'aux cleanup_md' EXIT # cleanup this MD device at the end of the test
+> +mdadm --create --metadata=1.0 $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 $dev1 $dev2
+> +trap 'aux cleanup_md_and_teardown' EXIT # cleanup this MD device at the end of the test
+>  test -b "$mddev" || exit 200
+>  
+>  # Test alignment of PV on MD without any MD-aware or topology-aware detection
+> @@ -113,3 +117,27 @@
+>  	pvremove $mddev_p
+>      fi
+>  fi
+> +
+> +# Test newer topology-aware alignment detection w/ --dataalignment override
+> +if [ $linux_minor -ge 33 ]; then
+> +    cleanup_md
+> +    pvcreate -f $dev1
+> +    pvcreate -f $dev2
+> +
+> +    # create 2 disk MD raid0 array (stripe_width=2M)
+> +    test -b "$mddev" && exit 200
+> +    mdadm --create --metadata=1.0 $mddev --auto=md --level 0 --raid-devices=2 --chunk 1024 $dev1 $dev2
+> +    test -b "$mddev" || exit 200
+> +
+> +    # optimal_io_size=2097152, minimum_io_size=1048576
+> +    pv_align="2.00m"
+> +    pvcreate --metadatasize 128k \
+> +	--config 'devices { md_chunk_alignment=0 }' $mddev
+> +    check_pv_field_ $mddev pe_start $pv_align
+> +
+> +    # now verify pe_start alignment override using --dataalignment
+> +    pv_align="192.00k"
+> +    pvcreate --dataalignment 64k --metadatasize 128k \
+> +	--config 'devices { md_chunk_alignment=0 }' $mddev
+> +    check_pv_field_ $mddev pe_start $pv_align
+> +fi
 
 
