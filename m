@@ -1,10 +1,10 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Sep 2010 10:44:48 +0200
-Subject: [PATCH 02/19] Refactor pvstatus_disp to take pv argument and call common pv_attr function.
-In-Reply-To: <1284564971-26060-3-git-send-email-dwysocha@redhat.com>
+Date: Thu, 16 Sep 2010 10:47:08 +0200
+Subject: [PATCH 04/19] Call id_format_and_copy from _uuid_disp.
+In-Reply-To: <1284564971-26060-5-git-send-email-dwysocha@redhat.com>
 References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>
-	<1284564971-26060-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <4C91D900.2050804@redhat.com>
+	<1284564971-26060-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <4C91D98C.6000205@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,42 +15,27 @@ Dne 15.9.2010 17:35, Dave Wysochanski napsal(a):
 > 
 > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 > ---
->  lib/metadata/metadata.c |   21 +++++++++++++++++++++
->  lib/metadata/metadata.h |    1 +
->  lib/report/columns.h    |    2 +-
->  lib/report/report.c     |   17 +++--------------
->  4 files changed, 26 insertions(+), 15 deletions(-)
+>  lib/report/report.c |    7 +------
+>  1 files changed, 1 insertions(+), 6 deletions(-)
 > 
-> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-> index 094ffc1..86f07e7 100644
-> --- a/lib/metadata/metadata.c
-> +++ b/lib/metadata/metadata.c
-> @@ -4598,6 +4598,27 @@ char *vg_attr(struct dm_pool *mem, const struct volume_group *vg)
->  	return repstr;
->  }
+> diff --git a/lib/report/report.c b/lib/report/report.c
+> index b7612a1..940ee25 100644
+> --- a/lib/report/report.c
+> +++ b/lib/report/report.c
+> @@ -677,13 +677,8 @@ static int _uuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_po
+>  {
+>  	char *repstr = NULL;
 >  
-> +char *pv_attr(struct dm_pool *mem, const struct physical_volume *pv)
-> +{
-> +	char *repstr;
-> +
-> +	if (!(repstr = dm_pool_zalloc(mem, 3))) {
-> +		log_error("dm_pool_alloc failed");
-> +		return NULL;
-> +	}
-> +
-> +	if (pv->status & ALLOCATABLE_PV)
-> +		repstr[0] = 'a';
-> +	else
-> +		repstr[0] = '-';
-> +
-> +	if (pv->status & EXPORTED_VG)
-> +		repstr[1] = 'x';
-> +	else
-> +		repstr[1] = '-';
-> +	return repstr;
+> -	if (!(repstr = dm_pool_alloc(mem, 40))) {
+> -		log_error("dm_pool_alloc failed");
+> +	if (!(repstr = id_format_and_copy(mem, (struct id *)data)))
+>  		return 0;
+> -	}
+> -
+> -	if (!id_write_format((const struct id *) data, repstr, 40))
+> -		return_0;
 
-when you are moving this code maybe again little shortening could be made:
-c = (x) ? a : b;
+return_0 should be used after NULL detection from id_format_and_copy()
 
 Zdenek
 
