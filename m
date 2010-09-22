@@ -1,39 +1,40 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 22 Sep 2010 01:50:38 -0000
-Subject: LVM2/lib/filters filter-md.c
-Message-ID: <20100922015038.11915.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 22 Sep 2010 15:20:30 +0200
+Subject: [PATCH 17/19] Rename internal vg_get_property to more generic lvm_get_property.
+In-Reply-To: <1285001396.5111.8.camel@f12-work>
+References: <1284564971-26060-1-git-send-email-dwysocha@redhat.com>	<1284564971-26060-18-git-send-email-dwysocha@redhat.com>	<4C91D82D.2080302@redhat.com>
+	<4C91DBDF.7010508@redhat.com> <1285001396.5111.8.camel@f12-work>
+Message-ID: <4C9A029E.5080906@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-09-22 01:50:38
+Dne 20.9.2010 18:49, Dave Wysochanski napsal(a):
+> On Thu, 2010-09-16 at 10:57 +0200, Zdenek Kabelac wrote:
+>> Dne 16.9.2010 10:41, Zdenek Kabelac napsal(a):
+>>> Dne 15.9.2010 17:36, Dave Wysochanski napsal(a):
+>>>>  lib/report/properties.c |    4 ++--
+>>>>  lib/report/properties.h |    2 +-
+>>>>  liblvm/lvm_vg.c         |    2 +-
+>>>>  3 files changed, 4 insertions(+), 4 deletions(-)
+>>>>
+>>>> diff --git a/lib/report/properties.c b/lib/report/properties.c
+>>>> index 0b80593..95da8ab 100644
+>>>> --- a/lib/report/properties.c
+>>>> +++ b/lib/report/properties.c
+> +
+> +int vg_get_property(struct volume_group *vg, struct lvm_property_type *prop)
 
-Modified files:
-	lib/filters    : filter-md.c 
+This function should be able to operate with const* vg - or do we need to
+modify vg with some get functionality ?
 
-Log message:
-	Fix name in msg in last checkin.
-	
-	(The problem the last checkin addressed was a segfault in 'pvs -a' if .cache
-	didn't contain every PV in a VG.)
+> +int pv_get_property(struct physical_volume *pv, struct lvm_property_type *prop)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-md.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+const* pv
 
---- LVM2/lib/filters/filter-md.c	2010/09/22 01:36:14	1.10
-+++ LVM2/lib/filters/filter-md.c	2010/09/22 01:50:38	1.11
-@@ -46,7 +46,7 @@
- static void _destroy(struct dev_filter *f)
- {
- 	if (f->use_count)
--		log_error(INTERNAL_ERROR "Destroying sysfs filter while in use %u times.", f->use_count);
-+		log_error(INTERNAL_ERROR "Destroying md filter while in use %u times.", f->use_count);
- 
- 	dm_free(f);
- }
+
+Zdenek
 
 
