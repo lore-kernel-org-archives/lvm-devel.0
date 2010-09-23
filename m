@@ -1,59 +1,49 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Jun 2017 11:13:52 -0400
-Subject: master - cleanup: drop unused parameter
-Message-ID: <201706161513.v5GFDqMa011240@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Wed, 22 Sep 2010 22:31:12 -0400
+Subject: [PATCH 11/20] Make generic GET_*_PROPERTY_FN macros and define secondary macro for vg, pv, lv.
+In-Reply-To: <4C9B49DA.3050402@redhat.com>
+References: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
+	<1285189592-26525-12-git-send-email-dwysocha@redhat.com>
+	<4C9B49DA.3050402@redhat.com>
+Message-ID: <1285209072.12533.3.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e96f96a410c7ff977fa8593dff185fbe90615fe
-Commit:        9e96f96a410c7ff977fa8593dff185fbe90615fe
-Parent:        cdb55c19cd7633cd3467525f6f2b84ef77350d72
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 15 11:21:06 2017 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 16 17:04:02 2017 +0200
+On Thu, 2010-09-23 at 14:36 +0200, Zdenek Kabelac wrote:
+> Dne 22.9.2010 23:06, Dave Wysochanski napsal(a):
+> > Will need similar macros for VG, PV and LV, so define a generic one, and just
+> > pass in the struct name and variable name for the specific macro.
+> > 
+> > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> > ---
+> >  lib/report/properties.c |   25 +++++++++++++++++++++++--
+> >  1 files changed, 23 insertions(+), 2 deletions(-)
+> > 
+> > diff --git a/lib/report/properties.c b/lib/report/properties.c
+> > index 9e3cad3..b39a979 100644
+> > --- a/lib/report/properties.c
+> > +++ b/lib/report/properties.c
+> > @@ -20,14 +20,35 @@
+> >  #include "lvm-types.h"
+> >  #include "metadata.h"
+> >  
+> > -#define GET_NUM_PROPERTY_FN(NAME, VALUE) \
+> > +#define GET_NUM_PROPERTY_FN(NAME, VALUE, STRUCT, VAR)			\
+> >  static int _ ## NAME ## _get (void *obj, struct lvm_property_type *prop) \
+> >  { \
+> > -	struct volume_group *vg = (struct volume_group *)obj; \
+> > +	struct STRUCT *VAR = (struct STRUCT *)obj; \
+> 
+> 
+> struct STRUCT *VAR
+> 
+> 
+> looks weird... isn't there something better?
+> 
 
-cleanup: drop unused parameter
-
----
- lib/metadata/raid_manip.c |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
-
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 0f52ecf..5c3f9ef 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -3994,7 +3994,6 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
- 				    uint32_t new_image_count,
- 				    uint32_t new_region_size,
- 				    struct dm_list *allocate_pvs,
--				    int update_and_reload,
- 				    struct dm_list *removal_lvs)
- {
- 	struct logical_volume *log_lv;
-@@ -4051,7 +4050,10 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
- 	if (!attach_mirror_log(first_seg(lv), log_lv))
- 		return_0;
- 
--	return update_and_reload ? _lv_update_reload_fns_reset_eliminate_lvs(lv, 0, removal_lvs, NULL) : 1;
-+	if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, 0, removal_lvs, NULL))
-+		return_0;
-+
-+	return 1;
- }
- 
- /*
-@@ -4786,7 +4788,7 @@ static int _raid1_to_mirrored_wrapper(TAKEOVER_FN_ARGS)
- 		return_0;
- 
- 	return _convert_raid1_to_mirror(lv, new_segtype, new_image_count, new_region_size,
--					allocate_pvs, 1, &removal_lvs);
-+					allocate_pvs, &removal_lvs);
- }
- 
- /*
+"struct TYPE *VAR" ?
 
 
