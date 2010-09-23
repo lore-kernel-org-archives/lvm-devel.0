@@ -1,216 +1,304 @@
-From: Jonathan Brassow <jbrassow@sourceware.org>
-Date: Wed, 14 Jun 2017 09:42:01 -0400
-Subject: master - lvconvert: Disallow removal of primary when up-converting (recovering)
-Message-ID: <201706141342.v5EDg1in012800@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 23 Sep 2010 12:02:37 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c lib/m ...
+Message-ID: <20100923120237.4064.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddb14b6b05e0f75a97ab8ab1ed99091268c239ba
-Commit:        ddb14b6b05e0f75a97ab8ab1ed99091268c239ba
-Parent:        4c0e908b0ac012a5517e61420ea1eccc6193c00a
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Jun 14 08:41:05 2017 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Jun 14 08:41:05 2017 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2010-09-23 12:02:35
 
-lvconvert: Disallow removal of primary when up-converting (recovering)
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
+	lib/misc       : lvm-string.c lvm-string.h 
+	tools          : pvchange.c pvck.c pvcreate.c pvmove.c 
+	                 pvremove.c toollib.c vgsplit.c 
 
-This patch ensures that under normal conditions (i.e. not during repair
-operations) that users are prevented from removing devices that would
-cause data loss.
+Log message:
+	Add escape sequence for ':' and '@' found in device names used as PVs.
 
-When a RAID1 is undergoing its initial sync, it is ok to remove all but
-one of the images because they have all existed since creation and
-contain all the data written since the array was created.  OTOH, if the
-RAID1 was created as a result of an up-convert from linear, it is very
-important not to let the user remove the primary image (the source of
-all the data).  They should be allowed to remove any devices they want
-and as many as they want as long as one original (primary) device is left
-during a "recover" (aka up-convert).
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1734&r2=1.1735
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.396&r2=1.397
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-string.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-string.h.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvchange.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvck.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvcreate.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvremove.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.208&r2=1.209
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
 
-This fixes bug 1461187 and includes the necessary regression tests.
----
- lib/metadata/raid_manip.c    |   85 ++++++++++++++++++++++++++++++++++++++++++
- test/shell/lvconvert-raid.sh |   61 ++++++++++++++++++++++++++++++
- 2 files changed, 146 insertions(+), 0 deletions(-)
-
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 0925594..52def78 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -2862,6 +2862,87 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
+--- LVM2/WHATS_NEW	2010/09/22 22:31:45	1.1734
++++ LVM2/WHATS_NEW	2010/09/23 12:02:33	1.1735
+@@ -1,5 +1,6 @@
+ Version 2.02.74 - 
+ =====================================
++  Add escape sequence for ':' and '@' found in device names used as PVs.
+   Replace alloca with dm_malloc in _aligned_io.
+   Fix partial mode operations for lvm1 metadata format.
+   Track recursive filter iteration to avoid refreshing while in use. (2.02.56)
+--- LVM2/lib/metadata/metadata.c	2010/08/20 20:59:07	1.396
++++ LVM2/lib/metadata/metadata.c	2010/09/23 12:02:34	1.397
+@@ -677,6 +677,7 @@
+ 
+ 	/* attach each pv */
+ 	for (i = 0; i < pv_count; i++) {
++		unescape_colons_and_at_signs(pv_names[i], NULL, NULL);
+ 		if (!vg_extend_single_pv(vg, pv_names[i], pp))
+ 			goto bad;
+ 	}
+--- LVM2/lib/misc/lvm-string.c	2010/09/20 14:25:27	1.21
++++ LVM2/lib/misc/lvm-string.c	2010/09/23 12:02:34	1.22
+@@ -109,19 +109,31 @@
  }
  
  /*
-+ * _raid_allow_extraction
-+ * @lv
-+ * @extract_count
-+ * @target_pvs
-+ *
-+ * returns: 0 if no, 1 if yes
+- * Unquote orig_char in string.
+- * Also unquote quote_char.
+- */
+-static void _unquote_characters(char *src, const int orig_char,
+-				const int quote_char)
++ * Unquote each character given in orig_char array and unquote quote_char
++ * as well. The array ends up with '\0' character. Also save the first
++ * occurence of each character from orig_char that was found unquoted in
++ * arr_substr_first_unquoted array. This way we can process several
++ * characters in one go.
 + */
-+static int _raid_allow_extraction(struct logical_volume *lv,
-+				  int extract_count,
-+				  struct dm_list *target_pvs)
-+{
-+	int s, redundancy = 0;
-+	char *dev_health;
-+	char *sync_action;
-+	struct lv_segment *seg = first_seg(lv);
-+	struct cmd_context *cmd = lv->vg->cmd;
-+
-+	/* If in-sync or hanlding repairs, allow to proceed. */
-+	if (_raid_in_sync(lv) || lv->vg->cmd->handles_missing_pvs)
-+		return 1;
-+
-+	/*
-+	 * FIXME:
-+	 * Right now, we are primarily concerned with down-converting of
-+	 * RAID1 LVs, but parity RAIDs and RAID10 will also have to be
-+	 * considered.
-+	 * (e.g. It would not be good to allow extracting a dev from a
-+	 * stripe set while upconverting to RAID5/6.)
-+	 */
-+	if (!segtype_is_raid1(seg->segtype))
-+		return 1;
-+
-+	/*
-+	 * We can allow extracting images if the array is performing a
-+	 * sync operation as long as it is "recover" and the image is not
-+	 * a primary image or if "resync".
-+	 */
-+	if (!lv_raid_sync_action(lv, &sync_action) ||
-+	    !lv_raid_dev_health(lv, &dev_health))
-+		return_0;
-+
-+	if (!strcmp("idle", sync_action)) {
-+		log_error(INTERNAL_ERROR
-+			  "RAID LV should not be out-of-sync and \"idle\"");
-+		return 0;
-+	}
-+
-+	if (!strcmp("resync", sync_action))
-+		return 1;
-+
-+	/* If anything other than "recover" */
-+	if (strcmp("recover", sync_action)) {
-+		log_error("Unable to remove RAID image while array"
-+			  " is performing \"%s\"", sync_action);
-+		return 0;
-+	}
-+
-+	if (seg->area_count != strlen(dev_health)) {
-+		log_error(INTERNAL_ERROR
-+			  "RAID LV area_count differs from number of health characters");
-+		return 0;
-+	}
-+
-+	for (s = 0; s < seg->area_count; s++)
-+		if (dev_health[s] == 'A')
-+			redundancy++;
-+
-+	for (s = 0; (s < seg->area_count) && extract_count; s++) {
-+		if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
-+		    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
-+			continue;
-+		if ((dev_health[s] == 'A') && !--redundancy) {
-+			log_error("Unable to remove all primary source devices");
-+			return 0;
++static void _unquote_characters(char *src, const int orig_chars[],
++				const int quote_char,
++				char *arr_substr_first_unquoted[])
+ {
+ 	char *out = src;
++	int c;
++	int i;
+ 
+ 	while (*src) {
+-		if (*src == quote_char &&
+-		    (*(src + 1) == orig_char || *(src + 1) == quote_char))
+-			src++;
+-
++		for (i = 0; (c = orig_chars[i]); i++) {
++			if (*src == quote_char &&
++			    (*(src + 1) == c || *(src + 1) == quote_char)) {
++				src++;
++				break;
++			}
++			else if (arr_substr_first_unquoted && (*src == c) &&
++				 !arr_substr_first_unquoted[i])
++				arr_substr_first_unquoted[i] = out;
 +		}
-+		extract_count--;
-+	}
-+	return 1;
+ 		*out++ = *src++;
+ 	}
+ 
+@@ -217,7 +229,31 @@
+  */
+ void unescape_double_quotes(char *src)
+ {
+-	_unquote_characters(src, '\"', '\\');
++	const int orig_chars[] = {'\"', '\0'};
++
++	_unquote_characters(src, orig_chars, '\\', NULL);
 +}
 +
 +/*
-  * _raid_extract_images
-  * @lv
-  * @force: force a replacement in case of primary mirror leg
-@@ -2892,6 +2973,10 @@ static int _raid_extract_images(struct logical_volume *lv,
- 	struct segment_type *error_segtype;
++ * Unescape colons and "at" signs in situ and save the substrings
++ * starting at the position of the first unescaped colon and the
++ * first unescaped "at" sign. This is normally used to unescape
++ * device names used as PVs.
++ */
++void unescape_colons_and_at_signs(char *src,
++				  char **substr_first_unquoted_colon,
++				  char **substr_first_unquoted_at_sign)
++{
++	const int orig_chars[] = {':', '@', '\0'};
++	char *arr_substr_first_unquoted[] = {NULL, NULL, NULL};
++
++	_unquote_characters(src, orig_chars, '\\', arr_substr_first_unquoted);
++
++	if (substr_first_unquoted_colon)
++		*substr_first_unquoted_colon = arr_substr_first_unquoted[0];
++
++	if (substr_first_unquoted_at_sign)
++		*substr_first_unquoted_at_sign = arr_substr_first_unquoted[1];
+ }
  
- 	extract = seg->area_count - new_count;
-+
-+	if (!_raid_allow_extraction(lv, extract, target_pvs))
-+		return_0;
-+
- 	log_verbose("Extracting %u %s from %s.", extract,
- 		    (extract > 1) ? "images" : "image",
- 		    display_lvname(lv));
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index e173d66..fba7864 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -223,6 +223,67 @@ for i in 1 2 3 ; do
- done
+ /*
+--- LVM2/lib/misc/lvm-string.h	2010/04/23 14:16:33	1.20
++++ LVM2/lib/misc/lvm-string.h	2010/09/23 12:02:34	1.21
+@@ -60,4 +60,13 @@
+  */
+ void unescape_double_quotes(char *src);
  
- ###########################################
-+# Upconverted RAID1 should not allow loss of primary
-+#  - don't allow removal of primary while syncing
-+#  - DO allow removal of secondaries while syncing
-+###########################################
-+aux delay_dev $dev2 0 100
-+lvcreate -aey -l 2 -n $lv1 $vg $dev1 $dev2
-+lvconvert -y -m 1 $vg/$lv1 \
-+	--config 'global { mirror_segtype_default = "raid1" }'
-+lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
-+not lvconvert --yes -m 0 $vg/$lv1 $dev1
-+lvconvert --yes -m 0 $vg/$lv1 $dev2
-+aux enable_dev $dev2
-+lvremove -ff $vg
++/*
++ * Unescape colons and at signs in situ and save the substring starting
++ *@the position of the first unescaped colon and the first unescaped
++ * "at" sign.
++ */
++void unescape_colons_and_at_signs(char *src,
++				  char **substr_first_unquoted_colon,
++				  char **substr_first_unquoted_at_sign);
 +
-+###########################################
-+# lvcreated RAID1 should allow all down-conversion
-+#  - DO allow removal of primary while syncing
-+#  - DO allow removal of secondaries while syncing
-+###########################################
-+aux delay_dev $dev2 0 100
-+lvcreate --type raid1 -m 2 -aey -l 2 -n $lv1 $vg $dev1 $dev2 $dev3
-+lvconvert --yes -m 1 $vg/$lv1 $dev3
-+lvconvert --yes -m 0 $vg/$lv1 $dev1
-+aux enable_dev $dev2
-+lvremove -ff $vg
+ #endif
+--- LVM2/tools/pvchange.c	2010/07/09 15:34:48	1.83
++++ LVM2/tools/pvchange.c	2010/09/23 12:02:34	1.84
+@@ -195,7 +195,8 @@
+ 	int total = 0;
+ 
+ 	struct volume_group *vg;
+-	const char *pv_name, *vg_name;
++	const char *vg_name;
++	char *pv_name;
+ 
+ 	struct pv_list *pvl;
+ 	struct dm_list *vgnames;
+@@ -223,6 +224,7 @@
+ 		log_verbose("Using physical volume(s) on command line");
+ 		for (; opt < argc; opt++) {
+ 			pv_name = argv[opt];
++			unescape_colons_and_at_signs(pv_name, NULL, NULL);
+ 			vg_name = find_vgname_from_pvname(cmd, pv_name);
+ 			if (!vg_name) {
+ 				log_error("Failed to read physical volume %s",
+--- LVM2/tools/pvck.c	2007/08/22 14:38:18	1.4
++++ LVM2/tools/pvck.c	2010/09/23 12:02:34	1.5
+@@ -31,6 +31,7 @@
+ 		/* FIXME: warning and/or check if in use? */
+ 		log_verbose("Scanning %s", argv[i]);
+ 
++		unescape_colons_and_at_signs(argv[i], NULL, NULL);
+ 		pv_analyze(cmd, argv[i],
+ 			   arg_uint64_value(cmd, labelsector_ARG,
+ 					   UINT64_C(0)));
+--- LVM2/tools/pvcreate.c	2010/08/12 04:09:00	1.91
++++ LVM2/tools/pvcreate.c	2010/09/23 12:02:34	1.92
+@@ -109,6 +109,8 @@
+ 			return ECMD_FAILED;
+ 		}
+ 
++		unescape_colons_and_at_signs(argv[i], NULL, NULL);
 +
-+###########################################
-+# Converting from 2-way RAID1 to 3-way
-+#  - DO allow removal of one of primary sources
-+#  - Do not allow removal of all primary sources
-+###########################################
-+lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg $dev1 $dev2
-+aux wait_for_sync $vg $lv1
-+aux delay_dev $dev3 0 100
-+lvconvert --yes -m +1 $vg/$lv1 $dev3
-+# should allow 1st primary to be removed
-+lvconvert --yes -m -1 $vg/$lv1 $dev1
-+# should NOT allow last primary to be removed
-+not lvconvert --yes -m -1 $vg/$lv1 $dev2
-+# should allow non-primary to be removed
-+lvconvert --yes -m 0 $vg/$lv1 $dev3
-+aux enable_dev $dev3
-+lvremove -ff $vg
+ 		if (!pvcreate_single(cmd, argv[i], &pp)) {
+ 			stack;
+ 			ret = ECMD_FAILED;
+--- LVM2/tools/pvmove.c	2010/08/23 11:34:10	1.79
++++ LVM2/tools/pvmove.c	2010/09/23 12:02:34	1.80
+@@ -644,17 +644,16 @@
+ 	}
+ 
+ 	if (argc) {
+-		pv_name = argv[0];
++		if (!(pv_name = dm_pool_strdup(cmd->mem, argv[0]))) {
++			log_error("Failed to clone PV name");
++			return ECMD_FAILED;
++		}
 +
-+###########################################
-+# Converting from 2-way RAID1 to 3-way
-+#  - Should allow removal of two devices,
-+#    as long as they aren't both primary
-+###########################################
-+lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg $dev1 $dev2
-+aux wait_for_sync $vg $lv1
-+aux delay_dev $dev3 0 100
-+lvconvert --yes -m +1 $vg/$lv1 $dev3
-+# should NOT allow both primaries to be removed
-+not lvconvert -m 0 $vg/$lv1 $dev1 $dev2
-+# should allow primary + non-primary
-+lvconvert --yes -m 0 $vg/$lv1 $dev1 $dev3
-+aux enable_dev $dev3
-+lvremove -ff $vg
++		unescape_colons_and_at_signs(pv_name, &colon, NULL);
+ 
+ 		/* Drop any PE lists from PV name */
+-		if ((colon = strchr(pv_name, ':'))) {
+-			if (!(pv_name = dm_pool_strndup(cmd->mem, pv_name,
+-						     (unsigned) (colon -
+-								 pv_name)))) {
+-				log_error("Failed to clone PV name");
+-				return ECMD_FAILED;
+-			}
+-		}
++		if (colon)
++			*colon = '\0';
+ 
+ 		if (!arg_count(cmd, abort_ARG) &&
+ 		    (ret = _set_up_pvmove(cmd, pv_name, argc, argv)) !=
+--- LVM2/tools/pvremove.c	2010/08/19 23:04:37	1.29
++++ LVM2/tools/pvremove.c	2010/09/23 12:02:34	1.30
+@@ -144,6 +144,7 @@
+ 	}
+ 
+ 	for (i = 0; i < argc; i++) {
++		unescape_colons_and_at_signs(argv[i], NULL, NULL);
+ 		r = pvremove_single(cmd, argv[i], NULL);
+ 		if (r > ret)
+ 			ret = r;
+--- LVM2/tools/toollib.c	2010/08/19 23:04:37	1.208
++++ LVM2/tools/toollib.c	2010/09/23 12:02:34	1.209
+@@ -680,7 +680,7 @@
+ 	struct dm_list *pvslist, *vgnames;
+ 	struct dm_list tags;
+ 	struct str_list *sll;
+-	char *tagname;
++	char *at_sign, *tagname;
+ 	int scanned = 0;
+ 	struct dm_list mdas;
+ 
+@@ -694,8 +694,9 @@
+ 	if (argc) {
+ 		log_verbose("Using physical volume(s) on command line");
+ 		for (; opt < argc; opt++) {
+-			if (*argv[opt] == '@') {
+-				tagname = argv[opt] + 1;
++			unescape_colons_and_at_signs(argv[opt], NULL, &at_sign);
++			if (at_sign && (at_sign == argv[opt])) {
++				tagname = at_sign + 1;
+ 
+ 				if (!validate_name(tagname)) {
+ 					log_error("Skipping invalid tag %s",
+@@ -1093,8 +1094,8 @@
+ 	struct dm_list *r;
+ 	struct pv_list *pvl;
+ 	struct dm_list tags, arg_pvnames;
+-	const char *pvname = NULL;
+-	char *colon, *tagname;
++	char *pvname = NULL;
++	char *colon, *at_sign, *tagname;
+ 	int i;
+ 
+ 	/* Build up list of PVs */
+@@ -1108,8 +1109,10 @@
+ 	dm_list_init(&arg_pvnames);
+ 
+ 	for (i = 0; i < argc; i++) {
+-		if (*argv[i] == '@') {
+-			tagname = argv[i] + 1;
++		unescape_colons_and_at_signs(argv[i], &colon, &at_sign);
 +
-+###########################################
- # Device Replacement Testing
- ###########################################
- # RAID1: Replace up to n-1 devices - trying different combinations
++		if (at_sign && (at_sign == argv[i])) {
++			tagname = at_sign + 1;
+ 			if (!validate_name(tagname)) {
+ 				log_error("Skipping invalid tag %s", tagname);
+ 				continue;
+@@ -1128,13 +1131,10 @@
+ 
+ 		pvname = argv[i];
+ 
+-		if ((colon = strchr(pvname, ':'))) {
+-			if (!(pvname = dm_pool_strndup(mem, pvname,
+-						    (unsigned) (colon -
+-								pvname)))) {
+-				log_error("Failed to clone PV name");
+-				return NULL;
+-			}
++		if (colon && !(pvname = dm_pool_strndup(mem, pvname,
++					(unsigned) (colon - pvname)))) {
++			log_error("Failed to clone PV name");
++			return NULL;
+ 		}
+ 
+ 		if (!(pvl = find_pv_in_vg(vg, pvname))) {
+--- LVM2/tools/vgsplit.c	2010/06/30 20:03:53	1.101
++++ LVM2/tools/vgsplit.c	2010/09/23 12:02:34	1.102
+@@ -394,6 +394,7 @@
+ 
+ 	/* Move PVs across to new structure */
+ 	for (opt = 0; opt < argc; opt++) {
++		unescape_colons_and_at_signs(argv[opt], NULL, NULL);
+ 		if (!move_pv(vg_from, vg_to, argv[opt]))
+ 			goto_bad;
+ 	}
 
 
