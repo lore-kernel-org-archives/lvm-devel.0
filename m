@@ -1,61 +1,68 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 19 Jun 2017 16:30:51 -0400
-Subject: master - lvconvert: disable reshaping of open RAID LV
-Message-ID: <201706192030.v5JKUp7b010963@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 24 Sep 2010 16:25:04 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20100924162504.22605.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e9163618ab36a6b046b6380d6ef58429b219ef8
-Commit:        9e9163618ab36a6b046b6380d6ef58429b219ef8
-Parent:        e1a1c20e95974811ffa541f02723a9390132d10b
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Jun 19 22:25:54 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Jun 19 22:25:54 2017 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-09-24 16:24:59
 
-lvconvert: disable reshaping of open RAID LV
+Modified files:
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
-Disable until we have a proper fix for reshape space allocation,
-switching it to begin/end of rimages and activation.
+Log message:
+	pre-release
 
-Related: rhbz1447812
----
- lib/metadata/raid_manip.c |   13 +++++++++++++
- 1 files changed, 13 insertions(+), 0 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.254&r2=1.255
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.63&r2=1.64
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1735&r2=1.1736
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.414&r2=1.415
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 95ce3b5..8fc04fb 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6267,6 +6267,8 @@ int lv_raid_convert(struct logical_volume *lv,
- 	uint32_t region_size;
- 	uint32_t data_copies = seg->data_copies;
- 	uint32_t available_slvs, removed_slvs;
-+	char *dev_path;
-+	size_t sz;
- 	takeover_fn_t takeover_fn;
+--- LVM2/VERSION	2010/09/22 01:36:13	1.254
++++ LVM2/VERSION	2010/09/24 16:24:57	1.255
+@@ -1 +1 @@
+-2.02.74(2)-cvs (2010-09-22)
++2.02.74(2)-cvs (2010-09-24)
+--- LVM2/VERSION_DM	2010/09/22 01:36:13	1.63
++++ LVM2/VERSION_DM	2010/09/24 16:24:57	1.64
+@@ -1 +1 @@
+-1.02.55-cvs (2010-09-22)
++1.02.55-cvs (2010-09-24)
+--- LVM2/WHATS_NEW	2010/09/23 12:02:33	1.1735
++++ LVM2/WHATS_NEW	2010/09/24 16:24:57	1.1736
+@@ -1,14 +1,13 @@
+-Version 2.02.74 - 
++Version 2.02.74 - 24th September 2010
+ =====================================
+-  Add escape sequence for ':' and '@' found in device names used as PVs.
+-  Replace alloca with dm_malloc in _aligned_io.
++  Allow : and @ to be escaped with \ in device names of PVs.
++  Replace alloca with dm_malloc in _aligned_io to avoid stack corruption.
+   Fix partial mode operations for lvm1 metadata format.
+   Track recursive filter iteration to avoid refreshing while in use. (2.02.56)
+   Revert to old glibc vsnprintf behaviour in emit_to_buffer() to catch overflow.
+   Allocate buffer for metadata tags dynamically to remove 4k limit.
+   Add random suffix to archive file names to prevent races when being created.
+   Reinitialize archive and backup handling on toolcontext refresh.
+-  Fix opprobriously slow I/O to cluster mirrors created with --nosync.
+   Make poll_mirror_progress report PROGRESS_CHECK_FAILED if LV is not a mirror.
+   Like mirrors, don't scan origins if ignore_suspended_devices() is set.
+   Fix return type qualifier to avoid compiler warning. (2.02.69)
+--- LVM2/WHATS_NEW_DM	2010/09/22 01:36:13	1.414
++++ LVM2/WHATS_NEW_DM	2010/09/24 16:24:57	1.415
+@@ -1,5 +1,6 @@
+-Version 1.02.55 - 
++Version 1.02.55 - 24th September 2010
+ =====================================
++  Fix the way regions are marked complete to avoid slow --nosync cmirror I/O.
+   Add DM_REPORT_FIELD_TYPE_ID_LEN to libdevmapper.h.
  
- 	/* FIXME If not active, prompt and activate */
-@@ -6331,6 +6333,17 @@ int lv_raid_convert(struct logical_volume *lv,
- 			return 0;
- 		}
- 
-+		/* BZ1447812 */
-+		sz = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
-+		if (!(dev_path = dm_pool_alloc(lv->vg->cmd->mem, sz)))
-+			return_0;
-+		if (dm_snprintf(dev_path, sz, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0)
-+			return_0;
-+		if (open(dev_path, O_RDONLY|O_EXCL) && errno) {
-+			log_error("Reshape of open %s not supported.", display_lvname(lv));
-+			return 0;
-+		}
-+
- 		if (!_raid_reshape(lv, new_segtype, yes, force,
- 				   data_copies, region_size,
- 				   stripes, stripe_size, allocate_pvs)) {
+ Version 1.02.54 - 18th August 2010
 
 
