@@ -1,143 +1,33 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Sep 2010 01:29:08 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/lvm-string.c
-Message-ID: <20100928012908.16589.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 29 Sep 2010 12:12:38 +0200
+Subject: [PATCH 1/1] Maps fix
+In-Reply-To: <867a4bada2ee53fcf310d54788e3b08868d5031e.1285601408.git.zkabelac@redhat.com>
+References: <cover.1285601408.git.zkabelac@redhat.com>
+	<867a4bada2ee53fcf310d54788e3b08868d5031e.1285601408.git.zkabelac@redhat.com>
+Message-ID: <4CA31116.8050301@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-09-28 01:29:07
+On 09/27/2010 05:31 PM, Zdenek Kabelac wrote:
+> Read complete content of /proc/self/maps into one buffer without
+> realocation in the middle of reading and before doing any m/unlock
+> operation with these lines - as some of them gets change.
+> With previous implementation we've read some mappings twice ([stack])
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/misc       : lvm-string.c 
+ACK, if it solves the problem with lock != unlock size error....
 
-Log message:
-	Speed up unquoting of quoted double quotes and backslashes.
+> +		for (len = 0 ; len < _maps_len; len += n) {
+> +			if (!(n = read(_maps_fd, _maps_buffer + len, _maps_len - len))) {
+> +				_maps_buffer[len] = '0';
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1737&r2=1.1738
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-string.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+typo '\0' :)
 
---- LVM2/WHATS_NEW	2010/09/27 19:09:34	1.1737
-+++ LVM2/WHATS_NEW	2010/09/28 01:29:06	1.1738
-@@ -1,5 +1,6 @@
- Version 2.02.75 - 
- =====================================
-+  Speed up unquoting of quoted double quotes and backslashes.
-   Speed up CRC32 calculations by using a larger lookup table.
- 
- Version 2.02.74 - 24th September 2010
---- LVM2/lib/misc/lvm-string.c	2010/09/23 12:02:34	1.22
-+++ LVM2/lib/misc/lvm-string.c	2010/09/28 01:29:07	1.23
-@@ -108,33 +108,64 @@
- 	}
- }
- 
-+static void _unquote_one_character(char *src, const char orig_char,
-+				   const char quote_char)
-+{
-+	char *out;
-+	char s, n;
-+
-+	/* Optimise for the common case where no changes are needed. */
-+	while ((s = *src++)) {
-+		if (s == quote_char &&
-+		    ((n = *src) == orig_char || n == quote_char)) {
-+			out = src++;
-+			*(out - 1) = n;
-+
-+			while ((s = *src++)) {
-+				if (s == quote_char &&
-+				    ((n = *src) == orig_char || n == quote_char)) {
-+					s = n;
-+					src++;
-+				}
-+				*out = s;
-+				out++;
-+			}
-+
-+			*out = '\0';
-+			return;
-+		}
-+	}
-+}
-+
- /*
-  * Unquote each character given in orig_char array and unquote quote_char
-- * as well. The array ends up with '\0' character. Also save the first
-- * occurence of each character from orig_char that was found unquoted in
-- * arr_substr_first_unquoted array. This way we can process several
-- * characters in one go.
-+ * as well. Also save the first occurrence of each character from orig_char
-+ * that was found unquoted in arr_substr_first_unquoted array. This way we can
-+ * process several characters in one go.
-  */
--static void _unquote_characters(char *src, const int orig_chars[],
--				const int quote_char,
-+static void _unquote_characters(char *src, const char *orig_chars,
-+				const int num_orig_chars, 
-+				const char quote_char,
- 				char *arr_substr_first_unquoted[])
- {
- 	char *out = src;
--	int c;
--	int i;
-+	char c, s, n;
-+	unsigned i;
- 
--	while (*src) {
--		for (i = 0; (c = orig_chars[i]); i++) {
--			if (*src == quote_char &&
--			    (*(src + 1) == c || *(src + 1) == quote_char)) {
-+	while ((s = *src++)) {
-+		for (i = 0; i < num_orig_chars; i++) {
-+			c = orig_chars[i];
-+			if (s == quote_char &&
-+			    ((n = *src) == c || n == quote_char)) {
-+				s = n;
- 				src++;
- 				break;
- 			}
--			else if (arr_substr_first_unquoted && (*src == c) &&
--				 !arr_substr_first_unquoted[i])
-+			if (arr_substr_first_unquoted && (s == c) &&
-+			    !arr_substr_first_unquoted[i])
- 				arr_substr_first_unquoted[i] = out;
--		}
--		*out++ = *src++;
-+		};
-+		*out++ = s;
- 	}
- 
- 	*out = '\0';
-@@ -229,9 +260,7 @@
-  */
- void unescape_double_quotes(char *src)
- {
--	const int orig_chars[] = {'\"', '\0'};
--
--	_unquote_characters(src, orig_chars, '\\', NULL);
-+	_unquote_one_character(src, '\"', '\\');
- }
- 
- /*
-@@ -244,10 +273,10 @@
- 				  char **substr_first_unquoted_colon,
- 				  char **substr_first_unquoted_at_sign)
- {
--	const int orig_chars[] = {':', '@', '\0'};
-+	const char *orig_chars = ":@";
- 	char *arr_substr_first_unquoted[] = {NULL, NULL, NULL};
- 
--	_unquote_characters(src, orig_chars, '\\', arr_substr_first_unquoted);
-+	_unquote_characters(src, orig_chars, 2, '\\', arr_substr_first_unquoted);
- 
- 	if (substr_first_unquoted_colon)
- 		*substr_first_unquoted_colon = arr_substr_first_unquoted[0];
+for the parsing simple lines it is quite complicated code but if we cannot get
+file size from /proc in advance...
+
+Milan
 
 
