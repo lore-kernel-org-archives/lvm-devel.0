@@ -1,33 +1,53 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 29 Sep 2010 12:12:38 +0200
-Subject: [PATCH 1/1] Maps fix
-In-Reply-To: <867a4bada2ee53fcf310d54788e3b08868d5031e.1285601408.git.zkabelac@redhat.com>
-References: <cover.1285601408.git.zkabelac@redhat.com>
-	<867a4bada2ee53fcf310d54788e3b08868d5031e.1285601408.git.zkabelac@redhat.com>
-Message-ID: <4CA31116.8050301@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 30 Sep 2010 10:09:00 -0000
+Subject: LVM2/daemons/dmeventd/plugins lvm2/Makefile.in ...
+Message-ID: <20100930100900.22616.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/27/2010 05:31 PM, Zdenek Kabelac wrote:
-> Read complete content of /proc/self/maps into one buffer without
-> realocation in the middle of reading and before doing any m/unlock
-> operation with these lines - as some of them gets change.
-> With previous implementation we've read some mappings twice ([stack])
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-09-30 10:08:59
 
-ACK, if it solves the problem with lock != unlock size error....
+Modified files:
+	daemons/dmeventd/plugins/lvm2: Makefile.in 
+	daemons/dmeventd/plugins/mirror: Makefile.in 
+	daemons/dmeventd/plugins/snapshot: Makefile.in 
 
-> +		for (len = 0 ; len < _maps_len; len += n) {
-> +			if (!(n = read(_maps_fd, _maps_buffer + len, _maps_len - len))) {
-> +				_maps_buffer[len] = '0';
+Log message:
+	Add missing cleanup rule for generated .exported_symbols_generated
 
-typo '\0' :)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/Makefile.in.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
-for the parsing simple lines it is quite complicated code but if we cannot get
-file size from /proc in advance...
-
-Milan
+--- LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in	2010/04/09 21:42:49	1.5
++++ LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in	2010/09/30 10:08:58	1.6
+@@ -29,3 +29,5 @@
+ install_lvm2: install_lib_shared
+ 
+ install: install_lvm2
++
++DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/05/11 08:41:58	1.21
++++ LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/09/30 10:08:59	1.22
+@@ -35,3 +35,5 @@
+ install_lvm2: install_dm_plugin
+ 
+ install: install_lvm2
++
++DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/05/11 08:41:59	1.16
++++ LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/09/30 10:08:59	1.17
+@@ -31,3 +31,5 @@
+ install_lvm2: install_dm_plugin
+ 
+ install: install_lvm2
++
++DISTCLEAN_TARGETS += .exported_symbols_generated
 
 
