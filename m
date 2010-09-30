@@ -1,101 +1,120 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Sep 2010 17:06:24 -0400
-Subject: [PATCH 12/20] Add 'get' functions for vg fields.
-In-Reply-To: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-References: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1285189592-26525-13-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 30 Sep 2010 13:05:46 -0000
+Subject: LVM2 include/.symlinks.in lib/Makefile.in lib/ ...
+Message-ID: <20100930130546.20183.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add 'get' functions based on generic macros for VG, PV, and LV.
-Add 'get' functions for vg string fields, vg_name, vg_fmt, vg_sysid,
-vg_uuid, vg_attr, and vg_tags, and all numeric fields.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-09-30 13:05:45
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/report/properties.c |   44 ++++++++++++++++++++++----------------------
- 1 files changed, 22 insertions(+), 22 deletions(-)
+Modified files:
+	include        : .symlinks.in 
+	lib            : Makefile.in 
+	lib/metadata   : metadata-exported.h metadata.c 
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index b39a979..89a462b 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -135,49 +135,49 @@ static int _not_implemented(void *obj, struct lvm_property_type *prop)
- #define _modules_set _not_implemented
+Log message:
+	Refactor metadata.[ch] into lv.[ch] for lv functions.
+	
+	This patch is similar to the other patches for pv and vg
+	functionality, and separates lv functionality into separate
+	files, concentrating on reporting fields and simple functions.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/Makefile.in.diff?cvsroot=lvm2&r1=1.107&r2=1.108
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.167&r2=1.168
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.399&r2=1.400
+
+--- LVM2/include/.symlinks.in	2010/09/30 13:05:20	1.5
++++ LVM2/include/.symlinks.in	2010/09/30 13:05:45	1.6
+@@ -30,6 +30,7 @@
+ @top_srcdir@/lib/locking/locking.h
+ @top_srcdir@/lib/log/log.h
+ @top_srcdir@/lib/log/lvm-logging.h
++ at top_srcdir@/lib/metadata/lv.h
+ @top_srcdir@/lib/metadata/lv_alloc.h
+ @top_srcdir@/lib/metadata/metadata.h
+ @top_srcdir@/lib/metadata/metadata-exported.h
+--- LVM2/lib/Makefile.in	2010/09/30 13:05:20	1.107
++++ LVM2/lib/Makefile.in	2010/09/30 13:05:45	1.108
+@@ -73,6 +73,7 @@
+ 	locking/locking.c \
+ 	locking/no_locking.c \
+ 	log/log.c \
++	metadata/lv.c \
+ 	metadata/lv_manip.c \
+ 	metadata/merge.c \
+ 	metadata/metadata.c \
+--- LVM2/lib/metadata/metadata-exported.h	2010/09/30 13:05:20	1.167
++++ LVM2/lib/metadata/metadata-exported.h	2010/09/30 13:05:45	1.168
+@@ -24,6 +24,7 @@
+ #include "uuid.h"
+ #include "pv.h"
+ #include "vg.h"
++#include "lv.h"
  
- /* VG */
--#define _vg_fmt_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
- #define _vg_fmt_set _not_implemented
--#define _vg_uuid_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_uuid, vg_uuid_dup(vg))
- #define _vg_uuid_set _not_implemented
--#define _vg_name_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_name, vg_name_dup(vg))
- #define _vg_name_set _not_implemented
--#define _vg_attr_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_attr, vg_attr_dup(vg->vgmem, vg))
- #define _vg_attr_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_size, (SECTOR_SIZE * vg_size(vg)))
- #define _vg_size_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
- #define _vg_free_set _not_implemented
--#define _vg_sysid_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_sysid, vg_system_id_dup(vg))
- #define _vg_sysid_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
-+GET_VG_NUM_PROPERTY_FN(vg_extent_size, vg->extent_size)
- #define _vg_extent_size_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
-+GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
- #define _vg_extent_count_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_free_count, vg->free_count)
-+GET_VG_NUM_PROPERTY_FN(vg_free_count, vg->free_count)
- #define _vg_free_count_set _not_implemented
--GET_NUM_PROPERTY_FN(max_lv, vg->max_lv)
-+GET_VG_NUM_PROPERTY_FN(max_lv, vg->max_lv)
- #define _max_lv_set _not_implemented
--GET_NUM_PROPERTY_FN(max_pv, vg->max_pv)
-+GET_VG_NUM_PROPERTY_FN(max_pv, vg->max_pv)
- #define _max_pv_set _not_implemented
--GET_NUM_PROPERTY_FN(pv_count, vg->pv_count)
-+GET_VG_NUM_PROPERTY_FN(pv_count, vg->pv_count)
- #define _pv_count_set _not_implemented
--GET_NUM_PROPERTY_FN(lv_count, (vg_visible_lvs(vg)))
-+GET_VG_NUM_PROPERTY_FN(lv_count, (vg_visible_lvs(vg)))
- #define _lv_count_set _not_implemented
--GET_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
-+GET_VG_NUM_PROPERTY_FN(snap_count, (snapshot_count(vg)))
- #define _snap_count_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
-+GET_VG_NUM_PROPERTY_FN(vg_seqno, vg->seqno)
- #define _vg_seqno_set _not_implemented
--#define _vg_tags_get _not_implemented
-+GET_VG_STR_PROPERTY_FN(vg_tags, vg_tags_dup(vg))
- #define _vg_tags_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_mda_count, (vg_mda_count(vg)))
- #define _vg_mda_count_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_mda_used_count, (vg_mda_used_count(vg)))
- #define _vg_mda_used_count_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_mda_free, (SECTOR_SIZE * vg_mda_free(vg)))
- #define _vg_mda_free_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
- #define _vg_mda_size_set _not_implemented
--GET_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
-+GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
- #define _vg_mda_copies_set _not_implemented
+ #define MAX_STRIPES 128U
+ #define SECTOR_SHIFT 9L
+@@ -291,33 +292,6 @@
+ #define seg_pv(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv
+ #define seg_lv(seg, s)		(seg)->areas[(s)].u.lv.lv
  
- /* LVSEG */
--- 
-1.7.2.2
+-struct logical_volume {
+-	union lvid lvid;
+-	char *name;
+-
+-	struct volume_group *vg;
+-
+-	uint64_t status;
+-	alloc_policy_t alloc;
+-	uint32_t read_ahead;
+-	int32_t major;
+-	int32_t minor;
+-
+-	uint64_t size;		/* Sectors */
+-	uint32_t le_count;
+-
+-	uint32_t origin_count;
+-	struct dm_list snapshot_segs;
+-	struct lv_segment *snapshot;
+-
+-	struct replicator_device *rdevice;/* For replicator-devs, rimages, slogs - reference to rdevice */
+-	struct dm_list rsites;	/* For replicators - all sites */
+-
+-	struct dm_list segments;
+-	struct dm_list tags;
+-	struct dm_list segs_using_this_lv;
+-};
+-
+ struct pe_range {
+ 	struct dm_list list;
+ 	uint32_t start;		/* PEs */
+@@ -744,7 +718,6 @@
+ */
+ int pv_change_metadataignore(struct physical_volume *pv, uint32_t mda_ignore);
+ 
+-uint64_t lv_size(const struct logical_volume *lv);
+ 
+ int vg_check_write_mode(struct volume_group *vg);
+ #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
+--- LVM2/lib/metadata/metadata.c	2010/09/30 13:05:20	1.399
++++ LVM2/lib/metadata/metadata.c	2010/09/30 13:05:45	1.400
+@@ -3921,11 +3921,6 @@
+ 	return 1;
+ }
+ 
+-uint64_t lv_size(const struct logical_volume *lv)
+-{
+-	return lv->size;
+-}
+-
+ /**
+  * pv_by_path - Given a device path return a PV handle if it is a PV
+  * @cmd - handle to the LVM command instance
 
 
