@@ -1,122 +1,100 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Wed, 22 Sep 2010 17:06:25 -0400
-Subject: [PATCH 13/20] Add lvm_vg_get_property() generic vg property function.
-In-Reply-To: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-References: <1285189592-26525-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1285189592-26525-14-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 30 Sep 2010 14:08:22 -0000
+Subject: LVM2/lib/metadata lv.c lv.h pv.c pv.h vg.c vg.h
+Message-ID: <20100930140822.17482.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add a generic VG property function to lvm2app.  Call the internal library
-vg_get_property() function.  Strings are dup'd internally.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-09-30 14:08:20
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- liblvm/lvm2app.h |   42 ++++++++++++++++++++++++++++++++++++++++++
- liblvm/lvm_vg.c  |   19 +++++++++++++++++++
- 2 files changed, 61 insertions(+), 0 deletions(-)
+Modified files:
+	lib/metadata   : lv.c lv.h pv.c pv.h vg.c vg.h 
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 47d3417..cc839a6 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -168,6 +168,22 @@ typedef struct lvm_str_list {
- 	const char *str;
- } lvm_str_list_t;
- 
-+/**
-+ * Property Value
-+ *
-+ * This structure defines a single LVM property value for an LVM object.
-+ * The structures are returned by functions such as
-+ * lvm_vg_get_property() and lvm_vg_set_property().
-+ */
-+typedef struct lvm_property_value {
-+	unsigned is_writeable;
-+	unsigned is_string;
-+	union {
-+		char *s_val;
-+		uint64_t n_val;
-+	} v;
-+} lvm_property_value_t;
-+
- /*************************** generic lvm handling ***************************/
- /**
-  * Create a LVM handle.
-@@ -848,6 +864,32 @@ uint64_t lvm_vg_get_max_lv(const vg_t vg);
-  */
- struct dm_list *lvm_vg_get_tags(const vg_t vg);
- 
-+/**
-+ * Get the value of a VG property
-+ *
-+ * \memberof vg_t
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example:
-+ *      lvm_property_value value;
-+ *
-+ *      if (lvm_vg_get_property(vg, "vg_mda_count", &value) < 0) {
-+ *              // handle error
-+ *      }
-+ *      if (value.is_string)
-+ *           printf(", value = %s\n", value.u.s_val);
-+ *	else
-+ *           printf(", value = %"PRIu64"\n", value.u.n_val);
-+ *
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
-+int lvm_vg_get_property(vg_t vg, const char *name,
-+			struct lvm_property_value *value);
-+
- /************************** logical volume handling *************************/
- 
- /**
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index a09208a..6fabe19 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -20,6 +20,7 @@
- #include "locking.h"
- #include "lvmcache.h"
- #include "lvm_misc.h"
-+#include "properties.h"
- 
- int lvm_vg_add_tag(vg_t vg, const char *tag)
- {
-@@ -335,6 +336,24 @@ const char *lvm_vg_get_name(const vg_t vg)
- 	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+Log message:
+	Add pv_tags_dup, vg_tags_dup, lv_tags_dup functions that call tags_format_and_copy.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+
+--- LVM2/lib/metadata/lv.c	2010/09/30 14:07:47	1.4
++++ LVM2/lib/metadata/lv.c	2010/09/30 14:08:19	1.5
+@@ -21,6 +21,11 @@
+ 	return id_format_and_copy(lv->vg->vgmem, &lv->lvid.id[1]);
  }
  
-+
-+int lvm_vg_get_property(vg_t vg, const char *name,
-+			struct lvm_property_value *value)
++char *lv_tags_dup(const struct logical_volume *lv)
 +{
-+	struct lvm_property_type prop;
-+
-+	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
-+	if (!vg_get_property(vg, &prop))
-+		return -1;
-+	value->is_writeable = prop.is_writeable;
-+	value->is_string = prop.is_string;
-+	if (value->is_string)
-+		value->v.s_val = prop.v.s_val;
-+	else
-+		value->v.n_val = prop.v.n_val;
-+	return 0;
++	return tags_format_and_copy(lv->vg->vgmem, &lv->tags);
 +}
 +
- struct dm_list *lvm_list_vg_names(lvm_t libh)
+ uint64_t lv_size(const struct logical_volume *lv)
  {
- 	return get_vgnames((struct cmd_context *)libh, 0);
--- 
-1.7.2.2
+ 	return lv->size;
+--- LVM2/lib/metadata/lv.h	2010/09/30 14:07:47	1.3
++++ LVM2/lib/metadata/lv.h	2010/09/30 14:08:20	1.4
+@@ -50,5 +50,6 @@
+ uint64_t lv_size(const struct logical_volume *lv);
+ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_uuid_dup(const struct logical_volume *lv);
++char *lv_tags_dup(const struct logical_volume *lv);
+ 
+ #endif
+--- LVM2/lib/metadata/pv.c	2010/09/30 14:07:47	1.4
++++ LVM2/lib/metadata/pv.c	2010/09/30 14:08:20	1.5
+@@ -34,6 +34,11 @@
+ 	return id_format_and_copy(pv->vg->vgmem, &pv->id);
+ }
+ 
++char *pv_tags_dup(const struct physical_volume *pv)
++{
++	return tags_format_and_copy(pv->vg->vgmem, &pv->tags);
++}
++
+ const struct format_type *pv_format_type(const struct physical_volume *pv)
+ {
+ 	return pv_field(pv, fmt);
+--- LVM2/lib/metadata/pv.h	2010/09/30 14:07:47	1.3
++++ LVM2/lib/metadata/pv.h	2010/09/30 14:08:20	1.4
+@@ -57,6 +57,7 @@
+ char *pv_attr_dup(struct dm_pool *mem, const struct physical_volume *pv);
+ const char *pv_dev_name(const struct physical_volume *pv);
+ char *pv_uuid_dup(const struct physical_volume *pv);
++char *pv_tags_dup(const struct physical_volume *pv);
+ uint64_t pv_size(const struct physical_volume *pv);
+ uint64_t pv_size_field(const struct physical_volume *pv);
+ uint64_t pv_dev_size(const struct physical_volume *pv);
+--- LVM2/lib/metadata/vg.c	2010/09/30 14:07:47	1.4
++++ LVM2/lib/metadata/vg.c	2010/09/30 14:08:20	1.5
+@@ -21,6 +21,11 @@
+ 	return id_format_and_copy(vg->vgmem, &vg->id);
+ }
+ 
++char *vg_tags_dup(const struct volume_group *vg)
++{
++	return tags_format_and_copy(vg->vgmem, &vg->tags);
++}
++
+ uint32_t vg_seqno(const struct volume_group *vg)
+ {
+ 	return vg->seqno;
+--- LVM2/lib/metadata/vg.h	2010/09/30 14:07:47	1.3
++++ LVM2/lib/metadata/vg.h	2010/09/30 14:08:20	1.4
+@@ -125,5 +125,6 @@
+ uint64_t vg_mda_free(const struct volume_group *vg);
+ char *vg_attr_dup(struct dm_pool *mem, const struct volume_group *vg);
+ char *vg_uuid_dup(const struct volume_group *vg);
++char *vg_tags_dup(const struct volume_group *vg);
+ 
+ #endif
 
 
