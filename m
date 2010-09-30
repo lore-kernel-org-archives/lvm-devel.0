@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Sep 2010 13:05:46 -0000
-Subject: LVM2 include/.symlinks.in lib/Makefile.in lib/ ...
-Message-ID: <20100930130546.20183.qmail@sourceware.org>
+Date: 30 Sep 2010 13:15:44 -0000
+Subject: LVM2/lib/metadata pv.c pv.h
+Message-ID: <20100930131544.1058.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,111 +10,327 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-09-30 13:05:45
+Changes by:	wysochanski at sourceware.org	2010-09-30 13:15:42
 
-Modified files:
-	include        : .symlinks.in 
-	lib            : Makefile.in 
-	lib/metadata   : metadata-exported.h metadata.c 
+Added files:
+	lib/metadata   : pv.c pv.h 
 
 Log message:
-	Refactor metadata.[ch] into lv.[ch] for lv functions.
+	Add lib/metadata/pv.[ch] new files.
 	
-	This patch is similar to the other patches for pv and vg
-	functionality, and separates lv functionality into separate
-	files, concentrating on reporting fields and simple functions.
+	Apparently git cvsexportcommit does not properly add new files
+	from a git commit.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/Makefile.in.diff?cvsroot=lvm2&r1=1.107&r2=1.108
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.167&r2=1.168
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.399&r2=1.400
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
---- LVM2/include/.symlinks.in	2010/09/30 13:05:20	1.5
-+++ LVM2/include/.symlinks.in	2010/09/30 13:05:45	1.6
-@@ -30,6 +30,7 @@
- @top_srcdir@/lib/locking/locking.h
- @top_srcdir@/lib/log/log.h
- @top_srcdir@/lib/log/lvm-logging.h
-+ at top_srcdir@/lib/metadata/lv.h
- @top_srcdir@/lib/metadata/lv_alloc.h
- @top_srcdir@/lib/metadata/metadata.h
- @top_srcdir@/lib/metadata/metadata-exported.h
---- LVM2/lib/Makefile.in	2010/09/30 13:05:20	1.107
-+++ LVM2/lib/Makefile.in	2010/09/30 13:05:45	1.108
-@@ -73,6 +73,7 @@
- 	locking/locking.c \
- 	locking/no_locking.c \
- 	log/log.c \
-+	metadata/lv.c \
- 	metadata/lv_manip.c \
- 	metadata/merge.c \
- 	metadata/metadata.c \
---- LVM2/lib/metadata/metadata-exported.h	2010/09/30 13:05:20	1.167
-+++ LVM2/lib/metadata/metadata-exported.h	2010/09/30 13:05:45	1.168
-@@ -24,6 +24,7 @@
- #include "uuid.h"
- #include "pv.h"
- #include "vg.h"
-+#include "lv.h"
- 
- #define MAX_STRIPES 128U
- #define SECTOR_SHIFT 9L
-@@ -291,33 +292,6 @@
- #define seg_pv(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv
- #define seg_lv(seg, s)		(seg)->areas[(s)].u.lv.lv
- 
--struct logical_volume {
--	union lvid lvid;
--	char *name;
--
--	struct volume_group *vg;
--
--	uint64_t status;
--	alloc_policy_t alloc;
--	uint32_t read_ahead;
--	int32_t major;
--	int32_t minor;
--
--	uint64_t size;		/* Sectors */
--	uint32_t le_count;
--
--	uint32_t origin_count;
--	struct dm_list snapshot_segs;
--	struct lv_segment *snapshot;
--
--	struct replicator_device *rdevice;/* For replicator-devs, rimages, slogs - reference to rdevice */
--	struct dm_list rsites;	/* For replicators - all sites */
--
--	struct dm_list segments;
--	struct dm_list tags;
--	struct dm_list segs_using_this_lv;
--};
--
- struct pe_range {
- 	struct dm_list list;
- 	uint32_t start;		/* PEs */
-@@ -744,7 +718,6 @@
- */
- int pv_change_metadataignore(struct physical_volume *pv, uint32_t mda_ignore);
- 
--uint64_t lv_size(const struct logical_volume *lv);
- 
- int vg_check_write_mode(struct volume_group *vg);
- #define vg_is_clustered(vg) (vg_status((vg)) & CLUSTERED)
---- LVM2/lib/metadata/metadata.c	2010/09/30 13:05:20	1.399
-+++ LVM2/lib/metadata/metadata.c	2010/09/30 13:05:45	1.400
-@@ -3921,11 +3921,6 @@
- 	return 1;
- }
- 
--uint64_t lv_size(const struct logical_volume *lv)
--{
--	return lv->size;
--}
--
- /**
-  * pv_by_path - Given a device path return a PV handle if it is a PV
-  * @cmd - handle to the LVM command instance
+/cvs/lvm2/LVM2/lib/metadata/pv.c,v  -->  standard output
+revision 1.1
+--- LVM2/lib/metadata/pv.c
++++ -	2010-09-30 13:15:43.764416000 +0000
+@@ -0,0 +1,223 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "metadata.h"
++#include "lvmcache.h"
++
++/*
++ * FIXME: Check for valid handle before dereferencing field or log error?
++ */
++#define pv_field(handle, field)	((handle)->field)
++
++/*
++ * Gets/Sets for external LVM library
++ */
++struct id pv_id(const struct physical_volume *pv)
++{
++	return pv_field(pv, id);
++}
++
++const struct format_type *pv_format_type(const struct physical_volume *pv)
++{
++	return pv_field(pv, fmt);
++}
++
++struct id pv_vgid(const struct physical_volume *pv)
++{
++	return pv_field(pv, vgid);
++}
++
++struct device *pv_dev(const struct physical_volume *pv)
++{
++	return pv_field(pv, dev);
++}
++
++const char *pv_vg_name(const struct physical_volume *pv)
++{
++	return pv_field(pv, vg_name);
++}
++
++const char *pv_dev_name(const struct physical_volume *pv)
++{
++	return dev_name(pv_dev(pv));
++}
++
++uint64_t pv_size(const struct physical_volume *pv)
++{
++	return pv_field(pv, size);
++}
++
++uint64_t pv_dev_size(const struct physical_volume *pv)
++{
++	uint64_t size;
++
++	if (!dev_get_size(pv->dev, &size))
++		size = 0;
++	return size;
++}
++
++uint64_t pv_size_field(const struct physical_volume *pv)
++{
++	uint64_t size;
++
++	if (!pv->pe_count)
++		size = pv->size;
++	else
++		size = (uint64_t) pv->pe_count * pv->pe_size;
++	return size;
++}
++
++uint64_t pv_free(const struct physical_volume *pv)
++{
++	uint64_t freespace;
++
++	if (!pv->pe_count)
++		freespace = pv->size;
++	else
++		freespace = (uint64_t)
++			(pv->pe_count - pv->pe_alloc_count) * pv->pe_size;
++	return freespace;
++}
++
++uint64_t pv_status(const struct physical_volume *pv)
++{
++	return pv_field(pv, status);
++}
++
++uint32_t pv_pe_size(const struct physical_volume *pv)
++{
++	return pv_field(pv, pe_size);
++}
++
++uint64_t pv_pe_start(const struct physical_volume *pv)
++{
++	return pv_field(pv, pe_start);
++}
++
++uint32_t pv_pe_count(const struct physical_volume *pv)
++{
++	return pv_field(pv, pe_count);
++}
++
++uint32_t pv_pe_alloc_count(const struct physical_volume *pv)
++{
++	return pv_field(pv, pe_alloc_count);
++}
++
++uint32_t pv_mda_count(const struct physical_volume *pv)
++{
++	struct lvmcache_info *info;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	return info ? dm_list_size(&info->mdas) : UINT64_C(0);
++}
++
++uint32_t pv_mda_used_count(const struct physical_volume *pv)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda;
++	uint32_t used_count=0;
++
++	info = info_from_pvid((const char *)&pv->id.uuid, 0);
++	if (!info)
++		return 0;
++	dm_list_iterate_items(mda, &info->mdas) {
++		if (!mda_is_ignored(mda))
++			used_count++;
++	}
++	return used_count;
++}
++
++/**
++ * is_orphan - Determine whether a pv is an orphan based on its vg_name
++ * @pv: handle to the physical volume
++ */
++int is_orphan(const struct physical_volume *pv)
++{
++	return is_orphan_vg(pv_field(pv, vg_name));
++}
++
++/**
++ * is_pv - Determine whether a pv is a real pv or dummy one
++ * @pv: handle to device
++ */
++int is_pv(const struct physical_volume *pv)
++{
++	return (pv_field(pv, vg_name) ? 1 : 0);
++}
++
++int is_missing_pv(const struct physical_volume *pv)
++{
++	return pv_field(pv, status) & MISSING_PV ? 1 : 0;
++}
++
++unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned mda_ignored)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda, *vg_mda, *tmda;
++	struct dm_list *vg_mdas_in_use, *vg_mdas_ignored;
++
++	if (!(info = info_from_pvid((const char *)&pv->id.uuid, 0)))
++		return_0;
++
++	if (is_orphan(pv)) {
++		dm_list_iterate_items(mda, &info->mdas)
++			mda_set_ignored(mda, mda_ignored);
++		return 1;
++	}
++
++	/*
++	 * Do not allow disabling of the the last PV in a VG.
++	 */
++	if (pv_mda_used_count(pv) == vg_mda_used_count(pv->vg)) {
++		log_error("Cannot disable all metadata areas in volume group %s.",
++			  pv->vg->name);
++		return 0;
++	}
++
++	/*
++	 * Non-orphan case is more complex.
++	 * If the PV's mdas are ignored, and we wish to un-ignore,
++	 * we clear the bit and move them from the ignored mda list to the
++	 * in_use list, ensuring the new state will get written to disk
++	 * in the vg_write() path.
++	 * If the PV's mdas are not ignored, and we are setting
++	 * them to ignored, we set the bit but leave them on the in_use
++	 * list, ensuring the new state will get written to disk in the
++	 * vg_write() path.
++	 */
++	vg_mdas_in_use = &pv->vg->fid->metadata_areas_in_use;
++	vg_mdas_ignored = &pv->vg->fid->metadata_areas_ignored;
++
++	dm_list_iterate_items(mda, &info->mdas) {
++		if (mda_is_ignored(mda) && !mda_ignored)
++			/* Changing an ignored mda to one in_use requires moving it */
++			dm_list_iterate_items_safe(vg_mda, tmda, vg_mdas_ignored)
++				if (mda_locns_match(mda, vg_mda)) {
++					mda_set_ignored(vg_mda, mda_ignored);
++					dm_list_move(vg_mdas_in_use, &vg_mda->list);
++				}
++
++		dm_list_iterate_items_safe(vg_mda, tmda, vg_mdas_in_use)
++			if (mda_locns_match(mda, vg_mda))
++				/* Don't move mda: needs writing to disk. */
++				mda_set_ignored(vg_mda, mda_ignored);
++
++		mda_set_ignored(mda, mda_ignored);
++	}
++
++	return 1;
++}
++
+/cvs/lvm2/LVM2/lib/metadata/pv.h,v  -->  standard output
+revision 1.1
+--- LVM2/lib/metadata/pv.h
++++ -	2010-09-30 13:15:44.115676000 +0000
+@@ -0,0 +1,74 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++#ifndef _PV_H
++#define _PV_H
++
++struct id;
++struct device;
++struct format_type;
++struct volume_group;
++
++struct physical_volume {
++	struct id id;
++	struct device *dev;
++	const struct format_type *fmt;
++
++	/*
++	 * vg_name and vgid are used before the parent VG struct exists.
++	 * FIXME: Investigate removal/substitution with 'vg' fields.
++	 */
++	const char *vg_name;
++	struct id vgid;
++
++	/*
++	 * 'vg' is set and maintained when the PV belongs to a 'pvs'
++	 * list in a parent VG struct.
++	 */
++	struct volume_group *vg;
++
++	uint64_t status;
++	uint64_t size;
++
++	/* physical extents */
++	uint32_t pe_size;
++	uint64_t pe_start;
++	uint32_t pe_count;
++	uint32_t pe_alloc_count;
++	unsigned long pe_align;
++	unsigned long pe_align_offset;
++
++	struct dm_list segments;	/* Ordered pv_segments covering complete PV */
++	struct dm_list tags;
++};
++
++struct device *pv_dev(const struct physical_volume *pv);
++const char *pv_vg_name(const struct physical_volume *pv);
++const char *pv_dev_name(const struct physical_volume *pv);
++uint64_t pv_size(const struct physical_volume *pv);
++uint64_t pv_size_field(const struct physical_volume *pv);
++uint64_t pv_dev_size(const struct physical_volume *pv);
++uint64_t pv_free(const struct physical_volume *pv);
++uint64_t pv_status(const struct physical_volume *pv);
++uint32_t pv_pe_size(const struct physical_volume *pv);
++uint64_t pv_pe_start(const struct physical_volume *pv);
++uint32_t pv_pe_count(const struct physical_volume *pv);
++uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
++uint32_t pv_mda_count(const struct physical_volume *pv);
++uint32_t pv_mda_used_count(const struct physical_volume *pv);
++unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned ignored);
++int is_orphan(const struct physical_volume *pv);
++int is_missing_pv(const struct physical_volume *pv);
++int is_pv(const struct physical_volume *pv);
++
++#endif
 
 
