@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 30 Sep 2010 14:07:21 -0000
-Subject: LVM2/lib/metadata lv.c pv.c vg.c
-Message-ID: <20100930140721.15911.qmail@sourceware.org>
+Date: 30 Sep 2010 14:07:34 -0000
+Subject: LVM2/lib report/report.c uuid/uuid.c uuid/uuid.h
+Message-ID: <20100930140734.16135.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,140 +10,68 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-09-30 14:07:19
+Changes by:	wysochanski at sourceware.org	2010-09-30 14:07:34
 
 Modified files:
-	lib/metadata   : lv.c pv.c vg.c 
+	lib/report     : report.c 
+	lib/uuid       : uuid.c uuid.h 
 
 Log message:
-	Simplify logic to create 'attr' strings.
+	Add id_format_and_copy() common function and call from _uuid_disp.
 	
-	This patch addresses code review request to simplify creation of 'attr'
-	strings.  The simplification is done in this separate patch to more
-	easily review and ensure the simplification is done without error.
+	Add supporting uuid function to allocate memory and call id_write_format.
+	Call id_format_and_copy from _uuid_disp.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/uuid/uuid.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/uuid/uuid.h.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/lib/metadata/lv.c	2010/09/30 13:52:55	1.2
-+++ LVM2/lib/metadata/lv.c	2010/09/30 14:07:19	1.3
-@@ -61,28 +61,16 @@
- 		repstr[0] = 'v';
- 	/* Origin takes precedence over Mirror */
- 	else if (lv_is_origin(lv)) {
--		if (lv_is_merging_origin(lv))
--			repstr[0] = 'O';
--		else
--			repstr[0] = 'o';
-+		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
- 	}
- 	else if (lv->status & MIRRORED) {
--		if (lv->status & MIRROR_NOTSYNCED)
--			repstr[0] = 'M';
--		else
--			repstr[0] = 'm';
-+		repstr[0] = (lv->status & MIRROR_NOTSYNCED) ? 'M' : 'm';
- 	}else if (lv->status & MIRROR_IMAGE)
--		if (_lv_mimage_in_sync(lv))
--			repstr[0] = 'i';
--		else
--			repstr[0] = 'I';
-+		repstr[0] = (_lv_mimage_in_sync(lv)) ? 'i' : 'I';
- 	else if (lv->status & MIRROR_LOG)
- 		repstr[0] = 'l';
- 	else if (lv_is_cow(lv)) {
--		if (lv_is_merging_cow(lv))
--			repstr[0] = 'S';
--		else
--			repstr[0] = 's';
-+		repstr[0] = (lv_is_merging_cow(lv)) ? 'S' : 's';
- 	} else
- 		repstr[0] = '-';
+--- LVM2/lib/report/report.c	2010/09/30 13:52:57	1.128
++++ LVM2/lib/report/report.c	2010/09/30 14:07:33	1.129
+@@ -677,12 +677,7 @@
+ {
+ 	char *repstr = NULL;
  
-@@ -100,10 +88,7 @@
- 	if (lv->status & LOCKED)
- 		repstr[2] = toupper(repstr[2]);
- 
--	if (lv->status & FIXED_MINOR)
--		repstr[3] = 'm';	/* Fixed Minor */
--	else
--		repstr[3] = '-';
-+	repstr[3] = (lv->status & FIXED_MINOR) ? 'm' : '-';
- 
- 	if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && info.exists) {
- 		if (info.suspended)
-@@ -126,10 +111,7 @@
- 				repstr[4] = 'I'; /* Invalid snapshot */
- 		}
- 
--		if (info.open_count)
--			repstr[5] = 'o';	/* Open */
--		else
--			repstr[5] = '-';
-+		repstr[5] = (info.open_count) ? 'o' : '-';
- 	} else {
- 		repstr[4] = '-';
- 		repstr[5] = '-';
---- LVM2/lib/metadata/pv.c	2010/09/30 13:52:56	1.2
-+++ LVM2/lib/metadata/pv.c	2010/09/30 14:07:19	1.3
-@@ -172,15 +172,8 @@
- 		return NULL;
- 	}
- 
--	if (pv->status & ALLOCATABLE_PV)
--		repstr[0] = 'a';
--	else
--		repstr[0] = '-';
+-	if (!(repstr = dm_pool_alloc(mem, 40))) {
+-		log_error("dm_pool_alloc failed");
+-		return 0;
+-	}
 -
--	if (pv->status & EXPORTED_VG)
--		repstr[1] = 'x';
--	else
--		repstr[1] = '-';
-+	repstr[0] = (pv->status & ALLOCATABLE_PV) ? 'a' : '-';
-+	repstr[1] = (pv->status & EXPORTED_VG) ? 'x' : '-';
- 	return repstr;
+-	if (!id_write_format((const struct id *) data, repstr, 40))
++	if (!(repstr = id_format_and_copy(mem, (struct id *)data)))
+ 		return_0;
+ 
+ 	dm_report_field_set_value(field, repstr, NULL);
+--- LVM2/lib/uuid/uuid.c	2009/07/15 20:02:47	1.30
++++ LVM2/lib/uuid/uuid.c	2010/09/30 14:07:33	1.31
+@@ -206,3 +206,18 @@
+ 
+ 	return id_valid(id);
  }
++
++char *id_format_and_copy(struct dm_pool *mem, const struct id *id)
++{
++	char *repstr = NULL;
++
++	if (!(repstr = dm_pool_alloc(mem, 40))) {
++		log_error("dm_pool_alloc failed");
++		return NULL;
++	}
++
++	if (!id_write_format(id, repstr, 40))
++		return_NULL;
++
++	return repstr;
++}
+--- LVM2/lib/uuid/uuid.h	2008/08/28 18:41:51	1.16
++++ LVM2/lib/uuid/uuid.h	2010/09/30 14:07:33	1.17
+@@ -54,4 +54,6 @@
+  */
+ int id_read_format(struct id *id, const char *buffer);
  
---- LVM2/lib/metadata/vg.c	2010/09/30 13:52:56	1.2
-+++ LVM2/lib/metadata/vg.c	2010/09/30 14:07:19	1.3
-@@ -443,31 +443,11 @@
- 		return NULL;
- 	}
- 
--	if (vg->status & LVM_WRITE)
--		repstr[0] = 'w';
--	else
--		repstr[0] = 'r';
--
--	if (vg_is_resizeable(vg))
--		repstr[1] = 'z';
--	else
--		repstr[1] = '-';
--
--	if (vg_is_exported(vg))
--		repstr[2] = 'x';
--	else
--		repstr[2] = '-';
--
--	if (vg_missing_pv_count(vg))
--		repstr[3] = 'p';
--	else
--		repstr[3] = '-';
--
-+	repstr[0] = (vg->status & LVM_WRITE) ? 'w' : 'r';
-+	repstr[1] = (vg_is_resizeable(vg)) ? 'z' : '-';
-+	repstr[2] = (vg_is_exported(vg)) ? 'x' : '-';
-+	repstr[3] = (vg_missing_pv_count(vg)) ? 'p' : '-';
- 	repstr[4] = alloc_policy_char(vg->alloc);
--
--	if (vg_is_clustered(vg))
--		repstr[5] = 'c';
--	else
--		repstr[5] = '-';
-+	repstr[5] = (vg_is_clustered(vg)) ? 'c' : '-';
- 	return repstr;
- }
++char *id_format_and_copy(struct dm_pool *mem, const struct id *id);
++
+ #endif
 
 
