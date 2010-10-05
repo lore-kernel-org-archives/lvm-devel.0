@@ -1,7 +1,7 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 05 Oct 2010 12:45:46 +0200
-Subject: [PATCH] dmeventd -R (restart; BZ 454618)
-Message-ID: <87sk0kncit.fsf@twilight.int.mornfall.net.>
+Date: Tue, 05 Oct 2010 15:51:40 +0200
+Subject: [PATCH] automatic snapshot extension with dmeventd (BZ 427298)
+Message-ID: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-the attached patch implements dmeventd -R, which allows us to restart
-dmeventd without losing the monitoring state. The version that is
-already running needs to support a (new) "get status" command for this
-to work. This means that upgrade scripts can't use dmeventd -R if they
-are upgrading from a version that does not provide this mechanism,
-without losing the monitoring status.
+the attached patch adds support for automatic snapshot extension. It
+uses 2 configuration variables (in lvm.conf):
 
-I believe a reasonable solution (for upgrades) is to:
+    # 'snapshot_extend_threshold' and 'snapshot_extend_amount' define how to
+    # handle automatic snapshot extension. The former defines when the snapshot
+    # should be extended: when its space usage exceeds this many percent. The
+    # latter defines how much extra space should be allocated for the snapshot,
+    # in percent of its current size.
+    #
+    # For example, if you set snapshot_extend_threshold to 70 and
+    # snapshot_extend_amount to 20, whenever a snapshot exceeds 70% usage, it
+    # will be extended by another 20%. For a 1G snapshot, using 700M usage will
+    # trigger a resize to 1.2G. When the usage exceeds 840M, the snapshot will
+    # be extended to 1.44G, and so on.
+    #
+    # Setting snapshot_extend_threshold to 100 disables automatic extensions.
 
-- check the existing version of dmeventd
-- if new, use dmeventd -R
-- if old, kill dmeventd, start the new one and enable monitoring for all
-  devices in the system
+    snapshot_extend_threshold = 100
+    snapshot_extend_amount = 20
 
-IIRC, RPM provides the version number of the package you are upgrading
-from to the post-installation script, which would make the above fairly
-easy. If no, you can run dmeventd -V in pre-install (and store it
-somewhere) and use that in the post-install to decide what to do.
+It works by calling lvextend --use-policies every time that the snapshot
+use grows by a 5% step, starting at 50% (i.e. it checks at 50, 55, 60,
+... 95). The implementation of lvextend --use-policies checks the
+configuration options and if the threshold is hit, it extends the
+volume. (On a second thought, this 50% should be either relaxed (to 5)
+or documented in lvm.conf.)
 
-The patch provides an automated test for the -R functionality, in
-test/t-dmeventd-restart.sh.
+The patch comes with two automated tests, one testing lvextend
+--use-policies directly (test/t-lvextend-snapshot-policy.sh), another
+for the dmeventd integration (test/t-lvextend-snapshot-dmeventd.sh).
+
+The latter is somewhat suboptimal, since dmeventd only checks the
+snapshot every 10 seconds, so it takes a bit longish. This can be fixed
+later though, shouldn't be a real problem for anything.
 
 Yours,
    Petr.
 
-PS: The other option is to just use dmeventd -R unconditionally. It
-should fail if the running dmeventd is too old, but should not cause any
-other harm. This needs some extra testing, though.
+PS: I'll look at the related BZ 189462 next (umount when the snapshot is
+invalidated). Shouldn't be too hard, it just needs to find the right
+mount point, presumably by consulting /proc/mounts, and use umount2 with
+MNT_FORCE and MNT_DETACH. It's probably better not to touch (nor trust)
+/etc/mtab.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: dmeventd-restart.diff
+Name: dmeventd-snapshot-extend.diff
 Type: text/x-diff
-Size: 11496 bytes
+Size: 14905 bytes
 Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101005/64d94e12/attachment.bin>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101005/1870f9f7/attachment.bin>
