@@ -1,48 +1,42 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 30 Jul 2009 12:31:46 -0000
-Subject: LVM2 configure.in configure
-Message-ID: <20090730123146.23400.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 06 Oct 2010 16:07:13 +0200
+Subject: [PATCH] dmeventd -R (restart; BZ 454618)
+In-Reply-To: <20101005234945.GG1200@agk-dp.fab.redhat.com> (Alasdair
+	G. Kergon's message of "Wed, 6 Oct 2010 00:49:45 +0100")
+References: <87sk0kncit.fsf@twilight.int.mornfall.net.>
+	<BCC2498C-1B82-4462-A9FE-27823E22DEA2@redhat.com>
+	<20101005234945.GG1200@agk-dp.fab.redhat.com>
+Message-ID: <87bp77l8j2.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-07-30 12:31:46
+Hi,
 
-Modified files:
-	.              : configure.in configure 
+Alasdair G Kergon <agk@redhat.com> writes:
 
-Log message:
-	corosync not cman...
+>>> +	kill(pid, 9);
+>
+> I'm paranoid about code like that, and want to see everything reasonably
+> possible done to ensure it can only kill the process it should and
+> any possible races are clearly documented and defended against.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.102&r2=1.103
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.97&r2=1.98
+the attached version avoids the kill, instead relying on the remote end
+committing suicide upon a special DIE message. It turns out to simplify
+the code as well, at the expense of having to modify the lock-file
+function slightly (it now tries a little harder, waiting for a couple
+seconds before failing, periodically re-trying to grab the lock). This
+also addresses some (all?) of the races.
 
---- LVM2/configure.in	2009/07/30 12:25:42	1.102
-+++ LVM2/configure.in	2009/07/30 12:31:45	1.103
-@@ -340,7 +340,7 @@
- fi
- 
- dnl -- Look for corosync libraries if required.
--if [[ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*cman.*'` != 0 ]]; then
-+if [[ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
- 	PKG_CHECK_MODULES(QUORUM, libquorum, [],
- 		[AC_MSG_RESULT([no pkg for quorum library, using -lquorum]);
- 		QUORUM_LIBS="-lquorum"])
---- LVM2/configure	2009/07/30 12:25:42	1.97
-+++ LVM2/configure	2009/07/30 12:31:45	1.98
-@@ -9190,7 +9190,7 @@
- 	CLUSTER=internal
- fi
- 
--if [ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*cman.*'` != 0 ]; then
-+if [ "x$CLVMD" = xall -o `expr x"$CLVMD" : '.*corosync.*'` != 0 ]; then
- 
- 
- if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
+Yours,
+   Petr.
 
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dmeventd-restart.diff
+Type: text/x-diff
+Size: 13298 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101006/6f8a6340/attachment.bin>
