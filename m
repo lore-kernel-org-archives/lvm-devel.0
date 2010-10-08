@@ -1,41 +1,54 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Thu, 7 Oct 2010 20:23:23 +0100
-Subject: [PATCH] let dmeventd unmount invalid snapshots (BZ 189462)
-In-Reply-To: <877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
-References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
-	<87r5g4lejw.fsf@twilight.int.mornfall.net.>
-	<877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
-Message-ID: <20101007192323.GD22053@agk-dp.fab.redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Oct 2010 11:18:30 -0000
+Subject: LVM2/scripts fsadm.sh
+Message-ID: <20101008111830.29768.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Oct 07, 2010 at 03:10:43PM +0200, Peter Rockai wrote:
-> There are some trade-offs involved. I have opted for using an umount
-> syscall directly since it's simpler and more robust. The downside is
-> that /etc/mtab will go out of sync and people may actually think that
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-08 11:18:29
 
-I'm not keen on leaving /etc/mtab out-of-date, or missing out anything
-else that /bin/umount might actually do (with an errored-out device).
-Would this patch need an update to the selinux context to allow umount?
+Modified files:
+	scripts        : fsadm.sh 
 
-> the snapshot is still mounted (mount(8) just prints mtab without
-> thinking twice about it). We could just fork off umount(8) instead, but
-> that can fail in new and interesting ways.
+Log message:
+	Replace  "can not" with "cannot"
 
-Yes, even if moved outside the locking.  But even umount2() within
-the lock might have deadlock possibilities, as might syslog() as
-you point out.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
 
-The options/problems here need a bit more investigation.
+--- LVM2/scripts/fsadm.sh	2010/05/14 11:33:21	1.12
++++ LVM2/scripts/fsadm.sh	2010/10/08 11:18:29	1.13
+@@ -227,7 +227,7 @@
  
-> The other possible issue with the patch is that I am not sure whether
-> it's actually safe to read /proc/mounts incrementally, with possibly
+ try_umount() {
+ 	yes_no "Do you want to unmount \"$MOUNTED\"" && dry $UMOUNT "$MOUNTED" && return 0
+-	error "Can not proceed with mounted filesystem \"$MOUNTED\""
++	error "Cannot proceed with mounted filesystem \"$MOUNTED\""
+ }
  
-kabi found problems like that with another /proc file.
-
-Alasdair
+ validate_parsing() {
+@@ -289,7 +289,7 @@
+ ########################
+ # Resize XFS filesystem
+ # - mounted for upsize
+-# - can not downsize
++# - cannot downsize
+ ########################
+ resize_xfs() {
+ 	detect_mounted
+@@ -345,7 +345,7 @@
+ ###################
+ check() {
+ 	detect_fs "$1"
+-	detect_mounted && error "Can not fsck device \"$VOLUME\", filesystem mounted on $MOUNTED"
++	detect_mounted && error "Cannot fsck device \"$VOLUME\", filesystem is mounted on $MOUNTED"
+ 	case "$FSTYPE" in
+ 	  "xfs") dry $XFS_CHECK "$VOLUME" ;;
+ 	  *) dry $FSCK $YES "$VOLUME" ;;
 
 
