@@ -1,84 +1,121 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:34 -0400
-Subject: [PATCH 10/14] Refactor and add code for (lv) 'lv_origin' get function.
+Date: Mon, 11 Oct 2010 11:14:35 -0400
+Subject: [PATCH 11/14] Add lvm_vg_get_property() generic vg property function.
 In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-11-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-12-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Add a generic VG property function to lvm2app.  Call the internal library
+vg_get_property() function.  Strings are dup'd internally.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/lv.c       |    7 +++++++
- lib/metadata/lv.h       |    1 +
- lib/report/properties.c |    2 +-
- lib/report/report.c     |    6 ++++--
- 4 files changed, 13 insertions(+), 3 deletions(-)
+ liblvm/lvm2app.h |   42 ++++++++++++++++++++++++++++++++++++++++++
+ liblvm/lvm_vg.c  |   19 +++++++++++++++++++
+ 2 files changed, 61 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 63851f6..593d37a 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -20,6 +20,13 @@
- #include "segtype.h"
- #include "str_list.h"
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 47d3417..b5008c1 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -168,6 +168,22 @@ typedef struct lvm_str_list {
+ 	const char *str;
+ } lvm_str_list_t;
  
-+char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv)
++/**
++ * Property Value
++ *
++ * This structure defines a single LVM property value for an LVM object.
++ * The structures are returned by functions such as
++ * lvm_vg_get_property() and lvm_vg_set_property().
++ */
++typedef struct lvm_property_value {
++	unsigned is_writeable;
++	unsigned is_string;
++	union {
++		char *s_val;
++		uint64_t n_val;
++	} v;
++} lvm_property_value_t;
++
+ /*************************** generic lvm handling ***************************/
+ /**
+  * Create a LVM handle.
+@@ -848,6 +864,32 @@ uint64_t lvm_vg_get_max_lv(const vg_t vg);
+  */
+ struct dm_list *lvm_vg_get_tags(const vg_t vg);
+ 
++/**
++ * Get the value of a VG property
++ *
++ * \memberof vg_t
++ *
++ * The memory allocated for a string property value is tied to the vg_t
++ * handle and will be released when lvm_vg_close() is called.
++ *
++ * Example:
++ *      lvm_property_value value;
++ *
++ *      if (lvm_vg_get_property(vg, "vg_mda_count", &value) < 0) {
++ *              // handle error
++ *      }
++ *      if (value.is_string)
++ *           printf(", value = %s\n", value.u.s_val);
++ *	else
++ *           printf(", value = %"PRIu64"\n", value.u.n_val);
++ *
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ */
++int lvm_vg_get_property(const vg_t vg, const char *name,
++			struct lvm_property_value *value);
++
+ /************************** logical volume handling *************************/
+ 
+ /**
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index a09208a..848a497 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -20,6 +20,7 @@
+ #include "locking.h"
+ #include "lvmcache.h"
+ #include "lvm_misc.h"
++#include "properties.h"
+ 
+ int lvm_vg_add_tag(vg_t vg, const char *tag)
+ {
+@@ -335,6 +336,24 @@ const char *lvm_vg_get_name(const vg_t vg)
+ 	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+ }
+ 
++
++int lvm_vg_get_property(const vg_t vg, const char *name,
++			struct lvm_property_value *value)
 +{
-+	if (lv_is_cow(lv))
-+		return lv_name_dup(mem, origin_from_cow(lv));
-+	return NULL;
++	struct lvm_property_type prop;
++
++	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
++	if (!vg_get_property(vg, &prop))
++		return -1;
++	value->is_writeable = prop.is_writeable;
++	value->is_string = prop.is_string;
++	if (value->is_string)
++		value->v.s_val = prop.v.s_val;
++	else
++		value->v.n_val = prop.v.n_val;
++	return 0;
 +}
 +
- char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
  {
- 	char *repstr, *lvname;
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index f80d2d5..1767551 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -61,5 +61,6 @@ int lv_kernel_minor(const struct logical_volume *lv);
- char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
- 
- #endif
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 8228193..250c7c9 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -121,7 +121,7 @@ GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
- #define _lv_size_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
- #define _seg_count_set _not_implemented_set
--#define _origin_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
- #define _origin_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
- #define _origin_size_set _not_implemented_set
-diff --git a/lib/report/report.c b/lib/report/report.c
-index ffca851..522abd4 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -339,9 +339,11 @@ static int _origin_disp(struct dm_report *rh, struct dm_pool *mem,
- 			const void *data, void *private)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
-+	const char *name;
- 
--	if (lv_is_cow(lv))
--		return _lvname_disp(rh, mem, field, origin_from_cow(lv), private);
-+	name = lv_origin_dup(mem, lv);
-+	if (name)
-+		return dm_report_field_string(rh, field, &name);
- 
- 	dm_report_field_set_value(field, "", NULL);
- 	return 1;
+ 	return get_vgnames((struct cmd_context *)libh, 0);
 -- 
 1.7.2.2
 
