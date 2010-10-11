@@ -1,11 +1,11 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 11 Oct 2010 20:25:26 +0200
-Subject: [PATCH 05/14] Refactor and add code for (lv) 'convert_lv' get function.
-In-Reply-To: <1286810078-25769-6-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Mon, 11 Oct 2010 11:14:29 -0400")
+Date: Mon, 11 Oct 2010 20:27:32 +0200
+Subject: [PATCH 06/14] Refactor and add code for (lv) 'lv_kernel_{major|minor}' get functions.
+In-Reply-To: <1286810078-25769-7-git-send-email-dwysocha@redhat.com> (Dave
+	Wysochanski's message of "Mon, 11 Oct 2010 11:14:30 -0400")
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-6-git-send-email-dwysocha@redhat.com>
-Message-ID: <87hbgs37u1.fsf@twilight.int.mornfall.net.>
+	<1286810078-25769-7-git-send-email-dwysocha@redhat.com>
+Message-ID: <87d3rg37qj.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -19,84 +19,60 @@ Reviewed-By: Petr Rockai <prockai@redhat.com>
 
 > --- a/lib/metadata/lv.c
 > +++ b/lib/metadata/lv.c
-> @@ -18,6 +18,26 @@
+> @@ -18,6 +18,23 @@
 >  #include "activate.h"
 >  #include "toolcontext.h"
 >  
-> +char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> +int lv_kernel_minor(const struct logical_volume *lv)
 > +{
-> +	struct lv_segment *seg;
-> +	const char *name = NULL;
+> +	struct lvinfo info;
 > +
-> +	if (lv->status & CONVERTING) {
-> +		if (lv->status & MIRRORED) {
-> +			seg = first_seg(lv);
-> +
-> +			/* Temporary mirror is always area_num == 0 */
-> +			if (seg_type(seg, 0) == AREA_LV &&
-> +			    is_temporary_mirror_layer(seg_lv(seg, 0)))
-> +				name = seg_lv(seg, 0)->name;
-> +		}
-> +	}
-> +	if (name)
-> +		return dm_pool_strndup(mem, name, strlen(name) + 1);
-> +	return NULL;
+> +	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+> +		return info.minor;
+> +	return -1;
 > +}
-strndup/strdup again, use of "name" can be eliminated as well...
-
 > +
->  char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv)
->  {
->  	const char *name;
-
-> --- a/lib/metadata/lv.h
-> +++ b/lib/metadata/lv.h
-> @@ -55,5 +55,6 @@ char *lv_tags_dup(const struct logical_volume *lv);
->  char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
->  uint64_t lv_origin_size(const struct logical_volume *lv);
->  char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> +char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
->  
->  #endif
-
-> --- a/lib/report/properties.c
-> +++ b/lib/report/properties.c
-> @@ -131,7 +131,7 @@ GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
->  #define _copy_percent_set _not_implemented_set
->  GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
->  #define _move_pv_set _not_implemented_set
-> -#define _convert_lv_get _not_implemented_get
-> +GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
->  #define _convert_lv_set _not_implemented_set
->  GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
->  #define _lv_tags_set _not_implemented_set
+> +int lv_kernel_major(const struct logical_volume *lv)
+> +{
+> +	struct lvinfo info;
+> +	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+> +		return info.major;
+> +	return -1;
+> +}
+> +
 
 > --- a/lib/report/report.c
 > +++ b/lib/report/report.c
-> @@ -392,19 +392,8 @@ static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
+> @@ -212,10 +212,10 @@ static int _lvkmaj_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+>  			const void *data, void *private __attribute__((unused)))
 >  {
 >  	const struct logical_volume *lv = (const struct logical_volume *) data;
->  	const char *name = NULL;
-> -	struct lv_segment *seg;
-> -
-> -	if (lv->status & CONVERTING) {
-> -		if (lv->status & MIRRORED) {
-> -			seg = first_seg(lv);
-> -
-> -			/* Temporary mirror is always area_num == 0 */
-> -			if (seg_type(seg, 0) == AREA_LV &&
-> -			    is_temporary_mirror_layer(seg_lv(seg, 0)))
-> -				name = seg_lv(seg, 0)->name;
-> -		}
-> -	}
+> -	struct lvinfo info;
+> +	int major;
 >  
-> +	name = lv_convert_lv_dup(mem, lv);
->  	if (name)
->  		return dm_report_field_string(rh, field, &name);
+> -	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+> -		return dm_report_field_int(rh, field, &info.major);
+> +	if ((major = lv_kernel_major(lv)) >= 0)
+> +		return dm_report_field_int(rh, field, &major);
+>  
+>  	return dm_report_field_int32(rh, field, &_minusone32);
+>  }
+> @@ -225,10 +225,10 @@ static int _lvkmin_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+>  			const void *data, void *private __attribute__((unused)))
+>  {
+>  	const struct logical_volume *lv = (const struct logical_volume *) data;
+> -	struct lvinfo info;
+> +	int minor;
+>  
+> -	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+> -		return dm_report_field_int(rh, field, &info.minor);
+> +	if ((minor = lv_kernel_minor(lv)) >= 0)
+> +		return dm_report_field_int(rh, field, &minor);
+>  
+>  	return dm_report_field_int32(rh, field, &_minusone32);
+>  }
 
-Ok. Although we don't need a string duplicate here. On the other hand,
-having a non-dup version of the above code and the dup version
-implemented in terms of that would be overkill, I guess...
+OK.
 
 Yours,
    Petr.
