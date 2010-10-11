@@ -1,61 +1,85 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 30 Jul 2009 17:41:02 -0000
-Subject: LVM2/lib/format_text format-text.c
-Message-ID: <20090730174102.26972.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 11 Oct 2010 11:14:34 -0400
+Subject: [PATCH 10/14] Refactor and add code for (lv) 'lv_origin' get function.
+In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
+References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-11-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2009-07-30 17:41:02
 
-Modified files:
-	lib/format_text: format-text.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/lv.c       |    7 +++++++
+ lib/metadata/lv.h       |    1 +
+ lib/report/properties.c |    2 +-
+ lib/report/report.c     |    6 ++++--
+ 4 files changed, 13 insertions(+), 3 deletions(-)
 
-Log message:
-	Remove legacy support for preserving pe_start if a PV already has data
-	areas.
-	
-	This preserved pe_start would quickly be readjusted to follow the first
-	mda anyway.  An example use-case that hit this code path is: running
-	pvcreate on an already existing PV _without_ a preceeding pvremove.
-	
-	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.108&r2=1.109
-
---- LVM2/lib/format_text/format-text.c	2009/07/30 17:19:31	1.108
-+++ LVM2/lib/format_text/format-text.c	2009/07/30 17:41:01	1.109
-@@ -1327,7 +1327,6 @@
- 	char buf[MDA_HEADER_SIZE] __attribute((aligned(8)));
- 	struct mda_header *mdah = (struct mda_header *) buf;
- 	uint64_t adjustment;
--	struct data_area_list *da;
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 63851f6..593d37a 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -20,6 +20,13 @@
+ #include "segtype.h"
+ #include "str_list.h"
  
- 	/* FIXME Test mode don't update cache? */
++char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	if (lv_is_cow(lv))
++		return lv_name_dup(mem, origin_from_cow(lv));
++	return NULL;
++}
++
+ char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	char *repstr, *lvname;
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index f80d2d5..1767551 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -61,5 +61,6 @@ int lv_kernel_minor(const struct logical_volume *lv);
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
++char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
  
-@@ -1364,16 +1363,9 @@
- 		dm_list_init(&info->mdas);
- 	}
+ #endif
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 8228193..250c7c9 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -121,7 +121,7 @@ GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
+ #define _lv_size_set _not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
+ #define _seg_count_set _not_implemented_set
+-#define _origin_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
+ #define _origin_set _not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
+ #define _origin_size_set _not_implemented_set
+diff --git a/lib/report/report.c b/lib/report/report.c
+index ffca851..522abd4 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -339,9 +339,11 @@ static int _origin_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			const void *data, void *private)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
++	const char *name;
  
--	/*
--	 * If no pe_start supplied but PV already exists,
--	 * preserve existing value.
--	 */
--	if (info->das.n) {
--		if (!pv->pe_start)
--			dm_list_iterate_items(da, &info->das)
--				pv->pe_start = da->disk_locn.offset >> SECTOR_SHIFT;
-+	if (info->das.n)
- 		del_das(&info->das);
--	} else
-+	else
- 		dm_list_init(&info->das);
+-	if (lv_is_cow(lv))
+-		return _lvname_disp(rh, mem, field, origin_from_cow(lv), private);
++	name = lv_origin_dup(mem, lv);
++	if (name)
++		return dm_report_field_string(rh, field, &name);
  
- 	/*
+ 	dm_report_field_set_value(field, "", NULL);
+ 	return 1;
+-- 
+1.7.2.2
 
 
