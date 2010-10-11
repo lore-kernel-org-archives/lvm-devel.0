@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:31 -0400
-Subject: [PATCH 07/14] Refactor and add code for (lv) 'mirror_log' get function.
+Date: Mon, 11 Oct 2010 11:14:32 -0400
+Subject: [PATCH 08/14] Refactor and add code for (lv) 'modules' get function.
 In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-8-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-9-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,86 +13,88 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/lv.c       |   16 ++++++++++++++++
+ lib/metadata/lv.c       |   15 +++++++++++++++
  lib/metadata/lv.h       |    1 +
  lib/report/properties.c |    2 +-
- lib/report/report.c     |   11 ++++-------
- 4 files changed, 22 insertions(+), 8 deletions(-)
+ lib/report/report.c     |   12 ++++--------
+ 4 files changed, 21 insertions(+), 9 deletions(-)
 
 diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index af2b418..4fad293 100644
+index 4fad293..329a3be 100644
 --- a/lib/metadata/lv.c
 +++ b/lib/metadata/lv.c
-@@ -17,6 +17,22 @@
- #include "metadata.h"
+@@ -18,6 +18,21 @@
  #include "activate.h"
  #include "toolcontext.h"
-+#include "segtype.h"
+ #include "segtype.h"
++#include "str_list.h"
 +
-+char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv)
++char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv)
 +{
-+	struct lv_segment *seg;
-+	const char *name = NULL;
++	struct dm_list *modules;
 +
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		if (!seg_is_mirrored(seg) || !seg->log_lv)
-+			continue;
-+		name = seg->log_lv->name;
++	if (!(modules = str_list_create(mem))) {
++		log_error("modules str_list allocation failed");
++		return NULL;
 +	}
-+	if (name)
-+		return dm_pool_strndup(mem, name, strlen(name) + 1);
-+	return NULL;
++
++	if (!list_lv_modules(mem, lv, modules))
++		return_NULL;
++	return tags_format_and_copy(lv->vg->vgmem, modules);
 +}
  
- int lv_kernel_minor(const struct logical_volume *lv)
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv)
  {
 diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 557f54a..8d069af 100644
+index 8d069af..2f0ebee 100644
 --- a/lib/metadata/lv.h
 +++ b/lib/metadata/lv.h
-@@ -58,5 +58,6 @@ char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
+@@ -59,5 +59,6 @@ char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
  int lv_kernel_major(const struct logical_volume *lv);
  int lv_kernel_minor(const struct logical_volume *lv);
-+char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
++char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
  
  #endif
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 5e42014..eba2b59 100644
+index eba2b59..ce1d2f7 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
-@@ -135,7 +135,7 @@ GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
- #define _convert_lv_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
+@@ -137,7 +137,7 @@ GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
  #define _lv_tags_set _not_implemented_set
--#define _mirror_log_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
+ GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
  #define _mirror_log_set _not_implemented_set
- #define _modules_get _not_implemented_get
+-#define _modules_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(modules, lv_modules_dup(lv->vg->vgmem, lv))
  #define _modules_set _not_implemented_set
+ 
+ /* VG */
 diff --git a/lib/report/report.c b/lib/report/report.c
-index f3e3e41..65becaf 100644
+index 65becaf..012659e 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -297,14 +297,11 @@ static int _loglv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((
- 		       const void *data, void *private __attribute__((unused)))
+@@ -165,17 +165,13 @@ static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			 const void *data, void *private)
  {
  	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lv_segment *seg;
-+	const char *name;
+-	struct dm_list *modules;
++	char *modules_str;
  
--	dm_list_iterate_items(seg, &lv->segments) {
--		if (!seg_is_mirrored(seg) || !seg->log_lv)
--			continue;
--		return dm_report_field_string(rh, field,
--					      (const char **) &seg->log_lv->name);
+-	if (!(modules = str_list_create(mem))) {
+-		log_error("modules str_list allocation failed");
++	if (!(modules_str = lv_modules_dup(mem, lv)))
+ 		return 0;
 -	}
-+	name = lv_mirror_log_dup(mem, lv);
-+	if (name)
-+		return dm_report_field_string(rh, field, &name);
+-
+-	if (!list_lv_modules(mem, lv, modules))
+-		return_0;
  
- 	dm_report_field_set_value(field, "", NULL);
- 	return 1;
+-	return _tags_disp(rh, mem, field, modules, private);
++	dm_report_field_set_value(field, modules_str, NULL);
++	return 1;
+ }
+ 
+ static int _vgfmt_disp(struct dm_report *rh, struct dm_pool *mem,
 -- 
 1.7.2.2
 
