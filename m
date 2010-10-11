@@ -1,33 +1,23 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 11 Oct 2010 13:28:36 +0200
-Subject: [PATCH 6/9] Fix problem with fscking of mounted filesystem
-In-Reply-To: <20101007172557.GA22053@agk-dp.fab.redhat.com>
-References: <cover.1286460218.git.zkabelac@redhat.com>	<d1625c45c8e5f047113bc2f2af784e11e5e81249.1286460218.git.zkabelac@redhat.com>
-	<20101007172557.GA22053@agk-dp.fab.redhat.com>
-Message-ID: <4CB2F4E4.2000109@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 11 Oct 2010 11:14:24 -0400
+Subject: [PATCH 00/14] Add lvm lv properties and lvm2app interfaces for pv/vg/lv.
+Message-ID: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 7.10.2010 19:25, Alasdair G Kergon napsal(a):
-> On Thu, Oct 07, 2010 at 04:06:36PM +0200, Zdenek Kabelac wrote:
->> Instead of calling mount without parameter to get actual mount table,
->> switch to use /proc/mounts directly. (Not really sure, maybe we want to
->> use /proc/self/mounts?)
->  
-> /proc/mounts I'd think: If it's mounted anywhere on the system, we need to
-> be aware, even if it's not visible to the current process.
-> 
+This patchset is adds lv properties for lvm2app, and adds
+the lvm2app interfaces and interactive tests to exercise
+the interface.
 
-I've been reading this rhbz:
+A few attributes require more complex refactoring and are thus still
+missing:
+1. readahead: lv_read_ahead, lv_kernel_read_ahead
+2. percents: snap_percent and copy_percent
 
-https://bugzilla.redhat.com/show_bug.cgi?id=491924
-
-Which seems to be suggesting to switch to to use self version.
-On the other hand  /proc/mounts is symbolic link to self/mounts anyway.
-
-Zdenek
+All vg and pv properties and most lv properties may now be queried
+with this patchset.
 
 
