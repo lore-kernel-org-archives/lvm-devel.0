@@ -1,11 +1,11 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 11 Oct 2010 20:00:01 +0200
-Subject: [PATCH 01/14] Add some lv 'get' functions that require no refactoring.
-In-Reply-To: <1286810078-25769-2-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Mon, 11 Oct 2010 11:14:25 -0400")
+Date: Mon, 11 Oct 2010 20:09:14 +0200
+Subject: [PATCH 02/14] Refactor and add code for (lv) 'lv_path' get function.
+In-Reply-To: <1286810078-25769-3-git-send-email-dwysocha@redhat.com> (Dave
+	Wysochanski's message of "Mon, 11 Oct 2010 11:14:26 -0400")
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-2-git-send-email-dwysocha@redhat.com>
-Message-ID: <87y6a4390e.fsf@twilight.int.mornfall.net.>
+	<1286810078-25769-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <87tyks38l1.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,51 +15,114 @@ Content-Transfer-Encoding: 7bit
 Dave Wysochanski <dwysocha@redhat.com> writes:
 
 > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-Adds lv_uuid, lv_attr, lv_major, lv_minor, lv_size, (assumed lv_)
-seg_count, pv_mda_used_count, lv_tags.
-
-Straightforward enough.
-
 Reviewed-By: Petr Rockai <prockai@redhat.com>
 
-> -#define _lv_uuid_get _not_implemented_get
-> +GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
+(But! See inline comments below. It would make sense to have another go
+at this one.)
+
+> ---
+>  lib/metadata/lv.c       |   21 +++++++++++++++++++++
+>  lib/metadata/lv.h       |    1 +
+>  lib/report/properties.c |    2 +-
+>  lib/report/report.c     |   11 +----------
+>  4 files changed, 24 insertions(+), 11 deletions(-)
+>
+> diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+> index add0a4d..f750f54 100644
+> --- a/lib/metadata/lv.c
+> +++ b/lib/metadata/lv.c
+> @@ -16,6 +16,27 @@
+>  #include "lib.h"
+>  #include "metadata.h"
+>  #include "activate.h"
+> +#include "toolcontext.h"
+> +
+> +char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> +{
+> +	char *repstr;
+> +	size_t len;
+> +
+> +	len = strlen(lv->vg->cmd->dev_dir);
+> +	len += strlen(lv->vg->name) + strlen(lv->name) + 2;
+Can you just make that a single size_t len = foo + bar + ...; line? That
+would make it clear there are no side effects involved...
+
+> +	if (!(repstr = dm_pool_zalloc(mem, len))) {
+> +		log_error("dm_pool_alloc failed");
+> +		return 0;
+> +	}
+> +
+> +	if (dm_snprintf(repstr, len, "%s%s/%s",
+> +			lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
+> +		log_error("lvpath snprintf failed");
+> +		return 0;
+> +	}
+^^ Should the above dm_pool_zalloc/dm_snprintf go into some
+dm_pool_asprintf, in fact? That would also remove that "len" computation
+and make this function completely trivial. We already have dm_asprintf
+(which uses dm_malloc). You could probably parametrise dm_asprintf with
+the strdup function into dm_generic_asprintf and have both dm_asprintf
+and dm_pool_asprintf implemented in terms of that.
+
+> +	return repstr;
+> +}
+
+Also, the log_error bits aren't that spectacular... Could you make them
+a bit clearer, or even omit them? The caller has to check the result and
+error out anyway...
+
+>  char *lv_uuid_dup(const struct logical_volume *lv)
+>  {
+> diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+> index 54ed7e0..eee2811 100644
+> --- a/lib/metadata/lv.h
+> +++ b/lib/metadata/lv.h
+> @@ -52,5 +52,6 @@ uint64_t lv_size(const struct logical_volume *lv);
+>  char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv);
+>  char *lv_uuid_dup(const struct logical_volume *lv);
+>  char *lv_tags_dup(const struct logical_volume *lv);
+> +char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
+>  
+>  #endif
+> diff --git a/lib/report/properties.c b/lib/report/properties.c
+> index eec4c61..8890e27 100644
+> --- a/lib/report/properties.c
+> +++ b/lib/report/properties.c
+> @@ -101,7 +101,7 @@ GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
 >  #define _lv_uuid_set _not_implemented_set
 >  #define _lv_name_get _not_implemented_get
 >  #define _lv_name_set _not_implemented_set
->  #define _lv_path_get _not_implemented_get
+> -#define _lv_path_get _not_implemented_get
+> +GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
 >  #define _lv_path_set _not_implemented_set
-> -#define _lv_attr_get _not_implemented_get
-> +GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
+>  GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
 >  #define _lv_attr_set _not_implemented_set
-> -#define _lv_major_get _not_implemented_get
-> +GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
->  #define _lv_major_set _not_implemented_set
-> -#define _lv_minor_get _not_implemented_get
-> +GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
->  #define _lv_minor_set _not_implemented_set
->  #define _lv_read_ahead_get _not_implemented_get
->  #define _lv_read_ahead_set _not_implemented_set
-> @@ -117,9 +117,9 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
->  #define _lv_kernel_minor_set _not_implemented_set
->  #define _lv_kernel_read_ahead_get _not_implemented_get
->  #define _lv_kernel_read_ahead_set _not_implemented_set
-> -#define _lv_size_get _not_implemented_get
-> +GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
->  #define _lv_size_set _not_implemented_set
-> -#define _seg_count_get _not_implemented_get
-> +GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
->  #define _seg_count_set _not_implemented_set
->  #define _origin_get _not_implemented_get
->  #define _origin_set _not_implemented_set
-> @@ -133,7 +133,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
->  #define _move_pv_set _not_implemented_set
->  #define _convert_lv_get _not_implemented_get
->  #define _convert_lv_set _not_implemented_set
-> -#define _lv_tags_get _not_implemented_get
-> +GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
->  #define _lv_tags_set _not_implemented_set
->  #define _mirror_log_get _not_implemented_get
->  #define _mirror_log_set _not_implemented_set
+> diff --git a/lib/report/report.c b/lib/report/report.c
+> index 95f4550..32559b8 100644
+> --- a/lib/report/report.c
+> +++ b/lib/report/report.c
+> @@ -350,18 +350,9 @@ static int _lvpath_disp(struct dm_report *rh, struct dm_pool *mem,
+>  {
+>  	const struct logical_volume *lv = (const struct logical_volume *) data;
+>  	char *repstr;
+> -	size_t len;
+>  
+> -	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
+> -	if (!(repstr = dm_pool_zalloc(mem, len))) {
+> -		log_error("dm_pool_alloc failed");
+> +	if (!(repstr = lv_path_dup(mem, lv)))
+>  		return 0;
+> -	}
+> -
+> -	if (dm_snprintf(repstr, len, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
+> -		log_error("lvpath snprintf failed");
+> -		return 0;
+> -	}
+>  
+>  	dm_report_field_set_value(field, repstr, NULL);
+Ok.
+
+Yours,
+   Petr.
 
 
