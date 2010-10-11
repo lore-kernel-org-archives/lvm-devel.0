@@ -1,59 +1,33 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:35 -0400
-Subject: [PATCH 11/14] Add lvm_vg_get_property() generic vg property function.
+Date: Mon, 11 Oct 2010 11:14:36 -0400
+Subject: [PATCH 12/14] Add lvm_pv_get_property() generic function to obtain value of any pv property.
 In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-12-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-13-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add a generic VG property function to lvm2app.  Call the internal library
-vg_get_property() function.  Strings are dup'd internally.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- liblvm/lvm2app.h |   42 ++++++++++++++++++++++++++++++++++++++++++
- liblvm/lvm_vg.c  |   19 +++++++++++++++++++
- 2 files changed, 61 insertions(+), 0 deletions(-)
+ liblvm/lvm2app.h |   26 ++++++++++++++++++++++++++
+ liblvm/lvm_pv.c  |   18 ++++++++++++++++++
+ 2 files changed, 44 insertions(+), 0 deletions(-)
 
 diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 47d3417..b5008c1 100644
+index b5008c1..b6cc729 100644
 --- a/liblvm/lvm2app.h
 +++ b/liblvm/lvm2app.h
-@@ -168,6 +168,22 @@ typedef struct lvm_str_list {
- 	const char *str;
- } lvm_str_list_t;
+@@ -1222,6 +1222,32 @@ uint64_t lvm_pv_get_size(const pv_t pv);
+ uint64_t lvm_pv_get_free(const pv_t pv);
  
-+/**
-+ * Property Value
-+ *
-+ * This structure defines a single LVM property value for an LVM object.
-+ * The structures are returned by functions such as
-+ * lvm_vg_get_property() and lvm_vg_set_property().
-+ */
-+typedef struct lvm_property_value {
-+	unsigned is_writeable;
-+	unsigned is_string;
-+	union {
-+		char *s_val;
-+		uint64_t n_val;
-+	} v;
-+} lvm_property_value_t;
-+
- /*************************** generic lvm handling ***************************/
  /**
-  * Create a LVM handle.
-@@ -848,6 +864,32 @@ uint64_t lvm_vg_get_max_lv(const vg_t vg);
-  */
- struct dm_list *lvm_vg_get_tags(const vg_t vg);
- 
-+/**
-+ * Get the value of a VG property
++ * Get the value of a PV property
 + *
-+ * \memberof vg_t
++ * \memberof pv_t
 + *
 + * The memory allocated for a string property value is tied to the vg_t
 + * handle and will be released when lvm_vg_close() is called.
@@ -61,7 +35,7 @@ index 47d3417..b5008c1 100644
 + * Example:
 + *      lvm_property_value value;
 + *
-+ *      if (lvm_vg_get_property(vg, "vg_mda_count", &value) < 0) {
++ *      if (lvm_pv_get_property(pv, "pv_mda_count", &value) < 0) {
 + *              // handle error
 + *      }
 + *      if (value.is_string)
@@ -73,36 +47,36 @@ index 47d3417..b5008c1 100644
 + * \return
 + * 0 (success) or -1 (failure).
 + */
-+int lvm_vg_get_property(const vg_t vg, const char *name,
++int lvm_pv_get_property(const pv_t pv, const char *name,
 +			struct lvm_property_value *value);
 +
- /************************** logical volume handling *************************/
- 
- /**
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index a09208a..848a497 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -20,6 +20,7 @@
- #include "locking.h"
- #include "lvmcache.h"
- #include "lvm_misc.h"
++/**
+  * Resize physical volume to new_size bytes.
+  *
+  * \memberof pv_t
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 0b6b6b1..2e3c3e9 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -16,6 +16,7 @@
+ #include "lvm2app.h"
+ #include "metadata.h"
+ #include "lvm-string.h"
 +#include "properties.h"
  
- int lvm_vg_add_tag(vg_t vg, const char *tag)
+ const char *lvm_pv_get_uuid(const pv_t pv)
  {
-@@ -335,6 +336,24 @@ const char *lvm_vg_get_name(const vg_t vg)
- 	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+@@ -48,6 +49,23 @@ uint64_t lvm_pv_get_free(const pv_t pv)
+ 	return (uint64_t) SECTOR_SIZE * pv_free(pv);
  }
  
-+
-+int lvm_vg_get_property(const vg_t vg, const char *name,
++int lvm_pv_get_property(const pv_t pv, const char *name,
 +			struct lvm_property_value *value)
 +{
 +	struct lvm_property_type prop;
 +
 +	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
-+	if (!vg_get_property(vg, &prop))
++	if (!pv_get_property(pv, &prop))
 +		return -1;
 +	value->is_writeable = prop.is_writeable;
 +	value->is_string = prop.is_string;
@@ -113,9 +87,9 @@ index a09208a..848a497 100644
 +	return 0;
 +}
 +
- struct dm_list *lvm_list_vg_names(lvm_t libh)
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
  {
- 	return get_vgnames((struct cmd_context *)libh, 0);
+ 	/* FIXME: add pv resize code here */
 -- 
 1.7.2.2
 
