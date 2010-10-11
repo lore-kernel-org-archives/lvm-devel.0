@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:25 -0400
-Subject: [PATCH 01/14] Add some lv 'get' functions that require no refactoring.
+Date: Mon, 11 Oct 2010 11:14:28 -0400
+Subject: [PATCH 04/14] Refactor and add code for (lv) 'move_pv' get function.
 In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-2-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,56 +13,86 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/properties.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ lib/metadata/lv.c       |   15 +++++++++++++++
+ lib/metadata/lv.h       |    1 +
+ lib/report/properties.c |    2 +-
+ lib/report/report.c     |   11 +++--------
+ 4 files changed, 20 insertions(+), 9 deletions(-)
 
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index ae8a4fb..8f4c95a 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -18,6 +18,21 @@
+ #include "activate.h"
+ #include "toolcontext.h"
+ 
++char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	const char *name;
++	struct lv_segment *seg;
++
++	dm_list_iterate_items(seg, &lv->segments) {
++		if (!(seg->status & PVMOVE))
++			continue;
++		name = dev_name(seg_dev(seg, 0));
++	}
++	if (name)
++		return dm_pool_strndup(mem, name, strlen(name) + 1);
++	return NULL;
++}
++
+ uint64_t lv_origin_size(const struct logical_volume *lv)
+ {
+ 	uint64_t size;
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 69c4077..bfb38f9 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -54,5 +54,6 @@ char *lv_uuid_dup(const struct logical_volume *lv);
+ char *lv_tags_dup(const struct logical_volume *lv);
+ char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ uint64_t lv_origin_size(const struct logical_volume *lv);
++char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ 
+ #endif
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index bea57b5..eec4c61 100644
+index 27503a9..bcec0c8 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
-@@ -97,17 +97,17 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
- #define _pv_mda_used_count_set _not_implemented_set
- 
- /* LV */
--#define _lv_uuid_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
- #define _lv_uuid_set _not_implemented_set
- #define _lv_name_get _not_implemented_get
- #define _lv_name_set _not_implemented_set
- #define _lv_path_get _not_implemented_get
- #define _lv_path_set _not_implemented_set
--#define _lv_attr_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
- #define _lv_attr_set _not_implemented_set
--#define _lv_major_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
- #define _lv_major_set _not_implemented_set
--#define _lv_minor_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
- #define _lv_minor_set _not_implemented_set
- #define _lv_read_ahead_get _not_implemented_get
- #define _lv_read_ahead_set _not_implemented_set
-@@ -117,9 +117,9 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
- #define _lv_kernel_minor_set _not_implemented_set
- #define _lv_kernel_read_ahead_get _not_implemented_get
- #define _lv_kernel_read_ahead_set _not_implemented_set
--#define _lv_size_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
- #define _lv_size_set _not_implemented_set
--#define _seg_count_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
- #define _seg_count_set _not_implemented_set
- #define _origin_get _not_implemented_get
- #define _origin_set _not_implemented_set
-@@ -133,7 +133,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+@@ -129,7 +129,7 @@ GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
+ #define _snap_percent_set _not_implemented_set
+ #define _copy_percent_get _not_implemented_get
+ #define _copy_percent_set _not_implemented_set
+-#define _move_pv_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
  #define _move_pv_set _not_implemented_set
  #define _convert_lv_get _not_implemented_get
  #define _convert_lv_set _not_implemented_set
--#define _lv_tags_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
- #define _lv_tags_set _not_implemented_set
- #define _mirror_log_get _not_implemented_get
- #define _mirror_log_set _not_implemented_set
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 83216b2..26ff879 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -378,16 +378,11 @@ static int _movepv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 	const char *name;
+-	struct lv_segment *seg;
+ 
+-	dm_list_iterate_items(seg, &lv->segments) {
+-		if (!(seg->status & PVMOVE))
+-			continue;
+-		name = dev_name(seg_dev(seg, 0));
++	if (!(name = lv_move_pv_dup(mem, lv)))
++		dm_report_field_set_value(field, "", NULL);
++	else
+ 		return dm_report_field_string(rh, field, &name);
+-	}
+-
+-	dm_report_field_set_value(field, "", NULL);
+ 	return 1;
+ }
+ 
 -- 
 1.7.2.2
 
