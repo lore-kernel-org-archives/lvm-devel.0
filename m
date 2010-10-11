@@ -1,9 +1,9 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Mon, 11 Oct 2010 11:14:26 -0400
-Subject: [PATCH 02/14] Refactor and add code for (lv) 'lv_path' get function.
+Date: Mon, 11 Oct 2010 11:14:30 -0400
+Subject: [PATCH 06/14] Refactor and add code for (lv) 'lv_kernel_{major|minor}' get functions.
 In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1286810078-25769-3-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-7-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,92 +13,100 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/lv.c       |   21 +++++++++++++++++++++
- lib/metadata/lv.h       |    1 +
- lib/report/properties.c |    2 +-
- lib/report/report.c     |   11 +----------
- 4 files changed, 24 insertions(+), 11 deletions(-)
+ lib/metadata/lv.c       |   17 +++++++++++++++++
+ lib/metadata/lv.h       |    2 ++
+ lib/report/properties.c |    4 ++--
+ lib/report/report.c     |   12 ++++++------
+ 4 files changed, 27 insertions(+), 8 deletions(-)
 
 diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index add0a4d..f750f54 100644
+index fd6d36d..af2b418 100644
 --- a/lib/metadata/lv.c
 +++ b/lib/metadata/lv.c
-@@ -16,6 +16,27 @@
- #include "lib.h"
- #include "metadata.h"
+@@ -18,6 +18,23 @@
  #include "activate.h"
-+#include "toolcontext.h"
-+
-+char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	char *repstr;
-+	size_t len;
-+
-+	len = strlen(lv->vg->cmd->dev_dir);
-+	len += strlen(lv->vg->name) + strlen(lv->name) + 2;
-+	if (!(repstr = dm_pool_zalloc(mem, len))) {
-+		log_error("dm_pool_alloc failed");
-+		return 0;
-+	}
-+
-+	if (dm_snprintf(repstr, len, "%s%s/%s",
-+			lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
-+		log_error("lvpath snprintf failed");
-+		return 0;
-+	}
-+	return repstr;
-+}
+ #include "toolcontext.h"
  
- char *lv_uuid_dup(const struct logical_volume *lv)
++int lv_kernel_minor(const struct logical_volume *lv)
++{
++	struct lvinfo info;
++
++	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
++		return info.minor;
++	return -1;
++}
++
++int lv_kernel_major(const struct logical_volume *lv)
++{
++	struct lvinfo info;
++	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
++		return info.major;
++	return -1;
++}
++
+ char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
  {
+ 	struct lv_segment *seg;
 diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 54ed7e0..eee2811 100644
+index 1ba932b..557f54a 100644
 --- a/lib/metadata/lv.h
 +++ b/lib/metadata/lv.h
-@@ -52,5 +52,6 @@ uint64_t lv_size(const struct logical_volume *lv);
- char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_uuid_dup(const struct logical_volume *lv);
- char *lv_tags_dup(const struct logical_volume *lv);
-+char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
+@@ -56,5 +56,7 @@ char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ uint64_t lv_origin_size(const struct logical_volume *lv);
+ char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
++int lv_kernel_major(const struct logical_volume *lv);
++int lv_kernel_minor(const struct logical_volume *lv);
  
  #endif
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index eec4c61..8890e27 100644
+index db02683..5e42014 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
-@@ -101,7 +101,7 @@ GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
- #define _lv_uuid_set _not_implemented_set
- #define _lv_name_get _not_implemented_get
- #define _lv_name_set _not_implemented_set
--#define _lv_path_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
- #define _lv_path_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
- #define _lv_attr_set _not_implemented_set
+@@ -111,9 +111,9 @@ GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
+ #define _lv_minor_set _not_implemented_set
+ #define _lv_read_ahead_get _not_implemented_get
+ #define _lv_read_ahead_set _not_implemented_set
+-#define _lv_kernel_major_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(lv_kernel_major, lv_kernel_major(lv))
+ #define _lv_kernel_major_set _not_implemented_set
+-#define _lv_kernel_minor_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
+ #define _lv_kernel_minor_set _not_implemented_set
+ #define _lv_kernel_read_ahead_get _not_implemented_get
+ #define _lv_kernel_read_ahead_set _not_implemented_set
 diff --git a/lib/report/report.c b/lib/report/report.c
-index 95f4550..32559b8 100644
+index bb2d4ce..f3e3e41 100644
 --- a/lib/report/report.c
 +++ b/lib/report/report.c
-@@ -350,18 +350,9 @@ static int _lvpath_disp(struct dm_report *rh, struct dm_pool *mem,
+@@ -212,10 +212,10 @@ static int _lvkmaj_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ 			const void *data, void *private __attribute__((unused)))
  {
  	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	char *repstr;
--	size_t len;
+-	struct lvinfo info;
++	int major;
  
--	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
--	if (!(repstr = dm_pool_zalloc(mem, len))) {
--		log_error("dm_pool_alloc failed");
-+	if (!(repstr = lv_path_dup(mem, lv)))
- 		return 0;
--	}
--
--	if (dm_snprintf(repstr, len, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
--		log_error("lvpath snprintf failed");
--		return 0;
--	}
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+-		return dm_report_field_int(rh, field, &info.major);
++	if ((major = lv_kernel_major(lv)) >= 0)
++		return dm_report_field_int(rh, field, &major);
  
- 	dm_report_field_set_value(field, repstr, NULL);
+ 	return dm_report_field_int32(rh, field, &_minusone32);
+ }
+@@ -225,10 +225,10 @@ static int _lvkmin_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ 			const void *data, void *private __attribute__((unused)))
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	struct lvinfo info;
++	int minor;
  
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) && info.exists)
+-		return dm_report_field_int(rh, field, &info.minor);
++	if ((minor = lv_kernel_minor(lv)) >= 0)
++		return dm_report_field_int(rh, field, &minor);
+ 
+ 	return dm_report_field_int32(rh, field, &_minusone32);
+ }
 -- 
 1.7.2.2
 
