@@ -1,87 +1,69 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 30 Jul 2009 17:19:33 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/format-text.c
-Message-ID: <20090730171933.19164.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 11 Oct 2010 11:14:25 -0400
+Subject: [PATCH 01/14] Add some lv 'get' functions that require no refactoring.
+In-Reply-To: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
+References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1286810078-25769-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2009-07-30 17:19:31
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/format_text: format-text.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/report/properties.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-Log message:
-	Fix _mda_setup() to not check first mda's size before pe_align rounding.
-	
-	Without this fix rounding the end of the first mda to a pe_align
-	boundary could silently exceed the disk_size.
-	
-	Final 'if (start1 + mda_size1 > disk_size)' block serves as a safety
-	net.
-	
-	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1213&r2=1.1214
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
-
---- LVM2/WHATS_NEW	2009/07/30 17:18:03	1.1213
-+++ LVM2/WHATS_NEW	2009/07/30 17:19:31	1.1214
-@@ -1,5 +1,6 @@
- Version 2.02.51 - 
- ================================
-+  Fix _mda_setup() to not check first mda's size before pe_align rounding.
-   Formalize pe_start policy as split between .pv_setup and .pv_write.
-   Document -I option of clvmd in the man page.
-   Fix configure script to handle multiple clvmd selections.
---- LVM2/lib/format_text/format-text.c	2009/07/30 17:18:08	1.107
-+++ LVM2/lib/format_text/format-text.c	2009/07/30 17:19:31	1.108
-@@ -1214,6 +1214,15 @@
- 			start1 += (pagesize - mda_adjustment);
- 	}
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index bea57b5..eec4c61 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -97,17 +97,17 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+ #define _pv_mda_used_count_set _not_implemented_set
  
-+	/* Round up to pe_align boundary */
-+	mda_adjustment = (mda_size1 + start1) % alignment;
-+	if (mda_adjustment) {
-+		mda_size1 += (alignment - mda_adjustment);
-+		/* Revert if it's now too large */
-+		if (start1 + mda_size1 > disk_size)
-+			mda_size1 -= (alignment - mda_adjustment);
-+	}
-+
- 	/* Ensure it's not going to be bigger than the disk! */
- 	if (start1 + mda_size1 > disk_size) {
- 		log_warn("WARNING: metadata area fills disk leaving no "
-@@ -1221,15 +1230,19 @@
- 		/* Leave some free space for rounding */
- 		/* Avoid empty data area as could cause tools problems */
- 		mda_size1 = disk_size - start1 - alignment * 2;
-+		if (start1 + mda_size1 > disk_size) {
-+			log_error("Insufficient space for first mda on %s",
-+				  pv_dev_name(pv));
-+			return 0;
-+		}
-+		/* Round up to pe_align boundary */
-+		mda_adjustment = (mda_size1 + start1) % alignment;
-+		if (mda_adjustment)
-+			mda_size1 += (alignment - mda_adjustment);
- 		/* Only have 1 mda in this case */
- 		pvmetadatacopies = 1;
- 	}
- 
--	/* Round up to pe_align() boundary */
--	mda_adjustment = (mda_size1 + start1) % alignment;
--	if (mda_adjustment)
--		mda_size1 += (alignment - mda_adjustment);
--
- 	/* If we already have PEs, avoid overlap */
- 	if (pe_start || pe_end) {
- 		if (pe_start <= start1)
+ /* LV */
+-#define _lv_uuid_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
+ #define _lv_uuid_set _not_implemented_set
+ #define _lv_name_get _not_implemented_get
+ #define _lv_name_set _not_implemented_set
+ #define _lv_path_get _not_implemented_get
+ #define _lv_path_set _not_implemented_set
+-#define _lv_attr_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
+ #define _lv_attr_set _not_implemented_set
+-#define _lv_major_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
+ #define _lv_major_set _not_implemented_set
+-#define _lv_minor_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
+ #define _lv_minor_set _not_implemented_set
+ #define _lv_read_ahead_get _not_implemented_get
+ #define _lv_read_ahead_set _not_implemented_set
+@@ -117,9 +117,9 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+ #define _lv_kernel_minor_set _not_implemented_set
+ #define _lv_kernel_read_ahead_get _not_implemented_get
+ #define _lv_kernel_read_ahead_set _not_implemented_set
+-#define _lv_size_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
+ #define _lv_size_set _not_implemented_set
+-#define _seg_count_get _not_implemented_get
++GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
+ #define _seg_count_set _not_implemented_set
+ #define _origin_get _not_implemented_get
+ #define _origin_set _not_implemented_set
+@@ -133,7 +133,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+ #define _move_pv_set _not_implemented_set
+ #define _convert_lv_get _not_implemented_get
+ #define _convert_lv_set _not_implemented_set
+-#define _lv_tags_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
+ #define _lv_tags_set _not_implemented_set
+ #define _mirror_log_get _not_implemented_get
+ #define _mirror_log_set _not_implemented_set
+-- 
+1.7.2.2
 
 
