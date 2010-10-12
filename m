@@ -1,123 +1,89 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 11 Oct 2010 20:36:30 +0200
-Subject: [PATCH 09/14] Refactor and add code for (lv) 'lv_name' get function.
-In-Reply-To: <1286810078-25769-10-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Mon, 11 Oct 2010 11:14:33 -0400")
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 12 Oct 2010 10:40:24 +0200
+Subject: [PATCH 11/14] Add lvm_vg_get_property() generic vg property function.
+In-Reply-To: <1286810078-25769-12-git-send-email-dwysocha@redhat.com>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-10-git-send-email-dwysocha@redhat.com>
-Message-ID: <871v7w37bl.fsf@twilight.int.mornfall.net.>
+	<1286810078-25769-12-git-send-email-dwysocha@redhat.com>
+Message-ID: <4CB41EF8.9010706@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
-
+Dne 11.10.2010 17:14, Dave Wysochanski napsal(a):
+> Add a generic VG property function to lvm2app.  Call the internal library
+> vg_get_property() function.  Strings are dup'd internally.
+> 
 > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-Reviewed-By: Petr Rockai <prockai@redhat.com>
-
-> --- a/lib/metadata/lv.c
-> +++ b/lib/metadata/lv.c
-> @@ -20,6 +20,33 @@
->  #include "segtype.h"
->  #include "str_list.h"
+> ---
+>  liblvm/lvm2app.h |   42 ++++++++++++++++++++++++++++++++++++++++++
+>  liblvm/lvm_vg.c  |   19 +++++++++++++++++++
+>  2 files changed, 61 insertions(+), 0 deletions(-)
+> 
+> diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+> index 47d3417..b5008c1 100644
+> --- a/liblvm/lvm2app.h
+> +++ b/liblvm/lvm2app.h
+> @@ -168,6 +168,22 @@ typedef struct lvm_str_list {
+>  	const char *str;
+>  } lvm_str_list_t;
 >  
-> +char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> +/**
+> + * Property Value
+> + *
+> + * This structure defines a single LVM property value for an LVM object.
+> + * The structures are returned by functions such as
+> + * lvm_vg_get_property() and lvm_vg_set_property().
+> + */
+> +typedef struct lvm_property_value {
+> +	unsigned is_writeable;
+> +	unsigned is_string;
+> +	union {
+> +		char *s_val;
+
+are we going to support return of modifiable strings - or const would fit here
+?  (IMHO I still think, we are duplicating way too many things on return...)
+
+> +		uint64_t n_val;
+> +	} v;
+> +} lvm_property_value_t;
+> +
+
+
+> +int lvm_vg_get_property(const vg_t vg, const char *name,
+> +			struct lvm_property_value *value)
 > +{
-> +	char *repstr, *lvname;
-> +	size_t len;
+> +	struct lvm_property_type prop;
 > +
-> +	if (lv_is_visible(lv)) {
-> +		goto dup;
-> +	}
-> +
-> +	len = strlen(lv->name) + 3;
-> +	if (!(repstr = dm_pool_zalloc(mem, len))) {
-> +		log_error("dm_pool_alloc failed");
-> +		return NULL;
-> +	}
-> +
-> +	if (dm_snprintf(repstr, len, "[%s]", lv->name) < 0) {
-> +		log_error("lvname snprintf failed");
-> +		return NULL;
-> +	}
-> +dup:
-> +	if (!(lvname = dm_pool_strdup(mem, lv->name))) {
-> +		log_error("dm_pool_strdup failed");
-> +		return NULL;
-> +	}
-> +	return lvname;
+> +	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
+
+Hmmm why doing a copy here instead of passing/assigning  'name' ptr somewhere?
+
+
+> +	if (!vg_get_property(vg, &prop))
+> +		return -1;
+
+As this is public interface - I'd add check for valid 'value' pointer.
+
+if (value) return 0;   // might indicate, property exists and is queriable,
+but user is not interested in the result.
+
+
+> +	value->is_writeable = prop.is_writeable;
+> +	value->is_string = prop.is_string;
+> +	if (value->is_string)
+> +		value->v.s_val = prop.v.s_val;
+> +	else
+> +		value->v.n_val = prop.v.n_val;
+> +	return 0;
 > +}
-Using (proposed) dm_pool_asprintf would simplify this a lot, too.
-
-> --- a/lib/metadata/lv.h
-> +++ b/lib/metadata/lv.h
-> @@ -60,5 +60,6 @@ int lv_kernel_major(const struct logical_volume *lv);
->  int lv_kernel_minor(const struct logical_volume *lv);
->  char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
->  char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> +char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
->  
->  #endif
-
-> --- a/lib/report/properties.c
-> +++ b/lib/report/properties.c
-> @@ -99,7 +99,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
->  /* LV */
->  GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
->  #define _lv_uuid_set _not_implemented_set
-> -#define _lv_name_get _not_implemented_get
-> +GET_LV_STR_PROPERTY_FN(lv_name, lv_name_dup(lv->vg->vgmem, lv))
->  #define _lv_name_set _not_implemented_set
->  GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
->  #define _lv_path_set _not_implemented_set
-
-> --- a/lib/report/report.c
-> +++ b/lib/report/report.c
-> @@ -308,31 +308,13 @@ static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
->  			const void *data, void *private __attribute__((unused)))
+> +
+>  struct dm_list *lvm_list_vg_names(lvm_t libh)
 >  {
->  	const struct logical_volume *lv = (const struct logical_volume *) data;
-> -	char *repstr, *lvname;
-> -	size_t len;
-> -
-> -	if (lv_is_visible(lv)) {
-> -		repstr = lv->name;
-> -		return dm_report_field_string(rh, field, (const char **) &repstr);
-> -	}
-> -
-> -	len = strlen(lv->name) + 3;
-> -	if (!(repstr = dm_pool_zalloc(mem, len))) {
-> -		log_error("dm_pool_alloc failed");
-> -		return 0;
-> -	}
-> -
-> -	if (dm_snprintf(repstr, len, "[%s]", lv->name) < 0) {
-> -		log_error("lvname snprintf failed");
-> -		return 0;
-> -	}
-> +	const char *name;
->  
-> -	if (!(lvname = dm_pool_strdup(mem, lv->name))) {
-> -		log_error("dm_pool_strdup failed");
-> -		return 0;
-> -	}
-> +	name = lv_name_dup(mem, lv);
-> +	if (name)
-> +		return dm_report_field_string(rh, field, &name);
-if ((name = ...)) vs ... ; if (name) ... again
+>  	return get_vgnames((struct cmd_context *)libh, 0);
 
->  
-> -	dm_report_field_set_value(field, repstr, lvname);
-> +	dm_report_field_set_value(field, "", NULL);
->  
->  	return 1;
->  }
 
-OK.
-
-Yours,
-   Petr.
+Zdenek
 
 
