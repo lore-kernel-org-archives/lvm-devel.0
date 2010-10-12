@@ -1,35 +1,47 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sat, 30 Oct 2010 18:44:33 +0200
-Subject: Patch for fsadm bz 64146
-In-Reply-To: <20101029212639.GU29400@agk-dp.fab.redhat.com>
-References: <4CCB2668.8020809@redhat.com>
-	<20101029204456.GB26687@redhat.com>	<20101029205623.GD26687@redhat.com>
-	<20101029212639.GU29400@agk-dp.fab.redhat.com>
-Message-ID: <4CCC4B71.7050201@redhat.com>
+From: Diego Elio Pettenò <flameeyes@gmail.com>
+Date: Tue, 12 Oct 2010 14:26:38 -0000
+Subject: [PATCH] Fix liblvm2cmd.so linking order for --as-needed builds
+In-Reply-To: <4CB468E4.4080101@redhat.com>
+References: <1283355456.30896.286.camel@yamato.local>
+	<4CB468E4.4080101@redhat.com>
+Message-ID: <1286893207.20493.20.camel@yamato.local>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 29.10.2010 23:26, Alasdair G Kergon napsal(a):
->>> "Skipping fsck for device \"$VOLUME\" as filesystem is mounted on $MOUNTED"
->> "for" could be replaced with "on" or "of" too. ;)
->  
-> What's fsck?
-> 
+Il giorno mar, 12/10/2010 alle 15.55 +0200, Zdenek Kabelac ha scritto:
+> The last occurrence of  CLDWHOLEARCHIVE in tools/Makefile.in seems to be
+> dropped by this Alasdair's commit:
 
-I think the tool should be used by system admins - so they should not need the
-long version 'filesystem check' - but if it's preferable to avoid shortcut
-I'll switch ?
+Uh?
 
-Do we consider now this as a final solution - or do you rather prefer 'non
-zero' return code for this case (check of mounted fs). This would require
-exec_cmd modification for status passing we've discussed.
+liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
+        $(CC) -shared -Wl,-soname,$@.$(LIB_VERSION) \
+        $(CFLAGS) $(CLDFLAGS) -o $@ $(LVMLIBS) $(LIBS) \
+                @CLDWHOLEARCHIVE@ liblvm2cmd.a @CLDNOWHOLEARCHIVE@
 
-I'd rather avoid switching between success/fail return code from the fsadm
-command between releases.
+this is in 
 
-Zdenek
+commit 39429d390515de9a375979274bc61d787ea9a0cb
+Author: Zdenek Kabelac <zkabelac@redhat.com>
+Date:   Fri Oct 8 15:03:21 2010 +0000
+
+Did I get the wrong GIT repository?
 
 
+-- 
+Diego Elio Petten? ? ?Flameeyes?
+http://blog.flameeyes.eu/
+
+If you found a .asc file in this mail and know not what it is,
+it's a GnuPG digital signature: http://www.gnupg.org/
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: This is a digitally signed message part
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101012/07353e75/attachment.sig>
