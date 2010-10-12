@@ -1,130 +1,102 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 12 Oct 2010 11:14:22 -0400
-Subject: [PATCH 05/14] Refactor and add code for (lv) 'convert_lv' get function.
-In-Reply-To: <87hbgs37u1.fsf@twilight.int.mornfall.net.>
-References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-6-git-send-email-dwysocha@redhat.com>
-	<87hbgs37u1.fsf@twilight.int.mornfall.net.>
-Message-ID: <1286896462.15299.16.camel@f12-work>
+From: Przemyslaw Iskra <sparky@pld-linux.org>
+Date: Tue, 12 Oct 2010 17:15:24 +0200
+Subject: [PATCH] Fix liblvm2cmd.so linking order for --as-needed builds
+In-Reply-To: <4CB4775B.2000009@redhat.com>
+References: <1283355456.30896.286.camel@yamato.local>
+	<4CB468E4.4080101@redhat.com>
+	<1286893207.20493.20.camel@yamato.local>
+	<4CB4775B.2000009@redhat.com>
+Message-ID: <20101012151524.GA6280@pld-linux.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2010-10-11 at 20:25 +0200, Petr Rockai wrote:
-> Dave Wysochanski <dwysocha@redhat.com> writes:
-> 
-> > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> Reviewed-By: Petr Rockai <prockai@redhat.com>
-> 
-> > --- a/lib/metadata/lv.c
-> > +++ b/lib/metadata/lv.c
-> > @@ -18,6 +18,26 @@
-> >  #include "activate.h"
-> >  #include "toolcontext.h"
-> >  
-> > +char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
-> > +{
-> > +	struct lv_segment *seg;
-> > +	const char *name = NULL;
-> > +
-> > +	if (lv->status & CONVERTING) {
-> > +		if (lv->status & MIRRORED) {
-> > +			seg = first_seg(lv);
-> > +
-> > +			/* Temporary mirror is always area_num == 0 */
-> > +			if (seg_type(seg, 0) == AREA_LV &&
-> > +			    is_temporary_mirror_layer(seg_lv(seg, 0)))
-> > +				name = seg_lv(seg, 0)->name;
-> > +		}
-> > +	}
-> > +	if (name)
-> > +		return dm_pool_strndup(mem, name, strlen(name) + 1);
-> > +	return NULL;
-> > +}
-> strndup/strdup again, use of "name" can be eliminated as well...
-> 
+On Tue, Oct 12, 2010 at 04:57:31PM +0200, Zdenek Kabelac wrote:
 
-Done.  I also simplified the lv->status checks:
+> Hmm - ok - I'll need to take a look on this.
 
-+char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
+The Makefile should be fixed, but...
+
+Why not just drop floor() usage (which is misused anyways) ?
+Without it the whole -lm won't be needed.
+I've sent a patch for this some time ago, resending it here.
+[May be a bit outdated if configure.in changed]
+
+
+-- 
+ ____  Sparky{PI] -- Przemyslaw _  ___  _  _  ......... LANG...Pl,Ca,Es,En
+/____) ___  ___  _ _ || Iskra  |  | _ \| |  | : WWW...ppcrcd.pld-linux.org
+\____\| -_)'___| ||^'||//\\// <   |  _/| |  | : WWW2..............rsget.pl
+(____/||   (_-_|_||  ||\\ ||   |_ |_|  |_| _| : Mail..sparky@pld-linux.org
+-------------- next part --------------
+>From ab3a151bdae8566fddbd91cdc86c600083890f59 Mon Sep 17 00:00:00 2001
+From: Przemyslaw Iskra <sparky@pld-linux.org>
+Date: Fri, 30 Jul 2010 18:45:43 +0200
+Subject: [PATCH] Don't use floor() in _bitset_with_random_bits
+
+Use _even_rand() function instead of floor() in
+_bitset_with_random_bits(). floor() function is missing in dietlibc (on
+architectures other than x86). Moreover using floor() to clip rand
+results does not assure even result distribution.
+_even_rand() uses integer arithmetic only and is designed to return evenly
+distributed results.
+
+Signed-off-by: Przemyslaw Iskra <sparky@pld-linux.org>
+---
+ configure.in            |    3 +--
+ lib/metadata/metadata.c |   16 +++++++++++++++-
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/configure.in b/configure.in
+index bd56136..6f6c67e 100644
+--- a/configure.in
++++ b/configure.in
+@@ -125,8 +125,7 @@ AC_STRUCT_TM
+ 
+ ################################################################################
+ dnl -- Check for functions
+-AC_SEARCH_LIBS([floor], [m], , [AC_MSG_ERROR(bailing out)])
+-AC_CHECK_FUNCS([floor ftruncate gethostname getpagesize \
++AC_CHECK_FUNCS([ftruncate gethostname getpagesize \
+   gettimeofday memset mkdir mkfifo rmdir munmap nl_langinfo setenv setlocale \
+   strcasecmp strchr strcspn strspn strdup strncasecmp strerror strrchr \
+   strstr strtol strtoul uname], , [AC_MSG_ERROR(bailing out)])
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 07222a7..6ee7731 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1018,6 +1018,20 @@ static int _recalc_extents(uint32_t *extents, const char *desc1,
+ 	return 1;
+ }
+ 
++/* return random integer in [0,max) interval */
++static unsigned _even_rand( unsigned *seed, unsigned max )
 +{
-+       struct lv_segment *seg;
++	unsigned r, ret;
 +
-+       if (lv->status & (CONVERTING|MIRRORED)) {
-+               seg = first_seg(lv);
++	/* make sure distribution is even */
++	do {
++		r = (unsigned) rand_r( seed );
++		ret = r % max;
++	} while ( r - ret > RAND_MAX - max );
 +
-+               /* Temporary mirror is always area_num == 0 */
-+               if (seg_type(seg, 0) == AREA_LV &&
-+                   is_temporary_mirror_layer(seg_lv(seg, 0)))
-+                       return dm_pool_strdup(mem, seg_lv(seg, 0)->name);
-+       }
-+       return NULL;
++	return ret;
 +}
-
-
-> > +
-> >  char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv)
-> >  {
-> >  	const char *name;
-> 
-> > --- a/lib/metadata/lv.h
-> > +++ b/lib/metadata/lv.h
-> > @@ -55,5 +55,6 @@ char *lv_tags_dup(const struct logical_volume *lv);
-> >  char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> >  uint64_t lv_origin_size(const struct logical_volume *lv);
-> >  char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> > +char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> >  
-> >  #endif
-> 
-> > --- a/lib/report/properties.c
-> > +++ b/lib/report/properties.c
-> > @@ -131,7 +131,7 @@ GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
-> >  #define _copy_percent_set _not_implemented_set
-> >  GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
-> >  #define _move_pv_set _not_implemented_set
-> > -#define _convert_lv_get _not_implemented_get
-> > +GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
-> >  #define _convert_lv_set _not_implemented_set
-> >  GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
-> >  #define _lv_tags_set _not_implemented_set
-> 
-> > --- a/lib/report/report.c
-> > +++ b/lib/report/report.c
-> > @@ -392,19 +392,8 @@ static int _convertlv_disp(struct dm_report *rh, struct dm_pool *mem __attribute
-> >  {
-> >  	const struct logical_volume *lv = (const struct logical_volume *) data;
-> >  	const char *name = NULL;
-> > -	struct lv_segment *seg;
-> > -
-> > -	if (lv->status & CONVERTING) {
-> > -		if (lv->status & MIRRORED) {
-> > -			seg = first_seg(lv);
-> > -
-> > -			/* Temporary mirror is always area_num == 0 */
-> > -			if (seg_type(seg, 0) == AREA_LV &&
-> > -			    is_temporary_mirror_layer(seg_lv(seg, 0)))
-> > -				name = seg_lv(seg, 0)->name;
-> > -		}
-> > -	}
-> >  
-> > +	name = lv_convert_lv_dup(mem, lv);
-> >  	if (name)
-> >  		return dm_report_field_string(rh, field, &name);
-> 
-> Ok. Although we don't need a string duplicate here. On the other hand,
-> having a non-dup version of the above code and the dup version
-> implemented in terms of that would be overkill, I guess...
-> 
-> Yours,
->    Petr.
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-
-
++
+ static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bits,
+ 					    uint32_t num_set_bits, unsigned *seed)
+ {
+@@ -1040,7 +1054,7 @@ static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bi
+ 	/* Perform loop num_set_bits times, selecting one bit each time */
+ 	while (i++ < num_bits) {
+ 		/* Select a random bit between 0 and (i-1) inclusive. */
+-		bit_selected = (unsigned) floor(i * (rand_r(seed) / (RAND_MAX + 1.0)));
++		bit_selected = _even_rand( seed, i );
+ 
+ 		/*
+ 		 * If the bit was already set, set the new bit that became
+-- 
+1.7.1
 
