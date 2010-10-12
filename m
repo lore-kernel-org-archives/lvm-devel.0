@@ -1,61 +1,77 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 24 Oct 2010 14:04:21 +0200
-Subject: [PATCH 5/8] Add lvm_vg_get_property() generic vg property function.
-In-Reply-To: <1287686377.5097.63.camel@f12-work> (Dave Wysochanski's message
-	of "Thu, 21 Oct 2010 14:39:37 -0400")
-References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
-	<1287487975-26572-6-git-send-email-dwysocha@redhat.com>
-	<87sk008rcz.fsf@twilight.int.mornfall.net.>
-	<1287686377.5097.63.camel@f12-work>
-Message-ID: <87bp6j4x16.fsf@twilight.int.mornfall.net.>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 12 Oct 2010 16:41:20 -0000
+Subject: LVM2 lib/metadata/metadata-exported.h lib/meta ...
+Message-ID: <20101012164120.31556.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-10-12 16:41:18
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
->> A is_integer might be useful here, for symmetry. In the client code, it
->> might not be obvious that !p.is_string means that it is an integer. It
->> would also improve API extensibility for the future, may we ever run
->> into a property that's neither string nor integer (although it won't
->> help with ABI).
->> 
->
-> Ok, I've implemented this - easy.  But...
-> Now that I think about it, rather than a bitfield and 'is_string' and
-> 'is_integer", should we have a 'type' field and leave this an unsigned
-> (for example, #define LVM_PROPERTY_TYPE_NUM 1 and #define
-> LVM_PROPERTY_TYPE STR 2) or at least should we add padding to this
-> struct?  The struct might warrant a bit more thought, given how much
-> we've changed it recently, and given the ABI implications.
+Modified files:
+	lib/metadata   : metadata-exported.h mirror.c 
+	tools          : lvconvert.c 
 
-The advantage of the bitfield is that it is much more convenient to use
-(and the resulting code more concise and clearer). It also does not
-impose any ABI problems as long as you keep the items in the right
-order. What can be done to ensure forward compatibility is this:
+Log message:
+	Make lvconvert respect --yes/--force in the inactive log conversion
+	prompt. Fixes BZs 642055, 621281. Patch by Taka.
+	
+	Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
+	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
-uint32_t foo:1;
-uint32_t bar:1;
-uint32_t _padding:30;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.168&r2=1.169
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.134&r2=1.135
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.146&r2=1.147
 
-And when you need a new flag, just reduce the padding by one and add
-your new flag between the existing flags and the padding.
-
-> As the code is, the client does not need to check lvm_errno() unless it
-> cares what went wrong.  In essence, v.is_valid "should =" !lvm_errno()
-> today, though there's no explicit assignment.  However, if we explicitly
-> assign v.is_valid = !lvm_errno(), then this assumes all error paths will
-> properly set lvm_errno().  Otherwise, we may end up telling the user the
-> value is valid when it may not be.  Now this case is clearly a bug but
-> keeping them separate avoids the potential bug.  It's fairly clear right
-> now that all error paths do properly set lvm_errno(), so this assignment
-> would be safe today.
-Ok.
-
-Yours,
-   Petr.
+--- LVM2/lib/metadata/metadata-exported.h	2010/09/30 13:05:45	1.168
++++ LVM2/lib/metadata/metadata-exported.h	2010/10/12 16:41:17	1.169
+@@ -652,7 +652,7 @@
+ struct logical_volume *detach_mirror_log(struct lv_segment *seg);
+ int attach_mirror_log(struct lv_segment *seg, struct logical_volume *lv);
+ int remove_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
+-		      struct dm_list *removable_pvs);
++		      struct dm_list *removable_pvs, int force);
+ int add_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
+ 		   uint32_t log_count, uint32_t region_size,
+ 		   struct dm_list *allocatable_pvs, alloc_policy_t alloc);
+--- LVM2/lib/metadata/mirror.c	2010/08/17 19:25:05	1.134
++++ LVM2/lib/metadata/mirror.c	2010/10/12 16:41:17	1.135
+@@ -1573,7 +1573,8 @@
+  */
+ int remove_mirror_log(struct cmd_context *cmd,
+ 		      struct logical_volume *lv,
+-		      struct dm_list *removable_pvs)
++		      struct dm_list *removable_pvs,
++		      int force)
+ {
+ 	float sync_percent;
+ 	percent_range_t percent_range = PERCENT_0;
+@@ -1597,7 +1598,7 @@
+ 		log_error("Unable to convert the log of an inactive "
+ 			  "cluster mirror, %s", lv->name);
+ 		return 0;
+-	} else if (yes_no_prompt("Full resync required to convert "
++	} else if (force || yes_no_prompt("Full resync required to convert "
+ 				 "inactive mirror %s to core log. "
+ 				 "Proceed? [y/n]: ", lv->name) == 'y')
+ 		sync_percent = 0;
+--- LVM2/tools/lvconvert.c	2010/08/17 16:25:35	1.146
++++ LVM2/tools/lvconvert.c	2010/10/12 16:41:18	1.147
+@@ -747,7 +747,9 @@
+ 
+ 	/* Remove an existing log completely */
+ 	if (!log_count) {
+-		if (!remove_mirror_log(cmd, original_lv, operable_pvs))
++		if (!remove_mirror_log(cmd, original_lv, operable_pvs,
++				       arg_count(cmd, yes_ARG) ||
++				       arg_count(cmd, force_ARG)))
+ 			return_0;
+ 		return 1;
+ 	}
 
 
