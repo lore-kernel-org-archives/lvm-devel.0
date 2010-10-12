@@ -1,59 +1,44 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 12 Oct 2010 10:52:52 -0400
-Subject: [PATCH 04/14] Refactor and add code for (lv) 'move_pv' get function.
-In-Reply-To: <87lj64380j.fsf@twilight.int.mornfall.net.>
-References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-5-git-send-email-dwysocha@redhat.com>
-	<87lj64380j.fsf@twilight.int.mornfall.net.>
-Message-ID: <1286895172.15299.14.camel@f12-work>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 12 Oct 2010 16:57:31 +0200
+Subject: [PATCH] Fix liblvm2cmd.so linking order for --as-needed builds
+In-Reply-To: <1286893207.20493.20.camel@yamato.local>
+References: <1283355456.30896.286.camel@yamato.local>	
+	<4CB468E4.4080101@redhat.com>
+	<1286893207.20493.20.camel@yamato.local>
+Message-ID: <4CB4775B.2000009@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2010-10-11 at 20:21 +0200, Petr Rockai wrote:
-> Dave Wysochanski <dwysocha@redhat.com> writes:
+Dne 12.10.2010 16:20, Diego Elio Petten? napsal(a):
+> Il giorno mar, 12/10/2010 alle 15.55 +0200, Zdenek Kabelac ha scritto:
+>> The last occurrence of  CLDWHOLEARCHIVE in tools/Makefile.in seems to be
+>> dropped by this Alasdair's commit:
 > 
-> > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> Reviewed-By: Petr Rockai <prockai@redhat.com>
+> Uh?
 > 
-> > diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-> > index ae8a4fb..8f4c95a 100644
-> > --- a/lib/metadata/lv.c
-> > +++ b/lib/metadata/lv.c
-> > @@ -18,6 +18,21 @@
-> >  #include "activate.h"
-> >  #include "toolcontext.h"
-> >  
-> > +char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv)
-> > +{
-> > +	const char *name;
-> > +	struct lv_segment *seg;
-> > +
-> > +	dm_list_iterate_items(seg, &lv->segments) {
-> > +		if (!(seg->status & PVMOVE))
-> > +			continue;
-> > +		name = dev_name(seg_dev(seg, 0));
-> > +	}
-> > +	if (name)
-> > +		return dm_pool_strndup(mem, name, strlen(name) + 1);
-> > +	return NULL;
-> > +}
+> liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
+>         $(CC) -shared -Wl,-soname,$@.$(LIB_VERSION) \
+>         $(CFLAGS) $(CLDFLAGS) -o $@ $(LVMLIBS) $(LIBS) \
+>                 @CLDWHOLEARCHIVE@ liblvm2cmd.a @CLDNOWHOLEARCHIVE@
 > 
-> I believe that dev_name can't give you NULL and that there is only ever
-> a single matching device (even if there wasn't, giving first or last
-> shouldn't make any difference). So you can remove the "name" temporary
-> and just say
+> this is in 
 > 
-> if (seg->status & PVMOVE)
->    return dm_pool_strdup(mem, dev_name(seg_dev(seg, 0)))
+> commit 39429d390515de9a375979274bc61d787ea9a0cb
+> Author: Zdenek Kabelac <zkabelac@redhat.com>
+> Date:   Fri Oct 8 15:03:21 2010 +0000
 > 
-> in the loop, and return NULL after the loop. (Even if you prefer the one
-> you already have, changing strndup to strdup is a good idea, since doing
-> the above comes with no benefits, just downsides.)
-> 
+> Did I get the wrong GIT repository?
 
-Ok, I've made these cleanups as well.  Another good simplification.
+Ooops sorry - my bad - I've been working with non-master git branch looking
+for some older bug.
+
+
+Hmm - ok - I'll need to take a look on this.
+
+
+Zdenek
 
 
