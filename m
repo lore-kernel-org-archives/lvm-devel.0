@@ -1,85 +1,59 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 12 Oct 2010 10:29:59 -0400
-Subject: [PATCH 02/14] Refactor and add code for (lv) 'lv_path' get function.
-In-Reply-To: <87tyks38l1.fsf@twilight.int.mornfall.net.>
+Date: Tue, 12 Oct 2010 10:52:52 -0400
+Subject: [PATCH 04/14] Refactor and add code for (lv) 'move_pv' get function.
+In-Reply-To: <87lj64380j.fsf@twilight.int.mornfall.net.>
 References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-3-git-send-email-dwysocha@redhat.com>
-	<87tyks38l1.fsf@twilight.int.mornfall.net.>
-Message-ID: <1286893799.15299.13.camel@f12-work>
+	<1286810078-25769-5-git-send-email-dwysocha@redhat.com>
+	<87lj64380j.fsf@twilight.int.mornfall.net.>
+Message-ID: <1286895172.15299.14.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2010-10-11 at 20:09 +0200, Petr Rockai wrote:
+On Mon, 2010-10-11 at 20:21 +0200, Petr Rockai wrote:
 > Dave Wysochanski <dwysocha@redhat.com> writes:
 > 
 > > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 > Reviewed-By: Petr Rockai <prockai@redhat.com>
 > 
-> (But! See inline comments below. It would make sense to have another go
-> at this one.)
-> 
-
-Ok.
-
-
-> > +
-> > +char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> > diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+> > index ae8a4fb..8f4c95a 100644
+> > --- a/lib/metadata/lv.c
+> > +++ b/lib/metadata/lv.c
+> > @@ -18,6 +18,21 @@
+> >  #include "activate.h"
+> >  #include "toolcontext.h"
+> >  
+> > +char *lv_move_pv_dup(struct dm_pool *mem, const struct logical_volume *lv)
 > > +{
-> > +	char *repstr;
-> > +	size_t len;
+> > +	const char *name;
+> > +	struct lv_segment *seg;
 > > +
-> > +	len = strlen(lv->vg->cmd->dev_dir);
-> > +	len += strlen(lv->vg->name) + strlen(lv->name) + 2;
-> Can you just make that a single size_t len = foo + bar + ...; line? That
-> would make it clear there are no side effects involved...
-> 
-
-done.
-
-
-> > +	if (!(repstr = dm_pool_zalloc(mem, len))) {
-> > +		log_error("dm_pool_alloc failed");
-> > +		return 0;
+> > +	dm_list_iterate_items(seg, &lv->segments) {
+> > +		if (!(seg->status & PVMOVE))
+> > +			continue;
+> > +		name = dev_name(seg_dev(seg, 0));
 > > +	}
-> > +
-> > +	if (dm_snprintf(repstr, len, "%s%s/%s",
-> > +			lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
-> > +		log_error("lvpath snprintf failed");
-> > +		return 0;
-> > +	}
-> ^^ Should the above dm_pool_zalloc/dm_snprintf go into some
-> dm_pool_asprintf, in fact? That would also remove that "len" computation
-> and make this function completely trivial. We already have dm_asprintf
-> (which uses dm_malloc). You could probably parametrise dm_asprintf with
-> the strdup function into dm_generic_asprintf and have both dm_asprintf
-> and dm_pool_asprintf implemented in terms of that.
-> 
-> > +	return repstr;
+> > +	if (name)
+> > +		return dm_pool_strndup(mem, name, strlen(name) + 1);
+> > +	return NULL;
 > > +}
 > 
-> Also, the log_error bits aren't that spectacular... Could you make them
-> a bit clearer, or even omit them? The caller has to check the result and
-> error out anyway...
+> I believe that dev_name can't give you NULL and that there is only ever
+> a single matching device (even if there wasn't, giving first or last
+> shouldn't make any difference). So you can remove the "name" temporary
+> and just say
+> 
+> if (seg->status & PVMOVE)
+>    return dm_pool_strdup(mem, dev_name(seg_dev(seg, 0)))
+> 
+> in the loop, and return NULL after the loop. (Even if you prefer the one
+> you already have, changing strndup to strdup is a good idea, since doing
+> the above comes with no benefits, just downsides.)
 > 
 
-If it's ok with you, I may defer these to a couple cleanup patches.
-They are good suggestions but I'm mostly focused on straight moving and
-refactoring for this patch set.
-
-There's probably other places in the code that could benefit from such a
-dm_pool_asprintf.  So when that is proposed as a patch, all code should
-get cleaned up.
-
-The error paths in the attribute and lvm2app code need a cleanup pass -
-for example some places I'm using log_errno(ENOMEM, ....), others it
-seems we're just doing return_NULL, and still others is this method.
-
-I've placed these two items into the bz for now:
-https://bugzilla.redhat.com/show_bug.cgi?id=614049
-
-
+Ok, I've made these cleanups as well.  Another good simplification.
 
 
