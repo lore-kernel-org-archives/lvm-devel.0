@@ -1,102 +1,138 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Oct 2010 16:11:35 -0000
-Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
-Message-ID: <20101012161135.23383.qmail@sourceware.org>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Wed, 13 Oct 2010 14:53:02 -0400
+Subject: [PATCH] lvconvert: provide useful error when snapshot-merge target missing
+Message-ID: <20101013185302.GA2944@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-12 16:11:34
+Convey need for snapshot-merge target in lvconvert error message and man
+page.
 
-Modified files:
-	lib/metadata   : lv.c lv.h 
-	lib/report     : properties.c report.c 
+Add ->target_name to segtype_handler to allow a more specific target
+name to be returned based on the state of the segment.
 
-Log message:
-	Refactor and add code for (lv) 'lv_path' get function.
+Before:
+# lvconvert --merge vg/snap
+  Can't expand LV lv: snapshot target support missing from kernel?
+  Failed to suspend origin lv
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+After:
+# lvconvert --merge vg/snap
+  Can't process LV lv: snapshot-merge target support missing from kernel?
+  Failed to suspend origin lv
+  Unable to merge LV "snap" into it's origin.
 
---- LVM2/lib/metadata/lv.c	2010/09/30 20:47:18	1.6
-+++ LVM2/lib/metadata/lv.c	2010/10/12 16:11:34	1.7
-@@ -16,6 +16,28 @@
- #include "lib.h"
- #include "metadata.h"
- #include "activate.h"
-+#include "toolcontext.h"
-+
-+char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	char *repstr;
-+	size_t len;
-+
-+	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) +
-+		strlen(lv->name) + 2;
-+
-+	if (!(repstr = dm_pool_zalloc(mem, len))) {
-+		log_error("dm_pool_alloc failed");
-+		return 0;
-+	}
-+
-+	if (dm_snprintf(repstr, len, "%s%s/%s",
-+			lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
-+		log_error("lvpath snprintf failed");
-+		return 0;
-+	}
-+	return repstr;
-+}
+Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ lib/activate/dev_manager.c |   10 +++++++---
+ lib/metadata/segtype.h     |    1 +
+ lib/snapshot/snapshot.c    |    9 +++++++++
+ man/lvconvert.8.in         |    6 ++++--
+ tools/lvconvert.c          |    2 +-
+ 5 files changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index cee8f10..841bfc1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1350,19 +1350,23 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
+ 	uint32_t s;
+ 	struct dm_list *snh;
+ 	struct lv_segment *seg_present;
++	const char *target_name;
  
- char *lv_uuid_dup(const struct logical_volume *lv)
- {
---- LVM2/lib/metadata/lv.h	2010/09/30 20:47:18	1.5
-+++ LVM2/lib/metadata/lv.h	2010/10/12 16:11:34	1.6
-@@ -52,5 +52,6 @@
- char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_uuid_dup(const struct logical_volume *lv);
- char *lv_tags_dup(const struct logical_volume *lv);
-+char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ 	/* Ensure required device-mapper targets are loaded */
+ 	seg_present = find_cow(seg->lv) ? : seg;
++	target_name = (seg_present->segtype->ops->target_name ?
++		       seg_present->segtype->ops->target_name(seg_present) :
++		       seg_present->segtype->name);
  
- #endif
---- LVM2/lib/report/properties.c	2010/10/12 16:11:20	1.9
-+++ LVM2/lib/report/properties.c	2010/10/12 16:11:34	1.10
-@@ -101,7 +101,7 @@
- #define _lv_uuid_set _not_implemented_set
- #define _lv_name_get _not_implemented_get
- #define _lv_name_set _not_implemented_set
--#define _lv_path_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
- #define _lv_path_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
- #define _lv_attr_set _not_implemented_set
---- LVM2/lib/report/report.c	2010/09/30 14:09:10	1.131
-+++ LVM2/lib/report/report.c	2010/10/12 16:11:34	1.132
-@@ -350,18 +350,9 @@
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	char *repstr;
--	size_t len;
+ 	log_debug("Checking kernel supports %s segment type for %s%s%s",
+-		  seg_present->segtype->name, seg->lv->name,
++		  target_name, seg->lv->name,
+ 		  layer ? "-" : "", layer ? : "");
  
--	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) + strlen(lv->name) + 2;
--	if (!(repstr = dm_pool_zalloc(mem, len))) {
--		log_error("dm_pool_alloc failed");
-+	if (!(repstr = lv_path_dup(mem, lv)))
+ 	if (seg_present->segtype->ops->target_present &&
+ 	    !seg_present->segtype->ops->target_present(seg_present->lv->vg->cmd,
+ 						       seg_present, NULL)) {
+-		log_error("Can't expand LV %s: %s target support missing "
+-			  "from kernel?", seg->lv->name, seg_present->segtype->name);
++		log_error("Can't process LV %s: %s target support missing "
++			  "from kernel?", seg->lv->name, target_name);
  		return 0;
--	}
--
--	if (dm_snprintf(repstr, len, "%s%s/%s", lv->vg->cmd->dev_dir, lv->vg->name, lv->name) < 0) {
--		log_error("lvpath snprintf failed");
--		return 0;
--	}
+ 	}
  
- 	dm_report_field_set_value(field, repstr, NULL);
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index d15df8b..c31cf32 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -66,6 +66,7 @@ struct segment_type {
  
+ struct segtype_handler {
+ 	const char *(*name) (const struct lv_segment * seg);
++	const char *(*target_name) (const struct lv_segment * seg);
+ 	void (*display) (const struct lv_segment * seg);
+ 	int (*text_export) (const struct lv_segment * seg,
+ 			    struct formatter * f);
+diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
+index 92f8911..30e78d4 100644
+--- a/lib/snapshot/snapshot.c
++++ b/lib/snapshot/snapshot.c
+@@ -28,6 +28,14 @@ static const char *_snap_name(const struct lv_segment *seg)
+ 	return seg->segtype->name;
+ }
+ 
++static const char *_snap_target_name(const struct lv_segment *seg)
++{
++	if (seg->status & MERGING)
++		return "snapshot-merge";
++
++	return _snap_name(seg);
++}
++
+ static int _snap_text_import(struct lv_segment *seg, const struct config_node *sn,
+ 			struct dm_hash_table *pv_hash __attribute__((unused)))
+ {
+@@ -217,6 +225,7 @@ static void _snap_destroy(const struct segment_type *segtype)
+ 
+ static struct segtype_handler _snapshot_ops = {
+ 	.name = _snap_name,
++	.target_name = _snap_target_name,
+ 	.text_import = _snap_text_import,
+ 	.text_export = _snap_text_export,
+ 	.target_status_compatible = _snap_target_status_compatible,
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 3d4ba20..8e48793 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -135,8 +135,10 @@ Controls zeroing of the first KB of data in the snapshot.
+ If the volume is read-only the snapshot will not be zeroed.
+ .TP
+ .I \-\-merge
+-Merges a snapshot into its origin volume. If both the origin and snapshot volume
+-are not open the merge will start immediately.  Otherwise, the merge will start
++Merges a snapshot into its origin volume.  To check if your kernel
++supports this feature, look for 'snapshot-merge' in the output
++of 'dmsetup targets'.  If both the origin and snapshot volume are not
++open the merge will start immediately.  Otherwise, the merge will start
+ the first time either the origin or snapshot are activated and both are closed.
+ Merging a snapshot into an origin that cannot be closed, for example a root
+ filesystem, is deferred until the next time the origin volume is activated.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index d39030b..4f02806 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1561,7 +1561,7 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 			return ECMD_FAILED;
+ 		}
+ 		if (!lvconvert_merge(cmd, lv, lp)) {
+-			stack;
++			log_error("Unable to merge LV \"%s\" into it's origin.", lv->name);
+ 			return ECMD_FAILED;
+ 		}
+ 	} else if (lp->snapshot) {
 
 
