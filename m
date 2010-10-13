@@ -1,50 +1,38 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:24 +0200
-Subject: [PATCH 17/30] Use const pvid for device_from_pvid()
-In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <6d6e018d2a3a09b8dfb9059df78a5e416eb0cd60.1287994530.git.zkabelac@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 13 Oct 2010 09:44:53 -0000
+Subject: LVM2/test t-fsadm.sh
+Message-ID: <20101013094453.7845.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Update interface for device_from_pvid and use const pvid.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-13 09:44:53
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/cache/lvmcache.c |    2 +-
- lib/cache/lvmcache.h |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+Modified files:
+	test           : t-fsadm.sh 
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 35d6f76..83ac1a5 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -733,7 +733,7 @@ struct dm_list *lvmcache_get_pvids(struct cmd_context *cmd, const char *vgname,
- 	return pvids;
- }
+Log message:
+	Skip fsadm testing until proper installation rules are commited in.
+	
+	For now testing of fsadm is broken - as it's executing fsadm from system
+	and not from the package thus we get wrong results.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-fsadm.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+
+--- LVM2/test/t-fsadm.sh	2010/10/08 15:03:21	1.3
++++ LVM2/test/t-fsadm.sh	2010/10/13 09:44:52	1.4
+@@ -10,6 +10,7 @@
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  
--struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
-+struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 				unsigned *scan_done_once)
- {
- 	struct label *label;
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 4966a5c..28f8541 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -94,7 +94,7 @@ struct lvmcache_vginfo *vginfo_from_vgname(const char *vgname,
- struct lvmcache_vginfo *vginfo_from_vgid(const char *vgid);
- struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only);
- const char *vgname_from_vgid(struct dm_pool *mem, const char *vgid);
--struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
-+struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 				unsigned *scan_done_once);
- const char *pvid_from_devname(struct cmd_context *cmd,
- 			      const char *dev_name);
--- 
-1.7.3.1
+ test_description='Exercise fsadm filesystem resize'
++exit 200
+ 
+ . ./test-utils.sh
+ 
 
 
