@@ -1,38 +1,41 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:16 +0200
-Subject: [PATCH 09/30] Reuse result of previous strchr.
-In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <1ded298d3c909b9ebdcedcf9c275c201c9e4861c.1287994530.git.zkabelac@redhat.com>
+Date: Wed, 13 Oct 2010 10:22:27 +0200
+Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
+In-Reply-To: <20101012161235.24148.qmail@sourceware.org>
+References: <20101012161235.24148.qmail@sourceware.org>
+Message-ID: <4CB56C43.5060001@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-clang Argument with 'nonnull' attribute passed null
-Reuse result of the last strchr call - it also makes sure,
-'st' point is nonnull for next strchr call.
+Dne 12.10.2010 18:12, wysochanski at sourceware.org napsal(a):
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	wysochanski at sourceware.org	2010-10-12 16:12:34
+> 
+> Modified files:
+> 	lib/metadata   : lv.c lv.h 
+> 	lib/report     : properties.c report.c 
+> 
+> Log message:
+> 	Refactor and add code for (lv) 'lv_kernel_{major|minor}' get functions.
+> 	
+> 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> 	Reviewed-By: Petr Rockai <prockai@redhat.com>
+> 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/toollib.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+> +int lv_kernel_minor(const struct logical_volume *lv)
+> +{
+> +	struct lvinfo info;
+>
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 02c4962..5adc160 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -869,7 +869,7 @@ const char *extract_vgname(struct cmd_context *cmd, const char *lv_name)
- 			while (*st == '/')
- 				st++;
- 
--		if (!strchr(vg_name, '/') || strchr(st, '/')) {
-+		if (!st || strchr(st, '/')) {
- 			log_error("\"%s\": Invalid path for Logical Volume",
- 				  lv_name);
- 			return 0;
--- 
-1.7.3.1
+I think for cases like this one - where the return value is different from
+common practice in lvm codebase we should add some doxygen comments - so it's
+clear that -1 is return value in this function.
+
+
+Zdenek
 
 
