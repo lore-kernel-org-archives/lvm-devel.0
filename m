@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Oct 2010 16:11:49 -0000
-Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
-Message-ID: <20101012161149.23554.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 14 Oct 2010 14:36:27 -0000
+Subject: LVM2/test Makefile.in harness.c
+Message-ID: <20101014143627.12501.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,77 +10,80 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-12 16:11:48
+Changes by:	mornfall at sourceware.org	2010-10-14 14:36:26
 
 Modified files:
-	lib/metadata   : lv.c lv.h 
-	lib/report     : properties.c report.c 
+	test           : Makefile.in harness.c 
 
 Log message:
-	Refactor and add code for (lv) 'origin_size' get function.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-	Reviewed-By: Petr Rockai <prockai@redhat.com>
+	Add a VERBOSE option to make check (make check VERBOSE=1).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
 
---- LVM2/lib/metadata/lv.c	2010/10/12 16:11:34	1.7
-+++ LVM2/lib/metadata/lv.c	2010/10/12 16:11:48	1.8
-@@ -18,6 +18,15 @@
- #include "activate.h"
- #include "toolcontext.h"
+--- LVM2/test/Makefile.in	2010/10/12 16:17:25	1.43
++++ LVM2/test/Makefile.in	2010/10/14 14:36:26	1.44
+@@ -27,6 +27,7 @@
  
-+uint64_t lv_origin_size(const struct logical_volume *lv)
-+{
-+	if (lv_is_cow(lv))
-+		return (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
-+	if (lv_is_origin(lv))
-+		return lv->size;
-+	return 0;
-+}
-+
- char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv)
- {
- 	char *repstr;
---- LVM2/lib/metadata/lv.h	2010/10/12 16:11:34	1.6
-+++ LVM2/lib/metadata/lv.h	2010/10/12 16:11:48	1.7
-@@ -53,5 +53,6 @@
- char *lv_uuid_dup(const struct logical_volume *lv);
- char *lv_tags_dup(const struct logical_volume *lv);
- char *lv_path_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+uint64_t lv_origin_size(const struct logical_volume *lv);
+ T ?= .
+ S ?= @ # never match anything by default
++VERBOSE ?= 0
+ RUN = $(shell find -regextype posix-egrep -name t-\*.sh -and -regex ".*($(T)).*" -and -not -regex ".*($(S)).*" | sort)
  
- #endif
---- LVM2/lib/report/properties.c	2010/10/12 16:11:34	1.10
-+++ LVM2/lib/report/properties.c	2010/10/12 16:11:48	1.11
-@@ -123,7 +123,7 @@
- #define _seg_count_set _not_implemented_set
- #define _origin_get _not_implemented_get
- #define _origin_set _not_implemented_set
--#define _origin_size_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
- #define _origin_size_set _not_implemented_set
- #define _snap_percent_get _not_implemented_get
- #define _snap_percent_set _not_implemented_set
---- LVM2/lib/report/report.c	2010/10/12 16:11:34	1.132
-+++ LVM2/lib/report/report.c	2010/10/12 16:11:48	1.133
-@@ -570,12 +570,7 @@
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	uint64_t size;
+ # Shell quote;
+@@ -49,17 +50,17 @@
  
--	if (lv_is_cow(lv))
--		size = (uint64_t) find_cow(lv)->len * lv->vg->extent_size;
--	else if (lv_is_origin(lv))
--		size = lv->size;
--	else
--		size = UINT64_C(0);
-+	size = lv_origin_size(lv);
+ all check: init.sh
+ 	@echo Testing with locking_type 1
+-	./bin/harness $(RUN)
++	VERBOSE=$(VERBOSE) ./bin/harness $(RUN)
+ 	@echo Testing with locking_type 3
+-	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
++	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
  
- 	return _size64_disp(rh, mem, field, &size, private);
- }
+ check_cluster: init.sh
+ 	@echo Testing with locking_type 3
+-	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
++	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
+ 
+ check_local: init.sh
+ 	@echo Testing with locking_type 1
+-	LVM_TEST_LOCKING=1 ./bin/harness $(RUN)
++	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=1 ./bin/harness $(RUN)
+ 
+ bin/not: $(srcdir)/not.c .bin-dir-stamp
+ 	$(CC) -o bin/not $<
+--- LVM2/test/harness.c	2010/07/28 12:20:41	1.13
++++ LVM2/test/harness.c	2010/10/14 14:36:26	1.14
+@@ -39,6 +39,7 @@
+ int readbuf_sz = 0, readbuf_used = 0;
+ 
+ int die = 0;
++int verbose = 0;
+ 
+ #define PASSED 0
+ #define SKIPPED 1
+@@ -64,6 +65,8 @@
+ 	char buf[2048];
+ 	while (1) {
+ 		sz = read(fds[1], buf, 2048);
++		if (verbose)
++			write(1, buf, sz);
+ 		if (sz <= 0)
+ 			return;
+ 		if (readbuf_used + sz >= readbuf_sz) {
+@@ -164,7 +167,10 @@
+ 	s.nwarned = s.nfailed = s.npassed = s.nskipped = 0;
+ 
+ 	char *config = getenv("LVM_TEST_CONFIG"),
+-	     *config_debug;
++		*config_debug,
++		*be_verbose = getenv("VERBOSE");
++	if (be_verbose && atoi(be_verbose))
++		verbose = 1; // XXX
+ 	config = config ? config : "";
+ 	asprintf(&config_debug, "%s\n%s\n", config, "log { verbose=4 }");
+ 
 
 
