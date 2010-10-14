@@ -1,89 +1,136 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 14 Oct 2010 14:36:27 -0000
-Subject: LVM2/test Makefile.in harness.c
-Message-ID: <20101014143627.12501.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 14 Oct 2010 14:07:22 -0500
+Subject: [patch] Fix for handling simultaneous failure of mirrored-log devices
+Message-ID: <1287083242.3762.3.camel@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-10-14 14:36:26
+There is a test we could add to the testsuite, but if it actually finds
+the bug, it will hang indefinitely.  I'm not sure we want that.
 
-Modified files:
-	test           : Makefile.in harness.c 
+ brassow
 
-Log message:
-	Add a VERBOSE option to make check (make check VERBOSE=1).
+Fix for bug 637936: killing both redundant logs causes deadlock
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/harness.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+Problem:
+When both legs of a mirrored log fail, neither the log nor the parent
+mirror can proceed.  The repair code must be careful to replace the
+log with an error target before operating on the parent - otherwise,
+the parent can get stuck trying to suspend because it can't push through
+any writes.  The steps to replace the log device with an error target
+were incomplete and resulted in the replacement not happening at all!
 
---- LVM2/test/Makefile.in	2010/10/12 16:17:25	1.43
-+++ LVM2/test/Makefile.in	2010/10/14 14:36:26	1.44
-@@ -27,6 +27,7 @@
+The code originally had all the necessary logic to complete the
+replacement task, but was pulled out in a effort to clean-up that
+section of code, while fixing another bug:
+<offending commit msg>
+In addition, I added following three changes.
+
+- Removed tmp_orphan_lvs handling procedure
+  It seems that _delete_lv() can handle detached_log_lv properly
+  without adding mirror legs in mirrored log to tmp_orphan_lvs.
+  Therefore, I removed the procedure.
+
+- Removed vg_write()/vg_commit()
+  Metadata is saved by vg_write()/vg_commit() just after detached_log_lv
+  is handled. Therefore, I removed vg_write()/vg_commit().
+</offending commit msg>
+
+http://sources.redhat.com/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c?cvsroot=lvm2&f=h#rev1.130
+
+I've reverted the "clean-up" changes associated with that fix, but not what
+that commit was actually fixing.
+
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+
+Index: LVM2/lib/metadata/lv_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/lv_manip.c
++++ LVM2/lib/metadata/lv_manip.c
+@@ -462,6 +462,15 @@ int replace_lv_with_error_segment(struct
+ 	if (!lv_empty(lv))
+ 		return_0;
  
- T ?= .
- S ?= @ # never match anything by default
-+VERBOSE ?= 0
- RUN = $(shell find -regextype posix-egrep -name t-\*.sh -and -regex ".*($(T)).*" -and -not -regex ".*($(S)).*" | sort)
++	/*
++	 * Since we are replacing the whatever-was-there with
++	 * an error segment, we should also clear any flags
++	 * that suggest it is anything other than "error".
++	 */
++	lv->status &= ~MIRRORED;
++
++	/* FIXME: Should we bug if we find a log_lv attached? */
++
+ 	if (!lv_add_virtual_segment(lv, 0, len,
+ 				    get_segtype_from_string(lv->vg->cmd,
+ 							    "error")))
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -896,18 +896,40 @@ static int _remove_mirror_images(struct 
+ 	 */
+ 	if (detached_log_lv && lv_is_mirrored(detached_log_lv) &&
+ 	    (detached_log_lv->status & PARTIAL_LV)) {
++		struct lv_segment *seg = first_seg(detached_log_lv);
++
+ 		log_very_verbose("%s being removed due to failures",
+ 				 detached_log_lv->name);
  
- # Shell quote;
-@@ -49,17 +50,17 @@
++		/*
++		 * We are going to replace the mirror with an
++		 * error segment, but before we do, we must remember
++		 * all of the LVs that must be deleted later (i.e.
++		 * the sub-lv's)
++		 */
++		for (m = 0; m < seg->area_count; m++) {
++			seg_lv(seg, m)->status &= ~MIRROR_IMAGE;
++			lv_set_visible(seg_lv(seg, m));
++			if (!(lvl = dm_pool_alloc(lv->vg->cmd->mem,
++						  sizeof(*lvl)))) {
++				log_error("dm_pool_alloc failed");
++				return 0;
++			}
++			lvl->lv = seg_lv(seg, m);
++			dm_list_add(&tmp_orphan_lvs, &lvl->list);
++		}
++
+ 		if (!replace_lv_with_error_segment(detached_log_lv)) {
+ 			log_error("Failed error target substitution for %s",
+ 				  detached_log_lv->name);
+ 			return 0;
+ 		}
  
- all check: init.sh
- 	@echo Testing with locking_type 1
--	./bin/harness $(RUN)
-+	VERBOSE=$(VERBOSE) ./bin/harness $(RUN)
- 	@echo Testing with locking_type 3
--	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
-+	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
+-		/*
+-		 * Flush all I/Os held by mirrored log.
+-		 */
++		if (!vg_write(detached_log_lv->vg)) {
++			log_error("intermediate VG write failed.");
++			return 0;
++		}
++
+ 		if (!suspend_lv(detached_log_lv->vg->cmd,
+ 				detached_log_lv)) {
+ 			log_error("Failed to suspend %s",
+@@ -915,8 +937,14 @@ static int _remove_mirror_images(struct 
+ 			return 0;
+  		}
  
- check_cluster: init.sh
- 	@echo Testing with locking_type 3
--	LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
-+	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN)
- 
- check_local: init.sh
- 	@echo Testing with locking_type 1
--	LVM_TEST_LOCKING=1 ./bin/harness $(RUN)
-+	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=1 ./bin/harness $(RUN)
- 
- bin/not: $(srcdir)/not.c .bin-dir-stamp
- 	$(CC) -o bin/not $<
---- LVM2/test/harness.c	2010/07/28 12:20:41	1.13
-+++ LVM2/test/harness.c	2010/10/14 14:36:26	1.14
-@@ -39,6 +39,7 @@
- int readbuf_sz = 0, readbuf_used = 0;
- 
- int die = 0;
-+int verbose = 0;
- 
- #define PASSED 0
- #define SKIPPED 1
-@@ -64,6 +65,8 @@
- 	char buf[2048];
- 	while (1) {
- 		sz = read(fds[1], buf, 2048);
-+		if (verbose)
-+			write(1, buf, sz);
- 		if (sz <= 0)
- 			return;
- 		if (readbuf_used + sz >= readbuf_sz) {
-@@ -164,7 +167,10 @@
- 	s.nwarned = s.nfailed = s.npassed = s.nskipped = 0;
- 
- 	char *config = getenv("LVM_TEST_CONFIG"),
--	     *config_debug;
-+		*config_debug,
-+		*be_verbose = getenv("VERBOSE");
-+	if (be_verbose && atoi(be_verbose))
-+		verbose = 1; // XXX
- 	config = config ? config : "";
- 	asprintf(&config_debug, "%s\n%s\n", config, "log { verbose=4 }");
- 
+-		if (!resume_lv(detached_log_lv->vg->cmd,
+-			       detached_log_lv)) {
++		if (!vg_commit(detached_log_lv->vg)) {
++			if (!resume_lv(detached_log_lv->vg->cmd,
++				       detached_log_lv))
++				stack;
++			return_0;
++		}
++
++		if (!resume_lv(detached_log_lv->vg->cmd, detached_log_lv)) {
+ 			log_error("Failed to resume %s",
+ 				  detached_log_lv->name);
+ 			return_0;
+
 
 
