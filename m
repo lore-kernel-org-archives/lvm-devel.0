@@ -1,31 +1,33 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 15 Oct 2010 15:15:50 +0100
-Subject: [PATCH] automatic snapshot extension with dmeventd (BZ 427298)
-In-Reply-To: <4CB84F49.9020602@redhat.com>
-References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
-	<87r5g4lejw.fsf@twilight.int.mornfall.net.>
-	<4CB6D2BC.9060404@redhat.com>
-	<87aamffz2u.fsf@twilight.int.mornfall.net.>
-	<4CB84F49.9020602@redhat.com>
-Message-ID: <20101015141550.GH32395@agk-dp.fab.redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Fri, 15 Oct 2010 10:18:49 -0400
+Subject: [PATCH 11/14] Add lvm_vg_get_property() generic vg property function.
+In-Reply-To: <877hhnwu0b.fsf@twilight.int.mornfall.net.>
+References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
+	<1286810078-25769-12-git-send-email-dwysocha@redhat.com>
+	<4CB41EF8.9010706@redhat.com>
+	<877hhnwu0b.fsf@twilight.int.mornfall.net.>
+Message-ID: <1287152329.27666.2.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Oct 15, 2010 at 02:55:37PM +0200, Zdenek Kabelac wrote:
-> What I see as a problem for the future is how to resolve settings per each
-> snapshot as current  'global' version - one setting for all snapshots is IMHO
-> quite limiting.
- 
-When we discussed this I suggested storing the information directly against each LV
-just as we do for other properties.  So you'd set it with lvcreate/lvchange or
-inherit setting from vgcreate/vgchange or use default from lvm.conf or fallback
-to builtin default.
+On Tue, 2010-10-12 at 13:05 +0200, Petr Rockai wrote:
+> Zdenek Kabelac <zkabelac@redhat.com> writes:
+> >> +	struct lvm_property_type prop;
+> >> +
+> >> +	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
+> >
+> > Hmmm why doing a copy here instead of passing/assigning  'name' ptr somewhere?
+> 
+> Because lvm_property_type says: char id[LVM_PROPERTY_NAME_LEN];
+> 
+> Yours,
+>    Petr.
+> 
 
-That builds upon this patch, which is the first step.
-
-Alasdair
+Thanks both of you for the feedback.  I am reworking this based on all
+your comments and will re-post soon.
 
 
