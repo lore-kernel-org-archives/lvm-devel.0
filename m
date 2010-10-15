@@ -1,33 +1,56 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Fri, 15 Oct 2010 10:18:49 -0400
-Subject: [PATCH 11/14] Add lvm_vg_get_property() generic vg property function.
-In-Reply-To: <877hhnwu0b.fsf@twilight.int.mornfall.net.>
-References: <1286810078-25769-1-git-send-email-dwysocha@redhat.com>
-	<1286810078-25769-12-git-send-email-dwysocha@redhat.com>
-	<4CB41EF8.9010706@redhat.com>
-	<877hhnwu0b.fsf@twilight.int.mornfall.net.>
-Message-ID: <1287152329.27666.2.camel@f12-work>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 15 Oct 2010 16:24:02 -0000
+Subject: LVM2 doc/example.conf.in man/lvm.conf.5.in
+Message-ID: <20101015162402.16002.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, 2010-10-12 at 13:05 +0200, Petr Rockai wrote:
-> Zdenek Kabelac <zkabelac@redhat.com> writes:
-> >> +	struct lvm_property_type prop;
-> >> +
-> >> +	strncpy(prop.id, name, LVM_PROPERTY_NAME_LEN);
-> >
-> > Hmmm why doing a copy here instead of passing/assigning  'name' ptr somewhere?
-> 
-> Because lvm_property_type says: char id[LVM_PROPERTY_NAME_LEN];
-> 
-> Yours,
->    Petr.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-10-15 16:24:01
 
-Thanks both of you for the feedback.  I am reworking this based on all
-your comments and will re-post soon.
+Modified files:
+	doc            : example.conf.in 
+	man            : lvm.conf.5.in 
+
+Log message:
+	Fixes for the devices/disable_after_error_count documentation.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.in.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+
+--- LVM2/doc/example.conf.in	2010/10/13 15:45:18	1.13
++++ LVM2/doc/example.conf.in	2010/10/15 16:24:00	1.14
+@@ -139,7 +139,7 @@
+     # During each LVM operation errors received from each device are counted.
+     # If the counter of a particular device exceeds the limit set here, no
+     # further I/O is sent to that device for the remainder of the respective
+-    # operation.
++    # operation. Setting the parameter to 0 disables the counters altogether.
+     disable_after_error_count = 0
+ 
+     # Allow use of pvcreate --uuid without requiring --restorefile.
+--- LVM2/man/lvm.conf.5.in	2010/10/13 15:40:39	1.14
++++ LVM2/man/lvm.conf.5.in	2010/10/15 16:24:01	1.15
+@@ -166,10 +166,11 @@
+ \fBdata_alignment_offset_detection\fP (if enabled) or the pvcreate
+ commandline.
+ .IP
+-\fBdev_max_error_count\fP \(em Maximum number of error counts per device
+-before disabling devices. This option prevents a broken device from
+-being accessed repeatedly. If set to 0, no access control to devices is
+-done.
++\fBdisable_after_error_count\fP \(em During each LVM operation errors received
++from each device are counted.  If the counter of a particular device exceeds
++the limit set here, no further I/O is sent to that device for the remainder of
++the respective operation. Setting the parameter to 0 disables the counters
++altogether.
+ .TP
+ \fBlog\fP \(em Default log settings
+ .IP
 
 
