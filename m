@@ -1,34 +1,49 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 15 Oct 2010 17:04:03 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20101015170403.15595.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 18 Oct 2010 19:17:58 +0200
+Subject: [PATCH] (DRAFT!) Fix a deadlock in CLVMD (possibly related to BZ 561226).
+Message-ID: <874ocje7y1.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-10-15 17:04:02
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
+the signalling code (pthread_cond_signal/pthread_cond_wait) in the
+pre_and_post_thread in clvmd is using the wait mutex (see man
+pthread_cond_wait) incorrectly, and this can cause clvmd to completely
+deadlock when the timing is right.
 
-Log message:
-	Update WHATS_NEW.
+This was showing up on nevrast in buildbot. Possibly triggered by an
+independent bug in my vgextend --restoremissing code that caused a
+double unlock of orphans, which would *normally* be fairly harmless, but
+it tripped this race. Was not happening on other machines...
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1763&r2=1.1764
+Anyway, Milan says that this could be related to BZ 561226 where clvmd
+runs into deadlocks as well. It may or may not be the same, but it is
+quite likely that someone somewhere would run into the bug that this
+patch is fixing as well.
 
---- LVM2/WHATS_NEW	2010/10/15 09:55:37	1.1763
-+++ LVM2/WHATS_NEW	2010/10/15 17:04:02	1.1764
-@@ -1,5 +1,6 @@
- Version 2.02.75 - 
- =====================================
-+  Add an option to automatically extend snapshots through dmeventd.
-   Remove dependency on libm, floor() is replaced with integer algorithm.
-   Fix hang when repairing a mirrored-log that had both devs fail.
-   Convey need for snapshot-merge target in lvconvert error message and man page.
+NB., I only made very modest effort at checking if localsock.mutex was
+not being used for anything else. Whoever ends up reviewing the code,
+please make sure this is so! If the localsock.mutex is being used for
+anything else, the patch could actually introduce some new bad
+behaviours. In that case, just creating a new mutex in the same
+structure just for the pre_and_post_thread would be necessary. But you
+get the idea of the fix, anyway. (It is also recommended that the
+reviewer spends a while reading pthread_cond_wait manpage, especially
+the section about the mutex pointer, and also with a paper and pencil
+sketching on how things could go wrong if the mutex is used incorrectly,
+as in this case.)
 
+Yours,
+   Petr.
 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: clvmd.diff
+Type: text/x-diff
+Size: 1794 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101018/0f9bdb4d/attachment.bin>
