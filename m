@@ -1,95 +1,95 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 19 Oct 2010 00:02:26 -0400
-Subject: [PATCH 3/8] Add lv_read_ahead and lv_kernel_read_ahead 'get' functions.
+Date: Tue, 19 Oct 2010 00:02:27 -0400
+Subject: [PATCH 4/8] Rename fields in lvm_property_type.
 In-Reply-To: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
 References: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1287460951-338-4-git-send-email-dwysocha@redhat.com>
+Message-ID: <1287460951-338-5-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Based on review comments, rename a few fields in lvm_property_type.
+In particular, change 'is_writeable' to 'is_settable', which is
+more intuitive to the intent of the bitfield (a 'set' function
+exists for this field/property).  Also, remove the char array
+for 'id' - unnecessary as we can just use the string passed in
+to do the strcmp.  Finally rename the union members from n_val
+to 'integer' and 's_val' to 'string'.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/metadata/lv.c       |    9 +++++++++
- lib/metadata/lv.h       |    1 +
- lib/report/properties.c |    4 ++--
- lib/report/report.c     |    6 +++---
- 4 files changed, 15 insertions(+), 5 deletions(-)
+ lib/report/properties.c |   10 +++++-----
+ lib/report/properties.h |   14 ++++++--------
+ 2 files changed, 11 insertions(+), 13 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 9cd5bf8..b7a8700 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -20,6 +20,15 @@
- #include "segtype.h"
- #include "str_list.h"
- 
-+uint32_t lv_kernel_read_ahead(const struct logical_volume *lv)
-+{
-+	struct lvinfo info;
-+
-+	if (!lv_info(lv->vg->cmd, lv, 0, &info, 0, 1) || !info.exists)
-+		return UINT32_MAX;
-+	return info.read_ahead;
-+}
-+
- char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv)
- {
- 	if (lv_is_cow(lv))
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 1767551..d77c362 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -62,5 +62,6 @@ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+uint32_t lv_kernel_read_ahead(const struct logical_volume *lv);
- 
- #endif
 diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 250c7c9..587f11d 100644
+index 587f11d..8f9272c 100644
 --- a/lib/report/properties.c
 +++ b/lib/report/properties.c
-@@ -109,13 +109,13 @@ GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
- #define _lv_major_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
- #define _lv_minor_set _not_implemented_set
--#define _lv_read_ahead_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(lv_read_ahead, lv->read_ahead * SECTOR_SIZE)
- #define _lv_read_ahead_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(lv_kernel_major, lv_kernel_major(lv))
- #define _lv_kernel_major_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
- #define _lv_kernel_minor_set _not_implemented_set
--#define _lv_kernel_read_ahead_get _not_implemented_get
-+GET_LV_NUM_PROPERTY_FN(lv_kernel_read_ahead, lv_kernel_read_ahead(lv) * SECTOR_SIZE)
- #define _lv_kernel_read_ahead_set _not_implemented_set
- GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
- #define _lv_size_set _not_implemented_set
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 9d86b12..dbeef21 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -470,12 +470,12 @@ static int _lvkreadahead_disp(struct dm_report *rh, struct dm_pool *mem,
- 			      void *private)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lvinfo info;
-+	uint32_t read_ahead;
- 
--	if (!lv_info(lv->vg->cmd, lv, 0, &info, 0, 1) || !info.exists)
-+	if ((read_ahead = lv_kernel_read_ahead(lv)) == UINT32_MAX)
- 		return dm_report_field_int32(rh, field, &_minusone32);
- 
--	return _size32_disp(rh, mem, field, &info.read_ahead, private);
-+	return _size32_disp(rh, mem, field, &read_ahead, private);
+@@ -25,7 +25,7 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ { \
+ 	const struct TYPE *VAR = (const struct TYPE *)obj; \
+ \
+-	prop->v.n_val = VALUE; \
++	prop->value.integer = VALUE; \
+ 	return 1; \
  }
+ #define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
+@@ -40,7 +40,7 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+ { \
+ 	const struct TYPE *VAR = (const struct TYPE *)obj; \
+ \
+-	prop->v.s_val = (char *)VALUE;	\
++	prop->value.string = (char *)VALUE;	\
+ 	return 1; \
+ }
+ #define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
+@@ -226,12 +226,12 @@ GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
  
- static int _vgsize_disp(struct dm_report *rh, struct dm_pool *mem,
+ #define STR DM_REPORT_FIELD_TYPE_STRING
+ #define NUM DM_REPORT_FIELD_TYPE_NUMBER
+-#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, writeable) \
+-	{ type, #id, writeable, sorttype == STR, { .n_val = 0 }, _ ## id ## _get, _ ## id ## _set },
++#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, settable) \
++	{ type, #id, settable, sorttype == STR, { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
+ 
+ struct lvm_property_type _properties[] = {
+ #include "columns.h"
+-	{ 0, "", 0, 0, { .n_val = 0 }, _not_implemented_get, _not_implemented_set },
++	{ 0, "", 0, 0, { .integer = 0 }, _not_implemented_get, _not_implemented_set },
+ };
+ 
+ #undef STR
+diff --git a/lib/report/properties.h b/lib/report/properties.h
+index 7398f2f..db4ae51 100644
+--- a/lib/report/properties.h
++++ b/lib/report/properties.h
+@@ -19,17 +19,15 @@
+ #include "metadata.h"
+ #include "report.h"
+ 
+-#define LVM_PROPERTY_NAME_LEN DM_REPORT_FIELD_TYPE_ID_LEN
+-
+ struct lvm_property_type {
+ 	report_type_t type;
+-	char id[LVM_PROPERTY_NAME_LEN];
+-	unsigned is_writeable;
+-	unsigned is_string;
++	const char *id;
++	unsigned is_settable:1;
++	unsigned is_string:1;
+ 	union {
+-		char *s_val;
+-		uint64_t n_val;
+-	} v;
++		char *string;
++		uint64_t integer;
++	} value;
+ 	int (*get) (const void *obj, struct lvm_property_type *prop);
+ 	int (*set) (void *obj, struct lvm_property_type *prop);
+ };
 -- 
 1.7.2.2
 
