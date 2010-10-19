@@ -1,64 +1,64 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 18 Oct 2010 21:54:44 +0200
-Subject: [PATCH] (DRAFT!) Fix a deadlock in CLVMD (possibly related to BZ 561226).
-In-Reply-To: <874ocje7y1.fsf@twilight.int.mornfall.net.> (Petr Rockai's
-	message of "Mon, 18 Oct 2010 19:17:58 +0200")
-References: <874ocje7y1.fsf@twilight.int.mornfall.net.>
-Message-ID: <87y69vcm4b.fsf@twilight.int.mornfall.net.>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 19 Oct 2010 00:02:24 -0400
+Subject: [PATCH 1/8] Refactor and add code for (lv) 'lv_name' get function.
+In-Reply-To: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
+References: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1287460951-338-2-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr Rockai <prockai@redhat.com> writes:
-> (It is also recommended that the reviewer spends a while reading
-> pthread_cond_wait manpage, especially the section about the mutex
-> pointer, and also with a paper and pencil sketching on how things
-> could go wrong if the mutex is used incorrectly, as in this case.)
 
-I can try to illustrate the problem in ASCII art... There is a single
-mutex around (L for Lock, U for Unlock), a signal (S) and a wait (W). C
-for pthread_create. Time flows from left to right, each arrow is a
-thread.
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ lib/metadata/lv.c       |    5 +++++
+ lib/metadata/lv.h       |    1 +
+ lib/report/properties.c |    2 +-
+ 3 files changed, 7 insertions(+), 1 deletions(-)
 
-So first the "naive" scenario, with no mutex (PPT = pre_and_post_thread,
-MCT = main clvmd thread). I will also use X, for a moment when MCT
-actually waits for something to happen that PPT was supposed to do.
-
-
-MCT -----C ------S--X-----S----X----------------------S------XXXXXXXXX
-         |                everything OK up to this --> <-- point...
-PPT       -----WWW-----WWWW------------------------------WWWWWWWWWWWWW
-
-Ok, so pthread API actually does not let you use W/S like that. It goes
-out of its way to tell you that you need a mutex to protect the W so
-that the above cannot happen. *But* if you get creative and just lock
-around the W's and S's, this happens:
-
-MCT ----C-----LSU----X-----LSU----X------------LSU------XXXXXXX
-        |
-PPT      ---LWWWU-------LWWWWU-----------------------LWWWWWWWWW
-
-Ooops. Nothing changed (the above is what actually was done by clvmd
-before the patch). So let's do it differently, holding L locked *all*
-the time in PPT, unless we are actually in W (this is something that the
-pthread API does itself, see the man page).
-
-MCT ----C-----LSU------X---LSU---X-----LLLLLLLSU----X----
-        |                             (and they live happily ever after)
-PPT     L---WWWWW---------WWWW----------------W----------
-
-So W actually ensures that L is unlocked *atomically* together with
-entering the wait. That means that unless PPT is actually waiting, it
-cannot be signalled by MCT. So if MCT happens to signal it too soon (it
-wasn't waiting yet), it MCT will be blocked on the mutex (L), until PPT
-is actually ready to do something.
-
-That's the story. You obviously need monotype-capable reader to make any
-sense of it. : - )
-
-Yours,
-   Petr.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index f379c3e..bbaeb64 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -20,6 +20,11 @@
+ #include "segtype.h"
+ #include "str_list.h"
+ 
++char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	return dm_pool_strdup(mem, lv->name);
++}
++
+ char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	struct dm_list *modules;
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 2f0ebee..f80d2d5 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -60,5 +60,6 @@ int lv_kernel_major(const struct logical_volume *lv);
+ int lv_kernel_minor(const struct logical_volume *lv);
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
++char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ 
+ #endif
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index ce1d2f7..8228193 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -99,7 +99,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
+ /* LV */
+ GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
+ #define _lv_uuid_set _not_implemented_set
+-#define _lv_name_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(lv_name, lv_name_dup(lv->vg->vgmem, lv))
+ #define _lv_name_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
+ #define _lv_path_set _not_implemented_set
+-- 
+1.7.2.2
 
 
