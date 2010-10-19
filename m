@@ -1,64 +1,30 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 19 Oct 2010 00:02:24 -0400
-Subject: [PATCH 1/8] Refactor and add code for (lv) 'lv_name' get function.
-In-Reply-To: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
-References: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1287460951-338-2-git-send-email-dwysocha@redhat.com>
+Date: Tue, 19 Oct 2010 00:02:23 -0400
+Subject: [PATCH 00/08] Add lvm lv properties for lvm2app.
+Message-ID: <1287460951-338-1-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+This patchset adds remaining lv properties for lvm2app, and adds
+the lvm2app interfaces and interactive tests to exercise
+the interface.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- lib/metadata/lv.c       |    5 +++++
- lib/metadata/lv.h       |    1 +
- lib/report/properties.c |    2 +-
- 3 files changed, 7 insertions(+), 1 deletions(-)
+Changes since last patchset:
+1. Added readahead attributes (lv_read_ahead, lv_kernel_read_ahead)
+2. Incorporated most all Petr and Kabi's feedback comments, including
+renaming of the fields, etc.  I did not change the 'get' function
+prototype to return the property value rather than passing it in.
+I will do this as a second patchset.
+3. Updated comments describing new APIs in lvm2app.h
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index f379c3e..bbaeb64 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -20,6 +20,11 @@
- #include "segtype.h"
- #include "str_list.h"
- 
-+char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	return dm_pool_strdup(mem, lv->name);
-+}
-+
- char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv)
- {
- 	struct dm_list *modules;
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 2f0ebee..f80d2d5 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -60,5 +60,6 @@ int lv_kernel_major(const struct logical_volume *lv);
- int lv_kernel_minor(const struct logical_volume *lv);
- char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
- 
- #endif
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index ce1d2f7..8228193 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -99,7 +99,7 @@ GET_PV_NUM_PROPERTY_FN(pv_mda_used_count, pv_mda_used_count(pv))
- /* LV */
- GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
- #define _lv_uuid_set _not_implemented_set
--#define _lv_name_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(lv_name, lv_name_dup(lv->vg->vgmem, lv))
- #define _lv_name_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
- #define _lv_path_set _not_implemented_set
--- 
-1.7.2.2
+The only two lv properties not included now are still the float/percent
+based properties, snap_percent and copy_percent.  These should be
+refactored carefully and I did not want to delay these patches further.
+
+All vg and pv properties and most lv properties may now be queried
+with this patchset.
 
 
