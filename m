@@ -1,95 +1,197 @@
 From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 19 Oct 2010 07:32:51 -0400
-Subject: [PATCH 4/8] Rename fields in lvm_property_type.
+Date: Tue, 19 Oct 2010 07:32:52 -0400
+Subject: [PATCH 5/8] Add lvm_vg_get_property() generic vg property function.
 In-Reply-To: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
 References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1287487975-26572-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <1287487975-26572-6-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Based on review comments, rename a few fields in lvm_property_type.
-In particular, change 'is_writeable' to 'is_settable', which is
-more intuitive to the intent of the bitfield (a 'set' function
-exists for this field/property).  Also, remove the char array
-for 'id' - unnecessary as we can just use the string passed in
-to do the strcmp.  Finally rename the union members from n_val
-to 'integer' and 's_val' to 'string'.
+Add a generic VG property function to lvm2app.  Call the internal library
+vg_get_property() function.  Strings are dup'd internally.
+Rework lvm_vg_get_property to return lvm_property_value and require caller
+to check 'is_valid' flag and lvm_errno() for API error.
+Create a 'get_property' function, local to lvm2app, that factors out
+most of the common code that copies the components of lvm_property_type
+into lvm_property_value.  This allows for a 1-line function for each
+of the generic property functions exported by lvm2app.
 
 Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
 ---
- lib/report/properties.c |   10 +++++-----
- lib/report/properties.h |   14 ++++++--------
- 2 files changed, 11 insertions(+), 13 deletions(-)
+ liblvm/lvm2app.h  |   62 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm_misc.c |   34 +++++++++++++++++++++++++++++
+ liblvm/lvm_misc.h |    2 +
+ liblvm/lvm_vg.c   |    6 +++++
+ 4 files changed, 103 insertions(+), 1 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 587f11d..8f9272c 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -25,7 +25,7 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
- { \
- 	const struct TYPE *VAR = (const struct TYPE *)obj; \
- \
--	prop->v.n_val = VALUE; \
-+	prop->value.integer = VALUE; \
- 	return 1; \
- }
- #define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
-@@ -40,7 +40,7 @@ static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
- { \
- 	const struct TYPE *VAR = (const struct TYPE *)obj; \
- \
--	prop->v.s_val = (char *)VALUE;	\
-+	prop->value.string = (char *)VALUE;	\
- 	return 1; \
- }
- #define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
-@@ -226,12 +226,12 @@ GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 47d3417..8b244fc 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -139,7 +139,7 @@ typedef struct physical_volume *pv_t;
+ /**
+  * Logical Volume object list.
+  *
+- * Lists of these structures are returned by lvm_vg_list_pvs().
++ * Lists of these structures are returned by lvm_vg_list_lvs().
+  */
+ typedef struct lvm_lv_list {
+ 	struct dm_list list;
+@@ -168,6 +168,27 @@ typedef struct lvm_str_list {
+ 	const char *str;
+ } lvm_str_list_t;
  
- #define STR DM_REPORT_FIELD_TYPE_STRING
- #define NUM DM_REPORT_FIELD_TYPE_NUMBER
--#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, writeable) \
--	{ type, #id, writeable, sorttype == STR, { .n_val = 0 }, _ ## id ## _get, _ ## id ## _set },
-+#define FIELD(type, strct, sorttype, head, field, width, fn, id, desc, settable) \
-+	{ type, #id, settable, sorttype == STR, { .integer = 0 }, _ ## id ## _get, _ ## id ## _set },
- 
- struct lvm_property_type _properties[] = {
- #include "columns.h"
--	{ 0, "", 0, 0, { .n_val = 0 }, _not_implemented_get, _not_implemented_set },
-+	{ 0, "", 0, 0, { .integer = 0 }, _not_implemented_get, _not_implemented_set },
- };
- 
- #undef STR
-diff --git a/lib/report/properties.h b/lib/report/properties.h
-index 7398f2f..db4ae51 100644
---- a/lib/report/properties.h
-+++ b/lib/report/properties.h
-@@ -19,17 +19,15 @@
- #include "metadata.h"
- #include "report.h"
- 
--#define LVM_PROPERTY_NAME_LEN DM_REPORT_FIELD_TYPE_ID_LEN
--
- struct lvm_property_type {
- 	report_type_t type;
--	char id[LVM_PROPERTY_NAME_LEN];
--	unsigned is_writeable;
--	unsigned is_string;
-+	const char *id;
++/**
++ * Property Value
++ *
++ * This structure defines a single LVM property value for an LVM object.
++ * The structures are returned by functions such as
++ * lvm_vg_get_property() and lvm_vg_set_property().
++ *
++ * is_settable: indicates whether a 'set' function exists for this property
++ * is_string: indicates whether this property is a string (1) or integer (0)
++ * is_valid: indicates whether 'value' is valid (1) or not (0)
++ */
++typedef struct lvm_property_value {
 +	unsigned is_settable:1;
 +	unsigned is_string:1;
- 	union {
--		char *s_val;
--		uint64_t n_val;
--	} v;
-+		char *string;
++	unsigned is_valid:1;
++	union {
++		const char *string;
 +		uint64_t integer;
 +	} value;
- 	int (*get) (const void *obj, struct lvm_property_type *prop);
- 	int (*set) (void *obj, struct lvm_property_type *prop);
- };
++} lvm_property_value_t;
++
+ /*************************** generic lvm handling ***************************/
+ /**
+  * Create a LVM handle.
+@@ -848,6 +869,45 @@ uint64_t lvm_vg_get_max_lv(const vg_t vg);
+  */
+ struct dm_list *lvm_vg_get_tags(const vg_t vg);
+ 
++/**
++ * Get the value of a VG property
++ *
++ * \memberof vg_t
++ *
++ * \param   vg
++ * VG handle obtained from lvm_vg_create() or lvm_vg_open().
++ *
++ * \param   name
++ * Name of property to query.  See vgs man page for full list of properties
++ * that may be queried.
++ *
++ * The memory allocated for a string property value is tied to the vg_t
++ * handle and will be released when lvm_vg_close() is called.
++ *
++ * Example:
++ *      lvm_property_value v;
++ *      char *prop_name = "vg_mda_count";
++ *
++ *      v = lvm_vg_get_property(vg, prop_name);
++ *      if (lvm_errno(libh) || !v.is_valid) {
++ *           // handle error
++ *           printf("Invalid property name or unable to query"
++ *                  "'%s'.\n", prop_name);
++ *           return;
++ *      }
++ *      if (v.is_string)
++ *           printf(", value = %s\n", v.value.string);
++ *	else
++ *           printf(", value = %"PRIu64"\n", v.value.integer);
++ *
++ *
++ * \return
++ * lvm_property_value structure that will contain the current
++ * value of the property.  Caller should check lvm_errno() as well
++ * as 'is_valid' flag before using the value.
++ */
++struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name);
++
+ /************************** logical volume handling *************************/
+ 
+ /**
+diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
+index e339faa..52f3636 100644
+--- a/liblvm/lvm_misc.c
++++ b/liblvm/lvm_misc.c
+@@ -15,6 +15,7 @@
+ #include "lvm2app.h"
+ #include "lvm_misc.h"
+ #include "lib.h"
++#include "properties.h"
+ 
+ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
+ {
+@@ -43,3 +44,36 @@ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
+ 	}
+ 	return list;
+ }
++
++struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
++				       const lv_t lv, const char *name)
++{
++	struct lvm_property_type prop;
++	struct lvm_property_value v;
++
++	prop.id = name;
++	if (pv) {
++		if (!pv_get_property(pv, &prop)) {
++			v.is_valid = 0;
++			return v;
++		}
++	} else if (vg) {
++		if (!vg_get_property(vg, &prop)) {
++			v.is_valid = 0;
++			return v;
++		}
++	} else if (lv) {
++		if (!lv_get_property(lv, &prop)) {
++			v.is_valid = 0;
++			return v;
++		}
++	}
++	v.is_settable = prop.is_settable;
++	v.is_string = prop.is_string;
++	if (v.is_string)
++		v.value.string = prop.value.string;
++	else
++		v.value.integer = prop.value.integer;
++	v.is_valid = 1;
++	return v;
++}
+diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
+index ced1f0f..b4e675e 100644
+--- a/liblvm/lvm_misc.h
++++ b/liblvm/lvm_misc.h
+@@ -17,5 +17,7 @@
+ #include "libdevmapper.h"
+ 
+ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
++struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
++				       const lv_t lv, const char *name);
+ 
+ #endif
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index a09208a..6970910 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -335,6 +335,12 @@ const char *lvm_vg_get_name(const vg_t vg)
+ 	return dm_pool_strndup(vg->vgmem, (const char *)vg->name, NAME_LEN+1);
+ }
+ 
++
++struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
++{
++	return get_property(NULL, vg, NULL, name);
++}
++
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+ {
+ 	return get_vgnames((struct cmd_context *)libh, 0);
 -- 
 1.7.2.2
 
