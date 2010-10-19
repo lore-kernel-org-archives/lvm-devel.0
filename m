@@ -1,94 +1,161 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Oct 2010 16:12:52 -0000
-Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
-Message-ID: <20101012161252.24392.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 19 Oct 2010 09:24:55 -0400
+Subject: [PATCH 3/4] Add lvm_lvseg_get_property() function.
+In-Reply-To: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
+References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
+Message-ID: <1287494696-18310-4-git-send-email-dwysocha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-12 16:12:50
 
-Modified files:
-	lib/metadata   : lv.c lv.h 
-	lib/report     : properties.c report.c 
+Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+---
+ liblvm/lvm2app.h  |   39 +++++++++++++++++++++++++++++++++++++++
+ liblvm/lvm_lv.c   |    8 +++++++-
+ liblvm/lvm_misc.c |    8 +++++++-
+ liblvm/lvm_misc.h |    3 ++-
+ liblvm/lvm_pv.c   |    2 +-
+ liblvm/lvm_vg.c   |    2 +-
+ 6 files changed, 57 insertions(+), 5 deletions(-)
 
-Log message:
-	Refactor and add code for (lv) 'mirror_log' get function.
-	
-	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-	Reviewed-By: Petr Rockai <prockai@redhat.com>
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.136&r2=1.137
-
---- LVM2/lib/metadata/lv.c	2010/10/12 16:12:33	1.11
-+++ LVM2/lib/metadata/lv.c	2010/10/12 16:12:50	1.12
-@@ -17,6 +17,19 @@
- #include "metadata.h"
- #include "activate.h"
- #include "toolcontext.h"
-+#include "segtype.h"
-+
-+char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	struct lv_segment *seg;
-+
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		if (!seg_is_mirrored(seg) || !seg->log_lv)
-+			continue;
-+		return dm_pool_strdup(mem, seg->log_lv->name);
-+	}
-+	return NULL;
-+}
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index f6d54f1..7e2eb69 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1099,6 +1099,45 @@ uint64_t lvm_lv_get_size(const lv_t lv);
+ struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name);
  
- int lv_kernel_minor(const struct logical_volume *lv)
+ /**
++ * Get the value of a LV segment property
++ *
++ * \memberof lv_t
++ *
++ * \param   lvseg
++ * Logical volume segment handle.
++ *
++ * \param   name
++ * Name of property to query.  See lvs man page for full list of properties
++ * that may be queried.
++ *
++ * The memory allocated for a string property value is tied to the vg_t
++ * handle and will be released when lvm_vg_close() is called.
++ *
++ * Example:
++ *      lvm_property_value v;
++ *      char *prop_name = "seg_start_pe";
++ *
++ *      v = lvm_lvseg_get_property(lv, prop_name);
++ *      if (lvm_errno(libh) || !v.is_valid) {
++ *           // handle error
++ *           printf("Invalid property name or unable to query"
++ *                  "'%s'.\n", prop_name);
++ *           return;
++ *      }
++ *      if (v.is_string)
++ *           printf(", value = %s\n", v.value.string);
++ *	else
++ *           printf(", value = %"PRIu64"\n", v.value.integer);
++ *
++ * \return
++ * lvm_property_value structure that will contain the current
++ * value of the property.  Caller should check lvm_errno() as well
++ * as 'is_valid' flag before using the value.
++ */
++struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
++						 const char *name);
++
++/**
+  * Get the current activation state of a logical volume.
+  *
+  * \memberof lv_t
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 42982f9..5d6f110 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -50,7 +50,13 @@ const char *lvm_lv_get_name(const lv_t lv)
+ 
+ struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
  {
---- LVM2/lib/metadata/lv.h	2010/10/12 16:12:33	1.10
-+++ LVM2/lib/metadata/lv.h	2010/10/12 16:12:50	1.11
-@@ -58,5 +58,6 @@
- char *lv_convert_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
- int lv_kernel_major(const struct logical_volume *lv);
- int lv_kernel_minor(const struct logical_volume *lv);
-+char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+-	return get_property(NULL, NULL, lv, name);
++	return get_property(NULL, NULL, lv, NULL, name);
++}
++
++struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
++						 const char *name)
++{
++	return get_property(NULL, NULL, NULL, lvseg, name);
+ }
+ 
+ uint64_t lvm_lv_is_active(const lv_t lv)
+diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
+index 52f3636..7eab169 100644
+--- a/liblvm/lvm_misc.c
++++ b/liblvm/lvm_misc.c
+@@ -46,7 +46,8 @@ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
+ }
+ 
+ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+-				       const lv_t lv, const char *name)
++				       const lv_t lv, const lvseg_t lvseg,
++				       const char *name)
+ {
+ 	struct lvm_property_type prop;
+ 	struct lvm_property_value v;
+@@ -67,6 +68,11 @@ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+ 			v.is_valid = 0;
+ 			return v;
+ 		}
++	} else if (lvseg) {
++		if (!lvseg_get_property(lvseg, &prop)) {
++			v.is_valid = 0;
++			return v;
++		}
+ 	}
+ 	v.is_settable = prop.is_settable;
+ 	v.is_string = prop.is_string;
+diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
+index b4e675e..918482e 100644
+--- a/liblvm/lvm_misc.h
++++ b/liblvm/lvm_misc.h
+@@ -18,6 +18,7 @@
+ 
+ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
+ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+-				       const lv_t lv, const char *name);
++				       const lv_t lv, const lvseg_t lvseg,
++				       const char *name);
  
  #endif
---- LVM2/lib/report/properties.c	2010/10/12 16:12:34	1.14
-+++ LVM2/lib/report/properties.c	2010/10/12 16:12:50	1.15
-@@ -135,7 +135,7 @@
- #define _convert_lv_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(lv_tags, lv_tags_dup(lv))
- #define _lv_tags_set _not_implemented_set
--#define _mirror_log_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
- #define _mirror_log_set _not_implemented_set
- #define _modules_get _not_implemented_get
- #define _modules_set _not_implemented_set
---- LVM2/lib/report/report.c	2010/10/12 16:12:34	1.136
-+++ LVM2/lib/report/report.c	2010/10/12 16:12:50	1.137
-@@ -297,14 +297,10 @@
- 		       const void *data, void *private __attribute__((unused)))
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index efdccb5..6705dd8 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -51,7 +51,7 @@ uint64_t lvm_pv_get_free(const pv_t pv)
+ 
+ struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
  {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lv_segment *seg;
-+	const char *name;
+-	return get_property(pv, NULL, NULL, name);
++	return get_property(pv, NULL, NULL, NULL, name);
+ }
  
--	dm_list_iterate_items(seg, &lv->segments) {
--		if (!seg_is_mirrored(seg) || !seg->log_lv)
--			continue;
--		return dm_report_field_string(rh, field,
--					      (const char **) &seg->log_lv->name);
--	}
-+	if ((name = lv_mirror_log_dup(mem, lv)))
-+		return dm_report_field_string(rh, field, &name);
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+index 6970910..bc92ca2 100644
+--- a/liblvm/lvm_vg.c
++++ b/liblvm/lvm_vg.c
+@@ -338,7 +338,7 @@ const char *lvm_vg_get_name(const vg_t vg)
  
- 	dm_report_field_set_value(field, "", NULL);
- 	return 1;
+ struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
+ {
+-	return get_property(NULL, vg, NULL, name);
++	return get_property(NULL, vg, NULL, NULL, name);
+ }
+ 
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+-- 
+1.7.2.2
 
 
