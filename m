@@ -1,153 +1,73 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 19 Oct 2010 09:24:56 -0400
-Subject: [PATCH 4/4] Update tests for lvseg apis.
-In-Reply-To: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
-References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <1287494696-18310-5-git-send-email-dwysocha@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 20 Oct 2010 12:40:48 +0200
+Subject: [PATCH] (DRAFT!) Fix a deadlock in CLVMD (possibly related to BZ 561226).
+In-Reply-To: <874ocje7y1.fsf@twilight.int.mornfall.net.>
+References: <874ocje7y1.fsf@twilight.int.mornfall.net.>
+Message-ID: <4CBEC730.4020906@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+On 10/18/2010 07:17 PM, Petr Rockai wrote:
+> the signalling code (pthread_cond_signal/pthread_cond_wait) in the
+> pre_and_post_thread in clvmd is using the wait mutex (see man
+> pthread_cond_wait) incorrectly, and this can cause clvmd to completely
+> deadlock when the timing is right.
 
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/api/test.c |   76 ++++++++++++++++++++++++++++--------------------------
- 1 files changed, 39 insertions(+), 37 deletions(-)
+well, nobody even tried to answer, despite this quite important problem...
 
-diff --git a/test/api/test.c b/test/api/test.c
-index fea3d0d..20f4210 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -69,6 +69,8 @@ static void _show_help(void)
- 	       "List the PVs that exist in VG vgname\n");
- 	printf("'vg_list_lvs vgname': "
- 	       "List the LVs that exist in VG vgname\n");
-+	printf("'lv_list_lvsegs vgname lvname': "
-+	       "List the LV segments that exist in LV vgname/lvname\n");
- 	printf("'vgs_open': "
- 	       "List the VGs that are currently open\n");
- 	printf("'vgs': "
-@@ -569,12 +571,15 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
- 
--static void _print_property_value(struct lvm_property_value value)
-+static void _print_property_value(const char *name,
-+				  struct lvm_property_value v)
- {
--	if (value.is_string)
--		printf(", value = %s\n", value.value.string);
-+	if (!v.is_valid)
-+		printf("%s = INVALID\n", name);
-+	else if (v.is_string)
-+		printf("%s = %s\n", name, v.value.string);
- 	else
--		printf(", value = %"PRIu64"\n", value.value.integer);
-+		printf("%s = %"PRIu64"\n", name, v.value.integer);
- }
- 
- static void _pv_get_property(char **argv, int argc)
-@@ -589,17 +594,7 @@ static void _pv_get_property(char **argv, int argc)
- 	if (!(pv = _lookup_pv_by_name(argv, argc)))
- 		return;
- 	v = lvm_pv_get_property(pv, argv[2]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in PV %s",
--	       argv[2], argv[1]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[2], v);
- }
- 
- static void _vg_get_property(char **argv, int argc)
-@@ -614,17 +609,7 @@ static void _vg_get_property(char **argv, int argc)
- 	if (!(vg = _lookup_vg_by_name(argv, argc)))
- 		return;
- 	v =  lvm_vg_get_property(vg, argv[2]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in VG %s",
--	       argv[2], argv[1]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[2], v);
- }
- 
- static void _lv_get_property(char **argv, int argc)
-@@ -639,17 +624,7 @@ static void _lv_get_property(char **argv, int argc)
- 	if (!(lv = _lookup_lv_by_name(argv[2])))
- 		return;
- 	v = lvm_lv_get_property(lv, argv[3]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in LV %s",
--	       argv[3], argv[2]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[3], v);
- }
- 
- static void _lv_get_tags(char **argv, int argc)
-@@ -742,6 +717,31 @@ static void _lvs_in_vg(char **argv, int argc)
- 	}
- }
- 
-+static void _lvsegs_in_lv(char **argv, int argc)
-+{
-+	struct dm_list *lvsegs;
-+	struct lvm_lvseg_list *lvl;
-+	lv_t lv;
-+
-+	if (!(lv = _lookup_lv_by_name(argv[2])))
-+		return;
-+	lvsegs = lvm_lv_list_lvsegs(lv);
-+	if (!lvsegs || dm_list_empty(lvsegs)) {
-+		printf("No LV segments in lv %s\n", lvm_lv_get_name(lv));
-+		return;
-+	}
-+	printf("LV segments in lv %s:\n", lvm_lv_get_name(lv));
-+	dm_list_iterate_items(lvl, lvsegs) {
-+		struct lvm_property_value v;
-+		v = lvm_lvseg_get_property(lvl->lvseg, "segtype");
-+		_print_property_value("segtype", v);
-+		v = lvm_lvseg_get_property(lvl->lvseg, "seg_start_pe");
-+		_print_property_value("seg_start_pe", v);
-+		v = lvm_lvseg_get_property(lvl->lvseg, "seg_size");
-+		_print_property_value("seg_size", v);
-+	}
-+}
-+
- static void _lv_deactivate(char **argv, int argc)
- {
- 	lv_t lv;
-@@ -888,6 +888,8 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_pvs_in_vg(argv, argc);
- 		} else if (!strcmp(argv[0], "vg_list_lvs")) {
- 			_lvs_in_vg(argv, argc);
-+		} else if (!strcmp(argv[0], "lv_list_lvsegs")) {
-+			_lvsegs_in_lv(argv, argc);
- 		} else if (!strcmp(argv[0], "list_vg_names")) {
- 			_list_vg_names(libh);
- 		} else if (!strcmp(argv[0], "list_vg_ids")) {
--- 
-1.7.2.2
+So, I see these important items:
+
+1) always rely on implicit unlock in pthread_cond_wait()
+
+2) some of the code now runs with client->bits.localsock.mutex locked,
+mainly the do_pre_command() and do_post_command() + socket writes
+
+3) the common code to signal is _only_ this pattern
+
+	pthread_mutex_lock(&client->bits.localsock.mutex);
+	client->bits.localsock.state = <STATE>;
+	pthread_cond_signal(&client->bits.localsock.cond);
+	pthread_mutex_unlock(&client->bits.localsock.mutex);
+
+this is called from request_timed_out() and read_from_local_sock()
+and it wakes up thrad always waiting in this code pattern
+
+	pthread_cond_wait(&client->bits.localsock.cond,
+			  &client->bits.localsock.mutex);
+
+I didn't found any other uses for this lock.
+
+So the thread is signaled only when in cond_wait now (there is no
+other place where signaling thread can take lock now).
+
+This seems as expected fix.
+
+The post/pre routines should not have problems with running with
+localsock.mutex taken, same for socket writes - hope I am right:-)
+
+Did I miss or misinterpret anything?
+
+Not extra deep analysis, but for me it seems like correct fix,
+I think we should commit it and run some tests...
+
+Milan
+
+p.s.
+nitpicking
+
+	DEBUGLOG("in sub thread: client = %p\n", client);
+	+ pthread_mutex_lock(&client->bits.localsock.mutex);
+
+	/* Don't start until the LVM thread is ready */
+	pthread_mutex_lock(&lvm_start_mutex);
+	pthread_mutex_unlock(&lvm_start_mutex);
+	DEBUGLOG("Sub thread ready for work.\n");
+
+
+Can we move that localsock.muext lock after the lvm_start_mutex exercise?
+(Which I do not like either - isn't cond wait better for that?)
 
 
