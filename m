@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 12 Oct 2010 16:13:08 -0000
-Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
-Message-ID: <20101012161308.24909.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 20 Oct 2010 14:46:46 -0000
+Subject: LVM2/daemons/clvmd clvmd-command.c clvmd.c
+Message-ID: <20101020144646.24402.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,88 +10,127 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-12 16:13:07
+Changes by:	mornfall at sourceware.org	2010-10-20 14:46:45
 
 Modified files:
-	lib/metadata   : lv.c lv.h 
-	lib/report     : properties.c report.c 
+	daemons/clvmd  : clvmd-command.c clvmd.c 
 
 Log message:
-	Refactor and add code for (lv) 'modules' get function.
+	Fix a deadlock in clvmd.
+	
+	The signalling code (pthread_cond_signal/pthread_cond_wait) in the
+	pre_and_post_thread was using the wait mutex (see man pthread_cond_wait)
+	incorrectly, and this could cause clvmd to deadlock when timing was
+	right. Detailed explanation of the problem follows.
+	
+	There is a single mutex around (L for Lock, U for Unlock), a signal (S) and a
+	wait (W). C for pthread_create. Time flows from left to right, each arrow is a
+	thread.
+	
+	So first the "naive" scenario, with no mutex (PPT = pre_and_post_thread, MCT =
+	main clvmd thread; well actually the thread that does read_from_local_sock). I
+	will also use X, for a moment when MCT actually waits for something to happen
+	that PPT was supposed to do.
+	
+	MCT -----C ------S--X-----S----X----------------------S------XXXXXXXXX
+	|                everything OK up to this --> <-- point...
+	PPT       -----WWW-----WWWW------------------------------WWWWWWWWWWWWW
+	
+	Ok, so pthread API actually does not let you use W/S like that. It goes out of
+	its way to tell you that you need a mutex to protect the W so that the above
+	cannot happen. *But* if you are creative and just lock around the W's and S's,
+	this happens:
+	
+	MCT ----C-----LSU----X-----LSU----X------------LSU------XXXXXXX
+	|
+	PPT      ---LWWWU-------LWWWWU-----------------------LWWWWWWWWW
+	
+	Ooops. Nothing changed (the above is what actually was done by clvmd before
+	this satch). So let's do it differently, holding L locked *all* the time in
+	PPT, unless we are actually in W (this is something that the pthread API does
+	itself, see the man page).
+	
+	MCT ----C-----LSU------X---LSU---X-----LLLLLLLSU----X----
+	|                             (and they live happily ever after)
+	PPT     L---WWWWW---------WWWW----------------W----------
+	
+	So W actually ensures that L is unlocked *atomically* together with entering
+	the wait. That means that unless PPT is actually waiting, it cannot be
+	signalled by MCT. So if MCT happens to signal it too soon (it wasn't waiting
+	yet), it (MCT) will be blocked on the mutex (L), until PPT is actually ready to
+	do something.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.77&r2=1.78
 
---- LVM2/lib/metadata/lv.c	2010/10/12 16:12:50	1.12
-+++ LVM2/lib/metadata/lv.c	2010/10/12 16:13:06	1.13
-@@ -18,6 +18,21 @@
- #include "activate.h"
- #include "toolcontext.h"
- #include "segtype.h"
-+#include "str_list.h"
-+
-+char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	struct dm_list *modules;
-+
-+	if (!(modules = str_list_create(mem))) {
-+		log_error("modules str_list allocation failed");
-+		return NULL;
+--- LVM2/daemons/clvmd/clvmd-command.c	2010/06/21 15:56:58	1.39
++++ LVM2/daemons/clvmd/clvmd-command.c	2010/10/20 14:46:45	1.40
+@@ -210,9 +210,12 @@
+ 
+     if (lock_mode == LCK_UNLOCK) {
+ 
++        DEBUGLOG("PRE: UNLOCK\n");
+ 	lkid = (int)(long)dm_hash_lookup(lock_hash, lockname);
+-	if (lkid == 0)
++	if (lkid == 0) {
++            DEBUGLOG("lock not found in table\n");
+ 	    return EINVAL;
 +	}
-+
-+	if (!list_lv_modules(mem, lv, modules))
-+		return_NULL;
-+	return tags_format_and_copy(lv->vg->vgmem, modules);
-+}
  
- char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv)
- {
---- LVM2/lib/metadata/lv.h	2010/10/12 16:12:50	1.11
-+++ LVM2/lib/metadata/lv.h	2010/10/12 16:13:06	1.12
-@@ -59,5 +59,6 @@
- int lv_kernel_major(const struct logical_volume *lv);
- int lv_kernel_minor(const struct logical_volume *lv);
- char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ 	status = sync_unlock(lockname, lkid);
+ 	if (status)
+@@ -221,6 +224,7 @@
+ 	    dm_hash_remove(lock_hash, lockname);
+     }
+     else {
++        DEBUGLOG("PRE: LOCK\n");
+ 	/* Read locks need to be PR; other modes get passed through */
+ 	if (lock_mode == LCK_READ)
+ 	    lock_mode = LCK_PREAD;
+--- LVM2/daemons/clvmd/clvmd.c	2010/08/17 16:25:32	1.77
++++ LVM2/daemons/clvmd/clvmd.c	2010/10/20 14:46:45	1.78
+@@ -1520,6 +1520,7 @@
+ 	int pipe_fd = client->bits.localsock.pipe;
  
- #endif
---- LVM2/lib/report/properties.c	2010/10/12 16:12:50	1.15
-+++ LVM2/lib/report/properties.c	2010/10/12 16:13:07	1.16
-@@ -137,7 +137,7 @@
- #define _lv_tags_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
- #define _mirror_log_set _not_implemented_set
--#define _modules_get _not_implemented_get
-+GET_LV_STR_PROPERTY_FN(modules, lv_modules_dup(lv->vg->vgmem, lv))
- #define _modules_set _not_implemented_set
+ 	DEBUGLOG("in sub thread: client = %p\n", client);
++	pthread_mutex_lock(&client->bits.localsock.mutex);
  
- /* VG */
---- LVM2/lib/report/report.c	2010/10/12 16:12:50	1.137
-+++ LVM2/lib/report/report.c	2010/10/12 16:13:07	1.138
-@@ -165,17 +165,13 @@
- 			 const void *data, void *private)
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct dm_list *modules;
-+	char *modules_str;
+ 	/* Don't start until the LVM thread is ready */
+ 	pthread_mutex_lock(&lvm_start_mutex);
+@@ -1564,7 +1565,6 @@
+ 		}
  
--	if (!(modules = str_list_create(mem))) {
--		log_error("modules str_list allocation failed");
-+	if (!(modules_str = lv_modules_dup(mem, lv)))
- 		return 0;
--	}
--
--	if (!list_lv_modules(mem, lv, modules))
--		return_0;
+ 		/* We may need to wait for the condition variable before running the post command */
+-		pthread_mutex_lock(&client->bits.localsock.mutex);
+ 		DEBUGLOG("Waiting to do post command - state = %d\n",
+ 			 client->bits.localsock.state);
  
--	return _tags_disp(rh, mem, field, modules, private);
-+	dm_report_field_set_value(field, modules_str, NULL);
-+	return 1;
+@@ -1573,7 +1573,6 @@
+ 			pthread_cond_wait(&client->bits.localsock.cond,
+ 					  &client->bits.localsock.mutex);
+ 		}
+-		pthread_mutex_unlock(&client->bits.localsock.mutex);
+ 
+ 		DEBUGLOG("Got post command condition...\n");
+ 
+@@ -1594,16 +1593,15 @@
+ next_pre:
+ 		DEBUGLOG("Waiting for next pre command\n");
+ 
+-		pthread_mutex_lock(&client->bits.localsock.mutex);
+ 		if (client->bits.localsock.state != PRE_COMMAND &&
+ 		    !client->bits.localsock.finished) {
+ 			pthread_cond_wait(&client->bits.localsock.cond,
+ 					  &client->bits.localsock.mutex);
+ 		}
+-		pthread_mutex_unlock(&client->bits.localsock.mutex);
+ 
+ 		DEBUGLOG("Got pre command condition...\n");
+ 	}
++	pthread_mutex_unlock(&client->bits.localsock.mutex);
+ 	DEBUGLOG("Subthread finished\n");
+ 	pthread_exit((void *) 0);
  }
- 
- static int _vgfmt_disp(struct dm_report *rh, struct dm_pool *mem,
 
 
