@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Oct 2010 15:14:13 -0000
-Subject: LVM2/test test-utils.sh t-test-partition.sh
-Message-ID: <20101020151413.9437.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 20 Oct 2010 15:32:15 -0000
+Subject: LVM2/test t-vgchange-maxlv.sh
+Message-ID: <20101020153215.19079.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,23 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-20 15:14:13
+Changes by:	mornfall at sourceware.org	2010-10-20 15:32:15
 
-Modified files:
-	test           : test-utils.sh 
 Added files:
-	test           : t-test-partition.sh 
+	test           : t-vgchange-maxlv.sh 
 
 Log message:
-	Add coverage test for partition table scanning
+	Add a test for BZ 509182 (vgchange --monitor y breaks with max_lv).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-test-partition.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgchange-maxlv.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
-/cvs/lvm2/LVM2/test/t-test-partition.sh,v  -->  standard output
+/cvs/lvm2/LVM2/test/t-vgchange-maxlv.sh,v  -->  standard output
 revision 1.1
---- LVM2/test/t-test-partition.sh
-+++ -	2010-10-20 15:14:13.391062000 +0000
-@@ -0,0 +1,30 @@
-+#!/bin/sh
+--- LVM2/test/t-vgchange-maxlv.sh
++++ -	2010-10-20 15:32:15.903509000 +0000
+@@ -0,0 +1,31 @@
++#!/bin/bash
 +# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
@@ -40,34 +37,25 @@ revision 1.1
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+#
-+# Testcase for bugzilla #621173 
-+# excercises partition table scanning code path
-+#
-+
-+which sfdisk || exit 200
-+
-+LVM_TEST_CONFIG_DEVICES="types = [\"device-mapper\", 142]"
-+
 +. ./test-utils.sh
 +
-+aux prepare_pvs 1 30
++prepare_dmeventd
++aux prepare_pvs 3
 +
-+pvs
++vgcreate -c n -l 2 $vg $dev1 $dev2 $dev3
++lvcreate -n one -l 1 $vg
++lvcreate -n two -l 1 $vg
++not lvcreate -n three -l 1 $vg
++vgchange -an $vg
++vgremove -ff $vg
 +
-+# create small partition table
-+echo "1 2" | sfdisk $dev1
-+
-+pvs
---- LVM2/test/test-utils.sh	2010/10/15 16:28:15	1.52
-+++ LVM2/test/test-utils.sh	2010/10/20 15:14:13	1.53
-@@ -370,6 +370,7 @@
-     cache_dir = "$TESTDIR/etc"
-     sysfs_scan = 0
-     default_data_alignment = 1
-+    $LVM_TEST_CONFIG_DEVICES
-   }
-   log {
-     syslog = 0
++vgcreate -c n -l 3 $vg $dev1 $dev2 $dev3
++lvcreate -n one -l 1 $vg
++lvcreate -n snap -s -l 1 $vg/one
++lvcreate -n two -l 1 $vg
++not lvcreate -n three -l 1 $vg
++vgchange --monitor y $vg
++vgchange -an $vg 2>&1 | tee vgchange.out
++not grep "event server" vgchange.out
 
 
