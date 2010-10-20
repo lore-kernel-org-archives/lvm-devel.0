@@ -1,25 +1,31 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 20 Oct 2010 15:30:08 +0200
-Subject: [PATCH] (DRAFT!) Fix a deadlock in CLVMD (possibly related to BZ 561226).
-In-Reply-To: <87wrpd9fuf.fsf@twilight.int.mornfall.net.>
-References: <874ocje7y1.fsf@twilight.int.mornfall.net.>	<4CBEC730.4020906@redhat.com>
-	<87wrpd9fuf.fsf@twilight.int.mornfall.net.>
-Message-ID: <4CBEEEE0.4090101@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 20 Oct 2010 16:28:19 +0200
+Subject: [PATCH 0/2] Strict aliasing
+Message-ID: <cover.1287584556.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/20/2010 03:03 PM, Petr Rockai wrote:
-> I would be actually wary about that -- I suspect that going the other
-> way around could introduce a (very slight) race condition. Not that it
-> would ever happen in practice, but still. On the other hand, I didn't
-> try too hard to think about it, so I might be wrong.
+Patch goes with test that executes partition scanning code path
+(so improves our coverage a bit)
 
-ok, ack, please commit it.
-... and wait what happens with tests.
+Looks like are command line --config options has some room
+for improvements as I had to change the global config.
 
-m.
+
+Zdenek Kabelac (2):
+  Fix compiler warning about strict-aliasing break
+  Testcase for partition table scanning
+
+ lib/device/device.c      |   18 +++++++++---------
+ test/t-test-partition.sh |   30 ++++++++++++++++++++++++++++++
+ test/test-utils.sh       |    1 +
+ 3 files changed, 40 insertions(+), 9 deletions(-)
+ create mode 100755 test/t-test-partition.sh
+
+-- 
+1.7.3.1
 
 
