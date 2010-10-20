@@ -1,10 +1,10 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 20 Oct 2010 13:53:19 +0200
-Subject: [PATCH 2/4] Add lvseg 'get' functions.
-In-Reply-To: <1287494696-18310-3-git-send-email-dwysocha@redhat.com>
+Date: Wed, 20 Oct 2010 14:08:46 +0200
+Subject: [PATCH 4/4] Update tests for lvseg apis.
+In-Reply-To: <1287494696-18310-5-git-send-email-dwysocha@redhat.com>
 References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
-	<1287494696-18310-3-git-send-email-dwysocha@redhat.com>
-Message-ID: <4CBED82F.7020702@redhat.com>
+	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>
+Message-ID: <4CBEDBCE.1060400@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -14,70 +14,40 @@ Content-Transfer-Encoding: 7bit
 Dne 19.10.2010 15:24, Dave Wysochanski napsal(a):
 > 
 > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-> index b7a8700..eca046f 100644
-> --- a/lib/metadata/lv.c
-> +++ b/lib/metadata/lv.c
-> @@ -20,6 +20,41 @@
->  #include "segtype.h"
->  #include "str_list.h"
->  
-> +char *lvseg_tags_dup(const struct lv_segment *seg)
-> +{
-> +	return tags_format_and_copy(seg->lv->vg->vgmem, &seg->tags);
-> +}
-> +
-> +char *lvseg_segtype_dup(const struct lv_segment *seg)
-> +{
-> +	if (seg->area_count == 1) {
-> +		return (char *)"linear";
-
-NACK!
-
-> +	}
-> +
-> +	return dm_pool_strdup(seg->lv->vg->vgmem, seg->segtype->ops->name(seg));
-> +}
-> +
-> +uint64_t lvseg_chunksize(const struct lv_segment *seg)
-> +{
-> +	uint64_t size;
-> +
-> +	if (lv_is_cow(seg->lv))
-> +		size = (uint64_t) find_cow(seg->lv)->chunk_size;
-> +	else
-> +		size = UINT64_C(0);
-
-if (lv_is_cow())
-       return ...
-
-return 0;
-
-
-> diff --git a/lib/report/report.c b/lib/report/report.c
-> index dbeef21..c7f141f 100644
-> --- a/lib/report/report.c
-> +++ b/lib/report/report.c
-> @@ -279,12 +279,9 @@ static int _segtype_disp(struct dm_report *rh __attribute__((unused)),
->  {
->  	const struct lv_segment *seg = (const struct lv_segment *) data;
->  
-> -	if (seg->area_count == 1) {
-> -		dm_report_field_set_value(field, "linear", NULL);
-> -		return 1;
-> -	}
-> -
-> -	dm_report_field_set_value(field, seg->segtype->ops->name(seg), NULL);
-> +	char *name;
-> +	name = lvseg_segtype_dup(seg);
-> +	dm_report_field_set_value(field, name, NULL);
->  	return 1;
+> ---
+>  test/api/test.c |   76 ++++++++++++++++++++++++++++--------------------------
+>  1 files changed, 39 insertions(+), 37 deletions(-)
+> 
+> diff --git a/test/api/test.c b/test/api/test.c
+> index fea3d0d..20f4210 100644
+> --- a/test/api/test.c
+> +++ b/test/api/test.c
+> @@ -69,6 +69,8 @@ static void _show_help(void)
+>  	       "List the PVs that exist in VG vgname\n");
+>  	printf("'vg_list_lvs vgname': "
+>  	       "List the LVs that exist in VG vgname\n");
+> +	printf("'lv_list_lvsegs vgname lvname': "
+> +	       "List the LV segments that exist in LV vgname/lvname\n");
+>  	printf("'vgs_open': "
+>  	       "List the VGs that are currently open\n");
+>  	printf("'vgs': "
+> @@ -569,12 +571,15 @@ static void _vg_tag(char **argv, int argc, int add)
+>  	       add ? "adding":"removing", argv[2], argv[1]);
 >  }
+>  
+> -static void _print_property_value(struct lvm_property_value value)
+> +static void _print_property_value(const char *name,
+> +				  struct lvm_property_value v)
 
-I really think this API is wrong somewhere - there is way too many duplication
-- this isn't going to be very efficient....
-I do like the beauty of const strings....
+const struct if you do not modify it.
+And I think using pointer would be wise decision here.
 
+
+>  
+>  static void _pv_get_property(char **argv, int argc)
+> @@ -589,17 +594,7 @@ static void _pv_get_property(char **argv, int argc)
+
+const array of const pointers ?
 
 Zdenek
 
