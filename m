@@ -1,54 +1,40 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 20 Oct 2010 14:08:46 +0200
-Subject: [PATCH 4/4] Update tests for lvseg apis.
-In-Reply-To: <1287494696-18310-5-git-send-email-dwysocha@redhat.com>
-References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
-	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>
-Message-ID: <4CBEDBCE.1060400@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 20 Oct 2010 15:03:04 +0200
+Subject: [PATCH] (DRAFT!) Fix a deadlock in CLVMD (possibly related to BZ 561226).
+In-Reply-To: <4CBEC730.4020906@redhat.com> (Milan Broz's message of "Wed, 20
+	Oct 2010 12:40:48 +0200")
+References: <874ocje7y1.fsf@twilight.int.mornfall.net.>
+	<4CBEC730.4020906@redhat.com>
+Message-ID: <87wrpd9fuf.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 19.10.2010 15:24, Dave Wysochanski napsal(a):
-> 
-> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> ---
->  test/api/test.c |   76 ++++++++++++++++++++++++++++--------------------------
->  1 files changed, 39 insertions(+), 37 deletions(-)
-> 
-> diff --git a/test/api/test.c b/test/api/test.c
-> index fea3d0d..20f4210 100644
-> --- a/test/api/test.c
-> +++ b/test/api/test.c
-> @@ -69,6 +69,8 @@ static void _show_help(void)
->  	       "List the PVs that exist in VG vgname\n");
->  	printf("'vg_list_lvs vgname': "
->  	       "List the LVs that exist in VG vgname\n");
-> +	printf("'lv_list_lvsegs vgname lvname': "
-> +	       "List the LV segments that exist in LV vgname/lvname\n");
->  	printf("'vgs_open': "
->  	       "List the VGs that are currently open\n");
->  	printf("'vgs': "
-> @@ -569,12 +571,15 @@ static void _vg_tag(char **argv, int argc, int add)
->  	       add ? "adding":"removing", argv[2], argv[1]);
->  }
->  
-> -static void _print_property_value(struct lvm_property_value value)
-> +static void _print_property_value(const char *name,
-> +				  struct lvm_property_value v)
+Milan Broz <mbroz@redhat.com> writes:
 
-const struct if you do not modify it.
-And I think using pointer would be wise decision here.
+> p.s.
+> nitpicking
+>
+> 	DEBUGLOG("in sub thread: client = %p\n", client);
+> 	+ pthread_mutex_lock(&client->bits.localsock.mutex);
+>
+> 	/* Don't start until the LVM thread is ready */
+> 	pthread_mutex_lock(&lvm_start_mutex);
+> 	pthread_mutex_unlock(&lvm_start_mutex);
+> 	DEBUGLOG("Sub thread ready for work.\n");
+>
+>
+> Can we move that localsock.muext lock after the lvm_start_mutex exercise?
+> (Which I do not like either - isn't cond wait better for that?)
 
+I would be actually wary about that -- I suspect that going the other
+way around could introduce a (very slight) race condition. Not that it
+would ever happen in practice, but still. On the other hand, I didn't
+try too hard to think about it, so I might be wrong.
 
->  
->  static void _pv_get_property(char **argv, int argc)
-> @@ -589,17 +594,7 @@ static void _pv_get_property(char **argv, int argc)
-
-const array of const pointers ?
-
-Zdenek
+Yours,
+   Petr.
 
 
