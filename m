@@ -1,168 +1,66 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 20 Oct 2010 23:57:34 +0200
-Subject: [PATCH 8/8] Add interactive tests for lvm_{pv|vg|lv}_get_property().
-In-Reply-To: <1287487975-26572-9-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Tue, 19 Oct 2010 07:32:55 -0400")
-References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
-	<1287487975-26572-9-git-send-email-dwysocha@redhat.com>
-Message-ID: <87fww08r3l.fsf@twilight.int.mornfall.net.>
+Date: Thu, 21 Oct 2010 00:50:40 +0200
+Subject: [PATCH] let dmeventd unmount invalid snapshots (BZ 189462)
+In-Reply-To: <20101007192323.GD22053@agk-dp.fab.redhat.com> (Alasdair
+	G. Kergon's message of "Thu, 7 Oct 2010 20:23:23 +0100")
+References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
+	<87r5g4lejw.fsf@twilight.int.mornfall.net.>
+	<877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
+	<20101007192323.GD22053@agk-dp.fab.redhat.com>
+Message-ID: <877hhc8on3.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
+Hi,
 
-> Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+Alasdair G Kergon <agk@redhat.com> writes:
+> On Thu, Oct 07, 2010 at 03:10:43PM +0200, Peter Rockai wrote:
+>> There are some trade-offs involved. I have opted for using an umount
+>> syscall directly since it's simpler and more robust. The downside is
+>> that /etc/mtab will go out of sync and people may actually think that
+>
+> I'm not keen on leaving /etc/mtab out-of-date, or missing out anything
+> else that /bin/umount might actually do (with an errored-out device).
+> Would this patch need an update to the selinux context to allow umount?
 
-I take your word for this one (looks OK after a quick scan).
+I don't know about selinux. Anyhow, I think my plan is to fork off
+/bin/umount asynchronously (i.e. outside of the dmeventd lock). That's
+probably the safest possible approach I can think of, at least with our
+current design. It will need a bit of thinking, but it should be doable.
 
-Reviewed-by: Petr Rockai <prockai@redhat.com>
+>> the snapshot is still mounted (mount(8) just prints mtab without
+>> thinking twice about it). We could just fork off umount(8) instead, but
+>> that can fail in new and interesting ways.
+>
+> Yes, even if moved outside the locking.  But even umount2() within
+> the lock might have deadlock possibilities, as might syslog() as
+> you point out.
 
-> diff --git a/test/api/test.c b/test/api/test.c
-> index f89840c..fea3d0d 100644
-> --- a/test/api/test.c
-> +++ b/test/api/test.c
-> @@ -91,6 +91,12 @@ static void _show_help(void)
->  	       "Issue a lvm_config_override() with accept device filter\n");
->  	printf("'vg_get_tags vgname': "
->  	       "List the tags of a VG\n");
-> +	printf("'lv_get_property vgname lvname property_name': "
-> +	       "Display the value of LV property\n");
-> +	printf("'vg_get_property vgname property_name': "
-> +	       "Display the value of VG property\n");
-> +	printf("'pv_get_property pvname property_name': "
-> +	       "Display the value of PV property\n");
->  	printf("'lv_get_tags vgname lvname': "
->  	       "List the tags of a LV\n");
->  	printf("'vg_{add|remove}_tag vgname tag': "
-> @@ -180,6 +186,23 @@ static vg_t _lookup_vg_by_name(char **argv, int argc)
->  	}
->  	return vg;
->  }
-> +
-> +static pv_t _lookup_pv_by_name(char **argv, int argc)
-> +{
-> +	pv_t pv;
-> +
-> +	if (argc < 2) {
-> +		printf ("Please enter vg_name\n");
-> +		return NULL;
-> +	}
-> +	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-> +		printf ("Can't find %s in open PVs - run vg_open first\n",
-> +			argv[1]);
-> +		return NULL;
-> +	}
-> +	return pv;
-> +}
-> +
->  static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
->  {
->  	struct lvm_lv_list *lvl;
-> @@ -546,6 +569,89 @@ static void _vg_tag(char **argv, int argc, int add)
->  	       add ? "adding":"removing", argv[2], argv[1]);
->  }
->  
-> +static void _print_property_value(struct lvm_property_value value)
-> +{
-> +	if (value.is_string)
-> +		printf(", value = %s\n", value.value.string);
-> +	else
-> +		printf(", value = %"PRIu64"\n", value.value.integer);
-> +}
-> +
-> +static void _pv_get_property(char **argv, int argc)
-> +{
-> +	pv_t pv;
-> +	struct lvm_property_value v;
-> +
-> +	if (argc < 3) {
-> +		printf("Please enter pvname, field_id\n");
-> +		return;
-> +	}
-> +	if (!(pv = _lookup_pv_by_name(argv, argc)))
-> +		return;
-> +	v = lvm_pv_get_property(pv, argv[2]);
-> +	if (!v.is_valid)
-> +		printf("Error ");
-> +	else
-> +		printf("Success ");
-> +	printf("obtaining value of property %s in PV %s",
-> +	       argv[2], argv[1]);
-> +	if (!v.is_valid) {
-> +		printf("\n");
-> +		return;
-> +	}
-> +	_print_property_value(v);
-> +}
-> +
-> +static void _vg_get_property(char **argv, int argc)
-> +{
-> +	vg_t vg;
-> +	struct lvm_property_value v;
-> +
-> +	if (argc < 3) {
-> +		printf("Please enter vgname, field_id\n");
-> +		return;
-> +	}
-> +	if (!(vg = _lookup_vg_by_name(argv, argc)))
-> +		return;
-> +	v =  lvm_vg_get_property(vg, argv[2]);
-> +	if (!v.is_valid)
-> +		printf("Error ");
-> +	else
-> +		printf("Success ");
-> +	printf("obtaining value of property %s in VG %s",
-> +	       argv[2], argv[1]);
-> +	if (!v.is_valid) {
-> +		printf("\n");
-> +		return;
-> +	}
-> +	_print_property_value(v);
-> +}
-> +
-> +static void _lv_get_property(char **argv, int argc)
-> +{
-> +	lv_t lv;
-> +	struct lvm_property_value v;
-> +
-> +	if (argc < 4) {
-> +		printf("Please enter vgname, lvname, field_id\n");
-> +		return;
-> +	}
-> +	if (!(lv = _lookup_lv_by_name(argv[2])))
-> +		return;
-> +	v = lvm_lv_get_property(lv, argv[3]);
-> +	if (!v.is_valid)
-> +		printf("Error ");
-> +	else
-> +		printf("Success ");
-> +	printf("obtaining value of property %s in LV %s",
-> +	       argv[3], argv[2]);
-> +	if (!v.is_valid) {
-> +		printf("\n");
-> +		return;
-> +	}
-> +	_print_property_value(v);
-> +}
-> +
->  static void _lv_get_tags(char **argv, int argc)
->  {
->  	lv_t lv;
-> @@ -796,6 +902,12 @@ static int lvmapi_test_shell(lvm_t libh)
->  			_vg_tag(argv, argc, 0);
->  		} else if (!strcmp(argv[0], "vg_get_tags")) {
->  			_vg_get_tags(argv, argc);
-> +		} else if (!strcmp(argv[0], "lv_get_property")) {
-> +			_lv_get_property(argv, argc);
-> +		} else if (!strcmp(argv[0], "vg_get_property")) {
-> +			_vg_get_property(argv, argc);
-> +		} else if (!strcmp(argv[0], "pv_get_property")) {
-> +			_pv_get_property(argv, argc);
->  		} else if (!strcmp(argv[0], "lv_add_tag")) {
->  			_lv_tag(argv, argc, 1);
->  		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+I will tackle that (syslog) separately.
+
+>> The other possible issue with the patch is that I am not sure whether
+>> it's actually safe to read /proc/mounts incrementally, with possibly
+>
+> kabi found problems like that with another /proc file.
+
+Ok, that arguably sucks. Nevertheless, from reading the kernel code for
+that, it seems that while the contents may change in between reads, the
+results are still well defined: adding lines to the buffer is done
+atomically in the kernel, so we should never get a garbled line. What
+could happen is that we encounter the same line twice, or that we miss
+something that was there when we were opening the file but was no longer
+there when we got to that point in it. Neither should be a serious
+problem.
+
+That behaviour depends on the proc file implementation using the
+seq_file mechanism, which may not be the case with all files. It is used
+for all the mount-related files though (mounts, self/mounts,
+self/mountinfo).
+
+Yours,
+   Petr.
 
 
