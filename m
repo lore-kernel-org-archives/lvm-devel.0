@@ -1,97 +1,62 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 21 Oct 2010 10:38:43 -0400
-Subject: [PATCH 2/8] Refactor and add code for (lv) 'lv_origin' get function.
-In-Reply-To: <8762wwa6ej.fsf@twilight.int.mornfall.net.>
-References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
-	<1287487975-26572-3-git-send-email-dwysocha@redhat.com>
-	<8762wwa6ej.fsf@twilight.int.mornfall.net.>
-Message-ID: <1287671923.5097.2.camel@f12-work>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 21 Oct 2010 14:49:11 -0000
+Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
+Message-ID: <20101021144911.8734.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2010-10-20 at 23:41 +0200, Petr Rockai wrote:
-> Dave Wysochanski <dwysocha@redhat.com> writes:
-> 
-> > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> 
-> > --- a/lib/metadata/lv.c
-> > +++ b/lib/metadata/lv.c
-> > @@ -20,6 +20,13 @@
-> >  #include "segtype.h"
-> >  #include "str_list.h"
-> >  
-> > +char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv)
-> > +{
-> > +	if (lv_is_cow(lv))
-> > +		return lv_name_dup(mem, origin_from_cow(lv));
-> > +	return NULL;
-> > +}
-> > +
-> >  char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
-> >  {
-> >  	return dm_pool_strdup(mem, lv->name);
-> 
-> > --- a/lib/metadata/lv.h
-> > +++ b/lib/metadata/lv.h
-> > @@ -61,5 +61,6 @@ int lv_kernel_minor(const struct logical_volume *lv);
-> >  char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> >  char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> >  char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> > +char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
-> >  
-> >  #endif
-> > diff --git a/lib/report/properties.c b/lib/report/properties.c
-> > index 8228193..250c7c9 100644
-> > --- a/lib/report/properties.c
-> > +++ b/lib/report/properties.c
-> > @@ -121,7 +121,7 @@ GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
-> >  #define _lv_size_set _not_implemented_set
-> >  GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
-> >  #define _seg_count_set _not_implemented_set
-> > -#define _origin_get _not_implemented_get
-> > +GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
-> >  #define _origin_set _not_implemented_set
-> >  GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
-> >  #define _origin_size_set _not_implemented_set
-> 
-> > --- a/lib/report/report.c
-> > +++ b/lib/report/report.c
-> > @@ -356,9 +356,10 @@ static int _origin_disp(struct dm_report *rh, struct dm_pool *mem,
-> >  			const void *data, void *private)
-> >  {
-> >  	const struct logical_volume *lv = (const struct logical_volume *) data;
-> > +	const char *name;
-> >  
-> > -	if (lv_is_cow(lv))
-> > -		return _lvname_disp(rh, mem, field, origin_from_cow(lv), private);
-> > +	if ((name = lv_origin_dup(mem, lv)))
-> > +		return dm_report_field_string(rh, field, &name);
-> >  
-> >  	dm_report_field_set_value(field, "", NULL);
-> >  	return 1;
-> 
-> Now, this code is not equivalent for those cases where the origin is not
-> visible. I am not sure that can ever happen, though. I am also not sure
-> which behaviour is better. But it's something worth double-checking.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2010-10-21 14:49:11
 
-This was another error in my patch - reporting commands need to retain
-the same output, so origin_disp should not be changed IMO.
+Modified files:
+	lib/metadata   : lv.c lv.h 
+	lib/report     : properties.c 
 
-> Other than this, looks OK.
-> 
-> Reviewed-by: Petr Rockai <prockai@redhat.com>
-> 
-> Yours,
->    Petr.
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+Log message:
+	Refactor and add code for (lv) 'lv_name' get function.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+
+--- LVM2/lib/metadata/lv.c	2010/10/12 17:09:23	1.14
++++ LVM2/lib/metadata/lv.c	2010/10/21 14:49:10	1.15
+@@ -20,6 +20,11 @@
+ #include "segtype.h"
+ #include "str_list.h"
+ 
++char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
++{
++	return dm_pool_strdup(mem, lv->name);
++}
++
+ char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	struct dm_list *modules;
+--- LVM2/lib/metadata/lv.h	2010/10/12 16:13:06	1.12
++++ LVM2/lib/metadata/lv.h	2010/10/21 14:49:10	1.13
+@@ -60,5 +60,6 @@
+ int lv_kernel_minor(const struct logical_volume *lv);
+ char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
++char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
+ 
+ #endif
+--- LVM2/lib/report/properties.c	2010/10/12 16:13:07	1.16
++++ LVM2/lib/report/properties.c	2010/10/21 14:49:10	1.17
+@@ -99,7 +99,7 @@
+ /* LV */
+ GET_LV_STR_PROPERTY_FN(lv_uuid, lv_uuid_dup(lv))
+ #define _lv_uuid_set _not_implemented_set
+-#define _lv_name_get _not_implemented_get
++GET_LV_STR_PROPERTY_FN(lv_name, lv_name_dup(lv->vg->vgmem, lv))
+ #define _lv_name_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(lv_path, lv_path_dup(lv->vg->vgmem, lv))
+ #define _lv_path_set _not_implemented_set
 
 
