@@ -1,66 +1,97 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 21 Oct 2010 00:50:40 +0200
-Subject: [PATCH] let dmeventd unmount invalid snapshots (BZ 189462)
-In-Reply-To: <20101007192323.GD22053@agk-dp.fab.redhat.com> (Alasdair
-	G. Kergon's message of "Thu, 7 Oct 2010 20:23:23 +0100")
-References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
-	<87r5g4lejw.fsf@twilight.int.mornfall.net.>
-	<877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
-	<20101007192323.GD22053@agk-dp.fab.redhat.com>
-Message-ID: <877hhc8on3.fsf@twilight.int.mornfall.net.>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Thu, 21 Oct 2010 10:38:43 -0400
+Subject: [PATCH 2/8] Refactor and add code for (lv) 'lv_origin' get function.
+In-Reply-To: <8762wwa6ej.fsf@twilight.int.mornfall.net.>
+References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
+	<1287487975-26572-3-git-send-email-dwysocha@redhat.com>
+	<8762wwa6ej.fsf@twilight.int.mornfall.net.>
+Message-ID: <1287671923.5097.2.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On Wed, 2010-10-20 at 23:41 +0200, Petr Rockai wrote:
+> Dave Wysochanski <dwysocha@redhat.com> writes:
+> 
+> > Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
+> 
+> > --- a/lib/metadata/lv.c
+> > +++ b/lib/metadata/lv.c
+> > @@ -20,6 +20,13 @@
+> >  #include "segtype.h"
+> >  #include "str_list.h"
+> >  
+> > +char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> > +{
+> > +	if (lv_is_cow(lv))
+> > +		return lv_name_dup(mem, origin_from_cow(lv));
+> > +	return NULL;
+> > +}
+> > +
+> >  char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv)
+> >  {
+> >  	return dm_pool_strdup(mem, lv->name);
+> 
+> > --- a/lib/metadata/lv.h
+> > +++ b/lib/metadata/lv.h
+> > @@ -61,5 +61,6 @@ int lv_kernel_minor(const struct logical_volume *lv);
+> >  char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
+> >  char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
+> >  char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
+> > +char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
+> >  
+> >  #endif
+> > diff --git a/lib/report/properties.c b/lib/report/properties.c
+> > index 8228193..250c7c9 100644
+> > --- a/lib/report/properties.c
+> > +++ b/lib/report/properties.c
+> > @@ -121,7 +121,7 @@ GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
+> >  #define _lv_size_set _not_implemented_set
+> >  GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
+> >  #define _seg_count_set _not_implemented_set
+> > -#define _origin_get _not_implemented_get
+> > +GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
+> >  #define _origin_set _not_implemented_set
+> >  GET_LV_NUM_PROPERTY_FN(origin_size, lv_origin_size(lv))
+> >  #define _origin_size_set _not_implemented_set
+> 
+> > --- a/lib/report/report.c
+> > +++ b/lib/report/report.c
+> > @@ -356,9 +356,10 @@ static int _origin_disp(struct dm_report *rh, struct dm_pool *mem,
+> >  			const void *data, void *private)
+> >  {
+> >  	const struct logical_volume *lv = (const struct logical_volume *) data;
+> > +	const char *name;
+> >  
+> > -	if (lv_is_cow(lv))
+> > -		return _lvname_disp(rh, mem, field, origin_from_cow(lv), private);
+> > +	if ((name = lv_origin_dup(mem, lv)))
+> > +		return dm_report_field_string(rh, field, &name);
+> >  
+> >  	dm_report_field_set_value(field, "", NULL);
+> >  	return 1;
+> 
+> Now, this code is not equivalent for those cases where the origin is not
+> visible. I am not sure that can ever happen, though. I am also not sure
+> which behaviour is better. But it's something worth double-checking.
+> 
 
-Alasdair G Kergon <agk@redhat.com> writes:
-> On Thu, Oct 07, 2010 at 03:10:43PM +0200, Peter Rockai wrote:
->> There are some trade-offs involved. I have opted for using an umount
->> syscall directly since it's simpler and more robust. The downside is
->> that /etc/mtab will go out of sync and people may actually think that
->
-> I'm not keen on leaving /etc/mtab out-of-date, or missing out anything
-> else that /bin/umount might actually do (with an errored-out device).
-> Would this patch need an update to the selinux context to allow umount?
+This was another error in my patch - reporting commands need to retain
+the same output, so origin_disp should not be changed IMO.
 
-I don't know about selinux. Anyhow, I think my plan is to fork off
-/bin/umount asynchronously (i.e. outside of the dmeventd lock). That's
-probably the safest possible approach I can think of, at least with our
-current design. It will need a bit of thinking, but it should be doable.
+> Other than this, looks OK.
+> 
+> Reviewed-by: Petr Rockai <prockai@redhat.com>
+> 
+> Yours,
+>    Petr.
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
->> the snapshot is still mounted (mount(8) just prints mtab without
->> thinking twice about it). We could just fork off umount(8) instead, but
->> that can fail in new and interesting ways.
->
-> Yes, even if moved outside the locking.  But even umount2() within
-> the lock might have deadlock possibilities, as might syslog() as
-> you point out.
-
-I will tackle that (syslog) separately.
-
->> The other possible issue with the patch is that I am not sure whether
->> it's actually safe to read /proc/mounts incrementally, with possibly
->
-> kabi found problems like that with another /proc file.
-
-Ok, that arguably sucks. Nevertheless, from reading the kernel code for
-that, it seems that while the contents may change in between reads, the
-results are still well defined: adding lines to the buffer is done
-atomically in the kernel, so we should never get a garbled line. What
-could happen is that we encounter the same line twice, or that we miss
-something that was there when we were opening the file but was no longer
-there when we got to that point in it. Neither should be a serious
-problem.
-
-That behaviour depends on the proc file implementation using the
-seq_file mechanism, which may not be the case with all files. It is used
-for all the mount-related files though (mounts, self/mounts,
-self/mountinfo).
-
-Yours,
-   Petr.
 
 
