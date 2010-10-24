@@ -1,50 +1,55 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Sun, 24 Oct 2010 13:28:40 -0400
-Subject: [RFC][PATCH] never scan a device which is using the error target
-In-Reply-To: <4CC4623D.7080505@redhat.com>
-References: <20101024005515.GA31723@redhat.com> <4CC4623D.7080505@redhat.com>
-Message-ID: <20101024172840.GA2384@redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 24 Oct 2010 17:36:59 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
+Message-ID: <20101024173659.18790.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Oct 24 2010 at 12:43pm -0400,
-Milan Broz <mbroz@redhat.com> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-10-24 17:36:59
 
-> On 10/24/2010 02:55 AM, Mike Snitzer wrote:
-> > A merged snapshot's DM device is made to use the "error" target as part
-> > of lvm's transaction to merge a snapshot.  This snapshot merge use-case
-> > aside, any device using the error target shouldn't be scanned.
-> > 
-> > NOTE: I'm not using an ignore_suspended_devices() check like other
-> > target checks in device_is_usable() -- its not clear to me what such a
-> 
-> IIRC scan for mirrors, snapshots etc is OK.
-> But during mirror repair or conversion some devices in the middle of stack
-> can be suspended, so the ignore_suspended_devices() says when it is safe to
-> scan it. (see that it is set during conversions etc)
-> IMHO it is quite hack (mainly for clusters where one node runs the conversion
-> or repair and other just follows the state).
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : dev_manager.c 
 
-OK, thanks for the info.
+Log message:
+	Never scan a device which is using the error target
+	
+	A merged snapshot's DM device is made to use the "error" target as part
+	of lvm's transaction to merge a snapshot.  This snapshot merge use-case
+	aside, any device using the error target shouldn't be scanned.
 
-> For error device it makes no sense - it is unusable all the time:-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1765&r2=1.1766
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.203&r2=1.204
 
-Right.
-
-> > +		if (target_type && !strcmp(target_type, "error")) {
-> 
-> Do we have some #define for the error target name?
-
-I don't think we have a #define for any target names.  Target names are
-open coded strings throughout the lvm2 codebase.  Certainly a candidate
-for cleanup.
-
-> Anyway, ack.
-
-Thanks,
-Mike
+--- LVM2/WHATS_NEW	2010/10/20 15:07:30	1.1765
++++ LVM2/WHATS_NEW	2010/10/24 17:36:58	1.1766
+@@ -1,5 +1,6 @@
+ Version 2.02.75 - 
+ =====================================
++  Never scan a device which is using the error target.
+   Fix strict-aliasing compile warning in partition table scanning.
+   Add an option to automatically extend snapshots through dmeventd.
+   Remove dependency on libm, floor() is replaced with integer algorithm.
+--- LVM2/lib/activate/dev_manager.c	2010/10/13 21:26:37	1.203
++++ LVM2/lib/activate/dev_manager.c	2010/10/24 17:36:59	1.204
+@@ -190,6 +190,12 @@
+ 				  dev_name(dev), name);
+ 			goto out;
+ 		}
++
++		if (target_type && !strcmp(target_type, "error")) {
++			log_debug("%s: Error device %s not usable.",
++				  dev_name(dev), name);
++			goto out;
++		}
+ 	} while (next);
+ 
+ 	/* FIXME Also check dependencies? */
 
 
