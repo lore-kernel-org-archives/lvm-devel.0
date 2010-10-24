@@ -1,56 +1,38 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 24 Oct 2010 18:24:00 +0200
-Subject: [PATCH 4/4] Update tests for lvseg apis.
-In-Reply-To: <87lj5q61rn.fsf@twilight.int.mornfall.net.>
-References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>	<4CBEDBCE.1060400@redhat.com>	<87zku75wmo.fsf@twilight.int.mornfall.net.>	<4CC14AB6.9030407@redhat.com>
-	<87lj5q61rn.fsf@twilight.int.mornfall.net.>
-Message-ID: <4CC45DA0.4030509@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 24 Oct 2010 18:43:41 +0200
+Subject: [RFC][PATCH] never scan a device which is using the error target
+In-Reply-To: <20101024005515.GA31723@redhat.com>
+References: <20101024005515.GA31723@redhat.com>
+Message-ID: <4CC4623D.7080505@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 22.10.2010 10:59, Petr Rockai napsal(a):
-> Zdenek Kabelac <zkabelac@redhat.com> writes:
->>>> And I think using pointer would be wise decision here.
->>> Care to elaborate? What's wise about using a pointer here?
->>
->> (const struct lvm_proper_value *v)
->>
->> avoid doing local copy of the 'v' structure - currently it's not a big
->> difference, but as you pointed out in other emails - it could be extended in
->> future. And I think we are using  pointers in other calls as well - so we
->> should stay consistent also internally - and just pass pointers all the time -
->> instead of thinking when to use struct and when the pointer should be passed.
+On 10/24/2010 02:55 AM, Mike Snitzer wrote:
+> A merged snapshot's DM device is made to use the "error" target as part
+> of lvm's transaction to merge a snapshot.  This snapshot merge use-case
+> aside, any device using the error target shouldn't be scanned.
 > 
-> Unlike object lifetime, this is something that the compiler can check
-> statically. Moreover, it may or may not be more efficient to pass a
-> pointer. Usually it's not, unless the structure is big and/or the
-> compiler optimisations poor.
-> 
-> Passing a value is prone to fewer errors. I vote for a value. (We should
-> aim to pass values whenever possible, IMHO. Those vg_t/pv_t/lv_t behave
-> as values as well, in this respect.)
-> 
+> NOTE: I'm not using an ignore_suspended_devices() check like other
+> target checks in device_is_usable() -- its not clear to me what such a
 
-I'm not going to argue whether it's more or less efficient as in this case it
-will make no difference.  But passing things by value is simply very hardly
-supportable by dso libraries - and usually require complete rebuild of binary
-to use updated library. Also you would need to remember where are you using
-passing by value - and in case structure size grows - rewrite many functions
-to switch to pointers - why not do that right from the beginning? -  I'd pass
-by value only the language atomic/basic types - definitely not any structure
-where even you are pointing out future extensions in other post.
+IIRC scan for mirrors, snapshots etc is OK.
+But during mirror repair or conversion some devices in the middle of stack
+can be suspended, so the ignore_suspended_devices() says when it is safe to
+scan it. (see that it is set during conversions etc)
+IMHO it is quite hack (mainly for clusters where one node runs the conversion
+or repair and other just follows the state).
 
-BTW: I don't take vg_t/pv_t/lv_t as an an argument for passing things by value
-as it's nothing else that syntactical sugar for pointers - and in fact I'd not
-any objections against exactly same strategy for properties - making property
-object completely private structure to lvm and give the API user only handle
-lvm_property_t and set of function for this handle (C++ in C :))
-(i.e.
-lvm_property_is_string/get_string/is_integer/get_integer(lvm_property_t...)
+For error device it makes no sense - it is unusable all the time:-)
 
-Zdenek
+> +		if (target_type && !strcmp(target_type, "error")) {
+
+Do we have some #define for the error target name?
+
+Anyway, ack.
+
+Milan
 
 
