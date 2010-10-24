@@ -1,48 +1,56 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 24 Oct 2010 12:12:06 +0200
-Subject: [PATCH 00/05] Add generic property fns for lvm2app, return struct, v2.
-In-Reply-To: <1287748270-26875-1-git-send-email-dwysocha@redhat.com> (Dave
-	Wysochanski's message of "Fri, 22 Oct 2010 07:51:05 -0400")
-References: <1287748270-26875-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <87hbgb5289.fsf@twilight.int.mornfall.net.>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 24 Oct 2010 18:24:00 +0200
+Subject: [PATCH 4/4] Update tests for lvseg apis.
+In-Reply-To: <87lj5q61rn.fsf@twilight.int.mornfall.net.>
+References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>	<4CBEDBCE.1060400@redhat.com>	<87zku75wmo.fsf@twilight.int.mornfall.net.>	<4CC14AB6.9030407@redhat.com>
+	<87lj5q61rn.fsf@twilight.int.mornfall.net.>
+Message-ID: <4CC45DA0.4030509@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Dne 22.10.2010 10:59, Petr Rockai napsal(a):
+> Zdenek Kabelac <zkabelac@redhat.com> writes:
+>>>> And I think using pointer would be wise decision here.
+>>> Care to elaborate? What's wise about using a pointer here?
+>>
+>> (const struct lvm_proper_value *v)
+>>
+>> avoid doing local copy of the 'v' structure - currently it's not a big
+>> difference, but as you pointed out in other emails - it could be extended in
+>> future. And I think we are using  pointers in other calls as well - so we
+>> should stay consistent also internally - and just pass pointers all the time -
+>> instead of thinking when to use struct and when the pointer should be passed.
+> 
+> Unlike object lifetime, this is something that the compiler can check
+> statically. Moreover, it may or may not be more efficient to pass a
+> pointer. Usually it's not, unless the structure is big and/or the
+> compiler optimisations poor.
+> 
+> Passing a value is prone to fewer errors. I vote for a value. (We should
+> aim to pass values whenever possible, IMHO. Those vg_t/pv_t/lv_t behave
+> as values as well, in this respect.)
+> 
 
-Dave Wysochanski <dwysocha@redhat.com> writes:
-> This is the modified patchset based on Petr's suggestion of changing
-> the return value from 'int' to struct lvm_property_value:
-> http://www.redhat.com/archives/lvm-devel/2010-October/msg00068.html
+I'm not going to argue whether it's more or less efficient as in this case it
+will make no difference.  But passing things by value is simply very hardly
+supportable by dso libraries - and usually require complete rebuild of binary
+to use updated library. Also you would need to remember where are you using
+passing by value - and in case structure size grows - rewrite many functions
+to switch to pointers - why not do that right from the beginning? -  I'd pass
+by value only the language atomic/basic types - definitely not any structure
+where even you are pointing out future extensions in other post.
 
-> Returning the struct seems like the approach things are moving, but
-> a few details probably still worth considering, especially the exact
-> layout of the exported struct lvm_property_value (ABI implications).
-> Final submission might be best left to Petr.
-I think I almost prefer to have this in tree now and tweak the layouts
-etc. afterwards. I think that all that needs to be done is to pad the
-bit-field, the union is already 64b wide so we shouldn't need anything
-else. I'll have a closer look next week.
+BTW: I don't take vg_t/pv_t/lv_t as an an argument for passing things by value
+as it's nothing else that syntactical sugar for pointers - and in fact I'd not
+any objections against exactly same strategy for properties - making property
+object completely private structure to lvm and give the API user only handle
+lvm_property_t and set of function for this handle (C++ in C :))
+(i.e.
+lvm_property_is_string/get_string/is_integer/get_integer(lvm_property_t...)
 
-> Patchset adds the lvm2app 'get' functions for vg, pv, and lv, and interactive
-> tests to exercise the interface.
-
-> The only two lv properties not included now are still the float/percent
-> based properties, snap_percent and copy_percent.  These should be
-> refactored carefully and I did not want to delay these patches further.
-I will sort these out myself as well.
-
-I went through the individual patches and I don't have any specific
-comments. So I think all five can go in now, and I'll look at finishing
-the two above items and will look into test coverage that we already
-have and maybe extend it. Therefore,
-
-Reviewed-by: Petr Rockai <prockai@redhat.com>
-
-Yours,
-   Petr.
+Zdenek
 
 
