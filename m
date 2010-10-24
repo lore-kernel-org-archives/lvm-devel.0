@@ -1,47 +1,64 @@
-From: Diego Elio Pettenò <flameeyes@gmail.com>
-Date: Tue, 12 Oct 2010 14:26:38 -0000
-Subject: [PATCH] Fix liblvm2cmd.so linking order for --as-needed builds
-In-Reply-To: <4CB468E4.4080101@redhat.com>
-References: <1283355456.30896.286.camel@yamato.local>
-	<4CB468E4.4080101@redhat.com>
-Message-ID: <1286893207.20493.20.camel@yamato.local>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sun, 24 Oct 2010 23:06:15 +0200
+Subject: [PATCH 4/4] Update tests for lvseg apis.
+In-Reply-To: <4CC45DA0.4030509@redhat.com> (Zdenek Kabelac's message of "Sun, 
+	24 Oct 2010 18:24:00 +0200")
+References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
+	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>
+	<4CBEDBCE.1060400@redhat.com>
+	<87zku75wmo.fsf@twilight.int.mornfall.net.>
+	<4CC14AB6.9030407@redhat.com>
+	<87lj5q61rn.fsf@twilight.int.mornfall.net.>
+	<4CC45DA0.4030509@redhat.com>
+Message-ID: <87sjzv2tdk.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Il giorno mar, 12/10/2010 alle 15.55 +0200, Zdenek Kabelac ha scritto:
-> The last occurrence of  CLDWHOLEARCHIVE in tools/Makefile.in seems to be
-> dropped by this Alasdair's commit:
+Zdenek Kabelac <zkabelac@redhat.com> writes:
+> I'm not going to argue whether it's more or less efficient as in this case it
+> will make no difference.  But passing things by value is simply very hardly
+> supportable by dso libraries - and usually require complete rebuild of binary
+> to use updated library. Also you would need to remember where are you using
+> passing by value - and in case structure size grows - rewrite many functions
+> to switch to pointers - why not do that right from the beginning? -  I'd pass
+> by value only the language atomic/basic types - definitely not any structure
+> where even you are pointing out future extensions in other post.
 
-Uh?
+But there is a difference in adding bitfield values / union members and
+adding new members to the structure! Both mentioned extensions are
+ABI-compatible (within limits, see my other mails).
 
-liblvm2cmd.$(LIB_SUFFIX): liblvm2cmd.a $(LDDEPS)
-        $(CC) -shared -Wl,-soname,$@.$(LIB_VERSION) \
-        $(CFLAGS) $(CLDFLAGS) -o $@ $(LVMLIBS) $(LIBS) \
-                @CLDWHOLEARCHIVE@ liblvm2cmd.a @CLDNOWHOLEARCHIVE@
+> BTW: I don't take vg_t/pv_t/lv_t as an an argument for passing things by value
+> as it's nothing else that syntactical sugar for pointers - and in fact I'd not
+> any objections against exactly same strategy for properties - making property
+> object completely private structure to lvm and give the API user only handle
+> lvm_property_t and set of function for this handle (C++ in C :))
+> (i.e.
+> lvm_property_is_string/get_string/is_integer/get_integer(lvm_property_t...)
 
-this is in 
+That's both inefficient and extremely tedious to write and read. You
+have to make some compromises, C is a low level language, and by no
+means supports encapsulation or (gods forbid) OO. I will rather freeze
+the structure ABI-wise than have to write
 
-commit 39429d390515de9a375979274bc61d787ea9a0cb
-Author: Zdenek Kabelac <zkabelac@redhat.com>
-Date:   Fri Oct 8 15:03:21 2010 +0000
+lvm_property_t p = lvm_get_property(...)
+if (lvm_property_is_valid(p)) {
+    if (lvm_property_is_string(p)) {
+       const char *str = lvm_property_get_string(p);
+       ...
+    } else if (lvm_property_is_integer(p)) {
+       int i = lvm_property_get_integer(p);
+       ...
+    }
+}
 
-Did I get the wrong GIT repository?
+In fact, I'd rather go for C++ than for Glib, if we want to have fancy
+things in the API.
+
+Yours,
+   Petr.
 
 
--- 
-Diego Elio Petten? ? ?Flameeyes?
-http://blog.flameeyes.eu/
-
-If you found a .asc file in this mail and know not what it is,
-it's a GnuPG digital signature: http://www.gnupg.org/
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: signature.asc
-Type: application/pgp-signature
-Size: 490 bytes
-Desc: This is a digitally signed message part
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101012/07353e75/attachment.sig>
