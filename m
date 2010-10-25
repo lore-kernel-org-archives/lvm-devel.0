@@ -1,62 +1,34 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:26 +0200
-Subject: [PATCH 19/30] Fix constness warning
+Date: Mon, 25 Oct 2010 10:24:27 +0200
+Subject: [PATCH 20/30] Fix constness warning
 In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <ce28656e64b2da18d26c3de9b17f33cbb869533e.1287994530.git.zkabelac@redhat.com>
+Message-ID: <af618d30d3fffc82a0d504efa542210f80afe790.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-After update of device_from_pvid API fix few constness warnings
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/cache/lvmcache.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 83ac1a5..60edcec 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -514,7 +514,7 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
- 	struct lvmcache_info *info;
- 	char *vgname;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 2da4085..77fdd02 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3141,7 +3141,7 @@ struct logical_volume *lv_from_lvid(struct cmd_context *cmd, const char *lvid_s,
+ 	lvid = (const union lvid *) lvid_s;
  
--	if (!device_from_pvid(cmd, (struct id *)pvid, NULL)) {
-+	if (!device_from_pvid(cmd, (const struct id *)pvid, NULL)) {
- 		log_error("Couldn't find device with uuid %s.", pvid);
+ 	log_very_verbose("Finding volume group for uuid %s", lvid_s);
+-	if (!(vg = _vg_read_by_vgid(cmd, (char *)lvid->id[0].uuid, precommitted))) {
++	if (!(vg = _vg_read_by_vgid(cmd, (const char *)lvid->id[0].uuid, precommitted))) {
+ 		log_error("Volume group for uuid not found: %s", lvid_s);
  		return NULL;
  	}
-@@ -740,7 +740,7 @@ struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 	struct lvmcache_info *info;
- 
- 	/* Already cached ? */
--	if ((info = info_from_pvid((char *) pvid, 0))) {
-+	if ((info = info_from_pvid((const char *) pvid, 0))) {
- 		if (label_read(info->dev, &label, UINT64_C(0))) {
- 			info = (struct lvmcache_info *) label->info;
- 			if (id_equal(pvid, (struct id *) &info->dev->pvid))
-@@ -751,7 +751,7 @@ struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 	lvmcache_label_scan(cmd, 0);
- 
- 	/* Try again */
--	if ((info = info_from_pvid((char *) pvid, 0))) {
-+	if ((info = info_from_pvid((const char *) pvid, 0))) {
- 		if (label_read(info->dev, &label, UINT64_C(0))) {
- 			info = (struct lvmcache_info *) label->info;
- 			if (id_equal(pvid, (struct id *) &info->dev->pvid))
-@@ -767,7 +767,7 @@ struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 		*scan_done_once = 1;
- 
- 	/* Try again */
--	if ((info = info_from_pvid((char *) pvid, 0))) {
-+	if ((info = info_from_pvid((const char *) pvid, 0))) {
- 		if (label_read(info->dev, &label, UINT64_C(0))) {
- 			info = (struct lvmcache_info *) label->info;
- 			if (id_equal(pvid, (struct id *) &info->dev->pvid))
 -- 
 1.7.3.1
 
