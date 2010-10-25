@@ -1,34 +1,23 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Oct 2010 17:33:51 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20101025173351.28236.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 25 Oct 2010 19:59:56 +0100
+Subject: [RFC][PATCH] never scan a device which is using the error target
+In-Reply-To: <4CC5215F.4080304@redhat.com>
+References: <20101024005515.GA31723@redhat.com>
+	<20101025010031.GA26942@agk-dp.fab.redhat.com>
+	<4CC5215F.4080304@redhat.com>
+Message-ID: <20101025185956.GA29098@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-25 17:33:51
+See the FIXMEs in the code.
+With mirrors it already excludes more devs that it actually needs to.
 
-Modified files:
-	.              : WHATS_NEW 
+And of course you know what I'd say the right answer is:-)
+The entire scanning logic should be outside lvm...
 
-Log message:
-	Update WHATS_NEW for lvm2app property functions
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1776&r2=1.1777
-
---- LVM2/WHATS_NEW	2010/10/25 16:38:20	1.1776
-+++ LVM2/WHATS_NEW	2010/10/25 17:33:51	1.1777
-@@ -1,5 +1,6 @@
- Version 2.02.76
- ===================================
-+  Add lvm2app functions to query any pv, vg, or lv property / report field.
- 
- Version 2.02.75 - 25th October 2010
- ===================================
+Alasdair
 
 
