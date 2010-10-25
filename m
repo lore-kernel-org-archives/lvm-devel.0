@@ -1,33 +1,72 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 25 Oct 2010 13:23:32 +0200
-Subject: [PATCH 16/30] Fix void* pointer arithmetic
-In-Reply-To: <b27d551f464cef87fdbf52580c9b74607e500793.1287994530.git.zkabelac@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>
-	<b27d551f464cef87fdbf52580c9b74607e500793.1287994530.git.zkabelac@redhat.com>
-Message-ID: <4CC568B4.4020002@redhat.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 25 Oct 2010 09:55:05 -0400
+Subject: [PATCH 5/8] Add lvm_vg_get_property() generic vg property function.
+In-Reply-To: <87bp6j4x16.fsf@twilight.int.mornfall.net.>
+References: <1287487975-26572-1-git-send-email-dwysocha@redhat.com>
+	<1287487975-26572-6-git-send-email-dwysocha@redhat.com>
+	<87sk008rcz.fsf@twilight.int.mornfall.net.>
+	<1287686377.5097.63.camel@f12-work>
+	<87bp6j4x16.fsf@twilight.int.mornfall.net.>
+Message-ID: <1288014905.5029.1.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/25/2010 10:24 AM, Zdenek Kabelac wrote:
+On Sun, 2010-10-24 at 14:04 +0200, Petr Rockai wrote:
+> Hi,
+> 
+> Dave Wysochanski <dwysocha@redhat.com> writes:
+> >> A is_integer might be useful here, for symmetry. In the client code, it
+> >> might not be obvious that !p.is_string means that it is an integer. It
+> >> would also improve API extensibility for the future, may we ever run
+> >> into a property that's neither string nor integer (although it won't
+> >> help with ABI).
+> >> 
+> >
+> > Ok, I've implemented this - easy.  But...
+> > Now that I think about it, rather than a bitfield and 'is_string' and
+> > 'is_integer", should we have a 'type' field and leave this an unsigned
+> > (for example, #define LVM_PROPERTY_TYPE_NUM 1 and #define
+> > LVM_PROPERTY_TYPE STR 2) or at least should we add padding to this
+> > struct?  The struct might warrant a bit more thought, given how much
+> > we've changed it recently, and given the ABI implications.
+> 
+> The advantage of the bitfield is that it is much more convenient to use
+> (and the resulting code more concise and clearer). It also does not
+> impose any ABI problems as long as you keep the items in the right
+> order. What can be done to ensure forward compatibility is this:
+> 
+> uint32_t foo:1;
+> uint32_t bar:1;
+> uint32_t _padding:30;
+> 
+> And when you need a new flag, just reduce the padding by one and add
+> your new flag between the existing flags and the padding.
+> 
 
->  static void _touch_memory(void *mem, size_t size)
->  {
->  	size_t pagesize = lvm_getpagesize();
-> -	void *pos = mem;
-> -	void *end = mem + size - sizeof(long);
-> +	char *pos = mem;
-> +	char *end = pos + size - sizeof(long);
+Exactly.  Will add this now.
 
-And what about trash this "touch memory" code completely?
 
-The whole idea of touching memory before locking is IMHO obsolete.
+> > As the code is, the client does not need to check lvm_errno() unless it
+> > cares what went wrong.  In essence, v.is_valid "should =" !lvm_errno()
+> > today, though there's no explicit assignment.  However, if we explicitly
+> > assign v.is_valid = !lvm_errno(), then this assumes all error paths will
+> > properly set lvm_errno().  Otherwise, we may end up telling the user the
+> > value is valid when it may not be.  Now this case is clearly a bug but
+> > keeping them separate avoids the potential bug.  It's fairly clear right
+> > now that all error paths do properly set lvm_errno(), so this assignment
+> > would be safe today.
+> Ok.
+> 
+> Yours,
+>    Petr.
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
-Locking memory should do this implicitly - can we prove that this
-code has some effect on recent systems?
-
-Milan
 
 
