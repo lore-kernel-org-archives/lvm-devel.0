@@ -1,31 +1,34 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 12:59:42 +0200
-Subject: [PATCH 02/30] Use dm_pool_grow_object embeded strlen for 0 delta
-In-Reply-To: <87vd4q61el.wl%ejt@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>	<c8607124ac3c8c7f5d92aafc1e266732df8f2abc.1287994529.git.zkabelac@redhat.com>
-	<87vd4q61el.wl%ejt@redhat.com>
-Message-ID: <4CC5631E.9040204@redhat.com>
+Date: Mon, 25 Oct 2010 13:13:13 +0200
+Subject: [PATCH 13/30] Eliminate uninitialized_var
+In-Reply-To: <87k4l660f8.wl%ejt@redhat.com>
+References: <cover.1287994529.git.zkabelac@redhat.com>	<0f16dc9e1e7859ac7a275bbd9218dda77bcabc7f.1287994530.git.zkabelac@redhat.com>
+	<87k4l660f8.wl%ejt@redhat.com>
+Message-ID: <4CC56649.3070804@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 25.10.2010 11:56, ejt at redhat.com napsal(a):
-> At Mon, 25 Oct 2010 10:24:09 +0200,
+Dne 25.10.2010 12:18, ejt at redhat.com napsal(a):
+> At Mon, 25 Oct 2010 10:24:20 +0200,
 > Zdenek Kabelac wrote:
 >>
->> Use internal strlen for 0
+>> Use some default value instead of a random number for unknown
+>> minor_version.
 >>
 >> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 > 
-> Ack, but I don't think this improves the readablility of the code.  The problem is the extra semantics of zero as the third arg to dm_pool_grow_object() (probably my bad).  Maybe introduce a new pool method dm_pool_grow_string(struct dm_pool *p, const char *str) ?
+> Nack.  What if your default |sb_offset| is wrong?
 
+Still better something defined - then completely random value.
 
-Well you are not the first one with this idea :)
+But this patch is rather about make compiler analyzer quiet -
+maybe  default: assert() for 'generic' version ?
 
-Me and Milan thinks in the same way - if everyone agree - I'll make another
-version with  ...grow_string()
+>From the source code - we are actually using only  MD_MINOR_V0,
+as is: minor = MD_MINOR_VERSION_MIN (== MD_MINOR_V0)
 
 Zdenek
 
