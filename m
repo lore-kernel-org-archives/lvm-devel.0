@@ -1,41 +1,44 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 13 Oct 2010 10:22:27 +0200
-Subject: LVM2/lib metadata/lv.c metadata/lv.h report/pr ...
-In-Reply-To: <20101012161235.24148.qmail@sourceware.org>
-References: <20101012161235.24148.qmail@sourceware.org>
-Message-ID: <4CB56C43.5060001@redhat.com>
+Date: Mon, 25 Oct 2010 10:24:17 +0200
+Subject: [PATCH 10/30] Fix potential NULL pointer dereference
+In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
+References: <cover.1287994529.git.zkabelac@redhat.com>
+Message-ID: <0fe6e9c0c86a7a0487fb7a6eead6fc7b4760a123.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12.10.2010 18:12, wysochanski at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	wysochanski at sourceware.org	2010-10-12 16:12:34
-> 
-> Modified files:
-> 	lib/metadata   : lv.c lv.h 
-> 	lib/report     : properties.c report.c 
-> 
-> Log message:
-> 	Refactor and add code for (lv) 'lv_kernel_{major|minor}' get functions.
-> 	
-> 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> 	Reviewed-By: Petr Rockai <prockai@redhat.com>
-> 
+Makes clang happier as it covers all code paths and avoids NULL pointer
+dereference through com pointer (which is NULL by default static
+initialisation).
 
-> +int lv_kernel_minor(const struct logical_volume *lv)
-> +{
-> +	struct lvinfo info;
->
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ tools/lvm.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-I think for cases like this one - where the return value is different from
-common practice in lvm codebase we should add some doxygen comments - so it's
-clear that -1 is return value in this function.
-
-
-Zdenek
+diff --git a/tools/lvm.c b/tools/lvm.c
+index 60f9a79..9cac23e 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -85,11 +85,11 @@ static char *_list_args(const char *text, int state)
+ 				break;
+ 			}
+ 		}
+-
+-		if (!com)
+-			return NULL;
+ 	}
+ 
++	if (!com)
++		return NULL;
++
+ 	/* Short form arguments */
+ 	if (len < 3) {
+ 		while (match_no < com->num_args) {
+-- 
+1.7.3.1
 
 
