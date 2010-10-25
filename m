@@ -1,51 +1,48 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:33 +0200
-Subject: [PATCH 26/30] Use static
+Date: Mon, 25 Oct 2010 10:24:34 +0200
+Subject: [PATCH 27/30] Instrument compiler about code unreachability
 In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <be53da7626bf9a4d05bdc2f8819d9e283516478f.1287994530.git.zkabelac@redhat.com>
+Message-ID: <a10aa0c9fece5a74e30b068a688fc49979d07381.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Clang needs some instrumentation for code analysis.
+It might probably help also for gcc.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/mm/pool-fast.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ daemons/clvmd/clvmd.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/mm/pool-fast.c b/libdm/mm/pool-fast.c
-index d9030cf..ebd982e 100644
---- a/libdm/mm/pool-fast.c
-+++ b/libdm/mm/pool-fast.c
-@@ -33,8 +33,8 @@ struct dm_pool {
- 	unsigned object_alignment;
- };
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 57f7ffe..f9096cc 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -491,6 +491,7 @@ int main(int argc, char *argv[])
+ 		DEBUGLOG("Can't initialise cluster interface\n");
+ 		log_error("Can't initialise cluster interface\n");
+ 		child_init_signal(DFAIL_CLUSTER_IF);
++		__builtin_unreachable();
+ 	}
+ 	DEBUGLOG("Cluster ready, doing some more initialisation\n");
  
--void _align_chunk(struct chunk *c, unsigned alignment);
--struct chunk *_new_chunk(struct dm_pool *p, size_t s);
-+static void _align_chunk(struct chunk *c, unsigned alignment);
-+static struct chunk *_new_chunk(struct dm_pool *p, size_t s);
- static void _free_chunk(struct chunk *c);
+@@ -505,8 +506,10 @@ int main(int argc, char *argv[])
  
- /* by default things come out aligned for doubles */
-@@ -240,12 +240,12 @@ void dm_pool_abandon_object(struct dm_pool *p)
- 	p->object_alignment = DEFAULT_ALIGNMENT;
- }
+ 	/* Add the local socket to the list */
+ 	newfd = malloc(sizeof(struct local_client));
+-	if (!newfd)
+-	        child_init_signal(DFAIL_MALLOC);
++	if (!newfd) {
++		child_init_signal(DFAIL_MALLOC);
++		__builtin_unreachable();
++	}
  
--void _align_chunk(struct chunk *c, unsigned alignment)
-+static void _align_chunk(struct chunk *c, unsigned alignment)
- {
- 	c->begin += alignment - ((unsigned long) c->begin & (alignment - 1));
- }
- 
--struct chunk *_new_chunk(struct dm_pool *p, size_t s)
-+static struct chunk *_new_chunk(struct dm_pool *p, size_t s)
- {
- 	struct chunk *c;
- 
+ 	newfd->fd = local_sock;
+ 	newfd->removeme = 0;
 -- 
 1.7.3.1
 
