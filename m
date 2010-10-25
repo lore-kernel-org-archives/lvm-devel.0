@@ -1,39 +1,40 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 26 Oct 2010 14:59:26 +0200
-Subject: [PATCH 5/5] Check for NULL pointer
-In-Reply-To: <cover.1288097372.git.zkabelac@redhat.com>
-References: <cover.1288097372.git.zkabelac@redhat.com>
-Message-ID: <c55e248db9914edda41a5d685539277b1bc486a8.1288097372.git.zkabelac@redhat.com>
+Date: Mon, 25 Oct 2010 13:33:20 +0200
+Subject: [PATCH 16/30] Fix void* pointer arithmetic
+In-Reply-To: <4CC568B4.4020002@redhat.com>
+References: <cover.1287994529.git.zkabelac@redhat.com>	<b27d551f464cef87fdbf52580c9b74607e500793.1287994530.git.zkabelac@redhat.com>
+	<4CC568B4.4020002@redhat.com>
+Message-ID: <4CC56B00.4050404@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-clangs is happier and check for non NULL options value.
-Report internal error in this case.
+Dne 25.10.2010 13:23, Milan Broz napsal(a):
+> On 10/25/2010 10:24 AM, Zdenek Kabelac wrote:
+> 
+>>  static void _touch_memory(void *mem, size_t size)
+>>  {
+>>  	size_t pagesize = lvm_getpagesize();
+>> -	void *pos = mem;
+>> -	void *end = mem + size - sizeof(long);
+>> +	char *pos = mem;
+>> +	char *end = pos + size - sizeof(long);
+> 
+> And what about trash this "touch memory" code completely?
+> 
+> The whole idea of touching memory before locking is IMHO obsolete.
+> 
+> Locking memory should do this implicitly - can we prove that this
+> code has some effect on recent systems?
+> 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/reporter.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+Our memlock code should be physically allocating and paging all the memory to
+the process space - so the only difference is IMHO at which point in time
+memory failure happens - with memory touching - it might occur sooner in some
+cases - but we lose some speed by trashing CPU cache and flagging memory pages.
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index f39d23f..24a27ba 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -324,6 +324,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 			return EINVALID_CMD_LINE;
- 		}
- 		if (*opts == '+') {
-+			if (!options) {
-+				log_error(INTERNAL_ERROR "Missing options.");
-+				return EINVALID_CMD_LINE;
-+			}
- 			if (!(str = dm_pool_alloc(cmd->mem,
- 					 strlen(options) + strlen(opts) + 1))) {
- 				log_error("options string allocation failed");
--- 
-1.7.3.2
+Zdenek
 
 
