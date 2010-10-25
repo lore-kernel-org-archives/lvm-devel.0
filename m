@@ -1,43 +1,37 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:17 +0200
-Subject: [PATCH 10/30] Fix potential NULL pointer dereference
+Date: Mon, 25 Oct 2010 10:24:18 +0200
+Subject: [PATCH 11/30] Fix theoretical usage of NULL pointer dereference
 In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <0fe6e9c0c86a7a0487fb7a6eead6fc7b4760a123.1287994530.git.zkabelac@redhat.com>
+Message-ID: <35485b7f7c5850e5a8bd1cb934f7a01efbf6fd46.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Makes clang happier as it covers all code paths and avoids NULL pointer
-dereference through com pointer (which is NULL by default static
-initialisation).
+clang seems to be happier with this check.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvm.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ libdm/regex/ttree.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvm.c b/tools/lvm.c
-index 60f9a79..9cac23e 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -85,11 +85,11 @@ static char *_list_args(const char *text, int state)
- 				break;
+diff --git a/libdm/regex/ttree.c b/libdm/regex/ttree.c
+index ec97c98..0ad40bd 100644
+--- a/libdm/regex/ttree.c
++++ b/libdm/regex/ttree.c
+@@ -97,7 +97,9 @@ int ttree_insert(struct ttree *tt, unsigned int *key, void *data)
  			}
  		}
--
--		if (!com)
--			return NULL;
  	}
- 
-+	if (!com)
-+		return NULL;
+-	(*c)->data = data;
 +
- 	/* Short form arguments */
- 	if (len < 3) {
- 		while (match_no < com->num_args) {
++	if (*c)
++		(*c)->data = data;
+ 
+ 	return 1;
+ }
 -- 
 1.7.3.1
 
