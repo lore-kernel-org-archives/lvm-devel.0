@@ -1,37 +1,42 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 27 Oct 2010 09:45:47 +0200
-Subject: [PATCH] Fix a double close() in clvmd (fixing another deadlock bug)
-In-Reply-To: <87fwvs1q5z.fsf@twilight.int.mornfall.net.>
-References: <87fwvs1q5z.fsf@twilight.int.mornfall.net.>
-Message-ID: <4CC7D8AB.10706@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Oct 2010 12:05:46 -0000
+Subject: LVM2/tools lvcreate.c
+Message-ID: <20101025120546.7620.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/27/2010 01:37 AM, Petr Rockai wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-25 12:05:46
 
-> - a connection to clvmd is about to finish, let's say the fd is 13 (it
->   often happens to be in my test script, don't ask why)
-> - the local_sock thread calls close(13)
-> - the lvm thread calls open("/proc/devices"...) and gets 13
-> - the main_loop thread calls close(13) [OOPS!]
-> - new connection arrives, and is accept'd by a (new) local_sock thread
-> - the accept gives an fd of 13 (since it's the lowest free fd at this point)
-> - the lvm thread gets around to read from it's /proc/devices
->   handle... 13, again
-> - the lvm thread hangs forever trying to read from the socket instead
->   from /proc/devices
+Modified files:
+	tools          : lvcreate.c 
 
-Aieeeee. Which fd you want to read today? This sounds so secure... :)
+Log message:
+	Ensure we always have origin defined
+	
+	Reported by clang as: Logic error Dereference of null pointer
+	Make sure the code path could not use NULL origin because of some internal
+	code error.
 
-But I still think it is not the real deadlocking problem still...
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.223&r2=1.224
 
-Anyway, should I build another test rpm with that?
-
-Of course, Ack.
-
-Milan
+--- LVM2/tools/lvcreate.c	2010/07/09 15:34:48	1.223
++++ LVM2/tools/lvcreate.c	2010/10/25 12:05:46	1.224
+@@ -179,6 +179,10 @@
+ 					  lp->origin);
+ 				return 0;
+ 			}
++			if (!origin) {
++				log_error(INTERNAL_ERROR "Couldn't find origin volume.");
++				return 0;
++			}
+ 			lp->extents = lp->extents * origin->le_count / 100;
+ 			break;
+ 		case PERCENT_NONE:
 
 
