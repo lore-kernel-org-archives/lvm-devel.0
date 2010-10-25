@@ -1,7 +1,7 @@
 From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Oct 2010 14:09:09 -0000
-Subject: LVM2/liblvm lvm2app.h lvm_lv.c
-Message-ID: <20101025140909.20625.qmail@sourceware.org>
+Date: 25 Oct 2010 14:09:20 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20101025140920.20758.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,82 +10,158 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-25 14:09:08
+Changes by:	wysochanski at sourceware.org	2010-10-25 14:09:20
 
 Modified files:
-	liblvm         : lvm2app.h lvm_lv.c 
+	test/api       : test.c 
 
 Log message:
-	Add lvm_lv_get_property() generic function to obtain value of any lv propert
-	
-	Add a generic LV property function to lvm2app, similar to VG function.
-	Return lvm_property_value and require caller to check 'is_valid' flag
-	and lvm_errno() for API error.
+	Add interactive tests for lvm_{pv|vg|lv}_get_property().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
 
---- LVM2/liblvm/lvm2app.h	2010/10/25 14:08:55	1.22
-+++ LVM2/liblvm/lvm2app.h	2010/10/25 14:09:08	1.23
-@@ -1033,6 +1033,44 @@
- uint64_t lvm_lv_get_size(const lv_t lv);
- 
- /**
-+ * Get the value of a LV property
-+ *
-+ * \memberof lv_t
-+ *
-+ * \param   lv
-+ * Logical volume handle.
-+ *
-+ * \param   name
-+ * Name of property to query.  See lvs man page for full list of properties
-+ * that may be queried.
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example:
-+ *      lvm_property_value v;
-+ *      char *prop_name = "seg_count";
-+ *
-+ *      v = lvm_lv_get_property(lv, prop_name);
-+ *      if (!v.is_valid) {
-+ *           printf("Invalid property name or unable to query"
-+ *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
-+ *           return;
-+ *      }
-+ *      if (v.is_string)
-+ *           printf(", value = %s\n", v.value.string);
-+ *	if (v.is_integer)
-+ *           printf(", value = %"PRIu64"\n", v.value.integer);
-+ *
-+ * \return
-+ * lvm_property_value structure that will contain the current
-+ * value of the property.  Caller should check 'is_valid' flag before using
-+ * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-+ * for specific error.
-+ */
-+struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name);
-+
-+/**
-  * Get the current activation state of a logical volume.
-  *
-  * \memberof lv_t
---- LVM2/liblvm/lvm_lv.c	2010/09/30 14:07:48	1.26
-+++ LVM2/liblvm/lvm_lv.c	2010/10/25 14:09:08	1.27
-@@ -48,6 +48,11 @@
- 			       NAME_LEN+1);
+--- LVM2/test/api/test.c	2010/05/19 11:53:30	1.30
++++ LVM2/test/api/test.c	2010/10/25 14:09:19	1.31
+@@ -91,6 +91,12 @@
+ 	       "Issue a lvm_config_override() with accept device filter\n");
+ 	printf("'vg_get_tags vgname': "
+ 	       "List the tags of a VG\n");
++	printf("'lv_get_property vgname lvname property_name': "
++	       "Display the value of LV property\n");
++	printf("'vg_get_property vgname property_name': "
++	       "Display the value of VG property\n");
++	printf("'pv_get_property pvname property_name': "
++	       "Display the value of PV property\n");
+ 	printf("'lv_get_tags vgname lvname': "
+ 	       "List the tags of a LV\n");
+ 	printf("'vg_{add|remove}_tag vgname tag': "
+@@ -180,6 +186,23 @@
+ 	}
+ 	return vg;
  }
- 
-+struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
++
++static pv_t _lookup_pv_by_name(char **argv, int argc)
 +{
-+	return get_property(NULL, NULL, lv, name);
++	pv_t pv;
++
++	if (argc < 2) {
++		printf ("Please enter vg_name\n");
++		return NULL;
++	}
++	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
++		printf ("Can't find %s in open PVs - run vg_open first\n",
++			argv[1]);
++		return NULL;
++	}
++	return pv;
 +}
 +
- uint64_t lvm_lv_is_active(const lv_t lv)
+ static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
  {
- 	struct lvinfo info;
+ 	struct lvm_lv_list *lvl;
+@@ -546,6 +569,89 @@
+ 	       add ? "adding":"removing", argv[2], argv[1]);
+ }
+ 
++static void _print_property_value(struct lvm_property_value value)
++{
++	if (value.is_string)
++		printf(", value = %s\n", value.value.string);
++	else
++		printf(", value = %"PRIu64"\n", value.value.integer);
++}
++
++static void _pv_get_property(char **argv, int argc)
++{
++	pv_t pv;
++	struct lvm_property_value v;
++
++	if (argc < 3) {
++		printf("Please enter pvname, field_id\n");
++		return;
++	}
++	if (!(pv = _lookup_pv_by_name(argv, argc)))
++		return;
++	v = lvm_pv_get_property(pv, argv[2]);
++	if (!v.is_valid)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("obtaining value of property %s in PV %s",
++	       argv[2], argv[1]);
++	if (!v.is_valid) {
++		printf("\n");
++		return;
++	}
++	_print_property_value(v);
++}
++
++static void _vg_get_property(char **argv, int argc)
++{
++	vg_t vg;
++	struct lvm_property_value v;
++
++	if (argc < 3) {
++		printf("Please enter vgname, field_id\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	v =  lvm_vg_get_property(vg, argv[2]);
++	if (!v.is_valid)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("obtaining value of property %s in VG %s",
++	       argv[2], argv[1]);
++	if (!v.is_valid) {
++		printf("\n");
++		return;
++	}
++	_print_property_value(v);
++}
++
++static void _lv_get_property(char **argv, int argc)
++{
++	lv_t lv;
++	struct lvm_property_value v;
++
++	if (argc < 4) {
++		printf("Please enter vgname, lvname, field_id\n");
++		return;
++	}
++	if (!(lv = _lookup_lv_by_name(argv[2])))
++		return;
++	v = lvm_lv_get_property(lv, argv[3]);
++	if (!v.is_valid)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("obtaining value of property %s in LV %s",
++	       argv[3], argv[2]);
++	if (!v.is_valid) {
++		printf("\n");
++		return;
++	}
++	_print_property_value(v);
++}
++
+ static void _lv_get_tags(char **argv, int argc)
+ {
+ 	lv_t lv;
+@@ -796,6 +902,12 @@
+ 			_vg_tag(argv, argc, 0);
+ 		} else if (!strcmp(argv[0], "vg_get_tags")) {
+ 			_vg_get_tags(argv, argc);
++		} else if (!strcmp(argv[0], "lv_get_property")) {
++			_lv_get_property(argv, argc);
++		} else if (!strcmp(argv[0], "vg_get_property")) {
++			_vg_get_property(argv, argc);
++		} else if (!strcmp(argv[0], "pv_get_property")) {
++			_pv_get_property(argv, argc);
+ 		} else if (!strcmp(argv[0], "lv_add_tag")) {
+ 			_lv_tag(argv, argc, 1);
+ 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
 
 
