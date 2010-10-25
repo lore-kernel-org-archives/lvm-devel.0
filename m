@@ -1,44 +1,36 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:20 +0200
-Subject: [PATCH 13/30] Eliminate uninitialized_var
+Date: Mon, 25 Oct 2010 10:24:21 +0200
+Subject: [PATCH 14/30] Fix missing initilisation to 0
 In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <0f16dc9e1e7859ac7a275bbd9218dda77bcabc7f.1287994530.git.zkabelac@redhat.com>
+Message-ID: <9fb7596966d9e773570ca7b66ebedfc0b4289fa1.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use some default value instead of a random number for unknown
-minor_version.
+Missing init value for 'found' which is later tested and may
+containe garbage value.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/device/dev-md.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/cmirrord/cluster.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 89b9341..cb9feae 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -59,7 +59,7 @@ typedef enum {
- 
- static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
+diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
+index dddaec9..b6c925a 100644
+--- a/daemons/cmirrord/cluster.c
++++ b/daemons/cmirrord/cluster.c
+@@ -129,7 +129,7 @@ int cluster_send(struct clog_request *rq)
  {
--	uint64_t uninitialized_var(sb_offset);
-+	uint64_t sb_offset;
+ 	int r;
+ 	int count=0;
+-	int found;
++	int found = 0;
+ 	struct iovec iov;
+ 	struct clog_cpg *entry;
  
- 	switch(minor_version) {
- 	case MD_MINOR_V0:
-@@ -69,6 +69,7 @@ static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
- 		sb_offset = 0;
- 		break;
- 	case MD_MINOR_V2:
-+	default:
- 		sb_offset = 4 * 2;
- 		break;
- 	}
 -- 
 1.7.3.1
 
