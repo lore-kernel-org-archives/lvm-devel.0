@@ -1,24 +1,25 @@
 From: ejt@redhat.com <ejt@redhat.com>
-Date: Mon, 25 Oct 2010 11:02:29 +0100
-Subject: [PATCH 07/30] Ensure seg is nonnull
-In-Reply-To: <afaeb1ba5334b0f63fd3b92bc78c2f7fa577cff5.1287994529.git.zkabelac@redhat.com>
+Date: Mon, 25 Oct 2010 11:03:17 +0100
+Subject: [PATCH 09/30] Reuse result of previous strchr.
+In-Reply-To: <1ded298d3c909b9ebdcedcf9c275c201c9e4861c.1287994530.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-	<afaeb1ba5334b0f63fd3b92bc78c2f7fa577cff5.1287994529.git.zkabelac@redhat.com>
-Message-ID: <87r5fe6156.wl%ejt@redhat.com>
+	<1ded298d3c909b9ebdcedcf9c275c201c9e4861c.1287994530.git.zkabelac@redhat.com>
+Message-ID: <87pquy613u.wl%ejt@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-At Mon, 25 Oct 2010 10:24:14 +0200,
+At Mon, 25 Oct 2010 10:24:16 +0200,
 Zdenek Kabelac wrote:
 > 
-> clang Logic error	Dereference of null pointer
-> Make sure we do not try to use NULL seg pointer.
+> clang Argument with 'nonnull' attribute passed null
+> Reuse result of the last strchr call - it also makes sure,
+> 'st' point is nonnull for next strchr call.
 > 
 > Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 
-Does |seg| being NULL indicate a more serious problem?  Should we fail rather than making the best of it and carrying on silently?
+Ack
 
 
