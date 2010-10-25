@@ -1,64 +1,50 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 24 Oct 2010 23:06:15 +0200
-Subject: [PATCH 4/4] Update tests for lvseg apis.
-In-Reply-To: <4CC45DA0.4030509@redhat.com> (Zdenek Kabelac's message of "Sun, 
-	24 Oct 2010 18:24:00 +0200")
-References: <1287494696-18310-1-git-send-email-dwysocha@redhat.com>
-	<1287494696-18310-5-git-send-email-dwysocha@redhat.com>
-	<4CBEDBCE.1060400@redhat.com>
-	<87zku75wmo.fsf@twilight.int.mornfall.net.>
-	<4CC14AB6.9030407@redhat.com>
-	<87lj5q61rn.fsf@twilight.int.mornfall.net.>
-	<4CC45DA0.4030509@redhat.com>
-Message-ID: <87sjzv2tdk.fsf@twilight.int.mornfall.net.>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Oct 2010 12:59:25 -0000
+Subject: LVM2 ./WHATS_NEW daemons/cmirrord/cluster.c
+Message-ID: <20101025125925.4801.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Zdenek Kabelac <zkabelac@redhat.com> writes:
-> I'm not going to argue whether it's more or less efficient as in this case it
-> will make no difference.  But passing things by value is simply very hardly
-> supportable by dso libraries - and usually require complete rebuild of binary
-> to use updated library. Also you would need to remember where are you using
-> passing by value - and in case structure size grows - rewrite many functions
-> to switch to pointers - why not do that right from the beginning? -  I'd pass
-> by value only the language atomic/basic types - definitely not any structure
-> where even you are pointing out future extensions in other post.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-25 12:59:24
 
-But there is a difference in adding bitfield values / union members and
-adding new members to the structure! Both mentioned extensions are
-ABI-compatible (within limits, see my other mails).
+Modified files:
+	.              : WHATS_NEW 
+	daemons/cmirrord: cluster.c 
 
-> BTW: I don't take vg_t/pv_t/lv_t as an an argument for passing things by value
-> as it's nothing else that syntactical sugar for pointers - and in fact I'd not
-> any objections against exactly same strategy for properties - making property
-> object completely private structure to lvm and give the API user only handle
-> lvm_property_t and set of function for this handle (C++ in C :))
-> (i.e.
-> lvm_property_is_string/get_string/is_integer/get_integer(lvm_property_t...)
+Log message:
+	Fix missing initilisation to 0
+	
+	Add missing init value for variable 'found' which is later tested and may
+	have contained some garbage value.
 
-That's both inefficient and extremely tedious to write and read. You
-have to make some compromises, C is a low level language, and by no
-means supports encapsulation or (gods forbid) OO. I will rather freeze
-the structure ABI-wise than have to write
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1771&r2=1.1772
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
-lvm_property_t p = lvm_get_property(...)
-if (lvm_property_is_valid(p)) {
-    if (lvm_property_is_string(p)) {
-       const char *str = lvm_property_get_string(p);
-       ...
-    } else if (lvm_property_is_integer(p)) {
-       int i = lvm_property_get_integer(p);
-       ...
-    }
-}
-
-In fact, I'd rather go for C++ than for Glib, if we want to have fancy
-things in the API.
-
-Yours,
-   Petr.
+--- LVM2/WHATS_NEW	2010/10/25 12:01:38	1.1771
++++ LVM2/WHATS_NEW	2010/10/25 12:59:24	1.1772
+@@ -1,5 +1,6 @@
+ Version 2.02.75 - 
+ =====================================
++  Fix missing initilization in cluser_send() function rom cmirrord.
+   Fix pointer for VG name in _pv_resize_single error code path.
+   Fix warning for changed alignment requirements for dmeventd read/write func.
+   Add global/metadata_read_only to use unrepaired metadata in read-only cmds.
+--- LVM2/daemons/cmirrord/cluster.c	2010/07/09 15:34:40	1.15
++++ LVM2/daemons/cmirrord/cluster.c	2010/10/25 12:59:24	1.16
+@@ -129,7 +129,7 @@
+ {
+ 	int r;
+ 	int count=0;
+-	int found;
++	int found = 0;
+ 	struct iovec iov;
+ 	struct clog_cpg *entry;
+ 
 
 
