@@ -1,32 +1,41 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 29 Oct 2010 15:34:18 +0200
-Subject: [PATCH] let dmeventd unmount invalid snapshots (BZ 189462)
-In-Reply-To: <87y69h6wy8.fsf@twilight.int.mornfall.net.>
-References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>	<87r5g4lejw.fsf@twilight.int.mornfall.net.>	<877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
-	<87y69h6wy8.fsf@twilight.int.mornfall.net.>
-Message-ID: <4CCACD5A.7040805@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Oct 2010 12:08:16 -0000
+Subject: LVM2/tools toollib.c
+Message-ID: <20101025120816.8146.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 29.10.2010 13:49, Petr Rockai napsal(a):
-> Hi again,
-> 
-> the somewhat delayed re-cast of the auto-umount patch is
-> attached. Changes since the last time:
-> 
-> - the umount itself is now outside the dmeventd lvm2 lock, which should
->   mitigate the deadlock opportunities introduced by the umount
-> - we fork & exec real /bin/umount now, meaning that /etc/mtab is updated
->   (well, if umount manages to update it, that is)
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-25 12:08:16
 
-Looks like a bit of problem for application which locks itself into memory, to
-proceed all the time. Though currently I do not have good solution for this
-problem in mind - so it's probably to have at least something in this moment.
+Modified files:
+	tools          : toollib.c 
 
-Zdenek
+Log message:
+	Reuse result of previous strchr
+	
+	Reported by clang as: Argument with 'nonnull' attribute passed null
+	
+	Reuse the result of the last strchr() call - make sure, 'st' point is not
+	null for the next strchr() call.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.209&r2=1.210
+
+--- LVM2/tools/toollib.c	2010/09/23 12:02:34	1.209
++++ LVM2/tools/toollib.c	2010/10/25 12:08:15	1.210
+@@ -869,7 +869,7 @@
+ 			while (*st == '/')
+ 				st++;
+ 
+-		if (!strchr(vg_name, '/') || strchr(st, '/')) {
++		if (!st || strchr(st, '/')) {
+ 			log_error("\"%s\": Invalid path for Logical Volume",
+ 				  lv_name);
+ 			return 0;
 
 
