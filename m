@@ -1,24 +1,24 @@
 From: ejt@redhat.com <ejt@redhat.com>
-Date: Mon, 25 Oct 2010 10:59:10 +0100
-Subject: [PATCH 05/30] Print vg_name and do not to access vg->name
-In-Reply-To: <4ed74f138478e118c6a7e418aa638d72c913d4d3.1287994529.git.zkabelac@redhat.com>
+Date: Mon, 25 Oct 2010 11:02:29 +0100
+Subject: [PATCH 07/30] Ensure seg is nonnull
+In-Reply-To: <afaeb1ba5334b0f63fd3b92bc78c2f7fa577cff5.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-	<4ed74f138478e118c6a7e418aa638d72c913d4d3.1287994529.git.zkabelac@redhat.com>
-Message-ID: <87sjzu61ap.wl%ejt@redhat.com>
+	<afaeb1ba5334b0f63fd3b92bc78c2f7fa577cff5.1287994529.git.zkabelac@redhat.com>
+Message-ID: <87r5fe6156.wl%ejt@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-At Mon, 25 Oct 2010 10:24:12 +0200,
+At Mon, 25 Oct 2010 10:24:14 +0200,
 Zdenek Kabelac wrote:
 > 
-> clang Logic error Dereference of null pointer
-> Replacing pointer access with vg_name.
+> clang Logic error	Dereference of null pointer
+> Make sure we do not try to use NULL seg pointer.
 > 
 > Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 
-Ack
+Does |seg| being NULL indicate a more serious problem?  Should we fail rather than making the best of it and carrying on silently?
 
 
