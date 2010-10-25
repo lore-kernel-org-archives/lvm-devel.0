@@ -1,9 +1,9 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 10:24:32 +0200
-Subject: [PATCH 25/30] Proper C declaration
+Date: Mon, 25 Oct 2010 10:24:33 +0200
+Subject: [PATCH 26/30] Use static
 In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
 References: <cover.1287994529.git.zkabelac@redhat.com>
-Message-ID: <38ca589b12f1e7635bd07455884933002461d7a6.1287994530.git.zkabelac@redhat.com>
+Message-ID: <be53da7626bf9a4d05bdc2f8819d9e283516478f.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,31 +13,39 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/dmeventd.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ libdm/mm/pool-fast.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index d179879..bbe6e10 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1477,7 +1477,7 @@ static void _process_request(struct dm_event_fifos *fifos)
- 	dm_free(msg.data);
+diff --git a/libdm/mm/pool-fast.c b/libdm/mm/pool-fast.c
+index d9030cf..ebd982e 100644
+--- a/libdm/mm/pool-fast.c
++++ b/libdm/mm/pool-fast.c
+@@ -33,8 +33,8 @@ struct dm_pool {
+ 	unsigned object_alignment;
+ };
+ 
+-void _align_chunk(struct chunk *c, unsigned alignment);
+-struct chunk *_new_chunk(struct dm_pool *p, size_t s);
++static void _align_chunk(struct chunk *c, unsigned alignment);
++static struct chunk *_new_chunk(struct dm_pool *p, size_t s);
+ static void _free_chunk(struct chunk *c);
+ 
+ /* by default things come out aligned for doubles */
+@@ -240,12 +240,12 @@ void dm_pool_abandon_object(struct dm_pool *p)
+ 	p->object_alignment = DEFAULT_ALIGNMENT;
  }
  
--static void _process_initial_registrations()
-+static void _process_initial_registrations(void)
+-void _align_chunk(struct chunk *c, unsigned alignment)
++static void _align_chunk(struct chunk *c, unsigned alignment)
  {
- 	int i = 0;
- 	char *reg;
-@@ -1697,7 +1697,7 @@ static void _daemonize(void)
- 	setsid();
+ 	c->begin += alignment - ((unsigned long) c->begin & (alignment - 1));
  }
  
--static void restart()
-+static void restart(void)
+-struct chunk *_new_chunk(struct dm_pool *p, size_t s)
++static struct chunk *_new_chunk(struct dm_pool *p, size_t s)
  {
- 	struct dm_event_fifos fifos;
- 	struct dm_event_daemon_message msg = { 0, 0, NULL };
+ 	struct chunk *c;
+ 
 -- 
 1.7.3.1
 
