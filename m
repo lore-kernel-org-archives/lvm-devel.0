@@ -1,38 +1,56 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Oct 2010 09:44:53 -0000
-Subject: LVM2/test t-fsadm.sh
-Message-ID: <20101013094453.7845.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 25 Oct 2010 10:24:25 +0200
+Subject: [PATCH 18/30] Use const pointer for return value of dm_basename
+In-Reply-To: <cover.1287994529.git.zkabelac@redhat.com>
+References: <cover.1287994529.git.zkabelac@redhat.com>
+Message-ID: <090966787d1610aa086bad8ca1e53d0cb23cd34a.1287994530.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-13 09:44:53
+Fix pointer created from passed input const pointer.
 
-Modified files:
-	test           : t-fsadm.sh 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/libdevmapper.h |    2 +-
+ libdm/libdm-string.c |    6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-Log message:
-	Skip fsadm testing until proper installation rules are commited in.
-	
-	For now testing of fsadm is broken - as it's executing fsadm from system
-	and not from the package thus we get wrong results.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-fsadm.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-
---- LVM2/test/t-fsadm.sh	2010/10/08 15:03:21	1.3
-+++ LVM2/test/t-fsadm.sh	2010/10/13 09:44:52	1.4
-@@ -10,6 +10,7 @@
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 7ed60be..e2f2673 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -955,7 +955,7 @@ int dm_snprintf(char *buf, size_t bufsize, const char *format, ...)
+ /*
+  * Returns pointer to the last component of the path.
+  */
+-char *dm_basename(const char *path);
++const char *dm_basename(const char *path);
  
- test_description='Exercise fsadm filesystem resize'
-+exit 200
+ /**************************
+  * file/stream manipulation
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index ce05a10..d8fca1a 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -123,11 +123,11 @@ int dm_snprintf(char *buf, size_t bufsize, const char *format, ...)
+ 	return n;
+ }
  
- . ./test-utils.sh
+-char *dm_basename(const char *path)
++const char *dm_basename(const char *path)
+ {
+-	char *p = strrchr(path, '/');
++	const char *p = strrchr(path, '/');
  
+-	return p ? p + 1 : (char *) path;
++	return p ? p + 1 : path;
+ }
+ 
+ int dm_asprintf(char **result, const char *format, ...)
+-- 
+1.7.3.1
 
 
