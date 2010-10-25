@@ -1,7 +1,7 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 25 Oct 2010 14:09:20 -0000
-Subject: LVM2/test/api test.c
-Message-ID: <20101025140920.20758.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Oct 2010 11:57:08 -0000
+Subject: LVM2 ./WHATS_NEW daemons/dmeventd/dmeventd.c d ...
+Message-ID: <20101025115708.2744.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,158 +10,128 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2010-10-25 14:09:20
+Changes by:	zkabelac at sourceware.org	2010-10-25 11:57:07
 
 Modified files:
-	test/api       : test.c 
+	.              : WHATS_NEW 
+	daemons/dmeventd: dmeventd.c libdevmapper-event.c 
 
 Log message:
-	Add interactive tests for lvm_{pv|vg|lv}_get_property().
+	Fix clang warning for ntohl(*((uint32_t *)buf))
+	
+	We cast (char*) to (uint32_t*) that changes alignment requierements.
+	For our case the code has been correct as alloca() returns properly
+	aligned buffer, however this patch make it cleaner and more readable
+	and avoids warning generation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1769&r2=1.1770
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
 
---- LVM2/test/api/test.c	2010/05/19 11:53:30	1.30
-+++ LVM2/test/api/test.c	2010/10/25 14:09:19	1.31
-@@ -91,6 +91,12 @@
- 	       "Issue a lvm_config_override() with accept device filter\n");
- 	printf("'vg_get_tags vgname': "
- 	       "List the tags of a VG\n");
-+	printf("'lv_get_property vgname lvname property_name': "
-+	       "Display the value of LV property\n");
-+	printf("'vg_get_property vgname property_name': "
-+	       "Display the value of VG property\n");
-+	printf("'pv_get_property pvname property_name': "
-+	       "Display the value of PV property\n");
- 	printf("'lv_get_tags vgname lvname': "
- 	       "List the tags of a LV\n");
- 	printf("'vg_{add|remove}_tag vgname tag': "
-@@ -180,6 +186,23 @@
- 	}
- 	return vg;
- }
-+
-+static pv_t _lookup_pv_by_name(char **argv, int argc)
-+{
-+	pv_t pv;
-+
-+	if (argc < 2) {
-+		printf ("Please enter vg_name\n");
-+		return NULL;
-+	}
-+	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-+		printf ("Can't find %s in open PVs - run vg_open first\n",
-+			argv[1]);
-+		return NULL;
-+	}
-+	return pv;
-+}
-+
- static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
- {
- 	struct lvm_lv_list *lvl;
-@@ -546,6 +569,89 @@
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
+--- LVM2/WHATS_NEW	2010/10/25 11:20:54	1.1769
++++ LVM2/WHATS_NEW	2010/10/25 11:57:06	1.1770
+@@ -1,5 +1,6 @@
+ Version 2.02.75 - 
+ =====================================
++  Fix warning for changed alignment requirements for dmeventd read/write func.
+   Add global/metadata_read_only to use unrepaired metadata in read-only cmds.
+   Don't take write lock in vgchange --refresh, --poll or --monitor.
+   Skip dm devices in scan if they contain only error targets or are empty.
+--- LVM2/daemons/dmeventd/dmeventd.c	2010/10/20 15:12:12	1.67
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/10/25 11:57:07	1.68
+@@ -1300,9 +1300,9 @@
+ 	unsigned bytes = 0;
+ 	int ret = 0;
+ 	fd_set fds;
+-	int header = 1;
+ 	size_t size = 2 * sizeof(uint32_t);	/* status + size */
+-	char *buf = alloca(size);
++	uint32_t *header = alloca(size);
++	char *buf = (char *)header;
  
-+static void _print_property_value(struct lvm_property_value value)
-+{
-+	if (value.is_string)
-+		printf(", value = %s\n", value.value.string);
-+	else
-+		printf(", value = %"PRIu64"\n", value.value.integer);
-+}
-+
-+static void _pv_get_property(char **argv, int argc)
-+{
-+	pv_t pv;
-+	struct lvm_property_value v;
-+
-+	if (argc < 3) {
-+		printf("Please enter pvname, field_id\n");
-+		return;
-+	}
-+	if (!(pv = _lookup_pv_by_name(argv, argc)))
-+		return;
-+	v = lvm_pv_get_property(pv, argv[2]);
-+	if (!v.is_valid)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("obtaining value of property %s in PV %s",
-+	       argv[2], argv[1]);
-+	if (!v.is_valid) {
-+		printf("\n");
-+		return;
-+	}
-+	_print_property_value(v);
-+}
-+
-+static void _vg_get_property(char **argv, int argc)
-+{
-+	vg_t vg;
-+	struct lvm_property_value v;
-+
-+	if (argc < 3) {
-+		printf("Please enter vgname, field_id\n");
-+		return;
-+	}
-+	if (!(vg = _lookup_vg_by_name(argv, argc)))
-+		return;
-+	v =  lvm_vg_get_property(vg, argv[2]);
-+	if (!v.is_valid)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("obtaining value of property %s in VG %s",
-+	       argv[2], argv[1]);
-+	if (!v.is_valid) {
-+		printf("\n");
-+		return;
-+	}
-+	_print_property_value(v);
-+}
-+
-+static void _lv_get_property(char **argv, int argc)
-+{
-+	lv_t lv;
-+	struct lvm_property_value v;
-+
-+	if (argc < 4) {
-+		printf("Please enter vgname, lvname, field_id\n");
-+		return;
-+	}
-+	if (!(lv = _lookup_lv_by_name(argv[2])))
-+		return;
-+	v = lvm_lv_get_property(lv, argv[3]);
-+	if (!v.is_valid)
-+		printf("Error ");
-+	else
-+		printf("Success ");
-+	printf("obtaining value of property %s in LV %s",
-+	       argv[3], argv[2]);
-+	if (!v.is_valid) {
-+		printf("\n");
-+		return;
-+	}
-+	_print_property_value(v);
-+}
-+
- static void _lv_get_tags(char **argv, int argc)
- {
- 	lv_t lv;
-@@ -796,6 +902,12 @@
- 			_vg_tag(argv, argc, 0);
- 		} else if (!strcmp(argv[0], "vg_get_tags")) {
- 			_vg_get_tags(argv, argc);
-+		} else if (!strcmp(argv[0], "lv_get_property")) {
-+			_lv_get_property(argv, argc);
-+		} else if (!strcmp(argv[0], "vg_get_property")) {
-+			_vg_get_property(argv, argc);
-+		} else if (!strcmp(argv[0], "pv_get_property")) {
-+			_pv_get_property(argv, argc);
- 		} else if (!strcmp(argv[0], "lv_add_tag")) {
- 			_lv_tag(argv, argc, 1);
- 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+ 	msg->data = NULL;
+ 
+@@ -1326,9 +1326,9 @@
+ 
+ 		ret = read(fifos->client, buf + bytes, size - bytes);
+ 		bytes += ret > 0 ? ret : 0;
+-		if (bytes == 2 * sizeof(uint32_t) && header) {
+-			msg->cmd = ntohl(*((uint32_t *) buf));
+-			msg->size = ntohl(*((uint32_t *) buf + 1));
++		if (header && (bytes == 2 * sizeof(uint32_t))) {
++			msg->cmd = ntohl(header[0]);
++			msg->size = ntohl(header[1]);
+ 			buf = msg->data = dm_malloc(msg->size);
+ 			size = msg->size;
+ 			bytes = 0;
+@@ -1356,10 +1356,11 @@
+ 	fd_set fds;
+ 
+ 	size_t size = 2 * sizeof(uint32_t) + msg->size;
+-	char *buf = alloca(size);
++	uint32_t *header = alloca(size);
++	char *buf = (char *)header;
+ 
+-	*((uint32_t *)buf) = htonl(msg->cmd);
+-	*((uint32_t *)buf + 1) = htonl(msg->size);
++	header[0] = htonl(msg->cmd);
++	header[1] = htonl(msg->size);
+ 	if (msg->data)
+ 		memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
+ 
+--- LVM2/daemons/dmeventd/libdevmapper-event.c	2010/10/20 15:12:12	1.35
++++ LVM2/daemons/dmeventd/libdevmapper-event.c	2010/10/25 11:57:07	1.36
+@@ -230,8 +230,8 @@
+ 	fd_set fds;
+ 	struct timeval tval = { 0, 0 };
+ 	size_t size = 2 * sizeof(uint32_t);	/* status + size */
+-	char *buf = alloca(size);
+-	int header = 1;
++	uint32_t *header = alloca(size);
++	char *buf = (char *)header;
+ 
+ 	while (bytes < size) {
+ 		for (i = 0, ret = 0; (i < 20) && (ret < 1); i++) {
+@@ -262,9 +262,9 @@
+ 		}
+ 
+ 		bytes += ret;
+-		if (bytes == 2 * sizeof(uint32_t) && header) {
+-			msg->cmd = ntohl(*((uint32_t *)buf));
+-			msg->size = ntohl(*((uint32_t *)buf + 1));
++		if (header && (bytes == 2 * sizeof(uint32_t))) {
++			msg->cmd = ntohl(header[0]);
++			msg->size = ntohl(header[1]);
+ 			buf = msg->data = dm_malloc(msg->size);
+ 			size = msg->size;
+ 			bytes = 0;
+@@ -288,12 +288,13 @@
+ 	fd_set fds;
+ 
+ 	size_t size = 2 * sizeof(uint32_t) + msg->size;
+-	char *buf = alloca(size);
++	uint32_t *header = alloca(size);
++	char *buf = (char *)header;
+ 	char drainbuf[128];
+ 	struct timeval tval = { 0, 0 };
+ 
+-	*((uint32_t *)buf) = htonl(msg->cmd);
+-	*((uint32_t *)buf + 1) = htonl(msg->size);
++	header[0] = htonl(msg->cmd);
++	header[1] = htonl(msg->size);
+ 	memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
+ 
+ 	/* drain the answer fifo */
+@@ -323,8 +324,7 @@
+ 			}
+ 		} while (ret < 1);
+ 
+-		ret = write(fifos->client, ((char *) buf) + bytes,
+-			    size - bytes);
++		ret = write(fifos->client, buf + bytes, size - bytes);
+ 		if (ret < 0) {
+ 			if ((errno == EINTR) || (errno == EAGAIN))
+ 				continue;
 
 
