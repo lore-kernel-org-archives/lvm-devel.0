@@ -1,33 +1,36 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri,  8 Jan 2016 15:37:15 -0600
-Subject: [PATCH 0/2] lvm shell enhancements
-Message-ID: <1452289037-30597-1-git-send-email-tasleson@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Oct 2010 13:38:16 -0000
+Subject: LVM2/lib/striped striped.c
+Message-ID: <20101025133816.9858.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In an effort to avoid forking & exec'ing the lvm command line a user can create
-a sub process and pipe commands to/from lvm utilizing lvm shell.  
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-10-25 13:38:11
 
-However, this approach suffers from the following:
-1. lvm shell uses GNU readline which echos STDIN to STDOUT and it also appends
-   additional characters to STDOUT when doing this which complicates the code    
-   communicating with lvm shell.
-2. lvm shell ouputs messages to STDERR even when the command is successful, thus
-   the client has no way to easily determine if the command completed
-   successfully or not.
+Modified files:
+	lib/striped    : striped.c 
 
-This patch series addresses these two issues, please review.
+Log message:
+	Use const config node
 
-Thanks!
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/striped/striped.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
 
-Tony Asleson (2):
-  lvm.c: Don't use GNU readline when no tty
-  lvm.c: Add return value lvm shell prompt
-
- tools/lvm.c |   71 +++++++++++++++++++++++++++++++++++++++++++++++++---------
- 1 files changed, 60 insertions(+), 11 deletions(-)
+--- LVM2/lib/striped/striped.c	2010/07/09 15:34:46	1.32
++++ LVM2/lib/striped/striped.c	2010/10/25 13:38:11	1.33
+@@ -71,7 +71,7 @@
+ static int _striped_text_import(struct lv_segment *seg, const struct config_node *sn,
+ 			struct dm_hash_table *pv_hash)
+ {
+-	struct config_node *cn;
++	const struct config_node *cn;
+ 
+ 	if ((seg->area_count != 1) &&
+ 	    !get_config_uint32(sn, "stripe_size", &seg->stripe_size)) {
 
 
