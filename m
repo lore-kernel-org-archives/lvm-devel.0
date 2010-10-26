@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Oct 2010 09:57:04 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20101026095704.18295.qmail@sourceware.org>
+Date: 26 Oct 2010 10:04:35 -0000
+Subject: LVM2/lib/misc util.h
+Message-ID: <20101026100435.20019.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,32 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-26 09:57:03
+Changes by:	zkabelac at sourceware.org	2010-10-26 10:04:35
 
 Modified files:
-	daemons/clvmd  : clvmd.c 
+	lib/misc       : util.h 
 
 Log message:
-	Hotfix usage of __builtin_unreachable()
+	Macro uninitialized_var gives warnings in static analysis
 	
-	It's quite new feature which is not supported by older compilers.
-	So until some better macros are introduced into LVM code - hotfix current
-	compilation problems and compile this code only for __clang__ defining compilers.
+	Deactivate uninitialized_var() macro for clang static analysis.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/util.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/daemons/clvmd/clvmd.c	2010/10/26 09:01:47	1.79
-+++ LVM2/daemons/clvmd/clvmd.c	2010/10/26 09:57:03	1.80
-@@ -491,7 +491,9 @@
- 		DEBUGLOG("Can't initialise cluster interface\n");
- 		log_error("Can't initialise cluster interface\n");
- 		child_init_signal(DFAIL_CLUSTER_IF);
-+#ifdef __clang__
- 		__builtin_unreachable();
-+#endif
- 	}
- 	DEBUGLOG("Cluster ready, doing some more initialisation\n");
+--- LVM2/lib/misc/util.h	2010/05/24 23:11:35	1.6
++++ LVM2/lib/misc/util.h	2010/10/26 10:04:34	1.7
+@@ -25,7 +25,11 @@
+ 		     (void) (&_a == &_b); \
+ 		     _a > _b ? _a : _b; })
  
-@@ -508,7 +510,9 @@
- 	newfd = malloc(sizeof(struct local_client));
- 	if (!newfd) {
- 		child_init_signal(DFAIL_MALLOC);
 +#ifdef __clang__
- 		__builtin_unreachable();
++#define uninitialized_var(x) x
++#else
+ #define uninitialized_var(x) x = x
 +#endif
- 	}
  
- 	newfd->fd = local_sock;
+ #define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
+ 
 
 
