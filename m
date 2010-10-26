@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Oct 2010 10:04:35 -0000
-Subject: LVM2/lib/misc util.h
-Message-ID: <20101026100435.20019.qmail@sourceware.org>
+Date: 26 Oct 2010 10:14:42 -0000
+Subject: LVM2/daemons/cmirrord functions.c
+Message-ID: <20101026101442.23189.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,32 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-26 10:04:35
+Changes by:	zkabelac at sourceware.org	2010-10-26 10:14:41
 
 Modified files:
-	lib/misc       : util.h 
+	daemons/cmirrord: functions.c 
 
 Log message:
-	Macro uninitialized_var gives warnings in static analysis
+	Add missing return for NULL passed buffer
 	
-	Deactivate uninitialized_var() macro for clang static analysis.
+	Function pull_stateo() checks for NULL 'buf' - but return for this error
+	path was missing.  cmirror code never calls this function with NULL 'buf',
+	so this fix has no effect on current code base, but makes clang happier.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/util.h.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
 
---- LVM2/lib/misc/util.h	2010/05/24 23:11:35	1.6
-+++ LVM2/lib/misc/util.h	2010/10/26 10:04:34	1.7
-@@ -25,7 +25,11 @@
- 		     (void) (&_a == &_b); \
- 		     _a > _b ? _a : _b; })
+--- LVM2/daemons/cmirrord/functions.c	2010/08/30 18:37:42	1.24
++++ LVM2/daemons/cmirrord/functions.c	2010/10/26 10:14:41	1.25
+@@ -1809,8 +1809,10 @@
+ 	int bitset_size;
+ 	struct log_c *lc;
  
-+#ifdef __clang__
-+#define uninitialized_var(x) x
-+#else
- #define uninitialized_var(x) x = x
-+#endif
+-	if (!buf)
++	if (!buf) {
+ 		LOG_ERROR("pull_state: buf == NULL");
++		return -EINVAL;
++	}
  
- #define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
- 
+ 	lc = get_log(uuid, luid);
+ 	if (!lc) {
 
 
