@@ -1,30 +1,22 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Mon, 25 Oct 2010 18:10:40 -0400
-Subject: [RFC][PATCH] update vgchange's handling of -a, --refresh, --monitor and --poll
-In-Reply-To: <20101025220251.GA6858@redhat.com>
-References: <20101025220251.GA6858@redhat.com>
-Message-ID: <20101025221039.GA7417@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 26 Oct 2010 01:13:19 +0100
+Subject: [PATCH 02/30] Use dm_pool_grow_object embeded strlen for 0 delta
+In-Reply-To: <4CC5631E.9040204@redhat.com>
+References: <cover.1287994529.git.zkabelac@redhat.com>
+	<c8607124ac3c8c7f5d92aafc1e266732df8f2abc.1287994529.git.zkabelac@redhat.com>
+	<87vd4q61el.wl%ejt@redhat.com> <4CC5631E.9040204@redhat.com>
+Message-ID: <20101026001319.GB29400@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Oct 25 2010 at  6:02pm -0400,
-Mike Snitzer <snitzer@redhat.com> wrote:
+On Mon, Oct 25, 2010 at 12:59:42PM +0200, Zdenek Kabelac wrote:
+> version with  ...grow_string()
+ 
+Go for it.
 
-> Update vgchange to have nearly comparable processing of -a, --refresh,
-> --monitor and --poll
-
-Meant to say:
-
-Update vgchange to have lvchange like processing of -a, --refresh,
---monitor and --poll
-
-(I said "nearly comparable" before because I didn't make vgchange -ay
-control polling like lvchange -ay does, like noted in this patch's last
-FIXME)
-
-Mike
+Alasdair
 
 
