@@ -1,22 +1,37 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 26 Oct 2010 01:13:19 +0100
-Subject: [PATCH 02/30] Use dm_pool_grow_object embeded strlen for 0 delta
-In-Reply-To: <4CC5631E.9040204@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>
-	<c8607124ac3c8c7f5d92aafc1e266732df8f2abc.1287994529.git.zkabelac@redhat.com>
-	<87vd4q61el.wl%ejt@redhat.com> <4CC5631E.9040204@redhat.com>
-Message-ID: <20101026001319.GB29400@agk-dp.fab.redhat.com>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 26 Oct 2010 01:25:47 -0000
+Subject: LVM2/test test-utils.sh
+Message-ID: <20101026012547.3169.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Oct 25, 2010 at 12:59:42PM +0200, Zdenek Kabelac wrote:
-> version with  ...grow_string()
- 
-Go for it.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2010-10-26 01:25:47
 
-Alasdair
+Modified files:
+	test           : test-utils.sh 
+
+Log message:
+	Explicitly have grep print the matching filenames (needed to
+	successfully determine scsi_debug device).
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/test-utils.sh.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+
+--- LVM2/test/test-utils.sh	2010/10/20 15:14:13	1.53
++++ LVM2/test/test-utils.sh	2010/10/26 01:25:46	1.54
+@@ -245,7 +245,7 @@
+     modprobe scsi_debug dev_size_mb=$DEV_SIZE $SCSI_DEBUG_PARAMS num_tgts=1 || exit 200
+     sleep 2 # allow for async Linux SCSI device registration
+ 
+-    local DEBUG_DEV=/dev/$(grep scsi_debug /sys/block/*/device/model | cut -f4 -d /)
++    local DEBUG_DEV=/dev/$(grep -H scsi_debug /sys/block/*/device/model | cut -f4 -d /)
+     [ -b $DEBUG_DEV ] || exit 1 # should not happen
+ 
+     # Create symlink to scsi_debug device in $DM_DEV_DIR
 
 
