@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Oct 2010 08:59:06 -0000
-Subject: LVM2 libdm/mm/pool-fast.c ./WHATS_NEW
-Message-ID: <20101026085906.11074.qmail@sourceware.org>
+Date: 26 Oct 2010 09:01:47 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20101026090147.12146.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,58 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-26 08:59:05
+Changes by:	zkabelac at sourceware.org	2010-10-26 09:01:47
 
 Modified files:
-	libdm/mm       : pool-fast.c 
-	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Use static indentifier for internal functions
+	Instrument compiler about code unreachability
 	
-	Functions _align_chunk() and  _new_chunk() are used only internally inside
-	pool-fast.c - so keep them static inside this object file.
+	Clang needs some instrumentation help for static code analysis.
+	It helps gcc and human reader as well.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1778&r2=1.1779
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.78&r2=1.79
 
---- LVM2/libdm/mm/pool-fast.c	2010/09/30 21:06:52	1.10
-+++ LVM2/libdm/mm/pool-fast.c	2010/10/26 08:59:05	1.11
-@@ -33,8 +33,8 @@
- 	unsigned object_alignment;
- };
+--- LVM2/daemons/clvmd/clvmd.c	2010/10/20 14:46:45	1.78
++++ LVM2/daemons/clvmd/clvmd.c	2010/10/26 09:01:47	1.79
+@@ -491,6 +491,7 @@
+ 		DEBUGLOG("Can't initialise cluster interface\n");
+ 		log_error("Can't initialise cluster interface\n");
+ 		child_init_signal(DFAIL_CLUSTER_IF);
++		__builtin_unreachable();
+ 	}
+ 	DEBUGLOG("Cluster ready, doing some more initialisation\n");
  
--void _align_chunk(struct chunk *c, unsigned alignment);
--struct chunk *_new_chunk(struct dm_pool *p, size_t s);
-+static void _align_chunk(struct chunk *c, unsigned alignment);
-+static struct chunk *_new_chunk(struct dm_pool *p, size_t s);
- static void _free_chunk(struct chunk *c);
+@@ -505,8 +506,10 @@
  
- /* by default things come out aligned for doubles */
-@@ -240,12 +240,12 @@
- 	p->object_alignment = DEFAULT_ALIGNMENT;
- }
+ 	/* Add the local socket to the list */
+ 	newfd = malloc(sizeof(struct local_client));
+-	if (!newfd)
+-	        child_init_signal(DFAIL_MALLOC);
++	if (!newfd) {
++		child_init_signal(DFAIL_MALLOC);
++		__builtin_unreachable();
++	}
  
--void _align_chunk(struct chunk *c, unsigned alignment)
-+static void _align_chunk(struct chunk *c, unsigned alignment)
- {
- 	c->begin += alignment - ((unsigned long) c->begin & (alignment - 1));
- }
- 
--struct chunk *_new_chunk(struct dm_pool *p, size_t s)
-+static struct chunk *_new_chunk(struct dm_pool *p, size_t s)
- {
- 	struct chunk *c;
- 
---- LVM2/WHATS_NEW	2010/10/26 01:37:59	1.1778
-+++ LVM2/WHATS_NEW	2010/10/26 08:59:05	1.1779
-@@ -1,5 +1,6 @@
- Version 2.02.76
- ===================================
-+  Use static for internal _align_chunk() and _new_chunk() from pool-fast.c.
-   Fix vgchange to process -a, --refresh, --monitor and --poll like lvchange.
-   Add lvm2app functions to query any pv, vg, or lv property / report field.
- 
+ 	newfd->fd = local_sock;
+ 	newfd->removeme = 0;
 
 
