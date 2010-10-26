@@ -1,31 +1,34 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 26 Oct 2010 15:02:37 +0100
-Subject: [PATCH 1/5] Check type is not NULL before access
-In-Reply-To: <fa6078b0a1e1a7eba4dc339f425715eada3ad826.1288097372.git.zkabelac@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 26 Oct 2010 16:05:31 +0200
+Subject: [PATCH 0/5] Fix NULL dereference
+In-Reply-To: <20101026135759.GL29400@agk-dp.fab.redhat.com> (Alasdair
+	G. Kergon's message of "Tue, 26 Oct 2010 14:57:59 +0100")
 References: <cover.1288097372.git.zkabelac@redhat.com>
-	<fa6078b0a1e1a7eba4dc339f425715eada3ad826.1288097372.git.zkabelac@redhat.com>
-Message-ID: <20101026140237.GM29400@agk-dp.fab.redhat.com>
+	<20101026135759.GL29400@agk-dp.fab.redhat.com>
+Message-ID: <87vd4p1238.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Oct 26, 2010 at 02:59:22PM +0200, Zdenek Kabelac wrote:
-> Check type before dereference and report internal error in case
-> it's undefined and return from the function.
- 
-> +			if (!type) {
-> +				log_error(INTERNAL_ERROR "Type is not defined.");
-> +				return;
-> +			}
+Hi,
 
-Is this one really an internal library error?
+Alasdair G Kergon <agk@redhat.com> writes:
+> Well the ones I've looked at here seem to be more about dealing with
+> shortcomings in the static analysis code rather than fixing real bugs.
+talking about static analysis. We used to have access to Coverity
+Prevent reports about LVM, right? If I try to go to scan.coverity.com
+and click "sign in" near the LVM2 project, I get a connection
+refused... the link is sending me to
 
-Can it be triggered if someone usees the API incorrectly?
+http://scan2.coverity.com:7494/
 
-If so, it should be treated like validation.
+Alasdair, I suppose you are the Coverity's "contact" -- could you maybe
+ask what's up with that, and maybe get me an account so I can see the
+report as well? I reckon it could be useful...
 
-Alasdair
+Yours,
+   Petr.
 
 
