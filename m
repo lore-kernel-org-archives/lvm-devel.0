@@ -1,40 +1,27 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 25 Oct 2010 13:33:20 +0200
-Subject: [PATCH 16/30] Fix void* pointer arithmetic
-In-Reply-To: <4CC568B4.4020002@redhat.com>
-References: <cover.1287994529.git.zkabelac@redhat.com>	<b27d551f464cef87fdbf52580c9b74607e500793.1287994530.git.zkabelac@redhat.com>
-	<4CC568B4.4020002@redhat.com>
-Message-ID: <4CC56B00.4050404@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 26 Oct 2010 14:29:45 +0100
+Subject: [PATCH 2/5] Ensure seg is nonnull
+In-Reply-To: <fcd9985806b259f3f056c9f473144e029b2b7c8a.1288097372.git.zkabelac@redhat.com>
+References: <cover.1288097372.git.zkabelac@redhat.com>
+	<fcd9985806b259f3f056c9f473144e029b2b7c8a.1288097372.git.zkabelac@redhat.com>
+Message-ID: <20101026132945.GH29400@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 25.10.2010 13:23, Milan Broz napsal(a):
-> On 10/25/2010 10:24 AM, Zdenek Kabelac wrote:
-> 
->>  static void _touch_memory(void *mem, size_t size)
->>  {
->>  	size_t pagesize = lvm_getpagesize();
->> -	void *pos = mem;
->> -	void *end = mem + size - sizeof(long);
->> +	char *pos = mem;
->> +	char *end = pos + size - sizeof(long);
-> 
-> And what about trash this "touch memory" code completely?
-> 
-> The whole idea of touching memory before locking is IMHO obsolete.
-> 
-> Locking memory should do this implicitly - can we prove that this
-> code has some effect on recent systems?
-> 
+On Tue, Oct 26, 2010 at 02:59:23PM +0200, Zdenek Kabelac wrote:
+> +		if (!seg) {
+> +			log_error(INTERNAL_ERROR "Segment is not selected.");
 
-Our memlock code should be physically allocating and paging all the memory to
-the process space - so the only difference is IMHO at which point in time
-memory failure happens - with memory touching - it might occur sooner in some
-cases - but we lose some speed by trashing CPU cache and flagging memory pages.
+I don't mind assertions like this, but please describe the problem more
+accurately in the message.  If this triggers, doesn't it mean we
+have a corrupt segment list?  So say that.
+"LV %s segment list corrupted: NULL struct lv_segment detected."
 
-Zdenek
+But isn't there a missing 'if (lv)' ?
+
+Alasdair
 
 
