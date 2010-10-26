@@ -1,36 +1,37 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 26 Oct 2010 12:53:08 -0000
-Subject: LVM2/test t-lvconvert-repair-dmeventd.sh
-Message-ID: <20101026125308.11780.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 26 Oct 2010 14:59:21 +0200
+Subject: [PATCH 0/5] Fix NULL dereference
+Message-ID: <cover.1288097372.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-10-26 12:53:07
+Updated patchset for NULL pointer dereferences issues reported by clang.
 
-Modified files:
-	test           : t-lvconvert-repair-dmeventd.sh 
+Unlike the first version - this time less aggresive solution is used.
+INTERNAL_ERRORs are reported in these moments (if they would ever happen),
+and the execution path aborts when such conditions are met.
+Previous version was rather ignoring these paths and could lead to 
+unwanted execution of other code parts.
 
-Log message:
-	Use a more generous timeout for dmeventd in t-lvconvert-repair-dmeventd.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-dmeventd.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+Zdenek Kabelac (5):
+  Check type is not NULL before access
+  Ensure seg is nonnull
+  Ensure  first is not NULL before dereference
+  Fix theoretical usage of NULL pointer dereference
+  Check for NULL pointer
 
---- LVM2/test/t-lvconvert-repair-dmeventd.sh	2010/05/12 11:23:16	1.2
-+++ LVM2/test/t-lvconvert-repair-dmeventd.sh	2010/10/26 12:53:07	1.3
-@@ -20,7 +20,7 @@
- lvchange --monitor y $vg/4way
- disable_dev $dev2 $dev4
- mkfs.ext2 $DM_DEV_DIR/$vg/4way
--sleep 3 # FIXME: need a "poll" utility, akin to "check"
-+sleep 10 # FIXME: need a "poll" utility, akin to "check"
- enable_dev $dev2 $dev4
- check mirror $vg 4way
- check mirror_legs $vg 4way 2
+ lib/activate/dev_manager.c |    5 +++++
+ lib/format1/format1.c      |    5 +++++
+ libdm/libdm-report.c       |    6 ++++++
+ libdm/regex/ttree.c        |    6 ++++++
+ tools/reporter.c           |    4 ++++
+ 5 files changed, 26 insertions(+), 0 deletions(-)
+
+-- 
+1.7.3.2
 
 
