@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Oct 2010 08:54:38 -0000
-Subject: LVM2/daemons/dmeventd dmeventd.c
-Message-ID: <20101026085438.8477.qmail@sourceware.org>
+Date: 26 Oct 2010 08:59:06 -0000
+Subject: LVM2 libdm/mm/pool-fast.c ./WHATS_NEW
+Message-ID: <20101026085906.11074.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-26 08:54:37
+Changes by:	zkabelac at sourceware.org	2010-10-26 08:59:05
 
 Modified files:
-	daemons/dmeventd: dmeventd.c 
+	libdm/mm       : pool-fast.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Update C declaration  () -> (void)
+	Use static indentifier for internal functions
+	
+	Functions _align_chunk() and  _new_chunk() are used only internally inside
+	pool-fast.c - so keep them static inside this object file.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.68&r2=1.69
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1778&r2=1.1779
 
---- LVM2/daemons/dmeventd/dmeventd.c	2010/10/25 11:57:07	1.68
-+++ LVM2/daemons/dmeventd/dmeventd.c	2010/10/26 08:54:37	1.69
-@@ -1477,7 +1477,7 @@
- 	dm_free(msg.data);
+--- LVM2/libdm/mm/pool-fast.c	2010/09/30 21:06:52	1.10
++++ LVM2/libdm/mm/pool-fast.c	2010/10/26 08:59:05	1.11
+@@ -33,8 +33,8 @@
+ 	unsigned object_alignment;
+ };
+ 
+-void _align_chunk(struct chunk *c, unsigned alignment);
+-struct chunk *_new_chunk(struct dm_pool *p, size_t s);
++static void _align_chunk(struct chunk *c, unsigned alignment);
++static struct chunk *_new_chunk(struct dm_pool *p, size_t s);
+ static void _free_chunk(struct chunk *c);
+ 
+ /* by default things come out aligned for doubles */
+@@ -240,12 +240,12 @@
+ 	p->object_alignment = DEFAULT_ALIGNMENT;
  }
  
--static void _process_initial_registrations()
-+static void _process_initial_registrations(void)
+-void _align_chunk(struct chunk *c, unsigned alignment)
++static void _align_chunk(struct chunk *c, unsigned alignment)
  {
- 	int i = 0;
- 	char *reg;
-@@ -1697,7 +1697,7 @@
- 	setsid();
+ 	c->begin += alignment - ((unsigned long) c->begin & (alignment - 1));
  }
  
--static void restart()
-+static void restart(void)
+-struct chunk *_new_chunk(struct dm_pool *p, size_t s)
++static struct chunk *_new_chunk(struct dm_pool *p, size_t s)
  {
- 	struct dm_event_fifos fifos;
- 	struct dm_event_daemon_message msg = { 0, 0, NULL };
+ 	struct chunk *c;
+ 
+--- LVM2/WHATS_NEW	2010/10/26 01:37:59	1.1778
++++ LVM2/WHATS_NEW	2010/10/26 08:59:05	1.1779
+@@ -1,5 +1,6 @@
+ Version 2.02.76
+ ===================================
++  Use static for internal _align_chunk() and _new_chunk() from pool-fast.c.
+   Fix vgchange to process -a, --refresh, --monitor and --poll like lvchange.
+   Add lvm2app functions to query any pv, vg, or lv property / report field.
+ 
 
 
