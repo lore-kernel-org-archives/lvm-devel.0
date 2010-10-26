@@ -1,36 +1,42 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 26 Oct 2010 14:59:21 +0200
-Subject: [PATCH 0/5] Fix NULL dereference
-Message-ID: <cover.1288097372.git.zkabelac@redhat.com>
+Date: Tue, 26 Oct 2010 14:59:22 +0200
+Subject: [PATCH 1/5] Check type is not NULL before access
+In-Reply-To: <cover.1288097372.git.zkabelac@redhat.com>
+References: <cover.1288097372.git.zkabelac@redhat.com>
+Message-ID: <fa6078b0a1e1a7eba4dc339f425715eada3ad826.1288097372.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Updated patchset for NULL pointer dereferences issues reported by clang.
+clang Logic error Dereference of null pointer
 
-Unlike the first version - this time less aggresive solution is used.
-INTERNAL_ERRORs are reported in these moments (if they would ever happen),
-and the execution path aborts when such conditions are met.
-Previous version was rather ignoring these paths and could lead to 
-unwanted execution of other code parts.
+Check type before dereference and report internal error in case
+it's undefined and return from the function.
 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/libdm-report.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-Zdenek Kabelac (5):
-  Check type is not NULL before access
-  Ensure seg is nonnull
-  Ensure  first is not NULL before dereference
-  Fix theoretical usage of NULL pointer dereference
-  Check for NULL pointer
-
- lib/activate/dev_manager.c |    5 +++++
- lib/format1/format1.c      |    5 +++++
- libdm/libdm-report.c       |    6 ++++++
- libdm/regex/ttree.c        |    6 ++++++
- tools/reporter.c           |    4 ++++
- 5 files changed, 26 insertions(+), 0 deletions(-)
-
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 7631e21..db24fed 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -273,6 +273,12 @@ static void _display_fields(struct dm_report *rh)
+ 			log_warn("%*.*s", (int) strlen(desc) + 7,
+ 				 (int) strlen(desc) + 7,
+ 				 "-------------------------------------------------------------------------------");
++
++			if (!type) {
++				log_error(INTERNAL_ERROR "Type is not defined.");
++				return;
++			}
++
+ 			log_warn("  %sall%-*s - %s", type->prefix,
+ 				 (int) (id_len - 3 - strlen(type->prefix)), "",
+ 				 "All fields in this section.");
 -- 
 1.7.3.2
 
