@@ -1,68 +1,35 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 27 Oct 2010 11:40:15 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20101027114015.26986.qmail@sourceware.org>
+From: Petr Rockai <me@mornfall.net>
+Date: Fri, 29 Oct 2010 13:49:03 +0200
+Subject: [PATCH] let dmeventd unmount invalid snapshots (BZ 189462)
+In-Reply-To: <877hhujgh8.fsf_-_@twilight.int.mornfall.net.> (Petr Rockai's
+	message of "Thu, 07 Oct 2010 15:10:43 +0200")
+References: <87lj6cn3wz.fsf@twilight.int.mornfall.net.>
+	<87r5g4lejw.fsf@twilight.int.mornfall.net.>
+	<877hhujgh8.fsf_-_@twilight.int.mornfall.net.>
+Message-ID: <87y69h6wy8.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-10-27 11:40:15
+Hi again,
 
-Modified files:
-	daemons/clvmd  : clvmd.c 
+the somewhat delayed re-cast of the auto-umount patch is
+attached. Changes since the last time:
 
-Log message:
-	Alasdair correctly pointed out that if the two closes are concurrent (I haven't
-	checked, so they *might*), there is still a race possibility with the last
-	fix. This patch fixes that.
+- the umount itself is now outside the dmeventd lvm2 lock, which should
+  mitigate the deadlock opportunities introduced by the umount
+- we fork & exec real /bin/umount now, meaning that /etc/mtab is updated
+  (well, if umount manages to update it, that is)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.81&r2=1.82
+Yours,
+   Petr.
 
---- LVM2/daemons/clvmd/clvmd.c	2010/10/27 09:13:37	1.81
-+++ LVM2/daemons/clvmd/clvmd.c	2010/10/27 11:40:14	1.82
-@@ -188,6 +188,14 @@
- 	        exit(status);
- }
- 
-+static void safe_close(int *fd)
-+{
-+	if (*fd >= 0) {
-+		int to_close = *fd;
-+		*fd = -1;
-+		close(to_close);
-+	}
-+}
- 
- void debuglog(const char *fmt, ...)
- {
-@@ -838,10 +846,7 @@
- 						lastfd->next = thisfd->next;
- 						free_fd = thisfd;
- 						thisfd = lastfd;
--						if (free_fd->fd >= 0) {
--							close(free_fd->fd);
--							free_fd->fd = -1;
--						}
-+						safe_close(&(free_fd->fd));
- 
- 						/* Queue cleanup, this also frees the client struct */
- 						add_to_lvmqueue(free_fd, NULL, 0, NULL);
-@@ -1091,10 +1096,7 @@
- 			thisfd->bits.localsock.pipe_client->bits.pipe.client =
- 			    NULL;
- 
--		if (thisfd->fd >= 0) {
--			close(thisfd->fd);
--			thisfd->fd = -1;
--		}
-+		safe_close(&(thisfd->fd));
- 		return 0;
- 	} else {
- 		int comms_pipe[2];
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dmeventd-snapshot-umount.diff
+Type: text/x-diff
+Size: 6614 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101029/94d4053b/attachment.bin>
