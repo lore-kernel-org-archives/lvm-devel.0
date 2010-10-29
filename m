@@ -1,46 +1,21 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Oct 2010 12:57:01 -0000
-Subject: LVM2/tools lvm.c
-Message-ID: <20101025125701.4254.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 29 Oct 2010 22:26:39 +0100
+Subject: Patch for fsadm bz 64146
+In-Reply-To: <20101029205623.GD26687@redhat.com>
+References: <4CCB2668.8020809@redhat.com> <20101029204456.GB26687@redhat.com>
+	<20101029205623.GD26687@redhat.com>
+Message-ID: <20101029212639.GU29400@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-25 12:57:00
-
-Modified files:
-	tools          : lvm.c 
-
-Log message:
-	Fix potential NULL pointer dereference
-	
-	Makes clang happier as it covers all code paths and avoids NULL pointer
-	dereference through the 'com' pointer (which is NULL by default static
-	initialisation).
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvm.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
-
---- LVM2/tools/lvm.c	2010/07/09 15:34:48	1.113
-+++ LVM2/tools/lvm.c	2010/10/25 12:57:00	1.114
-@@ -85,11 +85,11 @@
- 				break;
- 			}
- 		}
--
--		if (!com)
--			return NULL;
- 	}
+> > "Skipping fsck for device \"$VOLUME\" as filesystem is mounted on $MOUNTED"
+> "for" could be replaced with "on" or "of" too. ;)
  
-+	if (!com)
-+		return NULL;
-+
- 	/* Short form arguments */
- 	if (len < 3) {
- 		while (match_no < com->num_args) {
+What's fsck?
+
+Alasdair
 
 
