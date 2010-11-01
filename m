@@ -1,163 +1,142 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 11 Sep 2018 09:54:36 -0400
-Subject: master - tests: adjust target version to enable reshape tests
-Message-ID: <201809111354.w8BDsaNP013967@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 01 Nov 2010 13:04:50 +0100
+Subject: [PATCH] Use dynamic allocation for buffer when reporting tags
+Message-ID: <4CCEACE2.8060609@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df67b1da4d5ee4cf4514f655dbc5a58193364cbd
-Commit:        df67b1da4d5ee4cf4514f655dbc5a58193364cbd
-Parent:        d0ff078e77e9f1018d14e824ae16b5d861a7f818
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Sep 11 15:39:31 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Sep 11 15:53:25 2018 +0200
+There's been a patch done recently to use dynamic allocation
+for metadata tags buffer which works fine now even with large
+set of tags/long tags (rhbz #633033).
 
-tests: adjust target version to enable reshape tests
+But we need the same dynamic allocation when trying to output
+the list of tags in reports which still use constant size
+buffer and hence makes problems (rhbz #648219).
 
-Bump target version to 1.14.0 which contains fixes
-for reshape deadlock/corruption to allow tests to
-run once the respective fixes show up in kernels.
-
-Remove now superfluous multi-core checks.
-
-Resolves: rhbz1501145
-Related: rhbz1514539
-Related: rhbz1586123
-Related: rhbz1613039
+Peter
 ---
- ...ert-raid-reshape-linear_to_raid6-single-type.sh |    5 +----
- ...t-raid-reshape-linear_to_striped-single-type.sh |    7 +------
- .../lvconvert-raid-reshape-linear_to_striped.sh    |    5 +----
- ...t-raid-reshape-striped_to_linear-single-type.sh |    6 +-----
- .../lvconvert-raid-reshape-striped_to_linear.sh    |    6 +-----
- test/shell/lvconvert-raid-reshape.sh               |    7 +------
- test/shell/lvconvert-raid-restripe-linear.sh       |    5 +----
- 7 files changed, 7 insertions(+), 34 deletions(-)
+ libdm/libdm-report.c |   48 +++++++++++++++++++++++++++++++++++++++---------
+ 1 files changed, 39 insertions(+), 9 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh b/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-index 05cb616..cbacf4a 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
-@@ -19,11 +19,8 @@ SKIP_WITH_LVMPOLLD=1
- aux lvmconf 'activation/raid_region_size = 512'
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 7631e21..55b8b80 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -757,7 +757,8 @@ static int _report_headings(struct dm_report *rh)
+ {
+ 	struct field_properties *fp;
+ 	const char *heading;
+-	char buf[1024];
++	char *buf;
++	size_t buf_size = 0;
  
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
-+aux have_raid 1 14 0 || skip
+ 	if (rh->flags & RH_HEADINGS_PRINTED)
+ 		return 1;
+@@ -773,6 +774,18 @@ static int _report_headings(struct dm_report *rh)
+ 		return 0;
+ 	}
  
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
- aux prepare_vg 5
++	dm_list_iterate_items(fp, &rh->field_props) {
++		if (buf_size < fp->width)
++			buf_size = fp->width;
++	}
++	/* Including trailing '\0'! */
++	buf_size++;
++
++	if (!(buf = dm_malloc(buf_size))) {
++		log_error("dm_report: Could not allocate memory for heading buffer.");
++		goto bad;
++	}
++
+ 	/* First heading line */
+ 	dm_list_iterate_items(fp, &rh->field_props) {
+ 		if (fp->flags & FLD_HIDDEN)
+@@ -780,7 +793,7 @@ static int _report_headings(struct dm_report *rh)
  
- #
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh b/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-index 7e31cb9..c9c4321 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_striped-single-type.sh
-@@ -18,12 +18,7 @@ SKIP_WITH_LVMPOLLD=1
- aux lvmconf 'activation/raid_region_size = 512'
+ 		heading = rh->fields[fp->field_num].heading;
+ 		if (rh->flags & DM_REPORT_OUTPUT_ALIGNED) {
+-			if (dm_snprintf(buf, sizeof(buf), "%-*.*s",
++			if (dm_snprintf(buf, buf_size, "%-*.*s",
+ 					 fp->width, fp->width, heading) < 0) {
+ 				log_error("dm_report: snprintf heading failed");
+ 				goto bad;
+@@ -806,9 +819,13 @@ static int _report_headings(struct dm_report *rh)
+ 	}
+ 	log_print("%s", (char *) dm_pool_end_object(rh->mem));
  
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
--
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
--aux prepare_vg 5
-+aux have_raid 1 14 0 || skip
++	dm_free(buf);
++
+ 	return 1;
  
- #
- # Test multi step linear -> striped conversion
-diff --git a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-index 04e2d62..c398c5e 100644
---- a/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-+++ b/test/shell/lvconvert-raid-reshape-linear_to_striped.sh
-@@ -17,11 +17,8 @@ SKIP_WITH_LVMPOLLD=1
- aux lvmconf 'activation/raid_region_size = 512'
+       bad:
++	if (buf)
++		dm_free(buf);
+ 	dm_pool_abandon_object(rh->mem);
+ 	return 0;
+ }
+@@ -892,7 +909,8 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
+ 	int32_t width;
+ 	uint32_t align;
+ 	const char *repstr;
+-	char buf[4096];
++	char *buf;
++	size_t buf_size = 0;
  
- which mkfs.ext4 || skip
--aux have_raid 1 12 0 || skip
-+aux have_raid 1 14 0 || skip
+ 	if (rh->flags & DM_REPORT_OUTPUT_FIELD_NAME_PREFIX) {
+ 		if (!(field_id = strdup(rh->fields[field->props->field_num].id))) {
+@@ -935,25 +953,33 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
+ 		if (!(align = field->props->flags & DM_REPORT_FIELD_ALIGN_MASK))
+ 			align = (field->props->flags & DM_REPORT_FIELD_TYPE_NUMBER) ? 
+ 				DM_REPORT_FIELD_ALIGN_RIGHT : DM_REPORT_FIELD_ALIGN_LEFT;
++
++		/* Including trailing '\0'! */
++		buf_size = width + 1;
++		if (!(buf = dm_malloc(buf_size))) {
++			log_error("dm_report: Could not allocate memory for output line buffer.");
++			return 0;
++		}
++
+ 		if (align & DM_REPORT_FIELD_ALIGN_LEFT) {
+-			if (dm_snprintf(buf, sizeof(buf), "%-*.*s",
++			if (dm_snprintf(buf, buf_size, "%-*.*s",
+ 					 width, width, repstr) < 0) {
+ 				log_error("dm_report: left-aligned snprintf() failed");
+-				return 0;
++				goto bad;
+ 			}
+ 			if (!dm_pool_grow_object(rh->mem, buf, width)) {
+ 				log_error("dm_report: Unable to extend output line");
+-				return 0;
++				goto bad;
+ 			}
+ 		} else if (align & DM_REPORT_FIELD_ALIGN_RIGHT) {
+-			if (dm_snprintf(buf, sizeof(buf), "%*.*s",
++			if (dm_snprintf(buf, buf_size, "%*.*s",
+ 					 width, width, repstr) < 0) {
+ 				log_error("dm_report: right-aligned snprintf() failed");
+-				return 0;
++				goto bad;
+ 			}
+ 			if (!dm_pool_grow_object(rh->mem, buf, width)) {
+ 				log_error("dm_report: Unable to extend output line");
+-				return 0;
++				goto bad;
+ 			}
+ 		}
+ 	}
+@@ -966,6 +992,10 @@ static int _output_field(struct dm_report *rh, struct dm_report_field *field)
+ 		}
  
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
- aux prepare_vg 5
+ 	return 1;
++
++bad:
++	dm_free(buf);
++	return 0;
+ }
  
- #
-diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-index 476fb10..60fc59f 100644
---- a/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-+++ b/test/shell/lvconvert-raid-reshape-striped_to_linear-single-type.sh
-@@ -18,11 +18,7 @@ SKIP_WITH_LVMPOLLD=1
- aux lvmconf 'activation/raid_region_size = 512'
- 
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
--
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
-+aux have_raid 1 14 0 || skip
- 
- aux prepare_vg 5
- 
-diff --git a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-index ccbe6ad..e217ea3 100644
---- a/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-+++ b/test/shell/lvconvert-raid-reshape-striped_to_linear.sh
-@@ -18,11 +18,7 @@ SKIP_WITH_LVMPOLLD=1
- aux lvmconf 'activation/raid_region_size = 512'
- 
- which mkfs.ext4 || skip
--aux have_raid 1 12 0 || skip
--
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
-+aux have_raid 1 14 0 || skip
- 
- aux prepare_vg 5 20
- 
-diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
-index ab3ea4e..28c7e2d 100644
---- a/test/shell/lvconvert-raid-reshape.sh
-+++ b/test/shell/lvconvert-raid-reshape.sh
-@@ -18,12 +18,7 @@ LVM_SKIP_LARGE_TESTS=0
- . lib/inittest
- 
- which mkfs.ext4 || skip
--aux have_raid 1 13 99 || skip # needed to address RHBZ#1501145
--
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--#aux have_multi_core || skip
--# dropping single-core limitation with  1.12 target
-+aux have_raid 1 14 0 || skip
- 
- if [ $LVM_SKIP_LARGE_TESTS -eq 0 ]
- then
-diff --git a/test/shell/lvconvert-raid-restripe-linear.sh b/test/shell/lvconvert-raid-restripe-linear.sh
-index 0ac8a04..70d31db 100644
---- a/test/shell/lvconvert-raid-restripe-linear.sh
-+++ b/test/shell/lvconvert-raid-restripe-linear.sh
-@@ -16,11 +16,8 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
- 
- which mkfs.ext4 || skip
--aux have_raid 1 12 0 || skip
-+aux have_raid 1 14 0 || skip
- 
--# Temporarily skip reshape tests on single-core CPUs until there's a fix for
--# https://bugzilla.redhat.com/1443999 - AGK 2017/04/20
--aux have_multi_core || skip
- aux prepare_vg 5
- 
- #
+ static int _output_as_rows(struct dm_report *rh)
 
 
