@@ -1,36 +1,69 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 05 Nov 2010 16:05:51 +0100
-Subject: [PATCH 3/3] ocf support
-In-Reply-To: <23bf9e224c03d73cd1b4c82bf2e5e29d17d10efb.1288706876.git.zkabelac@redhat.com>
-References: <cover.1288706876.git.zkabelac@redhat.com>
-	<23bf9e224c03d73cd1b4c82bf2e5e29d17d10efb.1288706876.git.zkabelac@redhat.com>
-Message-ID: <4CD41D4F.5050103@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 5 Nov 2010 16:10:10 -0000
+Subject: LVM2/include Makefile.in
+Message-ID: <20101105161010.17169.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 2.11.2010 15:10, Zdenek Kabelac napsal(a):
-> Updated patch from Florian Haas from Linux-HA project.
-> 
-> CF patch:
->   user needs to configure --enable-ocf so it gets installed with
->   make install target by default. Otherwise user can use:
->   make install_ocf to get only ocf files installed.
->   With disabled (default) ocf support - no files are installed.
-> 
-> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
-> ---
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-11-05 16:10:08
+
+Modified files:
+	include        : Makefile.in 
+
+Log message:
+	Use include make.tmpl
+	
+	Makes easier to use recursive targets and simplifies Makefile.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+
+--- LVM2/include/Makefile.in	2010/08/02 13:17:04	1.14
++++ LVM2/include/Makefile.in	2010/11/05 16:10:08	1.15
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -12,15 +12,11 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+-SHELL = /bin/sh
+-
+ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-LN_S = @LN_S@
+-
+-.PHONY: clean distclean all install pofile install_cluster install_device-mapper
++include $(top_builddir)/make.tmpl
+ 
+ all: .symlinks_created
+ 
+@@ -37,14 +33,4 @@
+ 
+ device-mapper: all
+ 
+-clean:
+-
+-install:
+-
+-install_cluster:
+-
+-install_device-mapper:
+-
+-install_lvm2:
+-
+ cflow: all
 
 
-Updated version with ocf_scriptdir defined in  make.tmpl.in
-
-Zdenek
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 0003-ocf-support.patch
-Type: text/x-patch
-Size: 11907 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101105/be4aec88/attachment.bin>
