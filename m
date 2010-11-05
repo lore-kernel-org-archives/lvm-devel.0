@@ -1,35 +1,31 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 2 Nov 2010 20:10:36 -0000
-Subject: LVM2/libdm/regex parse_rx.c
-Message-ID: <20101102201036.25035.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 05 Nov 2010 16:04:49 +0100
+Subject: [PATCH 2/3] Add ${prefix}
+In-Reply-To: <e9744c088379445ee05a3db39fa75f03b771ad2f.1288706876.git.zkabelac@redhat.com>
+References: <cover.1288706876.git.zkabelac@redhat.com>
+	<e9744c088379445ee05a3db39fa75f03b771ad2f.1288706876.git.zkabelac@redhat.com>
+Message-ID: <4CD41D11.8050705@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-11-02 20:10:35
+Dne 2.11.2010 15:10, Zdenek Kabelac napsal(a):
+> Avoid files to be written into the live system if lvm was
+> configured with diferent --prefix.
+> Also put path into one variable initd_dir.
+> 
+> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+> ---
 
-Modified files:
-	libdm/regex    : parse_rx.c 
+Updated version with  initdir defined in make.tmpl.in
 
-Log message:
-	lost line
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/parse_rx.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
-
---- LVM2/libdm/regex/parse_rx.c	2010/11/02 19:56:33	1.14
-+++ LVM2/libdm/regex/parse_rx.c	2010/11/02 20:10:35	1.15
-@@ -574,6 +574,7 @@
- 		if (!(r->left = _pass(mem, r->left, changed)))
- 			return_NULL;
- 
-+		break;
- 	case OR:
- 		/* It's important we optimise sub nodes first */
- 		if (!(r->left = _pass(mem, r->left, changed)))
-
-
+Zdenek
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 0002-Add-prefix.patch
+Type: text/x-patch
+Size: 1622 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101105/ebfd7f40/attachment.bin>
