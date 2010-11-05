@@ -1,42 +1,30 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 22:15:53 +0000
-Subject: [PATCH] Refactor handling of percent values (towards BZ 654441)
-In-Reply-To: <87aakxo6gn.fsf@twilight.int.mornfall.net.>
-References: <87eia9o9b6.fsf@twilight.int.mornfall.net.>
-	<87aakxo6gn.fsf@twilight.int.mornfall.net.>
-Message-ID: <20101129221552.GR29380@agk-dp.fab.redhat.com>
+From: Vitaly Kuznetsov <vitty@altlinux.ru>
+Date: Fri, 05 Nov 2010 11:56:42 -0000
+Subject: [PATCH] Fix dmeventd path check
+Message-ID: <8739rg7zmq.fsf@vps2.branbackup.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 02:53:12PM +0100, Peter Rockai wrote:
-> and now an amended patch, taking Alasdair's IRC feedback into account. I
-> have moved the implementation aside to a separate unit, and added a
-> comment explaining how the percent_t type works.
- 
-Ack.  (Not checked line-by-line, but not spotted any problems in
-a quick read through.)
+Hi,
 
-What's our test coverage like for the code that uses and relies on
-percentages?  - The parts that print them, and the parts like
-detecting syncs are complete?
-Any manual tests done or need doing?  I'd like to avoid regressions
-in the 'mirroring complete' detection in particular.
+I found a small bug in _start_server in daemons/dmeventd/libdevmapper-event.c: 
 
-Alasdair
+There is a possibility to change dmeventd_path by setting "executable"
+parameter in config. But it will not work if there is no executable at
+default DMEVENTD_PATH due to error in check: we must check args[0]
+(which is dmeventd_path ? : default_dmeventd_path) instead of
+DMEVENTD_PATH for existence. My patch fix this small issue.
 
-> +percent_t make_percent(uint64_t numerator, uint64_t denominator)
-> +{
-> +    percent_t percent;
-> +    if (!denominator)
-> +        return PERCENT_100; /* FIXME? */
+-- 
+Vitaly Kuznetsov, ALT Linux
 
-How does current code handle this, or does it never occur?
-If not, just define it and state the behaviour in the header file (for example).
-(or go for 'invalid')
-
-Alasdair
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-2.02.75-alt-dmeventd-path.patch
+Type: text/x-diff
+Size: 573 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101105/1365565d/attachment.bin>
