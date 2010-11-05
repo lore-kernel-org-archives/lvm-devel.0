@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 5 Nov 2010 16:10:10 -0000
-Subject: LVM2/include Makefile.in
-Message-ID: <20101105161010.17169.qmail@sourceware.org>
+Date: 5 Nov 2010 16:13:19 -0000
+Subject: LVM2 ./make.tmpl.in scripts/Makefile.in
+Message-ID: <20101105161319.18965.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,60 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-05 16:10:08
+Changes by:	zkabelac at sourceware.org	2010-11-05 16:13:19
 
 Modified files:
-	include        : Makefile.in 
+	.              : make.tmpl.in 
+	scripts        : Makefile.in 
 
 Log message:
-	Use include make.tmpl
+	Add given user prefix to make target install_initscripts
 	
-	Makes easier to use recursive targets and simplifies Makefile.
+	Avoid files to be written into the live system if lvm was
+	configured with different --prefix.
+	
+	Use initdir for install target path.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.112&r2=1.113
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/Makefile.in.diff?cvsroot=lvm2&r1=1.18&r2=1.19
 
---- LVM2/include/Makefile.in	2010/08/02 13:17:04	1.14
-+++ LVM2/include/Makefile.in	2010/11/05 16:10:08	1.15
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -12,15 +12,11 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/make.tmpl.in	2010/10/07 16:33:35	1.112
++++ LVM2/make.tmpl.in	2010/11/05 16:13:18	1.113
+@@ -64,6 +64,8 @@
+ staticdir = $(DESTDIR)@STATICDIR@
+ udevdir = $(DESTDIR)@udevdir@
+ pkgconfigdir = $(usrlibdir)/pkgconfig
++initdir = $(DESTDIR)@sysconfdir@/rc.d/init.d
++
+ USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
+   $(AWK) -f $(top_srcdir)/scripts/relpath.awk)
  
--SHELL = /bin/sh
--
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+--- LVM2/scripts/Makefile.in	2010/05/20 14:45:17	1.18
++++ LVM2/scripts/Makefile.in	2010/11/05 16:13:19	1.19
+@@ -33,13 +33,13 @@
  
--LN_S = @LN_S@
--
--.PHONY: clean distclean all install pofile install_cluster install_device-mapper
-+include $(top_builddir)/make.tmpl
+ # FIXME Customise for other distributions
+ install_initscripts:
+-	$(INSTALL_DIR) $(DESTDIR)/etc/rc.d/init.d
+-	$(INSTALL_SCRIPT) lvm2_monitoring_init_red_hat $(DESTDIR)/etc/rc.d/init.d/lvm2-monitor
++	$(INSTALL_DIR) $(initdir)
++	$(INSTALL_SCRIPT) lvm2_monitoring_init_red_hat $(initdir)/lvm2-monitor
+ ifneq ("@CLVMD@", "none")
+-	$(INSTALL_SCRIPT) clvmd_init_red_hat $(DESTDIR)/etc/rc.d/init.d/clvmd
++	$(INSTALL_SCRIPT) clvmd_init_red_hat $(initdir)/clvmd
+ endif
+ ifeq ("@BUILD_CMIRRORD@", "yes")
+-	$(INSTALL_SCRIPT) cmirrord_init_red_hat $(DESTDIR)/etc/rc.d/init.d/cmirrord
++	$(INSTALL_SCRIPT) cmirrord_init_red_hat $(initdir)/cmirrord
+ endif
  
- all: .symlinks_created
- 
-@@ -37,14 +33,4 @@
- 
- device-mapper: all
- 
--clean:
--
--install:
--
--install_cluster:
--
--install_device-mapper:
--
--install_lvm2:
--
- cflow: all
+ DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat lvm2_monitoring_init_red_hat
 
 
