@@ -1,102 +1,31 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 5 Nov 2010 18:18:13 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/m ...
-Message-ID: <20101105181813.2851.qmail@sourceware.org>
+From: Vitaly Kuznetsov <vitty@altlinux.ru>
+Date: Mon, 08 Nov 2010 11:42:20 +0000
+Subject: [PATCH] Fix dmeventd path check
+Message-ID: <87lj54avoj.fsf@vps2.branbackup.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-11-05 18:18:12
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c 
-	lib/metadata   : lv_manip.c 
+I found a small bug in _start_server in
+daemons/dmeventd/libdevmapper-event.c:
 
-Log message:
-	Clarify error messages when activation fails due to activation filter use.
+There is a possibility to change dmeventd_path by setting "executable"
+parameter in config. But it will not work if there is no executable at
+default DMEVENTD_PATH due to error in check: we must check args[0]
+(which is dmeventd_path ? : default_dmeventd_path) instead of
+DMEVENTD_PATH for existence. My patch fix this small issue.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1788&r2=1.1789
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.178&r2=1.179
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.234&r2=1.235
+-- 
+Vitaly Kuznetsov, ALT Linux
 
---- LVM2/WHATS_NEW	2010/11/05 16:18:38	1.1788
-+++ LVM2/WHATS_NEW	2010/11/05 18:18:11	1.1789
-@@ -1,5 +1,6 @@
- Version 2.02.76 - 
- ===================================
-+  Clarify error messages when activation fails due to activation filter use.
-   Add initial script VolumeGroup.ocf for pacemaker support.
-   Fix regex optimiser not to ignore RHS of OR nodes in _find_leftmost_common.
-   Fix handling of online filesystem resize (using new fsadm return code).
---- LVM2/lib/activate/activate.c	2010/11/01 14:17:35	1.178
-+++ LVM2/lib/activate/activate.c	2010/11/05 18:18:12	1.179
-@@ -285,12 +285,12 @@
- 		/* Don't activate */
- 		return 0;
- 	}
--
--	for (cv = cn->v; cv; cv = cv->next) {
-+	else
- 		log_verbose("activation/volume_list configuration setting "
- 			    "defined, checking the list to match %s/%s",
- 			    lv->vg->name, lv->name);
- 
-+	for (cv = cn->v; cv; cv = cv->next) {
- 		if (cv->type != CFG_STRING) {
- 			log_error("Ignoring invalid string in config file "
- 				  "activation/volume_list");
-@@ -303,6 +303,7 @@
- 			continue;
- 		}
- 
-+
- 		/* Tag? */
- 		if (*str == '@') {
- 			str++;
-@@ -1239,8 +1240,8 @@
- 		goto out;
- 
- 	if (!_passes_activation_filter(cmd, lv)) {
--		log_verbose("Not activating %s/%s due to config file settings",
--			    lv->vg->name, lv->name);
-+		log_verbose("Not activating %s/%s since it does not pass "
-+			    "activation filter.", lv->vg->name, lv->name);
- 		*activate_lv = 0;
- 	} else
- 		*activate_lv = 1;
-@@ -1266,8 +1267,8 @@
- 		goto out;
- 
- 	if (filter && !_passes_activation_filter(cmd, lv)) {
--		log_verbose("Not activating %s/%s due to config file settings",
--			    lv->vg->name, lv->name);
-+		log_error("Not activating %s/%s since it does not pass "
-+			  "activation filter.", lv->vg->name, lv->name);
- 		goto out;
- 	}
- 
---- LVM2/lib/metadata/lv_manip.c	2010/10/14 20:03:12	1.234
-+++ LVM2/lib/metadata/lv_manip.c	2010/11/05 18:18:12	1.235
-@@ -3240,12 +3240,9 @@
- 			goto revert_new_lv;
- 		}
- 	} else if (!activate_lv(cmd, lv)) {
--		if (lp->zero) {
--			log_error("Aborting. Failed to activate new LV to wipe "
--				  "the start of it.");
--			goto deactivate_and_revert_new_lv;
--		}
- 		log_error("Failed to activate new LV.");
-+		if (lp->zero)
-+			goto deactivate_and_revert_new_lv;
- 		return 0;
- 	}
- 
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2-2.02.75-alt-dmeventd-path.patch
+Type: text/x-diff
+Size: 573 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101108/287cfa4a/attachment.bin>
