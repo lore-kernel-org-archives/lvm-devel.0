@@ -1,31 +1,49 @@
-From: Vitaly Kuznetsov <vitty@altlinux.ru>
-Date: Mon, 08 Nov 2010 11:42:20 +0000
-Subject: [PATCH] Fix dmeventd path check
-Message-ID: <87lj54avoj.fsf@vps2.branbackup.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Nov 2010 14:19:48 -0000
+Subject: LVM2/include Makefile.in
+Message-ID: <20101108141948.28165.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-11-08 14:19:48
 
-I found a small bug in _start_server in
-daemons/dmeventd/libdevmapper-event.c:
+Modified files:
+	include        : Makefile.in 
 
-There is a possibility to change dmeventd_path by setting "executable"
-parameter in config. But it will not work if there is no executable at
-default DMEVENTD_PATH due to error in check: we must check args[0]
-(which is dmeventd_path ? : default_dmeventd_path) instead of
-DMEVENTD_PATH for existence. My patch fix this small issue.
+Log message:
+	Fix include commit and switch to use DISTCLEAN_TARGETS
+	
+	Fixing warning introduced by 'include make.tmpl' commit.
+	Produced this warning:
+	
+	Makefile:29: warning: overriding commands for target `distclean'
+	../make.tmpl:366: warning: ignoring old commands for target `distclean'
 
--- 
-Vitaly Kuznetsov, ALT Linux
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvm2-2.02.75-alt-dmeventd-path.patch
-Type: text/x-diff
-Size: 573 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101108/287cfa4a/attachment.bin>
+--- LVM2/include/Makefile.in	2010/11/05 16:10:08	1.15
++++ LVM2/include/Makefile.in	2010/11/08 14:19:48	1.16
+@@ -25,12 +25,11 @@
+ 	for i in `cat $<`; do $(LN_S) $$i ; done
+ 	touch $@
+ 
+-distclean:
+-	find . -maxdepth 1 -type l -exec $(RM) \{\} \;
+-	$(RM) Makefile .include_symlinks .symlinks_created .symlinks
+-
+ pofile: all
+ 
+ device-mapper: all
+ 
+ cflow: all
++
++DISTCLEAN_TARGETS += $(shell find . -maxdepth 1 -type l)
++DISTCLEAN_TARGETS += .include_symlinks .symlinks_created .symlinks
+
+
