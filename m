@@ -1,233 +1,169 @@
-From: Dave Wysochanski <wysochanski@pobox.com>
-Date: Wed, 10 Nov 2010 11:12:00 -0500
-Subject: [PATCH 7/7] Update tests for lvseg and pvseg apis.
-In-Reply-To: <1289405520-19964-1-git-send-email-wysochanski@pobox.com>
-References: <1289405520-19964-1-git-send-email-wysochanski@pobox.com>
-Message-ID: <1289405520-19964-8-git-send-email-wysochanski@pobox.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 10 Nov 2010 16:14:05 -0000
+Subject: LVM2 ./WHATS_NEW scripts/fsadm.sh
+Message-ID: <20101110161405.12477.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Dave Wysochanski <dwysocha@redhat.com>
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-11-10 16:14:03
 
-Update interactive tests for lvm2app lvseg and pvseg apis.
+Modified files:
+	.              : WHATS_NEW 
+	scripts        : fsadm.sh 
 
-Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
----
- test/api/test.c |  124 +++++++++++++++++++++++++++++++++----------------------
- 1 files changed, 75 insertions(+), 49 deletions(-)
+Log message:
+	fsadm fix for downsize of unmounted fs
+	
+	Fix for the last commit as $MOUNTED is not only used as bool flag,
+	but also store mounted location for remount - so parsing output
+	from mount differently then from /proc/mounts.
+	
+	Prefix calls of 'tunefs' tools with LANG=C to be sure we always do get
+	some nonlocalized strings.
+	
+	Avoid using forced 'resize2fs' for cleanly unmounted filesystems and
+	run regular fsck -f for this case as required by resize2fs.
+	
+	'fsadm check' uses date difference for extX filesystems between
+	the last mount and last check of 'fsck -f' execution and if the mount
+	was later run 'fsck' with -f so resize2fs is happy and user does not
+	need to pass '-f' flag.
 
-diff --git a/test/api/test.c b/test/api/test.c
-index fea3d0d..bfe32b7 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -67,8 +67,12 @@ static void _show_help(void)
- 	       "List the uuids of the VGs that exist in the system\n");
- 	printf("'vg_list_pvs vgname': "
- 	       "List the PVs that exist in VG vgname\n");
-+	printf("'pv_list_pvsegs pvname': "
-+	       "List the PV segments that exist in PV pvname\n");
- 	printf("'vg_list_lvs vgname': "
- 	       "List the LVs that exist in VG vgname\n");
-+	printf("'lv_list_lvsegs vgname lvname': "
-+	       "List the LV segments that exist in LV vgname/lvname\n");
- 	printf("'vgs_open': "
- 	       "List the VGs that are currently open\n");
- 	printf("'vgs': "
-@@ -187,17 +191,13 @@ static vg_t _lookup_vg_by_name(char **argv, int argc)
- 	return vg;
- }
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1794&r2=1.1795
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+
+--- LVM2/WHATS_NEW	2010/11/10 10:05:27	1.1794
++++ LVM2/WHATS_NEW	2010/11/10 16:14:02	1.1795
+@@ -1,6 +1,7 @@
+ Version 2.02.77 -
+ ===================================
+-  Fix regression in detection of mounted filesystem for older systems (2.0.75).
++  Fix fsadm need of using '-f' for downsize of unmounted filesystem.
++  Fix fsadm regression in detection of mounted filesystem for older systems (2.0.75).
+   Extend cling allocation policy to recognise PV tags (cling_by_tags).
+   Add allocation/cling_tag_list to lvm.conf.
+   Regenerate configure with 'autoreconf' for --enable-ocf. (2.02.76)
+--- LVM2/scripts/fsadm.sh	2010/11/10 10:03:07	1.22
++++ LVM2/scripts/fsadm.sh	2010/11/10 16:14:03	1.23
+@@ -199,14 +199,19 @@
+ 	# for empty string try again with real volume name
+ 	test -z "$MOUNTED" && MOUNTED=$($GREP ^"$RVOLUME" $PROCMOUNTS)
  
--static pv_t _lookup_pv_by_name(char **argv, int argc)
-+static pv_t _lookup_pv_by_name(const char *name)
- {
- 	pv_t pv;
- 
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return NULL;
--	}
--	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
-+	if (!(pv = dm_hash_lookup(_pvname_hash, name))) {
- 		printf ("Can't find %s in open PVs - run vg_open first\n",
--			argv[1]);
-+			name);
- 		return NULL;
- 	}
- 	return pv;
-@@ -236,6 +236,7 @@ static void _add_device_to_pvname_hash(struct dm_list *pvs, const char *name)
- 			dm_hash_insert(_pvname_hash, name, pvl->pv);
- 	}
- }
-+
- static void _vg_reduce(char **argv, int argc, lvm_t libh)
- {
- 	vg_t vg;
-@@ -494,6 +495,40 @@ static void _pvs_in_vg(char **argv, int argc)
- 	}
- }
- 
-+static void _print_property_value(const char *name,
-+				  struct lvm_property_value v)
-+{
-+	if (!v.is_valid)
-+		printf("%s = INVALID\n", name);
-+	else if (v.is_string)
-+		printf("%s = %s\n", name, v.value.string);
-+	else
-+		printf("%s = %"PRIu64"\n", name, v.value.integer);
-+}
-+
-+static void _pvsegs_in_pv(char **argv, int argc)
-+{
-+	struct dm_list *pvsegs;
-+	struct lvm_pvseg_list *pvl;
-+	pv_t pv;
-+
-+	if (!(pv = _lookup_pv_by_name(argv[1])))
-+		return;
-+	pvsegs = lvm_pv_list_pvsegs(pv);
-+	if (!pvsegs || dm_list_empty(pvsegs)) {
-+		printf("No PV segments in pv %s\n", argv[1]);
-+		return;
-+	}
-+	printf("PV segments in pv %s:\n", argv[1]);
-+	dm_list_iterate_items(pvl, pvsegs) {
-+		struct lvm_property_value v;
-+		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_start");
-+		_print_property_value("pvseg_start", v);
-+		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_size");
-+		_print_property_value("pvseg_size", v);
-+	}
-+}
-+
- static void _scan_vgs(lvm_t libh)
- {
- 	lvm_scan(libh);
-@@ -569,14 +604,6 @@ static void _vg_tag(char **argv, int argc, int add)
- 	       add ? "adding":"removing", argv[2], argv[1]);
- }
- 
--static void _print_property_value(struct lvm_property_value value)
--{
--	if (value.is_string)
--		printf(", value = %s\n", value.value.string);
--	else
--		printf(", value = %"PRIu64"\n", value.value.integer);
--}
+-	# for systems with different device names - check also mount output
+-	test -z "$MOUNTED" && MOUNTED=$($MOUNT | $GREP ^"$VOLUME")
+-	test -z "$MOUNTED" && MOUNTED=$($MOUNT | $GREP ^"$RVOLUME")
 -
- static void _pv_get_property(char **argv, int argc)
- {
- 	pv_t pv;
-@@ -586,20 +613,10 @@ static void _pv_get_property(char **argv, int argc)
- 		printf("Please enter pvname, field_id\n");
- 		return;
- 	}
--	if (!(pv = _lookup_pv_by_name(argv, argc)))
-+	if (!(pv = _lookup_pv_by_name(argv[1])))
- 		return;
- 	v = lvm_pv_get_property(pv, argv[2]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in PV %s",
--	       argv[2], argv[1]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[2], v);
- }
- 
- static void _vg_get_property(char **argv, int argc)
-@@ -614,17 +631,7 @@ static void _vg_get_property(char **argv, int argc)
- 	if (!(vg = _lookup_vg_by_name(argv, argc)))
- 		return;
- 	v =  lvm_vg_get_property(vg, argv[2]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in VG %s",
--	       argv[2], argv[1]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[2], v);
- }
- 
- static void _lv_get_property(char **argv, int argc)
-@@ -639,17 +646,7 @@ static void _lv_get_property(char **argv, int argc)
- 	if (!(lv = _lookup_lv_by_name(argv[2])))
- 		return;
- 	v = lvm_lv_get_property(lv, argv[3]);
--	if (!v.is_valid)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("obtaining value of property %s in LV %s",
--	       argv[3], argv[2]);
--	if (!v.is_valid) {
--		printf("\n");
--		return;
--	}
--	_print_property_value(v);
-+	_print_property_value(argv[3], v);
- }
- 
- static void _lv_get_tags(char **argv, int argc)
-@@ -742,6 +739,31 @@ static void _lvs_in_vg(char **argv, int argc)
- 	}
- }
- 
-+static void _lvsegs_in_lv(char **argv, int argc)
-+{
-+	struct dm_list *lvsegs;
-+	struct lvm_lvseg_list *lvl;
-+	lv_t lv;
+ 	# cut device name prefix and trim everything past mountpoint
+ 	# echo translates \040 to spaces
+ 	MOUNTED=${MOUNTED#* }
+ 	MOUNTED=$(echo -n -e ${MOUNTED%% *})
 +
-+	if (!(lv = _lookup_lv_by_name(argv[2])))
-+		return;
-+	lvsegs = lvm_lv_list_lvsegs(lv);
-+	if (!lvsegs || dm_list_empty(lvsegs)) {
-+		printf("No LV segments in lv %s\n", lvm_lv_get_name(lv));
-+		return;
-+	}
-+	printf("LV segments in lv %s:\n", lvm_lv_get_name(lv));
-+	dm_list_iterate_items(lvl, lvsegs) {
-+		struct lvm_property_value v;
-+		v = lvm_lvseg_get_property(lvl->lvseg, "segtype");
-+		_print_property_value("segtype", v);
-+		v = lvm_lvseg_get_property(lvl->lvseg, "seg_start_pe");
-+		_print_property_value("seg_start_pe", v);
-+		v = lvm_lvseg_get_property(lvl->lvseg, "seg_size");
-+		_print_property_value("seg_size", v);
-+	}
++	# for systems with different device names - check also mount output
++	if test -z "$MOUNTED" ; then
++		MOUNTED=$(LANG=C $MOUNT | $GREP ^"$VOLUME")
++		test -z "$MOUNTED" && MOUNTED=$(LANG=C $MOUNT | $GREP ^"$RVOLUME")
++		MOUNTED=${MOUNTED##* on }
++		MOUNTED=${MOUNTED% type *} # allow type in the mount name
++	fi
++
+ 	test -n "$MOUNTED"
+ }
+ 
+@@ -271,7 +276,7 @@
+ ####################################
+ resize_ext() {
+ 	verbose "Parsing $TUNE_EXT -l \"$VOLUME\""
+-	for i in $($TUNE_EXT -l "$VOLUME"); do
++	for i in $(LANG=C $TUNE_EXT -l "$VOLUME"); do
+ 		case "$i" in
+ 		  "Block size"*) BLOCKSIZE=${i##*  } ;;
+ 		  "Block count"*) BLOCKCOUNT=${i##*  } ;;
+@@ -284,8 +289,13 @@
+ 	if [ "$NEWBLOCKCOUNT" -lt "$BLOCKCOUNT" -o "$EXTOFF" -eq 1 ]; then
+ 		detect_mounted && verbose "$RESIZE_EXT needs unmounted filesystem" && try_umount
+ 		REMOUNT=$MOUNTED
+-		# CHECKME: after umount resize2fs requires fsck or -f flag.
+-		FSFORCE="-f"
++		if test -n "$MOUNTED" ; then
++			# Forced fsck -f for umounted extX filesystem.
++			case "$-" in
++			  *i*) dry $FSCK $YES -f "$VOLUME" ;;
++			  *) dry $FSCK -f -p "$VOLUME" ;;
++			esac
++		fi
+ 	fi
+ 
+ 	verbose "Resizing filesystem on device \"$VOLUME\" to $NEWSIZE bytes ($BLOCKCOUNT -> $NEWBLOCKCOUNT blocks of $BLOCKSIZE bytes)"
+@@ -301,7 +311,7 @@
+ 	detect_mounted && verbose "ReiserFS resizes only unmounted filesystem" && try_umount
+ 	REMOUNT=$MOUNTED
+ 	verbose "Parsing $TUNE_REISER \"$VOLUME\""
+-	for i in $($TUNE_REISER "$VOLUME"); do
++	for i in $(LANG=C $TUNE_REISER "$VOLUME"); do
+ 		case "$i" in
+ 		  "Blocksize"*) BLOCKSIZE=${i##*: } ;;
+ 		  "Count of blocks"*) BLOCKCOUNT=${i##*: } ;;
+@@ -330,7 +340,7 @@
+ 		temp_mount || error "Cannot mount Xfs filesystem"
+ 	fi
+ 	verbose "Parsing $TUNE_XFS \"$MOUNTPOINT\""
+-	for i in $($TUNE_XFS "$MOUNTPOINT"); do
++	for i in $(LANG=C $TUNE_XFS "$MOUNTPOINT"); do
+ 		case "$i" in
+ 		  "data"*) BLOCKSIZE=${i##*bsize=} ; BLOCKCOUNT=${i##*blocks=} ;;
+ 		esac
+@@ -370,6 +380,15 @@
+ 	cleanup 0
+ }
+ 
++####################################
++# Calclulate diff between two dates
++#  LANG=C input is expected the
++#  only one supported
++####################################
++diff_dates() {
++         echo $(( $(date -u -d"$1" +%s 2>/dev/null) - $(date -u -d"$2" +%s 2>/dev/null) ))
 +}
 +
- static void _lv_deactivate(char **argv, int argc)
- {
- 	lv_t lv;
-@@ -886,8 +908,12 @@ static int lvmapi_test_shell(lvm_t libh)
- 			_list_open_vgs();
- 		} else if (!strcmp(argv[0], "vg_list_pvs")) {
- 			_pvs_in_vg(argv, argc);
-+		} else if (!strcmp(argv[0], "pv_list_pvsegs")) {
-+			_pvsegs_in_pv(argv, argc);
- 		} else if (!strcmp(argv[0], "vg_list_lvs")) {
- 			_lvs_in_vg(argv, argc);
-+		} else if (!strcmp(argv[0], "lv_list_lvsegs")) {
-+			_lvsegs_in_lv(argv, argc);
- 		} else if (!strcmp(argv[0], "list_vg_names")) {
- 			_list_vg_names(libh);
- 		} else if (!strcmp(argv[0], "list_vg_ids")) {
--- 
-1.7.2.2
+ ###################
+ # Check filesystem
+ ###################
+@@ -379,6 +398,30 @@
+ 		verbose "Skipping filesystem check for device \"$VOLUME\" as the filesystem is mounted on $MOUNTED";
+ 		cleanup 3
+ 	fi
++
++	case "$FSTYPE" in
++	  "ext2"|"ext3"|"ext4")
++		IFS_CHECK=$IFS
++		IFS=$NL
++		for i in $(LANG=C $TUNE_EXT -l "$VOLUME"); do
++			case "$i" in
++			  "Last mount"*) LASTMOUNT=${i##*: } ;;
++			  "Last checked"*) LASTCHECKED=${i##*: } ;;
++			esac
++		done
++		case "$LASTMOUNT" in
++		  *"n/a") ;; # nothing to do - system was not mounted yet
++		  *)
++			LASTDIFF=$(diff_dates $LASTMOUNT $LASTCHECKED)
++			if test "$LASTDIFF" -gt 0 ; then
++				verbose "Filesystem has not been checked after the last mount, using fsck -f"
++				FORCE="-f"
++			fi
++			;;
++		esac
++		IFS=$IFS_CHECK
++	esac
++
+ 	case "$FSTYPE" in
+ 	  "xfs") dry $XFS_CHECK "$VOLUME" ;;
+ 	  *)    # check if executed from interactive shell environment
 
 
