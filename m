@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Nov 2010 10:03:07 -0000
-Subject: LVM2/scripts fsadm.sh
-Message-ID: <20101110100307.3127.qmail@sourceware.org>
+Date: 10 Nov 2010 10:05:27 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20101110100527.4817.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-10 10:03:07
+Changes by:	zkabelac at sourceware.org	2010-11-10 10:05:27
 
 Modified files:
-	scripts        : fsadm.sh 
+	.              : WHATS_NEW 
 
 Log message:
-	Scan also 'mount' output for mounted filesystem.
-	
-	As util-linux package seems to give all the time different names,
-	try harder to figure out, where is the given lv possible mounted
-	and scan /proc/mounts and if not found there, test also 'mount' output.
-	
-	/dev/dm-xxx
-	/dev/mapper/vg-lv
-	/dev/vg/lv
-	
-	All of them could be used different combination in /proc/mount and mount output.
-	
-	Patch fixes regression for older systems where new detection code failed to
-	find valid combination.
+	Update fsadm regresion
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1793&r2=1.1794
 
---- LVM2/scripts/fsadm.sh	2010/11/01 14:08:52	1.21
-+++ LVM2/scripts/fsadm.sh	2010/11/10 10:03:07	1.22
-@@ -199,6 +199,10 @@
- 	# for empty string try again with real volume name
- 	test -z "$MOUNTED" && MOUNTED=$($GREP ^"$RVOLUME" $PROCMOUNTS)
- 
-+	# for systems with different device names - check also mount output
-+	test -z "$MOUNTED" && MOUNTED=$($MOUNT | $GREP ^"$VOLUME")
-+	test -z "$MOUNTED" && MOUNTED=$($MOUNT | $GREP ^"$RVOLUME")
-+
- 	# cut device name prefix and trim everything past mountpoint
- 	# echo translates \040 to spaces
- 	MOUNTED=${MOUNTED#* }
+--- LVM2/WHATS_NEW	2010/11/09 12:34:40	1.1793
++++ LVM2/WHATS_NEW	2010/11/10 10:05:27	1.1794
+@@ -1,5 +1,6 @@
+ Version 2.02.77 -
+ ===================================
++  Fix regression in detection of mounted filesystem for older systems (2.0.75).
+   Extend cling allocation policy to recognise PV tags (cling_by_tags).
+   Add allocation/cling_tag_list to lvm.conf.
+   Regenerate configure with 'autoreconf' for --enable-ocf. (2.02.76)
 
 
