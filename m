@@ -1,128 +1,80 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 Sep 2018 14:55:55 -0400
-Subject: master - tests: add metadata-full
-Message-ID: <201809111855.w8BIttR2019938@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Dave Wysochanski <wysochanski@pobox.com>
+Date: Thu, 11 Nov 2010 11:41:57 -0500
+Subject: [PATCH 3/3] Add tests for vg 'set' property function.
+In-Reply-To: <1289493717-5790-1-git-send-email-wysochanski@pobox.com>
+References: <1289493717-5790-1-git-send-email-wysochanski@pobox.com>
+Message-ID: <1289493717-5790-4-git-send-email-wysochanski@pobox.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17bd91e33e0d37d8cca03b42cee20251d7fa5e80
-Commit:        17bd91e33e0d37d8cca03b42cee20251d7fa5e80
-Parent:        5fb15b19349af607654f2429850a706bbac4b792
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 11 10:05:53 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Sep 11 12:05:46 2018 -0500
-
-tests: add metadata-full
-
+Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
 ---
- test/shell/metadata-full.sh |   96 +++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 96 insertions(+), 0 deletions(-)
+ test/api/test.c |   34 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 34 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/metadata-full.sh b/test/shell/metadata-full.sh
-new file mode 100644
-index 0000000..388ebcd
---- /dev/null
-+++ b/test/shell/metadata-full.sh
-@@ -0,0 +1,96 @@
-+#!/usr/bin/env bash
+diff --git a/test/api/test.c b/test/api/test.c
+index fea3d0d..b675a52 100644
+--- a/test/api/test.c
++++ b/test/api/test.c
+@@ -97,6 +97,8 @@ static void _show_help(void)
+ 	       "Display the value of VG property\n");
+ 	printf("'pv_get_property pvname property_name': "
+ 	       "Display the value of PV property\n");
++	printf("'vg_set_property vgname property_name': "
++	       "Set the value of VG property\n");
+ 	printf("'lv_get_tags vgname lvname': "
+ 	       "List the tags of a LV\n");
+ 	printf("'vg_{add|remove}_tag vgname tag': "
+@@ -652,6 +654,36 @@ static void _lv_get_property(char **argv, int argc)
+ 	_print_property_value(v);
+ }
+ 
++static void _vg_set_property(char **argv, int argc)
++{
++	vg_t vg;
++	struct lvm_property_value value;
++	int rc;
 +
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++	if (argc < 4) {
++		printf("Please enter vgname, field_id, value\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	value = lvm_vg_get_property(vg, argv[2]);
++	if (!value.is_valid) {
++		printf("Error obtaining property value\n");
++		return;
++	}
++	if (value.is_string)
++		value.value.string = argv[3];
++	else
++		value.value.integer = atoi(argv[3]);
++	rc = lvm_vg_set_property(vg, argv[2], &value);
++	if (rc)
++		printf("Error ");
++	else
++		printf("Success ");
++	printf("setting value of property %s in VG %s\n",
++	       argv[2], argv[1]);
++}
 +
-+test_description='Test full metadata'
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+LVM_TEST_PVS=${LVM_TEST_PVS:-64}
-+
-+# aux prepare_vg $LVM_TEST_PVS
-+
-+unset LVM_LOG_FILE_MAX_LINES
-+
-+aux prepare_devs 64
-+get_devs
-+
-+vgcreate $SHARED -s 512K --metadatacopies 8 $vg "${DEVICES[@]}"
-+
-+# have tested to see how many LVs can be created in a
-+# vg set up like this and it's around 1190, so pick a
-+# number less than that but over 1024 (in case there's
-+# some issue at the number 1024 we want to find it.)
-+#
-+# uses long tags to increase the size of the metadata
-+# more quickly
-+#
-+# the specific number of LVs in these loops isn't great
-+# because it doesn't depend specified behavior, but it's
-+# based on how much metadata it produces at the time this
-+# is written.
-+
-+
-+for i in `seq 1 1050`; do lvcreate -l1 -an --addtag A123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg; done
-+
-+# should show non-zero
-+vgs -o+pv_mda_free
-+
-+# these addtag's will fail at some point when metadata space is full
-+
-+for i in `seq 1 1050`; do lvchange --addtag B123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg/lvol$i || true; done
-+
-+# should show 0
-+vgs -o+pv_mda_free
-+check vg_field $vg vg_mda_free 0
-+
-+# remove some of the tags to check that we can reduce the size of the
-+# metadata, and continue using the vg
-+
-+for i in `seq 1 50`; do lvchange --deltag B123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg/lvol$i || true; done
-+
-+# should show non-zero
-+vgs -o+pv_mda_free
-+
-+# these will fail at some point when metadata space is full again
-+
-+for i in `seq 1 50`; do lvcreate -l1 -an --addtag C123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg || true; done
-+
-+# should show 0
-+vgs -o+pv_mda_free
-+check vg_field $vg vg_mda_free 0
-+
-+# as long as we have a lot of LVs around, try to activate them all
-+# (filters are already set up that exclude the activated LVs from
-+# being scanned)
-+
-+time vgs
-+
-+vgchange -ay $vg
-+
-+time vgs
-+
-+vgchange -an $vg
-+
-+# see if we can remove LVs to make more metadata space,
-+# and then create more LVs
-+
-+for i in `seq 1 50`; do lvremove -y $vg/lvol$i; done
-+
-+for i in `seq 1 10`; do lvcreate -l1 $vg; done
-+
-+# should show non-zero
-+vgs -o+pv_mda_free
-+
-+vgremove -ff $vg
-+
+ static void _lv_get_tags(char **argv, int argc)
+ {
+ 	lv_t lv;
+@@ -908,6 +940,8 @@ static int lvmapi_test_shell(lvm_t libh)
+ 			_vg_get_property(argv, argc);
+ 		} else if (!strcmp(argv[0], "pv_get_property")) {
+ 			_pv_get_property(argv, argc);
++		} else if (!strcmp(argv[0], "vg_set_property")) {
++			_vg_set_property(argv, argc);
+ 		} else if (!strcmp(argv[0], "lv_add_tag")) {
+ 			_lv_tag(argv, argc, 1);
+ 		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+-- 
+1.7.2.2
 
 
