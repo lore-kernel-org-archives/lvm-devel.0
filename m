@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Nov 2010 12:17:16 -0000
-Subject: LVM2/scripts fsadm.sh
-Message-ID: <20101111121716.12701.qmail@sourceware.org>
+Date: 11 Nov 2010 12:32:35 -0000
+Subject: LVM2/lib datastruct/str_list.c datastruct/str_ ...
+Message-ID: <20101111123235.18232.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,55 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-11 12:17:15
+Changes by:	zkabelac at sourceware.org	2010-11-11 12:32:34
 
 Modified files:
-	scripts        : fsadm.sh 
+	lib/datastruct : str_list.c str_list.h 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Add date configurable variable DATE
+	Preserve const for char pointer
 	
-	Follow the rule to run every command through variable dereference.
-	Add a runtime check of translated date to seconds.
+	Keep char pointers 'const'  (introduced with cling commit).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/str_list.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/str_list.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.236&r2=1.237
 
---- LVM2/scripts/fsadm.sh	2010/11/10 16:14:03	1.23
-+++ LVM2/scripts/fsadm.sh	2010/11/11 12:17:15	1.24
-@@ -47,6 +47,7 @@
- RMDIR=rmdir
- BLOCKDEV=blockdev
- BLKID=blkid
-+DATE=date
- GREP=grep
- READLINK=readlink
- READLINK_E="-e"
-@@ -386,7 +387,7 @@
- #  only one supported
- ####################################
- diff_dates() {
--         echo $(( $(date -u -d"$1" +%s 2>/dev/null) - $(date -u -d"$2" +%s 2>/dev/null) ))
-+         echo $(( $($DATE -u -d"$1" +%s 2>/dev/null) - $($DATE -u -d"$2" +%s 2>/dev/null) ))
- }
+--- LVM2/lib/datastruct/str_list.c	2010/11/09 12:34:41	1.13
++++ LVM2/lib/datastruct/str_list.c	2010/11/11 12:32:33	1.14
+@@ -95,7 +95,7 @@
+  * Is at least one item on both lists?
+  * If tag_matched is non-NULL, it is set to the tag that matched.
+  */
+-int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, char **tag_matched)
++int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **tag_matched)
+ {
+ 	struct str_list *sl;
  
- ###################
-@@ -445,7 +446,7 @@
- test -n "$TUNE_EXT" -a -n "$RESIZE_EXT" -a -n "$TUNE_REISER" -a -n "$RESIZE_REISER" \
-   -a -n "$TUNE_XFS" -a -n "$RESIZE_XFS" -a -n "$MOUNT" -a -n "$UMOUNT" -a -n "$MKDIR" \
-   -a -n "$RMDIR" -a -n "$BLOCKDEV" -a -n "$BLKID" -a -n "$GREP" -a -n "$READLINK" \
--  -a -n "$FSCK" -a -n "$XFS_CHECK" -a -n "LVM" \
-+  -a -n "$DATE" -a -n "$FSCK" -a -n "$XFS_CHECK" -a -n "LVM" \
-   || error "Required command definitions in the script are missing!"
+--- LVM2/lib/datastruct/str_list.h	2010/11/09 12:34:42	1.10
++++ LVM2/lib/datastruct/str_list.h	2010/11/11 12:32:33	1.11
+@@ -20,7 +20,7 @@
+ int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str);
+ int str_list_del(struct dm_list *sll, const char *str);
+ int str_list_match_item(const struct dm_list *sll, const char *str);
+-int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, char **tag_matched);
++int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **tag_matched);
+ int str_list_lists_equal(const struct dm_list *sll, const struct dm_list *sll2);
+ int str_list_dup(struct dm_pool *mem, struct dm_list *sllnew,
+ 		 const struct dm_list *sllold);
+--- LVM2/lib/metadata/lv_manip.c	2010/11/09 12:34:42	1.236
++++ LVM2/lib/metadata/lv_manip.c	2010/11/11 12:32:34	1.237
+@@ -959,7 +959,7 @@
+ {
+ 	struct config_value *cv;
+ 	char *str;
+-	char *tag_matched;
++	const char *tag_matched;
  
- $LVM version >/dev/null 2>&1 || error "Could not run lvm binary '$LVM'"
-@@ -453,6 +454,7 @@
- TEST64BIT=$(( 1000 * 1000000000000 ))
- test $TEST64BIT -eq 1000000000000000 || error "Shell does not handle 64bit arithmetic"
- $(echo Y | $GREP Y >/dev/null) || error "Grep does not work properly"
-+test $($DATE -u -d"Jan 01 00:00:01 1970" +%s) -eq 1 || error "Date translation does not work"
- 
- 
- if [ "$#" -eq 0 ] ; then
+ 	for (cv = pvmatch->cling_tag_list_cn->v; cv; cv = cv->next) {
+ 		if (cv->type != CFG_STRING) {
 
 
