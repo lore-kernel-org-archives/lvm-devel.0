@@ -1,36 +1,27 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 12 Nov 2010 16:04:54 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20101112160454.29731.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sat, 13 Nov 2010 16:48:04 +0100
+Subject: [PATCH] binary backups & pvcreate --undo (take 5)
+Message-ID: <87aaldi5sb.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-11-12 16:04:53
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
+I am attaching yet another rebase of the binary backup code. Nothing new
+other than the rebase since the last time.
 
-Log message:
-	WHATS_NEW FIXME
+*Please* review. The patch has already celebrated its 3rd birthday...
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1796&r2=1.1797
+Yours,
+   Petr.
 
---- LVM2/WHATS_NEW	2010/11/11 17:29:05	1.1796
-+++ LVM2/WHATS_NEW	2010/11/12 16:04:52	1.1797
-@@ -3,7 +3,7 @@
-   Support repetition of --addtag and --deltag arguments.
-   Add infrastructure for specific cmdline arguments to be repeated in groups.
-   Split the_args cmdline arguments and values into arg_props and arg_values.
--FIXME??? Fix fsadm need of using '-f' for downsize of unmounted filesystem.
-+  Fix fsadm to not require '-f' for resize of unmounted filesystem.
-   Fix fsadm to detect mounted filesystems on older systems. (2.0.75)
-   Extend cling allocation policy to recognise PV tags (cling_by_tags).
-   Add allocation/cling_tag_list to lvm.conf.
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: binbackup-5.diff
+Type: text/x-diff
+Size: 52093 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101113/b98a9a89/attachment.bin>
