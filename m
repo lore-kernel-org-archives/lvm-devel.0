@@ -1,65 +1,131 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 11 Sep 2018 10:04:34 -0400
-Subject: master - tests: bump dm-raid version to 1.14.0
-Message-ID: <201809111404.w8BE4YTS014887@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 17 Nov 2010 19:16:06 -0000
+Subject: LVM2/liblvm lvm2app.h lvm_misc.c lvm_misc.h lv ...
+Message-ID: <20101117191606.26685.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99772e7e5b2d6dc881244429e2ab7ff2a664d00c
-Commit:        99772e7e5b2d6dc881244429e2ab7ff2a664d00c
-Parent:        df67b1da4d5ee4cf4514f655dbc5a58193364cbd
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Sep 11 15:58:43 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Sep 11 16:03:57 2018 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-11-17 19:16:05
 
-tests: bump dm-raid version to 1.14.0
+Modified files:
+	liblvm         : lvm2app.h lvm_misc.c lvm_misc.h lvm_vg.c 
 
-Commit 989626926c98cd00f0236c4fcac883107d76899d
-introduced 2 new tests
-lvconvert-raid-takeover-linear_to_raid4.sh and
-lvconvert-raid-takeover-linear_to_raid4.sh
-which involve raid reshaping.
+Log message:
+	Implement lvm_vg_set_property() by calling internal 'set' property function.
+	
+	Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
+	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
-Bump the checked dm-raid target version to 1.14.0
-which has reshape kernel fixes to avoid test suite
-runs to hang.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
 
-diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
----
- .../lvconvert-raid-takeover-linear_to_raid4.sh     |    2 +-
- .../lvconvert-raid-takeover-raid4_to_linear.sh     |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-index 0360fa0..adaf8d3 100644
---- a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-+++ b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
+--- LVM2/liblvm/lvm2app.h	2010/10/25 14:09:08	1.23
++++ LVM2/liblvm/lvm2app.h	2010/11/17 19:16:05	1.24
+@@ -911,6 +911,36 @@
+  */
+ struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name);
  
- which mkfs.ext4 || skip
--aux have_raid 1 9 1 || skip
-+aux have_raid 1 14 0 || skip
++/**
++ * Set the value of a VG property.  Note that the property must be
++ * a 'settable' property, as evidenced by the 'is_settable' flag
++ * when querying the property.
++ *
++ * \memberof vg_t
++ *
++ * The memory allocated for a string property value is tied to the vg_t
++ * handle and will be released when lvm_vg_close() is called.
++ *
++ * Example (integer):
++ *      lvm_property_value copies;
++ *
++ *      if (lvm_vg_get_property(vg, "vg_mda_copies", &copies) < 0) {
++ *              // Error - unable to query property
++ *      }
++ *      if (!copies.is_settable) {
++ *              // Error - property not settable
++ *      }
++ *      copies.value.integer = 2;
++ *      if (lvm_vg_set_property(vg, "vg_mda_copies", &copies) < 0) {
++ *              // handle error
++ *      }
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ */
++int lvm_vg_set_property(const vg_t vg, const char *name,
++			struct lvm_property_value *value);
++
+ /************************** logical volume handling *************************/
  
- aux prepare_vg 4 32
+ /**
+--- LVM2/liblvm/lvm_misc.c	2010/10/25 14:08:43	1.3
++++ LVM2/liblvm/lvm_misc.c	2010/11/17 19:16:05	1.4
+@@ -78,3 +78,33 @@
+ 	v.is_valid = 1;
+ 	return v;
+ }
++
++
++int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
++		 const char *name, struct lvm_property_value *v)
++{
++	struct lvm_property_type prop;
++
++	prop.id = name;
++	if (v->is_string)
++		prop.value.string = v->value.string;
++	else
++		prop.value.integer = v->value.integer;
++	if (pv) {
++		if (!pv_set_property(pv, &prop)) {
++			v->is_valid = 0;
++			return -1;
++		}
++	} else if (vg) {
++		if (!vg_set_property(vg, &prop)) {
++			v->is_valid = 0;
++			return -1;
++		}
++	} else if (lv) {
++		if (!lv_set_property(lv, &prop)) {
++			v->is_valid = 0;
++			return -1;
++		}
++	}
++	return 0;
++}
+--- LVM2/liblvm/lvm_misc.h	2010/10/25 14:08:43	1.3
++++ LVM2/liblvm/lvm_misc.h	2010/11/17 19:16:05	1.4
+@@ -19,5 +19,7 @@
+ struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
+ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+ 				       const lv_t lv, const char *name);
++int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
++		 const char *name, struct lvm_property_value *value);
  
-diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-index e571b82..a581846 100644
---- a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-+++ b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
+ #endif
+--- LVM2/liblvm/lvm_vg.c	2010/10/25 14:08:43	1.45
++++ LVM2/liblvm/lvm_vg.c	2010/11/17 19:16:05	1.46
+@@ -341,6 +341,12 @@
+ 	return get_property(NULL, vg, NULL, name);
+ }
  
- which mkfs.ext4 || skip
--aux have_raid 1 9 1 || skip
-+aux have_raid 1 14 0 || skip
- 
- aux prepare_vg 4 32
- 
++int lvm_vg_set_property(const vg_t vg, const char *name,
++			struct lvm_property_value *value)
++{
++	return set_property(NULL, vg, NULL, name, value);
++}
++
+ struct dm_list *lvm_list_vg_names(lvm_t libh)
+ {
+ 	return get_vgnames((struct cmd_context *)libh, 0);
 
 
