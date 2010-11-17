@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 17 Nov 2010 20:12:41 -0000
-Subject: LVM2/liblvm lvm2app.h lvm_lv.c lvm_misc.c lvm_ ...
-Message-ID: <20101117201241.8715.qmail@sourceware.org>
+Date: 17 Nov 2010 20:13:51 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20101117201351.9009.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,153 +10,225 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-11-17 20:12:40
+Changes by:	mornfall at sourceware.org	2010-11-17 20:13:51
 
 Modified files:
-	liblvm         : lvm2app.h lvm_lv.c lvm_misc.c lvm_misc.h 
-	                 lvm_pv.c lvm_vg.c 
+	test/api       : test.c 
 
 Log message:
-	Add lvm2app function to query pvseg properties.
+	Update interactive tests for lvm2app lvseg and pvseg apis.
 	
 	Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
 	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_misc.h.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_vg.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
 
---- LVM2/liblvm/lvm2app.h	2010/11/17 20:10:42	1.27
-+++ LVM2/liblvm/lvm2app.h	2010/11/17 20:12:39	1.28
-@@ -1437,6 +1437,45 @@
- struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name);
- 
- /**
-+ * Get the value of a PV segment property
-+ *
-+ * \memberof pv_t
-+ *
-+ * \param   pvseg
-+ * Physical volume segment handle.
-+ *
-+ * \param   name
-+ * Name of property to query.  See pvs man page for full list of properties
-+ * that may be queried.
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example:
-+ *      lvm_property_value v;
-+ *      char *prop_name = "pvseg_start";
-+ *
-+ *      v = lvm_pvseg_get_property(pvseg, prop_name);
-+ *      if (lvm_errno(libh) || !v.is_valid) {
-+ *           // handle error
-+ *           printf("Invalid property name or unable to query"
-+ *                  "'%s'.\n", prop_name);
-+ *           return;
-+ *      }
-+ *      if (v.is_string)
-+ *           printf(", value = %s\n", v.value.string);
-+ *	else
-+ *           printf(", value = %"PRIu64"\n", v.value.integer);
-+ *
-+ * \return
-+ * lvm_property_value structure that will contain the current
-+ * value of the property.  Caller should check lvm_errno() as well
-+ * as 'is_valid' flag before using the value.
-+ */
-+struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
-+						 const char *name);
-+
-+/**
-  * Return a list of pvseg handles for a given PV handle.
-  *
-  * \memberof pv_t
---- LVM2/liblvm/lvm_lv.c	2010/11/17 20:09:42	1.30
-+++ LVM2/liblvm/lvm_lv.c	2010/11/17 20:12:39	1.31
-@@ -50,13 +50,13 @@
- 
- struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
- {
--	return get_property(NULL, NULL, lv, NULL, name);
-+	return get_property(NULL, NULL, lv, NULL, NULL, name);
+--- LVM2/test/api/test.c	2010/11/17 19:17:07	1.32
++++ LVM2/test/api/test.c	2010/11/17 20:13:51	1.33
+@@ -67,8 +67,12 @@
+ 	       "List the uuids of the VGs that exist in the system\n");
+ 	printf("'vg_list_pvs vgname': "
+ 	       "List the PVs that exist in VG vgname\n");
++	printf("'pv_list_pvsegs pvname': "
++	       "List the PV segments that exist in PV pvname\n");
+ 	printf("'vg_list_lvs vgname': "
+ 	       "List the LVs that exist in VG vgname\n");
++	printf("'lv_list_lvsegs vgname lvname': "
++	       "List the LV segments that exist in LV vgname/lvname\n");
+ 	printf("'vgs_open': "
+ 	       "List the VGs that are currently open\n");
+ 	printf("'vgs': "
+@@ -189,17 +193,13 @@
+ 	return vg;
  }
  
- struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
- 						 const char *name)
+-static pv_t _lookup_pv_by_name(char **argv, int argc)
++static pv_t _lookup_pv_by_name(const char *name)
  {
--	return get_property(NULL, NULL, NULL, lvseg, name);
-+	return get_property(NULL, NULL, NULL, lvseg, NULL, name);
- }
+ 	pv_t pv;
  
- uint64_t lvm_lv_is_active(const lv_t lv)
---- LVM2/liblvm/lvm_misc.c	2010/11/17 20:09:42	1.5
-+++ LVM2/liblvm/lvm_misc.c	2010/11/17 20:12:40	1.6
-@@ -47,7 +47,7 @@
- 
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 				       const lv_t lv, const lvseg_t lvseg,
--				       const char *name)
-+				       const pvseg_t pvseg, const char *name)
- {
- 	struct lvm_property_type prop;
- 	struct lvm_property_value v;
-@@ -73,6 +73,11 @@
- 			v.is_valid = 0;
- 			return v;
- 		}
-+	} else if (pvseg) {
-+		if (!pvseg_get_property(pvseg, &prop)) {
-+			v.is_valid = 0;
-+			return v;
-+		}
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return NULL;
+-	}
+-	if (!(pv = dm_hash_lookup(_pvname_hash, argv[1]))) {
++	if (!(pv = dm_hash_lookup(_pvname_hash, name))) {
+ 		printf ("Can't find %s in open PVs - run vg_open first\n",
+-			argv[1]);
++			name);
+ 		return NULL;
  	}
- 	v.is_settable = prop.is_settable;
- 	v.is_string = prop.is_string;
---- LVM2/liblvm/lvm_misc.h	2010/11/17 20:09:42	1.5
-+++ LVM2/liblvm/lvm_misc.h	2010/11/17 20:12:40	1.6
-@@ -19,7 +19,7 @@
- struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 				       const lv_t lv, const lvseg_t lvseg,
--                                       const char *name);
-+				       const pvseg_t pvseg, const char *name);
- int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
- 		 const char *name, struct lvm_property_value *value);
- 
---- LVM2/liblvm/lvm_pv.c	2010/11/17 20:10:42	1.16
-+++ LVM2/liblvm/lvm_pv.c	2010/11/17 20:12:40	1.17
-@@ -51,7 +51,13 @@
- 
- struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
+ 	return pv;
+@@ -238,6 +238,7 @@
+ 			dm_hash_insert(_pvname_hash, name, pvl->pv);
+ 	}
+ }
++
+ static void _vg_reduce(char **argv, int argc, lvm_t libh)
  {
--	return get_property(pv, NULL, NULL, NULL, name);
-+	return get_property(pv, NULL, NULL, NULL, NULL, name);
+ 	vg_t vg;
+@@ -496,6 +497,40 @@
+ 	}
+ }
+ 
++static void _print_property_value(const char *name,
++				  struct lvm_property_value v)
++{
++	if (!v.is_valid)
++		printf("%s = INVALID\n", name);
++	else if (v.is_string)
++		printf("%s = %s\n", name, v.value.string);
++	else
++		printf("%s = %"PRIu64"\n", name, v.value.integer);
 +}
 +
-+struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
-+						 const char *name)
++static void _pvsegs_in_pv(char **argv, int argc)
 +{
-+	return get_property(NULL, NULL, NULL, NULL, pvseg, name);
- }
- 
- struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
---- LVM2/liblvm/lvm_vg.c	2010/11/17 20:09:42	1.47
-+++ LVM2/liblvm/lvm_vg.c	2010/11/17 20:12:40	1.48
-@@ -338,7 +338,7 @@
- 
- struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
++	struct dm_list *pvsegs;
++	struct lvm_pvseg_list *pvl;
++	pv_t pv;
++
++	if (!(pv = _lookup_pv_by_name(argv[1])))
++		return;
++	pvsegs = lvm_pv_list_pvsegs(pv);
++	if (!pvsegs || dm_list_empty(pvsegs)) {
++		printf("No PV segments in pv %s\n", argv[1]);
++		return;
++	}
++	printf("PV segments in pv %s:\n", argv[1]);
++	dm_list_iterate_items(pvl, pvsegs) {
++		struct lvm_property_value v;
++		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_start");
++		_print_property_value("pvseg_start", v);
++		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_size");
++		_print_property_value("pvseg_size", v);
++	}
++}
++
+ static void _scan_vgs(lvm_t libh)
  {
--	return get_property(NULL, vg, NULL, NULL, name);
-+	return get_property(NULL, vg, NULL, NULL, NULL, name);
+ 	lvm_scan(libh);
+@@ -571,14 +606,6 @@
+ 	       add ? "adding":"removing", argv[2], argv[1]);
  }
  
- int lvm_vg_set_property(const vg_t vg, const char *name,
+-static void _print_property_value(struct lvm_property_value value)
+-{
+-	if (value.is_string)
+-		printf(", value = %s\n", value.value.string);
+-	else
+-		printf(", value = %"PRIu64"\n", value.value.integer);
+-}
+-
+ static void _pv_get_property(char **argv, int argc)
+ {
+ 	pv_t pv;
+@@ -588,20 +615,10 @@
+ 		printf("Please enter pvname, field_id\n");
+ 		return;
+ 	}
+-	if (!(pv = _lookup_pv_by_name(argv, argc)))
++	if (!(pv = _lookup_pv_by_name(argv[1])))
+ 		return;
+ 	v = lvm_pv_get_property(pv, argv[2]);
+-	if (!v.is_valid)
+-		printf("Error ");
+-	else
+-		printf("Success ");
+-	printf("obtaining value of property %s in PV %s",
+-	       argv[2], argv[1]);
+-	if (!v.is_valid) {
+-		printf("\n");
+-		return;
+-	}
+-	_print_property_value(v);
++	_print_property_value(argv[2], v);
+ }
+ 
+ static void _vg_get_property(char **argv, int argc)
+@@ -616,17 +633,7 @@
+ 	if (!(vg = _lookup_vg_by_name(argv, argc)))
+ 		return;
+ 	v =  lvm_vg_get_property(vg, argv[2]);
+-	if (!v.is_valid)
+-		printf("Error ");
+-	else
+-		printf("Success ");
+-	printf("obtaining value of property %s in VG %s",
+-	       argv[2], argv[1]);
+-	if (!v.is_valid) {
+-		printf("\n");
+-		return;
+-	}
+-	_print_property_value(v);
++	_print_property_value(argv[2], v);
+ }
+ 
+ static void _lv_get_property(char **argv, int argc)
+@@ -641,17 +648,7 @@
+ 	if (!(lv = _lookup_lv_by_name(argv[2])))
+ 		return;
+ 	v = lvm_lv_get_property(lv, argv[3]);
+-	if (!v.is_valid)
+-		printf("Error ");
+-	else
+-		printf("Success ");
+-	printf("obtaining value of property %s in LV %s",
+-	       argv[3], argv[2]);
+-	if (!v.is_valid) {
+-		printf("\n");
+-		return;
+-	}
+-	_print_property_value(v);
++	_print_property_value(argv[3], v);
+ }
+ 
+ static void _vg_set_property(char **argv, int argc)
+@@ -774,6 +771,31 @@
+ 	}
+ }
+ 
++static void _lvsegs_in_lv(char **argv, int argc)
++{
++	struct dm_list *lvsegs;
++	struct lvm_lvseg_list *lvl;
++	lv_t lv;
++
++	if (!(lv = _lookup_lv_by_name(argv[2])))
++		return;
++	lvsegs = lvm_lv_list_lvsegs(lv);
++	if (!lvsegs || dm_list_empty(lvsegs)) {
++		printf("No LV segments in lv %s\n", lvm_lv_get_name(lv));
++		return;
++	}
++	printf("LV segments in lv %s:\n", lvm_lv_get_name(lv));
++	dm_list_iterate_items(lvl, lvsegs) {
++		struct lvm_property_value v;
++		v = lvm_lvseg_get_property(lvl->lvseg, "segtype");
++		_print_property_value("segtype", v);
++		v = lvm_lvseg_get_property(lvl->lvseg, "seg_start_pe");
++		_print_property_value("seg_start_pe", v);
++		v = lvm_lvseg_get_property(lvl->lvseg, "seg_size");
++		_print_property_value("seg_size", v);
++	}
++}
++
+ static void _lv_deactivate(char **argv, int argc)
+ {
+ 	lv_t lv;
+@@ -918,8 +940,12 @@
+ 			_list_open_vgs();
+ 		} else if (!strcmp(argv[0], "vg_list_pvs")) {
+ 			_pvs_in_vg(argv, argc);
++		} else if (!strcmp(argv[0], "pv_list_pvsegs")) {
++			_pvsegs_in_pv(argv, argc);
+ 		} else if (!strcmp(argv[0], "vg_list_lvs")) {
+ 			_lvs_in_vg(argv, argc);
++		} else if (!strcmp(argv[0], "lv_list_lvsegs")) {
++			_lvsegs_in_lv(argv, argc);
+ 		} else if (!strcmp(argv[0], "list_vg_names")) {
+ 			_list_vg_names(libh);
+ 		} else if (!strcmp(argv[0], "list_vg_ids")) {
 
 
