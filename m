@@ -1,27 +1,341 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 21:02:14 +0000
-Subject: [PATCH 19/29] Test for error status
-In-Reply-To: <a1f1654ee3bb7da4b0a538697fc3e60d4a63b63c.1290682013.git.zkabelac@redhat.com>
-References: <cover.1290682013.git.zkabelac@redhat.com>
-	<a1f1654ee3bb7da4b0a538697fc3e60d4a63b63c.1290682013.git.zkabelac@redhat.com>
-Message-ID: <20101129210214.GE29380@agk-dp.fab.redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 18 Nov 2010 22:32:25 +0100
+Subject: [PATCH 11/11] Use new metadata interface to provide better support for PV resize.
+In-Reply-To: <1290115945-27419-1-git-send-email-prajnoha@redhat.com>
+References: <1290115945-27419-1-git-send-email-prajnoha@redhat.com>
+Message-ID: <1290115945-27419-12-git-send-email-prajnoha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 11:55:23AM +0100, Zdenek Kabelac wrote:
-> +		if (write(child_pipe[1], &status, sizeof(status)) < 0)
-> +			log_sys_error("write", "child_pipe");
+(rhbz #477891)
 
-Still incomplete - add FIXME to use a proper wrapper around write().
+Finally, we can achieve this! Now, it's simple - when resizing a PV which
+contains 2nd metadata area at the end of the disk, we'll just remove the
+mda, resize and add a new mda.
 
-> +		if (close(child_pipe[1]))
-> +			log_sys_error("close", "child_pipe");
+We also need a format-specific resize part of the code to be called so
+the format_handler interface now includes the pv_resize fn (metadata
+location is format-specific as well as the number of supported metadata
+area and the metadata layout itself).
 
-Ack.
+The patch moves some parts of the PV resize code a bit to fit the changes
+better.
 
-Alasdair
+Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
+---
+ lib/format_text/format-text.c    |   52 ++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/metadata.h          |    8 ++++
+ lib/metadata/pv_manip.c          |   70 +++++++++++++++++++++++++++++---------
+ tools/pvresize.c                 |   55 ++----------------------------
+ 5 files changed, 118 insertions(+), 69 deletions(-)
+
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 7481d80..5a935e6 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2000,6 +2000,57 @@ static int _text_pv_remove_metadata_area(const struct format_type *fmt,
+ 	return 1;
+ }
+ 
++static int _text_pv_resize(const struct format_type *fmt,
++			   struct physical_volume *pv,
++			   struct volume_group *vg,
++			   uint64_t size)
++{
++	struct lvmcache_info *info;
++	struct metadata_area *mda;
++	struct mda_context *mdac;
++	uint64_t size_reduction;
++	uint64_t mda_size;
++	unsigned mda_ignored;
++
++	if (!(info = info_from_pvid(pv->dev->pvid, 0)))
++		return_0;
++
++	/*
++	 * First, set the new size and update the cache and reset pe_count.
++	 * (pe_count must be reset otherwise it would be considered as
++	 * a limiting factor while moving the mda!)
++	 */
++	pv->size = size;
++	pv->pe_count = 0;
++	info->device_size = size << SECTOR_SHIFT;
++
++	/* If there's an mda@the end, move it to a new position. */
++	if ((mda = info->mda_slots[1]) &&
++	    (mdac = mda->metadata_locn)) {
++		/* FIXME: Maybe MDA0 size would be better? */
++		mda_size = mdac->area.size >> SECTOR_SHIFT;
++		mda_ignored = mda_is_ignored(mda);
++
++		if (!_text_pv_remove_metadata_area(fmt, pv, 1) ||
++		    !_text_pv_add_metadata_area(fmt, pv, 1, mda_size, mda_ignored)) {
++			log_error("Failed to move metadata area with index 1 "
++				  "while resizing PV %s.", pv_dev_name(pv));
++			return 0;
++		}
++	}
++
++	/* If there's a VG, reduce size by counting in pe_start and metadata areas. */
++	if (vg) {
++		size_reduction = pv_pe_start(pv);
++		if ((mda = info->mda_slots[1]) &&
++		    (mdac = mda->metadata_locn))
++			size_reduction += mdac->area.size >> SECTOR_SHIFT;
++		pv->size -= size_reduction;
++	}
++
++	return 1;
++}
++
+ /* NULL vgname means use only the supplied context e.g. an archive file */
+ static struct format_instance *_text_create_text_instance(const struct format_type
+ 						     *fmt, const char *vgname,
+@@ -2143,6 +2194,7 @@ static struct format_handler _text_handler = {
+ 	.pv_setup = _text_pv_setup,
+ 	.pv_add_metadata_area = _text_pv_add_metadata_area,
+ 	.pv_remove_metadata_area = _text_pv_remove_metadata_area,
++	.pv_resize = _text_pv_resize,
+ 	.pv_write = _text_pv_write,
+ 	.vg_setup = _text_vg_setup,
+ 	.lv_setup = _text_lv_setup,
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 850a4ca..6383985 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -402,7 +402,7 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  uint64_t pvmetadatasize,
+ 				  unsigned metadataignore);
+ int pv_resize(struct physical_volume *pv, struct volume_group *vg,
+-             uint32_t new_pe_count);
++             uint64_t size);
+ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
+ 	       uint64_t label_sector);
+ 
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 5962b38..6acaa87 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -275,6 +275,14 @@ struct format_handler {
+ 					unsigned metadata_index);
+ 
+ 	/*
++	 * Recalculate the PV size taking into account any existing metadata areas.
++	 */
++	int (*pv_resize) (const struct format_type *fmt,
++			  struct physical_volume *pv,
++			  struct volume_group *vg,
++			  uint64_t size);
++
++	/*
+ 	 * Write a PV structure to disk. Fails if the PV is in a VG ie
+ 	 * pv->vg_name must be a valid orphan VG name
+ 	 */
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index e6fe6c2..03ba090 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -357,10 +357,10 @@ int check_pv_segments(struct volume_group *vg)
+ 	return ret;
+ }
+ 
+-static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg, uint32_t new_pe_count)
++static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg,
++		      uint32_t old_pe_count, uint32_t new_pe_count)
+ {
+ 	struct pv_segment *peg, *pegt;
+-	uint32_t old_pe_count = pv->pe_count;
+ 
+ 	if (new_pe_count < pv->pe_alloc_count) {
+ 		log_error("%s: cannot resize to %" PRIu32 " extents "
+@@ -400,10 +400,9 @@ static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg, uint3
+ }
+ 
+ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
+-		      uint32_t new_pe_count)
++		      uint32_t old_pe_count, uint32_t new_pe_count)
+ {
+ 	struct pv_segment *peg;
+-	uint32_t old_pe_count = pv->pe_count;
+ 
+ 	if ((uint64_t) new_pe_count * pv->pe_size > pv->size ) {
+ 		log_error("%s: cannot resize to %" PRIu32 " extents as there "
+@@ -432,20 +431,59 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
+  */
+ int pv_resize(struct physical_volume *pv,
+ 	      struct volume_group *vg,
+-	      uint32_t new_pe_count)
++	      uint64_t size)
+ {
+-	if ((new_pe_count == pv->pe_count)) {
+-		log_verbose("No change to size of physical volume %s.",
+-			    pv_dev_name(pv));
+-		return 1;
++	uint32_t old_pe_count, new_pe_count = 0;
++
++	if (size < PV_MIN_SIZE) {
++		log_error("Size must exceed minimum of %ld sectors on PV %s.",
++			   PV_MIN_SIZE, pv_dev_name(pv));
++		return 0;
+ 	}
+ 
+-	log_verbose("Resizing physical volume %s from %" PRIu32
+-		    " to %" PRIu32 " extents.",
+-		    pv_dev_name(pv), pv->pe_count, new_pe_count);
++	if (size < pv_pe_start(pv)) {
++		log_error("Size must exceed physical extent start "
++			  "of %" PRIu64 " sectors on PV %s.",
++			  pv_pe_start(pv), pv_dev_name(pv));
++	}
+ 
+-	if (new_pe_count > pv->pe_count)
+-		return _extend_pv(pv, vg, new_pe_count);
+-	else
+-		return _reduce_pv(pv, vg, new_pe_count);
++	old_pe_count = pv->pe_count;
++
++	if (!pv->fmt->ops->pv_resize(pv->fmt, pv, vg, size)) {
++		log_error("Format specific resize of PV %s failed.",
++			   pv_dev_name(pv));
++		return 0;
++	}
++
++	/* pv->pe_count is 0 now! We need to recalculate! */
++
++	/* If there's a VG, calculate new PE count value. */
++	if (vg) {
++		/* FIXME: Maybe PE calculation should go into pv->fmt->resize?
++		          (like it is for pv->fmt->setup) */
++		if (!(new_pe_count = pv_size(pv) / vg->extent_size)) {
++			log_error("Size must leave space for at least one physical "
++				  "extent of %" PRIu32 " sectors on PV %s.",
++				   pv_pe_size(pv), pv_dev_name(pv));
++			return 0;
++		}
++
++		if ((new_pe_count == old_pe_count)) {
++			pv->pe_count = old_pe_count;
++			log_verbose("No change to size of physical volume %s.",
++				    pv_dev_name(pv));
++			return 1;
++		}
++
++		log_verbose("Resizing physical volume %s from %" PRIu32
++			    " to %" PRIu32 " extents.",
++			    pv_dev_name(pv), pv->pe_count, new_pe_count);
++
++		if (new_pe_count > pv->pe_count)
++			return _extend_pv(pv, vg, old_pe_count, new_pe_count);
++		else
++			return _reduce_pv(pv, vg, old_pe_count, new_pe_count);
++	}
++
++	return 1;
+ }
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index b39f94c..5a68669 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -30,30 +30,22 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ {
+ 	struct pv_list *pvl;
+ 	uint64_t size = 0;
+-	uint32_t new_pe_count = 0;
+ 	int r = 0;
+-	struct dm_list mdas;
+ 	const char *pv_name = pv_dev_name(pv);
+ 	const char *vg_name = pv_vg_name(pv);
+-	struct lvmcache_info *info;
+-	int mda_count = 0;
+ 	struct volume_group *old_vg = vg;
+ 
+-	dm_list_init(&mdas);
+-
+ 	if (is_orphan_vg(vg_name)) {
+ 		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+ 			log_error("Can't get lock for orphans");
+ 			return 0;
+ 		}
+ 
+-		if (!(pv = pv_read(cmd, pv_name, &mdas, NULL, 1, 0))) {
++		if (!(pv = pv_read(cmd, pv_name, NULL, NULL, 1, 0))) {
+ 			unlock_vg(cmd, vg_name);
+ 			log_error("Unable to read PV \"%s\"", pv_name);
+ 			return 0;
+ 		}
+-
+-		mda_count = dm_list_size(&mdas);
+ 	} else {
+ 		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 
+@@ -72,24 +64,10 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 
+ 		pv = pvl->pv;
+ 
+-		if (!(info = info_from_pvid(pv->dev->pvid, 0))) {
+-			log_error("Can't get info for PV %s in volume group %s",
+-				  pv_name, vg->name);
+-			goto out;
+-		}
+-
+-		mda_count = dm_list_size(&info->mdas);
+-
+ 		if (!archive(vg))
+ 			goto out;
+ 	}
+ 
+-	/* FIXME Create function to test compatibility properly */
+-	if (mda_count > 1) {
+-		log_error("%s: too many metadata areas for pvresize", pv_name);
+-		goto out;
+-	}
+-
+ 	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
+ 		log_error("Physical volume %s format does not support resizing.",
+ 			  pv_name);
+@@ -111,35 +89,8 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 		size = new_size;
+ 	}
+ 
+-	if (size < PV_MIN_SIZE) {
+-		log_error("%s: Size must exceed minimum of %ld sectors.",
+-			  pv_name, PV_MIN_SIZE);
+-		goto out;
+-	}
+-
+-	if (size < pv_pe_start(pv)) {
+-		log_error("%s: Size must exceed physical extent start of "
+-			  "%" PRIu64 " sectors.", pv_name, pv_pe_start(pv));
+-		goto out;
+-	}
+-
+-	pv->size = size;
+-
+-	if (vg) {
+-		pv->size -= pv_pe_start(pv);
+-		new_pe_count = pv_size(pv) / vg->extent_size;
+-
+- 		if (!new_pe_count) {
+-			log_error("%s: Size must leave space for at "
+-				  "least one physical extent of "
+-				  "%" PRIu32 " sectors.", pv_name,
+-				  pv_pe_size(pv));
+-			goto out;
+-		}
+-
+-		if (!pv_resize(pv, vg, new_pe_count))
+-			goto_out;
+-	}
++	if (!pv_resize(pv, vg, size))
++		goto_out;
+ 
+ 	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
+ 		    pv_name, pv_size(pv));
+-- 
+1.7.3.2
 
 
