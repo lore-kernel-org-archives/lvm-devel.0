@@ -1,27 +1,24 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 23:27:20 +0000
-Subject: [PATCH 02/29] Fix check for empty system_dir
-In-Reply-To: <4CEEED6B.4050606@redhat.com>
-References: <cover.1290682013.git.zkabelac@redhat.com>
-	<cover.1290682013.git.zkabelac@redhat.com>
-	<ced2653c100dd20c1ed531b6ce59ae14a7396b13.1290682013.git.zkabelac@redhat.com>
-	<87vd3lmich.fsf@twilight.int.mornfall.net.>
-	<4CEEED6B.4050606@redhat.com>
-Message-ID: <20101129232719.GU29380@agk-dp.fab.redhat.com>
+From: Dave Wysochanski <wysochanski@pobox.com>
+Date: Fri, 19 Nov 2010 21:25:37 -0500
+Subject: [PATCH 00/03] Add lvm2app functions to lookup an lv or pv handle
+Message-ID: <1290219940-29464-1-git-send-email-wysochanski@pobox.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> > In that case, please use !strlen(str), as that is much more readable.
-> In this case I believe it's common practice not only in our source to check
-> the first char for '\0' when checking for empty string - so are we planning to
- 
-We use *str or str[0] in lots of places - it's pretty common practice I think
-and shouldn't really surprise anyone.  !strlen(str) is also fine by me
-where that adds clarity.
+This patchset implements helper functions to lookup an lv or pv handle
+from vg handle and the pv|lv name or uuid.
 
-Alasdair
+Until now, users of lvm2app that wished to obtain an LV or PV handle from
+an existing VG must do so by the following sequence:
+1) Call lvm_vg_open() to open an existing VG
+2) Call lvm_vg_list_{pvs|lvs}() to list all PVs or LVs
+3) Find the PV or LV of interest by comparing uuids or names
+
+The above method is awkward for callers of the API that wish to operate
+on a single LV or PV.  This patchset should make it easier for callers
+to do operations on a single LV or PV.
 
 
