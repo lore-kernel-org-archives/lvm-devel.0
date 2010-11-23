@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Nov 2010 15:09:02 -0000
-Subject: LVM2/lib/config config.c
-Message-ID: <20101123150902.29444.qmail@sourceware.org>
+Date: 23 Nov 2010 15:28:55 -0000
+Subject: LVM2 lib/activate/fs.c ./WHATS_NEW
+Message-ID: <20101123152855.12264.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,32 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-23 15:08:58
+Changes by:	zkabelac at sourceware.org	2010-11-23 15:28:55
 
 Modified files:
-	lib/config     : config.c 
+	lib/activate   : fs.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Move va_end() so it is also used before error path  return
+	Add missing  closedir() - fixes resource leak
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.82&r2=1.83
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1802&r2=1.1803
 
---- LVM2/lib/config/config.c	2010/09/30 21:06:51	1.82
-+++ LVM2/lib/config/config.c	2010/11/23 15:08:57	1.83
-@@ -381,11 +381,12 @@
- 
- 	va_start(ap, fmt);
- 	n = vsnprintf(&buf[0], sizeof buf - 1, fmt, ap);
-+	va_end(ap);
-+
- 	if (n < 0 || n > (int) sizeof buf - 1) {
- 		log_error("vsnprintf failed for config line");
- 		return 0;
+--- LVM2/lib/activate/fs.c	2010/01/11 15:40:03	1.51
++++ LVM2/lib/activate/fs.c	2010/11/23 15:28:54	1.52
+@@ -105,6 +105,9 @@
+ 				log_sys_error("unlink", path);
+ 		}
  	}
--	va_end(ap);
++
++	if (closedir(d))
++		log_sys_error("closedir", dir);
+ }
  
- 	if (!dm_pool_grow_object(outline->mem, &buf[0], strlen(buf))) {
- 		log_error("dm_pool_grow_object failed for config line");
+ static int _mk_link(const char *dev_dir, const char *vg_name,
+--- LVM2/WHATS_NEW	2010/11/23 01:55:53	1.1802
++++ LVM2/WHATS_NEW	2010/11/23 15:28:55	1.1803
+@@ -1,5 +1,6 @@
+ Version 2.02.78 - 
+ ====================================
++  Fix resource leak in _rm_blks().
+   Suppress 'No PV label' message when removing several PVs without mdas.
+   Fix default /etc/lvm permissions to be 0755. (2.02.66)
+ 
 
 
