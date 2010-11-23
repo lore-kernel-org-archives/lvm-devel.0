@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Nov 2010 15:00:53 -0000
-Subject: LVM2/libdm libdm-string.c
-Message-ID: <20101123150053.24357.qmail@sourceware.org>
+Date: 23 Nov 2010 15:09:02 -0000
+Subject: LVM2/lib/config config.c
+Message-ID: <20101123150902.29444.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,32 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-23 15:00:52
+Changes by:	zkabelac at sourceware.org	2010-11-23 15:08:58
 
 Modified files:
-	libdm          : libdm-string.c 
+	lib/config     : config.c 
 
 Log message:
-	Move va_end(ap)  so we do not leave with return -1 without calling it.
-	Remove unneeded ';'
+	Move va_end() so it is also used before error path  return
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-string.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.82&r2=1.83
 
---- LVM2/libdm/libdm-string.c	2010/10/25 13:13:53	1.13
-+++ LVM2/libdm/libdm-string.c	2010/11/23 15:00:52	1.14
-@@ -144,6 +144,8 @@
- 	while (!ok) {
- 		va_start(ap, format);
- 		n = vsnprintf(buf, size, format, ap);
-+		va_end(ap);
-+
- 		if (0 <= n && n < size)
- 			ok = 1;
- 		else {
-@@ -152,8 +154,7 @@
- 			buf = dm_malloc(size);
- 			if (!buf)
- 				return -1;
--		};
--		va_end(ap);
-+		}
- 	}
+--- LVM2/lib/config/config.c	2010/09/30 21:06:51	1.82
++++ LVM2/lib/config/config.c	2010/11/23 15:08:57	1.83
+@@ -381,11 +381,12 @@
  
- 	*result = dm_strdup(buf);
+ 	va_start(ap, fmt);
+ 	n = vsnprintf(&buf[0], sizeof buf - 1, fmt, ap);
++	va_end(ap);
++
+ 	if (n < 0 || n > (int) sizeof buf - 1) {
+ 		log_error("vsnprintf failed for config line");
+ 		return 0;
+ 	}
+-	va_end(ap);
+ 
+ 	if (!dm_pool_grow_object(outline->mem, &buf[0], strlen(buf))) {
+ 		log_error("dm_pool_grow_object failed for config line");
 
 
