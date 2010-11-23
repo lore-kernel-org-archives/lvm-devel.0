@@ -1,35 +1,50 @@
-From: Dave Wysochanski <wysochanski@pobox.com>
-Date: Mon, 22 Nov 2010 22:25:13 -0500
-Subject: [PATCH] Fix seg_size lvm2app property - should return bytes.
-Message-ID: <1290482713-18054-1-git-send-email-wysochanski@pobox.com>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Mon, 22 Nov 2010 23:14:05 -0500
+Subject: wishlist: Two lvm2app pv and lv properties still needed
+In-Reply-To: <201011221503.26030.benscott@nwlink.com>
+References: <20101122213948.11757.qmail@sourceware.org>
+	<201011221503.26030.benscott@nwlink.com>
+Message-ID: <1290485645.31336.12.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-All 'size' values of lvm2app properties should be in bytes.
-Fix 'seg_size' to return bytes.
+On Mon, 2010-11-22 at 15:03 -0800, ben wrote:
+> When using lvm2app function calls to retrieve physical volume segment 
+> properties there seems to be no way the get the "lv_name" to tie each segment 
+> of the pv to an lv. For instance like this:
+> 
+> pvs --segments -o+lv_name
+>   PV         VG    Fmt  Attr PSize   PFree   Start SSize LV   
+>   /dev/sdh1  local lvm2 a-   768.00m 512.00m     0     1      
+>   /dev/sdh1  local lvm2 a-   768.00m 512.00m     1     1 lvol1
+>   /dev/sdh1  local lvm2 a-   768.00m 512.00m     2     1      
+>   /dev/sdi1  local lvm2 a-   768.00m      0      0     3 lvol2
+> 
 
-Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
----
- lib/report/properties.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Right - lvm2app currently doesn't cover every combination of fields
+exactly like the reporting commands.  However, you should be able to get
+the info in another way (see below).
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index b93f419..edbaecd 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -230,7 +230,7 @@ GET_LVSEG_NUM_PROPERTY_FN(seg_start, lvseg_start(lvseg))
- #define _seg_start_set _not_implemented_set
- GET_LVSEG_NUM_PROPERTY_FN(seg_start_pe, lvseg->le)
- #define _seg_start_pe_set _not_implemented_set
--GET_LVSEG_NUM_PROPERTY_FN(seg_size, lvseg_size(lvseg))
-+GET_LVSEG_NUM_PROPERTY_FN(seg_size, (SECTOR_SIZE * lvseg_size(lvseg)))
- #define _seg_size_set _not_implemented_set
- GET_LVSEG_STR_PROPERTY_FN(seg_tags, lvseg_tags_dup(lvseg))
- #define _seg_tags_set _not_implemented_set
--- 
-1.7.2.2
+Also, we may need some futher function "helpers" to enumerate certain
+lvm objects from other objects (as the recent patches I submitted to
+lookup a lv/pv handle from a name or uuid).  For instance, we may want
+to provide a function to lookup an lv from a pv_segment.
+
+
+> The same seems to apply to getting lv segments properties and their 
+> asscociated devices.   Like this:
+> 
+>  lvs -o+devices
+>   LV    VG    Attr   LSize    Devices
+>   lvol1 local -wi-a- 256.00m  /dev/sdh1(1)
+>   lvol2 local -wi-a- 768.00m  /dev/sdi1(0)
+> 
+
+Patches have been submitted to lvm-devel to cover 'devices' and
+'seg_pe_ranges'.
+
 
 
