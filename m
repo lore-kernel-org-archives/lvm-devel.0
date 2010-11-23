@@ -1,37 +1,47 @@
-From: Dave Wysochanski <wysochanski@pobox.com>
-Date: Tue, 23 Nov 2010 00:01:10 -0500
-Subject: [PATCH 2/2] Update interactive tests to display lvm_vg_open errno code.
-In-Reply-To: <1290488470-21743-1-git-send-email-wysochanski@pobox.com>
-References: <1290488470-21743-1-git-send-email-wysochanski@pobox.com>
-Message-ID: <1290488470-21743-3-git-send-email-wysochanski@pobox.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 23 Nov 2010 15:00:53 -0000
+Subject: LVM2/libdm libdm-string.c
+Message-ID: <20101123150053.24357.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Show errno code if lvm_vg_open() fails.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2010-11-23 15:00:52
 
-Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
----
- test/api/test.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+Modified files:
+	libdm          : libdm-string.c 
 
-diff --git a/test/api/test.c b/test/api/test.c
-index f19268f..b1b0d61 100644
---- a/test/api/test.c
-+++ b/test/api/test.c
-@@ -349,7 +349,8 @@ static void _vg_open(char **argv, int argc, lvm_t libh)
- 	else
- 		vg = lvm_vg_open(libh, argv[1], argv[2], 0);
- 	if (!vg || !lvm_vg_get_name(vg)) {
--		printf("Error opening %s\n", argv[1]);
-+		printf("Error opening %s, errno = %d\n",
-+		       argv[1], lvm_errno(libh));
- 		return;
+Log message:
+	Move va_end(ap)  so we do not leave with return -1 without calling it.
+	Remove unneeded ';'
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-string.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+
+--- LVM2/libdm/libdm-string.c	2010/10/25 13:13:53	1.13
++++ LVM2/libdm/libdm-string.c	2010/11/23 15:00:52	1.14
+@@ -144,6 +144,8 @@
+ 	while (!ok) {
+ 		va_start(ap, format);
+ 		n = vsnprintf(buf, size, format, ap);
++		va_end(ap);
++
+ 		if (0 <= n && n < size)
+ 			ok = 1;
+ 		else {
+@@ -152,8 +154,7 @@
+ 			buf = dm_malloc(size);
+ 			if (!buf)
+ 				return -1;
+-		};
+-		va_end(ap);
++		}
  	}
  
--- 
-1.7.2.2
+ 	*result = dm_strdup(buf);
 
 
