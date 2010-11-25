@@ -1,39 +1,33 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:33 +0100
-Subject: [PATCH 29/29] Check for NULL pointer
-In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
-References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 25 Nov 2010 13:51:41 +0100
+Subject: [PATCH] Refactor handling of percent values (towards BZ 654441)
+Message-ID: <87eia9o9b6.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-clangs is happier and check for non NULL options value.
-Report internal error in this case.
+Hi,
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/reporter.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+the attached patch changes over the percent handling in the code: it
+folds all percent values into a single fixed-point value, instead of a
+floating point and an enum. This simplifies existing code (no need to
+pass around extra variable/parameter), while also making it possible to
+expose the percent attributes through the lvm2app API as a single
+integral value (this is BZ 654441).
 
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 40d3c9a..16c19e2 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -328,6 +328,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 			return EINVALID_CMD_LINE;
- 		}
- 		if (*opts == '+') {
-+			if (!options) {
-+				log_error(INTERNAL_ERROR "Missing options.");
-+				return EINVALID_CMD_LINE;
-+			}
- 			if (!(str = dm_pool_alloc(cmd->mem,
- 					 strlen(options) + strlen(opts) + 1))) {
- 				log_error("options string allocation failed");
--- 
-1.7.3.2
+The lvm2app patch will follow.
 
+Yours,
+   Petr.
 
+PS: Passes the testsuite.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: percent-refactor.diff
+Type: text/x-diff
+Size: 32714 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101125/ae187aa8/attachment.bin>
