@@ -1,35 +1,50 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:27 +0100
-Subject: [PATCH 23/29] Add test and error message for failure case
+Date: Thu, 25 Nov 2010 11:55:28 +0100
+Subject: [PATCH 24/29] Test for str_list_add
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <5383deb0c0a91b2eb3b1e57309eea5bc64fee8d2.1290682013.git.zkabelac@redhat.com>
+Message-ID: <6d5dfe12a1e10eccb3bc286ff08c667a8d1ae14c.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Check for success and report error on failure case.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/clvmd/clvmd.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/format_pool/import_export.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index ec98c3d..06be3c2 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -288,7 +288,8 @@ static const char *decode_cmd(unsigned char cmdl)
+diff --git a/lib/format_pool/import_export.c b/lib/format_pool/import_export.c
+index 07f67fd..7884247 100644
+--- a/lib/format_pool/import_export.c
++++ b/lib/format_pool/import_export.c
+@@ -206,7 +206,10 @@ static int _add_stripe_seg(struct dm_pool *mem,
+ 			return_0;
  
- static void remove_lockfile(void)
- {
--	unlink(CLVMD_PIDFILE);
-+	if (unlink(CLVMD_PIDFILE))
-+		log_sys_error("unlink", CLVMD_PIDFILE);
- }
+ 	/* add the subpool type to the segment tag list */
+-	str_list_add(mem, &seg->tags, _cvt_sptype(usp->type));
++	if (!str_list_add(mem, &seg->tags, _cvt_sptype(usp->type))) {
++		log_error("Allocation failed for str_list.");
++		return 0;
++	}
  
- /*
+ 	dm_list_add(&lv->segments, &seg->list);
+ 
+@@ -240,7 +243,10 @@ static int _add_linear_seg(struct dm_pool *mem,
+ 		}
+ 
+ 		/* add the subpool type to the segment tag list */
+-		str_list_add(mem, &seg->tags, _cvt_sptype(usp->type));
++		if (!str_list_add(mem, &seg->tags, _cvt_sptype(usp->type))) {
++			log_error("Allocation failed for str_list.");
++			return 0;
++		}
+ 
+ 		if (!set_lv_segment_area_pv(seg, 0, usp->devs[j].pv, 0))
+ 			return_0;
 -- 
 1.7.3.2
 
