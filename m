@@ -1,47 +1,40 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:14 +0100
-Subject: [PATCH 10/29] Add some backtrace - Attention please
+Date: Thu, 25 Nov 2010 11:55:15 +0100
+Subject: [PATCH 11/29] Add stack trace for error path
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <4b104b57c2aff346b77434aa52d0126801e25af9.1290682013.git.zkabelac@redhat.com>
+Message-ID: <0c942670df4d53c9c6581513a8a7c0ef10eda778.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-ATTENTION
-
-It is a bit unclear what should happen on error path.
-
-My idea:
- - skip to the next node if the set_name() fails.
- - print the backtrace for all error cases.
+If dm_task_set_cookie fail - print stack trace, but keep going on.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/ioctl/libdm-iface.c |    8 ++++++--
- 1 files changed, 6 insertions(+), 2 deletions(-)
+ libdm/ioctl/libdm-iface.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 8c0115a..147eec2 100644
+index 147eec2..431aa8f 100644
 --- a/libdm/ioctl/libdm-iface.c
 +++ b/libdm/ioctl/libdm-iface.c
-@@ -1594,8 +1594,12 @@ static int _process_mapper_dir(struct dm_task *dmt)
- 		    !strcmp(dirent->d_name, "..") ||
- 		    !strcmp(dirent->d_name, "control"))
- 			continue;
--		dm_task_set_name(dmt, dirent->d_name);
--		dm_task_run(dmt);
-+		if (!dm_task_set_name(dmt, dirent->d_name)) {
-+			stack;
-+			continue; /* try next name */
-+		}
-+		if (!dm_task_run(dmt))
-+                        stack;  /* keep going */
+@@ -1776,9 +1776,10 @@ static int _create_and_load_v4(struct dm_task *dmt)
+ 	if (dmt->cookie_set) {
+ 		cookie = (dmt->event_nr & ~DM_UDEV_FLAGS_MASK) |
+ 			 (DM_COOKIE_MAGIC << DM_UDEV_FLAGS_SHIFT);
+-		dm_task_set_cookie(dmt, &cookie,
+-				   (dmt->event_nr & DM_UDEV_FLAGS_MASK) >>
+-				    DM_UDEV_FLAGS_SHIFT);
++		if (!dm_task_set_cookie(dmt, &cookie,
++					(dmt->event_nr & DM_UDEV_FLAGS_MASK) >>
++					DM_UDEV_FLAGS_SHIFT))
++                        stack; /* keep going */
  	}
  
- 	if (closedir(d))
+ 	if (!dm_task_run(dmt))
 -- 
 1.7.3.2
 
