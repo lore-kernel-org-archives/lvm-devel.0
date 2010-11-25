@@ -1,59 +1,47 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:13 +0100
-Subject: [PATCH 09/29] Remove check for lv is NULL
+Date: Thu, 25 Nov 2010 11:55:14 +0100
+Subject: [PATCH 10/29] Add some backtrace - Attention please
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <23421ea755e11ff7379ced9a1ea40b319b797fe7.1290682013.git.zkabelac@redhat.com>
+Message-ID: <4b104b57c2aff346b77434aa52d0126801e25af9.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'lv' is deferenced in the begining of the function so any check
-later is not helpful.
+ATTENTION
 
-Parameters for dev_manager_transien() will be marked as nonnull.
+It is a bit unclear what should happen on error path.
+
+My idea:
+ - skip to the next node if the set_name() fails.
+ - print the backtrace for all error cases.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   15 +++++++--------
- 1 files changed, 7 insertions(+), 8 deletions(-)
+ libdm/ioctl/libdm-iface.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index cbb5378..cbd55f2 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -614,14 +614,13 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
- 	do {
- 		next = dm_get_next_target(dmt, next, &start, &length, &type,
- 					  &params);
--		if (lv) {
--			if (!(segh = dm_list_next(&lv->segments, segh))) {
--				log_error("Number of segments in active LV %s "
--					  "does not match metadata", lv->name);
--				goto out;
--			}
--			seg = dm_list_item(segh, struct lv_segment);
-+
-+		if (!(segh = dm_list_next(&lv->segments, segh))) {
-+		    log_error("Number of segments in active LV %s "
-+			      "does not match metadata", lv->name);
-+		    goto out;
- 		}
-+		seg = dm_list_item(segh, struct lv_segment);
- 
- 		if (!type || !params)
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 8c0115a..147eec2 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1594,8 +1594,12 @@ static int _process_mapper_dir(struct dm_task *dmt)
+ 		    !strcmp(dirent->d_name, "..") ||
+ 		    !strcmp(dirent->d_name, "control"))
  			continue;
-@@ -632,7 +631,7 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
+-		dm_task_set_name(dmt, dirent->d_name);
+-		dm_task_run(dmt);
++		if (!dm_task_set_name(dmt, dirent->d_name)) {
++			stack;
++			continue; /* try next name */
++		}
++		if (!dm_task_run(dmt))
++                        stack;  /* keep going */
+ 	}
  
- 	} while (next);
- 
--	if (lv && (segh = dm_list_next(&lv->segments, segh))) {
-+	if (segh = dm_list_next(&lv->segments, segh)) {
- 		log_error("Number of segments in active LV %s does not "
- 			  "match metadata", lv->name);
- 		goto out;
+ 	if (closedir(d))
 -- 
 1.7.3.2
 
