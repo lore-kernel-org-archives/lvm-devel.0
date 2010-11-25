@@ -1,44 +1,54 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Thu, 25 Nov 2010 15:48:28 +0100
-Subject: [PATCH 1/2] Update errno codes for vg_read() and lvm2app lvm_vg_open().
-In-Reply-To: <1290488470-21743-2-git-send-email-wysochanski@pobox.com> (Dave
-	Wysochanski's message of "Tue, 23 Nov 2010 00:01:09 -0500")
-References: <1290488470-21743-1-git-send-email-wysochanski@pobox.com>
-	<1290488470-21743-2-git-send-email-wysochanski@pobox.com>
-Message-ID: <8762vlo3wj.fsf@twilight.int.mornfall.net.>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 25 Nov 2010 17:24:42 +0100
+Subject: [PATCH 27/29] Add standard check for result of lv_info call
+In-Reply-To: <ca96fa093553cbe0e0c0e15d5e70d7e49334669f.1290682013.git.zkabelac@redhat.com>
+References: <cover.1290682013.git.zkabelac@redhat.com>
+	<ca96fa093553cbe0e0c0e15d5e70d7e49334669f.1290682013.git.zkabelac@redhat.com>
+Message-ID: <4CEE8DCA.4080407@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Dne 25.11.2010 11:55, Zdenek Kabelac napsal(a):
+> Also add log_error message in case info would not be found.
+> 
+> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+> ---
+>  lib/mirror/mirrored.c |   12 ++++++++++--
+>  1 files changed, 10 insertions(+), 2 deletions(-)
+> 
+> diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+> index da9bdba..98aaa0d 100644
+> --- a/lib/mirror/mirrored.c
+> +++ b/lib/mirror/mirrored.c
+> @@ -296,7 +296,11 @@ static int _mirrored_transient_status(struct lv_segment *seg, char *params)
+>  	if (!strcmp(log_args[0], "disk")) {
+>  		char buf[32];
+>  		log = first_seg(lv)->log_lv;
+> -		lv_info(lv->vg->cmd, log, 0, &info, 0, 0);
+> +		if (!lv_info(lv->vg->cmd, log, 0, &info, 0, 0)) {
+> +			log_error("Check for existence of mirror log '%s' failed.",
+> +				  log->name);
+> +			return 0;
+> +		}
+>  		log_debug("Found mirror log at %d:%d", info.major, info.minor);
+>  		sprintf(buf, "%d:%d", info.major, info.minor);
+>  		if (strcmp(buf, log_args[1])) {
+> @@ -316,7 +320,11 @@ static int _mirrored_transient_status(struct lv_segment *seg, char *params)
+>  
+>  	for (i = 0; i < seg->area_count; ++i) {
+>  		char buf[32];
+> -		lv_info(lv->vg->cmd, seg_lv(seg, i), 0, &info, 0, 0);
+> +		if (!lv_info(lv->vg->cmd, seg_lv(seg, i), 0, &info, 0, 0)) {
+> +			log_error("Check for existence of mirror leg '%s' failed.",
+> +				  log->name);
 
-I am not checking this in yet, I would like to discuss the value choices
-first a bit. Presumably, once we set them, we are sort of stuck with the
-choices, so we should be careful.
+Ooops - forget one merge commit in my local branch to fix this copy&paste.
 
-Dave Wysochanski <wysochanski@pobox.com> writes:
+Here instead of 'log->name'     'seg_lv(seg, i)->name'  has to be used.
 
-> Update errno codes for vg_read error paths:
-> - EINVAL: invalid vg_name
-> - ENOLCK: lock_vol fails
-EBUSY? (But really, this probably depends on *why* _lock_vol
-failed... maybe we need to drill down here?)
-
-> - ENODEV: VG 'vgname' does not exist
-> - EPROTOTYPE: VG is clustered but locking not clustered
-What about just EPROTO? Or ENOLCK?
-
-> - EROFS: VG is read-only
-If we want to re-use existing errnos, I would go with EACCESS or EPERM
-here. EROFS *sounds* similar, but is IMHO a semantical misfit.
-
-> - EUCLEAN: VG is inconsistent
-This one is tricky. I would almost not assign an errno here at least for
-now.
-
-Yours,
-   Petr.
+Zdenek
 
 
