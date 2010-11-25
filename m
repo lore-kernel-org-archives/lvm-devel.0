@@ -1,35 +1,55 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:25 +0100
-Subject: [PATCH 21/29] Instrument with nonnull dev_manager_transient
+Date: Thu, 25 Nov 2010 11:55:26 +0100
+Subject: [PATCH 22/29] Ensure pointer first is notnull before dereference
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <5f41ba3ce7405e6049ead308613062eae67e4171.1290682013.git.zkabelac@redhat.com>
+Message-ID: <2e0d78bc8fb02ee82c80cc41aca8a3710049b7a7.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As the function directly dereferencies its parameters mark them as non-null.
+Modify code to put check into local function.
+
+Old code expected  _check_vgs had been give  non empty pvs list which
+should ensure some 'first' pointer is defined.
+
+New code remove check for empty pvs list before call of _check_vgs
+and leave this case to be handle inside this function - this
+makes static analyzer less confused.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/format1/format1.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
-index be6de51..72ca7f9 100644
---- a/lib/activate/dev_manager.h
-+++ b/lib/activate/dev_manager.h
-@@ -58,7 +58,7 @@ int dev_manager_activate(struct dev_manager *dm, struct logical_volume *lv, unsi
- int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv,
- 			unsigned origin_only, int *flush_required);
- int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv);
--int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv);
-+int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv) __attribute__((nonnull(1, 2)));
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 0dcec05..0745890 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -102,7 +102,10 @@ static int _check_vgs(struct dm_list *pvs, struct volume_group *vg)
+ 		pv_count++;
+ 	}
  
- int dev_manager_mknodes(const struct logical_volume *lv);
+-	/* On entry to fn, list known to be non-empty */
++	/* Empty pvs list is not valid */
++	if (!first)
++		return 0;
++
+ 	if (pv_count != first->vgd.pv_cur) {
+ 		log_error("%d PV(s) found for VG %s: expected %d",
+ 			  pv_count, first->pvd.vg_name, first->vgd.pv_cur);
+@@ -187,9 +190,6 @@ static struct volume_group *_build_vg(struct format_instance *fid,
+ 	if (!vg)
+ 		goto_bad;
  
+-	if (dm_list_empty(pvs))
+-		goto_bad;
+-
+ 	vg->cmd = fid->fmt->cmd;
+ 	vg->vgmem = mem;
+ 	vg->fid = fid;
 -- 
 1.7.3.2
 
