@@ -1,187 +1,39 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 18 Nov 2010 22:32:21 +0100
-Subject: [PATCH 07/11] Remove unused _mda_setup.
-In-Reply-To: <1290115945-27419-1-git-send-email-prajnoha@redhat.com>
-References: <1290115945-27419-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <1290115945-27419-8-git-send-email-prajnoha@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 25 Nov 2010 11:55:23 +0100
+Subject: [PATCH 19/29] Test for error status
+In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
+References: <cover.1290682013.git.zkabelac@redhat.com>
+Message-ID: <a1f1654ee3bb7da4b0a538697fc3e60d4a63b63c.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The functionality of former _mda_setup is now in new
-pv_add_metadata_area fn (though it's changed considerably).
+Check for errors from write and close.
 
-Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format_text/format-text.c |  153 -----------------------------------------
- 1 files changed, 0 insertions(+), 153 deletions(-)
+ daemons/clvmd/clvmd.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index f32e347..c7f5d5a 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1246,159 +1246,6 @@ static int _text_scan(const struct format_type *fmt)
- 	return (_scan_file(fmt) & _scan_raw(fmt));
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 1a9d40e..ec98c3d 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -181,8 +181,10 @@ static void usage(char *prog, FILE *file)
+ static void child_init_signal(int status)
+ {
+         if (child_pipe[1]) {
+-	        write(child_pipe[1], &status, sizeof(status));
+-		close(child_pipe[1]);
++		if (write(child_pipe[1], &status, sizeof(status)) < 0)
++			log_sys_error("write", "child_pipe");
++		if (close(child_pipe[1]))
++			log_sys_error("close", "child_pipe");
+ 	}
  }
  
--/* For orphan, creates new mdas according to policy.
--   Always have an mda between end-of-label and pe_align() boundary */
--static int _mda_setup(const struct format_type *fmt,
--		      uint64_t pe_start, uint64_t pe_end,
--		      int pvmetadatacopies, uint64_t pvmetadatasize,
--		      unsigned metadataignore, struct dm_list *mdas,
--		      struct physical_volume *pv,
--		      struct volume_group *vg __attribute__((unused)))
--{
--	uint64_t mda_adjustment, disk_size, alignment, alignment_offset;
--	uint64_t start1, mda_size1;	/* First area - start of disk */
--	uint64_t start2, mda_size2;	/* Second area - end of disk */
--	uint64_t wipe_size = 8 << SECTOR_SHIFT;
--	size_t pagesize = lvm_getpagesize();
--
--	if (!pvmetadatacopies)
--		return 1;
--
--	alignment = pv->pe_align << SECTOR_SHIFT;
--	alignment_offset = pv->pe_align_offset << SECTOR_SHIFT;
--	disk_size = pv->size << SECTOR_SHIFT;
--	pe_start <<= SECTOR_SHIFT;
--	pe_end <<= SECTOR_SHIFT;
--
--	if (pe_end > disk_size) {
--		log_error("Physical extents end beyond end of device %s!",
--			  pv_dev_name(pv));
--		return 0;
--	}
--
--	/* Requested metadatasize */
--	mda_size1 = pvmetadatasize << SECTOR_SHIFT;
--
--	/* Place mda straight after label area@start of disk */
--	start1 = LABEL_SCAN_SIZE;
--
--	/* Unless the space available is tiny, round to PAGE_SIZE boundary */
--	if ((!pe_start && !pe_end) ||
--	    ((pe_start > start1) && (pe_start - start1 >= MDA_SIZE_MIN))) {
--		mda_adjustment = start1 % pagesize;
--		if (mda_adjustment)
--			start1 += (pagesize - mda_adjustment);
--	}
--
--	/* Round up to pe_align boundary */
--	mda_adjustment = (mda_size1 + start1) % alignment;
--	if (mda_adjustment) {
--		mda_size1 += (alignment - mda_adjustment);
--		/* Revert if it's now too large */
--		if (start1 + mda_size1 > disk_size)
--			mda_size1 -= (alignment - mda_adjustment);
--	}
--
--	/* Add pe_align_offset if on pe_align boundary */
--	if (alignment_offset &&
--	    (((start1 + mda_size1) % alignment) == 0)) {
--		mda_size1 += alignment_offset;
--		/* Revert if it's now too large */
--		if (start1 + mda_size1 > disk_size)
--			mda_size1 -= alignment_offset;
--	}
--
--	/* Ensure it's not going to be bigger than the disk! */
--	if (start1 + mda_size1 > disk_size) {
--		log_warn("WARNING: metadata area fills disk leaving no "
--			 "space for data on %s.", pv_dev_name(pv));
--		/* Leave some free space for rounding */
--		/* Avoid empty data area as could cause tools problems */
--		mda_size1 = disk_size - start1 - alignment * 2;
--		if (start1 + mda_size1 > disk_size) {
--			log_error("Insufficient space for first mda on %s",
--				  pv_dev_name(pv));
--			return 0;
--		}
--		/* Round up to pe_align boundary */
--		mda_adjustment = (mda_size1 + start1) % alignment;
--		if (mda_adjustment)
--			mda_size1 += (alignment - mda_adjustment);
--		/* Only have 1 mda in this case */
--		pvmetadatacopies = 1;
--	}
--
--	/* If we already have PEs, avoid overlap */
--	if (pe_start || pe_end) {
--		if (pe_start <= start1)
--			mda_size1 = 0;
--		else if (start1 + mda_size1 > pe_start)
--			mda_size1 = pe_start - start1;
--	}
--
--	/* FIXME If creating new mdas, wipe them! */
--	if (mda_size1) {
--		if (!add_mda(fmt, fmt->cmd->mem, mdas, pv->dev, start1,
--			     mda_size1, metadataignore))
--			return 0;
--
--		if (!dev_set((struct device *) pv->dev, start1,
--			     (size_t) (mda_size1 >
--				       wipe_size ? : mda_size1), 0)) {
--			log_error("Failed to wipe new metadata area");
--			return 0;
--		}
--
--		if (pvmetadatacopies == 1)
--			return 1;
--	} else
--		start1 = 0;
--
--	/* A second copy at end of disk */
--	mda_size2 = pvmetadatasize << SECTOR_SHIFT;
--
--	/* Ensure it's not going to be bigger than the disk! */
--	if (mda_size2 > disk_size)
--		mda_size2 = disk_size - start1 - mda_size1;
--
--	mda_adjustment = (disk_size - mda_size2) % alignment;
--	if (mda_adjustment)
--		mda_size2 += mda_adjustment;
--
--	start2 = disk_size - mda_size2;
--
--	/* If we already have PEs, avoid overlap */
--	if (pe_start || pe_end) {
--		if (start2 < pe_end) {
--			mda_size2 -= (pe_end - start2);
--			start2 = pe_end;
--		}
--	}
--
--	/* If we already have a first mda, avoid overlap */
--	if (mda_size1) {
--		if (start2 < start1 + mda_size1) {
--			mda_size2 -= (start1 + mda_size1 - start2);
--			start2 = start1 + mda_size1;
--		}
--		/* No room for any PEs here now! */
--	}
--
--	if (mda_size2) {
--		if (!add_mda(fmt, fmt->cmd->mem, mdas, pv->dev, start2,
--			     mda_size2, metadataignore)) return 0;
--		if (!dev_set(pv->dev, start2,
--			     (size_t) (mda_size1 >
--				       wipe_size ? : mda_size1), 0)) {
--			log_error("Failed to wipe new metadata area");
--			return 0;
--		}
--	} else
--		return 0;
--
--	return 1;
--}
--
- /* Only for orphans */
- /* Set label_sector to -1 if rewriting existing label into same sector */
- /* If mdas is supplied it overwrites existing mdas e.g. used with pvcreate */
 -- 
 1.7.3.2
 
