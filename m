@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 25 Nov 2010 14:34:56 -0000
-Subject: LVM2/liblvm lvm2app.h lvm_lv.c lvm_pv.c
-Message-ID: <20101125143456.10117.qmail@sourceware.org>
+Date: 25 Nov 2010 14:35:48 -0000
+Subject: LVM2/test/api test.c
+Message-ID: <20101125143548.12407.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,138 +10,170 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-11-25 14:34:52
+Changes by:	mornfall at sourceware.org	2010-11-25 14:35:47
 
 Modified files:
-	liblvm         : lvm2app.h lvm_lv.c lvm_pv.c 
+	test/api       : test.c 
 
 Log message:
-	This patch adds helpers to allow users to lookup a lv or pv handle by
-	uuid (given a vg_t of course).
+	Add interactive tests for functions to lookup a pv|lv by name|uuid.
 	
 	Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
 	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm2app.h.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
 
---- LVM2/liblvm/lvm2app.h	2010/11/25 14:33:44	1.29
-+++ LVM2/liblvm/lvm2app.h	2010/11/25 14:34:51	1.30
-@@ -1032,6 +1032,25 @@
- lv_t lvm_lv_from_name(vg_t vg, const char *name);
- 
- /**
-+ * Lookup an LV handle in a VG by the LV uuid.
-+ * The form of the uuid may be either the formatted, human-readable form,
-+ * or the non-formatted form.
-+ *
-+ * \memberof lv_t
-+ *
-+ * \param   vg
-+ * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-+ *
-+ * \param   uuid
-+ * UUID of LV to lookup.
-+ *
-+ * \return
-+ * non-NULL handle to the LV with 'uuid' attached to the VG.
-+ * NULL is returned if the LV uuid is not associated with the VG handle.
-+ */
-+lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid);
-+
-+/**
-  * Activate a logical volume.
-  *
-  * \memberof lv_t
-@@ -1523,6 +1542,25 @@
- pv_t lvm_pv_from_name(vg_t vg, const char *name);
- 
- /**
-+ * Lookup an PV handle in a VG by the PV uuid.
-+ * The form of the uuid may be either the formatted, human-readable form,
-+ * or the non-formatted form.
-+ *
-+ * \memberof pv_t
-+ *
-+ * \param   vg
-+ * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-+ *
-+ * \param   uuid
-+ * UUID of PV to lookup.
-+ *
-+ * \return
-+ * non-NULL handle to the PV with 'uuid' attached to the VG.
-+ * NULL is returned if the PV uuid is not associated with the VG handle.
-+ */
-+pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
-+
-+/**
-  * Resize physical volume to new_size bytes.
-  *
-  * \memberof pv_t
---- LVM2/liblvm/lvm_lv.c	2010/11/25 14:33:44	1.32
-+++ LVM2/liblvm/lvm_lv.c	2010/11/25 14:34:51	1.33
-@@ -260,6 +260,28 @@
- 	return NULL;
+--- LVM2/test/api/test.c	2010/11/17 20:13:51	1.33
++++ LVM2/test/api/test.c	2010/11/25 14:35:46	1.34
+@@ -113,6 +113,14 @@
+ 	       "Lookup a vgname from a device name\n");
+ 	printf("'vgname_from_pvid pvid': "
+ 	       "Lookup a vgname from a pvid\n");
++	printf("'lv_from_uuid vgname lvuuid': "
++	       "Lookup an LV from an LV uuid\n");
++	printf("'lv_from_name vgname lvname': "
++	       "Lookup an LV from an LV name\n");
++	printf("'pv_from_uuid vgname pvuuid': "
++	       "Lookup an LV from an LV uuid\n");
++	printf("'pv_from_name vgname pvname': "
++	       "Lookup an LV from an LV name\n");
+ 	printf("'quit': exit the program\n");
  }
  
-+lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
-+{
-+	struct lv_list *lvl;
-+	struct id id;
-+
-+	if (strlen(uuid) < ID_LEN) {
-+		log_errno (EINVAL, "Invalid UUID string length");
-+		return NULL;
-+	}
-+	if (strlen(uuid) >= ID_LEN) {
-+		if (!id_read_format(&id, uuid)) {
-+			log_errno(EINVAL, "Invalid UUID format");
-+			return NULL;
-+		}
-+	}
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (id_equal(&vg->id, &lvl->lv->lvid.id[0]) &&
-+		    id_equal(&id, &lvl->lv->lvid.id[1]))
-+			return lvl->lv;
-+	}
-+	return NULL;
-+}
- int lvm_lv_resize(const lv_t lv, uint64_t new_size)
- {
- 	/* FIXME: add lv resize code here */
---- LVM2/liblvm/lvm_pv.c	2010/11/25 14:33:44	1.18
-+++ LVM2/liblvm/lvm_pv.c	2010/11/25 14:34:51	1.19
-@@ -98,6 +98,28 @@
- 	return NULL;
+@@ -468,6 +476,30 @@
+ 		lvm_vg_get_pv_count(vg), lvm_vg_get_seqno(vg));
  }
  
-+pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
++static void _print_pv(pv_t pv)
 +{
-+	struct pv_list *pvl;
-+	struct id id;
-+
-+	if (strlen(uuid) < ID_LEN) {
-+		log_errno (EINVAL, "Invalid UUID string length");
-+		return NULL;
-+	}
-+	if (strlen(uuid) >= ID_LEN) {
-+		if (!id_read_format(&id, uuid)) {
-+			log_errno(EINVAL, "Invalid UUID format");
-+			return NULL;
-+		}
-+	}
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		if (id_equal(&id, &pvl->pv->id))
-+			return pvl->pv;
-+	}
-+	return NULL;
++	if (!pv)
++		return;
++	printf("%s (%s): size=%"PRIu64", free=%"PRIu64
++	       ", dev_size=%"PRIu64", mda_count=%"PRIu64"\n",
++	       lvm_pv_get_name(pv), lvm_pv_get_uuid(pv),
++	       lvm_pv_get_size(pv), lvm_pv_get_free(pv),
++	       lvm_pv_get_dev_size(pv),
++	       lvm_pv_get_mda_count(pv));
 +}
 +
- 
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
++static void _print_lv(vg_t vg, lv_t lv)
++{
++	if (!lv)
++		return;
++	printf("%s/%s (%s): size=%"PRIu64", %sACTIVE / %sSUSPENDED\n",
++	       lvm_vg_get_name(vg),
++	       lvm_lv_get_name(lv), lvm_lv_get_uuid(lv),
++	       lvm_lv_get_size(lv),
++	       lvm_lv_is_active(lv) ? "" : "IN",
++	       lvm_lv_is_suspended(lv) ? "" : "NOT ");
++}
++
+ static void _list_open_vgs(void)
  {
+ 	dm_hash_iter(_vgid_hash, (dm_hash_iterate_fn) _show_one_vg);
+@@ -488,12 +520,7 @@
+ 	}
+ 	printf("PVs in VG %s:\n", lvm_vg_get_name(vg));
+ 	dm_list_iterate_items(pvl, pvs) {
+-		printf("%s (%s): size=%"PRIu64", free=%"PRIu64
+-			", dev_size=%"PRIu64", mda_count=%"PRIu64"\n",
+-			lvm_pv_get_name(pvl->pv), lvm_pv_get_uuid(pvl->pv),
+-			lvm_pv_get_size(pvl->pv), lvm_pv_get_free(pvl->pv),
+-			lvm_pv_get_dev_size(pvl->pv),
+-			lvm_pv_get_mda_count(pvl->pv));
++		_print_pv(pvl->pv);
+ 	}
+ }
+ 
+@@ -715,6 +742,59 @@
+ 	printf("%s tag %s to LV %s\n",
+ 	       add ? "adding":"removing", argv[3], argv[2]);
+ }
++
++static void _lv_from_uuid(char **argv, int argc)
++{
++	vg_t vg;
++
++	if (argc < 3) {
++		printf("Please enter vgname, lv_uuid\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	_print_lv(vg, lvm_lv_from_uuid(vg, argv[2]));
++}
++
++static void _lv_from_name(char **argv, int argc)
++{
++	vg_t vg;
++
++	if (argc < 3) {
++		printf("Please enter vgname, lv_uuid\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	_print_lv(vg, lvm_lv_from_name(vg, argv[2]));
++}
++
++static void _pv_from_uuid(char **argv, int argc)
++{
++	vg_t vg;
++
++	if (argc < 3) {
++		printf("Please enter vgname, pv_uuid\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	_print_pv(lvm_pv_from_uuid(vg, argv[2]));
++}
++
++static void _pv_from_name(char **argv, int argc)
++{
++	vg_t vg;
++
++	if (argc < 3) {
++		printf("Please enter vgname, pv_uuid\n");
++		return;
++	}
++	if (!(vg = _lookup_vg_by_name(argv, argc)))
++		return;
++	_print_pv(lvm_pv_from_name(vg, argv[2]));
++}
++
+ static void _vgname_from_pvid(char **argv, int argc, lvm_t libh)
+ {
+ 	const char *vgname;
+@@ -762,12 +842,7 @@
+ 	}
+ 	printf("LVs in VG %s:\n", lvm_vg_get_name(vg));
+ 	dm_list_iterate_items(lvl, lvs) {
+-		printf("%s/%s (%s): size=%"PRIu64", %sACTIVE / %sSUSPENDED\n",
+-			lvm_vg_get_name(vg),
+-			lvm_lv_get_name(lvl->lv), lvm_lv_get_uuid(lvl->lv),
+-			lvm_lv_get_size(lvl->lv),
+-			lvm_lv_is_active(lvl->lv) ? "" : "IN",
+-			lvm_lv_is_suspended(lvl->lv) ? "" : "NOT ");
++		_print_lv(vg, lvl->lv);
+ 	}
+ }
+ 
+@@ -978,6 +1053,14 @@
+ 			_vgname_from_devname(argv, argc, libh);
+ 		} else if (!strcmp(argv[0], "vgname_from_pvid")) {
+ 			_vgname_from_pvid(argv, argc, libh);
++		} else if (!strcmp(argv[0], "lv_from_uuid")) {
++			_lv_from_uuid(argv, argc);
++		} else if (!strcmp(argv[0], "lv_from_name")) {
++			_lv_from_name(argv, argc);
++		} else if (!strcmp(argv[0], "pv_from_uuid")) {
++			_pv_from_uuid(argv, argc);
++		} else if (!strcmp(argv[0], "pv_from_name")) {
++			_pv_from_name(argv, argc);
+ 		} else {
+ 			printf ("Unrecognized command %s\n", argv[0]);
+ 		}
 
 
