@@ -1,50 +1,41 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:28 +0100
-Subject: [PATCH 24/29] Test for str_list_add
+Date: Thu, 25 Nov 2010 11:55:29 +0100
+Subject: [PATCH 25/29] Check for unlink result
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <6d5dfe12a1e10eccb3bc286ff08c667a8d1ae14c.1290682013.git.zkabelac@redhat.com>
+Message-ID: <6022829a3292ffcc95debee81bda60e0522698e2.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Check for success and report error on failure case.
+Even if we intentionally wish to silently ignore any error from
+unlink in this place - it might be still good idea to put at least
+a debug message to get the reason for failure.
+
+Test makes static analyzer happier about checked unlink result.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format_pool/import_export.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ lib/format_text/archiver.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format_pool/import_export.c b/lib/format_pool/import_export.c
-index 07f67fd..7884247 100644
---- a/lib/format_pool/import_export.c
-+++ b/lib/format_pool/import_export.c
-@@ -206,7 +206,10 @@ static int _add_stripe_seg(struct dm_pool *mem,
- 			return_0;
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index 3ace628..e0efafb 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -261,7 +261,9 @@ int backup_remove(struct cmd_context *cmd, const char *vg_name)
+ 	/*
+ 	 * Let this fail silently.
+ 	 */
+-	unlink(path);
++	if (unlink(path))
++		log_debug("Unlink %s failed: %s", path, strerror(errno));
++
+ 	return 1;
+ }
  
- 	/* add the subpool type to the segment tag list */
--	str_list_add(mem, &seg->tags, _cvt_sptype(usp->type));
-+	if (!str_list_add(mem, &seg->tags, _cvt_sptype(usp->type))) {
-+		log_error("Allocation failed for str_list.");
-+		return 0;
-+	}
- 
- 	dm_list_add(&lv->segments, &seg->list);
- 
-@@ -240,7 +243,10 @@ static int _add_linear_seg(struct dm_pool *mem,
- 		}
- 
- 		/* add the subpool type to the segment tag list */
--		str_list_add(mem, &seg->tags, _cvt_sptype(usp->type));
-+		if (!str_list_add(mem, &seg->tags, _cvt_sptype(usp->type))) {
-+			log_error("Allocation failed for str_list.");
-+			return 0;
-+		}
- 
- 		if (!set_lv_segment_area_pv(seg, 0, usp->devs[j].pv, 0))
- 			return_0;
 -- 
 1.7.3.2
 
