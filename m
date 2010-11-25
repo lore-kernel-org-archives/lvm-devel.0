@@ -1,50 +1,145 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:11 +0100
-Subject: [PATCH 07/29] Test success from dm_poll_create
+Date: Thu, 25 Nov 2010 11:55:12 +0100
+Subject: [PATCH 08/29] Fix memory leak in error path
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <750a494b506778c00d7093ea00a89fa863d826b5.1290682013.git.zkabelac@redhat.com>
+Message-ID: <fe9b9e08dfad635aff060d826257f24ce49dd23b.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add testing for NULL return value from dm_poll_create.
+Nicely hidden memory leak in error path.
+outf() is macro which uses out_text() and does automagical return_0.
+This would leak tag_buffer.
+
+As there was a repeating code for tags output - create _out_tags().
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/config/config.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ lib/format_text/export.c |   56 ++++++++++++++++++++++-----------------------
+ 1 files changed, 27 insertions(+), 29 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index c10c78e..4ecec94 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -511,7 +511,10 @@ int write_config_node(const struct config_node *cn, putline_fn putline, void *ba
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index d49090c..8ddfa85 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -363,10 +363,27 @@ static int _print_flag_config(struct formatter *f, uint64_t status, int type)
+ 	return 1;
+ }
+ 
++
++static int _out_tags(struct formatter *f, struct dm_list *tags)
++{
++	char *tag_buffer;
++
++	if (!dm_list_empty(tags)) {
++		if (!(tag_buffer = alloc_printed_tags(tags)))
++			return_0;
++		if (!out_text(f, "tags = %s", tag_buffer)) {
++			dm_free(tag_buffer);
++			return_0;
++		}
++		dm_free(tag_buffer);
++	}
++
++	return 1;
++}
++
+ static int _print_vg(struct formatter *f, struct volume_group *vg)
  {
- 	struct output_line outline;
- 	outline.fp = NULL;
--	outline.mem = dm_pool_create("config_line", 1024);
-+	if (!(outline.mem = dm_pool_create("config_line", 1024))) {
-+		log_error("Failed to allocate config_line pool.");
-+		return 0;
-+	}
- 	outline.putline = putline;
- 	outline.putline_baton = baton;
- 	if (!_write_config(cn, 0, &outline, 0)) {
-@@ -538,7 +541,10 @@ int write_config_file(struct config_tree *cft, const char *file,
- 		return 0;
- 	}
+ 	char buffer[4096];
+-	char *tag_buffer = NULL;
  
--	outline.mem = dm_pool_create("config_line", 1024);
-+	if (!(outline.mem = dm_pool_create("config_line", 1024))) {
-+		log_error("Failed to allocate config_line pool.");
-+		return 0;
-+	}
+ 	if (!id_write_format(&vg->id, buffer, sizeof(buffer)))
+ 		return_0;
+@@ -378,12 +395,8 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
+ 	if (!_print_flag_config(f, vg->status, VG_FLAGS))
+ 		return_0;
  
- 	log_verbose("Dumping configuration to %s", file);
- 	if (!argc) {
+-	if (!dm_list_empty(&vg->tags)) {
+-		if (!(tag_buffer = alloc_printed_tags(&vg->tags)))
+-			return_0;
+-		outf(f, "tags = %s", tag_buffer);
+-		dm_free(tag_buffer);
+-	}
++	if (!_out_tags(f, &vg->tags))
++		return_0;
+ 
+ 	if (vg->system_id && *vg->system_id)
+ 		outf(f, "system_id = \"%s\"", vg->system_id);
+@@ -428,7 +441,7 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ 	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+ 	char buffer[4096];
+-	char *buf, *tag_buffer = NULL;
++	char *buf;
+ 	const char *name;
+ 
+ 	outf(f, "physical_volumes {");
+@@ -462,12 +475,8 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ 		if (!_print_flag_config(f, pv->status, PV_FLAGS))
+ 			return_0;
+ 
+-		if (!dm_list_empty(&pv->tags)) {
+-			if (!(tag_buffer = alloc_printed_tags(&pv->tags)))
+-				return_0;
+-			outf(f, "tags = %s", tag_buffer);
+-			dm_free(tag_buffer);
+-		}
++		if (!_out_tags(f, &pv->tags))
++			return_0;
+ 
+ 		outsize(f, pv->size, "dev_size = %" PRIu64, pv->size);
+ 
+@@ -487,8 +496,6 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ static int _print_segment(struct formatter *f, struct volume_group *vg,
+ 			  int count, struct lv_segment *seg)
+ {
+-	char *tag_buffer = NULL;
+-
+ 	outf(f, "segment%u {", count);
+ 	_inc_indent(f);
+ 
+@@ -499,12 +506,8 @@ static int _print_segment(struct formatter *f, struct volume_group *vg,
+ 	outnl(f);
+ 	outf(f, "type = \"%s\"", seg->segtype->name);
+ 
+-	if (!dm_list_empty(&seg->tags)) {
+-		if (!(tag_buffer = alloc_printed_tags(&seg->tags)))
+-			return_0;
+-		outf(f, "tags = %s", tag_buffer);
+-		dm_free(tag_buffer);
+-	}
++	if (!_out_tags(f, &seg->tags))
++		return_0;
+ 
+ 	if (seg->segtype->ops->text_export &&
+ 	    !seg->segtype->ops->text_export(seg, f))
+@@ -557,7 +560,6 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
+ {
+ 	struct lv_segment *seg;
+ 	char buffer[4096];
+-	char *tag_buffer = NULL;
+ 	int seg_count;
+ 
+ 	outnl(f);
+@@ -573,12 +575,8 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
+ 	if (!_print_flag_config(f, lv->status, LV_FLAGS))
+ 		return_0;
+ 
+-	if (!dm_list_empty(&lv->tags)) {
+-		if (!(tag_buffer = alloc_printed_tags(&lv->tags)))
+-			return_0;
+-		outf(f, "tags = %s", tag_buffer);
+-		dm_free(tag_buffer);
+-	}
++	if (!_out_tags(f, &lv->tags))
++		return_0;
+ 
+ 	if (lv->alloc != ALLOC_INHERIT)
+ 		outf(f, "allocation_policy = \"%s\"",
 -- 
 1.7.3.2
 
