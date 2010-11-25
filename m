@@ -1,52 +1,51 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:16 +0100
-Subject: [PATCH 12/29] Add test for 'read' result
+Date: Thu, 25 Nov 2010 11:55:17 +0100
+Subject: [PATCH 13/29] Put some FIXME warnings in lvmcache_update_vg processing
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <725e7919102c477b04e9589a0c2b0f8004f68a74.1290682013.git.zkabelac@redhat.com>
+Message-ID: <24b600ce0d709f07f4628826b950770ce6190dc6.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Static analyzer complains when read result is ignored.
-
-So let's add some small check even when there is very low probablity to
-fail in this place.
+It's not clear how this code is supposed to work.
+For now we never set INCONSISTENT_VG flag - so marking expression with
+big FIXME as it always gives true.
+Remove extra paramater from lvmcache_update_vg call - as it effectively
+produced always 'false' - so reverting to previous version - where it has been
+possible to get also 'true' - use case is probably only in cluster
+environment - some testcase is needed.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvmcmdline.c |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ lib/metadata/metadata.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 192531d..f599613 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1191,15 +1191,17 @@ static const char *_get_cmdline(pid_t pid)
- {
- 	static char _proc_cmdline[32];
- 	char buf[256];
--	int fd;
-+	int fd, n = 0;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 743d633..fd5d024 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2679,6 +2679,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	 * the missing PV logic below.
+ 	 */
+ 	if ((correct_vg = lvmcache_get_vg(vgid, precommitted)) &&
++	    /* FIXME: Expression is always TRUE - as we never set INCONSISTENT_VG! */
+ 	    (use_precommitted || !*consistent || !(correct_vg->status & INCONSISTENT_VG))) {
+ 		if (!(correct_vg->status & INCONSISTENT_VG))
+ 			*consistent = 1;
+@@ -2935,8 +2936,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	 * If there is no precommitted metadata, committed metadata
+ 	 * is read and stored in the cache even if use_precommitted is set
+ 	 */
+-	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED &
+-			   (inconsistent ? INCONSISTENT_VG : 0));
++	/* FIXME: How to handle INCONSISTENT_VG? */
++	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
  
- 	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/%u/cmdline", pid);
- 	if ((fd = open(buf, O_RDONLY)) > 0) {
--		read(fd, _proc_cmdline, sizeof(_proc_cmdline) - 1);
--		_proc_cmdline[sizeof(_proc_cmdline) - 1] = '\0';
-+		if ((n = read(fd, _proc_cmdline, sizeof(_proc_cmdline) - 1)) < 0) {
-+			log_sys_error("read", buf);
-+			n = 0;
-+		}
- 		close(fd);
--	} else
--		_proc_cmdline[0] = '\0';
-+	}
-+	_proc_cmdline[n] = '\0';
- 
- 	return _proc_cmdline;
- }
+ 	if (inconsistent) {
+ 		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
 -- 
 1.7.3.2
 
