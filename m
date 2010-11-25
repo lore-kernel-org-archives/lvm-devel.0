@@ -1,34 +1,21 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 25 Nov 2010 17:16:42 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20101125171642.6544.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Thu, 25 Nov 2010 18:18:02 +0100
+Subject: [PATCH 01/29] Cleanup remove test for NULL
+In-Reply-To: <e0764574ca6db50ef95e464198f8d4d8fef19e28.1290682013.git.zkabelac@redhat.com>
+	(Zdenek Kabelac's message of "Thu, 25 Nov 2010 11:55:05 +0100")
+References: <cover.1290682013.git.zkabelac@redhat.com>
+	<cover.1290682013.git.zkabelac@redhat.com>
+	<e0764574ca6db50ef95e464198f8d4d8fef19e28.1290682013.git.zkabelac@redhat.com>
+Message-ID: <87zksxmiet.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-11-25 17:16:41
+Zdenek Kabelac <zkabelac@redhat.com> writes:
 
-Modified files:
-	.              : WHATS_NEW 
-
-Log message:
-	Update WHATS_NEW.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1809&r2=1.1810
-
---- LVM2/WHATS_NEW	2010/11/24 09:53:31	1.1809
-+++ LVM2/WHATS_NEW	2010/11/25 17:16:41	1.1810
-@@ -1,5 +1,6 @@
- Version 2.02.78 - 
- ====================================
-+  Certain lvconvert invocations are now required to be done in two steps.
-   Fix missing context desctruction in err path of lvm1 fallback in lvm2_main().
-   Fix memory leak in error path of parse_loop_device_name() from dmsetup.
-   Fix missing dlclose in _init_formats() error path from init_format call.
+> dm_free test for NULL itself.
+Ack.
 
 
