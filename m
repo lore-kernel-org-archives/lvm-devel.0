@@ -1,82 +1,50 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:10 +0100
-Subject: [PATCH 06/29] Replace snprintf -> dm_snprintf
+Date: Thu, 25 Nov 2010 11:55:11 +0100
+Subject: [PATCH 07/29] Test success from dm_poll_create
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <ad12e2d21c4356d9d34fc8d1f752ec1d6d39dce3.1290682013.git.zkabelac@redhat.com>
+Message-ID: <750a494b506778c00d7093ea00a89fa863d826b5.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use dm_snprintf with known error case behavior - return -1.
+Add testing for NULL return value from dm_poll_create.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/clvmd/clvmd-command.c |   21 ++++++++++-----------
- 1 files changed, 10 insertions(+), 11 deletions(-)
+ lib/config/config.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index 8d1dcff..915fcc7 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -97,10 +97,10 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 		}
- 		if (*buf) {
- 			uname(&nodeinfo);
--			*retlen = 1 + snprintf(*buf, buflen,
--					       "TEST from %s: %s v%s",
--					       nodeinfo.nodename, args,
--					       nodeinfo.release);
-+			*retlen = 1 + dm_snprintf(*buf, buflen,
-+						  "TEST from %s: %s v%s",
-+						  nodeinfo.nodename, args,
-+						  nodeinfo.release);
- 		}
- 		break;
- 
-@@ -121,9 +121,8 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 		status = do_lock_lv(lock_cmd, lock_flags, lockname);
- 		/* Replace EIO with something less scary */
- 		if (status == EIO) {
--			*retlen =
--			    1 + snprintf(*buf, buflen, "%s",
--					 get_last_lvm_error());
-+			*retlen = 1 + dm_snprintf(*buf, buflen, "%s",
-+						  get_last_lvm_error());
- 			return EIO;
- 		}
- 		break;
-@@ -133,7 +132,7 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 		if (buflen < 3)
- 			return EIO;
- 		if ((locktype = do_lock_query(lockname)))
--			*retlen = 1 + snprintf(*buf, buflen, "%s", locktype);
-+			*retlen = 1 + dm_snprintf(*buf, buflen, "%s", locktype);
- 		break;
- 
- 	case CLVMD_CMD_REFRESH:
-@@ -169,8 +168,8 @@ int do_command(struct local_client *client, struct clvm_header *msg, int msglen,
- 
- 	/* Check the status of the command and return the error text */
- 	if (status) {
--		*retlen = 1 + (*buf) ? snprintf(*buf, buflen, "%s",
--						strerror(status)) : -1;
-+		*retlen = 1 + (*buf) ? dm_snprintf(*buf, buflen, "%s",
-+						   strerror(status)) : -1;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index c10c78e..4ecec94 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -511,7 +511,10 @@ int write_config_node(const struct config_node *cn, putline_fn putline, void *ba
+ {
+ 	struct output_line outline;
+ 	outline.fp = NULL;
+-	outline.mem = dm_pool_create("config_line", 1024);
++	if (!(outline.mem = dm_pool_create("config_line", 1024))) {
++		log_error("Failed to allocate config_line pool.");
++		return 0;
++	}
+ 	outline.putline = putline;
+ 	outline.putline_baton = baton;
+ 	if (!_write_config(cn, 0, &outline, 0)) {
+@@ -538,7 +541,10 @@ int write_config_file(struct config_tree *cft, const char *file,
+ 		return 0;
  	}
  
- 	return status;
-@@ -377,7 +376,7 @@ static int restart_clvmd(void)
- 	/* Propogate debug options */
- 	if (debug) {
- 		if (!(debug_arg = malloc(16)) ||
--		    snprintf(debug_arg, 16, "-d%d", (int)debug) < 0)
-+		    dm_snprintf(debug_arg, 16, "-d%d", (int)debug) < 0)
- 			goto_out;
- 		argv[argc++] = debug_arg;
- 	}
+-	outline.mem = dm_pool_create("config_line", 1024);
++	if (!(outline.mem = dm_pool_create("config_line", 1024))) {
++		log_error("Failed to allocate config_line pool.");
++		return 0;
++	}
+ 
+ 	log_verbose("Dumping configuration to %s", file);
+ 	if (!argc) {
 -- 
 1.7.3.2
 
