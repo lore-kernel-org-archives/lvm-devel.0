@@ -1,44 +1,42 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:19 +0100
-Subject: [PATCH 15/29] Modify test to catch passing NULL pointer
+Date: Thu, 25 Nov 2010 11:55:20 +0100
+Subject: [PATCH 16/29] Test uuid for NULL
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <21ce9b1c3b783c65154252d32f13058c6c99b567.1290682013.git.zkabelac@redhat.com>
+Message-ID: <fc1d0eaa750c2123a16edbb58b417889a5130141.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Reason for this change is to avoid passing NULL 'data' to
-_add_pv_to_list().
+This one again makes static analysis easier.
 
-'data' is initialized as NULL and if 'dev' would be NULL from info->dev
-'data' assignement would skipped and NULL would be passed through.
-Also it would not make big sence to pass 'data' pointer twice in case
-'dev' would be NULL.
-
-Another fix could be that 'dev' could never be NULL in this place - so
-the test could be to completely removed?
+Though in this case when uuid is NULL len is also 0 so no bytes are
+copied from the src address so no dereference happens - the function
+memcpy itself is declared as the function which doesn't take
+NULL as either src or dst parameter - let's be complaint.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format1/disk-rep.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/dmsetup.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/format1/disk-rep.c b/lib/format1/disk-rep.c
-index bc58744..071b39d 100644
---- a/lib/format1/disk-rep.c
-+++ b/lib/format1/disk-rep.c
-@@ -471,7 +471,7 @@ int read_pvs_in_vg(const struct format_type *fmt, const char *vg_name,
- 	    vginfo->infos.n) {
- 		dm_list_iterate_items(info, &vginfo->infos) {
- 			dev = info->dev;
--			if (dev && !(data = read_disk(fmt, dev, mem, vg_name)))
-+			if (!dev || !(data = read_disk(fmt, dev, mem, vg_name)))
- 				break;
- 			_add_pv_to_list(head, data);
- 		}
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 241fa74..1a56d24 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -343,7 +343,9 @@ static char *_extract_uuid_prefix(const char *uuid, const int separator)
+ 		return NULL;
+ 	}
+ 
+-	memcpy(uuid_prefix, uuid, len);
++	if (uuid)
++		memcpy(uuid_prefix, uuid, len);
++
+ 	uuid_prefix[len] = '\0';
+ 
+ 	return uuid_prefix;
 -- 
 1.7.3.2
 
