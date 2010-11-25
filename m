@@ -1,145 +1,59 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 25 Nov 2010 11:55:12 +0100
-Subject: [PATCH 08/29] Fix memory leak in error path
+Date: Thu, 25 Nov 2010 11:55:13 +0100
+Subject: [PATCH 09/29] Remove check for lv is NULL
 In-Reply-To: <cover.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-Message-ID: <fe9b9e08dfad635aff060d826257f24ce49dd23b.1290682013.git.zkabelac@redhat.com>
+Message-ID: <23421ea755e11ff7379ced9a1ea40b319b797fe7.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Nicely hidden memory leak in error path.
-outf() is macro which uses out_text() and does automagical return_0.
-This would leak tag_buffer.
+'lv' is deferenced in the begining of the function so any check
+later is not helpful.
 
-As there was a repeating code for tags output - create _out_tags().
+Parameters for dev_manager_transien() will be marked as nonnull.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format_text/export.c |   56 ++++++++++++++++++++++-----------------------
- 1 files changed, 27 insertions(+), 29 deletions(-)
+ lib/activate/dev_manager.c |   15 +++++++--------
+ 1 files changed, 7 insertions(+), 8 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index d49090c..8ddfa85 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -363,10 +363,27 @@ static int _print_flag_config(struct formatter *f, uint64_t status, int type)
- 	return 1;
- }
- 
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index cbb5378..cbd55f2 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -614,14 +614,13 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
+ 	do {
+ 		next = dm_get_next_target(dmt, next, &start, &length, &type,
+ 					  &params);
+-		if (lv) {
+-			if (!(segh = dm_list_next(&lv->segments, segh))) {
+-				log_error("Number of segments in active LV %s "
+-					  "does not match metadata", lv->name);
+-				goto out;
+-			}
+-			seg = dm_list_item(segh, struct lv_segment);
 +
-+static int _out_tags(struct formatter *f, struct dm_list *tags)
-+{
-+	char *tag_buffer;
-+
-+	if (!dm_list_empty(tags)) {
-+		if (!(tag_buffer = alloc_printed_tags(tags)))
-+			return_0;
-+		if (!out_text(f, "tags = %s", tag_buffer)) {
-+			dm_free(tag_buffer);
-+			return_0;
-+		}
-+		dm_free(tag_buffer);
-+	}
-+
-+	return 1;
-+}
-+
- static int _print_vg(struct formatter *f, struct volume_group *vg)
- {
- 	char buffer[4096];
--	char *tag_buffer = NULL;
++		if (!(segh = dm_list_next(&lv->segments, segh))) {
++		    log_error("Number of segments in active LV %s "
++			      "does not match metadata", lv->name);
++		    goto out;
+ 		}
++		seg = dm_list_item(segh, struct lv_segment);
  
- 	if (!id_write_format(&vg->id, buffer, sizeof(buffer)))
- 		return_0;
-@@ -378,12 +395,8 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
- 	if (!_print_flag_config(f, vg->status, VG_FLAGS))
- 		return_0;
+ 		if (!type || !params)
+ 			continue;
+@@ -632,7 +631,7 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
  
--	if (!dm_list_empty(&vg->tags)) {
--		if (!(tag_buffer = alloc_printed_tags(&vg->tags)))
--			return_0;
--		outf(f, "tags = %s", tag_buffer);
--		dm_free(tag_buffer);
--	}
-+	if (!_out_tags(f, &vg->tags))
-+		return_0;
+ 	} while (next);
  
- 	if (vg->system_id && *vg->system_id)
- 		outf(f, "system_id = \"%s\"", vg->system_id);
-@@ -428,7 +441,7 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
- 	struct pv_list *pvl;
- 	struct physical_volume *pv;
- 	char buffer[4096];
--	char *buf, *tag_buffer = NULL;
-+	char *buf;
- 	const char *name;
- 
- 	outf(f, "physical_volumes {");
-@@ -462,12 +475,8 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
- 		if (!_print_flag_config(f, pv->status, PV_FLAGS))
- 			return_0;
- 
--		if (!dm_list_empty(&pv->tags)) {
--			if (!(tag_buffer = alloc_printed_tags(&pv->tags)))
--				return_0;
--			outf(f, "tags = %s", tag_buffer);
--			dm_free(tag_buffer);
--		}
-+		if (!_out_tags(f, &pv->tags))
-+			return_0;
- 
- 		outsize(f, pv->size, "dev_size = %" PRIu64, pv->size);
- 
-@@ -487,8 +496,6 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
- static int _print_segment(struct formatter *f, struct volume_group *vg,
- 			  int count, struct lv_segment *seg)
- {
--	char *tag_buffer = NULL;
--
- 	outf(f, "segment%u {", count);
- 	_inc_indent(f);
- 
-@@ -499,12 +506,8 @@ static int _print_segment(struct formatter *f, struct volume_group *vg,
- 	outnl(f);
- 	outf(f, "type = \"%s\"", seg->segtype->name);
- 
--	if (!dm_list_empty(&seg->tags)) {
--		if (!(tag_buffer = alloc_printed_tags(&seg->tags)))
--			return_0;
--		outf(f, "tags = %s", tag_buffer);
--		dm_free(tag_buffer);
--	}
-+	if (!_out_tags(f, &seg->tags))
-+		return_0;
- 
- 	if (seg->segtype->ops->text_export &&
- 	    !seg->segtype->ops->text_export(seg, f))
-@@ -557,7 +560,6 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
- {
- 	struct lv_segment *seg;
- 	char buffer[4096];
--	char *tag_buffer = NULL;
- 	int seg_count;
- 
- 	outnl(f);
-@@ -573,12 +575,8 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
- 	if (!_print_flag_config(f, lv->status, LV_FLAGS))
- 		return_0;
- 
--	if (!dm_list_empty(&lv->tags)) {
--		if (!(tag_buffer = alloc_printed_tags(&lv->tags)))
--			return_0;
--		outf(f, "tags = %s", tag_buffer);
--		dm_free(tag_buffer);
--	}
-+	if (!_out_tags(f, &lv->tags))
-+		return_0;
- 
- 	if (lv->alloc != ALLOC_INHERIT)
- 		outf(f, "allocation_policy = \"%s\"",
+-	if (lv && (segh = dm_list_next(&lv->segments, segh))) {
++	if (segh = dm_list_next(&lv->segments, segh)) {
+ 		log_error("Number of segments in active LV %s does not "
+ 			  "match metadata", lv->name);
+ 		goto out;
 -- 
 1.7.3.2
 
