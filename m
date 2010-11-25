@@ -1,55 +1,81 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Nov 2010 09:53:32 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvmcmdline.c
-Message-ID: <20101124095332.24720.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 25 Nov 2010 11:55:04 +0100
+Subject: [PATCH 00/29] Fixes for analyzer problems
+Message-ID: <cover.1290682013.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-24 09:53:31
+Another patchset with fixes based on static analyzer.
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : lvmcmdline.c 
+Close inspection required for patches:
 
-Log message:
-	Add missing destrustion of cmd_context
-	
-	Lvm1 fallback code missed to destroy cmd_context in error path.
+0010 - Add some backtrace - Attention please
+0013 - Put some FIXME warnings in lvmcache_update_vg processing
+0026 - Add stack traces for dev_set/close_immediate error path
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1808&r2=1.1809
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+It's not completly obvious what we should exactly do.
 
---- LVM2/WHATS_NEW	2010/11/24 09:43:18	1.1808
-+++ LVM2/WHATS_NEW	2010/11/24 09:53:31	1.1809
-@@ -1,5 +1,6 @@
- Version 2.02.78 - 
- ====================================
-+  Fix missing context desctruction in err path of lvm1 fallback in lvm2_main().
-   Fix memory leak in error path of parse_loop_device_name() from dmsetup.
-   Fix missing dlclose in _init_formats() error path from init_format call.
-   Fix missing fclose for _umount() in dmeventd snapshot plugin.
---- LVM2/tools/lvmcmdline.c	2010/11/17 10:19:30	1.131
-+++ LVM2/tools/lvmcmdline.c	2010/11/24 09:53:31	1.132
-@@ -1447,10 +1447,12 @@
- 		if (!argc) {
- 			log_error("Falling back to LVM1 tools, but no "
- 				  "command specified.");
--			return ECMD_FAILED;
-+			ret = ECMD_FAILED;
-+			goto out;
- 		}
- 		_exec_lvm1_command(argv);
--		return ECMD_FAILED;
-+		ret = ECMD_FAILED;
-+		goto out;
- 	}
- #ifdef READLINE_SUPPORT
- 	if (!alias && argc == 1) {
+Zdenek Kabelac (29):
+  Cleanup remove test for NULL
+  Fix check for empty system_dir
+  Remove printing of LCK_CACHE
+  Reset vg pointer after release
+  Test *buf for NULL
+  Replace  snprintf -> dm_snprintf
+  Test success from dm_poll_create
+  Fix memory leak in error path
+  Remove check for lv is NULL
+  Add some backtrace - Attention please
+  Add stack trace for error path
+  Add test for 'read' result
+  Put some FIXME warnings in lvmcache_update_vg processing
+  Remove unneeded check for NULL pvd->system_id
+  Modify test to catch passing NULL pointer
+  Test uuid for NULL
+  Optimize second call to strchr with same parameters
+  Check result of vginfo_from_vgname
+  Test for error status
+  Add test for lv_name not NULL
+  Instrument with nonnull  dev_manager_transient
+  Ensure pointer first is notnull before dereference
+  Add test and error message for failure case
+  Test for str_list_add
+  Check for unlink result
+  Add stack traces for dev_set/close_immediate error path
+  Add standard check for result of lv_info call
+  Check type is not NULL before access
+  Check for NULL pointer
+
+ daemons/clvmd/clvmd-command.c   |   20 +++++++-------
+ daemons/clvmd/clvmd.c           |    9 ++++--
+ daemons/clvmd/lvm-functions.c   |    5 +--
+ lib/activate/dev_manager.c      |   15 +++++-----
+ lib/activate/dev_manager.h      |    2 +-
+ lib/cache/lvmcache.c            |    6 ++++
+ lib/commands/toolcontext.c      |    2 +-
+ lib/config/config.c             |   10 +++++-
+ lib/format1/disk-rep.c          |    2 +-
+ lib/format1/format1.c           |    8 +++---
+ lib/format1/import-export.c     |    2 +-
+ lib/format_pool/import_export.c |   10 +++++-
+ lib/format_text/archiver.c      |    4 ++-
+ lib/format_text/export.c        |   56 ++++++++++++++++++--------------------
+ lib/metadata/lv_manip.c         |    8 ++++-
+ lib/metadata/metadata.c         |    6 +++-
+ lib/mirror/mirrored.c           |   12 +++++++-
+ libdm/ioctl/libdm-iface.c       |   15 +++++++---
+ libdm/libdm-common.c            |   14 +++-------
+ libdm/libdm-report.c            |    6 ++++
+ tools/dmsetup.c                 |    4 ++-
+ tools/lvmcmdline.c              |   12 +++++---
+ tools/reporter.c                |    4 +++
+ tools/toollib.c                 |    7 +++--
+ 24 files changed, 143 insertions(+), 96 deletions(-)
+
+-- 
+1.7.3.2
 
 
