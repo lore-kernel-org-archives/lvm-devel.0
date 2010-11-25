@@ -1,62 +1,31 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 26 Nov 2010 00:02:33 +0100
-Subject: [PATCH 29/29] Check for NULL pointer
-In-Reply-To: <5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
-References: <cover.1290682013.git.zkabelac@redhat.com>
-	<5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
-Message-ID: <4CEEEB09.5050508@redhat.com>
+Date: Fri, 26 Nov 2010 00:12:43 +0100
+Subject: [PATCH 02/29] Fix check for empty system_dir
+In-Reply-To: <87vd3lmich.fsf@twilight.int.mornfall.net.>
+References: <cover.1290682013.git.zkabelac@redhat.com>	<cover.1290682013.git.zkabelac@redhat.com>	<ced2653c100dd20c1ed531b6ce59ae14a7396b13.1290682013.git.zkabelac@redhat.com>
+	<87vd3lmich.fsf@twilight.int.mornfall.net.>
+Message-ID: <4CEEED6B.4050606@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 25.11.2010 11:55, Zdenek Kabelac napsal(a):
-> clangs is happier and check for non NULL options value.
-> Report internal error in this case.
+Dne 25.11.2010 18:19, Petr Rockai napsal(a):
+> Zdenek Kabelac <zkabelac@redhat.com> writes:
 > 
-> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
-> ---
->  tools/reporter.c |    4 ++++
->  1 files changed, 4 insertions(+), 0 deletions(-)
+>> Fixing most probably a typo - I assume original intention has been
+>> to check for zero length string.
 > 
-> diff --git a/tools/reporter.c b/tools/reporter.c
-> index 40d3c9a..16c19e2 100644
-> --- a/tools/reporter.c
-> +++ b/tools/reporter.c
-> @@ -328,6 +328,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
->  			return EINVALID_CMD_LINE;
->  		}
->  		if (*opts == '+') {
-> +			if (!options) {
-> +				log_error(INTERNAL_ERROR "Missing options.");
-> +				return EINVALID_CMD_LINE;
-> +			}
->  			if (!(str = dm_pool_alloc(cmd->mem,
->  					 strlen(options) + strlen(opts) + 1))) {
->  				log_error("options string allocation failed");
+> In that case, please use !strlen(str), as that is much more readable.
+> 
 
-Ok - here is 'smarter' way how to avoid NULL 'options' path:
+In this case I believe it's common practice not only in our source to check
+the first char for '\0' when checking for empty string - so are we planning to
+replace in other places in lvm code - then I'd propose probably some nice
+macro  empty_string() or whatever name we could think of?
 
-It's more or less assert - but since we are not using asserts.
 
-As with current code 'default:' could never be reached - so it doesn't put any
-extra check into the original code path.
-
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 40d3c9a..358c404 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -318,6 +318,9 @@ static int _report(struct cmd_context *cmd, int argc, char
-**argv,
- 						  "report/pvsegs_cols_verbose",
- 						  DEFAULT_PVSEGS_COLS_VERB);
- 		break;
-+	default:
-+		log_error(INTERNAL_ERROR "Unknown report type.");
-+		return ECMD_FAILED;
- 	}
-
- 	/* If -o supplied use it, else use default for report_type */
+Zdenek
 
 
