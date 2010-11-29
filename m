@@ -1,26 +1,29 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 21:43:14 +0000
-Subject: [PATCH 29/29] Check for NULL pointer
-In-Reply-To: <5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
+Date: Mon, 29 Nov 2010 21:50:42 +0000
+Subject: [PATCH 25/29] Check for unlink result
+In-Reply-To: <6022829a3292ffcc95debee81bda60e0522698e2.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-	<5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
-Message-ID: <20101129214314.GM29380@agk-dp.fab.redhat.com>
+	<6022829a3292ffcc95debee81bda60e0522698e2.1290682013.git.zkabelac@redhat.com>
+Message-ID: <20101129215042.GN29380@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 11:55:33AM +0100, Zdenek Kabelac wrote:
-> clangs is happier and check for non NULL options value.
-> Report internal error in this case.
+On Thu, Nov 25, 2010 at 11:55:29AM +0100, Zdenek Kabelac wrote:
+> Even if we intentionally wish to silently ignore any error from
+> unlink in this place - it might be still good idea to put at least
+> a debug message to get the reason for failure.
+
+Don't see why not.
+Ack.
  
-That one looks completely pointless to me.
-(And if you did have it, the right place for it would be after the switch that
-always sets it.)
+> Test makes static analyzer happier about checked unlink result.
 
-Nack.
-
+It's a project standard that all return values should be checked
+(or explicitly discarded with a cast to void).
+ 
 Alasdair
 
 
