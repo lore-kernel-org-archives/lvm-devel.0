@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Nov 2010 12:43:50 -0000
-Subject: LVM2/libdm/regex matcher.c
-Message-ID: <20101129124350.26591.qmail@sourceware.org>
+Date: 29 Nov 2010 12:44:53 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20101129124453.26860.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,30 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-29 12:43:49
+Changes by:	zkabelac at sourceware.org	2010-11-29 12:44:52
 
 Modified files:
-	libdm/regex    : matcher.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Remove dead assignment in _step_matcher
+	Remove dead assignment in wait_for_child
 	
-	'ns' is not used after this assignment and it is reassigned with the following
-	code, so dropping this assignment.
+	'pid' is not used anywhere - remove it.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/matcher.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
 
---- LVM2/libdm/regex/matcher.c	2010/09/30 21:06:52	1.13
-+++ LVM2/libdm/regex/matcher.c	2010/11/29 12:43:49	1.14
-@@ -372,7 +372,7 @@
+--- LVM2/daemons/clvmd/clvmd.c	2010/11/08 19:37:41	1.83
++++ LVM2/daemons/clvmd/clvmd.c	2010/11/29 12:44:52	1.84
+@@ -965,7 +965,6 @@
+  */
+ static void be_daemon(int timeout)
  {
-         struct dfa_state *ns;
+-        pid_t pid;
+ 	int devnull = open("/dev/null", O_RDWR);
+ 	if (devnull == -1) {
+ 		perror("Can't open /dev/null");
+@@ -974,7 +973,7 @@
  
--        if (!(ns = cs->lookup[(unsigned char) c]))
-+        if (!cs->lookup[(unsigned char) c])
-                 _calc_state(m, cs, (unsigned char) c);
+ 	pipe(child_pipe);
  
- 	if (!(ns = cs->lookup[(unsigned char) c]))
+-	switch (pid = fork()) {
++	switch (fork()) {
+ 	case -1:
+ 		perror("clvmd: can't fork");
+ 		exit(2);
 
 
