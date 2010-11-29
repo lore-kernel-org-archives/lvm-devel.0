@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Nov 2010 11:05:15 -0000
-Subject: LVM2/daemons/clvmd lvm-functions.c
-Message-ID: <20101129110515.8572.qmail@sourceware.org>
+Date: 29 Nov 2010 11:08:14 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20101129110814.10141.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-29 11:05:15
+Changes by:	zkabelac at sourceware.org	2010-11-29 11:08:14
 
 Modified files:
-	daemons/clvmd  : lvm-functions.c 
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Remove printing of LCK_CACHE
+	Reset vg pointer after release
 	
-	LCK_CACHE is defined as 0x100 so it cannot be passed through
-	unsigned char parameter - remove it from the sprintf code.
-	
-	If the LCK_CLUSTER should be printed here - lot of code need
-	to be reworked - so adding FIXME comment.
+	Set vg to NULL after releasing it as the following memlock() test may
+	lead to goto for the second call of vg_release() with the already
+	released vg pointer.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.100&r2=1.101
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1811&r2=1.1812
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.410&r2=1.411
 
---- LVM2/daemons/clvmd/lvm-functions.c	2010/11/23 01:55:58	1.100
-+++ LVM2/daemons/clvmd/lvm-functions.c	2010/11/29 11:05:15	1.101
-@@ -44,6 +44,10 @@
- 	int lock_mode;
- };
- 
-+/*
-+ * FIXME: 8bit value passed here -
-+ *        so only LCK_XXX defines < 0x100 can be decoded
-+ */
- static const char *decode_locking_cmd(unsigned char cmdl)
- {
- 	static char buf[128];
-@@ -109,12 +113,11 @@
- 		break;
+--- LVM2/WHATS_NEW	2010/11/29 10:58:33	1.1811
++++ LVM2/WHATS_NEW	2010/11/29 11:08:14	1.1812
+@@ -1,5 +1,6 @@
+ Version 2.02.78 - 
+ ====================================
++  Fix missing reset of vg pointer after vg_release() in _vg_read_by_vgid().
+   Fix test for empty system_dir string in _init_backup().
+   Certain lvconvert invocations are now required to be done in two steps.
+   Fix missing context desctruction in err path of lvm1 fallback in lvm2_main().
+--- LVM2/lib/metadata/metadata.c	2010/11/23 01:55:59	1.410
++++ LVM2/lib/metadata/metadata.c	2010/11/29 11:08:14	1.411
+@@ -3117,6 +3117,7 @@
+ 			return vg;
+ 		}
+ 		vg_release(vg);
++		vg = NULL; /* reset so memlock goto out is safe */
  	}
  
--	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s%s)", cmdl, command, type, scope,
-+	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s)", cmdl, command, type, scope,
- 		cmdl & LCK_NONBLOCK   ? "|NONBLOCK" : "",
- 		cmdl & LCK_HOLD       ? "|HOLD" : "",
- 		cmdl & LCK_LOCAL      ? "|LOCAL" : "",
--		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "",
--		cmdl & LCK_CACHE      ? "|CACHE" : "");
-+		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "");
- 
- 	return buf;
- }
+ 	/* Mustn't scan if memory locked: ensure cache gets pre-populated! */
 
 
