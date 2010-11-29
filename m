@@ -1,24 +1,32 @@
-From: Dave Wysochanski <wysochanski@pobox.com>
-Date: Fri, 19 Nov 2010 21:25:37 -0500
-Subject: [PATCH 00/03] Add lvm2app functions to lookup an lv or pv handle
-Message-ID: <1290219940-29464-1-git-send-email-wysochanski@pobox.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 29 Nov 2010 23:54:32 +0000
+Subject: [PATCH] Scan also special metadata areas (like metadata/dirs) in fmt_from_vgname
+In-Reply-To: <4CEFD75D.6060509@redhat.com>
+References: <4CEFD75D.6060509@redhat.com>
+Message-ID: <20101129235432.GV29380@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patchset implements helper functions to lookup an lv or pv handle
-from vg handle and the pv|lv name or uuid.
+On Fri, Nov 26, 2010 at 04:50:53PM +0100, Peter Rajnoha wrote:
+> We reread labels and metadata from raw devices in fmt_from_vgname function,
+> but we forgot to read special metadata areas? (like dirs defined by metadata/dirs
+> config setting) Anyway, can someone remind me why we do scanning inside this fn
+> at all?
+ 
+We don't.
 
-Until now, users of lvm2app that wished to obtain an LV or PV handle from
-an existing VG must do so by the following sequence:
-1) Call lvm_vg_open() to open an existing VG
-2) Call lvm_vg_list_{pvs|lvs}() to list all PVs or LVs
-3) Find the PV or LV of interest by comparing uuids or names
+fmt_from_vgname *just* looks for the VG in the cache.  If it's not there, it
+returns nothing.  If it *is* there, it rereads the PV metadata to check it's
+still current.  Any scanning is the responsibility of the caller.
 
-The above method is awkward for callers of the API that wish to operate
-on a single LV or PV.  This patchset should make it easier for callers
-to do operations on a single LV or PV.
+> Without this patch, we will fail to find a VG when metadata/dirs is only
+> used and there are no other metadata areas (which is itself a strange situation,
+
+Not at all strange.  If that's broken now, I'm afraid the fix lies elsewhere...
+
+Alasdair
 
 
