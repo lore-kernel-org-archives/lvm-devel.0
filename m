@@ -1,24 +1,26 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 20:44:38 +0000
-Subject: [PATCH 03/29] Remove printing of LCK_CACHE
-In-Reply-To: <b66c1e177b64ce40a6c63127b70dc9c01b83d14f.1290682013.git.zkabelac@redhat.com>
+Date: Mon, 29 Nov 2010 20:50:27 +0000
+Subject: [PATCH 17/29] Optimize second call to strchr with same parameters
+In-Reply-To: <da11b09033bc753792a43d6f4d2ce98826c7ae21.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-	<b66c1e177b64ce40a6c63127b70dc9c01b83d14f.1290682013.git.zkabelac@redhat.com>
-Message-ID: <20101129204438.GA29380@agk-dp.fab.redhat.com>
+	<da11b09033bc753792a43d6f4d2ce98826c7ae21.1290682013.git.zkabelac@redhat.com>
+Message-ID: <20101129205027.GB29380@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 11:55:07AM +0100, Zdenek Kabelac wrote:
-> LCK_CACHE is defined as 0x100 so it cannot be passed through
-> unsigned char parameter - remove it from the sprintf code.
+On Thu, Nov 25, 2010 at 11:55:21AM +0100, Zdenek Kabelac wrote:
+> Add tempory char* to keep result of strchr call.
+
+> Make also static analysis happier as lv_name is now tested for nonnull.
+
+As you know, I don't accept 'make static analysis happier' as a valid reason
+for making changes:)  File bugs against the static analyser instead if it's
+giving false positives.
  
-> If LCK_CLUSTER would be desirable to be printed here - lot of code
-> would neet to be reworked.
- 
-See follow up to commit message.  This one needs more work.
+So I'll ack that for the optimisation reason only.
 
 Alasdair
 
