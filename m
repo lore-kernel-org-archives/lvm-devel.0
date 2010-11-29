@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Nov 2010 12:42:11 -0000
-Subject: LVM2/libdm libdm-deptree.c
-Message-ID: <20101129124211.26148.qmail@sourceware.org>
+Date: 29 Nov 2010 12:43:50 -0000
+Subject: LVM2/libdm/regex matcher.c
+Message-ID: <20101129124350.26591.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-29 12:42:11
+Changes by:	zkabelac at sourceware.org	2010-11-29 12:43:49
 
 Modified files:
-	libdm          : libdm-deptree.c 
+	libdm/regex    : matcher.c 
 
 Log message:
-	Remove dead assignment in _mirror_emit_segment_line
+	Remove dead assignment in _step_matcher
 	
-	Remove unused 'r' assignment.
+	'ns' is not used after this assignment and it is reassigned with the following
+	code, so dropping this assignment.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/regex/matcher.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
 
---- LVM2/libdm/libdm-deptree.c	2010/11/29 11:26:00	1.88
-+++ LVM2/libdm/libdm-deptree.c	2010/11/29 12:42:10	1.89
-@@ -1536,7 +1536,6 @@
- 				     uint64_t *seg_start, char *params,
- 				     size_t paramsize)
+--- LVM2/libdm/regex/matcher.c	2010/09/30 21:06:52	1.13
++++ LVM2/libdm/regex/matcher.c	2010/11/29 12:43:49	1.14
+@@ -372,7 +372,7 @@
  {
--	int r;
- 	int block_on_error = 0;
- 	int handle_errors = 0;
- 	int dm_log_userspace = 0;
-@@ -1643,7 +1642,7 @@
+         struct dfa_state *ns;
  
- 	EMIT_PARAMS(pos, " %u ", seg->mirror_area_count);
+-        if (!(ns = cs->lookup[(unsigned char) c]))
++        if (!cs->lookup[(unsigned char) c])
+                 _calc_state(m, cs, (unsigned char) c);
  
--	if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0)
-+	if (_emit_areas_line(dmt, seg, params, paramsize, &pos) <= 0)
- 		return_0;
- 
- 	if (handle_errors)
+ 	if (!(ns = cs->lookup[(unsigned char) c]))
 
 
