@@ -1,23 +1,25 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 21:38:22 +0000
-Subject: [PATCH 28/29] Check type is not NULL before access
-In-Reply-To: <1581e3f71c289f475b0d580154ec41c734ad3309.1290682013.git.zkabelac@redhat.com>
+Date: Mon, 29 Nov 2010 21:43:14 +0000
+Subject: [PATCH 29/29] Check for NULL pointer
+In-Reply-To: <5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-	<1581e3f71c289f475b0d580154ec41c734ad3309.1290682013.git.zkabelac@redhat.com>
-Message-ID: <20101129213822.GL29380@agk-dp.fab.redhat.com>
+	<5aaa9a83ca612d4594736d7b7c34dcd5adc0a611.1290682013.git.zkabelac@redhat.com>
+Message-ID: <20101129214314.GM29380@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 11:55:32AM +0100, Zdenek Kabelac wrote:
-> Check type before dereference and report internal error in case
-> it's undefined and return from the function.
+On Thu, Nov 25, 2010 at 11:55:33AM +0100, Zdenek Kabelac wrote:
+> clangs is happier and check for non NULL options value.
+> Report internal error in this case.
  
-But that does *not* look to be an internal dm library error at the moment.
+That one looks completely pointless to me.
+(And if you did have it, the right place for it would be after the switch that
+always sets it.)
 
-It's just a parameter to dm_report_init().
+Nack.
 
 Alasdair
 
