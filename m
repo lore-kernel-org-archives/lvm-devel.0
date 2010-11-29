@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Nov 2010 10:58:33 -0000
-Subject: LVM2 lib/commands/toolcontext.c ./WHATS_NEW
-Message-ID: <20101129105833.5420.qmail@sourceware.org>
+Date: 29 Nov 2010 11:05:15 -0000
+Subject: LVM2/daemons/clvmd lvm-functions.c
+Message-ID: <20101129110515.8572.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-29 10:58:33
+Changes by:	zkabelac at sourceware.org	2010-11-29 11:05:15
 
 Modified files:
-	lib/commands   : toolcontext.c 
-	.              : WHATS_NEW 
+	daemons/clvmd  : lvm-functions.c 
 
 Log message:
-	Fix check for empty system_dir
+	Remove printing of LCK_CACHE
 	
-	Fixing check for zero length system_dir string.
+	LCK_CACHE is defined as 0x100 so it cannot be passed through
+	unsigned char parameter - remove it from the sprintf code.
+	
+	If the LCK_CLUSTER should be printed here - lot of code need
+	to be reworked - so adding FIXME comment.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1810&r2=1.1811
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.100&r2=1.101
 
---- LVM2/lib/commands/toolcontext.c	2010/11/24 09:34:35	1.109
-+++ LVM2/lib/commands/toolcontext.c	2010/11/29 10:58:32	1.110
-@@ -1036,7 +1036,7 @@
- 	char default_dir[PATH_MAX];
- 	const char *dir;
+--- LVM2/daemons/clvmd/lvm-functions.c	2010/11/23 01:55:58	1.100
++++ LVM2/daemons/clvmd/lvm-functions.c	2010/11/29 11:05:15	1.101
+@@ -44,6 +44,10 @@
+ 	int lock_mode;
+ };
  
--	if (!cmd->system_dir) {
-+	if (!cmd->system_dir[0]) {
- 		log_warn("WARNING: Metadata changes will NOT be backed up");
- 		backup_init(cmd, "", 0);
- 		archive_init(cmd, "", 0, 0, 0);
---- LVM2/WHATS_NEW	2010/11/25 17:16:41	1.1810
-+++ LVM2/WHATS_NEW	2010/11/29 10:58:33	1.1811
-@@ -1,5 +1,6 @@
- Version 2.02.78 - 
- ====================================
-+  Fix test for empty system_dir string in _init_backup().
-   Certain lvconvert invocations are now required to be done in two steps.
-   Fix missing context desctruction in err path of lvm1 fallback in lvm2_main().
-   Fix memory leak in error path of parse_loop_device_name() from dmsetup.
++/*
++ * FIXME: 8bit value passed here -
++ *        so only LCK_XXX defines < 0x100 can be decoded
++ */
+ static const char *decode_locking_cmd(unsigned char cmdl)
+ {
+ 	static char buf[128];
+@@ -109,12 +113,11 @@
+ 		break;
+ 	}
+ 
+-	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s%s)", cmdl, command, type, scope,
++	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s)", cmdl, command, type, scope,
+ 		cmdl & LCK_NONBLOCK   ? "|NONBLOCK" : "",
+ 		cmdl & LCK_HOLD       ? "|HOLD" : "",
+ 		cmdl & LCK_LOCAL      ? "|LOCAL" : "",
+-		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "",
+-		cmdl & LCK_CACHE      ? "|CACHE" : "");
++		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "");
+ 
+ 	return buf;
+ }
 
 
