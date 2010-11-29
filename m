@@ -1,30 +1,23 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 29 Nov 2010 21:34:05 +0000
-Subject: [PATCH 27/29] Add standard check for result of lv_info call
-In-Reply-To: <ca96fa093553cbe0e0c0e15d5e70d7e49334669f.1290682013.git.zkabelac@redhat.com>
+Date: Mon, 29 Nov 2010 21:38:22 +0000
+Subject: [PATCH 28/29] Check type is not NULL before access
+In-Reply-To: <1581e3f71c289f475b0d580154ec41c734ad3309.1290682013.git.zkabelac@redhat.com>
 References: <cover.1290682013.git.zkabelac@redhat.com>
-	<ca96fa093553cbe0e0c0e15d5e70d7e49334669f.1290682013.git.zkabelac@redhat.com>
-Message-ID: <20101129213405.GK29380@agk-dp.fab.redhat.com>
+	<1581e3f71c289f475b0d580154ec41c734ad3309.1290682013.git.zkabelac@redhat.com>
+Message-ID: <20101129213822.GL29380@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Nov 25, 2010 at 11:55:31AM +0100, Zdenek Kabelac wrote:
-> Also add log_error message in case info would not be found.
+On Thu, Nov 25, 2010 at 11:55:32AM +0100, Zdenek Kabelac wrote:
+> Check type before dereference and report internal error in case
+> it's undefined and return from the function.
  
-Ack.
+But that does *not* look to be an internal dm library error at the moment.
 
-> +			log_error("Check for existence of mirror log '%s' failed.",
-
-I generally don't use any quotes around names.
-Heinz uses \".
-
-> +			log_error("Check for existence of mirror leg '%s' failed.",
-
-Rightly or wrongly, we decided never to use 'leg' in user-visible error messages
-or documentation (in favour of 'image').
+It's just a parameter to dm_report_init().
 
 Alasdair
 
