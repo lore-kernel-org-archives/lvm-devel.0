@@ -1,49 +1,66 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 30 Nov 2010 04:43:37 +0000
-Subject: [PATCH] Scan also special metadata areas (like metadata/dirs) in fmt_from_vgname
-In-Reply-To: <4CEFD75D.6060509@redhat.com>
-References: <4CEFD75D.6060509@redhat.com>
-Message-ID: <20101130044337.GA18385@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 30 Nov 2010 11:21:53 +0100
+Subject: [Bug 16588] Regression introduced in 2.6.35.2 causes freezing, crashing, oopsing
+In-Reply-To: <AANLkTimXGb6-fFORR=Vm6gcdST6Sv3Uvsie7VZbEh2ev@mail.gmail.com>
+References: <bug-16588-5873@https.bugzilla.kernel.org/>	<201008141736.o7EHa1ui024187@demeter.kernel.org>
+	<AANLkTimXGb6-fFORR=Vm6gcdST6Sv3Uvsie7VZbEh2ev@mail.gmail.com>
+Message-ID: <4CF4D041.6090902@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-All that said, a hack like this might be the easiest way to fix this in the
-short term until the cache handles mdas properly.
+Dne 14.8.2010 19:47, Linus Torvalds napsal(a):
+> On Sat, Aug 14, 2010 at 10:36 AM,  <bugzilla-daemon@bugzilla.kernel.org> wrote:
+>> -
+>> I did a git bisect run and it pointed this commit as the first bad one. Indeed,
+>> if I revert it (after fixing trivial conflicts due to commit
+>> 3aba3fa070fc0f38de2d41252aee), the error doesn't occur.
+> 
+> Hmm. Turning those "Maps lock" numbers into hex gives us
+> 
+>   "Internal error: Maps lock 0xdbd000 < unlock 0xdbe000"
+> 
+> which is a bit suggestive - it's "page aligned". I wonder if the
+> "Maps" part refers to /proc/self/maps, and the process reads its own
+> maps file to see where the segments are.
+> 
+> The whole (and only) point of the whole stack guard page patch is to
+> make sure that a grow-down stack segment always has a guard page as
+> it's lowest page. And that guard page obviously means that the stack
+> segment is now one page bigger (downwards). If the lvcreate binary for
+> some reason looks at how big its virtual mappings are, and assumes
+> that they must be some particular size, then that would explain the
+> error message.
+> 
+> I wonder who knows. I'm cc'ing lvm-devel at redhat.com on this email, to
+> see if I can reach somebody who knows that that "Internal error"
+> means.
 
-On Fri, Nov 26, 2010 at 04:50:53PM +0100, Peter Rajnoha wrote:
-> @@ -400,6 +403,11 @@ const struct format_type *fmt_from_vgname(const char *vgname, const char *vgid)
->  		dm_free(devl);
->  	}
->  
-> +	dm_list_iterate_items(fmt, &cmd->formats) {
-> +		if (fmt->ops->scan && !fmt->ops->scan(fmt))
+LVM is doing it's 'own' version of  mlockall() functionality.
+(mainly to avoid locking 100MB locales files which is used on same
+distributions (like Fedora) to speedup setlocale() functionality.)
 
-We can reduce the impact a bit by adding vgname as a parameter to
-scan() and only running it if the vginfo got 'lost' within the
-function.  (I.e. the first lookup found it, but after the label_reads()
-it disappeared.)  
+Internal Error here means - LVM failed to avoid allocation which would require
+to increase the heap size (lvm is preallocating some memory to have some
+'spare' room) and tried to allocate some extra space during 'memory locked'
+state - this is an internal error - which is usually mostly harmless - but in
+the case there would be high memory pressure - lvm can fail to get this extra
+memory and deadlock the system (in the case it would suspend some root/swap
+devices) (check basically sums locked and unlocked memory - which is not the
+best we could - but seems sufficient - numbers should be equal).
 
-This type of metadata is incompatible with clustering, and memlock isn't
-supported either so calling scan() here is inconsequential.
+With the stack-guard fix patch and it's backport to older kernels - there was
+a missing patch (see https://bugzilla.redhat.com/show_bug.cgi?id=643500) -
+I've posted this on lkml list - unsure whether backporting was properly done.
 
+Anyway - the new version of LVM (>= 2.02.75) code does read this maps file in
+one read operation and just after that it's doing memory locking:
+http://www.redhat.com/archives/lvm-devel/2010-September/msg00091.html
+(With stackguard patch  maps list is modified during read).
 
-The fmt_from_vgname() triplets can also be optimised a bit:
-  The last one should never need to do any label_reads because it follows
-  a full scan, so it can return the answer directly from cache.
-  The memlock() test before it can be skipped when there is in-filesystem
-  metadata (so that the 3rd fmt_from_vgname always gets called).
+Zdenek
 
-So that provides an alternative fix I think: add parameter to fmt_from_vgname
-telling it to skip the device checks and use that whenever it follows a
-lvmcache_label_scan(cmd, 2); record whether or not in-filesystem metadata
-is in use and if so avoid returning when memlock is also set.
-(Treat raw the same as in-filesystem.)
-(Can probably optimise that further too so it only needs to fall through the
-triplet of functions the first time.)
-
-Alasdair
 
 
