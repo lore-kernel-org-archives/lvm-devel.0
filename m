@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Nov 2010 22:28:07 -0000
-Subject: LVM2/lib/activate dev_manager.c dev_manager.h
-Message-ID: <20101130222807.10187.qmail@sourceware.org>
+Date: 30 Nov 2010 22:32:45 -0000
+Subject: LVM2/libdm/ioctl libdm-iface.c
+Message-ID: <20101130223245.11604.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-30 22:28:06
+Changes by:	zkabelac at sourceware.org	2010-11-30 22:32:45
 
 Modified files:
-	lib/activate   : dev_manager.c dev_manager.h 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Remove check for lv is NULL
+	Add error path stack traces
 	
-	'lv' is deferenced in the begining of the function so any check
-	later is not helpful.
-	
-	Parameters for dev_manager_transien() are marked as nonnull.
+	Check for errors from dm_task_set_name() and dm_task_run().
+	Add stack traces for error paths.
+	Return 0 if some error is found.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.206&r2=1.207
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.h.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
 
---- LVM2/lib/activate/dev_manager.c	2010/11/30 11:53:31	1.206
-+++ LVM2/lib/activate/dev_manager.c	2010/11/30 22:28:06	1.207
-@@ -601,14 +601,13 @@
- 	do {
- 		next = dm_get_next_target(dmt, next, &start, &length, &type,
- 					  &params);
--		if (lv) {
--			if (!(segh = dm_list_next(&lv->segments, segh))) {
--				log_error("Number of segments in active LV %s "
--					  "does not match metadata", lv->name);
--				goto out;
--			}
--			seg = dm_list_item(segh, struct lv_segment);
-+
-+		if (!(segh = dm_list_next(&lv->segments, segh))) {
-+		    log_error("Number of segments in active LV %s "
-+			      "does not match metadata", lv->name);
-+		    goto out;
- 		}
-+		seg = dm_list_item(segh, struct lv_segment);
- 
- 		if (!type || !params)
+--- LVM2/libdm/ioctl/libdm-iface.c	2010/10/25 11:44:20	1.83
++++ LVM2/libdm/ioctl/libdm-iface.c	2010/11/30 22:32:44	1.84
+@@ -1594,8 +1594,15 @@
+ 		    !strcmp(dirent->d_name, "..") ||
+ 		    !strcmp(dirent->d_name, "control"))
  			continue;
-@@ -619,7 +618,7 @@
+-		dm_task_set_name(dmt, dirent->d_name);
+-		dm_task_run(dmt);
++		if (!dm_task_set_name(dmt, dirent->d_name)) {
++			r = 0;
++			stack;
++			continue; /* try next name */
++		}
++		if (!dm_task_run(dmt)) {
++			r = 0;
++			stack;  /* keep going */
++		}
+ 	}
  
- 	} while (next);
- 
--	if (lv && (segh = dm_list_next(&lv->segments, segh))) {
-+	if ((segh = dm_list_next(&lv->segments, segh))) {
- 		log_error("Number of segments in active LV %s does not "
- 			  "match metadata", lv->name);
- 		goto out;
---- LVM2/lib/activate/dev_manager.h	2010/11/30 11:53:31	1.35
-+++ LVM2/lib/activate/dev_manager.h	2010/11/30 22:28:06	1.36
-@@ -56,7 +56,7 @@
- int dev_manager_preload(struct dev_manager *dm, struct logical_volume *lv,
- 			unsigned origin_only, int *flush_required);
- int dev_manager_deactivate(struct dev_manager *dm, struct logical_volume *lv);
--int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv);
-+int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv) __attribute__((nonnull(1, 2)));
- 
- int dev_manager_mknodes(const struct logical_volume *lv);
- 
+ 	if (closedir(d))
 
 
