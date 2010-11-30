@@ -1,23 +1,39 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Tue, 30 Nov 2010 11:04:28 +0000
-Subject: [PATCH] Scan also special metadata areas (like metadata/dirs) in fmt_from_vgname
-In-Reply-To: <20101130044337.GA18385@agk-dp.fab.redhat.com>
-References: <4CEFD75D.6060509@redhat.com>
-	<20101130044337.GA18385@agk-dp.fab.redhat.com>
-Message-ID: <20101130110428.GA19659@agk-dp.fab.redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 30 Nov 2010 12:12:47 +0100
+Subject: [PATCH] Disable automatic MISSING_PV recovery when handles_missing_pvs is set (BZ 653643)
+In-Reply-To: <20101129224015.GS29380@agk-dp.fab.redhat.com> (Alasdair
+	G. Kergon's message of "Mon, 29 Nov 2010 22:40:15 +0000")
+References: <87d3ptm965.fsf@twilight.int.mornfall.net.>
+	<20101129224015.GS29380@agk-dp.fab.redhat.com>
+Message-ID: <87hbezjc9c.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Nov 30, 2010 at 04:43:37AM +0000, Alasdair G Kergon wrote:
-> record whether or not in-filesystem metadata
-> is in use and if so avoid returning when memlock is also set.
+Hi,
 
-_text_handler.scan could be changed between _text_scan and NULL
-to signal this.
+Alasdair G Kergon <agk@redhat.com> writes:
+> On Thu, Nov 25, 2010 at 09:37:38PM +0100, Peter Rockai wrote:
+>> it seems I did everything but actually posted the proposed patch for BZ
+>> 653643. The explanation of what goes wrong where and how the patch fixes
+>> that is in BZ comments.
+>
+> So what does the new output in the test case in that bz look like?
+>
+> Do we still get the last WARNING message?   (Where does it come from?
+> Maybe it's too hard to fix that without removing it from other code
+> paths where we do still want it?)
 
-Alasdair
+Which WARNING message you mean? There is only one in each command:
+inconsistent metadata, we can't get rid of that one. About the PV not
+found, I think it's better with the message than without. On the other
+hand, we *could* make vgextend --restoremissing behave just like normal
+vgextend if the PV is actually not part of the VG. But I think it's
+better for scriptability (and predictability) to not do that.
+
+Yours,
+   Petr
 
 
