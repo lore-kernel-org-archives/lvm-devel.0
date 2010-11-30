@@ -1,39 +1,43 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Tue, 30 Nov 2010 12:12:47 +0100
-Subject: [PATCH] Disable automatic MISSING_PV recovery when handles_missing_pvs is set (BZ 653643)
-In-Reply-To: <20101129224015.GS29380@agk-dp.fab.redhat.com> (Alasdair
-	G. Kergon's message of "Mon, 29 Nov 2010 22:40:15 +0000")
-References: <87d3ptm965.fsf@twilight.int.mornfall.net.>
-	<20101129224015.GS29380@agk-dp.fab.redhat.com>
-Message-ID: <87hbezjc9c.fsf@twilight.int.mornfall.net.>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 30 Nov 2010 11:15:56 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20101130111556.24421.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-11-30 11:15:55
 
-Alasdair G Kergon <agk@redhat.com> writes:
-> On Thu, Nov 25, 2010 at 09:37:38PM +0100, Peter Rockai wrote:
->> it seems I did everything but actually posted the proposed patch for BZ
->> 653643. The explanation of what goes wrong where and how the patch fixes
->> that is in BZ comments.
->
-> So what does the new output in the test case in that bz look like?
->
-> Do we still get the last WARNING message?   (Where does it come from?
-> Maybe it's too hard to fix that without removing it from other code
-> paths where we do still want it?)
+Modified files:
+	lib/metadata   : metadata.c 
 
-Which WARNING message you mean? There is only one in each command:
-inconsistent metadata, we can't get rid of that one. About the PV not
-found, I think it's better with the message than without. On the other
-hand, we *could* make vgextend --restoremissing behave just like normal
-vgextend if the PV is actually not part of the VG. But I think it's
-better for scriptability (and predictability) to not do that.
+Log message:
+	Avoid the automatic MISSING_PV recovery path in commands with special
+	MISSING_PV handling (cmd->handles_missing_pvs is set).
 
-Yours,
-   Petr
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.412&r2=1.413
+
+--- LVM2/lib/metadata/metadata.c	2010/11/29 18:35:37	1.412
++++ LVM2/lib/metadata/metadata.c	2010/11/30 11:15:54	1.413
+@@ -2614,6 +2614,14 @@
+ {
+ 	struct pv_list *pvl;
+ 
++        /*
++         * Skip these checks in case the tool is going to deal with missing
++         * PVs, especially since the resulting messages can be pretty
++         * confusing.
++         */
++        if (correct_vg->cmd->handles_missing_pvs)
++            return;
++
+ 	dm_list_iterate_items(pvl, &correct_vg->pvs)
+ 		if (pv->dev == pvl->pv->dev && is_missing_pv(pvl->pv)) {
+ 			log_warn("Missing device %s reappeared, updating "
 
 
