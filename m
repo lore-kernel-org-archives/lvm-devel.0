@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 30 Nov 2010 11:15:56 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20101130111556.24421.qmail@sourceware.org>
+Date: 30 Nov 2010 11:35:32 -0000
+Subject: LVM2/test t-lvconvert-mirror.sh
+Message-ID: <20101130113532.21653.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-11-30 11:15:55
+Changes by:	mornfall at sourceware.org	2010-11-30 11:35:32
 
 Modified files:
-	lib/metadata   : metadata.c 
+	test           : t-lvconvert-mirror.sh 
 
 Log message:
-	Avoid the automatic MISSING_PV recovery path in commands with special
-	MISSING_PV handling (cmd->handles_missing_pvs is set).
+	Fix a failing test (it used a combination of lvconvert parameters that is no
+	longer permitted.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.412&r2=1.413
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/lib/metadata/metadata.c	2010/11/29 18:35:37	1.412
-+++ LVM2/lib/metadata/metadata.c	2010/11/30 11:15:54	1.413
-@@ -2614,6 +2614,14 @@
- {
- 	struct pv_list *pvl;
+--- LVM2/test/t-lvconvert-mirror.sh	2010/08/17 22:01:41	1.7
++++ LVM2/test/t-lvconvert-mirror.sh	2010/11/30 11:35:32	1.8
+@@ -223,8 +223,9 @@
+ aux prepare_vg 5
+ lvcreate -l1 -m2 --corelog -n $lv1 $vg $dev1 $dev2 $dev3
+ while [ `lvs --noheadings -o copy_percent $vg/$lv1` != "100.00" ]; do sleep 1; done
+-lvconvert -m1 --mirrorlog disk $vg/$lv1 $dev1
+-check mirror $vg $lv1 $dev1
++lvconvert -m1 --mirrorlog disk $vg/$lv1
++check mirror $vg $lv1
++not check mirror $vg $lv1 core
  
-+        /*
-+         * Skip these checks in case the tool is going to deal with missing
-+         * PVs, especially since the resulting messages can be pretty
-+         * confusing.
-+         */
-+        if (correct_vg->cmd->handles_missing_pvs)
-+            return;
-+
- 	dm_list_iterate_items(pvl, &correct_vg->pvs)
- 		if (pv->dev == pvl->pv->dev && is_missing_pv(pvl->pv)) {
- 			log_warn("Missing device %s reappeared, updating "
+ # ---
+ # add mirror and disk log
 
 
