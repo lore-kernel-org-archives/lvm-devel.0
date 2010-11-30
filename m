@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Nov 2010 22:57:36 -0000
-Subject: LVM2/lib/format1 import-export.c
-Message-ID: <20101130225736.17433.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 30 Nov 2010 23:03:36 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20101130230336.19443.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,25 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-11-30 22:57:35
+Changes by:	mornfall at sourceware.org	2010-11-30 23:03:35
 
 Modified files:
-	lib/format1    : import-export.c 
+	.              : WHATS_NEW 
 
 Log message:
-	Remove unneeded test for NULL
-	
-	Remove check for system_id (it is defined as int8_t[], so cannot be NULL).
+	What's new.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/import-export.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1818&r2=1.1819
 
---- LVM2/lib/format1/import-export.c	2010/09/30 21:06:51	1.115
-+++ LVM2/lib/format1/import-export.c	2010/11/30 22:57:35	1.116
-@@ -185,7 +185,7 @@
- 	}
- 
- 	/* Generate system_id if PV is in VG */
--	if (!pvd->system_id || !*pvd->system_id)
-+	if (!pvd->system_id[0])
- 		if (!_system_id(cmd, (char *)pvd->system_id, ""))
- 			return_0;
- 
+--- LVM2/WHATS_NEW	2010/11/30 22:40:19	1.1818
++++ LVM2/WHATS_NEW	2010/11/30 23:03:35	1.1819
+@@ -1,5 +1,6 @@
+ Version 2.02.78 - 
+ ====================================
++  Avoid misleading warnings in vgextend --restoremissing in certain cases.
+   Add error path stack traces for _process_mapper_dir(), _create_and_load_v4().
+   Add missing test for failed pool allocation in write_config_node().
+   Replace snprintf with dm_snprintf in clvmd-command.c.
 
 
