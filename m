@@ -1,50 +1,50 @@
-From: Liuhua Wang <lwang@suse.com>
-Date: Thu, 27 Aug 2015 16:30:41 +0800
-Subject: [PATCH] libdm-iface: not output error message inside retry loops
-Message-ID: <1440664241-6149-1-git-send-email-lwang@suse.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 01 Dec 2010 10:07:33 +0100
+Subject: LVM2 include/.symlinks.in lib/Makefile.in lib/ ...
+In-Reply-To: <20101130115336.28589.qmail@sourceware.org>
+References: <20101130115336.28589.qmail@sourceware.org>
+Message-ID: <4CF61055.3000008@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-    To avoid noisy error message being output inside retry loops
-    in case of remove failure because device busy.
----
- libdm/ioctl/libdm-iface.c | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+Dne 30.11.2010 12:53, mornfall at sourceware.org napsal(a):
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	mornfall at sourceware.org	2010-11-30 11:53:33
+> 
+>  
+>  		if (segtype->ops->target_percent &&
+>  		    !segtype->ops->target_percent(&dm->target_state,
+> -						  &percent_range, dm->mem,
+> +						  &percent, dm->mem,
+>  						  dm->cmd, seg, params,
+>  						  &total_numerator,
+>  						  &total_denominator))
+>  			goto_out;
+>  
+>  		if (first_time) {
+> -			combined_percent_range = percent_range;
+> +			*overall_percent = percent;
+>  			first_time = 0;
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 73af12b..287e917 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -63,6 +63,8 @@
- #define MAPPER_CTRL_MINOR 236
- #define MISC_MAJOR 10
- 
-+#define DM_IOCTL_RETRIES 25
-+
- /* dm major version no for running kernel */
- static unsigned _dm_version = DM_VERSION_MAJOR;
- static unsigned _dm_version_minor = 0;
-@@ -1848,7 +1850,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 					    dmt->major > 0 && dmt->minor == 0 ? "0" : "",
- 					    dmt->major > 0 ? ")" : "",
- 					    strerror(dmt->ioctl_errno));
--			else
-+			else if(dmt->ioctl_errno != EBUSY || retry_repeat_count == DM_IOCTL_RETRIES)
- 				log_error("device-mapper: %s ioctl on %s%s%s%.0d%s%.0d%s%s "
- 					  "failed: %s",
- 					  _cmd_data_v4[dmt->type].name,
-@@ -1901,7 +1903,6 @@ void dm_task_update_nodes(void)
- 	update_devs();
- }
- 
--#define DM_IOCTL_RETRIES 25
- #define DM_RETRY_USLEEP_DELAY 200000
- 
- int dm_task_get_errno(struct dm_task *dmt)
--- 
-1.8.4.5
+When we are friends with analyzers now ;) -
+if (segtype->ops->target_percent == NULL)
+is not defined of fails -  'percent' will contain some garbage.
+
+I assume something like this would help?
+
+-	percent_t percent;
++	percent_t percent = PERCENT_INVALID;
+
+
+Other thing is - how the _combine_percent() is supposed to work in this case?
+
+Maybe you want to goto_out if segtype->ops->target_percent == NULL) as
+programming error ?
+
+Zdenek
 
 
