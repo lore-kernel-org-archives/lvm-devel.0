@@ -1,180 +1,144 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 02 Dec 2010 15:30:01 +0100
-Subject: [PATCH] Generate an archive (if possible) and a backup for metadata while running vgcfgrestore
-Message-ID: <4CF7AD69.7010103@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 6 Dec 2010 17:37:12 -0000
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM daemons/clvmd/ ...
+Message-ID: <20101206173712.19399.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We should archive existing backup (if possible) and make
-a new backup even for vgcfgrestore (rhbz #640589).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2010-12-06 17:37:10
 
-I've changed backup_restore_from_file and backup_restore fn
-to return the VG that has just been restored, so I can call
-backup for it in the layer above.
+Modified files:
+	.              : WHATS_NEW WHATS_NEW_DM 
+	daemons/clvmd  : lvm-functions.c 
 
-Peter
----
- lib/format_text/archiver.c |   35 ++++++++++++++++++++++++++---------
- lib/format_text/archiver.h |    6 +++---
- tools/vgcfgrestore.c       |   34 ++++++++++++++++++++++++++++++----
- 3 files changed, 59 insertions(+), 16 deletions(-)
+Log message:
+	Fix debug logging of derived flag LCK_CACHE in clvmd.
 
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 3ace628..7d025b3 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -272,6 +272,17 @@ struct volume_group *backup_read_vg(struct cmd_context *cmd,
- 	struct format_instance *tf;
- 	struct metadata_area *mda;
- 	void *context;
-+	char path[PATH_MAX];
-+
-+	/* Use default backup directory if not defined directly. */
-+	if (!file) {
-+		if (dm_snprintf(path, sizeof(path), "%s/%s",
-+			cmd->backup_params->dir, vg_name) < 0) {
-+			log_debug("Failed to generate backup filename (for read).");
-+			return NULL;
-+		}
-+		file = path;
-+	}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1826&r2=1.1827
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.427&r2=1.428
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+
+--- LVM2/WHATS_NEW	2010/12/01 13:05:06	1.1826
++++ LVM2/WHATS_NEW	2010/12/06 17:37:09	1.1827
+@@ -1,23 +1,23 @@
+ Version 2.02.78 - 
+ ====================================
+-  Check str_list_add() success in _add_stripe_seg().
+-  Check lv_info() success in _mirrored_transient_status().
++  Abort if segment tag allocation fails in pool format _add_stripe_seg.
++  Abort in _mirrored_transient_status if referenced log/image LV is not active.
+   Add backtraces for dev_set() and dev_close_immediate() errors in set_lv().
+-  Add logging for unlink() error in clvmd remove_lockfile().
+-  Add logging for pipe write() and close() error in clvmd child_init_signal().
+-  Add test for existance of orphan vginfo in _lvmcache_update_vgname().
+-  Do a full rescan if some device is missing in read_pvs_in_vg().
+-  Avoid misleading warnings in vgextend --restoremissing in certain cases.
+-  Add error path stack traces for _process_mapper_dir(), _create_and_load_v4().
+-  Add missing test for failed pool allocation in write_config_node().
+-  Replace snprintf with dm_snprintf in clvmd-command.c.
+-  Check reallocated buffer for NULL before use in clvmd do_command().
++  Log any unlink() error in clvmd remove_lockfile().
++  Log any pipe write() or close() errors in clvmd child_init_signal().
++  Detect if orphan vginfo was lost from cache before _lvmcache_update_vgname().
++  Do a full rescan if some device is missing in lvm1 format read_pvs_in_vg.
++  Add missing check that dm_pool_create succeeded in write_config_node().
++  Use dm_snprintf in clvmd-command.c to ensure an overlong buffer is truncated.
++  Don't write to buffer if its reallocation failed in clvmd do_command().
++  Switch from float to fixed point percentage handling.
++  Avoid misleading missing PV warnings in vgextend --restoremissing.
+   Fix memory leak when VG allocation policy in metadata is invalid.
+   Ignore unrecognised allocation policy found in metadata instead of aborting.
+   Factor out tag printing into _out_tags and avoid leaking string buffer.
+   Remove some unused variables & assignments.
+   Add missing vg_release calls in _vg_read_by_vgid.
+-Still to fix: LCK_CACHE/CLUSTER_VG printing/FIXME
++  Fix debug logging of derived flag LCK_CACHE in clvmd.
+   Fix test for no system_dir in _init_backup().
+   Disallow lvconvert ops that both allocate & free supplied PEs in a single cmd.
+   Fix liblvm seg_size to give bytes not sectors.
+--- LVM2/WHATS_NEW_DM	2010/11/29 18:35:37	1.427
++++ LVM2/WHATS_NEW_DM	2010/12/06 17:37:09	1.428
+@@ -1,5 +1,6 @@
+ Version 1.02.59 - 
+ ====================================
++  Add backtraces to _process_mapper_dir and  _create_and_load_v4 error paths.
+   Remove superfluous checks for NULL before calling dm_free.
  
- 	if (!(context = create_text_context(cmd, file,
- 					    cmd->cmd_line)) ||
-@@ -346,11 +357,12 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg)
+ Version 1.02.58 - 22nd November 2010
+--- LVM2/daemons/clvmd/lvm-functions.c	2010/11/29 11:05:15	1.101
++++ LVM2/daemons/clvmd/lvm-functions.c	2010/12/06 17:37:09	1.102
+@@ -44,11 +44,7 @@
+ 	int lock_mode;
+ };
+ 
+-/*
+- * FIXME: 8bit value passed here -
+- *        so only LCK_XXX defines < 0x100 can be decoded
+- */
+-static const char *decode_locking_cmd(unsigned char cmdl)
++static const char *decode_full_locking_cmd(uint32_t cmdl)
+ {
+ 	static char buf[128];
+ 	const char *type;
+@@ -117,11 +113,20 @@
+ 		cmdl & LCK_NONBLOCK   ? "|NONBLOCK" : "",
+ 		cmdl & LCK_HOLD       ? "|HOLD" : "",
+ 		cmdl & LCK_LOCAL      ? "|LOCAL" : "",
+-		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "");
++		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "",
++		cmdl & LCK_CACHE      ? "|CACHE" : "");
+ 
+ 	return buf;
  }
  
- /* ORPHAN and VG locks held before calling this */
--int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
--			     const char *file)
-+struct volume_group *backup_restore_from_file(struct cmd_context *cmd,
-+					      const char *vg_name,
-+					      const char *file)
++/*
++ * Only processes 8 bits: excludes LCK_CACHE.
++ */
++static const char *decode_locking_cmd(unsigned char cmdl)
++{
++	return decode_full_locking_cmd((uint32_t) cmdl);
++}
++
+ static const char *decode_flags(unsigned char flags)
  {
- 	struct volume_group *vg;
--	int missing_pvs, r = 0;
-+	int missing_pvs;
+ 	static char buf[128];
+@@ -676,15 +681,6 @@
+ 	uint32_t lock_cmd = command;
+ 	char *vgname = resource + 2;
+ 
+-	DEBUGLOG("do_lock_vg: resource '%s', cmd = %s, flags = %s, memlock = %d\n",
+-		 resource, decode_locking_cmd(command), decode_flags(lock_flags), memlock());
+-
+-	/* P_#global causes a full cache refresh */
+-	if (!strcmp(resource, "P_" VG_GLOBAL)) {
+-		do_refresh_cache();
+-		return;
+-	}
+-
+ 	lock_cmd &= (LCK_SCOPE_MASK | LCK_TYPE_MASK | LCK_HOLD);
  
  	/*
- 	 * Read in the volume group from the text file.
-@@ -358,18 +370,23 @@ int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
- 	if (!(vg = backup_read_vg(cmd, vg_name, file)))
- 		return_0;
+@@ -693,6 +689,15 @@
+ 	if (strncmp(resource, "P_#", 3) && !strncmp(resource, "P_", 2))
+ 		lock_cmd |= LCK_CACHE;
  
--	missing_pvs = vg_missing_pv_count(vg);
--	if (missing_pvs == 0)
--		r = backup_restore_vg(cmd, vg);
--	else
-+	if ((missing_pvs = vg_missing_pv_count(vg))) {
- 		log_error("Cannot restore Volume Group %s with %i PVs "
- 			  "marked as missing.", vg->name, missing_pvs);
-+		goto bad;
++	DEBUGLOG("do_lock_vg: resource '%s', cmd = %s, flags = %s, memlock = %d\n",
++		 resource, decode_full_locking_cmd(lock_cmd), decode_flags(lock_flags), memlock());
++
++	/* P_#global causes a full cache refresh */
++	if (!strcmp(resource, "P_" VG_GLOBAL)) {
++		do_refresh_cache();
++		return;
 +	}
- 
-+	if (!backup_restore_vg(cmd, vg))
-+		goto_bad;
 +
-+	return vg;
-+
-+bad:
- 	vg_release(vg);
--	return r;
-+	return NULL;
- }
- 
--int backup_restore(struct cmd_context *cmd, const char *vg_name)
-+struct volume_group *backup_restore(struct cmd_context *cmd, const char *vg_name)
- {
- 	char path[PATH_MAX];
- 
-diff --git a/lib/format_text/archiver.h b/lib/format_text/archiver.h
-index 7346f93..1a60d06 100644
---- a/lib/format_text/archiver.h
-+++ b/lib/format_text/archiver.h
-@@ -52,9 +52,9 @@ int backup_remove(struct cmd_context *cmd, const char *vg_name);
- struct volume_group *backup_read_vg(struct cmd_context *cmd,
- 				    const char *vg_name, const char *file);
- int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg);
--int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
--			     const char *file);
--int backup_restore(struct cmd_context *cmd, const char *vg_name);
-+struct volume_group *backup_restore_from_file(struct cmd_context *cmd,
-+				const char *vg_name, const char *file);
-+struct volume_group *backup_restore(struct cmd_context *cmd, const char *vg_name);
- 
- int backup_to_file(const char *file, const char *desc, struct volume_group *vg);
- 
-diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
-index dc0158f..a6e81df 100644
---- a/tools/vgcfgrestore.c
-+++ b/tools/vgcfgrestore.c
-@@ -18,6 +18,8 @@
- int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- {
- 	char *vg_name = NULL;
-+	struct volume_group *old_vg_backup, *restored_vg;
-+	int old_suppress;
- 
- 	if (argc == 1) {
- 		vg_name = skip_dev_dir(cmd, argv[0], NULL);
-@@ -45,6 +47,15 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_PROCESSED;
- 	}
- 
-+	/*
-+	 * Try to read any existing backup to archive it later on.
-+	 * Don't care if it does not exist (..we can restore a VG
-+	 * that does not currently exist in the system).
-+	*/
-+        old_suppress = log_suppress(1);
-+        old_vg_backup = backup_read_vg(cmd, vg_name, NULL);
-+        log_suppress(old_suppress);
-+
- 	if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
- 		log_error("Unable to lock volume group %s", vg_name);
- 		return ECMD_FAILED;
-@@ -56,20 +67,35 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 	}
- 
-+	if (old_vg_backup) {
-+		if (!archive(old_vg_backup))
-+			stack;
-+		vg_release(old_vg_backup);
-+	}
-+	else
-+		log_verbose("No existing backup for VG %s found, "
-+			    "skipping archive creation.", vg_name);
-+
- 	cmd->handles_unknown_segments = 1;
- 
--	if (!(arg_count(cmd, file_ARG) ?
--	      backup_restore_from_file(cmd, vg_name,
--				       arg_str_value(cmd, file_ARG, "")) :
--	      backup_restore(cmd, vg_name))) {
-+	if (arg_count(cmd, file_ARG))
-+		restored_vg = backup_restore_from_file(cmd, vg_name,
-+				arg_str_value(cmd, file_ARG, ""));
-+	else
-+		restored_vg = backup_restore(cmd, vg_name);
-+
-+	if (!restored_vg) {
- 		unlock_vg(cmd, VG_ORPHANS);
- 		unlock_vg(cmd, vg_name);
- 		log_error("Restore failed.");
- 		return ECMD_FAILED;
- 	}
- 
-+	backup(restored_vg);
-+
- 	log_print("Restored volume group %s", vg_name);
- 
-+	vg_release(restored_vg);
- 	unlock_vg(cmd, VG_ORPHANS);
- 	unlock_vg(cmd, vg_name);
- 	return ECMD_PROCESSED;
+ 	pthread_mutex_lock(&lvm_lock);
+ 	switch (lock_cmd) {
+ 		case LCK_VG_COMMIT:
 
 
