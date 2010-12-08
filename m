@@ -1,227 +1,124 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  8 Dec 2010 13:57:50 +0100
-Subject: [PATCH 4/9] Use internal cookie for dm_tree functions
+Date: Wed,  8 Dec 2010 13:57:51 +0100
+Subject: [PATCH 5/9] Stop calling fs_unlock() and dm_udev_wait()
 In-Reply-To: <cover.1291802397.git.zkabelac@redhat.com>
 References: <cover.1291802397.git.zkabelac@redhat.com>
-Message-ID: <29d02e7096fbe59365622fbc3d594ee725ee708b.1291802397.git.zkabelac@redhat.com>
+Message-ID: <1fb1776ab31cc970fcf2029c2581df3c8fb9140e.1291802397.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Creative part of patchset - start to use internal cookie for:
-dm_tree_deactivate_children()
-dm_tree_activate_children()
-dm_tree_preload_children()
+Stop calling fs_unlock() from lv_de/activate()
 
-Patch is not so simple (and I'm not 100% sure it covers all variants).
-Tries to switch dm_tree cookie/shmid to internal one if the supplied
-cookie/shmid is 0 - and it tries to remember this for preload.
-It would make code easier if we would care only about the internal libdm
-cookie/shmid and would not allow external dm_tree_set_cookie.
-Actually is there any other user of dm_tree except for lvm?
+Stop directly calling dm_udev_wait() and
+dm_tree_set/get_cookie() from lvm code -
+it's now handled internaly by  libdm.
+(in fact dm_tree_set/get_cookie is not used any more
+and could have been removed - but as it's already public API
+I'm not sure if we could remove it ?)
 
-The problem here is 'immediate' node - which resets cookie/shmid value.
-So we would probably need to add another extra variable to set
-whether libdm should use internal cookie/shmid numbers - code tries to
-handle this case - but the best would be to drop support for external
-cookie/shmid.
-
-Note: get_lib_cookie always generate 'internal' cookie/shmid even if the user
-supplies externally created cookie/shmid (or the cookie/shmid is not needed
-because no device needs to be created/destroyed).
-
-Primarily patch is able to show speedup from udev latency.
-
-I think solution would be to hide this internal cookie/shmid in
-dm_task_set_cookie() function - but I've currently decided to 'drop' this
-larger code modification - as it may influence behavior of 'purely'
-libdm users like Milan's dmcrypt or dmraid.
-
-IMHO libdm should completly hide 'udev' existance and we should
-provide library abstranction over udev - but that needs wider
-agreement.
+define HAVE_UNLOCK_FS is used for quick compare of how the perfomace
+is improved when it's in use.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdm-deptree.c |  106 ++++++++++++++++++++++++++++++++++++++++++------
- 1 files changed, 92 insertions(+), 14 deletions(-)
+ lib/activate/activate.c    |    5 +++++
+ lib/activate/dev_manager.c |   17 +----------------
+ 2 files changed, 6 insertions(+), 16 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 8d00514..d801eec 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1102,6 +1102,36 @@ static int _suspend_node(const char *name, uint32_t major, uint32_t minor,
- 	return r;
- }
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index a19d556..9372033 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -35,6 +35,7 @@
+ #include <unistd.h>
  
-+static int _use_lib_cookie(struct dm_tree_node *dnode, uint32_t *cookie)
-+{
-+	uint32_t c;
-+
-+	if (!get_lib_cookie(&c))
-+		return_0;
-+
-+	*cookie = dm_tree_get_cookie(dnode);
-+
-+	if (!*cookie) {
-+		*cookie = c;
-+		dm_tree_set_cookie(dnode, c);
-+	} else if (*cookie != c)
-+		*cookie = 0;
-+
-+	return 1;
-+}
-+
-+static int _wait_on_cookie(struct dm_tree_node *dnode, uint32_t cookie)
-+{
-+	if (!cookie && (cookie = dm_tree_get_cookie(dnode))) {
-+		if (!dm_udev_wait(cookie))
-+			return_0;
-+
-+		dm_tree_set_cookie(dnode, 0);
-+	}
-+
-+	return 1;
-+}
-+
- /*
-  * FIXME Don't attempt to deactivate known internal dependencies.
-  */
-@@ -1185,7 +1215,18 @@ int dm_tree_deactivate_children(struct dm_tree_node *dnode,
- 				   const char *uuid_prefix,
- 				   size_t uuid_prefix_len)
+ #define _skip(fmt, args...) log_very_verbose("Skipping: " fmt , ## args)
++#define HAVE_UNLOCK_FS 1
+ 
+ int lvm1_present(struct cmd_context *cmd)
  {
--	return _dm_tree_deactivate_children(dnode, uuid_prefix, uuid_prefix_len, 0);
-+	uint32_t lib_cookie;
-+	int r;
-+
-+	if (!_use_lib_cookie(dnode, &lib_cookie))
-+		return_0;
-+
-+	r = _dm_tree_deactivate_children(dnode, uuid_prefix, uuid_prefix_len, 0);
-+
-+	if (!_wait_on_cookie(dnode, lib_cookie))
-+		stack;
-+
-+	return r;
- }
+@@ -1206,7 +1207,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	memlock_inc(cmd);
+ 	r = _lv_deactivate(lv);
+ 	memlock_dec(cmd);
++#ifndef HAVE_UNLOCK_FS
+ 	fs_unlock();
++#endif
  
- void dm_tree_skip_lockfs(struct dm_tree_node *dnode)
-@@ -1274,9 +1315,9 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
- 	return r;
- }
+ 	if (!lv_info(cmd, lv, 0, &info, 1, 0) || info.exists)
+ 		r = 0;
+@@ -1305,7 +1308,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!(r = _lv_activate_lv(lv, 0)))
+ 		stack;
+ 	memlock_dec(cmd);
++#ifndef HAVE_UNLOCK_FS
+ 	fs_unlock();
++#endif
  
--int dm_tree_activate_children(struct dm_tree_node *dnode,
--				 const char *uuid_prefix,
--				 size_t uuid_prefix_len)
-+static int _dm_tree_activate_children(struct dm_tree_node *dnode,
-+				      const char *uuid_prefix,
-+				      size_t uuid_prefix_len)
- {
- 	int r = 1;
- 	void *handle = NULL;
-@@ -1297,7 +1338,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 	if (r && !monitor_dev_for_events(cmd, lv, 0, 1))
+ 		stack;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a58b7c5..3b95419 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1615,7 +1615,6 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
+ 	struct dm_tree_node *child;
+ 	char *vgname, *lvname, *layer;
+ 	const char *name, *uuid;
+-	int r;
+ 
+ 	while ((child = dm_tree_next_child(&handle, root, 0))) {
+ 		if (!(name = dm_tree_node_get_name(child)))
+@@ -1637,12 +1636,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
+ 		if (non_toplevel_tree_dlid && !strcmp(non_toplevel_tree_dlid, uuid))
  			continue;
  
- 		if (dm_tree_node_num_children(child, 0))
--			if (!dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len))
-+			if (!_dm_tree_activate_children(child, uuid_prefix, uuid_prefix_len))
- 				return_0;
- 	}
- 
-@@ -1353,7 +1394,23 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
- 		}
- 	}
- 
--	handle = NULL;
-+	return r;
-+}
-+
-+int dm_tree_activate_children(struct dm_tree_node *dnode,
-+			      const char *uuid_prefix,
-+			      size_t uuid_prefix_len)
-+{
-+	uint32_t lib_cookie;
-+	int r;
-+
-+	if (!_use_lib_cookie(dnode, &lib_cookie))
-+		return_0;
-+
-+	r = _dm_tree_activate_children(dnode, uuid_prefix, uuid_prefix_len);
-+
-+	if (!_wait_on_cookie(dnode, lib_cookie))
-+		stack;
- 
- 	return r;
- }
-@@ -1839,9 +1896,10 @@ out:
- 	return r;
- }
- 
--int dm_tree_preload_children(struct dm_tree_node *dnode,
--			     const char *uuid_prefix,
--			     size_t uuid_prefix_len)
-+static int _dm_tree_preload_children(struct dm_tree_node *dnode,
-+				     const char *uuid_prefix,
-+				     size_t uuid_prefix_len,
-+				     uint32_t* lib_cookie)
- {
- 	int r = 1;
- 	void *handle = NULL;
-@@ -1861,7 +1919,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			continue;
- 
- 		if (dm_tree_node_num_children(child, 0))
--			if (!dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len))
-+			if (!_dm_tree_preload_children(child, uuid_prefix, uuid_prefix_len, lib_cookie))
- 				return_0;
- 
- 		/* FIXME Cope if name exists with no uuid? */
-@@ -1913,18 +1971,38 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 
- 	}
- 
--	handle = NULL;
+-		dm_tree_set_cookie(root, 0);
+-		r = dm_tree_deactivate_children(root, uuid, strlen(uuid));
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
 -
- 	if (update_devs_flag) {
--		if (!dm_udev_wait(dm_tree_get_cookie(dnode)))
-+		if (!_wait_on_cookie(dnode, *lib_cookie))
- 			stack;
--		dm_tree_set_cookie(dnode, 0);
-+		/* For internal lib_cookie - dm_wait in update_dev() */
- 		dm_task_update_nodes();
-+
-+		/* For internal cookie - request regenerate */
-+		if (*lib_cookie && !_use_lib_cookie(dnode, lib_cookie))
-+			return_0;
+-		if (!r)
++		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid)))
+ 			return_0;
  	}
  
- 	return r;
- }
+@@ -1677,10 +1671,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 		break;
+ 	case DEACTIVATE:
+  		/* Deactivate LV and all devices it references that nothing else has open. */
+-		dm_tree_set_cookie(root, 0);
+ 		r = dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
+ 		if (!r)
+ 			goto_out;
+ 		if (!_remove_lv_symlinks(dm, root))
+@@ -1701,10 +1692,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			goto_out;
  
-+int dm_tree_preload_children(struct dm_tree_node *dnode,
-+			     const char *uuid_prefix,
-+			     size_t uuid_prefix_len)
-+{
-+	uint32_t lib_cookie;
-+	int r;
-+
-+	if (!_use_lib_cookie(dnode, &lib_cookie))
-+		return_0;
-+
-+	r = _dm_tree_preload_children(dnode, uuid_prefix, uuid_prefix_len, &lib_cookie);
-+
-+	if (!_wait_on_cookie(dnode, lib_cookie))
-+		stack;
-+
-+	return r;
-+}
-+
- /*
-  * Returns 1 if unsure.
-  */
+ 		/* Preload any devices required before any suspensions */
+-		dm_tree_set_cookie(root, 0);
+ 		r = dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
+ 		if (!r)
+ 			goto_out;
+ 
+@@ -1712,10 +1700,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			dm->flush_required = 1;
+ 
+ 		if (action == ACTIVATE) {
+-			dm_tree_set_cookie(root, 0);
+ 			r = dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-			if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-				stack;
+ 			if (!r)
+ 				goto_out;
+ 			if (!_create_lv_symlinks(dm, root)) {
 -- 
 1.7.3.3
 
