@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 Dec 2010 20:49:39 -0000
-Subject: LVM2/test/api Makefile.in
-Message-ID: <20101212204939.17102.qmail@sourceware.org>
+Date: 12 Dec 2010 21:08:01 -0000
+Subject: LVM2/test Makefile.in api/Makefile.in
+Message-ID: <20101212210801.23709.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-12-12 20:49:38
+Changes by:	mornfall at sourceware.org	2010-12-12 21:08:00
 
 Modified files:
+	test           : Makefile.in 
 	test/api       : Makefile.in 
 
 Log message:
-	Do not build vgtest (superseded by vgtest.t). Fix the build line for .t files.
+	Only build the required bits under api/ on make check.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/test/api/Makefile.in	2010/12/12 20:36:38	1.15
-+++ LVM2/test/api/Makefile.in	2010/12/12 20:49:38	1.16
-@@ -19,9 +19,8 @@
- 	DEFS += -DDEBUG
+--- LVM2/test/Makefile.in	2010/12/12 20:36:38	1.45
++++ LVM2/test/Makefile.in	2010/12/12 21:08:00	1.46
+@@ -42,19 +42,19 @@
  endif
  
--TARGETS = vgtest
-+TARGETS = 
- test_SOURCES = test.c
--vgtest_SOURCES = vgtest.c
- wrapper_SOURCES = test.c
- INCLUDES += -I../../include
+ all check: init.sh
+-	make -C api
++	make -C api tests
+ 	@echo Testing with locking_type 1
+ 	VERBOSE=$(VERBOSE) ./bin/harness $(RUN_BASE)
+ 	@echo Testing with locking_type 3
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN_BASE)
  
-@@ -42,9 +41,8 @@
- endif
+ check_cluster: init.sh
+-	make -C api
++	make -C api tests
+ 	@echo Testing with locking_type 3
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=3 ./bin/harness $(RUN_BASE)
  
- test_OBJECTS = $(test_SOURCES:.c=.o)
--vgtest_OBJECTS = $(vgtest_SOURCES:.c=.o)
+ check_local: init.sh
+-	make -C api
++	make -C api tests
+ 	@echo Testing with locking_type 1
+ 	VERBOSE=$(VERBOSE) LVM_TEST_LOCKING=1 ./bin/harness $(RUN_BASE)
+ 
+--- LVM2/test/api/Makefile.in	2010/12/12 20:49:38	1.16
++++ LVM2/test/api/Makefile.in	2010/12/12 21:08:00	1.17
+@@ -44,7 +44,9 @@
  wrapper_OBJECTS = $(wrapper_SOURCES:.c=.o)
--OBJECTS = $(test_OBJECTS) $(vgtest_OBJECTS)
-+OBJECTS = $(test_OBJECTS)
+ OBJECTS = $(test_OBJECTS)
  
- all: $(UNIT) test
+-all: $(UNIT) test
++all: tests test
++
++tests: $(UNIT)
  
-@@ -52,7 +50,7 @@
+ test: $(test_OBJECTS) $(DEPLIBS)
  	$(CC) -o test $(test_OBJECTS) $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS) $(READLINE_LIBS)
- 
- %.o: $(srcdir)/%.c
--	$(CC) -o $@ $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS) $(READLINE_LIBS)
-+	$(CC) -o $@ $(CFLAGS) $(INCLUDES)
- 
- %.t: %.o $(DEPLIBS)
- 	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS)
 
 
