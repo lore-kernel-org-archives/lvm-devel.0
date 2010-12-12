@@ -1,37 +1,37 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 Dec 2010 22:26:47 -0000
-Subject: LVM2/test/api Makefile.in
-Message-ID: <20101212222647.11529.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 13 Dec 2010 00:02:05 +0100
+Subject: [PATCH] percent attribute API for lvm2app (BZ 654441)
+Message-ID: <8762uy8uj6.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-12-12 22:26:47
+Hi,
 
-Modified files:
-	test/api       : Makefile.in 
+I am attaching a draft patch for $SUBJ. It is mostly OK in my opinion,
+with one catch: it is not clear at all how to deal with multiple public
+headers. For now, I have copied over interesting bits of the private
+header into the public one, but ultimately, I would like to be able to
+have headers from lib/ to be part of the API, so that code can be shared
+properly. It would also mean that the public API would come in more than
+one header. I am not sure we have any infrastructure for that, right
+now.
 
-Log message:
-	Remove a redundant %.o: %.c rule from test/api/Makefile.in.
+Anyway, with that caveat, the patch should be more or less OK. It comes
+with a "unit" test (the test is still pretty high level, but we still
+lack a lot of infrastructure for testing at any lower level; that means
+it's not real unit tests, but it's a bit closer than our traditional
+functional tests).
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+Yours,
+   Petr
 
---- LVM2/test/api/Makefile.in	2010/12/12 21:08:00	1.17
-+++ LVM2/test/api/Makefile.in	2010/12/12 22:26:47	1.18
-@@ -51,9 +51,6 @@
- test: $(test_OBJECTS) $(DEPLIBS)
- 	$(CC) -o test $(test_OBJECTS) $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS) $(READLINE_LIBS)
- 
--%.o: $(srcdir)/%.c
--	$(CC) -o $@ $(CFLAGS) $(INCLUDES)
--
- %.t: %.o $(DEPLIBS)
- 	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(LVMLIBS) $(LIBS)
- 
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: float-api.diff
+Type: text/x-diff
+Size: 8901 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101213/c84a941c/attachment.bin>
