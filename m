@@ -1,50 +1,37 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 13 Dec 2010 12:44:11 -0000
-Subject: LVM2/libdm libdm-common.c
-Message-ID: <20101213124411.17844.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Mon, 13 Dec 2010 22:24:46 +0100
+Subject: [PATCH] vg_validate support for pvmove LVs (BZ 662669)
+Message-ID: <87ipyx74dd.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-12-13 12:44:10
+Hi,
 
-Modified files:
-	libdm          : libdm-common.c 
+I am attaching patch that revs up vg_validate somewhat, to catch some
+malformed (internal) pvmoveN LVs. Currently, it checks that the segments
+in there are either linear or mirrored with 2 legs. Unfortunately, I
+haven't been able to come up with any further restrictions that wouldn't
+break the existing tests on some count. It seems that vg_validate is
+called on VGs where linear segments exist (although I have been unable
+to capture them at vg_commit time), and they are interspersed with
+mirrored segments in the same LV. I have already spent a lot of time on
+this, so if someone wants to come up with a stricter check, please feel
+free to do so.
 
-Log message:
-	HAVE_SELINUX again
+Anyway, the attached patch does catch the bug triggered by kabi's test
+attached to BZ 654447. For the other bug (dangling reference) I will
+submit a separate BZ and a separate patch, hopefully tomorrow.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.105&r2=1.106
+Yours,
+   Petr
 
---- LVM2/libdm/libdm-common.c	2010/12/13 12:30:04	1.105
-+++ LVM2/libdm/libdm-common.c	2010/12/13 12:44:09	1.106
-@@ -387,10 +387,10 @@
- 	return 1;
- }
- 
-+#ifdef HAVE_SELINUX
- static int _selabel_lookup(const char *path, mode_t mode,
- 			   security_context_t *scontext)
- {
--#ifdef HAVE_SELINUX
- #ifdef HAVE_SELINUX_LABEL_H
- 	if (!_selabel_handle &&
- 	    !(_selabel_handle = selabel_open(SELABEL_CTX_FILE, NULL, 0))) {
-@@ -408,9 +408,9 @@
- 		return 0;
- 	}
- #endif
--#endif
- 	return 1;
- }
-+#endif
- 
- int dm_prepare_selinux_context(const char *path, mode_t mode)
- {
-
-
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vg_validate-pvmove.diff
+Type: text/x-diff
+Size: 1254 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20101213/096bfb2b/attachment.bin>
