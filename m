@@ -1,105 +1,194 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 27 Aug 2015 15:28:49 +0000 (UTC)
-Subject: master - lvmlockd: fix to work around dlm lvb bug
-Message-ID: <20150827152849.F262E607A1@fedorahosted.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 13 Dec 2010 11:03:12 -0000
+Subject: LVM2 ./configure lib/misc/configure.h.in
+Message-ID: <20101213110312.3680.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=521136181b6c6cfde4c07d5aecf1dcc5e0ab9594
-Commit:        521136181b6c6cfde4c07d5aecf1dcc5e0ab9594
-Parent:        fda19b55b1f1a04c7539d007dfb6cd3faf1857de
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 25 16:10:12 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Aug 27 10:27:24 2015 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2010-12-13 11:03:11
 
-lvmlockd: fix to work around dlm lvb bug
+Modified files:
+	.              : configure 
+	lib/misc       : configure.h.in 
 
-Work around a dlm bug that fails to copy lvb
-on a NL->EX conversion.
----
- daemons/lvmlockd/lvmlockd-dlm.c |   35 +++++++++++++++++++++++++++++++++--
- 1 files changed, 33 insertions(+), 2 deletions(-)
+Log message:
+	Update configure.
 
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index 1d7cfe6..e242685 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -67,6 +67,8 @@ int lm_data_size_dlm(void)
- #define VG_LOCK_ARGS_MINOR 0
- #define VG_LOCK_ARGS_PATCH 0
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.142&r2=1.143
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/configure.h.in.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+
+--- LVM2/configure	2010/11/09 11:14:06	1.142
++++ LVM2/configure	2010/12/13 11:03:10	1.143
+@@ -15440,6 +15440,152 @@
+ done
  
-+static int dlm_has_lvb_bug;
-+
- static int cluster_name_from_args(char *vg_args, char *clustername)
- {
- 	return last_string_from_args(vg_args, clustername);
-@@ -160,6 +162,7 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
- {
- 	char sys_clustername[MAX_ARGS+1];
- 	char arg_clustername[MAX_ARGS+1];
-+	uint32_t major = 0, minor = 0, patch = 0;
- 	struct lm_dlm *lmd;
- 	int rv;
  
-@@ -170,6 +173,17 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
- 	if (rv < 0)
- 		return -EMANAGER;
++for ac_header in selinux/label.h
++do
++as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
++if { as_var=$as_ac_Header; eval "test \"\${$as_var+set}\" = set"; }; then
++  { $as_echo "$as_me:$LINENO: checking for $ac_header" >&5
++$as_echo_n "checking for $ac_header... " >&6; }
++if { as_var=$as_ac_Header; eval "test \"\${$as_var+set}\" = set"; }; then
++  $as_echo_n "(cached) " >&6
++fi
++ac_res=`eval 'as_val=${'$as_ac_Header'}
++		 $as_echo "$as_val"'`
++	       { $as_echo "$as_me:$LINENO: result: $ac_res" >&5
++$as_echo "$ac_res" >&6; }
++else
++  # Is the header compilable?
++{ $as_echo "$as_me:$LINENO: checking $ac_header usability" >&5
++$as_echo_n "checking $ac_header usability... " >&6; }
++cat >conftest.$ac_ext <<_ACEOF
++/* confdefs.h.  */
++_ACEOF
++cat confdefs.h >>conftest.$ac_ext
++cat >>conftest.$ac_ext <<_ACEOF
++/* end confdefs.h.  */
++$ac_includes_default
++#include <$ac_header>
++_ACEOF
++rm -f conftest.$ac_objext
++if { (ac_try="$ac_compile"
++case "(($ac_try" in
++  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
++  *) ac_try_echo=$ac_try;;
++esac
++eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
++$as_echo "$ac_try_echo") >&5
++  (eval "$ac_compile") 2>conftest.er1
++  ac_status=$?
++  grep -v '^ *+' conftest.er1 >conftest.err
++  rm -f conftest.er1
++  cat conftest.err >&5
++  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); } && {
++	 test -z "$ac_c_werror_flag" ||
++	 test ! -s conftest.err
++       } && test -s conftest.$ac_objext; then
++  ac_header_compiler=yes
++else
++  $as_echo "$as_me: failed program was:" >&5
++sed 's/^/| /' conftest.$ac_ext >&5
++
++	ac_header_compiler=no
++fi
++
++rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
++{ $as_echo "$as_me:$LINENO: result: $ac_header_compiler" >&5
++$as_echo "$ac_header_compiler" >&6; }
++
++# Is the header present?
++{ $as_echo "$as_me:$LINENO: checking $ac_header presence" >&5
++$as_echo_n "checking $ac_header presence... " >&6; }
++cat >conftest.$ac_ext <<_ACEOF
++/* confdefs.h.  */
++_ACEOF
++cat confdefs.h >>conftest.$ac_ext
++cat >>conftest.$ac_ext <<_ACEOF
++/* end confdefs.h.  */
++#include <$ac_header>
++_ACEOF
++if { (ac_try="$ac_cpp conftest.$ac_ext"
++case "(($ac_try" in
++  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
++  *) ac_try_echo=$ac_try;;
++esac
++eval ac_try_echo="\"\$as_me:$LINENO: $ac_try_echo\""
++$as_echo "$ac_try_echo") >&5
++  (eval "$ac_cpp conftest.$ac_ext") 2>conftest.er1
++  ac_status=$?
++  grep -v '^ *+' conftest.er1 >conftest.err
++  rm -f conftest.er1
++  cat conftest.err >&5
++  $as_echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); } >/dev/null && {
++	 test -z "$ac_c_preproc_warn_flag$ac_c_werror_flag" ||
++	 test ! -s conftest.err
++       }; then
++  ac_header_preproc=yes
++else
++  $as_echo "$as_me: failed program was:" >&5
++sed 's/^/| /' conftest.$ac_ext >&5
++
++  ac_header_preproc=no
++fi
++
++rm -f conftest.err conftest.$ac_ext
++{ $as_echo "$as_me:$LINENO: result: $ac_header_preproc" >&5
++$as_echo "$ac_header_preproc" >&6; }
++
++# So?  What about this header?
++case $ac_header_compiler:$ac_header_preproc:$ac_c_preproc_warn_flag in
++  yes:no: )
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: accepted by the compiler, rejected by the preprocessor!" >&5
++$as_echo "$as_me: WARNING: $ac_header: accepted by the compiler, rejected by the preprocessor!" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: proceeding with the compiler's result" >&5
++$as_echo "$as_me: WARNING: $ac_header: proceeding with the compiler's result" >&2;}
++    ac_header_preproc=yes
++    ;;
++  no:yes:* )
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: present but cannot be compiled" >&5
++$as_echo "$as_me: WARNING: $ac_header: present but cannot be compiled" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header:     check for missing prerequisite headers?" >&5
++$as_echo "$as_me: WARNING: $ac_header:     check for missing prerequisite headers?" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: see the Autoconf documentation" >&5
++$as_echo "$as_me: WARNING: $ac_header: see the Autoconf documentation" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header:     section \"Present But Cannot Be Compiled\"" >&5
++$as_echo "$as_me: WARNING: $ac_header:     section \"Present But Cannot Be Compiled\"" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: proceeding with the preprocessor's result" >&5
++$as_echo "$as_me: WARNING: $ac_header: proceeding with the preprocessor's result" >&2;}
++    { $as_echo "$as_me:$LINENO: WARNING: $ac_header: in the future, the compiler will take precedence" >&5
++$as_echo "$as_me: WARNING: $ac_header: in the future, the compiler will take precedence" >&2;}
++
++    ;;
++esac
++{ $as_echo "$as_me:$LINENO: checking for $ac_header" >&5
++$as_echo_n "checking for $ac_header... " >&6; }
++if { as_var=$as_ac_Header; eval "test \"\${$as_var+set}\" = set"; }; then
++  $as_echo_n "(cached) " >&6
++else
++  eval "$as_ac_Header=\$ac_header_preproc"
++fi
++ac_res=`eval 'as_val=${'$as_ac_Header'}
++		 $as_echo "$as_val"'`
++	       { $as_echo "$as_me:$LINENO: result: $ac_res" >&5
++$as_echo "$ac_res" >&6; }
++
++fi
++as_val=`eval 'as_val=${'$as_ac_Header'}
++		 $as_echo "$as_val"'`
++   if test "x$as_val" = x""yes; then
++  cat >>confdefs.h <<_ACEOF
++#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
++_ACEOF
++
++fi
++
++done
++
++
+ cat >>confdefs.h <<\_ACEOF
+ #define HAVE_SELINUX 1
+ _ACEOF
+--- LVM2/lib/misc/configure.h.in	2010/10/13 12:18:53	1.29
++++ LVM2/lib/misc/configure.h.in	2010/12/13 11:03:11	1.30
+@@ -252,6 +252,9 @@
+ /* Define to 1 to include support for selinux. */
+ #undef HAVE_SELINUX
  
-+	rv = dlm_kernel_version(&major, &minor, &patch);
-+	if (rv < 0) {
-+		log_error("prepare_lockspace_dlm kernel_version not detected %d", rv);
-+		dlm_has_lvb_bug = 1;
-+	}
++/* Define to 1 if you have the <selinux/label.h> header file. */
++#undef HAVE_SELINUX_LABEL_H
 +
-+	if ((major == 6) && (minor == 0) && (patch == 1)) {
-+		log_debug("dlm kernel version %u.%u.%u has lvb bug", major, minor, patch);
-+		dlm_has_lvb_bug = 1;
-+	}
-+
- 	if (!ls->vg_args[0]) {
- 		/* global lockspace has no vg args */
- 		goto skip_args;
-@@ -468,9 +482,27 @@ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
- 		return 0;
- 	}
+ /* Define to 1 if you have the <selinux/selinux.h> header file. */
+ #undef HAVE_SELINUX_SELINUX_H
  
-+	/*
-+	 * The dlm lvb bug means that converting NL->EX will not return 
-+	 * the latest lvb, so we have to convert NL->PR->EX to reread it.
-+	 */
-+	if (dlm_has_lvb_bug && (ld_mode == LD_LK_EX)) {
-+		rv = dlm_ls_lock_wait(lmd->dh, LKM_PRMODE, lksb, flags,
-+				      r->name, strlen(r->name),
-+				      0, NULL, NULL, NULL);
-+		if (rv == -1) {
-+			log_debug("S %s R %s lock_dlm acquire mode PR for %d rv %d",
-+				  ls->name, r->name, mode, rv);
-+			goto lockrv;
-+		}
-+
-+		/* Fall through to request EX. */
-+	}
-+
- 	rv = dlm_ls_lock_wait(lmd->dh, mode, lksb, flags,
- 			      r->name, strlen(r->name),
- 			      0, NULL, NULL, NULL);
-+lockrv:
- 	if (rv == -1 && errno == EAGAIN) {
- 		log_debug("S %s R %s lock_dlm acquire mode %d rv EAGAIN", ls->name, r->name, mode);
- 		return -EAGAIN;
-@@ -584,8 +616,7 @@ int lm_unlock_dlm(struct lockspace *ls, struct resource *r,
- 			/* first time vb has been written */
- 			rdd->vb->version = cpu_to_le16(VAL_BLK_VERSION);
- 		}
--		if (r_version)
--			rdd->vb->r_version = cpu_to_le32(r_version);
-+		rdd->vb->r_version = cpu_to_le32(r_version);
- 		memcpy(lksb->sb_lvbptr, rdd->vb, sizeof(struct val_blk));
- 
- 		log_debug("S %s R %s unlock_dlm set r_version %u",
 
 
