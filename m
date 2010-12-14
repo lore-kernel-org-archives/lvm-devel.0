@@ -1,116 +1,128 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Wed, 12 Oct 2022 13:19:49 +0000 (GMT)
-Subject: main - toollib: do not process just created historical LV
-Message-ID: <20221012131949.04C683898393@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 14 Dec 2010 17:51:14 -0000
+Subject: LVM2 lib/metadata/metadata.c tools/vgmerge.c t ...
+Message-ID: <20101214175114.26172.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=908555459f0abbcda687882439589209528e1dc0
-Commit:        908555459f0abbcda687882439589209528e1dc0
-Parent:        f6f2737015746b1b6c7fbd0d297a4596c584749b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Oct 12 14:41:58 2022 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Oct 12 15:14:59 2022 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2010-12-14 17:51:11
 
-toollib: do not process just created historical LV
+Modified files:
+	lib/metadata   : metadata.c 
+	tools          : vgmerge.c vgsplit.c 
 
-When executing process_each_lv_in_vg, we process live LVs first and
-after that, we process any historical LVs. In case we have just removed
-an LV, which also means we have just made it "historical" and so it
-appears as fresh item in vg->historical_lvs list, we have to skip it
-when we get to processing historical LVs inside the same process_each_lv_in_vg
-call.
+Log message:
+	Add further consistency checking to vg_validate, ensuring that all segment
+	areas point to LVs or PVs that are listed in the respective VG.
 
-The simplest approach here, without introducing another LV list, is to
-simply mark such historical LVs as "fresh" directly in struct
-historical_logical_volume when we have just removed the original LV
-and created the historical LV for it. Then, we just need to check the
-flag when processing historical LVs and skip it if it is "fresh".
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.417&r2=1.418
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
 
-When we read historical LVs out of metadata, they are marked as
-"not fresh" and so they can be processed as usual.
-
-This was mainly an issue in conjuction with -S|--select use:
-
-	#  lvmconfig --type diff
-	metadata {
-		record_lvs_history=1
-	}
-
-(In this example, a thin pool with lvol1 thin LV and lvol2 and lvol3 snapshots.)
-
-	#  lvs -H vg -o name,pool_lv,full_ancestors,full_descendants
-	  LV    Pool FAncestors  FDescendants
-	  lvol1 pool             lvol2,lvol3
-	  lvol2 pool lvol1       lvol3
-	  lvol3 pool lvol2,lvol1
-	  pool
-
-	#  lvremove -S 'name=lvol2'
-	  Logical volume "lvol2" successfully removed.
-	  Historical logical volume "lvol2" successfully removed.
-
-...here, the historical LV lvol2 should not have been removed because
-we have just removed its original non-historical lvol2 and the fresh
-historical lvol2 must not be included in the same processing spree.
----
- WHATS_NEW                 | 1 +
- lib/metadata/lv.h         | 1 +
- lib/metadata/pool_manip.c | 1 +
- tools/toollib.c           | 3 +++
- 4 files changed, 6 insertions(+)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e29ec7066..2942b0e53 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.17 - 
- ===============================
-+  Fix 'lvremove -S|--select LV' to not also remove its historical LV right away.
-   Fix lv_active field type to binary so --select and --binary applies properly.
-   Switch to use mallinfo2 and use it only with glibc.
-   Error out in lvm shell if using a cmd argument not supported in the shell.
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 304ee2f7d..e591a9510 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -93,6 +93,7 @@ struct historical_logical_volume {
- 	struct dm_list indirect_glvs; /* list of struct generic_logical_volume */
- 	unsigned checked:1; /* set if this historical LV has been checked for validity */
- 	unsigned valid:1;   /* historical LV is valid if there's at least one live LV among ancestors */
-+	unsigned fresh:1;   /* historical LV has just been created (the original LV just removed) */
- };
+--- LVM2/lib/metadata/metadata.c	2010/12/14 17:07:35	1.417
++++ LVM2/lib/metadata/metadata.c	2010/12/14 17:51:09	1.418
+@@ -2153,6 +2153,61 @@
+ 	}
+ }
  
- struct generic_logical_volume {
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index a6bfc2deb..559b07ba8 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -169,6 +169,7 @@ static struct glv_list *_init_historical_glvl(struct dm_pool *mem, struct lv_seg
- 	hlv->name = seg->lv->name;
- 	hlv->vg = seg->lv->vg;
- 	hlv->timestamp = seg->lv->timestamp;
-+	hlv->fresh = 1;
- 	dm_list_init(&hlv->indirect_glvs);
- 
- 	glvl->glv->is_historical = 1;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index e45afb6ee..5305e811b 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3450,6 +3450,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 				goto_out;
- 			}
- 
-+			if (glvl->glv->historical->fresh)
-+				continue;
++/*
++ * Check that an LV and all its PV references are correctly listed in vg->lvs
++ * and vg->pvs, respectively. This only looks at a single LV, but *not* at the
++ * LVs it is using. To do the latter, you should use _lv_postorder with this
++ * function. C.f. vg_validate.
++ */
++static int _lv_validate_references_single(struct logical_volume *lv, void *data)
++{
++	struct volume_group *vg = lv->vg;
++	struct lv_segment *lvseg;
++	struct pv_list *pvl;
++	struct lv_list *lvl;
++	int s;
++	int r = 1;
++	int ok = 0;
 +
- 			process_lv = process_all;
++	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (lvl->lv == lv) {
++			ok = 1;
++			break;
++		}
++	}
++
++	if (!ok) {
++		log_error(INTERNAL_ERROR
++			  "Referenced LV %s not listed in VG %s.",
++			  lv->name, vg->name);
++		r = 0;
++	}
++
++	dm_list_iterate_items(lvseg, &lv->segments) {
++		for (s = 0; s < lvseg->area_count; ++s) {
++			if (seg_type(lvseg, s) == AREA_PV) {
++				ok = 0;
++				/* look up the reference in vg->pvs */
++				dm_list_iterate_items(pvl, &vg->pvs) {
++					if (pvl->pv == seg_pv(lvseg, s)) {
++						ok = 1;
++						break;
++					}
++				}
++
++				if (!ok) {
++					log_error(INTERNAL_ERROR
++						  "Referenced PV %s not listed in VG %s.",
++						  pv_dev_name(seg_pv(lvseg, s)), vg->name);
++					r = 0;
++				}
++			}
++		}
++	}
++
++	return r;
++}
++
+ int vg_validate(struct volume_group *vg)
+ {
+ 	struct pv_list *pvl, *pvl2;
+@@ -2320,6 +2375,11 @@
+ 	}
  
- 			if (lvargs_supplied &&
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
++		if (!_lv_postorder(lvl->lv, _lv_validate_references_single, NULL))
++			r = 0;
++	}
++
++	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		if (!(lvl->lv->status & PVMOVE))
+ 			continue;
+ 		dm_list_iterate_items(seg, &lvl->lv->segments) {
+--- LVM2/tools/vgmerge.c	2010/12/08 20:50:51	1.70
++++ LVM2/tools/vgmerge.c	2010/12/14 17:51:10	1.71
+@@ -114,6 +114,10 @@
+ 		}
+ 	}
+ 
++	dm_list_iterate_items(lvl1, &vg_from->lvs) {
++		lvl1->lv->vg = vg_to;
++	}
++
+ 	while (!dm_list_empty(&vg_from->lvs)) {
+ 		struct dm_list *lvh = vg_from->lvs.n;
+ 
+--- LVM2/tools/vgsplit.c	2010/12/08 20:50:51	1.103
++++ LVM2/tools/vgsplit.c	2010/12/14 17:51:10	1.104
+@@ -34,6 +34,7 @@
+ 	struct logical_volume *lv = dm_list_item(lvh, struct lv_list)->lv;
+ 
+ 	dm_list_move(&vg_to->lvs, lvh);
++	lv->vg = vg_to;
+ 
+ 	if (lv_is_active(lv)) {
+ 		log_error("Logical volume \"%s\" must be inactive", lv->name);
+
 
