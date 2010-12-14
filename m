@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 14:20:53 -0000
-Subject: LVM2/lib/format_pool disk_rep.c
-Message-ID: <20101220142053.29593.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 14 Dec 2010 17:38:44 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20101214173844.18697.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 14:20:52
+Changes by:	mornfall at sourceware.org	2010-12-14 17:38:42
 
 Modified files:
-	lib/format_pool: disk_rep.c 
+	test           : Makefile.in 
 
 Log message:
-	Add internal error if pointer is uninitialized
-	
-	Add simple check for existance of 'pl' and printer internal error message
-	if device is missing instead of plain crash.
+	Hack up the RUN_BASE computation in the test Makefile.in a bit more (so that it
+	actually works... sometimes).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/disk_rep.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.47&r2=1.48
 
---- LVM2/lib/format_pool/disk_rep.c	2010/07/09 15:34:44	1.17
-+++ LVM2/lib/format_pool/disk_rep.c	2010/12/20 14:20:52	1.18
-@@ -263,6 +263,11 @@
- 		 */
- 		if (!sp_count) {
- 			/* FIXME pl left uninitialised if !info->dev */
-+			if (!pl) {
-+				log_error(INTERNAL_ERROR "device is missing");
-+				dm_pool_destroy(tmpmem);
-+				return 0;
-+			}
- 			sp_count = pl->pd.pl_subpools;
- 			if (!(sp_devs =
- 			      dm_pool_zalloc(tmpmem,
+--- LVM2/test/Makefile.in	2010/12/12 21:17:25	1.47
++++ LVM2/test/Makefile.in	2010/12/14 17:38:42	1.48
+@@ -29,7 +29,7 @@
+ S ?= @ # never match anything by default
+ VERBOSE ?= 0
+ RUN = $(shell find $(srcdir) -regextype posix-egrep \( -name t-\*.sh -or -path */api/\*.sh \) -and -regex "$(srcdir)/.*($(T)).*" -and -not -regex "$(srcdir)/.*($(S)).*" | sort)
+-RUN_BASE = $(shell echo $(RUN) | sed -e s,^$(srcdir)/,,)
++RUN_BASE = $(shell echo $(RUN) | xargs -n 1 echo | sed -e s,^$(srcdir)/,,)
+ 
+ # Shell quote;
+ SHELL_PATH_SQ = $(subst ','\'',$(SHELL_PATH))
 
 
