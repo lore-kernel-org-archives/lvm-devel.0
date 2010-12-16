@@ -1,37 +1,35 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Dec 2010 11:36:24 +0100
-Subject: [PATCH 16/20] Remove dead store in lvm_run_command
+Date: Thu, 16 Dec 2010 11:36:25 +0100
+Subject: [PATCH 17/20] Remove dead assignment in dev_manager_transient
 In-Reply-To: <cover.1292495195.git.zkabelac@redhat.com>
 References: <cover.1292495195.git.zkabelac@redhat.com>
-Message-ID: <19010510f66ed4c645542dfdfca293b1a361fed1.1292495195.git.zkabelac@redhat.com>
+Message-ID: <56ef3120aa631c388eb13c8d0dae970dc44225e5.1292495195.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'ret' is not read before its next assignment.
+'segh' is never read after this assignment - remove it.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/lvmcmdline.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index dcb1f28..836dbaa 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1064,8 +1064,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	set_cmd_name(cmd->command->name);
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 0bc658b..f950ca3 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -620,7 +620,7 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
  
- 	if (arg_count(cmd, config_ARG))
--		if ((ret = override_config_tree_from_string(cmd,
--			     arg_str_value(cmd, config_ARG, "")))) {
-+		if (override_config_tree_from_string(cmd,
-+		    arg_str_value(cmd, config_ARG, ""))) {
- 			ret = EINVALID_CMD_LINE;
- 			goto_out;
- 		}
+ 	} while (next);
+ 
+-	if ((segh = dm_list_next(&lv->segments, segh))) {
++	if (dm_list_next(&lv->segments, segh)) {
+ 		log_error("Number of segments in active LV %s does not "
+ 			  "match metadata", lv->name);
+ 		goto out;
 -- 
 1.7.3.3
 
