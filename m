@@ -1,35 +1,38 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Dec 2010 11:36:25 +0100
-Subject: [PATCH 17/20] Remove dead assignment in dev_manager_transient
+Date: Thu, 16 Dec 2010 11:36:26 +0100
+Subject: [PATCH 18/20] Remove dead assignment in _remove
 In-Reply-To: <cover.1292495195.git.zkabelac@redhat.com>
 References: <cover.1292495195.git.zkabelac@redhat.com>
-Message-ID: <56ef3120aa631c388eb13c8d0dae970dc44225e5.1292495195.git.zkabelac@redhat.com>
+Message-ID: <3f4bd971a96d2cf811a0d80cdfedc85ddf21d39d.1292495195.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'segh' is never read after this assignment - remove it.
+'r' is not read - remove it.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/dmsetup.c |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 0bc658b..f950ca3 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -620,7 +620,7 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 56f1579..ae223d6 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1386,10 +1386,8 @@ error:
  
- 	} while (next);
+ static int _remove(int argc, char **argv, void *data __attribute__((unused)))
+ {
+-	int r;
+-
+ 	if (_switches[FORCE_ARG] && argc > 1)
+-		r = _error_device(argc, argv, NULL);
++		_error_device(argc, argv, NULL);
  
--	if ((segh = dm_list_next(&lv->segments, segh))) {
-+	if (dm_list_next(&lv->segments, segh)) {
- 		log_error("Number of segments in active LV %s does not "
- 			  "match metadata", lv->name);
- 		goto out;
+ 	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
+ }
 -- 
 1.7.3.3
 
