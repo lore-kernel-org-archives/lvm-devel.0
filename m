@@ -1,38 +1,35 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 Oct 2022 17:36:10 +0000 (GMT)
-Subject: main - lvmlockd: fix warning
-Message-ID: <20221011173610.C8F8E3858D28@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Dec 2010 11:36:12 +0100
+Subject: [PATCH 04/20] Remove wrong cast to (char*)
+In-Reply-To: <cover.1292495195.git.zkabelac@redhat.com>
+References: <cover.1292495195.git.zkabelac@redhat.com>
+Message-ID: <84c785966181f3aa1e3c14839bf3e8e4cf23b60f.1292495195.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=657df00c9615ea5abb6faf4c21f01f90de17b207
-Commit:        657df00c9615ea5abb6faf4c21f01f90de17b207
-Parent:        fc01dd89006bc0a37351cca9332244bfa8d2f096
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 11 12:35:38 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Oct 11 12:35:38 2022 -0500
 
-lvmlockd: fix warning
-
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/lvmlockd/lvmlockd-dlm.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ liblvm/lvm_base.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index 01bec6f43..d262fa281 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -222,7 +222,7 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+index f8e1004..9e1a8ec 100644
+--- a/liblvm/lvm_base.c
++++ b/liblvm/lvm_base.c
+@@ -61,7 +61,7 @@ lvm_t lvm_init(const char *system_dir)
+ 	 * archive() call.  Possible example:
+ 	 * cmd_line = "lvm_vg_create: vg1\nlvm_vg_extend vg1 /dev/sda1\n"
+ 	 */
+-	cmd->cmd_line = (char *)"liblvm";
++	cmd->cmd_line = "liblvm";
  
- #define DLM_COMMS_PATH "/sys/kernel/config/dlm/cluster/comms"
- #define LOCK_LINE_MAX 1024
--static int get_local_nodeid()
-+static int get_local_nodeid(void)
- {
- 	struct dirent *de;
- 	DIR *ls_dir;
+ 	return (lvm_t) cmd;
+ }
+-- 
+1.7.3.3
+
 
