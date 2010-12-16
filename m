@@ -1,41 +1,39 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Dec 2010 11:36:16 +0100
-Subject: [PATCH 08/20] Use const char * for name and old_name in vg
+Date: Thu, 16 Dec 2010 11:36:17 +0100
+Subject: [PATCH 09/20] Replace stack trace with failure exit path
 In-Reply-To: <cover.1292495195.git.zkabelac@redhat.com>
 References: <cover.1292495195.git.zkabelac@redhat.com>
-Message-ID: <2dcef398948bb7111e271c87b561973b3417a255.1292495195.git.zkabelac@redhat.com>
+Message-ID: <9b6eb395e36beced8b714db6cc9ff5ac5cdf0dd6.1292495195.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Turn pointers to const char - to avoid changes of these struct
-members. (Having better control over, were the members could
-be modified).
+WARNING: functional change!
 
-Idea for future: system_id should be probably  char[NAME_LEN]
+It looks like bug - an error return should be here
+ - but the code currently ignores fail in engine construction
+ - is there any use of rfilter without engine ?
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/vg.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/filters/filter-regex.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index eb9debc..448dcfe 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -43,8 +43,8 @@ struct volume_group {
- 	uint64_t status;
+diff --git a/lib/filters/filter-regex.c b/lib/filters/filter-regex.c
+index d7c079e..e046c71 100644
+--- a/lib/filters/filter-regex.c
++++ b/lib/filters/filter-regex.c
+@@ -137,7 +137,7 @@ static int _build_matcher(struct rfilter *rf, const struct config_value *val)
+ 	 */
+ 	if (!(rf->engine = dm_regex_create(rf->mem, (const char **) regex,
+ 					   count)))
+-		stack;
++		goto_out;
+ 	r = 1;
  
- 	struct id id;
--	char *name;
--	char *old_name;		/* Set during vgrename and vgcfgrestore */
-+	const char *name;
-+	const char *old_name;		/* Set during vgrename and vgcfgrestore */
- 	char *system_id;
- 
- 	uint32_t extent_size;
+       out:
 -- 
 1.7.3.3
 
