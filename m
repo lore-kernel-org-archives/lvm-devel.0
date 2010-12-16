@@ -1,146 +1,138 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Dec 2010 11:56:20 +0100
-Subject: [PATCH 2/3] Stop calling fs_unlock() and dm_udev_wait()
+Date: Thu, 16 Dec 2010 11:56:21 +0100
+Subject: [PATCH 3/3] Add fs_unlock calls
 In-Reply-To: <cover.1292496056.git.zkabelac@redhat.com>
 References: <cover.1292496056.git.zkabelac@redhat.com>
-Message-ID: <72f39c1bd8ababe16da15d94ced7128bbc7a6e8b.1292496056.git.zkabelac@redhat.com>
+Message-ID: <e0a34706b95b7077e7d0db90c1cace819ac2c70f.1292496056.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Stop calling fs_unlock() from lv_de/activate()
+Add lvm_do_unlock_fs()
 
-Start using internal fs cookie for dm_tree
+Call fs_unlock() when unlocking vg where implicit unlock solves the
+problem also for cluster - thus no extra command for clustering
+environment is required - only lvm_do_unlock_fs() function is add
+to call lvm's fs_unlock() while holding lvm_lock mutex in clvmd.
 
-Stop directly calling dm_udev_wait() and
-dm_tree_set/get_cookie() from activate code -
-it's now handled through fs_unlock function.
-
-define HAVE_UNLOCK_FS is used for quick compare of how the perfomace
-is improved when it is in use - commit will be without define and
-remove fs_unlock() from lv_deactivate() and _lv_activate().
+Add fs_unlock() also to set_lv() so the system waits until device
+is ready for regular open (usully wiping device begining).
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/activate.c    |    5 +++++
- lib/activate/dev_manager.c |   23 ++++++-----------------
- 2 files changed, 11 insertions(+), 17 deletions(-)
+ daemons/clvmd/clvmd-command.c |    1 +
+ daemons/clvmd/lvm-functions.c |    8 ++++++++
+ daemons/clvmd/lvm-functions.h |    1 +
+ include/.symlinks.in          |    1 +
+ lib/locking/file_locking.c    |    2 ++
+ lib/metadata/lv_manip.c       |    4 ++++
+ 6 files changed, 17 insertions(+), 0 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 88cb184..8f4953b 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -35,6 +35,7 @@
- #include <unistd.h>
+diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
+index 915fcc7..4c3e704 100644
+--- a/daemons/clvmd/clvmd-command.c
++++ b/daemons/clvmd/clvmd-command.c
+@@ -214,6 +214,7 @@ static int lock_vg(struct local_client *client)
+ 	if (lkid == 0)
+ 	    return EINVAL;
  
- #define _skip(fmt, args...) log_very_verbose("Skipping: " fmt , ## args)
-+#define HAVE_UNLOCK_FS 1
++	lvm_do_unlock_fs(); /* Wait for devices */
+ 	status = sync_unlock(lockname, lkid);
+ 	if (status)
+ 	    status = errno;
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index 214f229..dcdad6b 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -30,6 +30,7 @@
+ #include "activate.h"
+ #include "archiver.h"
+ #include "memlock.h"
++#include "fs.h"
  
- int lvm1_present(struct cmd_context *cmd)
- {
-@@ -1206,7 +1207,9 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
- 	memlock_inc(cmd);
- 	r = _lv_deactivate(lv);
- 	memlock_dec(cmd);
-+#ifndef HAVE_UNLOCK_FS
- 	fs_unlock();
-+#endif
+ #include <syslog.h>
  
- 	if (!lv_info(cmd, lv, 0, &info, 1, 0) || info.exists)
- 		r = 0;
-@@ -1305,7 +1308,9 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 	if (!(r = _lv_activate_lv(lv, 0)))
- 		stack;
- 	memlock_dec(cmd);
-+#ifndef HAVE_UNLOCK_FS
- 	fs_unlock();
-+#endif
+@@ -894,6 +895,13 @@ struct dm_hash_node *get_next_excl_lock(struct dm_hash_node *v, char **name)
+ 	return v;
+ }
  
- 	if (r && !monitor_dev_for_events(cmd, lv, 0, 1))
- 		stack;
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 2a72bb2..0bc658b 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1617,7 +1617,6 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
- 	struct dm_tree_node *child;
- 	char *vgname, *lvname, *layer;
- 	const char *name, *uuid;
--	int r;
- 
- 	while ((child = dm_tree_next_child(&handle, root, 0))) {
- 		if (!(name = dm_tree_node_get_name(child)))
-@@ -1639,12 +1638,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
- 		if (non_toplevel_tree_dlid && !strcmp(non_toplevel_tree_dlid, uuid))
- 			continue;
- 
--		dm_tree_set_cookie(root, 0);
--		r = dm_tree_deactivate_children(root, uuid, strlen(uuid));
--		if (!dm_udev_wait(dm_tree_get_cookie(root)))
--			stack;
--
--		if (!r)
-+		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid)))
- 			return_0;
- 	}
- 
-@@ -1664,9 +1658,11 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
- 
- 	if (!(root = dm_tree_find_node(dtree, 0, 0))) {
- 		log_error("Lost dependency tree root node");
--		goto out;
-+		goto out_no_root;
- 	}
- 
-+	dm_tree_set_cookie(root, fs_get_cookie());
++void lvm_do_unlock_fs(void)
++{
++	pthread_mutex_lock(&lvm_lock);
++	fs_unlock();
++	pthread_mutex_unlock(&lvm_lock);
++}
 +
- 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, origin_only ? "real" : NULL)))
- 		goto_out;
+ /* Called to initialise the LVM context of the daemon */
+ int init_clvm(int using_gulm, char **argv)
+ {
+diff --git a/daemons/clvmd/lvm-functions.h b/daemons/clvmd/lvm-functions.h
+index 97153d4..6558863 100644
+--- a/daemons/clvmd/lvm-functions.h
++++ b/daemons/clvmd/lvm-functions.h
+@@ -36,5 +36,6 @@ extern char *get_last_lvm_error(void);
+ extern void do_lock_vg(unsigned char command, unsigned char lock_flags,
+ 		      char *resource);
+ extern struct dm_hash_node *get_next_excl_lock(struct dm_hash_node *v, char **name);
++void lvm_do_unlock_fs(void);
  
-@@ -1679,10 +1675,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ #endif
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index c16e107..263c530 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -2,6 +2,7 @@
+ @top_srcdir@/daemons/dmeventd/libdevmapper-event.h
+ @top_srcdir@/liblvm/lvm2app.h
+ @top_srcdir@/lib/activate/activate.h
++ at top_srcdir@/lib/activate/fs.h
+ @top_srcdir@/lib/activate/targets.h
+ @top_srcdir@/lib/cache/lvmcache.h
+ @top_srcdir@/lib/commands/errors.h
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index 9137a30..7538626 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -22,6 +22,7 @@
+ #include "lvm-file.h"
+ #include "lvm-string.h"
+ #include "lvmcache.h"
++#include "fs.h"
+ 
+ #include <limits.h>
+ #include <unistd.h>
+@@ -215,6 +216,7 @@ static int _lock_file(const char *file, uint32_t flags)
+ 		state = 'W';
  		break;
- 	case DEACTIVATE:
-  		/* Deactivate LV and all devices it references that nothing else has open. */
--		dm_tree_set_cookie(root, 0);
- 		r = dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
--		if (!dm_udev_wait(dm_tree_get_cookie(root)))
--			stack;
- 		if (!r)
- 			goto_out;
- 		if (!_remove_lv_symlinks(dm, root))
-@@ -1703,10 +1696,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
- 			goto_out;
+ 	case LCK_UNLOCK:
++		fs_unlock();
+ 		return _release_lock(file, 1);
+ 	default:
+ 		log_error("Unrecognised lock type: %d", flags & LCK_TYPE_MASK);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6f553cd..0de4ec3 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -26,6 +26,7 @@
+ #include "archiver.h"
+ #include "activate.h"
+ #include "str_list.h"
++#include "fs.h"
  
- 		/* Preload any devices required before any suspensions */
--		dm_tree_set_cookie(root, 0);
- 		r = dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
--		if (!dm_udev_wait(dm_tree_get_cookie(root)))
--			stack;
- 		if (!r)
- 			goto_out;
+ struct lv_names {
+ 	const char *old;
+@@ -3017,6 +3018,9 @@ int set_lv(struct cmd_context *cmd, struct logical_volume *lv,
+ 		return 0;
+ 	}
  
-@@ -1714,10 +1704,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
- 			dm->flush_required = 1;
++	/* Wait until devices are available */
++	fs_unlock();
++
+ 	log_verbose("Clearing start of logical volume \"%s\"", lv->name);
  
- 		if (action == ACTIVATE) {
--			dm_tree_set_cookie(root, 0);
- 			r = dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
--			if (!dm_udev_wait(dm_tree_get_cookie(root)))
--				stack;
- 			if (!r)
- 				goto_out;
- 			if (!_create_lv_symlinks(dm, root)) {
-@@ -1735,6 +1722,8 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
- 	r = 1;
- 
- out:
-+	fs_set_cookie(dm_tree_get_cookie(root));
-+out_no_root:
- 	dm_tree_free(dtree);
- 
- 	return r;
+ 	if (!(dev = dev_cache_get(name, NULL))) {
 -- 
 1.7.3.3
 
