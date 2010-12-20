@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 13:58:39 -0000
-Subject: LVM2/daemons/cmirrord functions.c
-Message-ID: <20101220135839.18301.qmail@sourceware.org>
+Date: 20 Dec 2010 13:59:52 -0000
+Subject: LVM2/tools lvmcmdline.c
+Message-ID: <20101220135952.18682.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 13:58:39
+Changes by:	zkabelac at sourceware.org	2010-12-20 13:59:52
 
 Modified files:
-	daemons/cmirrord: functions.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Removed unused pointer
+	Remove dead store in lvm_run_command
 	
-	Pointer 'duplicate' is unused.
+	Variable 'ret' is not read before its next assignment.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
 
---- LVM2/daemons/cmirrord/functions.c	2010/12/20 13:57:19	1.26
-+++ LVM2/daemons/cmirrord/functions.c	2010/12/20 13:58:38	1.27
-@@ -366,7 +366,6 @@
- 	uint64_t region_size;
- 	uint64_t region_count;
- 	struct log_c *lc = NULL;
--	struct log_c *duplicate;
- 	enum sync log_sync = DEFAULTSYNC;
- 	uint32_t block_on_error = 0;
+--- LVM2/tools/lvmcmdline.c	2010/12/20 13:16:30	1.135
++++ LVM2/tools/lvmcmdline.c	2010/12/20 13:59:52	1.136
+@@ -1064,8 +1064,8 @@
+ 	set_cmd_name(cmd->command->name);
  
-@@ -448,8 +447,8 @@
- 	strncpy(lc->uuid, uuid, DM_UUID_LEN);
- 	lc->luid = luid;
- 
--	if ((duplicate = get_log(lc->uuid, lc->luid)) ||
--	    (duplicate = get_pending_log(lc->uuid, lc->luid))) {
-+	if (get_log(lc->uuid, lc->luid) ||
-+	    get_pending_log(lc->uuid, lc->luid)) {
- 		LOG_ERROR("[%s/%" PRIu64 "u] Log already exists, unable to create.",
- 			  SHORT_UUID(lc->uuid), lc->luid);
- 		dm_free(lc);
+ 	if (arg_count(cmd, config_ARG))
+-		if ((ret = override_config_tree_from_string(cmd,
+-			     arg_str_value(cmd, config_ARG, "")))) {
++		if (override_config_tree_from_string(cmd,
++		    arg_str_value(cmd, config_ARG, ""))) {
+ 			ret = EINVALID_CMD_LINE;
+ 			goto_out;
+ 		}
 
 
