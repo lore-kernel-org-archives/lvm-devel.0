@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 14:08:46 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/dmeventd.c
-Message-ID: <20101220140846.24389.qmail@sourceware.org>
+Date: 20 Dec 2010 14:20:53 -0000
+Subject: LVM2/lib/format_pool disk_rep.c
+Message-ID: <20101220142053.29593.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 14:08:46
+Changes by:	zkabelac at sourceware.org	2010-12-20 14:20:52
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/dmeventd: dmeventd.c 
+	lib/format_pool: disk_rep.c 
 
 Log message:
-	Add check for unlink errors
+	Add internal error if pointer is uninitialized
+	
+	Add simple check for existance of 'pl' and printer internal error message
+	if device is missing instead of plain crash.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1846&r2=1.1847
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/disk_rep.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
 
---- LVM2/WHATS_NEW	2010/12/20 13:57:19	1.1846
-+++ LVM2/WHATS_NEW	2010/12/20 14:08:46	1.1847
-@@ -1,5 +1,6 @@
- Version 2.02.79 -  
- ===================================
-+  Add check for unlink error result in remove_lockfile() (dmeventd).
-   Use dm_free for dm_malloc-ed areas in _clog_ctr/_clog_dtr (cmirrord).
-   Add checks for allocation errors in config node clonning.
-   Fix error path if regex engine cannot be created in _build_matcher().
---- LVM2/daemons/dmeventd/dmeventd.c	2010/12/13 10:43:57	1.72
-+++ LVM2/daemons/dmeventd/dmeventd.c	2010/12/20 14:08:46	1.73
-@@ -1642,7 +1642,8 @@
- 
- static void remove_lockfile(void)
- {
--	unlink(DMEVENTD_PIDFILE);
-+	if (unlink(DMEVENTD_PIDFILE))
-+		perror(DMEVENTD_PIDFILE ": unlink failed");
- }
- 
- static void _daemonize(void)
+--- LVM2/lib/format_pool/disk_rep.c	2010/07/09 15:34:44	1.17
++++ LVM2/lib/format_pool/disk_rep.c	2010/12/20 14:20:52	1.18
+@@ -263,6 +263,11 @@
+ 		 */
+ 		if (!sp_count) {
+ 			/* FIXME pl left uninitialised if !info->dev */
++			if (!pl) {
++				log_error(INTERNAL_ERROR "device is missing");
++				dm_pool_destroy(tmpmem);
++				return 0;
++			}
+ 			sp_count = pl->pd.pl_subpools;
+ 			if (!(sp_devs =
+ 			      dm_pool_zalloc(tmpmem,
 
 
