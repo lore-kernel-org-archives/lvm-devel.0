@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 14:06:33 -0000
-Subject: LVM2/lib/format1 format1.c
-Message-ID: <20101220140633.23325.qmail@sourceware.org>
+Date: 20 Dec 2010 14:08:46 -0000
+Subject: LVM2 ./WHATS_NEW daemons/dmeventd/dmeventd.c
+Message-ID: <20101220140846.24389.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,35 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 14:06:33
+Changes by:	zkabelac at sourceware.org	2010-12-20 14:08:46
 
 Modified files:
-	lib/format1    : format1.c 
+	.              : WHATS_NEW 
+	daemons/dmeventd: dmeventd.c 
 
 Log message:
-	Remove unused variable label
-	
-	Variable 'label' is unused in _format1_pv_write().
+	Add check for unlink errors
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1846&r2=1.1847
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
 
---- LVM2/lib/format1/format1.c	2010/12/20 13:32:49	1.126
-+++ LVM2/lib/format1/format1.c	2010/12/20 14:06:33	1.127
-@@ -428,13 +428,12 @@
- 	struct dm_pool *mem;
- 	struct disk_list *dl;
- 	struct dm_list pvs;
--	struct label *label;
- 	struct lvmcache_info *info;
+--- LVM2/WHATS_NEW	2010/12/20 13:57:19	1.1846
++++ LVM2/WHATS_NEW	2010/12/20 14:08:46	1.1847
+@@ -1,5 +1,6 @@
+ Version 2.02.79 -  
+ ===================================
++  Add check for unlink error result in remove_lockfile() (dmeventd).
+   Use dm_free for dm_malloc-ed areas in _clog_ctr/_clog_dtr (cmirrord).
+   Add checks for allocation errors in config node clonning.
+   Fix error path if regex engine cannot be created in _build_matcher().
+--- LVM2/daemons/dmeventd/dmeventd.c	2010/12/13 10:43:57	1.72
++++ LVM2/daemons/dmeventd/dmeventd.c	2010/12/20 14:08:46	1.73
+@@ -1642,7 +1642,8 @@
  
- 	if (!(info = lvmcache_add(fmt->labeller, (char *) &pv->id, pv->dev,
- 				  pv->vg_name, NULL, 0)))
- 		return_0;
--	label = info->label;
-+
- 	info->device_size = pv->size << SECTOR_SHIFT;
- 	info->fmt = fmt;
+ static void remove_lockfile(void)
+ {
+-	unlink(DMEVENTD_PIDFILE);
++	if (unlink(DMEVENTD_PIDFILE))
++		perror(DMEVENTD_PIDFILE ": unlink failed");
+ }
  
+ static void _daemonize(void)
 
 
