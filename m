@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 15 Dec 2010 12:49:55 -0000
-Subject: LVM2 ./WHATS_NEW lib/device/device.c
-Message-ID: <20101215124955.7535.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 20 Dec 2010 13:48:29 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20101220134829.14860.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,77 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-12-15 12:49:55
+Changes by:	zkabelac at sourceware.org	2010-12-20 13:48:28
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/device     : device.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Fix device.c #include to ensure 64-bit fopen64 use. (2.02.51)  (robbat2)
+	Replace multiple fprintf calls with one large string parameter
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1837&r2=1.1838
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
 
---- LVM2/WHATS_NEW	2010/12/13 10:49:02	1.1837
-+++ LVM2/WHATS_NEW	2010/12/15 12:49:55	1.1838
-@@ -1,5 +1,6 @@
- Version 2.02.79 -  
- ===================================
-+  Fix device.c #include to ensure 64-bit fopen64 use. (2.02.51)
-   Create /var/run/lvm directory during clvmd initialisation if missing.
-   Use new dm_prepare_selinux_context instead of dm_set_selinux_context.
-   Avoid revalidating the label cache immediately after scanning.
---- LVM2/lib/device/device.c	2010/10/20 15:07:30	1.35
-+++ LVM2/lib/device/device.c	2010/12/15 12:49:55	1.36
-@@ -13,7 +13,6 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
+--- LVM2/daemons/clvmd/clvmd.c	2010/12/13 10:49:03	1.88
++++ LVM2/daemons/clvmd/clvmd.c	2010/12/20 13:48:28	1.89
+@@ -143,38 +143,37 @@
+ static if_type_t parse_cluster_interface(char *ifname);
+ static if_type_t get_cluster_type(void);
  
--#include <libgen.h> /* dirname, basename */
- #include "lib.h"
- #include "lvm-types.h"
- #include "device.h"
-@@ -21,6 +20,8 @@
- #include "filter.h"
- #include "xlate.h"
+-static void usage(char *prog, FILE *file)
++static void usage(const char *prog, FILE *file)
+ {
+-	fprintf(file, "Usage:\n");
+-	fprintf(file, "%s [Vhd]\n", prog);
+-	fprintf(file, "\n");
+-	fprintf(file, "   -V       Show version of clvmd\n");
+-	fprintf(file, "   -h       Show this help information\n");
+-	fprintf(file, "   -d       Set debug level\n");
+-	fprintf(file, "            If starting clvmd then don't fork, run in the foreground\n");
+-	fprintf(file, "   -R       Tell all running clvmds in the cluster to reload their device cache\n");
+-	fprintf(file, "   -S       Restart clvmd, preserving exclusive locks\n");
+-	fprintf(file, "   -C       Sets debug level (from -d) on all clvmd instances clusterwide\n");
+-	fprintf(file, "   -t<secs> Command timeout (default 60 seconds)\n");
+-	fprintf(file, "   -T<secs> Startup timeout (default none)\n");
+-	fprintf(file, "   -I<cmgr> Cluster manager (default: auto)\n");
+-	fprintf(file, "            Available cluster managers: ");
++	fprintf(file, "Usage:\n"
++		"%s [Vhd]\n\n"
++		"   -V       Show version of clvmd\n"
++		"   -h       Show this help information\n"
++		"   -d       Set debug level\n"
++		"            If starting clvmd then don't fork, run in the foreground\n"
++		"   -R       Tell all running clvmds in the cluster to reload their device cache\n"
++		"   -S       Restart clvmd, preserving exclusive locks\n"
++		"   -C       Sets debug level (from -d) on all clvmd instances clusterwide\n"
++		"   -t<secs> Command timeout (default 60 seconds)\n"
++		"   -T<secs> Startup timeout (default none)\n"
++		"   -I<cmgr> Cluster manager (default: auto)\n"
++		"            Available cluster managers: "
+ #ifdef USE_COROSYNC
+-	fprintf(file, "corosync ");
++		"corosync "
+ #endif
+ #ifdef USE_CMAN
+-	fprintf(file, "cman ");
++		"cman "
+ #endif
+ #ifdef USE_OPENAIS
+-	fprintf(file, "openais ");
++		"openais "
+ #endif
+ #ifdef USE_GULM
+-	fprintf(file, "gulm ");
++		"gulm "
+ #endif
+ #ifdef USE_SINGLENODE
+-	fprintf(file, "singlenode");
++		"singlenode "
+ #endif
+-	fprintf(file, "\n");
++		"\n", prog);
+ }
  
-+#include <libgen.h> /* dirname, basename */
-+
- /* See linux/genhd.h and fs/partitions/msdos */
- 
- #define PART_MAGIC 0xAA55
+ /* Called to signal the parent how well we got on during initialisation */
 
 
