@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 13:39:13 -0000
-Subject: LVM2/libdm libdevmapper.h
-Message-ID: <20101220133913.7994.qmail@sourceware.org>
+Date: 20 Dec 2010 13:40:47 -0000
+Subject: LVM2/lib/metadata vg.h
+Message-ID: <20101220134047.8645.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 13:39:13
+Changes by:	zkabelac at sourceware.org	2010-12-20 13:40:46
 
 Modified files:
-	libdm          : libdevmapper.h 
+	lib/metadata   : vg.h 
 
 Log message:
-	Use const char* for offset calculation
+	Use const char * for name and old_name in vg
 	
-	As 'const' types are also passed to macro dm_list_struct_base -
-	keep offset calculation with const char pointers.
-	Fixes several gcc constness warnings.
+	Switch to use const char pointers to avoid changes of these structure
+	members and having better control over, were these members could
+	be modified.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/libdm/libdevmapper.h	2010/12/20 13:23:12	1.130
-+++ LVM2/libdm/libdevmapper.h	2010/12/20 13:39:12	1.131
-@@ -814,7 +814,7 @@
-  * contained in a structure of type t, return the containing structure.
-  */
- #define dm_list_struct_base(v, t, head) \
--    ((t *)((char*)(v) - (char*)&((t *) 0)->head))
-+    ((t *)((const char *)(v) - (const char *)&((t *) 0)->head))
+--- LVM2/lib/metadata/vg.h	2010/11/09 12:34:43	1.8
++++ LVM2/lib/metadata/vg.h	2010/12/20 13:40:46	1.9
+@@ -43,8 +43,8 @@
+ 	uint64_t status;
  
- /*
-  * Given the address v of an instance of 'struct dm_list list' contained in
+ 	struct id id;
+-	char *name;
+-	char *old_name;		/* Set during vgrename and vgcfgrestore */
++	const char *name;
++	const char *old_name;		/* Set during vgrename and vgcfgrestore */
+ 	char *system_id;
+ 
+ 	uint32_t extent_size;
 
 
