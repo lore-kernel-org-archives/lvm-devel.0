@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Dec 2010 14:05:32 -0000
-Subject: LVM2/tools toollib.c
-Message-ID: <20101220140532.22941.qmail@sourceware.org>
+Date: 20 Dec 2010 14:06:33 -0000
+Subject: LVM2/lib/format1 format1.c
+Message-ID: <20101220140633.23325.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-20 14:05:32
+Changes by:	zkabelac at sourceware.org	2010-12-20 14:06:33
 
 Modified files:
-	tools          : toollib.c 
+	lib/format1    : format1.c 
 
 Log message:
-	Remove unused variable dev_dir_provided
+	Remove unused variable label
+	
+	Variable 'label' is unused in _format1_pv_write().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.217&r2=1.218
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
 
---- LVM2/tools/toollib.c	2010/12/08 20:50:51	1.217
-+++ LVM2/tools/toollib.c	2010/12/20 14:05:31	1.218
-@@ -842,7 +842,6 @@
- 	const char *vg_name = lv_name;
- 	char *st;
- 	char *dev_dir = cmd->dev_dir;
--	int dev_dir_provided = 0;
+--- LVM2/lib/format1/format1.c	2010/12/20 13:32:49	1.126
++++ LVM2/lib/format1/format1.c	2010/12/20 14:06:33	1.127
+@@ -428,13 +428,12 @@
+ 	struct dm_pool *mem;
+ 	struct disk_list *dl;
+ 	struct dm_list pvs;
+-	struct label *label;
+ 	struct lvmcache_info *info;
  
- 	/* Path supplied? */
- 	if (vg_name && strchr(vg_name, '/')) {
-@@ -854,7 +853,6 @@
- 		}
- 		if (!strncmp(vg_name, dev_dir, strlen(dev_dir))) {
- 			vg_name += strlen(dev_dir);
--			dev_dir_provided = 1;
- 			while (*vg_name == '/')
- 				vg_name++;
- 		}
+ 	if (!(info = lvmcache_add(fmt->labeller, (char *) &pv->id, pv->dev,
+ 				  pv->vg_name, NULL, 0)))
+ 		return_0;
+-	label = info->label;
++
+ 	info->device_size = pv->size << SECTOR_SHIFT;
+ 	info->fmt = fmt;
+ 
 
 
