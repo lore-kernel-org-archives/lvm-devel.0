@@ -1,31 +1,38 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 21 Dec 2010 18:32:02 +0100
-Subject: [PATCH 15/23] Add test check for find_config_str
-In-Reply-To: <0b3634555ba5dfe0300d98e5da7511faa13dcbc5.1292945707.git.zkabelac@redhat.com>
+Date: Tue, 21 Dec 2010 18:38:55 +0100
+Subject: [PATCH 17/23] Add check for dm_snprintf result
+In-Reply-To: <a8e673868df6582ac8916843f7f5c77d8dcdb2cf.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<0b3634555ba5dfe0300d98e5da7511faa13dcbc5.1292945707.git.zkabelac@redhat.com>
-Message-ID: <4D10E492.6090805@redhat.com>
+	<a8e673868df6582ac8916843f7f5c77d8dcdb2cf.1292945707.git.zkabelac@redhat.com>
+Message-ID: <4D10E62F.6070201@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
+>  		/* If the VG name is empty then lock the unused PVs */
+> -		if (is_orphan_vg(resource) || is_global_vg(resource) || (flags & LCK_CACHE))
+> -			dm_snprintf(lockname, sizeof(lockname), "P_%s",
+> -				    resource);
+> -		else
+> -			dm_snprintf(lockname, sizeof(lockname), "V_%s",
+> -				    resource);
+> +		if (dm_snprintf(lockname, sizeof(lockname), "%c_%s",
+> +				(is_orphan_vg(resource) ||
+> +				 is_global_vg(resource) ||
+> +				 (flags & LCK_CACHE)) ?  'P' : 'V',
+> +				resource)  < 0) {
+> +			log_error("Locking resource %s too long.", resource);
+> +			return 0;
+> +		}
 
-> -	*desc = dm_pool_strdup(mem, d);
-> +	*desc = (d) ? dm_pool_strdup(mem, d) : NULL;
+I cannot imagine how this can happen. First parm is fixed char, second is resource string
+with exact length. And char lockname[PATH_MAX];
 
-dm_pool_strdup(NULL) tries to alloc 1 byte and returning pointer, 
-and not setting to \0 and calling strlen(NULL).
+Should we check for glibc and clompiler bugs also? :)
 
-dunno what was the intention here.
-
-> -	get_config_uint32(cft->root, "creation_time", &u);
-> +	(void) get_config_uint32(cft->root, "creation_time", &u);
-
-What's wrong here? I thought that this is needed only
-if is defined with warn_if_unused_result?
+Well, isn't return_0 here enough?
 
 Milan
 
