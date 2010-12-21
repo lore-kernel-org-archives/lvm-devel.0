@@ -1,54 +1,39 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:41:46 +0100
-Subject: [PATCH 14/23] Add stack trace for backup and backup_remove
+Date: Tue, 21 Dec 2010 16:41:47 +0100
+Subject: [PATCH 15/23] Add test check for find_config_str
 In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-Message-ID: <80140cb22b102c7bb6fbefd5e04fe1ba937e2789.1292945707.git.zkabelac@redhat.com>
+Message-ID: <0b3634555ba5dfe0300d98e5da7511faa13dcbc5.1292945707.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add missing 'stack' traces for errors.
+It looks like there should be some error code returned from _read_desc
+when something fails.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/metadata.c |    3 ++-
- tools/vgrename.c        |    6 ++++--
- 2 files changed, 6 insertions(+), 3 deletions(-)
+ lib/format_text/import_vsn1.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5f75a66..27abaea 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -611,7 +611,8 @@ int vg_remove(struct volume_group *vg)
- 		}
- 	}
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index e5e83d4..5a2d664 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -842,9 +842,9 @@ static void _read_desc(struct dm_pool *mem,
+ 	old_suppress = log_suppress(1);
+ 	d = find_config_str(cft->root, "description", "");
+ 	log_suppress(old_suppress);
+-	*desc = dm_pool_strdup(mem, d);
++	*desc = (d) ? dm_pool_strdup(mem, d) : NULL;
  
--	backup_remove(vg->cmd, vg->name);
-+	if (!backup_remove(vg->cmd, vg->name))
-+		stack;
+-	get_config_uint32(cft->root, "creation_time", &u);
++	(void) get_config_uint32(cft->root, "creation_time", &u);
+ 	*when = u;
+ }
  
- 	if (ret)
- 		log_print("Volume group \"%s\" successfully removed", vg->name);
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 98be9a9..6739ebb 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -164,8 +164,10 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
- 		}
- 	}
- 
--	backup(vg);
--	backup_remove(cmd, vg_name_old);
-+	if (!backup(vg))
-+                stack;
-+	if (!backup_remove(cmd, vg_name_old))
-+                stack;
- 
- 	unlock_vg(cmd, vg_name_new);
- 	unlock_and_free_vg(cmd, vg, vg_name_old);
 -- 
 1.7.3.4
 
