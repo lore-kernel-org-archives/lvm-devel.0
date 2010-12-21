@@ -1,10 +1,10 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 21 Dec 2010 18:47:30 +0100
-Subject: [PATCH 18/23] Return PERCENT_INVALID for error case
-In-Reply-To: <988f227f76fc6371eeed50b7120887c701a582d2.1292945707.git.zkabelac@redhat.com>
+Date: Tue, 21 Dec 2010 18:55:58 +0100
+Subject: [PATCH 19/23] Warning - dead code problem elimination
+In-Reply-To: <2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<988f227f76fc6371eeed50b7120887c701a582d2.1292945707.git.zkabelac@redhat.com>
-Message-ID: <4D10E832.2090801@redhat.com>
+	<2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
+Message-ID: <4D10EA2E.8080404@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,15 +12,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
-> +	if (!lv_mirror_percent(lv->vg->cmd, (struct logical_volume *) lv,
-> +			   0, &perc, NULL))
-> +		perc = PERCENT_INVALID;
-> +	return perc;
+> @@ -653,8 +653,7 @@ static int _event_wait(struct thread_status *thread, struct dm_task **task)
+>  	if (dm_task_run(dmt)) {
+>  		thread->current_events |= DM_EVENT_DEVICE_ERROR;
+>  		ret = DM_WAIT_INTR;
+> -
+> -		if ((ret = dm_task_get_info(dmt, &info)))
+> +		if (dm_task_get_info(dmt, &info))
+>  			thread->event_nr = info.event_nr;
+>  	} else if (thread->events & DM_EVENT_TIMEOUT && errno == EINTR) {
+>  		thread->current_events |= DM_EVENT_TIMEOUT;
 
-dunno, these functions returns 0 if (!activation()) and if lv is not activated
- is the PERCENT_INVALID (-1) correct value here?
+#define DM_WAIT_RETRY 0
+#define DM_WAIT_INTR 1
 
-But it is apparent bug, it returns undefined value in API now.
+dm_task_get_info returns 0/1 - it is probably intended such way?
+
+I think you should return DM_WAIT_RETRY if info fails then (so the code _was_ correct)?
+
+mornfall? :)
 
 Milan
 
