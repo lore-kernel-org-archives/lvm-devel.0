@@ -1,44 +1,67 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:41:37 +0100
-Subject: [PATCH 05/23] Remove dead assignment in vgconvert_single
+Date: Tue, 21 Dec 2010 16:41:38 +0100
+Subject: [PATCH 06/23] Log of pthread_join operation
 In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-Message-ID: <2bf1127a19c1b88a3a5d37701967d486b7b54371.1292945707.git.zkabelac@redhat.com>
+Message-ID: <430a5babe48297b2305a3a67a0e0e013f86408de.1292945707.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'pe_end' is not used - remove it.
+Value jstat is unused - so replace it with logging via log_sys_error().
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/vgconvert.c |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ daemons/clvmd/clvmd.c |   13 +++++++------
+ 1 files changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-index acae0fc..7d1ee19 100644
---- a/tools/vgconvert.c
-+++ b/tools/vgconvert.c
-@@ -26,7 +26,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
- 	struct dm_list mdas;
- 	int pvmetadatacopies = 0;
- 	uint64_t pvmetadatasize = 0;
--	uint64_t pe_end = 0, pe_start = 0;
-+	uint64_t pe_start = 0;
- 	struct pv_list *pvl;
- 	int change_made = 0;
- 	struct lvinfo info;
-@@ -119,8 +119,6 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
- 		existing_pv = pvl->pv;
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index a6839f4..7bb28a3 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -666,7 +666,6 @@ static int local_pipe_callback(struct local_client *thisfd, char *buf,
  
- 		pe_start = pv_pe_start(existing_pv);
--		pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv)
--		    + pe_start - 1;
+ 	/* EOF on pipe or an error, close it */
+ 	if (len <= 0) {
+-		int jstat;
+ 		void *ret = &status;
+ 		close(thisfd->fd);
  
- 		dm_list_init(&mdas);
- 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
+@@ -677,7 +676,9 @@ static int local_pipe_callback(struct local_client *thisfd, char *buf,
+ 
+ 		/* Reap child thread */
+ 		if (thisfd->bits.pipe.threadid) {
+-			jstat = pthread_join(thisfd->bits.pipe.threadid, &ret);
++			if (pthread_join(thisfd->bits.pipe.threadid, &ret))
++				log_sys_error("pthread_join", "");
++
+ 			thisfd->bits.pipe.threadid = 0;
+ 			if (thisfd->bits.pipe.client != NULL)
+ 				thisfd->bits.pipe.client->bits.localsock.
+@@ -1039,7 +1040,6 @@ static int read_from_local_sock(struct local_client *thisfd)
+ 	/* EOF or error on socket */
+ 	if (len <= 0) {
+ 		int *status;
+-		int jstat;
+ 
+ 		DEBUGLOG("EOF on local socket: inprogress=%d\n",
+ 			 thisfd->bits.localsock.in_progress);
+@@ -1066,9 +1066,10 @@ static int read_from_local_sock(struct local_client *thisfd)
+ 			pthread_cond_signal(&thisfd->bits.localsock.cond);
+ 			pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
+ 
+-			jstat =
+-			    pthread_join(thisfd->bits.localsock.threadid,
+-					 (void **) &status);
++			if (pthread_join(thisfd->bits.localsock.threadid,
++					 (void **) &status))
++				log_sys_error("pthread_join", "");
++
+ 			DEBUGLOG("Joined child thread\n");
+ 
+ 			thisfd->bits.localsock.threadid = 0;
 -- 
 1.7.3.4
 
