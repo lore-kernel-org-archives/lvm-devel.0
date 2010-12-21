@@ -1,48 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:41:55 +0100
-Subject: [PATCH 23/23] Remove dead assignment in vg_split_mdas
-In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 21 Dec 2010 17:20:03 +0100
+Subject: [PATCH 04/23] Remove dead assignment of lock_flags
+In-Reply-To: <0662c43178e50334f41961cbb83743e9eb7e5e53.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-Message-ID: <9c9444b0a208344231b42cb5197d45a377452304.1292945707.git.zkabelac@redhat.com>
+	<0662c43178e50334f41961cbb83743e9eb7e5e53.1292945707.git.zkabelac@redhat.com>
+Message-ID: <4D10D3B3.1070003@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'common_mda' is assigned again with next code line.
+On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
+> @@ -204,7 +203,6 @@ static int lock_vg(struct local_client *client)
+>  
+>      lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+>      lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
+> -    lock_flags = args[1];
+>      lockname = &args[2];
 
-Why is the result not important from the first call?
-CHECKME!
+I intentionally kept unused args[1] here because it is clear how the request look like
+without searching code, IOW
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/metadata/metadata.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+- 0 byte is command
+- 1 byte flags
+- 2 lockname
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 27abaea..ebd19fa 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1263,15 +1263,14 @@ int vg_split_mdas(struct cmd_context *cmd __attribute__((unused)),
- {
- 	struct dm_list *mdas_from_in_use, *mdas_to_in_use;
- 	struct dm_list *mdas_from_ignored, *mdas_to_ignored;
--	int common_mda = 0;
-+	int common_mda;
- 
- 	mdas_from_in_use = &vg_from->fid->metadata_areas_in_use;
- 	mdas_from_ignored = &vg_from->fid->metadata_areas_ignored;
- 	mdas_to_in_use = &vg_to->fid->metadata_areas_in_use;
- 	mdas_to_ignored = &vg_to->fid->metadata_areas_ignored;
- 
--	common_mda = _move_mdas(vg_from, vg_to,
--				mdas_from_in_use, mdas_to_in_use);
-+	_move_mdas(vg_from, vg_to, mdas_from_in_use, mdas_to_in_use);
- 	common_mda = _move_mdas(vg_from, vg_to,
- 				mdas_from_ignored, mdas_to_ignored);
- 
--- 
-1.7.3.4
+So any possible changes is easy on place.
+Yes, it should be struct and should use some friendly names. But now there is byte array...
+
+Complier is clever enough to remove that code.
+
+I do not care what some stupid static analysis says, the code is more readable with
+"dead" variable for me.
+
+Milan
 
 
