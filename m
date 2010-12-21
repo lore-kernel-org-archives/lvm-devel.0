@@ -1,46 +1,35 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:41:51 +0100
-Subject: [PATCH 19/23] Warning - dead code problem elimination
+Date: Tue, 21 Dec 2010 16:41:52 +0100
+Subject: [PATCH 20/23] exit if lvmchache_init fails
 In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-Message-ID: <2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
+Message-ID: <a643f11abefe02b16de3b627c882b438cb7d4f57.1292945707.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Original code assign  ret = DM_WAIT_INTR and immediately
-reassing this value with result code from dm_task_get_info.
-
-It's not quite clear how such result code is supposed to
-fit DM_WAIT defines used in this function (maybe wrong merge?)
-
-Maybe it's actually wrong to assing ret with dm_task_get_info.
-So reather then removing line:  ret = DM_WAIT_INTR
-patch removes later assignment.
-
-CHECKME!!!
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/dmeventd/dmeventd.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ tools/polldaemon.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 2b454f9..e5adc4d 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -653,8 +653,7 @@ static int _event_wait(struct thread_status *thread, struct dm_task **task)
- 	if (dm_task_run(dmt)) {
- 		thread->current_events |= DM_EVENT_DEVICE_ERROR;
- 		ret = DM_WAIT_INTR;
--
--		if ((ret = dm_task_get_info(dmt, &info)))
-+		if (dm_task_get_info(dmt, &info))
- 			thread->event_nr = info.event_nr;
- 	} else if (thread->events & DM_EVENT_TIMEOUT && errno == EINTR) {
- 		thread->current_events |= DM_EVENT_TIMEOUT;
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 50579ba..bcc649f 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -64,7 +64,8 @@ static int _become_daemon(struct cmd_context *cmd)
+ 	strncpy(*cmd->argv, "(lvm2)", strlen(*cmd->argv));
+ 
+ 	reset_locking();
+-	lvmcache_init();
++	if (!lvmcache_init())
++		_exit(ECMD_FAILED);
+ 	dev_close_all();
+ 
+ 	return 1;
 -- 
 1.7.3.4
 
