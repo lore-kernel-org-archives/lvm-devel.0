@@ -1,52 +1,46 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:41:50 +0100
-Subject: [PATCH 18/23] Return PERCENT_INVALID for error case
+Date: Tue, 21 Dec 2010 16:41:51 +0100
+Subject: [PATCH 19/23] Warning - dead code problem elimination
 In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-Message-ID: <988f227f76fc6371eeed50b7120887c701a582d2.1292945707.git.zkabelac@redhat.com>
+Message-ID: <2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the percent value could not be determined - return PERCENT_INVALD.
-Indent function with tabs.
+Original code assign  ret = DM_WAIT_INTR and immediately
+reassing this value with result code from dm_task_get_info.
+
+It's not quite clear how such result code is supposed to
+fit DM_WAIT defines used in this function (maybe wrong merge?)
+
+Maybe it's actually wrong to assing ret with dm_task_get_info.
+So reather then removing line:  ret = DM_WAIT_INTR
+patch removes later assignment.
+
+CHECKME!!!
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/report/properties.c |   15 +++++++++------
- 1 files changed, 9 insertions(+), 6 deletions(-)
+ daemons/dmeventd/dmeventd.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 0b4929a..06e11ba 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -87,15 +87,18 @@ static int _not_implemented_set(void *obj, struct lvm_property_type *prop)
- }
- 
- static percent_t _copy_percent(const struct logical_volume *lv) {
--    percent_t perc;
--    lv_mirror_percent(lv->vg->cmd, (struct logical_volume *) lv, 0, &perc, NULL);
--    return perc;
-+	percent_t perc;
-+	if (!lv_mirror_percent(lv->vg->cmd, (struct logical_volume *) lv,
-+			   0, &perc, NULL))
-+		perc = PERCENT_INVALID;
-+	return perc;
- }
- 
- static percent_t _snap_percent(const struct logical_volume *lv) {
--    percent_t perc;
--    lv_snapshot_percent(lv, &perc);
--    return perc;
-+	percent_t perc;
-+	if (!lv_snapshot_percent(lv, &perc))
-+		perc = PERCENT_INVALID;
-+	return perc;
- }
- 
- /* PV */
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 2b454f9..e5adc4d 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -653,8 +653,7 @@ static int _event_wait(struct thread_status *thread, struct dm_task **task)
+ 	if (dm_task_run(dmt)) {
+ 		thread->current_events |= DM_EVENT_DEVICE_ERROR;
+ 		ret = DM_WAIT_INTR;
+-
+-		if ((ret = dm_task_get_info(dmt, &info)))
++		if (dm_task_get_info(dmt, &info))
+ 			thread->event_nr = info.event_nr;
+ 	} else if (thread->events & DM_EVENT_TIMEOUT && errno == EINTR) {
+ 		thread->current_events |= DM_EVENT_TIMEOUT;
 -- 
 1.7.3.4
 
