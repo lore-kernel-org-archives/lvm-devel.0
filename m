@@ -1,59 +1,69 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 21 Dec 2010 16:15:26 +0100
-Subject: [PATCH 13/29] Put some FIXME warnings in lvmcache_update_vg processing
-In-Reply-To: <24b600ce0d709f07f4628826b950770ce6190dc6.1290682013.git.zkabelac@redhat.com>
-References: <cover.1290682013.git.zkabelac@redhat.com>
-	<24b600ce0d709f07f4628826b950770ce6190dc6.1290682013.git.zkabelac@redhat.com>
-Message-ID: <4D10C48E.3020607@redhat.com>
+Date: Tue, 21 Dec 2010 16:41:32 +0100
+Subject: [PATCH 00/23] Static analyzis set
+Message-ID: <cover.1292945707.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 25.11.2010 11:55, Zdenek Kabelac napsal(a):
-> It's not clear how this code is supposed to work.
-> For now we never set INCONSISTENT_VG flag - so marking expression with
-> big FIXME as it always gives true.
-> Remove extra paramater from lvmcache_update_vg call - as it effectively
-> produced always 'false' - so reverting to previous version - where it has been
-> possible to get also 'true' - use case is probably only in cluster
-> environment - some testcase is needed.
-> 
-> Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
-> ---
->  lib/metadata/metadata.c |    5 +++--
->  1 files changed, 3 insertions(+), 2 deletions(-)
-> 
-> diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-> index 743d633..fd5d024 100644
-> --- a/lib/metadata/metadata.c
-> +++ b/lib/metadata/metadata.c
-> @@ -2679,6 +2679,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
->  	 * the missing PV logic below.
->  	 */
->  	if ((correct_vg = lvmcache_get_vg(vgid, precommitted)) &&
-> +	    /* FIXME: Expression is always TRUE - as we never set INCONSISTENT_VG! */
->  	    (use_precommitted || !*consistent || !(correct_vg->status & INCONSISTENT_VG))) {
->  		if (!(correct_vg->status & INCONSISTENT_VG))
->  			*consistent = 1;
-> @@ -2935,8 +2936,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
->  	 * If there is no precommitted metadata, committed metadata
->  	 * is read and stored in the cache even if use_precommitted is set
->  	 */
-> -	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED &
-> -			   (inconsistent ? INCONSISTENT_VG : 0));
-> +	/* FIXME: How to handle INCONSISTENT_VG? */
-> +	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
->  
->  	if (inconsistent) {
->  		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
+This is mostly the last bigger patch sets for covering
+issues reported by Coverity tool.
+
+Few patches needs some closer looking,
+Most of them are trivial, but as they may present
+some forgotten tests or missing code I'm posting
+them for review.
 
 
-Any opinion about this patch ?
-(missed in review)
+Zdenek Kabelac (23):
+  Remove dead assignment to thisfd
+  Remove dead assignment
+  Remove dead assigment of mirr_state
+  Remove dead assignment of lock_flags
+  Remove dead assignment in vgconvert_single
+  Log of pthread_join operation
+  Move  lastfd handling into for()
+  Fix memory leak in error path of restart_clvmd
+  Add test for errors in _setup_task
+  Fix memory leak of dev_filter on error path
+  Add stack traces for archive
+  Add tests for dm_task_set operations
+  Make it obvious this code is not used
+  Add stack trace for backup and backup_remove
+  Add test check for find_config_str
+  Remove check for vg != NULL
+  Add check for dm_snprintf result
+  Return PERCENT_INVALID for error case
+  Warning - dead code problem elimination
+  exit if lvmchache_init fails
+  Add default error path for get_property
+  Remove dead assignment in dm_event_get_registered_device
+  Remove dead assignment in vg_split_mdas
 
+ daemons/clvmd/clvmd-command.c         |    3 +-
+ daemons/clvmd/clvmd.c                 |   25 ++++++++++---------
+ daemons/dmeventd/dmeventd.c           |    3 +-
+ daemons/dmeventd/libdevmapper-event.c |   41 +++++++++++++++++---------------
+ lib/activate/dev_manager.c            |   21 ++++++++++------
+ lib/commands/toolcontext.c            |    2 +
+ lib/filters/filter-persistent.c       |   22 ++++++++++++-----
+ lib/format_text/archiver.c            |    9 +++++--
+ lib/format_text/import_vsn1.c         |   18 ++++++--------
+ lib/locking/cluster_locking.c         |   14 ++++++-----
+ lib/locking/file_locking.c            |   16 +++++++++---
+ lib/metadata/metadata.c               |    8 +++---
+ lib/mirror/mirrored.c                 |    3 --
+ lib/report/properties.c               |   15 +++++++-----
+ liblvm/lvm_misc.c                     |    4 +++
+ tools/lvscan.c                        |    6 -----
+ tools/polldaemon.c                    |    3 +-
+ tools/vgconvert.c                     |    4 +--
+ tools/vgrename.c                      |    6 +++-
+ 19 files changed, 125 insertions(+), 98 deletions(-)
 
-Zdenek
+--
+1.7.3.4
 
 
