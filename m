@@ -1,10 +1,9 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 21 Dec 2010 18:55:58 +0100
-Subject: [PATCH 19/23] Warning - dead code problem elimination
-In-Reply-To: <2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
+Date: Tue, 21 Dec 2010 19:09:01 +0100
+Subject: [PATCH 00/23] Static analyzis set
+In-Reply-To: <cover.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
-Message-ID: <4D10EA2E.8080404@redhat.com>
+Message-ID: <4D10ED3D.9010106@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,25 +11,17 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
-> @@ -653,8 +653,7 @@ static int _event_wait(struct thread_status *thread, struct dm_task **task)
->  	if (dm_task_run(dmt)) {
->  		thread->current_events |= DM_EVENT_DEVICE_ERROR;
->  		ret = DM_WAIT_INTR;
-> -
-> -		if ((ret = dm_task_get_info(dmt, &info)))
-> +		if (dm_task_get_info(dmt, &info))
->  			thread->event_nr = info.event_nr;
->  	} else if (thread->events & DM_EVENT_TIMEOUT && errno == EINTR) {
->  		thread->current_events |= DM_EVENT_TIMEOUT;
+> This is mostly the last bigger patch sets for covering
+> issues reported by Coverity tool.
 
-#define DM_WAIT_RETRY 0
-#define DM_WAIT_INTR 1
+If it help to stop spamming list, my ACK for:
+2,3,6,8,9,11,12,13,14,16,20,21,22,23
 
-dm_task_get_info returns 0/1 - it is probably intended such way?
+(No, these are not numbers from National Lottery and
+you did not won $1,000,000:-)
 
-I think you should return DM_WAIT_RETRY if info fails then (so the code _was_ correct)?
-
-mornfall? :)
+others I do not like but but do not care (no comment)
+or ... see comment:)
 
 Milan
 
