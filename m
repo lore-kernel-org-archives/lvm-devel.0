@@ -1,45 +1,47 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 22 Dec 2010 10:35:45 +0100
-Subject: [PATCH 19/23] Warning - dead code problem elimination
-In-Reply-To: <4D10EA2E.8080404@redhat.com> (Milan Broz's message of "Tue, 21
-	Dec 2010 18:55:58 +0100")
-References: <cover.1292945707.git.zkabelac@redhat.com>
-	<2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
-	<4D10EA2E.8080404@redhat.com>
-Message-ID: <87mxny2lqm.fsf@twilight.int.mornfall.net.>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 22 Dec 2010 11:00:41 +0100
+Subject: [PATCH 15/23] Add test check for find_config_str
+In-Reply-To: <4D10E492.6090805@redhat.com>
+References: <cover.1292945707.git.zkabelac@redhat.com>	<0b3634555ba5dfe0300d98e5da7511faa13dcbc5.1292945707.git.zkabelac@redhat.com>
+	<4D10E492.6090805@redhat.com>
+Message-ID: <4D11CC49.1070609@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Milan Broz <mbroz@redhat.com> writes:
-
+Dne 21.12.2010 18:32, Milan Broz napsal(a):
 > On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
->> @@ -653,8 +653,7 @@ static int _event_wait(struct thread_status *thread, struct dm_task **task)
->>  	if (dm_task_run(dmt)) {
->>  		thread->current_events |= DM_EVENT_DEVICE_ERROR;
->>  		ret = DM_WAIT_INTR;
->> -
->> -		if ((ret = dm_task_get_info(dmt, &info)))
->> +		if (dm_task_get_info(dmt, &info))
->>  			thread->event_nr = info.event_nr;
->>  	} else if (thread->events & DM_EVENT_TIMEOUT && errno == EINTR) {
->>  		thread->current_events |= DM_EVENT_TIMEOUT;
->
-> #define DM_WAIT_RETRY 0
-> #define DM_WAIT_INTR 1
->
-> dm_task_get_info returns 0/1 - it is probably intended such way?
->
-> I think you should return DM_WAIT_RETRY if info fails then (so the code _was_ correct)?
->
-> mornfall? :)
+> 
+>> -	*desc = dm_pool_strdup(mem, d);
+>> +	*desc = (d) ? dm_pool_strdup(mem, d) : NULL;
+> 
+> dm_pool_strdup(NULL) tries to alloc 1 byte and returning pointer, 
+> and not setting to \0 and calling strlen(NULL).
 
-Jeez, I wish I knew! I don't think I wrote this code. Anyway, it would
-make sense to add ret = DM_WAIT_RETRY in the else branch (i.e. get_info
-fails). Not that this is likely to ever trigger...
+hmm libdm/mm/pool.c - line 30
+It looks like fault case.
 
-Petr
+
+> 
+> dunno what was the intention here.
+> 
+>> -	get_config_uint32(cft->root, "creation_time", &u);
+>> +	(void) get_config_uint32(cft->root, "creation_time", &u);
+> 
+> What's wrong here? I thought that this is needed only
+> if is defined with warn_if_unused_result?
+> 
+
+When we ignore return value - we should do that explicitly
+when we test all other cases - it's being reported as suspicious.
+
+IMHO more important question here is - if it's correct to have
+this function returning void.
+
+Zdenek
+
+
 
 
