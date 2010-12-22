@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Dec 2010 13:45:34 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/archiver.c
-Message-ID: <20101222134534.18798.qmail@sourceware.org>
+Date: 22 Dec 2010 14:00:31 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20101222140031.22568.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-22 13:45:33
+Changes by:	zkabelac at sourceware.org	2010-12-22 14:00:30
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/format_text: archiver.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Add backtraces for archive and backup_locally
+	Fix last pthread_join fix commit
 	
-	If archive or back_locally fails - add stack trace.
+	Call for pthread_join() does not set errno value even though return values
+	looks like that. For now assign errno from return value and still use
+	strerror() to print some error message as this seems to be commonly used.
+	
+	Add also log_sys_error() message for error close of local pipe.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1852&r2=1.1853
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
 
---- LVM2/WHATS_NEW	2010/12/22 12:14:17	1.1852
-+++ LVM2/WHATS_NEW	2010/12/22 13:45:33	1.1853
-@@ -1,5 +1,6 @@
- Version 2.02.80 - 
- ====================================
-+  Add backtraces for archive and backup_locally in check_current_backup().
-   Fix memory leak in debug mode of restart_clvmd() error path.
-   Log error message for pthread_join() failure in clvmd.
+--- LVM2/daemons/clvmd/clvmd.c	2010/12/22 12:10:56	1.90
++++ LVM2/daemons/clvmd/clvmd.c	2010/12/22 14:00:28	1.91
+@@ -667,7 +667,8 @@
+ 	/* EOF on pipe or an error, close it */
+ 	if (len <= 0) {
+ 		void *ret = &status;
+-		close(thisfd->fd);
++		if (close(thisfd->fd))
++			log_sys_error("close", "local_pipe");
  
---- LVM2/lib/format_text/archiver.c	2010/12/08 20:50:49	1.35
-+++ LVM2/lib/format_text/archiver.c	2010/12/22 13:45:33	1.36
-@@ -452,9 +452,12 @@
- 	log_suppress(old_suppress);
+ 		/* Clear out the cross-link */
+ 		if (thisfd->bits.pipe.client != NULL)
+@@ -676,7 +677,8 @@
  
- 	if (vg_backup) {
--		archive(vg_backup);
-+		if (!archive(vg_backup))
-+			stack;
- 		free_vg(vg_backup);
- 	}
--	archive(vg);
--	backup_locally(vg);
-+	if (!archive(vg))
-+		stack;
-+	if (!backup_locally(vg))
-+		stack;
- }
+ 		/* Reap child thread */
+ 		if (thisfd->bits.pipe.threadid) {
+-			if (pthread_join(thisfd->bits.pipe.threadid, &ret))
++			if ((errno = pthread_join(thisfd->bits.pipe.threadid,
++						  &ret)))
+ 				log_sys_error("pthread_join", "");
+ 
+ 			thisfd->bits.pipe.threadid = 0;
+@@ -1068,8 +1070,8 @@
+ 			pthread_cond_signal(&thisfd->bits.localsock.cond);
+ 			pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
+ 
+-			if (pthread_join(thisfd->bits.localsock.threadid,
+-					 (void **) &status))
++			if ((errno = pthread_join(thisfd->bits.localsock.threadid,
++						  (void **) &status)))
+ 				log_sys_error("pthread_join", "");
+ 
+ 			DEBUGLOG("Joined child thread\n");
 
 
