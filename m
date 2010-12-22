@@ -1,53 +1,45 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 22 Dec 2010 11:05:14 +0100
-Subject: [PATCH 10/23] Fix memory leak of dev_filter on error path
-In-Reply-To: <4D10E22B.3020009@redhat.com>
-References: <cover.1292945707.git.zkabelac@redhat.com>	<f5f89efaed261f30fa5ce4b21aee5d567ca1f3c0.1292945707.git.zkabelac@redhat.com>
-	<4D10E22B.3020009@redhat.com>
-Message-ID: <4D11CD5A.5090104@redhat.com>
+Date: Wed, 22 Dec 2010 11:11:36 +0100
+Subject: [PATCH 04/23] Remove dead assignment of lock_flags
+In-Reply-To: <4D10D3B3.1070003@redhat.com>
+References: <cover.1292945707.git.zkabelac@redhat.com>
+	<0662c43178e50334f41961cbb83743e9eb7e5e53.1292945707.git.zkabelac@redhat.com>
+	<4D10D3B3.1070003@redhat.com>
+Message-ID: <4D11CED8.2070204@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 21.12.2010 18:21, Milan Broz napsal(a):
+Dne 21.12.2010 17:20, Milan Broz napsal(a):
 > On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
+>> @@ -204,7 +203,6 @@ static int lock_vg(struct local_client *client)
+>>  
+>>      lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+>>      lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
+>> -    lock_flags = args[1];
+>>      lockname = &args[2];
 > 
->> @@ -352,5 +357,8 @@ struct dev_filter *persistent_filter_create(struct dev_filter *real,
->>  		dm_hash_destroy(pf->devices);
->>  	dm_free(pf);
->>  	dm_free(f);
->> +
->> +     fail:
->> +	real->destroy(real);
->>  	return NULL;
->>  }
+> I intentionally kept unused args[1] here because it is clear how the request look like
+> without searching code, IOW
 > 
-> Why not move it to the caller instead - the same like previous two?
+> - 0 byte is command
+> - 1 byte flags
+> - 2 lockname
 > 
-> 	if (!(f4 = persistent_filter_create(f3, dev_cache))) {
-> 		log_error("Failed to create persistent device filter");
-> +		f3->destroy(f3); 
-> 		return 0;
-> 	}
+> So any possible changes is easy on place.
+> Yes, it should be struct and should use some friendly names. But now there is byte array...
 > 
+> Complier is clever enough to remove that code.
+> 
+> I do not care what some stupid static analysis says, the code is more readable with
+> "dead" variable for me.
 
-
-I'm not sure about the best logic - so used this as a plain proposal - of
-course both variants could be seen as valid. And as I've been already fixing
-error messages in the function it self, I've put the call of destructor there.
-
-My idea was - one the persistent_filter_create() is called - it takes
-ownership of the passed struct dev_filter.
-
-Your proposal means - that in error case the function doesn't take
-responsibility for this value and caller is supposed to cleanup.
-
-Do we agree on this semantic ?
+I always thought that's why /* comments */  were invented ;) for things like
+this, but anyway in this case if you prefer to keep the unused value present -
+I'll hide it only for my local scan-builds :)
 
 Zdenek
-
-
 
 
