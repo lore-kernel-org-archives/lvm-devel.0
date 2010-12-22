@@ -1,64 +1,41 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Dec 2010 14:00:31 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20101222140031.22568.qmail@sourceware.org>
+From: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+Date: Wed, 22 Dec 2010 14:49:01 +0100
+Subject: Release tarballs location
+Message-ID: <20101222144901.5d2bb8c7@surf>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-22 14:00:30
+Hello,
 
-Modified files:
-	daemons/clvmd  : clvmd.c 
+I am a contributor of Buildroot, a tool that allows to easily build
+embedded Linux systems. We create recipes to cross-compile software
+that are useful on embedded systems, and LVM2 is one of them.
 
-Log message:
-	Fix last pthread_join fix commit
-	
-	Call for pthread_join() does not set errno value even though return values
-	looks like that. For now assign errno from return value and still use
-	strerror() to print some error message as this seems to be commonly used.
-	
-	Add also log_sys_error() message for error close of local pipe.
+Unfortunately, it looks like when a release is made, the tarball is
+placed at ftp://sources.redhat.com/pub/lvm2/, but as once as a newer
+release is made, the previous tarball is moved into
+ftp://sources.redhat.com/pub/lvm2/old/. Unfortunately, this doesn't
+work well with how embedded Linux build systems work, since they code
+an URL and a version for each software they build. This is usually not
+a problem, since most of the software tarballs are available from a
+fixed location.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
+Would it be possible to change the release tarball location policy in
+order not to move them ? If you really want to have only the latest one
+in ftp://sources.redhat.com/pub/lvm2/, could you also put the latest
+available version in ftp://sources.redhat.com/pub/lvm2/old/ at the
+moment of the release ?
 
---- LVM2/daemons/clvmd/clvmd.c	2010/12/22 12:10:56	1.90
-+++ LVM2/daemons/clvmd/clvmd.c	2010/12/22 14:00:28	1.91
-@@ -667,7 +667,8 @@
- 	/* EOF on pipe or an error, close it */
- 	if (len <= 0) {
- 		void *ret = &status;
--		close(thisfd->fd);
-+		if (close(thisfd->fd))
-+			log_sys_error("close", "local_pipe");
- 
- 		/* Clear out the cross-link */
- 		if (thisfd->bits.pipe.client != NULL)
-@@ -676,7 +677,8 @@
- 
- 		/* Reap child thread */
- 		if (thisfd->bits.pipe.threadid) {
--			if (pthread_join(thisfd->bits.pipe.threadid, &ret))
-+			if ((errno = pthread_join(thisfd->bits.pipe.threadid,
-+						  &ret)))
- 				log_sys_error("pthread_join", "");
- 
- 			thisfd->bits.pipe.threadid = 0;
-@@ -1068,8 +1070,8 @@
- 			pthread_cond_signal(&thisfd->bits.localsock.cond);
- 			pthread_mutex_unlock(&thisfd->bits.localsock.mutex);
- 
--			if (pthread_join(thisfd->bits.localsock.threadid,
--					 (void **) &status))
-+			if ((errno = pthread_join(thisfd->bits.localsock.threadid,
-+						  (void **) &status)))
- 				log_sys_error("pthread_join", "");
- 
- 			DEBUGLOG("Joined child thread\n");
+Thank you very much!
+
+Thomas
+-- 
+Thomas Petazzoni, Free Electrons
+Kernel, drivers, real-time and embedded Linux
+development, consulting, training and support.
+http://free-electrons.com
 
 
