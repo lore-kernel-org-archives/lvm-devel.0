@@ -1,50 +1,44 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Dec 2010 15:44:10 -0000
-Subject: LVM2/lib/format_text import_vsn1.c
-Message-ID: <20101222154410.26105.qmail@sourceware.org>
+From: Robert Schwebel <r.schwebel@pengutronix.de>
+Date: Thu, 23 Dec 2010 11:04:37 +0100
+Subject: [Buildroot] Release tarballs location
+In-Reply-To: <20101222144901.5d2bb8c7@surf>
+References: <20101222144901.5d2bb8c7@surf>
+Message-ID: <20101223100437.GS4233@pengutronix.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-12-22 15:44:09
+Hello,
 
-Modified files:
-	lib/format_text: import_vsn1.c 
+On Wed, Dec 22, 2010 at 02:49:01PM +0100, Thomas Petazzoni wrote:
+> I am a contributor of Buildroot, a tool that allows to easily build
+> embedded Linux systems. We create recipes to cross-compile software
+> that are useful on embedded systems, and LVM2 is one of them.
+>
+> Unfortunately, it looks like when a release is made, the tarball is
+> placed at ftp://sources.redhat.com/pub/lvm2/, but as once as a newer
+> release is made, the previous tarball is moved into
+> ftp://sources.redhat.com/pub/lvm2/old/. Unfortunately, this doesn't
+> work well with how embedded Linux build systems work, since they code
+> an URL and a version for each software they build. This is usually not
+> a problem, since most of the software tarballs are available from a
+> fixed location.
+>
+> Would it be possible to change the release tarball location policy in
+> order not to move them ? If you really want to have only the latest one
+> in ftp://sources.redhat.com/pub/lvm2/, could you also put the latest
+> available version in ftp://sources.redhat.com/pub/lvm2/old/ at the
+> moment of the release ?
 
-Log message:
-	Remove check for existance of vg pointer
-	
-	Checking for vg being != NULL in this place is not needed.
-	Pointer vg is already dereferced in this function above this code line.
-	Also this internal function _read_pv is always called with valid 'vg' pointer.
+I second Thomas' position - we have the same problem in PTXdist as well.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
-
---- LVM2/lib/format_text/import_vsn1.c	2010/12/20 13:12:56	1.79
-+++ LVM2/lib/format_text/import_vsn1.c	2010/12/22 15:44:09	1.80
-@@ -257,14 +257,10 @@
- 		log_verbose("Fixing up missing size (%s) "
- 			    "for PV %s", display_size(fid->fmt->cmd, pv->size),
- 			    pv_dev_name(pv));
--		if (vg) {
--			size = pv->pe_count * (uint64_t) vg->extent_size +
--			       pv->pe_start;
--			if (size > pv->size)
--				log_warn("WARNING: Physical Volume %s is too "
--					 "large for underlying device",
--					 pv_dev_name(pv));
--		}
-+		size = pv->pe_count * (uint64_t) vg->extent_size + pv->pe_start;
-+		if (size > pv->size)
-+			log_warn("WARNING: Physical Volume %s is too large "
-+				 "for underlying device", pv_dev_name(pv));
- 	}
- 
- 	if (!alloc_pv_segment_whole_pv(mem, pv))
+Robert
+-- 
+Pengutronix e.K.                           |                             |
+Industrial Linux Solutions                 | http://www.pengutronix.de/  |
+Peiner Str. 6-8, 31137 Hildesheim, Germany | Phone: +49-5121-206917-0    |
+Amtsgericht Hildesheim, HRA 2686           | Fax:   +49-5121-206917-5555 |
 
 
