@@ -1,35 +1,40 @@
-From: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
-Date: Tue, 4 Jan 2011 16:02:59 +0100
-Subject: [Buildroot] Release tarballs location
-In-Reply-To: <20110104144901.GE13802@agk-dp.fab.redhat.com>
-References: <20101222144901.5d2bb8c7@surf>
-	<20101223100437.GS4233@pengutronix.de>
-	<20110104144901.GE13802@agk-dp.fab.redhat.com>
-Message-ID: <20110104160259.7b7745eb@surf>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 4 Jan 2011 21:16:58 -0000
+Subject: LVM2/scripts cmirrord_init_red_hat.in
+Message-ID: <20110104211658.15646.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Alasdair,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-01-04 21:16:56
 
-On Tue, 4 Jan 2011 14:49:01 +0000
-Alasdair G Kergon <agk@redhat.com> wrote:
+Modified files:
+	scripts        : cmirrord_init_red_hat.in 
 
-> OK - I've renamed 'old' to 'releases', put everything in there,
-> symlinked 'old' to it, and from now on will put new releases
-> in there immediately.
+Log message:
+	Fix bug 632681: cmirrord shouldn't fail 'start' if already started
+	
+	Return 0 from the cmirrord init script if the daemon is already
+	running.
+	
+	http://refspecs.freestandards.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/iniscrptact.html
 
-Awesome, thanks!
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/cmirrord_init_red_hat.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
-Regards,
-
-Thomas
--- 
-Thomas Petazzoni, Free Electrons
-Kernel, drivers, real-time and embedded Linux
-development, consulting, training and support.
-http://free-electrons.com
+--- LVM2/scripts/cmirrord_init_red_hat.in	2010/01/22 16:19:38	1.4
++++ LVM2/scripts/cmirrord_init_red_hat.in	2011/01/04 21:16:54	1.5
+@@ -21,6 +21,7 @@
+ 
+ start()
+ {
++	rtrn=0
+ 	if ! pidof $DAEMON > /dev/null 
+ 	then 
+ 		echo -n "Starting $DAEMON: "
 
 
