@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 3 Jan 2011 15:07:40 -0000
-Subject: LVM2/test/api percent.c
-Message-ID: <20110103150740.29956.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 4 Jan 2011 14:43:54 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
+Message-ID: <20110104144354.14530.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-03 15:07:40
+Changes by:	prajnoha at sourceware.org	2011-01-04 14:43:54
 
 Modified files:
-	test/api       : percent.c 
+	.              : WHATS_NEW_DM 
+	libdm          : libdevmapper.h 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Use system assert in test/api/percent.c, for now.
+	Export DM_CONTROL_NODE_UMASK and use it while creating /dev/mapper/control.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/percent.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.434&r2=1.435
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
 
---- LVM2/test/api/percent.c	2010/12/21 01:14:34	1.3
-+++ LVM2/test/api/percent.c	2011/01/03 15:07:39	1.4
-@@ -12,9 +12,10 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
+--- LVM2/WHATS_NEW_DM	2010/12/21 21:08:52	1.434
++++ LVM2/WHATS_NEW_DM	2011/01/04 14:43:53	1.435
+@@ -1,5 +1,6 @@
+ Version 1.02.61 - 
+ ====================================
++  Export DM_CONTROL_NODE_UMASK and use it while creating /dev/mapper/control.
  
--#include "lvm2app.h"
-+#undef NDEBUG
+ Version 1.02.60 - 20th December 2010
+ ====================================
+--- LVM2/libdm/libdevmapper.h	2010/12/20 13:39:12	1.131
++++ LVM2/libdm/libdevmapper.h	2011/01/04 14:43:54	1.132
+@@ -1219,6 +1219,7 @@
+ int dm_udev_wait(uint32_t cookie);
  
--#define assert(x) do { if (!(x)) goto bad; } while (0)
-+#include "lvm2app.h"
-+#include "assert.h"
+ #define DM_DEV_DIR_UMASK 0022
++#define DM_CONTROL_NODE_UMASK 0177
  
- int main(int argc, char *argv[])
- {
-@@ -52,13 +53,4 @@
- 
-         lvm_vg_close(vg);
-         return 0;
--
--bad:
--	if (handle && lvm_errno(handle))
--		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
--	if (vg)
--		lvm_vg_close(vg);
--	if (handle)
--		lvm_quit(handle);
--	return 1;
+ #ifdef __cplusplus
  }
+--- LVM2/libdm/ioctl/libdm-iface.c	2010/12/13 10:43:58	1.86
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/01/04 14:43:54	1.87
+@@ -282,12 +282,14 @@
+ 	log_verbose("Creating device %s (%u, %u)", control, major, minor);
+ 
+ 	(void) dm_prepare_selinux_context(control, S_IFCHR);
++	old_umask = umask(DM_CONTROL_NODE_UMASK);
+ 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
+ 		  MKDEV(major, minor)) < 0)  {
+ 		log_sys_error("mknod", control);
+ 		(void) dm_prepare_selinux_context(NULL, 0);
+ 		return 0;
+ 	}
++	umask(old_umask);
+ 	(void) dm_prepare_selinux_context(NULL, 0);
+ 
+ 	return 1;
 
 
