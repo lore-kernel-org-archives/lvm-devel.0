@@ -1,23 +1,36 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 4 Jan 2011 23:56:40 -0000
-Subject: LVM2/test/lib
-Message-ID: <20110104235640.26955.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Tue, 4 Jan 2011 23:59:08 +0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c tools ...
+In-Reply-To: <20101222153643.20331.qmail@sourceware.org>
+References: <20101222153643.20331.qmail@sourceware.org>
+Message-ID: <20110104235908.GC10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-04 23:56:39
+On Wed, Dec 22, 2010 at 03:36:43PM -0000, zkabelac at sourceware.org wrote:
+> 	Add backtraces for backup and backup_remove fail paths
+ 
+> +	if (!backup_remove(vg->cmd, vg->name))
+> +		stack;
+  
+We also have:
 
-LVM2/test/lib
+int backup_remove(struct cmd_context *cmd, const char *vg_name)
+{
+...
+        /*
+         * Let this fail silently.
+         */
+        unlink(path);
+        return 1;
+}
 
-Update of /cvs/lvm2/LVM2/test/lib
-In directory sourceware.org:/tmp/cvs-serv26948/test/lib
+I suggest you change that into a log_sys_debug() now rather than a void cast.
+(No harm logging ENOENT and could be useful to know that sometimes.)
 
-Log Message:
-Directory /cvs/lvm2/LVM2/test/lib added to the repository
+Alasdair
 
 
