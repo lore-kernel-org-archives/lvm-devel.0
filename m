@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 5 Jan 2011 12:17:20 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20110105121720.29669.qmail@sourceware.org>
+Date: 5 Jan 2011 12:27:57 -0000
+Subject: LVM2/lib/mirror mirrored.c
+Message-ID: <20110105122757.845.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-05 12:17:20
+Changes by:	zkabelac at sourceware.org	2011-01-05 12:27:57
 
 Modified files:
-	daemons/clvmd  : clvmd.c 
+	lib/mirror     : mirrored.c 
 
 Log message:
-	Remove dead assignment to thisfd
-	
-	Value of 'thisfd' is not read again after its assigment
+	Remove unused variable mirr_state and its assignment
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.82&r2=1.83
 
---- LVM2/daemons/clvmd/clvmd.c	2010/12/22 14:00:28	1.91
-+++ LVM2/daemons/clvmd/clvmd.c	2011/01/05 12:17:19	1.92
-@@ -830,7 +830,6 @@
- 					struct local_client *free_fd;
- 					lastfd->next = thisfd->next;
- 					free_fd = thisfd;
--					thisfd = lastfd;
+--- LVM2/lib/mirror/mirrored.c	2010/12/20 13:32:49	1.82
++++ LVM2/lib/mirror/mirrored.c	2011/01/05 12:27:56	1.83
+@@ -184,7 +184,6 @@
+ 				    uint64_t *total_numerator,
+ 				    uint64_t *total_denominator)
+ {
+-	struct mirror_state *mirr_state;
+ 	uint64_t numerator, denominator;
+ 	unsigned mirror_count, m;
+ 	int used;
+@@ -193,8 +192,6 @@
+ 	if (!*target_state)
+ 		*target_state = _mirrored_init_target(mem, cmd);
  
- 					DEBUGLOG("removeme set for fd %d\n", free_fd->fd);
+-	mirr_state = *target_state;
+-
+ 	/* Status line: <#mirrors> (maj:min)+ <synced>/<total_regions> */
+ 	log_debug("Mirror status: %s", params);
  
-@@ -866,7 +865,6 @@
- 							 ret, errno);
- 						lastfd->next = thisfd->next;
- 						free_fd = thisfd;
--						thisfd = lastfd;
- 						safe_close(&(free_fd->fd));
- 
- 						/* Queue cleanup, this also frees the client struct */
 
 
