@@ -1,26 +1,30 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 5 Jan 2011 02:05:54 +0000
-Subject: [PATCH 21/23] Add default error path for get_property
-In-Reply-To: <448fdedd7f429eb2a94c0f31ed4b85a7fb73eea1.1292945707.git.zkabelac@redhat.com>
+Date: Wed, 5 Jan 2011 02:13:57 +0000
+Subject: [PATCH 22/23] Remove dead assignment in dm_event_get_registered_device
+In-Reply-To: <0e0eb44bdebea6c5d74cb20e3638987793fd4543.1292945707.git.zkabelac@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<448fdedd7f429eb2a94c0f31ed4b85a7fb73eea1.1292945707.git.zkabelac@redhat.com>
-Message-ID: <20110105020554.GQ10297@agk-dp.fab.redhat.com>
+	<0e0eb44bdebea6c5d74cb20e3638987793fd4543.1292945707.git.zkabelac@redhat.com>
+Message-ID: <20110105021356.GR10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Dec 21, 2010 at 04:41:53PM +0100, Zdenek Kabelac wrote:
-> Set invalid property value for error path when none of handlers is set.
-> Fixes use of uninitialized prop variable.
+On Tue, Dec 21, 2010 at 04:41:54PM +0100, Zdenek Kabelac wrote:
+> ret assigned from _do_event was actually not used and replaced with next
+> assignment without any read of returned value.
  
-Ack.
+But does the actual error already get logged somewhere?
+(I don't see where.)
+Some _do_event() failures are reported, others aren't.  I don't see
+why there's a distinction.
 
-> Maybe add log_error() for this programming error?
- 
-You could probably add a log_errno() for errors with use of the library
-interface, yes.
+A DM_EVENT_CMD_REGISTER_FOR_EVENT failure is logged.
+A DM_EVENT_CMD_GET_TIMEOUT failure is not.
+
+Surely these failures should never occur on a properly-running system, so why
+not log them all in a similar way?
 
 Alasdair
 
