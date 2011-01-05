@@ -1,30 +1,25 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 5 Jan 2011 02:13:57 +0000
-Subject: [PATCH 22/23] Remove dead assignment in dm_event_get_registered_device
-In-Reply-To: <0e0eb44bdebea6c5d74cb20e3638987793fd4543.1292945707.git.zkabelac@redhat.com>
+Date: Wed, 5 Jan 2011 02:15:37 +0000
+Subject: [PATCH 19/23] Warning - dead code problem elimination
+In-Reply-To: <87mxny2lqm.fsf@twilight.int.mornfall.net.>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<0e0eb44bdebea6c5d74cb20e3638987793fd4543.1292945707.git.zkabelac@redhat.com>
-Message-ID: <20110105021356.GR10297@agk-dp.fab.redhat.com>
+	<2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
+	<4D10EA2E.8080404@redhat.com>
+	<87mxny2lqm.fsf@twilight.int.mornfall.net.>
+Message-ID: <20110105021537.GS10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Dec 21, 2010 at 04:41:54PM +0100, Zdenek Kabelac wrote:
-> ret assigned from _do_event was actually not used and replaced with next
-> assignment without any read of returned value.
- 
-But does the actual error already get logged somewhere?
-(I don't see where.)
-Some _do_event() failures are reported, others aren't.  I don't see
-why there's a distinction.
+> > I think you should return DM_WAIT_RETRY if info fails then (so the code _was_ correct)?
 
-A DM_EVENT_CMD_REGISTER_FOR_EVENT failure is logged.
-A DM_EVENT_CMD_GET_TIMEOUT failure is not.
+> Jeez, I wish I knew! I don't think I wrote this code. Anyway, it would
+> make sense to add ret = DM_WAIT_RETRY in the else branch (i.e. get_info
+> fails). Not that this is likely to ever trigger...
 
-Surely these failures should never occur on a properly-running system, so why
-not log them all in a similar way?
+Do that then.
 
 Alasdair
 
