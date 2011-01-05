@@ -1,26 +1,32 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 5 Jan 2011 02:15:37 +0000
-Subject: [PATCH 19/23] Warning - dead code problem elimination
-In-Reply-To: <87mxny2lqm.fsf@twilight.int.mornfall.net.>
+Date: Wed, 5 Jan 2011 02:33:58 +0000
+Subject: [PATCH 18/23] Return PERCENT_INVALID for error case
+In-Reply-To: <4D10E832.2090801@redhat.com>
 References: <cover.1292945707.git.zkabelac@redhat.com>
-	<2e3abc21f31d172f75c96f74e483dfbee6d9dd07.1292945707.git.zkabelac@redhat.com>
-	<4D10EA2E.8080404@redhat.com>
-	<87mxny2lqm.fsf@twilight.int.mornfall.net.>
-Message-ID: <20110105021537.GS10297@agk-dp.fab.redhat.com>
+	<988f227f76fc6371eeed50b7120887c701a582d2.1292945707.git.zkabelac@redhat.com>
+	<4D10E832.2090801@redhat.com>
+Message-ID: <20110105023358.GT10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> > I think you should return DM_WAIT_RETRY if info fails then (so the code _was_ correct)?
+On Tue, Dec 21, 2010 at 06:47:30PM +0100, Milan Broz wrote:
+> On 12/21/2010 04:41 PM, Zdenek Kabelac wrote:
+> > +	if (!lv_mirror_percent(lv->vg->cmd, (struct logical_volume *) lv,
+> > +			   0, &perc, NULL))
+> > +		perc = PERCENT_INVALID;
+> > +	return perc;
+> 
+> dunno, these functions returns 0 if (!activation()) and if lv is not activated
+>  is the PERCENT_INVALID (-1) correct value here?
 
-> Jeez, I wish I knew! I don't think I wrote this code. Anyway, it would
-> make sense to add ret = DM_WAIT_RETRY in the else branch (i.e. get_info
-> fails). Not that this is likely to ever trigger...
+Seems a reasonable use of this.
 
-Do that then.
-
+Ack (current code is definitely wrong) pending a review of whether all
+the code is making best use of the values of the new percent type.
+ 
 Alasdair
 
 
