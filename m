@@ -1,25 +1,45 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 5 Jan 2011 02:44:04 +0000
-Subject: [PATCH 02/23] Remove dead assignment
-In-Reply-To: <5ad58b8832a98a0d53fc939b89dbac3940521747.1292945707.git.zkabelac@redhat.com>
-References: <cover.1292945707.git.zkabelac@redhat.com>
-	<5ad58b8832a98a0d53fc939b89dbac3940521747.1292945707.git.zkabelac@redhat.com>
-Message-ID: <20110105024404.GX10297@agk-dp.fab.redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 5 Jan 2011 12:17:20 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20110105121720.29669.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Dec 21, 2010 at 04:41:34PM +0100, Zdenek Kabelac wrote:
-> Variables 'lv_total' and 'lv_capasity_total' are unused.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-01-05 12:17:20
 
-Ack.
+Modified files:
+	daemons/clvmd  : clvmd.c 
 
-Probably LVM1 used to display these, but we never bothered to
-reimplement lvscan fully as there are better commands to use
-instead.
+Log message:
+	Remove dead assignment to thisfd
+	
+	Value of 'thisfd' is not read again after its assigment
 
-Alasdair
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+
+--- LVM2/daemons/clvmd/clvmd.c	2010/12/22 14:00:28	1.91
++++ LVM2/daemons/clvmd/clvmd.c	2011/01/05 12:17:19	1.92
+@@ -830,7 +830,6 @@
+ 					struct local_client *free_fd;
+ 					lastfd->next = thisfd->next;
+ 					free_fd = thisfd;
+-					thisfd = lastfd;
+ 
+ 					DEBUGLOG("removeme set for fd %d\n", free_fd->fd);
+ 
+@@ -866,7 +865,6 @@
+ 							 ret, errno);
+ 						lastfd->next = thisfd->next;
+ 						free_fd = thisfd;
+-						thisfd = lastfd;
+ 						safe_close(&(free_fd->fd));
+ 
+ 						/* Queue cleanup, this also frees the client struct */
 
 
