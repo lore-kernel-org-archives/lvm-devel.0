@@ -1,47 +1,23 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 5 Jan 2011 00:25:16 -0000
-Subject: LVM2/test/lib aux.sh
-Message-ID: <20110105002516.9877.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 5 Jan 2011 01:06:20 +0000
+Subject: [PATCH 07/23] Move lastfd handling into for()
+In-Reply-To: <4D10DAC1.9050708@redhat.com>
+References: <cover.1292945707.git.zkabelac@redhat.com>
+	<403be35b0f1d1d1da149e3d9a948a6416475287e.1292945707.git.zkabelac@redhat.com>
+	<4D10DAC1.9050708@redhat.com>
+Message-ID: <20110105010619.GL10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-05 00:25:10
-
-Modified files:
-	test/lib       : aux.sh 
-
-Log message:
-	Fix a couple of bugs in the new (test/lib/)aux.sh.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-
---- LVM2/test/lib/aux.sh	2011/01/05 00:16:21	1.1
-+++ LVM2/test/lib/aux.sh	2011/01/05 00:25:07	1.2
-@@ -43,7 +43,10 @@
- 	fi
+On Tue, Dec 21, 2010 at 05:50:09PM +0100, Milan Broz wrote:
+> Anyway I prefer to keep the code intact instead of hiding possible bug.
  
- 	# skip if we don't have our own dmeventd...
--	(which dmeventd | grep $abs_builddir) || exit 200
-+	(which dmeventd | grep $abs_builddir) || {
-+            touch SKIP_THIS_TEST
-+            exit 1
-+        }
- 
- 	dmeventd -f &
- 	echo "$!" > LOCAL_DMEVENTD
-@@ -219,6 +222,7 @@
- 	fi
- 
- 	local size=$(($loopsz/$n))
-+        devs=
- 
- 	init_udev_transaction
- 	for i in `seq 1 $n`; do
+Ack, if this is only a gulm thing.
+Just add a comment to that effect.
+
+Alasdair
 
 
