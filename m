@@ -1,36 +1,24 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 7 Jan 2011 14:42:36 -0000
-Subject: LVM2/test/lib check.sh
-Message-ID: <20110107144236.19736.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 5 Jan 2011 00:30:02 +0000
+Subject: [PATCH 04/23] Remove dead assignment of lock_flags
+In-Reply-To: <4D11CED8.2070204@redhat.com>
+References: <cover.1292945707.git.zkabelac@redhat.com>
+	<0662c43178e50334f41961cbb83743e9eb7e5e53.1292945707.git.zkabelac@redhat.com>
+	<4D10D3B3.1070003@redhat.com> <4D11CED8.2070204@redhat.com>
+Message-ID: <20110105003002.GG10297@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-07 14:42:36
+On Wed, Dec 22, 2010 at 11:11:36AM +0100, Zdenek Kabelac wrote:
+> I always thought that's why /* comments */  were invented ;) for things like
+> this, but anyway in this case if you prefer to keep the unused value present -
+> I'll hide it only for my local scan-builds :)
+ 
+So do a patch that moves it into a comment?
 
-Modified files:
-	test/lib       : check.sh 
-
-Log message:
-	Fix a typo in the new relaxed mirror check (test/lib/check.sh).
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/check.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-
---- LVM2/test/lib/check.sh	2011/01/07 13:03:46	1.2
-+++ LVM2/test/lib/check.sh	2011/01/07 14:42:35	1.3
-@@ -141,7 +141,7 @@
- 	lv="$1/$2"
- 	lvs -oattr "$lv" | grep -q "^ *m.....$" || {
- 		if lvs -oattr "$lv" | grep -q "^ *o.....$" &&
--		   lvs -a | fgrep -q "[${lv}_mimage"; then
-+		   lvs -a | fgrep -q "[${2}_mimage"; then
- 			echo "TEST WARNING: $lv is a snapshot origin and looks like a mirror,"
- 			echo "assuming it is actually a mirror"
- 		else
+Alasdair
 
 
