@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 5 Jan 2011 23:18:47 -0000
-Subject: LVM2 ./WHATS_NEW tools/lvconvert.c
-Message-ID: <20110105231847.30157.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 6 Jan 2011 09:45:06 -0000
+Subject: LVM2/daemons/dmeventd libdevmapper-event.c
+Message-ID: <20110106094506.14126.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,69 +10,51 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-01-05 23:18:47
+Changes by:	zkabelac at sourceware.org	2011-01-06 09:45:05
 
 Modified files:
-	.              : WHATS_NEW 
-	tools          : lvconvert.c 
+	daemons/dmeventd: libdevmapper-event.c 
 
 Log message:
-	Reverting recent commit to disallow adding/removing mirror log while
-	removing/adding mirror images... There was already code in there to
-	do the job - I just didn't find it in WHATS_NEW (or in the code right
-	away).
+	Remove unneeded stack prints after log_error
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1861&r2=1.1862
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
 
---- LVM2/WHATS_NEW	2011/01/05 20:02:45	1.1861
-+++ LVM2/WHATS_NEW	2011/01/05 23:18:46	1.1862
-@@ -1,6 +1,5 @@
- Version 2.02.80 - 
- ====================================
--  Prevent adding/removing mirror log while removing/adding an image.
-   Add missing tests in _setup_task().
-   Fail poll daemon creation when lvmcache_init() fails.
-   Return defined value for errors in _copy_percent() and _snap_percent().
---- LVM2/tools/lvconvert.c	2011/01/05 20:02:45	1.153
-+++ LVM2/tools/lvconvert.c	2011/01/05 23:18:47	1.154
-@@ -927,25 +927,6 @@
+--- LVM2/daemons/dmeventd/libdevmapper-event.c	2010/12/22 15:28:44	1.37
++++ LVM2/daemons/dmeventd/libdevmapper-event.c	2011/01/06 09:45:05	1.38
+@@ -432,7 +432,6 @@
+ 
+ 		log_error("%s: Can't open client fifo %s: %s",
+ 			  __func__, fifos->client_path, strerror(errno));
+-		stack;
+ 		return 0;
  	}
  
- 	/*
--	 * Disallow adding logs while removing images or
--	 *          adding images while removing logs
--	 */
--	if ((*old_log_count < *new_log_count) &&
--	    (*old_mimage_count > *new_mimage_count)) {
--		log_error("Mirror logs cannot be added while images are"
--			  " being removed.");
--		log_error("Try two separate commands.");
--		return 0;
--	}
--	if ((*old_log_count > *new_log_count) &&
--	    (*old_mimage_count < *new_mimage_count)) {
--		log_error("Mirror images cannot be added while logs are"
--			  " being removed.");
--		log_error("Try two separate commands.");
--		return 0;
--	}
--
--	/*
- 	 * No mirrored logs for cluster mirrors until
- 	 * log daemon is multi-threaded.
- 	 */
-@@ -1368,8 +1349,8 @@
-         if (((old_mimage_count < new_mimage_count && old_log_count > new_log_count) ||
-              (old_mimage_count > new_mimage_count && old_log_count < new_log_count)) &&
-             lp->pv_count) {
--		log_error("Cannot both allocate and free extents when specifying physical"
--			  " volumes to use.");
-+		log_error("Cannot both allocate and free extents when "
-+			  "specifying physical volumes to use.");
- 		log_error("Please specify the operation in two steps.");
+@@ -441,7 +440,7 @@
+ 
+ 	if (!strncmp(DMEVENTD_PATH, "/", 1) && stat(DMEVENTD_PATH, &statbuf)) {
+ 		log_error("Unable to find dmeventd.");
+-		return_0;
++		return 0;
+ 	}
+ 
+ 	pid = fork();
+@@ -479,7 +478,6 @@
+ 	if ((fifos->server = open(fifos->server_path, O_RDWR)) < 0) {
+ 		log_error("%s: open server fifo %s",
+ 			  __func__, fifos->server_path);
+-		stack;
  		return 0;
-         }
+ 	}
+ 
+@@ -495,7 +493,6 @@
+ 		log_error("%s: Can't open client fifo %s: %s",
+ 			  __func__, fifos->client_path, strerror(errno));
+ 		close(fifos->server);
+-		stack;
+ 		return 0;
+ 	}
+ 
 
 
