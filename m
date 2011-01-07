@@ -1,24 +1,23 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 7 Jan 2011 13:39:00 +0000
-Subject: [PATCH 1/8] Add support for OCF dir selection
-In-Reply-To: <db275a73b7fcc40a9be28bc0a1235319042355ac.1294398815.git.zkabelac@redhat.com>
+Date: Fri, 7 Jan 2011 13:41:41 +0000
+Subject: [PATCH 2/8] Add default error path for get_property
+In-Reply-To: <6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
 References: <cover.1294398815.git.zkabelac@redhat.com>
-	<db275a73b7fcc40a9be28bc0a1235319042355ac.1294398815.git.zkabelac@redhat.com>
-Message-ID: <20110107133900.GB5910@agk-dp.fab.redhat.com>
+	<6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
+Message-ID: <20110107134141.GC5910@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jan 07, 2011 at 12:17:29PM +0100, Zdenek Kabelac wrote:
-> Add --with-ocfdir supported configure option.
+On Fri, Jan 07, 2011 at 12:17:30PM +0100, Zdenek Kabelac wrote:
+> +			log_errno(EINVAL, "Invalid query for property.");
+
+Do we have any information about the property to include in that error
+message, such as its name?
 
 Ack.
-
-> Note: After commit regeneration of configure file is needed.
- 
-If you have F14 installed, use that now.
 
 Alasdair
 
