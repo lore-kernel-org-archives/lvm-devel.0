@@ -1,54 +1,36 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 7 Jan 2011 14:56:52 -0000
-Subject: LVM2/test t-lvconvert-repair-snapshot.sh
-Message-ID: <20110107145652.26268.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 07 Jan 2011 16:03:16 +0100
+Subject: [PATCH 2/8] Add default error path for get_property
+In-Reply-To: <20110107135543.GH5910@agk-dp.fab.redhat.com>
+References: <cover.1294398815.git.zkabelac@redhat.com>	<6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>	<20110107134141.GC5910@agk-dp.fab.redhat.com>	<4D2719DC.1030008@redhat.com>
+	<20110107135543.GH5910@agk-dp.fab.redhat.com>
+Message-ID: <4D272B34.7030003@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-07 14:56:52
+Dne 7.1.2011 14:55, Alasdair G Kergon napsal(a):
+> On Fri, Jan 07, 2011 at 02:49:16PM +0100, Zdenek Kabelac wrote:
+>> No - all parameters passed to get_property are NULL in this case -
+>> so programmer's error.
+>  
+> So in what sense is it invalid?
+> (I'm basically asking if a more-useful error message is possible.
+> So you could say in it the function was called without any parameters set?)
+> 
 
-Added files:
-	test           : t-lvconvert-repair-snapshot.sh 
+Examle of such error use-case could be:
 
-Log message:
-	Add a test for the interaction of snapshots of mirrors and lvconvert --repair.
+lv = NULL;
+lvm_lv_get_property(lv, "name");
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-snapshot.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+i.e. user will use invalid lv handle for some reason - code mistake, missing
+check...
 
-/cvs/lvm2/LVM2/test/t-lvconvert-repair-snapshot.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-repair-snapshot.sh
-+++ -	2011-01-07 14:56:52.590474000 +0000
-@@ -0,0 +1,24 @@
-+# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+aux prepare_vg 5
-+lvcreate -m 3 --ig -L 2M -n 4way $vg $dev1 $dev2 $dev3 $dev4 $dev5:0
-+lvcreate -s $vg/4way -L 2M -n snap
-+
-+aux disable_dev $dev2 $dev4
-+echo n | lvconvert --repair $vg/4way 2>&1 | tee 4way.out
-+lvs -a -o +devices | not grep unknown
-+vgreduce --removemissing $vg
-+aux enable_dev $dev2 $dev4
-+lvs -a -o +devices
-+check mirror $vg 4way $dev5
-+
+Maybe "Invalid library use." ?
+
+Zdenek
 
 
