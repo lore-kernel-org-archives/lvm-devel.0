@@ -1,25 +1,30 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 7 Jan 2011 13:55:43 +0000
-Subject: [PATCH 2/8] Add default error path for get_property
-In-Reply-To: <4D2719DC.1030008@redhat.com>
+Date: Fri, 7 Jan 2011 14:16:23 +0000
+Subject: [PATCH 7/8] Stop calling fs_unlock() and dm_udev_wait()
+In-Reply-To: <82f127caaf42958f462a16c3981527b7a925a42d.1294398815.git.zkabelac@redhat.com>
 References: <cover.1294398815.git.zkabelac@redhat.com>
-	<6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
-	<20110107134141.GC5910@agk-dp.fab.redhat.com>
-	<4D2719DC.1030008@redhat.com>
-Message-ID: <20110107135543.GH5910@agk-dp.fab.redhat.com>
+	<82f127caaf42958f462a16c3981527b7a925a42d.1294398815.git.zkabelac@redhat.com>
+Message-ID: <20110107141623.GI5910@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jan 07, 2011 at 02:49:16PM +0100, Zdenek Kabelac wrote:
-> No - all parameters passed to get_property are NULL in this case -
-> so programmer's error.
+On Fri, Jan 07, 2011 at 12:17:35PM +0100, Zdenek Kabelac wrote:
+> Stop calling fs_unlock() from lv_de/activate()
  
-So in what sense is it invalid?
-(I'm basically asking if a more-useful error message is possible.
-So you could say in it the function was called without any parameters set?)
+Ack.
+
+> @@ -1669,9 +1663,12 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+  
+> +	/* Restore fs cookie */
+
+Restore?
+
+If a cookie is already allocated, re-use it; otherwise create a new one?
+
+> +	dm_tree_set_cookie(root, fs_get_cookie());
 
 Alasdair
 
