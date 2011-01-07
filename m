@@ -1,83 +1,132 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  7 Jan 2011 12:17:34 +0100
-Subject: [PATCH 6/8] Add internal fs cookie
+Date: Fri,  7 Jan 2011 12:17:35 +0100
+Subject: [PATCH 7/8] Stop calling fs_unlock() and dm_udev_wait()
 In-Reply-To: <cover.1294398815.git.zkabelac@redhat.com>
 References: <cover.1294398815.git.zkabelac@redhat.com>
-Message-ID: <c1ecd1ab7967504239b8258ad0bb2517fa4314a5.1294398815.git.zkabelac@redhat.com>
+Message-ID: <82f127caaf42958f462a16c3981527b7a925a42d.1294398815.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add functions for handling internal lvm cookie used for
-all dm_tree operations until fs_unlock is called.
+Stop calling fs_unlock() from lv_de/activate()
+
+Start using internal lvm fs cookie for dm_tree.
+
+Stop directly calling dm_udev_wait() and
+dm_tree_set/get_cookie() from activate code -
+it's now called through fs_unlock() function.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/fs.c |   22 +++++++++++++++++++++-
- lib/activate/fs.h |    2 ++
- 2 files changed, 23 insertions(+), 1 deletions(-)
+ lib/activate/activate.c    |    2 --
+ lib/activate/dev_manager.c |   25 ++++++++-----------------
+ 2 files changed, 8 insertions(+), 19 deletions(-)
 
-diff --git a/lib/activate/fs.c b/lib/activate/fs.c
-index 1523115..cbe823a 100644
---- a/lib/activate/fs.c
-+++ b/lib/activate/fs.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -26,6 +26,12 @@
- #include <limits.h>
- #include <dirent.h>
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 174f09e..e199fbb 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1206,7 +1206,6 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	memlock_inc(cmd);
+ 	r = _lv_deactivate(lv);
+ 	memlock_dec(cmd);
+-	fs_unlock();
  
-+/*
-+ * Library cookie to combine multiple fs transactions.
-+ * Supports to wait for udev device settle only when needed.
-+ */
-+static uint32_t _fs_cookie = DM_COOKIE_AUTO_CREATE;
-+
- static int _mk_dir(const char *dev_dir, const char *vg_name)
- {
- 	char vg_path[PATH_MAX];
-@@ -396,7 +402,21 @@ int fs_rename_lv(struct logical_volume *lv, const char *dev,
- void fs_unlock(void)
- {
- 	if (!memlock()) {
-+		/* Wait for all processed udev devices */
-+		if (!dm_udev_wait(_fs_cookie))
-+			stack;
-+		_fs_cookie = DM_COOKIE_AUTO_CREATE; /* Reset cookie */
- 		dm_lib_release();
- 		_pop_fs_ops();
+ 	if (!lv_info(cmd, lv, 0, &info, 1, 0) || info.exists)
+ 		r = 0;
+@@ -1305,7 +1304,6 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!(r = _lv_activate_lv(lv, 0)))
+ 		stack;
+ 	memlock_dec(cmd);
+-	fs_unlock();
+ 
+ 	if (r && !monitor_dev_for_events(cmd, lv, 0, 1))
+ 		stack;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 6d7d905..1fbefc4 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1622,7 +1622,6 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
+ 	struct dm_tree_node *child;
+ 	char *vgname, *lvname, *layer;
+ 	const char *name, *uuid;
+-	int r;
+ 
+ 	while ((child = dm_tree_next_child(&handle, root, 0))) {
+ 		if (!(name = dm_tree_node_get_name(child)))
+@@ -1644,12 +1643,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, char *
+ 		if (non_toplevel_tree_dlid && !strcmp(non_toplevel_tree_dlid, uuid))
+ 			continue;
+ 
+-		dm_tree_set_cookie(root, 0);
+-		r = dm_tree_deactivate_children(root, uuid, strlen(uuid));
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
+-
+-		if (!r)
++		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid)))
+ 			return_0;
  	}
- }
-+
-+uint32_t fs_get_cookie(void)
-+{
-+	return _fs_cookie;
-+}
-+
-+void fs_set_cookie(uint32_t cookie)
-+{
-+	_fs_cookie = cookie;
-+}
-diff --git a/lib/activate/fs.h b/lib/activate/fs.h
-index 28b2c73..695c529 100644
---- a/lib/activate/fs.h
-+++ b/lib/activate/fs.h
-@@ -30,5 +30,7 @@ int fs_del_lv_byname(const char *dev_dir, const char *vg_name,
- int fs_rename_lv(struct logical_volume *lv, const char *dev, 
- 		 const char *old_vgname, const char *old_lvname);
- void fs_unlock(void);
-+uint32_t fs_get_cookie(void);
-+void fs_set_cookie(uint32_t cookie);
  
- #endif
+@@ -1669,9 +1663,12 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 
+ 	if (!(root = dm_tree_find_node(dtree, 0, 0))) {
+ 		log_error("Lost dependency tree root node");
+-		goto out;
++		goto out_no_root;
+ 	}
+ 
++	/* Restore fs cookie */
++	dm_tree_set_cookie(root, fs_get_cookie());
++
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, origin_only ? "real" : NULL)))
+ 		goto_out;
+ 
+@@ -1684,10 +1681,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 		break;
+ 	case DEACTIVATE:
+  		/* Deactivate LV and all devices it references that nothing else has open. */
+-		dm_tree_set_cookie(root, 0);
+ 		r = dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
+ 		if (!r)
+ 			goto_out;
+ 		if (!_remove_lv_symlinks(dm, root))
+@@ -1708,10 +1702,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			goto_out;
+ 
+ 		/* Preload any devices required before any suspensions */
+-		dm_tree_set_cookie(root, 0);
+ 		r = dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-			stack;
+ 		if (!r)
+ 			goto_out;
+ 
+@@ -1719,10 +1710,7 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 			dm->flush_required = 1;
+ 
+ 		if (action == ACTIVATE) {
+-			dm_tree_set_cookie(root, 0);
+ 			r = dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-			if (!dm_udev_wait(dm_tree_get_cookie(root)))
+-				stack;
+ 			if (!r)
+ 				goto_out;
+ 			if (!_create_lv_symlinks(dm, root)) {
+@@ -1740,6 +1728,9 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 	r = 1;
+ 
+ out:
++	/* Save fs cookie for udev settle, do not wait here */
++	fs_set_cookie(dm_tree_get_cookie(root));
++out_no_root:
+ 	dm_tree_free(dtree);
+ 
+ 	return r;
 -- 
 1.7.3.4
 
