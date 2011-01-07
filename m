@@ -1,38 +1,83 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  7 Jan 2011 12:17:33 +0100
-Subject: [PATCH 5/8] Define DM_COOKIE_AUTO_CREATE
+Date: Fri,  7 Jan 2011 12:17:34 +0100
+Subject: [PATCH 6/8] Add internal fs cookie
 In-Reply-To: <cover.1294398815.git.zkabelac@redhat.com>
 References: <cover.1294398815.git.zkabelac@redhat.com>
-Message-ID: <1423d759bc7362acf344c234beb6c75d84fecfbb.1294398815.git.zkabelac@redhat.com>
+Message-ID: <c1ecd1ab7967504239b8258ad0bb2517fa4314a5.1294398815.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-TODO: Use it also for already written code.
+Add functions for handling internal lvm cookie used for
+all dm_tree operations until fs_unlock is called.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdevmapper.h |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/activate/fs.c |   22 +++++++++++++++++++++-
+ lib/activate/fs.h |    2 ++
+ 2 files changed, 23 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 994a364..eea1a6c 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1214,6 +1214,11 @@ void dm_udev_set_sync_support(int sync_with_udev);
- int dm_udev_get_sync_support(void);
- void dm_udev_set_checking(int checking);
- int dm_udev_get_checking(void);
-+
+diff --git a/lib/activate/fs.c b/lib/activate/fs.c
+index 1523115..cbe823a 100644
+--- a/lib/activate/fs.c
++++ b/lib/activate/fs.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -26,6 +26,12 @@
+ #include <limits.h>
+ #include <dirent.h>
+ 
 +/*
-+ * Default value to get new auto generated cookie created
++ * Library cookie to combine multiple fs transactions.
++ * Supports to wait for udev device settle only when needed.
 + */
-+#define DM_COOKIE_AUTO_CREATE 0
- int dm_udev_create_cookie(uint32_t *cookie);
- int dm_udev_complete(uint32_t cookie);
- int dm_udev_wait(uint32_t cookie);
++static uint32_t _fs_cookie = DM_COOKIE_AUTO_CREATE;
++
+ static int _mk_dir(const char *dev_dir, const char *vg_name)
+ {
+ 	char vg_path[PATH_MAX];
+@@ -396,7 +402,21 @@ int fs_rename_lv(struct logical_volume *lv, const char *dev,
+ void fs_unlock(void)
+ {
+ 	if (!memlock()) {
++		/* Wait for all processed udev devices */
++		if (!dm_udev_wait(_fs_cookie))
++			stack;
++		_fs_cookie = DM_COOKIE_AUTO_CREATE; /* Reset cookie */
+ 		dm_lib_release();
+ 		_pop_fs_ops();
+ 	}
+ }
++
++uint32_t fs_get_cookie(void)
++{
++	return _fs_cookie;
++}
++
++void fs_set_cookie(uint32_t cookie)
++{
++	_fs_cookie = cookie;
++}
+diff --git a/lib/activate/fs.h b/lib/activate/fs.h
+index 28b2c73..695c529 100644
+--- a/lib/activate/fs.h
++++ b/lib/activate/fs.h
+@@ -30,5 +30,7 @@ int fs_del_lv_byname(const char *dev_dir, const char *vg_name,
+ int fs_rename_lv(struct logical_volume *lv, const char *dev, 
+ 		 const char *old_vgname, const char *old_lvname);
+ void fs_unlock(void);
++uint32_t fs_get_cookie(void);
++void fs_set_cookie(uint32_t cookie);
+ 
+ #endif
 -- 
 1.7.3.4
 
