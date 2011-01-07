@@ -1,22 +1,21 @@
 From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 7 Jan 2011 13:41:41 +0000
-Subject: [PATCH 2/8] Add default error path for get_property
-In-Reply-To: <6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
+Date: Fri, 7 Jan 2011 13:44:44 +0000
+Subject: [PATCH 3/8] Change import_vg_from_buffer to use config_tree
+In-Reply-To: <c9446c5e5a74735278f5aae34f72d4947828eb6e.1294398815.git.zkabelac@redhat.com>
 References: <cover.1294398815.git.zkabelac@redhat.com>
-	<6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
-Message-ID: <20110107134141.GC5910@agk-dp.fab.redhat.com>
+	<c9446c5e5a74735278f5aae34f72d4947828eb6e.1294398815.git.zkabelac@redhat.com>
+Message-ID: <20110107134444.GD5910@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jan 07, 2011 at 12:17:30PM +0100, Zdenek Kabelac wrote:
-> +			log_errno(EINVAL, "Invalid query for property.");
-
-Do we have any information about the property to include in that error
-message, such as its name?
-
+On Fri, Jan 07, 2011 at 12:17:31PM +0100, Zdenek Kabelac wrote:
+> Change function import_vg_from_buffer() to import_vg_from_config_tree().
+> Instead of creating config tree inside the function allow cft to
+> be passed as parameter - usable later for caching.
+ 
 Ack.
 
 Alasdair
