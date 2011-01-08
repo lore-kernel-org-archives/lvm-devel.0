@@ -1,36 +1,48 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 5 Jan 2011 00:38:43 -0000
-Subject: LVM2/test t-pvcreate-operation-md.sh
-Message-ID: <20110105003843.10092.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Sat, 08 Jan 2011 17:20:22 -0500
+Subject: [PATCH 2/8] Add default error path for get_property
+In-Reply-To: <4D272B34.7030003@redhat.com>
+References: <cover.1294398815.git.zkabelac@redhat.com>
+	<6bbe3896c9173603df3be06a3e60dd79f339e028.1294398815.git.zkabelac@redhat.com>
+	<20110107134141.GC5910@agk-dp.fab.redhat.com>	<4D2719DC.1030008@redhat.com>
+	<20110107135543.GH5910@agk-dp.fab.redhat.com>
+	<4D272B34.7030003@redhat.com>
+Message-ID: <1294525222.1742.50.camel@f12-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-05 00:38:41
+On Fri, 2011-01-07 at 16:03 +0100, Zdenek Kabelac wrote:
+> Dne 7.1.2011 14:55, Alasdair G Kergon napsal(a):
+> > On Fri, Jan 07, 2011 at 02:49:16PM +0100, Zdenek Kabelac wrote:
+> >> No - all parameters passed to get_property are NULL in this case -
+> >> so programmer's error.
+> >  
+> > So in what sense is it invalid?
+> > (I'm basically asking if a more-useful error message is possible.
+> > So you could say in it the function was called without any parameters set?)
+> > 
+> 
+> Examle of such error use-case could be:
+> 
+> lv = NULL;
+> lvm_lv_get_property(lv, "name");
+> 
+> i.e. user will use invalid lv handle for some reason - code mistake, missing
+> check...
+> 
+> Maybe "Invalid library use." ?
+> 
+> Zdenek
+> 
 
-Modified files:
-	test           : t-pvcreate-operation-md.sh 
+Cleanup in this patch looks great.  Ack.
 
-Log message:
-	Fix typo in t-pvcreate-operation-md.sh.
+However, some handle validation should be done at the beginning of every
+library call (problem not unique to this function), not just in this
+function.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-operation-md.sh.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-
---- LVM2/test/t-pvcreate-operation-md.sh	2011/01/05 00:16:20	1.11
-+++ LVM2/test/t-pvcreate-operation-md.sh	2011/01/05 00:38:41	1.12
-@@ -20,7 +20,7 @@
- 
- . lib/test
- 
--prepare_lvmconf 'devices/filter = [ "a|/dev/md.*|", "a/dev\/mapper\/.*$/", "r/.*/" ]'
-+aux lvmconf 'devices/filter = [ "a|/dev/md.*|", "a/dev\/mapper\/.*$/", "r/.*/" ]'
- aux prepare_devs 2
- 
- # Have MD use a non-standard name to avoid colliding with an existing MD device
 
 
