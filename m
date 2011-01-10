@@ -1,146 +1,153 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 10 Jan 2011 14:56:48 -0600
-Subject: [PATCH 3 of 4] LVM: allow disk to mirror log conversion
-Message-ID: <201101102056.p0AKum46012036@hydrogen.msp.redhat.com>
+Date: Mon, 10 Jan 2011 14:56:59 -0600
+Subject: [PATCH 4 of 4] LVM: mirrored log testing
+Message-ID: <201101102056.p0AKuxIZ012109@hydrogen.msp.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-allow-disk-to-mirror-log-conversion.patch
+Patch name: lvm-mirrored-log-testing.patch
 
-Add ability to convert disk log to mirrored log
+This patch updates the mirror conversion tests to include
+converting mirror logs from disk -> mirrored.
 
-We can convert between any combination of mirror logs except
-disk -> mirrored.  This patch fixes that.
-Index: LVM2/lib/metadata/mirror.c
+Index: LVM2/test/t-lvconvert-mirror-basic.sh
 ===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -1322,7 +1322,9 @@ static int _create_mimage_lvs(struct all
- 		}
+--- LVM2.orig/test/t-lvconvert-mirror-basic.sh
++++ LVM2/test/t-lvconvert-mirror-basic.sh
+@@ -54,12 +54,6 @@ test_lvconvert()
+ 	local active=true
+ 	local i
  
- 		if (log) {
--			if (!lv_add_log_segment(ah, m * stripes + 1, img_lvs[m], 0)) {
-+			uint32_t first_area = m * stripes + (log - 1);
-+
-+			if (!lv_add_log_segment(ah, first_area, img_lvs[m], 0)) {
- 				log_error("Aborting. Failed to add mirror image segment "
- 					  "to %s. Remove new LV and retry.",
- 					  img_lvs[m]->name);
-@@ -1760,7 +1762,7 @@ static struct logical_volume *_set_up_mi
- 	}
- 
- 	if ((log_count > 1) &&
--	    !_form_mirror(cmd, ah, log_lv, log_count-1, 1, 0, region_size, 1)) {
-+	    !_form_mirror(cmd, ah, log_lv, log_count-1, 1, 0, region_size, 2)) {
- 		log_error("Failed to form mirrored log.");
- 		return NULL;
- 	}
-@@ -1792,6 +1794,7 @@ int add_mirror_log(struct cmd_context *c
- 	int in_sync;
- 	struct logical_volume *log_lv;
- 	struct lvinfo info;
-+	int old_log_count;
- 	int r = 0;
- 
- 	if (dm_list_size(&lv->segments) != 1) {
-@@ -1811,6 +1814,11 @@ int add_mirror_log(struct cmd_context *c
- 		return 0;
- 	}
- 
-+	log_lv = first_seg(lv)->log_lv;
-+	old_log_count = (log_lv) ? lv_mirror_count(log_lv) : 0;
-+	if (old_log_count == log_count)
-+		return_0;
-+
- 	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, lv, 0)))
- 		return_0;
- 
-@@ -1826,13 +1834,24 @@ int add_mirror_log(struct cmd_context *c
- 
- 	/* allocate destination extents */
- 	ah = allocate_extents(lv->vg, NULL, segtype,
--			      0, 0, log_count, region_size, 0,
-+			      0, 0, log_count - old_log_count, region_size, 0,
- 			      allocatable_pvs, alloc, parallel_areas);
- 	if (!ah) {
- 		log_error("Unable to allocate extents for mirror log.");
- 		return 0;
- 	}
- 
-+	if (old_log_count) {
-+		/* Converting from disk to mirrored log */
-+		if (!_form_mirror(cmd, ah, log_lv, log_count - 1, 1, 0,
-+				  region_size, 1)) {
-+			log_error("Failed to convert mirror log");
-+			return 0;
-+		}
-+		r = 1;
-+		goto out;
-+	}
-+
- 	/* check sync status */
- 	if (lv_mirror_percent(cmd, lv, 0, &sync_percent, NULL) &&
- 	    (sync_percent == PERCENT_100))
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -718,6 +718,7 @@ static int _lv_update_mirrored_log(struc
- 				    operable_pvs, 0U);
- }
- 
-+static int _reload_lv(struct cmd_context *cmd, struct logical_volume *lv);
- static int _lv_update_log_type(struct cmd_context *cmd,
- 			       struct lvconvert_params *lp,
- 			       struct logical_volume *lv,
-@@ -738,14 +739,6 @@ static int _lv_update_log_type(struct cm
- 						  lv->le_count,
- 						  lp->region_size);
- 
--	/* Add a log where there is none */
--	if (!old_log_count) {
--		if (!add_mirror_log(cmd, original_lv, log_count,
--				    region_size, operable_pvs, lp->alloc))
--			return_0;
--		return 1;
--	}
+-	if [ "$start_log_type" = "disk" ] &&
+-		[ "$finish_log_type" = "mirrored" ]; then
+-		echo "FIXME:  disk -> mirrored log conversion not yet supported by LVM"
+-		return 0
+-	fi
 -
- 	/* Remove an existing log completely */
- 	if (!log_count) {
- 		if (!remove_mirror_log(cmd, original_lv, operable_pvs,
-@@ -759,9 +752,17 @@ static int _lv_update_log_type(struct cm
+ 	test "$5" = "active" && active=false
+ 	#test $finish_count -gt $start_count && up=true
  
- 	/* Adding redundancy to the log */
- 	if (old_log_count < log_count) {
--		log_error("Adding log redundancy not supported yet.");
--		log_error("Try converting the log to 'core' first.");
--		return_0;
-+		if (!add_mirror_log(cmd, original_lv, log_count,
-+				    region_size, operable_pvs, lp->alloc))
-+			return_0;
-+		/*
-+		 * FIXME: This simple approach won't work in cluster mirrors,
-+		 *        but it doesn't matter because we don't support
-+		 *        mirrored logs in cluster mirrors.
-+		 */
-+		if (old_log_count)
-+			return _reload_lv(cmd, log_lv);
-+		return 1;
- 	}
+Index: LVM2/test/t-lvconvert-repair-replace.sh
+===================================================================
+--- LVM2.orig/test/t-lvconvert-repair-replace.sh
++++ LVM2/test/t-lvconvert-repair-replace.sh
+@@ -13,6 +13,7 @@
  
- 	/* Reducing redundancy of the log */
-@@ -1109,7 +1110,8 @@ static int _lvconvert_mirrors_aux(struct
+ aux prepare_vg 6
  
- 		/* FIXME: can't have multiple mlogs. force corelog. */
- 		if (!lv_add_mirrors(cmd, lv,
--				    new_mimage_count - old_mimage_count, lp->stripes, lp->stripe_size,
-+				    new_mimage_count - old_mimage_count,
-+				    lp->stripes, lp->stripe_size,
- 				    region_size, 0U, operable_pvs, lp->alloc,
- 				    MIRROR_BY_LV)) {
- 			layer_lv = seg_lv(first_seg(lv), 0);
++# 3-way, disk log
+ # multiple failures, full replace
+ lvcreate --mirrorlog disk -m 2 --ig -L 1 -n 3way $vg $dev1 $dev2 $dev3 $dev4:0-1
+ aux disable_dev $dev1 $dev2
+@@ -23,8 +24,37 @@ vgreduce --removemissing $vg
+ check mirror $vg 3way
+ aux enable_dev $dev1 $dev2
+ 
++vgremove -ff $vg; vgcreate -c n $vg $dev1 $dev2 $dev3 $dev4 $dev5 $dev6
++
++# 2-way, mirrored log
++# Double log failure, full replace
++lvcreate --mirrorlog mirrored -m 1 --ig -L 1 -n 2way $vg \
++    $dev1 $dev2 $dev3:0 $dev4:0
++aux disable_dev $dev3 $dev4
++echo y | lvconvert --repair $vg/2way 2>&1 | tee 2way.out
++lvs -a -o +devices | not grep unknown
++not grep "WARNING: Failed" 2way.out
++vgreduce --removemissing $vg
++check mirror $vg 2way
++aux enable_dev $dev3 $dev4
++
++vgremove -ff $vg; vgcreate -c n $vg $dev1 $dev2 $dev3 $dev4 $dev5 $dev6
++
++# 3-way, mirrored log
++# Single log failure, replace
++lvcreate --mirrorlog mirrored -m 2 --ig -L 1 -n 3way $vg \
++    $dev1 $dev2 $dev3 $dev4:0 $dev5:0
++aux disable_dev $dev4
++echo y | lvconvert --repair $vg/3way 2>&1 | tee 3way.out
++lvs -a -o +devices | not grep unknown
++not grep "WARNING: Failed" 3way.out
++vgreduce --removemissing $vg
++check mirror $vg 3way
++aux enable_dev $dev4
++
+ vgremove -ff $vg; vgcreate -c n $vg $dev1 $dev2 $dev3 $dev4 $dev5
+ 
++# 3-way, disk log
+ # multiple failures, partial replace
+ lvcreate --mirrorlog disk -m 2 --ig -L 1 -n 3way $vg $dev1 $dev2 $dev3 $dev4
+ aux disable_dev $dev1 $dev2
+Index: LVM2/test/t-lvconvert-repair.sh
+===================================================================
+--- LVM2.orig/test/t-lvconvert-repair.sh
++++ LVM2/test/t-lvconvert-repair.sh
+@@ -14,6 +14,7 @@
+ 
+ # fail multiple devices
+ 
++# 4-way, disk log => 2-way, disk log
+ aux prepare_vg 5
+ lvcreate -m 3 --ig -L 1 -n 4way $vg $dev1 $dev2 $dev3 $dev4 $dev5:0
+ aux disable_dev $dev2 $dev4
+@@ -23,6 +24,7 @@ vgreduce --removemissing $vg
+ aux enable_dev $dev2 $dev4
+ check mirror $vg 4way $dev5
+ 
++# 3-way, disk log => linear
+ aux prepare_vg 5
+ lvcreate -m 2 --ig -L 1 -n 3way $vg
+ aux disable_dev $dev1 $dev2
+@@ -37,6 +39,7 @@ check linear $vg 3way
+ 
+ # fail just log and get it removed
+ 
++# 3-way, disk log => 3-way, core log
+ aux prepare_vg 5
+ lvcreate -m 2 --ig -L 1 -n 3way $vg $dev1 $dev2 $dev3 $dev4:0
+ aux disable_dev $dev4
+@@ -48,6 +51,20 @@ dmsetup ls | grep $PREFIX | not grep mlo
+ vgreduce --removemissing $vg
+ aux enable_dev $dev4
+ 
++# 3-way, mirrored log => 3-way, core log
++aux prepare_vg 5
++lvcreate -m 2 --mirrorlog mirrored --ig -L 1 -n 3way $vg \
++    $dev1 $dev2 $dev3 $dev4:0 $dev5:0
++aux disable_dev $dev4 $dev5
++echo n | lvconvert --repair $vg/3way
++check mirror $vg 3way core
++lvs -a -o +devices | not grep unknown
++lvs -a -o +devices | not grep mlog
++dmsetup ls | grep $PREFIX | not grep mlog
++vgreduce --removemissing $vg
++aux enable_dev $dev4 $dev5
++
++# 2-way, disk log => 2-way, core log
+ aux prepare_vg 5
+ lvcreate -m 1 --ig -L 1 -n 2way $vg $dev1 $dev2 $dev3:0
+ aux disable_dev $dev3
+Index: LVM2/test/t-lvconvert-twostep.sh
+===================================================================
+--- LVM2.orig/test/t-lvconvert-twostep.sh
++++ LVM2/test/t-lvconvert-twostep.sh
+@@ -12,10 +12,15 @@
+ . lib/test
+ 
+ aux prepare_vg 4
++
+ lvcreate -m 1 --mirrorlog disk --ig -L 1 -n mirror $vg
+ not lvconvert -m 2 --mirrorlog core $vg/mirror $dev3 2>&1 | tee errs
+ grep "two steps" errs
++
+ lvconvert -m 2 $vg/mirror $dev3
+ lvconvert --mirrorlog core $vg/mirror
+ not lvconvert -m 1 --mirrorlog disk $vg/mirror $dev3 2>&1 | tee errs
+ grep "two steps" errs
++
++not lvconvert -m 1 --mirrorlog mirrored $vg/mirror $dev3 $dev4 2>&1 | tee errs
++grep "two steps" errs
 
 
