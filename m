@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 5 Jan 2011 01:00:35 -0000
-Subject: LVM2/test t-metadata-dirs.sh
-Message-ID: <20110105010035.10630.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 10 Jan 2011 13:42:32 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h
+Message-ID: <20110110134232.25171.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,64 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-01-05 01:00:34
+Changes by:	zkabelac at sourceware.org	2011-01-10 13:42:32
 
-Added files:
-	test           : t-metadata-dirs.sh 
+Modified files:
+	.              : WHATS_NEW_DM 
+	libdm          : libdevmapper.h 
 
 Log message:
-	Add a test for RHBZ 640621 (metadata/dirs + no PV MDAs broken).
+	Define DM_COOKIE_AUTO_CREATE
+	
+	TODO: Use it also for already written code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-metadata-dirs.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.435&r2=1.436
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.132&r2=1.133
 
-/cvs/lvm2/LVM2/test/t-metadata-dirs.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-metadata-dirs.sh
-+++ -	2011-01-05 01:00:34.976299000 +0000
-@@ -0,0 +1,43 @@
-+#!/bin/sh
-+# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/WHATS_NEW_DM	2011/01/04 14:43:53	1.435
++++ LVM2/WHATS_NEW_DM	2011/01/10 13:42:31	1.436
+@@ -1,5 +1,6 @@
+ Version 1.02.61 - 
+ ====================================
++  Add DM_COOKIE_AUTO_CREATE to libdevmapper.h.
+   Export DM_CONTROL_NODE_UMASK and use it while creating /dev/mapper/control.
+ 
+ Version 1.02.60 - 20th December 2010
+--- LVM2/libdm/libdevmapper.h	2011/01/04 14:43:54	1.132
++++ LVM2/libdm/libdevmapper.h	2011/01/10 13:42:31	1.133
+@@ -1214,6 +1214,11 @@
+ int dm_udev_get_sync_support(void);
+ void dm_udev_set_checking(int checking);
+ int dm_udev_get_checking(void);
 +
-+. lib/test
-+
-+aux prepare_devs 3
-+pvcreate --metadatacopies 0 $(cat DEVICES)
-+
-+not vgcreate $vg $(cat DEVICES)
-+
-+aux lvmconf "metadata/dirs = [ \"$TESTDIR/mda\" ]"
-+
-+vgcreate $vg $dev1
-+check vg_field $vg vg_mda_count 1
-+vgremove -ff $vg
-+
-+vgcreate $vg $(cat DEVICES)
-+check vg_field $vg vg_mda_count 1
-+
-+vgremove -ff $vg
-+pvcreate --metadatacopies 1 --metadataignore y $dev1
-+vgcreate $vg $(cat DEVICES)
-+check vg_field $vg vg_mda_count 2
-+
-+vgremove -ff $vg
-+pvcreate --metadatacopies 1 --metadataignore n $dev1
-+vgcreate $vg $(cat DEVICES)
-+check vg_field $vg vg_mda_count 2
-+
-+vgremove -ff $vg
-+pvcreate --metadatacopies 0 $dev1
-+
-+aux lvmconf "metadata/dirs = [ \"$TESTDIR/mda\", \"$TESTDIR/mda2\" ]"
-+vgcreate $vg $(cat DEVICES)
-+check vg_field $vg vg_mda_count 2
++/*
++ * Default value to get new auto generated cookie created
++ */
++#define DM_COOKIE_AUTO_CREATE 0
+ int dm_udev_create_cookie(uint32_t *cookie);
+ int dm_udev_complete(uint32_t cookie);
+ int dm_udev_wait(uint32_t cookie);
 
 
