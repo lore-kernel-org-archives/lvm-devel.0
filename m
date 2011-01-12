@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Jan 2011 15:28:35 -0000
-Subject: LVM2 ./WHATS_NEW lib/filters/filter.c
-Message-ID: <20110112152835.3597.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 12 Jan 2011 16:07:56 -0000
+Subject: LVM2/test/lib aux.sh
+Message-ID: <20110112160756.8967.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-01-12 15:28:34
+Changes by:	mornfall at sourceware.org	2011-01-12 16:07:56
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/filters    : filter.c 
+	test/lib       : aux.sh 
 
 Log message:
-	add fio
+	Kill clvmd properly after locking_type 3 tests (using clvmd/singlenode).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1876&r2=1.1877
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/WHATS_NEW	2011/01/11 17:05:08	1.1876
-+++ LVM2/WHATS_NEW	2011/01/12 15:28:33	1.1877
-@@ -1,5 +1,6 @@
- Version 2.02.81 -
- ===================================
-+  Accept fusion fio in device type filter.
-   Add disk to mirrored log type conversion.
+--- LVM2/test/lib/aux.sh	2011/01/07 15:04:52	1.5
++++ LVM2/test/lib/aux.sh	2011/01/12 16:07:55	1.6
+@@ -32,6 +32,7 @@
+ 	# check that it is really running now
+ 	sleep .1
+ 	ps $LOCAL_CLVMD || skip
++        echo "$LOCAL_CLVMD" > LOCAL_CLVMD
+ }
  
- Version 2.02.80 - 10th January 2011
---- LVM2/lib/filters/filter.c	2010/12/20 13:12:56	1.58
-+++ LVM2/lib/filters/filter.c	2011/01/12 15:28:34	1.59
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -128,6 +128,7 @@
- 	{"virtblk", 8},		/* VirtIO disk */
- 	{"mmc", 16},		/* MMC block device */
- 	{"blkext", 1},		/* Extended device partitions */
-+	{"fio", 16},		/* Fusion */
- 	{NULL, 0}
- };
+ prepare_dmeventd() {
+@@ -83,10 +84,10 @@
+ teardown() {
+     echo -n "## teardown..."
  
+-    test -n "$LOCAL_CLVMD" && {
+-	kill "$LOCAL_CLVMD"
++    test -f LOCAL_CLVMD && {
++	kill "$(cat LOCAL_CLVMD)"
+ 	sleep .1
+-	kill -9 "$LOCAL_CLVMD" || true
++	kill -9 "$(cat LOCAL_CLVMD)" || true
+     }
+ 
+     echo -n .
 
 
