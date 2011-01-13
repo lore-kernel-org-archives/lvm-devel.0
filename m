@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Jan 2011 16:07:05 -0000
-Subject: LVM2/test t-lvconvert-mirror-basic.sh
-Message-ID: <20110128160705.29046.qmail@sourceware.org>
+Date: 13 Jan 2011 14:59:00 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20110113145900.14465.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-28 16:07:05
+Changes by:	zkabelac at sourceware.org	2011-01-13 14:58:59
 
 Modified files:
-	test           : t-lvconvert-mirror-basic.sh 
+	test           : Makefile.in 
 
 Log message:
-	Accelerate mirror tests
+	Include default make.tmpl
 	
-	Instead of recreation of whole device set for each test round,
-	just cleanup created LVs to empty VG.
-	Lower the size of PV devices to 16MB
+	Use default clean targets for this Makefile
+	Use also same build flags for compiling testing tools like harness.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.51&r2=1.52
 
---- LVM2/test/t-lvconvert-mirror-basic.sh	2011/01/11 17:05:09	1.6
-+++ LVM2/test/t-lvconvert-mirror-basic.sh	2011/01/28 16:07:04	1.7
-@@ -77,8 +77,6 @@
- 		max_log_count=$start_log_count
- 	fi
+--- LVM2/test/Makefile.in	2011/01/07 12:26:02	1.51
++++ LVM2/test/Makefile.in	2011/01/13 14:58:59	1.52
+@@ -24,6 +24,7 @@
+ abs_builddir = @abs_builddir@
+ abs_top_builddir = @abs_top_builddir@
+ abs_top_srcdir = @abs_top_srcdir@
++include $(top_builddir)/make.tmpl
  
--	aux prepare_vg 5
--
- 	if [ $start_count -gt 0 ]; then
- 		# Are there extra devices for the log or do we overlap
- 		if [ $(($start_count_p1 + $start_log_count)) -gt ${#dev_array[@]} ]; then
-@@ -123,7 +121,7 @@
- 	fi
- }
+ T ?= .
+ S ?= @ # never match anything by default
+@@ -59,7 +60,7 @@
+ 	ln -sf not lib/should
  
--aux prepare_vg 5
-+aux prepare_vg 5 16
+ lib/%: $(srcdir)/lib/%.c .lib-dir-stamp
+-	$(CC) -o $@ $<
++	$(CC) $(DEFS) $(CFLAGS) -o $@ $<
  
- test_many() {
- 	i=$1
-@@ -135,7 +133,9 @@
- 				: "Testing mirror conversion -m$i/$k -> -m$j/$l"
- 				: ----------------------------------------------------
- 				test_lvconvert $i $k $j $l 0
-+				lvremove -ff $vg
- 				test_lvconvert $i $k $j $l 1
-+				lvremove -ff $vg
- 			done
- 		done
- 	done
+ lib/%: $(srcdir)/lib/%.sh .lib-dir-stamp
+ 	cp $< $@
+@@ -100,13 +101,9 @@
+ 	touch $@
+ 
+ clean:
+-	rm -rf bin .lib-dir-stamp .test-stamp
+-	rm -f $(LIB)
+-	rm -f lib/dmsetup lib/clvmd lib/dmeventd
+ 	for i in lvm $$(cat ../tools/.commands); do rm -f lib/$$i; done
+ 	if test "$(srcdir)" != . ; then rm -f $(subst $(srcdir)/, ,$(RUN)) lvm2app.sh ; fi
+ 
+-distclean: clean
+-	rm -f Makefile
++CLEAN_TARGETS += .lib-dir-stamp .test-stamp -f $(LIB) lib/dmsetup lib/clvmd lib/dmeventd
+ 
+ .NOTPARALLEL:
 
 
