@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2011 21:51:31 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-report.c
-Message-ID: <20110125215131.11155.qmail@sourceware.org>
+Date: 13 Jan 2011 14:56:18 -0000
+Subject: LVM2 ./WHATS_NEW lib/locking/locking.c
+Message-ID: <20110113145618.12179.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,91 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-25 21:51:31
+Changes by:	zkabelac at sourceware.org	2011-01-13 14:56:17
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdm-report.c 
+	.              : WHATS_NEW 
+	lib/locking    : locking.c 
 
 Log message:
-	Initialize pool object for each row
+	Skip unnecessary lock_vol() call after volume deactivation
 	
-	Fix assert abort of dmsetup (when compiled with pool debug)
-	dmsetup splitname --nameprefixes --noheadings --rows gvg-a2
+	Improve condition within lock_vol so we are not calling extra unlock
+	if the volume just has been deactivated.
 	
-	Move pool begin in the inner loop - otherwise it would using
-	already 'ended' pool object.
+	Patch uses lck_type and replaces negative 'and' condition to more
+	readable 'or' condition.
+	Few missing strace traces added.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.438&r2=1.439
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1879&r2=1.1880
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
 
---- LVM2/WHATS_NEW_DM	2011/01/10 14:51:33	1.438
-+++ LVM2/WHATS_NEW_DM	2011/01/25 21:51:30	1.439
+--- LVM2/WHATS_NEW	2011/01/13 14:51:32	1.1879
++++ LVM2/WHATS_NEW	2011/01/13 14:56:17	1.1880
 @@ -1,5 +1,6 @@
- Version 1.02.62 - 
+ Version 2.02.81 -
  ===================================
-+  Initialize pool object for each row in _output_as_rows().
++  Skip unnecessary lock_vol() call after volume deactivation.
+   Extend exec_cmd params to specify, when device sync is needed.
+   Replace fs_unlock by sync_local_dev_names to notify local clvmd. (2.02.80)
+   Introduce sync_local_dev_names and CLVMD_CMD_SYNC_NAMES to issue fs_unlock.
+--- LVM2/lib/locking/locking.c	2011/01/12 20:42:50	1.88
++++ LVM2/lib/locking/locking.c	2011/01/13 14:56:17	1.89
+@@ -406,6 +406,7 @@
+ {
+ 	char resource[258] __attribute__((aligned(8)));
+ 	lv_operation_t lv_op;
++	int lck_type = flags & LCK_TYPE_MASK;
  
- Version 1.02.61 - 10th January 2011
- ===================================
---- LVM2/libdm/libdm-report.c	2010/11/19 13:17:27	1.40
-+++ LVM2/libdm/libdm-report.c	2011/01/25 21:51:31	1.41
-@@ -1006,11 +1006,6 @@
- 	struct dm_report_field *field;
- 	struct row *row;
+ 	switch (flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) {
+ 		case LCK_LV_SUSPEND:
+@@ -432,15 +433,15 @@
+ 		if (is_orphan_vg(vol))
+ 			vol = VG_ORPHANS;
+ 		/* VG locks alphabetical, ORPHAN lock last */
+-		if (((flags & LCK_TYPE_MASK) != LCK_UNLOCK) &&
+-			 !(flags & LCK_CACHE) &&
+-			 !lvmcache_verify_lock_order(vol))
+-			return 0;
++		if ((lck_type != LCK_UNLOCK) &&
++		    !(flags & LCK_CACHE) &&
++		    !lvmcache_verify_lock_order(vol))
++			return_0;
  
--	if (!dm_pool_begin_object(rh->mem, 512)) {
--		log_error("dm_report: Unable to allocate output line");
+ 		/* Lock VG to change on-disk metadata. */
+ 		/* If LVM1 driver knows about the VG, it can't be accessed. */
+ 		if (!check_lvm1_vg_inactive(cmd, vol))
+-			return 0;
++			return_0;
+ 		break;
+ 	case LCK_LV:
+ 		/* All LV locks are non-blocking. */
+@@ -455,18 +456,18 @@
+ 	strncpy(resource, vol, sizeof(resource));
+ 
+ 	if (!_lock_vol(cmd, resource, flags, lv_op))
 -		return 0;
--	}
--
- 	dm_list_iterate_items(fp, &rh->field_props) {
- 		if (fp->flags & FLD_HIDDEN) {
- 			dm_list_iterate_items(row, &rh->rows) {
-@@ -1020,6 +1015,11 @@
- 			continue;
- 		}
++		return_0;
  
-+		if (!dm_pool_begin_object(rh->mem, 512)) {
-+			log_error("dm_report: Unable to allocate output line");
-+			return 0;
-+		}
+ 	/*
+ 	 * If a real lock was acquired (i.e. not LCK_CACHE),
+ 	 * perform an immediate unlock unless LCK_HOLD was requested.
+ 	 */
+-	if (!(flags & LCK_CACHE) && !(flags & LCK_HOLD) &&
+-	    ((flags & LCK_TYPE_MASK) != LCK_UNLOCK)) {
+-		if (!_lock_vol(cmd, resource,
+-			       (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK, lv_op))
+-			return 0;
+-	}
++	if ((lck_type == LCK_NULL) || (lck_type == LCK_UNLOCK) ||
++	    (flags & (LCK_CACHE | LCK_HOLD)))
++		return 1;
 +
- 		if ((rh->flags & DM_REPORT_OUTPUT_HEADINGS)) {
- 			if (!dm_pool_grow_object(rh->mem, rh->fields[fp->field_num].heading, 0)) {
- 				log_error("dm_report: Failed to extend row for field name");
++	if (!_lock_vol(cmd, resource, (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK, lv_op))
++		return_0;
+ 
+ 	return 1;
+ }
 
 
