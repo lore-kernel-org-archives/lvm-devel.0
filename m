@@ -1,58 +1,52 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 13:57:40 +0100
-Subject: [PATCH 17/24] Void* arithmetic replaced with char*
-In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
-References: <cover.1296391340.git.zkabelac@redhat.com>
-Message-ID: <52f76369d3da80addb8bdd14e76cd0ebbb6e6f0c.1296391340.git.zkabelac@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 17 Jan 2011 16:46:50 -0000
+Subject: LVM2 VERSION WHATS_NEW
+Message-ID: <20110117164650.13050.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-01-17 16:46:50
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- daemons/clvmd/clvmd.c        |    2 +-
- lib/format_text/text_label.c |    4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+Modified files:
+	.              : VERSION WHATS_NEW 
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 8e21732..3726324 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1867,7 +1867,7 @@ static int send_message(void *buf, int msglen, const char *csid, int fd,
- 				break;
- 			}
+Log message:
+	pre-release
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.268&r2=1.269
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1881&r2=1.1882
+
+--- LVM2/VERSION	2011/01/10 14:51:33	1.268
++++ LVM2/VERSION	2011/01/17 16:46:50	1.269
+@@ -1 +1 @@
+-2.02.81(2)-cvs (2011-01-10)
++2.02.81(2)-cvs (2011-01-17)
+--- LVM2/WHATS_NEW	2011/01/17 15:16:55	1.1881
++++ LVM2/WHATS_NEW	2011/01/17 16:46:50	1.1882
+@@ -1,12 +1,13 @@
+-Version 2.02.81 -
++Version 2.02.81 - 17th January 2011
+ ===================================
+-  Do not scan devices unnecessarily in dev_reset_error_count().
+-  Skip unnecessary lock_vol() call after volume deactivation.
+-  Extend exec_cmd params to specify, when device sync is needed.
++  Do not scan devices in dev_reset_error_count().
++  Skip unnecessary LOCK_NULL unlock call during volume deactivation.
++  Skip fs_unlock when calling exec_cmd within activation code (for modprobe).
++  Extend exec_cmd params to specify when device sync (fs_unlock) is needed.
+   Replace fs_unlock by sync_local_dev_names to notify local clvmd. (2.02.80)
+   Introduce sync_local_dev_names and CLVMD_CMD_SYNC_NAMES to issue fs_unlock.
+   Accept fusion fio in device type filter.
+-  Add disk to mirrored log type conversion.
++  Add disk to allowed mirrored log type conversions.
  
--			len = write(fd, buf + ptr, msglen - ptr);
-+			len = write(fd, (char*)buf + ptr, msglen - ptr);
- 
- 			if (len <= 0) {
- 				if (errno == EINTR)
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index ce250e6..b12250f 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -52,7 +52,7 @@ static int _text_write(struct label *label, void *buf)
- 
- 	strncpy((char *)lh->type, label->type, sizeof(label->type));
- 
--	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
-+	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 	info = (struct lvmcache_info *) label->info;
- 	pvhdr->device_size_xl = xlate64(info->device_size);
- 	memcpy(pvhdr->pv_uuid, &info->dev->pvid, sizeof(struct id));
-@@ -268,7 +268,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 	char *creation_host;
- 	struct mda_header *mdah;
- 
--	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
-+	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 
- 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
- 				  text_orphan_vg_name, text_orphan_vg_name, 0)))
--- 
-1.7.3.5
+ Version 2.02.80 - 10th January 2011
+ ===================================
 
 
