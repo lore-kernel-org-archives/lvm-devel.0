@@ -1,50 +1,37 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 13:57:36 +0100
-Subject: [PATCH 13/24] Memory unlock allows 1 page difference
-In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
-References: <cover.1296391340.git.zkabelac@redhat.com>
-Message-ID: <ab9622493e1f52065ae18d1ff78b8976f95e86ad.1296391340.git.zkabelac@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 17 Jan 2011 15:18:11 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20110117151811.20511.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As the kernel seems to be doing weird things during
-mlock -> munlock -  allow 1 page locking difference without
-warning - and log just debug message for a 1 page difference.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-01-17 15:18:10
 
-Do not scary users too often.
+Modified files:
+	test           : Makefile.in 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- lib/mm/memlock.c |   12 +++++++++---
- 1 files changed, 9 insertions(+), 3 deletions(-)
+Log message:
+	Remove -f from list of targets for cleanup
+	
+	rm -f is already in used for this cleanup.
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 062b765..9ddc2a2 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -320,9 +320,15 @@ static void _unlock_mem(struct cmd_context *cmd)
- 			log_sys_error("close", _procselfmaps);
- 		dm_free(_maps_buffer);
- 		_maps_buffer = NULL;
--		if (_mstats < unlock_mstats)
--			log_error(INTERNAL_ERROR "Maps lock %ld < unlock %ld",
--				  (long)_mstats, (long)unlock_mstats);
-+		if (_mstats < unlock_mstats) {
-+			if ((_mstats + 4096) < unlock_mstats)
-+				log_error(INTERNAL_ERROR
-+					  "Maps lock %ld < unlock %ld",
-+					  (long)_mstats, (long)unlock_mstats);
-+			else
-+				log_debug("Maps lock %ld < unlock %ld, 1 page difference!",
-+					  (long)_mstats, (long)unlock_mstats);
-+		}
- 	}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+
+--- LVM2/test/Makefile.in	2011/01/13 14:58:59	1.52
++++ LVM2/test/Makefile.in	2011/01/17 15:18:10	1.53
+@@ -104,6 +104,6 @@
+ 	for i in lvm $$(cat ../tools/.commands); do rm -f lib/$$i; done
+ 	if test "$(srcdir)" != . ; then rm -f $(subst $(srcdir)/, ,$(RUN)) lvm2app.sh ; fi
  
- 	if (setpriority(PRIO_PROCESS, 0, _priority))
--- 
-1.7.3.5
+-CLEAN_TARGETS += .lib-dir-stamp .test-stamp -f $(LIB) lib/dmsetup lib/clvmd lib/dmeventd
++CLEAN_TARGETS += .lib-dir-stamp .test-stamp $(LIB) lib/dmsetup lib/clvmd lib/dmeventd
+ 
+ .NOTPARALLEL:
 
 
