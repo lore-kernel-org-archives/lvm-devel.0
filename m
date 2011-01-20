@@ -1,57 +1,53 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 20 Jan 2011 11:29:52 +0100
-Subject: LVM2/test t-lvconvert-repair-policy.sh
-In-Reply-To: <20110119192207.5486.qmail@sourceware.org>
-References: <20110119192207.5486.qmail@sourceware.org>
-Message-ID: <4D380EA0.60108@redhat.com>
+Date: Thu, 20 Jan 2011 11:34:46 +0100
+Subject: [PATCH] Print less scary message if pvmove already finished.
+In-Reply-To: <1295476632-9949-1-git-send-email-mbroz@redhat.com>
+References: <1295476632-9949-1-git-send-email-mbroz@redhat.com>
+Message-ID: <4D380FC6.2020101@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 19.1.2011 20:22, jbrassow at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	jbrassow at sourceware.org	2011-01-19 19:22:07
+Dne 19.1.2011 23:37, Milan Broz napsal(a):
+> If other process finishes (ar aborts) pvmove operation and
+> polling function cannot find any lv with PVMOVE flag return
+> success and do not print  "aborting" message.
 > 
-> Modified files:
-> 	test           : t-lvconvert-repair-policy.sh 
+> Fixes https://bugzilla.redhat.com/show_bug.cgi?id=602389
+> ---
+>  tools/polldaemon.c |   12 ++++++++++--
+>  1 files changed, 10 insertions(+), 2 deletions(-)
 > 
-> Log message:
-> 	Add test to make sure that a log device is retained when a
-> 	mirror image fails and the policies are set to:
-> 	mirror_image_fault_policy = "replace"
-> 	mirror_log_fault_policy = "remove"
-> 
-> Patches:
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-policy.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-> 
-> --- LVM2/test/t-lvconvert-repair-policy.sh	2011/01/11 17:05:09	1.7
-> +++ LVM2/test/t-lvconvert-repair-policy.sh	2011/01/19 19:22:07	1.8
-> @@ -39,6 +39,14 @@
->  cleanup $dev1
+> diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+> index aac9c17..fdb3edd 100644
+> --- a/tools/polldaemon.c
+> +++ b/tools/polldaemon.c
+> @@ -193,8 +193,16 @@ static int _wait_for_single_lv(struct cmd_context *cmd, const char *name, const
+>  			return 0;
+>  		}
 >  
->  # Fail a leg of a mirror.
-> +# Expected result: Mirror (leg replaced, should retain log)
-> +aux disable_dev $dev1
-> +repair 'activation { mirror_image_fault_policy = "replace" mirror_log_fault_policy = "remove" }'
-> +check mirror $vg mirror
-> +lvs | grep mirror_mlog
+> -		if (!(lv = parms->poll_fns->get_copy_lv(cmd, vg, name, uuid,
+> -							parms->lv_type))) {
+> +		lv = parms->poll_fns->get_copy_lv(cmd, vg, name, uuid, parms->lv_type);
+> +
+> +		if (!lv && parms->lv_type == PVMOVE) {
+> +			log_print("%s: pvmove finished or aborted by other process.",
+> +				  name);
+> +			unlock_and_free_vg(cmd, vg, vg->name);
+> +			return 1;
+> +		}
+> +
+> +		if (!lv) {
+>  			log_error("ABORTING: Can't find LV in %s for %s",
+>  				  vg->name, name);
+>  			unlock_and_free_vg(cmd, vg, vg->name);
 
-This will not work properly on systems which are already running lvm. (i.e.
-even second test running in parallel).
 
-Test needs to check explicitly for devices it has created - so always add VGs
-or PVs on its command line.
+I would move it into the same 'if (!lv)'
+and just add a sub if for   if (parms->...) { }
 
-Please check more lib/check.sh functions - I assume you want to use active().
-
-
->  check mirror $vg mirror
->  lvs | grep mirror_mlog
-
-Same
 
 Zdenek
 
