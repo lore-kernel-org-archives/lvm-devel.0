@@ -1,62 +1,58 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 19 Jan 2011 23:11:41 -0000
-Subject: LVM2 ./WHATS_NEW tools/polldaemon.c
-Message-ID: <20110119231141.22779.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 20 Jan 2011 11:29:52 +0100
+Subject: LVM2/test t-lvconvert-repair-policy.sh
+In-Reply-To: <20110119192207.5486.qmail@sourceware.org>
+References: <20110119192207.5486.qmail@sourceware.org>
+Message-ID: <4D380EA0.60108@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-01-19 23:11:40
+Dne 19.1.2011 20:22, jbrassow at sourceware.org napsal(a):
+> CVSROOT:	/cvs/lvm2
+> Module name:	LVM2
+> Changes by:	jbrassow at sourceware.org	2011-01-19 19:22:07
+> 
+> Modified files:
+> 	test           : t-lvconvert-repair-policy.sh 
+> 
+> Log message:
+> 	Add test to make sure that a log device is retained when a
+> 	mirror image fails and the policies are set to:
+> 	mirror_image_fault_policy = "replace"
+> 	mirror_log_fault_policy = "remove"
+> 
+> Patches:
+> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-repair-policy.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+> 
+> --- LVM2/test/t-lvconvert-repair-policy.sh	2011/01/11 17:05:09	1.7
+> +++ LVM2/test/t-lvconvert-repair-policy.sh	2011/01/19 19:22:07	1.8
+> @@ -39,6 +39,14 @@
+>  cleanup $dev1
+>  
+>  # Fail a leg of a mirror.
+> +# Expected result: Mirror (leg replaced, should retain log)
+> +aux disable_dev $dev1
+> +repair 'activation { mirror_image_fault_policy = "replace" mirror_log_fault_policy = "remove" }'
+> +check mirror $vg mirror
+> +lvs | grep mirror_mlog
 
-Modified files:
-	.              : WHATS_NEW 
-	tools          : polldaemon.c 
+This will not work properly on systems which are already running lvm. (i.e.
+even second test running in parallel).
 
-Log message:
-	If other process finishes (or aborts) pvmove operation and
-	polling function cannot find any lv with PVMOVE flag, return
-	success and do not print  "aborting" message.
-	
-	Fixes https://bugzilla.redhat.com/show_bug.cgi?id=602389
+Test needs to check explicitly for devices it has created - so always add VGs
+or PVs on its command line.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1885&r2=1.1886
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+Please check more lib/check.sh functions - I assume you want to use active().
 
---- LVM2/WHATS_NEW	2011/01/19 23:09:31	1.1885
-+++ LVM2/WHATS_NEW	2011/01/19 23:11:39	1.1886
-@@ -2,6 +2,7 @@
- ===================================
-   Add -f (don't fork) option to clvmd and fix clvmd -d<num> description.
-   Fix possible clvmd DLM lockspace increasing reference count.
-+  Do not fail polling if pvmove finished in another process.
- 
- Version 2.02.81 - 17th January 2011
- ===================================
---- LVM2/tools/polldaemon.c	2011/01/12 20:42:51	1.42
-+++ LVM2/tools/polldaemon.c	2011/01/19 23:11:39	1.43
-@@ -193,8 +193,16 @@
- 			return 0;
- 		}
- 
--		if (!(lv = parms->poll_fns->get_copy_lv(cmd, vg, name, uuid,
--							parms->lv_type))) {
-+		lv = parms->poll_fns->get_copy_lv(cmd, vg, name, uuid, parms->lv_type);
-+
-+		if (!lv && parms->lv_type == PVMOVE) {
-+			log_print("%s: no pvmove in progress - already finished or aborted.",
-+				  name);
-+			unlock_and_free_vg(cmd, vg, vg->name);
-+			return 1;
-+		}
-+
-+		if (!lv) {
- 			log_error("ABORTING: Can't find LV in %s for %s",
- 				  vg->name, name);
- 			unlock_and_free_vg(cmd, vg, vg->name);
+
+>  check mirror $vg mirror
+>  lvs | grep mirror_mlog
+
+Same
+
+Zdenek
 
 
