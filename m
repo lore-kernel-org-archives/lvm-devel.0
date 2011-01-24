@@ -1,242 +1,487 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 24 Jan 2011 12:03:52 +0100
-Subject: [PATCH 01/17] Add pvid parameter to create_instance function.
+Date: Mon, 24 Jan 2011 12:03:53 +0100
+Subject: [PATCH 02/17] Add supporting functions for metadata areas stored in format instance.
 In-Reply-To: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
 References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <1295867048-21558-2-git-send-email-prajnoha@redhat.com>
+Message-ID: <1295867048-21558-3-git-send-email-prajnoha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is a preparation for the next patches...
+This patch divides current create_instance functionality into PV-based
+and VG-based. We add a simple flag "pv_only" in struct format_instance
+that will help us to identify the type of the format_instance when used
+later on (since we will always have PV/VG separation, I think it would
+be useless to define an interface for this where we would attach supporting
+functions on the fly like we do for mda->ops as an example. In this case,
+a simple flag is fine to switch the functionality).
 
-The format instance holds the information about current metadata areas and it
-is a snapshot of what we have in the cache at the moment of the instance
-creation. Through the command exection, we use this instance to modify, set
-and access modified metadata areas (like we use it to support the
---metadataignore and we store the metadata areas that are in use and the
-ones that are ignored).
+Another change is the metadata_areas_index we have in the struct
+format_instance. To access a certain metadata area, we need to know
+two keys - PV id and metadta area index within that PV. So a few new
+functions have been modified/added to support this:
+- fid_add_mda (modified)
+- fid_add_mdas (modified)
+- fid_remove_mda (new)
+- fid_get_mda_indexed (new)
 
-But to support modifying metadata areas fully (with add/remove metadata
-area support), we need to be able to create format instances for PVs as well.
-Hence, add the pvid parameter for the create_instance function.
+Actually, the form of the key that will be used is up to the caller,
+but he needs to remember the key somehow to get the mda back :)
 
-The rules we will follow:
+The key is simply made up of the base key (a string) and a subkey
+(an unsigned integer). The actual key used internally is then a string:
 
- - the format instance is VG-based or PV-based, but *never both*
-   at the same time,
+  <basekey>_<subkey>
 
- - when a PV (structure) is alone, not part of any VG, we will have
-   a PV based format_instance attached to the PV structure,
+Now, the metadata_areas_index is format specific. This is because
+each format can have different number and types of metadata areas
+it can support and so we'd like to be able to use the most suitable
+index for the specific format. Also, we can use a different indexing
+scheme for PV and VG based format_instance.
 
- - when a PV is part of the VG, any existing PV-based format_instance
-   is destroyed and the PV strucutre will reference VG based format
-   instance instead.
+For PV based format instance in current lvm2 format, we have only
+2 metadata areas at maximum. So we use only a simple array. No need
+to use any buldozer-type indexing here :)
 
- - whatever we need change for mdas, we'll use the format_instance,
-   we don't touch the cache directly! This will be synchronized with the
-   format instance after pv_write automatically.
+For VG based format instance, we can group many many mdas together
+from numerous PVs. So we'll use a hash here (like we use for the cache).
+(but maybe we can add even better indexing in the future!)
+
+If key is not defined, we just store the mda without indexing.
+We'll have it in the metadata_areas_in_use/ignored list directly.
+
+...but we can change these later if needed, of course. The
+implementation is internal, the interface stays the same)
+
+Also, I kept the format instance's metadata_areas_in_use/ignored for
+now, but eventually, I'd like this to be accessed through the index
+in the future. But that is another step to take later...
 
 Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
 ---
- lib/cache/lvmcache.c          |    2 +-
- lib/format1/format1.c         |    1 +
- lib/format_pool/format_pool.c |    1 +
- lib/format_text/archive.c     |    2 +-
- lib/format_text/archiver.c    |    8 ++++----
- lib/format_text/format-text.c |   20 +++++++++++---------
- lib/metadata/metadata.c       |   10 +++++-----
- lib/metadata/metadata.h       |    5 +++--
- 8 files changed, 27 insertions(+), 22 deletions(-)
+ lib/format1/format1.c            |    1 +
+ lib/format_text/format-text.c    |  137 ++++++++++++++++++++++++++++----------
+ lib/format_text/format-text.h    |    1 +
+ lib/metadata/metadata-exported.h |    3 +
+ lib/metadata/metadata.c          |  103 +++++++++++++++++++++++++++-
+ lib/metadata/metadata.h          |   10 ++-
+ 6 files changed, 213 insertions(+), 42 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 0e9cae1..476b176 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -653,7 +653,7 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
- 		return NULL;
- 
- 	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt,
--						      vginfo->vgname,
-+						      NULL, vginfo->vgname,
- 						      vgid, NULL)))
- 		return_NULL;
- 
 diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index fc14444..13b757d 100644
+index 13b757d..ff5b0f5 100644
 --- a/lib/format1/format1.c
 +++ b/lib/format1/format1.c
-@@ -522,6 +522,7 @@ static struct metadata_area_ops _metadata_format1_ops = {
- };
+@@ -534,6 +534,7 @@ static struct format_instance *_format1_create_instance(const struct format_type
+ 		return_NULL;
  
- static struct format_instance *_format1_create_instance(const struct format_type *fmt,
-+						const char *pvid __attribute__((unused)),
- 						const char *vgname __attribute__((unused)),
- 						const char *vgid __attribute__((unused)),
- 						void *private __attribute__((unused)))
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index 730da87..814d80c 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -249,6 +249,7 @@ static struct metadata_area_ops _metadata_format_pool_ops = {
- /* *INDENT-ON* */
+ 	fid->fmt = fmt;
++	fid->metadata_areas_index = NULL;
+ 	dm_list_init(&fid->metadata_areas_in_use);
+ 	dm_list_init(&fid->metadata_areas_ignored);
  
- static struct format_instance *_pool_create_instance(const struct format_type *fmt,
-+						const char *pvid __attribute__((unused)),
- 						const char *vgname __attribute__((unused)),
- 						const char *vgid __attribute__((unused)),
- 						void *private __attribute__((unused)))
-diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
-index 43425dc..760153c 100644
---- a/lib/format_text/archive.c
-+++ b/lib/format_text/archive.c
-@@ -309,7 +309,7 @@ static void _display_archive(struct cmd_context *cmd, struct archive_file *af)
- 
- 	if (!(context = create_text_context(cmd, af->path, NULL)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+							 NULL, NULL, context))) {
- 		log_error("Couldn't create text instance object.");
- 		return;
- 	}
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index e0212a2..b7dcad9 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -278,7 +278,7 @@ struct volume_group *backup_read_vg(struct cmd_context *cmd,
- 	if (!(context = create_text_context(cmd, file,
- 					    cmd->cmd_line)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+							 NULL, NULL, context))) {
- 		log_error("Couldn't create text format object.");
- 		return NULL;
- 	}
-@@ -306,8 +306,8 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg)
- 	 */
- 
- 	/* Attempt to write out using currently active format */
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg->name,
--						       NULL, NULL))) {
-+	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, NULL,
-+						vg->name, NULL, NULL))) {
- 		log_error("Failed to allocate format instance");
- 		return 0;
- 	}
-@@ -398,7 +398,7 @@ int backup_to_file(const char *file, const char *desc, struct volume_group *vg)
- 
- 	if (!(context = create_text_context(cmd, file, desc)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+							 NULL, NULL, context))) {
- 		log_error("Couldn't create backup object.");
- 		return 0;
- 	}
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c186757..fda8255 100644
+index fda8255..c8c56f7 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -37,10 +37,11 @@
- #include <dirent.h>
- #include <ctype.h>
+@@ -48,6 +48,10 @@ struct text_fid_context {
+ 	uint32_t raw_metadata_buf_size;
+ };
  
--static struct format_instance *_text_create_text_instance(const struct format_type
--						     *fmt, const char *vgname,
--						     const char *vgid,
--						     void *context);
++struct text_fid_pv_context {
++	int64_t label_sector;
++};
++
+ struct dir_list {
+ 	struct dm_list list;
+ 	char dir[0];
+@@ -1912,14 +1916,38 @@ static int _text_pv_setup(const struct format_type *fmt,
+ 	return 1;
+ }
+ 
+-/* NULL vgname means use only the supplied context e.g. an archive file */
+-static struct format_instance *_text_create_text_instance(const struct format_type*fmt,
+-							  const char *pvid,
+-							  const char *vgname,
+-							  const char *vgid,
+-							  void *context)
++static int _create_pv_text_instance(struct format_instance *fid, const char *pvid)
++{
++	struct text_fid_pv_context *fid_pv_tc;
++	struct lvmcache_info *info;
++
++	fid->pv_only = 1;
++
++	if (!(fid_pv_tc = (struct text_fid_pv_context *)
++			  dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*fid_pv_tc)))) {
++		log_error("Couldn't allocate text_fid_pv_context.");
++		return 0;
++	}
++	fid_pv_tc->label_sector = -1;
++	fid->private = (void *) fid_pv_tc;
++
++	if (!(fid->metadata_areas_index = dm_pool_zalloc(fid->fmt->cmd->mem,
++						   FMT_TEXT_MAX_MDAS_PER_PV *
++						   sizeof(struct metadata_area *)))) {
++		log_error("Couldn't allocate format instance metadata index.");
++		return 0;
++	}
++
++	if ((info = info_from_pvid(pvid, 0)))
++		fid_add_mdas(fid, &info->mdas, pvid, ID_LEN);
++
++	return 1;
++}
++
++static int _create_vg_text_instance(struct format_instance *fid,
++				    const char *vgname, const char *vgid,
++				    void *context)
+ {
+-	struct format_instance *fid;
+ 	struct text_fid_context *fidtc;
+ 	struct metadata_area *mda;
+ 	struct mda_context *mdac;
+@@ -1930,85 +1958,122 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 	struct lvmcache_vginfo *vginfo;
+ 	struct lvmcache_info *info;
+ 
+-	if (!(fid = dm_pool_alloc(fmt->cmd->mem, sizeof(*fid)))) {
+-		log_error("Couldn't allocate format instance object.");
+-		return NULL;
+-	}
++	fid->pv_only = 0;
+ 
+ 	if (!(fidtc = (struct text_fid_context *)
+-			dm_pool_zalloc(fmt->cmd->mem,sizeof(*fidtc)))) {
++			dm_pool_zalloc(fid->fmt->cmd->mem,sizeof(*fidtc)))) {
+ 		log_error("Couldn't allocate text_fid_context.");
+-		return NULL;
++		return 0;
+ 	}
+ 
+ 	fidtc->raw_metadata_buf = NULL;
+ 	fid->private = (void *) fidtc;
+ 
+-	fid->fmt = fmt;
+-	dm_list_init(&fid->metadata_areas_in_use);
+-	dm_list_init(&fid->metadata_areas_ignored);
+-
+ 	if (!vgname) {
+-		if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda))))
+-			return_NULL;
++		if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
++			return_0;
+ 		mda->ops = &_metadata_text_file_backup_ops;
+ 		mda->metadata_locn = context;
+ 		mda->status = 0;
+-		fid_add_mda(fid, mda);
++		fid_add_mda(fid, mda, NULL, 0, 0);
+ 	} else {
+-		dir_list = &((struct mda_lists *) fmt->private)->dirs;
++		if (!(fid->metadata_areas_index = dm_hash_create(128))) {
++			log_error("Couldn't create metadata index for format "
++				  "instance of VG %s.", vgname);
++			return 0;
++		}
++
++		dir_list = &((struct mda_lists *) fid->fmt->private)->dirs;
+ 
+ 		dm_list_iterate_items(dl, dir_list) {
+ 			if (dm_snprintf(path, PATH_MAX, "%s/%s",
+ 					 dl->dir, vgname) < 0) {
+ 				log_error("Name too long %s/%s", dl->dir,
+ 					  vgname);
+-				return NULL;
++				return 0;
+ 			}
+ 
+-			context = create_text_context(fmt->cmd, path, NULL);
+-			if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda))))
+-				return_NULL;
++			context = create_text_context(fid->fmt->cmd, path, NULL);
++			if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
++				return_0;
+ 			mda->ops = &_metadata_text_file_ops;
+ 			mda->metadata_locn = context;
+ 			mda->status = 0;
+-			fid_add_mda(fid, mda);
++			fid_add_mda(fid, mda, NULL, 0, 0);
+ 		}
+ 
+-		raw_list = &((struct mda_lists *) fmt->private)->raws;
++		raw_list = &((struct mda_lists *) fid->fmt->private)->raws;
+ 
+ 		dm_list_iterate_items(rl, raw_list) {
+ 			/* FIXME Cache this; rescan below if some missing */
+ 			if (!_raw_holds_vgname(fid, &rl->dev_area, vgname))
+ 				continue;
+ 
+-			if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda))))
+-				return_NULL;
++			if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
++				return_0;
+ 
+-			if (!(mdac = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mdac))))
+-				return_NULL;
++			if (!(mdac = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mdac))))
++				return_0;
+ 			mda->metadata_locn = mdac;
+ 			/* FIXME Allow multiple dev_areas inside area */
+ 			memcpy(&mdac->area, &rl->dev_area, sizeof(mdac->area));
+ 			mda->ops = &_metadata_text_raw_ops;
+ 			mda->status = 0;
+ 			/* FIXME MISTAKE? mda->metadata_locn = context; */
+-			fid_add_mda(fid, mda);
++			fid_add_mda(fid, mda, NULL, 0, 0);
+ 		}
+ 
+ 		/* Scan PVs in VG for any further MDAs */
+-		lvmcache_label_scan(fmt->cmd, 0);
++		lvmcache_label_scan(fid->fmt->cmd, 0);
+ 		if (!(vginfo = vginfo_from_vgname(vgname, vgid)))
+ 			goto_out;
+ 		dm_list_iterate_items(info, &vginfo->infos) {
+-			if (!fid_add_mdas(fid, &info->mdas))
+-				return_NULL;
++			if (!fid_add_mdas(fid, &info->mdas, info->dev->pvid,
++					  ID_LEN))
++				return_0;
+ 		}
+ 		/* FIXME Check raw metadata area count - rescan if required */
+ 	}
+ 
+       out:
+-	return fid;
++	return 1;
++}
++
++/* NULL vgname means use only the supplied context e.g. an archive file */
 +static struct format_instance *_text_create_text_instance(const struct format_type *fmt,
 +							  const char *pvid,
 +							  const char *vgname,
 +							  const char *vgid,
-+							  void *context);
- 
- struct text_fid_context {
- 	char *raw_metadata_buf;
-@@ -1085,7 +1086,7 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
- 
- 				/* FIXME stat file to see if it's changed */
- 				fid = _text_create_text_instance(fmt, NULL, NULL,
--							    NULL);
-+								 NULL, NULL);
- 				if ((vg = _vg_read_file_name(fid, scanned_vgname,
- 							     path))) {
- 					/* FIXME Store creation host in vg */
-@@ -1912,10 +1913,11 @@ static int _text_pv_setup(const struct format_type *fmt,
++							  void *context)
++{
++	struct format_instance *fid;
++	int r;
++
++	if (pvid && (vgname || vgid)) {
++		log_error(INTERNAL_ERROR "Format instance must be PV "
++					 "or VG specific, not both.");
++		return NULL;
++	}
++
++	if (!(fid = dm_pool_alloc(fmt->cmd->mem, sizeof(*fid)))) {
++		log_error("Couldn't allocate format instance object.");
++		return NULL;
++	}
++
++	fid->fmt = fmt;
++	fid->metadata_areas_index = NULL;
++	dm_list_init(&fid->metadata_areas_in_use);
++	dm_list_init(&fid->metadata_areas_ignored);
++
++	r = pvid ? _create_pv_text_instance(fid, pvid) :
++		   _create_vg_text_instance(fid, vgname, vgid, context);
++
++	if (r)
++		return fid;
++	else {
++		dm_pool_free(fmt->cmd->mem, fid);
++		return NULL;
++	}
  }
  
- /* NULL vgname means use only the supplied context e.g. an archive file */
--static struct format_instance *_text_create_text_instance(const struct format_type
--						     *fmt, const char *vgname,
--						     const char *vgid,
--						     void *context)
-+static struct format_instance *_text_create_text_instance(const struct format_type*fmt,
-+							  const char *pvid,
-+							  const char *vgname,
-+							  const char *vgid,
-+							  void *context)
- {
- 	struct format_instance *fid;
- 	struct text_fid_context *fidtc;
+ void *create_text_context(struct cmd_context *cmd, const char *path,
+diff --git a/lib/format_text/format-text.h b/lib/format_text/format-text.h
+index 79365ea..f3cf4f5 100644
+--- a/lib/format_text/format-text.h
++++ b/lib/format_text/format-text.h
+@@ -22,6 +22,7 @@
+ #define FMT_TEXT_NAME "lvm2"
+ #define FMT_TEXT_ALIAS "text"
+ #define FMT_TEXT_ORPHAN_VG_NAME ORPHAN_VG_NAME(FMT_TEXT_NAME)
++#define FMT_TEXT_MAX_MDAS_PER_PV 2
+ 
+ /*
+  * Archives a vg config.  'retain_days' is the minimum number of
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index a9709d6..d8247dd 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -173,6 +173,8 @@ struct pv_segment {
+ 
+ struct format_instance {
+ 	const struct format_type *fmt;
++	int pv_only;
++
+ 	/*
+ 	 * Each mda in a vg is on exactly one of the below lists.
+ 	 * MDAs on the 'in_use' list will be read from / written to
+@@ -181,6 +183,7 @@ struct format_instance {
+ 	 */
+ 	struct dm_list metadata_areas_in_use;
+ 	struct dm_list metadata_areas_ignored;
++	void *metadata_areas_index;
+ 	void *private;
+ };
+ 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 771cdb0..fd1948a 100644
+index fd1948a..c3accaf 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -974,8 +974,8 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
- 	/* initialize removed_pvs list */
- 	dm_list_init(&vg->removed_pvs);
+@@ -2881,7 +2881,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 					break;
+ 				}
+ 				if (dm_list_size(&info->mdas)) {
+-					if (!fid_add_mdas(fid, &info->mdas))
++					if (!fid_add_mdas(fid, &info->mdas,
++							info->dev->pvid, ID_LEN))
+ 						return_NULL;
+ 					 
+ 					log_debug("Empty mda found for VG %s.", vgname);
+@@ -3912,22 +3913,116 @@ uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname)
+ 	return FAILED_EXIST;
+ }
  
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg_name,
--						       NULL, NULL))) {
-+	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, NULL,
-+						vg_name, NULL, NULL))) {
- 		log_error("Failed to create format instance");
- 		goto bad;
+-void fid_add_mda(struct format_instance *fid, struct metadata_area *mda)
++static int _convert_key_to_string(const char *key, size_t key_len,
++				  unsigned subkey, char *buf, size_t buf_len)
+ {
++	memcpy(buf, key, key_len);
++	buf += key_len;
++	buf_len -= key_len;
++	if ((dm_snprintf(buf, buf_len, "_%u", subkey) == -1))
++		return_0;
++
++	return 1;
++}
++
++int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
++		 const char *key, size_t key_len, const unsigned subkey)
++{
++	char extended_key[PATH_MAX];
++
+ 	dm_list_add(mda_is_ignored(mda) ? &fid->metadata_areas_ignored :
+ 					  &fid->metadata_areas_in_use, &mda->list);
++
++	/*
++	 * Return if the mda is not supposed to be
++	 * indexed or the index itself is not initialised */
++	if (!key || !fid->metadata_areas_index)
++		return 1;
++
++	if (!_convert_key_to_string(key, key_len, subkey,
++				    extended_key, PATH_MAX))
++		return_0;
++
++	/* Add metadata area to index. */
++	if (fid->pv_only)
++		((struct metadata_area **)fid->metadata_areas_index)[subkey] = mda;
++	else
++		dm_hash_insert(fid->metadata_areas_index, extended_key, mda);
++
++	return 1;
+ }
+ 
+-int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas)
++int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas,
++		 const char *key, size_t key_len)
+ {
+ 	struct metadata_area *mda, *mda_new;
++	unsigned mda_index = 0;
+ 
+ 	dm_list_iterate_items(mda, mdas) {
+ 		mda_new = mda_copy(fid->fmt->cmd->mem, mda);
+ 		if (!mda_new)
+ 			return_0;
+-		fid_add_mda(fid, mda_new);
++
++		fid_add_mda(fid, mda_new, key, key_len, mda_index);
++		mda_index++;
  	}
-@@ -2629,7 +2629,7 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
- 	}
++
++	return 1;
++}
++
++struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
++					  const char *key, size_t key_len,
++					  const unsigned subkey)
++{
++	char extended_key[PATH_MAX];
++	struct metadata_area *mda = NULL;
++
++	if (!_convert_key_to_string(key, key_len, subkey,
++				    extended_key, PATH_MAX))
++		return_NULL;
++
++	if (fid->pv_only)
++		mda = ((struct metadata_area **)fid->metadata_areas_index)[subkey];
++	else
++		mda = (struct metadata_area *) dm_hash_lookup(fid->metadata_areas_index,
++							      extended_key);
++	return mda;
++}
++
++int fid_remove_mda(struct format_instance *fid, struct metadata_area *mda,
++		   const char *key, size_t key_len, const unsigned subkey)
++{
++	struct metadata_area *mda_indexed = NULL;
++	char extended_key[PATH_MAX];
++
++	/* At least one of mda or key must be specified. */
++	if (!mda && !key)
++		return 1;
++
++	if (key) {
++		/*
++		 * If both mda and key specified, check given mda
++		 * with what we find using the index and return
++		 * immediately if these two do not match.
++		 */
++		if (!(mda_indexed = fid_get_mda_indexed(fid, key, key_len, subkey)) ||
++		     (mda && mda != mda_indexed))
++			return 1;
++
++		if (!_convert_key_to_string(key, key_len, subkey,
++					    extended_key, PATH_MAX))
++			return_0;
++
++		mda = mda_indexed;
++
++		if (fid->pv_only)
++			((struct metadata_area**)fid->metadata_areas_index)[subkey] = NULL;
++		else
++			dm_hash_remove(fid->metadata_areas_index, extended_key);
++	}
++
++	dm_list_del(&mda->list);
++
+ 	return 1;
+ }
  
- 	/* create format instance with appropriate metadata area */
--	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt,
-+	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt, NULL,
- 							  orphan_vgname, NULL,
- 							  NULL))) {
- 		log_error("Failed to create format instance");
-@@ -2808,7 +2808,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		use_precommitted = 0;
- 
- 	/* create format instance with appropriate metadata area */
--	if (!(fid = fmt->ops->create_instance(fmt, vgname, vgid, NULL))) {
-+	if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL))) {
- 		log_error("Failed to create format instance");
- 		return NULL;
- 	}
-@@ -2962,7 +2962,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			use_precommitted = 0;
- 
- 		/* create format instance with appropriate metadata area */
--		if (!(fid = fmt->ops->create_instance(fmt, vgname, vgid, NULL))) {
-+		if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL))) {
- 			log_error("Failed to create format instance");
- 			return NULL;
- 		}
 diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index c0f9148..ab7cff0 100644
+index ab7cff0..0fbc954 100644
 --- a/lib/metadata/metadata.h
 +++ b/lib/metadata/metadata.h
-@@ -279,8 +279,9 @@ struct format_handler {
- 	/*
- 	 * Create format instance with a particular metadata area
- 	 */
--	struct format_instance *(*create_instance) (const struct format_type *
--						    fmt, const char *vgname,
-+	struct format_instance *(*create_instance) (const struct format_type *fmt,
-+						    const char *pvid,
-+						    const char *vgname,
- 						    const char *vgid,
- 						    void *context);
+@@ -191,8 +191,14 @@ struct metadata_area *mda_copy(struct dm_pool *mem,
+ unsigned mda_is_ignored(struct metadata_area *mda);
+ void mda_set_ignored(struct metadata_area *mda, unsigned ignored);
+ unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2);
+-void fid_add_mda(struct format_instance *fid, struct metadata_area *mda);
+-int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas);
++int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
++		 const char *key, size_t key_len, const unsigned subkey);
++int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas,
++		 const char *key, size_t key_len);
++int fid_remove_mda(struct format_instance *fid, struct metadata_area *mda,
++		   const char *key, size_t key_len, const unsigned subkey);
++struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
++		const char *key, size_t key_len, const unsigned subkey);
+ int mdas_empty_or_ignored(struct dm_list *mdas);
  
+ #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
 -- 
 1.7.3.4
 
