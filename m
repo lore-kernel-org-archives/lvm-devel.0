@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 Jan 2011 20:02:08 -0000
-Subject: LVM2 ./WHATS_NEW man/lvscan.8.in
-Message-ID: <20110124200208.31506.qmail@sourceware.org>
+Date: 24 Jan 2011 23:24:08 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW
+Message-ID: <20110124232408.13200.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-01-24 20:02:08
+Changes by:	agk at sourceware.org	2011-01-24 23:24:06
 
 Modified files:
-	.              : WHATS_NEW 
-	man            : lvscan.8.in 
+	.              : VERSION VERSION_DM WHATS_NEW 
 
 Log message:
-	Bring lvscan man page up-to-date.
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1888&r2=1.1889
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvscan.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.270&r2=1.271
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.78&r2=1.79
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1889&r2=1.1890
 
---- LVM2/WHATS_NEW	2011/01/24 14:19:05	1.1888
-+++ LVM2/WHATS_NEW	2011/01/24 20:02:07	1.1889
-@@ -1,5 +1,6 @@
- Version 2.02.82 -
+--- LVM2/VERSION	2011/01/17 18:16:18	1.270
++++ LVM2/VERSION	2011/01/24 23:24:06	1.271
+@@ -1 +1 @@
+-2.02.82(2)-cvs (2011-01-17)
++2.02.82(2)-cvs (2011-01-24)
+--- LVM2/VERSION_DM	2011/01/17 18:16:18	1.78
++++ LVM2/VERSION_DM	2011/01/24 23:24:06	1.79
+@@ -1 +1 @@
+-1.02.62-cvs (2011-01-17)
++1.02.62-cvs (2011-01-24)
+--- LVM2/WHATS_NEW	2011/01/24 20:02:07	1.1889
++++ LVM2/WHATS_NEW	2011/01/24 23:24:06	1.1890
+@@ -1,12 +1,12 @@
+-Version 2.02.82 -
++Version 2.02.82 - 24th January 2011
  ===================================
-+  Bring lvscan man page up-to-date.
+   Bring lvscan man page up-to-date.
    Fix lvchange --test to exit cleanly.
    Add change_tag to toollib.
    Allow multiple pvchange command line options to be specified together.
---- LVM2/man/lvscan.8.in	2009/10/26 14:37:09	1.2
-+++ LVM2/man/lvscan.8.in	2011/01/24 20:02:08	1.3
-@@ -1,6 +1,6 @@
- .TH LVSCAN 8 "LVM TOOLS #VERSION#" "Sistina Software UK" \" -*- nroff -*-
- .SH NAME
--lvscan \- scan (all disks) for logical volumes
-+lvscan \- scan (all disks) for Logical Volumes
- .SH SYNOPSIS
- .B lvscan
- .RB [ \-a | \-\-all]
-@@ -13,7 +13,11 @@
- .SH DESCRIPTION
- .B lvscan
- scans all known volume groups or all supported LVM block devices
--in the system for defined logical volumes.
-+in the system for defined Logical Volumes.  The output consists
-+of one line for each Logical Volume indicating whether or not it is active, 
-+a snapshot or origin, the size of the device and its allocation policy.
-+Use \fBlvs(8)\fP or \fBlvdisplay(8)\fP to obtain more-comprehensive information 
-+about the Logical Volumes.
- .SH OPTIONS
- See \fBlvm\fP for common options.
- .TP
-@@ -26,9 +30,10 @@
- mimage_0, mimage_1, and mlog.
- .TP
- .BR \-b ", " \-\-blockdevice
--Adds the device major and minor numbers to the display
--of each logical volume.
-+This option is now ignored.  Instead, use \fBlvs(8)\fP or \fBlvdisplay(8)\fP to obtain
-+the device number.
- .SH SEE ALSO
- .BR lvm (8), 
- .BR lvcreate (8),
- .BR lvdisplay (8)
-+.BR lvs (8)
++  Do not fail pvmove polling if another process cleaned up first.
++  Avoid clvmd incrementing dlm lockspace reference count more than once.
+   Add -f (don't fork) option to clvmd and fix clvmd -d<num> description.
+-  Fix possible clvmd DLM lockspace increasing reference count.
+-  Do not fail polling if pvmove finished in another process.
+ 
+ Version 2.02.81 - 17th January 2011
+ ===================================
 
 
