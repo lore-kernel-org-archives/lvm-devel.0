@@ -1,63 +1,72 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 24 Jan 2011 17:04:17 +0100
-Subject: [PATCH 16/17] Fix pvchange -u to work with recent changes in metadata handling interface.
-In-Reply-To: <1295867048-21558-17-git-send-email-prajnoha@redhat.com>
-References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
-	<1295867048-21558-17-git-send-email-prajnoha@redhat.com>
-Message-ID: <4D3DA301.2090303@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 24 Jan 2011 20:02:08 -0000
+Subject: LVM2 ./WHATS_NEW man/lvscan.8.in
+Message-ID: <20110124200208.31506.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/24/2011 12:04 PM +0100, Peter Rajnoha wrote:
-> I use PV id as a key for format instance's metadata_areas_index.
-> But since we change this one, I still need to work with the original
-> one to access the metadata areas (e.g. in pv_write). So, I defined
-> the pv->old_id to store that.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-01-24 20:02:08
 
-One more thing to note. We should probably allow writing non-orphan
-PVs directly... The pv_write code calls:
+Modified files:
+	.              : WHATS_NEW 
+	man            : lvscan.8.in 
 
-    /* Add a new cache entry with PV info or update existing one. */
-        if (!(info = lvmcache_add(fmt->labeller, (const char *) &pv->id,   
-                        pv->dev, FMT_TEXT_ORPHAN_VG_NAME, NULL, 0)))
-                return_0;
+Log message:
+	Bring lvscan man page up-to-date.
 
-..that changes any existing cache entry to be "orphaned", even if that
-PV is already part of a VG!
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1888&r2=1.1889
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvscan.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
-The code concerned is in outer pv_write fn that calls format specific
-pv_write code:
-
-        if (!is_orphan_vg(pv->vg_name) || pv->pe_alloc_count) {
-                log_error("Assertion failed: can't _pv_write non-orphan PV "
-                          "(in VG %s)", pv->vg_name);
-                return 0;
-        }
-
-Also, the pvchange -u call is not quite nice today:
-
-
-          pv->vg_name = pv->fmt->orphan_vg_name;
-          pv->pe_alloc_count = 0;
-          if (!(pv_write(cmd, pv))) {
-                      log_error("pv_write with new uuid failed "
-                                          "for %s.", pv_name);
-                      goto out;
-          }
-          pv->vg_name = orig_vg_name;
-          pv->pe_alloc_count = orig_pe_alloc_count;
-
-
-To support calling pv_write on non-orphan PVs, we need to destroy
-the old cache item and insert a new one or just update the existing
-cache entry. But since the pvid is used as a key to cache pvid hash,
-we need to update this entry as well... But I don't see that as a
-problem. The change is quite easy, the question is whether it won't
-cause any other problems...
-
-Peter
+--- LVM2/WHATS_NEW	2011/01/24 14:19:05	1.1888
++++ LVM2/WHATS_NEW	2011/01/24 20:02:07	1.1889
+@@ -1,5 +1,6 @@
+ Version 2.02.82 -
+ ===================================
++  Bring lvscan man page up-to-date.
+   Fix lvchange --test to exit cleanly.
+   Add change_tag to toollib.
+   Allow multiple pvchange command line options to be specified together.
+--- LVM2/man/lvscan.8.in	2009/10/26 14:37:09	1.2
++++ LVM2/man/lvscan.8.in	2011/01/24 20:02:08	1.3
+@@ -1,6 +1,6 @@
+ .TH LVSCAN 8 "LVM TOOLS #VERSION#" "Sistina Software UK" \" -*- nroff -*-
+ .SH NAME
+-lvscan \- scan (all disks) for logical volumes
++lvscan \- scan (all disks) for Logical Volumes
+ .SH SYNOPSIS
+ .B lvscan
+ .RB [ \-a | \-\-all]
+@@ -13,7 +13,11 @@
+ .SH DESCRIPTION
+ .B lvscan
+ scans all known volume groups or all supported LVM block devices
+-in the system for defined logical volumes.
++in the system for defined Logical Volumes.  The output consists
++of one line for each Logical Volume indicating whether or not it is active, 
++a snapshot or origin, the size of the device and its allocation policy.
++Use \fBlvs(8)\fP or \fBlvdisplay(8)\fP to obtain more-comprehensive information 
++about the Logical Volumes.
+ .SH OPTIONS
+ See \fBlvm\fP for common options.
+ .TP
+@@ -26,9 +30,10 @@
+ mimage_0, mimage_1, and mlog.
+ .TP
+ .BR \-b ", " \-\-blockdevice
+-Adds the device major and minor numbers to the display
+-of each logical volume.
++This option is now ignored.  Instead, use \fBlvs(8)\fP or \fBlvdisplay(8)\fP to obtain
++the device number.
+ .SH SEE ALSO
+ .BR lvm (8), 
+ .BR lvcreate (8),
+ .BR lvdisplay (8)
++.BR lvs (8)
 
 
