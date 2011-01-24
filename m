@@ -1,329 +1,232 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 24 Jan 2011 12:03:58 +0100
-Subject: [PATCH 07/17] Add pv_add_metadata_area fn to support adding metadata areas on demand.
+Date: Mon, 24 Jan 2011 12:04:00 +0100
+Subject: [PATCH 09/17] Add pv_initialise fn to format_handler interface.
 In-Reply-To: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
 References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <1295867048-21558-8-git-send-email-prajnoha@redhat.com>
+Message-ID: <1295867048-21558-10-git-send-email-prajnoha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-My previous version of the patch used the cache and that was not quite
-a happy solution (but it was easy to use :)) since any revert would
-be quite complex (or we'd need to destroy the cache item and rescan).
-
-Now, we can use the format_instance to store metadata areas. If anything
-goes wrong, we can just throw the instance away and create a new one to
-work with (so we don't need to revert the cache or rescan).
+This is a split-off from the original pv_setup code, a simple refactor.
+It makes the code easier to read and cleans up the interface a bit. So
+now we will call pv_initialise when we initialise a PV only, creating a
+brand new PV. It will also initialise a new format_instance to use later on.
 
 Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
 ---
- lib/format_text/format-text.c |  245 +++++++++++++++++++++++++++++++++++++++++
- lib/format_text/format-text.h |    5 +
- lib/metadata/metadata.h       |   10 ++
- 3 files changed, 260 insertions(+), 0 deletions(-)
+ lib/format1/format1.c         |   35 ++++++++++++++------
+ lib/format_pool/format_pool.c |   14 ++++++++
+ lib/format_text/format-text.c |   71 +++++++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata.h       |   13 +++++++
+ 4 files changed, 123 insertions(+), 10 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 5dfe0b8..cf18f25 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2031,6 +2031,250 @@ static int _create_vg_text_instance(struct format_instance *fid,
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 4f66cdc..cb17ef5 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -361,16 +361,15 @@ static int _format1_pv_read(const struct format_type *fmt, const char *pv_name,
+ 	return r;
+ }
+ 
+-static int _format1_pv_setup(const struct format_type *fmt,
+-			     uint64_t pe_start, uint32_t extent_count,
+-			     uint32_t extent_size,
+-			     unsigned long data_alignment __attribute__((unused)),
+-			     unsigned long data_alignment_offset __attribute__((unused)),
+-			     int pvmetadatacopies __attribute__((unused)),
+-			     uint64_t pvmetadatasize __attribute__((unused)),
+-			     unsigned metadataignore __attribute__((unused)),
+-			     struct dm_list *mdas __attribute__((unused)),
+-			     struct physical_volume *pv, struct volume_group *vg __attribute__((unused)))
++static int _format1_pv_initialise(const struct format_type * fmt,
++				  int64_t label_sector __attribute__((unused)),
++				  uint64_t pe_start,
++				  int pe_start_locked __attribute__((unused)),
++				  uint32_t extent_count,
++				  uint32_t extent_size,
++				  unsigned long data_alignment __attribute__((unused)),
++				  unsigned long data_alignment_offset __attribute__((unused)),
++				  struct physical_volume * pv)
+ {
+ 	if (pv->size > MAX_PV_SIZE)
+ 		pv->size--;
+@@ -400,6 +399,21 @@ static int _format1_pv_setup(const struct format_type *fmt,
  	return 1;
  }
  
-+int add_metadata_area_to_pv(struct physical_volume *pv,
-+			    unsigned mda_index,
-+			    uint64_t mda_start,
-+			    uint64_t mda_size,
-+			    unsigned mda_ignored)
++static int _format1_pv_setup(const struct format_type *fmt,
++			     uint64_t pe_start, uint32_t extent_count,
++			     uint32_t extent_size,
++			     unsigned long data_alignment __attribute__((unused)),
++			     unsigned long data_alignment_offset __attribute__((unused)),
++			     int pvmetadatacopies __attribute__((unused)),
++			     uint64_t pvmetadatasize __attribute__((unused)),
++			     unsigned metadataignore __attribute__((unused)),
++			     struct dm_list *mdas __attribute__((unused)),
++			     struct physical_volume *pv,
++			     struct volume_group *vg __attribute__((unused)))
 +{
-+	struct metadata_area *mda;
-+	struct mda_context *mdac;
-+	struct mda_lists *mda_lists = (struct mda_lists *) pv->fmt->private;
++	return _format1_pv_initialise(fmt, -1, 0, 0, 0, vg->extent_size, 0, 0, pv);
++}
 +
-+	if (mda_index >= FMT_TEXT_MAX_MDAS_PER_PV) {
-+		log_error(INTERNAL_ERROR "can't add metadata area with "
-+					 "index %u to PV %s. Metadata "
-+					 "layout not supported by %s format.",
-+					  mda_index, dev_name(pv->dev),
-+					  pv->fmt->name);
-+	}
-+
-+	if (!(mda = dm_malloc(sizeof(struct metadata_area)))) {
-+		log_error("struct metadata_area allocation failed");
-+		return 0;
-+	}
-+
-+	if (!(mdac = dm_malloc(sizeof(struct mda_context)))) {
-+		log_error("struct mda_context allocation failed");
-+		dm_free(mda);
-+		return 0;
-+	}
-+
-+	mda->ops = mda_lists->raw_ops;
-+	mda->metadata_locn = mdac;
-+	mda->status = 0;
-+
-+	mdac->area.dev = pv->dev;
-+	mdac->area.start = mda_start;
-+	mdac->area.size = mda_size;
-+	mdac->free_sectors = UINT64_C(0);
-+	memset(&mdac->rlocn, 0, sizeof(mdac->rlocn));
-+	mda_set_ignored(mda, mda_ignored);
-+
-+	fid_add_mda(pv->fid ? pv->fid : pv->vg->fid, mda,
-+		    (char *) &pv->id, ID_LEN, mda_index);
-+
+ static int _format1_lv_setup(struct format_instance *fid, struct logical_volume *lv)
+ {
+ 	uint64_t max_size = UINT_MAX;
+@@ -563,6 +577,7 @@ static void _format1_destroy(struct format_type *fmt)
+ 
+ static struct format_handler _format1_ops = {
+ 	.pv_read = _format1_pv_read,
++	.pv_initialise = _format1_pv_initialise,
+ 	.pv_setup = _format1_pv_setup,
+ 	.pv_write = _format1_pv_write,
+ 	.lv_setup = _format1_lv_setup,
+diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
+index 24ccfc2..83f474a 100644
+--- a/lib/format_pool/format_pool.c
++++ b/lib/format_pool/format_pool.c
+@@ -188,6 +188,19 @@ out:
+ 	return NULL;
+ }
+ 
++static int _pool_pv_initialise(const struct format_type *fmt __attribute__((unused)),
++			       int64_t label_sector __attribute__((unused)),
++			       uint64_t pe_start __attribute__((unused)),
++			       int pe_start_locked __attribute__((unused)),
++			       uint32_t extent_count __attribute__((unused)),
++			       uint32_t extent_size __attribute__((unused)),
++			       unsigned long data_alignment __attribute__((unused)),
++			       unsigned long data_alignment_offset __attribute__((unused)),
++			       struct physical_volume *pv __attribute__((unused)))
++{
 +	return 1;
 +}
 +
-+static int _text_pv_add_metadata_area(const struct format_type *fmt,
-+				      struct physical_volume *pv,
-+				      int pe_start_locked,
-+				      unsigned mda_index,
-+				      uint64_t mda_size,
-+				      unsigned mda_ignored)
+ static int _pool_pv_setup(const struct format_type *fmt __attribute__((unused)),
+ 			  uint64_t pe_start __attribute__((unused)),
+ 			  uint32_t extent_count __attribute__((unused)),
+@@ -295,6 +308,7 @@ static void _pool_destroy(struct format_type *fmt)
+ /* *INDENT-OFF* */
+ static struct format_handler _format_pool_ops = {
+ 	.pv_read = _pool_pv_read,
++	.pv_initialise = _pool_pv_initialise,
+ 	.pv_setup = _pool_pv_setup,
+ 	.create_instance = _pool_create_instance,
+ 	.destroy_instance = _pool_destroy_instance,
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 99f691f..c6adedc 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1688,6 +1688,76 @@ static int _text_pv_read(const struct format_type *fmt, const char *pv_name,
+ 	return 1;
+ }
+ 
++static int _text_pv_initialise(const struct format_type *fmt,
++			       const int64_t label_sector,
++			       uint64_t pe_start,
++			       int pe_start_locked,
++			       uint32_t extent_count,
++			       uint32_t extent_size,
++			       unsigned long data_alignment,
++			       unsigned long data_alignment_offset,
++			       struct physical_volume *pv)
 +{
-+	struct format_instance *fid = pv->fid;
-+	const char *pvid = (char *) &pv->id;
-+	uint64_t pe_start, pe_end;
-+	uint64_t alignment, alignment_offset;
-+	uint64_t disk_size;
-+	uint64_t mda_start;
-+	uint64_t adjustment, limit;
-+	uint64_t wipe_size = 8 << SECTOR_SHIFT;
-+	size_t page_size = lvm_getpagesize();
-+	struct metadata_area *mda;
-+	struct mda_context *mdac;
-+
-+	if (mda_index >= FMT_TEXT_MAX_MDAS_PER_PV) {
-+		log_error(INTERNAL_ERROR "invalid index of value %u used "
-+			      "while trying to add metadata area on PV %s. "
-+			      "Metadata layout not supported by %s format.",
-+			       mda_index, pv_dev_name(pv), fmt->name);
-+		return 0;
-+	}
-+
-+	pe_start = pv->pe_start << SECTOR_SHIFT;
-+	alignment = pv->pe_align << SECTOR_SHIFT;
-+	alignment_offset = pv->pe_align_offset << SECTOR_SHIFT;
-+	disk_size = pv->size << SECTOR_SHIFT;
-+	mda_size = mda_size << SECTOR_SHIFT;
-+
-+	if (fid_get_mda_indexed(fid, pvid, ID_LEN, mda_index)) {
-+		log_error(INTERNAL_ERROR "metadata area with index %u already "
-+			"exists on PV %s.", mda_index, pv_dev_name(pv));
-+		return 0;
-+	}
-+
-+	/* First metadata area@the start of the device. */
-+	if (mda_index == 0) {
-+		/*
-+		 * Try to fit MDA0 end within given pe_start limit if its value
-+		 * is locked. If it's not locked, count with any existing MDA1.
-+		 * If there's no MDA1, just use disk size as the limit.
-+		 */
-+		if (pe_start_locked)
-+			limit = pe_start;
-+		else if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 1)) &&
-+			 (mdac = mda->metadata_locn))
-+			limit = mdac->area.start;
-+		else
-+			limit = disk_size;
-+
-+		if (limit > disk_size)
-+			goto bad;
-+
-+		mda_start = LABEL_SCAN_SIZE;
-+
-+		/* Align MDA0 start with page size if possible. */
-+		if (limit - mda_start >= MDA_SIZE_MIN) {
-+			if ((adjustment = mda_start % page_size))
-+				mda_start += (page_size - adjustment);
-+		}
-+
-+		/* Align MDA0 end position with given alignment if possible. */
-+		if (alignment) {
-+			if ((adjustment = (mda_start + mda_size) % alignment)) {
-+				mda_size += (alignment - adjustment);
-+				if (mda_start + mda_size > limit)
-+					mda_size -= (alignment - adjustment);
-+			}
-+		}
-+
-+		/* Align MDA0 end position with given alignment offset if possible. */
-+		if (alignment_offset &&
-+		    (((mda_start + mda_size) % alignment) == 0)) {
-+			mda_size += alignment_offset;
-+			if (mda_start + mda_size > limit)
-+				mda_size -= alignment_offset;
-+		}
-+
-+		if (mda_start + mda_size > limit) {
-+			log_warn("WARNING: metadata area size outreaches "
-+				 "a limit on PV %s specified by its %s. "
-+				 "Trying to adjust metadata area size.",
-+				  pv_dev_name(pv),
-+				  pe_start_locked ? "PE start" : "disk size");
-+
-+			/*
-+			 * Try to decrease the MDA0 size with twice the
-+			 * alignment and then align with given alignment.
-+			 * If pe_start is locked, skip this type of
-+			 * alignment since it would be useless.
-+			 * Check first whether we can apply that!
-+			 */
-+			if (!pe_start_locked &&
-+			    ((limit - mda_start) > alignment * 2)) {
-+				mda_size = limit - mda_start - alignment * 2;
-+
-+				if ((adjustment = (mda_start + mda_size) % alignment))
-+					mda_size += (alignment - adjustment);
-+
-+				/* Still too much? Then there's nothing else to do. */
-+				if (mda_start + mda_size > limit)
-+					goto bad;
-+			}
-+			/* Otherwise, give up and take any usable space. */
-+			/* FIXME: We should probably check for some minimum MDA size here. */
-+			else
-+				mda_size = limit - mda_start;
-+		}
-+
-+		/*
-+		 * If PV's pe_start is not locked, update pe_start value with the
-+		 * start of the area that follows the MDA0 we've just calculated.
-+		 */
-+		if (!pe_start_locked) {
-+			pe_start = mda_start + mda_size;
-+			pv->pe_start = pe_start >> SECTOR_SHIFT;
-+		}
-+	}
-+	/* Second metadata area at the end of the device. */
-+	else {
-+		/*
-+		 * Try to fit MDA1 start within given pe_end or pe_start limit
-+		 * if it's locked. If pe_start and pe_end are not defined yet,
-+		 * count with any existing MDA0 and pe_start. If MDA0 does not
-+		 * exist, just use LABEL_SCAN_SIZE.
-+		 */
-+		pe_end = pv->pe_count ? (pv->pe_start +
-+					 pv->pe_count * pv->pe_size - 1) << SECTOR_SHIFT
-+				      : 0;
-+		if (pe_start_locked)
-+			limit = pe_end ? pe_end : pe_start;
-+		else if (pe_start)
-+			limit = pe_start;
-+		/*
-+		 * Normally MDA0's start + size should be pe_start.
-+		 * The statemet here is probably useless since the
-+		 * situation is covered by previous statement.
-+		 */
-+		else if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 0)) &&
-+			 (mdac = mda->metadata_locn))
-+			limit = mdac->area.start + mdac->area.size;
-+		else
-+			limit = LABEL_SCAN_SIZE;
-+
-+		if (limit > disk_size || mda_size > disk_size)
-+			goto bad;
-+
-+		mda_start = disk_size - mda_size;
-+
-+		if (alignment) {
-+			adjustment = mda_start % alignment;
-+			if (adjustment)
-+				mda_size += adjustment;
-+		}
-+
-+		if (disk_size - mda_size < limit)
-+			mda_size = disk_size - limit;
-+
-+		/*
-+		 * If PV's pe_end not set yet, set it to the end of the
-+		 * area that precedes the MDA1 we've just calculated.
-+		 * FIXME: do we need to set this? Isn't it always set before?
-+		 */
-+		/*if (!pe_end) {
-+			pe_end = mda_start;
-+			pv->pe_end = pe_end >> SECTOR_SHIFT;
-+		}*/
-+	}
-+
-+	if (mda_size) {
-+		/* Wipe metadata area with zeroes. */
-+		if (!dev_set((struct device *) pv->dev, mda_start,
-+			(size_t) (mda_size > wipe_size ? : mda_size), 0)) {
-+				log_error("Failed to wipe new metadata area "
-+					  "at the %s of the %s",
-+					   mda_index ? "end" : "start",
-+					   pv_dev_name(pv));
-+				return 0;
-+		}
-+
-+		/* Finally, add new metadata area to PV's format instance. */
-+		if (!add_metadata_area_to_pv(pv, mda_index, mda_start,
-+					     mda_size, mda_ignored))
-+			return_0;
-+	}
-+
-+	return 1;
-+
-+bad:
-+	log_error("Not enough space available for metadata area "
-+		  "with index %u on PV %s.", mda_index, pv_dev_name(pv));
-+	return 0;
-+}
-+
- /* NULL vgname means use only the supplied context e.g. an archive file */
- static struct format_instance *_text_create_text_instance(const struct format_type *fmt,
- 							  const char *pvid,
-@@ -2111,6 +2355,7 @@ static struct format_handler _text_handler = {
- 	.scan = _text_scan,
- 	.pv_read = _text_pv_read,
- 	.pv_setup = _text_pv_setup,
-+	.pv_add_metadata_area = _text_pv_add_metadata_area,
- 	.pv_write = _text_pv_write,
- 	.vg_setup = _text_vg_setup,
- 	.lv_setup = _text_lv_setup,
-diff --git a/lib/format_text/format-text.h b/lib/format_text/format-text.h
-index f3cf4f5..f65be74 100644
---- a/lib/format_text/format-text.h
-+++ b/lib/format_text/format-text.h
-@@ -56,6 +56,11 @@ int add_da(struct dm_pool *mem, struct dm_list *das,
- 	   uint64_t start, uint64_t size);
- void del_das(struct dm_list *das);
- 
-+int add_metadata_area_to_pv(struct physical_volume *pv,
-+			    unsigned mda_index,
-+			    uint64_t mda_start,
-+			    uint64_t mda_size,
-+			    unsigned mda_ignored);
- int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *mdas,
- 	    struct device *dev, uint64_t start, uint64_t size, unsigned ignored);
- void del_mdas(struct dm_list *mdas);
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 7ebf85c..0da8b3d 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -256,6 +256,16 @@ struct format_handler {
- 			 struct physical_volume * pv, struct volume_group * vg);
- 
- 	/*
-+	 * Add metadata area to a PV. Changes will take effect on pv_write.
-+	 */
-+	int (*pv_add_metadata_area) (const struct format_type * fmt,
-+				     struct physical_volume * pv,
-+				     int pe_start_locked,
-+				     unsigned metadata_index,
-+				     uint64_t metadata_size,
-+				     unsigned metadata_ignored);
++	struct text_fid_pv_context *fid_pv_tc;
 +
 +	/*
- 	 * Write a PV structure to disk. Fails if the PV is in a VG ie
- 	 * pv->vg_name must be a valid orphan VG name
++	 * Try to keep the value of PE start set to a firm value if requested.
++	 * This is usefull when restoring existing PE start value (backups etc.).
++	 */
++	if (pe_start_locked)
++		pv->pe_start = pe_start;
++
++	if (!data_alignment)
++		data_alignment = find_config_tree_int(pv->fmt->cmd,
++					      "devices/data_alignment",
++					      0) * 2;
++
++	if (set_pe_align(pv, data_alignment) != data_alignment &&
++	    data_alignment) {
++		log_error("%s: invalid data alignment of "
++			  "%lu sectors (requested %lu sectors)",
++			  pv_dev_name(pv), pv->pe_align, data_alignment);
++		return 0;
++	}
++
++	if (set_pe_align_offset(pv, data_alignment_offset) != data_alignment_offset &&
++	    data_alignment_offset) {
++		log_error("%s: invalid data alignment offset of "
++			  "%lu sectors (requested %lu sectors)",
++			  pv_dev_name(pv), pv->pe_align_offset, data_alignment_offset);
++		return 0;
++	}
++
++	if (pv->pe_align < pv->pe_align_offset) {
++		log_error("%s: pe_align (%lu sectors) must not be less "
++			  "than pe_align_offset (%lu sectors)",
++			  pv_dev_name(pv), pv->pe_align, pv->pe_align_offset);
++		return 0;
++	}
++
++	if (!pe_start_locked && pv->pe_start < pv->pe_align)
++		pv->pe_start = pv->pe_align;
++
++	if (extent_size)
++		pv->pe_size = extent_size;
++
++	if (extent_count)
++		pv->pe_count = extent_count;
++
++	if ((pv->pe_start + pv->pe_count * pv->pe_size - 1) > (pv->size << SECTOR_SHIFT)) {
++		log_error("Physical extents end beyond end of device %s.",
++			   pv_dev_name(pv));
++		return 0;
++	}
++
++	if (label_sector != -1) {
++		fid_pv_tc = (struct text_fid_pv_context *) pv->fid->private;
++		fid_pv_tc->label_sector = label_sector;
++	}
++
++	return 1;
++}
++
+ static void _text_destroy_instance(struct format_instance *fid __attribute__((unused)))
+ {
+ }
+@@ -2377,6 +2447,7 @@ void *create_text_context(struct cmd_context *cmd, const char *path,
+ static struct format_handler _text_handler = {
+ 	.scan = _text_scan,
+ 	.pv_read = _text_pv_read,
++	.pv_initialise = _text_pv_initialise,
+ 	.pv_setup = _text_pv_setup,
+ 	.pv_add_metadata_area = _text_pv_add_metadata_area,
+ 	.pv_remove_metadata_area = _text_pv_remove_metadata_area,
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index ed72551..ae8dd9a 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -244,6 +244,19 @@ struct format_handler {
+ 			struct physical_volume * pv, int scan_label_only);
+ 
+ 	/*
++	 * Initialise a new PV.
++	 */
++	int (*pv_initialise) (const struct format_type * fmt,
++			      int64_t label_sector,
++			      uint64_t pe_start,
++			      int pe_start_locked,
++			      uint32_t extent_count,
++			      uint32_t extent_size,
++			      unsigned long data_alignment,
++			      unsigned long data_alignment_offset,
++			      struct physical_volume * pv);
++
++	/*
+ 	 * Tweak an already filled out a pv ready for importing into a
+ 	 * vg.  eg. pe_count is format specific.
  	 */
 -- 
 1.7.3.4
