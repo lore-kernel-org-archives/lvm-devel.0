@@ -1,187 +1,100 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 24 Jan 2011 12:04:03 +0100
-Subject: [PATCH 12/17] Remove unused _mda_setup code.
+Date: Mon, 24 Jan 2011 12:04:07 +0100
+Subject: [PATCH 16/17] Fix pvchange -u to work with recent changes in metadata handling interface.
 In-Reply-To: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
 References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <1295867048-21558-13-git-send-email-prajnoha@redhat.com>
+Message-ID: <1295867048-21558-17-git-send-email-prajnoha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The functionality of former _mda_setup fn is now covered by
-pv_add_metadata_area fn.
+I use PV id as a key for format instance's metadata_areas_index.
+But since we change this one, I still need to work with the original
+one to access the metadata areas (e.g. in pv_write). So, I defined
+the pv->old_id to store that.
 
 Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
 ---
- lib/format_text/format-text.c |  153 -----------------------------------------
- 1 files changed, 0 insertions(+), 153 deletions(-)
+ lib/format_text/format-text.c |   10 +++++-----
+ lib/metadata/pv.h             |    1 +
+ tools/pvchange.c              |    1 +
+ 3 files changed, 7 insertions(+), 5 deletions(-)
 
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 2671adb..4cc6364 100644
+index 04abf58..c0d35f0 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -1256,159 +1256,6 @@ static int _text_scan(const struct format_type *fmt, const char *vgname)
- 	return (_scan_file(fmt, vgname) & _scan_raw(fmt, vgname));
- }
+@@ -1261,6 +1261,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ {
+ 	struct text_fid_pv_context *fid_pv_tc;
+ 	struct format_instance *fid = pv->fid;
++	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
+ 	struct label *label;
+ 	int64_t label_sector;
+ 	struct lvmcache_info *info;
+@@ -1303,8 +1304,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ 	 * just pass the right format_instance in.
+ 	 */
+ 	for (mda_index = 0; mda_index < FMT_TEXT_MAX_MDAS_PER_PV; mda_index++) {
+-		if (!(mda = fid_get_mda_indexed(fid, (const char *) &pv->id,
+-							ID_LEN, mda_index)))
++		if (!(mda = fid_get_mda_indexed(fid, pvid, ID_LEN, mda_index)))
+ 			continue;
  
--/* For orphan, creates new mdas according to policy.
--   Always have an mda between end-of-label and pe_align() boundary */
--static int _mda_setup(const struct format_type *fmt,
--		      uint64_t pe_start, uint64_t pe_end,
--		      int pvmetadatacopies, uint64_t pvmetadatasize,
--		      unsigned metadataignore, struct dm_list *mdas,
--		      struct physical_volume *pv,
--		      struct volume_group *vg __attribute__((unused)))
--{
--	uint64_t mda_adjustment, disk_size, alignment, alignment_offset;
--	uint64_t start1, mda_size1;	/* First area - start of disk */
--	uint64_t start2, mda_size2;	/* Second area - end of disk */
--	uint64_t wipe_size = 8 << SECTOR_SHIFT;
--	size_t pagesize = lvm_getpagesize();
--
--	if (!pvmetadatacopies)
--		return 1;
--
--	alignment = pv->pe_align << SECTOR_SHIFT;
--	alignment_offset = pv->pe_align_offset << SECTOR_SHIFT;
--	disk_size = pv->size << SECTOR_SHIFT;
--	pe_start <<= SECTOR_SHIFT;
--	pe_end <<= SECTOR_SHIFT;
--
--	if (pe_end > disk_size) {
--		log_error("Physical extents end beyond end of device %s!",
--			  pv_dev_name(pv));
--		return 0;
--	}
--
--	/* Requested metadatasize */
--	mda_size1 = pvmetadatasize << SECTOR_SHIFT;
--
--	/* Place mda straight after label area@start of disk */
--	start1 = LABEL_SCAN_SIZE;
--
--	/* Unless the space available is tiny, round to PAGE_SIZE boundary */
--	if ((!pe_start && !pe_end) ||
--	    ((pe_start > start1) && (pe_start - start1 >= MDA_SIZE_MIN))) {
--		mda_adjustment = start1 % pagesize;
--		if (mda_adjustment)
--			start1 += (pagesize - mda_adjustment);
--	}
--
--	/* Round up to pe_align boundary */
--	mda_adjustment = (mda_size1 + start1) % alignment;
--	if (mda_adjustment) {
--		mda_size1 += (alignment - mda_adjustment);
--		/* Revert if it's now too large */
--		if (start1 + mda_size1 > disk_size)
--			mda_size1 -= (alignment - mda_adjustment);
--	}
--
--	/* Add pe_align_offset if on pe_align boundary */
--	if (alignment_offset &&
--	    (((start1 + mda_size1) % alignment) == 0)) {
--		mda_size1 += alignment_offset;
--		/* Revert if it's now too large */
--		if (start1 + mda_size1 > disk_size)
--			mda_size1 -= alignment_offset;
--	}
--
--	/* Ensure it's not going to be bigger than the disk! */
--	if (start1 + mda_size1 > disk_size) {
--		log_warn("WARNING: metadata area fills disk leaving no "
--			 "space for data on %s.", pv_dev_name(pv));
--		/* Leave some free space for rounding */
--		/* Avoid empty data area as could cause tools problems */
--		mda_size1 = disk_size - start1 - alignment * 2;
--		if (start1 + mda_size1 > disk_size) {
--			log_error("Insufficient space for first mda on %s",
--				  pv_dev_name(pv));
--			return 0;
--		}
--		/* Round up to pe_align boundary */
--		mda_adjustment = (mda_size1 + start1) % alignment;
--		if (mda_adjustment)
--			mda_size1 += (alignment - mda_adjustment);
--		/* Only have 1 mda in this case */
--		pvmetadatacopies = 1;
--	}
--
--	/* If we already have PEs, avoid overlap */
--	if (pe_start || pe_end) {
--		if (pe_start <= start1)
--			mda_size1 = 0;
--		else if (start1 + mda_size1 > pe_start)
--			mda_size1 = pe_start - start1;
--	}
--
--	/* FIXME If creating new mdas, wipe them! */
--	if (mda_size1) {
--		if (!add_mda(fmt, fmt->cmd->mem, mdas, pv->dev, start1,
--			     mda_size1, metadataignore))
--			return 0;
--
--		if (!dev_set((struct device *) pv->dev, start1,
--			     (size_t) (mda_size1 >
--				       wipe_size ? : mda_size1), 0)) {
--			log_error("Failed to wipe new metadata area");
--			return 0;
--		}
--
--		if (pvmetadatacopies == 1)
--			return 1;
--	} else
--		start1 = 0;
--
--	/* A second copy at end of disk */
--	mda_size2 = pvmetadatasize << SECTOR_SHIFT;
--
--	/* Ensure it's not going to be bigger than the disk! */
--	if (mda_size2 > disk_size)
--		mda_size2 = disk_size - start1 - mda_size1;
--
--	mda_adjustment = (disk_size - mda_size2) % alignment;
--	if (mda_adjustment)
--		mda_size2 += mda_adjustment;
--
--	start2 = disk_size - mda_size2;
--
--	/* If we already have PEs, avoid overlap */
--	if (pe_start || pe_end) {
--		if (start2 < pe_end) {
--			mda_size2 -= (pe_end - start2);
--			start2 = pe_end;
--		}
--	}
--
--	/* If we already have a first mda, avoid overlap */
--	if (mda_size1) {
--		if (start2 < start1 + mda_size1) {
--			mda_size2 -= (start1 + mda_size1 - start2);
--			start2 = start1 + mda_size1;
--		}
--		/* No room for any PEs here now! */
--	}
--
--	if (mda_size2) {
--		if (!add_mda(fmt, fmt->cmd->mem, mdas, pv->dev, start2,
--			     mda_size2, metadataignore)) return 0;
--		if (!dev_set(pv->dev, start2,
--			     (size_t) (mda_size1 >
--				       wipe_size ? : mda_size1), 0)) {
--			log_error("Failed to wipe new metadata area");
--			return 0;
--		}
--	} else
--		return 0;
--
--	return 1;
--}
--
- /* Only for orphans */
- /* Set label_sector to -1 if rewriting existing label into same sector */
- /* If mdas is supplied it overwrites existing mdas e.g. used with pvcreate */
+ 		mdac = (struct mda_context *) mda->metadata_locn;
+@@ -1627,7 +1627,7 @@ static int _text_pv_setup(const struct format_type *fmt,
+ 			  struct volume_group *vg)
+ {
+ 	struct format_instance *fid = pv->fid;
+-	const char *pvid = (const char *) &pv->id;
++	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
+ 	unsigned mda_index;
+ 	struct metadata_area *pv_mda;
+ 	struct mda_context *pv_mdac;
+@@ -1871,7 +1871,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 				      unsigned mda_ignored)
+ {
+ 	struct format_instance *fid = pv->fid;
+-	const char *pvid = (char *) &pv->id;
++	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
+ 	uint64_t pe_start, pe_end;
+ 	uint64_t alignment, alignment_offset;
+ 	uint64_t disk_size;
+@@ -2090,7 +2090,7 @@ static int _text_pv_resize(const struct format_type *fmt,
+ 			   uint64_t size)
+ {
+ 	struct format_instance *fid = pv->fid;
+-	const char *pvid = (const char *) &pv->id;
++	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
+ 	struct metadata_area *mda;
+ 	struct mda_context *mdac;
+ 	uint64_t size_reduction;
+diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
+index a9efcfe..af63610 100644
+--- a/lib/metadata/pv.h
++++ b/lib/metadata/pv.h
+@@ -22,6 +22,7 @@ struct volume_group;
+ 
+ struct physical_volume {
+ 	struct id id;
++	struct id old_id;		/* Set during pvchange -u. */
+ 	struct device *dev;
+ 	const struct format_type *fmt;
+ 	struct format_instance *fid;
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index 3f60f54..1e11982 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -141,6 +141,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 			goto out;
+ 	} else {
+ 		/* --uuid: Change PV ID randomly */
++		memcpy(&pv->old_id, &pv->id, sizeof(pv->id));
+ 		if (!id_create(&pv->id)) {
+ 			log_error("Failed to generate new random UUID for %s.",
+ 				  pv_name);
 -- 
 1.7.3.4
 
