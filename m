@@ -1,52 +1,47 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 24 Jan 2011 01:11:12 +0100
+From: Lars Sjöström <lars.sjostrom@redhat.com>
+Date: Mon, 24 Jan 2011 10:58:38 +0100
 Subject: liblvm Python/C extension (Python Liblvm)
-In-Reply-To: <1295527769.24069.31.camel@ljonsson.local> ("Lars
-	=?utf-8?B?U2rDtnN0csO2bSIncw==?=
-	message of "Thu, 20 Jan 2011 13:49:29 +0100")
+In-Reply-To: <87oc77tb33.fsf@twilight.int.mornfall.net.>
 References: <1295527769.24069.31.camel@ljonsson.local>
-Message-ID: <87oc77tb33.fsf@twilight.int.mornfall.net.>
+	<87oc77tb33.fsf@twilight.int.mornfall.net.>
+Message-ID: <1295863118.2970.14.camel@ljonsson.local>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On Mon, 2011-01-24 at 01:11 +0100, Petr Rockai wrote: 
+> I am not a python guy myself, but I definitely welcome this. On the
+> other hand, as Zden?k points out, this does have some issues. 
 
-Lars Sj?str?m <lars.sjostrom@redhat.com> writes:
-> I was missing a proper LVM2 interface to Python so I decided to write
-> one my self! I have wrapped all the liblvm C APIs (excluding the new
-> APIs committed in Dec). Doc strings are still missing, as well as proper
-> setup.py build env, so consider it as work in progress.
->
-> This might also be interesting to other projects like Anaconda for
-> example.
->
-> I would love to get your feedback on it!
+Zdenek has indeed a good point! How much work do you guys see to get
+this sorted? (implement parameter for non-memlocking to RAM for certain
+LVM commands/APIs.)    
 
-I am not a python guy myself, but I definitely welcome this. On the
-other hand, as Zden?k points out, this does have some issues. I also
-think Anaconda folks have refused to use liblvm as far as there are no
-python bindings (and they are not interested in binding to the C API
-themselves). Hence, I suppose they are going to be interested indeed.
+> Nevertheless, there's another significant issue, and that is
+> maintenance. I can't commit to maintaining python bindings, since I have
+> responsibilities besides liblvm and I am a part-timer on LVM -- which
+> doesn't exactly leave much space for python (which would necessarily
+> include a lot of learning).
+> 
+> I'll try to talk with the rest of the team about how to best approach
+> this. There might be someone with the required python (and python
+> binding) skills and enough time. Alternatively, do you think you could
+> take the responsibility for the bindings yourself? 
 
-Nevertheless, there's another significant issue, and that is
-maintenance. I can't commit to maintaining python bindings, since I have
-responsibilities besides liblvm and I am a part-timer on LVM -- which
-doesn't exactly leave much space for python (which would necessarily
-include a lot of learning).
+I'm indeed willing to take the maintenance ownership if you don't mind! 
 
-I'll try to talk with the rest of the team about how to best approach
-this. There might be someone with the required python (and python
-binding) skills and enough time. Alternatively, do you think you could
-take the responsibility for the bindings yourself? As far as I recall,
-there was talk of shipping python bindings (provided there were any, but
-you obviously have some now) with the rest of LVM source (although I
-have no idea what technical implications this may have for building
-packages).
+As I said in earlier email, there is still work left. Doc strings,
+proper packaging as well as add the new APIs that were released in
+December.  
 
-Yours,
-   Petr
+Should I continue and post updates?
+
+Best regards,
+Lars
+
+
+
 
 
