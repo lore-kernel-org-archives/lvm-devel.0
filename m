@@ -1,336 +1,364 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Mon, 24 Jan 2011 12:03:56 +0100
-Subject: [PATCH 05/17] Add attach_existing_mdas parameter to create_instance fn.
+Date: Mon, 24 Jan 2011 12:03:57 +0100
+Subject: [PATCH 06/17] Remove useless mdas parameter from PV read functions.
 In-Reply-To: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
 References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <1295867048-21558-6-git-send-email-prajnoha@redhat.com>
+Message-ID: <1295867048-21558-7-git-send-email-prajnoha@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If attach_existing_mdas parameter is set, we'll attach any existing
-metadata areas found in the cache to the format_instance. Otherwise,
-we will only initialise the format_instance and keep the metadata
-areas list empty (so we can fill that later if that's needed).
+...metadata areas are now stored within pv->fid.
 
 Signed-off-by: Peter Rajnoha <prajnoha@redhat.com>
 ---
- lib/cache/lvmcache.c          |    2 +-
- lib/format1/format1.c         |    3 ++-
- lib/format_pool/format_pool.c |    3 ++-
- lib/format_text/archive.c     |    2 +-
- lib/format_text/archiver.c    |   10 ++++++----
- lib/format_text/format-text.c |   34 ++++++++++++++++++++--------------
- lib/metadata/metadata.c       |   27 ++++++++++++++++++++-------
- lib/metadata/metadata.h       |    4 +++-
- 8 files changed, 55 insertions(+), 30 deletions(-)
+ lib/format1/format1.c            |    3 +--
+ lib/format_pool/format_pool.c    |    1 -
+ lib/format_text/format-text.c    |   15 +--------------
+ lib/metadata/metadata-exported.h |    4 ++--
+ lib/metadata/metadata.c          |   37 +++++++++++++------------------------
+ lib/metadata/metadata.h          |    3 +--
+ tools/pvremove.c                 |   10 ++++------
+ tools/pvresize.c                 |    8 +++-----
+ tools/toollib.c                  |   14 ++++++--------
+ 9 files changed, 31 insertions(+), 64 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 476b176..e3ac4f2 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -654,7 +654,7 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
- 
- 	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt,
- 						      NULL, vginfo->vgname,
--						      vgid, NULL)))
-+						      vgid, NULL, 1)))
- 		return_NULL;
- 
- 	/* Build config tree from vgmetadata, if not yet cached */
 diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index ff5b0f5..b79bd56 100644
+index b79bd56..4f66cdc 100644
 --- a/lib/format1/format1.c
 +++ b/lib/format1/format1.c
-@@ -525,7 +525,8 @@ static struct format_instance *_format1_create_instance(const struct format_type
- 						const char *pvid __attribute__((unused)),
- 						const char *vgname __attribute__((unused)),
- 						const char *vgid __attribute__((unused)),
--						void *private __attribute__((unused)))
-+						void *private __attribute__((unused)),
-+						int attach_existing_mdas __attribute((unused)))
+@@ -331,8 +331,7 @@ static int _format1_vg_write(struct format_instance *fid, struct volume_group *v
+ }
+ 
+ static int _format1_pv_read(const struct format_type *fmt, const char *pv_name,
+-		    struct physical_volume *pv, struct dm_list *mdas __attribute__((unused)),
+-		    int scan_label_only __attribute__((unused)))
++		    struct physical_volume *pv, int scan_label_only __attribute__((unused)))
  {
- 	struct format_instance *fid;
- 	struct metadata_area *mda;
+ 	struct dm_pool *mem = dm_pool_create("lvm1 pv_read", 1024);
+ 	struct disk_list *dl;
 diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index 814d80c..3ecbfe9 100644
+index 3ecbfe9..24ccfc2 100644
 --- a/lib/format_pool/format_pool.c
 +++ b/lib/format_pool/format_pool.c
-@@ -252,7 +252,8 @@ static struct format_instance *_pool_create_instance(const struct format_type *f
- 						const char *pvid __attribute__((unused)),
- 						const char *vgname __attribute__((unused)),
- 						const char *vgid __attribute__((unused)),
--						void *private __attribute__((unused)))
-+						void *private __attribute__((unused)),
-+						int attach_existing_mdas __attribute__((unused)))
+@@ -206,7 +206,6 @@ static int _pool_pv_setup(const struct format_type *fmt __attribute__((unused)),
+ 
+ static int _pool_pv_read(const struct format_type *fmt, const char *pv_name,
+ 			 struct physical_volume *pv,
+-			 struct dm_list *mdas __attribute__((unused)),
+ 			 int scan_label_only __attribute__((unused)))
  {
- 	struct format_instance *fid;
- 	struct metadata_area *mda;
-diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
-index 760153c..8d55988 100644
---- a/lib/format_text/archive.c
-+++ b/lib/format_text/archive.c
-@@ -309,7 +309,7 @@ static void _display_archive(struct cmd_context *cmd, struct archive_file *af)
- 
- 	if (!(context = create_text_context(cmd, af->path, NULL)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, NULL, context))) {
-+						NULL, NULL, context, 1))) {
- 		log_error("Couldn't create text instance object.");
- 		return;
- 	}
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index b7dcad9..ec65794 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -278,7 +278,7 @@ struct volume_group *backup_read_vg(struct cmd_context *cmd,
- 	if (!(context = create_text_context(cmd, file,
- 					    cmd->cmd_line)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, NULL, context))) {
-+						NULL, NULL, context, 1))) {
- 		log_error("Couldn't create text format object.");
- 		return NULL;
- 	}
-@@ -299,6 +299,7 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg)
- 	struct pv_list *pvl;
- 	struct physical_volume *pv;
- 	struct lvmcache_info *info;
-+	struct format_instance *fid;
- 
- 	/*
- 	 * FIXME: Check that the PVs referenced in the backup are
-@@ -306,11 +307,12 @@ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg)
- 	 */
- 
- 	/* Attempt to write out using currently active format */
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, NULL,
--						vg->name, NULL, NULL))) {
-+	if (!(fid = cmd->fmt->ops->create_instance(cmd->fmt, NULL,
-+						vg->name, NULL, NULL, 1))) {
- 		log_error("Failed to allocate format instance");
- 		return 0;
- 	}
-+	change_vg_format_instance(vg, fid);
- 
- 	/*
- 	 * Setting vg->old_name to a blank value will explicitly
-@@ -398,7 +400,7 @@ int backup_to_file(const char *file, const char *desc, struct volume_group *vg)
- 
- 	if (!(context = create_text_context(cmd, file, desc)) ||
- 	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, NULL, context))) {
-+						NULL, NULL, context, 1))) {
- 		log_error("Couldn't create backup object.");
- 		return 0;
- 	}
+ 	struct dm_pool *mem = dm_pool_create("pool pv_read", 1024);
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c8c56f7..a2f3d74 100644
+index a2f3d74..5dfe0b8 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -41,7 +41,8 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 							  const char *pvid,
- 							  const char *vgname,
- 							  const char *vgid,
--							  void *context);
-+							  void *context,
-+							  int attach_existing_mdas);
+@@ -1669,10 +1669,8 @@ static uint64_t _metadata_locn_offset_raw(void *metadata_locn)
+ }
  
- struct text_fid_context {
- 	char *raw_metadata_buf;
-@@ -1090,7 +1091,7 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
+ static int _text_pv_read(const struct format_type *fmt, const char *pv_name,
+-		    struct physical_volume *pv, struct dm_list *mdas,
+-		    int scan_label_only)
++		    struct physical_volume *pv, int scan_label_only)
+ {
+-	struct metadata_area *mda, *mda_new;
+ 	struct label *label;
+ 	struct device *dev;
+ 	struct lvmcache_info *info;
+@@ -1687,17 +1685,6 @@ static int _text_pv_read(const struct format_type *fmt, const char *pv_name,
+ 	if (!_populate_pv_fields(info, pv, scan_label_only))
+ 		return 0;
  
- 				/* FIXME stat file to see if it's changed */
- 				fid = _text_create_text_instance(fmt, NULL, NULL,
--								 NULL, NULL);
-+								 NULL, NULL, 1);
- 				if ((vg = _vg_read_file_name(fid, scanned_vgname,
- 							     path))) {
- 					/* FIXME Store creation host in vg */
-@@ -1916,7 +1917,8 @@ static int _text_pv_setup(const struct format_type *fmt,
+-	if (!mdas)
+-		return 1;
+-
+-	/* Add copy of mdas to supplied list */
+-	dm_list_iterate_items(mda, &info->mdas) {
+-		mda_new = mda_copy(fmt->cmd->mem, mda);
+-		if (!mda_new)
+-			return 0;
+-		dm_list_add(mdas, &mda_new->list);
+-	}
+-
  	return 1;
  }
  
--static int _create_pv_text_instance(struct format_instance *fid, const char *pvid)
-+static int _create_pv_text_instance(struct format_instance *fid, const char *pvid,
-+				    int attach_existing_mdas)
- {
- 	struct text_fid_pv_context *fid_pv_tc;
- 	struct lvmcache_info *info;
-@@ -1938,7 +1940,7 @@ static int _create_pv_text_instance(struct format_instance *fid, const char *pvi
- 		return 0;
- 	}
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d8247dd..da62764 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -340,8 +340,8 @@ int vg_revert(struct volume_group *vg);
+ struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
+ 			     const char *vgid, int warnings, int *consistent);
+ struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+-				struct dm_list *mdas, uint64_t *label_sector,
+-				int warnings, int scan_label_only);
++				uint64_t *label_sector, int warnings,
++				int scan_label_only);
+ struct dm_list *get_pvs(struct cmd_context *cmd);
  
--	if ((info = info_from_pvid(pvid, 0)))
-+	if (attach_existing_mdas && (info = info_from_pvid(pvid, 0)))
- 		fid_add_mdas(fid, &info->mdas, pvid, ID_LEN);
- 
- 	return 1;
-@@ -1946,7 +1948,7 @@ static int _create_pv_text_instance(struct format_instance *fid, const char *pvi
- 
- static int _create_vg_text_instance(struct format_instance *fid,
- 				    const char *vgname, const char *vgid,
--				    void *context)
-+				    void *context, int attach_existing_mdas)
- {
- 	struct text_fid_context *fidtc;
- 	struct metadata_area *mda;
-@@ -1969,6 +1971,15 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 	fidtc->raw_metadata_buf = NULL;
- 	fid->private = (void *) fidtc;
- 
-+	if (!(fid->metadata_areas_index = dm_hash_create(128))) {
-+		log_error("Couldn't create metadata index for format "
-+			  "instance of VG %s.", vgname);
-+		return 0;
-+	}
-+
-+	if (!attach_existing_mdas)
-+		goto out;
-+
- 	if (!vgname) {
- 		if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
- 			return_0;
-@@ -1977,12 +1988,6 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 		mda->status = 0;
- 		fid_add_mda(fid, mda, NULL, 0, 0);
- 	} else {
--		if (!(fid->metadata_areas_index = dm_hash_create(128))) {
--			log_error("Couldn't create metadata index for format "
--				  "instance of VG %s.", vgname);
--			return 0;
--		}
--
- 		dir_list = &((struct mda_lists *) fid->fmt->private)->dirs;
- 
- 		dm_list_iterate_items(dl, dir_list) {
-@@ -2044,7 +2049,8 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 							  const char *pvid,
- 							  const char *vgname,
- 							  const char *vgid,
--							  void *context)
-+							  void *context,
-+							  int attach_existing_mdas)
- {
- 	struct format_instance *fid;
- 	int r;
-@@ -2065,8 +2071,8 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 	dm_list_init(&fid->metadata_areas_in_use);
- 	dm_list_init(&fid->metadata_areas_ignored);
- 
--	r = pvid ? _create_pv_text_instance(fid, pvid) :
--		   _create_vg_text_instance(fid, vgname, vgid, context);
-+	r = pvid ? _create_pv_text_instance(fid, pvid, attach_existing_mdas) :
-+		   _create_vg_text_instance(fid, vgname, vgid, context, attach_existing_mdas);
- 
- 	if (r)
- 		return fid;
+ /*
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index f6ea0e5..dccc3af 100644
+index dccc3af..591f7b5 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -977,7 +977,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
- 	dm_list_init(&vg->removed_pvs);
+@@ -38,7 +38,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					struct dm_pool *pvmem,
+ 					const char *pv_name,
+ 					struct format_instance *fid,
+-					struct dm_list *mdas,
+ 					uint64_t *label_sector,
+ 					int warnings, int scan_label_only);
  
- 	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, NULL,
--						vg_name, NULL, NULL))) {
-+					vg_name, NULL, NULL, 1))) {
- 		log_error("Failed to create format instance");
- 		goto bad;
- 	}
-@@ -1642,7 +1642,7 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
- 	}
- 
- 	if (!(pv->fid = fmt->ops->create_instance(fmt, (const char *) &pv->id,
--						  NULL, NULL, NULL))) {
-+						  NULL, NULL, NULL, 0))) {
- 		log_error("Couldn't create format instance for PV %s.", pv_dev_name(pv));
- 		goto bad;
- 	}
-@@ -2637,10 +2637,13 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
- 		goto bad;
- 	}
- 
--	/* create format instance with appropriate metadata area */
-+	/*
-+	 * Create an empty format instance. Metadata areas
-+	 * will be attached using consequent PV read calls.
-+	 */
- 	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt, NULL,
- 							  orphan_vgname, NULL,
--							  NULL))) {
-+							  NULL, 0))) {
- 		log_error("Failed to create format instance");
- 		goto bad;
- 	}
-@@ -2818,7 +2821,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		use_precommitted = 0;
- 
- 	/* create format instance with appropriate metadata area */
--	if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL))) {
-+	if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL, 1))) {
- 		log_error("Failed to create format instance");
- 		return NULL;
- 	}
-@@ -2973,7 +2976,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			use_precommitted = 0;
- 
- 		/* create format instance with appropriate metadata area */
--		if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL))) {
-+		if (!(fid = fmt->ops->create_instance(fmt, NULL, vgname, vgid, NULL, 1))) {
- 			log_error("Failed to create format instance");
- 			return NULL;
- 		}
-@@ -3416,7 +3419,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
- 	else {
- 		if (!(pv->fid = pv->fmt->ops->create_instance(pv->fmt,
- 						(const char *) &pv->id,
--						NULL, NULL, NULL))) {
-+						NULL, NULL, NULL, 1))) {
- 			log_error("_pv_read: Couldn't create format instance "
- 				  "for PV %s", pv_name);
- 			goto bad;
-@@ -3936,6 +3939,16 @@ uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname)
- 	return FAILED_EXIST;
- }
- 
-+void change_vg_format_instance(struct volume_group *vg,
-+			       struct format_instance *fid)
-+{
-+	struct pv_list *pvl;
-+
-+	vg->fid = fid;
-+	dm_list_iterate_items(pvl, &vg->pvs)
-+		pvl->pv->fid = fid;
-+}
-+
- static int _convert_key_to_string(const char *key, size_t key_len,
- 				  unsigned subkey, char *buf, size_t buf_len)
+@@ -1330,14 +1329,11 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
  {
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 0fbc954..bd638b5 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -191,6 +191,7 @@ struct metadata_area *mda_copy(struct dm_pool *mem,
- unsigned mda_is_ignored(struct metadata_area *mda);
- void mda_set_ignored(struct metadata_area *mda, unsigned ignored);
- unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2);
-+void change_vg_format_instance(struct volume_group *vg, struct format_instance *fid);
- int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
- 		 const char *key, size_t key_len, const unsigned subkey);
- int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas,
-@@ -289,7 +290,8 @@ struct format_handler {
- 						    const char *pvid,
- 						    const char *vgname,
- 						    const char *vgid,
--						    void *context);
-+						    void *context,
-+						    int attach_existing_mdas);
+ 	struct physical_volume *pv;
+ 	struct device *dev;
+-	struct dm_list mdas;
+-
+-	dm_list_init(&mdas);
+ 
+ 	/* FIXME Check partition type is LVM unless --force is given */
+ 
+ 	/* Is there a pv here already? */
+-	pv = pv_read(cmd, name, &mdas, NULL, 0, 0);
++	pv = pv_read(cmd, name, NULL, 0, 0);
  
  	/*
- 	 * Destructor for format instance
+ 	 * If a PV has no MDAs it may appear to be an orphan until the
+@@ -1345,10 +1341,10 @@ static int pvcreate_check(struct cmd_context *cmd, const char *name,
+ 	 * this means checking every VG by scanning every PV on the
+ 	 * system.
+ 	 */
+-	if (pv && is_orphan(pv) && mdas_empty_or_ignored(&mdas)) {
++	if (pv && is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use)) {
+ 		if (!scan_vgs_for_pvs(cmd, 0))
+ 			return_0;
+-		pv = pv_read(cmd, name, NULL, NULL, 0, 0);
++		pv = pv_read(cmd, name, NULL, 0, 0);
+ 	}
+ 
+ 	/* Allow partial & exported VGs to be destroyed. */
+@@ -1811,20 +1807,18 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+ static struct physical_volume *_find_pv_by_name(struct cmd_context *cmd,
+ 			 			const char *pv_name)
+ {
+-	struct dm_list mdas;
+ 	struct physical_volume *pv;
+ 
+-	dm_list_init(&mdas);
+-	if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, &mdas, NULL, 1, 0))) {
++	if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, NULL, 1, 0))) {
+ 		log_error("Physical volume %s not found", pv_name);
+ 		return NULL;
+ 	}
+ 
+-	if (is_orphan_vg(pv->vg_name) && mdas_empty_or_ignored(&mdas)) {
++	if (is_orphan_vg(pv->vg_name) && !dm_list_size(&pv->fid->metadata_areas_in_use)) {
+ 		/* If a PV has no MDAs - need to search all VGs for it */
+ 		if (!scan_vgs_for_pvs(cmd, 1))
+ 			return_NULL;
+-		if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, NULL, NULL, 1, 0))) {
++		if (!(pv = _pv_read(cmd, cmd->mem, pv_name, NULL, NULL, 1, 0))) {
+ 			log_error("Physical volume %s not found", pv_name);
+ 			return NULL;
+ 		}
+@@ -2649,8 +2643,8 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 	}
+ 
+ 	dm_list_iterate_items(info, &vginfo->infos) {
+-		if (!(pv = _pv_read(cmd, mem, dev_name(info->dev), vg->fid,
+-				    NULL, NULL, warnings, 0))) {
++		if (!(pv = _pv_read(cmd, mem, dev_name(info->dev),
++				    vg->fid, NULL, warnings, 0))) {
+ 			continue;
+ 		}
+ 		if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl)))) {
+@@ -3360,10 +3354,10 @@ const char *find_vgname_from_pvname(struct cmd_context *cmd,
+  *   FIXME - liblvm todo - make into function that returns handle
+  */
+ struct physical_volume *pv_read(struct cmd_context *cmd, const char *pv_name,
+-				struct dm_list *mdas, uint64_t *label_sector,
+-				int warnings, int scan_label_only)
++				uint64_t *label_sector, int warnings,
++				int scan_label_only)
+ {
+-	return _pv_read(cmd, cmd->mem, pv_name, NULL, mdas, label_sector, warnings, scan_label_only);
++	return _pv_read(cmd, cmd->mem, pv_name, NULL, label_sector, warnings, scan_label_only);
+ }
+ 
+ /* FIXME Use label functions instead of PV functions */
+@@ -3371,7 +3365,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 					struct dm_pool *pvmem,
+ 					const char *pv_name,
+ 					struct format_instance *fid,
+-					struct dm_list *mdas,
+ 					uint64_t *label_sector,
+ 					int warnings, int scan_label_only)
+ {
+@@ -3401,8 +3394,7 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
+ 	}
+ 
+ 	/* FIXME Move more common code up here */
+-	if (!(info->fmt->ops->pv_read(info->fmt, pv_name, pv, mdas,
+-	      scan_label_only))) {
++	if (!(info->fmt->ops->pv_read(info->fmt, pv_name, pv, scan_label_only))) {
+ 		log_error("Failed to read existing physical volume '%s'",
+ 			  pv_name);
+ 		goto bad;
+@@ -4239,8 +4231,5 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
+  */
+ struct physical_volume *pv_by_path(struct cmd_context *cmd, const char *pv_name)
+ {
+-	struct dm_list mdas;
+-
+-	dm_list_init(&mdas);
+-	return _pv_read(cmd, cmd->mem, pv_name, NULL, &mdas, NULL, 1, 0);
++	return _pv_read(cmd, cmd->mem, pv_name, NULL, NULL, 1, 0);
+ }
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index bd638b5..7ebf85c 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -241,8 +241,7 @@ struct format_handler {
+ 	 * Return PV with given path.
+ 	 */
+ 	int (*pv_read) (const struct format_type * fmt, const char *pv_name,
+-			struct physical_volume * pv, struct dm_list *mdas,
+-			int scan_label_only);
++			struct physical_volume * pv, int scan_label_only);
+ 
+ 	/*
+ 	 * Tweak an already filled out a pv ready for importing into a
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index a8717e0..ace3c1d 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -25,15 +25,12 @@ const char _really_wipe[] =
+ static int pvremove_check(struct cmd_context *cmd, const char *name)
+ {
+ 	struct physical_volume *pv;
+-	struct dm_list mdas;
+-
+-	dm_list_init(&mdas);
+ 
+ 	/* FIXME Check partition type is LVM unless --force is given */
+ 
+ 	/* Is there a pv here already? */
+ 	/* If not, this is an error unless you used -f. */
+-	if (!(pv = pv_read(cmd, name, &mdas, NULL, 1, 0))) {
++	if (!(pv = pv_read(cmd, name, NULL, 1, 0))) {
+ 		if (arg_count(cmd, force_ARG))
+ 			return 1;
+ 		log_error("Physical Volume %s not found", name);
+@@ -47,13 +44,14 @@ static int pvremove_check(struct cmd_context *cmd, const char *name)
+ 	 * means checking every VG by scanning every
+ 	 * PV on the system.
+ 	 */
+-	if (is_orphan(pv) && !dm_list_size(&mdas)) {
++	if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use) &&
++	    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
+ 		if (!scan_vgs_for_pvs(cmd, 0)) {
+ 			log_error("Rescan for PVs without metadata areas "
+ 				  "failed.");
+ 			return 0;
+ 		}
+-		if (!(pv = pv_read(cmd, name, NULL, NULL, 1, 0))) {
++		if (!(pv = pv_read(cmd, name, NULL, 1, 0))) {
+ 			log_error("Failed to read physical volume %s", name);
+ 			return 0;
+ 		}
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 8582ef4..4f1d610 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -32,28 +32,26 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 	uint64_t size = 0;
+ 	uint32_t new_pe_count = 0;
+ 	int r = 0;
+-	struct dm_list mdas;
+ 	const char *pv_name = pv_dev_name(pv);
+ 	const char *vg_name = pv_vg_name(pv);
+ 	struct lvmcache_info *info;
+ 	int mda_count = 0;
+ 	struct volume_group *old_vg = vg;
+ 
+-	dm_list_init(&mdas);
+-
+ 	if (is_orphan_vg(vg_name)) {
+ 		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
+ 			log_error("Can't get lock for orphans");
+ 			return 0;
+ 		}
+ 
+-		if (!(pv = pv_read(cmd, pv_name, &mdas, NULL, 1, 0))) {
++		if (!(pv = pv_read(cmd, pv_name, NULL, 1, 0))) {
+ 			unlock_vg(cmd, vg_name);
+ 			log_error("Unable to read PV \"%s\"", pv_name);
+ 			return 0;
+ 		}
+ 
+-		mda_count = dm_list_size(&mdas);
++		mda_count = dm_list_size(&pv->fid->metadata_areas_in_use) +
++			    dm_list_size(&pv->fid->metadata_areas_ignored);
+ 	} else {
+ 		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+ 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index f76aacd..48f8ed5 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -640,7 +640,7 @@ static int _process_all_devs(struct cmd_context *cmd, void *handle,
+ 	}
+ 
+ 	while ((dev = dev_iter_get(iter))) {
+-		if (!(pv = pv_read(cmd, dev_name(dev), NULL, NULL, 0, 0))) {
++		if (!(pv = pv_read(cmd, dev_name(dev), NULL, 0, 0))) {
+ 			memset(&pv_dummy, 0, sizeof(pv_dummy));
+ 			dm_list_init(&pv_dummy.tags);
+ 			dm_list_init(&pv_dummy.segments);
+@@ -682,7 +682,6 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 	struct str_list *sll;
+ 	char *at_sign, *tagname;
+ 	int scanned = 0;
+-	struct dm_list mdas;
+ 
+ 	dm_list_init(&tags);
+ 
+@@ -724,10 +723,8 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 				}
+ 				pv = pvl->pv;
+ 			} else {
+-
+-				dm_list_init(&mdas);
+-				if (!(pv = pv_read(cmd, argv[opt], &mdas,
+-						   NULL, 1, scan_label_only))) {
++				if (!(pv = pv_read(cmd, argv[opt], NULL,
++						   1, scan_label_only))) {
+ 					log_error("Failed to read physical "
+ 						  "volume \"%s\"", argv[opt]);
+ 					ret_max = ECMD_FAILED;
+@@ -742,7 +739,8 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 				 * PV on the system.
+ 				 */
+ 				if (!scanned && is_orphan(pv) &&
+-				    !dm_list_size(&mdas)) {
++				    !dm_list_size(&pv->fid->metadata_areas_in_use) &&
++				    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
+ 					if (!scan_label_only &&
+ 					    !scan_vgs_for_pvs(cmd, 1)) {
+ 						stack;
+@@ -751,7 +749,7 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
+ 					}
+ 					scanned = 1;
+ 					if (!(pv = pv_read(cmd, argv[opt],
+-							   NULL, NULL, 1,
++							   NULL, 1,
+ 							   scan_label_only))) {
+ 						log_error("Failed to read "
+ 							  "physical volume "
 -- 
 1.7.3.4
 
