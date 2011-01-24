@@ -1,95 +1,135 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 24 Jan 2011 11:50:30 +0100
-Subject: [PATCH 06/15] Micro optimization of _eat_space and _get_token
+Date: Mon, 24 Jan 2011 11:50:31 +0100
+Subject: [PATCH 07/15] Testing: Display duration of tests
 In-Reply-To: <cover.1295865933.git.zkabelac@redhat.com>
 References: <cover.1295865933.git.zkabelac@redhat.com>
-Message-ID: <b2c3df80e366c4c459feb1e39937a37a8804fe8e.1295865933.git.zkabelac@redhat.com>
+Message-ID: <df03f4ae045d82e76b0470a8e8984830f6cebb07.1295865933.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Makes the code more readable and has a smaller number of memory
-accesses.
-
-For _get_token() optimize number parsing. Check for '.' char only
-if it's not a digit. Move pointer incrementation into one place.
-
-For _eat_space() check only p->te for '\0' in skipping of comment line.
-Avoid check for '\0' when we know it is space. Also master while loop
-doesn't need checking p->tb for '\0'. We just need to check p->tb
-isn't already at the end of buffer. This could give 'extra' loop cycle
-if we are already there - but safes memory access in every other case.
+Enhance output with info about test duration.
+Cleanup few declarations in the code.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/config/config.c |   36 ++++++++++++++++++------------------
- 1 files changed, 18 insertions(+), 18 deletions(-)
+ test/lib/harness.c |   32 ++++++++++++++++++++++----------
+ 1 files changed, 22 insertions(+), 10 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 15bf401..4efe990 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -821,18 +821,20 @@ static void _get_token(struct parser *p, int tok_prev)
- 	case '+':
- 	case '-':
- 		if (values_allowed) {
--			te++;
--			while ((te != p->fe) && (*te)) {
--				if (*te == '.') {
--					if (p->t == TOK_FLOAT)
--						break;
--					p->t = TOK_FLOAT;
--				} else if (!isdigit((int) *te))
-+			while (++te != p->fe) {
-+				if (!isdigit((int) *te)) {
-+					if (*te == '.') {
-+						if (p->t != TOK_FLOAT) {
-+							p->t = TOK_FLOAT;
-+							continue;
-+						}
-+					}
- 					break;
--				te++;
-+				}
- 			}
- 			break;
- 		}
-+		/* fall through */
+diff --git a/test/lib/harness.c b/test/lib/harness.c
+index f07d2ed..ae6c344 100644
+--- a/test/lib/harness.c
++++ b/test/lib/harness.c
+@@ -20,6 +20,7 @@
+ #include <sys/wait.h>
+ #include <unistd.h>
+ #include <stdlib.h>
++#include <time.h>
  
- 	default:
- 		p->t = TOK_IDENTIFIER;
-@@ -849,21 +851,19 @@ static void _get_token(struct parser *p, int tok_prev)
- 
- static void _eat_space(struct parser *p)
- {
--	while ((p->tb != p->fe) && (*p->tb)) {
-+	while (p->tb != p->fe) {
- 		if (*p->te == '#')
- 			while ((p->te != p->fe) && (*p->te) && (*p->te != '\n'))
- 				p->te++;
- 
--		else if (isspace(*p->te)) {
--			while ((p->te != p->fe) && (*p->te) && isspace(*p->te)) {
--				if (*p->te == '\n')
--					p->line++;
--				p->te++;
--			}
--		}
-+		else if (!isspace(*p->te))
-+			break;
- 
--		else
--			return;
-+		while ((p->te != p->fe) && isspace(*p->te)) {
-+			if (*p->te == '\n')
-+				p->line++;
-+			p->te++;
-+		}
- 
- 		p->tb = p->te;
+ static pid_t pid;
+ static int fds[2];
+@@ -82,9 +83,9 @@ static int outline(char *buf, int start, int force) {
+                 char *line = strndup(from, next - from);
+                 char *a = line, *b;
+                 do {
+-                        b = line + strlen(line);
+                         int idx = -1;
+                         int i;
++                        b = line + strlen(line);
+                         for ( i = 0; i < 2; ++i ) {
+                                 if (subst[i].key) {
+                                         // printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
+@@ -145,15 +146,24 @@ static void drain(void) {
  	}
+ }
+ 
+-static void passed(int i, char *f) {
++static const char *duration(time_t start)
++{
++	static char buf[16];
++	int t = (int)(time(NULL) - start);
++
++	sprintf(buf, "%2d:%02d", t / 60, t % 60);
++	return buf;
++}
++
++static void passed(int i, char *f, time_t t) {
+ 	if (strstr(readbuf, "TEST WARNING")) {
+ 		++s.nwarned;
+ 		s.status[i] = WARNED;
+-		printf("warnings\n");
++		printf("warnings  %s\n", duration(t));
+ 	} else {
+ 		++ s.npassed;
+ 		s.status[i] = PASSED;
+-		printf("passed.\n");
++		printf("passed.   %s\n", duration(t));
+ 	}
+ }
+ 
+@@ -192,12 +202,13 @@ static void run(int i, char *f) {
+ 		fflush(stderr);
+ 		_exit(202);
+ 	} else {
++		int st, w;
++		time_t start = time(NULL);
+ 		char buf[128];
+ 		snprintf(buf, 128, "%s ...", f);
+ 		buf[127] = 0;
+ 		printf("Running %-40s ", buf);
+ 		fflush(stdout);
+-		int st, w;
+ 		while ((w = waitpid(pid, &st, WNOHANG)) == 0) {
+ 			drain();
+ 			usleep(20000);
+@@ -209,7 +220,7 @@ static void run(int i, char *f) {
+ 		drain();
+ 		if (WIFEXITED(st)) {
+ 			if (WEXITSTATUS(st) == 0) {
+-				passed(i, f);
++				passed(i, f, start);
+ 			} else if (WEXITSTATUS(st) == 200) {
+ 				skipped(i, f);
+ 			} else {
+@@ -223,6 +234,8 @@ static void run(int i, char *f) {
+ }
+ 
+ int main(int argc, char **argv) {
++	const char *be_verbose = getenv("VERBOSE");
++	time_t start = time(NULL);
+ 	int i;
+ 
+ 	if (argc >= MAX) {
+@@ -230,9 +243,6 @@ int main(int argc, char **argv) {
+ 		exit(1);
+ 	}
+ 
+-	s.nwarned = s.nfailed = s.npassed = s.nskipped = 0;
+-
+-	char *be_verbose = getenv("VERBOSE");
+ 	if (be_verbose && atoi(be_verbose))
+ 		verbose = 1; // XXX
+ 
+@@ -260,8 +270,9 @@ int main(int argc, char **argv) {
+ 			break;
+ 	}
+ 
+-	printf("\n## %d tests: %d OK, %d warnings, %d failures; %d skipped\n",
++	printf("\n## %d tests %s : %d OK, %d warnings, %d failures; %d skipped\n",
+ 	       s.nwarned + s.npassed + s.nfailed + s.nskipped,
++	       duration(start),
+ 	       s.npassed, s.nwarned, s.nfailed, s.nskipped);
+ 
+ 	/* print out a summary */
+@@ -279,5 +290,6 @@ int main(int argc, char **argv) {
+ 		printf("\n");
+ 		return s.nfailed > 0 || die;
+ 	}
++
+ 	return die;
+ }
 -- 
 1.7.3.5
 
