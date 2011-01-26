@@ -1,185 +1,121 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 26 Jan 2011 11:38:52 +0100
-Subject: [PATCH 02/17] Add supporting functions for metadata areas stored in format instance.
-In-Reply-To: <87pqrlrune.fsf@twilight.int.mornfall.net.>
-References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>	<1295867048-21558-3-git-send-email-prajnoha@redhat.com>
-	<87pqrlrune.fsf@twilight.int.mornfall.net.>
-Message-ID: <4D3FF9BC.9080401@redhat.com>
+Date: Wed, 26 Jan 2011 12:05:57 +0100
+Subject: [PATCH 04/17] Add format_instance support for pv_read.
+In-Reply-To: <87lj29ru07.fsf@twilight.int.mornfall.net.>
+References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>	<1295867048-21558-5-git-send-email-prajnoha@redhat.com>
+	<87lj29ru07.fsf@twilight.int.mornfall.net.>
+Message-ID: <4D400015.5040908@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/25/2011 02:16 PM +0100, Petr Rockai wrote:
->>  struct format_instance {
->>  	const struct format_type *fmt;
->> +	int pv_only;
+On 01/25/2011 02:30 PM +0100, Petr Rockai wrote:
+> Peter Rajnoha <prajnoha@redhat.com> writes:
 > 
-> Could this be changed to an enumerated "type" field, instead of pv_only?
-> If I understand correctly, types are mutually exclusive anyway, and
-> pv_only is rather confusing and non-obvious when reading the code.
+>> We don't need to store metadata areas in a separate "mdas" parameter
+>> since it is in the pv->fid now. If the fid is not defined yet and is
+>> NULL, pv_read code will create a new one (if there's no VG fid yet
+>> where the metadata areas read off of a PV should be attached to).
 > 
-
-Yes, these are mutually exclusive and it'll always be only a switch
-between PV and VG, or I hope so... Using a enumerated type field - OK,
-no problem, whatever that makes the switch...
-
->> +
->>  	/*
->>  	 * Each mda in a vg is on exactly one of the below lists.
->>  	 * MDAs on the 'in_use' list will be read from / written to
->> @@ -181,6 +183,7 @@ struct format_instance {
->>  	 */
->>  	struct dm_list metadata_areas_in_use;
->>  	struct dm_list metadata_areas_ignored;
->> +	void *metadata_areas_index;
-> 
-> I don't currently expect that we would need as much genericity as void *
-> offers (and that we could use a little extra safety). Would an union be
-> better here, with an explicit list of types that can go in?
+> This is somewhat hairy... With this patch, it's starting to seem that PV
+> will sometimes point to a VG FID and other times to PV FID. Is there a
+> good reason for that? Is the PV FID only used with orphan PVs?
 > 
 
-Well, my incentive here was to keep this for any future changes so the
-format-specific code can decide and use any type of index we can imagine.
-We have this "metadata.c" layer and then the "format-specific" layer
-underneath that. So adding any new format with a brand new indexing
-scheme that is fine-tuned and suitable for that one new format would
-require breaking the abstraction layer (so defining a new type of index
-used in new format in the "metadata.c" layer above). So my incentive was
-to make the index transparent for the "metadata.c" layer.
+Well, we have plain PVs that are not part of any real VG yet, the orphan. BUT
+we don't want to group them into an orphan VG (that would require collecting
+all mdas from all orphan VGs). In this case, we have a pure PV fid defined
+(this fid will include *only* the mdas on that PV).
 
-(I know, we have these "fid_{add,remove,get}_mda" functions that work
-directly with the index in "metadata.c" now, but that may eventually
-evolve into format-specific "fid" functions later. But since we have
-only one format that actually make real use of the format instance,
-I kept it in that metadata.c layer for now...)
+Then we have plain PVs that are not part of any real VG yet, but are grouped
+together into a virtual "orphan" VG. From fid's point of view, this is a VG
+like any other, so the pv->fid references the VG-based pv->vg->fid.
 
-But if we expect to use the same index scheme all the time for all
-possible formats, not changing it too much, then sure, we can use a
-union there... But I'd like to avoid too much editing in the future :)
+Then we have PVs that are part of a real VG. These also have the pv->fid
+referencing the pv->vg->fid.
 
->> +static int _convert_key_to_string(const char *key, size_t key_len,
->> +				  unsigned subkey, char *buf, size_t buf_len)
->>  {
->> +	memcpy(buf, key, key_len);
->> +	buf += key_len;
->> +	buf_len -= key_len;
->> +	if ((dm_snprintf(buf, buf_len, "_%u", subkey) == -1))
->> +		return_0;
->> +
->> +	return 1;
->> +}
-> 
-> Would it be better to require that key is NULL-terminated? It would
-> simplify a lot of code, by not needing to pass the length as an extra
+This way, we can use the pv->fid transparently - we don't actually care
+whether it is PV-based or VG-based fid, we only need to access the
+mdas. Whether these mdas are store together in a pool with mdas from
+other PVs (when in a VG) or they are just standalone mdas from that
+one PV, we don't care. It makes writing the code easier. We don't
+need to check that anymore...
 
-...if we can make sure that PV id is always terminated with 0, then OK.
-But otherwise we would need to call this "convert_to_string" function
-everywhere around the code (actually that was in my original working
-version of this patchset, then I decided to put it in one place instead).
+> I think this is something that really needs to be documented. If nothing
 
-> parameter everywhere. I know that currently we keep the PV/VG/... IDs in
-> unterminated strings, but I am quite sure this is not a good idea. I
-> wouldn't expect it to be a *lot* of work to change things to keep a NULL
-> termination in there as well. Maybe in a followup patch?
+..OK, I'll try to add some comments.
 
-..thing with PV id is that we store that as a "struct id" which internally
-is an array of integeres... Hmm, so you want to put another array item with
-0 at the end?
+> else, the format_instance type value (as suggested in an earlier
+> comment) should read ORPHAN_PV_FID and VG_FID. It also does raise the
 
-BTW, we also do this "convert_to_string" in the cache code... So yes, maybe
-it would be fine to clean this up somehow...
+Actually, ORPHAN_VG_FID, VG_FID and PV_FID. But since ORPHAN_VG_FID == VG_FID
+from fid's point of view, we have the separation PV_FID and VG_FID only
+(which is exactly what the format_instance->pv_only flag is about)
 
-> 
->> +int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
->> +		 const char *key, size_t key_len, const unsigned subkey)
->> +{
->> +	char extended_key[PATH_MAX];
->> +
->>  	dm_list_add(mda_is_ignored(mda) ? &fid->metadata_areas_ignored :
->>  					  &fid->metadata_areas_in_use, &mda->list);
->> +
->> +	/*
->> +	 * Return if the mda is not supposed to be
->> +	 * indexed or the index itself is not initialised */
->> +	if (!key || !fid->metadata_areas_index)
->> +		return 1;
->> +
->> +	if (!_convert_key_to_string(key, key_len, subkey,
->> +				    extended_key, PATH_MAX))
->> +		return_0;
->> +
->> +	/* Add metadata area to index. */
->> +	if (fid->pv_only)
->> +		((struct metadata_area **)fid->metadata_areas_index)[subkey] = mda;
-> 
-> In this branch, all the extended_key logic above is useless. It could be
-> made more obvious that only the else branch needs extended_key, by
-> restructuring the code. Also, is key, subkey and extended_key the right
-> naming scheme? Maybe full_key instead of extended? And maybe sub_key,
-> for consistency?
+> question, why we don't always use VG_FID even for orphans, given how we
+
+E.g. creating a new PV, modifying just one PV etc. - there's no need to group
+and store all the other mdas that are in that "virtual" orphan VG.
+If we want to group that for some complex situations, OK. But it's useless
+for simple modification done only on one PVs (iow, creating orphan VG fid
+means collecting all mdas from all PVs not in a VG yet. And that could
+be uselessly time-consuming for simple PV-only operations since we would
+throw all that information away anyway).
+
+> have an orphans VG? Would simply using the orphans VG FID be more
+> consistent overall?
 > 
 
-OK...
+Please, let's not group into orphan VG where it's not really needed...
 
->> +struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
->> +					  const char *key, size_t key_len,
->> +					  const unsigned subkey)
->> +{
->> +	char extended_key[PATH_MAX];
->> +	struct metadata_area *mda = NULL;
+>> +	if (fid)
+>> +		fid_add_mdas(fid, &info->mdas, (const char *) &pv->id, ID_LEN);
+>> +	else {
+>> +		if (!(pv->fid = pv->fmt->ops->create_instance(pv->fmt,
+>> +						(const char *) &pv->id,
+>> +						NULL, NULL, NULL))) {
+>> +			log_error("_pv_read: Couldn't create format instance "
+>> +				  "for PV %s", pv_name);
+>> +			goto bad;
+>> +		}
+>> +	}
 >> +
->> +	if (!_convert_key_to_string(key, key_len, subkey,
->> +				    extended_key, PATH_MAX))
->> +		return_NULL;
->> +
->> +	if (fid->pv_only)
->> +		mda = ((struct metadata_area **)fid->metadata_areas_index)[subkey];
->> +	else
->> +		mda = (struct metadata_area *) dm_hash_lookup(fid->metadata_areas_index,
->> +							      extended_key);
 > 
-> Same about extended_key as above (both path coverage and naming).
+> The code above is certainly confusing. A comment is needed, explaining
+> what is going on. Please explain that non-NULL "fid" means that this PV
+> belongs to a VG, and the fid variable points to that VG's fid.
 > 
 
-OK...
+It's because this _pv_read could be part of a vg_read (e.g. _vg_read_orphans).
+So creating a standalone PV fid that would be destroyed immediately and
+replaced by orphan VG fid would be useless, so it's better to pass the existing
+fid in. So if it's defined already, we just merge PVs mdas into the fid and if
+not, we create the new PV-based fid.
 
->> +int fid_remove_mda(struct format_instance *fid, struct metadata_area *mda,
->> +		   const char *key, size_t key_len, const unsigned subkey)
->> +{
->> +	struct metadata_area *mda_indexed = NULL;
->> +	char extended_key[PATH_MAX];
->> +
->> +	/* At least one of mda or key must be specified. */
->> +	if (!mda && !key)
->> +		return 1;
->> +
->> +	if (key) {
->> +		/*
->> +		 * If both mda and key specified, check given mda
->> +		 * with what we find using the index and return
->> +		 * immediately if these two do not match.
->> +		 */
->> +		if (!(mda_indexed = fid_get_mda_indexed(fid, key, key_len, subkey)) ||
->> +		     (mda && mda != mda_indexed))
->> +			return 1;
->> +
->> +		if (!_convert_key_to_string(key, key_len, subkey,
->> +					    extended_key, PATH_MAX))
->> +			return_0;
->> +
->> +		mda = mda_indexed;
->> +
->> +		if (fid->pv_only)
->> +			((struct metadata_area**)fid->metadata_areas_index)[subkey] = NULL;
->> +		else
->> +			dm_hash_remove(fid->metadata_areas_index, extended_key);
+> Also, why mdas are added to the VG fid, but the (orphan) PV fid is left
+> empty? Should the code read
 > 
-> Redundant code paths again.
+> if (!fid) {
+>     if (!(fid = pv->fid = ...
+> }
+> 
+> fid_add_mdas(fid, ...)
 > 
 
-OK... :)
+The fid_add_mdas is part of the create_instance fn, so you would call that
+code twice... (but this is related to the next patch also and I've seen the
+comment briefly, so I'll reply there :) )
+
+> ?
+> 
+> If, as I suspect, it's because create_instance adds the MDA's itself,
+> please add a comment to that effect. (Also, is it necessary that
+> create_instance does this? I am not sure it is entirely intuitive...)
+> 
+
+...
 
 Peter
 
