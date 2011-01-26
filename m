@@ -1,5 +1,5 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 26 Jan 2011 14:59:29 +0100
+Date: Wed, 26 Jan 2011 15:06:15 +0100
 Subject: [PATCH 02/17] Add supporting functions for metadata areas stored in format instance.
 In-Reply-To: <4D3FF9BC.9080401@redhat.com> (Peter Rajnoha's message of "Wed,
 	26 Jan 2011 11:38:52 +0100")
@@ -7,7 +7,7 @@ References: <1295867048-21558-1-git-send-email-prajnoha@redhat.com>
 	<1295867048-21558-3-git-send-email-prajnoha@redhat.com>
 	<87pqrlrune.fsf@twilight.int.mornfall.net.>
 	<4D3FF9BC.9080401@redhat.com>
-Message-ID: <877hdrr9la.fsf@twilight.int.mornfall.net.>
+Message-ID: <874o8vr9kz.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,47 +15,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 Peter Rajnoha <prajnoha@redhat.com> writes:
->>> +	void *metadata_areas_index;
->> 
->> I don't currently expect that we would need as much genericity as void *
->> offers (and that we could use a little extra safety). Would an union be
->> better here, with an explicit list of types that can go in?
->> 
->
-> Well, my incentive here was to keep this for any future changes so the
-> format-specific code can decide and use any type of index we can imagine.
-> We have this "metadata.c" layer and then the "format-specific" layer
-> underneath that. So adding any new format with a brand new indexing
-> scheme that is fine-tuned and suitable for that one new format would
-> require breaking the abstraction layer (so defining a new type of index
-> used in new format in the "metadata.c" layer above). So my incentive was
-> to make the index transparent for the "metadata.c" layer.
->
-> (I know, we have these "fid_{add,remove,get}_mda" functions that work
-> directly with the index in "metadata.c" now, but that may eventually
-> evolve into format-specific "fid" functions later. But since we have
-> only one format that actually make real use of the format instance,
-> I kept it in that metadata.c layer for now...)
->
-> But if we expect to use the same index scheme all the time for all
-> possible formats, not changing it too much, then sure, we can use a
-> union there... But I'd like to avoid too much editing in the future :)
 
-Well, I think you are deluding yourself about that. Plenty of other such
-things is hard-coded all over the place and I am fairly sure adding an
-union member is going to be the least of your worries at that point.
+>> parameter everywhere. I know that currently we keep the PV/VG/... IDs in
+>> unterminated strings, but I am quite sure this is not a good idea. I
+>> wouldn't expect it to be a *lot* of work to change things to keep a NULL
+>> termination in there as well. Maybe in a followup patch?
+>
+> ..thing with PV id is that we store that as a "struct id" which internally
+> is an array of integeres... Hmm, so you want to put another array item with
+> 0 at the end?
+>
+> BTW, we also do this "convert_to_string" in the cache code... So yes, maybe
+> it would be fine to clean this up somehow...
 
-I wouldn't say anything if this came for free, but you are obviously
-trading code safety and maintainability (which are fairly concrete) for
-easier extendability (which is fairly hypothetical). I would opt for the
-first, if faced with this kind of a tradeoff. YAGNI (You Aren't Gonna
-Need It), anyway.
+Well, I don't see a problem with making the array ID_LEN + 1 instead of
+ID_LEN and storing a 0 element at the end. It's always used as a
+character array anyway, and we can save significant amount of
+boilerplate by having that 0 in there.
 
 Yours,
    Petr
-
-PS: If you want to make the format instance actually opaque, you should
-move it out of metadata.{h,c} completely, into format_text, and only
-have an opaque pointer (void * typedef) in VG/PV.
 
 
