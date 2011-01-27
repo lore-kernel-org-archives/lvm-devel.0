@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Jan 2011 21:21:56 -0000
-Subject: LVM2/test/api percent.c
-Message-ID: <20110126212156.25214.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Jan 2011 00:21:38 -0000
+Subject: LVM2 ./WHATS_NEW lib/filters/filter.c
+Message-ID: <20110127002138.17816.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-26 21:21:56
+Changes by:	agk at sourceware.org	2011-01-27 00:21:38
 
 Modified files:
-	test/api       : percent.c 
+	.              : WHATS_NEW 
+	lib/filters    : filter.c 
 
 Log message:
-	Add missing lvm_quit in test
-	
-	Fix occasional confusing memory leak report in testing.
+	Use O_DIRECT when reading block devices.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/percent.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1891&r2=1.1892
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
 
---- LVM2/test/api/percent.c	2011/01/03 15:07:39	1.4
-+++ LVM2/test/api/percent.c	2011/01/26 21:21:56	1.5
-@@ -37,7 +37,7 @@
-         assert(v.is_valid);
-         assert(v.value.integer == PERCENT_0);
+--- LVM2/WHATS_NEW	2011/01/24 23:34:47	1.1891
++++ LVM2/WHATS_NEW	2011/01/27 00:21:37	1.1892
+@@ -1,5 +1,6 @@
+ Version 2.02.83 - 
+ ===================================
++  Always use O_DIRECT when opening block devices to check for partitioning.
  
--        lv = lvm_lv_from_name(vg, "mirr");
-+	lv = lvm_lv_from_name(vg, "mirr");
-         assert(lv);
+ Version 2.02.82 - 24th January 2011
+ ===================================
+--- LVM2/lib/filters/filter.c	2011/01/12 15:28:34	1.59
++++ LVM2/lib/filters/filter.c	2011/01/27 00:21:37	1.60
+@@ -147,7 +147,7 @@
+ 	}
  
-         v = lvm_lv_get_property(lv, "copy_percent");
-@@ -52,5 +52,7 @@
-         assert(v.value.integer == 50 * PERCENT_1);
- 
-         lvm_vg_close(vg);
-+
-+	lvm_quit(handle);
-         return 0;
- }
+ 	/* Check it's accessible */
+-	if (!dev_open_flags(dev, O_RDONLY, 0, 1)) {
++	if (!dev_open_flags(dev, O_RDONLY, 1, 1)) {
+ 		log_debug("%s: Skipping: open failed", name);
+ 		return 0;
+ 	}
 
 
