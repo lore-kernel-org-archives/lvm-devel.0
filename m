@@ -1,7 +1,7 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 28 Jan 2011 02:58:02 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20110128025802.30997.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 28 Jan 2011 10:14:09 -0000
+Subject: LVM2 ./WHATS_NEW lib/uuid/uuid.c
+Message-ID: <20110128101409.30443.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2011-01-28 02:58:01
+Changes by:	zkabelac at sourceware.org	2011-01-28 10:14:09
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
+	lib/uuid       : uuid.c 
 
 Log message:
-	Improve lvcreate "insufficient extents" errors to "insufficient free space".
+	Avoid rebuilding of uuid validation table
+	
+	Small CPU relax...
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1892&r2=1.1893
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.245&r2=1.246
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1893&r2=1.1894
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/uuid/uuid.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
 
---- LVM2/WHATS_NEW	2011/01/27 00:21:37	1.1892
-+++ LVM2/WHATS_NEW	2011/01/28 02:58:00	1.1893
-@@ -1,6 +1,7 @@
+--- LVM2/WHATS_NEW	2011/01/28 02:58:00	1.1893
++++ LVM2/WHATS_NEW	2011/01/28 10:14:08	1.1894
+@@ -1,5 +1,6 @@
  Version 2.02.83 - 
  ===================================
++  Avoid rebuilding of uuid validation table.
    Always use O_DIRECT when opening block devices to check for partitioning.
-+  Improve lvcreate "insufficient extents" errors to "insufficient free space".
+   Improve lvcreate "insufficient extents" errors to "insufficient free space".
  
- Version 2.02.82 - 24th January 2011
- ===================================
---- LVM2/lib/metadata/lv_manip.c	2011/01/24 14:19:05	1.245
-+++ LVM2/lib/metadata/lv_manip.c	2011/01/28 02:58:01	1.246
-@@ -1481,7 +1481,7 @@
- 	}
+--- LVM2/lib/uuid/uuid.c	2010/09/30 14:07:33	1.31
++++ LVM2/lib/uuid/uuid.c	2011/01/28 10:14:09	1.32
+@@ -125,6 +125,7 @@
+ 	if (_built_inverse)
+ 		return;
  
- 	if (log_needs_allocating) {
--		log_error("Insufficient extents for log allocation "
-+		log_error("Insufficient free space for log allocation "
- 			  "for logical volume %s.",
- 			  lv ? lv->name : "");
- 		goto out;
-@@ -3232,8 +3232,9 @@
++	_built_inverse = 1;
+ 	memset(_inverse_c, 0, sizeof(_inverse_c));
  
- 	if (!seg_is_virtual(lp) &&
- 	    vg->free_count < lp->extents) {
--		log_error("Insufficient free extents (%u) in volume group %s: "
--			  "%u required", vg->free_count, vg->name, lp->extents);
-+		log_error("Volume group \"%s\" has insufficient free space "
-+			  "(%u extents): %u required.",
-+			  vg->name, vg->free_count, lp->extents);
- 		return 0;
- 	}
- 
+ 	for (ptr = _c; *ptr; ptr++)
 
 
