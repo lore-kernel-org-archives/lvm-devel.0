@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Jan 2011 16:05:38 -0000
-Subject: LVM2/test/lib harness.c
-Message-ID: <20110128160538.27414.qmail@sourceware.org>
+Date: 28 Jan 2011 16:07:05 -0000
+Subject: LVM2/test t-lvconvert-mirror-basic.sh
+Message-ID: <20110128160705.29046.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,129 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-28 16:05:38
+Changes by:	zkabelac at sourceware.org	2011-01-28 16:07:05
 
 Modified files:
-	test/lib       : harness.c 
+	test           : t-lvconvert-mirror-basic.sh 
 
 Log message:
-	Display duration of tests when it passed.
+	Accelerate mirror tests
 	
-	Enhance output with info about the test duration.
-	Cleanup few declarations in the code.
+	Instead of recreation of whole device set for each test round,
+	just cleanup created LVs to empty VG.
+	Lower the size of PV devices to 16MB
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/harness.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/test/lib/harness.c	2011/01/13 15:03:28	1.5
-+++ LVM2/test/lib/harness.c	2011/01/28 16:05:38	1.6
-@@ -20,6 +20,7 @@
- #include <sys/wait.h>
- #include <unistd.h>
- #include <stdlib.h>
-+#include <time.h>
+--- LVM2/test/t-lvconvert-mirror-basic.sh	2011/01/11 17:05:09	1.6
++++ LVM2/test/t-lvconvert-mirror-basic.sh	2011/01/28 16:07:04	1.7
+@@ -77,8 +77,6 @@
+ 		max_log_count=$start_log_count
+ 	fi
  
- static pid_t pid;
- static int fds[2];
-@@ -82,9 +83,9 @@
-                 char *line = strndup(from, next - from);
-                 char *a = line, *b;
-                 do {
--                        b = line + strlen(line);
-                         int idx = -1;
-                         int i;
-+                        b = line + strlen(line);
-                         for ( i = 0; i < 2; ++i ) {
-                                 if (subst[i].key) {
-                                         // printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
-@@ -145,15 +146,24 @@
- 	}
- }
- 
--static void passed(int i, char *f) {
-+static const char *duration(time_t start)
-+{
-+	static char buf[16];
-+	int t = (int)(time(NULL) - start);
-+
-+	sprintf(buf, "%2d:%02d", t / 60, t % 60);
-+	return buf;
-+}
-+
-+static void passed(int i, char *f, time_t t) {
- 	if (strstr(readbuf, "TEST WARNING")) {
- 		++s.nwarned;
- 		s.status[i] = WARNED;
--		printf("warnings\n");
-+		printf("warnings  %s\n", duration(t));
- 	} else {
- 		++ s.npassed;
- 		s.status[i] = PASSED;
--		printf("passed.\n");
-+		printf("passed.   %s\n", duration(t));
- 	}
- }
- 
-@@ -192,12 +202,13 @@
- 		fflush(stderr);
- 		_exit(202);
- 	} else {
-+		int st, w;
-+		time_t start = time(NULL);
- 		char buf[128];
- 		snprintf(buf, 128, "%s ...", f);
- 		buf[127] = 0;
- 		printf("Running %-40s ", buf);
- 		fflush(stdout);
--		int st, w;
- 		while ((w = waitpid(pid, &st, WNOHANG)) == 0) {
- 			drain();
- 			usleep(20000);
-@@ -209,7 +220,7 @@
- 		drain();
- 		if (WIFEXITED(st)) {
- 			if (WEXITSTATUS(st) == 0) {
--				passed(i, f);
-+				passed(i, f, start);
- 			} else if (WEXITSTATUS(st) == 200) {
- 				skipped(i, f);
- 			} else {
-@@ -223,6 +234,8 @@
- }
- 
- int main(int argc, char **argv) {
-+	const char *be_verbose = getenv("VERBOSE");
-+	time_t start = time(NULL);
- 	int i;
- 
- 	if (argc >= MAX) {
-@@ -230,9 +243,6 @@
- 		exit(1);
- 	}
- 
--	s.nwarned = s.nfailed = s.npassed = s.nskipped = 0;
+-	aux prepare_vg 5
 -
--	char *be_verbose = getenv("VERBOSE");
- 	if (be_verbose && atoi(be_verbose))
- 		verbose = 1; // XXX
- 
-@@ -260,8 +270,9 @@
- 			break;
- 	}
- 
--	printf("\n## %d tests: %d OK, %d warnings, %d failures; %d skipped\n",
-+	printf("\n## %d tests %s : %d OK, %d warnings, %d failures; %d skipped\n",
- 	       s.nwarned + s.npassed + s.nfailed + s.nskipped,
-+	       duration(start),
- 	       s.npassed, s.nwarned, s.nfailed, s.nskipped);
- 
- 	/* print out a summary */
-@@ -279,5 +290,6 @@
- 		printf("\n");
- 		return s.nfailed > 0 || die;
- 	}
-+
- 	return die;
+ 	if [ $start_count -gt 0 ]; then
+ 		# Are there extra devices for the log or do we overlap
+ 		if [ $(($start_count_p1 + $start_log_count)) -gt ${#dev_array[@]} ]; then
+@@ -123,7 +121,7 @@
+ 	fi
  }
+ 
+-aux prepare_vg 5
++aux prepare_vg 5 16
+ 
+ test_many() {
+ 	i=$1
+@@ -135,7 +133,9 @@
+ 				: "Testing mirror conversion -m$i/$k -> -m$j/$l"
+ 				: ----------------------------------------------------
+ 				test_lvconvert $i $k $j $l 0
++				lvremove -ff $vg
+ 				test_lvconvert $i $k $j $l 1
++				lvremove -ff $vg
+ 			done
+ 		done
+ 	done
 
 
