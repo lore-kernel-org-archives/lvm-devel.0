@@ -1,44 +1,31 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Sun, 30 Jan 2011 21:17:44 +0100
-Subject: [PATCH 06/24] lv_info handle udev_sync
-In-Reply-To: <9a4defa6949857ab698f1d25e5779d422c5cdcc6.1296391340.git.zkabelac@redhat.com>
-References: <cover.1296391340.git.zkabelac@redhat.com>
-	<9a4defa6949857ab698f1d25e5779d422c5cdcc6.1296391340.git.zkabelac@redhat.com>
-Message-ID: <4D45C768.6090306@redhat.com>
+Date: Sun, 30 Jan 2011 21:22:47 +0100
+Subject: [PATCH 02/24] Replace PV_MIN_SIZE with function pv_min_size()
+In-Reply-To: <4D45C6F3.5000000@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>	<10a41c93f0c3f21e0ed40a74184001ca6b51bd19.1296391340.git.zkabelac@redhat.com>	<4D45C3AF.7010702@redhat.com>
+	<4D45C6F3.5000000@redhat.com>
+Message-ID: <4D45C897.3040705@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
+On 01/30/2011 09:15 PM, Zdenek Kabelac wrote:
 
-> NoteII: locking_is_clustered() is needed to detect in which context
-> lv_info() is called as we cannot use sync_local_dev_names() when
-> locking is not defined.
+> i.e. if you configure pv_min_size = 10MB - you cannot create  smaller PV - as
+> it would be invisible in your system - IMHO it could eventually lead to bigger
+> confusion - you create small PV, which will be invisible for lvm tools...
+> 
+> If you want to create and see smaller PV - lvm.conf needs to be set to smaller
+> value.
 
-hmmmm. I probably confused you here:)
+How it differs from filters line in principle?
 
-I don't think locking_is_clustered() can be used insinde clvmd
-(it is "locking implementation" itself).
+If you want to see device, you have to set filer properly.
 
-Or you mean it that in clvmd should run fs_unlock() and in local
-code (lvm command) should run sync_local_dev_names(cmd) (with cluster locking)?
-
-> +	/*
-> +	 * If open_count info is requested and we have to be sure our own udev
-> +	 * transactions are finished
-> +	 * For non-clustered locking type we are only interested for non-delete operation
-> +	 * in progress - as only those could lead to opened files
-> +	 */
-> +	if (with_open_count) {
-> +		if (locking_is_clustered())
-> +			sync_local_dev_names(cmd); /* Wait to have udev in sync */
-> +		else if (fs_has_non_delete_ops())
-> +			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
-> +	}
-
-this is really ugly...
+Of course it will prevent pv creation, because device is filtered out,
+but on another level.
 
 Milan
 
