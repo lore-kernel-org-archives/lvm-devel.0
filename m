@@ -1,52 +1,55 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Jan 2011 16:46:50 -0000
-Subject: LVM2 VERSION WHATS_NEW
-Message-ID: <20110117164650.13050.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 30 Jan 2011 13:57:41 +0100
+Subject: [PATCH 18/24] API change - support more const arg
+In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>
+Message-ID: <396c3fa8a52e8511221f5ab5ebc488de24c81eb4.1296391340.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-01-17 16:46:50
+As dm_report_field_string doesn't modify content of data pointer,
+it could be also marked as const.
 
-Modified files:
-	.              : VERSION WHATS_NEW 
+It's slight API change - but doesn't require any change on user side
+and supports wide range of arguments without const casting.
+(i.e. we may use as paramater const lv struct this way:  &lv->name)
 
-Log message:
-	pre-release
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/libdevmapper.h |    2 +-
+ libdm/libdm-report.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.268&r2=1.269
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1881&r2=1.1882
-
---- LVM2/VERSION	2011/01/10 14:51:33	1.268
-+++ LVM2/VERSION	2011/01/17 16:46:50	1.269
-@@ -1 +1 @@
--2.02.81(2)-cvs (2011-01-10)
-+2.02.81(2)-cvs (2011-01-17)
---- LVM2/WHATS_NEW	2011/01/17 15:16:55	1.1881
-+++ LVM2/WHATS_NEW	2011/01/17 16:46:50	1.1882
-@@ -1,12 +1,13 @@
--Version 2.02.81 -
-+Version 2.02.81 - 17th January 2011
- ===================================
--  Do not scan devices unnecessarily in dev_reset_error_count().
--  Skip unnecessary lock_vol() call after volume deactivation.
--  Extend exec_cmd params to specify, when device sync is needed.
-+  Do not scan devices in dev_reset_error_count().
-+  Skip unnecessary LOCK_NULL unlock call during volume deactivation.
-+  Skip fs_unlock when calling exec_cmd within activation code (for modprobe).
-+  Extend exec_cmd params to specify when device sync (fs_unlock) is needed.
-   Replace fs_unlock by sync_local_dev_names to notify local clvmd. (2.02.80)
-   Introduce sync_local_dev_names and CLVMD_CMD_SYNC_NAMES to issue fs_unlock.
-   Accept fusion fio in device type filter.
--  Add disk to mirrored log type conversion.
-+  Add disk to allowed mirrored log type conversions.
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 2ddcc96..51bccc7 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -1117,7 +1117,7 @@ int dm_report_set_output_field_name_prefix(struct dm_report *rh,
+  * They take care of allocating copies of the data.
+  */
+ int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
+-			   const char **data);
++			   const char *const *data);
+ int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
+ 			  const int32_t *data);
+ int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 4f47c46..0212284 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -102,7 +102,7 @@ static const struct dm_report_object_type *_find_type(struct dm_report *rh,
+  */
  
- Version 2.02.80 - 10th January 2011
- ===================================
+ int dm_report_field_string(struct dm_report *rh,
+-			   struct dm_report_field *field, const char **data)
++			   struct dm_report_field *field, const char *const *data)
+ {
+ 	char *repstr;
+ 
+-- 
+1.7.3.5
 
 
