@@ -1,53 +1,73 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 13:57:45 +0100
-Subject: [PATCH 22/24] Testing: Try to prioritize locking process
+Date: Sun, 30 Jan 2011 13:57:46 +0100
+Subject: [PATCH 23/24] Extend lvm2api with lvm_lv_rename
 In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
 References: <cover.1296391340.git.zkabelac@redhat.com>
-Message-ID: <0a0fb7e4fc3a29f9e67432a17d9710b44cfa1d63.1296391340.git.zkabelac@redhat.com>
+Message-ID: <01e072a4f4136915edd5b05ccfc726343330bd40.1296391340.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is rather 'hotfix' - it will run  lvm command with lower
-prioritu - thus flock process should exit sooner before it's
-checked by 'ps' for it's existance.
-
-Think about better way how to test this.
+Add support for LV rename
+Now useful now mainly for testing various combination of ops stacking.
+(following patch).
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- test/t-lock-blocking.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ liblvm/lvm2app.h |   16 ++++++++++++++++
+ liblvm/lvm_lv.c  |   10 ++++++++++
+ 2 files changed, 26 insertions(+), 0 deletions(-)
 
-diff --git a/test/t-lock-blocking.sh b/test/t-lock-blocking.sh
-index e3ec63c..3e6985b 100644
---- a/test/t-lock-blocking.sh
-+++ b/test/t-lock-blocking.sh
-@@ -20,17 +20,17 @@ vgcreate $vg $dev1 $dev2
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 317911d..cb7414c 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1321,6 +1321,22 @@ int lvm_lv_remove_tag(lv_t lv, const char *tag);
+  */
+ struct dm_list *lvm_lv_get_tags(const lv_t lv);
  
- # if wait_for_locks set, vgremove should wait for orphan lock
- # flock process should have exited by the time first vgremove completes
--flock -w 5 $TESTDIR/var/lock/lvm/P_orphans -c "sleep 10" &
-+flock -w 4 $TESTDIR/var/lock/lvm/P_orphans -c "sleep 6" &
- flock_pid=`jobs -p`
--vgremove --config 'global { wait_for_locks = 1 }' $vg
--not vgremove --config 'global { wait_for_locks = 1 }' $vg
-+nice vgremove -vvvv --config 'global { wait_for_locks = 1 }' $vg
-+nice not vgremove -vvvv --config 'global { wait_for_locks = 1 }' $vg
- not ps $flock_pid # finished
++/**
++ * Rename logical volume to new_name.
++ *
++ * \memberof lv_t
++ *
++ * \param   lv
++ * Logical volume handle.
++ *
++ * \param   new_name
++ * New name of logical volume.
++ *
++ * \return
++ * 0 (success) or -1 (failure).
++ *
++ */
++int lvm_lv_rename(lv_t lv, const char *new_name);
  
- # if wait_for_locks not set, vgremove should fail on non-blocking lock
- # we must wait for flock process at the end - vgremove won't wait
- vgcreate $vg $dev1 $dev2
--flock -w 5 $TESTDIR/var/lock/lvm/P_orphans -c "sleep 10" &
-+flock -w 4 $TESTDIR/var/lock/lvm/P_orphans -c "sleep 6" &
- flock_pid=`jobs -p`
--not vgremove --config 'global { wait_for_locks = 0 }' $vg
-+nice not vgremove --config 'global { wait_for_locks = 0 }' $vg
- ps $flock_pid # still running
- kill $flock_pid
+ /**
+  * Resize logical volume to new_size bytes.
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 664c39d..aef6c5e 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -282,6 +282,16 @@ lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
+ 	}
+ 	return NULL;
+ }
++
++int lvm_lv_rename(lv_t lv, const char *new_name)
++{
++	if (!lv_rename(lv->vg->cmd, lv, new_name)) {
++		log_verbose("LV Rename failed.");
++		return -1;
++	}
++	return 0;
++}
++
+ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+ {
+ 	/* FIXME: add lv resize code here */
 -- 
 1.7.3.5
 
