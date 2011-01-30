@@ -1,24 +1,36 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 30 Jan 2011 19:21:02 +0100
-Subject: [PATCH 00/15] Pvmin, udev, testing
-In-Reply-To: <cover.1295865933.git.zkabelac@redhat.com> (Zdenek Kabelac's
-	message of "Mon, 24 Jan 2011 11:50:24 +0100")
-References: <cover.1295865933.git.zkabelac@redhat.com>
-Message-ID: <8739oap81d.fsf@twilight.int.mornfall.net.>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 30 Jan 2011 21:54:11 +0100
+Subject: [PATCH 12/24] Perf: Increase hash sizes
+In-Reply-To: <4D45CB78.8080208@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>	<2483686e0452fbdc01bccd983c0d85672fc400ee.1296391340.git.zkabelac@redhat.com>
+	<4D45CB78.8080208@redhat.com>
+Message-ID: <4D45CFF3.6000108@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Zdenek Kabelac <zkabelac@redhat.com> writes:
+Dne 30.1.2011 21:35, Milan Broz napsal(a):
+> On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
+>> Modify size of created hash tables in a way, it could be uniquely
+>> identified in debug code - as hash will be rouned up to nearest power
+> 
+> code obfuscation :) can we better add new has function or macro
+> which takes some identifier? (similar to pool create)
+> 
+> Why do you need such hacks?
 
-> Patchset combince few 'smaller' changes which are trying to fix
-> couple problem with current git tree.
+Well I've been thinking about few solutions - for this - so take this
+just as an initial 'startup' - whether we want to extend API
+with some new function with string parameter for hash description - or as some
+'debug - like' version, which is compiled only with some debug option enabled.
 
-I have looked at the testing portion of this patchset -- ack (ex post).
+Meanwhile - this was rather very easy 'quick and see' - as we don't have
+named hashes, like we have for pools.
 
-Yours,
-   Petr
+This hash part needs some polishing.
+
+Zdenek
 
 
