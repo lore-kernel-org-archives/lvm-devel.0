@@ -1,23 +1,24 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sun, 30 Jan 2011 21:50:53 +0100
-Subject: [PATCH 21/24] Testing: remove -q from grep
-In-Reply-To: <56935a36945105a151999d7fed409100ec18c264.1296391340.git.zkabelac@redhat.com>
-References: <cover.1296391340.git.zkabelac@redhat.com>
-	<56935a36945105a151999d7fed409100ec18c264.1296391340.git.zkabelac@redhat.com>
-Message-ID: <4D45CF2D.2080001@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Sun, 30 Jan 2011 19:21:02 +0100
+Subject: [PATCH 00/15] Pvmin, udev, testing
+In-Reply-To: <cover.1295865933.git.zkabelac@redhat.com> (Zdenek Kabelac's
+	message of "Mon, 24 Jan 2011 11:50:24 +0100")
+References: <cover.1295865933.git.zkabelac@redhat.com>
+Message-ID: <8739oap81d.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
-> to avoid problems with pipe breaking
+Zdenek Kabelac <zkabelac@redhat.com> writes:
 
-yes, calling pipe fitter is quite expensive;-)
+> Patchset combince few 'smaller' changes which are trying to fix
+> couple problem with current git tree.
 
-ACK.
+I have looked at the testing portion of this patchset -- ack (ex post).
 
-Milan
+Yours,
+   Petr
 
 
