@@ -1,38 +1,64 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Jan 2011 15:03:28 -0000
-Subject: LVM2/test/lib harness.c
-Message-ID: <20110113150328.18360.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 30 Jan 2011 13:57:27 +0100
+Subject: [PATCH 04/24] Move add_dev_node to DM_DEVICE_RESUME
+In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>
+Message-ID: <56ba2c0e512202d41243c1ac211bb2efa399eb9b.1296391340.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-01-13 15:03:28
+This patch came out from discussion with Petr.
+We need valid 'check_udev' for stacked ops processing.
 
-Modified files:
-	test/lib       : harness.c 
+Current code:
 
-Log message:
-	Set default value to counter_last
-	
-	Missed in previous commit and could be using some random stack value.
+dmsetup create xxx --notable   ->  create node in /dev/mapper/xxx
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/harness.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+(check_udev has incorrect 0 value)
 
---- LVM2/test/lib/harness.c	2011/01/13 11:02:55	1.4
-+++ LVM2/test/lib/harness.c	2011/01/13 15:03:28	1.5
-@@ -110,7 +110,7 @@
- }
+**
+
+New patched code creates node with:
+
+dmsetup resume xxx
+
+(As just at this moment udev is registering such device)
+
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/ioctl/libdm-iface.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 25714ce..4e01bcf 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -2061,10 +2061,6 @@ repeat_ioctl:
  
- static void dump(void) {
--	int counter_last, counter = 0;
-+	int counter_last = -1, counter = 0;
+ 	switch (dmt->type) {
+ 	case DM_DEVICE_CREATE:
+-		if (dmt->dev_name && *dmt->dev_name && !udev_only)
+-			add_dev_node(dmt->dev_name, MAJOR(dmi->dev),
+-				     MINOR(dmi->dev), dmt->uid, dmt->gid,
+-				     dmt->mode, check_udev);
+ 		break;
+ 	case DM_DEVICE_REMOVE:
+ 		/* FIXME Kernel needs to fill in dmi->name */
+@@ -2080,6 +2076,10 @@ repeat_ioctl:
+ 		break;
  
- 	while ( counter < readbuf_used && counter != counter_last ) {
- 		counter_last = counter;
+ 	case DM_DEVICE_RESUME:
++		if (dmt->dev_name && *dmt->dev_name && !udev_only)
++			add_dev_node(dmt->dev_name, MAJOR(dmi->dev),
++				     MINOR(dmi->dev), dmt->uid, dmt->gid,
++				     dmt->mode, check_udev);
+ 		/* FIXME Kernel needs to fill in dmi->name */
+ 		set_dev_node_read_ahead(dmt->dev_name, dmt->read_ahead,
+ 					dmt->read_ahead_flags);
+-- 
+1.7.3.5
 
 
