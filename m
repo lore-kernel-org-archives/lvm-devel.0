@@ -1,181 +1,233 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 13:57:32 +0100
-Subject: [PATCH 09/24] Align orphan strings
+Date: Sun, 30 Jan 2011 13:57:33 +0100
+Subject: [PATCH 10/24] Perf: speed up hash tables
 In-Reply-To: <cover.1296391340.git.zkabelac@redhat.com>
 References: <cover.1296391340.git.zkabelac@redhat.com>
-Message-ID: <53ced78e174b7eff8b62b615874a5b52e7544e55.1296391340.git.zkabelac@redhat.com>
+Message-ID: <84b7fef71e2fc4a13fb5c864ed85408b53d8fe48.1296391340.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-While checking for passed pointers to hash function - some buffers
-were not nicely aligned - and those were mainly 'static' strings.
+Improve considerably hash perfomance:
+Remember calculated hash value for node - allows
+to speedup lookup of nodes with same  hash & mask value.
 
-So this code is a bit ugly but forces 8b alignment on these strings.
+Add statistic counters for hashes and print stats in debug mode on
+hash destruction - so bad perfomance of hash can be optimized.
+
+API change:
+dm_hash  binary functions takes  void* pointer - so there
+is no need to cast other pointers to char*.  This is slight API change,
+but presents no change on user side it just allows to write code easier.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/format1/format1.c         |   10 +++++++---
- lib/format1/lvm1-label.c      |    9 +++++++--
- lib/format_pool/format_pool.c |    4 +++-
- lib/format_text/format-text.c |   16 ++++++++++++----
- lib/format_text/text_label.c  |    5 +++--
- 5 files changed, 32 insertions(+), 12 deletions(-)
+ libdm/datastruct/hash.c |   84 ++++++++++++++++++++++++++++++-----------------
+ libdm/libdevmapper.h    |    6 ++--
+ 2 files changed, 57 insertions(+), 33 deletions(-)
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index fc14444..c70d857 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -578,6 +578,10 @@ struct format_type *init_format(struct cmd_context *cmd);
- struct format_type *init_format(struct cmd_context *cmd)
- #endif
- {
-+	static const char lvm1_orphan_vg_name[] __attribute__((aligned(8)))
-+		= FMT_LVM1_ORPHAN_VG_NAME;
-+	static const char lvm1_name[] __attribute__((aligned(8)))
-+		= FMT_LVM1_NAME;
- 	struct format_type *fmt = dm_malloc(sizeof(*fmt));
+diff --git a/libdm/datastruct/hash.c b/libdm/datastruct/hash.c
+index d4543df..fc19d34 100644
+--- a/libdm/datastruct/hash.c
++++ b/libdm/datastruct/hash.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
+@@ -19,12 +19,18 @@ struct dm_hash_node {
+ 	struct dm_hash_node *next;
+ 	void *data;
+ 	unsigned keylen;
++	unsigned long hash;
+ 	char key[0];
+ };
  
- 	if (!fmt)
-@@ -585,9 +589,9 @@ struct format_type *init_format(struct cmd_context *cmd)
+ struct dm_hash_table {
+ 	unsigned num_nodes;
++	unsigned num_hint;
+ 	unsigned num_slots;
++	unsigned collisions;
++	unsigned search;
++	unsigned same_hash;
++	unsigned mask;
+ 	struct dm_hash_node **slots;
+ };
  
- 	fmt->cmd = cmd;
- 	fmt->ops = &_format1_ops;
--	fmt->name = FMT_LVM1_NAME;
-+	fmt->name = lvm1_name;
- 	fmt->alias = NULL;
--	fmt->orphan_vg_name = FMT_LVM1_ORPHAN_VG_NAME;
-+	fmt->orphan_vg_name = lvm1_orphan_vg_name;
- 	fmt->features = FMT_RESTRICTED_LVIDS | FMT_ORPHAN_ALLOCATABLE |
- 			FMT_RESTRICTED_READAHEAD;
- 	fmt->private = NULL;
-@@ -597,7 +601,7 @@ struct format_type *init_format(struct cmd_context *cmd)
- 		return NULL;
+@@ -92,26 +98,26 @@ struct dm_hash_table *dm_hash_create(unsigned size_hint)
+ 	unsigned new_size = 16u;
+ 	struct dm_hash_table *hc = dm_zalloc(sizeof(*hc));
+ 
+-	if (!hc)
+-		return_0;
++	if (!hc) {
++		log_error("Failed to allocate memory for hash.");
++		return 0;
++	}
+ 
++	hc->num_hint = size_hint;
+ 	/* round size hint up to a power of two */
+ 	while (new_size < size_hint)
+ 		new_size = new_size << 1;
+ 
+ 	hc->num_slots = new_size;
++	hc->mask = new_size - 1;
+ 	len = sizeof(*(hc->slots)) * new_size;
+-	if (!(hc->slots = dm_malloc(len))) {
+-		stack;
+-		goto bad;
++	if (!(hc->slots = dm_zalloc(len))) {
++		dm_free(hc);
++		log_error("Failed to allocate slots for hash.");
++		return 0;
  	}
+-	memset(hc->slots, 0, len);
+-	return hc;
  
--	if (!(label_register_handler(FMT_LVM1_NAME, fmt->labeller))) {
-+	if (!(label_register_handler(lvm1_name, fmt->labeller))) {
- 		log_error("Couldn't register lvm1 label handler.");
- 		return NULL;
- 	}
-diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
-index 07596a5..2af444a 100644
---- a/lib/format1/lvm1-label.c
-+++ b/lib/format1/lvm1-label.c
-@@ -57,11 +57,16 @@ static int _lvm1_write(struct label *label __attribute__((unused)), void *buf __
- static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
- 		 struct label **label)
- {
-+	static const char orphan_vgid[] __attribute__((aligned(8)))
-+		= FMT_LVM1_ORPHAN_VG_NAME;
-+	static const char orphan_vg_name[] __attribute__((aligned(8)))
-+		= FMT_LVM1_ORPHAN_VG_NAME;
+-      bad:
+-	dm_free(hc->slots);
+-	dm_free(hc);
+-	return 0;
++	return hc;
+ }
+ 
+ static void _free_nodes(struct dm_hash_table *t)
+@@ -119,6 +125,13 @@ static void _free_nodes(struct dm_hash_table *t)
+ 	struct dm_hash_node *c, *n;
+ 	unsigned i;
+ 
++	log_debug("Released hash - used:%d size:%d hint:%d  (c:%d s:%d h:%d)",
++		  t->num_nodes, t->num_slots, t->num_hint,
++		  t->collisions, t->search, t->same_hash);
 +
- 	struct pv_disk *pvd = (struct pv_disk *) buf;
- 	struct vg_disk vgd;
- 	struct lvmcache_info *info;
--	const char *vgid = FMT_LVM1_ORPHAN_VG_NAME;
--	const char *vgname = FMT_LVM1_ORPHAN_VG_NAME;
-+	const char *vgid = orphan_vgid;
-+	const char *vgname = orphan_vg_name;
- 	unsigned exported = 0;
++	if (!t->num_nodes)
++		return;
++
+ 	for (i = 0; i < t->num_slots; i++)
+ 		for (c = t->slots[i]; c; c = n) {
+ 			n = c->next;
+@@ -133,45 +146,58 @@ void dm_hash_destroy(struct dm_hash_table *t)
+ 	dm_free(t);
+ }
  
- 	munge_pvd(dev, pvd);
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index 730da87..6f6f261 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -308,6 +308,8 @@ struct format_type *init_format(struct cmd_context *cmd);
- struct format_type *init_format(struct cmd_context *cmd)
- #endif
+-static struct dm_hash_node **_find(struct dm_hash_table *t, const char *key,
+-				   uint32_t len)
++static struct dm_hash_node **_findh(struct dm_hash_table *t, const void *key,
++				    uint32_t len, unsigned long hash)
  {
-+	static const char pool_orphan_vg_name[] __attribute__((aligned(8)))
-+		= FMT_POOL_ORPHAN_VG_NAME;
- 	struct format_type *fmt = dm_malloc(sizeof(*fmt));
+-	unsigned h = _hash(key, len) & (t->num_slots - 1);
+ 	struct dm_hash_node **c;
++	unsigned h = hash & t->mask;
  
- 	if (!fmt) {
-@@ -320,7 +322,7 @@ struct format_type *init_format(struct cmd_context *cmd)
- 	fmt->ops = &_format_pool_ops;
- 	fmt->name = FMT_POOL_NAME;
- 	fmt->alias = NULL;
--	fmt->orphan_vg_name = FMT_POOL_ORPHAN_VG_NAME;
-+	fmt->orphan_vg_name = pool_orphan_vg_name;
- 	fmt->features = 0;
- 	fmt->private = NULL;
+ 	for (c = &t->slots[h]; *c; c = &((*c)->next)) {
+-		if ((*c)->keylen != len)
+-			continue;
+-
+-		if (!memcmp(key, (*c)->key, len))
+-			break;
++		if ((*c)->keylen == len && (*c)->hash == hash) {
++			if (!memcmp(key, (*c)->key, len)) {
++				++t->search;
++				break;
++			} else
++				++t->same_hash;
++		}
++		++t->collisions;
+ 	}
  
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c186757..8abc564 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1594,6 +1594,8 @@ static int _populate_pv_fields(struct lvmcache_info *info,
- 			       struct physical_volume *pv,
- 			       int scan_label_only)
+ 	return c;
+ }
+ 
+-void *dm_hash_lookup_binary(struct dm_hash_table *t, const char *key,
+-			 uint32_t len)
++static struct dm_hash_node **_find(struct dm_hash_table *t, const void *key,
++				   uint32_t len)
++{
++	return _findh(t, key, len, _hash(key, len));
++}
++
++void *dm_hash_lookup_binary(struct dm_hash_table *t, const void *key,
++			    uint32_t len)
  {
-+	static const char orphan_vg_name[] __attribute__((aligned(8)))
-+		= FMT_TEXT_ORPHAN_VG_NAME;
- 	struct data_area_list *da;
+ 	struct dm_hash_node **c = _find(t, key, len);
  
- 	/* Have we already cached vgname? */
-@@ -1612,7 +1614,7 @@ static int _populate_pv_fields(struct lvmcache_info *info,
- 	pv->dev = info->dev;
- 	pv->fmt = info->fmt;
- 	pv->size = info->device_size >> SECTOR_SHIFT;
--	pv->vg_name = FMT_TEXT_ORPHAN_VG_NAME;
-+	pv->vg_name = orphan_vg_name;
- 	memcpy(&pv->id, &info->dev->pvid, sizeof(pv->id));
+ 	return *c ? (*c)->data : 0;
+ }
  
- 	/* Currently only support exactly one data area */
-@@ -2132,6 +2134,12 @@ static int _get_config_disk_area(struct cmd_context *cmd,
- 
- struct format_type *create_text_format(struct cmd_context *cmd)
+-int dm_hash_insert_binary(struct dm_hash_table *t, const char *key,
++int dm_hash_insert_binary(struct dm_hash_table *t, const void *key,
+ 			  uint32_t len, void *data)
  {
-+	static const char text_name[] __attribute__((aligned(8)))
-+		= FMT_TEXT_NAME;
-+	static const char text_alias[] __attribute__((aligned(8)))
-+		= FMT_TEXT_ALIAS;
-+	static const char orphan_vg_name[] __attribute__((aligned(8)))
-+		= ORPHAN_VG_NAME(FMT_TEXT_NAME);
- 	struct format_type *fmt;
- 	const struct config_node *cn;
- 	const struct config_value *cv;
-@@ -2142,9 +2150,9 @@ struct format_type *create_text_format(struct cmd_context *cmd)
+-	struct dm_hash_node **c = _find(t, key, len);
++	unsigned long hash = _hash(key, len);
++	struct dm_hash_node **c = _findh(t, key, len, hash);
  
- 	fmt->cmd = cmd;
- 	fmt->ops = &_text_handler;
--	fmt->name = FMT_TEXT_NAME;
--	fmt->alias = FMT_TEXT_ALIAS;
--	fmt->orphan_vg_name = ORPHAN_VG_NAME(FMT_TEXT_NAME);
-+	fmt->name = text_name;
-+	fmt->alias = text_alias;
-+	fmt->orphan_vg_name = orphan_vg_name;
- 	fmt->features = FMT_SEGMENTS | FMT_MDAS | FMT_TAGS | FMT_PRECOMMIT |
- 			FMT_UNLIMITED_VOLS | FMT_RESIZE_PV |
- 			FMT_UNLIMITED_STRIPESIZE;
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index e459cde..ce250e6 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -253,6 +253,8 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
- static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 		 struct label **label)
+ 	if (*c)
+ 		(*c)->data = data;
+ 	else {
+ 		struct dm_hash_node *n = _create_node(key, len);
+ 
+-		if (!n)
++		if (!n) {
++			log_error("Failed to allocate new hash node.");
+ 			return 0;
++		}
+ 
+ 		n->data = data;
++		n->hash = hash;
+ 		n->next = 0;
+ 		*c = n;
+ 		t->num_nodes++;
+@@ -180,7 +206,7 @@ int dm_hash_insert_binary(struct dm_hash_table *t, const char *key,
+ 	return 1;
+ }
+ 
+-void dm_hash_remove_binary(struct dm_hash_table *t, const char *key,
++void dm_hash_remove_binary(struct dm_hash_table *t, const void *key,
+ 			uint32_t len)
  {
-+	static const char text_orphan_vg_name[] __attribute__((aligned(8)))
-+		= FMT_TEXT_ORPHAN_VG_NAME;
- 	struct label_header *lh = (struct label_header *) buf;
- 	struct pv_header *pvhdr;
- 	struct lvmcache_info *info;
-@@ -269,8 +271,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
+ 	struct dm_hash_node **c = _find(t, key, len);
+@@ -229,7 +255,7 @@ void dm_hash_wipe(struct dm_hash_table *t)
+ {
+ 	_free_nodes(t);
+ 	memset(t->slots, 0, sizeof(struct dm_hash_node *) * t->num_slots);
+-	t->num_nodes = 0u;
++	t->num_nodes = t->collisions = t->search = t->same_hash = 0u;
+ }
  
- 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
--				  FMT_TEXT_ORPHAN_VG_NAME,
--				  FMT_TEXT_ORPHAN_VG_NAME, 0)))
-+				  text_orphan_vg_name, text_orphan_vg_name, 0)))
- 		return_0;
- 	*label = info->label;
+ char *dm_hash_get_key(struct dm_hash_table *t __attribute__((unused)),
+@@ -262,7 +288,5 @@ struct dm_hash_node *dm_hash_get_first(struct dm_hash_table *t)
  
+ struct dm_hash_node *dm_hash_get_next(struct dm_hash_table *t, struct dm_hash_node *n)
+ {
+-	unsigned h = _hash(n->key, n->keylen) & (t->num_slots - 1);
+-
+-	return n->next ? n->next : _next_slot(t, h + 1);
++	return n->next ? n->next : _next_slot(t, (n->hash & t->mask) + 1);
+ }
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index eea1a6c..2ddcc96 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -707,10 +707,10 @@ void *dm_hash_lookup(struct dm_hash_table *t, const char *key);
+ int dm_hash_insert(struct dm_hash_table *t, const char *key, void *data);
+ void dm_hash_remove(struct dm_hash_table *t, const char *key);
+ 
+-void *dm_hash_lookup_binary(struct dm_hash_table *t, const char *key, uint32_t len);
+-int dm_hash_insert_binary(struct dm_hash_table *t, const char *key, uint32_t len,
++void *dm_hash_lookup_binary(struct dm_hash_table *t, const void *key, uint32_t len);
++int dm_hash_insert_binary(struct dm_hash_table *t, const void *key, uint32_t len,
+ 		       void *data);
+-void dm_hash_remove_binary(struct dm_hash_table *t, const char *key, uint32_t len);
++void dm_hash_remove_binary(struct dm_hash_table *t, const void *key, uint32_t len);
+ 
+ unsigned dm_hash_get_num_entries(struct dm_hash_table *t);
+ void dm_hash_iter(struct dm_hash_table *t, dm_hash_iterate_fn f);
 -- 
 1.7.3.5
 
