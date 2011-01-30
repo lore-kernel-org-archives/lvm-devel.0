@@ -1,27 +1,52 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 20:43:47 +0100
-Subject: [PATCH 05/24] Perf: Fix multiple operations on the same node
-In-Reply-To: <26382d082d66727c13809cb4216caec33468ad20.1296391340.git.zkabelac@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 30 Jan 2011 21:01:51 +0100
+Subject: [PATCH 02/24] Replace PV_MIN_SIZE with function pv_min_size()
+In-Reply-To: <10a41c93f0c3f21e0ed40a74184001ca6b51bd19.1296391340.git.zkabelac@redhat.com>
 References: <cover.1296391340.git.zkabelac@redhat.com>
-	<26382d082d66727c13809cb4216caec33468ad20.1296391340.git.zkabelac@redhat.com>
-Message-ID: <4D45BF73.8080701@redhat.com>
+	<10a41c93f0c3f21e0ed40a74184001ca6b51bd19.1296391340.git.zkabelac@redhat.com>
+Message-ID: <4D45C3AF.7010702@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 30.1.2011 13:57, Zdenek Kabelac napsal(a):
-> With ability to stack many operations in one udev transaction -
-> in same cases we are adding and removing same device at the same time.
+
+On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
+> Add configurable option for defining minimal size of PV.
+> pv_min_size() is added to lvm-globals and it's being
+> initialized through _process_config.
 > 
-> This leads to a problem of checking stacked operations:
-> i.e. remove /dev/node1 followed by create /dev/node1
+> Macro PV_MIN_SIZE is unused and removed.
 > 
+> New define DEFAULT_PV_MIN_SIZE_KB is added to lvm-global
+> and unlike PV_MIN_SIZE it uses Kilobytes units.
+> 
+> Should help users with various slow devices attached to the system,
+> which cannot be easily filtered out (like Fdd on /dev/sdX):
+> https://bugzilla.redhat.com/show_bug.cgi?id=644578
 
+I think you are mixing two distinct things here
 
-This patch a missing proper reaction when there is no locking at all.
+- minimum PV size
+- minimum device size which is considered for lvm metadata scan
 
-Zdenek
+I think that minimum PV size should remain fixed in code.
+The second is runtime variable, you can adjust it per user needs.
+
+> +
+> +    # Minimal size (in KB) of PV partion which will be consider to be able
+> +    # to hold PV. It allows to automatically skip too small partitions
+> +    # like FDD devices from scan. Any value smaller then 512 is ignored.
+> +    pv_min_size = 512
+
+I thought we meant:
+Minimal size of device, which will be scanned for LVM metadata.
+
+IOW it should be filter, not limitation for PV creation.
+
+(But maybe I just misunderstood what Alasdair wants here...)
+
+Milan
 
 
