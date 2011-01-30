@@ -1,66 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 30 Jan 2011 21:15:47 +0100
-Subject: [PATCH 02/24] Replace PV_MIN_SIZE with function pv_min_size()
-In-Reply-To: <4D45C3AF.7010702@redhat.com>
-References: <cover.1296391340.git.zkabelac@redhat.com>	<10a41c93f0c3f21e0ed40a74184001ca6b51bd19.1296391340.git.zkabelac@redhat.com>
-	<4D45C3AF.7010702@redhat.com>
-Message-ID: <4D45C6F3.5000000@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 30 Jan 2011 21:17:44 +0100
+Subject: [PATCH 06/24] lv_info handle udev_sync
+In-Reply-To: <9a4defa6949857ab698f1d25e5779d422c5cdcc6.1296391340.git.zkabelac@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>
+	<9a4defa6949857ab698f1d25e5779d422c5cdcc6.1296391340.git.zkabelac@redhat.com>
+Message-ID: <4D45C768.6090306@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 30.1.2011 21:01, Milan Broz napsal(a):
-> 
-> On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
->> Add configurable option for defining minimal size of PV.
->> pv_min_size() is added to lvm-globals and it's being
->> initialized through _process_config.
->>
->> Macro PV_MIN_SIZE is unused and removed.
->>
->> New define DEFAULT_PV_MIN_SIZE_KB is added to lvm-global
->> and unlike PV_MIN_SIZE it uses Kilobytes units.
->>
->> Should help users with various slow devices attached to the system,
->> which cannot be easily filtered out (like Fdd on /dev/sdX):
->> https://bugzilla.redhat.com/show_bug.cgi?id=644578
-> 
-> I think you are mixing two distinct things here
-> 
-> - minimum PV size
-> - minimum device size which is considered for lvm metadata scan
-> 
-> I think that minimum PV size should remain fixed in code.
-> The second is runtime variable, you can adjust it per user needs.
-> 
->> +
->> +    # Minimal size (in KB) of PV partion which will be consider to be able
->> +    # to hold PV. It allows to automatically skip too small partitions
->> +    # like FDD devices from scan. Any value smaller then 512 is ignored.
->> +    pv_min_size = 512
-> 
-> I thought we meant:
-> Minimal size of device, which will be scanned for LVM metadata.
-> 
-> IOW it should be filter, not limitation for PV creation.
-> 
-> (But maybe I just misunderstood what Alasdair wants here...)
-> 
+On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
 
-Note: there is still hard coded 512KB value in the source code.
+> NoteII: locking_is_clustered() is needed to detect in which context
+> lv_info() is called as we cannot use sync_local_dev_names() when
+> locking is not defined.
 
-But what would be the point of creation of PV with smaller size then
-configured pv_min_size?
+hmmmm. I probably confused you here:)
 
-i.e. if you configure pv_min_size = 10MB - you cannot create  smaller PV - as
-it would be invisible in your system - IMHO it could eventually lead to bigger
-confusion - you create small PV, which will be invisible for lvm tools...
+I don't think locking_is_clustered() can be used insinde clvmd
+(it is "locking implementation" itself).
 
-If you want to create and see smaller PV - lvm.conf needs to be set to smaller
-value.
+Or you mean it that in clvmd should run fs_unlock() and in local
+code (lvm command) should run sync_local_dev_names(cmd) (with cluster locking)?
 
-Zdenek
+> +	/*
+> +	 * If open_count info is requested and we have to be sure our own udev
+> +	 * transactions are finished
+> +	 * For non-clustered locking type we are only interested for non-delete operation
+> +	 * in progress - as only those could lead to opened files
+> +	 */
+> +	if (with_open_count) {
+> +		if (locking_is_clustered())
+> +			sync_local_dev_names(cmd); /* Wait to have udev in sync */
+> +		else if (fs_has_non_delete_ops())
+> +			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
+> +	}
+
+this is really ugly...
+
+Milan
 
 
