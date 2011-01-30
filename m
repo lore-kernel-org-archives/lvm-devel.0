@@ -1,39 +1,32 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 17 Jan 2011 19:02:45 -0000
-Subject: LVM2/daemons/dmeventd dmeventd.h
-Message-ID: <20110117190245.19132.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sun, 30 Jan 2011 21:44:58 +0100
+Subject: [PATCH 20/24] Const fixing
+In-Reply-To: <692b32c0cb06e6f3f0b0b7619e04c128bcaaa3fb.1296391340.git.zkabelac@redhat.com>
+References: <cover.1296391340.git.zkabelac@redhat.com>
+	<692b32c0cb06e6f3f0b0b7619e04c128bcaaa3fb.1296391340.git.zkabelac@redhat.com>
+Message-ID: <4D45CDCA.9080203@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-01-17 19:02:45
+On 01/30/2011 01:57 PM, Zdenek Kabelac wrote:
+> Fixing some of the remaining const warnings - major change:
+> 
+> int vg_extend(struct volume_group *vg, int pv_count, const char *const *pv_names,
+> 
+> Change is needed - as lvm2api seems to expect const behaviour here.
+> So vg_extend() is doing local strdup for unescaping.
+> 
+> skip_dev_dir return const char* from const char* vg_name.
 
-Modified files:
-	daemons/dmeventd: dmeventd.h 
+Only C language allows us to have properly defined const variables :-)
 
-Log message:
-	remove unused definitions
+<add mornfall's signature here>
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.h.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+If it helps something, ACK.
 
---- LVM2/daemons/dmeventd/dmeventd.h	2010/10/20 15:12:12	1.7
-+++ LVM2/daemons/dmeventd/dmeventd.h	2011/01/17 19:02:44	1.8
-@@ -17,11 +17,8 @@
- 
- /* FIXME This stuff must be configurable. */
- 
--#define	DM_EVENT_DAEMON		"/sbin/dmeventd"
--#define DM_EVENT_LOCKFILE	"/var/lock/dmeventd"
- #define	DM_EVENT_FIFO_CLIENT	"/var/run/dmeventd-client"
- #define	DM_EVENT_FIFO_SERVER	"/var/run/dmeventd-server"
--#define DM_EVENT_PIDFILE	"/var/run/dmeventd.pid"
- 
- #define DM_EVENT_DEFAULT_TIMEOUT 10
- 
+Milan
 
 
