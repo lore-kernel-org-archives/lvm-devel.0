@@ -1,40 +1,68 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 2 Feb 2011 19:50:48 +0000
-Subject: [PATCHv3 2 of 2]LVM: allow exclusive snapshots in cluster
-In-Reply-To: <1296670066.27798.18.camel@hydrogen.msp.redhat.com>
-References: <1296670066.27798.18.camel@hydrogen.msp.redhat.com>
-Message-ID: <20110202195048.GA14956@agk-dp.fab.redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 2 Feb 2011 20:04:40 -0000
+Subject: LVM2 daemons/clvmd/lvm-functions.c lib/locking ...
+Message-ID: <20110202200440.15310.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Feb 02, 2011 at 12:07:46PM -0600, Jon Brassow wrote:
-> A) the exclusive flag on an LV is lost after the following operations:
-> 	1) lvchange -aey vg/lv
-> 	2) lvcreate -s -n snap vg/lv
-> 	3) lvremove vg/snap
-> 	4) lvcreate -s -n snap vg/lv - fails because lv is !EX
-> I don't think this is a result of the changes I've made, but an oddity
-> that has not been discovered yet.
- 
-Bug.  Check from the logs at what point the exclusive lock is dropped.
-(We fixed bug similar to this before.)
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-02-02 20:04:39
 
-> B) 'vgchange -ay' returns success on only one node (as mbroz
-> highlighted) when there are snapshots in a cluster because only one node
-> can activate all the LVs.  The other LVs on the remaining nodes still
-> activate properly.
- 
-Bug.
-You may have to query the status afterwards to work out the
-right return code to use or combine the responses from all the nodes 
-intelligently to see that exactly one has it active.
-(The node running the command doesn't know what activation filters
-might be set on other nodes, so must send the command to every node
-but expect exactly one to end up with it active.)
+Modified files:
+	daemons/clvmd  : lvm-functions.c 
+	lib/locking    : no_locking.c 
 
-Alasdair
+Log message:
+	Better fix for no-locking udev sync and clvmd
+	
+	This is better way how to fix clustered synchronization with udev.
+	As the code for message passing needs fixed - put currently
+	fs_unlock() after every active/deactive command in clvmd to
+	ensure nodes are properly created in time.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/no_locking.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+
+--- LVM2/daemons/clvmd/lvm-functions.c	2011/01/12 20:42:50	1.106
++++ LVM2/daemons/clvmd/lvm-functions.c	2011/02/02 20:04:39	1.107
+@@ -507,6 +507,7 @@
+ 	switch (command & LCK_MASK) {
+ 	case LCK_LV_EXCLUSIVE:
+ 		status = do_activate_lv(resource, lock_flags, LCK_EXCL);
++		fs_unlock();
+ 		break;
+ 
+ 	case LCK_LV_SUSPEND:
+@@ -520,10 +521,12 @@
+ 
+ 	case LCK_LV_ACTIVATE:
+ 		status = do_activate_lv(resource, lock_flags, LCK_READ);
++		fs_unlock();
+ 		break;
+ 
+ 	case LCK_LV_DEACTIVATE:
+ 		status = do_deactivate_lv(resource, lock_flags);
++		fs_unlock();
+ 		break;
+ 
+ 	default:
+--- LVM2/lib/locking/no_locking.c	2011/01/12 20:42:51	1.25
++++ LVM2/lib/locking/no_locking.c	2011/02/02 20:04:39	1.26
+@@ -38,7 +38,9 @@
+ {
+ 	switch (flags & LCK_SCOPE_MASK) {
+ 	case LCK_VG:
+-		if (!strcmp(resource, VG_SYNC_NAMES))
++		if (!strcmp(resource, VG_SYNC_NAMES) ||
++		    (((flags & LCK_TYPE_MASK) == LCK_UNLOCK) &&
++		     is_real_vg(resource)))
+ 			fs_unlock();
+ 		break;
+ 	case LCK_LV:
 
 
