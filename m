@@ -1,91 +1,95 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  2 Feb 2011 14:08:00 +0100
-Subject: [PATCH 4/5] lv_info handle udev_sync
+Date: Wed,  2 Feb 2011 14:08:01 +0100
+Subject: [PATCH 5/5] Remove open_count read from some lv_info calls
 In-Reply-To: <cover.1296651808.git.zkabelac@redhat.com>
 References: <cover.1296651808.git.zkabelac@redhat.com>
-Message-ID: <4a58285fffc6352dd9a9ffcba2b20f198b2c4078.1296651808.git.zkabelac@redhat.com>
+Message-ID: <c6ce8633a45817a11045f596ba8ff43ee235b1b9.1296651808.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In case open_count is requested via lv_info - check if there
-are any udev operations in-progress - and wait for them
-before checking for lv_info
+PLEASE CHECK ME!!!
 
-Remove fs_unlock after _lv_resume -  as it's now handled via
-lv_info query.
+It's not completely clear what could be the side effect
+lv_infoi() in these places does not read 'info.open_count' value -
+so it should not need to set this value - unless I'm missing some side-effect??
 
-Note: some those lv_info() which do not need open_count,
-needs to pass 0 for 'with_open_count' parameter.
+This change is needed to minimalize the amount of fs_unlock() calls.
 
-NoteII: locking_is_clustered() is needed to detect in which context
-lv_info() is called as we cannot use sync_local_dev_names() when
-locking is not defined.
+As we need to make sure no udev operation is in progress when we
+check for open_count.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/activate.c |   13 ++++++++++++-
- lib/activate/fs.c       |    5 +++++
- lib/activate/fs.h       |    1 +
- 3 files changed, 18 insertions(+), 1 deletions(-)
+ lib/activate/activate.c |    2 +-
+ liblvm/lvm_lv.c         |    4 ++--
+ tools/lvconvert.c       |    2 +-
+ tools/lvscan.c          |    2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 3670ea4..ff84f4f 100644
+index ff84f4f..d8f31ba 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -460,6 +460,18 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, unsigned o
- 
- 	if (!activation())
- 		return 0;
-+	/*
-+	 * If open_count info is requested and we have to be sure our own udev
-+	 * transactions are finished
-+	 * For non-clustered locking type we are only interested for non-delete operation
-+	 * in progress - as only those could lead to opened files
-+	 */
-+	if (with_open_count) {
-+		if (locking_is_clustered())
-+			sync_local_dev_names(cmd); /* Wait to have udev in sync */
-+		else if (fs_has_non_delete_ops())
-+			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
-+	}
- 
- 	if (!dev_manager_info(lv->vg->cmd->mem, lv, origin_only ? "real" : NULL, with_open_count,
- 			      with_read_ahead, &dminfo, &info->read_ahead))
-@@ -1112,7 +1124,6 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
- 		goto_out;
- 
+@@ -1218,7 +1218,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	r = _lv_deactivate(lv);
  	memlock_dec(cmd);
--	fs_unlock();
  
- 	if (!monitor_dev_for_events(cmd, lv, origin_only, 1))
- 		stack;
-diff --git a/lib/activate/fs.c b/lib/activate/fs.c
-index a3db5a7..31a71b1 100644
---- a/lib/activate/fs.c
-+++ b/lib/activate/fs.c
-@@ -477,3 +477,8 @@ void fs_set_cookie(uint32_t cookie)
+-	if (!lv_info(cmd, lv, 0, &info, 1, 0) || info.exists)
++	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists)
+ 		r = 0;
+ out:
+ 	if (lv) {
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index b77f78c..664c39d 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -62,7 +62,7 @@ struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
+ uint64_t lvm_lv_is_active(const lv_t lv)
  {
- 	_fs_cookie = cookie;
- }
-+
-+int fs_has_non_delete_ops(void)
-+{
-+	return _other_fs_ops(FS_DEL);
-+}
-diff --git a/lib/activate/fs.h b/lib/activate/fs.h
-index 17ecedf..43e2846 100644
---- a/lib/activate/fs.h
-+++ b/lib/activate/fs.h
-@@ -32,5 +32,6 @@ int fs_rename_lv(struct logical_volume *lv, const char *dev,
- /* void fs_unlock(void);  moved to activate.h */
- uint32_t fs_get_cookie(void);
- void fs_set_cookie(uint32_t cookie);
-+int fs_has_non_delete_ops(void);
+ 	struct lvinfo info;
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) &&
++	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
+ 	    info.exists && info.live_table)
+ 		return 1;
+ 	return 0;
+@@ -71,7 +71,7 @@ uint64_t lvm_lv_is_active(const lv_t lv)
+ uint64_t lvm_lv_is_suspended(const lv_t lv)
+ {
+ 	struct lvinfo info;
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) &&
++	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
+ 	    info.exists && info.suspended)
+ 		return 1;
+ 	return 0;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 04c9f41..b35bc81 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1637,7 +1637,7 @@ static int poll_logical_volume(struct cmd_context *cmd, struct logical_volume *l
+ {
+ 	struct lvinfo info;
  
- #endif
+-	if (!lv_info(cmd, lv, 0, &info, 1, 0) || !info.exists) {
++	if (!lv_info(cmd, lv, 0, &info, 0, 0) || !info.exists) {
+ 		log_print("Conversion starts after activation.");
+ 		return ECMD_PROCESSED;
+ 	}
+diff --git a/tools/lvscan.c b/tools/lvscan.c
+index 1f91d39..753b00d 100644
+--- a/tools/lvscan.c
++++ b/tools/lvscan.c
+@@ -28,7 +28,7 @@ static int lvscan_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	if (!arg_count(cmd, all_ARG) && !lv_is_visible(lv))
+ 		return ECMD_PROCESSED;
+ 
+-	inkernel = lv_info(cmd, lv, 0, &info, 1, 0) && info.exists;
++	inkernel = lv_info(cmd, lv, 0, &info, 0, 0) && info.exists;
+ 	if (lv_is_origin(lv)) {
+ 		dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs,
+ 				       origin_list) {
 -- 
 1.7.3.5
 
