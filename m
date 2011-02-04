@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Feb 2011 19:33:55 -0000
-Subject: LVM2 ./WHATS_NEW libdm/libdevmapper.h libdm/io ...
-Message-ID: <20110204193355.28325.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 4 Feb 2011 20:30:21 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c ...
+Message-ID: <20110204203021.11699.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,206 +10,303 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-04 19:33:54
+Changes by:	jbrassow at sourceware.org	2011-02-04 20:30:19
 
 Modified files:
 	.              : WHATS_NEW 
-	libdm          : libdevmapper.h 
-	libdm/ioctl    : libdm-iface.c libdm-targets.h 
-	man            : dmsetup.8.in 
-	tools          : dmsetup.c 
+	daemons/clvmd  : lvm-functions.c 
+	lib/activate   : activate.c activate.h dev_manager.c 
+	lib/locking    : locking.c locking.h 
+	lib/metadata   : lv_manip.c 
+	tools          : vgchange.c 
 
 Log message:
-	Add --addnodeonresume, --addnodeoncreate
+	Allow snapshots in a cluster as long as they are exclusively
+	activated.
 	
-	Add new function dm_task_set_add_node() to select between 2 types
-	of node creation in device directory.
+	In order to achieve this, we need to be able to query whether
+	the origin is active exclusively (a condition of being able to
+	add an exclusive snapshot).
 	
-	DM_ADD_NODE_ON_RESUME is now default and ensures node is created on
-	resume. Old original behavior is accessible with DM_ADD_NODE_ON_CREATE.
-	In this case node would be created during dmsetup create --notable.
+	Once we are able to query the exclusive activation of an LV, we
+	can safely create/activate the snapshot.
 	
-	For the user 2 new options for dmsetup create are added:
-	[{--addnodeonresume | --addnodeoncreate }]
-	
-	Properly working node creation on resume is needed for proper operation
-	stacking and ability to correctly check in which state the device should
-	after whole udev transation.
+	A change to 'hold_lock' was also made so that a request to aquire
+	a WRITE lock did not replace an EX lock, which is already a form
+	of write lock.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1904&r2=1.1905
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.134&r2=1.135
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.90&r2=1.91
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-targets.h.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.151&r2=1.152
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1905&r2=1.1906
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.110&r2=1.111
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.190&r2=1.191
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.73&r2=1.74
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.212&r2=1.213
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.246&r2=1.247
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
 
---- LVM2/WHATS_NEW	2011/02/04 19:18:16	1.1904
-+++ LVM2/WHATS_NEW	2011/02/04 19:33:53	1.1905
+--- LVM2/WHATS_NEW	2011/02/04 19:33:53	1.1905
++++ LVM2/WHATS_NEW	2011/02/04 20:30:17	1.1906
 @@ -1,5 +1,6 @@
  Version 2.02.83 - 
  ===================================
-+  Add --addnodeonresume, --addnodeoncreate options for dmsetup create.
++  Allow exclusive activation of snapshots in a cluster.
+   Add --addnodeonresume, --addnodeoncreate options for dmsetup create.
    Use cluster-wide message to request device name sync.
    Fix operation node stacking for consecutive dm ops.
-   Increase hash table size to 1024 lv names and 64 pv uuids.
---- LVM2/libdm/libdevmapper.h	2011/02/04 16:08:11	1.134
-+++ LVM2/libdm/libdevmapper.h	2011/02/04 19:33:53	1.135
-@@ -185,6 +185,11 @@
- int dm_task_query_inactive_table(struct dm_task *dmt);
- int dm_task_suppress_identical_reload(struct dm_task *dmt);
- int dm_task_secure_data(struct dm_task *dmt);
-+typedef enum {
-+	DM_ADD_NODE_ON_RESUME, /* add /dev/mapper node with dmsetup resume */
-+	DM_ADD_NODE_ON_CREATE  /* add /dev/mapper node with dmsetup create */
-+} dm_add_node_t;
-+int dm_task_set_add_node(struct dm_task *dmt, dm_add_node_t add_node);
+--- LVM2/daemons/clvmd/lvm-functions.c	2011/02/04 19:21:47	1.110
++++ LVM2/daemons/clvmd/lvm-functions.c	2011/02/04 20:30:17	1.111
+@@ -240,9 +240,17 @@
  
- /*
-  * Control read_ahead.
---- LVM2/libdm/ioctl/libdm-iface.c	2011/02/04 16:08:12	1.90
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/02/04 19:33:53	1.91
-@@ -1181,6 +1181,19 @@
- 	return 1;
+ 	lvi = lookup_info(resource);
+ 
+-	if (lvi && lvi->lock_mode == mode) {
+-		DEBUGLOG("hold_lock, lock mode %d already held\n", mode);
+-		return 0;
++	if (lvi) {
++		if (lvi->lock_mode == mode) {
++			DEBUGLOG("hold_lock, lock mode %d already held\n",
++				 mode);
++			return 0;
++		}
++		if ((lvi->lock_mode == LCK_EXCL) && (mode == LCK_WRITE)) {
++			DEBUGLOG("hold_lock, lock already held LCK_EXCL, "
++				 "ignoring LCK_WRITE request");
++			return 0;
++		}
+ 	}
+ 
+ 	/* Only allow explicit conversions */
+--- LVM2/lib/activate/activate.c	2011/02/04 19:14:40	1.190
++++ LVM2/lib/activate/activate.c	2011/02/04 20:30:18	1.191
+@@ -708,39 +708,108 @@
  }
  
-+int dm_task_set_add_node(struct dm_task *dmt, dm_add_node_t add_node)
-+{
-+	switch (add_node) {
-+	case DM_ADD_NODE_ON_RESUME:
-+	case DM_ADD_NODE_ON_CREATE:
-+		dmt->add_node = add_node;
-+		return 1;
-+	default:
-+		log_error("Unknown add node parameter");
-+		return 0;
-+	}
-+}
-+
- int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
+ /*
++ * _lv_is_active
++ * @lv:        logical volume being queried
++ * @locally:   set if active locally (when provided)
++ * @exclusive: set if active exclusively (when provided)
++ *
+  * Determine whether an LV is active locally or in a cluster.
+- * Assumes vg lock held.
+- * Returns:
+- * 0 - not active locally or on any node in cluster
+- * 1 - active either locally or some node in the cluster
++ * In addition to the return code which indicates whether or
++ * not the LV is active somewhere, two other values are set
++ * to yield more information about the status of the activation:
++ *	return	locally	exclusively	status
++ *	======	=======	===========	======
++ *	   0	   0	    0		not active
++ *	   1	   0	    0		active remotely
++ *	   1	   0	    1		exclusive remotely
++ *	   1	   1	    0		active locally and possibly remotely
++ *	   1	   1	    1		exclusive locally (or local && !cluster)
++ * The VG lock must be held to call this function.
++ *
++ * Returns: 0 or 1
+  */
+-int lv_is_active(struct logical_volume *lv)
++static int _lv_is_active(struct logical_volume *lv,
++			 int *locally, int *exclusive)
  {
- 	if (strlen(newuuid) >= DM_UUID_LEN) {
-@@ -2075,7 +2088,8 @@
- 
- 	switch (dmt->type) {
- 	case DM_DEVICE_CREATE:
--		if (dmt->dev_name && *dmt->dev_name && !udev_only)
-+	    if ((dmt->add_node == DM_ADD_NODE_ON_CREATE) &&
-+		dmt->dev_name && *dmt->dev_name && !udev_only)
- 			add_dev_node(dmt->dev_name, MAJOR(dmi->dev),
- 				     MINOR(dmi->dev), dmt->uid, dmt->gid,
- 				     dmt->mode, check_udev);
-@@ -2094,6 +2108,11 @@
- 		break;
- 
- 	case DM_DEVICE_RESUME:
-+		if ((dmt->add_node == DM_ADD_NODE_ON_RESUME) &&
-+		    dmt->dev_name && *dmt->dev_name && !udev_only)
-+			add_dev_node(dmt->dev_name, MAJOR(dmi->dev),
-+				     MINOR(dmi->dev), dmt->uid, dmt->gid,
-+				     dmt->mode, check_udev);
- 		/* FIXME Kernel needs to fill in dmi->name */
- 		set_dev_node_read_ahead(dmt->dev_name, dmt->read_ahead,
- 					dmt->read_ahead_flags);
---- LVM2/libdm/ioctl/libdm-targets.h	2011/02/04 16:08:12	1.28
-+++ LVM2/libdm/ioctl/libdm-targets.h	2011/02/04 19:33:54	1.29
-@@ -60,6 +60,7 @@
- 	int skip_lockfs;
- 	int query_inactive_table;
- 	int suppress_identical_reload;
-+	dm_add_node_t add_node;
- 	uint64_t existing_table_size;
- 	int cookie_set;
- 	int new_uuid;
---- LVM2/man/dmsetup.8.in	2010/10/15 01:10:28	1.36
-+++ LVM2/man/dmsetup.8.in	2011/02/04 19:33:54	1.37
-@@ -8,6 +8,7 @@
- .br
- .B dmsetup create 
- .I device_name [-u uuid] [--notable | --table <table> | table_file]
-+.I [{ --addnodeonresume | --addnodeoncreate }]
- .br
- .B dmsetup remove
- .I [-f|--force] device_name
-@@ -139,6 +140,12 @@
- .IP \fB--notable
- .br
- When creating a device, don't load any table.
-+.IP \fB--addnodeonresume
-+.br
-+Ensure /dev/mapper node exists after dmsetup resume (default with udev).
-+.IP \fB--addnodeoncreate
-+.br
-+Ensure /dev/mapper node exists after dmsetup create.
- .IP \fB--udevcookie\ \fIcookie
- .br
- Use cookie for udev synchronisation.
---- LVM2/tools/dmsetup.c	2010/12/20 14:36:12	1.151
-+++ LVM2/tools/dmsetup.c	2011/02/04 19:33:54	1.152
-@@ -153,6 +153,8 @@
- 	VERBOSE_ARG,
- 	VERSION_ARG,
- 	YES_ARG,
-+	ADD_NODE_ON_RESUME_ARG,
-+	ADD_NODE_ON_CREATE_ARG,
- 	NUM_SWITCHES
- };
- 
-@@ -624,6 +626,14 @@
- 		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
- 			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
- 
-+	if (_switches[ADD_NODE_ON_RESUME_ARG] &&
-+	    !dm_task_set_add_node(dmt, DM_ADD_NODE_ON_RESUME))
-+		goto out;
+-	int ret;
++	int r, l, e; /* remote, local, and exclusive */
 +
-+	if (_switches[ADD_NODE_ON_CREATE_ARG] &&
-+	    !dm_task_set_add_node(dmt, DM_ADD_NODE_ON_CREATE))
++	r = l = e = 0;
+ 
+ 	if (_lv_active(lv->vg->cmd, lv))
+-		return 1;
++		l = 1;
+ 
+-	if (!vg_is_clustered(lv->vg))
+-		return 0;
++	if (!vg_is_clustered(lv->vg)) {
++		e = 1;  /* exclusive by definition */
 +		goto out;
++	}
 +
- 	if (_udev_cookie) {
- 		cookie = _udev_cookie;
- 		if (_udev_only)
-@@ -2693,7 +2703,7 @@
- 	{"help", "[-c|-C|--columns]", 0, 0, _help},
- 	{"create", "<dev_name> [-j|--major <major> -m|--minor <minor>]\n"
- 	  "\t                  [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
--	  "\t                  [-u|uuid <uuid>]\n"
-+	  "\t                  [-u|uuid <uuid>] [{--addnodeonresume|--addnodeoncreate}]\n"
- 	  "\t                  [--notable | --table <table> | <table_file>]",
- 	 1, 2, _create},
- 	{"remove", "[-f|--force] <device>", 0, 1, _remove},
-@@ -3124,6 +3134,8 @@
- 		{"verbose", 1, &ind, VERBOSE_ARG},
- 		{"version", 0, &ind, VERSION_ARG},
- 		{"yes", 0, &ind, YES_ARG},
-+		{"addnodeonresume", 0, &ind, ADD_NODE_ON_RESUME_ARG},
-+		{"addnodeoncreate", 0, &ind, ADD_NODE_ON_CREATE_ARG},
- 		{0, 0, 0, 0}
- 	};
- #else
-@@ -3221,6 +3233,10 @@
- 		}
- 		if (c == 'y' || ind == YES_ARG)
- 			_switches[YES_ARG]++;
-+		if (ind == ADD_NODE_ON_RESUME_ARG)
-+			_switches[ADD_NODE_ON_RESUME_ARG]++;
-+		if (ind == ADD_NODE_ON_CREATE_ARG)
-+			_switches[ADD_NODE_ON_CREATE_ARG]++;
- 		if (ind == UDEVCOOKIE_ARG) {
- 			_switches[UDEVCOOKIE_ARG]++;
- 			_udev_cookie = _get_cookie_value(optarg);
-@@ -3318,6 +3334,11 @@
++	/* Active locally, and the caller doesn't care about exclusive */
++	if (l && !exclusive)
++		goto out;
+ 
+-	if ((ret = remote_lock_held(lv->lvid.s)) >= 0)
+-		return ret;
++	if ((r = remote_lock_held(lv->lvid.s, &e)) >= 0)
++		goto out;
+ 
+ 	/*
+-	 * Old compatibility code if locking doesn't support lock query
+-	 * FIXME: check status to not deactivate already activate device
++	 * If lock query is not supported (due to interfacing with old
++	 * code), then we cannot evaluate exclusivity properly.
++	 *
++	 * Old users of this function will never be affected by this,
++	 * since they are only concerned about active vs. not active.
++	 * New users of this function who specifically ask for 'exclusive'
++	 * will be given an error message.
+ 	 */
++	if (l) {
++		if (exclusive)
++			log_error("Unable to determine exclusivity of %s",
++				  lv->name);
++		goto out;
++	}
++
+ 	if (activate_lv_excl(lv->vg->cmd, lv)) {
+ 		if (!deactivate_lv(lv->vg->cmd, lv))
+ 			stack;
  		return 0;
  	}
  
-+	if (_switches[ADD_NODE_ON_RESUME_ARG] && _switches[ADD_NODE_ON_CREATE_ARG]) {
-+		fprintf(stderr, "--addnodeonresume and --addnodeoncreate are incompatible.\n");
-+		return 0;
-+	}
+-	/*
+-	 * Exclusive local activation failed so assume it is active elsewhere.
+-	 */
+-	return 1;
++out:
++	if (locally)
++		*locally = l;
++	if (exclusive)
++		*exclusive = e;
 +
- 	*argv += optind;
- 	*argc -= optind;
- 	return 1;
++	log_very_verbose("%s/%s is %sactive%s%s",
++			 lv->vg->name, lv->name,
++			 (r || l) ? "" : "not ",
++			 (exclusive && e) ? " exclusive" : "",
++			 e ? (l ? " locally" : " remotely") : "");
++
++	return r || l;
++}
++
++int lv_is_active(struct logical_volume *lv)
++{
++	return _lv_is_active(lv, NULL, NULL);
++}
++
++/*
++int lv_is_active_locally(struct logical_volume *lv)
++{
++	int l;
++	return _lv_is_active(lv, &l, NULL) && l;
++}
++*/
++
++int lv_is_active_exclusive_locally(struct logical_volume *lv)
++{
++	int l, e;
++	return _lv_is_active(lv, &l, &e) && l && e;
++}
++
++int lv_is_active_exclusive_remotely(struct logical_volume *lv)
++{
++	int l, e;
++	return _lv_is_active(lv, &l, &e) && !l && e;
+ }
+ 
+ #ifdef DMEVENTD
+--- LVM2/lib/activate/activate.h	2011/01/10 14:02:31	1.73
++++ LVM2/lib/activate/activate.h	2011/02/04 20:30:18	1.74
+@@ -94,6 +94,8 @@
+ int lvs_in_vg_opened(const struct volume_group *vg);
+ 
+ int lv_is_active(struct logical_volume *lv);
++int lv_is_active_exclusive_locally(struct logical_volume *lv);
++int lv_is_active_exclusive_remotely(struct logical_volume *lv);
+ 
+ int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
+ 		       const char *layer, const char *target_type);
+--- LVM2/lib/activate/dev_manager.c	2011/01/10 14:02:31	1.212
++++ LVM2/lib/activate/dev_manager.c	2011/02/04 20:30:18	1.213
+@@ -1390,10 +1390,6 @@
+ 	/* If this is a snapshot origin, add real LV */
+ 	/* If this is a snapshot origin + merging snapshot, add cow + real LV */
+ 	} else if (lv_is_origin(seg->lv) && !layer) {
+-		if (vg_is_clustered(seg->lv->vg)) {
+-			log_error("Clustered snapshots are not yet supported");
+-			return 0;
+-		}
+ 		if (lv_is_merging_origin(seg->lv)) {
+ 			if (!_add_new_lv_to_dtree(dm, dtree,
+ 			     find_merging_cow(seg->lv)->cow, "cow"))
+--- LVM2/lib/locking/locking.c	2011/02/02 13:34:00	1.91
++++ LVM2/lib/locking/locking.c	2011/02/04 20:30:18	1.92
+@@ -545,7 +545,7 @@
+ 	return (_locking.flags & LCK_CLUSTERED) ? 1 : 0;
+ }
+ 
+-int remote_lock_held(const char *vol)
++int remote_lock_held(const char *vol, int *exclusive)
+ {
+ 	int mode = LCK_NULL;
+ 
+@@ -563,5 +563,8 @@
+ 		return 1;
+ 	}
+ 
++	if (exclusive)
++		*exclusive = (mode == LCK_EXCL);
++
+ 	return mode == LCK_NULL ? 0 : 1;
+ }
+--- LVM2/lib/locking/locking.h	2011/02/04 19:18:17	1.61
++++ LVM2/lib/locking/locking.h	2011/02/04 20:30:18	1.62
+@@ -25,7 +25,7 @@
+ int vg_write_lock_held(void);
+ int locking_is_clustered(void);
+ 
+-int remote_lock_held(const char *vol);
++int remote_lock_held(const char *vol, int *exclusive);
+ 
+ /*
+  * LCK_VG:
+--- LVM2/lib/metadata/lv_manip.c	2011/01/28 02:58:01	1.246
++++ LVM2/lib/metadata/lv_manip.c	2011/02/04 20:30:18	1.247
+@@ -3164,11 +3164,6 @@
+ 				  "device-mapper kernel driver");
+ 			return 0;
+ 		}
+-		/* FIXME Allow exclusive activation. */
+-		if (vg_is_clustered(vg)) {
+-			log_error("Clustered snapshots are not yet supported.");
+-			return 0;
+-		}
+ 
+ 		/* Must zero cow */
+ 		status |= LVM_WRITE;
+@@ -3217,6 +3212,13 @@
+ 				return 0;
+ 			}
+ 			origin_active = info.exists;
++
++			if (vg_is_clustered(vg) &&
++			    !lv_is_active_exclusive_locally(org)) {
++				log_error("%s must be active exclusively to"
++					  " create snapshot", org->name);
++				return 0;
++			}
+ 		}
+ 	}
+ 
+--- LVM2/tools/vgchange.c	2011/01/24 13:38:32	1.118
++++ LVM2/tools/vgchange.c	2011/02/04 20:30:19	1.119
+@@ -115,6 +115,16 @@
+ 		    ((lv->status & PVMOVE) ))
+ 			continue;
+ 
++		/*
++		 * If the LV is active exclusive remotely,
++		 * then ignore it here
++		 */
++		if (lv_is_active_exclusive_remotely(lv)) {
++			log_verbose("%s/%s is exclusively active on"
++				    " a remote node", vg->name, lv->name);
++			continue;
++		}
++
+ 		expected_count++;
+ 
+ 		if (activate == CHANGE_AN) {
 
 
