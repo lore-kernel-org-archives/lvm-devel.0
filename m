@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Feb 2011 19:14:44 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/a ...
-Message-ID: <20110204191444.20244.qmail@sourceware.org>
+Date: 4 Feb 2011 19:18:18 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c ...
+Message-ID: <20110204191818.21804.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,344 +10,114 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-04 19:14:41
+Changes by:	zkabelac at sourceware.org	2011-02-04 19:18:17
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/activate   : activate.c fs.c 
-	libdm          : libdm-common.c 
+	daemons/clvmd  : clvmd-command.c 
+	lib/locking    : external_locking.c file_locking.c locking.h 
 
 Log message:
-	Fix operation node stacking for consecutive dm ops
+	Use cluster-wide message to request device name sync
 	
-	With the ability to stack many operations in one udev transaction -
-	in same cases we are adding and removing same device at the same time
-	(i.e. deactivate followed by activate).
-	
-	This leads to a problem of checking stacked operations:
-	i.e. remove /dev/node1 followed by create /dev/node1
-	
-	If the node creation is handled with udev - there is a problem as
-	stacked operation gives warning about existing node1 and will try to
-	remove it - while next operation needs to recreate it.
-	
-	Current code removes all previous stacked operation if the fs op is
-	FS_DEL - patch adds similar behavior for FS_ADD - it will try to
-	remove any 'delete' operation if udev is in use.
-	
-	For FS_RENAME operation it seems to be more complex. But as we
-	are always stacking FS_READ_AHEAD after FS_ADD operation -
-	should be safe to remove all previous operation on the node
-	when udev is running.
-	
-	Code does same checking for stacking libdm and liblvm operations.
-	
-	As a very simple optimization counters were added for each stacked ops
-	type to avoid unneeded list scans if some operation does not exists in
-	the list.
-	
-	Enable skipping of fs_unlock() (udev sync) if only DEL operations are staked.
-	as we do not use lv_info for already deleted nodes.
+	Thanks to CLVMD_CMD_SYNC_NAMES propagation fix the message passing started
+	to work. So starts to send a message before the VG is unlocked.
+	Removing also implicit sync in VG unlock from clmvd as now the message
+	is delievered and processed in do_command().
+	Also add support for this new message into external locking
+	and mask this event from further processing.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1902&r2=1.1903
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.189&r2=1.190
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.108&r2=1.109
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1903&r2=1.1904
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/external_locking.c.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/file_locking.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.60&r2=1.61
 
---- LVM2/WHATS_NEW	2011/02/03 16:03:13	1.1902
-+++ LVM2/WHATS_NEW	2011/02/04 19:14:39	1.1903
+--- LVM2/WHATS_NEW	2011/02/04 19:14:39	1.1903
++++ LVM2/WHATS_NEW	2011/02/04 19:18:16	1.1904
 @@ -1,5 +1,6 @@
  Version 2.02.83 - 
  ===================================
-+  Fix operation node stacking for consecutive dm ops.
++  Use cluster-wide message to request device name sync.
+   Fix operation node stacking for consecutive dm ops.
    Increase hash table size to 1024 lv names and 64 pv uuids.
    Remove fs_unlock() from lv_resume path.
-   Fix wipe size when setting up mda.
---- LVM2/lib/activate/activate.c	2011/02/03 01:58:21	1.189
-+++ LVM2/lib/activate/activate.c	2011/02/04 19:14:40	1.190
-@@ -469,7 +469,7 @@
- 	if (with_open_count) {
- 		if (locking_is_clustered())
- 			sync_local_dev_names(cmd); /* Wait to have udev in sync */
--		else //if (fs_has_non_delete_ops())
-+		else if (fs_has_non_delete_ops())
- 			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
- 	}
+--- LVM2/daemons/clvmd/clvmd-command.c	2011/02/02 13:34:00	1.51
++++ LVM2/daemons/clvmd/clvmd-command.c	2011/02/04 19:18:17	1.52
+@@ -217,7 +217,6 @@
+ 	if (lkid == 0)
+ 	    return EINVAL;
  
---- LVM2/lib/activate/fs.c	2011/02/03 01:24:46	1.58
-+++ LVM2/lib/activate/fs.c	2011/02/04 19:14:40	1.59
-@@ -257,7 +257,8 @@
- typedef enum {
- 	FS_ADD,
- 	FS_DEL,
--	FS_RENAME
-+	FS_RENAME,
-+	NUM_FS_OPS
- } fs_op_t;
+-	lvm_do_fs_unlock(); /* Wait for devices */
+ 	status = sync_unlock(lockname, lkid);
+ 	if (status)
+ 	    status = errno;
+--- LVM2/lib/locking/external_locking.c	2009/05/21 03:04:53	1.17
++++ LVM2/lib/locking/external_locking.c	2011/02/04 19:18:17	1.18
+@@ -18,6 +18,8 @@
+ #include "defaults.h"
+ #include "sharedlib.h"
+ #include "toolcontext.h"
++#include "activate.h"
++#include "locking.h"
  
- static int _do_fs_op(fs_op_t type, const char *dev_dir, const char *vg_name,
-@@ -283,12 +284,18 @@
- 
- 		if (!_mk_link(dev_dir, vg_name, lv_name, dev, check_udev))
- 			stack;
-+	default:;
- 	}
- 
- 	return 1;
- }
- 
- static DM_LIST_INIT(_fs_ops);
-+/*
-+ * Count number of stacked fs_op_t operations to allow to skip dm_list search.
-+ * FIXME: handling of FS_RENAME
-+ */
-+static int _count_fs_ops[NUM_FS_OPS];
- 
- struct fs_op_parms {
- 	struct dm_list list;
-@@ -309,15 +316,84 @@
- 	*pos += strlen(*ptr) + 1;
- }
- 
-+static void _del_fs_op(struct fs_op_parms *fsp)
-+{
-+	_count_fs_ops[fsp->type]--;
-+	dm_list_del(&fsp->list);
-+	dm_free(fsp);
-+}
-+
-+/* Check if there is other the type of fs operation stacked */
-+static int _other_fs_ops(fs_op_t type)
-+{
-+	int i;
-+
-+	for (i = 0; i < NUM_FS_OPS; i++)
-+		if (type != i && _count_fs_ops[i])
-+			return 1;
-+	return 0;
-+}
-+
-+/* Check if udev is supposed to create nodes */
-+static int _check_udev(int check_udev)
-+{
-+    return check_udev && dm_udev_get_sync_support() && dm_udev_get_checking();
-+}
-+
-+/* FIXME: duplication of the  code from libdm-common.c */
- static int _stack_fs_op(fs_op_t type, const char *dev_dir, const char *vg_name,
- 			const char *lv_name, const char *dev,
- 			const char *old_lv_name, int check_udev)
+ static void *_locking_lib = NULL;
+ static void (*_reset_fn) (void) = NULL;
+@@ -31,10 +33,16 @@
+ static int _lock_resource(struct cmd_context *cmd, const char *resource,
+ 			  uint32_t flags)
  {
-+	struct dm_list *fsph, *fspht;
- 	struct fs_op_parms *fsp;
- 	size_t len = strlen(dev_dir) + strlen(vg_name) + strlen(lv_name) +
- 	    strlen(dev) + strlen(old_lv_name) + 5;
- 	char *pos;
- 
-+	if ((type == FS_DEL) && _other_fs_ops(type))
-+		/*
-+		 * Ignore any outstanding operations on the fs_op if deleting it.
-+		 */
-+		dm_list_iterate_safe(fsph, fspht, &_fs_ops) {
-+			fsp = dm_list_item(fsph, struct fs_op_parms);
-+			if (!strcmp(lv_name, fsp->lv_name) &&
-+			    !strcmp(vg_name, fsp->vg_name)) {
-+				_del_fs_op(fsp);
-+				if (!_other_fs_ops(type))
-+					break; /* no other non DEL ops */
-+			}
-+		}
-+	else if ((type == FS_ADD) && _count_fs_ops[FS_DEL] && _check_udev(check_udev))
-+		/*
-+		 * If udev is running ignore previous DEL operation on added fs_op.
-+		 * (No other operations for this device then DEL could be staked here).
-+		 */
-+		dm_list_iterate_safe(fsph, fspht, &_fs_ops) {
-+			fsp = dm_list_item(fsph, struct fs_op_parms);
-+			if ((fsp->type == FS_DEL) &&
-+			    !strcmp(lv_name, fsp->lv_name) &&
-+			    !strcmp(vg_name, fsp->vg_name)) {
-+				_del_fs_op(fsp);
-+				break; /* no other DEL ops */
-+			}
-+		}
-+	else if ((type == FS_RENAME) && _check_udev(check_udev))
-+		/*
-+		 * If udev is running ignore any outstanding operations if renaming it.
-+		 *
-+		 * Currently RENAME operation happens through 'suspend -> resume'.
-+		 * On 'resume' device is added with read_ahead settings, so it
-+		 * safe to remove any stacked ADD, RENAME, READ_AHEAD operation
-+		 * There cannot be any DEL operation on the renamed device.
-+		 */
-+		dm_list_iterate_safe(fsph, fspht, &_fs_ops) {
-+			fsp = dm_list_item(fsph, struct fs_op_parms);
-+			if (!strcmp(old_lv_name, fsp->lv_name) &&
-+			    !strcmp(vg_name, fsp->vg_name))
-+				_del_fs_op(fsp);
-+		}
-+
- 	if (!(fsp = dm_malloc(sizeof(*fsp) + len))) {
- 		log_error("No space to stack fs operation");
+-	if (_lock_fn)
+-		return _lock_fn(cmd, resource, flags);
+-	else
++	if (!_lock_fn)
  		return 0;
-@@ -333,6 +409,7 @@
- 	_store_str(&pos, &fsp->dev, dev);
- 	_store_str(&pos, &fsp->old_lv_name, old_lv_name);
- 
-+	_count_fs_ops[type]++;
- 	dm_list_add(&_fs_ops, &fsp->list);
- 
- 	return 1;
-@@ -347,8 +424,7 @@
- 		fsp = dm_list_item(fsph, struct fs_op_parms);
- 		_do_fs_op(fsp->type, fsp->dev_dir, fsp->vg_name, fsp->lv_name,
- 			  fsp->dev, fsp->old_lv_name, fsp->check_udev);
--		dm_list_del(&fsp->list);
--		dm_free(fsp);
-+		_del_fs_op(fsp);
- 	}
- }
- 
-@@ -423,9 +499,7 @@
- 	_fs_cookie = cookie;
- }
- 
--#if 0
- int fs_has_non_delete_ops(void)
- {
- 	return _other_fs_ops(FS_DEL);
- }
--#endif
---- LVM2/libdm/libdm-common.c	2011/02/04 16:08:12	1.108
-+++ LVM2/libdm/libdm-common.c	2011/02/04 19:14:40	1.109
-@@ -725,7 +725,8 @@
- 	NODE_ADD,
- 	NODE_DEL,
- 	NODE_RENAME,
--	NODE_READ_AHEAD
-+	NODE_READ_AHEAD,
-+	NUM_NODES
- } node_op_t;
- 
- static int _do_node_op(node_op_t type, const char *dev_name, uint32_t major,
-@@ -744,12 +745,14 @@
- 	case NODE_READ_AHEAD:
- 		return _set_dev_node_read_ahead(dev_name, read_ahead,
- 						read_ahead_flags);
-+	default:;
- 	}
- 
- 	return 1;
- }
- 
- static DM_LIST_INIT(_node_ops);
-+static int _count_node_ops[NUM_NODES];
- 
- struct node_op_parms {
- 	struct dm_list list;
-@@ -774,6 +777,31 @@
- 	*pos += strlen(*ptr) + 1;
- }
- 
-+static void _del_node_op(struct node_op_parms *nop)
-+{
-+	_count_node_ops[nop->type]--;
-+	dm_list_del(&nop->list);
-+	dm_free(nop);
 +
-+}
++	if (!strcmp(resource, VG_SYNC_NAMES)) {
++		/* Hide this lock request from external locking */
++		fs_unlock();
++		return 1;
++	}
 +
-+/* Check if there is other the type of node operation stacked */
-+static int _other_node_ops(node_op_t type)
-+{
-+	int i;
-+
-+	for (i = 0; i < NUM_NODES; i++)
-+		if (type != i && _count_node_ops[i])
-+			return 1;
-+	return 0;
-+}
-+
-+/* Check if udev is supposed to create nodes */
-+static int _check_udev(int check_udev)
-+{
-+    return check_udev && dm_udev_get_sync_support() && dm_udev_get_checking();
-+}
-+
- static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
- 			  uint32_t minor, uid_t uid, gid_t gid, mode_t mode,
- 			  const char *old_name, uint32_t read_ahead,
-@@ -785,17 +813,47 @@
- 	char *pos;
- 
- 	/*
--	 * Ignore any outstanding operations on the node if deleting it
-+	 * Note: check_udev must have valid content
- 	 */
--	if (type == NODE_DEL) {
-+	if ((type == NODE_DEL) && _other_node_ops(type))
-+		/*
-+		 * Ignore any outstanding operations on the node if deleting it.
-+		 */
- 		dm_list_iterate_safe(noph, nopht, &_node_ops) {
- 			nop = dm_list_item(noph, struct node_op_parms);
- 			if (!strcmp(dev_name, nop->dev_name)) {
--				dm_list_del(&nop->list);
--				dm_free(nop);
-+				_del_node_op(nop);
-+				if (!_other_node_ops(type))
-+					break; /* no other non DEL ops */
- 			}
- 		}
--	}
-+	else if ((type == NODE_ADD) && _count_node_ops[NODE_DEL] && _check_udev(check_udev))
-+		/*
-+		 * If udev is running ignore previous DEL operation on added node.
-+		 * (No other operations for this device then DEL could be staked here).
-+		 */
-+		dm_list_iterate_safe(noph, nopht, &_node_ops) {
-+			nop = dm_list_item(noph, struct node_op_parms);
-+			if ((nop->type == NODE_DEL) &&
-+			    !strcmp(dev_name, nop->dev_name)) {
-+				_del_node_op(nop);
-+				break; /* no other DEL ops */
-+			}
-+		}
-+	else if ((type == NODE_RENAME) && _check_udev(check_udev))
-+		/*
-+		 * If udev is running ignore any outstanding operations if renaming it.
-+		 *
-+		 * Currently  RENAME operation happens through 'suspend -> resume'.
-+		 * On 'resume' device is added with read_ahead settings, so it is
-+		 * safe to remove any stacked ADD, RENAME, READ_AHEAD operation
-+		 * There cannot be any DEL operation on the renamed device.
-+		 */
-+		dm_list_iterate_safe(noph, nopht, &_node_ops) {
-+			nop = dm_list_item(noph, struct node_op_parms);
-+			if (!strcmp(old_name, nop->dev_name))
-+				_del_node_op(nop);
-+		}
- 
- 	if (!(nop = dm_malloc(sizeof(*nop) + len))) {
- 		log_error("Insufficient memory to stack mknod operation");
-@@ -816,6 +874,7 @@
- 	_store_str(&pos, &nop->dev_name, dev_name);
- 	_store_str(&pos, &nop->old_name, old_name);
- 
-+	_count_node_ops[type]++;
- 	dm_list_add(&_node_ops, &nop->list);
- 
- 	return 1;
-@@ -832,8 +891,7 @@
- 			    nop->uid, nop->gid, nop->mode, nop->old_name,
- 			    nop->read_ahead, nop->read_ahead_flags,
- 			    nop->check_udev);
--		dm_list_del(&nop->list);
--		dm_free(nop);
-+		_del_node_op(nop);
- 	}
++	return _lock_fn(cmd, resource, flags);
  }
  
+ static void _fin_external_locking(void)
+--- LVM2/lib/locking/file_locking.c	2011/02/02 13:34:00	1.56
++++ LVM2/lib/locking/file_locking.c	2011/02/04 19:18:17	1.57
+@@ -215,7 +215,6 @@
+ 		state = 'W';
+ 		break;
+ 	case LCK_UNLOCK:
+-		fs_unlock(); /* Wait until devices are available */
+ 		return _release_lock(file, 1);
+ 	default:
+ 		log_error("Unrecognised lock type: %d", flags & LCK_TYPE_MASK);
+--- LVM2/lib/locking/locking.h	2011/01/12 20:42:51	1.60
++++ LVM2/lib/locking/locking.h	2011/02/04 19:18:17	1.61
+@@ -143,7 +143,12 @@
+ 		lock_vol(cmd, (lv)->lvid.s, flags | LCK_LV_CLUSTERED(lv)) : \
+ 		0)
+ 
+-#define unlock_vg(cmd, vol)	lock_vol(cmd, vol, LCK_VG_UNLOCK)
++#define unlock_vg(cmd, vol)	\
++	do { \
++		if (is_real_vg(vol)) \
++			sync_dev_names(cmd); \
++		lock_vol(cmd, vol, LCK_VG_UNLOCK); \
++	} while (0)
+ #define unlock_and_free_vg(cmd, vg, vol) \
+ 	do { \
+ 		unlock_vg(cmd, vol); \
+@@ -172,6 +177,8 @@
+ 	lock_vol((vg)->cmd, (vg)->name, LCK_VG_BACKUP)
+ #define sync_local_dev_names(cmd)	\
+ 	lock_vol(cmd, VG_SYNC_NAMES, LCK_NONE | LCK_CACHE | LCK_LOCAL)
++#define sync_dev_names(cmd)	\
++	lock_vol(cmd, VG_SYNC_NAMES, LCK_NONE | LCK_CACHE)
+ 
+ /* Process list of LVs */
+ int suspend_lvs(struct cmd_context *cmd, struct dm_list *lvs);
 
 
