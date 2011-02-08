@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Feb 2011 12:41:09 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/crc.c
-Message-ID: <20110208124109.12853.qmail@sourceware.org>
+Date: 8 Feb 2011 15:52:01 -0000
+Subject: LVM2/libdm/mm dbg_malloc.c
+Message-ID: <20110208155201.13112.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-08 12:41:08
+Changes by:	zkabelac at sourceware.org	2011-02-08 15:52:01
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/misc       : crc.c 
+	libdm/mm       : dbg_malloc.c 
 
 Log message:
-	Fix CRC32 calculation on big endian CPU
+	Revert DEBUG_MEM cleanup commit
 	
-	Fix regresion from 2.02.75 speedup - so currently crc32 is a little bit
-	more complicated on big-endian CPU as the uint32_t needs to be shifted
-	on here.
+	As functions compiled within this define are apparently stil part of the public API,
+	(though lvm2 code is never using them unless this define is used for compilation),
+	keep functions available in the code for now -> revert.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1908&r2=1.1909
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/crc.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/dbg_malloc.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
 
---- LVM2/WHATS_NEW	2011/02/04 22:46:18	1.1908
-+++ LVM2/WHATS_NEW	2011/02/08 12:41:08	1.1909
-@@ -1,5 +1,6 @@
- Version 2.02.84 - 
- ===================================
-+  Fix CRC32 calculation on big endian CPU (2.02.75).
+--- LVM2/libdm/mm/dbg_malloc.c	2011/01/28 16:01:32	1.22
++++ LVM2/libdm/mm/dbg_malloc.c	2011/02/08 15:52:00	1.23
+@@ -15,8 +15,6 @@
  
- Version 2.02.83 - 4th February 2011
- ===================================
---- LVM2/lib/misc/crc.c	2010/10/25 13:36:09	1.9
-+++ LVM2/lib/misc/crc.c	2011/02/08 12:41:08	1.10
-@@ -16,6 +16,7 @@
- #include "lib.h"
+ #include "dmlib.h"
  
- #include "crc.h"
-+#include "xlate.h"
+-#ifdef DEBUG_MEM
+-
+ #include <assert.h>
+ #include <stdarg.h>
  
- /* Calculate an endian-independent CRC of supplied buffer */
- #ifndef DEBUG_CRC32
-@@ -65,7 +66,7 @@
-    
- 	/* Process 4 bytes per iteration */
- 	while (start < end) {
--		crc = crc ^ *start++;
-+		crc = crc ^ xlate32(*start++);
- 		crc = crctab[crc & 0xff] ^ crc >> 8;
- 		crc = crctab[crc & 0xff] ^ crc >> 8;
- 		crc = crctab[crc & 0xff] ^ crc >> 8;
+@@ -251,8 +249,6 @@
+ 	}
+ }
+ 
+-#endif
+-
+ void *dm_malloc_aux(size_t s, const char *file __attribute__((unused)),
+ 		    int line __attribute__((unused)))
+ {
 
 
