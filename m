@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 4 Feb 2011 22:46:19 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20110204224619.20615.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Feb 2011 12:41:09 -0000
+Subject: LVM2 ./WHATS_NEW lib/misc/crc.c
+Message-ID: <20110208124109.12853.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-02-04 22:46:18
+Changes by:	zkabelac at sourceware.org	2011-02-08 12:41:08
 
 Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+	.              : WHATS_NEW 
+	lib/misc       : crc.c 
 
 Log message:
-	post-release
+	Fix CRC32 calculation on big endian CPU
+	
+	Fix regresion from 2.02.75 speedup - so currently crc32 is a little bit
+	more complicated on big-endian CPU as the uint32_t needs to be shifted
+	on here.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.273&r2=1.274
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.80&r2=1.81
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1907&r2=1.1908
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.443&r2=1.444
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1908&r2=1.1909
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/crc.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
 
---- LVM2/VERSION	2011/02/04 22:07:43	1.273
-+++ LVM2/VERSION	2011/02/04 22:46:18	1.274
-@@ -1 +1 @@
--2.02.83(2)-cvs (2011-02-04)
-+2.02.84(2)-cvs (2011-02-04)
---- LVM2/VERSION_DM	2011/02/04 22:07:43	1.80
-+++ LVM2/VERSION_DM	2011/02/04 22:46:18	1.81
-@@ -1 +1 @@
--1.02.62-cvs (2011-02-04)
-+1.02.63-cvs (2011-02-04)
---- LVM2/WHATS_NEW	2011/02/04 22:07:43	1.1907
-+++ LVM2/WHATS_NEW	2011/02/04 22:46:18	1.1908
-@@ -1,3 +1,6 @@
-+Version 2.02.84 - 
-+===================================
-+
+--- LVM2/WHATS_NEW	2011/02/04 22:46:18	1.1908
++++ LVM2/WHATS_NEW	2011/02/08 12:41:08	1.1909
+@@ -1,5 +1,6 @@
+ Version 2.02.84 - 
+ ===================================
++  Fix CRC32 calculation on big endian CPU (2.02.75).
+ 
  Version 2.02.83 - 4th February 2011
  ===================================
-   Allow exclusive activation of snapshots in a cluster.
---- LVM2/WHATS_NEW_DM	2011/02/04 22:35:29	1.443
-+++ LVM2/WHATS_NEW_DM	2011/02/04 22:46:18	1.444
-@@ -1,3 +1,6 @@
-+Version 1.02.63 - 
-+===================================
-+
- Version 1.02.62 - 4th February 2011
- ===================================
-   Add configure --with-device-nodes-on=create for previous behaviour.
+--- LVM2/lib/misc/crc.c	2010/10/25 13:36:09	1.9
++++ LVM2/lib/misc/crc.c	2011/02/08 12:41:08	1.10
+@@ -16,6 +16,7 @@
+ #include "lib.h"
+ 
+ #include "crc.h"
++#include "xlate.h"
+ 
+ /* Calculate an endian-independent CRC of supplied buffer */
+ #ifndef DEBUG_CRC32
+@@ -65,7 +66,7 @@
+    
+ 	/* Process 4 bytes per iteration */
+ 	while (start < end) {
+-		crc = crc ^ *start++;
++		crc = crc ^ xlate32(*start++);
+ 		crc = crctab[crc & 0xff] ^ crc >> 8;
+ 		crc = crctab[crc & 0xff] ^ crc >> 8;
+ 		crc = crctab[crc & 0xff] ^ crc >> 8;
 
 
