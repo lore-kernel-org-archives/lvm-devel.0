@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 9 Feb 2011 17:42:16 -0000
-Subject: LVM2/man pvmove.8.in
-Message-ID: <20110209174216.17308.qmail@sourceware.org>
+Date: 9 Feb 2011 17:57:14 -0000
+Subject: LVM2/test/lib test.sh
+Message-ID: <20110209175714.24658.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-02-09 17:42:16
+Changes by:	mornfall at sourceware.org	2011-02-09 17:57:14
 
 Modified files:
-	man            : pvmove.8.in 
+	test/lib       : test.sh 
 
 Log message:
-	Fix a typo in pvmove.8 (fixes BZ 673618, spotted by John Bradshaw).
+	Allow overriding the DM_DEV_DIR used by the test suite (fixes BZ 672796). Use
+	like this:
+	
+	# LVM_TEST_DEVDIR=/tmp/dev make check
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvmove.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/test.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/man/pvmove.8.in	2009/08/04 08:09:52	1.3
-+++ LVM2/man/pvmove.8.in	2011/02/09 17:42:15	1.4
-@@ -21,7 +21,7 @@
- .IR DestinationPhysicalVolume (s).
- If no
- .I DestinationPhysicalVolume
--is specifed, the normal allocation rules for the volume group are used.
-+is specified, the normal allocation rules for the volume group are used.
+--- LVM2/test/lib/test.sh	2011/01/05 00:26:19	1.2
++++ LVM2/test/lib/test.sh	2011/02/09 17:57:14	1.3
+@@ -31,8 +31,11 @@
+ trap 'aux teardown' EXIT # don't forget to clean up
  
- If \fBpvmove\fP gets interrupted for any reason (e.g. the machine crashes)
- then run \fBpvmove\fP again without any PhysicalVolume arguments to
+ export LVM_SYSTEM_DIR=$TESTDIR/etc
+-export DM_DEV_DIR=$TESTDIR/dev
+-mkdir $LVM_SYSTEM_DIR $DM_DEV_DIR $DM_DEV_DIR/mapper $TESTDIR/lib
++DM_DEV_DIR=$TESTDIR/dev
++test -n "$LVM_TEST_DEVDIR" && DM_DEV_DIR="$LVM_TEST_DEVDIR"
++export DM_DEV_DIR
++mkdir $LVM_SYSTEM_DIR $TESTDIR/lib
++mkdir -p $DM_DEV_DIR $DM_DEV_DIR/mapper
+ 
+ cd $TESTDIR
+ 
 
 
