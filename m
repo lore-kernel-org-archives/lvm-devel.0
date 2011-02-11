@@ -1,9 +1,9 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:30:52 +0100
-Subject: [PATCH 06/16] Fix !DEVMAPPER_SUPPORT build
+Date: Fri, 11 Feb 2011 11:30:53 +0100
+Subject: [PATCH 07/16] Void* arithmetic replaced with char*
 In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
 References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <0e9e6db6d0df3621368ebafd9c4f9992862467d7.1297419991.git.zkabelac@redhat.com>
+Message-ID: <3448a98d55d1b7cc40b128e0d1ef1d1f05dc2640.1297419991.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,117 +13,45 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/activate.c |   35 ++++++++++++++++++++++++++++++-----
- lib/mirror/mirrored.c   |    2 ++
- lib/snapshot/snapshot.c |    2 ++
- 3 files changed, 34 insertions(+), 5 deletions(-)
+ daemons/clvmd/clvmd.c        |    2 +-
+ lib/format_text/text_label.c |    4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index e75415b..f39a066 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -171,7 +171,7 @@ int lvs_in_vg_activated(struct volume_group *vg)
- {
- 	return 0;
- }
--int lvs_in_vg_opened(struct volume_group *vg)
-+int lvs_in_vg_opened(const struct volume_group *vg)
- {
- 	return 0;
- }
-@@ -181,15 +181,15 @@ int lv_suspend(struct cmd_context *cmd, const char *lvid_s)
- 	return 1;
- }
- *******/
--int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s)
-+int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only)
- {
- 	return 1;
- }
--int lv_resume(struct cmd_context *cmd, const char *lvid_s)
-+int lv_resume(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only)
- {
- 	return 1;
- }
--int lv_resume_if_active(struct cmd_context *cmd, const char *lvid_s)
-+int lv_resume_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only)
- {
- 	return 1;
- }
-@@ -232,6 +232,31 @@ void activation_exit(void)
- 	return;
- }
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 8e21732..3726324 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1867,7 +1867,7 @@ static int send_message(void *buf, int msglen, const char *csid, int fd,
+ 				break;
+ 			}
  
-+int lv_is_active(struct logical_volume *lv)
-+{
-+	return 0;
-+}
-+
-+int lv_is_active_exclusive_locally(struct logical_volume *lv)
-+{
-+	return 0;
-+}
-+
-+int lv_is_active_exclusive_remotely(struct logical_volume *lv)
-+{
-+	return 0;
-+}
-+
-+int lv_check_transient(struct logical_volume *lv)
-+{
-+	return 0;
-+}
-+
-+int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
-+			   unsigned origin_only, int monitor)
-+{
-+	return 1;
-+}
- #else				/* DEVMAPPER_SUPPORT */
+-			len = write(fd, buf + ptr, msglen - ptr);
++			len = write(fd, (char*)buf + ptr, msglen - ptr);
  
- static int _activation = 1;
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index 0bf3b3b..7de2f70 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -641,10 +641,12 @@ struct segment_type *init_segtype(struct cmd_context *cmd)
- 	segtype->private = NULL;
- 	segtype->flags = SEG_AREAS_MIRRORED;
+ 			if (len <= 0) {
+ 				if (errno == EINTR)
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index ce250e6..b12250f 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -52,7 +52,7 @@ static int _text_write(struct label *label, void *buf)
  
-+#ifdef DEVMAPPER_SUPPORT
- #ifdef DMEVENTD
- 	if (_get_mirror_dso_path(cmd))
- 		segtype->flags |= SEG_MONITORED;
- #endif
-+#endif
+ 	strncpy((char *)lh->type, label->type, sizeof(label->type));
  
- 	log_very_verbose("Initialised segtype: %s", segtype->name);
+-	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
++	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
+ 	info = (struct lvmcache_info *) label->info;
+ 	pvhdr->device_size_xl = xlate64(info->device_size);
+ 	memcpy(pvhdr->pv_uuid, &info->dev->pvid, sizeof(struct id));
+@@ -268,7 +268,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
+ 	char *creation_host;
+ 	struct mda_header *mdah;
  
-diff --git a/lib/snapshot/snapshot.c b/lib/snapshot/snapshot.c
-index 1a98d7e..af5d708 100644
---- a/lib/snapshot/snapshot.c
-+++ b/lib/snapshot/snapshot.c
-@@ -260,10 +260,12 @@ struct segment_type *init_segtype(struct cmd_context *cmd)
- 	segtype->private = NULL;
- 	segtype->flags = SEG_SNAPSHOT;
+-	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
++	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
  
-+#ifdef DEVMAPPER_SUPPORT
- #ifdef DMEVENTD
- 	if (_get_snapshot_dso_path(cmd))
- 		segtype->flags |= SEG_MONITORED;
- #endif
-+#endif
- 	log_very_verbose("Initialised segtype: %s", segtype->name);
- 
- 	return segtype;
+ 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
+ 				  text_orphan_vg_name, text_orphan_vg_name, 0)))
 -- 
 1.7.4
 
