@@ -1,42 +1,43 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:31:00 +0100
-Subject: [PATCH 14/16] Add debug message for open_count failure
+Date: Fri, 11 Feb 2011 11:31:01 +0100
+Subject: [PATCH 15/16] Remove dead assignment of lock_flags
 In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
 References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <0fcc6137b1adc6f3cb9b5ba7fea8b2241ff133a6.1297419991.git.zkabelac@redhat.com>
+Message-ID: <6d85ce67bfba8d8c155700a255ad8368c40f6c5c.1297419991.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Report  open_count problem as debug.
-
-Function using _node_has_closed_parents decides whether
-it's error or could be ignored.
+Variable 'lock_flags' is not used - so put into a comment.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdm-deptree.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ daemons/clvmd/clvmd-command.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 8d00514..2293826 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -938,8 +938,11 @@ static int _node_has_closed_parents(struct dm_tree_node *node,
- 		    !info.exists)
- 			continue;
+diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
+index 6d0dee4..0c0a6cb 100644
+--- a/daemons/clvmd/clvmd-command.c
++++ b/daemons/clvmd/clvmd-command.c
+@@ -185,7 +185,6 @@ static int lock_vg(struct local_client *client)
+     struct clvm_header *header =
+ 	(struct clvm_header *) client->bits.localsock.cmd;
+     unsigned char lock_cmd;
+-    unsigned char lock_flags;
+     int lock_mode;
+     char *args = header->node + strlen(header->node) + 1;
+     int lkid;
+@@ -207,7 +206,7 @@ static int lock_vg(struct local_client *client)
  
--		if (info.open_count)
-+		if (info.open_count) {
-+			log_debug("Node %s %d:%d is opened:%d", uuid_prefix,
-+				  dinfo->major, dinfo->minor, info.open_count);
- 			return 0;
-+		}
- 	}
+     lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+     lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
+-    lock_flags = args[1];
++    /* lock_flags = args[1]; */
+     lockname = &args[2];
+     DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
  
- 	return 1;
 -- 
 1.7.4
 
