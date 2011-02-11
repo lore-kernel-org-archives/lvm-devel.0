@@ -1,95 +1,36 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:30:50 +0100
-Subject: [PATCH 04/16] Perf: optimize _eat_space and _get_token
+Date: Fri, 11 Feb 2011 11:30:51 +0100
+Subject: [PATCH 05/16] Remove fs_unlock after failed suspend
 In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
 References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <a40a42ab7f9c16baa1c572ef400dac5946e3532c.1297419991.git.zkabelac@redhat.com>
+Message-ID: <bd68b2a9fbc0e2e473641a088b75d68edfa4de33.1297419991.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Makes the code more readable and has a smaller number of memory
-accesses.
-
-For _get_token() optimize number parsing. Check for '.' char only
-if it's not a digit. Move pointer incrementation into one place.
-
-For _eat_space() check only p->te for '\0' in skipping of comment line.
-Avoid check for '\0' when we know it is space. Also master while loop
-doesn't need checking p->tb for '\0'. We just need to check p->tb
-isn't already at the end of buffer. This could give 'extra' loop cycle
-if we are already there - but safes memory access in every other case.
+Explicit fs_unlock() after failed suspend is not need -
+as it will happen automatically with nearest lv_info()
+or vg_unlock().
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/config/config.c |   36 ++++++++++++++++++------------------
- 1 files changed, 18 insertions(+), 18 deletions(-)
+ lib/activate/activate.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 237c610..53a6a57 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -821,18 +821,20 @@ static void _get_token(struct parser *p, int tok_prev)
- 	case '+':
- 	case '-':
- 		if (values_allowed) {
--			te++;
--			while ((te != p->fe) && (*te)) {
--				if (*te == '.') {
--					if (p->t == TOK_FLOAT)
--						break;
--					p->t = TOK_FLOAT;
--				} else if (!isdigit((int) *te))
-+			while (++te != p->fe) {
-+				if (!isdigit((int) *te)) {
-+					if (*te == '.') {
-+						if (p->t != TOK_FLOAT) {
-+							p->t = TOK_FLOAT;
-+							continue;
-+						}
-+					}
- 					break;
--				te++;
-+				}
- 			}
- 			break;
- 		}
-+		/* fall through */
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index ad9459a..e75415b 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1126,7 +1126,6 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
  
- 	default:
- 		p->t = TOK_IDENTIFIER;
-@@ -849,21 +851,19 @@ static void _get_token(struct parser *p, int tok_prev)
- 
- static void _eat_space(struct parser *p)
- {
--	while ((p->tb != p->fe) && (*p->tb)) {
-+	while (p->tb != p->fe) {
- 		if (*p->te == '#')
- 			while ((p->te != p->fe) && (*p->te) && (*p->te != '\n'))
- 				p->te++;
- 
--		else if (isspace(*p->te)) {
--			while ((p->te != p->fe) && (*p->te) && isspace(*p->te)) {
--				if (*p->te == '\n')
--					p->line++;
--				p->te++;
--			}
--		}
-+		else if (!isspace(*p->te))
-+			break;
- 
--		else
--			return;
-+		while ((p->te != p->fe) && isspace(*p->te)) {
-+			if (*p->te == '\n')
-+				p->line++;
-+			p->te++;
-+		}
- 
- 		p->tb = p->te;
+ 	if (!_lv_suspend_lv(lv, origin_only, lockfs, flush_required)) {
+ 		critical_section_dec(cmd);
+-		fs_unlock();
+ 		goto out;
  	}
+ 
 -- 
 1.7.4
 
