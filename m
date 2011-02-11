@@ -1,43 +1,45 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:31:01 +0100
-Subject: [PATCH 15/16] Remove dead assignment of lock_flags
+Date: Fri, 11 Feb 2011 11:31:02 +0100
+Subject: [PATCH 16/16] Remove dead assignment in vgconvert_single
 In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
 References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <6d85ce67bfba8d8c155700a255ad8368c40f6c5c.1297419991.git.zkabelac@redhat.com>
+Message-ID: <81174ffd947d965057e7ee593ca2185f5563ecf1.1297419991.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Variable 'lock_flags' is not used - so put into a comment.
+'pe_end' is unused, so hiding it as a comment in the code.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- daemons/clvmd/clvmd-command.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ tools/vgconvert.c |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index 6d0dee4..0c0a6cb 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -185,7 +185,6 @@ static int lock_vg(struct local_client *client)
-     struct clvm_header *header =
- 	(struct clvm_header *) client->bits.localsock.cmd;
-     unsigned char lock_cmd;
--    unsigned char lock_flags;
-     int lock_mode;
-     char *args = header->node + strlen(header->node) + 1;
-     int lkid;
-@@ -207,7 +206,7 @@ static int lock_vg(struct local_client *client)
+diff --git a/tools/vgconvert.c b/tools/vgconvert.c
+index acae0fc..729ce38 100644
+--- a/tools/vgconvert.c
++++ b/tools/vgconvert.c
+@@ -26,7 +26,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 	struct dm_list mdas;
+ 	int pvmetadatacopies = 0;
+ 	uint64_t pvmetadatasize = 0;
+-	uint64_t pe_end = 0, pe_start = 0;
++	uint64_t pe_start = 0;
+ 	struct pv_list *pvl;
+ 	int change_made = 0;
+ 	struct lvinfo info;
+@@ -119,8 +119,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
+ 		existing_pv = pvl->pv;
  
-     lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
-     lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
--    lock_flags = args[1];
-+    /* lock_flags = args[1]; */
-     lockname = &args[2];
-     DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
+ 		pe_start = pv_pe_start(existing_pv);
+-		pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv)
+-		    + pe_start - 1;
++		/* pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv) + pe_start - 1; */
  
+ 		dm_list_init(&mdas);
+ 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
 -- 
 1.7.4
 
