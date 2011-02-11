@@ -1,54 +1,50 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:30:54 +0100
-Subject: [PATCH 08/16] API change - support more const arg
+Date: Fri, 11 Feb 2011 11:30:55 +0100
+Subject: [PATCH 09/16] Use cleaner const *pointer
 In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
 References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <c85cf3c87f8385d14355b344ad9783981ebc18a4.1297419991.git.zkabelac@redhat.com>
+Message-ID: <c5d469e4c68e03543ad400e4d7e69596a9e3f1e8.1297419991.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As dm_report_field_string doesn't modify content of data pointer,
-it could be also marked as const.
-
-It's slight API change - but doesn't require any change on user side
-and supports wide range of arguments without const casting.
-(i.e. we may use as paramater const lv struct this way:  &lv->name)
+Now it's warning free -
+Const cast in _string_disp() is not even needed,
+but keep it for explicitely readable conversion.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdevmapper.h |    2 +-
- libdm/libdm-report.c |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/report/report.c |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index e3528d3..d7936bf 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -1123,7 +1123,7 @@ int dm_report_set_output_field_name_prefix(struct dm_report *rh,
-  * They take care of allocating copies of the data.
-  */
- int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
--			   const char **data);
-+			   const char *const *data);
- int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
- 			  const int32_t *data);
- int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index 4f47c46..0212284 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -102,7 +102,7 @@ static const struct dm_report_object_type *_find_type(struct dm_report *rh,
-  */
- 
- int dm_report_field_string(struct dm_report *rh,
--			   struct dm_report_field *field, const char **data)
-+			   struct dm_report_field *field, const char *const *data)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 136ad4c..f470840 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -44,7 +44,7 @@ static int _string_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
+ 			struct dm_report_field *field,
+ 			const void *data, void *private __attribute__((unused)))
  {
- 	char *repstr;
+-	return dm_report_field_string(rh, field, (const char **) data);
++	return dm_report_field_string(rh, field, (const char * const *) data);
+ }
  
+ static int _dev_name_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+@@ -307,10 +307,8 @@ static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	char *repstr, *lvname;
+ 	size_t len;
+ 
+-	if (lv_is_visible(lv)) {
+-		repstr = lv->name;
+-		return dm_report_field_string(rh, field, (const char **) &repstr);
+-	}
++	if (lv_is_visible(lv))
++		return dm_report_field_string(rh, field, &lv->name);
+ 
+ 	len = strlen(lv->name) + 3;
+ 	if (!(repstr = dm_pool_zalloc(mem, len))) {
 -- 
 1.7.4
 
