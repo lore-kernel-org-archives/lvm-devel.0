@@ -1,46 +1,36 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Feb 2011 11:31:02 +0100
-Subject: [PATCH 16/16] Remove dead assignment in vgconvert_single
-In-Reply-To: <cover.1297419991.git.zkabelac@redhat.com>
-References: <cover.1297419991.git.zkabelac@redhat.com>
-Message-ID: <81174ffd947d965057e7ee593ca2185f5563ecf1.1297419991.git.zkabelac@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 14 Feb 2011 14:26:37 -0000
+Subject: LVM2/daemons/dmeventd/plugins/snapshot dmevent ...
+Message-ID: <20110214142637.23726.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'pe_end' is unused, so hiding it as a comment in the code.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2011-02-14 14:26:37
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- tools/vgconvert.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+Modified files:
+	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
 
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-index acae0fc..729ce38 100644
---- a/tools/vgconvert.c
-+++ b/tools/vgconvert.c
-@@ -26,7 +26,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
- 	struct dm_list mdas;
- 	int pvmetadatacopies = 0;
- 	uint64_t pvmetadatasize = 0;
--	uint64_t pe_end = 0, pe_start = 0;
-+	uint64_t pe_start = 0;
- 	struct pv_list *pvl;
- 	int change_made = 0;
- 	struct lvinfo info;
-@@ -119,8 +119,7 @@ static int vgconvert_single(struct cmd_context *cmd, const char *vg_name,
- 		existing_pv = pvl->pv;
+Log message:
+	Avoid flooding syslog with redundant messages when a snapshot is invalidated
+	(reported by Corey).
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+
+--- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2010/11/23 21:19:45	1.13
++++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/02/14 14:26:36	1.14
+@@ -200,7 +200,6 @@
+ 	_parse_snapshot_params(params, &status);
  
- 		pe_start = pv_pe_start(existing_pv);
--		pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv)
--		    + pe_start - 1;
-+		/* pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv) + pe_start - 1; */
- 
- 		dm_list_init(&mdas);
- 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
--- 
-1.7.4
+ 	if (status.invalid) {
+-		syslog(LOG_ERR, "Trying to umount invalid snapshot %s...\n", device);
+ 		struct dm_info info;
+ 		if (dm_task_get_info(dmt, &info)) {
+ 			dmeventd_lvm2_unlock();
 
 
