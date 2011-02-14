@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 May 2009 00:29:15 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20090528002915.13084.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 14 Feb 2011 19:27:06 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20110214192706.27432.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,72 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-05-28 00:29:15
+Changes by:	mornfall at sourceware.org	2011-02-14 19:27:05
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Rename internal vorigin LV to match visible LV.
+	Fix an lv_postorder bug where it failed to clear temporary flags, making it
+	impossible to use twice with the same LV(s). Discovered by Milan.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1129&r2=1.1130
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.420&r2=1.421
 
---- LVM2/WHATS_NEW	2009/05/27 18:19:21	1.1129
-+++ LVM2/WHATS_NEW	2009/05/28 00:29:14	1.1130
-@@ -1,5 +1,6 @@
- Version 2.02.48 - 
- ===============================
-+  Rename internal vorigin LV to match visible LV.
-   Suppress 'removed' messages displayed when internal LVs are removed.
-   Fix lvchange -a and -p for sparse LVs.
-   Fix lvcreate --virtualsize to activate the new device immediately.
---- LVM2/lib/metadata/lv_manip.c	2009/05/27 18:19:21	1.175
-+++ LVM2/lib/metadata/lv_manip.c	2009/05/28 00:29:15	1.176
-@@ -1700,19 +1700,24 @@
- 					void *data),
- 			    void *data)
- {
-+	struct logical_volume *org;
- 	struct lv_segment *seg;
- 	uint32_t s;
+--- LVM2/lib/metadata/metadata.c	2011/01/12 20:42:51	1.420
++++ LVM2/lib/metadata/metadata.c	2011/02/14 19:27:05	1.421
+@@ -1969,18 +1969,6 @@
+ 			       int (*fn)(struct logical_volume *lv, void *data),
+ 			       void *data);
  
-+	if (lv_is_cow(lv) && lv_is_virtual_origin(org = origin_from_cow(lv)))
-+		if (!func(cmd, org, data))
-+			return_0;
+-static int _lv_postorder_level(struct logical_volume *lv, void *data)
+-{
+-	struct _lv_postorder_baton *baton = data;
+-	if (lv->status & POSTORDER_OPEN_FLAG)
+-		return 1; // a data structure loop has closed...
+-	lv->status |= POSTORDER_OPEN_FLAG;
+-	int r =_lv_postorder_visit(lv, baton->fn, baton->data);
+-	lv->status &= ~POSTORDER_OPEN_FLAG;
+-	lv->status |= POSTORDER_FLAG;
+-	return r;
+-};
+-
+ static int _lv_each_dependency(struct logical_volume *lv,
+ 			       int (*fn)(struct logical_volume *lv, void *data),
+ 			       void *data)
+@@ -2022,6 +2010,12 @@
+ 	return 1;
+ }
+ 
++static int _lv_postorder_level(struct logical_volume *lv, void *data)
++{
++	struct _lv_postorder_baton *baton = data;
++	return _lv_postorder_visit(lv, baton->fn, baton->data);
++};
 +
- 	dm_list_iterate_items(seg, &lv->segments) {
- 		if (seg->log_lv && !func(cmd, seg->log_lv, data))
--			return 0;
-+			return_0;
- 		for (s = 0; s < seg->area_count; s++) {
- 			if (seg_type(seg, s) != AREA_LV)
- 				continue;
- 			if (!func(cmd, seg_lv(seg, s), data))
--				return 0;
-+				return_0;
- 			if (!_for_each_sub_lv(cmd, seg_lv(seg, s), func, data))
--				return 0;
-+				return_0;
- 		}
- 	}
+ static int _lv_postorder_visit(struct logical_volume *lv,
+ 			       int (*fn)(struct logical_volume *lv, void *data),
+ 			       void *data)
+@@ -2031,13 +2025,20 @@
+ 
+ 	if (lv->status & POSTORDER_FLAG)
+ 		return 1;
++	if (lv->status & POSTORDER_OPEN_FLAG)
++		return 1; // a data structure loop has closed...
++	lv->status |= POSTORDER_OPEN_FLAG;
+ 
+ 	baton.fn = fn;
+ 	baton.data = data;
+ 	r = _lv_each_dependency(lv, _lv_postorder_level, &baton);
++
+ 	if (r)
+ 		r = fn(lv, data);
+ 
++	lv->status &= ~POSTORDER_OPEN_FLAG;
++	lv->status |= POSTORDER_FLAG;
++
+ 	return r;
+ }
  
 
 
