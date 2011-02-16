@@ -1,54 +1,65 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 May 2009 01:11:31 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20090528011131.31361.qmail@sourceware.org>
+From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
+Date: Wed, 16 Feb 2011 15:42:00 +0100
+Subject: [PATCH] make vg_mark_partial_lvs more robust and export it
+In-Reply-To: <36088.72482223$1297846647@news.gmane.org>
+References: <877hd0v0ht.fsf@twilight.int.mornfall.net.>
+	<36088.72482223$1297846647@news.gmane.org>
+Message-ID: <4D5BE238.9070806@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-05-28 01:11:30
+Dne 16.2.2011 09:57, Petr Rockai napsal(a):
+> Hey again,
+> 
+> Petr Rockai <prockai@redhat.com> writes:
+>> > the following patch makes vg_mark_partial_lvs also clear existing
+>> > PARTIAL_LV flags, so it can be issued repeatedly on the same VG, keeping
+>> > the PARTIAL_LV flags up to date.
+>> >
+>> > The patch is simple and straightforward.
+> scratch that. It introduces a bug nevertheless. Attaching a fixed
+> version.
+> 
+> 
+> 
+> vg-mark-partial.diff
+> 
+> 
+> -int vg_mark_partial_lvs(struct volume_group *vg)
+> +int vg_mark_partial_lvs(struct volume_group *vg, int clear)
+>  {
+> -	struct logical_volume *lv;
+>  	struct lv_list *lvl;
+>  
+> -	dm_list_iterate_items(lvl, &vg->lvs) {
+> -		lv = lvl->lv;
+> -		if (!_lv_mark_if_partial(lv))
+> +	if (clear)
+> +		dm_list_iterate_items(lvl, &vg->lvs)
+> +			lvl->lv->status &= ~PARTIAL_LV;
+> +
+> +	dm_list_iterate_items(lvl, &vg->lvs)
+> +		if (!_lv_mark_if_partial(lvl->lv))
+>  			return_0;
+> -	}
+> +
+>  	return 1;
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
+Probably nothing against the patch itself - but maybe we can we find a better
+solution for this list scanning?
 
-Log message:
-	Remove /dev/vgname/lvname symlink automatically if LV is no longer visible.
+We are often going through the whole list to find the information we could
+comfortable store in other places - like list of partial lvs maybe,
+or we may already know there is not partial LV in the whole VG (vg flag ?)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1130&r2=1.1131
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.150&r2=1.151
+This kind of code adds O(n) complexity for lots of operations.
+(When you have 10000LVs it has some measurable impact).
 
---- LVM2/WHATS_NEW	2009/05/28 00:29:14	1.1130
-+++ LVM2/WHATS_NEW	2009/05/28 01:11:29	1.1131
-@@ -1,5 +1,6 @@
- Version 2.02.48 - 
- ===============================
-+  Remove /dev/vgname/lvname symlink automatically if LV is no longer visible.
-   Rename internal vorigin LV to match visible LV.
-   Suppress 'removed' messages displayed when internal LVs are removed.
-   Fix lvchange -a and -p for sparse LVs.
---- LVM2/lib/activate/dev_manager.c	2009/05/20 11:09:49	1.150
-+++ LVM2/lib/activate/dev_manager.c	2009/05/28 01:11:30	1.151
-@@ -1067,7 +1067,14 @@
- 			}
- 			if (!fs_rename_lv(lvlayer->lv, name, old_vgname, old_lvname))
- 				r = 0;
--		} else if (!dev_manager_lv_mknodes(lvlayer->lv))
-+			continue;
-+		}
-+		if (lv_is_visible(lvlayer->lv)) {
-+			if (!dev_manager_lv_mknodes(lvlayer->lv))
-+				r = 0;
-+			continue;
-+		}
-+		if (!dev_manager_lv_rmnodes(lvlayer->lv))
- 			r = 0;
- 	}
- 
+I think similar is the 'unknown' segment which requires full scan.
+
+Zdenek
 
 
