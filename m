@@ -1,25 +1,35 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 15 Feb 2011 11:22:56 +0100
-Subject: LVM2/lib/metadata metadata.c
-In-Reply-To: <20110215020732.GE5825@agk-dp.fab.redhat.com>
-References: <20110214192706.27432.qmail@sourceware.org>
-	<20110215020732.GE5825@agk-dp.fab.redhat.com>
-Message-ID: <4D5A5400.3080803@redhat.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 16 Feb 2011 09:37:18 +0100
+Subject: [PATCH] make vg_mark_partial_lvs more robust and export it
+Message-ID: <877hd0v0ht.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 02/15/2011 03:07 AM, Alasdair G Kergon wrote:
-> On Mon, Feb 14, 2011 at 07:27:06PM -0000, mornfall at sourceware.org wrote:
->> 	Fix an lv_postorder bug where it failed to clear temporary flags, making it
->> 	impossible to use twice with the same LV(s). Discovered by Milan.
-> 
-> Is this bug triggered by any existing code paths and if so which?
+Hi,
 
-Yes, second readahead checkon the same LV == NOOP.
+the following patch makes vg_mark_partial_lvs also clear existing
+PARTIAL_LV flags, so it can be issued repeatedly on the same VG, keeping
+the PARTIAL_LV flags up to date.
 
-Milan
+This will be useful in a vgreduce --removemissing --force refactor
+later.
 
+The patch is simple and straightforward.
 
+Yours,
+   Petr
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vg-mark-partial.diff
+Type: text/x-diff
+Size: 2200 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110216/6521ca64/attachment.bin>
+-------------- next part --------------
+
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
