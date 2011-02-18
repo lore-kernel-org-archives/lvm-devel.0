@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 18 Feb 2011 14:34:47 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c lib/for ...
-Message-ID: <20110218143447.15849.qmail@sourceware.org>
+Date: 18 Feb 2011 14:38:51 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
+Message-ID: <20110218143851.31318.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,60 +10,57 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-18 14:34:42
+Changes by:	zkabelac at sourceware.org	2011-02-18 14:38:48
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
-	lib/format_text: text_label.c 
+	.              : WHATS_NEW_DM 
+	libdm          : libdevmapper.h libdm-report.c 
 
 Log message:
-	Void* arithmetic replaced with char*
+	API change - support more const arg
+	
+	As dm_report_field_string() doesn't modify content of data pointer,
+	it can be marked as const.
+	
+	It's slight API change - but doesn't require any change on the user side
+	and supports wider range of arguments without const casting.
+	(i.e. we may use as paramater const lv struct this way:  &lv->name)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1918&r2=1.1919
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/text_label.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.446&r2=1.447
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.135&r2=1.136
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
 
---- LVM2/WHATS_NEW	2011/02/18 14:29:39	1.1918
-+++ LVM2/WHATS_NEW	2011/02/18 14:34:41	1.1919
+--- LVM2/WHATS_NEW_DM	2011/02/09 12:11:21	1.446
++++ LVM2/WHATS_NEW_DM	2011/02/18 14:38:47	1.447
 @@ -1,5 +1,6 @@
- Version 2.02.85 - 
+ Version 1.02.64 - 
  ===================================
-+  Use char* arithmetic in _text_write(), _text_read() & send_message().
-   Fix compilation when devmapper is dissabled.
-   Remove fs_unlock() from lv_suspend error path.
-   Change memory locking semantic and use critical sections.
---- LVM2/daemons/clvmd/clvmd.c	2011/01/17 23:13:14	1.93
-+++ LVM2/daemons/clvmd/clvmd.c	2011/02/18 14:34:41	1.94
-@@ -1867,7 +1867,7 @@
- 				break;
- 			}
++  Change dm_report_field_string() API to accept const char *const *data.
  
--			len = write(fd, buf + ptr, msglen - ptr);
-+			len = write(fd, (char*)buf + ptr, msglen - ptr);
+ Version 1.02.63 - 9th February 2011
+ ===================================
+--- LVM2/libdm/libdevmapper.h	2011/02/04 19:33:53	1.135
++++ LVM2/libdm/libdevmapper.h	2011/02/18 14:38:48	1.136
+@@ -1123,7 +1123,7 @@
+  * They take care of allocating copies of the data.
+  */
+ int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
+-			   const char **data);
++			   const char *const *data);
+ int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
+ 			  const int32_t *data);
+ int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
+--- LVM2/libdm/libdm-report.c	2011/01/25 21:51:31	1.41
++++ LVM2/libdm/libdm-report.c	2011/02/18 14:38:48	1.42
+@@ -102,7 +102,7 @@
+  */
  
- 			if (len <= 0) {
- 				if (errno == EINTR)
---- LVM2/lib/format_text/text_label.c	2010/10/05 17:34:06	1.38
-+++ LVM2/lib/format_text/text_label.c	2011/02/18 14:34:41	1.39
-@@ -52,7 +52,7 @@
+ int dm_report_field_string(struct dm_report *rh,
+-			   struct dm_report_field *field, const char **data)
++			   struct dm_report_field *field, const char *const *data)
+ {
+ 	char *repstr;
  
- 	strncpy((char *)lh->type, label->type, sizeof(label->type));
- 
--	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
-+	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 	info = (struct lvmcache_info *) label->info;
- 	pvhdr->device_size_xl = xlate64(info->device_size);
- 	memcpy(pvhdr->pv_uuid, &info->dev->pvid, sizeof(struct id));
-@@ -266,7 +266,7 @@
- 	char *creation_host;
- 	struct mda_header *mdah;
- 
--	pvhdr = (struct pv_header *) ((void *) buf + xlate32(lh->offset_xl));
-+	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 
- 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
- 				  FMT_TEXT_ORPHAN_VG_NAME,
 
 
