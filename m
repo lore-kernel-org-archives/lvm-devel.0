@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 18 Feb 2011 14:51:04 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20110218145104.6981.qmail@sourceware.org>
+Date: 18 Feb 2011 15:02:26 -0000
+Subject: LVM2 ./WHATS_NEW tools/toollib.c
+Message-ID: <20110218150226.11654.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,85 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-18 14:51:04
+Changes by:	zkabelac at sourceware.org	2011-02-18 15:02:26
 
 Modified files:
-	lib/mm         : memlock.c 
+	.              : WHATS_NEW 
+	tools          : toollib.c 
 
 Log message:
-	Memory unlock allows 1 page difference
-	
-	As the kernel seems to be doing weird things during
-	mlock -> munlock -  allow 1 page locking difference without
-	warning - and log just debug message for a 1 page difference.
-	
-	Allocation happens outside critical section probably during
-	log_warn printing.
-	
-	Should make tests passing for now.
+	Add some backtraces for error paths in process_each_lv
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1920&r2=1.1921
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.220&r2=1.221
 
---- LVM2/lib/mm/memlock.c	2011/02/18 14:16:12	1.34
-+++ LVM2/lib/mm/memlock.c	2011/02/18 14:51:04	1.35
-@@ -343,9 +343,15 @@
- 			log_sys_error("close", _procselfmaps);
- 		dm_free(_maps_buffer);
- 		_maps_buffer = NULL;
--		if (_mstats < unlock_mstats)
--			log_error(INTERNAL_ERROR "Maps lock %ld < unlock %ld",
--				  (long)_mstats, (long)unlock_mstats);
-+		if (_mstats < unlock_mstats) {
-+			if ((_mstats + 4096) < unlock_mstats)
-+				log_error(INTERNAL_ERROR
-+					  "Maps lock %ld < unlock %ld",
-+					  (long)_mstats, (long)unlock_mstats);
-+			else
-+				log_debug("Maps lock %ld < unlock %ld, 1 page difference!",
-+					  (long)_mstats, (long)unlock_mstats);
+--- LVM2/WHATS_NEW	2011/02/18 14:47:28	1.1920
++++ LVM2/WHATS_NEW	2011/02/18 15:02:25	1.1921
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Add stack backtraces for error paths in process_each_lv().
+   Fixing some const cast gcc warnings in the code.
+   Use char* arithmetic in _text_write(), _text_read() & send_message().
+   Fix compilation when devmapper is dissabled.
+--- LVM2/tools/toollib.c	2011/02/18 14:47:31	1.220
++++ LVM2/tools/toollib.c	2011/02/18 15:02:25	1.221
+@@ -169,8 +169,10 @@
+ 		}
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+-		if (sigint_caught())
++		if (sigint_caught()) {
++			stack;
+ 			return ret_max;
 +		}
  	}
  
- 	if (setpriority(PRIO_PROCESS, 0, _priority))
+ 	if (lvargs_supplied && lvargs_matched != dm_list_size(arg_lvnames)) {
+@@ -253,8 +255,10 @@
+ 				while (*lv_name == '/')
+ 					lv_name++;
+ 				if (!(vgname = extract_vgname(cmd, vgname))) {
+-					if (ret_max < ECMD_FAILED)
++					if (ret_max < ECMD_FAILED) {
++						stack;
+ 						ret_max = ECMD_FAILED;
++					}
+ 					continue;
+ 				}
+ 			} else if (!dev_dir_found &&
+@@ -348,8 +352,10 @@
+ 						    tags_arg, &failed_lvnames,
+ 						    handle, process_single_lv);
+ 			if (ret != ECMD_PROCESSED ||
+-			    dm_list_empty(&failed_lvnames))
++			    dm_list_empty(&failed_lvnames)) {
++				stack;
+ 				break;
++			}
+ 
+ 			/* Try again with failed LVs in this VG */
+ 			dm_list_init(&lvnames);
+@@ -357,6 +363,7 @@
+ 
+ 			free_cmd_vgs(&cmd_vgs);
+ 			if (!cmd_vg_read(cmd, &cmd_vgs)) {
++				stack;
+ 				ret = ECMD_FAILED; /* break */
+ 				break;
+ 			}
+@@ -366,8 +373,10 @@
+ 
+ 		free_cmd_vgs(&cmd_vgs);
+ 		/* FIXME: logic for breaking command is not consistent */
+-		if (sigint_caught())
++		if (sigint_caught()) {
++			stack;
+ 			return ECMD_FAILED;
++		}
+ 	}
+ 
+ 	return ret_max;
 
 
