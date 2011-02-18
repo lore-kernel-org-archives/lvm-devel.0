@@ -1,73 +1,102 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 29 May 2009 10:35:37 +0200
-Subject: [PATCH] Fix readahead calculation segfault.
-Message-ID: <4A1F9E59.3010905@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 18 Feb 2011 16:17:59 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c ...
+Message-ID: <20110218161759.1911.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix readahead calculation problems.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-02-18 16:17:57
 
-During vgreduce is failed mirror image replaced with error segment,
-this segmant type has always area_count == 0.
-Current code expects that there is at least one area with device,
-patch fixes it by additional check (fixes segfault during vgreduce).
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd-command.c 
+	tools          : dmsetup.c vgconvert.c 
 
-Also do not calculate readahead in every lv_info call, we only need
-to cache PV readahead before suspend.
+Log message:
+	Fix gcc warnings for unused variables
+	
+	Put dead assigment code into comment.
 
-(In all other cases should be calling readahead calculation in
-device_manager/add_lv enough.)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1921&r2=1.1922
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.52&r2=1.53
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgconvert.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/activate/activate.c |   10 +++++-----
- lib/metadata/metadata.c |    2 +-
- 2 files changed, 6 insertions(+), 6 deletions(-)
-
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 12e8b20..42058d7 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -469,11 +469,6 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv, in
- 	info->live_table = dminfo.live_table;
- 	info->inactive_table = dminfo.inactive_table;
+--- LVM2/WHATS_NEW	2011/02/18 15:02:25	1.1921
++++ LVM2/WHATS_NEW	2011/02/18 16:17:56	1.1922
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Fix gcc warnings for unused variables.
+   Add stack backtraces for error paths in process_each_lv().
+   Fixing some const cast gcc warnings in the code.
+   Use char* arithmetic in _text_write(), _text_read() & send_message().
+--- LVM2/daemons/clvmd/clvmd-command.c	2011/02/04 19:18:17	1.52
++++ LVM2/daemons/clvmd/clvmd-command.c	2011/02/18 16:17:56	1.53
+@@ -185,7 +185,6 @@
+     struct clvm_header *header =
+ 	(struct clvm_header *) client->bits.localsock.cmd;
+     unsigned char lock_cmd;
+-    unsigned char lock_flags;
+     int lock_mode;
+     char *args = header->node + strlen(header->node) + 1;
+     int lkid;
+@@ -207,7 +206,7 @@
  
--	/*
--	 * Cache read ahead value for PV devices now (before possible suspend)
--	 */
--	(void)lv_calculate_readhead(lv);
--
- 	if (name)
- 		dm_pool_free(cmd->mem, name);
+     lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
+     lock_mode = ((int)lock_cmd & LCK_TYPE_MASK);
+-    lock_flags = args[1];
++    /* lock_flags = args[1]; */
+     lockname = &args[2];
+     DEBUGLOG("doing PRE command LOCK_VG '%s' at %x (client=%p)\n", lockname, lock_cmd, client);
  
-@@ -874,6 +869,11 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
- 	if (!lv_info(cmd, lv, &info, 0, 0))
- 		goto_out;
+--- LVM2/tools/dmsetup.c	2011/02/04 22:17:55	1.153
++++ LVM2/tools/dmsetup.c	2011/02/18 16:17:57	1.154
+@@ -2998,7 +2998,6 @@
+ static int _process_losetup_switches(const char *base, int *argc, char ***argv,
+ 				     const char *dev_dir)
+ {
+-	static int ind;
+ 	int c;
+ 	int encrypt_loop = 0, delete = 0, find = 0, show_all = 0;
+ 	char *device_name = NULL;
+@@ -3013,8 +3012,8 @@
  
-+	/*
-+	 * Cache read ahead value for PV devices now (before suspend)
-+	 */
-+	(void)lv_calculate_readhead(lv);
-+
- 	if (!info.exists || info.suspended) {
- 		r = error_if_not_suspended ? 0 : 1;
- 		goto out;
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6e4091a..3378ece 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1423,7 +1423,7 @@ static int _lv_read_ahead_single(struct logical_volume *lv, void *data)
- 	struct lv_segment *seg = first_seg(lv);
- 	uint32_t seg_read_ahead = 0, *read_ahead = data;
+ 	optarg = 0;
+ 	optind = OPTIND_INIT;
+-	while ((ind = -1, c = GETOPTLONG_FN(*argc, *argv, "ade:fo:v",
+-					    long_options, NULL)) != -1 ) {
++	while ((c = GETOPTLONG_FN(*argc, *argv, "ade:fo:v",
++				  long_options, NULL)) != -1 ) {
+ 		if (c == ':' || c == '?')
+ 			return 0;
+ 		if (c == 'a')
+--- LVM2/tools/vgconvert.c	2010/08/17 16:25:35	1.44
++++ LVM2/tools/vgconvert.c	2011/02/18 16:17:57	1.45
+@@ -26,7 +26,7 @@
+ 	struct dm_list mdas;
+ 	int pvmetadatacopies = 0;
+ 	uint64_t pvmetadatasize = 0;
+-	uint64_t pe_end = 0, pe_start = 0;
++	uint64_t pe_start = 0;
+ 	struct pv_list *pvl;
+ 	int change_made = 0;
+ 	struct lvinfo info;
+@@ -119,8 +119,7 @@
+ 		existing_pv = pvl->pv;
  
--	if (seg && seg_type(seg, 0) == AREA_PV)
-+	if (seg && seg->area_count && seg_type(seg, 0) == AREA_PV)
- 		dev_get_read_ahead(seg_pv(seg, 0)->dev, &seg_read_ahead);
+ 		pe_start = pv_pe_start(existing_pv);
+-		pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv)
+-		    + pe_start - 1;
++		/* pe_end = pv_pe_count(existing_pv) * pv_pe_size(existing_pv) + pe_start - 1; */
  
- 	if (seg_read_ahead > *read_ahead)
-
+ 		dm_list_init(&mdas);
+ 		if (!(pv = pv_create(cmd, pv_dev(existing_pv),
 
 
