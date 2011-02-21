@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 21 Feb 2011 12:40:47 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20110221124047.31467.qmail@sourceware.org>
+Date: 21 Feb 2011 13:09:28 -0000
+Subject: LVM2/lib/metadata pv_manip.c
+Message-ID: <20110221130928.31891.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-21 12:40:46
+Changes by:	prajnoha at sourceware.org	2011-02-21 13:09:27
 
 Modified files:
-	.              : WHATS_NEW 
+	lib/metadata   : pv_manip.c 
 
 Log message:
-	WHATS_NEW
+	%ld -> PRIu64
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1923&r2=1.1924
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv_manip.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
 
---- LVM2/WHATS_NEW	2011/02/18 23:09:55	1.1923
-+++ LVM2/WHATS_NEW	2011/02/21 12:40:46	1.1924
-@@ -1,5 +1,14 @@
- Version 2.02.85 - 
- ===================================
-+  Fix metadata balance code to work with recent changes in metadata handling.
-+  Add old_uuid field to physical_volume and fix pvchange -u for recent changes.
-+  Fix vgconvert to work with recent changes in metadata handling.
-+  Allow pvresize on a PV with two metadata areas.
-+  Change pvcreate to use new metadata handling interface.
-+  Restructure existing pv_setup and pv_write fn, add pv_initialise fn.
-+  Add internal interface to support adding and removing metadata areas.
-+  Allow internal indexing of metadata areas (PV id + mda order).
-+  Generalise internal format_instance infrastrusture for PV and VG use.
-   Handle decimal digits with --units instead of ignoring them silently.
-   Fix remaining warnings and compile with -Wpointer-arith.
-   Fix gcc warnings for unused variables.
+--- LVM2/lib/metadata/pv_manip.c	2011/02/21 12:27:26	1.26
++++ LVM2/lib/metadata/pv_manip.c	2011/02/21 13:09:27	1.27
+@@ -436,7 +436,7 @@
+ 	uint32_t old_pe_count, new_pe_count = 0;
+ 
+ 	if (size < pv_min_size()) {
+-		log_error("Size must exceed minimum of %ld sectors on PV %s.",
++		log_error("Size must exceed minimum of %" PRIu64 " sectors on PV %s.",
+ 			   pv_min_size(), pv_dev_name(pv));
+ 		return 0;
+ 	}
 
 
