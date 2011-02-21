@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 28 Feb 2011 17:08:09 -0000
-Subject: LVM2/tools pvresize.c
-Message-ID: <20110228170809.31229.qmail@sourceware.org>
+Date: 21 Feb 2011 12:12:33 -0000
+Subject: LVM2/lib/metadata metadata.c pv.h
+Message-ID: <20110221121233.29265.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,59 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-28 17:08:09
+Changes by:	prajnoha at sourceware.org	2011-02-21 12:12:32
 
 Modified files:
-	tools          : pvresize.c 
+	lib/metadata   : metadata.c pv.h 
 
 Log message:
-	Add a hint for manual revert if there's an error in pv_write, vg_write, vg_commit for pvresize.
+	Initialise a new PV-based format instance for a PV that is being created.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvresize.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.427&r2=1.428
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/tools/pvresize.c	2011/02/28 13:19:03	1.42
-+++ LVM2/tools/pvresize.c	2011/02/28 17:08:09	1.43
-@@ -35,6 +35,7 @@
- 	const char *pv_name = pv_dev_name(pv);
- 	const char *vg_name = pv_vg_name(pv);
- 	struct volume_group *old_vg = vg;
-+	int vg_needs_pv_write = 0;
+--- LVM2/lib/metadata/metadata.c	2011/02/21 12:10:58	1.427
++++ LVM2/lib/metadata/metadata.c	2011/02/21 12:12:32	1.428
+@@ -1555,6 +1555,7 @@
+ 	if (!pv)
+ 		return_NULL;
  
- 	if (is_orphan_vg(vg_name)) {
- 		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
-@@ -100,7 +101,8 @@
++	pv->fid = NULL;
+ 	pv->pe_size = 0;
+ 	pv->pe_start = 0;
+ 	pv->pe_count = 0;
+@@ -1606,6 +1607,7 @@
+ 				  unsigned metadataignore, struct dm_list *mdas)
+ {
+ 	const struct format_type *fmt = cmd->fmt;
++	struct format_instance_ctx fic;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = _alloc_pv(mem, dev);
  
- 	/* Write PV label only if this an orphan PV or it has 2nd mda. */
- 	if ((is_orphan_vg(vg_name) ||
--	    fid_get_mda_indexed(vg->fid, (const char *) &pv->id, ID_LEN, 1)) &&
-+	     (vg_needs_pv_write = (fid_get_mda_indexed(vg->fid,
-+			(const char *) &pv->id, ID_LEN, 1) != NULL))) &&
- 	    !pv_write(cmd, pv, 1)) {
- 		log_error("Failed to store physical volume \"%s\"",
- 			  pv_name);
-@@ -120,6 +122,9 @@
- 	r = 1;
+@@ -1646,6 +1648,13 @@
+ 		goto bad;
+ 	}
  
- out:
-+	if (!r && vg_needs_pv_write)
-+		log_error("Use pvcreate and vgcfgrestore "
-+			  "to repair from archived metadata.");
- 	unlock_vg(cmd, vg_name);
- 	if (!old_vg)
- 		free_vg(vg);
++	fic.type = FMT_INSTANCE_PV;
++	fic.context.pv_id = (const char *) &pv->id;
++	if (!(pv->fid = fmt->ops->create_instance(fmt, &fic))) {
++		log_error("Couldn't create format instance for PV %s.", pv_dev_name(pv));
++		goto bad;
++	}
++
+ 	pv->fmt = fmt;
+ 	pv->vg_name = fmt->orphan_vg_name;
+ 
+--- LVM2/lib/metadata/pv.h	2010/10/25 12:01:59	1.8
++++ LVM2/lib/metadata/pv.h	2011/02/21 12:12:32	1.9
+@@ -24,6 +24,7 @@
+ 	struct id id;
+ 	struct device *dev;
+ 	const struct format_type *fmt;
++	struct format_instance *fid;
+ 
+ 	/*
+ 	 * vg_name and vgid are used before the parent VG struct exists.
 
 
