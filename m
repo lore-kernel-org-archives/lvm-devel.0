@@ -1,98 +1,98 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Fri, 29 May 2009 14:14:47 -0400
-Subject: [PATCH] Fix rpmlint in clvmd initscript
-Message-ID: <1243620887-9963-1-git-send-email-snitzer@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 21 Feb 2011 12:01:23 -0000
+Subject: LVM2/lib/metadata metadata-exported.h metadata.h
+Message-ID: <20110221120123.24174.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Added missing LSB stanza lines.
-Added reload capability.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2011-02-21 12:01:23
 
-Remaining warning (incoherent-init-script-name) is not relevant.
+Modified files:
+	lib/metadata   : metadata-exported.h metadata.h 
 
-Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+Log message:
+	Change and generalise struct format_instance for PV and VG use.
 
---
-Index: WHATS_NEW
-===================================================================
-RCS file: /cvs/lvm2/LVM2/WHATS_NEW,v
-retrieving revision 1.1132
-diff -a -u -p -r1.1132 WHATS_NEW
---- LVM2/WHATS_NEW	28 May 2009 01:59:37 -0000	1.1132
-+++ LVM2/WHATS_NEW	29 May 2009 18:12:31 -0000
-@@ -1,5 +1,6 @@
- Version 2.02.48 - 
- ===============================
-+  Fix rpmlint in clvmd initscript
-   When creating new LV, double-check that name is not already in use.
-   Remove /dev/vgname/lvname symlink automatically if LV is no longer visible.
-   Rename internal vorigin LV to match visible LV.
-Index: scripts/clvmd_init_red_hat.in
-===================================================================
-RCS file: /cvs/lvm2/LVM2/scripts/clvmd_init_red_hat.in,v
-retrieving revision 1.2
-diff -a -u -p -r1.2 clvmd_init_red_hat.in
---- LVM2/scripts/clvmd_init_red_hat.in	10 Feb 2009 11:53:34 -0000	1.2
-+++ LVM2/scripts/clvmd_init_red_hat.in	29 May 2009 18:12:31 -0000
-@@ -6,7 +6,12 @@
- # For Red-Hat-based distributions such as Fedora, RHEL, CentOS.
- #	       
- ### BEGIN INIT INFO
--# Provides: 
-+# Provides: clvmd
-+# Required-Start: $local_fs
-+# Required-Stop: $local_fs
-+# Default-Start: 2 3 4 5
-+# Default-Stop: 0 1 6
-+# Short-Description: Clustered LVM Daemon
- ### END INIT INFO
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.176&r2=1.177
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.229&r2=1.230
+
+--- LVM2/lib/metadata/metadata-exported.h	2011/02/18 14:47:30	1.176
++++ LVM2/lib/metadata/metadata-exported.h	2011/02/21 12:01:22	1.177
+@@ -170,16 +170,48 @@
  
- . /etc/init.d/functions
-@@ -109,6 +114,19 @@ wait_for_finish()
- 	fi
- }
+ #define pvseg_is_allocated(pvseg) ((pvseg)->lvseg)
  
-+reload() {
-+	$DAEMON -R
-+}
++/*
++ * These flags define the type of the format instance to be created.
++ * There are two basic types: a PV-based and a VG-based format instance.
++ * We can further control the format_instance initialisation and functionality
++ * by using the other flags. Today, the primary role of the format_instance
++ * is to temporarily store metadata area information we are working with. More
++ * flags can be defined to cover even more functionality in the future...
++ */
 +
-+rh_status() {
-+	status $DAEMON
-+}
++/* PV-based format instance */
++#define FMT_INSTANCE_PV 		0x00000000U
 +
-+rh_status_q() {
-+	rh_status >/dev/null 2>&1
-+}
++/* VG-based format instance */
++#define FMT_INSTANCE_VG 		0x00000001U
 +
++/* Include any existing PV mdas during format_instance initialisation */
++#define FMT_INSTANCE_MDAS 		0x00000002U
 +
- rtrn=1
- 
- # See how we were called.
-@@ -134,15 +152,20 @@ case "$1" in
- 	rtrn=$?
- 	;;
- 
-+  reload)
-+	rh_status_q || exit 7
-+	reload
-+	;;
++/* Include any auxiliary mdas during format_instance intialisation */
++#define FMT_INSTANCE_AUX_MDAS 		0x00000004U
 +
-   status)
--	status $DAEMON
-+	rh_status
- 	rtrn=$?
- 	vols=$( $LVDISPLAY -C --nohead 2> /dev/null | awk '($3 ~ /....a./) {print $1}' )
- 	echo active volumes: ${vols:-"(none)"}
- 	;;
++/* Include any other format-specific mdas during format_instance initialisation */
++#define FMT_INSTANCE_PRIVATE_MDAS 	0x00000008U
++
+ struct format_instance {
++	uint32_t type;
+ 	const struct format_type *fmt;
++
+ 	/*
+ 	 * Each mda in a vg is on exactly one of the below lists.
+ 	 * MDAs on the 'in_use' list will be read from / written to
+ 	 * disk, while MDAs on the 'ignored' list will not be read
+ 	 * or written to.
+ 	 */
++	/* FIXME: Try to use the index only. Remove these lists. */
+ 	struct dm_list metadata_areas_in_use;
+ 	struct dm_list metadata_areas_ignored;
++	union {
++		struct metadata_area **array;
++		struct dm_hash_table *hash;
++	} metadata_areas_index;
++
+ 	void *private;
+ };
  
-   *)
--	echo $"Usage: $0 {start|stop|restart|status}"
-+	echo $"Usage: $0 {start|stop|restart|reload|status}"
- 	;;
- esac
+--- LVM2/lib/metadata/metadata.h	2011/02/18 14:11:23	1.229
++++ LVM2/lib/metadata/metadata.h	2011/02/21 12:01:23	1.230
+@@ -220,6 +220,18 @@
+ 	struct lv_segment *seg;
+ };
  
++struct format_instance_ctx {
++	uint32_t type;
++	union {
++		const char *pv_id;
++		struct {
++			const char *vg_name;
++			const char *vg_id;
++		} vg_ref;
++		void *private;
++	} context;
++};
++
+ /*
+  * Ownership of objects passes to caller.
+  */
 
 
