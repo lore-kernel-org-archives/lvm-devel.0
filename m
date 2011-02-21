@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 21 Feb 2011 12:17:27 -0000
+Date: 21 Feb 2011 12:17:55 -0000
 Subject: LVM2/lib format_text/format-text.c format_text ...
-Message-ID: <20110221121727.31913.qmail@sourceware.org>
+Message-ID: <20110221121755.32180.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,317 +10,82 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-21 12:17:26
+Changes by:	prajnoha at sourceware.org	2011-02-21 12:17:54
 
 Modified files:
 	lib/format_text: format-text.c format-text.h 
 	lib/metadata   : metadata.h 
 
 Log message:
-	Add new pv_add_metadata_area interface function.
+	Add new pv_remove_metadata_area interface function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.158&r2=1.159
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.h.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.233&r2=1.234
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.159&r2=1.160
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.h.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.234&r2=1.235
 
---- LVM2/lib/format_text/format-text.c	2011/02/21 12:15:59	1.158
-+++ LVM2/lib/format_text/format-text.c	2011/02/21 12:17:26	1.159
-@@ -2028,6 +2028,250 @@
- 	return 1;
+--- LVM2/lib/format_text/format-text.c	2011/02/21 12:17:26	1.159
++++ LVM2/lib/format_text/format-text.c	2011/02/21 12:17:54	1.160
+@@ -2272,6 +2272,29 @@
+ 	return 0;
  }
  
-+int add_metadata_area_to_pv(struct physical_volume *pv,
-+			    unsigned mda_index,
-+			    uint64_t mda_start,
-+			    uint64_t mda_size,
-+			    unsigned mda_ignored)
++int remove_metadata_area_from_pv(struct physical_volume *pv,
++				 unsigned mda_index)
 +{
-+	struct metadata_area *mda;
-+	struct mda_context *mdac;
-+	struct mda_lists *mda_lists = (struct mda_lists *) pv->fmt->private;
-+
 +	if (mda_index >= FMT_TEXT_MAX_MDAS_PER_PV) {
-+		log_error(INTERNAL_ERROR "can't add metadata area with "
-+					 "index %u to PV %s. Metadata "
-+					 "layout not supported by %s format.",
++		log_error(INTERNAL_ERROR "can't remove metadata area with "
++					 "index %u from PV %s. Metadata "
++					 "layou not supported by %s format.",
 +					  mda_index, dev_name(pv->dev),
 +					  pv->fmt->name);
-+	}
-+
-+	if (!(mda = dm_malloc(sizeof(struct metadata_area)))) {
-+		log_error("struct metadata_area allocation failed");
 +		return 0;
 +	}
 +
-+	if (!(mdac = dm_malloc(sizeof(struct mda_context)))) {
-+		log_error("struct mda_context allocation failed");
-+		dm_free(mda);
-+		return 0;
-+	}
-+
-+	mda->ops = mda_lists->raw_ops;
-+	mda->metadata_locn = mdac;
-+	mda->status = 0;
-+
-+	mdac->area.dev = pv->dev;
-+	mdac->area.start = mda_start;
-+	mdac->area.size = mda_size;
-+	mdac->free_sectors = UINT64_C(0);
-+	memset(&mdac->rlocn, 0, sizeof(mdac->rlocn));
-+	mda_set_ignored(mda, mda_ignored);
-+
-+	fid_add_mda(pv->fid, mda, (char *) &pv->id, ID_LEN, mda_index);
-+
-+	return 1;
++	return fid_remove_mda(pv->fid, NULL, (const char *) &pv->id,
++			      ID_LEN, mda_index);
 +}
 +
-+static int _text_pv_add_metadata_area(const struct format_type *fmt,
-+				      struct physical_volume *pv,
-+				      int pe_start_locked,
-+				      unsigned mda_index,
-+				      uint64_t mda_size,
-+				      unsigned mda_ignored)
++static int _text_pv_remove_metadata_area(const struct format_type *fmt,
++					 struct physical_volume *pv,
++					 unsigned mda_index)
 +{
-+	struct format_instance *fid = pv->fid;
-+	const char *pvid = (char *) &pv->id;
-+	uint64_t pe_start, pe_end;
-+	uint64_t alignment, alignment_offset;
-+	uint64_t disk_size;
-+	uint64_t mda_start;
-+	uint64_t adjustment, limit;
-+	uint64_t wipe_size = 8 << SECTOR_SHIFT;
-+	size_t page_size = lvm_getpagesize();
-+	struct metadata_area *mda;
-+	struct mda_context *mdac;
-+
-+	if (mda_index >= FMT_TEXT_MAX_MDAS_PER_PV) {
-+		log_error(INTERNAL_ERROR "invalid index of value %u used "
-+			      "while trying to add metadata area on PV %s. "
-+			      "Metadata layout not supported by %s format.",
-+			       mda_index, pv_dev_name(pv), fmt->name);
-+		return 0;
-+	}
-+
-+	pe_start = pv->pe_start << SECTOR_SHIFT;
-+	alignment = pv->pe_align << SECTOR_SHIFT;
-+	alignment_offset = pv->pe_align_offset << SECTOR_SHIFT;
-+	disk_size = pv->size << SECTOR_SHIFT;
-+	mda_size = mda_size << SECTOR_SHIFT;
-+
-+	if (fid_get_mda_indexed(fid, pvid, ID_LEN, mda_index)) {
-+		log_error(INTERNAL_ERROR "metadata area with index %u already "
-+			"exists on PV %s.", mda_index, pv_dev_name(pv));
-+		return 0;
-+	}
-+
-+	/* First metadata area@the start of the device. */
-+	if (mda_index == 0) {
-+		/*
-+		 * Try to fit MDA0 end within given pe_start limit if its value
-+		 * is locked. If it's not locked, count with any existing MDA1.
-+		 * If there's no MDA1, just use disk size as the limit.
-+		 */
-+		if (pe_start_locked)
-+			limit = pe_start;
-+		else if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 1)) &&
-+			 (mdac = mda->metadata_locn))
-+			limit = mdac->area.start;
-+		else
-+			limit = disk_size;
-+
-+		if (limit > disk_size)
-+			goto bad;
-+
-+		mda_start = LABEL_SCAN_SIZE;
-+
-+		/* Align MDA0 start with page size if possible. */
-+		if (limit - mda_start >= MDA_SIZE_MIN) {
-+			if ((adjustment = mda_start % page_size))
-+				mda_start += (page_size - adjustment);
-+		}
-+
-+		/* Align MDA0 end position with given alignment if possible. */
-+		if (alignment) {
-+			if ((adjustment = (mda_start + mda_size) % alignment)) {
-+				mda_size += (alignment - adjustment);
-+				if (mda_start + mda_size > limit)
-+					mda_size -= (alignment - adjustment);
-+			}
-+		}
-+
-+		/* Align MDA0 end position with given alignment offset if possible. */
-+		if (alignment_offset &&
-+		    (((mda_start + mda_size) % alignment) == 0)) {
-+			mda_size += alignment_offset;
-+			if (mda_start + mda_size > limit)
-+				mda_size -= alignment_offset;
-+		}
-+
-+		if (mda_start + mda_size > limit) {
-+			log_warn("WARNING: metadata area size outreaches "
-+				 "a limit on PV %s specified by its %s. "
-+				 "Trying to adjust metadata area size.",
-+				  pv_dev_name(pv),
-+				  pe_start_locked ? "PE start" : "disk size");
-+
-+			/*
-+			 * Try to decrease the MDA0 size with twice the
-+			 * alignment and then align with given alignment.
-+			 * If pe_start is locked, skip this type of
-+			 * alignment since it would be useless.
-+			 * Check first whether we can apply that!
-+			 */
-+			if (!pe_start_locked &&
-+			    ((limit - mda_start) > alignment * 2)) {
-+				mda_size = limit - mda_start - alignment * 2;
-+
-+				if ((adjustment = (mda_start + mda_size) % alignment))
-+					mda_size += (alignment - adjustment);
-+
-+				/* Still too much? Then there's nothing else to do. */
-+				if (mda_start + mda_size > limit)
-+					goto bad;
-+			}
-+			/* Otherwise, give up and take any usable space. */
-+			/* FIXME: We should probably check for some minimum MDA size here. */
-+			else
-+				mda_size = limit - mda_start;
-+		}
-+
-+		/*
-+		 * If PV's pe_start is not locked, update pe_start value with the
-+		 * start of the area that follows the MDA0 we've just calculated.
-+		 */
-+		if (!pe_start_locked) {
-+			pe_start = mda_start + mda_size;
-+			pv->pe_start = pe_start >> SECTOR_SHIFT;
-+		}
-+	}
-+	/* Second metadata area at the end of the device. */
-+	else {
-+		/*
-+		 * Try to fit MDA1 start within given pe_end or pe_start limit
-+		 * if it's locked. If pe_start and pe_end are not defined yet,
-+		 * count with any existing MDA0 and pe_start. If MDA0 does not
-+		 * exist, just use LABEL_SCAN_SIZE.
-+		 */
-+		pe_end = pv->pe_count ? (pv->pe_start +
-+					 pv->pe_count * pv->pe_size - 1) << SECTOR_SHIFT
-+				      : 0;
-+		if (pe_start_locked)
-+			limit = pe_end ? pe_end : pe_start;
-+		else if (pe_start)
-+			limit = pe_start;
-+		/*
-+		 * Normally MDA0's start + size should be pe_start.
-+		 * The statemet here is probably useless since the
-+		 * situation is covered by previous statement.
-+		 */
-+		else if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 0)) &&
-+			 (mdac = mda->metadata_locn))
-+			limit = mdac->area.start + mdac->area.size;
-+		else
-+			limit = LABEL_SCAN_SIZE;
-+
-+		if (limit > disk_size || mda_size > disk_size)
-+			goto bad;
-+
-+		mda_start = disk_size - mda_size;
-+
-+		if (alignment) {
-+			adjustment = mda_start % alignment;
-+			if (adjustment)
-+				mda_size += adjustment;
-+		}
-+
-+		if (disk_size - mda_size < limit)
-+			mda_size = disk_size - limit;
-+
-+		/*
-+		 * If PV's pe_end not set yet, set it to the end of the
-+		 * area that precedes the MDA1 we've just calculated.
-+		 * FIXME: do we need to set this? Isn't it always set before?
-+		 */
-+		/*if (!pe_end) {
-+			pe_end = mda_start;
-+			pv->pe_end = pe_end >> SECTOR_SHIFT;
-+		}*/
-+	}
-+
-+	if (mda_size) {
-+		/* Wipe metadata area with zeroes. */
-+		if (!dev_set((struct device *) pv->dev, mda_start,
-+			(size_t) ((mda_size > wipe_size) ?
-+				  wipe_size : mda_size), 0)) {
-+				log_error("Failed to wipe new metadata area "
-+					  "at the %s of the %s",
-+					   mda_index ? "end" : "start",
-+					   pv_dev_name(pv));
-+				return 0;
-+		}
-+
-+		/* Finally, add new metadata area to PV's format instance. */
-+		if (!add_metadata_area_to_pv(pv, mda_index, mda_start,
-+					     mda_size, mda_ignored))
-+			return_0;
-+	}
-+
-+	return 1;
-+
-+bad:
-+	log_error("Not enough space available for metadata area "
-+		  "with index %u on PV %s.", mda_index, pv_dev_name(pv));
-+	return 0;
++	return remove_metadata_area_from_pv(pv, mda_index);
 +}
 +
  /* NULL vgname means use only the supplied context e.g. an archive file */
  static struct format_instance *_text_create_text_instance(const struct format_type *fmt,
  							   const struct format_instance_ctx *fic)
-@@ -2102,6 +2346,7 @@
- 	.scan = _text_scan,
+@@ -2347,6 +2370,7 @@
  	.pv_read = _text_pv_read,
  	.pv_setup = _text_pv_setup,
-+	.pv_add_metadata_area = _text_pv_add_metadata_area,
+ 	.pv_add_metadata_area = _text_pv_add_metadata_area,
++	.pv_remove_metadata_area = _text_pv_remove_metadata_area,
  	.pv_write = _text_pv_write,
  	.vg_setup = _text_vg_setup,
  	.lv_setup = _text_lv_setup,
---- LVM2/lib/format_text/format-text.h	2011/02/21 12:05:50	1.29
-+++ LVM2/lib/format_text/format-text.h	2011/02/21 12:17:26	1.30
-@@ -56,6 +56,11 @@
- 	   uint64_t start, uint64_t size);
- void del_das(struct dm_list *das);
- 
-+int add_metadata_area_to_pv(struct physical_volume *pv,
-+			    unsigned mda_index,
-+			    uint64_t mda_start,
-+			    uint64_t mda_size,
-+			    unsigned mda_ignored);
+--- LVM2/lib/format_text/format-text.h	2011/02/21 12:17:26	1.30
++++ LVM2/lib/format_text/format-text.h	2011/02/21 12:17:54	1.31
+@@ -61,6 +61,8 @@
+ 			    uint64_t mda_start,
+ 			    uint64_t mda_size,
+ 			    unsigned mda_ignored);
++int remove_metadata_area_from_pv(struct physical_volume *pv,
++				 unsigned mda_index);
  int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *mdas,
  	    struct device *dev, uint64_t start, uint64_t size, unsigned ignored);
  void del_mdas(struct dm_list *mdas);
---- LVM2/lib/metadata/metadata.h	2011/02/21 12:16:00	1.233
-+++ LVM2/lib/metadata/metadata.h	2011/02/21 12:17:26	1.234
-@@ -35,6 +35,7 @@
- //#define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
- #define MIRROR_LOG_OFFSET	2	/* sectors */
- #define VG_MEMPOOL_CHUNK	10240	/* in bytes, hint only */
-+#define PV_PE_START_CALC	((uint64_t) -1) /* Calculate pe_start value */
- 
- /*
-  * Ceiling(n / sz)
-@@ -267,6 +268,16 @@
- 			 struct physical_volume * pv, struct volume_group * vg);
+--- LVM2/lib/metadata/metadata.h	2011/02/21 12:17:26	1.234
++++ LVM2/lib/metadata/metadata.h	2011/02/21 12:17:54	1.235
+@@ -278,6 +278,13 @@
+ 				     unsigned metadata_ignored);
  
  	/*
-+	 * Add metadata area to a PV. Changes will take effect on pv_write.
++	 * Remove metadata area from a PV. Changes will take effect on pv_write.
 +	 */
-+	int (*pv_add_metadata_area) (const struct format_type * fmt,
-+				     struct physical_volume * pv,
-+				     int pe_start_locked,
-+				     unsigned metadata_index,
-+				     uint64_t metadata_size,
-+				     unsigned metadata_ignored);
++	int (*pv_remove_metadata_area) (const struct format_type *fmt,
++					struct physical_volume *pv,
++					unsigned metadata_index);
 +
 +	/*
  	 * Write a PV structure to disk. Fails if the PV is in a VG ie
