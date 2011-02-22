@@ -1,7 +1,7 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 21 Feb 2011 16:26:25 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
-Message-ID: <20110221162625.11989.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 22 Feb 2011 10:01:12 -0000
+Subject: LVM2/daemons/clvmd clvmd-openais.c
+Message-ID: <20110222100112.25580.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2011-02-21 16:26:25
+Changes by:	prajnoha at sourceware.org	2011-02-22 10:01:11
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm/ioctl    : libdm-iface.c 
+	daemons/clvmd  : clvmd-openais.c 
 
 Log message:
-	Add inactive table query support for kernel driver >= 4.11.6 (RHEL 5.7).
+	Remove a few size_t type warnings.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.448&r2=1.449
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.93&r2=1.94
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/WHATS_NEW_DM	2011/02/18 16:13:56	1.448
-+++ LVM2/WHATS_NEW_DM	2011/02/21 16:26:23	1.449
-@@ -1,5 +1,6 @@
- Version 1.02.64 - 
- ===================================
-+  Add inactive table query support for kernel driver >= 4.11.6 (RHEL 5.7).
-   Log debug open_count in _node_has_closed_parents().
-   Change dm_report_field_string() API to accept const char *const *data.
+--- LVM2/daemons/clvmd/clvmd-openais.c	2010/06/21 15:56:58	1.15
++++ LVM2/daemons/clvmd/clvmd-openais.c	2011/02/22 10:01:11	1.16
+@@ -227,7 +227,7 @@
  
---- LVM2/libdm/ioctl/libdm-iface.c	2011/02/18 23:09:56	1.93
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/02/21 16:26:24	1.94
-@@ -992,6 +992,23 @@
- 	        _dm_version_minor >= 15);
- }
+ 	memcpy(&target_nodeid, msg, OPENAIS_CSID_LEN);
  
-+static int dm_inactive_supported(void)
-+{
-+	int inactive_supported = 0;
-+
-+	if (dm_check_version() && _dm_version >= 4) {
-+		if (_dm_version_minor >= 16)
-+			inactive_supported = 1; /* upstream */
-+		else if (_dm_version_minor == 11 &&
-+			 (_dm_version_patchlevel >= 6 &&
-+			  _dm_version_patchlevel <= 40)) {
-+			inactive_supported = 1; /* RHEL 5.7 */
-+		}
-+	}
-+
-+	return inactive_supported;
-+}
-+
- void *dm_get_next_target(struct dm_task *dmt, void *next,
- 			 uint64_t *start, uint64_t *length,
- 			 char **target_type, char **params)
-@@ -1548,7 +1565,7 @@
- 		dmi->flags |= DM_SECURE_DATA_FLAG;
- 	}
- 	if (dmt->query_inactive_table) {
--		if (_dm_version_minor < 16)
-+		if (!dm_inactive_supported())
- 			log_warn("WARNING: Inactive table query unsupported "
- 				 "by kernel.  It will use live table.");
- 		dmi->flags |= DM_QUERY_INACTIVE_TABLE_FLAG;
+-	DEBUGLOG("%u got message from nodeid %d for %d. len %d\n",
++	DEBUGLOG("%u got message from nodeid %d for %d. len %" PRIsize_t "\n",
+ 		 our_nodeid, nodeid, target_nodeid, msg_len-4);
+ 
+ 	if (nodeid != our_nodeid)
+@@ -245,7 +245,8 @@
+ 	int i;
+ 	struct node_info *ninfo;
+ 
+-	DEBUGLOG("confchg callback. %d joined, %d left, %d members\n",
++	DEBUGLOG("confchg callback. %" PRIsize_t " joined, "
++		 "%" PRIsize_t " left, %" PRIsize_t " members\n",
+ 		 joined_list_entries, left_list_entries, member_list_entries);
+ 
+ 	for (i=0; i<joined_list_entries; i++) {
 
 
