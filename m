@@ -1,26 +1,34 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 23 Feb 2011 15:14:40 +0100
-Subject: [PATCH 3/3] Destroy 'fic' memory in error path
-In-Reply-To: <2a970eeba07b551a68f7abab7bbf2acd2e4c61c8.1298466569.git.zkabelac@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 23 Feb 2011 16:48:36 +0000
+Subject: [PATCH 1/3] Refactor vg allocation code
+In-Reply-To: <95e375249a799ab7c5cb4d2f8ebf63e446c5364a.1298466569.git.zkabelac@redhat.com>
 References: <cover.1298466569.git.zkabelac@redhat.com>
-	<2a970eeba07b551a68f7abab7bbf2acd2e4c61c8.1298466569.git.zkabelac@redhat.com>
-Message-ID: <4D651650.3030606@redhat.com>
+	<95e375249a799ab7c5cb4d2f8ebf63e446c5364a.1298466569.git.zkabelac@redhat.com>
+Message-ID: <20110223164836.GA3626@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 02/23/2011 02:52 PM +0100, Zdenek Kabelac wrote:
-> +			fid->fmt->ops->destroy_instance(fid);
+On Wed, Feb 23, 2011 at 02:52:15PM +0100, Zdenek Kabelac wrote:
+> Usure about naming strategy - we use  i.e. alloc_lv,
+> but most the new function have now operation prefix.
+ 
+alloc_vg for now...because it's paired with free_vg and vg_free is already used
+for something else:)
 
-...and I'll send a patch that adds the content to destroy_instance
-since it's pure void now :)
+> Also the location after Dave's refactoring patches is unclear.
+ 
+vg.c  - move free_vg there too.
 
-Also, we need to add destroy_instance everywhere where necessary
-throughout the code. We haven't used this call before because we
-relied on automatic mempool deallocation mostly.
+> +	if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_CHUNK)) ||
 
-Peter
+The code is now shared - "alloc_vg" will have to do, or if that makes
+the log too hard to understand, pass the existing strings into the function.
+
+Ack.
+
+Alasdair
 
 
