@@ -1,87 +1,266 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 23 Feb 2011 14:52:14 +0100
-Subject: [PATCH 0/3] Share vg metadata for read only
-Message-ID: <cover.1298466569.git.zkabelac@redhat.com>
+Date: Wed, 23 Feb 2011 14:52:15 +0100
+Subject: [PATCH 1/3] Refactor vg allocation code
+In-Reply-To: <cover.1298466569.git.zkabelac@redhat.com>
+References: <cover.1298466569.git.zkabelac@redhat.com>
+Message-ID: <95e375249a799ab7c5cb4d2f8ebf63e446c5364a.1298466569.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Another nice speedup:
+Create new function to allocate VG structure.
 
-1st. patch refactors allocation of VG to one place - so refcounting
-is simplier to implement (I'm planning few more cleanup patches for
-this)
+Usure about naming strategy - we use  i.e. alloc_lv,
+but most the new function have now operation prefix.
 
-2nd. patch adds reference counting and caching of VG struct
-As Milan suggested - I'll try to add extra code which will try to
-check checksum of memory pool used for VG (with DEBUG_MEM option probably)
+Also the location after Dave's refactoring patches is unclear.
 
+I'd suppose we should move all 'vg' related code to vg.c,
+but for now lot's of stuff is still spread across metadata.c and
+other files (i.e.  free_vg).
 
-Some numbers with ~1700 volumes and current default rawhide kernel:
-2.6.38-0.rc5.git1.1.fc15.x86_64
-lvm2-2.02.84-1.fc15.x86_64
-(killed gvfs...  and removed udisk udev rules 
- - as these are currently major performance killers)
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/format_text/import_vsn1.c |   33 ++++++++++-----------------------
+ lib/metadata/metadata.c       |   35 +++++------------------------------
+ lib/metadata/vg.c             |   25 +++++++++++++++++++++++++
+ lib/metadata/vg.h             |    2 ++
+ 4 files changed, 42 insertions(+), 53 deletions(-)
 
-vgchange -ay
-  real	0m50.097s
-  user	0m10.765s
-  sys	0m35.481s
-
-vgchange -ay       (here are LVs already actived)
-  real	0m10.425s
-  user	0m8.240s
-  sys	0m2.133s
-
-vgchange -an
-  real	0m51.339s
-  user	0m10.375s
-  sys	0m31.457s
-
-vgchange -an       (here are LVs already deactived)
-  real	0m10.288s
-  user	0m8.328s
-  sys	0m1.901s
-
-and now the same with new lvm2 sharing code (and critical section)
-
-vgchange -ay
-  real	0m13.792s  (udev is slowing it down by 3 seconds)
-  user	0m0.629s
-  sys	0m4.535s
-
-vgchange -ay
-  real	0m0.745s
-  user	0m0.170s
-  sys	0m0.520s
-
-vgchange -an
-  real	0m9.886s
-  user	0m0.425s
-  sys	0m2.418s
-
-vgchange -an
-  real	0m0.468s
-  user	0m0.158s
-  sys	0m0.239s
-
-
-Zdenek Kabelac (3):
-  Refactor vg allocation code
-  Add VG refcount and cache created VG structure
-  Destroy 'fic' memory in error path
-
- lib/cache/lvmcache.c          |   55 +++++++++++++++++++++++++++-------------
- lib/cache/lvmcache.h          |    4 ++-
- lib/format_text/import_vsn1.c |   33 +++++++-----------------
- lib/metadata/metadata.c       |   40 ++++++-----------------------
- lib/metadata/vg.c             |   26 +++++++++++++++++++
- lib/metadata/vg.h             |    3 ++
- 6 files changed, 88 insertions(+), 73 deletions(-)
-
---
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 0ffe334..bc63f36 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -652,35 +652,28 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	const struct config_node *vgn, *cn;
+ 	struct volume_group *vg;
+ 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
+-	struct dm_pool *mem = dm_pool_create("lvm2 vg_read", VG_MEMPOOL_CHUNK);
+ 	unsigned scan_done_once = use_cached_pvs;
+ 
+-	if (!mem)
+-		return_NULL;
+-
+ 	/* skip any top-level values */
+ 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib)
+ 		;
+ 
+ 	if (!vgn) {
+ 		log_error("Couldn't find volume group in file.");
+-		goto bad;
++		return NULL;
+ 	}
+ 
+-	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
+-		goto_bad;
+-
+-	vg->vgmem = mem;
+-	vg->cmd = fid->fmt->cmd;
++	if (!(vg = alloc_vg(fid->fmt->cmd)))
++		return_NULL;
+ 
+ 	/* FIXME Determine format type from file contents */
+ 	/* eg Set to instance of fmt1 here if reading a format1 backup? */
+ 	vg->fid = fid;
+ 
+-	if (!(vg->name = dm_pool_strdup(mem, vgn->key)))
++	if (!(vg->name = dm_pool_strdup(vg->vgmem, vgn->key)))
+ 		goto_bad;
+ 
+-	if (!(vg->system_id = dm_pool_zalloc(mem, NAME_LEN)))
++	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN)))
+ 		goto_bad;
+ 
+ 	vgn = vgn->child;
+@@ -733,7 +726,6 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
+-	vg->alloc = ALLOC_NORMAL;
+ 	if ((cn = find_config_node(vgn, "allocation_policy"))) {
+ 		const struct config_value *cv = cn->v;
+ 		if (!cv || !cv->v.str) {
+@@ -761,21 +753,16 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
+-	dm_list_init(&vg->pvs);
+-	if (!_read_sections(fid, "physical_volumes", _read_pv, mem, vg,
++	if (!_read_sections(fid, "physical_volumes", _read_pv, vg->vgmem, vg,
+ 			    vgn, pv_hash, lv_hash, 0, &scan_done_once)) {
+ 		log_error("Couldn't find all physical volumes for volume "
+ 			  "group %s.", vg->name);
+ 		goto bad;
+ 	}
+ 
+-	dm_list_init(&vg->lvs);
+-	dm_list_init(&vg->tags);
+-	dm_list_init(&vg->removed_pvs);
+-
+ 	/* Optional tags */
+ 	if ((cn = find_config_node(vgn, "tags")) &&
+-	    !(read_tags(mem, &vg->tags, cn->v))) {
++	    !(read_tags(vg->vgmem, &vg->tags, cn->v))) {
+ 		log_error("Couldn't read tags for volume group %s.", vg->name);
+ 		goto bad;
+ 	}
+@@ -789,14 +776,14 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 		goto bad;
+ 	}
+ 
+-	if (!_read_sections(fid, "logical_volumes", _read_lvnames, mem, vg,
++	if (!_read_sections(fid, "logical_volumes", _read_lvnames, vg->vgmem, vg,
+ 			    vgn, pv_hash, lv_hash, 1, NULL)) {
+ 		log_error("Couldn't read all logical volume names for volume "
+ 			  "group %s.", vg->name);
+ 		goto bad;
+ 	}
+ 
+-	if (!_read_sections(fid, "logical_volumes", _read_lvsegs, mem, vg,
++	if (!_read_sections(fid, "logical_volumes", _read_lvsegs, vg->vgmem, vg,
+ 			    vgn, pv_hash, lv_hash, 1, NULL)) {
+ 		log_error("Couldn't read all logical volumes for "
+ 			  "volume group %s.", vg->name);
+@@ -824,7 +811,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
+ 	if (lv_hash)
+ 		dm_hash_destroy(lv_hash);
+ 
+-	dm_pool_destroy(mem);
++	free_vg(vg);
+ 	return NULL;
+ }
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 6a29d24..d75a1cf 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -942,18 +942,8 @@ static struct volume_group *_vg_make_handle(struct cmd_context *cmd,
+ 			     struct volume_group *vg,
+ 			     uint32_t failure)
+ {
+-	struct dm_pool *vgmem;
+-
+-	if (!vg) {
+-		if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_CHUNK)) ||
+-		    !(vg = dm_pool_zalloc(vgmem, sizeof(*vg)))) {
+-			log_error("Error allocating vg handle.");
+-			if (vgmem)
+-				dm_pool_destroy(vgmem);
+-			return_NULL;
+-		}
+-		vg->vgmem = vgmem;
+-	}
++	if (!vg && !(vg = alloc_vg(cmd)))
++		return_NULL;
+ 
+ 	vg->read_status = failure;
+ 
+@@ -994,7 +984,6 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	struct volume_group *vg;
+ 	struct format_instance_ctx fic;
+ 	int consistent = 0;
+-	struct dm_pool *mem;
+ 	uint32_t rc;
+ 
+ 	if (!validate_name(vg_name)) {
+@@ -1017,10 +1006,7 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 		return _vg_make_handle(cmd, NULL, FAILED_EXIST);
+ 	}
+ 
+-	if (!(mem = dm_pool_create("lvm2 vg_create", VG_MEMPOOL_CHUNK)))
+-		goto_bad;
+-
+-	if (!(vg = dm_pool_zalloc(mem, sizeof(*vg))))
++        if (!(vg = alloc_vg(cmd)))
+ 		goto_bad;
+ 
+ 	if (!id_create(&vg->id)) {
+@@ -1032,16 +1018,13 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	/* Strip dev_dir if present */
+ 	vg_name = strip_dir(vg_name, cmd->dev_dir);
+ 
+-	vg->vgmem = mem;
+-	vg->cmd = cmd;
+-
+-	if (!(vg->name = dm_pool_strdup(mem, vg_name)))
++	if (!(vg->name = dm_pool_strdup(vg->vgmem, vg_name)))
+ 		goto_bad;
+ 
+ 	vg->seqno = 0;
+ 
+ 	vg->status = (RESIZEABLE_VG | LVM_READ | LVM_WRITE);
+-	if (!(vg->system_id = dm_pool_alloc(mem, NAME_LEN)))
++	if (!(vg->system_id = dm_pool_alloc(vg->vgmem, NAME_LEN)))
+ 		goto_bad;
+ 
+ 	*vg->system_id = '\0';
+@@ -1057,14 +1040,6 @@ struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
+ 	vg->mda_copies = DEFAULT_VGMETADATACOPIES;
+ 
+ 	vg->pv_count = 0;
+-	dm_list_init(&vg->pvs);
+-
+-	dm_list_init(&vg->lvs);
+-
+-	dm_list_init(&vg->tags);
+-
+-	/* initialize removed_pvs list */
+-	dm_list_init(&vg->removed_pvs);
+ 
+ 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = vg_name;
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 9d0d5dd..392d23c 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -18,6 +18,31 @@
+ #include "display.h"
+ #include "activate.h"
+ 
++struct volume_group *alloc_vg(struct cmd_context *cmd)
++{
++	struct dm_pool *vgmem;
++	struct volume_group *vg;
++
++	if (!(vgmem = dm_pool_create("lvm2 vg_handle", VG_MEMPOOL_CHUNK)) ||
++	    !(vg = dm_pool_zalloc(vgmem, sizeof(*vg)))) {
++		log_error("Error allocating VG structure.");
++		if (vgmem)
++			dm_pool_destroy(vgmem);
++		return NULL;
++	}
++
++	vg->cmd = cmd;
++	vg->vgmem = vgmem;
++	vg->alloc = ALLOC_NORMAL;
++
++	dm_list_init(&vg->pvs);
++	dm_list_init(&vg->lvs);
++	dm_list_init(&vg->tags);
++	dm_list_init(&vg->removed_pvs);
++
++	return vg;
++}
++
+ char *vg_fmt_dup(const struct volume_group *vg)
+ {
+ 	if (!vg->fid || !vg->fid->fmt)
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 448dcfe..c00fb74 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -95,6 +95,8 @@ struct volume_group {
+ 	uint32_t mda_copies; /* target number of mdas for this VG */
+ };
+ 
++struct volume_group *alloc_vg(struct cmd_context *cmd);
++
+ char *vg_fmt_dup(const struct volume_group *vg);
+ char *vg_name_dup(const struct volume_group *vg);
+ char *vg_system_id_dup(const struct volume_group *vg);
+-- 
 1.7.4.1
 
 
