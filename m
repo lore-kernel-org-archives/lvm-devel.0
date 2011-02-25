@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 21 Feb 2011 12:07:04 -0000
-Subject: LVM2/lib cache/lvmcache.c format_text/archive. ...
-Message-ID: <20110221120704.25979.qmail@sourceware.org>
+Date: 25 Feb 2011 13:59:48 -0000
+Subject: LVM2/lib format_text/archiver.c format_text/fo ...
+Message-ID: <20110225135948.28606.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,233 +10,130 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-21 12:07:03
+Changes by:	prajnoha at sourceware.org	2011-02-25 13:59:47
 
 Modified files:
-	lib/cache      : lvmcache.c 
-	lib/format_text: archive.c archiver.c format-text.c 
+	lib/format_text: archiver.c format-text.c 
 	lib/metadata   : metadata.c 
 
 Log message:
-	Change the code throughout for recent changes in format_instance handling.
+	Read PV metadata information from cache if pv_setup called with pv->fid == vg->fid.
+	
+	If the PV is already part of the VG (so the pv->fid == vg->fid), it makes no
+	sense to attach the mdas information from PV to a VG. Instead, we read new
+	PV metadata information from cache and attach it to the VG fid.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.156&r2=1.157
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.425&r2=1.426
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.167&r2=1.168
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.433&r2=1.434
 
---- LVM2/lib/cache/lvmcache.c	2011/02/18 14:16:11	1.103
-+++ LVM2/lib/cache/lvmcache.c	2011/02/21 12:07:03	1.104
-@@ -629,6 +629,7 @@
- 	struct lvmcache_vginfo *vginfo;
- 	struct volume_group *vg;
- 	struct format_instance *fid;
-+	struct format_instance_ctx fic;
- 
- 	if (!vgid || !(vginfo = vginfo_from_vgid(vgid)) || !vginfo->vgmetadata)
- 		return NULL;
-@@ -652,9 +653,10 @@
- 	    (!precommitted && vginfo->precommitted && !critical_section()))
- 		return NULL;
- 
--	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt,
--						      vginfo->vgname,
--						      vgid, NULL)))
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-+	fic.context.vg_ref.vg_name = vginfo->vgname;
-+	fic.context.vg_ref.vg_id = vgid;
-+	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt, &fic)))
- 		return_NULL;
- 
- 	/* Build config tree from vgmetadata, if not yet cached */
---- LVM2/lib/format_text/archive.c	2010/12/08 20:50:49	1.40
-+++ LVM2/lib/format_text/archive.c	2011/02/21 12:07:03	1.41
-@@ -300,16 +300,16 @@
+--- LVM2/lib/format_text/archiver.c	2011/02/21 12:24:16	1.41
++++ LVM2/lib/format_text/archiver.c	2011/02/25 13:59:47	1.42
+@@ -294,8 +294,6 @@
+ int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg)
  {
- 	struct volume_group *vg = NULL;
- 	struct format_instance *tf;
-+	struct format_instance_ctx fic;
- 	time_t when;
- 	char *desc;
--	void *context;
- 
- 	log_print(" ");
- 	log_print("File:\t\t%s", af->path);
- 
--	if (!(context = create_text_context(cmd, af->path, NULL)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
-+	if (!(fic.context.private = create_text_context(cmd, af->path, NULL)) ||
-+	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create text instance object.");
- 		return;
- 	}
---- LVM2/lib/format_text/archiver.c	2011/01/28 10:16:04	1.38
-+++ LVM2/lib/format_text/archiver.c	2011/02/21 12:07:03	1.39
-@@ -270,13 +270,12 @@
- {
- 	struct volume_group *vg = NULL;
- 	struct format_instance *tf;
-+	struct format_instance_ctx fic;
- 	struct metadata_area *mda;
--	void *context;
- 
--	if (!(context = create_text_context(cmd, file,
--					    cmd->cmd_line)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
-+	if (!(fic.context.private = create_text_context(cmd, file, cmd->cmd_line)) ||
-+	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create text format object.");
- 		return NULL;
- 	}
-@@ -297,6 +296,8 @@
  	struct pv_list *pvl;
- 	struct physical_volume *pv;
- 	struct lvmcache_info *info;
-+	struct format_instance *fid;
-+	struct format_instance_ctx fic;
+-	struct physical_volume *pv;
+-	struct lvmcache_info *info;
+ 	struct format_instance *fid;
+ 	struct format_instance_ctx fic;
  
- 	/*
- 	 * FIXME: Check that the PVs referenced in the backup are
-@@ -304,8 +305,10 @@
+@@ -305,7 +303,7 @@
  	 */
  
  	/* Attempt to write out using currently active format */
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg->name,
--						       NULL, NULL))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-+	fic.context.vg_ref.vg_name = vg->name;
-+	fic.context.vg_ref.vg_id = NULL;
-+	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
- 		log_error("Failed to allocate format instance");
- 		return 0;
- 	}
-@@ -386,17 +389,17 @@
- {
- 	int r = 0;
- 	struct format_instance *tf;
-+	struct format_instance_ctx fic;
- 	struct metadata_area *mda;
--	void *context;
- 	struct cmd_context *cmd;
- 
- 	cmd = vg->cmd;
- 
- 	log_verbose("Creating volume group backup \"%s\" (seqno %u).", file, vg->seqno);
- 
--	if (!(context = create_text_context(cmd, file, desc)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, NULL,
--							 NULL, context))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
-+	if (!(fic.context.private = create_text_context(cmd, file, desc)) ||
-+	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create backup object.");
- 		return 0;
- 	}
---- LVM2/lib/format_text/format-text.c	2011/02/21 12:05:50	1.156
-+++ LVM2/lib/format_text/format-text.c	2011/02/21 12:07:03	1.157
-@@ -1056,6 +1056,7 @@
- 	DIR *d;
- 	struct volume_group *vg;
- 	struct format_instance *fid;
-+	struct format_instance_ctx fic;
- 	char path[PATH_MAX];
- 	char *scanned_vgname;
- 
-@@ -1086,8 +1087,10 @@
- 				}
- 
- 				/* FIXME stat file to see if it's changed */
--				fid = _text_create_text_instance(fmt, NULL, NULL,
--							    NULL);
-+				/* FIXME: Check this fid is OK! */
-+				fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
-+				fic.context.private = NULL;
-+				fid = _text_create_text_instance(fmt, &fic);
- 				if ((vg = _vg_read_file_name(fid, scanned_vgname,
- 							     path))) {
- 					/* FIXME Store creation host in vg */
---- LVM2/lib/metadata/metadata.c	2011/02/21 12:05:50	1.425
-+++ LVM2/lib/metadata/metadata.c	2011/02/21 12:07:03	1.426
-@@ -906,6 +906,7 @@
- struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name)
- {
- 	struct volume_group *vg;
-+	struct format_instance_ctx fic;
- 	int consistent = 0;
- 	struct dm_pool *mem;
- 	uint32_t rc;
-@@ -979,8 +980,10 @@
- 	/* initialize removed_pvs list */
- 	dm_list_init(&vg->removed_pvs);
- 
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, vg_name,
--						       NULL, NULL))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-+	fic.context.vg_ref.vg_name = vg_name;
-+	fic.context.vg_ref.vg_id = NULL;
-+	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
- 		log_error("Failed to create format instance");
- 		goto bad;
- 	}
-@@ -2604,6 +2607,7 @@
- 					     int warnings,
- 					     const char *orphan_vgname)
- {
-+	struct format_instance_ctx fic;
- 	struct lvmcache_vginfo *vginfo;
- 	struct lvmcache_info *info;
- 	struct pv_list *pvl;
-@@ -2635,9 +2639,10 @@
- 	}
- 
- 	/* create format instance with appropriate metadata area */
--	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt,
--							  orphan_vgname, NULL,
--							  NULL))) {
+-	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
 +	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_AUX_MDAS;
-+	fic.context.vg_ref.vg_name = orphan_vgname;
-+	fic.context.vg_ref.vg_id = NULL;
-+	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt, &fic))) {
- 		log_error("Failed to create format instance");
- 		goto bad;
- 	}
-@@ -2742,6 +2747,7 @@
- 				     int *consistent, unsigned precommitted)
- {
- 	struct format_instance *fid;
-+	struct format_instance_ctx fic;
- 	const struct format_type *fmt;
- 	struct volume_group *vg, *correct_vg = NULL;
- 	struct metadata_area *mda;
-@@ -2814,7 +2820,10 @@
- 		use_precommitted = 0;
+ 	fic.context.vg_ref.vg_name = vg->name;
+ 	fic.context.vg_ref.vg_id = NULL;
+ 	if (!(fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
+@@ -322,20 +320,9 @@
  
- 	/* create format instance with appropriate metadata area */
--	if (!(fid = fmt->ops->create_instance(fmt, vgname, vgid, NULL))) {
-+	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-+	fic.context.vg_ref.vg_name = vgname;
-+	fic.context.vg_ref.vg_id = vgid;
-+	if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
- 		log_error("Failed to create format instance");
- 		return NULL;
- 	}
-@@ -2969,7 +2978,10 @@
- 			use_precommitted = 0;
- 
- 		/* create format instance with appropriate metadata area */
--		if (!(fid = fmt->ops->create_instance(fmt, vgname, vgid, NULL))) {
-+		fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-+		fic.context.vg_ref.vg_name = vgname;
-+		fic.context.vg_ref.vg_id = vgid;
-+		if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
- 			log_error("Failed to create format instance");
- 			return NULL;
+ 	/* Add any metadata areas on the PVs */
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+-		pv = pvl->pv;
+-		if (!(info = info_from_pvid(pv->dev->pvid, 0))) {
+-			log_error("PV %s missing from cache",
+-				  pv_dev_name(pv));
+-			return 0;
+-		}
+-		if (cmd->fmt != info->fmt) {
+-			log_error("PV %s is a different format (seqno %s)",
+-				  pv_dev_name(pv), info->fmt->name);
+-			return 0;
+-		}
+-		if (!vg->fid->fmt->ops->pv_setup(vg->fid->fmt, pv, vg)) {
++		if (!vg->fid->fmt->ops->pv_setup(vg->fid->fmt, pvl->pv, vg)) {
+ 			log_error("Format-specific setup for %s failed",
+-				  pv_dev_name(pv));
++				  pv_dev_name(pvl->pv));
+ 			return 0;
  		}
+ 	}
+--- LVM2/lib/format_text/format-text.c	2011/02/25 13:50:02	1.167
++++ LVM2/lib/format_text/format-text.c	2011/02/25 13:59:47	1.168
+@@ -1645,20 +1645,42 @@
+ {
+ 	struct format_instance *fid = pv->fid;
+ 	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
++	struct lvmcache_info *info;
+ 	unsigned mda_index;
+ 	struct metadata_area *pv_mda;
+ 	struct mda_context *pv_mdac;
+ 	uint64_t pe_count;
+ 	uint64_t size_reduction = 0;
+ 
+-	/* Add any further mdas on this PV to VG's format instance. */
+-	for (mda_index = 0; mda_index < FMT_TEXT_MAX_MDAS_PER_PV; mda_index++) {
+-		if (!(pv_mda = fid_get_mda_indexed(fid, pvid, ID_LEN, mda_index)))
+-			continue;
+-
+-		/* Be sure it's not already in VG's format instance! */
+-		if (!fid_get_mda_indexed(vg->fid, pvid, ID_LEN, mda_index))
+-			fid_add_mda(vg->fid, pv_mda, pvid, ID_LEN, mda_index);
++	/* If PV has its own format instance, add mdas from pv->fid to vg->fid. */
++	if (pv->fid != vg->fid) {
++		for (mda_index = 0; mda_index < FMT_TEXT_MAX_MDAS_PER_PV; mda_index++) {
++			if (!(pv_mda = fid_get_mda_indexed(fid, pvid, ID_LEN, mda_index)))
++				continue;
++
++			/* Be sure it's not already in VG's format instance! */
++			if (!fid_get_mda_indexed(vg->fid, pvid, ID_LEN, mda_index))
++				fid_add_mda(vg->fid, pv_mda, pvid, ID_LEN, mda_index);
++		}
++	}
++	/*
++	 * Otherwise, if the PV is already a part of the VG (pv->fid == vg->fid),
++	 * reread PV mda information from the cache and add it to vg->fid.
++	 */
++	else {
++		if (!(info = info_from_pvid(pv->dev->pvid, 0))) {
++			log_error("PV %s missing from cache", pv_dev_name(pv));
++			return 0;
++		}
++
++		if (fmt != info->fmt) {
++			log_error("PV %s is a different format (seqno %s)",
++				  pv_dev_name(pv), info->fmt->name);
++			return 0;
++		}
++
++		if (!fid_add_mdas(vg->fid, &info->mdas, pvid, ID_LEN))
++			return_0;
+ 	}
+ 
+ 	/* If there's the 2nd mda, we need to reduce
+--- LVM2/lib/metadata/metadata.c	2011/02/21 12:29:21	1.433
++++ LVM2/lib/metadata/metadata.c	2011/02/25 13:59:47	1.434
+@@ -4105,7 +4105,7 @@
+ 		mda_new = mda_copy(fid->fmt->cmd->mem, mda);
+ 		if (!mda_new)
+ 			return_0;
+-
++		fid_remove_mda(fid, NULL, key, key_len, mda_index);
+ 		fid_add_mda(fid, mda_new, key, key_len, mda_index);
+ 		mda_index++;
+ 	}
 
 
