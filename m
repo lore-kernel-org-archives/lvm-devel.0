@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 21 Feb 2011 12:11:03 -0000
-Subject: LVM2/lib format_text/archiver.c metadata/metad ...
-Message-ID: <20110221121103.28716.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Feb 2011 01:16:56 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20110227011656.24324.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-21 12:10:59
+Changes by:	agk at sourceware.org	2011-02-27 01:16:54
 
 Modified files:
-	lib/format_text: archiver.c 
-	lib/metadata   : metadata.c metadata.h 
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Add vg_set_fid function to change VG format instance.
-	
-	This function also sets a reference to a new VG format instance for all PVs
-	that are part of the VG so the PV-VG interconnection is consistent after the
-	change.
+	Fix check for log-only allocation in new alloc normal loop.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.426&r2=1.427
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.231&r2=1.232
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1927&r2=1.1928
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.249&r2=1.250
 
---- LVM2/lib/format_text/archiver.c	2011/02/21 12:07:03	1.39
-+++ LVM2/lib/format_text/archiver.c	2011/02/21 12:10:58	1.40
-@@ -308,10 +308,11 @@
- 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
- 	fic.context.vg_ref.vg_name = vg->name;
- 	fic.context.vg_ref.vg_id = NULL;
--	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
-+	if (!(fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
- 		log_error("Failed to allocate format instance");
- 		return 0;
- 	}
-+	vg_set_fid(vg, fid);
+--- LVM2/WHATS_NEW	2011/02/27 00:38:31	1.1927
++++ LVM2/WHATS_NEW	2011/02/27 01:16:52	1.1928
+@@ -1,7 +1,7 @@
+ Version 2.02.85 - 
+ ===================================
+-  Extend normal policy to allow mirror logs on same devs as images if necessary.
+-  Improve cling policy to recognise devs already allocated in the transaction.
++  Extend normal policy to allow mirror logs on same PVs as images if necessary.
++  Improve cling policy to recognise PVs already used during the transaction.
+   Improve normal allocation algorithm to include clinging to existing areas.
+   Add allocation/maximise_cling & mirror_logs_require_separate_pvs to lvm.conf.
+   Fix metadata balance code to work with recent changes in metadata handling.
+--- LVM2/lib/metadata/lv_manip.c	2011/02/27 00:38:32	1.249
++++ LVM2/lib/metadata/lv_manip.c	2011/02/27 01:16:53	1.250
+@@ -1555,9 +1555,9 @@
+ 		  (alloc_parms->flags & A_CLING_TO_ALLOCED) && !iteration_count++) ||
+ 		/* Extra iteration needed to fill log areas on PVs already used? */
+ 		 (alloc_parms->alloc == ALLOC_NORMAL && preferred_count == ix_offset && !ah->mirror_logs_separate &&
++		  (ix + preferred_count >= ah->area_count) && 
+ 		  (ix + preferred_count < ah->area_count + alloc_state->log_area_count_still_needed) && !log_iteration_count++));
  
- 	/*
- 	 * Setting vg->old_name to a blank value will explicitly
---- LVM2/lib/metadata/metadata.c	2011/02/21 12:07:03	1.426
-+++ LVM2/lib/metadata/metadata.c	2011/02/21 12:10:58	1.427
-@@ -3931,6 +3931,16 @@
- 	return FAILED_EXIST;
- }
+-
+ 	if (preferred_count < ix_offset && !(alloc_parms->flags & A_CLING_TO_ALLOCED))
+ 		return 1;
  
-+void vg_set_fid(struct volume_group *vg,
-+		 struct format_instance *fid)
-+{
-+	struct pv_list *pvl;
-+
-+	vg->fid = fid;
-+	dm_list_iterate_items(pvl, &vg->pvs)
-+		pvl->pv->fid = fid;
-+}
-+
- static int _convert_key_to_string(const char *key, size_t key_len,
- 				  unsigned sub_key, char *buf, size_t buf_len)
- {
---- LVM2/lib/metadata/metadata.h	2011/02/21 12:05:50	1.231
-+++ LVM2/lib/metadata/metadata.h	2011/02/21 12:10:59	1.232
-@@ -190,6 +190,7 @@
- unsigned mda_is_ignored(struct metadata_area *mda);
- void mda_set_ignored(struct metadata_area *mda, unsigned ignored);
- unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2);
-+void vg_set_fid(struct volume_group *vg, struct format_instance *fid);
- int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
- 		const char *key, size_t key_len, const unsigned sub_key);
- int fid_add_mdas(struct format_instance *fid, struct dm_list *mdas,
 
 
