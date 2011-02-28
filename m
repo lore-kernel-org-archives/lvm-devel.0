@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Feb 2011 19:54:30 -0000
-Subject: LVM2/libdm/mm pool-debug.c
-Message-ID: <20110228195430.9287.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 28 Feb 2011 20:50:02 -0000
+Subject: LVM2/lib/format_text archiver.c
+Message-ID: <20110228205002.17491.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-28 19:54:30
+Changes by:	mbroz at sourceware.org	2011-02-28 20:50:01
 
 Modified files:
-	libdm/mm       : pool-debug.c 
+	lib/format_text: archiver.c 
 
 Log message:
-	Fix void pointer arithmetic warning in pool debug code
+	Rephrase backup message.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-debug.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
 
---- LVM2/libdm/mm/pool-debug.c	2009/07/15 20:02:48	1.9
-+++ LVM2/libdm/mm/pool-debug.c	2011/02/28 19:54:30	1.10
-@@ -248,7 +248,7 @@
+--- LVM2/lib/format_text/archiver.c	2011/02/25 14:12:14	1.43
++++ LVM2/lib/format_text/archiver.c	2011/02/28 20:50:01	1.44
+@@ -217,7 +217,7 @@
  	}
- 	p->object = new;
  
--	memcpy(new->data + new_size - delta, extra, delta);
-+	memcpy((char*)new->data + new_size - delta, extra, delta);
+ 	if (test_mode()) {
+-		log_verbose("Test mode: Skipping volume group backup.");
++		log_verbose("Test mode: Skipping backup of volume group.");
+ 		return 1;
+ 	}
  
- 	return 1;
- }
 
 
