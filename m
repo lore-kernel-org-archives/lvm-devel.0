@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 21 Feb 2011 12:12:33 -0000
-Subject: LVM2/lib/metadata metadata.c pv.h
-Message-ID: <20110221121233.29265.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 28 Feb 2011 19:35:10 -0000
+Subject: LVM2 ./WHATS_NEW tools/pvremove.c
+Message-ID: <20110228193510.7398.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-02-21 12:12:32
+Changes by:	agk at sourceware.org	2011-02-28 19:35:10
 
 Modified files:
-	lib/metadata   : metadata.c pv.h 
+	.              : WHATS_NEW 
+	tools          : pvremove.c 
 
 Log message:
-	Initialise a new PV-based format instance for a PV that is being created.
+	Improve pvremove error message when PV belongs to a VG.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.427&r2=1.428
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1929&r2=1.1930
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvremove.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
 
---- LVM2/lib/metadata/metadata.c	2011/02/21 12:10:58	1.427
-+++ LVM2/lib/metadata/metadata.c	2011/02/21 12:12:32	1.428
-@@ -1555,6 +1555,7 @@
- 	if (!pv)
- 		return_NULL;
- 
-+	pv->fid = NULL;
- 	pv->pe_size = 0;
- 	pv->pe_start = 0;
- 	pv->pe_count = 0;
-@@ -1606,6 +1607,7 @@
- 				  unsigned metadataignore, struct dm_list *mdas)
- {
- 	const struct format_type *fmt = cmd->fmt;
-+	struct format_instance_ctx fic;
- 	struct dm_pool *mem = fmt->cmd->mem;
- 	struct physical_volume *pv = _alloc_pv(mem, dev);
- 
-@@ -1646,6 +1648,13 @@
- 		goto bad;
+--- LVM2/WHATS_NEW	2011/02/28 13:19:02	1.1929
++++ LVM2/WHATS_NEW	2011/02/28 19:35:09	1.1930
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Improve pvremove error message when PV belongs to a VG.
+   Extend normal policy to allow mirror logs on same PVs as images if necessary.
+   Improve cling policy to recognise PVs already used during the transaction.
+   Improve normal allocation algorithm to include clinging to existing areas.
+--- LVM2/tools/pvremove.c	2011/02/21 12:16:00	1.32
++++ LVM2/tools/pvremove.c	2011/02/28 19:35:10	1.33
+@@ -64,8 +64,8 @@
+ 	/* Allow partial & exported VGs to be destroyed. */
+ 	/* we must have -ff to overwrite a non orphan */
+ 	if (arg_count(cmd, force_ARG) < 2) {
+-		log_error("Can't pvremove physical volume \"%s\" of "
+-			  "volume group \"%s\" without -ff", name, pv_vg_name(pv));
++		log_error("PV %s belongs to Volume Group %s so please use vgreduce first.", name, pv_vg_name(pv));
++		log_error("(If you are certain you need pvremove, then confirm by using --force twice.)");
+ 		return 0;
  	}
  
-+	fic.type = FMT_INSTANCE_PV;
-+	fic.context.pv_id = (const char *) &pv->id;
-+	if (!(pv->fid = fmt->ops->create_instance(fmt, &fic))) {
-+		log_error("Couldn't create format instance for PV %s.", pv_dev_name(pv));
-+		goto bad;
-+	}
-+
- 	pv->fmt = fmt;
- 	pv->vg_name = fmt->orphan_vg_name;
- 
---- LVM2/lib/metadata/pv.h	2010/10/25 12:01:59	1.8
-+++ LVM2/lib/metadata/pv.h	2011/02/21 12:12:32	1.9
-@@ -24,6 +24,7 @@
- 	struct id id;
- 	struct device *dev;
- 	const struct format_type *fmt;
-+	struct format_instance *fid;
- 
- 	/*
- 	 * vg_name and vgid are used before the parent VG struct exists.
 
 
