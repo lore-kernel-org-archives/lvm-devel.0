@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Feb 2011 19:47:23 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/dmeventd.c
-Message-ID: <20110228194723.2144.qmail@sourceware.org>
+Date: 28 Feb 2011 19:50:16 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20110228195016.4445.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-02-28 19:47:23
+Changes by:	zkabelac at sourceware.org	2011-02-28 19:50:15
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/dmeventd: dmeventd.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Test result of dm_task_set_uuid
+	Remove dead code
+	
+	Remove code which is no longer used.
+	Code which has been using msg_malloced was removed in 2007.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1930&r2=1.1931
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
 
---- LVM2/WHATS_NEW	2011/02/28 19:35:09	1.1930
-+++ LVM2/WHATS_NEW	2011/02/28 19:47:22	1.1931
-@@ -1,5 +1,6 @@
- Version 2.02.85 - 
- ===================================
-+  Add test for failed allocation from dm_task_set_uuid() in dmeventd.
-   Improve pvremove error message when PV belongs to a VG.
-   Extend normal policy to allow mirror logs on same PVs as images if necessary.
-   Improve cling policy to recognise PVs already used during the transaction.
---- LVM2/daemons/dmeventd/dmeventd.c	2011/01/17 23:14:05	1.74
-+++ LVM2/daemons/dmeventd/dmeventd.c	2011/02/28 19:47:22	1.75
-@@ -387,7 +387,9 @@
- 	if (!dmt)
- 		return 0;
+--- LVM2/daemons/clvmd/clvmd.c	2011/02/18 14:47:29	1.95
++++ LVM2/daemons/clvmd/clvmd.c	2011/02/28 19:50:15	1.96
+@@ -1392,7 +1392,6 @@
+ 	int replylen = 0;
+ 	int buflen = max_cluster_message - sizeof(struct clvm_header) - 1;
+ 	int status;
+-	int msg_malloced = 0;
  
--	dm_task_set_uuid(dmt, ts->device.uuid);
-+	if (!dm_task_set_uuid(dmt, ts->device.uuid))
-+		goto fail;
-+
- 	if (!dm_task_run(dmt))
- 		goto fail;
+ 	/* Get the node name as we /may/ need it later */
+ 	clops->name_from_csid(csid, nodename);
+@@ -1501,10 +1500,6 @@
+ 		}
+ 	}
  
-@@ -732,7 +734,8 @@
- 	if (!dmt)
- 		return NULL;
+-	/* Free buffer if it was malloced */
+-	if (msg_malloced) {
+-		free(msg);
+-	}
+ 	free(replyargs);
+ }
  
--	dm_task_set_uuid(dmt, ts->device.uuid);
-+	if (!dm_task_set_uuid(dmt, ts->device.uuid))
-+                return NULL;
- 
- 	if (!dm_task_run(dmt)) {
- 		dm_task_destroy(dmt);
 
 
