@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2011 23:18:41 -0000
-Subject: LVM2/test/api test.c
-Message-ID: <20110301231841.10338.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 1 Mar 2011 23:27:07 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20110301232707.16026.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-01 23:18:40
+Changes by:	agk at sourceware.org	2011-03-01 23:27:07
 
 Modified files:
-	test/api       : test.c 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Build test.c also without readline library
-	
-	Allow bulding of this testing tool also without readline library.
-	Outputs message about build without readline library then.
+	Fix _create_and_load_v4 not to lose the --addnodeoncreate setting (1.02.62).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.449&r2=1.450
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.94&r2=1.95
 
---- LVM2/test/api/test.c	2010/11/25 14:35:46	1.34
-+++ LVM2/test/api/test.c	2011/03/01 23:18:40	1.35
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -12,13 +12,18 @@
-  * along with this program; if not, write to the Free Software Foundation,
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
-+
- #include <stdio.h>
- #include <string.h>
- #include <stdlib.h>
--#include <readline/readline.h>
-+#include <ctype.h>
+--- LVM2/WHATS_NEW_DM	2011/02/21 16:26:23	1.449
++++ LVM2/WHATS_NEW_DM	2011/03/01 23:27:06	1.450
+@@ -1,5 +1,6 @@
+ Version 1.02.64 - 
+ ===================================
++  Fix _create_and_load_v4 not to lose the --addnodeoncreate setting (1.02.62).
+   Add inactive table query support for kernel driver >= 4.11.6 (RHEL 5.7).
+   Log debug open_count in _node_has_closed_parents().
+   Change dm_report_field_string() API to accept const char *const *data.
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/02/21 16:26:24	1.94
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/03/01 23:27:07	1.95
+@@ -1753,6 +1753,7 @@
+ 	/* FIXME: Just for udev_check in dm_task_run. Can we avoid this? */
+ 	task->event_nr = dmt->event_nr & DM_UDEV_FLAGS_MASK;
+ 	task->cookie_set = dmt->cookie_set;
++	task->add_node = dmt->add_node;
  
-+#include "configure.h"
- #include "lvm2app.h"
- 
-+#ifndef READLINE_SUPPORT
-+#include <readline/readline.h>
-+
- #define MAX_ARGS 64
- 
- static int lvm_split(char *str, int *argc, char **argv, int max)
-@@ -1071,6 +1076,13 @@
- 	free(input);
- 	return 0;
- }
-+#else /* !READLINE_SUPPORT */
-+static int lvmapi_test_shell(lvm_t libh)
-+{
-+	printf("Build without readline library, no interactive testing.\n");
-+	return 1;
-+}
-+#endif
- 
- int main (int argc, char *argv[])
- {
+ 	r = dm_task_run(task);
+ 	dm_task_destroy(task);
 
 
