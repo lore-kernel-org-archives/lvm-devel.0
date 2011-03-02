@@ -1,57 +1,42 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  2 Mar 2011 19:09:08 +0100
-Subject: [PATCH 2/2] Do not send random bytes in message
-In-Reply-To: <cover.1299089143.git.zkabelac@redhat.com>
-References: <cover.1299089143.git.zkabelac@redhat.com>
-Message-ID: <8c22247db5625256cf453a8ee775789cf5b22417.1299089143.git.zkabelac@redhat.com>
+Date: Wed,  2 Mar 2011 19:20:22 +0100
+Subject: [PATCH 0/4] Alloc VG
+Message-ID: <cover.1299089601.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fixing few issues:
+Refactor allocation of volume group structure.
 
-struct clvm_header contains 'char args[1]' - so adding '+ 1' here
-for the message length calculation is not correct - we end up with longer
-message where last byte is uninitialized and passed to write function.
+Patch is currently splitted into multiple files to make a review easier.
 
-xid and clintid are initialized to 0.
+Things to check - why is pool_vg_read used  seqno == 1?
+(To make it same for all - I'd leave to 0 ?)
 
-Memory allocation is checked for NULL - though it's not really clear what
-should happen in this case - so just log the message - probably it will 
-fail few moments later...
+Memory for import functions is always used from vg mempool.
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- daemons/clvmd/clvmd.c |    9 +++++++--
- 1 files changed, 7 insertions(+), 2 deletions(-)
+Future updates -
+It would be probably worth to switch vg name to  char[128] (max vg name len)
+to simplify surrounding allocations...
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 00d330d..ecc366d 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1743,13 +1743,18 @@ static void send_local_reply(struct local_client *client, int status, int fd)
- 	}
- 
- 	/* Add in the size of our header */
--	message_len = message_len + sizeof(struct clvm_header) + 1;
--	replybuf = malloc(message_len);
-+	message_len = message_len + sizeof(struct clvm_header);
-+	if (!(replybuf = malloc(message_len))) {
-+		DEBUGLOG("Memory allocation fails\n");
-+		return;
-+	}
- 
- 	clientreply = (struct clvm_header *) replybuf;
- 	clientreply->status = status;
- 	clientreply->cmd = CLVMD_CMD_REPLY;
- 	clientreply->node[0] = '\0';
-+	clientreply->xid = 0;
-+	clientreply->clientid = 0;
- 	clientreply->flags = 0;
- 
- 	ptr = clientreply->args;
+
+Zdenek Kabelac (4):
+  Refactor vg allocation code
+  Use alloc_vg for _pool_vg_read
+  Use allog_vg for _free_vg in _pvsegs_sub_single
+  Use alloc_vg for forma1_vg_read
+
+ lib/format1/format1.c         |   72 ++++++++++---------------------
+ lib/format_pool/format_pool.c |   96 ++++++++++++++---------------------------
+ lib/format_text/import_vsn1.c |   38 +++++-----------
+ lib/metadata/metadata.c       |   75 ++++++-------------------------
+ lib/metadata/vg.c             |   32 ++++++++++++++
+ lib/metadata/vg.h             |    3 +
+ tools/reporter.c              |   25 +++++------
+ 7 files changed, 128 insertions(+), 213 deletions(-)
+
 -- 
 1.7.4.1
 
