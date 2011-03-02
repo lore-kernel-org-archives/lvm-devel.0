@@ -1,46 +1,58 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu, 24 Sep 2015 19:03:27 +0000 (UTC)
-Subject: master - lockd: fix changing lock type on VG with pool
-Message-ID: <20150924190327.3C4C560E53@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed,  2 Mar 2011 19:09:08 +0100
+Subject: [PATCH 2/2] Do not send random bytes in message
+In-Reply-To: <cover.1299089143.git.zkabelac@redhat.com>
+References: <cover.1299089143.git.zkabelac@redhat.com>
+Message-ID: <8c22247db5625256cf453a8ee775789cf5b22417.1299089143.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d40830a2b13595943ca51d4bfd6249527a0972cf
-Commit:        d40830a2b13595943ca51d4bfd6249527a0972cf
-Parent:        028715b0f07c0cb9740f8bd81e3d69a29c3341d2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Sep 24 13:59:13 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 24 14:03:20 2015 -0500
+Fixing few issues:
 
-lockd: fix changing lock type on VG with pool
+struct clvm_header contains 'char args[1]' - so adding '+ 1' here
+for the message length calculation is not correct - we end up with longer
+message where last byte is uninitialized and passed to write function.
 
-vgchange --lock-type iterates through LVs to ensure
-no LVs are active before changing the lock type of
-the VG, but the loop was not checking that an LV
-actually has a lock before trying it, so it would
-fail if the VG had any LVs that don't use locks,
-e.g it would fail on a tmeta LV from a pool.
+xid and clintid are initialized to 0.
+
+Memory allocation is checked for NULL - though it's not really clear what
+should happen in this case - so just log the message - probably it will 
+fail few moments later...
+
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/locking/lvmlockd.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ daemons/clvmd/clvmd.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index e20920c..afbafcb 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -879,6 +879,9 @@ static int _lockd_all_lvs(struct cmd_context *cmd, struct volume_group *vg)
- 	struct lv_list *lvl;
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 00d330d..ecc366d 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -1743,13 +1743,18 @@ static void send_local_reply(struct local_client *client, int status, int fd)
+ 	}
  
- 	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (!lockd_lv_uses_lock(lvl->lv))
-+			continue;
-+
- 		if (!lockd_lv(cmd, lvl->lv, "ex", 0)) {
- 			log_error("LV %s/%s must be inactive on all hosts.",
- 				  vg->name, lvl->lv->name);
+ 	/* Add in the size of our header */
+-	message_len = message_len + sizeof(struct clvm_header) + 1;
+-	replybuf = malloc(message_len);
++	message_len = message_len + sizeof(struct clvm_header);
++	if (!(replybuf = malloc(message_len))) {
++		DEBUGLOG("Memory allocation fails\n");
++		return;
++	}
+ 
+ 	clientreply = (struct clvm_header *) replybuf;
+ 	clientreply->status = status;
+ 	clientreply->cmd = CLVMD_CMD_REPLY;
+ 	clientreply->node[0] = '\0';
++	clientreply->xid = 0;
++	clientreply->clientid = 0;
+ 	clientreply->flags = 0;
+ 
+ 	ptr = clientreply->args;
+-- 
+1.7.4.1
 
 
