@@ -1,341 +1,765 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 24 Sep 2015 14:09:03 +0000 (UTC)
-Subject: master - segtypes: Add and use new segtype macros.
-Message-ID: <20150924140903.525026020C@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 2 Mar 2011 02:44:57 -0000
+Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
+Message-ID: <20110302024457.5477.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=39a97d86f09df0d89664c7ddae28ca1d1bb3a741
-Commit:        39a97d86f09df0d89664c7ddae28ca1d1bb3a741
-Parent:        41fe225b0deecea871354b321d23fad548857518
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Sep 24 14:59:07 2015 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Sep 24 14:59:07 2015 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-03-02 02:44:56
 
-segtypes: Add and use new segtype macros.
+Modified files:
+	.              : WHATS_NEW_DM 
+	tools          : dmsetup.c 
 
-Includes fixing an inverted raid10 segtype check in _raid_add_target_line.
----
- lib/activate/dev_manager.c |   10 +++++-----
- lib/metadata/lv_manip.c    |   31 +++++++++++++++----------------
- lib/metadata/mirror.c      |    2 +-
- lib/metadata/raid_manip.c  |   16 +++++++---------
- lib/metadata/segtype.h     |   27 +++++++++++++++++++++++++++
- lib/raid/raid.c            |    2 +-
- tools/lvchange.c           |    2 +-
- tools/lvcreate.c           |   14 ++++++--------
- 8 files changed, 63 insertions(+), 41 deletions(-)
+Log message:
+	Accept multiple mapped device names on many dmsetup command lines.
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 5a1e18b..a5ee824 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -143,23 +143,23 @@ static int _get_segment_status_from_target_params(const char *target_name,
- 		return 0;
- 	}
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.451&r2=1.452
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.155&r2=1.156
+
+--- LVM2/WHATS_NEW_DM	2011/03/02 00:29:57	1.451
++++ LVM2/WHATS_NEW_DM	2011/03/02 02:44:56	1.452
+@@ -1,5 +1,6 @@
+ Version 1.02.64 - 
+ ===================================
++  Accept multiple mapped device names on many dmsetup command lines.
+   Fix dm_udev_wait calls in dmsetup to occur before readahead display not after.
+   Include an implicit dm_task_update_nodes() within dm_udev_wait().
+   Fix _create_and_load_v4 not to lose the --addnodeoncreate setting (1.02.62).
+--- LVM2/tools/dmsetup.c	2011/03/02 00:29:58	1.155
++++ LVM2/tools/dmsetup.c	2011/03/02 02:44:56	1.156
+@@ -185,13 +185,16 @@
+  * Commands
+  */
  
--	if (!strcmp(segtype->name, SEG_TYPE_NAME_CACHE)) {
-+	if (segtype_is_cache(segtype)) {
- 		if (!dm_get_status_cache(seg_status->mem, params, &(seg_status->cache)))
- 			return_0;
- 		seg_status->type = SEG_STATUS_CACHE;
--	} else if (!strcmp(segtype->name, SEG_TYPE_NAME_RAID)) {
-+	} else if (segtype_is_raid(segtype)) {
- 		if (!dm_get_status_raid(seg_status->mem, params, &seg_status->raid))
- 			return_0;
- 		seg_status->type = SEG_STATUS_RAID;
--	} else if (!strcmp(segtype->name, SEG_TYPE_NAME_THIN)) {
-+	} else if (segtype_is_thin_volume(segtype)) {
- 		if (!dm_get_status_thin(seg_status->mem, params, &seg_status->thin))
- 			return_0;
- 		seg_status->type = SEG_STATUS_THIN;
--	} else if (!strcmp(segtype->name, SEG_TYPE_NAME_THIN_POOL)) {
-+	} else if (segtype_is_thin_pool(segtype)) {
- 		if (!dm_get_status_thin_pool(seg_status->mem, params, &seg_status->thin_pool))
- 			return_0;
- 		seg_status->type = SEG_STATUS_THIN_POOL;
--	} else if (!strcmp(segtype->name, SEG_TYPE_NAME_SNAPSHOT)) {
-+	} else if (segtype_is_snapshot(segtype)) {
- 		if (!dm_get_status_snapshot(seg_status->mem, params, &seg_status->snapshot))
- 			return_0;
- 		seg_status->type = SEG_STATUS_SNAPSHOT;
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 69a6b6e..ac3d25f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -224,7 +224,7 @@ static int _lv_layout_and_role_raid(struct dm_pool *mem,
- 				    int *public_lv)
- {
- 	int top_level = 0;
--	const char *seg_name;
-+	const struct segment_type *segtype;
+-typedef int (*command_fn) (int argc, char **argv, void *data);
++struct command;
++#define CMD_ARGS const struct command *cmd, int argc, char **argv, struct dm_names *names, int multiple_devices
++typedef int (*command_fn) (CMD_ARGS);
  
- 	/* non-top-level LVs */
- 	if (lv_is_raid_image(lv)) {
-@@ -251,45 +251,45 @@ static int _lv_layout_and_role_raid(struct dm_pool *mem,
- 	if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID]))
- 		goto_bad;
+ struct command {
+ 	const char *name;
+ 	const char *help;
+ 	int min_args;
+ 	int max_args;
++	int repeatable_cmd;	/* Repeat to process device list? */
+ 	command_fn fn;
+ };
  
--	seg_name = first_seg(lv)->segtype->name;
-+	segtype = first_seg(lv)->segtype;
- 
--	if (!strcmp(seg_name, SEG_TYPE_NAME_RAID1)) {
-+	if (segtype_is_raid1(segtype)) {
- 		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID1]))
- 			goto_bad;
--	} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID10)) {
-+	} else if (segtype_is_raid10(segtype)) {
- 		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID10]))
- 			goto_bad;
--	} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID4)) {
-+	} else if (segtype_is_raid4(segtype)) {
- 		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID4]))
- 			goto_bad;
--	} else if (!strncmp(seg_name, SEG_TYPE_NAME_RAID5, strlen(SEG_TYPE_NAME_RAID5))) {
-+	} else if (segtype_is_any_raid5(segtype)) {
- 		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID5]))
- 			goto_bad;
- 
--		if (!strcmp(seg_name, SEG_TYPE_NAME_RAID5_LA)) {
-+		if (segtype_is_raid5_la(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID5_LA]))
- 				goto_bad;
--		} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID5_RA)) {
-+		} else if (segtype_is_raid5_ra(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID5_RA]))
- 				goto_bad;
--		} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID5_LS)) {
-+		} else if (segtype_is_raid5_ls(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID5_LS]))
- 				goto_bad;
--		} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID5_RS)) {
-+		} else if (segtype_is_raid5_rs(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID5_RS]))
- 				goto_bad;
- 		}
--	} else if (!strncmp(seg_name, SEG_TYPE_NAME_RAID6, strlen(SEG_TYPE_NAME_RAID6))) {
-+	} else if (segtype_is_any_raid6(segtype)) {
- 		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID6]))
- 			goto_bad;
- 
--		if (!strcmp(seg_name, SEG_TYPE_NAME_RAID6_ZR)) {
-+		if (segtype_is_raid6_zr(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID6_ZR]))
- 				goto_bad;
--		} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID6_NR)) {
-+		} else if (segtype_is_raid6_nr(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID6_NR]))
- 				goto_bad;
--		} else if (!strcmp(seg_name, SEG_TYPE_NAME_RAID6_NC)) {
-+		} else if (segtype_is_raid6_nc(segtype)) {
- 			if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_RAID6_NC]))
- 				goto_bad;
- 		}
-@@ -3669,8 +3669,7 @@ int lv_add_log_segment(struct alloc_handle *ah, uint32_t first_area,
- {
- 
- 	return lv_add_segment(ah, ah->area_count + first_area, 1, log_lv,
--			      get_segtype_from_string(log_lv->vg->cmd,
--						      SEG_TYPE_NAME_STRIPED),
-+			      get_segtype_from_string(log_lv->vg->cmd, SEG_TYPE_NAME_STRIPED),
- 			      0, status, 0);
+@@ -523,7 +526,7 @@
+ 	return 1;
  }
  
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index d4d2104..8166e89 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -112,7 +112,7 @@ uint32_t lv_mirror_count(const struct logical_volume *lv)
- 	seg = first_seg(lv);
+-static int _load(int argc, char **argv, void *data __attribute__((unused)))
++static int _load(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -583,7 +586,7 @@
+ 	return r;
+ }
  
- 	/* FIXME: RAID10 only supports 2 copies right now */
--	if (!strcmp(seg->segtype->name, SEG_TYPE_NAME_RAID10))
-+	if (seg_is_raid10(seg))
- 		return 2;
+-static int _create(int argc, char **argv, void *data __attribute__((unused)))
++static int _create(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -670,7 +673,7 @@
+ 	return r;
+ }
  
- 	if (lv_is_pvmove(lv))
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 87e6c8c..5919e3b 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -1102,7 +1102,7 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
- 	}
+-static int _rename(int argc, char **argv, void *data __attribute__((unused)))
++static int _rename(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -721,7 +724,7 @@
+ 	return r;
+ }
  
- 	if (!seg_is_mirrored(first_seg(lv)) ||
--	    !strcmp(first_seg(lv)->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	    seg_is_raid10(first_seg(lv))) {
- 		log_error("Unable to split logical volume of segment type, %s",
- 			  lvseg_name(first_seg(lv)));
- 		return 0;
-@@ -1475,13 +1475,11 @@ int lv_raid_reshape(struct logical_volume *lv,
- 		return 0;
- 	}
+-static int _message(int argc, char **argv, void *data __attribute__((unused)))
++static int _message(CMD_ARGS)
+ {
+ 	int r = 0, i;
+ 	size_t sz = 1;
+@@ -786,7 +789,7 @@
+ 	return r;
+ }
  
--	if (!strcmp(seg->segtype->name, SEG_TYPE_NAME_MIRROR) &&
--	    (!strcmp(new_segtype->name, SEG_TYPE_NAME_RAID1)))
--	    return _convert_mirror_to_raid1(lv, new_segtype);
-+	if (seg_is_mirror(seg) && segtype_is_raid1(new_segtype))
-+		return _convert_mirror_to_raid1(lv, new_segtype);
+-static int _setgeometry(int argc, char **argv, void *data __attribute__((unused)))
++static int _setgeometry(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -825,7 +828,7 @@
+ 	return r;
+ }
  
--	log_error("Converting the segment type for %s/%s from %s to %s"
--		  " is not yet supported.", lv->vg->name, lv->name,
--		  lvseg_name(seg), new_segtype->name);
-+	log_error("Converting the segment type for %s/%s from %s to %s is not yet supported.",
-+		  lv->vg->name, lv->name, lvseg_name(seg), new_segtype->name);
+-static int _splitname(int argc, char **argv, void *data __attribute__((unused)))
++static int _splitname(CMD_ARGS)
+ {
+ 	struct dmsetup_report_obj obj;
+ 	int r = 1;
+@@ -859,7 +862,7 @@
+ 		return (uint32_t) value;
+ }
+ 
+-static int _udevflags(int args, char **argv, void *data __attribute__((unused)))
++static int _udevflags(CMD_ARGS)
+ {
+ 	uint32_t cookie;
+ 	uint16_t flags;
+@@ -901,7 +904,7 @@
+ 	return 1;
+ }
+ 
+-static int _udevcomplete(int argc, char **argv, void *data __attribute__((unused)))
++static int _udevcomplete(CMD_ARGS)
+ {
+ 	uint32_t cookie;
+ 
+@@ -926,30 +929,28 @@
+ #ifndef UDEV_SYNC_SUPPORT
+ static const char _cmd_not_supported[] = "Command not supported. Recompile with \"--enable-udev-sync\" to enable.";
+ 
+-static int _udevcreatecookie(int argc, char **argv,
+-				  void *data __attribute__((unused)))
++static int _udevcreatecookie(CMD_ARGS)
+ {
+ 	log_error(_cmd_not_supported);
+ 
  	return 0;
  }
  
-@@ -1663,7 +1661,7 @@ int lv_raid_replace(struct logical_volume *lv,
- 			  lvseg_name(raid_seg),
- 			  lv->vg->name, lv->name);
- 		return 0;
--	} else if (!strcmp(raid_seg->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	} else if (seg_is_raid10(raid_seg)) {
- 		uint32_t i, rebuilds_per_group = 0;
- 		/* FIXME: We only support 2-way mirrors in RAID10 currently */
- 		uint32_t copies = 2;
-@@ -1895,7 +1893,7 @@ static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
- 	uint32_t i, s, rebuilds_per_group = 0;
- 	uint32_t failed_components = 0;
- 
--	if (!strcmp(raid_seg->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	if (seg_is_raid10(raid_seg)) {
- 		/* FIXME: We only support 2-way mirrors in RAID10 currently */
- 		copies = 2;
- 		for (i = 0; i < raid_seg->area_count * copies; i++) {
-diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
-index aa18224..a14f9d0 100644
---- a/lib/metadata/segtype.h
-+++ b/lib/metadata/segtype.h
-@@ -80,6 +80,20 @@ struct dev_manager;
- #define segtype_is_mirror(segtype)	((segtype)->flags & SEG_MIRROR ? 1 : 0)
- #define segtype_is_pool(segtype)	((segtype)->flags & (SEG_CACHE_POOL | SEG_THIN_POOL)  ? 1 : 0)
- #define segtype_is_raid(segtype)	((segtype)->flags & SEG_RAID ? 1 : 0)
-+#define segtype_is_raid1(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID1))
-+#define segtype_is_raid4(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID4))
-+#define segtype_is_raid5(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID5))
-+#define segtype_is_any_raid5(segtype)	(!strncmp((segtype)->name, SEG_TYPE_NAME_RAID5, strlen(SEG_TYPE_NAME_RAID5)))
-+#define segtype_is_raid5_la(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID5_LA))
-+#define segtype_is_raid5_ra(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID5_RA))
-+#define segtype_is_raid5_ls(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID5_LS))
-+#define segtype_is_raid5_rs(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID5_RS))
-+#define segtype_is_any_raid6(segtype)	(!strncmp((segtype)->name, SEG_TYPE_NAME_RAID6, strlen(SEG_TYPE_NAME_RAID6)))
-+#define segtype_is_raid6_zr(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID6_ZR))
-+#define segtype_is_raid6_nr(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID6_NR))
-+#define segtype_is_raid6_nc(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID6_NC))
-+#define segtype_is_raid10(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_RAID10))
-+#define segtype_is_snapshot(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_SNAPSHOT))
- #define segtype_is_striped(segtype)	((segtype)->flags & SEG_AREAS_STRIPED ? 1 : 0)
- #define segtype_is_thin(segtype)	((segtype)->flags & (SEG_THIN_POOL|SEG_THIN_VOLUME) ? 1 : 0)
- #define segtype_is_thin_pool(segtype)	((segtype)->flags & SEG_THIN_POOL ? 1 : 0)
-@@ -94,6 +108,19 @@ struct dev_manager;
- #define seg_is_mirrored(seg)	segtype_is_mirrored((seg)->segtype)
- #define seg_is_pool(seg)	segtype_is_pool((seg)->segtype)
- #define seg_is_raid(seg)	segtype_is_raid((seg)->segtype)
-+#define seg_is_raid1(seg)	segtype_is_raid1((seg)->segtype)
-+#define seg_is_raid4(seg)	segtype_is_raid4((seg)->segtype)
-+#define seg_is_raid5(seg)	segtype_is_raid5((seg)->segtype)
-+#define seg_is_any_raid5(seg)	segtype_is_any_raid5((seg)->segtype)
-+#define seg_is_raid5_la(seg)	segtype_is_raid5_la((seg)->segtype)
-+#define seg_is_raid5_ra(seg)	segtype_is_raid5_ra((seg)->segtype)
-+#define seg_is_raid5_ls(seg)	segtype_is_raid5_ls((seg)->segtype)
-+#define seg_is_raid5_rs(seg)	segtype_is_raid5_rs((seg)->segtype)
-+#define seg_is_any_raid6(seg)	segtype_is_any_raid6((seg)->segtype)
-+#define seg_is_raid6_zr(seg)	segtype_is_raid6_zr((seg)->segtype)
-+#define seg_is_raid6_nr(seg)	segtype_is_raid6_nr((seg)->segtype)
-+#define seg_is_raid6_nc(seg)	segtype_is_raid6_nc((seg)->segtype)
-+#define seg_is_raid10(seg)	segtype_is_raid10((seg)->segtype)
- #define seg_is_replicator(seg)	((seg)->segtype->flags & SEG_REPLICATOR ? 1 : 0)
- #define seg_is_replicator_dev(seg) ((seg)->segtype->flags & SEG_REPLICATOR_DEV ? 1 : 0)
- #define seg_is_snapshot(seg)	((seg)->segtype->flags & SEG_SNAPSHOT ? 1 : 0)
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index 290a590..13b9b6e 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -242,7 +242,7 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
- 		/* RAID 4/5/6 */
- 		params.mirrors = 1;
- 		params.stripes = seg->area_count - seg->segtype->parity_devs;
--	} else if (strcmp(seg->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	} else if (seg_is_raid10(seg)) {
- 		/* RAID 10 only supports 2 mirrors now */
- 		params.mirrors = 2;
- 		params.stripes = seg->area_count / 2;
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index e24c07a..bd34d11 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -731,7 +731,7 @@ static int _lvchange_writemostly(struct logical_volume *lv)
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *raid_seg = first_seg(lv);
- 
--	if (strcmp(raid_seg->segtype->name, SEG_TYPE_NAME_RAID1)) {
-+	if (!seg_is_raid1(raid_seg)) {
- 		log_error("--write%s can only be used with 'raid1' segment type",
- 			  arg_count(cmd, writemostly_ARG) ? "mostly" : "behind");
- 		return 0;
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index e19ae01..80c336a 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -453,7 +453,7 @@ static int _read_mirror_params(struct cmd_context *cmd,
- static int _read_raid_params(struct cmd_context *cmd,
- 			     struct lvcreate_params *lp)
+-static int _udevreleasecookie(int argc, char **argv,
+-				void *data __attribute__((unused)))
++static int _udevreleasecookie(CMD_ARGS)
  {
--	if ((lp->stripes < 2) && !strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	if ((lp->stripes < 2) && segtype_is_raid10(lp->segtype)) {
- 		if (arg_count(cmd, stripes_ARG)) {
- 			/* User supplied the bad argument */
- 			log_error("Segment type 'raid10' requires 2 or more stripes.");
-@@ -468,15 +468,14 @@ static int _read_raid_params(struct cmd_context *cmd,
- 	 * RAID1 does not take a stripe arg
- 	 */
- 	if ((lp->stripes > 1) && seg_is_mirrored(lp) &&
--	    strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	    !segtype_is_raid10(lp->segtype)) {
- 		log_error("Stripe argument cannot be used with segment type, %s",
- 			  lp->segtype->name);
+ 	log_error(_cmd_not_supported);
+ 
+ 	return 0;
+ }
+ 
+-static int _udevcomplete_all(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _udevcomplete_all(CMD_ARGS)
+ {
+ 	log_error(_cmd_not_supported);
+ 
+ 	return 0;
+ }
+ 
+-static int _udevcookies(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _udevcookies(CMD_ARGS)
+ {
+ 	log_error(_cmd_not_supported);
+ 
+@@ -1023,8 +1024,7 @@
+ 	return 1;
+ }
+ 
+-static int _udevcreatecookie(int argc, char **argv,
+-				  void *data __attribute__((unused)))
++static int _udevcreatecookie(CMD_ARGS)
+ {
+ 	uint32_t cookie;
+ 
+@@ -1037,8 +1037,7 @@
+ 	return 1;
+ }
+ 
+-static int _udevreleasecookie(int argc, char **argv,
+-				void *data __attribute__((unused)))
++static int _udevreleasecookie(CMD_ARGS)
+ {
+ 	if (argv[1] && !(_udev_cookie = _get_cookie_value(argv[1])))
  		return 0;
+@@ -1079,7 +1078,7 @@
+ 	return ret;
+ }
+ 
+-static int _udevcomplete_all(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _udevcomplete_all(CMD_ARGS)
+ {
+ 	int max_id, id, sid;
+ 	struct seminfo sinfo;
+@@ -1128,7 +1127,7 @@
+ 	return 1;
+ }
+ 
+-static int _udevcookies(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _udevcookies(CMD_ARGS)
+ {
+ 	int max_id, id, sid;
+ 	struct seminfo sinfo;
+@@ -1167,7 +1166,7 @@
+ }
+ #endif	/* UDEV_SYNC_SUPPORT */
+ 
+-static int _version(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _version(CMD_ARGS)
+ {
+ 	char version[80];
+ 
+@@ -1249,22 +1248,22 @@
+ 	return r;
+ }
+ 
+-static int _suspend(int argc, char **argv, void *data __attribute__((unused)))
++static int _suspend(CMD_ARGS)
+ {
+ 	return _simple(DM_DEVICE_SUSPEND, argc > 1 ? argv[1] : NULL, 0, 1);
+ }
+ 
+-static int _resume(int argc, char **argv, void *data __attribute__((unused)))
++static int _resume(CMD_ARGS)
+ {
+ 	return _simple(DM_DEVICE_RESUME, argc > 1 ? argv[1] : NULL, 0, 1);
+ }
+ 
+-static int _clear(int argc, char **argv, void *data __attribute__((unused)))
++static int _clear(CMD_ARGS)
+ {
+ 	return _simple(DM_DEVICE_CLEAR, argc > 1 ? argv[1] : NULL, 0, 1);
+ }
+ 
+-static int _wait(int argc, char **argv, void *data __attribute__((unused)))
++static int _wait(CMD_ARGS)
+ {
+ 	const char *name = NULL;
+ 
+@@ -1281,8 +1280,8 @@
+ 		       (argc > 1) ? (uint32_t) atoi(argv[argc - 1]) : 0, 1);
+ }
+ 
+-static int _process_all(int argc, char **argv, int silent,
+-			int (*fn) (int argc, char **argv, void *data))
++static int _process_all(const struct command *cmd, int argc, char **argv, int silent,
++			int (*fn) (CMD_ARGS))
+ {
+ 	int r = 1;
+ 	struct dm_names *names;
+@@ -1311,7 +1310,7 @@
+ 
+ 	do {
+ 		names = (struct dm_names *)((char *) names + next);
+-		if (!fn(argc, argv, names))
++		if (!fn(cmd, argc, argv, names, 1))
+ 			r = 0;
+ 		next = names->next;
+ 	} while (next);
+@@ -1358,15 +1357,14 @@
+ 	return size;
+ }
+ 
+-static int _error_device(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data)
++static int _error_device(CMD_ARGS)
+ {
+-	struct dm_names *names = (struct dm_names *) data;
+ 	struct dm_task *dmt;
+ 	const char *name;
+ 	uint64_t size;
+ 	int r = 0;
+ 
+-	if (data)
++	if (names)
+ 		name = names->name;
+ 	else
+ 		name = argv[1];
+@@ -1406,22 +1404,22 @@
+ 	return r;
+ }
+ 
+-static int _remove(int argc, char **argv, void *data __attribute__((unused)))
++static int _remove(CMD_ARGS)
+ {
+ 	if (_switches[FORCE_ARG] && argc > 1)
+-		(void) _error_device(argc, argv, NULL);
++		(void) _error_device(cmd, argc, argv, NULL, 0);
+ 
+ 	return _simple(DM_DEVICE_REMOVE, argc > 1 ? argv[1] : NULL, 0, 0);
+ }
+ 
+-static int _count_devices(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _count_devices(CMD_ARGS)
+ {
+ 	_num_devices++;
+ 
+ 	return 1;
+ }
+ 
+-static int _remove_all(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _remove_all(CMD_ARGS)
+ {
+ 	int r;
+ 
+@@ -1432,17 +1430,17 @@
+ 		return r;
+ 
+ 	_num_devices = 0;
+-	r |= _process_all(argc, argv, 1, _count_devices);
++	r |= _process_all(cmd, argc, argv, 1, _count_devices);
+ 
+ 	/* No devices left? */
+ 	if (!_num_devices)
+ 		return r;
+ 
+-	r |= _process_all(argc, argv, 1, _error_device);
++	r |= _process_all(cmd, argc, argv, 1, _error_device);
+ 	r |= _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
+ 
+ 	_num_devices = 0;
+-	r |= _process_all(argc, argv, 1, _count_devices);
++	r |= _process_all(cmd, argc, argv, 1, _count_devices);
+ 	if (!_num_devices)
+ 		return r;
+ 
+@@ -1459,7 +1457,7 @@
+ 		printf("%s\t(%u, %u)\n", name, info.major, info.minor);
+ }
+ 
+-static int _mknodes(int argc, char **argv, void *data __attribute__((unused)))
++static int _mknodes(CMD_ARGS)
+ {
+ 	return dm_mknodes(argc > 1 ? argv[1] : NULL);
+ }
+@@ -1523,7 +1521,7 @@
+ 	return 1;
+ }
+ 
+-static int _status(int argc, char **argv, void *data)
++static int _status(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -1531,31 +1529,30 @@
+ 	uint64_t start, length;
+ 	char *target_type = NULL;
+ 	char *params, *c;
+-	int cmd;
+-	struct dm_names *names = (struct dm_names *) data;
++	int cmdno;
+ 	const char *name = NULL;
+ 	int matched = 0;
+ 	int ls_only = 0;
+ 	struct dm_info info;
+ 
+-	if (data)
++	if (names)
+ 		name = names->name;
+ 	else {
+ 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
+-			return _process_all(argc, argv, 0, _status);
+-		if (argc == 2)
++			return _process_all(cmd, argc, argv, 0, _status);
++		if (multiple_devices)
+ 			name = argv[1];
  	}
  
- 	if (arg_count(cmd, mirrors_ARG) && segtype_is_raid(lp->segtype) &&
--	    strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID1) &&
--	    strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	    !segtype_is_raid1(lp->segtype) && !segtype_is_raid10(lp->segtype)) {
- 		log_error("Mirror argument cannot be used with segment type, %s",
- 			  lp->segtype->name);
+-	if (!strcmp(argv[0], "table"))
+-		cmd = DM_DEVICE_TABLE;
++	if (!strcmp(cmd->name, "table"))
++		cmdno = DM_DEVICE_TABLE;
+ 	else
+-		cmd = DM_DEVICE_STATUS;
++		cmdno = DM_DEVICE_STATUS;
+ 
+-	if (!strcmp(argv[0], "ls"))
++	if (!strcmp(cmd->name, "ls"))
+ 		ls_only = 1;
+ 
+-	if (!(dmt = dm_task_create(cmd)))
++	if (!(dmt = dm_task_create(cmdno)))
  		return 0;
-@@ -512,7 +511,7 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
- 			return 0;
- 		}
  
--		if ((lp->mirrors > 2) && !strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+		if ((lp->mirrors > 2) && segtype_is_raid10(lp->segtype)) {
- 			/*
- 			 * FIXME: When RAID10 is no longer limited to
- 			 *        2-way mirror, 'lv_mirror_count()'
-@@ -974,8 +973,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
- 			return 0;
- 		}
+ 	if (!_set_task_device(dmt, name, 0))
+@@ -1593,12 +1590,12 @@
+ 			   _switches[VERBOSE_ARG]) {
+ 			if (!matched && _switches[VERBOSE_ARG])
+ 				_display_info(dmt);
+-			if (data && !_switches[VERBOSE_ARG])
++			if (multiple_devices && !_switches[VERBOSE_ARG])
+ 				printf("%s: ", name);
+ 			if (target_type) {
+ 				/* Suppress encryption key */
+ 				if (!_switches[SHOWKEYS_ARG] &&
+-				    cmd == DM_DEVICE_TABLE &&
++				    cmdno == DM_DEVICE_TABLE &&
+ 				    !strcmp(target_type, "crypt")) {
+ 					c = params;
+ 					while (*c && *c != ' ')
+@@ -1616,7 +1613,7 @@
+ 		matched = 1;
+ 	} while (next);
  
--		if (!strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10) &&
--		    !(lp->target_attr & RAID_FEATURE_RAID10)) {
-+		if (segtype_is_raid10(lp->segtype) && !(lp->target_attr & RAID_FEATURE_RAID10)) {
- 			log_error("RAID module does not support RAID10.");
- 			return 0;
+-	if (data && _switches[VERBOSE_ARG] && matched && !ls_only)
++	if (multiple_devices && _switches[VERBOSE_ARG] && matched && !ls_only)
+ 		printf("\n");
+ 
+ 	if (matched && _switches[EXEC_ARG] && _command && !_exec_command(name))
+@@ -1630,7 +1627,7 @@
+ }
+ 
+ /* Show target names and their version numbers */
+-static int _targets(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data __attribute__((unused)))
++static int _targets(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -1662,20 +1659,19 @@
+ 	return r;
+ }
+ 
+-static int _info(int argc, char **argv, void *data)
++static int _info(CMD_ARGS)
+ {
+ 	int r = 0;
+ 
+ 	struct dm_task *dmt;
+-	struct dm_names *names = (struct dm_names *) data;
+ 	char *name = NULL;
+ 
+-	if (data)
++	if (names)
+ 		name = names->name;
+ 	else {
+ 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
+-			return _process_all(argc, argv, 0, _info);
+-		if (argc == 2)
++			return _process_all(cmd, argc, argv, 0, _info);
++		if (multiple_devices)
+ 			name = argv[1];
+ 	}
+ 
+@@ -1701,22 +1697,21 @@
+ 	return r;
+ }
+ 
+-static int _deps(int argc, char **argv, void *data)
++static int _deps(CMD_ARGS)
+ {
+ 	int r = 0;
+ 	uint32_t i;
+ 	struct dm_deps *deps;
+ 	struct dm_task *dmt;
+ 	struct dm_info info;
+-	struct dm_names *names = (struct dm_names *) data;
+ 	char *name = NULL;
+ 
+-	if (data)
++	if (names)
+ 		name = names->name;
+ 	else {
+ 		if (argc == 1 && !_switches[UUID_ARG] && !_switches[MAJOR_ARG])
+-			return _process_all(argc, argv, 0, _deps);
+-		if (argc == 2)
++			return _process_all(cmd, argc, argv, 0, _deps);
++		if (multiple_devices)
+ 			name = argv[1];
+ 	}
+ 
+@@ -1750,7 +1745,7 @@
+ 	if (_switches[VERBOSE_ARG])
+ 		_display_info(dmt);
+ 
+-	if (data && !_switches[VERBOSE_ARG])
++	if (multiple_devices && !_switches[VERBOSE_ARG])
+ 		printf("%s: ", name);
+ 	printf("%d dependencies\t:", deps->count);
+ 
+@@ -1760,7 +1755,7 @@
+ 		       (int) MINOR(deps->device[i]));
+ 	printf("\n");
+ 
+-	if (data && _switches[VERBOSE_ARG])
++	if (multiple_devices && _switches[VERBOSE_ARG])
+ 		printf("\n");
+ 
+ 	r = 1;
+@@ -1770,10 +1765,8 @@
+ 	return r;
+ }
+ 
+-static int _display_name(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data)
++static int _display_name(CMD_ARGS)
+ {
+-	struct dm_names *names = (struct dm_names *) data;
+-
+ 	printf("%s\t(%d, %d)\n", names->name,
+ 	       (int) MAJOR(names->dev), (int) MINOR(names->dev));
+ 
+@@ -2085,10 +2078,8 @@
+ 	}
+ }
+ 
+-static int _add_dep(int argc __attribute__((unused)), char **argv __attribute__((unused)), void *data)
++static int _add_dep(CMD_ARGS)
+ {
+-	struct dm_names *names = (struct dm_names *) data;
+-
+ 	if (!dm_tree_add_dev(_dtree, (unsigned) MAJOR(names->dev), (unsigned) MINOR(names->dev)))
+ 		return 0;
+ 
+@@ -2098,7 +2089,7 @@
+ /*
+  * Create and walk dependency tree
+  */
+-static int _build_whole_deptree(void)
++static int _build_whole_deptree(const struct command *cmd)
+ {
+ 	if (_dtree)
+ 		return 1;
+@@ -2106,17 +2097,15 @@
+ 	if (!(_dtree = dm_tree_create()))
+ 		return 0;
+ 
+-	if (!_process_all(0, NULL, 0, _add_dep))
++	if (!_process_all(cmd, 0, NULL, 0, _add_dep))
+ 		return 0;
+ 
+ 	return 1;
+ }
+ 
+-static int _display_tree(int argc __attribute__((unused)),
+-			 char **argv __attribute__((unused)),
+-			 void *data __attribute__((unused)))
++static int _display_tree(CMD_ARGS)
+ {
+-	if (!_build_whole_deptree())
++	if (!_build_whole_deptree(cmd))
+ 		return 0;
+ 
+ 	_display_tree_walk_children(dm_tree_find_node(_dtree, 0, 0), 0);
+@@ -2581,7 +2570,7 @@
+ static const char *default_report_options = "name,major,minor,attr,open,segments,events,uuid";
+ static const char *splitname_report_options = "vg_name,lv_name,lv_layer";
+ 
+-static int _report_init(struct command *c)
++static int _report_init(const struct command *cmd)
+ {
+ 	char *options = (char *) default_report_options;
+ 	const char *keys = "";
+@@ -2592,7 +2581,7 @@
+ 	size_t len = 0;
+ 	int r = 0;
+ 
+-	if (c && !strcmp(c->name, "splitname"))
++	if (cmd && !strcmp(cmd->name, "splitname"))
+ 		options = (char *) splitname_report_options;
+ 
+ 	/* emulate old dmsetup behaviour */
+@@ -2638,7 +2627,7 @@
+ 	if (_switches[SORT_ARG] && _string_args[SORT_ARG]) {
+ 		keys = _string_args[SORT_ARG];
+ 		buffered = 1;
+-		if (c && (!strcmp(c->name, "status") || !strcmp(c->name, "table"))) {
++		if (cmd && (!strcmp(cmd->name, "status") || !strcmp(cmd->name, "table"))) {
+ 			err("--sort is not yet supported with status and table");
+ 			goto out;
  		}
-@@ -1215,7 +1213,7 @@ static int _check_raid_parameters(struct volume_group *vg,
- 				  lp->segtype->name);
- 			return 0;
+@@ -2672,7 +2661,7 @@
+ 				       options, separator, flags, keys, NULL)))
+ 		goto out;
+ 
+-	if ((_report_type & DR_TREE) && !_build_whole_deptree()) {
++	if ((_report_type & DR_TREE) && !_build_whole_deptree(cmd)) {
+ 		err("Internal device dependency tree creation failed.");
+ 		goto out;
+ 	}
+@@ -2695,56 +2684,56 @@
+ /*
+  * List devices
+  */
+-static int _ls(int argc, char **argv, void *data)
++static int _ls(CMD_ARGS)
+ {
+ 	if ((_switches[TARGET_ARG] && _target) ||
+ 	    (_switches[EXEC_ARG] && _command))
+-		return _status(argc, argv, data);
++		return _status(cmd, argc, argv, NULL, 0);
+ 	else if ((_switches[TREE_ARG]))
+-		return _display_tree(argc, argv, data);
++		return _display_tree(cmd, 0, NULL, NULL, 0);
+ 	else
+-		return _process_all(argc, argv, 0, _display_name);
++		return _process_all(cmd, argc, argv, 0, _display_name);
+ }
+ 
+-static int _help(int argc, char **argv, void *data);
++static int _help(CMD_ARGS);
+ 
+ /*
+  * Dispatch table
+  */
+ static struct command _commands[] = {
+-	{"help", "[-c|-C|--columns]", 0, 0, _help},
++	{"help", "[-c|-C|--columns]", 0, 0, 0, _help},
+ 	{"create", "<dev_name> [-j|--major <major> -m|--minor <minor>]\n"
+ 	  "\t                  [-U|--uid <uid>] [-G|--gid <gid>] [-M|--mode <octal_mode>]\n"
+ 	  "\t                  [-u|uuid <uuid>] [{--addnodeonresume|--addnodeoncreate}]\n"
+ 	  "\t                  [--notable | --table <table> | <table_file>]",
+-	 1, 2, _create},
+-	{"remove", "[-f|--force] <device>", 0, 1, _remove},
+-	{"remove_all", "[-f|--force]", 0, 0, _remove_all},
+-	{"suspend", "[--noflush] <device>", 0, 1, _suspend},
+-	{"resume", "<device> [{--addnodeonresume|--addnodeoncreate}]", 0, 1, _resume},
+-	{"load", "<device> [<table_file>]", 0, 2, _load},
+-	{"clear", "<device>", 0, 1, _clear},
+-	{"reload", "<device> [<table_file>]", 0, 2, _load},
+-	{"rename", "<device> [--setuuid] <new_name_or_uuid>", 1, 2, _rename},
+-	{"message", "<device> <sector> <message>", 2, -1, _message},
+-	{"ls", "[--target <target_type>] [--exec <command>] [--tree [-o options]]", 0, 0, _ls},
+-	{"info", "[<device>]", 0, 1, _info},
+-	{"deps", "[<device>]", 0, 1, _deps},
+-	{"status", "[<device>] [--target <target_type>]", 0, 1, _status},
+-	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, 1, _status},
+-	{"wait", "<device> [<event_nr>]", 0, 2, _wait},
+-	{"mknodes", "[<device>]", 0, 1, _mknodes},
+-	{"udevcreatecookie", "", 0, 0, _udevcreatecookie},
+-	{"udevreleasecookie", "[<cookie>]", 0, 1, _udevreleasecookie},
+-	{"udevflags", "<cookie>", 1, 1, _udevflags},
+-	{"udevcomplete", "<cookie>", 1, 1, _udevcomplete},
+-	{"udevcomplete_all", "", 0, 0, _udevcomplete_all},
+-	{"udevcookies", "", 0, 0, _udevcookies},
+-	{"targets", "", 0, 0, _targets},
+-	{"version", "", 0, 0, _version},
+-	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, _setgeometry},
+-	{"splitname", "<device> [<subsystem>]", 1, 2, _splitname},
+-	{NULL, NULL, 0, 0, NULL}
++	 1, 2,0,  _create},
++	{"remove", "[-f|--force] <device>", 0, -1, 1, _remove},
++	{"remove_all", "[-f|--force]", 0, 0, 0,  _remove_all},
++	{"suspend", "[--noflush] <device>", 0, -1, 1, _suspend},
++	{"resume", "<device> [{--addnodeonresume|--addnodeoncreate}]", 0, -1, 1, _resume},
++	{"load", "<device> [<table_file>]", 0, 2, 0, _load},
++	{"clear", "<device>", 0, -1, 1, _clear},
++	{"reload", "<device> [<table_file>]", 0, 2, 0, _load},
++	{"rename", "<device> [--setuuid] <new_name_or_uuid>", 1, 2, 0, _rename},
++	{"message", "<device> <sector> <message>", 2, -1, 0, _message},
++	{"ls", "[--target <target_type>] [--exec <command>] [--tree [-o options]]", 0, 0, 0, _ls},
++	{"info", "[<device>]", 0, -1, 1, _info},
++	{"deps", "[<device>]", 0, -1, 1, _deps},
++	{"status", "[<device>] [--target <target_type>]", 0, -1, 1, _status},
++	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, -1, 1, _status},
++	{"wait", "<device> [<event_nr>]", 0, 2, 0, _wait},
++	{"mknodes", "[<device>]", 0, -1, 1, _mknodes},
++	{"udevcreatecookie", "", 0, 0, 0, _udevcreatecookie},
++	{"udevreleasecookie", "[<cookie>]", 0, 1, 0, _udevreleasecookie},
++	{"udevflags", "<cookie>", 1, 1, 0, _udevflags},
++	{"udevcomplete", "<cookie>", 1, 1, 0, _udevcomplete},
++	{"udevcomplete_all", "", 0, 0, 0, _udevcomplete_all},
++	{"udevcookies", "", 0, 0, 0, _udevcookies},
++	{"targets", "", 0, 0, 0, _targets},
++	{"version", "", 0, 0, 0, _version},
++	{"setgeometry", "<device> <cyl> <head> <sect> <start>", 5, 5, 0, _setgeometry},
++	{"splitname", "<device> [<subsystem>]", 1, 2, 0, _splitname},
++	{NULL, NULL, 0, 0, 0, NULL}
+ };
+ 
+ static void _usage(FILE *out)
+@@ -2777,9 +2766,7 @@
+ 		     "[-o offset] [-f|loop_device] [file]\n\n");
+ }
+ 
+-static int _help(int argc __attribute__((unused)),
+-		 char **argv __attribute__((unused)),
+-		 void *data __attribute__((unused)))
++static int _help(CMD_ARGS)
+ {
+ 	_usage(stderr);
+ 
+@@ -2792,7 +2779,7 @@
+ 			dm_report_free(_report);
+ 			_report = NULL;
  		}
--	} else if (!strcmp(lp->segtype->name, SEG_TYPE_NAME_RAID10)) {
-+	} else if (segtype_is_raid10(lp->segtype)) {
- 		if (!arg_count(cmd, stripes_ARG))
- 			lp->stripes = devs / lp->mirrors;
- 		if (lp->stripes < 2) {
+-		(void) _report_init(NULL);
++		(void) _report_init(cmd);
+ 	}
+ 
+ 	return 1;
+@@ -3357,9 +3344,10 @@
+ 
+ int main(int argc, char **argv)
+ {
+-	struct command *c;
+ 	int r = 1;
+ 	const char *dev_dir;
++	const struct command *cmd;
++	int multiple_devices;
+ 
+ 	(void) setlocale(LC_ALL, "");
+ 
+@@ -3378,12 +3366,12 @@
+ 	}
+ 
+ 	if (_switches[HELP_ARG]) {
+-		c = _find_command("help");
++		cmd = _find_command("help");
+ 		goto doit;
+ 	}
+ 
+ 	if (_switches[VERSION_ARG]) {
+-		c = _find_command("version");
++		cmd = _find_command("version");
+ 		goto doit;
+ 	}
+ 
+@@ -3392,27 +3380,27 @@
+ 		goto out;
+ 	}
+ 
+-	if (!(c = _find_command(argv[0]))) {
++	if (!(cmd = _find_command(argv[0]))) {
+ 		fprintf(stderr, "Unknown command\n");
+ 		_usage(stderr);
+ 		goto out;
+ 	}
+ 
+-	if (argc < c->min_args + 1 ||
+-	    (c->max_args >= 0 && argc > c->max_args + 1)) {
++	if (argc < cmd->min_args + 1 ||
++	    (cmd->max_args >= 0 && argc > cmd->max_args + 1)) {
+ 		fprintf(stderr, "Incorrect number of arguments\n");
+ 		_usage(stderr);
+ 		goto out;
+ 	}
+ 
+-	if (!_switches[COLS_ARG] && !strcmp(c->name, "splitname"))
++	if (!_switches[COLS_ARG] && !strcmp(cmd->name, "splitname"))
+ 		_switches[COLS_ARG]++;
+ 
+ 	if (_switches[COLS_ARG]) {
+-		if (!_report_init(c))
++		if (!_report_init(cmd))
+ 			goto out;
+ 		if (!_report) {
+-			if (!strcmp(c->name, "info"))
++			if (!strcmp(cmd->name, "info"))
+ 				r = 0;  /* info -c -o help */
+ 			goto out;
+ 		}
+@@ -3424,10 +3412,13 @@
+ 	#endif
+ 
+       doit:
+-	if (!c->fn(argc, argv, NULL)) {
+-		fprintf(stderr, "Command failed\n");
+-		goto out;
+-	}
++	multiple_devices = (argc > 1);
++	do {
++		if (!cmd->fn(cmd, argc--, argv++, NULL, multiple_devices)) {
++			fprintf(stderr, "Command failed\n");
++			goto out;
++		}
++	} while (cmd->repeatable_cmd && argc > 1);
+ 
+ 	r = 0;
+ 
 
 
