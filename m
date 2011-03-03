@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 2 Mar 2011 23:38:23 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
-Message-ID: <20110302233823.21409.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 3 Mar 2011 12:30:33 -0000
+Subject: LVM2/test t-lvconvert-mirror-basic.sh
+Message-ID: <20110303123033.7334.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,36 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-03-02 23:38:22
+Changes by:	zkabelac at sourceware.org	2011-03-03 12:30:33
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
+	test           : t-lvconvert-mirror-basic.sh 
 
 Log message:
-	Fix syslog initialisation in clvmd to respect lvm.conf setting.
+	Do not echo y to lvconvert
+	
+	This lvconvert is now able to complete operation automatically without question.
+	So remove  'echo y |'  - it's breaking pipe on some bash versions.
+	
+	i.e.:
+	+ echo y
+	./t-lvconvert-mirror-basic.sh: line 104: echo: write error: Broken pipe
+	
+	while command has completed this operation succesfully
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1933&r2=1.1934
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/WHATS_NEW	2011/03/02 20:00:09	1.1933
-+++ LVM2/WHATS_NEW	2011/03/02 23:38:22	1.1934
-@@ -1,5 +1,6 @@
- Version 2.02.85 - 
- ===================================
-+  Fix syslog initialisation in clvmd to respect lvm.conf setting.
-   Fix possible overflow in maximum stripe size and physical extent size.
-   Add test for failed allocation from dm_task_set_uuid() in dmeventd.
-   Improve pvremove error message when PV belongs to a VG.
---- LVM2/daemons/clvmd/lvm-functions.c	2011/02/18 14:16:11	1.113
-+++ LVM2/daemons/clvmd/lvm-functions.c	2011/03/02 23:38:22	1.114
-@@ -915,6 +915,10 @@
- /* Called to initialise the LVM context of the daemon */
- int init_clvm(int using_gulm, char **argv)
- {
-+	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
-+	init_syslog(LOG_DAEMON);
-+	openlog("clvmd", LOG_PID, LOG_DAEMON);
-+
- 	if (!(cmd = create_toolcontext(1, NULL))) {
- 		log_error("Failed to allocate command context");
- 		return 0;
-@@ -925,9 +929,6 @@
- 		return 0;
- 	}
+--- LVM2/test/t-lvconvert-mirror-basic.sh	2011/01/28 16:07:04	1.7
++++ LVM2/test/t-lvconvert-mirror-basic.sh	2011/03/03 12:30:33	1.8
+@@ -101,7 +101,7 @@
+ 		alloc="--alloc anywhere"
+ 	fi
  
--	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
--	init_syslog(LOG_DAEMON);
--	openlog("clvmd", LOG_PID, LOG_DAEMON);
- 	cmd->cmd_line = "clvmd";
+-	echo y | lvconvert -m $finish_count --mirrorlog $finish_log_type \
++	lvconvert -m $finish_count --mirrorlog $finish_log_type \
+ 		$vg/$lv1 $alloc
  
- 	/* Check lvm.conf is setup for cluster-LVM */
+ 	if ! $active; then
 
 
