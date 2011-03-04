@@ -1,27 +1,27 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 04 Mar 2011 17:56:01 +0100
-Subject: LVM2/lib/mm memlock.c
-In-Reply-To: <20110218145104.6981.qmail@sourceware.org>
-References: <20110218145104.6981.qmail@sourceware.org>
-Message-ID: <4D7119A1.3090209@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Fri, 4 Mar 2011 20:39:47 +0000
+Subject: [PATCH 1/2] Fix read byte from char[-1] position
+In-Reply-To: <4e9cb7c98861937ffc9ce6ac53b3e58124a2eb6f.1299089143.git.zkabelac@redhat.com>
+References: <cover.1299089143.git.zkabelac@redhat.com>
+	<4e9cb7c98861937ffc9ce6ac53b3e58124a2eb6f.1299089143.git.zkabelac@redhat.com>
+Message-ID: <20110304203946.GM10767@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 02/18/2011 03:51 PM, zkabelac at sourceware.org wrote:
+On Wed, Mar 02, 2011 at 07:09:07PM +0100, Zdenek Kabelac wrote:
+> When the ->params is empty string - access is made on the byte
+> before allocated buffer (catched by valgrind) - in case it would
+> constains 0x20 - it would even overwrite this buffer.
+> So fix by checking len > 0 before doing such access.
+> Optimise the code and use len counter instead of multiple strlen calls.
+ 
+Needing more context for this one:
+  Under what conditions is the bug triggered?
+  What are the implications when it is?
 
-> 	Memory unlock allows 1 page difference
-
-> --- LVM2/lib/mm/memlock.c	2011/02/18 14:16:12	1.34
-> +++ LVM2/lib/mm/memlock.c	2011/02/18 14:51:04	1.35
-> @@ -343,9 +343,15 @@
-
-> +			if ((_mstats + 4096) < unlock_mstats)
-
-Can we use getpagesize() here please?
-
-Milan
+Alasdair
 
 
