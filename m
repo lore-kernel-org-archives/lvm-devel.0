@@ -1,24 +1,47 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Sun, 6 Mar 2011 01:51:18 +0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-In-Reply-To: <4D72E53A.6070104@redhat.com>
-References: <20110305211719.11626.qmail@sourceware.org>
-	<20110306011808.GW10767@agk-dp.fab.redhat.com>
-	<4D72E53A.6070104@redhat.com>
-Message-ID: <20110306015118.GY10767@agk-dp.fab.redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 6 Mar 2011 16:47:44 -0000
+Subject: LVM2 ./WHATS_NEW lib/mm/memlock.c
+Message-ID: <20110306164744.13366.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Sun, Mar 06, 2011 at 02:36:58AM +0100, Milan Broz wrote:
-> IMHO that message should not be there at all. If application relies on
-> it, then it must fail completely, warning is not enough.
- 
-Indeed - that should be the long-term change - to fail instead of warn,
-and let the application decide whether to retry less-securely.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2011-03-06 16:47:43
 
-Alasdair
+Modified files:
+	.              : WHATS_NEW 
+	lib/mm         : memlock.c 
+
+Log message:
+	Fix hardcoded page size, fixing test fails with 8k page and new kernel.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1935&r2=1.1936
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+
+--- LVM2/WHATS_NEW	2011/03/05 12:14:00	1.1935
++++ LVM2/WHATS_NEW	2011/03/06 16:47:43	1.1936
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Use system page size and not hardcoded value in locking code check.
+   Fix reading of released memory for printing segment type.
+   Fix syslog initialisation in clvmd to respect lvm.conf setting.
+   Fix possible overflow in maximum stripe size and physical extent size.
+--- LVM2/lib/mm/memlock.c	2011/02/18 14:51:04	1.35
++++ LVM2/lib/mm/memlock.c	2011/03/06 16:47:43	1.36
+@@ -344,7 +344,7 @@
+ 		dm_free(_maps_buffer);
+ 		_maps_buffer = NULL;
+ 		if (_mstats < unlock_mstats) {
+-			if ((_mstats + 4096) < unlock_mstats)
++			if ((_mstats + getpagesize()) < unlock_mstats)
+ 				log_error(INTERNAL_ERROR
+ 					  "Maps lock %ld < unlock %ld",
+ 					  (long)_mstats, (long)unlock_mstats);
 
 
