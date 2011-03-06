@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 6 Mar 2011 17:52:08 -0000
-Subject: LVM2/lib/mm memlock.c
-Message-ID: <20110306175208.16985.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 6 Mar 2011 18:28:09 -0000
+Subject: LVM2/test t-pvcreate-usage.sh
+Message-ID: <20110306182809.27045.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-06 17:52:08
+Changes by:	mbroz at sourceware.org	2011-03-06 18:28:09
 
 Modified files:
-	lib/mm         : memlock.c 
+	test           : t-pvcreate-usage.sh 
 
 Log message:
-	Use lvm_getpagesize wrapper
+	Fix test for 8k page (fails on Sparc architecture).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.19&r2=1.20
 
---- LVM2/lib/mm/memlock.c	2011/03/06 16:47:43	1.36
-+++ LVM2/lib/mm/memlock.c	2011/03/06 17:52:07	1.37
-@@ -344,7 +344,7 @@
- 		dm_free(_maps_buffer);
- 		_maps_buffer = NULL;
- 		if (_mstats < unlock_mstats) {
--			if ((_mstats + getpagesize()) < unlock_mstats)
-+			if ((_mstats + lvm_getpagesize()) < unlock_mstats)
- 				log_error(INTERNAL_ERROR
- 					  "Maps lock %ld < unlock %ld",
- 					  (long)_mstats, (long)unlock_mstats);
+--- LVM2/test/t-pvcreate-usage.sh	2011/02/25 14:12:14	1.19
++++ LVM2/test/t-pvcreate-usage.sh	2011/03/06 18:28:09	1.20
+@@ -106,9 +106,10 @@
+ check pv_field $dev1 pe_start 200.00k
+ 
+ # metadata area start is aligned according to pagesize
+-# pagesize should be 64k or 4k ...
+ if [ $PAGESIZE -eq 65536 ] ; then
+ 	pv_align="192.50k"
++elif [ $PAGESIZE -eq 8192 ] ; then
++	pv_align="136.50k"
+ else
+ 	pv_align="133.00k"
+ fi
 
 
