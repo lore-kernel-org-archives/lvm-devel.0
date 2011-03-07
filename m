@@ -1,39 +1,84 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 6 Mar 2011 18:28:09 -0000
-Subject: LVM2/test t-pvcreate-usage.sh
-Message-ID: <20110306182809.27045.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon,  7 Mar 2011 15:45:54 +0100
+Subject: [PATCH] Fix clvmd return code for bad options.
+Message-ID: <1299509154-30046-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-03-06 18:28:09
+We should return exit code 2 for unknown options.
 
-Modified files:
-	test           : t-pvcreate-usage.sh 
+Patch also adds standart --help oprion instead
+of nonstandard (and getopt incomatible -?).
 
-Log message:
-	Fix test for 8k page (fails on Sparc architecture).
+Fixes https://bugzilla.redhat.com/show_bug.cgi?id=666991
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-pvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ daemons/clvmd/clvmd.c |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
 
---- LVM2/test/t-pvcreate-usage.sh	2011/02/25 14:12:14	1.19
-+++ LVM2/test/t-pvcreate-usage.sh	2011/03/06 18:28:09	1.20
-@@ -106,9 +106,10 @@
- check pv_field $dev1 pe_start 200.00k
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index b6fd725..56600f9 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -20,6 +20,7 @@
+ #include "clvmd-common.h"
  
- # metadata area start is aligned according to pagesize
--# pagesize should be 64k or 4k ...
- if [ $PAGESIZE -eq 65536 ] ; then
- 	pv_align="192.50k"
-+elif [ $PAGESIZE -eq 8192 ] ; then
-+	pv_align="136.50k"
- else
- 	pv_align="133.00k"
- fi
+ #include <pthread.h>
++#include <getopt.h>
+ 
+ #include "clvmd-comms.h"
+ #include "clvm.h"
+@@ -335,7 +336,7 @@ int main(int argc, char *argv[])
+ 	struct local_client *newfd;
+ 	struct utsname nodeinfo;
+ 	struct lvm_startup_params lvm_params;
+-	signed char opt;
++	int opt;
+ 	int cmd_timeout = DEFAULT_CMD_TIMEOUT;
+ 	int start_timeout = 0;
+ 	if_type_t cluster_iface = IF_AUTO;
+@@ -346,19 +347,21 @@ int main(int argc, char *argv[])
+ 	int clusterwide_opt = 0;
+ 	mode_t old_mask;
+ 
++	struct option longopts[] = {
++		{ "help", 0, 0, 'h' },
++		{ NULL, 0, 0, 0 }
++	};
++
+ 	/* Deal with command-line arguments */
+ 	opterr = 0;
+ 	optind = 0;
+-	while ((opt = getopt(argc, argv, "?vVhfd::t:RST:CI:E:")) != EOF) {
++	while ((opt = getopt_long(argc, argv, "vVhfd::t:RST:CI:E:",
++				  longopts, NULL)) != -1) {
+ 		switch (opt) {
+ 		case 'h':
+ 			usage(argv[0], stdout);
+ 			exit(0);
+ 
+-		case '?':
+-			usage(argv[0], stderr);
+-			exit(0);
+-
+ 		case 'R':
+ 			check_permissions();
+ 			return refresh_clvmd(1)==1?0:1;
+@@ -409,6 +412,9 @@ int main(int argc, char *argv[])
+ 			exit(0);
+ 			break;
+ 
++		default:
++			usage(argv[0], stderr);
++			exit(2);
+ 		}
+ 	}
+ 
+-- 
+1.7.2.3
 
 
