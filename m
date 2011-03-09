@@ -1,44 +1,57 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed,  9 Mar 2011 13:18:34 +0100
-Subject: [PATCH 3/4] Do not check already checked part
+Date: Wed,  9 Mar 2011 13:18:35 +0100
+Subject: [PATCH 4/4] Add pool name to pool-fast as well
 In-Reply-To: <cover.1299670163.git.zkabelac@redhat.com>
 References: <cover.1299670163.git.zkabelac@redhat.com>
-Message-ID: <cc232995c2292dc586069f16add546746f99c36e.1299670163.git.zkabelac@redhat.com>
+Message-ID: <3febf9d0e2ef73694a66af76e603eeddf0810b9c.1299670163.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-check_lv_segments is eithe called once - with 'complete_vg == 0'
-or twice in row first with == 0, then with 1.
-
-My assumtion is we do not need to make the same tests for same data
-pointers twice - if we already know it's been been OK from the
-first pass - that way it's used in vg_validate() and vg_read_internal().
-
-Better idea would be probably to make rather 2 separte functions
-there - but for now just skip some large piece of the code.
+It's fairly cheap to keep this name - and it could
+be useful without 'non pool debug code' compilation.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/metadata/merge.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ libdm/mm/pool-fast.c |    2 ++
+ libdm/mm/pool.c      |    2 +-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 3b8895c..402ee57 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -209,6 +209,9 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 		le += seg->len;
+diff --git a/libdm/mm/pool-fast.c b/libdm/mm/pool-fast.c
+index ebd982e..377ad99 100644
+--- a/libdm/mm/pool-fast.c
++++ b/libdm/mm/pool-fast.c
+@@ -28,6 +28,7 @@ struct dm_pool {
+ 	struct dm_list list;
+ 	struct chunk *chunk, *spare_chunk;	/* spare_chunk is a one entry free
+ 						   list to stop 'bobbling' */
++	const char *name;
+ 	size_t chunk_size;
+ 	size_t object_len;
+ 	unsigned object_alignment;
+@@ -51,6 +52,7 @@ struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
+ 		return 0;
  	}
  
-+	if (complete_vg)
-+		goto out;
-+
- 	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
- 		seg = sl->seg;
- 		seg_found = 0;
++	p->name = name;
+ 	/* round chunk_hint up to the next power of 2 */
+ 	p->chunk_size = chunk_hint + sizeof(struct chunk);
+ 	while (new_size < p->chunk_size)
+diff --git a/libdm/mm/pool.c b/libdm/mm/pool.c
+index 35bfffa..825f7ca 100644
+--- a/libdm/mm/pool.c
++++ b/libdm/mm/pool.c
+@@ -71,7 +71,7 @@ void dm_pools_check_leaks(void)
+ 			  p->orig_pool,
+ 			  p->name, p->stats.bytes);
+ #else
+-		log_error(" [%p]", p);
++		log_error(" [%p] %s", p, p->name);
+ #endif
+ 	}
+ }
 -- 
 1.7.4.1
 
