@@ -1,189 +1,95 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 09 Mar 2011 13:40:34 +0100
-Subject: [PATCH 0/7] Add memory pool for format instance and fix memory leaks
-In-Reply-To: <1299673359-6784-1-git-send-email-prajnoha@redhat.com>
-References: <1299673359-6784-1-git-send-email-prajnoha@redhat.com>
-Message-ID: <4D777542.8070705@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Mar 2011 12:44:45 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv.c tools/repor ...
+Message-ID: <20110309124445.8910.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/09/2011 01:22 PM +0100, Peter Rajnoha wrote:
->   Add memory pool and reference counting for format instances.
->   Move text_context allocation inside create_instance fn.
->   Use vg_set_fid and new pv_set_fid throughout.
->   Add new free_pv_fid fn and use it throughout.
->   Call destroy_instance for all PVs in a VG while calling free_vg.
->   Various cleanups for fid mem and ref_count changes.
->   Switch over to format instance mempool use where possible.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-03-09 12:44:43
 
-+ one more that has to come as the very first one!
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv.c 
+	tools          : reporter.c 
 
-Use new alloc_fid fn for common format instance initialisation.
+Log message:
+	Use empty string instead of /dev// for LV path when there's no VG.
+	Don't allocate unused VG mempool in _pvsegs_sub_single.
 
-Just a little cleanup for each format's create_instance fn. There's
-common code that doesn't need to be repeated. Factor it out into
-a separate "alloc_fid" fn. This makes the code easier to maintain.
----
- lib/format1/format1.c         |    8 +-------
- lib/format_pool/format_pool.c |   13 ++-----------
- lib/format_text/format-text.c |   14 +++-----------
- lib/metadata/metadata.c       |   19 +++++++++++++++++++
- lib/metadata/metadata.h       |   27 +++++++++++++++------------
- 5 files changed, 40 insertions(+), 41 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1938&r2=1.1939
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/reporter.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 9011982..8550a1e 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -530,15 +530,9 @@ static struct format_instance *_format1_create_instance(const struct format_type
- 	struct format_instance *fid;
- 	struct metadata_area *mda;
+--- LVM2/WHATS_NEW	2011/03/08 22:48:50	1.1938
++++ LVM2/WHATS_NEW	2011/03/09 12:44:42	1.1939
+@@ -1,6 +1,8 @@
+ Version 2.02.85 - 
+ ===================================
+-  Send 1 byte shorted fully initialised local clvmd messages.
++  Use empty string instead of /dev// for LV path when there's no VG.
++  Don't allocate unused VG mempool in _pvsegs_sub_single.
++  Remove uninitialised byte from end of local clvmd messages.
+   Support --help option for clvmd and return error for unknown option.
+   Use system page size and not hardcoded value in locking code check.
+   Fix reading of released memory for printing segment type.
+--- LVM2/lib/metadata/lv.c	2011/03/05 12:14:00	1.21
++++ LVM2/lib/metadata/lv.c	2011/03/09 12:44:43	1.22
+@@ -160,6 +160,9 @@
+ 	char *repstr;
+ 	size_t len;
  
--	if (!(fid = dm_pool_alloc(fmt->cmd->mem, sizeof(*fid))))
-+	if (!(fid = alloc_fid(fmt, fic)))
- 		return_NULL;
++	if (!*lv->vg->name)
++		return dm_pool_strdup(mem, "");
++
+ 	len = strlen(lv->vg->cmd->dev_dir) + strlen(lv->vg->name) +
+ 		strlen(lv->name) + 2;
  
--	fid->fmt = fmt;
--	fid->type = fic->type;
--
--	dm_list_init(&fid->metadata_areas_in_use);
--	dm_list_init(&fid->metadata_areas_ignored);
--
- 	/* Define a NULL metadata area */
- 	if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda)))) {
- 		dm_pool_free(fmt->cmd->mem, fid);
-diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
-index 4252dad..482d79a 100644
---- a/lib/format_pool/format_pool.c
-+++ b/lib/format_pool/format_pool.c
-@@ -256,17 +256,8 @@ static struct format_instance *_pool_create_instance(const struct format_type *f
- 	struct format_instance *fid;
- 	struct metadata_area *mda;
- 
--	if (!(fid = dm_pool_zalloc(fmt->cmd->mem, sizeof(*fid)))) {
--		log_error("Unable to allocate format instance structure for "
--			  "pool format");
--		return NULL;
--	}
--
--	fid->fmt = fmt;
--	fid->type = fic->type;
--
--	dm_list_init(&fid->metadata_areas_in_use);
--	dm_list_init(&fid->metadata_areas_ignored);
-+	if (!(fid = alloc_fid(fmt, fic)))
-+		return_NULL;
- 
- 	/* Define a NULL metadata area */
- 	if (!(mda = dm_pool_zalloc(fmt->cmd->mem, sizeof(*mda)))) {
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index c5db278..e5156f8 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2190,21 +2190,13 @@ static int _text_pv_resize(const struct format_type *fmt,
- 
- /* NULL vgname means use only the supplied context e.g. an archive file */
- static struct format_instance *_text_create_text_instance(const struct format_type *fmt,
--							   const struct format_instance_ctx *fic)
-+							  const struct format_instance_ctx *fic)
- {
- 	struct format_instance *fid;
- 	int r;
- 
--	if (!(fid = dm_pool_alloc(fmt->cmd->mem, sizeof(*fid)))) {
--		log_error("Couldn't allocate format instance object.");
--		return NULL;
--	}
--
--	fid->fmt = fmt;
--	fid->type = fic->type;
--
--	dm_list_init(&fid->metadata_areas_in_use);
--	dm_list_init(&fid->metadata_areas_ignored);
-+	if (!(fid = alloc_fid(fmt, fic)))
-+		return_NULL;
- 
- 	if (fid->type & FMT_INSTANCE_VG)
- 		r = _create_vg_text_instance(fid, fic);
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index ff61cbb..3cfbce6 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3951,6 +3951,25 @@ uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname)
- 	return FAILED_EXIST;
+@@ -173,6 +176,7 @@
+ 		log_error("lvpath snprintf failed");
+ 		return 0;
+ 	}
++
+ 	return repstr;
  }
  
-+struct format_instance *alloc_fid(const struct format_type *fmt,
-+				  const struct format_instance_ctx *fic)
-+{
-+	struct format_instance *fid;
-+
-+	if (!(fid = dm_pool_zalloc(fmt->cmd->mem, sizeof(*fid)))) {
-+		log_error("Couldn't allocate format_instance object.");
-+		return NULL;
-+	}
-+
-+	fid->fmt = fmt;
-+	fid->type = fic->type;
-+
-+	dm_list_init(&fid->metadata_areas_in_use);
-+	dm_list_init(&fid->metadata_areas_ignored);
-+
-+	return fid;
-+}
-+
- void vg_set_fid(struct volume_group *vg,
- 		 struct format_instance *fid)
- {
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 1982711..8f0a6b1 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -191,6 +191,21 @@ struct metadata_area *mda_copy(struct dm_pool *mem,
- unsigned mda_is_ignored(struct metadata_area *mda);
- void mda_set_ignored(struct metadata_area *mda, unsigned ignored);
- unsigned mda_locns_match(struct metadata_area *mda1, struct metadata_area *mda2);
-+
-+struct format_instance_ctx {
-+	uint32_t type;
-+	union {
-+		const char *pv_id;
-+		struct {
-+			const char *vg_name;
-+			const char *vg_id;
-+		} vg_ref;
-+		void *private;
-+	} context;
-+};
-+
-+struct format_instance *alloc_fid(const struct format_type *fmt,
-+				  const struct format_instance_ctx *fic);
- void vg_set_fid(struct volume_group *vg, struct format_instance *fid);
- /* FIXME: Add generic interface for mda counts based on given key. */
- int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
-@@ -229,18 +244,6 @@ struct seg_list {
- 	struct lv_segment *seg;
- };
+--- LVM2/tools/reporter.c	2011/02/18 14:47:31	1.65
++++ LVM2/tools/reporter.c	2011/03/09 12:44:43	1.66
+@@ -51,7 +51,6 @@
  
--struct format_instance_ctx {
--	uint32_t type;
--	union {
--		const char *pv_id;
--		struct {
--			const char *vg_name;
--			const char *vg_id;
--		} vg_ref;
--		void *private;
--	} context;
--};
+ 	return ECMD_PROCESSED;
+ }
 -
- /*
-  * Ownership of objects passes to caller.
-  */
--- 
-1.7.4
+ static int _pvsegs_sub_single(struct cmd_context *cmd,
+ 			      struct volume_group *vg,
+ 			      struct pv_segment *pvseg, void *handle)
+@@ -62,11 +61,9 @@
+ 	struct volume_group _free_vg = {
+ 		.cmd = cmd,
+ 		.name = "",
++		.vgmem = NULL,
+ 	};
+ 
+-        if (!(_free_vg.vgmem = dm_pool_create("_free_vg", 10240)))
+-		return ECMD_FAILED;
+-
+ 	struct logical_volume _free_logical_volume = {
+ 		.vg = vg ?: &_free_vg,
+ 		.name = "",
+@@ -109,8 +106,8 @@
+ 		ret = ECMD_FAILED;
+                 goto_out;
+ 	}
++
+  out:
+-	free_vg(&_free_vg);
+ 	return ret;
+ }
+ 
 
 
