@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Mar 2011 14:40:39 -0000
-Subject: LVM2 lib/metadata/metadata.c ./WHATS_NEW
-Message-ID: <20110310144039.9093.qmail@sourceware.org>
+Date: 10 Mar 2011 14:47:25 -0000
+Subject: LVM2/test/lib harness.c
+Message-ID: <20110310144725.22748.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,108 +10,162 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-10 14:40:33
+Changes by:	zkabelac at sourceware.org	2011-03-10 14:47:23
 
 Modified files:
-	lib/metadata   : metadata.c 
-	.              : WHATS_NEW 
+	test/lib       : harness.c 
 
 Log message:
-	Refactor code for _lv_postoder
-	
-	Add _lv_postorder_vg() - for calling _lv_postorder() for every LV from VG.
-	We use this in 2 places -  vg_mark_partial_lvs() and vg_validate()
-	so make it as a one function.
-	
-	Benefit here is - to use only one cleanup code and avoid
-	potentially duplicate scans of same LVs.
+	Indent spaces to tabs
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.439&r2=1.440
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1942&r2=1.1943
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/harness.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/lib/metadata/metadata.c	2011/03/10 13:12:00	1.439
-+++ LVM2/lib/metadata/metadata.c	2011/03/10 14:40:32	1.440
-@@ -2039,6 +2039,29 @@
- 	return r;
- }
+--- LVM2/test/lib/harness.c	2011/01/28 16:05:38	1.6
++++ LVM2/test/lib/harness.c	2011/03/10 14:47:22	1.7
+@@ -44,8 +44,8 @@
+ static int verbose = 0;
  
-+/*
-+ * Calls _lv_postorder() on each LV from VG. Avoids duplicate transitivity visits.
-+ * Clears with _lv_postorder_cleanup() when all LVs were visited by postorder.
-+ */
-+static int _lv_postorder_vg(struct volume_group *vg,
-+			    int (*fn)(struct logical_volume *lv, void *data),
-+			    void *data)
-+{
-+	struct lv_list *lvl;
-+	int r = 1;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		if (!_lv_postorder_visit(lvl->lv, fn, data)) {
-+			stack;
-+			r = 0;
-+		}
-+
-+	dm_list_iterate_items(lvl, &vg->lvs)
-+		_lv_postorder_cleanup(lvl->lv, 0);
-+
-+	return r;
-+}
-+
- struct _lv_mark_if_partial_baton {
- 	int partial;
+ struct subst {
+-        const char *key;
+-        char *value;
++	const char *key;
++	char *value;
  };
-@@ -2076,11 +2099,6 @@
- 	return 1;
+ 
+ static struct subst subst[2];
+@@ -62,52 +62,52 @@
  }
  
--static int _lv_mark_if_partial(struct logical_volume *lv)
--{
--	return _lv_postorder(lv, _lv_mark_if_partial_single, NULL);
--}
+ static int outline(char *buf, int start, int force) {
+-        char *from = buf + start;
+-        char *next = strchr(buf + start, '\n');
++	char *from = buf + start;
++	char *next = strchr(buf + start, '\n');
+ 
+-        if (!next && !force) /* not a complete line yet... */
+-                return start;
++	if (!next && !force) /* not a complete line yet... */
++		return start;
+ 
+-        if (!next)
+-                next = from + strlen(from);
+-        else
+-                ++next;
 -
- /*
-  * Mark LVs with missing PVs using PARTIAL_LV status flag. The flag is
-  * propagated transitively, so LVs referencing other LVs are marked
-@@ -2088,14 +2106,9 @@
-  */
- int vg_mark_partial_lvs(struct volume_group *vg)
- {
--	struct logical_volume *lv;
--	struct lv_list *lvl;
-+	if (!_lv_postorder_vg(vg, _lv_mark_if_partial_single, NULL))
-+		return_0;
+-        if (!strncmp(from, "@TESTDIR=", 9)) {
+-                subst[0].key = "@TESTDIR@";
+-                subst[0].value = strndup(from + 9, next - from - 9 - 1);
+-        } else if (!strncmp(from, "@PREFIX=", 8)) {
+-                subst[1].key = "@PREFIX@";
+-                subst[1].value = strndup(from + 8, next - from - 8 - 1);
+-        } else {
+-                char *line = strndup(from, next - from);
+-                char *a = line, *b;
+-                do {
+-                        int idx = -1;
+-                        int i;
+-                        b = line + strlen(line);
+-                        for ( i = 0; i < 2; ++i ) {
+-                                if (subst[i].key) {
+-                                        // printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
+-                                        char *stop = strstr(a, subst[i].value);
+-                                        if (stop && stop < b) {
+-                                                idx = i;
+-                                                b = stop;
+-                                        }
+-                                }
+-                        }
+-                        fwrite(a, 1, b - a, stdout);
+-                        a = b;
+-
+-                        if ( idx >= 0 ) {
+-                                fprintf(stdout, "%s", subst[idx].key);
+-                                a += strlen(subst[idx].value);
+-                        }
+-                } while (b < line + strlen(line));
+-                free(line);
+-        }
++	if (!next)
++		next = from + strlen(from);
++	else
++		++next;
++
++	if (!strncmp(from, "@TESTDIR=", 9)) {
++		subst[0].key = "@TESTDIR@";
++		subst[0].value = strndup(from + 9, next - from - 9 - 1);
++	} else if (!strncmp(from, "@PREFIX=", 8)) {
++		subst[1].key = "@PREFIX@";
++		subst[1].value = strndup(from + 8, next - from - 8 - 1);
++	} else {
++		char *line = strndup(from, next - from);
++		char *a = line, *b;
++		do {
++			int idx = -1;
++			int i;
++			b = line + strlen(line);
++			for ( i = 0; i < 2; ++i ) {
++				if (subst[i].key) {
++					// printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
++					char *stop = strstr(a, subst[i].value);
++					if (stop && stop < b) {
++						idx = i;
++						b = stop;
++					}
++				}
++			}
++			fwrite(a, 1, b - a, stdout);
++			a = b;
++
++			if ( idx >= 0 ) {
++				fprintf(stdout, "%s", subst[idx].key);
++				a += strlen(subst[idx].value);
++			}
++		} while (b < line + strlen(line));
++		free(line);
++	}
  
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		lv = lvl->lv;
--		if (!_lv_mark_if_partial(lv))
--			return_0;
--	}
- 	return 1;
+-        return next - buf + (force ? 0 : 1);
++	return next - buf + (force ? 0 : 1);
  }
  
-@@ -2378,9 +2391,9 @@
- 	dm_hash_destroy(lvname_hash);
- 	dm_hash_destroy(lvid_hash);
+ static void dump(void) {
+@@ -126,7 +126,7 @@
+ static void drain(void) {
+ 	int sz;
+ 	char buf[2048];
+-        memset(buf, 0, 2048);
++	memset(buf, 0, 2048);
  
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (!_lv_postorder(lvl->lv, _lv_validate_references_single, NULL))
--			r = 0;
-+	if (!_lv_postorder_vg(vg, _lv_validate_references_single, NULL)) {
-+		stack;
-+		r = 0;
+ 	while (1) {
+ 		sz = read(fds[1], buf, 2047);
+@@ -195,8 +195,8 @@
+ 		close(0);
+ 		dup2(fds[0], 1);
+ 		dup2(fds[0], 2);
+-                close(fds[0]);
+-                close(fds[1]);
++		close(fds[0]);
++		close(fds[1]);
+ 		execlp("bash", "bash", f, NULL);
+ 		perror("execlp");
+ 		fflush(stderr);
+@@ -257,11 +257,11 @@
  	}
  
- 	dm_list_iterate_items(lvl, &vg->lvs) {
---- LVM2/WHATS_NEW	2011/03/10 13:11:59	1.1942
-+++ LVM2/WHATS_NEW	2011/03/10 14:40:33	1.1943
-@@ -1,5 +1,6 @@
- Version 2.02.85 - 
- ===================================
-+  Add _lv_postorder_vg() to improve efficiency for all LVs in VG.
-   Use hash tables to speedup string search in validate_vg().
-   Refactor allocation of VG structure, add alloc_vg().
-   Avoid possible endless loop in _free_vginfo when 4 or more VGs have same name.
+ 	/* set up signal handlers */
+-        for (i = 0; i <= 32; ++i) {
+-            if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
+-                continue;
+-            signal(i, handler);
+-        }
++	for (i = 0; i <= 32; ++i) {
++		if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
++			continue;
++		signal(i, handler);
++	}
+ 
+ 	/* run the tests */
+ 	for (i = 1; i < argc; ++ i) {
 
 
