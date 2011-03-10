@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Mar 2011 14:47:25 -0000
-Subject: LVM2/test/lib harness.c
-Message-ID: <20110310144725.22748.qmail@sourceware.org>
+Date: 10 Mar 2011 14:49:02 -0000
+Subject: LVM2/libdm/mm pool-fast.c pool.c
+Message-ID: <20110310144902.23907.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,162 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-10 14:47:23
+Changes by:	zkabelac at sourceware.org	2011-03-10 14:49:01
 
 Modified files:
-	test/lib       : harness.c 
+	libdm/mm       : pool-fast.c pool.c 
 
 Log message:
-	Indent spaces to tabs
+	Keep pool name also for pool-fast
+	
+	It's cheap to keep this name - and it is useful for 'non pool debug code'
+	compilation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/harness.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/test/lib/harness.c	2011/01/28 16:05:38	1.6
-+++ LVM2/test/lib/harness.c	2011/03/10 14:47:22	1.7
-@@ -44,8 +44,8 @@
- static int verbose = 0;
- 
- struct subst {
--        const char *key;
--        char *value;
-+	const char *key;
-+	char *value;
- };
- 
- static struct subst subst[2];
-@@ -62,52 +62,52 @@
- }
- 
- static int outline(char *buf, int start, int force) {
--        char *from = buf + start;
--        char *next = strchr(buf + start, '\n');
-+	char *from = buf + start;
-+	char *next = strchr(buf + start, '\n');
- 
--        if (!next && !force) /* not a complete line yet... */
--                return start;
-+	if (!next && !force) /* not a complete line yet... */
-+		return start;
- 
--        if (!next)
--                next = from + strlen(from);
--        else
--                ++next;
--
--        if (!strncmp(from, "@TESTDIR=", 9)) {
--                subst[0].key = "@TESTDIR@";
--                subst[0].value = strndup(from + 9, next - from - 9 - 1);
--        } else if (!strncmp(from, "@PREFIX=", 8)) {
--                subst[1].key = "@PREFIX@";
--                subst[1].value = strndup(from + 8, next - from - 8 - 1);
--        } else {
--                char *line = strndup(from, next - from);
--                char *a = line, *b;
--                do {
--                        int idx = -1;
--                        int i;
--                        b = line + strlen(line);
--                        for ( i = 0; i < 2; ++i ) {
--                                if (subst[i].key) {
--                                        // printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
--                                        char *stop = strstr(a, subst[i].value);
--                                        if (stop && stop < b) {
--                                                idx = i;
--                                                b = stop;
--                                        }
--                                }
--                        }
--                        fwrite(a, 1, b - a, stdout);
--                        a = b;
--
--                        if ( idx >= 0 ) {
--                                fprintf(stdout, "%s", subst[idx].key);
--                                a += strlen(subst[idx].value);
--                        }
--                } while (b < line + strlen(line));
--                free(line);
--        }
-+	if (!next)
-+		next = from + strlen(from);
-+	else
-+		++next;
-+
-+	if (!strncmp(from, "@TESTDIR=", 9)) {
-+		subst[0].key = "@TESTDIR@";
-+		subst[0].value = strndup(from + 9, next - from - 9 - 1);
-+	} else if (!strncmp(from, "@PREFIX=", 8)) {
-+		subst[1].key = "@PREFIX@";
-+		subst[1].value = strndup(from + 8, next - from - 8 - 1);
-+	} else {
-+		char *line = strndup(from, next - from);
-+		char *a = line, *b;
-+		do {
-+			int idx = -1;
-+			int i;
-+			b = line + strlen(line);
-+			for ( i = 0; i < 2; ++i ) {
-+				if (subst[i].key) {
-+					// printf("trying: %s -> %s\n", subst[i].value, subst[i].key);
-+					char *stop = strstr(a, subst[i].value);
-+					if (stop && stop < b) {
-+						idx = i;
-+						b = stop;
-+					}
-+				}
-+			}
-+			fwrite(a, 1, b - a, stdout);
-+			a = b;
-+
-+			if ( idx >= 0 ) {
-+				fprintf(stdout, "%s", subst[idx].key);
-+				a += strlen(subst[idx].value);
-+			}
-+		} while (b < line + strlen(line));
-+		free(line);
-+	}
- 
--        return next - buf + (force ? 0 : 1);
-+	return next - buf + (force ? 0 : 1);
- }
- 
- static void dump(void) {
-@@ -126,7 +126,7 @@
- static void drain(void) {
- 	int sz;
- 	char buf[2048];
--        memset(buf, 0, 2048);
-+	memset(buf, 0, 2048);
- 
- 	while (1) {
- 		sz = read(fds[1], buf, 2047);
-@@ -195,8 +195,8 @@
- 		close(0);
- 		dup2(fds[0], 1);
- 		dup2(fds[0], 2);
--                close(fds[0]);
--                close(fds[1]);
-+		close(fds[0]);
-+		close(fds[1]);
- 		execlp("bash", "bash", f, NULL);
- 		perror("execlp");
- 		fflush(stderr);
-@@ -257,11 +257,11 @@
+--- LVM2/libdm/mm/pool-fast.c	2010/10/26 08:59:05	1.11
++++ LVM2/libdm/mm/pool-fast.c	2011/03/10 14:49:01	1.12
+@@ -28,6 +28,7 @@
+ 	struct dm_list list;
+ 	struct chunk *chunk, *spare_chunk;	/* spare_chunk is a one entry free
+ 						   list to stop 'bobbling' */
++	const char *name;
+ 	size_t chunk_size;
+ 	size_t object_len;
+ 	unsigned object_alignment;
+@@ -51,6 +52,7 @@
+ 		return 0;
  	}
  
- 	/* set up signal handlers */
--        for (i = 0; i <= 32; ++i) {
--            if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
--                continue;
--            signal(i, handler);
--        }
-+	for (i = 0; i <= 32; ++i) {
-+		if (i == SIGCHLD || i == SIGWINCH || i == SIGURG)
-+			continue;
-+		signal(i, handler);
-+	}
- 
- 	/* run the tests */
- 	for (i = 1; i < argc; ++ i) {
++	p->name = name;
+ 	/* round chunk_hint up to the next power of 2 */
+ 	p->chunk_size = chunk_hint + sizeof(struct chunk);
+ 	while (new_size < p->chunk_size)
+--- LVM2/libdm/mm/pool.c	2009/04/10 09:56:59	1.5
++++ LVM2/libdm/mm/pool.c	2011/03/10 14:49:01	1.6
+@@ -71,7 +71,7 @@
+ 			  p->orig_pool,
+ 			  p->name, p->stats.bytes);
+ #else
+-		log_error(" [%p]", p);
++		log_error(" [%p] %s", p, p->name);
+ #endif
+ 	}
+ }
 
 
