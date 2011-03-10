@@ -1,40 +1,40 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 10 Mar 2011 03:03:04 -0000
-Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c
-Message-ID: <20110310030304.29678.qmail@sourceware.org>
+From: James M Leddy <james.leddy@redhat.com>
+Date: Wed, 9 Mar 2011 20:56:24 -0500
+Subject: endless loop in _free_vginfo
+Message-ID: <20110310015624.GA8900@xander.lga.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-03-10 03:03:04
+Concerning the _free_vginfo function field in cache/lvmcache.c.  It
+looks like this code is supposed to traverse a list (list of vgs with
+the same name?), but the assignment is the same on every
+iteration. cache/lvmcache.c: 809
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/cache      : lvmcache.c 
+	if (vginfo == primary_vginfo) {
+		dm_hash_remove(_vgname_hash, vginfo->vgname);
+		if (vginfo->next && !dm_hash_insert(_vgname_hash, vginfo->vgname,
+						    vginfo->next)) {
+			log_error("_vgname_hash re-insertion for %s failed",
+				  vginfo->vgname);
+			r = 0;
+		}
+	} else do
+		if (vginfo2->next == vginfo) {
+			vginfo2->next = vginfo->next;
+			break;
+		}
+ 	while ((vginfo2 = primary_vginfo->next));
 
-Log message:
-	Avoid possible endless loop in _free_vginfo when 4 or more VGs have same name.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1939&r2=1.1940
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.104&r2=1.105
+Shouldn't it be this ?
 
---- LVM2/WHATS_NEW	2011/03/09 12:44:42	1.1939
-+++ LVM2/WHATS_NEW	2011/03/10 03:03:03	1.1940
-@@ -1,5 +1,6 @@
- Version 2.02.85 - 
- ===================================
-+  Avoid possible endless loop in _free_vginfo when 4 or more VGs have same name.
-   Use empty string instead of /dev// for LV path when there's no VG.
-   Don't allocate unused VG mempool in _pvsegs_sub_single.
-   Remove uninitialised byte from end of local clvmd messages.
---- LVM2/lib/cache/lvmcache.c	2011/02/21 12:07:03	1.104
-+++ LVM2/lib/cache/lvmcache.c	2011/03/10 03:03:04	1.105
-@@ -845,7 +845,7 @@
+diff -c /home/james/rpmbuild/lvm2/2.02.72-8.fc14.4/work/LVM2.2.02.72/lib/cache/lvmcache.c /tmp/buffer-content-2482n5q
+--- /home/james/rpmbuild/lvm2/2.02.72-8.fc14.4/work/LVM2.2.02.72/lib/cache/lvmcache.c	2010-07-09 11:34:42.000000000 -0400
++++ /tmp/buffer-content-2482n5q	2011-03-09 20:42:39.946008936 -0500
+@@ -819,7 +819,7 @@
  			vginfo2->next = vginfo->next;
  			break;
  		}
@@ -43,5 +43,16 @@ http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=
  
  	if (vginfo->vgname)
  		dm_free(vginfo->vgname);
+
+
+
+We ran into this when we have duplicate PV, probably also have a
+duplicate VG if that is what exposes this bug.
+
+
+-- 
+James M. Leddy
+Technical Account Manager
+Red Hat Inc.
 
 
