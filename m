@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 10 Mar 2011 13:45:14 -0000
-Subject: LVM2/scripts gdbinit
-Message-ID: <20110310134514.9579.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 10 Mar 2011 14:40:39 -0000
+Subject: LVM2 lib/metadata/metadata.c ./WHATS_NEW
+Message-ID: <20110310144039.9093.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,340 +10,108 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-03-10 13:45:13
+Changes by:	zkabelac at sourceware.org	2011-03-10 14:40:33
 
-Added files:
-	scripts        : gdbinit 
+Modified files:
+	lib/metadata   : metadata.c 
+	.              : WHATS_NEW 
 
 Log message:
-	gdbinit - A GDB init file to help while debugging LVM.
+	Refactor code for _lv_postoder
 	
-	Copy this file as '.gdbinit' to your home directory or your working
-	directory.  It adds the following commands to gdb:
-	- first_seg
-	- lv_status
-	- lv_status_r
-	- lv_is_mirrored
-	- seg_item
-	- seg_status
-	- segs_using_this_lv
+	Add _lv_postorder_vg() - for calling _lv_postorder() for every LV from VG.
+	We use this in 2 places -  vg_mark_partial_lvs() and vg_validate()
+	so make it as a one function.
 	
-	You can get a list of these user-defined commands by typing:
-	(gdb) help user-defined
-	
-	You can get more information on each command by typing:
-	(gdb) help <command>
+	Benefit here is - to use only one cleanup code and avoid
+	potentially duplicate scans of same LVs.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/gdbinit.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.439&r2=1.440
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1942&r2=1.1943
 
-/cvs/lvm2/LVM2/scripts/gdbinit,v  -->  standard output
-revision 1.1
---- LVM2/scripts/gdbinit
-+++ -	2011-03-10 13:45:14.261207000 +0000
-@@ -0,0 +1,303 @@
-+# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+# This file is part of LVM2.
+--- LVM2/lib/metadata/metadata.c	2011/03/10 13:12:00	1.439
++++ LVM2/lib/metadata/metadata.c	2011/03/10 14:40:32	1.440
+@@ -2039,6 +2039,29 @@
+ 	return r;
+ }
+ 
++/*
++ * Calls _lv_postorder() on each LV from VG. Avoids duplicate transitivity visits.
++ * Clears with _lv_postorder_cleanup() when all LVs were visited by postorder.
++ */
++static int _lv_postorder_vg(struct volume_group *vg,
++			    int (*fn)(struct logical_volume *lv, void *data),
++			    void *data)
++{
++	struct lv_list *lvl;
++	int r = 1;
 +
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU Lesser General Public License v.2.1.
++	dm_list_iterate_items(lvl, &vg->lvs)
++		if (!_lv_postorder_visit(lvl->lv, fn, data)) {
++			stack;
++			r = 0;
++		}
 +
-+# You should have received a copy of the GNU Lesser General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+#
-+# Author(s):
-+#	Jonathan Brassow <jbrassow@redhat.com>
-+#
-+# Copy this file to ~/.gdbinit or <working_dir>/.gdbinit
++	dm_list_iterate_items(lvl, &vg->lvs)
++		_lv_postorder_cleanup(lvl->lv, 0);
 +
-+printf "\n\n"
-+printf "Loading commands:\n"
-+printf " - first_seg <LV ptr>\n"
-+printf " - lv_status <LV ptr>\n"
-+printf " - lv_status_r <LV ptr>\n"
-+printf " - lv_is_mirrored <LV ptr>\n"
-+printf " - seg_item <seg ptr> <index>\n"
-+printf " - seg_status <seg ptr>\n"
-+printf " - segs_using_this_lv <seg ptr>\n"
-+printf " - \n"
-+printf "Use 'help <command>' for more info\n"
-+printf "\n\n"
-+printf "Popular breakpoints:\n"
-+printf "break lv_extend\n"
-+printf "run -m1 -L 200M -n lv vg\n"
-+printf "lv_status_r lv\n"
-+printf "\n\n"
++	return r;
++}
 +
-+set follow-fork-mode child
-+
-+define first_seg
-+	set $__lv=(struct logical_volume *)$arg0
-+
-+	if ($__lv->segments.n == &$__lv->segments)
-+		printf "No segments (list empty)\n"
-+	else
-+		p (struct lv_segment *)$__lv->segments.n
-+	end
-+end
-+
-+document first_seg
-+Returns the pointer to the first segment of an LV
-+
-+	Usage: first_seg <LV ptr>
-+
-+WARNING: If the list pointer in 'struct lv_segment' moves,
-+	 this function will be wrong.
-+end
-+
-+define seg_item
-+	set $__seg=(struct lv_segment *)$arg0
-+	set $__index=$arg1
-+	set $__area=$__seg->areas[$__index]
-+	set $__type=$__area.type
-+
-+	if ($__type == AREA_PV)
-+		p $__area.u.pv.pvseg->pv
-+	else
-+		if ($__type == AREA_LV)
-+			p $__area.u.lv.lv
-+		else
-+			printf "AREA_UNASSIGNED or invalid\n"
-+		end
-+	end
-+end
-+
-+document seg_item
-+Returns the pointer to the LV or PV for the indexed area of a segment
-+
-+	Usage: seg_item <struct lv_segment *> <index>
-+
-+Example - Getting to the sub-lv of a mirror:
-+	(gdb) p lv->name
-+	$1 = 0x712548 "lv"
-+
-+	(gdb) first_seg lv
-+	$2 = (struct lv_segment *) 0x7128b8
-+
-+	(gdb) seg_item $2 0
-+	$3 = (struct logical_volume *) 0x712688
-+
-+	(gdb) p $3->name
-+	$4 = 0x712770 "lv_mimage_0"
-+end
-+
-+define __status
-+#	Constants defined in metadata-exported.h
-+
-+#	if ($arg0->status & VISIBLE_LV)
-+	if ($arg0->status & 0x00000040U)
-+		printf " VISIBLE_LV"
-+	else
-+		printf " *HIDDEN_LV*"
-+	end
-+#	if ($arg0->status & FIXED_MINOR)
-+	if ($arg0->status & 0x00000080U)
-+		printf " FIXED_MINOR"
-+	end
-+#	if ($arg0->status & SNAPSHOT)
-+	if ($arg0->status & 0x00001000U)
-+		printf " SNAPSHOT"
-+	end
-+#	if ($arg0->status & PVMOVE)
-+	if ($arg0->status & 0x00002000U)
-+		printf " PVMOVE"
-+	end
-+#	if ($arg0->status & LOCKED)
-+	if ($arg0->status & 0x00004000U)
-+		printf " LOCKED"
-+	end
-+#	if ($arg0->status & MIRRORED)
-+	if ($arg0->status & 0x00008000U)
-+		printf " MIRRORED"
-+	end
-+#	if ($arg0->status & MIRROR_LOG)
-+	if ($arg0->status & 0x00020000U)
-+		printf " MIRROR_LOG"
-+	end
-+#	if ($arg0->status & MIRROR_IMAGE)
-+	if ($arg0->status & 0x00040000U)
-+		printf " MIRROR_IMAGE"
-+	end
-+#	if ($arg0->status & MIRROR_NOTSYNCED)
-+	if ($arg0->status & 0x00080000U)
-+		printf " MIRROR_NOTSYNCED"
-+	end
-+#	if ($arg0->status & CONVERTING)
-+	if ($arg0->status & 0x00400000U)
-+		printf " CONVERTING"
-+	end
-+end
-+
-+define lv_status
-+	set $_lv=(struct logical_volume *)$arg0
-+
-+	printf "%s->status:", $_lv->name
-+	__status $_lv
-+	printf "\n"
-+end
-+
-+document lv_status
-+Display the flags that are set on an LV.
-+
-+	Usage: lv_status <LV ptr>
-+end
-+
-+define seg_status
-+	set $_seg=(struct lv_segment *)$arg0
-+
-+	printf "(%s) seg->status:", $_seg->lv->name
-+	__status $_seg
-+	printf "\n"
-+end
-+
-+document seg_status
-+Display the flags that are set on an lv_segment.
-+
-+        Usage: lv_status <(struct lv_segment *)>
-+end
-+
-+define __lv_status_r
-+        set $_lv=(struct logical_volume *)$arg0
-+	set $_seg_list_head = &$_lv->segments
-+	set $_s = $_lv->segments.n
-+	set $_i = 0
-+
-+	# lv_status $_lv
-+	printf "%s%s->status:", $arg1, $_lv->name
-+	__status $_lv
-+	printf "\n"
-+
-+	if ($_s == $_seg_list_head)
-+		printf "[ No segments for %s ]\n", $_lv->name
-+	else
-+		while ($_s != $_seg_list_head)
-+			set $_seg = (struct lv_segment *)$_s
-+			printf "%s[ %s->seg(%d)->status:", $arg1, $_lv->name, $_i
-+			__status $_seg
-+			printf " ]\n"
-+
-+			set $_j = 0
-+			while ($_j < $_seg->area_count)
-+				set $_area=$_seg->areas[$_j]
-+				set $_type=$_area.type
-+				if ($_type == AREA_LV)
-+# Damn it, gdb does not have scoping so functions are not reentrant
-+#					__lv_status_r $_area.u.lv.lv "    "
-+
-+# Next couple lines will get us through a non-stacked mirror...
-+printf "*    "
-+lv_status $_area.u.lv.lv
-+set $barf = (struct lv_segment *)($_area.u.lv.lv)->segments.n
-+if ($barf != &($_area.u.lv.lv)->segments)
-+printf "*    "
-+printf "[ %s->seg(0)->status:", $_lv->name
-+__status $barf
-+printf " ]\n"
-+end
-+				end
-+				set $_j = $_j + 1
-+			end
-+			set $_s = $_s->n
-+			set $_i = $_i + 1
-+		end
-+	end
-+	printf "\n"	
-+end
-+
-+define lv_status_r
-+	__lv_status_r $arg0 ""
-+end
-+
-+document lv_status_r
-+Display the status flags of an LV and its sub_lvs.
-+
-+	Usage: lv_status_r <LV ptr>
-+
-+This function is useful for checking that all the LVs that
-+compose a logical volume have the correct flags set (and also
-+their associated lv_segments)
-+end
-+
-+define segs_using_this_lv
-+	set $_lv=(struct logical_volume *)$arg0
-+	set $_seg_list_head = &$_lv->segs_using_this_lv
-+	set $_s = $_lv->segs_using_this_lv.n
-+	set $_i = 0
-+
-+	if ($_s != $_seg_list_head)
-+		printf "Segments using %s\n", $_lv->name
-+	else
-+		printf "No segments using %s\n", $_lv->name
-+	end
-+	while ($_s != $_seg_list_head)
-+		set $_seg_list = (struct seg_list *)$_s
-+		set $_seg = (struct lv_segment *)$_seg_list->seg
-+		printf "  %d) seg: %p", $_i, $_seg
-+		if ($_seg->lv < 0x200)
-+			printf "  [BAD LV POINTER FROM THIS SEG]\n"
-+		else
-+			printf "  [seg found in %s]\n", $_seg->lv->name
-+		end
-+		set $_s = $_s->n
-+		set $_i = $_i + 1
-+	end
-+end
-+
-+document segs_using_this_lv
-+Display the segments (and their associated LV) using an LV
-+
-+	Usage: segs_using_this_lv <LV ptr>
-+
-+Example:
-+	(gdb) lv_is_mirrored lv
-+	lv is mirrored ('core' log)
-+
-+	(gdb) segs_using_this_lv lv
-+	No segments using lv
-+
-+	(gdb) first_seg lv
-+	$1 = (struct lv_segment *) 0x92d360
-+
-+	(gdb) seg_item $1 0
-+	$2 = (struct logical_volume *) 0x928f58
-+
-+	(gdb) segs_using_this_lv $2
-+	Segments using lv_mimage_0
-+	  0) seg: 0x92d360  [seg found in lv]
-+end
-+
-+define lv_is_mirrored
-+	set $_lv=(struct logical_volume *)$arg0
-+	set $_fs=(struct lv_segment *)$_lv->segments.n
-+	set $_log_lv=(struct logical_volume *)$_fs->log_lv
-+
-+#	if ($_lv->status & MIRRORED)
-+	if ($_lv->status & 0x00008000U)
-+		printf "%s is mirrored (", $_lv->name
-+		if ($_log_lv)
-+			if ($_log_lv->status & 0x00008000U)
-+				printf "'mirrored' log)\n"
-+			else
-+				printf "'disk' log)\n"
-+			end
-+		else
-+			printf "'core' log)\n"
-+		end
-+	else
-+		printf "%s is not mirrored\n", $_lv->name
-+	end
-+end
-+
-+document lv_is_mirrored
-+Report whether the given LV is mirrored (and its log type).
-+
-+	Usage: lv_is_mirrored <LV ptr>
-+end
+ struct _lv_mark_if_partial_baton {
+ 	int partial;
+ };
+@@ -2076,11 +2099,6 @@
+ 	return 1;
+ }
+ 
+-static int _lv_mark_if_partial(struct logical_volume *lv)
+-{
+-	return _lv_postorder(lv, _lv_mark_if_partial_single, NULL);
+-}
+-
+ /*
+  * Mark LVs with missing PVs using PARTIAL_LV status flag. The flag is
+  * propagated transitively, so LVs referencing other LVs are marked
+@@ -2088,14 +2106,9 @@
+  */
+ int vg_mark_partial_lvs(struct volume_group *vg)
+ {
+-	struct logical_volume *lv;
+-	struct lv_list *lvl;
++	if (!_lv_postorder_vg(vg, _lv_mark_if_partial_single, NULL))
++		return_0;
+ 
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+-		lv = lvl->lv;
+-		if (!_lv_mark_if_partial(lv))
+-			return_0;
+-	}
+ 	return 1;
+ }
+ 
+@@ -2378,9 +2391,9 @@
+ 	dm_hash_destroy(lvname_hash);
+ 	dm_hash_destroy(lvid_hash);
+ 
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (!_lv_postorder(lvl->lv, _lv_validate_references_single, NULL))
+-			r = 0;
++	if (!_lv_postorder_vg(vg, _lv_validate_references_single, NULL)) {
++		stack;
++		r = 0;
+ 	}
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+--- LVM2/WHATS_NEW	2011/03/10 13:11:59	1.1942
++++ LVM2/WHATS_NEW	2011/03/10 14:40:33	1.1943
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Add _lv_postorder_vg() to improve efficiency for all LVs in VG.
+   Use hash tables to speedup string search in validate_vg().
+   Refactor allocation of VG structure, add alloc_vg().
+   Avoid possible endless loop in _free_vginfo when 4 or more VGs have same name.
 
 
