@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 11 Mar 2011 14:45:22 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/archive.c lib ...
-Message-ID: <20110311144522.6248.qmail@sourceware.org>
+Date: 11 Mar 2011 14:50:17 -0000
+Subject: LVM2 ./WHATS_NEW lib/format1/format1.c lib/for ...
+Message-ID: <20110311145017.11347.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,269 +10,278 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-03-11 14:45:18
+Changes by:	prajnoha at sourceware.org	2011-03-11 14:50:15
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/format_text: archive.c archiver.c format-text.c 
-	                 format-text.h 
+	lib/format1    : format1.c 
+	lib/format_pool: format_pool.c 
+	lib/format_text: format-text.c import_vsn1.c 
+	lib/metadata   : metadata.c metadata.h 
 
 Log message:
-	Make create_text_context fn static and move it inside create_instance fn.
+	Use only vg_set_fid and new pv_set_fid fn to assign the format instance.
 	
-	We'd like to use the fid mempool for text_context that is stored
-	in the instance (we used cmd mempool before, so the order of
-	initialisation was not a matter, but now it is since we need to
-	create the fid mempool first which happens in create_instance fn).
-	
-	The text_context initialisation is not needed anywhere outside the
-	create_instance fn so move it there.
+	This is essential for proper format instance ref_count support. We must
+	use these functions to set the fid everywhere from now on, even the NULL
+	value!
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1946&r2=1.1947
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archive.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.h.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1947&r2=1.1948
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.136&r2=1.137
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.176&r2=1.177
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.443&r2=1.444
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.241&r2=1.242
 
---- LVM2/WHATS_NEW	2011/03/11 14:38:38	1.1946
-+++ LVM2/WHATS_NEW	2011/03/11 14:45:17	1.1947
+--- LVM2/WHATS_NEW	2011/03/11 14:45:17	1.1947
++++ LVM2/WHATS_NEW	2011/03/11 14:50:13	1.1948
 @@ -1,5 +1,6 @@
  Version 2.02.85 - 
  ===================================
-+  Make create_text_context fn static and move it inside create_instance fn.
++  Use only vg_set_fid and new pv_set_fid fn to assign the format instance.
+   Make create_text_context fn static and move it inside create_instance fn.
    Add mem and ref_count fields to struct format_instance for own mempool use.
    Use new alloc_fid fn for common format instance initialisation.
-   Optimise _get_token() and _eat_space().
---- LVM2/lib/format_text/archive.c	2011/02/21 12:07:03	1.41
-+++ LVM2/lib/format_text/archive.c	2011/03/11 14:45:18	1.42
-@@ -301,6 +301,9 @@
- 	struct volume_group *vg = NULL;
- 	struct format_instance *tf;
- 	struct format_instance_ctx fic;
-+	struct text_context tc = {.path_live = af->path,
-+				  .path_edit = NULL,
-+				  .desc = NULL};
- 	time_t when;
- 	char *desc;
+--- LVM2/lib/format1/format1.c	2011/03/11 14:38:39	1.136
++++ LVM2/lib/format1/format1.c	2011/03/11 14:50:14	1.137
+@@ -198,7 +198,7 @@
+ 	if (dm_list_empty(&pvs))
+ 		goto_bad;
  
-@@ -308,8 +311,8 @@
- 	log_print("File:\t\t%s", af->path);
+-	vg->fid = fid;
++	vg_set_fid(vg, fid);
  
- 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
--	if (!(fic.context.private = create_text_context(cmd, af->path, NULL)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
-+	fic.context.private = &tc;
-+	if (!(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create text instance object.");
- 		return;
- 	}
---- LVM2/lib/format_text/archiver.c	2011/02/28 20:50:01	1.44
-+++ LVM2/lib/format_text/archiver.c	2011/03/11 14:45:18	1.45
-@@ -271,11 +271,14 @@
- 	struct volume_group *vg = NULL;
- 	struct format_instance *tf;
- 	struct format_instance_ctx fic;
-+	struct text_context tc = {.path_live = file,
-+				  .path_edit = NULL,
-+				  .desc = cmd->cmd_line};
- 	struct metadata_area *mda;
+ 	if (!_check_vgs(&pvs, vg))
+ 		goto_bad;
+--- LVM2/lib/format_pool/format_pool.c	2011/03/11 14:38:39	1.42
++++ LVM2/lib/format_pool/format_pool.c	2011/03/11 14:50:14	1.43
+@@ -120,7 +120,8 @@
+ 	if (!read_pool_pds(fid->fmt, vg_name, vg->vgmem, &pds))
+ 		goto_bad;
  
- 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
--	if (!(fic.context.private = create_text_context(cmd, file, cmd->cmd_line)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
-+	fic.context.private = &tc;
-+	if (!(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create text format object.");
- 		return NULL;
- 	}
-@@ -379,6 +382,9 @@
- 	int r = 0;
- 	struct format_instance *tf;
- 	struct format_instance_ctx fic;
-+	struct text_context tc = {.path_live = file,
-+				  .path_edit = NULL,
-+				  .desc = desc};
- 	struct metadata_area *mda;
- 	struct cmd_context *cmd;
+-	vg->fid = fid;
++	vg_set_fid(vg, fid);
++
+ 	/* Setting pool seqno to 1 because the code always did this,
+ 	 * although we don't think it's needed. */
+ 	vg->seqno = 1;
+--- LVM2/lib/format_text/format-text.c	2011/03/11 14:45:18	1.176
++++ LVM2/lib/format_text/format-text.c	2011/03/11 14:50:15	1.177
+@@ -1690,12 +1690,8 @@
+ 	    (pv_mdac = pv_mda->metadata_locn))
+ 		size_reduction = pv_mdac->area.size >> SECTOR_SHIFT;
  
-@@ -387,8 +393,8 @@
- 	log_verbose("Creating volume group backup \"%s\" (seqno %u).", file, vg->seqno);
- 
- 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_PRIVATE_MDAS;
--	if (!(fic.context.private = create_text_context(cmd, file, desc)) ||
--	    !(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
-+	fic.context.private = &tc;
-+	if (!(tf = cmd->fmt_backup->ops->create_instance(cmd->fmt_backup, &fic))) {
- 		log_error("Couldn't create backup object.");
- 		return 0;
- 	}
---- LVM2/lib/format_text/format-text.c	2011/03/11 14:38:39	1.175
-+++ LVM2/lib/format_text/format-text.c	2011/03/11 14:45:18	1.176
-@@ -59,12 +59,6 @@
- 	struct device_area dev_area;
- };
- 
--struct text_context {
--	char *path_live;	/* Path to file holding live metadata */
--	char *path_edit;	/* Path to file holding edited metadata */
--	char *desc;		/* Description placed inside file */
--};
+-	/* Destroy old PV-based format instance if it exists. */
+-	if (!(pv->fid->type & FMT_INSTANCE_VG))
+-		pv->fmt->ops->destroy_instance(pv->fid);
 -
- int rlocn_is_ignored(const struct raw_locn *rlocn)
- {
- 	return (rlocn->flags & RAW_LOCN_IGNORED ? 1 : 0);
-@@ -992,7 +986,7 @@
- 			   struct metadata_area *mda)
- {
- 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
--	char *slash;
-+	const char *slash;
- 	char new_name[PATH_MAX];
- 	size_t len;
+ 	/* From now on, VG format instance will be used. */
+-	pv->fid = vg->fid;
++	pv_set_fid(pv, vg->fid);
  
-@@ -1758,6 +1752,52 @@
- 	return 1;
+ 	/* FIXME Cope with genuine pe_count 0 */
+ 
+--- LVM2/lib/format_text/import_vsn1.c	2011/03/10 12:43:29	1.83
++++ LVM2/lib/format_text/import_vsn1.c	2011/03/11 14:50:15	1.84
+@@ -666,10 +666,6 @@
+ 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
+ 		return_NULL;
+ 
+-	/* FIXME Determine format type from file contents */
+-	/* eg Set to instance of fmt1 here if reading a format1 backup? */
+-	vg->fid = fid;
+-
+ 	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN)))
+ 		goto_bad;
+ 
+@@ -796,6 +792,10 @@
+ 	dm_hash_destroy(pv_hash);
+ 	dm_hash_destroy(lv_hash);
+ 
++	/* FIXME Determine format type from file contents */
++	/* eg Set to instance of fmt1 here if reading a format1 backup? */
++	vg_set_fid(vg, fid);
++
+ 	/*
+ 	 * Finished.
+ 	 */
+--- LVM2/lib/metadata/metadata.c	2011/03/11 14:38:39	1.443
++++ LVM2/lib/metadata/metadata.c	2011/03/11 14:50:15	1.444
+@@ -166,14 +166,24 @@
+ 	dm_list_add(&vg->pvs, &pvl->list);
+ 	vg->pv_count++;
+ 	pvl->pv->vg = vg;
+-	pvl->pv->fid = vg->fid;
++	pv_set_fid(pvl->pv, vg->fid);
  }
  
-+static void *_create_text_context(struct dm_pool *mem, struct text_context *tc)
-+{
-+	struct text_context *new_tc;
-+	const char *path;
-+	char *tmp;
-+
-+	if (!tc)
-+		return NULL;
-+
-+	path = tc->path_live;
-+
-+	if ((tmp = strstr(path, ".tmp")) && (tmp == path + strlen(path) - 4)) {
-+		log_error("%s: Volume group filename may not end in .tmp",
-+			  path);
-+		return NULL;
-+	}
-+
-+	if (!(new_tc = dm_pool_alloc(mem, sizeof(*new_tc))))
-+		return_NULL;
-+
-+	if (!(new_tc->path_live = dm_pool_strdup(mem, path)))
-+		goto_bad;
-+
-+	/* If path_edit not defined, create one from path_live with .tmp suffix. */
-+	if (!tc->path_edit) {
-+		if (!(tmp = dm_pool_alloc(mem, strlen(path) + 5)))
-+			goto_bad;
-+		sprintf(tmp, "%s.tmp", path);
-+		new_tc->path_edit = tmp;
-+	}
-+	else if (!(new_tc->path_edit = dm_pool_strdup(mem, tc->path_edit)))
-+		goto_bad;
-+
-+	if (!(new_tc->desc = tc->desc ? dm_pool_strdup(mem, tc->desc)
-+				      : dm_pool_strdup(mem, "")))
-+		goto_bad;
-+
-+	return (void *) new_tc;
-+
-+      bad:
-+	dm_pool_free(mem, new_tc);
-+
-+	log_error("Couldn't allocate text format context object.");
-+	return NULL;
-+}
-+
- static int _create_vg_text_instance(struct format_instance *fid,
-                                     const struct format_instance_ctx *fic)
+ void del_pvl_from_vgs(struct volume_group *vg, struct pv_list *pvl)
  {
-@@ -1769,6 +1809,7 @@
- 	struct raw_list *rl;
- 	struct dm_list *dir_list, *raw_list;
- 	char path[PATH_MAX];
-+	struct text_context tc;
++	struct format_instance_ctx fic;
++	struct format_instance *fid;
++
+ 	vg->pv_count--;
+ 	dm_list_del(&pvl->list);
+ 	pvl->pv->vg = NULL; /* orphan */
++
++	/* Use a new PV-based format instance since the PV is orphan now. */
++	fic.type = FMT_INSTANCE_PV | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
++	fic.context.pv_id = (const char *) &pvl->pv->id;
++	fid = pvl->pv->fid->fmt->ops->create_instance(pvl->pv->fid->fmt, &fic);
++
++	pv_set_fid(pvl->pv, fid);
+ }
+ 
+ 
+@@ -288,6 +298,10 @@
+ {
+ 	memcpy(pv_to, pv_from, sizeof(*pv_to));
+ 
++	/* We must use pv_set_fid here to update the reference counter! */
++	pv_to->fid = NULL;
++	pv_set_fid(pv_to, pv_from->fid);
++
+ 	if (!(pv_to->vg_name = dm_pool_strdup(pvmem, pv_from->vg_name)))
+ 		return_0;
+ 
+@@ -881,6 +895,7 @@
+ {
+ 	struct volume_group *vg;
+ 	struct format_instance_ctx fic;
++	struct format_instance *fid;
+ 	int consistent = 0;
+ 	uint32_t rc;
+ 
+@@ -937,10 +952,11 @@
+ 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = vg_name;
+ 	fic.context.vg_ref.vg_id = NULL;
+-	if (!(vg->fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
++	if (!(fid = cmd->fmt->ops->create_instance(cmd->fmt, &fic))) {
+ 		log_error("Failed to create format instance");
+ 		goto bad;
+ 	}
++	vg_set_fid(vg, fid);
+ 
+ 	if (vg->fid->fmt->ops->vg_setup &&
+ 	    !vg->fid->fmt->ops->vg_setup(vg->fid, vg)) {
+@@ -1507,7 +1523,7 @@
+ 	if (!pv)
+ 		return_NULL;
+ 
+-	pv->fid = NULL;
++	pv_set_fid(pv, NULL);
+ 	pv->pe_size = 0;
+ 	pv->pe_start = 0;
+ 	pv->pe_count = 0;
+@@ -1562,6 +1578,7 @@
+ {
+ 	const struct format_type *fmt = cmd->fmt;
+ 	struct format_instance_ctx fic;
++	struct format_instance *fid;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = _alloc_pv(mem, dev);
+ 	unsigned mda_index;
+@@ -1605,10 +1622,11 @@
+ 
+ 	fic.type = FMT_INSTANCE_PV;
+ 	fic.context.pv_id = (const char *) &pv->id;
+-	if (!(pv->fid = fmt->ops->create_instance(fmt, &fic))) {
++	if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
+ 		log_error("Couldn't create format instance for PV %s.", pv_dev_name(pv));
+ 		goto bad;
+ 	}
++	pv_set_fid(pv, fid);
+ 
+ 	pv->fmt = fmt;
+ 	pv->vg_name = fmt->orphan_vg_name;
+@@ -2615,6 +2633,7 @@
+ 					     const char *orphan_vgname)
+ {
+ 	struct format_instance_ctx fic;
++	struct format_instance *fid;
  	struct lvmcache_vginfo *vginfo;
  	struct lvmcache_info *info;
- 	const char *vg_name, *vg_id;
-@@ -1786,7 +1827,7 @@
- 		if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
- 			return_0;
- 		mda->ops = &_metadata_text_file_backup_ops;
--		mda->metadata_locn = fic->context.private;
-+		mda->metadata_locn = _create_text_context(fid->fmt->cmd->mem, fic->context.private);
- 		mda->status = 0;
- 		fid->metadata_areas_index.hash = NULL;
- 		fid_add_mda(fid, mda, NULL, 0, 0);
-@@ -1811,7 +1852,9 @@
- 				if (!(mda = dm_pool_zalloc(fid->fmt->cmd->mem, sizeof(*mda))))
- 					return_0;
- 				mda->ops = &_metadata_text_file_ops;
--				mda->metadata_locn = create_text_context(fid->fmt->cmd, path, NULL);
-+				tc.path_live = path;
-+				tc.path_edit = tc.desc = NULL;
-+				mda->metadata_locn = _create_text_context(fid->fmt->cmd->mem, &tc);
- 				mda->status = 0;
- 				fid_add_mda(fid, mda, NULL, 0, 0);
- 			}
-@@ -2210,44 +2253,6 @@
+ 	struct pv_list *pvl;
+@@ -2633,10 +2652,11 @@
+ 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = orphan_vgname;
+ 	fic.context.vg_ref.vg_id = NULL;
+-	if (!(vg->fid = vginfo->fmt->ops->create_instance(vginfo->fmt, &fic))) {
++	if (!(fid = vginfo->fmt->ops->create_instance(vginfo->fmt, &fic))) {
+ 		log_error("Failed to create format instance");
+ 		goto bad;
+ 	}
++	vg_set_fid(vg, fid);
+ 
+ 	dm_list_iterate_items(info, &vginfo->infos) {
+ 		if (!(pv = _pv_read(cmd, vg->vgmem, dev_name(info->dev),
+@@ -3415,11 +3435,12 @@
+ 	else {
+ 		fic.type = FMT_INSTANCE_PV | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+ 		fic.context.pv_id = (const char *) &pv->id;
+-		if (!(pv->fid = pv->fmt->ops->create_instance(pv->fmt, &fic))) {
++		if (!(fid = pv->fmt->ops->create_instance(pv->fmt, &fic))) {
+ 			log_error("_pv_read: Couldn't create format instance "
+ 				  "for PV %s", pv_name);
+ 			goto bad;
+ 		}
++		pv_set_fid(pv, fid);
+ 	}
+ 
+ 	return pv;
+@@ -3970,14 +3991,31 @@
  	return NULL;
  }
  
--void *create_text_context(struct cmd_context *cmd, const char *path,
--			  const char *desc)
--{
--	struct text_context *tc;
--	char *tmp;
--
--	if ((tmp = strstr(path, ".tmp")) && (tmp == path + strlen(path) - 4)) {
--		log_error("%s: Volume group filename may not end in .tmp",
--			  path);
--		return NULL;
--	}
--
--	if (!(tc = dm_pool_alloc(cmd->mem, sizeof(*tc))))
--		return_NULL;
--
--	if (!(tc->path_live = dm_pool_strdup(cmd->mem, path)))
--		goto_bad;
--
--	if (!(tc->path_edit = dm_pool_alloc(cmd->mem, strlen(path) + 5)))
--		goto_bad;
--
--	sprintf(tc->path_edit, "%s.tmp", path);
--
--	if (!desc)
--		desc = "";
--
--	if (!(tc->desc = dm_pool_strdup(cmd->mem, desc)))
--		goto_bad;
--
--	return (void *) tc;
--
--      bad:
--	dm_pool_free(cmd->mem, tc);
--
--	log_error("Couldn't allocate text format context object.");
--	return NULL;
--}
--
- static struct format_handler _text_handler = {
- 	.scan = _text_scan,
- 	.pv_read = _text_pv_read,
---- LVM2/lib/format_text/format-text.h	2011/03/02 10:19:14	1.32
-+++ LVM2/lib/format_text/format-text.h	2011/03/11 14:45:18	1.33
-@@ -44,9 +44,12 @@
- /*
-  * The text format can read and write a volume_group to a file.
-  */
-+struct text_context {
-+	const char *path_live;	/* Path to file holding live metadata */
-+	const char *path_edit;	/* Path to file holding edited metadata */
-+	const char *desc;	/* Description placed inside file */
-+};
- struct format_type *create_text_format(struct cmd_context *cmd);
--void *create_text_context(struct cmd_context *cmd, const char *path,
--			  const char *desc);
++void pv_set_fid(struct physical_volume *pv,
++		struct format_instance *fid)
++{
++	if (pv->fid)
++		pv->fid->fmt->ops->destroy_instance(pv->fid);
++
++	pv->fid = fid;
++	if (fid)
++		fid->ref_count++;
++}
++
+ void vg_set_fid(struct volume_group *vg,
+ 		 struct format_instance *fid)
+ {
+ 	struct pv_list *pvl;
  
- struct labeller *text_labeller_create(const struct format_type *fmt);
++	if (vg->fid)
++		vg->fid->fmt->ops->destroy_instance(vg->fid);
++
+ 	vg->fid = fid;
++	if (fid)
++		fid->ref_count++;
++
+ 	dm_list_iterate_items(pvl, &vg->pvs)
+-		pvl->pv->fid = fid;
++		pv_set_fid(pvl->pv, fid);
+ }
  
+ static int _convert_key_to_string(const char *key, size_t key_len,
+--- LVM2/lib/metadata/metadata.h	2011/03/11 14:30:28	1.241
++++ LVM2/lib/metadata/metadata.h	2011/03/11 14:50:15	1.242
+@@ -206,7 +206,15 @@
+ 
+ struct format_instance *alloc_fid(const struct format_type *fmt,
+ 				  const struct format_instance_ctx *fic);
++
++/*
++ * Format instance must always be set using pv_set_fid or vg_set_fid
++ * (NULL value as well), never asign it directly! This is essential
++ * for proper reference counting for the format instance.
++ */
++void pv_set_fid(struct physical_volume *pv, struct format_instance *fid);
+ void vg_set_fid(struct volume_group *vg, struct format_instance *fid);
++
+ /* FIXME: Add generic interface for mda counts based on given key. */
+ int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
+ 		const char *key, size_t key_len, const unsigned sub_key);
 
 
