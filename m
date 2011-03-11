@@ -1,119 +1,84 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 23 Mar 2011 17:33:39 +0100
-Subject: [PATCH 1/6] Pool locking code
-In-Reply-To: <4D8A1886.1090105@redhat.com>
-References: <cover.1300828168.git.zkabelac@redhat.com>	<d2353d5f9081b6eed91ed788af173ddf88dd4bba.1300828168.git.zkabelac@redhat.com>	<1300888988.14527.28.camel@ubuntu>	<4D8A098C.8060803@redhat.com>
-	<1300893225.14527.37.camel@ubuntu> <4D8A1886.1090105@redhat.com>
-Message-ID: <4D8A20E3.5030809@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 11 Mar 2011 18:22:39 -0000
+Subject: LVM2/scripts gdbinit
+Message-ID: <20110311182239.15024.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 23.3.2011 16:57, Zdenek Kabelac napsal(a):
-> Dne 23.3.2011 16:13, Joe Thornber napsal(a):
->> On Wed, 2011-03-23 at 15:54 +0100, Zdenek Kabelac wrote:
->>> Forget to answer the size question -  >8MB is allocated by the VG
->>> mempool when
->>> set of simple linear 7200LVs on 1 PV are in use.
->>
->> So I think each snapshot/restore of a VG pool of that size is going to
->> take ~0.1 seconds.  So now my question is how many times are we
->> expecting to happen during a typical tool invocation?  Your previous
->> reply suggested it happens just once?
-> 
-> 
-> If there would be just 1 vg read for 7200 activate call - obviously I'd not
-> need to play with this dm_pool locking :)
-> 
-> So there is 7200 vg reads - which will use this one locked pool with my patch set:
-> 
-> To give some time info here
-> (using my unoptimized gcc debug build on C2D 2.2GHz - but with few more
-> patches applied than current upstream)
-> 
-> Deactivate 7200LV   (7200 already active)
-> real	1m16.140s
-> user	0m5.686s
-> sys	0m31.410s
-> 
-> 
-> Deactivate 7200LV (non active)
-> real	0m2.121s
-> user	0m1.083s
-> sys	0m1.032s
-> 
-> 
-> Activate 7200  (non active)
-> real	2m19.324s
-> user	0m6.503s
-> sys	1m30.785s
-> 
-> Activate 7200 (7200 already active)
-> real	0m10.945s
-> user	0m1.422s
-> sys	0m9.502s
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-03-11 18:22:39
 
-I think good example could be this - when I disable mprotect-ing in my
-patchset - and enable crc checking with each dm_pool_restore (which should be
-similar to memcpy) (otherwise crc is checked only with final pool unlock)
+Modified files:
+	scripts        : gdbinit 
 
-Deactivate 7200LV
-real	1m45.353s
-user	0m38.128s
-sys	0m27.395s
+Log message:
+	detect RAID* LV and segment flags.
 
-Deactivate 7200LV
-real	0m36.948s
-user	0m35.284s
-sys	0m1.642s
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/gdbinit.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
-Activate 7200  (non active)
-real	2m31.065s
-user	0m37.740s
-sys	1m18.481s
-
-(here could be observed - thet mprotecting takes 12s)
-
-Activate 7200 (7200 already active)
-real	0m52.188s
-user	0m35.570s
-sys	0m16.563s
-
-
-
-So I'd estimate like 33seconds would be wasted.
-
---
-
-And to complete the picture - crc only with unlock - and without pool
-mprotect-ing  - assuming this would be normal work.
-
-Deactivate 7200LV
-real	1m9.989s
-user	0m4.584s
-sys	0m26.882s
-
-Deactivate 7200LV
-real	0m2.119s
-user	0m1.087s
-sys	0m1.025s
-
-Activate 7200  (non active)
-real	2m11.363s
-user	0m4.696s
-sys	1m15.393s
-
-Activate 7200 (7200 already active)
-real	0m11.127s
-user	0m1.392s
-sys	0m9.669s
-
-
-Zdenek
-
-
+--- LVM2/scripts/gdbinit	2011/03/10 13:45:12	1.1
++++ LVM2/scripts/gdbinit	2011/03/11 18:22:39	1.2
+@@ -28,7 +28,7 @@
+ printf "\n\n"
+ printf "Popular breakpoints:\n"
+ printf "break lv_extend\n"
+-printf "run -m1 -L 200M -n lv vg\n"
++printf "run --type raid1 -L 200M -n lv vg\n"
+ printf "lv_status_r lv\n"
+ printf "\n\n"
+ 
+@@ -126,9 +126,21 @@
+ 	if ($arg0->status & 0x00040000U)
+ 		printf " MIRROR_IMAGE"
+ 	end
+-#	if ($arg0->status & MIRROR_NOTSYNCED)
++#	if ($arg0->status & RAID)
++	if ($arg0->status & 0x00000001U)
++		printf " RAID"
++	end
++#	if ($arg0->status & RAID_META)
++	if ($arg0->status & 0x00000002U)
++		printf " RAID_META"
++	end
++#	if ($arg0->status & RAID_IMAGE)
++	if ($arg0->status & 0x00000004U)
++		printf " RAID_IMAGE"
++	end
++#	if ($arg0->status & LV_NOTSYNCED)
+ 	if ($arg0->status & 0x00080000U)
+-		printf " MIRROR_NOTSYNCED"
++		printf " LV_NOTSYNCED"
+ 	end
+ #	if ($arg0->status & CONVERTING)
+ 	if ($arg0->status & 0x00400000U)
+@@ -178,8 +190,8 @@
+ 	if ($_s == $_seg_list_head)
+ 		printf "[ No segments for %s ]\n", $_lv->name
+ 	else
++		set $_seg = (struct lv_segment *)$_s
+ 		while ($_s != $_seg_list_head)
+-			set $_seg = (struct lv_segment *)$_s
+ 			printf "%s[ %s->seg(%d)->status:", $arg1, $_lv->name, $_i
+ 			__status $_seg
+ 			printf " ]\n"
+@@ -203,10 +215,11 @@
+ printf " ]\n"
+ end
+ 				end
+-				set $_j = $_j + 1
++				set $_j++
+ 			end
+ 			set $_s = $_s->n
+-			set $_i = $_i + 1
++			set $_seg = (struct lv_segment *)$_s
++			set $_i++
+ 		end
+ 	end
+ 	printf "\n"	
 
 
