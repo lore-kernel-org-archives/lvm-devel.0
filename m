@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Mar 2011 13:35:53 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20110330133553.18521.qmail@sourceware.org>
+Date: 13 Mar 2011 23:05:49 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/import_vsn1.c ...
+Message-ID: <20110313230549.16622.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,223 +10,73 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-30 13:35:52
+Changes by:	zkabelac at sourceware.org	2011-03-13 23:05:49
 
 Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: import_vsn1.c 
+	lib/format1    : import-export.c 
 	lib/metadata   : metadata.c 
 
 Log message:
-	Use created hash tables for quick check of LV, PV.
+	Fix allocation of system_id
 	
-	Instead of searching linear list of all LVs, PVs - use created hash tables
-	also for quick mapping between LV.
+	As code uses strncpy(system_id, NAME_LEN) and doesn't set '\0'
+	Fix it by always allocating NAME_LEN + 1 buffer size and with zalloc
+	we always get '\0' as the last byte.
 	
-	(Note - for small number of PVs or LVs the overhead of the hash is bigger).
+	This bug may trigger some unexpected behavior of the string operation
+	code - depends on the pool allocator.
 	
-	TODO: Use hash tables in volume_group structure directly.
+	FIXME: refactor this code to alloc_vg.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.451&r2=1.452
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1953&r2=1.1954
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.84&r2=1.85
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/import-export.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.448&r2=1.449
 
---- LVM2/lib/metadata/metadata.c	2011/03/29 21:57:56	1.451
-+++ LVM2/lib/metadata/metadata.c	2011/03/30 13:35:51	1.452
-@@ -2182,6 +2182,12 @@
- 	}
- }
+--- LVM2/WHATS_NEW	2011/03/13 22:57:51	1.1953
++++ LVM2/WHATS_NEW	2011/03/13 23:05:48	1.1954
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Fix allocation of system_id buffer in volume_group structure.
+   Fix buffer allocation in build_dm_uuid().
+   Fix readlink usage inside get_primary_dev().
+   Use format instance mempool where possible and adequate.
+--- LVM2/lib/format_text/import_vsn1.c	2011/03/11 14:50:15	1.84
++++ LVM2/lib/format_text/import_vsn1.c	2011/03/13 23:05:48	1.85
+@@ -666,7 +666,7 @@
+ 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
+ 		return_NULL;
  
-+struct validate_hash {
-+	struct dm_hash_table *lvname;
-+	struct dm_hash_table *lvid;
-+	struct dm_hash_table *pvid;
-+};
-+
- /*
-  * Check that an LV and all its PV references are correctly listed in vg->lvs
-  * and vg->pvs, respectively. This only looks at a single LV, but *not* at the
-@@ -2191,21 +2197,14 @@
- static int _lv_validate_references_single(struct logical_volume *lv, void *data)
- {
- 	struct volume_group *vg = lv->vg;
-+	struct validate_hash *vhash = data;
- 	struct lv_segment *lvseg;
--	struct pv_list *pvl;
--	struct lv_list *lvl;
-+	struct physical_volume *pv;
- 	int s;
- 	int r = 1;
--	int ok = 0;
+-	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN)))
++	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
+ 		goto_bad;
  
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (lvl->lv == lv) {
--			ok = 1;
--			break;
--		}
--	}
--
--	if (!ok) {
-+	if (lv != dm_hash_lookup_binary(vhash->lvid, &lv->lvid.id[1],
-+					sizeof(lv->lvid.id[1]))) {
- 		log_error(INTERNAL_ERROR
- 			  "Referenced LV %s not listed in VG %s.",
- 			  lv->name, vg->name);
-@@ -2214,22 +2213,16 @@
+ 	vgn = vgn->child;
+--- LVM2/lib/format1/import-export.c	2010/11/30 22:57:35	1.116
++++ LVM2/lib/format1/import-export.c	2011/03/13 23:05:48	1.117
+@@ -225,7 +225,7 @@
+ 	if (!(vg->name = dm_pool_strdup(mem, (char *)dl->pvd.vg_name)))
+ 		return_0;
  
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		for (s = 0; s < lvseg->area_count; ++s) {
--			if (seg_type(lvseg, s) == AREA_PV) {
--				ok = 0;
--				/* look up the reference in vg->pvs */
--				dm_list_iterate_items(pvl, &vg->pvs) {
--					if (pvl->pv == seg_pv(lvseg, s)) {
--						ok = 1;
--						break;
--					}
--				}
--
--				if (!ok) {
--					log_error(INTERNAL_ERROR
--						  "Referenced PV %s not listed in VG %s.",
--						  pv_dev_name(seg_pv(lvseg, s)), vg->name);
--					r = 0;
--				}
-+			if (seg_type(lvseg, s) != AREA_PV)
-+				continue;
-+			pv = seg_pv(lvseg, s);
-+			/* look up the reference in vg->pvs */
-+			if (pv != dm_hash_lookup_binary(vhash->pvid, &pv->id,
-+							sizeof(pv->id))) {
-+				log_error(INTERNAL_ERROR
-+					  "Referenced PV %s not listed in VG %s.",
-+					  pv_dev_name(pv), vg->name);
-+				r = 0;
- 			}
- 		}
- 	}
-@@ -2247,9 +2240,7 @@
- 	uint32_t hidden_lv_count = 0, lv_count = 0, lv_visible_count = 0;
- 	uint32_t pv_count = 0;
- 	uint32_t num_snapshots = 0;
--	struct dm_hash_table *lvname_hash;
--	struct dm_hash_table *lvid_hash;
--	struct dm_hash_table *pvid_hash;
-+	struct validate_hash vhash = { NULL };
+-	if (!(vg->system_id = dm_pool_alloc(mem, NAME_LEN)))
++	if (!(vg->system_id = dm_pool_zalloc(mem, NAME_LEN + 1)))
+ 		return_0;
  
- 	if (vg->alloc == ALLOC_CLING_BY_TAGS) {
- 		log_error(INTERNAL_ERROR "VG %s allocation policy set to invalid cling_by_tags.",
-@@ -2258,7 +2249,7 @@
+ 	*vg->system_id = '\0';
+--- LVM2/lib/metadata/metadata.c	2011/03/11 15:10:17	1.448
++++ LVM2/lib/metadata/metadata.c	2011/03/13 23:05:49	1.449
+@@ -934,7 +934,7 @@
  	}
  
- 	/* FIXME Also check there's no data/metadata overlap */
--	if (!(pvid_hash = dm_hash_create(vg->pv_count))) {
-+	if (!(vhash.pvid = dm_hash_create(vg->pv_count))) {
- 		log_error("Failed to allocate pvid hash.");
- 		return 0;
- 	}
-@@ -2283,7 +2274,7 @@
- 			r = 0;
- 		}
+ 	vg->status = (RESIZEABLE_VG | LVM_READ | LVM_WRITE);
+-	if (!(vg->system_id = dm_pool_alloc(vg->vgmem, NAME_LEN)))
++	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
+ 		goto_bad;
  
--		if (dm_hash_lookup_binary(pvid_hash, &pvl->pv->id,
-+		if (dm_hash_lookup_binary(vhash.pvid, &pvl->pv->id,
- 					  sizeof(pvl->pv->id))) {
- 			if (!id_write_format(&pvl->pv->id, uuid,
- 					     sizeof(uuid)))
-@@ -2295,7 +2286,7 @@
- 			r = 0;
- 		}
- 
--		if (!dm_hash_insert_binary(pvid_hash, &pvl->pv->id,
-+		if (!dm_hash_insert_binary(vhash.pvid, &pvl->pv->id,
- 					   sizeof(pvl->pv->id), pvl->pv)) {
- 			log_error("Failed to hash pvid.");
- 			r = 0;
-@@ -2303,7 +2294,6 @@
- 		}
- 	}
- 
--	dm_hash_destroy(pvid_hash);
- 
- 	if (!check_pv_segments(vg)) {
- 		log_error(INTERNAL_ERROR "PV segments corrupted in %s.",
-@@ -2370,28 +2360,29 @@
- 
- 	/* Avoid endless loop if lv->segments list is corrupt */
- 	if (!r)
--		return r;
-+		goto out;
- 
--	if (!(lvname_hash = dm_hash_create(lv_count))) {
-+	if (!(vhash.lvname = dm_hash_create(lv_count))) {
- 		log_error("Failed to allocate lv_name hash");
--		return 0;
-+		r = 0;
-+		goto out;
- 	}
- 
--	if (!(lvid_hash = dm_hash_create(lv_count))) {
-+	if (!(vhash.lvid = dm_hash_create(lv_count))) {
- 		log_error("Failed to allocate uuid hash");
--		dm_hash_destroy(lvname_hash);
--		return 0;
-+		r = 0;
-+		goto out;
- 	}
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (dm_hash_lookup(lvname_hash, lvl->lv->name)) {
-+		if (dm_hash_lookup(vhash.lvname, lvl->lv->name)) {
- 			log_error(INTERNAL_ERROR
- 				  "Duplicate LV name %s detected in %s.",
- 				  lvl->lv->name, vg->name);
- 			r = 0;
- 		}
- 
--		if (dm_hash_lookup_binary(lvid_hash, &lvl->lv->lvid.id[1],
-+		if (dm_hash_lookup_binary(vhash.lvid, &lvl->lv->lvid.id[1],
- 					  sizeof(lvl->lv->lvid.id[1]))) {
- 			if (!id_write_format(&lvl->lv->lvid.id[1], uuid,
- 					     sizeof(uuid)))
-@@ -2408,13 +2399,13 @@
- 			r = 0;
- 		}
- 
--		if (!dm_hash_insert(lvname_hash, lvl->lv->name, lvl)) {
-+		if (!dm_hash_insert(vhash.lvname, lvl->lv->name, lvl)) {
- 			log_error("Failed to hash lvname.");
- 			r = 0;
- 			break;
- 		}
- 
--		if (!dm_hash_insert_binary(lvid_hash, &lvl->lv->lvid.id[1],
-+		if (!dm_hash_insert_binary(vhash.lvid, &lvl->lv->lvid.id[1],
- 					   sizeof(lvl->lv->lvid.id[1]), lvl->lv)) {
- 			log_error("Failed to hash lvid.");
- 			r = 0;
-@@ -2422,10 +2413,7 @@
- 		}
- 	}
- 
--	dm_hash_destroy(lvname_hash);
--	dm_hash_destroy(lvid_hash);
--
--	if (!_lv_postorder_vg(vg, _lv_validate_references_single, NULL)) {
-+	if (!_lv_postorder_vg(vg, _lv_validate_references_single, &vhash)) {
- 		stack;
- 		r = 0;
- 	}
-@@ -2459,6 +2447,13 @@
- 
- 	if (vg_max_lv_reached(vg))
- 		stack;
-+out:
-+	if (vhash.lvid)
-+		dm_hash_destroy(vhash.lvid);
-+	if (vhash.lvname)
-+		dm_hash_destroy(vhash.lvname);
-+	if (vhash.pvid)
-+		dm_hash_destroy(vhash.pvid);
- 
- 	return r;
- }
+ 	*vg->system_id = '\0';
 
 
