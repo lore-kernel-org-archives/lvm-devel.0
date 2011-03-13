@@ -1,43 +1,49 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 28 Mar 2011 13:59:11 +0200
-Subject: [PATCH 0/6] Cleanup
-Message-ID: <cover.1301313391.git.zkabelac@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 13 Mar 2011 18:08:27 -0000
+Subject: LVM2/daemons/clvmd clvmd-openais.c
+Message-ID: <20110313180827.18910.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Nice-to-have patch set.
-Constains some warning fixes for various compilation builds which I'm
-using on my machine (so not covering all configure options)
-Should be easy to overview.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2011-03-13 18:08:26
 
-Zdenek Kabelac (6):
-  Unreleased pool is INTERNAL_ERROR
-  Remove double  brackets
-  Add void and few more warning
-  Add attribute printf
-  Fix signes warnings
-  const fixes
+Modified files:
+	daemons/clvmd  : clvmd-openais.c 
 
- daemons/clvmd/clvmd.c         |   11 ++++++-----
- daemons/clvmd/lvm-functions.c |    8 ++++----
- daemons/dmeventd/dmeventd.c   |    4 ++--
- lib/activate/dev_manager.c    |    2 +-
- lib/device/dev-io.c           |    2 +-
- lib/metadata/lv_manip.c       |    6 +++---
- lib/metadata/pv_manip.c       |    2 +-
- lib/misc/lvm-globals.c        |   24 ++++++++++++------------
- libdm/libdm-common.c          |    7 +++++--
- libdm/libdm-deptree.c         |    4 ++--
- libdm/mm/pool.c               |    2 +-
- tools/dmsetup.c               |    9 +++++----
- tools/pvmove.c                |    4 ++--
- tools/vgreduce.c              |    4 ++--
- 14 files changed, 47 insertions(+), 42 deletions(-)
+Log message:
+	Remove compile warning for lock_id.
+	
+	%llx --> PRIx64
 
--- 
-1.7.4.1
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+
+--- LVM2/daemons/clvmd/clvmd-openais.c	2011/02/22 10:01:11	1.16
++++ LVM2/daemons/clvmd/clvmd-openais.c	2011/03/13 18:08:26	1.17
+@@ -509,8 +509,8 @@
+ 			
+ 	/* Wait for it to complete */
+ 
+-	DEBUGLOG("lock_resource returning %d, lock_id=%llx\n", err,
+-		 lock_id);
++	DEBUGLOG("lock_resource returning %d, lock_id=%" PRIx64 "\n",
++		 err, lock_id);
+ 
+ 	linfo->lock_id = lock_id;
+ 	linfo->res_handle = res_handle;
+@@ -531,7 +531,7 @@
+ 	if (!linfo)
+ 		return 0;
+ 
+-	DEBUGLOG("unlock_resource: lockid: %llx\n", linfo->lock_id);
++	DEBUGLOG("unlock_resource: lockid: %" PRIx64 "\n", linfo->lock_id);
+ 	err = saLckResourceUnlock(linfo->lock_id, SA_TIME_END);
+ 	if (err != SA_AIS_OK)
+ 	{
 
 
