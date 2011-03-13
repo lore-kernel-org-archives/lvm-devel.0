@@ -1,39 +1,66 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Tue, 29 Mar 2011 20:08:23 +0900
-Subject: Filtering out LVs?
-Message-ID: <4D91BDA7.2030003@ce.jp.nec.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 13 Mar 2011 22:52:21 -0000
+Subject: LVM2 ./WHATS_NEW lib/device/device.c
+Message-ID: <20110313225221.11708.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-03-13 22:52:20
 
-LVM2 commands scan /dev for metadata read-in and validation.
-By default, it includes DM devices.
+Modified files:
+	.              : WHATS_NEW 
+	lib/device     : device.c 
 
-On the other hand, LV deactivation checks its open count
-and fails if it's open.
+Log message:
+	Fix usage of readlink
+	
+	Return value of readlink limits valid string size.
+	Characters after returned size present some garbage to printf.
+	Fix it by placing '\0' on the return size value.
 
-So there is a race that one of multiple vgchange instances prevents other;
-"vgchange -an vg0" might fail to deactivate the VG if "vgchange -an vg1"
-opens vg0/lv0 at the very time for scanning.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1951&r2=1.1952
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/device.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
 
-E.g. try this:
-   From one console,
-     # while true; do vgscan; done
-   and from other console,
-     # while true; do vgchange -ay $VG; vgchange -an $VG || break; done
-
-While device filter can be configured to avoid LV devices,
-and also someone may want to use LV as PV,
-it seems inconvenient default behavior.
-
-Does it make sense to add a filter to avoid LVs?
-(It has to cope with multiple udev-oriented aliases...)
-
--- 
-Jun'ichi Nomura, NEC Corporation
+--- LVM2/WHATS_NEW	2011/03/11 15:10:16	1.1951
++++ LVM2/WHATS_NEW	2011/03/13 22:52:16	1.1952
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Fix readlink usage inside get_primary_dev().
+   Use format instance mempool where possible and adequate.
+   Call destroy_instance for any PVs found in VG structure during vg_free call.
+   Add new free_pv_fid fn and use it throughout to free all attached fids.
+--- LVM2/lib/device/device.c	2010/12/15 12:49:55	1.36
++++ LVM2/lib/device/device.c	2011/03/13 22:52:20	1.37
+@@ -287,7 +287,7 @@
+ 	struct stat info;
+ 	FILE *fp;
+ 	uint32_t pri_maj, pri_min;
+-	int ret = 0;
++	int size, ret = 0;
+ 
+ 	/* check if dev is a partition */
+ 	if (dm_snprintf(path, PATH_MAX, "%s/dev/block/%d:%d/partition",
+@@ -309,11 +309,13 @@
+ 	 * - basename ../../block/md0/md0  = md0
+ 	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
+ 	 */
+-	if (readlink(dirname(path), temp_path, PATH_MAX) < 0) {
++	if ((size = readlink(dirname(path), temp_path, PATH_MAX)) < 0) {
+ 		log_sys_error("readlink", path);
+ 		return ret;
+ 	}
+ 
++	temp_path[size] = '\0';
++
+ 	if (dm_snprintf(path, PATH_MAX, "%s/block/%s/dev",
+ 			sysfs_dir, basename(dirname(temp_path))) < 0) {
+ 		log_error("dm_snprintf dev failed");
 
 
