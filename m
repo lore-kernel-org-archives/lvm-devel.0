@@ -1,34 +1,82 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 15 Mar 2011 19:31:35 -0500
-Subject: [PATCH 1 of 1] LVM: fix macro call
-Message-ID: <201103160031.p2G0VZFZ028034@hydrogen.msp.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 18 Mar 2011 12:32:17 +0100
+Subject: [PATCH] Mitigate some warnings if running as non-root user.
+Message-ID: <1300447937-8114-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch name: lvm-fix-macro-call.patch
+LVM doesn't behave correctly if running as non-root user,
+there is warning when it detects it.
 
-This 'bug' has been around for more than 5 years... originally put in here:
-http://sources.redhat.com/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?r1=1.93&r2=1.94&cvsroot=lvm2&f=h
+Despite this, it produces many error messages, saying nothing.
+See https://bugzilla.redhat.com/show_bug.cgi?id=620571
 
-Thing is, I'm not sure how it was ever suppose to work - it's the wrong type
-of argument to the macro.  Perhaps the macro has changed, or perhaps I just don't
-get it.
+This patch fixes two things:
+1) Removes eror message from device_is_usable() which has no
+information value anyway (real warning is printed inside it).
 
-Index: LVM2/tools/lvcreate.c
-===================================================================
---- LVM2.orig/tools/lvcreate.c
-+++ LVM2/tools/lvcreate.c
-@@ -346,7 +346,7 @@ static int _lvcreate_params(struct lvcre
- 	lp->mirrors = 1;
+2) it fixes device-mapper initialization, if we support
+core dm module autoload and device node is present, it should
+fail early and not try recreate existing and correct node.
+(non-root == permission denied here)
+
+N.B. In future code should support user roles, some more
+drastic checks in code are probably contraproductive now.
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/activate/dev_manager.c |    6 ++----
+ libdm/ioctl/libdm-iface.c  |    9 ++++++---
+ 2 files changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 865bb35..cb041c6 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -141,10 +141,8 @@ int device_is_usable(struct device *dev)
+ 	int only_error_target = 1;
+ 	int r = 0;
  
- 	/* Default to 2 mirrored areas if --type mirror */
--	if (seg_is_mirrored(lp))
-+	if (segtype_is_mirrored(lp->segtype))
- 		lp->mirrors = 2;
+-	if (!(dmt = dm_task_create(DM_DEVICE_STATUS))) {
+-		log_error("Failed to create dm_task struct to check dev status");
+-		return 0;
+-	}
++	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
++		return_0;
  
- 	if (arg_count(cmd, mirrors_ARG)) {
+ 	if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev), MINOR(dev->dev), 1))
+ 		goto_out;
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 241e792..b52c925 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -365,8 +365,9 @@ static int _open_and_assign_control_fd(const char *control,
+ 	_close_control_fd();
+ 
+ 	if ((_control_fd = open(control, O_RDWR)) < 0) {
+-		if (!(ignore_nodev && errno == ENODEV))
+-			log_sys_error("open", control);
++		if (ignore_nodev && errno == ENODEV)
++			return 1;
++		log_sys_error("open", control);
+ 		return 0;
+ 	}
+ 
+@@ -412,7 +413,9 @@ static int _open_control(void)
+ 		    !_create_control(control, major, MAPPER_CTRL_MINOR))
+ 			goto error;
+ 
+-		_open_and_assign_control_fd(control, 1);
++		/* Fallback to old code only if control node doesn't exist */
++		if (!_open_and_assign_control_fd(control, 1))
++			goto error;
+ 	}
+ 
+ 	/*
+-- 
+1.7.4.1
 
 
