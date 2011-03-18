@@ -1,78 +1,106 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Tue, 29 Sep 2015 16:29:03 +0000 (UTC)
-Subject: master - lockd: fix rescanning VG metadata
-Message-ID: <20150929162903.A61A360F10@fedorahosted.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 18 Mar 2011 12:17:59 -0000
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM lib/activate/d ...
+Message-ID: <20110318121759.15685.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=634bf8c953caba4550463281fc0a90ee43c80c8d
-Commit:        634bf8c953caba4550463281fc0a90ee43c80c8d
-Parent:        be393f6722bd89f3fe98ab1be2f1dd41609a0172
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 29 11:07:59 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Sep 29 11:28:48 2015 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2011-03-18 12:17:58
 
-lockd: fix rescanning VG metadata
+Modified files:
+	.              : WHATS_NEW WHATS_NEW_DM 
+	lib/activate   : dev_manager.c 
+	libdm/ioctl    : libdm-iface.c 
 
-One host changes a VG, making the cached VG on another
-host invalid.  The other host then rereads the VG from
-disk to get the latest copy.  If the first host removed
-a PV from the VG, the second host attempts to reread the
-VG from old PV when rescanning.  Reading the VG from the
-removed PV fails, causing vg_read to return "VG not found".
-The fix is to simply not fail when a VG is not found while
-rereading a PV and continue without it.
+Log message:
+	Mitigate some warnings if running as non-root user.
+	
+	LVM doesn't behave correctly if running as non-root user,
+	there is warning when it detects it.
+	
+	Despite this, it produces many error messages, saying nothing.
+	See https://bugzilla.redhat.com/show_bug.cgi?id=620571
+	
+	This patch fixes two things:
+	1) Removes eror message from device_is_usable() which has no
+	information value anyway (real warning is printed inside it).
+	
+	2) it fixes device-mapper initialization, if we support
+	core dm module autoload and device node is present, it should
+	fail early and not try recreate existing and correct node.
+	(non-root == permission denied here)
+	
+	N.B. In future code should support user roles, some more
+	drastic checks in code are probably contraproductive now.
 
-(This doesn't happen if the second host happens to first
-run a command like 'vgs' that triggers a global revalidation
-of metadata.)
----
- lib/cache/lvmetad.c |   20 +++++++++++++++++++-
- 1 files changed, 19 insertions(+), 1 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1956&r2=1.1957
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.455&r2=1.456
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.214&r2=1.215
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.99&r2=1.100
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 0fff65a..721c4a2 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -1122,6 +1122,8 @@ static int _lvmetad_pvscan_single(struct metadata_area *mda, void *baton)
-  * due to something like an lvcreate from another host.
-  * This is limited to changes that only affect the vg (not global state like
-  * orphan PVs), so we only need to reread mdas on the vg's existing pvs.
-+ * But, a previous PV in the VG may have been removed since we last read
-+ * the VG, and that PV may have been reused for another VG.
-  */
+--- LVM2/WHATS_NEW	2011/03/14 17:00:58	1.1956
++++ LVM2/WHATS_NEW	2011/03/18 12:17:57	1.1957
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Mitigate annoying error warning from device is usable check if run as non-root.
+   Add missing \0 for grown debug object in _bitset_with_random_bits().
+   Fix allocation of system_id buffer in volume_group structure.
+   Fix readlink usage inside get_primary_dev().
+--- LVM2/WHATS_NEW_DM	2011/03/10 12:48:40	1.455
++++ LVM2/WHATS_NEW_DM	2011/03/18 12:17:57	1.456
+@@ -1,5 +1,6 @@
+ Version 1.02.64 - 
+ ===================================
++  Fallback to control node creation only if node doesn't exist yet.
+   Change dm_hash API for binary data to accept const void *key.
+   Fix memory access of empty params string in _reload_with_suppression_v4().
+   Lower severity of selabel_lookup and matchpathcon failure to log_debug.
+--- LVM2/lib/activate/dev_manager.c	2011/02/28 19:53:03	1.214
++++ LVM2/lib/activate/dev_manager.c	2011/03/18 12:17:58	1.215
+@@ -141,10 +141,8 @@
+ 	int only_error_target = 1;
+ 	int r = 0;
  
- static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct volume_group *vg)
-@@ -1160,9 +1162,25 @@ static struct volume_group *lvmetad_pvscan_vg(struct cmd_context *cmd, struct vo
+-	if (!(dmt = dm_task_create(DM_DEVICE_STATUS))) {
+-		log_error("Failed to create dm_task struct to check dev status");
+-		return 0;
+-	}
++	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
++		return_0;
  
- 		lvmcache_foreach_mda(info, _lvmetad_pvscan_single, &baton);
+ 	if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev), MINOR(dev->dev), 1))
+ 		goto_out;
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/03/08 22:43:20	1.99
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/03/18 12:17:58	1.100
+@@ -365,8 +365,9 @@
+ 	_close_control_fd();
  
-+		/*
-+		 * The PV may have been removed from the VG by another host
-+		 * since we last read the VG.
-+		 */
- 		if (!baton.vg) {
-+			log_debug_lvmetad("Did not find VG %s in scan of PV %s", vg->name, dev_name(pvl->pv->dev));
- 			lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
--			return NULL;
-+			continue;
-+		}
-+
-+		/*
-+		 * The PV may have been removed from the VG and used for a
-+		 * different VG since we last read the VG.
-+		 */
-+		if (strcmp(baton.vg->name, vg->name)) {
-+			log_debug_lvmetad("Did not find VG %s in scan of PV %s which is now VG %s",
-+					  vg->name, dev_name(pvl->pv->dev), baton.vg->name);
-+			release_vg(baton.vg);
-+			continue;
- 		}
+ 	if ((_control_fd = open(control, O_RDWR)) < 0) {
+-		if (!(ignore_nodev && errno == ENODEV))
+-			log_sys_error("open", control);
++		if (ignore_nodev && errno == ENODEV)
++			return 1;
++		log_sys_error("open", control);
+ 		return 0;
+ 	}
  
- 		if (!(vgmeta = export_vg_to_config_tree(baton.vg))) {
+@@ -412,7 +413,9 @@
+ 		    !_create_control(control, major, MAPPER_CTRL_MINOR))
+ 			goto error;
+ 
+-		_open_and_assign_control_fd(control, 1);
++		/* Fallback to old code only if control node doesn't exist */
++		if (!_open_and_assign_control_fd(control, 1))
++			goto error;
+ 	}
+ 
+ 	/*
 
 
