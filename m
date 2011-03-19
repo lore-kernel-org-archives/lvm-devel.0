@@ -1,42 +1,41 @@
 From: Petr Rockai <prockai@redhat.com>
-Date: Sun, 20 Mar 2011 00:33:41 +0100
-Subject: [PATCH] fix bugs in temporary mirror layer handling
-Message-ID: <87pqpmofca.fsf@twilight.int.mornfall.net.>
+Date: Sun, 20 Mar 2011 00:52:51 +0100
+Subject: [PATCH] factor mirror_remove_missing out of lvconvert --repair
+Message-ID: <87lj0aoegc.fsf@twilight.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+This patch adds a new function, which ties together the code that is
+responsible for removing broken parts of a mirror. This is in
+preparation for refactoring vgreduce --removemissing --force, but this
+patch comes with some bugfixes as well in handling some corner cases
+related to temporary mirror layers. I went with lvconvert.h for now to
+make the function available to other tools. We may want to move some of
+the lvconvert code into lib/ eventually, but I didn't want to tangle
+that into this work.
 
-while working on vgreduce --removemissing --force, I have uncovered
-about half a dozen bugs in handling mirror image removal with temporary
-layers present in the mirror stack.
+Namely, after this patch, lvconvert --repair should cope with broken
+mirrors that contain temporary conversion layer. Breakage to both
+immediate and non-immediate images and logs is repaired now.
 
-In some cases, we could end up with a mirrored LV without a MIRRORED
-flag. In other cases, the code could wind up removing wrong number of
-mirrors. In yet other cases, we could remove the right number of
-mirrors, but fail to respect the removal preferences (i.e. keep an image
-that was requested to be removed while removing an image that was
-requested to be kept). Under some circumstances, remove_mirror_images
-could also get stuck in an infinite loop.
+I am getting a number of
+  Internal error: Maps lock 13840384 < unlock 13848576
 
-I think the proposed version of remove_mirror_images should get through
-all of these above cases correctly. I have tried to explain specific
-problems in the comments in the code.
-
-The patch did not break any tests from the test suite for me. It is a
-prerequisite for vgreduce --removemissing --force, but it also fixes the
-above bugs when triggered in plain lvconvert and in lvconvert --repair.
+-- other than that (when I comment out the internal error) the test seem
+to pass OK. Zden?k, if you could, please apply the patch and see whether
+the above reproduces for you. I don't think the problem is with the new
+code (but I could be wrong). Either way, review would be appreciated.
 
 -------------- next part --------------
 A non-text attachment was scrubbed...
-Name: temp-mirror-layer-fixes.diff
+Name: lvconvert-repair-refactor.diff
 Type: text/x-diff
-Size: 5315 bytes
+Size: 10831 bytes
 Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110320/ed89d66e/attachment.bin>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110320/89ca47ef/attachment.bin>
 -------------- next part --------------
 
 Yours,
