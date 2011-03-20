@@ -1,40 +1,40 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Sat, 19 Mar 2011 23:41:13 +0100
-Subject: [PATCH] make vg_mark_partial_lvs more robust and export it
-In-Reply-To: <4D5BE238.9070806@redhat.com> (Zdenek Kabelac's message of "Wed, 
-	16 Feb 2011 15:42:00 +0100")
-References: <877hd0v0ht.fsf@twilight.int.mornfall.net.>
-	<36088.72482223$1297846647@news.gmane.org>
-	<4D5BE238.9070806@redhat.com>
-Message-ID: <87tyeyohrq.fsf@twilight.int.mornfall.net.>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 20 Mar 2011 02:00:53 -0000
+Subject: LVM2/libdm/ioctl libdm-iface.c
+Message-ID: <20110320020053.24940.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Re,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-03-20 02:00:52
 
-I am attaching an updated patch (since the CVS went conflicting with the
-last version). It still does a scan of the LVs for the clear, but you
-obviously can't do any better without a major rework of the status flag
-system (where the flags would be sets of LVs instead of bits in the
-LVs). So we don't.
+Modified files:
+	libdm/ioctl    : libdm-iface.c 
 
-The patch applies to current CVS and passes tests. Please review (it is
-very simple and prerequisite for other patches)...
+Log message:
+	Fix last checkin - added error message text wrong.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: vg-mark-partial.diff
-Type: text/x-diff
-Size: 3475 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110319/209cc751/attachment.bin>
--------------- next part --------------
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
 
-Yours,
-   Petr
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/03/18 13:21:02	1.101
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/03/20 02:00:52	1.102
+@@ -965,10 +965,8 @@
+ 	if (_check_version(dmversion, sizeof(dmversion), _dm_compat))
+ 		return 1;
+ 
+-	if (!_dm_compat) {
+-		log_error("Support for older device-mapped version is disabled.");
+-		goto bad;
+-	}
++	if (!_dm_compat)
++		goto_bad;
+ 
+ 	log_verbose("device-mapper ioctl protocol version %u failed. "
+ 		    "Trying protocol version 1.", _dm_version);
 
--- 
-id' Ash = Ash; id' Dust = Dust; id' _ = undefined
+
