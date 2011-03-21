@@ -1,21 +1,25 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 21 Mar 2011 16:40:55 +0100
-Subject: [PATCH 2/3] Query udev database to obtain device list for device cache
-In-Reply-To: <4D876449.5040500@redhat.com>
-References: <4D876449.5040500@redhat.com>
-Message-ID: <4D877187.7090206@redhat.com>
+Date: Mon, 21 Mar 2011 16:45:34 +0100
+Subject: [PATCH] dmeventd protocol versioning mechanism
+In-Reply-To: <87pqpkmqu0.fsf@twilight.int.mornfall.net.>
+References: <877hbunlu9.fsf@twilight.int.mornfall.net.>	<4D875CF9.5020100@redhat.com>
+	<87pqpkmqu0.fsf@twilight.int.mornfall.net.>
+Message-ID: <4D87729E.40202@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/21/2011 03:44 PM, Peter Rajnoha wrote:
-> Use libudev to obtain the list of all block device nodes and associated symlinks
-> and construct the device cache from this information. This avoids accessing
-> inappropriate devices or subdirectories found in /dev that is managed by udev.
+On 03/21/2011 04:32 PM, Petr Rockai wrote:
+> it is not (safe), on the other hand there's code in other places in
+> libdevmapper-event that assumes correctly formatted messages and will
+> segfault otherwise.
 
-ack. it need some testing but definitely it should go in.
+Reminds me famous last words: "dmeventd cannot segfault" :-)
+
+We should be more careful at least in new code, it should not hurt much
+to reject garbage on input.
 
 Milan
 
