@@ -1,37 +1,41 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 21 Mar 2011 01:47:35 +0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-In-Reply-To: <4D8692EF.1030400@redhat.com>
-References: <20110320020053.24940.qmail@sourceware.org>
-	<4D85FC79.6050709@redhat.com>
-	<20110320214149.GZ11163@agk-dp.fab.redhat.com>
-	<4D8692EF.1030400@redhat.com>
-Message-ID: <20110321014735.GE11163@agk-dp.fab.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Mon, 21 Mar 2011 15:13:13 +0100
+Subject: [PATCH] dmeventd protocol versioning mechanism
+In-Reply-To: <877hbunlu9.fsf@twilight.int.mornfall.net.>
+References: <877hbunlu9.fsf@twilight.int.mornfall.net.>
+Message-ID: <4D875CF9.5020100@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> The order would be opposite - and I believe that giving the user knowledge,
-> that lvm lacks some part of code to handle this situation and code needs to be
-> recompiled with such support is IMHO good hint for error like this.
- 
-_dm_compat is deprecated functionality and I think the proposed message is
-very misleading, and most likely nothing to do with the actual problem
-the user needs to address on that code path.
+On 03/20/2011 11:10 AM, Petr Rockai wrote:
++/*
++ * You can (and have to) call this in place of
++ * daemon_talk(fifos, &msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0)
++ * -- this call will parse the version reply from dmeventd, in addition to
++ * above call. It is not safe to call this at any other place in the
++ * protocol.
++ */
++int dm_event_get_version(struct dm_event_fifos *fifos, int *version) {
++ char *p;
++ struct dm_event_daemon_message msg = { 0, 0, NULL };
++
++ if (daemon_talk(fifos, &msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0))
++ return 0;
++ p = msg.data;
++ *version = 0;
++
++ p = strchr(p, ' ') + 1; /* Message ID */
++ p = strchr(p, ' ') + 1; /* HELLO */
++ p = strchr(p, ' '); /* HELLO, once more */
 
-> And also it's worth to know - we have 2 other log_error() already there:
 
-which both look fine (on the deprecated code path).
+Is this safe? I think it will segfault on malformed reply (no spaces).
+strchr(NULL, ...)
 
-> > Support was not compiled in so we shouldn't mention anything about it to the
-> > user.
-> Well that's where I think 'root' should know why the operation failed.
- 
-No - if the support was not compiled in it is because it is known not to be
-required.
 
-Alasdair
+Milan
 
 
