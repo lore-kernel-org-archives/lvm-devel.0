@@ -1,93 +1,75 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 22 Mar 2011 22:21:58 +0100
-Subject: [PATCH 4/6] Use dm_pool_set_uint64
+Date: Tue, 22 Mar 2011 22:21:59 +0100
+Subject: [PATCH 5/6] lv_postorder using dm_pool_set_uint64
 In-Reply-To: <cover.1300828168.git.zkabelac@redhat.com>
 References: <cover.1300828168.git.zkabelac@redhat.com>
-Message-ID: <33e9694717f50fe65664cfa9e0ebe00d0e18ea7c.1300828168.git.zkabelac@redhat.com>
+Message-ID: <3ecd5edb5fbb88a05a76b1dc2af52aa07fdc8141.1300828168.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use the new dm_pool API call for the update of content of the locked
-shared VG mempool.  Save the original value of the VG into an extra
-allocated volatile area.  Currently only simple preallocated memory
-area is used - with expectation there should not be too many updates here.
+We may use either this code to safe&restore lv_postorder and keep
+the structure locked.
 
-Otherwisee more effective algorithm would be needed to get better perfomance.
-(most probably some resizable heap??)
+Next patch is optimization for this one - it unlocks VG during
+postorder processing (thus it equals to the original setting).
 
-Original code is kept in comments to make it more obvious what it is
-supposed to do.
+When memory pool is unlocked - this patch presents just very small
+overhead and potentially helps to better debugging if there ever would
+done something more complex then current lv_postoder code which could
+be easily checked there are no other side-effects.
 
-Note:  (snapshot is kept 64bit aligned in union)
+More comments in following patch...
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/activate.c       |    5 ++++-
- lib/metadata/lv.h             |    5 ++++-
- lib/metadata/snapshot_manip.c |   15 ++++++++++++---
- 3 files changed, 20 insertions(+), 5 deletions(-)
+ lib/metadata/metadata.c |   17 +++++++++++++----
+ 1 files changed, 13 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 1ec518d..4d257f1 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1411,7 +1411,10 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 	lv_calculate_readahead(lv, NULL);
- 
- 	if (exclusive)
--		lv->status |= ACTIVATE_EXCL;
-+		/* lv->status |= ACTIVATE_EXCL */
-+		if (!dm_pool_set_uint64(lv->vg->vgmem, &lv->status,
-+					lv->status | ACTIVATE_EXCL))
-+			goto_out;
- 
- 	critical_section_inc(cmd);
- 	if (!(r = _lv_activate_lv(lv, 0)))
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 1c3640b..66db813 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -38,7 +38,10 @@ struct logical_volume {
- 
- 	uint32_t origin_count;
- 	struct dm_list snapshot_segs;
--	struct lv_segment *snapshot;
-+	union {
-+		struct lv_segment *snapshot;
-+		uint64_t snapshot_64;	/* Keep the size 64bit on 32bit arch */
-+	};
- 
- 	struct replicator_device *rdevice;/* For replicator-devs, rimages, slogs - reference to rdevice */
- 	struct dm_list rsites;	/* For replicators - all sites */
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index cb5df6b..0dc8620 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -130,9 +130,18 @@ void init_snapshot_merge(struct lv_segment *cow_seg,
- void clear_snapshot_merge(struct logical_volume *origin)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index e466821..cec9c3c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2023,7 +2023,10 @@ static int _lv_postorder_cleanup(struct logical_volume *lv, void *data)
  {
- 	/* clear merge attributes */
--	origin->snapshot->status &= ~MERGING;
--	origin->snapshot = NULL;
--	origin->status &= ~MERGING;
-+
-+	/* origin->snapshot->status &= ~MERGING */
-+	/* origin->snapshot = NULL */
-+	/* origin->status &= ~MERGING */
-+	if (!dm_pool_set_uint64(origin->vg->vgmem,
-+				&origin->snapshot->status,
-+				origin->snapshot->status & ~MERGING) ||
-+	    !dm_pool_set_uint64(origin->vg->vgmem,
-+				&origin->snapshot_64, 0) ||
-+	    !dm_pool_set_uint64(origin->vg->vgmem, &origin->status,
-+				origin->status & ~MERGING))
-+		stack; /* FIXME: change to return error value */
- }
+ 	if (!(lv->status & POSTORDER_FLAG))
+ 		return 1;
+-	lv->status &= ~POSTORDER_FLAG;
++	/* lv->status &= ~POSTORDER_FLAG */
++	if (!dm_pool_set_uint64(lv->vg->vgmem, &lv->status,
++				lv->status & ~POSTORDER_FLAG))
++                return_0;
  
- int vg_add_snapshot(struct logical_volume *origin,
+ 	if (!_lv_each_dependency(lv, _lv_postorder_cleanup, data))
+ 		return_0;
+@@ -2047,7 +2050,10 @@ static int _lv_postorder_visit(struct logical_volume *lv,
+ 		return 1;
+ 	if (lv->status & POSTORDER_OPEN_FLAG)
+ 		return 1; // a data structure loop has closed...
+-	lv->status |= POSTORDER_OPEN_FLAG;
++	/* lv->status |= POSTORDER_OPEN_FLAG */
++	if (!dm_pool_set_uint64(lv->vg->vgmem, &lv->status,
++				lv->status | POSTORDER_OPEN_FLAG))
++                return_0;
+ 
+ 	baton.fn = fn;
+ 	baton.data = data;
+@@ -2056,8 +2062,11 @@ static int _lv_postorder_visit(struct logical_volume *lv,
+ 	if (r)
+ 		r = fn(lv, data);
+ 
+-	lv->status &= ~POSTORDER_OPEN_FLAG;
+-	lv->status |= POSTORDER_FLAG;
++	/* lv->status &= ~POSTORDER_OPEN_FLAG */
++	/* lv->status |= POSTORDER_FLAG */
++	if (!dm_pool_set_uint64(lv->vg->vgmem, &lv->status,
++				(lv->status & ~POSTORDER_OPEN_FLAG) | POSTORDER_FLAG))
++		return_0;
+ 
+ 	return r;
+ }
 -- 
 1.7.4.1
 
