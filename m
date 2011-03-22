@@ -1,86 +1,37 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 22 Mar 2011 22:34:16 +0100
-Subject: [PATCH 7/8] Proposal - avoid parsing same data
+Date: Tue, 22 Mar 2011 22:34:17 +0100
+Subject: [PATCH 8/8] Few more files filtered from memory locking
 In-Reply-To: <cover.1300829383.git.zkabelac@redhat.com>
 References: <cover.1300829383.git.zkabelac@redhat.com>
-Message-ID: <439f1f6518015f8775fec13ca96188bee73474cd.1300829384.git.zkabelac@redhat.com>
+Message-ID: <c6f8b6bffa5113cf4595b649f6c4b0a1a8eb5f55.1300829384.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Instead of regenerating config tree and parsing same data again,
-check whether export_vg_to_buffer does not produce same string as
-the one already cached - in this case keep it, otherwise throw cached
-content away.
-
-For the code simplicity calling _free_cached_vgmetadata() with
-vgmetadata == NULL as the function handles this itself.
-
-Note: sometimes export_vg_to_buffer() generates almost the same data
-with just different time stamp, but for the patch simplicity,
-data are reparsed in this case.
-
-This patch currently helps for vgrefresh.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/cache/lvmcache.c |   17 +++++++++++++----
- lib/cache/lvmcache.h |    1 +
- 2 files changed, 14 insertions(+), 4 deletions(-)
+ lib/mm/memlock.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 4e2e158..037fc4a 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -99,6 +99,7 @@ static void _store_metadata(struct volume_group *vg, unsigned precommitted)
- {
- 	char uuid[64] __attribute__((aligned(8)));
- 	struct lvmcache_vginfo *vginfo;
-+	char *data;
- 	int size;
- 
- 	if (!(vginfo = vginfo_from_vgid((const char *)&vg->id))) {
-@@ -106,14 +107,22 @@ static void _store_metadata(struct volume_group *vg, unsigned precommitted)
- 		return;
- 	}
- 
--	if (vginfo->vgmetadata)
--		_free_cached_vgmetadata(vginfo);
--
--	if (!(size = export_vg_to_buffer(vg, &vginfo->vgmetadata))) {
-+	if (!(size = export_vg_to_buffer(vg, &data))) {
- 		stack;
-+		_free_cached_vgmetadata(vginfo);
- 		return;
- 	}
- 
-+	/* Avoid reparsing of the same data string */
-+	if (vginfo->vgmetadata && vginfo->vgmetadata_size == size &&
-+	    strcmp(vginfo->vgmetadata, data) == 0)
-+		dm_free(data);
-+	else {
-+		_free_cached_vgmetadata(vginfo);
-+		vginfo->vgmetadata_size = size;
-+		vginfo->vgmetadata = data;
-+	}
-+
- 	vginfo->precommitted = precommitted;
- 
- 	if (!id_write_format((const struct id *)vginfo->vgid, uuid, sizeof(uuid))) {
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 080f3b5..f13cad2 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -46,6 +46,7 @@ struct lvmcache_vginfo {
- 	char _padding[7];
- 	struct lvmcache_vginfo *next; /* Another VG with same name? */
- 	char *creation_host;
-+	size_t vgmetadata_size;
- 	char *vgmetadata;	/* Copy of VG metadata as format_text string */
- 	struct config_tree *cft; /* Config tree created from vgmetadata */
- 				/* Lifetime is directly tied to vgmetadata */
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 0e8f585..363b724 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -89,9 +89,11 @@ static const char * const _ignore_maps[] = {
+ /* default blacklist for maps */
+ static const char * const _blacklist_maps[] = {
+     "locale/locale-archive",
++    "/LC_MESSAGES/",
+     "gconv/gconv-modules.cache",
+     "/libreadline.so.",	/* not using readline during mlock */
+     "/libncurses.so.",	/* not using readline during mlock */
++    "/libtinfo.so.",	/* not using readline during mlock */
+     "/libdl-",		/* not using dlopen,dlsym during mlock */
+     /* "/libdevmapper-event.so" */
+ };
 -- 
 1.7.4.1
 
