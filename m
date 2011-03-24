@@ -1,47 +1,42 @@
-From: Joe Thornber <thornber@redhat.com>
-Date: Thu, 24 Mar 2011 05:21:16 -0700
-Subject: [PATCH 1/6] Pool locking code
-In-Reply-To: <4D8A437D.9080609@redhat.com>
-References: <cover.1300828168.git.zkabelac@redhat.com>
-	<d2353d5f9081b6eed91ed788af173ddf88dd4bba.1300828168.git.zkabelac@redhat.com>
-	<1300888988.14527.28.camel@ubuntu> <4D8A098C.8060803@redhat.com>
-	<1300893225.14527.37.camel@ubuntu> <4D8A1886.1090105@redhat.com>
-	<1300905681.25951.3.camel@ubuntu>  <4D8A437D.9080609@redhat.com>
-Message-ID: <1300969276.28356.12.camel@ubuntu>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu, 24 Mar 2011 13:25:33 +0100
+Subject: [PATCH 3/4] Another fix for garbage send in clvmd message
+In-Reply-To: <b9919298acd0f83e1cac3a43bd78164f8dece828.1300965223.git.zkabelac@redhat.com>
+References: <cover.1300965223.git.zkabelac@redhat.com>
+	<b9919298acd0f83e1cac3a43bd78164f8dece828.1300965223.git.zkabelac@redhat.com>
+Message-ID: <4D8B383D.7060003@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2011-03-23 at 20:01 +0100, Zdenek Kabelac wrote:
-> 
-> Yes - the locking has rather 'debug' semantic to catch writes to vg
-> mempool.
-> 
-> But I'm not sure what do you mean here by 'set/restore api won't be
-> needed' ? 
+On 03/24/2011 12:16 PM, Zdenek Kabelac wrote:
 
-I had a quick chat about this with Alasdair yesterday.  The plan is to
-change the code that updates the VGs so they don't touch the VG data in
-the pool, but instead hold those small changes off to one side.
+> -	_build_header(head, cmd, node, len);
+> +	_build_header(head, cmd, node, len - 1);
+>  	memcpy(head->node + strlen(head->node) + 1, data, len);
+>  
+>  	status = _send_request(outbuf, sizeof(struct clvm_header) +
+> -			       strlen(head->node) + len, &retbuf, no_response);
+> +			       strlen(head->node) + len - 1, &retbuf, no_response);
 
-So the steps you seem to be following are:
+ACK, but this protocol _MUST_ be rewritten soon completely.
 
-i) debug lock/unlock api for pool to identify mutating code.  (Useful in
-perpetuity for regression tests.)
-ii) set/restore api for pool (temporary).
-iii) update the mutating code to use set.
-iv) gradually get rid of the use of set/restore on a case by case basis.
-v) remove the set/restore api
+really, no comment to use of this struct...
+(note that if strlen(node) > 0, args points somewhere inside on node name. wonderful.
 
-There is an argument that set/restore shouldn't ever go into HEAD, but
-is instead something solely useful to you while you do this work.  But
-since this work is going to take some time I see no problem with this
-going in on the understanding that it comes out again as soon as
-possible.
+struct clvm_header {
+	uint8_t  cmd;	        /* See below */
+...
+	char node[1];		/* Actually a NUL-terminated string, node name.
+				   If this is empty then the command is 
+				   forwarded to all cluster nodes unless 
+				   FLAG_LOCAL is also set. */
+	char args[1];		/* Arguments for the command follow the 
+				   node name, This member is only
+				   valid if the node name is empty */
 
-- Joe
-
+Milan
 
 
