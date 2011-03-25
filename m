@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 11 Mar 2011 22:25:36 -0000
-Subject: LVM2/scripts gdbinit
-Message-ID: <20110311222536.12369.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 25 Mar 2011 23:50:36 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20110325235036.26858.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,176 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-03-11 22:25:36
+Changes by:	agk at sourceware.org	2011-03-25 23:50:35
 
 Modified files:
-	scripts        : gdbinit 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	lv_status_r now prints out status of attached log LVs
-	
-	(Print layout could be nicer... :(
+	Use hard-coded /dev/mapper/control details for 2.6.36+ kernels and simplify
+	associated code.  (Some obscure configurations that happened to work before
+	are no longer supported.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/gdbinit.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.457&r2=1.458
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.102&r2=1.103
 
---- LVM2/scripts/gdbinit	2011/03/11 22:16:38	1.3
-+++ LVM2/scripts/gdbinit	2011/03/11 22:25:36	1.4
-@@ -198,10 +198,11 @@
- end
+--- LVM2/WHATS_NEW_DM	2011/03/18 13:21:03	1.457
++++ LVM2/WHATS_NEW_DM	2011/03/25 23:50:35	1.458
+@@ -1,5 +1,7 @@
+ Version 1.02.64 - 
+ ===================================
++  Streamline /dev/mapper/control node code for common cases.
++  Use hard-coded dm control node device number for 2.6.36 kernels and above.
+   Improve stack debug reporting in dm_task_create().
+   Fallback to control node creation only if node doesn't exist yet.
+   Change dm_hash API for binary data to accept const void *key.
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/03/20 02:00:52	1.102
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/03/25 23:50:35	1.103
+@@ -228,7 +228,7 @@
+ }
  
- define lv_status
--	set $_lv=(struct logical_volume *)$arg0
-+	# Use __lv because we don't want to overwrite higher functions
-+	set $__lv = (struct logical_volume *)$arg0
+ /*
+- * Returns 1 if exists; 0 if it doesn't; -1 if it's wrong
++ * Returns 1 if it exists on returning; 0 if it doesn't; -1 if it's wrong.
+  */
+ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
+ {
+@@ -267,8 +267,15 @@
+ 	int ret;
+ 	mode_t old_umask;
  
--	printf "%s->status:", $_lv->name
--	__status $_lv
-+	printf "%s->status:", $__lv->name
-+	__status $__lv
- 	printf "\n"
- end
+-	if (!major)
+-		return 0;
++	/*
++	 * Return if the control already exists with intended major/minor
++	 * or there's an error unlinking an apparently incorrect one.
++	 */
++	ret = _control_exists(control, major, minor);
++	if (ret == -1)
++		return 0;	/* Failed to unlink existing incorrect node */
++	if (ret)
++		return 1;	/* Already exists and correct */
  
-@@ -371,6 +372,10 @@
- 			__seg_item $_lv $_seg $_area_index
- 			__lv_status_r $_lv
- 		else
-+			if ($_seg->log_lv)
-+				printf "[LOG OF %s] ", $_lv->name
-+				lv_status $_seg->log_lv
-+			end
- 			__get_only_segment_using_this_lv $_seg $_lv
- 			if ($_seg)
- 				__lv_status_r $_lv $_seg
+ 	(void) dm_prepare_selinux_context(dm_dir(), S_IFDIR);
+ 	old_umask = umask(DM_DEV_DIR_UMASK);
+@@ -359,14 +366,9 @@
+ 	}
+ }
+ 
+-static int _open_and_assign_control_fd(const char *control,
+-				       int ignore_nodev)
++static int _open_and_assign_control_fd(const char *control)
+ {
+-	_close_control_fd();
+-
+ 	if ((_control_fd = open(control, O_RDWR)) < 0) {
+-		if (ignore_nodev && errno == ENODEV)
+-			return 1;
+ 		log_sys_error("open", control);
+ 		return 0;
+ 	}
+@@ -378,8 +380,8 @@
+ {
+ #ifdef DM_IOCTLS
+ 	char control[PATH_MAX];
+-	uint32_t major = 0, minor;
+-	int dm_mod_autoload_support, needs_open;
++	uint32_t major = MISC_MAJOR;
++	uint32_t minor = MAPPER_CTRL_MINOR;
+ 
+ 	if (_control_fd != -1)
+ 		return 1;
+@@ -390,63 +392,27 @@
+ 	snprintf(control, sizeof(control), "%s/%s", dm_dir(), DM_CONTROL_NODE);
+ 
+ 	/*
+-	 * dm-mod autoloading is supported since kernel 2.6.36.
+-	 * Udev daemon will try to read modules.devname file extracted
+-	 * by depmod and create any static nodes needed.
+-	 * The /dev/mapper/control node can be created and prepared this way.
+-	 * First access to such node should load dm-mod module automatically.
+-	 */
+-	dm_mod_autoload_support = KERNEL_VERSION(_kernel_major, _kernel_minor,
+-				  _kernel_release) >= KERNEL_VERSION(2, 6, 36);
+-
+-	/*
+-	 *  If dm-mod autoloading is supported and the control node exists
+-	 *  already try to open it now. This should autoload dm-mod module.
+-	 */
+-	if (dm_mod_autoload_support) {
+-		if (!_get_proc_number(PROC_DEVICES, MISC_NAME, &major))
+-			/* If major not found, just fallback to hardcoded value. */
+-			major = MISC_MAJOR;
+-
+-		/* Recreate the node with correct major and minor if needed. */
+-		if (!_control_exists(control, major, MAPPER_CTRL_MINOR) &&
+-		    !_create_control(control, major, MAPPER_CTRL_MINOR))
+-			goto error;
+-
+-		/* Fallback to old code only if control node doesn't exist */
+-		if (!_open_and_assign_control_fd(control, 1))
+-			goto error;
+-	}
+-
+-	/*
+-	 * Get major and minor number assigned for the control node.
+-	 * In case we make use of the module autoload support, this
+-	 * information should be accessible now as well.
++	 * Prior to 2.6.36 the minor number should be looked up in /proc.
+ 	 */
+-	if (!_control_device_number(&major, &minor))
+-		log_error("Is device-mapper driver missing from kernel?");
++	if ((KERNEL_VERSION(_kernel_major, _kernel_minor, _kernel_release) <
++	     KERNEL_VERSION(2, 6, 36)) &&
++	    !_control_device_number(&major, &minor))
++		goto_bad;
+ 
+ 	/*
+-	 * Check the control node and its major and minor number.
+-	 * If there's anything wrong, remove the old node and create
+-	 * a correct one.
++	 * Create the node with correct major and minor if not already done.
++	 * Udev may already have created /dev/mapper/control
++	 * from the modules.devname file generated by depmod.
+ 	 */
+-	if ((needs_open = !_control_exists(control, major, minor)) &&
+-	    !_create_control(control, major, minor)) {
+-		_close_control_fd();
+-		goto error;
+-	}
++	if (!_create_control(control, major, minor))
++		goto_bad;
+ 
+ 	/*
+-	 * For older kernels without dm-mod autoloading support, we always
+-	 * need to open the control node here - we still haven't done that!
+-	 * For newer kernels with dm-mod autoloading, we open it only if the
+-	 * node was recreated and corrected in previous step.
++	 * As of 2.6.36 kernels, the open can trigger autoloading dm-mod.
+ 	 */
+-	if ((!dm_mod_autoload_support || needs_open) &&
+-	     !_open_and_assign_control_fd(control, 0))
+-		goto error;
+-
++	if (!_open_and_assign_control_fd(control))
++		goto_bad;
++	
+ 	if (!_create_dm_bitset()) {
+ 		log_error("Failed to set up list of device-mapper major numbers");
+ 		return 0;
+@@ -454,8 +420,10 @@
+ 
+ 	return 1;
+ 
+-error:
++bad:
+ 	log_error("Failure to communicate with kernel device-mapper driver.");
++	if (!geteuid())
++		log_error("Check that device-mapper is available in the kernel.");
+ 	return 0;
+ #else
+ 	return 1;
 
 
