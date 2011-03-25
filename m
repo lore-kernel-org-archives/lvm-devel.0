@@ -1,60 +1,63 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 25 Mar 2011 22:57:45 +0100
-Subject: [PATCH 1/3] Fix mem
+Date: Fri, 25 Mar 2011 22:57:46 +0100
+Subject: [PATCH 2/3] Set our own in/out buffers
 In-Reply-To: <cover.1301089240.git.zkabelac@redhat.com>
 References: <cover.1301089240.git.zkabelac@redhat.com>
-Message-ID: <e943c109d457bd2cc89c836ae810ec9b8c7bb8f3.1301089240.git.zkabelac@redhat.com>
+Message-ID: <49609a18834f11b833c31a164a2b467dd52095f3.1301089240.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix release order when some data reference are moved
-between pools - as data are move 'from -> to'
-we just need to ensure 'from' pool will be released
-as the last.
+Memory lock from critical_section is now being kept over the critical
+section - mallopt() should ensure, that mmap is not used for allocation,
+and we preallocate some memory to be able to satisfy some small
+alloc request. However when glibc needs buffers for line buffering of
+input and output buffers - it allocates these buffers in such way it
+adds memory page for each such buffer and size of unlock memory check will
+mismatch by 1 or 2 pages.
+
+This happens when we print or read lines without '\n' so these buffers
+are used. To avoid this extra allocation, use setvbuf to set these
+bufffers ahead.
+
+FIXME: Bigger fix is needs to avoid quering users while holding VG
+locks, as such question might take quite some time....
+Thus should in effect unlock memory before displaying such message.
+But some more work needs to be done for this - so hack for now.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- tools/vgmerge.c |    6 ++++--
- tools/vgsplit.c |    6 ++++--
- 2 files changed, 8 insertions(+), 4 deletions(-)
+ lib/commands/toolcontext.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgmerge.c b/tools/vgmerge.c
-index adb00a0..e4431be 100644
---- a/tools/vgmerge.c
-+++ b/tools/vgmerge.c
-@@ -155,8 +155,10 @@ bad:
- 		unlock_and_free_vg(cmd, vg_to, vg_name_to);
- 		unlock_and_free_vg(cmd, vg_from, vg_name_from);
- 	} else {
--		unlock_and_free_vg(cmd, vg_from, vg_name_from);
--		unlock_and_free_vg(cmd, vg_to, vg_name_to);
-+		unlock_vg(cmd, vg_name_from);
-+		unlock_vg(cmd, vg_name_to);
-+		free_vg(vg_to);
-+		free_vg(vg_from);
- 	}
- 	return r;
- }
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index b97db97..f30c335 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -491,8 +491,10 @@ bad:
- 		unlock_and_free_vg(cmd, vg_to, vg_name_to);
- 		unlock_and_free_vg(cmd, vg_from, vg_name_from);
- 	} else {
--		unlock_and_free_vg(cmd, vg_from, vg_name_from);
--		unlock_and_free_vg(cmd, vg_to, vg_name_to);
-+		unlock_vg(cmd, vg_name_from);
-+		unlock_vg(cmd, vg_name_to);
-+		free_vg(vg_to);
-+		free_vg(vg_from);
- 	}
- 	return r;
- }
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 30c8fc6..be2ba5c 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1129,6 +1129,8 @@ static void _init_globals(struct cmd_context *cmd)
+ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 				       const char *system_dir)
+ {
++    	static char inbuf[4096];
++	static char outbuf[4096];
+ 	struct cmd_context *cmd;
+ 
+ #ifdef M_MMAP_MAX
+@@ -1159,6 +1161,12 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 	dm_list_init(&cmd->tags);
+ 	dm_list_init(&cmd->config_files);
+ 
++        /* Set in/out line buffers before glibc */
++	if (setvbuf(stdin, inbuf, _IOLBF, sizeof(inbuf)) != 0)
++		log_sys_error("setvbuf", "in");
++	if (setvbuf(stdout, outbuf, _IOLBF, sizeof(outbuf)) != 0)
++		log_sys_error("setvbuf", "out");
++
+ 	/* FIXME Make this configurable? */
+ 	reset_lvm_errno(1);
+ 
 -- 
 1.7.4.1
 
