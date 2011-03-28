@@ -1,49 +1,42 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 13 Mar 2011 18:08:27 -0000
-Subject: LVM2/daemons/clvmd clvmd-openais.c
-Message-ID: <20110313180827.18910.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 28 Mar 2011 13:59:12 +0200
+Subject: [PATCH 1/6] Unreleased pool is INTERNAL_ERROR
+In-Reply-To: <cover.1301313391.git.zkabelac@redhat.com>
+References: <cover.1301313391.git.zkabelac@redhat.com>
+Message-ID: <633b511e98d1f5c4faf5438b489c5cc722bd1a5e.1301313392.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-03-13 18:08:26
+It's better for catching bugs in test-suite.
+(As currently one test does not pass without noticing.)
 
-Modified files:
-	daemons/clvmd  : clvmd-openais.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/mm/pool.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Log message:
-	Remove compile warning for lock_id.
-	
-	%llx --> PRIx64
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-
---- LVM2/daemons/clvmd/clvmd-openais.c	2011/02/22 10:01:11	1.16
-+++ LVM2/daemons/clvmd/clvmd-openais.c	2011/03/13 18:08:26	1.17
-@@ -509,8 +509,8 @@
- 			
- 	/* Wait for it to complete */
+diff --git a/libdm/mm/pool.c b/libdm/mm/pool.c
+index 825f7ca..0e2444d 100644
+--- a/libdm/mm/pool.c
++++ b/libdm/mm/pool.c
+@@ -64,7 +64,6 @@ void dm_pools_check_leaks(void)
+ 	if (dm_list_empty(&_dm_pools))
+ 		return;
  
--	DEBUGLOG("lock_resource returning %d, lock_id=%llx\n", err,
--		 lock_id);
-+	DEBUGLOG("lock_resource returning %d, lock_id=%" PRIx64 "\n",
-+		 err, lock_id);
- 
- 	linfo->lock_id = lock_id;
- 	linfo->res_handle = res_handle;
-@@ -531,7 +531,7 @@
- 	if (!linfo)
- 		return 0;
- 
--	DEBUGLOG("unlock_resource: lockid: %llx\n", linfo->lock_id);
-+	DEBUGLOG("unlock_resource: lockid: %" PRIx64 "\n", linfo->lock_id);
- 	err = saLckResourceUnlock(linfo->lock_id, SA_TIME_END);
- 	if (err != SA_AIS_OK)
- 	{
+-	log_error("You have a memory leak (not released memory pool):");
+ 	dm_list_iterate_items(p, &_dm_pools) {
+ #ifdef DEBUG_POOL
+ 		log_error(" [%p] %s (%u bytes)",
+@@ -74,4 +73,5 @@ void dm_pools_check_leaks(void)
+ 		log_error(" [%p] %s", p, p->name);
+ #endif
+ 	}
++	log_error(INTERNAL_ERROR "Unreleased memory pool(s) found.");
+ }
+-- 
+1.7.4.1
 
 
