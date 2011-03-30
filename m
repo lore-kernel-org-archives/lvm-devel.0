@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Mar 2011 21:57:57 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20110329215757.27165.qmail@sourceware.org>
+Date: 30 Mar 2011 12:14:38 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c
+Message-ID: <20110330121438.20186.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,52 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-29 21:57:56
+Changes by:	zkabelac at sourceware.org	2011-03-30 12:14:37
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata.c 
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-common.c 
 
 Log message:
-	Use id_equal instead of strncmp()
+	Fix 2 signess warnings reported by gcc
 	
-	More consistent and easier to read.
+	Replace int with unsigned counter.
+	Replace snprintf with dm_snprintf.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1961&r2=1.1962
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.450&r2=1.451
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.459&r2=1.460
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
 
---- LVM2/WHATS_NEW	2011/03/29 21:34:18	1.1961
-+++ LVM2/WHATS_NEW	2011/03/29 21:57:56	1.1962
-@@ -1,5 +1,6 @@
- Version 2.02.85 - 
+--- LVM2/WHATS_NEW_DM	2011/03/29 21:49:18	1.459
++++ LVM2/WHATS_NEW_DM	2011/03/30 12:14:36	1.460
+@@ -1,5 +1,7 @@
+ Version 1.02.64 - 
  ===================================
-+  Replace several strncmp() calls with id_equal().
-   Fix lvmcache_info transfer to orphan_vginfo in _lvmcache_update_vgname().
-   Fix -Wold-style-definition gcc warnings.
-   Fixes for lvconvert (including --repair) of temporary mirror stacks.
---- LVM2/lib/metadata/metadata.c	2011/03/14 17:00:57	1.450
-+++ LVM2/lib/metadata/metadata.c	2011/03/29 21:57:56	1.451
-@@ -3043,8 +3043,7 @@
- 				continue;
- 			}
++  Use dm_snprintf() to fix signess warning in dm_set_dev_dir().
++  Use unsigned loop counter to fix signess warning in _other_node_ops().
+   Fix const cast in dmsetup calls of dm_report_field_string().
+   Streamline /dev/mapper/control node code for common cases.
+   Use hard-coded dm control node device number for 2.6.36 kernels and above.
+--- LVM2/libdm/libdm-common.c	2011/03/29 21:53:47	1.115
++++ LVM2/libdm/libdm-common.c	2011/03/30 12:14:36	1.116
+@@ -794,7 +794,7 @@
+ /* Check if there is other the type of node operation stacked */
+ static int _other_node_ops(node_op_t type)
+ {
+-	int i;
++	unsigned i;
  
--			if (strncmp((char *)vg->id.uuid,
--			    (char *)correct_vg->id.uuid, ID_LEN)) {
-+			if (!id_equal(&vg->id, &correct_vg->id)) {
- 				inconsistent = 1;
- 				inconsistent_vgid = 1;
- 			}
-@@ -3292,7 +3291,7 @@
- 	    vginfo->vgname && !is_orphan_vg(vginfo->vgname)) {
- 		if ((vg = _vg_read(cmd, NULL, vgid, 1,
- 				   &consistent, precommitted)) &&
--		    !strncmp((char *)vg->id.uuid, vgid, ID_LEN)) {
-+		    id_equal(&vg->id, (const struct id *)vgid)) {
- 			if (!consistent)
- 				log_error("Volume group %s metadata is "
- 					  "inconsistent", vg->name);
-@@ -3323,7 +3322,7 @@
- 		consistent = 0;
- 		if ((vg = _vg_read(cmd, vgname, vgid, 1, &consistent,
- 				   precommitted)) &&
--		    !strncmp((char *)vg->id.uuid, vgid, ID_LEN)) {
-+		    id_equal(&vg->id, (const struct id *)vgid)) {
- 			if (!consistent) {
- 				log_error("Volume group %s metadata is "
- 					  "inconsistent", vgname);
+ 	for (i = 0; i < NUM_NODES; i++)
+ 		if (type != i && _count_node_ops[i])
+@@ -958,8 +958,7 @@
+ 	len = strlen(dev_dir);
+ 	slash = dev_dir[len-1] == '/' ? "" : "/";
+ 
+-	if (snprintf(_dm_dir, sizeof _dm_dir, "%s%s%s", dev_dir, slash, DM_DIR)
+-	    >= sizeof _dm_dir) {
++	if (dm_snprintf(_dm_dir, sizeof _dm_dir, "%s%s%s", dev_dir, slash, DM_DIR) < 0) {
+ 		log_debug("Invalid dev_dir value, %s: name too long.", dev_dir);
+ 		return 0;
+ 	}
 
 
