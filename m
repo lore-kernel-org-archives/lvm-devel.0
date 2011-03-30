@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Mar 2011 23:01:08 -0000
-Subject: LVM2/lib/cache lvmcache.c
-Message-ID: <20110313230108.13989.qmail@sourceware.org>
+Date: 30 Mar 2011 12:16:16 -0000
+Subject: LVM2/libdm/mm pool-debug.c
+Message-ID: <20110330121616.24083.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,46 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-03-13 23:01:08
+Changes by:	zkabelac at sourceware.org	2011-03-30 12:16:16
 
 Modified files:
-	lib/cache      : lvmcache.c 
+	libdm/mm       : pool-debug.c 
 
 Log message:
-	Use proper size of strncpy
+	Simplify pool debug initialization
 	
-	Avoid reading extra character if we expect to have there '\0'.
+	zalloc pool structure and skip zeroing members.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-debug.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/lib/cache/lvmcache.c	2011/03/11 15:08:31	1.106
-+++ LVM2/lib/cache/lvmcache.c	2011/03/13 23:01:08	1.107
-@@ -1287,7 +1287,7 @@
- 		return NULL;
+--- LVM2/libdm/mm/pool-debug.c	2011/02/28 19:54:30	1.10
++++ LVM2/libdm/mm/pool-debug.c	2011/03/30 12:16:15	1.11
+@@ -48,7 +48,7 @@
+ 
+ struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
+ {
+-	struct dm_pool *mem = dm_malloc(sizeof(*mem));
++	struct dm_pool *mem = dm_zalloc(sizeof(*mem));
+ 
+ 	if (!mem) {
+ 		log_error("Couldn't create memory pool %s (size %"
+@@ -57,16 +57,6 @@
  	}
  
--	strncpy(pvid_s, pvid, sizeof(pvid_s));
-+	strncpy(pvid_s, pvid, sizeof(pvid_s) - 1);
- 	pvid_s[sizeof(pvid_s) - 1] = '\0';
+ 	mem->name = name;
+-	mem->begun = 0;
+-	mem->object = 0;
+-	mem->blocks = mem->tail = NULL;
+-
+-	mem->stats.block_serialno = 0;
+-	mem->stats.blocks_allocated = 0;
+-	mem->stats.blocks_max = 0;
+-	mem->stats.bytes = 0;
+-	mem->stats.maxbytes = 0;
+-
+ 	mem->orig_pool = mem;
  
- 	if (!(existing = info_from_pvid(pvid_s, 0)) &&
+ #ifdef DEBUG_POOL
 
 
