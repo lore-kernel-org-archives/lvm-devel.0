@@ -1,62 +1,141 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 04 Apr 2011 14:09:07 +0200
-Subject: [PATCH 2/3] Set our own in/out buffers
-In-Reply-To: <4D8DE1BB.1080608@redhat.com>
-References: <cover.1301089240.git.zkabelac@redhat.com>	<49609a18834f11b833c31a164a2b467dd52095f3.1301089240.git.zkabelac@redhat.com>	<4D8DBB4D.9060604@redhat.com>
-	<4D8DE1BB.1080608@redhat.com>
-Message-ID: <4D99B4E3.6040801@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 4 Apr 2011 16:11:11 -0000
+Subject: LVM2/daemons/dmeventd .exported_symbols dmeven ...
+Message-ID: <20110404161111.11125.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 26.3.2011 13:53, Zdenek Kabelac napsal(a):
-> Dne 26.3.2011 11:09, Milan Broz napsal(a):
->> On 03/25/2011 10:57 PM, Zdenek Kabelac wrote:
->>> Memory lock from critical_section is now being kept over the critical
->>> section - mallopt() should ensure, that mmap is not used for allocation,
->>> and we preallocate some memory to be able to satisfy some small
->>> alloc request. However when glibc needs buffers for line buffering of
->>> input and output buffers - it allocates these buffers in such way it
->>> adds memory page for each such buffer and size of unlock memory check will
->>> mismatch by 1 or 2 pages.
->>
->> ack in principle, these warnings appears quite often on various places
->> and distract people form real problems.
->>
->>> +    	static char inbuf[4096];
->>> +	static char outbuf[4096];
->>
->> Because we are handling stdin/stdout, I think this call is common
->> for glibc, right?
->>
->> Shouldn't this be initialized only once (do we support multiple command
->> contexts, IOW reentrant code here)? Is create_toolcontext() the right
->> place for it?
-> 
-> AFAIK lvm2 code is quite far far away from being reentrant - thus I'd not say
-> there could be any new problem with this. However if the lvm2api user will set
-> his own buffering it will get overwritten.
-> 
-> So another option would be to move it into lvm_main - but I'm not sure,
-> how to resolve lvm2api users - but I guess we may set some limits for these
-> users - anyway - I think we have not even resolved yet, how is the memory
-> locking supposed to work for them...
-> 
-> The real fix is to avoid sending text lines without '\n' while the memory is
-> locked - as we do this while queering some questions - once we will do this
-> outside VG locks - we may probably again switch to default glib settings.
-> Until this is fixed - this patch avoids distracting warnings.
-> 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2011-04-04 16:11:10
 
-Here is updated version  based on review, which enables this only for liblvm
-and lvm2api and does not modify glibc settings in CLVMD and reverts glibc
-default behavior when context is destroyed.
+Modified files:
+	daemons/dmeventd: .exported_symbols dmeventd.c dmeventd.h 
+	                  libdevmapper-event.c libdevmapper-event.h 
 
-Zdenek
+Log message:
+	Add rudimentary versioning to the dmevend protocol, allowing us to detect the
+	(protocol) version of the running dmeventd on the client side.
+	
+	Right now this is only used in dmeventd -R.
 
--------------- next part --------------
-An embedded and charset-unspecified text was scrubbed...
-Name: 0001-Set-our-own-in-out-buffers.patch
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110404/f9afac97/attachment.ksh>
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/.exported_symbols.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.h.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+
+--- LVM2/daemons/dmeventd/.exported_symbols	2010/10/20 15:12:12	1.11
++++ LVM2/daemons/dmeventd/.exported_symbols	2011/04/04 16:11:09	1.12
+@@ -1,3 +1,4 @@
+ init_fifos
+ fini_fifos
+ daemon_talk
++dm_event_get_version
+--- LVM2/daemons/dmeventd/dmeventd.c	2011/03/29 21:53:46	1.79
++++ LVM2/daemons/dmeventd/dmeventd.c	2011/04/04 16:11:09	1.80
+@@ -1424,8 +1424,9 @@
+ 		ret = 0;
+ 		answer = msg->data;
+ 		if (answer) {
+-			msg->size = dm_asprintf(&(msg->data), "%s %s", answer,
+-						msg->cmd == DM_EVENT_CMD_DIE ? "DYING" : "HELLO");
++			msg->size = dm_asprintf(&(msg->data), "%s %s %d", answer,
++						msg->cmd == DM_EVENT_CMD_DIE ? "DYING" : "HELLO",
++                                                DM_EVENT_PROTOCOL_VERSION);
+ 			dm_free(answer);
+ 		} else {
+ 			msg->size = 0;
+@@ -1704,6 +1705,7 @@
+ 	int i, count = 0;
+ 	char *message;
+ 	int length;
++	int version;
+ 
+ 	/* Get the list of registrations from the running daemon. */
+ 
+@@ -1712,12 +1714,19 @@
+ 		return;
+ 	}
+ 
+-	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0)) {
++	if (!dm_event_get_version(&fifos, &version)) {
+ 		fprintf(stderr, "WARNING: Could not communicate with existing dmeventd.\n");
+ 		fini_fifos(&fifos);
+ 		return;
+ 	}
+ 
++	if (version < 1) {
++		fprintf(stderr, "WARNING: The running dmeventd instance is too old.\n"
++			        "Protocol version %d (required: 1). Action cancelled.\n",
++			        version);
++		exit(EXIT_FAILURE);
++	}
++
+ 	if (daemon_talk(&fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0)) {
+ 		exit(EXIT_FAILURE);
+ 	}
+--- LVM2/daemons/dmeventd/dmeventd.h	2011/01/17 19:02:44	1.8
++++ LVM2/daemons/dmeventd/dmeventd.h	2011/04/04 16:11:09	1.9
+@@ -69,5 +69,6 @@
+ 		enum dm_event_mask evmask, uint32_t timeout);
+ int init_fifos(struct dm_event_fifos *fifos);
+ void fini_fifos(struct dm_event_fifos *fifos);
++int dm_event_get_version(struct dm_event_fifos *fifos, int *version);
+ 
+ #endif /* __DMEVENTD_DOT_H__ */
+--- LVM2/daemons/dmeventd/libdevmapper-event.c	2011/03/01 20:17:56	1.40
++++ LVM2/daemons/dmeventd/libdevmapper-event.c	2011/04/04 16:11:09	1.41
+@@ -782,6 +782,36 @@
+ 	return ret;
+ }
+ 
++/*
++ * You can (and have to) call this at the stage of the protocol where
++ *     daemon_talk(fifos, &msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0)
++ *
++ * would be normally sent. This call will parse the version reply from
++ * dmeventd, in addition to above call. It is not safe to call this@any
++ * other place in the protocol.
++ *
++ * This is an internal function, not exposed in the public API.
++ */
++
++int dm_event_get_version(struct dm_event_fifos *fifos, int *version) {
++	char *p;
++	struct dm_event_daemon_message msg = { 0, 0, NULL };
++
++	if (daemon_talk(fifos, &msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0))
++		return 0;
++	p = msg.data;
++	*version = 0;
++
++	p = strchr(p, ' ') + 1; /* Message ID */
++        if (!p) return 0;
++	p = strchr(p, ' ') + 1; /* HELLO */
++        if (!p) return 0;
++	p = strchr(p, ' '); /* HELLO, once more */
++	if (p)
++		*version = atoi(p);
++	return 1;
++}
++
+ #if 0				/* left out for now */
+ 
+ static char *_skip_string(char *src, const int delimiter)
+--- LVM2/daemons/dmeventd/libdevmapper-event.h	2010/08/16 22:54:36	1.15
++++ LVM2/daemons/dmeventd/libdevmapper-event.h	2011/04/04 16:11:09	1.16
+@@ -46,6 +46,7 @@
+ };
+ 
+ #define DM_EVENT_ALL_ERRORS DM_EVENT_ERROR_MASK
++#define DM_EVENT_PROTOCOL_VERSION 1
+ 
+ struct dm_event_handler;
+ 
+
+
