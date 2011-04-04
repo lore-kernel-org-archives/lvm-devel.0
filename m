@@ -1,97 +1,62 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 1 Apr 2011 14:54:21 -0000
-Subject: LVM2/lib/metadata metadata.c
-Message-ID: <20110401145421.8740.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 04 Apr 2011 14:09:07 +0200
+Subject: [PATCH 2/3] Set our own in/out buffers
+In-Reply-To: <4D8DE1BB.1080608@redhat.com>
+References: <cover.1301089240.git.zkabelac@redhat.com>	<49609a18834f11b833c31a164a2b467dd52095f3.1301089240.git.zkabelac@redhat.com>	<4D8DBB4D.9060604@redhat.com>
+	<4D8DE1BB.1080608@redhat.com>
+Message-ID: <4D99B4E3.6040801@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-04-01 14:54:21
+Dne 26.3.2011 13:53, Zdenek Kabelac napsal(a):
+> Dne 26.3.2011 11:09, Milan Broz napsal(a):
+>> On 03/25/2011 10:57 PM, Zdenek Kabelac wrote:
+>>> Memory lock from critical_section is now being kept over the critical
+>>> section - mallopt() should ensure, that mmap is not used for allocation,
+>>> and we preallocate some memory to be able to satisfy some small
+>>> alloc request. However when glibc needs buffers for line buffering of
+>>> input and output buffers - it allocates these buffers in such way it
+>>> adds memory page for each such buffer and size of unlock memory check will
+>>> mismatch by 1 or 2 pages.
+>>
+>> ack in principle, these warnings appears quite often on various places
+>> and distract people form real problems.
+>>
+>>> +    	static char inbuf[4096];
+>>> +	static char outbuf[4096];
+>>
+>> Because we are handling stdin/stdout, I think this call is common
+>> for glibc, right?
+>>
+>> Shouldn't this be initialized only once (do we support multiple command
+>> contexts, IOW reentrant code here)? Is create_toolcontext() the right
+>> place for it?
+> 
+> AFAIK lvm2 code is quite far far away from being reentrant - thus I'd not say
+> there could be any new problem with this. However if the lvm2api user will set
+> his own buffering it will get overwritten.
+> 
+> So another option would be to move it into lvm_main - but I'm not sure,
+> how to resolve lvm2api users - but I guess we may set some limits for these
+> users - anyway - I think we have not even resolved yet, how is the memory
+> locking supposed to work for them...
+> 
+> The real fix is to avoid sending text lines without '\n' while the memory is
+> locked - as we do this while queering some questions - once we will do this
+> outside VG locks - we may probably again switch to default glib settings.
+> Until this is fixed - this patch avoids distracting warnings.
+> 
 
-Modified files:
-	lib/metadata   : metadata.c 
+Here is updated version  based on review, which enables this only for liblvm
+and lvm2api and does not modify glibc settings in CLVMD and reverts glibc
+default behavior when context is destroyed.
 
-Log message:
-	Cleanup fid finalization code in free_vg and allow exactly the same fid to be set again for a PV/VG.
-	
-	Actually, we can call vg_set_fid(vg, NULL) instead of calling
-	destroy_instance for all PV structs and a VG struct - it's the same
-	code we already have in the vg_set_fid.
-	
-	Also, allow exactly the same fid to be set again for the same PV/VG
-	Before, this could end up with the fid destroyed because we destroyed
-	existing fid first and then we used the new one and we didn't care
-	whether existing one == new one by chance.
+Zdenek
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.452&r2=1.453
-
---- LVM2/lib/metadata/metadata.c	2011/03/30 13:35:51	1.452
-+++ LVM2/lib/metadata/metadata.c	2011/04/01 14:54:20	1.453
-@@ -3243,19 +3243,10 @@
- 
- void free_vg(struct volume_group *vg)
- {
--	struct pv_list *pvl;
--
- 	if (!vg)
- 		return;
- 
--	dm_list_iterate_items(pvl, &vg->pvs)
--		pvl->pv->fid->fmt->ops->destroy_instance(pvl->pv->fid);
--
--	dm_list_iterate_items(pvl, &vg->removed_pvs)
--		pvl->pv->fid->fmt->ops->destroy_instance(pvl->pv->fid);
--
--	if (vg->fid)
--		vg->fid->fmt->ops->destroy_instance(vg->fid);
-+	vg_set_fid(vg, NULL);
- 
- 	if (vg->cmd && vg->vgmem == vg->cmd->mem) {
- 		log_error(INTERNAL_ERROR "global memory pool used for VG %s",
-@@ -4048,12 +4039,13 @@
- void pv_set_fid(struct physical_volume *pv,
- 		struct format_instance *fid)
- {
-+	if (fid)
-+		fid->ref_count++;
-+
- 	if (pv->fid)
- 		pv->fid->fmt->ops->destroy_instance(pv->fid);
- 
- 	pv->fid = fid;
--	if (fid)
--		fid->ref_count++;
- }
- 
- void vg_set_fid(struct volume_group *vg,
-@@ -4061,15 +4053,19 @@
- {
- 	struct pv_list *pvl;
- 
--	if (vg->fid)
--		vg->fid->fmt->ops->destroy_instance(vg->fid);
--
--	vg->fid = fid;
- 	if (fid)
- 		fid->ref_count++;
- 
- 	dm_list_iterate_items(pvl, &vg->pvs)
- 		pv_set_fid(pvl->pv, fid);
-+
-+	dm_list_iterate_items(pvl, &vg->removed_pvs)
-+		pv_set_fid(pvl->pv, fid);
-+
-+	if (vg->fid)
-+		vg->fid->fmt->ops->destroy_instance(vg->fid);
-+
-+	vg->fid = fid;
- }
- 
- static int _convert_key_to_string(const char *key, size_t key_len,
-
-
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: 0001-Set-our-own-in-out-buffers.patch
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110404/f9afac97/attachment.ksh>
