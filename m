@@ -1,56 +1,72 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 7 Apr 2011 16:36:24 -0500
-Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/meta ...
-In-Reply-To: <4D9E2028.4030109@redhat.com>
-References: <20110406213222.10912.qmail@sourceware.org>	<4D9DA98D.2000007@redhat.com>
-	<7BF6E37A-25E5-4F8A-AC90-461D9AE26EF8@redhat.com>
-	<4D9E2028.4030109@redhat.com>
-Message-ID: <FF64CF2A-1514-44FC-AE50-A867C8CB2866@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 7 Apr 2011 21:49:31 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20110407214931.10279.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-04-07 21:49:30
 
-On Apr 7, 2011, at 3:35 PM, Zdenek Kabelac wrote:
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
-> Dne 7.4.2011 17:20, Jonathan Brassow napsal(a):
->> 
->> On Apr 7, 2011, at 7:09 AM, Zdenek Kabelac wrote:
->> 
->>>> +
->>>> +	dm_pool_free(lv->vg->cmd->mem, img_name);
->>> 
->>> 
->>> Aren't you experiencing random crashes with this  dm_pool_free() ?
->>> It removes also all objects allocated past this img_name.
->>> (Also I think there is already an internal function for building such names)
->> 
->> No crashes so far... I haven't run into that while running through the test suite or my by-hand tests.  Why would I expect that kind of behavior?
-> 
-> See the comment for dm_pool_free() in libdevmapper.h
-> As you are allocating LV after img_name - by this pool you are effectively
-> removing all memory allocated in VG pool after.
+Log message:
+	Thanks to Zdenek Kabelac (kabi) for pointing out that I was using
+	dm_pool_free incorrectly.  This check-in fixes that incorrect usage.
+	
+	I've also added a WHATS_NEW line to reflect the changes I made to allow
+	lv_extend to operate on 0 length intrinsically layered LVs (i.e mirrors
+	and RAID).  I forgot that in the last commit.
 
-Thank-you for mentioning this!  Gah.  Alright, I'll fix that.  I'm surprised too now that I haven't seen problems.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1967&r2=1.1968
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.255&r2=1.256
 
-> 
->> 
->> Also, do you know what the name of the internal function would be to replace my 'alloc, fill with template name, create empty lv's, free' sequence?
->> 
-> 
-> Ok - it looks like for _mimage_ - there is not yet one - so as there are
-> already 3 other placed - it might be forth to create one for this purpose.
-> 
-> (Also note - in other case we are already using simplier ,"%s_mimage_%%d",
-> (see the _split_mirror_images() in mirror.c)
-
-Well, there are a couple different things going on in _split_mirror_images.  In one case, the space is created at the time the variable is declared ('format' is allocated on the stack).  In the other, that string ("_mimage_%d") is passed to a function.
-
-In this case, I could easily create the space for img_name on the stack, i think.
-
- brassow
-
+--- LVM2/WHATS_NEW	2011/03/30 13:14:34	1.1967
++++ LVM2/WHATS_NEW	2011/04/07 21:49:29	1.1968
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Allow lv_extend() to work on zero length intrinsically layered LVs.
+   Keep the cache content when the exported vg buffer is matching.
+   Extend the set of memory regions, that are not locked to memory.
+   Enhance usability with the valgrind memcheck tool.
+--- LVM2/lib/metadata/lv_manip.c	2011/04/06 21:32:20	1.255
++++ LVM2/lib/metadata/lv_manip.c	2011/04/07 21:49:29	1.256
+@@ -2114,8 +2114,8 @@
+ 	struct logical_volume *sub_lv;
+ 	uint32_t i;
+ 	uint64_t status = 0;
+-	char *img_name;
+-	size_t len;
++	size_t len = strlen(lv->name) + 32;
++	char img_name[len];
+ 	struct lv_segment *mapseg;
+ 
+ 	if (lv->le_count || first_seg(lv)) {
+@@ -2141,9 +2141,6 @@
+ 	/*
+ 	 * Next, create all of our sub_lv's and link them in.
+ 	 */
+-	len = strlen(lv->name) + 32;
+-	if (!(img_name = dm_pool_alloc(lv->vg->cmd->mem, len)))
+-		return_0;
+ 	if (dm_snprintf(img_name, len, "%s%s", lv->name, "_mimage_%d") < 0)
+ 		return_0;
+ 
+@@ -2157,7 +2154,6 @@
+ 	}
+ 	dm_list_add(&lv->segments, &mapseg->list);
+ 
+-	dm_pool_free(lv->vg->cmd->mem, img_name);
+ 	return 1;
+ }
+ 
 
 
