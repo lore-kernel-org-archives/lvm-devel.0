@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 12 Apr 2011 14:13:18 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20110412141318.7422.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 12 Apr 2011 20:44:42 -0000
+Subject: LVM2/doc example.conf.in
+Message-ID: <20110412204442.10134.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-04-12 14:13:18
+Changes by:	snitzer at sourceware.org	2011-04-12 20:44:42
 
 Modified files:
-	lib/metadata   : mirror.c 
+	doc            : example.conf.in 
 
 Log message:
-	Replace dm_snprintf with strncpy
-	
-	My previous patch fixed incorrect error check for dm_snprintf.
-	However in this particular case - dm_snprintf has been used differently -
-	just like strncpy + setting last char with '\0' - so the code had to return
-	error - because the buffer was to short for whole string.
-	
-	Patch replaces it with real strncpy.
-	Also test for alloca() failure is removed - as the program behaviour
-	is rather undefined in this case - it never returns NULL.
+	fix s/then/than/ typos in 'pv_min_size' section and fold floppy example
+	into documentation preamble.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.149&r2=1.150
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.19&r2=1.20
 
---- LVM2/lib/metadata/mirror.c	2011/04/09 19:05:24	1.149
-+++ LVM2/lib/metadata/mirror.c	2011/04/12 14:13:17	1.150
-@@ -1785,13 +1785,10 @@
- 		lv_name = lv->name;
- 		suffix = "_mlogtmp_%d";
- 	} else if ((lv_name = strstr(lv->name, MIRROR_SYNC_LAYER))) {
--		len = lv_name - lv->name + 1;
--		if (!(tmp_name = alloca(len)) ||
--		    (dm_snprintf(tmp_name, len, "%s", lv->name) < 0)) {
--			log_error("mirror log name allocation failed");
--			return 0;
--		}
--		lv_name = tmp_name;
-+		len = lv_name - lv->name;
-+		tmp_name = alloca(len + 1);
-+		tmp_name[len] = '\0';
-+		lv_name = strncpy(tmp_name, lv->name, len);
- 		suffix = "_mlog";
- 	} else {
- 		lv_name = lv->name;
+--- LVM2/doc/example.conf.in	2011/02/27 00:38:32	1.19
++++ LVM2/doc/example.conf.in	2011/04/12 20:44:41	1.20
+@@ -147,11 +147,10 @@
+ 
+     # Minimal size (in KB) of the block device which can be used as a PV.
+     # In clustered environment all nodes have to use the same value.
+-    # Any value smaller then 512KB is ignored.
+-    pv_min_size = 512
+-
+-    # Example: Ignore devices smaller then 2MB (i.e. floppy drives).
++    # Any value smaller than 512KB is ignored.
++    # Example: Ignore devices smaller than 2MB (i.e. floppy drives).
+     # pv_min_size = 2048
++    pv_min_size = 512
+ }
+ 
+ # This section allows you to configure the way in which LVM selects
 
 
