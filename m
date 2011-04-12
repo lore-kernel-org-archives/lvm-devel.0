@@ -1,87 +1,54 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 12 Apr 2011 14:40:07 +0200
-Subject: LVM2 lib/metadata/lv.c lib/metadata/lv.h lib/r ...
-In-Reply-To: <20110412122431.26467.qmail@sourceware.org>
-References: <20110412122431.26467.qmail@sourceware.org>
-Message-ID: <4DA44827.3000808@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 12 Apr 2011 14:13:18 -0000
+Subject: LVM2/lib/metadata mirror.c
+Message-ID: <20110412141318.7422.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12.4.2011 14:24, mornfall at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	mornfall at sourceware.org	2011-04-12 12:24:30
-> 
-> Modified files:
-> 	lib/metadata   : lv.c lv.h 
-> 	lib/report     : properties.c report.c 
-> 	test/api       : test.c 
-> 
-> Log message:
-> 	This patchset refactors some reporting code and completes the remaining
-> 	lvseg properties for lvm2app, 'devices' and 'seg_pe_ranges'.
-> 	
-> 	Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
-> 	Reviewed-by: Petr Rockai <prockai@redhat.com>
-> 
-> Patches:
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.30&r2=1.31
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.143&r2=1.144
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/test.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
-> 
-> --- LVM2/lib/metadata/lv.c	2011/03/29 12:51:57	1.23
-> +++ LVM2/lib/metadata/lv.c	2011/04/12 12:24:29	1.24
-> @@ -21,6 +21,88 @@
->  #include "segtype.h"
->  #include "str_list.h"
->  
-> +static char *_format_pvsegs(struct dm_pool *mem, const struct lv_segment *seg,
-> +			     int range_format)
-> +{
-> +	unsigned int s;
-> +	const char *name = NULL;
-> +	uint32_t extent = 0;
-> +	char extent_str[32];
-> +
-> +	if (!dm_pool_begin_object(mem, 256)) {
-> +		log_error("dm_pool_begin_object failed");
-> +		return NULL;
-> +	}
-> +
-> +	for (s = 0; s < seg->area_count; s++) {
-> +		switch (seg_type(seg, s)) {
-> +		case AREA_LV:
-> +			name = seg_lv(seg, s)->name;
-> +			extent = seg_le(seg, s);
-> +			break;
-> +		case AREA_PV:
-> +			name = dev_name(seg_dev(seg, s));
-> +			extent = seg_pe(seg, s);
-> +			break;
-> +		case AREA_UNASSIGNED:
-> +			name = "unassigned";
-> +			extent = 0;
-> +		}
-> +
-> +		if (!dm_pool_grow_object(mem, name, strlen(name))) {
-> +			log_error("dm_pool_grow_object failed");
-> +			return NULL;
-> +		}
-> +
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-04-12 14:13:18
 
+Modified files:
+	lib/metadata   : mirror.c 
 
-unified error path for failing allocation could be: { goto err; }
+Log message:
+	Replace dm_snprintf with strncpy
+	
+	My previous patch fixed incorrect error check for dm_snprintf.
+	However in this particular case - dm_snprintf has been used differently -
+	just like strncpy + setting last char with '\0' - so the code had to return
+	error - because the buffer was to short for whole string.
+	
+	Patch replaces it with real strncpy.
+	Also test for alloca() failure is removed - as the program behaviour
+	is rather undefined in this case - it never returns NULL.
 
-err:
-log_error("error");
-dm_pool_abandon_object(mem);
-return NULL;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.149&r2=1.150
 
-Zdenek
+--- LVM2/lib/metadata/mirror.c	2011/04/09 19:05:24	1.149
++++ LVM2/lib/metadata/mirror.c	2011/04/12 14:13:17	1.150
+@@ -1785,13 +1785,10 @@
+ 		lv_name = lv->name;
+ 		suffix = "_mlogtmp_%d";
+ 	} else if ((lv_name = strstr(lv->name, MIRROR_SYNC_LAYER))) {
+-		len = lv_name - lv->name + 1;
+-		if (!(tmp_name = alloca(len)) ||
+-		    (dm_snprintf(tmp_name, len, "%s", lv->name) < 0)) {
+-			log_error("mirror log name allocation failed");
+-			return 0;
+-		}
+-		lv_name = tmp_name;
++		len = lv_name - lv->name;
++		tmp_name = alloca(len + 1);
++		tmp_name[len] = '\0';
++		lv_name = strncpy(tmp_name, lv->name, len);
+ 		suffix = "_mlog";
+ 	} else {
+ 		lv_name = lv->name;
 
 
