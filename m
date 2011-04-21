@@ -1,41 +1,50 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Thu, 21 Apr 2011 12:00:20 -0400
-Subject: [PATCH] Add nightly test for vgimportclone and querying of vgnames with duplicate pvs.
-Message-ID: <1303401620-8683-1-git-send-email-dwysocha@redhat.com>
+From: wysochanski@sourceware.org <wysochanski@sourceware.org>
+Date: 21 Apr 2011 17:03:39 -0000
+Subject: LVM2 ./WHATS_NEW test/t-vgimportclone.sh
+Message-ID: <20110421170339.31530.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Related to rhbz 697959.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	wysochanski at sourceware.org	2011-04-21 17:03:39
 
-This test fails prior to these two commits:
-commit af112eb2c9a62c5d794df920218bd3ee291d5b25
-Author: Zdenek Kabelac <zkabelac@redhat.com>
-Date:   Thu Apr 21 13:15:26 2011 +0000
+Modified files:
+	.              : WHATS_NEW 
+Added files:
+	test           : t-vgimportclone.sh 
 
-    Skip check for NULL before dm_free
+Log message:
+	Add nightly test for vgimportclone and querying of vgnames with duplicate pvs.
+	
+	Related to rhbz 697959.
+	
+	This test fails prior to these two commits:
+	commit af112eb2c9a62c5d794df920218bd3ee291d5b25
+	Author: Zdenek Kabelac <zkabelac@redhat.com>
+	Date:   Thu Apr 21 13:15:26 2011 +0000
+	
+	Skip check for NULL before dm_free
+	
+	dm_free makes this test itself.
+	
+	commit 91419c3e86bf9666aab2aa631faae1ba73e8d745
+	Author: Zdenek Kabelac <zkabelac@redhat.com>
+	Date:   Thu Apr 21 13:13:40 2011 +0000
+	
+	Fix use of released vgname and vgid
 
-    dm_free makes this test itself.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgimportclone.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1973&r2=1.1974
 
-commit 91419c3e86bf9666aab2aa631faae1ba73e8d745
-Author: Zdenek Kabelac <zkabelac@redhat.com>
-Date:   Thu Apr 21 13:13:40 2011 +0000
-
-    Fix use of released vgname and vgid
-
-Signed-off-by: Dave Wysochanski <dwysocha@redhat.com>
----
- test/t-vgimportclone.sh |   35 +++++++++++++++++++++++++++++++++++
- 1 files changed, 35 insertions(+), 0 deletions(-)
- create mode 100644 test/t-vgimportclone.sh
-
-diff --git a/test/t-vgimportclone.sh b/test/t-vgimportclone.sh
-new file mode 100644
-index 0000000..3c50170
---- /dev/null
-+++ b/test/t-vgimportclone.sh
+/cvs/lvm2/LVM2/test/t-vgimportclone.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-vgimportclone.sh
++++ -	2011-04-21 17:03:39.444919000 +0000
 @@ -0,0 +1,35 @@
 +# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
 +#
@@ -72,7 +81,14 @@ index 0000000..3c50170
 +lvchange -ay $vg2/$lv1
 +vgchange -an $vg1
 +vgchange -an $vg2
--- 
-1.7.2.3
+--- LVM2/WHATS_NEW	2011/04/21 13:13:40	1.1973
++++ LVM2/WHATS_NEW	2011/04/21 17:03:38	1.1974
+@@ -1,5 +1,6 @@
+ Version 2.02.85 - 
+ ===================================
++  Add nightly test for vgimportclone and querying of vgnames with duplicate pvs.
+   Fix use of released memory when duplicate PV is found.
+   Add "devices/issue_discards" to lvm.conf.
+   Issue discards on lvremove, lvreduce, etc if enabled and supported.
 
 
