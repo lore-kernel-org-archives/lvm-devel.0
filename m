@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 22 Apr 2011 11:56:42 -0000
-Subject: LVM2 ./WHATS_NEW_DM ./configure.in libdm/libdm ...
-Message-ID: <20110422115642.17063.qmail@sourceware.org>
+Date: 22 Apr 2011 12:00:00 -0000
+Subject: LVM2 ./make.tmpl.in lib/misc/lvm-wrappers.c li ...
+Message-ID: <20110422120000.18331.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,77 +10,145 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-04-22 11:56:41
+Changes by:	prajnoha at sourceware.org	2011-04-22 12:00:00
 
 Modified files:
-	.              : WHATS_NEW_DM configure.in 
-	libdm          : libdm-common.c 
-	tools          : dmsetup.c lvmcmdline.c 
+	.              : make.tmpl.in 
+	lib/misc       : lvm-wrappers.c lvm-wrappers.h 
 
 Log message:
-	Require libudev >= 143 when compiling with udev support.
+	Move common libudev code to lvm-wrappers.[ch].
 	
-	Old versions of libudev < 143 were experimental and unstable. Require recent
-	and stable versions only (version 143 is old enough anyway).
+	...so we can use it throughout.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.461&r2=1.462
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.160&r2=1.161
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.159&r2=1.160
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-wrappers.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-wrappers.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
 
---- LVM2/WHATS_NEW_DM	2011/03/30 12:57:03	1.461
-+++ LVM2/WHATS_NEW_DM	2011/04/22 11:56:41	1.462
-@@ -1,5 +1,6 @@
- Version 1.02.64 - 
- ===================================
-+  Require libudev >= 143 when compiling with udev support.
-   Use word alignment for dm_pool_strdup() and dm_pool_strndup().
-   Use dm_snprintf() to fix signess warning in dm_set_dev_dir().
-   Use unsigned loop counter to fix signess warning in _other_node_ops().
---- LVM2/configure.in	2011/02/04 22:17:54	1.160
-+++ LVM2/configure.in	2011/04/22 11:56:41	1.161
-@@ -803,9 +803,7 @@
- AC_MSG_RESULT($UDEV_SYNC)
+--- LVM2/make.tmpl.in	2011/02/18 23:09:55	1.116
++++ LVM2/make.tmpl.in	2011/04/22 11:59:59	1.117
+@@ -38,7 +38,7 @@
+ LDDEPS += @LDDEPS@
+ LDFLAGS += @LDFLAGS@
+ LIB_SUFFIX = @LIB_SUFFIX@
+-LVMINTERNAL_LIBS = -llvm-internal $(DL_LIBS)
++LVMINTERNAL_LIBS = -llvm-internal $(UDEV_LIBS) $(DL_LIBS)
+ DL_LIBS = @DL_LIBS@
+ PTHREAD_LIBS = @PTHREAD_LIBS@
+ READLINE_LIBS = @READLINE_LIBS@
+--- LVM2/lib/misc/lvm-wrappers.c	2008/12/07 04:23:37	1.3
++++ LVM2/lib/misc/lvm-wrappers.c	2011/04/22 12:00:00	1.4
+@@ -17,6 +17,91 @@
+ #include <unistd.h>
+ #include <fcntl.h>
  
- if test x$UDEV_SYNC = xyes; then
--	AC_CHECK_LIB(udev, udev_queue_get_udev_is_active,
--		     [UDEV_PC="libudev"; UDEV_LIBS="-ludev"],
--		     [AC_MSG_ERROR([bailing out... libudev library is required])])
-+	PKG_CHECK_MODULES(UDEV, libudev >= 143, [UDEV_PC="libudev"])
- 	AC_DEFINE([UDEV_SYNC_SUPPORT], 1, [Define to 1 to enable synchronisation with udev processing.])
- fi
++#ifdef UDEV_SYNC_SUPPORT
++static const char _no_context_msg[] = "Udev library context not set.";
++struct udev *_udev;
++
++int udev_init_library_context(void)
++{
++	if (_udev)
++		udev_unref(_udev);
++
++	if (!(_udev = udev_new())) {
++		log_error("Failed to create udev library context.");
++		return 0;
++	}
++
++	return 1;
++}
++
++void udev_fin_library_context(void)
++{
++	udev_unref(_udev);
++	_udev = NULL;
++}
++
++int udev_is_running(void)
++{
++	struct udev_queue *udev_queue;
++	int r;
++
++	if (!_udev) {
++		log_debug(_no_context_msg);
++		goto bad;
++	}
++
++	if (!(udev_queue = udev_queue_new(_udev))) {
++		log_debug("Could not get udev state.");
++		goto bad;
++	}
++
++	r = udev_queue_get_udev_is_active(udev_queue);
++	udev_queue_unref(udev_queue);
++
++	return r;
++
++bad:
++	log_debug("Assuming udev is not running.");
++	return 0;
++}
++
++const char *udev_get_dev_dir(void)
++{
++	if (!_udev) {
++		log_debug(_no_context_msg);
++		return NULL;
++	}
++
++	return udev_get_dev_path(_udev);
++}
++
++struct udev* udev_get_library_context(void)
++{
++	return _udev;
++}
++
++#else	/* UDEV_SYNC_SUPPORT */
++
++int udev_init_library_context(void)
++{
++	return 1;
++}
++
++void udev_fin_library_context(void)
++{
++}
++
++int udev_is_running(void)
++{
++	return 0;
++}
++
++const char *udev_get_dev_dir(void)
++{
++	return NULL;
++}
++#endif
++
+ int lvm_getpagesize(void)
+ {
+ 	return getpagesize();
+--- LVM2/lib/misc/lvm-wrappers.h	2009/09/28 21:23:02	1.4
++++ LVM2/lib/misc/lvm-wrappers.h	2011/04/22 12:00:00	1.5
+@@ -16,6 +16,16 @@
+ #ifndef _LVM_WRAPPERS_H
+ #define _LVM_WRAPPERS_H
  
---- LVM2/libdm/libdm-common.c	2011/03/30 12:14:36	1.116
-+++ LVM2/libdm/libdm-common.c	2011/04/22 11:56:41	1.117
-@@ -29,7 +29,6 @@
- #  include <sys/types.h>
- #  include <sys/ipc.h>
- #  include <sys/sem.h>
--#  define LIBUDEV_I_KNOW_THE_API_IS_SUBJECT_TO_CHANGE
- #  include <libudev.h>
- #endif
++#ifdef UDEV_SYNC_SUPPORT
++#include <libudev.h>
++struct udev *udev_get_library_context(void);
++#endif
++
++int udev_init_library_context(void);
++void udev_fin_library_context(void);
++int udev_is_running(void);
++const char *udev_get_dev_dir(void);
++
+ int lvm_getpagesize(void);
  
---- LVM2/tools/dmsetup.c	2011/04/08 14:40:21	1.159
-+++ LVM2/tools/dmsetup.c	2011/04/22 11:56:41	1.160
-@@ -45,7 +45,6 @@
- #  include <sys/types.h>
- #  include <sys/ipc.h>
- #  include <sys/sem.h>
--#  define LIBUDEV_I_KNOW_THE_API_IS_SUBJECT_TO_CHANGE
- #  include <libudev.h>
- #endif
- 
---- LVM2/tools/lvmcmdline.c	2011/04/08 14:40:21	1.138
-+++ LVM2/tools/lvmcmdline.c	2011/04/22 11:56:41	1.139
-@@ -43,7 +43,6 @@
- #endif
- 
- #ifdef UDEV_SYNC_SUPPORT
--#  define LIBUDEV_I_KNOW_THE_API_IS_SUBJECT_TO_CHANGE
- #  include <libudev.h>
- #endif
- 
+ /*
 
 
