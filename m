@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Apr 2011 19:06:17 -0000
-Subject: LVM2/lib format_text/import_vsn1.c metadata/vg.h
-Message-ID: <20110429190617.29509.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 26 Apr 2011 09:09:25 -0000
+Subject: LVM2/doc example.conf.in
+Message-ID: <20110426090925.29816.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-04-29 19:06:17
+Changes by:	prajnoha at sourceware.org	2011-04-26 09:09:24
 
 Modified files:
-	lib/format_text: import_vsn1.c 
-	lib/metadata   : vg.h 
+	doc            : example.conf.in 
 
 Log message:
-	test update without WHATS_NEW to check it gives warning now
+	Uncomment obtain_device_list_from_udev setting in lvm.conf.
+	
+	Just for consistency with other settings we already have in lvm.conf.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
 
---- LVM2/lib/format_text/import_vsn1.c	2011/03/27 13:44:08	1.86
-+++ LVM2/lib/format_text/import_vsn1.c	2011/04/29 19:06:17	1.87
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
---- LVM2/lib/metadata/vg.h	2011/03/10 12:43:30	1.10
-+++ LVM2/lib/metadata/vg.h	2011/04/29 19:06:17	1.11
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
+--- LVM2/doc/example.conf.in	2011/04/22 12:05:32	1.23
++++ LVM2/doc/example.conf.in	2011/04/26 09:09:24	1.24
+@@ -27,7 +27,7 @@
+     # fully. LVM2 needs to be compiled with udev support for this setting to
+     # take effect. N.B. Any device node or symlink not managed by udev in
+     # udev directory will be ignored with this setting on.
+-    # obtain_device_list_from_udev = 1
++    obtain_device_list_from_udev = 1
+ 
+     # If several entries in the scanned directories correspond to the
+     # same block device and the tools need to display a name for device,
+
 
