@@ -1,38 +1,43 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 26 Apr 2011 09:09:25 -0000
-Subject: LVM2/doc example.conf.in
-Message-ID: <20110426090925.29816.qmail@sourceware.org>
+From: Christian Motschke <christian@motschke.de>
+Date: Tue, 26 Apr 2011 11:18:06 +0200
+Subject: clustered snapshots
+Message-ID: <618B4C17-4670-4CDF-9476-7B4EF7A8675E@motschke.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-04-26 09:09:24
+Hi,
 
-Modified files:
-	doc            : example.conf.in 
+I tried the unstable packages of lvm2 in debian with support for clustered snapshots (2.02.84) (I looked at the sources, the patch is included). It is unusable (at least for me ;-).
+I have corosync and clvm with openais support running. Locking type is set to 3 in lvm.conf. I have only 1 server with clvm in this test setup. I hope this is not the problem.
 
-Log message:
-	Uncomment obtain_device_list_from_udev setting in lvm.conf.
-	
-	Just for consistency with other settings we already have in lvm.conf.
+What I did:
+gcc:~# vgchange -cy vgtest
+  Volume group "vgtest" successfully changed
+gcc:~# vgdisplay -C
+  VG     #PV #LV #SN Attr   VSize VFree
+  vgtest   1   1   0 wz--nc 4.00g 3.00g
+gcc:~# lvdisplay -C
+  LV      VG     Attr   LSize Origin Snap%  Move Log Copy%  Convert
+  test-lv vgtest -wi-a- 1.00g                                      
+gcc:~# 
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+gcc:~# lvchange -aey vgtest/test-lv
+gcc:~# lvcreate -s -n test-lv-snap -L 100m vgtest/test-lv
+  Logical volume "test-lv-snap" created
+gcc:~# lvdisplay -C
+  LV           VG     Attr   LSize   Origin  Snap%  Move Log Copy%  Convert
+  test-lv      vgtest owi-a-   1.00g                                       
+  test-lv-snap vgtest swi-a- 100.00m test-lv 100.00                        
 
---- LVM2/doc/example.conf.in	2011/04/22 12:05:32	1.23
-+++ LVM2/doc/example.conf.in	2011/04/26 09:09:24	1.24
-@@ -27,7 +27,7 @@
-     # fully. LVM2 needs to be compiled with udev support for this setting to
-     # take effect. N.B. Any device node or symlink not managed by udev in
-     # udev directory will be ignored with this setting on.
--    # obtain_device_list_from_udev = 1
-+    obtain_device_list_from_udev = 1
- 
-     # If several entries in the scanned directories correspond to the
-     # same block device and the tools need to display a name for device,
+So, after I created the snapshot it is immediately disabled and 100% full. What am I doing wrong?
+
+With kind regards.
+Christian Motschke
+
+
+
 
 
