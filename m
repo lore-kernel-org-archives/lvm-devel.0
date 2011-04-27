@@ -1,7 +1,7 @@
-From: Christian Motschke <christian@motschke.de>
-Date: Tue, 26 Apr 2011 11:18:06 +0200
-Subject: clustered snapshots
-Message-ID: <618B4C17-4670-4CDF-9476-7B4EF7A8675E@motschke.de>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 27 Apr 2011 14:08:49 +0200
+Subject: [PATCH] Refactor lib/ code to allow deferred PV labelling
+Message-ID: <87oc3rhp66.fsf@aldalome.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-I tried the unstable packages of lvm2 in debian with support for clustered snapshots (2.02.84) (I looked at the sources, the patch is included). It is unusable (at least for me ;-).
-I have corosync and clvm with openais support running. Locking type is set to 3 in lvm.conf. I have only 1 server with clvm in this test setup. I hope this is not the problem.
+this patch is a major part of a 623808 fix, making it possible to create
+the PV structures in memory in an lvmlib app, and only writing the
+labels upon a vg_write. Among other useful properties introduced by this
+option, it should make it possible to get a pe_start out of the library
+without actually creating a VG on disks, which was the original use case
+for this change.
 
-What I did:
-gcc:~# vgchange -cy vgtest
-  Volume group "vgtest" successfully changed
-gcc:~# vgdisplay -C
-  VG     #PV #LV #SN Attr   VSize VFree
-  vgtest   1   1   0 wz--nc 4.00g 3.00g
-gcc:~# lvdisplay -C
-  LV      VG     Attr   LSize Origin Snap%  Move Log Copy%  Convert
-  test-lv vgtest -wi-a- 1.00g                                      
-gcc:~# 
+When this is in, I will follow up with the lvmlib side of the necessary
+changes, which should be relatively simple in comparison.
 
-gcc:~# lvchange -aey vgtest/test-lv
-gcc:~# lvcreate -s -n test-lv-snap -L 100m vgtest/test-lv
-  Logical volume "test-lv-snap" created
-gcc:~# lvdisplay -C
-  LV           VG     Attr   LSize   Origin  Snap%  Move Log Copy%  Convert
-  test-lv      vgtest owi-a-   1.00g                                       
-  test-lv-snap vgtest swi-a- 100.00m test-lv 100.00                        
+Yours,
+   Petr
 
-So, after I created the snapshot it is immediately disabled and 100% full. What am I doing wrong?
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvmlib-pvcreate.diff
+Type: text/x-diff
+Size: 12493 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110427/aeccdc28/attachment.bin>
+-------------- next part --------------
 
-With kind regards.
-Christian Motschke
-
-
-
-
-
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
