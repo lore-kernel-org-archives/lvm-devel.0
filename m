@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Apr 2011 19:05:12 -0000
-Subject: LVM2 WHATS_NEW WHATS_NEW_DM
-Message-ID: <20110429190512.29177.qmail@sourceware.org>
+Date: 29 Apr 2011 19:06:17 -0000
+Subject: LVM2/lib format_text/import_vsn1.c metadata/vg.h
+Message-ID: <20110429190617.29509.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,32 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-04-29 19:05:11
+Changes by:	agk at sourceware.org	2011-04-29 19:06:17
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM 
+	lib/format_text: import_vsn1.c 
+	lib/metadata   : vg.h 
 
 Log message:
-	test
+	test update without WHATS_NEW to check it gives warning now
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1986&r2=1.1987
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.467&r2=1.468
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/WHATS_NEW	2011/04/29 18:57:09	1.1986
-+++ LVM2/WHATS_NEW	2011/04/29 19:05:11	1.1987
-@@ -1,4 +1,4 @@
--Version 2.02.86 -              
-+Version 2.02.86 -  
- =================================
- 
- Version 2.02.85 - 29th April 2011
---- LVM2/WHATS_NEW_DM	2011/04/29 19:01:59	1.467
-+++ LVM2/WHATS_NEW_DM	2011/04/29 19:05:11	1.468
-@@ -1,4 +1,4 @@
--Version 1.02.65 -       
-+Version 1.02.65 - 
- ==================================
- 
- Version 1.02.64 - 29th April 2011
+--- LVM2/lib/format_text/import_vsn1.c	2011/03/27 13:44:08	1.86
++++ LVM2/lib/format_text/import_vsn1.c	2011/04/29 19:06:17	1.87
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+--- LVM2/lib/metadata/vg.h	2011/03/10 12:43:30	1.10
++++ LVM2/lib/metadata/vg.h	2011/04/29 19:06:17	1.11
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
 
