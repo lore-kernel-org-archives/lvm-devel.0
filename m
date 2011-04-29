@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 29 Apr 2011 16:23:40 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20110429162340.1412.qmail@sourceware.org>
+Date: 29 Apr 2011 16:27:11 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20110429162711.4887.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,32 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-04-29 16:23:40
+Changes by:	agk at sourceware.org	2011-04-29 16:27:10
 
 Modified files:
-	lib/commands   : toolcontext.c 
+	.              : WHATS_NEW 
 
 Log message:
-	commands/toolcontext.c:578: warning: ???????udev_dir???????? may be used uninitialized in this function
-	commands/toolcontext.c:576: warning: ???????udev_dir_len???????? may be used uninitialized in this function
-	
-	Bogus - suppress them.
+	wake buildbot
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1977&r2=1.1978
 
---- LVM2/lib/commands/toolcontext.c	2011/04/28 17:33:35	1.117
-+++ LVM2/lib/commands/toolcontext.c	2011/04/29 16:23:39	1.118
-@@ -573,9 +573,9 @@
- {
- 	const struct config_node *cn;
- 	const struct config_value *cv;
--	size_t udev_dir_len, len;
-+	size_t uninitialized_var(udev_dir_len), len;
- 	int device_list_from_udev;
--	const char *udev_dir;
-+	const char *uninitialized_var(udev_dir);
- 
- 	init_dev_disable_after_error_count(
- 		find_config_tree_int(cmd, "devices/disable_after_error_count",
+--- LVM2/WHATS_NEW	2011/04/29 16:12:21	1.1977
++++ LVM2/WHATS_NEW	2011/04/29 16:27:09	1.1978
+@@ -346,7 +346,7 @@
+   Fix const warning in dev_manager_info() and _dev_manager_lv_rmnodes().
+   Fix const warning in archive_file structure from archive.c.
+   Clean generated files .exported_symbols_generated, example.conf for distclean.
+-  Handle failure of all mirrored log devices and all but one mirror leg. 
++  Handle failure of all mirrored log devices and all but one mirror leg.
+   Disallow 'mirrored' log type for cluster mirrors.
+   Do not use VPATH in include/Makefile.
+   Fix exported_symbols generation to use standard compiler arguments.
 
