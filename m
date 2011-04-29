@@ -1,25 +1,25 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 29 Apr 2011 13:40:09 +0100
-Subject: LVM2/lib locking/locking.c locking/locking.h m ...
-In-Reply-To: <4DBAADF4.2060507@redhat.com>
-References: <20110428203001.9308.qmail@sourceware.org>
-	<4DBAADF4.2060507@redhat.com>
-Message-ID: <20110429124009.GM32370@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 29 Apr 2011 17:21:54 +0200
+Subject: [PATCH 0/2] Fix mawk incompatibility for vgimportclone
+Message-ID: <cover.1304090389.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-> > +#define LCK_VG_SYNC		(LCK_NONE | LCK_CACHE)
-> > +#define LCK_VG_SYNC_LOCAL	(LCK_NONE | LCK_CACHE | LCK_LOCAL)
+Patch addresses incompatibility with older version of mawk.
+See attached comments.
 
-> I think this 'cleanup' patch is rather going in opposite direction ?
- 
-I want to be able to see all the combinations of flags that are used 
-listed in one place, not scattered throughout the code.  That's what the
-#defines I added are for.
+Zdenek Kabelac (2):
+  Replace char class :space: with explicit chars
+  Update test case
 
-Alasdair
+ scripts/vgimportclone.sh |   10 +++++-----
+ test/t-vgimportclone.sh  |   22 ++++++++--------------
+ 2 files changed, 13 insertions(+), 19 deletions(-)
+
+-- 
+1.7.5
 
 
