@@ -1,62 +1,67 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 29 Apr 2011 17:21:55 +0200
-Subject: [PATCH 1/2] Replace char class :space: with explicit chars
+Date: Fri, 29 Apr 2011 17:21:56 +0200
+Subject: [PATCH 2/2] Update test case
 In-Reply-To: <cover.1304090389.git.zkabelac@redhat.com>
 References: <cover.1304090389.git.zkabelac@redhat.com>
-Message-ID: <f6d906830b6cde0d2617267cc0d5f4abd2184b71.1304090389.git.zkabelac@redhat.com>
+Message-ID: <39b37fa94c513d19eff981efe86cb71637a8d7c8.1304090389.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-As some distributions are using 'mawk' and they are not using the latest
-version - we end here with hidden dependency on the latest version of
-mawk (1.3.4).  Some distributions like Debian Lenny seems to stay with 1.3.3.
-So we end with completely broken  vgimportclone script on such system.
-(From the plain look at http://packages.debian.org/search?keywords=mawk
-it still looks like the 1.3.3 is the last available package in Debian)
-
-We have 2 options:
- - check for proper support of :space: and abort if it doesn't work
- - replace [:space:] with [ \t] which seems sufficint to make it work
-   (as can be seen in this patch)
-
-This patch makes t-vgimportclone.sh test passing on Lenny.
+This script probably obsoletes  t-pv-duplicate.sh
+so that one would be removed together with this update
+(as it's subtest of this larger script)
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- scripts/vgimportclone.sh |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ test/t-vgimportclone.sh |   22 ++++++++--------------
+ 1 files changed, 8 insertions(+), 14 deletions(-)
 
-diff --git a/scripts/vgimportclone.sh b/scripts/vgimportclone.sh
-index 731b860..75c1175 100755
---- a/scripts/vgimportclone.sh
-+++ b/scripts/vgimportclone.sh
-@@ -245,10 +245,10 @@ LVMCONF=${TMP_LVM_SYSTEM_DIR}/lvm.conf
- "$LVM" dumpconfig ${LVM_OPTS} | \
- "$AWK" -v DEV=${TMP_LVM_SYSTEM_DIR} -v CACHE=${TMP_LVM_SYSTEM_DIR}/.cache \
-     -v CACHE_DIR=${TMP_LVM_SYSTEM_DIR}/cache \
--    '/^[[:space:]]*filter[[:space:]]*=/{print ENVIRON["FILTER"];next} \
--     /^[[:space:]]*scan[[:space:]]*=/{print "scan = [ \"" DEV "\" ]";next} \
--     /^[[:space:]]*cache[[:space:]]*=/{print "cache = \"" CACHE "\"";next} \
--     /^[[:space:]]*cache_dir[[:space:]]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
-+    '/^[ \t]*filter[ \t]*=/{print ENVIRON["FILTER"];next} \
-+     /^[ \t]*scan[ \t]*=/{print "scan = [ \"" DEV "\" ]";next} \
-+     /^[ \t]*cache[ \t]*=/{print "cache = \"" CACHE "\"";next} \
-+     /^[ \t]*cache_dir[ \t]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
-      {print $0}' > ${LVMCONF}
+diff --git a/test/t-vgimportclone.sh b/test/t-vgimportclone.sh
+index a979383..d8838d7 100644
+--- a/test/t-vgimportclone.sh
++++ b/test/t-vgimportclone.sh
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -12,25 +12,19 @@
  
- checkvalue $? "Failed to generate ${LVMCONF}"
-@@ -282,7 +282,7 @@ checkvalue $? "PV info could not be collected without errors"
+ aux prepare_devs 2
  
- # output VG info so each line looks like: name:exported?:disk1,disk2,...
- VGINFO=`echo "${PVINFO}" | \
--    "$AWK" -F : '{{sub(/^[[:space:]]*/,"")} \
-+    "$AWK" -F : '{{sub(/^[ \t]*/,"")} \
-     {sub(/unknown device/,"unknown_device")} \
-     {vg[$2]=$1","vg[$2]} if($3 ~ /^..x/){x[$2]="x"}} \
-     END{for(k in vg){printf("%s:%s:%s\n", k, x[k], vg[k])}}'`
+-pvcreate $dev1 $dev2
+-vgcreate $vg1 $dev1
++vgcreate -c n --metadatasize 128k $vg1 $dev1
+ lvcreate -l100%FREE -n $lv1 $vg1
+ 
+ # Clone the LUN
+-dd if=$dev1 of=$dev2
++dd if=$dev1 of=$dev2 bs=256K count=1
+ 
+ # Verify pvs works on each device to give us vgname
+-pvs --noheadings -o vg_name $dev1 1>err
+-grep $vg1 err
+-pvs --noheadings -o vg_name $dev2 1>err
+-grep $vg1 err
++check pv_field $dev1 vg_name $vg1
++check pv_field $dev2 vg_name $vg1
+ 
+ # Import the cloned PV to a new VG
+-# FIXME: this fails on lenny buildslave, I think we need proper wrapper
+-# vgimportclone --basevgname $vg2 $dev2
++vgimportclone --basevgname $vg2 $dev2
+ 
+ # Verify we can activate / deactivate the LV from both VGs
+-# lvchange -ay $vg1/$lv1
+-# lvchange -ay $vg2/$lv1
+-# vgchange -an $vg1
+-# vgchange -an $vg2
++lvchange -ay $vg1/$lv1 $vg2/$lv1
++vgchange -an $vg1 $vg2
 -- 
 1.7.5
 
