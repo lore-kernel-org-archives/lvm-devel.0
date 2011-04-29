@@ -1,29 +1,26 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 29 Apr 2011 18:22:23 +0100
-Subject: New LVM2 release 2.02.85
-Message-ID: <20110429172223.GO32370@agk-dp.fab.redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Fri, 29 Apr 2011 13:40:50 -0400
+Subject: [PATCH 0/2] Fix mawk incompatibility for vgimportclone
+In-Reply-To: <cover.1304090389.git.zkabelac@redhat.com>
+References: <cover.1304090389.git.zkabelac@redhat.com>
+Message-ID: <20110429174050.GB2032@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Release 2.02.85 should be considered a development release rather than a stable one
-due to the significant amount of change it contains.
+On Fri, Apr 29 2011 at 11:21am -0400,
+Zdenek Kabelac <zkabelac@redhat.com> wrote:
 
- 165 files changed, 4560 insertions(+), 2554 deletions(-)
+> Patch addresses incompatibility with older version of mawk.
+> See attached comments.
+> 
+> Zdenek Kabelac (2):
+>   Replace char class :space: with explicit chars
+>   Update test case
 
-Highlights:
-  Several independent changes to improve performance of the tools in different situations.
-  Ability to issue discards where supported.
-  Improvements to allocation policies primarily for mirrors.
+Looks good.
 
-ftp://sources.redhat.com/pub/lvm2/WHATS_NEW
-ftp://sources.redhat.com/pub/lvm2/WHATS_NEW_DM
-
-ftp://sources.redhat.com/pub/lvm2/LVM2.2.02.85.tgz
-ftp://sources.redhat.com/pub/lvm2/LVM2.2.02.85.tgz.asc
-
-Alasdair
-
+Acked-by: Mike Snitzer <snitzer@redhat.com>
 
