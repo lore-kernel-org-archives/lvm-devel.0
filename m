@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 7 May 2011 13:32:07 -0000
-Subject: LVM2/lib metadata/metadata-exported.h metadata ...
-Message-ID: <20110507133207.4999.qmail@sourceware.org>
+Date: 7 May 2011 13:50:19 -0000
+Subject: LVM2 tools/lvmcmdline.c liblvm/lvm_base.c lib/ ...
+Message-ID: <20110507135019.1909.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,92 +10,145 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-05-07 13:32:06
+Changes by:	mornfall at sourceware.org	2011-05-07 13:50:13
 
 Modified files:
-	lib/metadata   : metadata-exported.h metadata.c metadata.h 
-	lib/mirror     : mirrored.c 
+	tools          : lvmcmdline.c 
+	liblvm         : lvm_base.c 
+	lib/commands   : toolcontext.c toolcontext.h 
+	daemons/clvmd  : lvm-functions.c 
 
 Log message:
-	Make vg_mark_partial_lvs also clear existing PARTIAL_LV flags, so it can be
-	issued repeatedly on the same VG, keeping the PARTIAL_LV flags up to date.
+	When glibc needs buffers for line buffering of input and output buffers, it
+	allocates these buffers in such way it adds memory page for each such buffer
+	and size of unlock memory check will mismatch by 1 or 2 pages.
+	
+	This happens when we print or read lines without '\n' so these buffers are
+	used. To avoid this extra allocation, use setvbuf to set these bufffers ahead.
+	
+	Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+	Reviewed-by: Milan Broz <mbroz@redhat.com>
+	Reviewed-by: Petr Rockai <prockai@redhat.com>
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.190&r2=1.191
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.455&r2=1.456
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.242&r2=1.243
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_base.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.h.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
 
---- LVM2/lib/metadata/metadata-exported.h	2011/04/28 20:30:00	1.190
-+++ LVM2/lib/metadata/metadata-exported.h	2011/05/07 13:32:05	1.191
-@@ -763,6 +763,8 @@
- int lv_has_unknown_segments(const struct logical_volume *lv);
- int vg_has_unknown_segments(const struct volume_group *vg);
+--- LVM2/tools/lvmcmdline.c	2011/04/22 12:07:35	1.141
++++ LVM2/tools/lvmcmdline.c	2011/05/07 13:50:11	1.142
+@@ -1282,7 +1282,7 @@
+ 	if (!udev_init_library_context())
+ 		stack;
  
-+int vg_mark_partial_lvs(struct volume_group *vg, int clear);
+-	if (!(cmd = create_toolcontext(0, NULL)))
++	if (!(cmd = create_toolcontext(0, NULL, 1)))
+ 		return_NULL;
+ 
+ 	_cmdline.arg_props = &_arg_props[0];
+--- LVM2/liblvm/lvm_base.c	2010/12/20 13:28:04	1.20
++++ LVM2/liblvm/lvm_base.c	2011/05/07 13:50:11	1.21
+@@ -34,7 +34,7 @@
+ 	/* create context */
+ 	/* FIXME: split create_toolcontext */
+ 	/* FIXME: make all globals configurable */
+-	cmd = create_toolcontext(0, system_dir);
++	cmd = create_toolcontext(0, system_dir, 1);
+ 	if (!cmd)
+ 		return NULL;
+ 
+--- LVM2/lib/commands/toolcontext.c	2011/04/29 16:23:39	1.118
++++ LVM2/lib/commands/toolcontext.c	2011/05/07 13:50:12	1.119
+@@ -58,6 +58,8 @@
+ #  include <malloc.h>
+ #endif
+ 
++static const size_t linebuffer_size = 4096;
 +
- struct vgcreate_params {
- 	const char *vg_name;
- 	uint32_t extent_size;
---- LVM2/lib/metadata/metadata.c	2011/04/21 13:13:40	1.455
-+++ LVM2/lib/metadata/metadata.c	2011/05/07 13:32:05	1.456
-@@ -2138,11 +2138,16 @@
-  * propagated transitively, so LVs referencing other LVs are marked
-  * partial as well, if any of their referenced LVs are marked partial.
-  */
--int vg_mark_partial_lvs(struct volume_group *vg)
-+int vg_mark_partial_lvs(struct volume_group *vg, int clear)
+ static int _get_env_vars(struct cmd_context *cmd)
  {
-+	struct lv_list *lvl;
-+
-+	if (clear)
-+		dm_list_iterate_items(lvl, &vg->lvs)
-+			lvl->lv->status &= ~PARTIAL_LV;
-+
- 	if (!_lv_postorder_vg(vg, _lv_mark_if_partial_single, NULL))
- 		return_0;
--
- 	return 1;
- }
+ 	const char *e;
+@@ -1148,7 +1150,8 @@
  
-@@ -2825,7 +2830,7 @@
- 		if (vg_missing_pv_count(correct_vg)) {
- 			log_verbose("There are %d physical volumes missing.",
- 				    vg_missing_pv_count(correct_vg));
--			vg_mark_partial_lvs(correct_vg);
-+			vg_mark_partial_lvs(correct_vg, 1);
- 		}
- 		return correct_vg;
- 	} else {
-@@ -3179,7 +3184,7 @@
- 	if (vg_missing_pv_count(correct_vg)) {
- 		log_verbose("There are %d physical volumes missing.",
- 			    vg_missing_pv_count(correct_vg));
--		vg_mark_partial_lvs(correct_vg);
-+		vg_mark_partial_lvs(correct_vg, 1);
+ /* Entry point */
+ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+-				       const char *system_dir)
++				       const char *system_dir,
++				       unsigned set_buffering)
+ {
+ 	struct cmd_context *cmd;
+ 
+@@ -1183,6 +1186,22 @@
+ 	/* FIXME Make this configurable? */
+ 	reset_lvm_errno(1);
+ 
++	/* Set in/out stream buffering before glibc */
++	if (set_buffering) {
++		/* Allocate 2 buffers */
++		if (!(cmd->linebuffer = dm_malloc(2 * linebuffer_size))) {
++			log_error("Failed to allocate line buffer.");
++			goto out;
++		}
++		if ((setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size) ||
++		     setvbuf(stdout, cmd->linebuffer + linebuffer_size,
++			     _IOLBF, linebuffer_size))) {
++			log_sys_error("setvbuf", "");
++			goto out;
++		}
++		/* Buffers are used for lines without '\n' */
++	}
++
+ 	/*
+ 	 * Environment variable LVM_SYSTEM_DIR overrides this below.
+ 	 */
+@@ -1419,6 +1438,15 @@
+ 	_destroy_tag_configs(cmd);
+ 	if (cmd->libmem)
+ 		dm_pool_destroy(cmd->libmem);
++
++	if (cmd->linebuffer) {
++		/* Reset stream buffering to defaults */
++		setlinebuf(stdin);
++		fflush(stdout);
++		setlinebuf(stdout);
++		dm_free(cmd->linebuffer);
++	}
++
+ 	dm_free(cmd);
+ 
+ 	release_log_memory();
+--- LVM2/lib/commands/toolcontext.h	2010/12/10 22:39:54	1.42
++++ LVM2/lib/commands/toolcontext.h	2011/05/07 13:50:12	1.43
+@@ -66,6 +66,7 @@
+ 	const char *kernel_vsn;
+ 
+ 	unsigned rand_seed;
++	char *linebuffer;
+ 	const char *cmd_line;
+ 	struct command *command;
+ 	char **argv;
+@@ -109,7 +110,8 @@
+  * The environment variable LVM_SYSTEM_DIR always takes precedence.
+  */
+ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+-				       const char *system_dir);
++				       const char *system_dir,
++				       unsigned set_buffering);
+ void destroy_toolcontext(struct cmd_context *cmd);
+ int refresh_toolcontext(struct cmd_context *cmd);
+ int refresh_filters(struct cmd_context *cmd);
+--- LVM2/daemons/clvmd/lvm-functions.c	2011/03/29 20:30:06	1.115
++++ LVM2/daemons/clvmd/lvm-functions.c	2011/05/07 13:50:13	1.116
+@@ -919,7 +919,7 @@
+ 	init_syslog(LOG_DAEMON);
+ 	openlog("clvmd", LOG_PID, LOG_DAEMON);
+ 
+-	if (!(cmd = create_toolcontext(1, NULL))) {
++	if (!(cmd = create_toolcontext(1, NULL, 0))) {
+ 		log_error("Failed to allocate command context");
+ 		return 0;
  	}
- 
- 	if ((correct_vg->status & PVMOVE) && !pvmove_mode()) {
---- LVM2/lib/metadata/metadata.h	2011/03/11 14:50:15	1.242
-+++ LVM2/lib/metadata/metadata.h	2011/05/07 13:32:05	1.243
-@@ -471,7 +471,6 @@
- struct physical_volume *pv_by_path(struct cmd_context *cmd, const char *pv_name);
- int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 		 struct physical_volume *pv);
--int vg_mark_partial_lvs(struct volume_group *vg);
- int is_mirror_image_removable(struct logical_volume *mimage_lv, void *baton);
- 
- uint64_t find_min_mda_size(struct dm_list *mdas);
---- LVM2/lib/mirror/mirrored.c	2011/04/29 00:21:14	1.86
-+++ LVM2/lib/mirror/mirrored.c	2011/05/07 13:32:06	1.87
-@@ -343,7 +343,7 @@
- 
- 	/* update PARTIAL_LV flags across the VG */
- 	if (failed)
--		vg_mark_partial_lvs(lv->vg);
-+		vg_mark_partial_lvs(lv->vg, 0);
- 
- 	return 1;
- }
 
 
