@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 7 May 2011 13:56:16 -0000
-Subject: LVM2/tools lvconvert.c lvconvert.h
-Message-ID: <20110507135616.5404.qmail@sourceware.org>
+Date: 7 May 2011 15:52:17 -0000
+Subject: LVM2 tools/vgreduce.c test/t-mirror-vgreduce-r ...
+Message-ID: <20110507155217.28146.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,391 +10,453 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-05-07 13:56:13
+Changes by:	mornfall at sourceware.org	2011-05-07 15:52:16
 
 Modified files:
-	tools          : lvconvert.c 
+	tools          : vgreduce.c 
+	test           : t-mirror-vgreduce-removemissing.sh 
 Added files:
-	tools          : lvconvert.h 
+	test           : t-vgreduce-removemissing-snapshot.sh 
 
 Log message:
-	Add a new entry point in the mirror lvconvert code, for removing missing mirror
-	images and/or logs, without attempting any further actions.
+	Rewrite vgreduce --removemissing --force, using existing primitives:
+	lv_remove_with_dependencies and mirror_remove_missing (the latter coming from
+	lvconvert). Remove substantial amount of legacy code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.161&r2=1.162
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.110&r2=1.111
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgreduce-removemissing-snapshot.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mirror-vgreduce-removemissing.sh.diff?cvsroot=lvm2&r1=1.12&r2=1.13
 
-/cvs/lvm2/LVM2/tools/lvconvert.h,v  -->  standard output
-revision 1.1
---- LVM2/tools/lvconvert.h
-+++ -	2011-05-07 13:56:14.461143000 +0000
-@@ -0,0 +1,2 @@
-+int mirror_remove_missing(struct cmd_context *cmd,
-+			  struct logical_volume *lv, int force);
---- LVM2/tools/lvconvert.c	2011/04/09 19:05:24	1.161
-+++ LVM2/tools/lvconvert.c	2011/05/07 13:56:13	1.162
-@@ -16,6 +16,7 @@
- #include "polldaemon.h"
+--- LVM2/tools/vgreduce.c	2011/03/29 20:19:04	1.110
++++ LVM2/tools/vgreduce.c	2011/05/07 15:52:16	1.111
+@@ -15,6 +15,7 @@
+ 
+ #include "tools.h"
  #include "lv_alloc.h"
- #include "metadata.h"
 +#include "lvconvert.h"
  
- struct lvconvert_params {
- 	int snapshot;
-@@ -46,7 +47,6 @@
- 	int pv_count;
- 	char **pvs;
- 	struct dm_list *pvh;
--	struct dm_list *failed_pvs;
- 
- 	struct logical_volume *lv_to_poll;
- };
-@@ -319,7 +319,6 @@
- 
- 	lp->pv_count = argc;
- 	lp->pvs = argv;
--	lp->failed_pvs = NULL;
- 
- 	return 1;
- }
-@@ -538,19 +537,6 @@
+ static int _remove_pv(struct volume_group *vg, struct pv_list *pvl, int silent)
+ {
+@@ -45,91 +46,6 @@
  	return 1;
  }
  
--static int _area_missing(struct lv_segment *lvseg, int s)
+-static int _remove_lv(struct cmd_context *cmd, struct logical_volume *lv,
+-		      int *list_unsafe, struct dm_list *lvs_changed)
 -{
--	if (seg_type(lvseg, s) == AREA_LV) {
--		if (seg_lv(lvseg, s)->status & PARTIAL_LV)
--			return 1;
--	} else if ((seg_type(lvseg, s) == AREA_PV) &&
--		   (is_missing_pv(seg_pv(lvseg, s))))
--		return 1;
+-	struct lv_segment *snap_seg;
+-	struct dm_list *snh, *snht;
+-	struct logical_volume *cow;
+-	struct lv_list *lvl;
+-	struct lvinfo info;
+-	int first = 1;
 -
--	return 0;
+-	log_verbose("%s/%s has missing extents: removing (including "
+-		    "dependencies)", lv->vg->name, lv->name);
+-
+-	/* FIXME Cope properly with stacked devices & snapshots. */
+-
+-	/* If snapshot device is missing, deactivate origin. */
+-	if (lv_is_cow(lv) && (snap_seg = find_cow(lv))) {
+-		log_verbose("Deactivating (if active) logical volume %s "
+-			    "(origin of %s)", snap_seg->origin->name, lv->name);
+-
+-		if (!test_mode() && !deactivate_lv(cmd, snap_seg->origin)) {
+-			log_error("Failed to deactivate LV %s",
+-				  snap_seg->origin->name);
+-			return 0;
+-		}
+-
+-		/* Use the origin LV */
+-		lv = snap_seg->origin;
+-	}
+-
+-	/* Remove snapshot dependencies */
+-	dm_list_iterate_safe(snh, snht, &lv->snapshot_segs) {
+-		snap_seg = dm_list_struct_base(snh, struct lv_segment,
+-					    origin_list);
+-		cow = snap_seg->cow;
+-
+-		if (first && !test_mode() &&
+-		    !deactivate_lv(cmd, snap_seg->origin)) {
+-			log_error("Failed to deactivate LV %s",
+-				  snap_seg->origin->name);
+-			return 0;
+-		}
+-
+-		*list_unsafe = 1;	/* May remove caller's lvht! */
+-		if (!vg_remove_snapshot(cow))
+-			return_0;
+-		log_verbose("Removing LV %s from VG %s", cow->name,
+-			    lv->vg->name);
+-		if (!lv_remove(cow))
+-			return_0;
+-
+-		first = 0;
+-	}
+-
+-	/*
+-	 * If LV is active, replace it with error segment
+-	 * and add to list of LVs to be removed later.
+-	 * Doesn't apply to snapshots/origins yet - they're already deactivated.
+-	 */
+-	/*
+-	 * If the LV is a part of mirror segment,
+-	 * the mirrored LV also should be cleaned up.
+-	 * Clean-up is currently done by caller (_make_vg_consistent()).
+-	 */
+-	if ((lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) ||
+-	    find_mirror_seg(first_seg(lv))) {
+-		if (!replace_lv_with_error_segment(lv))
+-			return_0;
+-
+-		if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
+-			log_error("lv_list alloc failed");
+-			return 0;
+-		}
+-		lvl->lv = lv;
+-		dm_list_add(lvs_changed, &lvl->list);
+-	} else {
+-		/* Remove LV immediately. */
+-		log_verbose("Removing LV %s from VG %s", lv->name, lv->vg->name);
+-		if (!lv_remove(lv))
+-			return_0;
+-	}
+-
+-	return 1;
 -}
 -
--/* FIXME we want to handle mirror stacks here... */
- static int _failed_mirrors_count(struct logical_volume *lv)
+ static int _consolidate_vg(struct cmd_context *cmd, struct volume_group *vg)
  {
- 	struct lv_segment *lvseg;
-@@ -560,14 +546,41 @@
- 	dm_list_iterate_items(lvseg, &lv->segments) {
- 		if (!seg_is_mirrored(lvseg))
- 			return -1;
--		for (s = 0; s < lvseg->area_count; s++)
--			if (_area_missing(lvseg, s))
--				ret++;
-+		for (s = 0; s < lvseg->area_count; s++) {
-+			if (seg_type(lvseg, s) == AREA_LV) {
-+				if (is_temporary_mirror_layer(seg_lv(lvseg, s)))
-+					ret += _failed_mirrors_count(seg_lv(lvseg, s));
-+				else if (seg_lv(lvseg, s)->status & PARTIAL_LV)
-+					++ ret;
-+				else if (seg_type(lvseg, s) == AREA_PV &&
-+					 is_missing_pv(seg_pv(lvseg, s)))
-+					++ret;
-+			}
-+		}
+ 	struct pv_list *pvl;
+@@ -162,215 +78,41 @@
+ 
+ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
+ {
+-	struct dm_list *pvh, *pvht;
+-	struct dm_list *lvh, *lvht;
+-	struct pv_list *pvl;
+-	struct lv_list *lvl, *lvl2, *lvlt;
++	struct lv_list *lvl;
+ 	struct logical_volume *lv;
+-	struct physical_volume *pv;
+-	struct lv_segment *seg, *mirrored_seg;
+-	unsigned s;
+-	uint32_t mimages, remove_log;
+-	int list_unsafe, only_mirror_images_found;
+-	DM_LIST_INIT(lvs_changed);
+-	only_mirror_images_found = 1;
+-
+-	/* Deactivate & remove necessary LVs */
+-      restart_loop:
+-	list_unsafe = 0;	/* Set if we delete a different list-member */
+-
+-	dm_list_iterate_safe(lvh, lvht, &vg->lvs) {
+-		lv = dm_list_item(lvh, struct lv_list)->lv;
+-
+-		/* Are any segments of this LV on missing PVs? */
+-		dm_list_iterate_items(seg, &lv->segments) {
+-			for (s = 0; s < seg->area_count; s++) {
+-				if (seg_type(seg, s) != AREA_PV)
+-					continue;
+-
+-				/* FIXME Also check for segs on deleted LVs (incl pvmove) */
+-
+-				pv = seg_pv(seg, s);
+-				if (!pv || !pv_dev(pv) ||
+-				    is_missing_pv(pv)) {
+-					if (arg_count(cmd, mirrorsonly_ARG) &&
+-					    !(lv->status & MIRROR_IMAGE)) {
+-						log_error("Non-mirror-image LV %s found: can't remove.", lv->name);
+-						only_mirror_images_found = 0;
+-						continue;
+-					}
+-					if (!_remove_lv(cmd, lv, &list_unsafe, &lvs_changed))
+-						return_0;
+-					if (list_unsafe)
+-						goto restart_loop;
+-				}
+-			}
+-		}
+-	}
+ 
+-	if (!only_mirror_images_found) {
+-		log_error("Aborting because --mirrorsonly was specified.");
+-		return 0;
+-	}
++	cmd->partial_activation = 1;
+ 
+-	/*
+-	 * Remove missing PVs. FIXME: This duplicates _consolidate_vg above,
+-	 * but we cannot use that right now, since the LV removal code in this
+-	 * function leaves the VG in a "somewhat inconsistent" state and
+-	 * _consolidate_vg doesn't like that -- specifically, mirrors are fixed
+-	 * up *after* the PVs are removed. All this should be gradually
+-	 * superseded by lvconvert --repair.
+-	 */
+-	dm_list_iterate_safe(pvh, pvht, &vg->pvs) {
+-		pvl = dm_list_item(pvh, struct pv_list);
+-		if (pvl->pv->dev && !is_missing_pv(pvl->pv))
+-			continue;
+-		if (!_remove_pv(vg, pvl, 0))
+-			return_0;
+-	}
++ restart:
++	vg_mark_partial_lvs(vg, 1);
+ 
+-	/* FIXME Recovery.  For now people must clean up by hand. */
++	dm_list_iterate_items(lvl, &vg->lvs) {
++		lv = lvl->lv;
+ 
+-	if (!dm_list_empty(&lvs_changed)) {
+-		if (!vg_write(vg)) {
+-			log_error("Failed to write out a consistent VG for %s",
+-				  vg->name);
+-			return 0;
+-		}
+-
+-		if (!test_mode()) {
+-			/* Suspend lvs_changed */
+-			if (!suspend_lvs(cmd, &lvs_changed)) {
+-				stack;
+-				vg_revert(vg);
+-				return 0;
+-			}
+-		}
+-
+-		if (!vg_commit(vg)) {
+-			log_error("Failed to commit consistent VG for %s",
+-				  vg->name);
+-			vg_revert(vg);
+-			return 0;
+-		}
+-
+-		if (!test_mode()) {
+-			if (!resume_lvs(cmd, &lvs_changed)) {
+-				log_error("Failed to resume LVs using error segments.");
+-				return 0;
+-			}
+-		}
+-
+-  lvs_changed_altered:
+-		/* Remove lost mirror images from mirrors */
+-		dm_list_iterate_items(lvl, &vg->lvs) {
+-  mirrored_seg_altered:
+-			mirrored_seg = first_seg(lvl->lv);
+-			if (!seg_is_mirrored(mirrored_seg))
+-				continue;
+-
+-			mimages = mirrored_seg->area_count;
+-			remove_log = 0;
+-
+-			for (s = 0; s < mirrored_seg->area_count; s++) {
+-				dm_list_iterate_items_safe(lvl2, lvlt, &lvs_changed) {
+-					if (seg_type(mirrored_seg, s) != AREA_LV ||
+-					    lvl2->lv != seg_lv(mirrored_seg, s))
+-						continue;
+-					dm_list_del(&lvl2->list);
+-					if (!shift_mirror_images(mirrored_seg, s))
+-						return_0;
+-					mimages--;	/* FIXME Assumes uniqueness */
+-				}
+-			}
+-
+-			if (mirrored_seg->log_lv) {
+-				dm_list_iterate_items(seg, &mirrored_seg->log_lv->segments) {
+-					/* FIXME: The second test shouldn't be required */
+-					if (seg->segtype ==
+-					    get_segtype_from_string(vg->cmd, "error")) {
+-						log_print("The log device for %s/%s has failed.",
+-							  vg->name, mirrored_seg->lv->name);
+-						remove_log = 1;
+-						break;
+-					}
+-					if (!strcmp(seg->segtype->name, "error")) {
+-						log_print("Log device for %s/%s has failed.",
+-							  vg->name, mirrored_seg->lv->name);
+-						remove_log = 1;
+-						break;
+-					}
+-				}
+-			}
+-
+-			if ((mimages != mirrored_seg->area_count) || remove_log){
+-				if (!reconfigure_mirror_images(mirrored_seg, mimages,
+-							       NULL, remove_log))
++		/* Are any segments of this LV on missing PVs? */
++		if (lv->status & PARTIAL_LV) {
++			if (lv->status & MIRRORED) {
++				if (!mirror_remove_missing(cmd, lv, 1))
+ 					return_0;
+-
+-				if (!vg_write(vg)) {
+-					log_error("Failed to write out updated "
+-						  "VG for %s", vg->name);
+-					return 0;
+-				}
+-		
+-				if (!vg_commit(vg)) {
+-					log_error("Failed to commit updated VG "
+-						  "for %s", vg->name);
+-					vg_revert(vg);
+-					return 0;
+-				}
+-
+-				/* mirrored LV no longer has valid mimages.
+-				 * So add it to lvs_changed for removal.
+-				 * For this LV may be an area of other mirror,
+-				 * restart the loop. */
+-				if (!mimages) {
+-					if (!_remove_lv(cmd, lvl->lv,
+-						 &list_unsafe, &lvs_changed))
+-						return_0;
+-					goto lvs_changed_altered;
+-				}
+-
+-				/* As a result of reconfigure_mirror_images(),
+-				 * first_seg(lv) may now be different seg.
+-				 * e.g. a temporary layer might be removed.
+-				 * So check the mirrored_seg again. */
+-				goto mirrored_seg_altered;
++				goto restart;
+ 			}
+-		}
+ 
+-		/* Deactivate error LVs */
+-		if (!test_mode()) {
+-			dm_list_iterate_items_safe(lvl, lvlt, &lvs_changed) {
+-				log_verbose("Deactivating (if active) logical volume %s",
+-					    lvl->lv->name);
+-
+-				if (!deactivate_lv(cmd, lvl->lv)) {
+-					log_error("Failed to deactivate LV %s",
+-						  lvl->lv->name);
+-					/*
+-					 * We failed to deactivate.
+-					 * Probably because this was a mirror log.
+-					 * Don't try to lv_remove it.
+-					 * Continue work on others.
+-					 */
+-					dm_list_del(&lvl->list);
+-				}
++			if (arg_count(cmd, mirrorsonly_ARG) &&!(lv->status & MIRRORED)) {
++				log_error("Non-mirror-image LV %s found: can't remove.", lv->name);
++				continue;
+ 			}
+-		}
+ 
+-		/* Remove remaining LVs */
+-		dm_list_iterate_items(lvl, &lvs_changed) {
+-			log_verbose("Removing LV %s from VG %s", lvl->lv->name,
+-				    lvl->lv->vg->name);
+-				/* Skip LVs already removed by mirror code */
+-				if (find_lv_in_vg(vg, lvl->lv->name) &&
+-				    !lv_remove(lvl->lv))
+-					return_0;
++			if (!lv_is_visible(lv))
++				continue;
++			log_warn("Removing partial LV %s.", lv->name);
++			if (!lv_remove_with_dependencies(cmd, lv, 1, 0))
++				return_0;
++			goto restart;
+ 		}
  	}
  
- 	return ret;
- }
- 
-+static int _failed_logs_count(struct logical_volume *lv)
-+{
-+	int ret = 0, s;
-+	struct logical_volume *log_lv = first_seg(lv)->log_lv;
-+	if (log_lv && (log_lv->status & PARTIAL_LV)) {
-+		if (log_lv->status & MIRRORED)
-+			ret += _failed_mirrors_count(log_lv);
-+		else
-+			ret += 1;
-+	}
-+	for (s = 0; s < first_seg(lv)->area_count; s++) {
-+		if (seg_type(first_seg(lv), s) == AREA_LV &&
-+		    is_temporary_mirror_layer(seg_lv(first_seg(lv), s)))
-+			ret += _failed_logs_count(seg_lv(first_seg(lv), s));
-+	}
-+	return ret;
-+}
++	_consolidate_vg(cmd, vg);
 +
-+
- static struct dm_list *_failed_pv_list(struct volume_group *vg)
- {
- 	struct dm_list *failed_pvs;
-@@ -684,10 +697,10 @@
- 	struct logical_volume *log_lv;
- 
- 	log_lv = first_seg(_original_lv(lv))->log_lv;
--	if (!log_lv)
--		return 0;
-+	if (log_lv)
-+		return lv_mirror_count(log_lv);
- 
--	return lv_mirror_count(log_lv);
-+	return 0;
- }
- 
- static int _lv_update_mirrored_log(struct logical_volume *lv,
-@@ -735,10 +748,6 @@
- 		return 1;
- 
- 	original_lv = _original_lv(lv);
--	region_size = adjusted_mirror_region_size(lv->vg->extent_size,
--						  lv->le_count,
--						  lp->region_size);
--
- 	/* Remove an existing log completely */
- 	if (!log_count) {
- 		if (!remove_mirror_log(cmd, original_lv, operable_pvs,
-@@ -752,6 +761,11 @@
- 
- 	/* Adding redundancy to the log */
- 	if (old_log_count < log_count) {
-+
-+		region_size = adjusted_mirror_region_size(lv->vg->extent_size,
-+							  lv->le_count,
-+							  lp->region_size);
-+
- 		if (!add_mirror_log(cmd, original_lv, log_count,
- 				    region_size, operable_pvs, lp->alloc))
- 			return_0;
-@@ -1168,6 +1182,47 @@
  	return 1;
  }
  
-+int mirror_remove_missing(struct cmd_context *cmd,
-+			  struct logical_volume *lv, int force)
-+{
-+	struct dm_list *failed_pvs;
-+	int log_count = _get_log_count(lv) - _failed_logs_count(lv);
+/cvs/lvm2/LVM2/test/t-vgreduce-removemissing-snapshot.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-vgreduce-removemissing-snapshot.sh
++++ -	2011-05-07 15:52:16.886692000 +0000
+@@ -0,0 +1,26 @@
++# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+	if (!(failed_pvs = _failed_pv_list(lv->vg)))
-+		return_0;
++. lib/test
 +
-+	/* No point in keeping a log if the result is not a mirror */
-+	if (_failed_mirrors_count(lv) + 1 >= lv_mirror_count(lv))
-+		log_count = 0;
++aux prepare_vg 5
++lvcreate -m 3 --ig -L 2M -n 4way $vg $dev1 $dev2 $dev3 $dev4 $dev5:0
++lvcreate -s $vg/4way -L 2M -n snap
++lvcreate -i 2 -L 2M $vg $dev1 $dev2 -n stripe
 +
-+        if (force && _failed_mirrors_count(lv) == lv_mirror_count(lv)) {
-+		log_error("No usable images left in %s.", lv->name);
-+		return lv_remove_with_dependencies(cmd, lv, 1, 0);
-+        }
++aux disable_dev $dev2 $dev4
++echo n | lvconvert --repair $vg/4way
++aux enable_dev $dev2 $dev4
++#not vgreduce --removemissing $vg
++vgreduce -v --removemissing --force $vg # $dev2 $dev4
++lvs -a -o +devices | not grep unknown
++lvs -a -o +devices
++check mirror $vg 4way $dev5
 +
-+	/*
-+	 * We must adjust the log first, or the entire mirror
-+	 * will get stuck during a suspend.
-+	 */
-+	if (!_lv_update_mirrored_log(lv, failed_pvs, log_count))
-+		return 0;
-+
-+	if (_failed_mirrors_count(lv) > 0 &&
-+	    !lv_remove_mirrors(cmd, lv, _failed_mirrors_count(lv),
-+			       log_count ? 0U : 1U,
-+			       _is_partial_lv, NULL, 0))
-+		return 0;
-+
-+	if (!_lv_update_log_type(cmd, NULL, lv, failed_pvs,
-+				 log_count))
-+		return 0;
-+
-+	if (!_reload_lv(cmd, lv))
-+		return 0;
-+
-+	return 1;
-+}
-+
- /*
-  * _lvconvert_mirrors_repair
-  *
-@@ -1180,16 +1235,16 @@
-  */
- static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
- 				     struct logical_volume *lv,
--				     struct lvconvert_params *lp,
--				     uint32_t old_mimage_count,
--				     uint32_t old_log_count)
--{
--	int failed_log = 0;
--	int failed_mirrors = 0;
--	int replace_log = 0;
--	int replace_mirrors = 0;
--	uint32_t new_log_count, log_count;
--	struct logical_volume *log_lv;
-+				     struct lvconvert_params *lp)
-+{
-+	int failed_logs = 0;
-+	int failed_mimages = 0;
-+	int replace_logs = 0;
-+	int replace_mimages = 0;
-+	uint32_t log_count;
-+
-+	uint32_t original_mimages = lv_mirror_count(lv);
-+	uint32_t original_logs = _get_log_count(lv);
- 
- 	cmd->handles_missing_pvs = 1;
- 	cmd->partial_activation = 1;
-@@ -1202,93 +1257,43 @@
- 		return 1;
- 	}
- 
--	/*
--	 * Count the failed mimages - negative if 'lv' is not a mirror
--	 */
--	if ((failed_mirrors = _failed_mirrors_count(lv)) < 0)
--		return_0;
-+	failed_mimages = _failed_mirrors_count(lv);
-+	failed_logs = _failed_logs_count(lv);
- 
--	lp->mirrors = old_mimage_count - failed_mirrors;
-+	mirror_remove_missing(cmd, lv, 0);
- 
--	if (lp->mirrors != old_mimage_count)
-+	if (failed_mimages)
- 		log_error("Mirror status: %d of %d images failed.",
--			  failed_mirrors, old_mimage_count);
-+			  failed_mimages, original_mimages);
- 
- 	/*
- 	 * Count the failed log devices
- 	 */
--	new_log_count = old_log_count;
--	log_lv = first_seg(lv)->log_lv;
--	if (log_lv) {
--		new_log_count = lv_mirror_count(log_lv);
--		if (log_lv->status & PARTIAL_LV) {
--			failed_log = 1;
--			if (log_lv->status & MIRRORED)
--				new_log_count -= _failed_mirrors_count(log_lv);
--			else
--				new_log_count = 0;
--		}
--	}
--	if (old_log_count != new_log_count)
--		log_error("Mirror log status: %d of %d images failed%s",
--			  old_log_count - new_log_count, old_log_count,
--			  (!new_log_count) ? " - switching to core" : "");
-+	if (failed_logs)
-+		log_error("Mirror log status: %d of %d images failed.",
-+			  failed_logs, original_logs);
- 
- 	/*
- 	 * Find out our policies
- 	 */
--	_lvconvert_mirrors_repair_ask(cmd, failed_log, failed_mirrors,
--				      &replace_log, &replace_mirrors);
--
--	/*
--	 * First phase - remove faulty devices
--	 */
--	if (!(lp->failed_pvs = _failed_pv_list(lv->vg)))
--		return_0;
--
--	log_count = new_log_count;
--
--	/*
--	 * We must adjust the log first, or the entire mirror
--	 * will get stuck during a suspend.
--	 */
--	if (!_lv_update_mirrored_log(lv, lp->failed_pvs, log_count))
--		return 0;
--
--	if (lp->mirrors == 1)
--		log_count = 0;
--
--	if (failed_mirrors) {
--		if (!lv_remove_mirrors(cmd, lv, failed_mirrors,
--				       log_count ? 0U : 1U,
--				       _is_partial_lv, NULL, 0))
--			return 0;
--	}
--
--	if (!_lv_update_log_type(cmd, lp, lv, lp->failed_pvs,
--				 log_count))
--		return 0;
--
--	if (!_reload_lv(cmd, lv))
--		return 0;
-+	_lvconvert_mirrors_repair_ask(cmd, failed_logs, failed_mimages,
-+				      &replace_logs, &replace_mimages);
- 
- 	/*
- 	 * Second phase - replace faulty devices
- 	 */
--
--	if (replace_mirrors)
--		lp->mirrors = old_mimage_count;
-+	lp->mirrors = replace_mimages ? original_mimages : (original_mimages - failed_mimages);
- 
- 	/*
- 	 * It does not make sense to replace the log if the volume is no longer
- 	 * a mirror.
- 	 */
--	if (!replace_mirrors && lp->mirrors == 1)
--		replace_log = 0;
-+	if (lp->mirrors == 1)
-+		replace_logs = 0;
- 
--	log_count = replace_log ? old_log_count : new_log_count;
-+	log_count = replace_logs ? original_logs : (original_logs - failed_logs);
- 
--	while (replace_mirrors || replace_log) {
-+	while (replace_mimages || replace_logs) {
- 		log_warn("Trying to up-convert to %d images, %d logs.", lp->mirrors, log_count);
- 		if (_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
- 					   lp->mirrors, log_count))
-@@ -1303,12 +1308,12 @@
- 		}
- 	}
- 
--	if (replace_mirrors && lp->mirrors != old_mimage_count)
-+	if (replace_mimages && lv_mirror_count(lv) != original_mimages)
- 		log_warn("WARNING: Failed to replace %d of %d images in volume %s",
--			 old_mimage_count - lp->mirrors, old_mimage_count, lv->name);
--	if (replace_log && log_count != old_log_count)
-+			 original_mimages - lv_mirror_count(lv), original_mimages, lv->name);
-+	if (replace_logs && _get_log_count(lv) != original_logs)
- 		log_warn("WARNING: Failed to replace %d of %d logs in volume %s",
--			 old_log_count - log_count, old_log_count, lv->name);
-+			 original_logs - _get_log_count(lv), original_logs, lv->name);
- 
- 	/* if (!arg_count(cmd, use_policies_ARG) && (lp->mirrors != old_mimage_count
- 						  || log_count != old_log_count))
-@@ -1354,9 +1359,7 @@
- 		return 1;
- 
- 	if (repair)
--		return _lvconvert_mirrors_repair(cmd, lv, lp,
--						 old_mimage_count,
--						 old_log_count);
-+		return _lvconvert_mirrors_repair(cmd, lv, lp);
- 
- 	if (!_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
- 				    new_mimage_count, new_log_count))
-@@ -1531,6 +1534,7 @@
- 			     void *handle)
+--- LVM2/test/t-mirror-vgreduce-removemissing.sh	2011/03/30 13:39:24	1.12
++++ LVM2/test/t-mirror-vgreduce-removemissing.sh	2011/05/07 15:52:16	1.13
+@@ -95,7 +95,7 @@
+ prepare_lvs_()
  {
- 	struct lvconvert_params *lp = handle;
-+	struct dm_list *failed_pvs;
+ 	lvremove -ff $vg;
+-	if dmsetup table|grep $vg; then
++	if dmsetup table|grep -v -- "-missing_"|grep $vg; then
+ 		echo "ERROR: lvremove did leave some some mappings in DM behind!"
+ 		return 1
+ 	fi
+@@ -208,13 +208,14 @@
+ 	lvcreate -l2 -m2 -n $lv1 $vg $dev1 $dev2 $dev3 $dev5:0
+ 	lvchange -an $vg/$lv1 
+ 	lvconvert -m+1 $vg/$lv1 $dev4 
+-	mimages_are_on_ $lv1 $dev1 $dev2 $dev3 $dev4 
+-	mirrorlog_is_on_ $lv1 $dev5 
+-	eval aux disable_dev \$dev$n 
++	check mirror_images_on $vg $lv1 $dev1 $dev2 $dev3 $dev4 
++	check mirror_log_on $vg $lv1 $dev5 
++	eval aux disable_dev \$dev$index 
++        lvs -a -o +devices
+ 	vgreduce --removemissing --force $vg 
+-	lvs -a -o+devices $vg 
+-	mimages_are_on_ $lv1 $(rest_pvs_ $index 4) 
+-	mirrorlog_is_on_ $lv1 $dev5
++	lvs -a -o+devices # $vg 
++	check mirror_images_on $vg $lv1 $dev5 # $(rest_pvs_ $index 4) 
++	check mirror_log_on $vg $lv1 $dev5
+ }
  
- 	if (lv->status & LOCKED) {
- 		log_error("Cannot convert locked LV %s", lv->name);
-@@ -1594,9 +1598,14 @@
- 			return ECMD_FAILED;
- 		}
+ for n in $(seq 1 4); do
+@@ -234,16 +235,17 @@
+ 	local index=$1
  
-+		if (!(failed_pvs = _failed_pv_list(lv->vg))) {
-+			stack;
-+			return ECMD_FAILED;
-+		}
-+
- 		/* If repairing and using policies, remove missing PVs from VG */
- 		if (arg_count(cmd, repair_ARG) && arg_count(cmd, use_policies_ARG))
--			_remove_missing_empty_pv(lv->vg, lp->failed_pvs);
-+			_remove_missing_empty_pv(lv->vg, failed_pvs);
- 	}
+ 	lvcreate -l2 -m2 -n $lv1 $vg $dev1 $dev2 $dev3 $dev5:0
+-	lvchange -an $vg/$lv1 
+-	lvconvert -m+1 $vg/$lv1 $dev4 
+-	mimages_are_on_ $lv1 $dev1 $dev2 $dev3 $dev4 
+-	mirrorlog_is_on_ $lv1 $dev5 
+-	aux disable_dev $(rest_pvs_ $index 4) 
+-	vgreduce --removemissing --force $vg 
+-	lvs -a -o+devices $vg 
++	lvchange -an $vg/$lv1
++	lvconvert -m+1 $vg/$lv1 $dev4
++	check mirror_images_on $vg $lv1 $dev1 $dev2 $dev3 $dev4
++	check mirror_log_on $vg $lv1 $dev5
++	lvs -a -o+devices $vg
++	aux disable_dev $(rest_pvs_ $index 4)
++	vgreduce --removemissing --force $vg
++	lvs -a -o+devices $vg
+ 	eval local dev=\$dev$n
+-	mimages_are_on_ $lv1 $dev || lv_is_on_ $lv1 $dev
+-	not mirrorlog_is_on_ $lv1 $dev5
++	check linear $vg $lv1
++        check lv_on $vg $lv1 $dev
+ }
  
- 	return ECMD_PROCESSED;
+ for n in $(seq 1 4); do
 
 
