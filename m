@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 May 2011 17:49:46 -0000
-Subject: LVM2/daemons/lvmetad DESIGN
-Message-ID: <20110512174946.2647.qmail@sourceware.org>
+Date: 13 May 2011 08:07:30 -0000
+Subject: LVM2/daemons/common daemon-client.h daemon-ser ...
+Message-ID: <20110513080730.541.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,208 +10,159 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-05-12 17:49:46
+Changes by:	mornfall at sourceware.org	2011-05-13 08:07:29
 
 Added files:
-	daemons/lvmetad: DESIGN 
+	daemons/common : daemon-client.h daemon-server.h 
 
 Log message:
-	Initial design document for LVMetaD, building on the draft from June of last
-	year, incorporating the outcomes of today's and yesterday's discussions.
+	First stab at the prototypes of the daemon-common functionality (to be
+	eventually shared by dmeventd, lvmetad and clvmd).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/DESIGN.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
 
-/cvs/lvm2/LVM2/daemons/lvmetad/DESIGN,v  -->  standard output
+/cvs/lvm2/LVM2/daemons/common/daemon-client.h,v  -->  standard output
 revision 1.1
---- LVM2/daemons/lvmetad/DESIGN
-+++ -	2011-05-12 17:49:46.773525000 +0000
-@@ -0,0 +1,186 @@
-+The design of LVMetaD
-+=====================
+--- LVM2/daemons/common/daemon-client.h
++++ -	2011-05-13 08:07:30.026952000 +0000
+@@ -0,0 +1,59 @@
++/*
++ * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
 +
-+Invocation and setup
-+--------------------
++#ifndef _LVM_DAEMON_COMMON_CLIENT_H
++#define _LVM_DAEMON_COMMON_CLIENT_H
 +
-+The daemon should be started automatically by the first LVM command issued on
-+the system, when needed. The usage of the daemon should be configurable in
-+lvm.conf, probably with its own section. Say
++typedef struct {
++	int socket_fd; /* the fd we use to talk to the daemon */
++	int protocol;  /* version of the protocol the daemon uses */
++	char *read_buf;
++} daemon_handle;
 +
-+    lvmetad {
-+        enabled = 1 # default
-+        autostart = 1 # default
-+        socket = "/path/to/socket" # defaults to /var/run/lvmetad or such
-+    }
++typedef struct {
++	const char *path; /* the binary of the daemon */
++	const char *socket; /* path to the comms socket */
++	unsigned autostart:1; /* start the daemon if not running? */
++} daemon_info;
 +
-+Library integration
-+-------------------
++typedef struct {
++	char *request;
++} daemon_request;
 +
-+When a command needs to access metadata, it currently needs to perform a scan
-+of the physical devices available in the system. This is a possibly quite
-+expensive operation, especially if many devices are attached to the system. In
-+most cases, LVM needs a complete image of the system's PVs to operate
-+correctly, so all devices need to be read, to at least determine presence (and
-+content) of a PV label. Additional IO is done to obtain or write metadata
-+areas, but this is only marginally related and addressed by Dave's
-+metadata-balancing work.
++typedef struct {
++	int errno; /* 0 for success */
++	char *reply; /* textual reply */
++	struct config_tree *cft; /* parsed reply, if available */
++} daemon_reply;
 +
-+In the existing scanning code, a cache layer exists, under
-+lib/cache/lvmcache.[hc]. This layer is keeping a textual copy of the metadata
-+for a given volume group, in a format_text form, as a character string. We can
-+plug the lvmetad interface at this level: in lvmcache_get_vg, which is
-+responsible for looking up metadata in a local cache, we can, if the metadata
-+is not available in the local cache, query lvmetad. Under normal circumstances,
-+when a VG is not cached yet, this operation fails and prompts the caller to
-+perform a scan. Under the lvmetad enabled scenario, this would never happen and
-+the fall-through would only be activated when lvmetad is disabled, which would
-+lead to local cache being populated as usual through a locally executed scan.
++/*
++ * Open the communication channel to the daemon. If the daemon is not running,
++ * it may be autostarted based on the binary path provided in the info (this
++ * will only happen if autostart is set to true). If the call fails for any
++ * reason, daemon_handle_valid(h) for the response will return false. Otherwise,
++ * the connection is good to start serving requests.
++ */
++daemon_handle daemon_open(daemon_info i);
 +
-+Therefore, existing stand-alone (i.e. no lvmetad) functionality of the tools
-+would be not compromised by adding lvmetad. With lvmetad enabled, however,
-+significant portions of the code would be short-circuited.
++/*
++ * Send a request to the daemon, waiting for the reply. All communication with
++ * the daemon is synchronous. The function handles the IO details and parses the
++ * response, handling common error conditions. See "daemon_reply" for details.
++ */
++daemon_reply daemon_request(daemon_handle h, daemon_request r);
 +
-+Scanning
-+--------
++/* Shut down the communication to the daemon. Compulsory. */
++void daemon_close(daemon_handle h);
 +
-+Initially (at least), the lvmetad will be not allowed to read disks: it will
-+rely on an external program to provide the metadata. In the ideal case, this
-+will be triggered by udev. The role of lvmetad is then to collect and maintain
-+an accurate (up to the data it has received) image of the VGs available in the
-+system. I imagine we could extend the pvscan command (or add a new one, say
-+lvmetad_client, if pvscan is found to be inappropriate):
++#endif
+/cvs/lvm2/LVM2/daemons/common/daemon-server.h,v  -->  standard output
+revision 1.1
+--- LVM2/daemons/common/daemon-server.h
++++ -	2011-05-13 08:07:30.411524000 +0000
+@@ -0,0 +1,72 @@
++/*
++ * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
 +
-+    $ pvscan --lvmetad /dev/foo
-+    $ pvscan --lvmetad --remove /dev/foo
++#ifndef _LVM_DAEMON_COMMON_CLIENT_H
++#define _LVM_DAEMON_COMMON_CLIENT_H
 +
-+These commands would simply read the label and the MDA (if applicable) from the
-+given PV and feed that data to the running lvmetad, using
-+lvmetad_{add,remove}_pv (see lvmetad_client.h).
++typedef struct {
++	int socket_fd; /* the fd we use to talk to the client */
++	pthread_t thread_id;
++	char *read_buf;
++	void *private; /* this holds per-client state */
++} client_handle;
 +
-+We however need to ensure a couple of things here:
++typedef struct {
++	void *private; /* the global daemon state */
++} daemon_state;
 +
-+1) only LVM commands ever touch PV labels and VG metadata
-+2) when a device is added or removed, udev fires a rule to notify lvmetad
++typedef struct {
++	struct config_tree *cft;
++} request;
 +
-+While the latter is straightforward, there are issues with the first. We
-+*might* want to invoke the dreaded "watch" udev rule in this case, however it
-+ends up being implemented. Of course, we can also rely on the sysadmin to be
-+reasonable and not write over existing LVM metadata without first telling LVM
-+to let go of the respective device(s).
++typedef struct {
++	struct config_tree *cft;
++} response;
 +
-+Even if we simply ignore the problem, metadata write should fail in these
-+cases, so the admin should be unable to do substantial damage to the system. If
-+there were active LVs on top of the vanished PV, they are in trouble no matter
-+what happens there.
++/*
++ * The callback. Called once per request issued, in the respective client's
++ * thread. It is presented by a parsed request (in the form of a config tree).
++ * The output is a new config tree that is serialised and sent back to the
++ * client. The client blocks until the request processing is done and reply is
++ * sent.
++ */
++typedef response (*handle_request)(daemon_state s, client_handle h, request r);
 +
-+Incremental scan
-+----------------
++/*
++ * Start serving the requests. This does all the daemonisation, socket setup
++ * work and so on.
++ */
++void daemon_start(daemon_state s, handle_request r);
 +
-+There are some new issues arising with the "udev" scan mode. Namely, the
-+devices of a volume group will be appearing one by one. The behaviour in this
-+case will be very similar to the current behaviour when devices are missing:
-+the volume group, until *all* its physical volumes have been discovered and
-+announced by udev, will be in a state with some of its devices flagged as
-+MISSING_PV. This means that the volume group will be, for most purposes,
-+read-only until it is complete and LVs residing on yet-unknown PVs won't
-+activate without --partial. Under usual circumstances, this is not a problem
-+and the current code for dealing with MISSING_PVs should be adequate.
++/*
++ * Take over from an already running daemon. This function handles connecting
++ * to the running daemon and telling it we are going to take over. The takeover
++ * request may be customised by passing in a non-NULL request.
++ *
++ * The takeover sequence: the old daemon stops accepting new clients, then it
++ * waits until all current client connections are closed. When that happens, it
++ * serializes its current state and sends that as a reply, which is then
++ * returned by this function (therefore, this function won't return until the
++ * previous instance has shut down).
++ *
++ * The daemon, after calling daemon_takeover is expected to set up its
++ * daemon_state using the reply from this function and call daemon_start as
++ * usual.
++ */
++daemon_reply daemon_takeover(daemon_info i, daemon_request r);
 +
-+However, the code for reading volume groups from disks will need to be adapted,
-+since it currently does not work incrementally. Such support will need to track
-+metadata-less PVs that have been encountered so far and to provide a way to
-+update an existing volume group. When the first PV with metadata of a given VG
-+is encountered, the VG is created in lvmetad (probably in the form of "struct
-+volume_group") and it is assigned any previously cached metadata-less PVs it is
-+referencing. Any PVs that were not yet encountered will be marked as MISSING_PV
-+in the "struct volume_group". Upon scanning a new PV, if it belongs to any
-+already-known volume group, this PV is checked for consistency with the already
-+cached metadata (in a case of mismatch, the VG needs to be recovered or
-+declared conflicted), and is subsequently unmarked MISSING_PV. Care need be
-+taken not to unmark MISSING_PV on PVs that have this flag in their persistent
-+metadata, though.
++/* Call this to request a clean shutdown of the daemon. Async safe. */
++void daemon_stop();
 +
-+The most problematic aspect of the whole design may be orphan PVs. At any given
-+point, a metadata-less PV may appear orphaned, if a PV of its VG with metadata
-+has not been scanned yet. Eventually, we will have to decide that this PV is
-+really an orphan and enable its usage for creating or extending VGs. In
-+practice, the decision might be governed by a timeout or assumed immediately --
-+the former case is a little safer, the latter is probably more transparent. I
-+am not very keen on using timeouts and we can probably assume that the admin
-+won't blindly try to re-use devices in a way that would trip up LVM in this
-+respect. I would be in favour of just assuming that metadata-less VGs with no
-+known referencing VGs are orphans -- after all, this is the same approach as we
-+use today. The metadata balancing support may stress this a bit more than the
-+usual contemporary setups do, though.
-+
-+Automatic activation
-+--------------------
-+
-+It may also be prudent to provide a command that will block until a volume
-+group is complete, so that scripts can reliably activate/mount LVs and such. Of
-+course, some PVs may never appear, so a timeout is necessary. Again, this is
-+something not handled by current tools, but may become more important in
-+future. It probably does not need to be implemented right away though.
-+
-+The other aspect of the progressive VG assembly is automatic activation. The
-+currently only problem with that is that we would like to avoid having
-+activation code in lvmetad, so we would prefer to fire up an event of some sort
-+and let someone else handle the activation and whatnot.
-+
-+Cluster support
-+---------------
-+
-+When working in a cluster, clvmd integration will be necessary: clvmd will need
-+to instruct lvmetad to re-read metadata as appropriate due to writes on remote
-+hosts. Overall, this is not hard, but the devil is in the details. I would
-+possibly disable lvmetad for clustered volume groups in the first phase and
-+only proceed when the local mode is robust and well tested.
-+
-+Protocol & co.
-+--------------
-+
-+I expect a simple text-based protocol executed on top of an Unix Domain Socket
-+to be the communication interface for lvmetad. Ideally, the requests and
-+replies will be well-formed "config file" style strings, so we can re-use
-+existing parsing infrastructure.
-+
-+Since we already have two daemons, I would probably look into factoring some
-+common code for daemon-y things, like sockets, communication (including thread
-+management) and maybe logging and re-using it in all the daemons (clvmd,
-+dmeventd and lvmetad). This shared infrastructure should live under
-+daemons/common, and the existing daemons shall be gradually migrated to the
-+shared code.
-+
-+Future extensions
-+-----------------
-+
-+The above should basically cover the use of lvmetad as a cache-only
-+daemon. Writes could still be executed locally, and the new metadata version
-+can be provided to lvmetad through the socket the usual way. This is fairly
-+natural and in my opinion reasonable. The lvmetad acts like a cache that will
-+hold metadata, no more no less.
-+
-+Above this, there is a couple of things that could be worked on later, when the
-+above basic design is finished and implemented.
-+
-+_Metadata writing_: We may want to support writing new metadata through
-+lvmetad. This may or may not be a better design, but the write itself should be
-+more or less orthogonal to the rest of the story outlined above.
-+
-+_Locking_: Other than directing metadata writes through lvmetad, one could
-+conceivably also track VG/LV locking through the same.
-+
-+_Clustering_: A deeper integration of lvmetad with clvmd might be possible and
-+maybe desirable. Since clvmd communicates over the network with other clvmd
-+instances, this could be extended to metadata exchange between lvmetad's,
-+further cutting down scanning costs. This would combine well with the
-+write-through-lvmetad approach.
-+
-+Testing
-+-------
-+
-+Since (at least bare-bones) lvmetad has no disk interaction and is fed metadata
-+externally, it should be very amenable to automated testing. We need to provide
-+a client that can feed arbitrary, synthetic metadata to the daemon and request
-+the data back, providing reasonable (nearly unit-level) testing infrastructure.
++#endif
 
 
