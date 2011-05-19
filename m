@@ -1,55 +1,40 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 May 2011 13:59:25 -0000
-Subject: LVM2 tools/toollib.c ./WHATS_NEW
-Message-ID: <20110519135925.25029.qmail@sourceware.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Thu, 19 May 2011 12:37:13 -0400 (EDT)
+Subject: [PATCH] Fix vgchange for sparse devices
+Message-ID: <Pine.LNX.4.64.1105191235200.13331@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-05-19 13:59:23
+Fix vgchange for sparse devices
 
-Modified files:
-	tools          : toollib.c 
-	.              : WHATS_NEW 
+If we create a sparse snapshot volume with "lvcreate --virtualsize", the volume
+is not activated or deactivated with vgchange.
 
-Log message:
-	Do not log a superfluous stack message when the lv is properly processed
+This patch fixes it so that vgchange activates and deactivates such volumes.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.225&r2=1.226
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1989&r2=1.1990
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 
---- LVM2/tools/toollib.c	2011/03/11 14:56:56	1.225
-+++ LVM2/tools/toollib.c	2011/05/19 13:59:22	1.226
-@@ -351,12 +351,14 @@
- 			ret = process_each_lv_in_vg(cmd, cvl_vg->vg, &lvnames,
- 						    tags_arg, &failed_lvnames,
- 						    handle, process_single_lv);
--			if (ret != ECMD_PROCESSED ||
--			    dm_list_empty(&failed_lvnames)) {
-+			if (ret != ECMD_PROCESSED) {
- 				stack;
- 				break;
- 			}
+---
+ tools/vgchange.c |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+Index: LVM2.2.02.85/tools/vgchange.c
+===================================================================
+--- LVM2.2.02.85.orig/tools/vgchange.c	2011-05-19 17:41:17.000000000 +0200
++++ LVM2.2.02.85/tools/vgchange.c	2011-05-19 18:32:00.000000000 +0200
+@@ -96,6 +96,10 @@ static int _activate_lvs_in_vg(struct cm
+ 		if (!lv_is_visible(lv))
+ 			continue;
  
-+			if (dm_list_empty(&failed_lvnames))
-+				break;
++		/* If LV is sparse, activate origin instead */
++		if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
++			lv = origin_from_cow(lv);
 +
- 			/* Try again with failed LVs in this VG */
- 			dm_list_init(&lvnames);
- 			dm_list_splice(&lvnames, &failed_lvnames);
---- LVM2/WHATS_NEW	2011/05/12 12:42:47	1.1989
-+++ LVM2/WHATS_NEW	2011/05/19 13:59:23	1.1990
-@@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Do not log a superfluous stack message when the lv is properly processed.
-   Do not issue an error message when unable to remove .cache on read-only fs.
-   Avoid memlock size mismatch by preallocating stdio line buffers.
-   Reorganize lvconvert --repair code to allow reuse.
+ 		/* Only request activation of snapshot origin devices */
+ 		if ((lv->status & SNAPSHOT) || lv_is_cow(lv))
+ 			continue;
 
 
