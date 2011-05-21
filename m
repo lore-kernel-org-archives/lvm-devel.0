@@ -1,40 +1,34 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Thu, 19 May 2011 12:37:13 -0400 (EDT)
-Subject: [PATCH] Fix vgchange for sparse devices
-Message-ID: <Pine.LNX.4.64.1105191235200.13331@hs20-bc2-1.build.redhat.com>
+From: ben <benscott@nwlink.com>
+Date: Sat, 21 May 2011 16:12:22 -0700
+Subject: lvm2app lv properties stripe size issue
+In-Reply-To: <201105092042.22143.benscott@nwlink.com>
+References: <201105092042.22143.benscott@nwlink.com>
+Message-ID: <201105211612.22830.benscott@nwlink.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix vgchange for sparse devices
+On Monday, May 09, 2011 08:42:21 PM ben wrote:
+> When using:
+> 
+>    value = lvm_lvseg_get_property(lvm_lvseg, "stripesize");
+> 
+> The value returned seems to be double what I expect. Is this function
+> returning disk sectors (512 bytes) and not 1024 byte units?
+> 
+> Thank you.
+> 
+> 
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
-If we create a sparse snapshot volume with "lvcreate --virtualsize", the volume
-is not activated or deactivated with vgchange.
+shouldn't this function return bytes? Anyone?
 
-This patch fixes it so that vgchange activates and deactivates such volumes.
-
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-
----
- tools/vgchange.c |    4 ++++
- 1 file changed, 4 insertions(+)
-
-Index: LVM2.2.02.85/tools/vgchange.c
-===================================================================
---- LVM2.2.02.85.orig/tools/vgchange.c	2011-05-19 17:41:17.000000000 +0200
-+++ LVM2.2.02.85/tools/vgchange.c	2011-05-19 18:32:00.000000000 +0200
-@@ -96,6 +96,10 @@ static int _activate_lvs_in_vg(struct cm
- 		if (!lv_is_visible(lv))
- 			continue;
- 
-+		/* If LV is sparse, activate origin instead */
-+		if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
-+			lv = origin_from_cow(lv);
-+
- 		/* Only request activation of snapshot origin devices */
- 		if ((lv->status & SNAPSHOT) || lv_is_cow(lv))
- 			continue;
+Thank you
 
 
