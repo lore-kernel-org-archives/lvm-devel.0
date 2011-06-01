@@ -1,29 +1,25 @@
-From: cynical cynical <cynicaladore@gmail.com>
-Date: Wed, 1 Jun 2011 15:03:06 +0800
-Subject: the map between pv_segments and a lv
-Message-ID: <BANLkTikAsmU6Riuq0EBfJJ0B690g5jpJug@mail.gmail.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 1 Jun 2011 16:17:32 +0100
+Subject: [PATCH] deferred PV labelling, take 2 (BZ 623808)
+In-Reply-To: <87zkm32kdm.fsf@aldalome.int.mornfall.net.>
+References: <8762or3z4l.fsf@aldalome.int.mornfall.net.>
+	<87zkm32kdm.fsf@aldalome.int.mornfall.net.>
+Message-ID: <20110601151732.GA5684@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Mr. & Mrs.
-  Glad to be here. I'm a student from China, and very interested in lvm
-project.
-We are now doing a training project, which aims at cloning a hard disk. To
-some
-extent, we need to know the map between a lv and pv_segments,
- i.e,  to find out all the pv_segments that make up a lv.
-As it is known to us, the relationship can be found in directory
-/etc/lvm/backup.
-but it is not convenient.
+On Tue, May 31, 2011 at 01:13:25PM +0200, Peter Rockai wrote:
+> Oh, the actual patches, too ... (split into 4 chunks, hopefully for
+> better transparency)
+ 
+I've done some testing and completely failed to find a way of breaking this
+so far, though I did uncover some pre-existing bugs.
 
-So, can there be some APIs to tell the relationships.
+Ack.
 
-Best regards.
+Alasdair
 
-June 1st, 2011
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110601/291a3280/attachment.htm>
+
