@@ -1,72 +1,59 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  3 Jun 2011 21:13:29 +0200
-Subject: [PATCH 11/11] lv_postorder unlock and lock
-In-Reply-To: <cover.1307127169.git.zkabelac@redhat.com>
-References: <cover.1307127169.git.zkabelac@redhat.com>
-Message-ID: <cf76a9f5354f1a4d4dcc0dc2a665e9acf72ff121.1307127169.git.zkabelac@redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Sat,  4 Jun 2011 21:03:35 +0200
+Subject: [PATCH] Workaround for kernel 3.0 & uname
+Message-ID: <1307214215-13987-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Instead of unlocking and locking for every changed struct member
-do it once when entering and leaving function.
+With recent ernel 3.0 update sme distros
+has uname in form "3.0-rc1".
 
-Currently lv_postoder() does not modify other part of vg structure
-then status flags of each LV with flags that are also removed.
+This patch temporary workarounds uname detection
+(because with the new release string libdevmapper
+initialization fails.)
 
-After the function execution the structure should remain unmodified.
-
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- lib/metadata/metadata.c |   16 ++++++++++++++++
- 1 files changed, 16 insertions(+), 0 deletions(-)
+ libdm/ioctl/libdm-iface.c |   13 +++++++++++--
+ 1 files changed, 11 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 1cd1e6c..f4cee5a 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2107,8 +2107,17 @@ static int _lv_postorder(struct logical_volume *lv,
- 			       void *data)
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index f54cf1d..02b3470 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -152,6 +152,7 @@ static int _uname(void)
  {
- 	int r;
-+	int lck = dm_pool_locked(lv->vg->vgmem);
-+
-+	if (lck && !dm_pool_unlock(lv->vg->vgmem, 0))
-+		return_0;
-+
- 	r = _lv_postorder_visit(lv, fn, data);
- 	_lv_postorder_cleanup(lv, 0);
-+
-+	if (lck && !dm_pool_lock(lv->vg->vgmem, 0))
-+		return_0;
-+
- 	return r;
- }
+ 	static int _uts_set = 0;
+ 	struct utsname _uts;
++	int parts;
  
-@@ -2122,6 +2131,10 @@ static int _lv_postorder_vg(struct volume_group *vg,
- {
- 	struct lv_list *lvl;
- 	int r = 1;
-+	int lck = dm_pool_locked(vg->vgmem);
+ 	if (_uts_set)
+ 		return 1;
+@@ -160,10 +161,18 @@ static int _uname(void)
+ 		log_error("uname failed: %s", strerror(errno));
+ 		return 0;
+ 	}
+-	if (sscanf(_uts.release, "%d.%d.%d",
 +
-+	if (lck && !dm_pool_unlock(vg->vgmem, 0))
-+		return_0;
- 
- 	dm_list_iterate_items(lvl, &vg->lvs)
- 		if (!_lv_postorder_visit(lvl->lv, fn, data)) {
-@@ -2132,6 +2145,9 @@ static int _lv_postorder_vg(struct volume_group *vg,
- 	dm_list_iterate_items(lvl, &vg->lvs)
- 		_lv_postorder_cleanup(lvl->lv, 0);
- 
-+	if (lck && !dm_pool_lock(vg->vgmem, 0))
-+		return_0;
++	parts = sscanf(_uts.release, "%d.%d.%d",
+ 			&_kernel_major,
+ 			&_kernel_minor,
+-			&_kernel_release) != 3) {
++			&_kernel_release);
 +
- 	return r;
- }
- 
++	if (parts == 1 && _kernel_major >= 3) {
++		_kernel_minor = 0;
++		_kernel_release = 0;
++	} else if (parts == 2 && _kernel_major >= 3) {
++		_kernel_release = 0;
++	} else if (parts != 3) {
+ 		log_error("Could not determine kernel version used.");
+ 		return 0;
+ 	}
 -- 
-1.7.5.2
+1.7.5.3
 
 
