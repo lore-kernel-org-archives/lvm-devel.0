@@ -1,59 +1,115 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sat,  4 Jun 2011 21:03:35 +0200
-Subject: [PATCH] Workaround for kernel 3.0 & uname
-Message-ID: <1307214215-13987-1-git-send-email-mbroz@redhat.com>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 4 Jun 2011 21:46:34 -0000
+Subject: LVM2/test/api Makefile.in pe_start.c pe_start.sh
+Message-ID: <20110604214634.12098.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-With recent ernel 3.0 update sme distros
-has uname in form "3.0-rc1".
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mornfall at sourceware.org	2011-06-04 21:46:34
 
-This patch temporary workarounds uname detection
-(because with the new release string libdevmapper
-initialization fails.)
+Modified files:
+	test/api       : Makefile.in 
+Added files:
+	test/api       : pe_start.c pe_start.sh 
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- libdm/ioctl/libdm-iface.c |   13 +++++++++++--
- 1 files changed, 11 insertions(+), 2 deletions(-)
+Log message:
+	Add an API test that shows how to find a value of pe_start for a VG without
+	actually creating the VG on-disk.
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index f54cf1d..02b3470 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -152,6 +152,7 @@ static int _uname(void)
- {
- 	static int _uts_set = 0;
- 	struct utsname _uts;
-+	int parts;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/pe_start.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/pe_start.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+
+/cvs/lvm2/LVM2/test/api/pe_start.c,v  -->  standard output
+revision 1.1
+--- LVM2/test/api/pe_start.c
++++ -	2011-06-04 21:46:34.530305000 +0000
+@@ -0,0 +1,47 @@
++/*
++ * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#undef NDEBUG
++
++#include "lvm2app.h"
++#include "assert.h"
++
++int main(int argc, char *argv[])
++{
++	lvm_t handle;
++	vg_t vg = NULL;
++	pv_t pv;
++	struct lvm_property_value v;
++
++	handle = lvm_init(NULL);
++        assert(handle);
++
++	vg = lvm_vg_create(handle, "test_vg");
++        assert(vg);
++
++	if (lvm_vg_extend(vg, argv[1]))
++		abort();
++
++	pv = lvm_pv_from_name(vg, argv[1]);
++	assert(pv);
++
++        v = lvm_pv_get_property(pv, "pe_start");
++        assert(v.is_valid);
++	fprintf(stderr, "pe_start = %d\n", (int)v.value.integer);
++        assert(v.value.integer == 2048 * 512);
++
++        lvm_vg_close(vg);
++	lvm_quit(handle);
++        return 0;
++}
+/cvs/lvm2/LVM2/test/api/pe_start.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/api/pe_start.sh
++++ -	2011-06-04 21:46:34.614299000 +0000
+@@ -0,0 +1,17 @@
++#
++# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
++
++. lib/test
++
++aux prepare_devs 2
++aux apitest pe_start $dev1
+--- LVM2/test/api/Makefile.in	2011/03/01 21:30:43	1.21
++++ LVM2/test/api/Makefile.in	2011/06/04 21:46:34	1.22
+@@ -26,7 +26,7 @@
+ wrapper_SOURCES = test.c
+ INCLUDES += -I../../include
  
- 	if (_uts_set)
- 		return 1;
-@@ -160,10 +161,18 @@ static int _uname(void)
- 		log_error("uname failed: %s", strerror(errno));
- 		return 0;
- 	}
--	if (sscanf(_uts.release, "%d.%d.%d",
-+
-+	parts = sscanf(_uts.release, "%d.%d.%d",
- 			&_kernel_major,
- 			&_kernel_minor,
--			&_kernel_release) != 3) {
-+			&_kernel_release);
-+
-+	if (parts == 1 && _kernel_major >= 3) {
-+		_kernel_minor = 0;
-+		_kernel_release = 0;
-+	} else if (parts == 2 && _kernel_major >= 3) {
-+		_kernel_release = 0;
-+	} else if (parts != 3) {
- 		log_error("Could not determine kernel version used.");
- 		return 0;
- 	}
--- 
-1.7.5.3
+-TARGETS += vgtest.t percent.t
++TARGETS += vgtest.t percent.t pe_start.t
+ endif
+ 
+ LVMLIBS = @LVM2APP_LIB@ -ldevmapper
 
 
