@@ -1,36 +1,58 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Jun 2011 12:08:43 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20110606120843.13575.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue,  7 Jun 2011 18:16:26 +0200
+Subject: [PATCH] Validate mirror segments size
+Message-ID: <1307463386-25210-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-06-06 12:08:42
+Currently some operation with striped mirrors lead
+to corrupted metadata, this patch just add detection of such
+situation.
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+Example:
+# lvcreate -i2 -l10 -n lvs vg_test
+# lvconvert -m1 vg_test/lvs
 
-Log message:
-	missing space in mesg
+# lvreduce -f -l1 vg_test/lvs
+  Reducing logical volume lvs to 4.00 MiB
+  Segment extent reduction 9not divisible by #stripes 2
+  Logical volume lvs successfully resized
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.259&r2=1.260
+# lvremove vg_test/lvs
+  Segment extent reduction 1not divisible by #stripes 2
+  LV segment lvs:0-4294967295 is incorrectly listed as being used by LV lvs_mimage_0
+  Internal error: LV segments corrupted in lvs_mimage_0.
 
---- LVM2/lib/metadata/lv_manip.c	2011/06/01 19:21:04	1.259
-+++ LVM2/lib/metadata/lv_manip.c	2011/06/06 12:08:42	1.260
-@@ -418,7 +418,7 @@
- 	if (seg_is_striped(seg)) {
- 		if (reduction % seg->area_count) {
- 			log_error("Segment extent reduction %" PRIu32
--				  "not divisible by #stripes %" PRIu32,
-+				  " not divisible by #stripes %" PRIu32,
- 				  reduction, seg->area_count);
- 			return 0;
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/metadata/merge.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index 3b8895c..8de9ef4 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -204,6 +204,16 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
+ 					inc_error_count;
+ 				}
+ 			}
++
++			if (complete_vg && seg_is_mirrored(seg) &&
++			    seg_type(seg, s) == AREA_LV &&
++			    seg_lv(seg, s)->le_count != seg->area_len) {
++				log_error("LV %s: mirrored LV segment %u has "
++					  "wrong size %u (should be %u).",
++					  lv->name, s, seg_lv(seg, s)->le_count,
++					  seg->area_len);
++				inc_error_count;
++			}
  		}
+ 
+ 		le += seg->len;
+-- 
+1.7.5.3
 
 
