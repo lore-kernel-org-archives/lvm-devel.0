@@ -1,72 +1,63 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 8 Jun 2011 08:49:54 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/lvm-file.c
-Message-ID: <20110608084954.2300.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed,  8 Jun 2011 20:21:26 +0200
+Subject: [PATCH] Fix dmsetup table output (different format in 2.02.85)
+Message-ID: <1307557286-4803-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-06-08 08:49:54
+In previous versions < 2.02.85 dmsetup table <dev>
+produced just dmsetup table, no device.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/misc       : lvm-file.c 
+# dmsetup table abc
+0 100 zero
 
-Log message:
-	Fix create_temp_name to replace any '/' found in the hostname with '?'.
-	
-	There's a possibility someone will use the '/' in the hostname. Since we
-	generate a temporary file name (path) including the hostname, any '/' would
-	be ambiguous.
-	
-	We can always set such hostname using 'sethostname' from unistd.h. But the
-	'hostname' command already includes the check and removes the '/' char.
-	However, some old versions still allow that.
-	See: https://bugzilla.redhat.com/show_bug.cgi?id=711445.
-	
-	Since this is only a temporary name and the possibility of this error is
-	quite negligible, we don't need any complex escape sequence here, just a
-	simple char replace.
+Now is the output changed to:
+# dmsetup table abc
+abc: 0 100 zero
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2006&r2=1.2007
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+It should be only for all and multiple devices, not for one.
 
---- LVM2/WHATS_NEW	2011/06/02 09:02:03	1.2006
-+++ LVM2/WHATS_NEW	2011/06/08 08:49:53	1.2007
-@@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Fix create_temp_name to replace any '/' found in the hostname with '?'.
-   Always use append to file in lvmdump (selinux policy - no file truncation).
-   Propagate test mode to clvmd to skip activation and changes to held locks.
-   Defer writing PV labels to vg_write.
---- LVM2/lib/misc/lvm-file.c	2009/07/15 20:02:47	1.27
-+++ LVM2/lib/misc/lvm-file.c	2011/06/08 08:49:54	1.28
-@@ -35,6 +35,7 @@
- 	int i, num;
- 	pid_t pid;
- 	char hostname[255];
-+	char *p;
- 	struct flock lock = {
- 		.l_type = F_WRLCK,
- 		.l_whence = 0,
-@@ -48,6 +49,12 @@
- 		log_sys_error("gethostname", "");
- 		strcpy(hostname, "nohostname");
- 	}
-+	else {
-+		/* Replace any '/' with '?' found in the hostname. */
-+		p = hostname;
-+		while ((p = strchr(p, '/')))
-+			*p = '?';
-+	}
+It breaks at least cryptsetup test suite, I guess there
+are more problems.
+
+Patch somehow workarounds it, I have no idea what was the intention
+for this change.
+I guess even Alasdair should use patch review process sometimes :-p
+
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ tools/dmsetup.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 2a8e5a6..a2a4b30 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1590,7 +1590,7 @@ static int _status(CMD_ARGS)
+ 			   _switches[VERBOSE_ARG]) {
+ 			if (!matched && _switches[VERBOSE_ARG])
+ 				_display_info(dmt);
+-			if (multiple_devices && !_switches[VERBOSE_ARG])
++			if (multiple_devices > 1 && !_switches[VERBOSE_ARG])
+ 				printf("%s: ", name);
+ 			if (target_type) {
+ 				/* Suppress encryption key */
+@@ -3412,7 +3412,10 @@ int main(int argc, char **argv)
+ 	#endif
  
- 	for (i = 0; i < 20; i++, num++) {
- 
+       doit:
+-	multiple_devices = (argc > 1);
++	if (argc > 1)
++		multiple_devices = (argc > 2) ? 2 : 1;
++	else
++		multiple_devices = 0;
+ 	do {
+ 		if (!cmd->fn(cmd, argc--, argv++, NULL, multiple_devices)) {
+ 			fprintf(stderr, "Command failed\n");
+-- 
+1.7.5.3
 
 
