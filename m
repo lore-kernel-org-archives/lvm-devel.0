@@ -1,58 +1,72 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue,  7 Jun 2011 18:16:26 +0200
-Subject: [PATCH] Validate mirror segments size
-Message-ID: <1307463386-25210-1-git-send-email-mbroz@redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 8 Jun 2011 08:49:54 -0000
+Subject: LVM2 ./WHATS_NEW lib/misc/lvm-file.c
+Message-ID: <20110608084954.2300.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Currently some operation with striped mirrors lead
-to corrupted metadata, this patch just add detection of such
-situation.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2011-06-08 08:49:54
 
-Example:
-# lvcreate -i2 -l10 -n lvs vg_test
-# lvconvert -m1 vg_test/lvs
+Modified files:
+	.              : WHATS_NEW 
+	lib/misc       : lvm-file.c 
 
-# lvreduce -f -l1 vg_test/lvs
-  Reducing logical volume lvs to 4.00 MiB
-  Segment extent reduction 9not divisible by #stripes 2
-  Logical volume lvs successfully resized
+Log message:
+	Fix create_temp_name to replace any '/' found in the hostname with '?'.
+	
+	There's a possibility someone will use the '/' in the hostname. Since we
+	generate a temporary file name (path) including the hostname, any '/' would
+	be ambiguous.
+	
+	We can always set such hostname using 'sethostname' from unistd.h. But the
+	'hostname' command already includes the check and removes the '/' char.
+	However, some old versions still allow that.
+	See: https://bugzilla.redhat.com/show_bug.cgi?id=711445.
+	
+	Since this is only a temporary name and the possibility of this error is
+	quite negligible, we don't need any complex escape sequence here, just a
+	simple char replace.
 
-# lvremove vg_test/lvs
-  Segment extent reduction 1not divisible by #stripes 2
-  LV segment lvs:0-4294967295 is incorrectly listed as being used by LV lvs_mimage_0
-  Internal error: LV segments corrupted in lvs_mimage_0.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2006&r2=1.2007
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-file.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- lib/metadata/merge.c |   10 ++++++++++
- 1 files changed, 10 insertions(+), 0 deletions(-)
-
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 3b8895c..8de9ef4 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -204,6 +204,16 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
- 					inc_error_count;
- 				}
- 			}
-+
-+			if (complete_vg && seg_is_mirrored(seg) &&
-+			    seg_type(seg, s) == AREA_LV &&
-+			    seg_lv(seg, s)->le_count != seg->area_len) {
-+				log_error("LV %s: mirrored LV segment %u has "
-+					  "wrong size %u (should be %u).",
-+					  lv->name, s, seg_lv(seg, s)->le_count,
-+					  seg->area_len);
-+				inc_error_count;
-+			}
- 		}
+--- LVM2/WHATS_NEW	2011/06/02 09:02:03	1.2006
++++ LVM2/WHATS_NEW	2011/06/08 08:49:53	1.2007
+@@ -1,5 +1,6 @@
+ Version 2.02.86 -  
+ =================================
++  Fix create_temp_name to replace any '/' found in the hostname with '?'.
+   Always use append to file in lvmdump (selinux policy - no file truncation).
+   Propagate test mode to clvmd to skip activation and changes to held locks.
+   Defer writing PV labels to vg_write.
+--- LVM2/lib/misc/lvm-file.c	2009/07/15 20:02:47	1.27
++++ LVM2/lib/misc/lvm-file.c	2011/06/08 08:49:54	1.28
+@@ -35,6 +35,7 @@
+ 	int i, num;
+ 	pid_t pid;
+ 	char hostname[255];
++	char *p;
+ 	struct flock lock = {
+ 		.l_type = F_WRLCK,
+ 		.l_whence = 0,
+@@ -48,6 +49,12 @@
+ 		log_sys_error("gethostname", "");
+ 		strcpy(hostname, "nohostname");
+ 	}
++	else {
++		/* Replace any '/' with '?' found in the hostname. */
++		p = hostname;
++		while ((p = strchr(p, '/')))
++			*p = '?';
++	}
  
- 		le += seg->len;
--- 
-1.7.5.3
+ 	for (i = 0; i < 20; i++, num++) {
+ 
 
 
