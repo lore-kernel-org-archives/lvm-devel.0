@@ -1,109 +1,90 @@
 From: Milan Broz <mbroz@redhat.com>
-Date: Thu,  9 Jun 2011 16:30:30 +0200
-Subject: [PATCH 3/4] Fix mirrored stripe reduction.
+Date: Thu,  9 Jun 2011 16:30:31 +0200
+Subject: [PATCH 4/4] Fix dmsetup table output (different format in 2.02.85)
 In-Reply-To: <1307629831-13816-1-git-send-email-mbroz@redhat.com>
 References: <1307629831-13816-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1307629831-13816-3-git-send-email-mbroz@redhat.com>
+Message-ID: <1307629831-13816-4-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch adds check for stripe not only in direct
-LV segment but also in mirror image segment.
+In previous versions < 2.02.85 dmsetup table <dev>
+produced just dmsetup table, no device.
 
-This prevents bugs like:
+# dmsetup table abc
+0 100 zero
 
-# lvcreate -i2 -l10 -n lv vg_test
-# lvconvert -m1 -i1 vg_test/lv
+Now is the output changed to:
+# dmsetup table abc
+abc: 0 100 zero
 
-# lvreduce -f -l1 vg_test/lv
-  WARNING: Reducing active logical volume to 4.00 MiB
-  THIS MAY DESTROY YOUR DATA (filesystem etc.)
-  Reducing logical volume lv to 4.00 MiB
-  Segment extent reduction 9 not divisible by #stripes 2
-  Logical volume lv successfully resized
+It should be only for all and multiple devices, not for one.
 
-# lvremove -f vg_test
-  Segment extent reduction 1 not divisible by #stripes 2
-  LV segment lv:0-4294967295 is incorrectly listed as being used by LV lv_mimage_0
-  Internal error: LV segments corrupted in lv_mimage_0.
+It breaks at least cryptsetup test suite, I guess there
+are more problems.
+
+Patch somehow workarounds it, I have no idea what was the intention
+for this change.
+I guess even Alasdair should use patch review process sometimes :-p
 
 Signed-off-by: Milan Broz <mbroz@redhat.com>
 ---
- test/t-lvconvert-mirror.sh |    8 ++++++++
- tools/lvresize.c           |   34 ++++++++++++++++++++++++++++++----
- 2 files changed, 38 insertions(+), 4 deletions(-)
+ test/t-covercmd.sh |    5 +++++
+ tools/dmsetup.c    |    9 ++++++---
+ 2 files changed, 11 insertions(+), 3 deletions(-)
 
-diff --git a/test/t-lvconvert-mirror.sh b/test/t-lvconvert-mirror.sh
-index 129a4d4..64c407b 100644
---- a/test/t-lvconvert-mirror.sh
-+++ b/test/t-lvconvert-mirror.sh
-@@ -240,3 +240,11 @@ lvconvert -m+1 --mirrorlog disk -i1 $vg/$lv1 $dev4 $dev3:0
- check mirror $vg $lv1 $dev3
- check mirror_no_temporaries $vg $lv1
- check mirror_legs $vg $lv1 3
-+
-+# simple mirrored stripe
-+aux prepare_vg 5
-+lvcreate -i2 -l10 -n $lv1 $vg
-+lvconvert -m1 -i1 $vg/$lv1
-+lvreduce -f -l1 $vg/$lv1
-+lvextend -f -l10 $vg/$lv1
-+lvremove -ff $vg/$lv1
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 30e0bf0..02f1f32 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -305,6 +305,34 @@ static int _adjust_policy_params(struct cmd_context *cmd,
- 	return 1;
- }
+diff --git a/test/t-covercmd.sh b/test/t-covercmd.sh
+index 7843798..8c86388 100755
+--- a/test/t-covercmd.sh
++++ b/test/t-covercmd.sh
+@@ -34,6 +34,11 @@ pvcreate --norestorefile -u $TEST_UUID --metadatacopies 0 $dev5
+ vgcreate -c n $vg $(cat DEVICES)
+ lvcreate -n $lv -l 5 -i5 -I256 $vg
  
-+static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
-+{
-+	uint32_t s;
-+	struct lv_segment *seg_mirr;
++# dmsetup table works
++dmsetup table "$vg-$lv"
++test $(dmsetup table "$vg-$lv" | cut -d' '  -f 3) = "striped"
++test $(dmsetup table "$vg-$lv" "$vg-$lv" | head -n 1 | cut -d:  -f 1) = "$vg-$lv"
 +
-+	/* If segment mirrored, check if images are striped */
-+	if (seg_is_mirrored(seg))
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) != AREA_LV)
-+				continue;
-+			seg_mirr = first_seg(seg_lv(seg, s));
-+
-+			if (seg_is_striped(seg_mirr)) {
-+				seg = seg_mirr;
-+				break;
-+			}
-+		}
-+
-+
-+	if (seg_is_striped(seg)) {
-+		*stripesize = seg->stripe_size;
-+		return seg->area_count;
-+	}
-+
-+	*stripesize = 0;
-+	return 0;
-+}
-+
- static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 		     struct lvresize_params *lp)
- {
-@@ -548,10 +576,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 		dm_list_iterate_items(seg, &lv->segments) {
- 			seg_extents = seg->len;
+ # test *scan and *display tools
+ pvscan
+ vgscan
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 2a8e5a6..0a2e429 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1310,7 +1310,7 @@ static int _process_all(const struct command *cmd, int argc, char **argv, int si
  
--			if (seg_is_striped(seg)) {
--				seg_stripesize = seg->stripe_size;
--				seg_stripes = seg->area_count;
--			}
-+			/* Check for underlying stripe sizes */
-+			seg_stripes = lvseg_get_stripes(seg, &seg_stripesize);
+ 	do {
+ 		names = (struct dm_names *)((char *) names + next);
+-		if (!fn(cmd, argc, argv, names, 1))
++		if (!fn(cmd, argc, argv, names, 2))
+ 			r = 0;
+ 		next = names->next;
+ 	} while (next);
+@@ -1590,7 +1590,7 @@ static int _status(CMD_ARGS)
+ 			   _switches[VERBOSE_ARG]) {
+ 			if (!matched && _switches[VERBOSE_ARG])
+ 				_display_info(dmt);
+-			if (multiple_devices && !_switches[VERBOSE_ARG])
++			if (multiple_devices > 1 && !_switches[VERBOSE_ARG])
+ 				printf("%s: ", name);
+ 			if (target_type) {
+ 				/* Suppress encryption key */
+@@ -3412,7 +3412,10 @@ int main(int argc, char **argv)
+ 	#endif
  
- 			if (seg_is_mirrored(seg))
- 				seg_mirrors = lv_mirror_count(seg->lv);
+       doit:
+-	multiple_devices = (argc > 1);
++	if (argc > 1)
++		multiple_devices = (argc > 2) ? 2 : 1;
++	else
++		multiple_devices = 0;
+ 	do {
+ 		if (!cmd->fn(cmd, argc--, argv++, NULL, multiple_devices)) {
+ 			fprintf(stderr, "Command failed\n");
 -- 
 1.7.5.3
 
