@@ -1,97 +1,70 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 9 Jun 2011 14:26:48 -0000
-Subject: LVM2/test t-topology-support.sh
-Message-ID: <20110609142648.3300.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Thu,  9 Jun 2011 16:30:28 +0200
+Subject: [PATCH 1/4] Fix extent rounding for striped segments.
+Message-ID: <1307629831-13816-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-06-09 14:26:47
+We should never remove more extents than requested by user,
+so round up to next stripe boundary during lvreduce.
 
-Modified files:
-	test           : t-topology-support.sh 
+Also this fixes round to zero sized LV bug:
 
-Log message:
-	Fix topology test.
-	
-	Kernel version is misparsed in Fedora rawhide, just test sysfs file.
-	
-	SCSI_DEBUG_DEV is no longer exported, use provided file instead.
+# lvcreate -i2 -I 64k -l10 -n lvs vg_test
+# lvreduce -f -l1 vg_test/lvs
+  Rounding size (1 extents) down to stripe boundary size for segment (0 extents)
+  WARNING: Reducing active logical volume to 0
+  THIS MAY DESTROY YOUR DATA (filesystem etc.)
+  Reducing logical volume lvs to 0
+  Failed to suspend lvs
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-topology-support.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ test/t-lvextend-percent-extents.sh |    5 +++++
+ tools/lvresize.c                   |   10 ++++++++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
 
---- LVM2/test/t-topology-support.sh	2011/01/05 00:16:20	1.6
-+++ LVM2/test/t-topology-support.sh	2011/06/09 14:26:47	1.7
-@@ -10,22 +10,16 @@
+diff --git a/test/t-lvextend-percent-extents.sh b/test/t-lvextend-percent-extents.sh
+index 24fac60..ecd5a1b 100755
+--- a/test/t-lvextend-percent-extents.sh
++++ b/test/t-lvextend-percent-extents.sh
+@@ -99,3 +99,8 @@ check lv_field $vg/$lv seg_count 2
+ lvreduce -f -l -$(( $pe_count * 1 )) $vg/$lv
+ check lv_field $vg/$lv seg_count 1
  
- which mkfs.ext3 || exit 200
++# do not reduce to 0 extents
++lvremove -f $vg/$lv
++lvcreate -i2 -I 64k -l10 -n $lv $vg
++lvreduce -f -l1 $vg/$lv
++check lv_field $vg/$lv lv_size "8.00m"
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index b9084e6..30e0bf0 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -575,11 +575,17 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+ 		return EINVALID_CMD_LINE;
+ 	}
  
--# Get linux minor version
--linux_minor=$(echo `uname -r` | cut -d'.' -f3 | cut -d'-' -f1)
--
--test $linux_minor -ge 31 || exit 200
--
- . lib/test
+-	if ((lp->stripes > 1)) {
++	if (lp->stripes > 1) {
+ 		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
+ 			stripesize_extents = 1;
  
- check_logical_block_size()
- {
--    local DEV_=$1
--    local LOGICAL_BS=$2
-+    local DEV_=$(cat SCSI_DEBUG_DEV)
-     # Verify logical_block_size - requires Linux >= 2.6.31
-     SYSFS_LOGICAL_BLOCK_SIZE=`echo /sys/block/$(basename $DEV_)/queue/logical_block_size`
-     if [ -f "$SYSFS_LOGICAL_BLOCK_SIZE" ] ; then
- 	ACTUAL_LOGICAL_BLOCK_SIZE=`cat $SYSFS_LOGICAL_BLOCK_SIZE`
--	test $ACTUAL_LOGICAL_BLOCK_SIZE = $LOGICAL_BS
-+	test $ACTUAL_LOGICAL_BLOCK_SIZE = $1
-     fi
- }
- 
-@@ -60,13 +54,21 @@
- PER_DEV_SIZE=34
- DEV_SIZE=$(($NUM_DEVS*$PER_DEV_SIZE))
- 
-+# Test that kernel supports topology
-+aux prepare_scsi_debug_dev $DEV_SIZE
-+if [ ! -e /sys/block/$(basename $(cat SCSI_DEBUG_DEV))/alignment_offset ] ; then
-+	aux cleanup_scsi_debug_dev
-+	exit 200
-+fi
-+aux cleanup_scsi_debug_dev
-+
- # ---------------------------------------------
- # Create "desktop-class" 4K drive
- # (logical_block_size=512, physical_block_size=4096, alignment_offset=0):
- LOGICAL_BLOCK_SIZE=512
- aux prepare_scsi_debug_dev $DEV_SIZE \
-     sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=3
--check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
-+check_logical_block_size $LOGICAL_BLOCK_SIZE
- 
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
- vgcreate -c n $vg $(cat DEVICES)
-@@ -81,7 +83,7 @@
- LOGICAL_BLOCK_SIZE=512
- aux prepare_scsi_debug_dev $DEV_SIZE \
-     sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=3 lowest_aligned=7
--check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
-+check_logical_block_size $LOGICAL_BLOCK_SIZE
- 
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
- vgcreate -c n $vg $(cat DEVICES)
-@@ -96,7 +98,7 @@
- LOGICAL_BLOCK_SIZE=4096
- aux prepare_scsi_debug_dev $DEV_SIZE \
-     sector_size=$LOGICAL_BLOCK_SIZE
--check_logical_block_size $SCSI_DEBUG_DEV $LOGICAL_BLOCK_SIZE
-+check_logical_block_size $LOGICAL_BLOCK_SIZE
- 
- aux prepare_pvs $NUM_DEVS $PER_DEV_SIZE
- vgcreate -c n $vg $(cat DEVICES)
+-		if ((size_rest = seg_size % (lp->stripes * stripesize_extents))) {
++		size_rest = seg_size % (lp->stripes * stripesize_extents);
++		if (size_rest && lp->resize == LV_REDUCE) {
++			log_print("Rounding size (%d extents) up to stripe "
++				  "boundary size for segment (%d extents)",
++				  lp->extents, lp->extents + size_rest);
++			lp->extents = lp->extents + size_rest;
++		} else if (size_rest) {
+ 			log_print("Rounding size (%d extents) down to stripe "
+ 				  "boundary size for segment (%d extents)",
+ 				  lp->extents, lp->extents - size_rest);
+-- 
+1.7.5.3
 
 
