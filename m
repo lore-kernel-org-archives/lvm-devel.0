@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 9 Jun 2011 15:07:41 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
-Message-ID: <20110609150741.9287.qmail@sourceware.org>
+Date: 9 Jun 2011 15:53:01 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20110609155301.19117.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-06-09 15:07:41
+Changes by:	mbroz at sourceware.org	2011-06-09 15:53:00
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm/ioctl    : libdm-iface.c 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Accept kernel version 3 (3.0-rc and similar).
+	Fix another occurrence of linux kernel version check.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.468&r2=1.469
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.92&r2=1.93
 
---- LVM2/WHATS_NEW_DM	2011/04/29 19:05:11	1.468
-+++ LVM2/WHATS_NEW_DM	2011/06/09 15:07:40	1.469
-@@ -1,5 +1,6 @@
- Version 1.02.65 - 
- ==================================
-+  Accept new kernel version 3 formats in initialisation.
- 
- Version 1.02.64 - 29th April 2011
- ==================================
---- LVM2/libdm/ioctl/libdm-iface.c	2011/03/25 23:50:35	1.103
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/06/09 15:07:40	1.104
-@@ -73,9 +73,9 @@
- static unsigned _dm_version_patchlevel = 0;
- static int _log_suppress = 0;
- 
--static int _kernel_major;
--static int _kernel_minor;
--static int _kernel_release;
-+static int _kernel_major = 0;
-+static int _kernel_minor = 0;
-+static int _kernel_release = 0;
- 
- /*
-  * If the kernel dm driver only supports one major number
-@@ -152,6 +152,7 @@
- {
- 	static int _uts_set = 0;
- 	struct utsname _uts;
-+	int parts;
- 
- 	if (_uts_set)
- 		return 1;
-@@ -160,10 +161,14 @@
- 		log_error("uname failed: %s", strerror(errno));
- 		return 0;
- 	}
--	if (sscanf(_uts.release, "%d.%d.%d",
+--- LVM2/libdm/libdm-deptree.c	2011/03/29 20:19:04	1.92
++++ LVM2/libdm/libdm-deptree.c	2011/06/09 15:52:59	1.93
+@@ -1544,13 +1544,20 @@
+ 	int dm_log_userspace = 0;
+ 	struct utsname uts;
+ 	unsigned log_parm_count;
+-	int pos = 0;
++	int pos = 0, parts;
+ 	char logbuf[DM_FORMAT_DEV_BUFSIZE];
+ 	const char *logtype;
+-	unsigned kmaj, kmin, krel;
++	unsigned kmaj = 0, kmin = 0, krel = 0;
 +
-+	parts = sscanf(_uts.release, "%d.%d.%d",
- 			&_kernel_major,
- 			&_kernel_minor,
--			&_kernel_release) != 3) {
-+			&_kernel_release);
-+
++	if (uname(&uts) == -1) {
++		log_error("Cannot read kernel release version.");
++		return 0;
++	}
+ 
+-	if (uname(&uts) == -1 || sscanf(uts.release, "%u.%u.%u", &kmaj, &kmin, &krel) != 3) {
+-		log_error("Cannot read kernel release version");
 +	/* Kernels with a major number of 2 always had 3 parts. */
-+	if (parts < 1 || (_kernel_major < 3 && parts < 3)) {
- 		log_error("Could not determine kernel version used.");
++	parts = sscanf(uts.release, "%u.%u.%u", &kmaj, &kmin, &krel);
++	if (parts < 1 || (kmaj < 3 && parts < 3)) {
++		log_error("Wrong kernel release version %s.", uts.release);
  		return 0;
  	}
+ 
 
 
