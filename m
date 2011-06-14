@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 14 Jun 2011 02:34:19 -0000
-Subject: LVM2/daemons/common daemon-client.h daemon-ser ...
-Message-ID: <20110614023419.2122.qmail@sourceware.org>
+Date: 14 Jun 2011 02:36:39 -0000
+Subject: LVM2/daemons/lvmetad lvmetad-client.h Makefile ...
+Message-ID: <20110614023639.13104.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,333 +10,162 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-06-14 02:34:18
+Changes by:	mornfall at sourceware.org	2011-06-14 02:36:38
 
 Modified files:
-	daemons/common : daemon-client.h daemon-server.c daemon-server.h 
+	daemons/lvmetad: lvmetad-client.h 
 Added files:
-	daemons/common : daemon-client.c daemon-shared.c daemon-shared.h 
+	daemons/lvmetad: Makefile lvmetad-core.c testclient.c 
 
 Log message:
-	Common daemon code: Implement basic socket-based communication infrastructure
-	(both client and server side). The server handles each connection in a separate
-	thread.
+	Add a skeleton for lvmetad, a test client, and a temporary Makefile to build
+	them. These are currently mostly for testing the daemon-common code. LVMetaD
+	functionality is expected to trickle in soon though.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.h.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.h.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/Makefile.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/testclient.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-client.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
-/cvs/lvm2/LVM2/daemons/common/daemon-client.c,v  -->  standard output
+/cvs/lvm2/LVM2/daemons/lvmetad/Makefile,v  -->  standard output
 revision 1.1
---- LVM2/daemons/common/daemon-client.c
-+++ -	2011-06-14 02:34:19.031404000 +0000
-@@ -0,0 +1,54 @@
-+#include "daemon-client.h"
-+#include "daemon-shared.h"
-+#include <sys/un.h>
-+#include <sys/socket.h>
-+#include <string.h>
-+#include <stdio.h>
-+#include <assert.h>
+--- LVM2/daemons/lvmetad/Makefile
++++ -	2011-06-14 02:36:38.688218000 +0000
+@@ -0,0 +1,26 @@
++#
++# WARNING
++#
++# This is a temporary Makefile. You need to edit the IPATH/LPATH variables to
++# point to build-dir of LVM2. You may then just run "make" to build the lvmetad
++# binary and the test client.
++#
 +
-+daemon_handle daemon_open(daemon_info i) {
-+	daemon_handle h;
-+	struct sockaddr_un sockaddr;
-+	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
-+		perror("socket");
-+		goto error;
-+	}
-+	memset(&sockaddr, 0, sizeof(sockaddr));
-+	fprintf(stderr, "connecting to %s\n", i.socket);
-+	strcpy(sockaddr.sun_path, i.socket);
-+	sockaddr.sun_family = AF_UNIX;
-+	if (connect(h.socket_fd,(struct sockaddr *) &sockaddr, sizeof(sockaddr))) {
-+		perror("connect");
-+		goto error;
-+	}
-+	h.protocol = 0;
-+	return h;
-+error:
-+	if (h.socket_fd >= 0)
-+		close(h.socket_fd);
-+	h.socket_fd = -1;
-+	return h;
-+}
++SHARED = ../common/daemon-shared.c
++CLIENT = ../common/daemon-client.c $(SHARED)
++SERVER = ../common/daemon-server.c $(SHARED)
++SHARED_H = ../common/daemon-shared.h
++CLIENT_H = ../common/daemon-client.h $(SHARED_H)
++SERVER_H = ../common/daemon-server.h $(SHARED_H)
 +
-+daemon_reply daemon_send(daemon_handle h, daemon_request rq)
++LIBS = -ldevmapper -lpthread
++IPATH = -I../common -I/srv/build/lvm2/cvs-lvmetad/default/include
++LPATH = -L/srv/build/lvm2/cvs-lvmetad/default/libdm
++
++all: testclient lvmetad
++
++testclient: testclient.c $(CLIENT_H) $(CLIENT)
++	gcc -g testclient.c $(CLIENT) $(IPATH) $(LPATH) $(LIBS) -o testclient
++
++lvmetad: lvmetad-core.c ../common/daemon-server.c ../common/daemon-server.h ../common/daemon-shared.h ../common/daemon-shared.c
++	gcc -g lvmetad-core.c $(SERVER) $(IPATH) $(LPATH) $(LIBS) -o lvmetad
+/cvs/lvm2/LVM2/daemons/lvmetad/lvmetad-core.c,v  -->  standard output
+revision 1.1
+--- LVM2/daemons/lvmetad/lvmetad-core.c
++++ -	2011-06-14 02:36:38.790300000 +0000
+@@ -0,0 +1,76 @@
++#include "metadata-exported.h"
++#include "../common/daemon-server.h"
++
++typedef struct {
++} lvmetad_state;
++
++static response handler(daemon_state s, client_handle h, request r)
 +{
-+	daemon_reply reply;
-+	assert(h.socket_fd >= 0);
-+
-+	if (!rq.buffer) {
-+		/* TODO: build the buffer from rq.cft */
-+	}
-+
-+	assert(rq.buffer);
-+	write_buffer(h.socket_fd, rq.buffer, strlen(rq.buffer));
-+
-+	if (read_buffer(h.socket_fd, &reply.buffer)) {
-+		/* TODO: parse reply.buffer into reply.cft */
-+	} else
-+		reply.error = 1;
-+
-+	return reply;
++	response res;
++	fprintf(stderr, "handling client request: %s\n", r.buffer);
++	res.error = 1;
++	res.buffer = strdup("hey hey.\n\n");
++	return res;
 +}
 +
-+void daemon_close(daemon_handle h) {
-+}
-/cvs/lvm2/LVM2/daemons/common/daemon-shared.c,v  -->  standard output
-revision 1.1
---- LVM2/daemons/common/daemon-shared.c
-+++ -	2011-06-14 02:34:19.142467000 +0000
-@@ -0,0 +1,68 @@
-+#include <errno.h>
-+#include <stdio.h>
-+#include <malloc.h>
-+#include <string.h>
++static int setup_post(daemon_state *s)
++{
++	lvmetad_state *ls = s->private;
 +
-+/*
-+ * Read a single message from a (socket) filedescriptor. Messages are delimited
-+ * by blank lines. This call will block until all of a message is received. The
-+ * memory will be allocated from heap. Upon error, all memory is freed and the
-+ * buffer pointer is set to NULL.
-+ */
-+int read_buffer(int fd, char **buffer) {
-+	int bytes = 0;
-+	int buffersize = 32;
-+	*buffer = malloc(buffersize + 1);
++	/* if (ls->initial_registrations)
++	   _process_initial_registrations(ds->initial_registrations); */
 +
-+	while (1) {
-+		int result = read(fd, (*buffer) + bytes, buffersize - bytes);
-+		if (result > 0)
-+			bytes += result;
-+		if (result == 0)
-+			goto fail; /* we should never encounter EOF here */
-+		if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-+			goto fail;
-+
-+		if (bytes == buffersize) {
-+			buffersize += 1024;
-+			char *new = realloc(*buffer, buffersize + 1);
-+			if (new)
-+				*buffer = new;
-+			else
-+				goto fail;
-+		} else {
-+			(*buffer)[bytes] = 0;
-+			char *end;
-+			if ((end = strstr((*buffer) + bytes - 2, "\n\n"))) {
-+				*end = 0;
-+				break; /* success, we have the full message now */
-+			}
-+			/* TODO call select here if we encountered EAGAIN/EWOULDBLOCK */
-+		}
-+	}
 +	return 1;
-+fail:
-+	free(*buffer);
-+	*buffer = NULL;
-+	return 0;
 +}
 +
-+/*
-+ * Write a buffer to a filedescriptor. Keep trying. Blocks (even on
-+ * SOCK_NONBLOCK) until all of the write went through.
-+ *
-+ * TODO use select on EWOULDBLOCK/EAGAIN to avoid useless spinning
-+ */
-+int write_buffer(int fd, char *buffer, int length) {
-+	int written = 0;
-+	while (1) {
-+		int result = write(fd, buffer + written, length - written);
-+		if (result > 0)
-+			written += result;
-+		if (result < 0 && errno != EWOULDBLOCK && errno != EAGAIN)
-+			break; /* too bad */
-+		if (written == length)
-+			return 1; /* done */
-+	}
-+	return 0;
++static void usage(char *prog, FILE *file)
++{
++	fprintf(file, "Usage:\n"
++		"%s [-V] [-h] [-d] [-d] [-d] [-f]\n\n"
++		"   -V       Show version of lvmetad\n"
++		"   -h       Show this help information\n"
++		"   -d       Log debug messages to syslog (-d, -dd, -ddd)\n"
++		"   -R       Replace a running lvmetad instance, loading its data\n"
++		"   -f       Don't fork, run in the foreground\n\n", prog);
 +}
-/cvs/lvm2/LVM2/daemons/common/daemon-shared.h,v  -->  standard output
-revision 1.1
---- LVM2/daemons/common/daemon-shared.h
-+++ -	2011-06-14 02:34:19.240114000 +0000
-@@ -0,0 +1,2 @@
-+int read_buffer(int fd, char **buffer);
-+int write_buffer(int fd, char *buffer, int length);
---- LVM2/daemons/common/daemon-client.h	2011/05/15 11:02:29	1.2
-+++ LVM2/daemons/common/daemon-client.h	2011/06/14 02:34:18	1.3
-@@ -12,6 +12,8 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
-+#include "config.h" // should become part of libdevmapper later
 +
- #ifndef _LVM_DAEMON_COMMON_CLIENT_H
- #define _LVM_DAEMON_COMMON_CLIENT_H
- 
-@@ -28,13 +30,14 @@
- } daemon_info;
- 
- typedef struct {
--	char *request;
-+	char *buffer;
-+	struct config_node *cft;
- } daemon_request;
- 
- typedef struct {
- 	int error; /* 0 for success */
--	char *reply; /* textual reply */
--	struct config_tree *cft; /* parsed reply, if available */
-+	char *buffer; /* textual reply */
-+	struct config_node *cft; /* parsed reply, if available */
- } daemon_reply;
- 
- /*
---- LVM2/daemons/common/daemon-server.c	2011/05/15 11:02:29	1.3
-+++ LVM2/daemons/common/daemon-server.c	2011/06/14 02:34:18	1.4
-@@ -107,8 +107,9 @@
- 		fprintf(stderr, "setting CLOEXEC on socket fd %d failed: %s\n", fd, strerror(errno));
- 	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
- 
-+	fprintf(stderr, "creating %s\n", s.socket_path);
- 	memset(&sockaddr, 0, sizeof(sockaddr));
--	memcpy(sockaddr.sun_path, s.socket_path, strlen(s.socket_path));
-+	strcpy(sockaddr.sun_path, s.socket_path);
- 	sockaddr.sun_family = AF_UNIX;
- 
- 	if (bind(fd, (struct sockaddr *) &sockaddr, sizeof(sockaddr))) {
-@@ -128,6 +129,7 @@
- error:
- 	if (fd >= 0) {
- 		close(fd);
-+		unlink(s.socket_path);
- 		fd = -1;
- 	}
- 	goto out;
-@@ -198,6 +200,60 @@
- 	setsid();
- }
- 
-+struct thread_baton {
++int main(int argc, char *argv[])
++{
++	signed char opt;
 +	daemon_state s;
-+	client_handle client;
-+};
++	lvmetad_state ls;
++	int _restart = 0;
 +
-+void *client_thread(void *baton)
-+{
-+	struct thread_baton *b = baton;
-+	request req;
-+	while (1) {
-+		if (!read_buffer(b->client.socket_fd, &req.buffer))
-+			goto fail;
++	s.private = &ls;
++	s.setup_post = setup_post;
++	s.handler = handler;
++	s.socket_path = "/var/run/lvm/lvmetad.socket";
++	s.pidfile = "/var/run/lvm/lvmetad.pid";
 +
-+		/* TODO parse the buffer into req.cft */
-+		response res = b->s.handler(b->s, b->client, req);
-+
-+		if (!res.buffer) {
-+			/* TODO fill in the buffer from res.cft */
++	while ((opt = getopt(argc, argv, "?fhVdR")) != EOF) {
++		switch (opt) {
++		case 'h':
++			usage(argv[0], stdout);
++			exit(0);
++		case '?':
++			usage(argv[0], stderr);
++			exit(0);
++		case 'R':
++			_restart++;
++			break;
++		case 'f':
++			s.foreground = 1;
++			break;
++		case 'd':
++			s.log_level++;
++			break;
++		case 'V':
++			printf("lvmetad version 0\n");
++			exit(1);
++			break;
 +		}
-+
-+		write_buffer(b->client.socket_fd, res.buffer, strlen(res.buffer));
-+
-+		free(res.buffer);
-+		free(req.buffer);
 +	}
-+fail:
-+	/* TODO what should we really do here? */
-+	return NULL;
++
++	daemon_start(s);
++	return 0;
 +}
+/cvs/lvm2/LVM2/daemons/lvmetad/testclient.c,v  -->  standard output
+revision 1.1
+--- LVM2/daemons/lvmetad/testclient.c
++++ -	2011-06-14 02:36:38.888671000 +0000
+@@ -0,0 +1,12 @@
++#include "lvmetad-client.h"
 +
-+int handle_connect(daemon_state s)
-+{
-+	struct sockaddr_un sockaddr;
-+	client_handle client;
-+	socklen_t sl = sizeof(sockaddr);
-+	int client_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
-+	if (client_fd < 0)
-+		return 0;
-+
-+	struct thread_baton *baton = malloc(sizeof(struct thread_baton));
-+	if (!baton)
-+		return 0;
-+
-+	client.socket_fd = client_fd;
-+	client.read_buf = 0;
-+	client.private = 0;
-+	baton->s = s;
-+	baton->client = client;
-+
-+	if (pthread_create(&baton->client.thread_id, NULL, client_thread, baton))
-+		return 0;
-+	return 1;
++int main() {
++	daemon_handle h = lvmetad_open();
++	daemon_request rq = { .buffer= "hello worldn\n" };
++	int i;
++	for (i = 0; i < 5; ++i ) {
++		daemon_reply reply = daemon_send(h, rq);
++		fprintf(stderr, "daemon says: %s\n", reply.buffer);
++	}
++	return 0;
 +}
-+
- void daemon_start(daemon_state s)
- {
- 	int failed = 0;
-@@ -230,6 +286,8 @@
- 	signal(SIGINT, &_exit_handler);
- 	signal(SIGHUP, &_exit_handler);
- 	signal(SIGQUIT, &_exit_handler);
-+	signal(SIGTERM, &_exit_handler);
-+	signal(SIGPIPE, SIG_IGN);
- 
- #ifdef linux
- 	if (s.avoid_oom && !_set_oom_adj(OOM_DISABLE) && !_set_oom_adj(OOM_ADJUST_MIN))
-@@ -247,9 +305,20 @@
- 		kill(getppid(), SIGTERM);
- 
- 	while (!_shutdown_requested && !failed) {
--		/* TODO: do work */
-+		int status;
-+		fd_set in;
-+		FD_ZERO(&in);
-+		FD_SET(s.socket_fd, &in);
-+		if (select(FD_SETSIZE, &in, NULL, NULL, NULL) < 0 && errno != EINTR)
-+			perror("select error");
-+		if (FD_ISSET(s.socket_fd, &in))
-+			if (!handle_connect(s))
-+				syslog(LOG_ERR, "Failed to handle a client connection.");
- 	}
- 
-+	if (s.socket_fd >= 0)
-+		unlink(s.socket_path);
-+
- 	syslog(LOG_NOTICE, "%s shutting down", s.name);
- 	closelog();
- 	remove_lockfile(s.pidfile);
---- LVM2/daemons/common/daemon-server.h	2011/05/15 11:02:29	1.4
-+++ LVM2/daemons/common/daemon-server.h	2011/06/14 02:34:18	1.5
-@@ -13,6 +13,7 @@
-  */
+--- LVM2/daemons/lvmetad/lvmetad-client.h	2011/06/02 08:58:05	1.2
++++ LVM2/daemons/lvmetad/lvmetad-client.h	2011/06/14 02:36:38	1.3
+@@ -16,6 +16,7 @@
+ #define _LVM_LVMETAD_CLIENT_H
  
  #include "daemon-client.h"
-+#include "config.h" // XXX will be in libdevmapper.h later
++#include "metadata-exported.h"
  
- #ifndef _LVM_DAEMON_COMMON_SERVER_H
- #define _LVM_DAEMON_COMMON_SERVER_H
-@@ -25,12 +26,14 @@
- } client_handle;
+ /* Different types of replies we may get from lvmetad. */
  
- typedef struct {
--	struct config_tree *cft;
-+	struct config_node *cft;
-+	char *buffer;
- } request;
- 
- typedef struct {
- 	int error;
--	struct config_tree *cft;
-+	struct config_node *cft;
-+	char *buffer;
- } response;
- 
- struct daemon_state;
 
 
