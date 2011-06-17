@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 17 Jun 2011 14:30:59 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/f ...
-Message-ID: <20110617143059.11769.qmail@sourceware.org>
+Date: 17 Jun 2011 14:39:11 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/import.c lib/ ...
+Message-ID: <20110617143911.4873.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,79 +10,76 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-06-17 14:30:58
+Changes by:	zkabelac at sourceware.org	2011-06-17 14:39:10
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/activate   : activate.c 
-	lib/format_text: flags.c 
-	lib/metadata   : metadata-exported.h metadata.h 
+	lib/format_text: import.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Remove unused internal flag ACTIVATE_EXCL from the code
+	Code move of vg_mark_partial() up in stack
+	
+	It's useful to keep the partial flag cached - so just move the call
+	for vg_mark_partil_lvs() into import_vg_from_config_tree() so it gets
+	evaluated before it goes through the lvmcache.
+	
+	This patch should not present any functional change.
+	
+	Note: It is rather temporal solution - proper place is probably inside the
+	'read' call back - but needs some more discussion.
+	For now using this minor hack.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2020&r2=1.2021
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.201&r2=1.202
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.193&r2=1.194
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.245&r2=1.246
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2021&r2=1.2022
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.458&r2=1.459
 
---- LVM2/WHATS_NEW	2011/06/17 14:27:34	1.2020
-+++ LVM2/WHATS_NEW	2011/06/17 14:30:58	1.2021
+--- LVM2/WHATS_NEW	2011/06/17 14:30:58	1.2021
++++ LVM2/WHATS_NEW	2011/06/17 14:39:10	1.2022
 @@ -1,5 +1,6 @@
  Version 2.02.86 -  
  =================================
-+  Remove unused internal flag ACTIVATE_EXCL from the code.
++  Call vg_mark_partial_lvs() before VG structure is returned from the cache.
+   Remove unused internal flag ACTIVATE_EXCL from the code.
    Remove useless test of ACTIVATE_EXCL in lv_add_mirrors() clustered code path.
    Use lv_activate_opts struct instead of MERGING status flag.
-   Use lv_activate_opts struct instead of ACTIVATE_EXCL status flag.
---- LVM2/lib/activate/activate.c	2011/06/17 14:24:18	1.201
-+++ LVM2/lib/activate/activate.c	2011/06/17 14:30:58	1.202
-@@ -1293,14 +1293,6 @@
- 		goto out;
+--- LVM2/lib/format_text/import.c	2011/01/10 13:13:42	1.53
++++ LVM2/lib/format_text/import.c	2011/06/17 14:39:10	1.54
+@@ -136,6 +136,7 @@
+ {
+ 	struct volume_group *vg = NULL;
+ 	struct text_vg_version_ops **vsn;
++	int vg_missing;
+ 
+ 	_init_text_import();
+ 
+@@ -148,6 +149,12 @@
+ 		 */
+ 		if (!(vg = (*vsn)->read_vg(fid, cft, 1)))
+ 			stack;
++		else if ((vg_missing = vg_missing_pv_count(vg))) {
++			log_verbose("There are %d physical volumes missing.",
++				    vg_missing);
++			vg_mark_partial_lvs(vg, 1);
++			/* FIXME: move this code inside read_vg() */
++		}
+ 		break;
  	}
  
--	/*
--	 * When targets are activated exclusively in a cluster, the
--	 * non-clustered target should be used.  This only happens
--	 * if ACTIVATE_EXCL is set in lv->status.
--	 */
--	if (laopts->exclusive)
--		lv->status |= ACTIVATE_EXCL;
--
- 	if (!_lv_activate_lv(lv, laopts))
- 		goto_out;
+--- LVM2/lib/metadata/metadata.c	2011/06/15 17:45:03	1.458
++++ LVM2/lib/metadata/metadata.c	2011/06/17 14:39:10	1.459
+@@ -2868,11 +2868,6 @@
+ 		else	/* Inconsistent but we can't repair it */
+ 			correct_vg->status &= ~INCONSISTENT_VG;
  
---- LVM2/lib/format_text/flags.c	2011/03/29 12:51:57	1.44
-+++ LVM2/lib/format_text/flags.c	2011/06/17 14:30:58	1.45
-@@ -62,7 +62,6 @@
- 	{VIRTUAL, NULL, 0},
- 	{SNAPSHOT, NULL, 0},
- 	{MERGING, NULL, 0},
--	{ACTIVATE_EXCL, NULL, 0},
- 	{CONVERTING, NULL, 0},
- 	{PARTIAL_LV, NULL, 0},
- 	{POSTORDER_FLAG, NULL, 0},
---- LVM2/lib/metadata/metadata-exported.h	2011/06/11 00:03:07	1.193
-+++ LVM2/lib/metadata/metadata-exported.h	2011/06/17 14:30:58	1.194
-@@ -62,7 +62,6 @@
- #define MIRROR_LOG		0x00020000U	/* LV */
- #define MIRROR_IMAGE		0x00040000U	/* LV */
- #define LV_NOTSYNCED		0x00080000U	/* LV */
--//#define ACTIVATE_EXCL		0x00100000U	/* LV - internal use only */
- //#define PRECOMMITTED		0x00200000U	/* VG - internal use only */
- #define CONVERTING		0x00400000U	/* LV */
- 
---- LVM2/lib/metadata/metadata.h	2011/06/15 17:45:03	1.245
-+++ LVM2/lib/metadata/metadata.h	2011/06/17 14:30:58	1.246
-@@ -71,7 +71,6 @@
- //#define MIRROR_LOG		0x00020000U	/* LV */
- //#define MIRROR_IMAGE		0x00040000U	/* LV */
- //#define MIRROR_NOTSYNCED	0x00080000U	/* LV */
--#define ACTIVATE_EXCL		0x00100000U	/* LV - internal use only */
- #define PRECOMMITTED		0x00200000U	/* VG - internal use only */
- //#define CONVERTING		0x00400000U	/* LV */
- 
+-		if (vg_missing_pv_count(correct_vg)) {
+-			log_verbose("There are %d physical volumes missing.",
+-				    vg_missing_pv_count(correct_vg));
+-			vg_mark_partial_lvs(correct_vg, 1);
+-		}
+ 		return correct_vg;
+ 	} else {
+ 		free_vg(correct_vg);
 
 
