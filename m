@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 17 Jun 2011 14:50:56 -0000
-Subject: LVM2 ./WHATS_NEW doc/example.conf.in lib/activ ...
-Message-ID: <20110617145056.10755.qmail@sourceware.org>
+Date: 17 Jun 2011 14:55:52 -0000
+Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
+Message-ID: <20110617145552.11785.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,181 +10,122 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-06-17 14:50:54
+Changes by:	prajnoha at sourceware.org	2011-06-17 14:55:51
 
 Modified files:
-	.              : WHATS_NEW 
-	doc            : example.conf.in 
-	lib/activate   : dev_manager.c 
-	lib/commands   : toolcontext.c toolcontext.h 
-	lib/config     : defaults.h 
-	tools          : lvmcmdline.c 
+	.              : WHATS_NEW_DM 
+	tools          : dmsetup.c 
 
 Log message:
-	Disable udev fallback by default and add activation/udev_fallback to lvm.conf.
-	
-	We've used udev fallback code till now to check whether udev
-	created/removed the entries in /dev correctly and if not,
-	a repair was done (giving a warning messagea about that).
-	
-	This patch adds a possibility to enable this additional check
-	and subsequent fallback only when required (debugging purposes
-	mostly) and trust udev completely.
-	
-	So let's disable the fallback code by default and add a new
-	configuration option "activation/udev_fallback".
-	
-	(The original code for creating the nodes will still be used
-	in case the device directory that is set in lvm.conf differs
-	from the one that udev uses and also when activation/udev_rules
-	is set to 0 - otherwise we would end up with no nodes/symlinks
-	at all)
+	Disable udev fallback and add --udevfallback option to dmsetup.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2022&r2=1.2023
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.219&r2=1.220
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.119&r2=1.120
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.h.diff?cvsroot=lvm2&r1=1.43&r2=1.44
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.75&r2=1.76
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.142&r2=1.143
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.472&r2=1.473
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.160&r2=1.161
 
---- LVM2/WHATS_NEW	2011/06/17 14:39:10	1.2022
-+++ LVM2/WHATS_NEW	2011/06/17 14:50:53	1.2023
+--- LVM2/WHATS_NEW_DM	2011/06/13 03:32:45	1.472
++++ LVM2/WHATS_NEW_DM	2011/06/17 14:55:51	1.473
 @@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Disable udev fallback by default and add activation/udev_fallback to lvm.conf.
-   Call vg_mark_partial_lvs() before VG structure is returned from the cache.
-   Remove unused internal flag ACTIVATE_EXCL from the code.
-   Remove useless test of ACTIVATE_EXCL in lv_add_mirrors() clustered code path.
---- LVM2/doc/example.conf.in	2011/04/28 17:33:35	1.25
-+++ LVM2/doc/example.conf.in	2011/06/17 14:50:53	1.26
-@@ -428,6 +428,13 @@
-     # while any logical volumes are active.
-     udev_rules = 1
+ Version 1.02.65 - 
+ ==================================
++  Disable udev fallback by default and add --udevfallback option to dmsetup.
+   Warn if a table is loaded while a device is known to be in suspended state.
+   Add dm_get_suspended_counter() for number of devs in suspended state by lib.
+   Fix "all" report field prefix matching to include label fields with pv_all.
+--- LVM2/tools/dmsetup.c	2011/04/22 11:56:41	1.160
++++ LVM2/tools/dmsetup.c	2011/06/17 14:55:51	1.161
+@@ -135,6 +135,7 @@
+ 	UDEVCOOKIE_ARG,
+ 	NOUDEVRULES_ARG,
+ 	NOUDEVSYNC_ARG,
++	UDEVFALLBACK_ARG,
+ 	OPTIONS_ARG,
+ 	READAHEAD_ARG,
+ 	ROWS_ARG,
+@@ -648,11 +649,11 @@
+ 	if (!_set_task_add_node(dmt))
+                 goto out;
  
-+    # Set to 1 to enable udev fallback. This will enable additional checks and
-+    # possible repairs done on entries in the device directory after udev has
-+    # completed processing the events. This is normally not needed if udev
-+    # works correctly but it may be used in some problematic situations or
-+    # for debugging purposes.
-+    udev_fallback = 0
+-	if (_udev_cookie) {
++	if (_udev_cookie)
+ 		cookie = _udev_cookie;
+-		if (_udev_only)
+-			udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+-	}
 +
-     # How to fill in missing stripes if activating an incomplete volume.
-     # Using "error" will make inaccessible parts of the device return
-     # I/O errors on access.  You can instead use a device path, in which 
---- LVM2/lib/activate/dev_manager.c	2011/06/17 14:22:48	1.219
-+++ LVM2/lib/activate/dev_manager.c	2011/06/17 14:50:53	1.220
-@@ -874,6 +874,13 @@
- 	uint16_t udev_flags = 0;
- 
- 	/*
-+	 * Instruct also libdevmapper to disable udev
-+	 * fallback in accordance to LVM2 settings.
-+	 */
-+	if (!dm->cmd->current_settings.udev_fallback)
++	if (_udev_only)
 +		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+ 
+ 	if (!dm_task_set_cookie(dmt, &cookie, udev_flags) ||
+ 	    !dm_task_run(dmt))
+@@ -702,11 +703,11 @@
+ 		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
+ 			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+ 
+-	if (_udev_cookie) {
++	if (_udev_cookie)
+ 		cookie = _udev_cookie;
+-		if (_udev_only)
+-			udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+-	}
 +
-+	/*
- 	 * Is this top-level and visible device?
- 	 * If not, create just the /dev/mapper content.
- 	 */
-@@ -1584,6 +1591,10 @@
- 	const char *name;
- 	int r = 1;
++	if (_udev_only)
++		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
  
-+	/* Nothing to do if udev fallback is disabled. */
-+	if (!dm->cmd->current_settings.udev_fallback)
-+		return 1;
+ 	if (!dm_task_set_cookie(dmt, &cookie, udev_flags) ||
+ 	    !dm_task_run(dmt))
+@@ -1006,7 +1007,7 @@
+ 	else
+ 		dirs_diff = strcmp(dev_dir, udev_dev_dir);
+ 
+-	_udev_only = _udev_cookie && !dirs_diff;
++	_udev_only = !dirs_diff && (_udev_cookie || !_switches[UDEVFALLBACK_ARG]);
+ 
+ 	if (dirs_diff) {
+ 		log_debug("The path %s used for creating device nodes that is "
+@@ -1225,11 +1226,11 @@
+ 		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
+ 			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+ 
+-	if (_udev_cookie) {
++	if (_udev_cookie)
+ 		cookie = _udev_cookie;
+-		if (_udev_only)
+-			udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+-	}
 +
- 	while ((child = dm_tree_next_child(&handle, root, 0))) {
- 		if (!(lvlayer = dm_tree_node_get_context(child)))
- 			continue;
-@@ -1626,6 +1637,10 @@
- 	char *vgname, *lvname, *layer;
- 	int r = 1;
++	if (_udev_only)
++		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
  
-+	/* Nothing to do if udev fallback is disabled. */
-+	if (!dm->cmd->current_settings.udev_fallback)
-+		return 1;
-+
- 	while ((child = dm_tree_next_child(&handle, root, 0))) {
- 		if (!dm_split_lvm_name(dm->mem, dm_tree_node_get_name(child), &vgname, &lvname, &layer)) {
- 			r = 0;
---- LVM2/lib/commands/toolcontext.c	2011/05/07 13:50:12	1.119
-+++ LVM2/lib/commands/toolcontext.c	2011/06/17 14:50:54	1.120
-@@ -285,6 +285,21 @@
- 								"activation/udev_sync",
- 								DEFAULT_UDEV_SYNC);
- 
-+	#ifdef UDEV_SYNC_SUPPORT
-+	/*
-+	 * We need udev rules to be applied, otherwise we would end up with no
-+	 * nodes and symlinks! However, we can disable the synchronization itself
-+	 * in runtime and still have only udev to create the nodes and symlinks
-+	 * without any fallback.
-+	 */
-+	cmd->default_settings.udev_fallback = cmd->default_settings.udev_rules ?
-+					find_config_tree_int(cmd, "activation/udev_fallback",
-+							     DEFAULT_UDEV_FALLBACK) : 1;
-+	#else
-+	/* We must use old node/symlink creation code if not compiled with udev support at all! */
-+	cmd->default_settings.udev_fallback = 1;
-+	#endif
-+
- 	cmd->stripe_filler = find_config_tree_str(cmd,
- 						  "activation/missing_stripe_filler",
- 						  DEFAULT_STRIPE_FILLER);
---- LVM2/lib/commands/toolcontext.h	2011/05/07 13:50:12	1.43
-+++ LVM2/lib/commands/toolcontext.h	2011/06/17 14:50:54	1.44
-@@ -36,6 +36,7 @@
- 	int read_ahead;		/* DM_READ_AHEAD_NONE or _AUTO */
- 	int udev_rules;
- 	int udev_sync;
-+	int udev_fallback;
- 	int cache_vgmetadata;
- 	const char *msg_prefix;
- 	const char *fmt_name;
---- LVM2/lib/config/defaults.h	2011/04/28 17:33:35	1.75
-+++ LVM2/lib/config/defaults.h	2011/06/17 14:50:54	1.76
-@@ -78,6 +78,7 @@
- #define DEFAULT_READ_AHEAD "auto"
- #define DEFAULT_UDEV_RULES 1
- #define DEFAULT_UDEV_SYNC 0
-+#define DEFAULT_UDEV_FALLBACK 0
- #define DEFAULT_EXTENT_SIZE 4096	/* In KB */
- #define DEFAULT_MAX_PV 0
- #define DEFAULT_MAX_LV 0
---- LVM2/tools/lvmcmdline.c	2011/05/07 13:50:11	1.142
-+++ LVM2/tools/lvmcmdline.c	2011/06/17 14:50:54	1.143
-@@ -952,7 +952,7 @@
- 	cmd->handles_missing_pvs = 0;
- }
- 
--static int _set_udev_checking(struct cmd_context *cmd)
-+static int _set_udev_fallback(struct cmd_context *cmd)
- {
- #ifdef UDEV_SYNC_SUPPORT
- 	const char *udev_dev_dir;
-@@ -984,6 +984,9 @@
- 			   cmd->dev_dir, udev_dev_dir);
- 		dm_udev_set_checking(0);
- 		init_udev_checking(0);
-+
-+		/* Device directories differ - we must use the fallback code! */
-+		cmd->current_settings.udev_fallback = 1;
- 	}
- 
- #endif
-@@ -1088,7 +1091,7 @@
- 	log_debug("O_DIRECT will be used");
- #endif
- 
--	if (!_set_udev_checking(cmd))
-+	if (!_set_udev_fallback(cmd))
- 		goto_out;
- 
- 	if ((ret = _process_common_commands(cmd))) {
+ 	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, udev_flags))
+ 		goto out;
+@@ -2744,8 +2745,8 @@
+ 	fprintf(out, "dmsetup [--version] [-h|--help [-c|-C|--columns]]\n"
+ 		"        [-v|--verbose [-v|--verbose ...]]\n"
+ 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
+-		"        [--udevcookie] [--noudevrules] [--noudevsync] [-y|--yes]\n"
+-		"        [--readahead [+]<sectors>|auto|none]\n"
++		"        [--udevcookie] [--noudevrules] [--noudevsync] [--udevfallback]\n"
++		"        [-y|--yes] [--readahead [+]<sectors>|auto|none]\n"
+ 		"        [-c|-C|--columns] [-o <fields>] [-O|--sort <sort_fields>]\n"
+ 		"        [--nameprefixes] [--noheadings] [--separator <separator>]\n\n");
+ 	for (i = 0; _commands[i].name; i++)
+@@ -3115,6 +3116,7 @@
+ 		{"udevcookie", 1, &ind, UDEVCOOKIE_ARG},
+ 		{"noudevrules", 0, &ind, NOUDEVRULES_ARG},
+ 		{"noudevsync", 0, &ind, NOUDEVSYNC_ARG},
++		{"udevfallback", 0, &ind, UDEVFALLBACK_ARG},
+ 		{"options", 1, &ind, OPTIONS_ARG},
+ 		{"readahead", 1, &ind, READAHEAD_ARG},
+ 		{"rows", 0, &ind, ROWS_ARG},
+@@ -3243,6 +3245,8 @@
+ 			_switches[NOUDEVRULES_ARG]++;
+ 		if (ind == NOUDEVSYNC_ARG)
+ 			_switches[NOUDEVSYNC_ARG]++;
++		if (ind == UDEVFALLBACK_ARG)
++			_switches[UDEVFALLBACK_ARG]++;
+ 		if (c == 'G' || ind == GID_ARG) {
+ 			_switches[GID_ARG]++;
+ 			_int_args[GID_ARG] = atoi(optarg);
 
 
