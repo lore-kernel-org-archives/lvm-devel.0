@@ -1,101 +1,90 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 22 Jun 2011 21:31:22 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/a ...
-Message-ID: <20110622213122.1831.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Wed, 22 Jun 2011 16:47:40 -0500
+Subject: [PATCH] Fix to preserve exclusive activation of mirror while up-converting.
+Message-ID: <1308779260.13683.2.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-06-22 21:31:21
+Fix to preserve exclusive activation of mirror while up-converting.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c activate.h 
-	lib/metadata   : mirror.c 
+When an LVM mirror is up-converted (an additional image added), it creates
+a temporary mirror stack.  The lower-level mirror in the stack that is
+created was not being activated exclusively - violating the exclusive nature
+of the original mirror.  We now check for exclusive activation of a mirror
+before converting it, and if found, we ensure that the temporary mirror
+is also exclusively activated.
 
-Log message:
-	Fix issue preventing cluster mirror creation.
-	
-	Mirrors used to be created by first creating a linear device and then adding
-	the other images plus the log.  Now mirrors are created by creating all the
-	images in one go and then adding the log separately.  The new way ran into
-	the condition that cluster mirrors cannot change the log type (in the case
-	of creation, from core -> disk) while the mirror is not active.  (It isn't
-	active because it is in the process of being created.)  The reason this
-	condition is in place is because a remote node may have the mirror active, and
-	we don't want to alter the log underneath it.
-	
-	What we really needed was a way of checking if the mirror was active remotely
-	but not locally, and in that case do not allow a change of the log.  I've added
-	this check, and cluster mirrors can now be created again.
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2023&r2=1.2024
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.202&r2=1.203
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.77&r2=1.78
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.154&r2=1.155
-
---- LVM2/WHATS_NEW	2011/06/17 14:50:53	1.2023
-+++ LVM2/WHATS_NEW	2011/06/22 21:31:21	1.2024
-@@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Fix issue preventing cluster mirror creation.
-   Disable udev fallback by default and add activation/udev_fallback to lvm.conf.
-   Call vg_mark_partial_lvs() before VG structure is returned from the cache.
-   Remove unused internal flag ACTIVATE_EXCL from the code.
---- LVM2/lib/activate/activate.c	2011/06/17 14:30:58	1.202
-+++ LVM2/lib/activate/activate.c	2011/06/22 21:31:21	1.203
-@@ -823,13 +823,11 @@
- 	return _lv_is_active(lv, NULL, NULL);
- }
- 
--/*
--int lv_is_active_locally(struct logical_volume *lv)
-+int lv_is_active_but_not_locally(struct logical_volume *lv)
+Index: LVM2/lib/metadata/lv_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/lv_manip.c
++++ LVM2/lib/metadata/lv_manip.c
+@@ -3096,11 +3096,13 @@ struct logical_volume *insert_layer_for_
+ 					   uint64_t status,
+ 					   const char *layer_suffix)
  {
- 	int l;
--	return _lv_is_active(lv, &l, NULL) && l;
-+	return _lv_is_active(lv, &l, NULL) && !l;
- }
--*/
++	int r;
+ 	struct logical_volume *layer_lv;
+ 	char *name;
+ 	size_t len;
+ 	struct segment_type *segtype;
+ 	struct lv_segment *mapseg;
++	unsigned exclusive = 0;
  
- int lv_is_active_exclusive_locally(struct logical_volume *lv)
- {
---- LVM2/lib/activate/activate.h	2011/06/17 14:14:19	1.77
-+++ LVM2/lib/activate/activate.h	2011/06/22 21:31:21	1.78
-@@ -101,6 +101,7 @@
- int lvs_in_vg_opened(const struct volume_group *vg);
- 
- int lv_is_active(struct logical_volume *lv);
-+int lv_is_active_but_not_locally(struct logical_volume *lv);
- int lv_is_active_exclusive_locally(struct logical_volume *lv);
- int lv_is_active_exclusive_remotely(struct logical_volume *lv);
- 
---- LVM2/lib/metadata/mirror.c	2011/06/17 14:27:35	1.154
-+++ LVM2/lib/metadata/mirror.c	2011/06/22 21:31:21	1.155
-@@ -1857,15 +1857,9 @@
- 		return 0;
+ 	/* create an empty layer LV */
+ 	len = strlen(lv_where->name) + 32;
+@@ -3122,6 +3124,9 @@ struct logical_volume *insert_layer_for_
+ 		return NULL;
  	}
  
--	/*
--	 * We are unable to convert the log of inactive cluster mirrors
--	 * due to the inability to detect whether the mirror is active
--	 * on remote nodes (even though it is inactive on this node)
--	 */
--	if (vg_is_clustered(lv->vg) &&
--	    !(lv_info(cmd, lv, 0, &info, 0, 0) && info.exists)) {
--		log_error("Unable to convert the log of inactive "
--			  "cluster mirror %s", lv->name);
-+	if (lv_is_active_but_not_locally(lv)) {
-+		log_error("Unable to convert the log of a mirror, %s, that is "
-+			  "active remotely but not locally", lv->name);
- 		return 0;
++	if (lv_is_active_exclusive_locally(lv_where))
++		exclusive = 1;
++
+ 	if (lv_is_active(lv_where) && strstr(name, "_mimagetmp")) {
+ 		log_very_verbose("Creating transient LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
+ 
+@@ -3143,8 +3148,15 @@ struct logical_volume *insert_layer_for_
+ 			return NULL;
+ 		}
+ 
+-		if (!activate_lv(cmd, layer_lv)) {
+-			log_error("Failed to resume transient error LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
++		if (exclusive)
++			r = activate_lv_excl(cmd, layer_lv);
++		else
++			r = activate_lv(cmd, layer_lv);
++
++		if (!r) {
++			log_error("Failed to resume transient LV"
++				  " %s for mirror conversion in VG %s.",
++				  name, lv_where->vg->name);
+ 			return NULL;
+ 		}
+ 	}
+Index: LVM2/lib/metadata/mirror.c
+===================================================================
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -419,8 +419,13 @@ static int _delete_lv(struct logical_vol
+ 		}
  	}
  
+-	if (!activate_lv(cmd, lv))
+-		return_0;
++	if (lv_is_active_exclusive_locally(lv)) {
++		if (!activate_lv_excl(cmd, lv))
++			return_0;
++	} else {
++		if (!activate_lv(cmd, lv))
++			return_0;
++	}
+ 
+ 	if (!deactivate_lv(cmd, lv))
+ 		return_0;
+
 
 
