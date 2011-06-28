@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Jun 2011 09:43:28 -0000
-Subject: LVM2/test t-lvcreate-usage.sh
-Message-ID: <20110628094328.14597.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 28 Jun 2011 13:42:16 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20110628134216.15351.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,41 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-06-28 09:43:28
+Changes by:	zkabelac at sourceware.org	2011-06-28 13:42:15
 
 Modified files:
-	test           : t-lvcreate-usage.sh 
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	More readahead tests.
+	Annotate CLVMD_CMD_SYNC_NAMES in decode_cmd
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-usage.sh.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2028&r2=1.2029
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.104&r2=1.105
 
---- LVM2/test/t-lvcreate-usage.sh	2011/01/05 00:16:20	1.19
-+++ LVM2/test/t-lvcreate-usage.sh	2011/06/28 09:43:28	1.20
-@@ -131,11 +131,22 @@
- lvremove -ff $vg
- lvcreate -L 32m -n $lv --readahead none $vg
- check lv_field $vg/$lv lv_read_ahead "0"
-+check lv_field $vg/$lv lv_kernel_read_ahead "0"
- lvremove -ff $vg
- lvcreate -L 32m -n $lv --readahead 8k $vg
- check lv_field $vg/$lv lv_read_ahead "8.00k"
-+check lv_field $vg/$lv lv_kernel_read_ahead "8.00k"
- lvremove -ff $vg
- lvcreate -L 32m -n $lv --readahead auto $vg
- check lv_field $vg/$lv lv_read_ahead "auto"
-+check lv_field $vg/$lv lv_kernel_read_ahead "128.00k"
-+lvremove -ff $vg
-+lvcreate -L 32m -n $lv -i2 --stripesize 16k --readahead auto $vg
-+check lv_field $vg/$lv lv_read_ahead "auto"
-+check lv_field $vg/$lv lv_kernel_read_ahead "128.00k"
-+lvremove -ff $vg
-+lvcreate -L 32m -n $lv -i2 --stripesize 128k --readahead auto $vg
-+check lv_field $vg/$lv lv_read_ahead "auto"
-+check lv_field $vg/$lv lv_kernel_read_ahead "512.00k"
- lvremove -ff $vg
- 
+--- LVM2/WHATS_NEW	2011/06/28 00:23:06	1.2028
++++ LVM2/WHATS_NEW	2011/06/28 13:42:15	1.2029
+@@ -1,5 +1,6 @@
+ Version 2.02.86 -  
+ =================================
++  Annotate CLVMD_CMD_SYNC_NAMES in decode_cmd.
+   Remove enforcement of udev verification when using non-standard /dev location.
+   Fix to preserve exclusive activation of mirror while up-converting.
+   Reject allocation if number of extents is not divisible by area count.
+--- LVM2/daemons/clvmd/clvmd.c	2011/04/08 14:40:18	1.104
++++ LVM2/daemons/clvmd/clvmd.c	2011/06/28 13:42:15	1.105
+@@ -295,6 +295,9 @@
+ 	case CLVMD_CMD_RESTART:
+ 		command = "RESTART";
+ 		break;
++	case CLVMD_CMD_SYNC_NAMES:
++		command = "SYNC_NAMES";
++		break;
+ 	default:
+ 		command = "unknown";
+ 		break;
 
 
