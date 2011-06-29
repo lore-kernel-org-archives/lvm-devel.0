@@ -1,49 +1,59 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue,  9 Dec 2014 09:52:23 +0000 (UTC)
-Subject: master - WHATS_NEW: f94f846 actually fixes DM issue, not LVM issue
-Message-ID: <20141209095223.691896030E@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Jun 2011 14:56:34 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/pv.c man/pvs.8.in
+Message-ID: <20110629145634.14337.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5378a1a63e8a8d89cca9460051d473b7547404f9
-Commit:        5378a1a63e8a8d89cca9460051d473b7547404f9
-Parent:        f94f8463b0d3dddaa0e429123aba673d106f783e
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Dec 9 10:52:07 2014 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Dec 9 10:52:07 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-06-29 14:56:33
 
-WHATS_NEW: f94f846 actually fixes DM issue, not LVM issue
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : pv.c 
+	man            : pvs.8.in 
 
----
- WHATS_NEW    |    1 -
- WHATS_NEW_DM |    1 +
- 2 files changed, 1 insertions(+), 1 deletions(-)
+Log message:
+	Append 'm' attribute to pv_attr for missing PVs.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ff06b7b..9201f36 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,6 +1,5 @@
- Version 2.02.115 -
- =====================================
--  Fix segfault while using --select with regex and --unbuffered for reporting.
-   Fix automatic use of configure --enable-udev-systemd-background-jobs.
-   Correctly rename active split LV with -splitmirrors for raid1.
-   Add report/compact_output to lvm.conf to enable/disable compact report output.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index dcd35fa..02b8045 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2029&r2=1.2030
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvs.8.in.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+
+--- LVM2/WHATS_NEW	2011/06/28 13:42:15	1.2029
++++ LVM2/WHATS_NEW	2011/06/29 14:56:33	1.2030
 @@ -1,5 +1,6 @@
- Version 1.02.93 -
- ====================================
-+  Fix segfault while using selection with regex and unbuffered reporting.
-   Add dm_report_compact_fields to remove empty fields from report output.
-   Remove unimplemented dm_report_set_output_selection from libdevmapper.h.
+ Version 2.02.86 -  
+ =================================
++  Append 'm' attribute to pv_attr for missing PVs.
+   Annotate CLVMD_CMD_SYNC_NAMES in decode_cmd.
+   Remove enforcement of udev verification when using non-standard /dev location.
+   Fix to preserve exclusive activation of mirror while up-converting.
+--- LVM2/lib/metadata/pv.c	2011/02/21 12:33:16	1.9
++++ LVM2/lib/metadata/pv.c	2011/06/29 14:56:33	1.10
+@@ -197,6 +197,7 @@
  
+ 	repstr[0] = (pv->status & ALLOCATABLE_PV) ? 'a' : '-';
+ 	repstr[1] = (pv->status & EXPORTED_VG) ? 'x' : '-';
++	repstr[2] = (pv->status & MISSING_PV) ? 'm' : '-';
+ 	return repstr;
+ }
+ 
+--- LVM2/man/pvs.8.in	2010/06/28 20:34:12	1.13
++++ LVM2/man/pvs.8.in	2011/06/29 14:56:33	1.14
+@@ -59,7 +59,7 @@
+ .IP
+ With --segments, any "pvseg_" prefixes are optional; otherwise any
+ "pv_" prefixes are optional.  Columns mentioned in \fBvgs (8)\fP can also
+-be chosen. The pv_attr bits are: (a)llocatable and e(x)ported.
++be chosen. The pv_attr bits are: (a)llocatable, e(x)ported and (m)issing.
+ .TP
+ .I \-\-segments
+ Produces one line of output for each contiguous allocation of space on each
 
 
