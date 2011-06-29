@@ -1,77 +1,48 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Mon, 15 Dec 2014 23:32:39 +0100
-Subject: [PATCH 3/4] test: Add a test for reports of cache policy & settings.
-In-Reply-To: <1418682760-16427-1-git-send-email-prockai@redhat.com>
-References: <1418682760-16427-1-git-send-email-prockai@redhat.com>
-Message-ID: <1418682760-16427-3-git-send-email-prockai@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 29 Jun 2011 17:05:54 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20110629170554.23557.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- test/shell/lvs-cache.sh | 50 +++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 50 insertions(+)
- create mode 100644 test/shell/lvs-cache.sh
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-06-29 17:05:53
 
-diff --git a/test/shell/lvs-cache.sh b/test/shell/lvs-cache.sh
-new file mode 100644
-index 0000000..6ac5d0d
---- /dev/null
-+++ b/test/shell/lvs-cache.sh
-@@ -0,0 +1,50 @@
-+#!/bin/sh
-+# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Exercise creation of cache and cache pool volumes
-+
-+# Full CLI uses  --type
-+# Shorthand CLI uses -H | --cache
-+
-+. lib/inittest
-+
-+aux have_cache 1 3 0 || skip
-+aux prepare_vg 5 8000
-+
-+lvcreate --type cache-pool -L10 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg
-+lvs -a -o lv_name,cache_policy
-+lvs -a -o lv_name,cache_settings
-+
-+lvremove -f $vg
-+
-+lvcreate --type cache-pool -L10 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg --cachepolicy mq \
-+	 --cachesettings migration_threshold=233
-+lvs -a -o lv_name,cache_policy   | grep mq
-+lvs -a -o lv_name,cache_settings | grep migration_threshold=233
-+
-+lvremove -f $vg
-+
-+lvcreate --type cache-pool -L10 --cachepolicy mq --cachesettings migration_threshold=233 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg
-+lvs -a -o lv_name,cache_policy   | grep mq
-+lvs -a -o lv_name,cache_settings | grep migration_threshold=233
-+
-+lvremove -f $vg
-+
-+lvcreate --type cache-pool -L10 --cachepolicy mq --cachesettings migration_threshold=233 --cachesettings sequential_threshold=13 $vg/cpool
-+lvcreate --type cache -l 1 --cachepool $vg/cpool -n corigin $vg
-+lvs -a -o lv_name,cache_policy   | grep mq
-+lvs -a -o lv_name,cache_settings | grep migration_threshold=233
-+lvs -a -o lv_name,cache_settings | grep sequential_threshold=13
-+
-+lvremove -f $vg
--- 
-2.1.2
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
+
+Log message:
+	Reinstate correct permissions when creating mirrors.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2030&r2=1.2031
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.264&r2=1.265
+
+--- LVM2/WHATS_NEW	2011/06/29 14:56:33	1.2030
++++ LVM2/WHATS_NEW	2011/06/29 17:05:53	1.2031
+@@ -1,5 +1,6 @@
+ Version 2.02.86 -  
+ =================================
++  Reinstate correct permissions when creating mirrors. [2.02.85]
+   Append 'm' attribute to pv_attr for missing PVs.
+   Annotate CLVMD_CMD_SYNC_NAMES in decode_cmd.
+   Remove enforcement of udev verification when using non-standard /dev location.
+--- LVM2/lib/metadata/lv_manip.c	2011/06/23 14:00:58	1.264
++++ LVM2/lib/metadata/lv_manip.c	2011/06/29 17:05:53	1.265
+@@ -2157,7 +2157,8 @@
+ 
+ 	for (i = 0; i < devices; i++) {
+ 		sub_lv = lv_create_empty(img_name, NULL,
+-					 MIRROR_IMAGE, lv->alloc, lv->vg);
++					 LVM_READ | LVM_WRITE | MIRROR_IMAGE,
++					 lv->alloc, lv->vg);
+ 		if (!sub_lv)
+ 			return_0;
+ 		if (!set_lv_segment_area_lv(mapseg, i, sub_lv, 0, status))
 
 
