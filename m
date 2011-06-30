@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 29 Jun 2011 22:20:17 -0000
-Subject: LVM2/daemons/common daemon-client.c daemon-ser ...
-Message-ID: <20110629222017.14836.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 30 Jun 2011 00:57:29 -0000
+Subject: LVM2/test/lib aux.sh test.sh
+Message-ID: <20110630005729.21546.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,68 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-06-29 22:20:14
+Changes by:	agk at sourceware.org	2011-06-30 00:57:29
 
 Modified files:
-	daemons/common : daemon-client.c daemon-server.c daemon-shared.c 
-	                 daemon-shared.h 
+	test/lib       : aux.sh test.sh 
 
 Log message:
-	Differentiate the request and response format, in daemon/common.
+	test attempt to remove stray loop devs
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/test.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/daemons/common/daemon-client.c	2011/06/27 13:58:11	1.4
-+++ LVM2/daemons/common/daemon-client.c	2011/06/29 22:20:14	1.5
-@@ -60,7 +60,7 @@
- {
- 	va_list ap;
- 	va_start(ap, id);
--	daemon_request rq = { .buffer = format_buffer(id, ap) };
-+	daemon_request rq = { .buffer = format_buffer("request", id, ap) };
+--- LVM2/test/lib/aux.sh	2011/06/29 18:18:18	1.19
++++ LVM2/test/lib/aux.sh	2011/06/30 00:57:29	1.20
+@@ -90,7 +90,9 @@
+ 	rm -f DEVICES # devs is set in prepare_devs()
+ 	rm -f LOOP
  
- 	if (!rq.buffer) {
- 		daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
---- LVM2/daemons/common/daemon-server.c	2011/06/27 13:58:11	1.6
-+++ LVM2/daemons/common/daemon-server.c	2011/06/29 22:20:14	1.7
-@@ -205,7 +205,7 @@
- {
- 	va_list ap;
- 	va_start(ap, id);
--	response res = { .buffer = format_buffer(id, ap), .cft = NULL };
-+	response res = { .buffer = format_buffer("response", id, ap), .cft = NULL };
- 
- 	if (!res.buffer)
- 		res.error = ENOMEM;
---- LVM2/daemons/common/daemon-shared.c	2011/06/27 13:15:49	1.2
-+++ LVM2/daemons/common/daemon-shared.c	2011/06/29 22:20:14	1.3
-@@ -70,13 +70,13 @@
- 	return 0;
+-	# Display any loop devices that failed to get torn down
++	# Remove any loop devices that failed to get torn down
++	losetup -a
++	echo losetup -d `losetup -a | grep $COMMON_PREFIX | cut -d: -f1` 2>/dev/null || true
+ 	losetup -a
  }
  
--char *format_buffer(char *id, va_list ap)
-+char *format_buffer(const char *what, const char *id, va_list ap)
- {
- 	char *buffer, *old;
- 	char *next;
- 	char *format;
+--- LVM2/test/lib/test.sh	2011/02/09 17:57:14	1.3
++++ LVM2/test/lib/test.sh	2011/06/30 00:57:29	1.4
+@@ -19,11 +19,13 @@
+ . lib/utils
  
--	dm_asprintf(&buffer, "request = \"%s\"\n", id);
-+	dm_asprintf(&buffer, "%s = \"%s\"\n", what, id);
- 	if (!buffer) goto fail;
+ OLDPWD="`pwd`"
+-PREFIX="LVMTEST$$"
++COMMON_PREFIX="LVMTEST"
++PREFIX="${COMMON_PREFIX}$$"
  
- 	while (next = va_arg(ap, char *)) {
---- LVM2/daemons/common/daemon-shared.h	2011/06/27 13:15:49	1.2
-+++ LVM2/daemons/common/daemon-shared.h	2011/06/29 22:20:14	1.3
-@@ -3,4 +3,4 @@
+ TESTDIR=$(mkdtemp ${LVM_TEST_DIR-$(pwd)} $PREFIX.XXXXXXXXXX) \
+ 	|| { echo "failed to create temporary directory in ${LVM_TEST_DIR-$(pwd)}"; exit 1; }
  
- int read_buffer(int fd, char **buffer);
- int write_buffer(int fd, char *buffer, int length);
--char *format_buffer(char *id, va_list ap);
-+char *format_buffer(const char *what, const char *id, va_list ap);
++export COMMON_PREFIX
+ export PREFIX
+ export TESTDIR
+ 
 
 
