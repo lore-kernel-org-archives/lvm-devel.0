@@ -1,30 +1,47 @@
-From: ben <benscott@nwlink.com>
-Date: Mon, 4 Jul 2011 12:59:25 -0700
-Subject: lvcreate error message "divisible by 6" bug? LVM version: 2.02.86(2)-cvs
-Message-ID: <201107041259.25459.benscott@nwlink.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 5 Jul 2011 01:01:20 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20110705010120.26576.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If I execute the following command I get an error message that doesn't make
-sense to me:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-07-05 01:01:19
 
-lvcreate --name test  --corelog --mirrors 2 --stripes 2 --extents 20 vg0100
- Number of extents requested (20) needs to be divisible by 6
+Modified files:
+	lib/activate   : dev_manager.c 
 
-I see why it needs to be divisible by two, so the stripes come out even. But 
-why does the number of mirrors matter? I can get to the same place by first 
-making a linear volume of 20 extents then adding 2 mirror legs so why can't I 
-do it all at once? To me it looks like the <total> number of extents across 
-all three mirror legs need to be divisible by 6 but that falls out naturally 
-from having each leg a size divisible by two.
+Log message:
+	Fix conditions using no_merging: only those using lv_is_merging_cow() should
+	have been converted, not pure lv_is_cow ones.
+	(Merging has no impact on how the pre-merged cow segment itself is loaded.)
 
-  LVM version:     2.02.86(2)-cvs (2011-04-29)
-  Library version: 1.02.65-cvs (2011-04-29)
-  Driver version:  4.20.0
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.223&r2=1.224
 
-Thank you.
+--- LVM2/lib/activate/dev_manager.c	2011/07/04 14:56:58	1.223
++++ LVM2/lib/activate/dev_manager.c	2011/07/05 01:01:19	1.224
+@@ -1436,7 +1436,7 @@
+ 		}
+ 		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv, laopts, "real"))
+ 			return_0;
+-	} else if (!laopts->no_merging && lv_is_cow(seg->lv) && !layer) {
++	} else if (lv_is_cow(seg->lv) && !layer) {
+ 		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv, laopts, "cow"))
+ 			return_0;
+ 	} else {
+@@ -1457,7 +1457,7 @@
+ 			if (!_add_snapshot_merge_target_to_dtree(dm, dnode, seg->lv))
+ 				return_0;
+ 		}
+-	} else if (!laopts->no_merging && lv_is_cow(seg->lv) && !layer) {
++	} else if (lv_is_cow(seg->lv) && !layer) {
+ 		if (!_add_snapshot_target_to_dtree(dm, dnode, seg->lv, laopts))
+ 			return_0;
+ 	} else if (!_add_target_to_dtree(dm, dnode, seg, laopts))
 
 
