@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 5 Jul 2011 16:17:15 -0000
-Subject: LVM2/libdm libdm-common.c
-Message-ID: <20110705161715.28010.qmail@sourceware.org>
+Date: 5 Jul 2011 18:36:37 -0000
+Subject: LVM2/lib/activate activate.c
+Message-ID: <20110705183637.27966.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,89 +10,99 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-07-05 16:17:14
+Changes by:	agk at sourceware.org	2011-07-05 18:36:37
 
 Modified files:
-	libdm          : libdm-common.c 
+	lib/activate   : activate.c 
 
 Log message:
-	decode cookie flags in debug msgs
+	Always perform preload logic before suspending - not only in the case when we
+	have precommitted metadata.  (Necessary to avoid loading tables
+	while suspend in lvchange --refresh.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.206&r2=1.207
 
---- LVM2/libdm/libdm-common.c	2011/07/01 14:09:20	1.122
-+++ LVM2/libdm/libdm-common.c	2011/07/05 16:17:14	1.123
-@@ -1391,6 +1391,51 @@
- 	return _udev_notify_sem_create(cookie, &semid);
- }
+--- LVM2/lib/activate/activate.c	2011/07/05 01:08:42	1.206
++++ LVM2/lib/activate/activate.c	2011/07/05 18:36:37	1.207
+@@ -1168,49 +1168,47 @@
+ 	lv_calculate_readahead(lv, NULL);
  
-+static const char *_task_type_disp(int type)
-+{
-+	switch(type) {
-+	case DM_DEVICE_CREATE:
-+		return "CREATE";
-+        case DM_DEVICE_RELOAD:
-+		return "RELOAD";
-+        case DM_DEVICE_REMOVE:
-+		return "REMOVE";
-+        case DM_DEVICE_REMOVE_ALL:
-+		return "REMOVE_ALL";
-+        case DM_DEVICE_SUSPEND:
-+		return "SUSPEND";
-+        case DM_DEVICE_RESUME:
-+		return "RESUME";
-+        case DM_DEVICE_INFO:
-+		return "INFO";
-+        case DM_DEVICE_DEPS:
-+		return "DEPS";
-+        case DM_DEVICE_RENAME:
-+		return "RENAME";
-+        case DM_DEVICE_VERSION:
-+		return "VERSION";
-+        case DM_DEVICE_STATUS:
-+		return "STATUS";
-+        case DM_DEVICE_TABLE:
-+		return "TABLE";
-+        case DM_DEVICE_WAITEVENT:
-+		return "WAITEVENT";
-+        case DM_DEVICE_LIST:
-+		return "LIST";
-+        case DM_DEVICE_CLEAR:
-+		return "CLEAR";
-+        case DM_DEVICE_MKNODES:
-+		return "MKNODES";
-+        case DM_DEVICE_LIST_VERSIONS:
-+		return "LIST_VERSIONS";
-+        case DM_DEVICE_TARGET_MSG:
-+		return "TARGET_MSG";
-+        case DM_DEVICE_SET_GEOMETRY:
-+		return "SET_GEOMETRY";
-+	}
-+	return "unknown";
-+}
-+
- int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- {
- 	int semid;
-@@ -1419,8 +1464,16 @@
- 	dmt->event_nr |= ~DM_UDEV_FLAGS_MASK & *cookie;
- 	dmt->cookie_set = 1;
+ 	/*
+-	 * If VG was precommitted, preload devices for the LV.
++	 * Preload devices for the LV.
+ 	 * If the PVMOVE LV is being removed, it's only present in the old
+ 	 * metadata and not the new, so we must explicitly add the new
+ 	 * tables for all the changed LVs here, as the relationships
+ 	 * are not found by walking the new metadata.
+ 	 */
+-	if ((lv_pre->vg->status & PRECOMMITTED)) {
+-		if (!(lv_pre->status & LOCKED) &&
+-		    (lv->status & LOCKED) &&
+-		    (pvmove_lv = find_pvmove_lv_in_lv(lv))) {
+-			/* Preload all the LVs above the PVMOVE LV */
+-			dm_list_iterate_items(sl, &pvmove_lv->segs_using_this_lv) {
+-				if (!(lvl_pre = find_lv_in_vg(lv_pre->vg, sl->seg->lv->name))) {
+-					/* FIXME Internal error? */
+-					log_error("LV %s missing from preload metadata", sl->seg->lv->name);
+-					goto out;
+-				}
+-				if (!_lv_preload(lvl_pre->lv, laopts, &flush_required))
+-					goto_out;
+-			}
+-			/* Now preload the PVMOVE LV itself */
+-			if (!(lvl_pre = find_lv_in_vg(lv_pre->vg, pvmove_lv->name))) {
++	if (!(lv_pre->status & LOCKED) &&
++	    (lv->status & LOCKED) &&
++	    (pvmove_lv = find_pvmove_lv_in_lv(lv))) {
++		/* Preload all the LVs above the PVMOVE LV */
++		dm_list_iterate_items(sl, &pvmove_lv->segs_using_this_lv) {
++			if (!(lvl_pre = find_lv_in_vg(lv_pre->vg, sl->seg->lv->name))) {
+ 				/* FIXME Internal error? */
+-				log_error("LV %s missing from preload metadata", pvmove_lv->name);
++				log_error("LV %s missing from preload metadata", sl->seg->lv->name);
+ 				goto out;
+ 			}
+ 			if (!_lv_preload(lvl_pre->lv, laopts, &flush_required))
+ 				goto_out;
+-		} else {
+-			if (!_lv_preload(lv_pre, laopts, &flush_required))
+-				/* FIXME Revert preloading */
+-				goto_out;
++		}
++		/* Now preload the PVMOVE LV itself */
++		if (!(lvl_pre = find_lv_in_vg(lv_pre->vg, pvmove_lv->name))) {
++			/* FIXME Internal error? */
++			log_error("LV %s missing from preload metadata", pvmove_lv->name);
++			goto out;
++		}
++		if (!_lv_preload(lvl_pre->lv, laopts, &flush_required))
++			goto_out;
++	} else {
++		if (!_lv_preload(lv_pre, laopts, &flush_required))
++			/* FIXME Revert preloading */
++			goto_out;
  
--	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to dm_task "
--		  "type %d with flags 0x%" PRIx16, *cookie, semid, dmt->type, flags);
-+	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) assigned to "
-+		  "%s task(%d) with flags%s%s%s%s%s%s%s (0x%" PRIx16 ")", *cookie, semid, _task_type_disp(dmt->type), dmt->type, 
-+		  (flags & DM_UDEV_DISABLE_DM_RULES_FLAG) ? " DISABLE_DM_RULES" : "",
-+		  (flags & DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG) ? " DISABLE_SUBSYSTEM_RULES" : "",
-+		  (flags & DM_UDEV_DISABLE_DISK_RULES_FLAG) ? " DISABLE_DISK_RULES" : "",
-+		  (flags & DM_UDEV_DISABLE_OTHER_RULES_FLAG) ? " DISABLE_OTHER_RULES" : "",
-+		  (flags & DM_UDEV_LOW_PRIORITY_FLAG) ? " LOW_PRIORITY" : "",
-+		  (flags & DM_UDEV_DISABLE_LIBRARY_FALLBACK) ? " DISABLE_LIBRARY_FALLBACK" : "",
-+		  (flags & DM_UDEV_PRIMARY_SOURCE_FLAG) ? " PRIMARY_SOURCE" : "",
-+		  flags);
+-			/*
+-			 * Search for existing LVs that have become detached and preload them.
+-			 */
+-			detached.lv_pre = lv_pre;
+-			detached.laopts = laopts;
+-			detached.flush_required = &flush_required;
++		/*
++		 * Search for existing LVs that have become detached and preload them.
++		 */
++		detached.lv_pre = lv_pre;
++		detached.laopts = laopts;
++		detached.flush_required = &flush_required;
  
- 	return 1;
+-			if (!for_each_sub_lv(cmd, lv, &_preload_detached_lv, &detached))
+-				goto_out;
+-		}
++		if (!for_each_sub_lv(cmd, lv, &_preload_detached_lv, &detached))
++			goto_out;
+ 	}
  
+ 	if (!monitor_dev_for_events(cmd, lv, laopts, 0))
 
 
