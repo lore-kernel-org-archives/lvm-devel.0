@@ -1,63 +1,41 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Jul 2011 00:29:46 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20110706002946.17922.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 6 Jul 2011 12:23:59 +0100
+Subject: `pvmove stuck' in RH bugzilla
+In-Reply-To: <20110706095310.GA3225@swordfish>
+References: <20110706095310.GA3225@swordfish>
+Message-ID: <20110706112359.GF5448@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-07-06 00:29:45
-
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
-
-Log message:
-	Cope with a PV only discovered missing when creating deptree.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2036&r2=1.2037
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.225&r2=1.226
-
---- LVM2/WHATS_NEW	2011/07/05 23:10:14	1.2036
-+++ LVM2/WHATS_NEW	2011/07/06 00:29:44	1.2037
-@@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Cope with a PV only discovered missing when creating deptree.
-   Abort operation if dm_tree_node_add_target_area fails.
-   Add activation/checks to lvm.conf to perform additional ioctl validation.
-   When suspending, automatically preload newly-visible existing LVs.
---- LVM2/lib/activate/dev_manager.c	2011/07/05 23:10:15	1.225
-+++ LVM2/lib/activate/dev_manager.c	2011/07/06 00:29:45	1.226
-@@ -1194,13 +1194,21 @@
- 	uint64_t extent_size = seg->lv->vg->extent_size;
- 	uint32_t s;
- 	char *dlid;
-+	struct stat info;
-+	const char *name;
+On Wed, Jul 06, 2011 at 12:53:10PM +0300, Sergey Senozhatsky wrote:
+> I think we just trapped into the same trouble with pvmove as described in 
+> https://bugzilla.redhat.com/show_bug.cgi?id=602516
+> https://bugzilla.redhat.com/show_bug.cgi?id=706036
+> 
+> Alasdair, could you please point are those patches in vanilla kernel 
+> (3.0-rc*) or linux-next, or some RH internal tree? 
+> This is not critical, though I'd like to try out patches.
  
-+	/* FIXME Avoid repeating identical stat in dm_tree_node_add_target_area */
- 	for (s = start_area; s < areas; s++) {
- 		if ((seg_type(seg, s) == AREA_PV &&
--		     (!seg_pvseg(seg, s) ||
--		      !seg_pv(seg, s) ||
--		      !seg_dev(seg, s))) ||
-+		     (!seg_pvseg(seg, s) || !seg_pv(seg, s) || !seg_dev(seg, s) ||
-+		       !(name = dev_name(seg_dev(seg, s))) || !*name ||
-+		       stat(name, &info) < 0 || !S_ISBLK(info.st_mode))) ||
- 		    (seg_type(seg, s) == AREA_LV && !seg_lv(seg, s))) {
-+			if (!seg->lv->vg->cmd->partial_activation) {
-+				log_error("Aborting.  LV %s is now incomplete "
-+					  "and --partial was not specified.", seg->lv->name);
-+				return 0;
-+			}
- 			if (!_add_error_area(dm, node, seg, s))
- 				return_0;
- 		} else if (seg_type(seg, s) == AREA_PV) {
+This is a userspace bug not a kernel one.
+There is a workaround, which is to perform the pvmove one LV at a time
+using the --name option.  (For each LV, run pvmove -n <lvname>.)
+
+The patched code is in the upstream lvm2 repository:
+  git://sources.redhat.com/git/lvm2
+  http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/?cvsroot=lvm2
+  http://sourceware.org/lvm2/
+
+It was only last night that the code incorporating these changes passed
+our public testsuite for the first time, so I think it is still
+premature to be using this on production systems.  But this means I hope
+to be in a position to make the first development release containing a
+fix for the problems quite soon.  (I added assertions to catch other
+instances of the related problems - it was more than just pvmove
+affected.)
+
+Alasdair
 
 
