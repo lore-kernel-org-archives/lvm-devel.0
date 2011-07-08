@@ -1,384 +1,98 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri,  8 Jul 2011 17:52:24 +0200
-Subject: [PATCH 2/3] Pool locking code
+Date: Fri,  8 Jul 2011 17:52:25 +0200
+Subject: [PATCH 3/3] Use dm_pool locking
 In-Reply-To: <cover.1310140154.git.zkabelac@redhat.com>
 References: <cover.1310140154.git.zkabelac@redhat.com>
-Message-ID: <4c0fa48c1134a6d979a8cd8408d054ae46bb0d31.1310140154.git.zkabelac@redhat.com>
+Message-ID: <5c101c3646a6c5f6b7af1003ecc17999dc40e38e.1310140154.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adding specific debug functions to lock and unlock memory pool.
+Add debug pool locking functionality. So the command could check,
+whether the memory in the pool was not modified.
 
-2 ways to debug code:
-mprotect - quite fast all the time - but requires more memory and
-           currently it is using posix_memalign() - this could be
-	   later modified to use dm_malloc() and align internally.
-           Tool segfaults when locked memory is modified and core
-	   could be checked for problematic code section.
-
-crc - checksum of locked pool - implemented via quick simple hash.
-      But this may get quite slow when the pool is larger -
-      so the check is only made when VG is finaly released and
-      it has been used more then once - so the result it's rather
-      informative - and mprotect recompiled version is needed to
-      detect real cause of troubles.
-
-Only fast pools are using mprotect - so such build cannot be combined
-with DEBUG_POOL.
+For lv_postoder() instead of unlocking and locking for every changed
+struct status member do it once when entering and leaving function.
+Currently lv_postoder() does not modify other part of vg structure
+then status flags of each LV with flags that are reverted back to
+its original state after fucntion exit.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/libdevmapper.h  |    7 +++
- libdm/mm/pool-debug.c |   27 ++++++++++++
- libdm/mm/pool-fast.c  |   66 +++++++++++++++++++++++++++++-
- libdm/mm/pool.c       |  106 ++++++++++++++++++++++++++++++++++++++++++++++++-
- make.tmpl.in          |    2 +
- 5 files changed, 205 insertions(+), 3 deletions(-)
+ lib/cache/lvmcache.c    |    7 +++++++
+ lib/metadata/metadata.c |   16 ++++++++++++++++
+ 2 files changed, 23 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 340e6e5..6521032 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -605,6 +605,13 @@ void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment);
- void dm_pool_empty(struct dm_pool *p);
- void dm_pool_free(struct dm_pool *p, void *ptr);
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 275087f..19bae10 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -701,6 +701,9 @@ struct volume_group *lvmcache_get_vg(const char *vgid, unsigned precommitted)
+ 	vginfo->vg_ref_count = 2; /* Keep 1 reference for lvmcache */
+ 	vginfo->vg_use_count = 1;
  
-+/* pool locking routines */
-+int dm_pool_locked(struct dm_pool *p);
-+int dm_pool_lock(struct dm_pool *p, int crc)
-+	__attribute__((__warn_unused_result__));
-+int dm_pool_unlock(struct dm_pool *p, int crc)
-+	__attribute__((__warn_unused_result__));
++	if (!dm_pool_lock(vg->vgmem, 1))
++		goto_bad;
 +
- /*
-  * Object building routines:
-  *
-diff --git a/libdm/mm/pool-debug.c b/libdm/mm/pool-debug.c
-index af1a912..d8c19d4 100644
---- a/libdm/mm/pool-debug.c
-+++ b/libdm/mm/pool-debug.c
-@@ -33,6 +33,8 @@ struct dm_pool {
- 	struct dm_list list;
- 	const char *name;
- 	void *orig_pool;	/* to pair it with first allocation call */
-+	unsigned locked;
-+	long crc;
+ out:
+ 	log_debug("Using cached %smetadata for VG %s.",
+ 		  vginfo->precommitted ? "pre-committed" : "", vginfo->vgname);
+@@ -727,6 +730,10 @@ int lvmcache_release_vg(struct volume_group *vg)
+ 	log_debug("Released VG:%p %s from cache (used:%d).",
+ 		  vg, vg->name, vg->vginfo->vg_use_count);
  
- 	int begun;
- 	struct block *object;
-@@ -71,6 +73,8 @@ static void _free_blocks(struct dm_pool *p, struct block *b)
++	/* Debug perform crc check only when it's been used more then once */
++	if (!dm_pool_unlock(vg->vgmem, vg->vginfo->vg_use_count > 1))
++		log_error(INTERNAL_ERROR "VG mempool.");
++
+ 	vg->vginfo->vg_cache = NULL;
+ 	vg->vginfo = NULL;
+ 
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d7fb6c3..da15fc9 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2107,8 +2107,17 @@ static int _lv_postorder(struct logical_volume *lv,
+ 			       void *data)
  {
- 	struct block *n;
- 
-+	assert(!p->locked);
+ 	int r;
++	int lck = dm_pool_locked(lv->vg->vgmem);
 +
- 	while (b) {
- 		p->stats.bytes -= b->size;
- 		p->stats.blocks_allocated--;
-@@ -84,6 +88,8 @@ static void _free_blocks(struct dm_pool *p, struct block *b)
- 
- static void _pool_stats(struct dm_pool *p, const char *action)
- {
-+	assert(!p->locked);
-+
- #ifdef DEBUG_POOL
- 	log_debug("%s mempool %s: %u/%u bytes, %u/%u blocks, "
- 		  "%u allocations)", action, p->name, p->stats.bytes,
-@@ -99,6 +105,7 @@ void dm_pool_destroy(struct dm_pool *p)
- 	_pool_stats(p, "Destroying");
- 	_free_blocks(p, p->blocks);
- 	dm_list_del(&p->list);
-+	dm_free(p->volatile_mem);
- 	dm_free(p);
- }
- 
-@@ -109,6 +116,8 @@ void *dm_pool_alloc(struct dm_pool *p, size_t s)
- 
- static void _append_block(struct dm_pool *p, struct block *b)
- {
-+	assert(!p->locked);
-+
- 	if (p->tail) {
- 		p->tail->next = b;
- 		p->tail = b;
-@@ -216,6 +225,8 @@ int dm_pool_grow_object(struct dm_pool *p, const void *extra, size_t delta)
- 	struct block *new;
- 	size_t new_size;
- 
-+	assert(!p->locked);
-+
- 	if (!delta)
- 		delta = strlen(extra);
- 
-@@ -260,3 +271,19 @@ void dm_pool_abandon_object(struct dm_pool *p)
- 	p->begun = 0;
- 	p->object = NULL;
- }
-+
-+static long _pool_crc(const struct dm_pool *p)
-+{
-+#ifndef DEBUG_USE_MPROTECT
-+#warning pool crc not implemented with pool debug
-+#endif
-+	return 0;
-+}
-+
-+static int _pool_protect(struct dm_pool *p, int prot)
-+{
-+#ifdef DEBUG_USE_MPROTECT
-+#warning pool mprotect not implemented with pool debug
-+#endif
-+	return 1;
-+}
-diff --git a/libdm/mm/pool-fast.c b/libdm/mm/pool-fast.c
-index 29d61a4..c794ac7 100644
---- a/libdm/mm/pool-fast.c
-+++ b/libdm/mm/pool-fast.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of the device-mapper userspace tools.
-  *
-@@ -18,6 +18,7 @@
- #endif
- 
- #include "dmlib.h"
-+#include <malloc.h>
- 
- struct chunk {
- 	char *begin, *end;
-@@ -32,6 +33,8 @@ struct dm_pool {
- 	size_t chunk_size;
- 	size_t object_len;
- 	unsigned object_alignment;
-+	int locked;
-+	long crc;
- };
- 
- static void _align_chunk(struct chunk *c, unsigned alignment);
-@@ -260,7 +263,23 @@ static struct chunk *_new_chunk(struct dm_pool *p, size_t s)
- 		c = p->spare_chunk;
- 		p->spare_chunk = 0;
- 	} else {
--		if (!(c = dm_malloc(s))) {
-+#ifdef DEBUG_USE_MPROTECT
-+		if (!pagesize) {
-+			pagesize = getpagesize(); /* lvm_pagesize(); */
-+			pagesize_mask = pagesize - 1;
-+		}
-+		/*
-+		 * Allocate page aligned size so malloc could work.
-+		 * Otherwise page fault would happen from pool unrelated
-+		 * memory writes of internal malloc pointers.
-+		 */
-+#define aligned_malloc(s)   (posix_memalign((void**)&c, pagesize, \
-+					    ALIGN_ON_PAGE(s)) == 0)
-+#else
-+#define aligned_malloc(s)   (c = dm_malloc(s))
-+#endif /* DEBUG_USE_MPROTECT */
-+		if (!aligned_malloc(s)) {
-+#undef aligned_malloc
- 			log_error("Out of memory.  Requested %" PRIsize_t
- 				  " bytes.", s);
- 			return NULL;
-@@ -283,3 +302,46 @@ static void _free_chunk(struct chunk *c)
- {
- 	dm_free(c);
- }
-+
-+
-+/**
-+ * Calc crc/hash from pool's memory chunks with internal pointers
-+ */
-+static long _pool_crc(const struct dm_pool *p)
-+{
-+	long crc_hash = 0;
-+#ifndef DEBUG_USE_MPROTECT
-+	const struct chunk *c;
-+	const long *ptr, *end;
-+
-+	for (c = p->chunk; c; c = c->prev) {
-+		end = (const long *) (c->begin < c->end ? (long) c->begin & ~7: (long) c->end);
-+		ptr = (const long *) c;
-+#ifdef VALGRIND_POOL
-+		VALGRIND_MAKE_MEM_DEFINED(ptr, (end - ptr) * sizeof(*end));
-+#endif
-+		while (ptr < end) {
-+			crc_hash += *ptr++;
-+			crc_hash += (crc_hash << 10);
-+			crc_hash ^= (crc_hash >> 6);
-+		}
-+	}
-+#endif /* DEBUG_USE_MPROTECT */
-+
-+	return crc_hash;
-+}
-+
-+static int _pool_protect(struct dm_pool *p, int prot)
-+{
-+#ifdef DEBUG_USE_MPROTECT
-+	struct chunk *c;
-+
-+	for (c = p->chunk; c; c = c->prev) {
-+		if (mprotect(c, (size_t) ((c->end - (char *) c) - 1), prot) != 0) {
-+			log_sys_error("mprotect", "");
-+			return 0;
-+		}
-+	}
-+#endif
-+	return 1;
-+}
-diff --git a/libdm/mm/pool.c b/libdm/mm/pool.c
-index 3df6071..ec5cb0e 100644
---- a/libdm/mm/pool.c
-+++ b/libdm/mm/pool.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
-- * Copyright (C) 2004-2005 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of the device-mapper userspace tools.
-  *
-@@ -14,11 +14,30 @@
-  */
- 
- #include "dmlib.h"
-+#include <sys/mman.h>
- 
- /* FIXME: thread unsafe */
- static DM_LIST_INIT(_dm_pools);
- void dm_pools_check_leaks(void);
- 
-+#ifdef DEBUG_USE_MPROTECT
-+/*
-+ * Use mprotect system call to ensure all locked pages are not writeable
-+ * Generates segmentation fault with write access to the locked pool.
-+ *
-+ * - Implementation is using posix_memalign() to get page aligned
-+ *   memory blocks (could be implemented also through malloc).
-+ * - Only pool-fast is properly handled for now.
-+ * - As all pools could be locked now - using this aligned malloc for
-+ *   each pool - this is not memory efficient.
-+ * - Checksum is quite slow compared to mprotect.
-+ */
-+
-+static size_t pagesize = 0;
-+static size_t pagesize_mask = 0;
-+#define ALIGN_ON_PAGE(size) (((size) + (pagesize_mask)) & ~(pagesize_mask))
-+#endif
-+
- #ifdef DEBUG_POOL
- #include "pool-debug.c"
- #else
-@@ -76,3 +95,88 @@ void dm_pools_check_leaks(void)
- 	}
- 	log_error(INTERNAL_ERROR "Unreleased memory pool(s) found.");
- }
-+
-+/**
-+ * Status of locked pool.
-+ *
-+ * \param p
-+ * Pool to be tested for lock status.
-+ *
-+ * \return
-+ * 1 when the pool is locked, 0 otherwise.
-+ */
-+int dm_pool_locked(struct dm_pool *p)
-+{
-+	return p->locked;
-+}
-+
-+/**
-+ * Lock memory pool.
-+ *
-+ * \param p
-+ * Pool to be locked.
-+ *
-+ * \param crc
-+ * Specifies whether to save crc/hash checksum.
-+ *
-+ * \return
-+ * 1 (success) when the pool was preperly locked, 0 otherwise.
-+ */
-+int dm_pool_lock(struct dm_pool *p, int crc)
-+{
-+	if (p->locked) {
-+		log_error(INTERNAL_ERROR "Pool %s is already locked.",
-+			  p->name);
-+		return 0;
-+	}
-+
-+	if (crc)
-+		p->crc = _pool_crc(p);  /* Get crc for pool */
-+
-+	if (!_pool_protect(p, PROT_READ)) {
-+		_pool_protect(p, PROT_READ | PROT_WRITE);
-+		return_0;
-+	}
-+
-+	p->locked = 1;
-+
-+	log_debug("Pool %s is locked.", p->name);
-+
-+	return 1;
-+}
-+
-+/**
-+ * Unlock memory pool.
-+ *
-+ * \param p
-+ * Pool to be unlocked.
-+ *
-+ * \param crc
-+ * Compare crc/hash with saved value. If there is mismatch,
-+ * pool is not properly unlocked.
-+ *
-+ * \return
-+ * 1 (success) when the pool was properly unlocked, 0 otherwise.
-+ */
-+int dm_pool_unlock(struct dm_pool *p, int crc)
-+{
-+	if (!p->locked) {
-+		log_error(INTERNAL_ERROR "Pool %s is already unlocked.",
-+			  p->name);
-+		return 0;
-+	}
-+
-+	p->locked = 0;
-+
-+	if (!_pool_protect(p, PROT_READ | PROT_WRITE))
++	if (lck && !dm_pool_unlock(lv->vg->vgmem, 0))
 +		return_0;
 +
-+	log_debug("Pool %s is unlocked.", p->name);
+ 	r = _lv_postorder_visit(lv, fn, data);
+ 	_lv_postorder_cleanup(lv, 0);
 +
-+	if (crc && (p->crc != _pool_crc(p))) {
-+		log_error(INTERNAL_ERROR "Pool %s crc mismatch.", p->name);
-+		return 0;
-+	}
++	if (lck && !dm_pool_lock(lv->vg->vgmem, 0))
++		return_0;
 +
-+	return 1;
-+}
-diff --git a/make.tmpl.in b/make.tmpl.in
-index cd8ae35..d52f7ca 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -149,6 +149,8 @@ ifeq ("@DM_IOCTLS@", "yes")
- endif
+ 	return r;
+ }
  
- #DEFS += -DDEBUG_POOL
-+# do not use DEBUG_POOL and DEBUG_USE_MPROTECT at the same time
-+#DEFS += -DDEBUG_USE_MPROTECT
- #DEFS += -DBOUNDS_CHECK
+@@ -2122,6 +2131,10 @@ static int _lv_postorder_vg(struct volume_group *vg,
+ {
+ 	struct lv_list *lvl;
+ 	int r = 1;
++	int lck = dm_pool_locked(vg->vgmem);
++
++	if (lck && !dm_pool_unlock(vg->vgmem, 0))
++		return_0;
  
- #CFLAGS += -pg
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+ 		if (!_lv_postorder_visit(lvl->lv, fn, data)) {
+@@ -2132,6 +2145,9 @@ static int _lv_postorder_vg(struct volume_group *vg,
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+ 		_lv_postorder_cleanup(lvl->lv, 0);
+ 
++	if (lck && !dm_pool_lock(vg->vgmem, 0))
++		return_0;
++
+ 	return r;
+ }
+ 
 -- 
 1.7.6
 
