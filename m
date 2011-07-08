@@ -1,35 +1,48 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 08 Jul 2011 13:36:20 +0200
-Subject: LVM2/test/lib aux.sh
-In-Reply-To: <20110708100543.16319.qmail@sourceware.org>
-References: <20110708100543.16319.qmail@sourceware.org>
-Message-ID: <4E16EBB4.2060507@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 8 Jul 2011 12:35:49 -0000
+Subject: LVM2/daemons/dmeventd libdevmapper-event.c
+Message-ID: <20110708123549.18891.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 8.7.2011 12:05, zkabelac at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	zkabelac at sourceware.org	2011-07-08 10:05:43
->
-> Modified files:
-> 	test/lib       : aux.sh
->
-> Log message:
-> 	Increase timeout for udev settle
-> 	
-> 	For some unknown reason (atm) udev settle takes longer time on recent rawhide.
-> 	To pass the test - inrease the settle timeout.
->
->
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-07-08 12:35:48
 
-Ok - so it seem like 'enabling' global watch rule (as has been made on a 
-problematic machine in 60-persistent-storage.rules) was not really good idea.
-(problem of md* and dm*)
+Modified files:
+	daemons/dmeventd: libdevmapper-event.c 
 
-Zdenek
+Log message:
+	report which dev was not found
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+
+--- LVM2/daemons/dmeventd/libdevmapper-event.c	2011/04/04 16:11:09	1.41
++++ LVM2/daemons/dmeventd/libdevmapper-event.c	2011/07/08 12:35:48	1.42
+@@ -559,10 +559,19 @@
+ 	}
+ 
+ 	if (!info.exists) {
+-		log_error("_get_device_info: device not found");
++		log_error("_get_device_info: %s%s%s%.0d%s%.0d%s%s: device not found",
++			  dmevh->uuid ? : "", 
++			  (!dmevh->uuid && dmevh->dev_name) ? dmevh->dev_name : "", 
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->major > 0) ? "(" : "",
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->major > 0) ? dmevh->major : 0,
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->major > 0) ? ":" : "",
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->minor > 0) ? dmevh->minor : 0,
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->major > 0) && dmevh->minor == 0 ? "0" : "",
++			  (!dmevh->uuid && !dmevh->dev_name && dmevh->major > 0) ? ") " : "");
+ 		goto bad;
+ 	}
+ 
++		  
+ 	return dmt;
+ 
+       bad:
 
 
