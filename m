@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Jul 2011 19:42:11 -0000
-Subject: LVM2/tools lvconvert.c tools.h vgreduce.c lvco ...
-Message-ID: <20110708194211.24892.qmail@sourceware.org>
+Date: 8 Jul 2011 19:57:33 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20110708195733.30432.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-07-08 19:42:11
+Changes by:	agk at sourceware.org	2011-07-08 19:57:33
 
 Modified files:
-	tools          : lvconvert.c tools.h vgreduce.c 
-Removed files:
-	tools          : lvconvert.h 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	remove unnecessary lvconvert.h
+	post-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.165&r2=1.166
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/tools.h.diff?cvsroot=lvm2&r1=1.75&r2=1.76
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.h.diff?cvsroot=lvm2&r1=1.1&r2=NONE
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.281&r2=1.282
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2041&r2=1.2042
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.480&r2=1.481
 
---- LVM2/tools/lvconvert.c	2011/06/29 02:06:26	1.165
-+++ LVM2/tools/lvconvert.c	2011/07/08 19:42:11	1.166
-@@ -16,7 +16,6 @@
- #include "polldaemon.h"
- #include "lv_alloc.h"
- #include "metadata.h"
--#include "lvconvert.h"
- 
- struct lvconvert_params {
- 	int snapshot;
---- LVM2/tools/tools.h	2011/06/01 19:21:03	1.75
-+++ LVM2/tools/tools.h	2011/07/08 19:42:11	1.76
-@@ -178,4 +178,7 @@
- int pvmove_poll(struct cmd_context *cmd, const char *pv, unsigned background);
- int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned background);
- 
-+int mirror_remove_missing(struct cmd_context *cmd,
-+			  struct logical_volume *lv, int force);
+--- LVM2/VERSION	2011/07/08 19:19:44	1.281
++++ LVM2/VERSION	2011/07/08 19:57:32	1.282
+@@ -1 +1 @@
+-2.02.86(2)-cvs (2011-07-08)
++2.02.87(2)-cvs (2011-07-08)
+--- LVM2/VERSION_DM	2011/07/08 19:19:44	1.86
++++ LVM2/VERSION_DM	2011/07/08 19:57:33	1.87
+@@ -1 +1 @@
+-1.02.65-cvs (2011-07-08)
++1.02.66-cvs (2011-07-08)
+--- LVM2/WHATS_NEW	2011/07/08 19:19:44	1.2041
++++ LVM2/WHATS_NEW	2011/07/08 19:57:33	1.2042
+@@ -1,3 +1,6 @@
++Version 2.02.87 - 
++===============================
 +
- #endif
---- LVM2/tools/vgreduce.c	2011/05/07 15:52:16	1.111
-+++ LVM2/tools/vgreduce.c	2011/07/08 19:42:11	1.112
-@@ -15,7 +15,6 @@
- 
- #include "tools.h"
- #include "lv_alloc.h"
--#include "lvconvert.h"
- 
- static int _remove_pv(struct volume_group *vg, struct pv_list *pvl, int silent)
- {
+ Version 2.02.86 - 8th July 2011
+ ===============================
+   Remove unnecessary warning in pvcreate for MD linear devices.
+--- LVM2/WHATS_NEW_DM	2011/07/08 19:19:44	1.480
++++ LVM2/WHATS_NEW_DM	2011/07/08 19:57:33	1.481
+@@ -1,3 +1,6 @@
++Version 1.02.66 - 
++===============================
++
+ Version 1.02.65 - 8th July 2011
+ ===============================
+   Remove dev name prefix from dmsetup line output if exactly one dev requested.
 
 
