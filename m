@@ -1,40 +1,33 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Jul 2011 15:35:51 -0000
-Subject: LVM2/lib/activate activate.c
-Message-ID: <20110708153551.23550.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri,  8 Jul 2011 17:52:22 +0200
+Subject: [PATCH 0/3] Reuse VG
+Message-ID: <cover.1310140154.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-07-08 15:35:50
+Reuse VG structure multiple times.
+With separate debug patch.
 
-Modified files:
-	lib/activate   : activate.c 
+Zdenek Kabelac (3):
+  Share VG multiple times
+  Pool locking code
+  Use dm_pool locking
 
-Log message:
-	Need to snapshot lookup by uuid instead of name in case it's renamed.
+ lib/cache/lvmcache.c    |   74 ++++++++++++++++++++++++++++++++-
+ lib/cache/lvmcache.h    |    5 ++
+ lib/metadata/metadata.c |   42 ++++++++++++++++++-
+ lib/metadata/vg.h       |    2 +
+ libdm/libdevmapper.h    |    7 +++
+ libdm/mm/pool-debug.c   |   27 ++++++++++++
+ libdm/mm/pool-fast.c    |   66 ++++++++++++++++++++++++++++-
+ libdm/mm/pool.c         |  106 ++++++++++++++++++++++++++++++++++++++++++++++-
+ make.tmpl.in            |    2 +
+ 9 files changed, 325 insertions(+), 6 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.208&r2=1.209
-
---- LVM2/lib/activate/activate.c	2011/07/08 12:48:41	1.208
-+++ LVM2/lib/activate/activate.c	2011/07/08 15:35:50	1.209
-@@ -1214,9 +1214,9 @@
- 		 */
- 		if (!laopts->origin_only && lv_is_origin(lv)) {
-         		dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs, origin_list) {
--				if (!(lvl_pre = find_lv_in_vg(lv_pre->vg, snap_seg->cow->name))) {
--					log_error(INTERNAL_ERROR "LV %s missing from preload metadata",
--						  snap_seg->cow->name);
-+				if (!(lvl_pre = find_lv_in_vg_by_lvid(lv_pre->vg, &snap_seg->cow->lvid))) {
-+					log_error(INTERNAL_ERROR "LV %s (%s) missing from preload metadata",
-+						  snap_seg->cow->name, snap_seg->cow->lvid.id[1].uuid);
- 					goto out;
- 				}
- 				if (!lv_is_cow(lvl_pre->lv) &&
+-- 
+1.7.6
 
 
