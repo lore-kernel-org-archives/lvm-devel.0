@@ -1,34 +1,68 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Jul 2011 12:49:51 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20110708124951.14341.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri,  8 Jul 2011 16:30:38 +0200
+Subject: [PATCH] Fix warning for pvcreate over MD linear.
+Message-ID: <1310135438-23604-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-07-08 12:49:50
+If MD linear device has set rounding (overload chunk size attribute),
+the pvcreate command prints this warning:
 
-Modified files:
-	.              : WHATS_NEW 
+  /dev/md0 sysfs attr level not in expected format: linear
 
-Log message:
-	Move snapshot removal activation logic into lib/activate.
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/device/dev-md.c |   13 +++++++++----
+ 1 files changed, 9 insertions(+), 4 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2037&r2=1.2038
-
---- LVM2/WHATS_NEW	2011/07/06 00:29:44	1.2037
-+++ LVM2/WHATS_NEW	2011/07/08 12:49:50	1.2038
-@@ -1,5 +1,6 @@
- Version 2.02.86 -  
- =================================
-+  Move snapshot removal activation logic into lib/activate.
-   Cope with a PV only discovered missing when creating deptree.
-   Abort operation if dm_tree_node_add_target_area fails.
-   Add activation/checks to lvm.conf to perform additional ioctl validation.
+diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
+index 0d522f4..e572392 100644
+--- a/lib/device/dev-md.c
++++ b/lib/device/dev-md.c
+@@ -27,6 +27,7 @@
+ #define MD_RESERVED_SECTORS (MD_RESERVED_BYTES / 512)
+ #define MD_NEW_SIZE_SECTORS(x) ((x & ~(MD_RESERVED_SECTORS - 1)) \
+ 				- MD_RESERVED_SECTORS)
++#define MD_MAX_SYSFS_SIZE 64
+ 
+ static int _dev_has_md_magic(struct device *dev, uint64_t sb_offset)
+ {
+@@ -176,7 +177,7 @@ static int _md_sysfs_attribute_scanf(const char *sysfs_dir,
+ 				     const char *attribute_fmt,
+ 				     void *attribute_value)
+ {
+-	char path[PATH_MAX+1], buffer[64];
++	char path[PATH_MAX+1], buffer[MD_MAX_SYSFS_SIZE];
+ 	FILE *fp;
+ 	int ret = 0;
+ 
+@@ -231,15 +232,19 @@ static unsigned long dev_md_chunk_size(const char *sysfs_dir,
+  */
+ static int dev_md_level(const char *sysfs_dir, struct device *dev)
+ {
++	char level_string[MD_MAX_SYSFS_SIZE];
+ 	const char *attribute = "level";
+ 	int level = -1;
+ 
+ 	if (_md_sysfs_attribute_scanf(sysfs_dir, dev, attribute,
+-				      "raid%d", &level) != 1)
++				      "%s", &level_string) != 1)
+ 		return -1;
+ 
+-	log_very_verbose("Device %s %s is raid%d.",
+-			 dev_name(dev), attribute, level);
++	log_very_verbose("Device %s %s is %s.",
++			 dev_name(dev), attribute, level_string);
++
++	if (sscanf(level_string, "raid%d", &level) != 1)
++		return -1;
+ 
+ 	return level;
+ }
+-- 
+1.7.5.4
 
 
