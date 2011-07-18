@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 18 Jul 2011 14:34:34 -0000
-Subject: LVM2/lib datastruct/lvm-types.h uuid/uuid.h
-Message-ID: <20110718143434.2685.qmail@sourceware.org>
+Date: 18 Jul 2011 14:42:44 -0000
+Subject: LVM2/daemons/common daemon-shared.c
+Message-ID: <20110718144244.25566.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,76 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-07-18 14:34:34
+Changes by:	mornfall at sourceware.org	2011-07-18 14:42:44
 
 Modified files:
-	lib/datastruct : lvm-types.h 
-	lib/uuid       : uuid.h 
+	daemons/common : daemon-shared.c 
 
 Log message:
-	Revert the #include changes. Need to fix this at the #include site for now, and
-	eventually refactor the way we structure #includes in the all of the library.
+	Improve format_buffer in daemon-shared.c, adding block formatting in addition
+	to string/integer (this propagates to the *simple* family of request/response
+	functionality).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/lvm-types.h.diff?cvsroot=lvm2&r1=1.17&r2=1.18
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/uuid/uuid.h.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/lib/datastruct/lvm-types.h	2011/07/18 13:24:48	1.17
-+++ LVM2/lib/datastruct/lvm-types.h	2011/07/18 14:34:33	1.18
-@@ -16,7 +16,6 @@
- #ifndef _LVM_TYPES_H
- #define _LVM_TYPES_H
+--- LVM2/daemons/common/daemon-shared.c	2011/06/29 22:20:14	1.3
++++ LVM2/daemons/common/daemon-shared.c	2011/07/18 14:42:44	1.4
+@@ -2,6 +2,7 @@
+ #include <stdio.h>
+ #include <malloc.h>
+ #include <string.h>
++#include <assert.h>
+ #include "daemon-shared.h"
  
--#include <libdevmapper.h> // dm_list
- #include <sys/types.h>
- #include <inttypes.h>
+ /*
+@@ -74,30 +75,34 @@
+ {
+ 	char *buffer, *old;
+ 	char *next;
+-	char *format;
++	int keylen;
  
---- LVM2/lib/uuid/uuid.h	2011/07/18 13:24:14	1.18
-+++ LVM2/lib/uuid/uuid.h	2011/07/18 14:34:34	1.19
-@@ -16,10 +16,6 @@
- #ifndef _LVM_UUID_H
- #define _LVM_UUID_H
+ 	dm_asprintf(&buffer, "%s = \"%s\"\n", what, id);
+ 	if (!buffer) goto fail;
  
--#include <stdint.h> /* int8_t */
--#include <malloc.h> /* size_t */
--#include "libdevmapper.h"
+ 	while (next = va_arg(ap, char *)) {
+ 		old = buffer;
+-		if (strstr(next, "%d") || strstr(next, "%s")) {
+-			dm_asprintf(&format, "%%s%s\n", next);
+-			if (!format) goto fail;
 -
- #define ID_LEN 32
- #define ID_LEN_S "32"
+-			if (strstr(format, "%d"))
+-				dm_asprintf(&buffer, format, buffer, va_arg(ap, int));
+-			else
+-				dm_asprintf(&buffer, format, buffer, va_arg(ap, char *));
+-
+-			dm_free(format);
++		assert(strchr(next, '='));
++		keylen = strchr(next, '=') - next;
++		if (strstr(next, "%d")) {
++			int value = va_arg(ap, int);
++			dm_asprintf(&buffer, "%s%.*s= %d\n", buffer, keylen, next, value);
++			dm_free(old);
++		} else if (strstr(next, "%s")) {
++			char *value = va_arg(ap, char *);
++			dm_asprintf(&buffer, "%s%.*s= \"%s\"\n", buffer, keylen, next, value);
++			dm_free(old);
++		} else if (strstr(next, "%b")) {
++			char *block = va_arg(ap, char *);
++			if (!block)
++				continue;
++			dm_asprintf(&buffer, "%s%.*s%s", buffer, keylen, next, block);
+ 			dm_free(old);
+-			if (!buffer) goto fail;
+ 		} else {
+ 			dm_asprintf(&buffer, "%s%s", buffer, next);
+ 			dm_free(old);
+-			if (!buffer) goto fail;
+ 		}
++		if (!buffer) goto fail;
+ 	}
  
+ 	old = buffer;
 
 
