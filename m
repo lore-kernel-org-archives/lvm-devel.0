@@ -1,91 +1,76 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 19 Jul 2011 15:43:51 +0200
-Subject: [PATCH 0/7] ShareVG
-Message-ID: <cover.1311082436.git.zkabelac@redhat.com>
+Date: Tue, 19 Jul 2011 15:43:52 +0200
+Subject: [PATCH 1/7] Remove INCONSISTENG_VG flag
+In-Reply-To: <cover.1311082436.git.zkabelac@redhat.com>
+References: <cover.1311082436.git.zkabelac@redhat.com>
+Message-ID: <89143c73c9d1a1740e7974e2f0f69171a6d80ad1.1311082436.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Another incarnation of sharing VG structures.
+As this flag could not have been set - remove it from the code.
 
-This version changes  free_vg() to release_vg() to avoid term confusion
-(free should be free).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+NOTE: because of wrong code logic the call:
 
-Reference counting moved to VG structure - though I'm not 100% conviced
-it's the best choice here - as every counter is touching pool - this makes
-a bit more problematic following memory pool locking (keeping the
-reference within vginfo referenced from VG would make it simplier).
+lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED &
+			   (inconsistent ? INCONSISTENT_VG : 0));
 
-Some name corrections happend with the pool locking debug.
+used to always pass '0' - now with remove flag it's passing
+PRECOMMITTED flag in - tests on my machine are passing  - but this
+present functinal change in this patch.
 
-Option verify_vg_crc was added to make crc runtime configurable for debug.
+To match original functionality - 0 had to be always passed.
 
-As a bit unrelated patch is the first one where INCONSISTENG_VG.
-(It's part of this patchset as it's made this patchset simplier
-there is no need for dropping VG from cache now)
-This patchset also needs inspection as there is small change in code
-behaviour which might be seen as a bugfix?
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ lib/metadata/metadata.c |   11 +++--------
+ lib/metadata/metadata.h |    1 -
+ 2 files changed, 3 insertions(+), 9 deletions(-)
 
-
-Zdenek Kabelac (7):
-  Remove INCONSISTENG_VG flag
-  Change free_vg to release_vg
-  Add cache_vg
-  Pool locking code
-  Lock memory for shared VG
-  Add verify_vg_crc
-  Spaces
-
- WHATS_NEW                        |    2 +
- daemons/clvmd/lvm-functions.c    |    2 +-
- doc/example.conf.in              |    5 ++
- lib/activate/activate.c          |   14 ++--
- lib/cache/lvmcache.c             |   29 ++++++++-
- lib/cache/lvmcache.h             |    2 +
- lib/commands/toolcontext.c       |    2 +
- lib/format_pool/format_pool.c    |    2 +-
- lib/format_text/archive.c        |    2 +-
- lib/format_text/archiver.c       |    6 +-
- lib/format_text/format-text.c    |    4 +-
- lib/format_text/import_vsn1.c    |    2 +-
- lib/locking/locking.h            |    4 +-
- lib/metadata/metadata-exported.h |    6 --
- lib/metadata/metadata.c          |  115 +++++++++++++++++++-------------------
- lib/metadata/metadata.h          |    1 -
- lib/metadata/replicator_manip.c  |    6 +-
- lib/metadata/vg.c                |   62 ++++++++++++++++++++
- lib/metadata/vg.h                |   12 ++++
- lib/misc/lvm-globals.c           |   11 ++++
- lib/misc/lvm-globals.h           |    2 +
- libdm/libdevmapper.h             |    9 +++
- libdm/mm/pool-debug.c            |   30 ++++++++++
- libdm/mm/pool-fast.c             |   66 +++++++++++++++++++++-
- libdm/mm/pool.c                  |  106 ++++++++++++++++++++++++++++++++++-
- liblvm/lvm_vg.c                  |    8 +-
- make.tmpl.in                     |    2 +
- test/lib/aux.sh                  |    1 +
- tools/lvconvert.c                |   10 ++--
- tools/lvcreate.c                 |    4 +-
- tools/lvrename.c                 |    4 +-
- tools/lvresize.c                 |    4 +-
- tools/polldaemon.c               |   10 ++--
- tools/pvchange.c                 |    8 +-
- tools/pvcreate.c                 |    2 +-
- tools/pvdisplay.c                |    4 +-
- tools/pvmove.c                   |    4 +-
- tools/pvresize.c                 |    4 +-
- tools/reporter.c                 |    4 +-
- tools/toollib.c                  |   10 ++--
- tools/vgcreate.c                 |    6 +-
- tools/vgextend.c                 |    6 +-
- tools/vgmerge.c                  |   12 ++--
- tools/vgreduce.c                 |    6 +-
- tools/vgrename.c                 |   10 ++--
- tools/vgsplit.c                  |   18 +++---
- 46 files changed, 480 insertions(+), 159 deletions(-)
-
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 842885f..d0255da 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2862,12 +2862,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	 * the missing PV logic below.
+ 	 */
+ 	if ((correct_vg = lvmcache_get_vg(vgid, precommitted)) &&
+-	    (use_precommitted || !*consistent || !(correct_vg->status & INCONSISTENT_VG))) {
+-		if (!(correct_vg->status & INCONSISTENT_VG))
+-			*consistent = 1;
+-		else	/* Inconsistent but we can't repair it */
+-			correct_vg->status &= ~INCONSISTENT_VG;
+-
++	    (use_precommitted || !*consistent)) {
++		*consistent = 1;
+ 		return correct_vg;
+ 	} else {
+ 		free_vg(correct_vg);
+@@ -3134,8 +3130,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	 * If there is no precommitted metadata, committed metadata
+ 	 * is read and stored in the cache even if use_precommitted is set
+ 	 */
+-	lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED &
+-			   (inconsistent ? INCONSISTENT_VG : 0));
++	lvmcache_update_vg(correct_vg, (correct_vg->status & PRECOMMITTED));
+ 
+ 	if (inconsistent) {
+ 		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 56a224c..1ace8c1 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -75,7 +75,6 @@
+ //#define CONVERTING		0x00400000U	/* LV */
+ 
+ //#define MISSING_PV		0x00800000U	/* PV */
+-#define INCONSISTENT_VG		0x00800000U	/* VG - internal use only */
+ //#define PARTIAL_LV		0x01000000U	/* LV - derived flag, not
+ //						   written out in metadata*/
+ 
 -- 
 1.7.6
 
