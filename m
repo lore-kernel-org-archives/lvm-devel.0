@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 19 Jul 2011 16:37:43 -0000
-Subject: LVM2/lib/metadata lv_alloc.h lv_manip.c mirror.c
-Message-ID: <20110719163743.24421.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 19 Jul 2011 16:48:14 -0000
+Subject: LVM2/daemons/lvmetad Makefile lvmetad-core.c t ...
+Message-ID: <20110719164814.22194.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,83 +10,152 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-07-19 16:37:42
+Changes by:	mornfall at sourceware.org	2011-07-19 16:48:14
 
 Modified files:
-	lib/metadata   : lv_alloc.h lv_manip.c mirror.c 
+	daemons/lvmetad: Makefile lvmetad-core.c test.sh testclient.c 
 
 Log message:
-	Remove and unneeded parameter from build_parallel_areas_from_lv()
+	Work out some more details in metadata update in lvmetad.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_alloc.h.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.267&r2=1.268
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.157&r2=1.158
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/Makefile.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/test.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/testclient.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/lib/metadata/lv_alloc.h	2010/04/08 00:28:58	1.28
-+++ LVM2/lib/metadata/lv_alloc.h	2011/07/19 16:37:42	1.29
-@@ -76,8 +76,7 @@
+--- LVM2/daemons/lvmetad/Makefile	2011/06/27 13:44:33	1.2
++++ LVM2/daemons/lvmetad/Makefile	2011/07/19 16:48:13	1.3
+@@ -28,3 +28,6 @@
  
- void alloc_destroy(struct alloc_handle *ah);
- 
--struct dm_list *build_parallel_areas_from_lv(struct cmd_context *cmd,
--					     struct logical_volume *lv,
-+struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
- 					     unsigned use_pvmove_parent_lv);
- 
- #endif
---- LVM2/lib/metadata/lv_manip.c	2011/07/08 12:48:41	1.267
-+++ LVM2/lib/metadata/lv_manip.c	2011/07/19 16:37:42	1.268
-@@ -2575,10 +2575,10 @@
-  * Construct dm_list of segments of LVs showing which PVs they use.
-  * For pvmove we use the *parent* LV so we can pick up stripes & existing mirrors etc.
-  */
--struct dm_list *build_parallel_areas_from_lv(struct cmd_context *cmd,
--					     struct logical_volume *lv,
-+struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
- 					     unsigned use_pvmove_parent_lv)
+ check: testclient lvmetad
+ 	./test.sh "$(BUILDDIR)/libdm:$(BUILDDIR)/daemons/dmeventd"
++
++clean:
++	rm -f testclient lvmetad
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/19 14:13:59	1.7
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/19 16:48:13	1.8
+@@ -18,10 +18,11 @@
  {
-+	struct cmd_context *cmd = lv->vg->cmd;
- 	struct dm_list *parallel_areas;
- 	struct seg_pvs *spvs;
- 	uint32_t current_le = 0;
-@@ -2866,7 +2866,7 @@
- 	uint32_t s;
- 	struct dm_list *parallel_areas;
+ 	const char *uuid = daemon_request_str(r, "uuid", "NONE");
+ 	fprintf(stderr, "[D] vg_by_uuid: %s (vgs = %p)\n", uuid, s->vgs);
+-	struct config_node *metadata = dm_hash_lookup(s->vgs, uuid);
+-	if (!metadata)
++	struct config_tree *cft = dm_hash_lookup(s->vgs, uuid);
++	if (!cft || !cft->root)
+ 		return daemon_reply_simple("failed", "reason = %s", "uuid not found", NULL);
+-	fprintf(stderr, "[D] metadata: %p\n", metadata);
++
++	struct config_node *metadata = cft->root;
  
--	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, layer_lv, 0)))
-+	if (!(parallel_areas = build_parallel_areas_from_lv(layer_lv, 0)))
- 		return_0;
+ 	response res = { .buffer = NULL };
+ 	struct config_node *n;
+@@ -67,16 +68,16 @@
+ 	if (pvid) {
+ 		const char *vgid = dm_hash_lookup(s->pvid_to_vgid, pvid);
+ 		assert(vgid);
+-		struct config_node *vg = dm_hash_lookup(s->vgs, vgid);
++		struct config_tree *vg = dm_hash_lookup(s->vgs, vgid);
+ 		assert(vg);
+-		update_pv_status_in_vg(s, vg);
++		update_pv_status_in_vg(s, vg->root);
+ 	} else {
+ 		struct dm_hash_node *n = dm_hash_get_first(s->vgs);
+ 		while (n) {
+-			struct config_node *vg = dm_hash_get_data(s->vgs, n);
++			struct config_tree *vg = dm_hash_get_data(s->vgs, n);
+ 			fprintf(stderr, "[D] checking VG: %s\n",
+ 				find_config_str(vg, "metadata/id", "?"));
+-			update_pv_status_in_vg(s, vg);
++			update_pv_status_in_vg(s, vg->root);
+ 			n = dm_hash_get_next(s->vgs, n);
+ 		}
+ 	}
+@@ -84,11 +85,38 @@
  
- 	/* Loop through all LVs except itself */
---- LVM2/lib/metadata/mirror.c	2011/06/24 23:39:09	1.157
-+++ LVM2/lib/metadata/mirror.c	2011/07/19 16:37:42	1.158
-@@ -1624,7 +1624,7 @@
- 	uint32_t adjusted_region_size;
- 	int r = 1;
+ static int update_metadata(lvmetad_state *s, const char *vgid, struct config_node *metadata)
+ {
+-	struct config_node *metadata_clone =
+-		clone_config_node_with_mem(s->mem, metadata, 0);
+-	/* TODO: seqno-based comparison with existing metadata version */
+-	dm_hash_insert(s->vgs, vgid, (void*) metadata_clone);
+-	fprintf(stderr, "[D] metadata stored at %p\n", metadata_clone);
++	struct config_tree *old = dm_hash_lookup(s->vgs, vgid);
++	int seq = find_config_int(metadata, "metadata/seqno", -1);
++	int haveseq = -1;
++
++	if (old)
++		haveseq = find_config_int(old->root, "metadata/seqno", -1);
++
++	if (seq < 0)
++		return 0; /* bad */
++
++	if (seq == haveseq) {
++		// TODO: compare old->root with metadata to ensure equality
++		return 1;
++	}
++
++	if (seq < haveseq) {
++		// TODO: we may want to notify the client that their metadata is
++		// out of date?
++		return 1;
++	}
++
++	if (haveseq >= 0 && haveseq < seq) {
++		/* need to update what we have since we found a newer version */
++		destroy_config_tree(old);
++		dm_hash_remove(s->vgs, vgid);
++	}
++
++	struct config_tree *cft = create_config_tree(NULL, 0);
++	cft->root = clone_config_node(cft, metadata, 0);
++	dm_hash_insert(s->vgs, vgid, cft);
++
++	return 1;
+ }
  
--	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, lv, 1)))
-+	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 1)))
- 		return_0;
+ static response pv_add(lvmetad_state *s, request r)
+@@ -106,8 +134,12 @@
+ 		const char *vgid = daemon_request_str(r, "metadata/id", NULL);
+ 		if (!vgid)
+ 			return daemon_reply_simple("failed", "reason = %s", "need VG UUID", NULL);
++		if (daemon_request_int(r, "metadata/seqno", -1) < 0)
++			return daemon_reply_simple("failed", "reason = %s", "need VG seqno", NULL);
  
- 	if (!(segtype = get_segtype_from_string(cmd, "mirror")))
-@@ -1876,7 +1876,7 @@
- 		return 1;
+-		update_metadata(s, vgid, metadata);
++		if (!update_metadata(s, vgid, metadata))
++			return daemon_reply_simple("failed", "reason = %s",
++						   "metadata update failed", NULL);
  	}
  
--	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, lv, 0)))
-+	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0)))
- 		return_0;
+ 	update_pv_status(s, NULL);
+--- LVM2/daemons/lvmetad/test.sh	2011/06/27 13:44:33	1.1
++++ LVM2/daemons/lvmetad/test.sh	2011/07/19 16:48:13	1.2
+@@ -3,9 +3,11 @@
+ export LD_LIBRARY_PATH="$1"
  
- 	if (!(segtype = get_segtype_from_string(cmd, "mirror")))
-@@ -1948,7 +1948,7 @@
- 	 * allocate destination extents
- 	 */
+ test -n "$2" && {
+-    ./lvmetad -f &
++    rm -f /var/run/lvmetad.{socket,pid}
++    chmod +rx lvmetad
++    valgrind ./lvmetad -f &
+     PID=$!
+-    sleep .1
++    sleep 1
+     ./testclient
+     kill $PID
+     exit 0
+--- LVM2/daemons/lvmetad/testclient.c	2011/07/18 14:48:30	1.7
++++ LVM2/daemons/lvmetad/testclient.c	2011/07/19 16:48:13	1.8
+@@ -17,6 +17,9 @@
+ 	"    pv1 {\n"
+ 	"        id = \"bbcd-efgh\"\n"
+ 	"    }\n"
++	"    pv2 {\n"
++	"        id = \"cbcd-efgh\"\n"
++	"    }\n"
+ 	"}\n"
+ 	"}\n";
  
--	if (!(parallel_areas = build_parallel_areas_from_lv(cmd, lv, 0)))
-+	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0)))
- 		return_0;
- 
- 	if (!(segtype = get_segtype_from_string(cmd, "mirror")))
 
 
