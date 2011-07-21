@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 20 Jul 2011 21:33:41 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20110720213341.13373.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 21 Jul 2011 13:23:50 -0000
+Subject: LVM2 ./WHATS_NEW lib/config/config.c
+Message-ID: <20110721132350.5797.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,92 +10,62 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-07-20 21:33:41
+Changes by:	zkabelac at sourceware.org	2011-07-21 13:23:49
 
 Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+	.              : WHATS_NEW 
+	lib/config     : config.c 
 
 Log message:
-	lvmetad: Obliterate vg_status by returning the same information from
-	update_pv_status, saving a dozen lines of code and execution time of one
-	walkthrough of the PV list.
+	Compare also file size to detect changed config file
+	
+	Clvmd detects modifed config file before it takes lv_lock.
+	If the config file is changed rapidly - the change was ignored within
+	a seocnd ranged.  This patch adds also compare of file size.
+	So change like some flag for 0 to 1 would pass unnoticed - but
+	it's quick fix for failing test suite.
+	
+	FIXME: Implement inotify solution.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2042&r2=1.2043
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.100&r2=1.101
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/20 21:27:28	1.18
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/20 21:33:41	1.19
-@@ -144,8 +144,10 @@
+--- LVM2/WHATS_NEW	2011/07/08 19:57:33	1.2042
++++ LVM2/WHATS_NEW	2011/07/21 13:23:48	1.2043
+@@ -1,5 +1,6 @@
+ Version 2.02.87 - 
+ ===============================
++  Compare also file size to detect changed config file.
  
- /* Either the "big" vgs lock, or a per-vg lock needs to be held before entering
-  * this function. */
--static void update_pv_status(lvmetad_state *s, struct config_tree *vg)
-+static int update_pv_status(lvmetad_state *s, struct config_tree *vg)
- {
-+	int complete = 1;
-+
- 	lock_pvs(s);
- 	struct config_node *pv = pvs(vg);
- 	while (pv) {
-@@ -154,30 +156,13 @@
- 		// TODO: avoid the override here if MISSING came from the actual
- 		// metadata, as opposed from our manipulation...
- 		set_flag(vg, pv, "status", "MISSING", !found);
-+		if (!found)
-+			complete = 0;
- 		pv = pv->sib;
+ Version 2.02.86 - 8th July 2011
+ ===============================
+--- LVM2/lib/config/config.c	2011/07/19 19:12:38	1.100
++++ LVM2/lib/config/config.c	2011/07/21 13:23:49	1.101
+@@ -62,6 +62,7 @@
+ 	struct config_tree cft;
+ 	struct dm_pool *mem;
+ 	time_t timestamp;
++	off_t st_size;
+ 	char *filename;
+ 	int exists;
+ 	int keep_open;
+@@ -309,6 +310,7 @@
  	}
- 	unlock_pvs(s);
--}
--
--static int vg_status(lvmetad_state *s, const char *vgid)
--{
--	struct config_tree *vg = lock_vg(s, vgid);
--	struct config_node *pv = pvs(vg);
  
--	while (pv) {
--		const char *uuid = find_config_str(pv->child, "id", NULL);
--		lock_pvs(s);
--		int found = uuid ? (dm_hash_lookup(s->pvs, uuid) ? 1 : 0) : 0;
--		unlock_pvs(s);
--		if (!found) {
--			unlock_vg(s, vgid);
--			return 0;
--		}
--		pv = pv->sib;
--	}
--
--	unlock_vg(s, vgid);
--	return 1;
-+	return complete;
+ 	c->timestamp = info.st_ctime;
++	c->st_size = info.st_size;
+ 
+ 	return r;
  }
- 
- /* You need to be holding the pvid_map lock already to call this. */
-@@ -269,6 +254,8 @@
- 	if (!pvid)
- 		return daemon_reply_simple("failed", "reason = %s", "need PV UUID", NULL);
- 
-+	debug("pv_add %s, vgid = %s\n", pvid, vgid);
-+
- 	lock_pvs(s);
- 	dm_hash_insert(s->pvs, pvid, (void*)1);
- 	unlock_pvs(s);
-@@ -288,14 +275,13 @@
- 		unlock_pvid_map(s);
+@@ -352,7 +354,7 @@
  	}
  
-+	int complete = 0;
- 	if (vgid) {
- 		struct config_tree *cft = lock_vg(s, vgid);
--		update_pv_status(s, cft);
-+		complete = update_pv_status(s, cft);
- 		unlock_vg(s, vgid);
- 	}
+ 	/* Unchanged? */
+-	if (c->timestamp == info.st_ctime)
++	if (c->timestamp == info.st_ctime && c->st_size == info.st_size)
+ 		return 0;
  
--	int complete = vgid ? vg_status(s, vgid) : 0;
--
- 	return daemon_reply_simple("OK",
- 				   "status = %s", complete ? "complete" : "partial",
- 				   "vgid = %s", vgid ? vgid : "#orphan",
+       reload:
 
 
