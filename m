@@ -1,239 +1,130 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 25 Jul 2011 17:59:51 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20110725175951.14924.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 26 Jul 2011 14:03:17 +0200
+Subject: [PATCH] Use new oom_score_adj instead of oom_adj
+Message-ID: <4E2EAD05.4000603@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-07-25 17:59:51
+The filename to adjust the oom score was changed in 2.6.36.
+We should use oom_score_adj instead of oom_adj (which is still
+there under /proc, but it's scheduled for removal in August 2012).
 
-Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+New oom_score_adj uses a range from -1000 (OOM_SCORE_ADJ_MIN,
+disable oom killing) to 1000 (OOM_SCORE_ADJ_MAX).
 
-Log message:
-	lvmetad: Edit the MISSING_PV flags only after making a "reply" copy of the
-	metadata, which is then serialised and discarded. This fixes a couple of
-	outstanding TODO items about handling the MISSING flags correctly.
+So let's use oom_score_adj if it's present and fallback to
+old oom_adj if not.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.21&r2=1.22
+Peter
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/25 15:51:51	1.21
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2011/07/25 17:59:50	1.22
-@@ -65,6 +65,89 @@
- 	unlock_vgs(s);
- }
+---
+
+ daemons/dmeventd/dmeventd.c |   61 +++++++++++++++++++++++++++++-------------
+ 1 files changed, 42 insertions(+), 19 deletions(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 1a91cb8..a6956cb 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -41,11 +41,19 @@
+ #ifdef linux
+ #  include <malloc.h>
  
-+static struct config_node *pvs(struct config_node *vg)
-+{
-+	struct config_node *pv = find_config_node(vg, "metadata/physical_volumes");
-+	if (pv)
-+		pv = pv->child;
-+	return pv;
-+}
-+
+-#  define OOM_ADJ_FILE "/proc/self/oom_adj"
 +/*
-+ * TODO: This set_flag function is pretty generic and might make sense in a
-+ * library here or there.
++ * Kernel version 2.6.36 and higher has
++ * new OOM killer adjustment interface.
 + */
-+static void set_flag(struct config_tree *cft, struct config_node *parent,
-+		     char *field, const char *flag, int want) {
-+	struct config_value *value = NULL, *pred = NULL;
-+	struct config_node *node = find_config_node(parent->child, field);
-+	int found = 0;
-+
-+	if (node)
-+		value = node->v;
-+
-+	while (value && value->type != CFG_EMPTY_ARRAY && strcmp(value->v.str, flag)) {
-+		pred = value;
-+		value = value->next;
-+	}
-+
-+	if (value && want)
-+		return;
-+
-+	if (!value && !want)
-+		return;
-+
-+	if (value && !want) {
-+		if (pred)
-+			pred->next = value->next;
-+		if (value == node->v)
-+			node->v = value->next;
-+	}
-+
-+	if (!value && want) {
-+		if (!node) {
-+			node = create_config_node(cft, field);
-+			node->sib = parent->child;
-+			node->v = create_config_value(cft);
-+			node->v->type = CFG_EMPTY_ARRAY;
-+			node->parent = parent;
-+			parent->child = node;
-+		}
-+		struct config_value *new = create_config_value(cft);
-+		new->type = CFG_STRING;
-+		new->v.str = flag;
-+		new->next = node->v;
-+		node->v = new;
-+	}
-+}
-+
-+/* Either the "big" vgs lock, or a per-vg lock needs to be held before entering
-+ * this function. */
-+static int update_pv_status(lvmetad_state *s, struct config_tree *cft, struct config_node *vg, int act)
++#  define OOM_ADJ_FILE_OLD "/proc/self/oom_adj"
++#  define OOM_ADJ_FILE "/proc/self/oom_score_adj"
+ 
+ /* From linux/oom.h */
++/* Old interface */
+ #  define OOM_DISABLE (-17)
+ #  define OOM_ADJUST_MIN (-16)
++/* New interface */
++#  define OOM_SCORE_ADJ_MIN (-1000)
+ 
+ #endif
+ 
+@@ -1594,33 +1602,48 @@ static void _exit_handler(int sig __attribute__((unused)))
+ }
+ 
+ #ifdef linux
++static int _set_oom_adj(const char *oom_adj_path, int val)
 +{
-+	int complete = 1;
++	FILE *fp;
 +
-+	lock_pvs(s);
-+	struct config_node *pv = pvs(vg);
-+	while (pv) {
-+		const char *uuid = find_config_str(pv->child, "id", NULL);
-+		int found = uuid ? (dm_hash_lookup(s->pvs, uuid) ? 1 : 0) : 0;
-+		if (act)
-+			set_flag(cft, pv, "status", "MISSING", !found);
-+		if (!found) {
-+			complete = 0;
-+			if (!act) { // optimisation
-+				unlock_pvs(s);
-+				return complete;
-+			}
-+		}
-+		pv = pv->sib;
++	if (!(fp = fopen(oom_adj_path, "w"))) {
++		perror("oom_adj: fopen failed");
++		return 0;
 +	}
-+	unlock_pvs(s);
 +
-+	return complete;
++	fprintf(fp, "%i", val);
++
++	if (dm_fclose(fp))
++		perror("oom_adj: fclose failed");
++
++	return 1;
 +}
 +
- static response vg_by_uuid(lvmetad_state *s, request r)
+ /*
+  * Protection against OOM killer if kernel supports it
+  */
+-static int _set_oom_adj(int val)
++static int _protect_against_oom_killer()
  {
- 	const char *uuid = daemon_request_str(r, "uuid", "NONE");
-@@ -92,14 +175,11 @@
- 	res.error = 0;
- 	unlock_vg(s, uuid);
+-	FILE *fp;
+-
+ 	struct stat st;
  
-+	update_pv_status(s, cft, n, 1);
-+
- 	return res;
+ 	if (stat(OOM_ADJ_FILE, &st) == -1) {
+-		if (errno == ENOENT)
+-			perror(OOM_ADJ_FILE " not found");
+-		else
++		if (errno != ENOENT)
+ 			perror(OOM_ADJ_FILE ": stat failed");
+-		return 1;
+-	}
+ 
+-	if (!(fp = fopen(OOM_ADJ_FILE, "w"))) {
+-		perror(OOM_ADJ_FILE ": fopen failed");
+-		return 0;
+-	}
++		/* Try old oom_adj interface as a fallback */
++		if (stat(OOM_ADJ_FILE_OLD, &st) == -1) {
++			if (errno == ENOENT)
++				perror(OOM_ADJ_FILE_OLD " not found");
++			else
++				perror(OOM_ADJ_FILE_OLD ": stat failed");
++			return 1;
++		}
+ 
+-	fprintf(fp, "%i", val);
+-	if (dm_fclose(fp))
+-		perror(OOM_ADJ_FILE ": fclose failed");
++		return _set_oom_adj(OOM_ADJ_FILE_OLD, OOM_DISABLE) ||
++		       _set_oom_adj(OOM_ADJ_FILE_OLD, OOM_ADJUST_MIN);
++	}
+ 
+-	return 1;
++	return _set_oom_adj(OOM_ADJ_FILE, OOM_SCORE_ADJ_MIN);
  }
+ #endif
  
--/*
-- * TODO: Accept different flag permutations? Or else, ensure fixed ordering of
-- * flags in set_flag below (following the same order as we have in
-- * lib/format_text/flags.c).
-- */
- static int compare_value(struct config_value *a, struct config_value *b)
- {
- 	if (a->type > b->type)
-@@ -143,85 +223,6 @@
- 	return result;
- }
+@@ -1829,8 +1852,8 @@ int main(int argc, char *argv[])
+ 	signal(SIGQUIT, &_exit_handler);
  
--/*
-- * TODO: This set_flag function is pretty generic and might make sense in a
-- * library here or there.
-- */
--static void set_flag(struct config_tree *cft, struct config_node *parent,
--		     char *field, const char *flag, int want) {
--	struct config_value *value = NULL, *pred = NULL;
--	struct config_node *node = find_config_node(parent->child, field);
--	int found = 0;
--
--	if (node)
--		value = node->v;
--
--	while (value && value->type != CFG_EMPTY_ARRAY && strcmp(value->v.str, flag)) {
--		pred = value;
--		value = value->next;
--	}
--
--	if (value && want)
--		return;
--
--	if (!value && !want)
--		return;
--
--	if (value && !want) {
--		if (pred)
--			pred->next = value->next;
--		if (value == node->v)
--			node->v = value->next;
--	}
--
--	if (!value && want) {
--		if (!node) {
--			node = create_config_node(cft, field);
--			node->sib = parent->child;
--			node->v = create_config_value(cft);
--			node->v->type = CFG_EMPTY_ARRAY;
--			node->parent = parent;
--			parent->child = node;
--		}
--		struct config_value *new = create_config_value(cft);
--		new->type = CFG_STRING;
--		new->v.str = flag;
--		new->next = node->v;
--		node->v = new;
--	}
--}
--
--struct config_node *pvs(struct config_tree *vg)
--{
--	struct config_node *pv = find_config_node(vg->root, "metadata/physical_volumes");
--	if (pv)
--		pv = pv->child;
--	return pv;
--}
--
--/* Either the "big" vgs lock, or a per-vg lock needs to be held before entering
-- * this function. */
--static int update_pv_status(lvmetad_state *s, struct config_tree *vg)
--{
--	int complete = 1;
--
--	lock_pvs(s);
--	struct config_node *pv = pvs(vg);
--	while (pv) {
--		const char *uuid = find_config_str(pv->child, "id", NULL);
--		int found = uuid ? (dm_hash_lookup(s->pvs, uuid) ? 1 : 0) : 0;
--		// TODO: avoid the override here if MISSING came from the actual
--		// metadata, as opposed from our manipulation...
--		set_flag(vg, pv, "status", "MISSING", !found);
--		if (!found)
--			complete = 0;
--		pv = pv->sib;
--	}
--	unlock_pvs(s);
--
--	return complete;
--}
--
- /* You need to be holding the pvid_map lock already to call this. */
- int update_pvid_map(lvmetad_state *s, struct config_tree *vg, const char *vgid)
- {
-@@ -261,7 +262,6 @@
+ #ifdef linux
+-	if (!_set_oom_adj(OOM_DISABLE) && !_set_oom_adj(OOM_ADJUST_MIN))
+-		syslog(LOG_ERR, "Failed to set oom_adj to protect against OOM killer");
++	if (!_protect_against_oom_killer())
++		syslog(LOG_ERR, "Failed to protect against OOM killer");
+ #endif
  
- 	if (seq == haveseq) {
- 		retval = 1;
--		// TODO: disregard the MISSING_PV flag status in this comparison
- 		if (compare_config(metadata, old->root))
- 			retval = 0;
- 		goto out;
-@@ -337,7 +337,7 @@
- 	int complete = 0;
- 	if (vgid) {
- 		struct config_tree *cft = lock_vg(s, vgid);
--		complete = update_pv_status(s, cft);
-+		complete = update_pv_status(s, cft, cft->root, 0);
- 		unlock_vg(s, vgid);
- 	}
- 
+ 	_init_thread_signals();
 
 
