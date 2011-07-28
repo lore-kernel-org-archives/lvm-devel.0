@@ -1,98 +1,83 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 28 Jul 2011 14:27:03 +0200
-Subject: [PATCH 1/3] Add systemd units for dmeventd and lvm2 monitoring
-Message-ID: <4E315597.4040103@redhat.com>
+Date: Thu, 28 Jul 2011 14:27:55 +0200
+Subject: [PATCH 2/3] Configure and makefile changes for systemd units inclusion
+Message-ID: <4E3155CB.1020407@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-These units are already being used and tested in Fedora rawhide directly:
+ Makefile.in         |    3 +++
+ WHATS_NEW           |    1 +
+ configure.in        |    3 +++
+ make.tmpl.in        |    1 +
+ scripts/Makefile.in |    9 ++++++++-
+ 5 files changed, 16 insertions(+), 1 deletions(-)
 
-  dm_event_systemd_red_hat.service.in (dm-event.service)
-  dm_event_systemd_red_hat.socket (dm-event.socket)
-  lvm2_monitoring_systemd_red_hat.service.in (lvm2-monitor.service)
-
-I'm just resending them here for any additional comments
-(I've just added the OOMScoreAdjust to dm-event.service
-and SocketMode to dm-event.socket when compared to rawhide).
-
-Note: Conflicts: shutdown.target will stop monitoring before
-unmounting any mounted filesystems. But this is as far as we
-can go now. Monitor deactivation should be done later, but
-that will be handled properly if we have shutdown ramfs in
-place (which is also planned, at least for Fedora 16).
-
-Peter
-
----
-
- scripts/dm_event_systemd_red_hat.service.in        |   14 ++++++++++++++
- scripts/dm_event_systemd_red_hat.socket            |   11 +++++++++++
- scripts/lvm2_monitoring_systemd_red_hat.service.in |   17 +++++++++++++++++
- 3 files changed, 42 insertions(+), 0 deletions(-)
-
-diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
-new file mode 100644
-index 0000000..32295d3
---- /dev/null
-+++ b/scripts/dm_event_systemd_red_hat.service.in
-@@ -0,0 +1,14 @@
-+[Unit]
-+Description=Device-mapper event daemon
-+After=fedora-storage-init.service fedora-storage-init-late.service
-+Before=local-fs.target
-+DefaultDependencies=no
+diff --git a/Makefile.in b/Makefile.in
+index f7e34f4..38c41a3 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -92,6 +92,9 @@ install_system_dirs:
+ install_initscripts: 
+ 	$(MAKE) -C scripts install_initscripts
+ 
++install_systemd_units:
++	$(MAKE) -C scripts install_systemd_units
 +
-+[Service]
-+Type=forking
-+ExecStart=@sbindir@/dmeventd
-+PIDFile=@DMEVENTD_PIDFILE@
-+OOMScoreAdjust=-1000
+ LCOV_TRACES = libdm.info lib.info tools.info \
+ 	daemons/dmeventd.info daemons/clvmd.info
+ CLEAN_TARGETS += $(LCOV_TRACES)
+diff --git a/configure.in b/configure.in
+index 60796ad..d54d7d8 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1371,6 +1371,7 @@ AC_SUBST(UDEV_PC)
+ AC_SUBST(UDEV_RULES)
+ AC_SUBST(UDEV_SYNC)
+ AC_SUBST(WRITE_INSTALL)
++AC_SUBST(DMEVENTD_PIDFILE)
+ AC_SUBST(interface)
+ AC_SUBST(kerneldir)
+ AC_SUBST(missingkernel)
+@@ -1417,6 +1418,8 @@ po/Makefile
+ scripts/clvmd_init_red_hat
+ scripts/cmirrord_init_red_hat
+ scripts/lvm2_monitoring_init_red_hat
++scripts/dm_event_systemd_red_hat.service
++scripts/lvm2_monitoring_systemd_red_hat.service
+ scripts/Makefile
+ test/Makefile
+ test/api/Makefile
+diff --git a/make.tmpl.in b/make.tmpl.in
+index cd8ae35..f003149 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -65,6 +65,7 @@ staticdir = $(DESTDIR)@STATICDIR@
+ udevdir = $(DESTDIR)@udevdir@
+ pkgconfigdir = $(usrlibdir)/pkgconfig
+ initdir = $(DESTDIR)@sysconfdir@/rc.d/init.d
++systemd_dir = $(DESTDIR)/lib/systemd/system
+ ocf_scriptdir = $(DESTDIR)@OCFDIR@
+ 
+ USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 5293cc3..7262fbb 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -53,4 +53,11 @@ ifeq ("@BUILD_CMIRRORD@", "yes")
+ 	$(INSTALL_SCRIPT) cmirrord_init_red_hat $(initdir)/cmirrord
+ endif
+ 
+-DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat lvm2_monitoring_init_red_hat
++install_systemd_units:
++	$(INSTALL_DIR) $(systemd_dir)
++	$(INSTALL_DATA) dm_event_systemd_red_hat.socket $(systemd_dir)/dm-event.socket
++	$(INSTALL_DATA) dm_event_systemd_red_hat.service $(systemd_dir)/dm-event.service
++	$(INSTALL_DATA) lvm2_monitoring_systemd_red_hat.service $(systemd_dir)/lvm2-monitor.service
 +
-+[Install]
-+WantedBy=sysinit.target
-diff --git a/scripts/dm_event_systemd_red_hat.socket b/scripts/dm_event_systemd_red_hat.socket
-new file mode 100644
-index 0000000..c580555
---- /dev/null
-+++ b/scripts/dm_event_systemd_red_hat.socket
-@@ -0,0 +1,11 @@
-+[Unit]
-+Description=Device-mapper event daemon FIFOs
-+DefaultDependencies=no
-+
-+[Socket]
-+ListenFIFO=/var/run/dmeventd-server
-+ListenFIFO=/var/run/dmeventd-client
-+SocketMode=0600
-+
-+[Install]
-+WantedBy=sockets.target
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-new file mode 100644
-index 0000000..4715416
---- /dev/null
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -0,0 +1,17 @@
-+[Unit]
-+Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
-+Requires=dm-event.socket
-+After=fedora-storage-init.service fedora-storage-init-late.service
-+Before=local-fs.target
-+DefaultDependencies=no
-+Conflicts=shutdown.target
-+
-+[Service]
-+Type=oneshot
-+ExecStart=@sbindir@/lvm vgchange --monitor y
-+ExecStop=@sbindir@/lvm vgchange --monitor n
-+RemainAfterExit=yes
-+
-+[Install]
-+WantedBy=sysinit.target
-+Also=dm-event.socket
-
++DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat lvm2_monitoring_init_red_hat \
++		     dm_event_systemd_red_hat.service lvm2_monitoring_systemd_red_hat.service
 
 
