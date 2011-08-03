@@ -1,99 +1,59 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 03 Aug 2011 09:43:53 -0500
-Subject: [PATCH 2 of 5] LVM: New function - lv_is_on_pv
+Date: Wed, 03 Aug 2011 09:44:09 -0500
+Subject: [PATCH 3 of 5] LVM RAID: New function - lv_raid_percent
 In-Reply-To: <1312381844.1169.8.camel@f14.redhat.com>
 References: <1312381844.1169.8.camel@f14.redhat.com>
-Message-ID: <1312382633.1169.20.camel@f14.redhat.com>
+Message-ID: <1312382649.1169.21.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lv_is_on_pv - A useful function when devices are specified for removal from RAID
+Add function 'lv_raid_percent'
 
-This function should also be useful for mirror down-converting.
+'lv_raid_percent' operates exactly the same as 'lv_mirror_percent', so
+it is simply a wrapper around that function.
+
+lv_[snapshot|mirror|raid]_percent should be combined - perhaps at the
+dev_manager level while retaining distinct lv_*_percent calls.  We will
+not be able to combine the snapshot percent function with the other types
+for the simple reason that we must account for the "-real" layer.  Perhaps
+lv_snapshot_percent will become a wrapper around a more generic function -
+its only purpose being to flag that it wants the snapshot %'age and not
+an underlying LV's %'age.
+
+Anyway, this simple wrapper will suit RAID's purposes for now.
 
 Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-Index: LVM2/lib/metadata/lv_manip.c
+Index: LVM2/lib/activate/activate.c
 ===================================================================
---- LVM2.orig/lib/metadata/lv_manip.c
-+++ LVM2/lib/metadata/lv_manip.c
-@@ -3513,6 +3513,61 @@ static int _match_seg_area_to_pe_range(s
+--- LVM2.orig/lib/activate/activate.c
++++ LVM2/lib/activate/activate.c
+@@ -611,6 +611,11 @@ int lv_mirror_percent(struct cmd_context
+ 	return r;
  }
  
- /*
-+ * pv_is_in_lv
-+ * @lv:
-+ * @pv:
-+ *
-+ * If any of the component devices of the LV are on the given PV, 1
-+ * is returned; otherwise 0.  For example if one of the images of a mirror
-+ * (or its log) is on the PV, 1 would be returned for the top-level LV.
-+ * If you wish to check the images themselves, you should pass them.
-+ */
-+int pv_is_in_lv(struct logical_volume *lv, struct physical_volume *pv)
++int lv_raid_percent(const struct logical_volume *lv, percent_t *percent)
 +{
-+	uint32_t s;
-+	struct physical_volume *pv2;
-+	struct lv_segment *seg;
-+
-+	if (!lv)
-+		return 0;
-+
-+	seg = first_seg(lv);
-+	if (!seg)
-+		return 0;
-+
-+	/* Check mirror log */
-+	if (pv_is_in_lv(seg->log_lv, pv))
-+		return 1;
-+
-+	/* Check stack of LVs */
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) == AREA_PV) {
-+				pv2 = seg_pv(seg, s);
-+				if (id_equal(&pv->id, &pv2->id))
-+					return 1;
-+				if (pv->dev && pv2->dev &&
-+				    (pv->dev->dev == pv2->dev->dev))
-+					return 1;
-+			}
-+
-+			if ((seg_type(seg, s) == AREA_LV) &&
-+			    pv_is_in_lv(seg_lv(seg, s), pv))
-+				return 1;
-+
-+			if (!seg_is_raid(seg))
-+				continue;
-+
-+			/* This is RAID, so we know the meta_area is AREA_LV */
-+			if (pv_is_in_lv(seg_metalv(seg, s), pv))
-+				return 1;
-+		}
-+	}
-+
-+	return 0;
++	return lv_mirror_percent(lv->vg->cmd, lv, 0, percent, NULL);
 +}
 +
-+/*
-  * For each segment in lv_where that uses a PV in pvl directly,
-  * split the segment if it spans more than one underlying PV.
-  */
-Index: LVM2/lib/metadata/metadata-exported.h
+ static int _lv_active(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+ 	struct lvinfo info;
+Index: LVM2/lib/activate/activate.h
 ===================================================================
---- LVM2.orig/lib/metadata/metadata-exported.h
-+++ LVM2/lib/metadata/metadata-exported.h
-@@ -645,6 +645,7 @@ int lv_is_merging_cow(const struct logic
- int lv_is_visible(const struct logical_volume *lv);
+--- LVM2.orig/lib/activate/activate.h
++++ LVM2/lib/activate/activate.h
+@@ -93,6 +93,7 @@ int lv_check_transient(struct logical_vo
+ int lv_snapshot_percent(const struct logical_volume *lv, percent_t *percent);
+ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		      int wait, percent_t *percent, uint32_t *event_nr);
++int lv_raid_percent(const struct logical_volume *lv, percent_t *percent);
  
- int pv_is_in_vg(struct volume_group *vg, struct physical_volume *pv);
-+int pv_is_in_lv(struct logical_volume *lv, struct physical_volume *pv);
- 
- struct lv_segment *find_merging_cow(const struct logical_volume *origin);
- 
+ /*
+  * Return number of LVs in the VG that are active.
 
 
 
