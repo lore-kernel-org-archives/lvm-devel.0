@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Aug 2011 14:30:54 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/lvm-exec.c lib/repor ...
-Message-ID: <20110804143054.13747.qmail@sourceware.org>
+Date: 4 Aug 2011 14:54:48 -0000
+Subject: LVM2/tools lvmcmdline.c
+Message-ID: <20110804145448.20398.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,84 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-04 14:30:52
+Changes by:	zkabelac at sourceware.org	2011-08-04 14:54:48
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/misc       : lvm-exec.c 
-	lib/report     : report.c 
-	libdm          : libdm-report.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Remove meaningless const type qualifiers on cast type
+	Add 'empty' command
 	
-	Static analyzis noticed we do not really need them - so removing.
+	Using empty command ';' here makes the code look nicer.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2050&r2=1.2051
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-exec.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-report.c.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.145&r2=1.146
 
---- LVM2/WHATS_NEW	2011/08/04 12:40:25	1.2050
-+++ LVM2/WHATS_NEW	2011/08/04 14:30:51	1.2051
-@@ -1,5 +1,6 @@
- Version 2.02.87 - 
- ===============================
-+  Remove meaningless const type qualifiers on cast type.
-   Fix memory leak in dmsetup _message() memory allocation error path.
-   Add test for fcntl error in singlenode client code.
-   Remove --force option from lvrename manpage.
---- LVM2/lib/misc/lvm-exec.c	2011/01/13 14:51:33	1.12
-+++ LVM2/lib/misc/lvm-exec.c	2011/08/04 14:30:51	1.13
-@@ -75,7 +75,7 @@
- 		/* FIXME Fix effect of reset_locking on cache then include this */
- 		/* destroy_toolcontext(cmd); */
- 		/* FIXME Use execve directly */
--		execvp(argv[0], (char **const) argv);
-+		execvp(argv[0], (char **) argv);
- 		log_sys_error("execvp", argv[0]);
- 		_exit(errno);
- 	}
---- LVM2/lib/report/report.c	2011/04/12 12:24:29	1.144
-+++ LVM2/lib/report/report.c	2011/08/04 14:30:52	1.145
-@@ -350,7 +350,7 @@
- 		return 0;
- 	}
- 
--	*sortval = (const uint64_t) size;
-+	*sortval = (uint64_t) size;
- 
- 	dm_report_field_set_value(field, repstr, sortval);
- 
---- LVM2/libdm/libdm-report.c	2011/06/12 19:49:41	1.45
-+++ LVM2/libdm/libdm-report.c	2011/08/04 14:30:52	1.46
-@@ -139,7 +139,7 @@
- 		return 0;
- 	}
- 
--	*sortval = (const uint64_t) value;
-+	*sortval = (uint64_t) value;
- 	field->sort_value = sortval;
- 	field->report_string = repstr;
- 
-@@ -168,7 +168,7 @@
- 		return 0;
- 	}
- 
--	*sortval = (const uint64_t) value;
-+	*sortval = (uint64_t) value;
- 	field->sort_value = sortval;
- 	field->report_string = repstr;
- 
-@@ -197,7 +197,7 @@
- 		return 0;
- 	}
- 
--	*sortval = (const uint64_t) value;
-+	*sortval = (uint64_t) value;
- 	field->sort_value = sortval;
- 	field->report_string = repstr;
- 
+--- LVM2/tools/lvmcmdline.c	2011/08/04 14:11:28	1.145
++++ LVM2/tools/lvmcmdline.c	2011/08/04 14:54:48	1.146
+@@ -275,6 +275,7 @@
+ 			return 0;
+ 		} else if (i == 7) {
+ 			/* v is already in sectors */
++			;
+ 		} else if (i == 6) {
+ 			/* bytes */
+ 			v_tmp = (uint64_t) v;
 
 
