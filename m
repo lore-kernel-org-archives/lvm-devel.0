@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Aug 2011 12:13:52 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-singlenode.c
-Message-ID: <20110804121352.21061.qmail@sourceware.org>
+Date: 4 Aug 2011 12:40:27 -0000
+Subject: LVM2 tools/dmsetup.c ./WHATS_NEW
+Message-ID: <20110804124027.30147.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,43 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-04 12:13:51
+Changes by:	zkabelac at sourceware.org	2011-08-04 12:40:25
 
 Modified files:
+	tools          : dmsetup.c 
 	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-singlenode.c 
 
 Log message:
-	Add test for fcntl error in singlenode client code.
+	Minor memory leak fix
 	
-	Static analyzer noticed this check could be handy.
+	Defer the test of the function return value after the string memory is released.
+	Otherwise in this error path the string would present memory leak.
+	(Thought in this case we are already out of memory...)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2048&r2=1.2049
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-singlenode.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.165&r2=1.166
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2049&r2=1.2050
 
---- LVM2/WHATS_NEW	2011/08/04 10:14:42	1.2048
-+++ LVM2/WHATS_NEW	2011/08/04 12:13:50	1.2049
+--- LVM2/tools/dmsetup.c	2011/07/08 17:08:19	1.165
++++ LVM2/tools/dmsetup.c	2011/08/04 12:40:24	1.166
+@@ -779,11 +779,13 @@
+ 		strcat(str, argv[i]);
+ 	}
+ 
+-	if (!dm_task_set_message(dmt, str))
+-		goto out;
++	i = dm_task_set_message(dmt, str);
+ 
+ 	dm_free(str);
+ 
++	if (!i)
++		goto out;
++
+ 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
+ 		goto out;
+ 
+--- LVM2/WHATS_NEW	2011/08/04 12:13:50	1.2049
++++ LVM2/WHATS_NEW	2011/08/04 12:40:25	1.2050
 @@ -1,5 +1,6 @@
  Version 2.02.87 - 
  ===============================
-+  Add test for fcntl error in singlenode client code.
++  Fix memory leak in dmsetup _message() memory allocation error path.
+   Add test for fcntl error in singlenode client code.
    Remove --force option from lvrename manpage.
    Add missing new line in lvrename help text.
-   Add basic support for RAID 1/4/5/6 (i.e. create, remove, display)
---- LVM2/daemons/clvmd/clvmd-singlenode.c	2011/03/24 10:45:00	1.10
-+++ LVM2/daemons/clvmd/clvmd-singlenode.c	2011/08/04 12:13:51	1.11
-@@ -55,7 +55,10 @@
- 		goto error;
- 	}
- 	/* Set Close-on-exec */
--	fcntl(listen_fd, F_SETFD, 1);
-+	if (fcntl(listen_fd, F_SETFD, 1)) {
-+		DEBUGLOG("Setting CLOEXEC on client fd faile: %s\n", strerror(errno));
-+		goto error;
-+	}
- 
- 	memset(&addr, 0, sizeof(addr));
- 	memcpy(addr.sun_path, SINGLENODE_CLVMD_SOCKNAME,
 
 
