@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Aug 2011 10:14:42 -0000
-Subject: LVM2 ./WHATS_NEW man/lvrename.8.in
-Message-ID: <20110804101442.27177.qmail@sourceware.org>
+Date: 4 Aug 2011 12:13:52 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-singlenode.c
+Message-ID: <20110804121352.21061.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-04 10:14:42
+Changes by:	zkabelac at sourceware.org	2011-08-04 12:13:51
 
 Modified files:
 	.              : WHATS_NEW 
-	man            : lvrename.8.in 
+	daemons/clvmd  : clvmd-singlenode.c 
 
 Log message:
-	Remove --force option from lvrename manpage.
+	Add test for fcntl error in singlenode client code.
+	
+	Static analyzer noticed this check could be handy.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2047&r2=1.2048
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvrename.8.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2048&r2=1.2049
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-singlenode.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/WHATS_NEW	2011/08/04 10:12:44	1.2047
-+++ LVM2/WHATS_NEW	2011/08/04 10:14:42	1.2048
+--- LVM2/WHATS_NEW	2011/08/04 10:14:42	1.2048
++++ LVM2/WHATS_NEW	2011/08/04 12:13:50	1.2049
 @@ -1,5 +1,6 @@
  Version 2.02.87 - 
  ===============================
-+  Remove --force option from lvrename manpage.
++  Add test for fcntl error in singlenode client code.
+   Remove --force option from lvrename manpage.
    Add missing new line in lvrename help text.
    Add basic support for RAID 1/4/5/6 (i.e. create, remove, display)
-   Change DEFAULT_UDEV_SYNC to 1 so udev_sync is used even without any config.
---- LVM2/man/lvrename.8.in	2009/08/04 08:09:52	1.2
-+++ LVM2/man/lvrename.8.in	2011/08/04 10:14:42	1.3
-@@ -5,7 +5,6 @@
- .B lvrename
- .RB [ \-A | \-\-autobackup " {" y | n }]
- .RB [ \-d | \-\-debug ]
--.RB [ \-f | \-\-force ]
- .RB [ \-h | \-\-help ]
- .RB [ \-\-noudevsync ]
- .RB [ \-t | \-\-test ]
+--- LVM2/daemons/clvmd/clvmd-singlenode.c	2011/03/24 10:45:00	1.10
++++ LVM2/daemons/clvmd/clvmd-singlenode.c	2011/08/04 12:13:51	1.11
+@@ -55,7 +55,10 @@
+ 		goto error;
+ 	}
+ 	/* Set Close-on-exec */
+-	fcntl(listen_fd, F_SETFD, 1);
++	if (fcntl(listen_fd, F_SETFD, 1)) {
++		DEBUGLOG("Setting CLOEXEC on client fd faile: %s\n", strerror(errno));
++		goto error;
++	}
+ 
+ 	memset(&addr, 0, sizeof(addr));
+ 	memcpy(addr.sun_path, SINGLENODE_CLVMD_SOCKNAME,
 
 
