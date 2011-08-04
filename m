@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Aug 2011 12:40:27 -0000
-Subject: LVM2 tools/dmsetup.c ./WHATS_NEW
-Message-ID: <20110804124027.30147.qmail@sourceware.org>
+Date: 4 Aug 2011 14:11:29 -0000
+Subject: LVM2/tools lvmcmdline.c
+Message-ID: <20110804141129.5656.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-04 12:40:25
+Changes by:	zkabelac at sourceware.org	2011-08-04 14:11:29
 
 Modified files:
-	tools          : dmsetup.c 
-	.              : WHATS_NEW 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Minor memory leak fix
+	Remove self assigment which has no effect
 	
-	Defer the test of the function return value after the string memory is released.
-	Otherwise in this error path the string would present memory leak.
-	(Thought in this case we are already out of memory...)
+	Just a tiny code cleanup found by analyzer.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.165&r2=1.166
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2049&r2=1.2050
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
 
---- LVM2/tools/dmsetup.c	2011/07/08 17:08:19	1.165
-+++ LVM2/tools/dmsetup.c	2011/08/04 12:40:24	1.166
-@@ -779,11 +779,13 @@
- 		strcat(str, argv[i]);
- 	}
- 
--	if (!dm_task_set_message(dmt, str))
--		goto out;
-+	i = dm_task_set_message(dmt, str);
- 
- 	dm_free(str);
- 
-+	if (!i)
-+		goto out;
-+
- 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
- 		goto out;
- 
---- LVM2/WHATS_NEW	2011/08/04 12:13:50	1.2049
-+++ LVM2/WHATS_NEW	2011/08/04 12:40:25	1.2050
-@@ -1,5 +1,6 @@
- Version 2.02.87 - 
- ===============================
-+  Fix memory leak in dmsetup _message() memory allocation error path.
-   Add test for fcntl error in singlenode client code.
-   Remove --force option from lvrename manpage.
-   Add missing new line in lvrename help text.
+--- LVM2/tools/lvmcmdline.c	2011/06/27 23:43:04	1.144
++++ LVM2/tools/lvmcmdline.c	2011/08/04 14:11:28	1.145
+@@ -274,8 +274,7 @@
+ 		if (i < 0) {
+ 			return 0;
+ 		} else if (i == 7) {
+-			/* sectors */
+-			v = v;
++			/* v is already in sectors */
+ 		} else if (i == 6) {
+ 			/* bytes */
+ 			v_tmp = (uint64_t) v;
 
 
