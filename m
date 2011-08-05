@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Aug 2011 17:56:12 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-file.c
-Message-ID: <20110804175612.8219.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 5 Aug 2011 09:21:14 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20110805092114.14694.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,43 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-04 17:56:12
+Changes by:	prajnoha at sourceware.org	2011-08-05 09:21:13
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdm-file.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Add missing check for allocation failure
-	
-	Static analyzer discovered missing check.
+	Remove unused 'origin' variable in lv_remove_single function.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.485&r2=1.486
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-file.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.269&r2=1.270
 
---- LVM2/WHATS_NEW_DM	2011/07/28 13:06:50	1.485
-+++ LVM2/WHATS_NEW_DM	2011/08/04 17:56:11	1.486
-@@ -1,5 +1,6 @@
- Version 1.02.66 - 
- ===============================
-+  Add missing check for allocation failure _create_dir_recursive().
-   Add support for systemd file descriptor handover in dmeventd.
-   Add support for new oom killer adjustment interface (oom_score_adj).
-   Add systemd unit files for dmeventd.
---- LVM2/libdm/libdm-file.c	2011/04/08 14:40:20	1.15
-+++ LVM2/libdm/libdm-file.c	2011/08/04 17:56:12	1.16
-@@ -27,6 +27,11 @@
- 	log_verbose("Creating directory \"%s\"", dir);
- 	/* Create parent directories */
- 	orig = s = dm_strdup(dir);
-+	if (!s) {
-+		log_error("Failed to duplicate directory name.");
-+		return 0;
-+	}
-+
- 	while ((s = strchr(s, '/')) != NULL) {
- 		*s = '\0';
- 		if (*orig) {
+--- LVM2/lib/metadata/lv_manip.c	2011/08/02 22:07:22	1.269
++++ LVM2/lib/metadata/lv_manip.c	2011/08/05 09:21:13	1.270
+@@ -2923,7 +2923,6 @@
+ {
+ 	struct volume_group *vg;
+ 	struct lvinfo info;
+-	struct logical_volume *origin = NULL;
+ 
+ 	vg = lv->vg;
+ 
+@@ -2983,7 +2982,6 @@
+ 		return 0;
+ 
+ 	if (lv_is_cow(lv)) {
+-		origin = origin_from_cow(lv);
+ 		log_verbose("Removing snapshot %s", lv->name);
+ 		/* vg_remove_snapshot() will preload origin/former snapshots */
+ 		if (!vg_remove_snapshot(lv))
 
 
