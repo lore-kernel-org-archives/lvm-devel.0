@@ -1,423 +1,665 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue,  9 Aug 2011 18:39:45 +0200
-Subject: [PATCH] Remove GULM support completely.
-Message-ID: <1312907985-23182-1-git-send-email-mbroz@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Aug 2011 17:56:49 -0000
+Subject: LVM2 ./WHATS_NEW_DM ./configure ./configure.in ...
+Message-ID: <20110809175649.8969.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This cluster locking is not used for years and is completely obsoleted.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-08-09 17:56:48
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
----
- configure.in                  |   50 +--
- daemons/clvmd/Makefile.in     |   10 -
- daemons/clvmd/clvmd-comms.h   |    7 -
- daemons/clvmd/clvmd-gulm.c    | 1010 -----------------------------------------
- daemons/clvmd/clvmd-gulm.h    |    9 -
- daemons/clvmd/clvmd.c         |   29 +-
- daemons/clvmd/lvm-functions.c |   46 +--
- daemons/clvmd/lvm-functions.h |    2 +-
- daemons/clvmd/tcp-comms.c     |  502 --------------------
- daemons/clvmd/tcp-comms.h     |   13 -
- lib/misc/configure.h.in       |    6 -
- 11 files changed, 8 insertions(+), 1676 deletions(-)
- delete mode 100644 daemons/clvmd/clvmd-gulm.c
- delete mode 100644 daemons/clvmd/clvmd-gulm.h
- delete mode 100644 daemons/clvmd/tcp-comms.c
- delete mode 100644 daemons/clvmd/tcp-comms.h
+Modified files:
+	.              : WHATS_NEW_DM configure configure.in 
+	libdm/ioctl    : libdm-iface.c libdm-targets.h 
+Removed files:
+	libdm/ioctl    : libdm-compat.h 
 
-diff --git a/configure.in b/configure.in
-index 24f1ec4..5b52c4d 100644
---- a/configure.in
-+++ b/configure.in
-@@ -423,7 +423,6 @@ AC_MSG_CHECKING(whether to build cluster LVM daemon)
- AC_ARG_WITH(clvmd,
-   [  --with-clvmd=TYPE       build cluster LVM Daemon
-                           The following cluster manager combinations are valid:
--                           * cman,gulm             (RHEL4 or equivalent)
-                            * cman                  (RHEL5 or equivalent)
-                            * cman,corosync,openais (or selection of them)
-                            * singlenode            (localhost only)
-@@ -449,15 +448,10 @@ fi
- dnl -- Express clvmd init script Required-Start / Required-Stop
- CLVMD_CMANAGERS=""
- dnl -- On RHEL4/RHEL5, qdiskd is started from a separate init script.
--dnl -- Enable if we are build for either cman or gulm.
-+dnl -- Enable if we are build for cman.
- CLVMD_NEEDS_QDISKD=no
- 
- dnl -- define build types
--if [[ `expr x"$CLVMD" : '.*gulm.*'` != 0 ]]; then
--	BUILDGULM=yes
--	CLVMD_CMANAGERS="$CLVMD_CMANAGERS lock_gulmd"
--	CLVMD_NEEDS_QDISKD=yes
--fi
- if [[ `expr x"$CLVMD" : '.*cman.*'` != 0 ]]; then
- 	BUILDCMAN=yes
- 	CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
-@@ -475,14 +469,6 @@ if test x$CLVMD_NEEDS_QDISKD != xno; then
- 	CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
+Log message:
+	Remove support for the original dm ioctl interface version 1.
+	Leave the basic support for multiple versions in case we have a new version
+	in future.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.486&r2=1.487
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.150&r2=1.151
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.164&r2=1.165
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-targets.h.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-compat.h.diff?cvsroot=lvm2&r1=1.11&r2=NONE
+
+--- LVM2/WHATS_NEW_DM	2011/08/04 17:56:11	1.486
++++ LVM2/WHATS_NEW_DM	2011/08/09 17:56:47	1.487
+@@ -1,5 +1,6 @@
+ Version 1.02.66 - 
+ ===============================
++  Remove support for the original version 1 dm ioctls.
+   Add missing check for allocation failure _create_dir_recursive().
+   Add support for systemd file descriptor handover in dmeventd.
+   Add support for new oom killer adjustment interface (oom_score_adj).
+--- LVM2/configure	2011/08/02 22:07:20	1.150
++++ LVM2/configure	2011/08/09 17:56:47	1.151
+@@ -8917,6 +8917,13 @@
  fi
  
--dnl -- sanity check around user selection
--if test x$BUILDGULM = xyes; then
--	if test x$BUILDCOROSYNC = xyes || \
--	   test x$BUILDOPENAIS = xyes; then
--		AC_MSG_ERROR([requested clvmd configuration is not valid])
--	fi
--fi
--
- dnl -- define a soft bailout if we are autodetecting
- soft_bailout() {
- 	NOTFOUND=1
-@@ -494,10 +480,9 @@ hard_bailout() {
  
- dnl -- if clvmd=all then set soft_bailout (we don't want to error)
- dnl -- and set all builds to yes. We need to do this here
--dnl -- to skip the gulm + openais|corosync sanity check above.
-+dnl -- to skip the openais|corosync sanity check above.
- if test x$CLVMD = xall; then
- 	bailout=soft_bailout
--	BUILDGULM=yes
- 	BUILDCMAN=yes
- 	BUILDCOROSYNC=yes
- 	BUILDOPENAIS=yes
-@@ -519,28 +504,6 @@ check_lib_no_libs() {
- 	LIBS=$ac_check_lib_save_LIBS
- }
++if test x$DM_COMPAT = xyes; then
++	as_fn_error $? "--enable-compat is not currently supported.
++Since device-mapper version 1.02.66, only one version (4) of the device-mapper
++ioctl protocol is supported.
++	" "$LINENO" 5
++fi
++
+ ################################################################################
+ # Check whether --enable-units-compat was given.
+ if test "${enable_units_compat+set}" = set; then :
+--- LVM2/configure.in	2011/08/02 22:07:21	1.164
++++ LVM2/configure.in	2011/08/09 17:56:47	1.165
+@@ -846,6 +846,14 @@
+ 			     [enable support for old device-mapper versions]),
+ 	      DM_COMPAT=$enableval, DM_COMPAT=no)
  
--dnl -- Look for gulm libraries if required.
--if test x$BUILDGULM = xyes; then
--	PKG_CHECK_MODULES(CCS, libccs, [HAVE_CCS=yes],
--		[NOTFOUND=0
--		AC_CHECK_HEADERS(ccs.h,,$bailout)
--		check_lib_no_libs ccs ccs_connect
--		if test $NOTFOUND = 0; then
--			AC_MSG_RESULT([no pkg for libccs, using -lccs])
--			CCS_LIBS="-lccs"
--			HAVE_CCS=yes
--		fi])
--	PKG_CHECK_MODULES(GULM, libgulm, [HAVE_GULM=yes],
--		[NOTFOUND=0
--		AC_CHECK_HEADERS(libgulm.h,,$bailout)
--		check_lib_no_libs gulm lg_core_login
--		if test $NOTFOUND = 0; then
--			AC_MSG_RESULT([no pkg for libgulm, using -lgulm])
--			GULM_LIBS="-lgulm"
--			HAVE_GULM=yes
--		fi])
--fi
--
- dnl -- Look for cman libraries if required.
- if test x$BUILDCMAN = xyes; then
- 	PKG_CHECK_MODULES(CMAN, libcman, [HAVE_CMAN=yes],
-@@ -633,13 +596,6 @@ if test x$CLVMD = xall; then
- 	CLVMD=none
- 	CLVMD_CMANAGERS=""
- 	CLVMD_NEEDS_QDISKD=no
--	if test x$HAVE_CCS = xyes && \
--	   test x$HAVE_GULM = xyes; then
--		AC_MSG_RESULT([Enabling clvmd gulm cluster manager])
--		CLVMD="$CLVMD,gulm"
--		CLVMD_CMANAGERS="$CLVMD_CMANAGERS lock_gulmd"
--		CLVMD_NEEDS_QDISKD=yes
--	fi
- 	if test x$HAVE_CMAN = xyes && \
- 	   test x$HAVE_DLM = xyes; then
- 		AC_MSG_RESULT([Enabling clvmd cman cluster manager])
-@@ -1346,8 +1302,6 @@ AC_SUBST(DM_IOCTLS)
- AC_SUBST(DM_LIB_VERSION)
- AC_SUBST(DM_LIB_PATCHLEVEL)
- AC_SUBST(FSADM)
--AC_SUBST(GULM_CFLAGS)
--AC_SUBST(GULM_LIBS)
- AC_SUBST(HAVE_LIBDL)
- AC_SUBST(HAVE_REALTIME)
- AC_SUBST(INTL)
-diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
-index ee19e6c..91fd273 100644
---- a/daemons/clvmd/Makefile.in
-+++ b/daemons/clvmd/Makefile.in
-@@ -25,8 +25,6 @@ CPG_LIBS = @CPG_LIBS@
- CPG_CFLAGS = @CPG_CFLAGS@
- DLM_LIBS = @DLM_LIBS@
- DLM_CFLAGS = @DLM_CFLAGS@
--GULM_LIBS = @GULM_LIBS@
--GULM_CFLAGS = @GULM_CFLAGS@
- QUORUM_LIBS = @QUORUM_LIBS@
- QUORUM_CFLAGS = @QUORUM_CFLAGS@
- SALCK_LIBS = @SALCK_LIBS@
-@@ -42,13 +40,6 @@ ifeq ("@DEBUG@", "yes")
- 	DEFS += -DDEBUG
- endif
++if test x$DM_COMPAT = xyes; then
++	AC_MSG_ERROR(
++                 [--enable-compat is not currently supported.
++Since device-mapper version 1.02.66, only one version (4) of the device-mapper 
++ioctl protocol is supported.]
++	)
++fi
++
+ ################################################################################
+ dnl -- Compatible units suffix mode
+ AC_ARG_ENABLE(units-compat,
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/07/24 23:59:03	1.114
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/08/09 17:56:48	1.115
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
+@@ -17,10 +17,6 @@
+ #include "libdm-targets.h"
+ #include "libdm-common.h"
  
--ifneq (,$(findstring gulm,, "@CLVMD@,"))
--	SOURCES += clvmd-gulm.c tcp-comms.c
--	LMLIBS += $(CCS_LIBS) $(GULM_LIBS)
--	CFLAGS += $(CCS_CFLAGS) $(GULM_CFLAGS)
--	DEFS += -DUSE_GULM
--endif
--
- ifneq (,$(findstring cman,, "@CLVMD@,"))
- 	SOURCES += clvmd-cman.c
- 	LMLIBS += $(CMAN_LIBS) $(CONFDB_LIBS) $(DLM_LIBS)
-@@ -76,7 +67,6 @@ ifneq (,$(findstring singlenode,, &quot;@CLVMD@,&quot;))
- endif
- 
- ifeq ($(MAKECMDGOALS),distclean)
--	SOURCES += clvmd-gulm.c tcp-comms.c
- 	SOURCES += clvmd-cman.c
- 	SOURCES += clvmd-openais.c
- 	SOURCES += clvmd-corosync.c
-diff --git a/daemons/clvmd/clvmd-comms.h b/daemons/clvmd/clvmd-comms.h
-index fbcfe8b..500bd57 100644
---- a/daemons/clvmd/clvmd-comms.h
-+++ b/daemons/clvmd/clvmd-comms.h
-@@ -54,13 +54,6 @@ struct cluster_ops {
- 
- };
- 
--#ifdef USE_GULM
--#  include "tcp-comms.h"
--struct cluster_ops *init_gulm_cluster(void);
--#define MAX_CSID_LEN 			GULM_MAX_CSID_LEN
--#define MAX_CLUSTER_MEMBER_NAME_LEN	GULM_MAX_CLUSTER_MEMBER_NAME_LEN
+-#ifdef DM_COMPAT
+-#  include "libdm-compat.h"
 -#endif
 -
- #ifdef USE_CMAN
- #  include <netinet/in.h>
- #  include "libcman.h"
-diff --git a/daemons/clvmd/clvmd-gulm.c b/daemons/clvmd/clvmd-gulm.c
-deleted file mode 100644
-index 3561004..0000000
-diff --git a/daemons/clvmd/clvmd-gulm.h b/daemons/clvmd/clvmd-gulm.h
-deleted file mode 100644
-index 9416f5c..0000000
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index 703268f..07883ea 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -78,7 +78,6 @@ struct lvm_thread_cmd {
- };
+ #include <fcntl.h>
+ #include <dirent.h>
+ #include <sys/ioctl.h>
+@@ -44,8 +40,7 @@
+  * in the _cmd_data arrays.
+  */
  
- struct lvm_startup_params {
--	int using_gulm;
- 	char **argv;
- };
- 
-@@ -101,7 +100,7 @@ static int child_pipe[2];
- #define DFAIL_TIMEOUT    5
- #define SUCCESS          0
- 
--typedef enum {IF_AUTO, IF_CMAN, IF_GULM, IF_OPENAIS, IF_COROSYNC, IF_SINGLENODE} if_type_t;
-+typedef enum {IF_AUTO, IF_CMAN, IF_OPENAIS, IF_COROSYNC, IF_SINGLENODE} if_type_t;
- 
- /* Prototypes for code further down */
- static void sigusr2_handler(int sig);
-@@ -166,9 +165,6 @@ static void usage(const char *prog, FILE *file)
- #ifdef USE_OPENAIS
- 		"openais "
+-#if !((DM_VERSION_MAJOR == 1 && DM_VERSION_MINOR >= 0) || \
+-      (DM_VERSION_MAJOR == 4 && DM_VERSION_MINOR >= 0))
++#if !((DM_VERSION_MAJOR == 4 && DM_VERSION_MINOR >= 6))
+ #error The version of dm-ioctl.h included is incompatible.
  #endif
--#ifdef USE_GULM
--		"gulm "
+ 
+@@ -92,16 +87,7 @@
+ static int _version_ok = 1;
+ static unsigned _ioctl_buffer_double_factor = 0;
+ 
+-/*
+- * Support both old and new major numbers to ease the transition.
+- * Clumsy, but only temporary.
+- */
+-#if DM_VERSION_MAJOR == 4 && defined(DM_COMPAT)
+-const int _dm_compat = 1;
+-#else
+ const int _dm_compat = 0;
 -#endif
- #ifdef USE_SINGLENODE
- 		"singlenode "
- #endif
-@@ -342,7 +338,6 @@ int main(int argc, char *argv[])
- 	int start_timeout = 0;
- 	if_type_t cluster_iface = IF_AUTO;
- 	sigset_t ss;
--	int using_gulm = 0;
- 	int debug_opt = 0;
- 	debug_t debug_arg = DEBUG_OFF;
- 	int clusterwide_opt = 0;
-@@ -473,7 +468,7 @@ int main(int argc, char *argv[])
- 
- 	/* Set up signal handlers, USR1 is for cluster change notifications (in cman)
- 	   USR2 causes child threads to exit.
--	   HUP causes gulm version to re-read nodes list from CCS.
-+	   HUP causes to re-read nodes list from CCS.
- 	   PIPE should be ignored */
- 	signal(SIGUSR2, sigusr2_handler);
- 	signal(SIGHUP,  sighup_handler);
-@@ -505,16 +500,6 @@ int main(int argc, char *argv[])
- 		syslog(LOG_NOTICE, "Cluster LVM daemon started - connected to CMAN");
- 	}
- #endif
--#ifdef USE_GULM
--	if (!clops)
--		if ((cluster_iface == IF_AUTO || cluster_iface == IF_GULM) && (clops = init_gulm_cluster())) {
--			max_csid_len = GULM_MAX_CSID_LEN;
--			max_cluster_message = GULM_MAX_CLUSTER_MESSAGE;
--			max_cluster_member_name_len = GULM_MAX_CLUSTER_MEMBER_NAME_LEN;
--			using_gulm = 1;
--			syslog(LOG_NOTICE, "Cluster LVM daemon started - connected to GULM");
--		}
--#endif
- #ifdef USE_COROSYNC
- 	if (!clops)
- 		if (((cluster_iface == IF_AUTO || cluster_iface == IF_COROSYNC) && (clops = init_corosync_cluster()))) {
-@@ -580,14 +565,10 @@ int main(int argc, char *argv[])
- 
- 	/* Don't let anyone else to do work until we are started */
- 	pthread_mutex_lock(&lvm_start_mutex);
--	lvm_params.using_gulm = using_gulm;
- 	lvm_params.argv = argv;
- 	pthread_create(&lvm_thread, NULL, lvm_thread_fn, &lvm_params);
- 
- 	/* Tell the rest of the cluster our version number */
--	/* CMAN can do this immediately, gulm needs to wait until
--	   the core initialisation has finished and the node list
--	   has been gathered */
- 	if (clops->cluster_init_completed)
- 		clops->cluster_init_completed();
- 
-@@ -625,7 +606,7 @@ int main(int argc, char *argv[])
- 	return 0;
- }
- 
--/* Called when the GuLM cluster layer has completed initialisation.
-+/* Called when the cluster layer has completed initialisation.
-    We send the version message */
- void clvmd_cluster_init_completed(void)
- {
-@@ -1965,7 +1946,7 @@ static void *lvm_thread_fn(void *arg)
- 	pthread_sigmask(SIG_BLOCK, &ss, NULL);
- 
- 	/* Initialise the interface to liblvm */
--	init_clvm(lvm_params->using_gulm, lvm_params->argv);
-+	init_clvm(lvm_params->argv);
- 
- 	/* Allow others to get moving */
- 	pthread_mutex_unlock(&lvm_start_mutex);
-@@ -2222,8 +2203,6 @@ static if_type_t parse_cluster_interface(char *ifname)
- 		iface = IF_AUTO;
- 	if (!strcmp(ifname, "cman"))
- 		iface = IF_CMAN;
--	if (!strcmp(ifname, "gulm"))
--		iface = IF_GULM;
- 	if (!strcmp(ifname, "openais"))
- 		iface = IF_OPENAIS;
- 	if (!strcmp(ifname, "corosync"))
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index c10ce9d..d2c89d9 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -650,46 +650,6 @@ int do_refresh_cache(void)
- 	return 0;
- }
- 
 -
--/* Only called at gulm startup. Drop any leftover VG or P_orphan locks
--   that might be hanging around if we died for any reason
--*/
--static void drop_vg_locks(void)
+ 
+ /* *INDENT-OFF* */
+ static struct cmd_data _cmd_data_v4[] = {
+@@ -133,7 +119,6 @@
+ };
+ /* *INDENT-ON* */
+ 
+-#define ALIGNMENT_V1 sizeof(int)
+ #define ALIGNMENT 8
+ 
+ /* FIXME Rejig library to record & use errno instead */
+@@ -471,409 +456,6 @@
+ }
+ 
+ /*
+- * Protocol Version 1 compatibility functions.
+- */
+-
+-#ifdef DM_COMPAT
+-
+-static void _dm_zfree_dmi_v1(struct dm_ioctl_v1 *dmi)
 -{
--	char vg[128];
--	char line[255];
--	FILE *vgs =
--	    popen
--	    (LVM_PATH " pvs  --config 'log{command_names=0 prefix=\"\"}' --nolocking --noheadings -o vg_name", "r");
--
--	sync_unlock("P_" VG_ORPHANS, LCK_EXCL);
--	sync_unlock("P_" VG_GLOBAL, LCK_EXCL);
--
--	if (!vgs)
--		return;
--
--	while (fgets(line, sizeof(line), vgs)) {
--		char *vgend;
--		char *vgstart;
--
--		if (line[strlen(line)-1] == '\n')
--			line[strlen(line)-1] = '\0';
--
--		vgstart = line + strspn(line, " ");
--		vgend = vgstart + strcspn(vgstart, " ");
--		*vgend = '\0';
--
--		if (strncmp(vgstart, "WARNING:", 8) == 0)
--			continue;
--
--		sprintf(vg, "V_%s", vgstart);
--		sync_unlock(vg, LCK_EXCL);
--
+-	if (dmi) {
+-		memset(dmi, 0, dmi->data_size);
+-		dm_free(dmi);
 -	}
--	if (fclose(vgs))
--		DEBUGLOG("vgs fclose failed: %s\n", strerror(errno));
 -}
 -
- /*
-  * Handle VG lock - drop metadata or update lvmcache state
+-static int _dm_task_get_driver_version_v1(struct dm_task *dmt, char *version,
+-					  size_t size)
+-{
+-	unsigned int *v;
+-
+-	if (!dmt->dmi.v1) {
+-		version[0] = '\0';
+-		return 0;
+-	}
+-
+-	v = dmt->dmi.v1->version;
+-	snprintf(version, size, "%u.%u.%u", v[0], v[1], v[2]);
+-	return 1;
+-}
+-
+-/* Unmarshall the target info returned from a status call */
+-static int _unmarshal_status_v1(struct dm_task *dmt, struct dm_ioctl_v1 *dmi)
+-{
+-	char *outbuf = (char *) dmi + dmi->data_start;
+-	char *outptr = outbuf;
+-	int32_t i;
+-	struct dm_target_spec_v1 *spec;
+-
+-	for (i = 0; i < dmi->target_count; i++) {
+-		spec = (struct dm_target_spec_v1 *) outptr;
+-
+-		if (!dm_task_add_target(dmt, spec->sector_start,
+-					(uint64_t) spec->length,
+-					spec->target_type,
+-					outptr + sizeof(*spec))) {
+-			return 0;
+-		}
+-
+-		outptr = outbuf + spec->next;
+-	}
+-
+-	return 1;
+-}
+-
+-static int _dm_format_dev_v1(char *buf, int bufsize, uint32_t dev_major,
+-			     uint32_t dev_minor)
+-{
+-	int r;
+-
+-	if (bufsize < 8)
+-		return 0;
+-
+-	r = snprintf(buf, bufsize, "%03x:%03x", dev_major, dev_minor);
+-	if (r < 0 || r > bufsize - 1)
+-		return 0;
+-
+-	return 1;
+-}
+-
+-static int _dm_task_get_info_v1(struct dm_task *dmt, struct dm_info *info)
+-{
+-	if (!dmt->dmi.v1)
+-		return 0;
+-
+-	memset(info, 0, sizeof(*info));
+-
+-	info->exists = dmt->dmi.v1->flags & DM_EXISTS_FLAG ? 1 : 0;
+-	if (!info->exists)
+-		return 1;
+-
+-	info->suspended = dmt->dmi.v1->flags & DM_SUSPEND_FLAG ? 1 : 0;
+-	info->read_only = dmt->dmi.v1->flags & DM_READONLY_FLAG ? 1 : 0;
+-	info->target_count = dmt->dmi.v1->target_count;
+-	info->open_count = dmt->dmi.v1->open_count;
+-	info->event_nr = 0;
+-	info->major = MAJOR(dmt->dmi.v1->dev);
+-	info->minor = MINOR(dmt->dmi.v1->dev);
+-	info->live_table = 1;
+-	info->inactive_table = 0;
+-
+-	return 1;
+-}
+-
+-static const char *_dm_task_get_name_v1(const struct dm_task *dmt)
+-{
+-	return (dmt->dmi.v1->name);
+-}
+-
+-static const char *_dm_task_get_uuid_v1(const struct dm_task *dmt)
+-{
+-	return (dmt->dmi.v1->uuid);
+-}
+-
+-static struct dm_deps *_dm_task_get_deps_v1(struct dm_task *dmt)
+-{
+-	log_error("deps version 1 no longer supported by libdevmapper");
+-	return NULL;
+-}
+-
+-static struct dm_names *_dm_task_get_names_v1(struct dm_task *dmt)
+-{
+-	return (struct dm_names *) (((void *) dmt->dmi.v1) +
+-				    dmt->dmi.v1->data_start);
+-}
+-
+-static char *_add_target_v1(struct target *t, char *out, char *end)
+-{
+-	char *out_sp = out;
+-	struct dm_target_spec_v1 sp;
+-	size_t sp_size = sizeof(struct dm_target_spec_v1);
+-	int len;
+-
+-	out += sp_size;
+-	if (out >= end)
+-		return_NULL;
+-
+-	sp.status = 0;
+-	sp.sector_start = t->start;
+-	sp.length = t->length;
+-	strncpy(sp.target_type, t->type, sizeof(sp.target_type));
+-
+-	len = strlen(t->params);
+-
+-	if ((out + len + 1) >= end)
+-		return_NULL;
+-
+-	strcpy(out, t->params);
+-	out += len + 1;
+-
+-	/* align next block */
+-	out = _align(out, ALIGNMENT_V1);
+-
+-	sp.next = out - out_sp;
+-
+-	memcpy(out_sp, &sp, sp_size);
+-
+-	return out;
+-}
+-
+-static struct dm_ioctl_v1 *_flatten_v1(struct dm_task *dmt)
+-{
+-	const size_t min_size = 16 * 1024;
+-	const int (*version)[3];
+-
+-	struct dm_ioctl_v1 *dmi;
+-	struct target *t;
+-	size_t len = sizeof(struct dm_ioctl_v1);
+-	char *b, *e;
+-	int count = 0;
+-
+-	for (t = dmt->head; t; t = t->next) {
+-		len += sizeof(struct dm_target_spec_v1);
+-		len += strlen(t->params) + 1 + ALIGNMENT_V1;
+-		count++;
+-	}
+-
+-	if (count && dmt->newname) {
+-		log_error("targets and newname are incompatible");
+-		return NULL;
+-	}
+-
+-	if (dmt->newname)
+-		len += strlen(dmt->newname) + 1;
+-
+-	/*
+-	 * Give len a minimum size so that we have space to store
+-	 * dependencies or status information.
+-	 */
+-	if (len < min_size)
+-		len = min_size;
+-
+-	if (!(dmi = dm_malloc(len)))
+-		return NULL;
+-
+-	memset(dmi, 0, len);
+-
+-	version = &_cmd_data_v1[dmt->type].version;
+-
+-	dmi->version[0] = (*version)[0];
+-	dmi->version[1] = (*version)[1];
+-	dmi->version[2] = (*version)[2];
+-
+-	dmi->data_size = len;
+-	dmi->data_start = sizeof(struct dm_ioctl_v1);
+-
+-	if (dmt->dev_name)
+-		strncpy(dmi->name, dmt->dev_name, sizeof(dmi->name));
+-
+-	if (dmt->type == DM_DEVICE_SUSPEND)
+-		dmi->flags |= DM_SUSPEND_FLAG;
+-	if (dmt->read_only)
+-		dmi->flags |= DM_READONLY_FLAG;
+-
+-	if (dmt->minor >= 0) {
+-		if (dmt->major <= 0) {
+-			log_error("Missing major number for persistent device");
+-			return NULL;
+-		}
+-		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
+-		dmi->dev = MKDEV(dmt->major, dmt->minor);
+-	}
+-
+-	if (dmt->uuid)
+-		strncpy(dmi->uuid, dmt->uuid, sizeof(dmi->uuid));
+-
+-	dmi->target_count = count;
+-
+-	b = (char *) (dmi + 1);
+-	e = (char *) dmi + len;
+-
+-	for (t = dmt->head; t; t = t->next)
+-		if (!(b = _add_target_v1(t, b, e))) {
+-			log_error("Ran out of memory building ioctl parameter");
+-			goto bad;
+-		}
+-
+-	if (dmt->newname)
+-		strcpy(b, dmt->newname);
+-
+-	return dmi;
+-
+-      bad:
+-	_dm_zfree_dmi_v1(dmi);
+-	return NULL;
+-}
+-
+-static int _dm_names_v1(struct dm_ioctl_v1 *dmi)
+-{
+-	const char *dev_dir = dm_dir();
+-	int r = 1, len;
+-	const char *name;
+-	struct dirent *dirent;
+-	DIR *d;
+-	struct dm_names *names, *old_names = NULL;
+-	void *end = (void *) dmi + dmi->data_size;
+-	struct stat buf;
+-	char path[PATH_MAX];
+-
+-	log_warn("WARNING: Device list may be incomplete with interface "
+-		  "version 1.");
+-	log_warn("Please upgrade your kernel device-mapper driver.");
+-
+-	if (!(d = opendir(dev_dir))) {
+-		log_sys_error("opendir", dev_dir);
+-		return 0;
+-	}
+-
+-	names = (struct dm_names *) ((void *) dmi + dmi->data_start);
+-
+-	names->dev = 0;		/* Flags no data */
+-
+-	while ((dirent = readdir(d))) {
+-		name = dirent->d_name;
+-
+-		if (name[0] == '.' || !strcmp(name, "control"))
+-			continue;
+-
+-		if (old_names)
+-			old_names->next = (uint32_t) ((void *) names -
+-						      (void *) old_names);
+-		snprintf(path, sizeof(path), "%s/%s", dev_dir, name);
+-		if (stat(path, &buf)) {
+-			log_sys_error("stat", path);
+-			continue;
+-		}
+-		if (!S_ISBLK(buf.st_mode))
+-			continue;
+-		names->dev = (uint64_t) buf.st_rdev;
+-		names->next = 0;
+-		len = strlen(name);
+-		if (((char *) (names + 1) + len + 1) >= end) {
+-			log_error("Insufficient buffer space for device list");
+-			r = 0;
+-			break;
+-		}
+-
+-		strcpy(names->name, name);
+-
+-		old_names = names;
+-		names = _align((char *) ++names + len + 1, ALIGNMENT);
+-	}
+-
+-	if (closedir(d))
+-		log_sys_error("closedir", dev_dir);
+-
+-	return r;
+-}
+-
+-static int _dm_task_run_v1(struct dm_task *dmt)
+-{
+-	struct dm_ioctl_v1 *dmi;
+-	unsigned int command;
+-
+-	dmi = _flatten_v1(dmt);
+-	if (!dmi) {
+-		log_error("Couldn't create ioctl argument.");
+-		return 0;
+-	}
+-
+-	if (!_open_control())
+-		return 0;
+-
+-	if ((unsigned) dmt->type >=
+-	    (sizeof(_cmd_data_v1) / sizeof(*_cmd_data_v1))) {
+-		log_error(INTERNAL_ERROR "unknown device-mapper task %d",
+-			  dmt->type);
+-		goto bad;
+-	}
+-
+-	command = _cmd_data_v1[dmt->type].cmd;
+-
+-	if (dmt->type == DM_DEVICE_TABLE)
+-		dmi->flags |= DM_STATUS_TABLE_FLAG;
+-
+-	if (dmt->new_uuid) {
+-		log_error("Changing UUID is not supported by kernel.");
+-		goto bad;
+-	}
+-
+-	log_debug("dm %s %s %s%s%s [%u]", _cmd_data_v1[dmt->type].name,
+-		  dmi->name, dmi->uuid, dmt->newname ? " " : "",
+-		  dmt->newname ? dmt->newname : "",
+-		  dmi->data_size);
+-	if (dmt->type == DM_DEVICE_LIST) {
+-		if (!_dm_names_v1(dmi))
+-			goto bad;
+-	} 
+-#ifdef DM_IOCTLS
+-	else if (ioctl(_control_fd, command, dmi) < 0) {
+-		if (_log_suppress)
+-			log_verbose("device-mapper: %s ioctl failed: %s", 
+-				    _cmd_data_v1[dmt->type].name,
+-				    strerror(errno));
+-		else
+-			log_error("device-mapper: %s ioctl failed: %s",
+-				  _cmd_data_v1[dmt->type].name,
+-				  strerror(errno));
+-		goto bad;
+-	}
+-#else /* Userspace alternative for testing */
+-#endif
+-
+-	if (dmi->flags & DM_BUFFER_FULL_FLAG)
+-		/* FIXME Increase buffer size and retry operation (if query) */
+-		log_error("WARNING: libdevmapper buffer too small for data");
+-
+-	switch (dmt->type) {
+-	case DM_DEVICE_CREATE:
+-		add_dev_node(dmt->dev_name, MAJOR(dmi->dev), MINOR(dmi->dev),
+-			     dmt->uid, dmt->gid, dmt->mode, 0);
+-		break;
+-
+-	case DM_DEVICE_REMOVE:
+-		rm_dev_node(dmt->dev_name, 0);
+-		break;
+-
+-	case DM_DEVICE_RENAME:
+-		rename_dev_node(dmt->dev_name, dmt->newname, 0);
+-		break;
+-
+-	case DM_DEVICE_MKNODES:
+-		if (dmi->flags & DM_EXISTS_FLAG)
+-			add_dev_node(dmt->dev_name, MAJOR(dmi->dev),
+-				     MINOR(dmi->dev), dmt->uid,
+-				     dmt->gid, dmt->mode, 0);
+-		else
+-			rm_dev_node(dmt->dev_name, 0);
+-		break;
+-
+-	case DM_DEVICE_STATUS:
+-	case DM_DEVICE_TABLE:
+-		if (!_unmarshal_status_v1(dmt, dmi))
+-			goto bad;
+-		break;
+-
+-	case DM_DEVICE_SUSPEND:
+-	case DM_DEVICE_RESUME:
+-		dmt->type = DM_DEVICE_INFO;
+-		if (!dm_task_run(dmt))
+-			goto bad;
+-		_dm_zfree_dmi_v1(dmi);	/* We'll use what info returned */
+-		return 1;
+-	}
+-
+-	dmt->dmi.v1 = dmi;
+-	return 1;
+-
+-      bad:
+-	_dm_zfree_dmi_v1(dmi);
+-	return 0;
+-}
+-
+-#endif
+-
+-/*
+  * Protocol Version 4 functions.
   */
-@@ -920,7 +880,7 @@ void lvm_do_fs_unlock(void)
+ 
+@@ -881,11 +463,6 @@
+ {
+ 	unsigned *v;
+ 
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_driver_version_v1(dmt, version, size);
+-#endif
+-
+ 	if (!dmt->dmi.v4) {
+ 		version[0] = '\0';
+ 		return 0;
+@@ -1033,11 +610,6 @@
+ {
+ 	int r;
+ 
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_format_dev_v1(buf, bufsize, dev_major, dev_minor);
+-#endif
+-
+ 	if (bufsize < 8)
+ 		return 0;
+ 
+@@ -1050,11 +622,6 @@
+ 
+ int dm_task_get_info(struct dm_task *dmt, struct dm_info *info)
+ {
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_info_v1(dmt, info);
+-#endif
+-
+ 	if (!dmt->dmi.v4)
+ 		return 0;
+ 
+@@ -1084,12 +651,6 @@
+ 
+ 	*read_ahead = 0;
+ 
+-#ifdef DM_COMPAT
+-	/* Not supporting this */
+-        if (_dm_version == 1)
+-                return 1;
+-#endif  
+-
+         if (!dmt->dmi.v4 || !(dmt->dmi.v4->flags & DM_EXISTS_FLAG))
+ 		return 0;
+ 
+@@ -1107,42 +668,22 @@
+ 
+ const char *dm_task_get_name(const struct dm_task *dmt)
+ {
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_name_v1(dmt);
+-#endif
+-
+ 	return (dmt->dmi.v4->name);
  }
  
- /* Called to initialise the LVM context of the daemon */
--int init_clvm(int using_gulm, char **argv)
-+int init_clvm(char **argv)
+ const char *dm_task_get_uuid(const struct dm_task *dmt)
  {
- 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
- 	init_syslog(LOG_DAEMON);
-@@ -942,10 +902,6 @@ int init_clvm(int using_gulm, char **argv)
- 	check_config();
- 	init_ignore_suspended_devices(1);
- 
--	/* Remove any non-LV locks that may have been left around */
--	if (using_gulm)
--		drop_vg_locks();
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_uuid_v1(dmt);
+-#endif
 -
- 	get_initial_state(argv);
+ 	return (dmt->dmi.v4->uuid);
+ }
  
- 	/* Trap log messages so we can pass them back to the user */
-diff --git a/daemons/clvmd/lvm-functions.h b/daemons/clvmd/lvm-functions.h
-index a132f4a..f9c43b7 100644
---- a/daemons/clvmd/lvm-functions.h
-+++ b/daemons/clvmd/lvm-functions.h
-@@ -27,7 +27,7 @@ extern int post_lock_lv(unsigned char lock_cmd, unsigned char lock_flags,
- 			char *resource);
- extern int do_check_lvm1(const char *vgname);
- extern int do_refresh_cache(void);
--extern int init_clvm(int using_gulm, char **argv);
-+extern int init_clvm(char **argv);
- extern void destroy_lvm(void);
- extern void init_lvhash(void);
- extern void destroy_lvhash(void);
-diff --git a/daemons/clvmd/tcp-comms.c b/daemons/clvmd/tcp-comms.c
-deleted file mode 100644
-index 5f86556..0000000
-diff --git a/daemons/clvmd/tcp-comms.h b/daemons/clvmd/tcp-comms.h
-deleted file mode 100644
-index 9260e12..0000000
-diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
-index 65f6332..16e290a 100644
---- a/lib/misc/configure.h.in
-+++ b/lib/misc/configure.h.in
-@@ -84,9 +84,6 @@
- /* Define to 1 if canonicalize_file_name is available. */
- #undef HAVE_CANONICALIZE_FILE_NAME
- 
--/* Define to 1 if you have the <ccs.h> header file. */
--#undef HAVE_CCS_H
+ struct dm_deps *dm_task_get_deps(struct dm_task *dmt)
+ {
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_deps_v1(dmt);
+-#endif
 -
- /* Define to 1 if your system has a working `chown' function. */
- #undef HAVE_CHOWN
+ 	return (struct dm_deps *) (((char *) dmt->dmi.v4) +
+ 				   dmt->dmi.v4->data_start);
+ }
  
-@@ -159,9 +156,6 @@
- /* Define to 1 if you have the <libgen.h> header file. */
- #undef HAVE_LIBGEN_H
- 
--/* Define to 1 if you have the <libgulm.h> header file. */
--#undef HAVE_LIBGULM_H
+ struct dm_names *dm_task_get_names(struct dm_task *dmt)
+ {
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_get_names_v1(dmt);
+-#endif
 -
- /* Define to 1 if you have the <libintl.h> header file. */
- #undef HAVE_LIBINTL_H
+ 	return (struct dm_names *) (((char *) dmt->dmi.v4) +
+ 				    dmt->dmi.v4->data_start);
+ }
+@@ -2131,11 +1672,6 @@
+ 	int rely_on_udev;
+ 	int suspended_counter;
  
--- 
-1.7.6
+-#ifdef DM_COMPAT
+-	if (_dm_version == 1)
+-		return _dm_task_run_v1(dmt);
+-#endif
+-
+ 	if ((unsigned) dmt->type >=
+ 	    (sizeof(_cmd_data_v4) / sizeof(*_cmd_data_v4))) {
+ 		log_error(INTERNAL_ERROR "unknown device-mapper task %d",
+--- LVM2/libdm/ioctl/libdm-targets.h	2011/07/01 14:09:20	1.30
++++ LVM2/libdm/ioctl/libdm-targets.h	2011/08/09 17:56:48	1.31
+@@ -20,7 +20,6 @@
+ #include <sys/types.h>
+ 
+ struct dm_ioctl;
+-struct dm_ioctl_v1;
+ 
+ struct target {
+ 	uint64_t start;
+@@ -49,7 +48,6 @@
+ 	uint32_t read_ahead_flags;
+ 	union {
+ 		struct dm_ioctl *v4;
+-		struct dm_ioctl_v1 *v1;
+ 	} dmi;
+ 	char *newname;
+ 	char *message;
 
 
