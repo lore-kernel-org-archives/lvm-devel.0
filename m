@@ -1,333 +1,423 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 9 Aug 2011 11:44:58 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/cluster_locking.c ...
-Message-ID: <20110809114458.22396.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue,  9 Aug 2011 18:39:45 +0200
+Subject: [PATCH] Remove GULM support completely.
+Message-ID: <1312907985-23182-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-08-09 11:44:57
+This cluster locking is not used for years and is completely obsoleted.
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : cluster_locking.c external_locking.c 
-	                 file_locking.c locking.c locking_types.h 
-	                 no_locking.c 
-	lib/log        : log.h 
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ configure.in                  |   50 +--
+ daemons/clvmd/Makefile.in     |   10 -
+ daemons/clvmd/clvmd-comms.h   |    7 -
+ daemons/clvmd/clvmd-gulm.c    | 1010 -----------------------------------------
+ daemons/clvmd/clvmd-gulm.h    |    9 -
+ daemons/clvmd/clvmd.c         |   29 +-
+ daemons/clvmd/lvm-functions.c |   46 +--
+ daemons/clvmd/lvm-functions.h |    2 +-
+ daemons/clvmd/tcp-comms.c     |  502 --------------------
+ daemons/clvmd/tcp-comms.h     |   13 -
+ lib/misc/configure.h.in       |    6 -
+ 11 files changed, 8 insertions(+), 1676 deletions(-)
+ delete mode 100644 daemons/clvmd/clvmd-gulm.c
+ delete mode 100644 daemons/clvmd/clvmd-gulm.h
+ delete mode 100644 daemons/clvmd/tcp-comms.c
+ delete mode 100644 daemons/clvmd/tcp-comms.h
 
-Log message:
-	Suppress low-level locking errors and warnings while using --sysinit.
-	
-	Today, we use "suppress_messages" flag (set internally in init_locking fn based
-	on 'ignorelockingfailure() && getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES")'.
-	This way, we can suppress high level messages like "File-based locking
-	initialisation failed" or "Internal cluster locking initialisation failed".
-	
-	However, each locking has its own sequence of initialization steps and these
-	could log some errors as well. It's quite misleading for the user to see such
-	errors and warnings if the "--sysinit" is used (and so the ignorelockingfailure
-	&& LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES environment variable). Errors and
-	warnings from these intermediary steps should be suppressed as well if requested.
-	
-	This patch propagates the "suppress_messages" flag deeper into locking init
-	functions. I've also added these flags for other locking types for consistency,
-	though it's not actually used for no_locking and readonly_locking.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2052&r2=1.2053
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/external_locking.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/file_locking.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking_types.h.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/no_locking.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/log/log.h.diff?cvsroot=lvm2&r1=1.50&r2=1.51
-
---- LVM2/WHATS_NEW	2011/08/04 15:18:10	1.2052
-+++ LVM2/WHATS_NEW	2011/08/09 11:44:57	1.2053
-@@ -1,5 +1,6 @@
- Version 2.02.87 - 
- ===============================
-+  Suppress low-level locking errors and warnings while using --sysinit.
-   Remove unused inconsistent_seqno variable in _vg_read().
-   Remove meaningless const type qualifiers on cast type.
-   Fix memory leak in dmsetup _message() memory allocation error path.
---- LVM2/lib/locking/cluster_locking.c	2011/06/01 21:16:56	1.56
-+++ LVM2/lib/locking/cluster_locking.c	2011/08/09 11:44:57	1.57
-@@ -62,14 +62,15 @@
- /* FIXME Install SIGPIPE handler? */
+diff --git a/configure.in b/configure.in
+index 24f1ec4..5b52c4d 100644
+--- a/configure.in
++++ b/configure.in
+@@ -423,7 +423,6 @@ AC_MSG_CHECKING(whether to build cluster LVM daemon)
+ AC_ARG_WITH(clvmd,
+   [  --with-clvmd=TYPE       build cluster LVM Daemon
+                           The following cluster manager combinations are valid:
+-                           * cman,gulm             (RHEL4 or equivalent)
+                            * cman                  (RHEL5 or equivalent)
+                            * cman,corosync,openais (or selection of them)
+                            * singlenode            (localhost only)
+@@ -449,15 +448,10 @@ fi
+ dnl -- Express clvmd init script Required-Start / Required-Stop
+ CLVMD_CMANAGERS=""
+ dnl -- On RHEL4/RHEL5, qdiskd is started from a separate init script.
+-dnl -- Enable if we are build for either cman or gulm.
++dnl -- Enable if we are build for cman.
+ CLVMD_NEEDS_QDISKD=no
  
- /* Open connection to the Cluster Manager daemon */
--static int _open_local_sock(void)
-+static int _open_local_sock(int suppress_messages)
- {
- 	int local_socket;
- 	struct sockaddr_un sockaddr;
+ dnl -- define build types
+-if [[ `expr x"$CLVMD" : '.*gulm.*'` != 0 ]]; then
+-	BUILDGULM=yes
+-	CLVMD_CMANAGERS="$CLVMD_CMANAGERS lock_gulmd"
+-	CLVMD_NEEDS_QDISKD=yes
+-fi
+ if [[ `expr x"$CLVMD" : '.*cman.*'` != 0 ]]; then
+ 	BUILDCMAN=yes
+ 	CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
+@@ -475,14 +469,6 @@ if test x$CLVMD_NEEDS_QDISKD != xno; then
+ 	CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
+ fi
  
- 	/* Open local socket */
- 	if ((local_socket = socket(PF_UNIX, SOCK_STREAM, 0)) < 0) {
--		log_error("Local socket creation failed: %s", strerror(errno));
-+		log_error_suppress(suppress_messages, "Local socket "
-+				   "creation failed: %s", strerror(errno));
- 		return -1;
- 	}
+-dnl -- sanity check around user selection
+-if test x$BUILDGULM = xyes; then
+-	if test x$BUILDCOROSYNC = xyes || \
+-	   test x$BUILDOPENAIS = xyes; then
+-		AC_MSG_ERROR([requested clvmd configuration is not valid])
+-	fi
+-fi
+-
+ dnl -- define a soft bailout if we are autodetecting
+ soft_bailout() {
+ 	NOTFOUND=1
+@@ -494,10 +480,9 @@ hard_bailout() {
  
-@@ -82,8 +83,8 @@
- 		    sizeof(sockaddr))) {
- 		int saved_errno = errno;
- 
--		log_error("connect() failed on local socket: %s",
--			  strerror(errno));
-+		log_error_suppress(suppress_messages, "connect() failed "
-+				   "on local socket: %s", strerror(errno));
- 		if (close(local_socket))
- 			stack;
- 
-@@ -212,7 +213,7 @@
- 	*num = 0;
- 
- 	if (_clvmd_sock == -1)
--		_clvmd_sock = _open_local_sock();
-+		_clvmd_sock = _open_local_sock(0);
- 
- 	if (_clvmd_sock == -1)
- 		return 0;
-@@ -583,13 +584,14 @@
- 	if (close(_clvmd_sock))
- 		stack;
- 
--	_clvmd_sock = _open_local_sock();
-+	_clvmd_sock = _open_local_sock(0);
- 	if (_clvmd_sock == -1)
- 		stack;
+ dnl -- if clvmd=all then set soft_bailout (we don't want to error)
+ dnl -- and set all builds to yes. We need to do this here
+-dnl -- to skip the gulm + openais|corosync sanity check above.
++dnl -- to skip the openais|corosync sanity check above.
+ if test x$CLVMD = xall; then
+ 	bailout=soft_bailout
+-	BUILDGULM=yes
+ 	BUILDCMAN=yes
+ 	BUILDCOROSYNC=yes
+ 	BUILDOPENAIS=yes
+@@ -519,28 +504,6 @@ check_lib_no_libs() {
+ 	LIBS=$ac_check_lib_save_LIBS
  }
  
- #ifdef CLUSTER_LOCKING_INTERNAL
--int init_cluster_locking(struct locking_type *locking, struct cmd_context *cmd)
-+int init_cluster_locking(struct locking_type *locking, struct cmd_context *cmd,
-+			 int suppress_messages)
- {
- 	locking->lock_resource = _lock_resource;
- 	locking->query_resource = _query_resource;
-@@ -597,7 +599,7 @@
- 	locking->reset_locking = _reset_locking;
- 	locking->flags = LCK_PRE_MEMLOCK | LCK_CLUSTERED;
+-dnl -- Look for gulm libraries if required.
+-if test x$BUILDGULM = xyes; then
+-	PKG_CHECK_MODULES(CCS, libccs, [HAVE_CCS=yes],
+-		[NOTFOUND=0
+-		AC_CHECK_HEADERS(ccs.h,,$bailout)
+-		check_lib_no_libs ccs ccs_connect
+-		if test $NOTFOUND = 0; then
+-			AC_MSG_RESULT([no pkg for libccs, using -lccs])
+-			CCS_LIBS="-lccs"
+-			HAVE_CCS=yes
+-		fi])
+-	PKG_CHECK_MODULES(GULM, libgulm, [HAVE_GULM=yes],
+-		[NOTFOUND=0
+-		AC_CHECK_HEADERS(libgulm.h,,$bailout)
+-		check_lib_no_libs gulm lg_core_login
+-		if test $NOTFOUND = 0; then
+-			AC_MSG_RESULT([no pkg for libgulm, using -lgulm])
+-			GULM_LIBS="-lgulm"
+-			HAVE_GULM=yes
+-		fi])
+-fi
+-
+ dnl -- Look for cman libraries if required.
+ if test x$BUILDCMAN = xyes; then
+ 	PKG_CHECK_MODULES(CMAN, libcman, [HAVE_CMAN=yes],
+@@ -633,13 +596,6 @@ if test x$CLVMD = xall; then
+ 	CLVMD=none
+ 	CLVMD_CMANAGERS=""
+ 	CLVMD_NEEDS_QDISKD=no
+-	if test x$HAVE_CCS = xyes && \
+-	   test x$HAVE_GULM = xyes; then
+-		AC_MSG_RESULT([Enabling clvmd gulm cluster manager])
+-		CLVMD="$CLVMD,gulm"
+-		CLVMD_CMANAGERS="$CLVMD_CMANAGERS lock_gulmd"
+-		CLVMD_NEEDS_QDISKD=yes
+-	fi
+ 	if test x$HAVE_CMAN = xyes && \
+ 	   test x$HAVE_DLM = xyes; then
+ 		AC_MSG_RESULT([Enabling clvmd cman cluster manager])
+@@ -1346,8 +1302,6 @@ AC_SUBST(DM_IOCTLS)
+ AC_SUBST(DM_LIB_VERSION)
+ AC_SUBST(DM_LIB_PATCHLEVEL)
+ AC_SUBST(FSADM)
+-AC_SUBST(GULM_CFLAGS)
+-AC_SUBST(GULM_LIBS)
+ AC_SUBST(HAVE_LIBDL)
+ AC_SUBST(HAVE_REALTIME)
+ AC_SUBST(INTL)
+diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
+index ee19e6c..91fd273 100644
+--- a/daemons/clvmd/Makefile.in
++++ b/daemons/clvmd/Makefile.in
+@@ -25,8 +25,6 @@ CPG_LIBS = @CPG_LIBS@
+ CPG_CFLAGS = @CPG_CFLAGS@
+ DLM_LIBS = @DLM_LIBS@
+ DLM_CFLAGS = @DLM_CFLAGS@
+-GULM_LIBS = @GULM_LIBS@
+-GULM_CFLAGS = @GULM_CFLAGS@
+ QUORUM_LIBS = @QUORUM_LIBS@
+ QUORUM_CFLAGS = @QUORUM_CFLAGS@
+ SALCK_LIBS = @SALCK_LIBS@
+@@ -42,13 +40,6 @@ ifeq ("@DEBUG@", "yes")
+ 	DEFS += -DDEBUG
+ endif
  
--	_clvmd_sock = _open_local_sock();
-+	_clvmd_sock = _open_local_sock(suppress_messages);
- 	if (_clvmd_sock == -1)
- 		return 0;
+-ifneq (,$(findstring gulm,, "@CLVMD@,"))
+-	SOURCES += clvmd-gulm.c tcp-comms.c
+-	LMLIBS += $(CCS_LIBS) $(GULM_LIBS)
+-	CFLAGS += $(CCS_CFLAGS) $(GULM_CFLAGS)
+-	DEFS += -DUSE_GULM
+-endif
+-
+ ifneq (,$(findstring cman,, "@CLVMD@,"))
+ 	SOURCES += clvmd-cman.c
+ 	LMLIBS += $(CMAN_LIBS) $(CONFDB_LIBS) $(DLM_LIBS)
+@@ -76,7 +67,6 @@ ifneq (,$(findstring singlenode,, &quot;@CLVMD@,&quot;))
+ endif
  
-@@ -606,7 +608,7 @@
- #else
- int locking_init(int type, struct config_tree *cf, uint32_t *flags)
- {
--	_clvmd_sock = _open_local_sock();
-+	_clvmd_sock = _open_local_sock(0);
- 	if (_clvmd_sock == -1)
- 		return 0;
+ ifeq ($(MAKECMDGOALS),distclean)
+-	SOURCES += clvmd-gulm.c tcp-comms.c
+ 	SOURCES += clvmd-cman.c
+ 	SOURCES += clvmd-openais.c
+ 	SOURCES += clvmd-corosync.c
+diff --git a/daemons/clvmd/clvmd-comms.h b/daemons/clvmd/clvmd-comms.h
+index fbcfe8b..500bd57 100644
+--- a/daemons/clvmd/clvmd-comms.h
++++ b/daemons/clvmd/clvmd-comms.h
+@@ -54,13 +54,6 @@ struct cluster_ops {
  
---- LVM2/lib/locking/external_locking.c	2011/02/04 19:18:17	1.18
-+++ LVM2/lib/locking/external_locking.c	2011/08/09 11:44:57	1.19
-@@ -65,12 +65,13 @@
- 		_reset_fn();
- }
+ };
  
--int init_external_locking(struct locking_type *locking, struct cmd_context *cmd)
-+int init_external_locking(struct locking_type *locking, struct cmd_context *cmd,
-+			  int suppress_messages)
- {
- 	const char *libname;
+-#ifdef USE_GULM
+-#  include "tcp-comms.h"
+-struct cluster_ops *init_gulm_cluster(void);
+-#define MAX_CSID_LEN 			GULM_MAX_CSID_LEN
+-#define MAX_CLUSTER_MEMBER_NAME_LEN	GULM_MAX_CLUSTER_MEMBER_NAME_LEN
+-#endif
+-
+ #ifdef USE_CMAN
+ #  include <netinet/in.h>
+ #  include "libcman.h"
+diff --git a/daemons/clvmd/clvmd-gulm.c b/daemons/clvmd/clvmd-gulm.c
+deleted file mode 100644
+index 3561004..0000000
+diff --git a/daemons/clvmd/clvmd-gulm.h b/daemons/clvmd/clvmd-gulm.h
+deleted file mode 100644
+index 9416f5c..0000000
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 703268f..07883ea 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -78,7 +78,6 @@ struct lvm_thread_cmd {
+ };
  
- 	if (_locking_lib) {
--		log_error("External locking already initialised");
-+		log_error_suppress(suppress_messages, "External locking already initialised");
- 		return 1;
- 	}
+ struct lvm_startup_params {
+-	int using_gulm;
+ 	char **argv;
+ };
  
-@@ -90,16 +91,16 @@
- 	    !(_lock_fn = dlsym(_locking_lib, "lock_resource")) ||
- 	    !(_reset_fn = dlsym(_locking_lib, "reset_locking")) ||
- 	    !(_end_fn = dlsym(_locking_lib, "locking_end"))) {
--		log_error("Shared library %s does not contain locking "
--			  "functions", libname);
-+		log_error_suppress(suppress_messages, "Shared library %s does "
-+				   "not contain locking functions", libname);
- 		dlclose(_locking_lib);
- 		_locking_lib = NULL;
- 		return 0;
- 	}
+@@ -101,7 +100,7 @@ static int child_pipe[2];
+ #define DFAIL_TIMEOUT    5
+ #define SUCCESS          0
  
- 	if (!(_lock_query_fn = dlsym(_locking_lib, "query_resource")))
--		log_warn("WARNING: %s: _query_resource() missing: "
--			 "Using inferior activation method.", libname);
-+		log_warn_suppress(suppress_messages, "WARNING: %s: _query_resource() "
-+				  "missing: Using inferior activation method.", libname);
+-typedef enum {IF_AUTO, IF_CMAN, IF_GULM, IF_OPENAIS, IF_COROSYNC, IF_SINGLENODE} if_type_t;
++typedef enum {IF_AUTO, IF_CMAN, IF_OPENAIS, IF_COROSYNC, IF_SINGLENODE} if_type_t;
  
- 	log_verbose("Loaded external locking library %s", libname);
- 	return _init_fn(2, cmd->cft, &locking->flags);
---- LVM2/lib/locking/file_locking.c	2011/04/08 14:13:08	1.59
-+++ LVM2/lib/locking/file_locking.c	2011/08/09 11:44:57	1.60
-@@ -332,7 +332,8 @@
- 	return 1;
- }
- 
--int init_file_locking(struct locking_type *locking, struct cmd_context *cmd)
-+int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
-+		      int suppress_messages)
- {
- 	int r;
- 
-@@ -364,12 +365,14 @@
- 	dm_list_init(&_lock_list);
- 
- 	if (sigfillset(&_intsigset) || sigfillset(&_fullsigset)) {
--		log_sys_error("sigfillset", "init_file_locking");
-+		log_sys_error_suppress(suppress_messages, "sigfillset",
-+				       "init_file_locking");
- 		return 0;
- 	}
- 
- 	if (sigdelset(&_intsigset, SIGINT)) {
--		log_sys_error("sigdelset", "init_file_locking");
-+		log_sys_error_suppress(suppress_messages, "sigdelset",
-+				       "init_file_locking");
- 		return 0;
- 	}
- 
---- LVM2/lib/locking/locking.c	2011/06/11 00:03:07	1.95
-+++ LVM2/lib/locking/locking.c	2011/08/09 11:44:57	1.96
-@@ -232,7 +232,7 @@
- 
- 	switch (type) {
- 	case 0:
--		init_no_locking(&_locking, cmd);
-+		init_no_locking(&_locking, cmd, suppress_messages);
- 		log_warn("WARNING: Locking disabled. Be careful! "
- 			  "This could corrupt your metadata.");
- 		return 1;
-@@ -241,7 +241,7 @@
- 		log_very_verbose("%sFile-based locking selected.",
- 				 _blocking_supported ? "" : "Non-blocking ");
- 
--		if (!init_file_locking(&_locking, cmd)) {
-+		if (!init_file_locking(&_locking, cmd, suppress_messages)) {
- 			log_error_suppress(suppress_messages,
- 					   "File-based locking initialisation failed.");
- 			break;
-@@ -252,13 +252,13 @@
- 	case 2:
- 		if (!is_static()) {
- 			log_very_verbose("External locking selected.");
--			if (init_external_locking(&_locking, cmd))
-+			if (init_external_locking(&_locking, cmd, suppress_messages))
- 				return 1;
- 		}
- 		if (!find_config_tree_int(cmd, "locking/fallback_to_clustered_locking",
- 			    find_config_tree_int(cmd, "global/fallback_to_clustered_locking",
- 						 DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING))) {
--			log_error("External locking initialisation failed.");
-+			log_error_suppress(suppress_messages, "External locking initialisation failed.");
- 			break;
- 		}
+ /* Prototypes for code further down */
+ static void sigusr2_handler(int sig);
+@@ -166,9 +165,6 @@ static void usage(const char *prog, FILE *file)
+ #ifdef USE_OPENAIS
+ 		"openais "
  #endif
-@@ -269,7 +269,7 @@
+-#ifdef USE_GULM
+-		"gulm "
+-#endif
+ #ifdef USE_SINGLENODE
+ 		"singlenode "
+ #endif
+@@ -342,7 +338,6 @@ int main(int argc, char *argv[])
+ 	int start_timeout = 0;
+ 	if_type_t cluster_iface = IF_AUTO;
+ 	sigset_t ss;
+-	int using_gulm = 0;
+ 	int debug_opt = 0;
+ 	debug_t debug_arg = DEBUG_OFF;
+ 	int clusterwide_opt = 0;
+@@ -473,7 +468,7 @@ int main(int argc, char *argv[])
  
- 	case 3:
- 		log_very_verbose("Cluster locking selected.");
--		if (!init_cluster_locking(&_locking, cmd)) {
-+		if (!init_cluster_locking(&_locking, cmd, suppress_messages)) {
- 			log_error_suppress(suppress_messages,
- 					   "Internal cluster locking initialisation failed.");
- 			break;
-@@ -280,7 +280,7 @@
- 	case 4:
- 		log_verbose("Read-only locking selected. "
- 			    "Only read operations permitted.");
--		if (!init_readonly_locking(&_locking, cmd))
-+		if (!init_readonly_locking(&_locking, cmd, suppress_messages))
- 			break;
- 		return 1;
+ 	/* Set up signal handlers, USR1 is for cluster change notifications (in cman)
+ 	   USR2 causes child threads to exit.
+-	   HUP causes gulm version to re-read nodes list from CCS.
++	   HUP causes to re-read nodes list from CCS.
+ 	   PIPE should be ignored */
+ 	signal(SIGUSR2, sigusr2_handler);
+ 	signal(SIGHUP,  sighup_handler);
+@@ -505,16 +500,6 @@ int main(int argc, char *argv[])
+ 		syslog(LOG_NOTICE, "Cluster LVM daemon started - connected to CMAN");
+ 	}
+ #endif
+-#ifdef USE_GULM
+-	if (!clops)
+-		if ((cluster_iface == IF_AUTO || cluster_iface == IF_GULM) && (clops = init_gulm_cluster())) {
+-			max_csid_len = GULM_MAX_CSID_LEN;
+-			max_cluster_message = GULM_MAX_CLUSTER_MESSAGE;
+-			max_cluster_member_name_len = GULM_MAX_CLUSTER_MEMBER_NAME_LEN;
+-			using_gulm = 1;
+-			syslog(LOG_NOTICE, "Cluster LVM daemon started - connected to GULM");
+-		}
+-#endif
+ #ifdef USE_COROSYNC
+ 	if (!clops)
+ 		if (((cluster_iface == IF_AUTO || cluster_iface == IF_COROSYNC) && (clops = init_corosync_cluster()))) {
+@@ -580,14 +565,10 @@ int main(int argc, char *argv[])
  
-@@ -297,7 +297,7 @@
- 		log_warn_suppress(suppress_messages,
- 				  "Volume Groups with the clustered attribute will "
- 				  "be inaccessible.");
--		if (init_file_locking(&_locking, cmd))
-+		if (init_file_locking(&_locking, cmd, suppress_messages))
- 			return 1;
- 		else
- 			log_error_suppress(suppress_messages,
-@@ -308,7 +308,7 @@
- 		return 0;
+ 	/* Don't let anyone else to do work until we are started */
+ 	pthread_mutex_lock(&lvm_start_mutex);
+-	lvm_params.using_gulm = using_gulm;
+ 	lvm_params.argv = argv;
+ 	pthread_create(&lvm_thread, NULL, lvm_thread_fn, &lvm_params);
  
- 	log_verbose("Locking disabled - only read operations permitted.");
--	init_readonly_locking(&_locking, cmd);
-+	init_readonly_locking(&_locking, cmd, suppress_messages);
+ 	/* Tell the rest of the cluster our version number */
+-	/* CMAN can do this immediately, gulm needs to wait until
+-	   the core initialisation has finished and the node list
+-	   has been gathered */
+ 	if (clops->cluster_init_completed)
+ 		clops->cluster_init_completed();
  
- 	return 1;
+@@ -625,7 +606,7 @@ int main(int argc, char *argv[])
+ 	return 0;
  }
---- LVM2/lib/locking/locking_types.h	2009/07/15 05:57:11	1.19
-+++ LVM2/lib/locking/locking_types.h	2011/08/09 11:44:57	1.20
-@@ -38,12 +38,17 @@
+ 
+-/* Called when the GuLM cluster layer has completed initialisation.
++/* Called when the cluster layer has completed initialisation.
+    We send the version message */
+ void clvmd_cluster_init_completed(void)
+ {
+@@ -1965,7 +1946,7 @@ static void *lvm_thread_fn(void *arg)
+ 	pthread_sigmask(SIG_BLOCK, &ss, NULL);
+ 
+ 	/* Initialise the interface to liblvm */
+-	init_clvm(lvm_params->using_gulm, lvm_params->argv);
++	init_clvm(lvm_params->argv);
+ 
+ 	/* Allow others to get moving */
+ 	pthread_mutex_unlock(&lvm_start_mutex);
+@@ -2222,8 +2203,6 @@ static if_type_t parse_cluster_interface(char *ifname)
+ 		iface = IF_AUTO;
+ 	if (!strcmp(ifname, "cman"))
+ 		iface = IF_CMAN;
+-	if (!strcmp(ifname, "gulm"))
+-		iface = IF_GULM;
+ 	if (!strcmp(ifname, "openais"))
+ 		iface = IF_OPENAIS;
+ 	if (!strcmp(ifname, "corosync"))
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index c10ce9d..d2c89d9 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -650,46 +650,6 @@ int do_refresh_cache(void)
+ 	return 0;
+ }
+ 
+-
+-/* Only called at gulm startup. Drop any leftover VG or P_orphan locks
+-   that might be hanging around if we died for any reason
+-*/
+-static void drop_vg_locks(void)
+-{
+-	char vg[128];
+-	char line[255];
+-	FILE *vgs =
+-	    popen
+-	    (LVM_PATH " pvs  --config 'log{command_names=0 prefix=\"\"}' --nolocking --noheadings -o vg_name", "r");
+-
+-	sync_unlock("P_" VG_ORPHANS, LCK_EXCL);
+-	sync_unlock("P_" VG_GLOBAL, LCK_EXCL);
+-
+-	if (!vgs)
+-		return;
+-
+-	while (fgets(line, sizeof(line), vgs)) {
+-		char *vgend;
+-		char *vgstart;
+-
+-		if (line[strlen(line)-1] == '\n')
+-			line[strlen(line)-1] = '\0';
+-
+-		vgstart = line + strspn(line, " ");
+-		vgend = vgstart + strcspn(vgstart, " ");
+-		*vgend = '\0';
+-
+-		if (strncmp(vgstart, "WARNING:", 8) == 0)
+-			continue;
+-
+-		sprintf(vg, "V_%s", vgstart);
+-		sync_unlock(vg, LCK_EXCL);
+-
+-	}
+-	if (fclose(vgs))
+-		DEBUGLOG("vgs fclose failed: %s\n", strerror(errno));
+-}
+-
  /*
-  * Locking types
+  * Handle VG lock - drop metadata or update lvmcache state
   */
--int init_no_locking(struct locking_type *locking, struct cmd_context *cmd);
-+int init_no_locking(struct locking_type *locking, struct cmd_context *cmd,
-+		    int suppress_messages);
- 
--int init_readonly_locking(struct locking_type *locking, struct cmd_context *cmd);
-+int init_readonly_locking(struct locking_type *locking, struct cmd_context *cmd,
-+			  int suppress_messages);
- 
--int init_file_locking(struct locking_type *locking, struct cmd_context *cmd);
-+int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
-+		      int suppress_messages);
- 
--int init_external_locking(struct locking_type *locking, struct cmd_context *cmd);
-+int init_external_locking(struct locking_type *locking, struct cmd_context *cmd,
-+			  int suppress_messages);
- 
--int init_cluster_locking(struct locking_type *locking, struct cmd_context *cmd);
-+int init_cluster_locking(struct locking_type *locking, struct cmd_context *cmd,
-+			 int suppress_messages);
---- LVM2/lib/locking/no_locking.c	2011/02/18 00:36:05	1.28
-+++ LVM2/lib/locking/no_locking.c	2011/08/09 11:44:57	1.29
-@@ -81,7 +81,8 @@
- 	return _no_lock_resource(cmd, resource, flags);
+@@ -920,7 +880,7 @@ void lvm_do_fs_unlock(void)
  }
  
--int init_no_locking(struct locking_type *locking, struct cmd_context *cmd __attribute__((unused)))
-+int init_no_locking(struct locking_type *locking, struct cmd_context *cmd __attribute__((unused)),
-+		    int suppress_messages)
+ /* Called to initialise the LVM context of the daemon */
+-int init_clvm(int using_gulm, char **argv)
++int init_clvm(char **argv)
  {
- 	locking->lock_resource = _no_lock_resource;
- 	locking->reset_locking = _no_reset_locking;
-@@ -91,7 +92,8 @@
- 	return 1;
- }
+ 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
+ 	init_syslog(LOG_DAEMON);
+@@ -942,10 +902,6 @@ int init_clvm(int using_gulm, char **argv)
+ 	check_config();
+ 	init_ignore_suspended_devices(1);
  
--int init_readonly_locking(struct locking_type *locking, struct cmd_context *cmd __attribute__((unused)))
-+int init_readonly_locking(struct locking_type *locking, struct cmd_context *cmd __attribute__((unused)),
-+			  int suppress_messages)
- {
- 	locking->lock_resource = _readonly_lock_resource;
- 	locking->reset_locking = _no_reset_locking;
---- LVM2/lib/log/log.h	2010/06/21 15:56:59	1.50
-+++ LVM2/lib/log/log.h	2011/08/09 11:44:57	1.51
-@@ -76,6 +76,8 @@
- /* System call equivalents */
- #define log_sys_error(x, y) \
- 		log_err("%s: %s failed: %s", y, x, strerror(errno))
-+#define log_sys_error_suppress(s, x, y) \
-+		log_err_suppress(s, "%s: %s failed: %s", y, x, strerror(errno))
- #define log_sys_very_verbose(x, y) \
- 		log_info("%s: %s failed: %s", y, x, strerror(errno))
- #define log_sys_debug(x, y) \
+-	/* Remove any non-LV locks that may have been left around */
+-	if (using_gulm)
+-		drop_vg_locks();
+-
+ 	get_initial_state(argv);
+ 
+ 	/* Trap log messages so we can pass them back to the user */
+diff --git a/daemons/clvmd/lvm-functions.h b/daemons/clvmd/lvm-functions.h
+index a132f4a..f9c43b7 100644
+--- a/daemons/clvmd/lvm-functions.h
++++ b/daemons/clvmd/lvm-functions.h
+@@ -27,7 +27,7 @@ extern int post_lock_lv(unsigned char lock_cmd, unsigned char lock_flags,
+ 			char *resource);
+ extern int do_check_lvm1(const char *vgname);
+ extern int do_refresh_cache(void);
+-extern int init_clvm(int using_gulm, char **argv);
++extern int init_clvm(char **argv);
+ extern void destroy_lvm(void);
+ extern void init_lvhash(void);
+ extern void destroy_lvhash(void);
+diff --git a/daemons/clvmd/tcp-comms.c b/daemons/clvmd/tcp-comms.c
+deleted file mode 100644
+index 5f86556..0000000
+diff --git a/daemons/clvmd/tcp-comms.h b/daemons/clvmd/tcp-comms.h
+deleted file mode 100644
+index 9260e12..0000000
+diff --git a/lib/misc/configure.h.in b/lib/misc/configure.h.in
+index 65f6332..16e290a 100644
+--- a/lib/misc/configure.h.in
++++ b/lib/misc/configure.h.in
+@@ -84,9 +84,6 @@
+ /* Define to 1 if canonicalize_file_name is available. */
+ #undef HAVE_CANONICALIZE_FILE_NAME
+ 
+-/* Define to 1 if you have the <ccs.h> header file. */
+-#undef HAVE_CCS_H
+-
+ /* Define to 1 if your system has a working `chown' function. */
+ #undef HAVE_CHOWN
+ 
+@@ -159,9 +156,6 @@
+ /* Define to 1 if you have the <libgen.h> header file. */
+ #undef HAVE_LIBGEN_H
+ 
+-/* Define to 1 if you have the <libgulm.h> header file. */
+-#undef HAVE_LIBGULM_H
+-
+ /* Define to 1 if you have the <libintl.h> header file. */
+ #undef HAVE_LIBINTL_H
+ 
+-- 
+1.7.6
 
 
