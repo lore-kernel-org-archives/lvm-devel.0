@@ -1,87 +1,85 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Aug 2011 11:00:32 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
-Message-ID: <20110810110032.18699.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Wed, 10 Aug 2011 17:37:25 +0200
+Subject: [PATCH] Remove lock from cache even if unlock fails.
+Message-ID: <1312990645-20977-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-08-10 11:00:32
+If anything bad happens and unlocking fails
+(here clvmd crashed in the middle of operation),
+lock is not removed from cache - here is one example:
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
+locking/cluster_locking.c:497       Locking VG V_vg_test UN (VG) (0x6)
+locking/cluster_locking.c:113   Error writing data to clvmd: Broken pipe
+locking/locking.c:399         <backtrace>
+locking/locking.c:461         <backtrace>
+  Internal error: Volume Group vg_test was not unlocked
 
-Log message:
-	Initialise clvmd locks before lvm context to avoid open descriptor leaks.
-	
-	(At least /dev/mapper/control is open after lvm context init.)
+Code should always remove lock info from lvmcache and update counters
+on unlock, even if unlock fails.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2054&r2=1.2055
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ lib/locking/locking.c |   22 +++++++++++++---------
+ 1 files changed, 13 insertions(+), 9 deletions(-)
 
---- LVM2/WHATS_NEW	2011/08/09 18:11:00	1.2054
-+++ LVM2/WHATS_NEW	2011/08/10 11:00:32	1.2055
-@@ -1,5 +1,6 @@
- Version 2.02.87 - 
- ===============================
-+  Initialise clvmd locks before lvm context to avoid open descriptor leaks.
-   Remove obsoleted GULM clvmd cluster locking support.
-   Suppress low-level locking errors and warnings while using --sysinit.
-   Remove unused inconsistent_seqno variable in _vg_read().
---- LVM2/daemons/clvmd/lvm-functions.c	2011/08/09 18:11:00	1.120
-+++ LVM2/daemons/clvmd/lvm-functions.c	2011/08/10 11:00:32	1.121
-@@ -721,7 +721,7 @@
-  * but this may not be the case...
-  * I suppose this also comes in handy if clvmd crashes, not that it would!
-  */
--static void *get_initial_state(char **argv)
-+static int get_initial_state(char **argv)
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 8d709f6..79a6d56 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -359,6 +359,8 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname)
+ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 		     uint32_t flags, lv_operation_t lv_op)
  {
- 	int lock_mode;
- 	char lv[64], vg[64], flags[25], vg_flags[25];
-@@ -733,7 +733,7 @@
- 	     "r");
++	uint32_t lck_type = flags & LCK_TYPE_MASK;
++	uint32_t lck_scope = flags & LCK_SCOPE_MASK;
+ 	int ret = 0;
  
- 	if (!lvs)
--		return NULL;
-+		return 1;
- 
- 	while (fgets(line, sizeof(line), lvs)) {
- 	        if (sscanf(line, "%s %s %s %s\n", vg, lv, flags, vg_flags) == 4) {
-@@ -773,7 +773,7 @@
- 	}
- 	if (fclose(lvs))
- 		DEBUGLOG("lvs fclose failed: %s\n", strerror(errno));
--	return NULL;
-+	return 0;
- }
- 
- static void lvm2_log_fn(int level, const char *file, int line, int dm_errno,
-@@ -886,6 +886,10 @@
- 	init_syslog(LOG_DAEMON);
- 	openlog("clvmd", LOG_PID, LOG_DAEMON);
- 
-+	/* Initialise already held locks */
-+	if (get_initial_state(argv))
-+		log_error("Cannot load initial lock states.");
-+
- 	if (!(cmd = create_toolcontext(1, NULL, 0))) {
- 		log_error("Failed to allocate command context");
+ 	_block_signals(flags);
+@@ -376,21 +378,16 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
  		return 0;
-@@ -902,8 +906,6 @@
- 	check_config();
- 	init_ignore_suspended_devices(1);
+ 	}
  
--	get_initial_state(argv);
--
- 	/* Trap log messages so we can pass them back to the user */
- 	init_log_fn(lvm2_log_fn);
- 	memlock_inc_daemon(cmd);
+-	if (cmd->metadata_read_only &&
+-	    ((flags & LCK_TYPE_MASK) == LCK_WRITE) &&
++	if (cmd->metadata_read_only && lck_type == LCK_WRITE &&
+ 	    strcmp(resource, VG_GLOBAL)) {
+ 		log_error("Operation prohibited while global/metadata_read_only is set.");
+ 		return 0;
+ 	}
+ 
+ 	if ((ret = _locking.lock_resource(cmd, resource, flags))) {
+-		if ((flags & LCK_SCOPE_MASK) == LCK_VG &&
+-		    !(flags & LCK_CACHE)) {
+-			if ((flags & LCK_TYPE_MASK) == LCK_UNLOCK)
+-				lvmcache_unlock_vgname(resource);
+-			else
+-				lvmcache_lock_vgname(resource, (flags & LCK_TYPE_MASK)
+-								== LCK_READ);
++		if (lck_scope == LCK_VG && !(flags & LCK_CACHE)) {
++			if (lck_type != LCK_UNLOCK)
++				lvmcache_lock_vgname(resource, lck_type == LCK_READ);
+ 			dev_reset_error_count(cmd);
+ 		}
+ 
+@@ -398,6 +395,13 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 	} else
+ 		stack;
+ 
++	/* If unlocking, always remove lock from lvmcache even if operation failed. */
++	if (lck_scope == LCK_VG && !(flags & LCK_CACHE) && lck_type == LCK_UNLOCK) {
++		lvmcache_unlock_vgname(resource);
++		if (!ret)
++			_update_vg_lock_count(resource, flags);
++	}
++
+ 	_unlock_memory(cmd, lv_op);
+ 	_unblock_signals();
+ 
+-- 
+1.7.6
 
 
