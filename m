@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 11 Aug 2011 16:31:41 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
-Message-ID: <20110811163141.24464.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 11 Aug 2011 17:34:32 -0000
+Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c lib/meta ...
+Message-ID: <20110811173432.32560.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,173 +10,104 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-08-11 16:31:41
+Changes by:	zkabelac at sourceware.org	2011-08-11 17:34:31
 
 Modified files:
 	.              : WHATS_NEW 
+	lib/cache      : lvmcache.c 
 	lib/metadata   : metadata.c 
 
 Log message:
-	Fix possible format instance memory leaks and premature releases in _vg_read.
+	Lock memory for shared VG
+	
+	Use debug pool locking functionality. So the command could check,
+	whether the memory in the pool has not been modified.
+	
+	For lv_postoder() instead of unlocking and locking for every changed
+	struct status member do it once when entering and leaving function.
+	(mprotect would trap each such memory access).
+	Currently lv_postoder() does not modify other part of vg structure
+	then status flags of each LV with flags that are reverted back to
+	its original state after function exit.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2063&r2=1.2064
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.462&r2=1.463
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2065&r2=1.2066
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.464&r2=1.465
 
---- LVM2/WHATS_NEW	2011/08/11 15:27:46	1.2063
-+++ LVM2/WHATS_NEW	2011/08/11 16:31:40	1.2064
+--- LVM2/WHATS_NEW	2011/08/11 17:24:23	1.2065
++++ LVM2/WHATS_NEW	2011/08/11 17:34:30	1.2066
 @@ -1,5 +1,6 @@
  Version 2.02.87 - 
  ===============================
-+  Fix possible format instance memory leaks and premature releases in _vg_read.
++  Use memory pool locking to check for corruption of internal VG structs.
+   Cache and share generated VG structs.
+   Fix possible format instance memory leaks and premature releases in _vg_read.
    Suppress locking error messages in monitoring init scripts.
-   If pipe in clvmd fails, return busy instead of using uninitialised descriptors.
-   Add dmeventd monitoring shared library for RAID.
---- LVM2/lib/metadata/metadata.c	2011/08/10 20:25:30	1.462
-+++ LVM2/lib/metadata/metadata.c	2011/08/11 16:31:40	1.463
-@@ -2768,6 +2768,14 @@
- 		pvl->pv->fid->fmt->ops->destroy_instance(pvl->pv->fid);
+--- LVM2/lib/cache/lvmcache.c	2011/08/11 17:24:24	1.114
++++ LVM2/lib/cache/lvmcache.c	2011/08/11 17:34:30	1.115
+@@ -689,6 +689,9 @@
+ 	vginfo->vg_use_count = 0;
+ 	vg->vginfo = vginfo;
+ 
++	if (!dm_pool_lock(vg->vgmem, 1))
++		goto_bad;
++
+ out:
+ 	vginfo->holders++;
+ 	vginfo->vg_use_count++;
+@@ -715,6 +718,11 @@
+ 		log_debug("VG %s reused %d times.",
+ 			  vginfo->cached_vg->name, vginfo->vg_use_count);
+ 
++	/* Debug perform crc check only when it's been used more then once */
++	if (!dm_pool_unlock(vginfo->cached_vg->vgmem,
++			    (vginfo->vg_use_count > 1)))
++		stack;
++
+ 	vginfo->cached_vg->vginfo = NULL;
+ 	vginfo->cached_vg = NULL;
+ 
+--- LVM2/lib/metadata/metadata.c	2011/08/11 17:24:24	1.464
++++ LVM2/lib/metadata/metadata.c	2011/08/11 17:34:31	1.465
+@@ -2107,8 +2107,17 @@
+ 			       void *data)
+ {
+ 	int r;
++	int pool_locked = dm_pool_locked(lv->vg->vgmem);
++
++	if (pool_locked && !dm_pool_unlock(lv->vg->vgmem, 0))
++		return_0;
++
+ 	r = _lv_postorder_visit(lv, fn, data);
+ 	_lv_postorder_cleanup(lv, 0);
++
++	if (pool_locked && !dm_pool_lock(lv->vg->vgmem, 0))
++		return_0;
++
+ 	return r;
  }
  
-+static void _destroy_fid(struct format_instance **fid)
-+{
-+	if (*fid) {
-+		(*fid)->fmt->ops->destroy_instance(*fid);
-+		*fid = NULL;
-+	}
-+}
-+
- int vg_missing_pv_count(const struct volume_group *vg)
+@@ -2122,6 +2131,10 @@
  {
- 	int ret = 0;
-@@ -2826,7 +2834,7 @@
- 				     int warnings, 
- 				     int *consistent, unsigned precommitted)
- {
--	struct format_instance *fid;
-+	struct format_instance *fid = NULL;
- 	struct format_instance_ctx fic;
- 	const struct format_type *fmt;
- 	struct volume_group *vg, *correct_vg = NULL;
-@@ -2900,12 +2908,20 @@
- 	}
- 
- 	/* Store pvids for later so we can check if any are missing */
--	if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid)))
-+	if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid))) {
-+		_destroy_fid(&fid);
- 		return_NULL;
-+	}
- 
-+	/*
-+	 * We use the fid globally here so prevent the release_vg
-+	 * call to destroy the fid - we may want to reuse it!
-+	 */
-+	fid->ref_count++;
- 	/* Ensure contents of all metadata areas match - else do recovery */
- 	inconsistent_mda_count=0;
- 	dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
+ 	struct lv_list *lvl;
+ 	int r = 1;
++	int pool_locked = dm_pool_locked(vg->vgmem);
 +
- 		if ((use_precommitted &&
- 		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda))) ||
- 		    (!use_precommitted &&
-@@ -2941,6 +2957,7 @@
- 		if (vg != correct_vg)
- 			release_vg(vg);
- 	}
-+	fid->ref_count--;
++	if (pool_locked && !dm_pool_unlock(vg->vgmem, 0))
++		return_0;
  
- 	/* Ensure every PV in the VG was in the cache */
- 	if (correct_vg) {
-@@ -2972,8 +2989,10 @@
- 				}
- 				if (dm_list_size(&info->mdas)) {
- 					if (!fid_add_mdas(fid, &info->mdas,
--							  info->dev->pvid, ID_LEN))
-+							  info->dev->pvid, ID_LEN)) {
-+						release_vg(correct_vg);
- 						return_NULL;
-+					}
- 					 
- 					log_debug("Empty mda found for VG %s.", vgname);
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+ 		if (!_lv_postorder_visit(lvl->lv, fn, data)) {
+@@ -2132,6 +2145,9 @@
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+ 		_lv_postorder_cleanup(lvl->lv, 0);
  
-@@ -3002,11 +3021,14 @@
- 				 */
- 				lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
- 
--				if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid)))
-+				if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid))) {
-+					release_vg(correct_vg);
- 					return_NULL;
-+				}
- 			}
- 		}
- 
-+		fid->ref_count++;
- 		if (dm_list_size(&correct_vg->pvs) !=
- 		    dm_list_size(pvids) + vg_missing_pv_count(correct_vg)) {
- 			log_debug("Cached VG %s had incorrect PV list",
-@@ -3034,12 +3056,20 @@
- 			release_vg(correct_vg);
- 			correct_vg = NULL;
- 		}
-+		fid->ref_count--;
- 	}
- 
- 	dm_list_init(&all_pvs);
- 
- 	/* Failed to find VG where we expected it - full scan and retry */
- 	if (!correct_vg) {
-+		/*
-+		 * Free outstanding format instance that remained unassigned
-+		 * from previous step where we tried to get the "correct_vg",
-+		 * but we failed to do so (so there's a dangling fid now).
-+		 */
-+		_destroy_fid(&fid);
++	if (pool_locked && !dm_pool_lock(vg->vgmem, 0))
++		return_0;
 +
- 		inconsistent = 0;
+ 	return r;
+ }
  
- 		/* Independent MDAs aren't supported under low memory */
-@@ -3061,6 +3091,11 @@
- 			return NULL;
- 		}
- 
-+		/*
-+		 * We use the fid globally here so prevent the release_vg
-+		 * call to destroy the fid - we may want to reuse it!
-+		*/
-+		fid->ref_count++;
- 		/* Ensure contents of all metadata areas match - else recover */
- 		inconsistent_mda_count=0;
- 		dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
-@@ -3076,6 +3111,7 @@
- 				correct_vg = vg;
- 				if (!_update_pv_list(cmd->mem, &all_pvs, correct_vg)) {
- 					_free_pv_list(&all_pvs);
-+					fid->ref_count--;
- 					release_vg(vg);
- 					return_NULL;
- 				}
-@@ -3099,6 +3135,7 @@
- 
- 				if (!_update_pv_list(cmd->mem, &all_pvs, vg)) {
- 					_free_pv_list(&all_pvs);
-+					fid->ref_count--;
- 					release_vg(vg);
- 					release_vg(correct_vg);
- 					return_NULL;
-@@ -3115,10 +3152,12 @@
- 			if (vg != correct_vg)
- 				release_vg(vg);
- 		}
-+		fid->ref_count--;
- 
- 		/* Give up looking */
- 		if (!correct_vg) {
- 			_free_pv_list(&all_pvs);
-+			_destroy_fid(&fid);
- 			return_NULL;
- 		}
- 	}
 
 
