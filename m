@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 11 Aug 2011 15:27:47 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/locking.c scripts ...
-Message-ID: <20110811152747.2052.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 11 Aug 2011 17:06:25 -0000
+Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
+Message-ID: <20110811170625.8889.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-08-11 15:27:47
+Changes by:	mbroz at sourceware.org	2011-08-11 17:06:24
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/locking    : locking.c 
-	scripts        : lvm2_monitoring_init_red_hat.in 
-	                 lvm2_monitoring_systemd_red_hat.service.in 
+	.              : WHATS_NEW_DM 
+	tools          : dmsetup.c 
 
 Log message:
-	Suppress locking error messages in monitoring init scripts.
+	Remove dev name prefix from dmsetup line output if major and minor is used.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2062&r2=1.2063
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.97&r2=1.98
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_init_red_hat.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.487&r2=1.488
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.166&r2=1.167
 
---- LVM2/WHATS_NEW	2011/08/11 12:57:10	1.2062
-+++ LVM2/WHATS_NEW	2011/08/11 15:27:46	1.2063
+--- LVM2/WHATS_NEW_DM	2011/08/09 17:56:47	1.487
++++ LVM2/WHATS_NEW_DM	2011/08/11 17:06:24	1.488
 @@ -1,5 +1,6 @@
- Version 2.02.87 - 
+ Version 1.02.66 - 
  ===============================
-+  Suppress locking error messages in monitoring init scripts.
-   If pipe in clvmd fails, return busy instead of using uninitialised descriptors.
-   Add dmeventd monitoring shared library for RAID.
-   Add RAID metadata devices to considered devices in _add_lv_to_dtree.
---- LVM2/lib/locking/locking.c	2011/08/10 16:07:54	1.97
-+++ LVM2/lib/locking/locking.c	2011/08/11 15:27:46	1.98
-@@ -221,7 +221,7 @@
-  */
- int init_locking(int type, struct cmd_context *cmd, int suppress_messages)
- {
--	if (ignorelockingfailure() && getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES"))
-+	if (getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES"))
- 		suppress_messages = 1;
++  Remove dev name prefix from dmsetup line output if major and minor is used.
+   Remove support for the original version 1 dm ioctls.
+   Add missing check for allocation failure _create_dir_recursive().
+   Add support for systemd file descriptor handover in dmeventd.
+--- LVM2/tools/dmsetup.c	2011/08/04 12:40:24	1.166
++++ LVM2/tools/dmsetup.c	2011/08/11 17:06:24	1.167
+@@ -3478,7 +3478,8 @@
+ 	#endif
  
- 	if (type < 0)
---- LVM2/scripts/lvm2_monitoring_init_red_hat.in	2010/04/15 19:15:04	1.4
-+++ LVM2/scripts/lvm2_monitoring_init_red_hat.in	2011/08/11 15:27:46	1.5
-@@ -42,6 +42,7 @@
- LOCK_FILE="/var/lock/subsys/$DAEMON"
- 
- WARN=1
-+export LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- 
- start()
- {
---- LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in	2011/07/28 12:54:28	1.1
-+++ LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in	2011/08/11 15:27:46	1.2
-@@ -8,6 +8,7 @@
- 
- [Service]
- Type=oneshot
-+Environment=LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- ExecStart=@sbindir@/lvm vgchange --monitor y
- ExecStop=@sbindir@/lvm vgchange --monitor n
- RemainAfterExit=yes
+       doit:
+-	multiple_devices = (argc != 2 && cmd->repeatable_cmd);
++	multiple_devices = (cmd->repeatable_cmd && argc != 2 &&
++			   (argc != 1 || (!_switches[UUID_ARG] && !_switches[MAJOR_ARG])));
+ 	do {
+ 		if (!cmd->fn(cmd, argc--, argv++, NULL, multiple_devices)) {
+ 			fprintf(stderr, "Command failed\n");
 
 
