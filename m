@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Aug 2011 17:24:25 -0000
-Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c lib/cach ...
-Message-ID: <20110811172425.23087.qmail@sourceware.org>
+Date: 11 Aug 2011 17:29:06 -0000
+Subject: LVM2 ./WHATS_NEW_DM ./make.tmpl.in libdm/libde ...
+Message-ID: <20110811172906.25294.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,203 +10,382 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-11 17:24:24
+Changes by:	zkabelac at sourceware.org	2011-08-11 17:29:05
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/cache      : lvmcache.c lvmcache.h 
-	lib/metadata   : metadata.c vg.c vg.h 
+	.              : WHATS_NEW_DM make.tmpl.in 
+	libdm          : libdevmapper.h 
+	libdm/mm       : pool-debug.c pool-fast.c pool.c 
 
 Log message:
-	Cache and share generated VG structs
+	Add memory pool locking functions
 	
-	Extend vginfo cache with cached VG structure. So if the same metadata
-	are use, skip mda decoding in the case, the same data are in use.
-	This helps for operations like activation of all LVs in one VG,
-	where same data were decoded giving the same output result.
+	Adding debuging functionality to lock and unlock memory pool.
 	
-	Patch adds 1-to-1 connection between volume_group and lvmcache_vginfo.
+	2 ways to debug code:
+	crc - is default checksum/hash of the locked pool.
+	It gets slower when the pool is larger - so the check is only
+	made when VG is finaly released and it has been used more then
+	once.Thus the result is rather informative.
+	
+	mprotect - quite fast all the time - but requires more memory and
+	currently it is using posix_memalign() - this could be
+	later modified to use dm_malloc() and align internally.
+	Tool segfaults when locked memory is modified and core
+	could be examined for faulty code section (backtrace).
+	
+	Only fast memory pools could use mprotect for now -
+	so such debug builds cannot be combined with DEBUG_POOL.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2064&r2=1.2065
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.h.diff?cvsroot=lvm2&r1=1.39&r2=1.40
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.463&r2=1.464
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.488&r2=1.489
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.118&r2=1.119
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.140&r2=1.141
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-debug.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/WHATS_NEW	2011/08/11 16:31:40	1.2064
-+++ LVM2/WHATS_NEW	2011/08/11 17:24:23	1.2065
+--- LVM2/WHATS_NEW_DM	2011/08/11 17:06:24	1.488
++++ LVM2/WHATS_NEW_DM	2011/08/11 17:29:04	1.489
 @@ -1,5 +1,6 @@
- Version 2.02.87 - 
+ Version 1.02.66 - 
  ===============================
-+  Cache and share generated VG structs.
-   Fix possible format instance memory leaks and premature releases in _vg_read.
-   Suppress locking error messages in monitoring init scripts.
-   If pipe in clvmd fails, return busy instead of using uninitialised descriptors.
---- LVM2/lib/cache/lvmcache.c	2011/08/10 20:25:30	1.113
-+++ LVM2/lib/cache/lvmcache.c	2011/08/11 17:24:24	1.114
++  Add memory pool locking functions to aid debuging of shared VG structs.
+   Remove dev name prefix from dmsetup line output if major and minor is used.
+   Remove support for the original version 1 dm ioctls.
+   Add missing check for allocation failure _create_dir_recursive().
+--- LVM2/make.tmpl.in	2011/07/28 12:57:26	1.118
++++ LVM2/make.tmpl.in	2011/08/11 17:29:04	1.119
+@@ -149,7 +149,11 @@
+   DEFS += -DDM_IOCTLS
+ endif
+ 
++# Combination of DEBUG_POOL and DEBUG_ENFORCE_POOL_LOCKING is not suppored.
+ #DEFS += -DDEBUG_POOL
++# Default pool locking is using the crc checksum. With mprotect memory
++# enforcing compilation faulty memory write could be easily found.
++#DEFS += -DDEBUG_ENFORCE_POOL_LOCKING
+ #DEFS += -DBOUNDS_CHECK
+ 
+ #CFLAGS += -pg
+--- LVM2/libdm/libdevmapper.h	2011/08/02 22:07:23	1.140
++++ LVM2/libdm/libdevmapper.h	2011/08/11 17:29:04	1.141
+@@ -614,6 +614,22 @@
+ void dm_pool_free(struct dm_pool *p, void *ptr);
+ 
+ /*
++ * To aid debugging, a pool can be locked. Any modifications made
++ * to the content of the pool while it is locked can be detected.
++ * Default compilation is using a crc checksum to notice modifications.
++ * The pool locking is using the mprotect with the compilation flag
++ * DEBUG_ENFORCE_POOL_LOCKING to enforce the memory protection.
++ */
++/* query pool lock status */
++int dm_pool_locked(struct dm_pool *p);
++/* mark pool as locked */
++int dm_pool_lock(struct dm_pool *p, int crc)
++	__attribute__((__warn_unused_result__));
++/* mark pool as unlocked */
++int dm_pool_unlock(struct dm_pool *p, int crc)
++	__attribute__((__warn_unused_result__));
++
++/*
+  * Object building routines:
+  *
+  * These allow you to 'grow' an object, useful for
+--- LVM2/libdm/mm/pool-debug.c	2011/03/30 12:57:03	1.12
++++ LVM2/libdm/mm/pool-debug.c	2011/08/11 17:29:04	1.13
+@@ -33,6 +33,8 @@
+ 	struct dm_list list;
+ 	const char *name;
+ 	void *orig_pool;	/* to pair it with first allocation call */
++	unsigned locked;
++	long crc;
+ 
+ 	int begun;
+ 	struct block *object;
+@@ -71,6 +73,10 @@
+ {
+ 	struct block *n;
+ 
++	if (p->locked)
++		log_error(INTERNAL_ERROR "_free_blocks from locked pool %s",
++			  p->name);
++
+ 	while (b) {
+ 		p->stats.bytes -= b->size;
+ 		p->stats.blocks_allocated--;
+@@ -109,6 +115,10 @@
+ 
+ static void _append_block(struct dm_pool *p, struct block *b)
+ {
++	if (p->locked)
++		log_error(INTERNAL_ERROR "_append_blocks to locked pool %s",
++			  p->name);
++
+ 	if (p->tail) {
+ 		p->tail->next = b;
+ 		p->tail = b;
+@@ -216,6 +226,10 @@
+ 	struct block *new;
+ 	size_t new_size;
+ 
++	if (p->locked)
++		log_error(INTERNAL_ERROR "Grow objects in locked pool %s",
++			  p->name);
++
+ 	if (!delta)
+ 		delta = strlen(extra);
+ 
+@@ -260,3 +274,19 @@
+ 	p->begun = 0;
+ 	p->object = NULL;
+ }
++
++static long _pool_crc(const struct dm_pool *p)
++{
++#ifndef DEBUG_ENFORCE_POOL_LOCKING
++#warning pool crc not implemented with pool debug
++#endif
++	return 0;
++}
++
++static int _pool_protect(struct dm_pool *p, int prot)
++{
++#ifdef DEBUG_ENFORCE_POOL_LOCKING
++#warning pool mprotect not implemented with pool debug
++#endif
++	return 1;
++}
+--- LVM2/libdm/mm/pool-fast.c	2011/03/30 12:43:33	1.13
++++ LVM2/libdm/mm/pool-fast.c	2011/08/11 17:29:05	1.14
 @@ -1,6 +1,6 @@
  /*
   * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
+- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
 + * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
   *
-  * This file is part of LVM2.
+  * This file is part of the device-mapper userspace tools.
   *
-@@ -90,6 +90,8 @@
- 	}
+@@ -18,6 +18,7 @@
+ #endif
  
- 	log_debug("Metadata cache: VG %s wiped.", vginfo->vgname);
-+
-+	release_vg(vginfo->cached_vg);
+ #include "dmlib.h"
++#include <malloc.h>
+ 
+ struct chunk {
+ 	char *begin, *end;
+@@ -32,6 +33,8 @@
+ 	size_t chunk_size;
+ 	size_t object_len;
+ 	unsigned object_alignment;
++	int locked;
++	long crc;
+ };
+ 
+ static void _align_chunk(struct chunk *c, unsigned alignment);
+@@ -260,7 +263,23 @@
+ 		c = p->spare_chunk;
+ 		p->spare_chunk = 0;
+ 	} else {
+-		if (!(c = dm_malloc(s))) {
++#ifdef DEBUG_ENFORCE_POOL_LOCKING
++		if (!pagesize) {
++			pagesize = getpagesize(); /* lvm_pagesize(); */
++			pagesize_mask = pagesize - 1;
++		}
++		/*
++		 * Allocate page aligned size so malloc could work.
++		 * Otherwise page fault would happen from pool unrelated
++		 * memory writes of internal malloc pointers.
++		 */
++#  define aligned_malloc(s)	(posix_memalign((void**)&c, pagesize, \
++						ALIGN_ON_PAGE(s)) == 0)
++#else
++#  define aligned_malloc(s)	(c = dm_malloc(s))
++#endif /* DEBUG_ENFORCE_POOL_LOCKING */
++		if (!aligned_malloc(s)) {
++#undef aligned_malloc
+ 			log_error("Out of memory.  Requested %" PRIsize_t
+ 				  " bytes.", s);
+ 			return NULL;
+@@ -283,3 +302,46 @@
+ {
+ 	dm_free(c);
  }
- 
- /*
-@@ -662,6 +664,10 @@
- 	    (!precommitted && vginfo->precommitted && !critical_section()))
- 		return NULL;
- 
-+	/* Use already-cached VG struct when available */
-+	if ((vg = vginfo->cached_vg))
-+		goto out;
 +
- 	fic.type = FMT_INSTANCE_VG | FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
- 	fic.context.vg_ref.vg_name = vginfo->vgname;
- 	fic.context.vg_ref.vg_id = vgid;
-@@ -677,17 +683,44 @@
- 	if (!(vg = import_vg_from_config_tree(vginfo->cft, fid)))
- 		goto_bad;
- 
--	log_debug("Using cached %smetadata for VG %s.",
--		  vginfo->precommitted ? "pre-committed" : "", vginfo->vgname);
-+	/* Cache VG struct for reuse */
-+	vginfo->cached_vg = vg;
-+	vginfo->holders = 1;
-+	vginfo->vg_use_count = 0;
-+	vg->vginfo = vginfo;
 +
-+out:
-+	vginfo->holders++;
-+	vginfo->vg_use_count++;
-+	log_debug("Using cached %smetadata for VG %s with %u holder(s).",
-+		  vginfo->precommitted ? "pre-committed " : "",
-+		  vginfo->vgname, vginfo->holders);
- 
- 	return vg;
- 
- bad:
--	release_vg(vg);
- 	_free_cached_vgmetadata(vginfo);
- 	return NULL;
- }
- 
-+int vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo)
++/**
++ * Calc crc/hash from pool's memory chunks with internal pointers
++ */
++static long _pool_crc(const struct dm_pool *p)
 +{
-+	log_debug("VG %s decrementing %d holder(s) at %p.",
-+		  vginfo->cached_vg->name, vginfo->holders, vginfo->cached_vg);
++	long crc_hash = 0;
++#ifndef DEBUG_ENFORCE_POOL_LOCKING
++	const struct chunk *c;
++	const long *ptr, *end;
 +
-+	if (--vginfo->holders)
++	for (c = p->chunk; c; c = c->prev) {
++		end = (const long *) (c->begin < c->end ? (long) c->begin & ~7: (long) c->end);
++		ptr = (const long *) c;
++#ifdef VALGRIND_POOL
++		VALGRIND_MAKE_MEM_DEFINED(ptr, (end - ptr) * sizeof(*end));
++#endif
++		while (ptr < end) {
++			crc_hash += *ptr++;
++			crc_hash += (crc_hash << 10);
++			crc_hash ^= (crc_hash >> 6);
++		}
++	}
++#endif /* DEBUG_ENFORCE_POOL_LOCKING */
++
++	return crc_hash;
++}
++
++static int _pool_protect(struct dm_pool *p, int prot)
++{
++#ifdef DEBUG_ENFORCE_POOL_LOCKING
++	struct chunk *c;
++
++	for (c = p->chunk; c; c = c->prev) {
++		if (mprotect(c, (size_t) ((c->end - (char *) c) - 1), prot) != 0) {
++			log_sys_error("mprotect", "");
++			return 0;
++		}
++	}
++#endif
++	return 1;
++}
+--- LVM2/libdm/mm/pool.c	2011/03/30 12:57:03	1.7
++++ LVM2/libdm/mm/pool.c	2011/08/11 17:29:05	1.8
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+- * Copyright (C) 2004-2005 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
+@@ -14,11 +14,31 @@
+  */
+ 
+ #include "dmlib.h"
++#include <sys/mman.h>
+ 
+ /* FIXME: thread unsafe */
+ static DM_LIST_INIT(_dm_pools);
+ void dm_pools_check_leaks(void);
+ 
++#ifdef DEBUG_ENFORCE_POOL_LOCKING
++#ifdef DEBUG_POOL
++#error Do not use DEBUG_POOL with DEBUG_ENFORCE_POOL_LOCKING
++#endif
++
++/*
++ * Use mprotect system call to ensure all locked pages are not writable.
++ * Generates segmentation fault with write access to the locked pool.
++ *
++ * - Implementation is using posix_memalign() to get page aligned
++ *   memory blocks (could be implemented also through malloc).
++ * - Only pool-fast is properly handled for now.
++ * - Checksum is slower compared to mprotect.
++ */
++static size_t pagesize = 0;
++static size_t pagesize_mask = 0;
++#define ALIGN_ON_PAGE(size) (((size) + (pagesize_mask)) & ~(pagesize_mask))
++#endif
++
+ #ifdef DEBUG_POOL
+ #include "pool-debug.c"
+ #else
+@@ -75,3 +95,88 @@
+ #endif
+ 	}
+ }
++
++/**
++ * Status of locked pool.
++ *
++ * \param p
++ * Pool to be tested for lock status.
++ *
++ * \return
++ * 1 when the pool is locked, 0 otherwise.
++ */
++int dm_pool_locked(struct dm_pool *p)
++{
++	return p->locked;
++}
++
++/**
++ * Lock memory pool.
++ *
++ * \param p
++ * Pool to be locked.
++ *
++ * \param crc
++ * Bool specifies whether to store the pool crc/hash checksum.
++ *
++ * \return
++ * 1 (success) when the pool was preperly locked, 0 otherwise.
++ */
++int dm_pool_lock(struct dm_pool *p, int crc)
++{
++	if (p->locked) {
++		log_error(INTERNAL_ERROR "Pool %s is already locked.",
++			  p->name);
 +		return 0;
++	}
 +
-+	if (vginfo->vg_use_count > 1)
-+		log_debug("VG %s reused %d times.",
-+			  vginfo->cached_vg->name, vginfo->vg_use_count);
++	if (crc)
++		p->crc = _pool_crc(p);  /* Get crc for pool */
 +
-+	vginfo->cached_vg->vginfo = NULL;
-+	vginfo->cached_vg = NULL;
++	if (!_pool_protect(p, PROT_READ)) {
++		_pool_protect(p, PROT_READ | PROT_WRITE);
++		return_0;
++	}
++
++	p->locked = 1;
++
++	log_debug("Pool %s is locked.", p->name);
 +
 +	return 1;
 +}
 +
- struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd,
- 				   int include_internal)
- {
---- LVM2/lib/cache/lvmcache.h	2011/06/01 19:29:32	1.39
-+++ LVM2/lib/cache/lvmcache.h	2011/08/11 17:24:24	1.40
-@@ -50,6 +50,9 @@
- 	char *vgmetadata;	/* Copy of VG metadata as format_text string */
- 	struct config_tree *cft; /* Config tree created from vgmetadata */
- 				/* Lifetime is directly tied to vgmetadata */
-+	struct volume_group *cached_vg;
-+	unsigned holders;
-+	unsigned vg_use_count;	/* Counter of vg reusage */
- 	unsigned precommitted;	/* Is vgmetadata live or precommitted? */
- };
- 
-@@ -93,6 +96,8 @@
- 
- /* Queries */
- const struct format_type *fmt_from_vgname(const char *vgname, const char *vgid, unsigned revalidate_labels);
-+/* Decrement and test if there are still vg holders in vginfo. */
-+int vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo);
- struct lvmcache_vginfo *vginfo_from_vgname(const char *vgname,
- 					   const char *vgid);
- struct lvmcache_vginfo *vginfo_from_vgid(const char *vgid);
---- LVM2/lib/metadata/metadata.c	2011/08/11 16:31:40	1.463
-+++ LVM2/lib/metadata/metadata.c	2011/08/11 17:24:24	1.464
-@@ -866,6 +866,12 @@
- 					    struct volume_group *vg,
- 					    uint32_t failure)
- {
-+	/* Never return a cached VG structure for a failure */
-+	if (vg && vg->vginfo && failure != SUCCESS) {
-+		release_vg(vg);
-+		vg = NULL;
++/**
++ * Unlock memory pool.
++ *
++ * \param p
++ * Pool to be unlocked.
++ *
++ * \param crc
++ * Bool enables compare of the pool crc/hash with the stored value
++ * at pool lock. The pool is not properly unlocked if there is a mismatch.
++ *
++ * \return
++ * 1 (success) when the pool was properly unlocked, 0 otherwise.
++ */
++int dm_pool_unlock(struct dm_pool *p, int crc)
++{
++	if (!p->locked) {
++		log_error(INTERNAL_ERROR "Pool %s is already unlocked.",
++			  p->name);
++		return 0;
 +	}
 +
- 	if (!vg && !(vg = alloc_vg("vg_make_handle", cmd, NULL)))
- 		return_NULL;
- 
---- LVM2/lib/metadata/vg.c	2011/08/10 20:25:30	1.11
-+++ LVM2/lib/metadata/vg.c	2011/08/11 17:24:24	1.12
-@@ -18,6 +18,7 @@
- #include "display.h"
- #include "activate.h"
- #include "toolcontext.h"
-+#include "lvmcache.h"
- 
- struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
- 			      const char *vg_name)
-@@ -49,6 +50,8 @@
- 	dm_list_init(&vg->tags);
- 	dm_list_init(&vg->removed_pvs);
- 
-+	log_debug("Allocated VG %s at %p.", vg->name, vg);
++	p->locked = 0;
 +
- 	return vg;
- }
- 
-@@ -62,6 +65,8 @@
- 		return;
- 	}
- 
-+	log_debug("Freeing VG %s at %p.", vg->name, vg);
++	if (!_pool_protect(p, PROT_READ | PROT_WRITE))
++		return_0;
 +
- 	dm_pool_destroy(vg->vgmem);
- }
- 
-@@ -70,6 +75,11 @@
- 	if (!vg)
- 		return;
- 
-+	/* Check if there are any vginfo holders */
-+	if (vg->vginfo &&
-+	    !vginfo_holders_dec_and_test_for_zero(vg->vginfo))
-+		return;
++	log_debug("Pool %s is unlocked.", p->name);
 +
- 	_free_vg(vg);
- }
- 
---- LVM2/lib/metadata/vg.h	2011/08/10 20:26:41	1.14
-+++ LVM2/lib/metadata/vg.h	2011/08/11 17:24:24	1.15
-@@ -41,6 +41,7 @@
- 	struct cmd_context *cmd;
- 	struct dm_pool *vgmem;
- 	struct format_instance *fid;
-+	struct lvmcache_vginfo *vginfo;
- 	struct dm_list *cmd_vgs;/* List of wanted/locked and opened VGs */
- 	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
- 	uint32_t seqno;		/* Metadata sequence number */
++	if (crc && (p->crc != _pool_crc(p))) {
++		log_error(INTERNAL_ERROR "Pool %s crc mismatch.", p->name);
++		return 0;
++	}
++
++	return 1;
++}
 
 
