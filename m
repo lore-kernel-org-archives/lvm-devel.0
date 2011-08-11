@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 11 Aug 2011 19:38:01 -0000
-Subject: LVM2/lib activate/dev_manager.c metadata/lv_ma ...
-Message-ID: <20110811193801.19792.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 11 Aug 2011 20:49:34 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20110811204934.6761.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-08-11 19:38:01
+Changes by:	zkabelac at sourceware.org	2011-08-11 20:49:33
 
 Modified files:
-	lib/activate   : dev_manager.c 
-	lib/metadata   : lv_manip.c 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Add missing checks for function return codes.
+	Fix memleak of geometry buffer
 	
-	Some functions were being called without having their return values checked.
+	Looks like this function is not used too often - thus leak was discovered
+	by static analyzis (Coverity).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.228&r2=1.229
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.272&r2=1.273
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.489&r2=1.490
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
 
---- LVM2/lib/activate/dev_manager.c	2011/08/11 04:18:17	1.228
-+++ LVM2/lib/activate/dev_manager.c	2011/08/11 19:38:00	1.229
-@@ -1233,8 +1233,9 @@
- 						     NULL);
- 				if (!dlid)
- 					return_0;
--				dm_tree_node_add_target_area(node, NULL, dlid,
--							     extent_size * seg_metale(seg, s));
-+				if (!dm_tree_node_add_target_area(node, NULL, dlid,
-+								  extent_size * seg_metale(seg, s)))
-+					return_0;
- 			}
- 			if (!(dlid = build_dm_uuid(dm->mem, seg_lv(seg, s)->lvid.s, NULL)))
- 				return_0;
---- LVM2/lib/metadata/lv_manip.c	2011/08/11 03:29:52	1.272
-+++ LVM2/lib/metadata/lv_manip.c	2011/08/11 19:38:00	1.273
-@@ -312,13 +312,22 @@
- 		if (area_reduction != seg->area_len) {
- 			log_error("Unable to reduce RAID LV - operation not implemented.");
- 			return;
--		} else
--			lv_remove(seg_lv(seg, s));
-+		} else {
-+			if (!lv_remove(seg_lv(seg, s))) {
-+				log_error("Failed to remove RAID image %s",
-+					  seg_lv(seg, s)->name);
-+				return;
-+			}
-+		}
- 
- 		/* Remove metadata area if image has been removed */
- 		if (area_reduction == seg->area_len) {
--			lv_reduce(seg_metalv(seg, s),
--				  seg_metalv(seg, s)->le_count);
-+			if (!lv_reduce(seg_metalv(seg, s),
-+				       seg_metalv(seg, s)->le_count)) {
-+				log_error("Failed to remove RAID meta-device %s",
-+					  seg_metalv(seg, s)->name);
-+				return;
-+			}
- 		}
- 		return;
- 	}
+--- LVM2/WHATS_NEW_DM	2011/08/11 17:29:04	1.489
++++ LVM2/WHATS_NEW_DM	2011/08/11 20:49:33	1.490
+@@ -1,5 +1,6 @@
+ Version 1.02.66 - 
+ ===============================
++  Release geometry buffer in dm_task_destroy.
+   Add memory pool locking functions to aid debuging of shared VG structs.
+   Remove dev name prefix from dmsetup line output if major and minor is used.
+   Remove support for the original version 1 dm ioctls.
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/08/09 17:56:48	1.115
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/08/11 20:49:33	1.116
+@@ -451,6 +451,7 @@
+ 	dm_free(dmt->dev_name);
+ 	dm_free(dmt->newname);
+ 	dm_free(dmt->message);
++	dm_free(dmt->geometry);
+ 	dm_free(dmt->uuid);
+ 	dm_free(dmt);
+ }
 
 
