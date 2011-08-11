@@ -1,71 +1,71 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 11 Aug 2011 12:34:39 +0200
-Subject: [PATCH] Suppress locking error messages in monitoring initscripts
-Message-ID: <4E43B03F.1050606@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 11 Aug 2011 12:57:11 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20110811125711.31107.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We already use --sysinit to disable these messages when using
-"vgchange -ay" in rc.sysinit stage. However, there's also a
-"vgchange --monitor y" call later, but this is still too early
-to expect all locks to have the infrastructure in place (like
-using cluster locking globally in lvm.conf, but monitoring starts
-much earlier than cluster infrastructure, so we'd always end with
-a scary error message at boot).
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2011-08-11 12:57:11
 
-The user should not see these messages about socket failures and
-fallback to another type of locking, at least not at this moment.
-It's misleading - this is actually not a real problem at all, but
-the messages look like something terrible is happening.
+Modified files:
+	.              : WHATS_NEW 
+	daemons/clvmd  : clvmd.c 
 
-Peter
+Log message:
+	Never ever use uninitialised descriptors if pipe() fails
+	(because of maximum open count fd exceeded or so).
+	
+	Better return busy message, so even clients fail in more controlled way.
+	
+	Without patch,  clvmd crashes with various strange backtraces
+	if under heavy load of connection requests.
+	
+	https://bugzilla.redhat.com/show_bug.cgi?id=698393
+	https://bugzilla.redhat.com/show_bug.cgi?id=697945
+	
+	(It still can OOM but that's different issue.)
 
----
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2061&r2=1.2062
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
 
- lib/locking/locking.c                              |    2 +-
- scripts/lvm2_monitoring_init_red_hat.in            |    1 +
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    1 +
- 3 files changed, 3 insertions(+), 1 deletions(-)
-
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 8d709f6..a234ed9 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -221,7 +221,7 @@ static void _update_vg_lock_count(const char *resource, uint32_t flags)
-  */
- int init_locking(int type, struct cmd_context *cmd, int suppress_messages)
- {
--	if (ignorelockingfailure() && getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES"))
-+	if (getenv("LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES"))
- 		suppress_messages = 1;
+--- LVM2/WHATS_NEW	2011/08/11 05:00:20	1.2061
++++ LVM2/WHATS_NEW	2011/08/11 12:57:10	1.2062
+@@ -1,5 +1,6 @@
+ Version 2.02.87 - 
+ ===============================
++  If pipe in clvmd fails, return busy instead of using uninitialised descriptors.
+   Add dmeventd monitoring shared library for RAID.
+   Add RAID metadata devices to considered devices in _add_lv_to_dtree.
+   Fix renaming of RAID logical volumes.
+--- LVM2/daemons/clvmd/clvmd.c	2011/08/09 18:11:00	1.106
++++ LVM2/daemons/clvmd/clvmd.c	2011/08/11 12:57:11	1.107
+@@ -1263,9 +1263,19 @@
+ 		}
  
- 	if (type < 0)
-diff --git a/scripts/lvm2_monitoring_init_red_hat.in b/scripts/lvm2_monitoring_init_red_hat.in
-index 4812c75..0988511 100644
---- a/scripts/lvm2_monitoring_init_red_hat.in
-+++ b/scripts/lvm2_monitoring_init_red_hat.in
-@@ -42,6 +42,7 @@ VGS=${sbindir}/vgs
- LOCK_FILE="/var/lock/subsys/$DAEMON"
- 
- WARN=1
-+export LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- 
- start()
- {
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index 4715416..b5dd9bb 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -8,6 +8,7 @@ Conflicts=shutdown.target
- 
- [Service]
- Type=oneshot
-+Environment=LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- ExecStart=@sbindir@/lvm vgchange --monitor y
- ExecStop=@sbindir@/lvm vgchange --monitor n
- RemainAfterExit=yes
+ 		/* Create a pipe and add the reading end to our FD list */
+-		if (pipe(comms_pipe))
++		if (pipe(comms_pipe)) {
++			struct clvm_header reply;
+ 			DEBUGLOG("creating pipe failed: %s\n", strerror(errno));
+-		
++			reply.cmd = CLVMD_CMD_REPLY;
++			reply.status = EBUSY;
++			reply.arglen = 0;
++			reply.flags = 0;
++			send_message(&reply, sizeof(reply), our_csid,
++				     thisfd->fd,
++				     "Error sending EBUSY reply to local user");
++			return len;
++		}
++
+ 		newfd = malloc(sizeof(struct local_client));
+ 		if (!newfd) {
+ 			struct clvm_header reply;
 
 
