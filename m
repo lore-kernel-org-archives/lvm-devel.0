@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Aug 2011 01:52:20 -0000
-Subject: LVM2 ./configure ./configure.in daemons/clvmd/ ...
-Message-ID: <20110812015220.4731.qmail@sourceware.org>
+Date: 12 Aug 2011 02:16:46 -0000
+Subject: LVM2 daemons/clvmd/clvmd.c doc/example.conf.in ...
+Message-ID: <20110812021646.23566.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,98 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-12 01:52:19
+Changes by:	agk at sourceware.org	2011-08-12 02:16:46
 
 Modified files:
-	.              : configure configure.in 
-	daemons/clvmd  : Makefile.in 
+	daemons/clvmd  : clvmd.c 
+	doc            : example.conf.in 
+	tools          : lvcreate.c 
 
 Log message:
-	Drop CCS* variables no longer used.
+	more pre-release fixes
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.154&r2=1.155
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.168&r2=1.169
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/Makefile.in.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.233&r2=1.234
 
---- LVM2/configure	2011/08/11 19:18:18	1.154
-+++ LVM2/configure	2011/08/12 01:52:16	1.155
-@@ -669,8 +669,6 @@
- CLDWHOLEARCHIVE
- CLDNOWHOLEARCHIVE
- CLDFLAGS
--CCS_LIBS
--CCS_CFLAGS
- BUILD_DMEVENTD
- BUILD_CMIRRORD
- APPLIB
-@@ -10162,8 +10160,6 @@
+--- LVM2/daemons/clvmd/clvmd.c	2011/08/11 12:57:11	1.107
++++ LVM2/daemons/clvmd/clvmd.c	2011/08/12 02:16:46	1.108
+@@ -468,7 +468,7 @@
  
+ 	/* Set up signal handlers, USR1 is for cluster change notifications (in cman)
+ 	   USR2 causes child threads to exit.
+-	   HUP causes to re-read nodes list from CCS.
++	   (HUP used to cause gulm to re-read the nodes list from CCS.)
+ 	   PIPE should be ignored */
+ 	signal(SIGUSR2, sigusr2_handler);
+ 	signal(SIGHUP,  sighup_handler);
+--- LVM2/doc/example.conf.in	2011/08/11 17:46:13	1.30
++++ LVM2/doc/example.conf.in	2011/08/12 02:16:46	1.31
+@@ -413,6 +413,26 @@
+     # performed (except for the unchanged vg_seqno).
+     # Inappropriate use could mess up your system, so seek advice first!
+     metadata_read_only = 0
++
++    # 'mirror_segtype_default' defines which segtype will be used when the
++    # shorthand '-m' option is used for mirroring.  The possible options are:
++    #
++    # "mirror" - The original RAID1 implementation provided by LVM2/DM.  It is
++    # 	         characterized by a flexible log solution (core, disk, mirrored)
++    #		 and by the necessity to block I/O while reconfiguring in the
++    #		 event of a failure.  Snapshots of this type of RAID1 can be
++    #		 problematic.
++    #
++    # "raid1"  - This implementation leverages MD's RAID1 personality through
++    # 	       	 device-mapper.  It is characterized by a lack of log options.
++    #		 (A log is always allocated for every device and they are placed
++    #		 on the same device as the image - no separate devices are
++    #		 required.)  This mirror implementation does not require I/O
++    #		 to be blocked in the kernel in the event of a failure.
++    #
++    # Specify the '--type <mirror|raid1>' option to override this default
++    # setting.
++    mirror_segtype_default = "mirror"
+ }
  
+ activation {
+@@ -479,26 +499,6 @@
+     # "auto" - Use default value chosen by kernel.
+     readahead = "auto"
  
+-    # 'mirror_segtype_default' defines which segtype will be used when the
+-    # shorthand '-m' option is used for mirroring.  The possible options are:
+-    #
+-    # "mirror" - The original RAID1 implementation provided by LVM2/DM.  It is
+-    # 	         characterized by a flexible log solution (core, disk, mirrored)
+-    #		 and by the necessity to block I/O while reconfiguring in the
+-    #		 event of a failure.  Snapshots of this type of RAID1 can be
+-    #		 problematic.
+-    #
+-    # "raid1"  - This implementation leverages MD's RAID1 personality through
+-    # 	       	 device-mapper.  It is characterized by a lack of log options.
+-    #		 (A log is always allocated for every device and they are placed
+-    #		 on the same device as the image - no separate devices are
+-    #		 required.)  This mirror implementation does not require I/O
+-    #		 to be blocked in the kernel in the event of a failure.
+-    #
+-    # Specify the '--type <mirror|raid1>' option to override this default
+-    # setting.
+-    mirror_segtype_default = "mirror"
 -
--
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/Makefile test/Makefile test/api/Makefile tools/Makefile udev/Makef!
- ile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
+     # 'mirror_image_fault_policy' and 'mirror_log_fault_policy' define
+     # how a device failure affecting a mirror is handled.
+     # A mirror is composed of mirror images (copies) and a log.
+--- LVM2/tools/lvcreate.c	2011/08/10 20:25:31	1.233
++++ LVM2/tools/lvcreate.c	2011/08/12 02:16:46	1.234
+@@ -384,7 +384,7 @@
+ 	 */
+ 	segtype_str = "striped";
+ 	if (arg_count(cmd, mirrors_ARG))
+-		segtype_str = find_config_tree_str(cmd, "activation/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
++		segtype_str = find_config_tree_str(cmd, "global/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
  
---- LVM2/configure.in	2011/08/11 19:18:18	1.168
-+++ LVM2/configure.in	2011/08/12 01:52:17	1.169
-@@ -1271,8 +1271,6 @@
- AC_SUBST(AWK)
- AC_SUBST(BUILD_CMIRRORD)
- AC_SUBST(BUILD_DMEVENTD)
--AC_SUBST(CCS_CFLAGS)
--AC_SUBST(CCS_LIBS)
- AC_SUBST(CFLAGS)
- AC_SUBST(CFLOW_CMD)
- AC_SUBST(CLDFLAGS)
---- LVM2/daemons/clvmd/Makefile.in	2011/08/09 18:11:00	1.41
-+++ LVM2/daemons/clvmd/Makefile.in	2011/08/12 01:52:19	1.42
-@@ -15,8 +15,6 @@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+ 	lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, segtype_str));
  
--CCS_LIBS = @CCS_LIBS@
--CCS_CFLAGS = @CCS_CFLAGS@
- CMAN_LIBS = @CMAN_LIBS@
- CMAN_CFLAGS = @CMAN_CFLAGS@
- CONFDB_LIBS = @CONFDB_LIBS@
 
 
