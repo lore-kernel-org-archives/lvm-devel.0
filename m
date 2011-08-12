@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Aug 2011 12:56:39 -0000
-Subject: LVM2 make.tmpl.in
-Message-ID: <20110812125639.12212.qmail@sourceware.org>
+Date: 12 Aug 2011 13:03:35 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20110812130335.14365.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-12 12:56:38
+Changes by:	agk at sourceware.org	2011-08-12 13:03:35
 
 Modified files:
-	.              : make.tmpl.in 
+	.              : WHATS_NEW 
 
 Log message:
-	core removed with clean not distclean
+	makefile fixes
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2072&r2=1.2073
 
---- LVM2/make.tmpl.in	2011/08/12 07:57:24	1.121
-+++ LVM2/make.tmpl.in	2011/08/12 12:56:38	1.122
-@@ -370,7 +370,7 @@
+--- LVM2/WHATS_NEW	2011/08/12 02:34:08	1.2072
++++ LVM2/WHATS_NEW	2011/08/12 13:03:35	1.2073
+@@ -1,8 +1,10 @@
+ Version 2.02.88 - 
+ ==================================
++  Fix make clean not to remove Makefile.  (2.02.87)
  
- distclean: cleandir $(SUBDIRS.distclean)
- 	test -z "$(DISTCLEAN_DIRS)" || $(RM) -r $(DISTCLEAN_DIRS)
--	$(RM) $(DISTCLEAN_TARGETS) Makefile core
-+	$(RM) $(DISTCLEAN_TARGETS) Makefile 
- 
- .exported_symbols_generated: $(EXPORTED_HEADER) .exported_symbols
- 	set -e; \
+ Version 2.02.87 - 12th August 2011
+ ==================================
++  Fix make distclean to remove stray dmeventd and exported symbols files.
+   Add global/detect_internal_vg_cache_corruption to lvm.conf.
+   Use memory pool locking to check for corruption of internal VG structs.
+   Cache and share generated VG structs.
 
 
