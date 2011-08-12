@@ -1,38 +1,229 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Aug 2011 13:03:35 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20110812130335.14365.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Fri, 12 Aug 2011 12:10:03 -0500
+Subject: [PATCH] LVM RAID: a couple more fixes
+Message-ID: <1313169003.27367.6.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-12 13:03:35
+Patch includes:
+1) add new function 'raid_remove_top_layer' which will be useful
+ to other conversion functions later (also cleans up code)
+2) Add error messages if raid_[extract|add]_images fails
+3) DO NOT activate sub_lv's between a suspend/resume
+4) Add function prototypes to prevent compiler warnings when
+ compiling with '--with-raid=shared'
 
-Modified files:
-	.              : WHATS_NEW 
+Also, can someone provide insight on removing the 'sleep(1)'?  Without
+it, I get "device in use: cannot deactivate" error messages - even
+though it is /not/ in-use.
 
-Log message:
-	makefile fixes
+ brassow
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2072&r2=1.2073
 
---- LVM2/WHATS_NEW	2011/08/12 02:34:08	1.2072
-+++ LVM2/WHATS_NEW	2011/08/12 13:03:35	1.2073
-@@ -1,8 +1,10 @@
- Version 2.02.88 - 
- ==================================
-+  Fix make clean not to remove Makefile.  (2.02.87)
+Index: LVM2/lib/metadata/raid_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/raid_manip.c
++++ LVM2/lib/metadata/raid_manip.c
+@@ -123,6 +123,63 @@ static int raid_in_sync(struct logical_v
+ }
  
- Version 2.02.87 - 12th August 2011
- ==================================
-+  Fix make distclean to remove stray dmeventd and exported symbols files.
-   Add global/detect_internal_vg_cache_corruption to lvm.conf.
-   Use memory pool locking to check for corruption of internal VG structs.
-   Cache and share generated VG structs.
+ /*
++ * raid_remove_top_layer
++ * @lv
++ * @removal_list
++ *
++ * Remove top layer of RAID LV in order to convert to linear.
++ * This function makes no on-disk changes.  The residual LVs
++ * returned in 'removal_list' must be freed by the caller.
++ *
++ * Returns: 1 on succes, 0 on failure
++ */
++static int raid_remove_top_layer(struct logical_volume *lv,
++				 struct dm_list *removal_list)
++{
++	struct lv_list *lvl_array, *lvl;
++	struct lv_segment *seg = first_seg(lv);
++
++	if (!seg_is_mirrored(seg)) {
++		log_error(INTERNAL_ERROR
++			  "Unable to remove RAID layer from segment type %s",
++			  seg->segtype->name);
++		return 0;
++	}
++
++	if (seg->area_count != 1) {
++		log_error(INTERNAL_ERROR
++			  "Unable to remove RAID layer when there"
++			  " is more than one sub-lv");
++		return 0;
++	}
++
++	lvl_array = dm_pool_alloc(lv->vg->vgmem, 2 * sizeof(*lvl));
++	if (!lvl_array) {
++		log_error("Memory allocation failed.");
++		return 0;
++	}
++
++	/* Add last metadata area to removal_list */
++	lvl_array[0].lv = seg_metalv(seg, 0);
++	lv_set_visible(seg_metalv(seg, 0));
++	remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg);
++	seg_metatype(seg, 0) = AREA_UNASSIGNED;
++	dm_list_add(removal_list, &(lvl_array[0].list));
++
++	/* Remove RAID layer and add residual LV to removal_list*/
++	seg_lv(seg, 0)->status &= ~RAID_IMAGE;
++	lv_set_visible(seg_lv(seg, 0));
++	lvl_array[1].lv = seg_lv(seg, 0);
++	dm_list_add(removal_list, &(lvl_array[1].list));
++
++	if (!remove_layer_from_lv(lv, seg_lv(seg, 0)))
++		return_0;
++
++	lv->status &= ~(MIRRORED | RAID);
++	return 1;
++}
++
++/*
+  * _shift_and_rename_image_components
+  * @seg: Top-level RAID segment
+  *
+@@ -373,11 +430,10 @@ static int raid_extract_images(struct lo
+ int lv_raid_change_image_count(struct logical_volume *lv,
+ 			       uint32_t new_count, struct dm_list *pvs)
+ {
+-	int r;
+ 	uint32_t old_count = lv_raid_image_count(lv);
+ 	struct lv_segment *seg = first_seg(lv);
+ 	struct dm_list removal_list;
+-	struct lv_list *lvl_array, *lvl;
++	struct lv_list *lvl;
+ 
+ 	dm_list_init(&removal_list);
+ 
+@@ -392,34 +448,25 @@ int lv_raid_change_image_count(struct lo
+ 		return 1;
+ 	}
+ 
+-	if (old_count > new_count)
+-		r = raid_extract_images(lv, new_count, pvs, 1,
+-					&removal_list, &removal_list);
+-	else
+-		r = raid_add_images(lv, new_count, pvs);
+-	if (!r)
+-		return 0;
++	if (old_count > new_count) {
++		if (!raid_extract_images(lv, new_count, pvs, 1,
++					 &removal_list, &removal_list)) {
++			log_error("Failed to extract images from %s/%s",
++				  lv->vg->name, lv->name);
++			return 0;
++		}
++	} else {
++		if (!raid_add_images(lv, new_count, pvs)) {
++			log_error("Failed to add images to %s/%s",
++				  lv->vg->name, lv->name);
++			return 0;
++		}
++	}
+ 
+ 	/* Convert to linear? */
+-	if (new_count == 1) {
+-		/* Add last metadata area to removal_list */
+-		lvl_array = dm_pool_alloc(lv->vg->cmd->mem, 2 * sizeof(*lvl));
+-		if (!lvl_array)
+-			return_0;
+-		lvl_array[0].lv = seg_metalv(seg, 0);
+-		remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg);
+-		seg_metatype(seg, 0) = AREA_UNASSIGNED;
+-		dm_list_add(&removal_list, &(lvl_array[0].list));
+-
+-		/* Remove RAID layer */
+-		seg_lv(seg, 0)->status &= ~RAID_IMAGE;
+-		lv_set_visible(seg_lv(seg, 0));
+-		lvl_array[1].lv = seg_lv(seg, 0);
+-		dm_list_add(&removal_list, &(lvl_array[1].list));
+-
+-		if (!remove_layer_from_lv(lv, seg_lv(seg, 0)))
+-			return_0;
+-		lv->status &= ~(MIRRORED | RAID);
++	if ((new_count == 1) && !raid_remove_top_layer(lv, &removal_list)) {
++		log_error("Failed to remove RAID layer after linear conversion");
++		return 0;
+ 	}
+ 
+ 	if (!vg_write(lv->vg)) {
+@@ -441,22 +488,9 @@ int lv_raid_change_image_count(struct lo
+ 	}
+ 
+ 	/*
+-	 * Bring extracted LVs into existance, so there are no
+-	 * conflicts for the main RAID device's resume
++	 * Resume original LV
++	 * This also resumes all other sub-lvs (including the extracted)
+ 	 */
+-	if (!dm_list_empty(&removal_list)) {
+-		dm_list_iterate_items(lvl, &removal_list) {
+-			/* If top RAID was EX, use EX */
+-			if (lv_is_active_exclusive_locally(lv)) {
+-				if (!activate_lv_excl(lv->vg->cmd, lvl->lv))
+-					return_0;
+-			} else {
+-				if (!activate_lv(lv->vg->cmd, lvl->lv))
+-					return_0;
+-			}
+-		}
+-	}
+-
+ 	if (!resume_lv(lv->vg->cmd, lv)) {
+ 		log_error("Failed to resume %s/%s after committing changes",
+ 			  lv->vg->name, lv->name);
+@@ -465,9 +499,17 @@ int lv_raid_change_image_count(struct lo
+ 
+ 	/*
+ 	 * Eliminate the extracted LVs
++	 * The extracted devices do not take on their new names
++	 * (i.e. *_extracted) unless we suspend/resume them.  It
++	 * is not strictly necessary, so we skip that step.
+ 	 */
+ 	if (!dm_list_empty(&removal_list)) {
+ 		dm_list_iterate_items(lvl, &removal_list) {
++			/*
++			 * FIXME: Remove 'sleep' that is necessary to prevent
++			 * "device in use" errors - udev not fast enough?
++			 */
++			sleep(1);
+ 			if (!deactivate_lv(lv->vg->cmd, lvl->lv))
+ 				return_0;
+ 			if (!lv_remove(lvl->lv))
+Index: LVM2/lib/raid/raid.c
+===================================================================
+--- LVM2.orig/lib/raid/raid.c
++++ LVM2/lib/raid/raid.c
+@@ -349,6 +349,20 @@ static struct segment_type *init_raid_se
+ 	return segtype;
+ }
+ 
++#ifndef RAID_INTERNAL /* Shared */
++struct segment_type *init_raid1_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid4_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid5_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid5_la_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid5_ra_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid5_ls_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid5_rs_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid6_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid6_zr_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid6_nr_segtype(struct cmd_context *cmd);
++struct segment_type *init_raid6_nc_segtype(struct cmd_context *cmd);
++#endif
++
+ struct segment_type *init_raid1_segtype(struct cmd_context *cmd)
+ {
+ 	struct segment_type *segtype;
+
 
 
