@@ -1,232 +1,88 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 16 Aug 2011 09:20:58 -0500
-Subject: [PATCH 5 of 5] LVM RAID: Add ability to merge back LV split from RAID1
-In-Reply-To: <1313503895.11617.10.camel@f14.redhat.com>
-References: <1313503895.11617.10.camel@f14.redhat.com>
-Message-ID: <1313504458.11617.21.camel@f14.redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 17 Aug 2011 15:15:38 -0000
+Subject: LVM2 ./WHATS_NEW man/lvcreate.8.in tools/args. ...
+Message-ID: <20110817151538.32639.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add ability to merge back a RAID1 image that has been split w/ --trackchanges
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-08-17 15:15:37
 
-Argument layout is very similar to the merge command for snapshots.
+Modified files:
+	.              : WHATS_NEW 
+	man            : lvcreate.8.in 
+	tools          : args.h commands.h 
 
-Index: LVM2/lib/metadata/metadata-exported.h
-===================================================================
---- LVM2.orig/lib/metadata/metadata-exported.h
-+++ LVM2/lib/metadata/metadata-exported.h
-@@ -746,6 +746,7 @@ int lv_raid_split(struct logical_volume 
- 		  uint32_t new_count, struct dm_list *splittable_pvs);
- int lv_raid_split_and_track(struct logical_volume *lv,
- 			    struct dm_list *splittable_pvs);
-+int lv_raid_merge(struct logical_volume *lv);
- 
- /* --  metadata/raid_manip.c */
- 
-Index: LVM2/lib/metadata/raid_manip.c
-===================================================================
---- LVM2.orig/lib/metadata/raid_manip.c
-+++ LVM2/lib/metadata/raid_manip.c
-@@ -1016,3 +1016,89 @@ int lv_raid_split_and_track(struct logic
- 		  lv->vg->name, seg_lv(seg, s)->name, lv->name);
- 	return 1;
- }
-+
-+int lv_raid_merge(struct logical_volume *image_lv)
-+{
-+	uint32_t s;
-+	char *p, *lv_name;
-+	struct lv_list *lvl;
-+	struct logical_volume *lv;
-+	struct logical_volume *meta_lv = NULL;
-+	struct lv_segment *seg;
-+	struct volume_group *vg = image_lv->vg;
-+
-+	lv_name = dm_pool_strdup(vg->vgmem, image_lv->name);
-+	if (!lv_name)
-+		return_0;
-+
-+	if (!(p = strstr(lv_name, "_rimage_"))) {
-+		log_error("Unable to merge non-mirror image %s/%s",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	*p = '\0'; /* lv_name is now that of top-level RAID */
-+
-+	if (image_lv->status & LVM_WRITE) {
-+		log_error("%s/%s is not read-only - refusing to merge",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+
-+	if (!(lvl = find_lv_in_vg(vg, lv_name))) {
-+		log_error("Unable to find containing RAID array for %s/%s",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	lv = lvl->lv;
-+	seg = first_seg(lv);
-+	for (s = 0; s < seg->area_count; s++) {
-+		if (seg_lv(seg, s) == image_lv) {
-+			meta_lv = seg_metalv(seg, s);
-+		}
-+	}
-+	if (!meta_lv)
-+		return_0;
-+
-+	if (!deactivate_lv(vg->cmd, meta_lv)) {
-+		log_error("Failed to deactivate %s", meta_lv->name);
-+		return 0;
-+	}
-+
-+	if (!deactivate_lv(vg->cmd, image_lv)) {
-+		log_error("Failed to deactivate %s/%s before merging",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	lv_set_hidden(image_lv);
-+	image_lv->status |= (lv->status & LVM_WRITE);
-+	image_lv->status |= RAID_IMAGE;
-+
-+	if (!vg_write(vg)) {
-+		log_error("Failed to write changes to %s in %s",
-+			  lv->name, vg->name);
-+		return 0;
-+	}
-+
-+	if (!suspend_lv(vg->cmd, lv)) {
-+		log_error("Failed to suspend %s/%s before committing changes",
-+			  vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	if (!vg_commit(vg)) {
-+		log_error("Failed to commit changes to %s in %s",
-+			  lv->name, vg->name);
-+		return 0;
-+	}
-+
-+	if (!resume_lv(vg->cmd, lv)) {
-+		log_error("Failed to resume %s/%s after committing changes",
-+			  vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	log_print("%s/%s successfully merged back into %s/%s",
-+		  vg->name, image_lv->name,
-+		  vg->name, lv->name);
-+	return 1;
-+}
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -20,6 +20,7 @@
- struct lvconvert_params {
- 	int snapshot;
- 	int merge;
-+	int merge_mirror;
- 	int zero;
- 
- 	const char *origin;
-@@ -107,7 +108,7 @@ static int _lvconvert_name_params(struct
- 	if ((ptr = strrchr(lp->lv_name_full, '/')))
- 		lp->lv_name = ptr + 1;
- 
--	if (!apply_lvname_restrictions(lp->lv_name))
-+	if (!lp->merge_mirror && !apply_lvname_restrictions(lp->lv_name))
- 		return_0;
- 
- 	if (*pargc && lp->snapshot) {
-@@ -178,8 +179,12 @@ static int _read_params(struct lvconvert
- 		return 0;
- 	}
- 
--	if (arg_count(cmd, merge_ARG))
--		lp->merge = 1;
-+	if (arg_count(cmd, merge_ARG)) {
-+		if ((argc == 1) && strstr(argv[0], "_rimage_"))
-+			lp->merge_mirror = 1;
-+		else
-+			lp->merge = 1;
-+	}
- 
- 	if (arg_count(cmd, mirrors_ARG)) {
- 		/*
-@@ -1339,6 +1344,12 @@ static int _lvconvert_mirrors(struct cmd
- 	uint32_t new_mimage_count;
- 	uint32_t new_log_count;
- 
-+	if (lp->merge_mirror) {
-+		log_error("Unable to merge mirror images"
-+			  "of segment type 'mirror'");
-+		return 0;
-+	}
-+
- 	/* Adjust mimage and/or log count */
- 	if (!_lvconvert_mirrors_parse_params(cmd, lv, lp,
- 					     &old_mimage_count, &old_log_count,
-@@ -1423,17 +1434,21 @@ static int lvconvert_raid(struct logical
- 				  "split" : "reduce");
- 			return 0;
- 		}
--
--		if (arg_count(cmd, trackchanges_ARG))
--			return lv_raid_split_and_track(lv, lp->pvh);
--		else if (arg_count(cmd, splitmirrors_ARG))
--			return lv_raid_split(lv, lp->lv_split_name,
--					     image_count, lp->pvh);
--		else
--			return lv_raid_change_image_count(lv, image_count,
--							  lp->pvh);
- 	}
- 
-+	if (lp->merge_mirror)
-+		return lv_raid_merge(lv);
-+
-+	if (arg_count(cmd, trackchanges_ARG))
-+		return lv_raid_split_and_track(lv, lp->pvh);
-+
-+	if (arg_count(cmd, splitmirrors_ARG))
-+		return lv_raid_split(lv, lp->lv_split_name,
-+				     image_count, lp->pvh);
-+
-+	if (arg_count(cmd, mirrors_ARG))
-+		return lv_raid_change_image_count(lv, image_count, lp->pvh);
-+
- 	log_error("Conversion operation not yet supported.");
- 	return 0;
- }
-@@ -1652,7 +1667,8 @@ static int _lvconvert_single(struct cmd_
- 			stack;
- 			return ECMD_FAILED;
- 		}
--	} else if (segtype_is_raid(lp->segtype) || (lv->status & RAID)) {
-+	} else if (segtype_is_raid(lp->segtype) ||
-+		   (lv->status & RAID) || lp->merge_mirror) {
- 		if (!archive(lv->vg)) {
- 			stack;
- 			return ECMD_FAILED;
-Index: LVM2/libdm/ioctl/libdm-iface.c
-===================================================================
---- LVM2.orig/libdm/ioctl/libdm-iface.c
-+++ LVM2/libdm/ioctl/libdm-iface.c
-@@ -1639,9 +1639,10 @@ static struct dm_ioctl *_do_dm_ioctl(str
- 				    	    _cmd_data_v4[dmt->type].name,
- 					    strerror(errno));
- 			else
--				log_error("device-mapper: %s ioctl "
-+				log_error("device-mapper: %s ioctl for %s "
- 					  "failed: %s",
--				    	   _cmd_data_v4[dmt->type].name,
-+					  _cmd_data_v4[dmt->type].name,
-+					  dmi->name ? dmi->name : dmi->uuid,
- 					  strerror(errno));
- 			_dm_zfree_dmi(dmi);
- 			return NULL;
+Log message:
+	Add -V as short form of --virtualsize in lvcreate.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2073&r2=1.2074
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/args.h.diff?cvsroot=lvm2&r1=1.81&r2=1.82
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.159&r2=1.160
+
+--- LVM2/WHATS_NEW	2011/08/12 13:03:35	1.2073
++++ LVM2/WHATS_NEW	2011/08/17 15:15:36	1.2074
+@@ -1,5 +1,6 @@
+ Version 2.02.88 - 
+ ==================================
++  Add -V as short form of --virtualsize in lvcreate.
+   Fix make clean not to remove Makefile.  (2.02.87)
+ 
+ Version 2.02.87 - 12th August 2011
+--- LVM2/man/lvcreate.8.in	2011/08/02 22:07:23	1.20
++++ LVM2/man/lvcreate.8.in	2011/08/17 15:15:37	1.21
+@@ -36,7 +36,7 @@
+ {{\-s|\-\-snapshot}
+ OriginalLogicalVolumePath | 
+ [\-s|\-\-snapshot]
+-VolumeGroupName \-\-virtualsize VirtualSize}
++VolumeGroupName \-V|\-\-virtualsize VirtualSize}
+ .SH DESCRIPTION
+ lvcreate creates a new logical volume in a volume group ( see
+ .B vgcreate(8), vgchange(8)
+@@ -205,7 +205,7 @@
+ commandline switch alias is available for the desired type, as is the case
+ with "error", "zero", "raid4", "raid5", or "raid6".
+ .TP
+-.I \-\-virtualsize VirtualSize
++.I -V, \-\-virtualsize VirtualSize
+ Create a sparse device of the given size (in MB by default) using a snapshot.  
+ Anything written to the device will be returned when reading from it.
+ Reading from other areas of the device will return blocks of zeros.
+--- LVM2/tools/args.h	2010/11/11 17:29:06	1.81
++++ LVM2/tools/args.h	2011/08/17 15:15:37	1.82
+@@ -66,7 +66,6 @@
+ arg(dataalignment_ARG, '\0', "dataalignment", size_kb_arg, 0)
+ arg(dataalignmentoffset_ARG, '\0', "dataalignmentoffset", size_kb_arg, 0)
+ arg(virtualoriginsize_ARG, '\0', "virtualoriginsize", size_mb_arg, 0)
+-arg(virtualsize_ARG, '\0', "virtualsize", size_mb_arg, 0)
+ arg(noudevsync_ARG, '\0', "noudevsync", NULL, 0)
+ arg(poll_ARG, '\0', "poll", yes_no_arg, 0)
+ arg(stripes_long_ARG, '\0', "stripes", int_arg, 0)
+@@ -139,6 +138,7 @@
+ arg(uuidlist_ARG, 'U', "uuidlist", NULL, 0)
+ arg(verbose_ARG, 'v', "verbose", NULL, ARG_COUNTABLE)
+ arg(volumegroup_ARG, 'V', "volumegroup", NULL, 0)
++arg(virtualsize_ARG, 'V', "virtualsize", size_mb_arg, 0)
+ arg(allocatable_ARG, 'x', "allocatable", yes_no_arg, 0)
+ arg(resizeable_ARG, 'x', "resizeable", yes_no_arg, 0)
+ arg(yes_ARG, 'y', "yes", NULL, 0)
+--- LVM2/tools/commands.h	2011/08/04 10:12:44	1.159
++++ LVM2/tools/commands.h	2011/08/17 15:15:37	1.160
+@@ -175,7 +175,7 @@
+ 
+    "lvcreate \n"
+    "\t{ {-s|--snapshot} OriginalLogicalVolume[Path] |\n"
+-   "\t  [-s|--snapshot] VolumeGroupName[Path] --virtualsize VirtualSize}\n"
++   "\t  [-s|--snapshot] VolumeGroupName[Path] -V|--virtualsize VirtualSize}\n"
+    "\t[-c|--chunksize]\n"
+    "\t[-A|--autobackup {y|n}]\n"
+    "\t[--addtag Tag]\n"
 
 
