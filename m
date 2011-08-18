@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 18 Aug 2011 19:43:10 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
-Message-ID: <20110818194310.6744.qmail@sourceware.org>
+Date: 18 Aug 2011 19:56:17 -0000
+Subject: LVM2/test t-lvcreate-raid.sh t-lvconvert-raid.sh
+Message-ID: <20110818195617.9118.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,308 +10,215 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-08-18 19:43:09
+Changes by:	jbrassow at sourceware.org	2011-08-18 19:56:17
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : metadata-exported.h raid_manip.c 
-	libdm/ioctl    : libdm-iface.c 
-	man            : lvconvert.8.in 
-	tools          : lvconvert.c 
+	test           : t-lvcreate-raid.sh 
+Added files:
+	test           : t-lvconvert-raid.sh 
 
 Log message:
-	Add ability to merge back a RAID1 image that has been split w/ --trackchanges
+	Move RAID convert tests to new file, t-lvconvert-raid.sh
 	
-	Argument layout is very similar to the merge command for snapshots.
+	There is duplicate code in t-lvconvert-raid.sh and t-lvcreate-raid.sh.
+	This should be moved into a common file which is then sourced by these two
+	files.  I'll wait to move the duplicate code until I can talk to mornfall.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2078&r2=1.2079
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.200&r2=1.201
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvconvert.8.in.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.170&r2=1.171
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-raid.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-raid.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2011/08/18 19:41:21	1.2078
-+++ LVM2/WHATS_NEW	2011/08/18 19:43:08	1.2079
-@@ -1,5 +1,6 @@
- Version 2.02.88 - 
- ==================================
-+  Add --merge support for RAID1 images that were split with --trackchanges
-   Add support for m-way to n-way up-convert in RAID1 (no linear to n-way yet)
-   Add --trackchanges support to --splitmirrors option for RAID1
-   Add --splitmirrors support for RAID1 (1 image only)
---- LVM2/lib/metadata/metadata-exported.h	2011/08/18 19:38:27	1.200
-+++ LVM2/lib/metadata/metadata-exported.h	2011/08/18 19:43:08	1.201
-@@ -746,6 +746,7 @@
- 		  uint32_t new_count, struct dm_list *splittable_pvs);
- int lv_raid_split_and_track(struct logical_volume *lv,
- 			    struct dm_list *splittable_pvs);
-+int lv_raid_merge(struct logical_volume *lv);
- 
- /* --  metadata/raid_manip.c */
- 
---- LVM2/lib/metadata/raid_manip.c	2011/08/18 19:41:21	1.8
-+++ LVM2/lib/metadata/raid_manip.c	2011/08/18 19:43:08	1.9
-@@ -1016,3 +1016,89 @@
- 		  lv->vg->name, seg_lv(seg, s)->name, lv->name);
- 	return 1;
- }
+/cvs/lvm2/LVM2/test/t-lvconvert-raid.sh,v  -->  standard output
+revision 1.1
+--- LVM2/test/t-lvconvert-raid.sh
++++ -	2011-08-18 19:56:17.566911000 +0000
+@@ -0,0 +1,158 @@
++#!/bin/bash
 +
-+int lv_raid_merge(struct logical_volume *image_lv)
++# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++. lib/test
++
++# is_raid_in_sync <VG/LV>
++function is_raid_in_sync()
 +{
-+	uint32_t s;
-+	char *p, *lv_name;
-+	struct lv_list *lvl;
-+	struct logical_volume *lv;
-+	struct logical_volume *meta_lv = NULL;
-+	struct lv_segment *seg;
-+	struct volume_group *vg = image_lv->vg;
++	local dm_name
++	local a
++	local b
++	local idx
 +
-+	lv_name = dm_pool_strdup(vg->vgmem, image_lv->name);
-+	if (!lv_name)
-+		return_0;
++	dm_name=`echo $1 | sed s:-:--: | sed s:/:-:`
 +
-+	if (!(p = strstr(lv_name, "_rimage_"))) {
-+		log_error("Unable to merge non-mirror image %s/%s",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	*p = '\0'; /* lv_name is now that of top-level RAID */
++	if ! a=(`dmsetup status $dm_name`); then
++		echo "Unable to get sync status of $1"
++		exit 1
++	fi
++	idx=$((${#a[@]} - 1))
++	b=(`echo ${a[$idx]} | sed s:/:' ':`)
 +
-+	if (image_lv->status & LVM_WRITE) {
-+		log_error("%s/%s is not read-only - refusing to merge",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
++	if [ ${b[0]} != ${b[1]} ]; then
++		echo "$dm_name (${a[3]}) is not in-sync"
++		return 1
++	fi
 +
-+	if (!(lvl = find_lv_in_vg(vg, lv_name))) {
-+		log_error("Unable to find containing RAID array for %s/%s",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	lv = lvl->lv;
-+	seg = first_seg(lv);
-+	for (s = 0; s < seg->area_count; s++) {
-+		if (seg_lv(seg, s) == image_lv) {
-+			meta_lv = seg_metalv(seg, s);
-+		}
-+	}
-+	if (!meta_lv)
-+		return_0;
-+
-+	if (!deactivate_lv(vg->cmd, meta_lv)) {
-+		log_error("Failed to deactivate %s", meta_lv->name);
-+		return 0;
-+	}
-+
-+	if (!deactivate_lv(vg->cmd, image_lv)) {
-+		log_error("Failed to deactivate %s/%s before merging",
-+			  vg->name, image_lv->name);
-+		return 0;
-+	}
-+	lv_set_hidden(image_lv);
-+	image_lv->status |= (lv->status & LVM_WRITE);
-+	image_lv->status |= RAID_IMAGE;
-+
-+	if (!vg_write(vg)) {
-+		log_error("Failed to write changes to %s in %s",
-+			  lv->name, vg->name);
-+		return 0;
-+	}
-+
-+	if (!suspend_lv(vg->cmd, lv)) {
-+		log_error("Failed to suspend %s/%s before committing changes",
-+			  vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	if (!vg_commit(vg)) {
-+		log_error("Failed to commit changes to %s in %s",
-+			  lv->name, vg->name);
-+		return 0;
-+	}
-+
-+	if (!resume_lv(vg->cmd, lv)) {
-+		log_error("Failed to resume %s/%s after committing changes",
-+			  vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	log_print("%s/%s successfully merged back into %s/%s",
-+		  vg->name, image_lv->name,
-+		  vg->name, lv->name);
-+	return 1;
++	echo "$dm_name (${a[3]}) is in-sync"
++	return 0
 +}
---- LVM2/libdm/ioctl/libdm-iface.c	2011/08/11 20:49:33	1.116
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/08/18 19:43:09	1.117
-@@ -1639,9 +1639,10 @@
- 				    	    _cmd_data_v4[dmt->type].name,
- 					    strerror(errno));
- 			else
--				log_error("device-mapper: %s ioctl "
-+				log_error("device-mapper: %s ioctl for %s "
- 					  "failed: %s",
--				    	   _cmd_data_v4[dmt->type].name,
-+					  _cmd_data_v4[dmt->type].name,
-+					  dmi->name ? dmi->name : dmi->uuid,
- 					  strerror(errno));
- 			_dm_zfree_dmi(dmi);
- 			return NULL;
---- LVM2/man/lvconvert.8.in	2011/08/18 19:38:27	1.20
-+++ LVM2/man/lvconvert.8.in	2011/08/18 19:43:09	1.21
-@@ -40,7 +40,7 @@
- [\-h|\-?|\-\-help]
- [\-v|\-\-verbose]
- [\-\-version]
--SnapshotLogicalVolume[Path]...
-+LogicalVolume[Path]...
- .br
- 
- .br
-@@ -146,8 +146,11 @@
- If the volume is read-only the snapshot will not be zeroed.
- .TP
- .I \-\-merge
--Merges a snapshot into its origin volume.  To check if your kernel
--supports this feature, look for 'snapshot-merge' in the output
-+Merges a snapshot into its origin volume or merges a RAID1 image that has
-+been split from its mirror with \-\-trackchanges back into its mirror.
 +
-+To check if your kernel supports the snapshot merge feature, look
-+for 'snapshot-merge' in the output
- of 'dmsetup targets'.  If both the origin and snapshot volume are not
- open the merge will start immediately.  Otherwise, the merge will start
- the first time either the origin or snapshot are activated and both are closed.
-@@ -206,7 +209,7 @@
- extents /dev/sda:0-15 and /dev/sdb:0-15 for allocation of new extents.
- 
- .br
--"lvconvert -m0 vg00/lvmirror1 /dev/sda
-+"lvconvert -m0 vg00/lvmirror1 /dev/sda"
- .br
- converts mirror logical volume "vg00/lvmirror1" to linear, freeing physical
- extents from /dev/sda.
-@@ -224,6 +227,32 @@
- then vg00/lvol2, then vg00/lvol3.  If --background were used it would start
- all snapshot logical volume merges in parallel.
- 
-+.br
-+"lvconvert --splitmirrors 1 --name lv_split vg00/lvmirror1"
-+.br
-+Extract one image from the mirror, making it a new logical volume named
-+"lv_split".  The mirror the image is extracted from is reduced accordingly.
-+If it was a 2-way mirror (created with '-m 1'), then the resulting original
-+volume will be linear.
++# wait_for_raid_sync <VG/LV>
++function wait_for_raid_sync()
++{
++	local i=0
 +
-+.br
-+"lvconvert --splitmirrors 1 --trackchanges vg00/lv_raid1"
-+.br
-+A mirrored logical volume that uses the "raid1" segment type (i.e. created
-+with '--type raid1') can use the '\-\-trackchanges' argument when splitting
-+off an image.  The split-off image cannot be given a new name, as it is still
-+part of the original RAID1 logical volume in the sense that changes between
-+the two are being tracked for future integration upon merging.  The device that
-+results from the split will be read-only and will be named similarly to the
-+original - in this case "lv_raid1_rimage_N", where 'N' is the index of the
-+image that has been split.
++	while ! is_raid_in_sync $1; do
++		sleep 2
++		i=$(($i + 1))
++		if [ $i -gt 500 ]; then
++			echo "Sync is taking too long - assume stuck"
++			exit 1
++		fi
++	done
++}
 +
-+.br
-+"lvconvert --merge vg00/lv_raid1_rimage_1"
-+.br
-+Merge an image back into the mirror it was split from when the '\-\-trackchanges'
-+argument was used.
++function is_raid_available()
++{
++	local a
 +
- .SH SEE ALSO
- .BR lvm (8),
- .BR vgcreate (8),
---- LVM2/tools/lvconvert.c	2011/08/18 19:38:27	1.170
-+++ LVM2/tools/lvconvert.c	2011/08/18 19:43:09	1.171
-@@ -20,6 +20,7 @@
- struct lvconvert_params {
- 	int snapshot;
- 	int merge;
-+	int merge_mirror;
- 	int zero;
- 
- 	const char *origin;
-@@ -107,7 +108,7 @@
- 	if ((ptr = strrchr(lp->lv_name_full, '/')))
- 		lp->lv_name = ptr + 1;
- 
--	if (!apply_lvname_restrictions(lp->lv_name))
-+	if (!lp->merge_mirror && !apply_lvname_restrictions(lp->lv_name))
- 		return_0;
- 
- 	if (*pargc && lp->snapshot) {
-@@ -178,8 +179,12 @@
- 		return 0;
- 	}
- 
--	if (arg_count(cmd, merge_ARG))
--		lp->merge = 1;
-+	if (arg_count(cmd, merge_ARG)) {
-+		if ((argc == 1) && strstr(argv[0], "_rimage_"))
-+			lp->merge_mirror = 1;
++	modprobe dm-raid
++	a=(`dmsetup targets | grep raid`)
++	if [ -z $a ]; then
++		echo "RAID target not available"
++		return 1
++	fi
++	if [ ${a[1]} != "v1.1.0" ]; then
++		echo "Bad RAID version"
++		return 1
++	fi
++
++	return 0
++}
++
++########################################################
++# MAIN
++########################################################
++is_raid_available || exit 200
++
++aux prepare_vg 5 80
++
++###########################################
++# RAID1 convert tests
++###########################################
++for i in 2 3 4; do
++	for j in 1 2 3 4; do
++		if [ $i -eq 1 ]; then
++			from="linear"
 +		else
-+			lp->merge = 1;
-+	}
- 
- 	if (arg_count(cmd, mirrors_ARG)) {
- 		/*
-@@ -1339,6 +1344,12 @@
- 	uint32_t new_mimage_count;
- 	uint32_t new_log_count;
- 
-+	if (lp->merge_mirror) {
-+		log_error("Unable to merge mirror images"
-+			  "of segment type 'mirror'");
-+		return 0;
-+	}
++			from="$i-way"
++		fi
++		if [ $j -eq 1 ]; then
++			to="linear"
++		else
++			to="$j-way"
++		fi
++		echo "Converting from $from to $to"
++		lvcreate --type raid1 -m $(($i - 1)) -l 2 -n $lv1 $vg
++		wait_for_raid_sync $vg/$lv1
++		lvconvert -m $((j - 1))  $vg/$lv1
 +
- 	/* Adjust mimage and/or log count */
- 	if (!_lvconvert_mirrors_parse_params(cmd, lv, lp,
- 					     &old_mimage_count, &old_log_count,
-@@ -1423,17 +1434,21 @@
- 				  "split" : "reduce");
- 			return 0;
- 		}
++		# FIXME: ensure no residual devices
++
++		if [ $j -eq 1 ]; then
++			check linear $vg $lv1
++		fi
++		lvremove -ff $vg
++	done
++done
++
++#
++# FIXME: Add tests that specify particular devices to be removed
++#
++
++###########################################
++# RAID1 split tests
++###########################################
++# 3-way to 2-way/linear
++lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
++wait_for_raid_sync $vg/$lv1
++lvconvert --splitmirrors 1 -n $lv2 $vg/$lv1
++check lv_exists $vg $lv1
++check linear $vg $lv2
++# FIXME: ensure no residual devices
++lvremove -ff $vg
++
++# 2-way to linear/linear
++lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg
++wait_for_raid_sync $vg/$lv1
++lvconvert --splitmirrors 1 -n $lv2 $vg/$lv1
++check linear $vg $lv1
++check linear $vg $lv2
++# FIXME: ensure no residual devices
++lvremove -ff $vg
++
++# 3-way to linear/2-way
++lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
++wait_for_raid_sync $vg/$lv1
++
++# FIXME: Can't split off a mirror from a mirror yet
++#lvconvert --splitmirrors 2 -n $lv2 $vg/$lv1
++#check linear $vg $lv1
++#check lv_exists $vg $lv2
++
++# FIXME: ensure no residual devices
++lvremove -ff $vg
++
++###########################################
++# RAID1 split + trackchanges / merge
++###########################################
++# 3-way to 2-way/linear
++lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
++wait_for_raid_sync $vg/$lv1
++lvconvert --splitmirrors 1 --trackchanges $vg/$lv1
++check lv_exists $vg $lv1
++check linear $vg ${lv1}_rimage_2
++lvconvert --merge $vg/${lv1}_rimage_2
++# FIXME: ensure no residual devices
++lvremove -ff $vg
+--- LVM2/test/t-lvcreate-raid.sh	2011/08/11 18:24:42	1.1
++++ LVM2/test/t-lvcreate-raid.sh	2011/08/18 19:56:17	1.2
+@@ -1,3 +1,5 @@
++#!/bin/bash
++
+ # Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+@@ -106,17 +108,6 @@
+ 	lvremove -ff $vg
+ done
+ 
+-###########################################
+-# RAID1 down-convert tests
+-###########################################
 -
--		if (arg_count(cmd, trackchanges_ARG))
--			return lv_raid_split_and_track(lv, lp->pvh);
--		else if (arg_count(cmd, splitmirrors_ARG))
--			return lv_raid_split(lv, lp->lv_split_name,
--					     image_count, lp->pvh);
--		else
--			return lv_raid_change_image_count(lv, image_count,
--							  lp->pvh);
- 	}
- 
-+	if (lp->merge_mirror)
-+		return lv_raid_merge(lv);
-+
-+	if (arg_count(cmd, trackchanges_ARG))
-+		return lv_raid_split_and_track(lv, lp->pvh);
-+
-+	if (arg_count(cmd, splitmirrors_ARG))
-+		return lv_raid_split(lv, lp->lv_split_name,
-+				     image_count, lp->pvh);
-+
-+	if (arg_count(cmd, mirrors_ARG))
-+		return lv_raid_change_image_count(lv, image_count, lp->pvh);
-+
- 	log_error("Conversion operation not yet supported.");
- 	return 0;
- }
-@@ -1652,7 +1667,8 @@
- 			stack;
- 			return ECMD_FAILED;
- 		}
--	} else if (segtype_is_raid(lp->segtype) || (lv->status & RAID)) {
-+	} else if (segtype_is_raid(lp->segtype) ||
-+		   (lv->status & RAID) || lp->merge_mirror) {
- 		if (!archive(lv->vg)) {
- 			stack;
- 			return ECMD_FAILED;
+-# 3-way to 2-way
+-lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
+-wait_for_raid_sync $vg/$lv1
+-lvconvert -m 1 $vg/$lv1
+-# FIXME: ensure no residual devices
+-
+-# 2-way to linear
+-lvconvert -m 0 $vg/$lv1
+-# FIXME: ensure no residual devices
+-lvremove -ff $vg
++#
++# FIXME: Add tests that specify particular PVs to use for creation
++#
 
 
