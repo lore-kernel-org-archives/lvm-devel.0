@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Aug 2011 17:02:49 -0000
-Subject: LVM2/libdm libdm-deptree.c ioctl/libdm-iface.c
-Message-ID: <20110819170249.27187.qmail@sourceware.org>
+Date: 19 Aug 2011 17:36:13 -0000
+Subject: LVM2/man lvconvert.8.in
+Message-ID: <20110819173613.25661.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,223 +10,86 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-19 17:02:48
+Changes by:	agk at sourceware.org	2011-08-19 17:36:13
 
 Modified files:
-	libdm          : libdm-deptree.c 
-	libdm/ioctl    : libdm-iface.c 
+	man            : lvconvert.8.in 
 
 Log message:
-	spaces->tabs
+	tweak split/track/merge
+	How do you discover the value of N?
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvconvert.8.in.diff?cvsroot=lvm2&r1=1.21&r2=1.22
 
---- LVM2/libdm/libdm-deptree.c	2011/08/19 16:26:03	1.107
-+++ LVM2/libdm/libdm-deptree.c	2011/08/19 17:02:48	1.108
-@@ -150,7 +150,7 @@
- 	struct dm_tree_node *replicator;/* Replicator-dev */
- 	uint64_t rdevice_index;		/* Replicator-dev */
+--- LVM2/man/lvconvert.8.in	2011/08/18 19:43:09	1.21
++++ LVM2/man/lvconvert.8.in	2011/08/19 17:36:13	1.22
+@@ -125,12 +125,12 @@
  
--	uint64_t rebuilds;              /* raid */
-+	uint64_t rebuilds;	      /* raid */
- };
+ .TP
+ .I \-\-trackchanges
+-This argument is used along with \-\-splitmirrors when the intention
+-is to use the split-off image temporarily in a read-only fashion.  Splitting
+-off an image in this way allows it to be merged back into the mirror later
+-- only resynchronizing those portions of the image that have changed since
+-the split occurred.  This option is only available to the "raid1" segment
+-type.
++Used with \-\-splitmirrors on a raid1 device, this tracks changes so that the
++read-only detached image can be merged efficiently back into the mirror later.
++Only the regions of the detatched device where the data changed get resynchronized.
++
++Please note that this feature is only supported with the new md-based mirror
++implementation and not with the original device-mapper mirror implementation.
+ .br
  
- /* Per-device properties */
-@@ -194,12 +194,12 @@
- struct dm_tree_node {
- 	struct dm_tree *dtree;
+ .TP
+@@ -146,7 +146,7 @@
+ If the volume is read-only the snapshot will not be zeroed.
+ .TP
+ .I \-\-merge
+-Merges a snapshot into its origin volume or merges a RAID1 image that has
++Merges a snapshot into its origin volume or merges a raid1 image that has
+ been split from its mirror with \-\-trackchanges back into its mirror.
  
--        const char *name;
--        const char *uuid;
--        struct dm_info info;
-+	const char *name;
-+	const char *uuid;
-+	struct dm_info info;
+ To check if your kernel supports the snapshot merge feature, look
+@@ -164,7 +164,6 @@
+ multiple snapshots be merged to their respective origin.
+ .br
  
--        struct dm_list uses;       	/* Nodes this node uses */
--        struct dm_list used_by;    	/* Nodes that use this node */
-+	struct dm_list uses;       	/* Nodes this node uses */
-+	struct dm_list used_by;    	/* Nodes that use this node */
+-
+ .TP
+ .I \-\-repair
+ Repair a mirror after suffering a disk failure. The mirror will be brought back
+@@ -238,20 +237,20 @@
+ .br
+ "lvconvert --splitmirrors 1 --trackchanges vg00/lv_raid1"
+ .br
+-A mirrored logical volume that uses the "raid1" segment type (i.e. created
+-with '--type raid1') can use the '\-\-trackchanges' argument when splitting
+-off an image.  The split-off image cannot be given a new name, as it is still
+-part of the original RAID1 logical volume in the sense that changes between
+-the two are being tracked for future integration upon merging.  The device that
+-results from the split will be read-only and will be named similarly to the
+-original - in this case "lv_raid1_rimage_N", where 'N' is the index of the
+-image that has been split.
++A mirrored logical volume created with --type raid1 can use the '\-\-trackchanges' argument when splitting
++off an image.  
++
++Detach one image from the mirrored logical volume lv_raid1 as a separate
++read-only device and track the changes made to the mirror while it is detached.
++The split-off device has a name of the form lv_raid1_rimage_N, where N is
++a number, and it cannot be renamed.
  
- 	int activation_priority;	/* 0 gets activated first */
+ .br
+ "lvconvert --merge vg00/lv_raid1_rimage_1"
+ .br
+-Merge an image back into the mirror it was split from when the '\-\-trackchanges'
+-argument was used.
++Merge an image that was detached temporarily from its mirror with 
++the '\-\-trackchanges' argument back into its original mirror and
++bring its contents back up-to-date.
  
-@@ -1038,7 +1038,7 @@
- 	}
- 
- 	if (!dm_task_set_newname(dmt, new_name))
--                goto_out;
-+		goto_out;
- 
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
-@@ -1450,10 +1450,10 @@
- static int _build_dev_string(char *devbuf, size_t bufsize, struct dm_tree_node *node)
- {
- 	if (!dm_format_dev(devbuf, bufsize, node->info.major, node->info.minor)) {
--                log_error("Failed to format %s device number for %s as dm "
--                          "target (%u,%u)",
--                          node->name, node->uuid, node->info.major, node->info.minor);
--                return 0;
-+		log_error("Failed to format %s device number for %s as dm "
-+			  "target (%u,%u)",
-+			  node->name, node->uuid, node->info.major, node->info.minor);
-+		return 0;
- 	}
- 
- 	return 1;
-@@ -2132,8 +2132,8 @@
- }
- 
- int dm_tree_node_add_snapshot_origin_target(struct dm_tree_node *dnode,
--                                               uint64_t size,
--                                               const char *origin_uuid)
-+					       uint64_t size,
-+					       const char *origin_uuid)
- {
- 	struct load_segment *seg;
- 	struct dm_tree_node *origin_node;
-@@ -2238,7 +2238,7 @@
- }
- 
- int dm_tree_node_add_error_target(struct dm_tree_node *node,
--                                     uint64_t size)
-+				     uint64_t size)
- {
- 	if (!_add_segment(node, SEG_ERROR, size))
- 		return_0;
-@@ -2247,7 +2247,7 @@
- }
- 
- int dm_tree_node_add_zero_target(struct dm_tree_node *node,
--                                    uint64_t size)
-+				    uint64_t size)
- {
- 	if (!_add_segment(node, SEG_ZERO, size))
- 		return_0;
-@@ -2256,7 +2256,7 @@
- }
- 
- int dm_tree_node_add_linear_target(struct dm_tree_node *node,
--                                      uint64_t size)
-+				      uint64_t size)
- {
- 	if (!_add_segment(node, SEG_LINEAR, size))
- 		return_0;
-@@ -2265,8 +2265,8 @@
- }
- 
- int dm_tree_node_add_striped_target(struct dm_tree_node *node,
--                                       uint64_t size,
--                                       uint32_t stripe_size)
-+				       uint64_t size,
-+				       uint32_t stripe_size)
- {
- 	struct load_segment *seg;
- 
-@@ -2353,7 +2353,7 @@
- }
- 
- int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
--                                      uint64_t size)
-+				      uint64_t size)
- {
- 	if (!_add_segment(node, SEG_MIRRORED, size))
- 		return_0;
-@@ -2573,9 +2573,9 @@
- }
- 
- int dm_tree_node_add_target_area(struct dm_tree_node *node,
--                                    const char *dev_name,
--                                    const char *uuid,
--                                    uint64_t offset)
-+				    const char *dev_name,
-+				    const char *uuid,
-+				    uint64_t offset)
- {
- 	struct load_segment *seg;
- 	struct stat info;
-@@ -2599,7 +2599,7 @@
- 			return 0;
- 		}
- 
--        	if (!S_ISBLK(info.st_mode)) {
-+		if (!S_ISBLK(info.st_mode)) {
- 			log_error("Device %s is not a block device.", dev_name);
- 			return 0;
- 		}
---- LVM2/libdm/ioctl/libdm-iface.c	2011/08/19 16:49:00	1.118
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/08/19 17:02:48	1.119
-@@ -542,8 +542,8 @@
- int dm_cookie_supported(void)
- {
- 	return (dm_check_version() &&
--	        _dm_version >= 4 &&
--	        _dm_version_minor >= 15);
-+		_dm_version >= 4 &&
-+		_dm_version_minor >= 15);
- }
- 
- static int dm_inactive_supported(void)
-@@ -647,12 +647,12 @@
- }
- 
- uint32_t dm_task_get_read_ahead(const struct dm_task *dmt, uint32_t *read_ahead)
--{              
-+{
- 	const char *dev_name;
- 
- 	*read_ahead = 0;
- 
--        if (!dmt->dmi.v4 || !(dmt->dmi.v4->flags & DM_EXISTS_FLAG))
-+	if (!dmt->dmi.v4 || !(dmt->dmi.v4->flags & DM_EXISTS_FLAG))
- 		return 0;
- 
- 	if (*dmt->dmi.v4->name)
-@@ -1336,7 +1336,7 @@
- 		if (!dm_task_set_cookie(dmt, &cookie,
- 					(dmt->event_nr & DM_UDEV_FLAGS_MASK) >>
- 					DM_UDEV_FLAGS_SHIFT))
--                        stack; /* keep going */
-+			stack; /* keep going */
- 	}
- 
- 	if (!dm_task_run(dmt))
-@@ -1492,8 +1492,8 @@
- 		goto out;
- 	}
- 
--        if (!(deps = dm_task_get_deps(task)))
--                goto out;
-+	if (!(deps = dm_task_get_deps(task)))
-+		goto out;
- 
- 	for (i = 0; i < deps->count; i++) {
- 		/* Only recurse with dm devices */
-@@ -1707,15 +1707,15 @@
- 			  "are known to be suspended: "
- 			  "%s%s%s %s%.0d%s%.0d%s%s",
- 			  suspended_counter,
--	                  dmt->dev_name ? : "",
--	                  dmt->uuid ? " UUID " : "",
-+			  dmt->dev_name ? : "",
-+			  dmt->uuid ? " UUID " : "",
- 			  dmt->uuid ? : "",
--	                  dmt->major > 0 ? "(" : "",
--	                  dmt->major > 0 ? dmt->major : 0,
--	                  dmt->major > 0 ? ":" : "",
--	                  dmt->minor > 0 ? dmt->minor : 0,
--	                  dmt->major > 0 && dmt->minor == 0 ? "0" : "",
--	                  dmt->major > 0 ? ") " : "");
-+			  dmt->major > 0 ? "(" : "",
-+			  dmt->major > 0 ? dmt->major : 0,
-+			  dmt->major > 0 ? ":" : "",
-+			  dmt->minor > 0 ? dmt->minor : 0,
-+			  dmt->major > 0 && dmt->minor == 0 ? "0" : "",
-+			  dmt->major > 0 ? ") " : "");
- 
- 	/* FIXME Detect and warn if cookie set but should not be. */
- repeat_ioctl:
+ .SH SEE ALSO
+ .BR lvm (8),
 
 
