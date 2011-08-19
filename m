@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 19 Aug 2011 16:26:04 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
-Message-ID: <20110819162604.11816.qmail@sourceware.org>
+Date: 19 Aug 2011 16:31:00 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20110819163100.17820.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-19 16:26:03
+Changes by:	agk at sourceware.org	2011-08-19 16:31:00
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h libdm-deptree.c 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	restrict dm_tree_node_add_null_area
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.492&r2=1.493
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.143&r2=1.144
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.106&r2=1.107
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.284&r2=1.285
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.89&r2=1.90
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2080&r2=1.2081
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.493&r2=1.494
 
---- LVM2/WHATS_NEW_DM	2011/08/12 02:34:08	1.492
-+++ LVM2/WHATS_NEW_DM	2011/08/19 16:26:02	1.493
-@@ -1,5 +1,6 @@
- Version 1.02.67 - 
+--- LVM2/VERSION	2011/08/12 02:34:08	1.284
++++ LVM2/VERSION	2011/08/19 16:31:00	1.285
+@@ -1 +1 @@
+-2.02.88(2)-cvs (2011-08-12)
++2.02.88(2)-cvs (2011-08-19)
+--- LVM2/VERSION_DM	2011/08/12 02:34:08	1.89
++++ LVM2/VERSION_DM	2011/08/19 16:31:00	1.90
+@@ -1 +1 @@
+-1.02.67-cvs (2011-08-12)
++1.02.67-cvs (2011-08-19)
+--- LVM2/WHATS_NEW	2011/08/19 15:59:15	1.2080
++++ LVM2/WHATS_NEW	2011/08/19 16:31:00	1.2081
+@@ -1,4 +1,4 @@
+-Version 2.02.88 - 
++Version 2.02.88 - 19th August 2011
  ==================================
-+  Add dm_tree_node_add_null_area for temporarily-missing raid devs tracked.
- 
- Version 1.02.66 - 12th August 2011
+   Add lvconvert --merge support for raid1 devices split with --trackchanges.
+   Support lvconvert of -m1 raid1 devices to a higher number.
+--- LVM2/WHATS_NEW_DM	2011/08/19 16:26:02	1.493
++++ LVM2/WHATS_NEW_DM	2011/08/19 16:31:00	1.494
+@@ -1,4 +1,4 @@
+-Version 1.02.67 - 
++Version 1.02.67 - 19th August 2011
  ==================================
---- LVM2/libdm/libdevmapper.h	2011/08/18 19:41:22	1.143
-+++ LVM2/libdm/libdevmapper.h	2011/08/19 16:26:03	1.144
-@@ -516,6 +516,10 @@
- 				    const char *dev_name,
- 				    const char *dlid,
- 				    uint64_t offset);
-+
-+/*
-+ * Only for temporarily-missing raid devices where changes are tracked.
-+ */
- int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset);
- 
- /*
---- LVM2/libdm/libdm-deptree.c	2011/08/18 19:41:22	1.106
-+++ LVM2/libdm/libdm-deptree.c	2011/08/19 16:26:03	1.107
-@@ -2629,6 +2629,22 @@
- 
- 	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
- 
-+	switch (seg->type) {
-+	case SEG_RAID1:
-+	case SEG_RAID4:
-+	case SEG_RAID5_LA:
-+	case SEG_RAID5_RA:
-+	case SEG_RAID5_LS:
-+	case SEG_RAID5_RS:
-+	case SEG_RAID6_ZR:
-+	case SEG_RAID6_NR:
-+	case SEG_RAID6_NC:
-+		break;
-+	default:
-+		log_error("dm_tree_node_add_null_area() called on an unsupported segment type");
-+		return 0;
-+	}
-+
- 	if (!_add_area(node, seg, NULL, offset))
- 		return_0;
+   Add dm_tree_node_add_null_area for temporarily-missing raid devs tracked.
  
 
 
