@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 Aug 2011 13:41:48 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/segtype.h lib/ra ...
-Message-ID: <20110824134148.24271.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Aug 2011 10:00:10 -0000
+Subject: LVM2/lib commands/toolcontext.c metadata/segty ...
+Message-ID: <20110825100010.24066.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,296 +10,198 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-08-24 13:41:47
+Changes by:	zkabelac at sourceware.org	2011-08-25 10:00:09
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : segtype.h 
-	lib/raid       : .exported_symbols raid.c 
 	lib/commands   : toolcontext.c 
-	lib/replicator : replicator.c 
+	lib/metadata   : segtype.h 
+	lib/thin       : thin.c 
 
 Log message:
-	Fix raid shared lib segtype registration (2.02.87).
+	Add registration of thin_pool segment
+	
+	Register thin and thin_pool segment via multiple_segtypes.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2083&r2=1.2084
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.37&r2=1.38
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/raid/.exported_symbols.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/raid/raid.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/replicator/replicator.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.38&r2=1.39
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/WHATS_NEW	2011/08/19 23:01:20	1.2083
-+++ LVM2/WHATS_NEW	2011/08/24 13:41:46	1.2084
-@@ -1,9 +1,11 @@
- Version 2.02.89 - 
- ==================================
-+  Add configure --with-thin for (unimplemented) segtypes "thin" and "thin_pool".
-+  Fix raid shared lib segtype registration (2.02.87).
- 
- Version 2.02.88 - 19th August 2011
- ==================================
--  Remove incorrect 'Breaking' error message from allocation code (2.02.87).
-+  Remove incorrect 'Breaking' error message from allocation code. (2.02.87)
-   Add lvconvert --merge support for raid1 devices split with --trackchanges.
-   Support lvconvert of -m1 raid1 devices to a higher number.
-   Add --trackchanges support to lvconvert --splitmirrors option for raid1.
---- LVM2/lib/metadata/segtype.h	2011/08/24 08:27:50	1.37
-+++ LVM2/lib/metadata/segtype.h	2011/08/24 13:41:46	1.38
-@@ -130,21 +130,11 @@
- struct segment_type *init_unknown_segtype(struct cmd_context *cmd,
- 					  const char *name);
- #ifdef RAID_INTERNAL
--struct segment_type *init_raid1_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid4_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_la_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_ra_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_ls_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_rs_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_zr_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_nr_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_nc_segtype(struct cmd_context *cmd);
-+int init_raid_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
+--- LVM2/lib/commands/toolcontext.c	2011/08/24 13:41:47	1.129
++++ LVM2/lib/commands/toolcontext.c	2011/08/25 10:00:09	1.130
+@@ -1030,6 +1030,11 @@
+ 		return 0;
  #endif
  
- #ifdef REPLICATOR_INTERNAL
--int init_replicator_segtype(struct segtype_library *seglib);
-+int init_replicator_segtype(struct cmd_context *cmd, struct segtype_library *seglib);
++#ifdef THIN_INTERNAL
++	if (!init_thin_segtypes(cmd, &seglib))
++		return 0;
++#endif
++
+ #ifdef HAVE_LIBDL
+ 	/* Load any formats in shared libs unless static */
+ 	if (!is_static() &&
+--- LVM2/lib/metadata/segtype.h	2011/08/24 13:41:46	1.38
++++ LVM2/lib/metadata/segtype.h	2011/08/25 10:00:09	1.39
+@@ -40,6 +40,7 @@
+ #define SEG_REPLICATOR_DEV	0x00000200U
+ #define SEG_RAID		0x00000400U
+ #define SEG_THIN		0x00000800U
++#define SEG_THIN_POOL		0x00001000U
+ #define SEG_UNKNOWN		0x80000000U
+ 
+ #define seg_is_mirrored(seg)	((seg)->segtype->flags & SEG_AREAS_MIRRORED ? 1 : 0)
+@@ -50,6 +51,7 @@
+ #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
+ #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
+ #define seg_is_thin(seg)	((seg)->segtype->flags & SEG_THIN ? 1 : 0)
++#define seg_is_thin_pool(seg)	((seg)->segtype->flags & SEG_THIN_POOL ? 1 : 0)
+ #define seg_can_split(seg)	((seg)->segtype->flags & SEG_CAN_SPLIT ? 1 : 0)
+ #define seg_cannot_be_zeroed(seg) ((seg)->segtype->flags & SEG_CANNOT_BE_ZEROED ? 1 : 0)
+ #define seg_monitored(seg)	((seg)->segtype->flags & SEG_MONITORED ? 1 : 0)
+@@ -59,6 +61,7 @@
+ #define segtype_is_mirrored(segtype)	((segtype)->flags & SEG_AREAS_MIRRORED ? 1 : 0)
+ #define segtype_is_raid(segtype)	((segtype)->flags & SEG_RAID ? 1 : 0)
+ #define segtype_is_thin(segtype)	((segtype)->flags & SEG_THIN ? 1 : 0)
++#define segtype_is_thin_pool(segtype)	((segtype)->flags & SEG_THIN_POOL ? 1 : 0)
+ #define segtype_is_virtual(segtype)	((segtype)->flags & SEG_VIRTUAL ? 1 : 0)
+ 
+ struct segment_type {
+@@ -137,6 +140,10 @@
+ int init_replicator_segtype(struct cmd_context *cmd, struct segtype_library *seglib);
  #endif
  
++#ifdef THIN_INTERNAL
++int init_thin_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
++#endif
++
  #ifdef SNAPSHOT_INTERNAL
---- LVM2/lib/raid/.exported_symbols	2011/08/11 19:18:18	1.1
-+++ LVM2/lib/raid/.exported_symbols	2011/08/24 13:41:47	1.2
-@@ -1 +1 @@
--init_segtype
-+init_multiple_segtypes
---- LVM2/lib/raid/raid.c	2011/08/19 15:59:15	1.8
-+++ LVM2/lib/raid/raid.c	2011/08/24 13:41:47	1.9
-@@ -331,8 +331,8 @@
- 	.destroy = _raid_destroy,
- };
+ struct segment_type *init_snapshot_segtype(struct cmd_context *cmd);
+ #endif
+@@ -149,8 +156,4 @@
+ struct segment_type *init_crypt_segtype(struct cmd_context *cmd);
+ #endif
  
--static struct segment_type *init_raid_segtype(struct cmd_context *cmd,
--					      const char *raid_type)
-+static struct segment_type *_init_raid_segtype(struct cmd_context *cmd,
-+					       const char *raid_type)
- {
- 	struct segment_type *segtype = dm_zalloc(sizeof(*segtype));
- 
-@@ -362,25 +362,11 @@
- 	return segtype;
- }
- 
--#ifndef RAID_INTERNAL /* Shared */
--struct segment_type *init_raid1_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid4_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_la_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_ra_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_ls_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid5_rs_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_zr_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_nr_segtype(struct cmd_context *cmd);
--struct segment_type *init_raid6_nc_segtype(struct cmd_context *cmd);
+-#ifdef THIN_INTERNAL
+-struct segment_type *init_thin_segtype(struct cmd_context *cmd);
 -#endif
 -
--struct segment_type *init_raid1_segtype(struct cmd_context *cmd)
-+static struct segment_type *_init_raid1_segtype(struct cmd_context *cmd)
- {
- 	struct segment_type *segtype;
+ #endif
+--- LVM2/lib/thin/thin.c	2011/08/24 08:27:51	1.1
++++ LVM2/lib/thin/thin.c	2011/08/25 10:00:09	1.2
+@@ -30,6 +30,22 @@
+ /* Dm kernel module name for thin provisiong */
+ #define THIN_MODULE "thin-pool"
  
--	segtype = init_raid_segtype(cmd, "raid1");
-+	segtype = _init_raid_segtype(cmd, "raid1");
- 	if (!segtype)
- 		return NULL;
- 
-@@ -389,43 +375,87 @@
- 
- 	return segtype;
- }
--struct segment_type *init_raid4_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid4_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid4");
-+	return _init_raid_segtype(cmd, "raid4");
- }
--struct segment_type *init_raid5_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid5_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid5");
-+	return _init_raid_segtype(cmd, "raid5");
- }
--struct segment_type *init_raid5_la_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid5_la_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid5_la");
-+	return _init_raid_segtype(cmd, "raid5_la");
- }
--struct segment_type *init_raid5_ra_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid5_ra_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid5_ra");
-+	return _init_raid_segtype(cmd, "raid5_ra");
- }
--struct segment_type *init_raid5_ls_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid5_ls_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid5_ls");
-+	return _init_raid_segtype(cmd, "raid5_ls");
- }
--struct segment_type *init_raid5_rs_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid5_rs_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid5_rs");
-+	return _init_raid_segtype(cmd, "raid5_rs");
- }
--struct segment_type *init_raid6_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid6_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid6");
-+	return _init_raid_segtype(cmd, "raid6");
- }
--struct segment_type *init_raid6_zr_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid6_zr_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid6_zr");
-+	return _init_raid_segtype(cmd, "raid6_zr");
- }
--struct segment_type *init_raid6_nr_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid6_nr_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid6_nr");
-+	return _init_raid_segtype(cmd, "raid6_nr");
- }
--struct segment_type *init_raid6_nc_segtype(struct cmd_context *cmd)
-+
-+static struct segment_type *_init_raid6_nc_segtype(struct cmd_context *cmd)
- {
--	return init_raid_segtype(cmd, "raid6_nc");
-+	return _init_raid_segtype(cmd, "raid6_nc");
++static const char *_thin_pool_name(const struct lv_segment *seg)
++{
++	return seg->segtype->name;
 +}
 +
-+#ifdef RAID_INTERNAL /* Shared */
-+int init_raid_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
-+#else
-+int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
 +
-+int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
-+#endif
++static int _thin_pool_text_import(struct lv_segment *seg, const struct config_node *sn,
++			struct dm_hash_table *pv_hash __attribute__((unused)))
 +{
-+	struct segment_type *segtype;
-+	unsigned i = 0;
-+	struct segment_type *(*raid_segtype_fn[])(struct cmd_context *) =  {
-+		_init_raid1_segtype,
-+		_init_raid4_segtype,
-+		_init_raid5_segtype,
-+		_init_raid5_la_segtype,
-+		_init_raid5_ra_segtype,
-+		_init_raid5_ls_segtype,
-+		_init_raid5_rs_segtype,
-+		_init_raid6_segtype,
-+		_init_raid6_zr_segtype,
-+		_init_raid6_nr_segtype,
-+		_init_raid6_nc_segtype,
-+		NULL,
++	return 1;
++}
++
++static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter *f)
++{
++	return 1;
++}
+ 
+ static const char *_thin_name(const struct lv_segment *seg)
+ {
+@@ -67,7 +83,7 @@
+ 	static int _present = 0;
+ 
+ 	if (!_checked) {
+-		_present = target_present(cmd, "thin-pool", 1);
++		_present = target_present(cmd, THIN_MODULE, 1);
+ 		_checked = 1;
+ 	}
+ 
+@@ -93,6 +109,14 @@
+ 	dm_free(segtype);
+ }
+ 
++static struct segtype_handler _thin_pool_ops = {
++	.name = _thin_pool_name,
++	.text_import = _thin_pool_text_import,
++	.text_export = _thin_pool_text_export,
++	.modules_needed = _thin_modules_needed,
++	.destroy = _thin_destroy,
++};
++
+ static struct segtype_handler _thin_ops = {
+ 	.name = _thin_name,
+ 	.text_import = _thin_text_import,
+@@ -106,30 +130,48 @@
+ };
+ 
+ #ifdef THIN_INTERNAL
+-struct segment_type *init_thin_segtype(struct cmd_context *cmd)
+-#else				/* Shared */
+-struct segment_type *init_segtype(struct cmd_context *cmd);
+-struct segment_type *init_segtype(struct cmd_context *cmd)
++int init_thin_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
++#else /* Shared */
++int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
++int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
+ #endif
+ {
+-	struct segment_type *segtype = dm_zalloc(sizeof(*segtype));
+-
+-	if (!segtype)
+-		return_NULL;
+-
+-	segtype->cmd = cmd;
+-	segtype->ops = &_thin_ops;
+-	segtype->name = "thin";
+-	segtype->private = NULL;
+-	segtype->flags = SEG_THIN;
++	static const struct {
++		struct segtype_handler *ops;
++		const char name[16];
++		uint32_t flags;
++	} reg_segtypes[] = {
++		{ &_thin_pool_ops, "thin_pool", SEG_THIN_POOL },
++		{ &_thin_ops, "thin", SEG_THIN }
 +	};
 +
-+	do {
-+		if ((segtype = raid_segtype_fn[i](cmd)) &&
-+		    !lvm_register_segtype(seglib, segtype))
++	struct segment_type *segtype;
++	unsigned i;
++
++	for (i = 0; i < sizeof(reg_segtypes)/sizeof(reg_segtypes[0]); ++i) {
++		segtype = dm_zalloc(sizeof(*segtype));
++
++		if (!segtype) {
++			log_error("Failed to allocate memory for %s segtype",
++				  reg_segtypes[i].name);
 +			return 0;
-+	} while (raid_segtype_fn[++i]);
++		}
++
++		segtype->ops = reg_segtypes[i].ops;
++		segtype->name = reg_segtypes[i].name;
++		segtype->flags = reg_segtypes[i].flags;
+ 
+ #ifdef DEVMAPPER_SUPPORT
+ #  ifdef DMEVENTD
+-	if (_get_thin_dso_path(cmd))
+-		segtype->flags |= SEG_MONITORED;
++		if (_get_thin_dso_path(cmd))
++			segtype->flags |= SEG_MONITORED;
+ #  endif	/* DMEVENTD */
+ #endif
+-	log_very_verbose("Initialised segtype: %s", segtype->name);
++		if (!lvm_register_segtype(seglib, segtype))
++			return_0;
+ 
+-	return segtype;
++		log_very_verbose("Initialised segtype: %s", segtype->name);
++	}
 +
 +	return 1;
  }
---- LVM2/lib/commands/toolcontext.c	2011/08/11 17:46:13	1.128
-+++ LVM2/lib/commands/toolcontext.c	2011/08/24 13:41:47	1.129
-@@ -994,24 +994,17 @@
- {
- 	int i;
- 	struct segment_type *segtype;
--	struct segtype_library seglib = { .cmd = cmd };
-+	struct segtype_library seglib = { .cmd = cmd, .lib = NULL };
- 	struct segment_type *(*init_segtype_array[])(struct cmd_context *cmd) = {
- 		init_striped_segtype,
- 		init_zero_segtype,
- 		init_error_segtype,
- 		init_free_segtype,
--#ifdef RAID_INTERNAL
--		init_raid1_segtype,
--		init_raid4_segtype,
--		init_raid5_segtype,
--		init_raid5_la_segtype,
--		init_raid5_ra_segtype,
--		init_raid5_ls_segtype,
--		init_raid5_rs_segtype,
--		init_raid6_segtype,
--		init_raid6_zr_segtype,
--		init_raid6_nr_segtype,
--		init_raid6_nc_segtype,
-+#ifdef SNAPSHOT_INTERNAL
-+		init_snapshot_segtype,
-+#endif
-+#ifdef MIRRORED_INTERNAL
-+		init_mirrored_segtype,
- #endif
- 		NULL
- 	};
-@@ -1027,22 +1020,13 @@
- 		dm_list_add(&cmd->segtypes, &segtype->list);
- 	}
- 
--#ifdef SNAPSHOT_INTERNAL
--	if (!(segtype = init_snapshot_segtype(cmd)))
--		return 0;
--	segtype->library = NULL;
--	dm_list_add(&cmd->segtypes, &segtype->list);
--#endif
--
--#ifdef MIRRORED_INTERNAL
--	if (!(segtype = init_mirrored_segtype(cmd)))
-+#ifdef REPLICATOR_INTERNAL
-+	if (!init_replicator_segtype(cmd, &seglib))
- 		return 0;
--	segtype->library = NULL;
--	dm_list_add(&cmd->segtypes, &segtype->list);
- #endif
- 
--#ifdef REPLICATOR_INTERNAL
--	if (!init_replicator_segtype(&seglib))
-+#ifdef RAID_INTERNAL
-+	if (!init_raid_segtypes(cmd, &seglib))
- 		return 0;
- #endif
- 
---- LVM2/lib/replicator/replicator.c	2011/06/17 14:14:20	1.7
-+++ LVM2/lib/replicator/replicator.c	2011/08/24 13:41:47	1.8
-@@ -754,10 +754,10 @@
- };
- 
- #ifdef REPLICATOR_INTERNAL
--int init_replicator_segtype(struct segtype_library *seglib)
-+int init_replicator_segtype(struct cmd_context *cmd, struct segtype_library *seglib)
- #else /* Shared */
--int init_multiple_segtype(struct segtype_library *seglib);
--int init_multiple_segtype(struct segtype_library *seglib)
-+int init_multiple_segtype(struct cmd_context *cmd, struct segtype_library *seglib);
-+int init_multiple_segtype(struct cmd_context *cmd, struct segtype_library *seglib)
- #endif
- {
- 	struct segment_type *segtype;
 
 
