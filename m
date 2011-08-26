@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Aug 2011 10:00:10 -0000
-Subject: LVM2/lib commands/toolcontext.c metadata/segty ...
-Message-ID: <20110825100010.24066.qmail@sourceware.org>
+Date: 26 Aug 2011 13:37:48 -0000
+Subject: LVM2/lib metadata/metadata-exported.h thin/thin.c
+Message-ID: <20110826133748.19205.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,198 +10,136 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-08-25 10:00:09
+Changes by:	zkabelac at sourceware.org	2011-08-26 13:37:47
 
 Modified files:
-	lib/commands   : toolcontext.c 
-	lib/metadata   : segtype.h 
+	lib/metadata   : metadata-exported.h 
 	lib/thin       : thin.c 
 
 Log message:
-	Add registration of thin_pool segment
-	
-	Register thin and thin_pool segment via multiple_segtypes.
+	Initial code for read/write of thin metadata lv segments
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.201&r2=1.202
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/lib/commands/toolcontext.c	2011/08/24 13:41:47	1.129
-+++ LVM2/lib/commands/toolcontext.c	2011/08/25 10:00:09	1.130
-@@ -1030,6 +1030,11 @@
- 		return 0;
- #endif
+--- LVM2/lib/metadata/metadata-exported.h	2011/08/18 19:43:08	1.201
++++ LVM2/lib/metadata/metadata-exported.h	2011/08/26 13:37:47	1.202
+@@ -318,6 +318,13 @@
  
-+#ifdef THIN_INTERNAL
-+	if (!init_thin_segtypes(cmd, &seglib))
-+		return 0;
-+#endif
-+
- #ifdef HAVE_LIBDL
- 	/* Load any formats in shared libs unless static */
- 	if (!is_static() &&
---- LVM2/lib/metadata/segtype.h	2011/08/24 13:41:46	1.38
-+++ LVM2/lib/metadata/segtype.h	2011/08/25 10:00:09	1.39
-@@ -40,6 +40,7 @@
- #define SEG_REPLICATOR_DEV	0x00000200U
- #define SEG_RAID		0x00000400U
- #define SEG_THIN		0x00000800U
-+#define SEG_THIN_POOL		0x00001000U
- #define SEG_UNKNOWN		0x80000000U
+ 	struct lv_segment_area *areas;
+ 	struct lv_segment_area *meta_areas; /* For RAID */
++	struct logical_volume *data_lv;		/* For thin_pool */
++	struct logical_volume *metadata_lv;	/* For thin_pool */
++	uint64_t transaction_id;		/* For thin_pool */
++	uint32_t zero_new_blocks;		/* For thin_pool */
++	struct logical_volume *thin_pool_lv;	/* For thin */
++	struct logical_volume *origin_lv;	/* For thin */
++	uint64_t device_id;			/* For thin */
  
- #define seg_is_mirrored(seg)	((seg)->segtype->flags & SEG_AREAS_MIRRORED ? 1 : 0)
-@@ -50,6 +51,7 @@
- #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
- #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
- #define seg_is_thin(seg)	((seg)->segtype->flags & SEG_THIN ? 1 : 0)
-+#define seg_is_thin_pool(seg)	((seg)->segtype->flags & SEG_THIN_POOL ? 1 : 0)
- #define seg_can_split(seg)	((seg)->segtype->flags & SEG_CAN_SPLIT ? 1 : 0)
- #define seg_cannot_be_zeroed(seg) ((seg)->segtype->flags & SEG_CANNOT_BE_ZEROED ? 1 : 0)
- #define seg_monitored(seg)	((seg)->segtype->flags & SEG_MONITORED ? 1 : 0)
-@@ -59,6 +61,7 @@
- #define segtype_is_mirrored(segtype)	((segtype)->flags & SEG_AREAS_MIRRORED ? 1 : 0)
- #define segtype_is_raid(segtype)	((segtype)->flags & SEG_RAID ? 1 : 0)
- #define segtype_is_thin(segtype)	((segtype)->flags & SEG_THIN ? 1 : 0)
-+#define segtype_is_thin_pool(segtype)	((segtype)->flags & SEG_THIN_POOL ? 1 : 0)
- #define segtype_is_virtual(segtype)	((segtype)->flags & SEG_VIRTUAL ? 1 : 0)
- 
- struct segment_type {
-@@ -137,6 +140,10 @@
- int init_replicator_segtype(struct cmd_context *cmd, struct segtype_library *seglib);
- #endif
- 
-+#ifdef THIN_INTERNAL
-+int init_thin_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
-+#endif
-+
- #ifdef SNAPSHOT_INTERNAL
- struct segment_type *init_snapshot_segtype(struct cmd_context *cmd);
- #endif
-@@ -149,8 +156,4 @@
- struct segment_type *init_crypt_segtype(struct cmd_context *cmd);
- #endif
- 
--#ifdef THIN_INTERNAL
--struct segment_type *init_thin_segtype(struct cmd_context *cmd);
--#endif
--
- #endif
---- LVM2/lib/thin/thin.c	2011/08/24 08:27:51	1.1
-+++ LVM2/lib/thin/thin.c	2011/08/25 10:00:09	1.2
-@@ -30,6 +30,22 @@
+ 	struct logical_volume *replicator;/* For replicator-devs - link to replicator LV */
+ 	struct logical_volume *rlog_lv;	/* For replicators */
+--- LVM2/lib/thin/thin.c	2011/08/25 10:00:09	1.2
++++ LVM2/lib/thin/thin.c	2011/08/26 13:37:47	1.3
+@@ -30,20 +30,58 @@
  /* Dm kernel module name for thin provisiong */
  #define THIN_MODULE "thin-pool"
  
-+static const char *_thin_pool_name(const struct lv_segment *seg)
-+{
-+	return seg->segtype->name;
-+}
++/*
++ * Macro used as return argument - returns 0.
++ * return is left to be written in the function for better readability.
++ */
++#define SEG_LOG_ERROR(t, p...) \
++	log_error(t " segment %s of logical volume %s.", ## p, \
++		  config_parent_name(sn), seg->lv->name), 0;
 +
-+
-+static int _thin_pool_text_import(struct lv_segment *seg, const struct config_node *sn,
-+			struct dm_hash_table *pv_hash __attribute__((unused)))
-+{
-+	return 1;
-+}
-+
-+static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter *f)
-+{
-+	return 1;
-+}
- 
- static const char *_thin_name(const struct lv_segment *seg)
+ static const char *_thin_pool_name(const struct lv_segment *seg)
  {
-@@ -67,7 +83,7 @@
- 	static int _present = 0;
- 
- 	if (!_checked) {
--		_present = target_present(cmd, "thin-pool", 1);
-+		_present = target_present(cmd, THIN_MODULE, 1);
- 		_checked = 1;
- 	}
- 
-@@ -93,6 +109,14 @@
- 	dm_free(segtype);
+ 	return seg->segtype->name;
  }
  
-+static struct segtype_handler _thin_pool_ops = {
-+	.name = _thin_pool_name,
-+	.text_import = _thin_pool_text_import,
-+	.text_export = _thin_pool_text_export,
-+	.modules_needed = _thin_modules_needed,
-+	.destroy = _thin_destroy,
-+};
-+
- static struct segtype_handler _thin_ops = {
- 	.name = _thin_name,
- 	.text_import = _thin_text_import,
-@@ -106,30 +130,48 @@
- };
- 
- #ifdef THIN_INTERNAL
--struct segment_type *init_thin_segtype(struct cmd_context *cmd)
--#else				/* Shared */
--struct segment_type *init_segtype(struct cmd_context *cmd);
--struct segment_type *init_segtype(struct cmd_context *cmd)
-+int init_thin_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
-+#else /* Shared */
-+int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
-+int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *seglib)
- #endif
+-
+ static int _thin_pool_text_import(struct lv_segment *seg, const struct config_node *sn,
+ 			struct dm_hash_table *pv_hash __attribute__((unused)))
  {
--	struct segment_type *segtype = dm_zalloc(sizeof(*segtype));
--
--	if (!segtype)
--		return_NULL;
--
--	segtype->cmd = cmd;
--	segtype->ops = &_thin_ops;
--	segtype->name = "thin";
--	segtype->private = NULL;
--	segtype->flags = SEG_THIN;
-+	static const struct {
-+		struct segtype_handler *ops;
-+		const char name[16];
-+		uint32_t flags;
-+	} reg_segtypes[] = {
-+		{ &_thin_pool_ops, "thin_pool", SEG_THIN_POOL },
-+		{ &_thin_ops, "thin", SEG_THIN }
-+	};
++	const struct config_node *cn;
 +
-+	struct segment_type *segtype;
-+	unsigned i;
++	if (!(cn = find_config_node(sn, "data")) ||
++	    !cn->v || cn->v->type != CFG_STRING)
++		return SEG_LOG_ERROR("Thin pool data must be a string in");
 +
-+	for (i = 0; i < sizeof(reg_segtypes)/sizeof(reg_segtypes[0]); ++i) {
-+		segtype = dm_zalloc(sizeof(*segtype));
++	if (!(seg->data_lv = find_lv(seg->lv->vg, cn->v->v.str)))
++		return SEG_LOG_ERROR("Unknown pool data %s in",
++				     cn->v->v.str);
 +
-+		if (!segtype) {
-+			log_error("Failed to allocate memory for %s segtype",
-+				  reg_segtypes[i].name);
-+			return 0;
-+		}
++	if (!(cn = find_config_node(sn, "metadata")) ||
++	    !cn->v || cn->v->type != CFG_STRING)
++		return SEG_LOG_ERROR("Thin pool metadata must be a string in");
 +
-+		segtype->ops = reg_segtypes[i].ops;
-+		segtype->name = reg_segtypes[i].name;
-+		segtype->flags = reg_segtypes[i].flags;
++	if (!(seg->metadata_lv = find_lv(seg->lv->vg, cn->v->v.str)))
++		return SEG_LOG_ERROR("Unknown pool metadata %s in",
++				     cn->v->v.str);
++
++	if (!get_config_uint64(sn, "transaction_id", &seg->transaction_id))
++		return SEG_LOG_ERROR("Could not read transaction_id for");
++
++	if (find_config_node(sn, "zero_new_blocks") &&
++	    !get_config_uint32(sn, "zero_new_blocks", &seg->zero_new_blocks))
++		return SEG_LOG_ERROR("Could not read zero_new_blocks for");
++
+ 	return 1;
+ }
  
- #ifdef DEVMAPPER_SUPPORT
- #  ifdef DMEVENTD
--	if (_get_thin_dso_path(cmd))
--		segtype->flags |= SEG_MONITORED;
-+		if (_get_thin_dso_path(cmd))
-+			segtype->flags |= SEG_MONITORED;
- #  endif	/* DMEVENTD */
- #endif
--	log_very_verbose("Initialised segtype: %s", segtype->name);
-+		if (!lvm_register_segtype(seglib, segtype))
-+			return_0;
+ static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter *f)
+ {
++	outf(f, "data = \"%s\"", seg->data_lv->name);
++	outf(f, "metadata = \"%s\"", seg->metadata_lv->name);
++	outf(f, "transaction_id = %" PRIu64, seg->transaction_id);
++	if (seg->zero_new_blocks)
++		outf(f, "zero_new_blocks = 1");
++
+ 	return 1;
+ }
  
--	return segtype;
-+		log_very_verbose("Initialised segtype: %s", segtype->name);
+@@ -55,11 +93,39 @@
+ static int _thin_text_import(struct lv_segment *seg, const struct config_node *sn,
+ 			struct dm_hash_table *pv_hash __attribute__((unused)))
+ {
++	const struct config_node *cn;
++
++	if (!(cn = find_config_node(sn, "thin_pool")) ||
++	    !cn->v || cn->v->type != CFG_STRING)
++		return SEG_LOG_ERROR("Thin pool must be a string in");
++
++	if (!(seg->thin_pool_lv = find_lv(seg->lv->vg, cn->v->v.str)))
++		return SEG_LOG_ERROR("Unknown thin pool %s in",
++				     cn->v->v.str);
++
++	if ((cn = find_config_node(sn, "origin"))) {
++                if (!cn->v || cn->v->type != CFG_STRING)
++			return SEG_LOG_ERROR("Thin pool origin must be a string in");
++
++		if (!(seg->origin_lv = find_lv(seg->lv->vg, cn->v->v.str)))
++			return SEG_LOG_ERROR("Unknown origin %s in",
++					     cn->v->v.str);
 +	}
 +
-+	return 1;
++	if (!get_config_uint64(sn, "device_id", &seg->device_id))
++		return SEG_LOG_ERROR("Could not read device_id for");
++
+ 	return 1;
  }
+ 
+ static int _thin_text_export(const struct lv_segment *seg, struct formatter *f)
+ {
++	outf(f, "thin_pool = \"%s\"", seg->thin_pool_lv->name);
++	outf(f, "device_id = %" PRIu64, seg->device_id);
++
++	if (seg->origin_lv)
++		outf(f, "origin = \"%s\"", seg->origin_lv->name);
++
+ 	return 1;
+ }
+ 
 
 
