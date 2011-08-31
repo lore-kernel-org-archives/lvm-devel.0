@@ -1,34 +1,38 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 31 Aug 2011 12:48:00 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20110831124800.21271.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 31 Aug 2011 16:30:10 +0200
+Subject: [PATCH] non-const dm_config_find_node
+Message-ID: <87k49t4psd.fsf@aldalome.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-08-31 12:48:00
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
+this patch replaces const usage of dm_config_find_node with more
+appropriate value-lookup functionality. A number of bugs (copied and
+pasted all over the code) should disappear:
 
-Log message:
-	Mention --enable-lvmetad in WHATS_NEW.
+- most string lookup based on dm_config_find_node would segfault when
+  encountering a non-zero integer (the intention there was to print an
+  error message instead)
+- check for required sections in metadata would have been satisfied by
+  values as well (i.e. not sections)
+- encountering a section in place of expected flag value would have
+  segfaulted (due to assumed but unchecked cn->v != NULL)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2086&r2=1.2087
+Yours,
+   Petr
 
---- LVM2/WHATS_NEW	2011/08/31 08:23:33	1.2086
-+++ LVM2/WHATS_NEW	2011/08/31 12:47:59	1.2087
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Add configure --enable-lvmetad for building the (experimental) LVMetaD.
-   Fix resource leak when strdup fails in _get_device_status() (2.02.85).
-   Directly allocate buffer memory in a pvck scan instead of using a mempool.
-   Add configure --with-thin for (unimplemented) segtypes "thin" and "thin_pool".
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dm_config_find_node.diff
+Type: text/x-diff
+Size: 19939 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110831/54fa69e5/attachment.bin>
+-------------- next part --------------
 
-
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
