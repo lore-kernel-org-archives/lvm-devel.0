@@ -1,35 +1,42 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 31 Aug 2011 05:34:37 +0200
-Subject: [PATCH] Integrate LVMetaD with the build system
-Message-ID: <87sjoi45ki.fsf@aldalome.int.mornfall.net.>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 31 Aug 2011 08:23:05 -0000
+Subject: LVM2/daemons/dmeventd dmeventd.c
+Message-ID: <20110831082305.11987.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-08-31 08:23:05
 
-this is a "compromise" integration: I have kept all the daemon/common
-code in a single libdaemon.a, which is completely private. This is
-currently linked into the lvmetad binary, and will be linked into LVM
-(the client part, since static linking only picks up only symbols that
-are actually used). I have also added --disable-lvmetad to ./configure
-(i.e. building and using it by default; there's no LVM-side support yet,
-but when there is, even when built, it'll still need to be enabled by an
-lvm.conf option).
+Modified files:
+	daemons/dmeventd: dmeventd.c 
 
-Yours,
-   Petr
+Log message:
+	Fix resource leak when strdup fails
+	
+	Static analyzer noticed, strdup failing path leaks dmt structure.
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: lvmetad-build.diff
-Type: text/x-diff
-Size: 8428 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110831/82cab15b/attachment.bin>
--------------- next part --------------
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.82&r2=1.83
 
--- 
-id' Ash = Ash; id' Dust = Dust; id' _ = undefined
+--- LVM2/daemons/dmeventd/dmeventd.c	2011/07/28 13:06:50	1.82
++++ LVM2/daemons/dmeventd/dmeventd.c	2011/08/31 08:23:05	1.83
+@@ -751,8 +751,10 @@
+ 	if (!dmt)
+ 		return NULL;
+ 
+-	if (!dm_task_set_uuid(dmt, ts->device.uuid))
+-                return NULL;
++	if (!dm_task_set_uuid(dmt, ts->device.uuid)) {
++		dm_task_destroy(dmt);
++		return NULL;
++	}
+ 
+ 	if (!dm_task_run(dmt)) {
+ 		dm_task_destroy(dmt);
+
+
