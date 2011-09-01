@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Sep 2011 10:25:23 -0000
-Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c lib/form ...
-Message-ID: <20110901102523.14028.qmail@sourceware.org>
+Date: 1 Sep 2011 13:25:50 -0000
+Subject: LVM2 daemons/common/daemon-server.h lib/comman ...
+Message-ID: <20110901132550.4200.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,100 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-01 10:25:23
+Changes by:	zkabelac at sourceware.org	2011-09-01 13:25:50
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/cache      : lvmcache.c 
-	lib/format_text: export.c import-export.h 
-	lib/metadata   : metadata.h 
+	daemons/common : daemon-server.h 
+	lib/commands   : toolcontext.c 
 
 Log message:
-	Use size_t return type
-	
-	Since these function returns buffer size - use size_t type for them.
+	Keep the old-style prototypes
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2087&r2=1.2088
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/export.c.diff?cvsroot=lvm2&r1=1.83&r2=1.84
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import-export.h.diff?cvsroot=lvm2&r1=1.27&r2=1.28
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.250&r2=1.251
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
 
---- LVM2/WHATS_NEW	2011/08/31 12:47:59	1.2087
-+++ LVM2/WHATS_NEW	2011/09/01 10:25:22	1.2088
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Use size_t return type for text_vg_export_raw() and export_vg_to_buffer().
-   Add configure --enable-lvmetad for building the (experimental) LVMetaD.
-   Fix resource leak when strdup fails in _get_device_status() (2.02.85).
-   Directly allocate buffer memory in a pvck scan instead of using a mempool.
---- LVM2/lib/cache/lvmcache.c	2011/08/30 14:55:16	1.117
-+++ LVM2/lib/cache/lvmcache.c	2011/09/01 10:25:22	1.118
-@@ -102,7 +102,7 @@
- 	char uuid[64] __attribute__((aligned(8)));
- 	struct lvmcache_vginfo *vginfo;
- 	char *data;
--	int size;
-+	size_t size;
+--- LVM2/daemons/common/daemon-server.h	2011/08/31 12:39:58	1.11
++++ LVM2/daemons/common/daemon-server.h	2011/09/01 13:25:50	1.12
+@@ -114,6 +114,6 @@
+ daemon_reply daemon_takeover(daemon_info i, daemon_request r);
  
- 	if (!(vginfo = vginfo_from_vgid((const char *)&vg->id))) {
- 		stack;
-@@ -132,7 +132,7 @@
- 		return;
- 	}
+ /* Call this to request a clean shutdown of the daemon. Async safe. */
+-void daemon_stop();
++void daemon_stop(void);
  
--	log_debug("Metadata cache: VG %s (%s) stored (%d bytes%s).",
-+	log_debug("Metadata cache: VG %s (%s) stored (%" PRIsize_t " bytes%s).",
- 		  vginfo->vgname, uuid, size,
- 		  precommitted ? ", precommitted" : "");
- }
---- LVM2/lib/format_text/export.c	2011/08/30 14:55:17	1.83
-+++ LVM2/lib/format_text/export.c	2011/09/01 10:25:22	1.84
-@@ -775,10 +775,10 @@
- }
- 
- /* Returns amount of buffer used incl. terminating NUL */
--int text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf)
-+size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf)
- {
- 	struct formatter *f;
--	int r = 0;
-+	size_t r = 0;
- 
- 	_init();
- 
-@@ -809,7 +809,7 @@
- 	return r;
- }
- 
--int export_vg_to_buffer(struct volume_group *vg, char **buf)
-+size_t export_vg_to_buffer(struct volume_group *vg, char **buf)
- {
- 	return text_vg_export_raw(vg, "", buf);
- }
---- LVM2/lib/format_text/import-export.h	2011/08/30 14:55:17	1.27
-+++ LVM2/lib/format_text/import-export.h	2011/09/01 10:25:22	1.28
-@@ -65,7 +65,7 @@
- int read_tags(struct dm_pool *mem, struct dm_list *tags, const struct dm_config_value *cv);
- 
- int text_vg_export_file(struct volume_group *vg, const char *desc, FILE *fp);
--int text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf);
-+size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf);
- struct volume_group *text_vg_import_file(struct format_instance *fid,
- 					 const char *file,
- 					 time_t *when, char **desc);
---- LVM2/lib/metadata/metadata.h	2011/08/30 14:55:17	1.250
-+++ LVM2/lib/metadata/metadata.h	2011/09/01 10:25:22	1.251
-@@ -454,7 +454,7 @@
- /*
-  * For internal metadata caching.
+ #endif
+--- LVM2/lib/commands/toolcontext.c	2011/08/30 14:55:16	1.131
++++ LVM2/lib/commands/toolcontext.c	2011/09/01 13:25:50	1.132
+@@ -206,7 +206,7 @@
+  * 856a6f1dbd8940e72755af145ebcd806408ecedd
+  * some operations could not be performed by udev, requiring our fallback code.
   */
--int export_vg_to_buffer(struct volume_group *vg, char **buf);
-+size_t export_vg_to_buffer(struct volume_group *vg, char **buf);
- int export_vg_to_config_tree(struct volume_group *vg, struct dm_config_tree **cft);
- struct volume_group *import_vg_from_buffer(const char *buf,
- 					   struct format_instance *fid);
+-static int _dm_driver_has_stable_udev_support()
++static int _dm_driver_has_stable_udev_support(void)
+ {
+ 	char vsn[80];
+ 	unsigned maj, min, patchlevel;
 
 
