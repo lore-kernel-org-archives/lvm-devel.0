@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 2 Sep 2011 11:04:12 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20110902110412.30761.qmail@sourceware.org>
+Date: 2 Sep 2011 12:38:44 -0000
+Subject: LVM2/lib/commands toolcontext.c
+Message-ID: <20110902123844.4257.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-02 11:04:12
+Changes by:	zkabelac at sourceware.org	2011-09-02 12:38:44
 
 Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+	lib/commands   : toolcontext.c 
 
 Log message:
-	Compile fix
+	Add missing 'static' for local function
 	
-	Reflecting change in dm_config_value  float r -> float f.
+	Avoid missing prototype warning.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.24&r2=1.25
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.134&r2=1.135
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2011/08/31 12:39:58	1.24
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2011/09/02 11:04:12	1.25
-@@ -192,7 +192,7 @@
+--- LVM2/lib/commands/toolcontext.c	2011/09/02 01:59:07	1.134
++++ LVM2/lib/commands/toolcontext.c	2011/09/02 12:38:43	1.135
+@@ -558,7 +558,7 @@
+ 	return 1;
+ }
  
- 	switch (a->type) {
- 	case DM_CFG_STRING: r = strcmp(a->v.str, b->v.str);
--	case DM_CFG_FLOAT: r = (a->v.r == b->v.r);
-+	case DM_CFG_FLOAT: r = (a->v.f == b->v.f);
- 	case DM_CFG_INT: r = (a->v.i == b->v.i);
- 	case DM_CFG_EMPTY_ARRAY: return 0;
- 	}
+-struct dm_config_tree *_merge_config_files(struct cmd_context *cmd, struct dm_config_tree *cft)
++static struct dm_config_tree *_merge_config_files(struct cmd_context *cmd, struct dm_config_tree *cft)
+ {
+ 	struct config_tree_list *cfl;
+ 
 
 
