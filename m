@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 2 Sep 2011 14:49:01 -0000
-Subject: LVM2/daemons Makefile.in
-Message-ID: <20110902144901.21671.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 5 Sep 2011 12:54:30 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvchange.c
+Message-ID: <20110905125430.23508.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,30 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-02 14:49:00
+Changes by:	agk at sourceware.org	2011-09-05 12:54:30
 
 Modified files:
-	daemons        : Makefile.in 
+	.              : WHATS_NEW 
+	tools          : lvchange.c 
 
 Log message:
-	Hack for build rules of lvmetad
-	
-	FIXME
+	Remove incorrect requirement for -j or -m from lvchange error message.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/Makefile.in.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2089&r2=1.2090
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
 
---- LVM2/daemons/Makefile.in	2011/09/01 17:56:53	1.18
-+++ LVM2/daemons/Makefile.in	2011/09/02 14:49:00	1.19
-@@ -32,7 +32,8 @@
+--- LVM2/WHATS_NEW	2011/09/01 19:22:11	1.2089
++++ LVM2/WHATS_NEW	2011/09/05 12:54:29	1.2090
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Remove incorrect requirement for -j or -m from lvchange error message.
+   Fix unsafe table load when splitting off smaller mirror from a larger one.
+   Use size_t return type for text_vg_export_raw() and export_vg_to_buffer().
+   Add configure --enable-lvmetad for building the (experimental) LVMetaD.
+--- LVM2/tools/lvchange.c	2011/03/29 12:51:58	1.129
++++ LVM2/tools/lvchange.c	2011/09/05 12:54:29	1.130
+@@ -715,10 +715,8 @@
  
- ifeq ("@BUILD_LVMETAD@", "yes")
-   SUBDIRS += lvmetad
--device-mapper: libdaemon.a
-+# FIXME: build dependency order needs rule fixing, using hack
-+all: libdaemon.a
- endif
- 
- ifeq ("@BUILD_DMEVENTD@", "yes")
+ 	if (!update &&
+             !arg_count(cmd, available_ARG) && !arg_count(cmd, refresh_ARG) &&
+-            !arg_count(cmd, monitor_ARG) && !arg_count(cmd, poll_ARG) &&
+-            /* for persistent_ARG */
+-	    !arg_count(cmd, minor_ARG) && !arg_count(cmd, major_ARG)) {
+-		log_error("Need 1 or more of -a, -C, -j, -m, -M, -p, -r, "
++            !arg_count(cmd, monitor_ARG) && !arg_count(cmd, poll_ARG)) {
++		log_error("Need 1 or more of -a, -C, -M, -p, -r, "
+ 			  "--resync, --refresh, --alloc, --addtag, --deltag, "
+ 			  "--monitor or --poll");
+ 		return EINVALID_CMD_LINE;
 
 
