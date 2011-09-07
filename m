@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 7 Sep 2011 08:41:49 -0000
-Subject: LVM2 ./WHATS_NEW tools/toollib.c tools/vgchange.c
-Message-ID: <20110907084149.13250.qmail@sourceware.org>
+Date: 7 Sep 2011 08:50:37 -0000
+Subject: LVM2 ./WHATS_NEW man/fsadm.8.in man/lvreduce.8 ...
+Message-ID: <20110907085037.15123.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,74 +10,533 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-07 08:41:48
+Changes by:	zkabelac at sourceware.org	2011-09-07 08:50:36
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : toollib.c vgchange.c 
+	man            : fsadm.8.in lvreduce.8.in lvremove.8.in 
+	                 lvrename.8.in lvresize.8.in 
 
 Log message:
-	Support break for vgchange and vgrefresh operation
+	Improve man page style
 	
-	Allow to break some lengthy vgchange and vgrefresh operation.
+	Only reformat man pages.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2096&r2=1.2097
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.229&r2=1.230
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2097&r2=1.2098
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/fsadm.8.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvreduce.8.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvremove.8.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvrename.8.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvresize.8.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
 
---- LVM2/WHATS_NEW	2011/09/07 08:34:21	1.2096
-+++ LVM2/WHATS_NEW	2011/09/07 08:41:47	1.2097
+--- LVM2/WHATS_NEW	2011/09/07 08:41:47	1.2097
++++ LVM2/WHATS_NEW	2011/09/07 08:50:35	1.2098
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Support break for vgchange and vgrefresh operation.
++  Improve man page style for fsadm, lvreduce, lvremove, lvrename, lvresize.
+   Support break for vgchange and vgrefresh operation.
    Switch int to unsigned type for pvmetadatacopies for pv_create().
    Replace :space: with [\t ] for awk in vgimportclone (not widely supported).
-   Begin using 64-bit status field flags.
---- LVM2/tools/toollib.c	2011/08/30 14:55:19	1.229
-+++ LVM2/tools/toollib.c	2011/09/07 08:41:48	1.230
-@@ -1323,10 +1323,17 @@
- 	struct lv_list *lvl;
- 	int r = 1;
+--- LVM2/man/fsadm.8.in	2010/11/01 14:10:46	1.4
++++ LVM2/man/fsadm.8.in	2011/09/07 08:50:35	1.5
+@@ -1,64 +1,74 @@
+ .TH "FSADM" "8" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
+ .SH "NAME"
+ fsadm \- utility to resize or check filesystem on a device
+-.SH "SYNOPSIS"
++.SH SYNOPSIS
+ .B fsadm
+-.RI [options]\ check\ device
+-
++.RI [ options ]
++.B check
++.I device
++.sp
+ .B fsadm
+-.RI [options]\ resize\ device\ [new_size[BKMGTEP]]
+-
+-.SH "DESCRIPTION"
+-\fBfsadm\fR utility resizes or checks the filesystem on a device.
+-It tries to use the same API for \fBext2/ext3/ext4\fR,
+-\fBReiserFS\fR and \fBXFS\fR filesystem.
+-.SH "OPTIONS"
++.RI [ options ]
++.B resize
++.I device
++.RI [ new_size [ BKMGTEP ]]
++.sp
++.SH DESCRIPTION
++.B fsadm
++utility checks or resizes the filesystem on a device.
++It tries to use the same API for 
++.IR ext2 , ext3 , ext4 , ReiserFS
++and \fIXFS\fP filesystem.
++.SH OPTIONS
+ .TP
+-\fB\-h \-\-help\fR
+-\(em print help message
++.BR \-h ", " \-\-help
++Display the help text.
+ .TP
+-\fB\-v \-\-verbose\fR
+-\(em be more verbose
++.BR \-v ", " \-\-verbose
++Be more verbose.
+ .TP
+-\fB\-e \-\-ext\-offline\fR
+-\(em unmount ext2/ext3/ext4 filesystem before doing resize
++.BR \-e ", " \-\-ext\-offline
++Unmount ext2/ext3/ext4 filesystem before doing resize.
+ .TP
+-\fB\-f \-\-force\fR
+-\(em bypass some sanity checks
++.BR \-f ", " \-\-force
++Bypass some sanity checks.
+ .TP
+-\fB\-n \-\-dry\-run\fR
+-\(em print commands without running them
++.BR \-n ", " \-\-dry\-run
++Print commands without running them.
+ .TP
+-\fB\-y \-\-yes\fR
+-\(em answer "yes" at any prompts
++.BR \-y ", " \-\-yes
++Answer "yes" at any prompts.
+ .TP
+-\fBnew_size\fR
+-\(em Absolute number of filesystem blocks to be in the filesystem,
++.I new_size
++Absolute number of filesystem blocks to be in the filesystem,
+ or an absolute size using a suffix (in powers of 1024).
+ If new_size is not supplied, the whole device is used.
  
--	dm_list_iterate_items(lvl, &vg->lvs)
-+	sigint_allow();
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (sigint_caught())
-+			return_0;
+-.SH "DIAGNOSTICS"
++.SH DIAGNOSTICS
+ On successful completion, the status code is 0.
+ A status code of 2 indicates the operation was interrupted by the user.
+ A status code of 3 indicates the requested check operation could not be performed
+-because the filesystem is mounted and does not support an online fsck.
++because the filesystem is mounted and does not support an online 
++.BR fsck (8).
+ A status code of 1 is used for other failures.
+ 
+-.SH "EXAMPLES"
+-"fsadm \-e \-y resize /dev/vg/test 1000M" tries to resize the filesystem
+-on logical volume /dev/vg/test. If /dev/vg/test contains ext2/ext3/ext4
++.SH EXAMPLES
++Resize the filesystem on logical volume /dev/vg/test to 1000 megabytes.
++If /dev/vg/test contains ext2/ext3/ext4
+ filesystem it will be unmounted prior the resize.
+ All [y|n] questions will be answered 'y'.
+-.SH "ENVIRONMENT VARIABLES"
++.sp
++.B fsadm \-e \-y resize /dev/vg/test 1000M
++.SH ENVIRONMENT VARIABLES
+ .TP
+-\fBTMPDIR\fP
+-Where the temporary directory should be created.
+-.TP
+-.BR
+-.SH "SEE ALSO"
++.B TMPDIR
++The temporary directory name for mount points. Defaults to "/tmp". 
 +
- 		if (lv_is_visible(lvl->lv))
- 			if (!lv_refresh(cmd, lvl->lv))
- 				r = 0;
-+	}
-+
-+	sigint_restore();
- 
- 	return r;
- }
---- LVM2/tools/vgchange.c	2011/06/11 00:03:08	1.121
-+++ LVM2/tools/vgchange.c	2011/09/07 08:41:48	1.122
-@@ -90,7 +90,11 @@
- 	struct logical_volume *lv;
- 	int count = 0, expected_count = 0;
- 
-+	sigint_allow();
- 	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (sigint_caught())
-+			return_0;
-+
- 		lv = lvl->lv;
- 
- 		if (!lv_is_visible(lv))
-@@ -160,6 +164,8 @@
- 		count++;
- 	}
- 
-+	sigint_restore();
-+
- 	if (expected_count)
- 		log_verbose("%s %d logical volumes in volume group %s",
- 			    (activate == CHANGE_AN || activate == CHANGE_ALN)?
++.SH SEE ALSO
+ .BR lvm (8),
+ .BR lvresize (8),
+ .BR lvm.conf (5),
++.BR fsck (8),
+ .BR tune2fs (8),
+ .BR resize2fs (8),
+ .BR reiserfstune (8),
+--- LVM2/man/lvreduce.8.in	2010/06/21 15:56:59	1.8
++++ LVM2/man/lvreduce.8.in	2011/09/07 08:50:35	1.9
+@@ -3,15 +3,22 @@
+ lvreduce \- reduce the size of a logical volume
+ .SH SYNOPSIS
+ .B lvreduce
+-[\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-f|\-\-force]
+-[\-h|\-?|\-\-help]
+-[\-\-noudevsync]
+-{\-l|\-\-extents [\-]LogicalExtentsNumber[%{VG|LV|FREE|ORIGIN}] |
+-\-L|\-\-size [\-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+-[\-n|\-\-nofsck]
+-[\-r|\-\-resizefs]
+-[\-t|\-\-test]
+-[\-v|\-\-verbose] LogicalVolume[Path]
++.RB [ \-A | \-\-autobackup
++.RI { y | n }]
++.RB [ \-d | \-\-debug ]
++.RB [ \-h | \-\-help ]
++.RB [ \-t | \-\-test ]
++.RB [ \-v | \-\-verbose ]
++.RB [ \-\-version ]
++.RB [ \-f | \-\-force ]
++.RB [ \-\-noudevsync ]
++.RB { \-l | \-\-extents 
++.RI [ \- ] LogicalExtentsNumber [ % { VG | LV | FREE | ORIGIN "}] |"
++.RB [ \-L | \-\-size 
++.RI [ \- ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]}
++.RB [ \-n | \-\-nofsck ]
++.RB [ \-r | \-\-resizefs ]
++.IR LogicalVolume { Name | Path }
+ .SH DESCRIPTION
+ lvreduce allows you to reduce the size of a logical volume.
+ Be careful when reducing a logical volume's size, because data in the
+@@ -23,61 +30,64 @@
+ running lvreduce so that the extents that are to be removed are not in use.
+ .br
+ Shrinking snapshot logical volumes (see
+-.B lvcreate(8)
++.BR lvcreate (8)
+ for information to create snapshots) is supported as well.
+ But to change the number of copies in a mirrored logical
+ volume use 
+-.B lvconvert (8).
++.BR lvconvert (8).
+ .br
+ Sizes will be rounded if necessary - for example, the volume size must
+ be an exact number of extents and the size of a striped segment must
+ be a multiple of the number of stripes.
+ .br
+ .SH OPTIONS
+-See \fBlvm\fP for common options.
++See 
++.BR lvm (8)
++for common options.
+ .TP
+-.I \-f, \-\-force
++.BR \-f ", " \-\-force
+ Force size reduction without prompting even when it may cause data loss.
+ .TP
+-.I \-\-noudevsync
++.BR \-\-noudevsync
+ Disable udev synchronisation. The
+ process will not wait for notification from udev.
+ It will continue irrespective of any possible udev processing
+ in the background.  You should only use this if udev is not running
+ or has rules that ignore the devices LVM2 creates.
+ .TP
+-.I \-l, \-\-extents [\-]LogicalExtentsNumber[%{VG|LV|FREE|ORIGIN}]
++.IR \fB\-l ", " \fB\-\-extents " [" \- ] LogicalExtentsNumber [ % { VG | LV | FREE | ORIGIN }]
+ Reduce or set the logical volume size in units of logical extents.
+-With the - sign the value will be subtracted from
++With the \fI-\fP sign the value will be subtracted from
+ the logical volume's actual size and without it the value will be taken
+ as an absolute size.
+ The number can also be expressed as a percentage of the total space
+-in the Volume Group with the suffix %VG, relative to the existing
+-size of the Logical Volume with the suffix %LV, as a percentage of the
+-remaining free space in the Volume Group with the suffix %FREE, or (for
++in the Volume Group with the suffix \fI%VG\fP, relative to the existing
++size of the Logical Volume with the suffix \fI%LV\fP, as a percentage of the
++remaining free space in the Volume Group with the suffix \fI%FREE\fP, or (for
+ a snapshot) as a percentage of the total space in the Origin Logical
+-Volume with the suffix %ORIGIN.
++Volume with the suffix \fI%ORIGIN\fP.
+ .TP
+-.I \-L, \-\-size [\-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
++.IR \fB\-L ", " \fB\-\-size " [" \- ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]
+ Reduce or set the logical volume size in units of megabytes.
+-A size suffix of k for kilobyte, m for megabyte, 
+-g for gigabytes, t for terabytes, p for petabytes 
+-or e for exabytes is optional.
+-With the - sign the value will be subtracted from
++A size suffix of \fIk\fP for kilobyte, \fIm\fP for megabyte,
++\fIg\fP for gigabytes, \fIt\fP for terabytes, \fIp\fP for petabytes
++or \fIe\fP for exabytes is optional.
++With the \fI-\fP sign the value will be subtracted from
+ the logical volume's actual size and without it it will be taken as
+ an absolute size.
+ .TP
+-.I \-n, \-\-nofsck
++.BR \-n ", " \-\-nofsck
+ Do not perform fsck before resizing filesystem when filesystem
+ requires it. You may need to use \fB--force\fR to proceed with 
+ this option.
+ .TP
+-.I \-r, \-\-resizefs
++.BR \-r ", " \-\-resizefs
+ Resize underlying filesystem together with the logical volume using 
+-\fBfsadm\fR(8).
+-.SH Example
+-"lvreduce -l -3 vg00/lvol1" reduces the size of logical volume lvol1
+-in volume group vg00 by 3 logical extents.
++.BR fsadm (8).
++.SH EXAMPLES
++Reduce the size of logical volume lvol1 in volume group vg00 by 3 logical extents:
++.sp
++.B lvreduce -l -3 vg00/lvol1
+ .SH SEE ALSO
+ .BR fsadm (8),
+ .BR lvchange (8),
+--- LVM2/man/lvremove.8.in	2009/08/04 08:09:52	1.4
++++ LVM2/man/lvremove.8.in	2011/09/07 08:50:35	1.5
+@@ -3,11 +3,17 @@
+ lvremove \- remove a logical volume
+ .SH SYNOPSIS
+ .B lvremove
+-[\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-f|\-\-force]
+-[\-h|\-?|\-\-help] 
+-[\-\-noudevsync]
+-[\-t|\-\-test]
+-[\-v|\-\-verbose] LogicalVolumePath [LogicalVolumePath...]
++.RB [ \-A | \-\-autobackup
++.RI { y | n }]
++.RB [ \-d | \-\-debug ]
++.RB [ \-h | \-\-help ]
++.RB [ \-t | \-\-test ]
++.RB [ \-v | \-\-verbose ]
++.RB [ \-\-version ]
++.RB [ \-f | \-\-force ]
++.RB [ \-\-noudevsync ]
++.IR LogicalVolume { Name |  Path }
++.RI [ LogicalVolume { Name | Path }...]
+ .SH DESCRIPTION
+ \fBlvremove\fP removes one or more logical volumes.
+ Confirmation will be requested before deactivating any active logical
+@@ -21,10 +27,10 @@
+ .SH OPTIONS
+ See \fBlvm\fP(8) for common options.
+ .TP
+-.I \-f, \-\-force
++.BR \-f ", " \-\-force
+ Remove active logical volumes without confirmation.
+ .TP
+-.I \-\-noudevsync
++.B \-\-noudevsync
+ Disable udev synchronisation. The
+ process will not wait for notification from udev.
+ It will continue irrespective of any possible udev processing
+@@ -34,11 +40,11 @@
+ Remove the active logical volume lvol1 in volume group vg00 
+ without asking for confirmation:
+ .sp
+-\	\fBlvremove -f vg00/lvol1\fP
++.B lvremove -f vg00/lvol1
+ .sp
+ Remove all logical volumes in volume group vg00:
+ .sp
+-\	\fBlvremove vg00\fP
++.B lvremove vg00
+ .SH SEE ALSO
+ .BR lvcreate (8), 
+ .BR lvdisplay (8),
+--- LVM2/man/lvrename.8.in	2011/08/04 10:14:42	1.3
++++ LVM2/man/lvrename.8.in	2011/09/07 08:50:35	1.4
+@@ -3,17 +3,20 @@
+ lvrename \- rename a logical volume
+ .SH SYNOPSIS
+ .B lvrename
+-.RB [ \-A | \-\-autobackup " {" y | n }]
++.RB [ \-A | \-\-autobackup
++.RI { y | n }]
+ .RB [ \-d | \-\-debug ]
+ .RB [ \-h | \-\-help ]
+-.RB [ \-\-noudevsync ]
+ .RB [ \-t | \-\-test ]
+ .RB [ \-v | \-\-verbose ]
+ .RB [ \-\-version ]
+-.TP
+-.IR "OldLogicalVolumePath NewLogicalVolume" { Path | Name }
+-.TP
++.RB [ \-f | \-\-force ]
++.RB [ \-\-noudevsync ]
++.RI { OldLogicalVolume { Name | Path }
++.IR NewLogicalVolume { Name | Path }
++|
+ .I VolumeGroupName OldLogicalVolumeName NewLogicalVolumeName
++}
+ .SH DESCRIPTION
+ .B lvrename
+ renames an existing logical volume from
+@@ -21,7 +24,7 @@
+ to
+ .IR NewLogicalVolume { Name | Path }.
+ .SH OPTIONS
+-See \fBlvm\fP for common options.
++See \fBlvm\fP(8) for common options.
+ .TP
+ .BR \-\-noudevsync
+ Disable udev synchronisation. The
+@@ -30,23 +33,14 @@
+ in the background.  You should only use this if udev is not running
+ or has rules that ignore the devices LVM2 creates.
+ .SH EXAMPLE
+-To rename
+-.B lvold
+-in volume group
+-.B vg02
+-to
+-.BR lvnew :
+-.nf
+-
+-\	lvrename /dev/vg02/lvold /dev/vg02/lvnew
+-
+-.fi
+-An alternate syntax to rename this logical volume is
+-.nf
+-
+-\	lvrename vg02 lvold lvnew
+-
+-.fi
++To rename lvold in volume group vg02 to lvnew:
++.sp
++.B lvrename /dev/vg02/lvold vg02/lvnew
++.sp
++An alternate syntax to rename this logical volume is:
++.sp
++.B lvrename vg02 lvold lvnew
++.sp
+ .SH SEE ALSO
+ .BR lvm (8), 
+ .BR lvchange (8),
+--- LVM2/man/lvresize.8.in	2010/06/21 15:56:59	1.9
++++ LVM2/man/lvresize.8.in	2011/09/07 08:50:35	1.10
+@@ -3,17 +3,19 @@
+ lvresize \- resize a logical volume
+ .SH SYNOPSIS
+ .B lvresize
+-[\-\-alloc AllocationPolicy]
+-[\-A|\-\-autobackup y|n] [\-d|\-\-debug] [\-h|\-?|\-\-help]
+-[\-\-noudevsync]
+-[\-i|\-\-stripes Stripes [\-I|\-\-stripesize StripeSize]]
+-{\-l|\-\-extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE|ORIGIN}] |
+-\-L|\-\-size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}
+-[\-f|\-\-force]
+-[\-n|\-\-nofsck]
+-[\-r|\-\-resizefs]
+-[\-t|\-\-test]
+-[\-v|\-\-verbose] LogicalVolumePath [PhysicalVolumePath[:PE[-PE]]...]
++.RB [ \-\-alloc " " \fIAllocationPolicy ]
++.RB [ \-\-noudevsync ]
++.RB [ \-i | \-\-stripes " " \fIStripes
++.RB [ \-I | \-\-stripesize " " \fIStripeSize ]]
++.RB {[ \-l | \-\-extents
++.RI [ + | \- ] LogicalExtentsNumber [ % { VG | LV | PVS | FREE | ORIGIN "}] |"
++.RB [ \-L | \-\-size
++.RI [ + | \- ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]}
++.RB [ \-f | \-\-force ]
++.RB [ \-n | \-\-nofsck ]
++.RB [ \-r | \-\-resizefs ]
++.IR LogicalVolume { Name | Path }
++.RI [ PhysicalVolumePath [ :PE [ -PE ]]...]
+ .SH DESCRIPTION
+ lvresize allows you to resize a logical volume.
+ Be careful when reducing a logical volume's size, because data in the reduced
+@@ -21,74 +23,73 @@
+ You should therefore ensure that any filesystem on the volume is
+ shrunk first so that the extents that are to be removed are not in use.
+ Resizing snapshot logical volumes (see
+-.B lvcreate(8)
++.BR lvcreate (8)
+ for information about creating snapshots) is supported as well.
+ But to change the number of copies in a mirrored logical
+ volume use 
+ .BR lvconvert (8).
+ .SH OPTIONS
+-See \fBlvm\fP for common options.
++See \fBlvm\fP(8) for common options.
+ .TP
+-.I \-f, \-\-force
++.BR \-f ", " \-\-force
+ Force resize without prompting even when it may cause data loss.
+ .TP
+-.I \-l, \-\-extents [+|-]LogicalExtentsNumber[%{VG|LV|PVS|FREE|ORIGIN}]
+-Change or set the logical volume size in units of logical extents.
+-With the + or - sign the value is added to or subtracted from the actual size
+-of the logical volume and without it, the value is taken as an absolute one.
+-The number can also be expressed as a percentage of the total space
+-in the Volume Group with the suffix %VG, relative to the existing
+-size of the Logical Volume with the suffix %LV, as a percentage of
+-the remaining free space of the PhysicalVolumes on the command line with the
+-suffix %PVS, as a percentage of the remaining free space in the
+-Volume Group with the suffix %FREE, or (for a snapshot) as a percentage
+-of the total space in the Origin Logical Volume with the suffix %ORIGIN.
+-.TP
+-.I \-n, \-\-nofsck
++.BR \-n ", " \-\-nofsck
+ Do not perform fsck before resizing filesystem when filesystem
+ requires it. You may need to use \fB--force\fR to proceed with 
+ this option.
+ .TP
+-.I \-\-noudevsync
+-Disable udev synchronisation. The
+-process will not wait for notification from udev.
+-It will continue irrespective of any possible udev processing
+-in the background.  You should only use this if udev is not running
+-or has rules that ignore the devices LVM2 creates.
+-.TP
+-.I \-r, \-\-resizefs
++.BR \-r ", " \-\-resizefs
+ Resize underlying filesystem together with the logical volume using 
+ \fBfsadm\fR(8).
+ .TP
+-.I \-L, \-\-size [+|-]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
++.IR \fB\-l ", " \fB\-\-extents " [" + | - ] LogicalExtentsNumber [ % { VG | LV | PVS | FREE | ORIGIN }]
++Change or set the logical volume size in units of logical extents.
++With the \fI+\fP or \fI-\fP sign the value is added to or subtracted from the actual size
++of the logical volume and without it, the value is taken as an absolute one.
++The number can also be expressed as a percentage of the total space
++in the Volume Group with the suffix \fI%VG\fP, relative to the existing
++size of the Logical Volume with the suffix \fI%LV\fP, as a percentage of
++the remaining free space of the PhysicalVolumes on the command line with the
++suffix \fI%PVS\fP, as a percentage of the remaining free space in the
++Volume Group with the suffix \fI%FREE\fP, or (for a snapshot) as a percentage
++of the total space in the Origin Logical Volume with the suffix \fI%ORIGIN\fP.
++.TP
++.IR \fB\-L ", " \fB\-\-size " [" + | - ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]
+ Change or set the logical volume size in units of megabytes.
+-A size suffix of M for megabytes,
+-G for gigabytes, T for terabytes, P for petabytes 
+-or E for exabytes is optional.
+-With the + or - sign the value is added to or subtracted from
++A size suffix of \fIM\fP for megabytes,
++\fIG\fP for gigabytes, \fIT\fP for terabytes, \fIP\fP for petabytes
++or \fIE\fP for exabytes is optional.
++With the \fI+\fP or \fI-\fP sign the value is added to or subtracted from
+ the actual size of the logical volume and without it, the value is taken as an
+ absolute one.
+ .TP
+-.I \-i, \-\-stripes Stripes
++.BR \-i ", " \-\-stripes " " \fIStripes
+ Gives the number of stripes to use when extending a Logical Volume.
+ Defaults to whatever the last segment of the Logical Volume uses.
+ Not applicable to LVs using the original metadata LVM format, which must
+ use a single value throughout.
+ .TP
+-.I \-I, \-\-stripesize StripeSize
++.BR \-I ", " \-\-stripesize " " \fIStripeSize
+ Gives the number of kilobytes for the granularity of the stripes.
+ Defaults to whatever the last segment of the Logical Volume uses.
+ Not applicable to LVs using the original metadata LVM format, which
+ must use a single value throughout.
+ .br
+-StripeSize must be 2^n (n = 2 to 9)
+-.SH Examples
+-.br
+-"lvresize -L+16M vg1/lv1 /dev/sda:0-1 /dev/sdb:0-1"
++StripeSize must be 2^n (n = 2 to 9).
++.TP
++.B \-\-noudevsync
++Disable udev synchronisation. The
++process will not wait for notification from udev.
++It will continue irrespective of any possible udev processing
++in the background.  You should only use this if udev is not running
++or has rules that ignore the devices LVM2 creates.
++.SH EXAMPLES
+ .br
+-tries to extend a logical volume "vg1/lv1" by 16MB using physical extents
+-/dev/sda:0-1 and /dev/sdb:0-1 for allocation of extents.
+-
++Extend a logical volume vg1/lv1 by 16MB using physical extents
++/dev/sda:0-1 and /dev/sdb:0-1 for allocation of extents:
++.sp
++.B lvresize -L+16M vg1/lv1 /dev/sda:0-1 /dev/sdb:0-1
+ .SH SEE ALSO
+ .BR fsadm (8),
+ .BR lvm (8), 
 
 
