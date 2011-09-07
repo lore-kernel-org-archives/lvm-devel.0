@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 6 Sep 2011 22:43:59 -0000
-Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/merg ...
-Message-ID: <20110906224359.24695.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 7 Sep 2011 08:31:19 -0000
+Subject: LVM2 ./WHATS_NEW scripts/vgimportclone.sh test ...
+Message-ID: <20110907083119.16078.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,229 +10,114 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-09-06 22:43:58
+Changes by:	zkabelac at sourceware.org	2011-09-07 08:31:17
 
 Modified files:
-	lib/metadata   : lv_manip.c merge.c metadata-exported.h 
-	                 metadata.h thin_manip.c 
-	lib/thin       : thin.c 
-	tools          : lvcreate.c 
+	.              : WHATS_NEW 
+	scripts        : vgimportclone.sh 
+	test           : t-vgimportclone.sh 
 
 Log message:
-	pool attach fns & more field renaming
+	Replace char class :space: with explicit chars
+	
+	Some major distributions are still using 'mawk' and they are not using
+	the latest version - we end here with hidden dependency on the latest
+	version of mawk (1.3.4) while i.e. Debian Lenny seems to stay with 1.3.3.
+	So we end with completely broken  vgimportclone script on such system.
+	
+	We would need to check for proper support of :space: and abort build if
+	it doesn't work or simplier replace [:space:] with [ \t] which seems
+	sufficient to make it work (as can be seen in this patch)
+	
+	A better fix would be to use command line parameter override - leaving
+	as FIXME comment.
+	
+	This patch makes t-vgimportclone.sh test passing on Lenny.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.281&r2=1.282
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/merge.c.diff?cvsroot=lvm2&r1=1.46&r2=1.47
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.206&r2=1.207
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.253&r2=1.254
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.237&r2=1.238
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2094&r2=1.2095
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/vgimportclone.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgimportclone.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/lib/metadata/lv_manip.c	2011/09/06 19:25:43	1.281
-+++ LVM2/lib/metadata/lv_manip.c	2011/09/06 22:43:56	1.282
-@@ -257,7 +257,7 @@
+--- LVM2/WHATS_NEW	2011/09/06 18:49:31	1.2094
++++ LVM2/WHATS_NEW	2011/09/07 08:31:16	1.2095
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Replace :space: with [\t ] for awk in vgimportclone (not widely supported).
+   Begin using 64-bit status field flags.
+   Detect sscanf recovering_region input error in cmirrord pull_state().
+   Fix error path bitmap leak in cmirrord import_checkpoint().
+--- LVM2/scripts/vgimportclone.sh	2010/05/14 11:33:21	1.3
++++ LVM2/scripts/vgimportclone.sh	2011/09/07 08:31:17	1.4
+@@ -242,13 +242,14 @@
  
- 	if (log_lv) {
- 		if (thin_pool_lv) {
--			if (!attach_pool_metadata(seg, log_lv))
-+			if (!attach_pool_metadata_lv(seg, log_lv))
- 				return_NULL;
- 		} else if (!attach_mirror_log(seg, log_lv))
- 			return_NULL;
---- LVM2/lib/metadata/merge.c	2011/09/06 00:26:43	1.46
-+++ LVM2/lib/metadata/merge.c	2011/09/06 22:43:57	1.47
-@@ -313,7 +313,7 @@
- 	if (!(split_seg = alloc_lv_segment(lv->vg->vgmem, seg->segtype,
- 					   seg->lv, seg->le, seg->len,
- 					   seg->status, seg->stripe_size,
--					   seg->log_lv, seg->thin_pool_lv,
-+					   seg->log_lv, seg->pool_lv,
- 					   seg->area_count, seg->area_len,
- 					   seg->chunk_size, seg->region_size,
- 					   seg->extents_copied, seg->pvmove_source_seg))) {
---- LVM2/lib/metadata/metadata-exported.h	2011/09/06 19:25:43	1.206
-+++ LVM2/lib/metadata/metadata-exported.h	2011/09/06 22:43:57	1.207
-@@ -85,6 +85,8 @@
+ LVMCONF=${TMP_LVM_SYSTEM_DIR}/lvm.conf
  
- #define THIN_VOLUME		UINT64_C(0x0000001000000000)	/* LV */
- #define THIN_POOL		UINT64_C(0x0000002000000000)	/* LV */
-+#define THIN_POOL_DATA		UINT64_C(0x0000002000000000)	/* LV */
-+#define THIN_POOL_METADATA	UINT64_C(0x0000004000000000)	/* LV */
++# FIXME convert to cmdline override
+ "$LVM" dumpconfig ${LVM_OPTS} | \
+ "$AWK" -v DEV=${TMP_LVM_SYSTEM_DIR} -v CACHE=${TMP_LVM_SYSTEM_DIR}/.cache \
+     -v CACHE_DIR=${TMP_LVM_SYSTEM_DIR}/cache \
+-    '/^[[:space:]]*filter[[:space:]]*=/{print ENVIRON["FILTER"];next} \
+-     /^[[:space:]]*scan[[:space:]]*=/{print "scan = [ \"" DEV "\" ]";next} \
+-     /^[[:space:]]*cache[[:space:]]*=/{print "cache = \"" CACHE "\"";next} \
+-     /^[[:space:]]*cache_dir[[:space:]]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
++    '/^[ \t]*filter[ \t]*=/{print ENVIRON["FILTER"];next} \
++     /^[ \t]*scan[ \t]*=/{print "scan = [ \"" DEV "\" ]";next} \
++     /^[ \t]*cache[ \t]*=/{print "cache = \"" CACHE "\"";next} \
++     /^[ \t]*cache_dir[ \t]*=/{print "cache_dir = \"" CACHE_DIR "\"";next} \
+      {print $0}' > ${LVMCONF}
  
- #define LVM_READ		0x00000100U	/* LV VG 32-bit */
- #define LVM_WRITE		0x00000200U	/* LV VG 32-bit */
-@@ -134,6 +136,8 @@
+ checkvalue $? "Failed to generate ${LVMCONF}"
+@@ -282,7 +283,7 @@
  
- #define lv_is_thin_volume(lv)	((lv)->status & THIN_VOLUME ? 1 : 0)
- #define lv_is_thin_pool(lv)	((lv)->status & THIN_POOL ? 1 : 0)
-+#define lv_is_thin_pool_data(lv)	((lv)->status & THIN_POOL_DATA ? 1 : 0)
-+#define lv_is_thin_pool_metadata(lv)	((lv)->status & THIN_POOL_METADATA ? 1 : 0)
- #define lv_is_mirrored(lv)	((lv)->status & MIRRORED ? 1 : 0)
- #define lv_is_rlog(lv)		((lv)->status & REPLICATOR_LOG ? 1 : 0)
+ # output VG info so each line looks like: name:exported?:disk1,disk2,...
+ VGINFO=`echo "${PVINFO}" | \
+-    "$AWK" -F : '{{sub(/^[[:space:]]*/,"")} \
++    "$AWK" -F : '{{sub(/^[ \t]*/,"")} \
+     {sub(/unknown device/,"unknown_device")} \
+     {vg[$2]=$1","vg[$2]} if($3 ~ /^..x/){x[$2]="x"}} \
+     END{for(k in vg){printf("%s:%s:%s\n", k, x[k], vg[k])}}'`
+--- LVM2/test/t-vgimportclone.sh	2011/04/21 19:06:00	1.2
++++ LVM2/test/t-vgimportclone.sh	2011/09/07 08:31:17	1.3
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2010-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -12,25 +12,19 @@
  
-@@ -322,12 +326,12 @@
- 	struct dm_list tags;
+ aux prepare_devs 2
  
- 	struct lv_segment_area *areas;
--	struct lv_segment_area *meta_areas; /* For RAID */
--	struct logical_volume *pool_lv;		/* For thin_pool */
--	struct logical_volume *metadata_lv;	/* For thin_pool */
-+	struct lv_segment_area *meta_areas;	/* For RAID */
-+	struct logical_volume *pool_data_lv;	/* For thin_pool */
-+	struct logical_volume *pool_metadata_lv;/* For thin_pool */
- 	uint64_t transaction_id;		/* For thin_pool */
- 	uint32_t zero_new_blocks;		/* For thin_pool */
--	struct logical_volume *thin_pool_lv;	/* For thin */
-+	struct logical_volume *pool_lv;		/* For thin */
- 	uint64_t device_id;			/* For thin */
+-pvcreate $dev1 $dev2
+-vgcreate $vg1 $dev1
++vgcreate -c n --metadatasize 128k $vg1 $dev1
+ lvcreate -l100%FREE -n $lv1 $vg1
  
- 	struct logical_volume *replicator;/* For replicator-devs - link to replicator LV */
---- LVM2/lib/metadata/metadata.h	2011/09/06 19:25:43	1.253
-+++ LVM2/lib/metadata/metadata.h	2011/09/06 22:43:57	1.254
-@@ -442,9 +442,11 @@
- /*
-  * From thin_manip.c
-  */
--int attach_pool_metadata(struct lv_segment *seg,
--			 struct logical_volume *thin_pool_metadata);
--int attach_pool_lv(struct lv_segment *seg, struct logical_volume *thin_pool_lv);
-+int attach_pool_metadata_lv(struct lv_segment *seg,
-+			    struct logical_volume *pool_metadata_lv);
-+int attach_pool_data_lv(struct lv_segment *seg,
-+			struct logical_volume *pool_data_lv);
-+int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv);
+ # Clone the LUN
+-dd if=$dev1 of=$dev2
++dd if=$dev1 of=$dev2 bs=256K count=1
  
- /*
-  * Begin skeleton for external LVM library
---- LVM2/lib/metadata/thin_manip.c	2011/09/06 19:25:43	1.1
-+++ LVM2/lib/metadata/thin_manip.c	2011/09/06 22:43:57	1.2
-@@ -15,19 +15,28 @@
- #include "lib.h"
- #include "metadata.h"
+ # Verify pvs works on each device to give us vgname
+-pvs --noheadings -o vg_name $dev1 1>err
+-grep $vg1 err
+-pvs --noheadings -o vg_name $dev2 1>err
+-grep $vg1 err
++check pv_field $dev1 vg_name $vg1
++check pv_field $dev2 vg_name $vg1
  
--int attach_pool_metadata(struct lv_segment *seg, struct logical_volume *thin_pool_metadata)
-+int attach_pool_metadata_lv(struct lv_segment *seg, struct logical_volume *pool_metadata_lv)
- {
--	// FIXME Housekeeping needed here (cf attach_mirror_log)
--	seg->metadata_lv = thin_pool_metadata;
-+	seg->pool_metadata_lv = pool_metadata_lv;
-+	pool_metadata_lv->status |= THIN_POOL_METADATA;
-+        lv_set_hidden(pool_metadata_lv);
+ # Import the cloned PV to a new VG
+-# FIXME: this fails on lenny buildslave, I think we need proper wrapper
+-# vgimportclone --basevgname $vg2 $dev2
++vgimportclone --basevgname $vg2 $dev2
  
--	return 1;
-+        return add_seg_to_segs_using_this_lv(pool_metadata_lv, seg);
- }
- 
--int attach_pool_lv(struct lv_segment *seg, struct logical_volume *thin_pool_lv)
-+int attach_pool_data_lv(struct lv_segment *seg, struct logical_volume *pool_data_lv)
- {
--	// FIXME Housekeeping needed here (cf attach_mirror_log)
--	seg->thin_pool_lv = thin_pool_lv;
-+	seg->pool_data_lv = pool_data_lv;
-+	pool_data_lv->status |= THIN_POOL_DATA;
-+        lv_set_hidden(pool_data_lv);
- 
--	return 1;
-+        return add_seg_to_segs_using_this_lv(pool_data_lv, seg);
- }
- 
-+int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv)
-+{
-+	seg->pool_lv = pool_lv;
-+	pool_lv->status |= THIN_POOL;
-+
-+        return add_seg_to_segs_using_this_lv(pool_lv, seg);
-+}
---- LVM2/lib/thin/thin.c	2011/09/06 22:35:44	1.10
-+++ LVM2/lib/thin/thin.c	2011/09/06 22:43:57	1.11
-@@ -47,21 +47,26 @@
- 			struct dm_hash_table *pv_hash __attribute__((unused)))
- {
- 	const char *lv_name;
-+	struct logical_volume *pool_data_lv, *pool_metadata_lv;
- 
- 	if (!dm_config_get_str(sn, "pool", &lv_name))
- 		return SEG_LOG_ERROR("Pool must be a string in");
- 
--// Use attach_pool_lv
--	if (!(seg->pool_lv = find_lv(seg->lv->vg, lv_name)))
-+	if (!(pool_data_lv = find_lv(seg->lv->vg, lv_name)))
- 		return SEG_LOG_ERROR("Unknown pool %s in", lv_name);
- 
- 	if (!dm_config_get_str(sn, "metadata", &lv_name))
- 		return SEG_LOG_ERROR("Metadata must be a string in");
- 
--// Use attach_pool_metadata()
--	if (!(seg->metadata_lv = find_lv(seg->lv->vg, lv_name)))
-+	if (!(pool_metadata_lv = find_lv(seg->lv->vg, lv_name)))
- 		return SEG_LOG_ERROR("Unknown metadata %s in", lv_name);
- 
-+	if (!attach_pool_metadata_lv(seg, pool_metadata_lv))
-+		return_0;
-+
-+	if (!attach_pool_data_lv(seg, pool_data_lv))
-+		return_0;
-+
- 	if (!dm_config_get_uint64(sn, "transaction_id", &seg->transaction_id))
- 		return SEG_LOG_ERROR("Could not read transaction_id for");
- 
-@@ -74,8 +79,8 @@
- 
- static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter *f)
- {
--	outf(f, "pool = \"%s\"", seg->pool_lv->name);
--	outf(f, "metadata = \"%s\"", seg->metadata_lv->name);
-+	outf(f, "pool = \"%s\"", seg->pool_data_lv->name);
-+	outf(f, "metadata = \"%s\"", seg->pool_metadata_lv->name);
- 	outf(f, "transaction_id = %" PRIu64, seg->transaction_id);
- 	if (seg->zero_new_blocks)
- 		outf(f, "zero_new_blocks = 1");
-@@ -92,13 +97,17 @@
- 			struct dm_hash_table *pv_hash __attribute__((unused)))
- {
- 	const char *lv_name;
-+	struct logical_volume *pool_lv;
- 
- 	if (!dm_config_get_str(sn, "thin_pool", &lv_name))
- 		return SEG_LOG_ERROR("Thin pool must be a string in");
- 
--	if (!(seg->thin_pool_lv = find_lv(seg->lv->vg, lv_name)))
-+	if (!(pool_lv = find_lv(seg->lv->vg, lv_name)))
- 		return SEG_LOG_ERROR("Unknown thin pool %s in", lv_name);
- 
-+	if (!attach_pool_lv(seg, pool_lv))
-+		return_0;
-+
- 	if (dm_config_has_node(sn, "origin")) {
- 		if (!dm_config_get_str(sn, "origin", &lv_name))
- 			return SEG_LOG_ERROR("Origin must be a string in");
-@@ -115,7 +124,7 @@
- 
- static int _thin_text_export(const struct lv_segment *seg, struct formatter *f)
- {
--	outf(f, "thin_pool = \"%s\"", seg->thin_pool_lv->name);
-+	outf(f, "thin_pool = \"%s\"", seg->pool_lv->name);
- 	outf(f, "device_id = %" PRIu64, seg->device_id);
- 
- 	if (seg->origin)
---- LVM2/tools/lvcreate.c	2011/09/06 19:25:42	1.237
-+++ LVM2/tools/lvcreate.c	2011/09/06 22:43:58	1.238
-@@ -198,13 +198,12 @@
- 		return 0;
- 	}
- 
--	/* FIXME Replace with lv_is_thin_volume() once more flags are added */
- 	if (lv_is_thin_volume(lvl->lv)) {
- 		lp->thin = 1;
- 		if (!(lp->segtype = get_segtype_from_string(vg->cmd, "thin")))
- 			return_0;
- 
--		lp->pool = first_seg(lvl->lv)->thin_pool_lv->name;
-+		lp->pool = first_seg(lvl->lv)->pool_lv->name;
- 	}
- 
- 	if (!lp->thin && !arg_count(vg->cmd, extents_ARG) && !arg_count(vg->cmd, size_ARG)) {
+ # Verify we can activate / deactivate the LV from both VGs
+-# lvchange -ay $vg1/$lv1
+-# lvchange -ay $vg2/$lv1
+-# vgchange -an $vg1
+-# vgchange -an $vg2
++lvchange -ay $vg1/$lv1 $vg2/$lv1
++vgchange -an $vg1 $vg2
 
 
