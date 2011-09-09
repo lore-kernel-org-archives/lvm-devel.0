@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 19 Sep 2011 14:28:24 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20110919142824.15359.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 9 Sep 2011 01:15:20 -0000
+Subject: LVM2 lib/metadata/lv.c lib/metadata/metadata.h ...
+Message-ID: <20110909011520.6664.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,81 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-09-19 14:28:24
+Changes by:	agk at sourceware.org	2011-09-09 01:15:18
 
 Modified files:
-	lib/metadata   : mirror.c 
+	lib/metadata   : lv.c metadata.h thin_manip.c 
+	man            : lvs.8.in 
 
 Log message:
-	fix compiler warning.
-	
-	Compiler says variable may be used uninitialized.  It can't be, but we
-	initialize the variable to NULL anyway.  Also, remove the double initialization
-	of another variable.
+	Append z to lv_attr if new blocks will be zeroed.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.170&r2=1.171
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.255&r2=1.256
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/lib/metadata/mirror.c	2011/09/16 16:41:37	1.170
-+++ LVM2/lib/metadata/mirror.c	2011/09/19 14:28:23	1.171
-@@ -584,7 +584,7 @@
- 	struct logical_volume *detached_log_lv = NULL;
- 	struct lv_segment *mirrored_seg = first_seg(lv);
- 	struct dm_list split_images;
--	struct lv_list *lvl, *new_lvl;
-+	struct lv_list *lvl, *new_lvl = NULL;
- 	struct cmd_context *cmd = lv->vg->cmd;
+--- LVM2/lib/metadata/lv.c	2011/09/09 00:54:49	1.26
++++ LVM2/lib/metadata/lv.c	2011/09/09 01:15:18	1.27
+@@ -308,9 +308,10 @@
+ {
+ 	percent_t snap_percent;
+ 	struct lvinfo info;
++	struct lv_segment *seg;
+ 	char *repstr;
  
- 	if (!(lv->status & MIRRORED)) {
-@@ -748,7 +748,6 @@
- 	 *   - activate the new LV
- 	 */
- 	sync_local_dev_names(lv->vg->cmd);
--	new_lv = NULL;
- 	dm_list_iterate_items(lvl, &split_images) {
- 		if (!new_lv) {
- 			/* Grab 1st sub-LV for later */
+-	if (!(repstr = dm_pool_zalloc(mem, 8))) {
++	if (!(repstr = dm_pool_zalloc(mem, 9))) {
+ 		log_error("dm_pool_alloc failed");
+ 		return 0;
+ 	}
+@@ -405,6 +406,13 @@
+ 	else
+ 		repstr[6] = '-';
+ 
++	if ((lv_is_thin_volume(lv) && (seg = first_seg(lv)) && seg->pool_lv && (seg = first_seg(seg->pool_lv))) ||
++	    (lv_is_thin_pool(lv) && (seg = first_seg(lv))) &&
++	    seg->zero_new_blocks)
++		repstr[7] = 'z';
++	else
++		repstr[7] = '-';
++
+ out:
+ 	return repstr;
+ }
+--- LVM2/lib/metadata/metadata.h	2011/09/08 16:41:19	1.255
++++ LVM2/lib/metadata/metadata.h	2011/09/09 01:15:18	1.256
+@@ -372,7 +372,7 @@
+ struct lv_segment *find_seg_by_le(const struct logical_volume *lv, uint32_t le);
+ 
+ /* Find pool LV segment given a thin pool data or metadata segment. */
+-struct lv_segment *find_pool_seg(struct lv_segment *seg);
++struct lv_segment *find_pool_seg(const struct lv_segment *seg);
+ 
+ /*
+  * Remove a dev_dir if present.
+--- LVM2/lib/metadata/thin_manip.c	2011/09/08 16:41:19	1.3
++++ LVM2/lib/metadata/thin_manip.c	2011/09/09 01:15:18	1.4
+@@ -61,7 +61,7 @@
+ 	return remove_seg_from_segs_using_this_lv(seg->pool_lv, seg);
+ }
+ 
+-struct lv_segment *find_pool_seg(struct lv_segment *seg)
++struct lv_segment *find_pool_seg(const struct lv_segment *seg)
+ {
+         struct lv_segment *pool_seg;
+ 
+--- LVM2/man/lvs.8.in	2011/09/09 00:54:49	1.15
++++ LVM2/man/lvs.8.in	2011/09/09 01:15:18	1.16
+@@ -94,6 +94,8 @@
+ equivalents using the md raid kernel driver all appear as (r).
+ Snapshots using the original device-mapper driver appear as (s); whereas
+ snapshots of thin volumes using the new thin provisioning driver appear as (t).
++.IP 8 3
++Newly-allocated data blocks are overwritten with blocks of (z)eroes before use.
+ .RE
+ .TP
+ .I \-\-segments
 
 
