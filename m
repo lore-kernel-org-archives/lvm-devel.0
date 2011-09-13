@@ -1,40 +1,51 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 15:42:43 +0200
-Subject: [PATCH v3 10/18] fsadm: Umount ext2 file system prior resize
-In-Reply-To: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317130971-24173-11-git-send-email-lczerner@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 13 Sep 2011 21:13:34 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20110913211334.9661.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-ext2 does NOT support online resize, so we should attempt to umount the
-file system first.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-09-13 21:13:33
 
-Signed-off-by: Lukas Czerner <lczerner@redhat.com>
----
- scripts/fsadm.sh |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 0a2c8cc..7220f98 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -417,6 +417,11 @@ resize_ext() {
- 	decode_size $1 $BLOCKSIZE
- 	FSFORCE=$FORCE
+Log message:
+	Fix bug 733400 - Mirror down conversion when specifying the secondary leg is broke
+	
+	The operation of deactivating the residual error target LV after removing a
+	mirror layer can cause a "device in-use" conflict with udev.  Giving udev a
+	poke before calling deactivate_lv eliminates the conflict.  The stick used
+	to poke udev is 'sync_local_dev_names'.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2105&r2=1.2106
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.165&r2=1.166
+
+--- LVM2/WHATS_NEW	2011/09/13 18:42:57	1.2105
++++ LVM2/WHATS_NEW	2011/09/13 21:13:33	1.2106
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix failure to down-convert a mirror to linear due to udev "dev open" conflict
+   Fix mirrored log creation when PE size is small - force log_size >= region_size
+   Fix improper RAID 64-bit status flag reset when and'ing against 32-bit flag.
+   Fix log size calculation when only a log is being added to a mirror.
+--- LVM2/lib/metadata/mirror.c	2011/09/13 18:11:38	1.165
++++ LVM2/lib/metadata/mirror.c	2011/09/13 21:13:33	1.166
+@@ -419,6 +419,7 @@
+ 			return_0;
+ 	}
  
-+	# ext2 does NOT support online resize
-+	if [ "$FSTYPE" == "ext2" ]; then
-+		EXTOFF=1
-+	fi
-+
- 	detect_mounted
- 	if [ "$NEWBLOCKCOUNT" -lt "$BLOCKCOUNT" -o "$EXTOFF" -eq 1 ]; then
- 		[ "$MOUNTED" ] && verbose "$RESIZE_EXT needs unmounted filesystem" && try_umount
--- 
-1.7.4.4
++	sync_local_dev_names(lv->vg->cmd);
+ 	if (!deactivate_lv(cmd, lv))
+ 		return_0;
+ 
 
 
