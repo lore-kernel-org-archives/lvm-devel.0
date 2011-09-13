@@ -1,103 +1,57 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 13:15:22 +0200
-Subject: [PATCH 08/16] fsadm: Remove unnecessary modification of PATH variable
-In-Reply-To: <1317122130-13790-1-git-send-email-lczerner@redhat.com>
-References: <1317122130-13790-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317122130-13790-9-git-send-email-lczerner@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 13 Sep 2011 16:33:23 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/raid_manip.c
+Message-ID: <20110913163323.16570.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-User (or the system) should be set properly so there is no need to
-modify PATH variable. It also prevent us from setting appropriate PATH
-before calling the fsadm.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-09-13 16:33:22
 
-Signed-off-by: Lukas Czerner <lczerner@redhat.com>
----
- scripts/fsadm.sh |   24 ++++++++++++++----------
- 1 files changed, 14 insertions(+), 10 deletions(-)
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : raid_manip.c 
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index d9120b2..abd9c3f 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -37,9 +37,6 @@
+Log message:
+	Changing RAID status flags to 64-bit broke some binary flag operations.
+	
+	LVM_WRITE is a 32-bit flag.  Now that RAID[_IMAGE|_META] are 64-bit,
+	and'ing a RAID LV's status against LVM_WRITE can reset the higher order
+	flags.
+	
+	A similar thing will affect thinp flags if not careful.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2103&r2=1.2104
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+
+--- LVM2/WHATS_NEW	2011/09/13 14:37:48	1.2103
++++ LVM2/WHATS_NEW	2011/09/13 16:33:21	1.2104
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix improper RAID 64-bit status flag reset when and'ing against 32-bit flag.
+   Fix log size calculation when only a log is being added to a mirror.
+   Work around resume_lv causing error LV scanning during splitmirror operation.
+   Add 7th lv_attr char to show the related kernel target.
+--- LVM2/lib/metadata/raid_manip.c	2011/09/06 18:49:32	1.12
++++ LVM2/lib/metadata/raid_manip.c	2011/09/13 16:33:21	1.13
+@@ -971,7 +971,11 @@
+ 		if (!_lv_is_on_pvs(seg_lv(seg, s), splittable_pvs))
+ 			continue;
+ 		lv_set_visible(seg_lv(seg, s));
+-		seg_lv(seg, s)->status &= ~LVM_WRITE;
++		/*
++		 * LVM_WRITE is 32-bit, if we don't '|' it with
++		 * UINT64_C(0) it will remove all higher order flags
++		 */
++		seg_lv(seg, s)->status &= ~(UINT64_C(0) | LVM_WRITE);
+ 		break;
+ 	}
  
- TOOL=$(basename "$0")
- 
--_SAVEPATH=$PATH
--PATH=/sbin:/usr/sbin:/bin:/usr/sbin:$PATH
--
- # utilities
- TUNE_EXT=tune2fs
- RESIZE_EXT=resize2fs
-@@ -297,10 +294,7 @@ decode_size() {
- 	NEWBLOCKCOUNT=${NEWBLOCKCOUNT%%.*}
- }
- 
--# detect filesystem on the given device
--# dereference device name if it is symbolic link
--detect_fs() {
--	VOLUME_ORIG="$1"
-+get_volume() {
- 	VOLUME=${DM_DEV_DIR}/${1/#"${DM_DEV_DIR}/"/}
- 	if [ -h "$VOLUME" ]; then
- 		VOLUME=$("$READLINK" "$READLINK_E" "$VOLUME") || error "Cannot get readlink \"$VOLUME\""
-@@ -312,6 +306,12 @@ detect_fs() {
- 		read </sys/block/${RVOLUME#/dev/}/dm/name SYSVOLUME 2>&1 && VOLUME="$DM_DEV_DIR/mapper/$SYSVOLUME"
- 		;;
- 	esac
-+}
-+
-+# detect filesystem on the given device
-+# dereference device name if it is symbolic link
-+detect_fs() {
-+	get_volume "$1"
- 	# use null device as cache file to be sure about the result
- 	# not using option '-o value' to be compatible with older version of blkid
- 	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME") || return 1
-@@ -532,6 +532,7 @@ resize_fs() {
- 	detect_fs "$1" ||  error "Cannot get FSTYPE of \"$VOLUME\""
- 	verbose "\"$FSTYPE\" filesystem found on \"$VOLUME\""
- 	if [ "$NEWSIZE" ]; then
-+		decode_size $NEWSIZE
- 		is_natural $NEWSIZE ||  error "$NEWSIZE is not valid number for file system size"
- 	fi
- 	detect_device_size
-@@ -562,6 +563,7 @@ resize_lvolume() {
- 
- resize() {
- 	local size=
-+	devcount=
- 
- 	# Special case for the situation we have been called from within the lvresize code.
- 	# How crazy is that ?:) But anyway to preserve the old behaviour it is there.
-@@ -571,7 +573,8 @@ resize() {
- 	fi
- 
- 	for i in "$@"; do
--		if [ -b "$i" ]; then
-+		get_volume "$i"
-+		if [ -b "$VOLUME" ]; then
- 			if [ -z "$devcount" ]; then
- 				"$LVM" lvs "$i" &> /dev/null || error "$i is not valid logical volume"
- 				lvname=$i
-@@ -811,9 +814,10 @@ do_remove() {
- 	device=
- 	MOUNTED=
- 
-+	get_volume "$item"
- 	# Block device has been given
--	if [ -b "$item" ]; then
--		device=$item
-+	if [ -b "$VOLUME" ]; then
-+		device=$VOLUME
- 	fi
- 
- 	# Mount point has been given
--- 
-1.7.4.4
 
 
