@@ -1,168 +1,126 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 22 Sep 2011 11:52:50 +0200
-Subject: [PATCH 3/3] CLVMD support for CLVMD_BINARY and LVM_BINARY
-In-Reply-To: <cover.1316684951.git.zkabelac@redhat.com>
-References: <cover.1316684951.git.zkabelac@redhat.com>
-Message-ID: <d790e83a3147fc29b98ba1f3535e59b6ce9ecbc6.1316684951.git.zkabelac@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 13 Sep 2011 13:59:20 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20110913135920.4871.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Read 2 environmental vars to learn about overide position for
-CLVMD and LVM binaries.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-09-13 13:59:19
 
-We support LVM_BINARY in other script - and this way we could easily
-test restart in our test-suite.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- configure.in                  |    9 ++++++---
- daemons/clvmd/clvmd-command.c |    5 +++--
- daemons/clvmd/lvm-functions.c |   19 ++++++++++++++-----
- man/Makefile.in               |    2 +-
- man/clvmd.8.in                |   10 ++++++++++
- 5 files changed, 34 insertions(+), 11 deletions(-)
+Log message:
+	Fix for bug 733114.
+	
+	When an image is split from a 2-way mirror, the original mirror is converted to
+	a linear device.  To do this, the top "layer" must be removed.  The segments
+	are transferred from the sub-lv to the top-level LV and the link is severed.
+	The former sub-lv - having its segments transferred - now contains a temporary
+	error target.
+	
+	When the original LV is resumed, the old sub-lv that now contains an error
+	segment is activated and scanned.  This is what causes the I/O error messages.
+	There are three ways to fix this problem:
+	
+	1) Do not set the sub-lv which contains the error target as "visible" before
+	suspending the original LV.  This way, when the original is resumed, the sub-lv
+	device node is not created and it is not scanned - avoiding the error messages.
+	The problem with this approach is that if the machine crashes after the
+	resume, it leaves the *hidden* LV in place and the user has a more difficult
+	time noticing that it needs to be cleaned up.  Thus, this type of processing is
+	frowned upon.
+	
+	2) Do like _remove_mirror_images does and suspend the original, then suspend
+	the sub-lv (the error target), then resume the sub-lv, and finally resume the
+	original LV.  This seems like extra pointless operations to me, but it does not
+	produce the error message (although, I'm not sure why) and it allows us to
+	leave the visible flag in place.
+	
+	3) Flag the sub-lv (error target) with a "do not scan" flag.  This seems like
+	the cleanest approach, but I have been unable to find the method for doing
+	this.  LVs get tagged in such a way by _get_udev_flags, but in this case the
+	resume of the original LV also resumes the error target LV without running it
+	through _get_udev_flags (likely because they are no longer linked).  Could
+	there be something wrong in resume_lv?
+	
+	Option #2 was chosen to fix this bug, but it seems like more of a workaround
+	for now.
 
-diff --git a/configure.in b/configure.in
-index 30dd765..244bfc8 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1180,13 +1180,14 @@ fi
- lvm_exec_prefix=$exec_prefix
- test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$prefix
- test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$ac_default_prefix
--AC_DEFINE_UNQUOTED(LVM_PATH, ["$lvm_exec_prefix/sbin/lvm"], [Path to lvm binary.])
-+LVM_PATH="$lvm_exec_prefix/sbin/lvm"
-+AC_DEFINE_UNQUOTED(LVM_PATH, ["$LVM_PATH"], [Path to lvm binary.])
- 
- if  test "$CLVMD" != none; then
-         clvmd_prefix=$ac_default_prefix
-+        CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
-         test "$prefix" != NONE && clvmd_prefix=$prefix
--	AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$clvmd_prefix/sbin/clvmd"],
--			   [Path to clvmd binary.])
-+	AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$CLVMD_PATH"], [Path to clvmd binary.])
- fi
- 
- ################################################################################
-@@ -1309,6 +1310,7 @@ AC_SUBST(CLDWHOLEARCHIVE)
- AC_SUBST(CLUSTER)
- AC_SUBST(CLVMD)
- AC_SUBST(CLVMD_CMANAGERS)
-+AC_SUBST(CLVMD_PATH)
- AC_SUBST(CMAN_CFLAGS)
- AC_SUBST(CMAN_LIBS)
- AC_SUBST(CMDLIB)
-@@ -1357,6 +1359,7 @@ AC_SUBST(LVM_LIBAPI)
- AC_SUBST(LVM_MAJOR)
- AC_SUBST(LVM_MINOR)
- AC_SUBST(LVM_PATCHLEVEL)
-+AC_SUBST(LVM_PATH)
- AC_SUBST(LVM_RELEASE)
- AC_SUBST(LVM_RELEASE_DATE)
- AC_SUBST(MIRRORS)
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index bd6e55e..e1ded83 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -366,6 +366,7 @@ static int restart_clvmd(void)
- 	int argc = 0, max_locks = 0;
- 	struct dm_hash_node *hn = NULL;
- 	char debug_arg[16];
-+	const char *clvmd_binary = getenv("CLVMD_BINARY") ? : CLVMD_PATH;
- 
- 	DEBUGLOG("clvmd restart requested\n");
- 
-@@ -413,11 +414,11 @@ static int restart_clvmd(void)
- 	argv[argc] = NULL;
- 
- 	/* Exec new clvmd */
--	DEBUGLOG("--- Restarting %s ---\n", CLVMD_PATH);
-+	DEBUGLOG("--- Restarting %s ---\n", clvmd_binary);
- 	for (argc = 1; argv[argc]; argc++) DEBUGLOG("--- %d: %s\n", argc, argv[argc]);
- 
- 	/* NOTE: This will fail when downgrading! */
--	execve(CLVMD_PATH, (char **)argv, NULL);
-+	execve(clvmd_binary, (char **)argv, NULL);
- out:
- 	/* We failed */
- 	DEBUGLOG("Restart of clvmd failed.\n");
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index ba786bb..f16d006 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -704,14 +704,21 @@ static int get_initial_state(struct dm_hash_table *excl_uuid)
- 	char lv[64], vg[64], flags[25], vg_flags[25];
- 	char uuid[65];
- 	char line[255];
--	FILE *lvs =
--	    popen
--	    (LVM_PATH " lvs  --config 'log{command_names=0 prefix=\"\"}' --nolocking --noheadings -o vg_uuid,lv_uuid,lv_attr,vg_attr",
--	     "r");
-+	char *lvs_cmd;
-+	const char *lvm_binary = getenv("LVM_BINARY") ? : LVM_PATH;
-+	FILE *lvs;
- 
--	if (!lvs)
-+	if (dm_asprintf(&lvs_cmd, "%s lvs  --config 'log{command_names=0 prefix=\"\"}' "
-+			"--nolocking --noheadings -o vg_uuid,lv_uuid,lv_attr,vg_attr",
-+			lvm_binary) < 0)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2101&r2=1.2102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.162&r2=1.163
+
+--- LVM2/WHATS_NEW	2011/09/08 20:55:39	1.2101
++++ LVM2/WHATS_NEW	2011/09/13 13:59:19	1.2102
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Work around resume_lv causing error LV scanning during splitmirror operation.
+   Add 7th lv_attr char to show the related kernel target.
+   Terminate pv_attr field correctly. (2.02.86)
+   Fix 'not not' typo in pvcreate man page.
+--- LVM2/lib/metadata/mirror.c	2011/09/06 19:25:43	1.162
++++ LVM2/lib/metadata/mirror.c	2011/09/13 13:59:19	1.163
+@@ -666,6 +666,10 @@
  		return 0;
+ 	}
  
-+	/* FIXME: Maybe link and use liblvm2cmd directly instead of fork */
-+	if (!(lvs = popen(lvs_cmd, "r"))) {
-+		dm_free(lvs_cmd);
-+		return 0;
-+	}
++	/* Suspend temporary error target (see FIXME for resume below) */
++	if (sub_lv && !suspend_lv(sub_lv->vg->cmd, sub_lv))
++		return_0;
 +
- 	while (fgets(line, sizeof(line), lvs)) {
- 	        if (sscanf(line, "%s %s %s %s\n", vg, lv, flags, vg_flags) == 4) {
+ 	if (!vg_commit(mirrored_seg->lv->vg)) {
+ 		resume_lv(cmd, mirrored_seg->lv);
+ 		return 0;
+@@ -674,6 +678,42 @@
+ 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
  
-@@ -749,6 +756,8 @@ static int get_initial_state(struct dm_hash_table *excl_uuid)
- 	if (fclose(lvs))
- 		DEBUGLOG("lvs fclose failed: %s\n", strerror(errno));
- 
-+	dm_free(lvs_cmd);
+ 	/*
++	 * FIXME:
++When an image is split from a 2-way mirror, the original mirror is converted to
++a linear device.  To do this, the top "layer" must be removed.  The segments
++are transferred from the sub-lv to the top-level LV and the link is severed. 
++The former sub-lv - having its segments transferred - now contains a temporary
++error target.
 +
- 	return 1;
- }
- 
-diff --git a/man/Makefile.in b/man/Makefile.in
-index 2506fbd..3fb39b7 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -73,7 +73,7 @@ $(MAN5) $(MAN8) $(MAN8CLUSTER):	Makefile
- %: %.in
- 	@case "$@" in \
- 	  */*) ;; \
--	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+" $< > $@ ;; \
-+	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;" $< > $@ ;; \
- 	esac
- 
- install_man5: $(MAN5)
-diff --git a/man/clvmd.8.in b/man/clvmd.8.in
-index 22d94b2..0d1ed56 100644
---- a/man/clvmd.8.in
-+++ b/man/clvmd.8.in
-@@ -95,5 +95,15 @@ manually specify this option to override the search.
- .TP
- .I \-V
- Display the version of the cluster LVM daemon.
++When the original LV is resumed, the old sub-lv that now contains an error
++segment is activated and scanned.  This causes I/O error messages.  There are
++three ways to fix this problem:
 +
-+.SH ENVIRONMENT VARIABLES
-+.TP
-+.B CLVMD_BINARY
-+The CLVMD binary to use when clmvd restart is requested.
-+Defaults to #CLVMD_PATH#.
-+.TP
-+.B LVM_BINARY
-+The LVM2 binary to use. Defaults to #LVM_PATH#.
++1) Do not set the sub-lv which contains the error target as "visible" before
++suspending the original LV.  This way, when the original is resumed, the sub-lv
++device node is not created and it is not scanned - avoiding the error messages.
++ The problem with this approach is that if the machine crashes after the
++resume, it leaves the *hidden* LV in place and the user has a more difficult
++time noticing that it needs to be cleaned up.  Thus, this type of processing is
++frowned upon.
 +
- .SH SEE ALSO
- .BR lvm (8)
--- 
-1.7.6.2
++2) Do like _remove_mirror_images does and suspend the original, then suspend
++the sub-lv (the error target), then resume the sub-lv, and finally resume the
++original LV.  This seems like extra pointless operations to me, but it does not
++produce the error message (although, I'm not sure why) and it allows us to
++leave the visible flag in place.  ** THIS IS THE CHOSEN SOLUTION HERE **
++
++3) Flag the sub-lv (error target) with a "do not scan" flag.  This seems like
++the cleanest approach, but I have been unable to find the method for doing
++this.  LVs get tagged in such a way by _get_udev_flags, but in this case the
++resume of the original LV also resumes the error target LV without running it
++through _get_udev_flags (likely because they are no longer linked).  Could
++there be something wrong in resume_lv?
++	*/
++	if (sub_lv && !resume_lv(sub_lv->vg->cmd, sub_lv))
++		return_0;
++
++	/*
+ 	 * Resume the mirror - this also activates the visible, independent
+ 	 *                     soon-to-be-split sub-LVs
+ 	 */
 
 
