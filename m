@@ -1,40 +1,36 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Sep 2011 10:03:15 -0000
-Subject: LVM2/lib/metadata lv.c
-Message-ID: <20110914100315.5591.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 13 Sep 2011 13:29:36 -0500
+Subject: [PATCH] Retry dm device removal if busy
+In-Reply-To: <4E6F6958.5020609@redhat.com>
+References: <4E6F6958.5020609@redhat.com>
+Message-ID: <6E8B2169-8A1D-4682-B02E-9CEA8D1B6835@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-14 10:03:15
+Yes please!
 
-Modified files:
-	lib/metadata   : lv.c 
+All to often we come across this issue.  There are a number of bugs that are likely fixed by doing this change - even if it isn't academically perfect.
 
-Log message:
-	Add suggest parentheses around '&&'
-	
-	Follow gcc suggestion.
+ brassow
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+On Sep 13, 2011, at 9:31 AM, Peter Rajnoha wrote:
 
---- LVM2/lib/metadata/lv.c	2011/09/09 01:15:18	1.27
-+++ LVM2/lib/metadata/lv.c	2011/09/14 10:03:15	1.28
-@@ -406,8 +406,8 @@
- 	else
- 		repstr[6] = '-';
- 
--	if ((lv_is_thin_volume(lv) && (seg = first_seg(lv)) && seg->pool_lv && (seg = first_seg(seg->pool_lv))) ||
--	    (lv_is_thin_pool(lv) && (seg = first_seg(lv))) &&
-+	if (((lv_is_thin_volume(lv) && (seg = first_seg(lv)) && seg->pool_lv && (seg = first_seg(seg->pool_lv))) ||
-+	     (lv_is_thin_pool(lv) && (seg = first_seg(lv)))) &&
- 	    seg->zero_new_blocks)
- 		repstr[7] = 'z';
- 	else
+> If a dm device is being opened in parallel while we're
+> trying to remove it, we'll end up with an error that
+> the device is busy. This is a legitimate error, but
+> with udev in play and asynchronous events generated
+> as a result of using the WATCH udev rule, we can get
+> into a situation where such failure is very unpleasant.
+> 
+> Let's try the removal a few times then. Though this is
+> not a complete solution to the problem, let's use this
+> until we have one.
+> 
+> Peter
 
-
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20110913/f1201b63/attachment.htm>
