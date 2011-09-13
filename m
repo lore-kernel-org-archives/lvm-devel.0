@@ -1,56 +1,71 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 21 Sep 2011 13:36:43 +0200
-Subject: [PATCH 1/2] Clvmd fix restart
-In-Reply-To: <cover.1316604772.git.zkabelac@redhat.com>
-References: <cover.1316604772.git.zkabelac@redhat.com>
-Message-ID: <498932ea49b0379d95cf520090fa575551360ff6.1316604772.git.zkabelac@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 13 Sep 2011 13:57:03 -0000
+Subject: LVM2/scripts gdbinit
+Message-ID: <20110913135703.4342.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Patch fixes two reads in the iteration loop,
-where only every second lock is then passed to restarted clvmd.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-09-13 13:57:02
 
-Also moves initialisation of  'hn' to NULL - since for the first loop
-it's already initialized to NULL, while the second loop
-needs to start with 'hn' == NULL.
+Modified files:
+	scripts        : gdbinit 
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
----
- daemons/clvmd/clvmd-command.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+Log message:
+	reorder some status flag printing in gdbinit file.
 
-diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
-index 75f1367..c83e2cf 100644
---- a/daemons/clvmd/clvmd-command.c
-+++ b/daemons/clvmd/clvmd-command.c
-@@ -369,7 +369,6 @@ static int restart_clvmd(void)
- 	DEBUGLOG("clvmd restart requested\n");
- 
- 	/* Count exclusively-open LVs */
--	hn = NULL;
- 	do {
- 		hn = get_next_excl_lock(hn, &lv_name);
- 		if (lv_name)
-@@ -403,6 +402,7 @@ static int restart_clvmd(void)
- 	 */
- 
- 	/* Now add the exclusively-open LVs */
-+	hn = NULL;
- 	do {
- 		hn = get_next_excl_lock(hn, &lv_name);
- 		if (lv_name) {
-@@ -414,7 +414,6 @@ static int restart_clvmd(void)
- 				goto_out;
- 
- 			DEBUGLOG("excl lock: %s\n", lv_name);
--			hn = get_next_excl_lock(hn, &lv_name);
- 		}
- 	} while (hn && *lv_name);
- 	argv[argc++] = NULL;
--- 
-1.7.6.2
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/gdbinit.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+
+--- LVM2/scripts/gdbinit	2011/09/08 22:19:45	1.9
++++ LVM2/scripts/gdbinit	2011/09/13 13:57:02	1.10
+@@ -189,6 +189,21 @@
+ 		set $_s_status = $_s_status & ~0x0000000400000000LU
+ 		printf " RAID_IMAGE"
+ 	end
++#	if ($_s_status & MIRRORED)
++	if ($_s_status & 0x00008000U)
++		set $_s_status = $_s_status & ~0x00008000U
++		printf " MIRRORED"
++	end
++#	if ($_s_status & MIRROR_LOG)
++	if ($_s_status & 0x00020000U)
++		set $_s_status = $_s_status & ~0x00020000U
++		printf " MIRROR_LOG"
++	end
++#	if ($_s_status & MIRROR_IMAGE)
++	if ($_s_status & 0x00040000U)
++		set $_s_status = $_s_status & ~0x00040000U
++		printf " MIRROR_IMAGE"
++	end
+ #	if ($_s_status & VISIBLE_LV)
+ 	if ($_s_status & 0x00000040U)
+ 		printf " VISIBLE_LV"
+@@ -226,21 +241,6 @@
+ 		set $_s_status = $_s_status & ~0x00004000U
+ 		printf " LOCKED"
+ 	end
+-#	if ($_s_status & MIRRORED)
+-	if ($_s_status & 0x00008000U)
+-		set $_s_status = $_s_status & ~0x00008000U
+-		printf " MIRRORED"
+-	end
+-#	if ($_s_status & MIRROR_LOG)
+-	if ($_s_status & 0x00020000U)
+-		set $_s_status = $_s_status & ~0x00020000U
+-		printf " MIRROR_LOG"
+-	end
+-#	if ($_s_status & MIRROR_IMAGE)
+-	if ($_s_status & 0x00040000U)
+-		set $_s_status = $_s_status & ~0x00040000U
+-		printf " MIRROR_IMAGE"
+-	end
+ #	if ($_s_status & LV_NOTSYNCED)
+ 	if ($_s_status & 0x00080000U)
+ 		set $_s_status = $_s_status & ~0x00080000U
 
 
