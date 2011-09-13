@@ -1,56 +1,71 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 22 Sep 2011 12:15:32 -0500
-Subject: [PATCH 2 of 2] Add --nosync option to lvextend so sync of added mirror space can be skipped
-In-Reply-To: <1316711625.9375.1.camel@f14.redhat.com>
-References: <1316711625.9375.1.camel@f14.redhat.com>
-Message-ID: <1316711732.9375.3.camel@f14.redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 13 Sep 2011 16:31:52 +0200
+Subject: [PATCH] Retry dm device removal if busy
+Message-ID: <4E6F6958.5020609@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add '--nosync' option to lvextend to allow mirrors to extend w/o initial resync
+If a dm device is being opened in parallel while we're
+trying to remove it, we'll end up with an error that
+the device is busy. This is a legitimate error, but
+with udev in play and asynchronous events generated
+as a result of using the WATCH udev rule, we can get
+into a situation where such failure is very unpleasant.
 
-Index: LVM2/tools/commands.h
-===================================================================
---- LVM2.orig/tools/commands.h
-+++ LVM2/tools/commands.h
-@@ -265,6 +265,7 @@ xx(lvextend,
-    "\t{-l|--extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE|ORIGIN}] |\n"
-    "\t -L|--size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-    "\t[-m|--mirrors Mirrors]\n"
-+   "\t[--nosync]\n"
-    "\t[--use-policies]\n"
-    "\t[-n|--nofsck]\n"
-    "\t[--noudevsync]\n"
-@@ -276,7 +277,7 @@ xx(lvextend,
-    "\tLogicalVolume[Path] [ PhysicalVolumePath... ]\n",
+Let's try the removal a few times then. Though this is
+not a complete solution to the problem, let's use this
+until we have one.
+
+Peter
+---
+ libdm/ioctl/libdm-iface.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 816f1e6..e4a3a1f 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -1539,11 +1539,14 @@ static const char *_sanitise_message(char *message)
+ 	return sanitised_message;
+ }
  
-    alloc_ARG, autobackup_ARG, extents_ARG, force_ARG, mirrors_ARG,
--   nofsck_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
-+   nofsck_ARG, nosync_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
-    stripesize_ARG, test_ARG, type_ARG, use_policies_ARG)
- 
- xx(lvmchange,
-Index: LVM2/tools/lvresize.c
-===================================================================
---- LVM2.orig/tools/lvresize.c
-+++ LVM2/tools/lvresize.c
-@@ -504,6 +504,13 @@ static int _lvresize(struct cmd_context 
- 
- 	/* If extending, find mirrors of last segment */
- 	if ((lp->extents > lv->le_count)) {
-+		/*
-+		 * Has the user specified that they would like the additional
-+		 * extents of a mirror not to have an initial sync?
-+		 */
-+		if (seg_is_mirrored(first_seg(lv)) && arg_count(cmd, nosync_ARG))
-+			lv->status |= LV_NOTSYNCED;
++#define DM_REMOVE_IOCTL_RETRIES 5
 +
- 		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
- 			if (seg_is_mirrored(mirr_seg))
- 				seg_mirrors = lv_mirror_count(mirr_seg->lv);
-
+ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 				     unsigned repeat_count)
+ {
+ 	struct dm_ioctl *dmi;
+ 	int ioctl_with_uevent;
++	int retries = DM_REMOVE_IOCTL_RETRIES;
+ 
+ 	dmi = _flatten(dmt, repeat_count);
+ 	if (!dmi) {
+@@ -1627,11 +1630,23 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+ 		  dmt->sector, _sanitise_message(dmt->message),
+ 		  dmi->data_size);
+ #ifdef DM_IOCTLS
++repeat_dm_ioctl:
+ 	if (ioctl(_control_fd, command, dmi) < 0) {
+ 		if (errno == ENXIO && ((dmt->type == DM_DEVICE_INFO) ||
+ 				       (dmt->type == DM_DEVICE_MKNODES) ||
+ 				       (dmt->type == DM_DEVICE_STATUS)))
+ 			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
++		/*
++		 * FIXME: This is a workaround for asynchronous events generated
++		 *        as a result of using the WATCH udev rule with which we
++		 *        have no way of synchronizing. Processing such events in
++		 *        parallel causes devices to be open.
++		 */
++		else if (errno == EBUSY && (dmt->type == DM_DEVICE_REMOVE) && retries--) {
++			log_debug("device-mapper: device is busy, retrying removal");
++			sleep(1);
++			goto repeat_dm_ioctl;
++		}
+ 		else {
+ 			if (_log_suppress)
+ 				log_verbose("device-mapper: %s ioctl "
 
 
