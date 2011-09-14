@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Sep 2011 16:07:08 -0000
-Subject: LVM2/libdm libdm-string.c
-Message-ID: <20110914160708.3957.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 14 Sep 2011 18:20:04 -0000
+Subject: LVM2 ./WHATS_NEW tools/vgchange.c
+Message-ID: <20110914182004.1844.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,32 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-14 16:07:08
+Changes by:	mbroz at sourceware.org	2011-09-14 18:20:04
 
 Modified files:
-	libdm          : libdm-string.c 
+	.              : WHATS_NEW 
+	tools          : vgchange.c 
 
 Log message:
-	Fix memory overwrite
-	
-	Transfer of build_dm_uuid() function into libdm made uuid_prefix as parameter,
-	thus sizeof() was replaced with strlen() and room for '\0' missed.
-	
-	As it's only fix in current version - no whatsnew.
+	Fix vgchange activation of snapshot with virtual origin.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-string.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2109&r2=1.2110
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
 
---- LVM2/libdm/libdm-string.c	2011/09/01 17:58:27	1.16
-+++ LVM2/libdm/libdm-string.c	2011/09/14 16:07:07	1.17
-@@ -347,7 +347,7 @@
- 	if (!layer)
- 		layer = "";
+--- LVM2/WHATS_NEW	2011/09/14 14:20:16	1.2109
++++ LVM2/WHATS_NEW	2011/09/14 18:20:03	1.2110
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix vgchange activation of snapshot with virtual origin.
+   Activate virtual snapshot origin exclusively (only on local node in cluster).
+   Fix lv_mirror_count to handle mirrored stripes properly.
+   Fix failure to down-convert a mirror to linear due to udev "dev open" conflict
+--- LVM2/tools/vgchange.c	2011/09/07 08:41:48	1.122
++++ LVM2/tools/vgchange.c	2011/09/14 18:20:04	1.123
+@@ -100,6 +100,10 @@
+ 		if (!lv_is_visible(lv))
+ 			continue;
  
--	len = strlen(uuid_prefix) + strlen(lvid) + strlen(layer) + 1;
-+	len = strlen(uuid_prefix) + strlen(lvid) + strlen(layer) + 2;
- 
- 	if (!(dmuuid = dm_pool_alloc(mem, len))) {
- 		log_error("build_dm_name: Allocation failed for %" PRIsize_t
++		/* If LV is sparse, activate origin instead */
++		if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
++			lv = origin_from_cow(lv);
++
+ 		/* Only request activation of snapshot origin devices */
+ 		if ((lv->status & SNAPSHOT) || lv_is_cow(lv))
+ 			continue;
 
 
