@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 16 Sep 2011 16:41:38 -0000
-Subject: LVM2/lib/metadata mirror.c
-Message-ID: <20110916164138.17664.qmail@sourceware.org>
+Date: 16 Sep 2011 18:39:04 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20110916183904.12434.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-09-16 16:41:37
+Changes by:	jbrassow at sourceware.org	2011-09-16 18:39:04
 
 Modified files:
-	lib/metadata   : mirror.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	After suspend/resume following a splitmirror op, call sync_local_dev_names
-	to settle udev before calling deactivate_lv.
+	Fix Bug 738832 - core to disk log conversion fails with internal error
 	
-	This is an intra-release regression (no WHATS_NEW entry required).  It is
-	part of the fix for the current WHATS_NEW entry:
-	Work around resume_lv causing error LV scanning during splitmirror operation.
+	This bug showed up when trying to add a log to a mirror whose images are on
+	multiple devices.  This is an intra-release regression and no WHATS_NEW
+	entry will be added.  The error was introduce in the following commit:
+	2d8a2f35c77fdeef1dbe0ef791db8530d07826eb
+	
+	The solution is to recognise in _alloc_init that if there are no mirrors
+	or stripes specified, then 'new_extents' should be zero.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.169&r2=1.170
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.288&r2=1.289
 
---- LVM2/lib/metadata/mirror.c	2011/09/14 09:54:21	1.169
-+++ LVM2/lib/metadata/mirror.c	2011/09/16 16:41:37	1.170
-@@ -747,6 +747,7 @@
- 	 *   - commit VG changes
- 	 *   - activate the new LV
- 	 */
-+	sync_local_dev_names(lv->vg->cmd);
- 	new_lv = NULL;
- 	dm_list_iterate_items(lvl, &split_images) {
- 		if (!new_lv) {
+--- LVM2/lib/metadata/lv_manip.c	2011/09/16 12:12:51	1.288
++++ LVM2/lib/metadata/lv_manip.c	2011/09/16 18:39:03	1.289
+@@ -767,7 +767,10 @@
+ 		return NULL;
+ 	}
+ 
+-	ah->new_extents = new_extents;
++	if (mirrors || stripes)
++		ah->new_extents = new_extents;
++	else
++		ah->new_extents = 0;
+ 	ah->area_count = area_count;
+ 	ah->parity_count = segtype->parity_devs;
+ 	ah->region_size = region_size;
+@@ -801,7 +804,7 @@
+ 		ah->log_area_count = metadata_area_count;
+ 		ah->log_len = !metadata_area_count ? 0 :
+ 			mirror_log_extents(ah->region_size, extent_size,
+-					   ah->new_extents / ah->area_multiple);
++					   new_extents / ah->area_multiple);
+ 	}
+ 
+ 	for (s = 0; s < alloc_count; s++)
 
 
