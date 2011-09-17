@@ -1,173 +1,80 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 17 Sep 2011 14:49:19 -0000
-Subject: LVM2/daemons/common daemon-client.c daemon-ser ...
-Message-ID: <20110917144919.19685.qmail@sourceware.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Sat, 17 Sep 2011 15:34:07 -0400 (EDT)
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+In-Reply-To: <20110916120758.GB16890@agk-dp.fab.redhat.com>
+References: <20110913151342.26443.qmail@sourceware.org>
+	<20110916120758.GB16890@agk-dp.fab.redhat.com>
+Message-ID: <Pine.LNX.4.64.1109171531190.25719@hs20-bc2-1.build.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-17 14:49:18
 
-Modified files:
-	daemons/common : daemon-client.c daemon-server.c daemon-shared.c 
 
-Log message:
-	More gcc warnings removed
+On Fri, 16 Sep 2011, Alasdair G Kergon wrote:
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+> On Tue, Sep 13, 2011 at 03:13:42PM -0000, prajnoha at sourceware.org wrote:
+> > 	Let's use this until we have a proper solution.
+> 
+> That patch is unsuitable for general release and needs to be reverted in my
+> opinion.
+> 
+> There is a fallacy in assuming that the udev problem is the only reason for the
+> detected failure and then installing the defensive action on unaffected code
+> paths.  There are cases in which repeating the remove ioctl will make no
+> difference and the code will continue to see EBUSY and an enforced 5 second
+> delay risks causing some people new problems.  But with just a little more
+> effort, you can obtain the best of both worlds.
+> 
+> 
+> Please update the patch to address the following points:
+> 
+> 1. Currently the ioctl buffer contents are 'undefined' when the ioctl returns
+> an error.  I'm not happy to assume the buffer will always be unchanged if
+> there's an error - it should be repopulated before reuse.  (This basically
+> means I want the repeat loop in a higher layer of the code, or a new flag
+> defining...
+>   - Hmmm.  Mikulas - Have we just broken the BUFFER_FULL logic with
+> dm-ioctl-forbid-multiple-device-specifiers.patch?  Might have to revert
+> that kernel patch or update it only to complain if the multiple
+> specifiers don't all point to the same device...)
 
---- LVM2/daemons/common/daemon-client.c	2011/08/31 12:18:40	1.7
-+++ LVM2/daemons/common/daemon-client.c	2011/09/17 14:49:18	1.8
-@@ -9,8 +9,9 @@
- #include <errno.h> // ENOMEM
- 
- daemon_handle daemon_open(daemon_info i) {
--	daemon_handle h;
-+	daemon_handle h = { .protocol = 0 };
- 	struct sockaddr_un sockaddr;
-+
- 	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM /* | SOCK_NONBLOCK */, 0)) < 0) {
- 		perror("socket");
- 		goto error;
-@@ -23,7 +24,6 @@
- 		perror("connect");
- 		goto error;
- 	}
--	h.protocol = 0;
- 	return h;
- error:
- 	if (h.socket_fd >= 0)
-@@ -59,16 +59,19 @@
- 
- daemon_reply daemon_send_simple(daemon_handle h, char *id, ...)
- {
-+	static const daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
-+	daemon_request rq;
-+	daemon_reply repl;
- 	va_list ap;
-+
- 	va_start(ap, id);
--	daemon_request rq = { .buffer = format_buffer("request", id, ap) };
-+	rq.buffer = format_buffer("request", id, ap);
-+	va_end(ap);
- 
--	if (!rq.buffer) {
--		daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
-+	if (!rq.buffer)
- 		return err;
--	}
- 
--	daemon_reply repl = daemon_send(h, rq);
-+	repl = daemon_send(h, rq);
- 	dm_free(rq.buffer);
- 	return repl;
- }
---- LVM2/daemons/common/daemon-server.c	2011/08/31 12:39:58	1.13
-+++ LVM2/daemons/common/daemon-server.c	2011/09/17 14:49:18	1.14
-@@ -204,12 +204,15 @@
- response daemon_reply_simple(const char *id, ...)
- {
- 	va_list ap;
-+	response res = { .cft = NULL };
-+
- 	va_start(ap, id);
--	response res = { .buffer = format_buffer("response", id, ap), .cft = NULL };
- 
--	if (!res.buffer)
-+	if (!(res.buffer = format_buffer("response", id, ap)))
- 		res.error = ENOMEM;
- 
-+	va_end(ap);
-+
- 	return res;
- }
- 
-@@ -238,6 +241,8 @@
- {
- 	struct thread_baton *b = baton;
- 	request req;
-+	response res;
-+
- 	while (1) {
- 		if (!read_buffer(b->client.socket_fd, &req.buffer))
- 			goto fail;
-@@ -245,7 +250,7 @@
- 		req.cft = dm_config_from_string(req.buffer);
- 		if (!req.cft)
- 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer);
--		response res = b->s.handler(b->s, b->client, req);
-+		res = b->s.handler(b->s, b->client, req);
- 		if (req.cft)
- 			dm_config_destroy(req.cft);
- 		dm_free(req.buffer);
-@@ -268,25 +273,24 @@
- 
- static int handle_connect(daemon_state s)
- {
-+	struct thread_baton *baton;
- 	struct sockaddr_un sockaddr;
--	client_handle client;
-+	client_handle client = { .thread_id = 0 };
- 	socklen_t sl = sizeof(sockaddr);
--	int client_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
--	if (client_fd < 0)
-+
-+	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
-+	if (client.socket_fd < 0)
- 		return 0;
- 
--	struct thread_baton *baton = malloc(sizeof(struct thread_baton));
--	if (!baton)
-+	if (!(baton = malloc(sizeof(struct thread_baton))))
- 		return 0;
- 
--	client.socket_fd = client_fd;
--	client.read_buf = 0;
--	client.private = 0;
- 	baton->s = s;
- 	baton->client = client;
- 
- 	if (pthread_create(&baton->client.thread_id, NULL, client_thread, baton))
- 		return 0;
-+
- 	return 1;
- }
- 
---- LVM2/daemons/common/daemon-shared.c	2011/08/31 12:18:40	1.5
-+++ LVM2/daemons/common/daemon-shared.c	2011/09/17 14:49:18	1.6
-@@ -17,6 +17,8 @@
- int read_buffer(int fd, char **buffer) {
- 	int bytes = 0;
- 	int buffersize = 32;
-+	char *new;
-+	char *end;
- 	*buffer = malloc(buffersize + 1);
- 
- 	while (1) {
-@@ -30,14 +32,12 @@
- 
- 		if (bytes == buffersize) {
- 			buffersize += 1024;
--			char *new = realloc(*buffer, buffersize + 1);
--			if (new)
--				*buffer = new;
--			else
-+			if (!(new = realloc(*buffer, buffersize + 1)))
- 				goto fail;
-+
-+			*buffer = new;
- 		} else {
- 			(*buffer)[bytes] = 0;
--			char *end;
- 			if ((end = strstr((*buffer) + bytes - 2, "\n\n"))) {
- 				*end = 0;
- 				break; /* success, we have the full message now */
+We haven't broken BUFFER_FULL ... see my other email. I tested it and 
+reviewed the code and it is ok.
+
+But it is true that this patch is wrong and breaks is. Repeat should be 
+done at the higher level, just like BUFFER_FULL repeating.
+
+Mikulas
+
+> 2. The repeat must be made conditional, so it only occurs in potential problem
+> cases i.e. filter out as many 'OK' cases as you possibly can.
+> - if udev is not involved (which we already know from other variables) skip
+> this code (easy)
+> - consider any other easy tests that can narrow the filtering
+> 
+> 3. 'dmsetup remove' must not use the new behaviour by default, or you risk
+> affecting some people's existing scripts adversely.  Add a new cmdline switch
+> to enable this.  I do not think it should be enabled by default.  Keep sight of
+> the fact that the cases you're trying to improve involve specific *sequences*
+> of commands run in quick succession and there are no grounds for removing
+> functionality from dmsetup/libdevmapper by denying users the ability to run
+> individual ioctls and allowing them to handle the failures as *they* see fit.
+> 
+> 4. We can't rule out unanticipated side-effects on the lvm2 side either,
+> so, while enabled by default when udev is in use, it must still be possible to
+> turn off the feature at run time, using an lvm.conf setting.
+> 
+> 5. I've seen no empirical evidence yet to justify the selection of the number
+> of retries and the sleep time.  E.g. Please provide some base data on the length
+> of a typical delay/number of repeated attempts caused by a common problematic
+> udev rule firing to back up the numbers chosen, and consider whether 'one size
+> fits all' is suitable or if it needs to be tunable (is 5 seconds long enough on
+> a slow and loaded system?), or could it itself be triggered by something else?
+> 
+> Alasdair
+> 
 
 
