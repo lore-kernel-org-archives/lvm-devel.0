@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 9 Sep 2011 00:54:51 -0000
-Subject: LVM2 lib/config/defaults.h lib/metadata/lv.c l ...
-Message-ID: <20110909005451.9436.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 17 Sep 2011 14:49:19 -0000
+Subject: LVM2/daemons/common daemon-client.c daemon-ser ...
+Message-ID: <20110917144919.19685.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,135 +10,164 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-09-09 00:54:50
+Changes by:	zkabelac at sourceware.org	2011-09-17 14:49:18
 
 Modified files:
-	lib/config     : defaults.h 
-	lib/metadata   : lv.c lv.h 
-	lib/report     : columns.h properties.c report.c 
-	man            : lvs.8.in 
+	daemons/common : daemon-client.c daemon-server.c daemon-shared.c 
 
 Log message:
-	Add a new 'thin_pool' output field to 'lvs.
-	
-	A gentle reminder that anyone relying on the output of reporting commands
-	like lvs in scripts must use -o to guarantee they get the fields they expect.
-	
-	The default sequence of fields can change from release to release.
-	Equally, the 'attr' fields can have new values introduced and/or characters
-	appended to them.
+	More gcc warnings removed
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.82&r2=1.83
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.h.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.46&r2=1.47
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/report.c.diff?cvsroot=lvm2&r1=1.145&r2=1.146
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/lib/config/defaults.h	2011/08/11 17:46:14	1.82
-+++ LVM2/lib/config/defaults.h	2011/09/09 00:54:49	1.83
-@@ -139,13 +139,13 @@
- #define DEFAULT_REP_QUOTED 1
- #define DEFAULT_REP_SEPARATOR " "
+--- LVM2/daemons/common/daemon-client.c	2011/08/31 12:18:40	1.7
++++ LVM2/daemons/common/daemon-client.c	2011/09/17 14:49:18	1.8
+@@ -9,8 +9,9 @@
+ #include <errno.h> // ENOMEM
  
--#define DEFAULT_LVS_COLS "lv_name,vg_name,lv_attr,lv_size,origin,snap_percent,move_pv,mirror_log,copy_percent,convert_lv"
-+#define DEFAULT_LVS_COLS "lv_name,vg_name,lv_attr,lv_size,thin_pool,origin,snap_percent,move_pv,mirror_log,copy_percent,convert_lv"
- #define DEFAULT_VGS_COLS "vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free"
- #define DEFAULT_PVS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free"
- #define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
- #define DEFAULT_PVSEGS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
+ daemon_handle daemon_open(daemon_info i) {
+-	daemon_handle h;
++	daemon_handle h = { .protocol = 0 };
+ 	struct sockaddr_un sockaddr;
++
+ 	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM /* | SOCK_NONBLOCK */, 0)) < 0) {
+ 		perror("socket");
+ 		goto error;
+@@ -23,7 +24,6 @@
+ 		perror("connect");
+ 		goto error;
+ 	}
+-	h.protocol = 0;
+ 	return h;
+ error:
+ 	if (h.socket_fd >= 0)
+@@ -59,16 +59,19 @@
  
--#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,origin,snap_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
-+#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,thin_pool,origin,snap_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
- #define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid"
- #define DEFAULT_PVS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"
- #define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"
---- LVM2/lib/metadata/lv.c	2011/09/08 20:55:39	1.25
-+++ LVM2/lib/metadata/lv.c	2011/09/09 00:54:49	1.26
-@@ -185,6 +185,18 @@
- 	return NULL;
+ daemon_reply daemon_send_simple(daemon_handle h, char *id, ...)
+ {
++	static const daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
++	daemon_request rq;
++	daemon_reply repl;
+ 	va_list ap;
++
+ 	va_start(ap, id);
+-	daemon_request rq = { .buffer = format_buffer("request", id, ap) };
++	rq.buffer = format_buffer("request", id, ap);
++	va_end(ap);
+ 
+-	if (!rq.buffer) {
+-		daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
++	if (!rq.buffer)
+ 		return err;
+-	}
+ 
+-	daemon_reply repl = daemon_send(h, rq);
++	repl = daemon_send(h, rq);
+ 	dm_free(rq.buffer);
+ 	return repl;
+ }
+--- LVM2/daemons/common/daemon-server.c	2011/08/31 12:39:58	1.13
++++ LVM2/daemons/common/daemon-server.c	2011/09/17 14:49:18	1.14
+@@ -204,12 +204,15 @@
+ response daemon_reply_simple(const char *id, ...)
+ {
+ 	va_list ap;
++	response res = { .cft = NULL };
++
+ 	va_start(ap, id);
+-	response res = { .buffer = format_buffer("response", id, ap), .cft = NULL };
+ 
+-	if (!res.buffer)
++	if (!(res.buffer = format_buffer("response", id, ap)))
+ 		res.error = ENOMEM;
+ 
++	va_end(ap);
++
+ 	return res;
  }
  
-+char *lv_pool_lv_dup(struct dm_pool *mem, const struct logical_volume *lv)
-+{
-+	struct lv_segment *seg;
-+
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		if (!seg_is_thin_volume(seg) || !seg->pool_lv)
-+			continue;
-+		return dm_pool_strdup(mem, seg->pool_lv->name);
-+	}
-+	return NULL;
-+}
-+
- int lv_kernel_minor(const struct logical_volume *lv)
+@@ -238,6 +241,8 @@
  {
- 	struct lvinfo info;
---- LVM2/lib/metadata/lv.h	2011/04/12 12:24:29	1.20
-+++ LVM2/lib/metadata/lv.h	2011/09/09 00:54:49	1.21
-@@ -59,6 +59,7 @@
- int lv_kernel_major(const struct logical_volume *lv);
- int lv_kernel_minor(const struct logical_volume *lv);
- char *lv_mirror_log_dup(struct dm_pool *mem, const struct logical_volume *lv);
-+char *lv_pool_lv_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_modules_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_name_dup(struct dm_pool *mem, const struct logical_volume *lv);
- char *lv_origin_dup(struct dm_pool *mem, const struct logical_volume *lv);
---- LVM2/lib/report/columns.h	2010/11/17 19:15:10	1.46
-+++ LVM2/lib/report/columns.h	2011/09/09 00:54:49	1.47
-@@ -80,6 +80,7 @@
- FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
- FIELD(LVS, lv, STR, "LV Tags", tags, 7, tags, lv_tags, "Tags, if any.", 0)
- FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
-+FIELD(LVS, lv, STR, "Pool", lvid, 3, poollv, thin_pool, "For thinly-provisioned devices, the pool LV holding the data.", 0)
- FIELD(LVS, lv, STR, "Modules", lvid, 7, modules, modules, "Kernel device-mapper modules required for this LV.", 0)
+ 	struct thread_baton *b = baton;
+ 	request req;
++	response res;
++
+ 	while (1) {
+ 		if (!read_buffer(b->client.socket_fd, &req.buffer))
+ 			goto fail;
+@@ -245,7 +250,7 @@
+ 		req.cft = dm_config_from_string(req.buffer);
+ 		if (!req.cft)
+ 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer);
+-		response res = b->s.handler(b->s, b->client, req);
++		res = b->s.handler(b->s, b->client, req);
+ 		if (req.cft)
+ 			dm_config_destroy(req.cft);
+ 		dm_free(req.buffer);
+@@ -268,25 +273,24 @@
  
- FIELD(LABEL, pv, STR, "Fmt", id, 3, pvfmt, pv_fmt, "Type of metadata.", 0)
---- LVM2/lib/report/properties.c	2011/04/12 12:24:29	1.31
-+++ LVM2/lib/report/properties.c	2011/09/09 00:54:49	1.32
-@@ -175,6 +175,8 @@
- #define _lv_tags_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(mirror_log, lv_mirror_log_dup(lv->vg->vgmem, lv))
- #define _mirror_log_set _not_implemented_set
-+GET_LV_STR_PROPERTY_FN(thin_pool, lv_pool_lv_dup(lv->vg->vgmem, lv))
-+#define _thin_pool_set _not_implemented_set
- GET_LV_STR_PROPERTY_FN(modules, lv_modules_dup(lv->vg->vgmem, lv))
- #define _modules_set _not_implemented_set
+ static int handle_connect(daemon_state s)
+ {
++	struct thread_baton *baton;
+ 	struct sockaddr_un sockaddr;
+-	client_handle client;
++	client_handle client = { .thread_id = 0 };
+ 	socklen_t sl = sizeof(sockaddr);
+-	int client_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
+-	if (client_fd < 0)
++
++	client.socket_fd = accept(s.socket_fd, (struct sockaddr *) &sockaddr, &sl);
++	if (client.socket_fd < 0)
+ 		return 0;
  
---- LVM2/lib/report/report.c	2011/08/04 14:30:52	1.145
-+++ LVM2/lib/report/report.c	2011/09/09 00:54:49	1.146
-@@ -240,6 +240,19 @@
+-	struct thread_baton *baton = malloc(sizeof(struct thread_baton));
+-	if (!baton)
++	if (!(baton = malloc(sizeof(struct thread_baton))))
+ 		return 0;
+ 
+-	client.socket_fd = client_fd;
+-	client.read_buf = 0;
+-	client.private = 0;
+ 	baton->s = s;
+ 	baton->client = client;
+ 
+ 	if (pthread_create(&baton->client.thread_id, NULL, client_thread, baton))
+ 		return 0;
++
  	return 1;
  }
  
-+static int _poollv_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
-+			struct dm_report_field *field,
-+			const void *data, void *private __attribute__((unused)))
-+{
-+	const struct logical_volume *lv = (const struct logical_volume *) data;
-+	const char *name;
+--- LVM2/daemons/common/daemon-shared.c	2011/08/31 12:18:40	1.5
++++ LVM2/daemons/common/daemon-shared.c	2011/09/17 14:49:18	1.6
+@@ -17,6 +17,8 @@
+ int read_buffer(int fd, char **buffer) {
+ 	int bytes = 0;
+ 	int buffersize = 32;
++	char *new;
++	char *end;
+ 	*buffer = malloc(buffersize + 1);
+ 
+ 	while (1) {
+@@ -30,14 +32,12 @@
+ 
+ 		if (bytes == buffersize) {
+ 			buffersize += 1024;
+-			char *new = realloc(*buffer, buffersize + 1);
+-			if (new)
+-				*buffer = new;
+-			else
++			if (!(new = realloc(*buffer, buffersize + 1)))
+ 				goto fail;
 +
-+	if ((name = lv_pool_lv_dup(mem, lv)))
-+		return dm_report_field_string(rh, field, &name);
-+
-+	dm_report_field_set_value(field, "", NULL);
-+	return 1;
-+}
- static int _lvname_disp(struct dm_report *rh, struct dm_pool *mem,
- 			struct dm_report_field *field,
- 			const void *data, void *private __attribute__((unused)))
---- LVM2/man/lvs.8.in	2011/09/08 20:55:39	1.14
-+++ LVM2/man/lvs.8.in	2011/09/09 00:54:49	1.15
-@@ -57,7 +57,7 @@
- Column names include:
- lv_uuid, lv_name, lv_path, lv_attr, lv_major, lv_minor, lv_read_ahead, lv_kernel_major,
- lv_kernel_minor, lv_kernel_read_ahead, lv_size, seg_count, origin, origin_size,
--snap_percent, copy_percent, move_pv, convert_lv, lv_tags, mirror_log, modules,
-+snap_percent, copy_percent, move_pv, convert_lv, lv_tags, mirror_log, thin_pool, modules,
- segtype, stripes, stripesize, regionsize, chunksize, seg_start, seg_start_pe,
- seg_size, seg_tags, seg_pe_ranges, devices.
- .IP
++			*buffer = new;
+ 		} else {
+ 			(*buffer)[bytes] = 0;
+-			char *end;
+ 			if ((end = strstr((*buffer) + bytes - 2, "\n\n"))) {
+ 				*end = 0;
+ 				break; /* success, we have the full message now */
 
 
