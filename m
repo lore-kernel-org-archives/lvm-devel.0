@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Sep 2011 14:54:25 -0000
-Subject: LVM2 ./WHATS_NEW lib/misc/lvm-exec.c
-Message-ID: <20110919145425.15594.qmail@sourceware.org>
+Date: 19 Sep 2011 15:54:16 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20110919155416.29372.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-19 14:54:23
+Changes by:	zkabelac at sourceware.org	2011-09-19 15:54:15
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/misc       : lvm-exec.c 
+	test           : Makefile.in 
 
 Log message:
-	Use log_error instead of log_verbose when executed command fails
+	Ensure  fsadm.sh is executable
+	
+	When the srcdir == builddir we get the link on non-exectable file.
+	So make always sure fsadm.sh is executable script file.
+	
+	Add cleanup target for lib/fsadm.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2121&r2=1.2122
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-exec.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.58&r2=1.59
 
---- LVM2/WHATS_NEW	2011/09/19 14:52:33	1.2121
-+++ LVM2/WHATS_NEW	2011/09/19 14:54:23	1.2122
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Use log_error instead of log_verbose when executed command fails.
-   Add support for non /dev device paths into fsadm script.
-   Support different PATH setting for fsadm script testing.
-   Surround all executed commands with quotes in fsadm script.
---- LVM2/lib/misc/lvm-exec.c	2011/09/19 12:48:02	1.14
-+++ LVM2/lib/misc/lvm-exec.c	2011/09/19 14:54:23	1.15
-@@ -96,7 +96,7 @@
- 	if (WEXITSTATUS(status)) {
- 		if (rstatus) {
- 			*rstatus = WEXITSTATUS(status);
--			log_verbose("%s failed: %u", argv[0], *rstatus);
-+			log_error("%s failed: %u", argv[0], *rstatus);
- 		} else
- 			log_error("%s failed: %u", argv[0], WEXITSTATUS(status));
- 		return 0;
+--- LVM2/test/Makefile.in	2011/09/19 12:50:17	1.58
++++ LVM2/test/Makefile.in	2011/09/19 15:54:15	1.59
+@@ -101,6 +101,7 @@
+ 	ln -fs "$(abs_top_builddir)/daemons/dmeventd/dmeventd" lib/dmeventd
+ 	ln -fs "$(abs_top_builddir)/daemons/lvmetad/lvmetad" lib/lvmetad
+ 	ln -fs "$(abs_top_builddir)/scripts/vgimportclone.sh" lib/vgimportclone
++	chmod +x "$(abs_top_builddir)/scripts/fsadm.sh"
+ 	ln -fs "$(abs_top_builddir)/scripts/fsadm.sh" lib/fsadm
+ 	touch $@
+ 
+@@ -109,6 +110,6 @@
+ 	if test "$(srcdir)" != . ; then rm -f $(subst $(srcdir)/, ,$(RUN)) lvm2app.sh ; fi
+ 
+ CLEAN_TARGETS += .lib-dir-stamp .test-stamp $(LIB) \
+-	lib/dmsetup lib/clvmd lib/dmeventd lib/vgimportclone
++	lib/dmsetup lib/clvmd lib/dmeventd lib/vgimportclone lib/fsadm
+ 
+ .NOTPARALLEL:
 
 
