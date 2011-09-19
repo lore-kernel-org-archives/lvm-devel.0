@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Sep 2011 14:52:34 -0000
-Subject: LVM2 ./WHATS_NEW scripts/fsadm.sh
-Message-ID: <20110919145234.15298.qmail@sourceware.org>
+Date: 19 Sep 2011 14:54:25 -0000
+Subject: LVM2 ./WHATS_NEW lib/misc/lvm-exec.c
+Message-ID: <20110919145425.15594.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-19 14:52:33
+Changes by:	zkabelac at sourceware.org	2011-09-19 14:54:23
 
 Modified files:
 	.              : WHATS_NEW 
-	scripts        : fsadm.sh 
+	lib/misc       : lvm-exec.c 
 
 Log message:
-	Add support for non /dev devices
-	
-	Since test suite is not using /dev - add support for such dirs into fsadm.
+	Use log_error instead of log_verbose when executed command fails
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2120&r2=1.2121
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/fsadm.sh.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2121&r2=1.2122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-exec.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
 
---- LVM2/WHATS_NEW	2011/09/19 13:51:09	1.2120
-+++ LVM2/WHATS_NEW	2011/09/19 14:52:33	1.2121
+--- LVM2/WHATS_NEW	2011/09/19 14:52:33	1.2121
++++ LVM2/WHATS_NEW	2011/09/19 14:54:23	1.2122
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Add support for non /dev device paths into fsadm script.
++  Use log_error instead of log_verbose when executed command fails.
+   Add support for non /dev device paths into fsadm script.
    Support different PATH setting for fsadm script testing.
    Surround all executed commands with quotes in fsadm script.
-   Fix missing '$' in test for content of "$LVM" in fsadm script.
---- LVM2/scripts/fsadm.sh	2011/09/19 13:51:10	1.27
-+++ LVM2/scripts/fsadm.sh	2011/09/19 14:52:33	1.28
-@@ -177,7 +177,7 @@
- detect_fs() {
- 	VOLUME_ORIG=$1
- 	VOLUME=${1#/dev/}
--	VOLUME=$("$READLINK" $READLINK_E "/dev/$VOLUME") || error "Cannot get readlink $1"
-+	VOLUME=$("$READLINK" $READLINK_E "/dev/$VOLUME") || VOLUME=$("$READLINK" $READLINK_E "$VOLUME_ORIG") || error "Cannot get readlink \"$1\""
- 	RVOLUME=$VOLUME
- 	case "$RVOLUME" in
- 	  /dev/dm-[0-9]*)
+--- LVM2/lib/misc/lvm-exec.c	2011/09/19 12:48:02	1.14
++++ LVM2/lib/misc/lvm-exec.c	2011/09/19 14:54:23	1.15
+@@ -96,7 +96,7 @@
+ 	if (WEXITSTATUS(status)) {
+ 		if (rstatus) {
+ 			*rstatus = WEXITSTATUS(status);
+-			log_verbose("%s failed: %u", argv[0], *rstatus);
++			log_error("%s failed: %u", argv[0], *rstatus);
+ 		} else
+ 			log_error("%s failed: %u", argv[0], WEXITSTATUS(status));
+ 		return 0;
 
 
