@@ -1,78 +1,36 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Sep 2011 00:29:12 -0000
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Mon, 19 Sep 2011 02:01:51 +0100
 Subject: LVM2/daemons Makefile.in lvmetad/Makefile.in
-Message-ID: <20110919002912.12809.qmail@sourceware.org>
+In-Reply-To: <20110919002912.12809.qmail@sourceware.org>
+References: <20110919002912.12809.qmail@sourceware.org>
+Message-ID: <20110919010151.GA1842@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-19 00:29:12
+On Mon, Sep 19, 2011 at 12:29:12AM -0000, zkabelac at sourceware.org wrote:
+> 	It seem lvmetad deps must be expressed after the include.
+> 	Also adding lvmetad deps to device-mapper target in daemons dir.
+ 
+There's a contradiction here that must be resolved.
 
-Modified files:
-	daemons        : Makefile.in 
-	daemons/lvmetad: Makefile.in 
+As you know, our tree is basically divided into dm and lvm.
 
-Log message:
-	Few more updates to lvmetad build deps
-	
-	It seem lvmetad deps must be expressed after the include.
-	Also adding lvmetad deps to device-mapper target in daemons dir.
+The name of the daemon starts with 'lvm' so it must be considered to be
+part of lvm and built as part of lvm.
+However the Makefiles are referring to 'device-mapper'.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/Makefile.in.diff?cvsroot=lvm2&r1=1.20&r2=1.21
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/Makefile.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+So resolve this either by renaming the daemon to dm (and ensure it does not use
+any bits of the lvm part of the tree a la dmeventd etc.) OR removing it from
+'device-mapper' makefile targets and build it as part of the lvm pass.  If it
+was only meant for lvm's use, as I thought was intended, then the second
+alternative is the one that needs to be done.
 
---- LVM2/daemons/Makefile.in	2011/09/17 14:50:22	1.20
-+++ LVM2/daemons/Makefile.in	2011/09/19 00:29:11	1.21
-@@ -1,5 +1,5 @@
- #
--# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -20,13 +20,12 @@
- 
- LIB_STATIC = libdaemon.a
- SOURCES = common/daemon-shared.c common/daemon-server.c common/daemon-client.c
--lvmetad.device-mapper: $(LIB_STATIC)
- endif
- 
- .PHONY: dmeventd clvmd cmirrord lvmetad
- 
- ifneq ("@CLVMD@", "none")
--  SUBDIRS = clvmd
-+  SUBDIRS += clvmd
- endif
- 
- ifeq ("@BUILD_CMIRRORD@", "yes")
-@@ -49,3 +48,9 @@
- ifeq ("@BUILD_DMEVENTD@", "yes")
- device-mapper: dmeventd.device-mapper
- endif
-+
-+ifeq ("@BUILD_LVMETAD@", "yes")
-+device-mapper: lvmetad.device-mapper
-+lvmetad.device-mapper: $(LIB_STATIC)
-+endif
-+
---- LVM2/daemons/lvmetad/Makefile.in	2011/09/17 14:50:23	1.2
-+++ LVM2/daemons/lvmetad/Makefile.in	2011/09/19 00:29:12	1.3
-@@ -31,10 +31,9 @@
- 
- include $(top_builddir)/make.tmpl
- 
--all: device-mapper
- device-mapper: $(TARGETS)
- 
--LIBS += -ldevmapper -ldaemon -lpthread
-+LIBS += -ldevmapper -ldaemon $(PTHREAD_LIBS)
- 
- lvmetad: lvmetad-core.o
- 	$(CC) $(CFLAGS) $(LDFLAGS) -L$(top_builddir)/daemons -o $@ lvmetad-core.o \
+(This problem must be resolved before I can consider including the code in
+any release tarball.)
+
+Alasdair
 
 
