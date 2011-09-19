@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Sep 2011 13:52:22 -0000
-Subject: LVM2/test t-fsadm.sh
-Message-ID: <20110919135222.31358.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 19 Sep 2011 14:28:24 -0000
+Subject: LVM2/lib/metadata mirror.c
+Message-ID: <20110919142824.15359.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,66 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-19 13:52:22
+Changes by:	jbrassow at sourceware.org	2011-09-19 14:28:24
 
 Modified files:
-	test           : t-fsadm.sh 
+	lib/metadata   : mirror.c 
 
 Log message:
-	Enable  t-fsadm test
+	fix compiler warning.
 	
-	Now all commands are executed from preffered directory.
+	Compiler says variable may be used uninitialized.  It can't be, but we
+	initialize the variable to NULL anyway.  Also, remove the double initialization
+	of another variable.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-fsadm.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.170&r2=1.171
 
---- LVM2/test/t-fsadm.sh	2011/01/31 22:05:30	1.6
-+++ LVM2/test/t-fsadm.sh	2011/09/19 13:52:22	1.7
-@@ -1,5 +1,5 @@
- #!/bin/bash
--# Copyright (C) 2008-2010 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2008-2011 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -10,7 +10,6 @@
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+--- LVM2/lib/metadata/mirror.c	2011/09/16 16:41:37	1.170
++++ LVM2/lib/metadata/mirror.c	2011/09/19 14:28:23	1.171
+@@ -584,7 +584,7 @@
+ 	struct logical_volume *detached_log_lv = NULL;
+ 	struct lv_segment *mirrored_seg = first_seg(lv);
+ 	struct dm_list split_images;
+-	struct lv_list *lvl, *new_lvl;
++	struct lv_list *lvl, *new_lvl = NULL;
+ 	struct cmd_context *cmd = lv->vg->cmd;
  
- test_description='Exercise fsadm filesystem resize'
--exit 200
- 
- . lib/test
- 
-@@ -32,6 +31,8 @@
- vg_lv="$vg/$lv1"
- dev_vg_lv="$DM_DEV_DIR/$vg_lv"
- mount_dir="$TESTDIR/mnt"
-+# for recursive call
-+export LVM_BINARY=$(which lvm)
- 
- test ! -d $mount_dir && mkdir $mount_dir
- 
-@@ -75,13 +76,13 @@
- 
- 	fsadm --lvresize resize $vg_lv 30M
- 	# Fails - not enough space for 4M fs
--	not fsadm --lvresize resize $dev_vg_lv 4M
-+	not fsadm -y --lvresize resize $dev_vg_lv 4M
- 	lvresize -L+10M -r $vg_lv
- 	lvreduce -L10M -r $vg_lv
- 
- 	fscheck_ext3
- 	mount $dev_vg_lv $mount_dir
--	not fsadm --lvresize resize $vg_lv 9M
-+	not fsadm -y --lvresize resize $vg_lv 4M
- 	lvresize -L+20M -r -n $vg_lv
- 	umount $mount_dir
- 	fscheck_ext3
-@@ -121,3 +122,5 @@
- 
- 	lvresize -f -L20M $vg_lv
- fi
-+
-+vgremove -ff $vg
+ 	if (!(lv->status & MIRRORED)) {
+@@ -748,7 +748,6 @@
+ 	 *   - activate the new LV
+ 	 */
+ 	sync_local_dev_names(lv->vg->cmd);
+-	new_lv = NULL;
+ 	dm_list_iterate_items(lvl, &split_images) {
+ 		if (!new_lv) {
+ 			/* Grab 1st sub-LV for later */
 
 
