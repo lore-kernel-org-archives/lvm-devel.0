@@ -1,87 +1,83 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 20 Sep 2011 14:57:09 +0200
-Subject: [PATCH 4/7][retry remove] Add new "dm_device_has_holders" fn to libdm
-Message-ID: <4E788DA5.8010304@redhat.com>
+Date: Tue, 20 Sep 2011 14:57:39 +0200
+Subject: [PATCH 5/7][retry remove] Replace "info.open_count" test with "dm_device_has_holders" in lvremove code path
+Message-ID: <4E788DC3.6090306@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This is a helper function used both in libdevmapper and in LVM
-to test whether there are any devices that make use of certain
-device given as parameter (this will partially replace "open_count"
-check, see the following patch...).
+ lib/activate/activate.c    |    2 +-
+ lib/commands/toolcontext.c |    8 +++++---
+ lib/metadata/lv_manip.c    |    2 +-
+ libdm/libdm-deptree.c      |    2 +-
+ 4 files changed, 8 insertions(+), 6 deletions(-)
 
-Peter
----
- libdm/libdevmapper.h |    6 ++++++
- libdm/libdm-common.c |   36 ++++++++++++++++++++++++++++++++++++
- 2 files changed, 42 insertions(+), 0 deletions(-)
-
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index ae39262..9df34bb 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -267,6 +267,12 @@ const char *dm_sysfs_dir(void);
- int dm_is_dm_major(uint32_t major);
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index ae769dd..3d854d1 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1437,7 +1437,7 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s)
+ 	}
  
- /*
-+ * Determine whether a device has holders.
-+ * (this requires sysfs directory to be configured via dm_set_sysfs_dir)
-+ */
-+int dm_device_has_holders(uint32_t major, uint32_t minor);
-+
-+/*
-  * Release library resources
-  */
- void dm_lib_release(void);
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 7517fb1..7ea78af 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1051,6 +1051,42 @@ const char *dm_sysfs_dir(void)
- 	return _sysfs_dir;
- }
+ 	if (lv_is_visible(lv)) {
+-		if (info.open_count) {
++		if (dm_device_has_holders(info.major, info.minor)) {
+ 			log_error("LV %s/%s in use: not deactivating",
+ 				  lv->vg->name, lv->name);
+ 			goto out;
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 859da2b..3dccc18 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -243,9 +243,6 @@ static int _process_config(struct cmd_context *cmd)
+ 		log_error("Device directory given in config file too long");
+ 		return 0;
+ 	}
+-#ifdef DEVMAPPER_SUPPORT
+-	dm_set_dev_dir(cmd->dev_dir);
+-#endif
  
-+static int _is_empty_dir(const char *dir)
-+{
-+	struct dirent *dirent;
-+	DIR *d;
+ 	/* proc dir */
+ 	if (dm_snprintf(cmd->proc_dir, sizeof(cmd->proc_dir), "%s",
+@@ -265,6 +262,11 @@ static int _process_config(struct cmd_context *cmd)
+ 	_get_sysfs_dir(cmd);
+ 	set_sysfs_dir_path(cmd->sysfs_dir);
+ 
++#ifdef DEVMAPPER_SUPPORT
++	dm_set_dev_dir(cmd->dev_dir);
++	dm_set_sysfs_dir(cmd->sysfs_dir);
++#endif
 +
-+	if (!(d = opendir(dir))) {
-+		log_sys_error("opendir", dir);
-+		return 0;
-+	}
-+
-+	while ((dirent = readdir(d)))
-+		if (strcmp(dirent->d_name, ".") && strcmp(dirent->d_name, ".."))
-+			break;
-+
-+	if (closedir(d))
-+		log_sys_error("closedir", dir);
-+
-+	return dirent ? 0 : 1;
-+}
-+
-+int dm_device_has_holders(uint32_t major, uint32_t minor)
-+{
-+	char sysfs_path[PATH_MAX];
-+
-+	if (!*_sysfs_dir)
-+		return 0;
-+
-+	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32
-+			":%" PRIu32 "/holders", _sysfs_dir, major, minor) < 0) {
-+		log_error("sysfs_path dm_snprintf failed");
-+		return 0;
-+	}
-+
-+	return !_is_empty_dir(sysfs_path);
-+}
-+
- int dm_mknodes(const char *name)
- {
- 	struct dm_task *dmt;
+ 	/* activation? */
+ 	cmd->default_settings.activation = find_config_tree_int(cmd,
+ 							   "global/activation",
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 61e84c1..3132d0e 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3099,7 +3099,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	/* FIXME Ensure not referred to by another existing LVs */
+ 
+ 	if (lv_info(cmd, lv, 0, &info, 1, 0)) {
+-		if (info.open_count) {
++		if (info.exists && dm_device_has_holders(info.major, info.minor)) {
+ 			log_error("Can't remove open logical volume \"%s\"",
+ 				  lv->name);
+ 			return 0;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 0db8de2..864723d 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1185,7 +1185,7 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
+ 			continue;
+ 
+ 		/* Also checking open_count in parent nodes of presuspend_node */
+-		if (info.open_count ||
++		if (dm_device_has_holders(info.major, info.minor) ||
+ 		    (child->presuspend_node &&
+ 		     !_node_has_closed_parents(child->presuspend_node,
+ 					       uuid_prefix, uuid_prefix_len))) {
 
 
