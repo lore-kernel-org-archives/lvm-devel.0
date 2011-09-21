@@ -1,26 +1,53 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Wed, 21 Sep 2011 15:41:41 +0200
-Subject: [PATCH 1/2] Clvmd fix restart
-In-Reply-To: <498932ea49b0379d95cf520090fa575551360ff6.1316604772.git.zkabelac@redhat.com>
-References: <cover.1316604772.git.zkabelac@redhat.com>
-	<498932ea49b0379d95cf520090fa575551360ff6.1316604772.git.zkabelac@redhat.com>
-Message-ID: <4E79E995.5030807@redhat.com>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 21 Sep 2011 16:36:40 -0000
+Subject: LVM2/tools pvmove.c
+Message-ID: <20110921163640.16609.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/21/2011 01:36 PM, Zdenek Kabelac wrote:
-> Patch fixes two reads in the iteration loop,
-> where only every second lock is then passed to restarted clvmd.
-> 
-> Also moves initialisation of  'hn' to NULL - since for the first loop
-> it's already initialized to NULL, while the second loop
-> needs to start with 'hn' == NULL.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2011-09-21 16:36:39
 
-Ack. (I wonder that nobody noticed yet!)
+Modified files:
+	tools          : pvmove.c 
 
-Milan
+Log message:
+	FIXMEs to note problems with some error paths.  (Perhaps safer to disable
+	them until they can be fixed completely?)
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
+
+--- LVM2/tools/pvmove.c	2011/08/30 14:55:19	1.86
++++ LVM2/tools/pvmove.c	2011/09/21 16:36:39	1.87
+@@ -365,6 +365,7 @@
+ 	}
+ 
+ 	if (!_suspend_lvs(cmd, first_time, lv_mirr, lvs_changed)) {
++		/* FIXME vg_revert must be moved *before* any LV resumes */
+ 		vg_revert(vg);
+ 		goto_out;
+ 	}
+@@ -388,13 +389,16 @@
+ 
+ 			/*
+ 			 * Nothing changed yet, try to revert pvmove.
++			 * FIXME This error path is incomplete and unsafe.
+ 			 */
+ 			log_error("Temporary pvmove mirror activation failed.");
+ 
+ 			/* Ensure that temporary mrror is deactivate even on other nodes. */
++			/* FIXME Unsafe to proceed if this fails without checking explicitly that no pvmove LVs are still active */
+ 			(void)deactivate_lv(cmd, lv_mirr);
+ 
+ 			/* Revert metadata */
++			/* FIXME Use --abort code instead? */
+ 			if (!_detach_pvmove_mirror(cmd, lv_mirr) ||
+ 			    !lv_remove(lv_mirr) ||
+ 			    !vg_write(vg) || !vg_commit(vg))
 
 
