@@ -1,58 +1,42 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 9 Sep 2011 13:19:20 -0000
-Subject: LVM2/test/lib check.sh
-Message-ID: <20110909131920.32556.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 21 Sep 2011 10:39:10 +0200
+Subject: [PATCH 8/7][retry remove] Also add check for filesystem use on a DM/LVM device - "dm_device_has_fs"
+In-Reply-To: <4E78E64C.8080006@redhat.com>
+References: <4E78E64C.8080006@redhat.com>
+Message-ID: <4E79A2AE.5040708@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-09 13:19:20
+On 09/20/2011 09:15 PM +0100, Peter Rajnoha wrote:
+> diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+> index 7ea78af..37b6902 100644
+> --- a/libdm/libdm-common.c
+> +++ b/libdm/libdm-common.c
 
-Modified files:
-	test/lib       : check.sh 
+> +int dm_device_has_fs(uint32_t major, uint32_t minor)
+> +{
+> +	char sysfs_path[PATH_MAX];
+> +	char temp_path[PATH_MAX];
+> +	size_t size;
 
-Log message:
-	Updated testing script
-	
-	Since attrs were extended by 2 new fields update check functions.
+I've just noticed - this must be int size!!!
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/check.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+> +	char *kernel_dev_name;
+> +
+> +	/* Get kernel device name first */
+> +	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32 ":%" PRIu32,
+> +			_sysfs_dir, major, minor) < 0) {
+> +		log_error("sysfs_path dm_snprintf failed");
+> +		return 0;
+> +	}
+> +
+> +	if ((size = readlink(sysfs_path, temp_path, PATH_MAX)) < 0) {
 
---- LVM2/test/lib/check.sh	2011/04/12 12:39:24	1.5
-+++ LVM2/test/lib/check.sh	2011/09/09 13:19:19	1.6
-@@ -139,8 +139,8 @@
- 
- mirror_nonredundant() {
- 	lv="$1/$2"
--	lvs -oattr "$lv" | grep "^ *m.....$" >/dev/null || {
--		if lvs -oattr "$lv" | grep "^ *o.....$" >/dev/null &&
-+	lvs -oattr "$lv" | grep "^ *m.......$" >/dev/null || {
-+		if lvs -oattr "$lv" | grep "^ *o.......$" >/dev/null &&
- 		   lvs -a | fgrep "[${2}_mimage" >/dev/null; then
- 			echo "TEST WARNING: $lv is a snapshot origin and looks like a mirror,"
- 			echo "assuming it is actually a mirror"
-@@ -183,7 +183,7 @@
- 
- active() {
- 	lv="$1/$2"
--	lvl -oattr "$lv" 2> /dev/null | grep "^ *....a.$" >/dev/null || {
-+	lvl -oattr "$lv" 2> /dev/null | grep "^ *....a...$" >/dev/null || {
- 		echo "$lv expected active, but lvs says it's not:"
- 		lvl "$lv" -o+devices 2>/dev/null
- 		exit 1
-@@ -197,7 +197,7 @@
- 
- inactive() {
- 	lv="$1/$2"
--	lvl -oattr "$lv" 2> /dev/null | grep '^ *....[-isd].$' >/dev/null || {
-+	lvl -oattr "$lv" 2> /dev/null | grep '^ *....[-isd]...$' >/dev/null || {
- 		echo "$lv expected inactive, but lvs says it's not:"
- 		lvl "$lv" -o+devices 2>/dev/null
- 		exit 1
+...because of this check.
+
+Peter
 
 
