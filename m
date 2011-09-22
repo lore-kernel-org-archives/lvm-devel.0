@@ -1,116 +1,68 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 22 Sep 2011 17:12:29 -0000
-Subject: LVM2 ./WHATS_NEW_DM man/dmsetup.8.in tools/dms ...
-Message-ID: <20110922171229.24006.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 22 Sep 2011 12:13:45 -0500
+Subject: [PATCH 1 of 2] Skip sync of mirror extension if mirror has LV_NOTSYNCED set
+Message-ID: <1316711625.9375.1.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-09-22 17:12:28
+If mirror was created with '--nosync', lvextend should not do sync on extension.
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	man            : dmsetup.8.in 
-	tools          : dmsetup.c 
-
-Log message:
-	Add --retry option for dmsetup remove to retry removal if not successful.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.500&r2=1.501
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.42&r2=1.43
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.168&r2=1.169
-
---- LVM2/WHATS_NEW_DM	2011/09/22 17:09:48	1.500
-+++ LVM2/WHATS_NEW_DM	2011/09/22 17:12:28	1.501
-@@ -1,5 +1,6 @@
- Version 1.02.68 -
- ==================================
-+  Add --retry option for dmsetup remove to retry removal if not successful.
-   Add dm_task_retry_remove fn to use retry logic for device removal.
-   Remove unused passed parameters for _mirror_emit_segment_line().
-   Add dm_config and string character escaping functions to libdevmapper.
---- LVM2/man/dmsetup.8.in	2011/07/01 14:09:20	1.42
-+++ LVM2/man/dmsetup.8.in	2011/09/22 17:12:28	1.43
-@@ -11,7 +11,7 @@
- .I [{ --addnodeonresume | --addnodeoncreate }]
- .br
- .B dmsetup remove
--.I [-f|--force] device_name
-+.I [-f|--force] [--retry] device_name
- .br
- .B dmsetup remove_all
- .I [-f|--force]
-@@ -280,7 +280,7 @@
- correspond to mapped devices currently loaded by the device-mapper kernel
- driver, adding, changing or removing nodes as necessary.
- .IP \fBremove
--.I [-f|--force] device_name
-+.I [-f|--force] [--retry] device_name
- .br
- Removes a device.  It will no longer be visible to dmsetup.
- Open devices cannot be removed except with older kernels
-@@ -290,7 +290,10 @@
- be removed because an uninterruptible process is waiting for
- I/O to return from it, adding --force will replace the table 
- with one that fails all I/O, which might allow the 
--process to be killed.
-+process to be killed. If an attempt to remove a device fails,
-+perhaps because a process run from a quick udev rule
-+temporarily opened the device, the --retry option will cause
-+the operation to be retried for a few seconds before failing.
- .IP \fBremove_all
- .I [-f|--force]
- .br
---- LVM2/tools/dmsetup.c	2011/08/11 19:18:18	1.168
-+++ LVM2/tools/dmsetup.c	2011/09/22 17:12:28	1.169
-@@ -140,6 +140,7 @@
- 	NOUDEVSYNC_ARG,
- 	OPTIONS_ARG,
- 	READAHEAD_ARG,
-+	RETRY_ARG,
- 	ROWS_ARG,
- 	SEPARATOR_ARG,
- 	SETUUID_ARG,
-@@ -1279,6 +1280,9 @@
- 	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, udev_flags))
- 		goto out;
- 
-+	if (_switches[RETRY_ARG] && task == DM_DEVICE_REMOVE)
-+		dm_task_retry_remove(dmt);
-+
- 	r = dm_task_run(dmt);
- 
-       out:
-@@ -2805,7 +2809,7 @@
- 		"        [--checks] [-v|--verbose [-v|--verbose ...]]\n"
- 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
- 		"        [--udevcookie [cookie]] [--noudevrules] [--noudevsync] [--verifyudev]\n"
--		"        [-y|--yes] [--readahead [+]<sectors>|auto|none]\n"
-+		"        [-y|--yes] [--readahead [+]<sectors>|auto|none] [--retry]\n"
- 		"        [-c|-C|--columns] [-o <fields>] [-O|--sort <sort_fields>]\n"
- 		"        [--nameprefixes] [--noheadings] [--separator <separator>]\n\n");
- 	for (i = 0; _commands[i].name; i++)
-@@ -3178,6 +3182,7 @@
- 		{"noudevsync", 0, &ind, NOUDEVSYNC_ARG},
- 		{"options", 1, &ind, OPTIONS_ARG},
- 		{"readahead", 1, &ind, READAHEAD_ARG},
-+		{"retry", 0, &ind, RETRY_ARG},
- 		{"rows", 0, &ind, ROWS_ARG},
- 		{"separator", 1, &ind, SEPARATOR_ARG},
- 		{"setuuid", 0, &ind, SETUUID_ARG},
-@@ -3362,6 +3367,8 @@
- 				}
- 			}
+Index: LVM2/lib/metadata/lv_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/lv_manip.c
++++ LVM2/lib/metadata/lv_manip.c
+@@ -2599,13 +2599,45 @@ int lv_extend(struct logical_volume *lv,
+ 			return 0;
  		}
-+		if ((ind == RETRY_ARG))
-+			_switches[RETRY_ARG]++;
- 		if ((ind == ROWS_ARG))
- 			_switches[ROWS_ARG]++;
- 		if ((ind == SETUUID_ARG))
+ 
+-		r = _lv_extend_layered_lv(ah, lv, extents, 0,
+-					  stripes, stripe_size);
++		if (!(r = _lv_extend_layered_lv(ah, lv, extents, 0,
++						stripes, stripe_size)))
++			goto_out;
+ 
+-		if (r && segtype_is_thin_pool(segtype))
++		if (segtype_is_thin_pool(segtype))
+ 			r = lv_add_segment(ah, ah->area_count, 1, first_seg(lv)->pool_metadata_lv,
+ 					   get_segtype_from_string(lv->vg->cmd, "striped"), 0, 0, 0);
++
++		/*
++		 * If we are expanding an existing mirror, we can skip the
++		 * resync of the extension if the LV is currently in-sync
++		 * and the LV has the LV_NOTSYNCED flag set.
++		 */
++		if ((lv->le_count != extents) &&
++		    segtype_is_mirrored(segtype) &&
++		    (lv->status & LV_NOTSYNCED)) {
++			percent_t sync_percent;
++
++			log_verbose("%s/%s created or extended with '--nosync'",
++				    lv->vg->name, lv->name);
++			if (!lv_mirror_percent(lv->vg->cmd, lv, 0,
++					      &sync_percent, NULL)) {
++				log_error("Failed to get sync percent for %s/%s:"
++					  " Forcing resync of extended portion",
++					  lv->vg->name, lv->name);
++			} else if (sync_percent == PERCENT_100) {
++				log_verbose("Skipping initial resync for "
++					    "extended portion of %s/%s",
++					    lv->vg->name, lv->name);
++				init_mirror_in_sync(1);
++			} else {
++				log_verbose("%s/%s is not currently in-sync: "
++					  " Forcing resync of extended portion",
++					  lv->vg->name, lv->name);
++			}
++		}
+ 	}
++
++out:
+ 	alloc_destroy(ah);
+ 	return r;
+ }
+
 
 
