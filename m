@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Sep 2011 09:45:25 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c
-Message-ID: <20110922094525.13161.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 22 Sep 2011 15:33:22 -0000
+Subject: LVM2/lib/metadata raid_manip.c
+Message-ID: <20110922153322.597.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-22 09:45:24
+Changes by:	jbrassow at sourceware.org	2011-09-22 15:33:21
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-command.c 
+	lib/metadata   : raid_manip.c 
 
 Log message:
-	Add all exclusive locks to clvmd restart option args
-	
-	Fix bug when only every even lock has been passed.
-	
-	Warning: currently -E causes clvmd to exit with usage text being printed.
+	When up-converting a RAID1 array, we need to allocate new larger arrays for
+	seg->areas and seg->meta_areas.  We also need to copy the memory from the
+	old arrays to the newly allocated arrays.  The amount of memory to copy was
+	determined by seg->area_count.  However, seg->area_count was being set to the
+	higher value after copying the 'seg->areas' information, but before copying
+	the 'seg->meta_areas' information.  This means we were copying more memory
+	than necessary for 'seg->meta_areas' - something that could lead to a segfault.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2127&r2=1.2128
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
 
---- LVM2/WHATS_NEW	2011/09/21 13:40:46	1.2127
-+++ LVM2/WHATS_NEW	2011/09/22 09:45:24	1.2128
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Add all exclusive locks to clvmd restart option args.
-   Always send the whole clvmd packet header in refresh commands.
-   Add missing error checks for some system calls in cmirrord.
-   Add missing log_error() to lvresize command when fsadm tool fails.
---- LVM2/daemons/clvmd/clvmd-command.c	2011/06/03 09:05:30	1.56
-+++ LVM2/daemons/clvmd/clvmd-command.c	2011/09/22 09:45:24	1.57
-@@ -369,7 +369,6 @@
- 	DEBUGLOG("clvmd restart requested\n");
+--- LVM2/lib/metadata/raid_manip.c	2011/09/14 09:57:35	1.14
++++ LVM2/lib/metadata/raid_manip.c	2011/09/22 15:33:21	1.15
+@@ -499,7 +499,6 @@
+ 		goto fail;
+ 	memcpy(new_areas, seg->areas, seg->area_count * sizeof(*seg->areas));
+ 	seg->areas = new_areas;
+-	seg->area_count = new_count;
  
- 	/* Count exclusively-open LVs */
--	hn = NULL;
- 	do {
- 		hn = get_next_excl_lock(hn, &lv_name);
- 		if (lv_name)
-@@ -403,6 +402,7 @@
- 	 */
+ 	/* Expand meta_areas array */
+ 	if (!(new_areas = dm_pool_zalloc(lv->vg->cmd->mem,
+@@ -508,6 +507,7 @@
+ 	memcpy(new_areas, seg->meta_areas,
+ 	       seg->area_count * sizeof(*seg->meta_areas));
+ 	seg->meta_areas = new_areas;
++	seg->area_count = new_count;
  
- 	/* Now add the exclusively-open LVs */
-+	hn = NULL;
- 	do {
- 		hn = get_next_excl_lock(hn, &lv_name);
- 		if (lv_name) {
-@@ -414,7 +414,6 @@
- 				goto_out;
- 
- 			DEBUGLOG("excl lock: %s\n", lv_name);
--			hn = get_next_excl_lock(hn, &lv_name);
- 		}
- 	} while (hn && *lv_name);
- 	argv[argc++] = NULL;
+ 	/* Set segment areas for metadata sub_lvs */
+ 	s = old_count;
 
 
