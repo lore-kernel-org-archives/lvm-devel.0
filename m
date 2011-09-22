@@ -1,68 +1,56 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 22 Sep 2011 12:13:45 -0500
-Subject: [PATCH 1 of 2] Skip sync of mirror extension if mirror has LV_NOTSYNCED set
-Message-ID: <1316711625.9375.1.camel@f14.redhat.com>
+Date: Thu, 22 Sep 2011 12:15:32 -0500
+Subject: [PATCH 2 of 2] Add --nosync option to lvextend so sync of added mirror space can be skipped
+In-Reply-To: <1316711625.9375.1.camel@f14.redhat.com>
+References: <1316711625.9375.1.camel@f14.redhat.com>
+Message-ID: <1316711732.9375.3.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If mirror was created with '--nosync', lvextend should not do sync on extension.
+Add '--nosync' option to lvextend to allow mirrors to extend w/o initial resync
 
-Index: LVM2/lib/metadata/lv_manip.c
+Index: LVM2/tools/commands.h
 ===================================================================
---- LVM2.orig/lib/metadata/lv_manip.c
-+++ LVM2/lib/metadata/lv_manip.c
-@@ -2599,13 +2599,45 @@ int lv_extend(struct logical_volume *lv,
- 			return 0;
- 		}
+--- LVM2.orig/tools/commands.h
++++ LVM2/tools/commands.h
+@@ -265,6 +265,7 @@ xx(lvextend,
+    "\t{-l|--extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE|ORIGIN}] |\n"
+    "\t -L|--size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
+    "\t[-m|--mirrors Mirrors]\n"
++   "\t[--nosync]\n"
+    "\t[--use-policies]\n"
+    "\t[-n|--nofsck]\n"
+    "\t[--noudevsync]\n"
+@@ -276,7 +277,7 @@ xx(lvextend,
+    "\tLogicalVolume[Path] [ PhysicalVolumePath... ]\n",
  
--		r = _lv_extend_layered_lv(ah, lv, extents, 0,
--					  stripes, stripe_size);
-+		if (!(r = _lv_extend_layered_lv(ah, lv, extents, 0,
-+						stripes, stripe_size)))
-+			goto_out;
+    alloc_ARG, autobackup_ARG, extents_ARG, force_ARG, mirrors_ARG,
+-   nofsck_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
++   nofsck_ARG, nosync_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
+    stripesize_ARG, test_ARG, type_ARG, use_policies_ARG)
  
--		if (r && segtype_is_thin_pool(segtype))
-+		if (segtype_is_thin_pool(segtype))
- 			r = lv_add_segment(ah, ah->area_count, 1, first_seg(lv)->pool_metadata_lv,
- 					   get_segtype_from_string(lv->vg->cmd, "striped"), 0, 0, 0);
-+
+ xx(lvmchange,
+Index: LVM2/tools/lvresize.c
+===================================================================
+--- LVM2.orig/tools/lvresize.c
++++ LVM2/tools/lvresize.c
+@@ -504,6 +504,13 @@ static int _lvresize(struct cmd_context 
+ 
+ 	/* If extending, find mirrors of last segment */
+ 	if ((lp->extents > lv->le_count)) {
 +		/*
-+		 * If we are expanding an existing mirror, we can skip the
-+		 * resync of the extension if the LV is currently in-sync
-+		 * and the LV has the LV_NOTSYNCED flag set.
++		 * Has the user specified that they would like the additional
++		 * extents of a mirror not to have an initial sync?
 +		 */
-+		if ((lv->le_count != extents) &&
-+		    segtype_is_mirrored(segtype) &&
-+		    (lv->status & LV_NOTSYNCED)) {
-+			percent_t sync_percent;
++		if (seg_is_mirrored(first_seg(lv)) && arg_count(cmd, nosync_ARG))
++			lv->status |= LV_NOTSYNCED;
 +
-+			log_verbose("%s/%s created or extended with '--nosync'",
-+				    lv->vg->name, lv->name);
-+			if (!lv_mirror_percent(lv->vg->cmd, lv, 0,
-+					      &sync_percent, NULL)) {
-+				log_error("Failed to get sync percent for %s/%s:"
-+					  " Forcing resync of extended portion",
-+					  lv->vg->name, lv->name);
-+			} else if (sync_percent == PERCENT_100) {
-+				log_verbose("Skipping initial resync for "
-+					    "extended portion of %s/%s",
-+					    lv->vg->name, lv->name);
-+				init_mirror_in_sync(1);
-+			} else {
-+				log_verbose("%s/%s is not currently in-sync: "
-+					  " Forcing resync of extended portion",
-+					  lv->vg->name, lv->name);
-+			}
-+		}
- 	}
-+
-+out:
- 	alloc_destroy(ah);
- 	return r;
- }
+ 		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
+ 			if (seg_is_mirrored(mirr_seg))
+ 				seg_mirrors = lv_mirror_count(mirr_seg->lv);
 
 
 
