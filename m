@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 23 Sep 2011 17:16:29 -0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-Message-ID: <20110923171629.21970.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 23 Sep 2011 19:21:53 -0000
+Subject: LVM2/man lvs.8.in
+Message-ID: <20110923192153.18763.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,43 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-09-23 17:16:28
+Changes by:	jbrassow at sourceware.org	2011-09-23 19:21:53
 
 Modified files:
-	libdm/ioctl    : libdm-iface.c 
+	man            : lvs.8.in 
 
 Log message:
-	explain why we may now retry
+	update man page for new RAID lv_attr characters.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/libdm/ioctl/libdm-iface.c	2011/09/22 17:59:58	1.122
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/09/23 17:16:28	1.123
-@@ -1654,6 +1654,11 @@
- 					  _cmd_data_v4[dmt->type].name,
- 					  strerror(errno));
- 
-+			/*
-+			 * It's sometimes worth retrying after EBUSY in case
-+			 * it's a transient failure caused by an asynchronous
-+			 * process quickly scanning the device.
-+			 */
- 			*retryable = errno == EBUSY;
- 
- 			_dm_zfree_dmi(dmi);
-@@ -1739,6 +1744,12 @@
- repeat_ioctl:
- 	if (!(dmi = _do_dm_ioctl(dmt, command, _ioctl_buffer_double_factor,
- 				 ioctl_retry, &retryable))) {
-+		/*
-+		 * Async udev rules that scan devices commonly cause transient
-+		 * failures.  Normally you'd expect the user to have made sure
-+		 * nothing was using the device before issuing REMOVE, so it's
-+		 * worth retrying in case the failure is indeed transient.
-+		 */
- 		if (retryable && dmt->type == DM_DEVICE_REMOVE &&
- 		    dmt->retry_remove && ++ioctl_retry <= DM_IOCTL_RETRIES) {
- 			usleep(DM_RETRY_USLEEP_DELAY);
+--- LVM2/man/lvs.8.in	2011/09/09 01:15:18	1.16
++++ LVM2/man/lvs.8.in	2011/09/23 19:21:53	1.17
+@@ -69,10 +69,11 @@
+ .RS
+ .IP 1 3
+ Volume type: (m)irrored, (M)irrored without initial sync, (o)rigin,
+-(O)rigin with merging snapshot, (s)napshot, merging (S)napshot, (p)vmove,
+-(v)irtual, mirror (i)mage, mirror (I)mage out-of-sync, mirror (l)og device,
+-under (c)onversion, thin (V)olume, (t)hin pool, (T)hin pool data, thin pool 
+-m(e)tadata
++(O)rigin with merging snapshot, (r)aid, (R)aid without initial sync,
++(s)napshot, merging (S)napshot, (p)vmove, (v)irtual,
++mirror or raid (i)mage, mirror or raid (I)mage out-of-sync, mirror (l)og device,
++under (c)onversion, thin (V)olume, (t)hin pool, (T)hin pool data, raid or
++thin pool m(e)tadata
+ .IP 2 3
+ Permissions: (w)riteable, (r)ead-only
+ .IP 3 3
 
 
