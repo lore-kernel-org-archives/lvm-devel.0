@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Sep 2011 09:51:37 -0000
-Subject: LVM2 ./WHATS_NEW_DM man/dmsetup.8.in
-Message-ID: <20110923095137.20944.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 23 Sep 2011 15:17:56 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv.c
+Message-ID: <20110923151756.19057.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,98 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-23 09:51:37
+Changes by:	jbrassow at sourceware.org	2011-09-23 15:17:54
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	man            : dmsetup.8.in 
+	.              : WHATS_NEW 
+	lib/metadata   : lv.c 
 
 Log message:
-	Update dmsetup man page
+	Add 'Volume Type' lv_attr characters for RAID and RAID_IMAGE.
 	
-	While dmsetup command properly shows all dmsetup resume supported options,
-	man page missed to document it.
+	RAID_META is already handled.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.505&r2=1.506
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2132&r2=1.2133
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.28&r2=1.29
 
---- LVM2/WHATS_NEW_DM	2011/09/23 09:48:21	1.505
-+++ LVM2/WHATS_NEW_DM	2011/09/23 09:51:37	1.506
+--- LVM2/WHATS_NEW	2011/09/22 17:39:56	1.2132
++++ LVM2/WHATS_NEW	2011/09/23 15:17:54	1.2133
 @@ -1,5 +1,6 @@
- Version 1.02.68 -
+ Version 2.02.89 - 
  ==================================
-+  Update dmsetup resume man with --addnodeonresume/create options.
-   Add dependency for dm man pages to man subdirectory make target all:.
-   Add dm_tree_retry_remove to use retry logic for device removal in a dm_tree.
-   Add dm_device_has_mounted_fs fn to check mounted filesystem on a device.
---- LVM2/man/dmsetup.8.in	2011/09/22 17:12:28	1.43
-+++ LVM2/man/dmsetup.8.in	2011/09/23 09:51:37	1.44
-@@ -20,7 +20,7 @@
- .I [--nolockfs] [--noflush] device_name
- .br
- .B dmsetup resume
--.I device_name
-+.I device_name [{ --addnodeonresume | --addnodeoncreate }]
- .br
- .B dmsetup load
- .I device_name [--table <table> | table_file]
-@@ -313,7 +313,7 @@
- Sets the uuid of a device that was created without a uuid.
- After a uuid has been set it cannot be changed.
- .IP \fBresume
--.I device_name
-+.I device_name [{ --addnodeonresume | --addnodeoncreate }]
- .br
- Un-suspends a device.  
- If an inactive table has been loaded, it becomes live.
++  Add 'Volume Type' lv_attr characters for RAID and RAID_IMAGE.
+   Add activation/retry_deactivation to lvm.conf to retry deactivation of an LV.
+   Replace open_count check with holders/mounted_fs check on lvremove path.
+   Disallow the creation of mirrors (mirror or raid1 segtype) with only one leg.
+--- LVM2/lib/metadata/lv.c	2011/09/14 10:03:15	1.28
++++ LVM2/lib/metadata/lv.c	2011/09/23 15:17:54	1.29
+@@ -304,6 +304,48 @@
+ 	return (percent == PERCENT_100) ? 1 : 0;
+ }
+ 
++static int _lv_raid_image_in_sync(const struct logical_volume *lv)
++{
++	percent_t percent;
++	struct lv_segment *raid_seg;
++
++	if (!(lv->status & RAID_IMAGE)) {
++		log_error(INTERNAL_ERROR "%s is not a RAID image", lv->name);
++		return 0;
++	}
++
++	raid_seg = get_only_segment_using_this_lv(first_seg(lv)->lv);
++	if (!raid_seg) {
++		log_error("Failed to find RAID segment for %s", lv->name);
++		return 0;
++	}
++
++	if (!seg_is_raid(raid_seg)) {
++		log_error("%s on %s is not a RAID segment",
++			  raid_seg->lv->name, lv->name);
++		return 0;
++	}
++
++	if (!lv_raid_percent(raid_seg->lv, &percent))
++		return_0;
++
++	if (percent == PERCENT_100)
++		return 1;
++
++	/*
++	 * FIXME:  Get individual RAID image status.
++	 * The status health characters reported from a RAID target
++	 * indicate whether the whole array or just individual devices
++	 * are in-sync.  If the corresponding character for this image
++	 * was 'A', we could report a more accurate status.  This is
++	 * especially so in the case of failures or rebuildings.
++	 *
++	 * We need to test the health characters anyway to report
++	 * the correct 4th attr character.  Just need to figure out
++	 * where to put this functionality.
++	 */
++	return 0;
++}
+ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	percent_t snap_percent;
+@@ -327,6 +369,8 @@
+ 	/* Origin takes precedence over mirror and thin volume */
+ 	else if (lv_is_origin(lv))
+ 		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
++	else if (lv->status & RAID)
++		repstr[0] = (lv->status & LV_NOTSYNCED) ? 'R' : 'r';
+ 	else if (lv->status & MIRRORED)
+ 		repstr[0] = (lv->status & LV_NOTSYNCED) ? 'M' : 'm';
+ 	else if (lv_is_thin_volume(lv))
+@@ -341,6 +385,8 @@
+ 		repstr[0] = 'e';
+ 	else if (lv->status & MIRROR_IMAGE)
+ 		repstr[0] = (_lv_mimage_in_sync(lv)) ? 'i' : 'I';
++	else if (lv->status & RAID_IMAGE)
++		repstr[0] = (_lv_raid_image_in_sync(lv)) ? 'i' : 'I';
+ 	else if (lv->status & MIRROR_LOG)
+ 		repstr[0] = 'l';
+ 	else if (lv_is_cow(lv)) {
 
 
