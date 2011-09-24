@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 23 Sep 2011 19:21:53 -0000
-Subject: LVM2/man lvs.8.in
-Message-ID: <20110923192153.18763.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 24 Sep 2011 11:47:54 -0000
+Subject: LVM2/libdm libdm-common.c
+Message-ID: <20110924114754.22576.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-09-23 19:21:53
+Changes by:	prajnoha at sourceware.org	2011-09-24 11:47:53
 
 Modified files:
-	man            : lvs.8.in 
+	libdm          : libdm-common.c 
 
 Log message:
-	update man page for new RAID lv_attr characters.
+	readlink does not append a null byte to the output string!
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
 
---- LVM2/man/lvs.8.in	2011/09/09 01:15:18	1.16
-+++ LVM2/man/lvs.8.in	2011/09/23 19:21:53	1.17
-@@ -69,10 +69,11 @@
- .RS
- .IP 1 3
- Volume type: (m)irrored, (M)irrored without initial sync, (o)rigin,
--(O)rigin with merging snapshot, (s)napshot, merging (S)napshot, (p)vmove,
--(v)irtual, mirror (i)mage, mirror (I)mage out-of-sync, mirror (l)og device,
--under (c)onversion, thin (V)olume, (t)hin pool, (T)hin pool data, thin pool 
--m(e)tadata
-+(O)rigin with merging snapshot, (r)aid, (R)aid without initial sync,
-+(s)napshot, merging (S)napshot, (p)vmove, (v)irtual,
-+mirror or raid (i)mage, mirror or raid (I)mage out-of-sync, mirror (l)og device,
-+under (c)onversion, thin (V)olume, (t)hin pool, (T)hin pool data, raid or
-+thin pool m(e)tadata
- .IP 2 3
- Permissions: (w)riteable, (r)ead-only
- .IP 3 3
+--- LVM2/libdm/libdm-common.c	2011/09/22 17:23:36	1.126
++++ LVM2/libdm/libdm-common.c	2011/09/24 11:47:53	1.127
+@@ -1145,6 +1145,7 @@
+ 		log_sys_error("readlink", sysfs_path);
+ 		return 0;
+ 	}
++	temp_path[size] = '\0';
+ 
+ 	if (!(kernel_dev_name = strrchr(temp_path, '/'))) {
+ 		log_error("Could not locate device kernel name in sysfs path %s", temp_path);
 
 
