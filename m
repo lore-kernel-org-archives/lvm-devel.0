@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Sep 2011 20:48:35 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c daemons ...
-Message-ID: <20110924204835.29357.qmail@sourceware.org>
+Date: 24 Sep 2011 20:50:37 -0000
+Subject: LVM2 ./WHATS_NEW ./configure ./configure.in da ...
+Message-ID: <20110924205037.29958.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,245 +10,216 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-24 20:48:34
+Changes by:	zkabelac at sourceware.org	2011-09-24 20:50:36
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c lvm-functions.c lvm-functions.h 
-	man            : clvmd.8.in 
+	.              : WHATS_NEW configure configure.in 
+	daemons/clvmd  : clvmd-command.c lvm-functions.c 
+	man            : Makefile.in clvmd.8.in 
 
 Log message:
-	CLVMD bugfix support for args -S -E
+	CLVMD support for LVM_CLVMD_BINARY and LVM_BINARY
 	
-	Bugfix:
-	Add (most probably unfinished) support for -E arg with list of exclusive
-	locks.  (During clvmd restart all exclusive locks would have been lost and
-	in fact, if there would have been an exclusive lock, usage text would be
-	printed and clvmd exits.)
+	Read 2 environmental vars to learn about overide position for
+	CLVMD and LVM binaries.
 	
-	Instead of parsing list options multiple times every time some lock UUID is
-	checked - put them straight into the hash table - make the code easier to
-	understand as well.
-	
-	Remove  was_ex_lock() function (replaced with dm_hash_lookup()).
-	
-	Swap return value for get_initial_state() (1 means success).
-	
-	Update man pages and usage info for -E option.
+	We support LVM_BINARY in other script - and this way we could easily
+	test restart in our test-suite.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2133&r2=1.2134
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.109&r2=1.110
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.h.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/clvmd.8.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2134&r2=1.2135
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.157&r2=1.158
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.171&r2=1.172
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.42&r2=1.43
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/clvmd.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/WHATS_NEW	2011/09/23 15:17:54	1.2133
-+++ LVM2/WHATS_NEW	2011/09/24 20:48:34	1.2134
+--- LVM2/WHATS_NEW	2011/09/24 20:48:34	1.2134
++++ LVM2/WHATS_NEW	2011/09/24 20:50:35	1.2135
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Fix restart of clvmd (preserve exlusive locks). (2.02.64)
++  Support env vars LVM_CLVMD_BINARY and LVM_BINARY in clvmd.
+   Fix restart of clvmd (preserve exlusive locks). (2.02.64)
    Add 'Volume Type' lv_attr characters for RAID and RAID_IMAGE.
    Add activation/retry_deactivation to lvm.conf to retry deactivation of an LV.
-   Replace open_count check with holders/mounted_fs check on lvremove path.
---- LVM2/daemons/clvmd/clvmd.c	2011/09/16 14:40:07	1.109
-+++ LVM2/daemons/clvmd/clvmd.c	2011/09/24 20:48:34	1.110
-@@ -78,7 +78,7 @@
- };
+--- LVM2/configure	2011/08/31 11:39:32	1.157
++++ LVM2/configure	2011/09/24 20:50:35	1.158
+@@ -626,6 +626,7 @@
+ MIRRORS
+ LVM_RELEASE_DATE
+ LVM_RELEASE
++LVM_PATH
+ LVM_PATCHLEVEL
+ LVM_MINOR
+ LVM_MAJOR
+@@ -664,6 +665,7 @@
+ COPTIMISE_FLAG
+ CONFDIR
+ CMDLIB
++CLVMD_PATH
+ CLVMD_CMANAGERS
+ CLVMD
+ CLUSTER
+@@ -9913,18 +9915,20 @@
+ lvm_exec_prefix=$exec_prefix
+ test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$prefix
+ test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$ac_default_prefix
++LVM_PATH="$lvm_exec_prefix/sbin/lvm"
  
- struct lvm_startup_params {
--	char **argv;
-+	struct dm_hash_table *excl_uuid;
- };
+ cat >>confdefs.h <<_ACEOF
+-#define LVM_PATH "$lvm_exec_prefix/sbin/lvm"
++#define LVM_PATH "$LVM_PATH"
+ _ACEOF
  
- static debug_t debug = DEBUG_OFF;
-@@ -149,6 +149,7 @@
- 		"   -h       Show this help information\n"
- 		"   -d[n]    Set debug logging (0:none, 1:stderr (implies -f option), 2:syslog)\n"
- 		"   -f       Don't fork, run in the foreground\n"
-+		"   -E<lockuuid> Take this lock uuid as exclusively locked resource (for restart)\n"
- 		"   -R       Tell all running clvmds in the cluster to reload their device cache\n"
- 		"   -S       Restart clvmd, preserving exclusive locks\n"
- 		"   -C       Sets debug level (from -d) on all clvmd instances clusterwide\n"
-@@ -348,6 +349,11 @@
- 		{ NULL, 0, 0, 0 }
- 	};
  
-+	if (!(lvm_params.excl_uuid = dm_hash_create(128))) {
-+		fprintf(stderr, "Failed to allocate hash table\n");
-+		return 1;
-+	}
+ if  test "$CLVMD" != none; then
+         clvmd_prefix=$ac_default_prefix
++        CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
+         test "$prefix" != NONE && clvmd_prefix=$prefix
+ 
+ cat >>confdefs.h <<_ACEOF
+-#define CLVMD_PATH "$clvmd_prefix/sbin/clvmd"
++#define CLVMD_PATH "$CLVMD_PATH"
+ _ACEOF
+ 
+ fi
+@@ -10205,6 +10209,8 @@
+ 
+ 
+ 
 +
- 	/* Deal with command-line arguments */
- 	opterr = 0;
- 	optind = 0;
-@@ -391,6 +397,12 @@
- 		case 'I':
- 			cluster_iface = parse_cluster_interface(optarg);
- 			break;
-+		case 'E':
-+			if (!dm_hash_insert(lvm_params.excl_uuid, optarg, optarg)) {
-+				fprintf(stderr, "Failed to allocate hash entry\n");
-+				return 1;
-+			}
-+			break;
- 		case 'T':
- 			start_timeout = atoi(optarg);
- 			if (start_timeout <= 0) {
-@@ -565,7 +577,6 @@
- 
- 	/* Don't let anyone else to do work until we are started */
- 	pthread_mutex_lock(&lvm_start_mutex);
--	lvm_params.argv = argv;
- 	pthread_create(&lvm_thread, NULL, lvm_thread_fn, &lvm_params);
- 
- 	/* Tell the rest of the cluster our version number */
-@@ -603,6 +614,8 @@
- 		free(delfd);
- 	}
- 
-+	dm_hash_destroy(lvm_params.excl_uuid);
 +
- 	return 0;
- }
+ ################################################################################
+ ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/Makefile test/Makefile !
+ test/api/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
  
-@@ -1978,7 +1991,7 @@
- 	pthread_sigmask(SIG_BLOCK, &ss, NULL);
+--- LVM2/configure.in	2011/08/31 11:31:57	1.171
++++ LVM2/configure.in	2011/09/24 20:50:36	1.172
+@@ -1180,13 +1180,14 @@
+ lvm_exec_prefix=$exec_prefix
+ test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$prefix
+ test "$lvm_exec_prefix" = NONE && lvm_exec_prefix=$ac_default_prefix
+-AC_DEFINE_UNQUOTED(LVM_PATH, ["$lvm_exec_prefix/sbin/lvm"], [Path to lvm binary.])
++LVM_PATH="$lvm_exec_prefix/sbin/lvm"
++AC_DEFINE_UNQUOTED(LVM_PATH, ["$LVM_PATH"], [Path to lvm binary.])
  
- 	/* Initialise the interface to liblvm */
--	init_clvm(lvm_params->argv);
-+	init_clvm(lvm_params->excl_uuid);
+ if  test "$CLVMD" != none; then
+         clvmd_prefix=$ac_default_prefix
++        CLVMD_PATH="$clvmd_prefix/sbin/clvmd"
+         test "$prefix" != NONE && clvmd_prefix=$prefix
+-	AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$clvmd_prefix/sbin/clvmd"],
+-			   [Path to clvmd binary.])
++	AC_DEFINE_UNQUOTED(CLVMD_PATH, ["$CLVMD_PATH"], [Path to clvmd binary.])
+ fi
  
- 	/* Allow others to get moving */
- 	pthread_mutex_unlock(&lvm_start_mutex);
---- LVM2/daemons/clvmd/lvm-functions.c	2011/08/10 20:25:29	1.122
-+++ LVM2/daemons/clvmd/lvm-functions.c	2011/09/24 20:48:34	1.123
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -694,34 +694,11 @@
- }
+ ################################################################################
+@@ -1309,6 +1310,7 @@
+ AC_SUBST(CLUSTER)
+ AC_SUBST(CLVMD)
+ AC_SUBST(CLVMD_CMANAGERS)
++AC_SUBST(CLVMD_PATH)
+ AC_SUBST(CMAN_CFLAGS)
+ AC_SUBST(CMAN_LIBS)
+ AC_SUBST(CMDLIB)
+@@ -1357,6 +1359,7 @@
+ AC_SUBST(LVM_MAJOR)
+ AC_SUBST(LVM_MINOR)
+ AC_SUBST(LVM_PATCHLEVEL)
++AC_SUBST(LVM_PATH)
+ AC_SUBST(LVM_RELEASE)
+ AC_SUBST(LVM_RELEASE_DATE)
+ AC_SUBST(MIRRORS)
+--- LVM2/daemons/clvmd/clvmd-command.c	2011/09/22 09:47:34	1.58
++++ LVM2/daemons/clvmd/clvmd-command.c	2011/09/24 20:50:36	1.59
+@@ -366,6 +366,7 @@
+ 	int argc = 0, max_locks = 0;
+ 	struct dm_hash_node *hn = NULL;
+ 	char debug_arg[16];
++	const char *clvmd = getenv("LVM_CLVMD_BINARY") ? : CLVMD_PATH;
  
- /*
-- * Compare the uuid with the list of exclusive locks that clvmd
-- * held before it was restarted, so we can get the right kind
-- * of lock now we are restarting.
-- */
--static int was_ex_lock(char *uuid, char **argv)
--{
--	int optnum = 0;
--	char *opt = argv[optnum];
--
--	while (opt) {
--		if (strcmp(opt, "-E") == 0) {
--			opt = argv[++optnum];
--			if (opt && (strcmp(opt, uuid) == 0)) {
--				DEBUGLOG("Lock %s is exclusive\n", uuid);
--				return 1;
--			}
--		}
--		opt = argv[++optnum];
--	}
--	return 0;
--}
--
--/*
-  * Ideally, clvmd should be started before any LVs are active
-  * but this may not be the case...
-  * I suppose this also comes in handy if clvmd crashes, not that it would!
-  */
--static int get_initial_state(char **argv)
-+static int get_initial_state(struct dm_hash_table *excl_uuid)
- {
- 	int lock_mode;
+ 	DEBUGLOG("clvmd restart requested\n");
+ 
+@@ -415,11 +416,11 @@
+ 	argv[argc] = NULL;
+ 
+ 	/* Exec new clvmd */
+-	DEBUGLOG("--- Restarting %s ---\n", CLVMD_PATH);
++	DEBUGLOG("--- Restarting %s ---\n", clvmd);
+ 	for (argc = 1; argv[argc]; argc++) DEBUGLOG("--- %d: %s\n", argc, argv[argc]);
+ 
+ 	/* NOTE: This will fail when downgrading! */
+-	execve(CLVMD_PATH, (char **)argv, NULL);
++	execve(clvmd, (char **)argv, NULL);
+ out:
+ 	/* We failed */
+ 	DEBUGLOG("Restart of clvmd failed.\n");
+--- LVM2/daemons/clvmd/lvm-functions.c	2011/09/24 20:48:34	1.123
++++ LVM2/daemons/clvmd/lvm-functions.c	2011/09/24 20:50:36	1.124
+@@ -704,13 +704,20 @@
  	char lv[64], vg[64], flags[25], vg_flags[25];
-@@ -733,7 +710,7 @@
- 	     "r");
- 
- 	if (!lvs)
--		return 1;
+ 	char uuid[65];
+ 	char line[255];
+-	FILE *lvs =
+-	    popen
+-	    (LVM_PATH " lvs  --config 'log{command_names=0 prefix=\"\"}' --nolocking --noheadings -o vg_uuid,lv_uuid,lv_attr,vg_attr",
+-	     "r");
++	char *lvs_cmd;
++	const char *lvm_binary = getenv("LVM_BINARY") ? : LVM_PATH;
++	FILE *lvs;
++
++	if (dm_asprintf(&lvs_cmd, "%s lvs  --config 'log{command_names=0 prefix=\"\"}' "
++			"--nolocking --noheadings -o vg_uuid,lv_uuid,lv_attr,vg_attr",
++			lvm_binary) < 0)
 +		return 0;
+ 
+-	if (!lvs)
++	/* FIXME: Maybe link and use liblvm2cmd directly instead of fork */
++	if (!(lvs = popen(lvs_cmd, "r"))) {
++		dm_free(lvs_cmd);
+ 		return 0;
++	}
  
  	while (fgets(line, sizeof(line), lvs)) {
  	        if (sscanf(line, "%s %s %s %s\n", vg, lv, flags, vg_flags) == 4) {
-@@ -759,12 +736,10 @@
- 				memcpy(&uuid[58], &lv[32], 6);
- 				uuid[64] = '\0';
- 
--				lock_mode = LCK_READ;
--
- 				/* Look for this lock in the list of EX locks
- 				   we were passed on the command-line */
--				if (was_ex_lock(uuid, argv))
--					lock_mode = LCK_EXCL;
-+				lock_mode = (dm_hash_lookup(excl_uuid, uuid)) ?
-+					LCK_EXCL : LCK_READ;
- 
- 				DEBUGLOG("getting initial lock for %s\n", uuid);
- 				hold_lock(uuid, lock_mode, LCKF_NOQUEUE);
-@@ -773,7 +748,8 @@
- 	}
+@@ -749,6 +756,8 @@
  	if (fclose(lvs))
  		DEBUGLOG("lvs fclose failed: %s\n", strerror(errno));
--	return 0;
+ 
++	dm_free(lvs_cmd);
 +
-+	return 1;
+ 	return 1;
  }
  
- static void lvm2_log_fn(int level, const char *file, int line, int dm_errno,
-@@ -880,14 +856,14 @@
- }
+--- LVM2/man/Makefile.in	2011/09/23 17:05:44	1.42
++++ LVM2/man/Makefile.in	2011/09/24 20:50:36	1.43
+@@ -73,7 +73,7 @@
+ %: %.in
+ 	@case "$@" in \
+ 	  */*) ;; \
+-	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+" $< > $@ ;; \
++	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;" $< > $@ ;; \
+ 	esac
  
- /* Called to initialise the LVM context of the daemon */
--int init_clvm(char **argv)
-+int init_clvm(struct dm_hash_table *excl_uuid)
- {
- 	/* Use LOG_DAEMON for syslog messages instead of LOG_USER */
- 	init_syslog(LOG_DAEMON);
- 	openlog("clvmd", LOG_PID, LOG_DAEMON);
- 
- 	/* Initialise already held locks */
--	if (get_initial_state(argv))
-+	if (!get_initial_state(excl_uuid))
- 		log_error("Cannot load initial lock states.");
- 
- 	if (!(cmd = create_toolcontext(1, NULL, 0))) {
---- LVM2/daemons/clvmd/lvm-functions.h	2011/08/09 18:11:00	1.16
-+++ LVM2/daemons/clvmd/lvm-functions.h	2011/09/24 20:48:34	1.17
-@@ -27,7 +27,7 @@
- 			char *resource);
- extern int do_check_lvm1(const char *vgname);
- extern int do_refresh_cache(void);
--extern int init_clvm(char **argv);
-+extern int init_clvm(struct dm_hash_table *excl_uuid);
- extern void destroy_lvm(void);
- extern void init_lvhash(void);
- extern void destroy_lvhash(void);
---- LVM2/man/clvmd.8.in	2011/08/09 18:11:00	1.6
-+++ LVM2/man/clvmd.8.in	2011/09/24 20:48:34	1.7
-@@ -4,6 +4,7 @@
- .SH SYNOPSIS
- .B clvmd
- [\-d[<value>]] [\-C] [\-h]
-+[\-E <lock uuid>]
- [\-R]
- [\-S]
- [\-t <timeout>]
-@@ -69,6 +70,9 @@
- .br
- This timeout will be ignored if you start clvmd with the -d switch.
+ install_man5: $(MAN5)
+--- LVM2/man/clvmd.8.in	2011/09/24 20:48:34	1.7
++++ LVM2/man/clvmd.8.in	2011/09/24 20:50:36	1.8
+@@ -95,5 +95,15 @@
  .TP
-+.I \-E <lock uuid>
-+Pass lock uuid to be reacquired exclusively when clvmd is restarted.
+ .I \-V
+ Display the version of the cluster LVM daemon.
++
++.SH ENVIRONMENT VARIABLES
 +.TP
- .I \-R
- Tells all the running clvmds in the cluster to reload their device cache and
- re-read the lvm configuration file. This command should be run whenever the
++.B LVM_CLVMD_BINARY
++The CLVMD binary to use when clmvd restart is requested.
++Defaults to #CLVMD_PATH#.
++.TP
++.B LVM_BINARY
++The LVM2 binary to use. Defaults to #LVM_PATH#.
++
+ .SH SEE ALSO
+ .BR lvm (8)
 
 
