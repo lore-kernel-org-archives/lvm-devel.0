@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 24 Sep 2011 21:15:14 -0000
-Subject: LVM2/test/lib aux.sh
-Message-ID: <20110924211514.3746.qmail@sourceware.org>
+Date: 24 Sep 2011 21:19:31 -0000
+Subject: LVM2 ./WHATS_NEW lib/raid/raid.c lib/unknown/u ...
+Message-ID: <20110924211931.5233.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,46 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-24 21:15:14
+Changes by:	zkabelac at sourceware.org	2011-09-24 21:19:31
 
 Modified files:
-	test/lib       : aux.sh 
+	.              : WHATS_NEW 
+	lib/raid       : raid.c 
+	lib/unknown    : unknown.c 
 
 Log message:
-	Allow overwrite for VERIFY_UDEV
+	Fix log_error() usage
 	
-	When running tests it might be useful to have an override option when
-	testing on real /dev  and some broken system (i.e. Debian and its rules).
-	
-	So one can use:
-	
-	LVM_TEST_DEVDIR=/dev LVM_VERIFY_UDEV=1 make check
+	Cosmetic - skip <bactrace> when error has been just printed in raid segtype.
+	Add missing log_error if allocation would fail for unknown segtype.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.30&r2=1.31
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2137&r2=1.2138
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/raid/raid.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/unknown/unknown.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/test/lib/aux.sh	2011/09/24 20:54:36	1.30
-+++ LVM2/test/lib/aux.sh	2011/09/24 21:15:13	1.31
-@@ -371,9 +371,9 @@
- lvmconf() {
-     if test -z "$LVM_TEST_LOCKING"; then LVM_TEST_LOCKING=1; fi
-     if test "$DM_DEV_DIR" = "/dev"; then
--	VERIFY_UDEV=0;
-+	LVM_VERIFY_UDEV=${LVM_VERIFY_UDEV:-0};
-     else
--	VERIFY_UDEV=1;
-+	LVM_VERIFY_UDEV=${LVM_VERIFY_UDEV:-1};
-     fi
-     test -f CONFIG_VALUES || {
-         cat > CONFIG_VALUES <<-EOF
-@@ -401,7 +401,7 @@
- activation/checks = 1
- activation/udev_sync = 1
- activation/udev_rules = 1
--activation/verify_udev_operations = $VERIFY_UDEV
-+activation/verify_udev_operations = $LVM_VERIFY_UDEV
- activation/polling_interval = 0
- activation/snapshot_autoextend_percent = 50
- activation/snapshot_autoextend_threshold = 50
+--- LVM2/WHATS_NEW	2011/09/24 21:10:19	1.2137
++++ LVM2/WHATS_NEW	2011/09/24 21:19:30	1.2138
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix log_error() usage in raid and unknown segtype initialisation.
+   Improve testing Makefile.
+   Fix install_ocf make target when srcdir != builddir. (2.02.80)
+   Support env vars LVM_CLVMD_BINARY and LVM_BINARY in clvmd.
+--- LVM2/lib/raid/raid.c	2011/08/31 15:19:20	1.11
++++ LVM2/lib/raid/raid.c	2011/09/24 21:19:30	1.12
+@@ -338,7 +338,7 @@
+ 	if (!segtype) {
+ 		log_error("Failed to allocate memory for %s segtype",
+ 			  raid_type);
+-		return_NULL;
++		return NULL;
+ 	}
+ 	segtype->cmd = cmd;
+ 
+--- LVM2/lib/unknown/unknown.c	2011/08/30 14:55:18	1.8
++++ LVM2/lib/unknown/unknown.c	2011/09/24 21:19:30	1.9
+@@ -94,8 +94,10 @@
+ {
+ 	struct segment_type *segtype = dm_zalloc(sizeof(*segtype));
+ 
+-	if (!segtype)
+-		return_NULL;
++	if (!segtype) {
++		log_error("Failed to allocate memory for unknown segtype");
++		return NULL;
++	}
+ 
+ 	segtype->cmd = cmd;
+ 	segtype->ops = &_unknown_ops;
 
 
