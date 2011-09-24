@@ -1,100 +1,132 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 13 Sep 2011 16:55:10 +0200
-Subject: [PATCH] Retry dm device removal if busy
-In-Reply-To: <4E6F6958.5020609@redhat.com>
-References: <4E6F6958.5020609@redhat.com>
-Message-ID: <4E6F6ECE.4070700@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 24 Sep 2011 21:00:54 -0000
+Subject: LVM2 daemons/dmeventd/Makefile.in daemons/dmev ...
+Message-ID: <20110924210054.838.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 09/13/2011 04:31 PM, Peter Rajnoha wrote:
-> If a dm device is being opened in parallel while we're
-> trying to remove it, we'll end up with an error that
-> the device is busy. This is a legitimate error, but
-> with udev in play and asynchronous events generated
-> as a result of using the WATCH udev rule, we can get
-> into a situation where such failure is very unpleasant.
-> 
-> Let's try the removal a few times then. Though this is
-> not a complete solution to the problem, let's use this
-> until we have one.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-09-24 21:00:53
 
-Before anyone start to complain:
+Modified files:
+	daemons/dmeventd: Makefile.in 
+	daemons/dmeventd/plugins/lvm2: Makefile.in 
+	daemons/dmeventd/plugins/mirror: Makefile.in 
+	daemons/dmeventd/plugins/raid: Makefile.in 
+	daemons/dmeventd/plugins/snapshot: Makefile.in 
+	tools          : Makefile.in 
 
-we spent incredible amount of time with fixing the unfixable,
+Log message:
+	Drop cleanup of .exported_symbols_generated in DISTCLEAN_TARGETS
+	
+	Makefile cosmetics - since .exported_symbols_generated in cleardir:
+	target via make.tmpl, there is no need to set them in DISTCLEAN_TARGETS.
 
-I really prefer make it to work despite it is not 100% correct.
-It is ugly but it will allow us to fix another things and not
-waste time here for now.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/Makefile.in.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/raid/Makefile.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.122&r2=1.123
 
-This approach is already used in cryptsetup, mdadm and perhaps
-other similar packages.
-
-ACK for me (in principle), just with different time (see below).
-
-(please keep this as internal workaround, no lvm.conf bloat etc. Users
-are already very very confused by trillion switches.)
-
-> diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-> index 816f1e6..e4a3a1f 100644
-> --- a/libdm/ioctl/libdm-iface.c
-> +++ b/libdm/ioctl/libdm-iface.c
-> @@ -1539,11 +1539,14 @@ static const char *_sanitise_message(char *message)
->  	return sanitised_message;
->  }
->  
-> +#define DM_REMOVE_IOCTL_RETRIES 5
-
-I would use the same as array stop for mdadm : 25 x usleep(200000).
-
-#define DM_REMOVE_IOCTL_RETRIES 25
-
-maybe lower that to 10 ?
-
-> +
->  static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
->  				     unsigned repeat_count)
->  {
->  	struct dm_ioctl *dmi;
->  	int ioctl_with_uevent;
-> +	int retries = DM_REMOVE_IOCTL_RETRIES;
->  
->  	dmi = _flatten(dmt, repeat_count);
->  	if (!dmi) {
-> @@ -1627,11 +1630,23 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
->  		  dmt->sector, _sanitise_message(dmt->message),
->  		  dmi->data_size);
->  #ifdef DM_IOCTLS
-> +repeat_dm_ioctl:
->  	if (ioctl(_control_fd, command, dmi) < 0) {
->  		if (errno == ENXIO && ((dmt->type == DM_DEVICE_INFO) ||
->  				       (dmt->type == DM_DEVICE_MKNODES) ||
->  				       (dmt->type == DM_DEVICE_STATUS)))
->  			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
-> +		/*
-> +		 * FIXME: This is a workaround for asynchronous events generated
-> +		 *        as a result of using the WATCH udev rule with which we
-> +		 *        have no way of synchronizing. Processing such events in
-> +		 *        parallel causes devices to be open.
-> +		 */
-> +		else if (errno == EBUSY && (dmt->type == DM_DEVICE_REMOVE) && retries--) {
-> +			log_debug("device-mapper: device is busy, retrying removal");
-> +			sleep(1);
-
-usleep(200000);
-
-It would be good to not retry if we are sure that it is not transient use of device.
-Not sure if it is possible here though.
-
-> +			goto repeat_dm_ioctl;
-> +		}
->  		else {
->  			if (_log_suppress)
->  				log_verbose("device-mapper: %s ioctl "
-
-Milan
+--- LVM2/daemons/dmeventd/Makefile.in	2010/08/16 22:54:36	1.45
++++ LVM2/daemons/dmeventd/Makefile.in	2011/09/24 21:00:52	1.46
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2005-2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2005-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of the device-mapper userspace tools.
+ #
+@@ -105,4 +105,4 @@
+ 
+ install_device-mapper: install_include install_lib install_dmeventd
+ 
+-DISTCLEAN_TARGETS += libdevmapper-event.pc .exported_symbols_generated
++DISTCLEAN_TARGETS += libdevmapper-event.pc
+--- LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in	2010/09/30 10:08:58	1.6
++++ LVM2/daemons/dmeventd/plugins/lvm2/Makefile.in	2011/09/24 21:00:52	1.7
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2010-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -29,5 +29,3 @@
+ install_lvm2: install_lib_shared
+ 
+ install: install_lvm2
+-
+-DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2010/09/30 10:08:59	1.22
++++ LVM2/daemons/dmeventd/plugins/mirror/Makefile.in	2011/09/24 21:00:52	1.23
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2005, 2008-2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2005, 2008-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -35,5 +35,3 @@
+ install_lvm2: install_dm_plugin
+ 
+ install: install_lvm2
+-
+-DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/daemons/dmeventd/plugins/raid/Makefile.in	2011/08/11 05:00:21	1.1
++++ LVM2/daemons/dmeventd/plugins/raid/Makefile.in	2011/09/24 21:00:53	1.2
+@@ -1,6 +1,5 @@
+ #
+-# Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2005, 2008-2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -35,5 +34,3 @@
+ install_lvm2: install_dm_plugin
+ 
+ install: install_lvm2
+-
+-DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2010/09/30 10:08:59	1.17
++++ LVM2/daemons/dmeventd/plugins/snapshot/Makefile.in	2011/09/24 21:00:53	1.18
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of the LVM2.
+ #
+@@ -31,5 +31,3 @@
+ install_lvm2: install_dm_plugin
+ 
+ install: install_lvm2
+-
+-DISTCLEAN_TARGETS += .exported_symbols_generated
+--- LVM2/tools/Makefile.in	2010/10/15 09:41:21	1.122
++++ LVM2/tools/Makefile.in	2011/09/24 21:00:53	1.123
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2010 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -203,5 +203,3 @@
+ install_lvm2: $(INSTALL_LVM_TARGETS)
+ 
+ install: install_lvm2 install_device-mapper
+-
+-DISTCLEAN_TARGETS += .exported_symbols_generated
 
 
