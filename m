@@ -1,30 +1,37 @@
-From: Joe Thornber <thornber@redhat.com>
-Date: Tue, 13 Sep 2011 16:01:55 +0100
-Subject: [PATCH] Retry dm device removal if busy
-In-Reply-To: <4E6F6ECE.4070700@redhat.com>
-References: <4E6F6958.5020609@redhat.com>
- <4E6F6ECE.4070700@redhat.com>
-Message-ID: <20110913150154.GA6342@ubuntu>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Sep 2011 19:42:45 -0000
+Subject: LVM2/libdm libdm-config.c
+Message-ID: <20110925194245.17935.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Sep 13, 2011 at 04:55:10PM +0200, Milan Broz wrote:
-> Before anyone start to complain:
-> 
-> we spent incredible amount of time with fixing the unfixable,
-> 
-> I really prefer make it to work despite it is not 100% correct.
-> It is ugly but it will allow us to fix another things and not
-> waste time here for now.
-> 
-> This approach is already used in cryptsetup, mdadm and perhaps
-> other similar packages.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-09-25 19:42:45
 
-I've resorted to doing exactly this in the thin test suite.
+Modified files:
+	libdm          : libdm-config.c 
 
-- Joe
+Log message:
+	Add backtrace when allocation fails for _type
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+
+--- LVM2/libdm/libdm-config.c	2011/09/25 19:41:27	1.10
++++ LVM2/libdm/libdm-config.c	2011/09/25 19:42:45	1.11
+@@ -605,7 +605,8 @@
+ 		}
+ 
+ 	} else
+-		h = _type(p);
++		if (!(h = _type(p)))
++			return_NULL;
+ 
+ 	return h;
+ }
 
 
