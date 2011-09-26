@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Sep 2011 07:51:26 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c ...
-Message-ID: <20110926075126.9130.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 26 Sep 2011 10:17:58 -0000
+Subject: LVM2 lib/activate/activate.c libdm/libdm-deptree.c
+Message-ID: <20110926101758.13423.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,94 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-26 07:51:25
+Changes by:	prajnoha at sourceware.org	2011-09-26 10:17:52
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-command.c 
-	test           : t-clvmd-restart.sh 
+	lib/activate   : activate.c 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Use execvp for clvmd restart
-	
-	Since execve passed only NULL as environ, we had lost all environment vars on
-	restart - thus actually running  'different' clvmd then the one at start.
-	
-	Preserving environ allows to restart clvmd with the same settings
-	(i.e. LD_LIBRARY_PATH)
-	
-	Add test for second restart.
+	Add log_error even for general device in use when we can't do the sysfs checks.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2139&r2=1.2140
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.60&r2=1.61
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-clvmd-restart.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.213&r2=1.214
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
 
---- LVM2/WHATS_NEW	2011/09/25 19:37:00	1.2139
-+++ LVM2/WHATS_NEW	2011/09/26 07:51:23	1.2140
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Use execvp for CLVMD restart to preserve environment settings.
-   Restart CLVMD with same cluster manager.
-   Fix log_error() usage in raid and unknown segtype initialisation.
-   Improve testing Makefile.
---- LVM2/daemons/clvmd/clvmd-command.c	2011/09/25 19:37:00	1.60
-+++ LVM2/daemons/clvmd/clvmd-command.c	2011/09/26 07:51:24	1.61
-@@ -418,7 +418,7 @@
- 	for (argc = 1; argv[argc]; argc++) DEBUGLOG("--- %d: %s\n", argc, argv[argc]);
+--- LVM2/lib/activate/activate.c	2011/09/22 17:33:50	1.213
++++ LVM2/lib/activate/activate.c	2011/09/26 10:17:51	1.214
+@@ -533,8 +533,15 @@
+ 		return 1;
  
- 	/* NOTE: This will fail when downgrading! */
--	execve(clvmd, (char **)argv, NULL);
-+	execvp(clvmd, (char **)argv);
- out:
- 	/* We failed */
- 	DEBUGLOG("Restart of clvmd failed.\n");
---- LVM2/test/t-clvmd-restart.sh	2011/09/25 19:37:00	1.1
-+++ LVM2/test/t-clvmd-restart.sh	2011/09/26 07:51:24	1.2
-@@ -9,13 +9,15 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- 
--export LVM_CLVMD_BINARY="lib/clvmd"
--export LVM_BINARY="lib/lvm"
-+# set before test's clvmd is started, so it's passed in environ
-+export LVM_CLVMD_BINARY=clvmd
-+export LVM_BINARY=lvm
- 
- . lib/test
- 
- # only clvmd based test, skip otherwise
- test -e LOCAL_CLVMD || skip
-+read LOCAL_CLVMD < LOCAL_CLVMD
- 
- aux prepare_devs 1
- 
-@@ -30,15 +32,22 @@
- 
- "$LVM_CLVMD_BINARY" -S
- sleep .2
--# restarted clvmd has the same PID (no fork, only execve)
-+# restarted clvmd has the same PID (no fork, only execvp)
-+NEW_LOCAL_CLVMD=$(pgrep clvmd)
-+test "$LOCAL_CLVMD" -eq "$NEW_LOCAL_CLVMD"
+ 	/* If sysfs is not used, use open_count information only. */
+-	if (!*dm_sysfs_dir())
+-		return !info->open_count;
++	if (!*dm_sysfs_dir()) {
++		if (info->open_count) {
++			log_error("Logical volume %s/%s in use.",
++				  lv->vg->name, lv->name);
++			return 0;
++		}
 +
-+# try restart once more
++		return 1;
++	}
+ 
+ 	if (dm_device_has_holders(info->major, info->minor)) {
+ 		log_error("Logical volume %s/%s is used by another device.",
+--- LVM2/libdm/libdm-deptree.c	2011/09/22 17:36:50	1.111
++++ LVM2/libdm/libdm-deptree.c	2011/09/26 10:17:52	1.112
+@@ -947,8 +947,15 @@
+ 		return 1;
+ 
+ 	/* If sysfs is not used, use open_count information only. */
+-	if (!*dm_sysfs_dir())
+-		return !info->open_count;
++	if (!*dm_sysfs_dir()) {
++		if (info->open_count) {
++			log_error("Device %" PRIu32 ":%" PRIu32 " in use",
++				  info->major, info->minor);
++			return 0;
++		}
 +
-+"$LVM_CLVMD_BINARY" -S
-+sleep .2
-+# restarted clvmd has the same PID (no fork, only execvp)
- NEW_LOCAL_CLVMD=$(pgrep clvmd)
--read LOCAL_CLVMD < LOCAL_CLVMD
- test "$LOCAL_CLVMD" -eq "$NEW_LOCAL_CLVMD"
++		return 1;
++	}
  
- # FIXME: Hmm - how could we test exclusivity is preserved in singlenode ?
- lvchange -an $vg/$lv1
- lvchange -ay $vg/$lv1
- 
--lib/clvmd -R
-+"$LVM_CLVMD_BINARY" -R
- 
- vgremove -ff $vg
+ 	if (dm_device_has_holders(info->major, info->minor)) {
+ 		log_error("Device %" PRIu32 ":%" PRIu32 " is used "
 
 
