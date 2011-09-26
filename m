@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 26 Sep 2011 10:17:58 -0000
-Subject: LVM2 lib/activate/activate.c libdm/libdm-deptree.c
-Message-ID: <20110926101758.13423.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 26 Sep 2011 13:11:04 -0000
+Subject: LVM2/lib/display display.c
+Message-ID: <20110926131104.5465.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,58 +10,37 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-09-26 10:17:52
+Changes by:	zkabelac at sourceware.org	2011-09-26 13:11:03
 
 Modified files:
-	lib/activate   : activate.c 
-	libdm          : libdm-deptree.c 
+	lib/display    : display.c 
 
 Log message:
-	Add log_error even for general device in use when we can't do the sysfs checks.
+	Show some Thin related info in lvdisplay
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.213&r2=1.214
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
 
---- LVM2/lib/activate/activate.c	2011/09/22 17:33:50	1.213
-+++ LVM2/lib/activate/activate.c	2011/09/26 10:17:51	1.214
-@@ -533,8 +533,15 @@
- 		return 1;
+--- LVM2/lib/display/display.c	2011/03/01 20:17:56	1.117
++++ LVM2/lib/display/display.c	2011/09/26 13:11:02	1.118
+@@ -548,6 +548,18 @@
+ 			  snap_seg->origin->name);
+ 	}
  
- 	/* If sysfs is not used, use open_count information only. */
--	if (!*dm_sysfs_dir())
--		return !info->open_count;
-+	if (!*dm_sysfs_dir()) {
-+		if (info->open_count) {
-+			log_error("Logical volume %s/%s in use.",
-+				  lv->vg->name, lv->name);
-+			return 0;
-+		}
-+
-+		return 1;
++	if (lv_is_thin_volume(lv)) {
++		log_print("LV Thin pool           %s%s/%s", lv->vg->cmd->dev_dir,
++			  lv->vg->name, first_seg(lv)->pool_lv->name);
++	} else if (lv_is_thin_pool(lv)) {
++		log_print("LV Thin metadada       %s%s/%s", lv->vg->cmd->dev_dir,
++			  lv->vg->name, first_seg(lv)->pool_metadata_lv->name);
++		log_print("LV Thin data pool      %s%s/%s", lv->vg->cmd->dev_dir,
++			  lv->vg->name, seg_lv(first_seg(lv), 0)->name);
++		log_print("LV zero new blocks     %s",
++			  first_seg(lv)->zero_new_blocks ? "yes" : "no");
 +	}
- 
- 	if (dm_device_has_holders(info->major, info->minor)) {
- 		log_error("Logical volume %s/%s is used by another device.",
---- LVM2/libdm/libdm-deptree.c	2011/09/22 17:36:50	1.111
-+++ LVM2/libdm/libdm-deptree.c	2011/09/26 10:17:52	1.112
-@@ -947,8 +947,15 @@
- 		return 1;
- 
- 	/* If sysfs is not used, use open_count information only. */
--	if (!*dm_sysfs_dir())
--		return !info->open_count;
-+	if (!*dm_sysfs_dir()) {
-+		if (info->open_count) {
-+			log_error("Device %" PRIu32 ":%" PRIu32 " in use",
-+				  info->major, info->minor);
-+			return 0;
-+		}
 +
-+		return 1;
-+	}
- 
- 	if (dm_device_has_holders(info->major, info->minor)) {
- 		log_error("Device %" PRIu32 ":%" PRIu32 " is used "
+ 	if (inkernel && info.suspended)
+ 		log_print("LV Status              suspended");
+ 	else
 
 
