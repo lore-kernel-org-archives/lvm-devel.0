@@ -1,58 +1,39 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 15:42:47 +0200
-Subject: [PATCH v3 14/18] test: add helper to compute aligned lv size
-In-Reply-To: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 27 Sep 2011 17:39:42 +0200
+Subject: [PATCH v3 03/18] fsadm: Add simple configuration file
+In-Reply-To: <1317130971-24173-4-git-send-email-lczerner@redhat.com>
 References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317130971-24173-15-git-send-email-lczerner@redhat.com>
+	<1317130971-24173-4-git-send-email-lczerner@redhat.com>
+Message-ID: <4E81EE3E.3080005@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-For test purposes add a helper function to compute lv size as it
-would be done by lvm tools.
+Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
+> Signed-off-by: Lukas Czerner <lczerner@redhat.com>
+> ---
+>  scripts/fsadm.sh |   30 ++++++++++++++++++++++++++++++
+>  1 files changed, 30 insertions(+), 0 deletions(-)
+> 
+> diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+> index 58ff0ab..98921d3 100755
+> --- a/scripts/fsadm.sh
+> +++ b/scripts/fsadm.sh
+> @@ -88,6 +88,9 @@ PROCDEVICES="/proc/devices"
+>  PROCPARTITIONS="/proc/partitions"
+>  NULL="$DM_DEV_DIR/null"
+>  
+> +CONFIG_PATHS="/etc/fsadm.conf ~/fsadm.conf"
+> +CONFIG=
+> +
 
-Signed-off-by: Lukas Czerner <lczerner@redhat.com>
----
- test/lib/utils.sh |   23 +++++++++++++++++++++++
- 1 files changed, 23 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 4c3cd93..c555e45 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -177,6 +177,29 @@ kernel_at_least() {
-     return 1
- }
- 
-+align_size_up() {
-+    size=$1
-+    [ -z $2 ] && stripes=0
-+    [ -z $3 ] && extent=4
-+
-+    [ -z $size ] || [ -z $stripes ] || [ -z $extent ] && exit 1
-+
-+    tmp=$((size%extent))
-+    if [ $tmp -ne 0 ]; then
-+        size=$(($size+($extent-$tmp)))
-+    fi
-+    if [ $stripes -eq 0 ]; then
-+        echo "$size"
-+        return 0
-+    fi
-+    extents=$(($size/$extent))
-+    tmp=$(($extents%$stripes))
-+    if [ $tmp -ne 0 ]; then
-+        extents=$(($extents-$tmp+$stripes))
-+    fi
-+    echo "$(($extents*$extent))"
-+}
-+
- . lib/paths || { echo >&2 you must run make first; exit 1; }
- 
- PATH=$abs_top_builddir/test/lib:$PATH
--- 
-1.7.4.4
+Looks too complicated -  sourcing config file with some defines looks like
+better approach here  if you really think it's useful.
+
+
+Zdenek
 
 
