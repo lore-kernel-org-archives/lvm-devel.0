@@ -1,32 +1,30 @@
 From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 13:15:29 +0200
-Subject: [PATCH 15/16] test: Add test for fsadm resize command
+Date: Tue, 27 Sep 2011 13:15:30 +0200
+Subject: [PATCH 16/16] test: Add test for fsadm remove command
 In-Reply-To: <1317122130-13790-1-git-send-email-lczerner@redhat.com>
 References: <1317122130-13790-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317122130-13790-16-git-send-email-lczerner@redhat.com>
+Message-ID: <1317122130-13790-17-git-send-email-lczerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The tests exercises the fsadm "resize" functionality, by trying various
-combinations of arguments and checking the desired results. It also
-tries to create and resize volumes with various supported file systems,
-checking the resulting size.
+The tests exercises the fsadm "remove" functionality, by trying various
+combinations of arguments and checking the desired results.
 
 Signed-off-by: Lukas Czerner <lczerner@redhat.com>
 ---
- test/t-fsadm-resize.sh |  125 ++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 125 insertions(+), 0 deletions(-)
- create mode 100644 test/t-fsadm-resize.sh
+ test/t-fsadm-remove.sh |  115 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 115 insertions(+), 0 deletions(-)
+ create mode 100644 test/t-fsadm-remove.sh
 
-diff --git a/test/t-fsadm-resize.sh b/test/t-fsadm-resize.sh
+diff --git a/test/t-fsadm-remove.sh b/test/t-fsadm-remove.sh
 new file mode 100644
-index 0000000..130bd54
+index 0000000..9bec936
 --- /dev/null
-+++ b/test/t-fsadm-resize.sh
-@@ -0,0 +1,125 @@
++++ b/test/t-fsadm-remove.sh
+@@ -0,0 +1,115 @@
 +#!/bin/bash
 +# Copyright 2011 (C) Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
 +#
@@ -38,7 +36,7 @@ index 0000000..130bd54
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+test_description='Exercise fsadm create'
++test_description='Exercise fsadm remove'
 +
 +. lib/test
 +
@@ -57,101 +55,91 @@ index 0000000..130bd54
 +pool2=$vg3
 +DEFAULT_VOLUME=${DEFAULT_DEVICE_POOL}/$lvol1
 +
-+TEST_FS=
-+which mkfs.ext2 && TEST_FS+="ext2 "
-+which mkfs.ext3 && TEST_FS+="ext3 "
-+which mkfs.ext4 && TEST_FS+="ext4 "
-+which mkfs.xfs  && TEST_FS+="xfs"
++_FS=
++which mkfs.ext2 && _FS="ext2"
++which mkfs.ext3 && _FS="ext3"
++which mkfs.ext4 && _FS="ext4"
++which mkfs.xfs  && _FS="xfs"
++
 +
 +TEST_MNT=$TESTDIR/mnt
 +
-+_test_resize()
-+{
-+	size=$((TEST_MAX_SIZE/2))
-+	fsadm -f resize size=${size}M ${DM_DEV_DIR}/$DEFAULT_VOLUME
-+	size=$(align_size_up $size)
-+	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
++# Remove logical volume
++fsadm create $TEST_DEVS
++check lv_field $DEFAULT_VOLUME lv_name $lvol1
++fsadm -f remove $DEFAULT_VOLUME
++not check lv_field $DEFAULT_VOLUME lv_name $lvol1
 +
-+	# xfs does not support shrinking (xfs only grows big!! :))
-+	if [ "$fs" != "xfs" ]; then
-+		fsadm -f -v resize size=-$(($TEST_MAX_SIZE/4))M $DEFAULT_VOLUME
-+		size=$(align_size_up $(($size-($TEST_MAX_SIZE/4))))
-+		check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
-+	fi
-+	fsadm -f -v resize size=+$(($TEST_MAX_SIZE/5))M $DEFAULT_VOLUME
-+	size=$(align_size_up $(($size+($TEST_MAX_SIZE/5))))
-+	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
-+}
-+
-+fsadm add $TEST_DEVS
-+size=$((TEST_MAX_SIZE/3))
-+fsadm create size=${size}M $TEST_DEVS
-+size=$(align_size_up $size)
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
-+
-+fsadm -f resize size=+$(($TEST_MAX_SIZE/3))M ${DM_DEV_DIR}/$DEFAULT_VOLUME
-+size=$(align_size_up $(($size+($TEST_MAX_SIZE/3))))
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
-+
-+fsadm -f resize size=-$(($TEST_MAX_SIZE/2))M $DEFAULT_VOLUME
-+size=$(align_size_up $(($size-($TEST_MAX_SIZE/2))))
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
-+
-+fsadm -f resize size=$(($TEST_MAX_SIZE/2))M $DEFAULT_VOLUME
-+size=$(align_size_up $(($TEST_MAX_SIZE/2)))
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
++# Remove volume group
++fsadm create $TEST_DEVS
++check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
 +fsadm -f remove $DEFAULT_DEVICE_POOL
++not check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
 +
-+fsadm create $dev1
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count 1
-+devs=${TEST_DEVS##*$dev1 }
-+fsadm resize size=+$((TEST_MAX_SIZE/2))M $DEFAULT_VOLUME $devs
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
-+fsadm -f remove $DEFAULT_DEVICE_POOL
-+
-+fsadm create $dev1
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count 1
-+devs=${TEST_DEVS##*$dev1 }
-+fsadm resize size=$((TEST_MAX_SIZE/2))M ${DM_DEV_DIR}/$DEFAULT_VOLUME $devs
-+check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
-+fsadm -f remove $DEFAULT_DEVICE_POOL
-+
-+[ ! -d $TEST_MNT ] && mkdir $TEST_MNT &> /dev/null
-+for fs in $TEST_FS; do
-+	# umounted test
-+	fsadm add $TEST_DEVS
-+	size=$((TEST_MAX_SIZE/4))
-+	fsadm create fs=$fs size=${size}M $TEST_DEVS
-+
-+	_test_resize
-+	fsadm -f check $DEFAULT_VOLUME
-+	fsadm -f remove $DEFAULT_DEVICE_POOL
-+
-+	# mounted test
-+	fsadm add $TEST_DEVS
-+	size=$((TEST_MAX_SIZE/4))
-+	fsadm create fs=$fs size=${size}M $TEST_DEVS
-+
++if [ "$_FS" ]; then
++	[ ! -d $TEST_MNT ] && mkdir $TEST_MNT &> /dev/null
++	# Remove logical volume by mount point
++	fsadm create fs=$_FS $TEST_DEVS
 +	mount ${DM_DEV_DIR}/$DEFAULT_VOLUME $TEST_MNT
-+
-+	_test_resize
-+
-+	umount $TEST_MNT
-+	fsadm -f check $DEFAULT_VOLUME
++	check lv_field $DEFAULT_VOLUME lv_name $lvol1
++	fsadm -f remove $TEST_MNT
++	not check lv_field $DEFAULT_VOLUME lv_name $lvol1
 +	fsadm -f remove $DEFAULT_DEVICE_POOL
-+done
-+fsadm  -f remove --all
++fi
 +
-+fsadm resize --help
++# Remove unused devices from the pool
++fsadm create $dev1 $dev2 $dev3
++fsadm add $TEST_DEVS
++check vg_field $DEFAULT_DEVICE_POOL pv_count $DEV_COUNT
++fsadm -f remove $TEST_DEVS
++check vg_field $DEFAULT_DEVICE_POOL pv_count 3
++fsadm -f remove --all
++
++# Remove multiple things
++fsadm add $dev1 $dev2 $pool1
++fsadm add $dev3 $dev4 $pool2
++fsadm create $pool2
++fsadm create $dev5 $dev6
++fsadm create $dev7 $dev8
++fsadm add $dev9
++check vg_field $pool1 pv_count 2
++check vg_field $pool2 pv_count 2
++check vg_field $pool2 lv_count 1
++check vg_field $DEFAULT_DEVICE_POOL pv_count 5
++check vg_field $DEFAULT_DEVICE_POOL lv_count 2
++check vg_field $pool1 vg_name $pool1
++check lv_field ${pool2}/$lvol1 lv_name $lvol1
++fsadm -f remove $pool1 ${pool2}/$lvol1 $DEFAULT_VOLUME $dev9
++not check vg_field $pool1 vg_name $pool1
++not check lv_field ${pool2}/$lvol1 lv_name $lvol1
++not check lv_field $DEFAULT_VOLUME lv_name $lvol1
++check vg_field $DEFAULT_DEVICE_POOL pv_count 4
++fsadm -f remove --all
++
++# Remove all
++fsadm add $dev1 $dev2 $pool1
++fsadm add $dev3 $dev4 $pool2
++fsadm create $pool2
++fsadm create $dev5 $dev6
++fsadm create $dev7 $dev8
++fsadm add $dev9
++check vg_field $pool1 pv_count 2
++check vg_field $pool2 pv_count 2
++check vg_field $pool2 lv_count 1
++check vg_field $DEFAULT_DEVICE_POOL pv_count 5
++check vg_field $DEFAULT_DEVICE_POOL lv_count 2
++check vg_field $pool1 vg_name $pool1
++check vg_field $pool2 vg_name $pool2
++check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
++fsadm -f remove --all
++not check vg_field $pool1 vg_name $pool1
++not check vg_field $pool2 vg_name $pool2
++not check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
++
++fsadm remove --help
 +
 +# Some cases which should fail
-+not fsadm resize
-+not fsadm resize _garbage_
-+not fsadm resize $dev1
-+fsadm create $TEST_DEVS
-+not fsadm resize $DEFAULT_VOLUME
-+not fsadm -f resize size=+10G $DEFAULT_VOLUME
-+not fsadm -f resize size=-10G $DEFAULT_VOLUME
++not fsadm remove
 -- 
 1.7.4.4
 
