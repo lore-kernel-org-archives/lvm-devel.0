@@ -1,272 +1,160 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 30 Sep 2011 16:11:33 -0500
-Subject: [PATCH 3 of 3] Clean-up splitmirror code
-In-Reply-To: <1317416791.4475.3.camel@f14.redhat.com>
-References: <1317416791.4475.3.camel@f14.redhat.com>
-Message-ID: <1317417093.4475.9.camel@f14.redhat.com>
+From: Lukas Czerner <lczerner@redhat.com>
+Date: Tue, 27 Sep 2011 15:42:49 +0200
+Subject: [PATCH v3 16/18] test: Add test for fsadm create command
+In-Reply-To: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+Message-ID: <1317130971-24173-17-git-send-email-lczerner@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Clean-up splitmirrors code.
+The tests exercises the fsadm "create" functionality, by trying various
+combinations of arguments and checking the desired results. It also
+tries to create volumes with various supported file systems.
 
-I've attempted to clean-up the splitmirrors code to make it easier to
-understand with fewer operations.  I've tried to reduce the number of
-metadata operations without compromising the intermediate stages which
-are necessary for easy clean-up in the even of failure.
+Signed-off-by: Lukas Czerner <lczerner@redhat.com>
+---
+ test/t-fsadm-create.sh |  128 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 128 insertions(+), 0 deletions(-)
+ create mode 100644 test/t-fsadm-create.sh
 
-These changes now correctly handle cluster situations - including exclusive
-cluster mirrors.
-
-Index: LVM2/lib/metadata/mirror.c
-===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -394,6 +394,19 @@ activate_lv:
- 	return 0;
- }
- 
-+static int inkind_activate_lv(struct logical_volume *model,
-+			      struct logical_volume *lv)
-+{
-+	if (lv_is_active_exclusive_locally(model)) {
-+		if (!activate_lv_excl(lv->vg->cmd, lv))
-+			return_0;
-+	} else {
-+		if (!activate_lv(lv->vg->cmd, lv))
-+			return_0;
-+	}
-+	return 1;
+diff --git a/test/t-fsadm-create.sh b/test/t-fsadm-create.sh
+new file mode 100644
+index 0000000..4b735f8
+--- /dev/null
++++ b/test/t-fsadm-create.sh
+@@ -0,0 +1,128 @@
++#!/bin/bash
++# Copyright 2011 (C) Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++test_description='Exercise fsadm create'
++
++. lib/test
++
++DEV_COUNT=10
++DEV_SIZE=10
++TEST_MAX_SIZE=$(($DEV_COUNT*$DEV_SIZE))
++aux prepare_devs $DEV_COUNT $DEV_SIZE
++TEST_DEVS=$(cat DEVICES)
++export DEFAULT_DEVICE_POOL=$vg1
++export LVOL_PREFIX="lvol"
++lvol1=${LVOL_PREFIX}001
++lvol2=${LVOL_PREFIX}002
++lvol3=${LVOL_PREFIX}003
++
++pool1=$vg2
++pool2=$vg3
++
++TEST_FS=
++which mkfs.ext2 && TEST_FS+="ext2 "
++which mkfs.ext3 && TEST_FS+="ext3 "
++which mkfs.ext4 && TEST_FS+="ext4 "
++which mkfs.xfs  && TEST_FS+="xfs"
++
++_do_fsck() {
++	case $1 in
++		ext[234]) call="fsck.$1 -F -n" ;;
++		xfs) call="xfs_check" ;;
++		*) return 1 ;;
++	esac
++	$call $DM_DEV_DIR/$2
 +}
 +
- /*
-  * Delete independent/orphan LV, it must acquire lock.
-  */
-@@ -417,13 +430,9 @@ static int _delete_lv(struct logical_vol
- 		}
- 	}
- 
--	if (lv_is_active_exclusive_locally(lv)) {
--		if (!activate_lv_excl(cmd, lv))
--			return_0;
--	} else {
--		if (!activate_lv(cmd, lv))
--			return_0;
--	}
-+	// FIXME: shouldn't the activation type be based on mirror_lv, not lv?
-+	if (!inkind_activate_lv(lv, lv))
-+		return_0;
- 
- 	sync_local_dev_names(lv->vg->cmd);
- 	if (!deactivate_lv(cmd, lv))
-@@ -584,7 +593,7 @@ static int _split_mirror_images(struct l
- 	struct logical_volume *detached_log_lv = NULL;
- 	struct lv_segment *mirrored_seg = first_seg(lv);
- 	struct dm_list split_images;
--	struct lv_list *lvl, *new_lvl = NULL;
-+	struct lv_list *lvl;
- 	struct cmd_context *cmd = lv->vg->cmd;
- 
- 	if (!(lv->status & MIRRORED)) {
-@@ -626,12 +635,18 @@ static int _split_mirror_images(struct l
- 		sub_lv = seg_lv(mirrored_seg, mirrored_seg->area_count);
- 
- 		sub_lv->status &= ~MIRROR_IMAGE;
--		lv_set_visible(sub_lv);
- 		release_lv_segment_area(mirrored_seg, mirrored_seg->area_count,
- 					mirrored_seg->area_len);
- 
- 		log_very_verbose("%s assigned to be split", sub_lv->name);
- 
-+		if (!new_lv) {
-+			lv_set_visible(sub_lv);
-+			new_lv = sub_lv;
-+			continue;
-+		}
++# Create volume with all devices at once
++fsadm create $TEST_DEVS
++not fsadm create $TEST_DEVS
++not fsadm create $TEST_DEVS $pool1
++not fsadm create size=$DEV_SIZE $TEST_DEVS
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
++fsadm -f remove $DEFAULT_DEVICE_POOL
 +
-+		/* If there is more than one image being split, add to list */
- 		lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl));
- 		if (!lvl) {
- 			log_error("lv_list alloc failed");
-@@ -640,90 +655,7 @@ static int _split_mirror_images(struct l
- 		lvl->lv = sub_lv;
- 		dm_list_add(&split_images, &lvl->list);
- 	}
--	sub_lv = NULL;
--
--	/*
--	 * If no more mirrors, remove mirror layer.
--	 * The sub_lv is removed entirely later - leaving
--	 * only the top-level (now linear) LV.
--	 */
--	if (mirrored_seg->area_count == 1) {
--		sub_lv = seg_lv(mirrored_seg, 0);
--		sub_lv->status &= ~MIRROR_IMAGE;
--		lv_set_visible(sub_lv);
--		detached_log_lv = detach_mirror_log(mirrored_seg);
--		if (!remove_layer_from_lv(lv, sub_lv))
--			return_0;
--		lv->status &= ~MIRRORED;
--		lv->status &= ~LV_NOTSYNCED;
--	}
- 
--	if (!vg_write(mirrored_seg->lv->vg)) {
--		log_error("Intermediate VG metadata write failed.");
--		return 0;
--	}
--
--	/*
--	 * Suspend the mirror - this includes all the sub-LVs and
--	 *                      soon-to-be-split sub-LVs
--	 */
--	if (!suspend_lv(cmd, mirrored_seg->lv)) {
--		log_error("Failed to lock %s", mirrored_seg->lv->name);
--		vg_revert(mirrored_seg->lv->vg);
--		return 0;
--	}
--
--	if (!vg_commit(mirrored_seg->lv->vg)) {
--		resume_lv(cmd, mirrored_seg->lv);
--		return 0;
--	}
--
--	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
--
--	/*
--	 * Resume the mirror - this also activates the visible, independent
--	 *                     soon-to-be-split sub-LVs
--	 */
--	if (!resume_lv(cmd, mirrored_seg->lv)) {
--		log_error("Problem resuming %s", mirrored_seg->lv->name);
--		return 0;
--	}
--
--	/* Remove original mirror layer if it has been converted to linear */
--	if (sub_lv && !_delete_lv(lv, sub_lv))
--		return_0;
--
--	/* Remove the log if it has been converted to linear */
--	if (detached_log_lv && !_delete_lv(lv, detached_log_lv))
--		return_0;
--
--	/*
--	 * Step 2:
--	 *   The original mirror has been changed and we now have visible,
--	 *   independent, not-yet-renamed, active sub-LVs.  We must:
--	 *   - deactivate the split sub-LVs
--	 *   - rename them
--	 *   - form new mirror if necessary
--	 *   - commit VG changes
--	 *   - activate the new LV
--	 */
--	sync_local_dev_names(lv->vg->cmd);
--	dm_list_iterate_items(lvl, &split_images) {
--		if (!new_lv) {
--			/* Grab 1st sub-LV for later */
--			new_lvl = lvl;
--			new_lv = lvl->lv;
--		}
--
--		sub_lv = lvl->lv;
--		if (!deactivate_lv(cmd, sub_lv)) {
--			log_error("Failed to deactivate former mirror image, %s",
--				  sub_lv->name);
--			return 0;
--		}
--	}
--
--	dm_list_del(&new_lvl->list);
- 	new_lv->name = dm_pool_strdup(lv->vg->vgmem, split_name);
- 	if (!new_lv->name) {
- 		log_error("Unable to rename newly split LV");
-@@ -780,19 +712,76 @@ static int _split_mirror_images(struct l
- 		init_mirror_in_sync(1);
- 	}
- 
--	if (!vg_write(mirrored_seg->lv->vg) ||
--	    !vg_commit(mirrored_seg->lv->vg))
--		return_0;
-+	sub_lv = NULL;
++# Create the group first and then create volume using the whole group
++fsadm add $TEST_DEVS
++fsadm create
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
++fsadm -f remove $DEFAULT_DEVICE_POOL
 +
-+	/*
-+	 * If no more mirrors, remove mirror layer.
-+	 * The sub_lv is removed entirely later - leaving
-+	 * only the top-level (now linear) LV.
-+	 */
-+	if (mirrored_seg->area_count == 1) {
-+		sub_lv = seg_lv(mirrored_seg, 0);
-+		sub_lv->status &= ~MIRROR_IMAGE;
-+		lv_set_visible(sub_lv);
-+		detached_log_lv = detach_mirror_log(mirrored_seg);
-+		if (!remove_layer_from_lv(lv, sub_lv))
-+			return_0;
-+		lv->status &= ~MIRRORED;
-+		lv->status &= ~LV_NOTSYNCED;
-+	}
++# Create a logical volume of fixed size
++size=$(($DEV_SIZE*6))
++fsadm create size=${size}M $TEST_DEVS
++not fsadm create size=$TEST_MAX_SIZE
++size=$(align_size_up $size)
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 lv_size ${size}.00m
++fsadm -f remove $DEFAULT_DEVICE_POOL
 +
-+	if (!vg_write(mirrored_seg->lv->vg)) {
-+		log_error("Intermediate VG metadata write failed.");
-+		return 0;
-+	}
++# Create a striped logical volume
++fsadm create stripesize=32 $TEST_DEVS
++not fsadm create stripesize=32 size=$TEST_MAX_SIZE
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripesize 32.00k
++fsadm  -f remove $DEFAULT_DEVICE_POOL
 +
-+	/*
-+	 * Suspend the mirror - this includes all the sub-LVs and
-+	 *                      soon-to-be-split sub-LVs
-+	 */
-+	if (!suspend_lv(cmd, mirrored_seg->lv)) {
-+		log_error("Failed to lock %s", mirrored_seg->lv->name);
-+		vg_revert(mirrored_seg->lv->vg);
-+		return 0;
-+	}
++# Create several volumes with different parameters
++fsadm  add $TEST_DEVS
++fsadm create stripesize=8 stripes=$(($DEV_COUNT/2)) size=$(($DEV_SIZE*2))M
++fsadm create stripes=$(($DEV_COUNT)) size=$(($DEV_SIZE))M
++not fsadm create stripesize=32 size=$(($DEV_SIZE*2))M
++fsadm list
++fsadm create
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripesize 8.00k
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripes $(($DEV_COUNT/2))
++check lv_field $DEFAULT_DEVICE_POOL/$lvol2 stripes $DEV_COUNT
++check lv_field $DEFAULT_DEVICE_POOL/$lvol3 segtype linear
++fsadm  -f remove $DEFAULT_DEVICE_POOL
 +
-+	if (!vg_commit(mirrored_seg->lv->vg)) {
-+		resume_lv(cmd, mirrored_seg->lv);
-+		return 0;
-+	}
++# Create several volumes with different parameters from different groups
++fsadm add $dev1 $dev2 $dev3 $pool1
++fsadm create $dev1 $dev2
++fsadm add $dev4 $dev5 $dev6 $pool2
++fsadm create stripesize=32 stripes=3 size=$(($DEV_SIZE*2))M $pool2
++fsadm create $dev7 $dev8 $dev9 stripesize=8
++not fsadm create size=$DEV_SIZE $pool1
++check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripesize 8.00k
++check lv_field $pool1/$lvol1 seg_count 2
++check lv_field $pool2/$lvol1 stripesize 32.00k
++check lv_field $pool2/$lvol1 stripes 3
++fsadm  -f remove --all
 +
-+	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
++# Create logical volumes with file system
++for fs in $TEST_FS; do
++	fsadm create fs=$fs size=$(($DEV_SIZE*6))M $TEST_DEVS
++	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
++	fsadm -f check ${DEFAULT_DEVICE_POOL}/$lvol1
++	_do_fsck $fs ${DEFAULT_DEVICE_POOL}/$lvol1
++	fsadm  -f remove $DEFAULT_DEVICE_POOL
 +
-+	/*
-+	 * Resume the mirror - this also activates the visible, independent
-+	 *                     soon-to-be-split sub-LVs
-+	 */
-+	if (!resume_lv(cmd, mirrored_seg->lv)) {
-+		log_error("Problem resuming %s", mirrored_seg->lv->name);
-+		return 0;
-+	}
- 
--	/* Bring newly split-off LV into existence */
--	if (!activate_lv(cmd, new_lv)) {
--		log_error("Failed to activate newly split LV, %s",
--			  new_lv->name);
-+	/*
-+	 * Recycle newly split LV so it is properly renamed.
-+	 *   Cluster requires the extra deactivate/activate calls.
-+	 */
-+	if (vg_is_clustered(lv->vg) &&
-+	    (!deactivate_lv(cmd, new_lv) || !inkind_activate_lv(lv, new_lv))) {
-+		log_error("Failed to rename newly split LV in the kernel");
-+		return 0;
-+	}
-+	if (!suspend_lv(cmd, new_lv) || !resume_lv(cmd, new_lv)) {
-+		log_error("Failed to rename newly split LV in the kernel");
- 		return 0;
- 	}
- 
--	log_very_verbose("%" PRIu32 " image(s) detached from %s",
--			 split_count, lv->name);
-+	/* Remove original mirror layer if it has been converted to linear */
-+	if (sub_lv && !_delete_lv(lv, sub_lv))
-+		return_0;
++	fsadm create fs=$fs stripesize=32 size=$(($DEV_SIZE*6))M $TEST_DEVS
++	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 pv_count $DEV_COUNT
++	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripesize 32.00k
++	_do_fsck $fs ${DEFAULT_DEVICE_POOL}/$lvol1
++	fsadm  -f remove $DEFAULT_DEVICE_POOL
 +
-+	/* Remove the log if it has been converted to linear */
-+	if (detached_log_lv && !_delete_lv(lv, detached_log_lv))
-+		return_0;
- 
- 	return 1;
- }
-
++	fsadm add $TEST_DEVS
++	fsadm create fs=$fs stripesize=8 stripes=$((DEV_COUNT/5)) size=$(($DEV_SIZE*2))M
++	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripes $(($DEV_COUNT/5))
++	check lv_field $DEFAULT_DEVICE_POOL/$lvol1 stripesize 8.00k
++	_do_fsck $fs ${DEFAULT_DEVICE_POOL}/$lvol1
++	fsadm  -f remove $DEFAULT_DEVICE_POOL
++done
++
++fsadm create --help
++
++# Some cases which should fail
++not fsadm create
++fsadm add $TEST_DEVS
++not fsadm create $pool1
++not fsadm create stripesize=16 stripes=3 $dev1 $dev2
++fsadm  -f remove --all
+-- 
+1.7.4.4
 
 
