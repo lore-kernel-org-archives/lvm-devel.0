@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Sep 2011 09:03:36 -0000
-Subject: LVM2/lib/metadata merge.c
-Message-ID: <20110929090336.18702.qmail@sourceware.org>
+Date: 29 Sep 2011 08:58:28 -0000
+Subject: LVM2/test t-clvmd-restart.sh
+Message-ID: <20110929085828.17291.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-29 09:03:36
+Changes by:	zkabelac at sourceware.org	2011-09-29 08:58:27
 
 Modified files:
-	lib/metadata   : merge.c 
+	test           : t-clvmd-restart.sh 
 
 Log message:
-	Fix bad error message for thinp validation
+	Let the utils to prepare PVs
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/merge.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-clvmd-restart.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/lib/metadata/merge.c	2011/09/29 08:56:39	1.50
-+++ LVM2/lib/metadata/merge.c	2011/09/29 09:03:36	1.51
-@@ -239,7 +239,7 @@
- 				}
+--- LVM2/test/t-clvmd-restart.sh	2011/09/26 07:51:24	1.2
++++ LVM2/test/t-clvmd-restart.sh	2011/09/29 08:58:27	1.3
+@@ -19,7 +19,7 @@
+ test -e LOCAL_CLVMD || skip
+ read LOCAL_CLVMD < LOCAL_CLVMD
  
- 				if (seg->device_id >= (1 << 24)) {
--					log_error("LV %s: thin volume segment %u pool LV to large device id %d",
-+					log_error("LV %s: thin volume segment %u has too large device id %d",
- 						  lv->name, seg_count, seg->device_id);
- 					inc_error_count;
- 				}
+-aux prepare_devs 1
++aux prepare_pvs 1
+ 
+ vgcreate --clustered y $vg $(cat DEVICES)
+ 
 
 
