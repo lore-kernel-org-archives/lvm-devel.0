@@ -1,36 +1,23 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Sep 2011 08:58:28 -0000
-Subject: LVM2/test t-clvmd-restart.sh
-Message-ID: <20110929085828.17291.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Fri, 30 Sep 2011 16:06:30 -0500
+Subject: [PATCH 0 of 3] Patches to clean-up splitmirror code and fix bugs
+Message-ID: <1317416791.4475.3.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-29 08:58:27
+The following three patches are intended to fix bug 733114 - "mirror
+conversion and mirror image splitting results in device i/o errors".
 
-Modified files:
-	test           : t-clvmd-restart.sh 
+The first patch reverts a work-around that failed to address the issue
+in the cluster environment.
 
-Log message:
-	Let the utils to prepare PVs
+The second addresses improper udev_flag settings for sub-LVs.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-clvmd-restart.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+The third is a clean-up of the splitmirrors code.
 
---- LVM2/test/t-clvmd-restart.sh	2011/09/26 07:51:24	1.2
-+++ LVM2/test/t-clvmd-restart.sh	2011/09/29 08:58:27	1.3
-@@ -19,7 +19,7 @@
- test -e LOCAL_CLVMD || skip
- read LOCAL_CLVMD < LOCAL_CLVMD
- 
--aux prepare_devs 1
-+aux prepare_pvs 1
- 
- vgcreate --clustered y $vg $(cat DEVICES)
- 
+ brassow
 
 
