@@ -1,97 +1,181 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 30 Sep 2011 16:09:14 -0500
-Subject: [PATCH 1 of 3] Revert initial solution to bug 733114
+Date: Fri, 30 Sep 2011 16:10:40 -0500
+Subject: [PATCH 2 of 3] Fix udev flags on sub-lvs
 In-Reply-To: <1317416791.4475.3.camel@f14.redhat.com>
 References: <1317416791.4475.3.camel@f14.redhat.com>
-Message-ID: <1317416954.4475.6.camel@f14.redhat.com>
+Message-ID: <1317417040.4475.8.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Revert initial solution to bug 733114 - I/O error message during splitmirror
+This patch attempts to fix issues with improper udev flags on sub-LVs.
 
-The original commit comments can be located via this git commit ID:
-	7d8e615c0b30fc2ef300c90378a51f01c328128c
+The current code does not always assign proper udev flags to sub-LVs (e.g.
+mirror images and log LVs).  This shows up especially during a splitmirror
+operation in which an image is split off from a mirror to form a new LV.
 
-There were three possible solutions to the original problem proposed in the
-initial check-in.  The one chosen was as follows:
-    2) Do like _remove_mirror_images does and suspend the original, then suspend
-    the sub-lv (the error target), then resume the sub-lv, and finally resume the
-    original LV.  This seems like extra pointless operations to me, but it doesn't
-    produce the error message (although, I'm not sure why) and it allows us to
-    leave the visible flag in place.
-Turns out, the cluster also views the extra suspend/resume operations as
-pointless too and ignores them.  So, this solution doesn't work in a cluster.
-Further, I've noticed that in addition to the remote cluster nodes still getting
-I/O errors from scanning the error target, they also have different LVM and
-DM views of the same LV.  IOW, while the LVM level (gotten from the LVM metadata)
-sees the correct name for the newly split LV, device-mapper still maintains the
-old names.
+A mirror with a disk log is actually composed of 4 different LVs: the 2
+mirror images, the log, and the top-level LV that "glues" them all together.
+When a 2-way mirror is split into two linear LVs, two of those LVs must be
+removed.  The segments of the image which is not split off to form the new
+LV are transferred to the top-level LV.  This is done so that the original
+LV can maintain its major/minor, UUID, and name.  The sub-lv from which the
+segments were transferred gets an error segment as a transitory process
+before it is eventually removed.  (Note that if the error target was not put
+in place, a resume_lv would result in two LVs pointing to the same segment!
+If the machine crashes before the eventual removal of the sub-LV, the result
+would be a residual LV with the same mapping as the original (now linear) LV.)
+So, the two LVs that need to be removed are now the log device and the sub-LV
+with the error segment.  If udev_flags are not properly set, a resume will
+cause the error LV to come up and be scanned by udev.  This causes I/O errors.
+Additionally, when udev scans sub-LVs (or former sub-LVs), it can cause races
+when we are trying to remove those LVs.  This is especially bad during failure
+conditions.
 
-Because the original fix failed to completely fix the problem (or work-around it)
-and because a better solution must be found to address the additional cluster
-issue of device renaming, I am reverting the above mentioned commit.
+When the mirror is suspended, the top-level along with it's sub-LVs are
+suspended.  The changes (now 2 linear devices and the yet-to-be-removed log
+and error LV) are committed.  When the resume takes place on the original
+LV, there are no longer links to the other sub-lvs through the LVM metadata.
+The links are implicitly handled by querying the kernel for a list of
+dependencies.  This is done in the '_add_dev' function (which is recursively
+called for each dependency found) - called through the following chain:
+	_add_dev
+	dm_tree_add_dev_with_udev_flags
+	<*** DM / LVM divide ***>
+	_add_dev_to_dtree
+	_add_lv_to_dtree
+	_create_partial_dtree
+	_tree_action
+	dev_manager_activate
+	_lv_activate_lv
+	_lv_resume
+	lv_resume_if_active
+When udev flags are calculated by '_get_udev_flags', it is done by referencing
+the 'logical_volume' structure.  Those flags are then passed down into
+'dm_tree_add_dev_with_udev_flags', which in turn passes them to '_add_dev'.
+Unfortunately, when '_add_dev' is finding the dependencies, it has no way to
+calculate their proper udev_flags.  This is because it is below the DM/LVM
+divide - it doesn't have access to the logical_volume structure.  In fact,
+'_add_dev' simply reuses the udev_flags given for the initial device!  This
+virtually guarentees the udev_flags are wrong for all the dependencies unless
+they are reset by some other mechanism.  The current code provides no such
+mechanism.  Even if '_add_new_lv_to_dtree' were called on the sub-devices -
+which it isn't - entries already in the tree are simply passed over, failing
+to reset any udev_flags.  The solution must retain its implicit nature of
+discovering dependencies and be able to go back over the dependencies found
+to properly set the udev_flags.
 
-Index: LVM2/lib/metadata/mirror.c
+There are probably multiple levels at which a solution could be done (either
+up or down a function in the call chain from where I've placed it).  That
+position may significantly alter the way in which the solution is coded, but
+I don't think it will change the general idea.  I'm hoping that others have
+some insight on where the best place to make the necessary changes is.
+
+My solution simply calls a new function before leaving '_add_new_lv_to_dtree'
+that iterates over the dtree nodes to properly reset the udev_flags of any
+children.  It is important that this function occur after the '_add_dev' has
+done its job of querying the kernel for a list of dependencies.  It is this
+list of children that we use to look up their respective LVs and properly
+calculate the udev_flags.
+
+This solution has worked for single machine, cluster, and cluster w/ exclusive
+activation.
+
+
+
+
+Index: LVM2/libdm/libdm-deptree.c
 ===================================================================
---- LVM2.orig/lib/metadata/mirror.c
-+++ LVM2/lib/metadata/mirror.c
-@@ -673,10 +673,6 @@ static int _split_mirror_images(struct l
- 		return 0;
- 	}
+--- LVM2.orig/libdm/libdm-deptree.c
++++ LVM2/libdm/libdm-deptree.c
+@@ -720,6 +720,16 @@ struct dm_tree_node *dm_tree_add_new_dev
+ 	return node;
+ }
  
--	/* Suspend temporary error target (see FIXME for resume below) */
--	if (sub_lv && !suspend_lv(sub_lv->vg->cmd, sub_lv))
--		return_0;
--
- 	if (!vg_commit(mirrored_seg->lv->vg)) {
- 		resume_lv(cmd, mirrored_seg->lv);
- 		return 0;
-@@ -685,42 +681,6 @@ static int _split_mirror_images(struct l
- 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
++void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags)
++{
++	if (udev_flags == dnode->udev_flags)
++		log_debug("%s udev_flags already set to 0x%x",
++			  dnode->name, udev_flags);
++	else
++		log_debug("Reseting %s udev_flags (s/0x%x/0x%x)",
++			  dnode->name, dnode->udev_flags, udev_flags);
++	dnode->udev_flags = udev_flags;
++}
  
- 	/*
--	 * FIXME:
--When an image is split from a 2-way mirror, the original mirror is converted to
--a linear device.  To do this, the top "layer" must be removed.  The segments
--are transferred from the sub-lv to the top-level LV and the link is severed. 
--The former sub-lv - having its segments transferred - now contains a temporary
--error target.
--
--When the original LV is resumed, the old sub-lv that now contains an error
--segment is activated and scanned.  This causes I/O error messages.  There are
--three ways to fix this problem:
--
--1) Do not set the sub-lv which contains the error target as "visible" before
--suspending the original LV.  This way, when the original is resumed, the sub-lv
--device node is not created and it is not scanned - avoiding the error messages.
-- The problem with this approach is that if the machine crashes after the
--resume, it leaves the *hidden* LV in place and the user has a more difficult
--time noticing that it needs to be cleaned up.  Thus, this type of processing is
--frowned upon.
--
--2) Do like _remove_mirror_images does and suspend the original, then suspend
--the sub-lv (the error target), then resume the sub-lv, and finally resume the
--original LV.  This seems like extra pointless operations to me, but it does not
--produce the error message (although, I'm not sure why) and it allows us to
--leave the visible flag in place.  ** THIS IS THE CHOSEN SOLUTION HERE **
--
--3) Flag the sub-lv (error target) with a "do not scan" flag.  This seems like
--the cleanest approach, but I have been unable to find the method for doing
--this.  LVs get tagged in such a way by _get_udev_flags, but in this case the
--resume of the original LV also resumes the error target LV without running it
--through _get_udev_flags (likely because they are no longer linked).  Could
--there be something wrong in resume_lv?
--	*/
--	if (sub_lv && !resume_lv(sub_lv->vg->cmd, sub_lv))
--		return_0;
--
--	/*
- 	 * Resume the mirror - this also activates the visible, independent
- 	 *                     soon-to-be-split sub-LVs
- 	 */
+ void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+ 				 uint32_t read_ahead,
+Index: LVM2/lib/activate/dev_manager.c
+===================================================================
+--- LVM2.orig/lib/activate/dev_manager.c
++++ LVM2/lib/activate/dev_manager.c
+@@ -1524,6 +1524,41 @@ static int _add_segment_to_dtree(struct 
+ 	return 1;
+ }
+ 
++static int set_udev_flags_for_children(struct dev_manager *dm,
++				       struct volume_group *vg,
++				       struct dm_tree_node *dnode)
++{
++	void *handle = NULL;
++	struct dm_tree_node *child;
++	const struct dm_info *info;
++	char *vgname, *lvname, *layer;
++	struct lv_list *lvl;
++
++	while ((child = dm_tree_next_child(&handle, dnode, 0)) &&
++	       (info  = dm_tree_node_get_info(child)) && info->exists) {
++		if (!dm_split_lvm_name(dm->mem, dm_tree_node_get_name(child),
++				       &vgname, &lvname, &layer)) {
++			log_error("Failed to split DM name, %s",
++				  dm_tree_node_get_name(child));
++			return 0;
++		}
++
++		if (!(lvl = find_lv_in_vg(vg, lvname))) {
++			log_debug("Failed to find %s in %s (due to rename?)",
++				  lvname, vg->name);
++			continue;
++		}
++
++		log_debug("Resetting udev flags for %s (a child of %s)",
++			  dm_tree_node_get_name(dnode),
++			  dm_tree_node_get_name(dnode));
++		dm_tree_node_set_udev_flags(child, _get_udev_flags(dm, lvl->lv,
++								   layer));
++	}
++
++	return 1;
++}
++
+ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 				struct logical_volume *lv, struct lv_activate_opts *laopts,
+ 				const char *layer)
+@@ -1628,6 +1663,9 @@ static int _add_new_lv_to_dtree(struct d
+ 			if (!_add_new_lv_to_dtree(dm, dtree, sl->seg->lv, laopts, NULL))
+ 				return_0;
+ 
++	if (!set_udev_flags_for_children(dm, lv->vg, dnode))
++		return_0;
++
+ 	return 1;
+ }
+ 
+Index: LVM2/libdm/libdevmapper.h
+===================================================================
+--- LVM2.orig/libdm/libdevmapper.h
++++ LVM2/libdm/libdevmapper.h
+@@ -535,6 +535,8 @@ int dm_tree_node_add_replicator_dev_targ
+ 					   uint32_t slog_region_size);
+ /* End of Replicator API */
+ 
++void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
++
+ void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
+ 				      struct dm_tree_node *presuspend_node);
+ 
 
 
 
