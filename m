@@ -1,181 +1,272 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Fri, 30 Sep 2011 16:10:40 -0500
-Subject: [PATCH 2 of 3] Fix udev flags on sub-lvs
+Date: Fri, 30 Sep 2011 16:11:33 -0500
+Subject: [PATCH 3 of 3] Clean-up splitmirror code
 In-Reply-To: <1317416791.4475.3.camel@f14.redhat.com>
 References: <1317416791.4475.3.camel@f14.redhat.com>
-Message-ID: <1317417040.4475.8.camel@f14.redhat.com>
+Message-ID: <1317417093.4475.9.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch attempts to fix issues with improper udev flags on sub-LVs.
+Clean-up splitmirrors code.
 
-The current code does not always assign proper udev flags to sub-LVs (e.g.
-mirror images and log LVs).  This shows up especially during a splitmirror
-operation in which an image is split off from a mirror to form a new LV.
+I've attempted to clean-up the splitmirrors code to make it easier to
+understand with fewer operations.  I've tried to reduce the number of
+metadata operations without compromising the intermediate stages which
+are necessary for easy clean-up in the even of failure.
 
-A mirror with a disk log is actually composed of 4 different LVs: the 2
-mirror images, the log, and the top-level LV that "glues" them all together.
-When a 2-way mirror is split into two linear LVs, two of those LVs must be
-removed.  The segments of the image which is not split off to form the new
-LV are transferred to the top-level LV.  This is done so that the original
-LV can maintain its major/minor, UUID, and name.  The sub-lv from which the
-segments were transferred gets an error segment as a transitory process
-before it is eventually removed.  (Note that if the error target was not put
-in place, a resume_lv would result in two LVs pointing to the same segment!
-If the machine crashes before the eventual removal of the sub-LV, the result
-would be a residual LV with the same mapping as the original (now linear) LV.)
-So, the two LVs that need to be removed are now the log device and the sub-LV
-with the error segment.  If udev_flags are not properly set, a resume will
-cause the error LV to come up and be scanned by udev.  This causes I/O errors.
-Additionally, when udev scans sub-LVs (or former sub-LVs), it can cause races
-when we are trying to remove those LVs.  This is especially bad during failure
-conditions.
+These changes now correctly handle cluster situations - including exclusive
+cluster mirrors.
 
-When the mirror is suspended, the top-level along with it's sub-LVs are
-suspended.  The changes (now 2 linear devices and the yet-to-be-removed log
-and error LV) are committed.  When the resume takes place on the original
-LV, there are no longer links to the other sub-lvs through the LVM metadata.
-The links are implicitly handled by querying the kernel for a list of
-dependencies.  This is done in the '_add_dev' function (which is recursively
-called for each dependency found) - called through the following chain:
-	_add_dev
-	dm_tree_add_dev_with_udev_flags
-	<*** DM / LVM divide ***>
-	_add_dev_to_dtree
-	_add_lv_to_dtree
-	_create_partial_dtree
-	_tree_action
-	dev_manager_activate
-	_lv_activate_lv
-	_lv_resume
-	lv_resume_if_active
-When udev flags are calculated by '_get_udev_flags', it is done by referencing
-the 'logical_volume' structure.  Those flags are then passed down into
-'dm_tree_add_dev_with_udev_flags', which in turn passes them to '_add_dev'.
-Unfortunately, when '_add_dev' is finding the dependencies, it has no way to
-calculate their proper udev_flags.  This is because it is below the DM/LVM
-divide - it doesn't have access to the logical_volume structure.  In fact,
-'_add_dev' simply reuses the udev_flags given for the initial device!  This
-virtually guarentees the udev_flags are wrong for all the dependencies unless
-they are reset by some other mechanism.  The current code provides no such
-mechanism.  Even if '_add_new_lv_to_dtree' were called on the sub-devices -
-which it isn't - entries already in the tree are simply passed over, failing
-to reset any udev_flags.  The solution must retain its implicit nature of
-discovering dependencies and be able to go back over the dependencies found
-to properly set the udev_flags.
-
-There are probably multiple levels at which a solution could be done (either
-up or down a function in the call chain from where I've placed it).  That
-position may significantly alter the way in which the solution is coded, but
-I don't think it will change the general idea.  I'm hoping that others have
-some insight on where the best place to make the necessary changes is.
-
-My solution simply calls a new function before leaving '_add_new_lv_to_dtree'
-that iterates over the dtree nodes to properly reset the udev_flags of any
-children.  It is important that this function occur after the '_add_dev' has
-done its job of querying the kernel for a list of dependencies.  It is this
-list of children that we use to look up their respective LVs and properly
-calculate the udev_flags.
-
-This solution has worked for single machine, cluster, and cluster w/ exclusive
-activation.
-
-
-
-
-Index: LVM2/libdm/libdm-deptree.c
+Index: LVM2/lib/metadata/mirror.c
 ===================================================================
---- LVM2.orig/libdm/libdm-deptree.c
-+++ LVM2/libdm/libdm-deptree.c
-@@ -720,6 +720,16 @@ struct dm_tree_node *dm_tree_add_new_dev
- 	return node;
+--- LVM2.orig/lib/metadata/mirror.c
++++ LVM2/lib/metadata/mirror.c
+@@ -394,6 +394,19 @@ activate_lv:
+ 	return 0;
  }
  
-+void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags)
++static int inkind_activate_lv(struct logical_volume *model,
++			      struct logical_volume *lv)
 +{
-+	if (udev_flags == dnode->udev_flags)
-+		log_debug("%s udev_flags already set to 0x%x",
-+			  dnode->name, udev_flags);
-+	else
-+		log_debug("Reseting %s udev_flags (s/0x%x/0x%x)",
-+			  dnode->name, dnode->udev_flags, udev_flags);
-+	dnode->udev_flags = udev_flags;
-+}
- 
- void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
- 				 uint32_t read_ahead,
-Index: LVM2/lib/activate/dev_manager.c
-===================================================================
---- LVM2.orig/lib/activate/dev_manager.c
-+++ LVM2/lib/activate/dev_manager.c
-@@ -1524,6 +1524,41 @@ static int _add_segment_to_dtree(struct 
- 	return 1;
- }
- 
-+static int set_udev_flags_for_children(struct dev_manager *dm,
-+				       struct volume_group *vg,
-+				       struct dm_tree_node *dnode)
-+{
-+	void *handle = NULL;
-+	struct dm_tree_node *child;
-+	const struct dm_info *info;
-+	char *vgname, *lvname, *layer;
-+	struct lv_list *lvl;
-+
-+	while ((child = dm_tree_next_child(&handle, dnode, 0)) &&
-+	       (info  = dm_tree_node_get_info(child)) && info->exists) {
-+		if (!dm_split_lvm_name(dm->mem, dm_tree_node_get_name(child),
-+				       &vgname, &lvname, &layer)) {
-+			log_error("Failed to split DM name, %s",
-+				  dm_tree_node_get_name(child));
-+			return 0;
-+		}
-+
-+		if (!(lvl = find_lv_in_vg(vg, lvname))) {
-+			log_debug("Failed to find %s in %s (due to rename?)",
-+				  lvname, vg->name);
-+			continue;
-+		}
-+
-+		log_debug("Resetting udev flags for %s (a child of %s)",
-+			  dm_tree_node_get_name(dnode),
-+			  dm_tree_node_get_name(dnode));
-+		dm_tree_node_set_udev_flags(child, _get_udev_flags(dm, lvl->lv,
-+								   layer));
++	if (lv_is_active_exclusive_locally(model)) {
++		if (!activate_lv_excl(lv->vg->cmd, lv))
++			return_0;
++	} else {
++		if (!activate_lv(lv->vg->cmd, lv))
++			return_0;
 +	}
-+
 +	return 1;
 +}
 +
- static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 				struct logical_volume *lv, struct lv_activate_opts *laopts,
- 				const char *layer)
-@@ -1628,6 +1663,9 @@ static int _add_new_lv_to_dtree(struct d
- 			if (!_add_new_lv_to_dtree(dm, dtree, sl->seg->lv, laopts, NULL))
- 				return_0;
+ /*
+  * Delete independent/orphan LV, it must acquire lock.
+  */
+@@ -417,13 +430,9 @@ static int _delete_lv(struct logical_vol
+ 		}
+ 	}
  
-+	if (!set_udev_flags_for_children(dm, lv->vg, dnode))
+-	if (lv_is_active_exclusive_locally(lv)) {
+-		if (!activate_lv_excl(cmd, lv))
+-			return_0;
+-	} else {
+-		if (!activate_lv(cmd, lv))
+-			return_0;
+-	}
++	// FIXME: shouldn't the activation type be based on mirror_lv, not lv?
++	if (!inkind_activate_lv(lv, lv))
++		return_0;
+ 
+ 	sync_local_dev_names(lv->vg->cmd);
+ 	if (!deactivate_lv(cmd, lv))
+@@ -584,7 +593,7 @@ static int _split_mirror_images(struct l
+ 	struct logical_volume *detached_log_lv = NULL;
+ 	struct lv_segment *mirrored_seg = first_seg(lv);
+ 	struct dm_list split_images;
+-	struct lv_list *lvl, *new_lvl = NULL;
++	struct lv_list *lvl;
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 
+ 	if (!(lv->status & MIRRORED)) {
+@@ -626,12 +635,18 @@ static int _split_mirror_images(struct l
+ 		sub_lv = seg_lv(mirrored_seg, mirrored_seg->area_count);
+ 
+ 		sub_lv->status &= ~MIRROR_IMAGE;
+-		lv_set_visible(sub_lv);
+ 		release_lv_segment_area(mirrored_seg, mirrored_seg->area_count,
+ 					mirrored_seg->area_len);
+ 
+ 		log_very_verbose("%s assigned to be split", sub_lv->name);
+ 
++		if (!new_lv) {
++			lv_set_visible(sub_lv);
++			new_lv = sub_lv;
++			continue;
++		}
++
++		/* If there is more than one image being split, add to list */
+ 		lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl));
+ 		if (!lvl) {
+ 			log_error("lv_list alloc failed");
+@@ -640,90 +655,7 @@ static int _split_mirror_images(struct l
+ 		lvl->lv = sub_lv;
+ 		dm_list_add(&split_images, &lvl->list);
+ 	}
+-	sub_lv = NULL;
+-
+-	/*
+-	 * If no more mirrors, remove mirror layer.
+-	 * The sub_lv is removed entirely later - leaving
+-	 * only the top-level (now linear) LV.
+-	 */
+-	if (mirrored_seg->area_count == 1) {
+-		sub_lv = seg_lv(mirrored_seg, 0);
+-		sub_lv->status &= ~MIRROR_IMAGE;
+-		lv_set_visible(sub_lv);
+-		detached_log_lv = detach_mirror_log(mirrored_seg);
+-		if (!remove_layer_from_lv(lv, sub_lv))
+-			return_0;
+-		lv->status &= ~MIRRORED;
+-		lv->status &= ~LV_NOTSYNCED;
+-	}
+ 
+-	if (!vg_write(mirrored_seg->lv->vg)) {
+-		log_error("Intermediate VG metadata write failed.");
+-		return 0;
+-	}
+-
+-	/*
+-	 * Suspend the mirror - this includes all the sub-LVs and
+-	 *                      soon-to-be-split sub-LVs
+-	 */
+-	if (!suspend_lv(cmd, mirrored_seg->lv)) {
+-		log_error("Failed to lock %s", mirrored_seg->lv->name);
+-		vg_revert(mirrored_seg->lv->vg);
+-		return 0;
+-	}
+-
+-	if (!vg_commit(mirrored_seg->lv->vg)) {
+-		resume_lv(cmd, mirrored_seg->lv);
+-		return 0;
+-	}
+-
+-	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
+-
+-	/*
+-	 * Resume the mirror - this also activates the visible, independent
+-	 *                     soon-to-be-split sub-LVs
+-	 */
+-	if (!resume_lv(cmd, mirrored_seg->lv)) {
+-		log_error("Problem resuming %s", mirrored_seg->lv->name);
+-		return 0;
+-	}
+-
+-	/* Remove original mirror layer if it has been converted to linear */
+-	if (sub_lv && !_delete_lv(lv, sub_lv))
+-		return_0;
+-
+-	/* Remove the log if it has been converted to linear */
+-	if (detached_log_lv && !_delete_lv(lv, detached_log_lv))
+-		return_0;
+-
+-	/*
+-	 * Step 2:
+-	 *   The original mirror has been changed and we now have visible,
+-	 *   independent, not-yet-renamed, active sub-LVs.  We must:
+-	 *   - deactivate the split sub-LVs
+-	 *   - rename them
+-	 *   - form new mirror if necessary
+-	 *   - commit VG changes
+-	 *   - activate the new LV
+-	 */
+-	sync_local_dev_names(lv->vg->cmd);
+-	dm_list_iterate_items(lvl, &split_images) {
+-		if (!new_lv) {
+-			/* Grab 1st sub-LV for later */
+-			new_lvl = lvl;
+-			new_lv = lvl->lv;
+-		}
+-
+-		sub_lv = lvl->lv;
+-		if (!deactivate_lv(cmd, sub_lv)) {
+-			log_error("Failed to deactivate former mirror image, %s",
+-				  sub_lv->name);
+-			return 0;
+-		}
+-	}
+-
+-	dm_list_del(&new_lvl->list);
+ 	new_lv->name = dm_pool_strdup(lv->vg->vgmem, split_name);
+ 	if (!new_lv->name) {
+ 		log_error("Unable to rename newly split LV");
+@@ -780,19 +712,76 @@ static int _split_mirror_images(struct l
+ 		init_mirror_in_sync(1);
+ 	}
+ 
+-	if (!vg_write(mirrored_seg->lv->vg) ||
+-	    !vg_commit(mirrored_seg->lv->vg))
+-		return_0;
++	sub_lv = NULL;
++
++	/*
++	 * If no more mirrors, remove mirror layer.
++	 * The sub_lv is removed entirely later - leaving
++	 * only the top-level (now linear) LV.
++	 */
++	if (mirrored_seg->area_count == 1) {
++		sub_lv = seg_lv(mirrored_seg, 0);
++		sub_lv->status &= ~MIRROR_IMAGE;
++		lv_set_visible(sub_lv);
++		detached_log_lv = detach_mirror_log(mirrored_seg);
++		if (!remove_layer_from_lv(lv, sub_lv))
++			return_0;
++		lv->status &= ~MIRRORED;
++		lv->status &= ~LV_NOTSYNCED;
++	}
++
++	if (!vg_write(mirrored_seg->lv->vg)) {
++		log_error("Intermediate VG metadata write failed.");
++		return 0;
++	}
++
++	/*
++	 * Suspend the mirror - this includes all the sub-LVs and
++	 *                      soon-to-be-split sub-LVs
++	 */
++	if (!suspend_lv(cmd, mirrored_seg->lv)) {
++		log_error("Failed to lock %s", mirrored_seg->lv->name);
++		vg_revert(mirrored_seg->lv->vg);
++		return 0;
++	}
++
++	if (!vg_commit(mirrored_seg->lv->vg)) {
++		resume_lv(cmd, mirrored_seg->lv);
++		return 0;
++	}
++
++	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
++
++	/*
++	 * Resume the mirror - this also activates the visible, independent
++	 *                     soon-to-be-split sub-LVs
++	 */
++	if (!resume_lv(cmd, mirrored_seg->lv)) {
++		log_error("Problem resuming %s", mirrored_seg->lv->name);
++		return 0;
++	}
+ 
+-	/* Bring newly split-off LV into existence */
+-	if (!activate_lv(cmd, new_lv)) {
+-		log_error("Failed to activate newly split LV, %s",
+-			  new_lv->name);
++	/*
++	 * Recycle newly split LV so it is properly renamed.
++	 *   Cluster requires the extra deactivate/activate calls.
++	 */
++	if (vg_is_clustered(lv->vg) &&
++	    (!deactivate_lv(cmd, new_lv) || !inkind_activate_lv(lv, new_lv))) {
++		log_error("Failed to rename newly split LV in the kernel");
++		return 0;
++	}
++	if (!suspend_lv(cmd, new_lv) || !resume_lv(cmd, new_lv)) {
++		log_error("Failed to rename newly split LV in the kernel");
+ 		return 0;
+ 	}
+ 
+-	log_very_verbose("%" PRIu32 " image(s) detached from %s",
+-			 split_count, lv->name);
++	/* Remove original mirror layer if it has been converted to linear */
++	if (sub_lv && !_delete_lv(lv, sub_lv))
 +		return_0;
 +
++	/* Remove the log if it has been converted to linear */
++	if (detached_log_lv && !_delete_lv(lv, detached_log_lv))
++		return_0;
+ 
  	return 1;
  }
- 
-Index: LVM2/libdm/libdevmapper.h
-===================================================================
---- LVM2.orig/libdm/libdevmapper.h
-+++ LVM2/libdm/libdevmapper.h
-@@ -535,6 +535,8 @@ int dm_tree_node_add_replicator_dev_targ
- 					   uint32_t slog_region_size);
- /* End of Replicator API */
- 
-+void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
-+
- void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
- 				      struct dm_tree_node *presuspend_node);
- 
 
 
 
