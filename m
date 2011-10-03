@@ -1,65 +1,51 @@
-From: Gabriele Gristina <gabriele.gristina@gmail.com>
-Date: Sat, 1 Oct 2011 22:02:35 +0200
-Subject: patch for build lvm2 with --enable_static-link
-Message-ID: <CAAQoy1S2KXVHUMv-0+=T6FR_o4vQOZP41hSnzArBVYGMk8a5Aw@mail.gmail.com>
+From: Lukas Czerner <lczerner@redhat.com>
+Date: Mon, 3 Oct 2011 18:13:39 +0200 (CEST)
+Subject: [PATCH v3 02/18] fsadm: Make all internal math in kilobytes
+In-Reply-To: <4E81EEC6.1010904@redhat.com>
+References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+	<1317130971-24173-3-git-send-email-lczerner@redhat.com>
+	<4E81EEC6.1010904@redhat.com>
+Message-ID: <alpine.LFD.2.00.1110031803420.4447@dhcp-27-109.brq.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+On Tue, 27 Sep 2011, Zdenek Kabelac wrote:
 
-here the working patch for build lvm2 with --enable_static-link
+> Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
+> > We should make all math in fsadm to count with kilobytes (if possible)
+> > because it will bypass the problem of having too big numbers. Also the
+> > smaller granularity might have troubles with 512B alignment.
+> 
+> 
+> I don't like this one -  if you have problems with big numbers - bugreport
+> bash. You are probably covering up different bug here.
+
+I am not sure you do not "like" this one, it does not seem like a real
+reason, could you be more specific ? This patch just forces internal
+math to be done in kilobytes, since there is no real reason to do it in
+bytes.
+
+It has no implications for the user interface.
 
 
+Also, please when you reply to my patches, could you cc me as well ?
+This is not the only list I am sending patches to so I can not just
+check all lists for replies.
 
-diff -Naur LVM2/configure.in LVM2.new/configure.in
---- LVM2/configure.in    2011-09-24 20:57:49.000000000 +0000
-+++ LVM2.new/configure.in    2011-10-01 19:38:20.667538017 +0000
-@@ -35,6 +35,7 @@
-         CLDNOWHOLEARCHIVE="-Wl,-no-whole-archive"
-         LDDEPS="$LDDEPS .export.sym"
-         LDFLAGS="$LDFLAGS -Wl,--export-dynamic"
-+        LDFLAGS_STATIC="$LDFLAGS -Wl"
-         LIB_SUFFIX=so
-         DEVMAPPER=yes
-         LVMETAD=no
-diff -Naur LVM2/make.tmpl.in LVM2.new/make.tmpl.in
---- LVM2/make.tmpl.in    2011-08-12 12:56:38.000000000 +0000
-+++ LVM2.new/make.tmpl.in    2011-10-01 19:48:55.337537503 +0000
-@@ -134,6 +134,7 @@
- endif
+Thanks!
+-Lukas
 
- LDFLAGS += -L$(top_builddir)/libdm -L$(top_builddir)/lib
-+LDFLAGS_STATIC += -L$(top_builddir)/libdm -L$(top_builddir)/lib
- CLDFLAGS += -L$(top_builddir)/libdm -L$(top_builddir)/lib
+> 
+> 
+> Zdenek
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+> 
 
- ifeq ("@DMEVENTD@", "yes")
-diff -Naur LVM2/tools/Makefile.in LVM2.new/tools/Makefile.in
---- LVM2/tools/Makefile.in    2011-09-24 21:00:53.000000000 +0000
-+++ LVM2.new/tools/Makefile.in    2011-10-01 19:39:19.987537981 +0000
-@@ -126,7 +126,7 @@
-           -o $@ dmsetup.o -ldevmapper $(LIBS)
 
- dmsetup.static: dmsetup.o $(interfacebuilddir)/libdevmapper.a
--    $(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) \
-+    $(CC) $(CFLAGS) $(LDFLAGS_STATIC) -static -L$(interfacebuilddir) \
-           -o $@ dmsetup.o -ldevmapper $(STATIC_LIBS) $(LIBS)
-
- all: device-mapper
-@@ -136,7 +136,7 @@
-         $(LVMLIBS) $(READLINE_LIBS) $(LIBS) -rdynamic
-
- lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a
-$(interfacebuilddir)/libdevmapper.a
--    $(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) -o $@ \
-+    $(CC) $(CFLAGS) $(LDFLAGS_STATIC) -static -L$(interfacebuilddir) -o $@
-\
-           $(OBJECTS) lvm-static.o $(LVMLIBS) $(STATIC_LIBS) $(LIBS)
-
- liblvm2cmd.a: $(top_builddir)/lib/liblvm-internal.a $(OBJECTS) lvmcmdlib.o
-lvm2cmd.o
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20111001/1f756cb3/attachment.htm>
