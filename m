@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Oct 2011 18:39:18 -0000
-Subject: LVM2/lib/metadata metadata.h thin_manip.c
-Message-ID: <20111003183918.28055.qmail@sourceware.org>
+Date: 3 Oct 2011 18:43:39 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20111003184339.29263.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,74 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-03 18:39:18
+Changes by:	zkabelac at sourceware.org	2011-10-03 18:43:39
 
 Modified files:
-	lib/metadata   : metadata.h thin_manip.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Add simple function for lookup of some free device_id
+	Add code to activate thin target
 	
-	Initial simple implementation for finding some free device_id.
+	Code to zero pool metadata lv when pool is created.
+	Add code to create thin target via message sending.
+	
+	(Revert is missing)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.256&r2=1.257
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.292&r2=1.293
 
---- LVM2/lib/metadata/metadata.h	2011/09/09 01:15:18	1.256
-+++ LVM2/lib/metadata/metadata.h	2011/10/03 18:39:17	1.257
-@@ -374,6 +374,9 @@
- /* Find pool LV segment given a thin pool data or metadata segment. */
- struct lv_segment *find_pool_seg(const struct lv_segment *seg);
+--- LVM2/lib/metadata/lv_manip.c	2011/09/29 08:56:38	1.292
++++ LVM2/lib/metadata/lv_manip.c	2011/10/03 18:43:39	1.293
+@@ -3889,6 +3889,7 @@
+ 	uint32_t size_rest;
+ 	uint64_t status = UINT64_C(0);
+ 	struct logical_volume *lv, *org = NULL;
++	struct logical_volume *pool_lv;
+ 	int origin_active = 0;
+ 	struct lvinfo info;
  
-+/* Find some unused device_id for thin pool LV segment. */
-+uint32_t get_free_pool_device_id(struct lv_segment *thin_pool_seg);
-+
- /*
-  * Remove a dev_dir if present.
-  */
---- LVM2/lib/metadata/thin_manip.c	2011/09/09 01:15:18	1.4
-+++ LVM2/lib/metadata/thin_manip.c	2011/10/03 18:39:17	1.5
-@@ -80,3 +80,40 @@
+@@ -4113,6 +4114,27 @@
  
-         return pool_seg;
- }
+ 	if (seg_is_thin_pool(lp) && lp->zero)
+ 		first_seg(lv)->zero_new_blocks = 1;
++	else if (seg_is_thin_volume(lp)) {
++		pool_lv = first_seg(lv)->pool_lv;
 +
-+/*
-+ * Find a free device_id for given thin_pool segment.
-+ *
-+ * \return
-+ * Free device id, or 0 if free device_id is not found.
-+ *
-+ * FIXME: Improve naive search and keep the value cached
-+ * and updated during VG lifetime (so no const for lv_segment)
-+ */
-+uint32_t get_free_pool_device_id(struct lv_segment *thin_pool_seg)
-+{
-+	uint32_t dev_id, max_id = 0;
-+	struct dm_list *h;
++		if (!(first_seg(lv)->device_id =
++		      get_free_pool_device_id(first_seg(pool_lv))))
++			return_NULL;
 +
-+	if (!seg_is_thin_pool(thin_pool_seg)) {
-+		log_error("Segment in %s is not a thin pool segment.",
-+			  pool_seg->lv->name);
-+		return 0;
++		if (!activate_lv(pool_lv->vg->cmd, pool_lv)) {
++			log_error("Failed to activate %s/%s to send message.",
++				  pool_lv->vg->name, pool_lv->name);
++			return NULL;
++		}
++
++		if (!lv_send_message(pool_lv, "create_thin %u", first_seg(lv)->device_id))
++			return_NULL;
++
++		/*
++		 * FIXME: Skipping deactivate_lv(pool_lv) as it is going to be needed anyway
++		 * but revert_new_lv should revert to deactivated state.
++		 */
 +	}
-+
-+	dm_list_iterate(h, &thin_pool_seg->lv->segs_using_this_lv) {
-+		dev_id = dm_list_item(h, struct seg_list)->seg->device_id;
-+		if (dev_id > max_id)
-+			max_id = dev_id;
-+	}
-+
-+	if (++max_id >= (1 << 24)) {
-+		// FIXME: try to find empty holes....
-+		log_error("Free device_id exhausted...");
-+		return 0;
-+	}
-+
-+	log_debug("Found free pool device_id %u.", max_id);
-+
-+	return max_id;
-+}
+ 
+ 	if (seg_is_thin_pool(lp)) {
+ 		/* FIXME: add lvcreate params - maybe -c/--chunksize?,
+@@ -4166,6 +4188,10 @@
+ 			  lp->snapshot ? "snapshot exception store" :
+ 					 "start of new LV");
+ 		goto deactivate_and_revert_new_lv;
++	} else if (seg_is_thin_pool(lp)) {
++		if (!set_lv(cmd, first_seg(lv)->pool_metadata_lv, UINT64_C(0), 0))
++			log_error("Aborting. Failed to wipe pool metadata %s.",
++				  lv->name);
+ 	}
+ 
+ 	if (lp->snapshot) {
 
 
