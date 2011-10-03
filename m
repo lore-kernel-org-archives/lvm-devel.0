@@ -1,11 +1,11 @@
 From: Lukas Czerner <lczerner@redhat.com>
-Date: Mon, 3 Oct 2011 18:13:39 +0200 (CEST)
-Subject: [PATCH v3 02/18] fsadm: Make all internal math in kilobytes
-In-Reply-To: <4E81EEC6.1010904@redhat.com>
+Date: Mon, 3 Oct 2011 18:20:10 +0200 (CEST)
+Subject: [PATCH v3 12/18] lvresize: Specify --resize-fs-only when going to use fsadm resize
+In-Reply-To: <4E81EF71.4070906@redhat.com>
 References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-	<1317130971-24173-3-git-send-email-lczerner@redhat.com>
-	<4E81EEC6.1010904@redhat.com>
-Message-ID: <alpine.LFD.2.00.1110031803420.4447@dhcp-27-109.brq.redhat.com>
+	<1317130971-24173-13-git-send-email-lczerner@redhat.com>
+	<4E81EF71.4070906@redhat.com>
+Message-ID: <alpine.LFD.2.00.1110031816500.4447@dhcp-27-109.brq.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,32 +15,28 @@ Content-Transfer-Encoding: 7bit
 On Tue, 27 Sep 2011, Zdenek Kabelac wrote:
 
 > Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
-> > We should make all math in fsadm to count with kilobytes (if possible)
-> > because it will bypass the problem of having too big numbers. Also the
-> > smaller granularity might have troubles with 512B alignment.
+> > When lvresize is calling fsadm to resize the file system, originally
+> > it was the default action. However now fsadm support much more
+> > features and it is doing the lvresize by itself. Luckily there is
+> > still a way to tell fsadm to resize only the file system ane leave
+> > the rest up to the lvresize - provide "--resize-fs-only" argument.
+> > 
+> > This commit adds "--resize-fs-only" argument when we are going to
+> > use fsadm to resize the fs from within the lvresize.
 > 
 > 
-> I don't like this one -  if you have problems with big numbers - bugreport
-> bash. You are probably covering up different bug here.
+> There is a big reason to call lvresize for this operation - it's the cluster
+> atomicity, so the resize operation (while using lvm tools) provide consistent
+> results - this breaks it - so NACK for now.
+> 
+> Zdenek
 
-I am not sure you do not "like" this one, it does not seem like a real
-reason, could you be more specific ? This patch just forces internal
-math to be done in kilobytes, since there is no real reason to do it in
-bytes.
-
-It has no implications for the user interface.
-
-
-Also, please when you reply to my patches, could you cc me as well ?
-This is not the only list I am sending patches to so I can not just
-check all lists for replies.
+Sure, the patch actually does not change the atomicity, however the
+description might be a bit badly worded, I'll change that.
 
 Thanks!
 -Lukas
 
-> 
-> 
-> Zdenek
 > 
 > --
 > lvm-devel mailing list
