@@ -1,56 +1,58 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 28 Apr 2011 11:01:13 +0200
-Subject: [PATCH] Refactor lib/ code to allow deferred PV labelling
-In-Reply-To: <20110427182420.GD32370@agk-dp.fab.redhat.com>
-References: <87oc3rhp66.fsf@aldalome.int.mornfall.net.>
-	<20110427182420.GD32370@agk-dp.fab.redhat.com>
-Message-ID: <4DB92CD9.1060508@redhat.com>
+From: Lukas Czerner <lczerner@redhat.com>
+Date: Mon, 3 Oct 2011 18:44:04 +0200 (CEST)
+Subject: [PATCH v3 03/18] fsadm: Add simple configuration file
+In-Reply-To: <4E81EE3E.3080005@redhat.com>
+References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+	<1317130971-24173-4-git-send-email-lczerner@redhat.com>
+	<4E81EE3E.3080005@redhat.com>
+Message-ID: <alpine.LFD.2.00.1110031841070.4447@dhcp-27-109.brq.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 04/27/2011 08:24 PM +0100, Alasdair G Kergon wrote:
->> @@ -51,6 +51,9 @@ struct physical_volume {
+On Tue, 27 Sep 2011, Zdenek Kabelac wrote:
+
+> Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
+> > Signed-off-by: Lukas Czerner <lczerner@redhat.com>
+> > ---
+> >  scripts/fsadm.sh |   30 ++++++++++++++++++++++++++++++
+> >  1 files changed, 30 insertions(+), 0 deletions(-)
+> > 
+> > diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+> > index 58ff0ab..98921d3 100755
+> > --- a/scripts/fsadm.sh
+> > +++ b/scripts/fsadm.sh
+> > @@ -88,6 +88,9 @@ PROCDEVICES="/proc/devices"
+> >  PROCPARTITIONS="/proc/partitions"
+> >  NULL="$DM_DEV_DIR/null"
+> >  
+> > +CONFIG_PATHS="/etc/fsadm.conf ~/fsadm.conf"
+> > +CONFIG=
+> > +
 > 
->> +	/* NB. Only useful/used when status & UNLABELLED_PV! */
->> +	int64_t label_sector;
 > 
->> @@ -59,6 +65,13 @@ struct volume_group {
->> +	struct dm_list pvs_to_create;
+> Looks too complicated -  sourcing config file with some defines looks like
+> better approach here  if you really think it's useful.
 > 
-> These are really just temporary places to store things - not used as an intrinsic
-> part of the structs themselves.  How difficult is it to handle them
-> separately outside the structs?
+> 
+> Zdenek
 
-Well, normally, we store that in PV-based format instance context
-(the 'struct text_fid_pv_context' that is stored in 'private' field in
-'struct format_instance). But if that PV is part of the VG, we use a
-common VG-based format instance - so we can't store that PV info there
-separately for each PV...
+I do not think we should or can support setting all the different
+variables we are using in fsadm via configuration file. That is why I
+choose to only have strictly defined options in configuration file. This
+way we have absolute control over what is configured via the
+configuration file, which is the right approach.
 
-So how about using 'struct pvcreate_params' we attach to 'struct pv_to_create'
-in add_pv_to_vg fn:
+Thanks!
+-Lukas
 
-  if (pv->status & UNLABELLED_PV) {
-                if (!(pvc = dm_pool_zalloc(mem, sizeof(*pvc)))) {
-                        log_error("pv_to_create allocation for '%s' failed", pv_name);
-                        return 0;
-                }    
-                pvc->pv = pv;
-                pvc->pp = pp;
-                ...
-  ...
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+> 
 
-
-Can we use that to store that label sector info? Would that work?
-
-If we don't find a place for that label sector other than the struct PV
-itself as proposed in this patch, we can also remove the 'struct text_fid_pv_context'.
-The text_fid_pv_context is here to store the label_sector info only. At least for now.
-I wanted to use the PV struct for that as well the other day, like you do here... ;)
-It's useless to store that in two places at the same time.
-
-Peter
 
