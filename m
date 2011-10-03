@@ -1,158 +1,209 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Apr 2011 16:22:48 -0000
-Subject: LVM2/man pvmove.8.in
-Message-ID: <20110428162248.4318.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Mon, 03 Oct 2011 16:25:02 -0500
+Subject: [PATCH 2 of 3] Fix udev flags on sub-lvs
+In-Reply-To: <1317417040.4475.8.camel@f14.redhat.com>
+References: <1317416791.4475.3.camel@f14.redhat.com>
+	<1317417040.4475.8.camel@f14.redhat.com>
+Message-ID: <1317677102.7301.3.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-04-28 16:22:48
+Refresh patch to update the logging and ignore non-LVM devices when
+resetting udev flags.
 
-Modified files:
-	man            : pvmove.8.in 
+ brassow
 
-Log message:
-	Adjust pvmove man page wording.
-	
-	Add missing --alloc anywhere to example and mention that snapshots and
-	mirrors can't be moved.
+This patch attempts to fix issues with improper udev flags on sub-LVs.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/pvmove.8.in.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+The current code does not always assign proper udev flags to sub-LVs (e.g.
+mirror images and log LVs).  This shows up especially during a splitmirror
+operation in which an image is split off from a mirror to form a new LV.
 
---- LVM2/man/pvmove.8.in	2011/02/09 22:24:55	1.5
-+++ LVM2/man/pvmove.8.in	2011/04/28 16:22:47	1.6
-@@ -21,7 +21,7 @@
- .IR DestinationPhysicalVolume (s).
- If no
- .I DestinationPhysicalVolume
--is specified, the normal allocation rules for the volume group are used.
-+is specified, the normal allocation rules for the Volume Group are used.
+A mirror with a disk log is actually composed of 4 different LVs: the 2
+mirror images, the log, and the top-level LV that "glues" them all together.
+When a 2-way mirror is split into two linear LVs, two of those LVs must be
+removed.  The segments of the image which is not split off to form the new
+LV are transferred to the top-level LV.  This is done so that the original
+LV can maintain its major/minor, UUID, and name.  The sub-lv from which the
+segments were transferred gets an error segment as a transitory process
+before it is eventually removed.  (Note that if the error target was not put
+in place, a resume_lv would result in two LVs pointing to the same segment!
+If the machine crashes before the eventual removal of the sub-LV, the result
+would be a residual LV with the same mapping as the original (now linear) LV.)
+So, the two LVs that need to be removed are now the log device and the sub-LV
+with the error segment.  If udev_flags are not properly set, a resume will
+cause the error LV to come up and be scanned by udev.  This causes I/O errors.
+Additionally, when udev scans sub-LVs (or former sub-LVs), it can cause races
+when we are trying to remove those LVs.  This is especially bad during failure
+conditions.
+
+When the mirror is suspended, the top-level along with it's sub-LVs are
+suspended.  The changes (now 2 linear devices and the yet-to-be-removed log
+and error LV) are committed.  When the resume takes place on the original
+LV, there are no longer links to the other sub-lvs through the LVM metadata.
+The links are implicitly handled by querying the kernel for a list of
+dependencies.  This is done in the '_add_dev' function (which is recursively
+called for each dependency found) - called through the following chain:
+	_add_dev
+	dm_tree_add_dev_with_udev_flags
+	<*** DM / LVM divide ***>
+	_add_dev_to_dtree
+	_add_lv_to_dtree
+	_create_partial_dtree
+	_tree_action
+	dev_manager_activate
+	_lv_activate_lv
+	_lv_resume
+	lv_resume_if_active
+When udev flags are calculated by '_get_udev_flags', it is done by referencing
+the 'logical_volume' structure.  Those flags are then passed down into
+'dm_tree_add_dev_with_udev_flags', which in turn passes them to '_add_dev'.
+Unfortunately, when '_add_dev' is finding the dependencies, it has no way to
+calculate their proper udev_flags.  This is because it is below the DM/LVM
+divide - it doesn't have access to the logical_volume structure.  In fact,
+'_add_dev' simply reuses the udev_flags given for the initial device!  This
+virtually guarentees the udev_flags are wrong for all the dependencies unless
+they are reset by some other mechanism.  The current code provides no such
+mechanism.  Even if '_add_new_lv_to_dtree' were called on the sub-devices -
+which it isn't - entries already in the tree are simply passed over, failing
+to reset any udev_flags.  The solution must retain its implicit nature of
+discovering dependencies and be able to go back over the dependencies found
+to properly set the udev_flags.
+
+There are probably multiple levels at which a solution could be done (either
+up or down a function in the call chain from where I've placed it).  That
+position may significantly alter the way in which the solution is coded, but
+I don't think it will change the general idea.  I'm hoping that others have
+some insight on where the best place to make the necessary changes is.
+
+My solution simply calls a new function before leaving '_add_new_lv_to_dtree'
+that iterates over the dtree nodes to properly reset the udev_flags of any
+children.  It is important that this function occur after the '_add_dev' has
+done its job of querying the kernel for a list of dependencies.  It is this
+list of children that we use to look up their respective LVs and properly
+calculate the udev_flags.
+
+This solution has worked for single machine, cluster, and cluster w/ exclusive
+activation.
+
+
+
+
+Index: LVM2/libdm/libdm-deptree.c
+===================================================================
+--- LVM2.orig/libdm/libdm-deptree.c
++++ LVM2/libdm/libdm-deptree.c
+@@ -720,6 +720,18 @@ struct dm_tree_node *dm_tree_add_new_dev
+ 	return node;
+ }
  
- If \fBpvmove\fP gets interrupted for any reason (e.g. the machine crashes)
- then run \fBpvmove\fP again without any PhysicalVolume arguments to
-@@ -31,15 +31,15 @@
- 
- You can run more than one pvmove at once provided they are moving data
- off different SourcePhysicalVolumes, but additional pvmoves will ignore
--any logical volumes already in the process of being changed, so some
-+any Logical Volumes already in the process of being changed, so some
- data might not get moved.
- 
- \fBpvmove\fP works as follows:
- 
--1. A temporary 'pvmove' logical volume is created to store
-+1. A temporary 'pvmove' Logical Volume is created to store
- details of all the data movements required.
- 
--2. Every logical volume in the volume group is searched
-+2. Every Logical Volume in the Volume Group is searched
- for contiguous data that need moving
- according to the command line arguments.
- For each piece of data found, a new segment is added to the end of the
-@@ -49,25 +49,27 @@
- The original LV is updated to use the new temporary mirror segment
- in the pvmove LV instead of accessing the data directly.
- 
--3. The volume group metadata is updated on disk.
-+3. The Volume Group metadata is updated on disk.
- 
--4. The first segment of the pvmove logical volume is activated and starts
-+4. The first segment of the pvmove Logical Volume is activated and starts
- to mirror the first part of the data.  Only one segment is mirrored at once
- as this is usually more efficient.
- 
- 5. A daemon repeatedly checks progress at the specified time interval.
- When it detects that the first temporary mirror is in-sync,
- it breaks that mirror so that only the new location for that data gets used 
--and writes a checkpoint into the volume group metadata on disk.
-+and writes a checkpoint into the Volume Group metadata on disk.
- Then it activates the mirror for the next segment of the pvmove LV.
- 
- 6. When there are no more segments left to be mirrored, 
--the temporary logical volume is removed and the volume group metadata 
--is updated so that the logical volumes reflect the new data locations.
-+the temporary Logical Volume is removed and the Volume Group metadata 
-+is updated so that the Logical Volumes reflect the new data locations.
- 
- Note that this new process cannot support the original LVM1
- type of on-disk metadata.  Metadata can be converted using \fBvgconvert\fP(8).
- 
-+N.B. The moving of mirrors, snapshots and their origins is not yet supported.
++void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags)
 +
- .SH OPTIONS
- .TP
- .I \-\-abort
-@@ -94,38 +96,54 @@
- instead of all allocated extents to the destination physical volume(s).
- 
- .SH EXAMPLES
--To move all logical extents of any logical volumes on
-+To move all Physical Extents that are used by simple Logical Volumes on
- .B /dev/sdb1
--to free physical extents elsewhere in the volume group, use:
-+to free Physical Extents elsewhere in the Volume Group use:
- .sp
- \	pvmove /dev/sdb1
- .P
--Additionally, the destination device can be specified.
-+Any mirrors, snapshots and their origins are left unchanged.
-+.P
-+Additionally, a specific destination device
-+.B /dev/sdc1
-+can be specified like this:
- .sp
- \	pvmove /dev/sdb1 /dev/sdc1
- .P
--It is possible to perform the action on a single logical volume (instead of all
--the logical volumes that might be on the source device), like this:
-+To perform the action only on extents belonging to the single Logical Volume 
-+.B lvol1
-+do this:
- .sp
- \	pvmove -n lvol1 /dev/sdb1 /dev/sdc1
- .P
- Rather than moving the contents of the entire device, it is possible to
--move a range of extents.
-+move a range of Physical Extents - for example numbers 1000 to 1999 inclusive on
-+.B /dev/sdb1
-+- like this:
- .sp
- \	pvmove /dev/sdb1:1000-1999
- .P
--It is possible to move the range of extents to a specific location (as long
--as the location has sufficent free extents) - even on the same device.
-+To move a range of Physical Extents to a specific location (which must have
-+sufficent free extents) use the form:
- .sp
- \	pvmove /dev/sdb1:1000-1999 /dev/sdc1
- .sp
--\	pvmove /dev/sdb1:1000-1999 /dev/sdb1:0-999
-+or
-+.sp
-+\	pvmove /dev/sdb1:1000-1999 /dev/sdc1:0-999
- .P
--A specific logical volume in a range of extents can also be picked out and
--moved.
-+If the source and destination are on the same disk, the 
-+.B anywhere
-+allocation policy would be needed, like this:
-+.sp
-+\	pvmove --alloc anywhere /dev/sdb1:1000-1999 /dev/sdb1:0-999
-+.P
++{
++	struct dm_info *dinfo = &dnode->info;
 +
-+The part of a specific Logical Volume present within in a range of Physical
-+Extents can also be picked out and moved, like this:
- .sp
- \	pvmove -n lvol1 /dev/sdb1:1000-1999 /dev/sdc1
- .SH SEE ALSO
- .BR lvm (8),
- .BR vgconvert (8)
--.BR pvs (8)
-\ No newline at end of file
-+.BR pvs (8)
++	if (udev_flags != dnode->udev_flags)
++		log_debug("Resetting %s (%" PRIu32 ":%" PRIu32
++			  ") udev_flags (s/0x%X/0x%X)",
++			  dnode->name, dinfo->major, dinfo->minor,
++			  dnode->udev_flags, udev_flags);
++	dnode->udev_flags = udev_flags;
++}
+ 
+ void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+ 				 uint32_t read_ahead,
+Index: LVM2/lib/activate/dev_manager.c
+===================================================================
+--- LVM2.orig/lib/activate/dev_manager.c
++++ LVM2/lib/activate/dev_manager.c
+@@ -1524,6 +1524,60 @@ static int _add_segment_to_dtree(struct 
+ 	return 1;
+ }
+ 
++static int set_udev_flags_for_children(struct dev_manager *dm,
++				       struct volume_group *vg,
++				       struct dm_tree_node *dnode)
++{
++	void *handle = NULL;
++	struct dm_tree_node *child;
++	const char *uuid;
++	const struct dm_info *info;
++	char *vgname, *lvname, *layer;
++	struct lv_list *lvl;
++
++	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
++		/* Ignore root node */
++		if (!(info  = dm_tree_node_get_info(child)) || !info->exists)
++			continue;
++
++		if (!(uuid = dm_tree_node_get_uuid(child))) {
++			log_error(INTERNAL_ERROR
++				  "Failed to get uuid for %" PRIu32 ":%" PRIu32,
++				  info->major, info->minor);
++			continue;
++		}
++
++		/* Ignore non-LVM devices */
++		if (strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) {
++			log_debug("Not resetting udev flags for non-LVM "
++				  "device %" PRIu32 ":%" PRIu32,
++				  info->major, info->minor);
++			continue;
++		}
++
++		if (!dm_split_lvm_name(dm->mem, dm_tree_node_get_name(child),
++				       &vgname, &lvname, &layer)) {
++			log_error("Failed to split DM name, %s",
++				  dm_tree_node_get_name(child));
++			return 0;
++		}
++
++		if (!(lvl = find_lv_in_vg(vg, lvname)))
++			/*
++			 * Rename of an LV will cause it not to be found, but
++			 * in these cases we should allow udev to rename the
++			 * device - not skip over it because it is a mirror
++			 * sub-lv or something similar
++			 */
++			continue;
++
++		dm_tree_node_set_udev_flags(child,
++					    _get_udev_flags(dm, lvl->lv, layer));
++	}
++
++	return 1;
++}
++
+ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 				struct logical_volume *lv, struct lv_activate_opts *laopts,
+ 				const char *layer)
+@@ -1628,6 +1682,9 @@ static int _add_new_lv_to_dtree(struct d
+ 			if (!_add_new_lv_to_dtree(dm, dtree, sl->seg->lv, laopts, NULL))
+ 				return_0;
+ 
++	if (!set_udev_flags_for_children(dm, lv->vg, dnode))
++		return_0;
++
+ 	return 1;
+ }
+ 
+Index: LVM2/libdm/libdevmapper.h
+===================================================================
+--- LVM2.orig/libdm/libdevmapper.h
++++ LVM2/libdm/libdevmapper.h
+@@ -535,6 +535,8 @@ int dm_tree_node_add_replicator_dev_targ
+ 					   uint32_t slog_region_size);
+ /* End of Replicator API */
+ 
++void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
++
+ void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
+ 				      struct dm_tree_node *presuspend_node);
+ 
+
+
+
 
