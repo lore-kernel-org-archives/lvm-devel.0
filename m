@@ -1,174 +1,112 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Wed, 5 Oct 2011 10:02:21 +0200 (CEST)
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 05 Oct 2011 11:06:10 +0200
 Subject: [PATCH v3 01/18] fsadm: Add new commands create, list, add and remove
-In-Reply-To: <4E8B3DE5.2080803@redhat.com>
+In-Reply-To: <alpine.LFD.2.00.1110050932530.4423@dhcp-27-109.brq.redhat.com>
 References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
 	<1317130971-24173-2-git-send-email-lczerner@redhat.com>
 	<4E8AD4CF.3080609@redhat.com>
 	<alpine.LFD.2.00.1110041336440.4206@dhcp-27-109.brq.redhat.com>
 	<4E8B3DE5.2080803@redhat.com>
-Message-ID: <alpine.LFD.2.00.1110050932530.4423@dhcp-27-109.brq.redhat.com>
+	<alpine.LFD.2.00.1110050932530.4423@dhcp-27-109.brq.redhat.com>
+Message-ID: <4E8C1E02.9090308@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
-
-> Dne 4.10.2011 14:13, Lukas Czerner napsal(a):
-> > On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
-> > 
-> > > Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
-> > > > This commit adds new functionality in the form of new commands. Namely
-> > > > it is create, list, add and remove. This commit also changes the way how
-> > > > are commands recognised an executed. The new approach is more suitable
-> > > > for bigger number of commands.
-> > > > 
-> > > > Resize command is also significantly reworked. Unlike in the old
-> > > > approach fsadm will always attempt to resize the logical volume as well,
-> > > > since this is what it is expected. Leave the --lvresize option for
-> > > > backwards compatibility, but remove it from the help. If no file system
-> > > > resides on the logical volume, only the volume will be resized.
-> > > > 
-> > > > * Create command provides the functionality of creating a new logical
-> > > >     volumes including defined file system.
-> > > > * List command provides the functionality of listing useful information
-> > > >     about the logical volumes, file systems and devices.
-> > > > * Add command allows to add devices into volume groups (pool).
-> > > > * Remove command allows to remove the volumes or volume groups from the
-> > > >     system.
-> > > > 
-> > > > Signed-off-by: Lukas Czerner<lczerner@redhat.com>
-> > > 
-> > > > @@ -96,7 +109,6 @@ tool_usage() {
-> > > >    	echo "    -e | --ext-offline  unmount filesystem before
-> > > > ext2/ext3/ext4
-> > > > resize"
-> > > >    	echo "    -f | --force        Bypass sanity checks"
-> > > >    	echo "    -n | --dry-run      Print commands without running
-> > > > them"
-> > > > -	echo "    -l | --lvresize     Resize given device (if it is LVM
-> > > > device)"
-> > > >    	echo "    -y | --yes          Answer \"yes\" at any prompts"
-> > > >    	echo
-> > > >    	echo "  new_size - Absolute number of filesystem blocks to be
-> > > > in the
-> > > > filesystem,"
-> > > 
-> > > 
-> > > Again - no way to remove already supported option.
-> > 
-> > This is only removed from the tool_usage(), as you can see. I am not
-> > removing it from the code, but only from the documentation since it is
-> > not needed in the new code.
-> > 
-> 
-> Ok this made it clear that such functional change than needs a separate patch,
-> which will demonstrate how it's going to be used and how it is matching
-> current behavior.
-> 
-
-Agreed, as I said I'll separate resize update into separate patch.
-
-> 
-> 
-> > > > -	if [ "$DO_LVRESIZE" -eq 2 ]; then
-> > > > -		# start LVRESIZE with the filesystem modification flag
-> > > > -		# and allow recursive call of fsadm
-> > > > -		_FSADM_YES=$YES
-> > > > -		export _FSADM_YES
-> > > > -		unset FSADM_RUNNING
-> > > > -		test -n "$LVM_BINARY"&&   PATH=$_SAVEPATH
-> > > > -		dry exec "$LVM" lvresize $VERB $FORCE -r -L${NEWSIZE}b
-> > > > "$VOLUME_ORIG"
-> > > > -	fi
-> > > > -
-> > > 
-> > > Again - please do not remove things you do not understand.
-> > 
-> > Oh, but I do understand. Please read the new code, before trying to
-> > insult me. But maybe it would be better to separate resize command
-> > changes into separate patch.
-> > 
-> > > 
-> > > And also thing like this needs to be in a separate patch - not bundled in
-> > > hundreds patch lines.
-> 
-> 
-> It's nothing about insulting - this is very tricky change - so unless this is
-> extracted to separate patch to be properly reviewed for all combination and
-> whether all cases keep all VG locks properly.
-> (Thus patch needs to explain how it will resize  filesystem and LV when user
-> calls fsadm resize and this operation could not be broken with another
-> parallel lvm operation in both directions - upsize/downsize while current
-> syntax is still usable)
-> 
-> 
-> > > Well user is always the master - if he is brave to go without it, let him
-> > > do
-> > > what he wants (i.e. destroy his fs).
-> > 
-> > You're missing the point, resize2fs requires that the file system is
-> > checked with e2fsck -f prior the resize, if on of the conditions happen
-> > 
-> > 1. file system was not cleanly umounted
-> > 2. file system contain errors, or is invalid
-> > 3. it was not checked since the last time it was mounted
-> > 
-> > It is just to make sure that the file system is consistent and we will
-> > not make everything worse by messing with metadata further.
-> > 
-> 
-> If the user wants to risk  resize2fs without fsck - it's his decision (and
-> current -f with fsadm allows it) - and since we are not like gnome3 - we allow
-> users to kill their systems in number of ways already, so no reason to
-> eliminate this one.
-
-Well, this is just wrong in so many ways. Running fsck.ext4 -f to force
-the full check is not the same as skipping the fsck before resize in the
-tool which is suppose to do-it-all. We have to pick the safe way here.
-
-> 
-> i.e. mkfs, mount, umount, resize LV, resize2fs -f   works without fsck and
-> makes errorless result - so we support.
-
-Also it makes me think that you do not really see what is in the code.
-There is nothing about about 'force', fsck is done anyway (in the old
-code - your code) in the case that 
-
-[ "$NEWBLOCKCOUNT" -lt "$BLOCKCOUNT" -o "$EXTOFF" -eq 1 ]
-
-and 
-
-if test -n "$MOUNTED"
-
-so please, read before you write.
-
-Also your arguments are out of the line. There are different levels of
-granularity of force, and if user force things he does not expect things
-will be done in wrong way. That said, when I use force I do not want to
-be asked about stupid questions, but I certaily do not want fsck before
-resize2fs to be skipped.
-
-You just have to understand that we are using multiple tools in fsadm
-and just passing force to all of them would be incredibly stupid, even
-if you properly document it.
-
-User is just not able to guess what different sort of tools we are using
-in the path he is about to invoke, and guess where we are going to use
-his 'force' and what consequences will that have. We just HAVE to pick
-the most logical and most safe way of doing things. But your way of
-doing thing is just to get as many option as you can aggregate and throw
-it to the user while screaming RTFM, that is easy, but it is also wrong.
-
--Lukas
+Dne 5.10.2011 10:02, Lukas Czerner napsal(a):
+> On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
+>
+>> Dne 4.10.2011 14:13, Lukas Czerner napsal(a):
+>>> On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
+>>>
 
 
-> 
-> Zdenek
-> 
-> 
-> 
+>>>> Well user is always the master - if he is brave to go without it, let him
+>>>> do
+>>>> what he wants (i.e. destroy his fs).
+>>>
+>>> You're missing the point, resize2fs requires that the file system is
+>>> checked with e2fsck -f prior the resize, if on of the conditions happen
+>>>
+>>> 1. file system was not cleanly umounted
+>>> 2. file system contain errors, or is invalid
+>>> 3. it was not checked since the last time it was mounted
+>>>
+>>> It is just to make sure that the file system is consistent and we will
+>>> not make everything worse by messing with metadata further.
+>>>
+>>
+>> If the user wants to risk  resize2fs without fsck - it's his decision (and
+>> current -f with fsadm allows it) - and since we are not like gnome3 - we allow
+>> users to kill their systems in number of ways already, so no reason to
+>> eliminate this one.
+>
+> Well, this is just wrong in so many ways. Running fsck.ext4 -f to force
+> the full check is not the same as skipping the fsck before resize in the
+> tool which is suppose to do-it-all. We have to pick the safe way here.
+>
+
+Tool is not meant to be used only in a 'safe' way - tool is supposed to fully 
+usable even various force scenarios - i.e. when fsck support options '-y' we 
+should be able to use - even if some extX developers think it's very 
+dangerous option and should never ever be used - it's there and it has its 
+use. (I've used it already many times, and nothing unexpectedly bad happened).
+
+What we could do here better is to draw some state diagram and eventually add 
+few more options - but we will not strip down the usefulness of fsadm only for 
+clean filesystem and leave the user  to run  fsck -y on its - as we can do 
+that for him.
+
+
+>>
+>> i.e. mkfs, mount, umount, resize LV, resize2fs -f   works without fsck and
+>> makes errorless result - so we support.
+>
+> Also it makes me think that you do not really see what is in the code.
+> There is nothing about about 'force', fsck is done anyway (in the old
+> code - your code) in the case that
+>
+> [ "$NEWBLOCKCOUNT" -lt "$BLOCKCOUNT" -o "$EXTOFF" -eq 1 ]
+>
+> and
+>
+> if test -n "$MOUNTED"
+>
+> so please, read before you write.
+
+man lvresize  --nofsck
+
+
+> Also your arguments are out of the line. There are different levels of
+> granularity of force, and if user force things he does not expect things
+> will be done in wrong way. That said, when I use force I do not want to
+> be asked about stupid questions, but I certaily do not want fsck before
+> resize2fs to be skipped.
+
+We already allow that - since there are situation you may need to use it.
+
+> You just have to understand that we are using multiple tools in fsadm
+> and just passing force to all of them would be incredibly stupid, even
+> if you properly document it.
+
+Certainly personal opinion.
+
+As already said - provide state diagram and suggest more options
+(in lvm we use  -ff for some situations -  so maybe more levels of force)
+
+But we need to support what we already can do with fsadm tool.
+
+If the user puts --force anywhere on the command line - he surely needs to 
+expect, that some things may cause damage.
+
+> his 'force' and what consequences will that have. We just HAVE to pick
+> the most logical and most safe way of doing things. But your way of
+
+There is no 'safe' way with --force - that's the purpose of force.
+However there could be multiple force levels.
+
+Zdenek
 
 
