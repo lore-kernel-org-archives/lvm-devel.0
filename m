@@ -1,53 +1,174 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 4 Oct 2011 20:49:25 -0000
-Subject: LVM2 ./WHATS_NEW doc/example.conf.in
-Message-ID: <20111004204925.15246.qmail@sourceware.org>
+From: Lukas Czerner <lczerner@redhat.com>
+Date: Wed, 5 Oct 2011 10:02:21 +0200 (CEST)
+Subject: [PATCH v3 01/18] fsadm: Add new commands create, list, add and remove
+In-Reply-To: <4E8B3DE5.2080803@redhat.com>
+References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
+	<1317130971-24173-2-git-send-email-lczerner@redhat.com>
+	<4E8AD4CF.3080609@redhat.com>
+	<alpine.LFD.2.00.1110041336440.4206@dhcp-27-109.brq.redhat.com>
+	<4E8B3DE5.2080803@redhat.com>
+Message-ID: <alpine.LFD.2.00.1110050932530.4423@dhcp-27-109.brq.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-10-04 20:49:24
+On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
 
-Modified files:
-	.              : WHATS_NEW 
-	doc            : example.conf.in 
+> Dne 4.10.2011 14:13, Lukas Czerner napsal(a):
+> > On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
+> > 
+> > > Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
+> > > > This commit adds new functionality in the form of new commands. Namely
+> > > > it is create, list, add and remove. This commit also changes the way how
+> > > > are commands recognised an executed. The new approach is more suitable
+> > > > for bigger number of commands.
+> > > > 
+> > > > Resize command is also significantly reworked. Unlike in the old
+> > > > approach fsadm will always attempt to resize the logical volume as well,
+> > > > since this is what it is expected. Leave the --lvresize option for
+> > > > backwards compatibility, but remove it from the help. If no file system
+> > > > resides on the logical volume, only the volume will be resized.
+> > > > 
+> > > > * Create command provides the functionality of creating a new logical
+> > > >     volumes including defined file system.
+> > > > * List command provides the functionality of listing useful information
+> > > >     about the logical volumes, file systems and devices.
+> > > > * Add command allows to add devices into volume groups (pool).
+> > > > * Remove command allows to remove the volumes or volume groups from the
+> > > >     system.
+> > > > 
+> > > > Signed-off-by: Lukas Czerner<lczerner@redhat.com>
+> > > 
+> > > > @@ -96,7 +109,6 @@ tool_usage() {
+> > > >    	echo "    -e | --ext-offline  unmount filesystem before
+> > > > ext2/ext3/ext4
+> > > > resize"
+> > > >    	echo "    -f | --force        Bypass sanity checks"
+> > > >    	echo "    -n | --dry-run      Print commands without running
+> > > > them"
+> > > > -	echo "    -l | --lvresize     Resize given device (if it is LVM
+> > > > device)"
+> > > >    	echo "    -y | --yes          Answer \"yes\" at any prompts"
+> > > >    	echo
+> > > >    	echo "  new_size - Absolute number of filesystem blocks to be
+> > > > in the
+> > > > filesystem,"
+> > > 
+> > > 
+> > > Again - no way to remove already supported option.
+> > 
+> > This is only removed from the tool_usage(), as you can see. I am not
+> > removing it from the code, but only from the documentation since it is
+> > not needed in the new code.
+> > 
+> 
+> Ok this made it clear that such functional change than needs a separate patch,
+> which will demonstrate how it's going to be used and how it is matching
+> current behavior.
+> 
 
-Log message:
-	Clarify multi-name device filter pattern matching explanation in lvm.conf.5.
+Agreed, as I said I'll separate resize update into separate patch.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2144&r2=1.2145
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+> 
+> 
+> > > > -	if [ "$DO_LVRESIZE" -eq 2 ]; then
+> > > > -		# start LVRESIZE with the filesystem modification flag
+> > > > -		# and allow recursive call of fsadm
+> > > > -		_FSADM_YES=$YES
+> > > > -		export _FSADM_YES
+> > > > -		unset FSADM_RUNNING
+> > > > -		test -n "$LVM_BINARY"&&   PATH=$_SAVEPATH
+> > > > -		dry exec "$LVM" lvresize $VERB $FORCE -r -L${NEWSIZE}b
+> > > > "$VOLUME_ORIG"
+> > > > -	fi
+> > > > -
+> > > 
+> > > Again - please do not remove things you do not understand.
+> > 
+> > Oh, but I do understand. Please read the new code, before trying to
+> > insult me. But maybe it would be better to separate resize command
+> > changes into separate patch.
+> > 
+> > > 
+> > > And also thing like this needs to be in a separate patch - not bundled in
+> > > hundreds patch lines.
+> 
+> 
+> It's nothing about insulting - this is very tricky change - so unless this is
+> extracted to separate patch to be properly reviewed for all combination and
+> whether all cases keep all VG locks properly.
+> (Thus patch needs to explain how it will resize  filesystem and LV when user
+> calls fsadm resize and this operation could not be broken with another
+> parallel lvm operation in both directions - upsize/downsize while current
+> syntax is still usable)
+> 
+> 
+> > > Well user is always the master - if he is brave to go without it, let him
+> > > do
+> > > what he wants (i.e. destroy his fs).
+> > 
+> > You're missing the point, resize2fs requires that the file system is
+> > checked with e2fsck -f prior the resize, if on of the conditions happen
+> > 
+> > 1. file system was not cleanly umounted
+> > 2. file system contain errors, or is invalid
+> > 3. it was not checked since the last time it was mounted
+> > 
+> > It is just to make sure that the file system is consistent and we will
+> > not make everything worse by messing with metadata further.
+> > 
+> 
+> If the user wants to risk  resize2fs without fsck - it's his decision (and
+> current -f with fsadm allows it) - and since we are not like gnome3 - we allow
+> users to kill their systems in number of ways already, so no reason to
+> eliminate this one.
 
---- LVM2/WHATS_NEW	2011/10/03 18:37:47	1.2144
-+++ LVM2/WHATS_NEW	2011/10/04 20:49:24	1.2145
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Clarify multi-name device filter pattern matching explanation in lvm.conf.5.
-   Introduce lv_send_message and dev_manager_send_message.
-   Introduce revert_lv for better pvmove cleanup.
-   Replace incomplete pvmove activation failure recovery code with a message.
---- LVM2/doc/example.conf.in	2011/09/22 17:39:57	1.32
-+++ LVM2/doc/example.conf.in	2011/10/04 20:49:24	1.33
-@@ -51,9 +51,11 @@
- 
-     # Be careful if there there are symbolic links or multiple filesystem 
-     # entries for the same device as each name is checked separately against
--    # the list of patterns.  The effect is that if any name matches any 'a'
--    # pattern, the device is accepted; otherwise if any name matches any 'r'
--    # pattern it is rejected; otherwise it is accepted.
-+    # the list of patterns.  The effect is that if the first pattern in the 
-+    # list to match a name is an 'a' pattern for any of the names, the device
-+    # is accepted; otherwise if the first pattern in the list to match a name
-+    # is an 'r' pattern for any of the names it is rejected; otherwise it is
-+    # accepted.
- 
-     # Don't have more than one filter line active at once: only one gets used.
- 
+Well, this is just wrong in so many ways. Running fsck.ext4 -f to force
+the full check is not the same as skipping the fsck before resize in the
+tool which is suppose to do-it-all. We have to pick the safe way here.
+
+> 
+> i.e. mkfs, mount, umount, resize LV, resize2fs -f   works without fsck and
+> makes errorless result - so we support.
+
+Also it makes me think that you do not really see what is in the code.
+There is nothing about about 'force', fsck is done anyway (in the old
+code - your code) in the case that 
+
+[ "$NEWBLOCKCOUNT" -lt "$BLOCKCOUNT" -o "$EXTOFF" -eq 1 ]
+
+and 
+
+if test -n "$MOUNTED"
+
+so please, read before you write.
+
+Also your arguments are out of the line. There are different levels of
+granularity of force, and if user force things he does not expect things
+will be done in wrong way. That said, when I use force I do not want to
+be asked about stupid questions, but I certaily do not want fsck before
+resize2fs to be skipped.
+
+You just have to understand that we are using multiple tools in fsadm
+and just passing force to all of them would be incredibly stupid, even
+if you properly document it.
+
+User is just not able to guess what different sort of tools we are using
+in the path he is about to invoke, and guess where we are going to use
+his 'force' and what consequences will that have. We just HAVE to pick
+the most logical and most safe way of doing things. But your way of
+doing thing is just to get as many option as you can aggregate and throw
+it to the user while screaming RTFM, that is easy, but it is also wrong.
+
+-Lukas
+
+
+> 
+> Zdenek
+> 
+> 
+> 
 
 
