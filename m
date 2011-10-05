@@ -1,157 +1,105 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 14 Oct 2011 16:59:46 +0200
-Subject: [PATCH 5/6][devname mangling] Add support for decoding mangled strings and add a new field for "dmsetup info"
-Message-ID: <4E984E62.90809@redhat.com>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Wed, 05 Oct 2011 15:13:19 -0500
+Subject: [PATCH] Fix vgsplit for mirrored-log mirrors
+Message-ID: <1317845599.12903.8.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add support for decoding mangled string back to a human readable form
-(at least if the character is printable :)), accomplished with a new
-libdemapper helper function "dm_string_mangle_decode".
+This patch fixes the following problem reported by "ben <benscott@nwlink.com>".
 
-Use it to decode the "Name" and show also a new "Name (unmangled)" field
-in dmsetup info/dmsetup info -c output. For dmsetup info -c -o, the
-new column name is called "name_unmangled".
+vgsplit fails with mirrored mirror log
 
-Peter
----
- libdm/libdevmapper.h |    3 +++
- libdm/libdm-common.c |   41 +++++++++++++++++++++++++++++++++++++++++
- tools/dmsetup.c      |   26 ++++++++++++++++++++++++--
- 3 files changed, 68 insertions(+), 2 deletions(-)
+#lvs --all -o lv_name,lv_attr,devices
+ LV                       Attr   Devices                                                       
+ MyMirror                 mwi--
+ [MyMirror_mimage_0]      Iwi--- /dev/sdq(0)                                                   
+ [MyMirror_mimage_1]      Iwi--- /dev/sdo(0)                                                   
+ [MyMirror_mimage_2]      Iwi--- /dev/sdi(0)                                                   
+ [MyMirror_mlog]          mwi---            
+ [MyMirror_mlog_mimage_0] Iwi--- /dev/sds(0)                                                   
+ [MyMirror_mlog_mimage_1] Iwi--- /dev/sde(0)                                                   
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index fb4b2cb..fb6ad22 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -270,6 +270,9 @@ dm_string_mangle_t dm_get_default_name_mangle(void);
- int dm_task_set_name_mangle(struct dm_task *dmt, dm_string_mangle_t name_mangle);
- dm_string_mangle_t dm_task_get_name_mangle(struct dm_task *dmt);
- 
-+int dm_string_mangle_decode(dm_string_mangle_t type, const char *mangled_str,
-+			    char *buf, size_t buf_len);
-+
- /*
-  * Configure the device-mapper directory
-  */
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index e836661..fe0003d 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -306,6 +306,47 @@ static int _is_whitelisted_char(char c)
-         return 0;
- }
- 
-+int dm_string_mangle_decode(dm_string_mangle_t type, const char *mangled_str,
-+			    char *buf, size_t buf_len)
-+{
-+	size_t i, j;
-+	int code;
-+	char str[DM_NAME_LEN];
-+
-+	if (buf_len < DM_NAME_LEN) {
-+		log_error("dm_string_mangle_decode \"%s\": "
-+			  "output buffer too small", mangled_str);
-+		goto bad;
-+	}
-+
-+	if (type == DM_STRING_MANGLE_NONE) {
-+		strcpy(buf, mangled_str);
-+		return 1;
-+	}
-+
-+	for (i = 0, j = 0; mangled_str[i]; i++) {
-+		if (mangled_str[i] == '\\' && mangled_str[i+1] == 'x') {
-+			if (!sscanf(&mangled_str[i+2], "%2x%s", &code, str)) {
-+				log_error("Improperly encoded string %s", mangled_str);
-+				goto bad;
-+			}
-+			buf[j] = (unsigned char) code;
-+			i+= 3; j++;
-+		}
-+		else {
-+			buf[j] = mangled_str[i];
-+			j++;
-+		}
-+	}
-+
-+	buf[j] = '\0';
-+	return 1;
-+
-+bad:
-+	buf[0] = '\0';
-+	return 0;
-+}
-+
- /*
-  * Encode all characters in the input string which are not on a whitelist
-  * with '\xNN' format where NN is the hex value of the character.
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index a733dcd..0187a2f 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -441,13 +441,20 @@ static void _display_info_long(struct dm_task *dmt, struct dm_info *info)
+#vgsplit -v "TestA" "TestB" "/dev/sdq" "/dev/sdo" "/dev/sdi" "/dev/sds" 
+"/dev/sde"
+   Checking for volume group "TestA"
+   Checking for new volume group "TestB"
+   Archiving volume group "TestA" metadata (seqno 213).
+ Can't split mirror MyMirror between two Volume Groups
+
+Index: LVM2/tools/vgsplit.c
+===================================================================
+--- LVM2.orig/tools/vgsplit.c
++++ LVM2/tools/vgsplit.c
+@@ -163,7 +163,7 @@ static int _move_mirrors(struct volume_g
  {
- 	const char *uuid;
- 	uint32_t read_ahead;
-+	char buf[PATH_MAX];
-+	const char *name;
+ 	struct dm_list *lvh, *lvht;
+ 	struct logical_volume *lv;
+-	struct lv_segment *seg;
++	struct lv_segment *seg, *log_seg;
+ 	unsigned s, seg_in, log_in;
  
- 	if (!info->exists) {
- 		printf("Device does not exist.\n");
- 		return;
- 	}
+ 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
+@@ -179,7 +179,20 @@ static int _move_mirrors(struct volume_g
+ 			if (_lv_is_in_vg(vg_to, seg_lv(seg, s)))
+ 			    seg_in++;
  
--	printf("Name:              %s\n", dm_task_get_name(dmt));
-+	name = dm_task_get_name(dmt);
-+	printf("Name:              %s\n", name);
+-		log_in = (!seg->log_lv || _lv_is_in_vg(vg_to, seg->log_lv));
++		log_in = !seg->log_lv;
++		if (seg->log_lv) {
++			log_seg = first_seg(seg->log_lv);
++			if (seg_is_mirrored(log_seg)) {
++				log_in = 1;
 +
-+	if (!dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX))
-+		log_error("Could not unmangle device name");
-+	printf("Name (unmangled):  %s\n", buf);
++				/* Ensure each log dev is in vg_to */
++				for (s = 0; s < log_seg->area_count; s++)
++					log_in = log_in &&
++						_lv_is_in_vg(vg_to,
++							     seg_lv(log_seg, s));
++			} else
++				log_in = _lv_is_in_vg(vg_to, seg->log_lv);
++		}
  
- 	printf("State:             %s%s\n",
- 	       info->suspended ? "SUSPENDED" : "ACTIVE",
-@@ -475,7 +482,7 @@ static void _display_info_long(struct dm_task *dmt, struct dm_info *info)
- 		printf("Number of targets: %d\n", info->target_count);
- 
- 	if ((uuid = dm_task_get_uuid(dmt)) && *uuid)
--		printf("UUID: %s\n", uuid);
-+		printf("UUID:              %s\n", uuid);
- 
- 	printf("\n");
- }
-@@ -2225,6 +2232,20 @@ static int _dm_name_disp(struct dm_report *rh,
- 	return dm_report_field_string(rh, field, &name);
- }
- 
-+static int _dm_name_unmangled_disp(struct dm_report *rh,
-+				   struct dm_pool *mem __attribute__((unused)),
-+				   struct dm_report_field *field, const void *data,
-+				   void *private __attribute__((unused)))
-+{
-+	const char *name = dm_task_get_name((const struct dm_task *) data);
-+	char buf[PATH_MAX];
-+	const char *p = buf;
+ 		if ((seg_in && seg_in < seg->area_count) ||
+ 		    (seg_in && seg->log_lv && !log_in) ||
+Index: LVM2/test/t-vgsplit-operation.sh
+===================================================================
+--- LVM2.orig/test/t-vgsplit-operation.sh
++++ LVM2/test/t-vgsplit-operation.sh
+@@ -93,6 +93,31 @@ COMM "vgsplit correctly splits mirror LV
+ 		fi 
+ 		lvremove -f $vg2/$lv1 
+ 		vgremove -f $vg2
++# FIXME: ensure split /doesn't/ work when not all devs of mirror specified
 +
-+	dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX);
++COMM "vgsplit correctly splits mirror LV with mirrored log into $i VG ($j args)"
++		vgcreate -c n $vg1 $dev1 $dev2 $dev3 $dev4
++		if [ $i = existing ]; then
++		  vgcreate -c n $vg2 $dev5
++		fi
 +
-+	return dm_report_field_string(rh, field, &p);
-+}
++		lvcreate -l 64 --mirrorlog mirrored -m1 -n $lv1 $vg1 \
++		    $dev1 $dev2 $dev3 $dev4
 +
- static int _dm_uuid_disp(struct dm_report *rh,
- 			 struct dm_pool *mem __attribute__((unused)),
- 			 struct dm_report_field *field,
-@@ -2605,6 +2626,7 @@ static const struct dm_report_object_type _report_types[] = {
- static const struct dm_report_field_type _report_fields[] = {
- /* *INDENT-OFF* */
- FIELD_F(TASK, STR, "Name", 16, dm_name, "name", "Name of mapped device.")
-+FIELD_F(TASK, STR, "Name (unmangled)", 18, dm_name_unmangled, "name_unmangled", "Name of mapped device (unmangled).")
- FIELD_F(TASK, STR, "UUID", 32, dm_uuid, "uuid", "Unique (optional) identifier for mapped device.")
++		vgchange -an $vg1
++		if [ $j = PV ]; then
++		  vgsplit $vg1 $vg2 $dev1 $dev2 $dev3 $dev4
++		else
++		  vgsplit -n $lv1 $vg1 $vg2
++		fi
++		if [ $i = existing ]; then
++		  check pvlv_counts $vg2 5 1 0
++		else
++		  check pvlv_counts $vg2 4 1 0
++		fi
++		lvremove -f $vg2/$lv1
++		vgremove -f $vg2
++# FIXME: ensure split /doesn't/ work when not all devs of mirror specified
  
- /* FIXME Next one should be INFO */
+ COMM "vgsplit correctly splits origin and snapshot LV into $i VG ($j args)" 
+ 		vgcreate -c n $vg1 $dev1 $dev2 
+
 
 
