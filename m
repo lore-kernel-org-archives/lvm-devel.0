@@ -1,231 +1,477 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 6 Oct 2011 15:32:29 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c tools ...
-Message-ID: <20111006153229.6427.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 06 Oct 2011 10:38:00 -0500
+Subject: [PATCH] LVM RAID: Add ability to convert linear to RAID1
+Message-ID: <1317915480.21095.1.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-10-06 15:32:27
+Add the ability to convert linear LVs to RAID1
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
-	tools          : commands.h lvresize.c 
+Example:
+~> lvconvert --type raid1 -m 1 vg/lv
 
-Log message:
-	Allow 'nosync' extension of mirrors.
-	
-	This patch allows a mirror to be extended without an initial resync of the
-	extended portion.  It compliments the existing '--nosync' option to lvcreate.
-	This action can be done implicitly if the mirror was created with the '--nosync'
-	option, or explicitly if the '--nosync' option is used when extending the device.
-	
-	Here are the operational criteria:
-	1) A mirror created with '--nosync' should extend with 'nosync' implicitly
-	[EXAMPLE]# lvs vg; lvextend -L +5G vg/lv ; lvs vg
-	LV   VG   Attr     LSize Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   Mwi-a-m- 5.00g                         lv_mlog 100.00
-	Extending 2 mirror images.
-	Extending logical volume lv to 10.00 GiB
-	Logical volume lv successfully resized
-	LV   VG   Attr     LSize  Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   Mwi-a-m- 10.00g                         lv_mlog 100.00
-	
-	2) The 'M' attribute ('M' signifies a mirror created with '--nosync', while 'm'
-	signifies a mirror created w/o '--nosync') must be preserved when extending a
-	mirror created with '--nosync'.  See #1 for example of 'M' attribute.
-	
-	3) A mirror created without '--nosync' should extend with 'nosync' only when
-	'--nosync' is explicitly used when extending.
-	[EXAMPLE]# lvs vg; lvextend -L +5G vg/lv; lvs vg
-	LV   VG   Attr     LSize  Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   mwi-a-m- 20.00m                         lv_mlog 100.00
-	Extending 2 mirror images.
-	Extending logical volume lv to 5.02 GiB
-	Logical volume lv successfully resized
-	LV   VG   Attr     LSize Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   mwi-a-m- 5.02g                         lv_mlog   0.39
-	vs.
-	[EXAMPLE]# lvs vg; lvextend -L +5G vg/lv --nosync; lvs vg
-	LV   VG   Attr     LSize  Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   mwi-a-m- 20.00m                         lv_mlog 100.00
-	Extending 2 mirror images.
-	Extending logical volume lv to 5.02 GiB
-	Logical volume lv successfully resized
-	LV   VG   Attr     LSize Pool Origin Snap%  Move Log     Copy%  Convert
-	lv   vg   Mwi-a-m- 5.02g                         lv_mlog 100.00
-	
-	4) The 'm' attribute must change to 'M' when extending a mirror created without
-	'--nosync' is extended with the '--nosync' option.  (See #3 examples above.)
-	
-	5) An inactive mirror's sync percent cannot be determined definitively, so it
-	must not be allowed to skip resync.  Instead, the extend should ask the user if
-	they want to extend while performing a resync.
-	[EXAMPLE]# lvchange -an vg/lv
-	[EXAMPLE]# lvextend -L +5G vg/lv
-	Extending 2 mirror images.
-	Extending logical volume lv to 10.00 GiB
-	vg/lv is not active.  Unable to get sync percent.
-	Do full resync of extended portion of vg/lv?  [y/n]: y
-	Logical volume lv successfully resized
-	
-	6) A mirror that is performing recovery (as opposed to an initial sync) - like
-	after a failure - is not allowed to extend with either an implicit or
-	explicit nosync option.  [You can simulate this with a 'corelog' mirror because
-	when it is reactivated, it must be recovered every time.]
-	[EXAMPLE]# lvcreate -m1 -L 5G -n lv vg --nosync --corelog
-	WARNING: New mirror won't be synchronised. Don't read what you didn't write!
-	Logical volume "lv" created
-	[EXAMPLE]# lvs vg
-	LV   VG   Attr     LSize Pool Origin Snap%  Move Log Copy%  Convert
-	lv   vg   Mwi-a-m- 5.00g                             100.00
-	[EXAMPLE]# lvchange -an vg/lv; lvchange -ay vg/lv; lvs vg
-	LV   VG   Attr     LSize Pool Origin Snap%  Move Log Copy%  Convert
-	lv   vg   Mwi-a-m- 5.00g                               0.08
-	[EXAMPLE]# lvextend -L +5G vg/lv
-	Extending 2 mirror images.
-	Extending logical volume lv to 10.00 GiB
-	vg/lv cannot be extended while it is recovering.
-	
-	7) If 'no' is selected in #5 or if the condition in #6 is hit, it should not
-	result in the mirror being resized or the 'm/M' attribute being changed.
-	
-	NOTE:  A mirror created with '--nosync' behaves differently than one created
-	without it when performing an extension.  The former cannot be extended when
-	the mirror is recovering (unless in-active), while the latter can.  This is
-	a reasonable thing to do since recovery of a mirror doesn't take long (at
-	least in the case of an on-disk log) and it would cause far more time in
-	degraded mode if the extension w/o '--nosync' was allowed.  It might be
-	reasonable to add the ability to force the operation in the future.  This
-	should /not/ force a nosync extension, but rather force a sync'ed extension.
-	IOW, the user would be saying, "Yes, yes... I know recovery won't take long
-	and that I'll be adding significantly to the time spent in degraded mode, but
-	I need the extra space right now!".
+The following steps are performed to convert linear to RAID1:
+1) Allocate a metadata device from the same PV as the linear device
+   to provide the metadata/data LV pair required for all RAID components.
+2) Allocate the required number of metadata/data LV pairs for the
+   remaining additional images.
+3) Clear the metadata LVs.  This performs a LVM metadata update.
+4) Create the top-level RAID LV and add the component devices.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2149&r2=1.2150
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.293&r2=1.294
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.162&r2=1.163
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
+We want to make any failure easy to unwind.  This is why we don't create the
+top-level LV and add the components until the last step.  Should anything
+happen before that, the user could simply remove the unnecessary images.  Also,
+we want to ensure that the metadata LVs are cleared before forming the array to
+prevent stale information from polluting the new array.
 
---- LVM2/WHATS_NEW	2011/10/06 14:55:39	1.2149
-+++ LVM2/WHATS_NEW	2011/10/06 15:32:26	1.2150
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Add ability to extend mirrors with '--nosync' option.
-   Fix splitmirror in cluster having different DM/LVM views of storage.
-   Fix improper udev settings during suspend/resume for mirror sub-LVs.
-   Fix vgsplit when there are mirrors that have mirrored logs.
---- LVM2/lib/metadata/lv_manip.c	2011/10/03 18:43:39	1.293
-+++ LVM2/lib/metadata/lv_manip.c	2011/10/06 15:32:26	1.294
-@@ -2599,10 +2599,11 @@
+A new macro 'seg_is_linear' was added to allow us to distinguish linear LVs
+from striped LVs.
+
+The ability to reserve LV names was added to prevent generate_lv_name from
+choosing a name which we want to use in the future.  The need for this comes
+from the required order of steps when converting linear LVs to RAID1, and
+the following constraints:
+1) We want the linear LV to occupy the first position in the array (*_rimage_0)
+2) We must allocate the new metadata/data LVs in pairs to allow the allocator
+   to group them together on the same device cleanly.
+3) The linear LV does not aquire its sub-lv name until insert_layer_for_lv is
+   called.
+'generate_lv_name' is used in all the above cases to create names for the
+rimage and rmeta LVs.  If we can't reserve the *_rimage_0 name, then the
+rmeta and rimage LV pair names would not match, nor would the converting LV's
+rimage name be correct.
+
+Index: LVM2/lib/metadata/lv_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/lv_manip.c
++++ LVM2/lib/metadata/lv_manip.c
+@@ -2866,10 +2866,40 @@ out:
+ 	return r;
+ }
+ 
++int reserve_lv_name(struct volume_group *vg, const char *name)
++{
++	struct str_list *strl;
++	struct lv_list *lvl;
++
++	dm_list_iterate_items(lvl, &vg->lvs)
++		if (!strcmp(lvl->lv->name, name)) {
++			log_error("Unable to reserve existing LV name, %s",
++				  name);
++			return 0;
++		}
++
++	if (!(strl = dm_pool_zalloc(vg->vgmem, sizeof(*strl))))
++		goto fail;
++
++	if (!(strl->str = dm_pool_strdup(vg->vgmem, name)))
++		goto fail;
++
++	dm_list_add(&vg->reserved_lv_names, &strl->list);
++	log_debug("Reserving logical volume name, %s in volume group %s",
++		  name, vg->name);
++
++	return 1;
++
++fail:
++	log_error("Unable to reserve LV name, %s:  Out of memory", name);
++	return 0;
++}
++
+ char *generate_lv_name(struct volume_group *vg, const char *format,
+ 		       char *buffer, size_t len)
+ {
+ 	struct lv_list *lvl;
++	struct str_list *strl;
+ 	int high = -1, i;
+ 
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+@@ -2880,6 +2910,14 @@ char *generate_lv_name(struct volume_gro
+ 			high = i;
+ 	}
+ 
++	dm_list_iterate_items(strl, &vg->reserved_lv_names) {
++		if (sscanf(strl->str, format, &i) != 1)
++			continue;
++
++		if (i > high)
++			high = i;
++	}
++
+ 	if (dm_snprintf(buffer, len, format, high + 1) < 0)
+ 		return NULL;
+ 
+Index: LVM2/lib/metadata/metadata-exported.h
+===================================================================
+--- LVM2.orig/lib/metadata/metadata-exported.h
++++ LVM2/lib/metadata/metadata-exported.h
+@@ -801,6 +801,7 @@ struct dm_list *lvs_using_lv(struct cmd_
+ 			  struct logical_volume *lv);
+ 
+ uint32_t find_free_lvnum(struct logical_volume *lv);
++int reserve_lv_name(struct volume_group *vg, const char *name);
+ char *generate_lv_name(struct volume_group *vg, const char *format,
+ 		       char *buffer, size_t len);
+ 
+Index: LVM2/lib/metadata/raid_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/raid_manip.c
++++ LVM2/lib/metadata/raid_manip.c
+@@ -24,6 +24,8 @@
+ #include "str_list.h"
+ #include "memlock.h"
+ 
++#define RAID_REGION_SIZE 1024
++
+ uint32_t lv_raid_image_count(const struct logical_volume *lv)
+ {
+ 	struct lv_segment *seg = first_seg(lv);
+@@ -125,6 +127,45 @@ static int _lv_is_on_pvs(struct logical_
+ 	return 0;
+ }
+ 
++static int _get_pv_list_for_lv(struct logical_volume *lv, struct dm_list *pvs)
++{
++	uint32_t s;
++	struct pv_list *pvl;
++	struct lv_segment *seg = first_seg(lv);
++
++	if (!seg_is_linear(seg)) {
++		log_error(INTERNAL_ERROR
++			  "_get_pv_list_for_lv only handles linear volumes");
++		return 0;
++	}
++
++	log_debug("Getting list of PVs that %s/%s is on:",
++		  lv->vg->name, lv->name);
++
++	dm_list_iterate_items(seg, &lv->segments) {
++		for (s = 0; s < seg->area_count; s++) {
++			if (seg_type(seg, s) != AREA_PV) {
++				log_error(INTERNAL_ERROR
++					  "Linear seg_type should be AREA_PV");
++				return 0;
++			}
++
++			if (!(pvl = dm_pool_zalloc(lv->vg->cmd->mem,
++						   sizeof(*pvl)))) {
++				log_error("Failed to allocate memory");
++				return 0;
++			}
++
++			pvl->pv = seg_pv(seg, s);
++			log_debug("  %s/%s is on %s", lv->vg->name, lv->name,
++				  pv_dev_name(pvl->pv));
++			dm_list_add(pvs, &pvl->list);
++		}
++	}
++
++	return 1;
++}
++
+ static int _raid_in_sync(struct logical_volume *lv)
+ {
+ 	percent_t sync_percent;
+@@ -411,7 +452,9 @@ static int _alloc_image_components(struc
+ 				   struct dm_list *new_data_lvs)
+ {
+ 	uint32_t s;
++	uint32_t region_size;
+ 	struct lv_segment *seg = first_seg(lv);
++	const struct segment_type *segtype;
+ 	struct alloc_handle *ah;
+ 	struct dm_list *parallel_areas;
+ 	struct logical_volume *tmp_lv;
+@@ -425,8 +468,18 @@ static int _alloc_image_components(struc
+ 	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0)))
+ 		return_0;
+ 
+-	if (!(ah = allocate_extents(lv->vg, NULL, seg->segtype, 0, count, count,
+-				    seg->region_size, lv->le_count, pvs,
++	if (seg_is_linear(seg))
++		region_size = RAID_REGION_SIZE;
++	else
++		region_size = seg->region_size;
++
++	if (seg_is_raid(seg))
++		segtype = seg->segtype;
++	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, "raid1")))
++		return_0;
++
++	if (!(ah = allocate_extents(lv->vg, NULL, segtype, 0, count, count,
++				    region_size, lv->le_count, pvs,
+ 				    lv->alloc, parallel_areas)))
+ 		return_0;
+ 
+@@ -452,12 +505,60 @@ static int _alloc_image_components(struc
+ 	return 1;
+ }
+ 
++/*
++ * _alloc_rmeta_for_lv
++ * @lv
++ *
++ * Allocate a RAID metadata device for the given LV (which is or will
++ * be the associated RAID data device).  The new metadata device must
++ * be allocated from the same PV(s) as the data device.
++ */
++static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
++			       struct logical_volume **meta_lv)
++{
++	struct dm_list allocatable_pvs;
++	struct alloc_handle *ah;
++	struct lv_segment *seg = first_seg(data_lv);
++
++	dm_list_init(&allocatable_pvs);
++
++	if (!seg_is_linear(seg)) {
++		log_error(INTERNAL_ERROR "Unable to allocate RAID metadata "
++			  "area for non-linear LV, %s", data_lv->name);
++		return 0;
++	}
++
++	if (strstr("_mimage_", data_lv->name)) {
++		log_error("Unable to alloc metadata device for mirror device");
++		return 0;
++	}
++
++	if (!_get_pv_list_for_lv(data_lv, &allocatable_pvs)) {
++		log_error("Failed to build list of PVs for %s/%s",
++			  data_lv->vg->name, data_lv->name);
++		return 0;
++	}
++
++	if (!(ah = allocate_extents(data_lv->vg, NULL, seg->segtype, 0, 1, 0,
++				    seg->region_size,
++				    1 /*RAID_METADATA_AREA_LEN*/,
++				    &allocatable_pvs, data_lv->alloc, NULL)))
++		return_0;
++
++	if (!_alloc_image_component(data_lv, ah, 0, RAID_META, meta_lv))
++		return_0;
++
++	alloc_destroy(ah);
++	return 1;
++}
++
+ static int _raid_add_images(struct logical_volume *lv,
+ 			    uint32_t new_count, struct dm_list *pvs)
+ {
+ 	uint32_t s;
+ 	uint32_t old_count = lv_raid_image_count(lv);
+ 	uint32_t count = new_count - old_count;
++	uint64_t status_mask = -1;
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 	struct lv_segment *seg = first_seg(lv);
+ 	struct dm_list meta_lvs, data_lvs;
+@@ -467,7 +568,29 @@ static int _raid_add_images(struct logic
+ 	dm_list_init(&meta_lvs); /* For image addition */
+ 	dm_list_init(&data_lvs); /* For image addition */
+ 
+-	if (!seg_is_raid(seg)) {
++	/*
++	 * If the segtype is linear, then we must allocate a metadata
++	 * LV to accompany it.
++	 */
++	if (seg_is_linear(seg)) {
++		char reserve_name[strlen(lv->name) + 12];
++		sprintf(reserve_name, "%s_rimage_0", lv->name);
++		if (!reserve_lv_name(lv->vg, reserve_name))
++			return_0;
++
++		/* A complete resync will be done, no need to mark each sub-lv */
++		status_mask = ~(LV_NOTSYNCED);
++
++		if (!(lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl)))) {
++			log_error("Memory allocation failed");
++			return 0;
++		}
++
++		if (!_alloc_rmeta_for_lv(lv, &lvl->lv))
++			return_0;
++
++		dm_list_add(&meta_lvs, &lvl->list);
++	} else if (!seg_is_raid(seg)) {
+ 		log_error("Unable to add RAID images to %s of segment type %s",
+ 			  lv->name, seg->segtype->name);
+ 		return 0;
+@@ -482,6 +605,21 @@ static int _raid_add_images(struct logic
+ 	if (!_clear_lvs(&meta_lvs))
+ 		goto fail;
+ 
++	if (seg_is_linear(seg)) {
++		first_seg(lv)->status |= RAID_IMAGE;
++		if (!insert_layer_for_lv(lv->vg->cmd, lv,
++					 RAID | LVM_READ | LVM_WRITE,
++					 "_rimage_0"))
++			return_0;
++
++		lv->status |= RAID;
++		seg = first_seg(lv);
++		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
++		seg->region_size = RAID_REGION_SIZE;
++		seg->segtype = get_segtype_from_string(lv->vg->cmd, "raid1");
++		if (!seg->segtype)
++			return_0;
++	}
+ /*
+ FIXME: It would be proper to activate the new LVs here, instead of having
+ them activated by the suspend.  However, this causes residual device nodes
+@@ -504,16 +642,21 @@ to be left for these sub-lvs.
+ 	if (!(new_areas = dm_pool_zalloc(lv->vg->cmd->mem,
+ 					 new_count * sizeof(*new_areas))))
+ 		goto fail;
+-	memcpy(new_areas, seg->meta_areas,
+-	       seg->area_count * sizeof(*seg->meta_areas));
++	if (seg->meta_areas)
++		memcpy(new_areas, seg->meta_areas,
++		       seg->area_count * sizeof(*seg->meta_areas));
+ 	seg->meta_areas = new_areas;
+ 	seg->area_count = new_count;
+ 
++	/* Add extra meta area when converting from linear */
++	s = (old_count == 1) ? 0 : old_count;
++
+ 	/* Set segment areas for metadata sub_lvs */
+-	s = old_count;
+ 	dm_list_iterate_items(lvl, &meta_lvs) {
+ 		log_debug("Adding %s to %s",
+ 			  lvl->lv->name, lv->name);
++		lvl->lv->status &= status_mask;
++		first_seg(lvl->lv)->status &= status_mask;
+ 		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
+ 					    lvl->lv->status)) {
+ 			log_error("Failed to add %s to %s",
+@@ -523,11 +666,14 @@ to be left for these sub-lvs.
+ 		s++;
+ 	}
+ 
+-	/* Set segment areas for data sub_lvs */
+ 	s = old_count;
++
++	/* Set segment areas for data sub_lvs */
+ 	dm_list_iterate_items(lvl, &data_lvs) {
+ 		log_debug("Adding %s to %s",
+ 			  lvl->lv->name, lv->name);
++		lvl->lv->status &= status_mask;
++		first_seg(lvl->lv)->status &= status_mask;
+ 		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
+ 					    lvl->lv->status)) {
+ 			log_error("Failed to add %s to %s",
+@@ -810,12 +956,6 @@ int lv_raid_change_image_count(struct lo
+ 			       uint32_t new_count, struct dm_list *pvs)
+ {
+ 	uint32_t old_count = lv_raid_image_count(lv);
+-	struct lv_segment *seg = first_seg(lv);
+-
+-	if (!seg_is_mirrored(seg)) {
+-		log_error("Unable to change image count of non-mirrored RAID.");
+-		return 0;
+-	}
+ 
+ 	if (old_count == new_count) {
+ 		log_error("%s/%s already has image count of %d",
+Index: LVM2/lib/metadata/segtype.h
+===================================================================
+--- LVM2.orig/lib/metadata/segtype.h
++++ LVM2/lib/metadata/segtype.h
+@@ -47,6 +47,7 @@ struct dev_manager;
+ #define seg_is_replicator(seg)	((seg)->segtype->flags & SEG_REPLICATOR ? 1 : 0)
+ #define seg_is_replicator_dev(seg) ((seg)->segtype->flags & SEG_REPLICATOR_DEV ? 1 : 0)
+ #define seg_is_striped(seg)	((seg)->segtype->flags & SEG_AREAS_STRIPED ? 1 : 0)
++#define     seg_is_linear(seg)  (seg_is_striped(seg) && !(seg)->stripe_size)
+ #define seg_is_snapshot(seg)	((seg)->segtype->flags & SEG_SNAPSHOT ? 1 : 0)
+ #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
+ #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
+Index: LVM2/lib/metadata/vg.c
+===================================================================
+--- LVM2.orig/lib/metadata/vg.c
++++ LVM2/lib/metadata/vg.c
+@@ -48,6 +48,7 @@ struct volume_group *alloc_vg(const char
+ 	dm_list_init(&vg->pvs_to_create);
+ 	dm_list_init(&vg->lvs);
+ 	dm_list_init(&vg->tags);
++	dm_list_init(&vg->reserved_lv_names);
+ 	dm_list_init(&vg->removed_pvs);
+ 
+ 	log_debug("Allocated VG %s at %p.", vg->name, vg);
+Index: LVM2/lib/metadata/vg.h
+===================================================================
+--- LVM2.orig/lib/metadata/vg.h
++++ LVM2/lib/metadata/vg.h
+@@ -91,6 +91,14 @@ struct volume_group {
+ 	struct dm_list tags;
+ 
+ 	/*
++	 * The 'reserved_lv_names' list is used by the
++	 * [generate|reserve]_lv_name functions.  'generate_lv_name' will not
++	 * generate an LV name that exists or has been reserved by
++	 * 'reserve_lv_name'.
++	 */
++	struct dm_list reserved_lv_names;
++
++	/*
+ 	 * FIXME: Move the next fields into a different struct?
+ 	 */
+ 
+Index: LVM2/tools/commands.h
+===================================================================
+--- LVM2.orig/tools/commands.h
++++ LVM2/tools/commands.h
+@@ -98,6 +98,7 @@ xx(lvconvert,
+    0,
+    "lvconvert "
+    "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
++   "\t[--type SegmentType]\n"
+    "\t[--repair [--use-policies]]\n"
+    "\t[-R|--regionsize MirrorLogRegionSize]\n"
+    "\t[--alloc AllocationPolicy]\n"
+@@ -141,7 +142,7 @@ xx(lvconvert,
+    alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
+    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
+    regionsize_ARG, repair_ARG, snapshot_ARG, splitmirrors_ARG, trackchanges_ARG,
+-   stripes_long_ARG, stripesize_ARG, test_ARG,
++   type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
+    use_policies_ARG, yes_ARG, force_ARG, zero_ARG)
+ 
+ xx(lvcreate,
+Index: LVM2/tools/lvconvert.c
+===================================================================
+--- LVM2.orig/tools/lvconvert.c
++++ LVM2/tools/lvconvert.c
+@@ -304,7 +304,8 @@ static int _read_params(struct lvconvert
  			return 0;
  		}
  
--		r = _lv_extend_layered_lv(ah, lv, extents, 0,
--					  stripes, stripe_size);
-+		if (!(r = _lv_extend_layered_lv(ah, lv, extents, 0,
-+						stripes, stripe_size)))
-+			goto out;
- 
--		if (r && segtype_is_thin_pool(segtype)) {
-+		if (segtype_is_thin_pool(segtype)) {
- 			/* FIXME: resize metadata size here for now */
- 			struct logical_volume *tmeta = first_seg(lv)->pool_metadata_lv;
- 			if ((r = lv_add_segment(ah, ah->area_count, 1, tmeta,
-@@ -2613,7 +2614,52 @@
- 			} else
- 				stack;
- 		}
-+
-+		/*
-+		 * If we are expanding an existing mirror, we can skip the
-+		 * resync of the extension if the LV is currently in-sync
-+		 * and the LV has the LV_NOTSYNCED flag set.
-+		 */
-+		if ((lv->le_count != extents) &&
-+		    segtype_is_mirrored(segtype) &&
-+		    (lv->status & LV_NOTSYNCED)) {
-+			percent_t sync_percent = PERCENT_INVALID;
-+
-+			if (!lv_is_active(lv)) {
-+				log_print("%s/%s is not active."
-+					  "  Unable to get sync percent.",
-+					  lv->vg->name, lv->name);
-+				if (yes_no_prompt("Do full resync of extended "
-+						  "portion of %s/%s?  [y/n]: ",
-+						  lv->vg->name, lv->name) == 'y')
-+					goto out;
-+				r = 0;
-+				goto out;
-+			}
-+
-+			r = 0;
-+			if (!lv_mirror_percent(lv->vg->cmd, lv, 0,
-+					       &sync_percent, NULL)) {
-+				log_error("Failed to get sync percent for %s/%s",
-+					  lv->vg->name, lv->name);
-+				goto out;
-+			} else if (sync_percent == PERCENT_100) {
-+				log_verbose("Skipping initial resync for "
-+					    "extended portion of %s/%s",
-+					    lv->vg->name, lv->name);
-+				init_mirror_in_sync(1);
-+				lv->status |= LV_NOTSYNCED;
-+			} else {
-+				log_error("%s/%s cannot be extended while"
-+					  " it is recovering.",
-+					  lv->vg->name, lv->name);
-+				goto out;
-+			}
-+			r = 1;
-+		}
+-		if (!(lp->segtype = get_segtype_from_string(cmd, "mirror")))
++		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, "mirror"));
++		if (!lp->segtype)
+ 			return_0;
  	}
-+
-+out:
- 	alloc_destroy(ah);
- 	return r;
+ 
+@@ -1393,7 +1394,7 @@ static int is_valid_raid_conversion(cons
+ 	if (!segtype_is_raid(from_segtype) && !segtype_is_raid(to_segtype))
+ 		return_0;  /* Not converting to or from RAID? */
+ 
+-	return 0;
++	return 1;
  }
---- LVM2/tools/commands.h	2011/09/06 00:26:43	1.162
-+++ LVM2/tools/commands.h	2011/10/06 15:32:27	1.163
-@@ -265,6 +265,7 @@
-    "\t{-l|--extents [+]LogicalExtentsNumber[%{VG|LV|PVS|FREE|ORIGIN}] |\n"
-    "\t -L|--size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]}\n"
-    "\t[-m|--mirrors Mirrors]\n"
-+   "\t[--nosync]\n"
-    "\t[--use-policies]\n"
-    "\t[-n|--nofsck]\n"
-    "\t[--noudevsync]\n"
-@@ -276,7 +277,7 @@
-    "\tLogicalVolume[Path] [ PhysicalVolumePath... ]\n",
  
-    alloc_ARG, autobackup_ARG, extents_ARG, force_ARG, mirrors_ARG,
--   nofsck_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
-+   nofsck_ARG, nosync_ARG, noudevsync_ARG, resizefs_ARG, size_ARG, stripes_ARG,
-    stripesize_ARG, test_ARG, type_ARG, use_policies_ARG)
+ static int lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *lp)
+@@ -1405,7 +1406,9 @@ static int lvconvert_raid(struct logical
+ 	if (!arg_count(cmd, type_ARG))
+ 		lp->segtype = seg->segtype;
  
- xx(lvmchange,
---- LVM2/tools/lvresize.c	2011/09/21 10:39:47	1.138
-+++ LVM2/tools/lvresize.c	2011/10/06 15:32:27	1.139
-@@ -504,6 +504,13 @@
- 
- 	/* If extending, find mirrors of last segment */
- 	if ((lp->extents > lv->le_count)) {
-+		/*
-+		 * Has the user specified that they would like the additional
-+		 * extents of a mirror not to have an initial sync?
-+		 */
-+		if (seg_is_mirrored(first_seg(lv)) && arg_count(cmd, nosync_ARG))
-+			lv->status |= LV_NOTSYNCED;
-+
- 		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
- 			if (seg_is_mirrored(mirr_seg))
- 				seg_mirrors = lv_mirror_count(mirr_seg->lv);
+-	if (arg_count(cmd, mirrors_ARG) && !seg_is_mirrored(seg)) {
++	/* Can only change image count for raid1 and linear */
++	if (arg_count(cmd, mirrors_ARG) &&
++	    !seg_is_mirrored(seg) && !seg_is_linear(seg)) {
+ 		log_error("'--mirrors/-m' is not compatible with %s",
+ 			  seg->segtype->name);
+ 		return 0;
+
 
 
