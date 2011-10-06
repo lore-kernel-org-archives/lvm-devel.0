@@ -1,49 +1,60 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Oct 2011 09:53:17 -0000
-Subject: LVM2 ./WHATS_NEW man/lvcreate.8.in
-Message-ID: <20111021095317.22960.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu,  6 Oct 2011 11:43:02 +0200
+Subject: [PATCH 3/3] Change default prefix.
+In-Reply-To: <cover.1317893838.git.zkabelac@redhat.com>
+References: <cover.1317893838.git.zkabelac@redhat.com>
+Message-ID: <da81bee4945606f90a6a737f2d693d300b7d8246.1317893838.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-21 09:53:16
+Use ""  instead of "  ".
+So commands like lvs print from the begining of the line.
+(no need to trim space around).
 
-Modified files:
-	.              : WHATS_NEW 
-	man            : lvcreate.8.in 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ doc/example.conf.in   |    6 +++---
+ lib/config/defaults.h |    6 +++++-
+ 2 files changed, 8 insertions(+), 4 deletions(-)
 
-Log message:
-	Make units for chunksize more obvious
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2164&r2=1.2165
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
-
---- LVM2/WHATS_NEW	2011/10/19 16:49:13	1.2164
-+++ LVM2/WHATS_NEW	2011/10/21 09:53:16	1.2165
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Improve lvcreate man documentation of the chunksize option.
-   Improve man page style for lvcreate.
-   Avoid recursive calls to dmeventd in its LVM plugins.
-   Log dev name now returned to kernel for registering during cmirror CTR.
---- LVM2/man/lvcreate.8.in	2011/10/19 16:49:14	1.23
-+++ LVM2/man/lvcreate.8.in	2011/10/21 09:53:16	1.24
-@@ -129,7 +129,9 @@
- on one node and \fB-a\fIly\fR will activate only on the local node.
- .TP
- .BR \-c ", " \-\-chunksize " " \fIChunkSize
--Power of 2 chunk size for the snapshot logical volume between 4k and 512k.
-+Power of 2 chunk size in sector units (512b).
-+For snapshot logical volume the value must be between 8 (4KB) and 1024 (512KB)
-+and the default value is 8.
- .TP
- .BR \-C ", " \-\-contiguous " {" \fIy | \fIn }
- Sets or resets the contiguous allocation policy for
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index d38f90e..58748cc 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -248,9 +248,9 @@ log {
+     command_names = 0
+ 
+     # A prefix to use before the message text (but after the command name,
+-    # if selected).  Default is two spaces, so you can see/grep the severity
+-    # of each message.
+-    prefix = "  "
++    # if selected). Set to "  " to revert to the default behaviour
++    # prior to version 2.02.89.
++    prefix = ""
+ 
+     # To make the messages look similar to the original LVM tools use:
+     #   indent = 0
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index be016f6..df1dcba 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -99,7 +99,11 @@
+ #define DEFAULT_MAXIMISE_CLING 1
+ #define DEFAULT_CLUSTERED 0
+ 
+-#define DEFAULT_MSG_PREFIX "  "
++/*
++ * NOTE: _find_config_str() does not allow empty string "",
++ * but when the default msg prefix is also "" it works as expected.
++ */
++#define DEFAULT_MSG_PREFIX ""
+ #define DEFAULT_CMD_NAME 0
+ #define DEFAULT_OVERWRITE 0
+ 
+-- 
+1.7.6.4
 
 
