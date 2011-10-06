@@ -1,49 +1,53 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 19 Oct 2011 14:31:49 -0000
-Subject: LVM2/daemons/dmeventd/plugins/snapshot dmevent ...
-Message-ID: <20111019143149.7580.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu,  6 Oct 2011 11:43:00 +0200
+Subject: [PATCH 1/3] Fix core on buggy config file
+In-Reply-To: <cover.1317893838.git.zkabelac@redhat.com>
+References: <cover.1317893838.git.zkabelac@redhat.com>
+Message-ID: <b0b3a5f14ec1b30a83357f76197a3cdea87fbf8b.1317893838.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-10-19 14:31:49
+Since fixed within unreleased version - no WHATS_NEW
 
-Modified files:
-	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
+Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+---
+ libdm/libdm-config.c |    6 +++++-
+ test/t-000-basic.sh  |    3 +++
+ 2 files changed, 8 insertions(+), 1 deletions(-)
 
-Log message:
-	Remove a redundant (and in some cases, misleading) message about snapshot
-	extension, in the snapshot dmeventd plugin. The reporting is done as needed by
-	the LVM command nowadays.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-
---- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/04/08 14:18:40	1.15
-+++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/10/19 14:31:49	1.16
-@@ -119,7 +119,6 @@
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index a831936..b9ce7a3 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -170,8 +170,12 @@ void dm_config_destroy(struct dm_config_tree *cft)
+  */
+ struct dm_config_tree *dm_config_remove_cascaded_tree(struct dm_config_tree *cft)
  {
- 	char *vg = NULL, *lv = NULL, *layer = NULL;
- 	char cmd_str[1024];
--	int r = 0;
+-	struct dm_config_tree *second_cft = cft->cascade;
++	struct dm_config_tree *second_cft;
  
- 	if (!dm_split_lvm_name(dmeventd_lvm2_pool(), device, &vg, &lv, &layer)) {
- 		syslog(LOG_ERR, "Unable to determine VG name from %s.", device);
-@@ -131,10 +130,7 @@
- 		return 0;
- 	}
++	if (!cft)
++		return NULL;
++
++	second_cft = cft->cascade;
+ 	cft->cascade = NULL;
  
--	r = dmeventd_lvm2_run(cmd_str);
--	syslog(LOG_INFO, "Extension of snapshot %s/%s %s.", vg, lv,
--	       (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
--	return r == ECMD_PROCESSED;
-+	return dmeventd_lvm2_run(cmd_str) == ECMD_PROCESSED;
- }
+ 	return second_cft;
+diff --git a/test/t-000-basic.sh b/test/t-000-basic.sh
+index bd7ba69..dbee47c 100755
+--- a/test/t-000-basic.sh
++++ b/test/t-000-basic.sh
+@@ -23,3 +23,6 @@ diff -u actual expected
+ # ensure we can create devices (uses dmsetup, etc)
+ aux prepare_devs 5
  
- static void _umount(const char *device, int major, int minor)
++# ensure we not crash on buggy in config files
++aux lvmconf 'log/prefix = 1""'
++not lvs
+-- 
+1.7.6.4
 
 
