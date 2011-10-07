@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 7 Oct 2011 14:52:28 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/raid_manip.c lib ...
-Message-ID: <20111007145228.20377.qmail@sourceware.org>
+Date: 7 Oct 2011 14:56:02 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exporte ...
+Message-ID: <20111007145602.21371.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,451 +10,439 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-10-07 14:52:27
+Changes by:	jbrassow at sourceware.org	2011-10-07 14:56:01
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : raid_manip.c segtype.h 
+	lib/metadata   : metadata-exported.h raid_manip.c 
 	test           : t-lvconvert-raid.sh 
-	tools          : commands.h lvconvert.c 
+	tools          : lvconvert.c 
 
 Log message:
-	Add the ability to convert linear LVs to RAID1
+	Add the ability to convert LVs of "mirror" segtype to "raid1" segtype.
 	
 	Example:
-	~> lvconvert --type raid1 -m 1 vg/lv
+	~> lvconvert --type raid1 vg/mirror_lv
 	
-	The following steps are performed to convert linear to RAID1:
-	1) Allocate a metadata device from the same PV as the linear device
-	to provide the metadata/data LV pair required for all RAID components.
-	2) Allocate the required number of metadata/data LV pairs for the
-	remaining additional images.
-	3) Clear the metadata LVs.  This performs a LVM metadata update.
-	4) Create the top-level RAID LV and add the component devices.
-	
-	We want to make any failure easy to unwind.  This is why we don't create the
-	top-level LV and add the components until the last step.  Should anything
-	happen before that, the user could simply remove the unnecessary images.  Also,
-	we want to ensure that the metadata LVs are cleared before forming the array to
-	prevent stale information from polluting the new array.
-	
-	A new macro 'seg_is_linear' was added to allow us to distinguish linear LVs
-	from striped LVs.
+	Steps to convert "mirror" to "raid1"
+	1) Allocate a RAID metadata LV for each mirror image from the same PVs
+	on which they are located.
+	2) Clear the metadata LVs.  This involves writing LVM metadata, so we don't
+	change any aspects of the mirror LV before this so that the user can easily
+	remove LVs from the failed convert attempt while retaining the original
+	mirror.
+	3) Remove the mirror log, if it exists.
+	4) Add metadata LVs to mirror LV
+	5) Rename mirror sub-lvs (s/mimage/rimage/)
+	6) Change flags and segtype from mirror to raid1
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2150&r2=1.2151
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.42&r2=1.43
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-raid.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.163&r2=1.164
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.172&r2=1.173
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2151&r2=1.2152
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.213&r2=1.214
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-raid.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.173&r2=1.174
 
---- LVM2/WHATS_NEW	2011/10/06 15:32:26	1.2150
-+++ LVM2/WHATS_NEW	2011/10/07 14:52:26	1.2151
+--- LVM2/WHATS_NEW	2011/10/07 14:52:26	1.2151
++++ LVM2/WHATS_NEW	2011/10/07 14:56:01	1.2152
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Add ability to convert from linear to RAID1.
++  Add ability to convert mirror segtype to RAID1 segtype.
+   Add ability to convert from linear to RAID1.
    Add ability to extend mirrors with '--nosync' option.
    Fix splitmirror in cluster having different DM/LVM views of storage.
-   Fix improper udev settings during suspend/resume for mirror sub-LVs.
---- LVM2/lib/metadata/raid_manip.c	2011/09/22 15:33:21	1.15
-+++ LVM2/lib/metadata/raid_manip.c	2011/10/07 14:52:27	1.16
-@@ -24,6 +24,8 @@
- #include "str_list.h"
- #include "memlock.h"
+--- LVM2/lib/metadata/metadata-exported.h	2011/09/29 08:56:39	1.213
++++ LVM2/lib/metadata/metadata-exported.h	2011/10/07 14:56:01	1.214
+@@ -770,6 +770,8 @@
+ int lv_raid_split_and_track(struct logical_volume *lv,
+ 			    struct dm_list *splittable_pvs);
+ int lv_raid_merge(struct logical_volume *lv);
++int lv_raid_reshape(struct logical_volume *lv,
++		    const struct segment_type *new_segtype);
  
-+#define RAID_REGION_SIZE 1024
-+
- uint32_t lv_raid_image_count(const struct logical_volume *lv)
- {
- 	struct lv_segment *seg = first_seg(lv);
-@@ -125,6 +127,45 @@
- 	return 0;
- }
+ /* --  metadata/raid_manip.c */
  
-+static int _get_pv_list_for_lv(struct logical_volume *lv, struct dm_list *pvs)
-+{
-+	uint32_t s;
-+	struct pv_list *pvl;
-+	struct lv_segment *seg = first_seg(lv);
-+
-+	if (!seg_is_linear(seg)) {
-+		log_error(INTERNAL_ERROR
-+			  "_get_pv_list_for_lv only handles linear volumes");
-+		return 0;
-+	}
-+
-+	log_debug("Getting list of PVs that %s/%s is on:",
-+		  lv->vg->name, lv->name);
-+
-+	dm_list_iterate_items(seg, &lv->segments) {
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) != AREA_PV) {
-+				log_error(INTERNAL_ERROR
-+					  "Linear seg_type should be AREA_PV");
-+				return 0;
-+			}
-+
-+			if (!(pvl = dm_pool_zalloc(lv->vg->cmd->mem,
-+						   sizeof(*pvl)))) {
-+				log_error("Failed to allocate memory");
-+				return 0;
-+			}
-+
-+			pvl->pv = seg_pv(seg, s);
-+			log_debug("  %s/%s is on %s", lv->vg->name, lv->name,
-+				  pv_dev_name(pvl->pv));
-+			dm_list_add(pvs, &pvl->list);
-+		}
-+	}
-+
-+	return 1;
-+}
-+
- static int _raid_in_sync(struct logical_volume *lv)
- {
- 	percent_t sync_percent;
-@@ -411,7 +452,9 @@
- 				   struct dm_list *new_data_lvs)
- {
- 	uint32_t s;
-+	uint32_t region_size;
- 	struct lv_segment *seg = first_seg(lv);
-+	const struct segment_type *segtype;
- 	struct alloc_handle *ah;
- 	struct dm_list *parallel_areas;
- 	struct logical_volume *tmp_lv;
-@@ -425,8 +468,18 @@
- 	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0)))
- 		return_0;
- 
--	if (!(ah = allocate_extents(lv->vg, NULL, seg->segtype, 0, count, count,
--				    seg->region_size, lv->le_count, pvs,
-+	if (seg_is_linear(seg))
-+		region_size = RAID_REGION_SIZE;
-+	else
-+		region_size = seg->region_size;
-+
-+	if (seg_is_raid(seg))
-+		segtype = seg->segtype;
-+	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, "raid1")))
-+		return_0;
-+
-+	if (!(ah = allocate_extents(lv->vg, NULL, segtype, 0, count, count,
-+				    region_size, lv->le_count, pvs,
- 				    lv->alloc, parallel_areas)))
- 		return_0;
- 
-@@ -452,12 +505,60 @@
+--- LVM2/lib/metadata/raid_manip.c	2011/10/07 14:52:27	1.16
++++ LVM2/lib/metadata/raid_manip.c	2011/10/07 14:56:01	1.17
+@@ -166,6 +166,16 @@
  	return 1;
  }
  
 +/*
-+ * _alloc_rmeta_for_lv
++ * _raid_in_sync
 + * @lv
 + *
-+ * Allocate a RAID metadata device for the given LV (which is or will
-+ * be the associated RAID data device).  The new metadata device must
-+ * be allocated from the same PV(s) as the data device.
++ * _raid_in_sync works for all types of RAID segtypes, as well
++ * as 'mirror' segtype.  (This is because 'lv_raid_percent' is
++ * simply a wrapper around 'lv_mirror_percent'.
++ *
++ * Returns: 1 if in-sync, 0 otherwise.
 + */
-+static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
-+			       struct logical_volume **meta_lv)
-+{
-+	struct dm_list allocatable_pvs;
-+	struct alloc_handle *ah;
-+	struct lv_segment *seg = first_seg(data_lv);
-+
-+	dm_list_init(&allocatable_pvs);
-+
-+	if (!seg_is_linear(seg)) {
-+		log_error(INTERNAL_ERROR "Unable to allocate RAID metadata "
-+			  "area for non-linear LV, %s", data_lv->name);
-+		return 0;
-+	}
-+
-+	if (strstr("_mimage_", data_lv->name)) {
-+		log_error("Unable to alloc metadata device for mirror device");
-+		return 0;
-+	}
-+
-+	if (!_get_pv_list_for_lv(data_lv, &allocatable_pvs)) {
-+		log_error("Failed to build list of PVs for %s/%s",
-+			  data_lv->vg->name, data_lv->name);
-+		return 0;
-+	}
-+
-+	if (!(ah = allocate_extents(data_lv->vg, NULL, seg->segtype, 0, 1, 0,
-+				    seg->region_size,
-+				    1 /*RAID_METADATA_AREA_LEN*/,
-+				    &allocatable_pvs, data_lv->alloc, NULL)))
-+		return_0;
-+
-+	if (!_alloc_image_component(data_lv, ah, 0, RAID_META, meta_lv))
-+		return_0;
-+
-+	alloc_destroy(ah);
-+	return 1;
-+}
-+
- static int _raid_add_images(struct logical_volume *lv,
- 			    uint32_t new_count, struct dm_list *pvs)
+ static int _raid_in_sync(struct logical_volume *lv)
  {
- 	uint32_t s;
- 	uint32_t old_count = lv_raid_image_count(lv);
- 	uint32_t count = new_count - old_count;
-+	uint64_t status_mask = -1;
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *seg = first_seg(lv);
- 	struct dm_list meta_lvs, data_lvs;
-@@ -467,7 +568,24 @@
- 	dm_list_init(&meta_lvs); /* For image addition */
- 	dm_list_init(&data_lvs); /* For image addition */
+ 	percent_t sync_percent;
+@@ -399,20 +409,22 @@
+  * This function does not make metadata changes.
+  */
+ static int _alloc_image_component(struct logical_volume *lv,
++				  const char *alt_base_name,
+ 				  struct alloc_handle *ah, uint32_t first_area,
+ 				  uint64_t type, struct logical_volume **new_lv)
+ {
+ 	uint64_t status;
+ 	size_t len = strlen(lv->name) + 32;
+ 	char img_name[len];
++	const char *base_name = (alt_base_name) ? alt_base_name : lv->name;
+ 	struct logical_volume *tmp_lv;
+ 	const struct segment_type *segtype;
  
--	if (!seg_is_raid(seg)) {
-+	/*
-+	 * If the segtype is linear, then we must allocate a metadata
-+	 * LV to accompany it.
-+	 */
-+	if (seg_is_linear(seg)) {
-+		/* A complete resync will be done, no need to mark each sub-lv */
-+		status_mask = ~(LV_NOTSYNCED);
+ 	if (type == RAID_META) {
+-		if (dm_snprintf(img_name, len, "%s_rmeta_%%d", lv->name) < 0)
++		if (dm_snprintf(img_name, len, "%s_rmeta_%%d", base_name) < 0)
+ 			return_0;
+ 	} else if (type == RAID_IMAGE) {
+-		if (dm_snprintf(img_name, len, "%s_rimage_%%d", lv->name) < 0)
++		if (dm_snprintf(img_name, len, "%s_rimage_%%d", base_name) < 0)
+ 			return_0;
+ 	} else {
+ 		log_error(INTERNAL_ERROR
+@@ -490,13 +502,14 @@
+ 		 * allocated areas.  Thus, the metadata areas are pulled
+ 		 * from 's + count'.
+ 		 */
+-		if (!_alloc_image_component(lv, ah, s + count,
++		if (!_alloc_image_component(lv, NULL, ah, s + count,
+ 					    RAID_META, &tmp_lv))
+ 			return_0;
+ 		lvl_array[s + count].lv = tmp_lv;
+ 		dm_list_add(new_meta_lvs, &(lvl_array[s + count].list));
+ 
+-		if (!_alloc_image_component(lv, ah, s, RAID_IMAGE, &tmp_lv))
++		if (!_alloc_image_component(lv, NULL, ah, s,
++					    RAID_IMAGE, &tmp_lv))
+ 			return_0;
+ 		lvl_array[s].lv = tmp_lv;
+ 		dm_list_add(new_data_lvs, &(lvl_array[s].list));
+@@ -519,6 +532,7 @@
+ 	struct dm_list allocatable_pvs;
+ 	struct alloc_handle *ah;
+ 	struct lv_segment *seg = first_seg(data_lv);
++	char *p, base_name[strlen(data_lv->name) + 1];
+ 
+ 	dm_list_init(&allocatable_pvs);
+ 
+@@ -528,10 +542,9 @@
+ 		return 0;
+ 	}
+ 
+-	if (strstr("_mimage_", data_lv->name)) {
+-		log_error("Unable to alloc metadata device for mirror device");
+-		return 0;
+-	}
++	sprintf(base_name, "%s", data_lv->name);
++	if ((p = strstr(base_name, "_mimage_")))
++		*p = '\0';
+ 
+ 	if (!_get_pv_list_for_lv(data_lv, &allocatable_pvs)) {
+ 		log_error("Failed to build list of PVs for %s/%s",
+@@ -545,7 +558,8 @@
+ 				    &allocatable_pvs, data_lv->alloc, NULL)))
+ 		return_0;
+ 
+-	if (!_alloc_image_component(data_lv, ah, 0, RAID_META, meta_lv))
++	if (!_alloc_image_component(data_lv, base_name, ah, 0,
++				    RAID_META, meta_lv))
+ 		return_0;
+ 
+ 	alloc_destroy(ah);
+@@ -1264,3 +1278,153 @@
+ 		  vg->name, lv->name);
+ 	return 1;
+ }
 +
-+		if (!(lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl)))) {
-+			log_error("Memory allocation failed");
++static int _convert_mirror_to_raid1(struct logical_volume *lv,
++				    const struct segment_type *new_segtype)
++{
++	uint32_t s;
++	struct lv_segment *seg = first_seg(lv);
++	struct lv_list lvl_array[seg->area_count], *lvl;
++	struct dm_list meta_lvs;
++	struct lv_segment_area *meta_areas;
++
++	dm_list_init(&meta_lvs);
++
++	if (!_raid_in_sync(lv)) {
++		log_error("Unable to convert %s/%s while it is not in-sync",
++			  lv->vg->name, lv->name);
++		return 0;
++	}
++
++	meta_areas = dm_pool_zalloc(lv->vg->vgmem,
++				    lv_mirror_count(lv) * sizeof(*meta_areas));
++	if (!meta_areas) {
++		log_error("Failed to allocate memory");
++		return 0;
++	}
++
++	for (s = 0; s < seg->area_count; s++) {
++		log_debug("Allocating new metadata LV for %s",
++			  seg_lv(seg, s)->name);
++		if (!_alloc_rmeta_for_lv(seg_lv(seg, s), &(lvl_array[s].lv))) {
++			log_error("Failed to allocate metadata LV for %s in %s",
++				  seg_lv(seg, s)->name, lv->name);
++			return 0;
++		}
++		dm_list_add(&meta_lvs, &(lvl_array[s].list));
++	}
++
++	log_debug("Clearing newly allocated metadata LVs");
++	if (!_clear_lvs(&meta_lvs)) {
++		log_error("Failed to initialize metadata LVs");
++		return 0;
++	}
++
++	if (seg->log_lv) {
++		log_debug("Removing mirror log, %s", seg->log_lv->name);
++		if (!remove_mirror_log(lv->vg->cmd, lv, NULL, 0)) {
++			log_error("Failed to remove mirror log");
++			return 0;
++		}
++	}
++
++	seg->meta_areas = meta_areas;
++	s = 0;
++
++	dm_list_iterate_items(lvl, &meta_lvs) {
++		log_debug("Adding %s to %s", lvl->lv->name, lv->name);
++
++		/* Images are known to be in-sync */
++		lvl->lv->status &= ~LV_NOTSYNCED;
++		first_seg(lvl->lv)->status &= ~LV_NOTSYNCED;
++		lv_set_hidden(lvl->lv);
++
++		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
++					    lvl->lv->status)) {
++			log_error("Failed to add %s to %s",
++				  lvl->lv->name, lv->name);
++			return 0;
++		}
++		s++;
++	}
++
++	for (s = 0; s < seg->area_count; s++) {
++		char *new_name;
++
++		new_name = dm_pool_zalloc(lv->vg->vgmem,
++					  strlen(lv->name) +
++					  strlen("_rimage_XXn"));
++		if (!new_name) {
++			log_error("Failed to rename mirror images");
 +			return 0;
 +		}
 +
-+		if (!_alloc_rmeta_for_lv(lv, &lvl->lv))
-+			return_0;
++		sprintf(new_name, "%s_rimage_%u", lv->name, s);
++		log_debug("Renaming %s to %s", seg_lv(seg, s)->name, new_name);
++		seg_lv(seg, s)->name = new_name;
++		seg_lv(seg, s)->status &= ~MIRROR_IMAGE;
++		seg_lv(seg, s)->status |= RAID_IMAGE;
++	}
++	init_mirror_in_sync(1);
 +
-+		dm_list_add(&meta_lvs, &lvl->list);
-+	} else if (!seg_is_raid(seg)) {
- 		log_error("Unable to add RAID images to %s of segment type %s",
- 			  lv->name, seg->segtype->name);
- 		return 0;
-@@ -478,10 +596,52 @@
- 		return 0;
- 	}
- 
-+	/*
-+	 * If linear, we must correct data LV names.  They are off-by-one
-+	 * because the linear volume hasn't taken its proper name of "_rimage_0"
-+	 * yet.  This action must be done before '_clear_lvs' because it
-+	 * commits the LVM metadata before clearing the LVs.
-+	 */
-+	if (seg_is_linear(seg)) {
-+		char *name;
-+		size_t len;
-+		struct dm_list *l;
-+		struct lv_list *lvl_tmp;
++	log_debug("Setting new segtype for %s", lv->name);
++	seg->segtype = new_segtype;
++	lv->status &= ~MIRRORED;
++	lv->status |= RAID;
++	seg->status |= RAID;
 +
-+		dm_list_iterate(l, &data_lvs) {
-+			if (l == dm_list_last(&data_lvs)) {
-+				lvl = dm_list_item(l, struct lv_list);
-+				len = strlen(lv->name) + strlen("_rimage_XXX");
-+				name = dm_pool_alloc(lv->vg->vgmem, len);
-+				sprintf(name, "%s_rimage_%u", lv->name, count);
-+				lvl->lv->name = name;
-+				continue;
-+			}
-+			lvl = dm_list_item(l, struct lv_list);
-+			lvl_tmp = dm_list_item(l->n, struct lv_list);
-+			lvl->lv->name = lvl_tmp->lv->name;
-+		}
++	if (!vg_write(lv->vg)) {
++		log_error("Failed to write changes to %s in %s",
++			  lv->name, lv->vg->name);
++		return 0;
 +	}
 +
- 	/* Metadata LVs must be cleared before being added to the array */
- 	if (!_clear_lvs(&meta_lvs))
- 		goto fail;
- 
-+	if (seg_is_linear(seg)) {
-+		first_seg(lv)->status |= RAID_IMAGE;
-+		if (!insert_layer_for_lv(lv->vg->cmd, lv,
-+					 RAID | LVM_READ | LVM_WRITE,
-+					 "_rimage_0"))
-+			return_0;
-+
-+		lv->status |= RAID;
-+		seg = first_seg(lv);
-+		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
-+		seg->region_size = RAID_REGION_SIZE;
-+		seg->segtype = get_segtype_from_string(lv->vg->cmd, "raid1");
-+		if (!seg->segtype)
-+			return_0;
++	if (!suspend_lv(lv->vg->cmd, lv)) {
++		log_error("Failed to suspend %s/%s before committing changes",
++			  lv->vg->name, lv->name);
++		return 0;
 +	}
- /*
- FIXME: It would be proper to activate the new LVs here, instead of having
- them activated by the suspend.  However, this causes residual device nodes
-@@ -504,16 +664,21 @@
- 	if (!(new_areas = dm_pool_zalloc(lv->vg->cmd->mem,
- 					 new_count * sizeof(*new_areas))))
- 		goto fail;
--	memcpy(new_areas, seg->meta_areas,
--	       seg->area_count * sizeof(*seg->meta_areas));
-+	if (seg->meta_areas)
-+		memcpy(new_areas, seg->meta_areas,
-+		       seg->area_count * sizeof(*seg->meta_areas));
- 	seg->meta_areas = new_areas;
- 	seg->area_count = new_count;
- 
-+	/* Add extra meta area when converting from linear */
-+	s = (old_count == 1) ? 0 : old_count;
 +
- 	/* Set segment areas for metadata sub_lvs */
--	s = old_count;
- 	dm_list_iterate_items(lvl, &meta_lvs) {
- 		log_debug("Adding %s to %s",
- 			  lvl->lv->name, lv->name);
-+		lvl->lv->status &= status_mask;
-+		first_seg(lvl->lv)->status &= status_mask;
- 		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
- 					    lvl->lv->status)) {
- 			log_error("Failed to add %s to %s",
-@@ -523,11 +688,14 @@
- 		s++;
- 	}
- 
--	/* Set segment areas for data sub_lvs */
- 	s = old_count;
++	if (!vg_commit(lv->vg)) {
++		log_error("Failed to commit changes to %s in %s",
++			  lv->name, lv->vg->name);
++		return 0;
++	}
 +
-+	/* Set segment areas for data sub_lvs */
- 	dm_list_iterate_items(lvl, &data_lvs) {
- 		log_debug("Adding %s to %s",
- 			  lvl->lv->name, lv->name);
-+		lvl->lv->status &= status_mask;
-+		first_seg(lvl->lv)->status &= status_mask;
- 		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
- 					    lvl->lv->status)) {
- 			log_error("Failed to add %s to %s",
-@@ -810,12 +978,6 @@
- 			       uint32_t new_count, struct dm_list *pvs)
++	if (!resume_lv(lv->vg->cmd, lv)) {
++		log_error("Failed to resume %s/%s after committing changes",
++			  lv->vg->name, lv->name);
++		return 0;
++	}
++
++	return 1;
++}
++
++/*
++ * lv_raid_reshape
++ * @lv
++ * @new_segtype
++ *
++ * Convert an LV from one RAID type (or 'mirror' segtype) to another.
++ *
++ * Returns: 1 on success, 0 on failure
++ */
++int lv_raid_reshape(struct logical_volume *lv,
++		    const struct segment_type *new_segtype)
++{
++	struct lv_segment *seg = first_seg(lv);
++
++	if (!new_segtype) {
++		log_error(INTERNAL_ERROR "New segtype not specified");
++		return 0;
++	}
++
++	if (!strcmp(seg->segtype->name, "mirror") &&
++	    (!strcmp(new_segtype->name, "raid1")))
++	    return _convert_mirror_to_raid1(lv, new_segtype);
++
++	log_error("Converting the segment type for %s/%s from %s to %s"
++		  " is not yet supported.", lv->vg->name, lv->name,
++		  seg->segtype->name, new_segtype->name);
++	return 0;
++}
+--- LVM2/test/t-lvconvert-raid.sh	2011/10/07 14:52:27	1.2
++++ LVM2/test/t-lvconvert-raid.sh	2011/10/07 14:56:01	1.3
+@@ -12,8 +12,8 @@
+ 
+ . lib/test
+ 
+-# is_raid_in_sync <VG/LV>
+-function is_raid_in_sync()
++# is_in_sync <VG/LV>
++function is_in_sync()
  {
- 	uint32_t old_count = lv_raid_image_count(lv);
--	struct lv_segment *seg = first_seg(lv);
--
--	if (!seg_is_mirrored(seg)) {
--		log_error("Unable to change image count of non-mirrored RAID.");
--		return 0;
--	}
- 
- 	if (old_count == new_count) {
- 		log_error("%s/%s already has image count of %d",
---- LVM2/lib/metadata/segtype.h	2011/08/30 14:55:17	1.42
-+++ LVM2/lib/metadata/segtype.h	2011/10/07 14:52:27	1.43
-@@ -47,6 +47,7 @@
- #define seg_is_replicator(seg)	((seg)->segtype->flags & SEG_REPLICATOR ? 1 : 0)
- #define seg_is_replicator_dev(seg) ((seg)->segtype->flags & SEG_REPLICATOR_DEV ? 1 : 0)
- #define seg_is_striped(seg)	((seg)->segtype->flags & SEG_AREAS_STRIPED ? 1 : 0)
-+#define     seg_is_linear(seg)  (seg_is_striped(seg) && !(seg)->stripe_size)
- #define seg_is_snapshot(seg)	((seg)->segtype->flags & SEG_SNAPSHOT ? 1 : 0)
- #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
- #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
---- LVM2/test/t-lvconvert-raid.sh	2011/08/18 19:56:17	1.1
-+++ LVM2/test/t-lvconvert-raid.sh	2011/10/07 14:52:27	1.2
-@@ -34,6 +34,11 @@
- 		return 1
+ 	local dm_name
+ 	local a
+@@ -26,7 +26,19 @@
+ 		echo "Unable to get sync status of $1"
+ 		exit 1
  	fi
- 
-+	if [[ ${a[$(($idx - 1))]} =~ a ]]; then
-+		echo "$dm_name in-sync, but 'a' characters in health status"
+-	idx=$((${#a[@]} - 1))
++
++	# 6th argument is the sync ratio for RAID and mirror
++	echo ${a[@]}
++	if [ ${a[2]} = "raid" ]; then
++		# Last argument is the sync ratio for RAID
++		idx=$((${#a[@]} - 1))
++	elif [ ${a[2]} = "mirror" ]; then
++		# 4th Arg tells us how far to the sync ratio
++		idx=$((${a[3]} + 4))
++	else
++		echo "Unable to get sync ratio for target type '${a[2]}'"
 +		exit 1
 +	fi
+ 	b=(`echo ${a[$idx]} | sed s:/:' ':`)
+ 
+ 	if [ ${b[0]} != ${b[1]} ]; then
+@@ -39,16 +51,21 @@
+ 		exit 1
+ 	fi
+ 
+-	echo "$dm_name (${a[3]}) is in-sync"
++	if [ ${a[2]} = "raid" ]; then
++		echo "$dm_name (${a[3]}) is in-sync"
++	else
++		echo "$dm_name (${a[2]}) is in-sync"
++	fi
 +
- 	echo "$dm_name (${a[3]}) is in-sync"
  	return 0
  }
-@@ -81,7 +86,7 @@
- ###########################################
- # RAID1 convert tests
- ###########################################
--for i in 2 3 4; do
-+for i in 1 2 3 4; do
- 	for j in 1 2 3 4; do
- 		if [ $i -eq 1 ]; then
- 			from="linear"
-@@ -94,8 +99,15 @@
- 			to="$j-way"
+ 
+-# wait_for_raid_sync <VG/LV>
+-function wait_for_raid_sync()
++# wait_for_sync <VG/LV>
++function wait_for_sync()
+ {
+ 	local i=0
+ 
+-	while ! is_raid_in_sync $1; do
++	while ! is_in_sync $1; do
+ 		sleep 2
+ 		i=$(($i + 1))
+ 		if [ $i -gt 500 ]; then
+@@ -106,7 +123,7 @@
+ 			lvcreate -l 2 -n $lv1 $vg
+ 		else
+ 			lvcreate --type raid1 -m $(($i - 1)) -l 2 -n $lv1 $vg
+-			wait_for_raid_sync $vg/$lv1
++			wait_for_sync $vg/$lv1
  		fi
- 		echo "Converting from $from to $to"
--		lvcreate --type raid1 -m $(($i - 1)) -l 2 -n $lv1 $vg
--		wait_for_raid_sync $vg/$lv1
-+		if [ $i -eq 1 ]; then
-+			# Shouldn't be able to create with just 1 image
-+			not lvcreate --type raid1 -m 0 -l 2 -n $lv1 $vg
-+
-+			lvcreate -l 2 -n $lv1 $vg
-+		else
-+			lvcreate --type raid1 -m $(($i - 1)) -l 2 -n $lv1 $vg
-+			wait_for_raid_sync $vg/$lv1
-+		fi
  		lvconvert -m $((j - 1))  $vg/$lv1
  
- 		# FIXME: ensure no residual devices
-@@ -135,12 +147,10 @@
+@@ -128,7 +145,7 @@
+ ###########################################
+ # 3-way to 2-way/linear
+ lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
+-wait_for_raid_sync $vg/$lv1
++wait_for_sync $vg/$lv1
+ lvconvert --splitmirrors 1 -n $lv2 $vg/$lv1
+ check lv_exists $vg $lv1
+ check linear $vg $lv2
+@@ -137,7 +154,7 @@
+ 
+ # 2-way to linear/linear
+ lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg
+-wait_for_raid_sync $vg/$lv1
++wait_for_sync $vg/$lv1
+ lvconvert --splitmirrors 1 -n $lv2 $vg/$lv1
+ check linear $vg $lv1
+ check linear $vg $lv2
+@@ -146,8 +163,8 @@
+ 
  # 3-way to linear/2-way
  lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
- wait_for_raid_sync $vg/$lv1
--
- # FIXME: Can't split off a mirror from a mirror yet
--#lvconvert --splitmirrors 2 -n $lv2 $vg/$lv1
-+should lvconvert --splitmirrors 2 -n $lv2 $vg/$lv1
+-wait_for_raid_sync $vg/$lv1
+-# FIXME: Can't split off a mirror from a mirror yet
++wait_for_sync $vg/$lv1
++# FIXME: Can't split off a RAID1 from a RAID1 yet
+ should lvconvert --splitmirrors 2 -n $lv2 $vg/$lv1
  #check linear $vg $lv1
  #check lv_exists $vg $lv2
--
+@@ -159,10 +176,22 @@
+ ###########################################
+ # 3-way to 2-way/linear
+ lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
+-wait_for_raid_sync $vg/$lv1
++wait_for_sync $vg/$lv1
+ lvconvert --splitmirrors 1 --trackchanges $vg/$lv1
+ check lv_exists $vg $lv1
+ check linear $vg ${lv1}_rimage_2
+ lvconvert --merge $vg/${lv1}_rimage_2
  # FIXME: ensure no residual devices
  lvremove -ff $vg
++
++###########################################
++# Mirror to RAID1 conversion
++###########################################
++for i in 1 2 3 ; do
++	lvcreate --type mirror -m $i -l 2 -n $lv1 $vg
++	wait_for_sync $vg/$lv1
++	lvconvert --type raid1 $vg/$lv1
++	lvremove -ff $vg
++done
++
++exit 0
+--- LVM2/tools/lvconvert.c	2011/10/07 14:52:27	1.173
++++ LVM2/tools/lvconvert.c	2011/10/07 14:56:01	1.174
+@@ -1452,6 +1452,9 @@
+ 	if (arg_count(cmd, mirrors_ARG))
+ 		return lv_raid_change_image_count(lv, image_count, lp->pvh);
  
---- LVM2/tools/commands.h	2011/10/06 15:32:27	1.163
-+++ LVM2/tools/commands.h	2011/10/07 14:52:27	1.164
-@@ -98,6 +98,7 @@
-    0,
-    "lvconvert "
-    "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
-+   "\t[--type SegmentType]\n"
-    "\t[--repair [--use-policies]]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
-    "\t[--alloc AllocationPolicy]\n"
-@@ -141,7 +142,7 @@
-    alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
-    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
-    regionsize_ARG, repair_ARG, snapshot_ARG, splitmirrors_ARG, trackchanges_ARG,
--   stripes_long_ARG, stripesize_ARG, test_ARG,
-+   type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
-    use_policies_ARG, yes_ARG, force_ARG, zero_ARG)
- 
- xx(lvcreate,
---- LVM2/tools/lvconvert.c	2011/09/06 18:49:32	1.172
-+++ LVM2/tools/lvconvert.c	2011/10/07 14:52:27	1.173
-@@ -304,7 +304,8 @@
- 			return 0;
- 		}
- 
--		if (!(lp->segtype = get_segtype_from_string(cmd, "mirror")))
-+		lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, "mirror"));
-+		if (!lp->segtype)
- 			return_0;
- 	}
- 
-@@ -1393,7 +1394,7 @@
- 	if (!segtype_is_raid(from_segtype) && !segtype_is_raid(to_segtype))
- 		return_0;  /* Not converting to or from RAID? */
- 
--	return 0;
-+	return 1;
++	if (arg_count(cmd, type_ARG))
++		return lv_raid_reshape(lv, lp->segtype);
++
+ 	log_error("Conversion operation not yet supported.");
+ 	return 0;
  }
- 
- static int lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *lp)
-@@ -1405,7 +1406,9 @@
- 	if (!arg_count(cmd, type_ARG))
- 		lp->segtype = seg->segtype;
- 
--	if (arg_count(cmd, mirrors_ARG) && !seg_is_mirrored(seg)) {
-+	/* Can only change image count for raid1 and linear */
-+	if (arg_count(cmd, mirrors_ARG) &&
-+	    !seg_is_mirrored(seg) && !seg_is_linear(seg)) {
- 		log_error("'--mirrors/-m' is not compatible with %s",
- 			  seg->segtype->name);
- 		return 0;
 
 
