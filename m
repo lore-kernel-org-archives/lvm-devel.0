@@ -1,130 +1,210 @@
-From: Ric Wheeler <rwheeler@redhat.com>
-Date: Wed, 05 Oct 2011 07:28:36 -0400
-Subject: [PATCH v3 01/18] fsadm: Add new commands create, list, add and remove
-In-Reply-To: <alpine.LFD.2.00.1110051254330.4423@dhcp-27-109.brq.redhat.com>
-References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-	<1317130971-24173-2-git-send-email-lczerner@redhat.com>
-	<4E8AD4CF.3080609@redhat.com>
-	<alpine.LFD.2.00.1110041336440.4206@dhcp-27-109.brq.redhat.com>
-	<4E8B3DE5.2080803@redhat.com>
-	<alpine.LFD.2.00.1110050932530.4423@dhcp-27-109.brq.redhat.com>
-	<4E8C1E02.9090308@redhat.com>
-	<alpine.LFD.2.00.1110051107420.4423@dhcp-27-109.brq.redhat.com>
-	<20111005102750.GE32692@agk-dp.fab.redhat.com>
-	<alpine.LFD.2.00.1110051254330.4423@dhcp-27-109.brq.redhat.com>
-Message-ID: <4E8C3F64.6060004@redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 07 Oct 2011 15:43:27 +0200
+Subject: [PATCH] Add support for escaping device-mapper names (to be in sync with udev whitelist)
+Message-ID: <4E8F01FF.5050602@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/05/2011 07:21 AM, Lukas Czerner wrote:
-> On Wed, 5 Oct 2011, Alasdair G Kergon wrote:
->
->> On Wed, Oct 05, 2011 at 11:46:45AM +0200, Lukas Czerner wrote:
->>> On Wed, 5 Oct 2011, Zdenek Kabelac wrote:
->>>> Dne 5.10.2011 10:02, Lukas Czerner napsal(a):
->>>>> On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
->>>>>> Dne 4.10.2011 14:13, Lukas Czerner napsal(a):
->>>>>>> On Tue, 4 Oct 2011, Zdenek Kabelac wrote:
->>
-> Hi Alasdair,
->
->> You both lost me several messages ago!
->>
->> For *changes* to functionality, what I'm looking for is:
->>
->>    Description of how it works today in *all* relevant code paths/option
->> combinations/invocation methods;
->>
->>    Description/explanation of how it will work *after* the change has been made
->> in all the same cases as now plus any new ones
->>
->> Explanation of/justification for the difference.
->>
->> Currently in lvm:
->>
->>    --yes is meant to mean 'answer yes to all questions'
->> These are generally informative questions telling the user what the tool will do
->> and seeking confirmation.  On its own, they should not be dangerous or risk
->> corruption.  Example: removing an LV that is active but not currently being used.
->> The idea of such questions is to point out to the user the actual consequences
->> of the command to help to make sure they understand what will happen.
->>
->>    --force is meant to mean 'permit operations that might not always be wise but
->> sometimes do need to be done - assume the user knows what they are doing'.
->> Normally a warning of what will happen is issued and confirmation is required,
->> but --yes can be used to avoid that confirmation.
-> Do you mean --force in the last sentence ?
->
->> For dangerous things that wouldn't normally make sense but occasionally can be
->> justified, like destroying PVs while they are in (inactive) VGs, --force can be
->> required to be repeated twice.
->>
->>
->> Now, let's try to understand:
->>    How these options are currently used in fsadm-related tools;
->>    What's good/bad here and perhaps ought to change.
->>
->> Alasdair
->>
-> The first misunderstanding was the use of -f in lvm toos. Because I can
-> not see -y|--yes in the documentation I simply used force for not asking
-> questions about active volumes to be removed. This can be fixed, if '-y'
-> really works.
->
-> The other is, that using -y option to answer yes to umount mounted file
-> system to be checked is ok, but then running fsck with that '-y' option
-> does not make sense and it is also dangerous. But Zdenek is convinced
-> that it has to stay there (I say it is a bug).
+This patch restrict device names used in device-mapper to comply
+with udev whitelist. If not whitelisted, we use an escape mechanism
+that udev accepts - that is \xNN where NN is a hex value of the
+character.
 
-fsck should *never* be run on a mounted file system. If that is what you are 
-saying happens, that is 100% a bug and will cause data loss.
+(Related rhbz #736486, #740575)
 
->
-> And lastly, the problem with using --force to skip the fsck before
-> attempt to resize the file system. Using force in my opinion does not
-> imply skipping fsck, and I believe that is how it is implemented in
-> lvresize as well, where you have to use "--nofsck" (which is broken btw).
->
-> I believe that fscking file system before the resize is the right thing
-> to do and I do not see any reason to allow it to be overridden in fsadm,
-> although we probably should check for 'last mount' and 'last check' fs
-> attributes to see if it was checked after the last mount and fsck it
-> otherwise.
+Peter
+---
+ libdm/ioctl/libdm-iface.c   |    7 ++++
+ libdm/ioctl/libdm-targets.h |    1 +
+ libdm/libdevmapper.h        |    1 +
+ libdm/libdm-common.c        |   67 +++++++++++++++++++++++++++++++++++++++++--
+ tools/dmsetup.c             |   11 ++++++-
+ 5 files changed, 82 insertions(+), 5 deletions(-)
 
-We should definitely follow the rules of the file system for when it is safe to 
-resize. Having a clean file system verified by fsck or the checks you mention 
-would both be fine, over riding those checks is not.
-
-I think in general our tools should "do the right thing" and fall back to having 
-a human do manual fsck checks and so on. Running fsck in automatic "yes" mode in 
-a script seems quite iffy to me.
->
-> Generally the problem is that we could not agree on almost anything and
-> due to 'it stays as it is, deal with it' altitude it seems to be that
-> even the discussion is not allowed.
->
-> Honestly, when I started to poke the fsadm I quickly realized that if I
-> am going to improve the functionality in the bigger scale, it will be
-> more and more painful to do this in Bash. So maybe it will be easier for
-> both sides to just forget about fsadm and make a separate project for
-> example in Python. Because after all I would like this tool to be able
-> to manage btrfs as well someday and since that does not have anything to
-> do with lvm, I fear that it will be a major problem to get this into
-> upstream fsadm. So what people think ?
->
-> Thanks!
-> -Lukas
-
-If we do need to expand beyond the boundaries of fsadm, that is fine with me. I 
-think that the goal should be to present a pluggable & flexible user command 
-that will work for all local file systems including btrfs so we should not 
-require lvm to be there.
-
-thanks!
-
-ric
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index aab6305..4565266 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -835,6 +835,13 @@ int dm_task_retry_remove(struct dm_task *dmt)
+ 	return 1;
+ }
+ 
++int dm_task_name_escape(struct dm_task *dmt)
++{
++	dmt->name_escape = 1;
++
++	return 1;
++}
++
+ int dm_task_query_inactive_table(struct dm_task *dmt)
+ {
+ 	dmt->query_inactive_table = 1;
+diff --git a/libdm/ioctl/libdm-targets.h b/libdm/ioctl/libdm-targets.h
+index ca08fe8..46c5e88 100644
+--- a/libdm/ioctl/libdm-targets.h
++++ b/libdm/ioctl/libdm-targets.h
+@@ -64,6 +64,7 @@ struct dm_task {
+ 	int new_uuid;
+ 	int secure_data;
+ 	int retry_remove;
++	int name_escape;
+ 	int enable_checks;
+ 
+ 	char *uuid;
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index fdf8943..ae2803e 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -192,6 +192,7 @@ int dm_task_query_inactive_table(struct dm_task *dmt);
+ int dm_task_suppress_identical_reload(struct dm_task *dmt);
+ int dm_task_secure_data(struct dm_task *dmt);
+ int dm_task_retry_remove(struct dm_task *dmt);
++int dm_task_name_escape(struct dm_task *dmt);
+ 
+ /*
+  * Enable checks for common mistakes such as issuing ioctls in an unsafe order.
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 23539d7..22a3d32 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -277,11 +277,62 @@ static char *_find_dm_name_of_device(dev_t st_rdev)
+ 	return new_name;
+ }
+ 
++static int _is_whitelisted_char(char c)
++{
++	/*
++	 * Actually, DM supports any character in a device name.
++	 * This whitelist is just for proper integration with udev.
++	 */
++        if ((c >= '0' && c <= '9') ||
++            (c >= 'A' && c <= 'Z') ||
++            (c >= 'a' && c <= 'z') ||
++            strchr("#+-.:=@_", c) != NULL)
++                return 1;
++
++        return 0;
++}
++
++/*
++ * Encode all characters in the input string which are not on a whitelist
++ * with '\xNN' format where NN is the hex value of the character.
++ */
++static int _escape_dev_name(const char *str, char *str_enc, size_t len)
++{
++	size_t i, j;
++
++	if (str == NULL || str_enc == NULL)
++		return 0;
++
++	for (i = 0, j = 0; str[i] != '\0'; i++) {
++		if (str[i] == '\\' || !_is_whitelisted_char(str[i])) {
++			if (len - j < 4)
++				goto error;
++			sprintf(&str_enc[j], "\\x%02x", (unsigned char) str[i]);
++			j+=4;
++		} else {
++			if (len - j < 1)
++				goto error;
++			str_enc[j] = str[i];
++			j++;
++		}
++	}
++
++	if (len - j < 1)
++		goto error;
++	str_enc[j] = '\0';
++
++	return 1;
++error:
++	log_error("Escaped name too long for device name %s", str);
++	return 0;
++}
++
+ int dm_task_set_name(struct dm_task *dmt, const char *name)
+ {
+ 	char *pos;
+ 	char *new_name = NULL;
+ 	char path[PATH_MAX];
++	char esc_name[DM_NAME_LEN];
+ 	struct stat st1, st2;
+ 
+ 	dm_free(dmt->dev_name);
+@@ -330,9 +381,19 @@ int dm_task_set_name(struct dm_task *dmt, const char *name)
+ 
+ 	if (new_name)
+ 		dmt->dev_name = new_name;
+-	else if (!(dmt->dev_name = dm_strdup(name))) {
+-		log_error("dm_task_set_name: strdup(%s) failed", name);
+-		return 0;
++	else {
++		if (dmt->name_escape) {
++			if (!_escape_dev_name(name, esc_name, sizeof(esc_name))) {
++				log_error("Failed to encode device name %s", name);
++				return 0;
++			}
++			name = esc_name;
++		}
++
++		if (!(dmt->dev_name = dm_strdup(name))) {
++			log_error("dm_task_set_name: strdup(%s) failed", name);
++			return 0;
++		}
+ 	}
+ 
+ 	return 1;
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index f35c8a5..41637f5 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -130,6 +130,7 @@ enum {
+ 	MINOR_ARG,
+ 	MODE_ARG,
+ 	NAMEPREFIXES_ARG,
++	NONAMEESCAPE_ARG,
+ 	NOFLUSH_ARG,
+ 	NOHEADINGS_ARG,
+ 	NOLOCKFS_ARG,
+@@ -608,6 +609,9 @@ static int _create(CMD_ARGS)
+ 	if (!(dmt = dm_task_create(DM_DEVICE_CREATE)))
+ 		return 0;
+ 
++	if (!_switches[NONAMEESCAPE_ARG])
++		dm_task_name_escape(dmt);
++
+ 	if (!dm_task_set_name(dmt, argv[1]))
+ 		goto out;
+ 
+@@ -2806,8 +2810,8 @@ static void _usage(FILE *out)
+ 
+ 	fprintf(out, "Usage:\n\n");
+ 	fprintf(out, "dmsetup [--version] [-h|--help [-c|-C|--columns]]\n"
+-		"        [--checks] [-v|--verbose [-v|--verbose ...]]\n"
+-		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
++		"        [--checks] [-v|--verbose [-v|--verbose ...]] [-r|--readonly]\n"
++		"        [--nonameescape] [--noopencount] [--nolockfs] [--inactive]\n"
+ 		"        [--udevcookie [cookie]] [--noudevrules] [--noudevsync] [--verifyudev]\n"
+ 		"        [-y|--yes] [--readahead [+]<sectors>|auto|none] [--retry]\n"
+ 		"        [-c|-C|--columns] [-o <fields>] [-O|--sort <sort_fields>]\n"
+@@ -3172,6 +3176,7 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
+ 		{"minor", 1, &ind, MINOR_ARG},
+ 		{"mode", 1, &ind, MODE_ARG},
+ 		{"nameprefixes", 0, &ind, NAMEPREFIXES_ARG},
++		{"nonameescape", 0, &ind, NONAMEESCAPE_ARG},
+ 		{"noflush", 0, &ind, NOFLUSH_ARG},
+ 		{"noheadings", 0, &ind, NOHEADINGS_ARG},
+ 		{"nolockfs", 0, &ind, NOLOCKFS_ARG},
+@@ -3339,6 +3344,8 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
+ 			_switches[INACTIVE_ARG]++;
+ 		if ((ind == NAMEPREFIXES_ARG))
+ 			_switches[NAMEPREFIXES_ARG]++;
++		if ((ind == NONAMEESCAPE_ARG))
++			_switches[NONAMEESCAPE_ARG]++;
+ 		if ((ind == NOFLUSH_ARG))
+ 			_switches[NOFLUSH_ARG]++;
+ 		if ((ind == NOHEADINGS_ARG))
 
 
