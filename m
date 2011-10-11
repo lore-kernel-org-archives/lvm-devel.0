@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Oct 2011 09:23:48 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20111011092348.8624.qmail@sourceware.org>
+Date: 11 Oct 2011 09:26:04 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20111011092604.10366.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,86 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-11 09:23:48
+Changes by:	zkabelac at sourceware.org	2011-10-11 09:26:04
 
 Modified files:
+	.              : WHATS_NEW 
 	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Add FIXMEs for init_test
+	Use barrier instead of mutex
 	
-	Usage of thread unprotected init_test is not correct and needs probably lvm lock
-	since it part of lvm library. Current implementation may probably fail with
-	test mode and actually create something unexpectedly (and vice versa).
+	Barrier is supposed to be used in situation like this
+	and replace tricky mutex usage, where mutex has been unlocked
+	by a different thread than the locking thread.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.111&r2=1.112
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2158&r2=1.2159
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.112&r2=1.113
 
---- LVM2/daemons/clvmd/clvmd.c	2011/10/11 09:18:49	1.111
-+++ LVM2/daemons/clvmd/clvmd.c	2011/10/11 09:23:48	1.112
-@@ -1514,9 +1514,9 @@
- 
- 	if (replyargs != NULL) {
- 		/* Run the command */
--		status =
--		    do_command(NULL, msg, msglen, &replyargs, buflen,
--			       &replylen);
-+		/* FIXME: usage of init_test() is unprotected */
-+		status = do_command(NULL, msg, msglen, &replyargs,
-+				    buflen, &replylen);
- 	} else {
- 		status = ENOMEM;
+--- LVM2/WHATS_NEW	2011/10/11 09:20:17	1.2158
++++ LVM2/WHATS_NEW	2011/10/11 09:26:04	1.2159
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Use pthread_barrier to synchronize clvmd threads at startup.
+   Limit clvmd's thread size to 128KiB.
+   Reduce default preallocated stack size to 64KiB.
+   Add check for access through NULL pointer when refresh_filter() fails.
+--- LVM2/daemons/clvmd/clvmd.c	2011/10/11 09:23:48	1.112
++++ LVM2/daemons/clvmd/clvmd.c	2011/10/11 09:26:04	1.113
+@@ -89,7 +89,7 @@
+ static pthread_attr_t stack_attr;
+ static pthread_mutex_t lvm_thread_mutex;
+ static pthread_cond_t lvm_thread_cond;
+-static pthread_mutex_t lvm_start_mutex;
++static pthread_barrier_t lvm_start_barrier;
+ static struct dm_list lvm_cmd_head;
+ static volatile sig_atomic_t quit = 0;
+ static volatile sig_atomic_t reread_config = 0;
+@@ -505,7 +505,7 @@
  	}
-@@ -1651,6 +1651,7 @@
- 	/* Loop around doing PRE and POST functions until the client goes away */
- 	while (!client->bits.localsock.finished) {
- 		/* Execute the code */
-+		/* FIXME: usage of init_test() is unprotected as in do_command() */
- 		status = do_pre_command(client);
+ 	pthread_mutex_init(&lvm_thread_mutex, NULL);
+ 	pthread_cond_init(&lvm_thread_cond, NULL);
+-	pthread_mutex_init(&lvm_start_mutex, NULL);
++	pthread_barrier_init(&lvm_start_barrier, NULL, 2);
+ 	init_lvhash();
  
- 		if (status)
-@@ -1733,6 +1734,7 @@
- 	if (replybuf == NULL)
- 		return -1;
+ 	/* Start the cluster interface */
+@@ -584,9 +584,11 @@
+ 	DEBUGLOG("starting LVM thread\n");
  
-+	/* FIXME: usage of init_test() is unprotected */
- 	status = do_command(client, msg, msglen, &replybuf, buflen, &replylen);
+ 	/* Don't let anyone else to do work until we are started */
+-	pthread_mutex_lock(&lvm_start_mutex);
+ 	pthread_create(&lvm_thread, &stack_attr, lvm_thread_fn, &lvm_params);
  
- 	if (status)
++	/* Don't start until the LVM thread is ready */
++	pthread_barrier_wait(&lvm_start_barrier);
++
+ 	/* Tell the rest of the cluster our version number */
+ 	if (clops->cluster_init_completed)
+ 		clops->cluster_init_completed();
+@@ -1633,11 +1635,6 @@
+ 	DEBUGLOG("in sub thread: client = %p\n", client);
+ 	pthread_mutex_lock(&client->bits.localsock.mutex);
+ 
+-	/* Don't start until the LVM thread is ready */
+-	pthread_mutex_lock(&lvm_start_mutex);
+-	pthread_mutex_unlock(&lvm_start_mutex);
+-	DEBUGLOG("Sub thread ready for work.\n");
+-
+ 	/* Ignore SIGUSR1 (handled by master process) but enable
+ 	   SIGUSR2 (kills subthreads) */
+ 	sigemptyset(&ss);
+@@ -2004,7 +2001,8 @@
+ 	init_clvm(lvm_params->excl_uuid);
+ 
+ 	/* Allow others to get moving */
+-	pthread_mutex_unlock(&lvm_start_mutex);
++	pthread_barrier_wait(&lvm_start_barrier);
++	DEBUGLOG("Sub thread ready for work.\n");
+ 
+ 	/* Now wait for some actual work */
+ 	while (!quit) {
 
 
