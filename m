@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Oct 2011 09:09:02 -0000
-Subject: LVM2 ./WHATS_NEW lib/cache/lvmcache.c lib/comm ...
-Message-ID: <20111011090902.1856.qmail@sourceware.org>
+Date: 11 Oct 2011 09:13:40 -0000
+Subject: LVM2 doc/example.conf.in lib/config/defaults.h
+Message-ID: <20111011091340.4881.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,90 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-11 09:09:01
+Changes by:	zkabelac at sourceware.org	2011-10-11 09:13:39
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/cache      : lvmcache.c 
-	lib/commands   : toolcontext.c 
-	lib/metadata   : metadata.c 
+	doc            : example.conf.in 
+	lib/config     : defaults.h 
 
 Log message:
-	Check for refresh_filter failure
+	Reduce preallocated stack size
 	
-	Properly detect if the filters were refreshed properly.
+	Go with just 64KiB for stack.
 	
-	(May needs few more fixes ??)
+	Closer inspection should be made, whether we actually need to play with
+	settings at all.
 	
-	Filter refresh may fail because it may be out of free file descriptors
-	when clvmd gets overloaded.
+	Since default stack size is 8MB and gets mapped via page locking thus,
+	it seems there is no big help with preallocation of stack to some value.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2155&r2=1.2156
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.468&r2=1.469
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.84&r2=1.85
 
---- LVM2/WHATS_NEW	2011/10/11 09:05:20	1.2155
-+++ LVM2/WHATS_NEW	2011/10/11 09:09:00	1.2156
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Add check for access through NULL pointer when refresh_filter() fails.
-   Use pthread condition for SINGLENODE lock implementation.
-   Improve backtrace reporting for some dev_manager_ functions.
-   Change message severity to log_warn when symlink creation fails.
---- LVM2/lib/cache/lvmcache.c	2011/09/01 10:25:22	1.118
-+++ LVM2/lib/cache/lvmcache.c	2011/10/11 09:09:00	1.119
-@@ -597,12 +597,10 @@
- 		goto out;
- 	}
+--- LVM2/doc/example.conf.in	2011/10/04 20:49:24	1.33
++++ LVM2/doc/example.conf.in	2011/10/11 09:13:39	1.34
+@@ -481,7 +481,8 @@
+     missing_stripe_filler = "error"
  
--	if (full_scan == 2 && !cmd->filter->use_count && !refresh_filters(cmd)) {
--		log_error("refresh filters failed");
--		goto out;
--	}
-+	if (full_scan == 2 && (cmd->filter && !cmd->filter->use_count) && !refresh_filters(cmd))
-+		goto_out;
+     # How much stack (in KB) to reserve for use while devices suspended
+-    reserved_stack = 256
++    # Prior to version 2.02.89 this used to be set to 256KB
++    reserved_stack = 64
  
--	if (!(iter = dev_iter_create(cmd->filter, (full_scan == 2) ? 1 : 0))) {
-+	if (!cmd->filter || !(iter = dev_iter_create(cmd->filter, (full_scan == 2) ? 1 : 0))) {
- 		log_error("dev_iter creation failed");
- 		goto out;
- 	}
---- LVM2/lib/commands/toolcontext.c	2011/09/22 17:39:57	1.137
-+++ LVM2/lib/commands/toolcontext.c	2011/10/11 09:09:00	1.138
-@@ -786,7 +786,7 @@
- 	cmd->dump_filter = 0;
- 
- 	if (!(f3 = _init_filter_components(cmd)))
--		return 0;
-+		return_0;
- 
- 	init_ignore_suspended_devices(find_config_tree_int(cmd,
- 	    "devices/ignore_suspended_devices", DEFAULT_IGNORE_SUSPENDED_DEVICES));
-@@ -1402,7 +1402,8 @@
- 		cmd->filter = NULL;
- 	}
- 
--	r = _init_filters(cmd, 0);
-+	if (!(r = _init_filters(cmd, 0)))
-+                stack;
- 
- 	/*
- 	 * During repair code must not reset suspended flag.
---- LVM2/lib/metadata/metadata.c	2011/09/27 17:09:43	1.468
-+++ LVM2/lib/metadata/metadata.c	2011/10/11 09:09:00	1.469
-@@ -1373,7 +1373,9 @@
- 	/* Is there an md superblock here? */
- 	/* FIXME: still possible issues here - rescan cache? */
- 	if (!dev && md_filtering()) {
--		refresh_filters(cmd);
-+		if (!refresh_filters(cmd))
-+			goto_bad;
-+
- 		init_md_filtering(0);
- 		dev = dev_cache_get(name, cmd->filter);
- 		init_md_filtering(1);
+     # How much memory (in KB) to reserve for use while devices suspended
+     reserved_memory = 8192
+--- LVM2/lib/config/defaults.h	2011/09/22 17:39:57	1.84
++++ LVM2/lib/config/defaults.h	2011/10/11 09:13:39	1.85
+@@ -116,7 +116,7 @@
+ #ifdef DEVMAPPER_SUPPORT
+ #  define DEFAULT_ACTIVATION 1
+ #  define DEFAULT_RESERVED_MEMORY 8192
+-#  define DEFAULT_RESERVED_STACK 256
++#  define DEFAULT_RESERVED_STACK 64 /* KB */
+ #  define DEFAULT_PROCESS_PRIORITY -18
+ #else
+ #  define DEFAULT_ACTIVATION 0
 
 
