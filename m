@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Oct 2011 08:51:57 -0000
-Subject: LVM2/lib/thin thin.c
-Message-ID: <20111011085157.27379.qmail@sourceware.org>
+Date: 11 Oct 2011 08:54:02 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20111011085402.28190.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-11 08:51:56
+Changes by:	zkabelac at sourceware.org	2011-10-11 08:54:02
 
 Modified files:
-	lib/thin       : thin.c 
+	lib/activate   : dev_manager.c 
 
 Log message:
-	Reindent some thin functions
+	Skip r assignment
+	
+	Cosmetic, since r is already 0 for the error path, no need to assign it there,
+	and r is assigned to 1 after switch command.
+	Also makes the code more readable.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.237&r2=1.238
 
---- LVM2/lib/thin/thin.c	2011/10/06 11:06:36	1.15
-+++ LVM2/lib/thin/thin.c	2011/10/11 08:51:56	1.16
-@@ -43,8 +43,9 @@
- 	return seg->segtype->name;
- }
+--- LVM2/lib/activate/dev_manager.c	2011/10/06 14:45:41	1.237
++++ LVM2/lib/activate/dev_manager.c	2011/10/11 08:54:01	1.238
+@@ -1882,9 +1882,8 @@
+ 	case DEACTIVATE:
+ 		if (retry_deactivation())
+ 			dm_tree_retry_remove(root);
+- 		/* Deactivate LV and all devices it references that nothing else has open. */
+-		r = dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!r)
++		/* Deactivate LV and all devices it references that nothing else has open. */
++		if (!dm_tree_deactivate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 			goto_out;
+ 		if (!_remove_lv_symlinks(dm, root))
+ 			log_error("Failed to remove all device symlinks associated with %s.", lv->name);
+@@ -1905,16 +1904,14 @@
+ 			goto_out;
  
--static int _thin_pool_text_import(struct lv_segment *seg, const struct dm_config_node *sn,
--			struct dm_hash_table *pv_hash __attribute__((unused)))
-+static int _thin_pool_text_import(struct lv_segment *seg,
-+				  const struct dm_config_node *sn,
-+				  struct dm_hash_table *pv_hash __attribute__((unused)))
- {
- 	const char *lv_name;
- 	struct logical_volume *pool_data_lv, *pool_metadata_lv;
-@@ -113,13 +114,13 @@
+ 		/* Preload any devices required before any suspensions */
+-		r = dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-		if (!r)
++		if (!dm_tree_preload_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 			goto_out;
  
- #ifdef DEVMAPPER_SUPPORT
- static int _thin_pool_add_target_line(struct dev_manager *dm,
--				 struct dm_pool *mem __attribute__((unused)),
--				 struct cmd_context *cmd __attribute__((unused)),
--				 void **target_state __attribute__((unused)),
--				 struct lv_segment *seg,
--				 const struct lv_activate_opts *laopts __attribute__((unused)),
--				 struct dm_tree_node *node, uint64_t len,
--				 uint32_t *pvmove_mirror_count __attribute__((unused)))
-+				      struct dm_pool *mem __attribute__((unused)),
-+				      struct cmd_context *cmd __attribute__((unused)),
-+				      void **target_state __attribute__((unused)),
-+				      struct lv_segment *seg,
-+				      const struct lv_activate_opts *laopts __attribute__((unused)),
-+				      struct dm_tree_node *node, uint64_t len,
-+				      uint32_t *pvmove_mirror_count __attribute__((unused)))
- {
- 	char *metadata_dlid, *pool_dlid;
+ 		if (dm_tree_node_size_changed(root))
+ 			dm->flush_required = 1;
  
-@@ -147,8 +148,9 @@
- 	return seg->segtype->name;
- }
- 
--static int _thin_text_import(struct lv_segment *seg, const struct dm_config_node *sn,
--			struct dm_hash_table *pv_hash __attribute__((unused)))
-+static int _thin_text_import(struct lv_segment *seg,
-+			     const struct dm_config_node *sn,
-+			     struct dm_hash_table *pv_hash __attribute__((unused)))
- {
- 	const char *lv_name;
- 	struct logical_volume *pool_lv;
+ 		if (action == ACTIVATE) {
+-			r = dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1);
+-			if (!r)
++			if (!dm_tree_activate_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
+ 				goto_out;
+ 			if (!_create_lv_symlinks(dm, root)) {
+ 				log_error("Failed to create symlinks for %s.", lv->name);
 
 
