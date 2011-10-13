@@ -1,72 +1,75 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 13 Oct 2011 14:23:15 -0500
-Subject: [PATCH] LVM: Update stale libdm/misc/dm-log-userspace.h file
-Message-ID: <1318533795.28595.11.camel@f14.redhat.com>
+Date: Thu, 13 Oct 2011 14:24:39 -0500
+Subject: [PATCH] LVM cmirrord: Pass device name to kernel in CTR operation
+Message-ID: <1318533879.28595.13.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-libdm/misc/dm-log-userspace.h has become stale - update it.
+Make cmirrord return device information to kernel in CTR so they can be registered
 
+Also, update dm-log-userspace to the latest upstream version.
+
+Index: LVM2/daemons/cmirrord/functions.c
+===================================================================
+--- LVM2.orig/daemons/cmirrord/functions.c
++++ LVM2/daemons/cmirrord/functions.c
+@@ -597,7 +597,10 @@ static int clog_ctr(struct dm_ulog_reque
+ 	/* We join the CPG when we resume */
+ 
+ 	/* No returning data */
+-	rq->data_size = 0;
++	if ((rq->version > 1) && !strcmp(argv[0], "clustered-disk"))
++		rq->data_size = sprintf(rq->data, "%s", argv[1]) + 1;
++	else
++		rq->data_size = 0;
+ 
+ 	if (r) {
+ 		LOG_ERROR("Failed to create cluster log (%s)", rq->uuid);
 Index: LVM2/libdm/misc/dm-log-userspace.h
 ===================================================================
 --- LVM2.orig/libdm/misc/dm-log-userspace.h
 +++ LVM2/libdm/misc/dm-log-userspace.h
-@@ -7,7 +7,7 @@
- #ifndef __DM_LOG_USERSPACE_H__
- #define __DM_LOG_USERSPACE_H__
- 
--#include "dm-ioctl.h" /* For DM_UUID_LEN */
-+#include <linux/dm-ioctl.h> /* For DM_UUID_LEN */
- 
- /*
-  * The device-mapper userspace log module consists of a kernel component and
-@@ -363,13 +363,23 @@
-  * various request types above.  The remaining 24-bits are currently
-  * set to zero and are reserved for future use and compatibility concerns.
+@@ -52,15 +52,20 @@
+  * Payload-to-userspace:
+  *	A single string containing all the argv arguments separated by ' 's
+  * Payload-to-kernel:
+- *	None.  ('data_size' in the dm_ulog_request struct should be 0.)
++ *	The name of the device that is used as the backing store for the log
++ *      data.  'dm_get_device' will be called on this device.  ('dm_put_device'
++ *      will be called on this device automatically after calling DM_ULOG_DTR.)
++ *      If there is no device needed for log data, 'data_size' in the
++ *      dm_ulog_request struct should be 0.
   *
-- * User-space should always use DM_ULOG_REQUEST_TYPE to aquire the
-+ * User-space should always use DM_ULOG_REQUEST_TYPE to acquire the
-  * request type from the 'request_type' field to maintain forward compatibility.
+  * The UUID contained in the dm_ulog_request structure is the reference that
+  * will be used by all request types to a specific log.  The constructor must
+- * record this assotiation with instance created.
++ * record this assotiation with the instance created.
+  *
+  * When the request has been processed, user-space must return the
+- * dm_ulog_request to the kernel - setting the 'error' field and
+- * 'data_size' appropriately.
++ * dm_ulog_request to the kernel - setting the 'error' field, filling the
++ * data field with the log device if necessary, and setting 'data_size'
++ * appropriately.
   */
- #define DM_ULOG_REQUEST_MASK 0xFF
- #define DM_ULOG_REQUEST_TYPE(request_type) \
- 	(DM_ULOG_REQUEST_MASK & (request_type))
+ #define DM_ULOG_CTR                    1
  
-+/*
-+ * DM_ULOG_REQUEST_VERSION is incremented when there is a
-+ * change to the way information is passed between kernel
-+ * and userspace.  This could be a structure change of
-+ * dm_ulog_request or a change in the way requests are
-+ * issued/handled.  Changes are outlined here:
-+ *	version 1:  Initial implementation
-+ */
-+#define DM_ULOG_REQUEST_VERSION 1
-+
+@@ -377,8 +382,11 @@
+  * dm_ulog_request or a change in the way requests are
+  * issued/handled.  Changes are outlined here:
+  *	version 1:  Initial implementation
++ *	version 2:  DM_ULOG_CTR allowed to return a string containing a
++ *	            device name that is to be registered with DM via
++ *	            'dm_get_device'.
+  */
+-#define DM_ULOG_REQUEST_VERSION 1
++#define DM_ULOG_REQUEST_VERSION 2
+ 
  struct dm_ulog_request {
  	/*
- 	 * The local unique identifier (luid) and the universally unique
-@@ -383,15 +393,16 @@ struct dm_ulog_request {
- 	 */
- 	uint64_t luid;
- 	char uuid[DM_UUID_LEN];
--	char padding[7];        /* Padding because DM_UUID_LEN = 129 */
-+	char padding[3];        /* Padding because DM_UUID_LEN = 129 */
- 
-+	uint32_t version;       /* See DM_ULOG_REQUEST_VERSION */
- 	int32_t error;          /* Used to report back processing errors */
- 
- 	uint32_t seq;           /* Sequence number for request */
- 	uint32_t request_type;  /* DM_ULOG_* defined above */
- 	uint32_t data_size;     /* How much data (not including this struct) */
- 
--	char data[];
-+	char data[0];
- };
- 
- #endif /* __DM_LOG_USERSPACE_H__ */
 
 
 
