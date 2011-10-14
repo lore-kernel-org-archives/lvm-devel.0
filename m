@@ -1,105 +1,117 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 05 Oct 2011 15:13:19 -0500
-Subject: [PATCH] Fix vgsplit for mirrored-log mirrors
-Message-ID: <1317845599.12903.8.camel@f14.redhat.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 14 Oct 2011 16:59:57 +0200
+Subject: [PATCH 6/6][devname mangling] Add support for unmangling devnames in "dmsetup ls/deps"
+Message-ID: <4E984E6D.8030903@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch fixes the following problem reported by "ben <benscott@nwlink.com>".
+Well, for dmsetup ls/deps, I have no better idea, just to add --unmanglename
+switch (I assume it won't a be a good idea to change the existing output format).
+So if --unmanglename is define, the name will be unmangled in the output, if not,
+it will be kept as it is in the mangled form.
 
-vgsplit fails with mirrored mirror log
+Peter
+---
+ tools/dmsetup.c |   27 ++++++++++++++++++++++++---
+ 1 files changed, 24 insertions(+), 3 deletions(-)
 
-#lvs --all -o lv_name,lv_attr,devices
- LV                       Attr   Devices                                                       
- MyMirror                 mwi--
- [MyMirror_mimage_0]      Iwi--- /dev/sdq(0)                                                   
- [MyMirror_mimage_1]      Iwi--- /dev/sdo(0)                                                   
- [MyMirror_mimage_2]      Iwi--- /dev/sdi(0)                                                   
- [MyMirror_mlog]          mwi---            
- [MyMirror_mlog_mimage_0] Iwi--- /dev/sds(0)                                                   
- [MyMirror_mlog_mimage_1] Iwi--- /dev/sde(0)                                                   
-
-#vgsplit -v "TestA" "TestB" "/dev/sdq" "/dev/sdo" "/dev/sdi" "/dev/sds" 
-"/dev/sde"
-   Checking for volume group "TestA"
-   Checking for new volume group "TestB"
-   Archiving volume group "TestA" metadata (seqno 213).
- Can't split mirror MyMirror between two Volume Groups
-
-Index: LVM2/tools/vgsplit.c
-===================================================================
---- LVM2.orig/tools/vgsplit.c
-+++ LVM2/tools/vgsplit.c
-@@ -163,7 +163,7 @@ static int _move_mirrors(struct volume_g
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 0339ceb..49d8ebb 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -152,6 +152,7 @@ enum {
+ 	TREE_ARG,
+ 	UID_ARG,
+ 	UNBUFFERED_ARG,
++	UNMANGLENAME_ARG,
+ 	UNQUOTED_ARG,
+ 	UUID_ARG,
+ 	VERBOSE_ARG,
+@@ -1786,6 +1787,7 @@ static int _deps(CMD_ARGS)
+ 	struct dm_task *dmt;
+ 	struct dm_info info;
+ 	char *name = NULL;
++	char buf[PATH_MAX];
+ 
+ 	if (names)
+ 		name = names->name;
+@@ -1825,6 +1827,10 @@ static int _deps(CMD_ARGS)
+ 		goto out;
+ 	}
+ 
++	if (_switches[UNMANGLENAME_ARG] &&
++	    dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX))
++		name = buf;
++
+ 	if (_switches[VERBOSE_ARG])
+ 		_display_info(dmt);
+ 
+@@ -1850,7 +1856,14 @@ static int _deps(CMD_ARGS)
+ 
+ static int _display_name(CMD_ARGS)
  {
- 	struct dm_list *lvh, *lvht;
- 	struct logical_volume *lv;
--	struct lv_segment *seg;
-+	struct lv_segment *seg, *log_seg;
- 	unsigned s, seg_in, log_in;
- 
- 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
-@@ -179,7 +179,20 @@ static int _move_mirrors(struct volume_g
- 			if (_lv_is_in_vg(vg_to, seg_lv(seg, s)))
- 			    seg_in++;
- 
--		log_in = (!seg->log_lv || _lv_is_in_vg(vg_to, seg->log_lv));
-+		log_in = !seg->log_lv;
-+		if (seg->log_lv) {
-+			log_seg = first_seg(seg->log_lv);
-+			if (seg_is_mirrored(log_seg)) {
-+				log_in = 1;
+-	printf("%s\t(%d, %d)\n", names->name,
++	const char *name = names->name;
++	char buf[PATH_MAX];
 +
-+				/* Ensure each log dev is in vg_to */
-+				for (s = 0; s < log_seg->area_count; s++)
-+					log_in = log_in &&
-+						_lv_is_in_vg(vg_to,
-+							     seg_lv(log_seg, s));
-+			} else
-+				log_in = _lv_is_in_vg(vg_to, seg->log_lv);
-+		}
++	if (_switches[UNMANGLENAME_ARG] &&
++	    dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX))
++		name = buf;
++
++	printf("%s\t(%d, %d)\n", name,
+ 	       (int) MAJOR(names->dev), (int) MINOR(names->dev));
  
- 		if ((seg_in && seg_in < seg->area_count) ||
- 		    (seg_in && seg->log_lv && !log_in) ||
-Index: LVM2/test/t-vgsplit-operation.sh
-===================================================================
---- LVM2.orig/test/t-vgsplit-operation.sh
-+++ LVM2/test/t-vgsplit-operation.sh
-@@ -93,6 +93,31 @@ COMM "vgsplit correctly splits mirror LV
- 		fi 
- 		lvremove -f $vg2/$lv1 
- 		vgremove -f $vg2
-+# FIXME: ensure split /doesn't/ work when not all devs of mirror specified
-+
-+COMM "vgsplit correctly splits mirror LV with mirrored log into $i VG ($j args)"
-+		vgcreate -c n $vg1 $dev1 $dev2 $dev3 $dev4
-+		if [ $i = existing ]; then
-+		  vgcreate -c n $vg2 $dev5
-+		fi
-+
-+		lvcreate -l 64 --mirrorlog mirrored -m1 -n $lv1 $vg1 \
-+		    $dev1 $dev2 $dev3 $dev4
-+
-+		vgchange -an $vg1
-+		if [ $j = PV ]; then
-+		  vgsplit $vg1 $vg2 $dev1 $dev2 $dev3 $dev4
-+		else
-+		  vgsplit -n $lv1 $vg1 $vg2
-+		fi
-+		if [ $i = existing ]; then
-+		  check pvlv_counts $vg2 5 1 0
-+		else
-+		  check pvlv_counts $vg2 4 1 0
-+		fi
-+		lvremove -f $vg2/$lv1
-+		vgremove -f $vg2
-+# FIXME: ensure split /doesn't/ work when not all devs of mirror specified
+ 	return 1;
+@@ -2076,6 +2089,7 @@ static void _display_tree_node(struct dm_tree_node *node, unsigned depth,
+ 	const char *name;
+ 	const struct dm_info *info;
+ 	int first_on_line = 0;
++	char buf[PATH_MAX];
  
- COMM "vgsplit correctly splits origin and snapshot LV into $i VG ($j args)" 
- 		vgcreate -c n $vg1 $dev1 $dev2 
-
+ 	/* Sub-tree for targets has 2 more depth */
+ 	if (depth + 2 > MAX_DEPTH)
+@@ -2086,6 +2100,10 @@ static void _display_tree_node(struct dm_tree_node *node, unsigned depth,
+ 	if ((!name || !*name) && !_tree_switches[TR_DEVICE])
+ 		return;
+ 
++	if (_switches[UNMANGLENAME_ARG] &&
++	    dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX))
++		name = buf;
++
+ 	/* Indicate whether there are more nodes at this depth */
+ 	_tree_more[depth] = !last_child;
+ 	_tree_width[depth] = 0;
+@@ -2814,9 +2832,9 @@ static struct command _commands[] = {
+ 	{"reload", "<device> [<table_file>]", 0, 2, 0, _load},
+ 	{"rename", "<device> [--setuuid] <new_name_or_uuid>", 1, 2, 0, _rename},
+ 	{"message", "<device> <sector> <message>", 2, -1, 0, _message},
+-	{"ls", "[--target <target_type>] [--exec <command>] [--tree [-o options]]", 0, 0, 0, _ls},
++	{"ls", "[--target <target_type>] [--exec <command>] [--tree [-o options]] [--unmanglename]", 0, 0, 0, _ls},
+ 	{"info", "[<device>]", 0, -1, 1, _info},
+-	{"deps", "[<device>]", 0, -1, 1, _deps},
++	{"deps", "[<device>] [--unmanglename]", 0, -1, 1, _deps},
+ 	{"status", "[<device>] [--target <target_type>]", 0, -1, 1, _status},
+ 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, -1, 1, _status},
+ 	{"wait", "<device> [<event_nr>]", 0, 2, 0, _wait},
+@@ -3230,6 +3248,7 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
+ 		{"uid", 1, &ind, UID_ARG},
+ 		{"uuid", 1, &ind, UUID_ARG},
+ 		{"unbuffered", 0, &ind, UNBUFFERED_ARG},
++		{"unmanglename", 0, &ind, UNMANGLENAME_ARG},
+ 		{"unquoted", 0, &ind, UNQUOTED_ARG},
+ 		{"verbose", 1, &ind, VERBOSE_ARG},
+ 		{"verifyudev", 0, &ind, VERIFYUDEV_ARG},
+@@ -3387,6 +3406,8 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
+ 			}
+ 			dm_set_default_name_mangle(_int_args[MANGLENAME_ARG]);
+ 		}
++		if ((ind == UNMANGLENAME_ARG))
++			_switches[UNMANGLENAME_ARG]++;
+ 		if ((ind == NAMEPREFIXES_ARG))
+ 			_switches[NAMEPREFIXES_ARG]++;
+ 		if ((ind == NOFLUSH_ARG))
 
 
