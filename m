@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Oct 2011 13:23:49 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c li ...
-Message-ID: <20111014132349.15957.qmail@sourceware.org>
+Date: 14 Oct 2011 13:34:20 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-deptree.c
+Message-ID: <20111014133420.24391.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,96 +10,84 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-14 13:23:48
+Changes by:	zkabelac at sourceware.org	2011-10-14 13:34:19
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c fs.c fs.h 
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Fix lv_info open_count test
+	Use pool for dm_tree allocation
 	
-	When verify_udev_operations was disable, code for stacking fs operation for
-	lvm links was completely disable - but this code was also used for collecting
-	information, that a new node is being created.
-	
-	Add a new flag which is set when a creation of lv symlinks is requested which
-	should restore old behaviour of lv_info function, that has called fs_sync()
-	before quere for open count on device.
+	Using the same pool allocation strategy as we use for vg,
+	so dm_tree structure is part of the pool itself.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2160&r2=1.2161
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.244&r2=1.245
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.h.diff?cvsroot=lvm2&r1=1.17&r2=1.18
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.509&r2=1.510
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
 
---- LVM2/WHATS_NEW	2011/10/11 09:54:39	1.2160
-+++ LVM2/WHATS_NEW	2011/10/14 13:23:47	1.2161
-@@ -1,6 +1,7 @@
- Version 2.02.89 - 
+--- LVM2/WHATS_NEW_DM	2011/10/03 18:28:25	1.509
++++ LVM2/WHATS_NEW_DM	2011/10/14 13:34:19	1.510
+@@ -1,5 +1,6 @@
+ Version 1.02.68 -
  ==================================
--  Simplify code for lvm worker thread in clvmd.
-+  Fix lv_info open_count test for disabled verify_udev_operations (2.02.86).
-+  Simplify code for lvm worker thread in clvmd.                     
-   Use pthread_barrier to synchronize clvmd threads at startup.
-   Limit clvmd's thread size to 128KiB.
-   Reduce default preallocated stack size to 64KiB.
---- LVM2/lib/activate/dev_manager.c	2011/10/11 10:02:28	1.244
-+++ LVM2/lib/activate/dev_manager.c	2011/10/14 13:23:47	1.245
-@@ -1746,8 +1746,10 @@
- 	int r = 1;
++  Allocate dm_tree structure from dm_tree pool.
+   Update debug logging for _resume_node.
+   Add functions to support thin provisioning target (API unstable).
+   Improve libdm-config error path reporting.
+--- LVM2/libdm/libdm-deptree.c	2011/10/06 14:45:42	1.122
++++ LVM2/libdm/libdm-deptree.c	2011/10/14 13:34:19	1.123
+@@ -248,10 +248,14 @@
  
- 	/* Nothing to do if udev fallback is disabled. */
--	if (!dm->cmd->current_settings.udev_fallback)
-+	if (!dm->cmd->current_settings.udev_fallback) {
-+		fs_set_create();
- 		return 1;
-+	}
- 
- 	while ((child = dm_tree_next_child(&handle, root, 0))) {
- 		if (!(lvlayer = dm_tree_node_get_context(child)))
---- LVM2/lib/activate/fs.c	2011/04/08 14:40:19	1.62
-+++ LVM2/lib/activate/fs.c	2011/10/14 13:23:48	1.63
-@@ -32,6 +32,7 @@
-  * Supports to wait for udev device settle only when needed.
-  */
- static uint32_t _fs_cookie = DM_COOKIE_AUTO_CREATE;
-+static int _fs_create = 0;
- 
- static int _mk_dir(const char *dev_dir, const char *vg_name)
+ struct dm_tree *dm_tree_create(void)
  {
-@@ -427,6 +428,8 @@
- 			  fsp->dev, fsp->old_lv_name, fsp->check_udev);
- 		_del_fs_op(fsp);
++	struct dm_pool *dmem;
+ 	struct dm_tree *dtree;
+ 
+-	if (!(dtree = dm_zalloc(sizeof(*dtree)))) {
+-		log_error("dm_tree_create malloc failed");
++	if (!(dmem = dm_pool_create("dtree", 1024)) ||
++	    !(dtree = dm_pool_zalloc(dmem, sizeof(*dtree)))) {
++		log_error("Failed to allocate dtree.");
++		if (dmem)
++			dm_pool_destroy(dmem);
+ 		return NULL;
  	}
-+
-+	_fs_create = 0;
+ 
+@@ -260,17 +264,11 @@
+ 	dm_list_init(&dtree->root.used_by);
+ 	dtree->skip_lockfs = 0;
+ 	dtree->no_flush = 0;
+-
+-	if (!(dtree->mem = dm_pool_create("dtree", 1024))) {
+-		log_error("dtree pool creation failed");
+-		dm_free(dtree);
+-		return NULL;
+-	}
++	dtree->mem = dmem;
+ 
+ 	if (!(dtree->devs = dm_hash_create(8))) {
+ 		log_error("dtree hash creation failed");
+ 		dm_pool_destroy(dtree->mem);
+-		dm_free(dtree);
+ 		return NULL;
+ 	}
+ 
+@@ -278,7 +276,6 @@
+ 		log_error("dtree uuid hash creation failed");
+ 		dm_hash_destroy(dtree->devs);
+ 		dm_pool_destroy(dtree->mem);
+-		dm_free(dtree);
+ 		return NULL;
+ 	}
+ 
+@@ -293,7 +290,6 @@
+ 	dm_hash_destroy(dtree->uuids);
+ 	dm_hash_destroy(dtree->devs);
+ 	dm_pool_destroy(dtree->mem);
+-	dm_free(dtree);
  }
  
- static int _fs_op(fs_op_t type, const char *dev_dir, const char *vg_name,
-@@ -500,7 +503,12 @@
- 	_fs_cookie = cookie;
- }
- 
-+void fs_set_create(void)
-+{
-+	_fs_create = 1;
-+}
-+
- int fs_has_non_delete_ops(void)
- {
--	return _other_fs_ops(FS_DEL);
-+	return _fs_create || _other_fs_ops(FS_DEL);
- }
---- LVM2/lib/activate/fs.h	2011/02/03 01:16:35	1.17
-+++ LVM2/lib/activate/fs.h	2011/10/14 13:23:48	1.18
-@@ -32,6 +32,7 @@
- /* void fs_unlock(void);  moved to activate.h */
- uint32_t fs_get_cookie(void);
- void fs_set_cookie(uint32_t cookie);
-+void fs_set_create(void);
- int fs_has_non_delete_ops(void);
- 
- #endif
+ static int _nodes_are_linked(const struct dm_tree_node *parent,
 
 
