@@ -1,91 +1,83 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 14 Oct 2011 16:58:38 +0200
-Subject: [PATCH 1/6][devname mangling] Move dm_task_set_newname to libdm-common.c
-Message-ID: <4E984E1E.4050700@redhat.com>
+Date: Fri, 14 Oct 2011 16:59:07 +0200
+Subject: [PATCH 2/6][devname mangling] Define string mangle type in libdevmapper and prepare a configure to select default mangling
+Message-ID: <4E984E3B.3040804@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add support for device name mangling (to comply with udev whitelist) patchset.
+Define new dm_string_mangle_t to select the string mangling used.
+Possible values are:
 
-This is a more elaborate proposal of the former patch:
- [lvm-devel][PATCH] Add support for escaping device-mapper names (to be in sync with udev whitelist)
+  DM_STRING_MANGLE_NONE - do nothing, no mangling at all (current behaviour)
+  DM_STRING_MANGLE_HEX - mangle each character not on a whitelist with \xNN
+                         format, NN being a hex value of the character.
+  DM_STRING_MANGLE_AUTO - if \xNN is detected in the string, do not mangle it
+                          again, keep it as it and consider that the string is
+                          already mangled. If we hit a character that is not
+                          on a whitelist, mangle it. If we hit both - so we have
+                          mixed mangled/not mangled part in the string, return
+                          with error.
 
-This patch #1 is just a preparation - the dm_task_set_newname is moved from
-libdm-iface.c to libdm-common.c (where the dm_task_set_name is already). These
-fns will call new functions for setting the name mangling.
+Also, this patch adds a configure option "--with-default-name-mangle" to select
+default operation. Patches using it will follow...
 
 Peter
 ---
- libdm/ioctl/libdm-iface.c |   21 ---------------------
- libdm/libdm-common.c      |   21 +++++++++++++++++++++
- 2 files changed, 21 insertions(+), 21 deletions(-)
+ configure.in         |   14 ++++++++++++++
+ libdm/libdevmapper.h |   13 +++++++++++++
+ 2 files changed, 27 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index aab6305..93cd770 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -745,27 +745,6 @@ int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
- 	return 1;
- }
+diff --git a/configure.in b/configure.in
+index 5275b95..392fb9b 100644
+--- a/configure.in
++++ b/configure.in
+@@ -227,6 +227,20 @@ esac
+ AC_MSG_RESULT(on $ADD_NODE)
+ AC_DEFINE_UNQUOTED([DEFAULT_DM_ADD_NODE], $add_on, [Define default node creation behavior with dmsetup create])
  
--int dm_task_set_newname(struct dm_task *dmt, const char *newname)
--{
--	if (strchr(newname, '/')) {
--		log_error("Name \"%s\" invalid. It contains \"/\".", newname);
--		return 0;
--	}
--
--	if (strlen(newname) >= DM_NAME_LEN) {
--		log_error("Name \"%s\" too long", newname);
--		return 0;
--	}
--
--	if (!(dmt->newname = dm_strdup(newname))) {
--		log_error("dm_task_set_newname: strdup(%s) failed", newname);
--		return 0;
--	}
--	dmt->new_uuid = 0;
--
--	return 1;
--}
--
- int dm_task_set_message(struct dm_task *dmt, const char *message)
- {
- 	if (!(dmt->message = dm_strdup(message))) {
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 23539d7..1237c21 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -338,6 +338,27 @@ int dm_task_set_name(struct dm_task *dmt, const char *name)
- 	return 1;
- }
++AC_MSG_CHECKING(default name mangle)
++AC_ARG_WITH(default-name-mangle,
++	    AC_HELP_STRING([--with-default-name-mangle=MANGLE],
++			   [default name mangle: auto/disabled/hex [[MANGLE=auto]]]),
++	    MANGLE=$withval, MANGLE=auto)
++case "$MANGLE" in
++ auto) mangle=DM_STRING_MANGLE_AUTO;;
++ disabled) mangle=DM_STRING_MANGLE_NONE;;
++ hex) mangle=DM_STRING_MANGLE_HEX;;
++ *) AC_MSG_ERROR([--with-default-name-mangle parameter invalid]);;
++esac
++AC_MSG_RESULT($MANGLE)
++AC_DEFINE_UNQUOTED([DEFAULT_DM_NAME_MANGLE], $mangle, [Define default name mangle behaviour])
++
+ ################################################################################
+ dnl -- LVM1 tool fallback option
+ AC_MSG_CHECKING(whether to enable lvm1 fallback)
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index fdf8943..1b30069 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -250,6 +250,19 @@ int dm_task_run(struct dm_task *dmt);
+ void dm_task_update_nodes(void);
  
-+int dm_task_set_newname(struct dm_task *dmt, const char *newname)
-+{
-+	if (strchr(newname, '/')) {
-+		log_error("Name \"%s\" invalid. It contains \"/\".", newname);
-+		return 0;
-+	}
+ /*
++ * Mangling support
++ *
++ * Character whitelist: 0-9, A-Z, a-z, #+-.:=@_
++ * HEX mangle format: \xNN, NN being the hex value of the character.
++ * (whitelist and format supported by udev)
++*/
++typedef enum {
++	DM_STRING_MANGLE_NONE,	/* do not mangle at all */
++	DM_STRING_MANGLE_AUTO,	/* mangle only if not already mangled with hex, error when mixed */
++	DM_STRING_MANGLE_HEX	/* always mangle with hex encoding, no matter what the input is */
++} dm_string_mangle_t;
 +
-+	if (strlen(newname) >= DM_NAME_LEN) {
-+		log_error("Name \"%s\" too long", newname);
-+		return 0;
-+	}
-+
-+	if (!(dmt->newname = dm_strdup(newname))) {
-+		log_error("dm_task_set_newname: strdup(%s) failed", newname);
-+		return 0;
-+	}
-+	dmt->new_uuid = 0;
-+
-+	return 1;
-+}
-+
- int dm_task_set_uuid(struct dm_task *dmt, const char *uuid)
- {
- 	dm_free(dmt->uuid);
++/*
+  * Configure the device-mapper directory
+  */
+ int dm_set_dev_dir(const char *dir);
 
 
