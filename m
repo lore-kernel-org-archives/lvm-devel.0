@@ -1,38 +1,91 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 14 Oct 2011 14:21:33 -0000
-Subject: LVM2/lib/metadata segtype.h
-Message-ID: <20111014142133.7219.qmail@sourceware.org>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 14 Oct 2011 16:58:38 +0200
+Subject: [PATCH 1/6][devname mangling] Move dm_task_set_newname to libdm-common.c
+Message-ID: <4E984E1E.4050700@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-10-14 14:21:33
+Add support for device name mangling (to comply with udev whitelist) patchset.
 
-Modified files:
-	lib/metadata   : segtype.h 
+This is a more elaborate proposal of the former patch:
+ [lvm-devel][PATCH] Add support for escaping device-mapper names (to be in sync with udev whitelist)
 
-Log message:
-	Use a more correct macro for 'seg_is_linear'
-	
-	It is better to check 'seg->area_count == 1' than '!seg->stripe_size'.
+This patch #1 is just a preparation - the dm_task_set_newname is moved from
+libdm-iface.c to libdm-common.c (where the dm_task_set_name is already). These
+fns will call new functions for setting the name mangling.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/segtype.h.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+Peter
+---
+ libdm/ioctl/libdm-iface.c |   21 ---------------------
+ libdm/libdm-common.c      |   21 +++++++++++++++++++++
+ 2 files changed, 21 insertions(+), 21 deletions(-)
 
---- LVM2/lib/metadata/segtype.h	2011/10/07 14:52:27	1.43
-+++ LVM2/lib/metadata/segtype.h	2011/10/14 14:21:32	1.44
-@@ -47,7 +47,7 @@
- #define seg_is_replicator(seg)	((seg)->segtype->flags & SEG_REPLICATOR ? 1 : 0)
- #define seg_is_replicator_dev(seg) ((seg)->segtype->flags & SEG_REPLICATOR_DEV ? 1 : 0)
- #define seg_is_striped(seg)	((seg)->segtype->flags & SEG_AREAS_STRIPED ? 1 : 0)
--#define     seg_is_linear(seg)  (seg_is_striped(seg) && !(seg)->stripe_size)
-+#define     seg_is_linear(seg)  (seg_is_striped(seg) && ((seg)->area_count == 1))
- #define seg_is_snapshot(seg)	((seg)->segtype->flags & SEG_SNAPSHOT ? 1 : 0)
- #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
- #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index aab6305..93cd770 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -745,27 +745,6 @@ int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
+ 	return 1;
+ }
+ 
+-int dm_task_set_newname(struct dm_task *dmt, const char *newname)
+-{
+-	if (strchr(newname, '/')) {
+-		log_error("Name \"%s\" invalid. It contains \"/\".", newname);
+-		return 0;
+-	}
+-
+-	if (strlen(newname) >= DM_NAME_LEN) {
+-		log_error("Name \"%s\" too long", newname);
+-		return 0;
+-	}
+-
+-	if (!(dmt->newname = dm_strdup(newname))) {
+-		log_error("dm_task_set_newname: strdup(%s) failed", newname);
+-		return 0;
+-	}
+-	dmt->new_uuid = 0;
+-
+-	return 1;
+-}
+-
+ int dm_task_set_message(struct dm_task *dmt, const char *message)
+ {
+ 	if (!(dmt->message = dm_strdup(message))) {
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 23539d7..1237c21 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -338,6 +338,27 @@ int dm_task_set_name(struct dm_task *dmt, const char *name)
+ 	return 1;
+ }
+ 
++int dm_task_set_newname(struct dm_task *dmt, const char *newname)
++{
++	if (strchr(newname, '/')) {
++		log_error("Name \"%s\" invalid. It contains \"/\".", newname);
++		return 0;
++	}
++
++	if (strlen(newname) >= DM_NAME_LEN) {
++		log_error("Name \"%s\" too long", newname);
++		return 0;
++	}
++
++	if (!(dmt->newname = dm_strdup(newname))) {
++		log_error("dm_task_set_newname: strdup(%s) failed", newname);
++		return 0;
++	}
++	dmt->new_uuid = 0;
++
++	return 1;
++}
++
+ int dm_task_set_uuid(struct dm_task *dmt, const char *uuid)
+ {
+ 	dm_free(dmt->uuid);
 
 
