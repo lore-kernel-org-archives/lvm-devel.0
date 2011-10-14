@@ -1,112 +1,157 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 14 Oct 2011 16:59:31 +0200
-Subject: [PATCH 4/6][devname mangling] Add --manglename arg to dmsetup
-Message-ID: <4E984E53.9090403@redhat.com>
+Date: Fri, 14 Oct 2011 16:59:46 +0200
+Subject: [PATCH 5/6][devname mangling] Add support for decoding mangled strings and add a new field for "dmsetup info"
+Message-ID: <4E984E62.90809@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Add --manglename arg to dmsetup to select the name mangling method used
-on devname parameter used throughout all dmsetup commands.
+Add support for decoding mangled string back to a human readable form
+(at least if the character is printable :)), accomplished with a new
+libdemapper helper function "dm_string_mangle_decode".
 
-By default, it's the value set during configure ("auto" by default).
+Use it to decode the "Name" and show also a new "Name (unmangled)" field
+in dmsetup info/dmsetup info -c output. For dmsetup info -c -o, the
+new column name is called "name_unmangled".
 
 Peter
 ---
- tools/dmsetup.c |   30 +++++++++++++++++++++++++++++-
- 1 files changed, 29 insertions(+), 1 deletions(-)
+ libdm/libdevmapper.h |    3 +++
+ libdm/libdm-common.c |   41 +++++++++++++++++++++++++++++++++++++++++
+ tools/dmsetup.c      |   26 ++++++++++++++++++++++++--
+ 3 files changed, 68 insertions(+), 2 deletions(-)
 
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index fb4b2cb..fb6ad22 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -270,6 +270,9 @@ dm_string_mangle_t dm_get_default_name_mangle(void);
+ int dm_task_set_name_mangle(struct dm_task *dmt, dm_string_mangle_t name_mangle);
+ dm_string_mangle_t dm_task_get_name_mangle(struct dm_task *dmt);
+ 
++int dm_string_mangle_decode(dm_string_mangle_t type, const char *mangled_str,
++			    char *buf, size_t buf_len);
++
+ /*
+  * Configure the device-mapper directory
+  */
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index e836661..fe0003d 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -306,6 +306,47 @@ static int _is_whitelisted_char(char c)
+         return 0;
+ }
+ 
++int dm_string_mangle_decode(dm_string_mangle_t type, const char *mangled_str,
++			    char *buf, size_t buf_len)
++{
++	size_t i, j;
++	int code;
++	char str[DM_NAME_LEN];
++
++	if (buf_len < DM_NAME_LEN) {
++		log_error("dm_string_mangle_decode \"%s\": "
++			  "output buffer too small", mangled_str);
++		goto bad;
++	}
++
++	if (type == DM_STRING_MANGLE_NONE) {
++		strcpy(buf, mangled_str);
++		return 1;
++	}
++
++	for (i = 0, j = 0; mangled_str[i]; i++) {
++		if (mangled_str[i] == '\\' && mangled_str[i+1] == 'x') {
++			if (!sscanf(&mangled_str[i+2], "%2x%s", &code, str)) {
++				log_error("Improperly encoded string %s", mangled_str);
++				goto bad;
++			}
++			buf[j] = (unsigned char) code;
++			i+= 3; j++;
++		}
++		else {
++			buf[j] = mangled_str[i];
++			j++;
++		}
++	}
++
++	buf[j] = '\0';
++	return 1;
++
++bad:
++	buf[0] = '\0';
++	return 0;
++}
++
+ /*
+  * Encode all characters in the input string which are not on a whitelist
+  * with '\xNN' format where NN is the hex value of the character.
 diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index f35c8a5..b693143 100644
+index a733dcd..0187a2f 100644
 --- a/tools/dmsetup.c
 +++ b/tools/dmsetup.c
-@@ -126,6 +126,7 @@ enum {
- 	GID_ARG,
- 	HELP_ARG,
- 	INACTIVE_ARG,
-+	MANGLENAME_ARG,
- 	MAJOR_ARG,
- 	MINOR_ARG,
- 	MODE_ARG,
-@@ -1335,6 +1336,7 @@ static int _process_all(const struct command *cmd, int argc, char **argv, int si
- 	int r = 1;
- 	struct dm_names *names;
- 	unsigned next = 0;
-+	dm_string_mangle_t nm;
+@@ -441,13 +441,20 @@ static void _display_info_long(struct dm_task *dmt, struct dm_info *info)
+ {
+ 	const char *uuid;
+ 	uint32_t read_ahead;
++	char buf[PATH_MAX];
++	const char *name;
  
- 	struct dm_task *dmt;
- 
-@@ -1360,6 +1362,14 @@ static int _process_all(const struct command *cmd, int argc, char **argv, int si
- 		goto out;
+ 	if (!info->exists) {
+ 		printf("Device does not exist.\n");
+ 		return;
  	}
  
-+	/*
-+	 * We're iterating over the list of device names acquired
-+	 * directly from kernel. These names are already mangled
-+	 * so disable name mangling termporarily here!
-+	 */
-+	nm = dm_get_default_name_mangle();
-+	dm_set_default_name_mangle(DM_STRING_MANGLE_NONE);
+-	printf("Name:              %s\n", dm_task_get_name(dmt));
++	name = dm_task_get_name(dmt);
++	printf("Name:              %s\n", name);
 +
- 	do {
- 		names = (struct dm_names *)((char *) names + next);
- 		if (!fn(cmd, argc, argv, names, 1))
-@@ -1367,6 +1377,8 @@ static int _process_all(const struct command *cmd, int argc, char **argv, int si
- 		next = names->next;
- 	} while (next);
++	if (!dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX))
++		log_error("Could not unmangle device name");
++	printf("Name (unmangled):  %s\n", buf);
  
-+	dm_set_default_name_mangle(nm);
+ 	printf("State:             %s%s\n",
+ 	       info->suspended ? "SUSPENDED" : "ACTIVE",
+@@ -475,7 +482,7 @@ static void _display_info_long(struct dm_task *dmt, struct dm_info *info)
+ 		printf("Number of targets: %d\n", info->target_count);
+ 
+ 	if ((uuid = dm_task_get_uuid(dmt)) && *uuid)
+-		printf("UUID: %s\n", uuid);
++		printf("UUID:              %s\n", uuid);
+ 
+ 	printf("\n");
+ }
+@@ -2225,6 +2232,20 @@ static int _dm_name_disp(struct dm_report *rh,
+ 	return dm_report_field_string(rh, field, &name);
+ }
+ 
++static int _dm_name_unmangled_disp(struct dm_report *rh,
++				   struct dm_pool *mem __attribute__((unused)),
++				   struct dm_report_field *field, const void *data,
++				   void *private __attribute__((unused)))
++{
++	const char *name = dm_task_get_name((const struct dm_task *) data);
++	char buf[PATH_MAX];
++	const char *p = buf;
 +
-       out:
- 	dm_task_destroy(dmt);
- 	return r;
-@@ -2806,7 +2818,7 @@ static void _usage(FILE *out)
++	dm_string_mangle_decode(DM_STRING_MANGLE_HEX, name, buf, PATH_MAX);
++
++	return dm_report_field_string(rh, field, &p);
++}
++
+ static int _dm_uuid_disp(struct dm_report *rh,
+ 			 struct dm_pool *mem __attribute__((unused)),
+ 			 struct dm_report_field *field,
+@@ -2605,6 +2626,7 @@ static const struct dm_report_object_type _report_types[] = {
+ static const struct dm_report_field_type _report_fields[] = {
+ /* *INDENT-OFF* */
+ FIELD_F(TASK, STR, "Name", 16, dm_name, "name", "Name of mapped device.")
++FIELD_F(TASK, STR, "Name (unmangled)", 18, dm_name_unmangled, "name_unmangled", "Name of mapped device (unmangled).")
+ FIELD_F(TASK, STR, "UUID", 32, dm_uuid, "uuid", "Unique (optional) identifier for mapped device.")
  
- 	fprintf(out, "Usage:\n\n");
- 	fprintf(out, "dmsetup [--version] [-h|--help [-c|-C|--columns]]\n"
--		"        [--checks] [-v|--verbose [-v|--verbose ...]]\n"
-+		"        [--checks] [--manglename <mangle_type>] [-v|--verbose [-v|--verbose ...]]\n"
- 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
- 		"        [--udevcookie [cookie]] [--noudevrules] [--noudevsync] [--verifyudev]\n"
- 		"        [-y|--yes] [--readahead [+]<sectors>|auto|none] [--retry]\n"
-@@ -2816,6 +2828,7 @@ static void _usage(FILE *out)
- 		fprintf(out, "\t%s %s\n", _commands[i].name, _commands[i].help);
- 	fprintf(out, "\n<device> may be device name or -u <uuid> or "
- 		     "-j <major> -m <minor>\n");
-+	fprintf(out, "<mangle_type> is one of 'none', 'auto' and 'hex'.\n");
- 	fprintf(out, "<fields> are comma-separated.  Use 'help -c' for list.\n");
- 	fprintf(out, "Table_file contents may be supplied on stdin.\n");
- 	fprintf(out, "Tree options are: ascii, utf, vt100; compact, inverted, notrunc;\n"
-@@ -3168,6 +3181,7 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
- 		{"gid", 1, &ind, GID_ARG},
- 		{"help", 0, &ind, HELP_ARG},
- 		{"inactive", 0, &ind, INACTIVE_ARG},
-+		{"manglename", 1, &ind, MANGLENAME_ARG},
- 		{"major", 1, &ind, MAJOR_ARG},
- 		{"minor", 1, &ind, MINOR_ARG},
- 		{"mode", 1, &ind, MODE_ARG},
-@@ -3337,6 +3351,20 @@ static int _process_switches(int *argc, char ***argv, const char *dev_dir)
- 		}
- 		if ((ind == INACTIVE_ARG))
- 			_switches[INACTIVE_ARG]++;
-+		if ((ind == MANGLENAME_ARG)) {
-+			_switches[MANGLENAME_ARG]++;
-+			if (!strcasecmp(optarg, "none"))
-+				_int_args[MANGLENAME_ARG] = DM_STRING_MANGLE_NONE;
-+			else if (!strcasecmp(optarg, "auto"))
-+				_int_args[MANGLENAME_ARG] = DM_STRING_MANGLE_AUTO;
-+			else if (!strcasecmp(optarg, "hex"))
-+				_int_args[MANGLENAME_ARG] = DM_STRING_MANGLE_HEX;
-+			else {
-+				log_error("Unknown name mangle type");
-+				return 0;
-+			}
-+			dm_set_default_name_mangle(_int_args[MANGLENAME_ARG]);
-+		}
- 		if ((ind == NAMEPREFIXES_ARG))
- 			_switches[NAMEPREFIXES_ARG]++;
- 		if ((ind == NOFLUSH_ARG))
+ /* FIXME Next one should be INFO */
 
 
