@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 17 Oct 2011 13:15:36 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-deptree.c
-Message-ID: <20111017131536.905.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 17 Oct 2011 14:14:34 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20111017141434.23519.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-10-17 13:15:35
+Changes by:	zkabelac at sourceware.org	2011-10-17 14:14:33
 
 Modified files:
-	.              : WHATS_NEW_DM 
 	libdm          : libdm-deptree.c 
 
 Log message:
-	Fix alignment warning in bitcount calculation for raid segment.
+	Drop old check for transaction_id
+	
+	(revert)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.510&r2=1.511
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.124&r2=1.125
 
---- LVM2/WHATS_NEW_DM	2011/10/14 13:34:19	1.510
-+++ LVM2/WHATS_NEW_DM	2011/10/17 13:15:35	1.511
-@@ -1,5 +1,6 @@
- Version 1.02.68 -
- ==================================
-+  Fix alignment warning in bitcount calculation for raid segment.
-   Allocate dm_tree structure from dm_tree pool.
-   Update debug logging for _resume_node.
-   Add functions to support thin provisioning target (API unstable).
---- LVM2/libdm/libdm-deptree.c	2011/10/14 13:34:19	1.123
-+++ LVM2/libdm/libdm-deptree.c	2011/10/17 13:15:35	1.124
-@@ -1856,7 +1856,7 @@
- 				   uint64_t *seg_start, char *params,
- 				   size_t paramsize)
- {
--	uint32_t i, *tmp;
-+	uint32_t i;
- 	int param_count = 1; /* mandatory 'chunk size'/'stripe size' arg */
- 	int pos = 0;
+--- LVM2/libdm/libdm-deptree.c	2011/10/17 13:15:35	1.124
++++ LVM2/libdm/libdm-deptree.c	2011/10/17 14:14:33	1.125
+@@ -1512,18 +1512,6 @@
  
-@@ -1866,9 +1866,9 @@
- 	if (seg->region_size)
- 		param_count += 2;
+ 			/* Update cached info */
+ 			child->info = newinfo;
+-
+-			/* FIXME: trial version - to avoid use of unsynchronized thin_pool transaction_id */
+-			if (child->props.thin_pool_transaction_id &&
+-			    !_check_thin_pool_transaction_id(child->name, child->info.major,
+-							     child->info.minor,
+-							     child->props.thin_pool_transaction_id)) {
+-				stack;
+-				if (!(dm_tree_deactivate_children(child, uuid_prefix, uuid_prefix_len)))
+-					log_error("Failed to deactivate %s", child->name);
+-				r = 0;
+-				continue;
+-			}
+ 		}
+ 	}
  
--	tmp = (uint32_t *)(&seg->rebuilds); /* rebuilds is 64-bit */
--	param_count += 2 * hweight32(tmp[0]);
--	param_count += 2 * hweight32(tmp[1]);
-+	/* rebuilds is 64-bit */
-+	param_count += 2 * hweight32(seg->rebuilds & 0xFFFFFFFF);
-+	param_count += 2 * hweight32(seg->rebuilds >> 32);
+@@ -2207,18 +2195,6 @@
+ 		 */
+ 		if (child->props.immediate_dev_node)
+ 			update_devs_flag = 1;
+-
+-		/* FIXME: trial version - to avoid use of unsynchronized thin_pool transaction_id */
+-		if (child->props.thin_pool_transaction_id &&
+-		    !_check_thin_pool_transaction_id(child->name, child->info.major,
+-						     child->info.minor,
+-						     child->props.thin_pool_transaction_id)) {
+-			stack;
+-			if (!(dm_tree_deactivate_children(child, uuid_prefix, uuid_prefix_len)))
+-				log_error("Failed to deactivate %s", child->name);
+-			r = 0;
+-			continue;
+-		}
+ 	}
  
- 	if ((seg->type == SEG_RAID1) && seg->stripe_size)
- 		log_error("WARNING: Ignoring RAID1 stripe size");
+ 	handle = NULL;
 
 
