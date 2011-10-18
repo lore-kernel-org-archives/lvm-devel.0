@@ -1,38 +1,40 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Tue, 18 Oct 2011 14:56:00 +0200
-Subject: [PATCH] Avoid recursive calls from dmeventd to itself
-In-Reply-To: <87y5wsq5l9.fsf@aldalome.int.mornfall.net.>
-References: <8739gh3w98.fsf@aldalome.int.mornfall.net.>
-	<20110901194235.GA4025@agk-dp.fab.redhat.com>
-	<87ippb2jne.fsf@aldalome.int.mornfall.net.>
-	<87y5wsq5l9.fsf@aldalome.int.mornfall.net.>
-Message-ID: <4E9D7760.6050400@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 18 Oct 2011 16:27:46 -0000
+Subject: LVM2/tools commands.h
+Message-ID: <20111018162746.10662.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/10/2011 04:33 PM, Petr Rockai wrote:
-> Petr Rockai <prockai@redhat.com> writes:
-> 
->>> It might be a little more code, but I'd rather see it a property of the handle
->>> never to perform dmeventd monitoring calls.  We never fixed handle init to 
->>> take multiple settings, so maybe call
->>>   void lvm2_disable_dmeventd_monitoring(void *handle)
->>> after handle initialisation to set DMEVENTD_MONITOR_DISABLED and have that take
->>> precedence over any later attempt to enable monitoring.
->>
->> This sounds like a better option. Now that raises the question why we
->> aren't doing the same thing for memlock_{inc,dec}? We should certainly
->> unify these two things. I'll have a look, and unless I run into a
->> stumbling block will submit a patch to do that.
-> 
-> The patch doing that is attached. Seems straightforward enough to me. We
-> can change the memlock interface to be the same, too.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-10-18 16:27:46
 
-ack.
+Modified files:
+	tools          : commands.h 
 
-Milan
+Log message:
+	Fix bad lvconvert help output.
+	
+	The '--merge' option to lvconvert works on snapshots and RAID1.  The man
+	pages correctly reflect this, but the CLI help output still used the term,
+	'SnapshotLogicalVolume'.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/commands.h.diff?cvsroot=lvm2&r1=1.164&r2=1.165
+
+--- LVM2/tools/commands.h	2011/10/07 14:52:27	1.164
++++ LVM2/tools/commands.h	2011/10/18 16:27:45	1.165
+@@ -137,7 +137,7 @@
+    "\t[-d|--debug]\n"
+    "\t[-h|-?|--help]\n"
+    "\t[-v|--verbose]\n"
+-   "\tSnapshotLogicalVolume[Path]\n",
++   "\tLogicalVolume[Path]\n",
+ 
+    alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
+    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
 
 
