@@ -1,45 +1,38 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 17 Oct 2011 14:36:07 -0000
-Subject: LVM2/libdm/ioctl libdm-iface.c
-Message-ID: <20111017143607.14163.qmail@sourceware.org>
+From: Milan Broz <mbroz@redhat.com>
+Date: Tue, 18 Oct 2011 14:56:00 +0200
+Subject: [PATCH] Avoid recursive calls from dmeventd to itself
+In-Reply-To: <87y5wsq5l9.fsf@aldalome.int.mornfall.net.>
+References: <8739gh3w98.fsf@aldalome.int.mornfall.net.>
+	<20110901194235.GA4025@agk-dp.fab.redhat.com>
+	<87ippb2jne.fsf@aldalome.int.mornfall.net.>
+	<87y5wsq5l9.fsf@aldalome.int.mornfall.net.>
+Message-ID: <4E9D7760.6050400@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-17 14:36:06
+On 10/10/2011 04:33 PM, Petr Rockai wrote:
+> Petr Rockai <prockai@redhat.com> writes:
+> 
+>>> It might be a little more code, but I'd rather see it a property of the handle
+>>> never to perform dmeventd monitoring calls.  We never fixed handle init to 
+>>> take multiple settings, so maybe call
+>>>   void lvm2_disable_dmeventd_monitoring(void *handle)
+>>> after handle initialisation to set DMEVENTD_MONITOR_DISABLED and have that take
+>>> precedence over any later attempt to enable monitoring.
+>>
+>> This sounds like a better option. Now that raises the question why we
+>> aren't doing the same thing for memlock_{inc,dec}? We should certainly
+>> unify these two things. I'll have a look, and unless I run into a
+>> stumbling block will submit a patch to do that.
+> 
+> The patch doing that is attached. Seems straightforward enough to me. We
+> can change the memlock interface to be the same, too.
 
-Modified files:
-	libdm/ioctl    : libdm-iface.c 
+ack.
 
-Log message:
-	Use zalloc for malloc,memset
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.123&r2=1.124
-
---- LVM2/libdm/ioctl/libdm-iface.c	2011/09/23 17:16:28	1.123
-+++ LVM2/libdm/ioctl/libdm-iface.c	2011/10/17 14:36:06	1.124
-@@ -852,7 +852,7 @@
- struct target *create_target(uint64_t start, uint64_t len, const char *type,
- 			     const char *params)
- {
--	struct target *t = dm_malloc(sizeof(*t));
-+	struct target *t = dm_zalloc(sizeof(*t));
- 
- 	if (!t) {
- 		log_error("create_target: malloc(%" PRIsize_t ") failed",
-@@ -860,8 +860,6 @@
- 		return NULL;
- 	}
- 
--	memset(t, 0, sizeof(*t));
--
- 	if (!(t->params = dm_strdup(params))) {
- 		log_error("create_target: strdup(params) failed");
- 		goto bad;
+Milan
 
 
