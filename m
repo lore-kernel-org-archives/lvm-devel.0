@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Oct 2011 16:42:15 -0000
-Subject: LVM2 lib/metadata/thin_manip.c libdm/libdm-dep ...
-Message-ID: <20111019164215.636.qmail@sourceware.org>
+Date: 19 Oct 2011 16:45:03 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20111019164503.2863.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,64 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-19 16:42:14
+Changes by:	zkabelac at sourceware.org	2011-10-19 16:45:03
 
 Modified files:
-	lib/metadata   : thin_manip.c 
 	libdm          : libdm-deptree.c 
 
 Log message:
-	Update error message
+	Use structure copy
 	
-	Drop INTERNAL_ERROR from public API functions.
-	Improve some messages.
+	Since the code evolved a bit with current structures we could use C to
+	copy struct members.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.11&r2=1.12
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
 
---- LVM2/lib/metadata/thin_manip.c	2011/10/19 16:39:09	1.11
-+++ LVM2/lib/metadata/thin_manip.c	2011/10/19 16:42:14	1.12
-@@ -126,7 +126,7 @@
- 		tmsg->u.delete_id = delete_id;
+--- LVM2/libdm/libdm-deptree.c	2011/10/19 16:42:14	1.132
++++ LVM2/libdm/libdm-deptree.c	2011/10/19 16:45:02	1.133
+@@ -2906,26 +2906,24 @@
+ 		if (!_thin_validate_device_id(message->u.m_create_snap.device_id) ||
+ 		    !_thin_validate_device_id(message->u.m_create_snap.origin_id))
+ 			return_0;
+-		tm->message.u.m_create_snap.device_id = message->u.m_create_snap.device_id;
+-		tm->message.u.m_create_snap.origin_id = message->u.m_create_snap.origin_id;
++		tm->message.u.m_create_snap = message->u.m_create_snap;
+ 		break;
+ 	case DM_THIN_MESSAGE_CREATE_THIN:
+ 		if (!_thin_validate_device_id(message->u.m_create_thin.device_id))
+ 			return_0;
+-		tm->message.u.m_create_thin.device_id = message->u.m_create_thin.device_id;
++		tm->message.u.m_create_thin = message->u.m_create_thin;
+ 		tm->expected_errno = EEXIST;
+ 		break;
+ 	case DM_THIN_MESSAGE_DELETE:
+ 		if (!_thin_validate_device_id(message->u.m_delete.device_id))
+ 			return_0;
+-		tm->message.u.m_delete.device_id = message->u.m_delete.device_id;
++		tm->message.u.m_delete = message->u.m_delete;
+ 		tm->expected_errno = ENODATA;
+ 		break;
+ 	case DM_THIN_MESSAGE_TRIM:
+ 		if (!_thin_validate_device_id(message->u.m_trim.device_id))
+ 			return_0;
+-		tm->message.u.m_trim.device_id = message->u.m_trim.device_id;
+-		tm->message.u.m_trim.new_size = message->u.m_trim.new_size;
++		tm->message.u.m_trim = message->u.m_trim;
+ 		break;
+ 	case DM_THIN_MESSAGE_SET_TRANSACTION_ID:
+ 		if (message->u.m_set_transaction_id.current_id !=
+@@ -2933,10 +2931,7 @@
+ 			log_error("New transaction_id must be sequential.");
+ 			return 0; /* FIXME: Maybe too strict here? */
+ 		}
+-		tm->message.u.m_set_transaction_id.current_id =
+-			message->u.m_set_transaction_id.current_id;
+-		tm->message.u.m_set_transaction_id.new_id =
+-			message->u.m_set_transaction_id.new_id;
++		tm->message.u.m_set_transaction_id = message->u.m_set_transaction_id;
  		break;
  	default:
--		log_error(INTERNAL_ERROR "Unsupported message type %d", type);
-+		log_error(INTERNAL_ERROR "Unsupported message type %u.", type);
- 		return 0;
- 	}
- 
---- LVM2/libdm/libdm-deptree.c	2011/10/19 16:40:59	1.131
-+++ LVM2/libdm/libdm-deptree.c	2011/10/19 16:42:14	1.132
-@@ -2880,13 +2880,13 @@
- 	struct thin_message *tm;
- 
- 	if (node->props.segment_count != 1) {
--		log_error(INTERNAL_ERROR "Attempt to use non thin pool segment.");
-+		log_error("Thin pool node must have only one segment.");
- 		return 0;
- 	}
- 
- 	seg = dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
- 	if (seg->type != SEG_THIN_POOL) {
--		log_error(INTERNAL_ERROR "Attempt to use non thin pool segment %s.",
-+		log_error("Thin pool node has segment type %s.",
- 			  dm_segtypes[seg->type].target);
- 		return 0;
- 	}
-@@ -2898,9 +2898,9 @@
- 
- 	switch (message->type) {
- 	case DM_THIN_MESSAGE_CREATE_SNAP:
--		/* Origin MUST be suspend! */
-+		/* If the thin origin is active, it must be suspend first! */
- 		if (message->u.m_create_snap.device_id == message->u.m_create_snap.origin_id) {
--			log_error("Same origin used for thin snapshot.");
-+			log_error("Cannot use same device id for origin and its snapshot.");
- 			return 0;
- 		}
- 		if (!_thin_validate_device_id(message->u.m_create_snap.device_id) ||
+ 		log_error("Unsupported message type %d.", (int) message->type);
 
 
