@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 19 Oct 2011 09:01:04 -0000
-Subject: LVM2 WHATS_NEW
-Message-ID: <20111019090104.12106.qmail@sourceware.org>
+Date: 19 Oct 2011 14:31:49 -0000
+Subject: LVM2/daemons/dmeventd/plugins/snapshot dmevent ...
+Message-ID: <20111019143149.7580.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,25 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-10-19 09:01:04
+Changes by:	mornfall at sourceware.org	2011-10-19 14:31:49
 
 Modified files:
-	.              : WHATS_NEW 
+	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
 
 Log message:
-	New.
+	Remove a redundant (and in some cases, misleading) message about snapshot
+	extension, in the snapshot dmeventd plugin. The reporting is done as needed by
+	the LVM command nowadays.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2162&r2=1.2163
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/WHATS_NEW	2011/10/14 14:18:49	1.2162
-+++ LVM2/WHATS_NEW	2011/10/19 09:01:03	1.2163
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Avoid recursive calls to dmeventd in its LVM plugins.
-   Log dev name now returned to kernel for registering during cmirror CTR.
-   Fix lv_info open_count test for disabled verify_udev_operations (2.02.86).
-   Simplify code for lvm worker thread in clvmd.                     
+--- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/04/08 14:18:40	1.15
++++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/10/19 14:31:49	1.16
+@@ -119,7 +119,6 @@
+ {
+ 	char *vg = NULL, *lv = NULL, *layer = NULL;
+ 	char cmd_str[1024];
+-	int r = 0;
+ 
+ 	if (!dm_split_lvm_name(dmeventd_lvm2_pool(), device, &vg, &lv, &layer)) {
+ 		syslog(LOG_ERR, "Unable to determine VG name from %s.", device);
+@@ -131,10 +130,7 @@
+ 		return 0;
+ 	}
+ 
+-	r = dmeventd_lvm2_run(cmd_str);
+-	syslog(LOG_INFO, "Extension of snapshot %s/%s %s.", vg, lv,
+-	       (r == ECMD_PROCESSED) ? "finished successfully" : "failed");
+-	return r == ECMD_PROCESSED;
++	return dmeventd_lvm2_run(cmd_str) == ECMD_PROCESSED;
+ }
+ 
+ static void _umount(const char *device, int major, int minor)
 
 
