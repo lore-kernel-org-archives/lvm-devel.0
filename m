@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 20 Oct 2011 10:33:31 -0000
-Subject: LVM2/libdm libdevmapper.h libdm-deptree.c
-Message-ID: <20111020103331.31069.qmail@sourceware.org>
+Date: 20 Oct 2011 10:35:14 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20111020103514.28091.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,68 +10,72 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-20 10:33:31
+Changes by:	zkabelac at sourceware.org	2011-10-20 10:35:14
 
 Modified files:
-	libdm          : libdevmapper.h libdm-deptree.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Adapt to thin kernel target API
+	Ensure right activation order
 	
-	Since kernel target uses low_water_mark - use this name in libdm as well.
+	Couple FIXMEs put into the code for parts of the code which may be
+	improved later, since we might be able to add 'lazy' device creation later.
+	For now require exclusive activation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.163&r2=1.164
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.296&r2=1.297
 
---- LVM2/libdm/libdevmapper.h	2011/10/20 10:31:27	1.163
-+++ LVM2/libdm/libdevmapper.h	2011/10/20 10:33:30	1.164
-@@ -552,7 +552,7 @@
- 				      const char *metadata_uuid,
- 				      const char *pool_uuid,
- 				      uint32_t data_block_size,
--				      uint64_t low_water_mark_size,
-+				      uint64_t low_water_mark,
- 				      unsigned skip_block_zeroing);
+--- LVM2/lib/metadata/lv_manip.c	2011/10/19 16:36:39	1.296
++++ LVM2/lib/metadata/lv_manip.c	2011/10/20 10:35:14	1.297
+@@ -4214,7 +4214,33 @@
  
- /* Supported messages for thin provision target */
---- LVM2/libdm/libdm-deptree.c	2011/10/20 10:31:27	1.135
-+++ LVM2/libdm/libdm-deptree.c	2011/10/20 10:33:30	1.136
-@@ -170,7 +170,7 @@
- 	struct dm_tree_node *metadata;	/* Thin_pool */
- 	struct dm_tree_node *pool;	/* Thin_pool, Thin */
- 	struct dm_list thin_messages;	/* Thin_pool */
--	uint64_t low_water_mark_size;	/* Thin_pool */
-+	uint64_t low_water_mark;	/* Thin_pool */
- 	uint32_t data_block_size;       /* Thin_pool */
- 	unsigned skip_block_zeroing;	/* Thin_pool */
- 	uint32_t device_id;		/* Thin */
-@@ -2085,7 +2085,7 @@
- 		if (!_build_dev_string(pool, sizeof(pool), seg->pool))
- 			return_0;
- 		EMIT_PARAMS(pos, "%s %s %d %" PRIu64 " %s", metadata, pool,
--			    seg->data_block_size, seg->low_water_mark_size,
-+			    seg->data_block_size, seg->low_water_mark,
- 			    seg->skip_block_zeroing ? "1 skip_block_zeroing" : "");
- 		break;
- 	case SEG_THIN:
-@@ -2828,7 +2828,7 @@
- 				      const char *metadata_uuid,
- 				      const char *pool_uuid,
- 				      uint32_t data_block_size,
--				      uint64_t low_water_mark_size,
-+				      uint64_t low_water_mark,
- 				      unsigned skip_block_zeroing)
- {
- 	struct load_segment *seg;
-@@ -2865,7 +2865,7 @@
- 		return_0;
+ 	init_dmeventd_monitor(lp->activation_monitoring);
  
- 	node->props.thin_pool_transaction_id = transaction_id; // compare on resume
--	seg->low_water_mark_size = low_water_mark_size;
-+	seg->low_water_mark = low_water_mark;
- 	seg->data_block_size = data_block_size;
- 	seg->skip_block_zeroing = skip_block_zeroing;
- 	dm_list_init(&seg->thin_messages);
+-	if (lp->snapshot) {
++	if (seg_is_thin_pool(lp)) {
++		/* FIXME: skipping in test mode is not going work */
++		if (!activate_lv_excl(cmd, first_seg(lv)->pool_metadata_lv) ||
++		    /* First 4KB of metadata device must be cleared. */
++		    !set_lv(cmd, first_seg(lv)->pool_metadata_lv, UINT64_C(0), 0)) {
++			log_error("Aborting. Failed to wipe pool metadata %s.",
++				  lv->name);
++			goto revert_new_lv;
++		}
++		/* FIXME: we may postpone finish of the pool creation to the
++		 * moment of the first activation - but this needs more changes
++		 * so we would update metadata with vgchange -ay
++		 *
++		 * For now always activate.
++		 */
++		if (!activate_lv_excl(cmd, lv)) {
++			log_error("Aborting. Could not to activate thin pool %s.",
++				  lv->name);
++			goto revert_new_lv;
++		}
++	} else if (seg_is_thin(lp)) {
++		/* FIXME: same as with thin pool - add lazy creation support */
++		if (!activate_lv_excl(cmd, lv)) {
++			log_error("Aborting. Failed to activate thin %s.", lv->name);
++			goto revert_new_lv;
++		}
++	} else if (lp->snapshot) {
+ 		if (!activate_lv_excl(cmd, lv)) {
+ 			log_error("Aborting. Failed to activate snapshot "
+ 				  "exception store.");
+@@ -4236,12 +4262,9 @@
+ 			  lp->snapshot ? "snapshot exception store" :
+ 					 "start of new LV");
+ 		goto deactivate_and_revert_new_lv;
+-	} else if (seg_is_thin_pool(lp)) {
+-		if (!set_lv(cmd, first_seg(lv)->pool_metadata_lv, UINT64_C(0), 0))
+-			log_error("Aborting. Failed to wipe pool metadata %s.",
+-				  lv->name);
+ 	} else if (seg_is_thin_volume(lp)) {
+-		/* since we've got here, we may drop any queued thin messages */
++		/* FIXME: for now we may drop any queued thin messages
++		 * since we are sure everything was activated already */
+ 		if (!detach_pool_messages(first_seg(first_seg(lv)->pool_lv)))
+ 			goto deactivate_and_revert_new_lv;
+ 
 
 
