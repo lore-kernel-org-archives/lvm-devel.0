@@ -1,64 +1,102 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Oct 2011 09:55:51 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20111021095551.24350.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 21 Oct 2011 12:55:30 +0200
+Subject: [PATCH] Add configure option to select default run directory base and prepare for early /run use
+In-Reply-To: <4EA1404A.5020500@redhat.com>
+References: <4EA1404A.5020500@redhat.com>
+Message-ID: <4EA14FA2.9030705@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-21 09:55:50
+Dne 21.10.2011 11:50, Peter Rajnoha napsal(a):
+> On systemd-enabled systems the /run is writeable and it's accessible early on
+> boot so we don't need to use --sysinit anymore on early boot's vgchange call
+> (the --sysint is just a shortcut for --ignorelockingfailure, --ignoremonitoring,
+> --poll n and setting the LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES).
+> 
+> This patch adds a new configure option "--with-default-run-dir-base" with which
+> it's possible to change the run directory base for all directories/files that
+> need to be moved to /run in one go easily.
+> 
+> This patch also removes some hardcoded defines (in dmeventd.h and dm-event.socket
+> files used for systemd).
+> 
+> The patch also changes the dependencies a bit (in Fedora, but the same logic
+> applies anywhere):
+> 
+> originally:
+> 
+>   <dm-event.socket>
+>   ...
+>   fedora-wait-storage.service
+>   fedora-storage-init.service (calling vgchange -a y --sysinit)
+>   dm-event.service
+>   lvm2-monitor.service
+> 
+> changing to:
+> 
+>   <dm-event.socket>
+>   ...
+>   fedora-wait-storage.service
+>   dm-event.service
+>   fedora-storage-init.service (calling vgchange -a y, without --sysinit!!!)
+>   lvm2-monitor.service (this is just for proper shutdown now since the dmevent
+>                         registration will happen within the vgchange -a y call
+>                         in previous step)
+> 
+> 
+> (For FIFO-based activation, the fifos are already prepared and hence the
+> dm-event service could be spawned already)
+> 
+> Once we have this patch upstream and in the distro, we can remove the --sysinit
+> from the vgchange call.
+> 
+> Peter
+> ---
+> 
+>  configure.in                                |   29 +++++++++++++++++++-------
+>  daemons/dmeventd/dmeventd.h                 |    4 +-
+>  lib/misc/configure.h.in                     |    3 ++
+>  make.tmpl.in                                |    1 +
+>  scripts/dm_event_systemd_red_hat.service.in |    4 +-
+>  scripts/dm_event_systemd_red_hat.socket     |   11 ----------
+>  scripts/dm_event_systemd_red_hat.socket.in  |   11 ++++++++++
+>  7 files changed, 40 insertions(+), 23 deletions(-)
+> 
+> diff --git a/configure.in b/configure.in
+> index 5275b95..26eb268 100644
+> --- a/configure.in
+> +++ b/configure.in
+> @@ -425,6 +425,17 @@ AC_ARG_WITH(ocfdir,
+>  	    OCFDIR=$withval, OCFDIR='${prefix}/lib/ocf/resource.d/lvm2')
+>  
 
-Modified files:
-	lib/metadata   : lv_manip.c 
+>  fi
+> @@ -1214,9 +1225,9 @@ fi
+>  
+>  AH_TEMPLATE(DEFAULT_RUN_DIR, [Name of default run directory.])
+>  AC_ARG_WITH(default-run-dir,
+> -	    [  --with-default-run-dir=DIR       Default run directory [[/var/run/lvm]] ],
+> +	    [  --with-default-run-dir=DIR       Default run directory [[RDIR/lvm]] ],
+>  	    [ DEFAULT_RUN_DIR="$withval" ],
+> -	    [ DEFAULT_RUN_DIR="/var/run/lvm" ])
+> +	    [ DEFAULT_RUN_DIR="$DEFAULT_RUN_DIR_BASE/lvm" ])
+>  AC_DEFINE_UNQUOTED(DEFAULT_RUN_DIR,["$DEFAULT_RUN_DIR"] )
+>  
 
-Log message:
-	Remove double-hack for setting metadata size
-	
-	Drop the second lv_extend and set 128MB directly in the first hack place.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.298&r2=1.299
+I guess we should stay with just one place to configure /var/run
 
---- LVM2/lib/metadata/lv_manip.c	2011/10/21 09:55:07	1.298
-+++ LVM2/lib/metadata/lv_manip.c	2011/10/21 09:55:50	1.299
-@@ -800,8 +800,8 @@
- 		}
- 	} else if (segtype_is_thin_pool(segtype)) {
- 		ah->log_area_count = metadata_area_count;
--// FIXME Calculate thin metadata area size
--		ah->log_len = 1;
-+// FIXME Calculate thin metadata area size (--metadatasize, or reuse --regionsize??)
-+		ah->log_len = 128 * 1024 * 1024 / (512 * extent_size); /* Fixed 128MB */
- 	} else {
- 		ah->log_area_count = metadata_area_count;
- 		ah->log_len = !metadata_area_count ? 0 :
-@@ -2605,17 +2605,12 @@
- 						stripes, stripe_size)))
- 			goto out;
- 
--		if (segtype_is_thin_pool(segtype)) {
--			/* FIXME: resize metadata size here for now */
--			struct logical_volume *tmeta = first_seg(lv)->pool_metadata_lv;
--			if ((r = lv_add_segment(ah, ah->area_count, 1, tmeta,
--						get_segtype_from_string(lv->vg->cmd, "striped"), 0, 0, 0))) {
--				if (!(r = lv_extend(tmeta, first_seg(tmeta)->segtype,
--						    1, 0, 1, 0, 10, NULL, allocatable_pvs, ALLOC_INHERIT)))
--					stack;
--			} else
--				stack;
--		}
-+		if (segtype_is_thin_pool(segtype) &&
-+		    !(r = lv_add_segment(ah, ah->area_count, 1,
-+					 first_seg(lv)->pool_metadata_lv,
-+					 get_segtype_from_string(lv->vg->cmd,
-+								 "striped"), 0, 0, 0)))
-+			goto_out;
- 
- 		/*
- 		 * If we are expanding an existing mirror, we can skip the
+So I'd replace DEFAULT_RUN_DIR usage in the code  with  DEFAULT_RUN_DIR/lvm
+and use just this define.
+
+It should be backward compatible - so if someone configured it before - he
+will just get there extra lvm subdir - but this shouldn't cause problems.
+
+With double configuration for run dir it's getting way too complex.
+
+Zdenek
 
 
