@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 Oct 2011 15:49:46 -0000
-Subject: LVM2 ./WHATS_NEW lib/locking/cluster_locking.c
-Message-ID: <20111021154946.13441.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 22 Oct 2011 16:42:12 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c lib/m ...
+Message-ID: <20111022164212.7590.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,106 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-10-21 15:49:45
+Changes by:	zkabelac at sourceware.org	2011-10-22 16:42:11
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/locking    : cluster_locking.c 
+	lib/metadata   : lv_manip.c metadata.h 
 
 Log message:
-	Pass exclusive LV locks to all nodes in the cluster.
-	This was the intended behaviour, as described in the lvchange man page, so you
-	have complete control through volume_list in lvm.conf, but the code seems to
-	have been treating -ae as local-only for a very long time.
+	Make move_lv_segment non-static
+	
+	This function could be useful for other _manip source files.
+	
+	Use dm_list manipulation function for provided functionality,
+	which make the code more readable and avoid touching list
+	internal details here.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2165&r2=1.2166
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.59&r2=1.60
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2166&r2=1.2167
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.300&r2=1.301
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.259&r2=1.260
 
---- LVM2/WHATS_NEW	2011/10/21 09:53:16	1.2165
-+++ LVM2/WHATS_NEW	2011/10/21 15:49:45	1.2166
+--- LVM2/WHATS_NEW	2011/10/21 15:49:45	1.2166
++++ LVM2/WHATS_NEW	2011/10/22 16:42:10	1.2167
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Pass exclusive LV locks to all nodes in the cluster.
++  Make move_lv_segment non-static function and use dm_list function.
+   Pass exclusive LV locks to all nodes in the cluster.
    Improve lvcreate man documentation of the chunksize option.
    Improve man page style for lvcreate.
-   Avoid recursive calls to dmeventd in its LVM plugins.
-@@ -19,7 +20,7 @@
-   Fix splitmirror in cluster having different DM/LVM views of storage.
-   Fix improper udev settings during suspend/resume for mirror sub-LVs.
-   Fix vgsplit when there are mirrors that have mirrored logs.
--  Clarify multi-name device filter pattern matching explanation in lvm.conf.5.
-+  Clarify multi-name device filter pattern matching explanation in lvm.conf.
-   Introduce lv_send_message and dev_manager_send_message.
-   Introduce revert_lv for better pvmove cleanup.
-   Replace incomplete pvmove activation failure recovery code with a message.
---- LVM2/lib/locking/cluster_locking.c	2011/09/27 22:43:41	1.59
-+++ LVM2/lib/locking/cluster_locking.c	2011/10/21 15:49:45	1.60
-@@ -366,7 +366,6 @@
- 	} else if (clvmd_cmd != CLVMD_CMD_VG_BACKUP) {
- 		if (strncmp(name, "P_", 2) &&
- 		    (clvmd_cmd == CLVMD_CMD_LOCK_VG ||
--		     (flags & LCK_TYPE_MASK) == LCK_EXCL ||
- 		     (flags & LCK_LOCAL) ||
- 		     !(flags & LCK_CLUSTER_VG)))
- 			node = ".";
+--- LVM2/lib/metadata/lv_manip.c	2011/10/21 11:38:35	1.300
++++ LVM2/lib/metadata/lv_manip.c	2011/10/22 16:42:11	1.301
+@@ -3446,23 +3446,20 @@
+ 	return 1;
+ }
+ 
+-static int _move_lv_segments(struct logical_volume *lv_to,
+-			     struct logical_volume *lv_from,
+-			     uint64_t set_status, uint64_t reset_status)
++int move_lv_segments(struct logical_volume *lv_to,
++		     struct logical_volume *lv_from,
++		     uint64_t set_status, uint64_t reset_status)
+ {
+ 	struct lv_segment *seg;
+ 
+-	dm_list_iterate_items(seg, &lv_to->segments) {
++	dm_list_iterate_items(seg, &lv_to->segments)
+ 		if (seg->origin) {
+-			log_error("Can't move snapshot segment");
++			log_error("Can't move snapshot segment.");
+ 			return 0;
+ 		}
+-	}
+ 
+-	if (!dm_list_empty(&lv_from->segments))
+-		lv_to->segments = lv_from->segments;
+-	lv_to->segments.n->p = &lv_to->segments;
+-	lv_to->segments.p->n = &lv_to->segments;
++	dm_list_init(&lv_to->segments);
++	dm_list_splice(&lv_to->segments, &lv_from->segments);
+ 
+ 	dm_list_iterate_items(seg, &lv_to->segments) {
+ 		seg->lv = lv_to;
+@@ -3470,8 +3467,6 @@
+ 		seg->status |= set_status;
+ 	}
+ 
+-	dm_list_init(&lv_from->segments);
+-
+ 	lv_to->le_count = lv_from->le_count;
+ 	lv_to->size = lv_from->size;
+ 
+@@ -3512,7 +3507,7 @@
+ 	if (!lv_empty(parent))
+ 		return_0;
+ 
+-	if (!_move_lv_segments(parent, layer_lv, 0, 0))
++	if (!move_lv_segments(parent, layer_lv, 0, 0))
+ 		return_0;
+ 
+ 	/* Replace the empty layer with error segment */
+@@ -3602,7 +3597,7 @@
+ 	log_very_verbose("Inserting layer %s for %s",
+ 			 layer_lv->name, lv_where->name);
+ 
+-	if (!_move_lv_segments(layer_lv, lv_where, 0, 0))
++	if (!move_lv_segments(layer_lv, lv_where, 0, 0))
+ 		return_NULL;
+ 
+ 	if (!(segtype = get_segtype_from_string(cmd, "striped")))
+--- LVM2/lib/metadata/metadata.h	2011/10/19 16:39:09	1.259
++++ LVM2/lib/metadata/metadata.h	2011/10/22 16:42:11	1.260
+@@ -420,6 +420,9 @@
+                     int (*fn)(struct cmd_context *cmd,
+                               struct logical_volume *lv, void *data),
+                     void *data);
++int move_lv_segments(struct logical_volume *lv_to,
++		     struct logical_volume *lv_from,
++		     uint64_t set_status, uint64_t reset_status);
+ 
+ /*
+  * Calculate readahead from underlying PV devices
 
 
