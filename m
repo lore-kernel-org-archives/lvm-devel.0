@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Oct 2011 15:38:03 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/mm/pool-fast.c
-Message-ID: <20111023153803.22574.qmail@sourceware.org>
+Date: 23 Oct 2011 15:39:08 -0000
+Subject: LVM2/test t-mdata-strings.sh
+Message-ID: <20111023153908.22826.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,54 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-23 15:38:03
+Changes by:	zkabelac at sourceware.org	2011-10-23 15:39:08
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm/mm       : pool-fast.c 
+	test           : t-mdata-strings.sh 
 
 Log message:
-	Fix usage of DEBUG_ENFORCE_POOL_LOCKING with DEBUG_MEM
+	Expect failure with real /dev dir
 	
-	Since DEBUG_MEM is storing own extra structure within returned memory chunk,
-	glibc free must be used directly for posix_memaling() allocated block.
+	As udev is for now incapable to create such devices
+	turn this test error into warning.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.517&r2=1.518
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/mm/pool-fast.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-mdata-strings.sh.diff?cvsroot=lvm2&r1=1.6&r2=1.7
 
---- LVM2/WHATS_NEW_DM	2011/10/20 14:43:33	1.517
-+++ LVM2/WHATS_NEW_DM	2011/10/23 15:38:02	1.518
-@@ -1,5 +1,6 @@
- Version 1.02.68 -
- ==================================
-+  Fix compile-time pool memory locking with DEBUG_MEM.
-   Fix valgrind error reports in free of pool chunks with DEBUG_MEM.
-   Align size of structure chunk for fast pool allocator to 8 bytes.
-   Simplify some pointer operations in dm_free_aux() debug code.
---- LVM2/libdm/mm/pool-fast.c	2011/10/20 14:43:33	1.16
-+++ LVM2/libdm/mm/pool-fast.c	2011/10/23 15:38:03	1.17
-@@ -306,7 +306,12 @@
- 		VALGRIND_MAKE_MEM_UNDEFINED(c + 1, c->end - (char *) (c + 1));
- #  endif
- #endif
-+#ifdef DEBUG_ENFORCE_POOL_LOCKING
-+	/* since DEBUG_MEM is using own memory list */
-+	free(c); /* for posix_memalign() */
-+#else
- 	dm_free(c);
-+#endif
- }
+--- LVM2/test/t-mdata-strings.sh	2011/01/05 00:16:20	1.6
++++ LVM2/test/t-mdata-strings.sh	2011/10/23 15:39:08	1.7
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2008-2011 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -13,8 +13,9 @@
  
+ . lib/test
  
+-aux prepare_devs 1
++aux prepare_devs 2
+ 
++# for udev impossible to create
+ pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
+ 
+ # 'set up temp files, loopback devices' 
+@@ -23,9 +24,11 @@
+ dev1=$(dirname "$dev1")/$PREFIX$pv_ugly
+ 
+ # 'pvcreate, vgcreate on filename with backslashed chars' 
+-pvcreate "$dev1" 
+-vgcreate $vg "$dev1"
+-
++created=$dev1
++# when used with real udev without fallback, it will fail here
++pvcreate "$dev1" || created=$dev2
++pvs | should grep $dev1
++vgcreate $vg "$created"
+ # 'no parse errors and VG really exists' 
+ vgs 2>err
+ not grep "Parse error" err;
 
 
