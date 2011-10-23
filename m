@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Oct 2011 15:40:15 -0000
+Date: 23 Oct 2011 15:43:11 -0000
 Subject: LVM2/test/lib aux.sh
-Message-ID: <20111023154015.23161.qmail@sourceware.org>
+Message-ID: <20111023154311.23637.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-23 15:40:15
+Changes by:	zkabelac at sourceware.org	2011-10-23 15:43:10
 
 Modified files:
 	test/lib       : aux.sh 
 
 Log message:
-	Do not make link in the real /dev
+	Used device name instead of device path
 	
-	Skip trying to make link when real /dev dir is used for test.
+	Udev is tricky here - since with udev the node does not exists until
+	it resume happens.  So we need to resume devices via its name.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.32&r2=1.33
 
---- LVM2/test/lib/aux.sh	2011/09/24 21:15:13	1.31
-+++ LVM2/test/lib/aux.sh	2011/10/23 15:40:15	1.32
-@@ -265,7 +265,7 @@
-     echo "$SCSI_DEBUG_DEV" > SCSI_DEBUG_DEV
-     echo "$SCSI_DEBUG_DEV" > LOOP
-     # Setting $LOOP provides means for prepare_devs() override
--    ln -snf $DEBUG_DEV $SCSI_DEBUG_DEV
-+    test "$LVM_TEST_DEVDIR" != "/dev" && ln -snf $DEBUG_DEV $SCSI_DEBUG_DEV
-     return 0
+--- LVM2/test/lib/aux.sh	2011/10/23 15:40:15	1.32
++++ LVM2/test/lib/aux.sh	2011/10/23 15:43:10	1.33
+@@ -333,7 +333,8 @@
+ 	for dev in "$@"; do
+ 		local name=`echo "$dev" | sed -e 's,.*/,,'`
+ 		dmsetup create -u TEST-$name $name $name.table || dmsetup load $name $name.table
+-		dmsetup resume $dev
++		# using device name (since device path does not exists yes with udev)
++		dmsetup resume $name
+ 	done
+ 	finish_udev_transaction
  }
- 
 
 
