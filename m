@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 31 Oct 2011 12:22:51 -0000
-Subject: LVM2 ./WHATS_NEW_DM scripts/dm_event_systemd_r ...
-Message-ID: <20111031122251.20828.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 23 Oct 2011 14:30:51 -0000
+Subject: LVM2/test t-lvcreate-large.sh
+Message-ID: <20111023143051.21581.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-10-31 12:22:50
+Changes by:	mornfall at sourceware.org	2011-10-23 14:30:51
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	scripts        : dm_event_systemd_red_hat.service.in 
+	test           : t-lvcreate-large.sh 
 
 Log message:
-	Add "ExecReload" to dm-event.service for systemd to reload dmeventd properly.
-	
-	Normally, restart simply means "stop and start" for systemd. However, if
-	we're installing new versions of the dmeventd binary/libdevmapper, we need
-	to restart dmeventd. This fails if we have some devices monitored - we need
-	to call "dmeventd -R" instead.
-	
-	The "ExecReload" did not work quite well in some old versions of systemd,
-	systemd assumed that only the configuration is reloaded on "ExecReload",
-	not the whole binary itself so it lost track of dmeventd daemon (it lost new
-	dmeventd PID). This is fixed and seems to be working fine now with recent
-	versions of dmeventd.
+	In t-lvcreate-large, do not create a clustered VG. LV activation/suspend does
+	not work yet with singlenode clvmd in clustered VGs.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.519&r2=1.520
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/dm_event_systemd_red_hat.service.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-large.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW_DM	2011/10/28 20:06:49	1.519
-+++ LVM2/WHATS_NEW_DM	2011/10/31 12:22:49	1.520
-@@ -1,5 +1,6 @@
- Version 1.02.68 -
- ==================================
-+  Add ExecReload to dm-event.service for systemd to reload dmeventd properly.
-   Add dm_config_tree_find_str_allow_empty.
-   Fix compile-time pool memory locking with DEBUG_MEM.
-   Fix valgrind error reports in free of pool chunks with DEBUG_MEM.
---- LVM2/scripts/dm_event_systemd_red_hat.service.in	2011/07/28 12:54:28	1.1
-+++ LVM2/scripts/dm_event_systemd_red_hat.service.in	2011/10/31 12:22:50	1.2
-@@ -7,6 +7,7 @@
- [Service]
- Type=forking
- ExecStart=@sbindir@/dmeventd
-+ExecReload=@sbindir@/dmeventd -R
- PIDFile=@DMEVENTD_PIDFILE@
- OOMScoreAdjust=-1000
+--- LVM2/test/t-lvcreate-large.sh	2011/09/16 14:32:47	1.2
++++ LVM2/test/t-lvcreate-large.sh	2011/10/23 14:30:51	1.3
+@@ -13,9 +13,6 @@
  
+ . lib/test
+ 
+-# FIXME: remove it later when locking in virtual origin is fixed
+-test -e LOCAL_CLVMD && exit 200
+-
+ aux prepare_vg 4
+ 
+ lvcreate -s -l 100%FREE -n $lv $vg --virtualsize 1024T
+@@ -26,7 +23,7 @@
+ aux lvmconf 'devices/filter = [ "a/dev\/mapper\/.*$/", "a/dev\/LVMTEST/", "r/.*/" ]'
+ 
+ pvcreate $DM_DEV_DIR/$vg/$lv
+-vgcreate $vg1 $DM_DEV_DIR/$vg/$lv
++vgcreate -c n $vg1 $DM_DEV_DIR/$vg/$lv
+ 
+ lvcreate -l 100%FREE -n $lv1 $vg1
+ check lv_field $vg1/$lv1 size "1024.00t"
+@@ -40,4 +37,4 @@
+ check lv_field $vg1/$lv1 size "737.28t"
+ lvremove -ff $vg1/$lv1
+ 
+-lvremove -ff $vg/$lv
+\ No newline at end of file
++lvremove -ff $vg/$lv
 
 
