@@ -1,40 +1,55 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon, 13 Jan 2014 10:57:09 +0000 (UTC)
-Subject: master - report: Do not try to get dev_size of a NULL device.
-Message-ID: <20140113105709.26CE460D93@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 24 Oct 2011 10:24:40 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20111024102440.13376.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d61c9eb52f05de5da706b79b9596143fab628b8e
-Commit:        d61c9eb52f05de5da706b79b9596143fab628b8e
-Parent:        5f7286f15d34d89b6710af3946985b4479e2a472
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Jan 13 11:45:18 2014 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Jan 13 11:45:18 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-10-24 10:24:40
 
-report: Do not try to get dev_size of a NULL device.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
 
----
- lib/report/report.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+Log message:
+	Don't print char type[8] as a plain string
+	
+	pvck prints 'extra' character from the label since there is no '\0'
+	after the struct label entry and just uint64_t follows directly.
+	So avoid it by limiting 8 chars to be printed.
+	
+	https://www.redhat.com/archives/lvm-devel/2011-January/msg00109.html
+	
+	Signed-off-by: Paul Bolle <pebolle tiscali nl>
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 2d39cb0..3626769 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -695,6 +695,9 @@ static int _devsize_disp(struct dm_report *rh, struct dm_pool *mem,
- {
- 	uint64_t size;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2170&r2=1.2171
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.469&r2=1.470
+
+--- LVM2/WHATS_NEW	2011/10/23 16:05:45	1.2170
++++ LVM2/WHATS_NEW	2011/10/24 10:24:39	1.2171
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Don't print char type[8] as a plain string in pvck PV type.
+   Use vg memory pool implicitely for vg read.
+   Always use vg memory pool for allocated lv segment.
+   Remove extra 4kB buffer allocated on stack in print_log().
+--- LVM2/lib/metadata/metadata.c	2011/10/11 09:09:00	1.469
++++ LVM2/lib/metadata/metadata.c	2011/10/24 10:24:40	1.470
+@@ -3794,7 +3794,7 @@
+ 		return 0;
+ 	}
  
-+	if (!data)
-+		return _field_set_value(field, "", NULL);
-+
- 	if (!dev_get_size(*(const struct device **) data, &size))
- 		return_0;
+-	log_print("Found label on %s, sector %"PRIu64", type=%s",
++	log_print("Found label on %s, sector %"PRIu64", type=%.8s",
+ 		  pv_name, label->sector, label->type);
  
+ 	/*
 
 
