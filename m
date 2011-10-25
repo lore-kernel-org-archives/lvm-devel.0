@@ -1,33 +1,57 @@
-From: Mike Snitzer <snitzer@redhat.com>
-Date: Tue, 21 Jan 2014 13:04:42 -0500
-Subject: master - tests: more testing for online thin metadata resize
-In-Reply-To: <20140121125418.6F77260DB2@fedorahosted.org>
-References: <20140121125418.6F77260DB2@fedorahosted.org>
-Message-ID: <20140121180442.GA2917@redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 25 Oct 2011 13:17:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/mirror.c
+Message-ID: <20111025131705.14031.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Jan 21 2014 at  7:54am -0500,
-Zdenek Kabelac <zkabelac@fedoraproject.org> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-10-25 13:17:05
 
-> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=efe36fcd43f243de5cdd5838c284b0e5a24ac893
-> Commit:        efe36fcd43f243de5cdd5838c284b0e5a24ac893
-> Parent:        22d9daff12b73e72f520ea70f416e1d3057ae740
-> Author:        Zdenek Kabelac <zkabelac@redhat.com>
-> AuthorDate:    Tue Jan 21 10:04:23 2014 +0100
-> Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-> CommitterDate: Tue Jan 21 13:53:10 2014 +0100
-> 
-> tests: more testing for online thin metadata resize
-> 
-> Some more tests for online resize, but it's still disabled
-> by default, since kernel doesn't work yet for this feature.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : mirror.c 
 
-FYI, fix will go into 3.14.  I didn't bump the thin or thin-pool target
-versions because no released kernel (be it RHEL or upstream) has seen
-the partial fix yet.
+Log message:
+	Disallow 'mirrored' log for cluster mirrors.
+	
+	Git commit ID 0864378250956c310cb81608978d091fcdcc97d8 was meant to disallow
+	'mirrored' logs for cluster mirrors.  However, when add_mirror_log is used
+	to create the log (as is now the case when using 'lvcreate' or converting only
+	the log) the check is bypassed.
+	
+	This patch adds the check to add_mirror_log.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2171&r2=1.2172
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.173&r2=1.174
+
+--- LVM2/WHATS_NEW	2011/10/24 10:24:39	1.2171
++++ LVM2/WHATS_NEW	2011/10/25 13:17:04	1.2172
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix regression that allowed mirrored logs for cluster mirrors.
+   Don't print char type[8] as a plain string in pvck PV type.
+   Use vg memory pool implicitely for vg read.
+   Always use vg memory pool for allocated lv segment.
+--- LVM2/lib/metadata/mirror.c	2011/10/06 14:55:40	1.173
++++ LVM2/lib/metadata/mirror.c	2011/10/25 13:17:04	1.174
+@@ -1898,6 +1898,11 @@
+ 	unsigned old_log_count;
+ 	int r = 0;
+ 
++	if (vg_is_clustered(lv->vg) && (log_count > 1)) {
++		log_error("Log type, \"mirrored\", is unavailable to cluster mirrors");
++		return 0;
++	}
++
+ 	if (dm_list_size(&lv->segments) != 1) {
+ 		log_error("Multiple-segment mirror is not supported");
+ 		return 0;
 
 
