@@ -1,319 +1,95 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 22 Jan 2014 16:11:51 +0000 (UTC)
-Subject: master - Misc: Move some thin pool functions to a new file
-Message-ID: <20140122161151.8CDF76167B@fedorahosted.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 25 Oct 2011 13:24:24 -0000
+Subject: LVM2/man lvconvert.8.in lvcreate.8.in
+Message-ID: <20111025132424.18003.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5590448c320eb76789110546cdea47dd1d7a97b3
-Commit:        5590448c320eb76789110546cdea47dd1d7a97b3
-Parent:        2b9d25133e3dfa0f95f838a75a682e5195110684
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Jan 22 10:11:29 2014 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Jan 22 10:11:29 2014 -0600
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-10-25 13:24:23
 
-Misc: Move some thin pool functions to a new file
+Modified files:
+	man            : lvconvert.8.in lvcreate.8.in 
 
-Functions that handle set-up, tear-down and creation of thin pool
-volumes will be more generally applicable when more targets exist
-that make use of device-mapper's persistent data format.  One of
-these targets is the dm-cache target.  I've selected some functions
-that will be useful for the cache segment type to be moved, since
-they will no longer be thin pool specific but are more broadly
-useful to any segment type that makes use of a 'pool' LV.
----
- lib/Makefile.in           |    1 +
- lib/metadata/thin_manip.c |  241 ---------------------------------------------
- 2 files changed, 1 insertions(+), 241 deletions(-)
+Log message:
+	Update lvconvert man page to describe '--type <segtype>' argument
+	
+	Man page changes were not included when the ability to convert from
+	"mirror" -> "raid1" or "linear" -> "raid1" were made.
 
-diff --git a/lib/Makefile.in b/lib/Makefile.in
-index 8fdc194..c3ace5f 100644
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -88,6 +88,7 @@ SOURCES =\
- 	metadata/merge.c \
- 	metadata/metadata.c \
- 	metadata/mirror.c \
-+	metadata/pool_manip.c \
- 	metadata/pv.c \
- 	metadata/pv_manip.c \
- 	metadata/pv_map.c \
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index e12a8ad..00647cc 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -21,15 +21,6 @@
- #include "defaults.h"
- #include "display.h"
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvconvert.8.in.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.25&r2=1.26
+
+--- LVM2/man/lvconvert.8.in	2011/08/19 17:36:13	1.22
++++ LVM2/man/lvconvert.8.in	2011/10/25 13:24:23	1.23
+@@ -4,6 +4,7 @@
+ .SH SYNOPSIS
+ .B lvconvert
+ \-m|\-\-mirrors Mirrors [\-\-mirrorlog {disk|core|mirrored}] [\-\-corelog] [\-R|\-\-regionsize MirrorLogRegionSize]
++[\-\-type SegmentType]
+ [\-A|\-\-alloc AllocationPolicy]
+ [\-b|\-\-background] [\-f|\-\-force] [\-i|\-\-interval Seconds]
+ [\-h|\-?|\-\-help]
+@@ -50,6 +51,7 @@
+ [\-v|\-\-verbose]
+ [\-\-version]
+ LogicalVolume[Path] [PhysicalVolume[Path]...]
++
+ .SH DESCRIPTION
+ lvconvert is used to change the segment type (i.e. linear, mirror, etc) or
+ characteristics of a logical volume.  For example, it can add or remove the
+@@ -94,6 +96,11 @@
+ A mirror is divided into regions of this size (in MB), and the mirror log
+ uses this granularity to track which regions are in sync.
+ .TP
++.I \-\-type SegmentType
++Used to convert a logical volume to another segment type or to explicitly state
++the desired RAID1 segment type ("mirror" or "raid1") when converting a linear
++logical volume to a mirror with the '-m' argument.
++.TP
+ .I \-b, \-\-background
+ Run the daemon in the background.
+ .TP
+@@ -179,6 +186,12 @@
+ .br
+ converts the linear logical volume "vg00/lvol1" to
+ a two-way mirror logical volume.
++.br
++.SH Examples
++"lvconvert --type raid1 -m1 vg00/lvol1"
++.br
++converts the linear logical volume "vg00/lvol1" to a two-way RAID1
++logical volume.
  
--int attach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *metadata_lv)
--{
--	pool_seg->metadata_lv = metadata_lv;
--	metadata_lv->status |= THIN_POOL_METADATA;
--	lv_set_hidden(metadata_lv);
--
--	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
--}
--
- int detach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume **metadata_lv)
- {
- 	struct logical_volume *lv = pool_seg->metadata_lv;
-@@ -48,117 +39,6 @@ int detach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *
- 	return 1;
- }
+ "lvconvert --mirrorlog core vg00/lvol1"
+ .br
+@@ -195,6 +208,11 @@
+ converts a mirror logical volume to a linear logical
+ volume.
+ .br
++"lvconvert --type raid1 vg00/mirror_lv"
++.br
++converts a mirror logical volume to a RAID1 logical volume with the same
++number of images.
++.br
  
--int attach_pool_data_lv(struct lv_segment *pool_seg, struct logical_volume *pool_data_lv)
--{
--	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv, 0, THIN_POOL_DATA))
--		return_0;
--
--	pool_seg->lv->status |= THIN_POOL;
--	lv_set_hidden(pool_data_lv);
--
--	return 1;
--}
--
--int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv,
--		   struct logical_volume *origin, struct logical_volume *merge_lv)
--{
--	seg->pool_lv = pool_lv;
--	seg->lv->status |= THIN_VOLUME;
--	seg->origin = origin;
--
--	if (origin && !add_seg_to_segs_using_this_lv(origin, seg))
--		return_0;
--
--	if (!add_seg_to_segs_using_this_lv(pool_lv, seg))
--		return_0;
--
--	if (merge_lv) {
--		if (origin != merge_lv) {
--			if (!add_seg_to_segs_using_this_lv(merge_lv, seg))
--				return_0;
--		}
--
--		init_snapshot_merge(seg, merge_lv);
--	}
--
--	return 1;
--}
--
--int detach_pool_lv(struct lv_segment *seg)
--{
--	struct lv_thin_message *tmsg, *tmp;
--	struct seg_list *sl, *tsl;
--	int no_update = 0;
--
--	if (!seg->pool_lv || !lv_is_thin_pool(seg->pool_lv)) {
--		log_error(INTERNAL_ERROR "Cannot detach pool from non-thin LV %s",
--			  seg->lv->name);
--		return 0;
--	}
--
--	/* Drop any message referencing removed segment */
--	dm_list_iterate_items_safe(tmsg, tmp, &(first_seg(seg->pool_lv)->thin_messages)) {
--		switch (tmsg->type) {
--		case DM_THIN_MESSAGE_CREATE_SNAP:
--		case DM_THIN_MESSAGE_CREATE_THIN:
--			if (tmsg->u.lv == seg->lv) {
--				log_debug_metadata("Discarding message for LV %s.",
--						   tmsg->u.lv->name);
--				dm_list_del(&tmsg->list);
--				no_update = 1; /* Replacing existing */
--			}
--			break;
--		case DM_THIN_MESSAGE_DELETE:
--			if (tmsg->u.delete_id == seg->device_id) {
--				log_error(INTERNAL_ERROR "Trying to delete %u again.",
--					  tmsg->u.delete_id);
--				return 0;
--			}
--			break;
--		default:
--			log_error(INTERNAL_ERROR "Unsupported message type %u.", tmsg->type);
--			break;
--		}
--	}
--
--	if (!detach_thin_external_origin(seg))
--		return_0;
--
--	if (!attach_pool_message(first_seg(seg->pool_lv),
--				 DM_THIN_MESSAGE_DELETE,
--				 NULL, seg->device_id, no_update))
--		return_0;
--
--	if (!remove_seg_from_segs_using_this_lv(seg->pool_lv, seg))
--		return_0;
--
--	if (seg->origin &&
--	    !remove_seg_from_segs_using_this_lv(seg->origin, seg))
--		return_0;
--
--	/* If thin origin, remove it from related thin snapshots */
--	/*
--	 * TODO: map removal of origin as snapshot lvconvert --merge?
--	 * i.e. rename thin snapshot to origin thin origin
--	 */
--	dm_list_iterate_items_safe(sl, tsl, &seg->lv->segs_using_this_lv) {
--		if (!seg_is_thin_volume(sl->seg) ||
--		    (seg->lv != sl->seg->origin))
--			continue;
--
--		if (!remove_seg_from_segs_using_this_lv(seg->lv, sl->seg))
--			return_0;
--		/* Thin snapshot is now regular thin volume */
--		sl->seg->origin = NULL;
--	}
--
--	seg->lv->status &= ~THIN_VOLUME;
--	seg->pool_lv = NULL;
--	seg->origin = NULL;
--
--	return 1;
--}
--
- int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
- 			struct logical_volume *lv, uint32_t delete_id,
- 			int no_update)
-@@ -372,26 +252,6 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
- 	return 1;
- }
- 
--struct lv_segment *find_pool_seg(const struct lv_segment *seg)
--{
--	struct lv_segment *pool_seg;
--
--	pool_seg = get_only_segment_using_this_lv(seg->lv);
--
--	if (!pool_seg) {
--		log_error("Failed to find pool_seg for %s", seg->lv->name);
--		return NULL;
--	}
--
--	if (!seg_is_thin_pool(pool_seg)) {
--		log_error("%s on %s is not a pool segment",
--			  pool_seg->lv->name, seg->lv->name);
--		return NULL;
--	}
--
--	return pool_seg;
--}
--
- struct logical_volume *find_pool_lv(const struct logical_volume *lv)
- {
- 	struct lv_segment *seg;
-@@ -443,107 +303,6 @@ uint32_t get_free_pool_device_id(struct lv_segment *thin_pool_seg)
- 	return max_id;
- }
- 
--int create_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
--		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
--{
--	const struct segment_type *striped;
--	struct logical_volume *meta_lv, *data_lv;
--	struct lv_segment *seg;
--	char name[NAME_LEN];
--
--	if (pool_lv->le_count) {
--		/* FIXME move code for manipulation from lv_manip.c */
--		log_error(INTERNAL_ERROR "Pool %s has already extents.", pool_lv->name);
--		return 0;
--	}
--
--	/* LV is not yet a pool, so it's extension from lvcreate */
--	if (!(striped = get_segtype_from_string(pool_lv->vg->cmd, "striped")))
--		return_0;
--
--	if (activation() && segtype->ops->target_present &&
--	    !segtype->ops->target_present(pool_lv->vg->cmd, NULL, NULL)) {
--		log_error("%s: Required device-mapper target(s) not "
--			  "detected in your kernel.", segtype->name);
--		return 0;
--	}
--
--	/* Metadata segment */
--	if (!lv_add_segment(ah, stripes, 1, pool_lv, striped, 1, 0, 0))
--		return_0;
--
--	if (!activation())
--		log_warn("WARNING: Pool %s is created without initialization.", pool_lv->name);
--	else {
--		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
--			return_0;
--
--		/*
--		 * If killed here, only the VISIBLE striped pool LV is left
--		 * and user could easily remove it.
--		 *
--		 * FIXME: implement lazy clearing when activation is disabled
--		 */
--		/* pool_lv is a new LV so the VG lock protects us */
--		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv) ||
--		    /* Clear 4KB of metadata device for new thin-pool. */
--		    !wipe_lv(pool_lv, (struct wipe_params) { .do_zero = 1 })) {
--			log_error("Aborting. Failed to wipe pool metadata %s.",
--				  pool_lv->name);
--			goto bad;
--		}
--	}
--
--	if (dm_snprintf(name, sizeof(name), "%s_tmeta", pool_lv->name) < 0) {
--		log_error("Name is too long to be a pool name.");
--		goto bad;
--	}
--
--	if (!(meta_lv = lv_create_empty(name, NULL, LVM_READ | LVM_WRITE,
--					ALLOC_INHERIT, pool_lv->vg)))
--		goto_bad;
--
--	if (!move_lv_segments(meta_lv, pool_lv, 0, 0))
--		goto_bad;
--
--	/* Pool data segment */
--	if (!lv_add_segment(ah, 0, stripes, pool_lv, striped, stripe_size, 0, 0))
--		goto_bad;
--
--	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
--					    pool_lv->status, "_tdata")))
--		goto_bad;
--
--	seg = first_seg(pool_lv);
--	/* Drop reference as attach_pool_data_lv() takes it again */
--	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
--		goto_bad;
--
--	if (!attach_pool_data_lv(seg, data_lv))
--		goto_bad;
--
--	if (!attach_pool_metadata_lv(seg, meta_lv))
--		goto_bad;
--
--	seg->segtype = segtype; /* Set as thin_pool segment */
--
--	return 1;
--
--bad:
--	if (activation()) {
--		if (deactivate_lv_local(pool_lv->vg->cmd, pool_lv)) {
--			log_error("Aborting. Could not deactivate pool %s.",
--				  pool_lv->name);
--			return 0;
--		}
--		if (!lv_remove(pool_lv) || !vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
--			log_error("Manual intervention may be required to remove "
--				  "abandoned LV(s) before retrying.");
--	}
--
--	return 0;
--}
--
- int update_pool_lv(struct logical_volume *lv, int activate)
- {
- 	int monitored;
+ .br
+ "lvconvert -s vg00/lvol1 vg00/lvol2"
+--- LVM2/man/lvcreate.8.in	2011/10/21 09:55:07	1.25
++++ LVM2/man/lvcreate.8.in	2011/10/25 13:24:23	1.26
+@@ -267,7 +267,7 @@
+ commandline switch alias that will enable their use (-s is an alias for
+ --type snapshot).  However, this argument must be used when no existing
+ commandline switch alias is available for the desired type, as is the case
+-with "error", "zero", "raid4", "raid5", or "raid6".
++with "error", "zero", "raid1", "raid4", "raid5", or "raid6".
+ .TP
+ .BR \-V ", " \-\-virtualsize " " \fIVirtualSize
+ Create a sparse device of the given size (in MB by default) using a snapshot.  
 
 
