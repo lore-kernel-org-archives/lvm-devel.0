@@ -1,137 +1,155 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 29 Jan 2014 13:59:50 +0000 (UTC)
-Subject: master - thin: validate external origin size
-Message-ID: <20140129135950.0C3C260F65@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 28 Oct 2011 20:06:51 -0000
+Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM lib/commands/t ...
+Message-ID: <20111028200651.23306.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=155405b0e1d310fbc44f263c5e3a5c5d23043207
-Commit:        155405b0e1d310fbc44f263c5e3a5c5d23043207
-Parent:        8074d8056acd419fd38d53b32db5373df76d825f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 29 14:27:13 2014 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 29 14:58:13 2014 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-10-28 20:06:50
 
-thin: validate external origin size
+Modified files:
+	.              : WHATS_NEW WHATS_NEW_DM 
+	lib/commands   : toolcontext.c 
+	lib/config     : config.c config.h 
+	libdm          : libdevmapper.h libdm-config.c 
 
-Avoid use of external origin with size unaligned/incompatible with
-thin pool chunk size, since the last chunk is not correctly provisioned
-when it is overwritten.
----
- WHATS_NEW                        |    1 +
- lib/metadata/lv_manip.c          |    4 +++-
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/thin_manip.c        |   21 +++++++++++++++++++++
- lib/thin/thin.c                  |    2 ++
- tools/lvconvert.c                |    3 +++
- 6 files changed, 31 insertions(+), 1 deletions(-)
+Log message:
+	Add find_config_tree_str_allow_empty
+	
+	Add function to allow read of empty strings as valid arguments.
+	Add a warning message if string argument has ignored value.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3a4c7ec..d28ec3c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2172&r2=1.2173
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.518&r2=1.519
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.107&r2=1.108
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.h.diff?cvsroot=lvm2&r1=1.37&r2=1.38
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.165&r2=1.166
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+
+--- LVM2/WHATS_NEW	2011/10/25 13:17:04	1.2172
++++ LVM2/WHATS_NEW	2011/10/28 20:06:49	1.2173
 @@ -1,5 +1,6 @@
- Version 2.02.106 - 
- ====================================
-+  Prohibit use of external origin with size incompatible with thin pool.
-   Avoid trying to convert single to thin pool and volume at the same time.
-   Add support for partitions on ZFS zvol.
-   Fix unwanted drop of hold flocks on forked children.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 2e240fc..a2831cf 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -5980,6 +5980,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		 * within the same thin pool
- 		 */
- 		if (lp->snapshot && (first_seg(org)->pool_lv != pool_lv)) {
-+			if (!pool_supports_external_origin(first_seg(pool_lv), org))
-+				return_0;
- 			if (org->status & LVM_WRITE) {
- 				log_error("Cannot use writable LV as the external origin.");
- 				return 0; // TODO conversion for inactive
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index bdf5c9d..1ebf69f 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -682,6 +682,7 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ Version 2.02.89 - 
+ ==================================
++  Support empty string for log/prefix.
+   Fix regression that allowed mirrored logs for cluster mirrors.
+   Don't print char type[8] as a plain string in pvck PV type.
+   Use vg memory pool implicitely for vg read.
+--- LVM2/WHATS_NEW_DM	2011/10/23 15:38:02	1.518
++++ LVM2/WHATS_NEW_DM	2011/10/28 20:06:49	1.519
+@@ -1,5 +1,6 @@
+ Version 1.02.68 -
+ ==================================
++  Add dm_config_tree_find_str_allow_empty.
+   Fix compile-time pool memory locking with DEBUG_MEM.
+   Fix valgrind error reports in free of pool chunks with DEBUG_MEM.
+   Align size of structure chunk for fast pool allocator to 8 bytes.
+--- LVM2/lib/commands/toolcontext.c	2011/10/11 09:09:00	1.138
++++ LVM2/lib/commands/toolcontext.c	2011/10/28 20:06:49	1.139
+@@ -153,9 +153,9 @@
+ 	init_abort_on_internal_errors(find_config_tree_int(cmd, "global/abort_on_internal_errors",
+ 							   DEFAULT_ABORT_ON_INTERNAL_ERRORS));
  
- struct logical_volume *find_pool_lv(const struct logical_volume *lv);
- int pool_is_active(const struct logical_volume *pool_lv);
-+int pool_supports_external_origin(const struct lv_segment *pool_seg, const struct logical_volume *external_lv);
- int thin_pool_feature_supported(const struct logical_volume *pool_lv, int feature);
- int update_pool_lv(struct logical_volume *lv, int activate);
- int update_profilable_pool_params(struct cmd_context *cmd, struct profile *profile,
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 1abc2f1..60e93f0 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -252,6 +252,27 @@ int pool_below_threshold(const struct lv_segment *pool_seg)
- 	return 1;
+-	cmd->default_settings.msg_prefix = find_config_tree_str(cmd,
+-							   "log/prefix",
+-							   DEFAULT_MSG_PREFIX);
++	cmd->default_settings.msg_prefix =
++		find_config_tree_str_allow_empty(cmd, "log/prefix", DEFAULT_MSG_PREFIX);
++
+ 	init_msg_prefix(cmd->default_settings.msg_prefix);
+ 
+ 	cmd->default_settings.cmd_name = find_config_tree_int(cmd,
+--- LVM2/lib/config/config.c	2011/10/11 09:06:09	1.107
++++ LVM2/lib/config/config.c	2011/10/28 20:06:49	1.108
+@@ -183,6 +183,12 @@
+ 	return dm_config_tree_find_str(cmd->cft, path, fail);
  }
  
-+/*
-+ * Validate given external origin could be used with thin pool
-+ */
-+int pool_supports_external_origin(const struct lv_segment *pool_seg, const struct logical_volume *external_lv)
++const char *find_config_tree_str_allow_empty(struct cmd_context *cmd,
++					     const char *path, const char *fail)
 +{
-+	uint32_t csize = pool_seg->chunk_size;
-+
-+	if ((external_lv->size < csize) || (external_lv->size % csize)) {
-+		/* TODO: Validate with thin feature flag once, it will be supported */
-+		log_error("Can't use \"%s/%s\" as external origin with \"%s/%s\" pool. "
-+			  "Size %s is not a multiple of pool's chunk size %s.",
-+			  external_lv->vg->name, external_lv->name,
-+			  pool_seg->lv->vg->name, pool_seg->lv->name,
-+			  display_size(external_lv->vg->cmd, external_lv->size),
-+			  display_size(external_lv->vg->cmd, csize));
-+		return 0;
-+	}
-+
-+	return 1;
++	return dm_config_tree_find_str_allow_empty(cmd->cft, path, fail);
 +}
 +
- struct logical_volume *find_pool_lv(const struct logical_volume *lv)
+ int find_config_tree_int(struct cmd_context *cmd, const char *path,
+ 			 int fail)
  {
- 	struct lv_segment *seg;
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index 0b8eaf8..8eaa73d 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -561,6 +561,8 @@ static int _thin_add_target_line(struct dev_manager *dm,
+--- LVM2/lib/config/config.h	2011/09/02 01:32:09	1.37
++++ LVM2/lib/config/config.h	2011/10/28 20:06:49	1.38
+@@ -44,6 +44,8 @@
+ 						   const char *path);
+ const char *find_config_tree_str(struct cmd_context *cmd,
+ 				 const char *path, const char *fail);
++const char *find_config_tree_str_allow_empty(struct cmd_context *cmd,
++					     const char *path, const char *fail);
+ int find_config_tree_int(struct cmd_context *cmd, const char *path,
+ 			 int fail);
+ int64_t find_config_tree_int64(struct cmd_context *cmd, const char *path,
+--- LVM2/libdm/libdevmapper.h	2011/10/28 20:04:17	1.165
++++ LVM2/libdm/libdevmapper.h	2011/10/28 20:06:50	1.166
+@@ -1385,6 +1385,8 @@
+ const struct dm_config_node *dm_config_tree_find_node(const struct dm_config_tree *cft, const char *path);
+ const char *dm_config_tree_find_str(const struct dm_config_tree *cft,
+ 				    const char *path, const char *fail);
++const char *dm_config_tree_find_str_allow_empty(const struct dm_config_tree *cft,
++						const char *path, const char *fail);
+ int dm_config_tree_find_int(const struct dm_config_tree *cft,
+ 			    const char *path, int fail);
+ int64_t dm_config_tree_find_int64(const struct dm_config_tree *cft,
+--- LVM2/libdm/libdm-config.c	2011/09/25 19:45:40	1.13
++++ LVM2/libdm/libdm-config.c	2011/10/28 20:06:50	1.14
+@@ -919,15 +919,18 @@
+ }
  
- 	/* Add external origin LV */
- 	if (seg->external_lv) {
-+		if (!pool_supports_external_origin(first_seg(seg->pool_lv), seg->external_lv))
-+			return_0;
- 		if (seg->external_lv->size < seg->lv->size) {
- 			/* Validate target supports smaller external origin */
- 			if (!_thin_target_present(cmd, first_seg(seg->pool_lv), &attr) ||
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ffbf768..2ab4115 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2483,6 +2483,9 @@ static int _lvconvert_thinpool_external(struct cmd_context *cmd,
+ static const char *_find_config_str(const void *start, node_lookup_fn find_fn,
+-				    const char *path, const char *fail)
++				    const char *path, const char *fail, int allow_empty)
+ {
+ 	const struct dm_config_node *n = find_fn(start, path);
  
- 	dm_list_init(&lvc.tags);
+ 	/* Empty strings are ignored */
+-	if ((n && n->v && n->v->type == DM_CFG_STRING) && (*n->v->v.str)) {
++	if ((n && n->v && n->v->type == DM_CFG_STRING) &&
++	    (allow_empty || (*n->v->v.str))) {
+ 		log_very_verbose("Setting %s to %s", path, n->v->v.str);
+ 		return n->v->v.str;
+-	}
++	} else if (n && (!n->v || (n->v->type != DM_CFG_STRING) ||
++			 (!allow_empty && fail)))
++		log_warn("WARNING: Ignoring unsupported value for %s.", path);
  
-+	if (!pool_supports_external_origin(first_seg(pool_lv), external_lv))
-+		return_0;
+ 	if (fail)
+ 		log_very_verbose("%s not found in config: defaulting to %s",
+@@ -938,7 +941,7 @@
+ const char *dm_config_find_str(const struct dm_config_node *cn,
+ 			       const char *path, const char *fail)
+ {
+-	return _find_config_str(cn, _find_config_node, path, fail);
++	return _find_config_str(cn, _find_config_node, path, fail, 0);
+ }
+ 
+ static int64_t _find_config_int64(const void *start, node_lookup_fn find,
+@@ -1060,7 +1063,13 @@
+ const char *dm_config_tree_find_str(const struct dm_config_tree *cft, const char *path,
+ 				    const char *fail)
+ {
+-	return _find_config_str(cft, _find_first_config_node, path, fail);
++	return _find_config_str(cft, _find_first_config_node, path, fail, 0);
++}
 +
- 	if (!(lvc.segtype = get_segtype_from_string(cmd, "thin")))
- 		return_0;
++const char *dm_config_tree_find_str_allow_empty(const struct dm_config_tree *cft, const char *path,
++						const char *fail)
++{
++	return _find_config_str(cft, _find_first_config_node, path, fail, 1);
+ }
  
+ int dm_config_tree_find_int(const struct dm_config_tree *cft, const char *path, int fail)
 
 
