@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 22 Oct 2011 16:48:59 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20111022164859.9914.qmail@sourceware.org>
+Date: 28 Oct 2011 20:28:03 -0000
+Subject: LVM2 lib/activate/activate.c lib/metadata/lv_m ...
+Message-ID: <20111028202803.6184.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,166 +10,143 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-22 16:48:59
+Changes by:	zkabelac at sourceware.org	2011-10-28 20:28:01
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	lib/activate   : activate.c 
+	lib/metadata   : lv_manip.c metadata-exported.h 
+	tools          : lvchange.c toollib.c vgchange.c 
 
 Log message:
-	Remove old thin code from _lv_insert_empty_sublvs
+	Thin pool activation change
 	
-	Since thin is not able to use _lv_insert_empty_sublvs,
-	remove its appearence from this function.
+	To ensure we properly handle LV cluster locking - explicitely do
+	not allow to change the availability of the thin pool that is in use
+	for some thin LV.
 	
-	Start to use extend_pool() function for desired functionality
-	and modify lv_extend() for this.
+	As soon as the thin volume is created the only way to activate pool
+	is via implicit dependency.
+	
+	Ignore thinpool open count for lv/vgchange operations.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.302&r2=1.303
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.218&r2=1.219
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.308&r2=1.309
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.217&r2=1.218
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.231&r2=1.232
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.124&r2=1.125
 
---- LVM2/lib/metadata/lv_manip.c	2011/10/22 16:46:34	1.302
-+++ LVM2/lib/metadata/lv_manip.c	2011/10/22 16:48:59	1.303
-@@ -2369,9 +2369,6 @@
- 		lv->status |= MIRRORED;
- 		sub_lv_status = MIRROR_IMAGE;
- 		layer_name = "mimage";
--	} else if (segtype_is_thin_pool(segtype)) {
--		lv->status |= THIN_POOL;
--		layer_name = "tpool";
- 	} else
- 		return_0;
+--- LVM2/lib/activate/activate.c	2011/10/17 14:18:07	1.218
++++ LVM2/lib/activate/activate.c	2011/10/28 20:28:00	1.219
+@@ -782,7 +782,7 @@
+ 		return 0;
  
-@@ -2406,19 +2403,13 @@
- 					 lv->alloc, lv->vg)))
- 			return_0;
+ 	dm_list_iterate_items(lvl, &vg->lvs)
+-		if (lv_is_visible(lvl->lv))
++		if (lv_is_visible(lvl->lv) && !lv_is_used_thin_pool(lvl->lv))
+ 			count += (_lv_open_count(vg->cmd, lvl->lv) > 0);
  
--		if (segtype_is_thin_pool(segtype)) {
--			if (!attach_pool_data_lv(mapseg, sub_lv))
--				return_0;
--		} else if (!set_lv_segment_area_lv(mapseg, i, sub_lv, 0, sub_lv_status))
-+		if (!set_lv_segment_area_lv(mapseg, i, sub_lv, 0, sub_lv_status))
- 			return_0;
+ 	log_debug("Counted %d open LVs in VG %s", count, vg->name);
+--- LVM2/lib/metadata/lv_manip.c	2011/10/28 20:23:25	1.308
++++ LVM2/lib/metadata/lv_manip.c	2011/10/28 20:28:01	1.309
+@@ -3210,7 +3210,7 @@
+ 		}
+ 	}
  
--		/* Metadata LVs for raid or thin pool */
-+		/* Metadata LVs for raid */
- 		if (segtype_is_raid(segtype)) {
- 			if (dm_snprintf(img_name, len, "%s_rmeta_%u", lv->name, i) < 0)
- 				return_0;
--		} else if (segtype_is_thin_pool(segtype)) {
--			if (dm_snprintf(img_name, len, "%s_tmeta", lv->name) < 0)
--				return_0;
- 		} else
+-	if (lv_is_thin_pool(lv) && dm_list_size(&lv->segs_using_this_lv)) {
++	if (lv_is_used_thin_pool(lv)) {
+ 		/* remove thin LVs first */
+ 		if ((force == PROMPT) &&
+ 		    yes_no_prompt("Do you really want to remove all thin volumes when removing"
+@@ -4139,23 +4139,26 @@
+ 	} else if (seg_is_thin_volume(lp)) {
+ 		pool_lv = first_seg(lv)->pool_lv;
+ 
++		/* Ensure unused thin pool is not active */
++		if (!lv_is_used_thin_pool(pool_lv) &&
++		    !deactivate_lv(cmd, pool_lv)) {
++			log_error("Failed to deactivate unused pool %s.",
++				  pool_lv->name);
++			return NULL;
++		}
++
++		/*
++		 * From now the thin pool de/activation is made
++		 * only via implicit thin volume dependency.
++		 */
++
+ 		if (!(first_seg(lv)->device_id =
+ 		      get_free_pool_device_id(first_seg(pool_lv))))
+ 			return_NULL;
+ 
+-		if (!activate_lv(pool_lv->vg->cmd, pool_lv)) {
+-			log_error("Failed to activate %s/%s to send message.",
+-				  pool_lv->vg->name, pool_lv->name);
+-			return NULL;
+-		}
+-
+ 		if (!attach_pool_message(first_seg(pool_lv),
+ 					 DM_THIN_MESSAGE_CREATE_THIN, lv, 0, 0))
+ 			return_NULL;
+-		/*
+-		 * FIXME: Skipping deactivate_lv(pool_lv) as it is going to be needed anyway
+-		 * but revert_new_lv should revert to deactivated state.
+-		 */
+ 	}
+ 
+ 	if (lp->log_count &&
+--- LVM2/lib/metadata/metadata-exported.h	2011/10/28 20:12:55	1.217
++++ LVM2/lib/metadata/metadata-exported.h	2011/10/28 20:28:01	1.218
+@@ -136,6 +136,7 @@
+ 
+ #define lv_is_thin_volume(lv)	((lv)->status & THIN_VOLUME ? 1 : 0)
+ #define lv_is_thin_pool(lv)	((lv)->status & THIN_POOL ? 1 : 0)
++#define lv_is_used_thin_pool(lv)	(lv_is_thin_pool(lv) && !dm_list_empty(&(lv)->segs_using_this_lv))
+ #define lv_is_thin_pool_data(lv)	((lv)->status & THIN_POOL_DATA ? 1 : 0)
+ #define lv_is_thin_pool_metadata(lv)	((lv)->status & THIN_POOL_METADATA ? 1 : 0)
+ #define lv_is_mirrored(lv)	((lv)->status & MIRRORED ? 1 : 0)
+--- LVM2/tools/lvchange.c	2011/09/05 12:54:29	1.130
++++ LVM2/tools/lvchange.c	2011/10/28 20:28:01	1.131
+@@ -532,6 +532,12 @@
+ 		return ECMD_FAILED;
+ 	}
+ 
++	if (lv_is_used_thin_pool(lv) &&
++	    (arg_count(cmd, available_ARG))) {
++		log_error("Can't change pool volume \"%s\".", lv->name);
++		return ECMD_FAILED;
++	}
++
+ 	if (lv_is_cow(lv) && !lv_is_virtual_origin(origin_from_cow(lv)) &&
+ 	    arg_count(cmd, available_ARG)) {
+ 		log_error("Can't change snapshot logical volume \"%s\"",
+--- LVM2/tools/toollib.c	2011/09/15 15:26:40	1.231
++++ LVM2/tools/toollib.c	2011/10/28 20:28:01	1.232
+@@ -126,6 +126,11 @@
+ 		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
  			continue;
  
-@@ -2428,12 +2419,10 @@
- 					       lv->alloc, lv->vg)))
- 			return_0;
- 
--		if (segtype_is_thin_pool(segtype)) {
--			if (!attach_pool_metadata_lv(mapseg, sub_lv))
--				return_0;
--		} else if (!set_lv_segment_area_lv(mapseg, i, sub_lv, 0, RAID_META))
-+		if (!set_lv_segment_area_lv(mapseg, i, sub_lv, 0, RAID_META))
- 				return_0;
- 	}
++		/* Only unused thin pool can change its availability */
++		if (!lvargs_supplied && lv_is_used_thin_pool(lvl->lv) &&
++		    arg_count(cmd, available_ARG))
++			continue;
 +
- 	dm_list_add(&lv->segments, &mapseg->list);
+ 		/*
+ 		 * Only let hidden LVs through it --all was used or the LVs 
+ 		 * were specifically named on the command line.
+--- LVM2/tools/vgchange.c	2011/10/22 16:47:23	1.124
++++ LVM2/tools/vgchange.c	2011/10/28 20:28:01	1.125
+@@ -100,6 +100,10 @@
+ 		if (!lv_is_visible(lv))
+ 			continue;
  
- 	return 1;
-@@ -2562,29 +2551,15 @@
- 	struct alloc_handle *ah;
- 	uint32_t sub_lv_count;
- 
--	/*
--	 * For RAID, all the devices are AREA_LV.
--	 * However, for 'mirror on stripe' using non-RAID targets,
--	 * the mirror legs are AREA_LV while the stripes underneath
--	 * are AREA_PV.  
--	 */
--	if (segtype_is_raid(segtype))
--		sub_lv_count = mirrors * stripes + segtype->parity_devs;
--	else if (segtype_is_thin_pool(segtype))
--		sub_lv_count = 1;
--	else
--		sub_lv_count = mirrors;
--
- 	log_very_verbose("Extending segment type, %s", segtype->name);
- 
- 	if (segtype_is_virtual(segtype))
- 		return lv_add_virtual_segment(lv, 0u, extents, segtype, thin_pool_name);
- 
--	if (segtype_is_raid(segtype) && !lv->le_count)
--		log_count = mirrors * stripes;
--
- 	if (segtype_is_thin_pool(segtype))
- 		log_count = 1;
-+	else if (segtype_is_raid(segtype) && !lv->le_count)
-+		log_count = mirrors * stripes;
- 
- 	/* Thin pool allocation treats its metadata device like a mirror log. */
- 	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors,
-@@ -2592,10 +2567,24 @@
- 				    allocatable_pvs, alloc, NULL)))
- 		return_0;
- 
--	if (!segtype_is_mirrored(segtype) && !segtype_is_raid(segtype) && !segtype_is_thin_pool(segtype))
-+	if (segtype_is_thin_pool(segtype)) {
-+		if (!(r = extend_pool(lv, segtype, ah)))
-+			stack;
-+	} else if (!segtype_is_mirrored(segtype) && !segtype_is_raid(segtype))
- 		r = lv_add_segment(ah, 0, ah->area_count, lv, segtype,
- 				   stripe_size, 0u, 0);
- 	else {
-+		/*
-+		 * For RAID, all the devices are AREA_LV.
-+		 * However, for 'mirror on stripe' using non-RAID targets,
-+		 * the mirror legs are AREA_LV while the stripes underneath
-+		 * are AREA_PV.
-+		 */
-+		if (segtype_is_raid(segtype))
-+			sub_lv_count = mirrors * stripes + segtype->parity_devs;
-+		else
-+			sub_lv_count = mirrors;
++		/* Never manipulate with thin pools in use */
++		if (lv_is_used_thin_pool(lv))
++			continue;
 +
- 		if (!lv->le_count &&
- 		    !_lv_insert_empty_sublvs(lv, segtype, stripe_size,
- 					     region_size, sub_lv_count)) {
-@@ -4202,34 +4191,12 @@
- 
- 	init_dmeventd_monitor(lp->activation_monitoring);
- 
--	if (seg_is_thin_pool(lp)) {
--		/* FIXME: skipping in test mode is not going work */
--		if (!activate_lv_excl(cmd, first_seg(lv)->pool_metadata_lv) ||
--		    /* Clear 4KB of metadata device for new thin-pool. */
--		    // FIXME: maybe -zero n  should  allow to recreate same thin pool
--		    // and different option should be used for zero_new_blocks
--		    !set_lv(cmd, first_seg(lv)->pool_metadata_lv, UINT64_C(0), 0)) {
--			log_error("Aborting. Failed to wipe pool metadata %s.",
--				  lv->name);
--			goto revert_new_lv;
--		}
--		/* FIXME: we may postpone finish of the pool creation to the
--		 * moment of the first activation - but this needs more changes
--		 * so we would update metadata with vgchange -ay
--		 *
--		 * For now always activate.
--		 */
-+	if (seg_is_thin_pool(lp) || seg_is_thin(lp)) {
- 		if (!activate_lv_excl(cmd, lv)) {
--			log_error("Aborting. Could not to activate thin pool %s.",
-+			log_error("Aborting. Failed to activate thin %s.",
- 				  lv->name);
- 			goto revert_new_lv;
- 		}
--	} else if (seg_is_thin(lp)) {
--		/* FIXME: same as with thin pool - add lazy creation support */
--		if (!activate_lv_excl(cmd, lv)) {
--			log_error("Aborting. Failed to activate thin %s.", lv->name);
--			goto revert_new_lv;
--		}
- 	} else if (lp->snapshot) {
- 		if (!activate_lv_excl(cmd, lv)) {
- 			log_error("Aborting. Failed to activate snapshot "
+ 		/* If LV is sparse, activate origin instead */
+ 		if (lv_is_cow(lv) && lv_is_virtual_origin(origin_from_cow(lv)))
+ 			lv = origin_from_cow(lv);
 
 
