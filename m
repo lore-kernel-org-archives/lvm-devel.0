@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Oct 2011 20:32:55 -0000
-Subject: LVM2/lib/metadata lv_manip.c metadata.h thin_m ...
-Message-ID: <20111028203255.10555.qmail@sourceware.org>
+Date: 28 Oct 2011 20:33:51 -0000
+Subject: LVM2/man lvcreate.8.in
+Message-ID: <20111028203351.11196.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,73 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-28 20:32:54
+Changes by:	zkabelac at sourceware.org	2011-10-28 20:33:50
 
 Modified files:
-	lib/metadata   : lv_manip.c metadata.h thin_manip.c 
+	man            : lvcreate.8.in 
 
 Log message:
-	Thin support for stripe
-	
-	Support stripe options to create thin data pool LV.
-	
-	TODO: combine chunk size and stripe size.
+	Thin option documentation
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.311&r2=1.312
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.261&r2=1.262
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.26&r2=1.27
 
---- LVM2/lib/metadata/lv_manip.c	2011/10/28 20:31:01	1.311
-+++ LVM2/lib/metadata/lv_manip.c	2011/10/28 20:32:54	1.312
-@@ -2570,7 +2570,7 @@
+--- LVM2/man/lvcreate.8.in	2011/10/25 13:24:23	1.26
++++ LVM2/man/lvcreate.8.in	2011/10/28 20:33:50	1.27
+@@ -80,19 +80,26 @@
+ .br
  
- 	if (segtype_is_thin_pool(segtype)) {
- 		if (!lv->le_count) {
--			if (!(r = extend_pool(lv, segtype, ah)))
-+			if (!(r = extend_pool(lv, segtype, ah, stripes, stripe_size)))
- 				stack;
- 		} else if (!(r = _lv_extend_layered_lv(ah, lv, extents, 0,
- 						       stripes, stripe_size)))
---- LVM2/lib/metadata/metadata.h	2011/10/22 16:44:23	1.261
-+++ LVM2/lib/metadata/metadata.h	2011/10/28 20:32:54	1.262
-@@ -463,7 +463,7 @@
- 			int read_only);
- int detach_pool_messages(struct lv_segment *seg);
- int extend_pool(struct logical_volume *lv, const struct segment_type *segtype,
--		struct alloc_handle *ah);
-+		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size);
+ .B lvcreate
++.RB [ \-i | \-\-stripes
++.IR Stripes
++.RB [ \-I | \-\-stripesize
++.IR StripeSize ]]
+ .RB [ \-l | \-\-extents
+ .IR LogicalExtentsNumber [ % { VG | FREE | ORIGIN }]
+ |
+ .BR \-L | \-\-size
+ .IR LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]]
++.RB [ \-c | \-\-chunksize
++.IR ChunkSize ]
+ .RB [ \-V | \-\-virtualsize
+ .IR VirtualSize ]
+ .RB [ \-n | \-\-name
+ .IR ThinLogicalVolumeName ]
+-.RB [ \-\-thinpool
+-.IR ThinPoolLogicalVolumeName ]
+-.B \-T
+-.IR VolumeGroupName [/ ThinPoolLogicalVolumeName ]
++.RB [ \-T | \-\-thin
++.IR VolumeGroupName [/ ThinPoolLogicalVolumeName
++|
++.B \-\-thinpool
++.IR ThinPoolLogicalVolumeName ]]
+ .br
  
- /*
-  * Begin skeleton for external LVM library
---- LVM2/lib/metadata/thin_manip.c	2011/10/22 16:44:23	1.13
-+++ LVM2/lib/metadata/thin_manip.c	2011/10/28 20:32:54	1.14
-@@ -220,7 +220,7 @@
- }
- 
- int extend_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
--		struct alloc_handle *ah)
-+		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
- {
- 	const struct segment_type *striped;
- 	struct logical_volume *meta_lv, *data_lv;
-@@ -245,7 +245,7 @@
- 	}
- 
- 	/* Metadata segment */
--	if (!lv_add_segment(ah, 1, 1, pool_lv, striped, 1, 0, 0))
-+	if (!lv_add_segment(ah, stripes, 1, pool_lv, striped, 1, 0, 0))
- 		return_0;
- 
- 	if (activation()) {
-@@ -290,7 +290,7 @@
- 		return_0;
- 
- 	/* Pool data segment */
--	if (!lv_add_segment(ah, 0, 1, pool_lv, striped, 1, 0, 0))
-+	if (!lv_add_segment(ah, 0, stripes, pool_lv, striped, stripe_size, 0, 0))
- 		return_0;
- 
- 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
+ .SH DESCRIPTION
+@@ -269,11 +276,18 @@
+ commandline switch alias is available for the desired type, as is the case
+ with "error", "zero", "raid1", "raid4", "raid5", or "raid6".
+ .TP
++.BR \-T ", " \-\-thin " " \fIVolumeGroupName [/ \fIThinPoolLogicalVolumeName ]
++Defines the thin pool logical volume.
++.TP
++.BR \-\-thinpool " " \fIThinPoolLogicalVolumeName
++Specifies the thin pool logical volume.
++.TP
+ .BR \-V ", " \-\-virtualsize " " \fIVirtualSize
+-Create a sparse device of the given size (in MB by default) using a snapshot.  
++Create a sparse device of the given size (in MB by default) using a snapshot
++or thinly provisioned device when thin pool is specified.
+ Anything written to the device will be returned when reading from it.
+ Reading from other areas of the device will return blocks of zeros.
+-It is implemented by creating a hidden virtual device of the
++Virtual snapshot is implemented by creating a hidden virtual device of the
+ requested size using the zero target.  A suffix of _vorigin is used for
+ this device.
+ .TP
 
 
