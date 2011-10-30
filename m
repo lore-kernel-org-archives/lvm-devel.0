@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Oct 2011 22:00:58 -0000
-Subject: LVM2/lib metadata/lv_manip.c metadata/thin_man ...
-Message-ID: <20111030220058.4648.qmail@sourceware.org>
+Date: 30 Oct 2011 22:01:42 -0000
+Subject: LVM2/lib/metadata lv_manip.c metadata-exported ...
+Message-ID: <20111030220142.5430.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,108 +10,91 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-10-30 22:00:58
+Changes by:	zkabelac at sourceware.org	2011-10-30 22:01:40
 
 Modified files:
-	lib/metadata   : lv_manip.c thin_manip.c 
-	lib/thin       : thin.c 
+	lib/metadata   : lv_manip.c metadata-exported.h metadata.h 
+	                 thin_manip.c 
 
 Log message:
-	Thin cleanups
+	Make detach_pool_message visible for tools
 	
-	Fix/cleanup several error messages.
-	Remove test for seg_is_thin which could never be true there.
-	Replace (1<<24) with predefined constant.
+	Move there also vg_write and vg_commit.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.312&r2=1.313
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.14&r2=1.15
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.313&r2=1.314
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.218&r2=1.219
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.h.diff?cvsroot=lvm2&r1=1.262&r2=1.263
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/lib/metadata/lv_manip.c	2011/10/28 20:32:54	1.312
-+++ LVM2/lib/metadata/lv_manip.c	2011/10/30 22:00:57	1.313
-@@ -4206,7 +4206,7 @@
- 		   (lp->activate == CHANGE_AE && !activate_lv_excl(cmd, lv)) ||
- 		   (lp->activate == CHANGE_ALY && !activate_lv_local(cmd, lv))) {
- 		log_error("Failed to activate new LV.");
--		if (lp->zero && !seg_is_thin(lp))
-+		if (lp->zero)
+--- LVM2/lib/metadata/lv_manip.c	2011/10/30 22:00:57	1.313
++++ LVM2/lib/metadata/lv_manip.c	2011/10/30 22:01:39	1.314
+@@ -4221,13 +4221,10 @@
+ 	} else if (seg_is_thin_volume(lp)) {
+ 		/* FIXME: for now we may drop any queued thin messages
+ 		 * since we are sure everything was activated already */
+-		if (!detach_pool_messages(first_seg(first_seg(lv)->pool_lv)))
++		if (!detach_pool_messages(first_seg(lv)->pool_lv)) {
++			stack;
  			goto deactivate_and_revert_new_lv;
- 		return NULL;
+-
+-		if (!vg_write(vg) || !vg_commit(vg))
+-			goto deactivate_and_revert_new_lv;
+-
+-		backup(vg);
++		}
  	}
---- LVM2/lib/metadata/thin_manip.c	2011/10/28 20:32:54	1.14
-+++ LVM2/lib/metadata/thin_manip.c	2011/10/30 22:00:57	1.15
-@@ -197,7 +197,8 @@
- 	struct dm_list *h;
  
- 	if (!seg_is_thin_pool(thin_pool_seg)) {
--		log_error("Segment in %s is not a thin pool segment.",
-+		log_error(INTERNAL_ERROR
-+			  "Segment in %s is not a thin pool segment.",
- 			  thin_pool_seg->lv->name);
+ 	if (lp->snapshot) {
+--- LVM2/lib/metadata/metadata-exported.h	2011/10/28 20:28:01	1.218
++++ LVM2/lib/metadata/metadata-exported.h	2011/10/30 22:01:39	1.219
+@@ -558,6 +558,8 @@
+ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
+ 			   uint32_t extent_size);
+ 
++int detach_pool_messages(struct logical_volume *pool_lv);
++
+ /*
+  * Activation options
+  */
+--- LVM2/lib/metadata/metadata.h	2011/10/28 20:32:54	1.262
++++ LVM2/lib/metadata/metadata.h	2011/10/30 22:01:39	1.263
+@@ -461,7 +461,6 @@
+ int attach_pool_message(struct lv_segment *seg, dm_thin_message_t type,
+ 			struct logical_volume *lv, uint32_t delete_id,
+ 			int read_only);
+-int detach_pool_messages(struct lv_segment *seg);
+ int extend_pool(struct logical_volume *lv, const struct segment_type *segtype,
+ 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size);
+ 
+--- LVM2/lib/metadata/thin_manip.c	2011/10/30 22:00:57	1.15
++++ LVM2/lib/metadata/thin_manip.c	2011/10/30 22:01:39	1.16
+@@ -149,15 +149,22 @@
+ 	return 1;
+ }
+ 
+-int detach_pool_messages(struct lv_segment *seg)
++int detach_pool_messages(struct logical_volume *pool_lv)
+ {
+-	if (!lv_is_thin_pool(seg->lv)) {
++	if (!lv_is_thin_pool(pool_lv)) {
+ 		log_error(INTERNAL_ERROR "LV %s is not a thin pool.",
+-			  seg->lv->name);
++			  pool_lv->name);
  		return 0;
  	}
-@@ -208,9 +209,9 @@
- 			max_id = dev_id;
- 	}
  
--	if (++max_id >= (1 << 24)) {
-+	if (++max_id > DM_THIN_MAX_DEVICE_ID) {
- 		// FIXME: try to find empty holes....
--		log_error("Free device_id exhausted...");
-+		log_error("Cannot find free device_id.");
- 		return 0;
- 	}
+-	dm_list_init(&seg->thin_messages);
++	if (!dm_list_empty(&first_seg(pool_lv)->thin_messages)) {
++		dm_list_init(&first_seg(pool_lv)->thin_messages);
++
++		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
++			return_0;
++
++		backup(pool_lv->vg);
++	}
  
-@@ -228,8 +229,9 @@
- 	const size_t len = strlen(pool_lv->name) + 16;
- 	char name[len];
- 
--	if (lv_is_thin_pool(pool_lv)) {
--		log_error("Resize of pool %s not yet implemented.", pool_lv->name);
-+	if (pool_lv->le_count) {
-+		/* FIXME move code for manipulation from lv_manip.c */
-+		log_error(INTERNAL_ERROR "Pool %s has already extents.", pool_lv->name);
- 		return 0;
- 	}
- 
-@@ -276,7 +278,7 @@
- 			return 0;
- 		}
- 	} else {
--		log_error("Pool %s created without initilization.", pool_lv->name);
-+		log_warn("WARNING: Pool %s is created without initilization.", pool_lv->name);
- 	}
- 
- 	if (dm_snprintf(name, len, "%s_tmeta", pool_lv->name) < 0)
---- LVM2/lib/thin/thin.c	2011/10/28 20:25:08	1.26
-+++ LVM2/lib/thin/thin.c	2011/10/30 22:00:58	1.27
-@@ -252,7 +252,7 @@
- 			dmsg.u.m_create_snap.origin_id = 0;//first_seg(first_seg(lmsg->u.lv)->origin)->device_id;
- 			if (!dm_tree_node_add_thin_pool_message(node, &dmsg))
- 				return_0;
--			log_error("Sorry SNAPSHOTS is not yet supported.");
-+			log_error("Sorry SNAPSHOT is not yet supported.");
- 			return 0;
- 		case DM_THIN_MESSAGE_CREATE_THIN:
- 			log_debug("Thin pool create_thin %s.", lmsg->u.lv->name);
-@@ -268,7 +268,7 @@
- 			break;
- 		case DM_THIN_MESSAGE_TRIM:
- 			/* FIXME: to be implemented */
--			log_error("Sorry TRIM is not yes supported.");
-+			log_error("Sorry TRIM is not yet supported.");
- 			return 0;
- 		default:
- 			log_error(INTERNAL_ERROR "Unsupported message.");
-@@ -346,7 +346,7 @@
- 
- #ifdef DEVMAPPER_SUPPORT
- static int _thin_add_target_line(struct dev_manager *dm,
--				 struct dm_pool *mem __attribute__((unused)),
-+				 struct dm_pool *mem,
- 				 struct cmd_context *cmd __attribute__((unused)),
- 				 void **target_state __attribute__((unused)),
- 				 struct lv_segment *seg,
+ 	return 1;
+ }
 
 
