@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Nov 2011 14:57:05 -0000
-Subject: LVM2/lib/metadata metadata-exported.h thin_manip.c
-Message-ID: <20111103145705.32691.qmail@sourceware.org>
+Date: 3 Nov 2011 14:59:21 -0000
+Subject: LVM2/tools lvchange.c toollib.c
+Message-ID: <20111103145921.1089.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-03 14:57:04
+Changes by:	zkabelac at sourceware.org	2011-11-03 14:59:20
 
 Modified files:
-	lib/metadata   : metadata-exported.h thin_manip.c 
+	tools          : lvchange.c toollib.c 
 
 Log message:
-	Thin removing unused detach_pool_messages
+	Thin removing limitation on activation of pool device.
+	
+	Since activation of pool is now independent on thin activation,
+	user may do whatever he needs - thought preferable thin should stay alive,
+	but it it will be found inactivate, update_pool will bring the pool up.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.220&r2=1.221
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.134&r2=1.135
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.232&r2=1.233
 
---- LVM2/lib/metadata/metadata-exported.h	2011/11/03 14:53:58	1.220
-+++ LVM2/lib/metadata/metadata-exported.h	2011/11/03 14:57:04	1.221
-@@ -558,8 +558,6 @@
- uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
- 			   uint32_t extent_size);
+--- LVM2/tools/lvchange.c	2011/11/03 14:41:18	1.134
++++ LVM2/tools/lvchange.c	2011/11/03 14:59:20	1.135
+@@ -534,12 +534,6 @@
+ 		return ECMD_FAILED;
+ 	}
  
--int detach_pool_messages(struct logical_volume *pool_lv);
--
- int update_pool_lv(struct logical_volume *lv, int activate);
- 
- /*
---- LVM2/lib/metadata/thin_manip.c	2011/11/03 14:53:58	1.20
-+++ LVM2/lib/metadata/thin_manip.c	2011/11/03 14:57:04	1.21
-@@ -148,26 +148,6 @@
- 	return 1;
- }
- 
--int detach_pool_messages(struct logical_volume *pool_lv)
--{
--	if (!lv_is_thin_pool(pool_lv)) {
--		log_error(INTERNAL_ERROR "LV %s is not a thin pool.",
--			  pool_lv->name);
--		return 0;
+-	if (lv_is_used_thin_pool(lv) &&
+-	    (arg_count(cmd, available_ARG))) {
+-		log_error("Can't change pool volume \"%s\".", lv->name);
+-		return ECMD_FAILED;
 -	}
 -
--	if (!dm_list_empty(&first_seg(pool_lv)->thin_messages)) {
--		dm_list_init(&first_seg(pool_lv)->thin_messages);
+ 	if (lv_is_cow(lv) && !lv_is_virtual_origin(origin_from_cow(lv)) &&
+ 	    arg_count(cmd, available_ARG)) {
+ 		log_error("Can't change snapshot logical volume \"%s\"",
+--- LVM2/tools/toollib.c	2011/10/28 20:28:01	1.232
++++ LVM2/tools/toollib.c	2011/11/03 14:59:20	1.233
+@@ -126,11 +126,6 @@
+ 		if (lv_is_virtual_origin(lvl->lv) && !arg_count(cmd, all_ARG))
+ 			continue;
+ 
+-		/* Only unused thin pool can change its availability */
+-		if (!lvargs_supplied && lv_is_used_thin_pool(lvl->lv) &&
+-		    arg_count(cmd, available_ARG))
+-			continue;
 -
--		if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
--			return_0;
--
--		backup(pool_lv->vg);
--	}
--
--	return 1;
--}
--
- struct lv_segment *find_pool_seg(const struct lv_segment *seg)
- {
- 	struct lv_segment *pool_seg;
+ 		/*
+ 		 * Only let hidden LVs through it --all was used or the LVs 
+ 		 * were specifically named on the command line.
 
 
