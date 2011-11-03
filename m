@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Nov 2011 14:38:39 -0000
-Subject: LVM2 lib/metadata/thin_manip.c lib/misc/lvm-st ...
-Message-ID: <20111103143839.26671.qmail@sourceware.org>
+Date: 3 Nov 2011 14:41:19 -0000
+Subject: LVM2/tools lvchange.c vgchange.c
+Message-ID: <20111103144119.7765.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,55 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-03 14:38:37
+Changes by:	zkabelac at sourceware.org	2011-11-03 14:41:18
 
 Modified files:
-	lib/metadata   : thin_manip.c 
-	lib/misc       : lvm-string.c 
-	man            : lvm.8.in 
+	tools          : lvchange.c vgchange.c 
 
 Log message:
-	Thin uses _tdata instead of _tpool for data LV
-	
-	Switch to different suffix and keep -tpool reserved for overlay device name.
+	Thin avoids need of having writable VG for activation
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-string.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.133&r2=1.134
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.127&r2=1.128
 
---- LVM2/lib/metadata/thin_manip.c	2011/11/03 14:36:40	1.18
-+++ LVM2/lib/metadata/thin_manip.c	2011/11/03 14:38:36	1.19
-@@ -300,7 +300,7 @@
- 		return_0;
- 
- 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
--					    pool_lv->status, "_tpool")))
-+					    pool_lv->status, "_tdata")))
- 		return_0;
- 
- 	seg = first_seg(pool_lv);
---- LVM2/lib/misc/lvm-string.c	2011/09/06 15:38:44	1.31
-+++ LVM2/lib/misc/lvm-string.c	2011/11/03 14:38:36	1.32
-@@ -107,7 +107,7 @@
- 		"_rimage",
- 		"_rmeta",
- 		"_vorigin",
--		"_tpool",
-+		"_tdata",
- 		"_tmeta",
- 		NULL
- 	};
---- LVM2/man/lvm.8.in	2011/10/19 16:45:35	1.7
-+++ LVM2/man/lvm.8.in	2011/11/03 14:38:37	1.8
-@@ -276,7 +276,7 @@
- There are also various reserved names that are used internally by lvm that can not be used as LV or VG names.
- A VG cannot be called anything that exists in /dev/ at the time of creation, nor can it be called '.' or '..'.
- A LV cannot be called '.' '..' 'snapshot' or 'pvmove'. The LV name may also not contain
--the strings '_mlog', '_mimage', '_tmeta', '_tpool'.
-+the strings '_mlog', '_mimage', '_tdata', '_tmeta'.
- 
- 
- .SH DIAGNOSTICS
+--- LVM2/tools/lvchange.c	2011/10/30 22:07:38	1.133
++++ LVM2/tools/lvchange.c	2011/11/03 14:41:18	1.134
+@@ -142,10 +142,6 @@
+ 				    "exclusively", lv->name);
+ 			if (!activate_lv_excl(cmd, lv))
+ 				return_0;
+-			/* Drop any left thin messages after activation */
+-			if (lv_is_thin_volume(lv) &&
+-			    !detach_pool_messages(first_seg(lv)->pool_lv))
+-				return_0;
+ 		} else if (activate == CHANGE_ALY) {
+ 			log_verbose("Activating logical volume \"%s\" locally",
+ 				    lv->name);
+--- LVM2/tools/vgchange.c	2011/10/30 22:07:38	1.127
++++ LVM2/tools/vgchange.c	2011/11/03 14:41:18	1.128
+@@ -157,12 +157,6 @@
+ 				stack;
+ 				continue;
+ 			}
+-			/* Drop any left thin messages after activation */
+-			if (lv_is_thin_volume(lv) &&
+-			    !detach_pool_messages(first_seg(lv)->pool_lv)) {
+-				stack;
+-				continue;
+-			}
+ 		} else if (activate == CHANGE_ALY) {
+ 			if (!activate_lv_local(cmd, lv)) {
+ 				stack;
 
 
