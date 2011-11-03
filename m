@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 3 Nov 2011 14:37:24 -0000
-Subject: LVM2/lib/thin thin.c
-Message-ID: <20111103143724.16841.qmail@sourceware.org>
+Date: 3 Nov 2011 14:38:39 -0000
+Subject: LVM2 lib/metadata/thin_manip.c lib/misc/lvm-st ...
+Message-ID: <20111103143839.26671.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-03 14:37:24
+Changes by:	zkabelac at sourceware.org	2011-11-03 14:38:37
 
 Modified files:
-	lib/thin       : thin.c 
+	lib/metadata   : thin_manip.c 
+	lib/misc       : lvm-string.c 
+	man            : lvm.8.in 
 
 Log message:
-	Thin clean using delete_id consitently
+	Thin uses _tdata instead of _tpool for data LV
+	
+	Switch to different suffix and keep -tpool reserved for overlay device name.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.27&r2=1.28
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/lvm-string.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.8.in.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/lib/thin/thin.c	2011/10/30 22:00:58	1.27
-+++ LVM2/lib/thin/thin.c	2011/11/03 14:37:23	1.28
-@@ -49,7 +49,7 @@
- {
- 	const char *lv_name = NULL;
- 	struct logical_volume *lv = NULL;
--	uint32_t device_id = 0;
-+	uint32_t delete_id = 0;
- 	dm_thin_message_t type;
- 
- 	/* Message must have only one from: create, trim, delete */
-@@ -70,7 +70,7 @@
- 		type = DM_THIN_MESSAGE_TRIM;
- 	}
- 
--	if (!dm_config_get_uint32(sn, "delete", &device_id)) {
-+	if (!dm_config_get_uint32(sn, "delete", &delete_id)) {
- 		if (!lv)
- 			return SEG_LOG_ERROR("Unknown message in");
- 	} else {
-@@ -79,7 +79,7 @@
- 		type = DM_THIN_MESSAGE_DELETE;
- 	}
- 
--	if (!attach_pool_message(seg, type, lv, device_id, 1))
-+	if (!attach_pool_message(seg, type, lv, delete_id, 1))
+--- LVM2/lib/metadata/thin_manip.c	2011/11/03 14:36:40	1.18
++++ LVM2/lib/metadata/thin_manip.c	2011/11/03 14:38:36	1.19
+@@ -300,7 +300,7 @@
  		return_0;
  
- 	return 1;
+ 	if (!(data_lv = insert_layer_for_lv(pool_lv->vg->cmd, pool_lv,
+-					    pool_lv->status, "_tpool")))
++					    pool_lv->status, "_tdata")))
+ 		return_0;
+ 
+ 	seg = first_seg(pool_lv);
+--- LVM2/lib/misc/lvm-string.c	2011/09/06 15:38:44	1.31
++++ LVM2/lib/misc/lvm-string.c	2011/11/03 14:38:36	1.32
+@@ -107,7 +107,7 @@
+ 		"_rimage",
+ 		"_rmeta",
+ 		"_vorigin",
+-		"_tpool",
++		"_tdata",
+ 		"_tmeta",
+ 		NULL
+ 	};
+--- LVM2/man/lvm.8.in	2011/10/19 16:45:35	1.7
++++ LVM2/man/lvm.8.in	2011/11/03 14:38:37	1.8
+@@ -276,7 +276,7 @@
+ There are also various reserved names that are used internally by lvm that can not be used as LV or VG names.
+ A VG cannot be called anything that exists in /dev/ at the time of creation, nor can it be called '.' or '..'.
+ A LV cannot be called '.' '..' 'snapshot' or 'pvmove'. The LV name may also not contain
+-the strings '_mlog', '_mimage', '_tmeta', '_tpool'.
++the strings '_mlog', '_mimage', '_tdata', '_tmeta'.
+ 
+ 
+ .SH DIAGNOSTICS
 
 
