@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Nov 2011 22:47:18 -0000
-Subject: LVM2/man lvcreate.8.in
-Message-ID: <20111104224718.4184.qmail@sourceware.org>
+Date: 4 Nov 2011 22:49:54 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c lib/m ...
+Message-ID: <20111104224954.4844.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,118 +10,106 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-04 22:47:17
+Changes by:	zkabelac at sourceware.org	2011-11-04 22:49:53
 
 Modified files:
-	man            : lvcreate.8.in 
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c vg.c vg.h 
+	tools          : lvresize.c 
 
 Log message:
-	Thin lvcreate man update
+	Avoid lvextend to overflow
 	
-	Added poolmetadatasize options
-	Add an example.
+	Add extra check to extent_count overflow.
+	Use internal define MAX_EXTENT_COUNT instead UINT32_MAX.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.29&r2=1.30
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2177&r2=1.2178
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.471&r2=1.472
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/vg.h.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.140&r2=1.141
 
---- LVM2/man/lvcreate.8.in	2011/10/30 22:08:21	1.29
-+++ LVM2/man/lvcreate.8.in	2011/11/04 22:47:17	1.30
-@@ -79,26 +79,27 @@
- .br
+--- LVM2/WHATS_NEW	2011/11/04 01:31:23	1.2177
++++ LVM2/WHATS_NEW	2011/11/04 22:49:53	1.2178
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix extent_count overflow with lvextend.
+   Add missing lvrename mirrored log recursion in for_each_sub_lv.
+   Improve lv_extend stack reporting.
+   Increase virtual segment size instead of creating multiple segment list.
+--- LVM2/lib/metadata/metadata.c	2011/10/28 20:12:55	1.471
++++ LVM2/lib/metadata/metadata.c	2011/11/04 22:49:53	1.472
+@@ -276,12 +276,12 @@
+ 	if (!alloc_pv_segment_whole_pv(mem, pv))
+ 		return_0;
  
- .B lvcreate
-+.BR \-T | \-\-thin
-+.IR VolumeGroupName [ Path ][/ ThinPoolLogicalVolumeName
-+.RB [{ \-l | \-\-extents
-+.IR LogicalExtentsNumber [ % { VG | FREE | ORIGIN }]
-+|
-+.BR \-L | \-\-size
-+.IR LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]}
- .RB [ \-i | \-\-stripes
- .IR Stripes
- .RB [ \-I | \-\-stripesize
- .IR StripeSize ]]
--.RB [ \-l | \-\-extents
--.IR LogicalExtentsNumber [ % { VG | FREE | ORIGIN }]
--|
--.BR \-L | \-\-size
--.IR LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]]
- .RB [ \-c | \-\-chunksize
- .IR ChunkSize ]
-+.RB [ \-\-poolmetadatasize
-+.IR MetadataSize [ bBsSkKmMgGt ]]]
-+.RB [ \-\-thinpool
-+.IR ThinPoolLogicalVolumeName [ Path ]]
- .RB [ \-V | \-\-virtualsize
--.IR VirtualSize ]
-+.IR VirtualSize [ bBsSkKmMgGtTpPeE ]]
- .RB [ \-n | \-\-name
--.IR ThinLogicalVolumeName ]
--.RB [ \-T | \-\-thin
--.IR VolumeGroupName [/ ThinPoolLogicalVolumeName
--|
--.B \-\-thinpool
--.IR ThinPoolLogicalVolumeName ]]
-+.IR ThinLogicalVolumeName [ Path ]]
- .br
+-	if ((uint64_t) vg->extent_count + pv->pe_count > UINT32_MAX) {
++	if ((uint64_t) vg->extent_count + pv->pe_count > MAX_EXTENT_COUNT) {
+ 		log_error("Unable to add %s to %s: new extent count (%"
+ 			  PRIu64 ") exceeds limit (%" PRIu32 ").",
+ 			  pv_name, vg->name,
+ 			  (uint64_t) vg->extent_count + pv->pe_count,
+-			  UINT32_MAX);
++			  MAX_EXTENT_COUNT);
+ 		return 0;
+ 	}
  
- .SH DESCRIPTION
-@@ -235,6 +236,12 @@
- .br
- Default is read and write.
- .TP
-+.IR \fB\-\-poolmetadatasize " " MetadataSize [ bBsSkKmMgG ]
-+Set the size of thin pool's metadata logical volume.
-+Supported value is in range between 2MiB and 16GiB.
-+Default value is  (Pool_LV_size / Pool_LV_chunk_size * 64b).
-+
-+.TP
- .IR \fB\-r ", " \fB\-\-readahead " {" ReadAheadSectors | auto | none }
- Set read ahead sector count of this logical volume.
- For volume groups with metadata in lvm1 format, this must
-@@ -269,17 +276,24 @@
- .TP
- .B \-\-type \fISegmentType
- Create a logical volume that uses the specified segment type
--(e.g. "raid5", "mirror", "snapshot").  Many segment types have a
-+(e.g. "raid5", "mirror", "snapshot", "thin", "thin_pool").
-+Many segment types have a
- commandline switch alias that will enable their use (-s is an alias for
- --type snapshot).  However, this argument must be used when no existing
- commandline switch alias is available for the desired type, as is the case
- with "error", "zero", "raid1", "raid4", "raid5", or "raid6".
- .TP
--.BR \-T ", " \-\-thin " " \fIVolumeGroupName [/ \fIThinPoolLogicalVolumeName ]
--Defines the thin pool logical volume.
--.TP
--.BR \-\-thinpool " " \fIThinPoolLogicalVolumeName
--Specifies the thin pool logical volume.
-+.IR \fB\-T ", " \fB\-\-thin ", " \fB\-\-thinpool " " ThinPoolLogicalVolumeName [ Path ]
-+Creates thin pool or thin logical volume or both.
-+Specifying the optional argument --size will cause the creation of
-+the thin pool logical volume.
-+Specifying the optional argument --virtualsize will cause the creation of
-+the thin logical volume from given thin pool volume.
-+Specifying both arguments will cause the creation of both
-+thin pool and thin volume using this pool.
-+Requires device mapper kernel driver for thin provisioning
-+from kernel 3.2 or newer.
-+
- .TP
- .IR \fB\-V ", " \fB\-\-virtualsize " " VirtualSize [ bBsSkKmMgGtTpPeE ]
- Create a sparse device of the given size (in MB by default) using a snapshot
-@@ -344,6 +358,12 @@
- .sp
- .B lvcreate --type raid5 -L 5G -i 3 -I 64 -n my_lv vg00
+@@ -1000,12 +1000,12 @@
+ 			  display_size(cmd, size));
+ 	}
  
-+Creates 100MiB pool logical volume for thin provisioning
-+build with 2 stripes 64KiB and chunk size 128KiB together with
-+1TiB thin provisioned logical volume "vg00/thin_lv".
-+.sp
-+.B lvcreate -i 2 -I 64 -c 256  -L100M -T vg00/pool -V 1T --name thin_lv
+-	if (size > (uint64_t) UINT32_MAX * extent_size) {
++	if (size > (uint64_t) MAX_EXTENT_COUNT * extent_size) {
+ 		log_error("Volume too large (%s) for extent size %s. "
+ 			  "Upper limit is %s.",
+ 			  display_size(cmd, size),
+ 			  display_size(cmd, (uint64_t) extent_size),
+-			  display_size(cmd, (uint64_t) UINT32_MAX *
++			  display_size(cmd, (uint64_t) MAX_EXTENT_COUNT *
+ 				       extent_size));
+ 		return 0;
+ 	}
+--- LVM2/lib/metadata/vg.c	2011/08/11 17:24:24	1.12
++++ LVM2/lib/metadata/vg.c	2011/11/04 22:49:53	1.13
+@@ -261,7 +261,7 @@
+ 
+ 	size /= new_size;
+ 
+-	if (size > UINT32_MAX) {
++	if (size > MAX_EXTENT_COUNT) {
+ 		log_error("New extent count %" PRIu64 " for %s%s exceeds "
+ 			  "32 bits.", size, desc1, desc2);
+ 		return 0;
+--- LVM2/lib/metadata/vg.h	2011/08/11 17:24:24	1.15
++++ LVM2/lib/metadata/vg.h	2011/11/04 22:49:53	1.16
+@@ -37,6 +37,8 @@
+ 	struct pvcreate_params *pp;
+ };
+ 
++#define MAX_EXTENT_COUNT  (UINT32_MAX)
 +
- .SH SEE ALSO
- .BR lvm (8), 
- .BR vgcreate (8), 
+ struct volume_group {
+ 	struct cmd_context *cmd;
+ 	struct dm_pool *vgmem;
+--- LVM2/tools/lvresize.c	2011/10/28 20:31:01	1.140
++++ LVM2/tools/lvresize.c	2011/11/04 22:49:53	1.141
+@@ -459,8 +459,14 @@
+ 			break;
+ 	}
+ 
+-	if (lp->sign == SIGN_PLUS)
++	if (lp->sign == SIGN_PLUS) {
++		if (lp->extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
++			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
++				  lp->lv_name, lv->le_count, MAX_EXTENT_COUNT);
++			return EINVALID_CMD_LINE;
++		}
+ 		lp->extents += lv->le_count;
++	}
+ 
+ 	if (lp->sign == SIGN_MINUS) {
+ 		if (lp->extents >= lv->le_count) {
 
 
