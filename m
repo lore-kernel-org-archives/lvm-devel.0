@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Nov 2011 12:19:54 -0000
-Subject: LVM2/tools lvresize.c
-Message-ID: <20111108121954.23979.qmail@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 8 Nov 2011 17:32:12 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20111108173212.25065.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-08 12:19:53
+Changes by:	snitzer at sourceware.org	2011-11-08 17:32:11
 
 Modified files:
-	tools          : lvresize.c 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Thin ensure pool table is update after resize
+	Fix _get_proc_number to be tolerant of malformed /proc/misc entries.
 	
-	Always make sure table gets reloaded.
-	For now activate and deactivate pool volume if it's not active.
-	
-	FIXME: we could do this only if we are sure some thin volume is alive.
+	Fixes issue reported here: http://lkml.org/lkml/2011/11/8/190
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.142&r2=1.143
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.520&r2=1.521
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
 
---- LVM2/tools/lvresize.c	2011/11/07 10:58:13	1.142
-+++ LVM2/tools/lvresize.c	2011/11/08 12:19:53	1.143
-@@ -781,6 +781,20 @@
+--- LVM2/WHATS_NEW_DM	2011/10/31 12:22:49	1.520
++++ LVM2/WHATS_NEW_DM	2011/11/08 17:32:10	1.521
+@@ -1,5 +1,6 @@
+ Version 1.02.68 -
+ ==================================
++  Fix _get_proc_number to be tolerant of malformed /proc/misc entries.
+   Add ExecReload to dm-event.service for systemd to reload dmeventd properly.
+   Add dm_config_tree_find_str_allow_empty.
+   Fix compile-time pool memory locking with DEBUG_MEM.
+--- LVM2/libdm/ioctl/libdm-iface.c	2011/10/20 10:38:04	1.126
++++ LVM2/libdm/ioctl/libdm-iface.c	2011/11/08 17:32:11	1.127
+@@ -172,7 +172,8 @@
+ {
+ 	FILE *fl;
+ 	char nm[256];
+-	int c;
++	char *line;
++	size_t len;
+ 	uint32_t num;
  
- 	backup(vg);
+ 	if (!(fl = fopen(file, "r"))) {
+@@ -180,8 +181,8 @@
+ 		return 0;
+ 	}
  
-+	/*
-+	 * Update lvm pool metadata (drop messages) if the pool has been
-+	 * resumed and do a pool active/deactivate in other case.
-+	 *
-+	 * Note: Active thin pool can be waiting for resize.
-+	 *
-+	 * FIXME: Activate only when thin volume is active
-+	 */
-+	if (lv_is_thin_pool(lv) &&
-+	    !update_pool_lv(lv, !lv_is_active(lv))) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
- 	log_print("Logical volume %s successfully resized", lp->lv_name);
- 
- 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+-	while (!feof(fl)) {
+-		if (fscanf(fl, "%d %255s\n", &num, &nm[0]) == 2) {
++	while (getline(&line, &len, fl) != -1) {
++		if (sscanf(line, "%d %255s\n", &num, &nm[0]) == 2) {
+ 			if (!strcmp(name, nm)) {
+ 				if (number) {
+ 					*number = num;
+@@ -191,9 +192,7 @@
+ 				}
+ 				dm_bit_set(_dm_bitset, num);
+ 			}
+-		} else do {
+-			c = fgetc(fl);
+-		} while (c != EOF && c != '\n');
++		}
+ 	}
+ 	if (fclose(fl))
+ 		log_sys_error("fclose", file);
 
 
