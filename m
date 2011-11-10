@@ -1,83 +1,88 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Nov 2011 15:31:00 -0000
-Subject: LVM2 lib/thin/thin.c test/t-lvcreate-thin.sh
-Message-ID: <20111110153100.17579.qmail@sourceware.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Thu, 10 Nov 2011 16:26:09 -0600
+Subject: [PATCH] LVM: New flag, LV_REBUILD
+Message-ID: <1320963969.7209.1.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-10 15:31:00
+Any objections to a new flag?
 
-Modified files:
-	lib/thin       : thin.c 
-	test           : t-lvcreate-thin.sh 
+ brassow
 
-Log message:
-	Thin send create_snap message
-	
-	Start creating snapshots for real.
-	Update test suite to check it happens.
+Add new flag, LV_REBUILD.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvcreate-thin.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+Until now, I had been using the LV_NOTSYNCED as a flag to indicate that RAID
+sub-LVs needed to be rebuilt.  (The 'rebuild' parameter is then specified in
+the DM CTR table.)  However, I don't want to use a flag that gets written to
+the LVM metadata... and the LV_NOTSYNCED flag's original meaning does not
+suite the purpose adequately.
 
---- LVM2/lib/thin/thin.c	2011/11/07 11:03:48	1.31
-+++ LVM2/lib/thin/thin.c	2011/11/10 15:30:59	1.32
-@@ -222,6 +222,7 @@
- {
- 	char *metadata_dlid, *pool_dlid;
- 	const struct lv_thin_message *lmsg;
-+	const struct logical_volume *origin;
+This patch proposes and uses a new flag, LV_REBUILD.
+
+
+Index: LVM2/lib/metadata/metadata-exported.h
+===================================================================
+--- LVM2.orig/lib/metadata/metadata-exported.h
++++ LVM2/lib/metadata/metadata-exported.h
+@@ -61,7 +61,9 @@
+ //#define VIRTUAL		UINT64_C(0x00010000)	/* LV - internal use only */
+ #define MIRROR_LOG		UINT64_C(0x00020000)	/* LV */
+ #define MIRROR_IMAGE		UINT64_C(0x00040000)	/* LV */
++
+ #define LV_NOTSYNCED		UINT64_C(0x00080000)	/* LV */
++#define LV_REBUILD		UINT64_C(0x00100000)	/* LV */
+ //#define PRECOMMITTED		UINT64_C(0x00200000)	/* VG - internal use only */
+ #define CONVERTING		UINT64_C(0x00400000)	/* LV */
  
- 	if (!laopts->real_pool) {
- 		if (!(pool_dlid = build_dm_uuid(mem, seg->lv->lvid.s, "tpool"))) {
-@@ -258,22 +259,13 @@
+Index: LVM2/lib/metadata/raid_manip.c
+===================================================================
+--- LVM2.orig/lib/metadata/raid_manip.c
++++ LVM2/lib/metadata/raid_manip.c
+@@ -440,7 +440,7 @@ static int _alloc_image_component(struct
+ 		return 0;
+ 	}
  
- 	dm_list_iterate_items(lmsg, &seg->thin_messages) {
- 		switch (lmsg->type) {
--		case DM_THIN_MESSAGE_CREATE_SNAP:
--			/* FIXME: to be implemented */
--			log_debug("Thin pool create_snap %s.", lmsg->u.lv->name);
--			if (!dm_tree_node_add_thin_pool_message(node,
--								lmsg->type,
--								first_seg(lmsg->u.lv)->device_id,
--								0))//first_seg(first_seg(lmsg->u.lv)->origin)->device_id;
--				return_0;
--			log_error("Sorry SNAPSHOT is not yet supported.");
--			return 0;
- 		case DM_THIN_MESSAGE_CREATE_THIN:
--			log_debug("Thin pool create_thin %s.", lmsg->u.lv->name);
-+			origin = first_seg(lmsg->u.lv)->origin;
-+			log_debug("Thin pool create_%s %s.", (!origin) ? "thin" : "snap", lmsg->u.lv->name);
- 			if (!dm_tree_node_add_thin_pool_message(node,
--								lmsg->type,
-+								(!origin) ? lmsg->type : DM_THIN_MESSAGE_CREATE_SNAP,
- 								first_seg(lmsg->u.lv)->device_id,
--								0))
-+								(!origin) ? 0 : first_seg(origin)->device_id))
- 				return_0;
- 			break;
- 		case DM_THIN_MESSAGE_DELETE:
---- LVM2/test/t-lvcreate-thin.sh	2011/11/10 12:44:33	1.2
-+++ LVM2/test/t-lvcreate-thin.sh	2011/11/10 15:31:00	1.3
-@@ -145,10 +145,11 @@
- lvremove -ff $vg
- check vg_field $vg lv_count 0
+-	status = LVM_READ | LVM_WRITE | LV_NOTSYNCED | type;
++	status = LVM_READ | LVM_WRITE | LV_REBUILD | type;
+ 	tmp_lv = lv_create_empty(img_name, NULL, status, ALLOC_INHERIT, lv->vg);
+ 	if (!tmp_lv) {
+ 		log_error("Failed to allocate new raid component, %s", img_name);
+@@ -588,7 +588,7 @@ static int _raid_add_images(struct logic
+ 	 */
+ 	if (seg_is_linear(seg)) {
+ 		/* A complete resync will be done, no need to mark each sub-lv */
+-		status_mask = ~(LV_NOTSYNCED);
++		status_mask = ~(LV_REBUILD);
  
--
- # Create thin snapshot of thinLV
--lvcreate -L4M -V2G -T $vg/pool --name lv1
-+lvcreate -L10M -V10M -T $vg/pool --name lv1
-+mkfs.ext4 $DM_DEV_DIR/$vg/lv1
- lvcreate -s $vg/lv1
-+fsck -p $DM_DEV_DIR/$vg/lvol0
- lvcreate -s $vg/lv1 --name lv2
- lvcreate -s $vg/lv1 --name $vg/lv3
- lvcreate --type snapshot $vg/lv1
+ 		if (!(lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl)))) {
+ 			log_error("Memory allocation failed");
+@@ -1335,8 +1335,8 @@ static int _convert_mirror_to_raid1(stru
+ 		log_debug("Adding %s to %s", lvl->lv->name, lv->name);
+ 
+ 		/* Images are known to be in-sync */
+-		lvl->lv->status &= ~LV_NOTSYNCED;
+-		first_seg(lvl->lv)->status &= ~LV_NOTSYNCED;
++		lvl->lv->status &= ~LV_REBUILD;
++		first_seg(lvl->lv)->status &= ~LV_REBUILD;
+ 		lv_set_hidden(lvl->lv);
+ 
+ 		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
+Index: LVM2/lib/raid/raid.c
+===================================================================
+--- LVM2.orig/lib/raid/raid.c
++++ LVM2/lib/raid/raid.c
+@@ -183,7 +183,7 @@ static int _raid_add_target_line(struct 
+ 	}
+ 
+ 	for (s = 0; s < seg->area_count; s++)
+-		if (seg_lv(seg, s)->status & LV_NOTSYNCED)
++		if (seg_lv(seg, s)->status & LV_REBUILD)
+ 			rebuilds |= 1 << s;
+ 
+ 	if (!dm_tree_node_add_raid_target(node, len, _raid_name(seg),
+
 
 
