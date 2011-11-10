@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 10 Nov 2011 12:43:07 -0000
-Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/thin ...
-Message-ID: <20111110124307.7893.qmail@sourceware.org>
+Date: 10 Nov 2011 12:44:01 -0000
+Subject: LVM2/test/lib aux.sh
+Message-ID: <20111110124401.8290.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,72 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-10 12:43:06
+Changes by:	zkabelac at sourceware.org	2011-11-10 12:44:00
 
 Modified files:
-	lib/metadata   : lv_manip.c thin_manip.c 
-	tools          : lvcreate.c toollib.c 
+	test/lib       : aux.sh 
 
 Log message:
-	Small comment and indent updates
+	Add generic function to check for target version
+	
+	So the test script may use a simple line like i.e.:
+	
+	aux target_at_least dm-thin-pool 1 0 0 || skip
+	aux target_at_least snapshot-origin 1 6 || skip
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.329&r2=1.330
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.249&r2=1.250
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.233&r2=1.234
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.33&r2=1.34
 
---- LVM2/lib/metadata/lv_manip.c	2011/11/10 12:42:36	1.329
-+++ LVM2/lib/metadata/lv_manip.c	2011/11/10 12:43:05	1.330
-@@ -4263,7 +4263,6 @@
- 	init_dmeventd_monitor(lp->activation_monitoring);
+--- LVM2/test/lib/aux.sh	2011/10/23 15:43:10	1.33
++++ LVM2/test/lib/aux.sh	2011/11/10 12:44:00	1.34
+@@ -448,6 +448,39 @@
+ 	fi
+ }
  
- 	if (seg_is_thin(lp)) {
--
- 		/* For thin snapshot suspend active thin origin first */
- 		if (org && lv_is_active(org)) {
- 			if (!suspend_lv(cmd, org)) {
---- LVM2/lib/metadata/thin_manip.c	2011/11/07 11:04:45	1.25
-+++ LVM2/lib/metadata/thin_manip.c	2011/11/10 12:43:05	1.26
-@@ -346,7 +346,7 @@
- 	}
++#
++# Check wheter kernel [dm module] target exist
++# at least in expected version
++#
++# [dm-]target-name major minor revision
++#
++# i.e.   dm_target_at_least  dm-thin-pool  1 0
++target_at_least()
++{
++	case "$1" in
++	  dm-*) modprobe "$1" ;;
++	esac
++
++	version=$(dmsetup targets 2>/dev/null | grep "${1##dm-} " 2>/dev/null)
++	version=${version##* v}
++	shift
++	major=$(echo $version | cut -d. -f1)
++	minor=$(echo $version | cut -d. -f2)
++	revision=$(echo $version | cut -d. -f3)
++
++	test -z "$1" && return 0
++	test -z "$major" && return 1
++	test "$major" -gt "$1" && return 0
++	test "$major" -lt "$1" && return 1
++	test -z "$2" && return 0
++	test -z "$minor" && return 1
++	test "$minor" -gt "$2" && return 0
++	test "$minor" -lt "$2" && return 1
++	test -z "$4" && return 0
++	test -z "$revision" && return 1
++	test "$revision" -lt "$3" && return 1
++}
++
+ test -f DEVICES && devs=$(cat DEVICES)
+ test -f LOOP && LOOP=$(cat LOOP)
  
- 	if (activate) {
--		/* If the pool was not yet activated, do it */
-+		/* If the pool is not active, do activate deactivate */
- 		if (!lv_is_active(lv)) {
- 			if (!activate_lv_excl(lv->vg->cmd, lv))
- 				return_0;
---- LVM2/tools/lvcreate.c	2011/11/10 12:40:29	1.249
-+++ LVM2/tools/lvcreate.c	2011/11/10 12:43:05	1.250
-@@ -200,7 +200,8 @@
- 	struct lv_list *lvl;
- 
- 	if (!(lvl = find_lv_in_vg(vg, lp->origin))) {
--		log_error("Snapshot origin LV %s not found in Volume group %s.", lp->origin, vg->name);
-+		log_error("Snapshot origin LV %s not found in Volume group %s.",
-+			  lp->origin, vg->name);
- 		return 0;
- 	}
- 
-@@ -222,7 +223,7 @@
- 
- /*
-  * Update extents parameters based on other parameters which affect the size
-- * calcuation.
-+ * calculation.
-  * NOTE: We must do this here because of the percent_t typedef and because we
-  * need the vg.
-  */
---- LVM2/tools/toollib.c	2011/11/03 14:59:20	1.233
-+++ LVM2/tools/toollib.c	2011/11/10 12:43:05	1.234
-@@ -329,6 +329,7 @@
- 		dm_list_iterate_items(sll, &arg_lvnames) {
- 			const char *vg_name = sll->str;
- 			const char *lv_name = strchr(vg_name, '/');
-+log_error("VGNAME strdup %p %s   %s", lv_name, vg_name,  vgname);
- 
- 			if ((!lv_name && !strcmp(vg_name, vgname))) {
- 				/* Process all LVs in this VG */
 
 
