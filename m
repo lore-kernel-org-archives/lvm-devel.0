@@ -1,23 +1,52 @@
-From: John Calcote <JCalcote@fusionio.com>
-Date: Tue, 8 Nov 2011 10:26:46 -0700
-Subject: lvm2app installation issue
-Message-ID: <89CB961ABB6E1E45B7968F7C61CF3D5B61ED38964B@MBX.int.fusionio.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 10 Nov 2011 12:39:02 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20111110123902.2956.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi all -
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-11-10 12:39:01
 
-I'm working on an application that queries LVM2 for configuration information and displays it on the console. I wanted to use lvm2app for performance reasons, but the library is pretty new. In fact, I've found only the most recent releases of most distros even have a runtime package for this library, much less a devel package. Not wanting to give up the benefits of the library, I've decided to dynamically link to the library at runtime, and back off to parsing the output of command line utilities if the library isn't found on the system.
+Modified files:
+	lib/metadata   : lv_manip.c 
 
-While testing this approach, I noticed that the liblvm makefile's install target only creates a single link (liblvm2app.so -> liblvm2app.so.2.2). Are there plans to create a liblvm2app.so.2 link so I can link to major version 2 of the library and still pick up bug fixes in minor releases?
+Log message:
+	Thin disable pool create without activation
 
-Thanks in advance,
-John
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.326&r2=1.327
 
-Confidentiality Notice: This e-mail message, its contents and any attachments to it are confidential to the intended recipient, and may contain information that is privileged and/or exempt from disclosure under applicable law. If you are not the intended recipient, please immediately notify the sender and destroy the original e-mail message and any attachments (and any copies that may have been made) from your system or otherwise. Any unauthorized use, copying, disclosure or distribution of this information is strictly prohibited.
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20111108/90448218/attachment.htm>
+--- LVM2/lib/metadata/lv_manip.c	2011/11/07 13:54:54	1.326
++++ LVM2/lib/metadata/lv_manip.c	2011/11/10 12:39:01	1.327
+@@ -4110,13 +4110,21 @@
+ 		return NULL;
+ 	}
+ 
+-	if ((segtype_is_mirrored(lp->segtype) ||
+-	     segtype_is_raid(lp->segtype) || seg_is_thin_volume(lp)) && !activation()) {
++	if (!activation() &&
++	    (seg_is_mirrored(lp) ||
++	     seg_is_raid(lp) ||
++	     seg_is_thin_pool(lp))) {
++		/*
++		 * FIXME: For thin pool add some code to allow delayed
++		 * initialization of empty thin pool volume.
++		 * i.e. using some LV flag, fake message,...
++		 * and testing for metadata pool header signature?
++		 */
+ 		log_error("Can't create %s without using "
+ 			  "device-mapper kernel driver.",
+ 			  segtype_is_raid(lp->segtype) ? lp->segtype->name :
+ 			  segtype_is_mirrored(lp->segtype) ?  "mirror" :
+-			  "thin volume");
++			  "thin pool volume");
+ 		return NULL;
+ 	}
+ 
+
+
