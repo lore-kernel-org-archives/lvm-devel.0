@@ -1,103 +1,61 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 11 Nov 2011 17:23:10 +0100
-Subject: [PATCH] LVM: New flag, LV_REBUILD
-In-Reply-To: <1320963969.7209.1.camel@f14.redhat.com>
-References: <1320963969.7209.1.camel@f14.redhat.com>
-Message-ID: <4EBD4BEE.2050301@redhat.com>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 11 Nov 2011 16:41:38 -0000
+Subject: LVM2/lib activate/activate.c activate/activate ...
+Message-ID: <20111111164138.8749.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 10.11.2011 23:26, Jonathan Brassow napsal(a):
-> Any objections to a new flag?
-> 
->  brassow
-> 
-> Add new flag, LV_REBUILD.
-> 
-> Until now, I had been using the LV_NOTSYNCED as a flag to indicate that RAID
-> sub-LVs needed to be rebuilt.  (The 'rebuild' parameter is then specified in
-> the DM CTR table.)  However, I don't want to use a flag that gets written to
-> the LVM metadata... and the LV_NOTSYNCED flag's original meaning does not
-> suite the purpose adequately.
-> 
-> This patch proposes and uses a new flag, LV_REBUILD.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	mbroz at sourceware.org	2011-11-11 16:41:37
 
-Hmm and how is this going to work in some crash scenarios - are you always
-able to deduce the raid was not yet build ?
+Modified files:
+	lib/activate   : activate.c activate.h 
+	lib/filters    : filter-mpath.c 
 
-Also it seems we encode each flag into lib/format_text/flags.c
+Log message:
+	Remove unneeded parameter.
 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.222&r2=1.223
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.87&r2=1.88
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-mpath.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
-> 
-> 
-> Index: LVM2/lib/metadata/metadata-exported.h
-> ===================================================================
-> --- LVM2.orig/lib/metadata/metadata-exported.h
-> +++ LVM2/lib/metadata/metadata-exported.h
-> @@ -61,7 +61,9 @@
->  //#define VIRTUAL		UINT64_C(0x00010000)	/* LV - internal use only */
->  #define MIRROR_LOG		UINT64_C(0x00020000)	/* LV */
->  #define MIRROR_IMAGE		UINT64_C(0x00040000)	/* LV */
-> +
->  #define LV_NOTSYNCED		UINT64_C(0x00080000)	/* LV */
-> +#define LV_REBUILD		UINT64_C(0x00100000)	/* LV */
->  //#define PRECOMMITTED		UINT64_C(0x00200000)	/* VG - internal use only */
->  #define CONVERTING		UINT64_C(0x00400000)	/* LV */
->  
-> Index: LVM2/lib/metadata/raid_manip.c
-> ===================================================================
-> --- LVM2.orig/lib/metadata/raid_manip.c
-> +++ LVM2/lib/metadata/raid_manip.c
-> @@ -440,7 +440,7 @@ static int _alloc_image_component(struct
->  		return 0;
->  	}
->  
-> -	status = LVM_READ | LVM_WRITE | LV_NOTSYNCED | type;
-> +	status = LVM_READ | LVM_WRITE | LV_REBUILD | type;
->  	tmp_lv = lv_create_empty(img_name, NULL, status, ALLOC_INHERIT, lv->vg);
->  	if (!tmp_lv) {
->  		log_error("Failed to allocate new raid component, %s", img_name);
-> @@ -588,7 +588,7 @@ static int _raid_add_images(struct logic
->  	 */
->  	if (seg_is_linear(seg)) {
->  		/* A complete resync will be done, no need to mark each sub-lv */
-> -		status_mask = ~(LV_NOTSYNCED);
-> +		status_mask = ~(LV_REBUILD);
->  
->  		if (!(lvl = dm_pool_alloc(lv->vg->vgmem, sizeof(*lvl)))) {
->  			log_error("Memory allocation failed");
-> @@ -1335,8 +1335,8 @@ static int _convert_mirror_to_raid1(stru
->  		log_debug("Adding %s to %s", lvl->lv->name, lv->name);
->  
->  		/* Images are known to be in-sync */
-> -		lvl->lv->status &= ~LV_NOTSYNCED;
-> -		first_seg(lvl->lv)->status &= ~LV_NOTSYNCED;
-> +		lvl->lv->status &= ~LV_REBUILD;
-> +		first_seg(lvl->lv)->status &= ~LV_REBUILD;
->  		lv_set_hidden(lvl->lv);
->  
->  		if (!set_lv_segment_area_lv(seg, s, lvl->lv, 0,
-> Index: LVM2/lib/raid/raid.c
-> ===================================================================
-> --- LVM2.orig/lib/raid/raid.c
-> +++ LVM2/lib/raid/raid.c
-> @@ -183,7 +183,7 @@ static int _raid_add_target_line(struct 
->  	}
->  
->  	for (s = 0; s < seg->area_count; s++)
-> -		if (seg_lv(seg, s)->status & LV_NOTSYNCED)
-> +		if (seg_lv(seg, s)->status & LV_REBUILD)
->  			rebuilds |= 1 << s;
->  
->  	if (!dm_tree_node_add_raid_target(node, len, _raid_name(seg),
-> 
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+--- LVM2/lib/activate/activate.c	2011/11/11 15:14:05	1.222
++++ LVM2/lib/activate/activate.c	2011/11/11 16:41:37	1.223
+@@ -443,7 +443,7 @@
+ 	return r;
+ }
+ 
+-int lvm_dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix)
++int lvm_dm_prefix_check(int major, int minor, const char *prefix)
+ {
+ 	struct dm_task *dmt;
+ 	const char *uuid;
+--- LVM2/lib/activate/activate.h	2011/11/11 15:14:05	1.87
++++ LVM2/lib/activate/activate.h	2011/11/11 16:41:37	1.88
+@@ -53,7 +53,7 @@
+ 		   int use_modprobe);
+ int target_version(const char *target_name, uint32_t *maj,
+ 		   uint32_t *min, uint32_t *patchlevel);
+-int lvm_dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix);
++int lvm_dm_prefix_check(int major, int minor, const char *prefix);
+ int list_segment_modules(struct dm_pool *mem, const struct lv_segment *seg,
+ 			 struct dm_list *modules);
+ int list_lv_modules(struct dm_pool *mem, const struct logical_volume *lv,
+--- LVM2/lib/filters/filter-mpath.c	2011/11/11 15:24:48	1.1
++++ LVM2/lib/filters/filter-mpath.c	2011/11/11 16:41:37	1.2
+@@ -136,7 +136,7 @@
+ 	if (major != dm_major())
+ 		return 0;
+ 
+-	return lvm_dm_prefix_check(sysfs_dir, major, minor, MPATH_PREFIX);
++	return lvm_dm_prefix_check(major, minor, MPATH_PREFIX);
+ }
+ 
+ static int _ignore_mpath(struct dev_filter *f, struct device *dev)
 
 
