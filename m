@@ -1,459 +1,520 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 10 Nov 2011 16:37:06 -0600
-Subject: [PATCH] LVM: New lvconvert option, '--replace'
-Message-ID: <1320964626.7209.3.camel@f14.redhat.com>
+From: Milan Broz <mbroz@redhat.com>
+Date: Fri, 11 Nov 2011 14:55:52 +0100
+Subject: [PATCH v2] Do not scan device if it is part of active multipath.
+In-Reply-To: <1319038907-2655-1-git-send-email-mbroz@redhat.com>
+References: <1319038907-2655-1-git-send-email-mbroz@redhat.com>
+Message-ID: <1321019752-5389-1-git-send-email-mbroz@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
- brassow
+Add filter which tries to check if scanned device is part
+of active multipath.
 
-Support the ability to replace specific devices in a RAID array.
+Firstly, only SCSI major number devices are handled in filter.
 
-RAID is not like traditional LVM mirroring.  LVM mirroring required failed
-devices to be removed or the logical volume would simply hang.  RAID arrays can
-keep on running with failed devices.  In fact, for RAID types other than RAID1,
-removing a device would mean substituting an error target or converting to a
-lower level RAID (e.g. RAID6 -> RAID5, or RAID4/5 to RAID0).  Therefore, rather
-than removing a failed device unconditionally and potentially allocating a
-replacement, RAID allows the user to "replace" a device with a new one.  This
-approach is a 1-step solution vs the current 2-step solution.
+Then it checks if device has exactly one holder (in sysfs) and
+if it is device-mapper device and DM-UUID is prefixed by "MPATH-".
 
-example> lvconvert --replace <dev_to_remove> vg/lv [possible_replacement_PVs]
+If so, this device is filtered out.
 
-'--replace' can be specified more than once.
+The whole filter can be switched off by setting
+mpath_component_detection in lvm.conf.
 
-eg> lvconvert --replace /dev/sdb1 --replace /dev/sdc1 vg/lv
+https://bugzilla.redhat.com/show_bug.cgi?id=597010
 
+Signed-off-by: Milan Broz <mbroz@redhat.com>
+---
+ doc/example.conf.in        |    5 +
+ include/.symlinks.in       |    1 +
+ lib/Makefile.in            |    1 +
+ lib/activate/activate.c    |   27 ++++++
+ lib/activate/activate.h    |    1 +
+ lib/commands/toolcontext.c |   10 ++-
+ lib/config/defaults.h      |    1 +
+ lib/filters/filter-mpath.c |  190 ++++++++++++++++++++++++++++++++++++++++++++
+ lib/filters/filter-mpath.h |   23 ++++++
+ lib/filters/filter.c       |   34 ++++++--
+ lib/filters/filter.h       |    1 +
+ 11 files changed, 285 insertions(+), 9 deletions(-)
+ create mode 100644 lib/filters/filter-mpath.c
+ create mode 100644 lib/filters/filter-mpath.h
 
-Index: LVM2/lib/metadata/raid_manip.c
-===================================================================
---- LVM2.orig/lib/metadata/raid_manip.c
-+++ LVM2/lib/metadata/raid_manip.c
-@@ -1428,3 +1428,211 @@ int lv_raid_reshape(struct logical_volum
- 		  seg->segtype->name, new_segtype->name);
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index ed15db6..2dd1808 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -103,6 +103,11 @@ devices {
+     # 1 enables; 0 disables.
+     sysfs_scan = 1
+ 
++    # By default, LVM2 will ignore devices used as component paths
++    # of device-mapper multipath devices.
++    # 1 enables; 0 disables.
++    multipath_component_detection = 1
++
+     # By default, LVM2 will ignore devices used as components of
+     # software RAID (md) devices by looking for md superblocks.
+     # 1 enables; 0 disables.
+diff --git a/include/.symlinks.in b/include/.symlinks.in
+index c16e107..00d7d55 100644
+--- a/include/.symlinks.in
++++ b/include/.symlinks.in
+@@ -16,6 +16,7 @@
+ @top_srcdir@/lib/display/display.h
+ @top_srcdir@/lib/filters/filter-composite.h
+ @top_srcdir@/lib/filters/filter-md.h
++ at top_srcdir@/lib/filters/filter-mpath.h
+ @top_srcdir@/lib/filters/filter-persistent.h
+ @top_srcdir@/lib/filters/filter-regex.h
+ @top_srcdir@/lib/filters/filter-sysfs.h
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index a46e596..4e9afd9 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -65,6 +65,7 @@ SOURCES =\
+ 	filters/filter-regex.c \
+ 	filters/filter-sysfs.c \
+ 	filters/filter-md.c \
++	filters/filter-mpath.c \
+ 	filters/filter.c \
+ 	format_text/archive.c \
+ 	format_text/archiver.c \
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 2b44b19..37c10f5 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -147,6 +147,10 @@ int target_present(struct cmd_context *cmd, const char *target_name,
+ {
  	return 0;
  }
-+
-+/*
-+ * lv_raid_replace
-+ * @lv
-+ * @replace_pvs
-+ * @allocatable_pvs
-+ *
-+ * Replace the specified PVs.
-+ */
-+int lv_raid_replace(struct logical_volume *lv,
-+		    struct dm_list *remove_pvs,
-+		    struct dm_list *allocate_pvs)
++int dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix)
 +{
-+	uint32_t s, sd, match_count = 0;
-+	struct dm_list old_meta_lvs, old_data_lvs;
-+	struct dm_list new_meta_lvs, new_data_lvs;
-+	struct lv_segment *raid_seg = first_seg(lv);
-+	struct lv_list *lvl;
-+	char *tmp_names[raid_seg->area_count * 2];
++	return 0;
++}
+ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, unsigned origin_only,
+ 	    struct lvinfo *info, int with_open_count, int with_read_ahead)
+ {
+@@ -439,6 +443,29 @@ int target_version(const char *target_name, uint32_t *maj,
+ 	return r;
+ }
+ 
++int dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix)
++{
++	struct dm_task *dmt;
++	const char *uuid;
++	int r;
 +
-+	dm_list_init(&old_meta_lvs);
-+	dm_list_init(&old_data_lvs);
-+	dm_list_init(&new_meta_lvs);
-+	dm_list_init(&new_data_lvs);
++	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
++		return 0;
 +
-+	/*
-+	 * How many sub-LVs are being removed?
-+	 */
-+	for (s = 0; s < raid_seg->area_count; s++) {
-+		if ((seg_type(raid_seg, s) == AREA_UNASSIGNED) ||
-+		    (seg_metatype(raid_seg, s) == AREA_UNASSIGNED)) {
-+			log_error("Unable to replace RAID images while the "
-+				  "array has unassigned areas");
-+			return 0;
++	if (!dm_task_set_minor(dmt, minor) ||
++	    !dm_task_set_major(dmt, major) ||
++	    !dm_task_run(dmt) ||
++	    !(uuid = dm_task_get_uuid(dmt))) {
++		dm_task_destroy(dmt);
++		return 0;
++	}
++
++	r = strncasecmp(uuid, prefix, strlen(prefix));
++	dm_task_destroy(dmt);
++
++	return (r == 0) ? 1 : 0;
++}
++
+ int module_present(struct cmd_context *cmd, const char *target_name)
+ {
+ 	int ret = 0;
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 119211d..7de1703 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -53,6 +53,7 @@ int target_present(struct cmd_context *cmd, const char *target_name,
+ 		   int use_modprobe);
+ int target_version(const char *target_name, uint32_t *maj,
+ 		   uint32_t *min, uint32_t *patchlevel);
++int dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix);
+ int list_segment_modules(struct dm_pool *mem, const struct lv_segment *seg,
+ 			 struct dm_list *modules);
+ int list_lv_modules(struct dm_pool *mem, const struct logical_volume *lv,
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 4dc4c26..ec6e400 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -22,6 +22,7 @@
+ #include "filter.h"
+ #include "filter-composite.h"
+ #include "filter-md.h"
++#include "filter-mpath.h"
+ #include "filter-persistent.h"
+ #include "filter-regex.h"
+ #include "filter-sysfs.h"
+@@ -714,7 +715,7 @@ static int _init_dev_cache(struct cmd_context *cmd)
+ 	return 1;
+ }
+ 
+-#define MAX_FILTERS 4
++#define MAX_FILTERS 5
+ 
+ static struct dev_filter *_init_filter_components(struct cmd_context *cmd)
+ {
+@@ -766,6 +767,13 @@ static struct dev_filter *_init_filter_components(struct cmd_context *cmd)
+ 			nr_filt++;
+ 	}
+ 
++	/* mpath component filter. Optional, non-critical. */
++	if (find_config_tree_bool(cmd, "devices/multipath_component_detection",
++			     DEFAULT_MULTIPATH_COMPONENT_DETECTION)) {
++		if ((filters[nr_filt] = mpath_filter_create(cmd->sysfs_dir)))
++			nr_filt++;
++	}
++
+ 	/* Only build a composite filter if we really need it. */
+ 	return (nr_filt == 1) ?
+ 	    filters[0] : composite_filter_create(nr_filt, filters);
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 6819a9a..9b91aea 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -33,6 +33,7 @@
+ #define DEFAULT_SYSFS_SCAN 1
+ #define DEFAULT_MD_COMPONENT_DETECTION 1
+ #define DEFAULT_MD_CHUNK_ALIGNMENT 1
++#define DEFAULT_MULTIPATH_COMPONENT_DETECTION 1
+ #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
+ #define DEFAULT_DISABLE_AFTER_ERROR_COUNT 0
+ #define DEFAULT_REQUIRE_RESTOREFILE_WITH_UUID 1
+diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
+new file mode 100644
+index 0000000..26462e8
+--- /dev/null
++++ b/lib/filters/filter-mpath.c
+@@ -0,0 +1,190 @@
++/*
++ * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#include "lib.h"
++#include "filter.h"
++#include "filter-mpath.h"
++#include "activate.h"
++
++#ifdef linux
++#include <dirent.h>
++
++#define MPATH_PREFIX "mpath-"
++
++static const char *get_sysfs_name(struct device *dev)
++{
++	const char *name;
++
++	name = strrchr(dev_name(dev), '/');
++	if (!name)
++		return NULL;
++	name++;
++
++	if (!*name)
++		return NULL;
++
++	return name;
++}
++
++static int get_sysfs_string(const char *path, char *buffer, int max_size)
++{
++	FILE *fp;
++	int r = 0;
++
++	if (!(fp = fopen(path, "r")))
++		return_0;
++
++	if (!fgets(buffer, max_size, fp))
++		stack;
++	else
++		r = 1;
++
++	if (fclose(fp))
++		stack;
++
++	return r;
++}
++
++static int get_sysfs_get_major_minor(const char *sysfs_dir, const char *kname, int *major, int *minor)
++{
++	char path[PATH_MAX], buffer[64];
++
++	if (snprintf(path, sizeof(path), "%s/block/%s/dev", sysfs_dir, kname) < 0)
++		return_0;
++
++	if (!get_sysfs_string(path, buffer, sizeof(buffer)))
++		return 0;
++
++	if (sscanf(buffer, "%d:%d", major, minor) != 2)
++		return 0;
++
++	return 1;
++}
++
++static int get_parent_mpath(const char *dir, char *name, int max_size)
++{
++	struct dirent *d;
++	DIR *dr;
++	int r = 0;
++
++	if (!(dr = opendir(dir)))
++		return_0;
++
++	*name = '\0';
++	while ((d = readdir(dr))) {
++		if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, ".."))
++			continue;
++
++		/* There should be only one holder if it is multipath */
++		if (*name) {
++			r = 0;
++			break;
 +		}
 +
-+		if (_lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
-+		    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs))
-+			match_count++;
++		strncpy(name, d->d_name, max_size);
++		r = 1;
 +	}
 +
-+	if (!match_count) {
-+		log_verbose("%s/%s does not contain devices specified"
-+			    " for replacement", lv->vg->name, lv->name);
-+		return 1;
-+	} else if (match_count == raid_seg->area_count) {
-+		log_error("Unable to remove all PVs from %s/%s at once.",
-+			  lv->vg->name, lv->name);
++	if (closedir(dr))
++		stack;
++
++	return r;
++}
++
++static int dev_is_mpath(struct dev_filter *f, struct device *dev)
++{
++	const char *name;
++	char path[PATH_MAX+1];
++	char parent_name[PATH_MAX+1];
++	struct stat info;
++	const char *sysfs_dir = f->private;
++	int major, minor, r;
++
++	/* Limit this filter only to SCSI devices */
++	if (!major_is_scsi_device(MAJOR(dev->dev)))
 +		return 0;
-+	} else if (raid_seg->segtype->parity_devs &&
-+		   (match_count > raid_seg->segtype->parity_devs)) {
-+		log_error("Unable to replace more than %u PVs from (%s) %s/%s",
-+			  raid_seg->segtype->parity_devs,
-+			  raid_seg->segtype->name, lv->vg->name, lv->name);
++
++	name = get_sysfs_name(dev);
++	if (!name)
++		return_0;
++
++	r = dm_snprintf(path, PATH_MAX, "%s/block/%s/holders", sysfs_dir, name);
++	if (r < 0)
++		return_0;
++
++	/* also will filter out partitions */
++	if (stat(path, &info) == -1 || !S_ISDIR(info.st_mode))
 +		return 0;
-+	}
 +
-+	/*
-+	 * Allocate the new image components first
-+	 * - This makes it easy to avoid all currently used devs
-+	 * - We can immediately tell if there is enough space
-+	 *
-+	 * - We need to change the LV names when we insert them.
-+	 */
-+	if (!_alloc_image_components(lv, allocate_pvs, match_count,
-+				     &new_meta_lvs, &new_data_lvs)) {
-+		log_error("Failed to allocate replacement images for %s/%s",
-+			  lv->vg->name, lv->name);
++	if (!get_parent_mpath(path, parent_name, PATH_MAX))
 +		return 0;
-+	}
 +
-+	/*
-+	 * Remove the old images
-+	 * - If we did this before the allocate, we wouldn't have to rename
-+	 *   the allocated images, but it'd be much harder to avoid the right
-+	 *   PVs during allocation.
-+	 */
-+	if (!_raid_extract_images(lv, raid_seg->area_count - match_count,
-+				  remove_pvs, 0,
-+				  &old_meta_lvs, &old_data_lvs)) {
-+		log_error("Failed to remove the specified images from %s/%s",
-+			  lv->vg->name, lv->name);
++	if (!get_sysfs_get_major_minor(sysfs_dir, parent_name, &major, &minor))
 +		return 0;
-+	}
 +
-+	/*
-+	 * Skip metadata operation normally done to clear the metadata sub-LVs.
-+	 *
-+	 * The LV_REBUILD flag is set on the new sub-LVs,
-+	 * so they will be rebuilt and we don't need to clear the metadata dev.
-+	 */
-+
-+	for (s = 0; s < raid_seg->area_count; s++) {
-+		tmp_names[s] = NULL;
-+		sd = s + raid_seg->area_count;
-+		tmp_names[sd] = NULL;
-+
-+		if ((seg_type(raid_seg, s) == AREA_UNASSIGNED) &&
-+		    (seg_metatype(raid_seg, s) == AREA_UNASSIGNED)) {
-+			/* Adjust the new metadata LV name */
-+			lvl = dm_list_item(dm_list_first(&new_meta_lvs),
-+					   struct lv_list);
-+			dm_list_del(&lvl->list);
-+			tmp_names[s] = dm_pool_alloc(lv->vg->vgmem,
-+						    strlen(lvl->lv->name) + 1);
-+			if (!tmp_names[s])
-+				return_0;
-+			sprintf(tmp_names[s], "%s_rmeta_%u", lv->name, s);
-+			if (!set_lv_segment_area_lv(raid_seg, s, lvl->lv, 0,
-+						    lvl->lv->status)) {
-+				log_error("Failed to add %s to %s",
-+					  lvl->lv->name, lv->name);
-+				return 0;
-+			}
-+			lv_set_hidden(lvl->lv);
-+
-+			/* Adjust the new data LV name */
-+			lvl = dm_list_item(dm_list_first(&new_data_lvs),
-+					   struct lv_list);
-+			dm_list_del(&lvl->list);
-+			tmp_names[sd] = dm_pool_alloc(lv->vg->vgmem,
-+						     strlen(lvl->lv->name) + 1);
-+			if (!tmp_names[sd])
-+				return_0;
-+			sprintf(tmp_names[sd], "%s_rimage_%u", lv->name, s);
-+			if (!set_lv_segment_area_lv(raid_seg, s, lvl->lv, 0,
-+						    lvl->lv->status)) {
-+				log_error("Failed to add %s to %s",
-+					  lvl->lv->name, lv->name);
-+				return 0;
-+			}
-+			lv_set_hidden(lvl->lv);
-+		}
-+	}
-+
-+	if (!vg_write(lv->vg)) {
-+		log_error("Failed to write changes to %s in %s",
-+			  lv->name, lv->vg->name);
++	if (major != dm_major())
 +		return 0;
-+	}
 +
-+	if (!suspend_lv(lv->vg->cmd, lv)) {
-+		log_error("Failed to suspend %s/%s before committing changes",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
++	return dm_prefix_check(sysfs_dir, major, minor, MPATH_PREFIX);
++}
 +
-+	if (!vg_commit(lv->vg)) {
-+		log_error("Failed to commit changes to %s in %s",
-+			  lv->name, lv->vg->name);
-+		return 0;
-+	}
-+
-+	if (!resume_lv(lv->vg->cmd, lv)) {
-+		log_error("Failed to resume %s/%s after committing changes",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	sync_local_dev_names(lv->vg->cmd);
-+	dm_list_iterate_items(lvl, &old_meta_lvs) {
-+		if (!deactivate_lv(lv->vg->cmd, lvl->lv))
-+			return_0;
-+		if (!lv_remove(lvl->lv))
-+			return_0;
-+	}
-+	dm_list_iterate_items(lvl, &old_data_lvs) {
-+		if (!deactivate_lv(lv->vg->cmd, lvl->lv))
-+			return_0;
-+		if (!lv_remove(lvl->lv))
-+			return_0;
-+	}
-+
-+	/* Update new sub-LVs to correct name */
-+	for (s = 0; s < raid_seg->area_count; s++) {
-+		sd = s + raid_seg->area_count;
-+		if (tmp_names[s] && tmp_names[sd]) {
-+			seg_metalv(raid_seg, s)->name = tmp_names[s];
-+			seg_lv(raid_seg, s)->name = tmp_names[sd];
-+		}
-+	}
-+
-+	if (!vg_write(lv->vg)) {
-+		log_error("Failed to write changes to %s in %s",
-+			  lv->name, lv->vg->name);
-+		return 0;
-+	}
-+
-+	if (!suspend_lv(lv->vg->cmd, lv)) {
-+		log_error("Failed to suspend %s/%s before committing changes",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	if (!vg_commit(lv->vg)) {
-+		log_error("Failed to commit changes to %s in %s",
-+			  lv->name, lv->vg->name);
-+		return 0;
-+	}
-+
-+	if (!resume_lv(lv->vg->cmd, lv)) {
-+		log_error("Failed to resume %s/%s after committing changes",
-+			  lv->vg->name, lv->name);
++static int _ignore_mpath(struct dev_filter *f, struct device *dev)
++{
++	if (dev_is_mpath(f, dev) == 1) {
++		log_debug("%s: Skipping mpath component device", dev_name(dev));
 +		return 0;
 +	}
 +
 +	return 1;
 +}
-Index: LVM2/tools/args.h
-===================================================================
---- LVM2.orig/tools/args.h
-+++ LVM2/tools/args.h
-@@ -55,6 +55,7 @@ arg(corelog_ARG, '\0', "corelog", NULL, 
- arg(mirrorlog_ARG, '\0', "mirrorlog", string_arg, 0)
- arg(splitmirrors_ARG, '\0', "splitmirrors", int_arg, 0)
- arg(trackchanges_ARG, '\0', "trackchanges", NULL, 0)
-+arg(replace_ARG, '\0', "replace", string_arg, ARG_GROUPABLE)
- arg(repair_ARG, '\0', "repair", NULL, 0)
- arg(use_policies_ARG, '\0', "use-policies", NULL, 0)
- arg(monitor_ARG, '\0', "monitor", yes_no_arg, 0)
-Index: LVM2/tools/commands.h
-===================================================================
---- LVM2.orig/tools/commands.h
-+++ LVM2/tools/commands.h
-@@ -100,6 +100,7 @@ xx(lvconvert,
-    "[-m|--mirrors Mirrors [{--mirrorlog {disk|core|mirrored}|--corelog}]]\n"
-    "\t[--type SegmentType]\n"
-    "\t[--repair [--use-policies]]\n"
-+   "\t[--replace PhysicalVolume]\n"
-    "\t[-R|--regionsize MirrorLogRegionSize]\n"
-    "\t[--alloc AllocationPolicy]\n"
-    "\t[-b|--background]\n"
-@@ -141,8 +142,8 @@ xx(lvconvert,
- 
-    alloc_ARG, background_ARG, chunksize_ARG, corelog_ARG, interval_ARG,
-    merge_ARG, mirrorlog_ARG, mirrors_ARG, name_ARG, noudevsync_ARG,
--   regionsize_ARG, repair_ARG, snapshot_ARG, splitmirrors_ARG, trackchanges_ARG,
--   type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
-+   regionsize_ARG, repair_ARG, replace_ARG, snapshot_ARG, splitmirrors_ARG,
-+   trackchanges_ARG, type_ARG, stripes_long_ARG, stripesize_ARG, test_ARG,
-    use_policies_ARG, yes_ARG, force_ARG, zero_ARG)
- 
- xx(lvcreate,
-Index: LVM2/tools/lvconvert.c
-===================================================================
---- LVM2.orig/tools/lvconvert.c
-+++ LVM2/tools/lvconvert.c
-@@ -48,6 +48,10 @@ struct lvconvert_params {
- 	char **pvs;
- 	struct dm_list *pvh;
- 
-+	int replace_pv_count;
-+	char **replace_pvs;
-+	struct dm_list *replace_pvh;
 +
- 	struct logical_volume *lv_to_poll;
- };
++static void _destroy(struct dev_filter *f)
++{
++	if (f->use_count)
++		log_error(INTERNAL_ERROR "Destroying mpath filter while in use %u times.", f->use_count);
++
++	dm_free(f->private);
++	dm_free(f);
++}
++
++struct dev_filter *mpath_filter_create(const char *sysfs_dir)
++{
++	struct dev_filter *f;
++
++	if (!*sysfs_dir) {
++		log_verbose("No proc filesystem found: skipping multipath filter");
++		return NULL;
++	}
++
++	if (!(f = dm_malloc(sizeof(*f)))) {
++		log_error("mpath filter allocation failed");
++		return NULL;
++	}
++
++	f->passes_filter = _ignore_mpath;
++	f->destroy = _destroy;
++	f->use_count = 0;
++	f->private = dm_strdup(sysfs_dir);
++
++	return f;
++}
++
++#else
++
++struct dev_filter *mpath_filter_create(const char *sysfs_dir __attribute__((unused)))
++{
++	return NULL;
++}
++
++#endif
+diff --git a/lib/filters/filter-mpath.h b/lib/filters/filter-mpath.h
+new file mode 100644
+index 0000000..0b5373f
+--- /dev/null
++++ b/lib/filters/filter-mpath.h
+@@ -0,0 +1,23 @@
++/*
++ * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++
++#ifndef _LVM_FILTER_MPATH_H
++#define _LVM_FILTER_MPATH_H
++
++#include "dev-cache.h"
++
++struct dev_filter *mpath_filter_create(const char *sysfs_dir);
++
++#endif
++
+diff --git a/lib/filters/filter.c b/lib/filters/filter.c
+index f2398a1..68f65a0 100644
+--- a/lib/filters/filter.c
++++ b/lib/filters/filter.c
+@@ -29,8 +29,11 @@
  
-@@ -122,6 +126,9 @@ static int _lvconvert_name_params(struct
- static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 			int argc, char **argv)
+ #define NUMBER_OF_MAJORS 4096
+ 
+-/* 0 means LVM won't use this major number. */
+-static int _max_partitions_by_major[NUMBER_OF_MAJORS];
++#define PARTITION_SCSI_DEVICE (1 << 0)
++static struct {
++	int max_partitions; /* 0 means LVM won't use this major number. */
++	int flags;
++} _partitions[NUMBER_OF_MAJORS];
+ 
+ typedef struct {
+ 	const char *name;
+@@ -140,7 +143,7 @@ static int _passes_lvm_type_device_filter(struct dev_filter *f __attribute__((un
+ 	uint64_t size;
+ 
+ 	/* Is this a recognised device type? */
+-	if (!_max_partitions_by_major[MAJOR(dev->dev)]) {
++	if (!_partitions[MAJOR(dev->dev)].max_partitions) {
+ 		log_debug("%s: Skipping: Unrecognised LVM device type %"
+ 			  PRIu64, name, (uint64_t) MAJOR(dev->dev));
+ 		return 0;
+@@ -194,12 +197,12 @@ static int _scan_proc_dev(const char *proc, const struct dm_config_node *cn)
+ 		log_verbose("No proc filesystem found: using all block device "
+ 			    "types");
+ 		for (i = 0; i < NUMBER_OF_MAJORS; i++)
+-			_max_partitions_by_major[i] = 1;
++			_partitions[i].max_partitions = 1;
+ 		return 1;
+ 	}
+ 
+ 	/* All types unrecognised initially */
+-	memset(_max_partitions_by_major, 0, sizeof(int) * NUMBER_OF_MAJORS);
++	memset(_partitions, 0, sizeof(_partitions));
+ 
+ 	if (dm_snprintf(proc_devices, sizeof(proc_devices),
+ 			 "%s/devices", proc) < 0) {
+@@ -251,6 +254,10 @@ static int _scan_proc_dev(const char *proc, const struct dm_config_node *cn)
+ 		if (!strncmp("device-mapper", line + i, 13) && isspace(*(line + i + 13)))
+ 			_device_mapper_major = line_maj;
+ 
++		/* Major is SCSI device */
++		if (!strncmp("sd", line + i, 2) && isspace(*(line + i + 2)))
++			_partitions[line_maj].flags |= PARTITION_SCSI_DEVICE;
++
+ 		/* Go through the valid device names and if there is a
+ 		   match store max number of partitions */
+ 		for (j = 0; device_info[j].name != NULL; j++) {
+@@ -258,7 +265,7 @@ static int _scan_proc_dev(const char *proc, const struct dm_config_node *cn)
+ 			if (dev_len <= strlen(line + i) &&
+ 			    !strncmp(device_info[j].name, line + i, dev_len) &&
+ 			    (line_maj < NUMBER_OF_MAJORS)) {
+-				_max_partitions_by_major[line_maj] =
++				_partitions[line_maj].max_partitions =
+ 				    device_info[j].max_partitions;
+ 				break;
+ 			}
+@@ -298,7 +305,7 @@ static int _scan_proc_dev(const char *proc, const struct dm_config_node *cn)
+ 			if (dev_len <= strlen(line + i) &&
+ 			    !strncmp(name, line + i, dev_len) &&
+ 			    (line_maj < NUMBER_OF_MAJORS)) {
+-				_max_partitions_by_major[line_maj] = cv->v.i;
++				_partitions[line_maj].max_partitions = cv->v.i;
+ 				break;
+ 			}
+ 		}
+@@ -312,7 +319,18 @@ static int _scan_proc_dev(const char *proc, const struct dm_config_node *cn)
+ 
+ int max_partitions(int major)
  {
-+	int i;
-+	const char *tmp_str;
-+	struct arg_value_group_list *group;
- 	int region_size;
- 	int pagesize = lvm_getpagesize();
- 
-@@ -243,7 +250,27 @@ static int _read_params(struct lvconvert
- 						 SEG_CANNOT_BE_ZEROED) ?
- 						"n" : "y"), "n");
- 
--	} else {	/* Mirrors */
-+	} else if (arg_count(cmd, replace_ARG)) { /* RAID device replacement */
-+		lp->replace_pv_count = arg_count(cmd, replace_ARG);
-+		lp->replace_pvs = dm_pool_alloc(cmd->mem, sizeof(char *) * lp->replace_pv_count);
-+		if (!lp->replace_pvs)
-+			return_0;
+-	return _max_partitions_by_major[major];
++	if (major > NUMBER_OF_MAJORS)
++		return 0;
 +
-+		i = 0;
-+		dm_list_iterate_items(group, &cmd->arg_value_groups) {
-+			if (!grouped_arg_is_set(group->arg_values, replace_ARG))
-+				continue;
-+			if (!(tmp_str = grouped_arg_str_value(group->arg_values,
-+							      replace_ARG,
-+							      NULL))) {
-+				log_error("Failed to get '--replace' argument");
-+				return 0;
-+			}
-+			if (!(lp->replace_pvs[i++] = dm_pool_strdup(cmd->mem,
-+								    tmp_str)))
-+				return_0;
-+		}
-+	} else { /* Mirrors (and some RAID functions) */
- 		if (arg_count(cmd, chunksize_ARG)) {
- 			log_error("--chunksize is only available with "
- 				  "snapshots");
-@@ -309,7 +336,7 @@ static int _read_params(struct lvconvert
- 			return_0;
- 	}
- 
--	if (activation() && lp->segtype->ops->target_present &&
-+	if (activation() && lp->segtype && lp->segtype->ops->target_present &&
- 	    !lp->segtype->ops->target_present(cmd, NULL, NULL)) {
- 		log_error("%s: Required device-mapper target(s) not "
- 			  "detected in your kernel", lp->segtype->name);
-@@ -1455,6 +1482,9 @@ static int lvconvert_raid(struct logical
- 	if (arg_count(cmd, type_ARG))
- 		return lv_raid_reshape(lv, lp->segtype);
- 
-+	if (arg_count(cmd, replace_ARG))
-+		return lv_raid_replace(lv, lp->replace_pvh, lp->pvh);
++	return _partitions[major].max_partitions;
++}
 +
- 	log_error("Conversion operation not yet supported.");
- 	return 0;
++int major_is_scsi_device(int major)
++{
++	if (major > NUMBER_OF_MAJORS)
++		return 0;
++
++	return (_partitions[major].flags & PARTITION_SCSI_DEVICE) ? 1 : 0;
  }
-@@ -1646,6 +1676,9 @@ static int _lvconvert_single(struct cmd_
- 		return ECMD_FAILED;
- 	}
  
-+	if (!lp->segtype)
-+		lp->segtype = first_seg(lv)->segtype;
-+
- 	if (lp->merge) {
- 		if (!lv_is_cow(lv)) {
- 			log_error("Logical volume \"%s\" is not a snapshot",
-@@ -1785,6 +1818,12 @@ static int lvconvert_single(struct cmd_c
- 	} else
- 		lp->pvh = &lv->vg->pvs;
+ struct dev_filter *lvm_type_filter_create(const char *proc,
+diff --git a/lib/filters/filter.h b/lib/filters/filter.h
+index 5c6047a..21cb89b 100644
+--- a/lib/filters/filter.h
++++ b/lib/filters/filter.h
+@@ -39,6 +39,7 @@ int dm_major(void);
+ int md_major(void);
+ int blkext_major(void);
+ int max_partitions(int major);
++int major_is_scsi_device(int major);
  
-+	if (lp->replace_pv_count &&
-+	    !(lp->replace_pvh = create_pv_list(cmd->mem, lv->vg,
-+					       lp->replace_pv_count,
-+					       lp->replace_pvs, 0)))
-+			goto_bad;
-+
- 	lp->lv_to_poll = lv;
- 	ret = _lvconvert_single(cmd, lv, lp);
- bad:
-Index: LVM2/lib/metadata/metadata-exported.h
-===================================================================
---- LVM2.orig/lib/metadata/metadata-exported.h
-+++ LVM2/lib/metadata/metadata-exported.h
-@@ -784,6 +784,8 @@ int lv_raid_split_and_track(struct logic
- int lv_raid_merge(struct logical_volume *lv);
- int lv_raid_reshape(struct logical_volume *lv,
- 		    const struct segment_type *new_segtype);
-+int lv_raid_replace(struct logical_volume *lv, struct dm_list *remove_pvs,
-+		    struct dm_list *allocate_pvs);
- 
- /* --  metadata/raid_manip.c */
- 
-Index: LVM2/libdm/ioctl/libdm-iface.c
-===================================================================
---- LVM2.orig/libdm/ioctl/libdm-iface.c
-+++ LVM2/libdm/ioctl/libdm-iface.c
-@@ -1644,10 +1644,10 @@ static struct dm_ioctl *_do_dm_ioctl(str
- 				    	    _cmd_data_v4[dmt->type].name,
- 					    strerror(errno));
- 			else
--				log_error("device-mapper: %s ioctl "
-+				log_error("device-mapper: %s ioctl on %s "
- 					  "failed: %s",
- 					  _cmd_data_v4[dmt->type].name,
--					  strerror(errno));
-+					  dmi->name, strerror(errno));
- 
- 			/*
- 			 * It's sometimes worth retrying after EBUSY in case
-Index: LVM2/man/lvconvert.8.in
-===================================================================
---- LVM2.orig/man/lvconvert.8.in
-+++ LVM2/man/lvconvert.8.in
-@@ -52,6 +52,14 @@ LogicalVolume[Path]...
- [\-\-version]
- LogicalVolume[Path] [PhysicalVolume[Path]...]
- 
-+.br
-+.B lvconvert
-+\-\-replace PhysicalVolume
-+[\-h|\-?|\-\-help]
-+[\-v|\-\-verbose]
-+[\-\-version]
-+LogicalVolume[Path] [PhysicalVolume[Path]...]
-+
- .SH DESCRIPTION
- lvconvert is used to change the segment type (i.e. linear, mirror, etc) or
- characteristics of a logical volume.  For example, it can add or remove the
-@@ -181,6 +189,14 @@ Use \-f if you do not want any replaceme
- viz. activation/mirror_log_fault_policy or
- activation/mirror_device_fault_policy.
- .br
-+
-+.TP
-+.I \-\-replace PhysicalVolume
-+Remove the specified device (PhysicalVolume) and replace it with one that is
-+available in the volume group or from the specific list provided.  This option
-+is only available to RAID segment types (e.g. "raid1", "raid5", etc).
-+.br
-+
- .SH Examples
- "lvconvert -m1 vg00/lvol1"
- .br
-@@ -270,6 +286,14 @@ Merge an image that was detached tempora
- the '\-\-trackchanges' argument back into its original mirror and
- bring its contents back up-to-date.
- 
-+.br
-+"lvconvert --replace /dev/sdb1 vg00/my_raid1 /dev/sdf1"
-+.br
-+Replace the physical volume "/dev/sdb1" in the RAID1 logical volume "my_raid1"
-+with the specified physical volume "/dev/sdf1".  Had the argument "/dev/sdf1"
-+been left out, lvconvert would attempt to find a suitable device from those
-+available in the volume group.
-+
- .SH SEE ALSO
- .BR lvm (8),
- .BR vgcreate (8),
-
+ int dev_subsystem_part_major(const struct device *dev);
+ const char *dev_subsystem_name(const struct device *dev);
+-- 
+1.7.7.2
 
 
