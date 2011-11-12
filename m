@@ -1,54 +1,22 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 11 Nov 2011 16:59:31 -0000
-Subject: LVM2/lib/filters filter.c
-Message-ID: <20111111165931.28329.qmail@sourceware.org>
+From: James Le Cuirot <chewi@aura-online.co.uk>
+Date: Sat, 12 Nov 2011 13:49:43 +0000
+Subject: [PATCH] Fix Gentoo support in lvm2create_initrd
+Message-ID: <20111112134943.45692caf@symphony.aura-online.co.uk>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2011-11-11 16:59:30
-
-Modified files:
-	lib/filters    : filter.c 
-
-Log message:
-	Fix major number filter structure boundary test.
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
-
---- LVM2/lib/filters/filter.c	2011/11/11 15:11:12	1.64
-+++ LVM2/lib/filters/filter.c	2011/11/11 16:59:30	1.65
-@@ -154,7 +154,7 @@
- 		log_debug("%s: Skipping: open failed", name);
- 		return 0;
- 	}
--	
-+
- 	/* Check it's not too small */
- 	if (!dev_get_size(dev, &size)) {
- 		log_debug("%s: Skipping: dev_get_size failed", name);
-@@ -319,7 +319,7 @@
- 
- int max_partitions(int major)
- {
--	if (major > NUMBER_OF_MAJORS)
-+	if (major >= NUMBER_OF_MAJORS)
- 		return 0;
- 
- 	return _partitions[major].max_partitions;
-@@ -327,7 +327,7 @@
- 
- int major_is_scsi_device(int major)
- {
--	if (major > NUMBER_OF_MAJORS)
-+	if (major >= NUMBER_OF_MAJORS)
- 		return 0;
- 
- 	return (_partitions[major].flags & PARTITION_SCSI_DEVICE) ? 1 : 0;
-
-
+Gentoo's MAKEDEV has moved (probably some time ago) from /usr/sbin
+to /sbin. This fixes that and documents the option as well since I
+didn't even know it existed until I looked at the source. Note that
+this patch doesn't include the generated pod2man changes because my
+version is much newer and it changes a lot of other lines too.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lvm2create_initrd-gentoo.patch
+Type: text/x-patch
+Size: 2186 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20111112/a59e68de/attachment.bin>
