@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Nov 2011 17:03:55 -0000
-Subject: LVM2 ./WHATS_NEW scripts/lvm2create_initrd/lvm ...
-Message-ID: <20111112170355.7668.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 12 Nov 2011 22:44:12 -0000
+Subject: LVM2 lib/thin/thin.c libdm/libdevmapper.h libd ...
+Message-ID: <20111112224412.25198.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,282 +10,107 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-11-12 17:03:54
+Changes by:	zkabelac at sourceware.org	2011-11-12 22:44:11
 
 Modified files:
-	.              : WHATS_NEW 
-	scripts/lvm2create_initrd: lvm2create_initrd lvm2create_initrd.8 
-	                           lvm2create_initrd.pod 
+	lib/thin       : thin.c 
+	libdm          : libdevmapper.h libdm-deptree.c 
+	tools          : lvm.c toollib.c 
 
 Log message:
-	Move gentoo MAKEDEV to /sbin in lvm2create_initrd. (James Le Cuirot)
+	Thin remove unused define
+	
+	Remove DM_THIN_ERROR_DEVICE_ID from API.
+	Remove API warning.
+	Drop code that was using DM_THIN_ERROR_DEVICE_ID (already commented)
+	Remove debug message which slipped in through some previous commit.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2181&r2=1.2182
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2create_initrd/lvm2create_initrd.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2create_initrd/lvm2create_initrd.8.diff?cvsroot=lvm2&r1=1.1&r2=1.2
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2create_initrd/lvm2create_initrd.pod.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.168&r2=1.169
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.145&r2=1.146
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvm.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.234&r2=1.235
 
---- LVM2/WHATS_NEW	2011/11/11 15:11:08	1.2181
-+++ LVM2/WHATS_NEW	2011/11/12 17:03:53	1.2182
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Move gentoo MAKEDEV to /sbin in lvm2create_initrd.
-   Add filter to avoid scan of device if it is part of active multipath.
-   Add missing default $LVM_VG_NAME usage for snapshots.
-   Fix extent_count overflow with lvextend.
---- LVM2/scripts/lvm2create_initrd/lvm2create_initrd	2006/11/21 22:41:56	1.2
-+++ LVM2/scripts/lvm2create_initrd/lvm2create_initrd	2011/11/12 17:03:54	1.3
-@@ -48,7 +48,7 @@
- #    along with this program; if not, write to the Free Software
- #    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- #
--# $Id: lvm2create_initrd,v 1.2 2006/11/21 22:41:56 agk Exp $
-+# $Id: lvm2create_initrd,v 1.3 2011/11/12 17:03:54 agk Exp $
+--- LVM2/lib/thin/thin.c	2011/11/10 15:30:59	1.32
++++ LVM2/lib/thin/thin.c	2011/11/12 22:44:10	1.33
+@@ -230,8 +230,6 @@
+ 			return 0;
+ 		}
  
- TMPMNT=/tmp/mnt.$$
- DEVRAM=/tmp/initrd.$$
-@@ -74,7 +74,7 @@
- 	echo "      -e|--extra     extra files to add to initrd"
- 	echo "      -r|--raid      raid devices to start in initrd"
- 	echo "      -R|--raidconf  location of mdadm.conf file to include"
--	echo "      -M|--makedev   set MAKEDEV type (debian or redhat)"
-+	echo "      -M|--makedev   set MAKEDEV type (debian, redhat, gentoo)"
+-		//if (!dm_tree_node_add_thin_target(node, len, pool_dlid,
+-		//				    DM_THIN_ERROR_DEVICE_ID))
+ 		if (!dm_tree_node_add_linear_target(node, len) ||
+ 		    !dm_tree_node_add_target_area(node, NULL, pool_dlid, 0))
+ 			return_0;
+--- LVM2/libdm/libdevmapper.h	2011/11/03 14:45:01	1.168
++++ LVM2/libdm/libdevmapper.h	2011/11/12 22:44:10	1.169
+@@ -535,7 +535,6 @@
+ 					   uint32_t slog_region_size);
+ /* End of Replicator API */
+ 
+-/* API for thin provisioning is experimental, DO NOT USE. */
+ /*
+  * FIXME: Defines bellow are based on kernel's dm-thin.c defines
+  * DATA_DEV_BLOCK_SIZE_MIN_SECTORS (64 * 1024 >> SECTOR_SHIFT)
+@@ -571,10 +570,6 @@
+  * MAX_DEV_ID ((1 << 24) - 1)
+  */
+ #define DM_THIN_MAX_DEVICE_ID (UINT32_C((1 << 24) - 1))
+-/* Reserved device_id for error (deleted) thin device */
+-// FIXME - only needed for in-delete thin is not activated
+-#define DM_THIN_ERROR_DEVICE_ID (UINT32_MAX)
+-
+ int dm_tree_node_add_thin_target(struct dm_tree_node *node,
+ 				 uint64_t size,
+ 				 const char *pool_uuid,
+--- LVM2/libdm/libdm-deptree.c	2011/11/04 12:39:45	1.145
++++ LVM2/libdm/libdm-deptree.c	2011/11/12 22:44:10	1.146
+@@ -3018,19 +3018,14 @@
+ 	if (!_link_tree_nodes(node, pool))
+ 		return_0;
+ 
+-	if (device_id == DM_THIN_ERROR_DEVICE_ID) {
+-		if (!dm_tree_node_add_error_target(node, size))
+-			return_0;
+-	} else {
+-		if (!_thin_validate_device_id(device_id))
+-			return_0;
++	if (!_thin_validate_device_id(device_id))
++		return_0;
+ 
+-		if (!(seg = _add_segment(node, SEG_THIN, size)))
+-			return_0;
++	if (!(seg = _add_segment(node, SEG_THIN, size)))
++		return_0;
+ 
+-		seg->pool = pool;
+-		seg->device_id = device_id;
+-	}
++	seg->pool = pool;
++	seg->device_id = device_id;
+ 
+ 	return 1;
+ }
+--- LVM2/tools/lvm.c	2010/11/11 17:29:06	1.115
++++ LVM2/tools/lvm.c	2011/11/12 22:44:11	1.116
+@@ -167,7 +167,6 @@
+ 
+ 	stifle_history(find_config_tree_int(cmd, "shell/history_size",
+ 				       DEFAULT_MAX_HISTORY));
+-
  }
  
- verbose () {
-@@ -379,7 +379,7 @@
-     RETCODE=$?
-     ;;
- gentoo)
--    (cd $TMPMNT/dev; /usr/sbin/MAKEDEV $OPT_Q $BASICDEVICES $BLOCKDEVICES)
-+    (cd $TMPMNT/dev; /sbin/MAKEDEV $OPT_Q $BASICDEVICES $BLOCKDEVICES)
-     RETCODE=$?
-     ;;
- *)
---- LVM2/scripts/lvm2create_initrd/lvm2create_initrd.8	2004/06/07 16:20:05	1.1
-+++ LVM2/scripts/lvm2create_initrd/lvm2create_initrd.8	2011/11/12 17:03:54	1.2
-@@ -1,15 +1,7 @@
--.\" Automatically generated by Pod::Man v1.37, Pod::Parser v1.14
-+.\" Automatically generated by Pod::Man 2.23 (Pod::Simple 3.14)
- .\"
- .\" Standard preamble:
- .\" ========================================================================
--.de Sh \" Subsection heading
--.br
--.if t .Sp
--.ne 5
--.PP
--\fB\\$1\fR
--.PP
--..
- .de Sp \" Vertical space (when we can't use .PP)
- .if t .sp .5v
- .if n .sp
-@@ -25,11 +17,11 @@
- ..
- .\" Set up some character translations and predefined strings.  \*(-- will
- .\" give an unbreakable dash, \*(PI will give pi, \*(L" will give a left
--.\" double quote, and \*(R" will give a right double quote.  | will give a
--.\" real vertical bar.  \*(C+ will give a nicer C++.  Capital omega is used to
--.\" do unbreakable dashes and therefore won't be available.  \*(C` and \*(C'
--.\" expand to `' in nroff, nothing in troff, for use with C<>.
--.tr \(*W-|\(bv\*(Tr
-+.\" double quote, and \*(R" will give a right double quote.  \*(C+ will
-+.\" give a nicer C++.  Capital omega is used to do unbreakable dashes and
-+.\" therefore won't be available.  \*(C` and \*(C' expand to `' in nroff,
-+.\" nothing in troff, for use with C<>.
-+.tr \(*W-
- .ds C+ C\v'-.1v'\h'-1p'\s-2+\h'-1p'+\s0\v'.1v'\h'-1p'
- .ie n \{\
- .    ds -- \(*W-
-@@ -48,22 +40,25 @@
- .    ds R" ''
- 'br\}
- .\"
-+.\" Escape single quotes in literal strings from groff's Unicode transform.
-+.ie \n(.g .ds Aq \(aq
-+.el       .ds Aq '
-+.\"
- .\" If the F register is turned on, we'll generate index entries on stderr for
--.\" titles (.TH), headers (.SH), subsections (.Sh), items (.Ip), and index
-+.\" titles (.TH), headers (.SH), subsections (.SS), items (.Ip), and index
- .\" entries marked with X<> in POD.  Of course, you'll have to process the
- .\" output yourself in some meaningful fashion.
--.if \nF \{\
-+.ie \nF \{\
- .    de IX
- .    tm Index:\\$1\t\\n%\t"\\$2"
- ..
- .    nr % 0
- .    rr F
- .\}
--.\"
--.\" For nroff, turn off justification.  Always turn off hyphenation; it makes
--.\" way too many mistakes in technical documents.
--.hy 0
--.if n .na
-+.el \{\
-+.    de IX
-+..
-+.\}
- .\"
- .\" Accent mark definitions (@(#)ms.acc 1.5 88/02/08 SMI; from UCB 4.2).
- .\" Fear.  Run.  Save yourself.  No user-serviceable parts.
-@@ -129,7 +124,11 @@
- .\" ========================================================================
- .\"
- .IX Title "lvm2create_initrd 8"
--.TH lvm2create_initrd 8 "2004-06-05" "lvm2create_initrd" "create LVM2 initrd"
-+.TH lvm2create_initrd 8 "2011-11-12" "lvm2create_initrd" "create LVM2 initrd"
-+.\" For nroff, turn off justification.  Always turn off hyphenation; it makes
-+.\" way too many mistakes in technical documents.
-+.if n .ad l
-+.nh
- .SH "NAME"
- lvm2create_initrd \- create initrd image for booting to root\e\-on\e\-LVM2
- .SH "SYNOPSIS"
-@@ -145,10 +144,10 @@
- filesystem on a regular volume to act as a boot partition (typically mounted
- on /boot).
- .PP
--The resulting initrd image is fairly full\-featured. It can harbor and load
-+The resulting initrd image is fairly full-featured. It can harbor and load
- kernel modules, start \s-1MD\s0 devices, and boot to a shell to perform rescue
- operations.
--.Sh "Booting to your initrd Image:"
-+.SS "Booting to your initrd Image:"
- .IX Subsection "Booting to your initrd Image:"
- The filesystem image created is an ext2fs filesystem, hence your kernel must have
- ext2fs built into it statically in order to boot to the image.
-@@ -189,7 +188,7 @@
- special device filters or other options you wish to use during the initrd
- stage. If this option is not
- included, then a lvm.conf file is created that contains only the current
--device filter from an \fBlvm dumpconfig\fR. This can also be set via the \fB$LVMCONF\fR
-+device filter from an \fBlvm dumpconfig\fR. This can also be set via the \fB\f(CB$LVMCONF\fB\fR
- environment variable.
- .ie n .IP "\fB\-m|\-\-modules\fR ""\fI/path/to/module1.ko /path/to/module2.ko ...\fR""" 4
- .el .IP "\fB\-m|\-\-modules\fR ``\fI/path/to/module1.ko /path/to/module2.ko ...\fR''" 4
-@@ -198,70 +197,80 @@
- takes a quoted, space-separated list of modules. Full pathnames are required.
- These modules are loaded into the kernel early in the initrd phase of the boot
- process. The current modprobe.conf file is also copied to the initrd image
--as well. This can also be specified via the \fB$MODULES\fR environment variable.
-+as well. This can also be specified via the \fB\f(CB$MODULES\fB\fR environment variable.
- .ie n .IP "\fB\-e|\-\-extra\fR ""\fI/path/to/file1 /path/to/file2 ...\fR""" 4
- .el .IP "\fB\-e|\-\-extra\fR ``\fI/path/to/file1 /path/to/file2 ...\fR''" 4
- .IX Item "-e|--extra ""/path/to/file1 /path/to/file2 ..."""
- Extra files that should be included in the initrd image. These files will be
- copied to the same location in the initrd image that they are in the current
- filesystem. Again full pathnames are required. This can also be specified via
--the \fB$EXTRAFILES\fR environment variable.
-+the \fB\f(CB$EXTRAFILES\fB\fR environment variable.
- .ie n .IP "\fB\-r|\-\-raid\fR ""\fI/dev/md1 /dev/md2...\fR""" 4
- .el .IP "\fB\-r|\-\-raid\fR ``\fI/dev/md1 /dev/md2...\fR''" 4
- .IX Item "-r|--raid ""/dev/md1 /dev/md2..."""
- \&\s-1RAID\s0 devices to be started prior to scanning for \s-1LVM2\s0 volume groups. If this
- option is used then then \fBmdadm\fR program must be installed. This can also be
--specified via the \fB$RAID\fR environment variable.
-+specified via the \fB\f(CB$RAID\fB\fR environment variable.
- .ie n .IP "\fB\-R|\-\-raidconf\fR ""\fI/path/to/mdadm.conf\fR""" 4
- .el .IP "\fB\-R|\-\-raidconf\fR ``\fI/path/to/mdadm.conf\fR''" 4
- .IX Item "-R|--raidconf ""/path/to/mdadm.conf"""
- Location of a mdadm.conf file to include. If this is not specified, then no
- files are included, and any devices specified with the \fB\-r\fR option above
- must have minor numbers that match their superblock values. This can also be
--specified via the \fB$RAIDCONF\fR environment variable.
-+specified via the \fB\f(CB$RAIDCONF\fB\fR environment variable.
- .IP "\fB\-M|\-\-makedev\fR \fIstyle\fR" 4
- .IX Item "-M|--makedev style"
--Set \s-1MAKEDEV\s0 invocation style. The script currently supports 2 styles of
--\&\s-1MAKEDEV\s0 programs \fIdebian\fR and \fIredhat\fR. The default is \fIdebian\fR. Set
--to \fIredhat\fR if using the RedHat/Fedora binary \s-1MAKEDEV\s0 program. Please send
--a bug report to maintainer if your distrib doesn't work with any of the
--current options.
-+Set \s-1MAKEDEV\s0 invocation style. The script currently supports 3 styles of
-+\&\s-1MAKEDEV\s0 programs \fIdebian\fR, \fIredhat\fR and \fIgentoo\fR. The default is \fIdebian\fR.
-+Set to \fIredhat\fR if using the RedHat/Fedora binary \s-1MAKEDEV\s0 program. \fIgentoo\fR
-+has the same binary but in /sbin instead of /dev. Please send a bug report to
-+maintainer if your distribution doesn't work with any of the current options.
- .SH "ENVIRONMENT VARIABLES"
- .IX Header "ENVIRONMENT VARIABLES"
- Most of the options to this script can be set via environment variables. In
- situations where both are set, then the command-line options take precedence.
--.IP "\fB$LVMCONF\fR" 4
-+.ie n .IP "\fB\fB$LVMCONF\fB\fR" 4
-+.el .IP "\fB\f(CB$LVMCONF\fB\fR" 4
- .IX Item "$LVMCONF"
- Same as \-c option.
--.IP "\fB$MODULES\fR" 4
-+.ie n .IP "\fB\fB$MODULES\fB\fR" 4
-+.el .IP "\fB\f(CB$MODULES\fB\fR" 4
- .IX Item "$MODULES"
- Same as \-m option.
--.IP "\fB$EXTRAFILES\fR" 4
-+.ie n .IP "\fB\fB$EXTRAFILES\fB\fR" 4
-+.el .IP "\fB\f(CB$EXTRAFILES\fB\fR" 4
- .IX Item "$EXTRAFILES"
- Same as \-e option.
--.IP "\fB$RAID\fR" 4
-+.ie n .IP "\fB\fB$RAID\fB\fR" 4
-+.el .IP "\fB\f(CB$RAID\fB\fR" 4
- .IX Item "$RAID"
- Same as \-r option.
--.IP "\fB$RAIDCONF\fR" 4
-+.ie n .IP "\fB\fB$RAIDCONF\fB\fR" 4
-+.el .IP "\fB\f(CB$RAIDCONF\fB\fR" 4
- .IX Item "$RAIDCONF"
- Same as \-R option.
--.IP "\fB$MAKEDEV\fR" 4
-+.ie n .IP "\fB\fB$MAKEDEV\fB\fR" 4
-+.el .IP "\fB\f(CB$MAKEDEV\fB\fR" 4
- .IX Item "$MAKEDEV"
- Same as \-M option.
--.IP "\fB$BASICDEVICES\fR" 4
-+.ie n .IP "\fB\fB$BASICDEVICES\fB\fR" 4
-+.el .IP "\fB\f(CB$BASICDEVICES\fB\fR" 4
- .IX Item "$BASICDEVICES"
- Overrides the default value of \f(CW$BASICDEVICES\fR in the script (which is \*(L"std consoleonly fd\*(R"). These values are passed to the \fB\s-1MAKEDEV\s0\fR program to create device
- entries in the initrd image.
--.IP "\fB$BLOCKDEVICES\fR" 4
-+.ie n .IP "\fB\fB$BLOCKDEVICES\fB\fR" 4
-+.el .IP "\fB\f(CB$BLOCKDEVICES\fB\fR" 4
- .IX Item "$BLOCKDEVICES"
- Overrides the default value of \f(CW$BLOCKDEVICES\fR in the script (which is \*(L"md hda hdb hdc hdd sda sdb sdc sdd\*(R"). This value is passed to the \fB\s-1MAKEDEV\s0\fR program to
- create device entries in the initrd image.
--.IP "\fB$BINFILES\fR" 4
-+.ie n .IP "\fB\fB$BINFILES\fB\fR" 4
-+.el .IP "\fB\f(CB$BINFILES\fB\fR" 4
- .IX Item "$BINFILES"
- Overrides the default value of \f(CW$BINFILES\fR (which is \*(L"/lib/lvm\-200/lvm /bin/bash /bin/busybox /sbin/pivot_root\*(R"). The difference between using this and adding
- a file to the \f(CW$EXTRAFILES\fR list above is that libraries that these depend upon are also included. You can still use \f(CW$EXTRAFILES\fR to achieve the same effect, but
- you must resolve library dependencies youself.
--.IP "\fB$INITRDSIZE\fR" 4
-+.ie n .IP "\fB\fB$INITRDSIZE\fB\fR" 4
-+.el .IP "\fB\f(CB$INITRDSIZE\fB\fR" 4
- .IX Item "$INITRDSIZE"
- Force a particular size for your initrd image. The default is to total up the size of
- the included files and to add 512K as a buffer.
---- LVM2/scripts/lvm2create_initrd/lvm2create_initrd.pod	2004/06/07 16:20:05	1.1
-+++ LVM2/scripts/lvm2create_initrd/lvm2create_initrd.pod	2011/11/12 17:03:54	1.2
-@@ -107,11 +107,11 @@
+ static void _write_history(void)
+--- LVM2/tools/toollib.c	2011/11/10 12:43:05	1.234
++++ LVM2/tools/toollib.c	2011/11/12 22:44:11	1.235
+@@ -329,7 +329,6 @@
+ 		dm_list_iterate_items(sll, &arg_lvnames) {
+ 			const char *vg_name = sll->str;
+ 			const char *lv_name = strchr(vg_name, '/');
+-log_error("VGNAME strdup %p %s   %s", lv_name, vg_name,  vgname);
  
- =item B<-M|--makedev> I<style>
- 
--Set MAKEDEV invocation style. The script currently supports 2 styles of
--MAKEDEV programs I<debian> and I<redhat>. The default is I<debian>. Set
--to I<redhat> if using the RedHat/Fedora binary MAKEDEV program. Please send
--a bug report to maintainer if your distrib doesn't work with any of the
--current options.
-+Set MAKEDEV invocation style. The script currently supports 3 styles of
-+MAKEDEV programs I<debian>, I<redhat> and I<gentoo>. The default is I<debian>.
-+Set to I<redhat> if using the RedHat/Fedora binary MAKEDEV program. I<gentoo>
-+has the same binary but in /sbin instead of /dev. Please send a bug report to
-+maintainer if your distribution doesn't work with any of the current options.
- 
- =back
- 
+ 			if ((!lv_name && !strcmp(vg_name, vgname))) {
+ 				/* Process all LVs in this VG */
 
 
