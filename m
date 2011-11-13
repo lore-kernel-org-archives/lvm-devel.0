@@ -1,38 +1,29 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 13 Nov 2011 01:41:57 -0000
-Subject: LVM2/man dmsetup.8.in
-Message-ID: <20111113014157.1217.qmail@sourceware.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Sun, 13 Nov 2011 01:56:11 +0000
+Subject: LVM2 ./WHATS_NEW_DM man/dmsetup.8.in
+In-Reply-To: <20111112224845.28164.qmail@sourceware.org>
+References: <20111112224845.28164.qmail@sourceware.org>
+Message-ID: <20111113015611.GA4396@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-11-13 01:41:57
+On Sat, Nov 12, 2011 at 10:48:45PM -0000, zkabelac at sourceware.org wrote:
+> 	Added at least a very simply info about some other targets.
 
-Modified files:
-	man            : dmsetup.8.in 
+You could mention the names of the complex targets, but please don't try to
+document them in this man page as it would make it far too long and it's a
+distraction because dmsetup just passes its input lines through untouched at
+the moment so the formats are not anything to do with 'man dmsetup'.
 
-Log message:
-	Incomplete documentation is worse than no documentation.
-	Any documentation less-detailed than Documentation/device-mapper is
-	dangerous for the non-trivial ctr lines.  And anyway, this should be in s4
-	not here.
+Refer people to Documentation/device-mapper and concentrate on improving that
+documentation.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.45&r2=1.46
+(We should really be packaging that in /usr/share/doc actually until we have
+proper section 4 man pages written.)
 
---- LVM2/man/dmsetup.8.in	2011/11/12 22:48:44	1.45
-+++ LVM2/man/dmsetup.8.in	2011/11/13 01:41:57	1.46
-@@ -532,6 +532,7 @@
- To wait until the next event is triggered, use \fBinfo\fP to find
- the last event number.
- .SH TABLE FORMAT
-+// FIXME Rewrite safely (a lot of work) or remove.
- Each line of the table specifies a single target and is of the form:
- .P
- .I logical_start_sector num_sectors
+Alasdair
 
 
