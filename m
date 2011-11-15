@@ -1,60 +1,31 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 15 Nov 2011 11:54:17 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/flags.c
-Message-ID: <20111115115417.9067.qmail@sourceware.org>
+From: Dave Wysochanski <dwysocha@redhat.com>
+Date: Tue, 15 Nov 2011 08:54:31 -0500
+Subject: [PATCH 1/5] Add static _check_pv_sizes() function to check all pv sizes for consistency.
+In-Reply-To: <20111114213402.GK4396@agk-dp.fab.redhat.com>
+References: <1321305181-28158-1-git-send-email-dwysocha@redhat.com>
+	<1321305181-28158-2-git-send-email-dwysocha@redhat.com>
+	<20111114213402.GK4396@agk-dp.fab.redhat.com>
+Message-ID: <1321365271.1790.12.camel@f14-work>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-11-15 11:54:17
+On Mon, 2011-11-14 at 21:34 +0000, Alasdair G Kergon wrote:
+> On Mon, Nov 14, 2011 at 04:12:57PM -0500, Dave Wysochanski wrote:
+> > This function should be called from vg_validate() and vg_read_internal() at
+> > the very least, barring some condition I have not thought of.  Whether
+> 
+> --setphysicalvolumesize
+> 
+> Alasdair
+> 
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/format_text: flags.c 
+Hmmm.  So there's a reason we should allow someone to "pvresize
+--setphysicalvolumesize" a larger size than the device itself?  What's
+the use case, or are you just not wanting to be restrictive?
 
-Log message:
-	Avoid 'mda inconsistency' by properly registering UNLABELLED_PV flag (2.02.86).
-	
-	When a PV label write is deferred to a vg_write call (as introduced by a patch
-	in 2.02.86), the PV is flagged with the internal UNLABELLED_PV flag. However,
-	when calling vg_archive before vg_write, we still have the PV labelled with the
-	UNLABELLED_PV flag which was not recognised as a proper flag while exporting
-	VG metadata:
-	
-	# vgcreate vg /dev/sda
-	No physical volume label read from /dev/sda
-	Metadata inconsistency: Not all flags successfully exported.
-	Metadata inconsistency: Not all flags successfully exported.
-	Writing physical volume data to disk "/dev/sda"
-	Physical volume "/dev/sda" successfully created
-	Volume group "vg" successfully created
-
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2183&r2=1.2184
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
-
---- LVM2/WHATS_NEW	2011/11/14 21:30:35	1.2183
-+++ LVM2/WHATS_NEW	2011/11/15 11:54:15	1.2184
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Avoid 'mda inconsistency' by properly registering UNLABELLED_PV flag (2.02.86).
-   Fix --enable-static_link unless using --enable-dmeventd / --enable-udev_sync.
-   Move gentoo MAKEDEV to /sbin in lvm2create_initrd.
-   Add filter to avoid scan of device if it is part of active multipath.
---- LVM2/lib/format_text/flags.c	2011/09/08 16:41:18	1.48
-+++ LVM2/lib/format_text/flags.c	2011/11/15 11:54:16	1.49
-@@ -45,6 +45,7 @@
- 	{ALLOCATABLE_PV, "ALLOCATABLE", STATUS_FLAG},
- 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
- 	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
-+	{UNLABELLED_PV, NULL, 0},
- 	{0, NULL, 0}
- };
- 
+It did not seem to me we ever want to allow it.
 
 
