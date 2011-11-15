@@ -1,34 +1,60 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Mon, 14 Nov 2011 21:55:45 +0000
-Subject: [PATCH 0/5] Check for resized smaller devices, v1, rhbz753914
-In-Reply-To: <1321305181-28158-1-git-send-email-dwysocha@redhat.com>
-References: <1321305181-28158-1-git-send-email-dwysocha@redhat.com>
-Message-ID: <20111114215545.GL4396@agk-dp.fab.redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 15 Nov 2011 11:54:17 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/flags.c
+Message-ID: <20111115115417.9067.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-There are circumstances where sizes don't match and it's OK.
-There are circumstances where sizes don't match and it's not OK.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2011-11-15 11:54:17
 
-Warn, prompt or abort?
+Modified files:
+	.              : WHATS_NEW 
+	lib/format_text: flags.c 
 
-vg_validate is really about the internal consistency of the metadata,
-and I hesitate to extend it to check the underlying devices.
+Log message:
+	Avoid 'mda inconsistency' by properly registering UNLABELLED_PV flag (2.02.86).
+	
+	When a PV label write is deferred to a vg_write call (as introduced by a patch
+	in 2.02.86), the PV is flagged with the internal UNLABELLED_PV flag. However,
+	when calling vg_archive before vg_write, we still have the PV labelled with the
+	UNLABELLED_PV flag which was not recognised as a proper flag while exporting
+	VG metadata:
+	
+	# vgcreate vg /dev/sda
+	No physical volume label read from /dev/sda
+	Metadata inconsistency: Not all flags successfully exported.
+	Metadata inconsistency: Not all flags successfully exported.
+	Writing physical volume data to disk "/dev/sda"
+	Physical volume "/dev/sda" successfully created
+	Volume group "vg" successfully created
 
-It's not a particularly cheap check either.
-It shouldn't be done while any devices are suspended.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2183&r2=1.2184
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
-A flag in each PV to say to ignore a size mismatch on an individual PV,
-controlled with pvchange and set when --setphysicalvolumesize overrides
-it, or alternatively just a single global lvm.conf setting?
-
-Cache the sizes during the standard scanning we already do, perhaps and
-then check on (just the first?) vg read?  Re-check next time VG lock is
-acquired?  (Hook into VG cache this way?)
-
-Alasdair
+--- LVM2/WHATS_NEW	2011/11/14 21:30:35	1.2183
++++ LVM2/WHATS_NEW	2011/11/15 11:54:15	1.2184
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Avoid 'mda inconsistency' by properly registering UNLABELLED_PV flag (2.02.86).
+   Fix --enable-static_link unless using --enable-dmeventd / --enable-udev_sync.
+   Move gentoo MAKEDEV to /sbin in lvm2create_initrd.
+   Add filter to avoid scan of device if it is part of active multipath.
+--- LVM2/lib/format_text/flags.c	2011/09/08 16:41:18	1.48
++++ LVM2/lib/format_text/flags.c	2011/11/15 11:54:16	1.49
+@@ -45,6 +45,7 @@
+ 	{ALLOCATABLE_PV, "ALLOCATABLE", STATUS_FLAG},
+ 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
+ 	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
++	{UNLABELLED_PV, NULL, 0},
+ 	{0, NULL, 0}
+ };
+ 
 
 
