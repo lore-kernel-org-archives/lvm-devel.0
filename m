@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Nov 2011 17:23:51 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20111115172351.25734.qmail@sourceware.org>
+Date: 15 Nov 2011 17:25:06 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20111115172506.26101.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-15 17:23:51
+Changes by:	zkabelac at sourceware.org	2011-11-15 17:25:05
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	lib/activate   : dev_manager.c 
 
 Log message:
-	Thin supports only thin volumes as snapshot origins
+	Thin clean
 	
-	It's currently of the scope to properly solve the snapshoting
-	of internal thin devs so prevent non-toplevel snapshots here.
+	Reuse seg pointer already set in _add_lv_to_dtree to have the
+	value of first_seg(lv) (and is used in other parts of this function).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.333&r2=1.334
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.250&r2=1.251
 
---- LVM2/lib/metadata/lv_manip.c	2011/11/12 22:53:23	1.333
-+++ LVM2/lib/metadata/lv_manip.c	2011/11/15 17:23:51	1.334
-@@ -4071,6 +4071,16 @@
- 					  "merging snapshot is not supported");
- 				return NULL;
- 			}
-+
-+			if (lv_is_thin_type(org) && !lv_is_thin_volume(org)) {
-+				log_error("Snapshots of thin pool %sdevices "
-+					  "are not supported.",
-+					  lv_is_thin_pool_data(org) ? "data " :
-+					  lv_is_thin_pool_metadata(org) ?
-+					  "metadata " : "");
-+				return NULL;
-+			}
-+
- 			if ((org->status & MIRROR_IMAGE) ||
- 			    (org->status & MIRROR_LOG)) {
- 				log_error("Snapshots of mirror %ss "
+--- LVM2/lib/activate/dev_manager.c	2011/11/15 17:21:02	1.250
++++ LVM2/lib/activate/dev_manager.c	2011/11/15 17:25:05	1.251
+@@ -1100,17 +1100,16 @@
+ 		return_0;
+ 
+ 	if (lv_is_thin_pool(lv)) {
+-		if (!_add_dev_to_dtree(dm, dtree, lv, "tpool"))
+-			return_0;
+-		if (!_add_lv_to_dtree(dm, dtree, first_seg(lv)->pool_metadata_lv, origin_only))
++		if (!_add_lv_to_dtree(dm, dtree, seg->pool_metadata_lv, origin_only))
+ 			return_0;
+ 		/* FIXME code from _create_partial_dtree() should be moved here */
+-		if (!_add_lv_to_dtree(dm, dtree, seg_lv(first_seg(lv), 0), origin_only))
++		if (!_add_lv_to_dtree(dm, dtree, seg_lv(seg, 0), origin_only))
+ 			return_0;
+-	} else if (lv_is_thin_volume(lv)) {
+-		if (!_add_lv_to_dtree(dm, dtree, first_seg(lv)->pool_lv, origin_only))
++		if (!_add_dev_to_dtree(dm, dtree, lv, "tpool"))
+ 			return_0;
+-	}
++	} else if (lv_is_thin_volume(lv) &&
++		   !_add_lv_to_dtree(dm, dtree, seg->pool_lv, origin_only))
++		return_0;
+ 
+ 	return 1;
+ }
 
 
