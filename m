@@ -1,62 +1,63 @@
-From: Dave Wysochanski <dwysocha@redhat.com>
-Date: Tue, 15 Nov 2011 09:11:32 -0500
-Subject: [PATCH 0/5] Check for resized smaller devices, v1, rhbz753914
-In-Reply-To: <20111114215545.GL4396@agk-dp.fab.redhat.com>
-References: <1321305181-28158-1-git-send-email-dwysocha@redhat.com>
-	<20111114215545.GL4396@agk-dp.fab.redhat.com>
-Message-ID: <1321366292.1790.27.camel@f14-work>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 15 Nov 2011 17:15:04 -0000
+Subject: LVM2/lib/activate dev_manager.c
+Message-ID: <20111115171504.20211.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 2011-11-14 at 21:55 +0000, Alasdair G Kergon wrote:
-> There are circumstances where sizes don't match and it's OK.
-> There are circumstances where sizes don't match and it's not OK.
-> 
-> Warn, prompt or abort?
-> 
-"sizes don't match" is a larger scope than what I was trying to tackle.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2011-11-15 17:15:04
 
-I don't think pv_size should ever be larger than dev_size, and today it
-causes strange failures with things like lvcreate.
+Modified files:
+	lib/activate   : dev_manager.c 
 
-However, it's perfectly fine for pv_size to be be smaller than dev_size
-(no LVM problems result).
+Log message:
+	Thin fix tpool layer
+	
+	Since we support snapshots of thin volumes, we could have more layers,
+	so we have to check whether tpool layer is going to be inserted.
+	
+	As the _add_segment_to_dtree() is the only place that adds tpool
+	segment, we may just check pointer (no strcmp for layer).
+	
+	Switch to use  seg_is_  function instead of lv_is_.
 
-> vg_validate is really about the internal consistency of the metadata,
-> and I hesitate to extend it to check the underlying devices.
-> 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.248&r2=1.249
 
-Ok, that's reasonable to say vg_validate is restricted to internal
-checks.  I was not sure exactly where we should call it.
-
-> It's not a particularly cheap check either.
-> It shouldn't be done while any devices are suspended.
-> 
-Yeah, and in probably 95% of times the check will pass so it's just
-overhead.  This would argue for restricting the check to something like
-pvck or vgck.
-
-What do you think about calling from pvck / vgck for now?
-
-
-> A flag in each PV to say to ignore a size mismatch on an individual PV,
-> controlled with pvchange and set when --setphysicalvolumesize overrides
-> it, or alternatively just a single global lvm.conf setting?
-> 
-
-I would hope to not have to implement another flag or option but it may
-be necessary.
-
-
-> Cache the sizes during the standard scanning we already do, perhaps and
-> then check on (just the first?) vg read?  Re-check next time VG lock is
-> acquired?  (Hook into VG cache this way?)
-> 
-
-I'll have to look into the scope of these types of changes.  At a high
-level, it seems a reasonable approach, and may even improve performance.
+--- LVM2/lib/activate/dev_manager.c	2011/11/03 14:52:09	1.248
++++ LVM2/lib/activate/dev_manager.c	2011/11/15 17:15:03	1.249
+@@ -1455,6 +1455,7 @@
+ 	struct lv_segment *seg_present;
+ 	const char *target_name;
+ 	struct lv_activate_opts lva;
++	static const char tpool_layer[] = "tpool";
+ 
+ 	/* Ensure required device-mapper targets are loaded */
+ 	seg_present = find_cow(seg->lv) ? : seg;
+@@ -1499,15 +1500,14 @@
+ 	} else if (lv_is_cow(seg->lv) && !layer) {
+ 		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv, laopts, "cow"))
+ 			return_0;
+-	} else if (!layer && (lv_is_thin_pool(seg->lv) ||
+-			      lv_is_thin_volume(seg->lv))) {
++	} else if ((layer != tpool_layer) && seg_is_thin(seg)) {
+ 		lva = *laopts;
+ 		lva.real_pool = 1;
+-		if (!_add_new_lv_to_dtree(dm, dtree, lv_is_thin_pool(seg->lv) ?
+-					  seg->lv : seg->pool_lv, &lva, "tpool"))
++		if (!_add_new_lv_to_dtree(dm, dtree, seg_is_thin_pool(seg) ?
++					  seg->lv : seg->pool_lv, &lva, tpool_layer))
+ 			return_0;
+ 	} else {
+-		if (lv_is_thin_pool(seg->lv) &&
++		if (seg_is_thin_pool(seg) &&
+ 		    !_add_new_lv_to_dtree(dm, dtree, seg->pool_metadata_lv, laopts, NULL))
+ 			return_0;
+ 
 
 
