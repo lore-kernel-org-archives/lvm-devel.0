@@ -1,69 +1,41 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Nov 2011 17:32:13 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20111115173213.2500.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Tue, 15 Nov 2011 23:00:24 +0100
+Subject: [PATCH] Fix RHBZ 754198 (multiple dmeventd snapshot extensions)
+Message-ID: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-15 17:32:12
+Hi,
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
+the attached patch should fix the problem encountered in 754198. Namely,
+we failed to reset the percent threshold for the next check after
+extending a snapshot. To this end, I have added a special exit code,
+ENO_ACTION_NEEDED -- however, this is not absolutely required, and is
+only an optimisation. On the other hand, it is likely an important
+optimisation, because without this, all snapshots filled above 50 % will
+run a LVM command (with all the associated overhead) every 10
+seconds. There are more possible uses for this new exit code, so I think
+it's a good idea anyway.
 
-Log message:
-	Adjusted mirror region size only for mirrors and raids
-	
-	Update region_size only for mirror and raid targets.
-	This fixes warning messages when vg is using small
-	extent size like 1KiB and no mirror/raid is created,
-	but the user still got the message:
-	
-	$> vgcreate -s 1K vg  <pvs>
-	$> lvcreate -L10K vg
-	Using reduced mirror region size of 4 sectors
+Documentation *might* need updating (although it's currently only used
+by --use-policies, which is not an entirely user-level option...).
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2185&r2=1.2186
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.336&r2=1.337
+Other than that, the patch is relatively straightforward.
 
---- LVM2/WHATS_NEW	2011/11/15 17:27:41	1.2185
-+++ LVM2/WHATS_NEW	2011/11/15 17:32:12	1.2186
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Adjusted mirror region size only for mirrors and raids.
-   Reorder prompt conditions for removal of active volumes.
-   Avoid 'mda inconsistency' by properly registering UNLABELLED_PV flag (2.02.86).
-   Fix --enable-static_link unless using --enable-dmeventd / --enable-udev_sync.
---- LVM2/lib/metadata/lv_manip.c	2011/11/15 17:29:52	1.336
-+++ LVM2/lib/metadata/lv_manip.c	2011/11/15 17:32:12	1.337
-@@ -4197,6 +4197,10 @@
- 				 lp->segtype->name);
- 			status |= LV_NOTSYNCED;
- 		}
-+
-+		lp->region_size = adjusted_mirror_region_size(vg->extent_size,
-+							      lp->extents,
-+							      lp->region_size);
- 	}
- 
- 	if (!(lv = lv_create_empty(new_lv_name ? : "lvol%d", NULL,
-@@ -4218,10 +4222,6 @@
- 
- 	dm_list_splice(&lv->tags, &lp->tags);
- 
--	lp->region_size = adjusted_mirror_region_size(vg->extent_size,
--						      lp->extents,
--						      lp->region_size);
--
- 	if (!lv_extend(lv, lp->segtype,
- 		       lp->stripes, lp->stripe_size,
- 		       lp->mirrors,
+Yours,
+   Petr
 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dmeventd-snapshot-fix.diff
+Type: text/x-diff
+Size: 3791 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20111115/7bbcffad/attachment.bin>
+-------------- next part --------------
 
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
