@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Nov 2011 17:21:03 -0000
-Subject: LVM2/lib/activate dev_manager.c
-Message-ID: <20111115172103.22715.qmail@sourceware.org>
+Date: 15 Nov 2011 17:23:51 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20111115172351.25734.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-15 17:21:02
+Changes by:	zkabelac at sourceware.org	2011-11-15 17:23:51
 
 Modified files:
-	lib/activate   : dev_manager.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Simplify iteration
+	Thin supports only thin volumes as snapshot origins
 	
-	Since nothing is removed in dm_list snapshot_segs during the loop,
-	there is no reason to use _safe iteration, so switch to simplier
-	dm_list_iterate().
+	It's currently of the scope to properly solve the snapshoting
+	of internal thin devs so prevent non-toplevel snapshots here.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.249&r2=1.250
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.333&r2=1.334
 
---- LVM2/lib/activate/dev_manager.c	2011/11/15 17:15:03	1.249
-+++ LVM2/lib/activate/dev_manager.c	2011/11/15 17:21:02	1.250
-@@ -1118,7 +1118,7 @@
- static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, struct logical_volume *lv, int origin_only)
- {
- 	struct dm_tree *dtree;
--	struct dm_list *snh, *snht;
-+	struct dm_list *snh;
- 	struct lv_segment *seg;
- 	uint32_t s;
- 
-@@ -1132,7 +1132,7 @@
- 
- 	/* Add any snapshots of this LV */
- 	if (!origin_only && lv_is_origin(lv))
--		dm_list_iterate_safe(snh, snht, &lv->snapshot_segs)
-+		dm_list_iterate(snh, &lv->snapshot_segs)
- 			if (!_add_lv_to_dtree(dm, dtree, dm_list_struct_base(snh, struct lv_segment, origin_list)->cow, 0))
- 				goto_bad;
- 
+--- LVM2/lib/metadata/lv_manip.c	2011/11/12 22:53:23	1.333
++++ LVM2/lib/metadata/lv_manip.c	2011/11/15 17:23:51	1.334
+@@ -4071,6 +4071,16 @@
+ 					  "merging snapshot is not supported");
+ 				return NULL;
+ 			}
++
++			if (lv_is_thin_type(org) && !lv_is_thin_volume(org)) {
++				log_error("Snapshots of thin pool %sdevices "
++					  "are not supported.",
++					  lv_is_thin_pool_data(org) ? "data " :
++					  lv_is_thin_pool_metadata(org) ?
++					  "metadata " : "");
++				return NULL;
++			}
++
+ 			if ((org->status & MIRROR_IMAGE) ||
+ 			    (org->status & MIRROR_LOG)) {
+ 				log_error("Snapshots of mirror %ss "
 
 
