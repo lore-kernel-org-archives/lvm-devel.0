@@ -1,70 +1,110 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 16 Nov 2011 14:22:58 +0100
-Subject: [PATCH 11/12] Remove fixmes
+Date: Wed, 16 Nov 2011 14:22:59 +0100
+Subject: [PATCH 12/12] DEBUG Stack detection code
 In-Reply-To: <cover.1321449480.git.zkabelac@redhat.com>
 References: <cover.1321449480.git.zkabelac@redhat.com>
-Message-ID: <9c01a6ffb362cb07fb5ed51f5071779913271168.1321449480.git.zkabelac@redhat.com>
+Message-ID: <f1d356efc5f21d8025bb64d2f375e235009554e3.1321449480.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Remove FIXMES - there should not be any pool free call since
-the memory pool is from device manager, and pool is detroyed
-after the operation, so doing extra free here would not help here.
+This patch is rather just an idea we might deploy into the source
+code in some further modifed version.
 
-However lv_has_target_type() is using cmd mempool so here the extra
-call for dm_pool_free makes sence.
+It prefills allocated stack size with some pattern and check
+whether pattern is still present when leaving critical section
+and prints the amount of unmodified data.
+
+Final version might probably mark just bottom 32? bytes
+and check if they are still there ?
+(Something like we are doing for memory locked & unlocked size).
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/activate/dev_manager.c |   10 ++++------
- 1 files changed, 4 insertions(+), 6 deletions(-)
+ lib/mm/memlock.c |   49 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 48 insertions(+), 1 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 4f7e6ac..fdeb967 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -411,7 +411,7 @@ int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index b9fc430..0f705c0 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -26,6 +26,10 @@
+ #include <sys/time.h>
+ #include <sys/resource.h>
  
- 	if (!(dmt = _setup_task(NULL, dlid, 0,
- 				DM_DEVICE_STATUS, 0, 0)))
--		return_0;
-+		goto_bad;
++#ifdef VALGRIND_POOL
++#include "valgrind/memcheck.h"
++#endif
++
+ #ifndef DEVMAPPER_SUPPORT
  
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
-@@ -433,8 +433,10 @@ int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
- 		}
- 	} while (next);
+ void memlock_inc_daemon(struct cmd_context *cmd)
+@@ -121,12 +125,54 @@ static void _touch_memory(void *mem, size_t size)
+ 	}
+ }
  
-- out:
-+out:
- 	dm_task_destroy(dmt);
-+	dm_pool_free(mem, dlid);
++static long *_stack_lowest = 0;
++static void _touch_stack(void *mem, size_t size)
++{
++	long *pos = _stack_lowest = (long *) mem;
++	long *end = (long *) ((char *) pos + size - sizeof(long));
++	while (pos < end) {
++		*pos = (long) pos;
++		pos++;
++	}
++}
++
++static void _test_stack(void)
++{
++	long *pos = NULL;
++	long *end = (long*)&end;
++
++	/* Tets works only for downward growing stack */
++	if (&end > &pos)
++		return;
++
++	if (end <= _stack_lowest)
++		goto bad;
++
++	pos = alloca((end - _stack_lowest) * sizeof(long));
++#ifdef VALGRIND_POOL
++	VALGRIND_MAKE_MEM_DEFINED(pos, (end - _stack_lowest) * sizeof(long));
++#endif
++
++	pos = _stack_lowest;
++
++	while (pos < end && (*pos == (long) pos))
++		pos++;
++
++	log_verbose("Stack has not used %" PRIsize_t " reserved bytes.",
++		    sizeof(long) * (pos - _stack_lowest));
++
++	if ((pos - _stack_lowest) > 0)
++		return;
 +bad:
- 	return r;
++	log_error(INTERNAL_ERROR "Reserved stack has been too small.");
++}
++
+ static void _allocate_memory(void)
+ {
+ 	void *stack_mem, *temp_malloc_mem;
+ 
+ 	if ((stack_mem = alloca(_size_stack)))
+-		_touch_memory(stack_mem, _size_stack);
++		_touch_stack(stack_mem, _size_stack);
+ 
+ 	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
+ 		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
+@@ -140,6 +186,7 @@ static void _allocate_memory(void)
+ static void _release_memory(void)
+ {
+ 	free(_malloc_mem);
++	_test_stack();
  }
  
-@@ -737,8 +739,6 @@ int dev_manager_snapshot_percent(struct dev_manager *dm,
- 		       NULL, fail_if_percent_unsupported)))
- 		return_0;
- 
--	/* FIXME dm_pool_free ? */
--
- 	/* If the snapshot isn't available, percent will be -1 */
- 	return 1;
- }
-@@ -760,8 +760,6 @@ int dev_manager_mirror_percent(struct dev_manager *dm,
- 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
- 		return_0;
- 
--	/* FIXME dm_pool_free ? */
--
- 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer))) {
- 		log_error("dlid build failed for %s", lv->name);
- 		return 0;
+ /*
 -- 
 1.7.7.3
 
