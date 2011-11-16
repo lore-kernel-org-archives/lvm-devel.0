@@ -1,119 +1,62 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 16 Nov 2011 14:22:55 +0100
-Subject: [PATCH 08/12] Check for DM_MAX_TYPE_NAME length
+Date: Wed, 16 Nov 2011 14:22:56 +0100
+Subject: [PATCH 09/12] Limit max stack size
 In-Reply-To: <cover.1321449480.git.zkabelac@redhat.com>
 References: <cover.1321449480.git.zkabelac@redhat.com>
-Message-ID: <73bd5ed96f58434b9998794cf17d4c4d11bedaa9.1321449480.git.zkabelac@redhat.com>
+Message-ID: <418aee1d85467810cc425db607d076985984a92e.1321449480.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Avoid creation of target when it's longer then DM_MAX_TYPE_NAME
-(noticed by static analyzer where the sp.target_type
-might be missing '\0' at the end.)
+For now CLMVD allocates 128KiB for each thread which is
+twice the DEFAULT_RESERVED_STACK that happens to be 64KiB so
+we cannot support to prealllocate the arbitrary large stack size.
 
-Before patch:
+With this whole patchset applied it could be seen, the whole test-suite
+is passing even with just 32KiB preallocated stack with still some KiB
+left. So there is probably no point to allow allocation of more then
+64KiB.
 
-$> dmsetup create long
-0 1000 looooooooooooooooooooooooooong
-^D
-device-mapper: reload ioctl failed: Invalid argument
+We can have number of solutions here - ideally I'd drop the whole
+configurability of stack prealloction and leave it for internal code
+to know better what the stack size is needed.
 
-After patch:
+Without this patch every CLVMD user which have activation/reserved_stack
+set to 256KiB (which was default prior 2.02.89) will get clvmd crash
+after start.
 
-$> dmsetup create xxx
-0 1000 looooooooooooooooooooooooooong
-Target type name looooooooooooooooooooooooooong is too long.
-Command failed
+IMHO the worst option is to implement lvm.conf parsing into
+clvmd, to find out reserved_size and update pthread stack size to
+accomodate this value (since currently clvmd does not use lvm.conf -
+only its lvm threads).
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- libdm/ioctl/libdm-iface.c |   32 ++++++++++++++++++++------------
- libdm/libdm-common.c      |    3 +--
- 2 files changed, 21 insertions(+), 14 deletions(-)
+ lib/mm/memlock.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index cddd84a..725bd83 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -853,9 +853,14 @@ int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr)
- struct target *create_target(uint64_t start, uint64_t len, const char *type,
- 			     const char *params)
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 8bf9f22..b9fc430 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -446,8 +446,13 @@ void memlock_dec_daemon(struct cmd_context *cmd)
+ void memlock_init(struct cmd_context *cmd)
  {
--	struct target *t = dm_zalloc(sizeof(*t));
-+	struct target *t;
-+
-+	if (strlen(type) >= DM_MAX_TYPE_NAME) {
-+		log_error("Target type name %s is too long.", type);
-+		return NULL;
+ 	_size_stack = find_config_tree_int(cmd,
+-				      "activation/reserved_stack",
+-				      DEFAULT_RESERVED_STACK) * 1024;
++					   "activation/reserved_stack",
++					   DEFAULT_RESERVED_STACK) * 1024;
++	if (_size_stack > (DEFAULT_RESERVED_STACK * 1024)) {
++		_size_stack = DEFAULT_RESERVED_STACK * 1024;
++		log_verbose("Using maximum supported prealloc stack size %uKB",
++			    DEFAULT_RESERVED_STACK);
 +	}
- 
--	if (!t) {
-+	if (!(t = dm_zalloc(sizeof(*t)))) {
- 		log_error("create_target: malloc(%" PRIsize_t ") failed",
- 			  sizeof(*t));
- 		return NULL;
-@@ -889,19 +894,24 @@ static char *_add_target(struct target *t, char *out, char *end)
- 	size_t sp_size = sizeof(struct dm_target_spec);
- 	int len;
- 
--	out += sp_size;
--	if (out >= end)
--		return_NULL;
-+	if (strlen(t->type) >= sizeof(sp.target_type)) {
-+		log_error("Target type name %s is too long.", t->type);
-+		return NULL;
-+	}
- 
- 	sp.status = 0;
- 	sp.sector_start = t->start;
- 	sp.length = t->length;
--	strncpy(sp.target_type, t->type, sizeof(sp.target_type));
-+	strncpy(sp.target_type, t->type, sizeof(sp.target_type) - 1);
-+	sp.target_type[sizeof(sp.target_type) - 1] = '\0';
- 
-+	out += sp_size;
- 	len = strlen(t->params);
- 
--	if ((out + len + 1) >= end)
--		return_NULL;
-+	if ((out >= end) || (out + len + 1) >= end) {
-+		log_error("Ran out of memory building ioctl parameter");
-+		return NULL;
-+	}
- 
- 	strcpy(out, t->params);
- 	out += len + 1;
-@@ -1117,10 +1127,8 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 	e = (char *) dmi + len;
- 
- 	for (t = dmt->head; t; t = t->next)
--		if (!(b = _add_target(t, b, e))) {
--			log_error("Ran out of memory building ioctl parameter");
--			goto bad;
--		}
-+		if (!(b = _add_target(t, b, e)))
-+			goto_bad;
- 
- 	if (dmt->newname)
- 		strcpy(b, dmt->newname);
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 23539d7..4f438bd 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -407,9 +407,8 @@ int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
- 		       const char *ttype, const char *params)
- {
- 	struct target *t = create_target(start, size, ttype, params);
--
- 	if (!t)
--		return 0;
-+		return_0;
- 
- 	if (!dmt->head)
- 		dmt->head = dmt->tail = t;
+ 	_size_malloc_tmp = find_config_tree_int(cmd,
+ 					   "activation/reserved_memory",
+ 					   DEFAULT_RESERVED_MEMORY) * 1024;
 -- 
 1.7.7.3
 
