@@ -1,54 +1,66 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 16 Nov 2011 14:22:52 +0100
-Subject: [PATCH 05/12] Change default prefix.
+Date: Wed, 16 Nov 2011 14:22:53 +0100
+Subject: [PATCH 06/12] Do not zero full 16KB data
 In-Reply-To: <cover.1321449480.git.zkabelac@redhat.com>
 References: <cover.1321449480.git.zkabelac@redhat.com>
-Message-ID: <8650c346f45e070961239cb02c3374a29262a908.1321449480.git.zkabelac@redhat.com>
+Message-ID: <3593e34fab2806100371d9289ea5301a67cfadbe.1321449480.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use ""  instead of "  ".
-So commands like lvs print from the begining of the line.
-(no need to trim space around).
+Could be a bit dangerous - so careful review is needed here.
+
+When buffer is passed into ioctl - we always zero at least 16KB with
+each ioctl - but it seems only 2 * sizeof(struct dm_ioctl) is
+actually needed - this safe quite a few wasted CPU cycles spent
+on many ioctl operations.
+(could be seen as  micro-optimalization, since the real effect in CPU
+ is below reliable measurable treshold for normal use cases.)
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- doc/example.conf.in   |    6 +++---
- lib/config/defaults.h |    2 +-
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ libdm/ioctl/libdm-iface.c |   11 +++++++++--
+ 1 files changed, 9 insertions(+), 2 deletions(-)
 
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index 2dd1808..1bc6df7 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -258,9 +258,9 @@ log {
-     command_names = 0
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index a0fa640..cddd84a 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -960,6 +960,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+ 	size_t len = sizeof(struct dm_ioctl);
+ 	char *b, *e;
+ 	int count = 0;
++	size_t min_zero_len = 2 * len;
  
-     # A prefix to use before the message text (but after the command name,
--    # if selected).  Default is two spaces, so you can see/grep the severity
--    # of each message.
--    prefix = "  "
-+    # if selected). Set to "  " to revert to the default behaviour
-+    # prior to version 2.02.89.
-+    prefix = ""
+ 	for (t = dmt->head; t; t = t->next) {
+ 		len += sizeof(struct dm_target_spec);
+@@ -1011,6 +1012,9 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+ 	if (dmt->geometry)
+ 		len += strlen(dmt->geometry) + 1;
  
-     # To make the messages look similar to the original LVM tools use:
-     #   indent = 0
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 9b91aea..5691d56 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -96,7 +96,7 @@
- #define DEFAULT_MAXIMISE_CLING 1
- #define DEFAULT_CLUSTERED 0
++	if (min_zero_len < len)
++		min_zero_len = len;
++
+ 	/*
+ 	 * Give len a minimum size so that we have space to store
+ 	 * dependencies or status information.
+@@ -1022,10 +1026,13 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+ 	while (repeat_count--)
+ 		len *= 2;
  
--#define DEFAULT_MSG_PREFIX "  "
-+#define DEFAULT_MSG_PREFIX ""
- #define DEFAULT_CMD_NAME 0
- #define DEFAULT_OVERWRITE 0
+-	if (!(dmi = dm_malloc(len)))
++	if (!(dmi = dm_malloc(len))) {
++		log_error("Failed to allocate ioctl buffer.");
+ 		return NULL;
++	}
+ 
+-	memset(dmi, 0, len);
++	/* Zero@least 2 * sizeof(struct dm_ioctl) */
++	memset(dmi, 0, min_zero_len);
+ 
+ 	version = &_cmd_data_v4[dmt->type].version;
  
 -- 
 1.7.7.3
