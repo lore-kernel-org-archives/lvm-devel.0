@@ -1,66 +1,48 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 16 Nov 2011 10:41:16 +0100
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 16 Nov 2011 10:44:02 +0100
 Subject: [PATCH] Fix RHBZ 754198 (multiple dmeventd snapshot extensions)
-In-Reply-To: <20111116012039.GB3294@agk-dp.fab.redhat.com> (Alasdair
-	G. Kergon's message of "Wed, 16 Nov 2011 01:20:39 +0000")
+In-Reply-To: <87ipmkxvlt.fsf@aldalome.int.mornfall.net.>
 References: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
-	<20111116012039.GB3294@agk-dp.fab.redhat.com>
-Message-ID: <87ehx8xv43.fsf@aldalome.int.mornfall.net.>
+	<4EC2E670.6000208@redhat.com>
+	<20111116000020.GA3294@agk-dp.fab.redhat.com>
+	<87ipmkxvlt.fsf@aldalome.int.mornfall.net.>
+Message-ID: <4EC385E2.1000105@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
-
-Alasdair G Kergon <agk@redhat.com> writes:
-> Let's not add it then in response to a bug fix.
+Dne 16.11.2011 10:30, Petr Rockai napsal(a):
+> Alasdair G Kergon<agk@redhat.com>  writes:
+>> - real problem is the *calculation* must be going wrong if one
+>> extend is insufficient to solve the problem!
 >
-> If the cmd exits OK, there's only really one code we should return for
-> shell scripts.  Splitting 'OK' into 'OK - something changed' and
-> 'OK - but nothing was changed' doesn't seem worth the effort and
-> adding a new code for one special case is the thin end of the wedge.
->
-> (If there's nothing to do and use_policies was given, it can just
-> return the normal OK?)
+> No, the real problem is that the snapshot is being filled and reaches
+> the threshold again, after first extension is done. Nothing wrong with
+> calculation.
 
-That's what used to happen until now.
+Calculation should happen per every 5% increase.
 
-> Why does it loop every 10 seconds?  Is there another way to stop it?
+Yet the logic there is IMHO not the best abd I'd say there are couple things 
+to improve.
 
-No, there is not. (See below.)
+Recalc is made on every 5% increase and 10 second delay is relatively
+way too long time - when you could easily write over 100MB/s these days even
+on very low level laptops - and better hardware may easily reach over 400MB/s
 
-> 1) Is there some problematic interaction between the configurable
-> (or even default) parameters that's causing problems?  Do some
-> parameters sometimes need overriding or constraining?
-> We should list the parameters and any constraints and make sure the
-> code deals with them.
-> (This might be going beyond the specific problem that Corey found,
-> but suggesting related problems to fix.)
+(We already have reports from users, which needed to use very low watermark
+level to catch fast writing apps overfilling snapshot)
 
-No, this is not a problem and is not related to the fix at hand.
+I'm playing with something similar on thinp support,
+and I think we need something smarted here - which works with relative sizes
+(well thinp will sleep at least - why not making the same for snapshots ?)
 
-> 2) One auto-extend should always be enough to deal with the notified
-> event.
->   - It should pass in the minimum required extension and use_policies
-> should take account of that.
+Anyway - related to Petr's patch - I don't like value '6' -
+I would put there i.e. 128 - so we could keep real errors sequential within 7 
+bits ? and non-real-errors either 0 or > 127   (will we need more of these ?)
 
-See above, and my previous mail as well. This is *not* a problem (and
-most definitely not _the_ problem). This is all about multiple
-"events". Only that we do not get any actual events from the kernel, so
-we poll every ten seconds. And to avoid actually running lvresize every
-10 seconds, we cache the outcome of the last check and only re-run
-lvresize if things "changed" from the last time.
 
-Petr
-
-PS: If the separate exit code is not acceptable, there are other ways to
-fix this, but they involve more substantial changes to the snapshot
-DSO. It's your call whether it's worth complicating the logic and
-increasing the risks by going that way.
-
--- 
-id' Ash = Ash; id' Dust = Dust; id' _ = undefined
+Zdenek
 
 
