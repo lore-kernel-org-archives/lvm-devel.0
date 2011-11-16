@@ -1,56 +1,57 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 16 Nov 2011 13:07:34 +0000
-Subject: [PATCH] Fix RHBZ 754198 (multiple dmeventd snapshot extensions)
-In-Reply-To: <20111116105953.GD3294@agk-dp.fab.redhat.com>
-References: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
-	<20111116012039.GB3294@agk-dp.fab.redhat.com>
-	<87ehx8xv43.fsf@aldalome.int.mornfall.net.>
-	<20111116105953.GD3294@agk-dp.fab.redhat.com>
-Message-ID: <20111116130734.GE3294@agk-dp.fab.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 16 Nov 2011 14:22:47 +0100
+Subject: [PATCH 00/12] Misc updates
+Message-ID: <cover.1321449480.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Nov 16, 2011 at 10:59:53AM +0000, Alasdair G Kergon wrote:
-> - a minimum size needs to be passed into lvextend (to avoid repeated calls if
-> there is rapid growth or if snapshot_autoextend_threshold was set too small)
-> - the trigger logic needs improving and needs to take account of the actual
-> space used as well as the percentage (and set the mininum extension size
-> appropriately)
+Some of patches that has accumulated in my tree
+and they should be upstreamed and are unrelated
+to thin coding.
 
-So this line of thought leads to lvextend --use-polices calculating:
+Comments are enclosed with each patch.
 
-   (new_size = old_size + amount_to_extend_by) > 
-	old_size_in_use + ((100 + autoextend_percent) - autoextend_threshold) / (100+autoextend_percent) * (old_size + amount_to_extend_by)
+"Do not zero full 16KB" should be examined closely.
 
-IOW we scale the parameters based on the amount currently in use.
+"DEBUG Stack" is rather proposal not a final patch.
 
-For example:
 
-    snapshot_autoextend_threshold = 70
-    snapshot_autoextend_percent = 20
+Zdenek Kabelac (12):
+  Allow to activate snapshot
+  Query before removing inactive snapshots
+  Code reorder
+  Unlock memory for vg_write
+  Change default prefix.
+  Do not zero full 16KB data
+  Replace dynamic buffer allocations for PATH_MAX
+  Check for DM_MAX_TYPE_NAME length
+  Limit max stack size
+  Remove constant expression check
+  Remove fixmes
+  DEBUG Stack detection code
 
-Means if it was 70% full, the percentage of free space after extension would
-be:
+ doc/example.conf.in           |    6 ++--
+ lib/activate/activate.c       |    4 +-
+ lib/activate/dev_manager.c    |   10 +++----
+ lib/activate/fs.c             |   12 ++++----
+ lib/commands/toolcontext.c    |    6 ++--
+ lib/config/defaults.h         |    2 +-
+ lib/filters/filter.c          |    3 --
+ lib/format_text/format-text.c |    2 +-
+ lib/metadata/lv_manip.c       |   12 ++++++++-
+ lib/metadata/metadata.c       |   18 +++++++-----
+ lib/mm/memlock.c              |   58 ++++++++++++++++++++++++++++++++++++++--
+ libdm/ioctl/libdm-iface.c     |   43 ++++++++++++++++++++----------
+ libdm/libdm-common.c          |    3 +-
+ test/t-lvcreate-usage.sh      |    2 +-
+ tools/lvchange.c              |   28 ++++++++++++++++---
+ tools/toollib.c               |   30 +++++---------------
+ 16 files changed, 158 insertions(+), 81 deletions(-)
 
-  ((100 + 20) - 70) / (100 + 20) = ((100 + autoextend_percent) - autoextend_threshold) / (100+autoextend_percent)
-
-If it's more than 70% full, we extend it so that we obtain that same percentage
-of free space.
-
-As the check interval is 5%, we impose a minimum autoextend_percent of 6% of
-old size (so > 5% of new size)
-
-The plugin keeps track of the current size (from the status line) and if
-the size increased it discovers this the next time it reads the status line
-and resets its check at that point.
-
-Separately, the plugin should perhaps record the maximum amount of growth
-during a check interval and use that as a minimum amount of extension, if the
-actual extension would otherwise be less.
-
-Alasdair
+-- 
+1.7.7.3
 
 
