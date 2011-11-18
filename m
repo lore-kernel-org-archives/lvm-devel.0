@@ -1,7 +1,8 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Fri, 18 Nov 2011 20:53:12 +0000
+From: Petr Rockai <prockai@redhat.com>
+Date: Fri, 18 Nov 2011 22:19:08 +0100
 Subject: [PATCH] Fix RHBZ 754198 (multiple dmeventd snapshot extensions)
-In-Reply-To: <4EC6C4AD.9080702@redhat.com>
+In-Reply-To: <87k46xw4z1.fsf@aldalome.int.mornfall.net.> (Petr Rockai's
+	message of "Fri, 18 Nov 2011 21:28:02 +0100")
 References: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
 	<20111116012039.GB3294@agk-dp.fab.redhat.com>
 	<87ehx8xv43.fsf@aldalome.int.mornfall.net.>
@@ -10,22 +11,31 @@ References: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
 	<87y5vdwydx.fsf@aldalome.int.mornfall.net.>
 	<4EC6927B.4000402@redhat.com>
 	<87obw9w6vv.fsf@aldalome.int.mornfall.net.>
-	<4EC6C4AD.9080702@redhat.com>
-Message-ID: <20111118205312.GZ3294@agk-dp.fab.redhat.com>
+	<20111118195656.GX3294@agk-dp.fab.redhat.com>
+	<87k46xw4z1.fsf@aldalome.int.mornfall.net.>
+Message-ID: <87ehx5w2lv.fsf@aldalome.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Nov 18, 2011 at 09:48:45PM +0100, Zdenek Kabelac wrote:
-> while  {
->   read percentage
->   if converted && current_percent < last_time_percent
+Petr Rockai <prockai@redhat.com> writes:
+> Which is exactly what I proposed two mails back as a workaround for not
+> being able to use the exit code. So is that the preferred solution?
 
-Do that better, not by comparing the percentage, but by comparing the absolute
-size (which is also present on the status line).
+the attached patch implements this second approach.
 
-Alasdair
+Petr
 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dmeventd-snapshot-fix.diff
+Type: text/x-diff
+Size: 4528 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20111118/81ab7495/attachment.bin>
+-------------- next part --------------
 
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
