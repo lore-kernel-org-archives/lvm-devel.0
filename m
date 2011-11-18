@@ -1,85 +1,61 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 18 Nov 2011 19:42:04 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
-Message-ID: <20111118194204.15050.qmail@sourceware.org>
+From: Petr Rockai <prockai@redhat.com>
+Date: Fri, 18 Nov 2011 20:46:44 +0100
+Subject: [PATCH] Fix RHBZ 754198 (multiple dmeventd snapshot extensions)
+In-Reply-To: <4EC6927B.4000402@redhat.com> (Zdenek Kabelac's message of "Fri, 
+	18 Nov 2011 18:14:35 +0100")
+References: <87pqgtxczr.fsf@aldalome.int.mornfall.net.>
+	<20111116012039.GB3294@agk-dp.fab.redhat.com>
+	<87ehx8xv43.fsf@aldalome.int.mornfall.net.>
+	<20111116105953.GD3294@agk-dp.fab.redhat.com>
+	<20111116130734.GE3294@agk-dp.fab.redhat.com>
+	<87y5vdwydx.fsf@aldalome.int.mornfall.net.>
+	<4EC6927B.4000402@redhat.com>
+Message-ID: <87obw9w6vv.fsf@aldalome.int.mornfall.net.>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-18 19:42:04
+Zdenek Kabelac <zkabelac@redhat.com> writes:
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
+> The formula above should be placed inside lvresize
+> (_adjust_policy_params()).
 
-Log message:
-	Drop pool memory allocated in lv_has_target_type
-	
-	Remove FIXMES - there should not be any pool free call since
-	the memory pool is from device manager, and pool is detroyed
-	after the operation, so doing extra free here would not help here.
-	
-	However lv_has_target_type() is using cmd mempool so here the extra
-	call for dm_pool_free makes sence.
+And still completely besides the point.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2191&r2=1.2192
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.251&r2=1.252
+>> The problem:
+>>
+>> - to check whether anything needs to happen, lvextend needs to be
+>>    executed (this is *expensive*, even if it decides no action needs to
+>>    happen)
+>>
+>> - if nothing needed to happen, we don't need to call lvextend until the
+>>    utilisation has grown; *but* we don't know whether anything happened
+>>    (without ENO_ACTION_NEEDED that is)
+>
+> But you still call dmeventd_lvm2_run() - which is the most expensive
+> operation here - so I do not exactly see what do you actually safe here
+> i.e. if the resize will not happen because according to policy it's not
+> yet needed - then I do not see any difference ?
 
---- LVM2/WHATS_NEW	2011/11/18 19:31:09	1.2191
-+++ LVM2/WHATS_NEW	2011/11/18 19:42:03	1.2192
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Drop pool memory allocated within lv_has_target_type().
-   Reduce stack allocation of some PATH_MAX sized char buffers.
-   Unlock memory before writing metadata.
-   Add query before removing snapshots when inactive snapshot origin is removed.
---- LVM2/lib/activate/dev_manager.c	2011/11/15 17:25:05	1.251
-+++ LVM2/lib/activate/dev_manager.c	2011/11/18 19:42:03	1.252
-@@ -411,7 +411,7 @@
- 
- 	if (!(dmt = _setup_task(NULL, dlid, 0,
- 				DM_DEVICE_STATUS, 0, 0)))
--		return_0;
-+		goto_bad;
- 
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count");
-@@ -433,8 +433,11 @@
- 		}
- 	} while (next);
- 
-- out:
-+out:
- 	dm_task_destroy(dmt);
-+bad:
-+	dm_pool_free(mem, dlid);
-+
- 	return r;
- }
- 
-@@ -737,8 +740,6 @@
- 		       NULL, fail_if_percent_unsupported)))
- 		return_0;
- 
--	/* FIXME dm_pool_free ? */
--
- 	/* If the snapshot isn't available, percent will be -1 */
- 	return 1;
- }
-@@ -760,8 +761,6 @@
- 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
- 		return_0;
- 
--	/* FIXME dm_pool_free ? */
--
- 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer))) {
- 		log_error("dlid build failed for %s", lv->name);
- 		return 0;
+Well, what can I say. I have already tried to explain how this works
+(twice?), and it's also quite obvious from the code. Well, once more: we
+do *not* call dmeventd_lvm2_run *if* the last lvconvert decided that
+nothing needs to be done *and* the snapshot utilisation did not change
+(more than 5%).
+
+To implement that, we need to: 1) know that snapshot utilisation grew
+(we know this already in the existing code) and 2) that lvconvert did
+not change anything. We don't know 2 and wrongly assume that nothing
+changes, ever (that's the bug).
+
+Were we to assume every time that lvconvert might have changed
+something, we would have to call it *every time* (every 10 seconds).
+
+Is it clear now?
+
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
 
 
