@@ -1,43 +1,70 @@
-From: James Le Cuirot <chewi@aura-online.co.uk>
-Date: Mon, 21 Nov 2011 16:14:37 +0000
-Subject: Fixing other lvm2create_initrd issues
-In-Reply-To: <20111114005331.70e86028@symphony.aura-online.co.uk>
-References: <20111114005331.70e86028@symphony.aura-online.co.uk>
-Message-ID: <20111121161437.12f8eefa@symphony.aura-online.co.uk>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 22 Nov 2011 13:54:06 -0000
+Subject: LVM2/doc tagging.txt
+Message-ID: <20111122135406.7067.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, 14 Nov 2011 00:53:31 +0000
-James Le Cuirot <chewi@aura-online.co.uk> wrote:
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2011-11-22 13:54:05
 
-> Obviously this script hasn't seen a lot of love lately. I'm guessing
-> this is due to the existence of Debian's initramfs-tools and Fedora's
-> mkinitrd. Gentoo has genkernel but it seems most users don't bother
-> with an initrd at all or cook up their own script instead. I think it
-> is important to have a distribution-agnostic script that does the bare
-> minimum so I have taken the time to fix almost all of the above.
-> 
-> However, I had to consider whether trying to fix MAKEDEV was the right
-> approach given that it has been practically abandoned since udev has
-> become firmly established. While looking into the possibility of
-> putting udev on the initrd, I stumbled across devtmpfs. This has been
-> around since 2.6.32 but had somehow escaped my attention until now. If
-> you enable the option to automatically mount it then you can simply
-> skip the whole MAKEDEV mess altogether and everything just works. I
-> could add a "--makedev devtmpfs" option or we could just ditch the
-> MAKEDEV code entirely. Given that this script seems to be used very
-> little these days, I think there would be little harm in requiring
-> 2.6.32 as a minimum. Failing that, there's also BusyBox's mdev. What
-> do you think?
+Modified files:
+	doc            : tagging.txt 
 
-It looks like nobody cares? I'm leaning more towards BusyBox's mdev now
-or perhaps some combination of the two. The MAKEDEV stuff would be
-removed. Can I safely assume that if I do this work, you will accept the
-patch?
+Log message:
+	--addtag instead of --tag
 
-James
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/tagging.txt.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+
+--- LVM2/doc/tagging.txt	2004/11/17 18:34:49	1.1
++++ LVM2/doc/tagging.txt	2011/11/22 13:54:05	1.2
+@@ -85,7 +85,7 @@
+   From any machine in the cluster, add db1 to the list of machines that
+   activate vg1/lvol2:
+ 
+-  lvchange --tag @db1 vg1/lvol2
++  lvchange --addtag @db1 vg1/lvol2
+   (followed by lvchange -ay to actually activate it)
+ 
+ 
+@@ -98,10 +98,10 @@
+ 
+   Option (i) - centralised admin, static configuration replicated between hosts  
+     # Add @database tag to vg1's metadata
+-    vgchange --tag @database vg1
++    vgchange --addtag @database vg1
+ 
+     # Add @fileserver tag to vg2's metadata
+-    vgchange --tag @fileserver vg2
++    vgchange --addtag @fileserver vg2
+ 
+     lvm.conf:  (Identical on every machine)
+       tags {
+@@ -122,17 +122,17 @@
+       }
+   
+   In the event of the fileserver host going down, vg2 can be brought up
+-  on fsb1 by running *on any node* 'vgchange --tag @fileserverbackup vg2'
++  on fsb1 by running *on any node* 'vgchange --addtag @fileserverbackup vg2'
+   followed by 'vgchange -ay vg2'
+   
+   
+   Option (ii) - localised admin & configuation
+   (i.e. each host holds *locally* which classes of volumes to activate)
+     # Add @database tag to vg1's metadata
+-    vgchange --tag @database vg1
++    vgchange --addtag @database vg1
+   
+     # Add @fileserver tag to vg2's metadata
+-    vgchange --tag @fileserver vg2
++    vgchange --addtag @fileserver vg2
+   
+     lvm.conf:  (Identical on every machine - global settings)
+       tags {
 
 
