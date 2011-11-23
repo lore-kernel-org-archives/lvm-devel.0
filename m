@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Nov 2011 13:02:17 -0000
-Subject: LVM2/test/api Makefile.in
-Message-ID: <20111123130217.3959.qmail@sourceware.org>
+Date: 23 Nov 2011 13:03:57 -0000
+Subject: LVM2/test Makefile.in
+Message-ID: <20111123130357.4461.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-11-23 13:02:17
+Changes by:	zkabelac at sourceware.org	2011-11-23 13:03:57
 
 Modified files:
-	test/api       : Makefile.in 
+	test           : Makefile.in 
 
 Log message:
-	Put back devmapper-event linkage
+	Swap condition order
 	
-	Older systems are not able to get this library from lvm2api library and need
-	this library to be passed to the linker (i.e. Debian Lenny).
+	Swap condtion so the make line does not return 'false'.
+	Remove cleanup of lvm2api.sh since it is not created anymore.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/api/Makefile.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.64&r2=1.65
 
---- LVM2/test/api/Makefile.in	2011/11/23 12:21:41	1.23
-+++ LVM2/test/api/Makefile.in	2011/11/23 13:02:17	1.24
-@@ -28,7 +28,14 @@
- DEFS += -D_REENTRANT
- DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so $(top_builddir)/libdm/libdevmapper.so
- LDFLAGS += -L$(top_builddir)/liblvm
--LVMLIBS = @LVM2APP_LIB@ -ldevmapper $(LIBS)
-+LVMLIBS = @LVM2APP_LIB@ -ldevmapper
-+
-+ifeq ("@DMEVENTD@", "yes")
-+       LVMLIBS += -ldevmapper-event
-+       LDFLAGS += -L$(top_builddir)/daemons/dmeventd
-+endif
-+
-+LVMLIBS += $(LIBS)
+--- LVM2/test/Makefile.in	2011/11/23 12:21:41	1.64
++++ LVM2/test/Makefile.in	2011/11/23 13:03:57	1.65
+@@ -106,7 +106,7 @@
+ 	touch $@
  
- %.t: %.o $(DEPLIBS)
- 	$(CC) -o $@ $(<) $(LDFLAGS) $(LVMLIBS)
+ clean:
+-	test "$(srcdir)" != . && $(RM) $(RUN_BASE) lvm2app.sh
++	test "$(srcdir)" = . || $(RM) $(RUN_BASE)
+ 
+ CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,$(CMDS)) \
+ 	lib/clvmd lib/dmeventd lib/dmsetup lib/lvmetad lib/fsadm lib/vgimportclone
 
 
