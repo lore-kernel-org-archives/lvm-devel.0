@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 22 Nov 2011 13:54:06 -0000
-Subject: LVM2/doc tagging.txt
-Message-ID: <20111122135406.7067.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 23 Nov 2011 01:34:39 -0000
+Subject: LVM2 ./WHATS_NEW lib/display/display.c
+Message-ID: <20111123013439.5790.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,61 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2011-11-22 13:54:05
+Changes by:	agk at sourceware.org	2011-11-23 01:34:38
 
 Modified files:
-	doc            : tagging.txt 
+	.              : WHATS_NEW 
+	lib/display    : display.c 
 
 Log message:
-	--addtag instead of --tag
+	Move y/n prompts to stderr and repeat if response has both 'n' and 'y'.
+	
+	(Note that in a future release we might make this stricter and insist
+	on exactly 'y' or 'n'.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/tagging.txt.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2195&r2=1.2196
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
 
---- LVM2/doc/tagging.txt	2004/11/17 18:34:49	1.1
-+++ LVM2/doc/tagging.txt	2011/11/22 13:54:05	1.2
-@@ -85,7 +85,7 @@
-   From any machine in the cluster, add db1 to the list of machines that
-   activate vg1/lvol2:
+--- LVM2/WHATS_NEW	2011/11/21 12:44:38	1.2195
++++ LVM2/WHATS_NEW	2011/11/23 01:34:38	1.2196
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Move y/n prompts to stderr and repeat if response has both 'n' and 'y'.
+   Replace the unit testing framework with CUnit (--enable-testing).
+   Fix dmeventd snapshot monitoring when multiple extensions were involved.
+   Don't ignore configure --mandir and --infodir.
+--- LVM2/lib/display/display.c	2011/10/04 12:39:59	1.121
++++ LVM2/lib/display/display.c	2011/11/23 01:34:38	1.122
+@@ -850,9 +850,10 @@
+ 	do {
+ 		if (c == '\n' || !c) {
+ 			va_start(ap, prompt);
+-			vprintf(prompt, ap);
++			vfprintf(stderr, prompt, ap);
+ 			va_end(ap);
+-			fflush(stdout);
++			fflush(stderr);
++			ret = 0;
+ 		}
  
--  lvchange --tag @db1 vg1/lvol2
-+  lvchange --addtag @db1 vg1/lvol2
-   (followed by lvchange -ay to actually activate it)
+ 		if ((c = getchar()) == EOF) {
+@@ -861,9 +862,14 @@
+ 		}
  
+ 		c = tolower(c);
+-		if ((c == 'y') || (c == 'n'))
+-			ret = c;
+-	} while (!ret || c != '\n');
++		if ((c == 'y') || (c == 'n')) {
++			/* If both 'y' and 'n' given, begin again. */
++			if (ret && c != ret)
++				ret = -1;
++			else
++				ret = c;
++		}
++	} while (ret < 1 || c != '\n');
  
-@@ -98,10 +98,10 @@
+ 	sigint_restore();
  
-   Option (i) - centralised admin, static configuration replicated between hosts  
-     # Add @database tag to vg1's metadata
--    vgchange --tag @database vg1
-+    vgchange --addtag @database vg1
- 
-     # Add @fileserver tag to vg2's metadata
--    vgchange --tag @fileserver vg2
-+    vgchange --addtag @fileserver vg2
- 
-     lvm.conf:  (Identical on every machine)
-       tags {
-@@ -122,17 +122,17 @@
-       }
-   
-   In the event of the fileserver host going down, vg2 can be brought up
--  on fsb1 by running *on any node* 'vgchange --tag @fileserverbackup vg2'
-+  on fsb1 by running *on any node* 'vgchange --addtag @fileserverbackup vg2'
-   followed by 'vgchange -ay vg2'
-   
-   
-   Option (ii) - localised admin & configuation
-   (i.e. each host holds *locally* which classes of volumes to activate)
-     # Add @database tag to vg1's metadata
--    vgchange --tag @database vg1
-+    vgchange --addtag @database vg1
-   
-     # Add @fileserver tag to vg2's metadata
--    vgchange --tag @fileserver vg2
-+    vgchange --addtag @fileserver vg2
-   
-     lvm.conf:  (Identical on every machine - global settings)
-       tags {
 
 
