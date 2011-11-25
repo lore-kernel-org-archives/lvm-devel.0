@@ -1,70 +1,49 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 25 Nov 2011 10:59:07 +0100
-Subject: [PATCH 5/7] Minor cleanup of strchr analyzer warning
+Date: Fri, 25 Nov 2011 10:59:08 +0100
+Subject: [PATCH 6/7] Drop extra stat before open of device
 In-Reply-To: <cover.1322213495.git.zkabelac@redhat.com>
 References: <cover.1322213495.git.zkabelac@redhat.com>
-Message-ID: <015f152795adfbef2951bae7ecca569e3de29eab.1322213495.git.zkabelac@redhat.com>
+Message-ID: <931ffcba7ff33d370f53bd3824442b5f992b9e45.1322213495.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-While the code knows, path0 and path1 has the same amount of '/'
-otherwise the shorter path wins - the static analyzer is confused.
-So just add extra check also for 's1' strchr to clean away warning
-about unchecked strchr().
+Use the cached value of stat() and dropping extra call for 'stat()'
+before calling 'open()' and expect, that if device has been changed,
+it would be catched with the 'fstat()' call that follows the 'open()'
+call. If the device has dissappered 'open()' will fail.
+
+This safes one extra 'stat()' call per each device.
 
 Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
 ---
- lib/device/dev-cache.c |   18 ++++++++----------
- 1 files changed, 8 insertions(+), 10 deletions(-)
+ lib/device/dev-io.c |   11 -----------
+ 1 files changed, 0 insertions(+), 11 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 9b401ee..161bff7 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -264,8 +264,8 @@ static int _compare_paths(const char *path0, const char *path1)
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index bf30fe0..950e197 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -454,17 +454,6 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+ 	else if (!(name = dev_name_confirmed(dev, quiet)))
+ 		return_0;
  
- 	strncpy(p0, path0, PATH_MAX);
- 	strncpy(p1, path1, PATH_MAX);
--	s0 = &p0[0] + 1;
--	s1 = &p1[0] + 1;
-+	s0 = p0 + 1;
-+	s1 = p1 + 1;
- 	while (*s0 && *s0 == *s1)
-                 s0++, s1++;
- 
-@@ -273,12 +273,11 @@ static int _compare_paths(const char *path0, const char *path1)
- 	 * So we prefer a shorter path before the first symlink in the name.
- 	 * FIXME Configuration option to invert this? */
- 	while (s0) {
--		s0 = strchr(s0, '/');
--		s1 = strchr(s1, '/');
--		if (s0) {
-+		if ((s0 = strchr(s0, '/')))
- 			*s0 = '\0';
-+		if ((s1 = strchr(s1, '/')))
- 			*s1 = '\0';
+-	if (!(dev->flags & DEV_REGULAR)) {
+-		if (stat(name, &buf) < 0) {
+-			log_sys_error("%s: stat failed", name);
+-			return 0;
 -		}
-+
- 		if (lstat(p0, &stat0)) {
- 			log_sys_very_verbose("lstat", p0);
- 			return 1;
-@@ -291,10 +290,9 @@ static int _compare_paths(const char *path0, const char *path1)
- 			return 0;
- 		if (!S_ISLNK(stat0.st_mode) && S_ISLNK(stat1.st_mode))
- 			return 1;
--		if (s0) {
--			*s0++ = '/';
--			*s1++ = '/';
+-		if (buf.st_rdev != dev->dev) {
+-			log_error("%s: device changed", name);
+-			return 0;
 -		}
-+
-+		if (s0) *s0++ = '/';
-+		if (s1) *s1++ = '/';
- 	}
- 
- 	/* ASCII comparison */
+-	}
+-
+ #ifdef O_DIRECT_SUPPORT
+ 	if (direct) {
+ 		if (!(dev->flags & DEV_O_DIRECT_TESTED))
 -- 
 1.7.7.3
 
