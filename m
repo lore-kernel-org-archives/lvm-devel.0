@@ -1,142 +1,141 @@
-From: Alasdair Kergon <agk@sourceware.org>
-Date: Tue, 12 Dec 2017 16:24:46 -0500
-Subject: master - format_text: Refactor and document metadata offset calculation.
-Message-ID: <201712122124.vBCLOkRS022353@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 1 Dec 2011 00:21:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/raid_manip.c
+Message-ID: <20111201002105.27148.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4002f5e206ae89db28eb60bdfb3685bd926fed57
-Commit:        4002f5e206ae89db28eb60bdfb3685bd926fed57
-Parent:        e932c5da50a22e585a3cd08edb3d849e7715e244
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Tue Dec 12 18:36:54 2017 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Tue Dec 12 18:36:54 2017 +0000
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-12-01 00:21:04
 
-format_text: Refactor and document metadata offset calculation.
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : raid_manip.c 
 
----
- lib/format_text/format-text.c |   47 +++++++++++++++++++++++++++-------------
- 1 files changed, 32 insertions(+), 15 deletions(-)
+Log message:
+	Don't allow two images to be split and tracked from a RAID LV at one time
+	
+	Also, don't allow a splitmirror operation on a RAID LV that is already tracking
+	a split, unless the operation is to stop the tracking and complete the split.
+	Example:
+	~> lvconvert --splitmirrors 1 --trackchanges vg/lv /dev/sdc1
+	# Now tracking changes - image can be merged back or split-off for good
+	~> lvconvert --splitmirrors 1 -n new_name vg/lv /dev/sdc1
+	# ^ Completes split ^
+	
+	If a split is performed on a RAID that is tracking an already split image and
+	PVs are provided, we must ensure that
+	1) the already split LV is represented in the PVs
+	2) we are careful to split only the tracked image
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 154d748..174a579 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -476,7 +476,9 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2202&r2=1.2203
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+
+--- LVM2/WHATS_NEW	2011/12/01 00:13:16	1.2202
++++ LVM2/WHATS_NEW	2011/12/01 00:21:04	1.2203
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Don't allow two images to be split and tracked from a RAID LV at one time
+   Don't allow size change of RAID LV that is tracking changes for a split image
+   Don't allow size change of RAID sub-LVs independently
+   Don't allow name change of RAID LV that is tracking changes for a split image
+--- LVM2/lib/metadata/raid_manip.c	2011/12/01 00:09:35	1.19
++++ LVM2/lib/metadata/raid_manip.c	2011/12/01 00:21:04	1.20
+@@ -26,20 +26,32 @@
+ 
+ #define RAID_REGION_SIZE 1024
+ 
+-int lv_is_raid_with_tracking(const struct logical_volume *lv)
++static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
++				     struct logical_volume **tracking)
+ {
+ 	uint32_t s;
+ 	struct lv_segment *seg;
+ 
+-	if (lv->status & RAID) {
+-		seg = first_seg(lv);
++	*tracking = NULL;
++	seg = first_seg(lv);
+ 
+-		for (s = 0; s < seg->area_count; s++)
+-			if (lv_is_visible(seg_lv(seg, s)) &&
+-			    !(seg_lv(seg, s)->status & LVM_WRITE))
+-				return 1;
+-	}
+-	return 0;
++	if (!(lv->status & RAID))
++		return 0;
++
++	for (s = 0; s < seg->area_count; s++)
++		if (lv_is_visible(seg_lv(seg, s)) &&
++		    !(seg_lv(seg, s)->status & LVM_WRITE))
++			*tracking = seg_lv(seg, s);
++
++
++	return *tracking ? 1 : 0;
++}
++
++int lv_is_raid_with_tracking(const struct logical_volume *lv)
++{
++	struct logical_volume *tracking;
++
++	return _lv_is_raid_with_tracking(lv, &tracking);
  }
  
- /*
-- * Determine offset for uncommitted metadata
-+ * Find first aligned offset after end of existing metadata.
-+ * Based on the alignment provided, this is the exact offset to use for the new metadata.
-+ * The caller is responsible for validating the result.
-  */
- static uint64_t _next_rlocn_offset(struct raw_locn *rlocn, struct mda_header *mdah, uint64_t mdac_area_start, uint64_t alignment)
- {
-@@ -484,7 +486,7 @@ static uint64_t _next_rlocn_offset(struct raw_locn *rlocn, struct mda_header *md
+ uint32_t lv_raid_image_count(const struct logical_volume *lv)
+@@ -1051,6 +1063,8 @@
+ 	struct dm_list removal_list, data_list;
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 	uint32_t old_count = lv_raid_image_count(lv);
++	struct logical_volume *tracking;
++	struct dm_list tracking_pvs;
  
- 	if (!rlocn)
- 		/* Find an empty slot */
--		/* FIXME Assume only one VG per mdah for now */
-+		/* FIXME Assumes only one VG per mdah for now */
- 		return alignment;
- 
- 	/* Calculate new start position relative to start of buffer rounded up to absolute alignment */
-@@ -626,23 +628,28 @@ static int _metadata_fits_into_buffer(struct mda_context *mdac, struct mda_heade
- 	uint64_t old_wrap = 0;	/* Amount of wrap around in existing metadata */
- 	uint64_t new_end;	/* The end location of the new metadata */
- 
--	/* Do we have existing metadata that ends beyond the end of the buffer? */
--	if (rlocn && (rlocn->offset + rlocn->size > mdah->size))
--		old_wrap = (rlocn->offset + rlocn->size) - mdah->size;
-+	/* Does the total amount of metadata, old and new, fit inside the buffer? */
-+	if (MDA_HEADER_SIZE + (rlocn ? rlocn->size : 0) + mdac->rlocn.size >= mdah->size)
-+		return_0;
- 
--	new_end = new_wrap ? new_wrap + MDA_HEADER_SIZE :
--			    mdac->rlocn.offset + mdac->rlocn.size;
-+	/* Does the existing metadata wrap around the end of the buffer? */
-+	if (rlocn) {
-+		if (rlocn->offset + rlocn->size > mdah->size)
-+			old_wrap = (rlocn->offset + rlocn->size) - mdah->size;
-+	}
-+
-+	new_end = new_wrap ? new_wrap + MDA_HEADER_SIZE : (mdac->rlocn.offset + mdac->rlocn.size);
- 
- 	/* If both wrap around, there's necessarily overlap */
- 	if (new_wrap && old_wrap)
- 		return_0;
- 
--	/* If either wraps around, does the new end fall beyond the old start? */
--	if (rlocn && (new_wrap || old_wrap) && (new_end > rlocn->offset))
--		return_0;
-+	/* If there's no existing metadata, we're OK */
-+	if (!rlocn)
-+		return 1;
- 
--	/* Does the total amount of metadata, old and new, fit inside the buffer? */
--	if (MDA_HEADER_SIZE + (rlocn ? rlocn->size : 0) + mdac->rlocn.size >= mdah->size)
-+	/* If either wraps around, there's overlap if the new end falls beyond the old start */
-+	if ((new_wrap || old_wrap) && (new_end > rlocn->offset))
- 		return_0;
- 
- 	return 1;
-@@ -658,6 +665,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	struct pv_list *pvl;
- 	int r = 0;
- 	uint64_t new_wrap;	/* Number of bytes of new metadata that wrap around to start of buffer */
-+	uint64_t alignment = MDA_ORIGINAL_ALIGNMENT;
- 	int found = 0;
- 	int noprecommit = 0;
- 	const char *old_vg_name = NULL;
-@@ -675,6 +683,12 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	if (!found)
- 		return 1;
- 
-+	/*
-+	 * This is paired with the following closes:
-+	 *  - at the end of this fn if returning 0
-+	 *  - in _vg_commit_raw_rlocn regardless of return code
-+	 *    which handles commit (but not pre-commit) and revert.
-+	 */
- 	if (!dev_open(mdac->area.dev))
- 		return_0;
- 
-@@ -692,8 +706,10 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 
- 	mdac->rlocn.size = fidtc->raw_metadata_buf_size;
- 
--	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah, mdac->area.start, MDA_ORIGINAL_ALIGNMENT);
-+	/* Find where the new metadata would be written with our preferred alignment */
-+	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah, mdac->area.start, alignment);
- 
-+	/* Does the new metadata wrap around? */
- 	if (mdac->rlocn.offset + mdac->rlocn.size > mdah->size)
- 		new_wrap = (mdac->rlocn.offset + mdac->rlocn.size) - mdah->size;
- 	else
-@@ -705,9 +721,9 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 		goto out;
+ 	dm_list_init(&removal_list);
+ 	dm_list_init(&data_list);
+@@ -1079,6 +1093,25 @@
+ 		return 0;
  	}
  
--	log_debug_metadata("Writing %s metadata to %s at " FMTu64 " len " FMTu64 " of " FMTu64,
-+	log_debug_metadata("Writing %s metadata to %s at " FMTu64 " len " FMTu64 " of " FMTu64 " aligned to " FMTu64,
- 			    vg->name, dev_name(mdac->area.dev), mdac->area.start +
--			    mdac->rlocn.offset, mdac->rlocn.size - new_wrap, mdac->rlocn.size);
-+			    mdac->rlocn.offset, mdac->rlocn.size - new_wrap, mdac->rlocn.size, alignment);
++	/*
++	 * We only allow a split while there is tracking if it is to
++	 * complete the split of the tracking sub-LV
++	 */
++	if (_lv_is_raid_with_tracking(lv, &tracking)) {
++		if (!_lv_is_on_pvs(tracking, splittable_pvs)) {
++			log_error("Unable to split additional image from %s "
++				  "while tracking changes for %s",
++				  lv->name, tracking->name);
++			return 0;
++		} else {
++			/* Ensure we only split the tracking image */
++			dm_list_init(&tracking_pvs);
++			splittable_pvs = &tracking_pvs;
++			if (!_get_pv_list_for_lv(tracking, splittable_pvs))
++				return_0;
++		}
++	}
++
+ 	if (!_raid_extract_images(lv, new_count, splittable_pvs, 1,
+ 				 &removal_list, &data_list)) {
+ 		log_error("Failed to extract images from %s/%s",
+@@ -1181,6 +1214,12 @@
+ 		return 0;
+ 	}
  
- 	/* Write text out, circularly */
- 	if (!dev_write(mdac->area.dev, mdac->area.start + mdac->rlocn.offset,
-@@ -837,6 +853,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
- 
-       out:
- 	if (!precommit) {
-+		/* This is an paired with the open at the start of _vg_write_raw */
- 		if (!dev_close(mdac->area.dev))
- 			stack;
- 
++	/* Cannot track two split images at once */
++	if (lv_is_raid_with_tracking(lv)) {
++		log_error("Cannot track more than one split image at a time");
++		return 0;
++	}
++
+ 	for (s = seg->area_count - 1; s >= 0; s--) {
+ 		if (!_lv_is_on_pvs(seg_lv(seg, s), splittable_pvs))
+ 			continue;
 
 
