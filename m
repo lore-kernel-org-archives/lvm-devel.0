@@ -1,45 +1,42 @@
-From: Eric Ren <zren@suse.com>
-Date: Thu, 28 Dec 2017 10:42:10 +0800
-Subject: [PATCH 0/2] LVM2: fix lvmetad udev rules for CHANGE events
-In-Reply-To: <d9c8ba0b-26b0-00c4-ff7f-12f660a763f9@suse.com>
-References: <20171221115705.5055-1-mwilck@suse.com>
-	<1513943697.4257.14.camel@suse.com>
-	<b041c704-6f2a-b20f-c33e-a93e7504ad4d@suse.com>
-	<d9c8ba0b-26b0-00c4-ff7f-12f660a763f9@suse.com>
-Message-ID: <f6640724-1688-f19a-cfa1-d5b24a48432b@suse.com>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 1 Dec 2011 00:04:21 -0000
+Subject: LVM2/tools lvchange.c
+Message-ID: <20111201000421.23150.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi all,
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	jbrassow at sourceware.org	2011-12-01 00:04:21
+
+Modified files:
+	tools          : lvchange.c 
+
+Log message:
+	Do not allow users to change permissions on RAID sub-LVs.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.136&r2=1.137
+
+--- LVM2/tools/lvchange.c	2011/11/18 19:22:49	1.136
++++ LVM2/tools/lvchange.c	2011/12/01 00:04:21	1.137
+@@ -43,6 +43,14 @@
+ 		return 0;
+ 	}
+ 
++	/* Not allowed to change permissions on RAID sub-LVs directly */
++	if ((lv->status & RAID_META) || (lv->status & RAID_IMAGE)) {
++		log_error("Cannot change permissions of RAID %s \"%s\"",
++			  (lv->status & RAID_IMAGE) ? "image" :
++			  "metadata area", lv->name);
++		return 0;
++	}
++
+ 	if (lv_access & LVM_WRITE) {
+ 		lv->status |= LVM_WRITE;
+ 		log_verbose("Setting logical volume \"%s\" read/write",
 
 
-> I tried more times. The problem doesn't occur any more. I suspect 
-> maybe it's
-> because there's something wrong during my manual testing - it's easy 
-> to mistake
-> following all those steps. I will try to put all steps into a testing 
-> script for more testing.
-
-Based on Martin's reproducing steps for x86 arch, I scripted those steps 
-together into
-reproducer_x86.sh in attachment. The reproducer passed 100 loops on my 
-testing
-machine with Martin's patches.
-
-Please adjust some variables for your testing machine when running 
-reproducer_x86.sh.
-There are some ugly hard code settings inside - the device name/dev_t, 
-/sys/class/scsi_host/host1/scan/,etc.
-
-Regards,
-Eric
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: reproducer_x86.sh
-Type: application/x-shellscript
-Size: 2291 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20171228/7eefcdd1/attachment.bin>
