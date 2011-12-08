@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 11 Dec 2011 17:24:38 -0000
-Subject: LVM2 configure
-Message-ID: <20111211172438.22619.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 8 Dec 2011 18:32:37 -0000
+Subject: LVM2/daemons/clvmd clvmd-command.c lvm-functions.c
+Message-ID: <20111208183237.15966.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,161 +10,178 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2011-12-11 17:24:37
+Changes by:	agk at sourceware.org	2011-12-08 18:32:34
 
 Modified files:
-	.              : configure 
+	daemons/clvmd  : clvmd-command.c lvm-functions.c 
 
 Log message:
-	Autoreconf.
+	Test for LCK_CLUSTER_VG directly in args[0].
+	Drop unused LCK_LOCAL from debug msg.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.161&r2=1.162
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.61&r2=1.62
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
 
---- LVM2/configure	2011/11/21 10:40:21	1.161
-+++ LVM2/configure	2011/12/11 17:24:37	1.162
-@@ -683,6 +683,8 @@
- LVM2APP_LIB
- UDEV_LIBS
- UDEV_CFLAGS
-+CUNIT_LIBS
-+CUNIT_CFLAGS
- GENPNG
- GENHTML
- LCOV
-@@ -877,6 +879,8 @@
- DLM_LIBS
- SACKPT_CFLAGS
- SACKPT_LIBS
-+CUNIT_CFLAGS
-+CUNIT_LIBS
- UDEV_CFLAGS
- UDEV_LIBS'
+--- LVM2/daemons/clvmd/clvmd-command.c	2011/09/26 07:51:24	1.61
++++ LVM2/daemons/clvmd/clvmd-command.c	2011/12/08 18:32:33	1.62
+@@ -120,7 +120,7 @@
  
-@@ -1631,6 +1635,9 @@
-   SACKPT_CFLAGS
-               C compiler flags for SACKPT, overriding pkg-config
-   SACKPT_LIBS linker flags for SACKPT, overriding pkg-config
-+  CUNIT_CFLAGS
-+              C compiler flags for CUNIT, overriding pkg-config
-+  CUNIT_LIBS  linker flags for CUNIT, overriding pkg-config
-   UDEV_CFLAGS C compiler flags for UDEV, overriding pkg-config
-   UDEV_LIBS   linker flags for UDEV, overriding pkg-config
+ 	case CLVMD_CMD_LOCK_LV:
+ 		/* This is the biggie */
+-		lock_cmd = args[0] & (LCK_NONBLOCK | LCK_HOLD | LCK_SCOPE_MASK | LCK_TYPE_MASK);
++		lock_cmd = args[0];
+ 		lock_flags = args[1];
+ 		lockname = &args[2];
+ 		if (lock_flags & LCK_TEST_MODE)
+--- LVM2/daemons/clvmd/lvm-functions.c	2011/11/30 17:00:58	1.126
++++ LVM2/daemons/clvmd/lvm-functions.c	2011/12/08 18:32:34	1.127
+@@ -109,10 +109,9 @@
+ 		break;
+ 	}
  
-@@ -8425,17 +8432,97 @@
- $as_echo "$TESTING" >&6; }
+-	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s%s)", cmdl, command, type, scope,
++	sprintf(buf, "0x%x %s (%s|%s%s%s%s%s)", cmdl, command, type, scope,
+ 		cmdl & LCK_NONBLOCK   ? "|NONBLOCK" : "",
+ 		cmdl & LCK_HOLD       ? "|HOLD" : "",
+-		cmdl & LCK_LOCAL      ? "|LOCAL" : "",
+ 		cmdl & LCK_CLUSTER_VG ? "|CLUSTER_VG" : "",
+ 		cmdl & LCK_CACHE      ? "|CACHE" : "");
  
- if test "$TESTING" = yes; then
--	ac_fn_c_check_header_mongrel "$LINENO" "CUnit/Basic.h" "ac_cv_header_CUnit_Basic_h" "$ac_includes_default"
--if test "x$ac_cv_header_CUnit_Basic_h" = x""yes; then :
--  have_cunit=yes
-+
-+pkg_failed=no
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CUNIT" >&5
-+$as_echo_n "checking for CUNIT... " >&6; }
-+
-+if test -n "$CUNIT_CFLAGS"; then
-+    pkg_cv_CUNIT_CFLAGS="$CUNIT_CFLAGS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"cunit >= 2.0\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "cunit >= 2.0") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_CUNIT_CFLAGS=`$PKG_CONFIG --cflags "cunit >= 2.0" 2>/dev/null`
-+else
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
-+fi
-+if test -n "$CUNIT_LIBS"; then
-+    pkg_cv_CUNIT_LIBS="$CUNIT_LIBS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"cunit >= 2.0\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "cunit >= 2.0") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_CUNIT_LIBS=`$PKG_CONFIG --libs "cunit >= 2.0" 2>/dev/null`
- else
--  have_cunit=no
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
- fi
+@@ -332,7 +331,7 @@
+ */
  
+ /* Activate LV exclusive or non-exclusive */
+-static int do_activate_lv(char *resource, unsigned char lock_flags, int mode)
++static int do_activate_lv(char *resource, unsigned char command, unsigned char lock_flags, int mode)
+ {
+ 	int oldmode;
+ 	int status;
+@@ -342,7 +341,7 @@
  
--	if test "$have_cunit" = "no"; then
--		as_fn_error $? "CUnit is required for unit testing" "$LINENO" 5
--	fi
-+
-+if test $pkg_failed = yes; then
-+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+
-+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-+        _pkg_short_errors_supported=yes
-+else
-+        _pkg_short_errors_supported=no
-+fi
-+        if test $_pkg_short_errors_supported = yes; then
-+	        CUNIT_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors "cunit >= 2.0" 2>&1`
-+        else
-+	        CUNIT_PKG_ERRORS=`$PKG_CONFIG --print-errors "cunit >= 2.0" 2>&1`
-+        fi
-+	# Put the nasty error message in config.log where it belongs
-+	echo "$CUNIT_PKG_ERRORS" >&5
-+
-+	as_fn_error $? "Package requirements (cunit >= 2.0) were not met:
-+
-+$CUNIT_PKG_ERRORS
-+
-+Consider adjusting the PKG_CONFIG_PATH environment variable if you
-+installed software in a non-standard prefix.
-+
-+Alternatively, you may set the environment variables CUNIT_CFLAGS
-+and CUNIT_LIBS to avoid the need to call pkg-config.
-+See the pkg-config man page for more details." "$LINENO" 5
-+
-+elif test $pkg_failed = untried; then
-+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
-+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-+is in your PATH or set the PKG_CONFIG environment variable to the full
-+path to pkg-config.
-+
-+Alternatively, you may set the environment variables CUNIT_CFLAGS
-+and CUNIT_LIBS to avoid the need to call pkg-config.
-+See the pkg-config man page for more details.
-+
-+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-+See \`config.log' for more details" "$LINENO" 5; }
-+
-+else
-+	CUNIT_CFLAGS=$pkg_cv_CUNIT_CFLAGS
-+	CUNIT_LIBS=$pkg_cv_CUNIT_LIBS
-+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-+$as_echo "yes" >&6; }
-+
-+fi
- fi
+ 	/* Is it already open ? */
+ 	oldmode = get_current_lock(resource);
+-	if (oldmode == mode && (lock_flags & LCK_CLUSTER_VG)) {
++	if (oldmode == mode && (command & LCK_CLUSTER_VG)) {
+ 		DEBUGLOG("do_activate_lv, lock already held at %d\n", oldmode);
+ 		return 0;	/* Nothing to do */
+ 	}
+@@ -365,7 +364,7 @@
+ 	 * Use lock conversion only if requested, to prevent implicit conversion
+ 	 * of exclusive lock to shared one during activation.
+ 	 */
+-	if (lock_flags & LCK_CLUSTER_VG) {
++	if (command & LCK_CLUSTER_VG) {
+ 		status = hold_lock(resource, mode, LCKF_NOQUEUE | (lock_flags & LCK_CONVERT ? LCKF_CONVERT:0));
+ 		if (status) {
+ 			/* Return an LVM-sensible error for this.
+@@ -405,13 +404,13 @@
+ }
  
- ################################################################################
-@@ -10141,6 +10228,8 @@
+ /* Resume the LV if it was active */
+-static int do_resume_lv(char *resource, unsigned char lock_flags)
++static int do_resume_lv(char *resource, unsigned char command, unsigned char lock_flags)
+ {
+ 	int oldmode, origin_only, exclusive, revert;
  
+ 	/* Is it open ? */
+ 	oldmode = get_current_lock(resource);
+-	if (oldmode == -1 && (lock_flags & LCK_CLUSTER_VG)) {
++	if (oldmode == -1 && (command & LCK_CLUSTER_VG)) {
+ 		DEBUGLOG("do_resume_lv, lock not already held\n");
+ 		return 0;	/* We don't need to do anything */
+ 	}
+@@ -426,7 +425,7 @@
+ }
  
+ /* Suspend the device if active */
+-static int do_suspend_lv(char *resource, unsigned char lock_flags)
++static int do_suspend_lv(char *resource, unsigned char command, unsigned char lock_flags)
+ {
+ 	int oldmode;
+ 	struct lvinfo lvi;
+@@ -434,7 +433,7 @@
  
-+
-+
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/common/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts!
- /Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
+ 	/* Is it open ? */
+ 	oldmode = get_current_lock(resource);
+-	if (oldmode == -1 && (lock_flags & LCK_CLUSTER_VG)) {
++	if (oldmode == -1 && (command & LCK_CLUSTER_VG)) {
+ 		DEBUGLOG("do_suspend_lv, lock not already held\n");
+ 		return 0; /* Not active, so it's OK */
+ 	}
+@@ -449,14 +448,14 @@
+ 	return 0;
+ }
  
+-static int do_deactivate_lv(char *resource, unsigned char lock_flags)
++static int do_deactivate_lv(char *resource, unsigned char command, unsigned char lock_flags)
+ {
+ 	int oldmode;
+ 	int status;
+ 
+ 	/* Is it open ? */
+ 	oldmode = get_current_lock(resource);
+-	if (oldmode == -1 && (lock_flags & LCK_CLUSTER_VG)) {
++	if (oldmode == -1 && (command & LCK_CLUSTER_VG)) {
+ 		DEBUGLOG("do_deactivate_lock, lock not already held\n");
+ 		return 0;	/* We don't need to do anything */
+ 	}
+@@ -464,7 +463,7 @@
+ 	if (!lv_deactivate(cmd, resource))
+ 		return EIO;
+ 
+-	if (lock_flags & LCK_CLUSTER_VG) {
++	if (command & LCK_CLUSTER_VG) {
+ 		status = hold_unlock(resource);
+ 		if (status)
+ 			return errno;
+@@ -529,24 +528,24 @@
+ 
+ 	switch (command & LCK_MASK) {
+ 	case LCK_LV_EXCLUSIVE:
+-		status = do_activate_lv(resource, lock_flags, LCK_EXCL);
++		status = do_activate_lv(resource, command, lock_flags, LCK_EXCL);
+ 		break;
+ 
+ 	case LCK_LV_SUSPEND:
+-		status = do_suspend_lv(resource, lock_flags);
++		status = do_suspend_lv(resource, command, lock_flags);
+ 		break;
+ 
+ 	case LCK_UNLOCK:
+ 	case LCK_LV_RESUME:	/* if active */
+-		status = do_resume_lv(resource, lock_flags);
++		status = do_resume_lv(resource, command, lock_flags);
+ 		break;
+ 
+ 	case LCK_LV_ACTIVATE:
+-		status = do_activate_lv(resource, lock_flags, LCK_READ);
++		status = do_activate_lv(resource, command, lock_flags, LCK_READ);
+ 		break;
+ 
+ 	case LCK_LV_DEACTIVATE:
+-		status = do_deactivate_lv(resource, lock_flags);
++		status = do_deactivate_lv(resource, command, lock_flags);
+ 		break;
+ 
+ 	default:
+@@ -577,7 +576,7 @@
+ 	   LCKF_CONVERT is used always, local node is going to modify metadata
+ 	 */
+ 	if ((command & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_SUSPEND &&
+-	    (lock_flags & LCK_CLUSTER_VG)) {
++	    (command & LCK_CLUSTER_VG)) {
+ 		DEBUGLOG("pre_lock_lv: resource '%s', cmd = %s, flags = %s\n",
+ 			 resource, decode_locking_cmd(command), decode_flags(lock_flags));
+ 
+@@ -596,7 +595,7 @@
+ 
+ 	/* Opposite of above, done on resume after a metadata update */
+ 	if ((command & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) == LCK_LV_RESUME &&
+-	    (lock_flags & LCK_CLUSTER_VG)) {
++	    (command & LCK_CLUSTER_VG)) {
+ 		int oldmode;
+ 
+ 		DEBUGLOG
 
 
