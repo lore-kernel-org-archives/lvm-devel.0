@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Dec 2011 18:00:04 -0000
-Subject: LVM2/tools lvconvert.c
-Message-ID: <20111208180004.32234.qmail@sourceware.org>
+Date: 8 Dec 2011 18:06:34 -0000
+Subject: LVM2/tools pvmove.c
+Message-ID: <20111208180634.3013.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-12-08 18:00:04
+Changes by:	agk at sourceware.org	2011-12-08 18:06:34
 
 Modified files:
-	tools          : lvconvert.c 
+	tools          : pvmove.c 
 
 Log message:
-	tag uninit var
+	reinstate !first_time check
+	(recovery from first_time failure would need different code)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.176&r2=1.177
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.91&r2=1.92
 
---- LVM2/tools/lvconvert.c	2011/12/06 19:30:17	1.176
-+++ LVM2/tools/lvconvert.c	2011/12/08 18:00:03	1.177
-@@ -1460,7 +1460,7 @@
- static int lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *lp)
- {
- 	int replace = 0;
--	int image_count;
-+	int uninitialized_var(image_count);
- 	struct dm_list *failed_pvs;
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	struct lv_segment *seg = first_seg(lv);
+--- LVM2/tools/pvmove.c	2011/10/11 08:51:02	1.91
++++ LVM2/tools/pvmove.c	2011/12/08 18:06:33	1.92
+@@ -370,8 +370,8 @@
+ 
+ 	if (!_suspend_lvs(cmd, first_time, lv_mirr, lvs_changed, vg)) {
+ 		log_error("ABORTING: Volume group metadata update failed. (first_time: %d)", first_time);
+-		//FIXME:  - currently this check breaks pvmove testing
+-		if (/*!first_time &&*/ !revert_lv(cmd, lv_mirr))
++		/* FIXME Add a recovery path for first time too. */
++		if (!first_time && !revert_lv(cmd, lv_mirr))
+ 			stack;
+ 		return 0;
+ 	}
 
 
