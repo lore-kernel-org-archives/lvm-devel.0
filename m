@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 Dec 2011 18:19:06 -0000
-Subject: LVM2/lib/locking cluster_locking.c
-Message-ID: <20111208181906.8968.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 11 Dec 2011 15:19:41 -0000
+Subject: LVM2/test/unit Makefile.in run.c config_t.c
+Message-ID: <20111211151941.6609.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,134 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-12-08 18:19:05
+Changes by:	mornfall at sourceware.org	2011-12-11 15:19:41
 
 Modified files:
-	lib/locking    : cluster_locking.c 
+	test/unit      : Makefile.in run.c 
+Added files:
+	test/unit      : config_t.c 
 
 Log message:
-	Don't pass LCK_LOCAL to clvmd - it's unused.
-	Pass LCK_CLUSTER_VG in args[0] instead of args[1].
+	Start a rudimentary unit test for the dm_config_* interface.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/cluster_locking.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/config_t.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/Makefile.in.diff?cvsroot=lvm2&r1=1.4&r2=1.5
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/run.c.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/lib/locking/cluster_locking.c	2011/11/30 17:02:37	1.62
-+++ LVM2/lib/locking/cluster_locking.c	2011/12/08 18:19:05	1.63
-@@ -320,9 +320,10 @@
- 	args = alloca(len);
- 	strcpy(args + 2, name);
- 
--	/* Mask off lock flags */
--	args[0] = flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK | LCK_NONBLOCK | LCK_HOLD); 
--	args[1] = flags & (LCK_LOCAL | LCK_CLUSTER_VG);
-+	/* args[0] holds bottom 8 bits except LCK_LOCAL (0x40). */
-+	args[0] = flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK | LCK_NONBLOCK | LCK_HOLD | LCK_CLUSTER_VG); 
+/cvs/lvm2/LVM2/test/unit/config_t.c,v  -->  standard output
+revision 1.1
+--- LVM2/test/unit/config_t.c
++++ -	2011-12-11 15:19:41.326250000 +0000
+@@ -0,0 +1,83 @@
++/*
++ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
 +
-+	args[1] = 0;
++#include "libdevmapper.h"
++#include <CUnit/CUnit.h>
++
++static struct dm_pool *mem;
++
++int config_init() {
++	mem = dm_pool_create("config test", 1024);
++	return mem == NULL;
++}
++
++int config_fini() {
++	dm_pool_destroy(mem);
++	return 0;
++}
++
++static void test_parse()
++{
++	const char *conf =
++		"id = \"yada-yada\"\n"
++		"seqno = 15\n"
++		"status = [\"READ\", \"WRITE\"]\n"
++		"flags = []\n"
++		"extent_size = 8192\n"
++		"physical_volumes {\n"
++		"    pv0 {\n"
++		"        id = \"abcd-efgh\"\n"
++		"    }\n"
++		"    pv1 {\n"
++		"        id = \"bbcd-efgh\"\n"
++		"    }\n"
++		"    pv2 {\n"
++		"        id = \"cbcd-efgh\"\n"
++		"    }\n"
++		"}\n";
++	struct dm_config_tree *tree = dm_config_from_string(conf);
++	struct dm_config_value *value;
++
++	CU_ASSERT(tree);
++	CU_ASSERT(dm_config_has_node(tree->root, "id"));
++	CU_ASSERT(dm_config_has_node(tree->root, "physical_volumes"));
++	CU_ASSERT(dm_config_has_node(tree->root, "physical_volumes/pv0"));
++	CU_ASSERT(dm_config_has_node(tree->root, "physical_volumes/pv0/id"));
++
++	CU_ASSERT(!strcmp(dm_config_find_str(tree->root, "id", "foo"), "yada-yada"));
++	CU_ASSERT(!strcmp(dm_config_find_str(tree->root, "idt", "foo"), "foo"));
++
++	CU_ASSERT(!strcmp(dm_config_find_str(tree->root, "physical_volumes/pv0/bb", "foo"), "foo"));
++	CU_ASSERT(!strcmp(dm_config_find_str(tree->root, "physical_volumes/pv0/id", "foo"), "abcd-efgh"));
++
++	CU_ASSERT(!dm_config_get_uint32(tree->root, "id", NULL));
++	CU_ASSERT(dm_config_get_uint32(tree->root, "extent_size", NULL));
++
++	/* FIXME: Currently everything parses as a list, even if it's not */
++	// CU_ASSERT(!dm_config_get_list(tree->root, "id", NULL));
++	// CU_ASSERT(!dm_config_get_list(tree->root, "extent_size", NULL));
++
++	CU_ASSERT(dm_config_get_list(tree->root, "flags", &value));
++	CU_ASSERT(value->next == NULL);
++	CU_ASSERT(dm_config_get_list(tree->root, "status", &value));
++	CU_ASSERT(value->next != NULL);
++
++	dm_config_destroy(tree);
++}
++
++CU_TestInfo config_list[] = {
++	{ (char*)"parse", test_parse },
++	CU_TEST_INFO_NULL
++};
++
+--- LVM2/test/unit/Makefile.in	2011/12/11 15:15:57	1.4
++++ LVM2/test/unit/Makefile.in	2011/12/11 15:19:41	1.5
+@@ -15,7 +15,7 @@
+ top_builddir = @top_builddir@
  
- 	if (flags & LCK_ORIGIN_ONLY)
- 		args[1] |= LCK_ORIGIN_ONLY_MODE;
-@@ -492,7 +493,7 @@
- 		return 0;
- 	}
+ VPATH = $(srcdir)
+-SOURCES = bitset_t.c matcher_t.c run.c
++SOURCES = bitset_t.c matcher_t.c config_t.c run.c
+ TARGETS = run
  
--	log_very_verbose("Locking %s %s %s (%s%s%s%s%s%s%s) (0x%x)", lock_scope, lockname,
-+	log_very_verbose("Locking %s %s %s (%s%s%s%s%s%s%s%s) (0x%x)", lock_scope, lockname,
- 			 lock_type, lock_scope,
- 			 flags & LCK_NONBLOCK ? "|NONBLOCK" : "",
- 			 flags & LCK_HOLD ? "|HOLD" : "",
-@@ -500,6 +501,7 @@
- 			 flags & LCK_CLUSTER_VG ? "|CLUSTER" : "",
- 			 flags & LCK_CACHE ? "|CACHE" : "",
- 			 flags & LCK_ORIGIN_ONLY ? "|ORIGIN_ONLY" : "",
-+			 flags & LCK_REVERT ? "|REVERT" : "",
- 			 flags);
+ include $(top_builddir)/make.tmpl
+--- LVM2/test/unit/run.c	2011/11/20 21:43:20	1.1
++++ LVM2/test/unit/run.c	2011/12/11 15:19:41	1.2
+@@ -9,10 +9,12 @@
  
- 	/* Send a message to the cluster manager */
+ DECL(bitset);
+ DECL(regex);
++DECL(config);
+ 
+ CU_SuiteInfo suites[] = {
+ 	USE(bitset),
+ 	USE(regex),
++	USE(config),
+ 	CU_SUITE_INFO_NULL
+ };
+ 
 
 
