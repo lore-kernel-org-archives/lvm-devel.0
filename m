@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Dec 2011 12:52:39 -0000
-Subject: LVM2/libdm libdevmapper.h libdm-deptree.c
-Message-ID: <20111221125239.12669.qmail@sourceware.org>
+Date: 21 Dec 2011 12:54:20 -0000
+Subject: LVM2 lib/metadata/lv_manip.c lib/thin/thin.c t ...
+Message-ID: <20111221125420.13645.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,111 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-12-21 12:52:38
+Changes by:	zkabelac at sourceware.org	2011-12-21 12:54:19
 
 Modified files:
-	libdm          : libdevmapper.h libdm-deptree.c 
+	lib/metadata   : lv_manip.c 
+	lib/thin       : thin.c 
+	tools          : lvcreate.c 
 
 Log message:
-	Add Thin API for parsing thin status
+	Thin rename internal thin pool segment
 	
-	Add dm_get_status_thin_pool and dm_get_status_thin functions to
-	parse 'params' argument which is received via dm_get_next_target.
-	
-	Returns filed structure allocated from given mempool.
+	Use matching name as kernel target - useful when function like
+	_percent is using this for validation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.172&r2=1.173
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.146&r2=1.147
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.339&r2=1.340
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.250&r2=1.251
 
---- LVM2/libdm/libdevmapper.h	2011/12/21 12:47:45	1.172
-+++ LVM2/libdm/libdevmapper.h	2011/12/21 12:52:38	1.173
-@@ -238,6 +238,29 @@
- 			 void *next, uint64_t *start, uint64_t *length,
- 			 char **target_type, char **params);
+--- LVM2/lib/metadata/lv_manip.c	2011/12/20 00:02:18	1.339
++++ LVM2/lib/metadata/lv_manip.c	2011/12/21 12:54:19	1.340
+@@ -4450,7 +4450,7 @@
+ 	/* Create thin pool first if necessary */
+ 	if (lp->create_thin_pool) {
+ 		if (!seg_is_thin_pool(lp) &&
+-		    !(lp->segtype = get_segtype_from_string(vg->cmd, "thin_pool")))
++		    !(lp->segtype = get_segtype_from_string(vg->cmd, "thin-pool")))
+ 			return_0;
  
-+/* Parse params from STATUS call for thin_pool target */
-+struct dm_pool;
-+
-+struct dm_status_thin_pool {
-+	uint64_t transaction_id;
-+	uint64_t used_meta_blocks;
-+	uint64_t total_meta_blocks;
-+	uint64_t used_data_blocks;
-+	uint64_t total_data_blocks;
-+};
-+
-+int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
-+			    struct dm_status_thin_pool **status);
-+
-+/* Parse params from STATUS call for thin target */
-+struct dm_status_thin {
-+	uint64_t mapped_sectors;
-+	uint64_t highest_mapped_sector;
-+};
-+
-+int dm_get_status_thin(struct dm_pool *mem, const char *params,
-+		       struct dm_status_thin **status);
-+
- /*
-  * Call this to actually run the ioctl.
-  */
---- LVM2/libdm/libdm-deptree.c	2011/11/12 22:44:10	1.146
-+++ LVM2/libdm/libdm-deptree.c	2011/12/21 12:52:38	1.147
-@@ -3030,6 +3030,54 @@
- 	return 1;
- }
+ 		if (!(lv = _lv_create_an_lv(vg, lp, lp->pool)))
+--- LVM2/lib/thin/thin.c	2011/11/28 20:37:52	1.34
++++ LVM2/lib/thin/thin.c	2011/12/21 12:54:19	1.35
+@@ -474,7 +474,7 @@
+ 		const char name[16];
+ 		uint32_t flags;
+ 	} reg_segtypes[] = {
+-		{ &_thin_pool_ops, "thin_pool", SEG_THIN_POOL },
++		{ &_thin_pool_ops, "thin-pool", SEG_THIN_POOL },
+ 		/* FIXME Maybe use SEG_THIN_VOLUME instead of SEG_VIRTUAL */
+ 		{ &_thin_ops, "thin", SEG_THIN_VOLUME | SEG_VIRTUAL }
+ 	};
+--- LVM2/tools/lvcreate.c	2011/11/10 12:43:05	1.250
++++ LVM2/tools/lvcreate.c	2011/12/21 12:54:19	1.251
+@@ -371,7 +371,7 @@
+ 		}
+ 	} else {
+ 		/* No virtual size given, so no thin LV to create. */
+-		if (seg_is_thin_volume(lp) && !(lp->segtype = get_segtype_from_string(cmd, "thin_pool")))
++		if (seg_is_thin_volume(lp) && !(lp->segtype = get_segtype_from_string(cmd, "thin-pool")))
+ 			return_0;
  
-+
-+int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
-+			    struct dm_status_thin_pool **status)
-+{
-+	struct dm_status_thin_pool *s;
-+
-+	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_thin_pool)))) {
-+		log_error("Failed to allocate thin_pool status structure.");
-+		return 0;
-+	}
-+
-+	if (sscanf(params, "%" PRIu64 " %" PRIu64 "/%" PRIu64 " %" PRIu64 "/%" PRIu64,
-+		   &s->transaction_id,
-+		   &s->used_meta_blocks,
-+		   &s->total_meta_blocks,
-+		   &s->used_data_blocks,
-+		   &s->total_data_blocks) != 5) {
-+		log_error("Failed to parse thin pool params: %s.", params);
-+		return 0;
-+	}
-+
-+	*status = s;
-+
-+	return 1;
-+}
-+
-+int dm_get_status_thin(struct dm_pool *mem, const char *params,
-+		       struct dm_status_thin **status)
-+{
-+	struct dm_status_thin *s;
-+
-+	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_thin)))) {
-+		log_error("Failed to allocate thin status structure.");
-+		return 0;
-+	}
-+
-+	if (sscanf(params, "%" PRIu64 " %" PRIu64,
-+		   &s->mapped_sectors,
-+		   &s->highest_mapped_sector) != 2) {
-+		log_error("Failed to parse thin params: %s.", params);
-+		return 0;
-+	}
-+
-+	*status = s;
-+
-+	return 1;
-+}
-+
- static int _add_area(struct dm_tree_node *node, struct load_segment *seg, struct dm_tree_node *dev_node, uint64_t offset)
- {
- 	struct seg_area *area;
+ 		lp->thin = 0;
 
 
