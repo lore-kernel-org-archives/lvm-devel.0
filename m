@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Dec 2011 00:02:19 -0000
-Subject: LVM2 lib/metadata/lv_manip.c lib/metadata/snap ...
-Message-ID: <20111220000219.345.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 21 Dec 2011 12:47:46 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
+Message-ID: <20111221124746.8469.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,99 +10,57 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-12-20 00:02:19
+Changes by:	zkabelac at sourceware.org	2011-12-21 12:47:45
 
 Modified files:
-	lib/metadata   : lv_manip.c snapshot_manip.c 
-	.              : WHATS_NEW 
+	.              : WHATS_NEW_DM 
+	libdm          : libdevmapper.h libdm-config.c 
 
 Log message:
-	Reinstate support for format1 snapshots, but issue deprecated warning.
+	Add dm_config_find_str_allow_empty
 	
-	I anticipate removing support for snapshots with lvm1-formatted metadata in a
-	future release.
+	Support empty string values.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.338&r2=1.339
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/snapshot_manip.c.diff?cvsroot=lvm2&r1=1.51&r2=1.52
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2205&r2=1.2206
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.525&r2=1.526
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.171&r2=1.172
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
 
---- LVM2/lib/metadata/lv_manip.c	2011/11/18 19:25:20	1.338
-+++ LVM2/lib/metadata/lv_manip.c	2011/12/20 00:02:18	1.339
-@@ -3138,6 +3138,8 @@
+--- LVM2/WHATS_NEW_DM	2011/12/07 12:29:41	1.525
++++ LVM2/WHATS_NEW_DM	2011/12/21 12:47:44	1.526
+@@ -6,7 +6,7 @@
+   Improve man page style for dmsetup.
+   Fix _get_proc_number to be tolerant of malformed /proc/misc entries.
+   Add ExecReload to dm-event.service for systemd to reload dmeventd properly.
+-  Add dm_config_tree_find_str_allow_empty.
++  Add dm_config_tree_find_str_allow_empty and dm_config_find_str_allow_empty.
+   Fix compile-time pool memory locking with DEBUG_MEM.
+   Fix valgrind error reports in free of pool chunks with DEBUG_MEM.
+   Align size of structure chunk for fast pool allocator to 8 bytes.
+--- LVM2/libdm/libdevmapper.h	2011/12/18 21:56:03	1.171
++++ LVM2/libdm/libdevmapper.h	2011/12/21 12:47:45	1.172
+@@ -1351,6 +1351,7 @@
+ struct dm_config_node *dm_config_find_node(struct dm_config_node *cn, const char *path);
+ int dm_config_has_node(const struct dm_config_node *cn, const char *path);
+ const char *dm_config_find_str(const struct dm_config_node *cn, const char *path, const char *fail);
++const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn, const char *path, const char *fail);
+ int dm_config_find_int(const struct dm_config_node *cn, const char *path, int fail);
+ float dm_config_find_float(const struct dm_config_node *cn, const char *path, float fail);
+ 
+--- LVM2/libdm/libdm-config.c	2011/12/18 21:56:03	1.18
++++ LVM2/libdm/libdm-config.c	2011/12/21 12:47:45	1.19
+@@ -772,6 +772,12 @@
+ 	return _find_config_str(cn, _find_config_node, path, fail, 0);
+ }
+ 
++const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn,
++					   const char *path, const char *fail)
++{
++	return _find_config_str(cn, _find_config_node, path, fail, 1);
++}
++
+ static int64_t _find_config_int64(const void *start, node_lookup_fn find,
+ 				  const char *path, int64_t fail)
  {
- 	struct volume_group *vg;
- 	struct lvinfo info;
-+	struct logical_volume *format1_origin = NULL;
-+	int format1_reload_required = 0;
- 
- 	vg = lv->vg;
- 
-@@ -3195,6 +3197,10 @@
- 		return 0;
- 
- 	if (lv_is_cow(lv)) {
-+		/* Old format1 code */
-+		if (!(lv->vg->fid->fmt->features & FMT_MDAS))
-+			format1_origin = origin_from_cow(lv);
-+
- 		log_verbose("Removing snapshot %s", lv->name);
- 		/* vg_remove_snapshot() will preload origin/former snapshots */
- 		if (!vg_remove_snapshot(lv))
-@@ -3214,12 +3220,31 @@
- 		return 0;
- 	}
- 
-+	/*
-+	 * Old format1 code: If no snapshots left reload without -real.
-+	 */
-+	if (format1_origin && !lv_is_origin(format1_origin)) {
-+		log_warn("WARNING: Support for snapshots with old LVM1-style metadata is deprecated.");
-+		log_warn("WARNING: Please use lvconvert to update to lvm2 metadata at your convenience.");
-+		format1_reload_required = 1;
-+	}
-+
- 	/* store it on disks */
- 	if (!vg_write(vg))
- 		return_0;
- 
-+	/* format1 */
-+	if (format1_reload_required && !suspend_lv(cmd, format1_origin))
-+		log_error("Failed to refresh %s without snapshot.", format1_origin->name);
-+
- 	if (!vg_commit(vg))
- 		return_0;
-+ 
-+	/* format1 */
-+	if (format1_reload_required && !resume_lv(cmd, format1_origin)) {
-+		log_error("Failed to resume %s.", format1_origin->name);
-+		return 0;
-+	}
- 
- 	backup(vg);
- 
---- LVM2/lib/metadata/snapshot_manip.c	2011/07/19 16:23:52	1.51
-+++ LVM2/lib/metadata/snapshot_manip.c	2011/12/20 00:02:18	1.52
-@@ -208,6 +208,10 @@
- 	cow->snapshot = NULL;
- 	lv_set_visible(cow);
- 
-+	/* format1 must do the change in one step, with the commit last. */
-+	if (!(origin->vg->fid->fmt->features & FMT_MDAS))
-+		return 1;
-+
- 	if (!vg_write(origin->vg))
- 		return_0;
- 	if (!suspend_lv(origin->vg->cmd, origin)) {
---- LVM2/WHATS_NEW	2011/12/08 21:24:08	1.2205
-+++ LVM2/WHATS_NEW	2011/12/20 00:02:19	1.2206
-@@ -1,5 +1,7 @@
- Version 2.02.89 - 
- ==================================
-+  Issue deprecation warning when removing last lvm1-format snapshot.
-+  Reinstate support for snapshot removal with lvm1 format. (2.02.86)
-   Add policy based automated repair of RAID logical volumes
-   Don't allow two images to be split and tracked from a RAID LV at one time
-   Don't allow size change of RAID LV that is tracking changes for a split image
 
 
