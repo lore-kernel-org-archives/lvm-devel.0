@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Dec 2011 13:14:55 -0000
+Date: 21 Dec 2011 13:17:54 -0000
 Subject: LVM2 ./WHATS_NEW lib/device/dev-cache.c
-Message-ID: <20111221131455.8685.qmail@sourceware.org>
+Message-ID: <20111221131754.9797.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,106 +10,101 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-12-21 13:14:54
+Changes by:	zkabelac at sourceware.org	2011-12-21 13:17:54
 
 Modified files:
 	.              : WHATS_NEW 
 	lib/device     : dev-cache.c 
 
 Log message:
-	Always zalloc device structure
+	Add common initialization code for struct device
 	
-	Since there is zalloc behind the macro, put 'z' into the name.
-	Make the 'use_malloc' code path also using zalloc() call,
-	so it also give zeroed area.
+	Avoid duplicate code and add _dev_init() where all common
+	member values are initialized.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2209&r2=1.2210
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.66&r2=1.67
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2210&r2=1.2211
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
 
---- LVM2/WHATS_NEW	2011/12/21 13:03:06	1.2209
-+++ LVM2/WHATS_NEW	2011/12/21 13:14:54	1.2210
+--- LVM2/WHATS_NEW	2011/12/21 13:14:54	1.2210
++++ LVM2/WHATS_NEW	2011/12/21 13:17:54	1.2211
 @@ -1,5 +1,6 @@
  Version 2.02.89 - 
  ==================================
-+  Always zalloc device structure during initialization.
++  Add function to inialize common structure device members.
+   Always zalloc device structure during initialization.
    Fix missing thread list manipulation protection in dmeventd.
    Do not derefence lv pointer in _percent_run() function before NULL check.
-   Allow empty strings for description and creation_host config fields.
---- LVM2/lib/device/dev-cache.c	2011/08/30 14:55:16	1.66
-+++ LVM2/lib/device/dev-cache.c	2011/12/21 13:14:54	1.67
-@@ -48,7 +48,7 @@
+--- LVM2/lib/device/dev-cache.c	2011/12/21 13:14:54	1.67
++++ LVM2/lib/device/dev-cache.c	2011/12/21 13:17:54	1.68
+@@ -54,6 +54,18 @@
  
- } _cache;
+ static int _insert(const char *path, int rec, int check_with_udev_db);
  
--#define _alloc(x) dm_pool_zalloc(_cache.mem, (x))
-+#define _zalloc(x) dm_pool_zalloc(_cache.mem, (x))
- #define _free(x) dm_pool_free(_cache.mem, (x))
- #define _strdup(x) dm_pool_strdup(_cache.mem, (x))
- 
-@@ -61,11 +61,11 @@
- 
- 	if (allocate) {
- 		if (use_malloc) {
--			if (!(dev = dm_malloc(sizeof(*dev)))) {
-+			if (!(dev = dm_zalloc(sizeof(*dev)))) {
- 				log_error("struct device allocation failed");
- 				return NULL;
- 			}
--			if (!(alias = dm_malloc(sizeof(*alias)))) {
-+			if (!(alias = dm_zalloc(sizeof(*alias)))) {
- 				log_error("struct str_list allocation failed");
- 				dm_free(dev);
- 				return NULL;
-@@ -78,11 +78,11 @@
- 			}
- 			dev->flags = DEV_ALLOCED;
- 		} else {
--			if (!(dev = _alloc(sizeof(*dev)))) {
-+			if (!(dev = _zalloc(sizeof(*dev)))) {
- 				log_error("struct device allocation failed");
- 				return NULL;
- 			}
--			if (!(alias = _alloc(sizeof(*alias)))) {
-+			if (!(alias = _zalloc(sizeof(*alias)))) {
- 				log_error("struct str_list allocation failed");
- 				_free(dev);
- 				return NULL;
-@@ -118,7 +118,7 @@
++/* Setup non-zero members of passed zeroed 'struct device' */
++static void _dev_init(struct device *dev, int max_error_count)
++{
++	dev->block_size = -1;
++	dev->fd = -1;
++	dev->read_ahead = -1;
++	dev->max_error_count = max_error_count;
++
++	dm_list_init(&dev->aliases);
++	dm_list_init(&dev->open_list);
++}
++
+ struct device *dev_create_file(const char *filename, struct device *dev,
+ 			       struct str_list *alias, int use_malloc)
  {
- 	struct device *dev;
+@@ -76,7 +88,6 @@
+ 				dm_free(alias);
+ 				return NULL;
+ 			}
+-			dev->flags = DEV_ALLOCED;
+ 		} else {
+ 			if (!(dev = _zalloc(sizeof(*dev)))) {
+ 				log_error("struct device allocation failed");
+@@ -97,19 +108,9 @@
+ 		return NULL;
+ 	}
  
--	if (!(dev = _alloc(sizeof(*dev)))) {
-+	if (!(dev = _zalloc(sizeof(*dev)))) {
+-	dev->flags |= DEV_REGULAR;
+-	dm_list_init(&dev->aliases);
++	_dev_init(dev, NO_DEV_ERROR_COUNT_LIMIT);
++	dev->flags = DEV_REGULAR | ((use_malloc) ? DEV_ALLOCED : 0);
+ 	dm_list_add(&dev->aliases, &alias->list);
+-	dev->end = UINT64_C(0);
+-	dev->dev = 0;
+-	dev->fd = -1;
+-	dev->open_count = 0;
+-	dev->error_count = 0;
+-	dev->max_error_count = NO_DEV_ERROR_COUNT_LIMIT;
+-	dev->block_size = -1;
+-	dev->read_ahead = -1;
+-	memset(dev->pvid, 0, sizeof(dev->pvid));
+-	dm_list_init(&dev->open_list);
+ 
+ 	return dev;
+ }
+@@ -122,17 +123,9 @@
  		log_error("struct device allocation failed");
  		return NULL;
  	}
-@@ -303,7 +303,7 @@
+-	dev->flags = 0;
+-	dm_list_init(&dev->aliases);
++
++	_dev_init(dev, dev_disable_after_error_count());
+ 	dev->dev = d;
+-	dev->fd = -1;
+-	dev->open_count = 0;
+-	dev->max_error_count = dev_disable_after_error_count();
+-	dev->block_size = -1;
+-	dev->read_ahead = -1;
+-	dev->end = UINT64_C(0);
+-	memset(dev->pvid, 0, sizeof(dev->pvid));
+-	dm_list_init(&dev->open_list);
  
- static int _add_alias(struct device *dev, const char *path)
- {
--	struct str_list *sl = _alloc(sizeof(*sl));
-+	struct str_list *sl = _zalloc(sizeof(*sl));
- 	struct str_list *strl;
- 	const char *oldpath;
- 	int prefer_old = 1;
-@@ -788,7 +788,7 @@
- 		return 1;
- 	}
- 
--	if (!(dl = _alloc(sizeof(*dl) + strlen(path) + 1))) {
-+	if (!(dl = _zalloc(sizeof(*dl) + strlen(path) + 1))) {
- 		log_error("dir_list allocation failed");
- 		return 0;
- 	}
-@@ -814,7 +814,7 @@
- 		return 1;
- 	}
- 
--	if (!(dl = _alloc(sizeof(*dl) + strlen(path) + 1))) {
-+	if (!(dl = _zalloc(sizeof(*dl) + strlen(path) + 1))) {
- 		log_error("dir_list allocation failed for file");
- 		return 0;
- 	}
+ 	return dev;
+ }
 
 
