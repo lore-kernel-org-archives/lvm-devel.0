@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Dec 2011 13:09:34 -0000
-Subject: LVM2/lib/activate dev_manager.c dev_manager.h
-Message-ID: <20111221130934.12020.qmail@sourceware.org>
+Date: 21 Dec 2011 13:10:07 -0000
+Subject: LVM2/lib/activate activate.c activate.h
+Message-ID: <20111221131007.18990.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,64 +10,60 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-12-21 13:09:34
+Changes by:	zkabelac at sourceware.org	2011-12-21 13:10:06
 
 Modified files:
-	lib/activate   : dev_manager.c dev_manager.h 
+	lib/activate   : activate.c activate.h 
 
 Log message:
-	Thin add dev_manager_thin_pool_percent
-	
-	dev manager function to read percent info from thin pool.
+	Thin add lv_thin_pool_percent
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.255&r2=1.256
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.h.diff?cvsroot=lvm2&r1=1.40&r2=1.41
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.225&r2=1.226
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.89&r2=1.90
 
---- LVM2/lib/activate/dev_manager.c	2011/12/21 12:59:22	1.255
-+++ LVM2/lib/activate/dev_manager.c	2011/12/21 13:09:33	1.256
-@@ -872,6 +872,30 @@
+--- LVM2/lib/activate/activate.c	2011/12/21 13:08:13	1.225
++++ LVM2/lib/activate/activate.c	2011/12/21 13:10:05	1.226
+@@ -689,6 +689,30 @@
+ 	return lv_mirror_percent(lv->vg->cmd, lv, 0, percent, NULL);
+ }
  
- #endif
- 
-+int dev_manager_thin_pool_percent(struct dev_manager *dm,
-+				  const struct logical_volume *lv,
-+				  percent_t *percent)
++/*
++ * Returns 1 if percent set, else 0 on failure.
++ */
++int lv_thin_pool_percent(const struct logical_volume *lv, percent_t *percent)
 +{
-+	char *name;
-+	const char *dlid;
++	int r;
++	struct dev_manager *dm;
 +
-+	/*
-+	 * Build a name for the top layer.
-+	 */
-+	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, thin_layer)))
++	if (!activation())
++		return 0;
++
++	log_debug("Checking thin pool percent for LV %s/%s", lv->vg->name, lv->name);
++
++	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
 +		return_0;
 +
-+	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, thin_layer)))
-+		return_0;
++	if (!(r = dev_manager_thin_pool_percent(dm, lv, percent)))
++		stack;
 +
-+	log_debug("Getting device status percentage for %s", name);
-+	if (!(_percent(dm, name, dlid, "thin-pool", 0, NULL, percent,
-+		       NULL, 1)))
-+		return_0;
++	dev_manager_destroy(dm);
 +
-+	return 1;
++	return r;
 +}
 +
- /*************************/
- /*  NEW CODE STARTS HERE */
- /*************************/
---- LVM2/lib/activate/dev_manager.h	2011/10/17 14:18:07	1.40
-+++ LVM2/lib/activate/dev_manager.h	2011/12/21 13:09:34	1.41
-@@ -52,6 +52,9 @@
- int dev_manager_mirror_percent(struct dev_manager *dm,
- 			       const struct logical_volume *lv, int wait,
- 			       percent_t *percent, uint32_t *event_nr);
-+int dev_manager_thin_pool_percent(struct dev_manager *dm,
-+				  const struct logical_volume *lv,
-+				  percent_t *percent);
- int dev_manager_suspend(struct dev_manager *dm, struct logical_volume *lv,
- 			struct lv_activate_opts *laopts, int lockfs, int flush_required);
- int dev_manager_activate(struct dev_manager *dm, struct logical_volume *lv,
+ static int _lv_active(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+ 	struct lvinfo info;
+--- LVM2/lib/activate/activate.h	2011/11/28 20:37:51	1.89
++++ LVM2/lib/activate/activate.h	2011/12/21 13:10:06	1.90
+@@ -100,6 +100,7 @@
+ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		      int wait, percent_t *percent, uint32_t *event_nr);
+ int lv_raid_percent(const struct logical_volume *lv, percent_t *percent);
++int lv_thin_pool_percent(const struct logical_volume *lv, percent_t *percent);
+ 
+ /*
+  * Return number of LVs in the VG that are active.
 
 
