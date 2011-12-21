@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 21 Dec 2011 12:47:46 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
-Message-ID: <20111221124746.8469.qmail@sourceware.org>
+Date: 21 Dec 2011 12:49:01 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/import_vsn1.c
+Message-ID: <20111221124901.9219.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-12-21 12:47:45
+Changes by:	zkabelac at sourceware.org	2011-12-21 12:49:00
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h libdm-config.c 
+	.              : WHATS_NEW 
+	lib/format_text: import_vsn1.c 
 
 Log message:
-	Add dm_config_find_str_allow_empty
-	
-	Support empty string values.
+	Allow empty strings for description and creation_host config fields
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.525&r2=1.526
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.171&r2=1.172
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2206&r2=1.2207
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
 
---- LVM2/WHATS_NEW_DM	2011/12/07 12:29:41	1.525
-+++ LVM2/WHATS_NEW_DM	2011/12/21 12:47:44	1.526
-@@ -6,7 +6,7 @@
-   Improve man page style for dmsetup.
-   Fix _get_proc_number to be tolerant of malformed /proc/misc entries.
-   Add ExecReload to dm-event.service for systemd to reload dmeventd properly.
--  Add dm_config_tree_find_str_allow_empty.
-+  Add dm_config_tree_find_str_allow_empty and dm_config_find_str_allow_empty.
-   Fix compile-time pool memory locking with DEBUG_MEM.
-   Fix valgrind error reports in free of pool chunks with DEBUG_MEM.
-   Align size of structure chunk for fast pool allocator to 8 bytes.
---- LVM2/libdm/libdevmapper.h	2011/12/18 21:56:03	1.171
-+++ LVM2/libdm/libdevmapper.h	2011/12/21 12:47:45	1.172
-@@ -1351,6 +1351,7 @@
- struct dm_config_node *dm_config_find_node(struct dm_config_node *cn, const char *path);
- int dm_config_has_node(const struct dm_config_node *cn, const char *path);
- const char *dm_config_find_str(const struct dm_config_node *cn, const char *path, const char *fail);
-+const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn, const char *path, const char *fail);
- int dm_config_find_int(const struct dm_config_node *cn, const char *path, int fail);
- float dm_config_find_float(const struct dm_config_node *cn, const char *path, float fail);
+--- LVM2/WHATS_NEW	2011/12/20 00:02:19	1.2206
++++ LVM2/WHATS_NEW	2011/12/21 12:49:00	1.2207
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Allow empty strings for description and creation_host config fields.
+   Issue deprecation warning when removing last lvm1-format snapshot.
+   Reinstate support for snapshot removal with lvm1 format. (2.02.86)
+   Add policy based automated repair of RAID logical volumes
+--- LVM2/lib/format_text/import_vsn1.c	2011/10/23 16:05:45	1.95
++++ LVM2/lib/format_text/import_vsn1.c	2011/12/21 12:49:00	1.96
+@@ -800,7 +800,7 @@
+ 	int old_suppress;
  
---- LVM2/libdm/libdm-config.c	2011/12/18 21:56:03	1.18
-+++ LVM2/libdm/libdm-config.c	2011/12/21 12:47:45	1.19
-@@ -772,6 +772,12 @@
- 	return _find_config_str(cn, _find_config_node, path, fail, 0);
- }
+ 	old_suppress = log_suppress(1);
+-	d = dm_config_find_str(cft->root, "description", "");
++	d = dm_config_find_str_allow_empty(cft->root, "description", "");
+ 	log_suppress(old_suppress);
+ 	*desc = dm_pool_strdup(mem, d);
  
-+const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn,
-+					   const char *path, const char *fail)
-+{
-+	return _find_config_str(cn, _find_config_node, path, fail, 1);
-+}
-+
- static int64_t _find_config_int64(const void *start, node_lookup_fn find,
- 				  const char *path, int64_t fail)
- {
+@@ -819,7 +819,7 @@
+ 
+ 	old_suppress = log_suppress(2);
+ 	*creation_host = dm_pool_strdup(mem,
+-					dm_config_find_str(cft->root,
++					dm_config_find_str_allow_empty(cft->root,
+ 							"creation_host", ""));
+ 	log_suppress(old_suppress);
+ 
 
 
