@@ -1,138 +1,200 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 30 Mar 2022 12:49:26 +0000 (GMT)
-Subject: main - thin: fix message processing on thin-pool extension
-Message-ID: <20220330124926.9ABAB3858D3C@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 5 Jan 2012 15:38:21 -0000
+Subject: LVM2 ./WHATS_NEW man/lvextend.8.in man/lvreduc ...
+Message-ID: <20120105153821.20278.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09371131469f7398c597a5fb30dc565859253cc2
-Commit:        09371131469f7398c597a5fb30dc565859253cc2
-Parent:        86a0a652a9eedd932c7428ed82656f3fd40d13f8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 30 14:16:11 2022 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 30 14:49:04 2022 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-01-05 15:38:19
 
-thin: fix message processing on thin-pool extension
+Modified files:
+	.              : WHATS_NEW 
+	man            : lvextend.8.in lvreduce.8.in lvresize.8.in 
+	tools          : lvcreate.c lvresize.c toollib.c tools.h 
 
-When thin-pool had queued some delete message on extension operation
-such message has been 'lost' and thin-pool kernel metadata has been
-left with a thin volume that no longer existed for lvm2 metadata.
----
- WHATS_NEW                          |  1 +
- lib/metadata/lv_manip.c            |  2 +-
- test/shell/lvextend-thin-adddel.sh | 78 ++++++++++++++++++++++++++++++++++++++
- 3 files changed, 80 insertions(+), 1 deletion(-)
+Log message:
+	Support rounding of percentage upward
+	
+	We want to keep this logic -
+	when LV is extend - extend the LV by at least given amount,
+	when LV is reduced - reduce the LV by at most given amount.
+	
+	So for this the rounding needs to be used.
+	Current logic which seems to satisfy give rule is to round up all
+	extent values for LV resize upward except for values with '-' sign
+	that are round downward.
+	
+	This patch also fixes the problem when  lvextend --use-polices tried
+	to extend LV the by i.e. 20% - but the resulting 20% were smaller
+	the extent size thus before this patch no extension happened.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 006d0acb1..7c93d804d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2216&r2=1.2217
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvextend.8.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvreduce.8.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvresize.8.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.251&r2=1.252
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.145&r2=1.146
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.236&r2=1.237
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/tools.h.diff?cvsroot=lvm2&r1=1.77&r2=1.78
+
+--- LVM2/WHATS_NEW	2011/12/22 16:37:01	1.2216
++++ LVM2/WHATS_NEW	2012/01/05 15:38:18	1.2217
 @@ -1,5 +1,6 @@
- Version 2.03.16 - 
- ====================================
-+  Fix lossing of delete message on thin-pool extension.
+ Version 2.02.89 - 
+ ==================================
++  Supports rounding of percentage (%LV, %VG...) for LV resize upward.
+   Use dmeventd_lvm2_command in dmeventd plugins snapshot, raid, mirror.
+   Add helper dmeventd_lvm2_command() into libdevmapper-event-lvm2 library.
+   Updated documentation for dmeventd.
+--- LVM2/man/lvextend.8.in	2010/06/21 15:56:59	1.8
++++ LVM2/man/lvextend.8.in	2012/01/05 15:38:18	1.9
+@@ -43,6 +43,7 @@
+ as a percentage of the remaining free space in the Volume Group
+ with the suffix %FREE, or (for a snapshot) as a percentage of the total
+ space in the Origin Logical Volume with the suffix %ORIGIN.
++The resulting value is rounded upward.
+ .TP
+ .I \-L, \-\-size [+]LogicalVolumeSize[bBsSkKmMgGtTpPeE]
+ Extend or set the logical volume size in units of megabytes.
+--- LVM2/man/lvreduce.8.in	2011/09/07 08:50:35	1.9
++++ LVM2/man/lvreduce.8.in	2012/01/05 15:38:18	1.10
+@@ -66,6 +66,8 @@
+ remaining free space in the Volume Group with the suffix \fI%FREE\fP, or (for
+ a snapshot) as a percentage of the total space in the Origin Logical
+ Volume with the suffix \fI%ORIGIN\fP.
++The resulting value for the substraction is rounded downward, for the absolute
++size it is rounded upward.
+ .TP
+ .IR \fB\-L ", " \fB\-\-size " [" \- ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]
+ Reduce or set the logical volume size in units of megabytes.
+--- LVM2/man/lvresize.8.in	2011/09/07 08:50:35	1.10
++++ LVM2/man/lvresize.8.in	2012/01/05 15:38:18	1.11
+@@ -54,15 +54,18 @@
+ suffix \fI%PVS\fP, as a percentage of the remaining free space in the
+ Volume Group with the suffix \fI%FREE\fP, or (for a snapshot) as a percentage
+ of the total space in the Origin Logical Volume with the suffix \fI%ORIGIN\fP.
++The resulting value is rounded downward for the substraction otherwise
++it is rounded upward.
+ .TP
+ .IR \fB\-L ", " \fB\-\-size " [" + | - ] LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]
+ Change or set the logical volume size in units of megabytes.
+ A size suffix of \fIM\fP for megabytes,
+ \fIG\fP for gigabytes, \fIT\fP for terabytes, \fIP\fP for petabytes
+ or \fIE\fP for exabytes is optional.
+-With the \fI+\fP or \fI-\fP sign the value is added to or subtracted from
+-the actual size of the logical volume and without it, the value is taken as an
+-absolute one.
++With the \fI+\fP or \fI-\fP sign the value is added or subtracted
++from the actual size of the logical volume and rounded
++to the full extent size and without it,
++the value is taken as an absolute one.
+ .TP
+ .BR \-i ", " \-\-stripes " " \fIStripes
+ Gives the number of stripes to use when extending a Logical Volume.
+--- LVM2/tools/lvcreate.c	2011/12/21 12:54:19	1.251
++++ LVM2/tools/lvcreate.c	2012/01/05 15:38:19	1.252
+@@ -257,17 +257,17 @@
  
- Version 2.03.15 - 07th February 2022
- ====================================
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 003748d6f..9523e3e66 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6179,7 +6179,7 @@ int lv_resize(struct logical_volume *lv,
+ 	switch(lcp->percent) {
+ 		case PERCENT_VG:
+-			lp->extents = percent_of_extents(lp->extents, vg->extent_count);
++			lp->extents = percent_of_extents(lp->extents, vg->extent_count, 0);
+ 			break;
+ 		case PERCENT_FREE:
+-			lp->extents = percent_of_extents(lp->extents, vg->free_count);
++			lp->extents = percent_of_extents(lp->extents, vg->free_count, 0);
+ 			break;
+ 		case PERCENT_PVS:
+ 			if (!lcp->pv_count)
+-				lp->extents = percent_of_extents(lp->extents, vg->extent_count);
++				lp->extents = percent_of_extents(lp->extents, vg->extent_count, 0);
+ 			else {
+ 				pv_extent_count = pv_list_extents_free(lp->pvh);
+-				lp->extents = percent_of_extents(lp->extents, pv_extent_count);
++				lp->extents = percent_of_extents(lp->extents, pv_extent_count, 0);
+ 			}
+ 			break;
+ 		case PERCENT_LV:
+@@ -285,7 +285,7 @@
+ 				log_error(INTERNAL_ERROR "Couldn't find origin volume.");
+ 				return 0;
+ 			}
+-			lp->extents = percent_of_extents(lp->extents, origin->le_count);
++			lp->extents = percent_of_extents(lp->extents, origin->le_count, 0);
+ 			break;
+ 		case PERCENT_NONE:
+ 			break;
+--- LVM2/tools/lvresize.c	2011/12/21 13:10:53	1.145
++++ LVM2/tools/lvresize.c	2012/01/05 15:38:19	1.146
+@@ -464,27 +464,33 @@
  
- 	if (lv_is_thin_pool(lock_lv)) {
- 		/* Update lvm pool metadata (drop messages). */
--		if (!update_pool_lv(lock_lv, 0))
-+		if (!update_pool_lv(lock_lv, 1))
- 			goto_bad;
- 	}
+ 	switch(lp->percent) {
+ 		case PERCENT_VG:
+-			lp->extents = percent_of_extents(lp->extents, vg->extent_count);
++			lp->extents = percent_of_extents(lp->extents, vg->extent_count,
++							 (lp->sign != SIGN_MINUS));
+ 			break;
+ 		case PERCENT_FREE:
+-			lp->extents = percent_of_extents(lp->extents, vg->free_count);
++			lp->extents = percent_of_extents(lp->extents, vg->free_count,
++							 (lp->sign != SIGN_MINUS));
+ 			break;
+ 		case PERCENT_LV:
+-			lp->extents = percent_of_extents(lp->extents, lv->le_count);
++			lp->extents = percent_of_extents(lp->extents, lv->le_count,
++							 (lp->sign != SIGN_MINUS));
+ 			break;
+ 		case PERCENT_PVS:
+ 			if (lp->argc) {
+ 				pv_extent_count = pv_list_extents_free(pvh);
+-				lp->extents = percent_of_extents(lp->extents, pv_extent_count);
++				lp->extents = percent_of_extents(lp->extents, pv_extent_count,
++								 (lp->sign != SIGN_MINUS));
+ 			} else
+-				lp->extents = percent_of_extents(lp->extents, vg->extent_count);
++				lp->extents = percent_of_extents(lp->extents, vg->extent_count,
++								 (lp->sign != SIGN_MINUS));
+ 			break;
+ 		case PERCENT_ORIGIN:
+ 			if (!lv_is_cow(lv)) {
+ 				log_error("Specified LV does not have an origin LV.");
+ 				return EINVALID_CMD_LINE;
+ 			}
+-			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count);
++			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count,
++							 (lp->sign != SIGN_MINUS));
+ 			break;
+ 		case PERCENT_NONE:
+ 			break;
+--- LVM2/tools/toollib.c	2011/11/18 19:19:22	1.236
++++ LVM2/tools/toollib.c	2012/01/05 15:38:19	1.237
+@@ -1630,8 +1630,9 @@
+ 	return 1;
+ }
  
-diff --git a/test/shell/lvextend-thin-adddel.sh b/test/shell/lvextend-thin-adddel.sh
-new file mode 100644
-index 000000000..59b1bfa41
---- /dev/null
-+++ b/test/shell/lvextend-thin-adddel.sh
-@@ -0,0 +1,78 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2022 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+#
-+# Play with thin-pool and thin removal and creation in corner cases
-+#
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+aux have_thin 1 0 0 || skip
-+
-+test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_restore) || skip
-+"$LVM_TEST_THIN_RESTORE_CMD" -V || skip
-+
-+aux have_thin 1 10 0 || skip
-+
-+aux prepare_vg 2
-+
-+lvcreate -V10 -n $lv1 -L10 -T $vg/pool
-+lvcreate -V10 -n $lv2 $vg/pool
-+
-+# Forcibly 'error' _tmeta thin-pool metadata device
-+not dmsetup remove -f $vg-pool_tmeta
-+
-+# Now try to schedule removal of thin volume id 1
-+# that will fail with errored meta device
-+not lvremove -y $vg/$lv1
-+
-+# Check we have queued 'message'
-+vgcfgbackup -f out0 $vg
-+grep "message1" out0
-+
-+vgchange -an $vg || true
-+
-+not dmsetup table ${vg}-pool-tpool
-+
-+# Reactivate thin-pool
-+vgchange -ay $vg
-+
-+# Check message is still queued there
-+vgcfgbackup -f out1 $vg
-+grep "message1" out1
-+
-+lvchange -an $vg
-+
-+lvextend -L+10 $vg/pool
-+
-+# Messages should be now processed and gone
-+vgcfgbackup -f out2 $vg
-+not grep "message1" out2
-+
-+lvchange -an $vg
-+
-+lvchange -y -ay $vg/pool_tmeta
-+
-+# Kernel metadata must not see dev_id 1 either
-+thin_dump $DM_DEV_DIR/$vg/pool_tmeta | tee meta
-+not grep 'dev_id="1"' meta
-+
-+lvremove -ff $vg
-+
-+lvs -a $vg
-+
-+vgremove -ff $vg
+-/* Return percents of extents and avoid overflow */
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count)
++/* Return percents of extents and avoid overflow, with optional roundup */
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
+ {
+-	return (uint32_t)((uint64_t)percents * (uint64_t)count / 100);
++	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
++			   ((roundup) ? 99 : 0)) / 100);
+ }
+--- LVM2/tools/tools.h	2011/09/15 15:26:40	1.77
++++ LVM2/tools/tools.h	2012/01/05 15:38:19	1.78
+@@ -181,5 +181,5 @@
+ int mirror_remove_missing(struct cmd_context *cmd,
+ 			  struct logical_volume *lv, int force);
+ 
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count);
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
+ #endif
+
 
