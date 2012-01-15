@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 15 Jan 2012 11:17:18 -0000
-Subject: LVM2/daemons/common daemon-shared.c daemon-sha ...
-Message-ID: <20120115111718.4173.qmail@sourceware.org>
+Date: 15 Jan 2012 15:16:50 -0000
+Subject: LVM2/daemons/common daemon-client.c daemon-cli ...
+Message-ID: <20120115151650.29796.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,85 +10,39 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-01-15 11:17:17
+Changes by:	mornfall at sourceware.org	2012-01-15 15:16:50
 
 Modified files:
-	daemons/common : daemon-shared.c daemon-shared.h 
+	daemons/common : daemon-client.c daemon-client.h 
 
 Log message:
-	Unfortunately, blank lines are sometimes produced by config serializer, and
-	this interferes with their role as message separator in the lvmetad
-	protocol. Switch to using "##" on an otherwise blank line as a separator.
+	Fix prototypes for daemon_send_simple (const char).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.h.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
 
---- LVM2/daemons/common/daemon-shared.c	2011/09/17 14:49:18	1.6
-+++ LVM2/daemons/common/daemon-shared.c	2012/01/15 11:17:16	1.7
-@@ -38,7 +38,7 @@
- 			*buffer = new;
- 		} else {
- 			(*buffer)[bytes] = 0;
--			if ((end = strstr((*buffer) + bytes - 2, "\n\n"))) {
-+			if ((end = strstr((*buffer) + bytes - 4, "\n##\n"))) {
- 				*end = 0;
- 				break; /* success, we have the full message now */
- 			}
-@@ -58,18 +58,29 @@
-  *
-  * TODO use select on EWOULDBLOCK/EAGAIN to avoid useless spinning
-  */
--int write_buffer(int fd, char *buffer, int length) {
-+int write_buffer(int fd, const char *buffer, int length) {
-+	int done = 0;
- 	int written = 0;
-+write:
- 	while (1) {
- 		int result = write(fd, buffer + written, length - written);
- 		if (result > 0)
- 			written += result;
- 		if (result < 0 && errno != EWOULDBLOCK && errno != EAGAIN)
--			break; /* too bad */
--		if (written == length)
--			return 1; /* done */
-+			return 0; /* too bad */
-+		if (written == length) {
-+			if (done)
-+				return 1;
-+			else
-+				break; /* done */
-+		}
- 	}
--	return 0;
-+	const char *terminate = "\n##\n";
-+	buffer = terminate;
-+	length = 4;
-+	written = 0;
-+	done = 1;
-+	goto write;
+--- LVM2/daemons/common/daemon-client.c	2011/10/30 21:58:59	1.9
++++ LVM2/daemons/common/daemon-client.c	2012/01/15 15:16:50	1.10
+@@ -57,7 +57,7 @@
+ 		dm_config_destroy(r.cft);
  }
  
- char *format_buffer(const char *what, const char *id, va_list ap)
-@@ -106,10 +117,6 @@
- 		if (!buffer) goto fail;
- 	}
+-daemon_reply daemon_send_simple(daemon_handle h, char *id, ...)
++daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...)
+ {
+ 	static const daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
+ 	daemon_request rq = { .cft = NULL };
+--- LVM2/daemons/common/daemon-client.h	2011/08/30 15:42:57	1.8
++++ LVM2/daemons/common/daemon-client.h	2012/01/15 15:16:50	1.9
+@@ -77,7 +77,7 @@
+  * type (string, integer) of the value is indicated by a character substituted
+  * for ? in %?: d for integer, s for string.
+  */
+-daemon_reply daemon_send_simple(daemon_handle h, char *id, ...);
++daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...);
  
--	old = buffer;
--	dm_asprintf(&buffer, "%s\n", buffer);
--	dm_free(old);
--
- 	return buffer;
- fail:
- 	dm_free(buffer);
---- LVM2/daemons/common/daemon-shared.h	2011/06/29 22:20:14	1.3
-+++ LVM2/daemons/common/daemon-shared.h	2012/01/15 11:17:16	1.4
-@@ -2,5 +2,5 @@
- #include <libdevmapper.h>
+ void daemon_reply_destroy(daemon_reply r);
  
- int read_buffer(int fd, char **buffer);
--int write_buffer(int fd, char *buffer, int length);
-+int write_buffer(int fd, const char *buffer, int length);
- char *format_buffer(const char *what, const char *id, va_list ap);
 
 
