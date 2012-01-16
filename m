@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 15 Jan 2012 15:16:50 -0000
-Subject: LVM2/daemons/common daemon-client.c daemon-cli ...
-Message-ID: <20120115151650.29796.qmail@sourceware.org>
+Date: 16 Jan 2012 05:09:17 -0000
+Subject: LVM2/daemons/common daemon-shared.c
+Message-ID: <20120116050917.21695.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,45 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-01-15 15:16:50
+Changes by:	mornfall at sourceware.org	2012-01-16 05:09:16
 
 Modified files:
-	daemons/common : daemon-client.c daemon-client.h 
+	daemons/common : daemon-shared.c 
 
 Log message:
-	Fix prototypes for daemon_send_simple (const char).
+	Fix a boundary condition in read_buffer in daemon-shared.c.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/daemons/common/daemon-client.c	2011/10/30 21:58:59	1.9
-+++ LVM2/daemons/common/daemon-client.c	2012/01/15 15:16:50	1.10
-@@ -57,7 +57,7 @@
- 		dm_config_destroy(r.cft);
- }
+--- LVM2/daemons/common/daemon-shared.c	2012/01/15 11:17:16	1.7
++++ LVM2/daemons/common/daemon-shared.c	2012/01/16 05:09:16	1.8
+@@ -30,20 +30,19 @@
+ 		if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+ 			goto fail;
  
--daemon_reply daemon_send_simple(daemon_handle h, char *id, ...)
-+daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...)
- {
- 	static const daemon_reply err = { .error = ENOMEM, .buffer = NULL, .cft = NULL };
- 	daemon_request rq = { .cft = NULL };
---- LVM2/daemons/common/daemon-client.h	2011/08/30 15:42:57	1.8
-+++ LVM2/daemons/common/daemon-client.h	2012/01/15 15:16:50	1.9
-@@ -77,7 +77,7 @@
-  * type (string, integer) of the value is indicated by a character substituted
-  * for ? in %?: d for integer, s for string.
-  */
--daemon_reply daemon_send_simple(daemon_handle h, char *id, ...);
-+daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...);
++		if ((!strncmp((*buffer) + bytes - 4, "\n##\n", 4))) {
++			*(*buffer + bytes - 4) = 0;
++			break; /* success, we have the full message now */
++		}
++
+ 		if (bytes == buffersize) {
+ 			buffersize += 1024;
+ 			if (!(new = realloc(*buffer, buffersize + 1)))
+ 				goto fail;
  
- void daemon_reply_destroy(daemon_reply r);
- 
+ 			*buffer = new;
+-		} else {
+-			(*buffer)[bytes] = 0;
+-			if ((end = strstr((*buffer) + bytes - 4, "\n##\n"))) {
+-				*end = 0;
+-				break; /* success, we have the full message now */
+-			}
+-			/* TODO call select here if we encountered EAGAIN/EWOULDBLOCK */
+ 		}
++		/* TODO call select here if we encountered EAGAIN/EWOULDBLOCK */
+ 	}
+ 	return 1;
+ fail:
 
 
