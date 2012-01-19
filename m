@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Jan 2012 15:39:42 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120119153942.10748.qmail@sourceware.org>
+Date: 19 Jan 2012 15:42:19 -0000
+Subject: LVM2/lib/thin thin.c
+Message-ID: <20120119154219.25768.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-19 15:39:41
+Changes by:	zkabelac at sourceware.org	2012-01-19 15:42:18
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	lib/thin       : thin.c 
 
 Log message:
-	Thin disable snapshot creation when pool is over the threshold.
-	
-	Since snapshot needs to suspend origin - it might lead to pool userspace
-	deadlock (as the pool will wait for new space in case it would be overfilled,
-	but dmeventd would not be able to resize it, as the lvcreate operation would
-	have kept the VG lock.)
-	To minimize the risk of such scenario - we prevent to create new snapshot
-	in case we are over the threshold - but beware, there is still small timewindow,
-	so keep threshold at some reasonable level!
+	Thin indent update
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.342&r2=1.343
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.40&r2=1.41
 
---- LVM2/lib/metadata/lv_manip.c	2012/01/19 15:31:45	1.342
-+++ LVM2/lib/metadata/lv_manip.c	2012/01/19 15:39:41	1.343
-@@ -3996,6 +3996,7 @@
- 	struct logical_volume *lv, *org = NULL;
- 	struct logical_volume *pool_lv;
- 	struct lv_list *lvl;
-+	percent_t percent;
- 	int origin_active = 0;
- 	struct lvinfo info;
+--- LVM2/lib/thin/thin.c	2012/01/19 15:27:54	1.40
++++ LVM2/lib/thin/thin.c	2012/01/19 15:42:18	1.41
+@@ -313,7 +313,7 @@
+ 	if (!dm_get_status_thin_pool(mem, params, &s))
+ 		return_0;
  
-@@ -4315,6 +4316,14 @@
- 	if (seg_is_thin(lp)) {
- 		/* For thin snapshot suspend active thin origin first */
- 		if (org && lv_is_active(org)) {
-+			lv_thin_pool_percent(first_seg(org)->pool_lv, 0, &percent);
-+			percent /= PERCENT_1;
-+			if (percent >= (find_config_tree_int(cmd, "activation/thin_pool_autoextend_threshold",
-+							     DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD))) {
-+				log_error("Failed to create snapshot, pool is filled over "
-+					  "the autoextend threshold (%d%%).", percent);
-+				goto revert_new_lv;
-+			}
- 			if (!suspend_lv(cmd, org)) {
- 				log_error("Failed to suspend thin origin %s.",
- 					  org->name);
+-        /* With seg report metadata percent, otherwice data percent */
++	/* With 'seg' report metadata percent, otherwice data percent */
+ 	if (seg) {
+ 		*percent = make_percent(s->used_metadata_blocks,
+ 					s->total_metadata_blocks);
 
 
