@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 19 Jan 2012 15:19:19 -0000
-Subject: LVM2/lib/activate dev_manager.c
-Message-ID: <20120119151919.24655.qmail@sourceware.org>
+Date: 19 Jan 2012 15:21:25 -0000
+Subject: LVM2 daemons/dmeventd/plugins/thin/dmeventd_th ...
+Message-ID: <20120119152125.25519.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,70 +10,163 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-19 15:19:18
+Changes by:	zkabelac at sourceware.org	2012-01-19 15:21:24
 
 Modified files:
-	lib/activate   : dev_manager.c 
+	daemons/dmeventd/plugins/thin: dmeventd_thin.c 
+	lib/thin       : thin.c 
+	libdm          : libdevmapper.h libdm-deptree.c 
 
 Log message:
-	Thin rename local static
+	Thin use consistentely metadata
 	
-	Use '_' for local const char.
+	Do not shortcut to 'meta' and stay with 'metadata'
+	Also matches kernel doc for dm API then.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.257&r2=1.258
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/thin/dmeventd_thin.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.148&r2=1.149
 
---- LVM2/lib/activate/dev_manager.c	2012/01/12 01:51:56	1.257
-+++ LVM2/lib/activate/dev_manager.c	2012/01/19 15:19:18	1.258
-@@ -59,7 +59,7 @@
- 	const char *old_name;
+--- LVM2/daemons/dmeventd/plugins/thin/dmeventd_thin.c	2011/12/22 15:57:29	1.2
++++ LVM2/daemons/dmeventd/plugins/thin/dmeventd_thin.c	2012/01/19 15:21:23	1.3
+@@ -38,9 +38,9 @@
+ 
+ struct dso_state {
+ 	struct dm_pool *mem;
+-	int meta_percent_check;
++	int metadata_percent_check;
+ 	int data_percent_check;
+-	uint64_t known_meta_size;
++	uint64_t known_metadata_size;
+ 	uint64_t known_data_size;
+ 	char cmd_str[1024];
  };
+@@ -183,9 +183,9 @@
+ #endif
  
--static const char thin_layer[] = "tpool";
-+static const char _thin_layer[] = "tpool";
+ 	/* Thin pool size had changed. Clear the threshold. */
+-	if (state->known_meta_size != tps->total_meta_blocks) {
+-		state->meta_percent_check = CHECK_MINIMUM;
+-		state->known_meta_size = tps->total_meta_blocks;
++	if (state->known_metadata_size != tps->total_metadata_blocks) {
++		state->metadata_percent_check = CHECK_MINIMUM;
++		state->known_metadata_size = tps->total_metadata_blocks;
+ 	}
  
- int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts)
+ 	if (state->known_data_size != tps->total_data_blocks) {
+@@ -193,13 +193,13 @@
+ 		state->known_data_size = tps->total_data_blocks;
+ 	}
+ 
+-	percent = 100 * tps->used_meta_blocks / tps->total_meta_blocks;
+-	if (percent >= state->meta_percent_check) {
++	percent = 100 * tps->used_metadata_blocks / tps->total_metadata_blocks;
++	if (percent >= state->metadata_percent_check) {
+ 		/*
+ 		 * Usage has raised more than CHECK_STEP since the last
+ 		 * time. Run actions.
+ 		 */
+-		state->meta_percent_check = (percent / CHECK_STEP) * CHECK_STEP + CHECK_STEP;
++		state->metadata_percent_check = (percent / CHECK_STEP) * CHECK_STEP + CHECK_STEP;
+ 
+ 		/* FIXME: extension of metadata needs to be written! */
+ 		if (percent >= WARNING_THRESH) /* Print a warning to syslog. */
+@@ -259,7 +259,7 @@
+ 	}
+ 
+ 	state->mem = statemem;
+-	state->meta_percent_check = CHECK_MINIMUM;
++	state->metadata_percent_check = CHECK_MINIMUM;
+ 	state->data_percent_check = CHECK_MINIMUM;
+ 	*private = state;
+ 
+--- LVM2/lib/thin/thin.c	2011/12/21 13:08:13	1.37
++++ LVM2/lib/thin/thin.c	2012/01/19 15:21:23	1.38
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -303,31 +303,28 @@
+ 				     percent_t *percent,
+ 				     struct dm_pool *mem,
+ 				     struct cmd_context *cmd __attribute__((unused)),
+-				     struct lv_segment *seg __attribute__((unused)),
++				     struct lv_segment *seg,
+ 				     char *params,
+ 				     uint64_t *total_numerator,
+ 				     uint64_t *total_denominator)
  {
-@@ -879,13 +879,12 @@
- 	char *name;
- 	const char *dlid;
+ 	struct dm_status_thin_pool *s;
+-	percent_t meta_percent;
+-	percent_t data_percent;
+ 
+ 	if (!dm_get_status_thin_pool(mem, params, &s))
+ 		return_0;
  
 -	/*
--	 * Build a name for the top layer.
+-	 * FIXME: how to handle exhaust of metadata space
+-	 * pick the max from data and meta?
+-	 * Support for metadata resize is needed.
 -	 */
--	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, thin_layer)))
-+	/* Build a name for the top layer */
-+	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name,
-+				      _thin_layer)))
- 		return_0;
+-	meta_percent = make_percent(s->used_meta_blocks,
+-				    s->total_meta_blocks);
+-	data_percent = make_percent(s->used_data_blocks,
+-				    s->total_data_blocks);
+-
+-	*percent = data_percent;
+-	*total_numerator += s->used_data_blocks;
+-	*total_denominator += s->total_data_blocks;
++        /* With seg report metadata percent, otherwice data percent */
++	if (seg) {
++		*percent = make_percent(s->used_metadata_blocks,
++					s->total_metadata_blocks);
++		*total_numerator += s->used_metadata_blocks;
++		*total_denominator += s->total_metadata_blocks;
++	} else {
++		*percent = make_percent(s->used_data_blocks,
++					s->total_data_blocks);
++		*total_numerator += s->used_data_blocks;
++		*total_denominator += s->total_data_blocks;
++	}
  
--	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, thin_layer)))
-+	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, _thin_layer)))
- 		return_0;
+ 	return 1;
+ }
+--- LVM2/libdm/libdevmapper.h	2012/01/11 12:34:45	1.175
++++ LVM2/libdm/libdevmapper.h	2012/01/19 15:21:23	1.176
+@@ -243,10 +243,11 @@
  
- 	log_debug("Getting device status percentage for %s", name);
-@@ -1166,7 +1165,7 @@
- 		/* FIXME code from _create_partial_dtree() should be moved here */
- 		if (!_add_lv_to_dtree(dm, dtree, seg_lv(seg, 0), origin_only))
- 			return_0;
--		if (!_add_dev_to_dtree(dm, dtree, lv, thin_layer))
-+		if (!_add_dev_to_dtree(dm, dtree, lv, _thin_layer))
- 			return_0;
- 	} else if (lv_is_thin_volume(lv) &&
- 		   !_add_lv_to_dtree(dm, dtree, seg->pool_lv, origin_only))
-@@ -1559,11 +1558,11 @@
- 	} else if (lv_is_cow(seg->lv) && !layer) {
- 		if (!_add_new_lv_to_dtree(dm, dtree, seg->lv, laopts, "cow"))
- 			return_0;
--	} else if ((layer != thin_layer) && seg_is_thin(seg)) {
-+	} else if ((layer != _thin_layer) && seg_is_thin(seg)) {
- 		lva = *laopts;
- 		lva.real_pool = 1;
- 		if (!_add_new_lv_to_dtree(dm, dtree, seg_is_thin_pool(seg) ?
--					  seg->lv : seg->pool_lv, &lva, thin_layer))
-+					  seg->lv : seg->pool_lv, &lva, _thin_layer))
- 			return_0;
- 	} else {
- 		if (seg_is_thin_pool(seg) &&
+ struct dm_status_thin_pool {
+ 	uint64_t transaction_id;
+-	uint64_t used_meta_blocks;
+-	uint64_t total_meta_blocks;
++	uint64_t used_metadata_blocks;
++	uint64_t total_metadata_blocks;
+ 	uint64_t used_data_blocks;
+ 	uint64_t total_data_blocks;
++	uint64_t held_metadata_root;
+ };
+ 
+ int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
+--- LVM2/libdm/libdm-deptree.c	2012/01/10 02:03:32	1.148
++++ LVM2/libdm/libdm-deptree.c	2012/01/19 15:21:23	1.149
+@@ -3117,10 +3117,11 @@
+ 		return 0;
+ 	}
+ 
++	/* FIXME: add support for held metadata root */
+ 	if (sscanf(params, "%" PRIu64 " %" PRIu64 "/%" PRIu64 " %" PRIu64 "/%" PRIu64,
+ 		   &s->transaction_id,
+-		   &s->used_meta_blocks,
+-		   &s->total_meta_blocks,
++		   &s->used_metadata_blocks,
++		   &s->total_metadata_blocks,
+ 		   &s->used_data_blocks,
+ 		   &s->total_data_blocks) != 5) {
+ 		log_error("Failed to parse thin pool params: %s.", params);
 
 
