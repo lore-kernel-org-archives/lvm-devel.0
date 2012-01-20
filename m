@@ -1,45 +1,82 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue,  1 Mar 2022 20:11:44 +0000 (GMT)
-Subject: main - devices: only close PVs on LVs when scan_lvs is enabled
-Message-ID: <20220301201144.EFDF73858C20@sourceware.org>
+From: snitzer@sourceware.org <snitzer@sourceware.org>
+Date: 20 Jan 2012 22:03:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv.c man/lvs.8.in
+Message-ID: <20120120220305.27433.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc73d99886dfd6e0da3c6ca685669f77fac3c1cd
-Commit:        cc73d99886dfd6e0da3c6ca685669f77fac3c1cd
-Parent:        7b1a857d5ac480b789af07d85e55bc87c6a76934
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 1 12:22:46 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Mar 1 14:11:05 2022 -0600
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	snitzer at sourceware.org	2012-01-20 22:03:04
 
-devices: only close PVs on LVs when scan_lvs is enabled
+Modified files:
+	.              : WHATS_NEW 
+	lib/metadata   : lv.c 
+	man            : lvs.8.in 
 
-This code is only needed when lvm scans PVs that are stacked on LVs.
----
- lib/label/label.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+Log message:
+	Use m and M lv_attr to indicate that a snapshot merge failed in lvs.
+	
+	snapshot (m)erge failed, suspended snapshot (M)erge failed
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index c20863875..e6bc791a7 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1661,9 +1661,11 @@ void label_scan_invalidate_lvs(struct cmd_context *cmd, struct dm_list *lvs)
- 	dev_t devt;
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2230&r2=1.2231
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+
+--- LVM2/WHATS_NEW	2012/01/20 22:02:04	1.2230
++++ LVM2/WHATS_NEW	2012/01/20 22:03:03	1.2231
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Use m and M lv_attr to indicate that a snapshot merge failed in lvs.
+   Differentiate between snapshot status of "Invalid" and "Merge failed".
+   Lookup snapshot usage percent of origin volume when a snapshot is merging.
+   Update lvdisplay with backward compat. config opt. lvm1_compatible_display.
+--- LVM2/lib/metadata/lv.c	2012/01/20 10:56:30	1.34
++++ LVM2/lib/metadata/lv.c	2012/01/20 22:03:04	1.35
+@@ -441,14 +441,21 @@
+ 			repstr[4] = 'd';	/* Inactive without table */
  
- 	/*
--	 * FIXME: this is all unnecessary unless there are PVs stacked on LVs,
--	 * so we can skip all of this if scan_lvs=0.
-+	 * This is only needed when the command sees PVs stacked on LVs which
-+	 * will only happen with scan_lvs=1.
- 	 */
-+	if (!cmd->scan_lvs)
-+		return;
- 	log_debug("invalidating devs for any pvs on lvs");
+ 		/* Snapshot dropped? */
+-		if (info.live_table && lv_is_cow(lv) &&
+-		    (!lv_snapshot_percent(lv, &snap_percent) ||
+-		     snap_percent == PERCENT_INVALID)) {
+-			repstr[0] = toupper(repstr[0]);
+-			if (info.suspended)
+-				repstr[4] = 'S'; /* Susp Inv snapshot */
+-			else
+-				repstr[4] = 'I'; /* Invalid snapshot */
++		if (info.live_table && lv_is_cow(lv)) {
++			if (!lv_snapshot_percent(lv, &snap_percent) ||
++			    snap_percent == PERCENT_INVALID) {
++				repstr[0] = toupper(repstr[0]);
++				if (info.suspended)
++					repstr[4] = 'S'; /* Susp Inv snapshot */
++				else
++					repstr[4] = 'I'; /* Invalid snapshot */
++			}
++			else if (snap_percent == PERCENT_MERGE_FAILED) {
++				if (info.suspended)
++					repstr[4] = 'M'; /* Susp snapshot merge failed */
++				else
++					repstr[4] = 'm'; /* snapshot merge failed */
++			}
+ 		}
  
- 	if (get_device_list(NULL, &devs, &devs_features)) {
+ 		/*
+--- LVM2/man/lvs.8.in	2012/01/12 16:58:44	1.19
++++ LVM2/man/lvs.8.in	2012/01/20 22:03:04	1.20
+@@ -105,6 +105,7 @@
+ fixed (m)inor
+ .IP 5 3
+ State: (a)ctive, (s)uspended, (I)nvalid snapshot, invalid (S)uspended snapshot,
++snapshot (m)erge failed, suspended snapshot (M)erge failed,
+ mapped (d)evice present without tables, mapped device present with (i)nactive table
+ .IP 6 3
+ device (o)pen
 
 
