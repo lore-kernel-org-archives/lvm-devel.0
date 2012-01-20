@@ -1,285 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue,  1 Mar 2022 19:10:30 +0000 (GMT)
-Subject: main - devices: use dev-cache aliases handling from label scan functions
-Message-ID: <20220301191030.B05D23858D20@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 20 Jan 2012 03:56:19 -0000
+Subject: LVM2 WHATS_NEW
+Message-ID: <20120120035619.26882.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b1a857d5ac480b789af07d85e55bc87c6a76934
-Commit:        7b1a857d5ac480b789af07d85e55bc87c6a76934
-Parent:        4eb04c8c05e52776891f62863375ceacf866de77
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 28 17:37:12 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 28 17:37:12 2022 -0600
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2012-01-20 03:56:18
 
-devices: use dev-cache aliases handling from label scan functions
+Modified files:
+	.              : WHATS_NEW 
 
-The label scan functions where doing some device alias validation
-which is now better handled by the dev-cache layer, so just use
-that.
----
- lib/device/dev-cache.c |   4 +-
- lib/device/dev-cache.h |   1 +
- lib/label/label.c      | 143 ++++++++++++-------------------------------------
- 3 files changed, 36 insertions(+), 112 deletions(-)
+Log message:
+	.
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 8db28bd84..5607beefc 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1410,7 +1410,7 @@ static void _remove_alias(struct device *dev, const char *name)
-  * deactivated LV.  Those old paths are all invalid and are dropped here.
-  */
- 
--static void _verify_aliases(struct device *dev)
-+void dev_cache_verify_aliases(struct device *dev)
- {
- 	struct dm_str_list *strl, *strl2;
- 	struct stat st;
-@@ -1459,7 +1459,7 @@ static struct device *_dev_cache_get(struct cmd_context *cmd, const char *name,
- 			_remove_alias(dev, name);
- 
- 			/* Remove any other names in dev->aliases that are incorrect. */
--			_verify_aliases(dev);
-+			dev_cache_verify_aliases(dev);
- 		}
- 		return NULL;
- 	}
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index 622335982..46b1da72c 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -55,6 +55,7 @@ int dev_cache_add_dir(const char *path);
- struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f);
- struct device *dev_cache_get_existing(struct cmd_context *cmd, const char *name, struct dev_filter *f);
- struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt);
-+void dev_cache_verify_aliases(struct device *dev);
- 
- struct device *dev_hash_get(const char *name);
- 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index ffb393891..c20863875 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -459,7 +459,6 @@ static int _scan_dev_open(struct device *dev)
- 	const char *name;
- 	const char *modestr;
- 	struct stat sbuf;
--	int retried = 0;
- 	int flags = 0;
- 	int fd, di;
- 
-@@ -479,14 +478,23 @@ static int _scan_dev_open(struct device *dev)
- 		return 0;
- 	}
- 
-+ next_name:
- 	/*
- 	 * All the names for this device (major:minor) are kept on
- 	 * dev->aliases, the first one is the primary/preferred name.
-+	 *
-+	 * The default name preferences in dev-cache mean that the first
-+	 * name in dev->aliases is not a symlink for scsi devices, but is
-+	 * the /dev/mapper/ symlink for mpath devices.
-+	 *
-+	 * If preferred names are set to symlinks, should this
-+	 * first attempt to open using a non-symlink?
-+	 *
-+	 * dm_list_first() returns NULL if the list is empty.
- 	 */
- 	if (!(name_list = dm_list_first(&dev->aliases))) {
--		/* Shouldn't happen */
--		log_error("Device open %s %d:%d has no path names.",
--			  dev_name(dev), (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
-+		log_error("Device open %d:%d has no path names.",
-+			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
- 		return 0;
- 	}
- 	name_sl = dm_list_item(name_list, struct dm_str_list);
-@@ -514,50 +522,34 @@ static int _scan_dev_open(struct device *dev)
- 		modestr = "ro";
- 	}
- 
--retry_open:
--
- 	fd = open(name, flags, 0777);
--
- 	if (fd < 0) {
- 		if ((errno == EBUSY) && (flags & O_EXCL)) {
- 			log_error("Can't open %s exclusively.  Mounted filesystem?",
- 				  dev_name(dev));
-+			return 0;
- 		} else {
--			int major, minor;
--
- 			/*
--			 * Shouldn't happen, if it does, print stat info to help figure
--			 * out what's wrong.
-+			 * drop name from dev->aliases and use verify_aliases to
-+			 * drop any other invalid aliases before retrying open with
-+			 * any remaining valid paths.
- 			 */
--
--			major = (int)MAJOR(dev->dev);
--			minor = (int)MINOR(dev->dev);
--
--			log_error("Device open %s %d:%d failed errno %d", name, major, minor, errno);
--
--			if (stat(name, &sbuf)) {
--				log_debug_devs("Device open %s %d:%d stat failed errno %d",
--					       name, major, minor, errno);
--			} else if (sbuf.st_rdev != dev->dev) {
--				log_debug_devs("Device open %s %d:%d stat %d:%d does not match.",
--					       name, major, minor,
--					       (int)MAJOR(sbuf.st_rdev), (int)MINOR(sbuf.st_rdev));
--			}
--
--			if (!retried) {
--				/*
--				 * FIXME: remove this, the theory for this retry is that
--				 * there may be a udev race that we can sometimes mask by
--				 * retrying.  This is here until we can figure out if it's
--				 * needed and if so fix the real problem.
--				 */
--				usleep(5000);
--				log_debug_devs("Device open %s retry", dev_name(dev));
--				retried = 1;
--				goto retry_open;
--			}
-+			log_debug("Drop alias for %d:%d failed open %s (%d)",
-+				  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), name, errno);
-+			dev_cache_failed_path(dev, name);
-+			dev_cache_verify_aliases(dev);
-+			goto next_name;
- 		}
--		return 0;
-+	}
-+
-+	/* Verify that major:minor from the path still match dev. */
-+	if ((fstat(fd, &sbuf) < 0) || (sbuf.st_rdev != dev->dev)) {
-+		log_warn("Invalid path %s for device %d:%d, trying different path.",
-+			 name, (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
-+		(void)close(fd);
-+		dev_cache_failed_path(dev, name);
-+		dev_cache_verify_aliases(dev);
-+		goto next_name;
- 	}
- 
- 	dev->flags |= DEV_IN_BCACHE;
-@@ -605,37 +597,6 @@ static int _scan_dev_close(struct device *dev)
- 	return 1;
- }
- 
--static void _drop_bad_aliases(struct device *dev)
--{
--	struct dm_str_list *strl, *strl2;
--	const char *name;
--	struct stat sbuf;
--	int major = (int)MAJOR(dev->dev);
--	int minor = (int)MINOR(dev->dev);
--	int bad;
--
--	dm_list_iterate_items_safe(strl, strl2, &dev->aliases) {
--		name = strl->str;
--		bad = 0;
--
--		if (stat(name, &sbuf)) {
--			bad = 1;
--			log_debug_devs("Device path check %d:%d %s stat failed errno %d",
--					major, minor, name, errno);
--		} else if (sbuf.st_rdev != dev->dev) {
--			bad = 1;
--			log_debug_devs("Device path check %d:%d %s stat %d:%d does not match.",
--				       major, minor, name,
--				       (int)MAJOR(sbuf.st_rdev), (int)MINOR(sbuf.st_rdev));
--		}
--
--		if (bad) {
--			log_debug_devs("Device path check %d:%d dropping path %s.", major, minor, name);
--			dev_cache_failed_path(dev, name);
--		}
--	}
--}
--
- // Like bcache_invalidate, only it throws any dirty data away if the
- // write fails.
- static void _invalidate_di(struct bcache *cache, int di)
-@@ -663,10 +624,8 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
- 	char headers_buf[HEADERS_BUF_SIZE];
- 	struct dm_list wait_devs;
- 	struct dm_list done_devs;
--	struct dm_list reopen_devs;
- 	struct device_list *devl, *devl2;
- 	struct block *bb;
--	int retried_open = 0;
- 	int scan_read_errors = 0;
- 	int scan_process_errors = 0;
- 	int scan_failed_count = 0;
-@@ -677,7 +636,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
- 
- 	dm_list_init(&wait_devs);
- 	dm_list_init(&done_devs);
--	dm_list_init(&reopen_devs);
- 
- 	log_debug_devs("Scanning %d devices for VG info", dm_list_size(devs));
- 
-@@ -701,9 +659,9 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
- 
- 		if (!_in_bcache(devl->dev)) {
- 			if (!_scan_dev_open(devl->dev)) {
--				log_debug_devs("Scan failed to open %s.", dev_name(devl->dev));
-+				log_debug_devs("Scan failed to open %d:%d %s.",
-+					       (int)MAJOR(devl->dev->dev), (int)MINOR(devl->dev->dev), dev_name(devl->dev));
- 				dm_list_del(&devl->list);
--				dm_list_add(&reopen_devs, &devl->list);
- 				devl->dev->flags |= DEV_SCAN_NOT_READ;
- 				continue;
- 			}
-@@ -787,41 +745,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
- 	if (!dm_list_empty(devs))
- 		goto scan_more;
- 
--	/*
--	 * We're done scanning all the devs.  If we failed to open any of them
--	 * the first time through, refresh device paths and retry.  We failed
--	 * to open the devs on the reopen_devs list.
--	 *
--	 * FIXME: it's not clear if or why this helps.
--	 */
--	if (!dm_list_empty(&reopen_devs)) {
--		if (retried_open) {
--			/* Don't try again. */
--			scan_failed_count += dm_list_size(&reopen_devs);
--			dm_list_splice(&done_devs, &reopen_devs);
--			goto out;
--		}
--		retried_open = 1;
--
--		dm_list_iterate_items_safe(devl, devl2, &reopen_devs) {
--			_drop_bad_aliases(devl->dev);
--
--			if (dm_list_empty(&devl->dev->aliases)) {
--				log_warn("WARNING: Scan ignoring device %d:%d with no paths.",
--					 (int)MAJOR(devl->dev->dev),
--					 (int)MINOR(devl->dev->dev));
--					 
--				dm_list_del(&devl->list);
--				lvmcache_del_dev(devl->dev);
--				scan_failed_count++;
--			}
--		}
--
--		/* Put devs that failed to open back on the original list to retry. */
--		dm_list_splice(devs, &reopen_devs);
--		goto scan_more;
--	}
--out:
- 	log_debug_devs("Scanned devices: read errors %d process errors %d failed %d",
- 			scan_read_errors, scan_process_errors, scan_failed_count);
- 
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2225&r2=1.2226
+
+--- LVM2/WHATS_NEW	2012/01/20 00:27:18	1.2225
++++ LVM2/WHATS_NEW	2012/01/20 03:56:18	1.2226
+@@ -1,6 +1,5 @@
+ Version 2.02.89 - 
+ ==================================
+-  Preserve exclusive activation of cluster mirror when converting.
+   Keep info about creation host and time for each logical volume.
+   Make error message hit when preallocated memlock memory exceeded clearer.
+   Use R lv_attr to indicate read-only activation of non-read-only device in lvs.
+@@ -192,7 +191,7 @@
+   Append 'm' attribute to pv_attr for missing PVs.
+   Annotate CLVMD_CMD_SYNC_NAMES in decode_cmd.
+   Remove enforcement of udev verification when using non-standard /dev location.
+-  Fix to preserve exclusive activation of mirror while up-converting.
++  Keep an exclusive mirror non-clustered if reloaded e.g. during conversion.
+   Reject allocation if number of extents is not divisible by area count.
+   Fix cluster mirror creation to work with new mirror allocation algorithm.
+   Ignore activation/verify_udev_operations if dm kernel driver vsn < 4.18.
 
 
