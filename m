@@ -1,7 +1,7 @@
 From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 20 Jan 2012 22:03:05 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv.c man/lvs.8.in
-Message-ID: <20120120220305.27433.qmail@sourceware.org>
+Date: 20 Jan 2012 22:03:49 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c tools ...
+Message-ID: <20120120220349.28245.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,73 +10,91 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2012-01-20 22:03:04
+Changes by:	snitzer at sourceware.org	2012-01-20 22:03:49
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/metadata   : lv.c 
-	man            : lvs.8.in 
+	lib/metadata   : lv_manip.c 
+	tools          : lvconvert.c 
 
 Log message:
-	Use m and M lv_attr to indicate that a snapshot merge failed in lvs.
+	Allow removal of an invalid snapshot that was to be merged on next activation.
 	
-	snapshot (m)erge failed, suspended snapshot (M)erge failed
+	Don't allow a user to merge an invalid snapshot.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2230&r2=1.2231
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvs.8.in.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2231&r2=1.2232
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.343&r2=1.344
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.178&r2=1.179
 
---- LVM2/WHATS_NEW	2012/01/20 22:02:04	1.2230
-+++ LVM2/WHATS_NEW	2012/01/20 22:03:03	1.2231
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2012/01/20 22:03:03	1.2231
++++ LVM2/WHATS_NEW	2012/01/20 22:03:48	1.2232
+@@ -1,5 +1,7 @@
  Version 2.02.89 - 
  ==================================
-+  Use m and M lv_attr to indicate that a snapshot merge failed in lvs.
++  Allow removal of an invalid snapshot that was to be merged on next activation.
++  Don't allow a user to merge an invalid snapshot.
+   Use m and M lv_attr to indicate that a snapshot merge failed in lvs.
    Differentiate between snapshot status of "Invalid" and "Merge failed".
    Lookup snapshot usage percent of origin volume when a snapshot is merging.
-   Update lvdisplay with backward compat. config opt. lvm1_compatible_display.
---- LVM2/lib/metadata/lv.c	2012/01/20 10:56:30	1.34
-+++ LVM2/lib/metadata/lv.c	2012/01/20 22:03:04	1.35
-@@ -441,14 +441,21 @@
- 			repstr[4] = 'd';	/* Inactive without table */
+--- LVM2/lib/metadata/lv_manip.c	2012/01/19 15:39:41	1.343
++++ LVM2/lib/metadata/lv_manip.c	2012/01/20 22:03:48	1.344
+@@ -3263,15 +3263,27 @@
+ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *lv,
+ 				const force_t force, unsigned level)
+ {
++	percent_t snap_percent;
+ 	struct dm_list *snh, *snht;
+ 	struct seg_list *sl, *tsl;
++	struct lvinfo info;
  
- 		/* Snapshot dropped? */
--		if (info.live_table && lv_is_cow(lv) &&
--		    (!lv_snapshot_percent(lv, &snap_percent) ||
--		     snap_percent == PERCENT_INVALID)) {
--			repstr[0] = toupper(repstr[0]);
--			if (info.suspended)
--				repstr[4] = 'S'; /* Susp Inv snapshot */
--			else
--				repstr[4] = 'I'; /* Invalid snapshot */
-+		if (info.live_table && lv_is_cow(lv)) {
-+			if (!lv_snapshot_percent(lv, &snap_percent) ||
-+			    snap_percent == PERCENT_INVALID) {
-+				repstr[0] = toupper(repstr[0]);
-+				if (info.suspended)
-+					repstr[4] = 'S'; /* Susp Inv snapshot */
-+				else
-+					repstr[4] = 'I'; /* Invalid snapshot */
-+			}
-+			else if (snap_percent == PERCENT_MERGE_FAILED) {
-+				if (info.suspended)
-+					repstr[4] = 'M'; /* Susp snapshot merge failed */
-+				else
-+					repstr[4] = 'm'; /* snapshot merge failed */
+ 	if (lv_is_cow(lv)) {
+-		/* A merging snapshot cannot be removed directly */
++		/*
++		 * A merging snapshot cannot be removed directly unless
++		 * it has been invalidated.
++		 */
+ 		if (lv_is_merging_cow(lv) && !level) {
+-			log_error("Can't remove merging snapshot logical volume \"%s\"",
+-				  lv->name);
+-			return 0;
++			if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) &&
++			    info.exists && info.live_table) {
++				if (lv_snapshot_percent(lv, &snap_percent) &&
++				    ((snap_percent != PERCENT_INVALID) &&
++				     (snap_percent != PERCENT_MERGE_FAILED))) {
++					log_error("Can't remove merging snapshot logical volume \"%s\"",
++						  lv->name);
++					return 0;
++				}
 +			}
  		}
+ 	}
  
- 		/*
---- LVM2/man/lvs.8.in	2012/01/12 16:58:44	1.19
-+++ LVM2/man/lvs.8.in	2012/01/20 22:03:04	1.20
-@@ -105,6 +105,7 @@
- fixed (m)inor
- .IP 5 3
- State: (a)ctive, (s)uspended, (I)nvalid snapshot, invalid (S)uspended snapshot,
-+snapshot (m)erge failed, suspended snapshot (M)erge failed,
- mapped (d)evice present without tables, mapped device present with (i)nactive table
- .IP 6 3
- device (o)pen
+--- LVM2/tools/lvconvert.c	2012/01/20 22:02:05	1.178
++++ LVM2/tools/lvconvert.c	2012/01/20 22:03:48	1.179
+@@ -1709,6 +1709,8 @@
+ {
+ 	struct lvconvert_params *lp = handle;
+ 	struct dm_list *failed_pvs;
++	struct lvinfo info;
++	percent_t snap_percent;
+ 
+ 	if (lv->status & LOCKED) {
+ 		log_error("Cannot convert locked LV %s", lv->name);
+@@ -1742,6 +1744,13 @@
+ 				  lv->name);
+ 			return ECMD_FAILED;
+ 		}
++	        if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0)
++		    && info.exists && info.live_table &&
++		    (!lv_snapshot_percent(lv, &snap_percent) ||
++		     snap_percent == PERCENT_INVALID)) {
++			log_error("Unable to merge invalidated snapshot LV \"%s\"", lv->name);
++			return ECMD_FAILED;
++		}
+ 		if (!archive(lv->vg)) {
+ 			stack;
+ 			return ECMD_FAILED;
 
 
