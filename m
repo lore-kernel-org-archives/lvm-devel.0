@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 11:32:43 -0000
-Subject: LVM2 ./WHATS_NEW lib/config/defaults.h
-Message-ID: <20120125113243.26975.qmail@sourceware.org>
+Date: 25 Jan 2012 13:06:58 -0000
+Subject: LVM2/daemons common/daemon-shared.c lvmetad/lv ...
+Message-ID: <20120125130658.9542.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,44 +10,112 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 11:32:42
+Changes by:	zkabelac at sourceware.org	2012-01-25 13:06:57
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/config     : defaults.h 
+	daemons/common : daemon-shared.c 
+	daemons/lvmetad: lvmetad-core.c 
 
 Log message:
-	Update verbose lvs  to print metadata_percent info
-	
-	Update lvs  -o fields in WHATS_NEW.
+	Clean var declarations to the front of the function
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2238&r2=1.2239
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.94&r2=1.95
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-shared.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.29&r2=1.30
 
---- LVM2/WHATS_NEW	2012/01/25 09:00:57	1.2238
-+++ LVM2/WHATS_NEW	2012/01/25 11:32:41	1.2239
-@@ -1,5 +1,10 @@
- Version 2.02.89 - 
- ==================================
-+  Thin pools have segment fields thin_count, zero, transaction_id.
-+  Each new created LV volume has creation lv_time and lv_host.
-+  Print data_percent and metadata_percent for verbose lvs.
-+  Thin pool support lvs data_percent, metadata_percent, data/metadata_lv.
-+  Thin volumes support lvs options data_percent, pool_lv.
-   Update lv_info to use -real layer for origin_only LVs.
-   Add lv_thin_pool_transaction_id to read the transaction_id value.
-   Use suspend|resume_origin_only when up-converting RAID, as mirrors do.
---- LVM2/lib/config/defaults.h	2012/01/20 16:59:59	1.94
-+++ LVM2/lib/config/defaults.h	2012/01/25 11:32:41	1.95
-@@ -155,7 +155,7 @@
- #define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
- #define DEFAULT_PVSEGS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
+--- LVM2/daemons/common/daemon-shared.c	2012/01/19 15:59:51	1.9
++++ LVM2/daemons/common/daemon-shared.c	2012/01/25 13:06:57	1.10
+@@ -57,6 +57,7 @@
+  * TODO use select on EWOULDBLOCK/EAGAIN to avoid useless spinning
+  */
+ int write_buffer(int fd, const char *buffer, int length) {
++	static const char terminate[] = "\n##\n";
+ 	int done = 0;
+ 	int written = 0;
+ write:
+@@ -73,7 +74,7 @@
+ 				break; /* done */
+ 		}
+ 	}
+-	const char *terminate = "\n##\n";
++
+ 	buffer = terminate;
+ 	length = 4;
+ 	written = 0;
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2012/01/16 08:25:32	1.29
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/01/25 13:06:57	1.30
+@@ -167,6 +167,10 @@
  
--#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
-+#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
- #define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid"
- #define DEFAULT_PVS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"
- #define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"
+ static response vg_lookup(lvmetad_state *s, request r)
+ {
++	struct dm_config_tree *cft;
++	struct dm_config_node *metadata, *n;
++	response res = { .buffer = NULL };
++
+ 	const char *uuid = daemon_request_str(r, "uuid", NULL),
+ 		   *name = daemon_request_str(r, "name", NULL);
+ 	debug("vg_lookup: uuid = %s, name = %s\n", uuid, name);
+@@ -185,15 +189,13 @@
+ 	if (!uuid)
+ 		return daemon_reply_simple("failed", "reason = %s", "VG not found", NULL);
+ 
+-	struct dm_config_tree *cft = lock_vg(s, uuid);
++	cft = lock_vg(s, uuid);
+ 	if (!cft || !cft->root) {
+ 		unlock_vg(s, uuid);
+ 		return daemon_reply_simple("failed", "reason = %s", "UUID not found", NULL);
+ 	}
+ 
+-	struct dm_config_node *metadata = cft->root, *n;
+-	response res = { .buffer = NULL };
+-
++	metadata = cft->root;
+ 	res.cft = dm_config_create();
+ 
+ 	/* The response field */
+@@ -284,9 +286,11 @@
+ /* A pvid map lock needs to be held. */
+ static int remove_metadata(lvmetad_state *s, const char *vgid)
+ {
++	struct dm_config_tree *old;
++	const char *oldname;
+ 	lock_vgs(s);
+-	struct dm_config_tree *old = dm_hash_lookup(s->vgs, vgid);
+-	const char *oldname = dm_hash_lookup(s->vg_names, vgid);
++	old = dm_hash_lookup(s->vgs, vgid);
++	oldname = dm_hash_lookup(s->vg_names, vgid);
+ 	unlock_vgs(s);
+ 
+ 	if (!old)
+@@ -310,15 +314,17 @@
+ 	struct dm_config_tree *cft;
+ 	struct dm_config_tree *old;
+ 	int retval = 0;
++	int seq;
++	int haveseq = -1;
++	const char *oldname = NULL;
++	const char *vgid;
+ 
+ 	lock_vgs(s);
+ 	old = dm_hash_lookup(s->vgs, _vgid);
+ 	lock_vg(s, _vgid);
+ 	unlock_vgs(s);
+ 
+-	int seq = dm_config_find_int(metadata, "metadata/seqno", -1);
+-	int haveseq = -1;
+-	const char *oldname = NULL;
++	seq = dm_config_find_int(metadata, "metadata/seqno", -1);
+ 
+ 	if (old) {
+ 		haveseq = dm_config_find_int(old->root, "metadata/seqno", -1);
+@@ -348,7 +354,7 @@
+ 	cft = dm_config_create();
+ 	cft->root = dm_config_clone_node(cft, metadata, 0);
+ 
+-	const char *vgid = dm_config_find_str(cft->root, "metadata/id", NULL);
++	vgid = dm_config_find_str(cft->root, "metadata/id", NULL);
+ 
+ 	if (!vgid || !name) {
+ 		debug("Name '%s' or uuid '%s' missing!\n", name, vgid);
 
 
