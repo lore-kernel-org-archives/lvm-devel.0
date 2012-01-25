@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 09:06:44 -0000
-Subject: LVM2/lib activate/activate.h activate/dev_mana ...
-Message-ID: <20120125090644.29586.qmail@sourceware.org>
+Date: 25 Jan 2012 09:10:14 -0000
+Subject: LVM2/lib/activate activate.c dev_manager.c
+Message-ID: <20120125091014.30183.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,97 +10,97 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 09:06:43
+Changes by:	zkabelac at sourceware.org	2012-01-25 09:10:14
 
 Modified files:
-	lib/activate   : activate.h dev_manager.c 
-	lib/thin       : thin.c 
+	lib/activate   : activate.c dev_manager.c 
 
 Log message:
-	Thin add messages only for activation tree
+	Thin add support for origin_only suspend of thin volumes
 	
-	Extend lv_activate_opts with bool flag to know for which purpose
-	dtree is created - and add message only for activation tree
-	(since that's the only place that may send them).
+	Pass in the origin_only flag also for thin volumes - but curently the flag
+	is not used to its best.
 	
-	Extend validation check for thin snapshot creation and test whether
-	active snapshot origin is suspended before its snapshot is created
-	(useful in recover scenarios) -  in this case also detect, whether
-	transaction has been already completed and avoid such suspend check
-	failure in that case.
+	FIXME: achieve the state where only  thin volume snapshot origin is
+	suspended without its childrens -  let's explore whether this may
+	happen automatically inside libdm (might be generic for other targets).
+	So the code would not need to annotate the node for this.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.265&r2=1.266
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.236&r2=1.237
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.266&r2=1.267
 
---- LVM2/lib/activate/activate.h	2012/01/25 08:48:43	1.95
-+++ LVM2/lib/activate/activate.h	2012/01/25 09:06:43	1.96
-@@ -35,6 +35,7 @@
- 	int origin_only;
- 	int no_merging;
- 	int real_pool;
-+	int is_activate;
- 	unsigned revert;
- 	unsigned read_only;
- };
---- LVM2/lib/activate/dev_manager.c	2012/01/25 08:48:43	1.265
-+++ LVM2/lib/activate/dev_manager.c	2012/01/25 09:06:43	1.266
-@@ -1974,6 +1974,8 @@
- 	char *dlid;
- 	int r = 0;
+--- LVM2/lib/activate/activate.c	2012/01/25 09:00:18	1.236
++++ LVM2/lib/activate/activate.c	2012/01/25 09:10:13	1.237
+@@ -1344,7 +1344,7 @@
+ 		goto_out;
  
-+	laopts->is_activate = (action == ACTIVATE);
-+
- 	if (!(dtree = _create_partial_dtree(dm, lv, laopts->origin_only)))
+ 	/* Ignore origin_only unless LV is origin in both old and new metadata */
+-	if (!lv_is_origin(lv) || !lv_is_origin(lv_pre))
++	if (!lv_is_thin_volume(lv) && !(lv_is_origin(lv) && lv_is_origin(lv_pre)))
+ 		laopts->origin_only = 0;
+ 
+ 	if (test_mode()) {
+--- LVM2/lib/activate/dev_manager.c	2012/01/25 09:06:43	1.266
++++ LVM2/lib/activate/dev_manager.c	2012/01/25 09:10:14	1.267
+@@ -1201,8 +1201,13 @@
+ 	uint32_t s;
+ 	struct seg_list *sl;
+ 	struct lv_segment *seg = first_seg(lv);
++	/* FIXME: Resolve skip_childrens
++	struct dm_tree_node *thin_node;
++	const char *uuid;
++	*/
+ 
+-	if (!origin_only && !_add_dev_to_dtree(dm, dtree, lv, NULL))
++	if ((!origin_only || lv_is_thin_volume(lv)) &&
++	    !_add_dev_to_dtree(dm, dtree, lv, NULL))
  		return_0;
  
---- LVM2/lib/thin/thin.c	2012/01/25 08:51:29	1.43
-+++ LVM2/lib/thin/thin.c	2012/01/25 09:06:43	1.44
-@@ -223,6 +223,8 @@
- 	char *metadata_dlid, *pool_dlid;
- 	const struct lv_thin_message *lmsg;
- 	const struct logical_volume *origin;
-+	struct lvinfo info;
-+	uint64_t transaction_id = 0;
- 
- 	if (!laopts->real_pool) {
- 		if (!(pool_dlid = build_dm_uuid(mem, seg->lv->lvid.s, "tpool"))) {
-@@ -257,10 +259,35 @@
- 					       seg->zero_new_blocks ? 0 : 1))
+ 	/* FIXME Can we avoid doing this every time? */
+@@ -1233,17 +1238,29 @@
+ 	    !_add_partial_replicator_to_dtree(dm, dtree, lv))
  		return_0;
  
-+	/*
-+	 * Add messages only for activation tree.
-+	 * Otherwise avoid checking for existence of suspended origin.
-+	 * Also transation_id is checked only when snapshot origin is active.
-+	 * (This might change later)
-+	 */
-+	if (!laopts->is_activate)
-+		return 1;
++	if (lv_is_thin_volume(lv)) {
++		/* FIXME: Resolve skip_childrens
++		if (origin_only) {
++			if (!(uuid = build_dm_uuid(dm->mem, lv->lvid.s, NULL)))
++				return_0;
++			if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)))
++				dm_tree_node_skip_childrens(thin_node, 1);
++		}
++		*/
++		/* Add thin pool LV layer */
++		lv = seg->pool_lv;
++		seg = first_seg(lv);
++	}
 +
- 	dm_list_iterate_items(lmsg, &seg->thin_messages) {
- 		switch (lmsg->type) {
- 		case DM_THIN_MESSAGE_CREATE_THIN:
- 			origin = first_seg(lmsg->u.lv)->origin;
-+			/* Check if the origin is suspended */
-+			if (origin && lv_info(cmd, origin, 0, &info, 0, 0) &&
-+			    info.exists && !info.suspended) {
-+				/* Origin is not suspended, but the transaction may have been
-+				 * already transfered, so test for transaction_id and
-+				 * allow to pass in the message for dmtree processing
-+				 * so it will skip all messages later.
-+				 */
-+				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
-+					return_0; /* Thin pool should exist and work */
-+				if (transaction_id != seg->transaction_id) {
-+					log_error("Can't create snapshot %s as origin %s is not suspended.",
-+						  lmsg->u.lv->name, origin->name);
-+					return 0;
-+				}
-+			}
- 			log_debug("Thin pool create_%s %s.", (!origin) ? "thin" : "snap", lmsg->u.lv->name);
- 			if (!dm_tree_node_add_thin_pool_message(node,
- 								(!origin) ? lmsg->type : DM_THIN_MESSAGE_CREATE_SNAP,
+ 	if (lv_is_thin_pool(lv)) {
+-		if (!_add_lv_to_dtree(dm, dtree, seg->metadata_lv, origin_only))
++		if (!_add_lv_to_dtree(dm, dtree, seg->metadata_lv, 0))
+ 			return_0;
+ 		/* FIXME code from _create_partial_dtree() should be moved here */
+-		if (!_add_lv_to_dtree(dm, dtree, seg_lv(seg, 0), origin_only))
++		if (!_add_lv_to_dtree(dm, dtree, seg_lv(seg, 0), 0))
+ 			return_0;
+ 		if (!_add_dev_to_dtree(dm, dtree, lv, _thin_layer))
+ 			return_0;
+-	} else if (lv_is_thin_volume(lv) &&
+-		   !_add_lv_to_dtree(dm, dtree, seg->pool_lv, origin_only))
+-		return_0;
++	}
+ 
+ 	return 1;
+ }
+@@ -1260,7 +1277,7 @@
+ 		return NULL;
+ 	}
+ 
+-	if (!_add_lv_to_dtree(dm, dtree, lv, lv_is_origin(lv) ? origin_only : 0))
++	if (!_add_lv_to_dtree(dm, dtree, lv, (lv_is_origin(lv) || lv_is_thin_volume(lv)) ? origin_only : 0))
+ 		goto_bad;
+ 
+ 	/* Add any snapshots of this LV */
 
 
