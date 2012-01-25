@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 24 Jan 2012 14:54:00 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120124145400.9008.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Jan 2012 08:46:22 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20120125084622.21534.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,75 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-01-24 14:53:59
+Changes by:	zkabelac at sourceware.org	2012-01-25 08:46:22
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Caller is still entitled to reference an LV that's unlinked, so don't
-	tamper with struct contents.
+	Thin send messages on activation resume code path
+	
+	Using PRELOAD part would lead to problems when the problem
+	would happen before vg_write and vg_commit.
+	Also this change is necessary for snapshot creation sequence.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.347&r2=1.348
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.151&r2=1.152
 
---- LVM2/lib/metadata/lv_manip.c	2012/01/24 14:15:52	1.347
-+++ LVM2/lib/metadata/lv_manip.c	2012/01/24 14:53:59	1.348
-@@ -3111,8 +3111,6 @@
+--- LVM2/libdm/libdm-deptree.c	2012/01/23 17:46:31	1.151
++++ LVM2/libdm/libdm-deptree.c	2012/01/25 08:46:21	1.152
+@@ -1768,6 +1768,17 @@
+ 		}
+ 	}
  
- 	dm_list_del(&lvl->list);
++	/*
++	 * FIXME: Implement delayed error reporting
++	 * activation should be stopped only in the case,
++	 * the submission of transation_id message fails,
++	 * resume should continue further, just whole command
++	 * has to report failure.
++	 */
++	if (r && dnode->props.send_messages &&
++	    !(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len)))
++		stack;
++
+ 	handle = NULL;
  
--	lv->status = 0;   /* Reset */
+ 	return r;
+@@ -2434,11 +2445,6 @@
+ 
+ 		/* Update cached info */
+ 		child->info = newinfo;
+-		if (child->props.send_messages &&
+-		    !(r = _node_send_messages(child, uuid_prefix, uuid_prefix_len))) {
+-			stack;
+-			continue;
+-		}
+ 		/*
+ 		 * Prepare for immediate synchronization with udev and flush all stacked
+ 		 * dev node operations if requested by immediate_dev_node property. But
+@@ -2448,23 +2454,12 @@
+ 			update_devs_flag = 1;
+ 	}
+ 
+-	if (r && dnode->props.send_messages &&
+-	    !(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len)))
+-		stack;
 -
- 	return 1;
+ 	if (update_devs_flag) {
+ 		if (!dm_udev_wait(dm_tree_get_cookie(dnode)))
+ 			stack;
+ 		dm_tree_set_cookie(dnode, 0);
+ 	}
+ 
+-	if (r && !_node_send_messages(dnode, uuid_prefix, uuid_prefix_len)) {
+-		stack;
+-		if (!(dm_tree_deactivate_children(dnode, uuid_prefix, uuid_prefix_len)))
+-			log_error("Failed to deactivate %s", dnode->name);
+-		r = 0;
+-	}
+-
+ 	return r;
  }
  
 
