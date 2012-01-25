@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 11:27:43 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120125112743.25946.qmail@sourceware.org>
+Date: 25 Jan 2012 11:32:43 -0000
+Subject: LVM2 ./WHATS_NEW lib/config/defaults.h
+Message-ID: <20120125113243.26975.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,83 +10,44 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 11:27:42
+Changes by:	zkabelac at sourceware.org	2012-01-25 11:32:42
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	.              : WHATS_NEW 
+	lib/config     : defaults.h 
 
 Log message:
-	Thin clear stacked message for thin pool
+	Update verbose lvs  to print metadata_percent info
 	
-	Before removing thin pool LV always make sure, stacked message
-	for previous run are cleared - but allow to remove any
-	device that should have been created
-	(i.e. creation of snapshot failed - so the message for snapshot creation
-	may be replaced with delete message within unfinished transaction).
-	
-	Also commit messages after lv remove - so free space is released in pool.
+	Update lvs  -o fields in WHATS_NEW.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.352&r2=1.353
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2238&r2=1.2239
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/defaults.h.diff?cvsroot=lvm2&r1=1.94&r2=1.95
 
---- LVM2/lib/metadata/lv_manip.c	2012/01/25 09:15:44	1.352
-+++ LVM2/lib/metadata/lv_manip.c	2012/01/25 11:27:42	1.353
-@@ -527,10 +527,6 @@
- 				return_0;
+--- LVM2/WHATS_NEW	2012/01/25 09:00:57	1.2238
++++ LVM2/WHATS_NEW	2012/01/25 11:32:41	1.2239
+@@ -1,5 +1,10 @@
+ Version 2.02.89 - 
+ ==================================
++  Thin pools have segment fields thin_count, zero, transaction_id.
++  Each new created LV volume has creation lv_time and lv_host.
++  Print data_percent and metadata_percent for verbose lvs.
++  Thin pool support lvs data_percent, metadata_percent, data/metadata_lv.
++  Thin volumes support lvs options data_percent, pool_lv.
+   Update lv_info to use -real layer for origin_only LVs.
+   Add lv_thin_pool_transaction_id to read the transaction_id value.
+   Use suspend|resume_origin_only when up-converting RAID, as mirrors do.
+--- LVM2/lib/config/defaults.h	2012/01/20 16:59:59	1.94
++++ LVM2/lib/config/defaults.h	2012/01/25 11:32:41	1.95
+@@ -155,7 +155,7 @@
+ #define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
+ #define DEFAULT_PVSEGS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
  
- 			if (seg->pool_lv) {
--                                /* For now, clear stacked messages here */
--				if (!update_pool_lv(seg->pool_lv, 1))
--					return_0;
--
- 				if (!detach_pool_lv(seg))
- 					return_0;
- 			}
-@@ -3142,6 +3138,7 @@
- 	struct logical_volume *format1_origin = NULL;
- 	int format1_reload_required = 0;
- 	int visible;
-+	struct logical_volume *pool_lv = NULL;
- 
- 	vg = lv->vg;
- 
-@@ -3176,7 +3173,8 @@
- 		log_error("Can't remove logical volume %s used by a thin pool.",
- 			  lv->name);
- 		return 0;
--	}
-+	} else if (lv_is_thin_volume(lv))
-+		pool_lv = first_seg(lv)->pool_lv;
- 
- 	if (lv->status & LOCKED) {
- 		log_error("Can't remove locked LV %s", lv->name);
-@@ -3222,6 +3220,13 @@
- 		return 0;
- 	}
- 
-+	/* Clear thin pool stacked messages */
-+	if (pool_lv && !pool_has_message(first_seg(pool_lv), lv, 0) &&
-+	    !update_pool_lv(pool_lv, 1)) {
-+		log_error("Failed to update thin pool %s.", pool_lv->name);
-+		return 0;
-+	}
-+
- 	visible = lv_is_visible(lv);
- 
- 	log_verbose("Releasing logical volume \"%s\"", lv->name);
-@@ -3256,6 +3261,13 @@
- 		return 0;
- 	}
- 
-+	/* Release unneeded blocks in thin pool */
-+	/* TODO: defer when multiple LVs relased at once */
-+	if (pool_lv && !update_pool_lv(pool_lv, 1)) {
-+		log_error("Failed to update thin pool %s.", pool_lv->name);
-+		return 0;
-+	}
-+
- 	backup(vg);
- 
- 	if (visible)
+-#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
++#define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid"
+ #define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid"
+ #define DEFAULT_PVS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"
+ #define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"
 
 
