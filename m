@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 21:43:51 -0000
-Subject: LVM2 ./WHATS_NEW lib/format_text/import_vsn1.c
-Message-ID: <20120125214351.28803.qmail@sourceware.org>
+Date: 25 Jan 2012 09:14:26 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20120125091426.31531.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,43 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 21:43:51
+Changes by:	zkabelac at sourceware.org	2012-01-25 09:14:25
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/format_text: import_vsn1.c 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Check for correctness of uint64 value if exists
+	Thin use  suspend/resume_lv_origin
+	
+	Use origin_only support for thin volume when thin snapshot is created.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2240&r2=1.2241
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.98&r2=1.99
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.350&r2=1.351
 
---- LVM2/WHATS_NEW	2012/01/25 13:10:26	1.2240
-+++ LVM2/WHATS_NEW	2012/01/25 21:43:51	1.2241
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Check for correctness of uint64 dev_size value.
-   Rename origin_only parameter to more generic flag use_layer for lv_info().
-   Thin pools have segment fields thin_count, zero, transaction_id.
-   Each new created LV volume has creation lv_time and lv_host.
---- LVM2/lib/format_text/import_vsn1.c	2012/01/19 15:31:45	1.98
-+++ LVM2/lib/format_text/import_vsn1.c	2012/01/25 21:43:51	1.99
-@@ -216,7 +216,11 @@
- 		pv->status |= MISSING_PV;
- 
- 	/* Late addition */
--	_read_uint64(pvn, "dev_size", &pv->size);
-+	if (dm_config_has_node(pvn, "dev_size") &&
-+	    !_read_uint64(pvn, "dev_size", &pv->size)) {
-+		log_error("Couldn't read dev size for physical volume.");
-+		return 0;
-+	}
- 
- 	if (!_read_uint64(pvn, "pe_start", &pv->pe_start)) {
- 		log_error("Couldn't read extent size for physical volume.");
+--- LVM2/lib/metadata/lv_manip.c	2012/01/25 09:02:35	1.350
++++ LVM2/lib/metadata/lv_manip.c	2012/01/25 09:14:25	1.351
+@@ -4354,16 +4354,17 @@
+ 					  "the autoextend threshold (%d%%).", percent);
+ 				goto revert_new_lv;
+ 			}
+-			if (!suspend_lv(cmd, org)) {
+-				log_error("Failed to suspend thin origin %s.",
++			if (!suspend_lv_origin(cmd, org)) {
++				log_error("Failed to suspend thin snapshot origin %s.",
+ 					  org->name);
+ 				goto revert_new_lv;
+-			} else if (!resume_lv(cmd, org)) {
+-				log_error("Failed to resume thin origin %s.",
++			}
++			if (!resume_lv_origin(cmd, org)) { /* deptree updates thin-pool */
++				log_error("Failed to resume thin snapshot origin %s.",
+ 					  org->name);
+ 				goto revert_new_lv;
+ 			}
+-			/* At this point snapshot is active in kernel thin mda */
++			/* At this point remove pool messages, snapshot is active */
+ 			if (!update_pool_lv(first_seg(org)->pool_lv, 0)) {
+ 				stack;
+ 				goto deactivate_and_revert_new_lv;
 
 
