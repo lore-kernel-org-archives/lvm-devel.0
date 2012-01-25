@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 21:30:28 -0000
-Subject: LVM2/daemons/common daemon-server.c
-Message-ID: <20120125213028.3306.qmail@sourceware.org>
+Date: 25 Jan 2012 21:31:59 -0000
+Subject: LVM2/daemons/common daemon-client.c
+Message-ID: <20120125213159.3552.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,41 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 21:30:28
+Changes by:	zkabelac at sourceware.org	2012-01-25 21:31:59
 
 Modified files:
-	daemons/common : daemon-server.c 
+	daemons/common : daemon-client.c 
 
 Log message:
-	Check and print perror for syscalls
+	Ensure reply struct has all fields defined
+	
+	Reply is returned by value.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/daemons/common/daemon-server.c	2012/01/15 10:33:41	1.15
-+++ LVM2/daemons/common/daemon-server.c	2012/01/25 21:30:27	1.16
-@@ -129,8 +129,10 @@
+--- LVM2/daemons/common/daemon-client.c	2012/01/15 15:16:50	1.10
++++ LVM2/daemons/common/daemon-client.c	2012/01/25 21:31:59	1.11
+@@ -34,7 +34,7 @@
  
- error:
- 	if (fd >= 0) {
--		close(fd);
--		unlink(s.socket_path);
-+		if (close(fd))
-+			perror("close failed");
-+		if (unlink(s.socket_path))
-+			perror("unlink failed");
- 		fd = -1;
- 	}
- 	goto out;
-@@ -364,7 +366,8 @@
- 	}
+ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
+ {
+-	daemon_reply reply;
++	daemon_reply reply = { .cft = NULL };
+ 	assert(h.socket_fd >= 0);
  
- 	if (s.socket_fd >= 0)
--		unlink(s.socket_path);
-+		if (unlink(s.socket_path))
-+			perror("unlink error");
- 
- 	if (s.daemon_fini)
- 		s.daemon_fini(&s);
+ 	if (!rq.buffer) {
 
 
