@@ -1,50 +1,70 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  1 Mar 2016 13:03:14 +0000 (UTC)
-Subject: master - coverity: eliminate DEADCODE
-Message-ID: <20160301130314.70E0360DAC@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Jan 2012 21:47:18 -0000
+Subject: LVM2/libdm libdm-common.c
+Message-ID: <20120125214718.29653.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=36d0dcef38ec3ce89f3c13be272efc69f981b207
-Commit:        36d0dcef38ec3ce89f3c13be272efc69f981b207
-Parent:        8173c2ff9af805a1f8eb79fb4bd223622f79ad0d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 1 13:58:15 2016 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 1 14:02:43 2016 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-01-25 21:47:18
 
-coverity: eliminate DEADCODE
+Modified files:
+	libdm          : libdm-common.c 
 
-Coverity notice this cannot be NULL: cur = &dms->regions[*cur_r]
-so avoid NULL checking and simplify form.
----
- libdm/libdm-stats.c |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+Log message:
+	Fix resource leak of file handle
+	
+	Introduces when added dm_device_get_name.
+	Close file handle in all error paths.
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 82d3fa5..1dce3eb 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -957,15 +957,13 @@ bad:
- static void _stats_walk_next(const struct dm_stats *dms, int region,
- 			     uint64_t *cur_r, uint64_t *cur_a)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.133&r2=1.134
+
+--- LVM2/libdm/libdm-common.c	2012/01/17 14:36:58	1.133
++++ LVM2/libdm/libdm-common.c	2012/01/25 21:47:18	1.134
+@@ -1189,7 +1189,8 @@
+ static int _sysfs_get_dm_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
  {
--	struct dm_stats_region *cur = NULL;
-+	struct dm_stats_region *cur;
- 	int present;
+ 	char *sysfs_path, *temp_buf;
+-	FILE *fp;
++	FILE *fp = NULL;
++	int r = 0;
  
- 	if (!dms || !dms->regions)
- 		return;
+ 	if (!(sysfs_path = dm_malloc(PATH_MAX)) ||
+ 	    !(temp_buf = dm_malloc(PATH_MAX))) {
+@@ -1219,23 +1220,21 @@
+ 	}
+ 	temp_buf[strlen(temp_buf) - 1] = '\0';
  
--	if (!(cur = &dms->regions[*cur_r]))
--		return;
+-	if (fclose(fp))
+-		log_sys_error("fclose", sysfs_path);
 -
-+	cur = dms->regions + *cur_r;
- 	present = _stats_region_present(cur);
+ 	if (buf_size < strlen(temp_buf) + 1) {
+ 		log_error("_sysfs_get_dm_name: supplied buffer too small");
+ 		goto error;
+ 	}
  
- 	if (region && present)
+ 	strncpy(buf, temp_buf, buf_size);
+-	dm_free(sysfs_path);
+-	dm_free(temp_buf);
+-	return 1;
+-
++	r = 1;
+ error:
++	if (fp && fclose(fp))
++		log_sys_error("fclose", sysfs_path);
++
+ 	dm_free(sysfs_path);
+ 	dm_free(temp_buf);
+-	return 0;
++
++	return r;
+ }
+ 
+ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
 
 
