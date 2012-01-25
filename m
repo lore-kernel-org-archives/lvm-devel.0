@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 25 Jan 2012 17:14:57 -0000
-Subject: LVM2/lib/display display.c
-Message-ID: <20120125171457.1556.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Jan 2012 21:30:28 -0000
+Subject: LVM2/daemons/common daemon-server.c
+Message-ID: <20120125213028.3306.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-01-25 17:14:56
+Changes by:	zkabelac at sourceware.org	2012-01-25 21:30:28
 
 Modified files:
-	lib/display    : display.c 
+	daemons/common : daemon-server.c 
 
 Log message:
-	& -> &&
+	Check and print perror for syscalls
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/display/display.c.diff?cvsroot=lvm2&r1=1.126&r2=1.127
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/lib/display/display.c	2012/01/24 00:55:03	1.126
-+++ LVM2/lib/display/display.c	2012/01/25 17:14:56	1.127
-@@ -487,7 +487,7 @@
- 		  lv->name,
- 		  lv->vg->name,
- 		  ((lv->status & (LVM_READ | LVM_WRITE)) >> 8) |
--		  ((inkernel & info.read_only) ? 4 : 0), inkernel ? 1 : 0,
-+		  ((inkernel && info.read_only) ? 4 : 0), inkernel ? 1 : 0,
- 		  /* FIXME lv->lv_number,  */
- 		  inkernel ? info.open_count : 0, lv->size, lv->le_count,
- 		  /* FIXME Add num allocated to struct! lv->lv_allocated_le, */
+--- LVM2/daemons/common/daemon-server.c	2012/01/15 10:33:41	1.15
++++ LVM2/daemons/common/daemon-server.c	2012/01/25 21:30:27	1.16
+@@ -129,8 +129,10 @@
+ 
+ error:
+ 	if (fd >= 0) {
+-		close(fd);
+-		unlink(s.socket_path);
++		if (close(fd))
++			perror("close failed");
++		if (unlink(s.socket_path))
++			perror("unlink failed");
+ 		fd = -1;
+ 	}
+ 	goto out;
+@@ -364,7 +366,8 @@
+ 	}
+ 
+ 	if (s.socket_fd >= 0)
+-		unlink(s.socket_path);
++		if (unlink(s.socket_path))
++			perror("unlink error");
+ 
+ 	if (s.daemon_fini)
+ 		s.daemon_fini(&s);
 
 
