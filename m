@@ -1,120 +1,137 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Thu, 17 Dec 2020 01:32:44 -0000
-Subject: [PATCH] dev_name(): add to judge whether the dev->aliases list is empty
-In-Reply-To: <61d26ea0-0e02-3384-e5c7-f8e1ae5b35cd@redhat.com>
-References: <4f9d1853-8980-511e-3431-c0d549b18a5f@huawei.com>
-	<61d26ea0-0e02-3384-e5c7-f8e1ae5b35cd@redhat.com>
-Message-ID: <6abd5495-4498-e5cd-f8fa-0028420eb841@huawei.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Jan 2012 13:12:59 -0000
+Subject: LVM2/lib activate/activate.c mm/memlock.c
+Message-ID: <20120125131259.24480.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-01-25 13:12:59
 
-The LVM version we currently use is 2.02.187, and there is still lvmetad.
-We added a print log to lvmetad_pvscan_single and called the dev_name function,
-and then triggered the following segmentation fault.
+Modified files:
+	lib/activate   : activate.c 
+	lib/mm         : memlock.c 
 
+Log message:
+	Fix compilation with disabled devmapper
+	
+	During release preparation things has changed, so making sure
+	we are compilable with --disable-devmapper.
 
-Program terminated with signal SIGSEGV, Segmentation fault.
-#0  strlen () at ../sysdeps/aarch64/strlen.S:94
-94		ldp	data1, data2, [srcin]
-(gdb) bt
-#0  strlen () at ../sysdeps/aarch64/strlen.S:94
-#1  0x0000ffffa4de5ae0 in _IO_vfprintf_internal (s=0xaaaae1ce7e20, format=0xaaaad282e0b8 "No PV info found on %s for PVID %s.", ap=...) at vfprintf.c:1638
-#2  0x0000ffffa4e7e790 in ___vfprintf_chk (fp=fp at entry=0xaaaae1ce7e20, flag=flag at entry=1, format=format at entry=0xaaaad282e0b8 "No PV info found on %s for PVID %s.", ap=...) at vfprintf_chk.c:40
-#3  0x0000aaaad273df48 in vfprintf (__ap=..., __fmt=0xaaaad282e0b8 "No PV info found on %s for PVID %s.", __stream=0xaaaae1ce7e20) at /usr/include/bits/stdio2.h:130
-#4  _vprint_log (level=<optimized out>, level at entry=65540, file=file at entry=0xaaaad282c780 "cache/lvmetad.c", line=line at entry=2308, dm_errno_or_class=dm_errno_or_class at entry=0,
-    format=format at entry=0xaaaad282e0b8 "No PV info found on %s for PVID %s.", orig_ap=...) at log/log.c:633
-#5  0x0000aaaad273e380 in print_log (level=level at entry=65540, file=file at entry=0xaaaad282c780 "cache/lvmetad.c", line=line at entry=2308, dm_errno_or_class=dm_errno_or_class at entry=0,
-    format=format at entry=0xaaaad282e0b8 "No PV info found on %s for PVID %s.") at log/log.c:726
-#6  0x0000aaaad27afde4 in lvmetad_pvscan_single (cmd=cmd at entry=0xaaaae1ce2420, dev=dev at entry=0xaaaae1e38460, found_vgnames=found_vgnames at entry=0xffffc32f3568, changed_vgnames=changed_vgnames at entry=0xffffc32f3588)
-    at cache/lvmetad.c:2308
-#7  0x0000aaaad26e2bc0 in _pvscan_cache (argv=<optimized out>, argc=<optimized out>, cmd=0xaaaae1ce2420) at pvscan.c:693
-#8  pvscan (cmd=0xaaaae1ce2420, argc=<optimized out>, argv=<optimized out>) at pvscan.c:834
-#9  0x0000aaaad26d8378 in lvm_run_command (cmd=cmd at entry=0xaaaae1ce2420, argc=<optimized out>, argc at entry=5, argv=<optimized out>, argv at entry=0xffffc32f3a10) at lvmcmdline.c:3010
-#10 0x0000aaaad26d9430 in lvm2_main (argc=5, argv=0xffffc32f3a10) at lvmcmdline.c:3539
-#11 0x0000ffffa4dbef40 in __libc_start_main (main=0x0, argc=0, argv=0x0, init=<optimized out>, fini=<optimized out>, rtld_fini=<optimized out>, stack_end=<optimized out>) at ../csu/libc-start.c:308
-#12 0x0000aaaad26b6f94 in _start ()
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.239&r2=1.240
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mm/memlock.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
-
-int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
-			  struct dm_list *found_vgnames,
-			  struct dm_list *changed_vgnames)
-{
-	struct label *label;
-	struct lvmcache_info *info;
-	struct _lvmetad_pvscan_baton baton;
-	const struct format_type *fmt;
-	/* Create a dummy instance. */
-	struct format_instance_ctx fic = { .type = 0 };
-
-	log_debug_lvmetad("Scan metadata from dev %s", dev_name(dev));
-
-	if (!lvmetad_used()) {
-		log_error("Cannot proceed since lvmetad is not active.");
-		return 0;
-	}
-
-	if (udev_dev_is_mpath_component(dev)) {
-		log_debug("Ignore multipath component for pvscan.");
-		return 1;
-	}
-
-	label_read(dev);
-	if (!(info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
-		log_print_unless_silent("No PV info found on %s for PVID %s.", dev_name(dev), dev->pvid[0] ? dev->pvid : "");	// the print function we added
-		if (!lvmetad_pv_gone_by_dev(dev))
-			goto_bad;
-		return 1;
-	}
-	...
-
-
-? 2020/12/16 20:07, Zdenek Kabelac ??:
-> Dne 16. 12. 20 v 10:35 Wu Guanghao napsal(a):
->> If dev->aliases linked list is empty, then directly obtain the str address
->> of dm_str_list saved in dev->aliases.n, an unknown address will be returned,
->> which may cause segfault
->>
-> 
-> Hi
-> 
-> 
-> Do you have a triggering example case ?
-> 
-> It seems to me this patch is just hiding bug from other place.
-> 
-> Eventually try to pick-up info how you were able to hit this
-> coredump.
-> 
-> Zdenek
-> 
->> Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
->> ---
->> ? lib/device/dev-cache.c | 4 ++--
->> ? 1 file changed, 2 insertions(+), 2 deletions(-)
->>
->> diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
->> index d5f18ff..9441924 100644
->> --- a/lib/device/dev-cache.c
->> +++ b/lib/device/dev-cache.c
->> @@ -1629,8 +1629,8 @@ int dev_fd(struct device *dev)
->>
->> ? const char *dev_name(const struct device *dev)
->> ? {
->> -??? return (dev && dev->aliases.n) ? dm_list_item(dev->aliases.n, struct dm_str_list)->str :
->> -??????? unknown_device_name();
->> +??? return (dev && dev->aliases.n && !dm_list_empty(&dev->aliases)) ? \
->> +??????? dm_list_item(dev->aliases.n, struct dm_str_list)->str : unknown_device_name();
->> ? }
->>
->> ? bool dev_cache_has_md_with_end_superblock(struct dev_types *dt)
->>
-> 
-> .
-
+--- LVM2/lib/activate/activate.c	2012/01/25 13:10:26	1.239
++++ LVM2/lib/activate/activate.c	2012/01/25 13:12:59	1.240
+@@ -147,7 +147,7 @@
+ {
+ 	return 0;
+ }
+-int lvm_dm_prefix_check(const char *sysfs_dir, int major, int minor, const char *prefix)
++int lvm_dm_prefix_check(int major, int minor, const char *prefix)
+ {
+ 	return 0;
+ }
+@@ -161,6 +161,11 @@
+ {
+ 	return 0;
+ }
++int lv_check_not_in_use(struct cmd_context *cmd __attribute__((unused)),
++			struct logical_volume *lv, struct lvinfo *info)
++{
++        return 0;
++}
+ int lv_snapshot_percent(const struct logical_volume *lv, percent_t *percent)
+ {
+ 	return 0;
+@@ -170,6 +175,25 @@
+ {
+ 	return 0;
+ }
++int lv_raid_percent(const struct logical_volume *lv, percent_t *percent)
++{
++	return 0;
++}
++int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
++			 percent_t *percent)
++{
++	return 0;
++}
++int lv_thin_percent(const struct logical_volume *lv, int mapped,
++		    percent_t *percent)
++{
++	return 0;
++}
++int lv_thin_pool_transaction_id(const struct logical_volume *lv,
++				uint64_t *transaction_id)
++{
++	return 0;
++}
+ int lvs_in_vg_activated(struct volume_group *vg)
+ {
+ 	return 0;
+@@ -184,7 +208,7 @@
+ 	return 1;
+ }
+ *******/
+-int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only)
++int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only, unsigned exclusive)
+ {
+ 	return 1;
+ }
+@@ -260,10 +284,30 @@
+ 	return 1;
+ }
+ int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
+-			   struct lv_activate_opts *laopts, int monitor)
++			   const struct lv_activate_opts *laopts, int monitor)
+ {
+ 	return 1;
+ }
++/* fs.c */
++void fs_unlock(void)
++{
++}
++/* dev_manager.c */
++int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
++		   struct dm_tree_node *node, uint32_t start_area,
++		   uint32_t areas)
++{
++        return 0;
++}
++int device_is_usable(struct device *dev)
++{
++        return 0;
++}
++int lv_has_target_type(struct dm_pool *mem, struct logical_volume *lv,
++		       const char *layer, const char *target_type)
++{
++        return 0;
++}
+ #else				/* DEVMAPPER_SUPPORT */
+ 
+ static int _activation = 1;
+--- LVM2/lib/mm/memlock.c	2012/01/12 18:29:08	1.48
++++ LVM2/lib/mm/memlock.c	2012/01/25 13:12:59	1.49
+@@ -38,12 +38,12 @@
+ 	return;
+ }
+ 
+-void critical_section_inc(struct cmd_context *cmd)
++void critical_section_inc(struct cmd_context *cmd, const char *reason)
+ {
+ 	return;
+ }
+ 
+-void critical_section_dec(struct cmd_context *cmd)
++void critical_section_dec(struct cmd_context *cmd, const char *reason)
+ {
+ 	return;
+ }
 
 
