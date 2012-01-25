@@ -1,83 +1,53 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  3 Mar 2016 13:19:44 +0000 (UTC)
-Subject: master - metadata: add find_historical_glv fn
-Message-ID: <20160303131944.55B9F60091@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 25 Jan 2012 22:16:05 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/activate.c
+Message-ID: <20120125221605.7981.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c45af2df4ee1f3a7cf1e979ce5312acdc392ba68
-Commit:        c45af2df4ee1f3a7cf1e979ce5312acdc392ba68
-Parent:        a0842d1f259c467cb02a8dd94e3a53f543ade7fb
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 1 15:21:21 2016 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Mar 3 13:46:39 2016 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-01-25 22:16:05
 
-metadata: add find_historical_glv fn
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : activate.c 
 
-The find_historical_glv is helper function that looks up historical
-LV in struct volume_group's historical_lvs list and returns it if
-found.
----
- lib/metadata/metadata-exported.h |    5 +++++
- lib/metadata/metadata.c          |   26 ++++++++++++++++++++++++++
- 2 files changed, 31 insertions(+), 0 deletions(-)
+Log message:
+	Fix missing dmt destructor
+	
+	Also always initialize maj,min,patchlevel when success is returned.
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 7f1d43c..afd4723 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1026,6 +1026,11 @@ struct lv_list *find_lv_in_vg(const struct volume_group *vg,
- /* FIXME Merge these functions with ones above */
- struct logical_volume *find_lv(const struct volume_group *vg,
- 			       const char *lv_name);
-+
-+struct generic_logical_volume *find_historical_glv(const struct volume_group *vg,
-+						    const char *historical_lv_name,
-+						    struct glv_list **glvl_found);
-+
- struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
- 					const char *pv_name,
- 					int allow_orphan, int allow_unformatted);
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 0d2211a..8b3c53c 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2120,6 +2120,32 @@ struct logical_volume *find_lv(const struct volume_group *vg,
- 	return lvl ? lvl->lv : NULL;
- }
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2242&r2=1.2243
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.240&r2=1.241
+
+--- LVM2/WHATS_NEW	2012/01/25 21:52:53	1.2242
++++ LVM2/WHATS_NEW	2012/01/25 22:16:04	1.2243
+@@ -1,5 +1,6 @@
+ Version 2.02.89 - 
+ ==================================
++  Fix memleak in target_version() error path (unsupported LIST_VERSIONS).
+   Limit alignment to 32bit values.
+   Check for correctness of uint64 dev_size value.
+   Rename origin_only parameter to more generic flag use_layer for lv_info().
+--- LVM2/lib/activate/activate.c	2012/01/25 13:12:59	1.240
++++ LVM2/lib/activate/activate.c	2012/01/25 22:16:04	1.241
+@@ -481,7 +481,11 @@
+ 	if (!dm_task_run(dmt)) {
+ 		log_debug("Failed to get %s target version", target_name);
+ 		/* Assume this was because LIST_VERSIONS isn't supported */
+-		return 1;
++		*maj = 0;
++		*min = 0;
++		*patchlevel = 0;
++		r = 1;
++		goto out;
+ 	}
  
-+struct generic_logical_volume *find_historical_glv(const struct volume_group *vg,
-+					       const char *historical_lv_name,
-+					       struct glv_list **glvl_found)
-+{
-+	struct glv_list *glvl;
-+	const char *ptr;
-+
-+	/* Use last component */
-+	if ((ptr = strrchr(historical_lv_name, '/')))
-+		ptr++;
-+	else
-+		ptr = historical_lv_name;
-+
-+	dm_list_iterate_items(glvl, &vg->historical_lvs) {
-+		if (!strcmp(glvl->glv->historical->name, ptr)) {
-+			if (glvl_found)
-+				*glvl_found = glvl;
-+			return glvl->glv;
-+		}
-+	}
-+
-+	if (glvl_found)
-+		*glvl_found = NULL;
-+	return NULL;
-+}
-+
- struct physical_volume *find_pv(struct volume_group *vg, struct device *dev)
- {
- 	struct pv_list *pvl;
+ 	target = dm_task_get_versions(dmt);
 
 
