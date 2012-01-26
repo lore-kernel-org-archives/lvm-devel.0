@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 26 Jan 2012 18:25:47 -0000
-Subject: LVM2/test/lib aux.sh
-Message-ID: <20120126182547.22783.qmail@sourceware.org>
+Date: 26 Jan 2012 17:55:56 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20120126175556.11929.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,36 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-26 18:25:47
+Changes by:	zkabelac at sourceware.org	2012-01-26 17:55:56
 
 Modified files:
-	test/lib       : aux.sh 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	If clvmd is not started, die test instead of skipping it
+	Oops missed braces in previous commit
+	
+	This has disabled clvmd for being executed.
+	(FIXME improve testing part to catch this fault)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.118&r2=1.119
 
---- LVM2/test/lib/aux.sh	2011/12/12 00:01:12	1.35
-+++ LVM2/test/lib/aux.sh	2012/01/26 18:25:46	1.36
-@@ -1,5 +1,5 @@
- #!/bin/bash
--# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -34,8 +34,8 @@
+--- LVM2/daemons/clvmd/clvmd.c	2012/01/25 22:36:33	1.118
++++ LVM2/daemons/clvmd/clvmd.c	2012/01/26 17:55:55	1.119
+@@ -440,9 +440,10 @@
+ 		perror("Cannot set LANG to C");
  
- 	# check that it is really running now
- 	sleep .1
--	ps $LOCAL_CLVMD || skip
--        echo "$LOCAL_CLVMD" > LOCAL_CLVMD
-+	ps $LOCAL_CLVMD || die
-+	echo "$LOCAL_CLVMD" > LOCAL_CLVMD
- }
+ 	/* Setting debug options on an existing clvmd */
+-	if (debug_opt && !check_local_clvmd())
++	if (debug_opt && !check_local_clvmd()) {
+ 		dm_hash_destroy(lvm_params.excl_uuid);
+ 		return debug_clvmd(debug_arg, clusterwide_opt)==1?0:1;
++	}
  
- prepare_dmeventd() {
+ 	clvmd_set_debug(debug_opt);
+ 
 
 
