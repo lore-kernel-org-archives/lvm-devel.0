@@ -1,23 +1,30 @@
-From: Thuto Moji <thutomj@gmail.com>
-Date: Fri, 27 Jan 2012 15:30:01 +0200
-Subject: fsadm does not directly support ocfs2 - what to do for extending storage
-Message-ID: <CADaWgck99T-n1R+5QUN6HvBZWFpCp2zL=DP54puDXH7-Hjxj3w@mail.gmail.com>
+From: Stuart D Gathman <stuart@bmsi.com>
+Date: Fri, 27 Jan 2012 12:51:41 -0500
+Subject: [linux-lvm] New LVM2 release 2.02.89: Thinly-provisioned logical volumes
+In-Reply-To: <20120127025701.GB16767@agk-dp.fab.redhat.com>
+References: <20120127025701.GB16767@agk-dp.fab.redhat.com>
+Message-ID: <4F22E42D.5050401@bmsi.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-************FYI*********
-Extending storage on SAN.
-1. SAN Admin extend storage from SAN
-2. pvresize /dev/sdx
-3. lvresize -r -L +50G vg/lv
-   *error: fsadm: Filesystem "ocfs2" on device " /dev/mapper/bla
-4. tunefs.ocfs2 -S /dev/mapper/fs-siebel
+Long ago, Nostradamus foresaw that on 01/26/2012 09:57 PM, Alasdair G
+Kergon would write:
+> The basic idea
+> --------------
+> You create a logical volume known as the "thin pool" to hold the disk
+> space you want to use inside your volume group.
+>
+> Then you create "thin" logical volumes which share the space in that pool.
+>
+> lvs and lvdisplay will tell you "how full" your pool is.
+>
+What is the purpose?  Does it allow snapshots that share space like in
+Zumastor?  Do all the thin LVs start with a preconfigured image which
+can then be modified?  (Can be done with snapshots - updating the
+snapshots, but not the master, is efficient.  Presumably this way all
+the snapshots can share space.)
 
 
-Please edit accordingly
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20120127/43a2a5a4/attachment.htm>
