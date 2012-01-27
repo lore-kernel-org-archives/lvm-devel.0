@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 09:17:15 -0000
-Subject: LVM2/lib/metadata thin_manip.c
-Message-ID: <20120125091715.1071.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 27 Jan 2012 01:23:41 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20120127012341.29631.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 09:17:15
+Changes by:	agk at sourceware.org	2012-01-27 01:23:41
 
 Modified files:
-	lib/metadata   : thin_manip.c 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	Thin skip activation when there are no thin message
-	
-	If the list with thin messages is empty, do not touch thin pool device.
+	post-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.287&r2=1.288
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.92&r2=1.93
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2245&r2=1.2246
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.535&r2=1.536
 
---- LVM2/lib/metadata/thin_manip.c	2012/01/25 09:13:10	1.31
-+++ LVM2/lib/metadata/thin_manip.c	2012/01/25 09:17:15	1.32
-@@ -371,6 +371,9 @@
- 		return 0;
- 	}
- 
-+	if (dm_list_empty(&(first_seg(lv)->thin_messages)))
-+		return 1; /* No messages */
+--- LVM2/VERSION	2012/01/26 10:11:30	1.287
++++ LVM2/VERSION	2012/01/27 01:23:40	1.288
+@@ -1 +1 @@
+-2.02.89(2)-cvs (2012-01-26)
++2.02.90(2)-cvs (2012-01-27)
+--- LVM2/VERSION_DM	2012/01/26 10:11:30	1.92
++++ LVM2/VERSION_DM	2012/01/27 01:23:40	1.93
+@@ -1 +1 @@
+-1.02.68-cvs (2012-01-26)
++1.02.69-cvs (2012-01-27)
+--- LVM2/WHATS_NEW	2012/01/26 14:02:42	1.2245
++++ LVM2/WHATS_NEW	2012/01/27 01:23:40	1.2246
+@@ -1,3 +1,6 @@
++Version 2.02.90 - 
++===================================
 +
- 	if (activate) {
- 		/* If the pool is not active, do activate deactivate */
- 		if (!lv_is_active(lv)) {
-@@ -389,14 +392,12 @@
- 		}
- 	}
- 
--	if (!dm_list_empty(&first_seg(lv)->thin_messages)) {
--		dm_list_init(&first_seg(lv)->thin_messages);
-+	dm_list_init(&(first_seg(lv)->thin_messages));
- 
--		if (!vg_write(lv->vg) || !vg_commit(lv->vg))
--			return_0;
-+	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
-+		return_0;
- 
--		backup(lv->vg);
--	}
-+	backup(lv->vg);
- 
- 	return 1;
- }
+ Version 2.02.89 - 26th January 2012
+ ===================================
+   Add missing check for uname result in clvmd TEST processing.
+--- LVM2/WHATS_NEW_DM	2012/01/26 14:02:42	1.535
++++ LVM2/WHATS_NEW_DM	2012/01/27 01:23:40	1.536
+@@ -1,3 +1,6 @@
++Version 1.02.69 - 
++===================================
++
+ Version 1.02.68 - 26th January 2012
+ ===================================
+   Reset all members of info struct in dm_tree_add_new_dev_with_udev_flags.
 
 
