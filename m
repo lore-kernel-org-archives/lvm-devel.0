@@ -1,67 +1,36 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 19 Sep 2016 20:38:20 +0000 (UTC)
-Subject: master - lvmdbusd: Vg.LvCreate* methods, correct return type
-Message-ID: <20160919203820.DE57960CFC@fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 1 Feb 2012 02:11:44 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20120201021144.598.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ac2fc7a366d0e1e5b23115b34b7773eaf7334076
-Commit:        ac2fc7a366d0e1e5b23115b34b7773eaf7334076
-Parent:        72abf692e5b4f503ca9b52725df020342075c32f
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Sep 16 14:00:14 2016 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Sep 19 15:31:04 2016 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2012-02-01 02:11:43
 
-lvmdbusd: Vg.LvCreate* methods, correct return type
+Modified files:
+	lib/metadata   : lv_manip.c 
 
-The methods were returning an instance of the object instead of the
-object path which was causing an exception when the result was returned
-with the job object as we are explicity trying to return an object path.
+Log message:
+	lost line
 
-Unit test added which re-creates the issue and verifies the fix.
----
- daemons/lvmdbusd/vg.py   |    2 +-
- test/dbus/lvmdbustest.py |   11 +++++++++++
- 2 files changed, 12 insertions(+), 1 deletions(-)
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.355&r2=1.356
 
-diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
-index 3b35873..70ccad6 100644
---- a/daemons/lvmdbusd/vg.py
-+++ b/daemons/lvmdbusd/vg.py
-@@ -146,7 +146,7 @@ class Vg(AutomatedProperties):
- 	@staticmethod
- 	def fetch_new_lv(vg_name, lv_name):
- 		cfg.load()
--		return cfg.om.get_object_by_lvm_id("%s/%s" % (vg_name, lv_name))
-+		return cfg.om.get_object_path_by_lvm_id("%s/%s" % (vg_name, lv_name))
- 
- 	@staticmethod
- 	def _rename(uuid, vg_name, new_name, rename_options):
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index ea3f220..6943da5 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -387,6 +387,17 @@ class TestDbusService(unittest.TestCase):
- 			(rs(8, '_lv'), mib(4),
- 			dbus.Array([], '(ott)'), -1, {}), vg)
- 
-+	def test_lv_create_job(self):
+--- LVM2/lib/metadata/lv_manip.c	2012/02/01 02:10:46	1.355
++++ LVM2/lib/metadata/lv_manip.c	2012/02/01 02:11:43	1.356
+@@ -1458,6 +1458,8 @@
+ 			     const struct alloc_parms *alloc_parms, struct alloc_state *alloc_state,
+ 			     unsigned already_found_one, unsigned iteration_count, unsigned log_iteration_count)
+ {
++	unsigned s;
 +
-+		vg = self._vg_create().Vg
-+		(object_path, job_path) = vg.LvCreate(rs(8, '_lv'), mib(4),
-+			dbus.Array([], '(ott)'), 0, {})
-+
-+		self.assertTrue(object_path == '/')
-+		self.assertTrue(job_path != '/')
-+		object_path = self._wait_for_job(job_path)
-+		self.assertTrue(object_path != '/')
-+
- 	def test_lv_create_linear(self):
- 
- 		vg = self._vg_create().Vg
+ 	/* Skip fully-reserved areas (which are not currently removed from the list). */
+ 	if (!pva->unreserved)
+ 		return NEXT_AREA;
 
 
