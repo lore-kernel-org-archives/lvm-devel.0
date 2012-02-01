@@ -1,50 +1,48 @@
-From: Busby.Cheung <chaimvy@163.com>
-Date: Wed, 1 Feb 2012 09:42:29 +0800 (CST)
-Subject: [linux-lvm] New LVM2 release 2.02.89: Thinly-provisioned logical volumes
-In-Reply-To: <20120131132318.GH16447@agk-dp.fab.redhat.com>
-References: <20120131132318.GH16447@agk-dp.fab.redhat.com>
-	<20120127025701.GB16767@agk-dp.fab.redhat.com>
-	<1eaeb3d5.c6e.135332dea21.Coremail.chaimvy@163.com>
-Message-ID: <582e15fb.4e8.1353693c7ce.Coremail.chaimvy@163.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 1 Feb 2012 10:46:48 -0000
+Subject: LVM2 Makefile.in WHATS_NEW
+Message-ID: <20120201104648.29780.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Alasdair,
-             It works well as  what you said in the email. Thanks!
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-02-01 10:46:46
 
-Best regards,
-Busby
+Modified files:
+	.              : Makefile.in WHATS_NEW 
 
+Log message:
+	User correct base dir for lcov reports
+	
+	Fix problem when srcdir != builddir.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2249&r2=1.2250
+
+--- LVM2/Makefile.in	2011/11/23 12:21:41	1.67
++++ LVM2/Makefile.in	2012/02/01 10:46:45	1.68
+@@ -116,7 +116,7 @@
  
- > -----????-----
-> ???: "Alasdair G Kergon" <agk@redhat.com>
-> ????: 2012?1?31? ???
-> ???: "LVM general discussion and development" <linux-lvm@redhat.com>
-> ??: dm-devel at redhat.com, lvm-devel at redhat.com
-> ??: Re: [linux-lvm] New LVM2 release 2.02.89: Thinly-provisioned	logical volumes
-> 
-> On Tue, Jan 31, 2012 at 05:52:21PM +0800, Busby.Cheung wrote:
-> >        I tryed to use this LVM2 to create thin pool and thin lv, but it said PE was required. The VG I used is free, can anyone help me? Should any more args be needed? Is there any more detailed HowTo file than man file?
->   
-> 
-> For now, you need either 2 PVs in the VG, or use --alloc anywhere with 1 PV, or
-> split the allocation manually like:
-> 
-> > [root at host2 ~]# lvcreate  -L100M -T vg_pool/pool -V 1T --name thin_lv /dev/sdl:0 /dev/sdl:1-
-> 
-> I have a patch that fixes this problem, but I'm still testing it.
-> 
-> Alasdair
-> 
-> 
-> _______________________________________________
-> linux-lvm mailing list
-> linux-lvm at redhat.com
-> https://www.redhat.com/mailman/listinfo/linux-lvm
-> read the LVM HOW-TO at http://tldp.org/HOWTO/LVM-HOWTO/
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20120201/62c16b01/attachment.htm>
+ # maybe use subdirs processing to create tracefiles...
+ $(LCOV_TRACES):
+-	$(LCOV) -b $(top_srcdir)/$(basename $@) \
++	$(LCOV) -b $(basename $@) \
+ 		-d $(basename $@) -c -o - | $(SED) \
+ 		-e "s/\(dmeventd_lvm.[ch]\)/plugins\/lvm2\/\1/" \
+ 		-e "s/\(dmeventd_mirror.c\)/plugins\/mirror\/\1/" \
+--- LVM2/WHATS_NEW	2012/02/01 02:10:45	1.2249
++++ LVM2/WHATS_NEW	2012/02/01 10:46:45	1.2250
+@@ -1,5 +1,6 @@
+ Version 2.02.90 - 
+ ===================================
++  Fix lcov reports when srcdir != builddir.
+   Allow ALLOC_NORMAL to track reserved extents for log and data on same PV.
+   Automatically detect whether corosync clvmd needs to use confdb or cmap.
+   Fix data% report for thin volume used as origin for non-thin snapshot.
+
+
