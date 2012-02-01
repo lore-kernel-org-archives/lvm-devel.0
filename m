@@ -1,24 +1,65 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 1 Feb 2012 12:42:44 +0000
-Subject: [linux-lvm] New LVM2 release 2.02.89: Thinly-provisioned logical volumes
-In-Reply-To: <582e15fb.4e8.1353693c7ce.Coremail.chaimvy@163.com>
-References: <20120131132318.GH16447@agk-dp.fab.redhat.com>
-	<20120127025701.GB16767@agk-dp.fab.redhat.com>
-	<1eaeb3d5.c6e.135332dea21.Coremail.chaimvy@163.com>
-	<582e15fb.4e8.1353693c7ce.Coremail.chaimvy@163.com>
-Message-ID: <20120201124244.GB23056@agk-dp.fab.redhat.com>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 1 Feb 2012 13:08:40 -0000
+Subject: LVM2 ./WHATS_NEW scripts/dm_event_systemd_red_ ...
+Message-ID: <20120201130840.14675.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Feb 01, 2012 at 09:42:29AM +0800, Busby.Cheung wrote:
->              It works well as  what you said in the email. Thanks!
- 
-I committed the patch, and anticipate making an updated release later
-today.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	prajnoha at sourceware.org	2012-02-01 13:08:39
 
-Alasdair
+Modified files:
+	.              : WHATS_NEW 
+	scripts        : dm_event_systemd_red_hat.service.in 
+	                 lvm2_monitoring_systemd_red_hat.service.in 
+
+Log message:
+	Clean up systemd unit ordering and requirements.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2250&r2=1.2251
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/dm_event_systemd_red_hat.service.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+
+--- LVM2/WHATS_NEW	2012/02/01 10:46:45	1.2250
++++ LVM2/WHATS_NEW	2012/02/01 13:08:39	1.2251
+@@ -1,5 +1,6 @@
+ Version 2.02.90 - 
+ ===================================
++  Clean up systemd unit ordering and requirements.
+   Fix lcov reports when srcdir != builddir.
+   Allow ALLOC_NORMAL to track reserved extents for log and data on same PV.
+   Automatically detect whether corosync clvmd needs to use confdb or cmap.
+--- LVM2/scripts/dm_event_systemd_red_hat.service.in	2011/10/31 12:22:50	1.2
++++ LVM2/scripts/dm_event_systemd_red_hat.service.in	2012/02/01 13:08:39	1.3
+@@ -1,6 +1,7 @@
+ [Unit]
+ Description=Device-mapper event daemon
+-After=fedora-storage-init.service fedora-storage-init-late.service
++Requires=dm-event.socket
++After=dm-event.socket
+ Before=local-fs.target
+ DefaultDependencies=no
+ 
+--- LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in	2011/08/11 15:27:46	1.2
++++ LVM2/scripts/lvm2_monitoring_systemd_red_hat.service.in	2012/02/01 13:08:39	1.3
+@@ -1,7 +1,7 @@
+ [Unit]
+ Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
+ Requires=dm-event.socket
+-After=fedora-storage-init.service fedora-storage-init-late.service
++After=dm-event.socket fedora-storage-init.service fedora-storage-init-late.service
+ Before=local-fs.target
+ DefaultDependencies=no
+ Conflicts=shutdown.target
+@@ -15,4 +15,3 @@
+ 
+ [Install]
+ WantedBy=sysinit.target
+-Also=dm-event.socket
 
 
