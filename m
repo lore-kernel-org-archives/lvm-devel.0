@@ -1,107 +1,74 @@
-From: Fabio M. Di Nitto <fdinitto@redhat.com>
-Date: Tue, 07 Feb 2012 09:55:10 +0100
-Subject: [PATCH] clvmd-corosync: use libquorum callbacks instead of polling
-In-Reply-To: <1328539700-909-1-git-send-email-fdinitto@redhat.com>
-References: <1328539700-909-1-git-send-email-fdinitto@redhat.com>
-Message-ID: <4F30E6EE.5080102@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Feb 2012 10:43:43 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/fs.c
+Message-ID: <20120208104343.16759.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Please disregard this patch, it?s not correct.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-02-08 10:43:43
 
-Fabio
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : fs.c 
 
-On 2/6/2012 3:48 PM, Fabio M. Di Nitto wrote:
-> From: "Fabio M. Di Nitto" <fdinitto@redhat.com>
-> 
-> clvmd polls for quorum status every minute (from the main loop).
-> With the new libquorum, this is unnecessary since clvmd can receive
-> quorum updates via callbacks.
-> 
-> Signed-off-by: Fabio M. Di Nitto <fdinitto@redhat.com>
-> ---
->  daemons/clvmd/clvmd-corosync.c |   42 +++++++++++++++++++++++++++++++++++++++-
->  1 files changed, 41 insertions(+), 1 deletions(-)
-> 
-> diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
-> index d85ec1e..eaab023 100644
-> --- a/daemons/clvmd/clvmd-corosync.c
-> +++ b/daemons/clvmd/clvmd-corosync.c
-> @@ -83,9 +83,24 @@ cpg_callbacks_t corosync_cpg_callbacks = {
->  	.cpg_confchg_fn =            corosync_cpg_confchg_callback,
->  };
->  
-> +static int quorate = 0;
-> +
-> +#ifdef QUORUM_SET
-> +static void quorum_notification_callback(
-> +	quorum_handle_t handle,
-> +	uint32_t quorate,
-> +	uint64_t ring_id,
-> +	uint32_t view_list_entries,
-> +	uint32_t *view_list);
-> +
-> +quorum_callbacks_t quorum_callbacks = {
-> +	.quorum_notify_fn = quorum_notification_callback
-> +};
-> +#else
->  quorum_callbacks_t quorum_callbacks = {
->  	.quorum_notify_fn = NULL,
->  };
-> +#endif
->  
->  struct node_info
->  {
-> @@ -307,6 +322,14 @@ static int _init_cluster(void)
->  		DEBUGLOG("Corosync quorum service is not configured");
->  		return EINVAL;
->  	}
-> +
-> +	/* Initiliaze quorate status before callbacks */
-> +	if (quorum_getquorate(quorum_handle, &quorate) != CS_OK) {
-> +		syslog(LOG_ERR, "Unable to determine quorate status for this node");
-> +		DEBUGLOG("Unable to determine quorate status for this node\n");
-> +		quorate = 0;
-> +	}
-> +	DEBUGLOG("Initial quorate status: %u\n", quorate);
->  #else
->  	err = quorum_initialize(&quorum_handle,
->  				&quorum_callbacks);
-> @@ -528,14 +551,31 @@ static int _unlock_resource(const char *resource, int lockid)
->  	return 0;
->  }
->  
-> +#ifdef QUORUM_SET
-> +static void quorum_notification_callback(
-> +	quorum_handle_t handle,
-> +	uint32_t quorate_status,
-> +	uint64_t ring_id,
-> +	uint32_t view_list_entries,
-> +	uint32_t *view_list)
-> +{
-> +	DEBUGLOG("quorum_notification_callback. quorate: %u", quorate_status);
-> +	quorate = quorate_status;
-> +}
-> +
-> +static int _is_quorate()
-> +{
-> +	return quorate;
-> +}
-> +#else
->  static int _is_quorate()
->  {
-> -	int quorate;
->  	if (quorum_getquorate(quorum_handle, &quorate) == CS_OK)
->  		return quorate;
->  	else
->  		return 0;
->  }
-> +#endif
->  
->  static int _get_main_cluster_fd(void)
->  {
+Log message:
+	Check result of lstat
+	
+	If lstat returns errno different from ENOENT, do not use the content of
+	struct stat 'buf'.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2257&r2=1.2258
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.64&r2=1.65
+
+--- LVM2/WHATS_NEW	2012/02/01 20:13:44	1.2257
++++ LVM2/WHATS_NEW	2012/02/08 10:43:42	1.2258
+@@ -1,5 +1,6 @@
+ Version 2.02.91 -
+ ===================================
++  Do not use lstat() results when failed in _rm_link().
+   Remove a "waiting for another thread" log message from dmeventd plugins.
+ 
+ Version 2.02.90 - 1st February 2012
+--- LVM2/lib/activate/fs.c	2011/11/18 19:31:09	1.64
++++ LVM2/lib/activate/fs.c	2012/02/08 10:43:42	1.65
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -225,6 +225,7 @@
+ static int _rm_link(const char *dev_dir, const char *vg_name,
+ 		    const char *lv_name, int check_udev)
+ {
++	int r;
+ 	struct stat buf;
+ 	static char lv_path[PATH_MAX];
+ 
+@@ -234,14 +235,14 @@
+ 		return 0;
+ 	}
+ 
+-	if (lstat(lv_path, &buf) && errno == ENOENT)
++	if ((r = lstat(lv_path, &buf)) && errno == ENOENT)
+ 		return 1;
+ 	else if (dm_udev_get_sync_support() && udev_checking() && check_udev)
+ 		log_warn("The link %s should have been removed by udev "
+ 			 "but it is still present. Falling back to "
+ 			 "direct link removal.", lv_path);
+ 
+-	if (!S_ISLNK(buf.st_mode)) {
++	if (r || !S_ISLNK(buf.st_mode)) {
+ 		log_error("%s not symbolic link - not removing", lv_path);
+ 		return 0;
+ 	}
 
 
