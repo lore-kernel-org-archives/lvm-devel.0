@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Feb 2012 12:48:15 -0000
-Subject: LVM2 ./WHATS_NEW lib/filters/filter.c
-Message-ID: <20120208124815.20897.qmail@sourceware.org>
+Date: 8 Feb 2012 12:50:11 -0000
+Subject: LVM2 ./WHATS_NEW lib/format_text/archiver.c
+Message-ID: <20120208125011.21758.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-08 12:48:14
+Changes by:	zkabelac at sourceware.org	2012-02-08 12:50:11
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/filters    : filter.c 
+	lib/format_text: archiver.c 
 
 Log message:
-	Add range test for device number
+	Use dm_snprintf and improve error handling
 	
-	Check the output of atoi is in valid range.
+	Add standard error reporting with error logging.
+	Use plain alloc instead of zalloc for string buffer.
+	Use dm_snprintf with valid test for <0.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2267&r2=1.2268
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2268&r2=1.2269
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
---- LVM2/WHATS_NEW	2012/02/08 11:34:46	1.2267
-+++ LVM2/WHATS_NEW	2012/02/08 12:48:14	1.2268
+--- LVM2/WHATS_NEW	2012/02/08 12:48:14	1.2268
++++ LVM2/WHATS_NEW	2012/02/08 12:50:10	1.2269
 @@ -1,5 +1,6 @@
  Version 2.02.91 -
  ===================================
-+  Add range test for device number in _scan_proc_dev().
++  Fix error path handling in _build_desc()
+   Add range test for device number in _scan_proc_dev().
    Use signed long for sysconf() call in cmirrord.
    Do not write in front of log buffer in print_log().
-   Add boundary test for number of mirror devs and logs.
---- LVM2/lib/filters/filter.c	2012/01/11 20:38:42	1.67
-+++ LVM2/lib/filters/filter.c	2012/02/08 12:48:14	1.68
-@@ -226,7 +226,7 @@
+--- LVM2/lib/format_text/archiver.c	2012/01/20 11:01:13	1.48
++++ LVM2/lib/format_text/archiver.c	2012/02/08 12:50:10	1.49
+@@ -83,13 +83,16 @@
+ 	size_t len = strlen(line) + 32;
+ 	char *buffer;
  
- 		/* If it's not a number it may be name of section */
- 		line_maj = atoi(((char *) (line + i)));
--		if (!line_maj) {
-+		if ((line_maj <= 0) || (line_maj >= NUMBER_OF_MAJORS)) {
- 			blocksection = (line[i] == 'B') ? 1 : 0;
- 			continue;
- 		}
+-	if (!(buffer = dm_pool_zalloc(mem, strlen(line) + 32)))
+-		return_NULL;
++	if (!(buffer = dm_pool_alloc(mem, len))) {
++		log_error("Failed to allocate desc.");
++		return NULL;
++	}
+ 
+-	if (snprintf(buffer, len,
+-		     "Created %s executing '%s'",
+-		     before ? "*before*" : "*after*", line) < 0)
+-		return_NULL;
++	if (dm_snprintf(buffer, len, "Created %s executing '%s'",
++			before ? "*before*" : "*after*", line) < 0) {
++		log_error("Failed to build desc.");
++		return NULL;
++	}
+ 
+ 	return buffer;
+ }
 
 
