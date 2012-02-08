@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Feb 2012 11:36:19 -0000
-Subject: LVM2 daemons/cmirrord/functions.c daemons/dmev ...
-Message-ID: <20120208113619.21109.qmail@sourceware.org>
+Date: 8 Feb 2012 11:40:04 -0000
+Subject: LVM2 lib/filters/filter-mpath.c lib/metadata/m ...
+Message-ID: <20120208114004.1425.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,79 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-08 11:36:19
+Changes by:	zkabelac at sourceware.org	2012-02-08 11:40:03
 
 Modified files:
-	daemons/cmirrord: functions.c 
-	daemons/dmeventd: dmeventd.c 
-	libdm          : libdm-deptree.c 
-	tools          : lvm.c 
+	lib/filters    : filter-mpath.c 
+	lib/metadata   : mirror.c 
+	tools          : vgcfgbackup.c 
 
 Log message:
-	Remove unneeded assignments
+	Replace snprintf with dm_snprintf
 	
-	Variables have (or will have) those values set.
+	snprintf testing for negative is replaced with dm_snprintf where this
+	test really works.
+	Add missing test for result of dm_snprintf().
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.86&r2=1.87
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvm.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-mpath.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.176&r2=1.177
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgbackup.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
 
---- LVM2/daemons/cmirrord/functions.c	2012/02/08 11:34:46	1.31
-+++ LVM2/daemons/cmirrord/functions.c	2012/02/08 11:36:18	1.32
-@@ -372,7 +372,7 @@
- 	enum sync log_sync = DEFAULTSYNC;
- 	uint32_t block_on_error = 0;
- 
--	int disk_log = 0;
-+	int disk_log;
- 	char disk_path[128];
- 	int unlink_path = 0;
- 	long page_size;
---- LVM2/daemons/dmeventd/dmeventd.c	2011/12/22 15:50:39	1.86
-+++ LVM2/daemons/dmeventd/dmeventd.c	2012/02/08 11:36:18	1.87
-@@ -448,7 +448,7 @@
+--- LVM2/lib/filters/filter-mpath.c	2011/11/11 16:41:37	1.2
++++ LVM2/lib/filters/filter-mpath.c	2012/02/08 11:40:02	1.3
+@@ -60,7 +60,7 @@
  {
- 	struct dm_event_daemon_message *msg = message_data->msg;
- 	struct thread_status *thread;
--	int i = 0, j = 0;
-+	int i, j;
- 	int ret = -1;
- 	int count = dm_list_size(&_thread_registry);
- 	int size = 0, current = 0;
-@@ -1170,8 +1170,6 @@
- 	if (!hit)
- 		goto out;
+ 	char path[PATH_MAX], buffer[64];
  
--	thread = hit;
+-	if (snprintf(path, sizeof(path), "%s/block/%s/dev", sysfs_dir, kname) < 0)
++	if (dm_snprintf(path, sizeof(path), "%s/block/%s/dev", sysfs_dir, kname) < 0)
+ 		return_0;
+ 
+ 	if (!get_sysfs_string(path, buffer, sizeof(buffer)))
+--- LVM2/lib/metadata/mirror.c	2012/02/01 15:05:53	1.176
++++ LVM2/lib/metadata/mirror.c	2012/02/08 11:40:02	1.177
+@@ -696,9 +696,11 @@
+ 		dm_list_iterate_items(lvl, &split_images) {
+ 			sub_lv = lvl->lv;
+ 
+-			dm_snprintf(format, len, "%s_mimage_%%d",
+-				    new_lv->name);
 -
- 	while (1) {
- 		if (dm_list_end(&_thread_registry, &thread->list))
- 			goto out;
---- LVM2/libdm/libdm-deptree.c	2012/01/25 21:50:51	1.153
-+++ LVM2/libdm/libdm-deptree.c	2012/02/08 11:36:18	1.154
-@@ -739,10 +739,6 @@
- 		*deps = NULL;
- 		info->major = major;
- 		info->minor = minor;
--		info->exists = 0;
--		info->live_table = 0;
--		info->inactive_table = 0;
--		info->read_only = 0;
- 		return 1;
++			if (dm_snprintf(format, len, "%s_mimage_%%d",
++					new_lv->name) < 0) {
++				log_error("Failed to build new image name.");
++				return 0;
++			}
+ 			layer_name = dm_pool_alloc(lv->vg->vgmem, len);
+ 			if (!layer_name) {
+ 				log_error("Unable to allocate memory");
+--- LVM2/tools/vgcfgbackup.c	2009/09/15 01:38:59	1.31
++++ LVM2/tools/vgcfgbackup.c	2012/02/08 11:40:02	1.32
+@@ -28,7 +28,7 @@
+ 		return NULL;
  	}
  
---- LVM2/tools/lvm.c	2011/11/12 22:44:11	1.116
-+++ LVM2/tools/lvm.c	2012/02/08 11:36:19	1.117
-@@ -60,7 +60,7 @@
- 	/* Initialise if this is a new completion attempt */
- 	if (!state) {
- 		char *s = rl_line_buffer;
--		int j = 0;
-+		int j;
- 
- 		match_no = 0;
- 		com = NULL;
+-	if (snprintf(filename, PATH_MAX, template, vg_name) < 0) {
++	if (dm_snprintf(filename, PATH_MAX, template, vg_name) < 0) {
+ 		log_error("Error processing filename template %s",
+ 			   template);
+ 		dm_free(filename);	
 
 
