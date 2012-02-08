@@ -1,42 +1,49 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 19 Sep 2016 20:38:25 +0000 (UTC)
-Subject: master - lvmdbusd: Set value to non none on error
-Message-ID: <20160919203825.3ABF860D98@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 8 Feb 2012 11:07:18 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c
+Message-ID: <20120208110718.28491.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5366e87574cbf9f13badea37b827ae5b97bcfdbf
-Commit:        5366e87574cbf9f13badea37b827ae5b97bcfdbf
-Parent:        65f59184c833584e96dd61030db495d33a3e7a4c
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Sat Sep 17 00:10:46 2016 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Sep 19 15:31:04 2016 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-02-08 11:07:17
 
-lvmdbusd: Set value to non none on error
+Modified files:
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-common.c 
 
-When we register a failure we need to use a valid value which will be
-returned with the object manager.  Otherwise we will raise an Exception
-because we are trying to construct an object path from None.
----
- daemons/lvmdbusd/request.py |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Log message:
+	Fix fd resource leak in error path
+	
+	Use 'goto bad' to cleanup fd on error path.
 
-diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
-index ce6a6ef..c48d043 100644
---- a/daemons/lvmdbusd/request.py
-+++ b/daemons/lvmdbusd/request.py
-@@ -131,7 +131,7 @@ class RequestEntry(object):
- 				self._job = None
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.539&r2=1.540
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.135&r2=1.136
+
+--- LVM2/WHATS_NEW_DM	2012/02/08 11:05:04	1.539
++++ LVM2/WHATS_NEW_DM	2012/02/08 11:07:17	1.540
+@@ -1,5 +1,6 @@
+ Version 1.02.70 - 
+ ===================================
++  Fix fd resource leak in error path for _udev_notify_sem_create().
+   Leave space for '\0' for readline() call in _sysfs_get_kernel_name().
  
- 	def register_error(self, error_rc, error_message, error_exception):
--		self._reg_ending(None, error_rc, error_message, error_exception)
-+		self._reg_ending('/', error_rc, error_message, error_exception)
+ Version 1.02.69 - 1st February 2012
+--- LVM2/libdm/libdm-common.c	2012/02/08 11:05:05	1.135
++++ LVM2/libdm/libdm-common.c	2012/02/08 11:07:17	1.136
+@@ -1738,7 +1738,7 @@
+ 		log_error("semid %d: sem_ctl GETVAL failed for "
+ 			  "cookie 0x%" PRIx32 ": %s",
+ 			  gen_semid, gen_cookie, strerror(errno));
+-		return 0;		
++		goto bad;
+ 	}
  
- 	def register_result(self, result):
- 		self._reg_ending(result)
+ 	log_debug("Udev cookie 0x%" PRIx32 " (semid %d) incremented to %d",
 
 
