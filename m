@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Feb 2012 11:40:04 -0000
-Subject: LVM2 lib/filters/filter-mpath.c lib/metadata/m ...
-Message-ID: <20120208114004.1425.qmail@sourceware.org>
+Date: 8 Feb 2012 11:41:19 -0000
+Subject: LVM2 liblvm/lvm_lv.c liblvm/lvm_pv.c tools/vgr ...
+Message-ID: <20120208114119.1848.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,74 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-08 11:40:03
+Changes by:	zkabelac at sourceware.org	2012-02-08 11:41:18
 
 Modified files:
-	lib/filters    : filter-mpath.c 
-	lib/metadata   : mirror.c 
-	tools          : vgcfgbackup.c 
+	liblvm         : lvm_lv.c lvm_pv.c 
+	tools          : vgreduce.c 
 
 Log message:
-	Replace snprintf with dm_snprintf
+	Remove duplicate test
 	
-	snprintf testing for negative is replaced with dm_snprintf where this
-	test really works.
-	Add missing test for result of dm_snprintf().
+	Tested condition has been already evaluated before
+	For strlen() code has already excluded <ID_LEN.
+	For repairing, already tested (!argc && !repairing) before.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-mpath.c.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.176&r2=1.177
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgcfgbackup.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.36&r2=1.37
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_pv.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.113&r2=1.114
 
---- LVM2/lib/filters/filter-mpath.c	2011/11/11 16:41:37	1.2
-+++ LVM2/lib/filters/filter-mpath.c	2012/02/08 11:40:02	1.3
-@@ -60,7 +60,7 @@
- {
- 	char path[PATH_MAX], buffer[64];
- 
--	if (snprintf(path, sizeof(path), "%s/block/%s/dev", sysfs_dir, kname) < 0)
-+	if (dm_snprintf(path, sizeof(path), "%s/block/%s/dev", sysfs_dir, kname) < 0)
- 		return_0;
- 
- 	if (!get_sysfs_string(path, buffer, sizeof(buffer)))
---- LVM2/lib/metadata/mirror.c	2012/02/01 15:05:53	1.176
-+++ LVM2/lib/metadata/mirror.c	2012/02/08 11:40:02	1.177
-@@ -696,9 +696,11 @@
- 		dm_list_iterate_items(lvl, &split_images) {
- 			sub_lv = lvl->lv;
- 
--			dm_snprintf(format, len, "%s_mimage_%%d",
--				    new_lv->name);
--
-+			if (dm_snprintf(format, len, "%s_mimage_%%d",
-+					new_lv->name) < 0) {
-+				log_error("Failed to build new image name.");
-+				return 0;
-+			}
- 			layer_name = dm_pool_alloc(lv->vg->vgmem, len);
- 			if (!layer_name) {
- 				log_error("Unable to allocate memory");
---- LVM2/tools/vgcfgbackup.c	2009/09/15 01:38:59	1.31
-+++ LVM2/tools/vgcfgbackup.c	2012/02/08 11:40:02	1.32
-@@ -28,7 +28,7 @@
+--- LVM2/liblvm/lvm_lv.c	2011/06/01 19:21:04	1.36
++++ LVM2/liblvm/lvm_lv.c	2012/02/08 11:41:18	1.37
+@@ -270,12 +270,12 @@
+ 		log_errno (EINVAL, "Invalid UUID string length");
  		return NULL;
  	}
- 
--	if (snprintf(filename, PATH_MAX, template, vg_name) < 0) {
-+	if (dm_snprintf(filename, PATH_MAX, template, vg_name) < 0) {
- 		log_error("Error processing filename template %s",
- 			   template);
- 		dm_free(filename);	
+-	if (strlen(uuid) >= ID_LEN) {
+-		if (!id_read_format(&id, uuid)) {
+-			log_errno(EINVAL, "Invalid UUID format");
+-			return NULL;
+-		}
++
++	if (!id_read_format(&id, uuid)) {
++		log_errno(EINVAL, "Invalid UUID format.");
++		return NULL;
+ 	}
++
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		if (id_equal(&vg->id, &lvl->lv->lvid.id[0]) &&
+ 		    id_equal(&id, &lvl->lv->lvid.id[1]))
+--- LVM2/liblvm/lvm_pv.c	2010/12/14 23:20:58	1.20
++++ LVM2/liblvm/lvm_pv.c	2012/02/08 11:41:18	1.21
+@@ -107,12 +107,12 @@
+ 		log_errno (EINVAL, "Invalid UUID string length");
+ 		return NULL;
+ 	}
+-	if (strlen(uuid) >= ID_LEN) {
+-		if (!id_read_format(&id, uuid)) {
+-			log_errno(EINVAL, "Invalid UUID format");
+-			return NULL;
+-		}
++
++	if (!id_read_format(&id, uuid)) {
++		log_errno(EINVAL, "Invalid UUID format.");
++		return NULL;
+ 	}
++
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (id_equal(&id, &pvl->pv->id))
+ 			return pvl->pv;
+--- LVM2/tools/vgreduce.c	2011/08/10 20:25:31	1.113
++++ LVM2/tools/vgreduce.c	2012/02/08 11:41:18	1.114
+@@ -213,7 +213,7 @@
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 	
+-	if (!argc && repairing) {
++	if (!argc) { /* repairing */
+ 		log_error("Please give volume group name");
+ 		return EINVALID_CMD_LINE;
+ 	}
 
 
