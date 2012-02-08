@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 8 Feb 2012 13:02:09 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
-Message-ID: <20120208130209.32629.qmail@sourceware.org>
+Date: 8 Feb 2012 13:03:40 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20120208130340.755.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,52 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-08 13:02:08
+Changes by:	zkabelac at sourceware.org	2012-02-08 13:03:40
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Fix test for lv_snapshot_percent
+	A bit more readable code
 	
-	Do not check for PERCENT_MERGE_FAILED if the lv_snapshot_percent() failed.
-	(test for snap_percent would be testing uninitialized value).
+	Just a minor readability conversion.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2271&r2=1.2272
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.356&r2=1.357
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.119&r2=1.120
 
---- LVM2/WHATS_NEW	2012/02/08 12:57:15	1.2271
-+++ LVM2/WHATS_NEW	2012/02/08 13:02:07	1.2272
-@@ -1,5 +1,6 @@
- Version 2.02.91 -
- ===================================
-+  Fix test for snap percent for failing merge when removing LV.
-   Switch int to void return for str_list_del().
-   Fix error path handling in _build_desc().
-   Add range test for device number in _scan_proc_dev().
---- LVM2/lib/metadata/lv_manip.c	2012/02/01 02:11:43	1.356
-+++ LVM2/lib/metadata/lv_manip.c	2012/02/08 13:02:07	1.357
-@@ -3315,14 +3315,14 @@
- 		if (lv_is_merging_cow(lv) && !level) {
- 			if (lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) &&
- 			    info.exists && info.live_table) {
--				if (lv_snapshot_percent(lv, &snap_percent) &&
--				    ((snap_percent != PERCENT_INVALID) &&
--				     (snap_percent != PERCENT_MERGE_FAILED))) {
-+				if (!lv_snapshot_percent(lv, &snap_percent))
-+					return_0;
-+				if ((snap_percent != PERCENT_INVALID) &&
-+				     (snap_percent != PERCENT_MERGE_FAILED)) {
- 					log_error("Can't remove merging snapshot logical volume \"%s\"",
- 						  lv->name);
- 					return 0;
--				}
--				else if ((snap_percent == PERCENT_MERGE_FAILED) &&
-+				} else if ((snap_percent == PERCENT_MERGE_FAILED) &&
- 					 (force == PROMPT) &&
- 					 yes_no_prompt("Removing snapshot \"%s\" that failed to merge may leave origin \"%s\" inconsistent. "
- 						       "Proceed? [y/n]: ", lv->name, origin_from_cow(lv)->name) == 'n') {
+--- LVM2/daemons/clvmd/clvmd.c	2012/01/26 17:55:55	1.119
++++ LVM2/daemons/clvmd/clvmd.c	2012/02/08 13:03:40	1.120
+@@ -741,8 +741,7 @@
+ 			 status, sock_client);
+ 		/* But has the client gone away ?? */
+ 		if (sock_client == NULL) {
+-			DEBUGLOG
+-			    ("Got PIPE response for dead client, ignoring it\n");
++			DEBUGLOG("Got PIPE response for dead client, ignoring it\n");
+ 		} else {
+ 			/* If error then just return that code */
+ 			if (status)
+@@ -751,21 +750,16 @@
+ 			else {
+ 				/* FIXME: closer inspect this code since state is write thread protected */
+ 				pthread_mutex_lock(&sock_client->bits.localsock.mutex);
+-				if (sock_client->bits.localsock.state ==
+-				    POST_COMMAND) {
++				if (sock_client->bits.localsock.state == POST_COMMAND) {
+ 					pthread_mutex_unlock(&sock_client->bits.localsock.mutex);
+ 					send_local_reply(sock_client, 0,
+ 							 sock_client->fd);
+-				} else	// PRE_COMMAND finished.
+-				{
++				} else {
++					/* PRE_COMMAND finished. */
+ 					pthread_mutex_unlock(&sock_client->bits.localsock.mutex);
+-					if (
+-					    (status =
+-					     distribute_command(sock_client)) !=
+-					    0) send_local_reply(sock_client,
+-								EFBIG,
+-								sock_client->
+-								fd);
++					if ((status = distribute_command(sock_client)))
++						send_local_reply(sock_client, EFBIG,
++								 sock_client->fd);
+ 				}
+ 			}
+ 		}
+@@ -1247,9 +1241,8 @@
+ 			    inheader->node + strlen(inheader->node) + 1;
+ 
+ 			while (missing_len > 0) {
+-				DEBUGLOG
+-				    ("got %d bytes, need another %d (total %d)\n",
+-				     argslen, missing_len, inheader->arglen);
++				DEBUGLOG("got %d bytes, need another %d (total %d)\n",
++					 argslen, missing_len, inheader->arglen);
+ 				len = read(thisfd->fd, argptr + argslen,
+ 					   missing_len);
+ 				if (len == -1 && errno == EINTR)
 
 
