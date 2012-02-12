@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Feb 2012 21:42:43 -0000
-Subject: LVM2/lib/metadata thin_manip.c
-Message-ID: <20120212214243.20680.qmail@sourceware.org>
+Date: 12 Feb 2012 22:37:25 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata-exported.h
+Message-ID: <20120212223725.31322.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,49 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-12 21:42:43
+Changes by:	agk at sourceware.org	2012-02-12 22:37:24
 
 Modified files:
-	lib/metadata   : thin_manip.c 
+	.              : WHATS_NEW 
+	lib/metadata   : metadata-exported.h 
 
 Log message:
-	use stack consistently if 0 is considered an error
+	FMT_INSTANCE_PV is no longer used
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2276&r2=1.2277
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.228&r2=1.229
 
---- LVM2/lib/metadata/thin_manip.c	2012/02/08 13:05:39	1.33
-+++ LVM2/lib/metadata/thin_manip.c	2012/02/12 21:42:43	1.34
-@@ -225,22 +225,18 @@
- 				     DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD);
+--- LVM2/WHATS_NEW	2012/02/10 02:56:54	1.2276
++++ LVM2/WHATS_NEW	2012/02/12 22:37:24	1.2277
+@@ -1,6 +1,7 @@
+ Version 2.02.91 -
+ ===================================
+-  Refactor format instances for orphan PVs (internal).
++  Remove PV-based format instances (which are no longer needed).
++  Link all orphan PVs directly to a per-format global orphan VG.
+   Refactor lvmcache around an internal API.
+   Stop processing lvextend if trying to extend a mirror that is being recovered.
+   Add pool_below_threshold() function to check thin pool percent status.
+--- LVM2/lib/metadata/metadata-exported.h	2012/02/10 02:53:05	1.228
++++ LVM2/lib/metadata/metadata-exported.h	2012/02/12 22:37:24	1.229
+@@ -200,16 +200,13 @@
  
- 	/* Data */
--	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent)) {
--		stack;
--		return 0;
--	}
-+	if (!lv_thin_pool_percent(pool_seg->lv, 0, &percent))
-+		return_0;
+ /*
+  * These flags define the type of the format instance to be created.
+- * There are two basic types: a PV-based and a VG-based format instance.
++ * There used to be a PV-based type, but all are now VG-based.
+  * We can further control the format_instance initialisation and functionality
+  * by using the other flags. Today, the primary role of the format_instance
+  * is to temporarily store metadata area information we are working with. More
+  * flags can be defined to cover even more functionality in the future...
+  */
  
- 	if (percent >= threshold)
--		return 0;
-+		return_0;
+-/* PV-based format instance */
+-#define FMT_INSTANCE_PV			0x00000000U
+-
+ /* VG-based format instance */
+ #define FMT_INSTANCE_VG			0x00000001U
  
- 	/* Metadata */
--	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent)) {
--		stack;
--		return 0;
--	}
-+	if (!lv_thin_pool_percent(pool_seg->lv, 1, &percent))
-+		return_0;
- 
- 	if (percent >= threshold)
--		return 0;
-+		return_0;
- 
- 	return 1;
- }
 
 
