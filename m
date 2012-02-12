@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 12 Feb 2012 20:17:13 -0000
-Subject: LVM2/lib/activate fs.c
-Message-ID: <20120212201713.15967.qmail@sourceware.org>
+Date: 12 Feb 2012 20:19:40 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20120212201940.16693.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-12 20:17:12
+Changes by:	agk at sourceware.org	2012-02-12 20:19:40
 
 Modified files:
-	lib/activate   : fs.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	give standard error message if lstat fails unexpectedly
+	remove unused bits after fid changes
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/fs.c.diff?cvsroot=lvm2&r1=1.65&r2=1.66
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.478&r2=1.479
 
---- LVM2/lib/activate/fs.c	2012/02/08 10:43:42	1.65
-+++ LVM2/lib/activate/fs.c	2012/02/12 20:17:12	1.66
-@@ -225,7 +225,6 @@
- static int _rm_link(const char *dev_dir, const char *vg_name,
- 		    const char *lv_name, int check_udev)
+--- LVM2/lib/metadata/metadata.c	2012/02/10 02:53:05	1.478
++++ LVM2/lib/metadata/metadata.c	2012/02/12 20:19:39	1.479
+@@ -1616,8 +1616,6 @@
+ 				  unsigned metadataignore)
  {
--	int r;
- 	struct stat buf;
- 	static char lv_path[PATH_MAX];
+ 	const struct format_type *fmt = cmd->fmt;
+-	struct format_instance_ctx fic;
+-	struct format_instance *fid;
+ 	struct dm_pool *mem = fmt->cmd->mem;
+ 	struct physical_volume *pv = _alloc_pv(mem, dev);
+ 	unsigned mda_index;
+@@ -2746,8 +2744,6 @@
+ 					     int warnings,
+ 					     const char *orphan_vgname)
+ {
+-	struct format_instance_ctx fic;
+-	struct format_instance *fid;
+ 	const struct format_type *fmt;
+ 	struct lvmcache_vginfo *vginfo;
+ 	struct volume_group *vg = NULL;
+@@ -2768,8 +2764,6 @@
+ 	lvmcache_foreach_pv(vginfo, _vg_read_orphan_pv, &baton);
  
-@@ -235,14 +234,17 @@
- 		return 0;
- 	}
+ 	return vg;
+-bad:
+-	return NULL;
+ }
  
--	if ((r = lstat(lv_path, &buf)) && errno == ENOENT)
--		return 1;
--	else if (dm_udev_get_sync_support() && udev_checking() && check_udev)
-+	if (lstat(lv_path, &buf)) {
-+		if (errno == ENOENT)
-+			return 1;
-+		log_sys_error("lstat", lv_path);
-+		return 0;
-+	} else if (dm_udev_get_sync_support() && udev_checking() && check_udev)
- 		log_warn("The link %s should have been removed by udev "
- 			 "but it is still present. Falling back to "
- 			 "direct link removal.", lv_path);
- 
--	if (r || !S_ISLNK(buf.st_mode)) {
-+	if (!S_ISLNK(buf.st_mode)) {
- 		log_error("%s not symbolic link - not removing", lv_path);
- 		return 0;
- 	}
+ static int _update_pv_list(struct dm_pool *pvmem, struct dm_list *all_pvs, struct volume_group *vg)
+@@ -3557,7 +3551,6 @@
+ 					int warnings, int scan_label_only)
+ {
+ 	struct physical_volume *pv;
+-	struct format_instance_ctx fic;
+ 	struct label *label;
+ 	struct lvmcache_info *info;
+ 	struct device *dev;
 
 
