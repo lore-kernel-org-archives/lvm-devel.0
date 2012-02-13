@@ -1,92 +1,189 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Mon, 19 Sep 2016 20:38:29 +0000 (UTC)
-Subject: master - lvmdbusd: Fix dbus object with only properties and no method
-Message-ID: <20160919203829.6F7B160D98@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 13 Feb 2012 10:56:32 -0000
+Subject: LVM2 ./WHATS_NEW lib/format1/format1.c lib/for ...
+Message-ID: <20120213105632.8238.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9cb886551160cecc50a20d1867aaa5e1e75b61a6
-Commit:        9cb886551160cecc50a20d1867aaa5e1e75b61a6
-Parent:        cb2b2615107e84dc3aba7b3e4b6755ed01c18cb0
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Sep 19 09:54:24 2016 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Sep 19 15:32:47 2016 -0500
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-02-13 10:56:31
 
-lvmdbusd: Fix dbus object with only properties and no method
+Modified files:
+	.              : WHATS_NEW 
+	lib/format1    : format1.c 
+	lib/format_pool: format_pool.c 
+	lib/format_text: format-text.c 
 
-Gris debugged that when we don't have a method the introspection
-data is missing the interface itself eg.
+Log message:
+	Clean error paths for format instance
+	
+	With updated orphan VG code this code needed some updates.
+	Add missing log_error for allocation failures.
 
-<interface name="<your_obj_iface_name>" />
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2282&r2=1.2283
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.190&r2=1.191
 
-When adding the properties to the dbus object introspection we will
-add the interface too if it's missing.  This now allows us the
-ability to have a dbus object with only properties.
----
- daemons/lvmdbusd/lv.py    |    7 -------
- daemons/lvmdbusd/utils.py |   24 +++++++++++++++++-------
- 2 files changed, 17 insertions(+), 14 deletions(-)
-
-diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
-index 4ec6f23..455f371 100644
---- a/daemons/lvmdbusd/lv.py
-+++ b/daemons/lvmdbusd/lv.py
-@@ -354,13 +354,6 @@ class LvCommon(AutomatedProperties):
- 	def Active(self):
- 		return dbus.Boolean(self.state.active == "active")
+--- LVM2/WHATS_NEW	2012/02/13 10:53:31	1.2282
++++ LVM2/WHATS_NEW	2012/02/13 10:56:31	1.2283
+@@ -1,5 +1,6 @@
+ Version 2.02.92 - 
+ ====================================
++  Clean error paths for format instance creation (2.02.91).
+   Release vg in error path of _format1_vg_read() instead of just free().
+   Report allocation failure for allocation of PV structure.
+   Add clvmd init dependency on dlm service when running with new corosync.
+--- LVM2/lib/format1/format1.c	2012/02/13 10:53:32	1.144
++++ LVM2/lib/format1/format1.c	2012/02/13 10:56:31	1.145
+@@ -580,8 +580,10 @@
+ 	struct format_instance_ctx fic;
+ 	struct format_instance *fid;
  
--	@dbus.service.method(
--		dbus_interface=LV_COMMON_INTERFACE,
--		in_signature='ia{sv}',
--		out_signature='o')
--	def _Future(self, tmo, open_options):
--		raise dbus.exceptions.DBusException(LV_COMMON_INTERFACE, 'Do not use!')
--
+-	if (!fmt)
+-		return_NULL;
++	if (!fmt) {
++		log_error("Failed to allocate format1 format type structure.");
++		return NULL;
++	}
  
- # noinspection PyPep8Naming
- class Lv(LvCommon):
-diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index 7d217df..4fb6a6c 100644
---- a/daemons/lvmdbusd/utils.py
-+++ b/daemons/lvmdbusd/utils.py
-@@ -147,17 +147,27 @@ def add_properties(xml, interface, props):
- 	:param props:       Output from get_properties
- 	:return: updated XML string
- 	"""
--	root = Et.fromstring(xml)
--
- 	if props:
-+		root = Et.fromstring(xml)
-+		interface_element = None
+ 	fmt->cmd = cmd;
+ 	fmt->ops = &_format1_ops;
+@@ -607,15 +609,19 @@
  
-+		# Check to see if interface is present
- 		for c in root:
--			# print c.attrib['name']
- 			if c.attrib['name'] == interface:
--				for p in props:
--					temp = '<property type="%s" name="%s" access="%s"/>\n' % \
--						(p['p_t'], p['p_name'], p['p_access'])
--					c.append(Et.fromstring(temp))
-+				interface_element = c
-+				break
+ 	if (!(fmt->orphan_vg = alloc_vg("text_orphan", cmd, fmt->orphan_vg_name))) {
+ 		log_error("Couldn't create lvm1 orphan VG.");
++		dm_free(fmt);
+ 		return NULL;
+ 	}
 +
-+		# Interface is not present, lets create it so we have something to
-+		# attach the properties too
-+		if interface_element is None:
-+			interface_element = Et.Element("interface", name=interface)
-+			root.append(interface_element)
+ 	fic.type = FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = fmt->orphan_vg_name;
+ 	fic.context.vg_ref.vg_id = NULL;
 +
-+		# Add the properties
-+		for p in props:
-+			temp = '<property type="%s" name="%s" access="%s"/>\n' % \
-+				(p['p_t'], p['p_name'], p['p_access'])
-+			interface_element.append(Et.fromstring(temp))
+ 	if (!(fid = _format1_create_instance(fmt, &fic))) {
+-		log_error("Couldn't create lvm1 orphan VG format instance.");
+-		return NULL;
++		_format1_destroy(fmt);
++		return_NULL;
+ 	}
++
+ 	vg_set_fid(fmt->orphan_vg, fid);
  
- 		return Et.tostring(root, encoding='utf8')
- 	return xml
+ 	log_very_verbose("Initialised format: %s", fmt->name);
+--- LVM2/lib/format_pool/format_pool.c	2012/02/12 23:01:19	1.48
++++ LVM2/lib/format_pool/format_pool.c	2012/02/13 10:56:31	1.49
+@@ -320,15 +320,19 @@
+ 
+ 	if (!(fmt->orphan_vg = alloc_vg("text_orphan", cmd, fmt->orphan_vg_name))) {
+ 		log_error("Couldn't create lvm1 orphan VG.");
++		dm_free(fmt);
+ 		return NULL;
+ 	}
++
+ 	fic.type = FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = fmt->orphan_vg_name;
+ 	fic.context.vg_ref.vg_id = NULL;
++
+ 	if (!(fid = _pool_create_instance(fmt, &fic))) {
+-		log_error("Couldn't create lvm1 orphan VG format instance.");
++		_pool_destroy(fmt);
+ 		return NULL;
+ 	}
++
+ 	vg_set_fid(fmt->orphan_vg, fid);
+ 
+ 	log_very_verbose("Initialised format: %s", fmt->name);
+--- LVM2/lib/format_text/format-text.c	2012/02/12 23:01:19	1.190
++++ LVM2/lib/format_text/format-text.c	2012/02/13 10:56:31	1.191
+@@ -2270,8 +2270,10 @@
+ 	const struct dm_config_value *cv;
+ 	struct mda_lists *mda_lists;
+ 
+-	if (!(fmt = dm_malloc(sizeof(*fmt))))
+-		return_NULL;
++	if (!(fmt = dm_malloc(sizeof(*fmt)))) {
++		log_error("Failed to allocate text format type structure.");
++		return NULL;
++	}
+ 
+ 	fmt->cmd = cmd;
+ 	fmt->ops = &_text_handler;
+@@ -2296,13 +2298,13 @@
+ 
+ 	if (!(fmt->labeller = text_labeller_create(fmt))) {
+ 		log_error("Couldn't create text label handler.");
+-		goto err;
++		goto bad;
+ 	}
+ 
+ 	if (!(label_register_handler(FMT_TEXT_NAME, fmt->labeller))) {
+ 		log_error("Couldn't register text label handler.");
+ 		fmt->labeller->ops->destroy(fmt->labeller);
+-		goto err;
++		goto bad;
+ 	}
+ 
+ 	if ((cn = find_config_tree_node(cmd, "metadata/dirs"))) {
+@@ -2310,13 +2312,13 @@
+ 			if (cv->type != DM_CFG_STRING) {
+ 				log_error("Invalid string in config file: "
+ 					  "metadata/dirs");
+-				goto err;
++				goto bad;
+ 			}
+ 
+ 			if (!_add_dir(cv->v.str, &mda_lists->dirs)) {
+ 				log_error("Failed to add %s to text format "
+ 					  "metadata directory list ", cv->v.str);
+-				goto err;
++				goto bad;
+ 			}
+ 			cmd->independent_metadata_areas = 1;
+ 		}
+@@ -2325,31 +2327,26 @@
+ 	if ((cn = find_config_tree_node(cmd, "metadata/disk_areas"))) {
+ 		for (cn = cn->child; cn; cn = cn->sib) {
+ 			if (!_get_config_disk_area(cmd, cn, &mda_lists->raws))
+-				goto err;
++				goto_bad;
+ 			cmd->independent_metadata_areas = 1;
+ 		}
+ 	}
+ 
+-	if (!(fmt->orphan_vg = alloc_vg("text_orphan", cmd, fmt->orphan_vg_name))) {
+-		dm_free(fmt);
+-		return NULL;
+-	}
++	if (!(fmt->orphan_vg = alloc_vg("text_orphan", cmd, fmt->orphan_vg_name)))
++		goto_bad;
+ 
+ 	fic.type = FMT_INSTANCE_AUX_MDAS;
+ 	fic.context.vg_ref.vg_name = fmt->orphan_vg_name;
+ 	fic.context.vg_ref.vg_id = NULL;
+-	if (!(fid = _text_create_text_instance(fmt, &fic))) {
+-		log_error("Failed to create format instance");
+-		release_vg(fmt->orphan_vg);
+-		goto err;
+-	}
++	if (!(fid = _text_create_text_instance(fmt, &fic)))
++		goto_bad;
++
+ 	vg_set_fid(fmt->orphan_vg, fid);
+ 
+ 	log_very_verbose("Initialised format: %s", fmt->name);
+ 
+ 	return fmt;
+-
+-      err:
++bad:
+ 	_text_destroy(fmt);
+ 
+ 	return NULL;
 
 
