@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 13 Feb 2012 00:23:22 -0000
-Subject: LVM2 WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM
-Message-ID: <20120213002322.28544.qmail@sourceware.org>
+From: fabbione@sourceware.org <fabbione@sourceware.org>
+Date: 13 Feb 2012 05:24:58 -0000
+Subject: LVM2 WHATS_NEW configure.in
+Message-ID: <20120213052458.28874.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,47 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-13 00:23:22
+Changes by:	fabbione at sourceware.org	2012-02-13 05:24:58
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM 
+	.              : WHATS_NEW configure.in 
 
 Log message:
-	post-release
+	In the new corosync world, dlm is a standalone service.
+	
+	Fix clvmd init script to Require dlm service when building for the
+	new corosync or clvmd will fail to start.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2278&r2=1.2279
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.550&r2=1.551
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.291&r2=1.292
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.96&r2=1.97
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2279&r2=1.2280
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.180&r2=1.181
 
---- LVM2/WHATS_NEW	2012/02/12 23:02:52	1.2278
-+++ LVM2/WHATS_NEW	2012/02/13 00:23:21	1.2279
-@@ -1,3 +1,6 @@
-+Version 2.02.92 - 
-+====================================
-+
+--- LVM2/WHATS_NEW	2012/02/13 00:23:21	1.2279
++++ LVM2/WHATS_NEW	2012/02/13 05:24:57	1.2280
+@@ -1,5 +1,6 @@
+ Version 2.02.92 - 
+ ====================================
++  Add clvmd init dependency on dlm service when running with new corosync.
+ 
  Version 2.02.91 - 12th February 2012
  ====================================
-   Remove PV-based format instances (which are no longer needed).
---- LVM2/WHATS_NEW_DM	2012/02/12 23:02:52	1.550
-+++ LVM2/WHATS_NEW_DM	2012/02/13 00:23:21	1.551
-@@ -1,3 +1,6 @@
-+Version 1.02.71 - 
-+====================================
+--- LVM2/configure.in	2012/01/31 21:21:54	1.180
++++ LVM2/configure.in	2012/02/13 05:24:57	1.181
+@@ -675,6 +675,15 @@
+ 	fi
+ fi
+ 
++dnl -- Fixup CLVMD_CMANAGERS with new corosync
++dnl -- clvmd built with corosync >= 2.0 needs dlm (either init or systemd service)
++dnl -- to be started.
++if [[ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]]; then
++   if test x$HAVE_CMAP = xyes; then
++	CLVMD_CMANAGERS="$CLVMD_CMANAGERS dlm"
++   fi
++fi
 +
- Version 1.02.70 - 12th February 2012
- ====================================
-   Fix dm_event_get_version() check.
---- LVM2/VERSION	2012/02/12 23:02:52	1.291
-+++ LVM2/VERSION	2012/02/13 00:23:21	1.292
-@@ -1 +1 @@
--2.02.91(2)-cvs (2012-02-12)
-+2.02.92(2)-cvs (2012-02-12)
---- LVM2/VERSION_DM	2012/02/12 23:02:52	1.96
-+++ LVM2/VERSION_DM	2012/02/13 00:23:21	1.97
-@@ -1 +1 @@
--1.02.70-cvs (2012-02-12)
-+1.02.71-cvs (2012-02-12)
+ ################################################################################
+ dnl -- clvmd pidfile
+ if test "x$CLVMD" != xnone; then
 
 
