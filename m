@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 10:49:29 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c
-Message-ID: <20120213104929.6324.qmail@sourceware.org>
+Date: 13 Feb 2012 10:51:53 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/metadata.c
+Message-ID: <20120213105153.6976.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,157 +10,67 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 10:49:28
+Changes by:	zkabelac at sourceware.org	2012-02-13 10:51:53
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdm-common.c 
+	.              : WHATS_NEW 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Do not write to -1 buffer address
+	Log error reporting for failing _alloc_pv
 	
-	In case of zero bytes would be read from sysfs, it would store '\0' on
-	temp_buf[-1] address.
-	
-	Simplify some buffer length calculation and use strcpy if we've just
-	checked string fits in give buffer.
-	
-	Replace jump label error: with bad: commonly used in libdm.
+	Drop unneeded zeroing of zalloced memory region.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.551&r2=1.552
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.136&r2=1.137
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2280&r2=1.2281
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.480&r2=1.481
 
---- LVM2/WHATS_NEW_DM	2012/02/13 00:23:21	1.551
-+++ LVM2/WHATS_NEW_DM	2012/02/13 10:49:28	1.552
+--- LVM2/WHATS_NEW	2012/02/13 05:24:57	1.2280
++++ LVM2/WHATS_NEW	2012/02/13 10:51:52	1.2281
 @@ -1,5 +1,6 @@
- Version 1.02.71 - 
+ Version 2.02.92 - 
  ====================================
-+  Fix potential risk of writing in front of buffer in _sysfs_get_dm_name().
++  Report allocation failure for allocation of PV structure.
+   Add clvmd init dependency on dlm service when running with new corosync.
  
- Version 1.02.70 - 12th February 2012
- ====================================
---- LVM2/libdm/libdm-common.c	2012/02/08 11:07:17	1.136
-+++ LVM2/libdm/libdm-common.c	2012/02/13 10:49:28	1.137
-@@ -1191,19 +1191,18 @@
- 	char *sysfs_path, *temp_buf;
- 	FILE *fp = NULL;
- 	int r = 0;
-+	size_t len;
+ Version 2.02.91 - 12th February 2012
+--- LVM2/lib/metadata/metadata.c	2012/02/12 23:01:19	1.480
++++ LVM2/lib/metadata/metadata.c	2012/02/13 10:51:53	1.481
+@@ -1557,21 +1557,14 @@
  
- 	if (!(sysfs_path = dm_malloc(PATH_MAX)) ||
- 	    !(temp_buf = dm_malloc(PATH_MAX))) {
- 		log_error("_sysfs_get_dm_name: failed to allocate temporary buffers");
--		if (sysfs_path)
--			dm_free(sysfs_path);
--		return 0;
-+		goto bad;
- 	}
- 
- 	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32 ":%" PRIu32
- 			"/dm/name", _sysfs_dir, major, minor) < 0) {
- 		log_error("_sysfs_get_dm_name: dm_snprintf failed");
--		goto error;
-+		goto bad;
- 	}
- 
- 	if (!(fp = fopen(sysfs_path, "r"))) {
-@@ -1211,23 +1210,25 @@
- 			log_sys_error("fopen", sysfs_path);
- 		else
- 			log_sys_debug("fopen", sysfs_path);
--		goto error;
-+		goto bad;
- 	}
- 
- 	if (!fgets(temp_buf, PATH_MAX, fp)) {
- 		log_sys_error("fgets", sysfs_path);
--		goto error;
-+		goto bad;
- 	}
--	temp_buf[strlen(temp_buf) - 1] = '\0';
- 
--	if (buf_size < strlen(temp_buf) + 1) {
-+	len = strlen(temp_buf);
-+
-+	if (len > buf_size) {
- 		log_error("_sysfs_get_dm_name: supplied buffer too small");
--		goto error;
-+		goto bad;
- 	}
- 
--	strncpy(buf, temp_buf, buf_size);
-+	temp_buf[len ? len - 1 : 0] = '\0'; /* \n */
-+	strcpy(buf, temp_buf);
- 	r = 1;
--error:
-+bad:
- 	if (fp && fclose(fp))
- 		log_sys_error("fclose", sysfs_path);
- 
-@@ -1241,19 +1242,19 @@
+ static struct physical_volume *_alloc_pv(struct dm_pool *mem, struct device *dev)
  {
- 	char *sysfs_path, *temp_buf, *name;
- 	ssize_t size;
-+	size_t len;
-+	int r = 0;
+-	struct physical_volume *pv = dm_pool_zalloc(mem, sizeof(*pv));
++	struct physical_volume *pv;
  
- 	if (!(sysfs_path = dm_malloc(PATH_MAX)) ||
- 	    !(temp_buf = dm_malloc(PATH_MAX))) {
- 		log_error("_sysfs_get_kernel_name: failed to allocate temporary buffers");
--		if (sysfs_path)
--			dm_free(sysfs_path);
--		return 0;
-+		goto bad;
- 	}
+-	if (!pv)
+-		return_NULL;
++	if (!(pv = dm_pool_zalloc(mem, sizeof(*pv)))) {
++		log_error("Failed to allocate pv structure.");
++		return NULL;
++	}
  
- 	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32 ":%" PRIu32,
- 			_sysfs_dir, major, minor) < 0) {
- 		log_error("_sysfs_get_kernel_name: dm_snprintf failed");
--		goto error;
-+		goto bad;
- 	}
+-	pv_set_fid(pv, NULL);
+-	pv->pe_size = 0;
+-	pv->pe_start = 0;
+-	pv->pe_count = 0;
+-	pv->pe_alloc_count = 0;
+-	pv->pe_align = 0;
+-	pv->pe_align_offset = 0;
+-	pv->fmt = NULL;
+ 	pv->dev = dev;
+-
+ 	pv->status = ALLOCATABLE_PV;
  
- 	if ((size = readlink(sysfs_path, temp_buf, PATH_MAX - 1)) < 0) {
-@@ -1261,30 +1262,29 @@
- 			log_sys_error("readlink", sysfs_path);
- 		else
- 			log_sys_debug("readlink", sysfs_path);
--		goto error;
-+		goto bad;
- 	}
- 	temp_buf[size] = '\0';
+ 	dm_list_init(&pv->tags);
+@@ -1621,7 +1614,7 @@
+ 	unsigned mda_index;
  
- 	if (!(name = strrchr(temp_buf, '/'))) {
- 		log_error("Could not locate device kernel name in sysfs path %s", temp_buf);
--		goto error;
-+		goto bad;
- 	}
- 	name += 1;
-+	len = size - (name - temp_buf) + 1;
+ 	if (!pv)
+-		return NULL;
++		return_NULL;
  
--	if (buf_size < strlen(name) + 1) {
-+	if (len > buf_size) {
- 		log_error("_sysfs_get_kernel_name: output buffer too small");
--		goto error;
-+		goto bad;
- 	}
- 
--	strncpy(buf, name, buf_size);
-+	strcpy(buf, name);
-+	r = 1;
-+bad:
- 	dm_free(sysfs_path);
- 	dm_free(temp_buf);
--	return 1;
- 
--error:
--	dm_free(sysfs_path);
--	dm_free(temp_buf);
--	return 0;
-+	return r;
- }
- 
- int dm_device_get_name(uint32_t major, uint32_t minor, int prefer_kernel_name,
+ 	if (id)
+ 		memcpy(&pv->id, id, sizeof(*id));
 
 
