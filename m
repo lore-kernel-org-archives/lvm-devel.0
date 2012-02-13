@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Feb 2012 18:22:54 -0000
-Subject: LVM2/lib/cache lvmetad.h
-Message-ID: <20120228182254.23593.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 13 Feb 2012 18:36:57 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20120213183657.28415.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,70 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-28 18:22:52
+Changes by:	jbrassow at sourceware.org	2012-02-13 18:36:56
 
 Modified files:
-	lib/cache      : lvmetad.h 
+	tools          : lvconvert.c 
 
 Log message:
-	Bypass lvmetad fns when not configured to use lvmetad.
+	Fix possible NULL pointer dereferences when updating mirror log.
+	
+	'_lv_update_log_type' takes a lvconvert_params argument so that it can pass
+	down the user's preference of 'region_size' and allocation_policy.  When
+	'mirror_remove_missing' was introduced (commit ID
+	95986e42a18ca98c9b1d777346978b7297c85558) it didn't make sense to pass down
+	user preferences - so NULL was given instead.  While it may never happen in
+	practice, static analysis reveals that this argument could be dereferenced.
+	So, if the user preferences were not passed in, glean the necessary fields
+	from what is already set in the LV.
+	
+	Reported-by: Zdenek Kabelac <zkabelac@redhat.com>
+	Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
+	
+	(Not updating WHATSNEW for this simple clean-up.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.180&r2=1.181
 
---- LVM2/lib/cache/lvmetad.h	2012/02/26 08:50:13	1.2
-+++ LVM2/lib/cache/lvmetad.h	2012/02/28 18:22:52	1.3
-@@ -1,5 +1,5 @@
+--- LVM2/tools/lvconvert.c	2012/01/25 22:38:40	1.180
++++ LVM2/tools/lvconvert.c	2012/02/13 18:36:55	1.181
+@@ -770,8 +770,10 @@
+ 			       struct dm_list *operable_pvs,
+ 			       int log_count)
+ {
+-	uint32_t region_size;
+ 	int old_log_count;
++	uint32_t region_size = (lp) ? lp->region_size :
++		first_seg(lv)->region_size;
++	alloc_policy_t alloc = (lp) ? lp->alloc : lv->alloc;
+ 	struct logical_volume *original_lv;
+ 	struct logical_volume *log_lv;
+ 
+@@ -793,13 +795,12 @@
+ 
+ 	/* Adding redundancy to the log */
+ 	if (old_log_count < log_count) {
+-
+ 		region_size = adjusted_mirror_region_size(lv->vg->extent_size,
+ 							  lv->le_count,
+-							  lp->region_size);
++							  region_size);
+ 
+ 		if (!add_mirror_log(cmd, original_lv, log_count,
+-				    region_size, operable_pvs, lp->alloc))
++				    region_size, operable_pvs, alloc))
+ 			return_0;
+ 		/*
+ 		 * FIXME: This simple approach won't work in cluster mirrors,
+@@ -812,7 +813,8 @@
+ 	}
+ 
+ 	/* Reducing redundancy of the log */
+-	return remove_mirror_images(log_lv, log_count, is_mirror_image_removable, operable_pvs, 1U);
++	return remove_mirror_images(log_lv, log_count,
++				    is_mirror_image_removable, operable_pvs, 1U);
+ }
+ 
  /*
-- * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2012 Red Hat, Inc.
-  *
-  * This file is part of LVM2.
-  *
-@@ -19,6 +19,7 @@
- struct cmd_context;
- struct dm_config_tree;
- 
-+#ifdef LVMETAD_SUPPORT
- /*
-  * Initialise the communication with lvmetad. Normally called by
-  * lvmcache_init. Sets up a global handle for our process.
-@@ -100,5 +101,22 @@
-  */
- int pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv);
- 
--#endif
-+#  else		/* LVMETAD_SUPPORT */
-+
-+#    define lvmetad_init()	do { } while (0)
-+#    define lvmetad_set_active(a)	do { } while (0)
-+#    define lvmetad_active()	(0)
-+#    define lvmetad_vg_update(vg)	(1)
-+#    define lvmetad_vg_remove(vg)	(1)
-+#    define lvmetad_pv_found(pvid, device, fmt, label_sector, vg)	(1)
-+#    define lvmetad_pv_gone(device)	(1)
-+#    define lvmetad_pv_list_to_lvmcache(cmd)	(1)
-+#    define lvmetad_pv_lookup(cmd, pvid)	(0)
-+#    define lvmetad_pv_lookup_by_devt(cmd, dev)	(0)
-+#    define lvmetad_vg_list_to_lvmcache(cmd)	(1)
-+#    define lvmetad_vg_lookup(cmd, vgname, vgid)	(NULL)
-+#    define pvscan_lvmetad(cmd, argc, argv)	(0)
- 
-+#  endif	/* LVMETAD_SUPPORT */
-+
-+#endif
 
 
