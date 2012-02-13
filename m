@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Feb 2012 18:19:33 -0000
-Subject: LVM2/libdm libdm-string.c
-Message-ID: <20120223181933.30895.qmail@sourceware.org>
+Date: 13 Feb 2012 12:07:51 -0000
+Subject: LVM2/tools lvmcmdline.c
+Message-ID: <20120213120751.6383.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-23 18:19:32
+Changes by:	zkabelac at sourceware.org	2012-02-13 12:07:51
 
 Modified files:
-	libdm          : libdm-string.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Missed dm_free in last commit
+	Handle all succefull values from open()
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-string.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.149&r2=1.150
 
---- LVM2/libdm/libdm-string.c	2012/02/23 18:05:12	1.19
-+++ LVM2/libdm/libdm-string.c	2012/02/23 18:19:32	1.20
-@@ -161,6 +161,7 @@
- 			dm_free(buf);
- 			return -1;
- 		}
-+		dm_free(buf);
- 	} else
- 		*result = buf;
+--- LVM2/tools/lvmcmdline.c	2011/12/08 21:24:10	1.149
++++ LVM2/tools/lvmcmdline.c	2012/02/13 12:07:51	1.150
+@@ -1149,7 +1149,7 @@
  
+ 	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/%u/cmdline", pid);
+ 	/* FIXME Use generic read code. */
+-	if ((fd = open(buf, O_RDONLY)) > 0) {
++	if ((fd = open(buf, O_RDONLY)) >= 0) {
+ 		if ((n = read(fd, _proc_cmdline, sizeof(_proc_cmdline) - 1)) < 0) {
+ 			log_sys_error("read", buf);
+ 			n = 0;
 
 
