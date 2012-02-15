@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 15 Feb 2012 12:17:35 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
-Message-ID: <20120215121735.17979.qmail@sourceware.org>
+Date: 15 Feb 2012 12:23:17 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
+Message-ID: <20120215122317.20889.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,88 +10,102 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-02-15 12:17:35
+Changes by:	prajnoha at sourceware.org	2012-02-15 12:23:16
 
 Modified files:
 	.              : WHATS_NEW_DM 
-	libdm/ioctl    : libdm-iface.c 
+	libdm          : libdevmapper.h libdm-common.c libdm-common.h 
 
 Log message:
-	Replace any '\' char with '\\' in table specification on input.
+	Add DM_DEFAULT_NAME_MANGLING_MODE env. variable to override configured value.
 	
-	Device-mapper in kernel uses '\' as escape character so it's better
-	to double it to avoid any confusion when using existing device names
-	with '\' in the table specification.
-	
-	For example:
-	
-	dmsetup create x --table "0 8 linear /dev/mapper/a\x20b 0"
-	
-	should pass just fine now without a need to explicitly escape the '\' char
-	like this:
-	
-	dmsetup create x --table "0 8 linear /dev/mapper/a\\x20b 0"
+	Just in case of emergency when name mangling code causes any problems so
+	we can override the default value and switch off the mangling globally.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.563&r2=1.564
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.564&r2=1.565
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.182&r2=1.183
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.140&r2=1.141
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.h.diff?cvsroot=lvm2&r1=1.13&r2=1.14
 
---- LVM2/WHATS_NEW_DM	2012/02/15 12:08:57	1.563
-+++ LVM2/WHATS_NEW_DM	2012/02/15 12:17:34	1.564
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW_DM	2012/02/15 12:17:34	1.564
++++ LVM2/WHATS_NEW_DM	2012/02/15 12:23:15	1.565
+@@ -1,5 +1,7 @@
  Version 1.02.71 - 
  ====================================
-+  Replace any '\' char with '\\' in table specification on input.
++  Add DM_DEFAULT_NAME_MANGLING_MODE env. variable to override configured value.
++  Add dm_lib_init to automatically initialise device-mapper library on load.
+   Replace any '\' char with '\\' in table specification on input.
    Add mangle command to dmsetup to provide renaming to correct mangled form.
    Add 'mangled_name' and 'unmangled_name' fields to dmsetup info -c -o.
-   Add --manglename option to dmsetup to select the name mangling mode.
---- LVM2/libdm/ioctl/libdm-iface.c	2012/02/15 12:01:28	1.137
-+++ LVM2/libdm/ioctl/libdm-iface.c	2012/02/15 12:17:34	1.138
-@@ -866,7 +866,9 @@
- 	char *out_sp = out;
- 	struct dm_target_spec sp;
- 	size_t sp_size = sizeof(struct dm_target_spec);
-+	unsigned int backslash_count = 0;
- 	int len;
-+	char *pt;
+--- LVM2/libdm/libdevmapper.h	2012/02/15 12:01:28	1.182
++++ LVM2/libdm/libdevmapper.h	2012/02/15 12:23:16	1.183
+@@ -365,6 +365,12 @@
+  */
+ int dm_device_has_mounted_fs(uint32_t major, uint32_t minor);
  
- 	if (strlen(t->type) >= sizeof(sp.target_type)) {
- 		log_error("Target type name %s is too long.", t->type);
-@@ -880,15 +882,32 @@
- 	sp.target_type[sizeof(sp.target_type) - 1] = '\0';
- 
- 	out += sp_size;
--	len = strlen(t->params);
-+	pt = t->params;
 +
-+	while (*pt)
-+		if (*pt++ == '\\')
-+			backslash_count++;
-+	len = strlen(t->params) + backslash_count;
++/*
++ * Initialise library
++ */
++void dm_lib_init(void) __attribute__((constructor));
++
+ /*
+  * Release library resources
+  */
+--- LVM2/libdm/libdm-common.c	2012/02/15 11:39:38	1.140
++++ LVM2/libdm/libdm-common.c	2012/02/15 12:23:16	1.141
+@@ -43,6 +43,8 @@
+ #  include <selinux/label.h>
+ #endif
  
- 	if ((out >= end) || (out + len + 1) >= end) {
- 		log_error("Ran out of memory building ioctl parameter");
- 		return NULL;
- 	}
++#define DM_DEFAULT_NAME_MANGLING_MODE_ENV_VAR_NAME "DM_DEFAULT_NAME_MANGLING_MODE"
++
+ #define DEV_DIR "/dev/"
  
--	strcpy(out, t->params);
--	out += len + 1;
-+	if (backslash_count) {
-+		/* replace "\" with "\\" */
-+		pt = t->params;
-+		do {
-+			if (*pt == '\\')
-+				*out++ = '\\';
-+			*out++ = *pt++;
-+		} while (*pt);
-+		*out++ = '\0';
-+	}
-+	else {
-+		strcpy(out, t->params);
-+		out += len + 1;
-+	}
+ #ifdef UDEV_SYNC_SUPPORT
+@@ -66,7 +68,7 @@
  
- 	/* align next block */
- 	out = _align(out, ALIGNMENT);
+ static int _verbose = 0;
+ static int _suspended_dev_counter = 0;
+-static int _name_mangling_mode = DEFAULT_DM_NAME_MANGLING;
++static int _name_mangling_mode = -1;
+ 
+ #ifdef HAVE_SELINUX_LABEL_H
+ static struct selabel_handle *_selabel_handle = NULL;
+@@ -79,6 +81,22 @@
+ static int _udev_checking = 1;
+ #endif
+ 
++void dm_lib_init(void)
++{
++	const char *env;
++
++	env = getenv(DM_DEFAULT_NAME_MANGLING_MODE_ENV_VAR_NAME);
++	if (env && *env) {
++		if (!strcasecmp(env, "none"))
++			_name_mangling_mode = DM_STRING_MANGLING_NONE;
++		else if (!strcasecmp(env, "auto"))
++			_name_mangling_mode = DM_STRING_MANGLING_AUTO;
++		else if (!strcasecmp(env, "hex"))
++			_name_mangling_mode = DM_STRING_MANGLING_HEX;
++	} else
++		_name_mangling_mode = DEFAULT_DM_NAME_MANGLING;
++}
++
+ /*
+  * Library users can provide their own logging
+  * function.
+--- LVM2/libdm/libdm-common.h	2012/02/15 11:39:38	1.13
++++ LVM2/libdm/libdm-common.h	2012/02/15 12:23:16	1.14
+@@ -18,6 +18,8 @@
+ 
+ #include "libdevmapper.h"
+ 
++#define DM_DEFAULT_NAME_MANGLING_MODE_ENV_VAR_NAME "DM_DEFAULT_NAME_MANGLING_MODE"
++
+ #define DEV_NAME(dmt) (dmt->mangled_dev_name ? : dmt->dev_name)
+ 
+ int mangle_name(const char *str, size_t len, char *buf,
 
 
