@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 15 Feb 2012 15:18:46 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c lib/m ...
-Message-ID: <20120215151846.17172.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 15 Feb 2012 17:30:09 -0000
+Subject: LVM2/daemons/lvmetad lvmetad-core.c
+Message-ID: <20120215173009.31385.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,201 +10,332 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-15 15:18:44
+Changes by:	mornfall at sourceware.org	2012-02-15 17:30:07
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c metadata-exported.h 
-	liblvm         : lvm_lv.c 
-	tools          : lvchange.c lvcreate.c lvmcmdline.c toollib.c 
-	                 toollib.h vgchange.c 
+	daemons/lvmetad: lvmetad-core.c 
 
 Log message:
-	Initialize dmeventd monitoring for every command
-	
-	Read lvm.conf setting for monitoring for each command. So we should not
-	activate monitoring if the default compilation is set to monitor during
-	lvconvert commnads.
-	
-	Patch also removes check for  clustered VG and allows to disable monitoring
-	for clustered VG with the assumption, the problem with monitoring and dmeventd
-	flag passing for INGNORE is already fixed.
+	Update lvmetad: use device major/minor pair to track devices. Keep a pvmeta
+	config tree per PV which is mostly provided by the client, so it can be used to
+	keep track of things like label_sector, PV format, mda count / offsets and so
+	on.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2294&r2=1.2295
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.361&r2=1.362
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.230&r2=1.231
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/liblvm/lvm_lv.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.253&r2=1.254
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.150&r2=1.151
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.240&r2=1.241
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.h.diff?cvsroot=lvm2&r1=1.77&r2=1.78
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgchange.c.diff?cvsroot=lvm2&r1=1.129&r2=1.130
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.35&r2=1.36
 
---- LVM2/WHATS_NEW	2012/02/15 13:49:51	1.2294
-+++ LVM2/WHATS_NEW	2012/02/15 15:18:43	1.2295
-@@ -1,5 +1,6 @@
- Version 2.02.92 - 
- ====================================
-+  Read monitoring config settings for every lvm command.
-   Initialize monitoring support only for thin pools and skip thin volumes.
-   Make conversion from a synced 'mirror' to 'raid1' not cause a full resync.
-   Properly test buffer for unit check in units_to_bytes().
---- LVM2/lib/metadata/lv_manip.c	2012/02/13 11:25:56	1.361
-+++ LVM2/lib/metadata/lv_manip.c	2012/02/15 15:18:43	1.362
-@@ -4378,8 +4378,6 @@
- 		goto out;
- 	}
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/15 14:15:50	1.35
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/15 17:30:07	1.36
+@@ -12,14 +12,10 @@
+ #include "daemon-server.h"
  
--	init_dmeventd_monitor(lp->activation_monitoring);
+ typedef struct {
+-	const char *path;
+-	dev_t number;
+-} device; /* TODO */
 -
- 	if (seg_is_thin(lp)) {
- 		/* For snapshot, suspend active thin origin first */
- 		if (org && lv_is_active(org)) {
---- LVM2/lib/metadata/metadata-exported.h	2012/02/12 23:01:19	1.230
-+++ LVM2/lib/metadata/metadata-exported.h	2012/02/15 15:18:43	1.231
-@@ -574,7 +574,6 @@
- 	int minor; /* all */
- 	int log_count; /* mirror */
- 	int nosync; /* mirror */
--	int activation_monitoring; /* all */
- 	activation_change_t activate; /* non-snapshot, non-mirror */
- 
- 	const char *origin; /* snap */
---- LVM2/liblvm/lvm_lv.c	2012/02/13 11:25:56	1.38
-+++ LVM2/liblvm/lvm_lv.c	2012/02/15 15:18:43	1.39
-@@ -110,7 +110,6 @@
- 	lp->zero = 1;
- 	lp->major = -1;
- 	lp->minor = -1;
--	lp->activation_monitoring = DEFAULT_DMEVENTD_MONITOR;
- 	lp->activate = CHANGE_AY;
- 	lp->vg_name = vg->name;
- 	lp->lv_name = lvname; /* FIXME: check this for safety */
---- LVM2/tools/lvchange.c	2011/12/01 00:04:21	1.137
-+++ LVM2/tools/lvchange.c	2012/02/15 15:18:44	1.138
-@@ -524,7 +524,7 @@
- 			   void *handle __attribute__((unused)))
- {
- 	int doit = 0, docmds = 0;
--	int dmeventd_mode, archived = 0;
-+	int archived = 0;
- 	struct logical_volume *origin;
- 	char snaps_msg[128];
- 
-@@ -595,11 +595,6 @@
- 		return ECMD_FAILED;
- 	}
- 
--	if (!get_activation_monitoring_mode(cmd, lv->vg, &dmeventd_mode))
--		return ECMD_FAILED;
--
--	init_dmeventd_monitor(dmeventd_mode);
--
- 	/*
- 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
- 	 * If --poll is explicitly provided use it; otherwise polling
---- LVM2/tools/lvcreate.c	2012/02/01 01:54:20	1.253
-+++ LVM2/tools/lvcreate.c	2012/02/15 15:18:44	1.254
-@@ -726,10 +726,6 @@
- 		return 0;
- 	}
- 
--	if (!get_activation_monitoring_mode(cmd, NULL,
--					    &lp->activation_monitoring))
--		return_0;
--
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
---- LVM2/tools/lvmcmdline.c	2012/02/13 12:07:51	1.150
-+++ LVM2/tools/lvmcmdline.c	2012/02/15 15:18:44	1.151
-@@ -935,6 +935,7 @@
- 	init_test(cmd->current_settings.test);
- 	init_full_scan_done(0);
- 	init_mirror_in_sync(0);
-+	init_dmeventd_monitor(DEFAULT_DMEVENTD_MONITOR);
- 
- 	init_msg_prefix(cmd->default_settings.msg_prefix);
- 	init_cmd_name(cmd->default_settings.cmd_name);
-@@ -996,6 +997,7 @@
- {
- 	int ret = 0;
- 	int locking_type;
-+	int monitoring;
- 	struct dm_config_tree *old_cft;
- 
- 	init_error_message_produced(0);
-@@ -1041,6 +1043,10 @@
- 		goto_out;
- 	_apply_settings(cmd);
- 
-+	if (!get_activation_monitoring_mode(cmd, &monitoring))
-+		goto_out;
-+	init_dmeventd_monitor(monitoring);
+-typedef struct {
+ 	struct dm_hash_table *pvid_to_status;
+-	struct dm_hash_table *pvid_to_device; /* shares locks with status */
++	struct dm_hash_table *pvid_to_pvmeta; /* shares locks with status */
+ 	struct dm_hash_table *device_to_pvid; /* shares locks with status */
 +
- 	log_debug("Processing: %s", cmd->cmd_line);
- 
- #ifdef O_DIRECT_SUPPORT
---- LVM2/tools/toollib.c	2012/02/10 01:28:28	1.240
-+++ LVM2/tools/toollib.c	2012/02/15 15:18:44	1.241
-@@ -1490,7 +1490,6 @@
- }
- 
- int get_activation_monitoring_mode(struct cmd_context *cmd,
--				   struct volume_group *vg,
- 				   int *monitoring_mode)
- {
- 	*monitoring_mode = DEFAULT_DMEVENTD_MONITOR;
-@@ -1511,16 +1510,6 @@
- 					DEFAULT_DMEVENTD_MONITOR))
- 		*monitoring_mode = DMEVENTD_MONITOR_IGNORE;
- 
--	if (vg && vg_is_clustered(vg) &&
--	    *monitoring_mode == DMEVENTD_MONITOR_IGNORE) {
--		log_error("%s is incompatible with clustered Volume Group "
--			  "\"%s\": Skipping.",
--			  (arg_count(cmd, ignoremonitoring_ARG) ?
--			   "--ignoremonitoring" : "activation/monitoring=0"),
--			  vg->name);
--		return 0;
--	}
--	
+ 	struct dm_hash_table *vgid_to_metadata;
+ 	struct dm_hash_table *vgid_to_vgname;
+ 	struct dm_hash_table *vgname_to_vgid;
+@@ -164,6 +160,56 @@
  	return 1;
  }
  
---- LVM2/tools/toollib.h	2011/02/18 14:47:31	1.77
-+++ LVM2/tools/toollib.h	2012/02/15 15:18:44	1.78
-@@ -110,7 +110,6 @@
- 			     struct pvcreate_params *pp);
++static struct dm_config_node *make_config_node(struct dm_config_tree *cft,
++					       const char *key,
++					       struct dm_config_node *parent,
++					       struct dm_config_node *pre_sib)
++{
++	struct dm_config_node *cn = dm_config_create_node(cft, key);
++	cn->parent = parent;
++	cn->sib = NULL;
++	cn->v = NULL;
++	cn->child = NULL;
++
++	if (parent && parent->child && !pre_sib) { /* find the last one */
++		pre_sib = parent->child;
++		while (pre_sib && pre_sib->sib) pre_sib = pre_sib->sib;
++	}
++
++	if (parent && !parent->child)
++		parent->child = cn;
++	if (pre_sib)
++		pre_sib->sib = cn;
++
++	return cn;
++}
++
++static struct dm_config_node *make_text_node(struct dm_config_tree *cft,
++					     const char *key,
++					     const char *value,
++					     struct dm_config_node *parent,
++					     struct dm_config_node *pre_sib)
++{
++	struct dm_config_node *cn = make_config_node(cft, key, parent, pre_sib);
++	cn->v = dm_config_create_value(cft);
++	cn->v->type = DM_CFG_STRING;
++	cn->v->v.str = value;
++	return cn;
++}
++
++static struct dm_config_node *make_int_node(struct dm_config_tree *cft,
++					    const char *key,
++					    int64_t value,
++					    struct dm_config_node *parent,
++					    struct dm_config_node *pre_sib)
++{
++	struct dm_config_node *cn = make_config_node(cft, key, parent, pre_sib);
++	cn->v = dm_config_create_value(cft);
++	cn->v->type = DM_CFG_INT;
++	cn->v->v.i = value;
++	return cn;
++}
++
+ static void filter_metadata(struct dm_config_node *vg) {
+ 	struct dm_config_node *pv = pvs(vg);
+ 	while (pv) {
+@@ -195,16 +241,12 @@
+ 		int found = uuid ? (dm_hash_lookup(s->pvid_to_status, uuid) ? 1 : 0) : 0;
+ 		if (act) {
+ 			set_flag(cft, pv, "status", "MISSING", !found);
+-			const char *devpath = dm_hash_lookup(s->pvid_to_device, uuid);
+-			// debug("setting device of %s to %s\n", uuid, devpath);
+-			if (devpath) {
+-				struct dm_config_node *dev = dm_config_create_node(cft, "device");
+-				dev->sib = pv->child;
+-				dev->v = dm_config_create_value(cft);
+-				dev->v->type = DM_CFG_STRING;
+-				dev->v->v.str = dm_hash_lookup(s->pvid_to_device, uuid);
+-				dev->parent = pv;
+-				pv->child = dev;
++			struct dm_config_tree *pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, uuid);
++			if (pvmeta) {
++				// debug_cft("PV META", pvmeta->root);
++				make_int_node(cft, "device",
++					      dm_config_find_int(pvmeta->root, "pvmeta/device", 0),
++					      pv, NULL);
+ 			}
+ 		}
+ 		if (!found) {
+@@ -221,46 +263,16 @@
+ 	return complete;
+ }
  
- int get_activation_monitoring_mode(struct cmd_context *cmd,
--				   struct volume_group *vg,
- 				   int *monitoring_mode);
- int get_stripe_params(struct cmd_context *cmd, uint32_t *stripes,
- 		      uint32_t *stripe_size);
---- LVM2/tools/vgchange.c	2011/11/07 10:58:13	1.129
-+++ LVM2/tools/vgchange.c	2012/02/15 15:18:44	1.130
-@@ -447,7 +447,6 @@
- 			   struct volume_group *vg,
- 			   void *handle __attribute__((unused)))
+-static struct dm_config_node *make_config_node(struct dm_config_tree *cft,
+-					       const char *key,
+-					       struct dm_config_node *parent,
+-					       struct dm_config_node *pre_sib)
+-{
+-	struct dm_config_node *cn = dm_config_create_node(cft, key);
+-	cn->parent = parent;
+-	cn->sib = NULL;
+-	cn->v = NULL;
+-	cn->child = NULL;
+-
+-	if (parent && !parent->child)
+-		parent->child = cn;
+-	if (pre_sib)
+-		pre_sib->sib = cn;
+-
+-	return cn;
+-}
+-
+-static struct dm_config_node *make_text_node(struct dm_config_tree *cft,
+-					     const char *key,
+-					     const char *value,
+-					     struct dm_config_node *parent,
+-					     struct dm_config_node *pre_sib)
+-{
+-	struct dm_config_node *cn = make_config_node(cft, key, parent, pre_sib);
+-	cn->v = dm_config_create_value(cft);
+-	cn->v->type = DM_CFG_STRING;
+-	cn->v->v.str = value;
+-	return cn;
+-}
+-
+ static struct dm_config_node *make_pv_node(lvmetad_state *s, const char *pvid,
+ 					   struct dm_config_tree *cft,
+ 					   struct dm_config_node *parent,
+ 					   struct dm_config_node *pre_sib)
  {
--	int dmeventd_mode;
- 	int archived = 0;
- 	int i;
+-	const char *path = dm_hash_lookup(s->pvid_to_device, pvid),
+-		*vgid = dm_hash_lookup(s->pvid_to_vgid, pvid),
+-		*vgname = NULL;
++	struct dm_config_tree *pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
++	const char *vgid = dm_hash_lookup(s->pvid_to_vgid, pvid), *vgname = NULL;
++
++	if (!pvmeta)
++		return NULL;
  
-@@ -473,11 +472,6 @@
- 		return ECMD_FAILED;
+ 	if (vgid) {
+ 		lock_vgid_to_metadata(s); // XXX
+@@ -268,11 +280,17 @@
+ 		unlock_vgid_to_metadata(s);
  	}
  
--	if (!get_activation_monitoring_mode(cmd, vg, &dmeventd_mode))
--		return ECMD_FAILED;
+-	struct dm_config_node *pv = make_config_node(cft, pvid, parent, pre_sib), *cn = NULL;
++	/* Nick the pvmeta config tree. */
++	struct dm_config_node *pv = dm_config_clone_node(cft, pvmeta->root, 0);
++	if (pre_sib)
++		pre_sib->sib = pv;
++	if (parent && !parent->child)
++		parent->child = pv;
++	pv->parent = parent;
++
++	/* Add the "variable" bits to it. */
++	struct dm_config_node *cn = NULL;
+ 
+-	cn = make_text_node(cft, "id", pvid, pv, cn);
+-	if (path)
+-		cn = make_text_node(cft, "path", path, pv, cn);
+ 	if (vgid && strcmp(vgid, "#orphan"))
+ 		cn = make_text_node(cft, "vgid", vgid, pv, cn);
+ 	if (vgname)
+@@ -293,16 +311,16 @@
+ 
+ 	lock_pvid_to_status(s);
+ 
+-	struct dm_hash_node *n = dm_hash_get_first(s->pvid_to_device);
++	struct dm_hash_node *n = dm_hash_get_first(s->pvid_to_pvmeta);
+ 	while (n) {
+-		const char *id = dm_hash_get_key(s->pvid_to_device, n);
++		const char *id = dm_hash_get_key(s->pvid_to_pvmeta, n);
+ 		cn = make_pv_node(s, id, res.cft, cn_pvs, cn);
+-		n = dm_hash_get_next(s->pvid_to_device, n);
++		n = dm_hash_get_next(s->pvid_to_pvmeta, n);
+ 	}
+ 
+ 	unlock_pvid_to_status(s);
+ 
+-	debug_cft("PV LIST", res.cft->root);
++	// debug_cft("PV LIST", res.cft->root);
+ 
+ 	return res;
+ }
+@@ -321,6 +339,11 @@
+ 
+ 	lock_pvid_to_status(s);
+ 	pv = make_pv_node(s, pvid, res.cft, NULL, res.cft->root);
++	if (!pv) {
++		unlock_pvid_to_status(s);
++		return daemon_reply_simple("failed", "reason = %s", "PV not found", NULL);
++	}
++
+ 	pv->key = "physical_volume";
+ 	unlock_pvid_to_status(s);
+ 
+@@ -672,54 +695,70 @@
+ static response pv_gone(lvmetad_state *s, request r)
+ {
+ 	int found = 0;
+-	const char *pvid = daemon_request_str(r, "uuid", NULL),
+-		    *dev = daemon_request_str(r, "device", NULL);
++	const char *pvid = daemon_request_str(r, "uuid", NULL);
++	int64_t device = daemon_request_int(r, "device", 0);
+ 
+-	debug("pv_gone: %s / %s\n", pvid, dev);
++	debug("pv_gone: %s / %lld\n", pvid, device);
++	debug_cft("PV_GONE", r.cft->root);
+ 
+ 	lock_pvid_to_status(s);
+-	if (!pvid && dev)
+-		pvid = dm_hash_lookup(s->device_to_pvid, dev);
++	if (!pvid && device > 0)
++		pvid = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
+ 	if (!pvid) {
+ 		unlock_pvid_to_status(s);
+ 		return daemon_reply_simple("failed", "reason = %s", "device not in cache", NULL);
+ 	}
+ 
+-	debug("pv_gone (updated): %s / %s\n", pvid, dev);
++	debug("pv_gone (updated): %s / %lld\n", pvid, device);
+ 
+-	found = dm_hash_lookup(s->pvid_to_status, pvid) ? 1 : 0;
++	struct dm_config_tree *pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
++	dm_hash_remove_binary(s->device_to_pvid, &device, sizeof(device));
+ 	dm_hash_remove(s->pvid_to_status, pvid);
+-	dm_hash_remove(s->pvid_to_device, pvid);
 -
--	init_dmeventd_monitor(dmeventd_mode);
--
- 	/*
- 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
- 	 * If --poll is explicitly provided use it; otherwise polling
++	dm_hash_remove(s->pvid_to_pvmeta, pvid);
+ 	vg_remove_if_missing(s, dm_hash_lookup(s->pvid_to_vgid, pvid));
+ 	unlock_pvid_to_status(s);
+ 
+-	if (found)
++	if (pvmeta) {
++		dm_config_destroy(pvmeta);
+ 		return daemon_reply_simple("OK", NULL);
+-	else
++	} else
+ 		return daemon_reply_simple("failed", "reason = %s", "PVID does not exist", NULL);
+ }
+ 
+ static response pv_found(lvmetad_state *s, request r)
+ {
+ 	struct dm_config_node *metadata = dm_config_find_node(r.cft->root, "metadata");
+-	const char *pvid = daemon_request_str(r, "uuid", NULL);
++	const char *pvid = daemon_request_str(r, "pvmeta/id", NULL);
+ 	const char *vgname = daemon_request_str(r, "vgname", NULL);
+-	const char *devpath = dm_strdup(daemon_request_str(r, "device", NULL));
+ 	const char *vgid = daemon_request_str(r, "metadata/id", NULL);
++	struct dm_config_node *pvmeta = dm_config_find_node(r.cft->root, "pvmeta");
++	uint64_t device;
++
+ 	int complete = 0, orphan = 0;
+ 
++	// debug_cft("INCOMING PV", r.cft->root);
++
+ 	if (!pvid)
+ 		return daemon_reply_simple("failed", "reason = %s", "need PV UUID", NULL);
+-	if (!devpath)
+-		return daemon_reply_simple("failed", "reason = %s", "need PV device", NULL);
++	if (!pvmeta)
++		return daemon_reply_simple("failed", "reason = %s", "need PV metadata", NULL);
++
++	if (!dm_config_get_uint64(pvmeta, "pvmeta/device", &device))
++		return daemon_reply_simple("failed", "reason = %s", "need PV device number", NULL);
+ 
+-	debug("pv_found %s, vgid = %s, device = %s\n", pvid, vgid, devpath);
++	debug("pv_found %s, vgid = %s, device = %lld\n", pvid, vgid, device);
+ 
+ 	lock_pvid_to_status(s);
+ 	dm_hash_insert(s->pvid_to_status, pvid, (void*)1);
+-	dm_hash_insert(s->pvid_to_device, pvid, (void*)devpath);
+-	dm_hash_insert(s->device_to_pvid, devpath, (void*)dm_strdup(pvid));
++
++	{
++		struct dm_config_tree *cft = dm_config_create();
++		cft->root = dm_config_clone_node(cft, pvmeta, 0);
++		const char *pvid_dup = dm_config_find_str(cft->root, "pvmeta/id", NULL);
++		dm_hash_insert(s->pvid_to_pvmeta, pvid, cft);
++		dm_hash_insert_binary(s->device_to_pvid, &device, sizeof(device), (void*)pvid_dup);
++	}
++
+ 	unlock_pvid_to_status(s);
+ 
+ 	if (metadata) {
+@@ -842,7 +881,7 @@
+ 	lvmetad_state *ls = s->private;
+ 
+ 	ls->pvid_to_status = dm_hash_create(32);
+-	ls->pvid_to_device = dm_hash_create(32);
++	ls->pvid_to_pvmeta = dm_hash_create(32);
+ 	ls->device_to_pvid = dm_hash_create(32);
+ 	ls->vgid_to_metadata = dm_hash_create(32);
+ 	ls->vgid_to_vgname = dm_hash_create(32);
+@@ -885,7 +924,7 @@
+ 
+ 	dm_hash_destroy(ls->lock.vg);
+ 	dm_hash_destroy(ls->pvid_to_status);
+-	dm_hash_destroy(ls->pvid_to_device);
++	dm_hash_destroy(ls->pvid_to_pvmeta);
+ 	dm_hash_destroy(ls->device_to_pvid);
+ 	dm_hash_destroy(ls->vgid_to_metadata);
+ 	dm_hash_destroy(ls->pvid_to_vgid);
 
 
