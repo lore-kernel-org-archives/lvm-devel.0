@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 11:16:43 -0000
-Subject: LVM2 lib/filters/filter-regex.c ./WHATS_NEW
-Message-ID: <20120213111643.17448.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 16 Feb 2012 14:39:04 -0000
+Subject: LVM2 ./WHATS_NEW_DM udev/13-dm-disk.rules
+Message-ID: <20120216143904.13110.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,56 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 11:16:42
+Changes by:	prajnoha at sourceware.org	2012-02-16 14:39:03
 
 Modified files:
-	lib/filters    : filter-regex.c 
-	.              : WHATS_NEW 
+	.              : WHATS_NEW_DM 
+	udev           : 13-dm-disk.rules 
 
 Log message:
-	Add check for allocation failure
+	Switch to using built-in blkid in 13-dm-disk.rules.
+	
+	Available in udev since version 176.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter-regex.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2289&r2=1.2290
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.567&r2=1.568
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.diff?cvsroot=lvm2&r1=1.7&r2=1.8
 
---- LVM2/lib/filters/filter-regex.c	2011/08/30 14:55:17	1.32
-+++ LVM2/lib/filters/filter-regex.c	2012/02/13 11:16:42	1.33
-@@ -110,16 +110,17 @@
- 		count++;
- 	}
- 
--	/*
--	 * allocate space for them
--	 */
--	if (!(regex = dm_pool_alloc(scratch, sizeof(*regex) * count)))
--		goto_out;
-+	/* Allocate space for them */
-+	if (!(regex = dm_pool_alloc(scratch, sizeof(*regex) * count))) {
-+		log_error("Failed to allocate regex.");
-+		goto out;
-+	}
- 
--	/*
--	 * create the accept/reject bitset
--	 */
--	rf->accept = dm_bitset_create(rf->mem, count);
-+	/* Create the accept/reject bitset */
-+	if (!(rf->accept = dm_bitset_create(rf->mem, count))) {
-+		log_error("Failed to create bitset.");
-+		goto out;
-+	}
- 
- 	/*
- 	 * fill the array back to front because we
---- LVM2/WHATS_NEW	2012/02/13 11:10:37	1.2289
-+++ LVM2/WHATS_NEW	2012/02/13 11:16:42	1.2290
+--- LVM2/WHATS_NEW_DM	2012/02/15 14:50:33	1.567
++++ LVM2/WHATS_NEW_DM	2012/02/16 14:39:02	1.568
 @@ -1,5 +1,6 @@
- Version 2.02.92 - 
+ Version 1.02.71 - 
  ====================================
-+  Add check for allocation failure in _build_matcher().
-   Add check for rimage name allocation failure in _raid_add_images().
-   Add check for mda_copy failure in _text_pv_setup().
-   Add check for _mirrored_init_target failure.
++  Switch to using built-in blkid in 13-dm-disk.rules.
+   Add "watch" rule to 13-dm-disk.rules.
+   Detect failing fifo and skip 20s retry communication period.
+   Add DM_DEFAULT_NAME_MANGLING_MODE env. variable to override configured value.
+--- LVM2/udev/13-dm-disk.rules	2012/02/15 15:10:31	1.7
++++ LVM2/udev/13-dm-disk.rules	2012/02/16 14:39:02	1.8
+@@ -19,7 +19,7 @@
+ 
+ ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
+ 
+-IMPORT{program}="$env{DM_SBIN_PATH}/blkid -o udev -p $tempnode"
++IMPORT{program}="blkid"
+ ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
 
 
