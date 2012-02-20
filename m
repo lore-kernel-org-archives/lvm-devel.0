@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Feb 2012 19:38:21 -0000
-Subject: LVM2 WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM
-Message-ID: <20120220193821.30403.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 20 Feb 2012 19:38:42 -0000
+Subject: LVM2/udev Makefile.in 13-dm-disk.rules.in 13-d ...
+Message-ID: <20120220193842.30627.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,65 +10,90 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-20 19:38:19
+Changes by:	prajnoha at sourceware.org	2012-02-20 19:38:41
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM 
+	udev           : Makefile.in 
+Added files:
+	udev           : 13-dm-disk.rules.in 
+Removed files:
+	udev           : 13-dm-disk.rules 
 
 Log message:
-	pre-release
+	Call built-in blkid conditionaly (udev version >= 176), call standard blkid
+	with full path otherwise.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2295&r2=1.2296
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.568&r2=1.569
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.292&r2=1.293
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.97&r2=1.98
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.in.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/Makefile.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/13-dm-disk.rules.diff?cvsroot=lvm2&r1=1.8&r2=NONE
 
---- LVM2/WHATS_NEW	2012/02/15 15:18:43	1.2295
-+++ LVM2/WHATS_NEW	2012/02/20 19:38:19	1.2296
-@@ -1,7 +1,7 @@
--Version 2.02.92 - 
-+Version 2.02.92 - 20th February 2012
- ====================================
--  Read monitoring config settings for every lvm command.
--  Initialize monitoring support only for thin pools and skip thin volumes.
-+  Read dmeventd monitoring config settings for every lvm command.
-+  For thin devices, initialize monitoring only for thin pools not thin volumes.
-   Make conversion from a synced 'mirror' to 'raid1' not cause a full resync.
-   Properly test buffer for unit check in units_to_bytes().
-   Add configure --with-systemdsystemunitdir.
---- LVM2/WHATS_NEW_DM	2012/02/16 14:39:02	1.568
-+++ LVM2/WHATS_NEW_DM	2012/02/20 19:38:19	1.569
-@@ -1,9 +1,9 @@
--Version 1.02.71 - 
-+Version 1.02.71 - 20th February 2012
- ====================================
-   Switch to using built-in blkid in 13-dm-disk.rules.
-   Add "watch" rule to 13-dm-disk.rules.
-   Detect failing fifo and skip 20s retry communication period.
--  Add DM_DEFAULT_NAME_MANGLING_MODE env. variable to override configured value.
-+  Add DM_DEFAULT_NAME_MANGLING_MODE environment variable as an override.
-   Add dm_lib_init to automatically initialise device-mapper library on load.
-   Replace any '\' char with '\\' in table specification on input.
-   Add mangle command to dmsetup to provide renaming to correct mangled form.
-@@ -12,7 +12,7 @@
-   Add dm_task_get_name_mangled/unmangled to libdevmapper.
-   Mangle device name on dm_task_set_name/newname call if necessary.
-   Add dm_set/get_name_mangling_mode to set/get name mangling in libdevmapper.
--  Add configure --with-default-name-mangling.
-+  Add configure --with-default-name-mangling for udev-friendly dev name charset.
-   Test for parsed words in _umount() dmeventd snapshot plugin.
-   Fix memory leak in fail path of parse_loop_device_name() in dmsetup.
-   Check for missing reply_uuid in dm_event_get_registered_device().
---- LVM2/VERSION	2012/02/13 00:23:21	1.292
-+++ LVM2/VERSION	2012/02/20 19:38:19	1.293
-@@ -1 +1 @@
--2.02.92(2)-cvs (2012-02-12)
-+2.02.92(2)-cvs (2012-02-20)
---- LVM2/VERSION_DM	2012/02/13 00:23:21	1.97
-+++ LVM2/VERSION_DM	2012/02/20 19:38:19	1.98
-@@ -1 +1 @@
--1.02.71-cvs (2012-02-12)
-+1.02.71-cvs (2012-02-20)
+/cvs/lvm2/LVM2/udev/13-dm-disk.rules.in,v  -->  standard output
+revision 1.1
+--- LVM2/udev/13-dm-disk.rules.in
++++ -	2012-02-20 19:38:41.564935000 +0000
+@@ -0,0 +1,38 @@
++# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++
++# Udev rules for device-mapper devices.
++#
++# These rules create symlinks in /dev/disk directory.
++# Symlinks that depend on probing filesystem type,
++# label and uuid are created only if the device is not
++# suspended.
++
++# "add" event is processed on coldplug only!
++ACTION!="add|change", GOTO="dm_end"
++ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="dm_end"
++ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
++
++SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
++ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
++
++ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
++
++(BLKID_RULE)
++ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
++ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
++ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
++
++# Add inotify watch to track changes on this device.
++# Using the watch rule is not optimal - it generates a lot of spurious
++# and useless events whenever the device opened for read-write is closed.
++# The best would be to generete the event directly in the tool changing
++# relevant information so only relevant events will be processed
++# (like creating a filesystem, changing filesystem label etc.).
++#
++# But let's use this until we have something better...
++
++OPTIONS+="watch"
++
++LABEL="dm_end"
+--- LVM2/udev/Makefile.in	2010/04/09 21:44:28	1.8
++++ LVM2/udev/Makefile.in	2012/02/20 19:38:40	1.9
+@@ -19,6 +19,12 @@
+ LVM_RULES=11-dm-lvm.rules
+ DM_DIR=$(shell grep "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | awk '{print $$3}')
+ 
++ifeq ("@UDEV_HAS_BUILTIN_BLKID@", "yes")
++	BLKID_RULE=IMPORT{builtin}=\"blkid\"
++else
++	BLKID_RULE=IMPORT{program}=\"\$$env{DM_SBIN_PATH}\/blkid -o udev -p \$$tempnode\"
++endif
++
+ CLEAN_TARGETS=10-dm.rules
+ 
+ include $(top_builddir)/make.tmpl
+@@ -26,7 +32,7 @@
+ vpath %.rules $(srcdir)
+ 
+ %.rules: %.rules.in
+-	$(SED) -e "s/(DM_DIR)/$(DM_DIR)/" $< >$@
++	$(SED) -e "s/(DM_DIR)/$(DM_DIR)/" -e "s/(BLKID_RULE)/$(BLKID_RULE)/" $< >$@
+ 
+ %_install: %.rules
+ 	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
 
 
