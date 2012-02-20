@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 20 Feb 2012 19:36:29 -0000
-Subject: LVM2 configure configure.in
-Message-ID: <20120220193629.11063.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 20 Feb 2012 19:38:21 -0000
+Subject: LVM2 WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM
+Message-ID: <20120220193821.30403.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,88 +10,65 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-02-20 19:36:28
+Changes by:	agk at sourceware.org	2012-02-20 19:38:19
 
 Modified files:
-	.              : configure configure.in 
+	.              : WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM 
 
 Log message:
-	Check whether udev supports built-in blkid.
-	
-	Built-in blkid is supported since udev v176 - set the UDEV_HAS_BUILTIN_BLKID
-	variable appropriately so we can use it in the rules to call the built-in
-	blkid conditionaly.
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.168&r2=1.169
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.183&r2=1.184
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2295&r2=1.2296
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.568&r2=1.569
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.292&r2=1.293
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.97&r2=1.98
 
---- LVM2/configure	2012/02/15 11:20:12	1.168
-+++ LVM2/configure	2012/02/20 19:36:27	1.169
-@@ -606,6 +606,7 @@
- interface
- DMEVENTD_PIDFILE
- WRITE_INSTALL
-+UDEV_HAS_BUILTIN_BLKID
- UDEV_SYNC
- UDEV_RULES
- UDEV_PC
-@@ -8858,6 +8859,19 @@
- { $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_RULES" >&5
- $as_echo "$UDEV_RULES" >&6; }
- 
-+if test x$UDEV_RULES = xyes; then
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether udev supports builtin blkid" >&5
-+$as_echo_n "checking whether udev supports builtin blkid... " >&6; }
-+	udev_version=$(udevadm info --version 2>/dev/null)
-+	if test -n "$udev_version" && test "$udev_version" -ge 176; then
-+		UDEV_HAS_BUILTIN_BLKID=yes
-+	else
-+		UDEV_HAS_BUILTIN_BLKID=no
-+	fi
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_HAS_BUILTIN_BLKID" >&5
-+$as_echo "$UDEV_HAS_BUILTIN_BLKID" >&6; }
-+fi
-+
- ################################################################################
- # Check whether --enable-compat was given.
- if test "${enable_compat+set}" = set; then :
-@@ -10395,6 +10409,7 @@
- 
- 
- 
-+
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/common/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_mon!
- itoring_systemd_red_hat.service scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
- 
---- LVM2/configure.in	2012/02/15 11:17:57	1.183
-+++ LVM2/configure.in	2012/02/20 19:36:27	1.184
-@@ -873,6 +873,17 @@
- 	      UDEV_RULES=$enableval, UDEV_RULES=$UDEV_SYNC)
- AC_MSG_RESULT($UDEV_RULES)
- 
-+if test x$UDEV_RULES = xyes; then
-+	AC_MSG_CHECKING(whether udev supports builtin blkid)
-+	udev_version=$(udevadm info --version 2>/dev/null)
-+	if test -n "$udev_version" && test "$udev_version" -ge 176; then
-+		UDEV_HAS_BUILTIN_BLKID=yes
-+	else
-+		UDEV_HAS_BUILTIN_BLKID=no
-+	fi
-+	AC_MSG_RESULT($UDEV_HAS_BUILTIN_BLKID)
-+fi
-+
- ################################################################################
- dnl -- Compatibility mode
- AC_ARG_ENABLE(compat,
-@@ -1454,6 +1465,7 @@
- AC_SUBST(UDEV_PC)
- AC_SUBST(UDEV_RULES)
- AC_SUBST(UDEV_SYNC)
-+AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
- AC_SUBST(CUNIT_LIBS)
- AC_SUBST(CUNIT_CFLAGS)
- AC_SUBST(WRITE_INSTALL)
+--- LVM2/WHATS_NEW	2012/02/15 15:18:43	1.2295
++++ LVM2/WHATS_NEW	2012/02/20 19:38:19	1.2296
+@@ -1,7 +1,7 @@
+-Version 2.02.92 - 
++Version 2.02.92 - 20th February 2012
+ ====================================
+-  Read monitoring config settings for every lvm command.
+-  Initialize monitoring support only for thin pools and skip thin volumes.
++  Read dmeventd monitoring config settings for every lvm command.
++  For thin devices, initialize monitoring only for thin pools not thin volumes.
+   Make conversion from a synced 'mirror' to 'raid1' not cause a full resync.
+   Properly test buffer for unit check in units_to_bytes().
+   Add configure --with-systemdsystemunitdir.
+--- LVM2/WHATS_NEW_DM	2012/02/16 14:39:02	1.568
++++ LVM2/WHATS_NEW_DM	2012/02/20 19:38:19	1.569
+@@ -1,9 +1,9 @@
+-Version 1.02.71 - 
++Version 1.02.71 - 20th February 2012
+ ====================================
+   Switch to using built-in blkid in 13-dm-disk.rules.
+   Add "watch" rule to 13-dm-disk.rules.
+   Detect failing fifo and skip 20s retry communication period.
+-  Add DM_DEFAULT_NAME_MANGLING_MODE env. variable to override configured value.
++  Add DM_DEFAULT_NAME_MANGLING_MODE environment variable as an override.
+   Add dm_lib_init to automatically initialise device-mapper library on load.
+   Replace any '\' char with '\\' in table specification on input.
+   Add mangle command to dmsetup to provide renaming to correct mangled form.
+@@ -12,7 +12,7 @@
+   Add dm_task_get_name_mangled/unmangled to libdevmapper.
+   Mangle device name on dm_task_set_name/newname call if necessary.
+   Add dm_set/get_name_mangling_mode to set/get name mangling in libdevmapper.
+-  Add configure --with-default-name-mangling.
++  Add configure --with-default-name-mangling for udev-friendly dev name charset.
+   Test for parsed words in _umount() dmeventd snapshot plugin.
+   Fix memory leak in fail path of parse_loop_device_name() in dmsetup.
+   Check for missing reply_uuid in dm_event_get_registered_device().
+--- LVM2/VERSION	2012/02/13 00:23:21	1.292
++++ LVM2/VERSION	2012/02/20 19:38:19	1.293
+@@ -1 +1 @@
+-2.02.92(2)-cvs (2012-02-12)
++2.02.92(2)-cvs (2012-02-20)
+--- LVM2/VERSION_DM	2012/02/13 00:23:21	1.97
++++ LVM2/VERSION_DM	2012/02/20 19:38:19	1.98
+@@ -1 +1 @@
+-1.02.71-cvs (2012-02-12)
++1.02.71-cvs (2012-02-20)
 
 
