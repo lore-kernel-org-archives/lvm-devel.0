@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 20 Feb 2012 21:11:08 -0000
-Subject: LVM2 WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM
-Message-ID: <20120220211108.32614.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 21 Feb 2012 09:19:09 -0000
+Subject: LVM2/daemons/lvmetad lvmetad-core.c
+Message-ID: <20120221091909.11500.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,56 +10,168 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-20 21:11:06
+Changes by:	mornfall at sourceware.org	2012-02-21 09:19:08
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM VERSION VERSION_DM 
+	daemons/lvmetad: lvmetad-core.c 
 
 Log message:
-	post-release
+	Tweak lvmetad a bit more:
+	- allow at most one PV on any given device
+	- allow PV lookup by device
+	- merge the pvmeta info into VG metadata when responding to vg_lookup
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2296&r2=1.2297
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.569&r2=1.570
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.293&r2=1.294
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.98&r2=1.99
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.37&r2=1.38
 
---- LVM2/WHATS_NEW	2012/02/20 19:38:19	1.2296
-+++ LVM2/WHATS_NEW	2012/02/20 21:11:06	1.2297
-@@ -1,3 +1,6 @@
-+Version 2.02.93 - 
-+====================================
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/15 17:37:09	1.37
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/21 09:19:08	1.38
+@@ -224,6 +224,25 @@
+ 	vg->sib = NULL; /* Drop any trailing garbage. */
+ }
+ 
++static void merge_pvmeta(struct dm_config_node *pv, struct dm_config_node *pvmeta)
++{
++	if (!pvmeta)
++		return;
 +
- Version 2.02.92 - 20th February 2012
- ====================================
-   Read dmeventd monitoring config settings for every lvm command.
---- LVM2/WHATS_NEW_DM	2012/02/20 19:38:19	1.569
-+++ LVM2/WHATS_NEW_DM	2012/02/20 21:11:06	1.570
-@@ -1,3 +1,6 @@
-+Version 1.02.72 - 
-+====================================
++	struct dm_config_node *tmp = pvmeta;
++	while (tmp->sib) {
++		/* drop the redundant ID and dev_size nodes */
++		if (!strcmp(tmp->sib->key, "id") || !strcmp(tmp->sib->key, "dev_size"))
++			tmp->sib = tmp->sib->sib;
++		if (!tmp->sib) break;
++		tmp = tmp->sib;
++		tmp->parent = pv;
++	}
++	tmp->sib = pv->child;
++	pv->child = pvmeta;
++	pvmeta->parent = pv;
++}
 +
- Version 1.02.71 - 20th February 2012
- ====================================
-   Switch to using built-in blkid in 13-dm-disk.rules.
-@@ -5,7 +8,7 @@
-   Detect failing fifo and skip 20s retry communication period.
-   Add DM_DEFAULT_NAME_MANGLING_MODE environment variable as an override.
-   Add dm_lib_init to automatically initialise device-mapper library on load.
--  Replace any '\' char with '\\' in table specification on input.
-+  Replace any '\' char with '\\' in dm table specification on input.
-   Add mangle command to dmsetup to provide renaming to correct mangled form.
-   Add 'mangled_name' and 'unmangled_name' fields to dmsetup info -c -o.
-   Add --manglename option to dmsetup to select the name mangling mode.
---- LVM2/VERSION	2012/02/20 19:38:19	1.293
-+++ LVM2/VERSION	2012/02/20 21:11:06	1.294
-@@ -1 +1 @@
--2.02.92(2)-cvs (2012-02-20)
-+2.02.93(2)-cvs (2012-02-20)
---- LVM2/VERSION_DM	2012/02/20 19:38:19	1.98
-+++ LVM2/VERSION_DM	2012/02/20 21:11:06	1.99
-@@ -1 +1 @@
--1.02.71-cvs (2012-02-20)
-+1.02.72-cvs (2012-02-20)
+ /* Either the "big" vgs lock, or a per-vg lock needs to be held before entering
+  * this function. */
+ static int update_pv_status(lvmetad_state *s,
+@@ -241,10 +260,9 @@
+ 		if (act) {
+ 			set_flag(cft, pv, "status", "MISSING", !pvmeta);
+ 			if (pvmeta) {
+-				// debug_cft("PV META", pvmeta->root);
+-				make_int_node(cft, "device",
+-					      dm_config_find_int(pvmeta->root, "pvmeta/device", 0),
+-					      pv, NULL);
++				struct dm_config_node *pvmeta_cn =
++					dm_config_clone_node(cft, pvmeta->root->child, 1);
++				merge_pvmeta(pv, pvmeta_cn);
+ 			}
+ 		}
+ 		if (!pvmeta) {
+@@ -285,6 +303,7 @@
+ 	if (parent && !parent->child)
+ 		parent->child = pv;
+ 	pv->parent = parent;
++	pv->key = pvid;
+ 
+ 	/* Add the "variable" bits to it. */
+ 	struct dm_config_node *cn = NULL;
+@@ -318,16 +337,15 @@
+ 
+ 	unlock_pvid_to_pvmeta(s);
+ 
+-	// debug_cft("PV LIST", res.cft->root);
+-
+ 	return res;
+ }
+ 
+ static response pv_lookup(lvmetad_state *s, request r)
+ {
+ 	const char *pvid = daemon_request_str(r, "uuid", NULL);
+-	if (!pvid)
+-		return daemon_reply_simple("failed", "reason = %s", "need PVID", NULL);
++	int64_t devt = daemon_request_int(r, "device", 0);
++	if (!pvid && !devt)
++		return daemon_reply_simple("failed", "reason = %s", "need PVID or device", NULL);
+ 
+ 	response res = { .buffer = NULL };
+ 	res.cft = dm_config_create();
+@@ -336,6 +354,15 @@
+ 	struct dm_config_node *pv;
+ 
+ 	lock_pvid_to_pvmeta(s);
++	if (!pvid && devt)
++		pvid = dm_hash_lookup_binary(s->device_to_pvid, &devt, sizeof(devt));
++
++	if (!pvid) {
++		debug("pv_lookup: could not find device %lld\n", devt);
++		unlock_pvid_to_pvmeta(s);
++		return daemon_reply_simple("failed", "reason = %s", "device not found", NULL);
++	}
++
+ 	pv = make_pv_node(s, pvid, res.cft, NULL, res.cft->root);
+ 	if (!pv) {
+ 		unlock_pvid_to_pvmeta(s);
+@@ -345,8 +372,6 @@
+ 	pv->key = "physical_volume";
+ 	unlock_pvid_to_pvmeta(s);
+ 
+-	// debug_cft("PV LOOKUP", res.cft->root);
+-
+ 	return res;
+ }
+ 
+@@ -455,8 +480,6 @@
+ 
+ 	update_pv_status(s, res.cft, n, 1); /* FIXME report errors */
+ 
+-	// debug_cft("METADATA", n);
+-
+ 	return res;
+ }
+ 
+@@ -673,7 +696,6 @@
+ 		remove_metadata(s, vgid, 1);
+ 	}
+ 
+-	// debug_cft("METADATA", metadata);
+ 	lock_vgid_to_metadata(s);
+ 	dm_hash_insert(s->vgid_to_metadata, vgid, cft);
+ 	debug("Mapping %s to %s\n", vgid, name);
+@@ -697,7 +719,6 @@
+ 	int64_t device = daemon_request_int(r, "device", 0);
+ 
+ 	debug("pv_gone: %s / %lld\n", pvid, device);
+-	debug_cft("PV_GONE", r.cft->root);
+ 
+ 	lock_pvid_to_pvmeta(s);
+ 	if (!pvid && device > 0)
+@@ -733,8 +754,6 @@
+ 
+ 	int complete = 0, orphan = 0;
+ 
+-	// debug_cft("INCOMING PV", r.cft->root);
+-
+ 	if (!pvid)
+ 		return daemon_reply_simple("failed", "reason = %s", "need PV UUID", NULL);
+ 	if (!pvmeta)
+@@ -747,6 +766,10 @@
+ 
+ 	lock_pvid_to_pvmeta(s);
+ 	{
++		const char *old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
++		if (old)
++			dm_hash_remove(s->pvid_to_pvmeta, old);
++
+ 		struct dm_config_tree *cft = dm_config_create();
+ 		cft->root = dm_config_clone_node(cft, pvmeta, 0);
+ 		const char *pvid_dup = dm_config_find_str(cft->root, "pvmeta/id", NULL);
+@@ -758,7 +781,7 @@
+ 	if (metadata) {
+ 		if (!vgid)
+ 			return daemon_reply_simple("failed", "reason = %s", "need VG UUID", NULL);
+-		debug("obtained vgid = %s, vgname = %s", vgid, vgname);
++		debug("obtained vgid = %s, vgname = %s\n", vgid, vgname);
+ 		if (!vgname)
+ 			return daemon_reply_simple("failed", "reason = %s", "need VG name", NULL);
+ 		if (daemon_request_int(r, "metadata/seqno", -1) < 0)
 
 
