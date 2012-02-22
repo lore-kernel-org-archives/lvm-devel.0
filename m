@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 11:18:47 -0000
-Subject: LVM2 daemons/dmeventd/dmeventd.c ./WHATS_NEW_DM
-Message-ID: <20120213111847.19043.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 22 Feb 2012 15:20:51 -0000
+Subject: LVM2/tools lvconvert.c
+Message-ID: <20120222152051.16857.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 11:18:46
+Changes by:	jbrassow at sourceware.org	2012-02-22 15:20:51
 
 Modified files:
-	daemons/dmeventd: dmeventd.c 
-	.              : WHATS_NEW_DM 
+	tools          : lvconvert.c 
 
 Log message:
-	Check for allocation failure
+	Fix a bad return code in 'lvconvert_raid'
+	
+	Functions at this level do return 0 or 1, not ECMD_* values.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.88&r2=1.89
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.553&r2=1.554
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.182&r2=1.183
 
---- LVM2/daemons/dmeventd/dmeventd.c	2012/02/10 13:46:23	1.88
-+++ LVM2/daemons/dmeventd/dmeventd.c	2012/02/13 11:18:45	1.89
-@@ -1782,9 +1782,16 @@
- 		}
- 	}
+--- LVM2/tools/lvconvert.c	2012/02/13 18:38:36	1.182
++++ LVM2/tools/lvconvert.c	2012/02/22 15:20:50	1.183
+@@ -1528,10 +1528,9 @@
+ 		_lvconvert_raid_repair_ask(cmd, &replace);
  
--	_initial_registrations = dm_malloc(sizeof(char*) * (count + 1));
-+	if (!(_initial_registrations = dm_malloc(sizeof(char*) * (count + 1)))) {
-+		fprintf(stderr, "Memory allocation registration failed.\n");
-+		exit(EXIT_FAILURE);
-+	}
+ 		if (replace) {
+-			if (!(failed_pvs = _failed_pv_list(lv->vg))) {
+-				stack;
+-				return ECMD_FAILED;
+-			}
++			if (!(failed_pvs = _failed_pv_list(lv->vg)))
++				return_0;
 +
- 	for (i = 0; i < count; ++i) {
--		_initial_registrations[i] = dm_strdup(message);
-+		if (!(_initial_registrations[i] = dm_strdup(message))) {
-+			fprintf(stderr, "Memory allocation for message failed.\n");
-+			exit(EXIT_FAILURE);
-+		}
- 		message += strlen(message) + 1;
- 	}
- 	_initial_registrations[count] = 0;
---- LVM2/WHATS_NEW_DM	2012/02/13 11:13:44	1.553
-+++ LVM2/WHATS_NEW_DM	2012/02/13 11:18:46	1.554
-@@ -1,5 +1,6 @@
- Version 1.02.71 - 
- ====================================
-+  Check for allocation failure in dmeventd restart().
-   Add few missing allocation failures tests in dmsetup.
-   Fix potential risk of writing in front of buffer in _sysfs_get_dm_name().
+ 			return lv_raid_replace(lv, failed_pvs, lp->pvh);
+ 		}
  
 
 
