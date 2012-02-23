@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 Feb 2012 22:45:44 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
-Message-ID: <20120223224544.12279.qmail@sourceware.org>
+Date: 23 Feb 2012 22:47:18 -0000
+Subject: LVM2/test/unit Makefile.in run.c string_t.c
+Message-ID: <20120223224718.12710.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,67 +10,137 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-23 22:45:43
+Changes by:	zkabelac at sourceware.org	2012-02-23 22:47:18
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h libdm-string.c 
+	test/unit      : Makefile.in run.c 
+Added files:
+	test/unit      : string_t.c 
 
 Log message:
-	Introduce dm_strncpy
+	Unit testing for some string libdm functions
 	
-	Should be faster then strncpy - since we could avoid clearing 4KB pages
-	with each strncpy(...,PATH_MAX).
-	Also it's easy to check whether string fit - and eventually avoid
-	to continue working we incomplete string.
+	TODO: more functions need to be unit tested.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.573&r2=1.574
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.183&r2=1.184
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-string.c.diff?cvsroot=lvm2&r1=1.20&r2=1.21
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/string_t.c.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/Makefile.in.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/unit/run.c.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/WHATS_NEW_DM	2012/02/23 18:26:28	1.573
-+++ LVM2/WHATS_NEW_DM	2012/02/23 22:45:43	1.574
-@@ -1,5 +1,6 @@
- Version 1.02.73 - 
- ====================================
-+  Add dm_strncpy() function as a faster strncpy() replacement.
- 
- Version 1.02.72 - 23rd February 2012
- ====================================
---- LVM2/libdm/libdevmapper.h	2012/02/15 12:23:16	1.183
-+++ LVM2/libdm/libdevmapper.h	2012/02/23 22:45:43	1.184
-@@ -1211,6 +1211,15 @@
- 				     char **substr_first_unquoted_colon,
- 				     char **substr_first_unquoted_at_sign);
- 
+/cvs/lvm2/LVM2/test/unit/string_t.c,v  -->  standard output
+revision 1.1
+--- LVM2/test/unit/string_t.c
++++ -	2012-02-23 22:47:18.303865000 +0000
+@@ -0,0 +1,83 @@
 +/*
-+ * Replacement for strncpy() function.
++ * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
 + *
-+ * Copies no more than n bytes from string pointed by src to the buffer
-+ * pointed by dest and ensure string is finished with '\0'.
-+ * Returns 0 if the whole string does not fit.
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 + */
-+int dm_strncpy(char *dest, const char *src, size_t n);
 +
- /**************************
-  * file/stream manipulation
-  **************************/
---- LVM2/libdm/libdm-string.c	2012/02/23 18:19:32	1.20
-+++ LVM2/libdm/libdm-string.c	2012/02/23 22:45:43	1.21
-@@ -410,3 +410,13 @@
- 		*substr_first_unquoted_at_sign = arr_substr_first_unquoted[1];
- }
- 
-+int dm_strncpy(char *dest, const char *src, size_t n)
++#include "libdevmapper.h"
++
++#include <stdio.h>
++#include <string.h>
++
++#include <CUnit/CUnit.h>
++
++int string_init(void);
++int string_fini(void);
++
++static struct dm_pool *mem = NULL;
++
++int string_init(void)
 +{
-+	if (memccpy(dest, src, 0, n))
-+		return 1;
++	mem = dm_pool_create("string test", 1024);
 +
-+	if (n > 0)
-+		dest[n - 1] = '\0';
++	return (mem == NULL);
++}
++
++int string_fini(void)
++{
++	dm_pool_destroy(mem);
 +
 +	return 0;
 +}
++
++/* TODO: Add more string unit tests here */
++
++static void test_strncpy(void)
++{
++	const char st[] = "1234567890";
++	char buf[sizeof(st)];
++
++	CU_ASSERT_EQUAL(dm_strncpy(buf, st, sizeof(buf)), 1);
++	CU_ASSERT_EQUAL(strcmp(buf, st), 0);
++
++	CU_ASSERT_EQUAL(dm_strncpy(buf, st, sizeof(buf) - 1), 0);
++	CU_ASSERT_EQUAL(strlen(buf) + 1, sizeof(buf) - 1);
++}
++
++static void test_asprint(void)
++{
++	const char st0[] = "";
++	const char st1[] = "12345678901";
++	const char st2[] = "1234567890123456789012345678901234567890123456789012345678901234567";
++	char *buf;
++	int a;
++
++	a = dm_asprintf(&buf, "%s", st0);
++	CU_ASSERT_EQUAL(strcmp(buf, st0), 0);
++	CU_ASSERT_EQUAL(a, sizeof(st0));
++	free(buf);
++
++	a = dm_asprintf(&buf, "%s", st1);
++	CU_ASSERT_EQUAL(strcmp(buf, st1), 0);
++	CU_ASSERT_EQUAL(a, sizeof(st1));
++	free(buf);
++
++	a = dm_asprintf(&buf, "%s", st2);
++	CU_ASSERT_EQUAL(a, sizeof(st2));
++	CU_ASSERT_EQUAL(strcmp(buf, st2), 0);
++	free(buf);
++}
++
++CU_TestInfo string_list[] = {
++	{ (char*)"asprint", test_asprint },
++	{ (char*)"strncpy", test_strncpy },
++	CU_TEST_INFO_NULL
++};
+--- LVM2/test/unit/Makefile.in	2012/02/23 13:11:11	1.8
++++ LVM2/test/unit/Makefile.in	2012/02/23 22:47:17	1.9
+@@ -15,7 +15,7 @@
+ top_builddir = @top_builddir@
+ 
+ VPATH = $(srcdir)
+-SOURCES = bitset_t.c matcher_t.c config_t.c run.c
++SOURCES = bitset_t.c matcher_t.c config_t.c string_t.c run.c
+ ifeq ("@TESTING@", "yes")
+ TARGETS = run
+ endif
+--- LVM2/test/unit/run.c	2011/12/13 12:08:42	1.3
++++ LVM2/test/unit/run.c	2012/02/23 22:47:17	1.4
+@@ -10,11 +10,13 @@
+ DECL(bitset);
+ DECL(regex);
+ DECL(config);
++DECL(string);
+ 
+ CU_SuiteInfo suites[] = {
+ 	USE(bitset),
+ 	USE(regex),
+ 	USE(config),
++	USE(string),
+ 	CU_SUITE_INFO_NULL
+ };
+ 
 
 
