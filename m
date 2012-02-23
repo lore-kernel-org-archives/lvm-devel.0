@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 23 Feb 2012 14:21:18 -0000
-Subject: LVM2/test/shell lvmcache-exercise.sh
-Message-ID: <20120223142118.9920.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 23 Feb 2012 14:24:31 -0000
+Subject: LVM2/scripts lvm2_tmpfiles_red_hat.conf.in
+Message-ID: <20120223142431.10525.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-02-23 14:21:18
+Changes by:	prajnoha at sourceware.org	2012-02-23 14:24:30
 
 Modified files:
-	test/shell     : lvmcache-exercise.sh 
+	scripts        : lvm2_tmpfiles_red_hat.conf.in 
 
 Log message:
-	Kick out a debugging call to valgrind in lvmcache-exercise.sh.
+	Use 'd' instead of 'D' in tmpfiles configuration to not overwrite any existing directory.
+	
+	...that happens when systemd creates it first (e.g. based on a .socket unit)
+	before the tmpfiles.d content is executed.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvmcache-exercise.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_tmpfiles_red_hat.conf.in.diff?cvsroot=lvm2&r1=1.1&r2=1.2
 
---- LVM2/test/shell/lvmcache-exercise.sh	2012/02/23 13:11:10	1.2
-+++ LVM2/test/shell/lvmcache-exercise.sh	2012/02/23 14:21:18	1.3
-@@ -19,5 +19,4 @@
- pvscan
- vgcreate $vg1 $dev2
- aux enable_dev $dev1
--valgrind --trace-children=yes pvs
- pvs
+--- LVM2/scripts/lvm2_tmpfiles_red_hat.conf.in	2012/02/22 18:02:31	1.1
++++ LVM2/scripts/lvm2_tmpfiles_red_hat.conf.in	2012/02/23 14:24:30	1.2
+@@ -1,2 +1,2 @@
+-D @DEFAULT_LOCK_DIR@ 0700 root root -
+-D @DEFAULT_RUN_DIR@ 0700 root root -
++d @DEFAULT_LOCK_DIR@ 0700 root root -
++d @DEFAULT_RUN_DIR@ 0700 root root -
 
 
