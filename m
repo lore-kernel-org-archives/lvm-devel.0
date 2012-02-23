@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 23 Feb 2012 13:58:57 -0000
-Subject: LVM2/daemons Makefile.in
-Message-ID: <20120223135857.31093.qmail@sourceware.org>
+Date: 23 Feb 2012 14:21:18 -0000
+Subject: LVM2/test/shell lvmcache-exercise.sh
+Message-ID: <20120223142118.9920.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,24 +10,24 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-02-23 13:58:56
+Changes by:	mornfall at sourceware.org	2012-02-23 14:21:18
 
 Modified files:
-	daemons        : Makefile.in 
+	test/shell     : lvmcache-exercise.sh 
 
 Log message:
-	Add a missed dependency that is required to pull in dameons/common in an early
-	part of the build.
+	Kick out a debugging call to valgrind in lvmcache-exercise.sh.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/Makefile.in.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvmcache-exercise.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/daemons/Makefile.in	2012/02/23 13:41:11	1.23
-+++ LVM2/daemons/Makefile.in	2012/02/23 13:58:56	1.24
-@@ -52,3 +52,4 @@
- lvmetad: common.device-mapper
- endif
- 
-+device-mapper: common.device-mapper
+--- LVM2/test/shell/lvmcache-exercise.sh	2012/02/23 13:11:10	1.2
++++ LVM2/test/shell/lvmcache-exercise.sh	2012/02/23 14:21:18	1.3
+@@ -19,5 +19,4 @@
+ pvscan
+ vgcreate $vg1 $dev2
+ aux enable_dev $dev1
+-valgrind --trace-children=yes pvs
+ pvs
 
 
