@@ -1,7 +1,7 @@
 From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 23 Feb 2012 23:52:13 -0000
-Subject: LVM2/daemons common/daemon-client.c common/dae ...
-Message-ID: <20120223235213.28670.qmail@sourceware.org>
+Date: 23 Feb 2012 23:58:42 -0000
+Subject: LVM2/test shell/lvcreate-repair.sh shell/pool- ...
+Message-ID: <20120223235842.29824.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,187 +10,98 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-02-23 23:52:12
+Changes by:	mornfall at sourceware.org	2012-02-23 23:58:42
 
 Modified files:
-	daemons/common : daemon-client.c daemon-client.h daemon-server.c 
-	                 daemon-server.h 
-	daemons/lvmetad: lvmetad-client.h lvmetad-core.c 
+	test/shell     : lvcreate-repair.sh pool-labels.sh 
+	                 vgimportclone.sh 
+	test/lib       : aux.sh 
 
 Log message:
-	Couple of improvements in the daemon (common + lvmetad) code:
-	- some client-side memory leak fixes
-	- announce and check protocols and protocol versions
+	Make the calls to pvscan --lvmetad in the testsuite slightly more civilised.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-server.h.diff?cvsroot=lvm2&r1=1.12&r2=1.13
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-client.h.diff?cvsroot=lvm2&r1=1.8&r2=1.9
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvcreate-repair.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/pool-labels.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/vgimportclone.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.38&r2=1.39
 
---- LVM2/daemons/common/daemon-client.c	2012/02/15 09:14:54	1.12
-+++ LVM2/daemons/common/daemon-client.c	2012/02/23 23:52:11	1.13
-@@ -9,7 +9,7 @@
- #include <errno.h> // ENOMEM
+--- LVM2/test/shell/lvcreate-repair.sh	2012/02/23 14:55:29	1.3
++++ LVM2/test/shell/lvcreate-repair.sh	2012/02/23 23:58:42	1.4
+@@ -86,7 +86,7 @@
  
- daemon_handle daemon_open(daemon_info i) {
--	daemon_handle h = { .protocol = 0 };
-+	daemon_handle h = { .protocol_version = 0 };
- 	struct sockaddr_un sockaddr;
+ # dirty game
+ dd if=/dev/zero of="$dev3" bs=256K count=1
+-pvscan --lvmetad $dev3 || true # udev be watching you
++aux notify_lvmetad $dev3 # udev be watching you
  
- 	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM /* | SOCK_NONBLOCK */, 0)) < 0) {
-@@ -24,10 +24,28 @@
- 		perror("connect");
- 		goto error;
- 	}
-+
-+	daemon_reply r = daemon_send_simple(h, "hello", NULL);
-+	if (r.error || strcmp(daemon_reply_str(r, "response", "unknown"), "OK"))
-+		goto error;
-+
-+	h.protocol = daemon_reply_str(r, "protocol", NULL);
-+	if (h.protocol)
-+		h.protocol = dm_strdup(h.protocol); /* keep around */
-+	h.protocol_version = daemon_reply_int(r, "version", 0);
-+
-+	if (i.protocol && (!h.protocol || strcmp(h.protocol, i.protocol)))
-+		goto error;
-+	if (i.protocol_version && h.protocol_version != i.protocol_version)
-+		goto error;
-+
-+	daemon_reply_destroy(r);
- 	return h;
- error:
- 	if (h.socket_fd >= 0)
- 		close(h.socket_fd);
-+	if (r.cft)
-+		daemon_reply_destroy(r);
- 	h.socket_fd = -1;
- 	return h;
- }
-@@ -43,6 +61,7 @@
+ vgreduce --removemissing --force $vg
  
- 	assert(rq.buffer);
- 	write_buffer(h.socket_fd, rq.buffer, strlen(rq.buffer));
-+	dm_free(rq.buffer);
- 
- 	if (read_buffer(h.socket_fd, &reply.buffer)) {
- 		reply.cft = dm_config_from_string(reply.buffer);
-@@ -55,6 +74,7 @@
- void daemon_reply_destroy(daemon_reply r) {
- 	if (r.cft)
- 		dm_config_destroy(r.cft);
-+	dm_free(r.buffer);
+--- LVM2/test/shell/pool-labels.sh	2012/02/23 13:11:10	1.2
++++ LVM2/test/shell/pool-labels.sh	2012/02/23 23:58:42	1.3
+@@ -18,7 +18,7 @@
+   # printf comes from coreutils, and is probably not posix either
+   env printf "\x01\x16\x70\x06\x5f\xcf\xff\xb9\xf8\x24\x8apool1" | dd of=$2 bs=5 seek=1 conv=notrunc
+   env printf "\x04\x01\x03\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x0$1\x68\x01\x16\x70\x00\x00\x00\x00\x00\x06\x5f\xd0" | dd of=$2 bs=273 seek=1 conv=notrunc
+-  pvscan --lvmetad "$2" || true
++  aux notify_lvmetad "$2"
  }
  
- daemon_reply daemon_send_simple(daemon_handle h, const char *id, ...)
-@@ -72,10 +92,10 @@
- 		return err;
+ env printf "" || exit 200 # skip if printf is not available
+--- LVM2/test/shell/vgimportclone.sh	2012/02/23 13:11:10	1.2
++++ LVM2/test/shell/vgimportclone.sh	2012/02/23 23:58:42	1.3
+@@ -17,7 +17,7 @@
  
- 	repl = daemon_send(h, rq);
--	dm_free(rq.buffer);
- 	return repl;
+ # Clone the LUN
+ dd if=$dev1 of=$dev2 bs=256K count=1
+-pvscan --lvmetad $dev2 || true
++aux notify_lvmetad $dev2
+ 
+ # Verify pvs works on each device to give us vgname
+ check pv_field $dev1 vg_name $vg1
+@@ -30,8 +30,8 @@
+ # concerned, can only live on a single device. With the last pvscan, we told it
+ # that PV from $dev1 now lives on $dev2, but in fact this is not true anymore,
+ # since we wrote a different PV over $dev2.
+-pvscan --lvmetad $dev2 || true
+-pvscan --lvmetad $dev1 || true
++aux notify_lvmetad $dev2
++aux notify_lvmetad $dev1
+ 
+ # Verify we can activate / deactivate the LV from both VGs
+ lvchange -ay $vg1/$lv1 $vg2/$lv1
+--- LVM2/test/lib/aux.sh	2012/02/23 13:11:10	1.38
++++ LVM2/test/lib/aux.sh	2012/02/23 23:58:42	1.39
+@@ -78,6 +78,12 @@
+ 	sleep 1
  }
  
- void daemon_close(daemon_handle h)
- {
-+	dm_free((char *)h.protocol);
- }
---- LVM2/daemons/common/daemon-client.h	2012/01/15 15:16:50	1.9
-+++ LVM2/daemons/common/daemon-client.h	2012/02/23 23:52:11	1.10
-@@ -19,13 +19,21 @@
- 
- typedef struct {
- 	int socket_fd; /* the fd we use to talk to the daemon */
--	int protocol;  /* version of the protocol the daemon uses */
-+	const char *protocol;
-+	int protocol_version;  /* version of the protocol the daemon uses */
- } daemon_handle;
- 
- typedef struct {
- 	const char *path; /* the binary of the daemon */
- 	const char *socket; /* path to the comms socket */
- 	unsigned autostart:1; /* start the daemon if not running? */
-+
-+	/*
-+	 * If the following are not NULL/0, an attempt to talk to a daemon which
-+	 * uses a different protocol or version will fail.
-+	 */
-+	const char *protocol;
-+	int protocol_version;
- } daemon_info;
- 
- typedef struct {
---- LVM2/daemons/common/daemon-server.c	2012/01/25 21:30:27	1.16
-+++ LVM2/daemons/common/daemon-server.c	2012/02/23 23:52:11	1.17
-@@ -239,6 +239,19 @@
- 	return 0;
- }
- 
-+static response builtin_handler(daemon_state s, client_handle h, request r)
-+{
-+	const char *rq = daemon_request_str(r, "request", "NONE");
-+
-+	if (!strcmp(rq, "hello")) {
-+		return daemon_reply_simple("OK", "protocol = %s", s.protocol ?: "default",
-+					   "version = %d", s.protocol_version, NULL);
-+	}
-+
-+	response res = { .buffer = NULL, .error = EPROTO };
-+	return res;
++notify_lvmetad() {
++	if test -e LOCAL_LVMETAD; then
++		pvscan --lvmetad "$@" || true
++	fi
 +}
 +
- static void *client_thread(void *baton)
- {
- 	struct thread_baton *b = baton;
-@@ -252,7 +265,11 @@
- 		req.cft = dm_config_from_string(req.buffer);
- 		if (!req.cft)
- 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer);
--		res = b->s.handler(b->s, b->client, req);
-+
-+		res = builtin_handler(b->s, b->client, req);
-+
-+		if (res.error == EPROTO) /* Not a builtin, delegate to the custom handler. */
-+			res = b->s.handler(b->s, b->client, req);
+ teardown_devs() {
+ 	# Delete any remaining dm/udev semaphores
+ 	teardown_udev_cookies
+@@ -328,7 +334,7 @@
+ 	    min=$(($(stat --printf=0x%T $dev)))
+ 	    echo "disabling device $dev ($maj:$min)"
+             dmsetup remove -f $dev || true
+-	    pvscan --lvmetad $maj:$min || true
++	    notify_lvmetad $maj:$min
+ 	done
+ 	finish_udev_transaction
  
- 		if (!res.buffer) {
- 			dm_config_write_node(res.cft->root, buffer_line, &res);
---- LVM2/daemons/common/daemon-server.h	2011/09/01 13:25:50	1.12
-+++ LVM2/daemons/common/daemon-server.h	2012/02/23 23:52:11	1.13
-@@ -78,6 +78,9 @@
- 	const char *name;
- 	const char *pidfile;
- 	const char *socket_path;
-+	const char *protocol;
-+	int protocol_version;
-+
- 	int log_level;
- 	handle_request handler;
- 	int (*daemon_init)(struct daemon_state *st);
---- LVM2/daemons/lvmetad/lvmetad-client.h	2012/02/23 17:59:32	1.8
-+++ LVM2/daemons/lvmetad/lvmetad-client.h	2012/02/23 23:52:11	1.9
-@@ -64,6 +64,8 @@
- 	daemon_info lvmetad_info = {
- 		.path = "lvmetad",
- 		.socket = socket ?: DEFAULT_RUN_DIR "/lvmetad.socket",
-+		.protocol = "lvmetad",
-+		.protocol_version = 1,
- 		.autostart = 0
- 	};
- 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/23 17:59:32	1.39
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/23 23:52:11	1.40
-@@ -984,6 +984,8 @@
- 		s.socket_path = DEFAULT_RUN_DIR "/lvmetad.socket";
- 	s.pidfile = DEFAULT_RUN_DIR "/lvmetad.pid";
-         s.log_level = 0;
-+	s.protocol = "lvmetad";
-+	s.protocol_version = 1;
- 
- 	// use getopt_long
- 	while ((opt = getopt(argc, argv, "?fhVdRs:")) != EOF) {
+@@ -342,7 +348,7 @@
+ 		dmsetup create -u TEST-$name $name $name.table || dmsetup load $name $name.table
+ 		# using device name (since device path does not exists yes with udev)
+ 		dmsetup resume $name
+-		pvscan --lvmetad $dev || true
++		notify_lvmetad $dev
+ 	done
+ 	finish_udev_transaction
+ }
 
 
