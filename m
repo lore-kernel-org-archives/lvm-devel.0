@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 12:06:41 -0000
-Subject: LVM2 ./WHATS_NEW_DM tools/dmsetup.c
-Message-ID: <20120213120641.6073.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 23 Feb 2012 14:55:31 -0000
+Subject: LVM2/test/shell lvcreate-repair.sh
+Message-ID: <20120223145531.21091.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,59 +10,30 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 12:06:40
+Changes by:	mornfall at sourceware.org	2012-02-23 14:55:31
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	tools          : dmsetup.c 
+	test/shell     : lvcreate-repair.sh 
 
 Log message:
-	Ensure allocated device does not leak on error path
-	
-	For unimplementd canonicalize_file_name set to NULL
+	Add a vgscan to lvcreate-repair.sh. The old test applied device filter hacks to
+	make devices invisible to lvm, but the behaviour of those is slightly different
+	than of actual missing devices. Running vgscan after re-enabling the device
+	triggers a metadata repair which is not done by vgremove -ff. This is not a
+	regression, merely an odd behaviour that has been around even before lvmetad.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.555&r2=1.556
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.175&r2=1.176
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvcreate-repair.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW_DM	2012/02/13 11:24:09	1.555
-+++ LVM2/WHATS_NEW_DM	2012/02/13 12:06:39	1.556
-@@ -1,5 +1,6 @@
- Version 1.02.71 - 
- ====================================
-+  Fix memory leak in fail path of parse_loop_device_name() in dmsetup.
-   Check for missing reply_uuid in dm_event_get_registered_device().
-   Check for allocation failure in dmeventd restart().
-   Add few missing allocation failures tests in dmsetup.
---- LVM2/tools/dmsetup.c	2012/02/13 11:13:44	1.175
-+++ LVM2/tools/dmsetup.c	2012/02/13 12:06:40	1.176
-@@ -3043,6 +3043,8 @@
- 	_path = canonicalize_file_name(path);
- #else
- 	/* FIXME Provide alternative */
-+	log_error(INTERNAL_ERROR "Unimplemented _get_abspath.");
-+	_path = NULL;
- #endif
- 	return _path;
- }
-@@ -3050,7 +3052,7 @@
- static char *parse_loop_device_name(const char *dev, const char *dev_dir)
- {
- 	char *buf;
--	char *device;
-+	char *device = NULL;
+--- LVM2/test/shell/lvcreate-repair.sh	2012/02/23 13:11:10	1.2
++++ LVM2/test/shell/lvcreate-repair.sh	2012/02/23 14:55:29	1.3
+@@ -38,6 +38,7 @@
+ 		check lv_exists $vg $lv2
  
- 	if (!(buf = dm_malloc(PATH_MAX)))
- 		return NULL;
-@@ -3083,7 +3085,9 @@
- 	return buf;
+ 		aux enable_dev $i $j
++		vgscan
  
- error:
-+	dm_free(device);
- 	dm_free(buf);
-+
- 	return NULL;
- }
- 
+ 		test $i != $dev1 && check lv_exists $vg $lv1
+ 		check lv_exists $vg $lv2
 
 
