@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 14:17:05 -0000
-Subject: LVM2 daemons/dmeventd/plugins/snapshot/dmevent ...
-Message-ID: <20120213141705.27171.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 24 Feb 2012 13:45:37 -0000
+Subject: LVM2/scripts lvm2_lvmetad_init_red_hat.in
+Message-ID: <20120224134537.13828.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,50 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 14:17:04
+Changes by:	prajnoha at sourceware.org	2012-02-24 13:45:37
 
 Modified files:
-	daemons/dmeventd/plugins/snapshot: dmeventd_snapshot.c 
-	.              : WHATS_NEW_DM 
+	scripts        : lvm2_lvmetad_init_red_hat.in 
 
 Log message:
-	Make sure dereferenced words[0] and words[1] are defined
+	Use '-p PID_FILE' for the status call since the pidfile is in its own lvm subdir and return proper status code.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.556&r2=1.557
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_lvmetad_init_red_hat.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2011/12/22 16:37:03	1.18
-+++ LVM2/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c	2012/02/13 14:17:04	1.19
-@@ -144,7 +144,8 @@
- 			break; /* eof, likely */
+--- LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:11:57	1.2
++++ LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:45:37	1.3
+@@ -41,10 +41,11 @@
+ lvm_vgscan=${sbindir}/vgscan
  
- 		/* words[0] is the mount point and words[1] is the device path */
--		dm_split_words(buffer, 3, 0, words);
-+		if (dm_split_words(buffer, 3, 0, words) < 2)
-+			continue;
+ LOCK_FILE="/var/lock/subsys/$DAEMON"
++PID_FILE="@DEFAULT_RUN_DIR@/${DAEMON}.pid"
  
- 		/* find the major/minor of the device */
- 		if (stat(words[0], &st))
---- LVM2/WHATS_NEW_DM	2012/02/13 12:06:39	1.556
-+++ LVM2/WHATS_NEW_DM	2012/02/13 14:17:04	1.557
-@@ -1,5 +1,6 @@
- Version 1.02.71 - 
- ====================================
-+  Test for parsed words in _umount() dmeventd snapshot plugin.
-   Fix memory leak in fail path of parse_loop_device_name() in dmsetup.
-   Check for missing reply_uuid in dm_event_get_registered_device().
-   Check for allocation failure in dmeventd restart().
+ 
+ rh_status() {
+-	status $DAEMON
++	status -p $PID_FILE $DAEMON
+ }
+ 
+ rh_status_q() {
+@@ -62,7 +63,7 @@
+ stop()
+ {
+ 	ret=0
+-	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc $DAEMON) || ret=$?
++	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc -p $PID_FILE $DAEMON) || ret=$?
+ 	return $ret
+ }
+ 
+@@ -102,7 +103,8 @@
+ 	;;
+ 
+   status)
+-	status $DAEMON
++	rh_status
++	rtrn=$?
+ 	;;
+ 
+   *)
 
 
