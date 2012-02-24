@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 24 Feb 2012 00:24:38 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20120224002438.4034.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 24 Feb 2012 09:53:13 -0000
+Subject: LVM2/udev Makefile.in 69-dm-lvm-metad.rules
+Message-ID: <20120224095313.20658.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,80 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-02-24 00:24:37
+Changes by:	prajnoha at sourceware.org	2012-02-24 09:53:12
 
 Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+	udev           : Makefile.in 
+Added files:
+	udev           : 69-dm-lvm-metad.rules 
 
 Log message:
-	Fix server-side leaks in lvmetad.
+	Add skeleton for lvmetad udev rules - 69-dm-lvm-metad.rules.
+	
+	Why using the order 69:
+	
+	- Storage processing in general happens in 60-persistent-storage.rules,
+	including the blkid call that adds some usable information we can use
+	for filtering and speedup (these rules are part of upstream udev and
+	the order is preserved on most distros)
+	
+	- There's still some other storage-related processing done after
+	60-persistent-storage.rules in general. These might add some detailed
+	storage-related information we might use to filter devices effectively
+	(e.g. MD udev rules, ...).
+	
+	- We need lvmetad rules to be processed before any consumers can use the
+	output - so the metadata cache is ready soon enough (e.g. udisks rules).
+	
+	- There's no official (upstream udev) document about assigning the order,
+	so this number is chosen in best belief it will suit all scenarios.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.41&r2=1.42
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/69-dm-lvm-metad.rules.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/Makefile.in.diff?cvsroot=lvm2&r1=1.10&r2=1.11
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/24 00:11:59	1.41
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/24 00:24:37	1.42
-@@ -365,12 +365,14 @@
- 	if (!pvid) {
- 		debug("pv_lookup: could not find device %" PRIu64 "\n", devt);
- 		unlock_pvid_to_pvmeta(s);
-+		dm_config_destroy(res.cft);
- 		return daemon_reply_simple("failed", "reason = %s", "device not found", NULL);
- 	}
+/cvs/lvm2/LVM2/udev/69-dm-lvm-metad.rules,v  -->  standard output
+revision 1.1
+--- LVM2/udev/69-dm-lvm-metad.rules
++++ -	2012-02-24 09:53:13.057614000 +0000
+@@ -0,0 +1,25 @@
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++
++# Udev rules for LVM.
++#
++# Scan all block devices having a PV label for LVM metadata.
++# Store this information in LVMetaD (the LVM metadata daemon) and maintain LVM
++# metadata state for improved performance by avoiding further scans while
++# running subsequent LVM commands or while using lvm2app library.
++# Also, notify LVMetaD about any relevant block device removal.
++#
++# This rule is essential for having the information in LVMetaD up-to-date.
++# It also requires blkid to be called on block devices before so only devices
++# used as LVM PVs are processed (ID_FS_TYPE="LVM2_member" or "LVM1_member").
++
++SUBSYSTEM!="block", GOTO="lvm_end"
++
++# Device-mapper devices are processed only on change event or on supported synthesized event.
++KERNEL=="dm-[0-9]*", ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
++
++# Only process devices already marked as a PV - this requires blkid to be called before.
++ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{DM_SBIN_PATH}/pvscan --lvmetad $major:$minor"
++
++LABEL="lvm_end"
+--- LVM2/udev/Makefile.in	2012/02/23 10:01:12	1.10
++++ LVM2/udev/Makefile.in	2012/02/24 09:53:12	1.11
+@@ -19,6 +19,10 @@
+ LVM_RULES=11-dm-lvm.rules
+ DM_DIR=$(shell grep "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | awk '{print $$3}')
  
- 	pv = make_pv_node(s, pvid, res.cft, NULL, res.cft->root);
- 	if (!pv) {
- 		unlock_pvid_to_pvmeta(s);
-+		dm_config_destroy(res.cft);
- 		return daemon_reply_simple("failed", "reason = %s", "PV not found", NULL);
- 	}
- 
-@@ -761,7 +763,7 @@
- 	const char *vgid = daemon_request_str(r, "metadata/id", NULL);
- 	struct dm_config_node *pvmeta = dm_config_find_node(r.cft->root, "pvmeta");
- 	uint64_t device;
--	struct dm_config_tree *cft;
-+	struct dm_config_tree *cft, *pvmeta_old = NULL;
- 	const char *old;
- 	const char *pvid_dup;
- 	int complete = 0, orphan = 0;
-@@ -778,14 +780,18 @@
- 
- 	lock_pvid_to_pvmeta(s);
- 
--	if ((old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device))))
-+	if ((old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device)))) {
-+		pvmeta_old = dm_hash_lookup(s->pvid_to_pvmeta, old);
- 		dm_hash_remove(s->pvid_to_pvmeta, old);
-+	}
- 
- 	cft = dm_config_create();
- 	cft->root = dm_config_clone_node(cft, pvmeta, 0);
- 	pvid_dup = dm_config_find_str(cft->root, "pvmeta/id", NULL);
- 	dm_hash_insert(s->pvid_to_pvmeta, pvid, cft);
- 	dm_hash_insert_binary(s->device_to_pvid, &device, sizeof(device), (void*)pvid_dup);
-+	if (pvmeta_old)
-+		dm_config_destroy(pvmeta_old);
- 
- 	unlock_pvid_to_pvmeta(s);
- 
++ifeq ("@BUILD_LVMETAD@", "yes")
++LVM_RULES+=69-dm-lvm-metad.rules
++endif
++
+ ifeq ("@UDEV_HAS_BUILTIN_BLKID@", "yes")
+ 	BLKID_RULE=IMPORT{builtin}=\"blkid\"
+ else
 
 
