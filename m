@@ -1,7 +1,7 @@
 From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 24 Feb 2012 13:45:37 -0000
-Subject: LVM2/scripts lvm2_lvmetad_init_red_hat.in
-Message-ID: <20120224134537.13828.qmail@sourceware.org>
+Date: 24 Feb 2012 15:07:01 -0000
+Subject: LVM2/scripts Makefile.in
+Message-ID: <20120224150701.5639.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,50 +10,24 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-02-24 13:45:37
+Changes by:	prajnoha at sourceware.org	2012-02-24 15:07:01
 
 Modified files:
-	scripts        : lvm2_lvmetad_init_red_hat.in 
+	scripts        : Makefile.in 
 
 Log message:
-	Use '-p PID_FILE' for the status call since the pidfile is in its own lvm subdir and return proper status code.
+	Also remove intermediate lvmetad init script file.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_lvmetad_init_red_hat.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/Makefile.in.diff?cvsroot=lvm2&r1=1.28&r2=1.29
 
---- LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:11:57	1.2
-+++ LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:45:37	1.3
-@@ -41,10 +41,11 @@
- lvm_vgscan=${sbindir}/vgscan
- 
- LOCK_FILE="/var/lock/subsys/$DAEMON"
-+PID_FILE="@DEFAULT_RUN_DIR@/${DAEMON}.pid"
- 
- 
- rh_status() {
--	status $DAEMON
-+	status -p $PID_FILE $DAEMON
- }
- 
- rh_status_q() {
-@@ -62,7 +63,7 @@
- stop()
- {
- 	ret=0
--	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc $DAEMON) || ret=$?
-+	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc -p $PID_FILE $DAEMON) || ret=$?
- 	return $ret
- }
- 
-@@ -102,7 +103,8 @@
- 	;;
- 
-   status)
--	status $DAEMON
-+	rh_status
-+	rtrn=$?
- 	;;
- 
-   *)
+--- LVM2/scripts/Makefile.in	2012/02/24 13:03:50	1.28
++++ LVM2/scripts/Makefile.in	2012/02/24 15:07:00	1.29
+@@ -78,4 +78,4 @@
+ DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat lvm2_monitoring_init_red_hat \
+ 		     dm_event_systemd_red_hat.service lvm2_monitoring_systemd_red_hat.service \
+ 		     lvm2_lvmetad_systemd_red_hat.socket lvm2_lvmetad_systemd_red_hat.service \
+-		     lvm2_tmpfiles_red_hat.conf
++		     lvm2_lvmetad_init_red_hat lvm2_tmpfiles_red_hat.conf
 
 
