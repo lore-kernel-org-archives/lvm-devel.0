@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 11:45:09 -0000
-Subject: LVM2 ./WHATS_NEW lib/report/properties.c lib/r ...
-Message-ID: <20120227114509.30986.qmail@sourceware.org>
+Date: 27 Feb 2012 11:46:26 -0000
+Subject: LVM2/daemons/dmeventd dmeventd.h libdevmapper- ...
+Message-ID: <20120227114626.31697.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,63 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 11:45:07
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:46:26
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/report     : properties.c properties.h 
+	daemons/dmeventd: dmeventd.h libdevmapper-event.h 
 
 Log message:
-	Use unsigned type for bitmask
+	Add FIXME for misuse in case of dm_event_mask enum.
 	
-	Using report_type_t for bitmask is not correct, since we have not defined types
-	for all  bit combinations - so switching to unsigned type, since values of
-	report_type_t enum are unsigned.
+	Using enum for bitmask is not proper solution here.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2317&r2=1.2318
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.h.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/WHATS_NEW	2012/02/27 11:26:25	1.2317
-+++ LVM2/WHATS_NEW	2012/02/27 11:45:05	1.2318
-@@ -1,5 +1,6 @@
- Version 2.02.94 - 
- ====================================
-+  Use unsigned type for bitmask instead of enum type for lvm properties.
-   Add missing cleanup of excl_uuid hash on some exit paths of clvmd.
-   Check for existance of vg_name in _format1/_pool_vg_read().
-   Fix missing break in _format_pvsegs (2.02.92).
---- LVM2/lib/report/properties.c	2012/01/19 15:34:33	1.33
-+++ LVM2/lib/report/properties.c	2012/02/27 11:45:06	1.34
-@@ -315,7 +315,7 @@
+--- LVM2/daemons/dmeventd/dmeventd.h	2011/04/04 16:11:09	1.9
++++ LVM2/daemons/dmeventd/dmeventd.h	2012/02/27 11:46:25	1.10
+@@ -63,6 +63,7 @@
+ #define EXIT_CHDIR_FAILURE       7
  
+ /* Implemented in libdevmapper-event.c, but not part of public API. */
++// FIXME  misuse of bitmask as enum
+ int daemon_talk(struct dm_event_fifos *fifos,
+ 		struct dm_event_daemon_message *msg, int cmd,
+ 		const char *dso_name, const char *dev_name,
+--- LVM2/daemons/dmeventd/libdevmapper-event.h	2011/04/04 16:11:09	1.16
++++ LVM2/daemons/dmeventd/libdevmapper-event.h	2012/02/27 11:46:25	1.17
+@@ -82,6 +82,7 @@
+ /*
+  * Specify mask for events to monitor.
+  */
++// FIXME  misuse of bitmask as enum
+ void dm_event_handler_set_event_mask(struct dm_event_handler *dmevh,
+ 				     enum dm_event_mask evmask);
  
- static int _get_property(const void *obj, struct lvm_property_type *prop,
--			 report_type_t type)
-+			 unsigned type)
- {
- 	struct lvm_property_type *p;
+@@ -91,6 +92,7 @@
+ int dm_event_handler_get_major(const struct dm_event_handler *dmevh);
+ int dm_event_handler_get_minor(const struct dm_event_handler *dmevh);
+ int dm_event_handler_get_timeout(const struct dm_event_handler *dmevh);
++// FIXME  misuse of bitmask as enum
+ enum dm_event_mask dm_event_handler_get_event_mask(const struct dm_event_handler *dmevh);
  
-@@ -343,7 +343,7 @@
- }
+ /* FIXME Review interface (what about this next thing?) */
+@@ -104,6 +106,7 @@
  
- static int _set_property(void *obj, struct lvm_property_type *prop,
--			 report_type_t type)
-+			 unsigned type)
- {
- 	struct lvm_property_type *p;
- 
---- LVM2/lib/report/properties.h	2010/11/17 20:11:28	1.9
-+++ LVM2/lib/report/properties.h	2012/02/27 11:45:06	1.10
-@@ -20,7 +20,7 @@
- #include "report.h"
- 
- struct lvm_property_type {
--	report_type_t type;
-+	unsigned type;
- 	const char *id;
- 	unsigned is_settable:1;
- 	unsigned is_string:1;
+ /* Prototypes for DSO interface, see dmeventd.c, struct dso_data for
+    detailed descriptions. */
++// FIXME  misuse of bitmask as enum
+ void process_event(struct dm_task *dmt, enum dm_event_mask evmask, void **user);
+ int register_device(const char *device_name, const char *uuid, int major, int minor, void **user);
+ int unregister_device(const char *device_name, const char *uuid, int major,
 
 
