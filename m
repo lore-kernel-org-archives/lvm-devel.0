@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 27 Feb 2012 08:56:47 -0000
-Subject: LVM2/scripts lvm2_lvmetad_init_red_hat.in
-Message-ID: <20120227085647.9355.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 27 Feb 2012 09:51:33 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20120227095133.1813.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,35 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-02-27 08:56:46
+Changes by:	zkabelac at sourceware.org	2012-02-27 09:51:32
 
 Modified files:
-	scripts        : lvm2_lvmetad_init_red_hat.in 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Use 'killproc' fn in lvmetad init script (fn provided by 'functions' init script library).
+	Just reindent with tabs
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_lvmetad_init_red_hat.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.486&r2=1.487
 
---- LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:45:37	1.3
-+++ LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/27 08:56:46	1.4
-@@ -63,7 +63,7 @@
- stop()
+--- LVM2/lib/metadata/metadata.c	2012/02/23 13:11:10	1.486
++++ LVM2/lib/metadata/metadata.c	2012/02/27 09:51:31	1.487
+@@ -1896,12 +1896,12 @@
+ 
+ struct lv_segment *last_seg(const struct logical_volume *lv)
  {
- 	ret=0
--	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc -p $PID_FILE $DAEMON) || ret=$?
-+	action "Signaling LVM metadata daemon to exit:" killproc -p $PID_FILE $DAEMON -TERM || ret=$?
- 	return $ret
+-       struct lv_segment *seg;
++	struct lv_segment *seg;
+ 
+-       dm_list_iterate_back_items(seg, &lv->segments)
+-               return seg;
++	dm_list_iterate_back_items(seg, &lv->segments)
++		return seg;
+ 
+-       return NULL;
++	return NULL;
  }
  
+ int vg_remove_mdas(struct volume_group *vg)
 
 
