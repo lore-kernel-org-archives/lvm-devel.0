@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 11:23:16 -0000
-Subject: LVM2 ./WHATS_NEW lib/format1/format1.c lib/for ...
-Message-ID: <20120227112316.32615.qmail@sourceware.org>
+Date: 27 Feb 2012 11:26:27 -0000
+Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
+Message-ID: <20120227112627.2962.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,56 +10,72 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 11:23:15
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:26:26
 
 Modified files:
 	.              : WHATS_NEW 
-	lib/format1    : format1.c 
-	lib/format_pool: format_pool.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Check for vg_name existance
+	Nicer cleanup of excl_uuid hash
 	
-	Since vg_read() mda ops could be called with NULL vg_name,
-	check it before derefence also for pool and format1.
+	Since it on exit path, it's not a big difference,
+	but makes less noise in analyzer and valgrind.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2315&r2=1.2316
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.148&r2=1.149
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2316&r2=1.2317
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.122&r2=1.123
 
---- LVM2/WHATS_NEW	2012/02/27 11:13:48	1.2315
-+++ LVM2/WHATS_NEW	2012/02/27 11:23:15	1.2316
+--- LVM2/WHATS_NEW	2012/02/27 11:23:15	1.2316
++++ LVM2/WHATS_NEW	2012/02/27 11:26:25	1.2317
 @@ -1,5 +1,6 @@
  Version 2.02.94 - 
  ====================================
-+  Check for existance of vg_name in _format1/_pool_vg_read().
++  Add missing cleanup of excl_uuid hash on some exit paths of clvmd.
+   Check for existance of vg_name in _format1/_pool_vg_read().
    Fix missing break in _format_pvsegs (2.02.92).
    Test seg pointer for non-null it in raid_target_percent error path.
-   Check for errors in _init_tags() during config loading.
---- LVM2/lib/format1/format1.c	2012/02/23 13:11:09	1.148
-+++ LVM2/lib/format1/format1.c	2012/02/27 11:23:15	1.149
-@@ -186,7 +186,8 @@
- 	DM_LIST_INIT(pvs);
+--- LVM2/daemons/clvmd/clvmd.c	2012/02/27 10:17:06	1.122
++++ LVM2/daemons/clvmd/clvmd.c	2012/02/27 11:26:25	1.123
+@@ -345,6 +345,7 @@
+ 	debug_t debug_arg = DEBUG_OFF;
+ 	int clusterwide_opt = 0;
+ 	mode_t old_mask;
++	int ret = 1;
  
- 	/* Strip dev_dir if present */
--	vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
-+	if (vg_name)
-+		vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
+ 	struct option longopts[] = {
+ 		{ "help", 0, 0, 'h' },
+@@ -372,7 +373,8 @@
  
- 	if (!(vg = alloc_vg("format1_vg_read", fid->fmt->cmd, NULL)))
- 		return_NULL;
---- LVM2/lib/format_pool/format_pool.c	2012/02/23 13:11:09	1.53
-+++ LVM2/lib/format_pool/format_pool.c	2012/02/27 11:23:15	1.54
-@@ -110,7 +110,8 @@
- 	/* We can safely ignore the mda passed in */
+ 		case 'S':
+ 			check_permissions();
+-			return restart_clvmd(clusterwide_opt)==1?0:1;
++			ret = (restart_clvmd(clusterwide_opt) == 1) ? 0 : 1;
++			goto out;
  
- 	/* Strip dev_dir if present */
--	vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
-+	if (vg_name)
-+		vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
+ 		case 'C':
+ 			clusterwide_opt = 1;
+@@ -402,7 +404,7 @@
+ 		case 'E':
+ 			if (!dm_hash_insert(lvm_params.excl_uuid, optarg, optarg)) {
+ 				fprintf(stderr, "Failed to allocate hash entry\n");
+-				return 1;
++				goto out;
+ 			}
+ 			break;
+ 		case 'T':
+@@ -624,9 +626,11 @@
+ 		free(delfd);
+ 	}
  
- 	/* Set vg_name through read_pool_pds() */
- 	if (!(vg = alloc_vg("pool_vg_read", fid->fmt->cmd, NULL)))
++	ret = 0;
++out:
+ 	dm_hash_destroy(lvm_params.excl_uuid);
+ 
+-	return 0;
++	return ret;
+ }
+ 
+ /* Called when the cluster layer has completed initialisation.
 
 
