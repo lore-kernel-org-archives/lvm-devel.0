@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 11:32:48 -0000
-Subject: LVM2/lib/cache lvmetad.c
-Message-ID: <20120227113248.4694.qmail@sourceware.org>
+Date: 27 Feb 2012 11:36:00 -0000
+Subject: LVM2/lib format_text/archiver.c metadata/metad ...
+Message-ID: <20120227113600.31260.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,62 +10,58 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 11:32:48
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:36:00
 
 Modified files:
-	lib/cache      : lvmetad.c 
+	lib/format_text: archiver.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Check id_write_format result
+	Add stack traces for lock_vol failures
 	
-	Currently we never fail with 64byte uuid buffer,
-	but just stay consitent with rest of the code and check for result.
+	Adding at least stack traces with some FIXMEs for cases,
+	where we might want to do something cleaver - maybe fail command
+	or give user hints something is not going well ?
+	
+	For remote_backup is stack probably 'good' enough for now.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.6&r2=1.7
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/archiver.c.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.487&r2=1.488
 
---- LVM2/lib/cache/lvmetad.c	2012/02/26 13:42:50	1.6
-+++ LVM2/lib/cache/lvmetad.c	2012/02/27 11:32:48	1.7
-@@ -153,7 +153,8 @@
- 		return NULL;
+--- LVM2/lib/format_text/archiver.c	2012/02/12 23:01:19	1.50
++++ LVM2/lib/format_text/archiver.c	2012/02/27 11:35:59	1.51
+@@ -244,7 +244,8 @@
+ int backup(struct volume_group *vg)
+ {
+ 	if (vg_is_clustered(vg))
+-		remote_backup_metadata(vg);
++		if (!remote_backup_metadata(vg))
++			stack;
  
- 	if (vgid) {
--		id_write_format((const struct id*)vgid, uuid, 64);
-+		if (!id_write_format((const struct id*)vgid, uuid, sizeof(uuid)))
-+			return_0;
- 		reply = daemon_send_simple(_lvmetad, "vg_lookup", "uuid = %s", uuid, NULL);
- 	} else {
- 		if (!vgname)
-@@ -293,7 +294,9 @@
- 	if (!_using_lvmetad)
- 		return 1; /* just fake it */
+ 	return backup_locally(vg);
+ }
+--- LVM2/lib/metadata/metadata.c	2012/02/27 09:51:31	1.487
++++ LVM2/lib/metadata/metadata.c	2012/02/27 11:36:00	1.488
+@@ -2708,7 +2708,8 @@
  
--	id_write_format(&vg->id, uuid, 64);
-+	if (!id_write_format(&vg->id, uuid, sizeof(uuid)))
-+		return_0;
-+
- 	reply = daemon_send_simple(_lvmetad, "vg_remove", "uuid = %s", uuid, NULL);
+ 	if (cache_updated) {
+ 		/* Instruct remote nodes to upgrade cached metadata. */
+-		remote_commit_cached_metadata(vg);
++		if (!remote_commit_cached_metadata(vg))
++			stack; // FIXME: What should we do?
+ 		/*
+ 		 * We need to clear old_name after a successful commit.
+ 		 * The volume_group structure could be reused later.
+@@ -2741,7 +2742,8 @@
+ 		log_error("Attempt to drop cached metadata failed "
+ 			  "after reverted update for VG %s.", vg->name);
  
- 	return _lvmetad_handle_reply(reply, "remove VG", vg->name);
-@@ -309,7 +312,8 @@
- 	if (!_using_lvmetad)
- 		return_0;
+-	remote_revert_cached_metadata(vg);
++	if (!remote_revert_cached_metadata(vg))
++		stack; // FIXME: What should we do?
+ }
  
--	id_write_format(&pvid, uuid, 64);
-+	if (!id_write_format(&pvid, uuid, sizeof(uuid)))
-+		return_0;
- 
- 	reply = daemon_send_simple(_lvmetad, "pv_lookup", "uuid = %s", uuid, NULL);
- 
-@@ -482,7 +486,8 @@
- 	if (!_using_lvmetad)
- 		return 1;
- 
--	id_write_format(&pvid, uuid, 64);
-+	if (!id_write_format(&pvid, uuid, sizeof(uuid)))
-+                return_0;
- 
- 	/* FIXME A more direct route would be much preferable. */
- 	if ((info = lvmcache_info_from_pvid((const char *)&pvid, 0)))
+ struct _vg_read_orphan_baton {
 
 
