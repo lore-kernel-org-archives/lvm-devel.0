@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 11:40:58 -0000
-Subject: LVM2/lib/format_text import_vsn1.c
-Message-ID: <20120227114058.29902.qmail@sourceware.org>
+Date: 27 Feb 2012 11:45:09 -0000
+Subject: LVM2 ./WHATS_NEW lib/report/properties.c lib/r ...
+Message-ID: <20120227114509.30986.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,80 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 11:40:58
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:45:07
 
 Modified files:
-	lib/format_text: import_vsn1.c 
+	.              : WHATS_NEW 
+	lib/report     : properties.c properties.h 
 
 Log message:
-	Just code move of hash initialization in front of function
+	Use unsigned type for bitmask
 	
-	Make sure both hash tables are initialized before _read_sections() call.
-	Presents no functional change (since PV scan phase was not adding LV hashes),
-	but makes the code easier to handle mem failing case, and static analyzer is
-	hapier as well.
+	Using report_type_t for bitmask is not correct, since we have not defined types
+	for all  bit combinations - so switching to unsigned type, since values of
+	report_type_t enum are unsigned.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/import_vsn1.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2317&r2=1.2318
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.33&r2=1.34
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.h.diff?cvsroot=lvm2&r1=1.9&r2=1.10
 
---- LVM2/lib/format_text/import_vsn1.c	2012/02/23 13:11:09	1.101
-+++ LVM2/lib/format_text/import_vsn1.c	2012/02/27 11:40:58	1.102
-@@ -694,6 +694,24 @@
- 	if (!(vg->system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
- 		goto_bad;
+--- LVM2/WHATS_NEW	2012/02/27 11:26:25	1.2317
++++ LVM2/WHATS_NEW	2012/02/27 11:45:05	1.2318
+@@ -1,5 +1,6 @@
+ Version 2.02.94 - 
+ ====================================
++  Use unsigned type for bitmask instead of enum type for lvm properties.
+   Add missing cleanup of excl_uuid hash on some exit paths of clvmd.
+   Check for existance of vg_name in _format1/_pool_vg_read().
+   Fix missing break in _format_pvsegs (2.02.92).
+--- LVM2/lib/report/properties.c	2012/01/19 15:34:33	1.33
++++ LVM2/lib/report/properties.c	2012/02/27 11:45:06	1.34
+@@ -315,7 +315,7 @@
  
-+	/*
-+	 * The pv hash memorises the pv section names -> pv
-+	 * structures.
-+	 */
-+	if (!(pv_hash = dm_hash_create(64))) {
-+		log_error("Couldn't create pv hash table.");
-+		goto bad;
-+	}
-+
-+	/*
-+	 * The lv hash memorises the lv section names -> lv
-+	 * structures.
-+	 */
-+	if (!(lv_hash = dm_hash_create(1024))) {
-+		log_error("Couldn't create lv hash table.");
-+		goto bad;
-+	}
-+
- 	vgn = vgn->child;
  
- 	if (dm_config_get_str(vgn, "system_id", &str)) {
-@@ -752,15 +770,6 @@
- 		vg->mda_copies = DEFAULT_VGMETADATACOPIES;
- 	}
+ static int _get_property(const void *obj, struct lvm_property_type *prop,
+-			 report_type_t type)
++			 unsigned type)
+ {
+ 	struct lvm_property_type *p;
  
--	/*
--	 * The pv hash memorises the pv section names -> pv
--	 * structures.
--	 */
--	if (!(pv_hash = dm_hash_create(64))) {
--		log_error("Couldn't create hash table.");
--		goto bad;
--	}
--
- 	if (!_read_sections(fid, "physical_volumes", _read_pv, vg,
- 			    vgn, pv_hash, lv_hash, 0, &scan_done_once)) {
- 		log_error("Couldn't find all physical volumes for volume "
-@@ -775,15 +784,6 @@
- 		goto bad;
- 	}
+@@ -343,7 +343,7 @@
+ }
  
--	/*
--	 * The lv hash memorises the lv section names -> lv
--	 * structures.
--	 */
--	if (!(lv_hash = dm_hash_create(1024))) {
--		log_error("Couldn't create hash table.");
--		goto bad;
--	}
--
- 	if (!_read_sections(fid, "logical_volumes", _read_lvnames, vg,
- 			    vgn, pv_hash, lv_hash, 1, NULL)) {
- 		log_error("Couldn't read all logical volume names for volume "
+ static int _set_property(void *obj, struct lvm_property_type *prop,
+-			 report_type_t type)
++			 unsigned type)
+ {
+ 	struct lvm_property_type *p;
+ 
+--- LVM2/lib/report/properties.h	2010/11/17 20:11:28	1.9
++++ LVM2/lib/report/properties.h	2012/02/27 11:45:06	1.10
+@@ -20,7 +20,7 @@
+ #include "report.h"
+ 
+ struct lvm_property_type {
+-	report_type_t type;
++	unsigned type;
+ 	const char *id;
+ 	unsigned is_settable:1;
+ 	unsigned is_string:1;
 
 
