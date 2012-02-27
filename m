@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 09:52:38 -0000
-Subject: LVM2/lib/locking locking.h
-Message-ID: <20120227095238.2699.qmail@sourceware.org>
+Date: 27 Feb 2012 09:54:26 -0000
+Subject: LVM2/lib/format_text format-text.c
+Message-ID: <20120227095426.3540.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 09:52:37
+Changes by:	zkabelac at sourceware.org	2012-02-27 09:54:25
 
 Modified files:
-	lib/locking    : locking.h 
+	lib/format_text: format-text.c 
 
 Log message:
-	Ignore result of unlock explicitely
+	Remove test for pvid
+	
+	Since pvid is char buffer[] and not pointer,
+	there is no point to check it for NULL.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.195&r2=1.196
 
---- LVM2/lib/locking/locking.h	2012/01/21 05:29:52	1.74
-+++ LVM2/lib/locking/locking.h	2012/02/27 09:52:37	1.75
-@@ -163,7 +163,7 @@
- 	do { \
- 		if (is_real_vg(vol)) \
- 			sync_dev_names(cmd); \
--		lock_vol(cmd, vol, LCK_VG_UNLOCK); \
-+		(void) lock_vol(cmd, vol, LCK_VG_UNLOCK); \
- 	} while (0)
- #define unlock_and_release_vg(cmd, vg, vol) \
- 	do { \
+--- LVM2/lib/format_text/format-text.c	2012/02/23 17:59:33	1.195
++++ LVM2/lib/format_text/format-text.c	2012/02/27 09:54:25	1.196
+@@ -1676,7 +1676,6 @@
+ 	 */
+ 	else {
+ 		if (!pv->dev ||
+-		    !pv->dev->pvid ||
+ 		    !(info = lvmcache_info_from_pvid(pv->dev->pvid, 0))) {
+ 			log_error("PV %s missing from cache", pv_dev_name(pv));
+ 			return 0;
 
 
