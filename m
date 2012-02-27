@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 26 Feb 2012 13:42:50 -0000
-Subject: LVM2/lib/cache lvmetad.c
-Message-ID: <20120226134250.2471.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 27 Feb 2012 08:56:47 -0000
+Subject: LVM2/scripts lvm2_lvmetad_init_red_hat.in
+Message-ID: <20120227085647.9355.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,41 +10,27 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-02-26 13:42:50
+Changes by:	prajnoha at sourceware.org	2012-02-27 08:56:46
 
 Modified files:
-	lib/cache      : lvmetad.c 
+	scripts        : lvm2_lvmetad_init_red_hat.in 
 
 Log message:
-	Fix a possible SEGV in lvmetad client code, and a minor leak in pvscan
-	--lvmetad.
+	Use 'killproc' fn in lvmetad init script (fn provided by 'functions' init script library).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvm2_lvmetad_init_red_hat.in.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/lib/cache/lvmetad.c	2012/02/26 08:49:40	1.5
-+++ LVM2/lib/cache/lvmetad.c	2012/02/26 13:42:50	1.6
-@@ -566,9 +566,10 @@
+--- LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/24 13:45:37	1.3
++++ LVM2/scripts/lvm2_lvmetad_init_red_hat.in	2012/02/27 08:56:46	1.4
+@@ -63,7 +63,7 @@
+ stop()
  {
- 	struct _pvscan_lvmetad_baton *b = baton;
- 	struct volume_group *this = mda->ops->vg_read(b->fid, "", mda);
--	if ((this && !b->vg) || this->seqno > b->vg->seqno)
-+	if (!b->vg || this->seqno > b->vg->seqno)
- 		b->vg = this;
--	else release_vg(this);
-+	else if (b->vg)
-+		release_vg(this);
- 	return 1;
+ 	ret=0
+-	action "Signaling LVM metadata daemon to exit:" kill -TERM $(pidofproc -p $PID_FILE $DAEMON) || ret=$?
++	action "Signaling LVM metadata daemon to exit:" killproc -p $PID_FILE $DAEMON -TERM || ret=$?
+ 	return $ret
  }
  
-@@ -647,6 +648,8 @@
- 							     &fic);
- 
- 	lvmcache_foreach_mda(info, _pvscan_lvmetad_single, &baton);
-+	if (!baton.vg)
-+		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
- 
- 	/*
- 	 * NB. If this command failed and we are relying on lvmetad to have an
 
 
