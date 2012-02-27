@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 14:39:25 -0000
-Subject: LVM2/libdm libdm-common.c
-Message-ID: <20120213143925.3303.qmail@sourceware.org>
+Date: 27 Feb 2012 11:49:17 -0000
+Subject: LVM2/daemons/common daemon-client.c
+Message-ID: <20120227114917.32509.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,57 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 14:39:24
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:49:16
 
 Modified files:
-	libdm          : libdm-common.c 
+	daemons/common : daemon-client.c 
 
 Log message:
-	Fix missing temp_buf init for error path
+	Do not hide deallocation of buffer
 	
-	In previous commit this was missing, also deallocate in reversed order.
+	As API is passing structures by value, do not leave
+	the function which created buffer and keeps valid pointer
+	look like it would be some memory leak and move
+	free of buffer from inner function - makes more obvious,
+	how is the memory management handled.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.137&r2=1.138
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/common/daemon-client.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/libdm/libdm-common.c	2012/02/13 10:49:28	1.137
-+++ LVM2/libdm/libdm-common.c	2012/02/13 14:39:24	1.138
-@@ -1188,7 +1188,7 @@
+--- LVM2/daemons/common/daemon-client.c	2012/02/26 08:46:28	1.15
++++ LVM2/daemons/common/daemon-client.c	2012/02/27 11:49:16	1.16
+@@ -62,8 +62,6 @@
+ 	if (!write_buffer(h.socket_fd, rq.buffer, strlen(rq.buffer)))
+ 		reply.error = errno;
  
- static int _sysfs_get_dm_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
- {
--	char *sysfs_path, *temp_buf;
-+	char *sysfs_path, *temp_buf = NULL;
- 	FILE *fp = NULL;
- 	int r = 0;
- 	size_t len;
-@@ -1232,15 +1232,15 @@
- 	if (fp && fclose(fp))
- 		log_sys_error("fclose", sysfs_path);
+-	dm_free(rq.buffer);
+-
+ 	if (read_buffer(h.socket_fd, &reply.buffer)) {
+ 		reply.cft = dm_config_from_string(reply.buffer);
+ 	} else
+@@ -93,6 +91,8 @@
+ 		return err;
  
--	dm_free(sysfs_path);
- 	dm_free(temp_buf);
-+	dm_free(sysfs_path);
- 
- 	return r;
+ 	repl = daemon_send(h, rq);
++	dm_free(rq.buffer);
++
+ 	return repl;
  }
  
- static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
- {
--	char *sysfs_path, *temp_buf, *name;
-+	char *name, *sysfs_path, *temp_buf = NULL;
- 	ssize_t size;
- 	size_t len;
- 	int r = 0;
-@@ -1281,8 +1281,8 @@
- 	strcpy(buf, name);
- 	r = 1;
- bad:
--	dm_free(sysfs_path);
- 	dm_free(temp_buf);
-+	dm_free(sysfs_path);
- 
- 	return r;
- }
 
 
