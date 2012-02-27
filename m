@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 27 Feb 2012 11:13:52 -0000
-Subject: LVM2/daemons/dmeventd dmeventd.c
-Message-ID: <20120227111352.28380.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 27 Feb 2012 11:23:16 -0000
+Subject: LVM2 ./WHATS_NEW lib/format1/format1.c lib/for ...
+Message-ID: <20120227112316.32615.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,198 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-02-27 11:13:52
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:23:15
 
 Modified files:
-	daemons/dmeventd: dmeventd.c 
+	.              : WHATS_NEW 
+	lib/format1    : format1.c 
+	lib/format_pool: format_pool.c 
 
 Log message:
-	Systemd is linux-specific - move the supporting code under the 'ifdef linux'.
+	Check for vg_name existance
 	
-	Some 'defines' used in this specific code were already under an ifdef so this
-	patch just completes it.
+	Since vg_read() mda ops could be called with NULL vg_name,
+	check it before derefence also for pool and format1.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.89&r2=1.90
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2315&r2=1.2316
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format1/format1.c.diff?cvsroot=lvm2&r1=1.148&r2=1.149
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_pool/format_pool.c.diff?cvsroot=lvm2&r1=1.53&r2=1.54
 
---- LVM2/daemons/dmeventd/dmeventd.c	2012/02/13 11:18:45	1.89
-+++ LVM2/daemons/dmeventd/dmeventd.c	2012/02/27 11:13:51	1.90
-@@ -1657,6 +1657,76 @@
+--- LVM2/WHATS_NEW	2012/02/27 11:13:48	1.2315
++++ LVM2/WHATS_NEW	2012/02/27 11:23:15	1.2316
+@@ -1,5 +1,6 @@
+ Version 2.02.94 - 
+ ====================================
++  Check for existance of vg_name in _format1/_pool_vg_read().
+   Fix missing break in _format_pvsegs (2.02.92).
+   Test seg pointer for non-null it in raid_target_percent error path.
+   Check for errors in _init_tags() during config loading.
+--- LVM2/lib/format1/format1.c	2012/02/23 13:11:09	1.148
++++ LVM2/lib/format1/format1.c	2012/02/27 11:23:15	1.149
+@@ -186,7 +186,8 @@
+ 	DM_LIST_INIT(pvs);
  
- 	return _set_oom_adj(OOM_ADJ_FILE, OOM_SCORE_ADJ_MIN);
- }
-+
-+static int _handle_preloaded_fifo(int fd, const char *path)
-+{
-+	struct stat st_fd, st_path;
-+	int flags;
-+
-+	if ((flags = fcntl(fd, F_GETFD)) < 0)
-+		return 0;
-+
-+	if (flags & FD_CLOEXEC)
-+		return 0;
-+
-+	if (fstat(fd, &st_fd) < 0 || !S_ISFIFO(st_fd.st_mode))
-+		return 0;
-+
-+	if (stat(path, &st_path) < 0 ||
-+	    st_path.st_dev != st_fd.st_dev ||
-+	    st_path.st_ino != st_fd.st_ino)
-+		return 0;
-+
-+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0)
-+		return 0;
-+
-+	return 1;
-+}
-+
-+static int _systemd_handover(struct dm_event_fifos *fifos)
-+{
-+	const char *e;
-+	char *p;
-+	unsigned long env_pid, env_listen_fds;
-+	int r = 0;
-+
-+	memset(fifos, 0, sizeof(*fifos));
-+
-+	/* LISTEN_PID must be equal to our PID! */
-+	if (!(e = getenv(SD_LISTEN_PID_ENV_VAR_NAME)))
-+		goto out;
-+
-+	errno = 0;
-+	env_pid = strtoul(e, &p, 10);
-+	if (errno || !p || *p || env_pid <= 0 ||
-+	    getpid() != (pid_t) env_pid)
-+		goto out;
-+
-+	/* LISTEN_FDS must be 2 and the fds must be FIFOSs! */
-+	if (!(e = getenv(SD_LISTEN_FDS_ENV_VAR_NAME)))
-+		goto out;
-+
-+	errno = 0;
-+	env_listen_fds = strtoul(e, &p, 10);
-+	if (errno || !p || *p || env_listen_fds != 2)
-+		goto out;
-+
-+	/* Check and handle the FIFOs passed in */
-+	r = (_handle_preloaded_fifo(SD_FD_FIFO_SERVER, DM_EVENT_FIFO_SERVER) &&
-+	     _handle_preloaded_fifo(SD_FD_FIFO_CLIENT, DM_EVENT_FIFO_CLIENT));
-+
-+	if (r) {
-+		fifos->server = SD_FD_FIFO_SERVER;
-+		fifos->server_path = DM_EVENT_FIFO_SERVER;
-+		fifos->client = SD_FD_FIFO_CLIENT;
-+		fifos->client_path = DM_EVENT_FIFO_CLIENT;
-+	}
-+
-+out:
-+	unsetenv(SD_LISTEN_PID_ENV_VAR_NAME);
-+	unsetenv(SD_LISTEN_FDS_ENV_VAR_NAME);
-+	return r;
-+}
- #endif
+ 	/* Strip dev_dir if present */
+-	vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
++	if (vg_name)
++		vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
  
- static void remove_lockfile(void)
-@@ -1723,10 +1793,12 @@
- 		fd = rlim.rlim_cur;
+ 	if (!(vg = alloc_vg("format1_vg_read", fid->fmt->cmd, NULL)))
+ 		return_NULL;
+--- LVM2/lib/format_pool/format_pool.c	2012/02/23 13:11:09	1.53
++++ LVM2/lib/format_pool/format_pool.c	2012/02/27 11:23:15	1.54
+@@ -110,7 +110,8 @@
+ 	/* We can safely ignore the mda passed in */
  
- 	for (--fd; fd >= 0; fd--) {
-+#ifdef linux
- 		/* Do not close fds preloaded by systemd! */
- 		if (_systemd_activation &&
- 		    (fd == SD_FD_FIFO_SERVER || fd == SD_FD_FIFO_CLIENT))
- 			continue;
-+#endif
- 		close(fd);
- 	}
+ 	/* Strip dev_dir if present */
+-	vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
++	if (vg_name)
++		vg_name = strip_dir(vg_name, fid->fmt->cmd->dev_dir);
  
-@@ -1804,76 +1876,6 @@
- 	fini_fifos(&fifos);
- }
- 
--static int _handle_preloaded_fifo(int fd, const char *path)
--{
--	struct stat st_fd, st_path;
--	int flags;
--
--	if ((flags = fcntl(fd, F_GETFD)) < 0)
--		return 0;
--
--	if (flags & FD_CLOEXEC)
--		return 0;
--
--	if (fstat(fd, &st_fd) < 0 || !S_ISFIFO(st_fd.st_mode))
--		return 0;
--
--	if (stat(path, &st_path) < 0 ||
--	    st_path.st_dev != st_fd.st_dev ||
--	    st_path.st_ino != st_fd.st_ino)
--		return 0;
--
--	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0)
--		return 0;
--
--	return 1;
--}
--
--static int _systemd_handover(struct dm_event_fifos *fifos)
--{
--	const char *e;
--	char *p;
--	unsigned long env_pid, env_listen_fds;
--	int r = 0;
--
--	memset(fifos, 0, sizeof(*fifos));
--
--	/* LISTEN_PID must be equal to our PID! */
--	if (!(e = getenv(SD_LISTEN_PID_ENV_VAR_NAME)))
--		goto out;
--
--	errno = 0;
--	env_pid = strtoul(e, &p, 10);
--	if (errno || !p || *p || env_pid <= 0 ||
--	    getpid() != (pid_t) env_pid)
--		goto out;
--
--	/* LISTEN_FDS must be 2 and the fds must be FIFOSs! */
--	if (!(e = getenv(SD_LISTEN_FDS_ENV_VAR_NAME)))
--		goto out;
--
--	errno = 0;
--	env_listen_fds = strtoul(e, &p, 10);
--	if (errno || !p || *p || env_listen_fds != 2)
--		goto out;
--
--	/* Check and handle the FIFOs passed in */
--	r = (_handle_preloaded_fifo(SD_FD_FIFO_SERVER, DM_EVENT_FIFO_SERVER) &&
--	     _handle_preloaded_fifo(SD_FD_FIFO_CLIENT, DM_EVENT_FIFO_CLIENT));
--
--	if (r) {
--		fifos->server = SD_FD_FIFO_SERVER;
--		fifos->server_path = DM_EVENT_FIFO_SERVER;
--		fifos->client = SD_FD_FIFO_CLIENT;
--		fifos->client_path = DM_EVENT_FIFO_CLIENT;
--	}
--
--out:
--	unsetenv(SD_LISTEN_PID_ENV_VAR_NAME);
--	unsetenv(SD_LISTEN_FDS_ENV_VAR_NAME);
--	return r;
--}
--
- static void usage(char *prog, FILE *file)
- {
- 	fprintf(file, "Usage:\n"
-@@ -1928,7 +1930,9 @@
- 	if (_restart)
- 		restart();
- 
-+#ifdef linux
- 	_systemd_activation = _systemd_handover(&fifos);
-+#endif
- 
- 	if (!_foreground)
- 		_daemonize();
+ 	/* Set vg_name through read_pool_pds() */
+ 	if (!(vg = alloc_vg("pool_vg_read", fid->fmt->cmd, NULL)))
 
 
