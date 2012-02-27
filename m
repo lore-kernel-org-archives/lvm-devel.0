@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 10:17:07 -0000
-Subject: LVM2/daemons/clvmd clvmd.c
-Message-ID: <20120227101707.19011.qmail@sourceware.org>
+Date: 27 Feb 2012 10:19:00 -0000
+Subject: LVM2/daemons/lvmetad lvmetad-core.c
+Message-ID: <20120227101900.19358.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 10:17:06
+Changes by:	zkabelac at sourceware.org	2012-02-27 10:19:00
 
 Modified files:
-	daemons/clvmd  : clvmd.c 
+	daemons/lvmetad: lvmetad-core.c 
 
 Log message:
-	A bit more safe version of sprintf
+	Add assert for oldname
 	
-	Use just buffer size limit (it's used for debug only)
+	Code cannot proceed if oldname would be NULL.
+	Since lvmetad currently doesn't use logging mechanism of lvm to report
+	internal errors - stay with current code style of lvmetad which uses
+	plain asserts for cases like this.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
 
---- LVM2/daemons/clvmd/clvmd.c	2012/02/27 09:58:19	1.121
-+++ LVM2/daemons/clvmd/clvmd.c	2012/02/27 10:17:06	1.122
-@@ -303,7 +303,7 @@
- 		break;
- 	}
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/27 10:10:43	1.43
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/27 10:19:00	1.44
+@@ -595,6 +595,7 @@
  
--	sprintf(buf, "%s (0x%x)", command, cmdl);
-+	snprintf(buf, sizeof(buf), "%s (0x%x)", command, cmdl);
+ 	if (!old)
+ 		return 0;
++	assert(oldname);
  
- 	return buf;
- }
+ 	if (update_pvids)
+ 		update_pvid_to_vgid(s, old, "#orphan", 0);
 
 
