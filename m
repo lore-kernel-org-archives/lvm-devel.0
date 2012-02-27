@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 10:06:59 -0000
-Subject: LVM2/tools vgreduce.c vgremove.c
-Message-ID: <20120227100659.15185.qmail@sourceware.org>
+Date: 27 Feb 2012 10:10:43 -0000
+Subject: LVM2/daemons/lvmetad lvmetad-core.c
+Message-ID: <20120227101043.16200.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 10:06:58
+Changes by:	zkabelac at sourceware.org	2012-02-27 10:10:43
 
 Modified files:
-	tools          : vgreduce.c vgremove.c 
+	daemons/lvmetad: lvmetad-core.c 
 
 Log message:
-	Make force_t enum usage obvious
+	Move allocation after check for vgid
+	
+	so there is no mem leak on this error path.
+	Also actually check if the hash exists.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.115&r2=1.116
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgremove.c.diff?cvsroot=lvm2&r1=1.62&r2=1.63
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.42&r2=1.43
 
---- LVM2/tools/vgreduce.c	2012/02/15 12:30:46	1.115
-+++ LVM2/tools/vgreduce.c	2012/02/27 10:06:58	1.116
-@@ -104,7 +104,7 @@
- 			if (!lv_is_visible(lv))
- 				continue;
- 			log_warn("Removing partial LV %s.", lv->name);
--			if (!lv_remove_with_dependencies(cmd, lv, 1, 0))
-+			if (!lv_remove_with_dependencies(cmd, lv, DONT_PROMPT, 0))
- 				return_0;
- 			goto restart;
- 		}
---- LVM2/tools/vgremove.c	2010/07/09 15:34:48	1.62
-+++ LVM2/tools/vgremove.c	2012/02/27 10:06:58	1.63
-@@ -29,7 +29,7 @@
+--- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/24 00:24:37	1.42
++++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/27 10:10:43	1.43
+@@ -548,7 +548,7 @@
+ 			       const char *vgid, int nuke_empty)
+ {
+ 	struct dm_config_node *pv = pvs(vg->root);
+-	struct dm_hash_table *to_check = dm_hash_create(32);
++	struct dm_hash_table *to_check;
+ 	struct dm_hash_node *n;
+ 	const char *pvid;
+ 	const char *vgid_old;
+@@ -556,6 +556,9 @@
+ 	if (!vgid)
+ 		return 0;
  
- 	lv_count = vg_visible_lvs(vg);
- 
--	force = arg_count(cmd, force_ARG);
-+	force = (force_t) arg_count(cmd, force_ARG);
- 	if (lv_count) {
- 		if (force == PROMPT) {
- 			if ((missing = vg_missing_pv_count(vg)))
++	if (!(to_check = dm_hash_create(32)))
++		return 0;
++
+ 	while (pv) {
+ 		pvid = dm_config_find_str(pv->child, "id", NULL);
+ 		vgid_old = dm_hash_lookup(s->pvid_to_vgid, pvid);
 
 
