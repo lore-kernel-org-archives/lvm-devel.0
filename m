@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 10:15:11 -0000
-Subject: LVM2 ./WHATS_NEW lib/raid/raid.c
-Message-ID: <20120227101511.17477.qmail@sourceware.org>
+Date: 27 Feb 2012 10:17:07 -0000
+Subject: LVM2/daemons/clvmd clvmd.c
+Message-ID: <20120227101707.19011.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,42 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 10:15:08
+Changes by:	zkabelac at sourceware.org	2012-02-27 10:17:06
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/raid       : raid.c 
+	daemons/clvmd  : clvmd.c 
 
 Log message:
-	Test seg pointer for non-null
+	A bit more safe version of sprintf
 	
-	As the function accepts NULL for 'seg' parameter,
-	check for it before dereference.
+	Use just buffer size limit (it's used for debug only)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2313&r2=1.2314
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/raid/raid.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.121&r2=1.122
 
---- LVM2/WHATS_NEW	2012/02/27 10:05:35	1.2313
-+++ LVM2/WHATS_NEW	2012/02/27 10:15:08	1.2314
-@@ -1,5 +1,6 @@
- Version 2.02.94 - 
--====================================                       
-+====================================
-+  Test seg pointer for non-null it in raid_target_percent error path.
-   Check for errors in _init_tags() during config loading.
-   Always check result of _set_vg_name() in lvcreate.
-   Drop unused call to uname() during clvmd initialization.
---- LVM2/lib/raid/raid.c	2012/02/13 20:13:40	1.15
-+++ LVM2/lib/raid/raid.c	2012/02/27 10:15:08	1.16
-@@ -230,7 +230,7 @@
- 	if (!pos || (sscanf(pos, "%" PRIu64 "/%" PRIu64 "%n",
- 			    &numerator, &denominator, &i) != 2)) {
- 		log_error("Failed to parse %s status fraction: %s",
--			  seg->segtype->name, params);
-+			  (seg) ? seg->segtype->name : "segment", params);
- 		return 0;
+--- LVM2/daemons/clvmd/clvmd.c	2012/02/27 09:58:19	1.121
++++ LVM2/daemons/clvmd/clvmd.c	2012/02/27 10:17:06	1.122
+@@ -303,7 +303,7 @@
+ 		break;
  	}
  
+-	sprintf(buf, "%s (0x%x)", command, cmdl);
++	snprintf(buf, sizeof(buf), "%s (0x%x)", command, cmdl);
+ 
+ 	return buf;
+ }
 
 
