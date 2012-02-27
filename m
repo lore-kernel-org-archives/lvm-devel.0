@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 10:19:00 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20120227101900.19358.qmail@sourceware.org>
+Date: 27 Feb 2012 11:13:49 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv.c
+Message-ID: <20120227111349.28272.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,31 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 10:19:00
+Changes by:	zkabelac at sourceware.org	2012-02-27 11:13:48
 
 Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+	.              : WHATS_NEW 
+	lib/metadata   : lv.c 
 
 Log message:
-	Add assert for oldname
+	Fix missing break
 	
-	Code cannot proceed if oldname would be NULL.
-	Since lvmetad currently doesn't use logging mechanism of lvm to report
-	internal errors - stay with current code style of lvmetad which uses
-	plain asserts for cases like this.
+	Bug introduced with addition of internal error default case.
+	Seem like this code is not used.
+	TODO: add coverage test.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2314&r2=1.2315
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/27 10:10:43	1.43
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/27 10:19:00	1.44
-@@ -595,6 +595,7 @@
- 
- 	if (!old)
- 		return 0;
-+	assert(oldname);
- 
- 	if (update_pvids)
- 		update_pvid_to_vgid(s, old, "#orphan", 0);
+--- LVM2/WHATS_NEW	2012/02/27 10:15:08	1.2314
++++ LVM2/WHATS_NEW	2012/02/27 11:13:48	1.2315
+@@ -1,5 +1,6 @@
+ Version 2.02.94 - 
+ ====================================
++  Fix missing break in _format_pvsegs (2.02.92).
+   Test seg pointer for non-null it in raid_target_percent error path.
+   Check for errors in _init_tags() during config loading.
+   Always check result of _set_vg_name() in lvcreate.
+--- LVM2/lib/metadata/lv.c	2012/02/23 22:31:23	1.38
++++ LVM2/lib/metadata/lv.c	2012/02/27 11:13:48	1.39
+@@ -53,6 +53,7 @@
+ 		case AREA_UNASSIGNED:
+ 			name = "unassigned";
+ 			extent = 0;
++			break;
+ 		default:
+ 			log_error(INTERNAL_ERROR "Unknown area segtype.");
+ 			return NULL;
 
 
