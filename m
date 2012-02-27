@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 27 Feb 2012 09:58:21 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
-Message-ID: <20120227095821.9896.qmail@sourceware.org>
+Date: 27 Feb 2012 10:00:28 -0000
+Subject: LVM2 ./WHATS_NEW tools/lvcreate.c
+Message-ID: <20120227100028.11061.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,45 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-27 09:58:19
+Changes by:	zkabelac at sourceware.org	2012-02-27 10:00:24
 
 Modified files:
 	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
+	tools          : lvcreate.c 
 
 Log message:
-	Drop uname call, it's not used from gulm era.
+	Always check result of _set_vg_name()
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2310&r2=1.2311
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.120&r2=1.121
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2311&r2=1.2312
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.255&r2=1.256
 
---- LVM2/WHATS_NEW	2012/02/27 09:56:27	1.2310
-+++ LVM2/WHATS_NEW	2012/02/27 09:58:18	1.2311
-@@ -1,5 +1,6 @@
+--- LVM2/WHATS_NEW	2012/02/27 09:58:18	1.2311
++++ LVM2/WHATS_NEW	2012/02/27 10:00:23	1.2312
+@@ -1,6 +1,7 @@
  Version 2.02.94 - 
- ====================================
-+  Drop unused call to uname() during clvmd initia.lization.
+-====================================
+-  Drop unused call to uname() during clvmd initia.lization.
++====================================                       
++  Always check result of _set_vg_name() in lvcreate.
++  Drop unused call to uname() during clvmd initialization.
    Test allocation result in sysfs filter creation.
    Limit sscanf parameters with buffer size in clvmd get_initial_state().
    Use const lv pointer for lv_is_active...() functions. 
---- LVM2/daemons/clvmd/clvmd.c	2012/02/08 13:03:40	1.120
-+++ LVM2/daemons/clvmd/clvmd.c	2012/02/27 09:58:19	1.121
-@@ -335,7 +335,6 @@
- {
- 	int local_sock;
- 	struct local_client *newfd, *delfd;
--	struct utsname nodeinfo;
- 	struct lvm_startup_params lvm_params;
- 	int opt;
- 	int cmd_timeout = DEFAULT_CMD_TIMEOUT;
-@@ -559,7 +558,6 @@
- 	DEBUGLOG("Cluster ready, doing some more initialisation\n");
+--- LVM2/tools/lvcreate.c	2012/02/23 17:36:36	1.255
++++ LVM2/tools/lvcreate.c	2012/02/27 10:00:23	1.256
+@@ -93,8 +93,9 @@
+ 				lp->origin = ptr + 1;
+ 		}
  
- 	/* Save our CSID */
--	uname(&nodeinfo);
- 	clops->get_our_csid(our_csid);
+-		if (!lp->vg_name)
+-			_set_vg_name(lp, extract_vgname(cmd, NULL));
++		if (!lp->vg_name &&
++		    !_set_vg_name(lp, extract_vgname(cmd, NULL)))
++			return_0;
  
- 	/* Initialise the FD list head */
+ 		if (!lp->vg_name) {
+ 			log_error("The origin name should include the "
+@@ -115,8 +116,9 @@
+ 			if (!_set_vg_name(lp, extract_vgname(cmd, lp->pool)))
+ 				return_0;
+ 
+-			if (!lp->vg_name)
+-				_set_vg_name(lp, extract_vgname(cmd, NULL));
++			if (!lp->vg_name &&
++			    !_set_vg_name(lp, extract_vgname(cmd, NULL)))
++				return_0;
+ 
+ 			if (!lp->vg_name) {
+ 				log_error("The pool name should include the "
 
 
