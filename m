@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 13 Feb 2012 14:25:14 -0000
-Subject: LVM2/daemons/lvmetad lvmetad-core.c
-Message-ID: <20120213142514.856.qmail@sourceware.org>
+Date: 27 Feb 2012 10:15:11 -0000
+Subject: LVM2 ./WHATS_NEW lib/raid/raid.c
+Message-ID: <20120227101511.17477.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,91 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-13 14:25:14
+Changes by:	zkabelac at sourceware.org	2012-02-27 10:15:08
 
 Modified files:
-	daemons/lvmetad: lvmetad-core.c 
+	.              : WHATS_NEW 
+	lib/raid       : raid.c 
 
 Log message:
-	Add some FIXME around allocation code
+	Test seg pointer for non-null
 	
-	Remove also unreachable break..
+	As the function accepts NULL for 'seg' parameter,
+	check for it before dereference.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/lvmetad/lvmetad-core.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2313&r2=1.2314
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/raid/raid.c.diff?cvsroot=lvm2&r1=1.15&r2=1.16
 
---- LVM2/daemons/lvmetad/lvmetad-core.c	2012/01/25 21:42:09	1.31
-+++ LVM2/daemons/lvmetad/lvmetad-core.c	2012/02/13 14:25:14	1.32
-@@ -88,7 +88,7 @@
-  * TODO: This set_flag function is pretty generic and might make sense in a
-  * library here or there.
-  */
--static void set_flag(struct dm_config_tree *cft, struct dm_config_node *parent,
-+static int set_flag(struct dm_config_tree *cft, struct dm_config_node *parent,
- 		     const char *field, const char *flag, int want) {
- 	struct dm_config_value *value = NULL, *pred = NULL;
- 	struct dm_config_node *node = dm_config_find_node(parent->child, field);
-@@ -103,10 +103,10 @@
- 	}
- 
- 	if (value && want)
--		return;
-+		return 1;
- 
- 	if (!value && !want)
--		return;
-+		return 1;
- 
- 	if (value && !want) {
- 		if (pred) {
-@@ -127,12 +127,17 @@
- 			node->parent = parent;
- 			parent->child = node;
- 		}
--		new = dm_config_create_value(cft);
-+		if (!(new = dm_config_create_value(cft))) {
-+			/* FIXME error reporting */
-+			return 0;
-+		}
- 		new->type = DM_CFG_STRING;
- 		new->v.str = flag;
- 		new->next = node->v;
- 		node->v = new;
- 	}
-+
-+	return 1;
- }
- 
- /* Either the "big" vgs lock, or a per-vg lock needs to be held before entering
-@@ -149,8 +154,11 @@
- 	while (pv) {
- 		const char *uuid = dm_config_find_str(pv->child, "id", NULL);
- 		int found = uuid ? (dm_hash_lookup(s->pvs, uuid) ? 1 : 0) : 0;
--		if (act)
--			set_flag(cft, pv, "status", "MISSING", !found);
-+		if (act &&
-+		    !set_flag(cft, pv, "status", "MISSING", !found)) {
-+			complete =  0;
-+			break;
-+		}
- 		if (!found) {
- 			complete = 0;
- 			if (!act) { // optimisation
-@@ -215,7 +223,7 @@
- 	res.error = 0;
- 	unlock_vg(s, uuid);
- 
--	update_pv_status(s, cft, n, 1);
-+	update_pv_status(s, cft, n, 1); /* FIXME error reporting */
- 
- 	return res;
- }
-@@ -615,7 +623,6 @@
- 		case 'V':
- 			printf("lvmetad version 0\n");
- 			exit(1);
--			break;
- 		}
+--- LVM2/WHATS_NEW	2012/02/27 10:05:35	1.2313
++++ LVM2/WHATS_NEW	2012/02/27 10:15:08	1.2314
+@@ -1,5 +1,6 @@
+ Version 2.02.94 - 
+-====================================                       
++====================================
++  Test seg pointer for non-null it in raid_target_percent error path.
+   Check for errors in _init_tags() during config loading.
+   Always check result of _set_vg_name() in lvcreate.
+   Drop unused call to uname() during clvmd initialization.
+--- LVM2/lib/raid/raid.c	2012/02/13 20:13:40	1.15
++++ LVM2/lib/raid/raid.c	2012/02/27 10:15:08	1.16
+@@ -230,7 +230,7 @@
+ 	if (!pos || (sscanf(pos, "%" PRIu64 "/%" PRIu64 "%n",
+ 			    &numerator, &denominator, &i) != 2)) {
+ 		log_error("Failed to parse %s status fraction: %s",
+-			  seg->segtype->name, params);
++			  (seg) ? seg->segtype->name : "segment", params);
+ 		return 0;
  	}
  
 
