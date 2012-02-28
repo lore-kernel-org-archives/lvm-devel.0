@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Feb 2012 10:10:07 -0000
-Subject: LVM2/lib/cache lvmcache.c
-Message-ID: <20120228101007.16089.qmail@sourceware.org>
+Date: 28 Feb 2012 10:11:36 -0000
+Subject: LVM2/lib filters/filter.c format_text/format-t ...
+Message-ID: <20120228101136.16669.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,38 +10,64 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-28 10:10:07
+Changes by:	zkabelac at sourceware.org	2012-02-28 10:11:36
 
 Modified files:
-	lib/cache      : lvmcache.c 
+	lib/filters    : filter.c 
+	lib/format_text: format-text.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Explicitely ignore errors in label_read iteration.
-	
-	We don't want stack traces here, so mark as void.
+	Add some stack traces for dev_close error paths
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/filters/filter.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/format-text.c.diff?cvsroot=lvm2&r1=1.196&r2=1.197
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.488&r2=1.489
 
---- LVM2/lib/cache/lvmcache.c	2012/02/23 22:23:13	1.128
-+++ LVM2/lib/cache/lvmcache.c	2012/02/28 10:10:07	1.129
-@@ -641,7 +641,7 @@
- 	struct label *label;
+--- LVM2/lib/filters/filter.c	2012/02/13 10:45:26	1.69
++++ LVM2/lib/filters/filter.c	2012/02/28 10:11:35	1.70
+@@ -179,7 +179,8 @@
+ 	ret = 1;
  
- 	if (info->status & CACHE_INVALID)
--		label_read(info->dev, &label, UINT64_C(0));
-+		(void) label_read(info->dev, &label, UINT64_C(0));
+       out:
+-	dev_close(dev);
++	if (!dev_close(dev))
++		stack;
+ 
+ 	return ret;
  }
+--- LVM2/lib/format_text/format-text.c	2012/02/27 09:54:25	1.196
++++ LVM2/lib/format_text/format-text.c	2012/02/28 10:11:36	1.197
+@@ -1357,8 +1357,10 @@
+ 		return_0;
  
- static int _scan_invalid(void)
-@@ -688,7 +688,7 @@
+ 	if (!label_write(pv->dev, label)) {
+-		dev_close(pv->dev);
+-		return_0;
++		stack;
++		if (!dev_close(pv->dev))
++			stack;
++		return 0;
  	}
  
- 	while ((dev = dev_iter_get(iter)))
--		label_read(dev, &label, UINT64_C(0));
-+		(void) label_read(dev, &label, UINT64_C(0));
+ 	/*
+--- LVM2/lib/metadata/metadata.c	2012/02/27 11:36:00	1.488
++++ LVM2/lib/metadata/metadata.c	2012/02/28 10:11:36	1.489
+@@ -1460,10 +1460,12 @@
  
- 	dev_iter_destroy(iter);
+ 		if (!dev_set(dev, UINT64_C(0), (size_t) 2048, 0)) {
+ 			log_error("%s not wiped: aborting", pv_name);
+-			dev_close(dev);
++			if (!dev_close(dev))
++				stack;
+ 			return 0;
+ 		}
+-		dev_close(dev);
++		if (!dev_close(dev))
++			stack;
+ 	}
  
+ 	log_error("Writing physical volume data to disk \"%s\"",
 
 
