@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Feb 2012 18:20:19 -0000
-Subject: LVM2/lib/cache lvmcache.c
-Message-ID: <20120228182019.20085.qmail@sourceware.org>
+Date: 28 Feb 2012 18:20:59 -0000
+Subject: LVM2/lib/misc configure.h.in
+Message-ID: <20120228182059.20352.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,37 +10,28 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-28 18:20:18
+Changes by:	agk at sourceware.org	2012-02-28 18:20:58
 
 Modified files:
-	lib/cache      : lvmcache.c 
+	lib/misc       : configure.h.in 
 
 Log message:
-	If lvmetad fails, don't set _has_scanned
+	Add LVMETAD_SUPPORT
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/misc/configure.h.in.diff?cvsroot=lvm2&r1=1.37&r2=1.38
 
---- LVM2/lib/cache/lvmcache.c	2012/02/28 11:08:04	1.130
-+++ LVM2/lib/cache/lvmcache.c	2012/02/28 18:20:17	1.131
-@@ -116,10 +116,15 @@
+--- LVM2/lib/misc/configure.h.in	2012/02/15 11:20:13	1.37
++++ LVM2/lib/misc/configure.h.in	2012/02/28 18:20:58	1.38
+@@ -452,6 +452,9 @@
+ /* Define to 1 to include built-in support for LVM1 metadata. */
+ #undef LVM1_INTERNAL
  
- void lvmcache_seed_infos_from_lvmetad(struct cmd_context *cmd)
- {
--	if (lvmetad_active() && !_has_scanned) {
--		lvmetad_pv_list_to_lvmcache(cmd);
--		_has_scanned = 1;
-+	if (!lvmetad_active() || _has_scanned)
-+		return;
++/* Define to 1 to include code that uses lvmetad. */
++#undef LVMETAD_SUPPORT
 +
-+	if (!lvmetad_pv_list_to_lvmcache(cmd)) {
-+		stack;
-+		return;
- 	}
-+
-+	_has_scanned = 1;
- };
- 
+ /* Path to lvm binary. */
+ #undef LVM_PATH
  
 
 
