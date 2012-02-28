@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Feb 2012 11:09:07 -0000
-Subject: LVM2/lib/cache lvmetad.c
-Message-ID: <20120228110907.2177.qmail@sourceware.org>
+Date: 28 Feb 2012 11:10:46 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20120228111046.3812.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,31 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-28 11:09:06
+Changes by:	zkabelac at sourceware.org	2012-02-28 11:10:45
 
 Modified files:
-	lib/cache      : lvmetad.c 
+	lib/metadata   : metadata.c 
 
 Log message:
-	Check result of export_vg_to_buffer
+	Check error from _lv_each_dependency
 	
-	and avoid usage of failed buffer.
+	_lv_mark_if_partial_collect cannot fail, however it's good to keep
+	checking here as we do in all other cases.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.7&r2=1.8
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.489&r2=1.490
 
---- LVM2/lib/cache/lvmetad.c	2012/02/27 11:32:48	1.7
-+++ LVM2/lib/cache/lvmetad.c	2012/02/28 11:09:06	1.8
-@@ -518,7 +518,11 @@
- 		 * formatted and has no conflicting keys with the rest of the
- 		 * request.
- 		 */
--		export_vg_to_buffer(vg, &buf);
-+		if (!export_vg_to_buffer(vg, &buf)) {
-+			dm_free(pvmeta);
-+			return_0;
-+		}
-+
- 		reply = daemon_send_simple(_lvmetad,
- 					   "pv_found",
- 					   "pvmeta = %b", pvmeta,
+--- LVM2/lib/metadata/metadata.c	2012/02/28 10:11:36	1.489
++++ LVM2/lib/metadata/metadata.c	2012/02/28 11:10:45	1.490
+@@ -2186,7 +2186,8 @@
+ 	}
+ 
+ 	baton.partial = 0;
+-	_lv_each_dependency(lv, _lv_mark_if_partial_collect, &baton);
++	if (!_lv_each_dependency(lv, _lv_mark_if_partial_collect, &baton))
++		return_0;
+ 
+ 	if (baton.partial)
+ 		lv->status |= PARTIAL_LV;
 
 
