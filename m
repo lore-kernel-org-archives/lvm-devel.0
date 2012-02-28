@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 28 Feb 2012 10:08:21 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120228100821.14862.qmail@sourceware.org>
+Date: 28 Feb 2012 10:10:07 -0000
+Subject: LVM2/lib/cache lvmcache.c
+Message-ID: <20120228101007.16089.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-02-28 10:08:20
+Changes by:	zkabelac at sourceware.org	2012-02-28 10:10:07
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	lib/cache      : lvmcache.c 
 
 Log message:
-	Explicitely check list size of segments
+	Explicitely ignore errors in label_read iteration.
 	
-	instead of checking for NULL from last_seg and first_seg.
+	We don't want stack traces here, so mark as void.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.366&r2=1.367
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.128&r2=1.129
 
---- LVM2/lib/metadata/lv_manip.c	2012/02/23 22:24:47	1.366
-+++ LVM2/lib/metadata/lv_manip.c	2012/02/28 10:08:20	1.367
-@@ -2093,7 +2093,8 @@
- 		}
+--- LVM2/lib/cache/lvmcache.c	2012/02/23 22:23:13	1.128
++++ LVM2/lib/cache/lvmcache.c	2012/02/28 10:10:07	1.129
+@@ -641,7 +641,7 @@
+ 	struct label *label;
+ 
+ 	if (info->status & CACHE_INVALID)
+-		label_read(info->dev, &label, UINT64_C(0));
++		(void) label_read(info->dev, &label, UINT64_C(0));
+ }
+ 
+ static int _scan_invalid(void)
+@@ -688,7 +688,7 @@
  	}
  
--	if ((seg = last_seg(lv)) && (seg->segtype == segtype)) {
-+	if (!dm_list_empty(&lv->segments) &&
-+	    (seg = last_seg(lv)) && (seg->segtype == segtype)) {
- 		seg->area_len += extents;
- 		seg->len += extents;
- 	} else {
-@@ -2411,7 +2412,7 @@
- 	char img_name[len];
- 	struct lv_segment *mapseg;
+ 	while ((dev = dev_iter_get(iter)))
+-		label_read(dev, &label, UINT64_C(0));
++		(void) label_read(dev, &label, UINT64_C(0));
  
--	if (lv->le_count || first_seg(lv)) {
-+	if (lv->le_count || !dm_list_empty(&lv->segments)) {
- 		log_error(INTERNAL_ERROR
- 			  "Non-empty LV passed to _lv_insert_empty_sublv");
- 		return 0;
+ 	dev_iter_destroy(iter);
+ 
 
 
