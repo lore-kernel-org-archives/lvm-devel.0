@@ -1,22 +1,16 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 29 Feb 2012 08:00:03 -0600
+Date: Wed, 29 Feb 2012 09:36:07 -0600
 Subject: [PATCH] Allow cluster mirrors to handle the absence of the checkpoint lib (libSaCkpt).
-Message-ID: <1330524003.21136.5.camel@f14.redhat.com>
+In-Reply-To: <1330524003.21136.5.camel@f14.redhat.com>
+References: <1330524003.21136.5.camel@f14.redhat.com>
+Message-ID: <1330529767.21136.7.camel@f14.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In the patch below, I conditionally replace some functions based on
-whether the checkpoint library exists.  There are ways to make the code
-handle both methods of checkpointing, but I chose to make it do
-exclusively one or the other.  This is because the cluster will likely
-be restarted when the cluster libraries are upgraded and checkpointing
-is lost.  (IOW, this solution does not allow rolling upgrades, but I
-don't think it needs to.)
-
-Please take a good look at my changes to 'configure.in' also.
+... different ideas for the configure[.in] and Makefile files.
 
  brassow
 
@@ -45,7 +39,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
 -#include <openais/saCkpt.h>
  #include <signal.h>
  #include <unistd.h>
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
 +#include <openais/saAis.h>
 +#include <openais/saCkpt.h>
 +#endif
@@ -56,7 +50,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  	RQ_TYPE((x) & ~DM_ULOG_RESPONSE)
  
  static uint32_t my_cluster_id = 0xDEAD;
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  static SaCkptHandleT ckpt_handle = 0;
  static SaCkptCallbacksT callbacks = { 0, 0 };
  static SaVersionT version = { 'B', 1, 1 };
@@ -88,7 +82,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  	if (entry->cpg_state != VALID)
  		return -EINVAL;
  
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  	do {
 +		int count = 0;
 +
@@ -116,11 +110,11 @@ Index: LVM2/daemons/cmirrord/cluster.c
  	free(cp);
  }
  
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  static int export_checkpoint(struct checkpoint_data *cp)
  {
  	SaCkptCheckpointCreationAttributesT attr;
-@@ -587,7 +595,55 @@ rr_create_retry:
+@@ -587,7 +595,54 @@ rr_create_retry:
  	return 0;
  }
  
@@ -135,7 +129,6 @@ Index: LVM2/daemons/cmirrord/cluster.c
 +	rq_size += RECOVERING_REGION_SECTION_SIZE;
 +	rq_size += cp->bitmap_size * 2; /* clean|sync_bits */
 +
-+	LOG_ERROR("Allocating %d bytes for Checkpoint RQ", rq_size);
 +	rq = malloc(rq_size);
 +	if (!rq) {
 +		LOG_ERROR("export_checkpoint: "
@@ -146,7 +139,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
 +
 +	dm_list_init(&rq->u.list);
 +	rq->u_rq.request_type = DM_ULOG_CHECKPOINT_READY;
-+	rq->originator = cp->requester;  /* FIXME: hack to overload meaning of originator */
++	rq->originator = cp->requester;
 +	strncpy(rq->u_rq.uuid, cp->uuid, CPG_MAX_NAME_LENGTH);
 +	rq->u_rq.seq = my_cluster_id;
 +	rq->u_rq.data_size = rq_size - sizeof(*rq);
@@ -169,15 +162,15 @@ Index: LVM2/daemons/cmirrord/cluster.c
 +	free(rq);
 +	return 0;
 +}
-+#endif /* __HAS_OPENAIS_CHECKPOINT__ */
++#endif /* CMIRROR_HAS_CHECKPOINT */
 +
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
 +static int import_checkpoint(struct clog_cpg *entry, int no_read,
 +			     struct clog_request *rq __attribute__((unused)))
  {
  	int rtn = 0;
  	SaCkptCheckpointHandleT h;
-@@ -742,6 +798,44 @@ no_read:
+@@ -742,6 +797,32 @@ no_read:
  	return rtn;
  }
  
@@ -187,18 +180,6 @@ Index: LVM2/daemons/cmirrord/cluster.c
 +{
 +	int bitmap_size;
 +
-+	/*
-+	 * The old method of transfering start-up log state depended
-+	 * on OpenAIS checkpointing.  The log state was transferred through
-+	 * checkpointing and the DM_ULOG_CHECKPOINT_READY request contained
-+	 * no data.
-+	 *
-+	 * The new method carries the log state with the request.
-+	 */
-+	if (!rq->u_rq.data_size)
-+		return _import_checkpoint_v1(entry, no_read);
-+
-+	LOG_ERROR("Importing checkpoint - version 2");
 +	bitmap_size = (rq->u_rq.data_size - RECOVERING_REGION_SECTION_SIZE) / 2;
 +	if (bitmap_size < 0) {
 +		LOG_ERROR("Checkpoint has invalid payload size.");
@@ -217,12 +198,12 @@ Index: LVM2/daemons/cmirrord/cluster.c
 +	}
 +	return 0;
 +}
-+#endif /* __HAS_OPENAIS_CHECKPOINT__ */
++#endif /* CMIRROR_HAS_CHECKPOINT */
 +
  static void do_checkpoints(struct clog_cpg *entry, int leaving)
  {
  	struct checkpoint_data *cp;
-@@ -859,13 +953,13 @@ static int resend_requests(struct clog_c
+@@ -859,13 +940,13 @@ static int resend_requests(struct clog_c
  
  static int do_cluster_work(void *data __attribute__((unused)))
  {
@@ -239,7 +220,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  
  		if (entry->free_me) {
  			free(entry);
-@@ -876,7 +970,7 @@ static int do_cluster_work(void *data __
+@@ -876,7 +957,7 @@ static int do_cluster_work(void *data __
  		resend_requests(entry);
  	}
  
@@ -248,7 +229,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  }
  
  static int flush_startup_list(struct clog_cpg *entry)
-@@ -941,16 +1035,19 @@ static void cpg_message_callback(cpg_han
+@@ -941,16 +1022,19 @@ static void cpg_message_callback(cpg_han
  	struct clog_request *tmp_rq;
  	struct clog_cpg *match;
  
@@ -272,7 +253,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  	if ((nodeid == my_cluster_id) &&
  	    !(rq->u_rq.request_type & DM_ULOG_RESPONSE) &&
  	    (rq->u_rq.request_type != DM_ULOG_RESUME) &&
-@@ -969,7 +1066,7 @@ static void cpg_message_callback(cpg_han
+@@ -969,7 +1053,7 @@ static void cpg_message_callback(cpg_han
  		}
  		memcpy(tmp_rq, rq, sizeof(*rq) + rq->u_rq.data_size);
  		dm_list_init(&tmp_rq->u.list);
@@ -281,7 +262,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  	}
  
  	if (rq->u_rq.request_type == DM_ULOG_POSTSUSPEND) {
-@@ -1022,7 +1119,8 @@ static void cpg_message_callback(cpg_han
+@@ -1022,7 +1106,8 @@ static void cpg_message_callback(cpg_han
  			/* Redundant checkpoints ignored if match->valid */
  			LOG_SPRINT(match, "[%s] CHECKPOINT_READY notification from %u",
  				   SHORT_UUID(rq->u_rq.uuid), nodeid);
@@ -291,15 +272,15 @@ Index: LVM2/daemons/cmirrord/cluster.c
  				LOG_SPRINT(match,
  					   "[%s] Failed to import checkpoint from %u",
  					   SHORT_UUID(rq->u_rq.uuid), nodeid);
-@@ -1415,6 +1513,7 @@ cpg_callbacks_t cpg_callbacks = {
+@@ -1415,6 +1500,7 @@ cpg_callbacks_t cpg_callbacks = {
   */
  static int remove_checkpoint(struct clog_cpg *entry)
  {
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  	int len;
  	SaNameT name;
  	SaAisErrorT rv;
-@@ -1454,6 +1553,10 @@ unlink_retry:
+@@ -1454,6 +1540,10 @@ unlink_retry:
  	saCkptCheckpointClose(h);
  
  	return 1;
@@ -310,7 +291,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  }
  
  int create_cluster_cpg(char *uuid, uint64_t luid)
-@@ -1495,14 +1598,14 @@ int create_cluster_cpg(char *uuid, uint6
+@@ -1495,14 +1585,14 @@ int create_cluster_cpg(char *uuid, uint6
  			 SHORT_UUID(new->name.value));
  
  	r = cpg_initialize(&new->handle, &cpg_callbacks);
@@ -327,11 +308,11 @@ Index: LVM2/daemons/cmirrord/cluster.c
  		LOG_ERROR("cpg_join failed:  Cannot join cluster");
  		free(new);
  		return -EPERM;
-@@ -1593,24 +1696,27 @@ int destroy_cluster_cpg(char *uuid)
+@@ -1593,24 +1683,27 @@ int destroy_cluster_cpg(char *uuid)
  
  int init_cluster(void)
  {
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  	SaAisErrorT rv;
  
 -	dm_list_init(&clog_cpg_list);
@@ -347,7 +328,7 @@ Index: LVM2/daemons/cmirrord/cluster.c
  
  void cleanup_cluster(void)
  {
-+#ifdef __HAS_OPENAIS_CHECKPOINT__
++#if CMIRROR_HAS_CHECKPOINT
  	SaAisErrorT err;
  
  	err = saCkptFinalize(ckpt_handle);
@@ -361,24 +342,18 @@ Index: LVM2/configure
 ===================================================================
 --- LVM2.orig/configure
 +++ LVM2/configure
-@@ -668,6 +668,7 @@ DEFAULT_SYS_DIR
- DEBUG
- COPTIMISE_FLAG
- CONFDIR
-+CMIRROR_HAS_CHECKPOINT
- CMDLIB
- CLVMD_PATH
- CLVMD_CMANAGERS
-@@ -8198,6 +8199,8 @@ if [ "x$BUILD_CMIRRORD" = xyes ]; then
+@@ -8198,6 +8198,10 @@ if [ "x$BUILD_CMIRRORD" = xyes ]; then
  		pkg_config_init
  	fi
  
-+	CMIRROR_HAS_CHECKPOINT=yes
++
++$as_echo "#define CMIRROR_HAS_CHECKPOINT 1" >>confdefs.h
++
 +
  pkg_failed=no
  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for SACKPT" >&5
  $as_echo_n "checking for SACKPT... " >&6; }
-@@ -8254,40 +8257,23 @@ fi
+@@ -8254,40 +8258,27 @@ fi
  	# Put the nasty error message in config.log where it belongs
  	echo "$SACKPT_PKG_ERRORS" >&5
  
@@ -388,14 +363,14 @@ Index: LVM2/configure
 -
 -Consider adjusting the PKG_CONFIG_PATH environment variable if you
 -installed software in a non-standard prefix.
--
++	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
++$as_echo "no libSaCkpt, compiling without it" >&6; }
+ 
 -Alternatively, you may set the environment variables SACKPT_CFLAGS
 -and SACKPT_LIBS to avoid the need to call pkg-config.
 -See the pkg-config man page for more details." "$LINENO" 5
--
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
-+$as_echo "no libSaCkpt, compiling without it" >&6; }
-+		CMIRROR_HAS_CHECKPOINT=no
++$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
+ 
  elif test $pkg_failed = untried; then
       	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
  $as_echo "no" >&6; }
@@ -404,17 +379,17 @@ Index: LVM2/configure
 -as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
 -is in your PATH or set the PKG_CONFIG environment variable to the full
 -path to pkg-config.
--
++	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
++$as_echo "no libSaCkpt, compiling without it" >&6; }
+ 
 -Alternatively, you may set the environment variables SACKPT_CFLAGS
 -and SACKPT_LIBS to avoid the need to call pkg-config.
 -See the pkg-config man page for more details.
 -
 -To get pkg-config, see <http://pkg-config.freedesktop.org/>.
 -See \`config.log' for more details" "$LINENO" 5; }
--
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
-+$as_echo "no libSaCkpt, compiling without it" >&6; }
-+		CMIRROR_HAS_CHECKPOINT=no
++$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
+ 
  else
  	SACKPT_CFLAGS=$pkg_cv_SACKPT_CFLAGS
  	SACKPT_LIBS=$pkg_cv_SACKPT_LIBS
@@ -427,14 +402,6 @@ Index: LVM2/configure
  	if test x$HAVE_CPG != xyes; then
  
  pkg_failed=no
-@@ -10425,6 +10411,7 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]'
- 
- 
- 
-+
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/common/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
- 
 Index: LVM2/configure.in
 ===================================================================
 --- LVM2.orig/configure.in
@@ -445,38 +412,14 @@ Index: LVM2/configure.in
  	fi
 -	PKG_CHECK_MODULES(SACKPT, libSaCkpt)
 +
-+	CMIRROR_HAS_CHECKPOINT=yes
++	AC_DEFINE([CMIRROR_HAS_CHECKPOINT], 1, [Define to 1 to include libSaCkpt.])
 +	PKG_CHECK_MODULES(SACKPT, libSaCkpt, [HAVE_SACKPT=yes],
 +		[AC_MSG_RESULT([no libSaCkpt, compiling without it])
-+		CMIRROR_HAS_CHECKPOINT=no])
++		AC_DEFINE([CMIRROR_HAS_CHECKPOINT], 0, [Define to 0 to exclude libSaCkpt.])])
 +
  	if test x$HAVE_CPG != xyes; then
  		PKG_CHECK_MODULES(CPG, libcpg)
  	fi
-@@ -1394,6 +1399,7 @@ AC_SUBST(CMAN_LIBS)
- AC_SUBST(CMAP_CFLAGS)
- AC_SUBST(CMAP_LIBS)
- AC_SUBST(CMDLIB)
-+AC_SUBST(CMIRROR_HAS_CHECKPOINT)
- AC_SUBST(CONFDB_CFLAGS)
- AC_SUBST(CONFDB_LIBS)
- AC_SUBST(CONFDIR)
-Index: LVM2/daemons/cmirrord/Makefile.in
-===================================================================
---- LVM2.orig/daemons/cmirrord/Makefile.in
-+++ LVM2/daemons/cmirrord/Makefile.in
-@@ -30,6 +30,10 @@ LIBS += -ldevmapper
- LMLIBS += $(CPG_LIBS) $(SACKPT_LIBS)
- CFLAGS += $(CPG_CFLAGS) $(SACKPT_CFLAGS)
- 
-+ifeq ("@CMIRROR_HAS_CHECKPOINT@", "yes")
-+	CFLAGS += -D__HAS_OPENAIS_CHECKPOINT__
-+endif
-+
- cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
- 		$(LVMLIBS) $(LMLIBS) $(LIBS)
-
 
 
 
