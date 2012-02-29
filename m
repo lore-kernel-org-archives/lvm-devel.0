@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 28 Feb 2012 18:35:32 -0000
-Subject: LVM2/include .symlinks.in
-Message-ID: <20120228183532.1429.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 29 Feb 2012 00:18:28 -0000
+Subject: LVM2/lib/metadata metadata.c
+Message-ID: <20120229001828.9454.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,34 +10,38 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-02-28 18:35:32
+Changes by:	mornfall at sourceware.org	2012-02-29 00:18:27
 
 Modified files:
-	include        : .symlinks.in 
+	lib/metadata   : metadata.c 
 
 Log message:
-	expose new include files to build
+	Attempt a fix for lvm shell accumulating copies of orphan PVs with each "pvs"
+	invocation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.491&r2=1.492
 
---- LVM2/include/.symlinks.in	2012/02/23 13:19:26	1.9
-+++ LVM2/include/.symlinks.in	2012/02/28 18:35:32	1.10
-@@ -1,5 +1,6 @@
- @top_srcdir@/daemons/clvmd/clvm.h
- @top_srcdir@/daemons/dmeventd/libdevmapper-event.h
-+ at top_srcdir@/daemons/lvmetad/lvmetad-client.h
- @top_srcdir@/liblvm/lvm2app.h
- @top_srcdir@/lib/activate/activate.h
- @top_srcdir@/lib/activate/targets.h
-@@ -59,6 +60,8 @@
- @top_srcdir@/lib/report/properties.h
- @top_srcdir@/lib/report/report.h
- @top_srcdir@/lib/uuid/uuid.h
-+ at top_srcdir@/libdaemon/client/daemon-client.h
-+ at top_srcdir@/libdaemon/client/daemon-shared.h
- @top_srcdir@/libdm/libdevmapper.h
- @top_srcdir@/libdm/misc/dm-ioctl.h
- @top_srcdir@/libdm/misc/dm-logging.h
+--- LVM2/lib/metadata/metadata.c	2012/02/28 11:12:58	1.491
++++ LVM2/lib/metadata/metadata.c	2012/02/29 00:18:27	1.492
+@@ -2775,7 +2775,8 @@
+ 	return 1;
+ }
+ 
+-/* Make orphan PVs look like a VG */
++/* Make orphan PVs look like a VG. FIXME multiple runs will leak memory
++ * allocated to PVs into the orphan VG pool which is now global. */
+ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
+ 					     int warnings,
+ 					     const char *orphan_vgname)
+@@ -2795,6 +2796,8 @@
+ 		return_NULL;
+ 
+ 	vg = fmt->orphan_vg;
++        dm_list_init(&vg->pvs);
++	vg->pv_count = 0;
+ 
+ 	baton.warnings = warnings;
+ 	baton.vg = vg;
 
 
