@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2012 21:57:44 -0000
+Date: 1 Mar 2012 21:58:55 -0000
 Subject: LVM2/lib/cache lvmcache.c
-Message-ID: <20120301215744.20197.qmail@sourceware.org>
+Message-ID: <20120301215855.20579.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,29 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-01 21:57:43
+Changes by:	zkabelac at sourceware.org	2012-03-01 21:58:55
 
 Modified files:
 	lib/cache      : lvmcache.c 
 
 Log message:
-	Explicitely ignore fail from this label_read
+	Check pointer before deref in debug message
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.131&r2=1.132
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
 
---- LVM2/lib/cache/lvmcache.c	2012/02/28 18:20:17	1.131
-+++ LVM2/lib/cache/lvmcache.c	2012/03/01 21:57:43	1.132
-@@ -498,7 +498,7 @@
+--- LVM2/lib/cache/lvmcache.c	2012/03/01 21:57:43	1.132
++++ LVM2/lib/cache/lvmcache.c	2012/03/01 21:58:55	1.133
+@@ -1110,8 +1110,8 @@
  
- 	dm_list_iterate_safe(devh, tmp, &devs) {
- 		devl = dm_list_item(devh, struct device_list);
--		label_read(devl->dev, &label, UINT64_C(0));
-+		(void) label_read(devl->dev, &label, UINT64_C(0));
- 		dm_list_del(&devl->list);
- 		dm_free(devl);
- 	}
+ 	if (!is_orphan_vg(vginfo->vgname))
+ 		log_debug("lvmcache: %s: setting %s VGID to %s",
+-			  dev_name(info->dev), vginfo->vgname,
+-			  vginfo->vgid);
++			  (info) ? dev_name(info->dev) : "",
++			  vginfo->vgname, vginfo->vgid);
+ 
+ 	return 1;
+ }
 
 
