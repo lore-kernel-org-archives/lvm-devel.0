@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2012 09:54:24 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/lvm-functions.c
-Message-ID: <20120301095424.31796.qmail@sourceware.org>
+Date: 1 Mar 2012 10:07:39 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/ioctl/libdm-iface.c
+Message-ID: <20120301100739.8781.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,73 +10,67 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-01 09:54:24
+Changes by:	zkabelac at sourceware.org	2012-03-01 10:07:39
 
 Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : lvm-functions.c 
+	.              : WHATS_NEW_DM 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Check for allocation error
+	Check for version string buffer
 	
-	return ENOMEM when malloc fails.
+	Since lvm seems to call driver_version(NULL, 0)  this would lead
+	to crash. Though the combination of the code is probably very hard to hit.
+	If the user doesn't supply version buffer, just skip printing to buffer.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2327&r2=1.2328
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.577&r2=1.578
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.138&r2=1.139
 
---- LVM2/WHATS_NEW	2012/02/29 22:08:57	1.2327
-+++ LVM2/WHATS_NEW	2012/03/01 09:54:23	1.2328
+--- LVM2/WHATS_NEW_DM	2012/03/01 09:50:04	1.577
++++ LVM2/WHATS_NEW_DM	2012/03/01 10:07:38	1.578
 @@ -1,5 +1,6 @@
- Version 2.02.94 - 
+ Version 1.02.73 - 
  ====================================
-+  Check for allocation failure in hold_lock() in clvmd.
-   Use set_lv() (wipe initial 4KiB) for non zeroed thin volume.
-   Allow cluster mirrors to handle the absence of the checkpoint lib (libSaCkpt).
-   Revert free of allocated segtype in init segment error path (2.02.89).
---- LVM2/daemons/clvmd/lvm-functions.c	2012/02/23 22:50:50	1.130
-+++ LVM2/daemons/clvmd/lvm-functions.c	2012/03/01 09:54:24	1.131
-@@ -167,11 +167,15 @@
- 	return lvi;
- }
++  Support dm_task_get_driver_version() query without version string.
+   Log failure of pthread_join when cleaning unused threads in dmeventd.
+   Fix empty string warning logic in _find_config_str. (1.02.68)
+   Fix dm_task_set_name to properly resolve path to dm name (1.02.71).
+--- LVM2/libdm/ioctl/libdm-iface.c	2012/02/15 12:17:34	1.138
++++ LVM2/libdm/ioctl/libdm-iface.c	2012/03/01 10:07:38	1.139
+@@ -467,14 +467,21 @@
+ 	unsigned *v;
  
--static void insert_info(const char *resource, struct lv_info *lvi)
-+static int insert_info(const char *resource, struct lv_info *lvi)
- {
-+	int ret;
-+
- 	pthread_mutex_lock(&lv_hash_lock);
--	dm_hash_insert(lv_hash, resource, lvi);
-+	ret = dm_hash_insert(lv_hash, resource, lvi);
- 	pthread_mutex_unlock(&lv_hash_lock);
-+
-+	return ret;
- }
- 
- static void remove_info(const char *resource)
-@@ -277,8 +281,10 @@
- 		errno = saved_errno;
- 	} else {
- 		lvi = malloc(sizeof(struct lv_info));
--		if (!lvi)
-+		if (!lvi) {
-+			errno = ENOMEM;
- 			return -1;
-+		}
- 
- 		lvi->lock_mode = mode;
- 		status = sync_lock(resource, mode, flags & ~LCKF_CONVERT, &lvi->lock_id);
-@@ -288,7 +294,10 @@
- 			DEBUGLOG("hold_lock. lock at %d failed: %s\n", mode,
- 				 strerror(errno));
- 		} else
--			insert_info(resource, lvi);
-+			if (!insert_info(resource, lvi)) {
-+				errno = ENOMEM;
-+				return -1;
-+			}
- 
- 		errno = saved_errno;
+ 	if (!dmt->dmi.v4) {
+-		version[0] = '\0';
++		if (version)
++			version[0] = '\0';
+ 		return 0;
  	}
+ 
+ 	v = dmt->dmi.v4->version;
+-	snprintf(version, size, "%u.%u.%u", v[0], v[1], v[2]);
+ 	_dm_version_minor = v[1];
+ 	_dm_version_patchlevel = v[2];
++	if (version &&
++	    (snprintf(version, size, "%u.%u.%u", v[0], v[1], v[2]) < 0)) {
++		log_error("Buffer for version is to short.");
++		if (size > 0)
++			version[0] = '\0'
++		return 0;
++	}
+ 
+ 	return 1;
+ }
+@@ -494,7 +501,8 @@
+ 		_log_suppress = 1;
+ 
+ 	r = dm_task_run(task);
+-	dm_task_get_driver_version(task, version, size);
++	if (!dm_task_get_driver_version(task, version, size))
++		stack;
+ 	dm_task_destroy(task);
+ 	_log_suppress = 0;
+ 
 
 
