@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2012 22:55:21 -0000
-Subject: LVM2/daemons/clvmd lvm-functions.c
-Message-ID: <20120301225521.13768.qmail@sourceware.org>
+Date: 1 Mar 2012 23:20:46 -0000
+Subject: LVM2/tools polldaemon.c
+Message-ID: <20120301232046.29671.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,27 +10,33 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-01 22:55:21
+Changes by:	zkabelac at sourceware.org	2012-03-01 23:20:46
 
 Modified files:
-	daemons/clvmd  : lvm-functions.c 
+	tools          : polldaemon.c 
 
 Log message:
-	Add traceback for failpath
+	Check for error from dup2
+	
+	Do not take correct fd as error result.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/lvm-functions.c.diff?cvsroot=lvm2&r1=1.132&r2=1.133
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/polldaemon.c.diff?cvsroot=lvm2&r1=1.48&r2=1.49
 
---- LVM2/daemons/clvmd/lvm-functions.c	2012/03/01 21:18:38	1.132
-+++ LVM2/daemons/clvmd/lvm-functions.c	2012/03/01 22:55:21	1.133
-@@ -729,7 +729,7 @@
- 	if (dm_asprintf(&lvs_cmd, "%s lvs  --config 'log{command_names=0 prefix=\"\"}' "
- 			"--nolocking --noheadings -o vg_uuid,lv_uuid,lv_attr,vg_attr",
- 			lvm_binary) < 0)
--		return 0;
-+		return_0;
+--- LVM2/tools/polldaemon.c	2012/02/28 14:24:58	1.48
++++ LVM2/tools/polldaemon.c	2012/03/01 23:20:45	1.49
+@@ -67,9 +67,9 @@
+ 		_exit(ECMD_FAILED);
+ 	}
  
- 	/* FIXME: Maybe link and use liblvm2cmd directly instead of fork */
- 	if (!(lvs = popen(lvs_cmd, "r"))) {
+-	if (dup2(null_fd, STDIN_FILENO)  || /* reopen stdin */
+-	    dup2(null_fd, STDOUT_FILENO) || /* reopen stdout */
+-	    dup2(null_fd, STDERR_FILENO)) { /* reopen stderr */
++	if ((dup2(null_fd, STDIN_FILENO) < 0)  || /* reopen stdin */
++	    (dup2(null_fd, STDOUT_FILENO) < 0) || /* reopen stdout */
++	    (dup2(null_fd, STDERR_FILENO) < 0)) { /* reopen stderr */
+ 		log_sys_error("dup2", "redirect");
+ 		(void) close(null_fd);
+ 		_exit(ECMD_FAILED);
 
 
