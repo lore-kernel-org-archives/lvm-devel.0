@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 1 Mar 2012 21:16:05 -0000
-Subject: LVM2/lib/commands toolcontext.c
-Message-ID: <20120301211605.9291.qmail@sourceware.org>
+Date: 1 Mar 2012 21:16:44 -0000
+Subject: LVM2/tools vgmerge.c vgrename.c
+Message-ID: <20120301211644.9564.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,41 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-01 21:16:05
+Changes by:	zkabelac at sourceware.org	2012-03-01 21:16:44
 
 Modified files:
-	lib/commands   : toolcontext.c 
+	tools          : vgmerge.c vgrename.c 
 
 Log message:
-	Check for udev_get_dev_dir result
-	
-	Don't use NULL return value.
+	Backtrace for failing drop_cached_metadata
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.152&r2=1.153
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.74&r2=1.75
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgrename.c.diff?cvsroot=lvm2&r1=1.79&r2=1.80
 
---- LVM2/lib/commands/toolcontext.c	2012/02/27 10:05:35	1.152
-+++ LVM2/lib/commands/toolcontext.c	2012/03/01 21:16:05	1.153
-@@ -664,8 +664,9 @@
- 	if ((device_list_from_udev = udev_is_running() ?
- 		find_config_tree_bool(cmd, "devices/obtain_device_list_from_udev",
- 				      DEFAULT_OBTAIN_DEVICE_LIST_FROM_UDEV) : 0)) {
--		udev_dir = udev_get_dev_dir();
--		udev_dir_len = strlen(udev_dir);
-+		if (!(udev_dir = udev_get_dev_dir()))
-+			stack;
-+		udev_dir_len = (udev_dir) ? strlen(udev_dir) : 0;
- 	}
- 	init_obtain_device_list_from_udev(device_list_from_udev);
+--- LVM2/tools/vgmerge.c	2011/08/10 20:25:31	1.74
++++ LVM2/tools/vgmerge.c	2012/03/01 21:16:44	1.75
+@@ -80,7 +80,8 @@
+ 	if (!archive(vg_from) || !archive(vg_to))
+ 		goto_bad;
  
-@@ -687,7 +688,7 @@
- 			return 0;
- 		}
+-	drop_cached_metadata(vg_from);
++	if (!drop_cached_metadata(vg_from))
++		stack;
  
--		if (device_list_from_udev) {
-+		if (device_list_from_udev && udev_dir) {
- 			len = strlen(cv->v.str);
- 			len = udev_dir_len > len ? len : udev_dir_len;
- 			if (strncmp(udev_dir, cv->v.str, len) ||
+ 	/* Merge volume groups */
+ 	dm_list_iterate_items_safe(pvl, tpvl, &vg_from->pvs) {
+--- LVM2/tools/vgrename.c	2012/02/28 18:08:08	1.79
++++ LVM2/tools/vgrename.c	2012/03/01 21:16:44	1.80
+@@ -139,7 +139,8 @@
+ 		goto error;
+ 
+ 	/* Remove references based on old name */
+-	drop_cached_metadata(vg);
++	if (!drop_cached_metadata(vg))
++		stack;
+ 
+ 	/* Change the volume group name */
+ 	vg_rename(cmd, vg, vg_name_new);
 
 
