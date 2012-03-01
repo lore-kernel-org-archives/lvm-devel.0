@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 1 Mar 2012 17:41:39 -0000
-Subject: LVM2/daemons/cmirrord cluster.c
-Message-ID: <20120301174139.1099.qmail@sourceware.org>
+From: mornfall@sourceware.org <mornfall@sourceware.org>
+Date: 1 Mar 2012 19:54:55 -0000
+Subject: LVM2 libdm/libdevmapper.h libdm/libdm-config.c ...
+Message-ID: <20120301195455.30827.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,86 +10,56 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2012-03-01 17:41:39
+Changes by:	mornfall at sourceware.org	2012-03-01 19:54:53
 
 Modified files:
-	daemons/cmirrord: cluster.c 
+	libdm          : libdevmapper.h libdm-config.c 
+	libdaemon/client: daemon-client.h 
 
 Log message:
-	s/CPG_/CS_: Various CPG constants are going away, even though CPG itself stays
-	
-	F17 is getting rid of OpenAIS libraries (and checkpointing).  While the
-	CPG stuff is staying, some if its constants are being removed.  So, we
-	must adjust and use the remaining constants which the CPG constants were based on.
-	
-	[~]# egrep 'CPG_DISPATCH_ALL|CPG_OK' /usr/include/*/*
-	corosync/corotypes.h:#define CPG_DISPATCH_ALL     CS_DISPATCH_ALL
-	corosync/corotypes.h:#define CPG_OK               CS_OK
+	Use 64 bit integers whenever extracting numbers from daemon replies.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.184&r2=1.185
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdaemon/client/daemon-client.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/daemons/cmirrord/cluster.c	2012/02/29 21:15:34	1.18
-+++ LVM2/daemons/cmirrord/cluster.c	2012/03/01 17:41:39	1.19
-@@ -197,7 +197,7 @@
- #else
- 	r = cpg_mcast_joined(entry->handle, CPG_TYPE_AGREED, &iov, 1);
- #endif
--	if (r == CPG_OK)
-+	if (r == CS_OK)
- 		return 0;
+--- LVM2/libdm/libdevmapper.h	2012/02/23 22:45:43	1.184
++++ LVM2/libdm/libdevmapper.h	2012/03/01 19:54:53	1.185
+@@ -1453,6 +1453,7 @@
+ const char *dm_config_find_str(const struct dm_config_node *cn, const char *path, const char *fail);
+ const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn, const char *path, const char *fail);
+ int dm_config_find_int(const struct dm_config_node *cn, const char *path, int fail);
++int64_t dm_config_find_int64(const struct dm_config_node *cn, const char *path, int64_t fail);
+ float dm_config_find_float(const struct dm_config_node *cn, const char *path, float fail);
  
- 	/* error codes found in openais/cpg.h */
-@@ -940,12 +940,12 @@
+ const struct dm_config_node *dm_config_tree_find_node(const struct dm_config_tree *cft, const char *path);
+--- LVM2/libdm/libdm-config.c	2012/02/28 17:46:47	1.22
++++ LVM2/libdm/libdm-config.c	2012/03/01 19:54:53	1.23
+@@ -877,6 +877,11 @@
+ 	return (int) _find_config_int64(cn, _find_config_node, path, (int64_t) fail);
+ }
  
- static int do_cluster_work(void *data __attribute__((unused)))
++int64_t dm_config_find_int64(const struct dm_config_node *cn, const char *path, int64_t fail)
++{
++	return _find_config_int64(cn, _find_config_node, path, fail);
++}
++
+ float dm_config_find_float(const struct dm_config_node *cn, const char *path,
+ 			   float fail)
  {
--	int r = CPG_OK;
-+	int r = CS_OK;
- 	struct clog_cpg *entry, *tmp;
+--- LVM2/libdaemon/client/daemon-client.h	2012/02/28 18:35:05	1.2
++++ LVM2/libdaemon/client/daemon-client.h	2012/03/01 19:54:53	1.3
+@@ -90,8 +90,8 @@
  
- 	dm_list_iterate_items_safe(entry, tmp, &clog_cpg_list) {
--		r = cpg_dispatch(entry->handle, CPG_DISPATCH_ALL);
--		if (r != CPG_OK)
-+		r = cpg_dispatch(entry->handle, CS_DISPATCH_ALL);
-+		if (r != CS_OK)
- 			LOG_ERROR("cpg_dispatch failed: %d", r);
+ void daemon_reply_destroy(daemon_reply r);
  
- 		if (entry->free_me) {
-@@ -957,7 +957,7 @@
- 		resend_requests(entry);
- 	}
- 
--	return (r == CPG_OK) ? 0 : -1;  /* FIXME: good error number? */
-+	return (r == CS_OK) ? 0 : -1;  /* FIXME: good error number? */
+-static inline int daemon_reply_int(daemon_reply r, const char *path, int def) {
+-	return dm_config_find_int(r.cft->root, path, def);
++static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def) {
++	return dm_config_find_int64(r.cft->root, path, def);
  }
  
- static int flush_startup_list(struct clog_cpg *entry)
-@@ -1585,14 +1585,14 @@
- 			 SHORT_UUID(new->name.value));
- 
- 	r = cpg_initialize(&new->handle, &cpg_callbacks);
--	if (r != CPG_OK) {
-+	if (r != CS_OK) {
- 		LOG_ERROR("cpg_initialize failed:  Cannot join cluster");
- 		free(new);
- 		return -EPERM;
- 	}
- 
- 	r = cpg_join(new->handle, &new->name);
--	if (r != CPG_OK) {
-+	if (r != CS_OK) {
- 		LOG_ERROR("cpg_join failed:  Cannot join cluster");
- 		free(new);
- 		return -EPERM;
-@@ -1665,7 +1665,7 @@
- 		abort_startup(del);
- 
- 	r = cpg_leave(del->handle, &del->name);
--	if (r != CPG_OK)
-+	if (r != CS_OK)
- 		LOG_ERROR("Error leaving CPG!");
- 	return 0;
- }
+ static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def) {
 
 
