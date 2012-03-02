@@ -1,145 +1,163 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 29 Apr 2015 13:10:30 +0000 (UTC)
-Subject: master - tests: minimize teardown when uneeded
-Message-ID: <20150429131030.7C53560ECF@fedorahosted.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 2 Mar 2012 13:26:18 -0000
+Subject: LVM2 ./WHATS_NEW_DM lib/metadata/thin_manip.c ...
+Message-ID: <20120302132618.22799.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=244ca7ee775b554eb12d1897a8f90bf2d9640138
-Commit:        244ca7ee775b554eb12d1897a8f90bf2d9640138
-Parent:        c5b4327f3d34f823ae01511ea8b7635c3637fe87
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 29 13:37:13 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 29 15:09:58 2015 +0200
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-03-02 13:26:12
 
-tests: minimize teardown when uneeded
+Modified files:
+	.              : WHATS_NEW_DM 
+	lib/metadata   : thin_manip.c 
+	lib/thin       : thin.c 
+	libdm          : libdevmapper.h libdm-deptree.c 
 
-If test has not yet initilized any device,
-make teardown a bit faster.
----
- test/lib/aux.sh      |   25 +++++++++++++------------
- test/lib/inittest.sh |   10 +++-------
- 2 files changed, 16 insertions(+), 19 deletions(-)
+Log message:
+	Remove support for TRIM message
+	
+	It's been unsupporte for now - and it's not going to be
+	implemented for thin pool kernel driver - so dropping
+	appearence of TRIM from libdm and lvm.
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 961dfcf..373909a 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -140,6 +140,8 @@ teardown_devs_prefixed() {
- 	local IFS=$IFS_NL
- 	local dm
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.580&r2=1.581
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.34&r2=1.35
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.185&r2=1.186
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.157&r2=1.158
+
+--- LVM2/WHATS_NEW_DM	2012/03/01 22:06:18	1.580
++++ LVM2/WHATS_NEW_DM	2012/03/02 13:26:08	1.581
+@@ -1,5 +1,6 @@
+ Version 1.02.73 - 
+ ====================================
++  Drop unsupported TRIM message for thin pool.
+   Improve logging for fifo startup in dmeventd.
+   Add few pointer validation in dmsetup.
+   Support dm_task_get_driver_version() query without version string.
+--- LVM2/lib/metadata/thin_manip.c	2012/02/12 21:42:43	1.34
++++ LVM2/lib/metadata/thin_manip.c	2012/03/02 13:26:09	1.35
+@@ -70,7 +70,6 @@
+ 		switch (tmsg->type) {
+ 		case DM_THIN_MESSAGE_CREATE_SNAP:
+ 		case DM_THIN_MESSAGE_CREATE_THIN:
+-		case DM_THIN_MESSAGE_TRIM:
+ 			if (tmsg->u.lv == seg->lv) {
+ 				log_debug("Discarding message for LV %s.",
+ 					  tmsg->u.lv->name);
+@@ -151,7 +150,6 @@
+ 	switch (type) {
+ 	case DM_THIN_MESSAGE_CREATE_SNAP:
+ 	case DM_THIN_MESSAGE_CREATE_THIN:
+-	case DM_THIN_MESSAGE_TRIM:
+ 		tmsg->u.lv = lv;
+ 		break;
+ 	case DM_THIN_MESSAGE_DELETE:
+@@ -173,7 +171,6 @@
+ 	log_debug("Added %s message",
+ 		  (type == DM_THIN_MESSAGE_CREATE_SNAP ||
+ 		   type == DM_THIN_MESSAGE_CREATE_THIN) ? "create" :
+-		  (type == DM_THIN_MESSAGE_TRIM) ? "trim" :
+ 		  (type == DM_THIN_MESSAGE_DELETE) ? "delete" : "unknown");
  
-+	rm -rf "$TESTDIR/dev/$prefix"*
-+
- 	# Resume suspended devices first
- 	for dm in $(dm_info suspended,name | grep "^Suspended:.*$prefix"); do
- 		echo "dmsetup resume \"${dm#Suspended:}\""
-@@ -180,16 +182,16 @@ teardown_devs_prefixed() {
- 			num_remaining_devs=$num_devs
- 		done
- 	fi
-+
-+	udev_wait
- }
- 
- teardown_devs() {
- 	# Delete any remaining dm/udev semaphores
- 	teardown_udev_cookies
- 
--	test -z "$PREFIX" || {
--		rm -rf "$TESTDIR/dev/$PREFIX"*
--		teardown_devs_prefixed "$PREFIX"
--	}
-+	test ! -f MD_DEV || cleanup_md_dev
-+	test ! -f DEVICES || teardown_devs_prefixed "$PREFIX"
- 
- 	# NOTE: SCSI_DEBUG_DEV test must come before the LOOP test because
- 	# prepare_scsi_debug_dev() also sets LOOP to short-circuit prepare_loop()
-@@ -199,22 +201,21 @@ teardown_devs() {
- 		test ! -f LOOP || losetup -d $(< LOOP) || true
- 		test ! -f LOOPFILE || rm -f $(< LOOPFILE)
- 	fi
--	rm -f DEVICES # devs is set in prepare_devs()
-+
- 	not diff LOOP BACKING_DEV >/dev/null 2>&1 || rm -f BACKING_DEV
--	rm -f LOOP
-+	rm -f DEVICES LOOP
- 
- 	# Attempt to remove any loop devices that failed to get torn down if earlier tests aborted
- 	test "${LVM_TEST_PARALLEL:-0}" -eq 1 -o -z "$COMMON_PREFIX" || {
--		teardown_devs_prefixed "$COMMON_PREFIX" 1
- 		local stray_loops=( $(losetup -a | grep "$COMMON_PREFIX" | cut -d: -f1) )
- 		test ${#stray_loops[@]} -eq 0 || {
-+			teardown_devs_prefixed "$COMMON_PREFIX" 1
- 			echo "Removing stray loop devices containing $COMMON_PREFIX: ${stray_loops[@]}"
- 			for i in "${stray_loops[@]}" ; do losetup -d $i ; done
-+			# Leave test when udev processed all removed devices
-+			udev_wait
- 		}
+ 	return 1;
+@@ -200,7 +197,6 @@
+ 		switch (tmsg->type) {
+ 		case DM_THIN_MESSAGE_CREATE_SNAP:
+ 		case DM_THIN_MESSAGE_CREATE_THIN:
+-		case DM_THIN_MESSAGE_TRIM:
+ 			if (tmsg->u.lv == lv)
+ 				return 1;
+ 			break;
+--- LVM2/lib/thin/thin.c	2012/02/28 14:23:42	1.47
++++ LVM2/lib/thin/thin.c	2012/03/02 13:26:09	1.48
+@@ -62,15 +62,6 @@
+ 		type = DM_THIN_MESSAGE_CREATE_THIN;
  	}
+ 
+-	if (dm_config_get_str(sn, "trim", &lv_name)) {
+-		if (lv)
+-			return SEG_LOG_ERROR("Unsupported message format in");
+-		if (!(lv = find_lv(seg->lv->vg, lv_name)))
+-			return SEG_LOG_ERROR("Unknown LV %s for trim message in",
+-					     lv_name);
+-		type = DM_THIN_MESSAGE_TRIM;
+-	}
 -
--	# Leave test when udev processed all removed devices
--	udev_wait
- }
+ 	if (!dm_config_get_uint32(sn, "delete", &delete_id)) {
+ 		if (!lv)
+ 			return SEG_LOG_ERROR("Unknown message in");
+@@ -169,7 +160,6 @@
+ 		switch (tmsg->type) {
+ 		case DM_THIN_MESSAGE_CREATE_SNAP:
+ 		case DM_THIN_MESSAGE_CREATE_THIN:
+-		case DM_THIN_MESSAGE_TRIM:
+ 			if (!lv_is_thin_volume(tmsg->u.lv)) {
+ 				log_error(INTERNAL_ERROR
+ 					  "LV %s is not a thin volume.",
+@@ -192,9 +182,6 @@
+ 		case DM_THIN_MESSAGE_CREATE_THIN:
+ 			outf(f, "create = \"%s\"", tmsg->u.lv->name);
+ 			break;
+-		case DM_THIN_MESSAGE_TRIM:
+-			outf(f, "trim = \"%s\"", tmsg->u.lv->name);
+-			break;
+ 		case DM_THIN_MESSAGE_DELETE:
+ 			outf(f, "delete = %d", tmsg->u.delete_id);
+ 			break;
+@@ -302,10 +289,6 @@
+ 								lmsg->u.delete_id, 0))
+ 				return_0;
+ 			break;
+-		case DM_THIN_MESSAGE_TRIM:
+-			/* FIXME: to be implemented */
+-			log_error("Sorry TRIM is not yet supported.");
+-			return 0;
+ 		default:
+ 			log_error(INTERNAL_ERROR "Unsupported message.");
+ 			return 0;
+--- LVM2/libdm/libdevmapper.h	2012/03/01 19:54:53	1.185
++++ LVM2/libdm/libdevmapper.h	2012/03/02 13:26:10	1.186
+@@ -650,7 +650,6 @@
+ 	DM_THIN_MESSAGE_CREATE_THIN,		/* device_id */
+ 	DM_THIN_MESSAGE_DELETE,			/* device_id */
+ 	DM_THIN_MESSAGE_SET_TRANSACTION_ID,	/* current_id, new_id */
+-	DM_THIN_MESSAGE_TRIM			/* device_id, new_size */
+ } dm_thin_message_t;
  
- kill_sleep_kill_() {
-@@ -248,9 +249,8 @@ kill_listed_processes() {
- }
- 
- teardown() {
--	test -f MD_DEV && cleanup_md_dev
--
- 	echo -n "## teardown..."
-+	unset LVM_LOG_FILE_EPOCH
- 
- 	if test -f TESTNAME ; then
- 
-@@ -461,6 +461,7 @@ prepare_devs() {
- 	local pvname=${3:-pv}
- 	local shift=0
- 
-+	touch DEVICES
- 	prepare_backing_dev $(($n*$devsize))
- 	# shift start of PV devices on /dev/loopXX by 1M
- 	not diff LOOP BACKING_DEV >/dev/null 2>&1 || shift=2048
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 0efbf0d..96dfff2 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -32,7 +32,7 @@ PREFIX="${COMMON_PREFIX}$$"
- if test -z "$LVM_TEST_DIR"; then LVM_TEST_DIR=$TMPDIR; fi
- TESTDIR=$(mkdtemp "${LVM_TEST_DIR:-/tmp}" "$PREFIX.XXXXXXXXXX") || \
- 	die "failed to create temporary directory in ${LVM_TEST_DIR:-$TESTOLDPWD}"
--RUNNING_DMEVENTD=$(pgrep dmeventd) || true
-+RUNNING_DMEVENTD=$(pgrep dmeventd || true)
- 
- export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
- export LVM_LOG_FILE_EPOCH=DEBUG
-@@ -62,7 +62,7 @@ mkdir "$LVM_SYSTEM_DIR" "$DM_DEV_DIR"
- if test -n "$LVM_TEST_DEVDIR" ; then
- 	DM_DEV_DIR=$LVM_TEST_DEVDIR
- else
--	mknod "$DM_DEV_DIR/testnull" c 1 3 || die "mknod failed";
-+	mknod "$DM_DEV_DIR/testnull" c 1 3 || die "mknod failed"
- 	echo >"$DM_DEV_DIR/testnull" || \
- 		die "Filesystem does support devices in $DM_DEV_DIR (mounted with nodev?)"
- 	mkdir "$DM_DEV_DIR/mapper"
-@@ -77,11 +77,7 @@ echo "$TESTNAME" >TESTNAME
- 
- echo "Kernel is $(uname -a)"
- # Report SELinux mode
--if which getenforce &>/dev/null ; then
--	echo "Selinux mode is \"$(getenforce 2>/dev/null)\"."
--else
--	echo "Selinux mode is not installed."
--fi
-+echo "Selinux mode is $(getenforce 2>/dev/null || echo not installed)."
- 
- # Set vars from utils now that we have TESTDIR/PREFIX/...
- prepare_test_vars
+ int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
+--- LVM2/libdm/libdm-deptree.c	2012/02/13 20:13:40	1.157
++++ LVM2/libdm/libdm-deptree.c	2012/03/02 13:26:10	1.158
+@@ -1404,11 +1404,6 @@
+ 		r = dm_snprintf(buf, sizeof(buf), "delete %u",
+ 				m->u.m_delete.device_id);
+ 		break;
+-	case DM_THIN_MESSAGE_TRIM:
+-		r = dm_snprintf(buf, sizeof(buf), "trim %u %" PRIu64,
+-				m->u.m_trim.device_id,
+-				m->u.m_trim.new_size);
+-		break;
+ 	case DM_THIN_MESSAGE_SET_TRANSACTION_ID:
+ 		r = dm_snprintf(buf, sizeof(buf),
+ 				"set_transaction_id %" PRIu64 " %" PRIu64,
+@@ -3051,12 +3046,6 @@
+ 		tm->message.u.m_delete.device_id = id1;
+ 		tm->expected_errno = ENODATA;
+ 		break;
+-	case DM_THIN_MESSAGE_TRIM:
+-		if (!_thin_validate_device_id(id1))
+-			return_0;
+-		tm->message.u.m_trim.device_id = id1;
+-		tm->message.u.m_trim.new_size = id2;
+-		break;
+ 	case DM_THIN_MESSAGE_SET_TRANSACTION_ID:
+ 		if ((id1 + 1) != id2) {
+ 			log_error("New transaction id must be sequential.");
 
 
