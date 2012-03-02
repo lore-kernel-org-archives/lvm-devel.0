@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 2 Mar 2012 21:53:18 -0000
-Subject: LVM2/libdm libdm-deptree.c
-Message-ID: <20120302215318.25431.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 2 Mar 2012 22:44:32 -0000
+Subject: LVM2/lib/cache lvmetad.c
+Message-ID: <20120302224432.18832.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,61 +10,26 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-02 21:53:17
+Changes by:	agk at sourceware.org	2012-03-02 22:44:32
 
 Modified files:
-	libdm          : libdm-deptree.c 
+	lib/cache      : lvmetad.c 
 
 Log message:
-	Support 16GB for thin pool metadata
-	
-	Add some hack math to allow 16GB devices to be passed as thinpool metadata.
-	Since kernel has put in limit to not allow which are just bigger then
-	some predefined constant in kernel but not matching 16GB so any device bigger
-	is rejected.
-	
-	FIXME: Current code still might need more tweaks to be more generic.
+	a fixme
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.160&r2=1.161
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
 
---- LVM2/libdm/libdm-deptree.c	2012/03/02 21:43:27	1.160
-+++ LVM2/libdm/libdm-deptree.c	2012/03/02 21:53:17	1.161
-@@ -2968,7 +2968,15 @@
- 				      uint64_t low_water_mark,
- 				      unsigned skip_block_zeroing)
- {
--	struct load_segment *seg;
-+	struct load_segment *seg, *mseg;
-+	uint64_t devsize = 0;
-+	/*
-+	 * Max supported size for thin pool  metadata device
-+	 * Limitation is hardcoded into kernel and bigger
-+	 * device size is not accepted. (16978542592)
-+	 */
-+	const uint64_t max_metadata_size =
-+		255ULL * (1 << 14) * (4096 / (1 << 9)) - 256 * 1024;
+--- LVM2/lib/cache/lvmetad.c	2012/03/02 21:24:37	1.16
++++ LVM2/lib/cache/lvmetad.c	2012/03/02 22:44:31	1.17
+@@ -654,6 +654,7 @@
+ 	struct _pvscan_lvmetad_baton *b = baton;
+ 	struct volume_group *this = mda->ops->vg_read(b->fid, "", mda, 1);
  
- 	if (data_block_size < DM_THIN_MIN_DATA_BLOCK_SIZE) {
- 		log_error("Data block size %u is lower then %u sectors.",
-@@ -2993,6 +3001,18 @@
- 	if (!_link_tree_nodes(node, seg->metadata))
- 		return_0;
- 
-+	/* FIXME: more complex target may need more tweaks */
-+	dm_list_iterate_items(mseg, &seg->metadata->props.segs) {
-+		devsize += mseg->size;
-+		if (devsize > max_metadata_size) {
-+			log_debug("Ignoring %" PRIu64 " of device.",
-+				  devsize - max_metadata_size);
-+			mseg->size -= (devsize - max_metadata_size);
-+			devsize = max_metadata_size;
-+			/* FIXME: drop remaining segs */
-+		}
-+	}
-+
- 	if (!(seg->pool = dm_tree_find_node_by_uuid(node->dtree, pool_uuid))) {
- 		log_error("Missing pool uuid %s.", pool_uuid);
- 		return 0;
++	/* FIXME Also ensure contents match etc. */
+ 	if (!b->vg || this->seqno > b->vg->seqno)
+ 		b->vg = this;
+ 	else if (b->vg)
 
 
