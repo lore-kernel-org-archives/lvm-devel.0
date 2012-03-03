@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 2 Mar 2012 23:01:10 -0000
-Subject: LVM2/daemons/dmeventd dmeventd.c
-Message-ID: <20120302230110.30891.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 3 Mar 2012 01:00:51 -0000
+Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
+Message-ID: <20120303010051.3887.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,104 +10,84 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-02 23:01:10
+Changes by:	agk at sourceware.org	2012-03-03 01:00:50
 
 Modified files:
-	daemons/dmeventd: dmeventd.c 
+	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
 
 Log message:
-	Code refactoring
-	
-	Properly test for dm_asprintf result.
-	Keep unlocking of mutex in the same function and do not spread lock and
-	unlock over functions.
+	pre-release
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/dmeventd.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.296&r2=1.297
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.101&r2=1.102
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2335&r2=1.2336
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.583&r2=1.584
 
---- LVM2/daemons/dmeventd/dmeventd.c	2012/03/02 22:57:25	1.95
-+++ LVM2/daemons/dmeventd/dmeventd.c	2012/03/02 23:01:10	1.96
-@@ -1000,10 +1000,8 @@
- 	   almost as good as dead already... */
- 	if (thread_new->events & DM_EVENT_TIMEOUT) {
- 		ret = -_register_for_timeout(thread_new);
--		if (ret) {
--		    _unlock_mutex();
--		    goto out;
--		}
-+		if (ret)
-+			goto outth;
- 	}
+--- LVM2/VERSION	2012/02/23 18:26:28	1.296
++++ LVM2/VERSION	2012/03/03 01:00:49	1.297
+@@ -1 +1 @@
+-2.02.94(2)-cvs (2012-02-23)
++2.02.94(2)-cvs (2012-03-03)
+--- LVM2/VERSION_DM	2012/02/23 18:26:28	1.101
++++ LVM2/VERSION_DM	2012/03/03 01:00:49	1.102
+@@ -1 +1 @@
+-1.02.73-cvs (2012-02-23)
++1.02.73-cvs (2012-03-03)
+--- LVM2/WHATS_NEW	2012/03/02 22:57:25	1.2335
++++ LVM2/WHATS_NEW	2012/03/03 01:00:49	1.2336
+@@ -1,5 +1,5 @@
+-Version 2.02.94 - 
+-====================================
++Version 2.02.94 - 3rd March 2012
++================================
+   Add support to execute thin_check with each de/active of thin pool.
+   Fix automatic estimation of metadata device size for thin pool.
+   Test for alloc fail from _alloc_pv_segment() in _extend_pv().
+@@ -11,14 +11,14 @@
+   Allow cluster mirrors to handle the absence of the checkpoint lib (libSaCkpt).
+   Revert free of allocated segtype in init segment error path (2.02.89).
+   Test dm_hash_insert() failures in filter-persistent.c and fid_add_mda().
+-  Ensure clvmd message is always \0 terminated after read.
++  Ensure clvmd message is always NUL-terminated after read.
+   Add some close() and dev_close() error path backtraces.
+-  For polling daemon reopen stdin,stdout,stderr to /dev/null.
++  Set stdin/stdout/stderr to /dev/null for polldaemon.
+   Limit the max size of processed clvmd message to ~8KB.
+-  Do not send uninitilised bytes in cluster error reply messages.
++  Do not send uninitialised bytes in cluster error reply messages.
+   Use unsigned type for bitmask instead of enum type for lvm properties.
+   Add missing cleanup of excl_uuid hash on some exit paths of clvmd.
+-  Check for existance of vg_name in _format1/_pool_vg_read().
++  Check for existence of vg_name in _format1/_pool_vg_read().
+   Fix missing break in _format_pvsegs (2.02.92).
+   Test seg pointer for non-null it in raid_target_percent error path.
+   Check for errors in _init_tags() during config loading.
+@@ -28,6 +28,7 @@
+   Limit sscanf parameters with buffer size in clvmd get_initial_state().
+   Use const lv pointer for lv_is_active...() functions. 
+   Use same signed numbers in _mirrored_transient_status().
++  Provide new metadata daemon for testing with configure --enable-lvmetad .
+   Integrate client-side lvmetad into build.
  
- 	if (!(thread = _lookup_thread_status(message_data))) {
-@@ -1029,6 +1027,7 @@
- 	/* Or event # into events bitfield. */
- 	thread->events |= message_data->events.field;
- 
-+    outth:
- 	_unlock_mutex();
- 
-       out:
-@@ -1105,15 +1104,19 @@
- 	const char *id = message_data->id;
- 	const char *dso = thread->dso_data->dso_name;
- 	const char *dev = thread->device.uuid;
-+	int r;
- 	unsigned events = ((thread->status == DM_THREAD_RUNNING)
- 			   && (thread->events)) ? thread->events : thread->
- 	    events | DM_EVENT_REGISTRATION_PENDING;
- 
- 	dm_free(msg->data);
- 
--	msg->size = dm_asprintf(&(msg->data), fmt, id, dso, dev, events);
-+	if ((r = dm_asprintf(&(msg->data), fmt, id, dso, dev, events)) < 0) {
-+		msg->size = 0;
-+		return -ENOMEM;
-+	}
- 
--	_unlock_mutex();
-+	msg->size = (uint32_t) r;
- 
- 	return 0;
- }
-@@ -1146,6 +1149,7 @@
- static int _get_registered_dev(struct message_data *message_data, int next)
- {
- 	struct thread_status *thread, *hit = NULL;
-+	int ret = -ENOENT;
- 
- 	_lock_mutex();
- 
-@@ -1162,10 +1166,8 @@
- 	 * If we got a registered device and want the next one ->
- 	 * fetch next conforming element off the list.
- 	 */
--	if (hit && !next) {
--		_unlock_mutex();
--		return _registered_device(message_data, hit);
--	}
-+	if (hit && !next)
-+		goto reg;
- 
- 	if (!hit)
- 		goto out;
-@@ -1181,13 +1183,13 @@
- 		}
- 	}
- 
--	_unlock_mutex();
--	return _registered_device(message_data, hit);
-+      reg:
-+	ret = _registered_device(message_data, hit);
- 
-       out:
- 	_unlock_mutex();
--	
--	return -ENOENT;
-+
-+	return ret;
- }
- 
- static int _get_registered_device(struct message_data *message_data)
+ Version 2.02.93 - 23rd February 2012
+--- LVM2/WHATS_NEW_DM	2012/03/02 22:57:25	1.583
++++ LVM2/WHATS_NEW_DM	2012/03/03 01:00:50	1.584
+@@ -1,11 +1,11 @@
+-Version 1.02.73 - 
+-====================================
++Version 1.02.73 - 3rd March 2012
++================================
+   Test _thread_registry list with holding mutex in dmeventd.
+-  Added dm_tree_node_set_callback() for preload and deactivation hooks.
++  Add dm_tree_node_set_callback() for preload and deactivation hooks.
+   Drop unsupported TRIM message for thin pool.
+   Improve logging for fifo startup in dmeventd.
+   Better detection of missing dmeventd fifo connection (1.02.71).
+-  Add few pointer validation in dmsetup.
++  Add a few pointer validations in dmsetup.
+   Support dm_task_get_driver_version() query without version string.
+   Log failure of pthread_join when cleaning unused threads in dmeventd.
+   Fix empty string warning logic in _find_config_str. (1.02.68)
 
 
