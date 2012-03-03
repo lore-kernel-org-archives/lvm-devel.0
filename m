@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 3 Mar 2012 17:03:21 -0000
+Date: 3 Mar 2012 17:12:22 -0000
 Subject: LVM2/tools pvscan.c
-Message-ID: <20120303170321.21505.qmail@sourceware.org>
+Message-ID: <20120303171222.24098.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,26 +10,41 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-03-03 17:03:21
+Changes by:	agk at sourceware.org	2012-03-03 17:12:22
 
 Modified files:
 	tools          : pvscan.c 
 
 Log message:
-	Reinstate accidentally-deleted line.
+	Obtain VG list from lvmetad before relying on get_vgs, otherwise PVs in VGs
+	don't appear.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvscan.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvscan.c.diff?cvsroot=lvm2&r1=1.58&r2=1.59
 
---- LVM2/tools/pvscan.c	2012/03/02 18:09:48	1.57
-+++ LVM2/tools/pvscan.c	2012/03/03 17:03:20	1.58
-@@ -152,6 +152,7 @@
- 		return EINVALID_CMD_LINE;
- 	}
+--- LVM2/tools/pvscan.c	2012/03/03 17:03:20	1.58
++++ LVM2/tools/pvscan.c	2012/03/03 17:12:21	1.59
+@@ -165,6 +165,10 @@
+ 	persistent_filter_wipe(cmd->filter);
+ 	lvmcache_destroy(cmd, 1);
  
-+	if (arg_count(cmd, exported_ARG) || arg_count(cmd, novolumegroup_ARG))
- 		log_warn("WARNING: only considering physical volumes %s",
- 			  arg_count(cmd, exported_ARG) ?
- 			  "of exported volume group(s)" : "in no volume group");
++	/* populate lvmcache */
++	if (!lvmetad_vg_list_to_lvmcache(cmd))
++		stack;
++
+ 	log_verbose("Walking through all physical volumes");
+ 	if (!(pvslist = get_pvs(cmd))) {
+ 		unlock_vg(cmd, VG_GLOBAL);
+@@ -177,8 +181,8 @@
+ 		pv = pvl->pv;
+ 
+ 		if ((arg_count(cmd, exported_ARG)
+-		     && !(pv_status(pv) & EXPORTED_VG))
+-		    || (arg_count(cmd, novolumegroup_ARG) && (!is_orphan(pv)))) {
++		     && !(pv_status(pv) & EXPORTED_VG)) ||
++		    (arg_count(cmd, novolumegroup_ARG) && (!is_orphan(pv)))) {
+ 			dm_list_del(&pvl->list);
+ 			continue;
+ 		}
 
 
