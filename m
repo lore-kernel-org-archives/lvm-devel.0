@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Mar 2012 15:57:27 -0000
-Subject: LVM2/lib/metadata lv_manip.c
-Message-ID: <20120304155727.16076.qmail@sourceware.org>
+Date: 4 Mar 2012 15:58:32 -0000
+Subject: LVM2/tools toollib.c
+Message-ID: <20120304155832.16300.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,29 +10,42 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-04 15:57:27
+Changes by:	zkabelac at sourceware.org	2012-03-04 15:58:32
 
 Modified files:
-	lib/metadata   : lv_manip.c 
+	tools          : toollib.c 
 
 Log message:
-	Just make error message more clear
+	Add FIXMEs
 	
-	Make more obvious, the origin LV for snapshot must be active.
+	Processing loop needs some thinking
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.369&r2=1.370
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.245&r2=1.246
 
---- LVM2/lib/metadata/lv_manip.c	2012/03/01 10:09:36	1.369
-+++ LVM2/lib/metadata/lv_manip.c	2012/03/04 15:57:27	1.370
-@@ -4218,7 +4218,7 @@
- 			}
+--- LVM2/tools/toollib.c	2012/03/01 21:14:43	1.245
++++ LVM2/tools/toollib.c	2012/03/04 15:58:31	1.246
+@@ -119,6 +119,10 @@
+ 		process_all = 1;
+ 	}
  
- 			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
--				log_error("Check for existence of snapshot "
-+				log_error("Check for existence of active snapshot "
- 					  "origin '%s' failed.", org->name);
- 				return NULL;
- 			}
++	/*
++	 * FIXME: In case of remove it goes through deleted entries,
++	 * but it works since entries are allocated from vg mem pool.
++	 */
+ 	dm_list_iterate_items(lvl, &vg->lvs) {
+ 		if (lvl->lv->status & SNAPSHOT)
+ 			continue;
+@@ -182,6 +186,10 @@
+ 	}
+ 
+ 	if (lvargs_supplied && lvargs_matched != dm_list_size(arg_lvnames)) {
++		/*
++		 * FIXME: lvm supports removal of LV with all its dependencies
++		 * this leads to miscalculation that depends on the order of args.
++		 */
+ 		log_error("One or more specified logical volume(s) not found.");
+ 		if (ret_max < ECMD_FAILED)
+ 			ret_max = ECMD_FAILED;
 
 
