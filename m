@@ -1,23 +1,38 @@
-From: ben <benscott@nwlink.com>
-Date: Sat, 03 Mar 2012 21:06:15 -0800
-Subject: A bug in liblvm2app: lvm_pv_get_property()
-Message-ID: <1443975.PGRcsSfSxn@laptop>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 4 Mar 2012 15:57:27 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20120304155727.16076.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvm version: 2.02.88
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-03-04 15:57:27
 
-When calling the function:
-value = lvm_pv_get_property(lvm_pv, "pv_tags")
+Modified files:
+	lib/metadata   : lv_manip.c 
 
-The returned value doesn't always get terminated. The attribute characters at 
-the start are correct but the string continues with garbage. The value is 
-checked for validity with  value.is_valid first.
+Log message:
+	Just make error message more clear
+	
+	Make more obvious, the origin LV for snapshot must be active.
 
-Thank you.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.369&r2=1.370
 
+--- LVM2/lib/metadata/lv_manip.c	2012/03/01 10:09:36	1.369
++++ LVM2/lib/metadata/lv_manip.c	2012/03/04 15:57:27	1.370
+@@ -4218,7 +4218,7 @@
+ 			}
+ 
+ 			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
+-				log_error("Check for existence of snapshot "
++				log_error("Check for existence of active snapshot "
+ 					  "origin '%s' failed.", org->name);
+ 				return NULL;
+ 			}
 
 
