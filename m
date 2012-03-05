@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 4 Mar 2012 17:40:59 -0000
-Subject: LVM2 ./WHATS_NEW ./WHATS_NEW_DM lib/device/dev ...
-Message-ID: <20120304174059.28091.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 5 Mar 2012 12:43:05 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c libdm ...
+Message-ID: <20120305124305.25720.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,71 +10,143 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-04 17:40:59
+Changes by:	prajnoha at sourceware.org	2012-03-05 12:43:03
 
 Modified files:
-	.              : WHATS_NEW WHATS_NEW_DM 
-	lib/device     : dev-cache.c 
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-common.c 
+	libdm/ioctl    : libdm-iface.c 
 
 Log message:
-	Validate udev structures
+	Check whether device names are properly mangled on ioctl return.
 	
-	Avoid using NULL pointers from udev. It seems like some older versions of udev
-	were improperly returning NULL in some case, so do not silently break here,
-	and give at least a warning to the user.
+	Be more strict when unmangling names on ioctl return - require the name to be
+	properly mangled in 'auto' and 'hex' mode. There really should not be any
+	blacklisted character since the names should be renamed already (by means of
+	renaming it directly or running 'dmsetup mangle' for automatic rename).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2340&r2=1.2341
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.585&r2=1.586
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.72&r2=1.73
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.586&r2=1.587
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
 
---- LVM2/WHATS_NEW	2012/03/04 17:36:23	1.2340
-+++ LVM2/WHATS_NEW	2012/03/04 17:40:59	1.2341
-@@ -1,6 +1,6 @@
- Version 2.02.95 -
- ================================
--  Deactivation of failed thin check on thin pool returns success.
-+  Validate udev structures in _insert_udev_dir().
-   Scan all devices for lvmetad if 'pvscan --cache' used without device list.
-   Populate lvmcache from lvmetad before displaying PVs in pvscan. (2.02.94)
-   Suppress incorrect -n pvscan warning now always displayed. (2.02.94)
---- LVM2/WHATS_NEW_DM	2012/03/03 02:08:37	1.585
-+++ LVM2/WHATS_NEW_DM	2012/03/04 17:40:59	1.586
+--- LVM2/WHATS_NEW_DM	2012/03/04 17:40:59	1.586
++++ LVM2/WHATS_NEW_DM	2012/03/05 12:43:03	1.587
 @@ -1,5 +1,6 @@
  Version 1.02.74 - 
  ================================
-+  Deactivation of failed thin check on thin pool returns success.
++  Check whether device names are properly mangled on ioctl return.
+   Deactivation of failed thin check on thin pool returns success.
  
  Version 1.02.73 - 3rd March 2012
- ================================
---- LVM2/lib/device/dev-cache.c	2012/02/23 13:11:09	1.72
-+++ LVM2/lib/device/dev-cache.c	2012/03/04 17:40:59	1.73
-@@ -509,14 +509,21 @@
- 		goto bad;
+--- LVM2/libdm/libdm-common.c	2012/03/05 12:40:34	1.144
++++ LVM2/libdm/libdm-common.c	2012/03/05 12:43:03	1.145
+@@ -421,6 +421,7 @@
+ int unmangle_name(const char *str, size_t len, char *buf,
+ 		  size_t buf_len, dm_string_mangling_t mode)
+ {
++	int strict = mode != DM_STRING_MANGLING_NONE;
+ 	char str_rest[DM_NAME_LEN];
+ 	size_t i, j;
+ 	int code;
+@@ -439,6 +440,13 @@
+ 	}
  
- 	udev_list_entry_foreach(device_entry, udev_enumerate_get_list_entry(udev_enum)) {
--		device = udev_device_new_from_syspath(udev, udev_list_entry_get_name(device_entry));
-+		if (!(device = udev_device_new_from_syspath(udev, udev_list_entry_get_name(device_entry)))) {
-+			log_warn("Udev returns NULL device.");
-+			continue;
+ 	for (i = 0, j = 0; str[i]; i++, j++) {
++		if (strict && !(_is_whitelisted_char(str[i]) || str[i]=='\\')) {
++			log_error("The name \"%s\" should be mangled but "
++				  "it contains blacklisted characters.", str);
++			j=0; r=-1;
++			goto out;
 +		}
++
+ 		if (str[i] == '\\' && str[i+1] == 'x') {
+ 			if (!sscanf(&str[i+2], "%2x%s", &code, str_rest)) {
+ 				log_debug("Hex encoding mismatch detected in \"%s\" "
+--- LVM2/libdm/ioctl/libdm-iface.c	2012/03/05 12:40:34	1.141
++++ LVM2/libdm/ioctl/libdm-iface.c	2012/03/05 12:43:03	1.142
+@@ -1550,41 +1550,47 @@
+ 	return sanitised_message;
+ }
  
--		node_name = udev_device_get_devnode(device);
--		r &= _insert(node_name, 0, 0);
-+		if (!(node_name = udev_device_get_devnode(device)))
-+			log_warn("Udev returns NULL devnode.");
-+		else
-+			r &= _insert(node_name, 0, 0);
+-static void _do_dm_ioctl_unmangle_name(char *name)
++static int _do_dm_ioctl_unmangle_name(char *name)
+ {
+ 	dm_string_mangling_t mode = dm_get_name_mangling_mode();
+ 	char buf[DM_NAME_LEN];
+ 	int r;
  
- 		udev_list_entry_foreach(symlink_entry, udev_device_get_devlinks_list_entry(device)) {
--			symlink_name = udev_list_entry_get_name(symlink_entry);
--			r &= _insert(symlink_name, 0, 0);
-+			if (!(symlink_name = udev_list_entry_get_name(symlink_entry)))
-+				log_warn("Udev returns NULL name.");
-+			else
-+				r &= _insert(symlink_name, 0, 0);
+ 	if (mode == DM_STRING_MANGLING_NONE)
+-		return;
++		return 1;
+ 
+ 	if ((r = unmangle_name(name, DM_NAME_LEN, buf, sizeof(buf),
+-			       dm_get_name_mangling_mode())) < 0)
++			       dm_get_name_mangling_mode())) < 0) {
+ 		log_debug("_do_dm_ioctl_unmangle_name: failed to "
+ 			  "unmangle \"%s\"", name);
+-	else if (r)
++		return 0;
++	} else if (r)
+ 		memcpy(name, buf, strlen(buf) + 1);
++
++	return 1;
+ }
+ 
+-static void _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
++static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
+ {
+ 	struct dm_names *names;
+ 	unsigned next = 0;
+ 	char *name;
++	int r = 1;
+ 
+ 	if ((name = dmi->name))
+-		_do_dm_ioctl_unmangle_name(name);
++		r = _do_dm_ioctl_unmangle_name(name);
+ 
+ 	if (type == DM_DEVICE_LIST &&
+ 	    ((names = ((struct dm_names *) ((char *)dmi + dmi->data_start)))) &&
+ 	    names->dev) {
+ 		do {
+ 			names = (struct dm_names *)((char *) names + next);
+-			_do_dm_ioctl_unmangle_name(names->name);
++			r = _do_dm_ioctl_unmangle_name(names->name);
+ 			next = names->next;
+ 		} while (next);
+ 	}
++
++	return r;
+ }
+ 
+ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
+@@ -1703,8 +1709,7 @@
+ 			 */
+ 			*retryable = errno == EBUSY;
+ 
+-			_dm_zfree_dmi(dmi);
+-			return NULL;
++			goto error;
  		}
+ 	}
  
- 		udev_device_unref(device);
+@@ -1715,11 +1720,16 @@
+ 		_udev_complete(dmt);
+ 	}
+ 
+-	(void) _dm_ioctl_unmangle_names(dmt->type, dmi);
++	if (!_dm_ioctl_unmangle_names(dmt->type, dmi))
++		goto error;
+ 
+ #else /* Userspace alternative for testing */
+ #endif
+ 	return dmi;
++
++error:
++	_dm_zfree_dmi(dmi);
++	return NULL;
+ }
+ 
+ void dm_task_update_nodes(void)
 
 
