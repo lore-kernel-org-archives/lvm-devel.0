@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 30 Mar 2012 14:59:36 -0000
-Subject: LVM2 ./WHATS_NEW tools/vgreduce.c
-Message-ID: <20120330145936.1325.qmail@sourceware.org>
+Date: 6 Mar 2012 09:22:03 -0000
+Subject: LVM2 ./WHATS_NEW man/lvcreate.8.in tools/lvcre ...
+Message-ID: <20120306092203.17171.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,70 +10,80 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-30 14:59:36
+Changes by:	zkabelac at sourceware.org	2012-03-06 09:22:03
 
 Modified files:
 	.              : WHATS_NEW 
-	tools          : vgreduce.c 
+	man            : lvcreate.8.in 
+	tools          : lvcreate.c 
 
 Log message:
-	Fix unlocking in error path of vgreduce
+	Fix warn message and update man page
 	
-	When vg_read fails, it internally unlocks VG if it's been locked,
-	so in error path we should skip unlock_vg for this case.
-	(user would see ugly internal warning)
+	Fix regression in man page. The chunk size is in kilobyte units on command line
+	input though in the source code we work with sector size unit
+	so make it clear in the man page.
+	
+	Update chunksize for thin pool in man page - it's max value is 1024M == 1G.
+	
+	Fix warning range message to show proper max value.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2374&r2=1.2375
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgreduce.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2348&r2=1.2349
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvcreate.8.in.diff?cvsroot=lvm2&r1=1.35&r2=1.36
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvcreate.c.diff?cvsroot=lvm2&r1=1.262&r2=1.263
 
---- LVM2/WHATS_NEW	2012/03/30 11:39:52	1.2374
-+++ LVM2/WHATS_NEW	2012/03/30 14:59:35	1.2375
+--- LVM2/WHATS_NEW	2012/03/06 04:47:37	1.2348
++++ LVM2/WHATS_NEW	2012/03/06 09:22:02	1.2349
 @@ -1,5 +1,6 @@
  Version 2.02.96 - 
  ================================
-+  Fix unlocking volume group in vgreduce in error path.
-   Exit immediately if LISTEN_PID env var incorrect during systemd handover.
-   Detect VG name being part of the LV name in lvconvert --splitmirrors -n.
-   Fix exclusive lvchange running from other node. (2.02.89)
---- LVM2/tools/vgreduce.c	2012/02/27 10:06:58	1.116
-+++ LVM2/tools/vgreduce.c	2012/03/30 14:59:35	1.117
-@@ -206,6 +206,7 @@
- 	int fixed = 1;
- 	int repairing = arg_count(cmd, removemissing_ARG);
- 	int saved_ignore_suspended_devices = ignore_suspended_devices();
-+	int locked = 0;
++  Fix warn msg for thin pool chunk size and update man for chunksize (2.02.89).
  
- 	if (!argc && !repairing) {
- 		log_error("Please give volume group name and "
-@@ -260,6 +261,8 @@
- 	    && !arg_count(cmd, removemissing_ARG))
- 		goto_out;
- 
-+	locked = !vg_read_error(vg);
-+
- 	if (repairing) {
- 		if (!vg_read_error(vg) && !vg_missing_pv_count(vg)) {
- 			log_error("Volume group \"%s\" is already consistent",
-@@ -275,6 +278,7 @@
- 					READ_ALLOW_INCONSISTENT
- 					| READ_ALLOW_EXPORTED);
- 
-+		locked |= !vg_read_error(vg);
- 		if (vg_read_error(vg) && vg_read_error(vg) != FAILED_READ_ONLY
- 		    && vg_read_error(vg) != FAILED_INCONSISTENT)
- 			goto_out;
-@@ -314,7 +318,10 @@
- 	}
- out:
- 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
--	unlock_and_release_vg(cmd, vg, vg_name);
-+	if (locked)
-+		unlock_vg(cmd, vg_name);
-+
-+	release_vg(vg);
- 
- 	return ret;
- 
+ Version 2.02.95 - 6th March 2012
+ ================================
+--- LVM2/man/lvcreate.8.in	2012/01/20 10:50:39	1.35
++++ LVM2/man/lvcreate.8.in	2012/03/06 09:22:02	1.36
+@@ -120,11 +120,14 @@
+ on one node and \fB-a\fIly\fR will activate only on the local node.
+ .TP
+ .BR \-c ", " \-\-chunksize " " \fIChunkSize
+-Power of 2 chunk size in sector units (512b).
+-For snapshot logical volume the value must be between 8 (4KB) and 1024 (512KB)
+-and the default value is 8.
+-For thin pool logical volume the value must be between 128 (64KB) and
+-2097152 (1MB) and the default value is 128.
++Gives the size of chunk for snapshot and thin pool logical volumes.
++For snapshots the value must be power of 2 between 4KiB and 512KiB
++and the default value is 4.
++For thin pools the value must be power of 2 between 64KiB and
++1048576KiB and the default value starts with 64 and scales
++up to fit the pool metadata size within 128MB, 
++if the poolmetadata size is not specified.
++Default unit is in kilobytes.
+ .TP
+ .BR \-C ", " \-\-contiguous " {" \fIy | \fIn }
+ Sets or resets the contiguous allocation policy for
+--- LVM2/tools/lvcreate.c	2012/03/06 02:30:50	1.262
++++ LVM2/tools/lvcreate.c	2012/03/06 09:22:03	1.263
+@@ -772,13 +772,15 @@
+ 				return 0;
+ 			}
+ 		} else {
+-			lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, DM_THIN_MIN_DATA_BLOCK_SIZE);
++			lp->chunk_size = arg_uint_value(cmd, chunksize_ARG,
++							DM_THIN_MIN_DATA_BLOCK_SIZE);
+ 			if ((lp->chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE) ||
+ 			    (lp->chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) ||
+ 			    (lp->chunk_size & (lp->chunk_size - 1))) {
+ 				log_error("Chunk size must be a power of 2 in the "
+-					  "range %uK to %uK", (DM_THIN_MIN_DATA_BLOCK_SIZE / 2),
+-					  (DM_THIN_MIN_DATA_BLOCK_SIZE / 2));
++					  "range %uK to %uK",
++					  (DM_THIN_MIN_DATA_BLOCK_SIZE / 2),
++					  (DM_THIN_MAX_DATA_BLOCK_SIZE / 2));
+ 				return 0;
+ 			}
+ 		}
 
 
