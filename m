@@ -1,7 +1,7 @@
 From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Mar 2012 09:32:48 -0000
-Subject: LVM2/daemons clvmd/clvmd-openais.c cmirrord/cl ...
-Message-ID: <20120310093248.2313.qmail@sourceware.org>
+Date: 10 Mar 2012 10:39:28 -0000
+Subject: LVM2/daemons/clvmd clvm.h
+Message-ID: <20120310103928.27875.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,174 +10,48 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2012-03-10 09:32:47
+Changes by:	mbroz at sourceware.org	2012-03-10 10:39:28
 
 Modified files:
-	daemons/clvmd  : clvmd-openais.c 
-	daemons/cmirrord: cluster.c functions.c link_mon.c local.c 
-	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
+	daemons/clvmd  : clvm.h 
 
 Log message:
 	Remove some whitespaces.
-	(test commit)
+	(Test commit.)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/link_mon.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/local.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvm.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
 
---- LVM2/daemons/clvmd/clvmd-openais.c	2011/09/25 19:37:00	1.18
-+++ LVM2/daemons/clvmd/clvmd-openais.c	2012/03/10 09:32:46	1.19
-@@ -506,7 +506,7 @@
- 		saLckResourceClose(res_handle);
- 		return ais_to_errno(err);
- 	}
--			
-+
- 	/* Wait for it to complete */
+--- LVM2/daemons/clvmd/clvm.h	2012/01/21 05:31:54	1.11
++++ LVM2/daemons/clvmd/clvm.h	2012/03/10 10:39:28	1.12
+@@ -30,14 +30,14 @@
+ 	uint16_t xid;	        /* Transaction ID */
+ 	uint32_t clientid;	/* Only used in Daemon->Daemon comms */
+ 	int32_t  status;	/* For replies, whether request succeeded */
+-	uint32_t arglen;	/* Length of argument below. 
+-				   If >1500 then it will be passed 
++	uint32_t arglen;	/* Length of argument below.
++				   If >1500 then it will be passed
+ 				   around the cluster in the system LV */
+ 	char node[1];		/* Actually a NUL-terminated string, node name.
+-				   If this is empty then the command is 
+-				   forwarded to all cluster nodes unless 
++				   If this is empty then the command is
++				   forwarded to all cluster nodes unless
+ 				   FLAG_LOCAL or FLAG_REMOTE is also set. */
+-	char args[1];		/* Arguments for the command follow the 
++	char args[1];		/* Arguments for the command follow the
+ 				   node name, This member is only
+ 				   valid if the node name is empty */
+ } __attribute__ ((packed));
+@@ -54,7 +54,7 @@
+ /* Internal commands & replies */
+ #define CLVMD_CMD_REPLY    1
+ #define CLVMD_CMD_VERSION  2	/* Send version around cluster when we start */
+-#define CLVMD_CMD_GOAWAY   3	/* Die if received this - we are running 
++#define CLVMD_CMD_GOAWAY   3	/* Die if received this - we are running
+ 				   an incompatible version */
+ #define CLVMD_CMD_TEST     4	/* Just for mucking about */
  
- 	DEBUGLOG("lock_resource returning %d, lock_id=%" PRIx64 "\n",
---- LVM2/daemons/cmirrord/cluster.c	2012/03/01 17:41:39	1.19
-+++ LVM2/daemons/cmirrord/cluster.c	2012/03/10 09:32:47	1.20
-@@ -89,7 +89,7 @@
- 	char *clean_bits;
- 	char *recovering_region;
- 	struct checkpoint_data *next;
--};	
-+};
- 
- #define INVALID 0
- #define VALID   1
-@@ -911,9 +911,9 @@
- 
- 			rq->u_rq.data_size = 0;
- 			kernel_send(&rq->u_rq);
--				
-+
- 			break;
--			
-+
- 		default:
- 			/*
- 			 * If an action or a response is required, then
-@@ -1355,7 +1355,7 @@
- 		match->free_me = 1;
- 		match->lowest_id = 0xDEAD;
- 		match->state = INVALID;
--	}			
-+	}
- 
- 	/* Remove any pending checkpoints for the leaving node. */
- 	for (p_cp = NULL, c_cp = match->checkpoint_list;
-@@ -1411,7 +1411,7 @@
- 			 left->nodeid);
- 		return;
- 	}
--		
-+
- 	match->lowest_id = member_list[0].nodeid;
- 	for (i = 0; i < member_list_entries; i++)
- 		if (match->lowest_id > member_list[i].nodeid)
-@@ -1530,7 +1530,7 @@
-                 usleep(1000);
-                 goto unlink_retry;
-         }
--	
-+
- 	if (rv != SA_AIS_OK) {
-                 LOG_ERROR("[%s] Failed to unlink checkpoint: %s",
-                           SHORT_UUID(entry->name.value), str_ais_error(rv));
-@@ -1633,7 +1633,7 @@
- {
- 	int r;
- 	int state;
--	
-+
- 	LOG_COND(log_resend_requests, "[%s] I am leaving.2.....",
- 		 SHORT_UUID(del->name.value));
- 
---- LVM2/daemons/cmirrord/functions.c	2012/02/08 11:36:18	1.32
-+++ LVM2/daemons/cmirrord/functions.c	2012/03/10 09:32:47	1.33
-@@ -784,7 +784,7 @@
- 		else if (lc->disk_nr_regions > lc->region_count)
- 			LOG_DBG("[%s] Mirror has shrunk, updating log bits",
- 				SHORT_UUID(lc->uuid));
--		break;		
-+		break;
- 	case -EINVAL:
- 		LOG_DBG("[%s] (Re)initializing mirror log - resync issued.",
- 			SHORT_UUID(lc->uuid));
-@@ -837,7 +837,7 @@
- 	lc->sync_search = 0;
- 	lc->state = LOG_RESUMED;
- 	lc->recovery_halted = 0;
--	
-+
- 	return rq->error;
- }
- 
-@@ -1032,7 +1032,7 @@
- {
- 	int r = 0;
- 	struct log_c *lc = get_log(rq->uuid, rq->luid);
--	
-+
- 	if (!lc)
- 		return -EINVAL;
- 
-@@ -1614,7 +1614,7 @@
- 
- 	rq->data_size = sizeof(*pkg);
- 
--	return 0;	
-+	return 0;
- }
- 
- 
---- LVM2/daemons/cmirrord/link_mon.c	2010/01/19 15:58:45	1.5
-+++ LVM2/daemons/cmirrord/link_mon.c	2012/03/10 09:32:47	1.6
-@@ -58,7 +58,7 @@
- 			free(lc);
- 			return -ENOMEM;
- 		}
--		
-+
- 		pfds = tmp;
- 		free_pfds = used_pfds + 1;
- 	}
-@@ -125,7 +125,7 @@
- 	for (i = 0; i < used_pfds; i++)
- 		if (pfds[i].revents & POLLIN) {
- 			LOG_DBG("Data ready on %d", pfds[i].fd);
--				
-+
- 			/* FIXME: Add this back return 1;*/
- 			r++;
- 		}
---- LVM2/daemons/cmirrord/local.c	2010/07/09 15:34:41	1.9
-+++ LVM2/daemons/cmirrord/local.c	2012/03/10 09:32:47	1.10
-@@ -249,7 +249,7 @@
- 		if (r)
- 			LOG_ERROR("Failed to respond to kernel [%s]",
- 				  RQ_TYPE(u_rq->request_type));
--			
-+
- 		break;
- 	case DM_ULOG_RESUME:
- 		/*
---- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2012/02/08 11:29:13	1.39
-+++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2012/03/10 09:32:47	1.40
-@@ -124,7 +124,7 @@
- out:
- 	dm_free(args);
- 	return r;
--	
-+
- out_parse:
- 	dm_free(args);
- 	syslog(LOG_ERR, "Unable to parse mirror status string.");
 
 
