@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 5 Mar 2012 12:43:05 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-common.c libdm ...
-Message-ID: <20120305124305.25720.qmail@sourceware.org>
+From: mbroz@sourceware.org <mbroz@sourceware.org>
+Date: 10 Mar 2012 09:32:48 -0000
+Subject: LVM2/daemons clvmd/clvmd-openais.c cmirrord/cl ...
+Message-ID: <20120310093248.2313.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,143 +10,174 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-03-05 12:43:03
+Changes by:	mbroz at sourceware.org	2012-03-10 09:32:47
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdm-common.c 
-	libdm/ioctl    : libdm-iface.c 
+	daemons/clvmd  : clvmd-openais.c 
+	daemons/cmirrord: cluster.c functions.c link_mon.c local.c 
+	daemons/dmeventd/plugins/mirror: dmeventd_mirror.c 
 
 Log message:
-	Check whether device names are properly mangled on ioctl return.
-	
-	Be more strict when unmangling names on ioctl return - require the name to be
-	properly mangled in 'auto' and 'hex' mode. There really should not be any
-	blacklisted character since the names should be renamed already (by means of
-	renaming it directly or running 'dmsetup mangle' for automatic rename).
+	Remove some whitespaces.
+	(test commit)
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.586&r2=1.587
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-common.c.diff?cvsroot=lvm2&r1=1.144&r2=1.145
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/ioctl/libdm-iface.c.diff?cvsroot=lvm2&r1=1.141&r2=1.142
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-openais.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/cluster.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/functions.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/link_mon.c.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/cmirrord/local.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c.diff?cvsroot=lvm2&r1=1.39&r2=1.40
 
---- LVM2/WHATS_NEW_DM	2012/03/04 17:40:59	1.586
-+++ LVM2/WHATS_NEW_DM	2012/03/05 12:43:03	1.587
-@@ -1,5 +1,6 @@
- Version 1.02.74 - 
- ================================
-+  Check whether device names are properly mangled on ioctl return.
-   Deactivation of failed thin check on thin pool returns success.
- 
- Version 1.02.73 - 3rd March 2012
---- LVM2/libdm/libdm-common.c	2012/03/05 12:40:34	1.144
-+++ LVM2/libdm/libdm-common.c	2012/03/05 12:43:03	1.145
-@@ -421,6 +421,7 @@
- int unmangle_name(const char *str, size_t len, char *buf,
- 		  size_t buf_len, dm_string_mangling_t mode)
- {
-+	int strict = mode != DM_STRING_MANGLING_NONE;
- 	char str_rest[DM_NAME_LEN];
- 	size_t i, j;
- 	int code;
-@@ -439,6 +440,13 @@
+--- LVM2/daemons/clvmd/clvmd-openais.c	2011/09/25 19:37:00	1.18
++++ LVM2/daemons/clvmd/clvmd-openais.c	2012/03/10 09:32:46	1.19
+@@ -506,7 +506,7 @@
+ 		saLckResourceClose(res_handle);
+ 		return ais_to_errno(err);
  	}
- 
- 	for (i = 0, j = 0; str[i]; i++, j++) {
-+		if (strict && !(_is_whitelisted_char(str[i]) || str[i]=='\\')) {
-+			log_error("The name \"%s\" should be mangled but "
-+				  "it contains blacklisted characters.", str);
-+			j=0; r=-1;
-+			goto out;
-+		}
+-			
 +
- 		if (str[i] == '\\' && str[i+1] == 'x') {
- 			if (!sscanf(&str[i+2], "%2x%s", &code, str_rest)) {
- 				log_debug("Hex encoding mismatch detected in \"%s\" "
---- LVM2/libdm/ioctl/libdm-iface.c	2012/03/05 12:40:34	1.141
-+++ LVM2/libdm/ioctl/libdm-iface.c	2012/03/05 12:43:03	1.142
-@@ -1550,41 +1550,47 @@
- 	return sanitised_message;
- }
+ 	/* Wait for it to complete */
  
--static void _do_dm_ioctl_unmangle_name(char *name)
-+static int _do_dm_ioctl_unmangle_name(char *name)
+ 	DEBUGLOG("lock_resource returning %d, lock_id=%" PRIx64 "\n",
+--- LVM2/daemons/cmirrord/cluster.c	2012/03/01 17:41:39	1.19
++++ LVM2/daemons/cmirrord/cluster.c	2012/03/10 09:32:47	1.20
+@@ -89,7 +89,7 @@
+ 	char *clean_bits;
+ 	char *recovering_region;
+ 	struct checkpoint_data *next;
+-};	
++};
+ 
+ #define INVALID 0
+ #define VALID   1
+@@ -911,9 +911,9 @@
+ 
+ 			rq->u_rq.data_size = 0;
+ 			kernel_send(&rq->u_rq);
+-				
++
+ 			break;
+-			
++
+ 		default:
+ 			/*
+ 			 * If an action or a response is required, then
+@@ -1355,7 +1355,7 @@
+ 		match->free_me = 1;
+ 		match->lowest_id = 0xDEAD;
+ 		match->state = INVALID;
+-	}			
++	}
+ 
+ 	/* Remove any pending checkpoints for the leaving node. */
+ 	for (p_cp = NULL, c_cp = match->checkpoint_list;
+@@ -1411,7 +1411,7 @@
+ 			 left->nodeid);
+ 		return;
+ 	}
+-		
++
+ 	match->lowest_id = member_list[0].nodeid;
+ 	for (i = 0; i < member_list_entries; i++)
+ 		if (match->lowest_id > member_list[i].nodeid)
+@@ -1530,7 +1530,7 @@
+                 usleep(1000);
+                 goto unlink_retry;
+         }
+-	
++
+ 	if (rv != SA_AIS_OK) {
+                 LOG_ERROR("[%s] Failed to unlink checkpoint: %s",
+                           SHORT_UUID(entry->name.value), str_ais_error(rv));
+@@ -1633,7 +1633,7 @@
  {
- 	dm_string_mangling_t mode = dm_get_name_mangling_mode();
- 	char buf[DM_NAME_LEN];
  	int r;
- 
- 	if (mode == DM_STRING_MANGLING_NONE)
--		return;
-+		return 1;
- 
- 	if ((r = unmangle_name(name, DM_NAME_LEN, buf, sizeof(buf),
--			       dm_get_name_mangling_mode())) < 0)
-+			       dm_get_name_mangling_mode())) < 0) {
- 		log_debug("_do_dm_ioctl_unmangle_name: failed to "
- 			  "unmangle \"%s\"", name);
--	else if (r)
-+		return 0;
-+	} else if (r)
- 		memcpy(name, buf, strlen(buf) + 1);
+ 	int state;
+-	
 +
-+	return 1;
+ 	LOG_COND(log_resend_requests, "[%s] I am leaving.2.....",
+ 		 SHORT_UUID(del->name.value));
+ 
+--- LVM2/daemons/cmirrord/functions.c	2012/02/08 11:36:18	1.32
++++ LVM2/daemons/cmirrord/functions.c	2012/03/10 09:32:47	1.33
+@@ -784,7 +784,7 @@
+ 		else if (lc->disk_nr_regions > lc->region_count)
+ 			LOG_DBG("[%s] Mirror has shrunk, updating log bits",
+ 				SHORT_UUID(lc->uuid));
+-		break;		
++		break;
+ 	case -EINVAL:
+ 		LOG_DBG("[%s] (Re)initializing mirror log - resync issued.",
+ 			SHORT_UUID(lc->uuid));
+@@ -837,7 +837,7 @@
+ 	lc->sync_search = 0;
+ 	lc->state = LOG_RESUMED;
+ 	lc->recovery_halted = 0;
+-	
++
+ 	return rq->error;
  }
  
--static void _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
-+static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
+@@ -1032,7 +1032,7 @@
  {
- 	struct dm_names *names;
- 	unsigned next = 0;
- 	char *name;
-+	int r = 1;
- 
- 	if ((name = dmi->name))
--		_do_dm_ioctl_unmangle_name(name);
-+		r = _do_dm_ioctl_unmangle_name(name);
- 
- 	if (type == DM_DEVICE_LIST &&
- 	    ((names = ((struct dm_names *) ((char *)dmi + dmi->data_start)))) &&
- 	    names->dev) {
- 		do {
- 			names = (struct dm_names *)((char *) names + next);
--			_do_dm_ioctl_unmangle_name(names->name);
-+			r = _do_dm_ioctl_unmangle_name(names->name);
- 			next = names->next;
- 		} while (next);
- 	}
+ 	int r = 0;
+ 	struct log_c *lc = get_log(rq->uuid, rq->luid);
+-	
 +
-+	return r;
+ 	if (!lc)
+ 		return -EINVAL;
+ 
+@@ -1614,7 +1614,7 @@
+ 
+ 	rq->data_size = sizeof(*pkg);
+ 
+-	return 0;	
++	return 0;
  }
  
- static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
-@@ -1703,8 +1709,7 @@
- 			 */
- 			*retryable = errno == EBUSY;
  
--			_dm_zfree_dmi(dmi);
--			return NULL;
-+			goto error;
+--- LVM2/daemons/cmirrord/link_mon.c	2010/01/19 15:58:45	1.5
++++ LVM2/daemons/cmirrord/link_mon.c	2012/03/10 09:32:47	1.6
+@@ -58,7 +58,7 @@
+ 			free(lc);
+ 			return -ENOMEM;
  		}
- 	}
- 
-@@ -1715,11 +1720,16 @@
- 		_udev_complete(dmt);
- 	}
- 
--	(void) _dm_ioctl_unmangle_names(dmt->type, dmi);
-+	if (!_dm_ioctl_unmangle_names(dmt->type, dmi))
-+		goto error;
- 
- #else /* Userspace alternative for testing */
- #endif
- 	return dmi;
+-		
 +
-+error:
-+	_dm_zfree_dmi(dmi);
-+	return NULL;
- }
- 
- void dm_task_update_nodes(void)
+ 		pfds = tmp;
+ 		free_pfds = used_pfds + 1;
+ 	}
+@@ -125,7 +125,7 @@
+ 	for (i = 0; i < used_pfds; i++)
+ 		if (pfds[i].revents & POLLIN) {
+ 			LOG_DBG("Data ready on %d", pfds[i].fd);
+-				
++
+ 			/* FIXME: Add this back return 1;*/
+ 			r++;
+ 		}
+--- LVM2/daemons/cmirrord/local.c	2010/07/09 15:34:41	1.9
++++ LVM2/daemons/cmirrord/local.c	2012/03/10 09:32:47	1.10
+@@ -249,7 +249,7 @@
+ 		if (r)
+ 			LOG_ERROR("Failed to respond to kernel [%s]",
+ 				  RQ_TYPE(u_rq->request_type));
+-			
++
+ 		break;
+ 	case DM_ULOG_RESUME:
+ 		/*
+--- LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2012/02/08 11:29:13	1.39
++++ LVM2/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c	2012/03/10 09:32:47	1.40
+@@ -124,7 +124,7 @@
+ out:
+ 	dm_free(args);
+ 	return r;
+-	
++
+ out_parse:
+ 	dm_free(args);
+ 	syslog(LOG_ERR, "Unable to parse mirror status string.");
 
 
