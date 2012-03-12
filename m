@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 12 Mar 2012 08:59:55 -0000
-Subject: LVM2/udev 69-dm-lvm-metad.rules
-Message-ID: <20120312085955.12874.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 12 Mar 2012 14:15:06 -0000
+Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c to ...
+Message-ID: <20120312141506.17666.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,40 +10,68 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-03-12 08:59:55
+Changes by:	zkabelac at sourceware.org	2012-03-12 14:15:05
 
 Modified files:
-	udev           : 69-dm-lvm-metad.rules 
+	.              : WHATS_NEW 
+	lib/commands   : toolcontext.c 
+	tools          : lvmcmdline.c 
 
 Log message:
-	Detect the lvm binary path in lvmetad udev rules.
+	Fix error path for create_toolcontext
 	
-	We can't use 'DM_SBIN_PATH'. This one is set only for DM devices but not
-	for all block devices - the pvscan is run on all relevant block devices!
-	
-	This LVM_SBIN_PATH (as well as DM_SBIN_PATH) detection should be removed
-	eventually but for upstream solution, we still have to do that as there are
-	known cases where the binaries are put either in /sbin or /usr/sbin
-	(some installation systems, initrd systems etc.).
+	Never return unfinished toolcontext - since error path is hit on
+	various stages of initialization we cannot leave it partially uninitialized,
+	since we would need to spread many more test across the code for config_valid.
+	Instead return NULL and properly release udev library resources as well.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/69-dm-lvm-metad.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2349&r2=1.2350
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvmcmdline.c.diff?cvsroot=lvm2&r1=1.153&r2=1.154
 
---- LVM2/udev/69-dm-lvm-metad.rules	2012/03/06 02:30:50	1.3
-+++ LVM2/udev/69-dm-lvm-metad.rules	2012/03/12 08:59:55	1.4
-@@ -19,7 +19,12 @@
- # Device-mapper devices are processed only on change event or on supported synthesized event.
- KERNEL=="dm-[0-9]*", ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
+--- LVM2/WHATS_NEW	2012/03/06 09:22:02	1.2349
++++ LVM2/WHATS_NEW	2012/03/12 14:15:04	1.2350
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Fix error path for failing toolcontext creation.
+   Fix warn msg for thin pool chunk size and update man for chunksize (2.02.89).
  
-+# Set proper sbin path, /sbin has higher priority than /usr/sbin.
-+ENV{LVM_SBIN_PATH}="/sbin"
-+TEST!="$env{LVM_SBIN_PATH}/lvm", ENV{LVM_SBIN_PATH}="/usr/sbin"
-+TEST!="$env{LVM_SBIN_PATH}/lvm", GOTO="lvm_end"
+ Version 2.02.95 - 6th March 2012
+--- LVM2/lib/commands/toolcontext.c	2012/03/01 21:16:05	1.153
++++ LVM2/lib/commands/toolcontext.c	2012/03/12 14:15:04	1.154
+@@ -1371,6 +1371,11 @@
+ 
+ 	cmd->config_valid = 1;
+ out:
++	if (cmd->config_valid != 1) {
++		destroy_toolcontext(cmd);
++		cmd = NULL;
++	}
 +
- # Only process devices already marked as a PV - this requires blkid to be called before.
--ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{DM_SBIN_PATH}/pvscan --cache --major $major --minor $minor"
-+ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{LVM_SBIN_PATH}/lvm pvscan --cache --major $major --minor $minor"
+ 	return cmd;
+ }
  
- LABEL="lvm_end"
+--- LVM2/tools/lvmcmdline.c	2012/03/06 02:30:50	1.153
++++ LVM2/tools/lvmcmdline.c	2012/03/12 14:15:04	1.154
+@@ -1248,13 +1248,16 @@
+ 	if (!udev_init_library_context())
+ 		stack;
+ 
+-	if (!(cmd = create_toolcontext(0, NULL, 1, 0)))
++	if (!(cmd = create_toolcontext(0, NULL, 1, 0))) {
++		udev_fin_library_context();
+ 		return_NULL;
++	}
+ 
+ 	_cmdline.arg_props = &_arg_props[0];
+ 
+ 	if (stored_errno()) {
+ 		destroy_toolcontext(cmd);
++		udev_fin_library_context();
+ 		return_NULL;
+ 	}
+ 
 
 
