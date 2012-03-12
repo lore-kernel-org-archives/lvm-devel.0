@@ -1,7 +1,7 @@
-From: mbroz@sourceware.org <mbroz@sourceware.org>
-Date: 10 Mar 2012 10:39:28 -0000
-Subject: LVM2/daemons/clvmd clvm.h
-Message-ID: <20120310103928.27875.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 12 Mar 2012 08:59:55 -0000
+Subject: LVM2/udev 69-dm-lvm-metad.rules
+Message-ID: <20120312085955.12874.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,48 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mbroz at sourceware.org	2012-03-10 10:39:28
+Changes by:	prajnoha at sourceware.org	2012-03-12 08:59:55
 
 Modified files:
-	daemons/clvmd  : clvm.h 
+	udev           : 69-dm-lvm-metad.rules 
 
 Log message:
-	Remove some whitespaces.
-	(Test commit.)
+	Detect the lvm binary path in lvmetad udev rules.
+	
+	We can't use 'DM_SBIN_PATH'. This one is set only for DM devices but not
+	for all block devices - the pvscan is run on all relevant block devices!
+	
+	This LVM_SBIN_PATH (as well as DM_SBIN_PATH) detection should be removed
+	eventually but for upstream solution, we still have to do that as there are
+	known cases where the binaries are put either in /sbin or /usr/sbin
+	(some installation systems, initrd systems etc.).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvm.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/udev/69-dm-lvm-metad.rules.diff?cvsroot=lvm2&r1=1.3&r2=1.4
 
---- LVM2/daemons/clvmd/clvm.h	2012/01/21 05:31:54	1.11
-+++ LVM2/daemons/clvmd/clvm.h	2012/03/10 10:39:28	1.12
-@@ -30,14 +30,14 @@
- 	uint16_t xid;	        /* Transaction ID */
- 	uint32_t clientid;	/* Only used in Daemon->Daemon comms */
- 	int32_t  status;	/* For replies, whether request succeeded */
--	uint32_t arglen;	/* Length of argument below. 
--				   If >1500 then it will be passed 
-+	uint32_t arglen;	/* Length of argument below.
-+				   If >1500 then it will be passed
- 				   around the cluster in the system LV */
- 	char node[1];		/* Actually a NUL-terminated string, node name.
--				   If this is empty then the command is 
--				   forwarded to all cluster nodes unless 
-+				   If this is empty then the command is
-+				   forwarded to all cluster nodes unless
- 				   FLAG_LOCAL or FLAG_REMOTE is also set. */
--	char args[1];		/* Arguments for the command follow the 
-+	char args[1];		/* Arguments for the command follow the
- 				   node name, This member is only
- 				   valid if the node name is empty */
- } __attribute__ ((packed));
-@@ -54,7 +54,7 @@
- /* Internal commands & replies */
- #define CLVMD_CMD_REPLY    1
- #define CLVMD_CMD_VERSION  2	/* Send version around cluster when we start */
--#define CLVMD_CMD_GOAWAY   3	/* Die if received this - we are running 
-+#define CLVMD_CMD_GOAWAY   3	/* Die if received this - we are running
- 				   an incompatible version */
- #define CLVMD_CMD_TEST     4	/* Just for mucking about */
+--- LVM2/udev/69-dm-lvm-metad.rules	2012/03/06 02:30:50	1.3
++++ LVM2/udev/69-dm-lvm-metad.rules	2012/03/12 08:59:55	1.4
+@@ -19,7 +19,12 @@
+ # Device-mapper devices are processed only on change event or on supported synthesized event.
+ KERNEL=="dm-[0-9]*", ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
  
++# Set proper sbin path, /sbin has higher priority than /usr/sbin.
++ENV{LVM_SBIN_PATH}="/sbin"
++TEST!="$env{LVM_SBIN_PATH}/lvm", ENV{LVM_SBIN_PATH}="/usr/sbin"
++TEST!="$env{LVM_SBIN_PATH}/lvm", GOTO="lvm_end"
++
+ # Only process devices already marked as a PV - this requires blkid to be called before.
+-ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{DM_SBIN_PATH}/pvscan --cache --major $major --minor $minor"
++ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{LVM_SBIN_PATH}/lvm pvscan --cache --major $major --minor $minor"
+ 
+ LABEL="lvm_end"
 
 
