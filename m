@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 14 Mar 2012 17:14:34 -0000
-Subject: LVM2/test Makefile.in
-Message-ID: <20120314171434.10306.qmail@sourceware.org>
+Date: 14 Mar 2012 17:15:22 -0000
+Subject: LVM2/lib/cache lvmetad.c
+Message-ID: <20120314171522.12113.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,58 +10,34 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-14 17:14:34
+Changes by:	zkabelac at sourceware.org	2012-03-14 17:15:22
 
 Modified files:
-	test           : Makefile.in 
+	lib/cache      : lvmetad.c 
 
 Log message:
-	Use proper "" for absolute paths
+	Just move declaration
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/Makefile.in.diff?cvsroot=lvm2&r1=1.67&r2=1.68
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmetad.c.diff?cvsroot=lvm2&r1=1.18&r2=1.19
 
---- LVM2/test/Makefile.in	2012/02/15 14:24:31	1.67
-+++ LVM2/test/Makefile.in	2012/03/14 17:14:33	1.68
-@@ -1,4 +1,4 @@
--# Copyright (C) 2007-2011 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2007-2012 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -19,10 +19,10 @@
- srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
--abs_srcdir = @abs_srcdir@
--abs_builddir = @abs_builddir@
--abs_top_builddir = @abs_top_builddir@
--abs_top_srcdir = @abs_top_srcdir@
-+abs_srcdir = "@abs_srcdir@"
-+abs_builddir = "@abs_builddir@"
-+abs_top_builddir = "@abs_top_builddir@"
-+abs_top_srcdir = "@abs_top_srcdir@"
+--- LVM2/lib/cache/lvmetad.c	2012/03/03 18:32:54	1.18
++++ LVM2/lib/cache/lvmetad.c	2012/03/14 17:15:22	1.19
+@@ -609,13 +609,14 @@
  
- SUBDIRS = api unit
- SOURCES = lib/not.c lib/harness.c
-@@ -98,12 +98,12 @@
- .lib-dir-stamp:
- 	$(MKDIR_P) lib
- 	for i in $(CMDS); do ln -fs lvm-wrapper lib/$$i; done
--	ln -fs "$(abs_top_builddir)/tools/dmsetup" lib/dmsetup
--	ln -fs "$(abs_top_builddir)/daemons/clvmd/clvmd" lib/clvmd
--	ln -fs "$(abs_top_builddir)/daemons/dmeventd/dmeventd" lib/dmeventd
--	ln -fs "$(abs_top_builddir)/daemons/lvmetad/lvmetad" lib/lvmetad
--	ln -fs "$(abs_top_srcdir)/scripts/vgimportclone.sh" lib/vgimportclone
--	ln -fs "$(abs_top_srcdir)/scripts/fsadm.sh" lib/fsadm
-+	ln -fs $(abs_top_builddir)/tools/dmsetup lib/dmsetup
-+	ln -fs $(abs_top_builddir)/daemons/clvmd/clvmd lib/clvmd
-+	ln -fs $(abs_top_builddir)/daemons/dmeventd/dmeventd lib/dmeventd
-+	ln -fs $(abs_top_builddir)/daemons/lvmetad/lvmetad lib/lvmetad
-+	ln -fs $(abs_top_srcdir)/scripts/vgimportclone.sh lib/vgimportclone
-+	ln -fs $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
- 	touch $@
+ int lvmetad_pv_gone(dev_t device, const char *pv_name)
+ {
++	daemon_reply reply;
+ 	int result;
+ 	int found;
  
- clean:
+ 	if (!_using_lvmetad)
+ 		return 1;
+ 
+-	daemon_reply reply = daemon_send_simple(_lvmetad, "pv_gone", "device = %d", device, NULL);
++	reply = daemon_send_simple(_lvmetad, "pv_gone", "device = %d", device, NULL);
+ 
+ 	result = _lvmetad_handle_reply(reply, "drop PV", pv_name, &found);
+ 	/* We don't care whether or not the daemon had the PV cached. */
 
 
