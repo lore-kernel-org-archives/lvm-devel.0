@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 5 Mar 2012 12:49:07 -0000
-Subject: LVM2/test/shell name-mangling.sh
-Message-ID: <20120305124907.28221.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 16 Mar 2012 12:56:30 -0000
+Subject: LVM2/test/lib aux.sh
+Message-ID: <20120316125630.22462.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,251 +10,44 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-03-05 12:49:06
+Changes by:	zkabelac at sourceware.org	2012-03-16 12:56:29
 
-Added files:
-	test/shell     : name-mangling.sh 
+Modified files:
+	test/lib       : aux.sh 
 
 Log message:
-	Add test for name mangling functionality.
+	Allow to use also special prefixed names for test
+	
+	Currently we could not test special prefixes in our test suite.
+	As teardown will not find such device and basicaly busyloops here,
+	as at cannot remove such names.
+	
+	This patch adds possibity to use:
+	
+	vgcreate  V_$vg1 $dev
+	
+	Note: you still need to use $PREFIX somewhere in the name.
+	(And of course, it's really bad idea to use $PREFIX (=LVMTEST)
+	for normally used LVs)
+	
+	The only purpose of this patch is to allow testing cluster with
+	special vg names that begins with V_ , P_....
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/name-mangling.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/lib/aux.sh.diff?cvsroot=lvm2&r1=1.41&r2=1.42
 
-/cvs/lvm2/LVM2/test/shell/name-mangling.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/shell/name-mangling.sh
-+++ -	2012-03-05 12:49:07.028923000 +0000
-@@ -0,0 +1,230 @@
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+name_prefix=$RANDOM
-+
-+CHARACTER_WHITELIST="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#+-.:=@_"
-+FAIL_MIXED_STR="contains mixed mangled and unmangled characters"
-+FAIL_MULTI_STR="seems to be multiple mangled"
-+FAIL_BLACK_STR="should be mangled but it contains blacklisted characters"
-+CORRECT_FORM_STR="name already in correct form"
-+RENAMING_STR="renaming to"
-+
-+function create_dm_dev()
-+{
-+	local mode=$1
-+	local name=$2;
-+
-+	if [ $mode = "none" ]; then
-+		# there's no mangling done - we must use --verifyudev here in
-+		# case we're testing with udev so we have the nodes in place,
-+		# udev would not create them - it can't handle unmangled names
-+		verify_udev="--verifyudev"
-+	else
-+		verify_udev=""
-+	fi
-+
-+	dmsetup create "${name_prefix}$name" $verify_udev --manglename $mode --table "0 1 zero"
-+}
-+
-+function remove_dm_dev()
-+{
-+	local mode=$1
-+	local name=$2
-+
-+	if [ $mode = "none" ]; then
-+		verify_udev="--verifyudev"
-+	else
-+		verify_udev=""
-+	fi
-+
-+	dmsetup remove $verify_udev --manglename $mode "${name_prefix}$name"
-+}
-+
-+function check_create_and_remove()
-+{
-+	local mode=$1
-+	local input_name=$2
-+	local dm_name=$3
-+	local r=0
-+
-+	if [ $mode = "none" ]; then
-+		verify_udev="--verifyudev"
-+	else
-+		verify_udev=""
-+	fi
-+
-+	dmsetup create "${name_prefix}$input_name" $verify_udev --manglename $mode --table "0 1 zero" 2>err && \
-+	test -b "$DM_DEV_DIR/mapper/${name_prefix}$dm_name" && \
-+	dmsetup remove "${name_prefix}$input_name" $verify_udev --manglename $mode || r=1
-+
-+	if [ $dm_name = "FAIL_MIXED" ]; then
-+		r=0
-+		grep "$FAILED_MIXED_STR" err || r=1
-+	elif [ $dm_name = "FAIL_MULTI" ]; then
-+		r=0
-+		grep "$FAILED_MULTI_STR" err || r=1
-+	elif [ $dm_name = "FAIL_BLACK" ]; then
-+		r=0
-+		grep "$FAILED_BLACK_STR" err || r=1
-+	fi
-+
-+	return $r
-+}
-+
-+function check_dm_field()
-+{
-+	local mode=$1
-+	local dm_name="$2"
-+	local field=$3
-+	local expected="$4"
-+
-+	value=$(dmsetup info --rows --noheadings --manglename $mode -c -o $field "${DM_DEV_DIR}/mapper/${name_prefix}$dm_name" 2> err || true)
-+
-+	if [ "$expected" = "FAIL_MIXED" ]; then
-+		grep "$FAIL_MIXED_STR" err
-+	elif [ "$expected" = "FAIL_MULTI" ]; then
-+		grep "$FAIL_MULTI_STR" err
-+	elif [ "$expected" = "FAIL_BLACK" ]; then
-+		grep "$FAIL_BLACK_STR" err
-+	else
-+		test "$value" = "${name_prefix}$expected"
-+	fi
-+}
-+
-+function check_expected_names()
-+{
-+	local mode=$1
-+	local dm_name="$2"
-+	local r=0
-+
-+	create_dm_dev none "$dm_name"
-+
-+	test -b "$DM_DEV_DIR/mapper/${name_prefix}$dm_name" && \
-+	check_dm_field none "$dm_name" name "$dm_name" && \
-+	check_dm_field $mode "$dm_name" name "$3" && \
-+	check_dm_field $mode "$dm_name" mangled_name "$4" && \
-+	check_dm_field $mode "$dm_name" unmangled_name "$5" || r=1
-+
-+	remove_dm_dev none "$dm_name"
-+
-+	return $r
-+}
-+
-+function check_mangle_cmd()
-+{
-+	local mode=$1
-+	local dm_name="$2"
-+	local expected="$3"
-+	local rename_expected=0
-+	local r=0
-+
-+	create_dm_dev none "$dm_name"
-+
-+	dmsetup mangle --manglename $mode "${name_prefix}$dm_name" 1>out 2>err || true;
-+
-+	if [ "$expected" = "OK" ]; then
-+		grep "$CORRECT_FORM_STR" out || r=1
-+	elif [ "$expected" = "FAIL_MIXED" ]; then
-+		grep "$FAIL_MIXED_STR" err || r=1
-+	elif [ "$expected" = "FAIL_MULTI" ]; then
-+		grep "$FAIL_MULTI_STR" err || r=1
-+	else
-+		rename_expected=1
-+		grep -F "$RENAMING_STR ${name_prefix}$expected" out || r=1
-+	fi
-+
-+	if [ $r = 0 -a $rename_expected = 1 ]; then
-+		# successfuly renamed to expected name
-+		remove_dm_dev none "$expected"
-+	elif [ $r = 1 ]; then
-+		# failed to rename to expected or renamed when it should not - find the new name
-+		new_name=$(sed -e "s/.*: $RENAMING_STR //g" out)
-+		# try to remove any of the form - falling back to less probable error scenario
-+		dmsetup remove --verifyudev --manglename none "$new_name" || \
-+		remove_dm_dev none "$dm_name" || remove_dm_dev none "$expected"
-+	else
-+		# successfuly done nothing
-+		remove_dm_dev none "$dm_name"
-+	fi
-+
-+	return $r
-+}
-+
-+# check dmsetup can process path where the last component is not equal dm name (rhbz #797322)
-+r=0
-+create_dm_dev auto "abc"
-+ln -s ${DM_DEV_DIR}/mapper/${name_prefix}abc ${DM_DEV_DIR}/${name_prefix}xyz
-+dmsetup status ${DM_DEV_DIR}/${name_prefix}xyz || r=1
-+remove_dm_dev auto "abc"
-+if [ r = 1 ]; then
-+	exit 1
-+fi
-+
-+### ALL WHITELISTED CHARACTERS ###
-+# none of these should be mangled in any mode
-+name="$CHARACTER_WHITELIST"
-+for mode in auto hex none; do
-+	check_expected_names $mode "$name" "$name" "$name" "$name"
-+	check_mangle_cmd $mode "$name" "OK"
-+done
-+
-+
-+#### NONE MANGLING MODE ###
-+check_create_and_remove none 'a b' 'a b'
-+check_create_and_remove none 'a\x20b' 'a\x20b'
-+check_create_and_remove none 'a b\x20c' 'a b\x20c'
-+check_create_and_remove none 'a\x5cx20b' 'a\x5cx20b'
-+
-+check_expected_names none 'a b' 'a b' 'a\x20b' 'a b'
-+check_expected_names none 'a\x20b' 'a\x20b' 'a\x20b' 'a b'
-+check_expected_names none 'a b\x20c' 'a b\x20c' 'FAIL_MIXED' 'a b c'
-+check_expected_names none 'a\x5cx20b' 'a\x5cx20b' 'a\x5cx20b' 'a\x20b'
-+
-+check_mangle_cmd none 'a b' 'OK'
-+check_mangle_cmd none 'a\x20b' 'a b'
-+check_mangle_cmd none 'a b\x20c' 'a b c'
-+check_mangle_cmd none 'a\x5cx20b' 'a\x20b'
-+
-+
-+### AUTO MANGLING MODE ###
-+check_create_and_remove auto 'a b' 'a\x20b'
-+check_create_and_remove auto 'a\x20b' 'a\x20b'
-+check_create_and_remove auto 'a b\x20c' 'FAIL_MIXED'
-+check_create_and_remove auto 'a\x5cx20b' 'FAIL_MULTI'
-+
-+check_expected_names auto 'a b' 'FAIL_BLACK' 'FAIL_BLACK' 'FAIL_BLACK'
-+check_expected_names auto 'a\x20b' 'a b' 'a\x20b' 'a b'
-+check_expected_names auto 'a b\x20c' 'FAIL_BLACK' 'FAIL_BLACK' 'FAIL_BLACK'
-+check_expected_names auto 'a\x5cx20b' 'FAIL_MULTI' 'FAIL_MULTI' 'FAIL_MULTI'
-+
-+check_mangle_cmd auto 'a b' 'a\x20b'
-+check_mangle_cmd auto 'a\x20b' 'OK'
-+check_mangle_cmd auto 'a b\x20c' 'FAIL_MIXED'
-+check_mangle_cmd auto 'a\x5cx20b' 'FAIL_MULTI'
-+
-+
-+### HEX MANGLING MODE ###
-+check_create_and_remove hex 'a b' 'a\x20b'
-+check_create_and_remove hex 'a\x20b' 'a\x5cx20b'
-+check_create_and_remove hex 'a b\x20c' 'a\x20b\x5cx20c'
-+check_create_and_remove hex 'a\x5cx20b' 'a\x5cx5cx20b'
-+
-+check_expected_names hex 'a b' 'FAIL_BLACK' 'FAIL_BLACK' 'FAIL_BLACK'
-+check_expected_names hex 'a\x20b' 'a b' 'a\x20b' 'a b'
-+check_expected_names hex 'a b\x20c' 'FAIL_BLACK' 'FAIL_BLACK' 'FAIL_BLACK'
-+check_expected_names hex 'a\x5cx20b' 'a\x20b' 'a\x5cx20b' 'a\x20b'
-+
-+check_mangle_cmd hex 'a b' 'a\x20b'
-+check_mangle_cmd hex 'a\x20b' 'OK'
-+check_mangle_cmd hex 'a b\x20c' 'FAIL_MIXED'
-+check_mangle_cmd hex 'a\x5cx20b' 'OK'
+--- LVM2/test/lib/aux.sh	2012/03/06 02:54:31	1.41
++++ LVM2/test/lib/aux.sh	2012/03/16 12:56:29	1.42
+@@ -92,8 +92,8 @@
+ 		rm -rf $TESTDIR/dev/$PREFIX*
+ 
+ 		init_udev_transaction
+-		while dmsetup table | grep -q ^$PREFIX; do
+-			for s in `dmsetup info -c -o name --noheading | grep ^$PREFIX`; do
++		while dmsetup table | grep -q $PREFIX; do
++			for s in `dmsetup info -c -o name --noheading | grep $PREFIX`; do
+ 				umount -fl $DM_DEV_DIR/mapper/$s >& /dev/null || true
+ 				dmsetup remove -f $s >& /dev/null || true
+ 			done
 
 
