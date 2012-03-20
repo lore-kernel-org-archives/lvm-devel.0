@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 5 Mar 2012 15:05:26 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c li ...
-Message-ID: <20120305150526.24433.qmail@sourceware.org>
+Date: 20 Mar 2012 10:49:00 -0000
+Subject: LVM2/test/shell dmeventd-restart.sh pvcreate-o ...
+Message-ID: <20120320104900.6692.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,107 +10,196 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-03-05 15:05:25
+Changes by:	zkabelac at sourceware.org	2012-03-20 10:48:59
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : dev_manager.c 
-	lib/metadata   : lv_manip.c pv_manip.c 
-	tools          : lvresize.c 
+	test/shell     : dmeventd-restart.sh pvcreate-operation-md.sh 
 
 Log message:
-	Some more missing supposedly 64bit operations.
+	Update test for dmevent restart
 	
-	Avoid use 32bit math for extent_size.
+	Actually restart was failing for different reason - so pass in proper
+	location of dmeventd for restart from lvm command and avoid using
+	the one from /sbin location.
+	
+	Update pv create test with "" around path.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2344&r2=1.2345
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.274&r2=1.275
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.371&r2=1.372
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/pv_manip.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.150&r2=1.151
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/dmeventd-restart.sh.diff?cvsroot=lvm2&r1=1.3&r2=1.4
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/pvcreate-operation-md.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
 
---- LVM2/WHATS_NEW	2012/03/05 14:19:13	1.2344
-+++ LVM2/WHATS_NEW	2012/03/05 15:05:24	1.2345
-@@ -2,7 +2,7 @@
- ================================
-   Try to fit thin pool metadata size into 128MB.
-   Print just warning on thin pool check callback path for failing check.
--  Use 64bit math for verification of thin pool and snapshot chunk size.
-+  Always use 64bit math with VG extent_size expression.
-   Validate udev structures in _insert_udev_dir().
-   Scan all devices for lvmetad if 'pvscan --cache' used without device list.
-   Populate lvmcache from lvmetad before displaying PVs in pvscan. (2.02.94)
---- LVM2/lib/activate/dev_manager.c	2012/03/05 14:15:50	1.274
-+++ LVM2/lib/activate/dev_manager.c	2012/03/05 15:05:25	1.275
-@@ -1412,7 +1412,7 @@
- 	struct dm_tree_node *node;
- 	struct lv_segment *seg_i;
- 	int segno = -1, i = 0;
--	uint64_t size = seg->len * seg->lv->vg->extent_size;
-+	uint64_t size = (uint64_t) seg->len * seg->lv->vg->extent_size;
+--- LVM2/test/shell/dmeventd-restart.sh	2012/03/16 19:11:29	1.3
++++ LVM2/test/shell/dmeventd-restart.sh	2012/03/20 10:48:59	1.4
+@@ -11,15 +11,8 @@
  
- 	dm_list_iterate_items(seg_i, &seg->lv->segments) {
- 		if (seg == seg_i)
---- LVM2/lib/metadata/lv_manip.c	2012/03/05 14:12:57	1.371
-+++ LVM2/lib/metadata/lv_manip.c	2012/03/05 15:05:25	1.372
-@@ -3768,7 +3768,7 @@
- 	/* add the new segment to the layer LV */
- 	dm_list_add(&lv_where->segments, &mapseg->list);
- 	lv_where->le_count = layer_lv->le_count;
--	lv_where->size = lv_where->le_count * lv_where->vg->extent_size;
-+	lv_where->size = (uint64_t) lv_where->le_count * lv_where->vg->extent_size;
+ . lib/test
  
- 	return layer_lv;
+-which mkfs.ext2 || skip
+-
+ aux prepare_dmeventd
+ 
+-# Currently dmeventd doesn't support any other location
+-# for dmeventd restart, so FIXME in dmeventd
+-# and update this check
+-test -x /sbin/dmeventd || skip
+-
+ aux prepare_vg 5
+ 
+ lvcreate -m 3 --ig -L 1 -n 4way $vg
+@@ -28,9 +21,8 @@
+ lvchange --monitor y $vg/3way
+ 
+ dmeventd -R -f &
+-echo "$!" > LOCAL_DMEVENTD
+-
+-sleep 1 # wait a bit, so we talk to the new dmeventd later
++echo $! >LOCAL_DMEVENTD
++sleep 2 # wait a bit, so we talk to the new dmeventd later
+ 
+ lvchange --monitor y --verbose $vg/3way 2>&1 | tee lvchange.out
+ grep 'already monitored' lvchange.out
+@@ -40,9 +32,15 @@
+ # now try what happens if no dmeventd is running
+ kill -9 $(cat LOCAL_DMEVENTD)
+ dmeventd -R -f &
+-sleep 3
++sleep 1
++# now dmeventd should not be running
++pgrep dmeventd
++rm LOCAL_DMEVENTD
++
++# set dmeventd path
++aux lvmconf "dmeventd/executable=\"$abs_top_builddir/test/lib/dmeventd\""
+ lvchange --monitor y --verbose $vg/3way 2>&1 | tee lvchange.out
+-not grep 'already monitored' lvchange.out
+ pgrep dmeventd >LOCAL_DMEVENTD
++not grep 'already monitored' lvchange.out
+ 
+ vgremove -ff $vg
+--- LVM2/test/shell/pvcreate-operation-md.sh	2012/03/16 13:00:06	1.2
++++ LVM2/test/shell/pvcreate-operation-md.sh	2012/03/20 10:48:59	1.3
+@@ -37,12 +37,12 @@
+     # sleeps offer hack to defeat: 'md: md127 still in use'
+     # see: https://bugzilla.redhat.com/show_bug.cgi?id=509908#c25
+     aux udev_wait
+-    mdadm --stop $mddev || true
++    mdadm --stop "$mddev" || true
+     aux udev_wait
+     if [ -b "$mddev" ]; then
+         # mdadm doesn't always cleanup the device node
+ 	sleep 2
+-	rm -f $mddev
++	rm -f "$mddev"
+     fi
  }
-@@ -3810,7 +3810,7 @@
- 	/* add the new segment to the layer LV */
- 	dm_list_add(&layer_lv->segments, &mapseg->list);
- 	layer_lv->le_count += seg->area_len;
--	layer_lv->size += seg->area_len * layer_lv->vg->extent_size;
-+	layer_lv->size += (uint64_t) seg->area_len * layer_lv->vg->extent_size;
  
- 	/* map the original area to the new segment */
- 	if (!set_lv_segment_area_lv(seg, s, layer_lv, mapseg->le, 0))
---- LVM2/lib/metadata/pv_manip.c	2012/03/01 21:49:32	1.32
-+++ LVM2/lib/metadata/pv_manip.c	2012/03/05 15:05:25	1.33
-@@ -210,7 +210,7 @@
- 	    dev_discard_max_bytes(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev) &&
- 	    dev_discard_granularity(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev)) {
- 		discard_offset_sectors = (peg->pe + peg->lvseg->area_len - area_reduction) *
--			peg->pv->vg->extent_size + pe_start;
-+			(uint64_t) peg->pv->vg->extent_size + pe_start;
- 		if (!discard_offset_sectors) {
- 			/*
- 			 * pe_start=0 and the PV's first extent contains the label.
-@@ -223,7 +223,7 @@
- 			  discard_area_reduction, discard_offset_sectors, dev_name(peg->pv->dev));
- 		if (discard_area_reduction &&
- 		    !dev_discard_blocks(peg->pv->dev, discard_offset_sectors << SECTOR_SHIFT,
--					discard_area_reduction * peg->pv->vg->extent_size * SECTOR_SIZE))
-+					discard_area_reduction * (uint64_t) peg->pv->vg->extent_size * SECTOR_SIZE))
- 			return_0;
- 	}
+@@ -53,7 +53,7 @@
  
---- LVM2/tools/lvresize.c	2012/02/28 14:24:58	1.150
-+++ LVM2/tools/lvresize.c	2012/03/05 15:05:25	1.151
-@@ -63,7 +63,7 @@
+ # create 2 disk MD raid0 array (stripe_width=128K)
+ test -b "$mddev" && skip
+-mdadm --create --metadata=1.0 $mddev --auto=md --level 0 --raid-devices=2 --chunk 64 "$dev1" "$dev2"
++mdadm --create --metadata=1.0 "$mddev" --auto=md --level 0 --raid-devices=2 --chunk 64 "$dev1" "$dev2"
+ trap 'cleanup_md_and_teardown' EXIT # cleanup this MD device at the end of the test
+ test -b "$mddev" || skip
  
- 	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
- 		log_warn("Varied stripesize not supported. Ignoring.");
--	else if (arg_uint_value(cmd, stripesize_ARG, 0) > vg->extent_size * 2) {
-+	else if (arg_uint_value(cmd, stripesize_ARG, 0) > (uint64_t) vg->extent_size * 2) {
- 		log_error("Reducing stripe size %s to maximum, "
- 			  "physical extent size %s",
- 			  display_size(cmd,
-@@ -463,7 +463,7 @@
- 				    (lp->size % vg->extent_size);
+@@ -62,15 +62,15 @@
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {md_chunk_alignment=0 data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    $mddev
+-check pv_field $mddev pe_start $pv_align
++    "$mddev"
++check pv_field "$mddev" pe_start $pv_align
  
- 			log_print("Rounding up size to full physical extent %s",
--				  display_size(cmd, (uint64_t) lp->size));
-+				  display_size(cmd, lp->size));
- 		}
+ # Test md_chunk_alignment independent of topology-aware detection
+ pv_align="1.00m"
+ pvcreate --metadatasize 128k \
+     --config 'devices {data_alignment_detection=0 data_alignment_offset_detection=0}' \
+-    $mddev
+-check pv_field $mddev pe_start $pv_align
++    "$mddev"
++check pv_field "$mddev" pe_start $pv_align
  
- 		lp->extents = lp->size / vg->extent_size;
+ 
+ # Test newer topology-aware alignment detection
+@@ -79,34 +79,34 @@
+     pv_align="1.00m"
+     # optimal_io_size=131072, minimum_io_size=65536
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' $mddev
+-    check pv_field $mddev pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$mddev"
++    check pv_field "$mddev" pe_start $pv_align
+ fi
+ 
+ # partition MD array directly, depends on blkext in Linux >= 2.6.28
+ if kernel_at_least 2 6 28 ; then
+     # create one partition
+-    sfdisk $mddev <<EOF
++    sfdisk "$mddev" <<EOF
+ ,,83
+ EOF
+     # make sure partition on MD is _not_ removed
+     # - tests partition -> parent lookup via sysfs paths
+-    not pvcreate --metadatasize 128k $mddev
++    not pvcreate --metadatasize 128k "$mddev"
+ 
+     # verify alignment_offset is accounted for in pe_start
+     # - topology infrastructure is available in Linux >= 2.6.31
+     # - also tests partition -> parent lookup via sysfs paths
+ 
+     # Oh joy: need to lookup /sys/block/md127 rather than /sys/block/md_lvm_test0
+-    mddev_maj_min=$(ls -lL $mddev | awk '{ print $5 $6 }' | perl -pi -e 's|,|:|')
++    mddev_maj_min=$(ls -lL "$mddev" | awk '{ print $5 $6 }' | perl -pi -e 's|,|:|')
+     mddev_p_sysfs_name=$(echo /sys/dev/block/${mddev_maj_min}/*p1)
+     base_mddev_p=`basename $mddev_p_sysfs_name`
+     mddev_p=/dev/${base_mddev_p}
+ 
+     # in case the system is running without devtmpfs /dev
+     # wait here for created device node on tmpfs
+-    aux udev_wait $mddev_p
+-    test -b $mddev_p || skip
++    aux udev_wait "$mddev_p"
++    test -b "$mddev_p" || skip
+ 
+     # Checking for 'alignment_offset' in sysfs implies Linux >= 2.6.31
+     # but reliable alignment_offset support requires kernel.org Linux >= 2.6.33
+@@ -118,9 +118,9 @@
+     if [ $alignment_offset -gt 0 ]; then
+         # default alignment is 1M, add alignment_offset
+ 	pv_align=$((1048576+$alignment_offset))B
+-	pvcreate --metadatasize 128k $mddev_p
+-	check pv_field $mddev_p pe_start $pv_align --units b
+-	pvremove $mddev_p
++	pvcreate --metadatasize 128k "$mddev_p"
++	check pv_field "$mddev_p" pe_start $pv_align --units b
++	pvremove "$mddev_p"
+     fi
+ fi
+ 
+@@ -132,18 +132,18 @@
+ 
+     # create 2 disk MD raid0 array (stripe_width=2M)
+     test -b "$mddev" && skip
+-    mdadm --create --metadata=1.0 $mddev --auto=md --level 0 --raid-devices=2 --chunk 1024 "$dev1" "$dev2"
++    mdadm --create --metadata=1.0 "$mddev" --auto=md --level 0 --raid-devices=2 --chunk 1024 "$dev1" "$dev2"
+     test -b "$mddev" || skip
+ 
+     # optimal_io_size=2097152, minimum_io_size=1048576
+     pv_align="2.00m"
+     pvcreate --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' $mddev
+-    check pv_field $mddev pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$mddev"
++    check pv_field "$mddev" pe_start $pv_align
+ 
+     # now verify pe_start alignment override using --dataalignment
+     pv_align="192.00k"
+     pvcreate --dataalignment 64k --metadatasize 128k \
+-	--config 'devices { md_chunk_alignment=0 }' $mddev
+-    check pv_field $mddev pe_start $pv_align
++	--config 'devices { md_chunk_alignment=0 }' "$mddev"
++    check pv_field "$mddev" pe_start $pv_align
+ fi
 
 
