@@ -1,39 +1,60 @@
-From: Killian De Volder <killian.de.volder@megasoft.be>
-Date: Thu, 22 Mar 2012 08:17:37 +0100
-Subject: liblvm Python/C extension (Python Liblvm)
-Message-ID: <4F6AD211.3040807@megasoft.be>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 22 Mar 2012 16:01:34 +0100
+Subject: [PATCH] Allow vgname/lvname name specification in lvconvert --splitmirrors
+Message-ID: <4F6B3ECE.50804@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-@Lars,
-I'm rather interested in this, have there been any updates ?
+Before:
+devel/~ # lvconvert --splitmirrors 1 -n vg/splitted_one vg/mirrored_one
+  Internal error: LV name vg/splitted_one has invalid form.
+  Intermediate VG metadata write failed.
 
-@The community,
-Are there any plans for allowing python binding in the lvm-sources, or should this be a separate package ?
-I also detect no way in lvm2app to create for example a snapshot. So I'm going to assume there is also need for work here.
-Or is C binding of LVM generally a bad idea, and should we instead parse the lvm-tool output and communicate with LVM trough those means ?
+After:
+devel/~ # lvconvert --splitmirrors 1 -n vg/splitted_one vg/mirrored_one
+  Logical volume mirrored_one converted.
 
-Feedback is welcome of course.
+devel/~ # lvconvert --splitmirrors 1 -n blabla/splitted_one vg/mirrored_one
+  Please use a single volume group name ("vg" or "blabla")
+  Run `lvconvert --help' for more information.
 
-Kind regards,
-Killian De Volder
+...should make rhbz #796602 happy (lvcreate/lvrename already accepts
+vgname/lvname for a new volume name).
 
->  Hello,
->
->  I was missing a proper LVM2 interface to Python so I decided to write
->  one my self! I have wrapped all the liblvm C APIs (excluding the new
->  APIs committed in Dec). Doc strings are still missing, as well as proper
->  setup.py build env, so consider it as work in progress.
->
->  This might also be interesting to other projects like Anaconda for
->  example.
->
->  I would love to get your feedback on it!
->
->  Best regards,
->  Lars
+Peter
+---
+ tools/lvconvert.c |   16 +++++++++++++---
+ 1 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 654e115..2071f08 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -173,9 +173,19 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
+ 		}
+ 
+ 		lp->lv_split_name = arg_value(cmd, name_ARG);
+-		if (lp->lv_split_name &&
+-		    !apply_lvname_restrictions(lp->lv_split_name))
+-			return_0;
++		if (lp->lv_split_name) {
++			if (strchr(lp->lv_split_name, '/')) {
++				if (!(lp->vg_name = extract_vgname(cmd, lp->lv_split_name)))
++					return_0;
++
++				/* Strip VG from lv_split_name */
++				if ((tmp_str = strrchr(lp->lv_split_name, '/')))
++					lp->lv_split_name = tmp_str + 1;
++			}
++
++			if (!apply_lvname_restrictions(lp->lv_split_name))
++				return_0;
++		}
+ 
+ 		lp->keep_mimages = 1;
+ 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
 
 
