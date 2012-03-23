@@ -1,60 +1,52 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Thu, 22 Mar 2012 16:01:34 +0100
-Subject: [PATCH] Allow vgname/lvname name specification in lvconvert --splitmirrors
-Message-ID: <4F6B3ECE.50804@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 23 Mar 2012 09:39:04 -0000
+Subject: LVM2 Makefile.in WHATS_NEW
+Message-ID: <20120323093904.4137.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Before:
-devel/~ # lvconvert --splitmirrors 1 -n vg/splitted_one vg/mirrored_one
-  Internal error: LV name vg/splitted_one has invalid form.
-  Intermediate VG metadata write failed.
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-03-23 09:39:03
 
-After:
-devel/~ # lvconvert --splitmirrors 1 -n vg/splitted_one vg/mirrored_one
-  Logical volume mirrored_one converted.
+Modified files:
+	.              : Makefile.in WHATS_NEW 
 
-devel/~ # lvconvert --splitmirrors 1 -n blabla/splitted_one vg/mirrored_one
-  Please use a single volume group name ("vg" or "blabla")
-  Run `lvconvert --help' for more information.
+Log message:
+	Update lcov target
 
-...should make rhbz #796602 happy (lvcreate/lvrename already accepts
-vgname/lvname for a new volume name).
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/Makefile.in.diff?cvsroot=lvm2&r1=1.71&r2=1.72
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2361&r2=1.2362
 
-Peter
----
- tools/lvconvert.c |   16 +++++++++++++---
- 1 files changed, 13 insertions(+), 3 deletions(-)
-
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 654e115..2071f08 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -173,9 +173,19 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 		}
+--- LVM2/Makefile.in	2012/03/12 15:05:55	1.71
++++ LVM2/Makefile.in	2012/03/23 09:39:03	1.72
+@@ -123,11 +123,10 @@
  
- 		lp->lv_split_name = arg_value(cmd, name_ARG);
--		if (lp->lv_split_name &&
--		    !apply_lvname_restrictions(lp->lv_split_name))
--			return_0;
-+		if (lp->lv_split_name) {
-+			if (strchr(lp->lv_split_name, '/')) {
-+				if (!(lp->vg_name = extract_vgname(cmd, lp->lv_split_name)))
-+					return_0;
-+
-+				/* Strip VG from lv_split_name */
-+				if ((tmp_str = strrchr(lp->lv_split_name, '/')))
-+					lp->lv_split_name = tmp_str + 1;
-+			}
-+
-+			if (!apply_lvname_restrictions(lp->lv_split_name))
-+				return_0;
-+		}
+ # maybe use subdirs processing to create tracefiles...
+ $(LCOV_TRACES):
+-	$(LCOV) -b $(basename $@) \
+-		-d $(basename $@) -c -o - | $(SED) \
++	$(LCOV) -b $(basename $@) -d $(basename $@) \
++		--ignore-errors source -c -o - | $(SED) \
+ 		-e "s/\(dmeventd_lvm.[ch]\)/plugins\/lvm2\/\1/" \
+-		-e "s/\(dmeventd_mirror.c\)/plugins\/mirror\/\1/" \
+-		-e "s/\(dmeventd_snapshot.c\)/plugins\/snapshot\/\1/" \
++		-e "s/dmeventd_\(mirror\|snapshot\|thin\|raid\)\.c/plugins\/\1\/dmeventd_\1\.c/" \
+ 		>$@
  
- 		lp->keep_mimages = 1;
- 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
+ ifneq ("$(GENHTML)", "")
+--- LVM2/WHATS_NEW	2012/03/20 17:42:19	1.2361
++++ LVM2/WHATS_NEW	2012/03/23 09:39:03	1.2362
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Update lcov Makefile target to support all dmeventd plugins.
+   Fix initializiation of thin monitoring (2.02.92).
+   Support improperly formated device numbers in /proc/devices (2.02.91).
+   Fix fsadm propagation of -e option.
 
 
