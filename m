@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 10 Apr 2012 23:34:42 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/plugins/lvm2 ...
-Message-ID: <20120410233442.27068.qmail@sourceware.org>
+Date: 11 Apr 2012 01:23:30 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/raid_manip.c
+Message-ID: <20120411012330.22012.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,49 +10,63 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2012-04-10 23:34:41
+Changes by:	jbrassow at sourceware.org	2012-04-11 01:23:29
 
 Modified files:
 	.              : WHATS_NEW 
-	daemons/dmeventd/plugins/lvm2: dmeventd_lvm.c 
+	lib/metadata   : raid_manip.c 
 
 Log message:
-	Commit ID 46a75dedb4f6aa815a804f27cafbd3fd16a62011 consolidated code from the
-	various dmeventd plug-ins into a new function called 'dmeventd_lvm2_command',
-	but the new function did not strip off the "_mlog" extentions that the
-	mirror plug-in had been doing.  This created bug 794904 - failure to replace
-	devices in a redundant log.
-	
-	The test suite did catch this scenario because it performs repair tests (mainly)
-	through the CLI and not dmeventd.  It's also not easy to test because the test
-	itself will hang if the bug is encountered.
+	RAID LVs could not handle a down-convert if a device other than the last one
+	in the array was specified for removal.  This change addresses that (bz806111).
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2375&r2=1.2376
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2376&r2=1.2377
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.25&r2=1.26
 
---- LVM2/WHATS_NEW	2012/03/30 14:59:35	1.2375
-+++ LVM2/WHATS_NEW	2012/04/10 23:34:41	1.2376
+--- LVM2/WHATS_NEW	2012/04/10 23:34:41	1.2376
++++ LVM2/WHATS_NEW	2012/04/11 01:23:29	1.2377
 @@ -1,5 +1,6 @@
  Version 2.02.96 - 
  ================================
-+  Fix ability to handle failures in mirrored log (regression intro 2.02.89).
++  Fix problems when specifying PVs during RAID down-converts.
+   Fix ability to handle failures in mirrored log (regression intro 2.02.89).
    Fix unlocking volume group in vgreduce in error path.
    Exit immediately if LISTEN_PID env var incorrect during systemd handover.
-   Detect VG name being part of the LV name in lvconvert --splitmirrors -n.
---- LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2012/02/01 20:11:58	1.8
-+++ LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2012/04/10 23:34:41	1.9
-@@ -160,6 +160,11 @@
- 		return 0;
+--- LVM2/lib/metadata/raid_manip.c	2012/03/15 20:00:54	1.25
++++ LVM2/lib/metadata/raid_manip.c	2012/04/11 01:23:29	1.26
+@@ -975,6 +975,8 @@
+ static int _raid_remove_images(struct logical_volume *lv,
+ 			       uint32_t new_count, struct dm_list *pvs)
+ {
++	uint32_t s;
++	struct lv_segment *seg;
+ 	struct dm_list removal_list;
+ 	struct lv_list *lvl;
+ 
+@@ -1024,9 +1026,21 @@
  	}
  
-+	/* strip off the mirror component designations */
-+	layer = strstr(lv, "_mlog");
-+	if (layer)
-+		*layer = '\0';
-+
- 	r = dm_snprintf(buffer, size, "%s %s/%s", cmd, vg, lv);
- 
- 	dm_pool_free(mem, vg);
+ 	/*
+-	 * Resume original LV
+-	 * This also resumes all other sub-LVs
++	 * Resume the remaining LVs
++	 * We must start by resuming the sub-LVs first (which would
++	 * otherwise be handled automatically) because the shifting
++	 * of positions could otherwise cause name collisions.  For
++	 * example, if position 0 of a 3-way array is removed, position
++	 * 1 and 2 must be shifted and renamed 0 and 1.  If position 2
++	 * tries to rename first, it will collide with the existing
++	 * position 1.
+ 	 */
++	seg = first_seg(lv);
++	for (s = 0; (new_count > 1) && (s < seg->area_count); s++) {
++		if (!resume_lv(lv->vg->cmd, seg_lv(seg, s)) ||
++		    !resume_lv(lv->vg->cmd, seg_metalv(seg, s)))
++			return_0;
++	}
+ 	if (!resume_lv(lv->vg->cmd, lv)) {
+ 		log_error("Failed to resume %s/%s after committing changes",
+ 			  lv->vg->name, lv->name);
 
 
