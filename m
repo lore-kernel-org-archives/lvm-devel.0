@@ -1,7 +1,7 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 Apr 2012 12:53:46 -0000
-Subject: LVM2/test/shell lvresize-rounding.sh
-Message-ID: <20120411125346.11194.qmail@sourceware.org>
+From: jbrassow@sourceware.org <jbrassow@sourceware.org>
+Date: 11 Apr 2012 14:20:21 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/raid_manip.c
+Message-ID: <20120411142021.21095.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,117 +10,128 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-04-11 12:53:46
+Changes by:	jbrassow at sourceware.org	2012-04-11 14:20:20
 
 Modified files:
-	test/shell     : lvresize-rounding.sh 
+	.              : WHATS_NEW 
+	lib/metadata   : raid_manip.c 
 
 Log message:
-	Update test
+	Fix inability to split RAID1 image while specifying a particular PV.
+	
+	The logic for resuming the original and newly split LVs was not properly
+	done to handle situations where anything but the last device in the array
+	was split.  It did not take into account the possible name collisions that
+	might occur when the original LV undergoes the shifting and renaming of its
+	sub-LVs.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvresize-rounding.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2382&r2=1.2383
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/raid_manip.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
 
---- LVM2/test/shell/lvresize-rounding.sh	2012/03/16 13:00:06	1.2
-+++ LVM2/test/shell/lvresize-rounding.sh	2012/04/11 12:53:46	1.3
-@@ -1,5 +1,5 @@
- #!/bin/sh
--# Copyright (C) 2007-2008 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2007-2012 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -11,16 +11,80 @@
+--- LVM2/WHATS_NEW	2012/04/11 12:42:10	1.2382
++++ LVM2/WHATS_NEW	2012/04/11 14:20:19	1.2383
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Fix inability to split RAID1 image while specifying a particular PV.
+   Update man pages to give them same look&feel.
+   Fix lvresize of thin pool for stipped devices.
+   For lvresize round upward when specifying number of extents.
+--- LVM2/lib/metadata/raid_manip.c	2012/04/11 01:23:29	1.26
++++ LVM2/lib/metadata/raid_manip.c	2012/04/11 14:20:20	1.27
+@@ -64,6 +64,24 @@
+ 	return seg->area_count;
+ }
  
- . lib/test
++/*
++ * Resume sub-LVs first, then top-level LV
++ */
++static int _bottom_up_resume(struct logical_volume *lv)
++{
++	uint32_t s;
++	struct lv_segment *seg = first_seg(lv);
++
++	if (seg_is_raid(seg) && (seg->area_count > 1)) {
++		for (s = 0; s < seg->area_count; s++)
++			if (!resume_lv(lv->vg->cmd, seg_lv(seg, s)) ||
++			    !resume_lv(lv->vg->cmd, seg_metalv(seg, s)))
++				return_0;
++	}
++
++	return resume_lv(lv->vg->cmd, lv);
++}
++
+ static int _activate_sublv_preserving_excl(struct logical_volume *top_lv,
+ 					   struct logical_volume *sub_lv)
+ {
+@@ -975,8 +993,6 @@
+ static int _raid_remove_images(struct logical_volume *lv,
+ 			       uint32_t new_count, struct dm_list *pvs)
+ {
+-	uint32_t s;
+-	struct lv_segment *seg;
+ 	struct dm_list removal_list;
+ 	struct lv_list *lvl;
  
--aux prepare_vg 2
-+aux prepare_pvs 3 22
+@@ -1035,13 +1051,7 @@
+ 	 * tries to rename first, it will collide with the existing
+ 	 * position 1.
+ 	 */
+-	seg = first_seg(lv);
+-	for (s = 0; (new_count > 1) && (s < seg->area_count); s++) {
+-		if (!resume_lv(lv->vg->cmd, seg_lv(seg, s)) ||
+-		    !resume_lv(lv->vg->cmd, seg_metalv(seg, s)))
+-			return_0;
+-	}
+-	if (!resume_lv(lv->vg->cmd, lv)) {
++	if (!_bottom_up_resume(lv)) {
+ 		log_error("Failed to resume %s/%s after committing changes",
+ 			  lv->vg->name, lv->name);
+ 		return 0;
+@@ -1193,22 +1203,33 @@
+ 	}
  
--lvcreate -l 10 -n lv -i2 $vg
-+vgcreate -s 32K $vg "$dev1" "$dev2" "$dev3"
+ 	/*
+-	 * Resume original LV
+-	 * This also resumes all other sub-lvs (including the extracted)
++	 * First resume the newly split LV and LVs on the removal list.
++	 * This is necessary so that there are no name collisions due to
++	 * the original RAID LV having possibly had sub-LVs that have been
++	 * shifted and renamed.
++	 */
++	if (!resume_lv(cmd, lvl->lv))
++		return_0;
++	dm_list_iterate_items(lvl, &removal_list)
++		if (!resume_lv(cmd, lvl->lv))
++			return_0;
++
++	/*
++	 * Resume the remaining LVs
++	 * We must start by resuming the sub-LVs first (which would
++	 * otherwise be handled automatically) because the shifting
++	 * of positions could otherwise cause name collisions.  For
++	 * example, if position 0 of a 3-way array is split, position
++	 * 1 and 2 must be shifted and renamed 0 and 1.  If position 2
++	 * tries to rename first, it will collide with the existing
++	 * position 1.
+ 	 */
+-	if (!resume_lv(cmd, lv)) {
++	if (!_bottom_up_resume(lv)) {
+ 		log_error("Failed to resume %s/%s after committing changes",
+ 			  lv->vg->name, lv->name);
+ 		return 0;
+ 	}
  
--lvextend -l +1 $vg/lv 2>&1 | tee log
--grep 'down to stripe' log
--lvresize -l +1 $vg/lv 2>&1 | tee log
--grep 'down to stripe' log
+-	/* Recycle newly split LV so it is properly renamed */
+-	if (!suspend_lv(cmd, lvl->lv) || !resume_lv(cmd, lvl->lv)) {
+-		log_error("Failed to rename %s to %s after committing changes",
+-			  old_name, split_name);
+-		return 0;
+-	}
 -
--lvreduce -f -l -1 $vg/lv 2>&1 | tee log
--grep 'up to stripe' log
--lvresize -f -l -1 $vg/lv 2>&1 | tee log
--grep 'up to stripe' log
-+lvcreate -l4 -i3 -I64 $vg
-+
-+lvcreate -l8 -i2 -I64 $vg
-+
-+lvcreate -l16 $vg
-+
-+lvcreate -l32 -i3 -I64 -n $lv1 $vg
-+
-+lvresize -l+64 -i3 -I64 $vg/$lv1
-+
-+lvresize -l+64 -i3 -I128 $vg/$lv1
-+
-+#lvcreate -l100%FREE -i3 -I64 --alloc anywhere $vg
-+
-+dmsetup table
-+
-+vgcfgbackup -f /tmp/vg $vg
-+vgremove -f $vg
-+
-+# 15 extents
-+aux prepare_vg 3 22
-+
-+# Block some extents
-+lvcreate -l4 -i3 $vg
-+lvcreate -l1 $vg
-+
-+lvcreate -l100%FREE -n $lv1 -i3 $vg
-+check vg_field $vg vg_free_count 2
-+lvremove -f $vg/$lv1
-+
-+lvcreate -l1 -n $lv1 -i3 $vg
-+lvextend -l+100%FREE -i3 $vg/$lv1
-+check vg_field $vg vg_free_count 2
-+
-+lvreduce -f -l50%LV $vg/$lv1
-+vgremove -f $vg
-+
-+
-+vgcreate -s 4M $vg "$dev1" "$dev2" "$dev3"
-+
-+# Expect to play with 15 extents
-+check vg_field $vg vg_free_count 15
-+
-+# Should be rounded to 12 extents
-+lvcreate -l10 -n lv -i3 $vg
-+check vg_field $vg vg_free_count 3
-+
-+# Should want 16 extents
-+not lvextend -l+4 $vg/lv
-+
-+# Round up to whole free space
-+lvextend -l+100%FREE $vg/lv
-+check vg_field $vg vg_free_count 0
-+
-+# Rounds up and should reduce just by 3 extents
-+lvreduce -f -l-4 $vg/lv
-+check vg_field $vg vg_free_count 3
-+
-+# Should round up to 15 extents
-+lvextend -f -l+1 $vg/lv
-+check vg_field $vg vg_free_count 0
-+
-+lvreduce -f -l-4 $vg/lv
-+check vg_field $vg vg_free_count 3
-+
-+lvextend -l90%VG $vg/lv
-+check vg_field $vg vg_free_count 0
-+
-+lvreduce -f -l-10%LV $vg/lv
-+check vg_field $vg vg_free_count 0
-+
-+lvreduce -f -l-20%LV $vg/lv
-+check vg_field $vg vg_free_count 3
+ 	/*
+ 	 * Eliminate the residual LVs
+ 	 */
 
 
