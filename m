@@ -1,67 +1,71 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 11 Apr 2012 13:44:49 +0200
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/plugins/lvm2 ...
-In-Reply-To: <20120410233442.27068.qmail@sourceware.org>
-References: <20120410233442.27068.qmail@sourceware.org>
-Message-ID: <4F856EB1.6030703@redhat.com>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 11 Apr 2012 12:30:50 -0000
+Subject: LVM2/tools lvresize.c
+Message-ID: <20120411123050.6401.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 11.4.2012 01:34, jbrassow at sourceware.org napsal(a):
-> CVSROOT:	/cvs/lvm2
-> Module name:	LVM2
-> Changes by:	jbrassow at sourceware.org	2012-04-10 23:34:41
->
-> Modified files:
-> 	.              : WHATS_NEW
-> 	daemons/dmeventd/plugins/lvm2: dmeventd_lvm.c
->
-> Log message:
-> 	Commit ID 46a75dedb4f6aa815a804f27cafbd3fd16a62011 consolidated code from the
-> 	various dmeventd plug-ins into a new function called 'dmeventd_lvm2_command',
-> 	but the new function did not strip off the "_mlog" extentions that the
-> 	mirror plug-in had been doing.  This created bug 794904 - failure to replace
-> 	devices in a redundant log.
-> 	
-> 	The test suite did catch this scenario because it performs repair tests (mainly)
-> 	through the CLI and not dmeventd.  It's also not easy to test because the test
-> 	itself will hang if the bug is encountered.
->
-> Patches:
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2375&r2=1.2376
-> http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c.diff?cvsroot=lvm2&r1=1.8&r2=1.9
->
-> --- LVM2/WHATS_NEW	2012/03/30 14:59:35	1.2375
-> +++ LVM2/WHATS_NEW	2012/04/10 23:34:41	1.2376
-> @@ -1,5 +1,6 @@
->   Version 2.02.96 -
->   ================================
-> +  Fix ability to handle failures in mirrored log (regression intro 2.02.89).
->     Fix unlocking volume group in vgreduce in error path.
->     Exit immediately if LISTEN_PID env var incorrect during systemd handover.
->     Detect VG name being part of the LV name in lvconvert --splitmirrors -n.
-> --- LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2012/02/01 20:11:58	1.8
-> +++ LVM2/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c	2012/04/10 23:34:41	1.9
-> @@ -160,6 +160,11 @@
->   		return 0;
->   	}
->
-> +	/* strip off the mirror component designations */
-> +	layer = strstr(lv, "_mlog");
-> +	if (layer)
-> +		*layer = '\0';
-> +
->   	r = dm_snprintf(buffer, size, "%s %s/%s", cmd, vg, lv);
->
->   	dm_pool_free(mem, vg);
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	zkabelac at sourceware.org	2012-04-11 12:30:49
 
-I think this fix is in wrong layer - you should probably do this inside liblvm 
-which knows what should be monitored instead of this 'wild' stripping inside 
-unrelated code in dmeventd lvm2 lib.
+Modified files:
+	tools          : lvresize.c 
 
-Zdenek
+Log message:
+	Move check for min strip size
+	
+	and remove few asigns that are not needed.
+
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.151&r2=1.152
+
+--- LVM2/tools/lvresize.c	2012/03/05 15:05:25	1.151
++++ LVM2/tools/lvresize.c	2012/04/11 12:30:48	1.152
+@@ -367,12 +367,12 @@
+ {
+ 	struct logical_volume *lv;
+ 	struct lvinfo info;
+-	uint32_t stripesize_extents = 0;
+-	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size = 0;
++	uint32_t stripesize_extents;
++	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size;
+ 	uint32_t seg_mirrors = 0;
+-	uint32_t extents_used = 0;
++	uint32_t extents_used;
+ 	uint32_t size_rest;
+-	uint32_t pv_extent_count = 0;
++	uint32_t pv_extent_count;
+ 	alloc_policy_t alloc;
+ 	struct logical_volume *lock_lv;
+ 	struct lv_list *lvl;
+@@ -665,6 +665,12 @@
+ 	}
+ 
+ 	if (lp->stripes > 1) {
++		if (lp->stripe_size < STRIPE_SIZE_MIN) {
++			log_error("Invalid stripe size %s",
++				  display_size(cmd, (uint64_t) lp->stripe_size));
++			return EINVALID_CMD_LINE;
++		}
++
+ 		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
+ 			stripesize_extents = 1;
+ 
+@@ -684,11 +690,6 @@
+ 			lp->extents = lp->extents - size_rest;
+ 		}
+ 
+-		if (lp->stripe_size < STRIPE_SIZE_MIN) {
+-			log_error("Invalid stripe size %s",
+-				  display_size(cmd, (uint64_t) lp->stripe_size));
+-			return EINVALID_CMD_LINE;
+-		}
+ 	}
+ 
+ 	if (lp->extents < lv->le_count) {
 
 
