@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 15 Apr 2012 15:40:49 -0000
-Subject: LVM2/man Makefile.in lvmetad.8.in
-Message-ID: <20120415154049.20645.qmail@sourceware.org>
+From: prajnoha@sourceware.org <prajnoha@sourceware.org>
+Date: 18 Apr 2012 15:26:03 -0000
+Subject: LVM2 ./WHATS_NEW scripts/lvmdump.sh
+Message-ID: <20120418152603.13666.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,99 +10,85 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-04-15 15:40:49
+Changes by:	prajnoha at sourceware.org	2012-04-18 15:26:02
 
 Modified files:
-	man            : Makefile.in 
-Added files:
-	man            : lvmetad.8.in 
+	.              : WHATS_NEW 
+	scripts        : lvmdump.sh 
 
 Log message:
-	Add a rudimentary lvmetad manpage.
+	Add udev info and context to lvmdump.
+	--------------------------------------------------------------------
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvmetad.8.in.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.43&r2=1.44
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2384&r2=1.2385
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/lvmdump.sh.diff?cvsroot=lvm2&r1=1.18&r2=1.19
 
-/cvs/lvm2/LVM2/man/lvmetad.8.in,v  -->  standard output
-revision 1.1
---- LVM2/man/lvmetad.8.in
-+++ -	2012-04-15 15:40:49.456002000 +0000
-@@ -0,0 +1,42 @@
-+.TH LVMETAD 8 "LVM TOOLS #VERSION#" "Red Hat Inc" \" -*- nroff -*-
-+.SH NAME
-+lvmetad \- LVM metadata cache daemon
-+.SH SYNOPSIS
-+.B lvmetad
-+.RB [ \-d ]
-+.RB [ \-s ]
-+.RB [ \-f ]
-+.RB [ \-h ]
-+.RB [ \-V ]
-+.RB [ \-? ]
-+.SH DESCRIPTION
-+lvmetad is a metadata caching daemon for LVM. The daemon receives notifications
-+from udev rules (which must be installed for LVM to work correctly when lvmetad
-+is in use). Through these notifications, lvmetad has an up-to-date and
-+consistent image of the volume groups available in the system.
-+
-+By default, lvmetad, even if running, is not used by LVM. See \fBlvm.conf\fP(5).
-+.SH OPTIONS
-+.TP
-+.B \-d
-+Repeat from 1 to 3 times (-d, -dd, -ddd) to increase the detail of
-+debug messages sent to syslog.
-+Each extra d adds more debugging information.
-+.TP
-+.B \-f
-+Don't fork, run in the foreground.
-+.TP
-+.BR \-h ", " \-?
-+Show help information.
-+.TP
-+.B \-s
-+Path to the socket file to use. The option overrides both the built-in default
-+(#DEFAULT_RUN_DIR#/lvmetad.socket) and the environment variable
-+LVM_LVMETAD_SOCKET.
-+.TP
-+.B \-V
-+Show version of dmeventd.
-+
-+.SH SEE ALSO
-+.BR lvm (8),
-+.BR lvm.conf (5)
---- LVM2/man/Makefile.in	2011/09/24 20:50:36	1.43
-+++ LVM2/man/Makefile.in	2012/04/15 15:40:48	1.44
-@@ -28,6 +28,12 @@
- DMEVENTDMAN =
- endif
+--- LVM2/WHATS_NEW	2012/04/12 03:16:37	1.2384
++++ LVM2/WHATS_NEW	2012/04/18 15:26:02	1.2385
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Add udev info and context to lvmdump.
+   Fix RAID device replacement code so that it works under snapshot.
+   Fix inability to split RAID1 image while specifying a particular PV.
+   Update man pages to give them same look&feel.
+--- LVM2/scripts/lvmdump.sh	2011/06/02 09:08:16	1.18
++++ LVM2/scripts/lvmdump.sh	2012/04/18 15:26:02	1.19
+@@ -30,6 +30,7 @@
+ CUT=cut
+ DATE=date
+ BASENAME=basename
++UDEVADM=udevadm
+ UNAME=uname
  
-+ifeq ("@BUILD_LVMETAD@", "yes")
-+LVMETAD = lvmetad.8
-+else
-+LVMETAD =
-+endif
+ # user may override lvm and dmsetup location by setting LVM_BINARY
+@@ -54,6 +55,7 @@
+ 	echo "    -m gather LVM metadata from the PVs"
+ 	echo "    -d <directory> dump into a directory instead of tarball"
+ 	echo "    -c if running clvmd, gather cluster data as well"
++	echo "    -u gather udev info and context"
+ 	echo ""
+ 
+ 	exit 1
+@@ -62,7 +64,8 @@
+ advanced=0
+ clustered=0
+ metadata=0
+-while getopts :acd:hm opt; do
++udev=0
++while getopts :acd:hmu opt; do
+ 	case $opt in 
+ 		s)      sysreport=1 ;;
+ 		a)	advanced=1 ;;
+@@ -70,6 +73,7 @@
+ 		d)	userdir=$OPTARG ;;
+ 		h)	usage ;;
+ 		m)	metadata=1 ;;
++		u)	udev=1 ;;
+ 		:)	echo "$0: $OPTARG requires a value:"; usage ;;
+ 		\?)     echo "$0: unknown option $OPTARG"; usage ;;
+ 		*)	usage ;;
+@@ -221,6 +225,20 @@
+ 	done
+ fi
+ 
++if (( $udev )); then
++	myecho "Gathering udev info..."
 +
- MAN5=lvm.conf.5
- MAN8=lvchange.8 lvconvert.8 lvcreate.8 lvdisplay.8 lvextend.8 lvm.8 \
- 	lvmchange.8 lvmconf.8 lvmdiskscan.8 lvmdump.8 lvmsadc.8 lvmsar.8 \
-@@ -36,7 +42,7 @@
- 	pvresize.8 pvs.8 pvscan.8 vgcfgbackup.8 vgcfgrestore.8 vgchange.8 \
- 	vgck.8 vgcreate.8 vgconvert.8 vgdisplay.8 vgexport.8 vgextend.8 \
- 	vgimport.8 vgimportclone.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 \
--	vgrename.8 vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN)
-+	vgrename.8 vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN) $(LVMETAD)
- 
- ifneq ("@CLVMD@", "none")
-   MAN8CLUSTER=clvmd.8
-@@ -73,7 +79,7 @@
- %: %.in
- 	@case "$@" in \
- 	  */*) ;; \
--	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;" $< > $@ ;; \
-+	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+ at CLVMD_PATH@+;s+#LVM_PATH#+ at LVM_PATH@+;s+#DEFAULT_RUN_DIR#+ at DEFAULT_RUN_DIR@+;" $< > $@ ;; \
- 	esac
- 
- install_man5: $(MAN5)
++	udev_dir="$dir/udev"
++
++	log "$MKDIR -p \"$udev_dir\""
++	log "$UDEVADM info --version >> \"$udev_dir/version\" 2>> \"$log\""
++	log "$UDEVADM info --export-db >> \"$udev_dir/db\" 2>> \"$log\""
++	log "$CP -a /etc/udev/udev.conf \"$udev_dir/conf\" 2>> \"$log\""
++	log "$LS -la /lib/udev >> \"$udev_dir/lib_dir\" 2>> \"$log\""
++	log "$CP -aR /etc/udev/rules.d \"$udev_dir/rules_etc\" 2>> \"$log\""
++	log "$CP -aR /lib/udev/rules.d \"$udev_dir/rules_lib\" 2>> \"$log\""
++fi
++
+ if test -z "$userdir"; then
+ 	lvm_dump="$dirbase.tgz"
+ 	myecho "Creating report tarball in $HOME/$lvm_dump..."
 
 
