@@ -1,7 +1,7 @@
 From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 1 May 2012 19:21:26 -0000
+Date: 5 May 2012 02:08:48 -0000
 Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c test/ ...
-Message-ID: <20120501192126.8834.qmail@sourceware.org>
+Message-ID: <20120505020848.8450.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,114 +10,112 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2012-05-01 19:21:25
+Changes by:	jbrassow at sourceware.org	2012-05-05 02:08:47
 
 Modified files:
 	.              : WHATS_NEW 
 	lib/metadata   : lv_manip.c 
-	test/shell     : lvconvert-repair-snapshot.sh 
-	                 snapshots-of-mirrors.sh 
-	                 vgreduce-removemissing-snapshot.sh 
+	test/shell     : lvconvert-mirror.sh 
 
 Log message:
-	Disallow snapshots of mirror segment types.
+	Fix up-convert when mirror activation is controled by volume_list and tags.
 	
-	Snapshots of RAID logical volumes are allowed (including "raid1").  However,
-	snapshots of "mirror" logical volumes has been disallowed due to unsolvable
-	issues inherent to the design.  The fact that mirroring (dm-raid1.c) must
-	stop all I/O as the result of a failure and wait for userspace intervention
-	can lead to a circular dependency if userspace is simultaneously waiting for
-	snapshots (on mirrors) to make an I/O update before proceeding.
+	When mirrors are up-converted, a transient mirror layer is put in so that
+	only the new devices are sync'ed.  That transient layer must carry the tags
+	of the original mirror LV, otherwise it will fail to activate when activation
+	is regulated by lvm.conf:activation/volume_list.  The conversion would then
+	fail.
 	
-	Various snapshot on mirror tests have been removed as a result.
+	The fix is to do exactly the same thing that is being done for linear ->
+	mirror converting (lib/metadata/mirror.c:_init_mirror_log()).  We copy the
+	tags temporarily for the new LV and remove them after the activation.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2395&r2=1.2396
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.372&r2=1.373
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvconvert-repair-snapshot.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/snapshots-of-mirrors.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/vgreduce-removemissing-snapshot.sh.diff?cvsroot=lvm2&r1=1.2&r2=1.3
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2396&r2=1.2397
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.373&r2=1.374
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
 
---- LVM2/WHATS_NEW	2012/04/26 17:30:49	1.2395
-+++ LVM2/WHATS_NEW	2012/05/01 19:21:24	1.2396
+--- LVM2/WHATS_NEW	2012/05/01 19:21:24	1.2396
++++ LVM2/WHATS_NEW	2012/05/05 02:08:46	1.2397
 @@ -1,5 +1,6 @@
  Version 2.02.96 - 
  ================================
-+  Disallow snapshots of mirror segment type.
++  Fix up-convert when mirror activation is controled by volume_list and tags.
+   Disallow snapshots of mirror segment type.
    Fix bug in cmirror that caused incorrect status info to print on some nodes.
    Remove statement that snapshots cannot be tagged from lvm man page.
-   Disallow changing cluster attribute of VG while RAID LVs are active.
---- LVM2/lib/metadata/lv_manip.c	2012/03/05 15:05:25	1.372
-+++ LVM2/lib/metadata/lv_manip.c	2012/05/01 19:21:24	1.373
-@@ -4208,12 +4208,10 @@
- 				return NULL;
- 			}
+--- LVM2/lib/metadata/lv_manip.c	2012/05/01 19:21:24	1.373
++++ LVM2/lib/metadata/lv_manip.c	2012/05/05 02:08:47	1.374
+@@ -3682,9 +3682,10 @@
+ 					   const char *layer_suffix)
+ {
+ 	int r;
+-	struct logical_volume *layer_lv;
+ 	char *name;
+ 	size_t len;
++	struct str_list *sl;
++	struct logical_volume *layer_lv;
+ 	struct segment_type *segtype;
+ 	struct lv_segment *mapseg;
+ 	unsigned exclusive = 0;
+@@ -3722,6 +3723,14 @@
+ 			return NULL;
+ 		}
  
--			if ((org->status & MIRROR_IMAGE) ||
--			    (org->status & MIRROR_LOG)) {
--				log_error("Snapshots of mirror %ss "
--					  "are not supported",
--					  (org->status & MIRROR_LOG) ?
--					  "log" : "image");
-+			if (lv_is_mirror_type(org) &&
-+			    !seg_is_raid(first_seg(org))) {
-+				log_error("Snapshots of \"mirror\" segment types"
-+					  " are not supported");
- 				return NULL;
- 			}
- 
---- LVM2/test/shell/lvconvert-repair-snapshot.sh	2012/03/16 13:00:06	1.2
-+++ LVM2/test/shell/lvconvert-repair-snapshot.sh	2012/05/01 19:21:25	1.3
-@@ -11,6 +11,13 @@
- 
- . lib/test
- 
-+exit 0
-+#
-+# Snapshots of 'mirrors' are not supported.  They can no longer be created.
-+# This file could be used to test some aspect of lvconvert, snapshot, and
-+# RAID at some point though...
-+#
++		/* Temporary tags for activation of the transient LV */
++		dm_list_iterate_items(sl, &lv_where->tags)
++			if (!str_list_add(cmd->mem, &layer_lv->tags, sl->str)) {
++				log_error("Aborting.  Unable to tag"
++					  " transient mirror layer.");
++				return NULL;
++			}
 +
- aux prepare_vg 5
- aux lvmconf 'allocation/maximise_cling = 0'
- aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
---- LVM2/test/shell/snapshots-of-mirrors.sh	2012/03/16 13:00:06	1.2
-+++ LVM2/test/shell/snapshots-of-mirrors.sh	2012/05/01 19:21:25	1.3
-@@ -13,9 +13,15 @@
- 
- aux prepare_vg 4
- 
--# Create snapshot of a mirror origin
-+# Attempt to create snapshot of a mirror origin - should fail
- lvcreate -m 1 -L 10M -n lv $vg
--lvcreate -s $vg/lv -L 10M -n snap
-+not lvcreate -s $vg/lv -L 10M -n snap
+ 		if (!vg_write(lv_where->vg)) {
+ 			log_error("Failed to write intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
+ 			return NULL;
+@@ -3744,6 +3753,11 @@
+ 				  name, lv_where->vg->name);
+ 			return NULL;
+ 		}
 +
-+exit 0
++		/* Remove the temporary tags */
++		dm_list_iterate_items(sl, &lv_where->tags)
++			str_list_del(&layer_lv->tags, sl->str);
 +
-+#
-+# Snapshots of mirrors are no longer allowed.
-+#
+ 	}
  
- # Down-convert (mirror -> linear) under a snapshot
- lvconvert -m0 $vg/lv
---- LVM2/test/shell/vgreduce-removemissing-snapshot.sh	2012/03/16 13:00:06	1.2
-+++ LVM2/test/shell/vgreduce-removemissing-snapshot.sh	2012/05/01 19:21:25	1.3
-@@ -11,6 +11,14 @@
+ 	log_very_verbose("Inserting layer %s for %s",
+--- LVM2/test/shell/lvconvert-mirror.sh	2012/03/16 13:00:06	1.5
++++ LVM2/test/shell/lvconvert-mirror.sh	2012/05/05 02:08:47	1.6
+@@ -15,16 +15,28 @@
+ 	while test $(get lv_field $1 copy_percent) != "100.00"; do sleep 1; done
+ }
  
- . lib/test
+-# convert from linear to 2-way mirror
+ aux prepare_pvs 5 10
+ # FIXME - test fails with extent size < 512k
+ vgcreate -c n -s 512k $vg $(cat DEVICES)
  
-+exit 0
++# convert from linear to 2-way mirror
+ lvcreate -l2 -n $lv1 $vg "$dev1"
+ lvconvert -i1 -m+1 $vg/$lv1 "$dev2" "$dev3:0-1"
+ check mirror $vg $lv1 "$dev3"
+ lvremove -ff $vg
+ 
++# convert from linear to 2-way mirror - with tags and volume_list (bz683270)
++lvcreate -l2 -n $lv1 $vg --addtag hello
++lvconvert -i1 -m+1 $vg/$lv1 \
++    --config 'activation { volume_list = [ "@hello" ] }'
++lvremove -ff $vg
 +
-+#
-+# Snapshots of 'mirrors' are not supported.  They can no longer be created.
-+# This file could be used to test some aspect of vgreduce, snapshot, and
-+# RAID at some point though...
-+#
++# convert from 2-way to 3-way mirror - with tags and volume_list (bz683270)
++lvcreate -l2 -m1 -n $lv1 $vg --addtag hello
++lvconvert -i1 -m+1 $vg/$lv1 \
++    --config 'activation { volume_list = [ "@hello" ] }'
++lvremove -ff $vg
 +
- aux prepare_vg 5
- 
- lvcreate -m 3 --ig -L 2M -n 4way $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5":0
+ # convert from 2-way mirror to linear
+ lvcreate -l2 -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-1"
+ lvconvert -m-1 $vg/$lv1
 
 
