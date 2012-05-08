@@ -1,7 +1,7 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 5 May 2012 02:08:48 -0000
-Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c test/ ...
-Message-ID: <20120505020848.8450.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 8 May 2012 14:31:48 -0000
+Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-config.c
+Message-ID: <20120508143148.24375.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,112 +10,71 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2012-05-05 02:08:47
+Changes by:	agk at sourceware.org	2012-05-08 14:31:46
 
 Modified files:
-	.              : WHATS_NEW 
-	lib/metadata   : lv_manip.c 
-	test/shell     : lvconvert-mirror.sh 
+	.              : WHATS_NEW_DM 
+	libdm          : libdm-config.c 
 
 Log message:
-	Fix up-convert when mirror activation is controled by volume_list and tags.
-	
-	When mirrors are up-converted, a transient mirror layer is put in so that
-	only the new devices are sync'ed.  That transient layer must carry the tags
-	of the original mirror LV, otherwise it will fail to activate when activation
-	is regulated by lvm.conf:activation/volume_list.  The conversion would then
-	fail.
-	
-	The fix is to do exactly the same thing that is being done for linear ->
-	mirror converting (lib/metadata/mirror.c:_init_mirror_log()).  We copy the
-	tags temporarily for the new LV and remove them after the activation.
+	Log value chosen in _find_config_bool like other variable types do.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2396&r2=1.2397
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.373&r2=1.374
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/lvconvert-mirror.sh.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.600&r2=1.601
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
 
---- LVM2/WHATS_NEW	2012/05/01 19:21:24	1.2396
-+++ LVM2/WHATS_NEW	2012/05/05 02:08:46	1.2397
+--- LVM2/WHATS_NEW_DM	2012/04/24 12:25:12	1.600
++++ LVM2/WHATS_NEW_DM	2012/05/08 14:31:44	1.601
 @@ -1,5 +1,6 @@
- Version 2.02.96 - 
+ Version 1.02.75 - 
  ================================
-+  Fix up-convert when mirror activation is controled by volume_list and tags.
-   Disallow snapshots of mirror segment type.
-   Fix bug in cmirror that caused incorrect status info to print on some nodes.
-   Remove statement that snapshots cannot be tagged from lvm man page.
---- LVM2/lib/metadata/lv_manip.c	2012/05/01 19:21:24	1.373
-+++ LVM2/lib/metadata/lv_manip.c	2012/05/05 02:08:47	1.374
-@@ -3682,9 +3682,10 @@
- 					   const char *layer_suffix)
++  Log value chosen in _find_config_bool like other variable types do.
+   Synchronize with dead of dmeventd.
+   Rename (Blk)DevNames/DevNos dmsetup header to (Blk)DevNamesUsed/DevNosUsed.
+   Add configure --with-veritysetup for independent veritysetup tool.
+--- LVM2/libdm/libdm-config.c	2012/03/01 19:54:53	1.23
++++ LVM2/libdm/libdm-config.c	2012/05/08 14:31:45	1.24
+@@ -842,22 +842,29 @@
  {
- 	int r;
--	struct logical_volume *layer_lv;
- 	char *name;
- 	size_t len;
-+	struct str_list *sl;
-+	struct logical_volume *layer_lv;
- 	struct segment_type *segtype;
- 	struct lv_segment *mapseg;
- 	unsigned exclusive = 0;
-@@ -3722,6 +3723,14 @@
- 			return NULL;
- 		}
+ 	const struct dm_config_node *n = find(start, path);
+ 	const struct dm_config_value *v;
++	int b;
  
-+		/* Temporary tags for activation of the transient LV */
-+		dm_list_iterate_items(sl, &lv_where->tags)
-+			if (!str_list_add(cmd->mem, &layer_lv->tags, sl->str)) {
-+				log_error("Aborting.  Unable to tag"
-+					  " transient mirror layer.");
-+				return NULL;
-+			}
+-	if (!n)
+-		return fail;
++	if (n) {
++		v = n->v;
+ 
+-	v = n->v;
+-
+-	switch (v->type) {
+-	case DM_CFG_INT:
+-		return v->v.i ? 1 : 0;
+-
+-	case DM_CFG_STRING:
+-		return _str_to_bool(v->v.str, fail);
+-	default:
+-		;
++		switch (v->type) {
++		case DM_CFG_INT:
++			b = v->v.i ? 1 : 0;
++			log_very_verbose("Setting %s to %d", path, b);
++			return b;
 +
- 		if (!vg_write(lv_where->vg)) {
- 			log_error("Failed to write intermediate VG %s metadata for mirror conversion.", lv_where->vg->name);
- 			return NULL;
-@@ -3744,6 +3753,11 @@
- 				  name, lv_where->vg->name);
- 			return NULL;
- 		}
-+
-+		/* Remove the temporary tags */
-+		dm_list_iterate_items(sl, &lv_where->tags)
-+			str_list_del(&layer_lv->tags, sl->str);
-+
++		case DM_CFG_STRING:
++			b = _str_to_bool(v->v.str, fail);
++			log_very_verbose("Setting %s to %d", path, b);
++			return b;
++		default:
++			;
++		}
  	}
  
- 	log_very_verbose("Inserting layer %s for %s",
---- LVM2/test/shell/lvconvert-mirror.sh	2012/03/16 13:00:06	1.5
-+++ LVM2/test/shell/lvconvert-mirror.sh	2012/05/05 02:08:47	1.6
-@@ -15,16 +15,28 @@
- 	while test $(get lv_field $1 copy_percent) != "100.00"; do sleep 1; done
++	log_very_verbose("%s not found in config: defaulting to %d",
++			 path, fail);
++
+ 	return fail;
  }
  
--# convert from linear to 2-way mirror
- aux prepare_pvs 5 10
- # FIXME - test fails with extent size < 512k
- vgcreate -c n -s 512k $vg $(cat DEVICES)
- 
-+# convert from linear to 2-way mirror
- lvcreate -l2 -n $lv1 $vg "$dev1"
- lvconvert -i1 -m+1 $vg/$lv1 "$dev2" "$dev3:0-1"
- check mirror $vg $lv1 "$dev3"
- lvremove -ff $vg
- 
-+# convert from linear to 2-way mirror - with tags and volume_list (bz683270)
-+lvcreate -l2 -n $lv1 $vg --addtag hello
-+lvconvert -i1 -m+1 $vg/$lv1 \
-+    --config 'activation { volume_list = [ "@hello" ] }'
-+lvremove -ff $vg
-+
-+# convert from 2-way to 3-way mirror - with tags and volume_list (bz683270)
-+lvcreate -l2 -m1 -n $lv1 $vg --addtag hello
-+lvconvert -i1 -m+1 $vg/$lv1 \
-+    --config 'activation { volume_list = [ "@hello" ] }'
-+lvremove -ff $vg
-+
- # convert from 2-way mirror to linear
- lvcreate -l2 -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-1"
- lvconvert -m-1 $vg/$lv1
 
 
