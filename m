@@ -1,7 +1,7 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 8 May 2012 14:31:48 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdm-config.c
-Message-ID: <20120508143148.24375.qmail@sourceware.org>
+From: zkabelac@sourceware.org <zkabelac@sourceware.org>
+Date: 9 May 2012 12:12:22 -0000
+Subject: LVM2 ./WHATS_NEW lib/metadata/lv_manip.c
+Message-ID: <20120509121222.26252.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,71 +10,47 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-05-08 14:31:46
+Changes by:	zkabelac at sourceware.org	2012-05-09 12:12:22
 
 Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdm-config.c 
+	.              : WHATS_NEW 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	Log value chosen in _find_config_bool like other variable types do.
+	Fix regression in for_each_sub_lv
+	
+	pool_lv is not a sub lv in terms for this function.
+	It has caused problem with renaming thin_volume, where it has tried to
+	rename pool LV as well.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.600&r2=1.601
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-config.c.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2397&r2=1.2398
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.374&r2=1.375
 
---- LVM2/WHATS_NEW_DM	2012/04/24 12:25:12	1.600
-+++ LVM2/WHATS_NEW_DM	2012/05/08 14:31:44	1.601
+--- LVM2/WHATS_NEW	2012/05/05 02:08:46	1.2397
++++ LVM2/WHATS_NEW	2012/05/09 12:12:21	1.2398
 @@ -1,5 +1,6 @@
- Version 1.02.75 - 
+ Version 2.02.96 - 
  ================================
-+  Log value chosen in _find_config_bool like other variable types do.
-   Synchronize with dead of dmeventd.
-   Rename (Blk)DevNames/DevNos dmsetup header to (Blk)DevNamesUsed/DevNosUsed.
-   Add configure --with-veritysetup for independent veritysetup tool.
---- LVM2/libdm/libdm-config.c	2012/03/01 19:54:53	1.23
-+++ LVM2/libdm/libdm-config.c	2012/05/08 14:31:45	1.24
-@@ -842,22 +842,29 @@
- {
- 	const struct dm_config_node *n = find(start, path);
- 	const struct dm_config_value *v;
-+	int b;
++  Fix lvrename for thin volumes (regression in for_each_sub_lv() 2.02.89).
+   Fix up-convert when mirror activation is controled by volume_list and tags.
+   Disallow snapshots of mirror segment type.
+   Fix bug in cmirror that caused incorrect status info to print on some nodes.
+--- LVM2/lib/metadata/lv_manip.c	2012/05/05 02:08:47	1.374
++++ LVM2/lib/metadata/lv_manip.c	2012/05/09 12:12:21	1.375
+@@ -2814,13 +2814,6 @@
+ 				return_0;
+ 		}
  
--	if (!n)
--		return fail;
-+	if (n) {
-+		v = n->v;
- 
--	v = n->v;
+-		if (seg->pool_lv) {
+-			if (!fn(cmd, seg->pool_lv, data))
+-				return_0;
+-			if (!for_each_sub_lv(cmd, seg->pool_lv, fn, data))
+-				return_0;
+-		}
 -
--	switch (v->type) {
--	case DM_CFG_INT:
--		return v->v.i ? 1 : 0;
--
--	case DM_CFG_STRING:
--		return _str_to_bool(v->v.str, fail);
--	default:
--		;
-+		switch (v->type) {
-+		case DM_CFG_INT:
-+			b = v->v.i ? 1 : 0;
-+			log_very_verbose("Setting %s to %d", path, b);
-+			return b;
-+
-+		case DM_CFG_STRING:
-+			b = _str_to_bool(v->v.str, fail);
-+			log_very_verbose("Setting %s to %d", path, b);
-+			return b;
-+		default:
-+			;
-+		}
- 	}
- 
-+	log_very_verbose("%s not found in config: defaulting to %d",
-+			 path, fail);
-+
- 	return fail;
- }
- 
+ 		if (seg->metadata_lv) {
+ 			if (!fn(cmd, seg->metadata_lv, data))
+ 				return_0;
 
 
