@@ -1,7 +1,7 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 10 May 2012 11:03:08 -0000
-Subject: LVM2/lib/metadata metadata-exported.h
-Message-ID: <20120510110308.14954.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 11 May 2012 15:26:31 -0000
+Subject: LVM2/lib/metadata lv_manip.c
+Message-ID: <20120511152631.12429.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,39 +10,73 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2012-05-10 11:03:08
+Changes by:	agk at sourceware.org	2012-05-11 15:26:30
 
 Modified files:
-	lib/metadata   : metadata-exported.h 
+	lib/metadata   : lv_manip.c 
 
 Log message:
-	More comments on metadata area types.
+	Refactor _has_matching_pv_tag to provide a fn that takes PV structs.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata-exported.h.diff?cvsroot=lvm2&r1=1.233&r2=1.234
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.375&r2=1.376
 
---- LVM2/lib/metadata/metadata-exported.h	2012/05/10 10:37:49	1.233
-+++ LVM2/lib/metadata/metadata-exported.h	2012/05/10 11:03:07	1.234
-@@ -205,7 +205,7 @@
-  * area information we are working with.
+--- LVM2/lib/metadata/lv_manip.c	2012/05/09 12:12:21	1.375
++++ LVM2/lib/metadata/lv_manip.c	2012/05/11 15:26:30	1.376
+@@ -1248,13 +1248,13 @@
+  * Does PV area have a tag listed in allocation/cling_tag_list that 
+  * matches a tag of the PV of the existing segment?
   */
+-static int _has_matching_pv_tag(struct pv_match *pvmatch, struct pv_segment *pvseg, struct pv_area *pva)
++static int _pvs_have_matching_tag(const struct dm_config_node *cling_tag_list_cn, struct physical_volume *pv1, struct physical_volume *pv2)
+ {
+ 	const struct dm_config_value *cv;
+ 	const char *str;
+ 	const char *tag_matched;
  
--/* Include any existing PV mdas during format_instance initialisation */
-+/* Include any existing PV ("on-disk") mdas during format_instance initialisation. */
- #define FMT_INSTANCE_MDAS		0x00000002U
+-	for (cv = pvmatch->cling_tag_list_cn->v; cv; cv = cv->next) {
++	for (cv = cling_tag_list_cn->v; cv; cv = cv->next) {
+ 		if (cv->type != DM_CFG_STRING) {
+ 			log_error("Ignoring invalid string in config file entry "
+ 				  "allocation/cling_tag_list");
+@@ -1283,21 +1283,21 @@
  
+ 		/* Wildcard matches any tag against any tag. */
+ 		if (!strcmp(str, "*")) {
+-			if (!str_list_match_list(&pvseg->pv->tags, &pva->map->pv->tags, &tag_matched))
++			if (!str_list_match_list(&pv1->tags, &pv2->tags, &tag_matched))
+ 				continue;
+ 			else {
+ 				log_debug("Matched allocation PV tag %s on existing %s with free space on %s.",
+-					  tag_matched, pv_dev_name(pvseg->pv), pv_dev_name(pva->map->pv));
++					  tag_matched, pv_dev_name(pv1), pv_dev_name(pv2));
+ 				return 1;
+ 			}
+ 		}
+ 
+-		if (!str_list_match_item(&pvseg->pv->tags, str) ||
+-		    !str_list_match_item(&pva->map->pv->tags, str))
++		if (!str_list_match_item(&pv1->tags, str) ||
++		    !str_list_match_item(&pv2->tags, str))
+ 			continue;
+ 		else {
+ 			log_debug("Matched allocation PV tag %s on existing %s with free space on %s.",
+-				  str, pv_dev_name(pvseg->pv), pv_dev_name(pva->map->pv));
++				  str, pv_dev_name(pv1), pv_dev_name(pv2));
+ 			return 1;
+ 		}
+ 	}
+@@ -1305,6 +1305,11 @@
+ 	return 0;
+ }
+ 
++static int _has_matching_pv_tag(struct pv_match *pvmatch, struct pv_segment *pvseg, struct pv_area *pva)
++{
++	return _pvs_have_matching_tag(pvmatch->cling_tag_list_cn, pvseg->pv, pva->map->pv);
++}
++
  /*
-@@ -215,7 +215,10 @@
+  * Is PV area contiguous to PV segment?
   */
- #define FMT_INSTANCE_AUX_MDAS		0x00000004U
- 
--/* Include any other format-specific mdas during format_instance initialisation */
-+/*
-+ * Include any other format-specific mdas during format_instance initialisation.
-+ * For example metadata areas used during backup/restore/archive handling.
-+ */
- #define FMT_INSTANCE_PRIVATE_MDAS	0x00000008U
- 
- struct format_instance {
 
 
