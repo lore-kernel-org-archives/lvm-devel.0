@@ -1,7 +1,7 @@
 From: agk@sourceware.org <agk@sourceware.org>
-Date: 14 May 2012 16:29:52 -0000
-Subject: LVM2/doc example.conf.in
-Message-ID: <20120514162952.21162.qmail@sourceware.org>
+Date: 15 May 2012 14:10:55 -0000
+Subject: LVM2/libdm libdm-deptree.c
+Message-ID: <20120515141055.9422.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,33 +10,40 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-05-14 16:29:51
+Changes by:	agk at sourceware.org	2012-05-15 14:10:54
 
 Modified files:
-	doc            : example.conf.in 
+	libdm          : libdm-deptree.c 
 
 Log message:
-	Refer to details of snapshot of raid problem.
+	indicate when deptree detects but ignores size change in debug msg
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.49&r2=1.50
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.163&r2=1.164
 
---- LVM2/doc/example.conf.in	2012/05/10 00:18:49	1.49
-+++ LVM2/doc/example.conf.in	2012/05/14 16:29:50	1.50
-@@ -430,8 +430,12 @@
-     # "mirror" - The original RAID1 implementation provided by LVM2/DM.  It is
-     # 	         characterized by a flexible log solution (core, disk, mirrored)
-     #		 and by the necessity to block I/O while reconfiguring in the
--    #		 event of a failure.  Snapshots of this type of RAID1 can be
--    #		 problematic.
-+    #		 event of a failure.
-+    #
-+    #		 There is an inherent race in the dmeventd failure handling
-+    #		 logic with snapshots of devices using this type of RAID1 that
-+    #		 in the worst case could cause a deadlock.
-+    #		   Ref: https://bugzilla.redhat.com/show_bug.cgi?id=817130#c10
-     #
-     # "raid1"  - This implementation leverages MD's RAID1 personality through
-     # 	       	 device-mapper.  It is characterized by a lack of log options.
+--- LVM2/libdm/libdm-deptree.c	2012/03/04 17:36:24	1.163
++++ LVM2/libdm/libdm-deptree.c	2012/05/15 14:10:54	1.164
+@@ -2364,9 +2364,6 @@
+ 		existing_table_size = dm_task_get_existing_table_size(dmt);
+ 		if ((dnode->props.size_changed =
+ 		     (existing_table_size == seg_start) ? 0 : 1)) {
+-			log_debug("Table size changed from %" PRIu64 " to %"
+-				  PRIu64 " for %s", existing_table_size,
+-				  seg_start, dnode->name);
+ 			/*
+ 			 * Kernel usually skips size validation on zero-length devices
+ 			 * now so no need to preload them.
+@@ -2374,6 +2371,11 @@
+ 			/* FIXME In which kernel version did this begin? */
+ 			if (!existing_table_size && dnode->props.delay_resume_if_new)
+ 				dnode->props.size_changed = 0;
++
++			log_debug("Table size changed from %" PRIu64 " to %"
++				  PRIu64 " for %s.%s", existing_table_size,
++				  seg_start, dnode->name,
++				  dnode->props.size_changed ? "" : " (Ignoring.)");
+ 		}
+ 	}
+ 
 
 
