@@ -1,7 +1,7 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 16 May 2012 10:44:36 -0000
-Subject: LVM2/test/shell activate-missing-segment.sh
-Message-ID: <20120516104436.28074.qmail@sourceware.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 16 May 2012 12:50:17 -0000
+Subject: LVM2 ./WHATS_NEW lib/activate/dev_manager.c
+Message-ID: <20120516125017.8063.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,51 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2012-05-16 10:44:36
+Changes by:	agk at sourceware.org	2012-05-16 12:50:16
 
-Added files:
-	test/shell     : activate-missing-segment.sh 
+Modified files:
+	.              : WHATS_NEW 
+	lib/activate   : dev_manager.c 
 
 Log message:
-	Add a (currently failing) test for RHBZ 816672.
+	Re-enable partial activation of non-thin LVs until it can be fixed. (2.02.90)
+	- The test should be checking the LV as a whole, not just individual segments.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/shell/activate-missing-segment.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2405&r2=1.2406
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.278&r2=1.279
 
-/cvs/lvm2/LVM2/test/shell/activate-missing-segment.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/shell/activate-missing-segment.sh
-+++ -	2012-05-16 10:44:36.820286000 +0000
-@@ -0,0 +1,30 @@
-+#!/bin/sh
-+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+# Test activation behaviour with devices missing.
-+# - snapshots and their origins are only activated together; if one fails, both
-+#   fail
-+# - partial mirrors are not activated (but maybe they should? maybe we should
-+#   instead lvconvert --repair them?)
-+# - linear LVs with bits missing are not activated
-+
-+. lib/test
-+
-+aux prepare_vg 2
-+aux expect_failure
-+
-+lvcreate -l100%FREE -n span $vg
-+vgchange -a n $vg
-+
-+aux disable_dev "$dev1"
-+not vgchange -a y $vg
-+vgchange -a y --partial $vg
-+check active $vg span
+--- LVM2/WHATS_NEW	2012/05/14 16:18:58	1.2405
++++ LVM2/WHATS_NEW	2012/05/16 12:50:14	1.2406
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Re-enable partial activation of non-thin LVs until it can be fixed. (2.02.90)
+   Fix alloc cling to cling to PVs already found with contiguous policy.
+   Fix cling policy not to behave like normal policy if no previous LV seg.
+   Fix allocation loop not to use later policies when --alloc cling without tags.
+--- LVM2/lib/activate/dev_manager.c	2012/04/24 00:51:26	1.278
++++ LVM2/lib/activate/dev_manager.c	2012/05/16 12:50:15	1.279
+@@ -1581,22 +1581,6 @@
+ 				  seg->lv->vg->name, seg->lv->name);
+ 			return 0;
+ 		}
+-
+-		/*
+-		 * Mirrors activate LVs replaced with error targets and
+-		 * RAID can handle non-accessible sub-LVs.
+-		 *
+-		 * TODO: Can we eventually skip to activate such LVs ?
+-		 */
+-		if (!num_existing_areas &&
+-		    !strstr(seg->lv->name, "_rmeta_") &&
+-		    !strstr(seg->lv->name, "_rimage_") &&
+-		    !strstr(seg->lv->name, "_mimage_") &&
+-		    !((name = strstr(seg->lv->name, "_mlog")) && !name[5])) {
+-			log_error("Cannot activate %s/%s: all segments missing.",
+-				  seg->lv->vg->name, seg->lv->name);
+-			return 0;
+-		}
+ 	}
+ 
+ 	return 1;
 
 
