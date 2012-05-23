@@ -1,7 +1,7 @@
 From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 23 May 2012 12:59:35 -0000
-Subject: LVM2/doc example.conf.in
-Message-ID: <20120523125935.31560.qmail@sourceware.org>
+Date: 23 May 2012 13:02:37 -0000
+Subject: LVM2 ./WHATS_NEW lib/commands/toolcontext.c
+Message-ID: <20120523130237.506.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,64 +10,55 @@ Content-Transfer-Encoding: 7bit
 
 CVSROOT:	/cvs/lvm2
 Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-05-23 12:59:35
+Changes by:	zkabelac at sourceware.org	2012-05-23 13:02:37
 
 Modified files:
-	doc            : example.conf.in 
+	.              : WHATS_NEW 
+	lib/commands   : toolcontext.c 
 
 Log message:
-	Move thin_check_executable to proper section
+	Fix error path
 	
-	It's read from global section.
-	In-release change, so no what's new
+	Do not increase nr_filt in case of NULL ret value, since the error path
+	doesn't handle NULL pointers.
 
 Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.50&r2=1.51
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2408&r2=1.2409
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/commands/toolcontext.c.diff?cvsroot=lvm2&r1=1.156&r2=1.157
 
---- LVM2/doc/example.conf.in	2012/05/14 16:29:50	1.50
-+++ LVM2/doc/example.conf.in	2012/05/23 12:59:35	1.51
-@@ -467,6 +467,21 @@
-     # proper udev rules, all changes in block device configuration will be
-     # *ignored* until a manual 'vgscan' is performed.
-     use_lvmetad = 0
-+
-+    # Full path of the utility called to check that a thin metadata device
-+    # is in a state that allows it to be used.
-+    # Each time a thin pool needs to be activated or after it is deactivated
-+    # this utility is executed. The activation will only proceed if the utility
-+    # has an exit status of 0.
-+    # Set to "" to skip this check.  (Not recommended.)
-+    # The thin tools are available as part of the device-mapper-persistent-data
-+    # package from https://github.com/jthornber/thin-provisioning-tools.
-+    #
-+    thin_check_executable = "@THIN_CHECK_CMD@"
-+
-+    # String with options passed with thin_check command. By default,
-+    # option '-q' is for quiet output.
-+    thin_check_options = [ "-q" ]
- }
+--- LVM2/WHATS_NEW	2012/05/16 13:09:09	1.2408
++++ LVM2/WHATS_NEW	2012/05/23 13:02:36	1.2409
+@@ -1,5 +1,6 @@
+ Version 2.02.96 - 
+ ================================
++  Fix error paths for regex filter initialization.
+   Re-enable partial activation of non-thin LVs until it can be fixed. (2.02.90)
+   Fix alloc cling to cling to PVs already found with contiguous policy.
+   Fix cling policy not to behave like normal policy if no previous LV seg.
+--- LVM2/lib/commands/toolcontext.c	2012/03/23 09:42:36	1.156
++++ LVM2/lib/commands/toolcontext.c	2012/05/23 13:02:37	1.157
+@@ -759,17 +759,19 @@
+ 		log_very_verbose("devices/filter not found in config file: "
+ 				 "no regex filter installed");
  
- activation {
-@@ -654,20 +669,6 @@
-     thin_pool_autoextend_threshold = 100
-     thin_pool_autoextend_percent = 20
+-	else if (!(filters[nr_filt++] = regex_filter_create(cn->v))) {
++	else if (!(filters[nr_filt] = regex_filter_create(cn->v))) {
+ 		log_error("Failed to create regex device filter");
+ 		goto bad;
+-	}
++	} else
++		nr_filt++;
  
--    # Full path of the utility called to check that a thin metadata device
--    # is in a state that allows it to be used.
--    # Each time a thin pool needs to be activated, this utility is executed.
--    # The activation will only proceed if the utility has an exit status of 0.
--    # Set to "" to skip this check.  (Not recommended.)
--    # The thin tools are available as part of the device-mapper-persistent-data
--    # package from https://github.com/jthornber/thin-provisioning-tools.
--    #
--    thin_check_executable = "@THIN_CHECK_CMD@"
--
--    # String with options passed with thin_check command. By default,
--    # option '-q' is for quiet output.
--    thin_check_options = [ "-q" ]
--
-     # While activating devices, I/O to devices being (re)configured is
-     # suspended, and as a precaution against deadlocks, LVM2 needs to pin
-     # any memory it is using so it is not paged out.  Groups of pages that
+ 	/* device type filter. Required. */
+ 	cn = find_config_tree_node(cmd, "devices/types");
+-	if (!(filters[nr_filt++] = lvm_type_filter_create(cmd->proc_dir, cn))) {
++	if (!(filters[nr_filt] = lvm_type_filter_create(cmd->proc_dir, cn))) {
+ 		log_error("Failed to create lvm type filter");
+ 		goto bad;
+ 	}
++	nr_filt++;
+ 
+ 	/* md component filter. Optional, non-critical. */
+ 	if (find_config_tree_bool(cmd, "devices/md_component_detection",
 
 
