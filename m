@@ -1,196 +1,39 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  7 Jun 2012 13:06:57 +0000 (UTC)
-Subject: LVM2: master - Remove obsolete CVS helper script.
-Message-ID: <20120607130657.A38A02260@lists.fedorahosted.org>
+Date: Thu,  7 Jun 2012 14:14:47 +0000 (UTC)
+Subject: master - Edit WHATS_NEW.
+Message-ID: <20120607141447.68B9D23EC@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=LVM2.git;a=commitdiff;h=bb2a2bb3ff92c27083354b9c02d6f869938aab2b
-Commit:        bb2a2bb3ff92c27083354b9c02d6f869938aab2b
-Parent:        859165e005f2b94a069d8d9ef69bfe57c919a512
+Gitweb:        http://git.fedorahosted.org/git/?p=LVM2.git;a=commitdiff;h=d459f6b32abb5c9a2d18dd25efe5f84d036e869c
+Commit:        d459f6b32abb5c9a2d18dd25efe5f84d036e869c
+Parent:        bb2a2bb3ff92c27083354b9c02d6f869938aab2b
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jun 7 14:06:01 2012 +0100
+AuthorDate:    Thu Jun 7 15:14:19 2012 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jun 7 14:06:01 2012 +0100
+CommitterDate: Thu Jun 7 15:14:19 2012 +0100
 
-Remove obsolete CVS helper script.
+Edit WHATS_NEW.
 
-Remove last_cvs_update.sh now that we're using git.
 ---
- scripts/last_cvs_update.sh |  163 --------------------------------------------
- 1 files changed, 0 insertions(+), 163 deletions(-)
+ WHATS_NEW |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/last_cvs_update.sh b/scripts/last_cvs_update.sh
-deleted file mode 100755
-index 7b5afea..0000000
---- a/scripts/last_cvs_update.sh
-+++ /dev/null
-@@ -1,163 +0,0 @@
--#!/bin/bash
--#$Header$
--################################################################################
--##
--##    Copyright 2001 Sistina Software, Inc.
--##
--##    This is free software released under the GNU General Public License.
--##    There is no warranty for this software.  See the file COPYING for
--##    details.
--##
--##    See the file CONTRIBUTORS for a list of contributors.
--##
--##    This file is maintained by:
--##      AJ Lewis <lewis@sistina.com>
--## 
--##    File name: last_cvs_update.sh
--##
--##    Description: displays the last file updated by CVS commands and the date
--##                 it was updated.  May be given a relative or absolute path.
--##                 Based on this information, you should be able to do a 
--##                 cvs co -D $date GFS and get the same version of the source
--##                 tree as this tool was run on.
--##                 
--##                 Will also give you the CVS tag the source tree is based off
--##                 off when appropriate
--## 
--##                 Output format:
--##                 [Tag:  $TAG]
--##                 The last file updated by CVS was:
--##                 $path/$file
--##                 on
--##                 $date
--##
--################################################################################
--
--if [[ -z $1 ]];
-- then path=.;
--else
-- if [[ $1 == "-h" ]];
--   then echo "usage: $0 [ -h | path ]"
--        exit 0;
-- else
--   if [[ -d $1 ]]
--     then path=$1;
--   else
--     echo "usage: $0 [ -h | path ]"
--     exit 0;
--   fi
-- fi
--fi
--
--# grab the tag from the path passed in
--if [[ -f $path/CVS/Tag ]];
--  then echo "Tag: " `cat $path/CVS/Tag | sed -e 's/^[NT]//'`
--fi
--
--awk '
--BEGIN {                            
--  FS = "/"                         
--}
--{
--    # find the path for the Entries file
--    path = FILENAME
--    sub(/^\.\//, "", path)
--    
--    # remove the CVS part of it
--    sub(/CVS\/Entries/, "", path)
--    
--    # add the path the the filename that was modified, and put the date it was
--    # modified in as well
--    print path $2 " " $4
--
--}' `find $path -name "Entries" -printf "%h/%f "` | awk '
--# converts string name of month the a numeral
--function cvt_month(month) {
--  if(month == "Jan")
--    return 0
--  if(month == "Feb")
--    return 1
--  if(month == "Mar")
--    return 2
--  if(month == "Apr")
--    return 3
--  if(month == "May")
--    return 4
--  if(month == "Jun")
--    return 5
--  if(month == "Jul")
--    return 6
--  if(month == "Aug")
--    return 7
--  if(month == "Sep")
--    return 8
--  if(month == "Oct")
--    return 9
--  if(month == "Nov")
--    return 10
--  if(month == "Dec")
--    return 11
--  return -1
--}
--BEGIN {                            
--  FS = " "                         
--  latest=""
--  maxyear = 0
--  maxdate = 0
--  maxmonth = "Jan"
--  maxtime = "00:00:00"
--}
--{
--   # check year first
--   if (maxyear < $6) {
--      date = $2 " " $3 " " $4 " " $5 " " $6
--      file = $1
--      maxyear = $6
--      maxmonth = $3
--      maxdate = $4
--      maxtime = $5
--   }
--   else {
--      if (maxyear == $6) {
--        # then month if year is the same
--        if (cvt_month(maxmonth) < cvt_month($3)) {
--          date = $2 " " $3 " " $4 " " $5 " " $6
--          file = $1
--	  maxmonth = $3
--	  maxdate = $4
--	  maxtime = $5
--        }
--        else {
--          if (cvt_month(maxmonth) == cvt_month($3)) {
--	    #then date if month is the same
--            if (maxdate < $4) {
--              date = $2 " " $3 " " $4 " " $5 " " $6
--              file = $1
--	      maxdate = $4
--	      maxtime = $5
--	    }
--	    else {
--	      if (maxdate == $4) {
--	        # then time if date is the same
--	        if (maxtime < $5) {
--		  date = $2 " " $3 " " $4 " " $5 " " $6
--                  file = $1
--		  maxtime = $5
--		}
--              }
--	    }
--	  }
--        }
--      }
--   }
--}
--
--END {
--   # strip leading "./" from filename
--   sub(/^\.\//, "", file)
--   print "The last file updated by CVS was:"
--   print file 
--   print "on"
--   print date " GMT"
--}'
--
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b3f742d..7692b2f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -39,7 +39,7 @@ Version 2.02.96 -
+   Fix exclusive lvchange running from other node. (2.02.89)
+   Add 'vgscan --cache' functionality for consistency with 'pvscan --cache'.
+   Keep exclusive activation in pvmove if LV is already active.
+-  Disallow pvmove for exclusive LV if some affected LVs are not exclusively activated.
++  Disallow exclusive pvmove if some affected LVs are not exclusively activated.
+   Remove unused and wrongly set cluster VG flag from clvmd lock query command.
+   Fix pvmove for exclusively activated LV pvmove in clustered VG. (2.02.86)
+   Always free hash table on update_pvid_to_vgid() in lvmetad.
 
 
