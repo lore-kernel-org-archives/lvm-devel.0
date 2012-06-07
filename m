@@ -1,39 +1,72 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  7 Jun 2012 14:14:47 +0000 (UTC)
-Subject: master - Edit WHATS_NEW.
-Message-ID: <20120607141447.68B9D23EC@lists.fedorahosted.org>
+From: agk@sourceware.org <agk@sourceware.org>
+Date: 7 Jun 2012 14:28:33 -0000
+Subject: LVM2 README WHATS_NEW WHATS_NEW_DM
+Message-ID: <20120607142833.4170.qmail@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=LVM2.git;a=commitdiff;h=d459f6b32abb5c9a2d18dd25efe5f84d036e869c
-Commit:        d459f6b32abb5c9a2d18dd25efe5f84d036e869c
-Parent:        bb2a2bb3ff92c27083354b9c02d6f869938aab2b
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jun 7 15:14:19 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jun 7 15:14:19 2012 +0100
+CVSROOT:	/cvs/lvm2
+Module name:	LVM2
+Changes by:	agk at sourceware.org	2012-06-07 14:28:32
 
-Edit WHATS_NEW.
+Modified files:
+	.              : README WHATS_NEW WHATS_NEW_DM 
 
----
- WHATS_NEW |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Log message:
+	Indicate new location of source code.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b3f742d..7692b2f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -39,7 +39,7 @@ Version 2.02.96 -
-   Fix exclusive lvchange running from other node. (2.02.89)
-   Add 'vgscan --cache' functionality for consistency with 'pvscan --cache'.
-   Keep exclusive activation in pvmove if LV is already active.
--  Disallow pvmove for exclusive LV if some affected LVs are not exclusively activated.
-+  Disallow exclusive pvmove if some affected LVs are not exclusively activated.
-   Remove unused and wrongly set cluster VG flag from clvmd lock query command.
-   Fix pvmove for exclusively activated LV pvmove in clustered VG. (2.02.86)
-   Always free hash table on update_pvid_to_vgid() in lvmetad.
+Patches:
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/README.diff?cvsroot=lvm2&r1=1.8&r2=1.9
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2409&r2=1.2410
+http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.603&r2=1.604
+
+--- LVM2/README	2008/11/04 17:49:22	1.8
++++ LVM2/README	2012/06/07 14:28:32	1.9
+@@ -1,3 +1,14 @@
++NEWS
++----
++
++On 7th June 2012, we froze this copy of the source code and moved it to
++fedorahosted.org:
++
++  http://git.fedorahosted.org/git/LVM2.git
++  git clone git://git.fedorahosted.org/git/LVM2.git
++
++-------------------------------------------------------------------------------
++
+ This tree contains the LVM2 and device-mapper tools and libraries.
+ 
+ For more information about LVM2 read the changelog in the WHATS_NEW file.
+--- LVM2/WHATS_NEW	2012/05/23 13:02:36	1.2409
++++ LVM2/WHATS_NEW	2012/06/07 14:28:32	1.2410
+@@ -1,3 +1,11 @@
++On 7th June 2012, we froze this copy of the source code and moved it to
++fedorahosted.org:
++
++  http://git.fedorahosted.org/git/LVM2.git
++  git clone git://git.fedorahosted.org/git/LVM2.git
++
++--------------------------------------------------------------------------------
++
+ Version 2.02.96 - 
+ ================================
+   Fix error paths for regex filter initialization.
+--- LVM2/WHATS_NEW_DM	2012/05/29 08:09:10	1.603
++++ LVM2/WHATS_NEW_DM	2012/06/07 14:28:32	1.604
+@@ -1,3 +1,11 @@
++On 7th June 2012, we froze this copy of the source code and moved it to
++fedorahosted.org:
++
++  http://git.fedorahosted.org/git/LVM2.git
++  git clone git://git.fedorahosted.org/git/LVM2.git
++
++--------------------------------------------------------------------------------
++
+ Version 1.02.75 - 
+ ================================
+   Remove unsupported udev_get_dev_path libudev call used for checking udev dir.
 
 
