@@ -1,58 +1,196 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu,  7 Jun 2012 12:48:55 +0000 (UTC)
-Subject: LVM2: master - Update source code location in README.
-Message-ID: <20120607124855.49DF5225F@lists.fedorahosted.org>
+Date: Thu,  7 Jun 2012 13:06:57 +0000 (UTC)
+Subject: LVM2: master - Remove obsolete CVS helper script.
+Message-ID: <20120607130657.A38A02260@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=LVM2.git;a=commitdiff;h=859165e005f2b94a069d8d9ef69bfe57c919a512
-Commit:        859165e005f2b94a069d8d9ef69bfe57c919a512
-Parent:        64a3ac8f51789ae58e0b5f7b5b7bb0b036bcfd30
+Gitweb:        http://git.fedorahosted.org/git/?p=LVM2.git;a=commitdiff;h=bb2a2bb3ff92c27083354b9c02d6f869938aab2b
+Commit:        bb2a2bb3ff92c27083354b9c02d6f869938aab2b
+Parent:        859165e005f2b94a069d8d9ef69bfe57c919a512
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jun 7 13:48:13 2012 +0100
+AuthorDate:    Thu Jun 7 14:06:01 2012 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jun 7 13:48:13 2012 +0100
+CommitterDate: Thu Jun 7 14:06:01 2012 +0100
 
-Update source code location in README.
+Remove obsolete CVS helper script.
 
-Change CVS to git and mention lvm2-commits list.
+Remove last_cvs_update.sh now that we're using git.
 ---
- README |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ scripts/last_cvs_update.sh |  163 --------------------------------------------
+ 1 files changed, 0 insertions(+), 163 deletions(-)
 
-diff --git a/README b/README
-index bd6214c..e327702 100644
---- a/README
-+++ b/README
-@@ -8,19 +8,21 @@ There is no warranty - see COPYING and COPYING.LIB.
- Tarballs are available from:
-   ftp://sources.redhat.com/pub/lvm2/
- 
--To access the CVS tree use:
--  cvs -d :pserver:cvs at sources.redhat.com:/cvs/lvm2 login
--  CVS password: cvs
--  cvs -d :pserver:cvs at sources.redhat.com:/cvs/lvm2 co LVM2
-+The source code is stored in git:
-+  http://git.fedorahosted.org/git/LVM2.git
-+  git clone git://git.fedorahosted.org/git/LVM2.git
- 
- Mailing list for general discussion related to LVM2:
-   linux-lvm at redhat.com
-   Subscribe from https://www.redhat.com/mailman/listinfo/linux-lvm
- 
--Mailing list for LVM2 development, patches and commits:
-+Mailing lists for LVM2 development, patches and commits:
-   lvm-devel at redhat.com
-   Subscribe from https://www.redhat.com/mailman/listinfo/linux-lvm
- 
-+  lvm2-commits at lists.fedorahosted.org (Read-only archive of commits)
-+  Subscribe from https://fedorahosted.org/mailman/listinfo/lvm2-commits
-+
- Mailing list for device-mapper development, including kernel patches
- and multipath-tools:
-   dm-devel at redhat.com
+diff --git a/scripts/last_cvs_update.sh b/scripts/last_cvs_update.sh
+deleted file mode 100755
+index 7b5afea..0000000
+--- a/scripts/last_cvs_update.sh
++++ /dev/null
+@@ -1,163 +0,0 @@
+-#!/bin/bash
+-#$Header$
+-################################################################################
+-##
+-##    Copyright 2001 Sistina Software, Inc.
+-##
+-##    This is free software released under the GNU General Public License.
+-##    There is no warranty for this software.  See the file COPYING for
+-##    details.
+-##
+-##    See the file CONTRIBUTORS for a list of contributors.
+-##
+-##    This file is maintained by:
+-##      AJ Lewis <lewis@sistina.com>
+-## 
+-##    File name: last_cvs_update.sh
+-##
+-##    Description: displays the last file updated by CVS commands and the date
+-##                 it was updated.  May be given a relative or absolute path.
+-##                 Based on this information, you should be able to do a 
+-##                 cvs co -D $date GFS and get the same version of the source
+-##                 tree as this tool was run on.
+-##                 
+-##                 Will also give you the CVS tag the source tree is based off
+-##                 off when appropriate
+-## 
+-##                 Output format:
+-##                 [Tag:  $TAG]
+-##                 The last file updated by CVS was:
+-##                 $path/$file
+-##                 on
+-##                 $date
+-##
+-################################################################################
+-
+-if [[ -z $1 ]];
+- then path=.;
+-else
+- if [[ $1 == "-h" ]];
+-   then echo "usage: $0 [ -h | path ]"
+-        exit 0;
+- else
+-   if [[ -d $1 ]]
+-     then path=$1;
+-   else
+-     echo "usage: $0 [ -h | path ]"
+-     exit 0;
+-   fi
+- fi
+-fi
+-
+-# grab the tag from the path passed in
+-if [[ -f $path/CVS/Tag ]];
+-  then echo "Tag: " `cat $path/CVS/Tag | sed -e 's/^[NT]//'`
+-fi
+-
+-awk '
+-BEGIN {                            
+-  FS = "/"                         
+-}
+-{
+-    # find the path for the Entries file
+-    path = FILENAME
+-    sub(/^\.\//, "", path)
+-    
+-    # remove the CVS part of it
+-    sub(/CVS\/Entries/, "", path)
+-    
+-    # add the path the the filename that was modified, and put the date it was
+-    # modified in as well
+-    print path $2 " " $4
+-
+-}' `find $path -name "Entries" -printf "%h/%f "` | awk '
+-# converts string name of month the a numeral
+-function cvt_month(month) {
+-  if(month == "Jan")
+-    return 0
+-  if(month == "Feb")
+-    return 1
+-  if(month == "Mar")
+-    return 2
+-  if(month == "Apr")
+-    return 3
+-  if(month == "May")
+-    return 4
+-  if(month == "Jun")
+-    return 5
+-  if(month == "Jul")
+-    return 6
+-  if(month == "Aug")
+-    return 7
+-  if(month == "Sep")
+-    return 8
+-  if(month == "Oct")
+-    return 9
+-  if(month == "Nov")
+-    return 10
+-  if(month == "Dec")
+-    return 11
+-  return -1
+-}
+-BEGIN {                            
+-  FS = " "                         
+-  latest=""
+-  maxyear = 0
+-  maxdate = 0
+-  maxmonth = "Jan"
+-  maxtime = "00:00:00"
+-}
+-{
+-   # check year first
+-   if (maxyear < $6) {
+-      date = $2 " " $3 " " $4 " " $5 " " $6
+-      file = $1
+-      maxyear = $6
+-      maxmonth = $3
+-      maxdate = $4
+-      maxtime = $5
+-   }
+-   else {
+-      if (maxyear == $6) {
+-        # then month if year is the same
+-        if (cvt_month(maxmonth) < cvt_month($3)) {
+-          date = $2 " " $3 " " $4 " " $5 " " $6
+-          file = $1
+-	  maxmonth = $3
+-	  maxdate = $4
+-	  maxtime = $5
+-        }
+-        else {
+-          if (cvt_month(maxmonth) == cvt_month($3)) {
+-	    #then date if month is the same
+-            if (maxdate < $4) {
+-              date = $2 " " $3 " " $4 " " $5 " " $6
+-              file = $1
+-	      maxdate = $4
+-	      maxtime = $5
+-	    }
+-	    else {
+-	      if (maxdate == $4) {
+-	        # then time if date is the same
+-	        if (maxtime < $5) {
+-		  date = $2 " " $3 " " $4 " " $5 " " $6
+-                  file = $1
+-		  maxtime = $5
+-		}
+-              }
+-	    }
+-	  }
+-        }
+-      }
+-   }
+-}
+-
+-END {
+-   # strip leading "./" from filename
+-   sub(/^\.\//, "", file)
+-   print "The last file updated by CVS was:"
+-   print file 
+-   print "on"
+-   print date " GMT"
+-}'
+-
 
 
