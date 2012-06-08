@@ -1,41 +1,35 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  8 Jun 2012 21:14:45 +0000 (UTC)
-Subject: master - VERSION: Update for release.
-Message-ID: <20120608211445.0CE7A2262@lists.fedorahosted.org>
+Date: Fri,  8 Jun 2012 22:36:28 +0000 (UTC)
+Subject: master - gitignore: Remove redundant test dir entry
+Message-ID: <20120608223628.D8971402C@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f3c20bf7e6e036b8714ddd9ae456046948ca130a
-Commit:        f3c20bf7e6e036b8714ddd9ae456046948ca130a
-Parent:        389498764a5bd9b223a7c53a49a7061da1efa462
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dd5b2974c09a6650211b6f02f0e86ec63d6413d4
+Commit:        dd5b2974c09a6650211b6f02f0e86ec63d6413d4
+Parent:        f3c20bf7e6e036b8714ddd9ae456046948ca130a
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jun 8 22:14:30 2012 +0100
+AuthorDate:    Fri Jun 8 23:34:15 2012 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jun 8 22:14:30 2012 +0100
+CommitterDate: Fri Jun 8 23:34:15 2012 +0100
 
-VERSION: Update for release.
+gitignore: Remove redundant test dir entry
 
 ---
- VERSION    |    2 +-
- VERSION_DM |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/.gitignore |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 18095df..42a2ae5 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.96(2)-git (2012-06-07)
-+2.02.96(2)-git (2012-06-08)
-diff --git a/VERSION_DM b/VERSION_DM
-index 1851180..27e1a58 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.75-git (2012-06-07)
-+1.02.75-git (2012-06-08)
+diff --git a/test/.gitignore b/test/.gitignore
+index 2351bfc..2450c66 100644
+--- a/test/.gitignore
++++ b/test/.gitignore
+@@ -1,4 +1,3 @@
+ .bin-dir-stamp
+-Makefile
+ bin
+ init.sh
 
 
