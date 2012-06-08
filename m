@@ -1,7 +1,7 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  8 Jun 2012 23:44:32 +0000 (UTC)
-Subject: master - release: post-release update version
-Message-ID: <20120608234432.858D92262@lists.fedorahosted.org>
+Date: Fri,  8 Jun 2012 23:44:45 +0000 (UTC)
+Subject: the tag v2_02_96 has been created
+Message-ID: <20120608234445.27FA72262@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
