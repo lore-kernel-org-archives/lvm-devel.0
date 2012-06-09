@@ -1,65 +1,51 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  8 Jun 2012 23:44:45 +0000 (UTC)
-Subject: the tag v2_02_96 has been created
-Message-ID: <20120608234445.27FA72262@lists.fedorahosted.org>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Sat, 9 Jun 2012 01:23:08 +0100
+Subject: LVM release 2.02.96 / git / veritysetup
+Message-ID: <20120609002308.GD15806@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d41ad502b8138a4cb7f9c1a3bfd9f85bd5b337e8
-Commit:        d41ad502b8138a4cb7f9c1a3bfd9f85bd5b337e8
-Parent:        8dade001b82326ad15ec04ce329aeda218c3830c
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sat Jun 9 00:44:01 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sat Jun 9 00:44:01 2012 +0100
+New LVM release
+---------------
+LVM version 2.02.96 is now available from
+  ftp://sources.redhat.com/pub/lvm2/
 
-release: post-release update version
+and this is mirrored on the sites listed here:
+  http://sourceware.org/mirrors.html
 
+Lots of little enhancements and fixes this time.
+For a summary:
+  ftp://sources.redhat.com/pub/lvm2/WHATS_NEW_DM
+  ftp://sources.redhat.com/pub/lvm2/WHATS_NEW
+
+
+git
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+This release was done from a new git repository at:
+  git://git.fedorahosted.org/git/lvm2.git
+  http://git.fedorahosted.org/git/lvm2.git
+  
+The project web page should be up to date again with locations.
+  http://sourceware.org/lvm2/
 
-diff --git a/VERSION b/VERSION
-index 42a2ae5..b26c415 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.96(2)-git (2012-06-08)
-+2.02.97(2)-git (2012-06-09)
-diff --git a/VERSION_DM b/VERSION_DM
-index 27e1a58..749d204 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.75-git (2012-06-08)
-+1.02.76-git (2012-06-09)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 89e26b5..9128607 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.97 - 
-+===============================
-+
- Version 2.02.96 - 8th June 2012
- ===============================
-   Upstream source repo now fedorahosted.org git not sources.redhat.com CVS.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 1246f19..97d5a8e 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.76 - 
-+===============================
-+
- Version 1.02.75 - 8th June 2012
- ===============================
-   Upstream source repo now fedorahosted.org git not sources.redhat.com CVS.
+The CVS repository will no longer be updated.
 
+veritysetup
+-----------
+Although this release contains a userspace tool for dm-verity,
+  configure --with-verity-setup=<cryptlib>
+we think the cryptsetup package would provide a better home for this
+so watch out for an updated version in an upcoming cryptsetup release.
 
+Alasdair
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 835 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20120609/24ed3e11/attachment.sig>
