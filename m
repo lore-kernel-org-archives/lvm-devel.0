@@ -1,98 +1,51 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 20 Jun 2012 12:25:21 +0000 (UTC)
-Subject: master - systemd: Add Documentation references
-Message-ID: <20120620122521.345C91684@lists.fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 20 Jun 2012 12:49:10 +0000 (UTC)
+Subject: master - cmirrord: fix cut&paste
+Message-ID: <20120620124910.C51E9168A@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e77803edc95d9b40e367bc447ad316bb5f9d9d8a
-Commit:        e77803edc95d9b40e367bc447ad316bb5f9d9d8a
-Parent:        2f99e5e35a9918c337e66b74aa6126cca9328c64
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jun 20 14:23:50 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 20 14:23:50 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=865b9d3701e075484888ac23ceb5c29d73b06154
+Commit:        865b9d3701e075484888ac23ceb5c29d73b06154
+Parent:        fb4584b83ddfe645ac1b8c16385e9a4632171d96
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 19 23:47:02 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jun 20 14:41:57 2012 +0200
 
-systemd: Add Documentation references
+cmirrord: fix cut&paste
 
-These documentation references show up in "systemctl status" output.
 ---
- WHATS_NEW_DM                                       |    1 +
- scripts/dm_event_systemd_red_hat.service.in        |    1 +
- scripts/dm_event_systemd_red_hat.socket            |    1 +
- scripts/lvm2_lvmetad_systemd_red_hat.service.in    |    1 +
- scripts/lvm2_lvmetad_systemd_red_hat.socket.in     |    1 +
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    1 +
- 6 files changed, 6 insertions(+), 0 deletions(-)
+ WHATS_NEW                    |    1 +
+ daemons/cmirrord/functions.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index a0440da..33f8515 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 10fd724..34da256 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.76 - 
+ Version 2.02.97 - 
  ===============================
-+  Add documentation references in systemd units.
-   Remove veritysetup.  Now maintained with cryptsetup.
++  Print clean_bits in pull_state, fix cut&paste typo in cmirrord.
+   Add tests for errors from closedir(), close() in cmirrord.
+   Fix missing sync of filesystem when creating thin volume snapshot.
  
- Version 1.02.75 - 8th June 2012
-diff --git a/scripts/dm_event_systemd_red_hat.service.in b/scripts/dm_event_systemd_red_hat.service.in
-index 02a24c6..96c5225 100644
---- a/scripts/dm_event_systemd_red_hat.service.in
-+++ b/scripts/dm_event_systemd_red_hat.service.in
-@@ -1,5 +1,6 @@
- [Unit]
- Description=Device-mapper event daemon
-+Documentation=man:dmeventd(8)
- Requires=dm-event.socket
- After=dm-event.socket
- Before=local-fs.target
-diff --git a/scripts/dm_event_systemd_red_hat.socket b/scripts/dm_event_systemd_red_hat.socket
-index c580555..bfc8ea1 100644
---- a/scripts/dm_event_systemd_red_hat.socket
-+++ b/scripts/dm_event_systemd_red_hat.socket
-@@ -1,5 +1,6 @@
- [Unit]
- Description=Device-mapper event daemon FIFOs
-+Documentation=man:dmeventd(8)
- DefaultDependencies=no
+diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
+index 40b4bad..3e8fd20 100644
+--- a/daemons/cmirrord/functions.c
++++ b/daemons/cmirrord/functions.c
+@@ -1875,7 +1875,7 @@ int pull_state(const char *uuid, uint64_t luid,
  
- [Socket]
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-index e32c8a1..7552240 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-@@ -1,5 +1,6 @@
- [Unit]
- Description=LVM2 metadata daemon
-+Documentation=man:lvmetad(8)
- Requires=lvm2-lvmetad.socket
- After=lvm2-lvmetad.socket
- DefaultDependencies=no
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-index f4c82a5..9a46f50 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-@@ -1,5 +1,6 @@
- [Unit]
- Description=LVM2 metadata daemon socket
-+Documentation=man:lvmetad(8)
- DefaultDependencies=no
+ 		LOG_DBG("[%s] loading clean_bits:", SHORT_UUID(lc->uuid));
  
- [Socket]
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index e93414d..a8d5183 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -1,5 +1,6 @@
- [Unit]
- Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
-+Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
- Requires=dm-event.socket
- After=dm-event.socket fedora-storage-init.service fedora-storage-init-late.service
- Before=local-fs.target
+-		print_bits(lc->sync_bits, 0);
++		print_bits(lc->clean_bits, 0);
+ 	}
+ 
+ 	return 0;
 
 
