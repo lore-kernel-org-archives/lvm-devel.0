@@ -1,119 +1,103 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 20 Jun 2012 12:49:08 +0000 (UTC)
-Subject: master - cmirrord: add test for closedir() and close()
-Message-ID: <20120620124908.842811684@lists.fedorahosted.org>
+Date: Wed, 20 Jun 2012 12:49:15 +0000 (UTC)
+Subject: master - headers: add some __attribute__ instrumentation
+Message-ID: <20120620124915.6BF641684@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb4584b83ddfe645ac1b8c16385e9a4632171d96
-Commit:        fb4584b83ddfe645ac1b8c16385e9a4632171d96
-Parent:        e77803edc95d9b40e367bc447ad316bb5f9d9d8a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ac8a931889d796cf1e74b7c38ee6fb201ae2963b
+Commit:        ac8a931889d796cf1e74b7c38ee6fb201ae2963b
+Parent:        ba222c6e35dd08d7e3665b187eacdd61e6f678d4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 19 23:37:53 2012 +0200
+AuthorDate:    Mon Oct 25 09:39:36 2010 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 20 14:40:39 2012 +0200
+CommitterDate: Wed Jun 20 14:48:11 2012 +0200
 
-cmirrord: add test for closedir() and close()
+headers: add some __attribute__ instrumentation
 
+Use some malloc and strdup instrumentation and warning attributes
+and standard systems headers.
 ---
- WHATS_NEW                    |    1 +
- daemons/cmirrord/functions.c |   13 +++++++++----
- daemons/cmirrord/local.c     |   14 ++++++++++----
- 3 files changed, 20 insertions(+), 8 deletions(-)
+ libdm/libdevmapper.h |   39 ++++++++++++++++++++++++++-------------
+ 1 files changed, 26 insertions(+), 13 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 0158c6c..10fd724 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.97 - 
- ===============================
-+  Add tests for errors from closedir(), close() in cmirrord.
-   Fix missing sync of filesystem when creating thin volume snapshot.
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 1f780a3..a8bf885 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -713,13 +713,19 @@ uint32_t dm_tree_get_cookie(struct dm_tree_node *node);
+  * Memory management
+  *******************/
  
- Version 2.02.96 - 8th June 2012
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index 96f7b8e..40b4bad 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -337,14 +337,18 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, int *unlink_pat
- 		    (major(statbuf.st_rdev) == major) &&
- 		    (minor(statbuf.st_rdev) == minor)) {
- 			LOG_DBG("  %s: YES", dep->d_name);
--			closedir(dp);
-+			if (closedir(dp))
-+				LOG_DBG("Unable to closedir /dev/mapper %s",
-+					strerror(errno));
- 			return 0;
- 		} else {
- 			LOG_DBG("  %s: NO", dep->d_name);
- 		}
- 	}
+-void *dm_malloc_aux(size_t s, const char *file, int line);
+-void *dm_malloc_aux_debug(size_t s, const char *file, int line);
+-void *dm_zalloc_aux(size_t s, const char *file, int line);
+-void *dm_zalloc_aux_debug(size_t s, const char *file, int line);
+-char *dm_strdup_aux(const char *str, const char *file, int line);
++void *dm_malloc_aux(size_t s, const char *file, int line)
++	__attribute__((malloc)) __attribute__((__warn_unused_result__));
++void *dm_malloc_aux_debug(size_t s, const char *file, int line)
++	__attribute__((__warn_unused_result__));
++void *dm_zalloc_aux(size_t s, const char *file, int line)
++	__attribute__((malloc)) __attribute__((__warn_unused_result__));
++void *dm_zalloc_aux_debug(size_t s, const char *file, int line)
++	__attribute__((__warn_unused_result__));
++char *dm_strdup_aux(const char *str, const char *file, int line)
++	__attribute__((malloc)) __attribute__((__warn_unused_result__));
+ void dm_free_aux(void *p);
+-void *dm_realloc_aux(void *p, unsigned int s, const char *file, int line);
++void *dm_realloc_aux(void *p, unsigned int s, const char *file, int line)
++	__attribute__((__warn_unused_result__));
+ int dm_dump_memory_debug(void);
+ void dm_bounds_check_debug(void);
  
--	closedir(dp);
-+	if (closedir(dp))
-+		LOG_DBG("Unable to closedir /dev/mapper %s",
-+			strerror(errno));
+@@ -782,12 +788,15 @@ void dm_bounds_check_debug(void);
+ struct dm_pool;
  
- 	/* FIXME Find out why this was here and deal with underlying problem. */
- 	LOG_DBG("Path not found for %d/%d", major, minor);
-@@ -640,8 +644,9 @@ static int clog_dtr(struct dm_ulog_request *rq)
- 	LOG_DBG("[%s] Cluster log removed", SHORT_UUID(lc->uuid));
+ /* constructor and destructor */
+-struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint);
++struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
++	__attribute__((__warn_unused_result__));
+ void dm_pool_destroy(struct dm_pool *p);
  
- 	dm_list_del(&lc->list);
--	if (lc->disk_fd != -1)
--		close(lc->disk_fd);
-+	if (lc->disk_fd != -1 && close(lc->disk_fd))
-+		LOG_ERROR("Failed to close disk log: %s",
-+			  strerror(errno));
- 	if (lc->disk_buffer)
- 		free(lc->disk_buffer);
- 	dm_free(lc->clean_bits);
-diff --git a/daemons/cmirrord/local.c b/daemons/cmirrord/local.c
-index 8601cfd..50711a1 100644
---- a/daemons/cmirrord/local.c
-+++ b/daemons/cmirrord/local.c
-@@ -27,7 +27,7 @@
- #define CN_VAL_DM_USERSPACE_LOG         0x1
- #endif
+ /* simple allocation/free routines */
+-void *dm_pool_alloc(struct dm_pool *p, size_t s);
+-void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment);
++void *dm_pool_alloc(struct dm_pool *p, size_t s)
++	__attribute__((__warn_unused_result__));
++void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment)
++	__attribute__((__warn_unused_result__));
+ void dm_pool_empty(struct dm_pool *p);
+ void dm_pool_free(struct dm_pool *p, void *ptr);
  
--static int cn_fd;  /* Connector (netlink) socket fd */
-+static int cn_fd = -1;  /* Connector (netlink) socket fd */
- static char recv_buf[2048];
- static char send_buf[2048];
+@@ -858,9 +867,12 @@ void *dm_pool_end_object(struct dm_pool *p);
+ void dm_pool_abandon_object(struct dm_pool *p);
  
-@@ -384,14 +384,18 @@ int init_local(void)
+ /* utilities */
+-char *dm_pool_strdup(struct dm_pool *p, const char *str);
+-char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n);
+-void *dm_pool_zalloc(struct dm_pool *p, size_t s);
++char *dm_pool_strdup(struct dm_pool *p, const char *str)
++	__attribute__((__warn_unused_result__));
++char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n)
++	__attribute__((__warn_unused_result__));
++void *dm_pool_zalloc(struct dm_pool *p, size_t s)
++	__attribute__((__warn_unused_result__));
  
- 	r = bind(cn_fd, (struct sockaddr *) &addr, sizeof(addr));
- 	if (r < 0) {
--		close(cn_fd);
-+		if (close(cn_fd))
-+			LOG_ERROR("Failed to close socket: %s",
-+				  strerror(errno));
- 		return EXIT_KERNEL_BIND;
- 	}
+ /******************
+  * bitset functions
+@@ -918,7 +930,8 @@ struct dm_hash_node;
  
- 	opt = addr.nl_groups;
- 	r = setsockopt(cn_fd, 270, NETLINK_ADD_MEMBERSHIP, &opt, sizeof(opt));
- 	if (r) {
--		close(cn_fd);
-+		if (close(cn_fd))
-+			LOG_ERROR("Failed to close socket: %s",
-+				  strerror(errno));
- 		return EXIT_KERNEL_SETSOCKOPT;
- 	}
+ typedef void (*dm_hash_iterate_fn) (void *data);
  
-@@ -412,5 +416,7 @@ int init_local(void)
- void cleanup_local(void)
- {
- 	links_unregister(cn_fd);
--	close(cn_fd);
-+	if (cn_fd >= 0 && close(cn_fd))
-+		LOG_ERROR("Failed to close socket: %s",
-+			  strerror(errno));
- }
+-struct dm_hash_table *dm_hash_create(unsigned size_hint);
++struct dm_hash_table *dm_hash_create(unsigned size_hint)
++	__attribute__((__warn_unused_result__));
+ void dm_hash_destroy(struct dm_hash_table *t);
+ void dm_hash_wipe(struct dm_hash_table *t);
+ 
 
 
