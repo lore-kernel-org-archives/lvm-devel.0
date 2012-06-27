@@ -1,386 +1,313 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Jun 2012 10:12:56 +0000 (UTC)
-Subject: master - udev: udev rules cleanup
-Message-ID: <20120627101256.B64AF171E@lists.fedorahosted.org>
+Date: Wed, 27 Jun 2012 10:12:58 +0000 (UTC)
+Subject: master - configure: autoreconf
+Message-ID: <20120627101258.EDF44171E@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e6f8d86409e54300aeda05a82aad9b072d22ed4d
-Commit:        e6f8d86409e54300aeda05a82aad9b072d22ed4d
-Parent:        9a96f930a762418f1014f6a9da9546cb1f501f04
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5723db017ab62c40697329e1725ecb3b32b4d217
+Commit:        5723db017ab62c40697329e1725ecb3b32b4d217
+Parent:        e6f8d86409e54300aeda05a82aad9b072d22ed4d
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jun 22 05:50:02 2012 -0400
+AuthorDate:    Thu Jun 21 08:43:38 2012 -0400
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jun 27 12:11:56 2012 +0200
+CommitterDate: Wed Jun 27 12:12:08 2012 +0200
 
-udev: udev rules cleanup
+configure: autoreconf
 
-Remove executable path detection in udev rules and use sbindir that
-is configured, but still provide the original functionality by means
-of 'configure --enable-udev-rule-exec-detection'.
-
-Normally, the exec path for the tools called in udev rules should
-not differ from the sbindir used, however, there are cases this is
-necessary. For example different environments could be assembled
-in a way that these path differ for some reason (distribution installer,
-initrd ...).
-
-This functionality is kept for compatibility only. Any environment
-moving the binaries around and using different paths should be fixed
-eventually!
 ---
- WHATS_NEW_DM                  |    2 ++
- configure.in                  |   25 ++++++++++++++++---------
- udev/10-dm.rules.in           |   12 ++++--------
- udev/11-dm-lvm.rules          |   37 -------------------------------------
- udev/11-dm-lvm.rules.in       |   37 +++++++++++++++++++++++++++++++++++++
- udev/69-dm-lvm-metad.rules    |   30 ------------------------------
- udev/69-dm-lvm-metad.rules.in |   26 ++++++++++++++++++++++++++
- udev/95-dm-notify.rules       |   12 ------------
- udev/95-dm-notify.rules.in    |   12 ++++++++++++
- udev/Makefile.in              |   33 ++++++++++++++++++++++-----------
- 10 files changed, 119 insertions(+), 107 deletions(-)
+ configure |  144 ++++++++++++++++++++++++++++++++++++++++++++++--------------
+ 1 files changed, 110 insertions(+), 34 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index f6596c1..711104b 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,7 @@
- Version 1.02.76 - 
- ===============================
-+  Add configure --enable-udev-rule-exec-detection to detect exec path in rules.
-+  Use sbindir in udev rules by default and remove executable path detection.
-   Remove hard-coded paths for dmeventd fifos and use default-dm-run-dir.
-   Add configure --with-lvmetad-pidfile to remove hard-coded value.
-   Add configure --with-default-pid-dir for common directory with pid files.
-diff --git a/configure.in b/configure.in
-index 814c0bd..6c27324 100644
---- a/configure.in
-+++ b/configure.in
-@@ -934,16 +934,22 @@ AC_ARG_ENABLE(udev_rules,
- 	      UDEV_RULES=$enableval, UDEV_RULES=$UDEV_SYNC)
- AC_MSG_RESULT($UDEV_RULES)
+diff --git a/configure b/configure
+index 1bddccc..e54efd3 100755
+--- a/configure
++++ b/configure
+@@ -605,9 +605,11 @@ kernelvsn
+ missingkernel
+ kerneldir
+ interface
++LVMETAD_PIDFILE
+ DMEVENTD_PIDFILE
+ WRITE_INSTALL
+ UDEV_HAS_BUILTIN_BLKID
++UDEV_RULE_EXEC_DETECTION
+ UDEV_SYNC
+ UDEV_RULES
+ UDEV_PC
+@@ -659,6 +661,7 @@ DMEVENTD
+ DL_LIBS
+ DEVMAPPER
+ DEFAULT_RUN_DIR
++DEFAULT_DM_RUN_DIR
+ DEFAULT_LOCK_DIR
+ DEFAULT_DATA_ALIGNMENT
+ DEFAULT_CACHE_SUBDIR
+@@ -814,6 +817,9 @@ enable_readline
+ enable_realtime
+ enable_ocf
+ with_ocfdir
++with_default_pid_dir
++with_default_dm_run_dir
++with_default_run_dir
+ with_clvmd
+ with_clvmd_pidfile
+ enable_cmirrord
+@@ -825,8 +831,10 @@ enable_testing
+ enable_valgrind_pool
+ enable_devmapper
+ enable_lvmetad
++with_lvmetad_pidfile
+ enable_udev_sync
+ enable_udev_rules
++enable_udev_rule_exec_detection
+ enable_compat
+ enable_units_compat
+ enable_ioctl
+@@ -850,7 +858,6 @@ with_systemdsystemunitdir
+ with_tmpfilesdir
+ with_dmeventd_pidfile
+ with_dmeventd_path
+-with_default_run_dir
+ with_default_system_dir
+ with_default_archive_subdir
+ with_default_backup_subdir
+@@ -1525,6 +1532,8 @@ Optional Features:
+   --enable-lvmetad        enable the LVM Metadata Daemon
+   --enable-udev_sync      enable synchronisation with udev processing
+   --enable-udev_rules     install rule files needed for udev synchronisation
++  --enable-udev-rule-exec-detection
++                          enable executable path detection in udev rules
+   --enable-compat         enable support for old device-mapper versions
+   --enable-units-compat   enable output compatibility with old versions that
+                           that do not use KiB-style unit suffixes
+@@ -1571,6 +1580,12 @@ Optional Packages:
+   --with-thin-check=PATH  thin_check tool: [[autodetect]]
+   --with-ocfdir=DIR       install OCF files in DIR
+                           [[PREFIX/lib/ocf/resource.d/lvm2]]
++  --with-default-pid-dir=PID_DIR
++                          Default directory to keep PID files in. [[/var/run]]
++  --with-default-dm-run-dir=DM_RUN_DIR
++                          Default DM run directory. [[/var/run]]
++  --with-default-run-dir=RUN_DIR
++                          Default LVM run directory. [[/var/run/lvm]]
+   --with-clvmd=TYPE       build cluster LVM Daemon
+                           The following cluster manager combinations are valid:
+                            * cman                  (RHEL5 or equivalent)
+@@ -1580,10 +1595,12 @@ Optional Packages:
+                            * none                  (disable build)
+                           [TYPE=none]
+   --with-clvmd-pidfile=PATH
+-                          clvmd pidfile [[/var/run/clvmd.pid]]
++                          clvmd pidfile [[PID_DIR/clvmd.pid]]
+   --with-cmirrord-pidfile=PATH
+-                          cmirrord pidfile [[/var/run/cmirrord.pid]]
++                          cmirrord pidfile [[PID_DIR/cmirrord.pid]]
+   --with-optimisation=OPT C optimisation flag [[OPT=-O2]]
++  --with-lvmetad-pidfile=PATH
++                          lvmetad pidfile [[PID_DIR/lvmetad.pid]]
+   --with-localedir=DIR    translation files in DIR [[PREFIX/share/locale]]
+   --with-confdir=DIR      configuration files in DIR [[/etc]]
+   --with-staticdir=DIR    static binaries in DIR [[EPREFIX/sbin]]
+@@ -1598,10 +1615,9 @@ Optional Packages:
+                           volatile files and directories in DIR
+                           [[SYSCONFDIR/tmpfiles.d]]
+   --with-dmeventd-pidfile=PATH
+-                          dmeventd pidfile [[/var/run/dmeventd.pid]]
++                          dmeventd pidfile [[PID_DIR/dmeventd.pid]]
+   --with-dmeventd-path=PATH
+                           dmeventd path [[EPREFIX/sbin/dmeventd]]
+-  --with-default-run-dir=DIR       Default run directory [/var/run/lvm]
+   --with-default-system-dir=DIR
+                           default LVM system directory [[/etc/lvm]]
+   --with-default-archive-subdir=SUBDIR
+@@ -7315,6 +7331,52 @@ fi
+ }
+ 
+ ################################################################################
++
++
++# Check whether --with-default-pid-dir was given.
++if test "${with_default_pid_dir+set}" = set; then :
++  withval=$with_default_pid_dir; DEFAULT_PID_DIR="$withval"
++else
++  DEFAULT_PID_DIR="/var/run"
++fi
++
++
++cat >>confdefs.h <<_ACEOF
++#define DEFAULT_PID_DIR "$DEFAULT_PID_DIR"
++_ACEOF
++
++
++
++
++# Check whether --with-default-dm-run-dir was given.
++if test "${with_default_dm_run_dir+set}" = set; then :
++  withval=$with_default_dm_run_dir; DEFAULT_DM_RUN_DIR="$withval"
++else
++  DEFAULT_DM_RUN_DIR="/var/run"
++fi
++
++
++cat >>confdefs.h <<_ACEOF
++#define DEFAULT_DM_RUN_DIR "$DEFAULT_DM_RUN_DIR"
++_ACEOF
++
++
++
++
++# Check whether --with-default-run-dir was given.
++if test "${with_default_run_dir+set}" = set; then :
++  withval=$with_default_run_dir; DEFAULT_RUN_DIR="$withval"
++else
++  DEFAULT_RUN_DIR="/var/run/lvm"
++fi
++
++
++cat >>confdefs.h <<_ACEOF
++#define DEFAULT_RUN_DIR "$DEFAULT_RUN_DIR"
++_ACEOF
++
++
++################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build cluster LVM daemon" >&5
+ $as_echo_n "checking whether to build cluster LVM daemon... " >&6; }
+ 
+@@ -8217,7 +8279,7 @@ if test "x$CLVMD" != xnone; then
+ if test "${with_clvmd_pidfile+set}" = set; then :
+   withval=$with_clvmd_pidfile; CLVMD_PIDFILE=$withval
+ else
+-  CLVMD_PIDFILE="/var/run/clvmd.pid"
++  CLVMD_PIDFILE="$DEFAULT_PID_DIR/clvmd.pid"
+ fi
+ 
+ 
+@@ -8249,7 +8311,7 @@ if test "x$BUILD_CMIRRORD" = xyes; then
+ if test "${with_cmirrord_pidfile+set}" = set; then :
+   withval=$with_cmirrord_pidfile; CMIRRORD_PIDFILE=$withval
+ else
+-  CMIRRORD_PIDFILE="/var/run/cmirrord.pid"
++  CMIRRORD_PIDFILE="$DEFAULT_PID_DIR/cmirrord.pid"
+ fi
+ 
+ 
+@@ -8801,6 +8863,20 @@ if test x$BUILD_LVMETAD = xyes; then
+ 
+ $as_echo "#define LVMETAD_SUPPORT 1" >>confdefs.h
+ 
++
++
++# Check whether --with-lvmetad-pidfile was given.
++if test "${with_lvmetad_pidfile+set}" = set; then :
++  withval=$with_lvmetad_pidfile; LVMETAD_PIDFILE=$withval
++else
++  LVMETAD_PIDFILE="$DEFAULT_PID_DIR/lvmetad.pid"
++fi
++
++
++cat >>confdefs.h <<_ACEOF
++#define LVMETAD_PIDFILE "$LVMETAD_PIDFILE"
++_ACEOF
++
+ fi
+ 
+ ################################################################################
+@@ -8928,18 +9004,28 @@ fi
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_RULES" >&5
+ $as_echo "$UDEV_RULES" >&6; }
  
 -if test x$UDEV_RULES = xyes; then
--	AC_MSG_CHECKING(whether udev supports builtin blkid)
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether udev supports builtin blkid" >&5
+-$as_echo_n "checking whether udev supports builtin blkid... " >&6; }
 -	udev_version=$(udevadm info --version 2>/dev/null)
 -	if test -n "$udev_version" && test "$udev_version" -ge 176; then
 -		UDEV_HAS_BUILTIN_BLKID=yes
 -	else
 -		UDEV_HAS_BUILTIN_BLKID=no
 -	fi
--	AC_MSG_RESULT($UDEV_HAS_BUILTIN_BLKID)
-+AC_MSG_CHECKING(whether to enable executable path detection in udev rules)
-+AC_ARG_ENABLE(udev_rule_exec_detection,
-+	      AC_HELP_STRING([--enable-udev-rule-exec-detection],
-+			     [enable executable path detection in udev rules]),
-+	      UDEV_RULE_EXEC_DETECTION=$enableval, UDEV_RULE_EXEC_DETECTION=no)
-+AC_MSG_RESULT($UDEV_RULE_EXEC_DETECTION)
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_HAS_BUILTIN_BLKID" >&5
+-$as_echo "$UDEV_HAS_BUILTIN_BLKID" >&6; }
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable executable path detection in udev rules" >&5
++$as_echo_n "checking whether to enable executable path detection in udev rules... " >&6; }
++# Check whether --enable-udev_rule_exec_detection was given.
++if test "${enable_udev_rule_exec_detection+set}" = set; then :
++  enableval=$enable_udev_rule_exec_detection; UDEV_RULE_EXEC_DETECTION=$enableval
++else
++  UDEV_RULE_EXEC_DETECTION=no
++fi
 +
-+dnl -- Check support for built-in blkid against target udev version
-+AC_MSG_CHECKING(whether udev supports built-in blkid)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_RULE_EXEC_DETECTION" >&5
++$as_echo "$UDEV_RULE_EXEC_DETECTION" >&6; }
++
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether udev supports built-in blkid" >&5
++$as_echo_n "checking whether udev supports built-in blkid... " >&6; }
 +test x$PKGCONFIG_INIT != x1 && pkg_config_init
 +if $($PKG_CONFIG --atleast-version=176 libudev); then
 +	UDEV_HAS_BUILTIN_BLKID=yes
 +else
 +	UDEV_HAS_BUILTIN_BLKID=no
  fi
-+AC_MSG_RESULT($UDEV_HAS_BUILTIN_BLKID)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $UDEV_HAS_BUILTIN_BLKID" >&5
++$as_echo "$UDEV_HAS_BUILTIN_BLKID" >&6; }
  
  ################################################################################
- dnl -- Compatibility mode
-@@ -1528,6 +1534,7 @@ AC_SUBST(UDEV_LIBS)
- AC_SUBST(UDEV_PC)
- AC_SUBST(UDEV_RULES)
- AC_SUBST(UDEV_SYNC)
-+AC_SUBST(UDEV_RULE_EXEC_DETECTION)
- AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
- AC_SUBST(CUNIT_LIBS)
- AC_SUBST(CUNIT_CFLAGS)
-diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
-index 605e088..29af467 100644
---- a/udev/10-dm.rules.in
-+++ b/udev/10-dm.rules.in
-@@ -18,11 +18,7 @@ KERNEL=="device-mapper", NAME="(DM_DIR)/control"
- 
- SUBSYSTEM!="block", GOTO="dm_end"
- KERNEL!="dm-[0-9]*", GOTO="dm_end"
--
--# Set proper sbin path, /sbin has higher priority than /usr/sbin.
--ENV{DM_SBIN_PATH}="/sbin"
--TEST!="$env{DM_SBIN_PATH}/dmsetup", ENV{DM_SBIN_PATH}="/usr/sbin"
--TEST!="$env{DM_SBIN_PATH}/dmsetup", GOTO="dm_end"
-+(DM_EXEC_RULE)
- 
- # Device created, major and minor number assigned - "add" event generated.
- # Table loaded - no event generated.
-@@ -40,7 +36,7 @@ ACTION!="add|change", GOTO="dm_end"
- # These flags are encoded in DM_COOKIE variable that was introduced in
- # kernel version 2.6.31. Therefore, we can use this feature with
- # kernels >= 2.6.31 only. Cookie is not decoded for remove event.
--ENV{DM_COOKIE}=="?*", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup udevflags $env{DM_COOKIE}"
-+ENV{DM_COOKIE}=="?*", IMPORT{program}="(DM_EXEC)/dmsetup udevflags $env{DM_COOKIE}"
- 
- # Rule out easy-to-detect inappropriate events first.
- ENV{DISK_RO}=="1", GOTO="dm_disable"
-@@ -91,8 +87,8 @@ ACTION=="add", ENV{DM_UDEV_RULES_VSN}!="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}!="1
- # so we also have to call dmsetup if the kernel version used
- # is in between these releases.
- TEST=="dm", ENV{DM_NAME}="$attr{dm/name}", ENV{DM_UUID}="$attr{dm/uuid}", ENV{DM_SUSPENDED}="$attr{dm/suspended}"
--TEST!="dm", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o name,uuid,suspended"
--ENV{DM_SUSPENDED}!="?*", IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o suspended"
-+TEST!="dm", IMPORT{program}="(DM_EXEC)/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o name,uuid,suspended"
-+ENV{DM_SUSPENDED}!="?*", IMPORT{program}="(DM_EXEC)/dmsetup info -j %M -m %m -c --nameprefixes --noheadings --rows -o suspended"
- 
- # dmsetup tool provides suspended state information in textual
- # form with values "Suspended"/"Active". We translate it to
-diff --git a/udev/11-dm-lvm.rules b/udev/11-dm-lvm.rules
-deleted file mode 100644
-index 8244464..0000000
---- a/udev/11-dm-lvm.rules
-+++ /dev/null
-@@ -1,37 +0,0 @@
--# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
--#
--# This file is part of LVM2.
--
--# Udev rules for LVM.
--#
--# These rules create symlinks for LVM logical volumes in
--# /dev/VG directory (VG is an actual VG name). Some udev
--# environment variables are set (they can be used in later
--# rules as well):
--#   DM_LV_NAME - logical volume name
--#   DM_VG_NAME - volume group name
--#   DM_LV_LAYER - logical volume layer (blank if not set)
--
--# "add" event is processed on coldplug only!
--ACTION!="add|change", GOTO="lvm_end"
--ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
--ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
--
--# Use DM name and split it up into its VG/LV/layer constituents.
--IMPORT{program}="$env{DM_SBIN_PATH}/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
--
--ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
--
--# Do not create symlinks for inappropriate subdevices.
--ENV{DM_LV_NAME}=="pvmove?*|?*_vorigin", GOTO="lvm_disable"
--ENV{DM_LV_LAYER}=="?*", GOTO="lvm_disable"
--
--# Create symlinks for top-level devices only.
--ENV{DM_VG_NAME}=="?*", ENV{DM_LV_NAME}=="?*", SYMLINK+="$env{DM_VG_NAME}/$env{DM_LV_NAME}", GOTO="lvm_end"
--
--LABEL="lvm_disable"
--ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}="1"
--ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="1"
--OPTIONS:="nowatch"
--
--LABEL="lvm_end"
-diff --git a/udev/11-dm-lvm.rules.in b/udev/11-dm-lvm.rules.in
-new file mode 100644
-index 0000000..58ef210
---- /dev/null
-+++ b/udev/11-dm-lvm.rules.in
-@@ -0,0 +1,37 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
-+# Udev rules for LVM.
-+#
-+# These rules create symlinks for LVM logical volumes in
-+# /dev/VG directory (VG is an actual VG name). Some udev
-+# environment variables are set (they can be used in later
-+# rules as well):
-+#   DM_LV_NAME - logical volume name
-+#   DM_VG_NAME - volume group name
-+#   DM_LV_LAYER - logical volume layer (blank if not set)
-+
-+# "add" event is processed on coldplug only!
-+ACTION!="add|change", GOTO="lvm_end"
-+ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
-+ENV{DM_UUID}!="LVM-?*", GOTO="lvm_end"
-+
-+# Use DM name and split it up into its VG/LV/layer constituents.
-+IMPORT{program}="(DM_EXEC)/dmsetup splitname --nameprefixes --noheadings --rows $env{DM_NAME}"
-+
-+ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
-+
-+# Do not create symlinks for inappropriate subdevices.
-+ENV{DM_LV_NAME}=="pvmove?*|?*_vorigin", GOTO="lvm_disable"
-+ENV{DM_LV_LAYER}=="?*", GOTO="lvm_disable"
-+
-+# Create symlinks for top-level devices only.
-+ENV{DM_VG_NAME}=="?*", ENV{DM_LV_NAME}=="?*", SYMLINK+="$env{DM_VG_NAME}/$env{DM_LV_NAME}", GOTO="lvm_end"
-+
-+LABEL="lvm_disable"
-+ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}="1"
-+ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}="1"
-+OPTIONS:="nowatch"
-+
-+LABEL="lvm_end"
-diff --git a/udev/69-dm-lvm-metad.rules b/udev/69-dm-lvm-metad.rules
-deleted file mode 100644
-index d272e6e..0000000
---- a/udev/69-dm-lvm-metad.rules
-+++ /dev/null
-@@ -1,30 +0,0 @@
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This file is part of LVM2.
--
--# Udev rules for LVM.
--#
--# Scan all block devices having a PV label for LVM metadata.
--# Store this information in LVMetaD (the LVM metadata daemon) and maintain LVM
--# metadata state for improved performance by avoiding further scans while
--# running subsequent LVM commands or while using lvm2app library.
--# Also, notify LVMetaD about any relevant block device removal.
--#
--# This rule is essential for having the information in LVMetaD up-to-date.
--# It also requires blkid to be called on block devices before so only devices
--# used as LVM PVs are processed (ID_FS_TYPE="LVM2_member" or "LVM1_member").
--
--SUBSYSTEM!="block", GOTO="lvm_end"
--
--# Device-mapper devices are processed only on change event or on supported synthesized event.
--KERNEL=="dm-[0-9]*", ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
--
--# Set proper sbin path, /sbin has higher priority than /usr/sbin.
--ENV{LVM_SBIN_PATH}="/sbin"
--TEST!="$env{LVM_SBIN_PATH}/lvm", ENV{LVM_SBIN_PATH}="/usr/sbin"
--TEST!="$env{LVM_SBIN_PATH}/lvm", GOTO="lvm_end"
--
--# Only process devices already marked as a PV - this requires blkid to be called before.
--ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="$env{LVM_SBIN_PATH}/lvm pvscan --cache --major $major --minor $minor"
--
--LABEL="lvm_end"
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-new file mode 100644
-index 0000000..26309de
---- /dev/null
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -0,0 +1,26 @@
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
-+# Udev rules for LVM.
-+#
-+# Scan all block devices having a PV label for LVM metadata.
-+# Store this information in LVMetaD (the LVM metadata daemon) and maintain LVM
-+# metadata state for improved performance by avoiding further scans while
-+# running subsequent LVM commands or while using lvm2app library.
-+# Also, notify LVMetaD about any relevant block device removal.
-+#
-+# This rule is essential for having the information in LVMetaD up-to-date.
-+# It also requires blkid to be called on block devices before so only devices
-+# used as LVM PVs are processed (ID_FS_TYPE="LVM2_member" or "LVM1_member").
-+
-+SUBSYSTEM!="block", GOTO="lvm_end"
-+(LVM_EXEC_RULE)
-+
-+# Device-mapper devices are processed only on change event or on supported synthesized event.
-+KERNEL=="dm-[0-9]*", ENV{DM_UDEV_RULES_VSN}!="?*", GOTO="lvm_end"
-+
-+# Only process devices already marked as a PV - this requires blkid to be called before.
-+ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", RUN+="(LVM_EXEC)/lvm pvscan --cache --major $major --minor $minor"
-+
-+LABEL="lvm_end"
-diff --git a/udev/95-dm-notify.rules b/udev/95-dm-notify.rules
-deleted file mode 100644
-index 72cc609..0000000
---- a/udev/95-dm-notify.rules
-+++ /dev/null
-@@ -1,12 +0,0 @@
--# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
--#
--# This file is part of LVM2.
--
--# Udev rules for device-mapper devices.
--#
--# These rules are responsible for sending a notification to a process
--# waiting for completion of udev rules. The process is identified by
--# a cookie value sent within "change" and "remove" events (the cookie
--# value is set before by that process for every action requested).
--
--ENV{DM_COOKIE}=="?*", RUN+="$env{DM_SBIN_PATH}/dmsetup udevcomplete $env{DM_COOKIE}"
-diff --git a/udev/95-dm-notify.rules.in b/udev/95-dm-notify.rules.in
-new file mode 100644
-index 0000000..80d59d3
---- /dev/null
-+++ b/udev/95-dm-notify.rules.in
-@@ -0,0 +1,12 @@
-+# Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+
-+# Udev rules for device-mapper devices.
-+#
-+# These rules are responsible for sending a notification to a process
-+# waiting for completion of udev rules. The process is identified by
-+# a cookie value sent within "change" and "remove" events (the cookie
-+# value is set before by that process for every action requested).
-+
-+ENV{DM_COOKIE}=="?*", RUN+="(DM_EXEC)/dmsetup udevcomplete $env{DM_COOKIE}"
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index 4ace910..5c15bdb 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -15,28 +15,39 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- 
-+include $(top_builddir)/make.tmpl
-+vpath %.rules $(srcdir)
-+
- DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
- LVM_RULES=11-dm-lvm.rules
--DM_DIR=$(shell grep "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | awk '{print $$3}')
--
- ifeq ("@BUILD_LVMETAD@", "yes")
- LVM_RULES+=69-dm-lvm-metad.rules
- endif
- 
--ifeq ("@UDEV_HAS_BUILTIN_BLKID@", "yes")
--	BLKID_RULE=IMPORT{builtin}=\"blkid\"
-+DM_DIR=$(shell grep "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | awk '{print $$3}')
-+
-+ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
-+SBIN=\$$env{DM_SBIN_PATH}
-+DM_EXEC_RULE=ENV{DM_SBIN_PATH}=\"\/sbin\"\\nTEST!=\"\$$env{DM_SBIN_PATH}\/dmsetup\", ENV{DM_SBIN_PATH}=\"\/usr\/sbin\"
-+DM_EXEC=\$$env{DM_SBIN_PATH}
-+LVM_EXEC_RULE=ENV{LVM_SBIN_PATH}=\"\/sbin\"\\nTEST!=\"\$$env{LVM_SBIN_PATH}\/lvm\", ENV{LVM_SBIN_PATH}=\"\/usr\/sbin\"
-+LVM_EXEC=\$$env{LVM_SBIN_PATH}
+ # Check whether --enable-compat was given.
+@@ -10211,7 +10297,7 @@ if test "$BUILD_DMEVENTD" = yes; then
+ if test "${with_dmeventd_pidfile+set}" = set; then :
+   withval=$with_dmeventd_pidfile; DMEVENTD_PIDFILE=$withval
  else
--	BLKID_RULE=IMPORT{program}=\"\$$env{DM_SBIN_PATH}\/blkid -o udev -p \$$tempnode\"
-+SBIN="@sbindir@"
-+DM_EXEC_RULE=""
-+DM_EXEC=${SBIN}
-+LVM_EXEC_RULE=""
-+LVM_EXEC=${SBIN}
- endif
+-  DMEVENTD_PIDFILE="/var/run/dmeventd.pid"
++  DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid"
+ fi
  
--CLEAN_TARGETS = 10-dm.rules 13-dm-disk.rules
+ 
+@@ -10237,20 +10323,6 @@ _ACEOF
+ 
+ fi
+ 
 -
--include $(top_builddir)/make.tmpl
 -
--vpath %.rules $(srcdir)
-+ifeq ("@UDEV_HAS_BUILTIN_BLKID@", "yes")
-+BLKID_RULE=IMPORT{builtin}=\"blkid\"
-+else
-+BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
-+endif
+-# Check whether --with-default-run-dir was given.
+-if test "${with_default_run_dir+set}" = set; then :
+-  withval=$with_default_run_dir;  DEFAULT_RUN_DIR="$withval"
+-else
+-   DEFAULT_RUN_DIR="/var/run/lvm"
+-fi
+-
+-cat >>confdefs.h <<_ACEOF
+-#define DEFAULT_RUN_DIR "$DEFAULT_RUN_DIR"
+-_ACEOF
+-
+-
+ ################################################################################
  
- %.rules: %.rules.in
--	$(SED) -e "s/(DM_DIR)/$(DM_DIR)/" -e "s/(BLKID_RULE)/$(BLKID_RULE)/" $< >$@
-+	$(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+ # Check whether --with-default-system-dir was given.
+@@ -10491,8 +10563,11 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
  
- %_install: %.rules
- 	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
+ 
+ 
++
++
++
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_l
+ vmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_l
+ vmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.socket scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -11224,6 +11299,7 @@ do
+     "scripts/lvm2_lvmetad_systemd_red_hat.socket") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmetad_systemd_red_hat.socket" ;;
+     "scripts/lvm2_lvmetad_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmetad_systemd_red_hat.service" ;;
+     "scripts/lvm2_monitoring_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_monitoring_init_red_hat" ;;
++    "scripts/dm_event_systemd_red_hat.socket") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.socket" ;;
+     "scripts/dm_event_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.service" ;;
+     "scripts/lvm2_monitoring_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_monitoring_systemd_red_hat.service" ;;
+     "scripts/lvm2_tmpfiles_red_hat.conf") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_tmpfiles_red_hat.conf" ;;
 
 
