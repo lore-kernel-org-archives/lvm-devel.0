@@ -1,216 +1,121 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 28 Jun 2012 00:11:50 +0000 (UTC)
-Subject: master - allocation: allow release_lv_segment_area to fail
-Message-ID: <20120628001150.4D0FA1719@lists.fedorahosted.org>
+Date: Thu, 28 Jun 2012 00:11:52 +0000 (UTC)
+Subject: master - discards: split discard from release_pv_segment
+Message-ID: <20120628001152.A3589172E@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a5ddb347e569a953d6732d8d9f72857a560b5bcd
-Commit:        a5ddb347e569a953d6732d8d9f72857a560b5bcd
-Parent:        5723db017ab62c40697329e1725ecb3b32b4d217
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e59f6981e6547fcffc8bd86b435dac3e805b9fc0
+Commit:        e59f6981e6547fcffc8bd86b435dac3e805b9fc0
+Parent:        a5ddb347e569a953d6732d8d9f72857a560b5bcd
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Jun 27 19:37:54 2012 +0100
+AuthorDate:    Wed Jun 27 20:07:04 2012 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Jun 27 22:11:49 2012 +0100
+CommitterDate: Wed Jun 27 22:11:54 2012 +0100
 
-allocation: allow release_lv_segment_area to fail
+discards: split discard from release_pv_segment
 
-Allow release_lv_segment_area to fail as functions it calls can fail.
+Separate discard_pv_segment out of release_pv_segment
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_alloc.h |    4 +-
- lib/metadata/lv_manip.c |   49 +++++++++++++++++++++++++++-------------------
- lib/metadata/mirror.c   |   10 +++++---
- 4 files changed, 38 insertions(+), 26 deletions(-)
+ lib/metadata/pv_alloc.h |    1 +
+ lib/metadata/pv_manip.c |   58 ++++++++++++++++++++++++++++------------------
+ 2 files changed, 36 insertions(+), 23 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 9479d6d..bc9cea7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.97 - 
- ===============================
-+  Allow release_lv_segment_area to fail as functions it calls can fail.
-   Open device read-only to obtain readahead value.
-   Fix lvconvert error path NULL pointer dereference.
-   Check for create_instance() fail in pvscan_lvmetad_single().
-diff --git a/lib/metadata/lv_alloc.h b/lib/metadata/lv_alloc.h
-index 2ec0030..71ca1ab 100644
---- a/lib/metadata/lv_alloc.h
-+++ b/lib/metadata/lv_alloc.h
-@@ -40,8 +40,8 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
- 			   uint64_t status);
- int move_lv_segment_area(struct lv_segment *seg_to, uint32_t area_to,
- 			 struct lv_segment *seg_from, uint32_t area_from);
--void release_lv_segment_area(struct lv_segment *seg, uint32_t s,
--			     uint32_t area_reduction);
-+int release_lv_segment_area(struct lv_segment *seg, uint32_t s,
-+			    uint32_t area_reduction);
- 
- struct alloc_handle;
- struct alloc_handle *allocate_extents(struct volume_group *vg,
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 5c715a8..bdcc925 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -299,24 +299,25 @@ struct lv_segment *alloc_snapshot_seg(struct logical_volume *lv,
- 	return seg;
+diff --git a/lib/metadata/pv_alloc.h b/lib/metadata/pv_alloc.h
+index d894f31..2318473 100644
+--- a/lib/metadata/pv_alloc.h
++++ b/lib/metadata/pv_alloc.h
+@@ -23,6 +23,7 @@ struct pv_segment *assign_peg_to_lvseg(struct physical_volume *pv, uint32_t pe,
+ int pv_split_segment(struct dm_pool *mem,
+ 		     struct physical_volume *pv, uint32_t pe,
+ 		     struct pv_segment **pvseg_allocated);
++int discard_pv_segment(struct pv_segment *peg, uint32_t discard_area_reduction);
+ int release_pv_segment(struct pv_segment *peg, uint32_t area_reduction);
+ int check_pv_segments(struct volume_group *vg);
+ void merge_pv_segments(struct pv_segment *peg1, struct pv_segment *peg2);
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index 9eca9e7..e3fe272 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -189,14 +189,13 @@ struct pv_segment *assign_peg_to_lvseg(struct physical_volume *pv,
+ 	return peg;
  }
  
--void release_lv_segment_area(struct lv_segment *seg, uint32_t s,
--			     uint32_t area_reduction)
-+int release_lv_segment_area(struct lv_segment *seg, uint32_t s,
-+			    uint32_t area_reduction)
+-int release_pv_segment(struct pv_segment *peg, uint32_t area_reduction)
++int discard_pv_segment(struct pv_segment *peg, uint32_t discard_area_reduction)
  {
- 	if (seg_type(seg, s) == AREA_UNASSIGNED)
--		return;
-+		return 1;
+ 	uint64_t discard_offset_sectors;
+ 	uint64_t pe_start = peg->pv->pe_start;
+-	uint64_t discard_area_reduction = area_reduction;
  
- 	if (seg_type(seg, s) == AREA_PV) {
--		if (release_pv_segment(seg_pvseg(seg, s), area_reduction) &&
--		    seg->area_len == area_reduction)
-+		if (!release_pv_segment(seg_pvseg(seg, s), area_reduction))
-+			return_0;
-+		if (seg->area_len == area_reduction)
- 			seg_type(seg, s) = AREA_UNASSIGNED;
--		return;
-+		return 1;
+ 	if (!peg->lvseg) {
+-		log_error("release_pv_segment with unallocated segment: "
++		log_error("discard_pv_segment with unallocated segment: "
+ 			  "%s PE %" PRIu32, pv_dev_name(peg->pv), peg->pe);
+ 		return 0;
  	}
- 
- 	if ((seg_lv(seg, s)->status & MIRROR_IMAGE) ||
- 	    (seg_lv(seg, s)->status & THIN_POOL_DATA)) {
- 		if (!lv_reduce(seg_lv(seg, s), area_reduction))
--			stack; /* FIXME: any upper level reporting */
--		return;
-+			return_0; /* FIXME: any upper level reporting */
+@@ -205,26 +204,39 @@ int release_pv_segment(struct pv_segment *peg, uint32_t area_reduction)
+ 	 * Only issue discards if enabled in lvm.conf and both
+ 	 * the device and kernel (>= 2.6.35) supports discards.
+ 	 */
+-	if (find_config_tree_bool(peg->pv->fmt->cmd,
+-				  "devices/issue_discards", DEFAULT_ISSUE_DISCARDS) &&
+-	    dev_discard_max_bytes(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev) &&
+-	    dev_discard_granularity(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev)) {
+-		discard_offset_sectors = (peg->pe + peg->lvseg->area_len - area_reduction) *
+-			(uint64_t) peg->pv->vg->extent_size + pe_start;
+-		if (!discard_offset_sectors) {
+-			/*
+-			 * pe_start=0 and the PV's first extent contains the label.
+-			 * Must skip past the first extent.
+-			 */
+-			discard_offset_sectors = peg->pv->vg->extent_size;
+-			discard_area_reduction--;
+-		}
+-		log_debug("Discarding %" PRIu64 " extents offset %" PRIu64 " sectors on %s.",
+-			  discard_area_reduction, discard_offset_sectors, dev_name(peg->pv->dev));
+-		if (discard_area_reduction &&
+-		    !dev_discard_blocks(peg->pv->dev, discard_offset_sectors << SECTOR_SHIFT,
+-					discard_area_reduction * (uint64_t) peg->pv->vg->extent_size * SECTOR_SIZE))
+-			return_0;
++	if (!find_config_tree_bool(peg->pv->fmt->cmd,
++				   "devices/issue_discards", DEFAULT_ISSUE_DISCARDS) ||
++	    !dev_discard_max_bytes(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev) ||
++	    !dev_discard_granularity(peg->pv->fmt->cmd->sysfs_dir, peg->pv->dev))
 +		return 1;
- 	}
- 
- 	if (seg_lv(seg, s)->status & RAID_IMAGE) {
-@@ -328,12 +329,12 @@ void release_lv_segment_area(struct lv_segment *seg, uint32_t s,
- 		*/
- 		if (area_reduction != seg->area_len) {
- 			log_error("Unable to reduce RAID LV - operation not implemented.");
--			return;
-+			return_0;
- 		} else {
- 			if (!lv_remove(seg_lv(seg, s))) {
- 				log_error("Failed to remove RAID image %s",
- 					  seg_lv(seg, s)->name);
--				return;
-+				return 0;
- 			}
- 		}
- 
-@@ -343,10 +344,10 @@ void release_lv_segment_area(struct lv_segment *seg, uint32_t s,
- 				       seg_metalv(seg, s)->le_count)) {
- 				log_error("Failed to remove RAID meta-device %s",
- 					  seg_metalv(seg, s)->name);
--				return;
-+				return 0;
- 			}
- 		}
--		return;
-+		return 1;
- 	}
- 
- 	if (area_reduction == seg->area_len) {
-@@ -360,6 +361,8 @@ void release_lv_segment_area(struct lv_segment *seg, uint32_t s,
- 		seg_le(seg, s) = 0;
- 		seg_type(seg, s) = AREA_UNASSIGNED;
- 	}
++
++	discard_offset_sectors = (peg->pe + peg->lvseg->area_len - discard_area_reduction) *
++				 (uint64_t) peg->pv->vg->extent_size + pe_start;
++	if (!discard_offset_sectors) {
++		/*
++		 * pe_start=0 and the PV's first extent contains the label.
++		 * Must skip past the first extent.
++		 */
++		discard_offset_sectors = peg->pv->vg->extent_size;
++		discard_area_reduction--;
++	}
++
++	log_debug("Discarding %" PRIu32 " extents offset %" PRIu64 " sectors on %s.",
++		  discard_area_reduction, discard_offset_sectors, dev_name(peg->pv->dev));
++	if (discard_area_reduction &&
++	    !dev_discard_blocks(peg->pv->dev, discard_offset_sectors << SECTOR_SHIFT,
++				discard_area_reduction * (uint64_t) peg->pv->vg->extent_size * SECTOR_SIZE))
++		return_0;
 +
 +	return 1;
- }
- 
- /*
-@@ -377,9 +380,11 @@ int move_lv_segment_area(struct lv_segment *seg_to, uint32_t area_to,
- 		pv = seg_pv(seg_from, area_from);
- 		pe = seg_pe(seg_from, area_from);
- 
--		release_lv_segment_area(seg_from, area_from,
--					seg_from->area_len);
--		release_lv_segment_area(seg_to, area_to, seg_to->area_len);
-+		if (!release_lv_segment_area(seg_from, area_from, seg_from->area_len))
-+			return_0;
++}
 +
-+		if (!release_lv_segment_area(seg_to, area_to, seg_to->area_len))
-+			return_0;
- 
- 		if (!set_lv_segment_area_pv(seg_to, area_to, pv, pe))
- 			return_0;
-@@ -390,9 +395,11 @@ int move_lv_segment_area(struct lv_segment *seg_to, uint32_t area_to,
- 		lv = seg_lv(seg_from, area_from);
- 		le = seg_le(seg_from, area_from);
- 
--		release_lv_segment_area(seg_from, area_from,
--					seg_from->area_len);
--		release_lv_segment_area(seg_to, area_to, seg_to->area_len);
-+		if (!release_lv_segment_area(seg_from, area_from, seg_from->area_len))
-+			return_0;
-+
-+		if (!release_lv_segment_area(seg_to, area_to, seg_to->area_len))
-+			return_0;
- 
- 		if (!set_lv_segment_area_lv(seg_to, area_to, lv, le, 0))
- 			return_0;
-@@ -400,7 +407,8 @@ int move_lv_segment_area(struct lv_segment *seg_to, uint32_t area_to,
- 		break;
- 
- 	case AREA_UNASSIGNED:
--		release_lv_segment_area(seg_to, area_to, seg_to->area_len);
-+		if (!release_lv_segment_area(seg_to, area_to, seg_to->area_len))
-+			return_0;
++int release_pv_segment(struct pv_segment *peg, uint32_t area_reduction)
++{
++	if (!peg->lvseg) {
++		log_error("release_pv_segment with unallocated segment: "
++			  "%s PE %" PRIu32, pv_dev_name(peg->pv), peg->pe);
++		return 0;
  	}
  
- 	return 1;
-@@ -493,7 +501,8 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
- 		area_reduction = reduction;
- 
- 	for (s = 0; s < seg->area_count; s++)
--		release_lv_segment_area(seg, s, area_reduction);
-+		if (!release_lv_segment_area(seg, s, area_reduction))
-+			return_0;
- 
- 	seg->len -= reduction;
- 	seg->area_len -= area_reduction;
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 236edea..d943175 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -645,8 +645,8 @@ static int _split_mirror_images(struct logical_volume *lv,
- 		sub_lv = seg_lv(mirrored_seg, mirrored_seg->area_count);
- 
- 		sub_lv->status &= ~MIRROR_IMAGE;
--		release_lv_segment_area(mirrored_seg, mirrored_seg->area_count,
--					mirrored_seg->area_len);
-+		if (!release_lv_segment_area(mirrored_seg, mirrored_seg->area_count, mirrored_seg->area_len))
-+			return_0;
- 
- 		log_very_verbose("%s assigned to be split", sub_lv->name);
- 
-@@ -906,7 +906,8 @@ static int _remove_mirror_images(struct logical_volume *lv,
- 		}
- 		lvl->lv = seg_lv(mirrored_seg, m);
- 		dm_list_add(&tmp_orphan_lvs, &lvl->list);
--		release_lv_segment_area(mirrored_seg, m, mirrored_seg->area_len);
-+		if (!release_lv_segment_area(mirrored_seg, m, mirrored_seg->area_len))
-+			return_0;
- 	}
- 	mirrored_seg->area_count = new_area_count;
- 
-@@ -1468,7 +1469,8 @@ int remove_mirrors_from_segments(struct logical_volume *lv,
- 		}
- 
- 		for (s = new_mirrors + 1; s < seg->area_count; s++)
--			release_lv_segment_area(seg, s, seg->area_len);
-+			if (!release_lv_segment_area(seg, s, seg->area_len))
-+				return_0;
- 
- 		seg->area_count = new_mirrors + 1;
- 
+ 	if (peg->lvseg->area_len == area_reduction) {
 
 
