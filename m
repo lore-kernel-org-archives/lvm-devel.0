@@ -1,48 +1,25 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 04 Jul 2012 12:01:03 +0200
-Subject: master - TEST (lvcreate-raid): Allow more time for RAID arrays to sync
-In-Reply-To: <20120703155232.B2168176E@lists.fedorahosted.org>
-References: <20120703155232.B2168176E@lists.fedorahosted.org>
-Message-ID: <4FF4145F.4040704@redhat.com>
+From: Alasdair G Kergon <agk@redhat.com>
+Date: Wed, 4 Jul 2012 13:29:50 +0100
+Subject: master - RAID: Fix extending size of RAID 4/5/6 logical volumes.
+In-Reply-To: <20120704045302.ECBDF113F@lists.fedorahosted.org>
+References: <20120704045302.ECBDF113F@lists.fedorahosted.org>
+Message-ID: <20120704122950.GG22022@agk-dp.fab.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 3.7.2012 17:52, Jonathan Brassow napsal(a):
-> Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=149ab6921e9029e12899c280f290656b1b60742f
-> Commit:        149ab6921e9029e12899c280f290656b1b60742f
-> Parent:        1d0a2b919fe173e3a25e5f19d535588bb5b214e2
-> Author:        Jonathan Brassow <jbrassow@redhat.com>
-> AuthorDate:    Mon Jun 25 22:20:24 2012 -0500
-> Committer:     Jonathan Brassow <jbrassow@redhat.com>
-> CommitterDate: Mon Jun 25 22:20:24 2012 -0500
->
-> TEST (lvcreate-raid): Allow more time for RAID arrays to sync
->
-> My machines can run very slow sometimes causing this test to fail
-> when it would otherwise have succeeded given more time.
-> ---
->   test/shell/lvcreate-raid.sh |    2 +-
->   1 files changed, 1 insertions(+), 1 deletions(-)
->
-> diff --git a/test/shell/lvcreate-raid.sh b/test/shell/lvcreate-raid.sh
-> index 21ab9a1..b6792c5 100644
-> --- a/test/shell/lvcreate-raid.sh
-> +++ b/test/shell/lvcreate-raid.sh
-> @@ -41,7 +41,7 @@ function wait_for_raid_sync()
->   	local i=0
->
->   	while ! is_raid_in_sync $1; do
-> -		sleep .2
-> +		sleep 1
->   		i=$(($i + 1))
->   		if [ $i -gt 500 ]; then
->   			echo "Sync is taking too long - assume stuck"
+On Wed, Jul 04, 2012 at 04:53:02AM +0000, Jonathan Brassow wrote:
+> Reducing a RAID 4/5/6 LV or extending it with a different number of
+> stripes is still not implemented.  This patch covers the "simple" case
+> where the LV is extended with the same number of stripes as the orginal.
 
-I'd prefer to increase the time  5x   i.e.  test $i -gt 2500;
+For now, we only need to support this 'simple' case.
 
-Zdenek
+Attempts at the complex case (i.e. multiple segments in a raid LV) should just
+give an error message.  (We can consider how to tackle that some other time.)
+
+Alasdair
 
 
