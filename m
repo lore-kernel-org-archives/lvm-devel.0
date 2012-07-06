@@ -1,39 +1,77 @@
-From: Alasdair G Kergon <agk@redhat.com>
-Date: Wed, 4 Jul 2012 22:34:51 +0100
-Subject: liblvm2app stripe_size reported wrong
-In-Reply-To: <201207041401.37385.benscott@nwlink.com>
-References: <201207041320.24826.benscott@nwlink.com>
-	<201207041341.29807.benscott@nwlink.com>
-	<20120704205301.GM22022@agk-dp.fab.redhat.com>
-	<201207041401.37385.benscott@nwlink.com>
-Message-ID: <20120704213451.GO22022@agk-dp.fab.redhat.com>
+From: ben <benscott@nwlink.com>
+Date: Thu, 05 Jul 2012 17:04:05 -0700
+Subject: lvcreate and raid volume size problem
+Message-ID: <2040970.xrSVmVQSQ2@laptop>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Jul 04, 2012 at 02:01:36PM -0700, ben wrote:
-> Sector size is changing to a mix of 512 and 4k which will add to the confusion 
-> if it reports sectors.
+I found what may be a small bug in creating raid volumes.
 
-Like in the kernel, we have a convention that sectors are always treated as 512
-bytes.
- 
-commit 0bc382eae4cf77bdec9e5a2fdb11c72db64438bb
-Author: Petr Rockai <prockai@redhat.com>
-Date:   Thu Nov 25 14:39:02 2010 +0000
+if I start with three pvs with 2364 extents each:
 
-    All 'size' values of lvm2app properties should be in bytes.
-    Fix 'seg_size' to return bytes.
-    
-    Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
-    Reviewed-by: Petr Rockai <prockai@redhat.com>
+lvs --version
+  LVM version:     2.02.95(2) (2012-03-06)
+  Library version: 1.02.74 (2012-03-06)
+  Driver version:  4.22.0
+
+pvs --units 4m
+  PV         VG   Fmt  Attr PSize PFree
+  /dev/sdq   vg1  lvm2 a--  2364  2364
+  /dev/sdr   vg1  lvm2 a--  2364  2364
+  /dev/sds   vg1  lvm2 a--  2364  2364
+
+Since RAID 5 needs a parity stripe and each stripe needs an extent
+for metadata I should have 4726 (2 * 2363) extents for a volume.
+
+But, if I run:
+
+lvcreate --stripes 2 --stripesize 64k --type raid5 --extents +4726 vg1 
+/dev/sdq /dev/sdr /dev/sds
+  Insufficient free space: 7094 extents needed, but only 7092 available
+
+So I run this instead:
+
+lvcreate --stripes 2  --stripesize 64k --type raid5 --extents +4724 vg1 
+/dev/sdq /dev/sdr /dev/sds
+  Logical volume "lvol0" created
+
+Now I have one free extent on each pv:
+
+pvs --units 4m
+  PV         VG   Fmt  Attr PSize    PFree
+  /dev/sdq   vg1  lvm2 a--  2364.00U    1.00U
+  /dev/sdr   vg1  lvm2 a--  2364.00U    1.00U
+  /dev/sds   vg1  lvm2 a--  2364.00U    1.00U
+
+Finally I execute this:
+
+lvextend --stripes 2  --stripesize 64k --type raid5 --extents +2 vg1/lvol0 
+/dev/sdq /dev/sdr /dev/sds
+
+Extending logical volume lvol0 to 18.46 GiB
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Failed to find segment for lvol0_rimage_0 extent 4723
+  Logical volume lvol0 successfully resized
+
+pvs --units 4m
+  PV         VG   Fmt  Attr PSize    PFree
+  /dev/sdq   vg1  lvm2 a--  2364.00U       0U
+  /dev/sdr   vg1  lvm2 a--  2364.00U       0U
+  /dev/sds   vg1  lvm2 a--  2364.00U       0U
 
 
-But if the assertion that all size values should be in bytes is true, why
-did that patch only change one field and not these others?
+Since my program calls lvcreate, it needs to be able to
+determine the maximum lv size, which I am having trouble
+with here. If someone could look into this I would
+appreciate it.
 
-Alasdair
+thank you.
 
 
