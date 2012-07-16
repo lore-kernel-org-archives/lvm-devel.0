@@ -1,66 +1,55 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 16 Jul 2012 09:22:20 +0000 (UTC)
-Subject: master - configure: default tmpfile dir in PREFIX/lib/tmpfiles.d
-Message-ID: <20120716092220.2E65914E8@lists.fedorahosted.org>
+From: dongsu.park@profitbricks.com <dongsu.park@profitbricks.com>
+Date: Mon, 16 Jul 2012 23:18:36 +0200
+Subject: [RFC PATCH 0/3] optimize detection of MD devices
+Message-ID: <1342473519-2853-1-git-send-email-dongsu.park@profitbricks.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3f5cdf20cd65173cc36f765ebe68134299c9cbc8
-Commit:        3f5cdf20cd65173cc36f765ebe68134299c9cbc8
-Parent:        35ebc5d343e2e01b719ce15c801d522a36e54ac4
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Jul 16 11:13:32 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Jul 16 11:17:02 2012 +0200
+From: Dongsu Park <dongsu.park@profitbricks.com>
 
-configure: default tmpfile dir in PREFIX/lib/tmpfiles.d
+This patchset optimizes the detection mechanism of MD devices, as well
+as introduces a possibility to turn off detections of the legacy
+metadata versions.
 
-SYSCONFDIR (the /etc) contains overrides to system-wide settings.
-System-wide settings are in PREFIX/lib/tmpfiles.d by default
----
- configure    |    4 ++--
- configure.in |    4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+In order to detect MD device, LVM has been trying to find MD magic string
+from every underlying device. For that purpose, LVM2 must seek to a specific
+offset for each MD metadata version, i.e. 0.9, 1.0, 1.1, 1.2, meaning
+four operations per device. Being quite inefficient, those cause
+performance problems when creating a certain amount of logical volumes.
 
-diff --git a/configure b/configure
-index e54efd3..ca71fdb 100755
---- a/configure
-+++ b/configure
-@@ -1613,7 +1613,7 @@ Optional Packages:
-                           systemd service files in DIR
-   --with-tmpfilesdir=DIR  install configuration files for management of
-                           volatile files and directories in DIR
--                          [[SYSCONFDIR/tmpfiles.d]]
-+                          [[PREFIX/lib/tmpfiles.d]]
-   --with-dmeventd-pidfile=PATH
-                           dmeventd pidfile [[PID_DIR/dmeventd.pid]]
-   --with-dmeventd-path=PATH
-@@ -9925,7 +9925,7 @@ fi
- if test "${with_tmpfilesdir+set}" = set; then :
-   withval=$with_tmpfilesdir; tmpfilesdir=$withval
- else
--  tmpfilesdir='${sysconfdir}/tmpfiles.d'
-+  tmpfilesdir='${prefix}/lib/tmpfiles.d'
- fi
- 
- ################################################################################
-diff --git a/configure.in b/configure.in
-index 6c27324..8bf0c4e 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1280,8 +1280,8 @@ fi
- ################################################################################
- AC_ARG_WITH(tmpfilesdir,
- 	    AC_HELP_STRING([--with-tmpfilesdir=DIR],
--			   [install configuration files for management of volatile files and directories in DIR [[SYSCONFDIR/tmpfiles.d]]]),
--			   tmpfilesdir=$withval, tmpfilesdir='${sysconfdir}/tmpfiles.d')
-+			   [install configuration files for management of volatile files and directories in DIR [[PREFIX/lib/tmpfiles.d]]]),
-+			   tmpfilesdir=$withval, tmpfilesdir='${prefix}/lib/tmpfiles.d')
- ################################################################################
- dnl -- Ensure additional headers required
- if test x$READLINE = xyes; then
+As shown in the second patch, a solution to the problem is reading block
+area only 2 times for each MD device. First, try to read several bytes from
+the beginning of device. (This is the case of MD metadata version 1.2 or 1.1)
+If MD magic is found there, return immediately.
+If not found, then try again to read from the end of device.
+(That's the case of MD metadata version 1.0 or 0.9)
+
+In addition, the third patch introduces a new config option
+md_detect_metadata_legacy under devices section in lvm.conf, to be able to
+switch on (or off) detection of legacy metadata versions, i.e. 0.9 or 1.0.
+By turning off the option, the checksum can only be searched for v1.2 and
+v1.1 from the beginning of each device. This can dramatically improve
+performance of most LVM2 tools.
+
+Dongsu Park (3):
+  lvm-wrappers: implement wrappers to get min/max u64 values
+  dev-md: optimize detection of MD devices
+  a new config option devices/md_detect_metadata_legacy
+
+ doc/example.conf.in        |   10 +++
+ lib/commands/toolcontext.c |    5 ++
+ lib/config/defaults.h      |    1 +
+ lib/device/dev-md.c        |  159 ++++++++++++++++++++++++++++++++++++++++----
+ lib/misc/lvm-globals.c     |   11 +++
+ lib/misc/lvm-wrappers.c    |   10 +++
+ lib/misc/lvm-wrappers.h    |    3 +
+ man/lvm.conf.5.in          |    8 +++
+ 8 files changed, 193 insertions(+), 14 deletions(-)
+
+-- 
+1.7.10
 
 
