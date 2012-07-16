@@ -1,9 +1,9 @@
 From: dongsu.park@profitbricks.com <dongsu.park@profitbricks.com>
-Date: Mon, 16 Jul 2012 23:18:38 +0200
-Subject: [RFC PATCH 2/3] dev-md: optimize detection of MD devices
+Date: Mon, 16 Jul 2012 23:18:39 +0200
+Subject: [RFC PATCH 3/3] a new config option devices/md_detect_metadata_legacy
 In-Reply-To: <1342473519-2853-1-git-send-email-dongsu.park@profitbricks.com>
 References: <1342473519-2853-1-git-send-email-dongsu.park@profitbricks.com>
-Message-ID: <1342473519-2853-3-git-send-email-dongsu.park@profitbricks.com>
+Message-ID: <1342473519-2853-4-git-send-email-dongsu.park@profitbricks.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,236 +12,148 @@ Content-Transfer-Encoding: 7bit
 
 From: Dongsu Park <dongsu.park@profitbricks.com>
 
-This patch optimizes the detection algorithm of MD devices. In order
-to detect MD device, LVM has been trying to find MD magic string from
-every underlying device. For that purpose, LVM2 must seek to a specific
-offset for each MD metadata version, i.e. 0.9, 1.0, 1.1, 1.2, meaning
-4 operations per device. Being quite inefficient, that causes
-performance problems when creating a certain amount of logical volumes.
+This commit introduces a new config option md_detect_metadata_legacy
+under devices section in lvm.conf, to be able to switch on or off
+detection of legacy metadata versions, i.e. 0.9 or 1.0.
 
-The solution to that is reading block area only 2 times for each MD
-device. First, try to read several bytes from the beginning of device.
-(This is the case of MD metadata version 1.2 or 1.1)
-If MD magic is found there, return immediately.
-If not found, then try again to read from the end of device.
-(That's the case of MD metadata version 1.0 or 0.9)
-
-This mechanism allows LVM tools to determine more quickly whether a
-device is MD device or not, avoiding multiple seek operations to the
-end of each device. For each device, the maximum number of seeks to the
-end of device will decrease from 2 to 1. Under circumstances, no seek
-will be needed at all, when a MD magic is found already from the
-beginning of device.
-
-It's also necessary to start reading MD magic v1.2, followed by reading
-lower versions of MD magic afterwards, because MD devices with newer
-versions of MD metadata (e.g. 1.2) will be more common in these days.
+By default, LVM2 will try to detect if each device is MD device,
+reading MD checksums from different offsets for each MD versions,
+i.e. 1.2, 1.1, 1.0, 0.9. Legacy versions mean 1.0 and 0.9.
+For both of them, LVM2 has to seek to the end of every block device.
+If that causes performance degradation, this option can be disabled,
+so that the checksum can only be searched for v1.2 and v1.1 from
+the beginning of each device.
+(1 enables (by default); 0 disables)
 
 Signed-off-by: Dongsu Park <dongsu.park@profitbricks.com>
 ---
- lib/device/dev-md.c |  155 ++++++++++++++++++++++++++++++++++++++++++++++-----
- 1 file changed, 141 insertions(+), 14 deletions(-)
+ doc/example.conf.in        |   10 ++++++++++
+ lib/commands/toolcontext.c |    5 +++++
+ lib/config/defaults.h      |    1 +
+ lib/device/dev-md.c        |    6 +++++-
+ lib/misc/lvm-globals.c     |   11 +++++++++++
+ man/lvm.conf.5.in          |    8 ++++++++
+ 6 files changed, 40 insertions(+), 1 deletion(-)
 
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index a085014..da1adbc 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -121,6 +121,16 @@ devices {
+     # 1 enables; 0 disables.
+     md_chunk_alignment = 1
+ 
++    # By default, LVM2 will try to detect if each device is MD device,
++    # reading MD checksums from different offsets for each MD versions,
++    # i.e. 1.2, 1.1, 1.0, 0.9. Legacy versions mean 1.0 and 0.9.
++    # For both of them, LVM2 has to seek to the end of every block device.
++    # If that causes performance degradation, this option can be disabled,
++    # so that the checksum can only be searched for v1.2 and v1.1 from the
++    # beginning of each device.
++    # 1 enables; 0 disables.
++    md_detect_metadata_legacy = 1
++
+     # Default alignment of the start of a data area in MB.  If set to 0,
+     # a value of 64KB will be used.  Set to 1 for 1MiB, 2 for 2MiB, etc.
+     # default_data_alignment = @DEFAULT_DATA_ALIGNMENT@
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 529bd51..eb851cb 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -392,6 +392,11 @@ static int _process_config(struct cmd_context *cmd)
+ 
+ 	lvmetad_set_active(find_config_tree_int(cmd, "global/use_lvmetad", 0));
+ 
++	/* md metadata legacy(v0.9, v1.0) detection. Optional. */
++	init_md_detect_metadata_legacy(find_config_tree_bool(cmd,
++					"devices/md_detect_metadata_legacy",
++					DEFAULT_MD_DETECT_METADATA_LEGACY));
++
+ 	return 1;
+ }
+ 
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index bee3d56..bf1609f 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -33,6 +33,7 @@
+ #define DEFAULT_SYSFS_SCAN 1
+ #define DEFAULT_MD_COMPONENT_DETECTION 1
+ #define DEFAULT_MD_CHUNK_ALIGNMENT 1
++#define DEFAULT_MD_DETECT_METADATA_LEGACY 1
+ #define DEFAULT_MULTIPATH_COMPONENT_DETECTION 1
+ #define DEFAULT_IGNORE_SUSPENDED_DEVICES 1
+ #define DEFAULT_DISABLE_AFTER_ERROR_COUNT 0
 diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 247a8ac..4cd0a7b 100644
+index 4cd0a7b..40f15cb 100644
 --- a/lib/device/dev-md.c
 +++ b/lib/device/dev-md.c
-@@ -20,6 +20,12 @@
+@@ -225,8 +225,12 @@ int dev_is_md(struct device *dev, uint64_t *sb)
+ 	}
  
- #ifdef linux
- 
-+/* MD metadata versions from 0.9 to 1.2 */
-+typedef struct md_vers_offset {
-+	uint64_t sb_offset;
-+	uint32_t md_magic;
-+} md_vers_offset_t;
+ 	/* So you haven't found any MD magic from the beginning.
+-	 * Then try again to find MD magic from the end of device.
++	 * Then try again to find MD magic from the end of device,
++	 * if md_detect_metadata_legacy option is enabled.
+ 	 */
++	if (!md_detect_metadata_legacy())
++		goto out;
 +
- /* Lifted from <linux/raid/md_p.h> because of difficulty including it */
+ 	md_offs_end[0].sb_offset = _v1_sb_offset(size, MD_MINOR_V0);	/* 1.0 */
+ 	md_offs_end[1].sb_offset = MD_NEW_SIZE_SECTORS(size) << SECTOR_SHIFT;	/* 0.9 */
+ 	len_md_offs = sizeof(md_offs_end) / sizeof(md_offs_end[0]);
+diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
+index e1512f9..323bb3c 100644
+--- a/lib/misc/lvm-globals.c
++++ b/lib/misc/lvm-globals.c
+@@ -49,6 +49,7 @@ static int _dev_disable_after_error_count = DEFAULT_DISABLE_AFTER_ERROR_COUNT;
+ static uint64_t _pv_min_size = (DEFAULT_PV_MIN_SIZE_KB * 1024L >> SECTOR_SHIFT);
+ static int _detect_internal_vg_cache_corruption =
+ 	DEFAULT_DETECT_INTERNAL_VG_CACHE_CORRUPTION;
++static unsigned _md_detect_metadata_legacy = DEFAULT_MD_DETECT_METADATA_LEGACY;
  
- #define MD_SB_MAGIC 0xa92b4efc
-@@ -79,19 +85,124 @@ static uint64_t _v1_sb_offset(uint64_t size, md_minor_version_t minor_version)
+ void init_verbose(int level)
+ {
+@@ -163,6 +164,11 @@ void init_detect_internal_vg_cache_corruption(int detect)
+ 	_detect_internal_vg_cache_corruption = detect;
  }
  
- /*
-- * Returns -1 on error
-+ * get_md_magic:
-+ *  @dev:         [in ] device to be read
-+ *  @md_offs:     [in ] array including the md magic pairs (offset, md_magic)
-+ *  @len_md_offs: [in ] length of array md_offs[]
-+ *  @sb_offset:   [out] offset to superblock obtained
-+ *
-+ *  Read a specific block area defined in md_offs[], in order to find
-+ *  a uint32 integer representing MD magic from a block device.
-+ *
-+ *  First of all, a memory area from (min_sboff, max_sboff+4) will be read
-+ *  out from the block device. The output buffer will then include two integer
-+ *  values, one from the beginning (offset min_sboff), and another from the
-+ *  end (offset max_sboff).
-+ *
-+ * Returns 1 if any md_magic is found. 0 if not found,
-+ *        -1 on error
-+ */
-+static int get_md_magic(struct device *dev, md_vers_offset_t *md_offs,
-+			unsigned int len_md_offs, uint64_t *sb_offset)
++void init_md_detect_metadata_legacy(unsigned value)
 +{
-+	int i, ret = 0;
-+	uint64_t max_sboff = 0U, min_sboff = 0U;
-+	char *magic_buf;
-+
-+	if (!md_offs)
-+		goto err;
-+
-+	if (len_md_offs < 1)
-+		goto err;
-+
-+	/* Obtain a pair of sb offsets (min_sboff, max_sboff),
-+	 * i.e. the min/max values of md_offs[].
-+	 */
-+	min_sboff = max_sboff = md_offs[0].sb_offset;
-+
-+	for (i=1; i < len_md_offs; i++) {
-+		min_sboff = get_min_val_u64(min_sboff, md_offs[i].sb_offset);
-+		max_sboff = get_max_val_u64(max_sboff, md_offs[i].sb_offset);
-+	}
-+
-+	log_debug("min_sboff[%lu], max_sboff[%lu].", min_sboff, max_sboff);
-+
-+	/* Move the max offset by 4 bytes forwards,
-+	 * as we need to read until the end of md magic */
-+	max_sboff += sizeof(uint32_t);
-+	magic_buf = (char *)alloca(max_sboff - min_sboff);
-+
-+	log_debug("reading %lu bytes of device area from offset %lu.",
-+		max_sboff - min_sboff, min_sboff);
-+
-+	/* read md magic by once */
-+	if (!dev_read(dev, min_sboff, max_sboff - min_sboff, magic_buf)) {
-+		log_verbose("cannot read sb_offset.");
-+		ret = -1;
-+		goto err;
-+	}
-+
-+	/* Get md_magic value for each md version */
-+	for (i=0; i < len_md_offs; i++) {
-+		md_offs[i].md_magic = *(uint32_t *)(magic_buf
-+			+ (md_offs[i].sb_offset - min_sboff));
-+
-+		if (md_offs[i].md_magic == xlate32(MD_SB_MAGIC) ||
-+		    md_offs[i].md_magic == MD_SB_MAGIC) {
-+			*sb_offset = md_offs[i].sb_offset;
-+			ret = 1;	/* found */
-+			goto out;
-+		}
-+	}
-+
-+	/* md magic is not found */
-+out:
-+	log_debug("sb_offset[%lu].", *sb_offset);
-+
-+	return ret;
-+err:
-+	return ret;
++	_md_detect_metadata_legacy = value;
 +}
 +
-+/*
-+ * dev_is_md:
-+ *
-+ *  Determine if a device is md device.
-+ *  First, try to read several bytes from the beginning of device.
-+ *  (This is the case of MD metadata version 1.2 or 1.1)
-+ *  If any MD magic is found there, return immediately.
-+ *  If not found, then try again to read from the end of device.
-+ *  (That's the case of MD metadata version 1.0 or 0.9)
-+ *
-+ *  This mechanism allows LVM tools to read more fast from MD devices,
-+ *  avoiding multiple seek operations to the end of each device. For each
-+ *  device, the maximum number of seeks to the end of device will decrease
-+ *  from 2 to 1. Under circumstances, no seek will be needed@all,
-+ *  when a MD magic is found already from the beginning of device.
-+ *
-+ *  It's also necessary to start reading the MD magic v1.2, followed by
-+ *  reading lower versions of MD magic afterwards, because MD devices
-+ *  with newer versions of MD metadata (e.g. 1.2) will be more common in
-+ *  these days.
-+ *
-+ * Returns 1 if md_magic is found. 0 if not found,
-+ *        -1 on error
-  */
- int dev_is_md(struct device *dev, uint64_t *sb)
+ void set_cmd_name(const char *cmd)
  {
- 	int ret = 1;
--	md_minor_version_t minor;
--	uint64_t size, sb_offset;
-+	uint64_t size, sb_offset = 0;
-+	md_vers_offset_t md_offs_begin[2];
-+	md_vers_offset_t md_offs_end[2];
-+	unsigned int len_md_offs;
- 
- 	if (!dev_get_size(dev, &size)) {
- 		stack;
- 		return -1;
- 	}
- 
-+	log_debug("block device size = %lu", size);
-+
- 	if (size < MD_RESERVED_SECTORS * 2)
- 		return 0;
- 
-@@ -100,20 +211,34 @@ int dev_is_md(struct device *dev, uint64_t *sb)
- 		return -1;
- 	}
- 
--	/* Check if it is an md component device. */
--	/* Version 0.90.0 */
--	sb_offset = MD_NEW_SIZE_SECTORS(size) << SECTOR_SHIFT;
--	if (_dev_has_md_magic(dev, sb_offset))
-+	/* First of all, try to read md_magic from the beginning of device */
-+
-+	md_offs_begin[0].sb_offset = _v1_sb_offset(size, MD_MINOR_V2);	/* 1.2 */
-+	md_offs_begin[1].sb_offset = _v1_sb_offset(size, MD_MINOR_V1);	/* 1.1 */
-+	len_md_offs = sizeof(md_offs_begin) / sizeof(md_offs_begin[0]);
-+
-+	if ((ret = get_md_magic(dev, md_offs_begin, len_md_offs, &sb_offset)) < 0 ||
-+		ret > 0) {
-+		/* if md_magic is found, or any error occurred. */
-+		stack;
- 		goto out;
-+	}
- 
--	minor = MD_MINOR_VERSION_MIN;
--	/* Version 1, try v1.0 -> v1.2 */
--	do {
--		sb_offset = _v1_sb_offset(size, minor);
--		if (_dev_has_md_magic(dev, sb_offset))
--			goto out;
--	} while (++minor <= MD_MINOR_VERSION_MAX);
-+	/* So you haven't found any MD magic from the beginning.
-+	 * Then try again to find MD magic from the end of device.
-+	 */
-+	md_offs_end[0].sb_offset = _v1_sb_offset(size, MD_MINOR_V0);	/* 1.0 */
-+	md_offs_end[1].sb_offset = MD_NEW_SIZE_SECTORS(size) << SECTOR_SHIFT;	/* 0.9 */
-+	len_md_offs = sizeof(md_offs_end) / sizeof(md_offs_end[0]);
- 
-+	if ((ret = get_md_magic(dev, md_offs_end, len_md_offs, &sb_offset)) < 0 ||
-+		ret > 0) {
-+		/* if md_magic is found, or any error occurred. */
-+		stack;
-+		goto out;
-+	}
-+
-+	/* not found */
- 	ret = 0;
- 
- out:
-@@ -123,6 +248,8 @@ out:
- 	if (ret && sb)
- 		*sb = sb_offset;
- 
-+	log_debug("return sb_offset[%lu].", sb_offset);
-+
- 	return ret;
+ 	strncpy(_cmd_name, cmd, sizeof(_cmd_name) - 1);
+@@ -307,3 +313,8 @@ int detect_internal_vg_cache_corruption(void)
+ {
+ 	return _detect_internal_vg_cache_corruption;
  }
- 
++
++unsigned md_detect_metadata_legacy(void)
++{
++	return _md_detect_metadata_legacy;
++}
+diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
+index 47ee9f1..868b8e8 100644
+--- a/man/lvm.conf.5.in
++++ b/man/lvm.conf.5.in
+@@ -137,6 +137,14 @@ has been reused without wiping the md superblocks first.
+ directly upon an md device, LVM2 will align its data blocks with the
+ md device's stripe-width.
+ .IP
++\fBmd_detect_metadata_legacy\fP \(em If set to 1, LVM2 will try to detect
++if each device is MD device, reading MD checksums from different offsets for
++each MD versions, i.e. 1.2, 1.1, 1.0, 0.9.  Legacy versions mean 1.0 and 0.9.
++For both of them, LVM2 has to seek to the end of every block device. If that
++causes performance degradation, this option can be disabled, so that the
++checksum can only be searched for v1.2 and v1.1 from the beginning of each
++device.
++.IP
+ \fBdata_alignment_detection\fP \(em If set to 1, and your kernel provides
+ topology information in sysfs for the Physical Volume, the start of data
+ area will be aligned on a multiple of the ?minimum_io_size? or
 -- 
 1.7.10
 
