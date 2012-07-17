@@ -1,52 +1,40 @@
-From: Dongsu Park <dongsu.park@profitbricks.com>
-Date: Tue, 17 Jul 2012 17:19:08 +0200
-Subject: [RFC PATCH 0/3] optimize detection of MD devices
-In-Reply-To: <20120716221758.GB2641@agk-dp.fab.redhat.com>
-References: <1342473519-2853-1-git-send-email-dongsu.park@profitbricks.com>
-	<20120716221758.GB2641@agk-dp.fab.redhat.com>
-Message-ID: <20120717151908.GA22995@gmail.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Tue, 17 Jul 2012 15:52:18 +0000 (UTC)
+Subject: master - TEST (lvresize-raid): Don't run test when RAID module doesn't exist
+Message-ID: <20120717155218.4624F1CFD@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Alasdair,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00d9bf8107b47e51fc966dd5bd78789190c6e846
+Commit:        00d9bf8107b47e51fc966dd5bd78789190c6e846
+Parent:        3f5cdf20cd65173cc36f765ebe68134299c9cbc8
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Jul 17 10:50:21 2012 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Jul 17 10:50:21 2012 -0500
 
-On 16.07.2012 23:17, Alasdair G Kergon wrote:
-> On Mon, Jul 16, 2012 at 11:18:36PM +0200, dongsu.park at profitbricks.com wrote:
-> > This patchset optimizes the detection mechanism of MD devices, as well
-> 
-> Optimising the detection, good.
+TEST (lvresize-raid):  Don't run test when RAID module doesn't exist
 
-Thank you for reviewing the patches.
+Check for RAID module and skip test if not there.
+---
+ test/shell/lvresize-raid.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-> > as introduces a possibility to turn off detections of the legacy
-> > metadata versions.
->  
-> Maybe, but I'd discourage people from turning it off more strongly, as it's a
-> small price to pay for peace of mind.
-> 
-> So, after review and a bit of tweaking, yes, I'm in favour.
-> 
-> However, the whole of this code is itself 'legacy' in that this detection is
-> moving into blkid under udev's control, so you should check if that code is
-> sufficiently efficient too.
-
-Ok, that's a good point.
-It would be more optimal to get MD metadata versions, rather than to turn
-off v1.0/v0.9 completely.
-
-I think it could be possible to determine the MD metadata version of a
-device, simply reading the sysfs attribute,
-e.g. /sys/block/md*/md/metadata_version.
-
-I'll post a second patchset with the improvement.
-
-Dongsu
-
-> 
-> Alasdair
-> 
+diff --git a/test/shell/lvresize-raid.sh b/test/shell/lvresize-raid.sh
+index c6c5dd1..ea5cc80 100644
+--- a/test/shell/lvresize-raid.sh
++++ b/test/shell/lvresize-raid.sh
+@@ -11,6 +11,8 @@
+ 
+ . lib/test
+ 
++aux target_at_least dm-raid 1 1 0 || skip
++
+ aux prepare_vg 5 80
+ 
+ # Extend a 2-way RAID1
 
 
