@@ -1,70 +1,72 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Thu, 26 Jul 2012 11:24:07 +0000 (UTC)
-Subject: master - filters: move device_info_t definition to header
-Message-ID: <20120726112407.1AA1C2300@lists.fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Thu, 26 Jul 2012 22:12:21 +0000 (UTC)
+Subject: master - vgextend: Allow PVs to be added to VGs that have PVs missing
+Message-ID: <20120726221221.9AE7B3166@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45db25817ff342a86b2ddf000b4b3a4d59be8848
-Commit:        45db25817ff342a86b2ddf000b4b3a4d59be8848
-Parent:        9161308252336491a107983ed16481e446853e26
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Thu Jul 26 12:22:55 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Thu Jul 26 12:22:55 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=186a2772e8ac3c2088bdfc833c32d773464d666b
+Commit:        186a2772e8ac3c2088bdfc833c32d773464d666b
+Parent:        45db25817ff342a86b2ddf000b4b3a4d59be8848
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Jul 26 17:06:06 2012 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Thu Jul 26 17:06:06 2012 -0500
 
-filters: move device_info_t definition to header
+vgextend:  Allow PVs to be added to VGs that have PVs missing
 
+Allowing people to add devices to a VG that has PVs missing helps
+people avoid the inability to repair RAID LVs in certain cases.
+For example, if a user creates a RAID 4/5/6 LV using all of the
+available devices in a VG, there will be no spare devices to
+repair the LV with if a device should fail.  Further, because the
+VG is missing a device, new devices cannot be added to allow the
+repair.  If 'vgreduce --removemissing' were attempted, the
+"MISSING" PV could not be removed without also destroying the RAID
+LV.
+
+Allowing vgextend to operate solves the circular dependency.
+
+When the PV is added by a vgextend operation, the sequence number is
+incremented and the 'MISSING' flag is put on the PVs which are missing.
 ---
- lib/filters/device-types.h |    5 +++++
- lib/filters/filter.c       |    9 ++-------
- 2 files changed, 7 insertions(+), 7 deletions(-)
+ WHATS_NEW        |    1 +
+ tools/vgextend.c |    9 +++++++--
+ 2 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
-index 1208160..9efbe68 100644
---- a/lib/filters/device-types.h
-+++ b/lib/filters/device-types.h
-@@ -13,6 +13,11 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 735bdba..32ebf15 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.97 - 
+ ===============================
++  Allow vgextend to add PVs to a VG that is missing PVs.
+   Recognise Micron PCIe SSDs in filter and move array out to device-types.h.
+   Fix segfault when attempting to replace RAID 4/5/6 device (2.02.97).
+   Fix dumpconfig <node> to print only <node> without its siblings (2.02.89).
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index d1adf21..161796c 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -66,8 +66,13 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
  
-+typedef struct {
-+	const char name[15];
-+	const int8_t max_partitions;
-+} device_info_t;
-+
- /*
-  * Devices are only checked for partition tables if their minor number
-  * is a multiple of the number corresponding to their type below
-diff --git a/lib/filters/filter.c b/lib/filters/filter.c
-index bab20ec..dcb6c5e 100644
---- a/lib/filters/filter.c
-+++ b/lib/filters/filter.c
-@@ -27,6 +27,8 @@
- #include <fcntl.h>
- #include <limits.h>
+-	if (arg_count(cmd, restoremissing_ARG))
+-		cmd->handles_missing_pvs = 1;
++	/*
++	 * It is always ok to add new PVs to a VG - even if there are
++	 * missing PVs.  No LVs are affected by this operation, but
++	 * repair processes - particularly for RAID segtypes - can
++	 * be facilitated.
++	 */
++	cmd->handles_missing_pvs = 1;
  
-+#include "device-types.h"
-+
- #define NUMBER_OF_MAJORS 4096
- 
- #define PARTITION_SCSI_DEVICE (1 << 0)
-@@ -35,13 +37,6 @@ static struct {
- 	int flags;
- } _partitions[NUMBER_OF_MAJORS];
- 
--typedef struct {
--	const char name[15];
--	const int8_t max_partitions;
--} device_info_t;
--
--#include "device-types.h"
--
- static int _md_major = -1;
- static int _blkext_major = -1;
- static int _drbd_major = -1;
+ 	log_verbose("Checking for volume group \"%s\"", vg_name);
+ 	vg = vg_read_for_update(cmd, vg_name, NULL, 0);
 
 
