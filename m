@@ -1,218 +1,164 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 31 Jul 2012 14:49:05 +0000 (UTC)
-Subject: master - systemd: add lvm2 activation generator
-Message-ID: <20120731144905.A8EC03171@fedorahosted.org>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 27 Jul 2012 19:03:50 +0000 (UTC)
+Subject: master - dmsetup: allow --noflush with status/wait for thin
+Message-ID: <20120727190350.31B9D33A5@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e67ba8ca13115ffdd324e64e965240dced8ef1
-Commit:        d3e67ba8ca13115ffdd324e64e965240dced8ef1
-Parent:        f64f22e2d657346197fcd0b8e97e87b6d290ab2b
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jul 31 16:20:24 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 31 16:20:24 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=25ae0b39b77d80990d0821729ab4f2307bd38c16
+Commit:        25ae0b39b77d80990d0821729ab4f2307bd38c16
+Parent:        186a2772e8ac3c2088bdfc833c32d773464d666b
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Jul 27 20:03:07 2012 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Jul 27 20:03:07 2012 +0100
 
-systemd: add lvm2 activation generator
+dmsetup: allow --noflush with status/wait for thin
 
-The lvm2 activation generator generates systemd units conditionally
-based on the global/use_lvmetad lvm.conf setting.
-
-If use_lvmetad=0, the lvm2-activation-early.service and lvm2-activation.service
-units will be generated. These units are responsible for direct volume activation
-by calling "vgchange -aay --sysinit" (this is actually the original on-boot
-activation as it was used before). If use_lvmetad=1, no units will be generated
-as we're relying on autoactivation.
-
-Important thing to note is that the lvm2-activation units normally bring
-in the udev-settle ("storage-wait") service that waits for udev to settle
-(with block devices). We don't need this if lvmetad is used in conjunction
-with autoactivation feature... but systemd units can't be enabled or disabled
-(or dependencies added/removed) dynamically based on external configuration.
-
-Therefore, we need the unit generator which adds support for such situations:
-the units as a whole either exist or not based on the external configuration.
+Allow --noflush with dmsetup status and wait (for thin target 1.3.0 /
+ioctl 4.23.0).
 ---
- .../lvm2_activation_generator_systemd_red_hat.c    |  169 ++++++++++++++++++++
- 1 files changed, 169 insertions(+), 0 deletions(-)
+ WHATS_NEW_DM          |    1 +
+ libdm/misc/dm-ioctl.h |   12 +++++++-----
+ man/dmsetup.8.in      |    9 ++++++++-
+ tools/dmsetup.c       |    7 +++++--
+ 4 files changed, 21 insertions(+), 8 deletions(-)
 
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-new file mode 100644
-index 0000000..9921004
---- /dev/null
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -0,0 +1,169 @@
-+/*
-+ * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of the device-mapper userspace tools.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU General Public License v.2.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+*/
-+
-+#include <stdio.h>
-+#include <unistd.h>
-+#include <errno.h>
-+#include <stdarg.h>
-+#include <sys/types.h>
-+#include <sys/stat.h>
-+#include <fcntl.h>
-+#include "lvm2app.h"
-+
-+#define KMSG_DEV_PATH        "/dev/kmsg"
-+#define LVM_CONF_USE_LVMETAD "global/use_lvmetad"
-+
-+#define DEFAULT_UNIT_DIR     "/tmp"
-+#define UNIT_NAME_EARLY      "lvm2-activation-early.service"
-+#define UNIT_NAME            "lvm2-activation.service"
-+#define UNIT_TARGET          "local-fs.target"
-+
-+static char unit_path[PATH_MAX];
-+static char target_path[PATH_MAX];
-+static char message[PATH_MAX];
-+static int kmsg_fd = -1;
-+
-+static void kmsg(const char *format, ...)
-+{
-+	va_list ap;
-+	int n;
-+
-+	va_start(ap, format);
-+	n = vsnprintf(message, sizeof(message), format, ap);
-+	va_end(ap);
-+
-+	if (kmsg_fd < 0 || (n < 0 || ((unsigned) n + 1 > sizeof(message))))
-+		return;
-+
-+	write(kmsg_fd, message, n + 1);
-+}
-+
-+static int lvm_uses_lvmetad(void)
-+{
-+	lvm_t lvm;
-+	int r;
-+
-+	if (!(lvm = lvm_init(NULL))) {
-+		kmsg("LVM: Failed to initialize library context for activation generator.\n");
-+		return 0;
-+	}
-+	r = lvm_config_find_bool(lvm, LVM_CONF_USE_LVMETAD, 0);
-+	lvm_quit(lvm);
-+
-+	return r;
-+}
-+
-+static int register_unit_with_target(const char *dir, const char *unit, const char *target)
-+{
-+	int r = 1;
-+
-+	if (dm_snprintf(target_path, PATH_MAX, "%s/%s.wants", dir, target) < 0) {
-+		r = 0; goto out;
-+	}
-+	(void) dm_prepare_selinux_context(target_path, S_IFDIR);
-+	if (mkdir(target_path, 0755) < 0 && errno != EEXIST) {
-+		kmsg("LVM: Failed to create target directory %s: %m.\n", target_path);
-+		r = 0; goto out;
-+	}
-+
-+	if (dm_snprintf(target_path, PATH_MAX, "%s/%s.wants/%s", dir, target, unit) < 0) {
-+		r = 0; goto out;
-+	}
-+	(void) dm_prepare_selinux_context(target_path, S_IFLNK);
-+	if (symlink(unit_path, target_path) < 0) {
-+		kmsg("LVM: Failed to create symlink for unit %s: %m.\n", unit);
-+		r = 0;
-+	}
-+out:
-+	dm_prepare_selinux_context(NULL, 0);
-+	return r;
-+}
-+
-+static int generate_unit(const char *dir, int early)
-+{
-+	FILE *f;
-+	const char *unit = early ? UNIT_NAME_EARLY : UNIT_NAME;
-+
-+	if (dm_snprintf(unit_path, PATH_MAX, "%s/%s", dir, unit) < 0)
-+		return 0;
-+
-+	if (!(f = fopen(unit_path, "wxe"))) {
-+		kmsg("LVM: Failed to create unit file %s: %m.\n", unit);
-+		return 0;
-+	}
-+
-+	fputs("# Automatically generated by lvm2-activation-generator.\n"
-+	      "#\n"
-+	      "# This unit is responsible for direct activation of LVM2 logical volumes\n"
-+	      "# if lvmetad daemon is not used (global/use_lvmetad=0 lvm.conf setting),\n"
-+	      "# hence volume autoactivation is not applicable.\n"
-+	      "# Direct LVM2 activation requires udev to be settled!\n\n"
-+	      "[Unit]\n"
-+	      "Description=Activation of LVM2 logical volumes\n"
-+	      "Documentation=man:lvm(8) man:vgchange(8)\n"
-+	      "SourcePath=/etc/lvm/lvm.conf\n"
-+	      "DefaultDependencies=no\n", f);
-+
-+	if (early)
-+		fputs("After=fedora-wait-storage.service\n", f);
-+	else
-+		fputs("After=lvm2-activation-early.service cryptsetup.target\n", f);
-+
-+	fputs("Before=local-fs.target shutdown.target\n"
-+	      "Wants=fedora-wait-storage.service\n\n"
-+	      "[Service]\n"
-+	      "ExecStart=/usr/sbin/lvm vgchange -aay --sysinit\n"
-+	      "Type=oneshot\n", f);
-+
-+	if (fclose(f) < 0) {
-+		kmsg("LVM: Failed to write unit file %s: %m.\n", unit);
-+		return 0;
-+	}
-+
-+	if (!register_unit_with_target(dir, unit, UNIT_TARGET)) {
-+		kmsg("LVM: Failed to register unit %s with target %s.\n", unit, UNIT_TARGET);
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+int main(int argc, char *argv[])
-+{
-+	const char *dir;
-+	int r = EXIT_SUCCESS;
-+
-+	kmsg_fd = open(KMSG_DEV_PATH, O_WRONLY|O_NOCTTY|O_CLOEXEC);
-+
-+	if (argc > 1 && argc != 4) {
-+		kmsg("LVM: Activation generator takes three or no arguments.\n");
-+		r = EXIT_FAILURE; goto out;
-+	}
-+
-+	/* If lvmetad used, rely on autoactivation instead of direct activation. */
-+	if (lvm_uses_lvmetad()) {
-+		kmsg("LVM: Logical Volume autoactivation enabled.\n");
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 0bfd016..a790ccf 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.76 - 
+ ===============================
++  Allow --noflush with dmsetup status and wait (for thin target).
+   Add dm_config_write_one_node to libdevmapper.
+   Add support for thin pool message release/reserve_metadata_snap.
+   Add support for thin pool discard and external origin.
+diff --git a/libdm/misc/dm-ioctl.h b/libdm/misc/dm-ioctl.h
+index c031315..1cf66fe 100644
+--- a/libdm/misc/dm-ioctl.h
++++ b/libdm/misc/dm-ioctl.h
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001 - 2003 Sistina Software (UK) Limited.
+- * Copyright (C) 2004 - 2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004 - 2012 Red Hat, Inc. All rights reserved.
+  *
+  * This file is released under the LGPL.
+  */
+@@ -269,9 +269,9 @@ enum {
+ #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
+ 
+ #define DM_VERSION_MAJOR	4
+-#define DM_VERSION_MINOR	20
++#define DM_VERSION_MINOR	23
+ #define DM_VERSION_PATCHLEVEL	0
+-#define DM_VERSION_EXTRA	"-ioctl (2011-02-02)"
++#define DM_VERSION_EXTRA	"-ioctl (2012-07-25)"
+ 
+ /* Status bits */
+ #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
+@@ -309,6 +309,8 @@ enum {
+ 
+ /*
+  * Set this to suspend without flushing queued ios.
++ * Also disables flushing uncommitted changes in the thin target before
++ * generating statistics for DM_TABLE_STATUS and DM_DEV_WAIT.
+  */
+ #define DM_NOFLUSH_FLAG		(1 << 11) /* In */
+ 
+@@ -331,8 +333,8 @@ enum {
+ #define DM_UUID_FLAG			(1 << 14) /* In */
+ 
+ /*
+- * If set, all buffers are wiped after use. Used when sending
+- * or requesting sensitive data like crypt key.
++ * If set, all buffers are wiped after use. Use when sending
++ * or requesting sensitive data such as an encryption key.
+  */
+ #define DM_SECURE_DATA_FLAG		(1 << 15) /* In */
+ 
+diff --git a/man/dmsetup.8.in b/man/dmsetup.8.in
+index 8eb679b..90c715f 100644
+--- a/man/dmsetup.8.in
++++ b/man/dmsetup.8.in
+@@ -109,6 +109,7 @@ dmsetup \- low level logical volume management
+ .B dmsetup status
+ .RB [ \-\-target
+ .IR target_type ]
++.RB [ \-\-noflush ]
+ .RI [ device_name ]
+ .br
+ .B dmsetup suspend
+@@ -143,6 +144,7 @@ dmsetup \- low level logical volume management
+ .B dmsetup version
+ .br
+ .B dmsetup wait
++.RB [ \-\-noflush ]
+ .I device_name
+ .RI [ event_nr ]
+ .br
+@@ -477,11 +479,13 @@ Default subsystem is LVM.
+ .B status
+ .RB [ \-\-target
+ .IR target_type ]
++.RB [ \-\-noflush ]
+ .RI [ device_name ]
+ .br
+ Outputs status information for each of the device's targets.
+ With \-\-target, only information relating to the specified target type
+-is displayed.
++any is displayed.  With \-\-noflush, the thin target (from version 1.3.0)
++doesn't commit any outstanding changes to disk before reporting its statistics.
+ .br
+ .HP
+ .B suspend
+@@ -577,6 +581,7 @@ Outputs version information.
+ 
+ .TP
+ .B wait
++.RB [ \-\-noflush ]
+ .I device_name
+ .RI [ event_nr ]
+ .br
+@@ -584,6 +589,8 @@ Sleeps until the event counter for device_name exceeds event_nr.
+ Use \-v to see the event number returned.
+ To wait until the next event is triggered, use \fBinfo\fP to find
+ the last event number.
++With \-\-noflush, the thin target (from version 1.3.0) doesn't commit
++any outstanding changes to disk before reporting its statistics.
+ .SH TABLE FORMAT
+ Each line of the table specifies a single target and is of the form:
+ .P
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 2787b76..5422f0b 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -1642,6 +1642,9 @@ static int _status(CMD_ARGS)
+ 	if (_switches[CHECKS_ARG] && !dm_task_enable_checks(dmt))
+ 		goto out;
+ 
++	if (_switches[NOFLUSH_ARG] && !dm_task_no_flush(dmt))
 +		goto out;
-+	}
 +
-+	dir = argc > 1 ? argv[1] : DEFAULT_UNIT_DIR;
-+
-+	if (!generate_unit(dir, 1) || !generate_unit(dir, 0))
-+		r = EXIT_FAILURE;
-+out:
-+	kmsg("LVM: Activation generator %s.\n", r ? "failed" : "successfully completed");
-+	if (kmsg_fd != -1)
-+		close(kmsg_fd);
-+	return r;
-+}
+ 	if (!dm_task_run(dmt))
+ 		goto out;
+ 
+@@ -2994,9 +2997,9 @@ static struct command _commands[] = {
+ 	{"ls", "[--target <target_type>] [--exec <command>] [-o options] [--tree]", 0, 0, 0, _ls},
+ 	{"info", "[<device>]", 0, -1, 1, _info},
+ 	{"deps", "[-o options] [<device>]", 0, -1, 1, _deps},
+-	{"status", "[<device>] [--target <target_type>]", 0, -1, 1, _status},
++	{"status", "[<device>] [--noflush] [--target <target_type>]", 0, -1, 1, _status},
+ 	{"table", "[<device>] [--target <target_type>] [--showkeys]", 0, -1, 1, _status},
+-	{"wait", "<device> [<event_nr>]", 0, 2, 0, _wait},
++	{"wait", "<device> [<event_nr>] [--noflush]", 0, 2, 0, _wait},
+ 	{"mknodes", "[<device>]", 0, -1, 1, _mknodes},
+ 	{"mangle", "[<device>]", 0, -1, 1, _mangle},
+ 	{"udevcreatecookie", "", 0, 0, 0, _udevcreatecookie},
 
 
