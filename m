@@ -1,33 +1,42 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 13 Oct 2006 17:14:32 -0400
-Subject: [PATCH LVM2] (10/12) calculate free pe counts before allocation attempt
-In-Reply-To: <452FFCFB.6090805@ce.jp.nec.com>
-References: <452FFCFB.6090805@ce.jp.nec.com>
-Message-ID: <453001B8.8040906@ce.jp.nec.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 30 Jul 2012 15:17:50 +0000 (UTC)
+Subject: master - version: update
+Message-ID: <20120730151750.4F9175600@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds calculation of free pe counts and checks it
-before doing any allocation attempt.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e39de2282214e8716a9e6e3152a0957889fe6f29
+Commit:        e39de2282214e8716a9e6e3152a0957889fe6f29
+Parent:        20ca6d6545e6a0a8e84c117fd4530de0421bc78d
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Jul 30 16:17:16 2012 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Jul 30 16:17:16 2012 +0100
+
+version: update
+
+Update version date.
+---
+ VERSION    |    2 +-
+ VERSION_DM |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/VERSION b/VERSION
+index b26c415..e1fd846 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.97(2)-git (2012-06-09)
++2.02.97(2)-git (2012-07-30)
+diff --git a/VERSION_DM b/VERSION_DM
+index 749d204..e01aaa7 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.76-git (2012-06-09)
++1.02.76-git (2012-07-30)
 
 
-$ diffstat -p1 10.calcfree.patch
- lib/metadata/lv_manip.c |   30 ++++++++++++++++++++++++++----
- 1 file changed, 26 insertions(+), 4 deletions(-)
-
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
-
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 10.calcfree.patch
-Type: text/x-patch
-Size: 1890 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061013/be275032/attachment.bin>
