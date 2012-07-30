@@ -1,66 +1,66 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Fri, 13 Oct 2006 16:55:51 -0400
-Subject: [PATCH LVM2] (2/12) rewrite with struct allocation request
-In-Reply-To: <452FFCFB.6090805@ce.jp.nec.com>
-References: <452FFCFB.6090805@ce.jp.nec.com>
-Message-ID: <452FFD57.6040407@ce.jp.nec.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon, 30 Jul 2012 09:25:05 +0000 (UTC)
+Subject: master - TEST: Add lvmetad-test; checks --test with lvmetad.
+Message-ID: <20120730092505.7B7BE340A@lists.fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch introduces 'struct allocaction_request' to generalize
-the allocation request currently embedded in struct alloc_handle.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=20ca6d6545e6a0a8e84c117fd4530de0421bc78d
+Commit:        20ca6d6545e6a0a8e84c117fd4530de0421bc78d
+Parent:        6997943f2221729449469d1a7963055991c2361d
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Mon Jul 30 11:21:55 2012 +0200
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Mon Jul 30 11:21:55 2012 +0200
 
-o The struct is in this form:
-   struct allocation_request {
-        uint32_t len; /* requested length of single area */
-        uint32_t area_count; /* number of areas with same length */
-        uint32_t multiple;      /* LV size is extended with (len * multiple) */
-        uint32_t allocated; /* allocated length of single area */
-        int flags;
-        int index;      /* index to alloced_areas[] */
-   };
+TEST: Add lvmetad-test; checks --test with lvmetad.
 
-  For example, if you do 'lvcreate -l3 -m1', the first allocation
-  request would be:
-     { len = 3, area_count = 2, multiple = 1, index = 0 }
-  and for the 2nd allocation (i.e. log) would be:
-     { len = 1, area_count = 1, multiple = 1, index = 2 }
+---
+ test/shell/lvmetad-test.sh |   34 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 34 insertions(+), 0 deletions(-)
 
-  _handle_allocation_requests() will call _find_parallel_space() for
-  each struct allocation_request.
+diff --git a/test/shell/lvmetad-test.sh b/test/shell/lvmetad-test.sh
+new file mode 100644
+index 0000000..7e801f1
+--- /dev/null
++++ b/test/shell/lvmetad-test.sh
+@@ -0,0 +1,34 @@
++#!/bin/sh
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++. lib/test
++
++aux prepare_pvs 2
++
++vgcreate $vg1 $dev1 $dev2 --test
++vgs | not grep $vg1
++vgcreate $vg1 $dev1 $dev2
++vgs | grep $vg1
++
++lvcreate -n bar -l 1 $vg1 --test
++lvs | not grep bar
++lvcreate -n bar -l 1 $vg1
++lvs | grep bar
++
++lvremove $vg1/bar -f --test
++lvs | grep bar
++lvremove $vg1/bar -f
++lvs | not grep bar
++
++vgremove $vg1 --test
++vgs | grep $vg1
++vgremove $vg1
++vgs | not grep $vg1
 
-  The flags is used to describe preference and also be used later
-  to find out for what purpose the request was.
 
-o _find_parallel_space() is simplified since we don't need to carry
-  around the attempt-wide "*allocated" or "max_parallel" and a lot of
-  division and multiplication.
-
-o lv_add_log_segment() is changed to search alloced_areas for log.
-  It should be easily extended to cope with multiple log allocation.
-
-o Set up of struct allocation_request is done in _alloc_init().
-  It seems better to do it out side of allocate_extents()
-  and allocate_extents() to take the array of struct allocation_request.
-
-
-$ diffstat -p1 02.alloc_requests.patch
- lib/metadata/lv_manip.c |  459 ++++++++++++++++++++++++++++++++-------------
- 1 file changed, 310 insertions(+), 149 deletions(-)
-
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
-
-
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 02.alloc_requests.patch
-Type: text/x-patch
-Size: 24365 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20061013/6d5a1bc7/attachment.bin>
