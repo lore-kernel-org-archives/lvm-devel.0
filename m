@@ -1,201 +1,218 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 31 Jul 2012 14:49:08 +0000 (UTC)
-Subject: master - systemd: integrate lvm2 activation generator with conf+make
-Message-ID: <20120731144908.28C223171@fedorahosted.org>
+Date: Tue, 31 Jul 2012 14:49:05 +0000 (UTC)
+Subject: master - systemd: add lvm2 activation generator
+Message-ID: <20120731144905.A8EC03171@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fa68466e904568d054f0b0cf5fdab6499cb47998
-Commit:        fa68466e904568d054f0b0cf5fdab6499cb47998
-Parent:        d3e67ba8ca13115ffdd324e64e965240dced8ef1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d3e67ba8ca13115ffdd324e64e965240dced8ef1
+Commit:        d3e67ba8ca13115ffdd324e64e965240dced8ef1
+Parent:        f64f22e2d657346197fcd0b8e97e87b6d290ab2b
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Jul 31 16:46:24 2012 +0200
+AuthorDate:    Tue Jul 31 16:20:24 2012 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Jul 31 16:46:24 2012 +0200
+CommitterDate: Tue Jul 31 16:20:24 2012 +0200
 
-systemd: integrate lvm2 activation generator with conf+make
+systemd: add lvm2 activation generator
 
+The lvm2 activation generator generates systemd units conditionally
+based on the global/use_lvmetad lvm.conf setting.
+
+If use_lvmetad=0, the lvm2-activation-early.service and lvm2-activation.service
+units will be generated. These units are responsible for direct volume activation
+by calling "vgchange -aay --sysinit" (this is actually the original on-boot
+activation as it was used before). If use_lvmetad=1, no units will be generated
+as we're relying on autoactivation.
+
+Important thing to note is that the lvm2-activation units normally bring
+in the udev-settle ("storage-wait") service that waits for udev to settle
+(with block devices). We don't need this if lvmetad is used in conjunction
+with autoactivation feature... but systemd units can't be enabled or disabled
+(or dependencies added/removed) dynamically based on external configuration.
+
+Therefore, we need the unit generator which adds support for such situations:
+the units as a whole either exist or not based on the external configuration.
 ---
- Makefile.in         |    7 ++++++-
- WHATS_NEW           |    2 ++
- configure           |    9 ++++++++-
- configure.in        |    8 +++++++-
- make.tmpl.in        |    3 ++-
- scripts/Makefile.in |   26 ++++++++++++++++++++------
- 6 files changed, 45 insertions(+), 10 deletions(-)
+ .../lvm2_activation_generator_systemd_red_hat.c    |  169 ++++++++++++++++++++
+ 1 files changed, 169 insertions(+), 0 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index 5e0b348..04746d1 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -16,7 +16,7 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- 
--SUBDIRS = doc include man scripts
-+SUBDIRS = doc include man
- 
- ifeq ("@UDEV_RULES@", "yes")
-   SUBDIRS += udev
-@@ -36,6 +36,8 @@ ifeq ("@BUILD_LVMETAD@", "yes")
-   SUBDIRS += libdaemon
- endif
- 
-+SUBDIRS += scripts
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
+new file mode 100644
+index 0000000..9921004
+--- /dev/null
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -0,0 +1,169 @@
++/*
++ * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++*/
 +
- # FIXME Should use intermediate Makefiles here!
- ifeq ($(MAKECMDGOALS),distclean)
-   SUBDIRS = doc include man scripts \
-@@ -98,6 +100,9 @@ install_system_dirs:
- install_initscripts: 
- 	$(MAKE) -C scripts install_initscripts
- 
-+install_systemd_generators:
-+	$(MAKE) -C scripts install_systemd_generators
++#include <stdio.h>
++#include <unistd.h>
++#include <errno.h>
++#include <stdarg.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include "lvm2app.h"
 +
- install_systemd_units:
- 	$(MAKE) -C scripts install_systemd_units
- 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5208da9..92dd0dc 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.97 - 
- ===============================
-+  Add make install_systemd_generators.
-+  Add generator for lvm2 activation systemd units.
-   Add lvm_config_find_bool lvm2app fn to retrieve bool value from config tree.
-   Respect --test also when using lvmetad.
-   No longer capitalise first LV attribute char for invalid snapshots.
-diff --git a/configure b/configure
-index ca71fdb..52f0e36 100755
---- a/configure
-+++ b/configure
-@@ -597,6 +597,7 @@ ac_subst_vars='LTLIBOBJS
- usrsbindir
- usrlibdir
- tmpfilesdir
-+systemdutildir
- systemdsystemunitdir
- udevdir
- udev_prefix
-@@ -9917,7 +9918,12 @@ if test -n "$pkg_systemdsystemunitdir"; then
- fi
- 
- if test -z "$systemdsystemunitdir"; then
--	    systemdsystemunitdir='/lib/systemd/system';
-+	    systemdsystemunitdir='${exec_prefix}/lib/systemd/system';
-+fi
++#define KMSG_DEV_PATH        "/dev/kmsg"
++#define LVM_CONF_USE_LVMETAD "global/use_lvmetad"
 +
-+systemdutildir=$($PKG_CONFIG --variable=systemdutildir systemd)
-+if test -z "$systemdutildir"; then
-+	    systemdutildir='${exec_prefix}/lib/systemd';
- fi
- ################################################################################
- 
-@@ -10566,6 +10572,7 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[()]' '{print $2}'`
- 
- 
- 
++#define DEFAULT_UNIT_DIR     "/tmp"
++#define UNIT_NAME_EARLY      "lvm2-activation-early.service"
++#define UNIT_NAME            "lvm2-activation.service"
++#define UNIT_TARGET          "local-fs.target"
 +
- ################################################################################
- ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmetad/Makefile doc/Makefile doc/example.conf include/.symlinks include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/replicator/Makefile lib/misc/lvm-version.h lib/raid/Makefile lib/snapshot/Makefile lib/thin/Makefile libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_l
- vmetad_systemd_red_hat.socket scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/dm_event_systemd_red_hat.socket scripts/dm_event_systemd_red_hat.service scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile unit-tests/datastruct/Makefile unit-tests/regex/Makefile unit-tests/mm/Makefile"
- 
-diff --git a/configure.in b/configure.in
-index 8bf0c4e..1c908f9 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1275,7 +1275,12 @@ if test -n "$pkg_systemdsystemunitdir"; then
- fi
- 
- if test -z "$systemdsystemunitdir"; then
--	    systemdsystemunitdir='/lib/systemd/system';
-+	    systemdsystemunitdir='${exec_prefix}/lib/systemd/system';
-+fi
++static char unit_path[PATH_MAX];
++static char target_path[PATH_MAX];
++static char message[PATH_MAX];
++static int kmsg_fd = -1;
 +
-+systemdutildir=$($PKG_CONFIG --variable=systemdutildir systemd)
-+if test -z "$systemdutildir"; then
-+	    systemdutildir='${exec_prefix}/lib/systemd';
- fi
- ################################################################################
- AC_ARG_WITH(tmpfilesdir,
-@@ -1549,6 +1554,7 @@ AC_SUBST(tmpdir)
- AC_SUBST(udev_prefix)
- AC_SUBST(udevdir)
- AC_SUBST(systemdsystemunitdir)
-+AC_SUBST(systemdutildir)
- AC_SUBST(tmpfilesdir)
- AC_SUBST(usrlibdir)
- AC_SUBST(usrsbindir)
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 25cc87f..b8b127f 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -67,7 +67,8 @@ staticdir = $(DESTDIR)@STATICDIR@
- udevdir = $(DESTDIR)@udevdir@
- pkgconfigdir = $(usrlibdir)/pkgconfig
- initdir = $(DESTDIR)$(sysconfdir)/rc.d/init.d
--systemd_dir = $(DESTDIR)@systemdsystemunitdir@
-+systemd_unit_dir = $(DESTDIR)@systemdsystemunitdir@
-+systemd_generator_dir = $(DESTDIR)@systemdutildir@/system-generators
- tmpfiles_dir = $(DESTDIR)@tmpfilesdir@
- ocf_scriptdir = $(DESTDIR)@OCFDIR@
- 
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index 53c85f5..40396b0 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -15,9 +15,16 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- 
-+SOURCES = lvm2_activation_generator_systemd_red_hat.c
-+TARGETS = lvm2_activation_generator_systemd_red_hat
++static void kmsg(const char *format, ...)
++{
++	va_list ap;
++	int n;
 +
- include $(top_builddir)/make.tmpl
- 
-+DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so $(top_builddir)/libdm/libdevmapper.so
-+LVMLIBS = @LVM2APP_LIB@ -ldevmapper
++	va_start(ap, format);
++	n = vsnprintf(message, sizeof(message), format, ap);
++	va_end(ap);
 +
- SCRIPTS = lvmdump.sh lvmconf.sh vgimportclone.sh
++	if (kmsg_fd < 0 || (n < 0 || ((unsigned) n + 1 > sizeof(message))))
++		return;
 +
- ifeq ("@FSADM@", "yes")
- 	SCRIPTS += fsadm.sh
- endif
-@@ -59,16 +66,23 @@ ifeq ("@BUILD_CMIRRORD@", "yes")
- 	$(INSTALL_SCRIPT) cmirrord_init_red_hat $(initdir)/cmirrord
- endif
- 
-+lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS)
-+	$(CC) -o $@ $(OBJECTS) $(LVMLIBS)
++	write(kmsg_fd, message, n + 1);
++}
 +
-+install_systemd_generators:
-+	$(INSTALL_DIR) $(systemd_generator_dir)
-+	$(INSTALL_PROGRAM) lvm2_activation_generator_systemd_red_hat $(systemd_generator_dir)/lvm2-activation-generator
++static int lvm_uses_lvmetad(void)
++{
++	lvm_t lvm;
++	int r;
 +
- install_systemd_units:
--	$(INSTALL_DIR) $(systemd_dir)
-+	$(INSTALL_DIR) $(systemd_unit_dir)
- ifeq ("@BUILD_DMEVENTD@", "yes")
--	$(INSTALL_DATA) dm_event_systemd_red_hat.socket $(systemd_dir)/dm-event.socket
--	$(INSTALL_DATA) dm_event_systemd_red_hat.service $(systemd_dir)/dm-event.service
--	$(INSTALL_DATA) lvm2_monitoring_systemd_red_hat.service $(systemd_dir)/lvm2-monitor.service
-+	$(INSTALL_DATA) dm_event_systemd_red_hat.socket $(systemd_unit_dir)/dm-event.socket
-+	$(INSTALL_DATA) dm_event_systemd_red_hat.service $(systemd_unit_dir)/dm-event.service
-+	$(INSTALL_DATA) lvm2_monitoring_systemd_red_hat.service $(systemd_unit_dir)/lvm2-monitor.service
- endif
- ifeq ("@BUILD_LVMETAD@", "yes")
--	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.socket $(systemd_dir)/lvm2-lvmetad.socket
--	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.service $(systemd_dir)/lvm2-lvmetad.service
-+	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.socket $(systemd_unit_dir)/lvm2-lvmetad.socket
-+	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.service $(systemd_unit_dir)/lvm2-lvmetad.service
- endif
- 
- install_tmpfiles_configuration:
++	if (!(lvm = lvm_init(NULL))) {
++		kmsg("LVM: Failed to initialize library context for activation generator.\n");
++		return 0;
++	}
++	r = lvm_config_find_bool(lvm, LVM_CONF_USE_LVMETAD, 0);
++	lvm_quit(lvm);
++
++	return r;
++}
++
++static int register_unit_with_target(const char *dir, const char *unit, const char *target)
++{
++	int r = 1;
++
++	if (dm_snprintf(target_path, PATH_MAX, "%s/%s.wants", dir, target) < 0) {
++		r = 0; goto out;
++	}
++	(void) dm_prepare_selinux_context(target_path, S_IFDIR);
++	if (mkdir(target_path, 0755) < 0 && errno != EEXIST) {
++		kmsg("LVM: Failed to create target directory %s: %m.\n", target_path);
++		r = 0; goto out;
++	}
++
++	if (dm_snprintf(target_path, PATH_MAX, "%s/%s.wants/%s", dir, target, unit) < 0) {
++		r = 0; goto out;
++	}
++	(void) dm_prepare_selinux_context(target_path, S_IFLNK);
++	if (symlink(unit_path, target_path) < 0) {
++		kmsg("LVM: Failed to create symlink for unit %s: %m.\n", unit);
++		r = 0;
++	}
++out:
++	dm_prepare_selinux_context(NULL, 0);
++	return r;
++}
++
++static int generate_unit(const char *dir, int early)
++{
++	FILE *f;
++	const char *unit = early ? UNIT_NAME_EARLY : UNIT_NAME;
++
++	if (dm_snprintf(unit_path, PATH_MAX, "%s/%s", dir, unit) < 0)
++		return 0;
++
++	if (!(f = fopen(unit_path, "wxe"))) {
++		kmsg("LVM: Failed to create unit file %s: %m.\n", unit);
++		return 0;
++	}
++
++	fputs("# Automatically generated by lvm2-activation-generator.\n"
++	      "#\n"
++	      "# This unit is responsible for direct activation of LVM2 logical volumes\n"
++	      "# if lvmetad daemon is not used (global/use_lvmetad=0 lvm.conf setting),\n"
++	      "# hence volume autoactivation is not applicable.\n"
++	      "# Direct LVM2 activation requires udev to be settled!\n\n"
++	      "[Unit]\n"
++	      "Description=Activation of LVM2 logical volumes\n"
++	      "Documentation=man:lvm(8) man:vgchange(8)\n"
++	      "SourcePath=/etc/lvm/lvm.conf\n"
++	      "DefaultDependencies=no\n", f);
++
++	if (early)
++		fputs("After=fedora-wait-storage.service\n", f);
++	else
++		fputs("After=lvm2-activation-early.service cryptsetup.target\n", f);
++
++	fputs("Before=local-fs.target shutdown.target\n"
++	      "Wants=fedora-wait-storage.service\n\n"
++	      "[Service]\n"
++	      "ExecStart=/usr/sbin/lvm vgchange -aay --sysinit\n"
++	      "Type=oneshot\n", f);
++
++	if (fclose(f) < 0) {
++		kmsg("LVM: Failed to write unit file %s: %m.\n", unit);
++		return 0;
++	}
++
++	if (!register_unit_with_target(dir, unit, UNIT_TARGET)) {
++		kmsg("LVM: Failed to register unit %s with target %s.\n", unit, UNIT_TARGET);
++		return 0;
++	}
++
++	return 1;
++}
++
++int main(int argc, char *argv[])
++{
++	const char *dir;
++	int r = EXIT_SUCCESS;
++
++	kmsg_fd = open(KMSG_DEV_PATH, O_WRONLY|O_NOCTTY|O_CLOEXEC);
++
++	if (argc > 1 && argc != 4) {
++		kmsg("LVM: Activation generator takes three or no arguments.\n");
++		r = EXIT_FAILURE; goto out;
++	}
++
++	/* If lvmetad used, rely on autoactivation instead of direct activation. */
++	if (lvm_uses_lvmetad()) {
++		kmsg("LVM: Logical Volume autoactivation enabled.\n");
++		goto out;
++	}
++
++	dir = argc > 1 ? argv[1] : DEFAULT_UNIT_DIR;
++
++	if (!generate_unit(dir, 1) || !generate_unit(dir, 0))
++		r = EXIT_FAILURE;
++out:
++	kmsg("LVM: Activation generator %s.\n", r ? "failed" : "successfully completed");
++	if (kmsg_fd != -1)
++		close(kmsg_fd);
++	return r;
++}
 
 
