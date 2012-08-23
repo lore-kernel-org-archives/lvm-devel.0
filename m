@@ -1,123 +1,109 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 12:42:32 +0000 (UTC)
-Subject: master - cleanup: keep MKNOD type cast clean
-Message-ID: <20120823124232.1D507A33BE@fedorahosted.org>
+Date: Thu, 23 Aug 2012 12:42:34 +0000 (UTC)
+Subject: master - cleanup: uint64_t casts
+Message-ID: <20120823124234.7B1ACA33BE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff86c6ed00859a93b984ffd5944c6ba3e450c747
-Commit:        ff86c6ed00859a93b984ffd5944c6ba3e450c747
-Parent:        ba309e0da5bd22f844dbfc284c1606ca413f79f7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd67a3151aa3a3202d52fcc9ffac781b96dca04a
+Commit:        bd67a3151aa3a3202d52fcc9ffac781b96dca04a
+Parent:        ff86c6ed00859a93b984ffd5944c6ba3e450c747
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 16 20:06:07 2012 +0200
+AuthorDate:    Thu Aug 16 20:07:30 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Aug 23 14:37:21 2012 +0200
 
-cleanup: keep MKNOD type cast clean
+cleanup: uint64_t casts
 
-Setup major already a dev_t type before it gets shifted.
 ---
- lib/device/device.c       |    2 +-
- libdm/ioctl/libdm-iface.c |    6 +++---
- libdm/libdm-common.c      |    2 +-
- libdm/libdm-deptree.c     |    4 ++--
- tools/pvscan.c            |    2 +-
- 5 files changed, 8 insertions(+), 8 deletions(-)
+ lib/format1/disk-rep.c     |    2 +-
+ lib/format1/layout.c       |    2 +-
+ lib/format1/lvm1-label.c   |    2 +-
+ lib/format_pool/disk_rep.c |    2 +-
+ lib/metadata/lv_manip.c    |    2 +-
+ tools/pvdisplay.c          |    2 +-
+ 6 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/device/device.c b/lib/device/device.c
-index 37bed63..3e5e2a4 100644
---- a/lib/device/device.c
-+++ b/lib/device/device.c
-@@ -347,7 +347,7 @@ int get_primary_dev(const char *sysfs_dir,
- 			  path, buffer);
- 		goto out;
- 	}
--	*result = MKDEV(pri_maj, pri_min);
-+	*result = MKDEV((dev_t)pri_maj, pri_min);
- 	ret = 1;
- 
- out:
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 5276c11..9932aa9 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -239,7 +239,7 @@ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
- 		return -1;
+diff --git a/lib/format1/disk-rep.c b/lib/format1/disk-rep.c
+index d7c3f7d..0143ea0 100644
+--- a/lib/format1/disk-rep.c
++++ b/lib/format1/disk-rep.c
+@@ -335,7 +335,7 @@ static void __update_lvmcache(const struct format_type *fmt,
+ 		return;
  	}
  
--	if (major && buf.st_rdev != MKDEV(major, minor)) {
-+	if (major && buf.st_rdev != MKDEV((dev_t)major, minor)) {
- 		log_verbose("%s: Wrong device number: (%u, %u) instead of "
- 			    "(%u, %u)", control,
- 			    MAJOR(buf.st_mode), MINOR(buf.st_mode),
-@@ -282,7 +282,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
- 	(void) dm_prepare_selinux_context(control, S_IFCHR);
- 	old_umask = umask(DM_CONTROL_NODE_UMASK);
- 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
--		  MKDEV(major, minor)) < 0)  {
-+		  MKDEV((dev_t)major, minor)) < 0)  {
- 		log_sys_error("mknod", control);
- 		(void) dm_prepare_selinux_context(NULL, 0);
- 		return 0;
-@@ -1062,7 +1062,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 		}
+-	lvmcache_set_device_size(info, xlate32(dl->pvd.pv_size) << SECTOR_SHIFT);
++	lvmcache_set_device_size(info, ((uint64_t)xlate32(dl->pvd.pv_size)) << SECTOR_SHIFT);
+ 	lvmcache_del_mdas(info);
+ 	lvmcache_make_valid(info);
+ }
+diff --git a/lib/format1/layout.c b/lib/format1/layout.c
+index de9b206..14a7eaf 100644
+--- a/lib/format1/layout.c
++++ b/lib/format1/layout.c
+@@ -153,7 +153,7 @@ int calculate_extent_count(struct physical_volume *pv, uint32_t extent_size,
  
- 		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
--		dmi->dev = MKDEV(dmt->major, dmt->minor);
-+		dmi->dev = MKDEV((dev_t)dmt->major, dmt->minor);
- 	}
+ 		pvd->pe_start = _round_up(end, LVM1_PE_ALIGN);
  
- 	/* Does driver support device number referencing? */
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index fd775ca..7929889 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -841,7 +841,7 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
+-	} while ((pvd->pe_start + (pvd->pe_total * extent_size))
++	} while ((pvd->pe_start + ((uint64_t)pvd->pe_total * extent_size))
+ 		 > pv->size);
+ 
+ 	if (pvd->pe_total > MAX_PE_TOTAL) {
+diff --git a/lib/format1/lvm1-label.c b/lib/format1/lvm1-label.c
+index 4c157ac..6138a05 100644
+--- a/lib/format1/lvm1-label.c
++++ b/lib/format1/lvm1-label.c
+@@ -79,7 +79,7 @@ static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+ 		return_0;
+ 	*label = lvmcache_get_label(info);
+ 
+-	lvmcache_set_device_size(info, xlate32(pvd->pv_size) << SECTOR_SHIFT);
++	lvmcache_set_device_size(info, ((uint64_t)xlate32(pvd->pv_size)) << SECTOR_SHIFT);
+ 	lvmcache_del_mdas(info);
+ 	lvmcache_make_valid(info);
+ 
+diff --git a/lib/format_pool/disk_rep.c b/lib/format_pool/disk_rep.c
+index 2201ab9..a140384 100644
+--- a/lib/format_pool/disk_rep.c
++++ b/lib/format_pool/disk_rep.c
+@@ -103,7 +103,7 @@ int read_pool_label(struct pool_list *pl, struct labeller *l,
+ 	if (label)
+ 		*label = lvmcache_get_label(info);
+ 
+-	lvmcache_set_device_size(info, xlate32_be(pd->pl_blocks) << SECTOR_SHIFT);
++	lvmcache_set_device_size(info, ((uint64_t)xlate32_be(pd->pl_blocks)) << SECTOR_SHIFT);
+ 	lvmcache_del_mdas(info);
+ 	lvmcache_make_valid(info);
+ 
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 70b984e..51abae0 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -726,7 +726,7 @@ static uint32_t mirror_log_extents(uint32_t region_size, uint32_t pe_size, uint3
  {
- 	char path[PATH_MAX];
- 	struct stat info;
--	dev_t dev = MKDEV(major, minor);
-+	dev_t dev = MKDEV((dev_t)major, minor);
- 	mode_t old_mask;
+ 	size_t area_size, bitset_size, log_size, region_count;
  
- 	_build_dev_path(path, sizeof(path), dev_name);
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 503b240..28d1153 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -484,7 +484,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
- 	dm_list_init(&node->used_by);
- 	dm_list_init(&node->props.segs);
+-	area_size = area_len * pe_size;
++	area_size = (size_t)area_len * pe_size;
+ 	region_count = dm_div_up(area_size, region_size);
  
--	dev = MKDEV(info->major, info->minor);
-+	dev = MKDEV((dev_t)info->major, info->minor);
+ 	/* Work out how many "unsigned long"s we need to hold the bitset. */
+diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
+index 2136721..c6cd412 100644
+--- a/tools/pvdisplay.c
++++ b/tools/pvdisplay.c
+@@ -54,7 +54,7 @@ static int _pvdisplay_single(struct cmd_context *cmd,
+ 	if (is_orphan(pv))
+ 		size = pv_size(pv);
+ 	else
+-		size = (pv_pe_count(pv) - pv_pe_alloc_count(pv)) *
++		size = (uint64_t)(pv_pe_count(pv) - pv_pe_alloc_count(pv)) *
+ 			pv_pe_size(pv);
  
- 	if (!dm_hash_insert_binary(dtree->devs, (const char *) &dev,
- 				sizeof(dev), node)) {
-@@ -508,7 +508,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
- static struct dm_tree_node *_find_dm_tree_node(struct dm_tree *dtree,
- 					       uint32_t major, uint32_t minor)
- {
--	dev_t dev = MKDEV(major, minor);
-+	dev_t dev = MKDEV((dev_t)major, minor);
- 
- 	return dm_hash_lookup_binary(dtree->devs, (const char *) &dev,
- 				  sizeof(dev));
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index a040899..a846322 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -209,7 +209,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
- 		if (major < 0 || minor < 0)
- 			continue;
- 
--		devno = MKDEV(major, minor);
-+		devno = MKDEV((dev_t)major, minor);
- 
- 		if (!(dev = dev_cache_get_by_devt(devno, NULL))) {
- 			if (!dm_asprintf(&buf, "%" PRIi32 ":%" PRIi32, major, minor))
+ 	if (arg_count(cmd, short_ARG)) {
 
 
