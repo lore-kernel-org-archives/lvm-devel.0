@@ -1,50 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 12:42:50 +0000 (UTC)
-Subject: master - cleanup: add error message and simplify creation
-Message-ID: <20120823124250.2181FA0D9A@fedorahosted.org>
+Date: Thu, 23 Aug 2012 12:42:45 +0000 (UTC)
+Subject: master - cleanup: use static char[] array
+Message-ID: <20120823124245.A0B03A0D9A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=15891d366d34fa6ea7235ec803ee0c5445a17101
-Commit:        15891d366d34fa6ea7235ec803ee0c5445a17101
-Parent:        195fe0307526ffc8307842618a7eeb4a421cacf9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=449c09201030cfb18baf8481430bc150e43f5f07
+Commit:        449c09201030cfb18baf8481430bc150e43f5f07
+Parent:        90191e6ff2d156abceebafa342ec34274b6bd22a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 20 10:35:24 2012 +0200
+AuthorDate:    Tue Aug 21 15:16:32 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Aug 23 14:37:38 2012 +0200
 
-cleanup: add error message and simplify creation
+cleanup: use static char[] array
 
-Report error for malloc failure, and use zeroed allocation
-to initialize handler structure.
 ---
- daemons/dmeventd/libdevmapper-event.c |   10 +++-------
- 1 files changed, 3 insertions(+), 7 deletions(-)
+ lib/device/device.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 386a4fa..1f8fbef 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -59,14 +59,10 @@ struct dm_event_handler *dm_event_handler_create(void)
+diff --git a/lib/device/device.c b/lib/device/device.c
+index 3e5e2a4..a87ae7f 100644
+--- a/lib/device/device.c
++++ b/lib/device/device.c
+@@ -361,7 +361,7 @@ static unsigned long _dev_topology_attribute(const char *attribute,
+ 					     const char *sysfs_dir,
+ 					     struct device *dev)
  {
- 	struct dm_event_handler *dmevh = NULL;
- 
--	if (!(dmevh = dm_malloc(sizeof(*dmevh))))
-+	if (!(dmevh = dm_zalloc(sizeof(*dmevh)))) {
-+		log_error("Failed to allocate event handler.");
- 		return NULL;
--
--	dmevh->dmeventd_path = NULL;
--	dmevh->dso = dmevh->dev_name = dmevh->uuid = NULL;
--	dmevh->major = dmevh->minor = 0;
--	dmevh->mask = 0;
--	dmevh->timeout = 0;
-+	}
- 
- 	return dmevh;
- }
+-	const char *sysfs_fmt_str = "%s/dev/block/%d:%d/%s";
++	static const char sysfs_fmt_str[] = "%s/dev/block/%d:%d/%s";
+ 	char path[PATH_MAX+1], buffer[64];
+ 	FILE *fp;
+ 	struct stat info;
 
 
