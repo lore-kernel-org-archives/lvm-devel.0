@@ -1,40 +1,48 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 12:42:41 +0000 (UTC)
-Subject: master - cleanup: use return_NULL
-Message-ID: <20120823124241.3C913A0D9A@fedorahosted.org>
+Date: Thu, 23 Aug 2012 12:42:43 +0000 (UTC)
+Subject: master - cleanup: cast to matching type
+Message-ID: <20120823124243.768C2A0D9A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=14d2b5a13ff6637f2ff1e8bd40dc8ca67e53e51b
-Commit:        14d2b5a13ff6637f2ff1e8bd40dc8ca67e53e51b
-Parent:        c8ad1f3e3a280b8cf3ca219dd6a6f3313b8be8d8
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=90191e6ff2d156abceebafa342ec34274b6bd22a
+Commit:        90191e6ff2d156abceebafa342ec34274b6bd22a
+Parent:        14d2b5a13ff6637f2ff1e8bd40dc8ca67e53e51b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 17 12:04:52 2012 +0200
+AuthorDate:    Fri Aug 17 12:15:36 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Aug 23 14:37:38 2012 +0200
 
-cleanup: use return_NULL
+cleanup: cast to matching type
 
-Function returns pointer, so use NULL.
 ---
- lib/cache/lvmetad.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/dmsetup.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index bb949b5..db092ac 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -189,7 +189,7 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 0734ded..0ac970f 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -2283,7 +2283,7 @@ static int _dm_mangled_name_disp(struct dm_report *rh,
+ 	int r = 0;
  
- 	if (vgid) {
- 		if (!id_write_format((const struct id*)vgid, uuid, sizeof(uuid)))
--			return_0;
-+			return_NULL;
- 		reply = daemon_send_simple(_lvmetad, "vg_lookup", "uuid = %s", uuid, NULL);
- 	} else {
- 		if (!vgname)
+ 	if ((name = dm_task_get_name_mangled((const struct dm_task *) data))) {
+-		r = dm_report_field_string(rh, field, (const char **) &name);
++		r = dm_report_field_string(rh, field, (const char * const *) &name);
+ 		dm_free(name);
+ 	}
+ 
+@@ -2299,7 +2299,7 @@ static int _dm_unmangled_name_disp(struct dm_report *rh,
+ 	int r = 0;
+ 
+ 	if ((name = dm_task_get_name_unmangled((const struct dm_task *) data))) {
+-		r = dm_report_field_string(rh, field, (const char **) &name);
++		r = dm_report_field_string(rh, field, (const char * const *) &name);
+ 		dm_free(name);
+ 	}
+ 
 
 
