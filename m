@@ -1,64 +1,59 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 15 Aug 2012 08:46:01 +0000 (UTC)
-Subject: master - mirror: reconfigure_mirror_images not used
-Message-ID: <20120815084601.0E92B344F@fedorahosted.org>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Wed, 22 Aug 2012 21:35:28 -0400 (EDT)
+Subject: [PATCH] check sector number in dmsetup message
+In-Reply-To: <Pine.LNX.4.64.1208222122180.7091@file.rdu.redhat.com>
+References: <Pine.LNX.4.64.1208151832280.8587@file.rdu.redhat.com>
+	<20120816070955.GA32526@agk-dp.fab.redhat.com>
+	<C3B343EE19BD2940B6AEC40C9BE99426094C0C@AUSX10MPS302.AMER.DELL.COM>
+	<Pine.LNX.4.64.1208201429110.18279@file.rdu.redhat.com>
+	<20120821163329.GA21395@freewill.lab.equallogic.com>
+	<Pine.LNX.4.64.1208212103310.1653@file.rdu.redhat.com>
+	<20120822192547.GJ32571@agk-dp.fab.redhat.com>
+	<Pine.LNX.4.64.1208221813380.12623@file.rdu.redhat.com>
+	<20120822222708.GN32571@agk-dp.fab.redhat.com>
+	<Pine.LNX.4.64.1208222122180.7091@file.rdu.redhat.com>
+Message-ID: <Pine.LNX.4.64.1208222133590.8956@file.rdu.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00877fe47b99458e22f6e1c928505fc75aad0752
-Commit:        00877fe47b99458e22f6e1c928505fc75aad0752
-Parent:        54c24193f535660478e88af76340eef40dc3223c
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 15 10:44:19 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 15 10:44:19 2012 +0200
+atoll doesn't check for errors, so invalid sector numbers were silently
+accepted in the "dmsetup message" command.
 
-mirror: reconfigure_mirror_images not used
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
 
 ---
- lib/metadata/metadata-exported.h |    3 +++
- lib/metadata/mirror.c            |    3 +++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ tools/dmsetup.c |    9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f46fccc..f39f968 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -761,8 +761,11 @@ int add_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
- 		   uint32_t log_count, uint32_t region_size,
- 		   struct dm_list *allocatable_pvs, alloc_policy_t alloc);
+Index: LVM2.2.02.96/tools/dmsetup.c
+===================================================================
+--- LVM2.2.02.96.orig/tools/dmsetup.c	2012-08-23 03:27:51.000000000 +0200
++++ LVM2.2.02.96/tools/dmsetup.c	2012-08-23 03:29:48.000000000 +0200
+@@ -769,6 +769,8 @@ static int _message(CMD_ARGS)
+ 	size_t sz = 1;
+ 	struct dm_task *dmt;
+ 	char *str;
++	uint64_t sector;
++	char *endptr;
  
-+#if 0
-+/* FIXME: reconfigure_mirror_images: remove this code? */
- int reconfigure_mirror_images(struct lv_segment *mirrored_seg, uint32_t num_mirrors,
- 			      struct dm_list *removable_pvs, unsigned remove_log);
-+#endif
- int collapse_mirrored_lv(struct logical_volume *lv);
- int shift_mirror_images(struct lv_segment *mirrored_seg, unsigned mimage);
+ 	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
+ 		return 0;
+@@ -783,7 +785,12 @@ static int _message(CMD_ARGS)
+ 		argv++;
+ 	}
  
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 61e4b47..0997c58 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1219,6 +1219,8 @@ int collapse_mirrored_lv(struct logical_volume *lv)
- 	return 1;
- }
+-	if (!dm_task_set_sector(dmt, (uint64_t) atoll(argv[1])))
++	sector = strtoull(argv[1], &endptr, 10);
++	if (*endptr || endptr == argv[1]) {
++		err("invalid sector");
++		goto out;
++	}
++	if (!dm_task_set_sector(dmt, sector))
+ 		goto out;
  
-+#if 0
-+/* FIXME: reconfigure_mirror_images: remove this code? */
- static int _get_mirror_fault_policy(struct cmd_context *cmd __attribute__((unused)),
- 				   int log_policy)
- {
-@@ -1375,6 +1377,7 @@ int reconfigure_mirror_images(struct lv_segment *mirrored_seg, uint32_t num_mirr
- 	 */
- 	return 1;
- }
-+#endif
- 
- static int _create_mimage_lvs(struct alloc_handle *ah,
- 			      uint32_t num_mirrors,
+ 	argc -= 2;
 
 
