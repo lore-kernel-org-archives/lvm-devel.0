@@ -1,51 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 12:42:19 +0000 (UTC)
-Subject: master - dmsetup: check if new_name is non NULL
-Message-ID: <20120823124219.461E9A0D9A@fedorahosted.org>
+Date: Thu, 23 Aug 2012 12:42:21 +0000 (UTC)
+Subject: master - cmirrord: check for result of chdir
+Message-ID: <20120823124221.7D583A0D9A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b1640df5e6375926df0cc0e8dab217b21b23ce57
-Commit:        b1640df5e6375926df0cc0e8dab217b21b23ce57
-Parent:        b9ae22d758e6b5eed62774f5b2a71b87d818087e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6d0abc6b484f1441c6a0a65fd3c82bc09e9d2104
+Commit:        6d0abc6b484f1441c6a0a65fd3c82bc09e9d2104
+Parent:        b1640df5e6375926df0cc0e8dab217b21b23ce57
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 27 01:19:23 2012 +0100
+AuthorDate:    Wed Jun 20 00:10:40 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Aug 23 14:37:18 2012 +0200
+CommitterDate: Thu Aug 23 14:37:20 2012 +0200
 
-dmsetup: check if new_name is non NULL
+cmirrord: check for result of chdir
 
+Error exit if chdir fails.
 ---
- WHATS_NEW_DM    |    1 +
- tools/dmsetup.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/cmirrord/clogd.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 186a2e1..d0e8f7d 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.77 -
- =================================
-+  Check for existing new_name for dmsetup rename.
-   Fix memory leak in dmsetup _get_split_name() error path.
+diff --git a/daemons/cmirrord/clogd.c b/daemons/cmirrord/clogd.c
+index 32b01a6..adf7a92 100644
+--- a/daemons/cmirrord/clogd.c
++++ b/daemons/cmirrord/clogd.c
+@@ -185,7 +185,11 @@ static void daemonize(void)
+ 	}
  
- Version 1.02.76 - 7th August 2012
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index ca1087d..7d1f2a1 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -719,7 +719,7 @@ static int _do_rename(const char *name, const char *new_name, const char *new_uu
- 	if (new_uuid) {
- 		if (!dm_task_set_newuuid(dmt, new_uuid))
- 			goto out;
--	} else if (!dm_task_set_newname(dmt, new_name))
-+	} else if (!new_name || !dm_task_set_newname(dmt, new_name))
- 		goto out;
+ 	setsid();
+-	chdir("/");
++	if (chdir("/")) {
++		LOG_ERROR("Failed to chdir /: %s", strerror(errno));
++		exit(EXIT_FAILURE);
++	}
++
+ 	umask(0);
  
- 	if (_switches[NOOPENCOUNT_ARG] && !dm_task_no_open_count(dmt))
+ 	if (close(0) || close(1) || close(2)) {
 
 
