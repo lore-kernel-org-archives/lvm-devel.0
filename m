@@ -1,47 +1,58 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 23 Aug 2012 14:32:22 +0000 (UTC)
-Subject: master - clenaup: compatible definition for older gcc
-Message-ID: <20120823143222.161EAA0D9A@fedorahosted.org>
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Fri, 24 Aug 2012 12:52:24 +0530
+Subject: lvm2-api usage in GlusterFS
+In-Reply-To: <20120704205749.GN22022@agk-dp.fab.redhat.com>
+References: <87txxnqvok.fsf@in.ibm.com>
+	<20120704205749.GN22022@agk-dp.fab.redhat.com>
+Message-ID: <87boi0vjnz.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=329c46d36ee16cc374c31af7aaf3bb84b21ab462
-Commit:        329c46d36ee16cc374c31af7aaf3bb84b21ab462
-Parent:        7b300a803c0878e6c9a42aeb5d2c53ac7f64afed
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Aug 23 16:12:45 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Aug 23 16:30:22 2012 +0200
+On Wed, 4 Jul 2012 21:57:49 +0100, Alasdair G Kergon <agk@redhat.com> wrote:
+> On Wed, Jul 04, 2012 at 11:02:11PM +0530, M.Mohan Kumar wrote:
+> > Also other issues with the patch is resizing and creating a snapshot
+> > of LV. There is no API to resize a LV and as of now I am using the
+> 
+> int lvm_lv_resize(const lv_t lv, uint64_t new_size);
+> 
+> "NOTE: This function is currently not implemented."
+> 
+> > Is there any plan to add support to resize a LV and create snapshot of
+> > LV?
+> 
+> Well we're about to start a review of the state of this interface, so if
+> you have any more suggestions, please send them too.
+> 
 
-clenaup: compatible definition for older gcc
+It will be great if lvm library supports following interfaces
 
-Fixes previous commit, it seems older gcc compilers do not
-recognize same typedef.
+1) lvresize
 
-(Easiest would be probably to directly include proper header here).
----
- lib/cache/lvmetad.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+2) lv snapshot creation
 
-diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
-index 932a9f1..9c49440 100644
---- a/lib/cache/lvmetad.h
-+++ b/lib/cache/lvmetad.h
-@@ -18,10 +18,10 @@
- struct volume_group;
- struct cmd_context;
- struct dm_config_tree;
--typedef enum activation_change activation_change_t;
-+enum activation_change;
+3) lvrename
+
+4) Possible to set some properties per LV, something like gluster may
+set a attribute (for ex: attribute:owner, value:gluster) in each LV
+created by it so that gluster (or who ever created an LV) can filter
+LVs that are not created by gluster (I am just listing one of the use cases)
+
+5) Ability to do the full copy of LVs, for example: lv_copy (lv_t dest,
+lv_t source). If its possible to implement in the kernel itself, we can
+avoid user space copying incurred in read/write.
+
+6) Ability to provide list of logical blocks and the physical disk for a
+given LV so that these blocks can be given to libStorageManagement tool
+to offload storage operations (such as full cloning a LV)
  
- typedef int (*activation_handler) (struct volume_group *vg, int partial,
--				   activation_change_t activate);
-+				   enum activation_change activate);
- 
- #ifdef LVMETAD_SUPPORT
- /*
+7) Ability to create other targets for example lv library giving
+interface to create a dm-thinpool, dm-thintarget etc.
+
+
+Regards,
+M. Mohan Kumar
 
 
