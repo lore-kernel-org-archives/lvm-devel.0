@@ -1,58 +1,41 @@
-From: M. Mohan Kumar <mohan@in.ibm.com>
-Date: Fri, 24 Aug 2012 12:52:24 +0530
-Subject: lvm2-api usage in GlusterFS
-In-Reply-To: <20120704205749.GN22022@agk-dp.fab.redhat.com>
-References: <87txxnqvok.fsf@in.ibm.com>
-	<20120704205749.GN22022@agk-dp.fab.redhat.com>
-Message-ID: <87boi0vjnz.fsf@in.ibm.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Fri, 24 Aug 2012 17:52:05 +0000 (UTC)
+Subject: master - version: update
+Message-ID: <20120824175205.BE3D9770@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 4 Jul 2012 21:57:49 +0100, Alasdair G Kergon <agk@redhat.com> wrote:
-> On Wed, Jul 04, 2012 at 11:02:11PM +0530, M.Mohan Kumar wrote:
-> > Also other issues with the patch is resizing and creating a snapshot
-> > of LV. There is no API to resize a LV and as of now I am using the
-> 
-> int lvm_lv_resize(const lv_t lv, uint64_t new_size);
-> 
-> "NOTE: This function is currently not implemented."
-> 
-> > Is there any plan to add support to resize a LV and create snapshot of
-> > LV?
-> 
-> Well we're about to start a review of the state of this interface, so if
-> you have any more suggestions, please send them too.
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=99d1e264a87eb256debe2eaa02d9fc4e2b08c815
+Commit:        99d1e264a87eb256debe2eaa02d9fc4e2b08c815
+Parent:        329c46d36ee16cc374c31af7aaf3bb84b21ab462
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Fri Aug 24 18:51:24 2012 +0100
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Fri Aug 24 18:51:24 2012 +0100
 
-It will be great if lvm library supports following interfaces
+version: update
 
-1) lvresize
+---
+ VERSION    |    2 +-
+ VERSION_DM |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-2) lv snapshot creation
-
-3) lvrename
-
-4) Possible to set some properties per LV, something like gluster may
-set a attribute (for ex: attribute:owner, value:gluster) in each LV
-created by it so that gluster (or who ever created an LV) can filter
-LVs that are not created by gluster (I am just listing one of the use cases)
-
-5) Ability to do the full copy of LVs, for example: lv_copy (lv_t dest,
-lv_t source). If its possible to implement in the kernel itself, we can
-avoid user space copying incurred in read/write.
-
-6) Ability to provide list of logical blocks and the physical disk for a
-given LV so that these blocks can be given to libStorageManagement tool
-to offload storage operations (such as full cloning a LV)
- 
-7) Ability to create other targets for example lv library giving
-interface to create a dm-thinpool, dm-thintarget etc.
-
-
-Regards,
-M. Mohan Kumar
+diff --git a/VERSION b/VERSION
+index 159419f..33b5cee 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.97(2)-git (2012-08-07)
++2.02.98(2)-git (2012-08-24)
+diff --git a/VERSION_DM b/VERSION_DM
+index 6b6b104..171ac28 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.76-git (2012-08-07)
++1.02.77-git (2012-08-24)
 
 
