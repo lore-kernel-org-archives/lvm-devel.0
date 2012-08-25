@@ -1,143 +1,147 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Sat, 25 Aug 2012 23:28:51 +0000 (UTC)
-Subject: master - buffering: use unbuffered silent mode for liblvm
-Message-ID: <20120825232851.3604DA1503@fedorahosted.org>
+Date: Sat, 25 Aug 2012 23:28:54 +0000 (UTC)
+Subject: master - setvbuf: close and reopen stream before change
+Message-ID: <20120825232854.69C77A1503@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3acc85caa8d313b8c21e4bef7f84601731e74b2b
-Commit:        3acc85caa8d313b8c21e4bef7f84601731e74b2b
-Parent:        438e0050dfed1f8f2d74670a5f7c5e8c8819c777
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=92330ba9c8e21451f8406377ae4839f397f369a2
+Commit:        92330ba9c8e21451f8406377ae4839f397f369a2
+Parent:        3acc85caa8d313b8c21e4bef7f84601731e74b2b
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Sun Aug 26 00:15:45 2012 +0100
+AuthorDate:    Sun Aug 26 00:19:52 2012 +0100
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Sun Aug 26 00:15:45 2012 +0100
+CommitterDate: Sun Aug 26 00:19:52 2012 +0100
 
-buffering: use unbuffered silent mode for liblvm
+setvbuf: close and reopen stream before change
 
-Disable private buffering when using liblvm.
-When private stdin/stdout buffering is not used always use silent
-mode.
+Fix setvbuf code by closing and reopening stream before changing buffer.
+
+But we need to review what this code is doing embedded inside a library
+function rather than the simpler original form being run independently
+at the top of main() by tools that need it.
 ---
- WHATS_NEW                  |    2 ++
- doc/example.conf.in        |    2 ++
- lib/commands/toolcontext.c |   12 +++++++++---
- lib/display/display.c      |    9 ++++++++-
- lib/metadata/lv_manip.c    |    1 +
- liblvm/lvm_base.c          |    2 +-
- 6 files changed, 23 insertions(+), 5 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/commands/toolcontext.c |   65 +++++++++++++++++++++++++++++++++++++++----
+ 2 files changed, 60 insertions(+), 6 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 7d070f9..acb158b 100644
+index acb158b..85f8663 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
+@@ -1,5 +1,6 @@
  Version 2.02.98 -
  =================================
-+  Disable private buffering when using liblvm.
-+  When private stdin/stdout buffering is not used always use silent mode.
++  Fix setvbuf code by closing and reopening stream before changing buffer.
+   Disable private buffering when using liblvm.
+   When private stdin/stdout buffering is not used always use silent mode.
    Add log/silent to lvm.conf equivalent to -qq.
-   Suppress non-essential stdout with -qq.
-   Switch non-essential log_print messages to log_print_unless_silent.
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index 479b74b..8cec63c 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -241,6 +241,8 @@ log {
-     # pvs, version, vgcfgrestore -l, vgdisplay, vgs.
-     # Non-essential messages are shifted from log level 4 to log level 5
-     # for syslog and lvm2_log_fn purposes.
-+    # Any 'yes' or 'no' questions not overridden by other arguments
-+    # are suppressed and default to 'no'.
-     silent = 0
- 
-     # Should we send log messages through syslog?
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 57667b6..4230624 100644
+index 4230624..0ede104 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -144,8 +144,12 @@ static void _init_logging(struct cmd_context *cmd)
- 	    find_config_tree_int(cmd, "log/level", DEFAULT_LOGLEVEL);
- 	init_debug(cmd->default_settings.debug);
- 
--	/* Suppress all non-essential stdout? */
--	cmd->default_settings.silent = 
-+	/*
-+	 * Suppress all non-essential stdout?
-+	 * -qq can override the default of 0 to 1 later.
-+	 * Once set to 1, there is no facility to change it back to 0.
-+	 */
-+	cmd->default_settings.silent = silent_mode() ? :
- 	    find_config_tree_int(cmd, "log/silent", DEFAULT_SILENT);
- 	init_silent(cmd->default_settings.silent);
- 
-@@ -1296,7 +1300,9 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 			goto out;
- 		}
- 		/* Buffers are used for lines without '\n' */
--	}
-+	} else
-+		/* Without buffering, must not use stdin/stdout */
-+		init_silent(1);
- 
- 	/*
- 	 * Environment variable LVM_SYSTEM_DIR overrides this below.
-diff --git a/lib/display/display.c b/lib/display/display.c
-index 2422b51..b15ff71 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -902,11 +902,19 @@ void display_segtypes(const struct cmd_context *cmd)
- 	}
+@@ -1245,6 +1245,37 @@ static void _init_globals(struct cmd_context *cmd)
+ 	init_mirror_in_sync(0);
  }
  
 +/*
-+ * Prompt for y or n from stdin.
-+ * Defaults to 'no' in silent mode.
-+ * All callers should support --yes and/or --force to override this.
++ * Close and reopen stream on file descriptor fd.
 + */
- char yes_no_prompt(const char *prompt, ...)
- {
- 	int c = 0, ret = 0;
- 	va_list ap;
- 
-+	if (silent_mode())
-+		return 'n';
++static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *name, FILE **new_stream)
++{
++	int fd_copy, new_fd;
 +
- 	sigint_allow();
- 	do {
- 		if (c == '\n' || !c) {
-@@ -939,4 +947,3 @@ char yes_no_prompt(const char *prompt, ...)
++	if ((fd_copy = dup(fd)) < 0) {
++		log_sys_error("dup", name);
++		return 0;
++	}
++
++	if (fclose(stream))
++		log_sys_error("fclose", name);
++
++	if ((new_fd = dup2(fd_copy, fd)) < 0)
++		log_sys_error("dup2", name);
++	else if (new_fd != fd)
++		log_error("dup2(%d, %d) returned %d", fd_copy, fd, new_fd);
++
++	if (close(fd_copy) < 0)
++		log_sys_error("close", name);
++
++	if (!(*new_stream = fdopen(fd, mode))) {
++		log_sys_error("fdopen", name);
++		return 0;
++	}
++
++	return 1;
++}
++
+ /* Entry point */
+ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 				       const char *system_dir,
+@@ -1252,6 +1283,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 				       unsigned threaded)
+ {
+ 	struct cmd_context *cmd;
++	FILE *new_stream;
  
- 	return ret;
- }
--
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d591b7b..617d4b7 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2741,6 +2741,7 @@ int lv_extend(struct logical_volume *lv,
- 				log_error("%s/%s is not active."
- 					  "  Unable to get sync percent.",
- 					  lv->vg->name, lv->name);
-+				/* FIXME Support --force */
- 				if (yes_no_prompt("Do full resync of extended "
- 						  "portion of %s/%s?  [y/n]: ",
- 						  lv->vg->name, lv->name) == 'y')
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 2f39b46..815151e 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -37,7 +37,7 @@ lvm_t lvm_init(const char *system_dir)
- 	/* create context */
- 	/* FIXME: split create_toolcontext */
- 	/* FIXME: make all globals configurable */
--	cmd = create_toolcontext(0, system_dir, 1, 0);
-+	cmd = create_toolcontext(0, system_dir, 0, 0);
- 	if (!cmd)
- 		return NULL;
+ #ifdef M_MMAP_MAX
+ 	mallopt(M_MMAP_MAX, 0);
+@@ -1293,9 +1325,20 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 			log_error("Failed to allocate line buffer.");
+ 			goto out;
+ 		}
+-		if ((setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size) ||
+-		     setvbuf(stdout, cmd->linebuffer + linebuffer_size,
+-			     _IOLBF, linebuffer_size))) {
++
++		if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
++			goto_out;
++		stdin = new_stream;
++		if (setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size)) {
++			log_sys_error("setvbuf", "");
++			goto out;
++		}
++
++		if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
++			goto_out;
++		stdout = new_stream;
++		if (setvbuf(stdout, cmd->linebuffer + linebuffer_size,
++			     _IOLBF, linebuffer_size)) {
+ 			log_sys_error("setvbuf", "");
+ 			goto out;
+ 		}
+@@ -1546,6 +1589,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ void destroy_toolcontext(struct cmd_context *cmd)
+ {
+ 	struct dm_config_tree *cft_cmdline;
++	FILE *new_stream;
+ 
+ 	if (cmd->dump_filter)
+ 		persistent_filter_dump(cmd->filter, 1);
+@@ -1570,9 +1614,18 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 
+ 	if (cmd->linebuffer) {
+ 		/* Reset stream buffering to defaults */
+-		setlinebuf(stdin);
+-		fflush(stdout);
+-		setlinebuf(stdout);
++		if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
++			stdin = new_stream;
++			setlinebuf(stdin);
++		} else
++			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++
++		if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
++			stdout = new_stream;
++			setlinebuf(stdout);
++		} else
++			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++
+ 		dm_free(cmd->linebuffer);
+ 	}
  
 
 
