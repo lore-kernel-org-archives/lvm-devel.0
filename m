@@ -1,45 +1,60 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 27 Aug 2012 13:40:26 +0000 (UTC)
-Subject: master - make: fix subdir order for distclean
-Message-ID: <20120827134026.14FB9A1043@fedorahosted.org>
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Mon, 27 Aug 2012 23:53:37 +0530
+Subject: lvm2-api usage in GlusterFS
+In-Reply-To: <87boi0vjnz.fsf@in.ibm.com>
+References: <87txxnqvok.fsf@in.ibm.com>
+	<20120704205749.GN22022@agk-dp.fab.redhat.com>
+	<87boi0vjnz.fsf@in.ibm.com>
+Message-ID: <87pq6ctcra.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=967b5eb1f3a25572448974f882e3bc8ba5d3fb9a
-Commit:        967b5eb1f3a25572448974f882e3bc8ba5d3fb9a
-Parent:        847e2856a29c41756cc5bbaf70eb87ea030826f4
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Aug 27 15:39:08 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Aug 27 15:39:08 2012 +0200
+On Fri, 24 Aug 2012 12:52:24 +0530, "M. Mohan Kumar" <mohan@in.ibm.com> wrote:
+> On Wed, 4 Jul 2012 21:57:49 +0100, Alasdair G Kergon <agk@redhat.com> wrote:
+> > On Wed, Jul 04, 2012 at 11:02:11PM +0530, M.Mohan Kumar wrote:
+> > > Also other issues with the patch is resizing and creating a snapshot
+> > > of LV. There is no API to resize a LV and as of now I am using the
+> > 
+> > int lvm_lv_resize(const lv_t lv, uint64_t new_size);
+> > 
+> > "NOTE: This function is currently not implemented."
+> > 
+> > > Is there any plan to add support to resize a LV and create snapshot of
+> > > LV?
+> > 
+> > Well we're about to start a review of the state of this interface, so if
+> > you have any more suggestions, please send them too.
+> > 
+> 
+> It will be great if lvm library supports following interfaces
+> 
+> 1) lvresize
+> 
+> 2) lv snapshot creation
+> 
+> 3) lvrename
+> 
+> 4) Possible to set some properties per LV, something like gluster may
+> set a attribute (for ex: attribute:owner, value:gluster) in each LV
+> created by it so that gluster (or who ever created an LV) can filter
+> LVs that are not created by gluster (I am just listing one of the use cases)
+> 
+> 5) Ability to do the full copy of LVs, for example: lv_copy (lv_t dest,
+> lv_t source). If its possible to implement in the kernel itself, we can
+> avoid user space copying incurred in read/write.
+> 
+> 6) Ability to provide list of logical blocks and the physical disk for a
+> given LV so that these blocks can be given to libStorageManagement tool
+> to offload storage operations (such as full cloning a LV)
+> 
+> 7) Ability to create other targets for example lv library giving
+> interface to create a dm-thinpool, dm-thintarget etc.
+> 
+Hi Alasdair,
 
-make: fix subdir order for distclean
-
-The 'test' subdir needs to be processed before 'tools' subdir
-for distclean as all the cmd names are read from 'tools/.commands'
-file. Otherwise we'd end up with dangling symlinks in 'tools' subdir.
----
- Makefile.in |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/Makefile.in b/Makefile.in
-index d957e26..4316190 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -40,9 +40,9 @@ SUBDIRS += scripts
- 
- # FIXME Should use intermediate Makefiles here!
- ifeq ($(MAKECMDGOALS),distclean)
--  SUBDIRS = doc include man scripts \
-+  SUBDIRS = doc include man test scripts \
-     libdaemon lib tools daemons libdm \
--    udev po liblvm test \
-+    udev po liblvm \
-     unit-tests/datastruct unit-tests/mm unit-tests/regex
- endif
- DISTCLEAN_DIRS += lcov_reports*
+Whats your opinion on this request?
 
 
