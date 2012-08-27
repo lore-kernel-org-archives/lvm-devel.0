@@ -1,141 +1,132 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 27 Aug 2012 11:04:02 +0000 (UTC)
-Subject: master - tests: testing lvm_lv_rename
-Message-ID: <20120827110402.22B4FA26EF@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 27 Aug 2012 11:08:11 +0000 (UTC)
+Subject: master - setvbuf: reopen only valid fd
+Message-ID: <20120827110811.4D304A1550@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5a3c597fd599c21a0bb0c551c92393518d3e70b8
-Commit:        5a3c597fd599c21a0bb0c551c92393518d3e70b8
-Parent:        e52d3167518f5ebbb0296b117a1266874978612f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 27 23:43:14 2011 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Aug 27 13:03:15 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c68c15757384e6cebd7667139661ab643eebbfbe
+Commit:        c68c15757384e6cebd7667139661ab643eebbfbe
+Parent:        5a3c597fd599c21a0bb0c551c92393518d3e70b8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Aug 27 13:07:07 2012 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Aug 27 13:07:07 2012 +0200
 
-tests: testing lvm_lv_rename
+setvbuf: reopen only valid fd
 
-Test stacking of rename operation within one udev transaction.
+We should check whether the fd is opened before trying to reopen it.
+For example, the stdin is closed in test/lib/harness.c causing the
+test suite to fail.
 ---
- test/api/Makefile.in |    4 +-
- test/api/lvtest.c    |   64 ++++++++++++++++++++++++++++++++++++++++++++++++++
- test/api/lvtest.sh   |   21 ++++++++++++++++
- 3 files changed, 87 insertions(+), 2 deletions(-)
+ lib/commands/toolcontext.c |   54 +++++++++++++++++++++++++------------------
+ lib/misc/lvm-file.h        |    2 +
+ tools/lvmcmdline.c         |    2 +-
+ 3 files changed, 34 insertions(+), 24 deletions(-)
 
-diff --git a/test/api/Makefile.in b/test/api/Makefile.in
-index 324d00b..58d0a23 100644
---- a/test/api/Makefile.in
-+++ b/test/api/Makefile.in
-@@ -20,8 +20,8 @@ ifeq ("@APPLIB@", "yes")
- TARGETS += test
- SOURCES = test.c
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 0ede104..9c2404f 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1326,21 +1326,25 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 			goto out;
+ 		}
  
--TARGETS += vgtest.t percent.t pe_start.t
--SOURCES2 = vgtest.c percent.c pe_start.c
-+TARGETS += vgtest.t percent.t pe_start.t lvtest.t
-+SOURCES2 = vgtest.c percent.c pe_start.c lvtest.c
- endif
+-		if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
+-			goto_out;
+-		stdin = new_stream;
+-		if (setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size)) {
+-			log_sys_error("setvbuf", "");
+-			goto out;
++		if (is_valid_fd(STDIN_FILENO)) {
++			if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
++				goto_out;
++			stdin = new_stream;
++			if (setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size)) {
++				log_sys_error("setvbuf", "");
++				goto out;
++			}
+ 		}
  
- include $(top_builddir)/make.tmpl
-diff --git a/test/api/lvtest.c b/test/api/lvtest.c
-new file mode 100644
-index 0000000..c0fee65
---- /dev/null
-+++ b/test/api/lvtest.c
-@@ -0,0 +1,64 @@
-+/*
-+ * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+ */
+-		if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
+-			goto_out;
+-		stdout = new_stream;
+-		if (setvbuf(stdout, cmd->linebuffer + linebuffer_size,
+-			     _IOLBF, linebuffer_size)) {
+-			log_sys_error("setvbuf", "");
+-			goto out;
++		if (is_valid_fd(STDOUT_FILENO)) {
++			if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
++				goto_out;
++			stdout = new_stream;
++			if (setvbuf(stdout, cmd->linebuffer + linebuffer_size,
++				     _IOLBF, linebuffer_size)) {
++				log_sys_error("setvbuf", "");
++				goto out;
++			}
+ 		}
+ 		/* Buffers are used for lines without '\n' */
+ 	} else
+@@ -1614,17 +1618,21 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 
+ 	if (cmd->linebuffer) {
+ 		/* Reset stream buffering to defaults */
+-		if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
+-			stdin = new_stream;
+-			setlinebuf(stdin);
+-		} else
+-			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++		if (is_valid_fd(STDIN_FILENO)) {
++			if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
++				stdin = new_stream;
++				setlinebuf(stdin);
++			} else
++				cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++		}
+ 
+-		if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
+-			stdout = new_stream;
+-			setlinebuf(stdout);
+-		} else
+-			cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++		if (is_valid_fd(STDOUT_FILENO)) {
++			if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
++				stdout = new_stream;
++				setlinebuf(stdout);
++			} else
++				cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
++		}
+ 
+ 		dm_free(cmd->linebuffer);
+ 	}
+diff --git a/lib/misc/lvm-file.h b/lib/misc/lvm-file.h
+index 07327c3..c23d8ad 100644
+--- a/lib/misc/lvm-file.h
++++ b/lib/misc/lvm-file.h
+@@ -51,6 +51,8 @@ void fcntl_unlock_file(int lockfd);
+   ((buf1).st_ino == (buf2).st_ino && \
+    (buf1).st_dev == (buf2).st_dev)
+ 
++#define is_valid_fd(fd) (!(fcntl(fd, F_GETFD) == -1 && errno == EBADF))
 +
-+#undef NDEBUG
-+
-+#include "lvm2app.h"
-+#include "assert.h"
-+
-+#define err(args...) \
-+	do { fprintf(stderr, args); goto bad; } while (0)
-+
-+int main(int argc, char *argv[])
-+{
-+	lvm_t handle;
-+	vg_t vg;
-+	lv_t lv;
-+	int r = -1;
-+
-+	if (!(handle = lvm_init(NULL)))
-+                return -1;
-+
-+	if (!(vg = lvm_vg_open(handle, argv[1], "w", 0)))
-+		err("VG open %s failed.\n", argv[1]);
-+
-+	if (!(lv = lvm_lv_from_name(vg, "test")))
-+                err("LV test not found.\n");
-+
-+	if (lvm_lv_deactivate(lv))
-+                err("LV test deactivation failed.\n");
-+
-+	if (lvm_lv_activate(lv))
-+                err("LV test activation failed.\n");
-+
-+	if (lvm_lv_activate(lv))
-+                err("LV test repeated activation failed.\n");
-+
-+	if (lvm_lv_rename(lv, "test1"))
-+		err("LV test rename to test1 failed.\n");
-+
-+	if (lvm_lv_rename(lv, "test2"))
-+		err("LV test1 rename to test2 failed.\n");
-+
-+	if (lvm_lv_rename(lv, "test"))
-+		err("LV test2 rename to test failed.\n");
-+
-+	if (lvm_vg_close(vg))
-+		err("VG close failed.\n");
-+
-+        r = 0;
-+bad:
-+	lvm_quit(handle);
-+	return r;
-+}
-diff --git a/test/api/lvtest.sh b/test/api/lvtest.sh
-new file mode 100644
-index 0000000..0b7684a
---- /dev/null
-+++ b/test/api/lvtest.sh
-@@ -0,0 +1,21 @@
-+#!/bin/sh
-+# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-+#
-+# This file is part of LVM2.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
-+
-+. lib/test
-+
-+aux prepare_vg 1
-+
-+lvcreate -n test -l 5 $vg
-+aux apitest lvtest $vg
-+
-+check lv_field $vg/test lv_name test
+ /*
+  * Close the specified stream, taking care to detect and diagnose any write
+  * error.  If there is an error, use the supplied file name in a diagnostic
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index f3704d6..c5341df 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1230,7 +1230,7 @@ static void _close_descriptor(int fd, unsigned suppress_warnings,
+ 	const char *filename;
+ 
+ 	/* Ignore bad file descriptors */
+-	if (fcntl(fd, F_GETFD) == -1 && errno == EBADF)
++	if (!is_valid_fd(fd))
+ 		return;
+ 
+ 	if (!suppress_warnings)
 
 
