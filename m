@@ -1,40 +1,82 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 18 Apr 2014 14:55:08 +0000 (UTC)
-Subject: master - makefiles: compile files on make
-Message-ID: <20140418145508.979E160758@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed,  5 Sep 2012 16:39:25 +0000 (UTC)
+Subject: master - TEST (lvresize-raid): Also test resizing of RAID10
+Message-ID: <20120905163925.9E880A0DA1@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2b748e3118988222560392fa795e093cd2ce0af4
-Commit:        2b748e3118988222560392fa795e093cd2ce0af4
-Parent:        1af05a7a166a470d1b9d86f88fdc64c2d984124b
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 17 10:07:17 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 18 16:38:49 2014 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1b01a2f65a27b95717fa7b6d912271e330782873
+Commit:        1b01a2f65a27b95717fa7b6d912271e330782873
+Parent:        967b5eb1f3a25572448974f882e3bc8ba5d3fb9a
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Aug 24 16:20:53 2012 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Sep 5 11:33:07 2012 -0500
 
-makefiles: compile files on make
+TEST (lvresize-raid):  Also test resizing of RAID10
 
-Make install should install already compiled/generated files.
 ---
- udev/Makefile.in |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ test/shell/lvresize-raid.sh |   35 +++++++++++++++++++++++++++++++++--
+ 1 files changed, 33 insertions(+), 2 deletions(-)
 
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index a2e2571..390069b 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -58,6 +58,8 @@ endif
- %_install: %.rules
- 	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
+diff --git a/test/shell/lvresize-raid.sh b/test/shell/lvresize-raid.sh
+index ea5cc80..e78eb8c 100644
+--- a/test/shell/lvresize-raid.sh
++++ b/test/shell/lvresize-raid.sh
+@@ -38,7 +38,7 @@ for deactivate in true false; do
+ 		lvchange -an $vg/$lv1
+ 	fi
  
-+all: $(DM_RULES) $(LVM_RULES)
-+CLEAN_TARGETS = $(DM_RULES) $(LVM_RULES)
- install_device-mapper: $(DM_RULES:.rules=_install)
- install_lvm2: $(LVM_RULES:.rules=_install)
+-	should lvresize -l -2 $vg/$lv1
++	should lvresize -y -l -2 $vg/$lv1
  
+ 	#check raid_images_contiguous $vg $lv1
+ 
+@@ -71,10 +71,41 @@ for i in 4 5 6 ; do
+ 			lvchange -an $vg/$lv1
+ 		fi
+ 
+-		should lvresize -l -3 $vg/$lv1
++		should lvresize -y -l -3 $vg/$lv1
+ 
+ 		#check raid_images_contiguous $vg $lv1
+ 
+ 		lvremove -ff $vg
+ 	done
+ done
++
++# Extend RAID10 (2-stripes, 2-mirror)
++for deactivate in true false; do
++	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
++
++	if $deactivate; then
++		lvchange -an $vg/$lv1
++	fi
++
++	lvresize -l +2 $vg/$lv1
++
++	#check raid_images_contiguous $vg $lv1
++
++	lvremove -ff $vg
++done
++
++# Reduce RAID10 (2-stripes, 2-mirror)
++for deactivate in true false; do
++	lvcreate --type raid10 -m 1 -i 2 -l 4 -n $lv1 $vg
++
++	if $deactivate; then
++		lvchange -an $vg/$lv1
++	fi
++
++	should lvresize -y -l -2 $vg/$lv1
++
++	#check raid_images_contiguous $vg $lv1
++
++	lvremove -ff $vg
++done
++
 
 
