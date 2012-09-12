@@ -1,143 +1,86 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue, 11 Sep 2012 18:11:37 +0000 (UTC)
-Subject: master - RAID: Properly handle resync of RAID LVs
-Message-ID: <20120911181137.F1EAA2364@hosted02.fedoraproject.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 12 Sep 2012 07:55:54 +0000 (UTC)
+Subject: master - vgchange: fix -aay to activate proper volumes
+Message-ID: <20120912075554.41D5D23E5@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4ededc698f32a4cbabaf70bfd3835abab866cbb9
-Commit:        4ededc698f32a4cbabaf70bfd3835abab866cbb9
-Parent:        a2d9b1a7e92aab78c80be0e0cbd45fde00d42aa4
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Sep 11 13:09:35 2012 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Sep 11 13:09:35 2012 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=31271606265ec8f7c14734aedbb0a314dfea2cd1
+Commit:        31271606265ec8f7c14734aedbb0a314dfea2cd1
+Parent:        4ededc698f32a4cbabaf70bfd3835abab866cbb9
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Sep 12 09:47:40 2012 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Sep 12 09:47:40 2012 +0200
 
-RAID:  Properly handle resync of RAID LVs
+vgchange: fix -aay to activate proper volumes
 
-Issuing a 'lvchange --resync <VG>/<RAID_LV>' had no effect.  This is
-because the code to handle RAID LVs was not present.  This patch adds
-the code that will clear the metadata areas of RAID LVs - causing them
-to resync upon activation.
+Using 'activation/auto_activation_volume_list = [ "vg/lvol1" ]'.
+
+Before this patch:
+  3 logical volume(s) in volume group "vg" now active
+  LV    VG   Attr     LSize Pool Origin Data%  Move Log Copy%  Convert
+  lvol0 vg   -wi----- 4.00m
+  lvol1 vg   -wi-a--- 4.00m
+  lvol2 vg   -wi-a--- 4.00m
+  lvol3 vg   -wi-a--- 4.00m
+
+(vg/lvol1 activated as it passes the list and all subsequent volumes too - wrong!)
+
+With this patch:
+  1 logical volume(s) in volume group "vg" now active
+  LV    VG   Attr     LSize Pool Origin Data%  Move Log Copy%  Convert
+  lvol0 vg   -wi----- 4.00m
+  lvol1 vg   -wi-a--- 4.00m
+  lvol2 vg   -wi----- 4.00m
+  lvol3 vg   -wi----- 4.00m
+
+(only vg/lvol1 activated as it passes the list and no other - correct!)
 ---
  WHATS_NEW        |    1 +
- tools/lvchange.c |   51 +++++++++++++++++++++++++++++++++++++--------------
- 2 files changed, 38 insertions(+), 14 deletions(-)
+ tools/vgchange.c |    9 +++------
+ 2 files changed, 4 insertions(+), 6 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index c0b84ab..0c3b591 100644
+index 0c3b591..4884626 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.98 -
  =================================
-+  Properly handle 'resync' of RAID LVs.
++  Fix vgchange -aay to activate proper logical volumes.
+   Properly handle 'resync' of RAID LVs.
    Disallow addition of RAID images until the array is in-sync.
    Fix RAID LV creation with '--test' so valid commands do not fail.
-   Add lvm_lv_rename() to lvm2api.
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 6972aac..0904e7b 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -258,29 +258,50 @@ static int lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 34f6167..fa129f8 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -131,11 +131,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 			continue;
+ 		}
  
- static int detach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- {
-+	uint32_t s;
-+	uint32_t num_meta_lvs;
- 	struct cmd_context *cmd = seg->lv->vg->cmd;
- 	struct lv_list *lvl;
+-		if (activate == CHANGE_AAY) {
+-			if (!lv_passes_auto_activation_filter(cmd, lv))
+-				continue;
+-			activate = CHANGE_ALY;
+-		}
++		if (activate == CHANGE_AAY && !lv_passes_auto_activation_filter(cmd, lv))
++			continue;
  
--	if (seg_is_raid(seg)) {
--		return 0;
--	}
-+	num_meta_lvs = seg_is_raid(seg) ? seg->area_count : !!seg->log_lv;
-+
-+	if (!num_meta_lvs)
-+		return_0;
+ 		expected_count++;
  
--	if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl))))
-+	if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl) * num_meta_lvs)))
- 		return_0;
- 
--	lvl->lv = detach_mirror_log(seg);
--	dm_list_add(list, &lvl->list);
-+	if (seg_is_raid(seg)) {
-+		for (s = 0; s < seg->area_count; s++) {
-+			if (!seg_metalv(seg, s))
-+				return_0; /* Trap this future possibility */
-+
-+			lvl[s].lv = seg_metalv(seg, s);
-+			lv_set_visible(lvl[s].lv);
-+
-+			dm_list_add(list, &lvl[s].list);
-+		}
-+		return 1;
-+	}
-+
-+	lvl[0].lv = detach_mirror_log(seg);
-+	dm_list_add(list, &lvl[0].list);
- 
- 	return 1;
- }
- 
- static int attach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- {
-+	uint32_t s = 0;
- 	struct cmd_context *cmd = seg->lv->vg->cmd;
--	struct lv_list *lvl;
-+	struct lv_list *lvl, *tmp;
- 
- 	if (seg_is_raid(seg)) {
--		return 0;
-+		dm_list_iterate_items_safe(lvl, tmp, list) {
-+			lv_set_hidden(lvl->lv);
-+			dm_pool_free(cmd->mem, lvl);
-+		}
-+		return 1;
- 	}
- 
- 	dm_list_iterate_items(lvl, list)
-@@ -308,8 +329,8 @@ static int lvchange_resync(struct cmd_context *cmd,
- 
- 	dm_list_init(&device_list);
- 
--	if (!(lv->status & MIRRORED)) {
--		log_error("Unable to resync %s because it is not mirrored.",
-+	if (!(lv->status & MIRRORED) && !seg_is_raid(seg)) {
-+		log_error("Unable to resync %s.  It is not RAID or mirrored.",
- 			  lv->name);
- 		return 1;
- 	}
-@@ -364,12 +385,14 @@ static int lvchange_resync(struct cmd_context *cmd,
- 	}
- 
- 	init_dmeventd_monitor(monitored);
-+	init_mirror_in_sync(0);
- 
--	log_very_verbose("Starting resync of %s%s%s mirror \"%s\"",
-+	log_very_verbose("Starting resync of %s%s%s%s \"%s\"",
- 			 (active) ? "active " : "",
- 			 vg_is_clustered(lv->vg) ? "clustered " : "",
--			 (seg->log_lv) ? "disk-logged" : "core-logged",
--			 lv->name);
-+			 (seg->log_lv) ? "disk-logged " :
-+			 seg_is_raid(seg) ? "" : "core-logged ",
-+			 seg->segtype->ops->name(seg), lv->name);
- 
- 	/*
- 	 * If this mirror has a core log (i.e. !seg->log_lv),
-@@ -377,7 +400,7 @@ static int lvchange_resync(struct cmd_context *cmd,
- 	 * it to reset the sync status.  We only need to
- 	 * worry about persistent logs.
- 	 */
--	if (!seg->log_lv) {
-+	if (!seg_is_raid(seg) && !seg->log_lv) {
- 		if (!(lv->status & LV_NOTSYNCED)) {
- 			lv->status &= ~LV_NOTSYNCED;
- 			log_very_verbose("Updating logical volume \"%s\""
+@@ -157,7 +154,7 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 				stack;
+ 				continue;
+ 			}
+-		} else if (activate == CHANGE_ALY) {
++		} else if (activate == CHANGE_AAY || activate == CHANGE_ALY) {
+ 			if (!activate_lv_local(cmd, lv)) {
+ 				stack;
+ 				continue;
 
 
