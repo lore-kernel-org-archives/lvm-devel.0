@@ -1,78 +1,98 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Wed, 19 Sep 2012 11:50:09 +0000 (UTC)
-Subject: master - lvs: add partial attribute
-Message-ID: <20120919115009.2F9261696@hosted02.fedoraproject.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 19 Sep 2012 16:17:22 +0000 (UTC)
+Subject: master - mirror: 'lvconvert --resync' should reset LV_NOTSYNCED on corelog mirror
+Message-ID: <20120919161722.E104214FC@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=290ae4791ef5eedaae2bc1cfa3645ac8073faf54
-Commit:        290ae4791ef5eedaae2bc1cfa3645ac8073faf54
-Parent:        b737ff01e4038d45798521448dc4ae4864d1b29a
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Wed Sep 19 12:49:40 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Wed Sep 19 12:49:40 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2e04681248b7c72ce295f538d698ae644c73cc9c
+Commit:        2e04681248b7c72ce295f538d698ae644c73cc9c
+Parent:        290ae4791ef5eedaae2bc1cfa3645ac8073faf54
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Sep 19 11:09:32 2012 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Sep 19 11:16:45 2012 -0500
 
-lvs: add partial attribute
+mirror:  'lvconvert --resync' should reset LV_NOTSYNCED on corelog mirror
 
+When reformatting the 'lvchange_resync' code in commit
+05131f5853e86419d9c726faa961b8d012298d9c, a '!' should have been removed
+from the condition that checks for the LV_NOTSYNCED flag on a corelog
+mirror LV.  The presence of this '!' caused the LV_NOTSYNCED flag to be
+cleared when it wasn't present and left when it was present.
+
+It is not allowed to add images to a 'mirror' or 'raid1' LV if the
+LV_NOTSYNCED flag is set.  We add some up-convert tests to ensure this
+behavior is being enforced and that the LV_NOTSYNCED flag is being
+properly cleared by 'lvchange --resync'.
+
+(Not updating WHATS_NEW because this is intrarelease.)
 ---
- WHATS_NEW         |    1 +
- lib/metadata/lv.c |    7 ++++++-
- man/lvs.8.in      |    3 +++
- 3 files changed, 10 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-mirror.sh |   14 ++++++++++++++
+ test/shell/lvconvert-raid.sh   |   12 ++++++++++++
+ tools/lvchange.c               |    2 +-
+ 3 files changed, 27 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 996f1a2..448f306 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Add (p)artial attribute to lvs.
-   Don't try to issue discards to a missing PV to avoid segfault.
-   Prevent lvremove from removing LVs that have any part missing.
-   Clear LV_NOSYNCED flag when a RAID1 LV is converted to a linear LV.
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 003e18d..33e3270 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -377,7 +377,7 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	struct lv_segment *seg;
- 	char *repstr;
- 
--	if (!(repstr = dm_pool_zalloc(mem, 9))) {
-+	if (!(repstr = dm_pool_zalloc(mem, 10))) {
- 		log_error("dm_pool_alloc failed");
- 		return 0;
- 	}
-@@ -496,6 +496,11 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	else
- 		repstr[7] = '-';
- 
-+	if (lv->status & PARTIAL_LV)
-+		repstr[8] = 'p';
-+	else
-+		repstr[8] = '-';
+diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
+index 4d587d9..c09b8fd 100644
+--- a/test/shell/lvconvert-mirror.sh
++++ b/test/shell/lvconvert-mirror.sh
+@@ -264,3 +264,17 @@ lvremove -ff $vg/$lv1
+ lvcreate -l15 -n $lv1 $vg
+ not lvconvert -m1 --corelog --stripes 2 $vg/$lv1
+ lvremove -ff $vg
 +
- out:
- 	return repstr;
- }
-diff --git a/man/lvs.8.in b/man/lvs.8.in
-index 97e1879..f31256c 100644
---- a/man/lvs.8.in
-+++ b/man/lvs.8.in
-@@ -157,6 +157,9 @@ Snapshots using the original device-mapper driver appear as (s); whereas
- snapshots of thin volumes using the new thin provisioning driver appear as (t).
- .IP 8 3
- Newly-allocated data blocks are overwritten with blocks of (z)eroes before use.
-+.IP 9 3
-+(p)artial: One or more of the Physical Volumes this Logical Volume uses is
-+missing from the system.
- .RE
- .TP
- .BR \-O ", " \-\-sort
++# Should not be able to add images to --nosync mirror
++# but should be able to after 'lvchange --resync'
++lvcreate -m 1 -l1 -n $lv1 $vg --nosync
++not lvconvert -m +1 $vg/$lv1
++lvchange --resync -y $vg/$lv1
++lvconvert -m +1 $vg/$lv1
++lvremove -ff $vg
++
++lvcreate -m 1 --corelog -l1 -n $lv1 $vg --nosync
++not lvconvert -m +1 $vg/$lv1
++lvchange --resync -y $vg/$lv1
++lvconvert -m +1 $vg/$lv1
++lvremove -ff $vg
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index c62aee5..9c3cff6 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -79,6 +79,18 @@ for i in 1 2 3 4; do
+ done
+ done
+ 
++##############################################
++# RAID1 - shouldn't be able to add image
++#         if created '--nosync', but should
++#         be able to after 'lvchange --resync'
++##############################################
++lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg --nosync
++not lvconvert -m +1 $vg/$lv1
++lvchange --resync -y $vg/$lv1
++aux wait_for_sync $vg $lv1
++lvconvert -m +1 $vg/$lv1
++lvremove -ff $vg
++
+ # 3-way to 2-way convert while specifying devices
+ lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg $dev1 $dev2 $dev3
+ aux wait_for_sync $vg $lv1
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 0904e7b..5048cab 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -401,7 +401,7 @@ static int lvchange_resync(struct cmd_context *cmd,
+ 	 * worry about persistent logs.
+ 	 */
+ 	if (!seg_is_raid(seg) && !seg->log_lv) {
+-		if (!(lv->status & LV_NOTSYNCED)) {
++		if (lv->status & LV_NOTSYNCED) {
+ 			lv->status &= ~LV_NOTSYNCED;
+ 			log_very_verbose("Updating logical volume \"%s\""
+ 					 " on disk(s)", lv->name);
 
 
