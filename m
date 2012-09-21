@@ -1,38 +1,32 @@
-From: Marian Csontos <mcsontos@fedoraproject.org>
-Date: Thu, 20 Sep 2012 05:40:42 +0000 (UTC)
-Subject: master - cleanup: remove unused variable
-Message-ID: <20120920054042.6606A2278@hosted02.fedoraproject.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Fri, 21 Sep 2012 15:26:26 -0500
+Subject: [PATCH] Add missing lvm_percent_to_float
+Message-ID: <1348259186-12157-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17901569da5294322dcb09fd9b66531adabdf95d
-Commit:        17901569da5294322dcb09fd9b66531adabdf95d
-Parent:        9d0dc63c8bcf255eb48a236824b6e8a58026f305
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Sep 20 07:40:11 2012 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Sep 20 07:40:11 2012 +0200
-
-cleanup: remove unused variable
-
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- tools/lvchange.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ liblvm/lvm_misc.c | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 5048cab..d1cb4cf 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -292,7 +292,6 @@ static int detach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- 
- static int attach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- {
--	uint32_t s = 0;
- 	struct cmd_context *cmd = seg->lv->vg->cmd;
- 	struct lv_list *lvl, *tmp;
- 
+diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
+index 0a0ea12..66dcdef 100644
+--- a/liblvm/lvm_misc.c
++++ b/liblvm/lvm_misc.c
+@@ -114,3 +114,8 @@ int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
+ 	}
+ 	return 0;
+ }
++
++float lvm_percent_to_float(percent_t v)
++{
++    return percent_to_float(v);
++}
+-- 
+1.7.11.4
 
 
