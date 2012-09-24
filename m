@@ -1,54 +1,160 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Wed, 23 Apr 2014 14:20:32 -0500
-Subject: [PATCH] vgsplit: Make vgsplit work on mirrors with leg and log on same PV
-Message-ID: <1398280832.16593.1.camel@f16>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Mon, 24 Sep 2012 18:29:22 -0500
+Subject: [PATCH 11/12] Add support for lvm_lv_list_lvsegs, lvm_lvseg_get_property
+In-Reply-To: <1348529363-13997-1-git-send-email-tasleson@redhat.com>
+References: <1348529363-13997-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1348529363-13997-12-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Given a named mirror LV, vgsplit will look for the PVs that compose it
-and move them to a new VG.  It does this by first looking at the log
-and then the legs.  If the log is on the same device as one of the mirror
-images, a problem occurs.  This is because the PV is moved to the new VG
-as the log is processed and thus cannot be found in the current VG when
-the image is processed.  The solution is to check and see if the PV we are
-looking for has already been moved to the new VG.  If so, it is not an
-error.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ liblvm.c | 83 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 83 insertions(+)
 
-
-Index: lvm2/lib/metadata/metadata.c
-===================================================================
---- lvm2.orig/lib/metadata/metadata.c
-+++ lvm2/lib/metadata/metadata.c
-@@ -368,6 +368,14 @@ int move_pv(struct volume_group *vg_from
+diff --git a/liblvm.c b/liblvm.c
+index e44b43d..62521fd 100644
+--- a/liblvm.c
++++ b/liblvm.c
+@@ -48,9 +48,16 @@ typedef struct {
+     lvmobject *lvm_obj;
+ } pvobject;
  
- 	/* FIXME: handle tags */
- 	if (!(pvl = find_pv_in_vg(vg_from, pv_name))) {
-+		if (pvl = find_pv_in_vg(vg_to, pv_name))
-+			/*
-+			 * PV has already been moved.  This can happen if an
-+			 * LV is being moved that has multiple sub-LVs on the
-+			 * same PV.
-+			 */
-+			return 1;
++typedef struct {
++    PyObject_HEAD
++    lvseg_t    lv_seg;              /* lv segment handle */
++    lvmobject *lvm_obj;
++} lvsegobject;
 +
- 		log_error("Physical volume %s not in volume group %s",
- 			  pv_name, vg_from->name);
- 		return 0;
-Index: lvm2/tools/vgsplit.c
-===================================================================
---- lvm2.orig/tools/vgsplit.c
-+++ lvm2/tools/vgsplit.c
-@@ -67,6 +67,7 @@ static int _move_lvs(struct volume_group
- 			continue;
+ static PyTypeObject LibLVMvgType;
+ static PyTypeObject LibLVMlvType;
+ static PyTypeObject LibLVMpvType;
++static PyTypeObject LibLVMlvsegType;
  
- 		if ((lv->status & MIRRORED))
-+			/* further checks by _move_mirrors() */
- 			continue;
+ static PyObject *LibLVMError;
  
- 		if (lv_is_thin_pool(lv) ||
-
+@@ -1295,6 +1302,43 @@ liblvm_lvm_lv_resize(lvobject *self, PyObject *args)
+     return Py_None;
+ }
+ 
++static PyObject *
++liblvm_lvm_lv_list_lvsegs(lvobject *lv)
++{
++    struct dm_list  *lvsegs;
++    lvseg_list_t    *lvsegl;
++    PyObject * pytuple;
++    lvsegobject *self;
++    int i = 0;
++
++    LV_VALID(lv);
++
++    lvsegs = lvm_lv_list_lvsegs(lv->lv);
++    if(!lvsegs) {
++        return Py_BuildValue("()");
++    }
++
++    pytuple = PyTuple_New(dm_list_size(lvsegs));
++    if (!pytuple)
++        return NULL;
++
++    dm_list_iterate_items(lvsegl, lvsegs) {
++        /* Create and initialize the object */
++        self = PyObject_New(lvsegobject, &LibLVMlvsegType);
++        if (!self) {
++            Py_DECREF(pytuple);
++            return NULL;
++        }
++
++        self->lv_seg = lvsegl->lvseg;
++        self->lvm_obj = lv->lvm_obj;
++        PyTuple_SET_ITEM(pytuple, i, (PyObject *) self);
++        i++;
++    }
++
++    return pytuple;
++}
++
+ /* PV Methods */
+ 
+ #define PV_VALID(pvobject) \
+@@ -1375,6 +1419,27 @@ liblvm_lvm_pv_resize(pvobject *self, PyObject *args)
+     return Py_None;
+ }
+ 
++/* LV seg methods */
++
++static void
++liblvm_lvseg_dealloc(lvsegobject *self)
++{
++    PyObject_Del(self);
++}
++
++static PyObject *
++liblvm_lvm_lvseg_get_property(lvsegobject *self,  PyObject *args)
++{
++    const char *name;
++    struct lvm_property_value prop_value;
++
++     if (!PyArg_ParseTuple(args, "s", &name))
++        return NULL;
++
++    prop_value = lvm_lvseg_get_property(self->lv_seg, name);
++    return get_property(self->lvm_obj, &prop_value);
++}
++
+ /* ----------------------------------------------------------------------
+  * Method tables and other bureaucracy
+  */
+@@ -1450,6 +1515,7 @@ static PyMethodDef liblvm_lv_methods[] = {
+     { "getTags",          (PyCFunction)liblvm_lvm_lv_get_tags, METH_NOARGS },
+     { "rename",         (PyCFunction)liblvm_lvm_lv_rename, METH_VARARGS },
+     { "resize",          (PyCFunction)liblvm_lvm_lv_resize, METH_VARARGS },
++    { "listLVsegs",          (PyCFunction)liblvm_lvm_lv_list_lvsegs, METH_NOARGS },
+     { NULL,             NULL}   /* sentinel */
+ };
+ 
+@@ -1466,6 +1532,10 @@ static PyMethodDef liblvm_pv_methods[] = {
+     { NULL,             NULL}   /* sentinel */
+ };
+ 
++static PyMethodDef liblvm_lvseg_methods[] = {
++    { "getProperty",        (PyCFunction)liblvm_lvm_lvseg_get_property, METH_VARARGS }
++};
++
+ static PyTypeObject LiblvmType = {
+     PyObject_HEAD_INIT(&PyType_Type)
+     .tp_name = "liblvm.Liblvm",
+@@ -1511,6 +1581,17 @@ static PyTypeObject LibLVMpvType = {
+     .tp_methods = liblvm_pv_methods,
+ };
+ 
++static PyTypeObject LibLVMlvsegType = {
++    PyObject_HEAD_INIT(&PyType_Type)
++    .tp_name = "liblvm.Liblvm_lvseg",
++    .tp_basicsize = sizeof(lvsegobject),
++    .tp_new = PyType_GenericNew,
++    .tp_dealloc = (destructor)liblvm_lvseg_dealloc,
++    .tp_flags = Py_TPFLAGS_DEFAULT,
++    .tp_doc = "LVM Logical Volume Segment object",
++    .tp_methods = liblvm_lvseg_methods,
++};
++
+ PyMODINIT_FUNC
+ initlvm(void)
+ {
+@@ -1524,6 +1605,8 @@ initlvm(void)
+         return;
+     if (PyType_Ready(&LibLVMpvType) < 0)
+         return;
++    if (PyType_Ready(&LibLVMlvsegType) < 0)
++        return;
+ 
+     m = Py_InitModule3("lvm", Liblvm_methods, "Liblvm module");
+     if (m == NULL)
+-- 
+1.7.11.4
 
 
