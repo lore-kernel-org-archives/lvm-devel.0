@@ -1,135 +1,160 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 26 Sep 2012 17:55:47 +0000 (UTC)
-Subject: master - lvmetad: Use "%" PRId64 in place of "%d" for extra clarity.
-Message-ID: <20120926175547.9222EA33AB@fedorahosted.org>
+Date: Wed, 26 Sep 2012 17:55:49 +0000 (UTC)
+Subject: master - lib/cache/lvmetad: s/pvscan_lvmetad/lvmetad_pvscan/ in the API
+Message-ID: <20120926175549.D8961A33AB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9f56d639b6c6ddfae7749c64eba64a776ecc7d9
-Commit:        c9f56d639b6c6ddfae7749c64eba64a776ecc7d9
-Parent:        c7b17836ea139ba7448f5a5c1d2fbe93676baa36
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ca0c8673b2064ceb840ee7f4cb5804b33e55f3c7
+Commit:        ca0c8673b2064ceb840ee7f4cb5804b33e55f3c7
+Parent:        c9f56d639b6c6ddfae7749c64eba64a776ecc7d9
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Sun Sep 9 21:57:59 2012 +0200
+AuthorDate:    Sun Sep 9 22:05:59 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Sep 26 17:26:16 2012 +0200
+CommitterDate: Wed Sep 26 17:26:23 2012 +0200
 
-lvmetad: Use "%" PRId64 in place of "%d" for extra clarity.
+lib/cache/lvmetad: s/pvscan_lvmetad/lvmetad_pvscan/ in the API
 
 ---
- lib/cache/lvmetad.c              |   15 +++++++++------
- lib/format_text/format-text.c    |    8 ++++----
- libdaemon/client/daemon-shared.c |    8 ++++----
- libdaemon/server/daemon-server.c |    2 +-
- 4 files changed, 18 insertions(+), 15 deletions(-)
+ lib/cache/lvmetad.c |   18 +++++++++---------
+ lib/cache/lvmetad.h |    8 ++++----
+ tools/pvscan.c      |    6 +++---
+ 3 files changed, 16 insertions(+), 16 deletions(-)
 
 diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 90d43dd..1e185da 100644
+index 1e185da..237fec6 100644
 --- a/lib/cache/lvmetad.c
 +++ b/lib/cache/lvmetad.c
-@@ -508,7 +508,7 @@ int lvmetad_pv_lookup_by_dev(struct cmd_context *cmd, struct device *dev, int *f
- 	if (!lvmetad_active())
- 		return_0;
+@@ -123,7 +123,7 @@ retry:
+ 		_lvmetad_token = (char *) "update in progress";
+ 		if (!_token_update()) goto out;
  
--	reply = _lvmetad_send("pv_lookup", "device = %d", dev->dev, NULL);
-+	reply = _lvmetad_send("pv_lookup", "device = %" PRId64, (int64_t) dev->dev, NULL);
- 	if (!_lvmetad_handle_reply(reply, "lookup PV", dev_name(dev), found))
- 		goto_out;
+-		if (pvscan_lvmetad_all_devs(_lvmetad_cmd, NULL)) {
++		if (lvmetad_pvscan_all_devs(_lvmetad_cmd, NULL)) {
+ 			_lvmetad_token = future_token;
+ 			if (!_token_update()) goto out;
+ 		}
+@@ -773,14 +773,14 @@ int lvmetad_pv_gone_by_dev(struct device *dev, activation_handler handler)
+  * The following code implements pvscan --cache.
+  */
  
-@@ -624,7 +624,10 @@ static int _extract_da(struct disk_locn *da, void *baton)
- 	dm_snprintf(id, 32, "da%d", b->i);
- 	if (!(cn = make_config_node(b->cft, id, b->cft->root, b->pre_sib)))
- 		return 0;
--	if (!config_make_nodes(b->cft, cn, NULL, "offset = %d", da->offset, "size = %d", da->size, NULL))
-+	if (!config_make_nodes(b->cft, cn, NULL,
-+			       "offset = %"PRId64, (int64_t) da->offset,
-+			       "size = %"PRId64, (int64_t) da->size,
-+			       NULL))
- 		return 0;
+-struct _pvscan_lvmetad_baton {
++struct _lvmetad_pvscan_baton {
+ 	struct volume_group *vg;
+ 	struct format_instance *fid;
+ };
  
- 	b->i ++;
-@@ -676,10 +679,10 @@ int lvmetad_pv_found(struct id pvid, struct device *device, const struct format_
- 	}
+-static int _pvscan_lvmetad_single(struct metadata_area *mda, void *baton)
++static int _lvmetad_pvscan_single(struct metadata_area *mda, void *baton)
+ {
+-	struct _pvscan_lvmetad_baton *b = baton;
++	struct _lvmetad_pvscan_baton *b = baton;
+ 	struct volume_group *this = mda->ops->vg_read(b->fid, "", mda, 1);
  
- 	if (!config_make_nodes(pvmeta, pvmeta->root, NULL,
--			       "device = %d", device->dev,
--			       "dev_size = %d", info ? lvmcache_device_size(info) : 0,
-+			       "device = %"PRId64, (int64_t) device->dev,
-+			       "dev_size = %"PRId64, (int64_t) (info ? lvmcache_device_size(info) : 0),
- 			       "format = %s", fmt->name,
--			       "label_sector = %d", label_sector,
-+			       "label_sector = %"PRId64, (int64_t) label_sector,
- 			       "id = %s", uuid,
- 			       NULL))
- 	{
-@@ -751,7 +754,7 @@ int lvmetad_pv_gone(dev_t device, const char *pv_name, activation_handler handle
-          *        the whole stack from top to bottom (not yet upstream).
-          */
- 
--	reply = _lvmetad_send("pv_gone", "device = %d", device, NULL);
-+	reply = _lvmetad_send("pv_gone", "device = %" PRId64, (int64_t) device, NULL);
- 
- 	result = _lvmetad_handle_reply(reply, "drop PV", pv_name, &found);
- 	/* We don't care whether or not the daemon had the PV cached. */
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index ff8757f..b562cfa 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -1617,10 +1617,10 @@ static int _mda_export_text_raw(struct metadata_area *mda,
- 	struct mda_context *mdc = (struct mda_context *) mda->metadata_locn;
- 
- 	return config_make_nodes(cft, parent, NULL,
--				 "ignore = %d", mda_is_ignored(mda),
--				 "start = %d", mdc->area.start,
--				 "size = %d", mdc->area.size,
--				 "free_sectors = %d", mdc->free_sectors,
-+				 "ignore = %" PRId64, (int64_t) mda_is_ignored(mda),
-+				 "start = %" PRId64, (int64_t) mdc->area.start,
-+				 "size = %" PRId64, (int64_t) mdc->area.size,
-+				 "free_sectors = %" PRId64, (int64_t) mdc->free_sectors,
- 				 NULL) ? 1 : 0;
+ 	/* FIXME Also ensure contents match etc. */
+@@ -792,12 +792,12 @@ static int _pvscan_lvmetad_single(struct metadata_area *mda, void *baton)
+ 	return 1;
  }
  
-diff --git a/libdaemon/client/daemon-shared.c b/libdaemon/client/daemon-shared.c
-index 4b98f51..6a1cf05 100644
---- a/libdaemon/client/daemon-shared.c
-+++ b/libdaemon/client/daemon-shared.c
-@@ -115,9 +115,9 @@ char *format_buffer_v(const char *head, va_list ap)
- 			goto fail;
- 		}
- 		keylen = strchr(next, '=') - next;
--		if (strstr(next, "%d")) {
--			int value = va_arg(ap, int);
--			dm_asprintf(&buffer, "%s%.*s= %d\n", buffer, keylen, next, value);
-+		if (strstr(next, "%d") || strstr(next, "%" PRId64)) {
-+			int64_t value = va_arg(ap, int64_t);
-+			dm_asprintf(&buffer, "%s%.*s= %" PRId64 "\n", buffer, keylen, next, value);
- 			dm_free(old);
- 		} else if (strstr(next, "%s")) {
- 			char *value = va_arg(ap, char *);
-@@ -301,7 +301,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 		char *key = dm_pool_strdup(cft->mem, next);
- 		*strchr(key, '=') = 0;
+-int pvscan_lvmetad_single(struct cmd_context *cmd, struct device *dev,
++int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 			  activation_handler handler)
+ {
+ 	struct label *label;
+ 	struct lvmcache_info *info;
+-	struct _pvscan_lvmetad_baton baton;
++	struct _lvmetad_pvscan_baton baton;
+ 	/* Create a dummy instance. */
+ 	struct format_instance_ctx fic = { .type = 0 };
  
--		if (!strcmp(fmt, "%d")) {
-+		if (!strcmp(fmt, "%d") || !strcmp(fmt, "%" PRId64)) {
- 			int64_t value = va_arg(ap, int64_t);
- 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
- 				return 0;
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 76627c0..50bf065 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -360,7 +360,7 @@ static response builtin_handler(daemon_state s, client_handle h, request r)
+@@ -822,7 +822,7 @@ int pvscan_lvmetad_single(struct cmd_context *cmd, struct device *dev,
+ 	if (!baton.fid)
+ 		goto_bad;
  
- 	if (!strcmp(rq, "hello")) {
- 		return daemon_reply_simple("OK", "protocol = %s", s.protocol ?: "default",
--					   "version = %d", s.protocol_version, NULL);
-+					   "version = %" PRId64, (int64_t) s.protocol_version, NULL);
+-	lvmcache_foreach_mda(info, _pvscan_lvmetad_single, &baton);
++	lvmcache_foreach_mda(info, _lvmetad_pvscan_single, &baton);
+ 	if (!baton.vg)
+ 		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
+ 
+@@ -847,7 +847,7 @@ bad:
+ 	return 0;
+ }
+ 
+-int pvscan_lvmetad_all_devs(struct cmd_context *cmd, activation_handler handler)
++int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ {
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+@@ -859,7 +859,7 @@ int pvscan_lvmetad_all_devs(struct cmd_context *cmd, activation_handler handler)
  	}
  
- 	response res = { .buffer = NULL, .error = EPROTO };
+ 	while ((dev = dev_iter_get(iter))) {
+-		if (!pvscan_lvmetad_single(cmd, dev, handler)) {
++		if (!lvmetad_pvscan_single(cmd, dev, handler)) {
+ 			r = 0;
+ 			break;
+ 		}
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index cb85929..60110a0 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -125,10 +125,10 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd,
+ /*
+  * Scan a single device and update lvmetad with the result(s).
+  */
+-int pvscan_lvmetad_single(struct cmd_context *cmd, struct device *dev,
++int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
+ 			  activation_handler handler);
+ 
+-int pvscan_lvmetad_all_devs(struct cmd_context *cmd, activation_handler handler);
++int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler);
+ 
+ #  else		/* LVMETAD_SUPPORT */
+ 
+@@ -148,8 +148,8 @@ int pvscan_lvmetad_all_devs(struct cmd_context *cmd, activation_handler handler)
+ #    define lvmetad_pv_lookup_by_dev(cmd, dev, found)	(0)
+ #    define lvmetad_vg_list_to_lvmcache(cmd)	(1)
+ #    define lvmetad_vg_lookup(cmd, vgname, vgid)	(NULL)
+-#    define pvscan_lvmetad_single(cmd, dev, handler)	(0)
+-#    define pvscan_lvmetad_all_devs(cmd, handler)	(0)
++#    define lvmetad_pvscan_single(cmd, dev, handler)	(0)
++#    define lvmetad_pvscan_all_devs(cmd, handler)	(0)
+ 
+ #  endif	/* LVMETAD_SUPPORT */
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 239ce97..3d5ddef 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -142,7 +142,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	/* Scan everything? */
+ 	if (!argc && !devno_args) {
+-		if (!pvscan_lvmetad_all_devs(cmd, handler))
++		if (!lvmetad_pvscan_all_devs(cmd, handler))
+ 			ret = ECMD_FAILED;
+ 		goto out;
+ 	}
+@@ -159,7 +159,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
+ 			continue;
+ 		}
+ 
+-		if (!pvscan_lvmetad_single(cmd, dev, handler)) {
++		if (!lvmetad_pvscan_single(cmd, dev, handler)) {
+ 			ret = ECMD_FAILED;
+ 			break;
+ 		}
+@@ -198,7 +198,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
+ 			continue;
+ 		}
+ 
+-		if (!pvscan_lvmetad_single(cmd, dev, handler)) {
++		if (!lvmetad_pvscan_single(cmd, dev, handler)) {
+ 			ret = ECMD_FAILED;
+ 			break;
+ 		}
 
 
