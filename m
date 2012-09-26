@@ -1,79 +1,75 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 24 Apr 2014 10:08:52 +0200
-Subject: clvmd coredump issue
-In-Reply-To: <535926B2020000A000005EB1@soto.provo.novell.com>
-References: <535926B2020000A000005EB1@soto.provo.novell.com>
-Message-ID: <5358C694.4060807@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 26 Sep 2012 17:55:56 +0000 (UTC)
+Subject: master - lvmetad: Make vgscan --cache an alias to pvscan --cache.
+Message-ID: <20120926175556.BEE00A33AB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 24.4.2014 08:58, Liuhua Wang napsal(a):
-> Hi, list
->
-> I have encountered a coredump when start clvmd on ppc64 as followed:
->
-> #p $pc
-> $1 = (void (*)()) 0x10070c18
-> #bt
-> #0  0x0000000010070c18 in _allocate_memory () at mm/memlock.c:130
-> #1  0x0000000010070d38 in _lock_mem (cmd=<optimized out>) at mm/memlock.c:310
-> #2  _lock_mem_if_needed (cmd=0x10104f40) at mm/memlock.c:387
-> #3  0x0000000010011358 in init_clvm (excl_uuid=<optimized out>) at
-> lvm-functions.c:919
-> #4  0x000000001000f47c in lvm_thread_fn (arg=0xfffcaf4e530) at clvmd.c:2020
-> #5  0x00000fff9df6c67c in .start_thread () from /lib64/power6/libpthread.so.0
-> #6  0x00000fff9de7643c in .__clone () from /lib64/power6/libc.so.6
->
->
-> When the followed four lines are commented then the problem is ok.
-> I suppose the problem is probably because of alloca.
->
-> static void _allocate_memory(void)
-> {
-> 	void *stack_mem, *temp_malloc_mem;
-> 	struct rlimit limit;
->
-> 	/* Check if we could preallocate requested stack */
-> -	if ((getrlimit (RLIMIT_STACK, &limit) == 0) &&
-> -	    ((_size_stack * 2) < limit.rlim_cur) &&
-> -         ((stack_mem = alloca(_size_stack))))
-> -	   _touch_memory(stack_mem, _size_stack);
-> 	/* FIXME else warn user setting got ignored */
->
-> 	if ((temp_malloc_mem = malloc(_size_malloc_tmp)))
-> 		_touch_memory(temp_malloc_mem, _size_malloc_tmp);
->
-> 	if ((_malloc_mem = malloc(_size_malloc)))
-> 		_touch_memory(_malloc_mem, _size_malloc);
->
-> 	free(temp_malloc_mem);
-> }
->
-> My questions are:
-> 1. Can we delete the four lines, since it is just PREallocate?
-> 2. What is the purpose of _touch_memory()
-> 3. why do first malloc temp_malloc_mem but then free it?
->
-> Any information is very appreciated.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7d3553906f15b9117d0152844f69de33564ab46
+Commit:        e7d3553906f15b9117d0152844f69de33564ab46
+Parent:        2d7a8b453196893186ae3eb61dc31c1df8b1cf6f
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Sep 10 16:35:43 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Sep 26 17:26:23 2012 +0200
 
-The memory use in lvm2 has deeper logic.
+lvmetad: Make vgscan --cache an alias to pvscan --cache.
 
-The idea behind preallocation and touching memory is - to preallocate memory 
-pages and enforce their physical allocation for stack & heap - before the 
-memory is mlock()-ed into RAM.
+---
+ tools/vgscan.c |   16 ++++------------
+ 1 files changed, 4 insertions(+), 12 deletions(-)
 
-Since the suspend may free i.e. swap device - all the code parts which run in 
-suspend needs to be locked in RAM.
-
-Now back to powerpc issue - check why it's crashing -  is the rlim_cur  wrong?
-Stack size is too big ?
-
-Code will not be removed it needs to be fixed for powerpc.
-
-Zdenek
-
+diff --git a/tools/vgscan.c b/tools/vgscan.c
+index 8deafb6..99124ef 100644
+--- a/tools/vgscan.c
++++ b/tools/vgscan.c
+@@ -15,8 +15,6 @@
+ 
+ #include "tools.h"
+ 
+-static int _lvmetad;
+-
+ static int vgscan_single(struct cmd_context *cmd, const char *vg_name,
+ 			 struct volume_group *vg,
+ 			 void *handle __attribute__((unused)))
+@@ -27,12 +25,6 @@ static int vgscan_single(struct cmd_context *cmd, const char *vg_name,
+ 
+ 	check_current_backup(vg);
+ 
+-	/* keep lvmetad up to date, restore the "active" state temporarily */
+-	lvmetad_set_active(_lvmetad);
+-	if (!lvmetad_vg_update(vg))
+-		stack;
+-	lvmetad_set_active(0);
+-
+ 	return ECMD_PROCESSED;
+ }
+ 
+@@ -54,10 +46,11 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
+ 		cmd->filter->wipe(cmd->filter);
+ 	lvmcache_destroy(cmd, 1);
+ 
+-	_lvmetad = lvmetad_active();
+ 	if (arg_count(cmd, cache_ARG)) {
+-		if (_lvmetad)
+-			lvmetad_set_active(0); /* do not rely on lvmetad info */
++		if (lvmetad_active()) {
++			if (!lvmetad_pvscan_all_devs(cmd, NULL))
++				return ECMD_FAILED;
++		}
+ 		else {
+ 			log_error("Cannot proceed since lvmetad is not active.");
+ 			unlock_vg(cmd, VG_GLOBAL);
+@@ -76,7 +69,6 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
+ 			maxret = ret;
+ 	}
+ 
+-	lvmetad_set_active(_lvmetad); /* restore */
+ 	unlock_vg(cmd, VG_GLOBAL);
+ 	return maxret;
+ }
 
 
