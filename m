@@ -1,63 +1,52 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 26 Aug 2019 09:34:18 -0400
-Subject: master - cache: improve vgremove loop
-Message-ID: <201908261334.x7QDYI96005496@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  3 Oct 2012 13:14:47 +0000 (UTC)
+Subject: master - thin: origin only suspend
+Message-ID: <20121003131447.E5B9E30C1@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c98e34e4d0edbcb2594e93f06183838de0c6e2bc
-Commit:        c98e34e4d0edbcb2594e93f06183838de0c6e2bc
-Parent:        af0b84ccc850d619eddef5112753731abce099ed
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf8e1a00937a7ef5eebf363898e237fd4a8dc392
+Commit:        cf8e1a00937a7ef5eebf363898e237fd4a8dc392
+Parent:        1946a453297535829d3d698dfa51733d8a223400
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Aug 26 13:28:00 2019 +0200
+AuthorDate:    Tue Jun 5 11:28:01 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Aug 26 15:32:12 2019 +0200
+CommitterDate: Wed Oct 3 15:05:55 2012 +0200
 
-cache: improve vgremove loop
+thin: origin only suspend
 
-Support internal removal of 'cache origin' volume - which we
-do not normally expose to a user - however internal processing
-loops may hit this condition (depending on order of list LVs).
-
-So when this operation is internally requested - we automatically
-try to remove it's 'holding' LV (cache LV) - which will also
-remove the origin.
+Skip tree creating when used with origin_only flag.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 0b48e03..cb93bbe 100644
+index bc0c778..8050db8 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.03.06 - 
- ================================
-+  Improve internal removal of cached devices.
-   Synchronize with udev when dropping snapshot.
-   Add missing device synchronization point before removing pvmove node.
-   Correctly set read_ahead for LVs when pvmove is finished.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6aee947..af3a16f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6544,6 +6544,13 @@ int lv_remove_with_dependencies(struct cmd_context *cmd, struct logical_volume *
- 		return 0;
+ Version 2.02.98 -
+ =================================
++  Skip building dm tree for thin pool when called with origin_only flag.
+   Add internal lv_rename_update() to rename LV without updating mda.
+   Ensure descriptors 0,1,2 are always available.
+   Use /proc/self/fd for closing openned descriptors.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index c8a1e35..31c1c27 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1369,7 +1369,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		seg = first_seg(lv);
  	}
  
-+	if (lv_is_cache_origin(lv)) {
-+		if (!_lv_remove_segs_using_this_lv(cmd, lv, force, level, "cache origin"))
-+			return_0;
-+		/* Removal of cache LV also removes caching origin */
-+		return 1;
-+	}
-+
- 	if (lv_is_external_origin(lv) &&
- 	    !_lv_remove_segs_using_this_lv(cmd, lv, force, level, "external origin"))
- 		return_0;
+-	if (lv_is_thin_pool(lv)) {
++	if (!origin_only && lv_is_thin_pool(lv)) {
+ 		if (!_add_lv_to_dtree(dm, dtree, seg->metadata_lv, 0))
+ 			return_0;
+ 		/* FIXME code from _create_partial_dtree() should be moved here */
 
 
