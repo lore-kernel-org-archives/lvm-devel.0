@@ -1,206 +1,65 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Tue, 23 Oct 2012 14:43:30 -0500
-Subject: [PATCH] Avoid reading from mirrors that have failed devices
-Message-ID: <1351021410.29140.1.camel@f16>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed,  3 Oct 2012 13:14:45 +0000 (UTC)
+Subject: master - libdm: reset delay flag for devs used by thin
+Message-ID: <20121003131445.8CE442319@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-mirror:  Avoid reading from mirrors that have failed devices
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1946a453297535829d3d698dfa51733d8a223400
+Commit:        1946a453297535829d3d698dfa51733d8a223400
+Parent:        21c401006c3c12b75354736db9a2f75e7993f489
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Sep 27 16:57:14 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Oct 3 15:04:41 2012 +0200
 
-Addresses: rhbz855398 (Allow VGs to be built on cluster mirrors),
-           and other issues.
+libdm: reset delay flag for devs used by thin
 
-The LVM code attempts to avoid reading labels from devices that are
-suspended to try to avoid situations that may cause the commands to
-block indefinitely.  When scanning devices, 'ignore_suspended_devices'
-can be set so the code (lib/activate/dev_manager.c:device_is_usable())
-checks any DM devices it finds and avoids them if they are suspended.
+Patch clears the flag if thin pool is stacked over mirror.
 
-The mirror target has an additional mechanism that can cause I/O to
-be blocked.  If a device in a mirror fails, all I/O will be blocked
-by the kernel until a new table (a linear target or a mirror with
-replacement devices) is loaded.  The mirror indicates that this condition
-has happened by marking a 'D' for the faulty device in its status
-output.  This condition must also be checked by 'device_is_usable()' to
-avoid the possibility of blocking LVM commands indefinitely due to an
-attempt to read the blocked mirror for labels.
+Since thin pool could be used to stack device over mirrors,
+it needs resume properly i.e. mirrors with corelog which are otherwise
+unconditionally skipped (for pvmove functionality).
+---
+ WHATS_NEW_DM          |    1 +
+ libdm/libdm-deptree.c |    6 +++++-
+ 2 files changed, 6 insertions(+), 1 deletions(-)
 
-Until now, mirrors were avoided if the 'ignore_suspended_devices'
-condition was set.  This check seemed to suggest, "if we are concerned
-about suspended devices, then let's ignore mirrors altogether just
-in case".  This is insufficient and doesn't solve any problems.  All
-devices that are suspended are already avoided if
-'ignore_suspended_devices' is set; and if a mirror is blocking because
-of an error condition, it will block the LVM command regardless of the
-setting of that variable.
-
-Rather than avoiding mirrors whenever 'ignore_suspended_devices' is
-set, this patch causes mirrors to be avoided whenever they are blocking
-due to an error.  (As mentioned above, the case where a DM device is
-suspended is already covered.)  This solves a number of issues that weren't
-handled before.  For example, pvcreate (or any command that does a
-pv_read or vg_read, which eventually call device_is_usable()) will be
-protected from blocked mirrors regardless of how
-'ignore_suspended_devices' is set.  Additionally, a mirror that is
-neither suspended nor blocking is /allowed/ to be read regardless
-of how 'ignore_suspended_devices' is set.  (The latter point being the
-source of the fix for rhbz855398.)
-
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-Index: lvm2/lib/activate/dev_manager.c
-===================================================================
---- lvm2.orig/lib/activate/dev_manager.c
-+++ lvm2/lib/activate/dev_manager.c
-@@ -135,6 +135,123 @@ static int _info_run(const char *name, c
- 	return r;
- }
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index c46db61..338cfaf 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.77 -
+ =================================
++  Always reset delay_resume_if_new flag when stacking thin pool.
+   Don't create value for dm_config_node and require dm_config_create_value call.
+   Check for existing new_name for dmsetup rename.
+   Fix memory leak in dmsetup _get_split_name() error path.
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index f675d0d..096eba2 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2005-2011 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2005-2012 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of the device-mapper userspace tools.
+  *
+@@ -3107,6 +3107,10 @@ int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
+ 	if (!_link_tree_nodes(node, seg->pool))
+ 		return_0;
  
-+/*
-+ * ignore_blocked_mirror_devices
-+ * @dev
-+ * @start
-+ * @length
-+ * @mirror_status_str
-+ *
-+ * When a DM 'mirror' target is created with 'block_on_error' or
-+ * 'handle_errors', it will block I/O if there is a device failure
-+ * until the mirror is reconfigured.  Thus, LVM should never attempt
-+ * to read labels from a mirror that has a failed device.  (LVM
-+ * commands are issued to repair mirrors; and if LVM is blocked
-+ * attempting to read a mirror, a circular dependency would be created.)
-+ *
-+ * This function is a slimmed-down version of lib/mirror/mirrored.c:
-+ * _mirrored_transient_status().  FIXME: It is unable to handle mirrors
-+ * with mirrored logs because it does not have a way to get the status of
-+ * the mirror that forms the log, which could be blocked.
-+ *
-+ * If a failed device is detected in the status string, then it must be
-+ * determined if 'block_on_error' or 'handle_errors' was used when
-+ * creating the mirror.  This info can only be determined from the mirror
-+ * table.  The 'dev', 'start', 'length' trio allow us to correlate the
-+ * 'mirror_status_str' with the correct device table in order to check
-+ * for blocking.
-+ *
-+ * Returns: 1 if mirror should be ignored, 0 if safe to use
-+ */
-+static int ignore_blocked_mirror_devices(struct device *dev,
-+					 uint64_t start, uint64_t length,
-+					 char *mirror_status_str)
-+{
-+	unsigned i, check_for_blocking = 0;
-+	char *p = NULL;
-+	char **args, **log_args;
-+	unsigned num_devs, log_argc;
-+	char *status;
++	/* Clean flag delay_resume_if_new - so corelog gets resumed */
++	seg->metadata->props.delay_resume_if_new = 0;
++	seg->pool->props.delay_resume_if_new = 0;
 +
-+	uint64_t s,l;
-+	char *params, *target_type = NULL;
-+	void *next = NULL;
-+	struct dm_task *dmt;
-+
-+	if (!dm_split_words(mirror_status_str, 1, 0, &p) ||
-+	    !(num_devs = (unsigned) atoi(p)))
-+		/* On errors, we must assume the mirror is to be avoided */
-+		goto_out;
-+
-+	p += strlen(p) + 1;
-+	args = alloca((num_devs + 5) * sizeof(char *));
-+
-+	if ((unsigned)dm_split_words(p, num_devs + 4, 0, args) < num_devs + 4)
-+		goto_out;
-+
-+	log_argc = (unsigned) atoi(args[3 + num_devs]);
-+	log_args = alloca(log_argc * sizeof(char *));
-+
-+	if ((unsigned)dm_split_words(args[3 + num_devs] + strlen(args[3 + num_devs]) + 1,
-+				     log_argc, 0, log_args) < log_argc)
-+		goto_out;
-+
-+	if (!strcmp(log_args[0], "disk") &&
-+	    (log_args[2][0] != 'A')) {
-+		log_debug("%s: Mirror log device marked as failed",
-+			  dev_name(dev));
-+		check_for_blocking = 1;
-+	}
-+
-+	status = args[2 + num_devs];
-+
-+	for (i = 0; i < num_devs; ++i)
-+		if (status[i] != 'A') {
-+			log_debug("%s: Mirror image %d marked as failed",
-+				  dev_name(dev), i);
-+			check_for_blocking = 1;
-+		}
-+	/*
-+	 * We avoid another system call if we can, but if a device is
-+	 * dead, we have no choice but to look up the table too.
-+	 */
-+	if (check_for_blocking) {
-+		if (!(dmt = dm_task_create(DM_DEVICE_TABLE)))
-+			goto_out;
-+
-+		if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev),
-+					     MINOR(dev->dev), 1))
-+			goto_out;
-+
-+		if (activation_checks() && !dm_task_enable_checks(dmt))
-+			goto_out;
-+
-+		if (!dm_task_run(dmt))
-+			goto_out;
-+
-+		do {
-+			next = dm_get_next_target(dmt, next, &s, &l,
-+						  &target_type, &params);
-+			if ((s == start) && (l == length)) {
-+				if (strcmp(target_type, "mirror"))
-+					goto_out;
-+
-+				if (strstr(params, "block_on_error") ||
-+				    strstr(params, "handle_errors")) {
-+					log_debug("%s: I/O blocked to mirror device", dev_name(dev));
-+					return 1;
-+				}
-+			}
-+		} while (next);
-+		dm_task_destroy(dmt);
-+	}
-+
-+	return 0;
-+
-+out:
-+	return 1;
-+}
-+
- int device_is_usable(struct device *dev)
- {
- 	struct dm_task *dmt;
-@@ -180,15 +297,15 @@ int device_is_usable(struct device *dev)
- 		goto out;
- 	}
- 
--	/* FIXME Also check for mirror block_on_error and mpath no paths */
--	/* For now, we exclude all mirrors */
--
-+	/* FIXME Also check for mpath no paths */
- 	do {
- 		next = dm_get_next_target(dmt, next, &start, &length,
- 					  &target_type, &params);
--		/* Skip if target type doesn't match */
--		if (target_type && !strcmp(target_type, "mirror") && ignore_suspended_devices()) {
--			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
-+
-+		if (target_type && !strcmp(target_type, "mirror") &&
-+		    ignore_blocked_mirror_devices(dev, start, length, params)) {
-+			log_debug("%s: Mirror device %s not usable.",
-+				  dev_name(dev), name);
- 			goto out;
- 		}
- 
-
+ 	node->props.send_messages = 1;
+ 	seg->transaction_id = transaction_id;
+ 	seg->low_water_mark = low_water_mark;
 
 
