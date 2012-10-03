@@ -1,55 +1,47 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 14 Oct 2012 21:21:20 +0000 (UTC)
-Subject: master - test: speedup a bit
-Message-ID: <20121014212120.825DF22FD@hosted02.fedoraproject.org>
+From: ben <benscott@nwlink.com>
+Date: Tue, 02 Oct 2012 17:28:42 -0700
+Subject: Inconsistent flags of thin volumes and snapshots
+Message-ID: <1540614.udHforCSB6@laptop>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c6f2821b9fb74bec2de29a878e71fc64a70d11bb
-Commit:        c6f2821b9fb74bec2de29a878e71fc64a70d11bb
-Parent:        16060b101bdb541376fdfd7c0e6cac8cf73c0271
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 14 19:45:59 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 14 23:17:33 2012 +0200
+I have noticed inconsistencies in the flags with regard to
+thin volumes. I haven't posted them as bugs yet though because I
+am not sure if some are intentional.
 
-test: speedup a bit
+The first column of the flags is 'o' when a normal snapshot is taken
+of a thin volume but is 'V' when a thin snap is used. I haven't
+checked to see if 'O' is used for merging with thin snapshots.
 
-Do not wait full 10s if the invalid snapshot is already dropped.
----
- test/shell/snapshot-autoumount-dmeventd.sh |   11 +++++++----
- 1 files changed, 7 insertions(+), 4 deletions(-)
+The other issue I have run into is that a thin snapshot doesn't
+put an 's' into column 1 or column 7. This makes parsing more
+difficult since a thin volume and thin snap look the same in the
+flags. It seems that one of the columns could be changed to
+an 's' without losing any information. The first column also is
+used for merging 'S' so that would probably be the best one.
 
-diff --git a/test/shell/snapshot-autoumount-dmeventd.sh b/test/shell/snapshot-autoumount-dmeventd.sh
-index dbb90df..3b4b711 100644
---- a/test/shell/snapshot-autoumount-dmeventd.sh
-+++ b/test/shell/snapshot-autoumount-dmeventd.sh
-@@ -1,5 +1,5 @@
- #!/bin/bash
--# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2010-2012 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -32,10 +32,13 @@ mkdir "$mntdir"
- mount "$DM_DEV_DIR/mapper/$vg-snap" "$mntdir"
- mount
- cat /proc/mounts | grep "$mntdir"
--
--dd if=/dev/zero of="$mntdir/file$1" bs=1M count=17
-+dd if=/dev/zero of="$mntdir/file$1" bs=1M count=16
- sync
--sleep 10 # dmeventd only checks every 10 seconds :(
-+#dmeventd only checks every 10 seconds :(
-+for i in {1..10}; do
-+	cat /proc/mounts | grep "$mntdir" || break
-+	sleep 1
-+done
- 
- cat /proc/mounts | not grep "$mntdir"
- 
+~# lvs
+  LV        VG      Attr      LSize   Pool     Origin    Data%  
+  Pool_One  MyGroup twi-a-tz-   1.00g                      9.96
+  fat_snap1 MyGroup swi-a-s-- 112.00m          thin_vol2   0.00
+  thin_vol2 MyGroup owi-a-tz-   2.00g Pool_One             4.98
+
+
+~# lvs
+  LV         VG      Attr      LSize Pool     Origin    Data%   
+  Pool_One   MyGroup twi-a-tz- 1.00g                      9.96
+  thin_snap1 MyGroup Vwi-a-tz- 2.00g Pool_One thin_vol2   4.98
+  thin_vol2  MyGroup Vwi-a-tz- 2.00g Pool_One             4.98
+
+
+Should I post these as bugs?
+
+Thank you.
+
+
+
 
 
