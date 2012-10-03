@@ -1,52 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  3 Oct 2012 13:14:47 +0000 (UTC)
-Subject: master - thin: origin only suspend
-Message-ID: <20121003131447.E5B9E30C1@hosted02.fedoraproject.org>
+Date: Wed,  3 Oct 2012 13:14:50 +0000 (UTC)
+Subject: master - cleanup: add proper cast for force_t
+Message-ID: <20121003131450.C27FE313A@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf8e1a00937a7ef5eebf363898e237fd4a8dc392
-Commit:        cf8e1a00937a7ef5eebf363898e237fd4a8dc392
-Parent:        1946a453297535829d3d698dfa51733d8a223400
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4648d33d0704de23876582f35786023ebc954fe9
+Commit:        4648d33d0704de23876582f35786023ebc954fe9
+Parent:        cf8e1a00937a7ef5eebf363898e237fd4a8dc392
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 5 11:28:01 2012 +0200
+AuthorDate:    Wed Sep 19 15:13:21 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 3 15:05:55 2012 +0200
+CommitterDate: Wed Oct 3 15:06:17 2012 +0200
 
-thin: origin only suspend
+cleanup: add proper cast for force_t
 
-Skip tree creating when used with origin_only flag.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ tools/lvremove.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index bc0c778..8050db8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Skip building dm tree for thin pool when called with origin_only flag.
-   Add internal lv_rename_update() to rename LV without updating mda.
-   Ensure descriptors 0,1,2 are always available.
-   Use /proc/self/fd for closing openned descriptors.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index c8a1e35..31c1c27 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1369,7 +1369,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		seg = first_seg(lv);
- 	}
+diff --git a/tools/lvremove.c b/tools/lvremove.c
+index 0252149..54094b1 100644
+--- a/tools/lvremove.c
++++ b/tools/lvremove.c
+@@ -26,7 +26,7 @@ static int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
+         if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
+                 lv = origin;
  
--	if (lv_is_thin_pool(lv)) {
-+	if (!origin_only && lv_is_thin_pool(lv)) {
- 		if (!_add_lv_to_dtree(dm, dtree, seg->metadata_lv, 0))
- 			return_0;
- 		/* FIXME code from _create_partial_dtree() should be moved here */
+-	if (!lv_remove_with_dependencies(cmd, lv, arg_count(cmd, force_ARG), 0)) {
++	if (!lv_remove_with_dependencies(cmd, lv, (force_t) arg_count(cmd, force_ARG), 0)) {
+ 		stack;
+ 		return ECMD_FAILED;
+ 	}
 
 
