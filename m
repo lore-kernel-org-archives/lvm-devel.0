@@ -1,85 +1,59 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Mon,  8 Oct 2012 10:10:00 +0000 (UTC)
-Subject: master - lvmetad: Avoid overlapping locks that could cause a deadlock (BZ 862253).
-Message-ID: <20121008101000.AA7CA9FBD4@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  8 Oct 2012 10:17:06 +0000 (UTC)
+Subject: master - lvconvert: disable convertion of thin to mirrors
+Message-ID: <20121008101706.CCD1D337A@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6e312c56adb04e709819868c6fa89f5984013a65
-Commit:        6e312c56adb04e709819868c6fa89f5984013a65
-Parent:        0dfafd77d4c5682ac9ee37f3a2a4dce92659187c
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Oct 8 09:12:51 2012 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Oct 8 09:12:51 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5b07bd3f9116ade9bb5931485eaa260f5141db6b
+Commit:        5b07bd3f9116ade9bb5931485eaa260f5141db6b
+Parent:        6e312c56adb04e709819868c6fa89f5984013a65
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Oct 5 11:06:08 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 8 12:16:53 2012 +0200
 
-lvmetad: Avoid overlapping locks that could cause a deadlock (BZ 862253).
+lvconvert: disable convertion of thin to mirrors
 
+For now this convertions is not supported, thus disabled.
+The only supported conversion for now is to create mirrored thin pools
+from mirrored devices.
 ---
- daemons/lvmetad/lvmetad-core.c |   16 ++++++++++++----
- 1 files changed, 12 insertions(+), 4 deletions(-)
+ WHATS_NEW         |    1 +
+ tools/lvconvert.c |    7 +++++++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 0c39a77..dce7535 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -38,6 +38,7 @@ typedef struct {
- 	struct dm_hash_table *pvid_to_vgid;
- 	struct {
- 		struct dm_hash_table *vg;
-+		pthread_mutex_t vg_lock_map;
- 		pthread_mutex_t pvid_to_pvmeta;
- 		pthread_mutex_t vgid_to_metadata;
- 		pthread_mutex_t pvid_to_vgid;
-@@ -112,7 +113,7 @@ static struct dm_config_tree *lock_vg(lvmetad_state *s, const char *id) {
- 	pthread_mutex_t *vg;
- 	struct dm_config_tree *cft;
- 
--	lock_vgid_to_metadata(s);
-+	pthread_mutex_lock(&s->lock.vg_lock_map);
- 	vg = dm_hash_lookup(s->lock.vg, id);
- 	if (!vg) {
- 		pthread_mutexattr_t rec;
-@@ -126,8 +127,14 @@ static struct dm_config_tree *lock_vg(lvmetad_state *s, const char *id) {
- 			return NULL;
- 		}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 44682a6..e39a36e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.98 -
+ =================================
++  Disallow convertion of thins to mirrors.
+   Fix lvm2api data_percent reporting for thin volumes.
+   Do not allow RAID LVs in a clustered volume group.
+   Update lvconvert to support stacking of devs for thin meta/data devs.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 41bc585..132a69d 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1494,6 +1494,13 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
+ 		return 0;
  	}
-+	/* We never remove items from s->lock.vg => the pointer remains valid. */
-+	pthread_mutex_unlock(&s->lock.vg_lock_map);
+ 
++	/* TODO: decide what should be done here */
++	if (lv_is_thin_type(lv)) {
++		log_error("Converting segment type for %s/%s to mirror is not yet supported.",
++			 lv->vg->name, lv->name);
++		return 0;
++	}
 +
- 	DEBUG(s, "locking VG %s", id);
- 	pthread_mutex_lock(vg);
-+
-+	/* Protect against structure changes of the vgid_to_metadata hash. */
-+	lock_vgid_to_metadata(s);
- 	cft = dm_hash_lookup(s->vgid_to_metadata, id);
- 	unlock_vgid_to_metadata(s);
- 	return cft;
-@@ -137,11 +144,11 @@ static void unlock_vg(lvmetad_state *s, const char *id) {
- 	pthread_mutex_t *vg;
- 
- 	DEBUG(s, "unlocking VG %s", id);
--	lock_vgid_to_metadata(s); /* someone might be changing the s->lock.vg structure right
--				   * now, so avoid stepping on each other's toes */
-+	/* Protect the s->lock.vg structure from concurrent access. */
-+	pthread_mutex_lock(&s->lock.vg_lock_map);
- 	if ((vg = dm_hash_lookup(s->lock.vg, id)))
- 		pthread_mutex_unlock(vg);
--	unlock_vgid_to_metadata(s);
-+	pthread_mutex_unlock(&s->lock.vg_lock_map);
- }
- 
- static struct dm_config_node *pvs(struct dm_config_node *vg)
-@@ -975,6 +982,7 @@ static int init(daemon_state *s)
- 	pthread_mutex_init(&ls->lock.pvid_to_pvmeta, &rec);
- 	pthread_mutex_init(&ls->lock.vgid_to_metadata, &rec);
- 	pthread_mutex_init(&ls->lock.pvid_to_vgid, NULL);
-+	pthread_mutex_init(&ls->lock.vg_lock_map, NULL);
- 	pthread_mutex_init(&ls->token_lock, NULL);
- 	create_metadata_hashes(ls);
- 
+ 	/* Adjust mimage and/or log count */
+ 	if (!_lvconvert_mirrors_parse_params(cmd, lv, lp,
+ 					     &old_mimage_count, &old_log_count,
 
 
