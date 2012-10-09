@@ -1,89 +1,75 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  9 Oct 2012 10:22:58 +0000 (UTC)
-Subject: master - test: split raid tests
-Message-ID: <20121009102258.57F94AABF6@fedorahosted.org>
+Date: Tue,  9 Oct 2012 14:39:23 +0000 (UTC)
+Subject: master - test: move raid10 test into separate test files
+Message-ID: <20121009143923.2FFA5E1C@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=93d7d3ed2c16317812e553a25babf5225471e8d4
-Commit:        93d7d3ed2c16317812e553a25babf5225471e8d4
-Parent:        cdb7502e54aeb464216af271289deec12f15442e
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d7b3179669dd82de7dab88309a9234d4cdbc6554
+Commit:        d7b3179669dd82de7dab88309a9234d4cdbc6554
+Parent:        93d7d3ed2c16317812e553a25babf5225471e8d4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 9 12:17:33 2012 +0200
+AuthorDate:    Tue Oct 9 13:51:30 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 9 12:22:26 2012 +0200
+CommitterDate: Tue Oct 9 16:38:12 2012 +0200
 
-test: split raid tests
+test: move raid10 test into separate test files
 
-Separate original raid test and new raid10 test,
-so the old could be tested on platforms without raid10 support.
-
-Replace test-unfriendly `ls /dev/mapper`   with  dmsetup ls
+New features tested in new files.
 ---
- test/shell/lvconvert-raid.sh   |   35 +-----------------------
- test/shell/lvconvert-raid10.sh |   56 ++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 58 insertions(+), 33 deletions(-)
+ test/shell/lvcreate-raid.sh   |   25 +---------------------
+ test/shell/lvcreate-raid10.sh |   42 +++++++++++++++++++++++++++++++++++++
+ test/shell/lvresize-raid.sh   |   33 -----------------------------
+ test/shell/lvresize-raid10.sh |   46 +++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 89 insertions(+), 57 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 9c3cff6..7f4dd4b 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -13,11 +13,9 @@
- 
- get_image_pvs() {
- 	local d
--	local images=""
-+	local images
- 
--	for d in `ls /dev/mapper/${1}-${2}_?image_*`; do
--		images="$images `basename $d | sed s:-:/:`"
--	done
-+	images=`dmsetup ls | grep ${1}-${2}_.image_.* | cut -f1 | sed -e s:-:/:`
- 	lvs --noheadings -a -o devices $images | sed s/\(.\)//
- }
- 
-@@ -222,32 +220,3 @@ for i in 4 5 6; do
- 
+diff --git a/test/shell/lvcreate-raid.sh b/test/shell/lvcreate-raid.sh
+index 81e5a5d..05c7428 100644
+--- a/test/shell/lvcreate-raid.sh
++++ b/test/shell/lvcreate-raid.sh
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -47,26 +47,3 @@ for i in raid4 \
+ 	aux wait_for_sync $vg $lv1
  	lvremove -ff $vg
  done
 -
--# RAID10: Can replace 'copies - 1' devices from each stripe
--# Tests are run on 2-way mirror, 3-way stripe RAID10
--aux target_at_least dm-raid 1 3 1 || skip
+-#
+-# Create RAID10:
+-#
 -
+-aux target_at_least dm-raid 1 3 0 || skip
+-
+-# Should not allow more than 2-way mirror
+-not lvcreate --type raid10 -m 2 -i 2 -l 2 -n $lv1 $vg
+-
+-# 2-way mirror, 2-stripes
+-lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
+-aux wait_for_sync $vg $lv1
+-lvremove -ff $vg
+-
+-# 2-way mirror, 3-stripes
 -lvcreate --type raid10 -m 1 -i 3 -l 3 -n $lv1 $vg
 -aux wait_for_sync $vg $lv1
+-lvremove -ff $vg
 -
--# Can replace any single device
--for i in $(get_image_pvs $vg $lv1); do
--	lvconvert --replace $i $vg/$lv1
--	aux wait_for_sync $vg $lv1
--done
--
--# Can't replace adjacent devices
--devices=( $(get_image_pvs $vg $lv1) )
--not lvconvert --replace ${devices[0]} --replace ${devices[1]} $vg/$lv1
--not lvconvert --replace ${devices[2]} --replace ${devices[3]} $vg/$lv1
--not lvconvert --replace ${devices[4]} --replace ${devices[5]} $vg/$lv1
--
--# Can replace non-adjacent devices
--for i in 0 1; do
--	lvconvert \
--		--replace ${devices[$i]} \
--		--replace ${devices[$(($i + 2))]} \
--		--replace ${devices[$(($i + 4))]} \
--		 $vg/$lv1
--	aux wait_for_sync $vg $lv1
--done
-diff --git a/test/shell/lvconvert-raid10.sh b/test/shell/lvconvert-raid10.sh
+-#
+-# FIXME: Add tests that specify particular PVs to use for creation
+-#
+diff --git a/test/shell/lvcreate-raid10.sh b/test/shell/lvcreate-raid10.sh
 new file mode 100644
-index 0000000..2e4381d
+index 0000000..63d086f
 --- /dev/null
-+++ b/test/shell/lvconvert-raid10.sh
-@@ -0,0 +1,56 @@
++++ b/test/shell/lvcreate-raid10.sh
+@@ -0,0 +1,42 @@
 +#!/bin/sh
 +# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
 +#
@@ -97,48 +83,127 @@ index 0000000..2e4381d
 +
 +. lib/test
 +
-+get_image_pvs() {
-+	local d
-+	local images
-+
-+	images=`dmsetup ls | grep ${1}-${2}_.image_.* | cut -f1 | sed -e s:-:/:`
-+	lvs --noheadings -a -o devices $images | sed s/\(.\)//
-+}
-+
 +########################################################
 +# MAIN
 +########################################################
-+# RAID10: Can replace 'copies - 1' devices from each stripe
-+# Tests are run on 2-way mirror, 3-way stripe RAID10
-+aux target_at_least dm-raid 1 3 1 || skip
++aux target_at_least dm-raid 1 3 0 || skip
 +
-+# 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
-+aux prepare_pvs 9 80
-+vgcreate -c n -s 256k $vg $(cat DEVICES)
++aux prepare_pvs 6 20  # 6 devices for RAID10 (2-mirror,3-stripe) test
++vgcreate -c n -s 512k $vg $(cat DEVICES)
 +
++#
++# Create RAID10:
++#
++
++
++# Should not allow more than 2-way mirror
++not lvcreate --type raid10 -m 2 -i 2 -l 2 -n $lv1 $vg
++
++# 2-way mirror, 2-stripes
++lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
++aux wait_for_sync $vg $lv1
++lvremove -ff $vg
++
++# 2-way mirror, 3-stripes
 +lvcreate --type raid10 -m 1 -i 3 -l 3 -n $lv1 $vg
 +aux wait_for_sync $vg $lv1
++lvremove -ff $vg
 +
-+# Can replace any single device
-+for i in $(get_image_pvs $vg $lv1); do
-+	lvconvert --replace $i $vg/$lv1
-+	aux wait_for_sync $vg $lv1
++#
++# FIXME: Add tests that specify particular PVs to use for creation
++#
+diff --git a/test/shell/lvresize-raid.sh b/test/shell/lvresize-raid.sh
+index 08382a5..f999a31 100644
+--- a/test/shell/lvresize-raid.sh
++++ b/test/shell/lvresize-raid.sh
+@@ -78,36 +78,3 @@ for i in 4 5 6 ; do
+ 		lvremove -ff $vg
+ 	done
+ done
+-
+-aux target_at_least dm-raid 1 3 0 || skip
+-
+-# Extend RAID10 (2-stripes, 2-mirror)
+-for deactivate in true false; do
+-	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
+-
+-	if $deactivate; then
+-		lvchange -an $vg/$lv1
+-	fi
+-
+-	lvresize -l +2 $vg/$lv1
+-
+-	#check raid_images_contiguous $vg $lv1
+-
+-	lvremove -ff $vg
+-done
+-
+-# Reduce RAID10 (2-stripes, 2-mirror)
+-for deactivate in true false; do
+-	lvcreate --type raid10 -m 1 -i 2 -l 4 -n $lv1 $vg
+-
+-	if $deactivate; then
+-		lvchange -an $vg/$lv1
+-	fi
+-
+-	should lvresize -y -l -2 $vg/$lv1
+-
+-	#check raid_images_contiguous $vg $lv1
+-
+-	lvremove -ff $vg
+-done
+-
+diff --git a/test/shell/lvresize-raid10.sh b/test/shell/lvresize-raid10.sh
+new file mode 100644
+index 0000000..9b71708
+--- /dev/null
++++ b/test/shell/lvresize-raid10.sh
+@@ -0,0 +1,46 @@
++#!/bin/sh
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++. lib/test
++
++aux target_at_least dm-raid 1 3 0 || skip
++
++aux prepare_vg 5 80
++
++# Extend RAID10 (2-stripes, 2-mirror)
++for deactivate in true false; do
++	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
++
++	if $deactivate; then
++		lvchange -an $vg/$lv1
++	fi
++
++	lvresize -l +2 $vg/$lv1
++
++	#check raid_images_contiguous $vg $lv1
++
++	lvremove -ff $vg
 +done
 +
-+# Can't replace adjacent devices
-+devices=( $(get_image_pvs $vg $lv1) )
-+not lvconvert --replace ${devices[0]} --replace ${devices[1]} $vg/$lv1
-+not lvconvert --replace ${devices[2]} --replace ${devices[3]} $vg/$lv1
-+not lvconvert --replace ${devices[4]} --replace ${devices[5]} $vg/$lv1
++# Reduce RAID10 (2-stripes, 2-mirror)
++for deactivate in true false; do
++	lvcreate --type raid10 -m 1 -i 2 -l 4 -n $lv1 $vg
 +
-+# Can replace non-adjacent devices
-+for i in 0 1; do
-+	lvconvert \
-+		--replace ${devices[$i]} \
-+		--replace ${devices[$(($i + 2))]} \
-+		--replace ${devices[$(($i + 4))]} \
-+		 $vg/$lv1
-+	aux wait_for_sync $vg $lv1
++	if $deactivate; then
++		lvchange -an $vg/$lv1
++	fi
++
++	should lvresize -y -l -2 $vg/$lv1
++
++	#check raid_images_contiguous $vg $lv1
++
++	lvremove -ff $vg
 +done
 
 
