@@ -1,214 +1,95 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  9 Oct 2012 14:39:25 +0000 (UTC)
-Subject: master - test: more thin tests
-Message-ID: <20121009143925.98751E1C@hosted02.fedoraproject.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 09 Oct 2012 18:06:04 -0500
+Subject: [PATCH]: Add new configurable to allow metadata changes when PVs are missing
+Message-ID: <1349823964.32340.2.camel@f16>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=439989adab473b2fa867b1e492b205084471051a
-Commit:        439989adab473b2fa867b1e492b205084471051a
-Parent:        d7b3179669dd82de7dab88309a9234d4cdbc6554
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 9 16:32:11 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 9 16:38:42 2012 +0200
+Patch and description follow...
+ brassow
 
-test: more thin tests
+config:  Add configurable to allow metadata changes when PVs are missing
 
----
- test/shell/discards-thin.sh      |   56 +++++++++++++++++++++++++++++++++
- test/shell/lvconvert-thin.sh     |   49 +++++++++++++++++++++++++++++
- test/shell/lvcreate-thin-snap.sh |   63 ++++++++++++++++++++++++++++++++++++++
- 3 files changed, 168 insertions(+), 0 deletions(-)
+A while back the behavior of LVM changed from allowing metadata changes
+when PVs were missing to not allowing changes.  Until recently, this
+change was tolerated by HA-LVM by forcing a 'vgreduce --removemissing'
+before trying (again) to add tags to an LV and then activate it.  LVM
+mirroring requires that failed devices are removed anyway, so this was
+largely harmless.  However, RAID LVs do not require devices to be removed
+from the array in order to be activated.  In fact, in an HA-LVM
+environment this would be very undesirable.  Device failures in such an
+environment can often be transient and it would be much better to restore
+the device to the array than synchronize an entirely new device.
 
-diff --git a/test/shell/discards-thin.sh b/test/shell/discards-thin.sh
-new file mode 100644
-index 0000000..28300d9
---- /dev/null
-+++ b/test/shell/discards-thin.sh
-@@ -0,0 +1,56 @@
-+#!/bin/sh
+There are two methods that can be used to setup an HA-LVM environment:
+"clvm" or "tagging".  For RAID LVs, "clvm" is out of the question because
+RAID LVs are not supported in clustered VGs - not even in an exclusively
+activated manner.  That leaves "tagging".  HA-LVM uses tagging - coupled
+with 'volume_list' - to ensure that only one machine can have an LV active
+at a time.  If updates are not allowed when a PV is missing, it is
+impossible to add or remove tags to allow for activation.  This removes
+one of the most basic functionalities of HA-LVM - site redundancy.  If
+mirroring or RAID is used to replicate the storage in two data centers
+and one of them goes down, a server and a storage device are lost.  When
+the service fails-over to the alternate site, the VG will be "partial".
+Unable to add a tag to the VG/LV, the RAID device will be unable to
+activate.
+
+The solution is to create a configurable, "handles_missing_pvs", that
+allows for the old behavior.  Like 'metadata_read_only' it comes with
+a stern warning that "inappropriate use could mess up your system".
+The controled environment of HA-LVM is a sufficiently appropriate use
+for such a tool and allows for RAID LVs to be used in an HA-LVM
+environment.
+
+Index: lvm2/doc/example.conf.in
+===================================================================
+--- lvm2.orig/doc/example.conf.in
++++ lvm2/doc/example.conf.in
+@@ -446,6 +446,13 @@ global {
+     # Inappropriate use could mess up your system, so seek advice first!
+     metadata_read_only = 0
+ 
++    # If set to 1, operations that change on-disk metadata will be permitted.
++    #  One particularly useful application is to perform an 'addtag' to enable
++    #  the activation of a partial LV that may be under the control of
++    #  'volume_list' restrictions.
++    # Inappropriate use could mess up your system, so seek advice first!
++    handles_missing_pvs = 0
 +
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+#
-+# test support of thin discards
-+#
-+
-+. lib/test
-+
-+#
-+# Main
-+#
-+aux target_at_least dm-thin-pool 1 1 0 || skip
-+
-+aux prepare_pvs 2 64
-+
-+# disable thin_check if not present in system
-+which thin_check || aux lvmconf 'global/thin_check_executable = ""'
-+
-+clustered=
-+test -e LOCAL_CLVMD && clustered="--clustered y"
-+
-+vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+
-+# Create named pool only
-+lvcreate -l1 --discards ignore -T $vg/pool
-+check lv_field $vg/pool discards "ignore"
-+lvcreate -l1 --discards nopassdown -T $vg/pool1
-+check lv_field $vg/pool1 discards "nopassdown"
-+lvcreate -l1 --discards passdown -T $vg/pool2
-+check lv_field $vg/pool2 discards "passdown"
-+
-+lvchange --discards nopassdown $vg/pool2
-+
-+# cannot convert active  ignore -> passdown
-+not lvchange --discards passdown $vg/pool
-+
-+# cannot convert active  nopassdown -> ignore
-+not lvchange --discards ignore $vg/pool1
-+
-+# deactivate
-+lvchange -an $vg/pool $vg/pool1
-+lvchange --discards passdown $vg/pool
-+check lv_field $vg/pool discards "passdown"
-+lvchange --discards ignore $vg/pool1
-+check lv_field $vg/pool1 discards "ignore"
-+
-+vgremove -ff $vg
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-new file mode 100644
-index 0000000..3ad3248
---- /dev/null
-+++ b/test/shell/lvconvert-thin.sh
-@@ -0,0 +1,49 @@
-+#!/bin/sh
-+
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+#
-+# Main
-+#
-+aux target_at_least dm-thin-pool 1 0 0 || skip
-+
-+aux prepare_pvs 4 64
-+
-+# disable thin_check if not present in system
-+which thin_check || aux lvmconf 'global/thin_check_executable = ""'
-+
-+clustered=
-+test -e LOCAL_CLVMD && clustered="--clustered y"
-+
-+vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+
-+# create mirrored LVs for data and metadata volumes
-+lvcreate -l8 -m1 --mirrorlog core -n $lv1 $vg
-+lvcreate -l4 -m1 --mirrorlog core -n $lv2 $vg
-+
-+lvconvert -c 64K --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+
-+lvcreate -V10M -T $vg/$lv1 --name $lv3
-+
-+# check lvrename work properly
-+lvrename $vg/$lv1  $vg/pool
-+check lv_field $vg/pool name "pool"
-+
-+lvrename $vg/$lv3  $vg/$lv4
-+check lv_field $vg/$lv4 name "$lv4"
-+
-+# not yet supported conversions
-+not lvconvert -m 1 $vg/pool
-+not lvconvert -m 1 $vg/$lv3
-+
-+vgremove -ff $vg
-diff --git a/test/shell/lvcreate-thin-snap.sh b/test/shell/lvcreate-thin-snap.sh
-new file mode 100644
-index 0000000..0e91222
---- /dev/null
-+++ b/test/shell/lvcreate-thin-snap.sh
-@@ -0,0 +1,63 @@
-+#!/bin/sh
-+
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+check_lv_field_modules_()
-+{
-+	mod=$1
-+	shift
-+
-+	for d in $*; do
-+		check lv_field $vg/$d modules $mod
-+	done
-+}
-+
-+
-+#
-+# Main
-+#
-+aux target_at_least dm-thin-pool 1 0 0 || skip
-+
-+aux prepare_pvs 2 64
-+
-+# disable thin_check if not present in system
-+which thin_check || aux lvmconf 'global/thin_check_executable = ""'
-+
-+clustered=
-+test -e LOCAL_CLVMD && clustered="--clustered y"
-+
-+vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+
-+lvcreate -L10M -V10M -T $vg/pool --name $lv1
-+mkfs.ext4 $DM_DEV_DIR/$vg/$lv1
-+# create thin snapshot of thin LV
-+lvcreate -s $vg/$lv1
-+# check snapshot filesystem was properly frozen before snapping
-+fsck -p $DM_DEV_DIR/$vg/lvol0
-+lvcreate -s $vg/$lv1 --name $lv2
-+lvcreate -s $vg/$lv1 --name $vg/$lv3
-+lvcreate --type snapshot $vg/$lv1
-+lvcreate --type snapshot $vg/$lv1 --name $lv4
-+lvcreate --type snapshot $vg/$lv1 --name $vg/$lv5
-+
-+# create old-style snapshot
-+lvcreate -s -L10M --name oldsnap1 $vg/$lv2
-+lvcreate -s -L10M --name oldsnap2 $vg/$lv2
-+
-+# thin snap of snap of snap...
-+lvcreate -s --name sn1 $vg/$lv2
-+lvcreate -s --name sn2 $vg/sn1
-+lvcreate -s --name sn3 $vg/sn2
-+lvcreate -s --name sn4 $vg/sn3
-+
-+vgremove -ff $vg
+     # 'mirror_segtype_default' defines which segtype will be used when the
+     # shorthand '-m' option is used for mirroring.  The possible options are:
+     #
+Index: lvm2/lib/config/defaults.h
+===================================================================
+--- lvm2.orig/lib/config/defaults.h
++++ lvm2/lib/config/defaults.h
+@@ -49,6 +49,7 @@
+ #define DEFAULT_PRIORITISE_WRITE_LOCKS 1
+ #define DEFAULT_USE_MLOCKALL 0
+ #define DEFAULT_METADATA_READ_ONLY 0
++#define DEFAULT_HANDLES_MISSING_PVS 0
+ #define DEFAULT_LVDISPLAY_SHOWS_FULL_DEVICE_PATH 0
+ 
+ #define DEFAULT_MIRROR_SEGTYPE "mirror"
+Index: lvm2/tools/lvmcmdline.c
+===================================================================
+--- lvm2.orig/tools/lvmcmdline.c
++++ lvm2/tools/lvmcmdline.c
+@@ -988,7 +988,9 @@ static void _apply_settings(struct cmd_c
+ 	cmd->fmt = get_format_by_name(cmd, arg_str_value(cmd, metadatatype_ARG,
+ 				      cmd->current_settings.fmt_name));
+ 
+-	cmd->handles_missing_pvs = 0;
++	cmd->handles_missing_pvs =
++		find_config_tree_int(cmd, "global/handles_missing_pvs",
++				     DEFAULT_HANDLES_MISSING_PVS);
+ }
+ 
+ static const char *_copy_command_line(struct cmd_context *cmd, int argc, char **argv)
+
 
 
