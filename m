@@ -1,53 +1,66 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon,  8 Oct 2012 14:53:17 +0000 (UTC)
-Subject: master - systemd: remove ExecStartPost from lvm2-lvmetad.service.
-Message-ID: <20121008145317.A5C822370@hosted02.fedoraproject.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Tue,  9 Oct 2012 05:52:50 +0000 (UTC)
+Subject: master - libdaemon-server: Optimize logging for a fast no-output path.
+Message-ID: <20121009055250.4E1FD2473@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7a64fff948278604d287ac96d9783a6b896de99b
-Commit:        7a64fff948278604d287ac96d9783a6b896de99b
-Parent:        ee4c75c8b790001cb05d85a44b2a894a91f4ba05
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Oct 8 16:49:54 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Oct 8 16:49:54 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4b4c2833d984f6b6a8dde394168b4653cdd47863
+Commit:        4b4c2833d984f6b6a8dde394168b4653cdd47863
+Parent:        cc9c02fe68f6ee8f5f6bcf885c1ed41387778bb7
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Oct 8 18:34:33 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Oct 8 20:35:29 2012 +0200
 
-systemd: remove ExecStartPost from lvm2-lvmetad.service.
+libdaemon-server: Optimize logging for a fast no-output path.
 
-The ExecStartPost with pvscan --cache in lvm2-lvmetad.service
-is not needed now as this is called transparently within the
-first LVM command that queries lvmetad.
 ---
- WHATS_NEW                                       |    1 +
- scripts/lvm2_lvmetad_systemd_red_hat.service.in |    1 -
- 2 files changed, 1 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-log.c |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 004f8b1..cf1b563 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Remove ExecStartPost with pvscan --cache from lvm2-lvmetad.service.
-   Report invalid percentage for property snap_percent of non-snaphot LVs.
-   Disallow convertion of thins to mirrors.
-   Fix lvm2api data_percent reporting for thin volumes.
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-index e527369..0150726 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-@@ -10,7 +10,6 @@ Conflicts=shutdown.target
- Type=forking
- NonBlocking=true
- ExecStart=@sbindir@/lvmetad
--ExecStartPost=@sbindir@/lvm pvscan --cache
- ExecReload=@sbindir@/lvmetad -R
- Environment=SD_ACTIVATION=1
- Restart=on-abort
+diff --git a/libdaemon/server/daemon-log.c b/libdaemon/server/daemon-log.c
+index 837fffd..b31bb4e 100644
+--- a/libdaemon/server/daemon-log.c
++++ b/libdaemon/server/daemon-log.c
+@@ -52,6 +52,16 @@ void daemon_log(log_state *s, int type, const char *message) {
+ 	}
+ }
+ 
++static int _type_interesting(log_state *s, int type) {
++	int i = 0;
++	while ( backend[i].id ) {
++		if ( (s->log_config[type] & backend[i].id) == backend[i].id )
++			return 1;
++		++ i;
++	}
++	return 0;
++}
++
+ void daemon_logf(log_state *s, int type, const char *fmt, ...) {
+ 	char *buf;
+ 	va_list ap;
+@@ -78,12 +88,18 @@ static int _log_line(const char *line, void *baton) {
+ 
+ void daemon_log_cft(log_state *s, int type, const char *prefix, const struct dm_config_node *n)
+ {
++	if (!_type_interesting(s, type))
++		return;
++
+ 	struct log_line_baton b = { .s = s, .type = type, .prefix = prefix };
+ 	dm_config_write_node(n, &_log_line, &b);
+ }
+ 
+ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *msg)
+ {
++	if (!_type_interesting(s, type))
++		return;
++
+ 	struct log_line_baton b = { .s = s, .type = type, .prefix = prefix };
+ 	char *buf = dm_strdup(msg);
+ 	char *pos = buf;
 
 
