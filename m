@@ -1,40 +1,67 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  9 Oct 2012 23:49:03 +0000 (UTC)
-Subject: master - TEST: Avoid building unit tests with --disable-testing.
-Message-ID: <20121009234903.E6AD7246B@hosted02.fedoraproject.org>
+Date: Tue,  9 Oct 2012 23:49:06 +0000 (UTC)
+Subject: master - libdaemon-server: Do not create pidfile if NULL.
+Message-ID: <20121009234906.44D84246B@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff752c60dfde5f40e400746b98b17e511c9f1e34
-Commit:        ff752c60dfde5f40e400746b98b17e511c9f1e34
-Parent:        439989adab473b2fa867b1e492b205084471051a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=329d10268cf64f6d2ddb801f0191f3112c76ef66
+Commit:        329d10268cf64f6d2ddb801f0191f3112c76ef66
+Parent:        ff752c60dfde5f40e400746b98b17e511c9f1e34
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Oct 9 11:20:28 2012 +0200
+AuthorDate:    Tue Oct 9 20:22:30 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Tue Oct 9 20:37:34 2012 +0200
 
-TEST: Avoid building unit tests with --disable-testing.
+libdaemon-server: Do not create pidfile if NULL.
 
 ---
- test/unit/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-server.c |   21 ++++++++++++---------
+ 1 files changed, 12 insertions(+), 9 deletions(-)
 
-diff --git a/test/unit/Makefile.in b/test/unit/Makefile.in
-index 65e8bec..740eb14 100644
---- a/test/unit/Makefile.in
-+++ b/test/unit/Makefile.in
-@@ -15,8 +15,8 @@ top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index b15a7cc..9dd911f 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -466,16 +466,18 @@ void daemon_start(daemon_state s)
+ 	daemon_log_enable(s.log, DAEMON_LOG_OUTLET_SYSLOG, DAEMON_LOG_FATAL, 1);
+ 	daemon_log_enable(s.log, DAEMON_LOG_OUTLET_SYSLOG, DAEMON_LOG_ERROR, 1);
  
- VPATH = $(srcdir)
--SOURCES = bitset_t.c matcher_t.c config_t.c string_t.c run.c
- ifeq ("@TESTING@", "yes")
-+SOURCES = bitset_t.c matcher_t.c config_t.c string_t.c run.c
- TARGETS = run
- endif
+-	(void) dm_prepare_selinux_context(s.pidfile, S_IFREG);
++	if (s.pidfile) {
++		(void) dm_prepare_selinux_context(s.pidfile, S_IFREG);
  
+-	/*
+-	 * NB. Take care to not keep stale locks around. Best not exit(...)
+-	 * after this point.
+-	 */
+-	if (dm_create_lockfile(s.pidfile) == 0)
+-		exit(1);
++		/*
++		 * NB. Take care to not keep stale locks around. Best not exit(...)
++		 * after this point.
++		 */
++		if (dm_create_lockfile(s.pidfile) == 0)
++			exit(1);
+ 
+-	(void) dm_prepare_selinux_context(NULL, 0);
++		(void) dm_prepare_selinux_context(NULL, 0);
++	}
+ 
+ 	/* Set normal exit signals to request shutdown instead of dying. */
+ 	signal(SIGINT, &_exit_handler);
+@@ -526,7 +528,8 @@ void daemon_start(daemon_state s)
+ 	INFO(&s, "%s shutting down", s.name);
+ 
+ 	closelog(); /* FIXME */
+-	remove_lockfile(s.pidfile);
++	if (s.pidfile)
++		remove_lockfile(s.pidfile);
+ 	if (failed)
+ 		exit(1);
+ }
 
 
