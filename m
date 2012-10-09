@@ -1,77 +1,41 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  9 Oct 2012 05:52:57 +0000 (UTC)
-Subject: master - TEST: When INTERACTIVE=1, allow scripts to control a TTY.
-Message-ID: <20121009055257.64BF9241E@hosted02.fedoraproject.org>
+Date: Tue,  9 Oct 2012 05:52:59 +0000 (UTC)
+Subject: master - TEST: Wait for lvmetad socket to appear in "aux prepare_lvmetad".
+Message-ID: <20121009055259.ABEB5241E@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d5f2e6223f90b56fb173997bc2932bc361f54475
-Commit:        d5f2e6223f90b56fb173997bc2932bc361f54475
-Parent:        138b4e1719324139426d894f666d00b8f5b86965
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=39468b73a33853c2e532375762a2bbf1e76ea406
+Commit:        39468b73a33853c2e532375762a2bbf1e76ea406
+Parent:        d5f2e6223f90b56fb173997bc2932bc361f54475
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Oct 8 20:15:55 2012 +0200
+AuthorDate:    Mon Oct 8 20:25:14 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Mon Oct 8 20:35:29 2012 +0200
 
-TEST: When INTERACTIVE=1, allow scripts to control a TTY.
+TEST: Wait for lvmetad socket to appear in "aux prepare_lvmetad".
 
 ---
- test/lib/harness.c |   19 +++++++++++++------
- 1 files changed, 13 insertions(+), 6 deletions(-)
+ test/lib/aux.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/harness.c b/test/lib/harness.c
-index c1d6774..929bfc8 100644
---- a/test/lib/harness.c
-+++ b/test/lib/harness.c
-@@ -44,6 +44,7 @@ static int readbuf_sz = 0, readbuf_used = 0;
- 
- static int die = 0;
- static int verbose = 0; /* >1 with timestamps */
-+static int interactive = 0; /* disable all redirections */
- 
- struct subst {
- 	const char *key;
-@@ -278,11 +279,13 @@ static void run(int i, char *f) {
- 		perror("Fork failed.");
- 		exit(201);
- 	} else if (pid == 0) {
--		close(0);
--		dup2(fds[0], 1);
--		dup2(fds[0], 2);
--		close(fds[0]);
--		close(fds[1]);
-+		if (!interactive) {
-+			close(0);
-+			dup2(fds[0], 1);
-+			dup2(fds[0], 2);
-+			close(fds[0]);
-+			close(fds[1]);
-+		}
- 		execlp("bash", "bash", f, NULL);
- 		perror("execlp");
- 		fflush(stderr);
-@@ -320,7 +323,8 @@ static void run(int i, char *f) {
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index d1d5e10..37e7f69 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -79,8 +79,8 @@ prepare_lvmetad() {
+ 	echo "preparing lvmetad..."
+ 	$run_valgrind lvmetad -f "$@" -s "$TESTDIR/lvmetad.socket" -d wire,debug &
+ 	echo $! > LOCAL_LVMETAD
+-
+-	sleep .3
++	while ! test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait for the socket
++	echo ok
  }
  
- int main(int argc, char **argv) {
--	const char *be_verbose = getenv("VERBOSE");
-+	const char *be_verbose = getenv("VERBOSE"),
-+		   *be_interactive = getenv("INTERACTIVE");
- 	time_t start = time(NULL);
- 	int i;
- 
-@@ -332,6 +336,9 @@ int main(int argc, char **argv) {
- 	if (be_verbose)
- 		verbose = atoi(be_verbose);
- 
-+	if (be_interactive)
-+		interactive = atoi(be_interactive);
-+
- 	if (socketpair(PF_UNIX, SOCK_STREAM, 0, fds)) {
- 		perror("socketpair");
- 		return 201;
+ notify_lvmetad() {
 
 
