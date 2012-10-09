@@ -1,67 +1,74 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  9 Oct 2012 23:49:06 +0000 (UTC)
-Subject: master - libdaemon-server: Do not create pidfile if NULL.
-Message-ID: <20121009234906.44D84246B@hosted02.fedoraproject.org>
+Date: Tue,  9 Oct 2012 23:49:08 +0000 (UTC)
+Subject: master - lvmetad: Only create pidfile when running as a daemon (no -f).
+Message-ID: <20121009234908.8723E246B@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=329d10268cf64f6d2ddb801f0191f3112c76ef66
-Commit:        329d10268cf64f6d2ddb801f0191f3112c76ef66
-Parent:        ff752c60dfde5f40e400746b98b17e511c9f1e34
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=19971492632fb2273bb2a991858e5cd5b48e2c5d
+Commit:        19971492632fb2273bb2a991858e5cd5b48e2c5d
+Parent:        329d10268cf64f6d2ddb801f0191f3112c76ef66
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Tue Oct 9 20:22:30 2012 +0200
+AuthorDate:    Tue Oct 9 20:25:17 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
 CommitterDate: Tue Oct 9 20:37:34 2012 +0200
 
-libdaemon-server: Do not create pidfile if NULL.
+lvmetad: Only create pidfile when running as a daemon (no -f).
 
+Additionally, -f now makes -s mandatory, so the foreground (debugging) lvmetad
+does not steal the system-wide socket accidentally.
 ---
- libdaemon/server/daemon-server.c |   21 ++++++++++++---------
- 1 files changed, 12 insertions(+), 9 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |   13 ++++++++++++-
+ 1 files changed, 12 insertions(+), 1 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index b15a7cc..9dd911f 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -466,16 +466,18 @@ void daemon_start(daemon_state s)
- 	daemon_log_enable(s.log, DAEMON_LOG_OUTLET_SYSLOG, DAEMON_LOG_FATAL, 1);
- 	daemon_log_enable(s.log, DAEMON_LOG_OUTLET_SYSLOG, DAEMON_LOG_ERROR, 1);
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 4741649..ff861a2 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1060,6 +1060,7 @@ int main(int argc, char *argv[])
+ 	daemon_state s = { .private = NULL };
+ 	lvmetad_state ls;
+ 	int _restart = 0;
++	int _socket_override = 1;
  
--	(void) dm_prepare_selinux_context(s.pidfile, S_IFREG);
-+	if (s.pidfile) {
-+		(void) dm_prepare_selinux_context(s.pidfile, S_IFREG);
- 
--	/*
--	 * NB. Take care to not keep stale locks around. Best not exit(...)
--	 * after this point.
--	 */
--	if (dm_create_lockfile(s.pidfile) == 0)
--		exit(1);
-+		/*
-+		 * NB. Take care to not keep stale locks around. Best not exit(...)
-+		 * after this point.
-+		 */
-+		if (dm_create_lockfile(s.pidfile) == 0)
-+			exit(1);
- 
--	(void) dm_prepare_selinux_context(NULL, 0);
-+		(void) dm_prepare_selinux_context(NULL, 0);
+ 	s.name = "lvmetad";
+ 	s.private = &ls;
+@@ -1067,8 +1068,10 @@ int main(int argc, char *argv[])
+ 	s.daemon_fini = fini;
+ 	s.handler = handler;
+ 	s.socket_path = getenv("LVM_LVMETAD_SOCKET");
+-	if (!s.socket_path)
++	if (!s.socket_path) {
++		_socket_override = 0;
+ 		s.socket_path = DEFAULT_RUN_DIR "/lvmetad.socket";
 +	}
+ 	s.pidfile = LVMETAD_PIDFILE;
+ 	s.protocol = "lvmetad";
+ 	s.protocol_version = 1;
+@@ -1094,6 +1097,7 @@ int main(int argc, char *argv[])
+ 			break;
+ 		case 's': // --socket
+ 			s.socket_path = optarg;
++			_socket_override = 1;
+ 			break;
+ 		case 'V':
+ 			printf("lvmetad version 0\n");
+@@ -1101,6 +1105,13 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
  
- 	/* Set normal exit signals to request shutdown instead of dying. */
- 	signal(SIGINT, &_exit_handler);
-@@ -526,7 +528,8 @@ void daemon_start(daemon_state s)
- 	INFO(&s, "%s shutting down", s.name);
- 
- 	closelog(); /* FIXME */
--	remove_lockfile(s.pidfile);
-+	if (s.pidfile)
-+		remove_lockfile(s.pidfile);
- 	if (failed)
- 		exit(1);
++	if (s.foreground && !_socket_override) {
++		fprintf(stderr, "A socket path (-s) is required in foreground mode.");
++		exit(2);
++	} else {
++		s.pidfile = NULL;
++	}
++
+ 	daemon_start(s);
+ 	return 0;
  }
 
 
