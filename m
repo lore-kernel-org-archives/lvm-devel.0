@@ -1,60 +1,33 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 10 Oct 2012 12:08:45 +0000 (UTC)
-Subject: master - lvmetad: Warn if lvmetad is running but disabled.
-Message-ID: <20121010120845.53649A0D5E@fedorahosted.org>
+Date: Wed, 10 Oct 2012 12:08:47 +0000 (UTC)
+Subject: master - test: Check that lvmetad is refreshed correctly on restart.
+Message-ID: <20121010120847.961C8A0D5E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=71d718a4a4202d0e8a10bed1551878c68dd99a59
-Commit:        71d718a4a4202d0e8a10bed1551878c68dd99a59
-Parent:        622fb968a22d5b2c6ba3dcd9155743adfe5dec8c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f65754e6fc0e7e1eb17f058fe92db1ea6eead809
+Commit:        f65754e6fc0e7e1eb17f058fe92db1ea6eead809
+Parent:        71d718a4a4202d0e8a10bed1551878c68dd99a59
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Oct 10 12:33:48 2012 +0200
+AuthorDate:    Wed Oct 10 12:34:44 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Oct 10 13:54:29 2012 +0200
+CommitterDate: Wed Oct 10 13:54:36 2012 +0200
 
-lvmetad: Warn if lvmetad is running but disabled.
+test: Check that lvmetad is refreshed correctly on restart.
 
 ---
- lib/cache/lvmetad.c            |    2 ++
- test/Makefile.in               |    1 +
- test/shell/lvmetad-disabled.sh |   26 ++++++++++++++++++++++++++
- 3 files changed, 29 insertions(+), 0 deletions(-)
+ test/shell/lvmetad-restart.sh |   23 +++++++++++++++++++++++
+ 1 files changed, 23 insertions(+), 0 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index b5fdc54..b5e3787 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -41,6 +41,8 @@ void lvmetad_disconnect(void)
- 
- void lvmetad_init(struct cmd_context *cmd)
- {
-+	if (!_lvmetad_use && !access(LVMETAD_PIDFILE, F_OK))
-+		log_warn("WARNING: lvmetad is running but disabled. Restart lvmetad before enabling it!");
- 	if (_lvmetad_use && _lvmetad_socket && !_lvmetad_connected) {
- 		assert(_lvmetad_socket);
- 		_lvmetad = lvmetad_open(_lvmetad_socket);
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 6d7ee2c..5bbd1d6 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -99,6 +99,7 @@ lib/paths: $(srcdir)/Makefile.in .lib-dir-stamp
- 	echo 'abs_builddir=$(abs_builddir)' >> $@-t
- 	echo 'export DM_UDEV_SYNCHRONISATION=$(dm_udev_synchronisation)' >> $@-t
- 	echo 'export THIN=@THIN@' >> $@-t
-+	echo 'export LVMETAD_PIDFILE=@LVMETAD_PIDFILE@' >> $@-t
- 	mv $@-t $@
- 
- LIB = lib/not lib/should lib/harness \
-diff --git a/test/shell/lvmetad-disabled.sh b/test/shell/lvmetad-disabled.sh
+diff --git a/test/shell/lvmetad-restart.sh b/test/shell/lvmetad-restart.sh
 new file mode 100644
-index 0000000..41a3a19
+index 0000000..10268c2
 --- /dev/null
-+++ b/test/shell/lvmetad-disabled.sh
-@@ -0,0 +1,26 @@
++++ b/test/shell/lvmetad-restart.sh
+@@ -0,0 +1,23 @@
 +#!/bin/sh
 +# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
 +#
@@ -69,17 +42,14 @@ index 0000000..41a3a19
 +. lib/test
 +
 +test -e LOCAL_LVMETAD || skip
++aux prepare_pvs 2
++
++vgcreate $vg1 $dev1 $dev2
++vgs | grep $vg1
++
 +kill $(cat LOCAL_LVMETAD)
++aux prepare_lvmetad
 +
-+test -e $LVMETAD_PIDFILE && skip
-+lvmetad
-+test -e $LVMETAD_PIDFILE
-+cp $LVMETAD_PIDFILE LOCAL_LVMETAD
-+pvs 2>&1 | not grep "lvmetad is running"
-+aux lvmconf "global/use_lvmetad = 0"
-+pvs 2>&1 | grep "lvmetad is running"
-+
-+kill $(cat $LVMETAD_PIDFILE)
-+not ls $LVMETAD_PIDFILE
++vgs | grep $vg1
 
 
