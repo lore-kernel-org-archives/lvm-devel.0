@@ -1,93 +1,71 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 10 Oct 2012 19:23:07 +0000 (UTC)
-Subject: master - test: drop clustered flag control from thin tests
-Message-ID: <20121010192307.689B3AB3C1@fedorahosted.org>
+Date: Wed, 10 Oct 2012 19:23:09 +0000 (UTC)
+Subject: master - test: thin support for non power of 2 chunk size
+Message-ID: <20121010192309.AEFC5AB3C8@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=876514eb34d3b67cb1063ea2feca49a76be65229
-Commit:        876514eb34d3b67cb1063ea2feca49a76be65229
-Parent:        d4eded9fd6686310ea653da889f40dbe8358f244
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9db5217a3111f72298de31a6b94d33fff39401a3
+Commit:        9db5217a3111f72298de31a6b94d33fff39401a3
+Parent:        876514eb34d3b67cb1063ea2feca49a76be65229
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 10 19:00:46 2012 +0200
+AuthorDate:    Wed Oct 10 16:37:55 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Oct 10 21:22:12 2012 +0200
 
-test: drop clustered flag control from thin tests
+test: thin support for non power of 2 chunk size
 
 ---
- test/shell/discards-thin.sh      |    5 +----
- test/shell/lvconvert-thin.sh     |    5 +----
- test/shell/lvcreate-thin-snap.sh |    5 +----
- test/shell/lvcreate-thin.sh      |    5 +----
- 4 files changed, 4 insertions(+), 16 deletions(-)
+ test/shell/lvcreate-thin-power2.sh |   39 ++++++++++++++++++++++++++++++++++++
+ 1 files changed, 39 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/discards-thin.sh b/test/shell/discards-thin.sh
-index 4aa4293..84688b4 100644
---- a/test/shell/discards-thin.sh
-+++ b/test/shell/discards-thin.sh
-@@ -22,10 +22,7 @@ aux have_thin 1 1 0 || skip
- 
- aux prepare_pvs 2 64
- 
--clustered=
--test -e LOCAL_CLVMD && clustered="--clustered y"
--
--vgcreate $clustered $vg -s 64K $(cat DEVICES)
+diff --git a/test/shell/lvcreate-thin-power2.sh b/test/shell/lvcreate-thin-power2.sh
+new file mode 100644
+index 0000000..e1c793c
+--- /dev/null
++++ b/test/shell/lvcreate-thin-power2.sh
+@@ -0,0 +1,39 @@
++#!/bin/sh
++
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++#
++# test support for non-power-of-2 thin chunk size
++#
++
++. lib/test
++
++#
++# Main
++#
++aux have_thin 1 2 0 || skip
++
++aux prepare_pvs 2 64
++
 +vgcreate $vg -s 64K $(cat DEVICES)
- 
- # Create named pool only
- lvcreate -l1 --discards ignore -T $vg/pool
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-index 32661cd..29beb93 100644
---- a/test/shell/lvconvert-thin.sh
-+++ b/test/shell/lvconvert-thin.sh
-@@ -19,10 +19,7 @@ aux have_thin 1 0 0 || skip
- 
- aux prepare_pvs 4 64
- 
--clustered=
--test -e LOCAL_CLVMD && clustered="--clustered y"
--
--vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+vgcreate $vg -s 64K $(cat DEVICES)
- 
- # create mirrored LVs for data and metadata volumes
- lvcreate -l8 -m1 --mirrorlog core -n $lv1 $vg
-diff --git a/test/shell/lvcreate-thin-snap.sh b/test/shell/lvcreate-thin-snap.sh
-index 18846e3..23f91f9 100644
---- a/test/shell/lvcreate-thin-snap.sh
-+++ b/test/shell/lvcreate-thin-snap.sh
-@@ -30,10 +30,7 @@ aux have_thin 1 0 0 || skip
- 
- aux prepare_pvs 2 64
- 
--clustered=
--test -e LOCAL_CLVMD && clustered="--clustered y"
--
--vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+vgcreate $vg -s 64K $(cat DEVICES)
- 
- lvcreate -L10M -V10M -T $vg/pool --name $lv1
- mkfs.ext4 $DM_DEV_DIR/$vg/$lv1
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index 8ad552b..6f60976 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
-@@ -33,10 +33,7 @@ aux have_thin 1 0 0 || skip
- 
- aux prepare_pvs 2 64
- 
--clustered=
--test -e LOCAL_CLVMD && clustered="--clustered y"
--
--vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+vgcreate $vg -s 64K $(cat DEVICES)
- 
- # Create named pool only
- lvcreate -l1 -T $vg/pool1
++
++# create non-power-of-2 pool
++lvcreate -l100 -c 192 -T $vg/pool
++
++check lv_field $vg/pool discards "ignore"
++
++# check we cannot change discards settings
++not lvchange --discard passdown $vg/pool
++not lvchange --discard nopassdown $vg/pool
++
++# must be multiple of 64KB
++not lvcreate -l100 -c 168 -T $vg/pool1
++
++vgremove -ff $vg
 
 
