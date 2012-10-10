@@ -1,33 +1,49 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 10 Oct 2012 12:12:58 +0200
-Subject: [PATCH]: Allow limited metadata changes when PVs are missing
-In-Reply-To: <1349840815.32340.6.camel@f16> (Jonathan Brassow's message of
-	"Tue, 09 Oct 2012 22:46:55 -0500")
-References: <1349840815.32340.6.camel@f16>
-Message-ID: <87txu2r5xx.fsf@aldalome.mornfall.net>
-	(sfid-20121010_121259_226031_DDC14B84)
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 10 Oct 2012 12:08:42 +0000 (UTC)
+Subject: master - lvmetad: Fix the -f pidfile (non-)creation logic.
+Message-ID: <20121010120842.E53ADA0D5E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=622fb968a22d5b2c6ba3dcd9155743adfe5dec8c
+Commit:        622fb968a22d5b2c6ba3dcd9155743adfe5dec8c
+Parent:        6e523f01d07d7d819c2f0d9b1595e628ddffea24
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Oct 10 12:32:24 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Oct 10 13:53:21 2012 +0200
 
-Jonathan Brassow <jbrassow@redhat.com> writes:
-> The solution is to allow vgchange and lvchange to alter the LVM metadata
-> for a limited set of options - --[add|del]tag included.  The set of
-> allowable options are ones that do not cause changes to the DM kernel
-> target (like --resync would) or could alter the structure of the LV
-> (like allocation or conversion).
+lvmetad: Fix the -f pidfile (non-)creation logic.
 
-seems OK to me. Nevertheless, I would like to see a functional test
-along with the patch, to make sure the newly allowed options actually
-work as expected. Other than the missing test, ACK.
+---
+ daemons/lvmetad/lvmetad-core.c |   12 +++++++-----
+ 1 files changed, 7 insertions(+), 5 deletions(-)
 
-Petr
-
--- 
-id' Ash = Ash; id' Dust = Dust; id' _ = undefined
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index ff861a2..22625c5 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1105,11 +1105,13 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
+ 
+-	if (s.foreground && !_socket_override) {
+-		fprintf(stderr, "A socket path (-s) is required in foreground mode.");
+-		exit(2);
+-	} else {
+-		s.pidfile = NULL;
++	if (s.foreground) {
++		if (!_socket_override) {
++			fprintf(stderr, "A socket path (-s) is required in foreground mode.");
++			exit(2);
++		} else {
++			s.pidfile = NULL;
++		}
+ 	}
+ 
+ 	daemon_start(s);
 
 
