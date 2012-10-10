@@ -1,118 +1,110 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 10 Oct 2012 15:18:27 +0000 (UTC)
-Subject: master - libdm: unmangle dm UUIDs on dm ioctl return
-Message-ID: <20121010151827.39C962EA7@hosted02.fedoraproject.org>
+Date: Wed, 10 Oct 2012 15:18:34 +0000 (UTC)
+Subject: master - dmsetup: also apply 'mangle' command for UUIDs
+Message-ID: <20121010151834.30E56335B@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8dccbae35e6a26fbc736d215de8e0538773de5e0
-Commit:        8dccbae35e6a26fbc736d215de8e0538773de5e0
-Parent:        7e71ecbaf6137fa6b6e3ca5c25c090369fe69dd4
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=470d1a2f5459bbbf82effb70b83a86329a170f85
+Commit:        470d1a2f5459bbbf82effb70b83a86329a170f85
+Parent:        788b7a6a2b6c20f7dddda3b90cd4dd5c60b1e1f5
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Oct 10 17:01:42 2012 +0200
+AuthorDate:    Wed Oct 10 17:03:47 2012 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Wed Oct 10 17:16:15 2012 +0200
 
-libdm: unmangle dm UUIDs on dm ioctl return
+dmsetup: also apply 'mangle' command for UUIDs
 
+Compared to names, UUIDs can't be renamed once they are created
+for a device. The 'mangle' command will just issue an error message
+about a need for manual intervention in this case - reactivating the
+device (remove + create) does the job as the defualt mangling mode
+used is "auto" and that will assign a correct mangled form the UUID.
 ---
- libdm/ioctl/libdm-iface.c |   39 +++++++++++++++++++++++++++++----------
- 1 files changed, 29 insertions(+), 10 deletions(-)
+ tools/dmsetup.c |   41 +++++++++++++++++++++++++++++++++--------
+ 1 files changed, 33 insertions(+), 8 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 04e458c..ac3442e 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1571,44 +1571,48 @@ static const char *_sanitise_message(char *message)
- 	return sanitised_message;
- }
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 8d24293..196c170 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -2943,8 +2943,8 @@ static int _ls(CMD_ARGS)
  
--static int _do_dm_ioctl_unmangle_name(char *name)
-+static int _do_dm_ioctl_unmangle_string(char *str, const char *str_name,
-+					char *buf, size_t buf_size,
-+					dm_string_mangling_t mode)
+ static int _mangle(CMD_ARGS)
  {
--	dm_string_mangling_t mode = dm_get_name_mangling_mode();
--	char buf[DM_NAME_LEN];
- 	int r;
+-	char *name;
+-	char *new_name = NULL;
++	const char *name, *uuid;
++	char *new_name = NULL, *new_uuid = NULL;
+ 	struct dm_task *dmt;
+ 	struct dm_info info;
+ 	int r = 0;
+@@ -2973,25 +2973,49 @@ static int _mangle(CMD_ARGS)
+ 	if (!dm_task_get_info(dmt, &info) || !info.exists)
+ 		goto out;
  
- 	if (mode == DM_STRING_MANGLING_NONE)
- 		return 1;
++	uuid = dm_task_get_uuid(dmt);
++
+ 	target_format = _switches[MANGLENAME_ARG] ? _int_args[MANGLENAME_ARG]
+ 						  : DEFAULT_DM_NAME_MANGLING;
  
--	if (!check_multiple_mangled_string_allowed(name, "name", mode))
-+	if (!check_multiple_mangled_string_allowed(str, str_name, mode))
- 		return_0;
- 
--	if ((r = unmangle_string(name, "name", DM_NAME_LEN, buf, sizeof(buf), mode)) < 0) {
--		log_debug("_do_dm_ioctl_unmangle_name: failed to "
--			  "unmangle \"%s\"", name);
-+	if ((r = unmangle_string(str, str_name, strlen(str), buf, buf_size, mode)) < 0) {
-+		log_debug("_do_dm_ioctl_unmangle_string: failed to "
-+			  "unmangle %s \"%s\"", str_name, str);
- 		return 0;
- 	} else if (r)
--		memcpy(name, buf, strlen(buf) + 1);
-+		memcpy(str, buf, strlen(buf) + 1);
- 
- 	return 1;
- }
- 
- static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
- {
-+	char buf[DM_NAME_LEN];
- 	struct dm_names *names;
- 	unsigned next = 0;
- 	char *name;
- 	int r = 1;
- 
- 	if ((name = dmi->name))
--		r = _do_dm_ioctl_unmangle_name(name);
-+		r = _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
-+						 dm_get_name_mangling_mode());
- 
- 	if (type == DM_DEVICE_LIST &&
- 	    ((names = ((struct dm_names *) ((char *)dmi + dmi->data_start)))) &&
- 	    names->dev) {
- 		do {
- 			names = (struct dm_names *)((char *) names + next);
--			r = _do_dm_ioctl_unmangle_name(names->name);
-+			r = _do_dm_ioctl_unmangle_string(names->name, "name",
-+							 buf, sizeof(buf),
-+							 dm_get_name_mangling_mode());
- 			next = names->next;
- 		} while (next);
+-	if (target_format == DM_STRING_MANGLING_AUTO && strstr(name, "\\x5cx")) {
+-		log_error("The name \"%s\" seems to be mangled more than once. "
+-			  "Manual intervention required to rename the device.", name);
+-		goto out;
++	if (target_format == DM_STRING_MANGLING_AUTO) {
++		if (strstr(name, "\\x5cx")) {
++			log_error("The name \"%s\" seems to be mangled more than once. "
++				  "Manual intervention required to rename the device.", name);
++			goto out;
++		}
++		if (strstr(uuid, "\\x5cx")) {
++			log_error("The UUID \"%s\" seems to be mangled more than once. "
++				  "Manual intervention required to correct the device UUID.", uuid);
++			goto out;
++		}
  	}
-@@ -1616,6 +1620,18 @@ static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
+ 
+ 	if (target_format == DM_STRING_MANGLING_NONE) {
+ 		if (!(new_name = dm_task_get_name_unmangled(dmt)))
+ 			goto out;
++		if (!(new_uuid = dm_task_get_uuid_unmangled(dmt)))
++			goto out;
+ 	}
+-	else if (!(new_name = dm_task_get_name_mangled(dmt)))
++	else {
++		if (!(new_name = dm_task_get_name_mangled(dmt)))
++			goto out;
++		if (!(new_uuid = dm_task_get_uuid_mangled(dmt)))
++			goto out;
++	}
++
++	/* We can't rename the UUID, the device must be reactivated manually. */
++	if (strcmp(uuid, new_uuid)) {
++		log_error("%s: %s: UUID in incorrect form. ", name, uuid);
++		log_error("Unable to change device UUID. The device must be deactivated first.");
++		r = 0;
+ 		goto out;
++	}
+ 
+ 	/* Nothing to do if the name is in correct form already. */
+ 	if (!strcmp(name, new_name)) {
+-		log_print("%s: name already in correct form", name);
++		log_print("%s: %s: name %salready in correct form", name,
++			  *uuid ? uuid : "[no UUID]", *uuid ? "and UUID " : "");
+ 		r = 1;
+ 		goto out;
+ 	}
+@@ -3003,6 +3027,7 @@ static int _mangle(CMD_ARGS)
+ 
+ out:
+ 	dm_free(new_name);
++	dm_free(new_uuid);
+ 	dm_task_destroy(dmt);
  	return r;
  }
- 
-+static int _dm_ioctl_unmangle_uuids(int type, struct dm_ioctl *dmi)
-+{
-+	char buf[DM_UUID_LEN];
-+	char *uuid = dmi->uuid;
-+
-+	if (uuid)
-+		return _do_dm_ioctl_unmangle_string(uuid, "UUID", buf, sizeof(buf),
-+						    dm_get_name_mangling_mode());
-+
-+	return 1;
-+}
-+
- static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 				     unsigned buffer_repeat_count,
- 				     unsigned retry_repeat_count,
-@@ -1746,6 +1762,9 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 	if (!_dm_ioctl_unmangle_names(dmt->type, dmi))
- 		goto error;
- 
-+	if (!_dm_ioctl_unmangle_uuids(dmt->type, dmi))
-+		goto error;
-+
- #else /* Userspace alternative for testing */
- #endif
- 	return dmi;
 
 
