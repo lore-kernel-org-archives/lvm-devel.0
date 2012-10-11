@@ -1,95 +1,132 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Thu, 11 Oct 2012 11:58:47 -0500
-Subject: [PATCH] RAID: Make RAID 4/5/6 display sync status under heading s/Copy%/Cpy%Sync
-Message-ID: <1349974727.25910.2.camel@f16>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Thu, 11 Oct 2012 20:03:55 +0000 (UTC)
+Subject: master - lvmetad: Implement a "dump" request to capture lvmetad state.
+Message-ID: <20121011200355.EB7EF22BD@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-RAID: Make RAID 4/5/6 display sync status under heading s/Copy%/Cpy%Sync
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a63b46bf36b22b83ff05f2d3529bc22a38ff56d3
+Commit:        a63b46bf36b22b83ff05f2d3529bc22a38ff56d3
+Parent:        b165e9f3f8fe757e2dc330f6952856908fb131d8
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Thu Oct 11 20:31:29 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Thu Oct 11 20:31:29 2012 +0200
 
-The heading 'Copy%' is specific to PVMOVE volumes, but can be generalized
-to apply to LVM mirrors also.  It is a bit awkward to use 'Copy%' for
-RAID 4/5/6, however - 'Sync%' would be more appropriate.  This is why
-RAID 4/5/6 have not displayed their sync status by any means available to
-'lvs' yet.
+lvmetad: Implement a "dump" request to capture lvmetad state.
 
-Example (old):
-[root at hayes-02 lvm2]# lvs vg
-  LV      VG   Attr      LSize  Pool Origin Data%  Move Log Cpy%Sy Convert
-  lv    vg   -wi-a----  1.00g
-  raid1 vg   rwi-a-r--  1.00g                             100.00
-  raid4 vg   rwi-a-r--  1.01g
-  raid5 vg   rwi-a-r--  1.01g
-  raid6 vg   rwi-a-r--  1.01g
+---
+ daemons/lvmetad/lvmetad-core.c |   81 +++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 80 insertions(+), 1 deletions(-)
 
-This patch changes the heading to 'Cpy%Sync' and allows RAID 4/5/6 to print
-their sync percent in this field.
-
-Example (new):
-[root at hayes-02 lvm2]# lvs vg
-  LV    VG   Attr      LSize Pool Origin Data%  Move Log Cpy%Sync Convert
-  lv    vg   -wi-a---- 1.00g                                             
-  raid1 vg   rwi-a-r-- 1.00g                               100.00        
-  raid4 vg   rwi-a-r-- 1.01g                               100.00        
-  raid5 vg   rwi-a-r-- 1.01g                               100.00        
-  raid6 vg   rwi-a-r-- 1.01g                               100.00        
-
-Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
-
-Index: lvm2/lib/report/columns.h
-===================================================================
---- lvm2.orig/lib/report/columns.h
-+++ lvm2/lib/report/columns.h
-@@ -78,7 +78,7 @@ FIELD(LVS, lv, NUM, "OSize", lvid, 5, or
- FIELD(LVS, lv, NUM, "Data%", lvid, 6, datapercent, data_percent, "For snapshot and thin pools and volumes, the percentage full if LV is active.", 0)
- FIELD(LVS, lv, NUM, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
- FIELD(LVS, lv, NUM, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For thin pools, the percentage of metadata full if LV is active.", 0)
--FIELD(LVS, lv, NUM, "Copy%", lvid, 6, copypercent, copy_percent, "For mirrors and pvmove, current percentage in-sync.", 0)
-+FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
- FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
- FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
- FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
-Index: lvm2/lib/report/report.c
-===================================================================
---- lvm2.orig/lib/report/report.c
-+++ lvm2/lib/report/report.c
-@@ -899,13 +899,14 @@ static int _copypercent_disp(struct dm_r
- 		return 0;
- 	}
- 
--	if ((!(lv->status & PVMOVE) && !(lv->status & MIRRORED)) ||
--	    !lv_mirror_percent(lv->vg->cmd, lv, 0, &percent,
--			       NULL) || (percent == PERCENT_INVALID)) {
--		*sortval = UINT64_C(0);
--		dm_report_field_set_value(field, "", sortval);
--		return 1;
--	}
-+	if (seg_is_raid(first_seg(lv))) {
-+		if (!lv_raid_percent(lv, &percent) ||
-+		    (percent == PERCENT_INVALID))
-+			goto no_copypercent;
-+	} else if ((!(lv->status & PVMOVE) && !(lv->status & MIRRORED)) ||
-+		   !lv_mirror_percent(lv->vg->cmd, lv, 0, &percent, NULL) ||
-+		   (percent == PERCENT_INVALID))
-+		goto no_copypercent;
- 
- 	percent = copy_percent(lv);
- 
-@@ -923,6 +924,11 @@ static int _copypercent_disp(struct dm_r
- 	dm_report_field_set_value(field, repstr, sortval);
- 
- 	return 1;
-+
-+no_copypercent:
-+	*sortval = UINT64_C(0);
-+	dm_report_field_set_value(field, "", sortval);
-+	return 1;
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 47b07aa..99ae99f 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -942,6 +942,82 @@ static response vg_remove(lvmetad_state *s, request r)
+ 	return daemon_reply_simple("OK", NULL);
  }
  
- static int _dtpercent_disp(int metadata, struct dm_report *rh,
-
++static void _dump_cft(struct buffer *buf, struct dm_hash_table *ht, const char *key_addr)
++{
++	struct dm_hash_node *n = dm_hash_get_first(ht);
++	while (n) {
++		struct dm_config_tree *cft = dm_hash_get_data(ht, n);
++		const char *key_backup = cft->root->key;
++		cft->root->key = dm_config_find_str(cft->root, key_addr, "unknown");
++		dm_config_write_node(cft->root, buffer_line, buf);
++		cft->root->key = key_backup;
++		n = dm_hash_get_next(ht, n);
++	}
++}
++
++static void _dump_pairs(struct buffer *buf, struct dm_hash_table *ht, const char *name, int int_key)
++{
++	char *append;
++	struct dm_hash_node *n = dm_hash_get_first(ht);
++
++	buffer_append(buf, name);
++	buffer_append(buf, " {\n");
++
++	while (n) {
++		const char *key = dm_hash_get_key(ht, n),
++			   *val = dm_hash_get_data(ht, n);
++		buffer_append(buf, "    ");
++		if (int_key)
++			dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
++		else
++			dm_asprintf(&append, "%s = \"%s\"", key, val);
++		if (append)
++			buffer_append(buf, append);
++		buffer_append(buf, "\n");
++		dm_free(append);
++		n = dm_hash_get_next(ht, n);
++	}
++	buffer_append(buf, "}\n");
++}
++
++static response dump(lvmetad_state *s)
++{
++	response res;
++	struct buffer *b = &res.buffer;
++
++	buffer_init(b);
++
++	/* Lock everything so that we get a consistent dump. */
++
++	lock_vgid_to_metadata(s);
++	lock_pvid_to_pvmeta(s);
++	lock_pvid_to_vgid(s);
++
++	buffer_append(b, "# VG METADATA\n\n");
++	_dump_cft(b, s->vgid_to_metadata, "metadata/id");
++
++	buffer_append(b, "\n# PV METADATA\n\n");
++	_dump_cft(b, s->pvid_to_pvmeta, "pvmeta/id");
++
++	buffer_append(b, "\n# VGID to VGNAME mapping\n\n");
++	_dump_pairs(b, s->vgid_to_vgname, "vgid_to_vgname", 0);
++
++	buffer_append(b, "\n# VGNAME to VGID mapping\n\n");
++	_dump_pairs(b, s->vgname_to_vgid, "vgname_to_vgid", 0);
++
++	buffer_append(b, "\n# PVID to VGID mapping\n\n");
++	_dump_pairs(b, s->pvid_to_vgid, "pvid_to_vgid", 0);
++
++	buffer_append(b, "\n# DEVICE to PVID mapping\n\n");
++	_dump_pairs(b, s->device_to_pvid, "device_to_pvid", 1);
++
++	unlock_pvid_to_vgid(s);
++	unlock_pvid_to_pvmeta(s);
++	unlock_vgid_to_metadata(s);
++
++	return res;
++}
++
+ static response handler(daemon_state s, client_handle h, request r)
+ {
+ 	lvmetad_state *state = s.private;
+@@ -956,7 +1032,7 @@ static response handler(daemon_state s, client_handle h, request r)
+ 		return daemon_reply_simple("OK", NULL);
+ 	}
+ 
+-	if (strcmp(token, state->token)) {
++	if (strcmp(token, state->token) && strcmp(rq, "dump")) {
+ 		pthread_mutex_unlock(&state->token_lock);
+ 		return daemon_reply_simple("token_mismatch",
+ 					   "expected = %s", state->token,
+@@ -997,6 +1073,9 @@ static response handler(daemon_state s, client_handle h, request r)
+ 	if (!strcmp(rq, "vg_list"))
+ 		return vg_list(state, r);
+ 
++	if (!strcmp(rq, "dump"))
++		return dump(state);
++
+ 	return reply_fail("request not implemented");
+ }
+ 
 
 
