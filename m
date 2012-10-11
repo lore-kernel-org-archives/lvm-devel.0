@@ -1,53 +1,38 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 11 Oct 2012 15:31:04 +0000 (UTC)
-Subject: master - lvm2api: add defined lvm_percent_to_float
-Message-ID: <20121011153104.472A6A0D93@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Thu, 11 Oct 2012 16:15:45 +0000 (UTC)
+Subject: master - test: Skip lvconvert-raid on kernels < 3.2 since they BUG out.
+Message-ID: <20121011161545.4EDCA2497@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0a46160d94524cca9d07e2d183d62ff6df1ec48e
-Commit:        0a46160d94524cca9d07e2d183d62ff6df1ec48e
-Parent:        316ce655a37136375dc9ea1204f218838d77ce41
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 11 17:25:14 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 11 17:29:56 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b165e9f3f8fe757e2dc330f6952856908fb131d8
+Commit:        b165e9f3f8fe757e2dc330f6952856908fb131d8
+Parent:        b07df8850ad1952edff67f263f1f161b1d4cf439
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Thu Oct 11 15:38:19 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Thu Oct 11 18:13:37 2012 +0200
 
-lvm2api: add defined lvm_percent_to_float
+test: Skip lvconvert-raid on kernels < 3.2 since they BUG out.
 
-Implement function which was somehow missing from it's original
-placement in the header file lvm2api.h.
 ---
- WHATS_NEW         |    1 +
- liblvm/lvm_base.c |    5 +++++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-raid.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5a3364a..d614270 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Add implementation of lvm2api function lvm_percent_to_float.
-   Allow non power of 2 thin chunk sizes if thin pool driver supports that.
-   Allow limited metadata changes when PVs are missing via [vg|lv]change.
-   Do not start dmeventd for lvchange --resync when monitoring is off.
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-index 815151e..01ea0d7 100644
---- a/liblvm/lvm_base.c
-+++ b/liblvm/lvm_base.c
-@@ -126,3 +126,8 @@ const char *lvm_vgname_from_device(lvm_t libh, const char *device)
- 	struct cmd_context *cmd = (struct cmd_context *)libh;
- 	return find_vgname_from_pvname(cmd, device);
- }
-+
-+float lvm_percent_to_float(percent_t v)
-+{
-+	return percent_to_float(v);
-+}
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 7f4dd4b..4fa766d 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -23,6 +23,7 @@ get_image_pvs() {
+ # MAIN
+ ########################################################
+ aux target_at_least dm-raid 1 1 0 || skip
++aux kernel_at_least 3 2 0 || skip
+ 
+ # 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
+ aux prepare_pvs 9 80
 
 
