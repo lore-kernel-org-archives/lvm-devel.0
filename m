@@ -1,55 +1,40 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 10 Oct 2012 19:56:13 +0000 (UTC)
-Subject: master - pvscan --cache: Also read metadata from LVM1 PVs (BZ 863401).
-Message-ID: <20121010195613.311F4236C@hosted02.fedoraproject.org>
+Date: Thu, 11 Oct 2012 09:52:15 +0000 (UTC)
+Subject: master - test: Skip the topology test if setting up scsi_debug fails.
+Message-ID: <20121011095215.10F0EA0D93@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=deea86c7f49ea825608826e29b56a005e2c9e747
-Commit:        deea86c7f49ea825608826e29b56a005e2c9e747
-Parent:        2ba9fb4019f737783606d886b96db59570850937
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=57460fe5a853c0824d35c02b2a77ef0afc8a5f2d
+Commit:        57460fe5a853c0824d35c02b2a77ef0afc8a5f2d
+Parent:        deea86c7f49ea825608826e29b56a005e2c9e747
 Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Oct 10 21:49:40 2012 +0200
+AuthorDate:    Thu Oct 11 11:51:04 2012 +0200
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Oct 10 21:55:24 2012 +0200
+CommitterDate: Thu Oct 11 11:51:04 2012 +0200
 
-pvscan --cache: Also read metadata from LVM1 PVs (BZ 863401).
+test: Skip the topology test if setting up scsi_debug fails.
 
 ---
- lib/cache/lvmetad.c        |    6 ++++++
- test/shell/lvmetad-lvm1.sh |    1 +
- 2 files changed, 7 insertions(+), 0 deletions(-)
+ test/shell/topology-support.sh |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index b5e3787..18794be 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -823,6 +823,12 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
- 		goto_bad;
+diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
+index cf2461c..e952dc0 100644
+--- a/test/shell/topology-support.sh
++++ b/test/shell/topology-support.sh
+@@ -53,7 +53,8 @@ PER_DEV_SIZE=34
+ DEV_SIZE=$(($NUM_DEVS*$PER_DEV_SIZE))
  
- 	lvmcache_foreach_mda(info, _lvmetad_pvscan_single, &baton);
+ # Test that kernel supports topology
+-aux prepare_scsi_debug_dev $DEV_SIZE
++aux prepare_scsi_debug_dev $DEV_SIZE || skip
 +
-+	/* LVM1 VGs have no MDAs. */
-+	if (!baton.vg && lvmcache_fmt(info) == get_format_by_name(cmd, "lvm1"))
-+		baton.vg = ((struct metadata_area *) dm_list_first(&baton.fid->metadata_areas_in_use))->
-+			ops->vg_read(baton.fid, lvmcache_vgname_from_info(info), NULL, 0);
-+
- 	if (!baton.vg)
- 		lvmcache_fmt(info)->ops->destroy_instance(baton.fid);
- 
-diff --git a/test/shell/lvmetad-lvm1.sh b/test/shell/lvmetad-lvm1.sh
-index c183fec..528eec2 100644
---- a/test/shell/lvmetad-lvm1.sh
-+++ b/test/shell/lvmetad-lvm1.sh
-@@ -17,5 +17,6 @@ pvcreate --metadatatype 1 $dev1
- vgscan --cache
- pvs | grep $dev1
- vgcreate --metadatatype 1 $vg1 $dev1
-+vgscan --cache
- vgs | grep $vg1
- pvs | grep $dev1
+ if [ ! -e /sys/block/$(basename $(cat SCSI_DEBUG_DEV))/alignment_offset ] ; then
+ 	aux cleanup_scsi_debug_dev
+ 	skip
 
 
