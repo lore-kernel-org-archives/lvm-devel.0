@@ -1,81 +1,61 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Oct 2012 10:22:21 +0000 (UTC)
-Subject: master - thin: prohibit lvcreate --thinpool with mirrors
-Message-ID: <20121012102221.EA1CDA2BCE@fedorahosted.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Fri, 12 Oct 2012 11:28:30 +0000 (UTC)
+Subject: master - Update WHATS_NEW.
+Message-ID: <20121012112830.DCCF5A105B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3058f662cf08bee36e7ff465e6f222cd8ced0ad2
-Commit:        3058f662cf08bee36e7ff465e6f222cd8ced0ad2
-Parent:        be291e106458a0ae1024bd517a37d471c032c505
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 12 12:18:06 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 12 12:21:45 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=141f26035d67d3d8b6bab98960a219322fc30f32
+Commit:        141f26035d67d3d8b6bab98960a219322fc30f32
+Parent:        3058f662cf08bee36e7ff465e6f222cd8ced0ad2
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Fri Oct 12 13:24:06 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Fri Oct 12 13:24:06 2012 +0200
 
-thin: prohibit lvcreate --thinpool with mirrors
+Update WHATS_NEW.
 
-Disable --thinpool to be used with mirror on lvcreate.
 ---
- WHATS_NEW                   |    1 +
- test/shell/lvcreate-thin.sh |    8 ++++++--
- tools/lvcreate.c            |    5 +++--
- 3 files changed, 10 insertions(+), 4 deletions(-)
+ WHATS_NEW |   18 +++++++++++++++++-
+ 1 files changed, 17 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 047e2ed..211d1bb 100644
+index 211d1bb..8ae3a22 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,22 @@
  Version 2.02.98 -
  =================================
-+  Prohibit usage of lvcreate --thinpool with --mirrors.
++  Implement devices/global_filter (affects lvmetad).
++  Make vgscan --cache an alias to pvscan --cache.
++  Clear lvmetad metadata/PV cache before a rescan.
++  Fix a segmentation fault upon receiving a corrupt lvmetad response.
++  Give inconsistent metadata warnings in pvscan --cache.
++  Make lvremove ask before discarding data areas.
++  Avoid overlapping locks that could cause a deadlock in lvmetad.
++  Fix memory leaks in libdaemon and lvmetad.
++  Optimize libdaemon logging for a fast no-output path.
++  example.conf: Warn about running lvmetad with use_lvmetad = 0.
++  Only create lvmetad pidfile when running as a daemon (no -f).
++  Warn if lvmetad is running but disabled.
++  Update lvmetad help output (flags and their meaning).
++  Make pvscan --cache read metadata from LVM1 PVs.
++  Make libdaemon buffer handling asymptotically more efficient.
++  Add lvmdump -l, to collect a state dump from lvmetad.
++  Make --sysinit suppress lvmetad connection failure warnings.
+   Prohibit usage of lvcreate --thinpool with --mirrors.
    Fix lvm2api origin reporting for thin snapshot volume.
    Add configure --enable-python_bindings for liblvm2app to new python subdir.
-   Add implementation of lvm2api function lvm_percent_to_float.
-diff --git a/test/shell/lvcreate-thin.sh b/test/shell/lvcreate-thin.sh
-index 6f60976..8ac5468 100644
---- a/test/shell/lvcreate-thin.sh
-+++ b/test/shell/lvcreate-thin.sh
-@@ -174,14 +174,18 @@ not lvcreate -L4M --chunksize 2G -T $vg/pool1
- lvcreate -L4M -V2G --name lv1 -T $vg/pool1
- # Origin name is not accepted
- not lvcreate -s $vg/lv1 -L4M -V2G --name $vg/lv4
--vgremove -ff $vg
- 
-+# Check we cannot create mirror and thin or thinpool together
-+not lvcreate -T mirpool -L4M --alloc anywhere -m1 $vg
-+not lvcreate --thinpool mirpool -L4M --alloc anywhere -m1 $vg
-+
-+vgremove -ff $vg
- 
- # Test --poolmetadatasize range
- # allocating large devices for testing
- aux teardown_devs
- aux prepare_pvs 10 16500
--vgcreate $clustered $vg -s 64K $(cat DEVICES)
-+vgcreate $vg -s 64K $(cat DEVICES)
- 
- lvcreate -L4M --chunksize 128 --poolmetadatasize 0 -T $vg/pool1 2>out
- grep "WARNING: Minimum" out
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7d01685..53c4940 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -694,8 +694,9 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	 * Check selected options are compatible and determine segtype
- 	 */
- // FIXME -m0 implies *striped*
--	if (arg_count(cmd, thin_ARG) && arg_count(cmd,mirrors_ARG)) {
--		log_error("--thin and --mirrors are incompatible.");
-+	if ((arg_count(cmd, thin_ARG) || arg_count(cmd, thinpool_ARG)) &&
-+	    arg_count(cmd,mirrors_ARG)) {
-+		log_error("--thin,--thinpool  and --mirrors are incompatible.");
- 		return 0;
- 	}
- 
+@@ -23,7 +40,6 @@ Version 2.02.98 -
+   Fix inability to create, extend or convert to a large (> 1TiB) RAID LV.
+   Add (p)artial attribute to lvs.
+   Don't try to issue discards to a missing PV to avoid segfault.
+-  Prevent lvremove from removing LVs that have any part missing.
+   Clear LV_NOSYNCED flag when a RAID1 LV is converted to a linear LV.
+   Disallow RAID1 upconvert if the LV was created with --nosync.
+   Depend on systemd-udev-settle in units generated by activation generator.
 
 
