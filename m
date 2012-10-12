@@ -1,39 +1,52 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 12 Oct 2012 15:17:09 +0000 (UTC)
-Subject: master - lvmetad: release_token without lvmetad
-Message-ID: <20121012151709.7BC04AAE24@fedorahosted.org>
+Date: Fri, 12 Oct 2012 15:29:08 +0000 (UTC)
+Subject: master - test: move global_filter only to mdata_string test
+Message-ID: <20121012152908.2329A14EC@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0f155e699c67b98cdf6613dcb9fad8d175af7077
-Commit:        0f155e699c67b98cdf6613dcb9fad8d175af7077
-Parent:        d9cc3f3acb47b698bb85dc24d3bfe890426c6d7b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=45b1fcdb4e65ff55ba40df03df56c65d6c06aa76
+Commit:        45b1fcdb4e65ff55ba40df03df56c65d6c06aa76
+Parent:        0f155e699c67b98cdf6613dcb9fad8d175af7077
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 12 17:16:28 2012 +0200
+AuthorDate:    Fri Oct 12 17:27:29 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 12 17:16:28 2012 +0200
+CommitterDate: Fri Oct 12 17:27:29 2012 +0200
 
-lvmetad: release_token without lvmetad
+test: move global_filter only to mdata_string test
 
-Missing wrapper when not building with lvmetad support
+Tries to help with lvmetad test and pvdisplay and unknown device.
 ---
- lib/cache/lvmetad.h |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ test/lib/aux.sh             |    1 -
+ test/shell/mdata-strings.sh |    1 +
+ 2 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
-index 98d9034..724922d 100644
---- a/lib/cache/lvmetad.h
-+++ b/lib/cache/lvmetad.h
-@@ -147,6 +147,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
- #    define lvmetad_active()	(0)
- #    define lvmetad_warning()	do { } while (0)
- #    define lvmetad_set_token(a)	do { } while (0)
-+#    define lvmetad_release_token()	do { } while (0)
- #    define lvmetad_vg_update(vg)	(1)
- #    define lvmetad_vg_remove(vg)	(1)
- #    define lvmetad_pv_found(pvid, device, fmt, label_sector, vg, handler)	(1)
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 07326ec..103318a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -410,7 +410,6 @@ lvmconf() {
+             cat > CONFIG_VALUES <<-EOF
+ devices/dir = "$DM_DEV_DIR"
+ devices/scan = "$DM_DEV_DIR"
+-devices/global_filter = [ "a|$DM_DEV_DIR/mirror|", "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
+ devices/filter = [ "a|$DM_DEV_DIR/mirror|", "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]
+ devices/cache_dir = "$TESTDIR/etc"
+ devices/sysfs_scan = 0
+diff --git a/test/shell/mdata-strings.sh b/test/shell/mdata-strings.sh
+index 574334c..c98b364 100644
+--- a/test/shell/mdata-strings.sh
++++ b/test/shell/mdata-strings.sh
+@@ -14,6 +14,7 @@
+ . lib/test
+ 
+ aux prepare_devs 2
++axu lvmconf 'devices/global_filter = [ "a|$DM_DEV_DIR/mirror|", "a|$DM_DEV_DIR/mapper/.*pv[0-9_]*$|", "r|.*|" ]'
+ 
+ # for udev impossible to create
+ pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
 
 
