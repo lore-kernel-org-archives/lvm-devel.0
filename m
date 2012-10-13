@@ -1,70 +1,65 @@
-From: Brassow Jonathan <jbrassow@redhat.com>
-Date: Fri, 12 Oct 2012 11:11:08 -0500
-Subject: [PATCH] RAID: Make RAID 4/5/6 display sync status under heading s/Copy%/Cpy%Sync
-In-Reply-To: <5077BEC6.3050909@gmail.com>
-References: <1349974727.25910.2.camel@f16> <5077BEC6.3050909@gmail.com>
-Message-ID: <164C34CC-E44A-4367-9A69-9AD2AC90E370@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sat, 13 Oct 2012 17:22:05 +0000 (UTC)
+Subject: master - cleanup: remove unneeded headers
+Message-ID: <20121013172205.2600622CC@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=feea5003cc0af2647f45a46d7b1d449a2f75e99b
+Commit:        feea5003cc0af2647f45a46d7b1d449a2f75e99b
+Parent:        98124361ae19b049842d9c8263be6216ee5a6ed8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Oct 13 19:13:25 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Oct 13 19:13:25 2012 +0200
 
-On Oct 12, 2012, at 1:55 AM, Zdenek Kabelac wrote:
+cleanup: remove unneeded headers
 
-> Dne 11.10.2012 18:58, Jonathan Brassow napsal(a):
->> RAID: Make RAID 4/5/6 display sync status under heading s/Copy%/Cpy%Sync
->> 
->> The heading 'Copy%' is specific to PVMOVE volumes, but can be generalized
->> to apply to LVM mirrors also.  It is a bit awkward to use 'Copy%' for
->> RAID 4/5/6, however - 'Sync%' would be more appropriate.  This is why
->> RAID 4/5/6 have not displayed their sync status by any means available to
->> 'lvs' yet.
->> 
->> Example (old):
->> [root at hayes-02 lvm2]# lvs vg
->>   LV      VG   Attr      LSize  Pool Origin Data%  Move Log Cpy%Sy Convert
->>   lv    vg   -wi-a----  1.00g
->>   raid1 vg   rwi-a-r--  1.00g                             100.00
->>   raid4 vg   rwi-a-r--  1.01g
->>   raid5 vg   rwi-a-r--  1.01g
->>   raid6 vg   rwi-a-r--  1.01g
->> 
->> This patch changes the heading to 'Cpy%Sync' and allows RAID 4/5/6 to print
->> their sync percent in this field.
->> 
->> Example (new):
->> [root at hayes-02 lvm2]# lvs vg
->>   LV    VG   Attr      LSize Pool Origin Data%  Move Log Cpy%Sync Convert
->>   lv    vg   -wi-a---- 1.00g
->>   raid1 vg   rwi-a-r-- 1.00g                               100.00
->>   raid4 vg   rwi-a-r-- 1.01g                               100.00
->>   raid5 vg   rwi-a-r-- 1.01g                               100.00
->>   raid6 vg   rwi-a-r-- 1.01g                               100.00
->> 
->> Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
->> 
->> Index: lvm2/lib/report/columns.h
->> ===================================================================
->> --- lvm2.orig/lib/report/columns.h
->> +++ lvm2/lib/report/columns.h
->> @@ -78,7 +78,7 @@ FIELD(LVS, lv, NUM, "OSize", lvid, 5, or
->>  FIELD(LVS, lv, NUM, "Data%", lvid, 6, datapercent, data_percent, "For snapshot and thin pools and volumes, the percentage full if LV is active.", 0)
->>  FIELD(LVS, lv, NUM, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
->>  FIELD(LVS, lv, NUM, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For thin pools, the percentage of metadata full if LV is active.", 0)
->> -FIELD(LVS, lv, NUM, "Copy%", lvid, 6, copypercent, copy_percent, "For mirrors and pvmove, current percentage in-sync.", 0)
->> +FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
-> 
-> 
-> Just add new one if needed - and keep the old one available for users (staying backward compatible)
-> 
-> You may update default columns written by lvs command and change Copy% field to something else.
-> 
-> Though IMHO   Copy%  looks better then Cpy%Sync...
+Header do not provide any needed symbols.
+---
+ lib/cache/lvmetad.c          |    1 -
+ lib/device/dev-cache.c       |    1 -
+ libdaemon/client/daemon-io.c |    1 -
+ 3 files changed, 0 insertions(+), 3 deletions(-)
 
-i had similar thoughts about whether or not to just create a new field.  I've been over this with agk and this is how I arrived at the patch above.
-
- brassow
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 9c11329..64820d8 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -20,7 +20,6 @@
+ #include "lvmcache.h"
+ #include "lvmetad-client.h"
+ #include "format-text.h" // TODO for disk_locn, used as a DA representation
+-#include "filter.h"
+ #include "assert.h"
+ #include "crc.h"
+ 
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 44a9e27..d08b07f 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -18,7 +18,6 @@
+ #include "lvm-types.h"
+ #include "btree.h"
+ #include "filter.h"
+-#include "filter-persistent.h"
+ #include "toolcontext.h"
+ 
+ #include <unistd.h>
+diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
+index 50ef9b2..37f2744 100644
+--- a/libdaemon/client/daemon-io.c
++++ b/libdaemon/client/daemon-io.c
+@@ -18,7 +18,6 @@
+ #include <unistd.h>
+ 
+ #include "daemon-io.h"
+-#include "dm-logging.h"
+ #include "libdevmapper.h"
+ 
+ /*
 
 
