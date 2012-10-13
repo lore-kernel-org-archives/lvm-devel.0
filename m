@@ -1,49 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 13 Oct 2012 17:22:09 +0000 (UTC)
-Subject: master - lvmetad: move initialization in the inner loop
-Message-ID: <20121013172209.C07F522CC@hosted02.fedoraproject.org>
+Date: Sat, 13 Oct 2012 17:22:12 +0000 (UTC)
+Subject: master - cleanup: drop unused assignment
+Message-ID: <20121013172212.2652D22CC@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=88c547d1ca83426f4de5371baac885f5500b5487
-Commit:        88c547d1ca83426f4de5371baac885f5500b5487
-Parent:        7c7ab99843837bd9099ea502c8a34c05fad495c3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9effc6ab316db0f3f7122019ccdc546972ea1e94
+Commit:        9effc6ab316db0f3f7122019ccdc546972ea1e94
+Parent:        88c547d1ca83426f4de5371baac885f5500b5487
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 13 19:15:15 2012 +0200
+AuthorDate:    Sat Oct 13 19:17:10 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Oct 13 19:15:15 2012 +0200
+CommitterDate: Sat Oct 13 19:17:10 2012 +0200
 
-lvmetad: move initialization in the inner loop
+cleanup: drop unused assignment
 
-Set append to NULL in the front of cycle, so the INTERNAL error path
-is not leading to double-free of append pointer.
+Since 'n' is later reassigned and unused between, drop it's first
+assign.
 ---
- libdaemon/client/config-util.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
-index 9b893c6..1f4b55b 100644
---- a/libdaemon/client/config-util.c
-+++ b/libdaemon/client/config-util.c
-@@ -23,7 +23,7 @@
- 
- int buffer_append_vf(struct buffer *buf, va_list ap)
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 9a5c8b9..1992467 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -1113,7 +1113,7 @@ static int init(daemon_state *s)
+ static int fini(daemon_state *s)
  {
--	char *append = NULL;
-+	char *append;
- 	char *next;
- 	int keylen;
- 	int64_t value;
-@@ -31,6 +31,7 @@ int buffer_append_vf(struct buffer *buf, va_list ap)
- 	char *block;
+ 	lvmetad_state *ls = s->private;
+-	struct dm_hash_node *n = dm_hash_get_first(ls->vgid_to_metadata);
++	struct dm_hash_node *n;
  
- 	while ((next = va_arg(ap, char *))) {
-+		append = NULL;
- 		if (!strchr(next, '=')) {
- 			log_error(INTERNAL_ERROR "Bad format string at '%s'", next);
- 			goto fail;
+ 	DEBUG(s, "fini");
+ 
 
 
