@@ -1,39 +1,61 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 13 Oct 2012 17:22:14 +0000 (UTC)
-Subject: master - cleanup: used old C standard
-Message-ID: <20121013172214.56E0522CC@hosted02.fedoraproject.org>
+Date: Sat, 13 Oct 2012 17:22:16 +0000 (UTC)
+Subject: master - lvmetad: fix memory leaks in error paths
+Message-ID: <20121013172216.9B55B22CC@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5df6ec24bffc2df7028639f06b580eda46d894df
-Commit:        5df6ec24bffc2df7028639f06b580eda46d894df
-Parent:        9effc6ab316db0f3f7122019ccdc546972ea1e94
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4379365cae3a1efa8299e0d6cf248520a136c798
+Commit:        4379365cae3a1efa8299e0d6cf248520a136c798
+Parent:        5df6ec24bffc2df7028639f06b580eda46d894df
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 13 19:18:33 2012 +0200
+AuthorDate:    Sat Oct 13 19:19:50 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Oct 13 19:18:33 2012 +0200
+CommitterDate: Sat Oct 13 19:19:50 2012 +0200
 
-cleanup: used old C standard
+lvmetad: fix memory leaks in error paths
 
+Destroy interator in error path.
+Releasy any possible allocated buffer from buffer_append_f
+and buffer_append_vf  in error path.
 ---
- lib/cache/lvmetad.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/cache/lvmetad.c              |    1 +
+ libdaemon/client/daemon-client.c |    7 ++++---
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 64820d8..81b6f04 100644
+index 81b6f04..1a52787 100644
 --- a/lib/cache/lvmetad.c
 +++ b/lib/cache/lvmetad.c
-@@ -52,7 +52,7 @@ void lvmetad_init(struct cmd_context *cmd)
+@@ -880,6 +880,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 	future_token = _lvmetad_token;
+ 	_lvmetad_token = (char *) "update in progress";
+ 	if (!_token_update()) {
++		dev_iter_destroy(iter);
+ 		_lvmetad_token = future_token;
+ 		return 0;
  	}
- }
+diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
+index c4422d6..a010cc0 100644
+--- a/libdaemon/client/daemon-client.c
++++ b/libdaemon/client/daemon-client.c
+@@ -108,10 +108,11 @@ daemon_reply daemon_send_simple_v(daemon_handle h, const char *id, va_list ap)
+ 	daemon_request rq = { .cft = NULL };
+ 	daemon_reply repl;
  
--void lvmetad_warning()
-+void lvmetad_warning(void)
- {
- 	if (_lvmetad_use && (_lvmetad.socket_fd < 0 || _lvmetad.error))
- 		log_warn("WARNING: Failed to connect to lvmetad: %s. Falling back to internal scanning.",
+-	if (!buffer_append_f(&rq.buffer, "request = %s", id, NULL))
+-		return err;
+-	if (!buffer_append_vf(&rq.buffer, ap))
++	if (!buffer_append_f(&rq.buffer, "request = %s", id, NULL) ||
++	    !buffer_append_vf(&rq.buffer, ap)) {
++		buffer_destroy(&rq.buffer);
+ 		return err;
++	}
+ 
+ 	repl = daemon_send(h, rq);
+ 	buffer_destroy(&rq.buffer);
 
 
