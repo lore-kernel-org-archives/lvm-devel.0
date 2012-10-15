@@ -1,39 +1,102 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Mon, 15 Oct 2012 11:24:00 +0000 (UTC)
-Subject: master - scripts: blk-availability - use the same name for lock file
-Message-ID: <20121015112400.649D3226A@hosted02.fedoraproject.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon, 15 Oct 2012 12:10:07 +0000 (UTC)
+Subject: master - test: detect compilation with readline
+Message-ID: <20121015121007.72B53A0C45@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c93659e0e0fac317f4fe35dc19ba86e5977721d7
-Commit:        c93659e0e0fac317f4fe35dc19ba86e5977721d7
-Parent:        4dace48f51dce7a7473934f7f7ff8d74e478cd8f
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Oct 15 13:22:36 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon Oct 15 13:22:36 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=faa9a520857ecae31ab6e8f880a040e1e1b5363a
+Commit:        faa9a520857ecae31ab6e8f880a040e1e1b5363a
+Parent:        2fc1fc3a93783fa715a0c833e12962194674b8b1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Oct 15 13:18:32 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 15 14:07:06 2012 +0200
 
-scripts: blk-availability - use the same name for lock file
+test: detect compilation with readline
 
+check lvm shell functionality only if compiled with readline.
 ---
- scripts/blk_availability_init_red_hat.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/lib/aux.sh        |   14 ++++++++++----
+ test/shell/covercmd.sh |   23 +++++++++++++++++++++--
+ 2 files changed, 31 insertions(+), 6 deletions(-)
 
-diff --git a/scripts/blk_availability_init_red_hat.in b/scripts/blk_availability_init_red_hat.in
-index b6c4a67..618f3d3 100644
---- a/scripts/blk_availability_init_red_hat.in
-+++ b/scripts/blk_availability_init_red_hat.in
-@@ -35,7 +35,7 @@ sbindir=@sbindir@
- script=blkdeactivate
- options="-u -l wholevg"
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 9094562..7c0c189 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -532,11 +532,17 @@ target_at_least()
  
--LOCK_FILE="/var/lock/subsys/$script"
-+LOCK_FILE="/var/lock/subsys/blk-availability"
+ have_thin()
+ {
+-    target_at_least dm-thin-pool "$@" || exit 1
+-    test "$THIN" = shared || test "$THIN" = internal || exit 1
++	target_at_least dm-thin-pool "$@" || exit 1
++	test "$THIN" = shared || test "$THIN" = internal || exit 1
  
+-# disable thin_check if not present in system
+-    which thin_check || lvmconf 'global/thin_check_executable = ""'
++	# disable thin_check if not present in system
++	which thin_check || lvmconf 'global/thin_check_executable = ""'
++}
++
++# check if lvm shell is build-in  (needs readline)
++have_readline()
++{
++	echo version | lvm &>/dev/null
+ }
  
- rtrn=1
+ test -f DEVICES && devs=$(cat DEVICES)
+diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
+index 0514468..12d9be1 100644
+--- a/test/shell/covercmd.sh
++++ b/test/shell/covercmd.sh
+@@ -27,6 +27,7 @@ pvcreate --norestorefile -u $TEST_UUID --metadatacopies 0 "$dev5"
+ vgcreate -c n $vg $(cat DEVICES)
+ lvcreate -l 5 -i5 -I256 -n $lv $vg
+ 
++if aux have_readline; then
+ # test *scan and *display tools
+ cat <<EOF | lvm
+ pvscan
+@@ -45,6 +46,24 @@ EOF
+ for i in h b s k m g t p e H B S K M G T P E; do
+ 	echo pvdisplay --units $i "$dev1"
+ done | lvm
++else
++pvscan
++vgscan
++lvscan
++lvmdiskscan
++vgdisplay --units k $vg
++lvdisplay --units g $vg
++pvdisplay -c "$dev1"
++pvdisplay -s "$dev1"
++vgdisplay -c $vg
++vgdisplay -s $vg
++lvdisplay -c $vg
++
++for i in h b s k m g t p e H B S K M G T P E; do
++	pvdisplay --units $i "$dev1"
++done
++fi
++
+ 
+ # test vgexport vgimport tools
+ vgchange -an $vg
+@@ -61,8 +80,8 @@ done
+ 
+ for i in pr "p rw" an ay "-monitor y" "-monitor n" \
+         -resync -refresh "-addtag MYTAG" "-deltag MYETAG"; do
+-	echo lvchange -$i $vg/$lv
+-done | lvm
++	lvchange -$i $vg/$lv
++done
+ 
+ pvck "$dev1"
+ vgck $vg
 
 
