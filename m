@@ -1,56 +1,75 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon, 15 Oct 2012 20:42:41 +0000 (UTC)
-Subject: master - RAID: Add "raid10" to lvcreate man page.
-Message-ID: <20121015204241.61426A0C4B@fedorahosted.org>
+Date: Mon, 15 Oct 2012 20:47:22 +0000 (UTC)
+Subject: master - TEST: Re-add testing of lvconvert-raid for kernels < 3.2
+Message-ID: <20121015204722.C0AB423AB@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67379a3ffdafa69a2830a1155fe9b4689bbf71cb
-Commit:        67379a3ffdafa69a2830a1155fe9b4689bbf71cb
-Parent:        7519d881ef07c4a515716099a4bf9566b7f71b1a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=831ce3cda941f02556dd8c4a407754397df17997
+Commit:        831ce3cda941f02556dd8c4a407754397df17997
+Parent:        67379a3ffdafa69a2830a1155fe9b4689bbf71cb
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Oct 15 15:41:14 2012 -0500
+AuthorDate:    Mon Oct 15 15:43:15 2012 -0500
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Oct 15 15:41:14 2012 -0500
+CommitterDate: Mon Oct 15 15:43:15 2012 -0500
 
-RAID:  Add "raid10" to lvcreate man page.
+TEST:  Re-add testing of lvconvert-raid for kernels < 3.2
 
-In addition to reference to raid10 under the '--type' argument, an
-example creating a RAID10 LV has been added.
+I'm not sure what 'BUG's were being encountered when the restriction
+to limit lvconvert-raid.sh tests to kernels > 3.2 was added.  I do know
+that there were BUG's that could be triggered when testing snapshots and
+some of the earliest DM RAID available in the kernel.  I've taken out
+the 3.2 kernel restriction and added a dm-raid >= 1.2 restriction instead.
+This will allow the test to run on patched production kernels.
 ---
- man/lvcreate.8.in |   10 +++++++++-
- 1 files changed, 9 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-raid.sh |   18 +++---------------
+ 1 files changed, 3 insertions(+), 15 deletions(-)
 
-diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
-index fb54cc6..f374950 100644
---- a/man/lvcreate.8.in
-+++ b/man/lvcreate.8.in
-@@ -298,7 +298,7 @@ commandline switch alias that will enable their use
- However, this argument must be used when no existing
- commandline switch alias is available for the desired type,
- as is the case with
--.IR error ", " zero ", " raid1 ", " raid4 ", " raid5 " or " raid6 .
-+.IR error ", " zero ", " raid1 ", " raid10 ", " raid4 ", " raid5 " or " raid6 .
- .TP
- .BR \-V ", " \-\-virtualsize " " \fIVirtualSize [ \fIbBsSkKmMgGtTpPeE ]
- Create a sparse device of the given size (in MB by default) using a snapshot
-@@ -363,6 +363,14 @@ a parity drive for a total of 4 devices) and a stripesize of 64KiB:
- .sp
- .B lvcreate \-\-type raid5 \-L 5G \-i 3 \-I 64 \-n my_lv vg00
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 4fa766d..59c8bdb 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -22,8 +22,7 @@ get_image_pvs() {
+ ########################################################
+ # MAIN
+ ########################################################
+-aux target_at_least dm-raid 1 1 0 || skip
+-aux kernel_at_least 3 2 0 || skip
++aux target_at_least dm-raid 1 2 0 || skip
  
-+Creates a 5GiB RAID10 logical volume "vg00/my_lv", with 2 stripes on
-+2 2-way mirrors.  Note that the '-i' and '-m' arguments behave differently.
-+The '-i' specifies the number of stripes.  The '-m' specifies the number of
-+.B additional 
-+copies.
-+.sp
-+.B lvcreate \-\-type raid10 \-L 5G \-i 2 \-m 1 \-n my_lv vg00
-+
- Creates 100MiB pool logical volume for thin provisioning
- build with 2 stripes 64KiB and chunk size 128KiB together with
- 1TiB thin provisioned logical volume "vg00/thin_lv":
+ # 9 PVs needed for RAID10 testing (3-stripes/2-mirror - replacing 3 devs)
+ aux prepare_pvs 9 80
+@@ -33,8 +32,8 @@ vgcreate -c n -s 256k $vg $(cat DEVICES)
+ # RAID1 convert tests
+ ###########################################
+ for under_snap in false true; do
+-for i in 1 2 3 4; do
+-	for j in 1 2 3 4; do
++for i in 1 2 3; do
++	for j in 1 2 3; do
+ 		if [ $i -eq 1 ]; then
+ 			from="linear"
+ 		else
+@@ -121,17 +120,6 @@ check linear $vg $lv2
+ # FIXME: ensure no residual devices
+ lvremove -ff $vg
+ 
+-# 3-way to linear/2-way
+-lvcreate --type raid1 -m 2 -l 2 -n $lv1 $vg
+-aux wait_for_sync $vg $lv1
+-# FIXME: Can't split off a RAID1 from a RAID1 yet
+-# 'should' results in "warnings"
+-should lvconvert --splitmirrors 2 -n $lv2 $vg/$lv1
+-#check linear $vg $lv1
+-#check lv_exists $vg $lv2
+-# FIXME: ensure no residual devices
+-lvremove -ff $vg
+-
+ ###########################################
+ # RAID1 split + trackchanges / merge
+ ###########################################
 
 
