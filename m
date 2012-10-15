@@ -1,68 +1,57 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  3 Oct 2012 13:14:35 +0000 (UTC)
-Subject: master - configure: fix --enable-testing
-Message-ID: <20121003131435.B87A92319@hosted02.fedoraproject.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon, 15 Oct 2012 10:46:40 +0000 (UTC)
+Subject: master - lvmetad: Only print scanning messages when scanning 1 device.
+Message-ID: <20121015104640.814192274@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=98bcfdca837c8b56cc355e74672c932c1e8ed735
-Commit:        98bcfdca837c8b56cc355e74672c932c1e8ed735
-Parent:        886656e4ac5e5c932d9fbe60d18c063136288a38
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 1 14:34:07 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 3 14:59:59 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=08ba1b447205913a1979143d9bf3b6afbdc5c742
+Commit:        08ba1b447205913a1979143d9bf3b6afbdc5c742
+Parent:        78dafcba994be668c540ecacd828f61d4a26ed85
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Oct 15 12:44:19 2012 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Oct 15 12:45:50 2012 +0200
 
-configure: fix --enable-testing
+lvmetad: Only print scanning messages when scanning 1 device.
 
-Add missing pkg init for configure --enable-testing.
 ---
- WHATS_NEW    |    1 +
- configure    |    3 +++
- configure.in |    3 +++
- 3 files changed, 7 insertions(+), 0 deletions(-)
+ lib/cache/lvmetad.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index dc62d77..1868f99 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Add missing pkg init with --enable-testing in configure.in (2.02.71).
-   Fix inability to create, extend or convert to a large (> 1TiB) RAID LV.
-   Add (p)artial attribute to lvs.
-   Don't try to issue discards to a missing PV to avoid segfault.
-diff --git a/configure b/configure
-index 52f0e36..13fb6d6 100755
---- a/configure
-+++ b/configure
-@@ -8704,6 +8704,9 @@ fi
- $as_echo "$TESTING" >&6; }
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index f7d250e..6a374ac 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -871,6 +871,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 	daemon_reply reply;
+ 	int r = 1;
+ 	char *future_token;
++	int was_silent;
  
- if test "$TESTING" = yes; then
-+	if  test x$PKGCONFIG_INIT != x1; then
-+		pkg_config_init
-+	fi
+ 	if (!(iter = dev_iter_create(cmd->lvmetad_filter, 1))) {
+ 		log_error("dev_iter creation failed");
+@@ -890,6 +891,9 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 		r = 0;
+ 	daemon_reply_destroy(reply);
  
- pkg_failed=no
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking for CUNIT" >&5
-diff --git a/configure.in b/configure.in
-index 1c908f9..2bdffca 100644
---- a/configure.in
-+++ b/configure.in
-@@ -856,6 +856,9 @@ AC_ARG_ENABLE(testing,
- AC_MSG_RESULT($TESTING)
++	was_silent = silent_mode();
++	init_silent(1);
++
+ 	while ((dev = dev_iter_get(iter))) {
+ 		if (!lvmetad_pvscan_single(cmd, dev, handler))
+ 			r = 0;
+@@ -898,6 +902,8 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 			break;
+ 	}
  
- if test "$TESTING" = yes; then
-+	if  test x$PKGCONFIG_INIT != x1; then
-+		pkg_config_init
-+	fi
- 	PKG_CHECK_MODULES(CUNIT, cunit >= 2.0)
- fi
++	init_silent(was_silent);
++
+ 	dev_iter_destroy(iter);
  
+ 	_lvmetad_token = future_token;
 
 
