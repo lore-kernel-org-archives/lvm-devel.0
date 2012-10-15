@@ -1,56 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 15 Oct 2012 12:10:09 +0000 (UTC)
-Subject: master - thin: disable conversion of thin-pool to read-only
-Message-ID: <20121015121009.C3788A0C45@fedorahosted.org>
+Date: Mon, 15 Oct 2012 12:32:17 +0000 (UTC)
+Subject: master - test: resync is for mirror devices
+Message-ID: <20121015123217.6BE79129C@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b3899056d94d14eaa80c49e4a5a52c8e7865f08a
-Commit:        b3899056d94d14eaa80c49e4a5a52c8e7865f08a
-Parent:        faa9a520857ecae31ab6e8f880a040e1e1b5363a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d864c6eacd3e2f40034eb583cb2df9fa7c72efbe
+Commit:        d864c6eacd3e2f40034eb583cb2df9fa7c72efbe
+Parent:        457387718600579b862fe940c9a9daea3da59141
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 15 13:41:38 2012 +0200
+AuthorDate:    Mon Oct 15 14:31:41 2012 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 15 14:09:11 2012 +0200
+CommitterDate: Mon Oct 15 14:31:41 2012 +0200
 
-thin: disable conversion of thin-pool to read-only
+test: resync is for mirror devices
 
-This change is not yet supported.
 ---
- WHATS_NEW        |    1 +
- tools/lvchange.c |    6 ++++++
- 2 files changed, 7 insertions(+), 0 deletions(-)
+ test/shell/covercmd.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 53f3fe9..b2b7c35 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Prohibit not yet supported change of thin-pool to read-only.
-   Support creation of read-only thin volumes (lvcreate -p r).
-   Using autoextend percent 0 for thin pool fails 'lvextend --use-policies'.
-   Introduce blkdeactivate script.
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index b787672..85253ef 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -51,6 +51,12 @@ static int lvchange_permission(struct cmd_context *cmd,
- 		return 0;
- 	}
+diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
+index 12d9be1..b77d378 100644
+--- a/test/shell/covercmd.sh
++++ b/test/shell/covercmd.sh
+@@ -79,7 +79,7 @@ for i in dumpconfig formats segtypes; do
+ done
  
-+	if (!(lv_access & LVM_WRITE) && lv_is_thin_pool(lv)) {
-+		log_error("Change permissions of thin pool \"%s\" not "
-+			  "yes supported.", lv->name);
-+		return 0;
-+	}
-+
- 	if (lv_access & LVM_WRITE) {
- 		lv->status |= LVM_WRITE;
- 		log_verbose("Setting logical volume \"%s\" read/write",
+ for i in pr "p rw" an ay "-monitor y" "-monitor n" \
+-        -resync -refresh "-addtag MYTAG" "-deltag MYETAG"; do
++        -refresh "-addtag MYTAG" "-deltag MYETAG"; do
+ 	lvchange -$i $vg/$lv
+ done
+ 
 
 
