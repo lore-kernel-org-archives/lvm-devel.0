@@ -1,221 +1,119 @@
 From: Andy Grover <grover@fedoraproject.org>
-Date: Mon, 15 Oct 2012 23:36:53 +0000 (UTC)
-Subject: master - python-lvm: whitespace and Yoda conditionals
-Message-ID: <20121015233653.6476AA0C4B@fedorahosted.org>
+Date: Mon, 15 Oct 2012 23:36:55 +0000 (UTC)
+Subject: master - python-lvm: Update example to work with lvm object removal.
+Message-ID: <20121015233655.C6FEEA0C4B@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=12b631a6768e6f2a2005ef8ea91c0afbc2455c54
-Commit:        12b631a6768e6f2a2005ef8ea91c0afbc2455c54
-Parent:        84a4d4b970bb9aaf540ad5fa82276b1caf5aa9bd
-Author:        Andy Grover <agrover@redhat.com>
-AuthorDate:    Mon Oct 15 13:34:43 2012 -0700
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=10ba799ab08001d5435425e65f039f20cadd306e
+Commit:        10ba799ab08001d5435425e65f039f20cadd306e
+Parent:        12b631a6768e6f2a2005ef8ea91c0afbc2455c54
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon Oct 15 13:54:19 2012 -0700
 Committer:     Andy Grover <agrover@redhat.com>
 CommitterDate: Mon Oct 15 14:11:10 2012 -0700
 
-python-lvm: whitespace and Yoda conditionals
+python-lvm: Update example to work with lvm object removal.
 
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 Signed-off-by: Andy Grover <agrover@redhat.com>
 ---
- python/liblvm.c |   50 ++++++++++++++++++++++++--------------------------
- 1 files changed, 24 insertions(+), 26 deletions(-)
+ python/example.py |   35 +++++++++++++++--------------------
+ 1 files changed, 15 insertions(+), 20 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 4518cf4..8a73ced 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -75,7 +75,7 @@ liblvm_get_last_error(void)
+diff --git a/python/example.py b/python/example.py
+index 67bb7e4..5c14ee1 100644
+--- a/python/example.py
++++ b/python/example.py
+@@ -31,9 +31,9 @@ def print_pv(pv):
  
- 	LVM_VALID();
  
--	if((info = PyTuple_New(2)) == NULL)
-+	if ((info = PyTuple_New(2)) == NULL)
- 		return NULL;
+ #Dump some information about a specific volume group
+-def print_vg(h, vg_name):
++def print_vg(vg_name):
+     #Open read only
+-    vg = h.vgOpen(vg_name, 'r')
++    vg = lvm.vgOpen(vg_name, 'r')
  
- 	PyTuple_SetItem(info, 0, PyInt_FromLong((long) lvm_errno(libh)));
-@@ -174,7 +174,7 @@ liblvm_lvm_vgname_from_pvid(PyObject *self, PyObject *arg)
- 	if (!PyArg_ParseTuple(arg, "s", &pvid))
- 		return NULL;
+     print 'Volume group:', vg_name, 'Size: ', vg.getSize()
  
--	if((vgname = lvm_vgname_from_pvid(libh, pvid)) == NULL) {
-+	if ((vgname = lvm_vgname_from_pvid(libh, pvid)) == NULL) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
-@@ -193,7 +193,7 @@ liblvm_lvm_vgname_from_device(PyObject *self, PyObject *arg)
- 	if (!PyArg_ParseTuple(arg, "s", &device))
- 		return NULL;
+@@ -55,13 +55,13 @@ def print_vg(h, vg_name):
+     vg.close()
  
--	if((vgname = lvm_vgname_from_device(libh, device)) == NULL) {
-+	if ((vgname = lvm_vgname_from_device(libh, device)) == NULL) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
-@@ -233,7 +233,7 @@ liblvm_lvm_config_reload(void)
+ #Returns the name of a vg with space available
+-def find_vg_with_free_space(h):
++def find_vg_with_free_space():
+     free_space = 0
+     rc = None
  
- 	LVM_VALID();
+-    vg_names = l.listVgNames()
++    vg_names = lvm.listVgNames()
+     for v in vg_names:
+-        vg = h.vgOpen(v, 'r')
++        vg = lvm.vgOpen(v, 'r')
+         c_free = vg.getFreeSize()
+         if c_free > free_space:
+             free_space = c_free
+@@ -72,13 +72,13 @@ def find_vg_with_free_space(h):
  
--	if((rval = lvm_config_reload(libh)) == -1) {
-+	if ((rval = lvm_config_reload(libh)) == -1) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
-@@ -250,7 +250,7 @@ liblvm_lvm_scan(void)
+ #Walk through the volume groups and fine one with space in which we can
+ #create a new logical volume
+-def create_delete_logical_volume(h):
+-    vg_name = find_vg_with_free_space(h)
++def create_delete_logical_volume():
++    vg_name = find_vg_with_free_space()
  
- 	LVM_VALID();
+     print 'Using volume group ', vg_name, ' for example'
  
--	if((rval = lvm_scan(libh)) == -1) {
-+	if ((rval = lvm_scan(libh)) == -1) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
-@@ -603,7 +603,7 @@ get_property(struct lvm_property_value *prop)
- 	PyObject *pytuple;
- 	PyObject *setable;
+     if vg_name:
+-        vg = h.vgOpen(vg_name, 'w')
++        vg = lvm.vgOpen(vg_name, 'w')
+         lv = vg.createLvLinear('python_lvm_ok_to_delete', vg.getFreeSize())
  
--	if( !prop->is_valid ) {
-+	if (!prop->is_valid) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
-@@ -612,7 +612,7 @@ get_property(struct lvm_property_value *prop)
- 	if (!pytuple)
- 		return NULL;
+         if lv:
+@@ -93,11 +93,11 @@ def create_delete_logical_volume(h):
+                 #Remove tag
+                 lv.removeTag(t)
  
--	if( prop->is_integer ) {
-+	if (prop->is_integer) {
- 		PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("K", prop->value.integer));
- 	} else {
- 		PyTuple_SET_ITEM(pytuple, 0, PyString_FromString(prop->value.string));
-@@ -661,11 +661,11 @@ liblvm_lvm_vg_set_property(vgobject *self,  PyObject *args)
++            lv.deactivate()
++
+             #Try to rename
+-            lv.rename("python_lvm_ok_to_be_removed_shortly")
++            lv.rename("python_lvm_renamed")
+             print 'LV name= ', lv.getName()
+-
+-            lv.deactivate()
+             lv.remove()
  
- 	lvm_property = lvm_vg_get_property(self->vg, property_name);
+         vg.close()
+@@ -105,21 +105,16 @@ def create_delete_logical_volume(h):
+         print 'No free space available to create demo lv!'
  
--	if( !lvm_property.is_valid ) {
-+	if (!lvm_property.is_valid ) {
- 		goto lvmerror;
- 	}
+ if __name__ == '__main__':
+-    #Create a new LVM instance
+-    l = lvm.Liblvm()
+-
+     #What version
+-    print 'lvm version=', l.getVersion()
++    print 'lvm version=', lvm.getVersion()
  
--	if(PyObject_IsInstance(variant_type_arg, (PyObject*)&PyString_Type)) {
-+	if (PyObject_IsInstance(variant_type_arg, (PyObject*)&PyString_Type)) {
+     #Get a list of volume group names
+-    vg_names = l.listVgNames()
++    vg_names = lvm.listVgNames()
  
- 		if (!lvm_property.is_string) {
- 			PyErr_Format(PyExc_ValueError, "Property requires string value");
-@@ -676,7 +676,7 @@ liblvm_lvm_vg_set_property(vgobject *self,  PyObject *args)
- 		   leak when calling into set_property, need to verify*/
- 		string_value = strdup(PyString_AsString(variant_type_arg));
- 		lvm_property.value.string = string_value;
--		if(!lvm_property.value.string) {
-+		if (!lvm_property.value.string) {
- 			PyErr_NoMemory();
- 			goto bail;
- 		}
-@@ -688,14 +688,12 @@ liblvm_lvm_vg_set_property(vgobject *self,  PyObject *args)
- 			goto bail;
- 		}
+     #For each volume group display some information about each of them
+     for vg_i in vg_names:
+-        print_vg(l, vg_i)
++        print_vg(vg_i)
  
--		if(PyObject_IsInstance(variant_type_arg, (PyObject*)&PyInt_Type)) {
-+		if (PyObject_IsInstance(variant_type_arg, (PyObject*)&PyInt_Type)) {
- 			int temp_py_int = PyInt_AsLong(variant_type_arg);
+     #Demo creating a logical volume
+-    create_delete_logical_volume(l)
++    create_delete_logical_volume()
  
- 			/* -1 could be valid, need to see if an exception was gen. */
--			if( -1 == temp_py_int ) {
--				if( PyErr_Occurred() ) {
--					goto bail;
--				}
-+			if (temp_py_int == -1 && PyErr_Occurred()) {
-+				goto bail;
- 			}
- 
- 			if (temp_py_int < 0) {
-@@ -704,10 +702,10 @@ liblvm_lvm_vg_set_property(vgobject *self,  PyObject *args)
- 			}
- 
- 			lvm_property.value.integer = temp_py_int;
--		} else if(PyObject_IsInstance(variant_type_arg, (PyObject*)&PyLong_Type)){
-+		} else if (PyObject_IsInstance(variant_type_arg, (PyObject*)&PyLong_Type)){
- 			/* This will fail on negative numbers */
- 			unsigned long long temp_py_long = PyLong_AsUnsignedLongLong(variant_type_arg);
--			if( (unsigned long long)-1 == temp_py_long ) {
-+			if (temp_py_long == (unsigned long long)-1) {
- 				goto bail;
- 			}
- 
-@@ -718,11 +716,11 @@ liblvm_lvm_vg_set_property(vgobject *self,  PyObject *args)
- 		}
- 	}
- 
--	if( -1 == lvm_vg_set_property(self->vg, property_name, &lvm_property) ) {
-+	if (lvm_vg_set_property(self->vg, property_name, &lvm_property) == -1) {
- 		goto lvmerror;
- 	}
- 
--	if( -1 == lvm_vg_write(self->vg)) {
-+	if (lvm_vg_write(self->vg) == -1) {
- 		goto lvmerror;
- 	}
- 
-@@ -734,7 +732,7 @@ lvmerror:
- 	PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- bail:
- 	free(string_value);
--	if( variant_type_arg ) {
-+	if (variant_type_arg) {
- 		Py_DECREF(variant_type_arg);
- 		variant_type_arg = NULL;
- 	}
-@@ -933,13 +931,13 @@ liblvm_lvm_lv_from_N(vgobject *self, PyObject *arg, lv_fetch_by_N method)
- 		return NULL;
- 
- 	lv = method(self->vg, id);
--	if( !lv ) {
-+	if (!lv) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
- 
- 	rc = PyObject_New(lvobject, &LibLVMlvType);
--	if( !rc ) {
-+	if (!rc) {
- 		return NULL;
- 	}
- 
-@@ -972,13 +970,13 @@ liblvm_lvm_pv_from_N(vgobject *self, PyObject *arg, pv_fetch_by_N method)
- 		return NULL;
- 
- 	pv = method(self->vg, id);
--	if( !pv ) {
-+	if (!pv) {
- 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
- 		return NULL;
- 	}
- 
- 	rc = PyObject_New(pvobject, &LibLVMpvType);
--	if( !rc ) {
-+	if (!rc) {
- 		return NULL;
- 	}
- 
-@@ -1255,7 +1253,7 @@ liblvm_lvm_lv_list_lvsegs(lvobject *lv)
- 	LV_VALID(lv);
- 
- 	lvsegs = lvm_lv_list_lvsegs(lv->lv);
--	if(!lvsegs) {
-+	if (!lvsegs) {
- 		return Py_BuildValue("()");
- 	}
- 
-@@ -1371,7 +1369,7 @@ liblvm_lvm_lv_list_pvsegs(pvobject *pv)
- 	PV_VALID(pv);
- 
- 	pvsegs = lvm_pv_list_pvsegs(pv->pv);
--	if(!pvsegs) {
-+	if (!pvsegs) {
- 		return Py_BuildValue("()");
- 	}
- 
+-    #Close
+-    l.close()
 
 
