@@ -1,73 +1,135 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 17 Oct 2012 13:43:26 +0000 (UTC)
-Subject: master - cleanup: move log_error upward in code stack
-Message-ID: <20121017134326.8DCC91F38@hosted02.fedoraproject.org>
+Date: Wed, 17 Oct 2012 13:43:29 +0000 (UTC)
+Subject: master - Use lv_is_active instead of lv_info()
+Message-ID: <20121017134329.F19371F38@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e431b19bac29cf8fc21530118eb283b6ae703cbb
-Commit:        e431b19bac29cf8fc21530118eb283b6ae703cbb
-Parent:        f260f99d5791791f0aef2172b199fa5cdb7f6102
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf2741376d47411994d4065863acab8e405ff5c7
+Commit:        bf2741376d47411994d4065863acab8e405ff5c7
+Parent:        e431b19bac29cf8fc21530118eb283b6ae703cbb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 16 10:20:02 2012 +0200
+AuthorDate:    Tue Jan 31 23:42:53 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 17 15:41:44 2012 +0200
+CommitterDate: Wed Oct 17 15:42:31 2012 +0200
 
-cleanup: move log_error upward in code stack
+Use lv_is_active instead of lv_info()
 
-Report log_error earlier.
+Usage of lv_is_active makes it more obvious what is being checked.
 ---
- lib/metadata/metadata.c |   21 +++++++++------------
- 1 files changed, 9 insertions(+), 12 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    5 ++---
+ lib/metadata/mirror.c   |    9 +++------
+ lib/report/report.c     |    3 +--
+ 4 files changed, 7 insertions(+), 11 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 0b3158a..549a356 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -450,8 +450,11 @@ static int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 370c7e5..8ba9f2d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Use lv_is_active() instead of lv_info() call.
+   Cleanup some log_error message and use log_warn instead.
+   
+ Version 2.02.98 - 15th October 2012
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d2aca00..32a207d 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4218,7 +4218,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 	struct logical_volume *pool_lv;
+ 	struct lv_list *lvl;
+ 	int origin_active = 0;
+-	struct lvinfo info;
+ 
+ 	if (new_lv_name && find_lv_in_vg(vg, new_lv_name)) {
+ 		log_error("Logical volume \"%s\" already exists in "
+@@ -4350,12 +4349,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
+ 				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
+ 			}
+ 
+-			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
++			if (!lv_is_active(org)) {
+ 				log_error("Check for existence of active snapshot "
+ 					  "origin '%s' failed.", org->name);
+ 				return NULL;
+ 			}
+-			origin_active = info.exists;
++			origin_active = 1;
+ 
+ 			if (vg_is_clustered(vg) &&
+ 			    !lv_is_active_exclusive_locally(org)) {
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index c4683df..084c93a 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -282,7 +282,6 @@ static int _init_mirror_log(struct cmd_context *cmd,
+ 			    struct dm_list *tags, int remove_on_failure)
  {
- 	static char vg_path[PATH_MAX];
+ 	struct str_list *sl;
+-	struct lvinfo info;
+ 	uint64_t orig_status = log_lv->status;
+ 	int was_active = 0;
  
--	if (!validate_name(vg_name))
--		return_0;
-+	if (!validate_name(vg_name)) {
-+		log_error("New volume group name \"%s\" is invalid.",
-+			  vg_name);
-+		return 0;
-+	}
- 
- 	snprintf(vg_path, sizeof(vg_path), "%s%s", cmd->dev_dir, vg_name);
- 	if (path_exists(vg_path)) {
-@@ -479,11 +482,8 @@ int validate_vg_rename_params(struct cmd_context *cmd,
- 		return 0;
+@@ -298,14 +297,13 @@ static int _init_mirror_log(struct cmd_context *cmd,
  	}
  
--	if (!validate_new_vg_name(cmd, vg_name_new)) {
--		log_error("New volume group name \"%s\" is invalid",
--			  vg_name_new);
--		return 0;
--	}
-+	if (!validate_new_vg_name(cmd, vg_name_new))
-+		return_0;
- 
- 	if (!strcmp(vg_name_old, vg_name_new)) {
- 		log_error("Old and new volume group names must differ");
-@@ -819,11 +819,8 @@ const char *strip_dir(const char *vg_name, const char *dev_dir)
- int vgcreate_params_validate(struct cmd_context *cmd,
- 			     struct vgcreate_params *vp)
+ 	/* If the LV is active, deactivate it first. */
+-	if (lv_info(cmd, log_lv, 0, &info, 0, 0) && info.exists) {
+-		(void)deactivate_lv(cmd, log_lv);
++	if (lv_is_active(log_lv)) {
+ 		/*
+ 		 * FIXME: workaround to fail early
+ 		 * Ensure that log is really deactivated because deactivate_lv
+ 		 * on cluster do not fail if there is log_lv with different UUID.
+ 		 */
+-		if (lv_info(cmd, log_lv, 0, &info, 0, 0) && info.exists) {
++		if (!deactivate_lv(cmd, log_lv)) {
+ 			log_error("Aborting. Unable to deactivate mirror log.");
+ 			goto revert_new_lv;
+ 		}
+@@ -1714,7 +1712,6 @@ int remove_mirror_log(struct cmd_context *cmd,
+ 		      int force)
  {
--	if (!validate_new_vg_name(cmd, vp->vg_name)) {
--		log_error("New volume group name \"%s\" is invalid",
--			  vp->vg_name);
--		return 0;
--	}
-+	if (!validate_new_vg_name(cmd, vp->vg_name))
-+		return_0;
+ 	percent_t sync_percent;
+-	struct lvinfo info;
+ 	struct volume_group *vg = lv->vg;
  
- 	if (vp->alloc == ALLOC_INHERIT) {
- 		log_error("Volume Group allocation policy cannot inherit "
+ 	/* Unimplemented features */
+@@ -1724,7 +1721,7 @@ int remove_mirror_log(struct cmd_context *cmd,
+ 	}
+ 
+ 	/* Had disk log, switch to core. */
+-	if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
++	if (lv_is_active(lv)) {
+ 		if (!lv_mirror_percent(cmd, lv, 0, &sync_percent,
+ 				       NULL)) {
+ 			log_error("Unable to determine mirror sync status.");
+diff --git a/lib/report/report.c b/lib/report/report.c
+index eeca282..b1e2bc1 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -830,7 +830,6 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
+ 			   const void *data, void *private __attribute__((unused)))
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	struct lvinfo info;
+ 	percent_t snap_percent;
+ 	uint64_t *sortval;
+ 	char *repstr;
+@@ -847,7 +846,7 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
+ 	}
+ 
+ 	if ((!lv_is_cow(lv) && !lv_is_merging_origin(lv)) ||
+-	    !lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) || !info.exists) {
++	    !lv_is_active(lv)) {
+ 		*sortval = UINT64_C(0);
+ 		dm_report_field_set_value(field, "", sortval);
+ 		return 1;
 
 
