@@ -1,135 +1,219 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 17 Oct 2012 13:43:29 +0000 (UTC)
-Subject: master - Use lv_is_active instead of lv_info()
-Message-ID: <20121017134329.F19371F38@hosted02.fedoraproject.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Wed, 17 Oct 2012 14:25:51 -0500
+Subject: [PATCH] lvm2app: Possible implementation of missing pv resize (v3)
+Message-ID: <1350501951-17360-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf2741376d47411994d4065863acab8e405ff5c7
-Commit:        bf2741376d47411994d4065863acab8e405ff5c7
-Parent:        e431b19bac29cf8fc21530118eb283b6ae703cbb
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 31 23:42:53 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 17 15:42:31 2012 +0200
+Patch correctly checks for update lock before allowing
+resize to process and also requires lvm_vg_write to
+make changes persistent.  As the API does not allow the
+re-size of a orphaned pv this is accomplished through
+the existing vg_write, vg_commit sequence which is done
+in lvm_vg_write.  I would appreciate others who know
+the code better to review and make suggestions.
 
-Use lv_is_active instead of lv_info()
+Thanks,
+Tony
 
-Usage of lv_is_active makes it more obvious what is being checked.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    5 ++---
- lib/metadata/mirror.c   |    9 +++------
- lib/report/report.c     |    3 +--
- 4 files changed, 7 insertions(+), 11 deletions(-)
+ lib/metadata/metadata-exported.h |    8 ++++-
+ lib/metadata/pv_manip.c          |   48 +++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm2app.h                 |    5 ++-
+ liblvm/lvm_pv.c                  |   21 +++++++++++++---
+ tools/pvresize.c                 |   26 +-------------------
+ 5 files changed, 74 insertions(+), 34 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 370c7e5..8ba9f2d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Use lv_is_active() instead of lv_info() call.
-   Cleanup some log_error message and use log_warn instead.
-   
- Version 2.02.98 - 15th October 2012
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d2aca00..32a207d 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4218,7 +4218,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 	struct logical_volume *pool_lv;
- 	struct lv_list *lvl;
- 	int origin_active = 0;
--	struct lvinfo info;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d149f95..cf38d9e 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -482,8 +482,12 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  unsigned pvmetadatacopies,
+ 				  uint64_t pvmetadatasize,
+ 				  unsigned metadataignore);
+-int pv_resize(struct physical_volume *pv, struct volume_group *vg,
+-	      uint64_t size);
++
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size);
++
+ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
+ 	       uint64_t label_sector);
  
- 	if (new_lv_name && find_lv_in_vg(vg, new_lv_name)) {
- 		log_error("Logical volume \"%s\" already exists in "
-@@ -4350,12 +4349,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
- 			}
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index d04ecab..4d37a6b 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -19,6 +19,7 @@
+ #include "toolcontext.h"
+ #include "locking.h"
+ #include "defaults.h"
++#include "archiver.h"
  
--			if (!lv_info(cmd, org, 0, &info, 0, 0)) {
-+			if (!lv_is_active(org)) {
- 				log_error("Check for existence of active snapshot "
- 					  "origin '%s' failed.", org->name);
- 				return NULL;
- 			}
--			origin_active = info.exists;
-+			origin_active = 1;
- 
- 			if (vg_is_clustered(vg) &&
- 			    !lv_is_active_exclusive_locally(org)) {
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index c4683df..084c93a 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -282,7 +282,6 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 			    struct dm_list *tags, int remove_on_failure)
+ static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
+ 					    struct physical_volume *pv,
+@@ -485,7 +486,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
+  * Resize a PV in a VG, adding or removing segments as needed.
+  * New size must fit within pv->size.
+  */
+-int pv_resize(struct physical_volume *pv,
++static int _pv_resize(struct physical_volume *pv,
+ 	      struct volume_group *vg,
+ 	      uint64_t size)
  {
- 	struct str_list *sl;
--	struct lvinfo info;
- 	uint64_t orig_status = log_lv->status;
- 	int was_active = 0;
+@@ -543,3 +544,48 @@ int pv_resize(struct physical_volume *pv,
  
-@@ -298,14 +297,13 @@ static int _init_mirror_log(struct cmd_context *cmd,
+ 	return 1;
+ }
++
++/*
++ * You need to have acquired the correct locks for vg or pv (if orphan) before
++ * calling this function.  vg can be NULL which implies orphan pv.
++ * Code to write changes out must be called after this to make persistent.
++ */
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size)
++{
++	uint64_t size = 0;
++	int rc = 0;
++	const char *pv_name = pv_dev_name(pv);
++
++	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
++		log_error("Physical volume %s format does not support resizing.",
++					pv_name);
++	} else {
++
++		/* Get new size */
++		if (!dev_get_size(pv_dev(pv), &size)) {
++			log_error("%s: Couldn't get size.", pv_name);
++		} else {
++
++			if (new_size) {
++				if (new_size > size)
++					log_warn("WARNING: %s: Overriding real size. "
++							"You could lose data.", pv_name);
++
++				log_verbose("%s: Pretending size is %" PRIu64 " not %"
++							PRIu64 " sectors.", pv_name, new_size, pv_size(pv));
++				size = new_size;
++			}
++
++			log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
++					pv_name, pv_size(pv));
++
++			if (_pv_resize(pv, vg, size))
++				rc = 1;
++		}
++	}
++
++	return rc;
++}
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index b758945..3a1fbf2 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1603,9 +1603,10 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+ /**
+  * Resize physical volume to new_size bytes.
+  *
+- * \memberof pv_t
++ * Note: Make sure to do a lvm_vg_write on the containing vg to save the
++ * new size.
+  *
+- * NOTE: This function is currently not implemented.
++ * \memberof pv_t
+  *
+  * \param   pv
+  * Physical volume handle.
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 90edaed..c12adf1 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -120,10 +120,23 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
+ 	return NULL;
+ }
+ 
+-
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+ {
+-	/* FIXME: add pv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	uint64_t size = new_size >> SECTOR_SHIFT;
++
++	if (new_size % SECTOR_SIZE) {
++		log_errno(EINVAL, "Size not a multiple of 512");
++		return -1;
++	}
++
++	if (!vg_check_write_mode(pv->vg)) {
++		return -1;
++	}
++
++	if (!pv_resize(pv->vg->cmd, pv->vg, pv, size)) {
++		log_error("PV re-size failed!");
++		return -1;
++	} else {
++		return 0;
++	}
+ }
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 2f0693a..abf8432 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -30,7 +30,6 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 			     const uint64_t new_size)
+ {
+ 	struct pv_list *pvl;
+-	uint64_t size = 0;
+ 	int r = 0;
+ 	const char *pv_name = pv_dev_name(pv);
+ 	const char *vg_name = pv_vg_name(pv);
+@@ -70,33 +69,10 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 			goto out;
  	}
  
- 	/* If the LV is active, deactivate it first. */
--	if (lv_info(cmd, log_lv, 0, &info, 0, 0) && info.exists) {
--		(void)deactivate_lv(cmd, log_lv);
-+	if (lv_is_active(log_lv)) {
- 		/*
- 		 * FIXME: workaround to fail early
- 		 * Ensure that log is really deactivated because deactivate_lv
- 		 * on cluster do not fail if there is log_lv with different UUID.
- 		 */
--		if (lv_info(cmd, log_lv, 0, &info, 0, 0) && info.exists) {
-+		if (!deactivate_lv(cmd, log_lv)) {
- 			log_error("Aborting. Unable to deactivate mirror log.");
- 			goto revert_new_lv;
- 		}
-@@ -1714,7 +1712,6 @@ int remove_mirror_log(struct cmd_context *cmd,
- 		      int force)
- {
- 	percent_t sync_percent;
--	struct lvinfo info;
- 	struct volume_group *vg = lv->vg;
- 
- 	/* Unimplemented features */
-@@ -1724,7 +1721,7 @@ int remove_mirror_log(struct cmd_context *cmd,
+-	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
+-		log_error("Physical volume %s format does not support resizing.",
+-			  pv_name);
+-		goto out;
+-	}
+-
+-	/* Get new size */
+-	if (!dev_get_size(pv_dev(pv), &size)) {
+-		log_error("%s: Couldn't get size.", pv_name);
++	if( !pv_resize(cmd, vg, pv, new_size)) {
+ 		goto out;
  	}
  
- 	/* Had disk log, switch to core. */
--	if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
-+	if (lv_is_active(lv)) {
- 		if (!lv_mirror_percent(cmd, lv, 0, &sync_percent,
- 				       NULL)) {
- 			log_error("Unable to determine mirror sync status.");
-diff --git a/lib/report/report.c b/lib/report/report.c
-index eeca282..b1e2bc1 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -830,7 +830,6 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
- 			   const void *data, void *private __attribute__((unused)))
- {
- 	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lvinfo info;
- 	percent_t snap_percent;
- 	uint64_t *sortval;
- 	char *repstr;
-@@ -847,7 +846,7 @@ static int _snpercent_disp(struct dm_report *rh __attribute__((unused)), struct
- 	}
+-	if (new_size) {
+-		if (new_size > size)
+-			log_warn("WARNING: %s: Overriding real size. "
+-				  "You could lose data.", pv_name);
+-		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
+-			    " sectors.", pv_name, new_size, pv_size(pv));
+-		size = new_size;
+-	}
+-
+-	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
+-		    pv_name, pv_size(pv));
+-
+-	if (!pv_resize(pv, vg, size))
+-		goto_out;
+-
+ 	log_verbose("Updating physical volume \"%s\"", pv_name);
  
- 	if ((!lv_is_cow(lv) && !lv_is_merging_origin(lv)) ||
--	    !lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) || !info.exists) {
-+	    !lv_is_active(lv)) {
- 		*sortval = UINT64_C(0);
- 		dm_report_field_set_value(field, "", sortval);
- 		return 1;
+ 	/* Write PV label only if this an orphan PV or it has 2nd mda. */
+-- 
+1.7.1
 
 
