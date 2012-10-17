@@ -1,350 +1,195 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Tue, 16 Oct 2012 14:12:25 -0500
-Subject: [PATCH] lvm2app: Possible implementation of missing pv resize (v2).
-Message-ID: <1350414745-11420-1-git-send-email-tasleson@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Wed, 17 Oct 2012 13:43:21 +0000 (UTC)
+Subject: master - cleanup: swap return values
+Message-ID: <20121017134321.64B221F38@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch implements pv resize and it appears to work in my
-simple testing.  I would appreciate others who know the code
-better to review and make suggestions.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b89963a7c3aea97ff11083a13dff718b5895ccc9
+Commit:        b89963a7c3aea97ff11083a13dff718b5895ccc9
+Parent:        10ba799ab08001d5435425e65f039f20cadd306e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Oct 16 10:07:27 2012 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Oct 17 15:37:26 2012 +0200
 
-Thanks,
--Tony
+cleanup: swap return values
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+Use lvm standard return code for success/fail  1/0.
 ---
- lib/metadata/metadata-exported.h |   8 ++-
- lib/metadata/pv_manip.c          | 118 ++++++++++++++++++++++++++++++++++++++-
- liblvm/lvm_pv.c                  |  17 ++++--
- tools/pvresize.c                 | 113 +------------------------------------
- 4 files changed, 138 insertions(+), 118 deletions(-)
+ lib/config/config.c     |    4 ++--
+ lib/metadata/metadata.c |   10 +++++-----
+ liblvm/lvm_base.c       |    2 +-
+ tools/lvmcmdline.c      |    2 +-
+ tools/toollib.c         |   10 +++++-----
+ tools/vgcreate.c        |    4 ++--
+ tools/vgsplit.c         |    4 ++--
+ 7 files changed, 18 insertions(+), 18 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index d149f95..cf38d9e 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -482,8 +482,12 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
- 				  unsigned pvmetadatacopies,
- 				  uint64_t pvmetadatasize,
- 				  unsigned metadataignore);
--int pv_resize(struct physical_volume *pv, struct volume_group *vg,
--	      uint64_t size);
-+
-+int pv_resize(struct cmd_context *cmd,
-+				struct volume_group *vg,
-+				struct physical_volume *pv,
-+				const uint64_t new_size);
-+
- int pv_analyze(struct cmd_context *cmd, const char *pv_name,
- 	       uint64_t label_sector);
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 00bfcab..0820594 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -177,12 +177,12 @@ int override_config_tree_from_string(struct cmd_context *cmd,
  
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index d04ecab..e4b5a66 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -19,6 +19,7 @@
- #include "toolcontext.h"
- #include "locking.h"
- #include "defaults.h"
-+#include "archiver.h"
- 
- static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
- 					    struct physical_volume *pv,
-@@ -485,7 +486,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
-  * Resize a PV in a VG, adding or removing segments as needed.
-  * New size must fit within pv->size.
-  */
--int pv_resize(struct physical_volume *pv,
-+static int _pv_resize(struct physical_volume *pv,
- 	      struct volume_group *vg,
- 	      uint64_t size)
- {
-@@ -543,3 +544,118 @@ int pv_resize(struct physical_volume *pv,
- 
- 	return 1;
- }
-+
-+int pv_resize(struct cmd_context *cmd,
-+				struct volume_group *vg,
-+				struct physical_volume *pv,
-+				const uint64_t new_size)
-+{
-+	struct pv_list *pvl;
-+	uint64_t size = 0;
-+	int r = 0;
-+	const char *pv_name = pv_dev_name(pv);
-+	const char *vg_name = pv_vg_name(pv);
-+	struct volume_group *old_vg = vg;
-+	int vg_needs_pv_write = 0;
-+
-+	/* If we are passed a vg we are assuming the caller has the appropriate locks */
-+	if (!old_vg) {
-+		if (is_orphan_vg(vg_name)) {
-+			if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
-+				log_error("Can't get lock for orphans");
-+				return 0;
-+			}
-+
-+			if (!(pv = pv_read(cmd, pv_name, 1, 0))) {
-+				unlock_vg(cmd, vg_name);
-+				log_error("Unable to read PV \"%s\"", pv_name);
-+				return 0;
-+			}
-+		} else {
-+			vg = vg_read_for_update(cmd, vg_name, NULL, 0);
-+
-+			if (vg_read_error(vg)) {
-+				release_vg(vg);
-+				log_error("Unable to read volume group \"%s\".",
-+					vg_name);
-+				return 0;
-+			}
-+
-+			if (!(pvl = find_pv_in_vg(vg, pv_name))) {
-+				log_error("Unable to find \"%s\" in volume group \"%s\"",
-+					pv_name, vg->name);
-+				goto out;
-+			}
-+
-+			pv = pvl->pv;
-+
-+			if (!archive(vg))
-+				goto out;
-+		}
-+	}
-+
-+	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
-+		log_error("Physical volume %s format does not support resizing.",
-+			  pv_name);
-+		goto out;
-+	}
-+
-+	/* Get new size */
-+	if (!dev_get_size(pv_dev(pv), &size)) {
-+		log_error("%s: Couldn't get size.", pv_name);
-+		goto out;
-+	}
-+
-+	if (new_size) {
-+		if (new_size > size)
-+			log_warn("WARNING: %s: Overriding real size. "
-+				  "You could lose data.", pv_name);
-+		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
-+			    " sectors.", pv_name, new_size, pv_size(pv));
-+		size = new_size;
-+	}
-+
-+	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
-+		    pv_name, pv_size(pv));
-+
-+	if (!_pv_resize(pv, vg, size))
-+		goto_out;
-+
-+	log_verbose("Updating physical volume \"%s\"", pv_name);
-+
-+	/* Write PV label only if this an orphan PV or it has 2nd mda. */
-+	if ((is_orphan_vg(vg_name) ||
-+	     (vg_needs_pv_write = (fid_get_mda_indexed(vg->fid,
-+			(const char *) &pv->id, ID_LEN, 1) != NULL))) &&
-+	    !pv_write(cmd, pv, 1)) {
-+		log_error("Failed to store physical volume \"%s\"",
-+			  pv_name);
-+		goto out;
-+	}
-+
-+	if (!is_orphan_vg(vg_name)) {
-+		if (!vg_write(vg) || !vg_commit(vg)) {
-+			log_error("Failed to store physical volume \"%s\" in "
-+				  "volume group \"%s\"", pv_name, vg_name);
-+			goto out;
-+		}
-+		backup(vg);
-+	}
-+
-+	log_print_unless_silent("Physical volume \"%s\" changed", pv_name);
-+	r = 1;
-+
-+out:
-+	if (!r && vg_needs_pv_write)
-+		log_error("Use pvcreate and vgcfgrestore "
-+			  "to repair from archived metadata.");
-+
-+	if (!old_vg) {
-+		unlock_vg(cmd, vg_name);
-+		if (is_orphan_vg(vg_name))
-+			free_pv_fid(pv);
-+
-+		release_vg(vg);
-+	}
-+	return r;
-+}
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 90edaed..446051a 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -120,10 +120,19 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
- 	return NULL;
- }
- 
--
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
- {
--	/* FIXME: add pv resize code here */
--	log_error("NOT IMPLEMENTED YET");
--	return -1;
-+	uint64_t size = new_size >> SECTOR_SHIFT;
-+
-+	if (new_size % SECTOR_SIZE) {
-+		log_errno(EINVAL, "Size not a multiple of 512");
-+		return -1;
-+	}
-+
-+	if (!pv_resize(pv->vg->cmd, pv->vg, pv, size)) {
-+		log_error("PV re-size failed!");
-+		return -1;
-+	} else {
+ 	if (!(cft_new = dm_config_from_string(config_settings))) {
+ 		log_error("Failed to set overridden configuration entries.");
+-		return 1;
 +		return 0;
-+	}
- }
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 2f0693a..0b53ffb 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -24,115 +24,6 @@ struct pvresize_params {
- 	unsigned total;
- };
- 
--static int _pv_resize_single(struct cmd_context *cmd,
--			     struct volume_group *vg,
--			     struct physical_volume *pv,
--			     const uint64_t new_size)
--{
--	struct pv_list *pvl;
--	uint64_t size = 0;
--	int r = 0;
--	const char *pv_name = pv_dev_name(pv);
--	const char *vg_name = pv_vg_name(pv);
--	struct volume_group *old_vg = vg;
--	int vg_needs_pv_write = 0;
--
--	if (is_orphan_vg(vg_name)) {
--		if (!lock_vol(cmd, vg_name, LCK_VG_WRITE)) {
--			log_error("Can't get lock for orphans");
--			return 0;
--		}
--
--		if (!(pv = pv_read(cmd, pv_name, 1, 0))) {
--			unlock_vg(cmd, vg_name);
--			log_error("Unable to read PV \"%s\"", pv_name);
--			return 0;
--		}
--	} else {
--		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
--
--		if (vg_read_error(vg)) {
--			release_vg(vg);
--			log_error("Unable to read volume group \"%s\".",
--				  vg_name);
--			return 0;
--		}
--
--		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error("Unable to find \"%s\" in volume group \"%s\"",
--				  pv_name, vg->name);
--			goto out;
--		}
--
--		pv = pvl->pv;
--
--		if (!archive(vg))
--			goto out;
--	}
--
--	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
--		log_error("Physical volume %s format does not support resizing.",
--			  pv_name);
--		goto out;
--	}
--
--	/* Get new size */
--	if (!dev_get_size(pv_dev(pv), &size)) {
--		log_error("%s: Couldn't get size.", pv_name);
--		goto out;
--	}
--
--	if (new_size) {
--		if (new_size > size)
--			log_warn("WARNING: %s: Overriding real size. "
--				  "You could lose data.", pv_name);
--		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
--			    " sectors.", pv_name, new_size, pv_size(pv));
--		size = new_size;
--	}
--
--	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
--		    pv_name, pv_size(pv));
--
--	if (!pv_resize(pv, vg, size))
--		goto_out;
--
--	log_verbose("Updating physical volume \"%s\"", pv_name);
--
--	/* Write PV label only if this an orphan PV or it has 2nd mda. */
--	if ((is_orphan_vg(vg_name) ||
--	     (vg_needs_pv_write = (fid_get_mda_indexed(vg->fid,
--			(const char *) &pv->id, ID_LEN, 1) != NULL))) &&
--	    !pv_write(cmd, pv, 1)) {
--		log_error("Failed to store physical volume \"%s\"",
--			  pv_name);
--		goto out;
--	}
--
--	if (!is_orphan_vg(vg_name)) {
--		if (!vg_write(vg) || !vg_commit(vg)) {
--			log_error("Failed to store physical volume \"%s\" in "
--				  "volume group \"%s\"", pv_name, vg_name);
--			goto out;
--		}
--		backup(vg);
--	}
--
--	log_print_unless_silent("Physical volume \"%s\" changed", pv_name);
--	r = 1;
--
--out:
--	if (!r && vg_needs_pv_write)
--		log_error("Use pvcreate and vgcfgrestore "
--			  "to repair from archived metadata.");
--	unlock_vg(cmd, vg_name);
--	if (is_orphan_vg(vg_name))
--		free_pv_fid(pv);
--	if (!old_vg)
--		release_vg(vg);
--	return r;
--}
--
- static int _pvresize_single(struct cmd_context *cmd,
- 			    struct volume_group *vg,
- 			    struct physical_volume *pv,
-@@ -142,11 +33,11 @@ static int _pvresize_single(struct cmd_context *cmd,
- 
- 	params->total++;
- 
--	if (!_pv_resize_single(cmd, vg, pv, params->new_size)) {
-+	if (!pv_resize(cmd, vg, pv, params->new_size)) {
- 		stack;
- 		return ECMD_FAILED;
  	}
--	
-+
- 	params->done++;
  
- 	return ECMD_PROCESSED;
--- 
-1.7.11.7
+ 	cmd->cft = dm_config_insert_cascaded_tree(cft_new, cmd->cft);
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index c210a63..0b3158a 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -822,18 +822,18 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+ 	if (!validate_new_vg_name(cmd, vp->vg_name)) {
+ 		log_error("New volume group name \"%s\" is invalid",
+ 			  vp->vg_name);
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (vp->alloc == ALLOC_INHERIT) {
+ 		log_error("Volume Group allocation policy cannot inherit "
+ 			  "from anything");
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (!vp->extent_size) {
+ 		log_error("Physical extent size may not be zero");
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (!(cmd->fmt->features & FMT_UNLIMITED_VOLS)) {
+@@ -843,11 +843,11 @@ int vgcreate_params_validate(struct cmd_context *cmd,
+ 			vp->max_pv = 255;
+ 		if (vp->max_lv > 255 || vp->max_pv > 255) {
+ 			log_error("Number of volumes may not exceed 255");
+-			return 1;
++			return 0;
+ 		}
+ 	}
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ /*
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+index 01ea0d7..b4911df 100644
+--- a/liblvm/lvm_base.c
++++ b/liblvm/lvm_base.c
+@@ -89,7 +89,7 @@ int lvm_config_reload(lvm_t libh)
+ int lvm_config_override(lvm_t libh, const char *config_settings)
+ {
+ 	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	if (override_config_tree_from_string(cmd, config_settings))
++	if (!override_config_tree_from_string(cmd, config_settings))
+ 		return -1;
+ 	return 0;
+ }
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 39a8c58..3720d7f 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -1066,7 +1066,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	set_cmd_name(cmd->command->name);
+ 
+ 	if (arg_count(cmd, config_ARG))
+-		if (override_config_tree_from_string(cmd, arg_str_value(cmd, config_ARG, ""))) {
++		if (!override_config_tree_from_string(cmd, arg_str_value(cmd, config_ARG, ""))) {
+ 			ret = EINVALID_CMD_LINE;
+ 			goto_out;
+ 		}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 3fe1c14..48b9a86 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1264,23 +1264,23 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 
+ 	if (arg_sign_value(cmd, physicalextentsize_ARG, SIGN_NONE) == SIGN_MINUS) {
+ 		log_error("Physical extent size may not be negative");
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (arg_uint64_value(cmd, physicalextentsize_ARG, 0) > MAX_EXTENT_SIZE) {
+ 		log_error("Physical extent size cannot be larger than %s",
+ 				  display_size(cmd, (uint64_t) MAX_EXTENT_SIZE));
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (arg_sign_value(cmd, maxlogicalvolumes_ARG, SIGN_NONE) == SIGN_MINUS) {
+ 		log_error("Max Logical Volumes may not be negative");
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (arg_sign_value(cmd, maxphysicalvolumes_ARG, SIGN_NONE) == SIGN_MINUS) {
+ 		log_error("Max Physical Volumes may not be negative");
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	if (arg_count(cmd, metadatacopies_ARG)) {
+@@ -1295,7 +1295,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
+ 						   DEFAULT_VGMETADATACOPIES);
+ 	}
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index 2b9fb2f..8ce7803 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -43,10 +43,10 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	vgcreate_params_set_defaults(&vp_def, NULL);
+ 	vp_def.vg_name = vg_name;
+-	if (vgcreate_params_set_from_args(cmd, &vp_new, &vp_def))
++	if (!vgcreate_params_set_from_args(cmd, &vp_new, &vp_def))
+ 		return EINVALID_CMD_LINE;
+ 
+-	if (vgcreate_params_validate(cmd, &vp_new))
++	if (!vgcreate_params_validate(cmd, &vp_new))
+ 	    return EINVALID_CMD_LINE;
+ 
+ 	lvmcache_seed_infos_from_lvmetad(cmd);
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 3bbb9fa..b52c2f8 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -383,12 +383,12 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 	} else {
+ 		vgcreate_params_set_defaults(&vp_def, vg_from);
+ 		vp_def.vg_name = vg_name_to;
+-		if (vgcreate_params_set_from_args(cmd, &vp_new, &vp_def)) {
++		if (!vgcreate_params_set_from_args(cmd, &vp_new, &vp_def)) {
+ 			r = EINVALID_CMD_LINE;
+ 			goto_bad;
+ 		}
+ 
+-		if (vgcreate_params_validate(cmd, &vp_new)) {
++		if (!vgcreate_params_validate(cmd, &vp_new)) {
+ 			r = EINVALID_CMD_LINE;
+ 			goto_bad;
+ 		}
 
 
