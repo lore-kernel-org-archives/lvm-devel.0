@@ -1,40 +1,41 @@
-From: Robert Milasan <rmilasan@suse.com>
-Date: Fri, 19 Oct 2012 15:46:04 +0200
-Subject: clvmd always sets debug level to DEBUG_SYSLOG
-In-Reply-To: <50815828.90309@redhat.com>
-References: <20121019143301.4cc7e9ac@coolcat.suse.cz>
-	<50815828.90309@redhat.com>
-Message-ID: <20121019154604.5253147e@coolcat.suse.cz>
+From: Marian Csontos <mcsontos@fedoraproject.org>
+Date: Mon, 22 Oct 2012 12:16:38 +0000 (UTC)
+Subject: master - version: update
+Message-ID: <20121022121638.34E2613F6@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 19 Oct 2012 15:39:52 +0200
-"Zdenek Kabelac" <zkabelac@redhat.com> wrote:
-> 
-> Thanks for noticing, the patch (in a bit updated version) pushed
-> upstream.
-> (https://www.redhat.com/archives/lvm-devel/2012-October/msg00166.html)
-> 
-> Zdenek
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
-> 
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fc849a9eebecf77c75d016fad2b83fd3b2950474
+Commit:        fc849a9eebecf77c75d016fad2b83fd3b2950474
+Parent:        13fe333b54c2dedf91af2f663d6ac9bd883c3b87
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Mon Oct 22 14:16:06 2012 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Oct 22 14:16:06 2012 +0200
 
-Yes I know, didn't wanna do this again for a newer version of LVM, the
-idea is more important.
+version: update
 
--- 
-Robert Milasan
+---
+ VERSION    |    2 +-
+ VERSION_DM |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-L3 Support Engineer
-SUSE Linux (http://www.suse.com)
-email: rmilasan at suse.com
-GPG fingerprint: B6FE F4A8 0FA3 3040 3402  6FE7 2F64 167C 1909 6D1A
+diff --git a/VERSION b/VERSION
+index 246867e..f8dcbdc 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.98(2)-git (2012-10-15)
++2.02.99(2)-git (2012-10-22)
+diff --git a/VERSION_DM b/VERSION_DM
+index bb267d5..75d1302 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.77-git (2012-10-15)
++1.02.78-git (2012-10-22)
 
 
