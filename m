@@ -1,39 +1,44 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 24 Oct 2012 02:40:04 +0000 (UTC)
-Subject: master - WHATS_NEW: Entry for commit e1917809477c4850cc1094121001d61a2b70ef26
-Message-ID: <20121024024004.75949A0D90@fedorahosted.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Tue, 23 Oct 2012 19:55:14 +0000 (UTC)
+Subject: master - python-lvm: seg. fault in liblvm_lvm_percent_to_float
+Message-ID: <20121023195514.C0310242D@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b873fc54baf12891158017cd732e01a7f19b3ac3
-Commit:        b873fc54baf12891158017cd732e01a7f19b3ac3
-Parent:        e1917809477c4850cc1094121001d61a2b70ef26
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Oct 23 21:38:37 2012 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Oct 23 21:38:37 2012 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8073ce16900def5a200fce44cb69862bfc50d4ce
+Commit:        8073ce16900def5a200fce44cb69862bfc50d4ce
+Parent:        a820a68619c10108666f8093545837233c954046
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Oct 23 14:50:14 2012 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Oct 23 14:54:06 2012 -0500
 
-WHATS_NEW:  Entry for commit e1917809477c4850cc1094121001d61a2b70ef26
+python-lvm: seg. fault in liblvm_lvm_percent_to_float
 
-WHATS_NEW commit for 'lvs' output change to add RAID 4/5/6 sync %age
-to s/Copy%/Cpy%Sync/ output.
+The first parameter needs to be present even if it isn't being
+used, otherwise the one any only parameter we get is null
+which causes PyArg_ParseTuple to seg. fault.
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ python/liblvm.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 2c4e516..ffbf4ef 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Change lvs heading Copy% to Cpy%Sync and print RAID4/5/6 sync% there too.
-   Fix clvmd support for option -d and properly use its argument.
-   Support use of option --yes for lvchange --persistent.
-   Fix memory leak on error path for pvcreate with invalid uuid.
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 024d769..4da2999 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -153,7 +153,7 @@ liblvm_lvm_list_vg_uuids(void)
+ }
+ 
+ static PyObject *
+-liblvm_lvm_percent_to_float(PyObject *arg)
++liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ {
+ 	double converted;
+ 	int percent;
 
 
