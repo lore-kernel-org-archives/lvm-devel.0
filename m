@@ -1,80 +1,206 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 23 Oct 2012 11:25:21 +0000 (UTC)
-Subject: master - udev_sync: cookie_set=1 on each dm_task_set_cookie call
-Message-ID: <20121023112521.98EE2A0C5B@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Tue, 23 Oct 2012 14:43:30 -0500
+Subject: [PATCH] Avoid reading from mirrors that have failed devices
+Message-ID: <1351021410.29140.1.camel@f16>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a820a68619c10108666f8093545837233c954046
-Commit:        a820a68619c10108666f8093545837233c954046
-Parent:        fc849a9eebecf77c75d016fad2b83fd3b2950474
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 23 11:40:53 2012 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 23 13:23:35 2012 +0200
+mirror:  Avoid reading from mirrors that have failed devices
 
-udev_sync: cookie_set=1 on each dm_task_set_cookie call
+Addresses: rhbz855398 (Allow VGs to be built on cluster mirrors),
+           and other issues.
 
-cookie_set variable found in the struct dm_task should be always
-set to 1 after dm_task_set_cookie_call, even if udev_sync is disabled
-as the cookie itself carries synchronization informations *as well as*
-extra flags to control other aspects of udev support.
+The LVM code attempts to avoid reading labels from devices that are
+suspended to try to avoid situations that may cause the commands to
+block indefinitely.  When scanning devices, 'ignore_suspended_devices'
+can be set so the code (lib/activate/dev_manager.c:device_is_usable())
+checks any DM devices it finds and avoids them if they are suspended.
 
-For example, one could disable the synchronization itself, but still
-direct the libdm code to disable library fallback via
-DM_UDEV_DISABLE_LIBRARY_FALLBACK flag. These extra flags still need
-to be carried out!
+The mirror target has an additional mechanism that can cause I/O to
+be blocked.  If a device in a mirror fails, all I/O will be blocked
+by the kernel until a new table (a linear target or a mirror with
+replacement devices) is loaded.  The mirror indicates that this condition
+has happened by marking a 'D' for the faulty device in its status
+output.  This condition must also be checked by 'device_is_usable()' to
+avoid the possibility of blocking LVM commands indefinitely due to an
+attempt to read the blocked mirror for labels.
 
-A concrete example:
-  $ dmsetup create test --table "0 1 zero" --noudevsync
+Until now, mirrors were avoided if the 'ignore_suspended_devices'
+condition was set.  This check seemed to suggest, "if we are concerned
+about suspended devices, then let's ignore mirrors altogether just
+in case".  This is insufficient and doesn't solve any problems.  All
+devices that are suspended are already avoided if
+'ignore_suspended_devices' is set; and if a mirror is blocking because
+of an error condition, it will block the LVM command regardless of the
+setting of that variable.
 
-This disables synchronization with udev. As the --verifyudev option is
-not used, we don't want to do any corrections. In other words, we
-need DM_UDEV_DISABLE_LIBRARY_FALLBACK flag to be used. However,
-with --noudevsync this was not the case - the flag was ignored!
+Rather than avoiding mirrors whenever 'ignore_suspended_devices' is
+set, this patch causes mirrors to be avoided whenever they are blocking
+due to an error.  (As mentioned above, the case where a DM device is
+suspended is already covered.)  This solves a number of issues that weren't
+handled before.  For example, pvcreate (or any command that does a
+pv_read or vg_read, which eventually call device_is_usable()) will be
+protected from blocked mirrors regardless of how
+'ignore_suspended_devices' is set.  Additionally, a mirror that is
+neither suspended nor blocking is /allowed/ to be read regardless
+of how 'ignore_suspended_devices' is set.  (The latter point being the
+source of the fix for rhbz855398.)
 
-This patch fixes the case when noudevsync is used but there are still
-some extra flags passed within the cookie flag part. The synchronization
-part of the cookie stays zero (which is ok as dm_udev_wait call on such a
-cookie is simply a NOOP).
----
- WHATS_NEW_DM         |    1 +
- libdm/libdm-common.c |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+Signed-off-by: Jonathan Brassow <jbrassow@redhat.com>
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 2d0b05c..7c636f0 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.77 - 15th October 2012
- ===================================
-+  Fix dm_task_set_cookie to properly process udev flags if udev_sync disabled.
-   Support unmount of thin volumes from pool above thin pool threshold.
-   Update man page to reflect that dm UUIDs are being mangled as well.
-   Apply 'dmsetup mangle' for dm UUIDs besides dm names.
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index b8533ed..afdac89 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1838,6 +1838,7 @@ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
- 	if (dm_cookie_supported())
- 		dmt->event_nr = flags << DM_UDEV_FLAGS_SHIFT;
- 	*cookie = 0;
-+	dmt->cookie_set = 1;
- 
- 	return 1;
+Index: lvm2/lib/activate/dev_manager.c
+===================================================================
+--- lvm2.orig/lib/activate/dev_manager.c
++++ lvm2/lib/activate/dev_manager.c
+@@ -135,6 +135,123 @@ static int _info_run(const char *name, c
+ 	return r;
  }
-@@ -2207,6 +2208,7 @@ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
  
- 	if (!dm_udev_get_sync_support()) {
- 		*cookie = 0;
-+		dmt->cookie_set = 1;
- 		return 1;
++/*
++ * ignore_blocked_mirror_devices
++ * @dev
++ * @start
++ * @length
++ * @mirror_status_str
++ *
++ * When a DM 'mirror' target is created with 'block_on_error' or
++ * 'handle_errors', it will block I/O if there is a device failure
++ * until the mirror is reconfigured.  Thus, LVM should never attempt
++ * to read labels from a mirror that has a failed device.  (LVM
++ * commands are issued to repair mirrors; and if LVM is blocked
++ * attempting to read a mirror, a circular dependency would be created.)
++ *
++ * This function is a slimmed-down version of lib/mirror/mirrored.c:
++ * _mirrored_transient_status().  FIXME: It is unable to handle mirrors
++ * with mirrored logs because it does not have a way to get the status of
++ * the mirror that forms the log, which could be blocked.
++ *
++ * If a failed device is detected in the status string, then it must be
++ * determined if 'block_on_error' or 'handle_errors' was used when
++ * creating the mirror.  This info can only be determined from the mirror
++ * table.  The 'dev', 'start', 'length' trio allow us to correlate the
++ * 'mirror_status_str' with the correct device table in order to check
++ * for blocking.
++ *
++ * Returns: 1 if mirror should be ignored, 0 if safe to use
++ */
++static int ignore_blocked_mirror_devices(struct device *dev,
++					 uint64_t start, uint64_t length,
++					 char *mirror_status_str)
++{
++	unsigned i, check_for_blocking = 0;
++	char *p = NULL;
++	char **args, **log_args;
++	unsigned num_devs, log_argc;
++	char *status;
++
++	uint64_t s,l;
++	char *params, *target_type = NULL;
++	void *next = NULL;
++	struct dm_task *dmt;
++
++	if (!dm_split_words(mirror_status_str, 1, 0, &p) ||
++	    !(num_devs = (unsigned) atoi(p)))
++		/* On errors, we must assume the mirror is to be avoided */
++		goto_out;
++
++	p += strlen(p) + 1;
++	args = alloca((num_devs + 5) * sizeof(char *));
++
++	if ((unsigned)dm_split_words(p, num_devs + 4, 0, args) < num_devs + 4)
++		goto_out;
++
++	log_argc = (unsigned) atoi(args[3 + num_devs]);
++	log_args = alloca(log_argc * sizeof(char *));
++
++	if ((unsigned)dm_split_words(args[3 + num_devs] + strlen(args[3 + num_devs]) + 1,
++				     log_argc, 0, log_args) < log_argc)
++		goto_out;
++
++	if (!strcmp(log_args[0], "disk") &&
++	    (log_args[2][0] != 'A')) {
++		log_debug("%s: Mirror log device marked as failed",
++			  dev_name(dev));
++		check_for_blocking = 1;
++	}
++
++	status = args[2 + num_devs];
++
++	for (i = 0; i < num_devs; ++i)
++		if (status[i] != 'A') {
++			log_debug("%s: Mirror image %d marked as failed",
++				  dev_name(dev), i);
++			check_for_blocking = 1;
++		}
++	/*
++	 * We avoid another system call if we can, but if a device is
++	 * dead, we have no choice but to look up the table too.
++	 */
++	if (check_for_blocking) {
++		if (!(dmt = dm_task_create(DM_DEVICE_TABLE)))
++			goto_out;
++
++		if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev),
++					     MINOR(dev->dev), 1))
++			goto_out;
++
++		if (activation_checks() && !dm_task_enable_checks(dmt))
++			goto_out;
++
++		if (!dm_task_run(dmt))
++			goto_out;
++
++		do {
++			next = dm_get_next_target(dmt, next, &s, &l,
++						  &target_type, &params);
++			if ((s == start) && (l == length)) {
++				if (strcmp(target_type, "mirror"))
++					goto_out;
++
++				if (strstr(params, "block_on_error") ||
++				    strstr(params, "handle_errors")) {
++					log_debug("%s: I/O blocked to mirror device", dev_name(dev));
++					return 1;
++				}
++			}
++		} while (next);
++		dm_task_destroy(dmt);
++	}
++
++	return 0;
++
++out:
++	return 1;
++}
++
+ int device_is_usable(struct device *dev)
+ {
+ 	struct dm_task *dmt;
+@@ -180,15 +297,15 @@ int device_is_usable(struct device *dev)
+ 		goto out;
  	}
  
+-	/* FIXME Also check for mirror block_on_error and mpath no paths */
+-	/* For now, we exclude all mirrors */
+-
++	/* FIXME Also check for mpath no paths */
+ 	do {
+ 		next = dm_get_next_target(dmt, next, &start, &length,
+ 					  &target_type, &params);
+-		/* Skip if target type doesn't match */
+-		if (target_type && !strcmp(target_type, "mirror") && ignore_suspended_devices()) {
+-			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
++
++		if (target_type && !strcmp(target_type, "mirror") &&
++		    ignore_blocked_mirror_devices(dev, start, length, params)) {
++			log_debug("%s: Mirror device %s not usable.",
++				  dev_name(dev), name);
+ 			goto out;
+ 		}
+ 
+
 
 
