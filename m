@@ -1,65 +1,113 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed,  3 Oct 2012 13:14:45 +0000 (UTC)
-Subject: master - libdm: reset delay flag for devs used by thin
-Message-ID: <20121003131445.8CE442319@hosted02.fedoraproject.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Wed, 24 Oct 2012 02:20:56 +0000 (UTC)
+Subject: master - mirror/raid: Move 'copy_percent' to common code (mirror.c -> lv_manip.c)
+Message-ID: <20121024022056.F34681F3D@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1946a453297535829d3d698dfa51733d8a223400
-Commit:        1946a453297535829d3d698dfa51733d8a223400
-Parent:        21c401006c3c12b75354736db9a2f75e7993f489
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 27 16:57:14 2012 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 3 15:04:41 2012 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6db461e3b0d3fbc394fe2ed2a7d6a3c070453874
+Commit:        6db461e3b0d3fbc394fe2ed2a7d6a3c070453874
+Parent:        8073ce16900def5a200fce44cb69862bfc50d4ce
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Tue Oct 23 20:33:54 2012 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Tue Oct 23 20:33:54 2012 -0500
 
-libdm: reset delay flag for devs used by thin
+mirror/raid:  Move 'copy_percent' to common code (mirror.c -> lv_manip.c)
 
-Patch clears the flag if thin pool is stacked over mirror.
+The 'copy_percent' function takes the 'extents_copied' field from each
+segment in an LV to create the numerator for the ratio that is to
+become the copy_percent.  (Otherwise known as the 'sync' percent for
+non-pvmove uses, like mirror LVs and RAID LVs.)  This function safely
+works on RAID - not just mirrors - so it is better to have it in
+lv_manip.c rather than mirror.c.
 
-Since thin pool could be used to stack device over mirrors,
-it needs resume properly i.e. mirrors with corelog which are otherwise
-unconditionally skipped (for pvmove functionality).
+There's a lot of different functions that do a lot of different things
+in lv_manip.c, so I placed the function near a function in lv_manip.c
+that it was close to in metadata-exported.h.  Different placement in the
+file or a different name for the function may be useful.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |    6 +++++-
- 2 files changed, 6 insertions(+), 1 deletions(-)
+ lib/metadata/lv_manip.c          |   18 ++++++++++++++++++
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/mirror.c            |   17 -----------------
+ 3 files changed, 19 insertions(+), 18 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index c46db61..338cfaf 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.77 -
- =================================
-+  Always reset delay_resume_if_new flag when stacking thin pool.
-   Don't create value for dm_config_node and require dm_config_create_value call.
-   Check for existing new_name for dmsetup rename.
-   Fix memory leak in dmsetup _get_split_name() error path.
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index f675d0d..096eba2 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2005-2011 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2005-2012 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of the device-mapper userspace tools.
-  *
-@@ -3107,6 +3107,10 @@ int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
- 	if (!_link_tree_nodes(node, seg->pool))
- 		return_0;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 32a207d..9f87854 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -199,6 +199,24 @@ uint32_t find_free_lvnum(struct logical_volume *lv)
+ 	return i;
+ }
  
-+	/* Clean flag delay_resume_if_new - so corelog gets resumed */
-+	seg->metadata->props.delay_resume_if_new = 0;
-+	seg->pool->props.delay_resume_if_new = 0;
++percent_t copy_percent(const struct logical_volume *lv)
++{
++	uint32_t numerator = 0u, denominator = 0u;
++	struct lv_segment *seg;
 +
- 	node->props.send_messages = 1;
- 	seg->transaction_id = transaction_id;
- 	seg->low_water_mark = low_water_mark;
++	dm_list_iterate_items(seg, &lv->segments) {
++		denominator += seg->area_len;
++
++		if ((seg_is_raid(seg) || seg_is_mirrored(seg))
++		    && (seg->area_count > 1))
++			numerator += seg->extents_copied;
++		else
++			numerator += seg->area_len;
++	}
++
++	return denominator ? make_percent( numerator, denominator ) : 100.0;
++}
++
+ /*
+  * All lv_segments get created here.
+  */
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d149f95..00be606 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -831,11 +831,11 @@ struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
+ struct logical_volume *find_pvmove_lv_in_lv(struct logical_volume *lv);
+ const char *get_pvmove_pvname_from_lv(struct logical_volume *lv);
+ const char *get_pvmove_pvname_from_lv_mirr(struct logical_volume *lv_mirr);
+-percent_t copy_percent(const struct logical_volume *lv_mirr);
+ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 			  struct logical_volume *lv);
+ 
+ uint32_t find_free_lvnum(struct logical_volume *lv);
++percent_t copy_percent(const struct logical_volume *lv_mirr);
+ char *generate_lv_name(struct volume_group *vg, const char *format,
+ 		       char *buffer, size_t len);
+ 
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 084c93a..4fee763 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1623,23 +1623,6 @@ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 	return lvs;
+ }
+ 
+-percent_t copy_percent(const struct logical_volume *lv_mirr)
+-{
+-	uint32_t numerator = 0u, denominator = 0u;
+-	struct lv_segment *seg;
+-
+-	dm_list_iterate_items(seg, &lv_mirr->segments) {
+-		denominator += seg->area_len;
+-
+-		if (seg_is_mirrored(seg) && seg->area_count > 1)
+-			numerator += seg->extents_copied;
+-		else
+-			numerator += seg->area_len;
+-	}
+-
+-	return denominator ? make_percent( numerator, denominator ) : 100.0;
+-}
+-
+ /*
+  * Fixup mirror pointers after single-pass segment import
+  */
 
 
