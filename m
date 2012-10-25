@@ -1,87 +1,93 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 30 Oct 2012 19:56:05 +0000 (UTC)
-Subject: master - systemd: various updates and fixes
-Message-ID: <20121030195605.CD1D5350E@hosted02.fedoraproject.org>
+From: tasleson <tasleson@fedoraproject.org>
+Date: Thu, 25 Oct 2012 23:10:24 +0000 (UTC)
+Subject: master - python-lvm: Memory leaks & seg. fault fixes
+Message-ID: <20121025231025.03D411212@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=360c569ce8f0bfe936d59ca91de2716958550524
-Commit:        360c569ce8f0bfe936d59ca91de2716958550524
-Parent:        09d77d0c9455a42bfe7c1c55ac64475fb349b1d6
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Oct 30 20:36:49 2012 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Oct 30 20:55:50 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bbff143d54b890f3b9c91b302f0322469ba56ef6
+Commit:        bbff143d54b890f3b9c91b302f0322469ba56ef6
+Parent:        291909ecafbf5594c145516c19c2ce87c874ffb1
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Oct 25 17:31:11 2012 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Oct 25 18:09:10 2012 -0500
 
-systemd: various updates and fixes
+python-lvm: Memory leaks & seg. fault fixes
 
-Don't use lvmetad in lvm2-monitor.service ExecStop to avoid a systemd issue.
- - a systemd design issue while processing dependencies
-   with socket-based activation that ends up with a hang
- - https://bugzilla.redhat.com/show_bug.cgi?id=843587
-   (also tracker bug https://bugzilla.redhat.com/show_bug.cgi?id=871527)
- - not using lvmetad in this case is just a workaround, once the bug
-   above is resolved, we should enable the lvmetad in that specific case
+Issues found (thus far) in unit test developemnt for python bindings.
 
-Remove dependency on fedora-storage-init.service in lvm2 systemd units.
- - fedora-storage-init.service and fedora-storage-init-late.service is
-   going to be separated into respective units that belong to each block
-   device subsystem:
-     - mpath + mdraid activated via udev solely
-     - dmraid with its own dmraid-activation.service unit
-     - lvm2 with the lvm2-activation-generator to generate the
-       activation units runtime if lvmetad disabled
-       (global/use_lvmetad=0 set in lvm.conf) and activation done
-       via udev+lvmetad if lvmetad enabled (global/use_lvmetad=1 set
-       in lvm.conf)
+Added Py_DECREF(ptr) in liblvm_lvm_vg_open & liblvm_lvm_vg_create
+in error paths so that we correctly clean up memory.
 
-Depend on lvm2-lvmetad.socket in lvm2-monitor.service systemd unit.
- - as lvm2-monitor uses lvmetad if lvmetad is enabled
+Added a call to lvm_vg_close when we remove a vg.  The code was
+clearing out the vg pointer which prevented us from actually
+calling lvm_vg_close in the close path.
+
+liblvm_lvm_vg_create_lv_linear was not initializing
+lvobj->parent_vgobj and if lvm_vg_create_lv_linear failed
+we went through liblvm_lv_dealloc on clean up and tried to
+Py_DECREF an invalid pointer.
+
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW                                          |    3 +++
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    7 ++++---
- 2 files changed, 7 insertions(+), 3 deletions(-)
+ python/liblvm.c |   13 ++++++++++++-
+ 1 files changed, 12 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 4b71402..a3f8142 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,8 @@
- Version 2.02.99 - 
- ===================================
-+  Don't use lvmetad in lvm2-monitor.service ExecStop to avoid a systemd issue.
-+  Remove dependency on fedora-storage-init.service in lvm2 systemd units.
-+  Depend on lvm2-lvmetad.socket in lvm2-monitor.service systemd unit.
-   Hardcode use_lvmetad=0 if cluster locking used and issue a warning msg.
-   Avoid reading mirrors with failed devices in its mirrored log.
-   Avoid reading from mirrors that have failed devices if they block I/O.
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index 6c4c55f..e6b4814 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -1,8 +1,8 @@
- [Unit]
- Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
- Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
--Requires=dm-event.socket
--After=dm-event.socket fedora-storage-init.service fedora-storage-init-late.service lvm2-activation.service lvm2-lvmetad.service
-+Requires=dm-event.socket lvm2-lvmetad.socket
-+After=dm-event.socket lvm2-lvmetad.socket lvm2-lvmetad.service
- Before=local-fs.target
- DefaultDependencies=no
- Conflicts=shutdown.target
-@@ -11,7 +11,8 @@ Conflicts=shutdown.target
- Type=oneshot
- Environment=LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- ExecStart=@sbindir@/lvm vgchange --monitor y
--ExecStop=@sbindir@/lvm vgchange --monitor n
-+# The lvmetad must be disabled here, it needs https://bugzilla.redhat.com/show_bug.cgi?id=843587 to be resolved first.
-+ExecStop="@sbindir@/lvm vgchange --monitor n --config 'global{use_lvmetad=0}'"
- RemainAfterExit=yes
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 4da2999..831493e 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -309,6 +309,7 @@ liblvm_lvm_vg_open(PyObject *self, PyObject *args)
  
- [Install]
+ 	if ((vgobj->vg = lvm_vg_open(libh, vgname, mode, 0))== NULL) {
+ 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++		Py_DECREF(vgobj);
+ 		return NULL;
+ 	}
+ 
+@@ -332,6 +333,7 @@ liblvm_lvm_vg_create(PyObject *self, PyObject *args)
+ 
+ 	if ((vgobj->vg = lvm_vg_create(libh, vgname))== NULL) {
+ 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++		Py_DECREF(vgobj);
+ 		return NULL;
+ 	}
+ 
+@@ -401,6 +403,10 @@ liblvm_lvm_vg_remove(vgobject *self)
+ 	if (lvm_vg_write(self->vg) == -1)
+ 		goto error;
+ 
++	/* Not much you can do with a vg that is removed so close it */
++	if (lvm_vg_close(self->vg) == -1)
++		goto error;
++
+ 	self->vg = NULL;
+ 
+ 	Py_INCREF(Py_None);
+@@ -872,6 +878,9 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ 	if ((lvobj = PyObject_New(lvobject, &LibLVMlvType)) == NULL)
+ 		return NULL;
+ 
++	/* Initialize the parent ptr in case lv create fails and we dealloc lvobj */
++	lvobj->parent_vgobj = NULL;
++
+ 	if ((lvobj->lv = lvm_vg_create_lv_linear(self->vg, vgname, size)) == NULL) {
+ 		PyErr_SetObject(LibLVMError, liblvm_get_last_error());
+ 		Py_DECREF(lvobj);
+@@ -887,7 +896,9 @@ liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+ static void
+ liblvm_lv_dealloc(lvobject *self)
+ {
+-	Py_DECREF(self->parent_vgobj);
++	/* We can dealloc an object that didn't get fully created */
++	if (self->parent_vgobj)	
++		Py_DECREF(self->parent_vgobj);
+ 	PyObject_Del(self);
+ }
+ 
 
 
