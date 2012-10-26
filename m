@@ -1,33 +1,43 @@
-From: Andy Grover <agrover@redhat.com>
-Date: Fri, 26 Oct 2012 13:40:43 -0700
-Subject: liblvm/python-lvm behavior
-In-Reply-To: <5088566A.4080105@redhat.com>
-References: <5088566A.4080105@redhat.com>
-Message-ID: <508AF54B.9090302@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Fri, 26 Oct 2012 15:40:09 -0500
+Subject: [PATCH 1/2] test: set LD_LIBRARY_PATH to all dirs with *.so
+Message-ID: <1351284010-8247-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 10/24/2012 01:58 PM, Tony Asleson wrote:
-> What should be done to make this all consistent?  If we want to continue
-> with the implicit lvm_vg_write in all python methods we need to change
-> the signature of lvm_vg_create to require at least 1 device.  Otherwise,
-> we could remove all the implicit lvm_vg_write calls in the python
-> bindings and expose it.  This would then require python users to make
-> explicit calls to lvm_vg_write to make the changes persistent as the C
-> library currently requires.
+Instead of manually editing entries, add all the
+directories which contain shared objects.
 
-Yes I think we should not expose vg_write to library users. The fact
-that it is created as an in-memory struct that is then extended to
-include its first pv and then written, doesn't need to be exposed since
-skipping any of those steps is incorrect.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ test/lib/utils.sh |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-So I'd like to see lvm_vg_create take a single path to a vg as a
-required parameter. I don't think we need to take multiple pv paths, we
-can extend to them after lvm_vg_create returns easily enough.
-
-Regards -- Andy
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index 70d9f66..ab5abc1 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -204,11 +204,11 @@ test -n "${abs_top_builddir+varset}" || . lib/paths || die "you must run make fi
+ case "$PATH" in
+ *"$abs_top_builddir/test/lib"*) ;;
+ *)
+-        PATH="$abs_top_builddir/test/lib":$PATH
+-        for d in daemons/dmeventd/plugins/mirror daemons/dmeventd/plugins/snapshot \
+-                daemons/dmeventd/plugins/lvm2 daemons/dmeventd liblvm tools libdm; do
+-                LD_LIBRARY_PATH="$abs_top_builddir/$d":$LD_LIBRARY_PATH
+-        done
++	PATH="$abs_top_builddir/test/lib":"$abs_top_builddir/test/api":$PATH
++	for i in `find $abs_top_builddir -name \*.so`; do
++		p=`dirname $i`
++		LD_LIBRARY_PATH="$p":$LD_LIBRARY_PATH
++	done
+         export PATH LD_LIBRARY_PATH ;;
+ esac
+ 
+-- 
+1.7.1
 
 
