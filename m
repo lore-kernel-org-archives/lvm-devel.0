@@ -1,257 +1,439 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Wed, 24 Oct 2012 04:11:15 +0000 (UTC)
-Subject: master - mirror: Avoid reading from mirrors that have failed devices
-Message-ID: <20121024041115.A2ED6A1618@fedorahosted.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Fri, 26 Oct 2012 15:40:10 -0500
+Subject: [PATCH 2/2] python-lvm: Initial check-in of python-lvm unit test case.
+In-Reply-To: <1351284010-8247-1-git-send-email-tasleson@redhat.com>
+References: <1351284010-8247-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1351284010-8247-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9fd7ac7d035f0b2f8dcc3cb19935eb181816bd76
-Commit:        9fd7ac7d035f0b2f8dcc3cb19935eb181816bd76
-Parent:        b873fc54baf12891158017cd732e01a7f19b3ac3
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Oct 23 23:10:33 2012 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Oct 23 23:10:33 2012 -0500
-
-mirror:  Avoid reading from mirrors that have failed devices
-
-Addresses: rhbz855398 (Allow VGs to be built on cluster mirrors),
-           and other issues.
-
-The LVM code attempts to avoid reading labels from devices that are
-suspended to try to avoid situations that may cause the commands to
-block indefinitely.  When scanning devices, 'ignore_suspended_devices'
-can be set so the code (lib/activate/dev_manager.c:device_is_usable())
-checks any DM devices it finds and avoids them if they are suspended.
-
-The mirror target has an additional mechanism that can cause I/O to
-be blocked.  If a device in a mirror fails, all I/O will be blocked
-by the kernel until a new table (a linear target or a mirror with
-replacement devices) is loaded.  The mirror indicates that this condition
-has happened by marking a 'D' for the faulty device in its status
-output.  This condition must also be checked by 'device_is_usable()' to
-avoid the possibility of blocking LVM commands indefinitely due to an
-attempt to read the blocked mirror for labels.
-
-Until now, mirrors were avoided if the 'ignore_suspended_devices'
-condition was set.  This check seemed to suggest, "if we are concerned
-about suspended devices, then let's ignore mirrors altogether just
-in case".  This is insufficient and doesn't solve any problems.  All
-devices that are suspended are already avoided if
-'ignore_suspended_devices' is set; and if a mirror is blocking because
-of an error condition, it will block the LVM command regardless of the
-setting of that variable.
-
-Rather than avoiding mirrors whenever 'ignore_suspended_devices' is
-set, this patch causes mirrors to be avoided whenever they are blocking
-due to an error.  (As mentioned above, the case where a DM device is
-suspended is already covered.)  This solves a number of issues that weren't
-handled before.  For example, pvcreate (or any command that does a
-pv_read or vg_read, which eventually call device_is_usable()) will be
-protected from blocked mirrors regardless of how
-'ignore_suspended_devices' is set.  Additionally, a mirror that is
-neither suspended nor blocking is /allowed/ to be read regardless
-of how 'ignore_suspended_devices' is set.  (The latter point being the
-source of the fix for rhbz855398.)
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |  160 ++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 155 insertions(+), 6 deletions(-)
+ test/api/pytest.sh          |   27 +++
+ test/api/python_lvm_unit.py |  375 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 402 insertions(+), 0 deletions(-)
+ create mode 100644 test/api/pytest.sh
+ create mode 100755 test/api/python_lvm_unit.py
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ffbf4ef..db776c0 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Avoid reading from mirrors that have failed devices if they block I/O.
-   Change lvs heading Copy% to Cpy%Sync and print RAID4/5/6 sync% there too.
-   Fix clvmd support for option -d and properly use its argument.
-   Support use of option --yes for lvchange --persistent.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 31c1c27..6cc57d0 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -135,6 +135,154 @@ static int _info_run(const char *name, const char *dlid, struct dm_info *info,
- 	return r;
- }
- 
-+/*
-+ * _parse_mirror_status
-+ * @mirror_status_string
-+ * @image_health:  return for allocated copy of image health characters
-+ * @log_health: NULL if corelog, otherwise alloc'ed log health char
-+ *
-+ * This function takes the mirror status string, breaks it up and returns
-+ * its components.  For now, we only return the health characters.  This
-+ * is an internal function.  If there are more things we want to return
-+ * later, we can do that then.
-+ *
-+ * Returns: 1 on success, 0 on failure
-+ */
-+static int _parse_mirror_status(char *mirror_status_str,
-+				char **images_health, char **log_health)
-+{
-+	char *p = NULL;
-+	char **args, **log_args;
-+	unsigned num_devs, log_argc;
+diff --git a/test/api/pytest.sh b/test/api/pytest.sh
+new file mode 100644
+index 0000000..ad99624
+--- /dev/null
++++ b/test/api/pytest.sh
+@@ -0,0 +1,27 @@
++#!/bin/sh
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 +
-+	if (!dm_split_words(mirror_status_str, 1, 0, &p) ||
-+	    !(num_devs = (unsigned) atoi(p)))
-+		/* On errors, we must assume the mirror is to be avoided */
-+		return_0;
++. lib/test
 +
-+	p += strlen(p) + 1;
-+	args = alloca((num_devs + 5) * sizeof(char *));
++aux prepare_vg 1
++lvcreate -n test -l 5 $vg
 +
-+	if ((unsigned)dm_split_words(p, num_devs + 4, 0, args) < num_devs + 4)
-+		return_0;
++#Locate the python binding library to use.
++python_lib=`find $abs_top_builddir -name lvm.so`
++if [ "$python_lib" != "" ]
++then
++	export PYTHONPATH=`dirname $python_lib`:$PYTHONPATH
++	python_lvm_unit.py
++else
++	echo "Unable to test python bindings as library not available"
++fi
+diff --git a/test/api/python_lvm_unit.py b/test/api/python_lvm_unit.py
+new file mode 100755
+index 0000000..fdeca75
+--- /dev/null
++++ b/test/api/python_lvm_unit.py
+@@ -0,0 +1,375 @@
++#!/usr/bin/env python
 +
-+	log_argc = (unsigned) atoi(args[3 + num_devs]);
-+	log_args = alloca(log_argc * sizeof(char *));
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 +
-+	if ((unsigned)dm_split_words(args[3 + num_devs] + strlen(args[3 + num_devs]) + 1,
-+				     log_argc, 0, log_args) < log_argc)
-+		return_0;
++import unittest
++import random
++import string
++import lvm
 +
-+	*log_health = NULL;
-+	if (!strcmp(log_args[0], "disk") &&
-+	    !(*log_health = dm_strdup(log_args[2])))
-+		return_0;
++# Set of basic unit tests for the python bindings.
 +
-+	if (!(*images_health = dm_strdup(args[2 + num_devs])))
-+		return_0;
++def rs(l=10):
++	"""
++	Generate a random string
++	"""
++	return ''.join(random.choice(string.ascii_uppercase) for x in range(l))
 +
-+	return 1;
-+}
 +
-+/*
-+ * ignore_blocked_mirror_devices
-+ * @dev
-+ * @start
-+ * @length
-+ * @mirror_status_str
-+ *
-+ * When a DM 'mirror' target is created with 'block_on_error' or
-+ * 'handle_errors', it will block I/O if there is a device failure
-+ * until the mirror is reconfigured.  Thus, LVM should never attempt
-+ * to read labels from a mirror that has a failed device.  (LVM
-+ * commands are issued to repair mirrors; and if LVM is blocked
-+ * attempting to read a mirror, a circular dependency would be created.)
-+ *
-+ * This function is a slimmed-down version of lib/mirror/mirrored.c:
-+ * _mirrored_transient_status().  FIXME: It is unable to handle mirrors
-+ * with mirrored logs because it does not have a way to get the status of
-+ * the mirror that forms the log, which could be blocked.
-+ *
-+ * If a failed device is detected in the status string, then it must be
-+ * determined if 'block_on_error' or 'handle_errors' was used when
-+ * creating the mirror.  This info can only be determined from the mirror
-+ * table.  The 'dev', 'start', 'length' trio allow us to correlate the
-+ * 'mirror_status_str' with the correct device table in order to check
-+ * for blocking.
-+ *
-+ * Returns: 1 if mirror should be ignored, 0 if safe to use
-+ */
-+static int _ignore_blocked_mirror_devices(struct device *dev,
-+					  uint64_t start, uint64_t length,
-+					  char *mirror_status_str)
-+{
-+	unsigned i, check_for_blocking = 0;
-+	char *images_health, *log_health;
++class TestLvm(unittest.TestCase):
++	def setUp(self):
++		pass
 +
-+	uint64_t s,l;
-+	char *params, *target_type = NULL;
-+	void *next = NULL;
-+	struct dm_task *dmt;
++	def tearDown(self):
++		pass
 +
-+	if (!_parse_mirror_status(mirror_status_str,
-+				  &images_health, &log_health))
-+		goto_out;
++	def testOpenClose(self):
++		pass
 +
-+	if (log_health && (log_health[0] != 'A')) {
-+		log_debug("%s: Mirror log device marked as failed",
-+			  dev_name(dev));
-+		check_for_blocking = 1;
-+	}
++	def testVersion(self):
++		version = lvm.getVersion()
++		self.assertNotEquals(version, None)
++		self.assertEquals(type(version), str)
++		self.assertTrue(len(version) > 0)
 +
-+	for (i = 0; images_health[i]; i++)
-+		if (images_health[i] != 'A') {
-+			log_debug("%s: Mirror image %d marked as failed",
-+				  dev_name(dev), i);
-+			check_for_blocking = 1;
-+		}
++	def testVgOpen(self):
++		vg_names = lvm.listVgNames()
 +
-+	if (!check_for_blocking)
-+		return 0;
++		for i in vg_names:
++			vg = lvm.vgOpen(i)
++			vg.close()
 +
-+	/*
-+	 * We avoid another system call if we can, but if a device is
-+	 * dead, we have no choice but to look up the table too.
-+	 */
-+	if (!(dmt = dm_task_create(DM_DEVICE_TABLE)))
-+		goto_out;
++	def _get_lv_test(self, mode='r'):
++		vg_name_list = lvm.listVgNames()
++		for vgname in vg_name_list:
++			vg = lvm.vgOpen(vgname, mode)
++			lvs = vg.listLVs()
++			if len(lvs):
++				return lvs[0]
++		return None
 +
-+	if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev), MINOR(dev->dev), 1))
-+		goto_out;
++	def _get_pv_test(self, mode='r'):
++		vg_name_list = lvm.listVgNames()
++		for vgname in vg_name_list:
++			vg = lvm.vgOpen(vgname, mode)
++			pvs = vg.listPVs()
++			if len(pvs):
++				return pvs[0]
++		return None
 +
-+	if (activation_checks() && !dm_task_enable_checks(dmt))
-+		goto_out;
++	def testPvGetters(self):
++		pv = self._get_pv_test()
 +
-+	if (!dm_task_run(dmt))
-+		goto_out;
++		self.assertEqual(type(pv.getName()), str)
++		self.assertTrue(len(pv.getName()) > 0)
 +
-+	do {
-+		next = dm_get_next_target(dmt, next, &s, &l,
-+					  &target_type, &params);
-+		if ((s == start) && (l == length)) {
-+			if (strcmp(target_type, "mirror"))
-+				goto_out;
++		self.assertEqual(type(pv.getUuid()), str)
++		self.assertTrue(len(pv.getUuid()) > 0)
 +
-+			if (strstr(params, "block_on_error") ||
-+			    strstr(params, "handle_errors")) {
-+				log_debug("%s: I/O blocked to mirror device",
-+					  dev_name(dev));
-+				return 1;
-+			}
-+		}
-+	} while (next);
-+	dm_task_destroy(dmt);
++		self.assertEqual(type(pv.getMdaCount()), int)
++		self.assertEqual(type(pv.getMdaCount()), int)
 +
-+	return 0;
++		self.assertEqual(type(pv.getSize()), int)
 +
-+out:
-+	return 1;
-+}
++		self.assertEqual(type(pv.getDevSize()), int)
 +
- int device_is_usable(struct device *dev)
- {
- 	struct dm_task *dmt;
-@@ -180,15 +328,15 @@ int device_is_usable(struct device *dev)
- 		goto out;
- 	}
- 
--	/* FIXME Also check for mirror block_on_error and mpath no paths */
--	/* For now, we exclude all mirrors */
--
-+	/* FIXME Also check for mpath no paths */
- 	do {
- 		next = dm_get_next_target(dmt, next, &start, &length,
- 					  &target_type, &params);
--		/* Skip if target type doesn't match */
--		if (target_type && !strcmp(target_type, "mirror") && ignore_suspended_devices()) {
--			log_debug("%s: Mirror device %s not usable.", dev_name(dev), name);
++		self.assertEqual(type(pv.getFree()), int)
 +
-+		if (target_type && !strcmp(target_type, "mirror") &&
-+		    _ignore_blocked_mirror_devices(dev, start, length, params)) {
-+			log_debug("%s: Mirror device %s not usable.",
-+				  dev_name(dev), name);
- 			goto out;
- 		}
- 
++	def _test_prop(self, prop_obj, prop, var_type, settable):
++		result = prop_obj.getProperty(prop)
++
++		self.assertEqual(type(result[0]), var_type)
++		self.assertEqual(type(result[1]), bool)
++		self.assertTrue(result[1] == settable)
++
++	def testPvSegs(self):
++		pv = self._get_pv_test("r")
++		pv_segs = pv.listPVsegs()
++
++		#LVsegs returns a tuple, (value, bool settable)
++
++		#TODO: Test other properties of pv_seg
++		for i in pv_segs:
++			self._test_prop(i, 'pvseg_start', long, False)
++
++	def testPvProperty(self):
++		pv = self._get_pv_test("r")
++		self._test_prop(pv, 'pv_mda_count', long, False)
++
++	def testLvProperty(self):
++		lv = self._get_lv_test("r")
++		self._test_prop(lv, 'seg_count', long, False)
++
++	def testLvTags(self):
++		lv = self._get_lv_test("w")
++		self._testTags(lv)
++
++	def testLvActiveInactive(self):
++		lv = self._get_lv_test("w")
++		lv.deactivate()
++		self.assertTrue(lv.isActive() == False)
++		lv.activate()
++		self.assertTrue(lv.isActive() == True)
++
++	def testLvRename(self):
++		lv = self._get_lv_test("w")
++
++		current_name = lv.getName()
++		new_name = rs()
++		lv.rename(new_name)
++		self.assertEqual(lv.getName(), new_name)
++		lv.rename(current_name)
++
++	def testLvSuspend(self):
++		lv = self._get_lv_test("r")
++
++		result = lv.isSuspended()
++		self.assertTrue(type(result), bool)
++
++	def testLvSize(self):
++		lv = self._get_lv_test("r")
++		result = lv.getSize()
++		self.assertTrue(type(result), bool)
++
++	def testLvResize(self):
++		pass    #Not implemented!
++
++	def testPvResize(self):
++		pass    #Patch available, not committed
++
++	def testLvSeg(self):
++		lv = self._get_lv_test("r")
++
++		lv_segs = lv.listLVsegs()
++
++		#LVsegs returns a tuple, (value, bool settable)
++
++		#TODO: Test other properties of lv_seg
++		for i in lv_segs:
++			self._test_prop(i, 'seg_start_pe', long, False)
++
++	def testLvMisc(self):
++		#Need to look at lack of vg_write in vg create
++
++		#For this to work cleanly we will remove an existing lv & vg and then
++		#put it back so that the test framework can clean it up.
++		vg_name_list = lvm.listVgNames()
++
++		if len(vg_name_list):
++			vg_name = vg_name_list[0]
++
++			vg = lvm.vgOpen(vg_name, "w")
++
++			vg_mda_copies = vg.getProperty('vg_mda_copies')
++			vg.setProperty('vg_mda_copies', vg_mda_copies[0])
++
++			pvs = vg.listPVs()
++			lvs = vg.listLVs()
++
++			pe_devices = []
++			for p in pvs:
++				pe_devices.append(p.getName())
++
++			self.assertEquals(len(lvs), 1)
++
++			lv = lvs[0]
++
++			lv_name = lv.getName()
++			lv_size = lv.getSize()
++
++			lv.remove()
++			lv = None
++
++			vg.reduce(pe_devices[0])
++
++			vg.remove()
++			vg.close()
++
++			nvg = lvm.vgCreate(vg_name)
++			for p in pe_devices:
++				nvg.extend(p)
++
++			#2MiB extent size
++			new_extent = 1024 * 1024 * 2
++
++			nvg.setExtentSize(new_extent)
++			self.assertEqual(nvg.getExtentSize(), new_extent)
++
++			v = nvg.createLvLinear(lv_name, lv_size)
++
++			lv_find_name = nvg.lvFromName(lv_name)
++			lv_find_uuid = nvg.lvFromUuid(v.getUuid())
++
++			self.assertTrue(lv_find_name.getName() == v.getName())
++			self.assertTrue(lv_find_uuid.getUuid() == v.getUuid())
++
++			nvg.close()
++
++	def testVgNames(self):
++		vg = lvm.listVgNames()
++		self.assertTrue(isinstance(vg, tuple))
++
++	def testDupeLvCreate(self):
++		"""
++		Try to create a lv with the same name expecting a failure
++		Note: This was causing a seg. fault previously
++		"""
++		vgs = lvm.listVgNames()
++
++		if len(vgs):
++			vg_name = vgs[0]
++			vg = lvm.vgOpen(vg_name, "w")
++
++			lvs = vg.listLVs()
++
++			if len(lvs):
++				lv = lvs[0]
++				lv_name = lv.getName()
++				self.assertRaises(lvm.LibLVMError, vg.createLvLinear, lv_name,
++					lv.getSize())
++
++	def testVgUuids(self):
++		vgs_uuids = lvm.listVgUuids()
++
++		self.assertTrue(isinstance(vgs_uuids, tuple))
++
++		vgs_uuids = list(vgs_uuids)
++
++		vgs_names = lvm.listVgNames()
++
++		for vg_name in vgs_names:
++			vg = lvm.vgOpen(vg_name, "r")
++
++			#TODO Write/fix BUG, vg uuid don't match between lvm.listVgUuids
++			# and vg.getUuid()
++			vg_uuid_search = vg.getUuid().replace('-', '')
++
++			self.assertTrue(vg_uuid_search in vgs_uuids)
++			vgs_uuids.remove(vg_uuid_search)
++
++		self.assertTrue(len(vgs_uuids) == 0)
++
++	def testPercentToFloat(self):
++		self.assertEqual(lvm.percentToFloat(0), 0.0)
++		self.assertEqual(lvm.percentToFloat(1000000), 1.0)
++		self.assertEqual(lvm.percentToFloat(1000000 / 2), 0.5)
++
++	def testScan(self):
++		self.assertEqual(lvm.scan(), None)
++
++	def testConfigReload(self):
++		self.assertEqual(lvm.configReload(), None)
++
++	def testConfig_override(self):
++		self.assertEquals(lvm.configOverride("global.test = 1"), None)
++
++	def testConfigFindBool(self):
++		self.assertTrue(lvm.configFindBool("global/locking_type"))
++		self.assertFalse(lvm.configFindBool("global/fallback_to_local_locking"))
++
++	def testVgFromPVLookups(self):
++		vgname_list = lvm.listVgNames()
++		for vg_name in vgname_list:
++			vg = lvm.vgOpen(vg_name, 'r')
++
++			vg_name = vg.getName()
++
++			pv_list = vg.listPVs()
++			for pv in pv_list:
++				vg_name_from_pv = lvm.vgNameFromPvid(pv.getUuid())
++				self.assertEquals(vg_name, vg_name_from_pv)
++				self.assertEqual(vg_name, lvm.vgNameFromDevice(pv.getName()))
++			vg.close()
++
++	def testVgGetName(self):
++		vgname_list = lvm.listVgNames()
++
++		for vg_name in vgname_list:
++			vg = lvm.vgOpen(vg_name, 'r')
++			self.assertEqual(vg.getName(), vg_name)
++			vg.close()
++
++	def testVgGetUuid(self):
++		vgname_list = lvm.listVgNames()
++
++		for vg_name in vgname_list:
++			vg = lvm.vgOpen(vg_name, 'r')
++			uuid = vg.getUuid()
++			self.assertNotEqual(uuid, None)
++			self.assertTrue(len(uuid) > 0)
++			vg.close()
++
++
++	RETURN_NUMERIC = ["getSeqno", "getSize", "getFreeSize", "getFreeSize",
++					  "getExtentSize", "getExtentCount", "getFreeExtentCount",
++					  "getPvCount", "getMaxPv", "getMaxLv"]
++
++	def testVgGetters(self):
++		vg_name_list = lvm.listVgNames()
++
++		for vg_name in vg_name_list:
++			vg = lvm.vgOpen(vg_name, 'r')
++			self.assertTrue(type(vg.isClustered()) == bool)
++			self.assertTrue(type(vg.isExported()) == bool)
++			self.assertTrue(type(vg.isPartial()) == bool)
++
++			#Loop through the list invoking the method
++			for method_name in TestLvm.RETURN_NUMERIC:
++				method = getattr(vg, method_name)
++				result = method()
++				self.assertTrue(type(result) == int)
++
++			vg.close()
++
++	def _testTags(self, tag_obj):
++		existing_tags = tag_obj.getTags()
++		self.assertTrue(type(existing_tags) == tuple)
++
++		num_tags = random.randint(2, 40)
++		created_tags = []
++
++		for i in range(num_tags):
++			tag_name = rs(random.randint(1, 128))
++			tag_obj.addTag(tag_name)
++			created_tags.append(tag_name)
++
++		tags = tag_obj.getTags()
++		self.assertTrue(len(existing_tags) + len(created_tags) == len(tags))
++
++		num_remove = len(created_tags)
++
++		for i in range(num_remove):
++			tag_to_remove = created_tags[random.randint(0, len(created_tags) - 1)]
++
++			created_tags.remove(tag_to_remove)
++
++			tag_obj.removeTag(tag_to_remove)
++
++			current_tags = tag_obj.getTags()
++			self.assertFalse(tag_to_remove in current_tags)
++
++		current_tags = tag_obj.getTags()
++		self.assertTrue(len(current_tags) == len(existing_tags))
++		for e in existing_tags:
++			self.assertTrue(e in current_tags)
++
++	def testVgTags(self):
++		vg_name_list = lvm.listVgNames()
++
++		for vg_name in vg_name_list:
++			vg = lvm.vgOpen(vg_name, 'w')
++			self._testTags(vg)
++			vg.close()
++
++if __name__ == "__main__":
++	unittest.main()
+\ No newline at end of file
+-- 
+1.7.1
 
 
