@@ -1,40 +1,50 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  1 May 2015 13:40:21 +0000 (UTC)
-Subject: master - tests: free -h is quite new option
-Message-ID: <20150501134021.44D9B610ED@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Mon, 29 Oct 2012 15:30:34 +0000 (UTC)
+Subject: master - lvmetad: warn only if use_lvmetad=1 and locking_type=3
+Message-ID: <20121029153034.89326245D@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9c7063ef893449742922a4bcbcbe6c38f191b8dc
-Commit:        9c7063ef893449742922a4bcbcbe6c38f191b8dc
-Parent:        79844b9066e53d9618f6641d5cee9c7264fe01fd
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 1 15:37:50 2015 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 1 15:40:04 2015 +0200
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c59199d4932d7edcd2919d6d45ec4baac590e2e
+Commit:        7c59199d4932d7edcd2919d6d45ec4baac590e2e
+Parent:        bbff143d54b890f3b9c91b302f0322469ba56ef6
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Oct 29 16:20:35 2012 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Oct 29 16:20:35 2012 +0100
 
-tests: free -h is quite new option
+lvmetad: warn only if use_lvmetad=1 and locking_type=3
 
-Stay with -g and and ignore failure.
 ---
- test/lib/inittest.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/commands/toolcontext.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index d5c80f4..98abae6 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -78,7 +78,7 @@ echo "$TESTNAME" >TESTNAME
- echo "Kernel is $(uname -a)"
- # Report SELinux mode
- echo "Selinux mode is $(getenforce 2>/dev/null || echo not installed)."
--free -h
-+free -m || true
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 8da96e4..aec4df3 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -413,13 +413,15 @@ static int _process_config(struct cmd_context *cmd)
+ 	lvmetad_set_socket(lvmetad_socket);
+ 	cn = find_config_tree_node(cmd, "devices/global_filter");
+ 	lvmetad_set_token(cn ? cn->v : NULL);
+-	if (find_config_tree_int(cmd, "global/locking_type", 1) != 3)
+-		lvmetad_set_active(find_config_tree_int(cmd, "global/use_lvmetad", 0));
+-	else {
++
++	if (find_config_tree_int(cmd, "global/locking_type", 1) == 3 &&
++	    find_config_tree_int(cmd, "global/use_lvmetad", 0)) {
+ 		log_warn("WARNING: configuration setting use_lvmetad overriden to 0 due to locking_type 3. "
+ 			 "Clustered environment not supported by lvmetad yet.");
+ 		lvmetad_set_active(0);
+-	}
++	} else
++		lvmetad_set_active(find_config_tree_int(cmd, "global/use_lvmetad", 0));
++
+ 	lvmetad_init(cmd);
  
- # Set vars from utils now that we have TESTDIR/PREFIX/...
- prepare_test_vars
+ 	return 1;
 
 
