@@ -1,43 +1,53 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu,  1 Nov 2012 12:35:26 +0000 (UTC)
-Subject: master - systemd: do not remove lvm2-activation.service
-Message-ID: <20121101123526.96F6BA2C15@fedorahosted.org>
+From: Ondrej Kozina <okozina@redhat.com>
+Date: Thu,  1 Nov 2012 18:22:14 +0100
+Subject: [PATCH 0/3] CLVMD: systemd native service
+Message-ID: <1351790537-10199-1-git-send-email-okozina@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa07de5a50175a2cee3f8662a23544d43feaf128
-Commit:        aa07de5a50175a2cee3f8662a23544d43feaf128
-Parent:        360c569ce8f0bfe936d59ca91de2716958550524
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Nov 1 13:33:49 2012 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Nov 1 13:33:49 2012 +0100
+In response to (bz #829308):
 
-systemd: do not remove lvm2-activation.service
+Right now, clvmd init scripts are not compatible with systemd so I propose to 
+add "native" systemd units for systemd enabled distros.
 
-Fix previous commit 360c569ce8f0bfe936d59ca91de2716958550524.
-Remove only fedora-storage-init/fedora-storage-init-late.service, but
-not lvm2-activation.service.
-fedora-storage-init.service fedora-storage-init-late.service
----
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+This patch splits clvmd service between two new services:
 
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index e6b4814..3cb998b 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -2,7 +2,7 @@
- Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
- Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
- Requires=dm-event.socket lvm2-lvmetad.socket
--After=dm-event.socket lvm2-lvmetad.socket lvm2-lvmetad.service
-+After=dm-event.socket lvm2-lvmetad.socket lvm2-activation.service lvm2-lvmetad.service
- Before=local-fs.target
- DefaultDependencies=no
- Conflicts=shutdown.target
+1) clvmd daemon itself (clvmd-daemon.service)
+2) activation/deactivation of clustered VGs (clvmd.service)
+
+There're several reasons to split it. First, there's no support for conditional
+stop in systemd and AFAIK they don't plan to support it. In other words:
+if the deactivation fails for some reason, systemd doesn't care and simply kills all
+remaining procs in the cgroup (by default). Killing the remaining procs can be suppressed
+however it doesn't solve the following problem:
+
+You can't repeat the stop command of a failed service. The repeated stop command is simply 
+not propagated to the service. You would have to start and then try to stop
+the service again. Unfortunately, this can't be done while the daemon is still running
+(and we need the daemon to be active until all clustered VGs are deactivated successfully).
+
+In a separated setup we need only to restart the failed activation service and that's fine.
+
+Ondrej Kozina (3):
+  - add clvmd native systemd service
+  - add clvmd activation systemd service
+  - alter related configuration files
+
+ configure.in                                       |  3 +
+ make.tmpl.in                                       |  1 +
+ scripts/Makefile.in                                |  9 ++-
+ scripts/clvmd_activation_script_red_hat.sh.in      | 71 ++++++++++++++++++++++
+ .../clvmd_activation_systemd_red_hat.service.in    | 14 +++++
+ scripts/clvmd_systemd_red_hat.service.in           | 20 ++++++
+ 6 files changed, 117 insertions(+), 1 deletion(-)
+ create mode 100755 scripts/clvmd_activation_script_red_hat.sh.in
+ create mode 100644 scripts/clvmd_activation_systemd_red_hat.service.in
+ create mode 100644 scripts/clvmd_systemd_red_hat.service.in
+
+-- 
+1.7.12.4
 
 
