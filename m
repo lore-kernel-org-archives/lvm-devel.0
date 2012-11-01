@@ -1,123 +1,72 @@
 From: Ondrej Kozina <okozina@redhat.com>
-Date: Thu,  1 Nov 2012 18:22:16 +0100
-Subject: [PATCH 2/3] - add clvmd activation systemd service
+Date: Thu,  1 Nov 2012 18:22:17 +0100
+Subject: [PATCH 3/3] - alter related configuration files
 In-Reply-To: <1351790537-10199-1-git-send-email-okozina@redhat.com>
 References: <1351790537-10199-1-git-send-email-okozina@redhat.com>
-Message-ID: <1351790537-10199-3-git-send-email-okozina@redhat.com>
+Message-ID: <1351790537-10199-4-git-send-email-okozina@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-OnFailure=clvmd-daemon.service - this will prevent the daemon to be killed if the (de)activation fails (yup, ugly hack).
-
-clvmd_activation_script_red_hat.sh.in - It's a very simple rewrite of the original inititscript (no waiting in a loop, no awk)
-
 ---
- scripts/clvmd_activation_script_red_hat.sh.in      | 71 ++++++++++++++++++++++
- .../clvmd_activation_systemd_red_hat.service.in    | 14 +++++
- 2 files changed, 85 insertions(+)
- create mode 100755 scripts/clvmd_activation_script_red_hat.sh.in
- create mode 100644 scripts/clvmd_activation_systemd_red_hat.service.in
+ configure.in        | 3 +++
+ make.tmpl.in        | 1 +
+ scripts/Makefile.in | 9 ++++++++-
+ 3 files changed, 12 insertions(+), 1 deletion(-)
 
-diff --git a/scripts/clvmd_activation_script_red_hat.sh.in b/scripts/clvmd_activation_script_red_hat.sh.in
-new file mode 100755
-index 0000000..07eadec
---- /dev/null
-+++ b/scripts/clvmd_activation_script_red_hat.sh.in
-@@ -0,0 +1,71 @@
-+#!/bin/bash
-+
-+sbindir=/usr/sbin
-+
-+lvm_vgchange=${sbindir}/vgchange
-+lvm_vgscan=${sbindir}/vgscan
-+lvm_vgs=${sbindir}/vgs
-+lvm_lvm=${sbindir}/lvm
-+
-+parse_clustered_vgs() {
-+	while read -r name attrs;
-+	do
-+		test "${attrs:5:1}" == 'c' && echo -n "$name "
-+	done
-+}
-+
-+# NOTE: replace this with vgs, once display filter per attr is implemented.
-+clustered_vgs() {
-+	${lvm_vgs} -o vg_name,vg_attr --noheadings | parse_clustered_vgs
-+}
-+
-+activate() {
-+	eval local $(${lvm_lvm} dumpconfig devices/obtain_device_list_from_udev 2>/dev/null) 2>/dev/null
-+	if [ $? -ne 0 ]; then
-+		echo "Warning: expected single couple of key=value in output of dumpconfig"
-+	fi
-+
-+	if [ -z $obtain_device_list_from_udev -o $obtain_device_list_from_udev -ne 1 ]; then
-+		echo -n "lvm.conf option obtain_device_list_from_udev!=1: Executing vgscan"
-+		${lvm_vgscan} > /dev/null 2>&1
-+	fi
-+
-+	echo -n "Activating ${LVM_VGS:-"all VG(s)"}: "
-+        ${lvm_vgchange} -ayl $LVM_VGS || return 1
-+
-+	return 0
-+}
-+
-+deactivate()
-+{
-+	# NOTE: following section will be replaced by blkdeactivate script
-+	# with option supporting request to deactivate all clustered volume
-+	# groups in the system
-+	[ -z $LVM_VGS ] && LVM_VGS="$(clustered_vgs)"
-+	if [ -n "$LVM_VGS" ]; then
-+		echo -n "Deactivating clustered VG(s): "
-+                ${lvm_vgchange} -anl $LVM_VGS || return 1
-+	fi
-+
-+	return 0
-+}
-+
-+case "$1" in
-+  deactivate)
-+	deactivate
-+	rtrn=$?
-+	;;
-+  activate)
-+	activate
-+	rtrn=$?
-+	;;
-+  reload)
-+	rtrn=0;
-+	;;
-+  *)
-+	echo $"Usage: $0 {activate|deactivate|reload}"
-+	rtrn=3
-+	;;
-+esac
-+
-+exit $rtrn
-diff --git a/scripts/clvmd_activation_systemd_red_hat.service.in b/scripts/clvmd_activation_systemd_red_hat.service.in
-new file mode 100644
-index 0000000..b5bd963
---- /dev/null
-+++ b/scripts/clvmd_activation_systemd_red_hat.service.in
-@@ -0,0 +1,14 @@
-+[Unit]
-+Description=Clustered LVM volumes activation service
-+Requires=clvmd-daemon.service
-+After=clvmd-daemon.service
-+OnFailure=clvmd-daemon.service
-+PropagatesReloadTo=clvmd-daemon.service
-+
-+[Service]
-+Type=simple
-+RemainAfterExit=yes
-+EnvironmentFile=- at sysconfdir@/sysconfig/clvmd
-+ExecStart=@libexecdir@/clvmd/clvmd.sh activate
-+ExecStop=@libexecdir@/clvmd/clvmd.sh deactivate
-+ExecReload=@libexecdir@/clvmd/clvmd.sh reload
+diff --git a/configure.in b/configure.in
+index 75e0d84..2fe0763 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1658,7 +1658,10 @@ python/setup.py
+ scripts/blkdeactivate.sh
+ scripts/blk_availability_init_red_hat
+ scripts/blk_availability_systemd_red_hat.service
++scripts/clvmd_activation_script_red_hat.sh
++scripts/clvmd_activation_systemd_red_hat.service
+ scripts/clvmd_init_red_hat
++scripts/clvmd_systemd_red_hat.service
+ scripts/cmirrord_init_red_hat
+ scripts/lvm2_lvmetad_init_red_hat
+ scripts/lvm2_lvmetad_systemd_red_hat.socket
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 8b56f01..5102237 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -73,6 +73,7 @@ systemd_unit_dir = $(DESTDIR)@systemdsystemunitdir@
+ systemd_generator_dir = $(DESTDIR)@systemdutildir@/system-generators
+ tmpfiles_dir = $(DESTDIR)@tmpfilesdir@
+ ocf_scriptdir = $(DESTDIR)@OCFDIR@
++libexecdir = $(DESTDIR)@libexecdir@
+ 
+ USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
+   $(AWK) -f $(top_srcdir)/scripts/relpath.awk)
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 91e2e94..7f1f1cf 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -108,6 +108,12 @@ ifeq ("@BUILD_LVMETAD@", "yes")
+ 	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.socket $(systemd_unit_dir)/lvm2-lvmetad.socket
+ 	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.service $(systemd_unit_dir)/lvm2-lvmetad.service
+ endif
++ifneq ("@CLVMD@", "none")
++	$(INSTALL_DATA) clvmd_systemd_red_hat.service $(systemd_unit_dir)/clvmd-daemon.service
++	$(INSTALL_DATA) clvmd_activation_systemd_red_hat.service $(systemd_unit_dir)/clvmd.service
++	$(INSTALL_DIR) $(libexecdir)/clvmd
++	$(INSTALL_DATA) clvmd_activation_script_red_hat.sh $(libexecdir)/clvmd/clvmd.sh
++endif
+ 
+ install_tmpfiles_configuration:
+ 	$(INSTALL_DIR) $(tmpfiles_dir)
+@@ -118,4 +124,5 @@ DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat \
+ 		     dm_event_systemd_red_hat.socket dm_event_systemd_red_hat.service \
+ 		     lvm2_monitoring_systemd_red_hat.service \
+ 		     lvm2_lvmetad_systemd_red_hat.socket lvm2_lvmetad_systemd_red_hat.service \
+-		     lvm2_tmpfiles_red_hat.conf
++		     lvm2_tmpfiles_red_hat.conf clvmd_systemd_red_hat.service \
++		     clvmd_activation_systemd_red_hat.service clvmd_activation_script_red_hat.sh
 -- 
 1.7.12.4
 
