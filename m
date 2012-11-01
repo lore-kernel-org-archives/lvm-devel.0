@@ -1,66 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 16 Jun 2021 15:35:23 +0000 (GMT)
-Subject: main - tests: stress: Change to use $SHARED for vgcreate
-Message-ID: <20210616153523.C0388393AC2A@sourceware.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu,  1 Nov 2012 12:35:26 +0000 (UTC)
+Subject: master - systemd: do not remove lvm2-activation.service
+Message-ID: <20121101123526.96F6BA2C15@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f25df0386edf6cd80fb577b477069a1705cf4869
-Commit:        f25df0386edf6cd80fb577b477069a1705cf4869
-Parent:        e5740e9646d08eb9804a40bf195cefa46e8006e2
-Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Wed Jun 16 21:43:54 2021 +0800
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 16 10:35:12 2021 -0500
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=aa07de5a50175a2cee3f8662a23544d43feaf128
+Commit:        aa07de5a50175a2cee3f8662a23544d43feaf128
+Parent:        360c569ce8f0bfe936d59ca91de2716958550524
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Nov 1 13:33:49 2012 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Nov 1 13:33:49 2012 +0100
 
-tests: stress: Change to use $SHARED for vgcreate
+systemd: do not remove lvm2-activation.service
 
-Use the variable $SHARED to replace "--shared" for vgcreate commands.
-
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
+Fix previous commit 360c569ce8f0bfe936d59ca91de2716958550524.
+Remove only fedora-storage-init/fedora-storage-init-late.service, but
+not lvm2-activation.service.
+fedora-storage-init.service fedora-storage-init-late.service
 ---
- test/shell/stress_multi_threads_1.sh | 4 ++--
- test/shell/stress_multi_threads_2.sh | 4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ scripts/lvm2_monitoring_systemd_red_hat.service.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/stress_multi_threads_1.sh b/test/shell/stress_multi_threads_1.sh
-index e76810bbb..c5695eb0b 100644
---- a/test/shell/stress_multi_threads_1.sh
-+++ b/test/shell/stress_multi_threads_1.sh
-@@ -22,8 +22,8 @@ get_devs
- 
- pvcreate -M2 "${DEVICES[@]}"
- 
--vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
--vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
-+vgcreate $SHARED -M2 "$vg1" "$dev1" "$dev2" "$dev3"
-+vgcreate $SHARED -M2 "$vg2" "$dev4" "$dev5" "$dev6"
- 
- test_vg_thread1()
- {
-diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
-index 4e72b7447..9b586a263 100644
---- a/test/shell/stress_multi_threads_2.sh
-+++ b/test/shell/stress_multi_threads_2.sh
-@@ -26,14 +26,14 @@ test_vg_thread1()
- {
- 	for i in {1..1000}
- 	do
--		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
-+		vgcreate $SHARED -M2 "$vg1" "$dev1" "$dev2" "$dev3"
- 		vgremove -ff $vg1
- 	done
- }
- 
- test_vg_thread2()
- {
--	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
-+	vgcreate $SHARED -M2 "$vg2" "$dev4" "$dev5" "$dev6"
- 
- 	for i in {1..1000}
- 	do
+diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
+index e6b4814..3cb998b 100644
+--- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
++++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
+@@ -2,7 +2,7 @@
+ Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
+ Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
+ Requires=dm-event.socket lvm2-lvmetad.socket
+-After=dm-event.socket lvm2-lvmetad.socket lvm2-lvmetad.service
++After=dm-event.socket lvm2-lvmetad.socket lvm2-activation.service lvm2-lvmetad.service
+ Before=local-fs.target
+ DefaultDependencies=no
+ Conflicts=shutdown.target
 
 
