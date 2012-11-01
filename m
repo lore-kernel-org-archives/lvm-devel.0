@@ -1,73 +1,93 @@
-From: Ondrej Kozina <okozina@redhat.com>
-Date: Thu,  1 Nov 2012 18:22:17 +0100
-Subject: [PATCH 3/3] - alter related configuration files
-In-Reply-To: <1351790537-10199-1-git-send-email-okozina@redhat.com>
-References: <1351790537-10199-1-git-send-email-okozina@redhat.com>
-Message-ID: <1351790537-10199-4-git-send-email-okozina@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Thu,  1 Nov 2012 18:11:25 -0500
+Subject: [PATCH 3/3] lvm2app: Implement lvm_lv_resize
+In-Reply-To: <1351811485-18488-1-git-send-email-tasleson@redhat.com>
+References: <1351811485-18488-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1351811485-18488-4-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- configure.in        | 3 +++
- make.tmpl.in        | 1 +
- scripts/Makefile.in | 9 ++++++++-
- 3 files changed, 12 insertions(+), 1 deletion(-)
+Additionally, renamed _lvresize to lv_resize.
 
-diff --git a/configure.in b/configure.in
-index 75e0d84..2fe0763 100644
---- a/configure.in
-+++ b/configure.in
-@@ -1658,7 +1658,10 @@ python/setup.py
- scripts/blkdeactivate.sh
- scripts/blk_availability_init_red_hat
- scripts/blk_availability_systemd_red_hat.service
-+scripts/clvmd_activation_script_red_hat.sh
-+scripts/clvmd_activation_systemd_red_hat.service
- scripts/clvmd_init_red_hat
-+scripts/clvmd_systemd_red_hat.service
- scripts/cmirrord_init_red_hat
- scripts/lvm2_lvmetad_init_red_hat
- scripts/lvm2_lvmetad_systemd_red_hat.socket
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 8b56f01..5102237 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -73,6 +73,7 @@ systemd_unit_dir = $(DESTDIR)@systemdsystemunitdir@
- systemd_generator_dir = $(DESTDIR)@systemdutildir@/system-generators
- tmpfiles_dir = $(DESTDIR)@tmpfilesdir@
- ocf_scriptdir = $(DESTDIR)@OCFDIR@
-+libexecdir = $(DESTDIR)@libexecdir@
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ lib/metadata/lv_manip.c          |    2 +-
+ lib/metadata/metadata-exported.h |    2 +-
+ liblvm/lvm_lv.c                  |   19 ++++++++++++++++---
+ tools/lvresize.c                 |    2 +-
+ 4 files changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 20bcc1c..adfa03f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3251,7 +3251,7 @@ int fsadm_cmd(struct cmd_context *cmd,
+ 	return exec_cmd(cmd, argv, status, 1);
+ }
  
- USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
-   $(AWK) -f $(top_srcdir)/scripts/relpath.awk)
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index 91e2e94..7f1f1cf 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -108,6 +108,12 @@ ifeq ("@BUILD_LVMETAD@", "yes")
- 	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.socket $(systemd_unit_dir)/lvm2-lvmetad.socket
- 	$(INSTALL_DATA) lvm2_lvmetad_systemd_red_hat.service $(systemd_unit_dir)/lvm2-lvmetad.service
- endif
-+ifneq ("@CLVMD@", "none")
-+	$(INSTALL_DATA) clvmd_systemd_red_hat.service $(systemd_unit_dir)/clvmd-daemon.service
-+	$(INSTALL_DATA) clvmd_activation_systemd_red_hat.service $(systemd_unit_dir)/clvmd.service
-+	$(INSTALL_DIR) $(libexecdir)/clvmd
-+	$(INSTALL_DATA) clvmd_activation_script_red_hat.sh $(libexecdir)/clvmd/clvmd.sh
-+endif
+-int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
++int lv_resize(struct cmd_context *cmd, struct volume_group *vg,
+ 		     struct lvresize_params *lp, struct dm_list *pvh)
+ {
+ 	struct logical_volume *lv;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 12dbea1..caa41fd 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -520,7 +520,7 @@ int vgs_are_compatible(struct cmd_context *cmd,
+ 		       struct volume_group *vg_to);
+ uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
  
- install_tmpfiles_configuration:
- 	$(INSTALL_DIR) $(tmpfiles_dir)
-@@ -118,4 +124,5 @@ DISTCLEAN_TARGETS += clvmd_init_red_hat cmirrord_init_red_hat \
- 		     dm_event_systemd_red_hat.socket dm_event_systemd_red_hat.service \
- 		     lvm2_monitoring_systemd_red_hat.service \
- 		     lvm2_lvmetad_systemd_red_hat.socket lvm2_lvmetad_systemd_red_hat.service \
--		     lvm2_tmpfiles_red_hat.conf
-+		     lvm2_tmpfiles_red_hat.conf clvmd_systemd_red_hat.service \
-+		     clvmd_activation_systemd_red_hat.service clvmd_activation_script_red_hat.sh
+-int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
++int lv_resize(struct cmd_context *cmd, struct volume_group *vg,
+ 		     struct lvresize_params *lp, struct dm_list *pvh);
+ 
+ int fsadm_cmd(struct cmd_context *cmd,
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index d47a857..b22ba11 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -304,7 +304,20 @@ int lvm_lv_rename(lv_t lv, const char *new_name)
+ 
+ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+ {
+-	/* FIXME: add lv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	struct lvresize_params lp = { 0 };
++
++	lp.vg_name = lv->vg->name;
++	lp.lv_name = lv->name;
++	lp.sign = SIGN_NONE;
++	lp.percent = PERCENT_NONE;
++	lp.resize = LV_ANY;
++	lp.size = new_size >> SECTOR_SHIFT;
++	lp.ac_force = 1;	/* Assume the user has a good backup? */
++
++	if (ECMD_PROCESSED != lv_resize(lv->vg->cmd, lv->vg, &lp, &lv->vg->pvs)) {
++		log_verbose("LV Re-size failed.");
++		return -1;
++	}
++
++	return 0;
+ }
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index e2ab990..ef79fad 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -175,7 +175,7 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
+ 		goto out;
+ 	}
+ 
+-	r = _lvresize(cmd, vg, &lp, pvh);
++	r = lv_resize(cmd, vg, &lp, pvh);
+ 
+ 	if (ECMD_PROCESSED == r) {
+ 		if (!vg_write(vg)) {
 -- 
-1.7.12.4
+1.7.1
 
 
