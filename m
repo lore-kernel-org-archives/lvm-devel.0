@@ -1,52 +1,41 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 16 Jun 2021 17:19:54 +0000 (GMT)
-Subject: main - lvmdbusd: Don't setup search key unless needed
-Message-ID: <20210616171954.147E53987C2C@sourceware.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Fri,  2 Nov 2012 15:33:07 -0500
+Subject: [PATCH 0/3] lvm2app: Possible lvm_lv_resize impl (V2)
+Message-ID: <1351888390-12619-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8f3a63000e692b00070b337e475fd4a38e1f1c9
-Commit:        e8f3a63000e692b00070b337e475fd4a38e1f1c9
-Parent:        27abb03a0d5fb8342741c306b0ce187f41f8e3c1
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Jun 10 13:26:15 2021 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Jun 16 12:19:02 2021 -0500
+This patch set implements lvm_lv_resize for the lvm2app API.
 
-lvmdbusd: Don't setup search key unless needed
+As this patch set is pretty large and touches a number of different areas
+I would appreciate folks to review.  Specifically the first patch where
+I added a flag to lv to do additional steps on a vg_commit.  In addition
+as users of the API are unable to interact the re-size has a implicit force, so
+users could potentially lose data if they reduce the size of the lv.
 
-self.lvm_id is a property which actually executes some code which doesn't
-need to be executed everytime.
----
- daemons/lvmdbusd/automatedproperties.py | 9 +++++----
- 1 file changed, 5 insertions(+), 4 deletions(-)
+Proposed changes pass local unit testing.
 
-diff --git a/daemons/lvmdbusd/automatedproperties.py b/daemons/lvmdbusd/automatedproperties.py
-index b5919484d..d9f2c5e9f 100644
---- a/daemons/lvmdbusd/automatedproperties.py
-+++ b/daemons/lvmdbusd/automatedproperties.py
-@@ -157,14 +157,15 @@ class AutomatedProperties(dbus.service.Object):
- 		if not self._ap_search_method:
- 			return 0
- 
--		search = self.lvm_id
--		if search_key:
--			search = search_key
--
- 		# Either we have the new object state or we need to go fetch it
- 		if object_state:
- 			new_state = object_state
- 		else:
-+			if search_key:
-+				search = search_key
-+			else:
-+				search = self.lvm_id
-+
- 			new_state = self._ap_search_method([search])[0]
- 			assert isinstance(new_state, State)
- 
+V2 - Removed automatic whitespace cleanup so patches are easier to
+     read.
+
+Tony Asleson (3):
+  liblvm: Breakout required operations for re-size into vg_commit
+  liblvm: Move core lv re-size to lv_manip.c
+  lvm2app: Implement lvm_lv_resize
+
+ lib/format_text/flags.c          |    1 +
+ lib/metadata/lv_manip.c          |  665 +++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |   76 ++++-
+ lib/metadata/metadata.c          |   87 ++++-
+ lib/misc/lvm-percent.c           |    5 +
+ lib/misc/lvm-percent.h           |    2 +
+ liblvm/lvm_lv.c                  |   19 +-
+ tools/lvresize.c                 |  811 +++-----------------------------------
+ tools/toollib.c                  |    6 -
+ tools/tools.h                    |   17 -
+ 10 files changed, 902 insertions(+), 787 deletions(-)
 
 
