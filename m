@@ -1,178 +1,261 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Nov 2012 13:49:05 +0000 (UTC)
-Subject: master - thin: lvcreate use common functions
-Message-ID: <20121119134905.8BE5C1698@hosted02.fedoraproject.org>
+Date: Mon, 19 Nov 2012 13:49:07 +0000 (UTC)
+Subject: master - thin: man page updates
+Message-ID: <20121119134907.EE7221698@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1794f777f48be29184ef8030b6e11b3a8e61757b
-Commit:        1794f777f48be29184ef8030b6e11b3a8e61757b
-Parent:        b21d3e3592e380cb79e5e45f2aa8164ae0747e15
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bf1cf1459f414eb1b397c21a0cdbd5acda7540f6
+Commit:        bf1cf1459f414eb1b397c21a0cdbd5acda7540f6
+Parent:        1794f777f48be29184ef8030b6e11b3a8e61757b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 19 12:47:34 2012 +0100
+AuthorDate:    Tue Oct 30 17:11:59 2012 +0000
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 19 14:38:17 2012 +0100
 
-thin: lvcreate use common functions
+thin: man page updates
 
-Use common functions from toollib and eliminate code from here.
+Cover latest extensions of lvconvert functionality.
+Update also lvcreate page.
 ---
- tools/lvcreate.c |  100 +++++++++++-------------------------------------------
- 1 files changed, 20 insertions(+), 80 deletions(-)
+ man/lvconvert.8.in |  103 ++++++++++++++++++++++++++++++++++++++++++++--------
+ man/lvcreate.8.in  |   18 +++++-----
+ 2 files changed, 96 insertions(+), 25 deletions(-)
 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index dad0ba7..470084c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -234,7 +234,6 @@ static int _update_extents_params(struct volume_group *vg,
- {
- 	uint32_t pv_extent_count;
- 	struct logical_volume *origin = NULL;
--	int changed = 0;
- 	uint32_t size_rest;
- 	uint32_t stripesize_extents;
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index 2659719..48345a9 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -40,7 +40,7 @@ lvconvert \- convert a logical volume from linear to mirror or snapshot
+ .B lvconvert
+ .BR \-s | \-\-snapshot
+ .RB [ \-c | \-\-chunksize
+-.IR ChunkSize ]
++.IR ChunkSize [ bBsSkK ]]
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-\-noudevsync ]
+ .RB [ \-v | \-\-verbose ]
+@@ -59,17 +59,6 @@ lvconvert \- convert a logical volume from linear to mirror or snapshot
+ .RB [ \-\-version ]
+ .IR LogicalVolume [ Path ]...
+ .sp
+-.B lvconvert \-\-thinpool
+-.IR ThinPoolLogicalVolume { Name | Path }
+-.RB [ \-c | \-\-chunksize
+-.IR ChunkSize ]
+-.RB [ \-h | \-? | \-\-help ]
+-.RB [ \-v | \-\-verbose ]
+-.RB [ \-\-version ]
+-.RB [ \-Z | \-\-zero
+-.RI { y | n }]
+-.IR ThinMetadataLogicalVolume { Name | Path }
+-.sp
+ .B lvconvert \-\-repair
+ .RB [ \-h | \-? | \-\-help ]
+ .RB [ \-v | \-\-verbose ]
+@@ -83,6 +72,31 @@ lvconvert \- convert a logical volume from linear to mirror or snapshot
+ .RB [ \-\-version ]
+ .IR LogicalVolume [ Path ]
+ .RI [ PhysicalVolume [ Path ]...]
++.sp
++.B lvconvert \-\-thinpool
++.IR ThinPoolLogicalVolume { Name | Path }
++.RB [ \-c | \-\-chunksize
++.IR ChunkSize [ bBsSkKmMgG ]]
++.RB [ \-\-discards
++.RI { ignore | nopassdown | passdown }]
++.RB [[ \-\-poolmetadata
++.IR ThinPoolMetadataLogicalVolume { Name | Path }]
++|
++.RB [ \-\-poolmetadatasize
++.IR ThinPoolMetadataSize [ bBsSkKmMgG ]]
++.RB [ \-r | \-\-readahead
++.RI { ReadAheadSectors | auto | none }]
++.RB [ \-\-stripes
++.I Stripes
++.RB [ \-I | \-\-stripesize
++.IR StripeSize ]]]
++.RB [ \-Z | \-\-zero
++.RI { y | n }]
++.RB [ \-h | \-? | \-\-help ]
++.RB [ \-v | \-\-verbose ]
++.RB [ \-\-version ]
++.RI [ PhysicalVolume [ Path ][ :PE [ -PE ]]...]
++.sp
  
-@@ -308,38 +307,11 @@ static int _update_extents_params(struct volume_group *vg,
- 	}
+ .SH DESCRIPTION
+ lvconvert is used to change the segment type (i.e. linear, mirror, etc) or
+@@ -102,8 +116,9 @@ the freed extents come first from the specified PhysicalVolumes.
+ See \fBlvm\fP(8) for common options.
+ .br
+ Exactly one of 
+-.BR \-\-splitmirrors ", " \-\-mirrors ", " \-\-repair ", " \-\-snapshot
+-or \fB\-\-merge\fP arguments is required.
++.BR \-\-merge ", " \-\-mirrors ", " \-\-repair ", " \-\-replace
++.RB ", " \-\-snapshot ", " \-\-splitmirrors " or " \-\-thinpool
++arguments is required.
+ .TP
+ .BR \-m ", " \-\-mirrors " " \fIMirrors
+ Specifies the degree of the mirror you wish to create.
+@@ -170,12 +185,28 @@ implementation and not with the original device-mapper mirror implementation.
+ Create a snapshot from existing logical volume using another
+ existing logical volume as its origin.
+ .TP
+-.BR \-c ", " \-\-chunksize " " \fIChunkSize
+-Power of 2 chunk size for the snapshot logical volume between 4KiB and 512KiB.
++.BR \-c ", " \-\-chunksize " " \fIChunkSize [ \fIbBsSkKmMgG ]
++Gives the size of chunk for snapshot and thin pool logical volumes.
++For snapshots the value must be power of 2 between 4KiB and 512KiB
++and the default value is 4.
++For thin pools the value must be between 64KiB and
++1GiB and the default value starts with 64 and scales
++up to fit the pool metadata size within 128MB,
++if the pool metadata size is not specified.
++Older dm thin pool target version (<1.4) requires the value to be power of 2.
++The newer version requires to be the multiple of 64KiB, however discard is
++not supported for non power of 2 values.
++Default unit is in kilobytes.
++.TP
++.BR \-\-discards " {" \fIignore | \fInopassdown | \fIpassdown }
++Sets discards behavior for thin pool.
++Default is \fIpassdown\fP.
+ .TP
+ .BR \-Z ", " \-\-zero " {" \fIy | \fIn }
+ Controls zeroing of the first KB of data in the snapshot.
+ If the volume is read-only the snapshot will not be zeroed.
++For thin pool volumes it controls zeroing of provisioned blocks.
++Note: Provisioning of large zeroed chunks impacts performance.
+ .TP
+ .B \-\-merge
+ Merges a snapshot into its origin volume or merges a raid1 image that has
+@@ -195,6 +226,28 @@ merge finishes, the merged snapshot is removed.  Multiple snapshots may
+ be specified on the commandline or a @tag may be used to specify
+ multiple snapshots be merged to their respective origin.
+ .TP
++.BR \-\-poolmetadata " " \fIThinPoolMetadataLogicalVolume { \fIName | \fIPath }
++Specifies thin pool metadata logical volume.
++The size should be in between 2MiB and 16GiB.
++Thin pool is specified with the option
++\fB\-\-thinpool\fP.
++.TP
++.BR \-\-poolmetadatasize " " \fIThinPoolMetadataSize [ \fIbBsSkKmMgG ]
++Sets the size of thin pool's metadata logical volume,
++if the pool metadata volume is undefined.
++Thin pool is specified with the option
++\fB\-\-thinpool\fP.
++Supported value is in the range between 2MiB and 16GiB.
++The default value is estimated with this formula
++(Pool_LV_size / Pool_LV_chunk_size * 64b).
++Default unit is megabytes.
++.TP
++.IR \fB\-r ", " \fB\-\-readahead " {" ReadAheadSectors | auto | none }
++Sets read ahead sector count of thin pool metadata logical volume.
++The default value is "auto" which allows the kernel to choose
++a suitable value automatically.
++"None" is equivalent to specifying zero.
++.TP
+ .B \-\-repair
+ Repair a mirror after suffering a disk failure. The mirror will be brought back
+ into a consistent state.  By default, the original number of mirrors will be
+@@ -210,6 +263,24 @@ Remove the specified device (\fIPhysicalVolume\fP) and replace it with one
+ that is available in the volume group or from the specific list provided.
+ This option is only available to RAID segment types
+ (e.g. "raid1", "raid5", etc).
++.TP
++.BR \-\-stripes " " \fIStripes
++Gives the number of stripes.
++This is equal to the number of physical volumes to scatter
++the logical volume.
++.TP
++.BR \-I ", " \-\-stripesize " " \fIStripeSize
++Gives the number of kilobytes for the granularity of the stripes.
++.br
++StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
++For metadata in LVM2 format, the stripe size may be a larger
++power of 2 but must not exceed the physical extent size.
++.TP
++.IR \fB\-\-thinpool " " ThinPoolLogicalVolume { Name | Path }
++Changes logical volume into a thin pool volume. The volume
++will store the pool's data.
++Thin pool metadata logical volume can be specified with the option
++\fB\-\-poolmetadata\fP or allocated with \fB\-\-poolmetadatasize\fP.
  
- 	if (lp->create_thin_pool) {
--		if (!arg_count(vg->cmd, poolmetadatasize_ARG)) {
--			/* Defaults to nr_pool_blocks * 64b */
--			lp->poolmetadatasize =  (uint64_t) lp->extents * vg->extent_size /
--				(uint64_t) (lp->chunk_size * (SECTOR_SIZE / UINT64_C(64)));
--
--			/* Check if we could eventually use bigger chunk size */
--			if (!arg_count(vg->cmd, chunksize_ARG)) {
--				while ((lp->poolmetadatasize >
--					(DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
--				       (lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE)) {
--					lp->chunk_size <<= 1;
--					lp->poolmetadatasize >>= 1;
--					changed++;
--				}
--				if (changed)
--					log_verbose("Changed chunksize to %u sectors.",
--						    lp->chunk_size);
--			}
--		}
--
--		if (lp->poolmetadatasize > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
--			if (arg_count(vg->cmd, poolmetadatasize_ARG))
--				log_warn("WARNING: Maximum supported pool metadata size is 16GB.");
--			lp->poolmetadatasize = 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE;
--		} else if (lp->poolmetadatasize < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
--			if (arg_count(vg->cmd, poolmetadatasize_ARG))
--				log_warn("WARNING: Minimum supported pool metadata size is 2M.");
--			lp->poolmetadatasize = 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE;
--		}
--
--		log_verbose("Setting pool metadata size to %" PRIu64 " sectors.",
--			    lp->poolmetadatasize);
-+		if (!update_pool_params(vg->cmd, lp->target_attr,
-+					lp->extents, vg->extent_size,
-+					&lp->chunk_size, &lp->discards,
-+					&lp->poolmetadatasize))
-+			return_0;
+ .SH Examples
+ Converts the linear logical volume "vg00/lvol1" to a two-way mirror
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index f374950..705ebae 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -53,11 +53,11 @@ lvcreate \- create a logical volume in an existing volume group
+ .RB [ \-t | \-\-test ]
+ .RB [ \-T | \-\-thin
+ .RB [ \-c | \-\-chunksize
+-.IR ChunkSize ]
++.IR ChunkSize [ bBsSkKmMgG ]]
+ .RB [ \-\-discards
+ .RI { ignore | nopassdown | passdown }]
+ .RB [ \-\-poolmetadatasize
+-.IR MetadataSize [ bBsSkKmMgG ]]]
++.IR ThinPoolMetadataSize [ bBsSkKmMgG ]]]
+ .RB [ \-\-thinpool
+ .IR ThinPoolLogicalVolume { Name | Path }]
+ .RB [ \-\-type
+@@ -76,7 +76,7 @@ lvcreate \- create a logical volume in an existing volume group
+ .BR \-L | \-\-size
+ .IR LogicalVolumeSize [ bBsSkKmMgGtTpPeE ]]
+ .RB [ \-c | \-\-chunksize
+-.IR ChunkSize ]
++.IR ChunkSize [ bBsSkK ]]
+ .RB [ \-\-noudevsync ]
+ .RB [ \-\-ignoremonitoring ]
+ .RB [ \-\-monitor " {" \fIy | \fIn }]
+@@ -125,14 +125,14 @@ always assumed and it can't be overridden. If clustered locking is enabled,
+ \fB\-a\fIey\fR will activate exclusively on one node and \fB\-a\fIly\fR will
+ activate only on the local node.
+ .TP
+-.BR \-c ", " \-\-chunksize " " \fIChunkSize
++.BR \-c ", " \-\-chunksize " " \fIChunkSize [ \fIbBsSkKmMgG ]
+ Gives the size of chunk for snapshot and thin pool logical volumes.
+ For snapshots the value must be power of 2 between 4KiB and 512KiB
+ and the default value is 4.
+ For thin pools the value must be between 64KiB and
+-1048576KiB and the default value starts with 64 and scales
++1GiB and the default value starts with 64 and scales
+ up to fit the pool metadata size within 128MB,
+-if the poolmetadata size is not specified.
++if the pool metadata size is not specified.
+ Older dm thin pool target version (<1.4) requires the value to be power of 2.
+ The newer version requires to be the multiple of 64KiB, however discard is
+ not supported for non power of 2 values.
+@@ -144,7 +144,7 @@ logical volumes. Default is no contiguous allocation based
+ on a next free principle.
+ .TP
+ .BR \-\-discards " {" \fIignore | \fInopassdown | \fIpassdown }
+-Set discards behavior.
++Set discards behavior for thin pool.
+ Default is \fIpassdown\fP.
+ .TP
+ .BR \-i ", " \-\-stripes " " \fIStripes
+@@ -236,7 +236,7 @@ Set access permissions to read only or read and write.
+ .br
+ Default is read and write.
+ .TP
+-.IR \fB\-\-poolmetadatasize " " MetadataSize [ bBsSkKmMgG ]
++.IR \fB\-\-poolmetadatasize " " ThinPoolMetadataSize [ bBsSkKmMgG ]
+ Set the size of thin pool's metadata logical volume.
+ Supported value is in range between 2MiB and 16GiB.
+ Default value is  (Pool_LV_size / Pool_LV_chunk_size * 64b).
+@@ -372,7 +372,7 @@ copies.
+ .B lvcreate \-\-type raid10 \-L 5G \-i 2 \-m 1 \-n my_lv vg00
  
- 		if (!(lp->poolmetadataextents =
- 		      extents_from_size(vg->cmd, lp->poolmetadatasize, vg->extent_size)))
-@@ -386,16 +358,9 @@ static int _read_size_params(struct lvcreate_params *lp,
- 	if (lp->thin && (arg_count(cmd, size_ARG) || arg_count(cmd, extents_ARG)))
- 		lp->create_thin_pool = 1;
- 
--	if (arg_count(cmd, poolmetadatasize_ARG)) {
--		if (!seg_is_thin(lp)) {
--			log_error("--poolmetadatasize may only be specified when allocating the thin pool.");
--			return 0;
--		}
--		if (arg_sign_value(cmd, poolmetadatasize_ARG, SIGN_NONE) == SIGN_MINUS) {
--			log_error("Negative poolmetadatasize is invalid.");
--			return 0;
--		}
--		lp->poolmetadatasize = arg_uint64_value(cmd, poolmetadatasize_ARG, UINT64_C(0));
-+	if (arg_count(cmd, poolmetadatasize_ARG) && !seg_is_thin(lp)) {
-+		log_error("--poolmetadatasize may only be specified when allocating the thin pool.");
-+		return 0;
- 	}
- 
- 	/* Size returned in kilobyte units; held in sectors */
-@@ -820,13 +785,13 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	if (!_lvcreate_name_params(lp, cmd, &argc, &argv) ||
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
-+	    !get_pool_params(cmd, &lp->chunk_size, &lp->discards,
-+			     &lp->poolmetadatasize, &lp->zero) ||
- 	    !_read_mirror_params(lp, cmd) ||
- 	    !_read_raid_params(lp, cmd))
- 		return_0;
- 
--	if (lp->create_thin_pool)
--		lp->discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_PASSDOWN);
--	else if (arg_count(cmd, discards_ARG)) {
-+	if (!lp->create_thin_pool && arg_count(cmd, discards_ARG)) {
- 		log_error("--discards is only available for thin pool creation.");
- 		return 0;
- 	}
-@@ -836,48 +801,23 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	else if (lp->thin && !lp->create_thin_pool) {
- 		if (arg_count(cmd, chunksize_ARG))
- 			log_warn("WARNING: Ignoring --chunksize when using an existing pool.");
--	} else if (lp->snapshot || lp->create_thin_pool) {
-+	} else if (lp->snapshot) {
- 		if (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS) {
- 			log_error("Negative chunk size is invalid");
- 			return 0;
- 		}
--		if (lp->snapshot) {
--			lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
--			if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
--			    (lp->chunk_size & (lp->chunk_size - 1))) {
--				log_error("Chunk size must be a power of 2 in the "
--					  "range 4K to 512K");
--				return 0;
--			}
--		} else {
--			lp->chunk_size = arg_uint_value(cmd, chunksize_ARG,
--							DM_THIN_MIN_DATA_BLOCK_SIZE);
--			if ((lp->chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE) ||
--			    (lp->chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE)) {
--				log_error("Chunk size must be in the range %uK to %uK",
--					  (DM_THIN_MIN_DATA_BLOCK_SIZE / 2),
--					  (DM_THIN_MAX_DATA_BLOCK_SIZE / 2));
--				return 0;
--			}
--			if (!(attr & THIN_FEATURE_BLOCK_SIZE) &&
--			    (lp->chunk_size & (lp->chunk_size - 1))) {
--				log_error("Chunk size must be a power of 2 for this thin target version.");
--				return 0;
--			} else if (lp->chunk_size & (DM_THIN_MIN_DATA_BLOCK_SIZE - 1)) {
--				log_error("Chunk size must be multiple of %uK.",
--					  DM_THIN_MIN_DATA_BLOCK_SIZE / 2);
--				return 0;
--			} else if ((lp->discards != THIN_DISCARDS_IGNORE) &&
--				   (lp->chunk_size & (lp->chunk_size - 1))) {
--				log_warn("WARNING: Using discards ignore for chunk size non power of 2.");
--				lp->discards = THIN_DISCARDS_IGNORE;
--			}
-+		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
-+		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
-+		    (lp->chunk_size & (lp->chunk_size - 1))) {
-+			log_error("Chunk size must be a power of 2 in the "
-+				  "range 4K to 512K");
-+			return 0;
- 		}
--		log_verbose("Setting chunksize to %u sectors.", lp->chunk_size);
-+		log_verbose("Setting chunksize to %s.", display_size(cmd, lp->chunk_size));
- 
- 		if (!lp->thin && lp->snapshot && !(lp->segtype = get_segtype_from_string(cmd, "snapshot")))
- 			return_0;
--	} else if (arg_count(cmd, chunksize_ARG)) {
-+	} else if (arg_count(cmd, chunksize_ARG) && !lp->create_thin_pool) {
- 		log_error("-c is only available with snapshots and thin pools");
- 		return 0;
- 	}
+ Creates 100MiB pool logical volume for thin provisioning
+-build with 2 stripes 64KiB and chunk size 128KiB together with
++build with 2 stripes 64KiB and chunk size 256KiB together with
+ 1TiB thin provisioned logical volume "vg00/thin_lv":
+ .sp
+ .B lvcreate \-i 2 \-I 64 \-c 256 \-L100M \-T vg00/pool \-V 1T \-\-name thin_lv
 
 
