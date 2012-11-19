@@ -1,87 +1,93 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Nov 2012 13:48:53 +0000 (UTC)
-Subject: master - lvconvert: store target attributes
-Message-ID: <20121119134853.562431698@hosted02.fedoraproject.org>
+Date: Mon, 19 Nov 2012 13:48:55 +0000 (UTC)
+Subject: master - liblvm: internal API change
+Message-ID: <20121119134855.D4FCA1698@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf5242a670010a7c0137090a330b78b3bf43a55b
-Commit:        cf5242a670010a7c0137090a330b78b3bf43a55b
-Parent:        2c3bbf0a6cf33de8f1b2a08fcb79da3f881d3472
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2e96ea4a899a0d0a5adb5e3d8fa09e04fd7a4173
+Commit:        2e96ea4a899a0d0a5adb5e3d8fa09e04fd7a4173
+Parent:        cf5242a670010a7c0137090a330b78b3bf43a55b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 15 10:32:13 2012 +0100
+AuthorDate:    Tue Nov 13 10:49:32 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 19 14:17:10 2012 +0100
+CommitterDate: Mon Nov 19 14:37:30 2012 +0100
 
-lvconvert: store target attributes
+liblvm: internal API change
 
-Target tells us its version, and we may allow different set of options
-to be supported with different version of driver.
-
-Idea is to provide individual feature flags and later be
-able to query for them.
+Return LV/NULL instead of 1/0 which saves lookup for created LV.
 ---
- lib/metadata/metadata-exported.h |    1 +
- tools/lvconvert.c                |    3 ++-
- tools/lvcreate.c                 |    3 +--
- 3 files changed, 4 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c          |    6 +++---
+ lib/metadata/metadata-exported.h |    4 ++--
+ liblvm/lvm_lv.c                  |    8 +++-----
+ 3 files changed, 8 insertions(+), 10 deletions(-)
 
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9f87854..dc315ac 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4714,8 +4714,8 @@ revert_new_lv:
+ 	return NULL;
+ }
+ 
+-int lv_create_single(struct volume_group *vg,
+-		     struct lvcreate_params *lp)
++struct logical_volume *lv_create_single(struct volume_group *vg,
++					struct lvcreate_params *lp)
+ {
+ 	struct logical_volume *lv;
+ 
+@@ -4743,5 +4743,5 @@ int lv_create_single(struct volume_group *vg,
+ out:
+ 	log_print_unless_silent("Logical volume \"%s\" created", lv->name);
+ 
+-	return 1;
++	return lv;
+ }
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 00be606..b586936 100644
+index b586936..ffec129 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -609,6 +609,7 @@ struct lvcreate_params {
- 	uint32_t mirrors; /* mirror */
+@@ -626,8 +626,8 @@ struct lvcreate_params {
+ 	struct dm_list tags;	/* all */
+ };
  
- 	const struct segment_type *segtype; /* all */
-+	unsigned target_attr; /* all */
+-int lv_create_single(struct volume_group *vg,
+-		     struct lvcreate_params *lp);
++struct logical_volume *lv_create_single(struct volume_group *vg,
++					struct lvcreate_params *lp);
  
- 	/* size */
- 	uint32_t extents; /* all */
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 27d8181..7d03a5f 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -41,6 +41,7 @@ struct lvconvert_params {
- 	uint32_t stripe_size;
+ /*
+  * Functions for layer manipulation
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index d47a857..77bdebf 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -146,7 +146,7 @@ lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
+ {
+ 	struct lvcreate_params lp = { 0 };
+ 	uint64_t extents;
+-	struct lv_list *lvl;
++	struct logival_volume *lv;
  
- 	const struct segment_type *segtype;
-+	unsigned target_attr;
+ 	if (vg_read_error(vg))
+ 		return NULL;
+@@ -162,11 +162,9 @@ lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
+ 	_lv_set_default_params(&lp, vg, name, extents);
+ 	if (!_lv_set_default_linear_params(vg->cmd, &lp))
+ 		return_NULL;
+-	if (!lv_create_single(vg, &lp))
++	if (!(lv = lv_create_single(vg, &lp)))
+ 		return_NULL;
+-	if (!(lvl = find_lv_in_vg(vg, name)))
+-		return NULL;
+-	return (lv_t) lvl->lv;
++	return (lv_t) lv;
+ }
  
- 	alloc_policy_t alloc;
- 
-@@ -460,7 +461,7 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 	}
- 
- 	if (activation() && lp->segtype && lp->segtype->ops->target_present &&
--	    !lp->segtype->ops->target_present(cmd, NULL, NULL)) {
-+	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
- 		log_error("%s: Required device-mapper target(s) not "
- 			  "detected in your kernel", lp->segtype->name);
- 		return 0;
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 5d687ac..dad0ba7 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -679,7 +679,6 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	struct arg_value_group_list *current_group;
- 	const char *segtype_str;
- 	const char *tag;
--	unsigned attr = 0;
- 
- 	memset(lp, 0, sizeof(*lp));
- 	memset(lcp, 0, sizeof(*lcp));
-@@ -796,7 +795,7 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	}
- 
- 	if (activation() && lp->segtype->ops->target_present &&
--	    !lp->segtype->ops->target_present(cmd, NULL, &attr)) {
-+	    !lp->segtype->ops->target_present(cmd, NULL, &lp->target_attr)) {
- 		log_error("%s: Required device-mapper target(s) not "
- 			  "detected in your kernel", lp->segtype->name);
- 		return 0;
+ /*
 
 
