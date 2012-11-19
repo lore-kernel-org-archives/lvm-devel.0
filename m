@@ -1,125 +1,62 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon, 19 Nov 2012 13:49:10 +0000 (UTC)
-Subject: master - test: testing lvconvert
-Message-ID: <20121119134910.5A0D01698@hosted02.fedoraproject.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Mon, 19 Nov 2012 15:21:38 +0000 (UTC)
+Subject: master - Document use_lvmetad and global_filter in lvm.conf.5.
+Message-ID: <20121119152138.71DF51F39@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a7893ae8580d344f3f55ddb08892991edf17408f
-Commit:        a7893ae8580d344f3f55ddb08892991edf17408f
-Parent:        bf1cf1459f414eb1b397c21a0cdbd5acda7540f6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 19 12:31:11 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 19 14:38:17 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c907ee0351b226eb9e89929afcfc008985f32f97
+Commit:        c907ee0351b226eb9e89929afcfc008985f32f97
+Parent:        a7893ae8580d344f3f55ddb08892991edf17408f
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Nov 19 16:19:58 2012 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Nov 19 16:20:54 2012 +0100
 
-test: testing lvconvert
+Document use_lvmetad and global_filter in lvm.conf.5.
 
 ---
- test/shell/lvconvert-thin.sh |   75 ++++++++++++++++++++++++++++++++++-------
- 1 files changed, 62 insertions(+), 13 deletions(-)
+ man/lvm.conf.5.in |   18 ++++++++++++++++++
+ 1 files changed, 18 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-index 97ccc09..f21453f 100644
---- a/test/shell/lvconvert-thin.sh
-+++ b/test/shell/lvconvert-thin.sh
-@@ -12,32 +12,81 @@
- 
- . lib/test
- 
-+prepare_lvs()
-+{
-+	lvremove -f $vg
-+	lvcreate -L10M -n $lv1 $vg
-+	lvcreate -L8M -n $lv2 $vg
-+}
-+
- #
- # Main
- #
- aux have_thin 1 0 0 || skip
- 
--aux prepare_pvs 4 64
-+aux prepare_pvs 4 6400000
- 
- vgcreate $vg -s 64K $(cat DEVICES)
- 
- # create mirrored LVs for data and metadata volumes
--lvcreate -aey -l8 -m1 --mirrorlog core -n $lv1 $vg
--lvcreate -aey -l4 -m1 --mirrorlog core -n $lv2 $vg
-+lvcreate -aey -L10M -m1 --mirrorlog core -n $lv1 $vg
-+lvcreate -aey -L8M -m1 --mirrorlog core -n $lv2 $vg
-+lvchange -an $vg/$lv1
-+
-+
-+# conversion fails for internal volumes
-+not lvconvert --thinpool $vg/${lv1}_mimage_0
-+not lvconvert --thinpool $vg/$lv1 --poolmetadata $vg/${lv2}_mimage_0
-+# can't use --readahead with --poolmetadata
-+not lvconvert --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 --readahead 512
-+
-+lvconvert --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+
-+prepare_lvs
-+lvconvert -c 64 --stripes 2 --thinpool $vg/$lv1 --readahead 48
-+
-+lvremove -f $vg
-+lvcreate -L1T -n $lv1 $vg
-+lvconvert -c 8M --thinpool $vg/$lv1
-+
-+lvremove -f $vg
-+# test with bigger sizes
-+lvcreate -L1T -n $lv1 $vg
-+lvcreate -L8M -n $lv2 $vg
-+lvcreate -L1M -n $lv3 $vg
- 
--lvconvert -c 64K --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+# chunk size is bigger then size of thin pool data
-+not lvconvert -c 1G --thinpool $vg/$lv3
-+# stripes can't be used with poolmetadata
-+not lvconvert --stripes 2 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+# too small metadata (<2M)
-+not lvconvert -c 64 --thinpool $vg/$lv1 --poolmetadata $vg/$lv3
-+# too small chunk size fails
-+not lvconvert -c 4 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+# too big chunk size fails
-+not lvconvert -c 2G --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+# negative chunk size fails
-+not lvconvert -c -256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
-+# non power of 2 fails
-+not lvconvert -c 88 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2
- 
--lvcreate -V10M -T $vg/$lv1 --name $lv3
-+# Warning about smaller then suggested
-+lvconvert -c 256 --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
-+grep "WARNING: Chunk size is smaller" err
- 
--# check lvrename work properly
--lvrename $vg/$lv1  $vg/pool
--check lv_field $vg/pool name "pool"
-+lvremove -f $vg
-+lvcreate -L1T -n $lv1 $vg
-+lvcreate -L32G -n $lv2 $vg
-+# Warning about bigger then needed
-+lvconvert --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 |& tee err
-+grep "WARNING: Maximum size" err
- 
--lvrename $vg/$lv3  $vg/$lv4
--check lv_field $vg/$lv4 name "$lv4"
-+lvremove -f $vg
-+lvcreate -L24T -n $lv1 $vg
-+# Warning about bigger then needed (24T data and 16G -> 128K chunk)
-+lvconvert -c 64 --thinpool $vg/$lv1 |& tee err
-+grep "WARNING: Chunk size is too small" err
- 
--# not yet supported conversions
--not lvconvert -m 1 $vg/pool
--not lvconvert -m 1 $vg/$lv3
-+#lvs -a -o+chunk_size,stripe_size,seg_pe_ranges
- 
- vgremove -ff $vg
+diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
+index 79044fc..718cf4d 100644
+--- a/man/lvm.conf.5.in
++++ b/man/lvm.conf.5.in
+@@ -104,6 +104,12 @@ otherwise it is accepted.  As an example, to ignore /dev/cdrom you could use:
+ .br
+ \fBdevices { filter=["r|cdrom|"] }\fP
+ .IP
++\fBglobal_filter\fP \(em Since "filter" is often overriden from command line, it
++is not suitable for system-wide device filtering (udev rules, lvmetad). To hide
++devices from LVM-specific udev processing and/or from lvmetad, you need to set
++global_filter. The syntax is the same as for normal "filter" above. Devices that
++fail the global_filter are not even opened by LVM.
++.IP
+ \fBcache_dir\fP \(em Persistent filter cache file directory.
+ Defaults to "#DEFAULT_CACHE_DIR#".
+ .IP
+@@ -354,6 +360,18 @@ if \fBlocking_type\fP is set to 1.  The default is \fB/var/lock/lvm\fP.
+ library to load if \fBlocking_type\fP is set to 2.
+ The default is \fBliblvm2clusterlock.so\fP.  If you need to write
+ such a library, look at the lib/locking source code directory.
++.IP
++\fBuse_lvmetad\fP \(em Whether to use (trust) a running instance of lvmetad. If
++this is set to 0, all commands fall back to the usual scanning mechanisms. When
++set to 1 \fBand\fP when lvmetad is running (it is not auto-started), the volume
++group metadata and PV state flags are obtained from the lvmetad instance and no
++scanning is done by the individual commands. In a setup with lvmetad, lvmetad
++udev rules \fBmust\fP be set up for LVM to work correctly. Without proper udev
++rules, all changes in block device configuration will be \fBignored\fP until a
++manual 'pvscan --cache' is performed.
++.br
++If lvmetad has been running while use_lvmetad was 0, it \fBMUST\fP be stopped before
++changing use_lvmetad to 1 and started again afterwards.
+ .TP
+ \fBtags\fP \(em Host tag settings
+ .IP
 
 
