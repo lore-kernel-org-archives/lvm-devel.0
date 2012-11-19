@@ -1,86 +1,78 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Mon, 19 Nov 2012 13:48:50 +0100
-Subject: LVM Encryption
-In-Reply-To: <20121118155259.GA9513@glandium.org>
-References: <20121118155259.GA9513@glandium.org>
-Message-ID: <50AA2AB2.1090109@redhat.com>
+From: Alasdair Kergon <agk@fedoraproject.org>
+Date: Mon, 19 Nov 2012 22:31:53 +0000 (UTC)
+Subject: master - docs: host tags has a default volume_list
+Message-ID: <20121119223154.0120A22CD@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 11/18/2012 04:52 PM, Mike Hommey wrote:
-> The usual setup for full disk encryption on Linux systems is LVM over
-> LUKS. This kind of setup however doesn't allow for easy migration from
-> non-encrypted systems, and lacks some flexibility.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ef6ca00b99e0a2ed83a00c4ddcb577dd3b52a7b
+Commit:        5ef6ca00b99e0a2ed83a00c4ddcb577dd3b52a7b
+Parent:        999952c5b9a21451d1b76c53a7dca615cd815113
+Author:        Alasdair G Kergon <agk@redhat.com>
+AuthorDate:    Mon Nov 19 22:29:23 2012 +0000
+Committer:     Alasdair G Kergon <agk@redhat.com>
+CommitterDate: Mon Nov 19 22:29:23 2012 +0000
 
-It is possible, but it is very complicated.
-For some crazy example see
-http://asalor.blogspot.cz/2012/08/re-encryption-of-luks-device-cryptsetup.html
+docs: host tags has a default volume_list
+
+Document that lvm.conf activation/volume_list defaults to @* when
+there's a host tag.
+---
+ doc/example.conf.in |   11 +++++++++--
+ man/lvm.conf.5.in   |    2 ++
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index f7344bb..7f94223 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -569,15 +569,21 @@ activation {
  
-> Has embedding some encryption system into LVM itself ever been
-> considered, and if it has, why has it been dismissed? If not, would it
-> be something the LVM developers would be interested in pursuing?
-
-It was considered, I wrote even some patches (see list archive, nobody replied,
-http://www.redhat.com/archives/lvm-devel/2009-January/thread.html#00082)
-and then I abandoned this completely.
-
-So, it is possible, but I think it is not worth to do it, there are
-other ways to handle it.
-
-Of course, if there is enough requests, I am sure it will be reconsidered,
-but I spent a lot of time to try to do it and my final decision was that
-maintaining it separately is better.
-
-Just some reasons (not there is no clear blocker, just complications, some
-problems shifted since patches were posted also):
-
-- as you said, many users prefer LVM over LUKS (so LVM metadata is encrypted)
-(it would be better to have some tool which automate even this config)
-
-- I think it is best to have encryption as separated layer. This doesn't
-limit you regarding to used metadata type (you can use Truecrypt, you can use
-plain dmcrypt (no header) or LUKS with detached header.
-
-- problems with vgcfgrestore (you need to maintain history of LUKS metadata also
-and safely wipe headers. This is itself potential security problem.
-
-(Example: imagine you restored lvm metadata and old LUKS header remains somewhere
-on the disk - in old LV start area. If an attacker (or former employee etc) have
-old password to this forgotten LUKS copy, he can still decrypt LV even if you have
-changed password to new LUKS header. If lvm integrates encryption handling it
-should solve these problems by design.)
-
-- problems with internal caching of keys/passphrases inside lvm code
-(it does device-mapper reloads and cannot ask user every time e.g. inside pvmove)
-
-This means that even if you separate encryption handling (in patches to libcryptsetup
-library) you still need to audit lvm (this is problem mainly for certifications).
-(And yes, kernel dmcrypt should use kernel keyring for this.)
-
-- patches were very invasive and with current raid and thin provision the test
-matrix multiplies, AFAIK there are simply not enough resources and the priority
-were elsewhere (better udev integration, raid, thin provisioning)
-
-But note, I am no longer in lvm devel team, so this is just my opinion
-(as cryptsetup/luks maintainer).
-
-So what's the solution for now?
-
-I think that it is simpler to use fsadm approach (similar to resize filesystem)
-with very similar results. Someone can write patches for automatic resize,
-it is trivial (cryptsetup reload handles LUKS device resize online).
-
-Also you can use cryptsetup-reencrypt in combination with lvresize for offline
-encryption addition to LV (despite it is not so trivial as just use one lvm command).
-
-For adding encryption - basically you just need to add one (4MiB) extent
-to LV (or reduce fs by one extent) to create space for LUKS header and then
-with LV unmounted (offline) run cryptsetup-reencrypt (it uses in-file temporary
-metadata during reencryption).
-
-Milan
+     # If volume_list is defined, each LV is only activated if there is a
+     # match against the list.
++    #
+     #   "vgname" and "vgname/lvname" are matched exactly.
+     #   "@tag" matches any tag set in the LV or VG.
+     #   "@*" matches if any tag defined on the host is also set in the LV or VG
+     #
++    # If any host tags exist but volume_list is not defined, a default
++    # single-entry list containing "@*" is assumed.
++    #
+     # volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
+ 
+     # If auto_activation_volume_list is defined, each LV that is to be
+-    # activated is checked against the list while using the autoactivation
+-    # option (--activate ay/-a ay), and if it matches, it is activated.
++    # activated with the autoactivation option (--activate ay/-a ay)
++    # is first checked against the list.  If it does not match, the LV
++    # is not activated.  This list is checked as well as volume_list.
++    #
+     #   "vgname" and "vgname/lvname" are matched exactly.
+     #   "@tag" matches any tag set in the LV or VG.
+     #   "@*" matches if any tag defined on the host is also set in the LV or VG
+@@ -588,6 +594,7 @@ activation {
+     # is checked against the list, and if it matches, it as activated
+     # in read-only mode.  (This overrides '--permission rw' stored in the
+     # metadata.)
++    #
+     #   "vgname" and "vgname/lvname" are matched exactly.
+     #   "@tag" matches any tag set in the LV or VG.
+     #   "@*" matches if any tag defined on the host is also set in the LV or VG
+diff --git a/man/lvm.conf.5.in b/man/lvm.conf.5.in
+index 718cf4d..5592f34 100644
+--- a/man/lvm.conf.5.in
++++ b/man/lvm.conf.5.in
+@@ -447,6 +447,8 @@ metadata for a match.
+ \fBtags\fP above).
+ Logical volume and volume groups can also be included in the list
+ by name e.g. vg00, vg00/lvol1.
++If this setting is not present but at least one host tag is defined
++then a default single-entry list containing @* is assumed.
+ .IP
+ \fBauto_activation_volume_list\fP \(em This acts as a filter through
+ which all requests to autoactivate a logical volume on this machine
 
 
