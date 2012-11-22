@@ -1,71 +1,55 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 21 Nov 2012 11:16:57 +0000 (UTC)
-Subject: master - lv_manip: fix regresion from bf2741376d4
-Message-ID: <20121121111657.BE7D54979@hosted02.fedoraproject.org>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Thu, 22 Nov 2012 00:42:51 +0000 (UTC)
+Subject: master - RAID: Do not allow --splitmirrors on RAID10 logical volumes.
+Message-ID: <20121122004252.0CE33F8E@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=400f6442861c6832f5f89d6e40e668517895b50d
-Commit:        400f6442861c6832f5f89d6e40e668517895b50d
-Parent:        d5697b29ee009104a4ed91f79543e22cc8c8d2c4
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Nov 21 09:46:18 2012 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Nov 21 12:15:09 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fb0cee9a66db6141ed331c8058d2c5c2c3a30cc1
+Commit:        fb0cee9a66db6141ed331c8058d2c5c2c3a30cc1
+Parent:        400f6442861c6832f5f89d6e40e668517895b50d
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Nov 21 18:39:26 2012 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Nov 21 18:39:26 2012 -0600
 
-lv_manip: fix regresion from bf2741376d4
+RAID:  Do not allow --splitmirrors on RAID10 logical volumes.
 
-Commit bf2741376d47411994d4065863acab8e405ff5c7 started to use
-lv_is_active() instead of call for lv_info & info.exists so
-we cover also cluster activated devices.
-For snapshost the conversion was not correct and introduced
-regression by blocking creation of snapshot of inactive LV.
-
-Fix it by assigning lv_is_active() directly.
-Note: we still have minor issue to fix - to make
-lv_is_???? function able to return error states since
-lv_info() may fail.
+RAID10 does not have the ability to split off images for independent
+use.  So, 'lvconvert --splitmirrors' will not work and must be
+disallowed.
 ---
- lib/metadata/lv_manip.c      |   10 ++--------
- test/shell/lvcreate-usage.sh |    2 ++
- 2 files changed, 4 insertions(+), 8 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index dc315ac..35a75ff 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4367,14 +4367,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 				log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
- 			}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e96703c..a0504fc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Do not allow --splitmirrors on RAID10 logical volumes.
+   Skip mlocking [vectors] on arm architecture.
+   Support allocation of pool metadata with lvconvert command.
+   Move common functionality for thin lvcreate and lvconvert to toollib.
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index b9f75ff..8be0abe 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1152,7 +1152,8 @@ int lv_raid_split(struct logical_volume *lv, const char *split_name,
+ 		return 0;
+ 	}
  
--			if (!lv_is_active(org)) {
--				log_error("Check for existence of active snapshot "
--					  "origin '%s' failed.", org->name);
--				return NULL;
--			}
--			origin_active = 1;
--
--			if (vg_is_clustered(vg) &&
-+			if ((origin_active = lv_is_active(org)) &&
-+			    vg_is_clustered(vg) &&
- 			    !lv_is_active_exclusive_locally(org)) {
- 				log_error("%s must be active exclusively to"
- 					  " create snapshot", org->name);
-diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
-index ddde401..c9c906a 100644
---- a/test/shell/lvcreate-usage.sh
-+++ b/test/shell/lvcreate-usage.sh
-@@ -64,6 +64,8 @@ lvcreate -l1 -n $lv3 $vg
- not lvcreate -l1 -n $lv4 $vg
- 
- lvremove -ff $vg/$lv3
-+# check snapshot of inactive origin
-+lvchange -an $vg/$lv1
- lvcreate -l1 -s -n $lv3 $vg/$lv1
- not lvcreate -l1 -n $lv4 $vg
- not lvcreate -l1 -m1 -n $lv4 $vg
+-	if (!seg_is_mirrored(first_seg(lv))) {
++	if (!seg_is_mirrored(first_seg(lv)) ||
++	    !strcmp(first_seg(lv)->segtype->name, "raid10")) {
+ 		log_error("Unable to split logical volume of segment type, %s",
+ 			  first_seg(lv)->segtype->ops->name(first_seg(lv)));
+ 		return 0;
 
 
