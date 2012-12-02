@@ -1,76 +1,45 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:29 +0000 (UTC)
-Subject: master - thin: shuffle code
-Message-ID: <20121202170229.38C2BA0D87@fedorahosted.org>
+Date: Sun,  2 Dec 2012 17:02:31 +0000 (UTC)
+Subject: master - thin: lvchange may change discards freely
+Message-ID: <20121202170231.7C718A0D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0da2842cfec05753154e5516f01e0dfd7331640
-Commit:        f0da2842cfec05753154e5516f01e0dfd7331640
-Parent:        0be8a9126f9e6e66bce186192fedbb5d841007f2
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dde5a6c52b315d7b8e2dd6b91e17eb3955534682
+Commit:        dde5a6c52b315d7b8e2dd6b91e17eb3955534682
+Parent:        f0da2842cfec05753154e5516f01e0dfd7331640
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 2 16:27:39 2012 +0100
+AuthorDate:    Sun Dec 2 16:30:45 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Dec 2 17:56:44 2012 +0100
 
-thin: shuffle code
+thin: lvchange may change discards freely
 
-Reorder code lines for next patch.
 ---
- tools/lvconvert.c |   26 +++++++++++++-------------
- 1 files changed, 13 insertions(+), 13 deletions(-)
+ tools/lvchange.c |    8 +-------
+ 1 files changed, 1 insertions(+), 7 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 76588d2..a75a7fc 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1917,12 +1917,6 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	/* Rename deactivated metadata LV to have _tmeta suffix */
--	/* Implicit checks if metadata_lv is visible */
--	if (strcmp(metadata_lv->name, name) &&
--	    !lv_rename_update(cmd, metadata_lv, name, 0))
--		return_0;
--
- 	/*
- 	 * Since we wish to have underlaying dev, to match _tdata
- 	 * rename data LV first, also checks for visible LV
-@@ -1940,18 +1934,24 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 	seg->segtype = lp->segtype;
- 	seg->lv->status |= THIN_POOL;
- 
--	seg->chunk_size = lp->chunk_size;
--	seg->zero_new_blocks = lp->zero ? 1 : 0;
--	seg->discards = lp->discards;
-+	/* Drop reference as attach_pool_data_lv() takes it again */
-+	remove_seg_from_segs_using_this_lv(data_lv, seg);
-+	if (!attach_pool_data_lv(seg, data_lv))
-+		return_0;
-+
- 	seg->low_water_mark = 0;
- 	seg->transaction_id = 0;
-+	seg->chunk_size = lp->chunk_size;
-+	seg->discards = lp->discards;
-+	seg->zero_new_blocks = lp->zero ? 1 : 0;
- 
--	if (!attach_pool_metadata_lv(seg, metadata_lv))
-+	/* Rename deactivated metadata LV to have _tmeta suffix */
-+	/* Implicit checks if metadata_lv is visible */
-+	if (strcmp(metadata_lv->name, name) &&
-+	    !lv_rename_update(cmd, metadata_lv, name, 0))
- 		return_0;
- 
--	/* Drop reference as attach_pool_data_lv() takes it again */
--	remove_seg_from_segs_using_this_lv(data_lv, seg);
--	if (!attach_pool_data_lv(seg, data_lv))
-+	if (!attach_pool_metadata_lv(seg, metadata_lv))
- 		return_0;
- 
- 	if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 8eabbbb..c3c993a 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -111,13 +111,7 @@ static int lvchange_pool_update(struct cmd_context *cmd,
+ 	if (arg_count(cmd, discards_ARG)) {
+ 		discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_IGNORE);
+ 		if (discards != first_seg(lv)->discards) {
+-			if ((discards != THIN_DISCARDS_IGNORE) &&
+-				 (first_seg(lv)->chunk_size &
+-				  (first_seg(lv)->chunk_size - 1)))
+-				log_error("Cannot change discards state for "
+-					  "logical volume \"%s\" "
+-					  "with non power of 2 chunk size.", lv->name);
+-			else if (((discards == THIN_DISCARDS_IGNORE) ||
++			if (((discards == THIN_DISCARDS_IGNORE) ||
+ 			     (first_seg(lv)->discards == THIN_DISCARDS_IGNORE)) &&
+ 			    lv_is_active(lv))
+ 				log_error("Cannot change discards state for active "
 
 
