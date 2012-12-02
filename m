@@ -1,45 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:31 +0000 (UTC)
-Subject: master - thin: lvchange may change discards freely
-Message-ID: <20121202170231.7C718A0D87@fedorahosted.org>
+Date: Sun,  2 Dec 2012 17:02:33 +0000 (UTC)
+Subject: master - thin: deactivate subvolumes
+Message-ID: <20121202170233.BABB2A0D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dde5a6c52b315d7b8e2dd6b91e17eb3955534682
-Commit:        dde5a6c52b315d7b8e2dd6b91e17eb3955534682
-Parent:        f0da2842cfec05753154e5516f01e0dfd7331640
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ade2f47829f66d061d69844b9911e266751435b7
+Commit:        ade2f47829f66d061d69844b9911e266751435b7
+Parent:        dde5a6c52b315d7b8e2dd6b91e17eb3955534682
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 2 16:30:45 2012 +0100
+AuthorDate:    Sun Dec 2 16:31:27 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Dec 2 17:56:44 2012 +0100
 
-thin: lvchange may change discards freely
+thin: deactivate subvolumes
 
+Do not leave active thin data and metadata volumes
+if activation of thin pool fails.
 ---
- tools/lvchange.c |    8 +-------
- 1 files changed, 1 insertions(+), 7 deletions(-)
+ tools/lvconvert.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 8eabbbb..c3c993a 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -111,13 +111,7 @@ static int lvchange_pool_update(struct cmd_context *cmd,
- 	if (arg_count(cmd, discards_ARG)) {
- 		discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_IGNORE);
- 		if (discards != first_seg(lv)->discards) {
--			if ((discards != THIN_DISCARDS_IGNORE) &&
--				 (first_seg(lv)->chunk_size &
--				  (first_seg(lv)->chunk_size - 1)))
--				log_error("Cannot change discards state for "
--					  "logical volume \"%s\" "
--					  "with non power of 2 chunk size.", lv->name);
--			else if (((discards == THIN_DISCARDS_IGNORE) ||
-+			if (((discards == THIN_DISCARDS_IGNORE) ||
- 			     (first_seg(lv)->discards == THIN_DISCARDS_IGNORE)) &&
- 			    lv_is_active(lv))
- 				log_error("Cannot change discards state for active "
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a75a7fc..2ef8d86 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1960,6 +1960,11 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+ 	if (!activate_lv_excl(cmd, pool_lv)) {
+ 		log_error("Failed to activate pool logical volume %s/%s.",
+ 			  pool_lv->vg->name, pool_lv->name);
++		/* Deactivate subvolumes */
++		if (!deactivate_lv(cmd, seg_lv(seg, 0)))
++			log_error("Failed to deactivate pool data logical volume.");
++		if (!deactivate_lv(cmd, seg->metadata_lv))
++			log_error("Failed to deactivate pool metadata logical volume.");
+ 		goto out;
+ 	}
+ 
 
 
