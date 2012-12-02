@@ -1,95 +1,82 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:21 +0000 (UTC)
-Subject: master - tests: add error_dev aux
-Message-ID: <20121202170221.BC51FA0D87@fedorahosted.org>
+Date: Sun,  2 Dec 2012 17:02:24 +0000 (UTC)
+Subject: master - thin: add detach_pool_metadata_lv
+Message-ID: <20121202170224.82384A0D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5e2f08cf9134ebf2d377ad050a707c0268d1444
-Commit:        c5e2f08cf9134ebf2d377ad050a707c0268d1444
-Parent:        0dc6ba8309300b576f56e28dc71fba760b3e52df
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6987a353de9476c57831fdcf9cccb5d80e4f505b
+Commit:        6987a353de9476c57831fdcf9cccb5d80e4f505b
+Parent:        c5e2f08cf9134ebf2d377ad050a707c0268d1444
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 1 17:09:18 2012 +0100
+AuthorDate:    Sun Dec 2 01:28:51 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 2 17:55:49 2012 +0100
+CommitterDate: Sun Dec 2 17:56:29 2012 +0100
 
-tests: add error_dev aux
+thin: add detach_pool_metadata_lv
 
-Aux function to replace PV with specifically damaged device.
-Usage:
-
-   aux error_dev "$dev1" 8:32 96:8
-
-Replaces from 8 sector 32 error 512b sectors
-and from 96 sector next 8 sectors will fail on rw.
-Rest of device is preserved.
-
-For testing:
-dd if="$dev1" of=x bs=512 count=104 conv=sync,noerror iflag=direct
+Add internal function detach_pool_metadata_lv().
 ---
- test/lib/aux.sh |   47 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 47 insertions(+), 0 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/metadata.h   |    2 ++
+ lib/metadata/thin_manip.c |   18 ++++++++++++++++++
+ 3 files changed, 21 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index e3dfdd9..d500b37 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -371,6 +371,53 @@ enable_dev() {
- 	finish_udev_transaction
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 43bdb0e..be2ebea 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Implement internal function detach_pool_metadata_lv().
+   Fix lvm2app to return all property sizes in bytes.
+   Recognize DM_DISABLE_UDEV environment variable for a complete fallback.
+   Do not verify udev operations if --noudevsync command option is used.
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 7bc7eaf..19bf742 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -460,6 +460,8 @@ int fixup_imported_mirrors(struct volume_group *vg);
+  */
+ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ 			    struct logical_volume *pool_metadata_lv);
++int detach_pool_metadata_lv(struct lv_segment *pool_seg,
++			    struct logical_volume **pool_metadata_lv);
+ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 			struct logical_volume *pool_data_lv);
+ int attach_pool_lv(struct lv_segment *seg, struct logical_volume *pool_lv,
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index e7e96df..e2762a0 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -30,6 +30,24 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *
+ 	return add_seg_to_segs_using_this_lv(metadata_lv, pool_seg);
  }
  
-+#
-+# Convert device to device with errors
-+# Takes the list of pairs of error segment from:len
-+# Original device table is replace with multiple lines
-+# i.e.  error_dev "$dev1" 8:32 96:8
-+error_dev() {
-+	local dev=$1
-+	local name=$(echo "$dev" | sed -e 's,.*/,,')
-+	local fromlen
-+	local pos
-+	local size
-+	local type
-+	local pvdev
-+	local offset
++int detach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume **metadata_lv)
++{
++	struct logical_volume *lv = pool_seg->metadata_lv;
 +
-+	read pos size type pvdev offset < $name.table
++	if (!lv || !lv_is_thin_pool_metadata(lv) ||
++	    !remove_seg_from_segs_using_this_lv(lv, pool_seg)) {
++		log_error(INTERNAL_ERROR "LV %s is invalid thin pool.", pool_seg->lv->name);
++		return 0;
++	}
 +
-+	shift
-+	rm -f $name.errtable
-+	for fromlen in "$@"; do
-+		from=${fromlen%%:*}
-+		len=${fromlen##*:}
-+		diff=$(($from - $pos))
-+		if test $diff -gt 0 ; then
-+			echo "$pos $diff $type $pvdev $(($pos + $offset))" >>$name.errtable
-+			pos=$(($pos + $diff))
-+		elif test $diff -lt 0 ; then
-+			die "Position error"
-+		fi
-+		echo "$from $len error" >>$name.errtable
-+		pos=$(($pos + $len))
-+	done
-+	diff=$(($size - $pos))
-+	test $diff -gt 0 && echo "$pos $diff $type $pvdev $(($pos + $offset))" >>$name.errtable
++	lv_set_visible(lv);
++	lv->status &= ~THIN_POOL_METADATA;
++	*metadata_lv = lv;
++	pool_seg->metadata_lv = NULL;
 +
-+	init_udev_transaction
-+	if dmsetup table $name ; then
-+		dmsetup load "$name" "$name.errtable"
-+	else
-+		dmsetup create -u "TEST-$name" "$name" "$name.errtable"
-+	fi
-+	# using device name (since device path does not exists yet with udev)
-+	notify_lvmetad "$dev"
-+	dmsetup resume "$name"
-+	finish_udev_transaction
++	return 1;
 +}
 +
- backup_dev() {
- 	local dev
- 
+ int attach_pool_data_lv(struct lv_segment *pool_seg, struct logical_volume *pool_data_lv)
+ {
+ 	if (!set_lv_segment_area_lv(pool_seg, 0, pool_data_lv, 0, THIN_POOL_DATA))
 
 
