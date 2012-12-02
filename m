@@ -1,63 +1,76 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:26 +0000 (UTC)
-Subject: master - thin: lvconvert update messages
-Message-ID: <20121202170226.D5857A0D87@fedorahosted.org>
+Date: Sun,  2 Dec 2012 17:02:29 +0000 (UTC)
+Subject: master - thin: shuffle code
+Message-ID: <20121202170229.38C2BA0D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0be8a9126f9e6e66bce186192fedbb5d841007f2
-Commit:        0be8a9126f9e6e66bce186192fedbb5d841007f2
-Parent:        6987a353de9476c57831fdcf9cccb5d80e4f505b
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f0da2842cfec05753154e5516f01e0dfd7331640
+Commit:        f0da2842cfec05753154e5516f01e0dfd7331640
+Parent:        0be8a9126f9e6e66bce186192fedbb5d841007f2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 2 16:23:44 2012 +0100
+AuthorDate:    Sun Dec 2 16:27:39 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Dec 2 17:56:44 2012 +0100
 
-thin: lvconvert update messages
+thin: shuffle code
 
+Reorder code lines for next patch.
 ---
- tools/lvconvert.c |   12 +++++++-----
- 1 files changed, 7 insertions(+), 5 deletions(-)
+ tools/lvconvert.c |   26 +++++++++++++-------------
+ 1 files changed, 13 insertions(+), 13 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index e428ce0..76588d2 100644
+index 76588d2..a75a7fc 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -1813,7 +1813,7 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 
- 	/* We are changing target type, so deactivate first */
- 	if (!deactivate_lv(cmd, pool_lv)) {
--		log_error("Can't deactivate logical volume %s/%s.",
-+		log_error("Aborting. Failed to deactivate logical volume %s/%s.",
- 			  pool_lv->vg->name, pool_lv->name);
- 		return 0;
- 	}
-@@ -1824,8 +1824,10 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+@@ -1917,12 +1917,6 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
  		return 0;
  	}
  
--	if (dm_snprintf(name, len, "%s_tmeta", pool_lv->name) < 0)
+-	/* Rename deactivated metadata LV to have _tmeta suffix */
+-	/* Implicit checks if metadata_lv is visible */
+-	if (strcmp(metadata_lv->name, name) &&
+-	    !lv_rename_update(cmd, metadata_lv, name, 0))
 -		return_0;
-+	if (dm_snprintf(name, len, "%s_tmeta", pool_lv->name) < 0) {
-+		log_error("Failed to create layer name.");
-+		return 0;
-+	}
+-
+ 	/*
+ 	 * Since we wish to have underlaying dev, to match _tdata
+ 	 * rename data LV first, also checks for visible LV
+@@ -1940,18 +1934,24 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
+ 	seg->segtype = lp->segtype;
+ 	seg->lv->status |= THIN_POOL;
  
- 	if (lp->pool_metadata_lv_name) {
- 		if (arg_count(cmd, stripesize_ARG) || arg_count(cmd, stripes_long_ARG)) {
-@@ -1864,8 +1866,8 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 		}
- 		if (!lv_is_active(metadata_lv) &&
- 		    !activate_lv_local(cmd, metadata_lv)) {
--		    log_error("Aborting. Failed to activate thin metadata lv.");
--		    return 0;
-+			log_error("Aborting. Failed to activate thin metadata lv.");
-+			return 0;
- 		}
- 		if (!set_lv(cmd, metadata_lv, UINT64_C(0), 0)) {
- 			log_error("Aborting. Failed to wipe thin metadata lv.");
+-	seg->chunk_size = lp->chunk_size;
+-	seg->zero_new_blocks = lp->zero ? 1 : 0;
+-	seg->discards = lp->discards;
++	/* Drop reference as attach_pool_data_lv() takes it again */
++	remove_seg_from_segs_using_this_lv(data_lv, seg);
++	if (!attach_pool_data_lv(seg, data_lv))
++		return_0;
++
+ 	seg->low_water_mark = 0;
+ 	seg->transaction_id = 0;
++	seg->chunk_size = lp->chunk_size;
++	seg->discards = lp->discards;
++	seg->zero_new_blocks = lp->zero ? 1 : 0;
+ 
+-	if (!attach_pool_metadata_lv(seg, metadata_lv))
++	/* Rename deactivated metadata LV to have _tmeta suffix */
++	/* Implicit checks if metadata_lv is visible */
++	if (strcmp(metadata_lv->name, name) &&
++	    !lv_rename_update(cmd, metadata_lv, name, 0))
+ 		return_0;
+ 
+-	/* Drop reference as attach_pool_data_lv() takes it again */
+-	remove_seg_from_segs_using_this_lv(data_lv, seg);
+-	if (!attach_pool_data_lv(seg, data_lv))
++	if (!attach_pool_metadata_lv(seg, metadata_lv))
+ 		return_0;
+ 
+ 	if (!vg_write(pool_lv->vg) || !vg_commit(pool_lv->vg))
 
 
