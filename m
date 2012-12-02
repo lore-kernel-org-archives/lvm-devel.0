@@ -1,45 +1,95 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun,  2 Dec 2012 17:02:19 +0000 (UTC)
-Subject: master - tests: resume devices on background
-Message-ID: <20121202170219.271E9A0D87@fedorahosted.org>
+Date: Sun,  2 Dec 2012 17:02:21 +0000 (UTC)
+Subject: master - tests: add error_dev aux
+Message-ID: <20121202170221.BC51FA0D87@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0dc6ba8309300b576f56e28dc71fba760b3e52df
-Commit:        0dc6ba8309300b576f56e28dc71fba760b3e52df
-Parent:        9ec474f38aac948a3fb2cb572af9a756b0ac585d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c5e2f08cf9134ebf2d377ad050a707c0268d1444
+Commit:        c5e2f08cf9134ebf2d377ad050a707c0268d1444
+Parent:        0dc6ba8309300b576f56e28dc71fba760b3e52df
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 29 17:39:36 2012 +0100
+AuthorDate:    Sat Dec 1 17:09:18 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Dec 2 17:55:49 2012 +0100
 
-tests: resume devices on background
+tests: add error_dev aux
 
-Since some devices may need correct order of their resuming,
-resume then all on background and wait for finish.
+Aux function to replace PV with specifically damaged device.
+Usage:
+
+   aux error_dev "$dev1" 8:32 96:8
+
+Replaces from 8 sector 32 error 512b sectors
+and from 96 sector next 8 sectors will fail on rw.
+Rest of device is preserved.
+
+For testing:
+dd if="$dev1" of=x bs=512 count=104 conv=sync,noerror iflag=direct
 ---
- test/lib/aux.sh |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ test/lib/aux.sh |   47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 47 insertions(+), 0 deletions(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 7c0c189..e3dfdd9 100644
+index e3dfdd9..d500b37 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -98,9 +98,11 @@ teardown_devs_prefixed() {
- 	# Resume suspended devices first
- 	for dm in $(dm_info suspended,name | grep "^Suspended:.*$prefix"); do
- 		echo "dmsetup resume \"${dm#Suspended:}\""
--		dmsetup resume "${dm#Suspended:}" || true
-+		dmsetup resume "${dm#Suspended:}" &
- 	done
+@@ -371,6 +371,53 @@ enable_dev() {
+ 	finish_udev_transaction
+ }
  
-+	wait
++#
++# Convert device to device with errors
++# Takes the list of pairs of error segment from:len
++# Original device table is replace with multiple lines
++# i.e.  error_dev "$dev1" 8:32 96:8
++error_dev() {
++	local dev=$1
++	local name=$(echo "$dev" | sed -e 's,.*/,,')
++	local fromlen
++	local pos
++	local size
++	local type
++	local pvdev
++	local offset
 +
- 	local mounts=( $(grep "$prefix" /proc/mounts | cut -d' ' -f1) )
- 	if test ${#mounts[@]} -gt 0; then
- 		test "$stray" -eq 0 || echo "Removing stray mounted devices containing $prefix: ${mounts[@]}"
++	read pos size type pvdev offset < $name.table
++
++	shift
++	rm -f $name.errtable
++	for fromlen in "$@"; do
++		from=${fromlen%%:*}
++		len=${fromlen##*:}
++		diff=$(($from - $pos))
++		if test $diff -gt 0 ; then
++			echo "$pos $diff $type $pvdev $(($pos + $offset))" >>$name.errtable
++			pos=$(($pos + $diff))
++		elif test $diff -lt 0 ; then
++			die "Position error"
++		fi
++		echo "$from $len error" >>$name.errtable
++		pos=$(($pos + $len))
++	done
++	diff=$(($size - $pos))
++	test $diff -gt 0 && echo "$pos $diff $type $pvdev $(($pos + $offset))" >>$name.errtable
++
++	init_udev_transaction
++	if dmsetup table $name ; then
++		dmsetup load "$name" "$name.errtable"
++	else
++		dmsetup create -u "TEST-$name" "$name" "$name.errtable"
++	fi
++	# using device name (since device path does not exists yet with udev)
++	notify_lvmetad "$dev"
++	dmsetup resume "$name"
++	finish_udev_transaction
++}
++
+ backup_dev() {
+ 	local dev
+ 
 
 
