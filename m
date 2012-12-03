@@ -1,184 +1,199 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 4 Nov 2008 17:25:34 -0000
-Subject: LVM2 ./make.tmpl.in daemons/dmeventd/Makefile. ...
-Message-ID: <20081104172534.19712.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  3 Dec 2012 10:57:58 +0000 (UTC)
+Subject: master - thin: reworked thin feature detection
+Message-ID: <20121203105758.6606322CE@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-11-04 17:25:33
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ec20e267fdc627e3bf50679b748c937fe3d79fb
+Commit:        5ec20e267fdc627e3bf50679b748c937fe3d79fb
+Parent:        99018b37ee9e916662ebd482ac8fe0f36bbd7ac8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Dec 3 11:52:04 2012 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Dec 3 11:57:40 2012 +0100
 
-Modified files:
-	.              : make.tmpl.in 
-	daemons/dmeventd: Makefile.in 
-	include        : Makefile.in 
-	libdm          : Makefile.in 
-	man            : Makefile.in 
-	tools          : Makefile.in 
+thin: reworked thin feature detection
 
-Log message:
-	make install_device-mapper
+Rework thin feature detection to support runtime
+section to allow to disable them selectively.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.62&r2=1.63
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/Makefile.in.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/Makefile.in.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/Makefile.in.diff?cvsroot=lvm2&r1=1.41&r2=1.42
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/Makefile.in.diff?cvsroot=lvm2&r1=1.24&r2=1.25
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/Makefile.in.diff?cvsroot=lvm2&r1=1.87&r2=1.88
+New lvm.conf option is born: global/thin_disabled_features
+---
+ WHATS_NEW           |    1 +
+ doc/example.conf.in |   10 ++++++
+ lib/thin/thin.c     |   91 ++++++++++++++++++++++++++++++++++++--------------
+ 3 files changed, 76 insertions(+), 26 deletions(-)
 
---- LVM2/make.tmpl.in	2008/11/04 15:55:26	1.62
-+++ LVM2/make.tmpl.in	2008/11/04 17:25:32	1.63
-@@ -129,7 +129,8 @@
- OBJECTS = $(SOURCES:%.c=%.o)
- POTFILES = $(SOURCES:%.c=%.pot)
- 
--.PHONY: all install install_cluster pofile distclean clean cflow device-mapper
-+.PHONY: all install install_cluster pofile distclean clean cflow device-mapper 
-+.PHONY: install_device-mapper
- .PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
- .PHONY: $(SUBDIRS.pofile) $(SUBDIRS.install_cluster) $(SUBDIRS.cflow)
- .PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
-@@ -163,7 +164,7 @@
- $(SUBDIRS.install_cluster): $(SUBDIRS)
- 	$(MAKE) -C $(@:.install_cluster=) install_cluster
- 
--$(SUBDIRS.install_device-mapper): $(SUBDIRS)
-+$(SUBDIRS.install_device-mapper): device-mapper
- 	$(MAKE) -C $(@:.install_device-mapper=) install_device-mapper
- 
- $(SUBDIRS.clean):
---- LVM2/daemons/dmeventd/Makefile.in	2008/11/04 15:55:27	1.22
-+++ LVM2/daemons/dmeventd/Makefile.in	2008/11/04 17:25:32	1.23
-@@ -61,6 +61,8 @@
- 
- install: $(INSTALL_TYPE) install_include install_dmeventd
- 
-+install_device-mapper: install
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ceb2295..cff005d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Add lvm.conf option global/thin_disabled_features.
+   Add lvconvert support to swap thin pool metadata volume.
+   Implement internal function detach_pool_metadata_lv().
+   Fix lvm2app to return all property sizes in bytes.
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index 1a3ee1b..872d6ef 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -524,6 +524,16 @@ global {
+     # String with options passed with thin_check command. By default,
+     # option '-q' is for quiet output.
+     thin_check_options = [ "-q" ]
 +
- install_include:
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper-event.h \
- 		$(includedir)/libdevmapper-event.h
---- LVM2/include/Makefile.in	2008/11/01 02:19:17	1.9
-+++ LVM2/include/Makefile.in	2008/11/04 17:25:32	1.10
-@@ -20,7 +20,7 @@
++    # If set, given features are not used by thin driver.
++    # This can be helpful not just for testing, but i.e. allows to avoid
++    # using problematic implementation of some thin feature.
++    # Features:
++    #   block_size
++    #   discards
++    #   discards_non_power_2
++    #
++    # thin_disabled_features = [ "discards", "block_size" ]
+ }
  
- LN_S = @LN_S@
+ activation {
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index f6ac437..18b819b 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -37,6 +37,24 @@
+ 	log_error(t " segment %s of logical volume %s.", ## p, \
+ 		  dm_config_parent_name(sn), seg->lv->name), 0;
  
--.PHONY: clean distclean all install pofile install_cluster
-+.PHONY: clean distclean all install pofile install_cluster install_device-mapper
- 
- all: .symlinks_created
- 
-@@ -43,5 +43,7 @@
- 
- install_cluster:
- 
-+install_device-mapper:
++/* List of features with their kernel target version */
++static const struct feature {
++	uint32_t maj;
++	uint32_t min;
++	unsigned thin_feature;
++	const char *feature;
++} _features[] = {
++	{ 1, 1, THIN_FEATURE_DISCARDS, "discards" },
++	{ 1, 1, THIN_FEATURE_EXTERNAL_ORIGIN, "external_origin" },
++	{ 1, 4, THIN_FEATURE_BLOCK_SIZE, "block_size" },
++	{ 1, 5, THIN_FEATURE_DISCARDS_NON_POWER_2, "discards_non_power_2" },
++};
 +
- cflow:
- 
---- LVM2/libdm/Makefile.in	2008/11/03 22:14:29	1.41
-+++ LVM2/libdm/Makefile.in	2008/11/04 17:25:32	1.42
-@@ -67,6 +67,8 @@
- 
- install: $(INSTALL_TYPE) install_include
- 
-+install_device-mapper: install
++static const char _lvmconf[] = "global/thin_disabled_features";
++/* TODO: using static field heer, maybe should be part of segment_type */
++static unsigned _feature_mask;
++static int _log_feature_mask;
 +
- install_include:
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 444 libdevmapper.h \
- 		$(includedir)/libdevmapper.h
---- LVM2/man/Makefile.in	2008/11/01 02:19:18	1.24
-+++ LVM2/man/Makefile.in	2008/11/04 17:25:32	1.25
-@@ -32,10 +32,11 @@
- 	vgimport.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 vgrename.8 \
- 	vgs.8 vgscan.8 vgsplit.8 $(FSADMMAN)
- MAN8CLUSTER=clvmd.8
-+MAN8DM=dmsetup.8
- MAN5DIR=${mandir}/man5
- MAN8DIR=${mandir}/man8
+ static int _thin_target_present(struct cmd_context *cmd,
+ 				const struct lv_segment *seg,
+ 				unsigned *attributes);
+@@ -541,8 +559,9 @@ static int _thin_target_present(struct cmd_context *cmd,
+ {
+ 	static int _checked = 0;
+ 	static int _present = 0;
+-	static int _attrs = 0;
++	static unsigned _attrs = 0;
+ 	uint32_t maj, min, patchlevel;
++	unsigned i;
  
--CLEAN_TARGETS=$(MAN5) $(MAN8) $(MAN8CLUSTER) $(FSADMMAN) dmsetup.8
-+CLEAN_TARGETS=$(MAN5) $(MAN8) $(MAN8CLUSTER) $(FSADMMAN) $(MAN8DM)
+ 	if (!_checked) {
+ 		_present = target_present(cmd, THIN_MODULE, 1);
+@@ -552,35 +571,27 @@ static int _thin_target_present(struct cmd_context *cmd,
+ 			return 0;
+ 		}
  
- include $(top_srcdir)/make.tmpl
+-		if (maj >=1 && min >= 1)
+-			_attrs |= THIN_FEATURE_DISCARDS;
+-		else
+-		/* FIXME Log this as WARNING later only if the user asked for the feature to be used but it's not present */
+-			log_debug("Target " THIN_MODULE " does not support discards.");
+-
+-		if (maj >=1 && min >= 1)
+-			_attrs |= THIN_FEATURE_EXTERNAL_ORIGIN;
+-		else
+-		/* FIXME Log this as WARNING later only if the user asked for the feature to be used but it's not present */
+-			log_debug("Target " THIN_MODULE " does not support external origins.");
+-
+-		if (maj >=1 && min >= 4)
+-			_attrs |= THIN_FEATURE_BLOCK_SIZE;
+-		else
+-		/* FIXME Log this as WARNING later only if the user asked for the feature to be used but it's not present */
+-			log_debug("Target " THIN_MODULE " does not support non power of 2 block sizes.");
+-
+-		if (maj >=1 && min >= 5)
+-			_attrs |= THIN_FEATURE_DISCARDS_NON_POWER_2;
+-		else
+-		/* FIXME Log this as WARNING later only if the user asked for the feature to be used but it's not present */
+-			log_debug("Target " THIN_MODULE " does not support discards for non power of 2 block sizes.");
++		for (i = 0; i < sizeof(_features)/sizeof(*_features); i++)
++			if (maj >= _features[i].maj && min >= _features[i].min)
++				_attrs |= _features[i].thin_feature;
++			else
++				log_very_verbose("Target " THIN_MODULE " does not support %s.",
++						 _features[i].feature);
  
-@@ -47,7 +48,7 @@
+ 		_checked = 1;
+ 	}
  
- .PHONY: man
+-	if (attributes)
+-		*attributes = _attrs;
++	if (attributes) {
++		if (_log_feature_mask) {
++			for (i = 0; i < sizeof(_features)/sizeof(*_features); i++)
++				if ((_attrs & _features[i].thin_feature) &&
++				    !(_feature_mask & _features[i].thin_feature))
++					log_very_verbose("Target "THIN_MODULE " %s support disabled by %s",
++							 _features[i].feature, _lvmconf);
++			_log_feature_mask = 0; /* log just once */
++		}
++		*attributes = _attrs & _feature_mask;
++	}
  
--device-mapper: dmsetup.8
-+device-mapper: $(MAN8DM)
+ 	return _present;
+ }
+@@ -653,7 +664,11 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
+ 	};
  
- man: $(MAN5) $(MAN8) $(MAN8CLUSTER)
+ 	struct segment_type *segtype;
++	const struct dm_config_node *cn;
++	const struct dm_config_value *cv;
++	const char *str;
+ 	unsigned i;
++	unsigned mask = 0;
  
-@@ -56,7 +57,7 @@
- %: %.in
- 	$(SED) -e "s/#VERSION#/$(LVM_VERSION)/" $< > $@
+ 	for (i = 0; i < sizeof(reg_segtypes)/sizeof(reg_segtypes[0]); ++i) {
+ 		segtype = dm_zalloc(sizeof(*segtype));
+@@ -682,5 +697,29 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
+ 		log_very_verbose("Initialised segtype: %s", segtype->name);
+ 	}
  
--install:
-+install: install_device-mapper
- 	@echo "Installing $(MAN8) in $(MAN8DIR)"
- 	@for f in $(MAN8); \
- 	do \
-@@ -78,3 +79,11 @@
- 	   $(RM) $(MAN8DIR)/$$f; \
- 	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
- 	done
++	/* Support runtime lvm.conf changes */
++	if ((cn = find_config_tree_node(cmd, _lvmconf))) {
++		for (cv = cn->v; cv; cv = cv->next) {
++			if (cv->type != DM_CFG_STRING) {
++				log_error("Ignoring invalid string in config file %s.",
++					  _lvmconf);
++				continue;
++			}
++			str = cv->v.str;
++			if (!*str) {
++				log_error("Ignoring empty string in config file %s.",
++					  _lvmconf);
++				continue;
++			}
++			for (i = 0; i < sizeof(_features)/sizeof(*_features); i++)
++				if (strcasecmp(str, _features[i].feature) == 0)
++					mask |= _features[i].thin_feature;
++		}
++		_log_feature_mask = (mask != 0);
++	}
 +
-+install_device-mapper:
-+	@echo "Installing $(MAN8DM) in $(MAN8DIR)"
-+	@for f in $(MAN8DM); \
-+	do \
-+	   $(RM) $(MAN8DIR)/$$f; \
-+	   @INSTALL@ -D $(OWNER) $(GROUP) -m 444 $$f $(MAN8DIR)/$$f; \
-+	done
---- LVM2/tools/Makefile.in	2008/11/03 22:14:30	1.87
-+++ LVM2/tools/Makefile.in	2008/11/04 17:25:32	1.88
-@@ -66,12 +66,14 @@
- 	.commands \
- 	lvm
- 
--INSTALL_TARGETS = install_tools_dynamic
-+INSTALL_LVM_TARGETS = install_tools_dynamic
-+INSTALL_DMSETUP_TARGETS = install_dmsetup_dynamic
- INSTALL_CMDLIB_TARGETS = install_cmdlib_dynamic
- 
- ifeq ("@STATIC_LINK@", "yes")
-   TARGETS += lvm.static
--  INSTALL_TARGETS += install_tools_static
-+  INSTALL_LVM_TARGETS += install_tools_static
-+  INSTALL_DMSETUP_TARGETS += install_dmsetup_static
-   INSTALL_CMDLIB_TARGETS += install_cmdlib_static
- endif
- 
-@@ -84,7 +86,7 @@
- 
- ifeq ("@CMDLIB@", "yes")
- 	TARGETS += liblvm2cmd.so
--	INSTALL_TARGETS += $(INSTALL_CMDLIB_TARGETS)
-+	INSTALL_LVM_TARGETS += $(INSTALL_CMDLIB_TARGETS)
- endif
- 
- ifeq ("@DMEVENTD@", "yes")
-@@ -182,4 +184,12 @@
- 	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) lvm.static \
- 		$(staticdir)/lvm.static
- 
--install: $(INSTALL_TARGETS)
-+install_dmsetup_dynamic: dmsetup
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
++	/* Store as 'and' mask in static field */
++	_feature_mask = ~mask;
 +
-+install_dmsetup_static: dmsetup.static
-+	$(INSTALL) -D $(OWNER) $(GROUP) -m 555 $(STRIP) $< $(sbindir)/$<
-+
-+install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
-+
-+install: $(INSTALL_LVM_TARGETS) install_device-mapper
+ 	return 1;
+ }
 
 
