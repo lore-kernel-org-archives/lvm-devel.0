@@ -1,84 +1,160 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Tue,  4 Dec 2012 23:53:48 +0000 (UTC)
-Subject: master - pvmove/RAID: Disallow pvmove on RAID LVs until properly handled
-Message-ID: <20121204235348.DFB7822DC@hosted02.fedoraproject.org>
+From: Andy Grover <grover@fedoraproject.org>
+Date: Thu,  6 Dec 2012 00:33:09 +0000 (UTC)
+Subject: master - Fix Py_BuildValue for i386
+Message-ID: <20121206003309.79EB9A0C59@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=383575525916d4cafb1c8396c95a40be539d1451
-Commit:        383575525916d4cafb1c8396c95a40be539d1451
-Parent:        35a4d70aad02f297d81909ff7c65a032c5e0dbf2
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Tue Dec 4 17:47:47 2012 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Tue Dec 4 17:47:47 2012 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1ec6a59dcf2c1c2788d12bd4374c6dbb5cfb8e36
+Commit:        1ec6a59dcf2c1c2788d12bd4374c6dbb5cfb8e36
+Parent:        383575525916d4cafb1c8396c95a40be539d1451
+Author:        James Antill <james.antill@redhat.com>
+AuthorDate:    Wed Dec 5 16:31:30 2012 -0800
+Committer:     Andy Grover <agrover@redhat.com>
+CommitterDate: Wed Dec 5 16:31:50 2012 -0800
 
-pvmove/RAID:  Disallow pvmove on RAID LVs until properly handled
+Fix Py_BuildValue for i386
 
-Attempting pvmove on RAID LVs replaces the kernel RAID target with
-a temporary pvmove target, ultimately destroying the RAID LV.  pvmove
-must be prevented on RAID LVs for now.
+see https://bugzilla.redhat.com/show_bug.cgi?id=881989
 
-Use 'lvconvert --replace old_pv vg/lv new_pv' if you want to move
-an image of the RAID LV.
+Signed-off-by: James Antill <james.antill@redhat.com>
+Signed-off-by: Andy Grover <agrover@redhat.com>
 ---
- WHATS_NEW      |    1 +
- tools/pvmove.c |   15 +++++++++++++++
- 2 files changed, 16 insertions(+), 0 deletions(-)
+ python/liblvm.c |   28 ++++++++++++++--------------
+ 1 files changed, 14 insertions(+), 14 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 519d4dd..b5b774f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Disallow pvmove on RAID LVs until they are addressed properly
-   Allow empty activation/{auto_activation|read_only|}_volume_list config option.
-   Add lvm.conf option global/thin_disabled_features.
-   Add lvconvert support to swap thin pool metadata volume.
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 9649f11..fcc5b31 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -179,6 +179,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 						unsigned *exclusive)
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 831493e..6ccc5ba 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -564,7 +564,7 @@ liblvm_lvm_vg_get_seqno(vgobject *self)
  {
- 	struct logical_volume *lv_mirr, *lv;
-+	struct lv_segment *seg;
- 	struct lv_list *lvl;
- 	uint32_t log_count = 0;
- 	int lv_found = 0;
-@@ -206,6 +207,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 	/* Find segments to be moved and set up mirrors */
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv = lvl->lv;
-+		seg = first_seg(lv);
- 		if (lv == lv_mirr)
- 			continue;
- 		if (lv_name) {
-@@ -218,6 +220,19 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			log_print_unless_silent("Skipping snapshot-related LV %s", lv->name);
- 			continue;
- 		}
-+		if (seg_is_raid(seg)) {
-+			lv_skipped = 1;
-+			log_print_unless_silent("Skipping %s LV %s",
-+						seg->segtype->ops->name(seg),
-+						lv->name);
-+			continue;
-+		}
-+		if (lv_is_raid_type(lv)) {
-+			lv_skipped = 1;
-+			log_print_unless_silent("Skipping RAID sub-LV %s",
-+						lv->name);
-+			continue;
-+		}
- 		if (lv->status & MIRRORED) {
- 			lv_skipped = 1;
- 			log_print_unless_silent("Skipping mirror LV %s", lv->name);
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_seqno(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_seqno(self->vg));
+ }
+ 
+ static PyObject *
+@@ -572,7 +572,7 @@ liblvm_lvm_vg_get_size(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_size(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_size(self->vg));
+ }
+ 
+ static PyObject *
+@@ -580,7 +580,7 @@ liblvm_lvm_vg_get_free_size(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_free_size(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_free_size(self->vg));
+ }
+ 
+ static PyObject *
+@@ -588,7 +588,7 @@ liblvm_lvm_vg_get_extent_size(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_extent_size(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_extent_size(self->vg));
+ }
+ 
+ static PyObject *
+@@ -596,7 +596,7 @@ liblvm_lvm_vg_get_extent_count(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_extent_count(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_extent_count(self->vg));
+ }
+ 
+ static PyObject *
+@@ -604,7 +604,7 @@ liblvm_lvm_vg_get_free_extent_count(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_free_extent_count(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_free_extent_count(self->vg));
+ }
+ 
+ /* Builds a python tuple ([string|number], bool) from a struct lvm_property_value */
+@@ -755,7 +755,7 @@ liblvm_lvm_vg_get_pv_count(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_pv_count(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_pv_count(self->vg));
+ }
+ 
+ static PyObject *
+@@ -763,7 +763,7 @@ liblvm_lvm_vg_get_max_pv(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_max_pv(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_max_pv(self->vg));
+ }
+ 
+ static PyObject *
+@@ -771,7 +771,7 @@ liblvm_lvm_vg_get_max_lv(vgobject *self)
+ {
+ 	VG_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_vg_get_max_lv(self->vg));
++	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_max_lv(self->vg));
+ }
+ 
+ static PyObject *
+@@ -1133,7 +1133,7 @@ liblvm_lvm_lv_get_size(lvobject *self)
+ {
+ 	LV_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_lv_get_size(self->lv));
++	return Py_BuildValue("K", (unsigned long long)lvm_lv_get_size(self->lv));
+ }
+ 
+ static PyObject *
+@@ -1344,7 +1344,7 @@ liblvm_lvm_pv_get_mda_count(pvobject *self)
+ {
+ 	PV_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_pv_get_mda_count(self->pv));
++	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_mda_count(self->pv));
+ }
+ 
+ static PyObject *
+@@ -1367,7 +1367,7 @@ liblvm_lvm_pv_get_dev_size(pvobject *self)
+ {
+ 	PV_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_pv_get_dev_size(self->pv));
++	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_dev_size(self->pv));
+ }
+ 
+ static PyObject *
+@@ -1375,7 +1375,7 @@ liblvm_lvm_pv_get_size(pvobject *self)
+ {
+ 	PV_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_pv_get_size(self->pv));
++	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_size(self->pv));
+ }
+ 
+ static PyObject *
+@@ -1383,7 +1383,7 @@ liblvm_lvm_pv_get_free(pvobject *self)
+ {
+ 	PV_VALID(self);
+ 
+-	return Py_BuildValue("l", lvm_pv_get_free(self->pv));
++	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_free(self->pv));
+ }
+ 
+ static PyObject *
 
 
