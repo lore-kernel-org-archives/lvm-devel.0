@@ -1,125 +1,180 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 4 Nov 2008 17:49:22 -0000
-Subject: LVM2 INSTALL README CONTRIBUTORS
-Message-ID: <20081104174922.20892.qmail@sourceware.org>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed, 12 Dec 2012 12:07:03 +0000 (UTC)
+Subject: master - lvmetad: Fix autoactivation for MDA-less PVs.
+Message-ID: <20121212120703.5DAACA0C3A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-11-04 17:49:22
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=789a45d6d7567c467250db661b937422e03f491d
+Commit:        789a45d6d7567c467250db661b937422e03f491d
+Parent:        cad22be3942809bac979d42195ea5a861a91a71f
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Dec 12 12:51:28 2012 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Dec 12 13:06:26 2012 +0100
 
-Modified files:
-	.              : INSTALL README 
-Removed files:
-	.              : CONTRIBUTORS 
+lvmetad: Fix autoactivation for MDA-less PVs.
 
-Log message:
-	quick review of docs
-	Note that we'll continue to use WHATS_NEW_DM for device-mapper changes
-	until we can switch to unified version numbering.
+---
+ lib/cache/lvmetad.c                |   12 +++------
+ lib/cache/lvmetad.h                |    3 +-
+ test/shell/lvmetad-pvscan-nomda.sh |   49 ++++++++++++++++++++++++++++++++++++
+ tools/pvscan.c                     |   22 ++++++++++++++-
+ 4 files changed, 75 insertions(+), 11 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/INSTALL.diff?cvsroot=lvm2&r1=1.3&r2=1.4
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/README.diff?cvsroot=lvm2&r1=1.7&r2=1.8
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/CONTRIBUTORS.diff?cvsroot=lvm2&r1=1.1&r2=NONE
-
---- LVM2/INSTALL	2002/11/18 13:52:12	1.3
-+++ LVM2/INSTALL	2008/11/04 17:49:22	1.4
-@@ -1,44 +1,30 @@
--LVM2 installation
--=================
-+Installation
-+============
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index e5c5f51..a636f43 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -675,7 +675,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
+ 	daemon_reply reply;
+ 	struct lvmcache_info *info;
+ 	struct dm_config_tree *pvmeta, *vgmeta;
+-	const char *status;
++	const char *status, *vgid;
+ 	int result;
  
--1) Install device-mapper
--
--   Ensure the device-mapper has been installed on the machine.
--
--   The device-mapper should be in the kernel (look for 'device-mapper'
--   messages in the kernel logs) and /usr/include/libdevmapper.h 
--   and libdevmapper.so should be present.
--
--   The device-mapper is available from:
--     ftp://ftp.sistina.com/pub/LVM2/device-mapper/
--
--
--2) Generate custom makefiles.
-+1) Generate custom makefiles.
+ 	if (!lvmetad_active() || test_mode())
+@@ -724,11 +724,6 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
+ 				      NULL);
+ 		dm_config_destroy(vgmeta);
+ 	} else {
+-		if (handler) {
+-			log_error(INTERNAL_ERROR "Handler needs existing VG.");
+-			dm_config_destroy(pvmeta);
+-			return 0;
+-		}
+ 		/* There are no MDAs on this PV. */
+ 		reply = _lvmetad_send("pv_found", "pvmeta = %t", pvmeta, NULL);
+ 	}
+@@ -744,10 +739,11 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
  
-    Run the 'configure' script from the top directory.
+ 	if (result && handler) {
+ 		status = daemon_reply_str(reply, "status", "<missing>");
++		vgid = daemon_reply_str(reply, "vgid", "<missing>");
+ 		if (!strcmp(status, "partial"))
+-			handler(vg, 1, CHANGE_AAY);
++			handler(_lvmetad_cmd, vgid, 1, CHANGE_AAY);
+ 		else if (!strcmp(status, "complete"))
+-			handler(vg, 0, CHANGE_AAY);
++			handler(_lvmetad_cmd, vgid, 0, CHANGE_AAY);
+ 		else if (!strcmp(status, "orphan"))
+ 			;
+ 		else
+diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
+index 5f0f552..c644069 100644
+--- a/lib/cache/lvmetad.h
++++ b/lib/cache/lvmetad.h
+@@ -22,7 +22,8 @@ struct cmd_context;
+ struct dm_config_tree;
+ enum activation_change;
  
--   If you wish to use the built-in LVM2 shell and have GNU readline 
--   installed (http://www.gnu.org/directory/readline.html) use:
--     ./configure --enable-readline
--
-    If you don't want to include the LVM1 backwards-compatibility code use:
-      ./configure --with-lvm1=none 
+-typedef int (*activation_handler) (struct volume_group *vg, int partial,
++typedef int (*activation_handler) (struct cmd_context *cmd,
++				   const char *vgid, int partial,
+ 				   enum activation_change activate);
  
-    To separate the LVM1 support into a shared library loaded by lvm.conf use:
-      ./configure --with-lvm1=shared
- 
-+   Use ./configure --help to see other options.
- 
--3) Build and install LVM2.
-+2) Build and install.
- 
--   Run 'make install' from the top directory.
-+   Run 'make' from the top directory to build everything you configured.
-+   Run 'make install' to build and install everything you configured.
- 
-+   If you only want the device-mapper libraries and tools use
-+   'make device-mapper' or 'make install_device-mapper'.
- 
--4) Create a configuration file
-+3) If using LVM2, create a configuration file.
- 
-    The tools will work fine without a configuration file being
-    present, but you ought to review the example file in doc/example.conf.
--   For example, specifying the devices that LVM2 is to use can
--   make the tools run more efficiently - and avoid scanning /dev/cdrom!
- 
- Please also refer to the WHATS_NEW file and the manual pages for the 
- individual commands.
---- LVM2/README	2004/07/03 18:20:25	1.7
-+++ LVM2/README	2008/11/04 17:49:22	1.8
-@@ -1,23 +1,27 @@
--This directory contains LVM2, the new version of the userland LVM
--tools designed for the new device-mapper for the Linux kernel.
-+This tree contains the LVM2 and device-mapper tools and libraries.
- 
--The device-mapper needs to be installed before compiling these LVM2 tools.
--
--For more information about LVM2 read the WHATS_NEW file.
-+For more information about LVM2 read the changelog in the WHATS_NEW file.
- Installation instructions are in INSTALL.
- 
- There is no warranty - see COPYING and COPYING.LIB.
- 
- Tarballs are available from:
-   ftp://sources.redhat.com/pub/lvm2/
--  ftp://sources.redhat.com/pub/dm/
- 
- To access the CVS tree use:
-   cvs -d :pserver:cvs at sources.redhat.com:/cvs/lvm2 login
-   CVS password: cvs
-   cvs -d :pserver:cvs at sources.redhat.com:/cvs/lvm2 co LVM2
- 
--Mailing list for discussion/bug reports etc.
-+Mailing list for general discussion related to LVM2:
-   linux-lvm at redhat.com
-   Subscribe from https://www.redhat.com/mailman/listinfo/linux-lvm
- 
-+Mailing list for LVM2 development, patches and commits:
-+  lvm-devel at redhat.com
-+  Subscribe from https://www.redhat.com/mailman/listinfo/linux-lvm
+ #ifdef LVMETAD_SUPPORT
+diff --git a/test/shell/lvmetad-pvscan-nomda.sh b/test/shell/lvmetad-pvscan-nomda.sh
+new file mode 100644
+index 0000000..c04a275
+--- /dev/null
++++ b/test/shell/lvmetad-pvscan-nomda.sh
+@@ -0,0 +1,49 @@
++#!/bin/sh
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+Mailing list for device-mapper development, including kernel patches
-+and multipath-tools:
-+  dm-devel at redhat.com
-+  Subscribe from https://www.redhat.com/mailman/listinfo/dm-devel
++. lib/test
++
++test -e LOCAL_LVMETAD || skip
++kill $(cat LOCAL_LVMETAD)
++rm LOCAL_LVMETAD
++
++aux prepare_devs 2
++
++pvcreate --metadatacopies 0 $dev1
++pvcreate --metadatacopies 1 $dev2
++vgcreate $vg1 $dev1 $dev2
++lvcreate -n foo -l 1 -an --zero n $vg1
++
++# start lvmetad but make sure it doesn't know about $dev1 or $dev2
++aux disable_dev $dev1
++aux disable_dev $dev2
++aux prepare_lvmetad
++lvs
++mv LOCAL_LVMETAD XXX
++aux enable_dev $dev2
++aux enable_dev $dev1
++mv XXX LOCAL_LVMETAD
++
++aux lvmconf 'global/use_lvmetad = 0'
++check inactive $vg1 foo
++aux lvmconf 'global/use_lvmetad = 1'
++
++pvscan --cache $dev2 -aay
++
++aux lvmconf 'global/use_lvmetad = 0'
++check inactive $vg1 foo
++aux lvmconf 'global/use_lvmetad = 1'
++
++pvscan --cache $dev1 -aay
++
++aux lvmconf 'global/use_lvmetad = 0'
++check active $vg1 foo
++aux lvmconf 'global/use_lvmetad = 1'
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 34ab792..81849f5 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -91,18 +91,36 @@ static void _pvscan_display_single(struct cmd_context *cmd,
+ 				display_size(cmd, (uint64_t) (pv_pe_count(pv) - pv_pe_alloc_count(pv)) * pv_pe_size(pv)));
+ }
+ 
+-static int _auto_activation_handler(struct volume_group *vg, int partial,
++static int _auto_activation_handler(struct cmd_context *cmd,
++				    const char *vgid, int partial,
+ 				    activation_change_t activate)
+ {
++	struct volume_group *vg;
++	int consistent = 0;
++	struct id vgid_raw;
++
+ 	/* TODO: add support for partial and clustered VGs */
+-	if (partial || vg_is_clustered(vg))
++	if (partial)
+ 		return 1;
+ 
++	id_read_format(&vgid_raw, vgid);
++	/* NB. This is safe because we know lvmetad is running and we won't hit
++	 * disk. */
++	if (!(vg = vg_read_internal(cmd, NULL, &vgid_raw, 0, &consistent)))
++	    return 1;
++
++	if (vg_is_clustered(vg)) {
++		release_vg(vg);
++		return 1;
++	}
++
+ 	if (!vgchange_activate(vg->cmd, vg, activate)) {
+ 		log_error("%s: autoactivation failed.", vg->name);
++		release_vg(vg);
+ 		return 0;
+ 	}
+ 
++	release_vg(vg);
+ 	return 1;
+ }
+ 
 
 
