@@ -1,186 +1,51 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 12 Dec 2012 12:20:06 +0000 (UTC)
-Subject: master - lvmetad: Fix autoactivation for MDA-less PVs.
-Message-ID: <20121212122007.0B7EB225E@hosted02.fedoraproject.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed, 12 Dec 2012 12:28:37 +0000 (UTC)
+Subject: master - lvmetad: fix compiler warning and add WHATS_NEW line for previous commit
+Message-ID: <20121212122837.D18F8246D@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f14f2d4378c066e50e2420e30407c8673cc7112a
-Commit:        f14f2d4378c066e50e2420e30407c8673cc7112a
-Parent:        cad22be3942809bac979d42195ea5a861a91a71f
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Wed Dec 12 12:51:28 2012 +0100
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Dec 12 13:19:04 2012 +0100
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e5709a32be746ad0d21b13df18f23387bcccabef
+Commit:        e5709a32be746ad0d21b13df18f23387bcccabef
+Parent:        f14f2d4378c066e50e2420e30407c8673cc7112a
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Wed Dec 12 13:27:25 2012 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Dec 12 13:27:25 2012 +0100
 
-lvmetad: Fix autoactivation for MDA-less PVs.
+lvmetad: fix compiler warning and add WHATS_NEW line for previous commit
 
-Calling pvscan --cache with -aay on a PV without an MDA would spuriously fail
-with an internal error, because of an incorrect assumption that a parsed VG
-structure was always available. This is not true and the autoactivation handler
-needs to call vg_read to obtain metadata in cases where the PV had no MDAs to
-parse. Therefore, we pass vgid into the handler instead of the (possibly NULL)
-VG coming from the PV's MDA.
 ---
- lib/cache/lvmetad.c                |   12 +++------
- lib/cache/lvmetad.h                |    3 +-
- test/shell/lvmetad-pvscan-nomda.sh |   49 ++++++++++++++++++++++++++++++++++++
- tools/pvscan.c                     |   22 ++++++++++++++-
- 4 files changed, 75 insertions(+), 11 deletions(-)
+ WHATS_NEW      |    1 +
+ tools/pvscan.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index e5c5f51..a636f43 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -675,7 +675,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
- 	daemon_reply reply;
- 	struct lvmcache_info *info;
- 	struct dm_config_tree *pvmeta, *vgmeta;
--	const char *status;
-+	const char *status, *vgid;
- 	int result;
- 
- 	if (!lvmetad_active() || test_mode())
-@@ -724,11 +724,6 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
- 				      NULL);
- 		dm_config_destroy(vgmeta);
- 	} else {
--		if (handler) {
--			log_error(INTERNAL_ERROR "Handler needs existing VG.");
--			dm_config_destroy(pvmeta);
--			return 0;
--		}
- 		/* There are no MDAs on this PV. */
- 		reply = _lvmetad_send("pv_found", "pvmeta = %t", pvmeta, NULL);
- 	}
-@@ -744,10 +739,11 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
- 
- 	if (result && handler) {
- 		status = daemon_reply_str(reply, "status", "<missing>");
-+		vgid = daemon_reply_str(reply, "vgid", "<missing>");
- 		if (!strcmp(status, "partial"))
--			handler(vg, 1, CHANGE_AAY);
-+			handler(_lvmetad_cmd, vgid, 1, CHANGE_AAY);
- 		else if (!strcmp(status, "complete"))
--			handler(vg, 0, CHANGE_AAY);
-+			handler(_lvmetad_cmd, vgid, 0, CHANGE_AAY);
- 		else if (!strcmp(status, "orphan"))
- 			;
- 		else
-diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
-index 5f0f552..c644069 100644
---- a/lib/cache/lvmetad.h
-+++ b/lib/cache/lvmetad.h
-@@ -22,7 +22,8 @@ struct cmd_context;
- struct dm_config_tree;
- enum activation_change;
- 
--typedef int (*activation_handler) (struct volume_group *vg, int partial,
-+typedef int (*activation_handler) (struct cmd_context *cmd,
-+				   const char *vgid, int partial,
- 				   enum activation_change activate);
- 
- #ifdef LVMETAD_SUPPORT
-diff --git a/test/shell/lvmetad-pvscan-nomda.sh b/test/shell/lvmetad-pvscan-nomda.sh
-new file mode 100644
-index 0000000..c04a275
---- /dev/null
-+++ b/test/shell/lvmetad-pvscan-nomda.sh
-@@ -0,0 +1,49 @@
-+#!/bin/sh
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+test -e LOCAL_LVMETAD || skip
-+kill $(cat LOCAL_LVMETAD)
-+rm LOCAL_LVMETAD
-+
-+aux prepare_devs 2
-+
-+pvcreate --metadatacopies 0 $dev1
-+pvcreate --metadatacopies 1 $dev2
-+vgcreate $vg1 $dev1 $dev2
-+lvcreate -n foo -l 1 -an --zero n $vg1
-+
-+# start lvmetad but make sure it doesn't know about $dev1 or $dev2
-+aux disable_dev $dev1
-+aux disable_dev $dev2
-+aux prepare_lvmetad
-+lvs
-+mv LOCAL_LVMETAD XXX
-+aux enable_dev $dev2
-+aux enable_dev $dev1
-+mv XXX LOCAL_LVMETAD
-+
-+aux lvmconf 'global/use_lvmetad = 0'
-+check inactive $vg1 foo
-+aux lvmconf 'global/use_lvmetad = 1'
-+
-+pvscan --cache $dev2 -aay
-+
-+aux lvmconf 'global/use_lvmetad = 0'
-+check inactive $vg1 foo
-+aux lvmconf 'global/use_lvmetad = 1'
-+
-+pvscan --cache $dev1 -aay
-+
-+aux lvmconf 'global/use_lvmetad = 0'
-+check active $vg1 foo
-+aux lvmconf 'global/use_lvmetad = 1'
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dbd59bf..4214b27 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix crash in pvscan --cache -aay triggered by non-mda PV.
+   Allow lvconvert --stripes/stripesize only with --mirrors/--repair/--thinpool.
+   Fix memleak in device_is_usable mirror testing function.
+   Do not ignore -f in lvconvert --repair -y -f for mirror and raid volumes.
 diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 34ab792..81849f5 100644
+index 81849f5..c2e6f5c 100644
 --- a/tools/pvscan.c
 +++ b/tools/pvscan.c
-@@ -91,18 +91,36 @@ static void _pvscan_display_single(struct cmd_context *cmd,
- 				display_size(cmd, (uint64_t) (pv_pe_count(pv) - pv_pe_alloc_count(pv)) * pv_pe_size(pv)));
- }
+@@ -106,7 +106,7 @@ static int _auto_activation_handler(struct cmd_context *cmd,
+ 	id_read_format(&vgid_raw, vgid);
+ 	/* NB. This is safe because we know lvmetad is running and we won't hit
+ 	 * disk. */
+-	if (!(vg = vg_read_internal(cmd, NULL, &vgid_raw, 0, &consistent)))
++	if (!(vg = vg_read_internal(cmd, NULL, (const char *) &vgid_raw, 0, &consistent)))
+ 	    return 1;
  
--static int _auto_activation_handler(struct volume_group *vg, int partial,
-+static int _auto_activation_handler(struct cmd_context *cmd,
-+				    const char *vgid, int partial,
- 				    activation_change_t activate)
- {
-+	struct volume_group *vg;
-+	int consistent = 0;
-+	struct id vgid_raw;
-+
- 	/* TODO: add support for partial and clustered VGs */
--	if (partial || vg_is_clustered(vg))
-+	if (partial)
- 		return 1;
- 
-+	id_read_format(&vgid_raw, vgid);
-+	/* NB. This is safe because we know lvmetad is running and we won't hit
-+	 * disk. */
-+	if (!(vg = vg_read_internal(cmd, NULL, &vgid_raw, 0, &consistent)))
-+	    return 1;
-+
-+	if (vg_is_clustered(vg)) {
-+		release_vg(vg);
-+		return 1;
-+	}
-+
- 	if (!vgchange_activate(vg->cmd, vg, activate)) {
- 		log_error("%s: autoactivation failed.", vg->name);
-+		release_vg(vg);
- 		return 0;
- 	}
- 
-+	release_vg(vg);
- 	return 1;
- }
- 
+ 	if (vg_is_clustered(vg)) {
 
 
