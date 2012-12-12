@@ -1,23 +1,29 @@
 From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Wed, 12 Dec 2012 12:07:03 +0000 (UTC)
+Date: Wed, 12 Dec 2012 12:20:06 +0000 (UTC)
 Subject: master - lvmetad: Fix autoactivation for MDA-less PVs.
-Message-ID: <20121212120703.5DAACA0C3A@fedorahosted.org>
+Message-ID: <20121212122007.0B7EB225E@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=789a45d6d7567c467250db661b937422e03f491d
-Commit:        789a45d6d7567c467250db661b937422e03f491d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f14f2d4378c066e50e2420e30407c8673cc7112a
+Commit:        f14f2d4378c066e50e2420e30407c8673cc7112a
 Parent:        cad22be3942809bac979d42195ea5a861a91a71f
 Author:        Petr Rockai <prockai@redhat.com>
 AuthorDate:    Wed Dec 12 12:51:28 2012 +0100
 Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Wed Dec 12 13:06:26 2012 +0100
+CommitterDate: Wed Dec 12 13:19:04 2012 +0100
 
 lvmetad: Fix autoactivation for MDA-less PVs.
 
+Calling pvscan --cache with -aay on a PV without an MDA would spuriously fail
+with an internal error, because of an incorrect assumption that a parsed VG
+structure was always available. This is not true and the autoactivation handler
+needs to call vg_read to obtain metadata in cases where the PV had no MDAs to
+parse. Therefore, we pass vgid into the handler instead of the (possibly NULL)
+VG coming from the PV's MDA.
 ---
  lib/cache/lvmetad.c                |   12 +++------
  lib/cache/lvmetad.h                |    3 +-
