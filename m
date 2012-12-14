@@ -1,45 +1,39 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Thu, 13 Dec 2012 10:20:02 +0000 (UTC)
-Subject: master - lvconvert: also allow --type with --stripes
-Message-ID: <20121213102002.BB88423D4@hosted02.fedoraproject.org>
+From: Sebastian Ott <sebott@linux.vnet.ibm.com>
+Date: Fri, 14 Dec 2012 10:02:43 +0100 (CET)
+Subject: [RESEND][PATCH] filters: add scm devices
+Message-ID: <alpine.LFD.2.02.1212140952350.3898@c4eb>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e8025aa67a05af046878f52dfb45fca30ed70084
-Commit:        e8025aa67a05af046878f52dfb45fca30ed70084
-Parent:        c089029b70d64e4f7d2851336d463ce40f1b7023
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Dec 13 11:15:37 2012 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Dec 13 11:19:11 2012 +0100
+Include scm block devices
+(http://git.kernel.org/?p=linux/kernel/git/torvalds/linux.git;a=commitdiff;h=f30664e2)
+to lvm's whitelist.
 
-lvconvert: also allow --type with --stripes
+Fix this:
+pvcreate /dev/scma
+  Device /dev/scma not found (or ignored by filtering).
 
-We can also use this for conversion between different mirror segment
-types. Each new segment type converter then needs to check itself
-whether the --stripes is applicable.
+Reported-by: Peter Oberparleiter <peter.oberparleiter@de.ibm.com>
+Signed-off-by: Sebastian Ott <sebott@linux.vnet.ibm.com>
 ---
- tools/lvconvert.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/filters/device-types.h | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 9c947d7..fa3b1ec 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -169,9 +169,9 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 
- 	if ((arg_count(cmd, stripes_long_ARG) || arg_count(cmd, stripesize_ARG)) &&
- 	    !(arg_count(cmd, mirrors_ARG) || arg_count(cmd, repair_ARG) ||
--	      arg_count(cmd, thinpool_ARG))) {
-+	      arg_count(cmd, thinpool_ARG) || arg_count(cmd, type_ARG))) {
- 		log_error("--stripes or --stripesize argument is only valid "
--			  "with --mirrors, --repair or --thinpool");
-+			  "with --mirrors, --repair, --thinpool or --type");
- 		return 0;
- 	}
- 
+diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
+index aec4293..2e49f7f 100644
+--- a/lib/filters/device-types.h
++++ b/lib/filters/device-types.h
+@@ -58,5 +58,6 @@ static const device_info_t _device_info[] = {
+ 	{"mtip32xx", 16},	/* Micron PCIe SSDs */
+ 	{"vtms", 16},		/* Violin Memory */
+ 	{"skd", 16},		/* STEC */
++	{"scm", 8},		/* Storage Class Memory (IBM S/390) */
+ 	{"", 0}
+ };
+-- 
+1.7.11.4
 
 
