@@ -1,87 +1,86 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:26 +0000 (UTC)
-Subject: master - libdaemon: check for strdup result
-Message-ID: <20121215162526.45625AAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:28 +0000 (UTC)
+Subject: master - lvmetad: unlock vg on out-of-memory path
+Message-ID: <20121215162528.CE737AAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=788ac7fa547fb98f0edd38685d40b80609f298dc
-Commit:        788ac7fa547fb98f0edd38685d40b80609f298dc
-Parent:        ff5612c0c3208276763348e9f9afa9a09096fbe1
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4269aadf320f36d3d6fa3a3b66dda98855e7bc3
+Commit:        a4269aadf320f36d3d6fa3a3b66dda98855e7bc3
+Parent:        788ac7fa547fb98f0edd38685d40b80609f298dc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 01:00:36 2012 +0100
+AuthorDate:    Fri Dec 14 16:35:26 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 17:23:26 2012 +0100
 
-libdaemon: check for strdup result
+lvmetad: unlock vg on out-of-memory path
 
-Detect failure of dm_pool_strdup() and print error in fail path.
-Save one extra strchr call - since we already know the distance
-for the '=' character.
-
-Drop stack trace from return after log_error().
+If we fail to get memory for mutex, hash the mutex
+or fail somewhere along pthread function calls
+return allocated resources back and unlock vg_lock_map mutex.
 ---
  WHATS_NEW                      |    1 +
- libdaemon/client/config-util.c |   17 +++++++++++------
- 2 files changed, 12 insertions(+), 6 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |   24 ++++++++++++++----------
+ 2 files changed, 15 insertions(+), 10 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index fcb8897..e0ce819 100644
+index e0ce819..dd8ae68 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Add check for key string duplication in config_make_nodes_v.
++  Unlock vg mutex in error path when lvmetad tries to lock_vg.
+   Add check for key string duplication in config_make_nodes_v.
    Add check for created fid in _scan_file.
    Log output also to syslog when abort_on_internal_error is set.
-   Add LV snapshot support to liblvm and python-lvm.
-diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
-index 1c83134..34d755f 100644
---- a/libdaemon/client/config-util.c
-+++ b/libdaemon/client/config-util.c
-@@ -215,7 +215,8 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 	const char *next;
- 	struct dm_config_node *first = NULL;
- 	struct dm_config_node *cn;
--	const char *fmt, *key;
-+	const char *fmt;
-+	char *key;
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index e1cb583..6c00146 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -121,19 +121,18 @@ static response reply_unknown(const char *reason)
+ static struct dm_config_tree *lock_vg(lvmetad_state *s, const char *id) {
+ 	pthread_mutex_t *vg;
+ 	struct dm_config_tree *cft;
++	pthread_mutexattr_t rec;
  
- 	while ((next = va_arg(ap, char *))) {
- 		cn = NULL;
-@@ -223,12 +224,16 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 
- 		if (!fmt) {
- 			log_error(INTERNAL_ERROR "Bad format string '%s'", fmt);
--			return_NULL;
-+			return NULL;
-+		}
-+
-+		if (!(key = dm_pool_strdup(cft->mem, next))) {
-+			log_error("Failed to duplicate node key.");
-+			return NULL;
+ 	pthread_mutex_lock(&s->lock.vg_lock_map);
+-	vg = dm_hash_lookup(s->lock.vg, id);
+-	if (!vg) {
+-		pthread_mutexattr_t rec;
+-		pthread_mutexattr_init(&rec);
+-		pthread_mutexattr_settype(&rec, PTHREAD_MUTEX_RECURSIVE_NP);
+-		if (!(vg = malloc(sizeof(pthread_mutex_t))))
+-                        return NULL;
+-		pthread_mutex_init(vg, &rec);
++	if (!(vg = dm_hash_lookup(s->lock.vg, id))) {
++		if (!(vg = malloc(sizeof(pthread_mutex_t))) ||
++		    pthread_mutexattr_init(&rec) ||
++		    pthread_mutexattr_settype(&rec, PTHREAD_MUTEX_RECURSIVE_NP) ||
++		    pthread_mutex_init(vg, &rec))
++			goto bad;
+ 		if (!dm_hash_insert(s->lock.vg, id, vg)) {
+-			free(vg);
+-			return NULL;
++			pthread_mutex_destroy(vg);
++			goto bad;
  		}
--		fmt += 2;
+ 	}
+ 	/* We never remove items from s->lock.vg => the pointer remains valid. */
+@@ -147,6 +146,11 @@ static struct dm_config_tree *lock_vg(lvmetad_state *s, const char *id) {
+ 	cft = dm_hash_lookup(s->vgid_to_metadata, id);
+ 	unlock_vgid_to_metadata(s);
+ 	return cft;
++bad:
++	pthread_mutex_unlock(&s->lock.vg_lock_map);
++	free(vg);
++	ERROR(s, "Out of memory");
++	return NULL;
+ }
  
--		key = dm_pool_strdup(cft->mem, next);
--		*strchr(key, '=') = 0;
-+		key[fmt - next] = '\0';
-+		fmt += 2;
- 
- 		if (!strcmp(fmt, "%d") || !strcmp(fmt, "%" PRId64)) {
- 			int64_t value = va_arg(ap, int64_t);
-@@ -247,7 +252,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
- 			chain_node(cn, parent, pre_sib);
- 		} else {
- 			log_error(INTERNAL_ERROR "Bad format string '%s'", fmt);
--			return_NULL;
-+			return NULL;
- 		}
- 		if (!first)
- 			first = cn;
+ static void unlock_vg(lvmetad_state *s, const char *id) {
 
 
