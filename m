@@ -1,49 +1,50 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:16 +0000 (UTC)
-Subject: master - cleanup: reorder code
-Message-ID: <20121215162516.A2901AAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:07 +0000 (UTC)
+Subject: master - cleanup: ignore return values
+Message-ID: <20121215162507.0778CAAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21f6511bc200af434fb933a181f5334021b3ee08
-Commit:        21f6511bc200af434fb933a181f5334021b3ee08
-Parent:        13835d04ac2a2c518ec935d220c7feb711327884
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ab43345051fe49b1d56771383feb65c408eaf9a
+Commit:        8ab43345051fe49b1d56771383feb65c408eaf9a
+Parent:        1b05438fcbb27ba425c369c0b9d4e641ccc1b970
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 19:43:42 2012 +0100
+AuthorDate:    Fri Dec 14 18:58:18 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 14:57:40 2012 +0100
 
-cleanup: reorder code
+cleanup: ignore return values
 
-Swap if() test condition and check for failure
-and use traditional 'stack' trace.
+These dm_snprintfs should not fail, since enough space is reserved.
+So return intentionaly ignored.
 ---
- lib/format_text/format-text.c |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ lib/cache/lvmetad.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index b562cfa..476d5d9 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2226,11 +2226,12 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
- 	if (!(fid = alloc_fid(fmt, fic)))
- 		return_NULL;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index a636f43..3ce2804 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -618,7 +618,7 @@ static int _extract_mda(struct metadata_area *mda, void *baton)
+ 	if (!mda->ops->mda_export_text) /* do nothing */
+ 		return 1;
  
--	if (_create_vg_text_instance(fid, fic))
--		return fid;
-+	if (!_create_vg_text_instance(fid, fic)) {
-+		dm_pool_destroy(fid->mem);
-+		return_NULL;
-+	}
+-	dm_snprintf(id, 32, "mda%d", b->i);
++	(void) dm_snprintf(id, 32, "mda%d", b->i);
+ 	if (!(cn = make_config_node(b->cft, id, b->cft->root, b->pre_sib)))
+ 		return 0;
+ 	if (!mda->ops->mda_export_text(mda, b->cft, cn))
+@@ -639,7 +639,7 @@ static int _extract_da(struct disk_locn *da, void *baton)
+ 	if (!da)
+ 		return 1;
  
--	dm_pool_destroy(fid->mem);
--	return NULL;
-+	return fid;
- }
- 
- static struct format_handler _text_handler = {
+-	dm_snprintf(id, 32, "da%d", b->i);
++	(void) dm_snprintf(id, 32, "da%d", b->i);
+ 	if (!(cn = make_config_node(b->cft, id, b->cft->root, b->pre_sib)))
+ 		return 0;
+ 	if (!config_make_nodes(b->cft, cn, NULL,
 
 
