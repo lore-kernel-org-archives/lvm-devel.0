@@ -1,55 +1,49 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:09 +0000 (UTC)
-Subject: master - cleanup: singlenode minor change
-Message-ID: <20121215162509.76708AAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:16 +0000 (UTC)
+Subject: master - cleanup: reorder code
+Message-ID: <20121215162516.A2901AAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a266154e1fc598ae184780391dc8d8e87eb2c891
-Commit:        a266154e1fc598ae184780391dc8d8e87eb2c891
-Parent:        8ab43345051fe49b1d56771383feb65c408eaf9a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=21f6511bc200af434fb933a181f5334021b3ee08
+Commit:        21f6511bc200af434fb933a181f5334021b3ee08
+Parent:        13835d04ac2a2c518ec935d220c7feb711327884
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 14:01:19 2012 +0100
+AuthorDate:    Fri Dec 14 19:43:42 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 14:57:40 2012 +0100
 
-cleanup: singlenode minor change
+cleanup: reorder code
 
-Use strcpy instead of sprintf for plain string.
-And use dm_strncpy for safer strncpy.
-
-TODO: Fix API return values for cluster functions.
+Swap if() test condition and check for failure
+and use traditional 'stack' trace.
 ---
- daemons/clvmd/clvmd-singlenode.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ lib/format_text/format-text.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
-index 3b35bf5..b968c5f 100644
---- a/daemons/clvmd/clvmd-singlenode.c
-+++ b/daemons/clvmd/clvmd-singlenode.c
-@@ -136,7 +136,7 @@ static int _csid_from_name(char *csid, const char *name)
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index b562cfa..476d5d9 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2226,11 +2226,12 @@ static struct format_instance *_text_create_text_instance(const struct format_ty
+ 	if (!(fid = alloc_fid(fmt, fic)))
+ 		return_NULL;
  
- static int _name_from_csid(const char *csid, char *name)
- {
--	sprintf(name, "SINGLENODE");
-+	strcpy(name, "SINGLENODE");
- 	return 0;
+-	if (_create_vg_text_instance(fid, fic))
+-		return fid;
++	if (!_create_vg_text_instance(fid, fic)) {
++		dm_pool_destroy(fid->mem);
++		return_NULL;
++	}
+ 
+-	dm_pool_destroy(fid->mem);
+-	return NULL;
++	return fid;
  }
  
-@@ -284,9 +284,8 @@ static int _cluster_send_message(const void *buf, int msglen,
- 
- static int _get_cluster_name(char *buf, int buflen)
- {
--	strncpy(buf, "localcluster", buflen);
--	buf[buflen - 1] = 0;
--	return 0;
-+	/* FIXME - cluster_ops API is broken - swap 1/0 */
-+	return dm_strncpy(buf, "localcluster", buflen) ? 0 : 1;
- }
- 
- static struct cluster_ops _cluster_singlenode_ops = {
+ static struct format_handler _text_handler = {
 
 
