@@ -1,50 +1,40 @@
-From: Andy Grover <grover@fedoraproject.org>
-Date: Fri, 14 Dec 2012 22:11:08 +0000 (UTC)
-Subject: master - python-lvm: Make second lv.snapshot() argument optional
-Message-ID: <20121214221108.E6D52137F@hosted02.fedoraproject.org>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Sat, 15 Dec 2012 16:24:57 +0000 (UTC)
+Subject: master - cleanup: convert to 32bit
+Message-ID: <20121215162457.181ECAAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0958905b1bc0a59d34a4092377bae7c59f424181
-Commit:        0958905b1bc0a59d34a4092377bae7c59f424181
-Parent:        0e3093979e901384aecb22e08d83b5acb2ef12c1
-Author:        Andy Grover <agrover@redhat.com>
-AuthorDate:    Fri Dec 14 14:10:41 2012 -0800
-Committer:     Andy Grover <agrover@redhat.com>
-CommitterDate: Fri Dec 14 14:10:41 2012 -0800
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=03be45ac0a3b10807374ac0869ac8431bee348b7
+Commit:        03be45ac0a3b10807374ac0869ac8431bee348b7
+Parent:        0958905b1bc0a59d34a4092377bae7c59f424181
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Dec 13 20:35:38 2012 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Dec 15 14:57:39 2012 +0100
 
-python-lvm: Make second lv.snapshot() argument optional
+cleanup: convert to 32bit
 
-If no size is given, size defaults to 0, which in lvm_lv_snapshot will
-allocate extents equal to the original LV be allocated for the new
-snapshot.
-
-Signed-off-by: Andy Grover <agrover@redhat.com>
+Chunk sizes fits into 4G range, so keep it in 32bit range.
 ---
- python/liblvm.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ tools/toollib.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 906825e..4db507c 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1317,12 +1317,12 @@ static PyObject *
- liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
- {
- 	const char *vgname;
--	uint64_t size;
-+	uint64_t size = 0;
- 	lvobject *lvobj;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 1d67e5d..1c455ef 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1618,7 +1618,7 @@ int update_pool_params(struct cmd_context *cmd, unsigned attr,
+ 				(2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE *
+ 				 (SECTOR_SIZE / UINT64_C(64)));
+ 			log_warn("WARNING: Chunk size is too small for pool, suggested minimum is %s.",
+-				 display_size(cmd, 1 << (ffs(estimate_chunk_size) + 1)));
++				 display_size(cmd, 1 << (int)(ffs(estimate_chunk_size) + 1)));
+ 		}
  
- 	LV_VALID(self);
- 
--	if (!PyArg_ParseTuple(args, "sl", &vgname, &size)) {
-+	if (!PyArg_ParseTuple(args, "s|l", &vgname, &size)) {
- 		return NULL;
- 	}
- 
+ 		/* Round up to extent size */
 
 
