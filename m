@@ -1,108 +1,70 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:52 +0000 (UTC)
-Subject: master - lvmetad: simplify pvid memory allocation.
-Message-ID: <20121215162552.4A3F0A0C59@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:04 +0000 (UTC)
+Subject: master - cleanup: ignore errors
+Message-ID: <20121215162504.A131AAAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ed23da95b63308e11f8d680b189686a5d2d380d0
-Commit:        ed23da95b63308e11f8d680b189686a5d2d380d0
-Parent:        6f9e26f5c0d0bbcd0eeedcda1de3daa92188bd22
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1b05438fcbb27ba425c369c0b9d4e641ccc1b970
+Commit:        1b05438fcbb27ba425c369c0b9d4e641ccc1b970
+Parent:        8b8065a870591e743a79e9aa7f738d084d88bcad
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 15 17:00:35 2012 +0100
+AuthorDate:    Thu Dec 13 19:55:33 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Dec 15 17:23:28 2012 +0100
+CommitterDate: Sat Dec 15 14:57:40 2012 +0100
 
-lvmetad: simplify pvid memory allocation.
+cleanup: ignore errors
 
-Since pvid_dup and cft config appears to be tightly
-binded together - reuse it's memory pool for string.
-Simplifies release of hashes.
+Since we are doing just dump and function doesn't report
+any error, explicitely ignore return values from
+dm_config_write_node and dm_asprintf.
+
+Same applies for the logging function.
 ---
- daemons/lvmetad/lvmetad-core.c |   21 +++------------------
- 1 files changed, 3 insertions(+), 18 deletions(-)
+ daemons/lvmetad/lvmetad-core.c |    6 +++---
+ libdaemon/server/daemon-log.c  |    2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index ef3f8fe..4e02662 100644
+index 0a1c884..e1cb583 100644
 --- a/daemons/lvmetad/lvmetad-core.c
 +++ b/daemons/lvmetad/lvmetad-core.c
-@@ -67,13 +67,6 @@ static void destroy_metadata_hashes(lvmetad_state *s)
- 	dm_hash_destroy(s->vgid_to_metadata);
- 	dm_hash_destroy(s->vgid_to_vgname);
- 	dm_hash_destroy(s->vgname_to_vgid);
--
--	n = dm_hash_get_first(s->device_to_pvid);
--	while (n) {
--		dm_free(dm_hash_get_data(s->device_to_pvid, n));
--		n = dm_hash_get_next(s->device_to_pvid, n);
--	}
--
- 	dm_hash_destroy(s->device_to_pvid);
- 	dm_hash_destroy(s->pvid_to_vgid);
+@@ -950,7 +950,7 @@ static void _dump_cft(struct buffer *buf, struct dm_hash_table *ht, const char *
+ 		struct dm_config_tree *cft = dm_hash_get_data(ht, n);
+ 		const char *key_backup = cft->root->key;
+ 		cft->root->key = dm_config_find_str(cft->root, key_addr, "unknown");
+-		dm_config_write_node(cft->root, buffer_line, buf);
++		(void) dm_config_write_node(cft->root, buffer_line, buf);
+ 		cft->root->key = key_backup;
+ 		n = dm_hash_get_next(ht, n);
+ 	}
+@@ -969,9 +969,9 @@ static void _dump_pairs(struct buffer *buf, struct dm_hash_table *ht, const char
+ 			   *val = dm_hash_get_data(ht, n);
+ 		buffer_append(buf, "    ");
+ 		if (int_key)
+-			dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
++			(void) dm_asprintf(&append, "%d = \"%s\"", *(int*)key, val);
+ 		else
+-			dm_asprintf(&append, "%s = \"%s\"", key, val);
++			(void) dm_asprintf(&append, "%s = \"%s\"", key, val);
+ 		if (append)
+ 			buffer_append(buf, append);
+ 		buffer_append(buf, "\n");
+diff --git a/libdaemon/server/daemon-log.c b/libdaemon/server/daemon-log.c
+index 6f5f4dc..c9e133c 100644
+--- a/libdaemon/server/daemon-log.c
++++ b/libdaemon/server/daemon-log.c
+@@ -98,7 +98,7 @@ void daemon_log_cft(log_state *s, int type, const char *prefix, const struct dm_
+ 	if (!_type_interesting(s, type))
+ 		return;
+ 
+-	dm_config_write_node(n, &_log_line, &b);
++	(void) dm_config_write_node(n, &_log_line, &b);
  }
-@@ -768,7 +761,6 @@ static response pv_gone(lvmetad_state *s, request r)
- 	const char *pvid = daemon_request_str(r, "uuid", NULL);
- 	int64_t device = daemon_request_int(r, "device", 0);
- 	struct dm_config_tree *pvmeta;
--	char *pvid_old;
  
- 	DEBUGLOG(s, "pv_gone: %s / %" PRIu64, pvid, device);
- 
-@@ -783,15 +775,11 @@ static response pv_gone(lvmetad_state *s, request r)
- 	DEBUGLOG(s, "pv_gone (updated): %s / %" PRIu64, pvid, device);
- 
- 	pvmeta = dm_hash_lookup(s->pvid_to_pvmeta, pvid);
--	pvid_old = dm_hash_lookup_binary(s->device_to_pvid, &device, sizeof(device));
- 	dm_hash_remove_binary(s->device_to_pvid, &device, sizeof(device));
- 	dm_hash_remove(s->pvid_to_pvmeta, pvid);
- 	vg_remove_if_missing(s, dm_hash_lookup(s->pvid_to_vgid, pvid));
- 	unlock_pvid_to_pvmeta(s);
- 
--	if (pvid_old)
--		dm_free(pvid_old);
--
- 	if (pvmeta) {
- 		dm_config_destroy(pvmeta);
- 		return daemon_reply_simple("OK", NULL);
-@@ -826,8 +814,8 @@ static response pv_found(lvmetad_state *s, request r)
- 	struct dm_config_node *pvmeta = dm_config_find_node(r.cft->root, "pvmeta");
- 	uint64_t device;
- 	struct dm_config_tree *cft, *pvmeta_old_dev = NULL, *pvmeta_old_pvid = NULL;
--	char *old;
--	char *pvid_dup;
-+	const char *old;
-+	const char *pvid_dup;
- 	int complete = 0, orphan = 0;
- 	int64_t seqno = -1, seqno_old = -1;
- 
-@@ -849,8 +837,6 @@ static response pv_found(lvmetad_state *s, request r)
- 
- 	DEBUGLOG(s, "pv_found %s, vgid = %s, device = %" PRIu64 ", old = %s", pvid, vgid, device, old);
- 
--	dm_free(old);
--
- 	if (!(cft = dm_config_create()) ||
- 	    !(cft->root = dm_config_clone_node(cft, pvmeta, 0))) {
- 		unlock_pvid_to_pvmeta(s);
-@@ -859,7 +845,7 @@ static response pv_found(lvmetad_state *s, request r)
- 		return reply_fail("out of memory");
- 	}
- 
--	if (!(pvid_dup = dm_strdup(pvid))) {
-+	if (!(pvid_dup = dm_pool_strdup(dm_config_memory(cft), pvid))) {
- 		unlock_pvid_to_pvmeta(s);
- 		dm_config_destroy(cft);
- 		return reply_fail("out of memory");
-@@ -870,7 +856,6 @@ static response pv_found(lvmetad_state *s, request r)
- 		unlock_pvid_to_pvmeta(s);
- 		dm_hash_remove(s->pvid_to_pvmeta, pvid);
- 		dm_config_destroy(cft);
--		dm_free(pvid_dup);
- 		return reply_fail("out of memory");
- 	}
- 	if (pvmeta_old_pvid)
+ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *msg)
 
 
