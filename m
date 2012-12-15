@@ -1,57 +1,57 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:40 +0000 (UTC)
-Subject: master - lvmetad: check id_read_format error status
-Message-ID: <20121215162540.2409CAAB82@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:42 +0000 (UTC)
+Subject: master - lvmetad: fix socket leak in handle_connect
+Message-ID: <20121215162542.AF7F0AAB82@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e012d0635d34edd98652c9425abb618a9565077a
-Commit:        e012d0635d34edd98652c9425abb618a9565077a
-Parent:        ba3f37c9e4971ba4538cb74e9e7b60e3772da793
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4008f4f891c948c1629ed0ee50e04d4c26001d0c
+Commit:        4008f4f891c948c1629ed0ee50e04d4c26001d0c
+Parent:        e012d0635d34edd98652c9425abb618a9565077a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 16:45:15 2012 +0100
+AuthorDate:    Fri Dec 14 21:31:22 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 17:23:27 2012 +0100
 
-lvmetad: check id_read_format error status
+lvmetad: fix socket leak in handle_connect
 
-Detect error from id_read_format() function.
+Close socket_fd and report error on malloc failure.
 ---
- WHATS_NEW           |    1 +
- lib/cache/lvmetad.c |    7 ++++---
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ WHATS_NEW                        |    1 +
+ libdaemon/server/daemon-server.c |    6 +++++-
+ 2 files changed, 6 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index d535d10..2fc8acf 100644
+index 2fc8acf..701d502 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Check for failing id_read_format() in _pv_populate_lvmcache.
++  Fix socket leak on error path in lvmetad's handle_connect.
+   Check for failing id_read_format() in _pv_populate_lvmcache.
    Fix memleak on error path for lvmetad's pv_found.
    Unlock vg mutex in error path when lvmetad tries to lock_vg.
-   Add check for key string duplication in config_make_nodes_v.
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 3ce2804..67e083b 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -249,9 +249,10 @@ static struct lvmcache_info *_pv_populate_lvmcache(
- 		return NULL;
- 	}
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 3711419..3c84e11 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -427,8 +427,12 @@ static int handle_connect(daemon_state s)
+ 	if (client.socket_fd < 0)
+ 		return 0;
  
--	if (vgid_txt)
--		id_read_format(&vgid, vgid_txt);
--	else
-+	if (vgid_txt) {
-+		if (!id_read_format(&vgid, vgid_txt))
-+			return_NULL;
-+	} else
- 		strcpy((char*)&vgid, fmt->orphan_vg_name);
+-	if (!(baton = malloc(sizeof(struct thread_baton))))
++	if (!(baton = malloc(sizeof(struct thread_baton)))) {
++		if (close(client.socket_fd))
++			perror("close");
++		ERROR(&s, "Failed to allocate thread baton");
+ 		return 0;
++	}
  
- 	if (!vgname)
+ 	baton->s = s;
+ 	baton->client = client;
 
 
