@@ -1,68 +1,56 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:21 +0000 (UTC)
-Subject: master - log: move abort past syslog
-Message-ID: <20121215162521.66A8BAAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:23 +0000 (UTC)
+Subject: master - format-text: check for _text_create_text_instance
+Message-ID: <20121215162523.CB9C8AAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=740ab81d03b1286096d9f8b35be15d54493db52f
-Commit:        740ab81d03b1286096d9f8b35be15d54493db52f
-Parent:        575c4ed96412edf513dbd0263983520a15b3b8bc
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ff5612c0c3208276763348e9f9afa9a09096fbe1
+Commit:        ff5612c0c3208276763348e9f9afa9a09096fbe1
+Parent:        740ab81d03b1286096d9f8b35be15d54493db52f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 13:57:01 2012 +0100
+AuthorDate:    Fri Dec 14 21:34:28 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Dec 15 17:22:48 2012 +0100
+CommitterDate: Sat Dec 15 17:23:23 2012 +0100
 
-log: move abort past syslog
+format-text: check for _text_create_text_instance
 
-When the abort_on_internal_errors is enabled, we aborted prior
-the syslog logging output.
-
-Since such fatal error gets level _LOG_FATAL it should
-not be blocked by debug_level() check so lets move it further,
-to get abort error logged also via syslog.
+Test if 'fid' creation failed and report stack trace,
+break the loop and do not pass NULL fid further.
 ---
- WHATS_NEW     |    1 +
- lib/log/log.c |    6 +++---
- 2 files changed, 4 insertions(+), 3 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format_text/format-text.c |    5 ++++-
+ 2 files changed, 5 insertions(+), 1 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 697e4d2..249db0b 100644
+index 249db0b..fcb8897 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Log output also to syslog when abort_on_internal_error is set.
++  Add check for created fid in _scan_file.
+   Log output also to syslog when abort_on_internal_error is set.
    Add LV snapshot support to liblvm and python-lvm.
    Avoid a global lock in pvs when lvmetad is in use.
-   Fix crash in pvscan --cache -aay triggered by non-mda PV.
-diff --git a/lib/log/log.c b/lib/log/log.c
-index d50cb4a..3c357f1 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -344,9 +344,6 @@ void print_log(int level, const char *file, int line, int dm_errno,
- 		va_end(ap);
- 	}
- 
--	if (fatal_internal_error)
--		abort();
--
- 	if (level > debug_level())
- 		return;
- 
-@@ -368,6 +365,9 @@ void print_log(int level, const char *file, int line, int dm_errno,
- 		va_end(ap);
- 	}
- 
-+	if (fatal_internal_error)
-+		abort();
-+
- 	/* FIXME This code is unfinished - pre-extend & condense. */
- 	if (!_already_logging && _log_direct && critical_section()) {
- 		_already_logging = 1;
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 476d5d9..227289f 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1089,7 +1089,10 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
+ 				/* FIXME: Check this fid is OK! */
+ 				fic.type = FMT_INSTANCE_PRIVATE_MDAS;
+ 				fic.context.private = NULL;
+-				fid = _text_create_text_instance(fmt, &fic);
++				if (!(fid = _text_create_text_instance(fmt, &fic))) {
++					stack;
++					break;
++				}
+ 				if ((vg = _vg_read_file_name(fid, scanned_vgname,
+ 							     path))) {
+ 					/* FIXME Store creation host in vg */
 
 
