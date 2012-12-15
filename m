@@ -1,41 +1,55 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:24:59 +0000 (UTC)
-Subject: master - cleanup: drop test for optarg NULL
-Message-ID: <20121215162459.B61D4AAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:09 +0000 (UTC)
+Subject: master - cleanup: singlenode minor change
+Message-ID: <20121215162509.76708AAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d774e56670cd8b9d753a8f8a98a3d258e9ee912
-Commit:        1d774e56670cd8b9d753a8f8a98a3d258e9ee912
-Parent:        03be45ac0a3b10807374ac0869ac8431bee348b7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a266154e1fc598ae184780391dc8d8e87eb2c891
+Commit:        a266154e1fc598ae184780391dc8d8e87eb2c891
+Parent:        8ab43345051fe49b1d56771383feb65c408eaf9a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Dec 13 19:54:07 2012 +0100
+AuthorDate:    Fri Dec 14 14:01:19 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 14:57:40 2012 +0100
 
-cleanup: drop test for optarg NULL
+cleanup: singlenode minor change
 
-Since -d takes an argument, we do not need to check for
-optarg being NULL here.
+Use strcpy instead of sprintf for plain string.
+And use dm_strncpy for safer strncpy.
+
+TODO: Fix API return values for cluster functions.
 ---
- daemons/clvmd/clvmd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/clvmd/clvmd-singlenode.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index eb0bffd..398e1a4 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -385,7 +385,7 @@ int main(int argc, char *argv[])
+diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
+index 3b35bf5..b968c5f 100644
+--- a/daemons/clvmd/clvmd-singlenode.c
++++ b/daemons/clvmd/clvmd-singlenode.c
+@@ -136,7 +136,7 @@ static int _csid_from_name(char *csid, const char *name)
  
- 		case 'd':
- 			debug_opt = DEBUG_STDERR;
--			debug_arg = optarg ? (debug_t) atoi(optarg) : DEBUG_STDERR;
-+			debug_arg = (debug_t) atoi(optarg);
- 			if (debug_arg == DEBUG_STDERR)
- 				foreground_mode = 1;
- 			break;
+ static int _name_from_csid(const char *csid, char *name)
+ {
+-	sprintf(name, "SINGLENODE");
++	strcpy(name, "SINGLENODE");
+ 	return 0;
+ }
+ 
+@@ -284,9 +284,8 @@ static int _cluster_send_message(const void *buf, int msglen,
+ 
+ static int _get_cluster_name(char *buf, int buflen)
+ {
+-	strncpy(buf, "localcluster", buflen);
+-	buf[buflen - 1] = 0;
+-	return 0;
++	/* FIXME - cluster_ops API is broken - swap 1/0 */
++	return dm_strncpy(buf, "localcluster", buflen) ? 0 : 1;
+ }
+ 
+ static struct cluster_ops _cluster_singlenode_ops = {
 
 
