@@ -1,117 +1,78 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 15 Dec 2012 16:25:31 +0000 (UTC)
-Subject: master - lvmetad: keep returned struct fully initialized
-Message-ID: <20121215162531.70E01AAB83@fedorahosted.org>
+Date: Sat, 15 Dec 2012 16:25:33 +0000 (UTC)
+Subject: master - lvmetad: fix memleak on pv_found error path
+Message-ID: <20121215162533.D7C49AAB83@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=399fc1bb33119d281f57108dba4bd9cd479ed8a0
-Commit:        399fc1bb33119d281f57108dba4bd9cd479ed8a0
-Parent:        a4269aadf320f36d3d6fa3a3b66dda98855e7bc3
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba3f37c9e4971ba4538cb74e9e7b60e3772da793
+Commit:        ba3f37c9e4971ba4538cb74e9e7b60e3772da793
+Parent:        399fc1bb33119d281f57108dba4bd9cd479ed8a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 14 16:38:07 2012 +0100
+AuthorDate:    Fri Dec 14 16:43:42 2012 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Dec 15 17:23:27 2012 +0100
 
-lvmetad: keep returned struct fully initialized
+lvmetad: fix memleak on pv_found error path
 
-Always clear the response structure.
-Simplify daemon_reply initialization.
+Free resources allocated in pv_found when going out
+through error path.
 ---
- daemons/lvmetad/lvmetad-core.c   |   11 +++++------
- libdaemon/client/daemon-client.c |    6 +++---
- 2 files changed, 8 insertions(+), 9 deletions(-)
+ WHATS_NEW                      |    1 +
+ daemons/lvmetad/lvmetad-core.c |   14 ++++++++++++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index dd8ae68..d535d10 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix memleak on error path for lvmetad's pv_found.
+   Unlock vg mutex in error path when lvmetad tries to lock_vg.
+   Add check for key string duplication in config_make_nodes_v.
+   Add check for created fid in _scan_file.
 diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 6c00146..cbeaae1 100644
+index cbeaae1..ef3f8fe 100644
 --- a/daemons/lvmetad/lvmetad-core.c
 +++ b/daemons/lvmetad/lvmetad-core.c
-@@ -292,7 +292,7 @@ static response pv_list(lvmetad_state *s, request r)
- 	struct dm_config_node *cn = NULL, *cn_pvs;
- 	struct dm_hash_node *n;
- 	const char *id;
--	response res;
-+	response res = { 0 };
+@@ -827,7 +827,7 @@ static response pv_found(lvmetad_state *s, request r)
+ 	uint64_t device;
+ 	struct dm_config_tree *cft, *pvmeta_old_dev = NULL, *pvmeta_old_pvid = NULL;
+ 	char *old;
+-	const char *pvid_dup;
++	char *pvid_dup;
+ 	int complete = 0, orphan = 0;
+ 	int64_t seqno = -1, seqno_old = -1;
  
- 	buffer_init( &res.buffer );
+@@ -854,13 +854,23 @@ static response pv_found(lvmetad_state *s, request r)
+ 	if (!(cft = dm_config_create()) ||
+ 	    !(cft->root = dm_config_clone_node(cft, pvmeta, 0))) {
+ 		unlock_pvid_to_pvmeta(s);
++		if (cft)
++			dm_config_destroy(cft);
++		return reply_fail("out of memory");
++	}
++
++	if (!(pvid_dup = dm_strdup(pvid))) {
++		unlock_pvid_to_pvmeta(s);
++		dm_config_destroy(cft);
+ 		return reply_fail("out of memory");
+ 	}
  
-@@ -320,7 +320,7 @@ static response pv_lookup(lvmetad_state *s, request r)
- {
- 	const char *pvid = daemon_request_str(r, "uuid", NULL);
- 	int64_t devt = daemon_request_int(r, "device", 0);
--	response res;
-+	response res = { 0 };
- 	struct dm_config_node *pv;
- 
- 	buffer_init( &res.buffer );
-@@ -364,7 +364,7 @@ static response vg_list(lvmetad_state *s, request r)
- 	struct dm_hash_node *n;
- 	const char *id;
- 	const char *name;
--	response res;
-+	response res = { 0 };
- 
- 	buffer_init( &res.buffer );
- 
-@@ -434,7 +434,7 @@ static response vg_lookup(lvmetad_state *s, request r)
- {
- 	struct dm_config_tree *cft;
- 	struct dm_config_node *metadata, *n;
--	response res;
-+	response res = { 0 };
- 
- 	const char *uuid = daemon_request_str(r, "uuid", NULL);
- 	const char *name = daemon_request_str(r, "name", NULL);
-@@ -492,7 +492,6 @@ static response vg_lookup(lvmetad_state *s, request r)
- 	if (!(n = n->sib = dm_config_clone_node(res.cft, metadata, 1)))
- 		goto bad;
- 	n->parent = res.cft->root;
--	res.error = 0;
- 	unlock_vg(s, uuid);
- 
- 	update_pv_status(s, res.cft, n, 1); /* FIXME report errors */
-@@ -987,7 +986,7 @@ static void _dump_pairs(struct buffer *buf, struct dm_hash_table *ht, const char
- 
- static response dump(lvmetad_state *s)
- {
--	response res;
-+	response res = { 0 };
- 	struct buffer *b = &res.buffer;
- 
- 	buffer_init(b);
-diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
-index a010cc0..53bfa86 100644
---- a/libdaemon/client/daemon-client.c
-+++ b/libdaemon/client/daemon-client.c
-@@ -27,7 +27,7 @@
- 
- daemon_handle daemon_open(daemon_info i) {
- 	daemon_handle h = { .protocol_version = 0, .error = 0 };
--	daemon_reply r = { .cft = NULL };
-+	daemon_reply r = { 0 };
- 	struct sockaddr_un sockaddr = { .sun_family = AF_UNIX };
- 
- 	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM /* | SOCK_NONBLOCK */, 0)) < 0)
-@@ -72,7 +72,7 @@ error:
- daemon_reply daemon_send(daemon_handle h, daemon_request rq)
- {
- 	struct buffer buffer;
--	daemon_reply reply = { .cft = NULL, .error = 0 };
-+	daemon_reply reply = { 0 };
- 	assert(h.socket_fd >= 0);
- 	buffer = rq.buffer;
- 
-@@ -104,7 +104,7 @@ void daemon_reply_destroy(daemon_reply r) {
- 
- daemon_reply daemon_send_simple_v(daemon_handle h, const char *id, va_list ap)
- {
--	static const daemon_reply err = { .error = ENOMEM, .buffer = { 0, 0, NULL }, .cft = NULL };
-+	static const daemon_reply err = { .error = ENOMEM };
- 	daemon_request rq = { .cft = NULL };
- 	daemon_reply repl;
- 
+-	pvid_dup = dm_strdup(pvid);
+ 	if (!dm_hash_insert(s->pvid_to_pvmeta, pvid, cft) ||
+ 	    !dm_hash_insert_binary(s->device_to_pvid, &device, sizeof(device), (void*)pvid_dup)) {
+ 		unlock_pvid_to_pvmeta(s);
++		dm_hash_remove(s->pvid_to_pvmeta, pvid);
++		dm_config_destroy(cft);
++		dm_free(pvid_dup);
+ 		return reply_fail("out of memory");
+ 	}
+ 	if (pvmeta_old_pvid)
 
 
