@@ -1,52 +1,42 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Sun, 16 Dec 2012 19:58:44 +0100
-Subject: master - python-lvm: Make second lv.snapshot() argument optional
-In-Reply-To: <50CD3175.5070803@redhat.com>
-References: <20121214221108.E6D52137F@hosted02.fedoraproject.org>
-	<50CCECF7.8000809@redhat.com> <50CD3175.5070803@redhat.com>
-Message-ID: <50CE19E4.5070709@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Sun, 16 Dec 2012 23:54:25 +0000 (UTC)
+Subject: master - lvmetad: Fix a possible deadlock.
+Message-ID: <20121216235425.9DA641292@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 16.12.2012 03:27, Andy Grover napsal(a):
-> On 12/15/2012 01:34 PM, Zdenek Kabelac wrote:
->> Dne 14.12.2012 23:11, Andy Grover napsal(a):
->>> If no size is given, size defaults to 0, which in lvm_lv_snapshot will
->>> allocate extents equal to the original LV be allocated for the new
->>> snapshot.
->>>
->>
->>
->> Possibly not the ideal solution here.
->>
->> 1) we have some clash with command line 'API'
->>     user creates snapshot of thin volume
->>        - without giving size he get thin volume snaphost.
->>          lvcreate -s
->>        - with size specified he gets 'old' snapshot
->>          (snapshot outside of the pool)
->>          lvcreate -s -l|-L
->
-> Makes sense. So should we do the same for the Python API -- size = None
-> -> thin snap, size = >=0 -> 'old' snap with the given size? OR might we
-> even be OK with just supporting 'new' snaps, and get rid of the size
-> parameter altogether?
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=fae1a611d2f907aa23c237b9f84df5089d30f728
+Commit:        fae1a611d2f907aa23c237b9f84df5089d30f728
+Parent:        ed23da95b63308e11f8d680b189686a5d2d380d0
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Mon Dec 17 00:39:00 2012 +0100
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Mon Dec 17 00:47:55 2012 +0100
 
-The 'old-snaps' should/will remain supported - since you may want to snap
-data outside of the pool - i.e. you want limit maximum size the snapshot 
-takes. Or you have very big 'chunk size' of the thin pool - and you may
-want to take snapshot of the volume in that pool - so use of snapshot
-with significantly smaller chunks size is preferable.
+lvmetad: Fix a possible deadlock.
 
-'zero' size snapshot (>=0) - I think this case is actually unsupportable - the 
-minimum size for snapshot is I think 2 chunks (1 for data 1 for metadata) - so 
-anything smaller should be rejected by metadata validator -  so I think  0 
-should be equal to 'None'.
+If an update and a query were running in parallel, there was a slim but non-zero
+chance of a deadlock due to (unnecessary) mutex nesting.
+---
+ daemons/lvmetad/lvmetad-core.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-Zdenek
+diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
+index 4e02662..674ddea 100644
+--- a/daemons/lvmetad/lvmetad-core.c
++++ b/daemons/lvmetad/lvmetad-core.c
+@@ -671,8 +671,8 @@ static int update_metadata(lvmetad_state *s, const char *name, const char *_vgid
+ 
+ 	lock_vgid_to_metadata(s);
+ 	old = dm_hash_lookup(s->vgid_to_metadata, _vgid);
+-	lock_vg(s, _vgid);
+ 	unlock_vgid_to_metadata(s);
++	lock_vg(s, _vgid);
+ 
+ 	seq = dm_config_find_int(metadata, "metadata/seqno", -1);
+ 
 
 
