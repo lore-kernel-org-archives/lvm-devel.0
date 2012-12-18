@@ -1,75 +1,38 @@
-From: Andy Grover <grover@fedoraproject.org>
-Date: Mon, 17 Dec 2012 22:14:59 +0000 (UTC)
-Subject: master - lvm2app: No special behavior for 0 for max_snap_size in lvm_lv_snapshot()
-Message-ID: <20121217221459.E804735F0@hosted02.fedoraproject.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Tue, 18 Dec 2012 11:14:51 +0000 (UTC)
+Subject: master - WHATS_NEW: changelog for fae1a611d2 and 5294a6f77a
+Message-ID: <20121218111451.8B4BC1F3E@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=86e528c6677b4eff40df5c2424fdb588effdc73e
-Commit:        86e528c6677b4eff40df5c2424fdb588effdc73e
-Parent:        69099e7ef57eb2d39da836a5466196ec05123ffb
-Author:        Andy Grover <agrover@redhat.com>
-AuthorDate:    Mon Dec 17 14:14:38 2012 -0800
-Committer:     Andy Grover <agrover@redhat.com>
-CommitterDate: Mon Dec 17 14:14:38 2012 -0800
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0379c480e09f0d6e8641bd4d8ca49a8bd3c32943
+Commit:        0379c480e09f0d6e8641bd4d8ca49a8bd3c32943
+Parent:        86e528c6677b4eff40df5c2424fdb588effdc73e
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Dec 18 12:12:58 2012 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Dec 18 12:12:58 2012 +0100
 
-lvm2app: No special behavior for 0 for max_snap_size in lvm_lv_snapshot()
+WHATS_NEW: changelog for fae1a611d2 and 5294a6f77a
 
-It isn't possible to choose a sane default for snapshot size, so just
-play it straight and use the passed size instead of adding special
-behavior for 0.
-
-Also revert change to Python lib, size parameter must be supplied.
-
-Signed-off-by: Andy Grover <agrover@redhat.com>
 ---
- liblvm/lvm_lv.c |   11 +----------
- python/liblvm.c |    4 ++--
- 2 files changed, 3 insertions(+), 12 deletions(-)
+ WHATS_NEW |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index a02e68d..91948a6 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -326,16 +326,7 @@ lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_siz
- 	if (!vg_check_write_mode(lv->vg))
- 		return NULL;
- 
--	/* Determine the correct size */
--	if (0 == max_snap_size){
--		size = lv->size;
--	} else {
--		size = max_snap_size >> SECTOR_SHIFT;
--
--		if (size > lv->size) {
--			size = lv->size;
--		}
--	}
-+	size = max_snap_size >> SECTOR_SHIFT;
- 
- 	if (!(extents = extents_from_size(lv->vg->cmd, size,
- 					  lv->vg->extent_size))) {
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 4db507c..906825e 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1317,12 +1317,12 @@ static PyObject *
- liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
- {
- 	const char *vgname;
--	uint64_t size = 0;
-+	uint64_t size;
- 	lvobject *lvobj;
- 
- 	LV_VALID(self);
- 
--	if (!PyArg_ParseTuple(args, "s|l", &vgname, &size)) {
-+	if (!PyArg_ParseTuple(args, "sl", &vgname, &size)) {
- 		return NULL;
- 	}
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 106bee4..c18f3f4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix possible race while removing metadata from lvmetad.
++  Fix possible deadlock when querying and updating lvmetad at the same time.
+   Check lvmcache_info_from_pvid and recall only when needed in _pv_read.
+   Check for memory failure of dm_config_write_node() in lvmetad.
+   Fix socket leak on error path in lvmetad's handle_connect.
 
 
