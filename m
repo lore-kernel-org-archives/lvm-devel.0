@@ -1,90 +1,42 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 23 Feb 2015 21:28:00 +0000 (UTC)
-Subject: master - config: Adjust system_id defaults.
-Message-ID: <20150223212800.3FF7E61136@fedorahosted.org>
+Date: Fri,  4 Jan 2013 23:48:23 +0000 (UTC)
+Subject: master - lvmetad: lvm depends on libdaemonclient.a
+Message-ID: <20130104234824.201D2231A@hosted02.fedoraproject.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3d406e5a8dfe254f45585759aafa0720a251f0ad
-Commit:        3d406e5a8dfe254f45585759aafa0720a251f0ad
-Parent:        e15b439bf346f8dc618bef9380b12eb595519a2c
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a527a3b8c25200284824cd43ec7693d5543741a4
+Commit:        a527a3b8c25200284824cd43ec7693d5543741a4
+Parent:        ad85b0c526b40a4e78ac83426f54c935c147c787
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Feb 23 21:20:51 2015 +0000
+AuthorDate:    Fri Jan 4 23:10:38 2013 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Feb 23 21:20:51 2015 +0000
+CommitterDate: Fri Jan 4 23:10:38 2013 +0000
 
-config: Adjust system_id defaults.
+lvmetad: lvm depends on libdaemonclient.a
 
-Allow cmd->unknown_system_id to be cleared during toolcontext
-refresh.
-Set a default value of "none" for global/system_id_source.
-Allow local/system_id to be empty so it's not impossible for
-a later config file to remove it.
+Rebuild lvm binary if libdaemonclient.a changes.
 ---
- lib/commands/toolcontext.c   |    9 ++++++---
- lib/config/config_settings.h |    4 ++--
- lib/config/defaults.h        |    1 +
- 3 files changed, 9 insertions(+), 5 deletions(-)
+ tools/Makefile.in |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 58f3b5e..d81de97 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -424,12 +424,15 @@ int process_profilable_config(struct cmd_context *cmd)
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index 15843f0..96dd8cf 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -135,6 +135,10 @@ lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -o $@ $(OBJECTS) lvm.o \
+ 		$(LVMLIBS) $(READLINE_LIBS) $(LIBS) -rdynamic
  
- static int _init_system_id(struct cmd_context *cmd)
- {
--	const char *source;
--	int local_set;
-+	const char *source, *system_id;
-+	int local_set = 0;
- 
- 	cmd->system_id = NULL;
-+	cmd->unknown_system_id = 0;
- 
--	local_set = !!find_config_tree_str(cmd, local_system_id_CFG, NULL);
-+	system_id = find_config_tree_str_allow_empty(cmd, local_system_id_CFG, NULL);
-+	if (system_id && *system_id)
-+		local_set = 1;
- 
- 	source = find_config_tree_str(cmd, global_system_id_source_CFG, NULL);
- 	if (!source)
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 7360420..fe4218e 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -193,7 +193,7 @@ cfg_array(global_cache_check_options_CFG, "cache_check_options", global_CFG_SECT
- cfg(global_cache_dump_executable_CFG, "cache_dump_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, CACHE_DUMP_CMD, vsn(2, 2, 108), NULL)
- cfg(global_cache_repair_executable_CFG, "cache_repair_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, CACHE_REPAIR_CMD, vsn(2, 2, 108), NULL)
- cfg_array(global_cache_repair_options_CFG, "cache_repair_options", global_CFG_SECTION, 0, CFG_TYPE_STRING, "#S" DEFAULT_CACHE_REPAIR_OPTIONS, vsn(2, 2, 108), NULL)
--cfg(global_system_id_source_CFG, "system_id_source", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL)
-+cfg(global_system_id_source_CFG, "system_id_source", global_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_SYSTEM_ID_SOURCE, vsn(2, 2, 117), NULL)
- cfg(global_system_id_file_CFG, "system_id_file", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL)
- 
- cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ACTIVATION_CHECKS, vsn(2, 2, 86), NULL)
-@@ -281,7 +281,7 @@ cfg(tags_hosttags_CFG, "hosttags", tags_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_H
- cfg_section(tag_CFG_SUBSECTION, "tag", tags_CFG_SECTION, CFG_NAME_VARIABLE | CFG_DEFAULT_UNDEFINED, vsn(1, 0, 18), NULL)
- cfg(tag_host_list_CFG, "host_list", tag_CFG_SUBSECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 18), NULL)
- 
--cfg(local_system_id_CFG, "system_id", local_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL)
-+cfg(local_system_id_CFG, "system_id", local_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL)
- cfg_array(local_allow_system_id_CFG, "allow_system_id", local_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL)
- 
- cfg(CFG_COUNT, NULL, root_CFG_SECTION, 0, CFG_TYPE_INT, 0, vsn(0, 0, 0), NULL)
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 9d2cff9..8339c1a 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -29,6 +29,7 @@
- 
- #define DEFAULT_DEV_DIR "/dev"
- #define DEFAULT_PROC_DIR "/proc"
-+#define DEFAULT_SYSTEM_ID_SOURCE "none"
- #define DEFAULT_OBTAIN_DEVICE_LIST_FROM_UDEV 1
- #define DEFAULT_EXTERNAL_DEVICE_INFO_SOURCE "none"
- #define DEFAULT_SYSFS_SCAN 1
++ifeq ("@BUILD_LVMETAD@", "yes")
++lvm: $(top_builddir)/libdaemon/client/libdaemonclient.a
++endif
++
+ lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a  $(interfacebuilddir)/libdevmapper.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) -o $@ \
+ 	      $(OBJECTS) lvm-static.o $(LVMLIBS) $(STATIC_LIBS) $(LIBS)
 
 
