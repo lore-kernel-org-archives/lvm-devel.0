@@ -1,170 +1,160 @@
 From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri,  4 Jan 2013 23:48:33 +0000 (UTC)
-Subject: master - lvmetad: rename device vars and move _token_update
-Message-ID: <20130104234833.16275231A@hosted02.fedoraproject.org>
+Date: Sat,  5 Jan 2013 00:41:59 +0000 (UTC)
+Subject: master - lvmetad: add basic client-side debug logging
+Message-ID: <20130105004159.3B8E9A0C48@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=41e7f45258555bf28871a8243487a12751932842
-Commit:        41e7f45258555bf28871a8243487a12751932842
-Parent:        981962b339123338335da5a3cda822117808c591
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=48e1ae7f6a48469be7bff795fde6ba978354ca7d
+Commit:        48e1ae7f6a48469be7bff795fde6ba978354ca7d
+Parent:        41e7f45258555bf28871a8243487a12751932842
 Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jan 4 23:45:22 2013 +0000
+AuthorDate:    Sat Jan 5 00:35:50 2013 +0000
 Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jan 4 23:45:22 2013 +0000
+CommitterDate: Sat Jan 5 00:35:50 2013 +0000
 
-lvmetad: rename device vars and move _token_update
+lvmetad: add basic client-side debug logging
 
-Move _token_update() to avoid the need for _lvmetad_send prototype.
-
-Use 'dev' consistently for a struct device * variable.
-Use 'devno' for a dev_t.
+First attempt at showing precisely what use any command is making of
+lvmetad in the -vvvv trace information.
 ---
- lib/cache/lvmetad.c |   49 +++++++++++++++++++++++--------------------------
- lib/cache/lvmetad.h |    4 ++--
- 2 files changed, 25 insertions(+), 28 deletions(-)
+ lib/cache/lvmetad.c |   25 ++++++++++++++++++++++---
+ 1 files changed, 22 insertions(+), 3 deletions(-)
 
 diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 0862f0a..0999fbd 100644
+index 0999fbd..db33553 100644
 --- a/lib/cache/lvmetad.c
 +++ b/lib/cache/lvmetad.c
-@@ -118,22 +118,6 @@ void lvmetad_set_socket(const char *sock)
- 	_lvmetad_socket = sock;
+@@ -91,6 +91,9 @@ void lvmetad_set_active(int active)
+ 	_lvmetad_use = active;
  }
  
--static daemon_reply _lvmetad_send(const char *id, ...);
--
--static int _token_update(void)
--{
--	daemon_reply repl = _lvmetad_send("token_update", NULL);
--
--	if (repl.error || strcmp(daemon_reply_str(repl, "response", ""), "OK")) {
--		daemon_reply_destroy(repl);
--		return 0;
--	}
--
--	daemon_reply_destroy(repl);
--	return 1;
--}
--
--
- static daemon_reply _lvmetad_send(const char *id, ...)
++/*
++ * Use a crc of the strings in the filter as the lvmetad token.
++ */
+ void lvmetad_set_token(const struct dm_config_value *filter)
  {
- 	va_list ap;
-@@ -167,6 +151,19 @@ retry:
- 	return repl;
- }
+ 	int ft = 0;
+@@ -153,6 +156,7 @@ retry:
  
-+static int _token_update(void)
-+{
-+	daemon_reply repl = _lvmetad_send("token_update", NULL);
-+
-+	if (repl.error || strcmp(daemon_reply_str(repl, "response", ""), "OK")) {
-+		daemon_reply_destroy(repl);
-+		return 0;
-+	}
-+
-+	daemon_reply_destroy(repl);
-+	return 1;
-+}
-+
- /*
-  * Helper; evaluate the reply from lvmetad, check for errors, print diagnostics
-  * and return a summary success/failure exit code.
-@@ -222,7 +219,7 @@ static int _read_mda(struct lvmcache_info *info,
- static struct lvmcache_info *_pv_populate_lvmcache(
- 	struct cmd_context *cmd, struct dm_config_node *cn, dev_t fallback)
+ static int _token_update(void)
  {
--	struct device *device;
-+	struct device *dev;
- 	struct id pvid, vgid;
- 	char mda_id[32];
- 	char da_id[32];
-@@ -246,11 +243,11 @@ static struct lvmcache_info *_pv_populate_lvmcache(
- 		return NULL;
++	log_debug("Sending updated token to lvmetad: %s", _lvmetad_token ? : "<NONE>");
+ 	daemon_reply repl = _lvmetad_send("token_update", NULL);
+ 
+ 	if (repl.error || strcmp(daemon_reply_str(repl, "response", ""), "OK")) {
+@@ -189,7 +193,7 @@ static int _lvmetad_handle_reply(daemon_reply reply, const char *action, const c
+ 
+ 	/* Unknown device permitted? */
+ 	if (found && !strcmp(daemon_reply_str(reply, "response", ""), "unknown")) {
+-		log_very_verbose("Request to %s %s%sin lvmetad did not find object.",
++		log_very_verbose("Request to %s %s%sin lvmetad did not find any matching object.",
+ 				 action, object, *object ? " " : "");
+ 		*found = 0;
+ 		return 1;
+@@ -319,10 +323,12 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 	if (vgid) {
+ 		if (!id_write_format((const struct id*)vgid, uuid, sizeof(uuid)))
+ 			return_NULL;
++		log_debug("Asking lvmetad for VG %s (%s)", uuid, vgname ? : "name unknown");
+ 		reply = _lvmetad_send("vg_lookup", "uuid = %s", uuid, NULL);
+ 	} else {
+ 		if (!vgname)
+ 			log_error(INTERNAL_ERROR "VG name required (VGID not available)");
++		log_debug("Asking lvmetad for VG %s", vgname);
+ 		reply = _lvmetad_send("vg_lookup", "name = %s", vgname, NULL);
  	}
  
--	device = dev_cache_get_by_devt(devt, cmd->filter);
--	if (!device && fallback)
--		device = dev_cache_get_by_devt(fallback, cmd->filter);
-+	dev = dev_cache_get_by_devt(devt, cmd->filter);
-+	if (!dev && fallback)
-+		dev = dev_cache_get_by_devt(fallback, cmd->filter);
+@@ -433,6 +439,7 @@ int lvmetad_vg_update(struct volume_group *vg)
+ 	if (!(vgmeta = _export_vg_to_config_tree(vg)))
+ 		return_0;
  
--	if (!device) {
-+	if (!dev) {
- 		log_error("No device found for PV %s.", pvid_txt);
- 		return NULL;
++	log_debug("Sending lvmetad updated metadata for VG %s (seqno %" PRIu32 ")", vg->name, vg->seqno);
+ 	reply = _lvmetad_send("vg_update", "vgname = %s", vg->name,
+ 			      "metadata = %t", vgmeta, NULL);
+ 	dm_config_destroy(vgmeta);
+@@ -485,6 +492,7 @@ int lvmetad_vg_remove(struct volume_group *vg)
+ 	if (!id_write_format(&vg->id, uuid, sizeof(uuid)))
+ 		return_0;
+ 
++	log_debug("Telling lvmetad to remove VGID %s (%s)", uuid, vg->name);
+ 	reply = _lvmetad_send("vg_remove", "uuid = %s", uuid, NULL);
+ 	result = _lvmetad_handle_reply(reply, "remove VG", vg->name, NULL);
+ 
+@@ -506,6 +514,7 @@ int lvmetad_pv_lookup(struct cmd_context *cmd, struct id pvid, int *found)
+ 	if (!id_write_format(&pvid, uuid, sizeof(uuid)))
+ 		return_0;
+ 
++	log_debug("Asking lvmetad for PV %s", uuid);
+ 	reply = _lvmetad_send("pv_lookup", "uuid = %s", uuid, NULL);
+ 	if (!_lvmetad_handle_reply(reply, "lookup PV", "", found))
+ 		goto_out;
+@@ -536,6 +545,7 @@ int lvmetad_pv_lookup_by_dev(struct cmd_context *cmd, struct device *dev, int *f
+ 	if (!lvmetad_active())
+ 		return_0;
+ 
++	log_debug("Asking lvmetad for PV on %s", dev_name(dev));
+ 	reply = _lvmetad_send("pv_lookup", "device = %" PRId64, (int64_t) dev->dev, NULL);
+ 	if (!_lvmetad_handle_reply(reply, "lookup PV", dev_name(dev), found))
+ 		goto_out;
+@@ -563,6 +573,7 @@ int lvmetad_pv_list_to_lvmcache(struct cmd_context *cmd)
+ 	if (!lvmetad_active())
+ 		return 1;
+ 
++	log_debug("Asking lvmetad for complete list of known PVs");
+ 	reply = _lvmetad_send("pv_list", NULL);
+ 	if (!_lvmetad_handle_reply(reply, "list PVs", "", NULL)) {
+ 		daemon_reply_destroy(reply);
+@@ -589,6 +600,7 @@ int lvmetad_vg_list_to_lvmcache(struct cmd_context *cmd)
+ 	if (!lvmetad_active())
+ 		return 1;
+ 
++	log_debug("Asking lvmetad for complete list of known VGs");
+ 	reply = _lvmetad_send("vg_list", NULL);
+ 	if (!_lvmetad_handle_reply(reply, "list VGs", "", NULL)) {
+ 		daemon_reply_destroy(reply);
+@@ -726,6 +738,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
+ 			return_0;
+ 		}
+ 
++		log_debug("Telling lvmetad to store PV %s (%s) in VG %s", dev_name(dev), uuid, vg->name);
+ 		reply = _lvmetad_send("pv_found",
+ 				      "pvmeta = %t", pvmeta,
+ 				      "vgname = %s", vg->name,
+@@ -733,7 +746,11 @@ int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct for
+ 				      NULL);
+ 		dm_config_destroy(vgmeta);
+ 	} else {
+-		/* There are no MDAs on this PV. */
++		/*
++		 * There is no VG metadata stored on this PV.
++		 * It might or might not be an orphan.
++		 */
++		log_debug("Telling lvmetad to store PV %s (%s)", dev_name(dev), uuid);
+ 		reply = _lvmetad_send("pv_found", "pvmeta = %t", pvmeta, NULL);
  	}
-@@ -269,7 +266,7 @@ static struct lvmcache_info *_pv_populate_lvmcache(
- 	if (!vgname)
- 		vgname = fmt->orphan_vg_name;
  
--	if (!(info = lvmcache_add(fmt->labeller, (const char *)&pvid, device,
-+	if (!(info = lvmcache_add(fmt->labeller, (const char *)&pvid, dev,
- 				  vgname, (const char *)&vgid, 0)))
- 		return_NULL;
- 
-@@ -680,7 +677,7 @@ static int _extract_mdas(struct lvmcache_info *info, struct dm_config_tree *cft,
- 	return 1;
- }
- 
--int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct format_type *fmt,
-+int lvmetad_pv_found(const struct id *pvid, struct device *dev, const struct format_type *fmt,
- 		     uint64_t label_sector, struct volume_group *vg, activation_handler handler)
- {
- 	char uuid[64];
-@@ -708,7 +705,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
- 	}
- 
- 	if (!config_make_nodes(pvmeta, pvmeta->root, NULL,
--			       "device = %"PRId64, (int64_t) device->dev,
-+			       "device = %"PRId64, (int64_t) dev->dev,
- 			       "dev_size = %"PRId64, (int64_t) (info ? lvmcache_device_size(info) : 0),
- 			       "format = %s", fmt->name,
- 			       "label_sector = %"PRId64, (int64_t) label_sector,
-@@ -768,7 +765,7 @@ int lvmetad_pv_found(const struct id *pvid, struct device *device, const struct
- 	return result;
- }
- 
--int lvmetad_pv_gone(dev_t device, const char *pv_name, activation_handler handler)
-+int lvmetad_pv_gone(dev_t devno, const char *pv_name, activation_handler handler)
- {
- 	daemon_reply reply;
- 	int result;
-@@ -784,7 +781,7 @@ int lvmetad_pv_gone(dev_t device, const char *pv_name, activation_handler handle
+@@ -781,6 +798,7 @@ int lvmetad_pv_gone(dev_t devno, const char *pv_name, activation_handler handler
           *        the whole stack from top to bottom (not yet upstream).
           */
  
--	reply = _lvmetad_send("pv_gone", "device = %" PRId64, (int64_t) device, NULL);
-+	reply = _lvmetad_send("pv_gone", "device = %" PRId64, (int64_t) devno, NULL);
++	log_debug("Telling lvmetad to forget any PV on %s", pv_name);
+ 	reply = _lvmetad_send("pv_gone", "device = %" PRId64, (int64_t) devno, NULL);
  
  	result = _lvmetad_handle_reply(reply, "drop PV", pv_name, &found);
- 	/* We don't care whether or not the daemon had the PV cached. */
-diff --git a/lib/cache/lvmetad.h b/lib/cache/lvmetad.h
-index 7886965..e985387 100644
---- a/lib/cache/lvmetad.h
-+++ b/lib/cache/lvmetad.h
-@@ -97,7 +97,7 @@ int lvmetad_vg_remove(struct volume_group *vg);
-  * number on the cached and on the discovered PV match but the metadata content
-  * does not.
-  */
--int lvmetad_pv_found(const struct id *pvid, struct device *device,
-+int lvmetad_pv_found(const struct id *pvid, struct device *dev,
- 		     const struct format_type *fmt, uint64_t label_sector,
- 		     struct volume_group *vg, activation_handler handler);
+@@ -907,8 +925,9 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
+ 		return 0;
+ 	}
  
-@@ -154,7 +154,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
- #    define lvmetad_release_token()	do { } while (0)
- #    define lvmetad_vg_update(vg)	(1)
- #    define lvmetad_vg_remove(vg)	(1)
--#    define lvmetad_pv_found(pvid, device, fmt, label_sector, vg, handler)	(1)
-+#    define lvmetad_pv_found(pvid, dev, fmt, label_sector, vg, handler)	(1)
- #    define lvmetad_pv_gone(devno, pv_name, handler)	(1)
- #    define lvmetad_pv_gone_by_dev(dev, handler)	(1)
- #    define lvmetad_pv_list_to_lvmcache(cmd)	(1)
++	log_debug("Telling lvmetad to clear its cache");
+ 	reply = _lvmetad_send("pv_clear_all", NULL);
+-	if (!_lvmetad_handle_reply(reply, "clear status on all PVs", "", NULL))
++	if (!_lvmetad_handle_reply(reply, "clear info about all PVs", "", NULL))
+ 		r = 0;
+ 	daemon_reply_destroy(reply);
+ 
 
 
