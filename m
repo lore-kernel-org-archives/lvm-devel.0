@@ -1,95 +1,219 @@
-From: David Teigland <teigland@redhat.com>
-Date: Fri, 4 Jan 2013 11:42:22 -0500
-Subject: [PATCH] lvmetad: --dump option to print state
-Message-ID: <20130104164222.GA10211@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Mon,  7 Jan 2013 15:02:14 -0600
+Subject: [PATCH 3/3] python-lvm: Add ability to disable vg auto write (v1)
+In-Reply-To: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
+References: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1357592534-14672-3-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Also add long opts for other options.
----
- daemons/lvmetad/lvmetad-core.c | 32 ++++++++++++++++++++++++++++++--
- 1 file changed, 30 insertions(+), 2 deletions(-)
+Previously, whenever changes were made to volume groups the changes
+were immediately written out and committed.  With this change the
+user has the ability to turn off this behavior and manually
+save the changes for the vg.  A new method lvm.vgAutoWrite(bool)
+has been added to control this behavior.  Default behavior matches
+previous behavior, implicit calls to lvm_vg_write.
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 0a1c884..ab8d83e 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -20,11 +20,13 @@
- #include "daemon-server.h"
- #include "daemon-log.h"
- #include "lvm-version.h"
-+#include "lvmetad-client.h"
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ python/liblvm.c | 90 ++++++++++++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 79 insertions(+), 11 deletions(-)
+
+diff --git a/python/liblvm.c b/python/liblvm.c
+index 906825e..10f466e 100644
+--- a/python/liblvm.c
++++ b/python/liblvm.c
+@@ -26,6 +26,9 @@
  
- #include <assert.h>
- #include <pthread.h>
- #include <stdint.h>
- #include <unistd.h>
-+#include <getopt.h>
+ static lvm_t libh;
+ 
++/*Determines if we should write out changes automatically for vg state change*/
++static int auto_vg_write;
++
  
  typedef struct {
- 	log_state *log; /* convenience */
-@@ -1019,6 +1021,19 @@ static response dump(lvmetad_state *s)
- 	return res;
+ 	PyObject_HEAD
+@@ -88,6 +91,14 @@ liblvm_get_last_error(void)
+ 	return info;
  }
  
-+static void print_dump(const char *socket_path)
++static int lvm_vg_write_auto(vg_t vg)
 +{
-+	daemon_handle h = lvmetad_open(socket_path);
-+	daemon_reply reply;
-+
-+	reply = daemon_send_simple(h, "dump", NULL);
-+
-+	printf("%s\n", reply.buffer.mem);
-+
-+	daemon_reply_destroy(reply);
-+	daemon_close(h);
++	if (auto_vg_write) {
++		return lvm_vg_write(vg);
++	}
++	return 0;
 +}
 +
- static response handler(daemon_state s, client_handle h, request r)
+ static PyObject *
+ liblvm_library_get_version(void)
  {
- 	lvmetad_state *state = s.private;
-@@ -1146,6 +1161,7 @@ static void usage(char *prog, FILE *file)
- int main(int argc, char *argv[])
- {
- 	signed char opt;
-+	int option_index = 0;
- 	daemon_state s = { .private = NULL };
- 	lvmetad_state ls;
- 	int _socket_override = 1;
-@@ -1165,8 +1181,17 @@ int main(int argc, char *argv[])
- 	s.protocol_version = 1;
- 	ls.log_config = "";
+@@ -152,6 +163,27 @@ liblvm_lvm_list_vg_uuids(void)
+ 	return pytuple;
+ }
  
--	// use getopt_long
--	while ((opt = getopt(argc, argv, "?fhVl:s:")) != EOF) {
-+	static struct option long_options[] = {
-+		{"help",       no_argument,       0, 'h' },
-+		{"dump",       no_argument,       0, 'd' },
-+		{"foreground", no_argument,       0, 'f' },
-+		{"log_config", required_argument, 0, 'l' },
-+		{"socket",     required_argument, 0, 's' },
-+		{"version",    no_argument,       0, 'V' },
-+		{0,            0,                 0,  0  }
-+	};
++/* Return the previous value, set current to passed in */
++static PyObject *
++liblvm_lvm_vg_autowrite(PyObject *self, PyObject *arg)
++{
++	PyObject *prev = NULL;
++	int rval = 0;
++	int bool = 0;
 +
-+	while ((opt = getopt_long(argc, argv, "hdfl:s:V", long_options, &option_index)) != EOF) {
- 		switch (opt) {
- 		case 'h':
- 			usage(argv[0], stdout);
-@@ -1174,6 +1199,9 @@ int main(int argc, char *argv[])
- 		case '?':
- 			usage(argv[0], stderr);
- 			exit(0);
-+		case 'd':
-+			print_dump(s.socket_path);
-+			exit(0);
- 		case 'f':
- 			s.foreground = 1;
- 			break;
++	LVM_VALID();
++
++	/* In later version of python they introduced "p" */
++	if (!PyArg_ParseTuple(arg, "i", &bool))
++		return NULL;
++
++	prev = (auto_vg_write) ? Py_True : Py_False;
++	Py_INCREF(prev);
++	auto_vg_write = bool;
++
++	return prev;
++}
++
+ static PyObject *
+ liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+ {
+@@ -374,6 +406,32 @@ liblvm_lvm_vg_close(vgobject *self)
+ }
+ 
+ static PyObject *
++liblvm_lvm_vg_write(vgobject *self)
++{
++	int rval;
++
++	VG_VALID(self);
++
++	if (!auto_vg_write) {
++		rval = lvm_vg_write(self->vg);
++		if (-1 == rval) {
++			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
++			return NULL;
++		} else {
++			Py_INCREF(Py_None);
++			return Py_None;
++		}
++	}
++
++	/*
++	 * Can't call this function directly if we have auto vg write
++	 * enabled
++	 */
++	PyErr_SetString(PyExc_ValueError, "lvm.vgAutoWrite() == True"); \
++	return NULL;
++}
++
++static PyObject *
+ liblvm_lvm_vg_get_name(vgobject *self)
+ {
+ 	VG_VALID(self);
+@@ -400,14 +458,17 @@ liblvm_lvm_vg_remove(vgobject *self)
+ 	if ((rval = lvm_vg_remove(self->vg)) == -1)
+ 		goto error;
+ 
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
++	/* If we aren't writing out the change leave the object ref. alone */
++	if (auto_vg_write) {
+ 
+-	/* Not much you can do with a vg that is removed so close it */
+-	if (lvm_vg_close(self->vg) == -1)
+-		goto error;
++		if (lvm_vg_write(self->vg) == -1)
++			goto error;
+ 
+-	self->vg = NULL;
++		if (lvm_vg_close(self->vg) == -1)
++			goto error;
++
++		self->vg = NULL;
++	}
+ 
+ 	Py_INCREF(Py_None);
+ 	return Py_None;
+@@ -432,8 +493,9 @@ liblvm_lvm_vg_extend(vgobject *self, PyObject *args)
+ 	if ((rval = lvm_vg_extend(self->vg, device)) == -1)
+ 		goto error;
+ 
+-	if (lvm_vg_write(self->vg) == -1)
++	if (lvm_vg_write_auto(self->vg) == -1) {
+ 		goto error;
++	}
+ 
+ 	Py_INCREF(Py_None);
+ 	return Py_None;
+@@ -458,8 +520,9 @@ liblvm_lvm_vg_reduce(vgobject *self, PyObject *args)
+ 	if ((rval = lvm_vg_reduce(self->vg, device)) == -1)
+ 		goto error;
+ 
+-	if (lvm_vg_write(self->vg) == -1)
++	if (lvm_vg_write_auto(self->vg) == -1) {
+ 		goto error;
++	}
+ 
+ 	Py_INCREF(Py_None);
+ 	return Py_None;
+@@ -483,8 +546,9 @@ liblvm_lvm_vg_add_tag(vgobject *self, PyObject *args)
+ 	if ((rval = lvm_vg_add_tag(self->vg, tag)) == -1)
+ 		goto error;
+ 
+-	if (lvm_vg_write(self->vg) == -1)
++	if (lvm_vg_write_auto(self->vg) == -1) {
+ 		goto error;
++	}
+ 
+ 	return Py_BuildValue("i", rval);
+ 
+@@ -508,8 +572,9 @@ liblvm_lvm_vg_remove_tag(vgobject *self, PyObject *args)
+ 	if ((rval = lvm_vg_remove_tag(self->vg, tag)) == -1)
+ 		goto error;
+ 
+-	if (lvm_vg_write(self->vg) == -1)
++	if (lvm_vg_write_auto(self->vg) == -1) {
+ 		goto error;
++	}
+ 
+ 	Py_INCREF(Py_None);
+ 	return Py_None;
+@@ -731,7 +796,7 @@ liblvm_lvm_vg_set_property(vgobject *self, PyObject *args)
+ 		goto lvmerror;
+ 	}
+ 
+-	if (lvm_vg_write(self->vg) == -1) {
++	if (lvm_vg_write_auto(self->vg) == -1) {
+ 		goto lvmerror;
+ 	}
+ 
+@@ -1553,6 +1618,7 @@ static PyMethodDef Liblvm_methods[] = {
+ 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
+ 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+ 	{ "vgNameFromDevice",	(PyCFunction)liblvm_lvm_vgname_from_device, METH_VARARGS },
++	{ "vgAutoWrite",	(PyCFunction)liblvm_lvm_vg_autowrite, METH_VARARGS },
+ 	{ NULL, NULL }		/* sentinel */
+ };
+ 
+@@ -1589,6 +1655,7 @@ static PyMethodDef liblvm_vg_methods[] = {
+ 	{ "pvFromUuid", 	(PyCFunction)liblvm_lvm_pv_from_uuid, METH_VARARGS },
+ 	{ "getTags",		(PyCFunction)liblvm_lvm_vg_get_tags, METH_NOARGS },
+ 	{ "createLvLinear",	(PyCFunction)liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
++	{ "write",			(PyCFunction)liblvm_lvm_vg_write, METH_VARARGS },
+ 	{ NULL, NULL }		/* sentinel */
+ };
+ 
+@@ -1704,6 +1771,7 @@ initlvm(void)
+ {
+ 	PyObject *m;
+ 
++	auto_vg_write = 1;
+ 	libh = lvm_init(NULL);
+ 
+ 	if (PyType_Ready(&LibLVMvgType) < 0)
 -- 
-1.8.1.rc1.5.g7e0651a
+1.7.11.7
 
 
