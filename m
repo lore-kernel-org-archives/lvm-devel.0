@@ -1,218 +1,214 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Mon,  7 Jan 2013 15:02:14 -0600
-Subject: [PATCH 3/3] python-lvm: Add ability to disable vg auto write (v1)
-In-Reply-To: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
-References: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1357592534-14672-3-git-send-email-tasleson@redhat.com>
+Date: Mon,  7 Jan 2013 15:02:12 -0600
+Subject: [PATCH 1/3] lvm2app: Implementation of pv resize (v4)
+Message-ID: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Previously, whenever changes were made to volume groups the changes
-were immediately written out and committed.  With this change the
-user has the ability to turn off this behavior and manually
-save the changes for the vg.  A new method lvm.vgAutoWrite(bool)
-has been added to control this behavior.  Default behavior matches
-previous behavior, implicit calls to lvm_vg_write.
+Patch correctly checks for update lock before allowing
+resize to process and also requires lvm_vg_write to
+make changes persistent.  As the API does not allow the
+re-size of a orphaned pv this is accomplished through
+the existing vg_write, vg_commit sequence which is done
+in lvm_vg_write.
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c | 90 ++++++++++++++++++++++++++++++++++++++++++++++++++-------
- 1 file changed, 79 insertions(+), 11 deletions(-)
+ lib/metadata/metadata-exported.h |  8 +++++--
+ lib/metadata/pv_manip.c          | 48 +++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm2app.h                 |  5 +++--
+ liblvm/lvm_pv.c                  | 21 ++++++++++++++----
+ tools/pvresize.c                 | 26 +---------------------
+ 5 files changed, 74 insertions(+), 34 deletions(-)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 906825e..10f466e 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -26,6 +26,9 @@
- 
- static lvm_t libh;
- 
-+/*Determines if we should write out changes automatically for vg state change*/
-+static int auto_vg_write;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index ffec129..4af9edf 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -482,8 +482,12 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  unsigned pvmetadatacopies,
+ 				  uint64_t pvmetadatasize,
+ 				  unsigned metadataignore);
+-int pv_resize(struct physical_volume *pv, struct volume_group *vg,
+-	      uint64_t size);
 +
- 
- typedef struct {
- 	PyObject_HEAD
-@@ -88,6 +91,14 @@ liblvm_get_last_error(void)
- 	return info;
- }
- 
-+static int lvm_vg_write_auto(vg_t vg)
-+{
-+	if (auto_vg_write) {
-+		return lvm_vg_write(vg);
-+	}
-+	return 0;
-+}
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size);
 +
- static PyObject *
- liblvm_library_get_version(void)
+ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
+ 	       uint64_t label_sector);
+ 
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index d04ecab..4d37a6b 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -19,6 +19,7 @@
+ #include "toolcontext.h"
+ #include "locking.h"
+ #include "defaults.h"
++#include "archiver.h"
+ 
+ static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
+ 					    struct physical_volume *pv,
+@@ -485,7 +486,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
+  * Resize a PV in a VG, adding or removing segments as needed.
+  * New size must fit within pv->size.
+  */
+-int pv_resize(struct physical_volume *pv,
++static int _pv_resize(struct physical_volume *pv,
+ 	      struct volume_group *vg,
+ 	      uint64_t size)
  {
-@@ -152,6 +163,27 @@ liblvm_lvm_list_vg_uuids(void)
- 	return pytuple;
- }
+@@ -543,3 +544,48 @@ int pv_resize(struct physical_volume *pv,
  
-+/* Return the previous value, set current to passed in */
-+static PyObject *
-+liblvm_lvm_vg_autowrite(PyObject *self, PyObject *arg)
-+{
-+	PyObject *prev = NULL;
-+	int rval = 0;
-+	int bool = 0;
-+
-+	LVM_VALID();
-+
-+	/* In later version of python they introduced "p" */
-+	if (!PyArg_ParseTuple(arg, "i", &bool))
-+		return NULL;
-+
-+	prev = (auto_vg_write) ? Py_True : Py_False;
-+	Py_INCREF(prev);
-+	auto_vg_write = bool;
-+
-+	return prev;
-+}
-+
- static PyObject *
- liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
- {
-@@ -374,6 +406,32 @@ liblvm_lvm_vg_close(vgobject *self)
+ 	return 1;
  }
- 
- static PyObject *
-+liblvm_lvm_vg_write(vgobject *self)
++
++/*
++ * You need to have acquired the correct locks for vg or pv (if orphan) before
++ * calling this function.  vg can be NULL which implies orphan pv.
++ * Code to write changes out must be called after this to make persistent.
++ */
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size)
 +{
-+	int rval;
++	uint64_t size = 0;
++	int rc = 0;
++	const char *pv_name = pv_dev_name(pv);
 +
-+	VG_VALID(self);
++	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
++		log_error("Physical volume %s format does not support resizing.",
++					pv_name);
++	} else {
 +
-+	if (!auto_vg_write) {
-+		rval = lvm_vg_write(self->vg);
-+		if (-1 == rval) {
-+			PyErr_SetObject(LibLVMError, liblvm_get_last_error());
-+			return NULL;
++		/* Get new size */
++		if (!dev_get_size(pv_dev(pv), &size)) {
++			log_error("%s: Couldn't get size.", pv_name);
 +		} else {
-+			Py_INCREF(Py_None);
-+			return Py_None;
++
++			if (new_size) {
++				if (new_size > size)
++					log_warn("WARNING: %s: Overriding real size. "
++							"You could lose data.", pv_name);
++
++				log_verbose("%s: Pretending size is %" PRIu64 " not %"
++							PRIu64 " sectors.", pv_name, new_size, pv_size(pv));
++				size = new_size;
++			}
++
++			log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
++					pv_name, pv_size(pv));
++
++			if (_pv_resize(pv, vg, size))
++				rc = 1;
 +		}
 +	}
 +
-+	/*
-+	 * Can't call this function directly if we have auto vg write
-+	 * enabled
-+	 */
-+	PyErr_SetString(PyExc_ValueError, "lvm.vgAutoWrite() == True"); \
-+	return NULL;
++	return rc;
 +}
-+
-+static PyObject *
- liblvm_lvm_vg_get_name(vgobject *self)
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 93a78c3..00f92ab 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1624,9 +1624,10 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+ /**
+  * Resize physical volume to new_size bytes.
+  *
+- * \memberof pv_t
++ * Note: Make sure to do a lvm_vg_write on the containing vg to save the
++ * new size.
+  *
+- * NOTE: This function is currently not implemented.
++ * \memberof pv_t
+  *
+  * \param   pv
+  * Physical volume handle.
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 90edaed..c12adf1 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -120,10 +120,23 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
+ 	return NULL;
+ }
+ 
+-
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
  {
- 	VG_VALID(self);
-@@ -400,14 +458,17 @@ liblvm_lvm_vg_remove(vgobject *self)
- 	if ((rval = lvm_vg_remove(self->vg)) == -1)
- 		goto error;
- 
--	if (lvm_vg_write(self->vg) == -1)
--		goto error;
-+	/* If we aren't writing out the change leave the object ref. alone */
-+	if (auto_vg_write) {
- 
--	/* Not much you can do with a vg that is removed so close it */
--	if (lvm_vg_close(self->vg) == -1)
--		goto error;
-+		if (lvm_vg_write(self->vg) == -1)
-+			goto error;
- 
--	self->vg = NULL;
-+		if (lvm_vg_close(self->vg) == -1)
-+			goto error;
+-	/* FIXME: add pv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	uint64_t size = new_size >> SECTOR_SHIFT;
 +
-+		self->vg = NULL;
++	if (new_size % SECTOR_SIZE) {
++		log_errno(EINVAL, "Size not a multiple of 512");
++		return -1;
 +	}
- 
- 	Py_INCREF(Py_None);
- 	return Py_None;
-@@ -432,8 +493,9 @@ liblvm_lvm_vg_extend(vgobject *self, PyObject *args)
- 	if ((rval = lvm_vg_extend(self->vg, device)) == -1)
- 		goto error;
- 
--	if (lvm_vg_write(self->vg) == -1)
-+	if (lvm_vg_write_auto(self->vg) == -1) {
- 		goto error;
++
++	if (!vg_check_write_mode(pv->vg)) {
++		return -1;
 +	}
- 
- 	Py_INCREF(Py_None);
- 	return Py_None;
-@@ -458,8 +520,9 @@ liblvm_lvm_vg_reduce(vgobject *self, PyObject *args)
- 	if ((rval = lvm_vg_reduce(self->vg, device)) == -1)
- 		goto error;
- 
--	if (lvm_vg_write(self->vg) == -1)
-+	if (lvm_vg_write_auto(self->vg) == -1) {
- 		goto error;
++
++	if (!pv_resize(pv->vg->cmd, pv->vg, pv, size)) {
++		log_error("PV re-size failed!");
++		return -1;
++	} else {
++		return 0;
 +	}
- 
- 	Py_INCREF(Py_None);
- 	return Py_None;
-@@ -483,8 +546,9 @@ liblvm_lvm_vg_add_tag(vgobject *self, PyObject *args)
- 	if ((rval = lvm_vg_add_tag(self->vg, tag)) == -1)
- 		goto error;
- 
--	if (lvm_vg_write(self->vg) == -1)
-+	if (lvm_vg_write_auto(self->vg) == -1) {
- 		goto error;
-+	}
- 
- 	return Py_BuildValue("i", rval);
- 
-@@ -508,8 +572,9 @@ liblvm_lvm_vg_remove_tag(vgobject *self, PyObject *args)
- 	if ((rval = lvm_vg_remove_tag(self->vg, tag)) == -1)
- 		goto error;
- 
--	if (lvm_vg_write(self->vg) == -1)
-+	if (lvm_vg_write_auto(self->vg) == -1) {
- 		goto error;
-+	}
- 
- 	Py_INCREF(Py_None);
- 	return Py_None;
-@@ -731,7 +796,7 @@ liblvm_lvm_vg_set_property(vgobject *self, PyObject *args)
- 		goto lvmerror;
+ }
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 2f0693a..abf8432 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -30,7 +30,6 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 			     const uint64_t new_size)
+ {
+ 	struct pv_list *pvl;
+-	uint64_t size = 0;
+ 	int r = 0;
+ 	const char *pv_name = pv_dev_name(pv);
+ 	const char *vg_name = pv_vg_name(pv);
+@@ -70,33 +69,10 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 			goto out;
  	}
  
--	if (lvm_vg_write(self->vg) == -1) {
-+	if (lvm_vg_write_auto(self->vg) == -1) {
- 		goto lvmerror;
+-	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
+-		log_error("Physical volume %s format does not support resizing.",
+-			  pv_name);
+-		goto out;
+-	}
+-
+-	/* Get new size */
+-	if (!dev_get_size(pv_dev(pv), &size)) {
+-		log_error("%s: Couldn't get size.", pv_name);
++	if( !pv_resize(cmd, vg, pv, new_size)) {
+ 		goto out;
  	}
  
-@@ -1553,6 +1618,7 @@ static PyMethodDef Liblvm_methods[] = {
- 	{ "percentToFloat",	(PyCFunction)liblvm_lvm_percent_to_float, METH_VARARGS },
- 	{ "vgNameFromPvid",	(PyCFunction)liblvm_lvm_vgname_from_pvid, METH_VARARGS },
- 	{ "vgNameFromDevice",	(PyCFunction)liblvm_lvm_vgname_from_device, METH_VARARGS },
-+	{ "vgAutoWrite",	(PyCFunction)liblvm_lvm_vg_autowrite, METH_VARARGS },
- 	{ NULL, NULL }		/* sentinel */
- };
+-	if (new_size) {
+-		if (new_size > size)
+-			log_warn("WARNING: %s: Overriding real size. "
+-				  "You could lose data.", pv_name);
+-		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
+-			    " sectors.", pv_name, new_size, pv_size(pv));
+-		size = new_size;
+-	}
+-
+-	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
+-		    pv_name, pv_size(pv));
+-
+-	if (!pv_resize(pv, vg, size))
+-		goto_out;
+-
+ 	log_verbose("Updating physical volume \"%s\"", pv_name);
  
-@@ -1589,6 +1655,7 @@ static PyMethodDef liblvm_vg_methods[] = {
- 	{ "pvFromUuid", 	(PyCFunction)liblvm_lvm_pv_from_uuid, METH_VARARGS },
- 	{ "getTags",		(PyCFunction)liblvm_lvm_vg_get_tags, METH_NOARGS },
- 	{ "createLvLinear",	(PyCFunction)liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
-+	{ "write",			(PyCFunction)liblvm_lvm_vg_write, METH_VARARGS },
- 	{ NULL, NULL }		/* sentinel */
- };
- 
-@@ -1704,6 +1771,7 @@ initlvm(void)
- {
- 	PyObject *m;
- 
-+	auto_vg_write = 1;
- 	libh = lvm_init(NULL);
- 
- 	if (PyType_Ready(&LibLVMvgType) < 0)
+ 	/* Write PV label only if this an orphan PV or it has 2nd mda. */
 -- 
 1.7.11.7
 
