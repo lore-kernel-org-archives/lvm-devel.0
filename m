@@ -1,159 +1,243 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 08 Jan 2013 11:44:09 +0100
-Subject: [PATCH 2/3] lvm2app: Implementation of lv resize (v1)
-In-Reply-To: <1357592534-14672-2-git-send-email-tasleson@redhat.com>
-References: <1357592534-14672-1-git-send-email-tasleson@redhat.com>
-	<1357592534-14672-2-git-send-email-tasleson@redhat.com>
-Message-ID: <50EBF879.7080201@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Tue,  8 Jan 2013 23:47:56 -0600
+Subject: [PATCH] lvm2app: Implementation of pv resize (v5)
+Message-ID: <1357710476-18432-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 7.1.2013 22:02, Tony Asleson napsal(a):
-> When re-sizing a LV with the command line, after the re-size
-> occurs the code used to do a vg_write and then a number of
-> operations before and after the commit.  As the API requires
-> the ability to have the re-size done independantly of the
-> write and commit a flag was added so that when we go through
-> vg_commit we will do the same required steps to commit the
-> lv size change regardless if it was done through the command
-> line or the API.
->
-> The core functionality was moved to lv_manip so that the
-> command line and the API could call it.  To make this work
-> all the argument parsing functions are being done in
-> tools/lv_resize.c and all the parameters are expected to be
-> passed in with the struct lvresize_params.
->
+Patch correctly checks for update lock before allowing
+resize to process and also requires lvm_vg_write to
+make changes persistent.  As the API does not allow the
+re-size of a orphaned pv this is accomplished through
+the existing vg_write, vg_commit sequence which is done
+in lvm_vg_write.
 
-I'd prefer here to see separate patches which are
-just moving code and then new patches for changes
-of moved code.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ lib/metadata/metadata-exported.h |  8 +++++--
+ lib/metadata/pv_manip.c          | 48 +++++++++++++++++++++++++++++++++++++++-
+ liblvm/lvm2app.h                 |  5 +++--
+ liblvm/lvm_pv.c                  | 21 ++++++++++++++----
+ tools/pvresize.c                 | 36 +++++-------------------------
+ 5 files changed, 79 insertions(+), 39 deletions(-)
 
-
-
-> Signed-off-by: Tony Asleson <tasleson@redhat.com>
-> ---
->   lib/format_text/flags.c          |   1 +
->   lib/metadata/lv_manip.c          | 665 ++++++++++++++++++++++++++++++++
->   lib/metadata/metadata-exported.h |  76 +++-
->   lib/metadata/metadata.c          |  91 ++++-
->   lib/misc/lvm-percent.c           |   5 +
->   lib/misc/lvm-percent.h           |   2 +
->   liblvm/lvm2app.h                 |   2 -
->   liblvm/lvm_lv.c                  |  19 +-
->   tools/lvresize.c                 | 811 +++------------------------------------
->   tools/toollib.c                  |   6 -
->   tools/tools.h                    |  17 -
->   11 files changed, 906 insertions(+), 789 deletions(-)
->
-> diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-> index a3a3d0e..4edf7e1 100644
-> --- a/lib/format_text/flags.c
-> +++ b/lib/format_text/flags.c
-> @@ -77,6 +77,7 @@ static const struct flag _lv_flags[] = {
->   	{THIN_POOL, NULL, 0},
->   	{THIN_POOL_DATA, NULL, 0},
->   	{THIN_POOL_METADATA, NULL, 0},
-> +	{LV_RESIZE, NULL, 0},
->   	{0, NULL, 0}
->   };
->
-> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-> index 35a75ff..6fcf6f2 100644
-> --- a/lib/metadata/lv_manip.c
-> +++ b/lib/metadata/lv_manip.c
-> @@ -27,6 +27,7 @@
->   #include "activate.h"
->   #include "str_list.h"
->   #include "defaults.h"
-> +#include "lvm-exec.h"
->
->   typedef enum {
->   	PREFERRED,
-> @@ -3041,6 +3042,670 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
->   	return lv_rename_update(cmd, lv, new_name, 1);
->   }
->
-> +static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
-
-After moving code - try to add  '_' prefixes to internal 'static' functions.
-
-
-
-> +			/* We could have been called after an error has occurred, in that
-> +			   case we will not do the next step */
-> +			if (ok) {
-> +
-> +				/*
-> +				* Update lvm pool metadata (drop messages) if the pool has been
-> +				* resumed and do a pool active/deactivate in other case.
-> +				*
-> +				* Note: Active thin pool can be waiting for resize.
-> +				*
-> +				* FIXME: Activate only when thin volume is active
-> +				*/
-> +				if (lv_is_thin_pool(lvl->lv) &&
-> +					!update_pool_lv(lvl->lv, !lv_is_active(lvl->lv))) {
-
-alignment
-
-> +					stack;
-> +					return 0;
-
-we have macro shortcut - return_0;
-
-> +				}
-> +			}
-> +		}
-> +	}
-> +
-> +	return 1;
-> +}
-> +
-> +
->   /* Commit pending changes */
->   int vg_commit(struct volume_group *vg)
->   {
-> @@ -2714,9 +2788,15 @@ int vg_commit(struct volume_group *vg)
->   		return cache_updated;
->   	}
->
-> +	if (!_pre_lv_resize(vg))
-> +		return_0;
-> +
->   	/* Skip if we already did this in vg_write */
->   	if ((vg->fid->fmt->features & FMT_PRECOMMIT) && !lvmetad_vg_update(vg))
-> -		return_0;
-> +	{
-> +		cache_updated = 0;
-> +		goto out;
-> +	}
-
-goto_out
-
-
->
->   	cache_updated = _vg_commit_mdas(vg);
->
-> @@ -2736,6 +2816,15 @@ int vg_commit(struct volume_group *vg)
->   		log_error("Attempt to drop cached metadata failed "
->   			  "after commit for VG %s.", vg->name);
->
-> +out:
-> +	if (!_post_lv_resize(vg, cache_updated)) {
-> +		cache_updated = 0;
-> +	}
-> +
-> +	if (!cache_updated) {
-> +		stack;
-> +	}
-
-{} around single commands unneeded
-
-Zdenek
-
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index ffec129..4af9edf 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -482,8 +482,12 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 				  unsigned pvmetadatacopies,
+ 				  uint64_t pvmetadatasize,
+ 				  unsigned metadataignore);
+-int pv_resize(struct physical_volume *pv, struct volume_group *vg,
+-	      uint64_t size);
++
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size);
++
+ int pv_analyze(struct cmd_context *cmd, const char *pv_name,
+ 	       uint64_t label_sector);
+ 
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index d04ecab..4d37a6b 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -19,6 +19,7 @@
+ #include "toolcontext.h"
+ #include "locking.h"
+ #include "defaults.h"
++#include "archiver.h"
+ 
+ static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
+ 					    struct physical_volume *pv,
+@@ -485,7 +486,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
+  * Resize a PV in a VG, adding or removing segments as needed.
+  * New size must fit within pv->size.
+  */
+-int pv_resize(struct physical_volume *pv,
++static int _pv_resize(struct physical_volume *pv,
+ 	      struct volume_group *vg,
+ 	      uint64_t size)
+ {
+@@ -543,3 +544,48 @@ int pv_resize(struct physical_volume *pv,
+ 
+ 	return 1;
+ }
++
++/*
++ * You need to have acquired the correct locks for vg or pv (if orphan) before
++ * calling this function.  vg can be NULL which implies orphan pv.
++ * Code to write changes out must be called after this to make persistent.
++ */
++int pv_resize(struct cmd_context *cmd,
++				struct volume_group *vg,
++				struct physical_volume *pv,
++				const uint64_t new_size)
++{
++	uint64_t size = 0;
++	int rc = 0;
++	const char *pv_name = pv_dev_name(pv);
++
++	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
++		log_error("Physical volume %s format does not support resizing.",
++					pv_name);
++	} else {
++
++		/* Get new size */
++		if (!dev_get_size(pv_dev(pv), &size)) {
++			log_error("%s: Couldn't get size.", pv_name);
++		} else {
++
++			if (new_size) {
++				if (new_size > size)
++					log_warn("WARNING: %s: Overriding real size. "
++							"You could lose data.", pv_name);
++
++				log_verbose("%s: Pretending size is %" PRIu64 " not %"
++							PRIu64 " sectors.", pv_name, new_size, pv_size(pv));
++				size = new_size;
++			}
++
++			log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
++					pv_name, pv_size(pv));
++
++			if (_pv_resize(pv, vg, size))
++				rc = 1;
++		}
++	}
++
++	return rc;
++}
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 93a78c3..00f92ab 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1624,9 +1624,10 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+ /**
+  * Resize physical volume to new_size bytes.
+  *
+- * \memberof pv_t
++ * Note: Make sure to do a lvm_vg_write on the containing vg to save the
++ * new size.
+  *
+- * NOTE: This function is currently not implemented.
++ * \memberof pv_t
+  *
+  * \param   pv
+  * Physical volume handle.
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 90edaed..c12adf1 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -120,10 +120,23 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
+ 	return NULL;
+ }
+ 
+-
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+ {
+-	/* FIXME: add pv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	uint64_t size = new_size >> SECTOR_SHIFT;
++
++	if (new_size % SECTOR_SIZE) {
++		log_errno(EINVAL, "Size not a multiple of 512");
++		return -1;
++	}
++
++	if (!vg_check_write_mode(pv->vg)) {
++		return -1;
++	}
++
++	if (!pv_resize(pv->vg->cmd, pv->vg, pv, size)) {
++		log_error("PV re-size failed!");
++		return -1;
++	} else {
++		return 0;
++	}
+ }
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 2f0693a..21980b3 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -30,7 +30,6 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 			     const uint64_t new_size)
+ {
+ 	struct pv_list *pvl;
+-	uint64_t size = 0;
+ 	int r = 0;
+ 	const char *pv_name = pv_dev_name(pv);
+ 	const char *vg_name = pv_vg_name(pv);
+@@ -61,41 +60,18 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
+ 			log_error("Unable to find \"%s\" in volume group \"%s\"",
+ 				  pv_name, vg->name);
+-			goto out;
++			goto_out;
+ 		}
+ 
+ 		pv = pvl->pv;
+ 
+ 		if (!archive(vg))
+-			goto out;
++			goto_out;
+ 	}
+ 
+-	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
+-		log_error("Physical volume %s format does not support resizing.",
+-			  pv_name);
+-		goto out;
+-	}
+-
+-	/* Get new size */
+-	if (!dev_get_size(pv_dev(pv), &size)) {
+-		log_error("%s: Couldn't get size.", pv_name);
+-		goto out;
+-	}
+-
+-	if (new_size) {
+-		if (new_size > size)
+-			log_warn("WARNING: %s: Overriding real size. "
+-				  "You could lose data.", pv_name);
+-		log_verbose("%s: Pretending size is %" PRIu64 " not %" PRIu64
+-			    " sectors.", pv_name, new_size, pv_size(pv));
+-		size = new_size;
+-	}
+-
+-	log_verbose("Resizing volume \"%s\" to %" PRIu64 " sectors.",
+-		    pv_name, pv_size(pv));
+-
+-	if (!pv_resize(pv, vg, size))
++	if( !pv_resize(cmd, vg, pv, new_size)) {
+ 		goto_out;
++	}
+ 
+ 	log_verbose("Updating physical volume \"%s\"", pv_name);
+ 
+@@ -106,14 +82,14 @@ static int _pv_resize_single(struct cmd_context *cmd,
+ 	    !pv_write(cmd, pv, 1)) {
+ 		log_error("Failed to store physical volume \"%s\"",
+ 			  pv_name);
+-		goto out;
++		goto_out;
+ 	}
+ 
+ 	if (!is_orphan_vg(vg_name)) {
+ 		if (!vg_write(vg) || !vg_commit(vg)) {
+ 			log_error("Failed to store physical volume \"%s\" in "
+ 				  "volume group \"%s\"", pv_name, vg_name);
+-			goto out;
++			goto_out;
+ 		}
+ 		backup(vg);
+ 	}
+-- 
+1.7.11.7
 
 
