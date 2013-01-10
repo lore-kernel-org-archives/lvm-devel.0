@@ -1,22 +1,23 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 11 Jan 2013 08:24:51 +0000 (UTC)
-Subject: master - filters: add scm devices
-Message-ID: <20130111082451.493A712ED@hosted02.fedoraproject.org>
+From: Sebastian Ott <sebott@linux.vnet.ibm.com>
+Date: Thu, 10 Jan 2013 20:20:37 +0100 (CET)
+Subject: [RESEND][PATCH] filters: add scm devices
+Message-ID: <alpine.LFD.2.03.1301102012530.3289@linux.vnet.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9602e68577b43cf2090e680d7b4d2318c72009a7
-Commit:        9602e68577b43cf2090e680d7b4d2318c72009a7
-Parent:        06abb2dd4c78e66529e7e6407db1afb3f0f44d85
-Author:        Sebastian Ott <sebott@linux.vnet.ibm.com>
-AuthorDate:    Thu Jan 10 20:20:37 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 11 09:24:07 2013 +0100
+Hi,
 
-filters: add scm devices
+Could someone please take this patch to include scm block devices
+(http://git.kernel.org/?p=linux/kernel/git/torvalds/linux.git;a=commitdiff;h=f30664e2)
+to lvm's whitelist.
+
+regards,
+Sebastian
+
+[PATCH] filters: add scm devices
 
 Fix this:
 pvcreate /dev/scma
@@ -25,8 +26,8 @@ pvcreate /dev/scma
 Reported-by: Peter Oberparleiter <peter.oberparleiter@de.ibm.com>
 Signed-off-by: Sebastian Ott <sebott@linux.vnet.ibm.com>
 ---
- lib/filters/device-types.h |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/filters/device-types.h | 1 +
+ 1 file changed, 1 insertion(+)
 
 diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
 index aec4293..2e49f7f 100644
@@ -39,5 +40,7 @@ index aec4293..2e49f7f 100644
 +	{"scm", 8},		/* Storage Class Memory (IBM S/390) */
  	{"", 0}
  };
+-- 
+1.7.11.4
 
 
