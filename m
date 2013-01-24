@@ -1,53 +1,121 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 23 Jan 2013 11:53:40 -0500
-Subject: [PATCH] vgreduce: only process specified vg when pv is identified by tag
-Message-ID: <20130123165339.GA31607@redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Thu, 24 Jan 2013 15:13:00 -0500 (EST)
+Subject: [PATCH] userspace: dm statistics
+In-Reply-To: <Pine.LNX.4.64.1301241507590.8036@file.rdu.redhat.com>
+References: <Pine.LNX.4.64.1301241507590.8036@file.rdu.redhat.com>
+Message-ID: <Pine.LNX.4.64.1301241511050.8036@file.rdu.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Fix vgreduce to only process specified vg when pv is identified by tag.
-process_each_pv was attempting to process all vgs in this case.
+This is the userspace patch for two-way messages that are needed for 
+statistics.
+
+BTW. when querying large data sets, dmsetup fails with "Huge memory 
+allocation (size 67108864) rejected - metadata corruption?"
+
+- do you think this limit should be removed from dmsetup?
+
+Mikulas
 
 ---
- WHATS_NEW       | 1 +
- tools/toollib.c | 9 ++++++++-
- 2 files changed, 9 insertions(+), 1 deletion(-)
+ libdm/ioctl/libdm-iface.c |   19 +++++++++++++++++++
+ libdm/libdevmapper.h      |    1 +
+ libdm/misc/dm-ioctl.h     |    5 +++++
+ tools/dmsetup.c           |    9 +++++++++
+ 4 files changed, 34 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index eb8a4a0..53df906 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix vgreduce to only process specified vg when pv is identified by tag.
-   Fix blkdeactivate to handle nested mountpoints and mangled mount paths.
-   Set locales with LC_ALL instead of lower priority LANG variable.
-   Fix a crash-inducing race condition in lvmetad.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 669d772..0e6979a 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -801,7 +801,14 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 			if (sigint_caught())
- 				goto out;
- 		}
--		if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 1)) &&
-+		if (!dm_list_empty(&tags) && vg) {
-+			ret = process_each_pv_in_vg(cmd, vg, &tags, handle,
-+						    process_single_pv);
-+			if (ret > ret_max)
-+				ret_max = ret;
-+			if (sigint_caught())
-+				goto out;
-+		} else if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 1)) &&
- 			   !dm_list_empty(vgnames)) {
- 			dm_list_iterate_items(sll, vgnames) {
- 				vg = vg_read(cmd, sll->str, NULL, flags);
--- 
-1.8.1.rc1.5.g7e0651a
+Index: LVM2.2.02.98/libdm/misc/dm-ioctl.h
+===================================================================
+--- LVM2.2.02.98.orig/libdm/misc/dm-ioctl.h	2012-10-15 16:24:58.000000000 +0200
++++ LVM2.2.02.98/libdm/misc/dm-ioctl.h	2013-01-23 10:18:48.000000000 +0100
+@@ -338,4 +338,9 @@ enum {
+  */
+ #define DM_SECURE_DATA_FLAG		(1 << 15) /* In */
+ 
++/*
++ * If set, message generated output.
++ */
++#define DM_MESSAGE_OUT_FLAG		(1 << 16) /* Out */
++
+ #endif				/* _LINUX_DM_IOCTL_H */
+Index: LVM2.2.02.98/libdm/ioctl/libdm-iface.c
+===================================================================
+--- LVM2.2.02.98.orig/libdm/ioctl/libdm-iface.c	2013-01-23 10:22:09.000000000 +0100
++++ LVM2.2.02.98/libdm/ioctl/libdm-iface.c	2013-01-23 13:03:38.000000000 +0100
+@@ -700,6 +700,24 @@ struct dm_versions *dm_task_get_versions
+ 				       dmt->dmi.v4->data_start);
+ }
+ 
++const char *dm_task_get_message_result(struct dm_task *dmt)
++{
++	const char *start, *end;
++	if (!(dmt->dmi.v4->flags & DM_MESSAGE_OUT_FLAG))
++		return NULL;
++	start = (const char *) dmt->dmi.v4 + dmt->dmi.v4->data_start;
++	end = (const char *) dmt->dmi.v4 + dmt->dmi.v4->data_size;
++	if (end < start) {
++		log_error(INTERNAL_ERROR "Corrupted message structure returned: %d > %d", (int)dmt->dmi.v4->data_start, (int)dmt->dmi.v4->data_size);
++		return NULL;
++	}
++	if (!memchr(start, 0, end - start)) {
++		log_error(INTERNAL_ERROR "Message result doesn't contain terminating nul character");
++		return NULL;
++	}
++	return start;
++}
++
+ int dm_task_set_ro(struct dm_task *dmt)
+ {
+ 	dmt->read_only = 1;
+@@ -1870,6 +1888,7 @@ repeat_ioctl:
+ 		case DM_DEVICE_STATUS:
+ 		case DM_DEVICE_TABLE:
+ 		case DM_DEVICE_WAITEVENT:
++		case DM_DEVICE_TARGET_MSG:
+ 			_ioctl_buffer_double_factor++;
+ 			_dm_zfree_dmi(dmi);
+ 			goto repeat_ioctl;
+Index: LVM2.2.02.98/libdm/libdevmapper.h
+===================================================================
+--- LVM2.2.02.98.orig/libdm/libdevmapper.h	2013-01-23 10:42:52.000000000 +0100
++++ LVM2.2.02.98/libdm/libdevmapper.h	2013-01-23 10:46:26.000000000 +0100
+@@ -178,6 +178,7 @@ const char *dm_task_get_uuid(const struc
+ 
+ struct dm_deps *dm_task_get_deps(struct dm_task *dmt);
+ struct dm_versions *dm_task_get_versions(struct dm_task *dmt);
++const char *dm_task_get_message_result(struct dm_task *dmt);
+ 
+ /*
+  * These functions return device-mapper names based on the value
+Index: LVM2.2.02.98/tools/dmsetup.c
+===================================================================
+--- LVM2.2.02.98.orig/tools/dmsetup.c	2013-01-23 10:50:18.000000000 +0100
++++ LVM2.2.02.98/tools/dmsetup.c	2013-01-24 12:28:47.000000000 +0100
+@@ -770,6 +770,7 @@ static int _message(CMD_ARGS)
+ 	size_t sz = 1;
+ 	struct dm_task *dmt;
+ 	char *str;
++	const char *result;
+ 	uint64_t sector;
+ 	char *endptr;
+ 
+@@ -833,6 +834,14 @@ static int _message(CMD_ARGS)
+ 	if (!dm_task_run(dmt))
+ 		goto out;
+ 
++	result = dm_task_get_message_result(dmt);
++	if (result) {
++		if (!*result || result[strlen(result) - 1] == '\n')
++			fputs(result, stdout);
++		else
++			puts(result);
++	}
++
+ 	r = 1;
+ 
+       out:
 
 
