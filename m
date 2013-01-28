@@ -1,74 +1,59 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 25 Jan 2013 10:43:59 -0600
-Subject: [RFC/PATCH 0/2] lvm2app: Adding lv creation support
-In-Reply-To: <87ham5jygw.fsf@in.ibm.com>
-References: <1358925908-32347-1-git-send-email-mohan@in.ibm.com>
-	<5101C449.60304@redhat.com> <87ham5jygw.fsf@in.ibm.com>
-Message-ID: <5102B64F.4020104@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Mon, 28 Jan 2013 18:37:36 +0000 (UTC)
+Subject: master - Test (RAID): Test for RAID10 activations when devices are missing
+Message-ID: <20130128183736.6734B1213@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 01/25/2013 05:25 AM, M. Mohan Kumar wrote:
-> Tony Asleson <tasleson@redhat.com> writes:
->> This patch looks pretty straight forward.  Ideally we would not have the
->> function do the write and commit to match the other functions.  Did you
->> happen to take a peek to what that would involve?
->>
-> This function is based on existing function
-> lvm_vg_create_lv_linear. This existing function does not call
-> lvm_vg_write.  or am I missing something here?
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a3cfe9d9b7d77d2641b052c33316fda71d05b0d7
+Commit:        a3cfe9d9b7d77d2641b052c33316fda71d05b0d7
+Parent:        2be83f45431313947619ac57e9554c59621c371b
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Mon Jan 28 12:32:33 2013 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Mon Jan 28 12:32:33 2013 -0600
 
-The existing lvm_vg_create_lv_linear indirectly does a vg_write and
-vg_commit.  Look at function _lv_create_an_lv in lib/metadata/lv_manip.c
+Test (RAID):  Test for RAID10 activations when devices are missing
 
-I took a look at this and it won't be easy.  I should have looked at
-lvm_vg_create_linear as Dave has a nice comment on the function about
-the difficulty in changing this behavior.
+Test the fix for bug 889358.  RAID10 had been failing to activate when
+there were devices that had failed in more than one mirror set.
+---
+ test/shell/lvchange-partial.sh |   16 +++++++++++++++-
+ 1 files changed, 15 insertions(+), 1 deletions(-)
 
-> I need to modify some of the validation as it was not needed in case of
-> parameter passed by user.
-
-I think before we integrate a patch like this we should address the code
-duplication part.  Otherwise we are making the code base incrementally
-messier rather than incrementally better :-)  At the moment I'm not sure
-where common code like this should be placed.
-
-Anyone have a suggestion?
-
->> Exposing parameter passing with the use of structures is typically
->> discouraged in a shared C API.  The struct padding can be different from
->> client application and library compile based on compiler settings.  If
->> we go this route we should at the very least do a pragma pack to
->> mitigate this.  In addition once you do this the structure forever
->> cannot change.  We could address these issues by creating an opaque data
->> type and then adding some functions to set/get the values from the
->> opaque handle.  Kind of tedious, but it is a common approach.
->>
->> Not sure what else we could do to offset the vast number of arguments
->> that are available.
->>
-> 
-> I agree, can we try something like this:
-> lv_set_param(mirror, value_for_mirror, opaque structure);
-> lv_set_param(region_size, value_for_region_size, opaque structure);
-
-This would work, but I'm not sure what you were thinking about for
-different types?  What happens when value_for* is a non numeric?  Is
-mirror & region_size enumerated values?  Python or even C++ could handle
-this easily, but without throwing out type safety I'm not sure about C.
- My initial simple thought was something more like:
-
-int lv_param_mirror_set(opaque_data_type handle, int value);
-int lv_param_mirror_get(opaque_data_type handle);
-
-Historically I have seen the opaque structure pointer first in the
-argument list (kind of like the this pointer), but it will work fine
-either way :-)
-
-Thanks,
--Tony
+diff --git a/test/shell/lvchange-partial.sh b/test/shell/lvchange-partial.sh
+index fe642d4..bc9a514 100644
+--- a/test/shell/lvchange-partial.sh
++++ b/test/shell/lvchange-partial.sh
+@@ -13,7 +13,7 @@
+ 
+ aux target_at_least dm-raid 1 1 0 || skip
+ 
+-aux prepare_vg 2
++aux prepare_vg 4
+ 
+ lvcreate --type raid1 -m 1 -l 2 -n $lv1 $vg
+ lvchange -an $vg/$lv1
+@@ -64,3 +64,17 @@ not lvchange --zero y $vg/$lv1
+ not lvchange --resync -ay $vg/$lv1
+ not lvchange --resync --addtag foo $vg/$lv1
+ 
++aux enable_dev "$dev1"
++lvremove -ff $vg
++
++# rhbz 889358
++# Should be able to activate when RAID10
++# has failed devs in different mirror sets.
++if aux target_at_least dm-raid 1 3 2; then
++	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
++	aux wait_for_sync $vg $lv1
++	lvchange -an $vg/$lv1
++	aux disable_dev "$dev1" "$dev3"
++	lvchange -ay $vg/$lv1 --partial
++	lvchange -an $vg/$lv1
++fi
 
 
