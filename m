@@ -1,11 +1,11 @@
 From: M. Mohan Kumar <mohan@in.ibm.com>
-Date: Fri, 01 Feb 2013 22:57:26 +0530
+Date: Fri, 01 Feb 2013 22:58:15 +0530
 Subject: [PATCH V2 0/2] Add thin lv and thin pool creation support
 In-Reply-To: <510BD450.1060801@redhat.com>
 References: <1359642352-9688-1-git-send-email-mohan@in.ibm.com>
 	<510ADC7B.3090903@redhat.com> <87pq0k1s89.fsf@in.ibm.com>
 	<510BD450.1060801@redhat.com>
-Message-ID: <87mwvo0wsh.fsf@in.ibm.com>
+Message-ID: <87lib80wr4.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -36,6 +36,6 @@ Tony Asleson <tasleson@redhat.com> writes:
 >
 > Do we know what a reasonable threshold value should be?
 
-I am not sure about the threshold value, should it bring it to dm folks?
+Oops I meant, should we discuss with dm folks about default threshold?
 
 
