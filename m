@@ -1,267 +1,259 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Fri,  1 Feb 2013 17:36:23 +0000 (UTC)
-Subject: master - RAID: Add RAID status accessibility functions
-Message-ID: <20130201173623.8D84FA333E@fedorahosted.org>
+Date: Fri,  1 Feb 2013 17:36:28 +0000 (UTC)
+Subject: master - RAID: Improve 'lvs' attribute reporting of RAID LVs and sub-LVs
+Message-ID: <20130201173628.D50C6A333E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c8242e5cf4895f13e16b598b387c876c6fab7180
-Commit:        c8242e5cf4895f13e16b598b387c876c6fab7180
-Parent:        a3cfe9d9b7d77d2641b052c33316fda71d05b0d7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=801d4f96a8a2333361d7292d9c79ffdb5a96fac3
+Commit:        801d4f96a8a2333361d7292d9c79ffdb5a96fac3
+Parent:        37ffe6a13ad56122abdc808c13af9eeb1adf6731
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Fri Feb 1 11:31:47 2013 -0600
+AuthorDate:    Fri Feb 1 11:33:54 2013 -0600
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Fri Feb 1 11:31:47 2013 -0600
+CommitterDate: Fri Feb 1 11:33:54 2013 -0600
 
-RAID:  Add RAID status accessibility functions
+RAID:  Improve 'lvs' attribute reporting of RAID LVs and sub-LVs
 
-Similar to the way thin* accesses its kernel status, we add a method
-for RAID to grab the various values in its status output without the
-higher levels (LVM) having to understand how to parse the output.
-Added functions include:
-        - lib/activate/dev_manager.c:dev_manager_raid_status()
-          Pulls the status line from the kernel
+There are currently a few issues with the reporting done on RAID LVs and
+sub-LVs.  The most concerning is that 'lvs' does not always report the
+correct failure status of individual RAID sub-LVs (devices).  This can
+occur when a device fails and is restored after the failure has been
+detected by the kernel.  In this case, 'lvs' would report all devices are
+fine because it can read the labels on each device just fine.
+Example:
+[root at bp-01 lvm2]# lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r--   100.00 lv_rimage_0(0),lv_rimage_1(0)
+  [lv_rimage_0] vg   iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   iwi-aor--          /dev/sdb1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
 
-        - libdm/libdm-deptree.c:dm_get_status_raid()
-          Parses status line and puts components into dm_status_raid struct
+However, 'dmsetup status' on the device tells us a different story:
+  [root at bp-01 lvm2]# dmsetup status vg-lv
+  0 1024000 raid raid1 2 DA 1024000/1024000
 
-        - lib/activate/activate.c:lv_raid_dev_health()
-          Accesses dm_status_raid to deliver raid dev_health string
+In this case, we must also be sure to check the RAID LVs kernel status
+in order to get the proper information.  Here is an example of the correct
+output that is displayed after this patch is applied:
+[root at bp-01 lvm2]# lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r-p   100.00 lv_rimage_0(0),lv_rimage_1(0)
+  [lv_rimage_0] vg   iwi-aor-p          /dev/sda1(1)
+  [lv_rimage_1] vg   iwi-aor--          /dev/sdb1(1)
+  [lv_rmeta_0]  vg   ewi-aor-p          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
 
-The new structure and functions can provide a more unified way to access
-status information.  ('lv_raid_percent' could switch to using these
-functions, for example.)
+The other case where 'lvs' gives incomplete or improper output is when a
+device is replaced or added to a RAID LV.  It should display that the RAID
+LV is in the process of sync'ing and that the new device is the only one
+that is not-in-sync - as indicated by a leading 'I' in the Attr column.
+(Remember that 'i' indicates an (i)mage that is in-sync and 'I' indicates
+an (I)mage that is not in sync.)  Here's an example of the old incorrect
+behaviour:
+[root at bp-01 lvm2]# lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r--   100.00 lv_rimage_0(0),lv_rimage_1(0)
+  [lv_rimage_0] vg   iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   iwi-aor--          /dev/sdb1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
+[root at bp-01 lvm2]# lvconvert -m +1 vg/lv; lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r--     0.00 lv_rimage_0(0),lv_rimage_1(0),lv_rimage_2(0)
+  [lv_rimage_0] vg   Iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   Iwi-aor--          /dev/sdb1(1)
+  [lv_rimage_2] vg   Iwi-aor--          /dev/sdc1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
+  [lv_rmeta_2]  vg   ewi-aor--          /dev/sdc1(0)                            ** Note that all the images currently are marked as 'I' even though it is
+   only the last device that has been added that should be marked.
+
+Here is an example of the correct output after this patch is applied:
+[root at bp-01 lvm2]# lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r--   100.00 lv_rimage_0(0),lv_rimage_1(0)
+  [lv_rimage_0] vg   iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   iwi-aor--          /dev/sdb1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
+[root at bp-01 lvm2]# lvconvert -m +1 vg/lv; lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   rwi-a-r--     0.00 lv_rimage_0(0),lv_rimage_1(0),lv_rimage_2(0)
+  [lv_rimage_0] vg   iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   iwi-aor--          /dev/sdb1(1)
+  [lv_rimage_2] vg   Iwi-aor--          /dev/sdc1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor--          /dev/sdb1(0)
+  [lv_rmeta_2]  vg   ewi-aor--          /dev/sdc1(0)
+** Note only the last image is marked with an 'I'.  This is correct and we can
+   tell that it isn't the whole array that is sync'ing, but just the new
+   device.
+
+It also works under snapshots...
+[root at bp-01 lvm2]# lvs -a -o name,vg_name,attr,copy_percent,devices vg
+  LV            VG   Attr      Cpy%Sync Devices
+  lv            vg   owi-a-r-p    33.47 lv_rimage_0(0),lv_rimage_1(0),lv_rimage_2(0)
+  [lv_rimage_0] vg   iwi-aor--          /dev/sda1(1)
+  [lv_rimage_1] vg   Iwi-aor-p          /dev/sdb1(1)
+  [lv_rimage_2] vg   Iwi-aor--          /dev/sdc1(1)
+  [lv_rmeta_0]  vg   ewi-aor--          /dev/sda1(0)
+  [lv_rmeta_1]  vg   ewi-aor-p          /dev/sdb1(0)
+  [lv_rmeta_2]  vg   ewi-aor--          /dev/sdc1(0)
+  snap          vg   swi-a-s--          /dev/sda1(51201)
 ---
- lib/activate/activate.c    |   34 ++++++++++++++++++++++++++++++++++
- lib/activate/activate.h    |    1 +
- lib/activate/dev_manager.c |   43 +++++++++++++++++++++++++++++++++++++++++++
- lib/activate/dev_manager.h |    3 +++
- libdm/libdevmapper.h       |   22 ++++++++++++++++++++--
- libdm/libdm-deptree.c      |   35 +++++++++++++++++++++++++++++++++++
- 6 files changed, 136 insertions(+), 2 deletions(-)
+ WHATS_NEW         |    1 +
+ lib/metadata/lv.c |  104 ++++++++++++++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 92 insertions(+), 13 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index d71639f..602445f 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -179,6 +179,10 @@ int lv_raid_percent(const struct logical_volume *lv, percent_t *percent)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index eb8a4a0..8eea410 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Improve 'lvs' attribute reporting of RAID LVs and sub-LVs
+   Fix blkdeactivate to handle nested mountpoints and mangled mount paths.
+   Set locales with LC_ALL instead of lower priority LANG variable.
+   Fix a crash-inducing race condition in lvmetad.
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 34b428a..b571ffd 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -339,9 +339,15 @@ static int _lv_mimage_in_sync(const struct logical_volume *lv)
+ 
+ static int _lv_raid_image_in_sync(const struct logical_volume *lv)
  {
++	unsigned s;
+ 	percent_t percent;
++	char *raid_health;
+ 	struct lv_segment *raid_seg;
+ 
++	/* If the LV is not active, it doesn't make sense to check status */
++	if (!lv_is_active(lv))
++		return 0;  /* Assume not in-sync */
++
+ 	if (!(lv->status & RAID_IMAGE)) {
+ 		log_error(INTERNAL_ERROR "%s is not a RAID image", lv->name);
+ 		return 0;
+@@ -365,20 +371,91 @@ static int _lv_raid_image_in_sync(const struct logical_volume *lv)
+ 	if (percent == PERCENT_100)
+ 		return 1;
+ 
+-	/*
+-	 * FIXME:  Get individual RAID image status.
+-	 * The status health characters reported from a RAID target
+-	 * indicate whether the whole array or just individual devices
+-	 * are in-sync.  If the corresponding character for this image
+-	 * was 'A', we could report a more accurate status.  This is
+-	 * especially so in the case of failures or rebuildings.
+-	 *
+-	 * We need to test the health characters anyway to report
+-	 * the correct 4th attr character.  Just need to figure out
+-	 * where to put this functionality.
+-	 */
++	/* Find out which sub-LV this is. */
++	for (s = 0; s < raid_seg->area_count; s++)
++		if (seg_lv(raid_seg, s) == lv)
++			break;
++	if (s == raid_seg->area_count) {
++		log_error(INTERNAL_ERROR
++			  "sub-LV %s was not found in raid segment",
++			  lv->name);
++		return 0;
++	}
++
++	if (!lv_raid_dev_health(raid_seg->lv, &raid_health))
++		return_0;
++
++	if (raid_health[s] == 'A')
++		return 1;
++
  	return 0;
  }
-+int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
++
++/*
++ * _lv_raid_healthy
++ * @lv: A RAID_IMAGE, RAID_META, or RAID logical volume.
++ *
++ * Returns: 1 if healthy, 0 if device is not health
++ */
++static int _lv_raid_healthy(const struct logical_volume *lv)
 +{
-+	return 0;
-+}
- int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
- 			 percent_t *percent)
- {
-@@ -777,6 +781,36 @@ int lv_raid_percent(const struct logical_volume *lv, percent_t *percent)
- 	return lv_mirror_percent(lv->vg->cmd, lv, 0, percent, NULL);
- }
- 
-+int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
-+{
-+	int r;
-+	struct dev_manager *dm;
-+	struct dm_status_raid *status;
++	unsigned s;
++	char *raid_health;
++	struct lv_segment *raid_seg;
 +
-+	*dev_health = NULL;
-+
-+	if (!activation())
-+		return 0;
-+
-+	log_debug_activation("Checking raid device health for LV %s/%s",
-+			     lv->vg->name, lv->name);
-+
++	/* If the LV is not active, it doesn't make sense to check status */
 +	if (!lv_is_active(lv))
-+		return 0;
++		return 1;  /* assume healthy */
 +
-+	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
-+		return_0;
-+
-+	if (!(r = dev_manager_raid_status(dm, lv, &status)) ||
-+	    !(*dev_health = dm_pool_strdup(lv->vg->cmd->mem,
-+					   status->dev_health)))
-+		stack;
-+
-+	dev_manager_destroy(dm);
-+
-+	return r;
-+}
-+
- /*
-  * Returns data or metadata percent usage, depends on metadata 0/1.
-  * Returns 1 if percent set, else 0 on failure.
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 0a0c97e..4db7183 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -117,6 +117,7 @@ int lv_snapshot_percent(const struct logical_volume *lv, percent_t *percent);
- int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
- 		      int wait, percent_t *percent, uint32_t *event_nr);
- int lv_raid_percent(const struct logical_volume *lv, percent_t *percent);
-+int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health);
- int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
- 			 percent_t *percent);
- int lv_thin_percent(const struct logical_volume *lv, int mapped,
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 23c25ab..843823f 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1020,6 +1020,49 @@ int dev_manager_mirror_percent(struct dev_manager *dm,
- 	return 1;
- }
- 
-+int dev_manager_raid_status(struct dev_manager *dm,
-+			    const struct logical_volume *lv,
-+			    struct dm_status_raid **status)
-+{
-+	int r = 0;
-+	const char *dlid;
-+	struct dm_task *dmt;
-+	struct dm_info info;
-+	uint64_t start, length;
-+	char *type = NULL;
-+	char *params = NULL;
-+	const char *layer = (lv_is_origin(lv)) ? "real" : NULL;
-+
-+	/* Build dlid for the thin pool layer */
-+	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
-+		return_0;
-+
-+	log_debug_activation("Getting raid device status for %s.", lv->name);
-+
-+	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_STATUS, 0, 0)))
-+		return_0;
-+
-+	if (!dm_task_no_open_count(dmt))
-+		log_error("Failed to disable open_count.");
-+
-+	if (!dm_task_run(dmt))
-+		goto_out;
-+
-+	if (!dm_task_get_info(dmt, &info) || !info.exists)
-+		goto_out;
-+
-+	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
-+
-+	if (!dm_get_status_raid(dm->mem, params, status))
-+		goto_out;
-+
-+	r = 1;
-+out:
-+	dm_task_destroy(dmt);
-+
-+	return r;
-+}
-+
- #if 0
- 	log_very_verbose("%s %s", sus ? "Suspending" : "Resuming", name);
- 
-diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
-index 2d1b745..e363aed 100644
---- a/lib/activate/dev_manager.h
-+++ b/lib/activate/dev_manager.h
-@@ -54,6 +54,9 @@ int dev_manager_snapshot_percent(struct dev_manager *dm,
- int dev_manager_mirror_percent(struct dev_manager *dm,
- 			       const struct logical_volume *lv, int wait,
- 			       percent_t *percent, uint32_t *event_nr);
-+int dev_manager_raid_status(struct dev_manager *dm,
-+			    const struct logical_volume *lv,
-+			    struct dm_status_raid **status);
- int dev_manager_thin_pool_status(struct dev_manager *dm,
- 				 const struct logical_volume *lv,
- 				 struct dm_status_thin_pool **status);
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 3963022..eaa68e9 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -260,9 +260,25 @@ void *dm_get_next_target(struct dm_task *dmt,
- 			 void *next, uint64_t *start, uint64_t *length,
- 			 char **target_type, char **params);
- 
--/* Parse params from STATUS call for thin_pool target */
-+/*
-+ * Parse params from STATUS call for raid target
-+ */
- struct dm_pool;
- 
-+struct dm_status_raid {
-+	uint64_t total_regions;
-+	uint64_t insync_regions;
-+	int dev_count;
-+	char raid_type[16];
-+	char dev_health[0];
-+};
-+
-+int dm_get_status_raid(struct dm_pool *mem, const char *params,
-+		       struct dm_status_raid **status);
-+
-+/*
-+ * Parse params from STATUS call for thin_pool target
-+ */
- struct dm_status_thin_pool {
- 	uint64_t transaction_id;
- 	uint64_t used_metadata_blocks;
-@@ -275,7 +291,9 @@ struct dm_status_thin_pool {
- int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
- 			    struct dm_status_thin_pool **status);
- 
--/* Parse params from STATUS call for thin target */
-+/*
-+ * Parse params from STATUS call for thin target
-+ */
- struct dm_status_thin {
- 	uint64_t mapped_sectors;
- 	uint64_t highest_mapped_sector;
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 9e313d4..de4958e 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2852,6 +2852,41 @@ int dm_tree_node_add_raid_target(struct dm_tree_node *node,
- 	return 1;
- }
- 
-+int dm_get_status_raid(struct dm_pool *mem, const char *params,
-+		       struct dm_status_raid **status)
-+{
-+	int dev_count;
-+	const char *p = params;
-+	struct dm_status_raid *s;
-+
-+	if (!(p = strchr(p, ' ')))
-+		return_0;
-+	p++;
-+
-+	if (sscanf(p, "%d", &dev_count) != 1)
-+		return_0;
-+
-+	s = dm_pool_zalloc(mem, sizeof(struct dm_status_raid) + dev_count + 1);
-+	if (!s) {
-+		log_error("Failed to allocate raid status structure.");
++	if (!lv_is_raid_type(lv)) {
++		log_error(INTERNAL_ERROR "%s is not of RAID type", lv->name);
 +		return 0;
 +	}
 +
-+	if (sscanf(params, "%s %d %s %" PRIu64 "/%" PRIu64,
-+		   s->raid_type,
-+		   &s->dev_count,
-+		   s->dev_health,
-+		   &s->insync_regions,
-+		   &s->total_regions) != 5) {
-+		log_error("Failed to parse raid params: %s", params);
++	if (lv->status & RAID)
++		raid_seg = first_seg(lv);
++	else
++		raid_seg = get_only_segment_using_this_lv(first_seg(lv)->lv);
++
++	if (!raid_seg) {
++		log_error("Failed to find RAID segment for %s", lv->name);
 +		return 0;
 +	}
 +
-+	*status = s;
++	if (!seg_is_raid(raid_seg)) {
++		log_error("%s on %s is not a RAID segment",
++			  raid_seg->lv->name, lv->name);
++		return 0;
++	}
++
++	if (!lv_raid_dev_health(raid_seg->lv, &raid_health))
++		return_0;
++
++	if (lv->status & RAID) {
++		if (strchr(raid_health, 'D'))
++			return 0;
++		else
++			return 1;
++	}
++
++	/* Find out which sub-LV this is. */
++	for (s = 0; s < raid_seg->area_count; s++)
++		if (((lv->status & RAID_IMAGE) && (seg_lv(raid_seg, s) == lv)) ||
++		    ((lv->status & RAID_META) && (seg_metalv(raid_seg,s) == lv)))
++			break;
++	if (s == raid_seg->area_count) {
++		log_error(INTERNAL_ERROR
++			  "sub-LV %s was not found in raid segment",
++			  lv->name);
++		return 0;
++	}
++
++	if (raid_health[s] == 'D')
++		return 0;
 +
 +	return 1;
 +}
 +
- int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
- 				       uint64_t size,
- 				       const char *rlog_uuid,
+ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ {
+ 	percent_t snap_percent;
+@@ -505,7 +582,8 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
+ 	else
+ 		repstr[7] = '-';
+ 
+-	if (lv->status & PARTIAL_LV)
++	if (lv->status & PARTIAL_LV ||
++	    (lv_is_raid_type(lv) && !_lv_raid_healthy(lv)))
+ 		repstr[8] = 'p';
+ 	else
+ 		repstr[8] = '-';
 
 
