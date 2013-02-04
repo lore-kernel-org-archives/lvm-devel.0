@@ -1,107 +1,86 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  4 Feb 2013 18:08:16 +0000 (UTC)
-Subject: master - thin: use noflush for obtaining transaction_id
-Message-ID: <20130204180816.7E2343523@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Mon, 04 Feb 2013 16:29:23 -0600
+Subject: [PATCH] Make "raid10" the default when creating a mirror+stripe LV
+Message-ID: <1360016963.27137.2.camel@f16>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4870c79cad46e6063862d7cc828a2bbef9251c3
-Commit:        a4870c79cad46e6063862d7cc828a2bbef9251c3
-Parent:        153ce89af36e716ace78182d8fe0668a6e98053d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 17 10:54:41 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 4 19:05:56 2013 +0100
+ brassow
 
-thin: use noflush for obtaining transaction_id
+RAID: Default to RAID10 when creating mirror+stripe LV
 
-Do not flush thin pool data, when reading transation_id status.
----
- WHATS_NEW                  |    1 +
- lib/activate/activate.c    |    2 +-
- lib/activate/dev_manager.c |    6 +++++-
- lib/activate/dev_manager.h |    3 ++-
- libdm/libdm-deptree.c      |    3 +++
- 5 files changed, 12 insertions(+), 3 deletions(-)
+If '--mirrors/-m' and '--stripes/-i' are used together when creating
+a logical volume, assume the user would like to use "raid10" rather
+than a mirror stacked on striped sub-LVs.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cfaa152..272c6c8 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Avoid flushing thin pool when quering for transaction_id.
-   Add internal function lv_layer() to obtain layer name for LV.
-   Report partial and in-sync RAID attribute based on kernel status
-   Fix blkdeactivate to handle nested mountpoints and mangled mount paths.
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index e39c04a..6187828 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -888,7 +888,7 @@ int lv_thin_pool_transaction_id(const struct logical_volume *lv,
- 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
- 		return_0;
+This patch also makes this option configurable with 'raid10_segtype_default'
+in the LVM configuration file.
+
+Index: lvm2/tools/lvcreate.c
+===================================================================
+--- lvm2.orig/tools/lvcreate.c
++++ lvm2/tools/lvcreate.c
+@@ -673,11 +673,12 @@ static int _lvcreate_params(struct lvcre
  
--	if (!(r = dev_manager_thin_pool_status(dm, lv, &status)))
-+	if (!(r = dev_manager_thin_pool_status(dm, lv, &status, 1)))
- 		stack;
+ 	/* Set default segtype */
+ 	if (arg_count(cmd, mirrors_ARG))
+-		/*
+-		 * FIXME: Add default setting for when -i and -m arguments
+-		 *        are both given.  We should default to "raid10".
+-		 */
+-		segtype_str = find_config_tree_str(cmd, "global/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
++		if (arg_uint_value(cmd, arg_count(cmd, stripes_long_ARG) ?
++				   stripes_long_ARG : stripes_ARG, 1) > 1) {
++			segtype_str = find_config_tree_str(cmd, "global/raid10_segtype_default", DEFAULT_RAID10_SEGTYPE);
++		} else {
++			segtype_str = find_config_tree_str(cmd, "global/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
++		}
+ 	else if (arg_count(cmd, thin_ARG) || arg_count(cmd, thinpool_ARG))
+ 		segtype_str = "thin";
  	else
- 		*transaction_id = status->transaction_id;
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index e4cb0c3..1916d3e 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1124,7 +1124,8 @@ static int _belong_to_vg(const char *vgname, const char *name)
+Index: lvm2/doc/example.conf.in
+===================================================================
+--- lvm2.orig/doc/example.conf.in
++++ lvm2/doc/example.conf.in
+@@ -498,6 +498,23 @@ global {
+     # setting.
+     mirror_segtype_default = "raid1"
  
- int dev_manager_thin_pool_status(struct dev_manager *dm,
- 				 const struct logical_volume *lv,
--				 struct dm_status_thin_pool **status)
-+				 struct dm_status_thin_pool **status,
-+				 int noflush)
- {
- 	const char *dlid;
- 	struct dm_task *dmt;
-@@ -1146,6 +1147,9 @@ int dev_manager_thin_pool_status(struct dev_manager *dm,
- 	if (!dm_task_no_open_count(dmt))
- 		log_error("Failed to disable open_count.");
- 
-+	if (noflush && !dm_task_no_flush(dmt))
-+		log_warn("Can't set no_flush.");
++    # 'raid10_segtype_default' determines the segment types used by default
++    # when the '--stripes/-i' and '--mirrors/-m' arguments are both specified
++    # during the creation of a logical volume.
++    # Possible settings include:
++    #
++    # "raid10" - This implementation leverages MD's RAID10 personality through
++    #            device-mapper.
++    #
++    # "mirror" - LVM will layer the 'mirror' and 'stripe' segment types.  It
++    #            will do this by creating a mirror on top of striped sub-LVs;
++    #            effectively creating a RAID 0+1 array.  This is suboptimal
++    #            in terms of providing redunancy and performance.  Changing to
++    #            this setting is not advised.
++    # Specify the '--type <raid10|mirror>' option to override this default
++    # setting.
++    raid10_segtype_default "raid10"
 +
- 	if (!dm_task_run(dmt))
- 		goto_out;
- 
-diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
-index e363aed..a4556e7 100644
---- a/lib/activate/dev_manager.h
-+++ b/lib/activate/dev_manager.h
-@@ -59,7 +59,8 @@ int dev_manager_raid_status(struct dev_manager *dm,
- 			    struct dm_status_raid **status);
- int dev_manager_thin_pool_status(struct dev_manager *dm,
- 				 const struct logical_volume *lv,
--				 struct dm_status_thin_pool **status);
-+				 struct dm_status_thin_pool **status,
-+				 int noflush);
- int dev_manager_thin_pool_percent(struct dev_manager *dm,
- 				  const struct logical_volume *lv,
- 				  int metadata, percent_t *percent);
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 6a73859..5e938d7 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1360,6 +1360,9 @@ static int _thin_pool_status_transaction_id(struct dm_tree_node *dnode, uint64_t
- 		goto out;
- 	}
- 
-+	if (!dm_task_no_flush(dmt))
-+		log_warn("Can't set no_flush flag."); /* Non fatal */
-+
- 	if (!dm_task_run(dmt))
- 		goto_out;
- 
+     # The default format for displaying LV names in lvdisplay was changed 
+     # in version 2.02.89 to show the LV name and path separately.
+     # Previously this was always shown as /dev/vgname/lvname even when that
+Index: lvm2/lib/config/defaults.h
+===================================================================
+--- lvm2.orig/lib/config/defaults.h
++++ lvm2/lib/config/defaults.h
+@@ -56,6 +56,7 @@
+ #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
+ #define DEFAULT_MIRROR_IMAGE_FAULT_POLICY "remove"
+ #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
++#define DEFAULT_RAID10_SEGTYPE "raid10"
+ #define DEFAULT_RAID_FAULT_POLICY "warn"
+ #define DEFAULT_DMEVENTD_RAID_LIB "libdevmapper-event-lvm2raid.so"
+ #define DEFAULT_DMEVENTD_MIRROR_LIB "libdevmapper-event-lvm2mirror.so"
+
 
 
