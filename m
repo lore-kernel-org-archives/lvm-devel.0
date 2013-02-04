@@ -1,41 +1,27 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon,  4 Feb 2013 23:11:54 +0000 (UTC)
-Subject: master - clean-up: Another functiont that can use 'lv_layer'
-Message-ID: <20130204231155.0ADAFA0C29@fedorahosted.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Mon, 04 Feb 2013 17:24:52 -0600
+Subject: [PATCH V2 0/2] Add thin lv and thin pool creation support
+In-Reply-To: <87lib80wr4.fsf@in.ibm.com>
+References: <1359642352-9688-1-git-send-email-mohan@in.ibm.com>
+	<510ADC7B.3090903@redhat.com> <87pq0k1s89.fsf@in.ibm.com>
+	<510BD450.1060801@redhat.com> <87lib80wr4.fsf@in.ibm.com>
+Message-ID: <51104344.1070706@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f5cd9c3563a77f65b039923833ee13f3e22a959f
-Commit:        f5cd9c3563a77f65b039923833ee13f3e22a959f
-Parent:        a4870c79cad46e6063862d7cc828a2bbef9251c3
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Feb 4 17:10:16 2013 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Feb 4 17:10:16 2013 -0600
+On 02/01/2013 11:28 AM, M. Mohan Kumar wrote:
+> Tony Asleson <tasleson@redhat.com> writes:
+>> Do we know what a reasonable threshold value should be?
+> 
+> Oops I meant, should we discuss with dm folks about default threshold?
 
-clean-up:  Another functiont that can use 'lv_layer'
+Sure, please do.  I was hoping that some dm folks were lurking on this
+list and would shout out :-)
 
-lib/activate/dev_manager.c:dev_manager_raid_status() can also use
-the new 'lv_layer' function.
----
- lib/activate/dev_manager.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 1916d3e..e8f449c 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1031,7 +1031,7 @@ int dev_manager_raid_status(struct dev_manager *dm,
- 	uint64_t start, length;
- 	char *type = NULL;
- 	char *params = NULL;
--	const char *layer = (lv_is_origin(lv)) ? "real" : NULL;
-+	const char *layer = lv_layer(lv);
- 
- 	/* Build dlid for the thin pool layer */
- 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
+Regards,
+Tony
 
 
