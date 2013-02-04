@@ -1,63 +1,72 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Sun, 03 Feb 2013 02:32:39 -0600
-Subject: [PATCH 3 of 3] Allow lvconvert repair to work on RAID images with error segments
-In-Reply-To: <1359880051.15387.8.camel@f16>
-References: <1359880051.15387.8.camel@f16>
-Message-ID: <1359880359.15387.14.camel@f16>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Mon,  4 Feb 2013 18:07:52 +0000 (UTC)
+Subject: master - cleanup: postpone lv_is_thin_volume check
+Message-ID: <20130204180752.D2DC03523@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-RAID: Allow replacement of RAID images that contain error segments
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9f433e6ee34c0ff94017c940aac301bc28d7e233
+Commit:        9f433e6ee34c0ff94017c940aac301bc28d7e233
+Parent:        38e7b37c897da9cfae8cb3b77ea585b7616d9813
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Feb 2 00:44:07 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Feb 4 19:00:19 2013 +0100
 
-This patch adds the ability to replace RAID images that contain error
-segments.  The user will still be unable to run 'lvconvert --replace'
-because there is no way to address the 'error' segment (i.e. no PV
-that it is associated with).  However, 'lvconvert --repair' can be
-used to replace the image's error segment with a new PV.  This is also
-the most appropriate way to do it, since the LV will continue to be
-reported as 'partial'.
+cleanup: postpone lv_is_thin_volume check
 
-Index: lvm2/lib/metadata/raid_manip.c
-===================================================================
---- lvm2.orig/lib/metadata/raid_manip.c
-+++ lvm2/lib/metadata/raid_manip.c
-@@ -1631,8 +1631,8 @@ int lv_raid_reshape(struct logical_volum
- /*
-  * lv_raid_replace
-  * @lv
-- * @replace_pvs
-- * @allocatable_pvs
-+ * @remove_pvs
-+ * @allocate_pvs
-  *
-  * Replace the specified PVs.
-  */
-@@ -1675,7 +1675,10 @@ int lv_raid_replace(struct logical_volum
- 			return 0;
- 		}
+Code move to make it easier to follow and
+call _add_dev_to_dtree() in the separate if() branch
+for thin volumes.
+---
+ lib/activate/dev_manager.c |   19 +++++++++++--------
+ 1 files changed, 11 insertions(+), 8 deletions(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 843823f..fda5bdc 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1557,8 +1557,7 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	struct dm_tree_node *thin_node;
+ 	const char *uuid;
  
--		if (_lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
-+		// FIXME: safe to use 'virtual' as a substitute for 'error'?
-+		if (lv_is_virtual(seg_lv(raid_seg, s)) ||
-+		    lv_is_virtual(seg_metalv(raid_seg, s)) ||
-+		    _lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
- 		    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs))
- 			match_count++;
+-	if ((!origin_only || lv_is_thin_volume(lv)) &&
+-	    !_add_dev_to_dtree(dm, dtree, lv, NULL))
++	if (!origin_only && !_add_dev_to_dtree(dm, dtree, lv, NULL))
+ 		return_0;
+ 
+ 	/* FIXME Can we avoid doing this every time? */
+@@ -1590,18 +1589,22 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		return_0;
+ 
+ 	if (lv_is_thin_volume(lv)) {
+-#if 0
+-		/* FIXME Implement dm_tree_node_skip_children optimisation */
+ 		if (origin_only) {
++			/* origin_only has special meaning for thin volumes */
++			if (!_add_dev_to_dtree(dm, dtree, lv, NULL))
++				return_0;
++#if 0
++			/* FIXME Implement dm_tree_node_skip_children optimisation */
+ 			if (!(uuid = build_dm_uuid(dm->mem, lv->lvid.s, NULL)))
+ 				return_0;
+ 			if ((thin_node = dm_tree_find_node_by_uuid(dtree, uuid)))
+ 				dm_tree_node_skip_children(thin_node, 1);
+-		}
+ #endif
+-		/* Add thin pool LV layer */
+-		lv = seg->pool_lv;
+-		seg = first_seg(lv);
++		} else {
++			/* Add thin pool LV layer */
++			lv = seg->pool_lv;
++			seg = first_seg(lv);
++		}
  	}
-@@ -1705,7 +1708,9 @@ int lv_raid_replace(struct logical_volum
- 			if (!(i % copies))
- 				rebuilds_per_group = 0;
- 			if (_lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
--			    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs))
-+			    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs) ||
-+			    lv_is_virtual(seg_lv(raid_seg, s)) ||
-+			    lv_is_virtual(seg_metalv(raid_seg, s)))
- 				rebuilds_per_group++;
- 			if (rebuilds_per_group >= copies) {
- 				log_error("Unable to replace all the devices "
-
+ 
+ 	if (!origin_only && lv_is_thin_pool(lv)) {
 
 
