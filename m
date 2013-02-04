@@ -1,49 +1,41 @@
-From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 04 Feb 2013 17:04:21 -0600
-Subject: [PATCH] Fix circular dependency when attempting vgimport on VG with missing PVs
-Message-ID: <1360019061.27780.3.camel@f16>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Mon,  4 Feb 2013 23:11:54 +0000 (UTC)
+Subject: master - clean-up: Another functiont that can use 'lv_layer'
+Message-ID: <20130204231155.0ADAFA0C29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Is there any reason why 'vgimport' should not be allowed to alter the
-metadata in order to import a VG with missing PVs?  I can't think of
-any.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f5cd9c3563a77f65b039923833ee13f3e22a959f
+Commit:        f5cd9c3563a77f65b039923833ee13f3e22a959f
+Parent:        a4870c79cad46e6063862d7cc828a2bbef9251c3
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Mon Feb 4 17:10:16 2013 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Mon Feb 4 17:10:16 2013 -0600
 
- brassow
+clean-up:  Another functiont that can use 'lv_layer'
 
-TOOLS: Fix inablility to vgimport VGs with missing PVs
+lib/activate/dev_manager.c:dev_manager_raid_status() can also use
+the new 'lv_layer' function.
+---
+ lib/activate/dev_manager.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-When there are missing PVs in a volume group, most operations that alter
-the LVM metadata are disallowed.  It turns out that 'vgimport' is one of
-those disallowed operations.  This is bad because it creates a circular
-dependency.  'vgimport' will complain that the VG is inconsistent and that
-'vgreduce --removemissing' must be run.  However, 'vgreduce' cannot be run
-because it has not been imported.  Therefore, 'vgimport' must be one of
-the operations allowed to change the metadata when PVs are missing.
-
-Index: lvm2/tools/vgimport.c
-===================================================================
---- lvm2.orig/tools/vgimport.c
-+++ lvm2/tools/vgimport.c
-@@ -68,6 +68,15 @@ int vgimport(struct cmd_context *cmd, in
- 		return ECMD_FAILED;
- 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 1916d3e..e8f449c 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1031,7 +1031,7 @@ int dev_manager_raid_status(struct dev_manager *dm,
+ 	uint64_t start, length;
+ 	char *type = NULL;
+ 	char *params = NULL;
+-	const char *layer = (lv_is_origin(lv)) ? "real" : NULL;
++	const char *layer = lv_layer(lv);
  
-+	/*
-+	 * Allow a VG to be imported even when there are missing PVs.  If
-+	 * we don't, a circular dependency is created.  The vgimport will
-+	 * complain that the VG is not consistent and 'vgreduce --removemissing'
-+	 * should be used.  However, 'vgreduce' cannot be used because the
-+	 * VG hasn't been imported.
-+	 */
-+	cmd->handles_missing_pvs = 1;
-+
- 	return process_each_vg(cmd, argc, argv,
- 			       READ_FOR_UPDATE | READ_ALLOW_EXPORTED,
- 			       NULL,
-
+ 	/* Build dlid for the thin pool layer */
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
 
 
