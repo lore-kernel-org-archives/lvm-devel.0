@@ -1,65 +1,78 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Mon,  4 Feb 2013 18:08:01 +0000 (UTC)
-Subject: master - use lv_layer
-Message-ID: <20130204180801.223333523@fedorahosted.org>
+Date: Mon,  4 Feb 2013 18:08:04 +0000 (UTC)
+Subject: master - thin: replace is_active with send_messages
+Message-ID: <20130204180804.0B7E33523@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=4af4241ba4f749ee64375e7e80fecf6bda67f1e8
-Commit:        4af4241ba4f749ee64375e7e80fecf6bda67f1e8
-Parent:        ca7abbce8a705c1e690bcc2b0c08c4b510843046
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8ed0b6f312e0e9b5566934c5d30f79c1450fba2f
+Commit:        8ed0b6f312e0e9b5566934c5d30f79c1450fba2f
+Parent:        4af4241ba4f749ee64375e7e80fecf6bda67f1e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 2 00:16:36 2013 +0100
+AuthorDate:    Thu Jan 17 10:35:27 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 4 19:01:10 2013 +0100
 
-use lv_layer
+thin: replace is_active with send_messages
 
+Since is_active is only used for thinp
+replace struct member with more meaningful
+send_messages flag
 ---
- lib/activate/dev_manager.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/activate/activate.h    |    2 +-
+ lib/activate/dev_manager.c |    3 +--
+ lib/thin/thin.c            |    2 +-
+ 3 files changed, 3 insertions(+), 4 deletions(-)
 
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 4db7183..df4120c 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -35,7 +35,7 @@ struct lv_activate_opts {
+ 	int origin_only;
+ 	int no_merging;
+ 	int real_pool;
+-	int is_activate;
++	int send_messages;
+ 	int skip_in_use;
+ 	unsigned revert;
+ 	unsigned read_only;
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index fda5bdc..de42b3b 100644
+index de42b3b..e4cb0c3 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -1,6 +1,6 @@
- /*
-  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -827,7 +827,7 @@ int dev_manager_transient(struct dev_manager *dm, struct logical_volume *lv)
- 	char *type = NULL;
- 	char *params = NULL;
- 	char *dlid = NULL;
--	const char *layer = lv_is_origin(lv) ? "real" : NULL;
-+	const char *layer = lv_layer(lv);
- 	const struct dm_list *segh = &lv->segments;
- 	struct lv_segment *seg = NULL;
+@@ -2388,8 +2388,6 @@ static int _tree_action(struct dev_manager *dm, struct logical_volume *lv,
+ 	char *dlid;
+ 	int r = 0;
  
-@@ -998,7 +998,7 @@ int dev_manager_mirror_percent(struct dev_manager *dm,
- 	char *name;
- 	const char *dlid;
- 	const char *target_type = first_seg(lv)->segtype->name;
--	const char *layer = (lv_is_origin(lv)) ? "real" : NULL;
-+	const char *layer = lv_layer(lv);
+-	laopts->is_activate = (action == ACTIVATE);
+-
+ 	if (!(dtree = _create_partial_dtree(dm, lv, laopts->origin_only)))
+ 		return_0;
  
- 	/*
- 	 * Build a name for the top layer.
-@@ -1193,7 +1193,7 @@ int dev_manager_thin_percent(struct dev_manager *dm,
+@@ -2471,6 +2469,7 @@ out_no_root:
+ int dev_manager_activate(struct dev_manager *dm, struct logical_volume *lv,
+ 			 struct lv_activate_opts *laopts)
  {
- 	char *name;
- 	const char *dlid;
--	const char *layer = lv_is_origin(lv) ? "real" : NULL;
-+	const char *layer = lv_layer(lv);
++	laopts->send_messages = 1;
+ 	if (!_tree_action(dm, lv, laopts, ACTIVATE))
+ 		return_0;
  
- 	/* Build a name for the top layer */
- 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index 3f74588..8c0ec82 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -305,7 +305,7 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
+ 	 * Also transation_id is checked only when snapshot origin is active.
+ 	 * (This might change later)
+ 	 */
+-	if (!laopts->is_activate)
++	if (!laopts->send_messages)
+ 		return 1;
+ 
+ 	dm_list_iterate_items(lmsg, &seg->thin_messages) {
 
 
