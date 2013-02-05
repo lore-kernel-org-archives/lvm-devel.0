@@ -1,51 +1,50 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  5 Feb 2013 15:55:01 +0000 (UTC)
-Subject: master - cleanup: old style gcc
-Message-ID: <20130205155501.0B1E1230F@fedorahosted.org>
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Tue, 05 Feb 2013 22:26:15 +0530
+Subject: Default low water mark threshold for a new thin pool
+In-Reply-To: <20130205121846.GB3082@raspberrypi>
+References: <87ehgv16gf.fsf@in.ibm.com> <20130205121846.GB3082@raspberrypi>
+Message-ID: <87boby1yz4.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e566faaae605cfbb35a97b46e211c68d3c7bcfd5
-Commit:        e566faaae605cfbb35a97b46e211c68d3c7bcfd5
-Parent:        d97605beafab98572e7e797139548dffde91274c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 5 16:48:48 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 5 16:54:12 2013 +0100
+thornber at redhat.com writes:
 
-cleanup: old style gcc
+> On Tue, Feb 05, 2013 at 02:30:00PM +0530, M. Mohan Kumar wrote:
+>> 
+>> Hello,
+>> 
+>> We are adding a lvm2api for creating a thin pool. During thin pool
+>> creation if user does not specify anything for the low water mark
+>> thresold, it would result in 0 and no events will be generated when thin
+>> pool capacity is reaching its full size.
+>
+> An event will be generated.
+Yeah, I missed that. But if thin pool is consumed fully there is no
+enough time to resize the pool and it may result in unwanted scenario?
 
----
- lib/cache/lvmetad.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+>
+>> I am not sure what should be the default low water threshold
+>> percentage. Is there any recommended value for low water threshold value
+>> in dm thin pools?
+>
+> It's very hard to say since it depends on your use case.  In general
+> you want to allow dmeventd plenty of time to extend the pool before
+> you run out of space.  So if you're seeing a _peak_ provisioning rate of
+> 100meg a minute, I'd set the lwm to about 100meg.  It would be nice if LVM
+> could help you through this process.
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index e7f00ac..886f163 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -46,7 +46,7 @@ void lvmetad_init(struct cmd_context *cmd)
- 	_lvmetad_cmd = cmd;
- }
- 
--static void _lvmetad_connect()
-+static void _lvmetad_connect(void)
- {
- 	if (!_lvmetad_use || !_lvmetad_socket || _lvmetad_connected)
- 		return;
-@@ -156,8 +156,10 @@ retry:
- 
- static int _token_update(void)
- {
-+	daemon_reply repl;
-+
- 	log_debug_lvmetad("Sending updated token to lvmetad: %s", _lvmetad_token ? : "<NONE>");
--	daemon_reply repl = _lvmetad_send("token_update", NULL);
-+	repl = _lvmetad_send("token_update", NULL);
- 
- 	if (repl.error || strcmp(daemon_reply_str(repl, "response", ""), "OK")) {
- 		daemon_reply_destroy(repl);
+Do you mean mesaure how much MB/blocks dm-thin is able to provision in a
+minute and treat it as the default lwm blocks?
+
+>
+> - Joe
+>
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
 
 
