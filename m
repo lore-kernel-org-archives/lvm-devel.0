@@ -1,50 +1,103 @@
-From: M. Mohan Kumar <mohan@in.ibm.com>
-Date: Tue, 05 Feb 2013 22:26:15 +0530
-Subject: Default low water mark threshold for a new thin pool
-In-Reply-To: <20130205121846.GB3082@raspberrypi>
-References: <87ehgv16gf.fsf@in.ibm.com> <20130205121846.GB3082@raspberrypi>
-Message-ID: <87boby1yz4.fsf@in.ibm.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Tue, 5 Feb 2013 13:05:29 -0500 (EST)
+Subject: [PATCH] lvm: don't set snapshot cow device read only
+Message-ID: <Pine.LNX.4.64.1302051301580.19904@file.rdu.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-thornber at redhat.com writes:
+Hi
 
-> On Tue, Feb 05, 2013 at 02:30:00PM +0530, M. Mohan Kumar wrote:
->> 
->> Hello,
->> 
->> We are adding a lvm2api for creating a thin pool. During thin pool
->> creation if user does not specify anything for the low water mark
->> thresold, it would result in 0 and no events will be generated when thin
->> pool capacity is reaching its full size.
->
-> An event will be generated.
-Yeah, I missed that. But if thin pool is consumed fully there is no
-enough time to resize the pool and it may result in unwanted scenario?
+This is the patch for the bug in lvm that it creates read-only 
+snapshot-cow device and then lets the kernel driver to write to the 
+device.
 
->
->> I am not sure what should be the default low water threshold
->> percentage. Is there any recommended value for low water threshold value
->> in dm thin pools?
->
-> It's very hard to say since it depends on your use case.  In general
-> you want to allow dmeventd plenty of time to extend the pool before
-> you run out of space.  So if you're seeing a _peak_ provisioning rate of
-> 100meg a minute, I'd set the lwm to about 100meg.  It would be nice if LVM
-> could help you through this process.
+BTW. I'd like to ask - what does this "vg->status & LVM_WRITE" flag mean 
+and how is it controlled? It is supposed to mean that the volume group is 
+read-only or read-write, but I don't know how is it set (there is no 
+read-only flag in vgchange or vgconvert) and what exactly does it cause.
 
-Do you mean mesaure how much MB/blocks dm-thin is able to provision in a
-minute and treat it as the default lwm blocks?
+Mikulas
 
->
-> - Joe
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+---
+
+lvm: don't set snapshot cow device read only
+
+lvm has a bug: when creating snapshot with "--permission r", the
+underlying -cow device is set read-only. Kernel than tries to write to
+this read-only device when creating metadata header and when processing
+writes to the origin. The kernel doesn't check writes to read-only
+device originating from kernelspace, thus this bug becomes unnoticed.
+However, if we modify the kernel to not allow write bios to read-only
+devices, this bug shows up.
+
+This patch fixes lvm so that the underlying -cow device is always
+read-write.
+
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+
+---
+ lib/activate/activate.c    |    2 +-
+ lib/activate/dev_manager.c |    9 ++++++---
+ lib/activate/dev_manager.h |    3 ++-
+ 3 files changed, 9 insertions(+), 5 deletions(-)
+
+Index: LVM2.2.02.98/lib/activate/dev_manager.c
+===================================================================
+--- LVM2.2.02.98.orig/lib/activate/dev_manager.c	2013-02-04 19:53:38.000000000 +0100
++++ LVM2.2.02.98/lib/activate/dev_manager.c	2013-02-05 16:01:58.000000000 +0100
+@@ -61,9 +61,12 @@ struct lv_layer {
+ 
+ static const char _thin_layer[] = "tpool";
+ 
+-int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts)
++int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts,
++		 const char *layer)
+ {
+-	return (laopts->read_only || !(lv->vg->status & LVM_WRITE) || !(lv->status & LVM_WRITE));
++	if (!(lv->vg->status & LVM_WRITE)) return 1;
++	if (layer && !strcmp(layer, "cow")) return 0;
++	return laopts->read_only || !(lv->status & LVM_WRITE);
+ }
+ 
+ /*
+@@ -1968,7 +1971,7 @@ static int _add_new_lv_to_dtree(struct d
+ 	if (!(dnode = dm_tree_add_new_dev_with_udev_flags(dtree, name, dlid,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->major,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->minor,
+-					     read_only_lv(lv, laopts),
++					     read_only_lv(lv, laopts, layer),
+ 					     ((lv->vg->status & PRECOMMITTED) | laopts->revert) ? 1 : 0,
+ 					     lvlayer,
+ 					     _get_udev_flags(dm, lv, layer))))
+Index: LVM2.2.02.98/lib/activate/activate.c
+===================================================================
+--- LVM2.2.02.98.orig/lib/activate/activate.c	2013-02-05 01:14:34.000000000 +0100
++++ LVM2.2.02.98/lib/activate/activate.c	2013-02-05 01:15:06.000000000 +0100
+@@ -1857,7 +1857,7 @@ static int _lv_activate(struct cmd_conte
+ 	 * Nothing to do?
+ 	 */
+ 	if (info.exists && !info.suspended && info.live_table &&
+-	    (info.read_only == read_only_lv(lv, laopts))) {
++	    (info.read_only == read_only_lv(lv, laopts, NULL))) {
+ 		r = 1;
+ 		goto out;
+ 	}
+Index: LVM2.2.02.98/lib/activate/dev_manager.h
+===================================================================
+--- LVM2.2.02.98.orig/lib/activate/dev_manager.h	2013-02-05 01:14:20.000000000 +0100
++++ LVM2.2.02.98/lib/activate/dev_manager.h	2013-02-05 01:14:29.000000000 +0100
+@@ -26,7 +26,8 @@ struct dev_manager;
+ struct dm_info;
+ struct device;
+ 
+-int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts);
++int read_only_lv(struct logical_volume *lv, struct lv_activate_opts *laopts,
++		 const char *layer);
+ 
+ /*
+  * Constructor and destructor.
 
 
