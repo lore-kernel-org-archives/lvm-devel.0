@@ -1,64 +1,51 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  5 Feb 2013 15:54:58 +0000 (UTC)
-Subject: master - cleanup: preserve signesss and type size on return values
-Message-ID: <20130205155458.8AD8D230F@fedorahosted.org>
+Date: Tue,  5 Feb 2013 15:55:01 +0000 (UTC)
+Subject: master - cleanup: old style gcc
+Message-ID: <20130205155501.0B1E1230F@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d97605beafab98572e7e797139548dffde91274c
-Commit:        d97605beafab98572e7e797139548dffde91274c
-Parent:        7910b6c0badbf222e7c434f4cb3c0ad2ed3bd3a7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e566faaae605cfbb35a97b46e211c68d3c7bcfd5
+Commit:        e566faaae605cfbb35a97b46e211c68d3c7bcfd5
+Parent:        d97605beafab98572e7e797139548dffde91274c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 5 16:43:16 2013 +0100
+AuthorDate:    Tue Feb 5 16:48:48 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 5 16:54:11 2013 +0100
+CommitterDate: Tue Feb 5 16:54:12 2013 +0100
 
-cleanup: preserve signesss and type size on return values
+cleanup: old style gcc
 
 ---
- lib/cache/lvmcache.c |    4 ++--
- lib/cache/lvmcache.h |    4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ lib/cache/lvmetad.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 6ef1556..acdd1c8 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1814,7 +1814,7 @@ int lvmcache_foreach_mda(struct lvmcache_info *info,
- 	return 1;
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index e7f00ac..886f163 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -46,7 +46,7 @@ void lvmetad_init(struct cmd_context *cmd)
+ 	_lvmetad_cmd = cmd;
  }
  
--int lvmcache_mda_count(struct lvmcache_info *info)
-+unsigned lvmcache_mda_count(struct lvmcache_info *info)
+-static void _lvmetad_connect()
++static void _lvmetad_connect(void)
  {
- 	return dm_list_size(&info->mdas);
- }
-@@ -1887,7 +1887,7 @@ int lvmcache_uncertain_ownership(struct lvmcache_info *info) {
- 	return mdas_empty_or_ignored(&info->mdas);
- }
+ 	if (!_lvmetad_use || !_lvmetad_socket || _lvmetad_connected)
+ 		return;
+@@ -156,8 +156,10 @@ retry:
  
--int lvmcache_smallest_mda_size(struct lvmcache_info *info)
-+uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)
+ static int _token_update(void)
  {
- 	return find_min_mda_size(&info->mdas);
- }
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 615f466..768cd4c 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -145,8 +145,8 @@ struct device *lvmcache_device(struct lvmcache_info *info);
- void lvmcache_make_valid(struct lvmcache_info *info);
- int lvmcache_is_orphan(struct lvmcache_info *info);
- int lvmcache_uncertain_ownership(struct lvmcache_info *info);
--int lvmcache_mda_count(struct lvmcache_info *info);
-+unsigned lvmcache_mda_count(struct lvmcache_info *info);
- int lvmcache_vgid_is_cached(const char *vgid);
--int lvmcache_smallest_mda_size(struct lvmcache_info *info);
-+uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info);
++	daemon_reply repl;
++
+ 	log_debug_lvmetad("Sending updated token to lvmetad: %s", _lvmetad_token ? : "<NONE>");
+-	daemon_reply repl = _lvmetad_send("token_update", NULL);
++	repl = _lvmetad_send("token_update", NULL);
  
- #endif
+ 	if (repl.error || strcmp(daemon_reply_str(repl, "response", ""), "OK")) {
+ 		daemon_reply_destroy(repl);
 
 
