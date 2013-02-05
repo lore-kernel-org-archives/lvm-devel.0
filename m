@@ -1,93 +1,108 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  5 Feb 2013 13:47:46 +0000 (UTC)
-Subject: master - thin: add function pool_is_active
-Message-ID: <20130205134746.AD8D6A0C2C@fedorahosted.org>
+Date: Tue,  5 Feb 2013 13:47:49 +0000 (UTC)
+Subject: master - thin: fix forbidden discards checks
+Message-ID: <20130205134749.5ECB7A0C2C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=11eaf1c98c3fac8524f227956f57c3d486740a1a
-Commit:        11eaf1c98c3fac8524f227956f57c3d486740a1a
-Parent:        9d445f371c7658969d6580748233dc33c3ba0453
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a5b9b4bf02b42baf1f1c033eaa98c5fe23951b43
+Commit:        a5b9b4bf02b42baf1f1c033eaa98c5fe23951b43
+Parent:        11eaf1c98c3fac8524f227956f57c3d486740a1a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 5 10:52:39 2013 +0100
+AuthorDate:    Sat Feb 2 12:48:52 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 5 14:35:44 2013 +0100
+CommitterDate: Tue Feb 5 14:38:16 2013 +0100
 
-thin: add function pool_is_active
+thin: fix forbidden discards checks
 
-This internal function check for active pool device.
-For cluster it checks every thin volume,
-On the non-clustered VG we need to check just
-for presence of -tpool device.
+Instead of check for lv_is_active() for thin pool LV,
+query the whole pool via new  pool_is_active().
+
+Fixes a problem when we cannot change discards settings
+for active pool device where the actual layer for pool
+device was inactive, but thin volumes using thin pool
+have been active.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/metadata.h   |    1 +
- lib/metadata/thin_manip.c |   27 +++++++++++++++++++++++++++
- 3 files changed, 29 insertions(+), 0 deletions(-)
+ WHATS_NEW                   |    1 +
+ test/shell/discards-thin.sh |   22 ++++++++++++++++++----
+ tools/lvchange.c            |    4 ++--
+ 3 files changed, 21 insertions(+), 6 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 64b811e..1b26317 100644
+index 1b26317..b6c1785 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Add pool_is_active() to check for any pool related active LV.
++  Fix check for some forbidden discards conversion of thin pools.
+   Add pool_is_active() to check for any pool related active LV.
    Report blank field if the LV doesn't have an origin instead of 0.
    Do not take a free lv name argument for lvconvert --thinpool option.
-   Avoid flushing thin pool when quering for transaction_id.
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 19bf742..8a80147 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -472,6 +472,7 @@ int attach_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
- 			int auto_increment);
- int pool_has_message(const struct lv_segment *seg,
- 		     const struct logical_volume *lv, uint32_t device_id);
-+int pool_is_active(const struct lv_segment *pool_seg);
- int pool_below_threshold(const struct lv_segment *pool_seg);
- int extend_pool(struct logical_volume *lv, const struct segment_type *segtype,
- 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size);
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 016f776..51f3d16 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -230,6 +230,33 @@ int pool_has_message(const struct lv_segment *seg,
- 	return 0;
- }
+diff --git a/test/shell/discards-thin.sh b/test/shell/discards-thin.sh
+index 84688b4..525f106 100644
+--- a/test/shell/discards-thin.sh
++++ b/test/shell/discards-thin.sh
+@@ -1,6 +1,6 @@
+ #!/bin/sh
  
-+int pool_is_active(const struct lv_segment *pool_seg)
-+{
-+	struct lvinfo info;
-+	const struct seg_list *sl;
-+	const struct logical_volume *lv = pool_seg->lv;
+-# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2012-2013 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -34,16 +34,30 @@ check lv_field $vg/pool2 discards "passdown"
+ 
+ lvchange --discards nopassdown $vg/pool2
+ 
+-# cannot convert active  ignore -> passdown
++lvcreate -V1M -n origin -T $vg/pool
++lvcreate -s $vg/origin -n snap
 +
-+	if (!seg_is_thin_pool(pool_seg)) {
-+		log_error(INTERNAL_ERROR "LV %s is not pool.", lv->name);
-+		return 0;
-+	}
++# Cannot convert active  nopassdown -> ignore
++not lvchange --discards nopassdown $vg/pool
 +
-+	/* On clustered VG, query every related thin pool volume */
-+	if (vg_is_clustered(lv->vg)) {
-+		if (lv_is_active(lv))
-+			return 1;
++# Cannot convert active  ignore -> passdown
+ not lvchange --discards passdown $vg/pool
+ 
+-# cannot convert active  nopassdown -> ignore
++# Cannot convert active  nopassdown -> ignore
+ not lvchange --discards ignore $vg/pool1
+ 
+-# deactivate
++# Deactivate pool only
+ lvchange -an $vg/pool $vg/pool1
 +
-+		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
-+			if (lv_is_active(sl->seg->lv)) {
-+				log_debug("Thin volume \"%s\" is active.", sl->seg->lv->name);
-+				return 1;
-+			}
-+	} else if (lv_info(lv->vg->cmd, lv, 1, &info, 0, 0) && info.exists)
-+		return 1; /* Non clustered VG - just checks for '-tpool' */
++# Cannot convert, since thin volumes are still active
++not lvchange --discards passdown $vg/pool
 +
-+	return 0;
-+}
++# Deactive thin volumes
++lvchange -an $vg/origin $vg/snap
 +
- int pool_below_threshold(const struct lv_segment *pool_seg)
- {
- 	percent_t percent;
+ lvchange --discards passdown $vg/pool
+ check lv_field $vg/pool discards "passdown"
++
+ lvchange --discards ignore $vg/pool1
+ check lv_field $vg/pool1 discards "ignore"
+ 
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index c3c993a..0ea2e78 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -113,9 +113,9 @@ static int lvchange_pool_update(struct cmd_context *cmd,
+ 		if (discards != first_seg(lv)->discards) {
+ 			if (((discards == THIN_DISCARDS_IGNORE) ||
+ 			     (first_seg(lv)->discards == THIN_DISCARDS_IGNORE)) &&
+-			    lv_is_active(lv))
++			    pool_is_active(first_seg(lv)))
+ 				log_error("Cannot change discards state for active "
+-					  "logical volume \"%s\".", lv->name);
++					  "pool volume \"%s\".", lv->name);
+ 			else {
+ 				first_seg(lv)->discards = discards;
+ 				update++;
 
 
