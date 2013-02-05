@@ -1,62 +1,51 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  5 Feb 2013 13:47:54 +0000 (UTC)
-Subject: master - thin: properly unmark volume after detach
-Message-ID: <20130205134754.7B68DA0C2C@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue,  5 Feb 2013 14:56:01 +0100
+Subject: [PATCH 0/6] Thin external origin support
+Message-ID: <cover.1360072297.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c984d8fbab73face6a137cd72c114e3c2edb0448
-Commit:        c984d8fbab73face6a137cd72c114e3c2edb0448
-Parent:        416eb4b9b352c65e019cbd0a11265050b7360c63
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 5 11:07:09 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 5 14:40:37 2013 +0100
+Pach set adds support for external origin usage for thin volumes.
+Usage might be observed in the 'tests:' patch 6.
 
-thin: properly unmark volume after detach
+I've tried to combine as many usage patterns as I could think of,
+but if someone sees still some missing behavior, report please.
 
-When the volume is detached form thin pool,
-unmask THIN_VOLUME flag and reset related pointers.
----
- WHATS_NEW                 |    1 +
- lib/metadata/thin_manip.c |    6 +++++-
- 2 files changed, 6 insertions(+), 1 deletions(-)
+Patch set does not provide yet for 'lvcreate -s' usage.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b6c1785..c08f2a5 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix missing cleanup of flags when the LV is detached from pool.
-   Fix check for some forbidden discards conversion of thin pools.
-   Add pool_is_active() to check for any pool related active LV.
-   Report blank field if the LV doesn't have an origin instead of 0.
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 51f3d16..6ec97d4 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2011-2013 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -136,6 +136,10 @@ int detach_pool_lv(struct lv_segment *seg)
- 		sl->seg->origin = NULL;
- 	}
- 
-+	seg->lv->status &= ~THIN_VOLUME;
-+	seg->pool_lv = NULL;
-+	seg->origin = NULL;
-+
- 	return 1;
- }
- 
+Zdenek Kabelac (6):
+  thin: add support for external origin
+  thin: external origin cannot be changed
+  thin: report external origin
+  thin: removal of external origin
+  thin: lvconvert support for external origin
+  tests: lvconvert external origin
+
+ lib/activate/activate.c               |   6 +-
+ lib/activate/dev_manager.c            |  40 ++++++++
+ lib/format_text/flags.c               |   3 +-
+ lib/metadata/lv.c                     |   9 +-
+ lib/metadata/lv_manip.c               |  62 ++++++++----
+ lib/metadata/merge.c                  |   7 +-
+ lib/metadata/metadata-exported.h      |   5 +-
+ lib/metadata/metadata.h               |   5 +-
+ lib/metadata/thin_manip.c             |  50 ++++++++++
+ lib/report/report.c                   |   3 +
+ lib/thin/thin.c                       |  33 ++++++-
+ man/lvconvert.8.in                    |  32 +++++++
+ test/shell/lvconvert-thin-external.sh |  82 ++++++++++++++++
+ tools/args.h                          |   3 +-
+ tools/commands.h                      |   7 +-
+ tools/lvchange.c                      |   6 ++
+ tools/lvconvert.c                     | 173 ++++++++++++++++++++++++++++++++--
+ tools/lvresize.c                      |   9 ++
+ 18 files changed, 497 insertions(+), 38 deletions(-)
+ create mode 100644 test/shell/lvconvert-thin-external.sh
+
+-- 
+1.8.1.2
 
 
