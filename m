@@ -1,153 +1,171 @@
 From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Thu, 21 Feb 2013 13:11:37 +0000 (UTC)
-Subject: master - RAID: Make 'vgreduce --removemissing' work with RAID LVs
-Message-ID: <20130221131137.9D4511465@fedorahosted.org>
+Date: Thu, 21 Feb 2013 13:19:34 +0000 (UTC)
+Subject: master - RAID: Allow remove/replace of sub-LVs composed of error segments.
+Message-ID: <20130221131934.CEB64AC684@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=845852d6b4b486075f3ed866890f79b278a990ce
-Commit:        845852d6b4b486075f3ed866890f79b278a990ce
-Parent:        0e4ffd9d3b9cc8bf88662e3a0d023602360c6993
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=bd0ee420b597d38e37cfe738951cb1242f527638
+Commit:        bd0ee420b597d38e37cfe738951cb1242f527638
+Parent:        845852d6b4b486075f3ed866890f79b278a990ce
 Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Feb 20 14:52:46 2013 -0600
+AuthorDate:    Wed Feb 20 14:58:56 2013 -0600
 Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Feb 20 14:52:46 2013 -0600
+CommitterDate: Wed Feb 20 14:58:56 2013 -0600
 
-RAID: Make 'vgreduce --removemissing' work with RAID LVs
+RAID:  Allow remove/replace of sub-LVs composed of error segments.
 
-Currently it is impossible to remove a failed PV which has a RAID LV
-on it.  This patch fixes the issue by replacing the failed PV with an
-'error' segment within the affected sub-LVs.  Once there is no longer
-a RAID LV using the PV, it can be removed.
+When a device fails, we may wish to replace those segments with an
+error segment.  (Like when a 'vgreduce --removemissing' removes a
+failed device that happens to be a RAID image/meta.)  We are then left
+with images that we will eventually want to remove or replace.
 
-Most often, it is better to replace a failed RAID device with a spare.
-(You can use 'lvconvert --repair <vg>/<LV>' to accomplish that.)
-However, if there are no spares in the volume group and none will be
-added, it is useful to be able to removed the failed device.
+This patch allows us to pull out these virtual "error" sub-LVs.  This
+allows a user to 'lvconvert -m -1 vg/lv' to extract the bad sub-LVs.
+Sub-LVs with error segments are considered for extraction before other
+possible devices so that good devices are not accidentally removed.
 
-Following patches address the ability to perform 'lvconvert' operations
-on RAID LVs that contain sub-LVs composed of 'error' segments.
+This patch also adds the ability to replace RAID images that contain error
+segments.  The user will still be unable to run 'lvconvert --replace'
+because there is no way to address the 'error' segment (i.e. no PV
+that it is associated with).  However, 'lvconvert --repair' can be
+used to replace the image's error segment with a new PV.  This is also
+the most appropriate way to do it, since the LV will continue to be
+reported as 'partial'.
 ---
- WHATS_NEW                        |    1 +
- lib/metadata/metadata-exported.h |    1 +
- lib/metadata/raid_manip.c        |   64 ++++++++++++++++++++++++++++++++++++++
- tools/vgreduce.c                 |    6 +++
- 4 files changed, 72 insertions(+), 0 deletions(-)
+ WHATS_NEW                 |    1 +
+ lib/metadata/raid_manip.c |   73 +++++++++++++++++++++++++++++++++++----------
+ 2 files changed, 58 insertions(+), 16 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index f827508..d237386 100644
+index d237386..33993e4 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Make 'vgreduce --removemissing' able to handle RAID LVs with missing PVs.
++  Allow remove/replace of RAID sub-LVs that are composed of error targets.
+   Make 'vgreduce --removemissing' able to handle RAID LVs with missing PVs.
    Rename lvm.conf setting 'mirror_region_size' to 'raid_region_size'.
    Fix pvs -o pv_free reporting for PVs with zero PE count.
-   Fix missing cleanup of flags when the LV is detached from pool.
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 406491c..890aa18 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -808,6 +808,7 @@ int lv_raid_reshape(struct logical_volume *lv,
- 		    const struct segment_type *new_segtype);
- int lv_raid_replace(struct logical_volume *lv, struct dm_list *remove_pvs,
- 		    struct dm_list *allocate_pvs);
-+int lv_raid_remove_missing(struct logical_volume *lv);
- 
- /* --  metadata/raid_manip.c */
- 
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 896ad42..74bb80a 100644
+index 74bb80a..f716664 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -1853,3 +1853,67 @@ try_again:
+@@ -958,10 +958,11 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 			        struct dm_list *extracted_meta_lvs,
+ 			        struct dm_list *extracted_data_lvs)
+ {
+-	int s, extract, lvl_idx = 0;
++	int ss, s, extract, lvl_idx = 0;
+ 	struct lv_list *lvl_array;
+ 	struct lv_segment *seg = first_seg(lv);
+ 	struct logical_volume *rmeta_lv, *rimage_lv;
++	struct segment_type *error_segtype;
  
- 	return 1;
- }
-+
-+int lv_raid_remove_missing(struct logical_volume *lv)
-+{
-+	uint32_t s, lvl_idx;
-+	struct lv_segment *seg = first_seg(lv);
-+	struct cmd_context *cmd = lv->vg->cmd;
-+
-+	if (!(lv->status & PARTIAL_LV)) {
-+		log_error(INTERNAL_ERROR "%s/%s is not a partial LV",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	log_debug("Attempting to remove missing devices from %s LV, %s",
-+		  seg->segtype->ops->name(seg), lv->name);
+ 	extract = seg->area_count - new_count;
+ 	log_verbose("Extracting %u %s from %s/%s", extract,
+@@ -973,18 +974,53 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 	if (!lvl_array)
+ 		return_0;
+ 
+-	for (s = seg->area_count - 1; (s >= 0) && extract; s--) {
+-		if (!_lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
+-		    !_lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+-			continue;
+-		if (!_raid_in_sync(lv) &&
+-		    (!seg_is_mirrored(seg) || (s == 0))) {
+-			log_error("Unable to extract %sRAID image"
+-				  " while RAID array is not in-sync",
+-				  seg_is_mirrored(seg) ? "primary " : "");
+-			return 0;
+-		}
++	error_segtype = get_segtype_from_string(lv->vg->cmd, "error");
 +
 +	/*
-+	 * FIXME: Make sure # of compromised components will not affect RAID
++	 * We make two passes over the devices.
++	 * - The first pass we look for error LVs
++	 * - The second pass we look for PVs that match target_pvs
 +	 */
++	for (ss = (seg->area_count * 2) - 1; (ss >= 0) && extract; ss--) {
++		s = ss % seg->area_count;
 +
-+	for (s = 0, lvl_idx = 0; s < seg->area_count; s++) {
-+		if (!(seg_lv(seg, s)->status & PARTIAL_LV) &&
-+		    !(seg_metalv(seg, s)->status & PARTIAL_LV))
-+			continue;
-+
-+		log_debug("Replacing %s and %s segments with error target",
-+			  seg_lv(seg, s)->name, seg_metalv(seg, s)->name);
-+		if (!replace_lv_with_error_segment(seg_lv(seg, s))) {
-+			log_error("Failed to replace %s/%s's extents"
-+				  " with error target", lv->vg->name,
-+				  seg_lv(seg, s)->name);
-+			return 0;
-+		}
-+		if (!replace_lv_with_error_segment(seg_metalv(seg, s))) {
-+			log_error("Failed to replace %s/%s's extents"
-+				  " with error target", lv->vg->name,
-+				  seg_metalv(seg, s)->name);
-+			return 0;
-+		}
-+	}
-+
-+	if (!vg_write(lv->vg)) {
-+		log_error("Failed to write changes to %s in %s",
-+			  lv->name, lv->vg->name);
-+		return 0;
-+	}
-+
-+	if (!suspend_lv(cmd, lv)) {
-+		log_error("Failed to suspend %s/%s before committing changes",
-+			  lv->vg->name, lv->name);
-+		return 0;
-+	}
-+
-+	if (!vg_commit(lv->vg)) {
-+		log_error("Failed to commit changes to %s in %s",
-+			  lv->name, lv->vg->name);
-+		return 0;
-+	}
-+
-+	if (!resume_lv(cmd, lv))
-+		return_0;
-+
-+	return 1;
-+}
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index 1b04a49..c068b26 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -89,6 +89,12 @@ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
++		if (ss / seg->area_count) {
++			/* Conditions for first pass */
++			if ((first_seg(seg_lv(seg, s))->segtype != error_segtype) &&
++			    (first_seg(seg_metalv(seg, s))->segtype != error_segtype))
++				continue;
  
- 		/* Are any segments of this LV on missing PVs? */
- 		if (lv->status & PARTIAL_LV) {
-+			if (seg_is_raid(first_seg(lv))) {
-+				if (!lv_raid_remove_missing(lv))
-+					return_0;
-+				goto restart;
-+			}
++			if (target_pvs && !dm_list_empty(target_pvs) &&
++			    (target_pvs != &lv->vg->pvs)) {
++				/*
++				 * User has supplied a list of PVs, but we
++				 * cannot honor that list because error LVs
++				 * must come first.
++				 */
++				log_error("%s has components with error targets"
++					  " that must be removed first: %s",
++					  lv->name, seg_lv(seg, s)->name);
 +
- 			if (lv->status & MIRRORED) {
- 				if (!mirror_remove_missing(cmd, lv, 1))
- 					return_0;
++				log_error("Try removing the PV list and rerun"
++					  " the command.");
++				return 0;
++			}
++			log_debug("LVs with error segments to be removed: %s %s",
++				  seg_metalv(seg, s)->name, seg_lv(seg, s)->name);
++		} else {
++			/* Conditions for second pass */
++			if (!_lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
++			    !_lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
++				continue;
++
++			if (!_raid_in_sync(lv) &&
++			    (!seg_is_mirrored(seg) || (s == 0))) {
++				log_error("Unable to extract %sRAID image"
++					  " while RAID array is not in-sync",
++					  seg_is_mirrored(seg) ? "primary " : "");
++				return 0;
++			}
++		}
+ 		if (!_extract_image_components(seg, s, &rmeta_lv, &rimage_lv)) {
+ 			log_error("Failed to extract %s from %s",
+ 				  seg_lv(seg, s)->name, lv->name);
+@@ -1595,8 +1631,8 @@ int lv_raid_reshape(struct logical_volume *lv,
+ /*
+  * lv_raid_replace
+  * @lv
+- * @replace_pvs
+- * @allocatable_pvs
++ * @remove_pvs
++ * @allocate_pvs
+  *
+  * Replace the specified PVs.
+  */
+@@ -1639,7 +1675,10 @@ int lv_raid_replace(struct logical_volume *lv,
+ 			return 0;
+ 		}
+ 
+-		if (_lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
++		// FIXME: safe to use 'virtual' as a substitute for 'error'?
++		if (lv_is_virtual(seg_lv(raid_seg, s)) ||
++		    lv_is_virtual(seg_metalv(raid_seg, s)) ||
++		    _lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
+ 		    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs))
+ 			match_count++;
+ 	}
+@@ -1669,7 +1708,9 @@ int lv_raid_replace(struct logical_volume *lv,
+ 			if (!(i % copies))
+ 				rebuilds_per_group = 0;
+ 			if (_lv_is_on_pvs(seg_lv(raid_seg, s), remove_pvs) ||
+-			    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs))
++			    _lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs) ||
++			    lv_is_virtual(seg_lv(raid_seg, s)) ||
++			    lv_is_virtual(seg_metalv(raid_seg, s)))
+ 				rebuilds_per_group++;
+ 			if (rebuilds_per_group >= copies) {
+ 				log_error("Unable to replace all the devices "
 
 
