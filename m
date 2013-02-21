@@ -1,224 +1,227 @@
-From: Marian Csontos <mcsontos@redhat.com>
-Date: Thu, 14 Feb 2013 14:19:17 +0100
-Subject: [linux-lvm] create physical partition from logical partition
-In-Reply-To: <511CE411.1030606@redhat.com>
-References: <CAMugGiGoVAKVTXHrcTwLOkiGCOF_iK5BsGKPo-5bHhXiC-f4tg@mail.gmail.com>
-	<5113A5D5.3070808@redhat.com>
-	<CAMugGiHnARz60km5=0WjHw4UrNnfvFVWQ3zgVWWG=n62S_XzNQ@mail.gmail.com>
-	<5114BA25.2000108@redhat.com>
-	<CAMugGiGTdn9SMjoaP2=AmPZ-QQuREVC89cziN4bM0eya5HjEDQ@mail.gmail.com>
-	<51180903.4020108@redhat.com> <511CE411.1030606@redhat.com>
-Message-ID: <511CE455.8080404@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Thu, 21 Feb 2013 12:59:34 +0000 (UTC)
+Subject: master - clean-up: Rename lvm.conf setting 'mirror_region_size' to 'raid_region_size'
+Message-ID: <20130221125935.04E8D222E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-:-( wrong list! Sorry.
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0e4ffd9d3b9cc8bf88662e3a0d023602360c6993
+Commit:        0e4ffd9d3b9cc8bf88662e3a0d023602360c6993
+Parent:        a7d6a612b800ac53ded216842d0386f41e504c4e
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Wed Feb 20 14:40:17 2013 -0600
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Wed Feb 20 14:40:17 2013 -0600
 
-On 02/14/2013 02:18 PM, Marian Csontos wrote:
-> Hello, I did answer here and it still applies.
->
-> Though I am sure I have not got you an ill advice, please, *use reply to
-> list* or reply to all, so other can review, fix typos/mistakes in steps,
-> or provide an additional information.
->
->  > [root at zaphod ~]# lvcreate -L 1G -n lv vg_zaphod
->  > Logical volume "lv" created
->  > [root at zaphod ~]# lvresize -L 2G vg_zaphod/lv
->  > Extending logical volume lv to 2.00 GiB
->  > Logical volume lv successfully resized
->  > [root at zaphod ~]# lvresize -L 1G vg_zaphod/lv
->  > WARNING: Reducing active logical volume to 1.00 GiB
->  > THIS MAY DESTROY YOUR DATA (filesystem etc.)
->  > Do you really want to reduce lv? [y/n]: n
->
-> Briefly, answered "y" here lvresize does what asked for and cuts
-> filesystem into two. Though it says it will destroy data it was still
-> reversible operation, resizing incomplete FS later not so, but running
-> fsck dealt an ultimate blow to the FS.
->
->  > Now, the important question: Have you done a backup before?
->
-> I hope not getting an answer does not mean no.
->
-> -- Marian
->
->
-> On 02/10/2013 09:54 PM, Marian Csontos wrote:
->> On 02/10/2013 12:23 AM, fakhreddine HABIB wrote:
->>> Thank you again Marian.
->>>
->>> I tried first with the second point to run `fdisk /dev/sda` and i change
->>> the `Id` of /dev/sda2 to `8e`, using the Live Cd of Ubuntu.
->>> Now i can see the VG group ' vg_regalcauchy, thank you a lot for this
->>> point.
->>>
->>> Now, i have a problem .. i don't know what the reason. I tried after to
->>> reduce my volume in ' dev/vg_regalcaucy/lv_home' to have a big space to
->>> install Ubuntu, when i reduce the volume, i had a problem with the
->>> filesystem size was 26214400 blocks and the physical size of the
->>> device is
->>> 24962048.
->>> When i use the resize2fs it didn't work, i fix the file system size
->>> manually to 24962048.
->>
->> Hello. Oh no! I am afraid this is the most common mistake I have seen:
->> people do first shrink the LV and then the FS, while it must be done in
->> reverse order. The wrong way just removes part of FS first, so there may
->> be uncomplete files. And any attempt to fix the FS makes it worse -
->> links to data in the removed part of FS are broken now.
->>
->> NOTE: There is a `fsadm` command which does handle resizing of both LVs
->> and FSs which should be used instead.
->>
->> Now, the important question: Have you done a backup before?
->>
->> *Yes*: Very well! Just restore the data from Backup and repeat just
->> shrink the FS first and everything should be fine.
->>
->> *No*: I am afraid there are going to be files lost, depends very much
->> how full the filesystem was.
->>
->> If possible do a backup now - you may need to return to it and retry...
->>
->> Then you should increase the size of the LV back and then increase the
->> FS size back to original value.
->>
->> Try running fsck now, but be prepared for lot of errors.
->>
->> You should check files in lost+found and if any valuable data are there:
->> fragments of your files,...
->>
->> -- Marian
->>
->>> but when i want to mount the ' dev/vg_regalcaucy/lv_home', i have the
->>> message :
->>>
->>> mount: wrong fs type, bad option, bad superblock on
->>> /dev/vg_regalcaucy/lv_home,
->>> missing codepage or helper program, or other error
->>> In some cases useful info is found in syslog - try
->>> dmesg | tail or so
->>>
->>>
->>> And when i try to reboot my Centos system i have the message in the
->>> snapshot
->>>
->>> http://cjoint.com/data/0Bkatrr9BNg.htm
->>>
->>> Can you help me please to find a solution, i use the partition magic
->>> Live
->>> CD to use the shell, because i can't have an access to the system...
->>> and i
->>> don't know how can'i install in the system the ' nfs-common ' if it
->>> need.
->>>
->>> Thank you.
->>>
->>> F. H
->>>
->>>
->>>
->>>
->>>
->>>
->>>
->>>
->>> 2013/2/8 Marian Csontos <mcsontos@redhat.com>
->>>
->>>> On 02/08/2013 04:38 AM, fakhreddine HABIB wrote:
->>>>
->>>>> First thank you Marian.
->>>>>
->>>>
->>>> Hello,
->>>>
->>>>
->>>>
->>>>> About the method to reuduce the Pv, i think is risked... I don't
->>>>> want to
->>>>> take any risk of loosing data ...
->>>>>
->>>>
->>>> - pvresize will not resize if there are data in the trailing disk
->>>> space to
->>>> about to be shrinked
->>>>
->>>> - pvmove will mirror the data until moved successfully and even on
->>>> failure
->>>> will start again
->>>>
->>>> There is a short interval when LVM metadata are updated where system
->>>> crash
->>>> could result in troubles, but this is no more risk than increasing
->>>> logical
->>>> volume size...
->>>>
->>>> If you need creating new partition, you have no other option than
->>>> resizing
->>>> the PV.
->>>>
->>>> *Backups, backups, backups!*
->>>>
->>>> Though I am quite confident LVM user now, I am always doing backups
->>>> when
->>>> shuffling round partitions.
->>>>
->>>> Perhaps the easiest way if you have a spare USB HDD around is to run a
->>>> live CD and `dd` the /dev/sda there (like this `dd if=/dev/sda
->>>> of=/path/to/file/on/your/usb/**disk.img bs=1M`) If anything goes wrong,
->>>> you can simply switch the if and of params, and everything will be back
->>>> where it was before.
->>>>
->>>> *Virtualization?*
->>>>
->>>> Actually, there is an option: if your machine is HVM (Virtualization
->>>> enabled) you could still install and run Ubuntu in a virtual machine.
->>>>
->>>> CONS: slower, more memory consuming (2 OS are running at the same
->>>> time),
->>>> not all HW is accessible...
->>>>
->>>>
->>>>
->>>>> I tried your idea if i can install ubuntu and Centos in the same
->>>>> Physical
->>>>> partition, using a logical one .. but i can,t find the way to do
->>>>> that..
->>>>> Ubuntu installation interface give the whole /dev/sda2 but i can't see
->>>>> the logical volumes (I talk about logical volumes of a LV group)
->>>>> (attached
->>>>> pics)
->>>>>
->>>>
->>>> Too bad. Looks like the installer does not recognize LVM partition.
->>>>
->>>> Is it possible the partition used does not have a partition header?
->>>>
->>>> Run `fdisk /dev/sda` and there you could try `p` to print partitions.
->>>> `Id`
->>>> should be `8e` and `System` Linux LVM. If that's not so, try `t` and
->>>> change
->>>> 2-nd partition's type to `8e`.
->>>>
->>>> That may help ubuntu recognize the LVM partition.
->>>>
->>>> If not, try asking on Ubuntu forum...
->>>>
->>>> -- Marian
->>>>
->>>>
->>>>> thank you.
->>>>>
->>>>>
->>>
->>
->
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+clean-up:  Rename lvm.conf setting 'mirror_region_size' to 'raid_region_size'
+
+We have been using 'mirror_region_size' in lvm.conf as the default region
+size for RAID logical volumes as well as mirror logical volumes.  Since,
+"raid" is more inclusive and representative than "mirror", I have changed
+the name of this setting.  We must still check for the old setting and warn
+the user if we are overriding it with the new setting if both happen to be
+present.
+---
+ WHATS_NEW                        |    1 +
+ doc/example.conf.in              |    8 +++++-
+ lib/config/defaults.h            |    2 +-
+ lib/metadata/lv_manip.c          |   43 ++++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |    1 +
+ lib/metadata/raid_manip.c        |    7 ++---
+ lib/mirror/mirrored.c            |    5 +---
+ tools/lvconvert.c                |    4 +--
+ tools/lvcreate.c                 |    4 +--
+ 9 files changed, 58 insertions(+), 17 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 426f302..f827508 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Rename lvm.conf setting 'mirror_region_size' to 'raid_region_size'.
+   Fix pvs -o pv_free reporting for PVs with zero PE count.
+   Fix missing cleanup of flags when the LV is detached from pool.
+   Fix check for some forbidden discards conversion of thin pools.
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index 256e012..a1ba5f8 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -637,8 +637,12 @@ activation {
+     #
+     # read_only_volume_list = [ "vg1", "vg2/lvol1", "@tag1", "@*" ]
+ 
+-    # Size (in KB) of each copy operation when mirroring
+-    mirror_region_size = 512
++    # For RAID or 'mirror' segment types, 'raid_region_size' is the
++    # size (in kiB) of each:
++    # - synchronization operation when initializing
++    # - each copy operation when performing a 'pvmove' (using 'mirror' segtype)
++    # This setting has replaced 'mirror_region_size' since version 2.02.99
++    raid_region_size = 512
+ 
+     # Setting to use when there is no readahead value stored in the metadata.
+     #
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 3518240..0a98254 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -142,7 +142,7 @@
+ 
+ #define DEFAULT_USE_LINEAR_TARGET 1
+ #define DEFAULT_STRIPE_FILLER "error"
+-#define DEFAULT_MIRROR_REGION_SIZE 512	/* KB */
++#define DEFAULT_RAID_REGION_SIZE   512	/* KB */
+ #define DEFAULT_INTERVAL 15
+ 
+ #ifdef READLINE_SUPPORT
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 50e42dc..818e740 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -72,6 +72,49 @@ struct lv_names {
+ 	const char *new;
+ };
+ 
++/*
++ * get_default_region_size
++ * @cmd
++ *
++ * 'mirror_region_size' and 'raid_region_size' are effectively the same thing.
++ * However, "raid" is more inclusive than "mirror", so the name has been
++ * changed.  This function checks for the old setting and warns the user if
++ * it is being overridden by the new setting (i.e. warn if both settings are
++ * present).
++ *
++ * Note that the config files give defaults in kiB terms, but we
++ * return the value in terms of sectors.
++ *
++ * Returns: default region_size in sectors
++ */
++int get_default_region_size(struct cmd_context *cmd)
++{
++	int mrs, rrs;
++
++	/*
++	 * 'mirror_region_size' is the old setting.  It is overridden
++	 * by the new setting, 'raid_region_size'.
++	 */
++	mrs = 2 * find_config_tree_int(cmd, "activation/mirror_region_size", 0);
++	rrs = 2 * find_config_tree_int(cmd, "activation/raid_region_size", 0);
++
++	if (!mrs && !rrs)
++		return DEFAULT_RAID_REGION_SIZE * 2;
++
++	if (!mrs)
++		return rrs;
++
++	if (!rrs)
++		return mrs;
++
++	if (mrs != rrs)
++		log_verbose("Overriding default 'mirror_region_size' setting"
++			    " with 'raid_region_size' setting of %u kiB",
++			    rrs / 2);
++
++	return rrs;
++}
++
+ int add_seg_to_segs_using_this_lv(struct logical_volume *lv,
+ 				  struct lv_segment *seg)
+ {
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index db62d51..406491c 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -727,6 +727,7 @@ int vg_max_lv_reached(struct volume_group *vg);
+ /*
+ * Mirroring functions
+ */
++int get_default_region_size(struct cmd_context *cmd);  /* in lv_manip.c */
+ struct lv_segment *find_mirror_seg(struct lv_segment *seg);
+ int lv_add_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
+ 		   uint32_t mirrors, uint32_t stripes, uint32_t stripe_size,
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 3031506..896ad42 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -21,8 +21,6 @@
+ #include "lv_alloc.h"
+ #include "lvm-string.h"
+ 
+-#define RAID_REGION_SIZE 1024
+-
+ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
+ 				     struct logical_volume **tracking)
+ {
+@@ -528,7 +526,7 @@ static int _alloc_image_components(struct logical_volume *lv,
+ 		return_0;
+ 
+ 	if (seg_is_linear(seg))
+-		region_size = RAID_REGION_SIZE;
++		region_size = get_default_region_size(lv->vg->cmd);
+ 	else
+ 		region_size = seg->region_size;
+ 
+@@ -730,7 +728,8 @@ static int _raid_add_images(struct logical_volume *lv,
+ 		lv->status |= RAID;
+ 		seg = first_seg(lv);
+ 		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
+-		seg->region_size = RAID_REGION_SIZE;
++		seg->region_size = get_default_region_size(lv->vg->cmd);
++
+ 		/* MD's bitmap is limited to tracking 2^21 regions */
+ 		while (seg->region_size < (lv->size / (1 << 21))) {
+ 			seg->region_size *= 2;
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index 23a6371..58afab3 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -162,10 +162,7 @@ static struct mirror_state *_mirrored_init_target(struct dm_pool *mem,
+ 		return NULL;
+ 	}
+ 
+-	mirr_state->default_region_size = 2 *
+-	    find_config_tree_int(cmd,
+-			    "activation/mirror_region_size",
+-			    DEFAULT_MIRROR_REGION_SIZE);
++	mirr_state->default_region_size = get_default_region_size(cmd);
+ 
+ 	return mirr_state;
+ }
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 0e15888..9b41722 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -404,9 +404,7 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
+ 			}
+ 			lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0);
+ 		} else {
+-			region_size = 2 * find_config_tree_int(cmd,
+-						"activation/mirror_region_size",
+-						DEFAULT_MIRROR_REGION_SIZE);
++			region_size = get_default_region_size(cmd);
+ 			if (region_size < 0) {
+ 				log_error("Negative regionsize in "
+ 					  "configuration file is invalid");
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 78292f7..8919ba4 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -457,9 +457,7 @@ static int _read_mirror_params(struct lvcreate_params *lp,
+ 		}
+ 		lp->region_size = arg_uint_value(cmd, regionsize_ARG, 0);
+ 	} else {
+-		region_size = 2 * find_config_tree_int(cmd,
+-					"activation/mirror_region_size",
+-					DEFAULT_MIRROR_REGION_SIZE);
++		region_size = get_default_region_size(cmd);
+ 		if (region_size < 0) {
+ 			log_error("Negative regionsize in configuration file "
+ 				  "is invalid");
 
 
