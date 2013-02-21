@@ -1,99 +1,112 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Thu, 21 Feb 2013 13:33:43 +0000 (UTC)
-Subject: master - RAID: Add new 'raid10_segtype_default' setting in lvm.conf
-Message-ID: <20130221133343.B369FA1045@fedorahosted.org>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Thu, 21 Feb 2013 13:51:32 +0000 (UTC)
+Subject: master - pvcreate: fix alignment to incorporate alignment offset if PV has 0 MDAs
+Message-ID: <20130221135132.735811C39@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=70f57996b3b9ba126a9cbf69afed79a7d66c793c
-Commit:        70f57996b3b9ba126a9cbf69afed79a7d66c793c
-Parent:        dc2ce71313cef15efa2ba0addfb0f4115af80ca6
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Wed Feb 20 15:10:04 2013 -0600
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Wed Feb 20 15:10:04 2013 -0600
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=303e86adc8dbbab2fe78412f1b90021e5bdb5bc3
+Commit:        303e86adc8dbbab2fe78412f1b90021e5bdb5bc3
+Parent:        70f57996b3b9ba126a9cbf69afed79a7d66c793c
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Feb 21 14:47:49 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Thu Feb 21 14:51:19 2013 +0100
 
-RAID:  Add new 'raid10_segtype_default' setting in lvm.conf
+pvcreate: fix alignment to incorporate alignment offset if PV has 0 MDAs
 
-If '--mirrors/-m' and '--stripes/-i' are used together when creating
-a logical volume, mirrors-over-stripes is currently chosen.  The user
-can override this by using the '--type raid10' option on creation.
-However, we want a place where we can set the default behavior to
-'raid10' explicitly - similar to the "mirror" and "raid1" tunable,
-mirror_segtype_default.
+If zero metadata copies are used, there's no further recalculation of
+PV alignment that happens when adding metadata areas to the PV and
+which actually calculates the alignment correctly as a matter of fact.
+So fix this for "PV without MDA" case as well.
 
-A follow-on patch should use this new setting to change the default
-from "mirror" to "raid10", as this is the preferred segment type.
+Before this patch:
+[1] raw/~ # pvcreate --dataalignment 8m --dataalignmentoffset 4m
+--metadatacopies 1 /dev/sda
+  Physical volume "/dev/sda" successfully created
+[1] raw/~ # pvs -o pv_name,pe_start
+  PV         1st PE
+  /dev/sda    12.00m
+[1] raw/~ # pvcreate --dataalignment 8m --dataalignmentoffset 4m
+--metadatacopies 0 /dev/sda
+  Physical volume "/dev/sda" successfully created
+[1] raw/~ # pvs -o pv_name,pe_start
+  PV         1st PE
+  /dev/sda     8.00m
+
+After this patch:
+[1] raw/~ # pvcreate --dataalignment 8m --dataalignmentoffset 4m
+--metadatacopies 1 /dev/sda
+  Physical volume "/dev/sda" successfully created
+[1] raw/~ # pvs -o pv_name,pe_start
+  PV         1st PE
+  /dev/sda    12.00m
+[1] raw/~ # pvcreate --dataalignment 8m --dataalignmentoffset 4m
+--metadatacopies 0 /dev/sda
+  Physical volume "/dev/sda" successfully created
+[1] raw/~ # pvs -o pv_name,pe_start
+  PV         1st PE
+  /dev/sda    12.00m
+
+Also, remove a superfluous condition "pv->pe_start < pv->pe_align" in:
+  if (pe_start == PV_PE_START_CALC && pv->pe_start < pv->pe_align)
+    pv->pe_start = pv->pe_align ...
+This part of the condition is not reachable as with the PV_PE_START_CALC,
+we always have pv->pe_start set to 0 from the PV struct initialisation
+(...the pv->pe_start value is just being calculated).
 ---
- doc/example.conf.in   |   17 +++++++++++++++++
- lib/config/defaults.h |    1 +
- tools/lvcreate.c      |   11 ++++++-----
- 3 files changed, 24 insertions(+), 5 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format_text/format-text.c |   10 ++++++++--
+ lib/metadata/metadata.c       |    2 +-
+ 3 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/doc/example.conf.in b/doc/example.conf.in
-index a1ba5f8..e6494e5 100644
---- a/doc/example.conf.in
-+++ b/doc/example.conf.in
-@@ -498,6 +498,23 @@ global {
-     # setting.
-     mirror_segtype_default = "mirror"
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 33993e4..82cbfc9 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix PV alignment to incorporate alignment offset if the PV has zero MDAs.
+   Allow remove/replace of RAID sub-LVs that are composed of error targets.
+   Make 'vgreduce --removemissing' able to handle RAID LVs with missing PVs.
+   Rename lvm.conf setting 'mirror_region_size' to 'raid_region_size'.
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 24fd318..cf15313 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1508,8 +1508,14 @@ static int _text_pv_initialise(const struct format_type *fmt,
+ 		return 0;
+ 	}
  
-+    # 'raid10_segtype_default' determines the segment types used by default
-+    # when the '--stripes/-i' and '--mirrors/-m' arguments are both specified
-+    # during the creation of a logical volume.
-+    # Possible settings include:
-+    #
-+    # "raid10" - This implementation leverages MD's RAID10 personality through
-+    #            device-mapper.
-+    #
-+    # "mirror" - LVM will layer the 'mirror' and 'stripe' segment types.  It
-+    #            will do this by creating a mirror on top of striped sub-LVs;
-+    #            effectively creating a RAID 0+1 array.  This is suboptimal
-+    #            in terms of providing redunancy and performance.  Changing to
-+    #            this setting is not advised.
-+    # Specify the '--type <raid10|mirror>' option to override this default
-+    # setting.
-+    raid10_segtype_default "mirror"
+-	if (pe_start == PV_PE_START_CALC && pv->pe_start < pv->pe_align)
+-		pv->pe_start = pv->pe_align;
++	if (pv->size < pv->pe_align + pv->pe_align_offset) {
++		log_error("%s: Data alignment must not exceed device size.",
++			  pv_dev_name(pv));
++		return 0;
++	}
 +
-     # The default format for displaying LV names in lvdisplay was changed 
-     # in version 2.02.89 to show the LV name and path separately.
-     # Previously this was always shown as /dev/vgname/lvname even when that
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 0a98254..d39995e 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -56,6 +56,7 @@
- #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
- #define DEFAULT_MIRROR_IMAGE_FAULT_POLICY "remove"
- #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
-+#define DEFAULT_RAID10_SEGTYPE "mirror"
- #define DEFAULT_RAID_FAULT_POLICY "warn"
- #define DEFAULT_DMEVENTD_RAID_LIB "libdevmapper-event-lvm2raid.so"
- #define DEFAULT_DMEVENTD_MIRROR_LIB "libdevmapper-event-lvm2mirror.so"
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 8919ba4..a2626c0 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -673,11 +673,12 @@ static int _lvcreate_params(struct lvcreate_params *lp,
++	if (pe_start == PV_PE_START_CALC)
++		pv->pe_start = pv->pe_align + pv->pe_align_offset;
  
- 	/* Set default segtype */
- 	if (arg_count(cmd, mirrors_ARG))
--		/*
--		 * FIXME: Add default setting for when -i and -m arguments
--		 *        are both given.  We should default to "raid10".
--		 */
--		segtype_str = find_config_tree_str(cmd, "global/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
-+		if (arg_uint_value(cmd, arg_count(cmd, stripes_long_ARG) ?
-+				   stripes_long_ARG : stripes_ARG, 1) > 1) {
-+			segtype_str = find_config_tree_str(cmd, "global/raid10_segtype_default", DEFAULT_RAID10_SEGTYPE);
-+		} else {
-+			segtype_str = find_config_tree_str(cmd, "global/mirror_segtype_default", DEFAULT_MIRROR_SEGTYPE);
-+		}
- 	else if (arg_count(cmd, thin_ARG) || arg_count(cmd, thinpool_ARG))
- 		segtype_str = "thin";
- 	else
+ 	if (extent_size)
+ 		pv->pe_size = extent_size;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 0b774ac..d03b49c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1650,7 +1650,7 @@ struct physical_volume *pv_create(const struct cmd_context *cmd,
+ 		goto bad;
+ 	}
+ 
+-	if (pv->size < data_alignment) {
++	if (pv->size < data_alignment + data_alignment_offset) {
+ 		log_error("%s: Data alignment must not exceed device size.",
+ 			  pv_dev_name(pv));
+ 		goto bad;
 
 
