@@ -1,42 +1,35 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sat, 23 Feb 2013 11:19:27 +0000 (UTC)
-Subject: master - activation: fix pvmove partial tree creation
-Message-ID: <20130223111927.684B3AC69D@fedorahosted.org>
+From: Regid Ichira <regid23@nt1.in>
+Date: Mon, 25 Feb 2013 00:11:14 +0200
+Subject: [PATCH] minor. man/lvm.8.in: Whether or not the metadata should. the, not to.
+Message-ID: <20130224221114.GD1552@nt1.in>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=71f49345004d385acc71a8e534c4313069cc59b6
-Commit:        71f49345004d385acc71a8e534c4313069cc59b6
-Parent:        b73de7315116da41a993d20567f9a1520610f545
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 23 12:09:12 2013 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Feb 23 12:09:12 2013 +0100
-
-activation: fix pvmove partial tree creation
-
-Do not try to add LV again into the partial tree, if it's been
-already added. Otherwise we may end in endless loop.
+  Shouldn't it read: Whether or not the metadata should ...?
 ---
- lib/activate/dev_manager.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+Applied to V2_02_98, on top of
+71f4934 - Zdenek Kabelac, 2013-02-23 : activation: fix pvmove partial t
+---
+ man/lvm.8.in |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index e326929..bffa8a5 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1605,7 +1605,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	/* Add any LVs referencing a PVMOVE LV unless told not to. */
- 	if (dm->track_pvmove_deps && lv->status & PVMOVE)
- 		dm_list_iterate_items(sl, &lv->segs_using_this_lv)
--			if (!_add_lv_to_dtree(dm, dtree, sl->seg->lv, origin_only))
-+			if (!_cached_info(dm->mem, dtree, sl->seg->lv, 0) &&
-+			    !_add_lv_to_dtree(dm, dtree, sl->seg->lv, origin_only))
- 				return_0;
- 
- 	/* Adding LV head of replicator adds all other related devs */
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 2ce0065..7de929c 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -181,7 +181,7 @@ Whether or not the device-mapper kernel driver is loaded.
+ If you set this to \fIn\fP, no attempt will be made to contact the driver.
+ .TP
+ .BR \-A ", " \-\-autobackup " {" \fIy | \fIn }
+-Whether or not to metadata should be backed up automatically after a change.
++Whether or not the metadata should be backed up automatically after a change.
+ You are strongly advised not to disable this!
+ See \fBvgcfgbackup\fP(8).
+ .TP
+-- 
+1.7.10.4
 
 
