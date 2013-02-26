@@ -1,382 +1,423 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 26 Feb 2013 14:18:14 +0000 (UTC)
-Subject: master - pv_header_extension: add support for reading PV header extension (flags & Embedding Area)
-Message-ID: <20130226141814.B75D1A0C57@fedorahosted.org>
+Date: Tue, 26 Feb 2013 14:18:17 +0000 (UTC)
+Subject: master - pv_header_extension: add support for writing PV header extension (flags & Embedding Area)
+Message-ID: <20130226141817.AE7F3A0C57@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9dbe25709e3805fbbc8024f0be68de2aae815747
-Commit:        9dbe25709e3805fbbc8024f0be68de2aae815747
-Parent:        60c5d4c42f904fb018b51364f1b81aa73cac1969
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b778653f03702a967df11d51d842abb9a9b86068
+Commit:        b778653f03702a967df11d51d842abb9a9b86068
+Parent:        9dbe25709e3805fbbc8024f0be68de2aae815747
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Feb 14 16:04:35 2013 +0100
+AuthorDate:    Fri Feb 15 11:02:53 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Feb 26 11:27:23 2013 +0100
+CommitterDate: Tue Feb 26 11:28:00 2013 +0100
 
-pv_header_extension: add support for reading PV header extension (flags & Embedding Area)
+pv_header_extension: add support for writing PV header extension (flags & Embedding Area)
 
-New tools with PV header extension support will read the extension
-if it exists and it's not an error if it does not exist (so old PVs
-will still work seamlessly with new tools).
+The PV header extension information (PV header extension version, flags
+and list of Embedding Area locations) is stored just beyond the PV header base.
 
-Old tools without PV header extension support will just ignore any
-extension.
+When calculating the Embedding Area start value (ea_start), the same logic is
+used as when calculating the pe_start value for Data Area - the value must
+follow exactly the same alignment restrictions for its start value
+(the alignment detected automatically or provided via command line using
+the --dataalignment and --dataalignmentoffset arguments).
 
-As for the Embedding Area location information (its start and size),
-there are actually two places where this is stored:
-  - PV header extension
-  - VG metadata
-
-The VG metadata contains a copy of what's written in the PV header
-extension about the Embedding Area location (NULL value is not copied):
-
-    physical_volumes {
-        pv0 {
-          id = "AkSSRf-difg-fCCZ-NjAN-qP49-1zzg-S0Fd4T"
-          device = "/dev/sda"     # Hint only
-
-          status = ["ALLOCATABLE"]
-          flags = []
-          dev_size = 262144       # 128 Megabytes
-          pe_start = 67584
-          pe_count = 23   # 92 Megabytes
-          ea_start = 2048
-          ea_size = 65536 # 32 Megabytes
-        }
-    }
-
-The new metadata fields are "ea_start" and "ea_size".
-This is mostly useful when restoring the PV by using existing
-metadata backups (e.g. pvcreate --restorefile ...).
-
-New tools does not require these two fields to exist in VG metadata,
-they're not compulsory. Therefore, reading old VG metadata which doesn't
-contain any Embedding Area information will not end up with any kind
-of error but only a debug message that the ea_start and ea_size values
-were not found.
-
-Old tools just ignore these extra fields in VG metadata.
+The Embedding Area is placed at the very start of the PV, starting at
+ea_start. The Data Area starting at pe_start is placed next. The pe_start is
+still properly aligned. Due to the pe_start alignment, it's possible that the
+resulting Embedding Area size (ea_size) ends up bigger in size than requested
+(but never less than requested).
 ---
- lib/cache/lvmcache.c          |   13 +++++++++++++
- lib/cache/lvmetad.c           |   40 +++++++++++++++++++++++++++++++---------
- lib/format1/format1.c         |    1 +
- lib/format_text/import_vsn1.c |   17 ++++++++++++++++-
- lib/format_text/layout.h      |    2 +-
- lib/format_text/text_label.c  |   26 ++++++++++++++++++++++++++
- lib/metadata/pv.c             |   10 ++++++++++
- lib/metadata/pv.h             |    2 ++
- tools/pvcreate.c              |    1 +
- 9 files changed, 101 insertions(+), 11 deletions(-)
+ lib/format1/format1.c            |    2 +
+ lib/format_text/export.c         |    5 ++
+ lib/format_text/format-text.c    |  108 ++++++++++++++++++++++++++++++-------
+ lib/format_text/text_label.c     |   73 ++++++++++++++++++-------
+ lib/metadata/metadata-exported.h |    2 +
+ lib/metadata/metadata.c          |    2 +
+ tools/pvcreate.c                 |    2 +
+ 7 files changed, 153 insertions(+), 41 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 4da8fe4..13a722f 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1479,6 +1479,7 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
- 
- 		lvmcache_del_mdas(info);
- 		lvmcache_del_das(info);
-+		lvmcache_del_eas(info);
- 	} else {
- 		if (existing->dev != dev) {
- 			/* Is the existing entry a duplicate pvid e.g. md ? */
-@@ -1723,9 +1724,21 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
- 		return 0;
- 	}
- 
-+	/* Currently only support one embedding area at most */
-+	if (dm_list_size(&info->eas) > 1) {
-+		log_error("Must be at most one embedding area (found %d) on PV %s",
-+			  dm_list_size(&info->eas), dev_name(info->dev));
-+		return 0;
-+	}
-+
- 	dm_list_iterate_items(da, &info->das)
- 		pv->pe_start = da->disk_locn.offset >> SECTOR_SHIFT;
- 
-+	dm_list_iterate_items(da, &info->eas) {
-+		pv->ea_start = da->disk_locn.offset >> SECTOR_SHIFT;
-+		pv->ea_size = da->disk_locn.size >> SECTOR_SHIFT;
-+	}
-+
- 	return 1;
- }
- 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 886f163..2f9ffea 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -280,6 +280,7 @@ static struct lvmcache_info *_pv_populate_lvmcache(
- 	lvmcache_set_device_size(info, devsize);
- 	lvmcache_del_das(info);
- 	lvmcache_del_mdas(info);
-+	lvmcache_del_eas(info);
- 
- 	do {
- 		sprintf(mda_id, "mda%d", i);
-@@ -301,6 +302,15 @@ static struct lvmcache_info *_pv_populate_lvmcache(
- 		++i;
- 	} while (da);
- 
-+	i = 0;
-+	do {
-+		sprintf(da_id, "ea%d", i);
-+		da = dm_config_find_node(cn->child, da_id);
-+		if (!dm_config_get_uint64(da->child, "offset", &offset)) return_0;
-+		if (!dm_config_get_uint64(da->child, "size", &size)) return_0;
-+		lvmcache_add_ea(info, offset, size);
-+	} while (da);
-+
- 	return info;
- }
- 
-@@ -629,7 +639,7 @@ int lvmetad_vg_list_to_lvmcache(struct cmd_context *cmd)
- 	return 1;
- }
- 
--struct _extract_mda_baton {
-+struct _extract_dl_baton {
- 	int i;
- 	struct dm_config_tree *cft;
- 	struct dm_config_node *pre_sib;
-@@ -637,7 +647,7 @@ struct _extract_mda_baton {
- 
- static int _extract_mda(struct metadata_area *mda, void *baton)
- {
--	struct _extract_mda_baton *b = baton;
-+	struct _extract_dl_baton *b = baton;
- 	struct dm_config_node *cn;
- 	char id[32];
- 
-@@ -656,21 +666,21 @@ static int _extract_mda(struct metadata_area *mda, void *baton)
- 	return 1;
- }
- 
--static int _extract_da(struct disk_locn *da, void *baton)
-+static int _extract_disk_location(const char *name, struct disk_locn *dl, void *baton)
- {
--	struct _extract_mda_baton *b = baton;
-+	struct _extract_dl_baton *b = baton;
- 	struct dm_config_node *cn;
- 	char id[32];
- 
--	if (!da)
-+	if (!dl)
- 		return 1;
- 
--	(void) dm_snprintf(id, 32, "da%d", b->i);
-+	(void) dm_snprintf(id, 32, "name%d", b->i);
- 	if (!(cn = make_config_node(b->cft, id, b->cft->root, b->pre_sib)))
- 		return 0;
- 	if (!config_make_nodes(b->cft, cn, NULL,
--			       "offset = %"PRId64, (int64_t) da->offset,
--			       "size = %"PRId64, (int64_t) da->size,
-+			       "offset = %"PRId64, (int64_t) dl->offset,
-+			       "size = %"PRId64, (int64_t) dl->size,
- 			       NULL))
- 		return 0;
- 
-@@ -680,16 +690,28 @@ static int _extract_da(struct disk_locn *da, void *baton)
- 	return 1;
- }
- 
-+static int _extract_da(struct disk_locn *da, void *baton)
-+{
-+	return _extract_disk_location("da", da, baton);
-+}
-+
-+static int _extract_ea(struct disk_locn *ea, void *baton)
-+{
-+	return _extract_disk_location("ea", ea, baton);
-+}
-+
- static int _extract_mdas(struct lvmcache_info *info, struct dm_config_tree *cft,
- 			 struct dm_config_node *pre_sib)
- {
--	struct _extract_mda_baton baton = { .i = 0, .cft = cft, .pre_sib = NULL };
-+	struct _extract_dl_baton baton = { .i = 0, .cft = cft, .pre_sib = NULL };
- 
- 	if (!lvmcache_foreach_mda(info, &_extract_mda, &baton))
- 		return 0;
- 	baton.i = 0;
- 	if (!lvmcache_foreach_da(info, &_extract_da, &baton))
- 		return 0;
-+	if (!lvmcache_foreach_ea(info, &_extract_ea, &baton))
-+		return 0;
- 
- 	return 1;
- }
 diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 335a7e2..c90c266 100644
+index c90c266..f3945bc 100644
 --- a/lib/format1/format1.c
 +++ b/lib/format1/format1.c
-@@ -423,6 +423,7 @@ static int _format1_pv_write(const struct format_type *fmt, struct physical_volu
- 	lvmcache_update_pv(info, pv, fmt);
- 	lvmcache_del_mdas(info);
- 	lvmcache_del_das(info);
-+	lvmcache_del_eas(info);
+@@ -379,6 +379,8 @@ static int _format1_pv_setup(const struct format_type *fmt,
+ 	struct pvcreate_restorable_params rp = {.restorefile = NULL,
+ 						.id = {{0}},
+ 						.idp = NULL,
++						.ea_start = 0,
++						.ea_size = 0,
+ 						.pe_start = 0,
+ 						.extent_count = 0,
+ 						.extent_size = vg->extent_size};
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index d68daf5..6d83106 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -490,6 +490,11 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
+ 		outsize(f, vg->extent_size * (uint64_t) pv->pe_count,
+ 			"pe_count = %u", pv->pe_count);
  
- 	dm_list_init(&pvs);
++		if (pv->ea_start && pv->ea_size) {
++			outf(f, "ea_start = %" PRIu64, pv->ea_start);
++			outsize(f, pv->ea_size, "ea_size = %" PRIu64, pv->ea_size);
++		}
++
+ 		_dec_indent(f);
+ 		outf(f, "}");
+ 	}
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index e1fbf99..774f6ce 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1331,6 +1331,9 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume
+ 				 mdac->area.start, mdac->area.size, mda_is_ignored(mda));
+ 	}
  
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index 33ad37d..d5b5a73 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -165,7 +165,7 @@ static int _read_pv(struct format_instance *fid,
- 	struct physical_volume *pv;
- 	struct pv_list *pvl;
- 	const struct dm_config_value *cv;
--	uint64_t size;
-+	uint64_t size, ea_start;
++	if (!lvmcache_update_eas(info, pv))
++		return_0;
++
+ 	/*
+ 	 * FIXME: Allow writing zero offset/size data area to disk.
+ 	 *        This requires defining a special value since we can't
+@@ -1471,12 +1474,7 @@ static int _text_pv_initialise(const struct format_type *fmt,
+ 			       struct pvcreate_restorable_params *rp,
+ 			       struct physical_volume *pv)
+ {
+-	/*
+-	 * Try to keep the value of PE start set to a firm value if requested.
+-	 * This is usefull when restoring existing PE start value (backups etc.).
+-	 */
+-	if (rp->pe_start != PV_PE_START_CALC)
+-		pv->pe_start = rp->pe_start;
++	unsigned long adjustment, final_alignment = 0;
  
- 	if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl))) ||
- 	    !(pvl->pv = dm_pool_zalloc(mem, sizeof(*pvl->pv))))
-@@ -246,6 +246,21 @@ static int _read_pv(struct format_instance *fid,
+ 	if (!data_alignment)
+ 		data_alignment = find_config_tree_int(pv->fmt->cmd,
+@@ -1506,14 +1504,65 @@ static int _text_pv_initialise(const struct format_type *fmt,
  		return 0;
  	}
  
-+	/* Embedding area is not compulsory - just log_debug if not found. */
-+	ea_start = size = 0;
-+	if (!_read_uint64(pvn, "ea_start", &ea_start))
-+		log_debug("PV Embedding Area start value (ea_start) not found.");
-+	if (!_read_uint64(pvn, "ea_size", &size))
-+		log_debug("PV Embedding Area size (ea_size) not found.");
-+	if ((!ea_start && size) || (ea_start && !size)) {
-+		log_error("Incomplete embedding area specification for "
-+			  "physical volume.");
+-	if (pv->size < pv->pe_align + pv->pe_align_offset) {
++	final_alignment = pv->pe_align + pv->pe_align_offset;
++
++	if (pv->size < final_alignment) {
+ 		log_error("%s: Data alignment must not exceed device size.",
+ 			  pv_dev_name(pv));
+ 		return 0;
+ 	}
+ 
+-	if (rp->pe_start == PV_PE_START_CALC)
+-		pv->pe_start = pv->pe_align + pv->pe_align_offset;
++	if (pv->size < final_alignment + rp->ea_size) {
++		log_error("%s: Embedding area with data-aligned start must "
++			  "not exceed device size.", pv_dev_name(pv));
 +		return 0;
-+	} else {
-+		pv->ea_start = ea_start;
-+		pv->ea_size = size;
 +	}
 +
- 	dm_list_init(&pv->tags);
- 	dm_list_init(&pv->segments);
++	if (rp->pe_start == PV_PE_START_CALC) {
++		/*
++		 * Calculate new PE start and embedding area start value.
++		 * Make sure both are properly aligned!
++		 * If PE start can't be aligned because EA is taking
++		 * the whole space, make PE start equal to the PV size
++		 * which effectively disables DA - it will have zero size.
++		 * This needs to be done as we can't have a PV without any DA.
++		 * But we still want to support a PV with EA only!
++		 */
++		if (rp->ea_size) {
++			pv->ea_start = final_alignment;
++			pv->ea_size = rp->ea_size;
++			if ((adjustment = rp->ea_size % pv->pe_align))
++				pv->ea_size += pv->pe_align - adjustment;
++			if (pv->size < pv->ea_start + pv->ea_size)
++				pv->ea_size = pv->size - pv->ea_start;
++			pv->pe_start = pv->ea_start + pv->ea_size;
++		} else
++			pv->pe_start = final_alignment;
++	} else {
++		/*
++		 * Try to keep the value of PE start set to a firm value if
++		 * requested. This is useful when restoring existing PE start
++		 * value (e.g. backups). Also, if creating an EA, try to place
++		 * it in between the final alignment and existing PE start
++		 * if possible.
++		 * TODO: Support restoring existing EA from MDA instead like
++		 *       we do for PE start? This would require adding EA info
++		 *       in MDA then!
++		 */
++		pv->pe_start = rp->pe_start;
++		if (rp->ea_size) {
++			if ((rp->ea_start && rp->ea_start + rp->ea_size > rp->pe_start) ||
++			    (rp->pe_start <= final_alignment) ||
++			    (rp->pe_start - final_alignment < rp->ea_size)) {
++				log_error("%s: Embedding area would overlap "
++					  "data area.", pv_dev_name(pv));
++				return 0;
++			} else {
++				pv->ea_start = rp->ea_start ? : final_alignment;
++				pv->ea_size = rp->ea_size;
++			}
++		}
++	}
  
-diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
-index 6bd3fe4..92dc582 100644
---- a/lib/format_text/layout.h
-+++ b/lib/format_text/layout.h
-@@ -29,7 +29,7 @@ struct pv_header_extension {
- 	uint32_t version;
- 	uint32_t flags;
- 	/* NULL-terminated list of embedding areas */
--	struct disk_locn embedding_area_xl[0];
-+	struct disk_locn embedding_areas_xl[0];
- } __attribute__ ((packed));
+ 	if (rp->extent_size)
+ 		pv->pe_size = rp->extent_size;
+@@ -1938,7 +1987,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ {
+ 	struct format_instance *fid = pv->fid;
+ 	const char *pvid = (const char *) (*pv->old_id.uuid ? &pv->old_id : &pv->id);
+-	uint64_t pe_start, pe_end;
++	uint64_t ea_size, pe_start, pe_end;
+ 	uint64_t alignment, alignment_offset;
+ 	uint64_t disk_size;
+ 	uint64_t mda_start;
+@@ -1959,6 +2008,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 	}
  
- /* Fields with the suffix _xl should be xlate'd wherever they appear */
+ 	pe_start = pv->pe_start << SECTOR_SHIFT;
++	ea_size = pv->ea_size << SECTOR_SHIFT;
+ 	alignment = pv->pe_align << SECTOR_SHIFT;
+ 	alignment_offset = pv->pe_align_offset << SECTOR_SHIFT;
+ 	disk_size = pv->size << SECTOR_SHIFT;
+@@ -1994,6 +2044,12 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 			limit_name = "disk size";
+ 		}
+ 
++		/* Adjust limits for embedding area if present. */
++		if (ea_size) {
++			limit -= ea_size;
++			limit_name = "ea_start";
++		}
++
+ 		if (limit > disk_size)
+ 			goto bad;
+ 
+@@ -2053,8 +2109,11 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 		 * start of the area that follows the MDA0 we've just calculated.
+ 		 */
+ 		if (!pe_start_locked) {
+-			pe_start = mda_start + mda_size;
+-			pv->pe_start = pe_start >> SECTOR_SHIFT;
++			if (ea_size) {
++				pv->ea_start = (mda_start + mda_size) >> SECTOR_SHIFT;
++				pv->pe_start = pv->ea_start + pv->ea_size;
++			} else
++				pv->pe_start = (mda_start + mda_size) >> SECTOR_SHIFT;
+ 		}
+ 	}
+ 	/* Second metadata area at the end of the device. */
+@@ -2072,15 +2131,22 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
+ 		if (pe_start || pe_start_locked) {
+ 			limit = pe_end ? pe_end : pe_start;
+ 			limit_name = pe_end ? "pe_end" : "pe_start";
+-		}
+-		else if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 0)) &&
+-			 (mdac = mda->metadata_locn)) {
+-			limit = mdac->area.start + mdac->area.size;
+-			limit_name = "MDA0 end";
+-		}
+-		else {
+-			limit = LABEL_SCAN_SIZE;
+-			limit_name = "label scan size";
++		} else {
++			if ((mda = fid_get_mda_indexed(fid, pvid, ID_LEN, 0)) &&
++				 (mdac = mda->metadata_locn)) {
++				limit = mdac->area.start + mdac->area.size;
++				limit_name = "MDA0 end";
++			}
++			else {
++				limit = LABEL_SCAN_SIZE;
++				limit_name = "label scan size";
++			}
++
++			/* Adjust limits for embedding area if present. */
++			if (ea_size) {
++				limit += ea_size;
++				limit_name = "ea_end";
++			}
+ 		}
+ 
+ 		if (limit > disk_size)
 diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index be28f11..7ee9022 100644
+index 7ee9022..32f3347 100644
 --- a/lib/format_text/text_label.c
 +++ b/lib/format_text/text_label.c
-@@ -336,11 +336,16 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
+@@ -35,23 +35,28 @@ static int _text_can_handle(struct labeller *l __attribute__((unused)),
+ 	return 0;
+ }
+ 
+-struct _da_setup_baton {
++struct _dl_setup_baton {
+ 	struct disk_locn *pvh_dlocn_xl;
+ 	struct device *dev;
+ };
+ 
+ static int _da_setup(struct disk_locn *da, void *baton)
+ {
+-	struct _da_setup_baton *p = baton;
++	struct _dl_setup_baton *p = baton;
+ 	p->pvh_dlocn_xl->offset = xlate64(da->offset);
+ 	p->pvh_dlocn_xl->size = xlate64(da->size);
+ 	p->pvh_dlocn_xl++;
+ 	return 1;
+ }
+ 
++static int _ea_setup(struct disk_locn *ea, void *baton)
++{
++	return _da_setup(ea, baton);
++}
++
+ static int _mda_setup(struct metadata_area *mda, void *baton)
+ {
+-	struct _da_setup_baton *p = baton;
++	struct _dl_setup_baton *p = baton;
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
+ 
+ 	if (mdac->area.dev != p->dev)
+@@ -64,15 +69,30 @@ static int _mda_setup(struct metadata_area *mda, void *baton)
+ 	return 1;
+ }
+ 
++static int _dl_null_termination(void *baton)
++{
++	struct _dl_setup_baton *p = baton;
++
++	p->pvh_dlocn_xl->offset = xlate64(UINT64_C(0));
++	p->pvh_dlocn_xl->size = xlate64(UINT64_C(0));
++	p->pvh_dlocn_xl++;
++
++	return 1;
++}
++
+ static int _text_write(struct label *label, void *buf)
  {
  	struct label_header *lh = (struct label_header *) buf;
  	struct pv_header *pvhdr;
 +	struct pv_header_extension *pvhdr_ext;
  	struct lvmcache_info *info;
- 	struct disk_locn *dlocn_xl;
- 	uint64_t offset;
-+	uint32_t ext_version;
- 	struct _update_mda_baton baton;
+-	struct _da_setup_baton baton;
++	struct _dl_setup_baton baton;
+ 	char buffer[64] __attribute__((aligned(8)));
+-	int da1, mda1, mda2;
++	int ea1, da1, mda1, mda2;
  
 +	/*
 +	 * PV header base
 +	 */
- 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
+ 	/* FIXME Move to where label is created */
+ 	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
  
- 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
-@@ -354,6 +359,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 
- 	lvmcache_del_das(info);
- 	lvmcache_del_mdas(info);
-+	lvmcache_del_eas(info);
- 
- 	/* Data areas holding the PEs */
- 	dlocn_xl = pvhdr->disk_areas_xl;
-@@ -369,6 +375,25 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
- 		dlocn_xl++;
+@@ -89,29 +109,34 @@ static int _text_write(struct label *label, void *buf)
  	}
  
-+	dlocn_xl++;
-+
+ 	baton.dev = lvmcache_device(info);
++	baton.pvh_dlocn_xl = &pvhdr->disk_areas_xl[0];
+ 
+ 	/* List of data areas (holding PEs) */
+-	baton.pvh_dlocn_xl = &pvhdr->disk_areas_xl[0];
+ 	lvmcache_foreach_da(info, _da_setup, &baton);
+-
+-	/* NULL-termination */
+-	baton.pvh_dlocn_xl->offset = xlate64(UINT64_C(0));
+-	baton.pvh_dlocn_xl->size = xlate64(UINT64_C(0));
+-	baton.pvh_dlocn_xl++;
++	_dl_null_termination(&baton);
+ 
+ 	/* List of metadata area header locations */
+ 	lvmcache_foreach_mda(info, _mda_setup, &baton);
++	_dl_null_termination(&baton);
+ 
+-	/* NULL-termination */
+-	baton.pvh_dlocn_xl->offset = xlate64(UINT64_C(0));
+-	baton.pvh_dlocn_xl->size = xlate64(UINT64_C(0));
 +	/*
 +	 * PV header extension
 +	 */
-+	pvhdr_ext = (struct pv_header_extension *) ((char *) dlocn_xl);
-+	if (!(ext_version = xlate32(pvhdr_ext->version)))
-+		goto out;
++	pvhdr_ext = (struct pv_header_extension *) ((char *) baton.pvh_dlocn_xl);
++	pvhdr_ext->version = xlate32(PV_HEADER_EXTENSION_VSN);
++	pvhdr_ext->flags = 0; /* no flags yet */
 +
-+	log_debug("%s: PV header extension version %" PRIu32 " found",
-+		  dev_name(dev), ext_version);
++	/* List of embedding area locations */
++	baton.pvh_dlocn_xl = &pvhdr_ext->embedding_areas_xl[0];
++	lvmcache_foreach_ea(info, _ea_setup, &baton);
++	_dl_null_termination(&baton);
+ 
+-	/* Create debug message with da and mda locations */
+-	if (xlate64(pvhdr->disk_areas_xl[0].offset) ||
+-	    xlate64(pvhdr->disk_areas_xl[0].size))
+-		da1 = 0;
+-	else
+-		da1 = -1;
++	/* Create debug message with ea, da and mda locations */
++	ea1 = (xlate64(pvhdr_ext->embedding_areas_xl[0].offset) ||
++	       xlate64(pvhdr_ext->embedding_areas_xl[0].size)) ? 0 : -1;
 +
-+	/* Embedding areas */
-+	dlocn_xl = pvhdr_ext->embedding_areas_xl;
-+	while ((offset = xlate64(dlocn_xl->offset))) {
-+		lvmcache_add_ea(info, offset, xlate64(dlocn_xl->size));
-+		dlocn_xl++;
-+	}
-+out:
- 	baton.info = info;
- 	baton.label = *label;
++	da1 = (xlate64(pvhdr->disk_areas_xl[0].offset) ||
++	       xlate64(pvhdr->disk_areas_xl[0].size)) ? 0 : -1;
  
-@@ -385,6 +410,7 @@ static void _text_destroy_label(struct labeller *l __attribute__((unused)),
- 
- 	lvmcache_del_mdas(info);
- 	lvmcache_del_das(info);
-+	lvmcache_del_eas(info);
- }
- 
- static void _fmt_text_destroy(struct labeller *l)
-diff --git a/lib/metadata/pv.c b/lib/metadata/pv.c
-index 3cd06aa..6c165a8 100644
---- a/lib/metadata/pv.c
-+++ b/lib/metadata/pv.c
-@@ -124,6 +124,16 @@ uint32_t pv_pe_size(const struct physical_volume *pv)
- 	return pv_field(pv, pe_size);
- }
- 
-+uint64_t pv_ea_start(const struct physical_volume *pv)
-+{
-+	return pv_field(pv, ea_start);
-+}
-+
-+uint64_t pv_ea_size(const struct physical_volume *pv)
-+{
-+	return pv_field(pv, ea_size);
-+}
-+
- uint64_t pv_pe_start(const struct physical_volume *pv)
- {
- 	return pv_field(pv, pe_start);
-diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
-index 69d4868..6db9d87 100644
---- a/lib/metadata/pv.h
-+++ b/lib/metadata/pv.h
-@@ -80,6 +80,8 @@ uint64_t pv_free(const struct physical_volume *pv);
- uint64_t pv_status(const struct physical_volume *pv);
- uint32_t pv_pe_size(const struct physical_volume *pv);
- uint64_t pv_pe_start(const struct physical_volume *pv);
-+uint64_t pv_ea_start(const struct physical_volume *pv);
-+uint64_t pv_ea_size(const struct physical_volume *pv);
- uint32_t pv_pe_count(const struct physical_volume *pv);
- uint32_t pv_pe_alloc_count(const struct physical_volume *pv);
- uint64_t pv_mda_size(const struct physical_volume *pv);
+ 	mda1 = da1 + 2;
+ 	mda2 = mda1 + 1;
+@@ -126,8 +151,16 @@ static int _text_write(struct label *label, void *buf)
+ 	log_debug_metadata("%s: Preparing PV label header %s size %" PRIu64 " with"
+ 			   "%s%.*" PRIu64 "%s%.*" PRIu64 "%s"
+ 			   "%s%.*" PRIu64 "%s%.*" PRIu64 "%s"
++			   "%s%.*" PRIu64 "%s%.*" PRIu64 "%s"
+ 			   "%s%.*" PRIu64 "%s%.*" PRIu64 "%s",
+ 			   dev_name(lvmcache_device(info)), buffer, lvmcache_device_size(info),
++			   (ea1 > -1) ? " ea1 (" : "",
++			   (ea1 > -1) ? 1 : 0,
++			   (ea1 > -1) ? xlate64(pvhdr_ext->embedding_areas_xl[ea1].offset) >> SECTOR_SHIFT : 0,
++			   (ea1 > -1) ? "s, " : "",
++			   (ea1 > -1) ? 1 : 0,
++			   (ea1 > -1) ? xlate64(pvhdr_ext->embedding_areas_xl[ea1].size) >> SECTOR_SHIFT : 0,
++			   (ea1 > -1) ? "s)" : "",
+ 			   (da1 > -1) ? " da1 (" : "",
+ 			   (da1 > -1) ? 1 : 0,
+ 			   (da1 > -1) ? xlate64(pvhdr->disk_areas_xl[da1].offset) >> SECTOR_SHIFT : 0,
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 6624a40..0ce5ad5 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -398,6 +398,8 @@ struct pvcreate_restorable_params {
+ 	const char *restorefile; /* 0 if no --restorefile option */
+ 	struct id id; /* FIXME: redundant */
+ 	struct id *idp; /* 0 if no --uuid option */
++	uint64_t ea_start;
++	uint64_t ea_size;
+ 	uint64_t pe_start;
+ 	uint32_t extent_count;
+ 	uint32_t extent_size;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 2c071b0..0996184 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1430,6 +1430,8 @@ void pvcreate_params_set_defaults(struct pvcreate_params *pp)
+ 	pp->metadataignore = DEFAULT_PVMETADATAIGNORE;
+ 	pp->rp.restorefile = 0;
+ 	pp->rp.idp = 0;
++	pp->rp.ea_start = 0;
++	pp->rp.ea_size = 0;
+ 	pp->rp.pe_start = PV_PE_START_CALC;
+ 	pp->rp.extent_count = 0;
+ 	pp->rp.extent_size = 0;
 diff --git a/tools/pvcreate.c b/tools/pvcreate.c
-index d7e7e52..eb2fb5e 100644
+index eb2fb5e..5b83a18 100644
 --- a/tools/pvcreate.c
 +++ b/tools/pvcreate.c
-@@ -76,6 +76,7 @@ static int pvcreate_restore_params_validate(struct cmd_context *cmd,
+@@ -73,6 +73,8 @@ static int pvcreate_restore_params_validate(struct cmd_context *cmd,
+ 				  uuid, pp->rp.restorefile);
+ 			return 0;
+ 		}
++		pp->rp.ea_start = pv_ea_start(existing_pvl->pv);
++		pp->rp.ea_size = pv_ea_size(existing_pvl->pv);
  		pp->rp.pe_start = pv_pe_start(existing_pvl->pv);
  		pp->rp.extent_size = pv_pe_size(existing_pvl->pv);
  		pp->rp.extent_count = pv_pe_count(existing_pvl->pv);
-+
- 		release_vg(vg);
- 	}
- 
 
 
