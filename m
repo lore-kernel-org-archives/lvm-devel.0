@@ -1,79 +1,73 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 27 Feb 2013 13:06:26 +0000 (UTC)
-Subject: master - config: fix config node lookup inside empty sections to not return the section itself
-Message-ID: <20130227130626.12A3053C@fedorahosted.org>
+From: M. Mohan Kumar <mohan@in.ibm.com>
+Date: Thu, 28 Feb 2013 16:52:10 +0530
+Subject: [PATCH 1/2] lvm2app: Add thin and thin pool lv creation
+In-Reply-To: <512BBF6B.3060004@redhat.com>
+References: <1360689876-13552-1-git-send-email-mohan@in.ibm.com>
+	<1360689876-13552-2-git-send-email-mohan@in.ibm.com>
+	<512BBF6B.3060004@redhat.com>
+Message-ID: <87wqtsznrx.fsf@in.ibm.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6c81cd26ccb03f3452fedca651c876f2709ff0b8
-Commit:        6c81cd26ccb03f3452fedca651c876f2709ff0b8
-Parent:        a9d0e25627f751026b2c486cec97c61ecf2af309
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Feb 27 13:47:57 2013 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Feb 27 13:47:57 2013 +0100
+Zdenek Kabelac <zkabelac@redhat.com> writes:
 
-config: fix config node lookup inside empty sections to not return the section itself
+> Dne 12.2.2013 18:24, M. Mohan Kumar napsal(a):
+>>   		first_seg(lv)->chunk_size = lp->chunk_size;
+>>   		first_seg(lv)->discards = lp->discards;
+>>   		/* FIXME: use lowwatermark  via lvm.conf global for all thinpools ? */
+>> -		first_seg(lv)->low_water_mark = 0;
+>> +		first_seg(lv)->low_water_mark = lp->low_water_mark;
+>
+> low_water_mark is not supported yet in the lvm2 stack,
+> and there is not yet clear definition how is it going to be used.
+>
 
-When a section was empty in a configuration tree (no children - this is
-allowed) and we were looking for a config node inside that section, the
-_find_config_node function incorrectly returned the section itself if
-the node inside that section was not found.
+IMHO there is no harm in adding support to specify low water mark during
+thin pool creation. 
 
-For example the configuration below:
+> For now dmeventd is based on 10sec polling interval.
+>
 
-The config:
-    abc {
-    }
+Is it not possible to use the 'thin-pool' threshold dm-event instead of
+10-sec polling in dmeventd? 
 
-And a function call to get the "def" node inside "abc" section:
-     _find_config_node(..., "abc/def")
+> However there needs to be made clean definition for various error path,
+> and we have to also support 'clean' shutdown for those paths according
+> to defined policy.
+>
 
-...returned the "abc" node instead of NULL ("def" not found).
+Could you please explain it further?
 
-This in turn caused segfaults in the code using lookups in such
-a configuration tree as we (correctly) expected that the node
-returned was always the one we were looking for or NULL if not
-found. But if incorrect node was returned instead, we processed
-that as if this was the node we were looking for and so we
-processed its value as well. But sections don't have values => segfault.
----
- WHATS_NEW_DM         |    1 +
- libdm/libdm-config.c |    4 ++--
- 2 files changed, 3 insertions(+), 2 deletions(-)
+>> +lv_t lvm_lv_thin(const vg_t vg, const char *pool,
+>> +		 const char *lvname, uint64_t size)
+>> +{
+>> +	struct lvcreate_params lp = { 0 };
+>
+> I think the lvm2app needs some extension here and rather
+> make the 'lvcreate_params' structure a visible object with some methods,
+> and use just one universal function call to create all types
+> of LVs - so we can better match the internal lvm2 processing.
+> i.e. there is going to be support for creation of thin
+> lvs with external origins - so adding  lvm API call for every
+> possible use case of thin pool is IMHO less clean then maintenance
+> of 'lvcreate_params' object separately from lvm_lv_create() call.
+>
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 0052e5a..9d9c53d 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Fix config node lookup inside empty sections to not return the section itself.
-   Extend support for status info of thin pool target.
-   Fix segfault for truncated string token in config file after the first '"'.
-   Close open dmeventd FIFO file descriptors on exec (FD_CLOEXEC).
-diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
-index cc726ae..bd29d32 100644
---- a/libdm/libdm-config.c
-+++ b/libdm/libdm-config.c
-@@ -752,12 +752,12 @@ static const struct dm_config_node *_find_config_node(const void *start,
- 		if (cn_found && *e)
- 			cn = cn_found->child;
- 		else
--			break;	/* don't move into the last node */
-+			return cn_found;
- 
- 		path = e;
- 	}
- 
--	return cn_found;
-+	return NULL;
- }
- 
- static const struct dm_config_node *_find_first_config_node(const void *start, const char *path)
+I agree for a need of a single lv create function capable of creating
+any LV type and I already posted a RFC version of that patch a month
+ago.
+
+But providing a simpler interface to create a specific type of LV may
+also be a valid usecase, where an user does not want to
+customize/specify each parameters in LV creation.
+
+IIUC by 'support for creation of thin lvs with external origins' you
+mean creating a thin snapshot LV from a linear LV. In this case
+lvm_lv_snapshot function needs to be changed, while this function
+lvm_lv_thin creates only thin Lvs (not thin snapshots) 
+
 
 
