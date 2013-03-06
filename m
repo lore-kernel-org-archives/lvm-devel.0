@@ -1,373 +1,429 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  6 Mar 2013 11:15:33 +0000 (UTC)
-Subject: master - config: add support for configuration check (config_def_check fn)
-Message-ID: <20130306111533.D8CC1A0C29@fedorahosted.org>
+Date: Wed,  6 Mar 2013 11:15:36 +0000 (UTC)
+Subject: master - config: use config checks and add support for creating trees from config definition (config_def_create_tree fn)
+Message-ID: <20130306111536.89402A0C29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e38aaddb5e72a2123a03dedbb40c2aa594495c17
-Commit:        e38aaddb5e72a2123a03dedbb40c2aa594495c17
-Parent:        296385c0f3fa5176704c42f92210e7c5d38996ad
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=245b85692ec9f30153c1aa7216d81e65bb132792
+Commit:        245b85692ec9f30153c1aa7216d81e65bb132792
+Parent:        e38aaddb5e72a2123a03dedbb40c2aa594495c17
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 5 17:14:18 2013 +0100
+AuthorDate:    Tue Mar 5 17:36:10 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Mar 6 10:17:18 2013 +0100
+CommitterDate: Wed Mar 6 10:46:35 2013 +0100
 
-config: add support for configuration check (config_def_check fn)
+config: use config checks and add support for creating trees from config definition (config_def_create_tree fn)
 
-Add support for configuration checking - type checking and recognition
-of registered configuration settings that LVM2 understands and also
-check the structure of the configuration. Log error on any mismatch
-found.
+Configuration checking is initiated during config load/processing
+(_process_config fn) which is part of the command context
+creation/refresh.
 
-A hash over all allowed configuration paths is created which helps
-with matching the exact configuration (lvm.conf/--config tree) with
-the configuration item definition from config_settings.h in an
-efficient and one-step way.
+This patch also defines 5 types of trees that could be created from
+the configuration definition (config_settings.h), the cfg_def_tree_t:
 
-Two more helper flags are introduced for each configuration definition
-item:
+  - CFG_DEF_TREE_CURRENT that denotes a tree of all the configuration
+    nodes that are explicitly defined in lvm.conf/--config
 
-  - CFG_USED which marks the item as being used (lvm.conf/--config)
-    This helps with identifying missing configuration options
-    (and for which defaults were used) when traversing the tree later.
+  - CFG_DEF_TREE_MISSING that denotes a tree of all missing
+    configuration nodes for which default valus are used since they're
+    not explicitly used in lvm.conf/--config
 
-  - CFG_VALID which denotes that the item has already been checked and
-    it was found valid. This improves performance, so if the check
-    is called once again on the same tree which was not reloaded, we
-    can just return the state from previous check (with a possibility
-    to force the check if needed).
+  - CFG_DEF_TREE_DEFAULT that denotes a tree of all possible
+    configuration nodes with default values assigned, no matter what
+    the actual lvm.conf/--config is
 
-The new function that config.h exports and which is going to be used
-to perform the configuration checking is:
+  - CFG_DEF_TREE_NEW that denotes a tree of all new configuration nodes
+    that appeared in given version
 
-  int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages)
+  - CFG_DEF_TREE_COMPLETE that denotes a tree of the whole configuration
+    tree that is used in LVM2 (a combination of CFG_DEF_TREE_CURRENT +
+    CFG_DEF_TREE_MISSING). This is not implemented yet, it will be added
+    later...
 
-...which is exported internally via config.h.
+The function that creates the definition tree of given type:
+
+  struct dm_config_tree *config_def_create_tree(struct config_def_tree_spec *spec);
+
+Where the "spec" specifies the tree type to be created:
+
+  struct config_def_tree_spec {
+    cfg_def_tree_t type;	/* tree type */
+    uint16_t version;		/* tree at this LVM2 version */
+    int ignoreadvanced;		/* do not include advanced configs */
+    int ignoreunsupported;	/* do not include unsupported configs */
+  };
+
+This tree can be passed to already existing functions that write
+the tree on output (like we already do with cmd->cft).
+
+There is a new lvm.conf section called "config" with two new options:
+
+  - config/checks which enables/disables checking (enabled by default)
+
+  - config/abort_on_errors which enables/disables aborts on any type of
+    mismatch found in the config (disabled by default)
 ---
- lib/config/config.c |  283 +++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/config/config.h |    5 +
- 2 files changed, 288 insertions(+), 0 deletions(-)
+ doc/example.conf.in          |   15 +++-
+ lib/commands/toolcontext.c   |    5 +
+ lib/config/config.c          |  235 ++++++++++++++++++++++++++++++++++++++++++
+ lib/config/config.h          |   21 ++++-
+ lib/config/config_settings.h |    2 +-
+ 5 files changed, 274 insertions(+), 4 deletions(-)
 
+diff --git a/doc/example.conf.in b/doc/example.conf.in
+index ab83c0c..9670b92 100644
+--- a/doc/example.conf.in
++++ b/doc/example.conf.in
+@@ -10,6 +10,20 @@
+ # N.B. Take care that each setting only appears once if uncommenting
+ # example settings in this file.
+ 
++# This section allows you to set the way the configuration settings are handled.
++config {
++
++    # If enabled, any LVM2 configuration mismatch is reported.
++    # This implies checking that the configuration key is understood
++    # by LVM2 and that the value of the key is of a proper type.
++    # If disabled, any configuration mismatch is ignored and default
++    # value is used instead without any warning (a message about the
++    # configuration key not being found is issued in verbose mode only).
++    checks = 1
++
++    # If enabled, any configuration mismatch aborts the LVM2 process.
++    abort_on_errors = 0
++}
+ 
+ # This section allows you to configure which block devices should
+ # be used by the LVM system.
+@@ -359,7 +373,6 @@ shell {
+ 
+ # Miscellaneous global LVM2 settings
+ global {
+-
+     # The file creation mask for any files and directories created.
+     # Interpreted as octal if the first digit is zero.
+     umask = 077
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 1cee204..5dff340 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -290,6 +290,11 @@ static int _process_config(struct cmd_context *cmd)
+ 	const char *lvmetad_socket;
+ 	int udev_disabled = 0;
+ 
++	if (!config_def_check(cmd, 0, 0, 0) && find_config_tree_bool(cmd, config_abort_on_errors_CFG)) {
++		log_error("LVM configuration invalid.");
++		return 0;
++	}
++
+ 	/* umask */
+ 	cmd->default_settings.umask = find_config_tree_int(cmd, global_umask_CFG);
+ 
 diff --git a/lib/config/config.c b/lib/config/config.c
-index 8234cf4..6f33c12 100644
+index 6f33c12..43f9d21 100644
 --- a/lib/config/config.c
 +++ b/lib/config/config.c
-@@ -334,6 +334,289 @@ int config_def_get_path(char *buf, size_t buf_size, int id)
- 	return _cfg_def_make_path(buf, buf_size, id, cfg_def_get_item_p(id));
+@@ -28,6 +28,7 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <assert.h>
++#include <ctype.h>
+ 
+ struct config_file {
+ 	time_t timestamp;
+@@ -851,3 +852,237 @@ int config_write(struct dm_config_tree *cft, const char *file,
+ 	return r;
  }
  
-+static void _get_type_name(char *buf, size_t buf_size, cfg_def_type_t type)
++static struct dm_config_value *_get_def_array_values(struct dm_config_tree *cft,
++						     cfg_def_item_t *def)
 +{
-+	buf[0] = '\0';
++	char *enc_value, *token, *p, *r;
++	struct dm_config_value *array = NULL, *v = NULL, *oldv = NULL;
 +
-+	if (type & CFG_TYPE_ARRAY) {
-+		if (type & ~CFG_TYPE_ARRAY)
-+			strncat(buf, " array with values of type:", buf_size);
-+		else {
-+			strncat(buf, " array", buf_size);
-+			return;
++	if (!def->default_value.v_CFG_TYPE_STRING) {
++		if (!(array = dm_config_create_value(cft))) {
++			log_error("Failed to create default empty array for %s.", def->name);
++			return NULL;
 +		}
++		array->type = DM_CFG_EMPTY_ARRAY;
++		return array;
 +	}
 +
-+	if (type & CFG_TYPE_SECTION)
-+		strncat(buf, " section", buf_size);
-+	if (type & CFG_TYPE_BOOL)
-+		strncat(buf, " boolean", buf_size);
-+	if (type & CFG_TYPE_INT)
-+		strncat(buf, " integer", buf_size);
-+	if (type & CFG_TYPE_FLOAT)
-+		strncat(buf, " float", buf_size);
-+	if (type & CFG_TYPE_STRING)
-+		strncat(buf, " string", buf_size);
-+}
-+
-+static void _log_type_error(const char *path, cfg_def_type_t actual,
-+			    cfg_def_type_t expected, int suppress_messages)
-+{
-+	static char actual_type_name[64];
-+	static char expected_type_name[64];
-+
-+	_get_type_name(actual_type_name, sizeof(actual_type_name), actual);
-+	_get_type_name(expected_type_name, sizeof(expected_type_name), expected);
-+
-+	log_warn_suppress(suppress_messages, "Configuration setting \"%s\" has invalid type. "
-+					     "Found%s, expected%s.", path,
-+					     actual_type_name, expected_type_name);
-+}
-+
-+static int _config_def_check_node_single_value(const char *rp, const struct dm_config_value *v,
-+					       const cfg_def_item_t *def, int suppress_messages)
-+{
-+	/* Check empty array first if present. */
-+	if (v->type == DM_CFG_EMPTY_ARRAY) {
-+		if (!(def->type & CFG_TYPE_ARRAY)) {
-+			_log_type_error(rp, CFG_TYPE_ARRAY, def->type, suppress_messages);
-+			return 0;
-+		}
-+		if (!(def->flags & CFG_ALLOW_EMPTY)) {
-+			log_warn_suppress(suppress_messages,
-+				"Configuration setting \"%s\" invalid. Empty value not allowed.", rp);
-+			return 0;
-+		}
-+		return 1;
++	if (!(p = token = enc_value = dm_strdup(def->default_value.v_CFG_TYPE_STRING))) {
++		log_error("_get_def_array_values: dm_strdup failed");
++		return NULL;
 +	}
++	/* Proper value always starts with '#'. */
++	if (token[0] != '#')
++		goto bad;
 +
-+	switch (v->type) {
-+		case DM_CFG_INT:
-+			if (!(def->type & CFG_TYPE_INT) && !(def->type & CFG_TYPE_BOOL)) {
-+				_log_type_error(rp, CFG_TYPE_INT, def->type, suppress_messages);
-+				return 0;
-+			}
-+			break;
-+		case DM_CFG_FLOAT:
-+			if (!(def->type & CFG_TYPE_FLOAT)) {
-+				_log_type_error(rp, CFG_TYPE_FLOAT, def->type, suppress_messages);
-+				return 0;
-+			}
-+			break;
-+		case DM_CFG_STRING:
-+			if (def->type & CFG_TYPE_BOOL) {
-+				if (!dm_config_value_is_bool(v)) {
-+					log_warn_suppress(suppress_messages,
-+						"Configuration setting \"%s\" invalid. "
-+						"Found string value \"%s\", "
-+						"expected boolean value: 0/1, \"y/n\", "
-+						"\"yes/no\", \"on/off\", "
-+						"\"true/false\".", rp, v->v.str);
-+					return 0;
++	while (token) {
++		/* Move to type identifier. Error on no char. */
++		token++;
++		if (!token[0])
++			goto bad;
++
++		/* Move to the actual value and decode any "##" into "#". */
++		p = token + 1;
++		while ((p = strchr(p, '#')) && p[1] == '#') {
++			memmove(p, p + 1, strlen(p));
++			p++;
++		}
++		/* Separate the value out of the whole string. */
++		if (p)
++			p[0] = '\0';
++
++		if (!(v = dm_config_create_value(cft))) {
++			log_error("Failed to create default config array value for %s.", def->name);
++			dm_free(enc_value);
++		}
++		if (oldv)
++			oldv->next = v;
++		if (!array)
++			array = v;
++
++		switch (toupper(token[0])) {
++			case 'I':
++			case 'B':
++				v->v.i = strtoll(token + 1, &r, 10);
++				if (*r)
++					goto bad;
++				v->type = DM_CFG_INT;
++				break;
++			case 'F':
++				v->v.f = strtod(token + 1, &r);
++				if (*r)
++					goto bad;
++				v->type = DM_CFG_FLOAT;
++				break;
++			case 'S':
++				if (!(r = dm_pool_alloc(cft->mem, strlen(token + 1)))) {
++					dm_free(enc_value);
++					log_error("Failed to duplicate token for default "
++						  "array value of %s.", def->name);
++					return NULL;
 +				}
-+			} else if  (!(def->type & CFG_TYPE_STRING)) {
-+				_log_type_error(rp, CFG_TYPE_STRING, def->type, suppress_messages);
-+				return 0;
-+			}
-+			break;
-+		default: ;
++				memcpy(r, token + 1, strlen(token + 1));
++				v->v.str = r;
++				v->type = DM_CFG_STRING;
++				break;
++			default:
++				goto bad;
++		}
++
++		oldv = v;
++		token = p;
 +	}
 +
-+	return 1;
++	dm_free(enc_value);
++	return array;
++bad:
++	log_error(INTERNAL_ERROR "Default array value malformed for \"%s\", "
++		  "value: \"%s\", token: \"%s\".", def->name,
++		  def->default_value.v_CFG_TYPE_STRING, token);
++	dm_free(enc_value);
++	return NULL;
 +}
 +
-+static int _config_def_check_node_value(const char *rp, const struct dm_config_value *v,
-+					const cfg_def_item_t *def, int suppress_messages)
++static struct dm_config_node *_add_def_node(struct dm_config_tree *cft,
++					    struct config_def_tree_spec *spec,
++					    struct dm_config_node *parent,
++					    struct dm_config_node *relay,
++					    cfg_def_item_t *def)
 +{
-+	if (!v) {
-+		if (def->type != CFG_TYPE_SECTION) {
-+			_log_type_error(rp, CFG_TYPE_SECTION, def->type, suppress_messages);
-+			return 0;
++	struct dm_config_node *cn;
++	const char *str;
++
++	if (!(cn = dm_config_create_node(cft, def->name))) {
++		log_error("Failed to create default config setting node.");
++		return NULL;
++	}
++
++	if (!(def->type & CFG_TYPE_SECTION) && (!(cn->v = dm_config_create_value(cft)))) {
++		log_error("Failed to create default config setting node value.");
++		return NULL;
++	}
++
++	if (!(def->type & CFG_TYPE_ARRAY)) {
++		switch (def->type) {
++			case CFG_TYPE_SECTION:
++				cn->v = NULL;
++				break;
++			case CFG_TYPE_BOOL:
++				cn->v->type = DM_CFG_INT;
++				cn->v->v.i = cfg_def_get_default_value(def, CFG_TYPE_BOOL);
++				break;
++			case CFG_TYPE_INT:
++				cn->v->type = DM_CFG_INT;
++				cn->v->v.i = cfg_def_get_default_value(def, CFG_TYPE_INT);
++				break;
++			case CFG_TYPE_FLOAT:
++				cn->v->type = DM_CFG_FLOAT;
++				cn->v->v.f = cfg_def_get_default_value(def, CFG_TYPE_FLOAT);
++				break;
++			case CFG_TYPE_STRING:
++				cn->v->type = DM_CFG_STRING;
++				if (!(str = cfg_def_get_default_value(def, CFG_TYPE_STRING)))
++					str = "";
++				cn->v->v.str = str;
++				break;
++			default:
++				log_error(INTERNAL_ERROR "_add_def_node: unknown type");
++				return NULL;
++				break;
 +		}
++	} else
++		cn->v = _get_def_array_values(cft, def);
++
++	cn->child = NULL;
++	if (parent) {
++		cn->parent = parent;
++		if (!parent->child)
++			parent->child = cn;
++	} else
++		cn->parent = cn;
++
++	if (relay)
++		relay->sib = cn;
++
++	return cn;
++}
++
++static int _should_skip_def_node(struct config_def_tree_spec *spec, int section_id, cfg_def_item_t *def)
++{
++	if (def->parent != section_id)
 +		return 1;
++
++	switch (spec->type) {
++		case CFG_DEF_TREE_MISSING:
++			if ((def->flags & CFG_USED) ||
++			    (def->flags & CFG_NAME_VARIABLE) ||
++			    (def->since_version > spec->version))
++				return 1;
++			break;
++		case CFG_DEF_TREE_NEW:
++			if (def->since_version != spec->version)
++				return 1;
++			break;
++		default:
++			if (def->since_version > spec->version)
++				return 1;
++			break;
 +	}
 +
-+	if (v->next) {
-+		if (!(def->type & CFG_TYPE_ARRAY)) {
-+			_log_type_error(rp, CFG_TYPE_ARRAY, def->type, suppress_messages);
-+			return 0;
-+		}
-+	}
-+
-+	do {
-+		if (!_config_def_check_node_single_value(rp, v, def, suppress_messages))
-+			return 0;
-+		v = v->next;
-+	} while (v);
-+
-+	return 1;
++	return 0;
 +}
 +
-+static int _config_def_check_node(const char *vp, char *pvp, char *rp, char *prp,
-+				  size_t buf_size, struct dm_config_node *cn,
-+				  struct dm_hash_table *ht, int suppress_messages)
++static struct dm_config_node *_add_def_section_subtree(struct dm_config_tree *cft,
++						       struct config_def_tree_spec *spec,
++						       struct dm_config_node *parent,
++						       struct dm_config_node *relay,
++						       int section_id)
 +{
++	struct dm_config_node *cn = NULL, *relay_sub = NULL, *tmp;
 +	cfg_def_item_t *def;
-+	int sep = vp != pvp; /* don't use '/' separator for top-level node */
++	int id;
 +
-+	if (dm_snprintf(pvp, buf_size, "%s%s", sep ? "/" : "", cn->key) < 0 ||
-+	    dm_snprintf(prp, buf_size, "%s%s", sep ? "/" : "", cn->key) < 0) {
-+		log_error("Failed to construct path for configuration node %s.", cn->key);
-+		return 0;
-+	}
-+
-+
-+	if (!(def = (cfg_def_item_t *) dm_hash_lookup(ht, vp))) {
-+		/* If the node is not a section but a setting, fail now. */
-+		if (cn->v) {
-+			log_warn_suppress(suppress_messages,
-+				"Configuration setting \"%s\" unknown.", rp);
-+			return 0;
-+		}
-+
-+		/* If the node is a section, try if the section name is variable. */
-+		/* Modify virtual path vp in situ and replace the key name with a '#'. */
-+		/* The real path without '#' is still stored in rp variable. */
-+		pvp[sep] = '#', pvp[sep + 1] = '\0';
-+		if (!(def = (cfg_def_item_t *) dm_hash_lookup(ht, vp))) {
-+			log_warn_suppress(suppress_messages,
-+				"Configuration section \"%s\" unknown.", rp);
-+			return 0;
-+		}
-+	}
-+
-+	def->flags |= CFG_USED;
-+	if (!_config_def_check_node_value(rp, cn->v, def, suppress_messages))
-+		return 0;
-+
-+	def->flags |= CFG_VALID;
-+	return 1;
-+}
-+
-+static int _config_def_check_tree(const char *vp, char *pvp, char *rp, char *prp,
-+				  size_t buf_size, struct dm_config_node *root,
-+				  struct dm_hash_table *ht, int suppress_messages)
-+{
-+	struct dm_config_node *cn;
-+	int valid, r = 1;
-+	size_t len;
-+
-+	for (cn = root->child; cn; cn = cn->sib) {
-+		if ((valid = _config_def_check_node(vp, pvp, rp, prp, buf_size,
-+					cn, ht, suppress_messages)) && !cn->v) {
-+			len = strlen(rp);
-+			valid = _config_def_check_tree(vp, pvp + strlen(pvp),
-+					rp, prp + len, buf_size - len, cn, ht,
-+					suppress_messages);
-+		}
-+		if (!valid)
-+			r = 0;
-+	}
-+
-+	return r;
-+}
-+
-+int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages)
-+{
-+	cfg_def_item_t *def;
-+	struct dm_config_node *cn;
-+	char *vp = _cfg_path, rp[CFG_PATH_MAX_LEN];
-+	size_t rplen;
-+	int id, r = 1;
-+
-+	/*
-+	 * vp = virtual path, it might contain substitutes for variable parts
-+	 * 	of the path, used while working with the hash
-+	 * rp = real path, the real path of the config element as found in the
-+	 *      configuration, used for message output
-+	 */
-+
-+	/*
-+	 * If the check has already been done and 'skip' is set,
-+	 * skip the actual check and use last result if available.
-+	 * If not available, we must do the check. The global status
-+	 * is stored in root node.
-+	 */
-+	def = cfg_def_get_item_p(root_CFG_SECTION);
-+	if (skip && (def->flags & CFG_USED))
-+		return def->flags & CFG_VALID;
-+
-+	/* Clear 'used' and 'valid' status flags. */
 +	for (id = 0; id < CFG_COUNT; id++) {
 +		def = cfg_def_get_item_p(id);
-+		def->flags &= ~(CFG_USED | CFG_VALID);
++		if (_should_skip_def_node(spec, section_id, def))
++			continue;
++
++		if (!cn && !(cn = _add_def_node(cft, spec, parent, relay, cfg_def_get_item_p(section_id))))
++				goto bad;
++
++		if ((tmp = def->type == CFG_TYPE_SECTION ? _add_def_section_subtree(cft, spec, cn, relay_sub, id)
++							 : _add_def_node(cft, spec, cn, relay_sub, def)))
++			relay_sub = tmp;
 +	}
 +
-+	if (!force && !find_config_tree_bool(cmd, config_checks_CFG)) {
-+		if (cmd->cft_def_hash) {
-+			dm_hash_destroy(cmd->cft_def_hash);
-+			cmd->cft_def_hash = NULL;
-+		}
-+		return 1;
-+	}
-+
-+	/*
-+	 * Create a hash of all possible configuration
-+	 * sections and settings with full path as a key.
-+	 * If section name is variable, use '#' as a substitute.
-+	 */
-+	if (!cmd->cft_def_hash) {
-+		if (!(cmd->cft_def_hash = dm_hash_create(64))) {
-+			log_error("Failed to create configuration definition hash.");
-+			r = 0; goto out;
-+		}
-+		for (id = 1; id < CFG_COUNT; id++) {
-+			def = cfg_def_get_item_p(id);
-+			if (!cfg_def_get_path(def)) {
-+				dm_hash_destroy(cmd->cft_def_hash);
-+				cmd->cft_def_hash = NULL;
-+				r = 0; goto out;
-+			}
-+			dm_hash_insert(cmd->cft_def_hash, dm_strdup(vp), def);
-+		}
-+	}
-+
-+	cfg_def_get_item_p(root_CFG_SECTION)->flags |= CFG_USED;
-+
-+	/*
-+	 * Allow only sections as top-level elements.
-+	 * Iterate top-level sections and dive deeper.
-+	 * If any of subsequent checks fails, the whole check fails.
-+	 */
-+	for (cn = cmd->cft->root; cn; cn = cn->sib) {
-+		if (!cn->v) {
-+			/* top level node: vp=vp, rp=rp */
-+			if (!_config_def_check_node(vp, vp, rp, rp,
-+						    CFG_PATH_MAX_LEN,
-+						    cn, cmd->cft_def_hash,
-+						    suppress_messages)) {
-+				r = 0; continue;
-+			}
-+			rplen = strlen(rp);
-+			if (!_config_def_check_tree(vp, vp + strlen(vp),
-+						    rp, rp + rplen,
-+						    CFG_PATH_MAX_LEN - rplen,
-+						    cn, cmd->cft_def_hash,
-+						    suppress_messages))
-+				r = 0;
-+		} else {
-+			log_error_suppress(suppress_messages,
-+				"Configuration setting \"%s\" invalid. "
-+				"It's not part of any section.", cn->key);
-+			r = 0;
-+		}
-+	}
-+out:
-+	if (r) {
-+		cfg_def_get_item_p(root_CFG_SECTION)->flags |= CFG_VALID;
-+		def->flags |= CFG_VALID;
-+	} else {
-+		cfg_def_get_item_p(root_CFG_SECTION)->flags &= ~CFG_VALID;
-+		def->flags &= ~CFG_VALID;
-+	}
-+	return r;
++	return cn;
++bad:
++	log_error("Failed to create default config section node.");
++	return NULL;
 +}
 +
- const struct dm_config_node *find_config_tree_node(struct cmd_context *cmd, int id)
- {
- 	return dm_config_tree_find_node(cmd->cft, cfg_def_get_path(cfg_def_get_item_p(id)));
++struct dm_config_tree *config_def_create_tree(struct config_def_tree_spec *spec)
++{
++	struct dm_config_tree *cft;
++	struct dm_config_node *root = NULL, *relay = NULL, *tmp;
++	int id;
++
++	if (!(cft = dm_config_create())) {
++		log_error("Failed to create default config tree.");
++		return NULL;
++	}
++
++	for (id = root_CFG_SECTION + 1; id < CFG_COUNT; id++) {
++		if (cfg_def_get_item_p(id)->parent != root_CFG_SECTION)
++			continue;
++
++		if ((tmp = _add_def_section_subtree(cft, spec, root, relay, id))) {
++			relay = tmp;
++			if (!root)
++				root = relay;
++		}
++	}
++
++	cft->root = root;
++	return cft;
++}
 diff --git a/lib/config/config.h b/lib/config/config.h
-index a239e1d..624ef59 100644
+index 624ef59..fb4993a 100644
 --- a/lib/config/config.h
 +++ b/lib/config/config.h
-@@ -59,6 +59,10 @@ typedef union {
- #define CFG_ADVANCED		0x04
- /* whether the configuraton item is not officially supported */
- #define CFG_UNSUPPORTED		0x08
-+/* helper flag to mark the item as used in a config tree instance */
-+#define CFG_USED		0x10
-+/* helper flag to mark the item as valid in a config tree instance */
-+#define CFG_VALID		0x20
+@@ -76,6 +76,23 @@ typedef struct cfg_def_item {
+ 	const char *comment;		/* brief comment */
+ } cfg_def_item_t;
  
- /* configuration definition item structure */
- typedef struct cfg_def_item {
-@@ -86,6 +90,7 @@ enum {
- };
++/* configuration definition tree types */
++typedef enum {
++	CFG_DEF_TREE_CURRENT,		/* tree of nodes with values currently set in the config */
++	CFG_DEF_TREE_MISSING,		/* tree of nodes missing in current config using default values */
++	CFG_DEF_TREE_COMPLETE,		/* CURRENT + MISSING, the tree actually used within execution, not implemented yet */
++	CFG_DEF_TREE_DEFAULT,		/* tree of all possible config nodes with default values */
++	CFG_DEF_TREE_NEW		/* tree of all new nodes that appeared in given version */
++} cfg_def_tree_t;
++
++/* configuration definition tree specification */
++struct config_def_tree_spec {
++	cfg_def_tree_t type;		/* tree type */
++	uint16_t version;		/* tree at this LVM2 version */
++	int ignoreadvanced;		/* do not include advanced configs */
++	int ignoreunsupported;		/* do not include unsupported configs */
++};
++
+ /*
+  * Register ID for each possible item in the configuration tree.
+  */
+@@ -103,8 +120,8 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
+ 			off_t offset, size_t size, off_t offset2, size_t size2,
+ 			checksum_fn_t checksum_fn, uint32_t checksum);
+ int config_file_read(struct dm_config_tree *cft);
+-int config_write(struct dm_config_tree *cft, const char *file,
+-		 int argc, char **argv);
++int config_write(struct dm_config_tree *cft, const char *file, int argc, char **argv);
++struct dm_config_tree *config_def_create_tree(struct config_def_tree_spec *spec);
+ void config_file_destroy(struct dm_config_tree *cft);
  
- int config_def_get_path(char *buf, size_t buf_size, int id);
-+int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_messages);
+ time_t config_file_timestamp(struct dm_config_tree *cft);
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index a7d2625..6229f2e 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -67,7 +67,7 @@ cfg_section(dmeventd_CFG_SECTION, "dmeventd", root_CFG_SECTION, 0, vsn(1, 2, 3),
+ cfg_section(tags_CFG_SECTION, "tags", root_CFG_SECTION, 0, vsn(1, 0, 18), NULL)
  
- int override_config_tree_from_string(struct cmd_context *cmd,
- 				     const char *config_settings);
+ cfg(config_checks_CFG, "checks", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2, 2, 99), "Configuration tree check on each LVM command execution.")
+-cfg(config_abort_on_errors_CFG, "abort_on_errors", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(2,2,99), "Abort LVM command execution if configuration is invalid.")
++cfg(config_abort_on_errors_CFG, "abort_on_errors", config_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(2,2,99), "Abort LVM command execution if configuration is invalid.")
+ 
+ cfg(devices_dir_CFG, "dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_DEV_DIR, vsn(1, 0, 0), NULL)
+ cfg_array(devices_scan_CFG, "scan", devices_CFG_SECTION, 0, CFG_TYPE_STRING, "#S/dev", vsn(1, 0, 0), NULL)
 
 
