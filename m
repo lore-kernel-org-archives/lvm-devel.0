@@ -1,33 +1,43 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Mon, 4 Mar 2013 18:34:34 -0500 (EST)
-Subject: [PATCH] lvm testsuite: Use #!/bin/bash
-Message-ID: <Pine.LNX.4.64.1303041834140.621@file.rdu.redhat.com>
+From: Peter Rajnoha <prajnoha@fedoraproject.org>
+Date: Wed,  6 Mar 2013 11:14:58 +0000 (UTC)
+Subject: master - config: add vsn macro
+Message-ID: <20130306111458.B0C19A0C29@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvm testsuite: Use #!/bin/bash
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=6ea68f233c2196856fbc008e30b1eb17deb62701
+Commit:        6ea68f233c2196856fbc008e30b1eb17deb62701
+Parent:        6c81cd26ccb03f3452fedca651c876f2709ff0b8
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Tue Mar 5 16:39:36 2013 +0100
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Wed Mar 6 08:52:55 2013 +0100
 
-On some systems /bin/sh is a link for dash, not bash
-This script doesn't work with dash, so use #!/bin/bash.
+config: add vsn macro
 
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-
+The 'vsn' macro encodes the LVM2 version major, minor
+and patchlevel number in a packed form using 16 bits.
 ---
- test/lib/get.sh |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/config/config.h |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-Index: LVM2.2.02.98/test/lib/get.sh
-===================================================================
---- LVM2.2.02.98.orig/test/lib/get.sh	2013-01-30 20:16:06.000000000 +0100
-+++ LVM2.2.02.98/test/lib/get.sh	2013-01-30 20:16:10.000000000 +0100
-@@ -1,4 +1,4 @@
--#!/bin/sh
-+#!/bin/bash
- # Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 5c36f4d..079e9d1 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -18,6 +18,10 @@
+ 
+ #include "lvm-types.h"
+ 
++/* 16 bits: 3 bits for major, 4 bits for minor, 9 bits for patchlevel */
++/* Max LVM version supported: 7.15.511. Just extend bits if ever needed. */
++#define vsn(major, minor, patchlevel) (major << 13 | minor << 9 | patchlevel)
++
+ struct device;
+ struct cmd_context;
+ 
 
 
