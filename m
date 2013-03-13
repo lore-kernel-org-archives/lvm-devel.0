@@ -1,201 +1,279 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Wed, 13 Mar 2013 14:15:56 +0000 (UTC)
-Subject: master - thin: mark passed args
-Message-ID: <20130313141556.E465AA0D6D@fedorahosted.org>
+Date: Wed, 13 Mar 2013 14:16:05 +0000 (UTC)
+Subject: master - thin: move update_pool_params
+Message-ID: <20130313141605.D9164A0D6D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f06dd8725a85d344820eda91835c58f489097563
-Commit:        f06dd8725a85d344820eda91835c58f489097563
-Parent:        b9fe52e811eba446813292e230502ac41040cdae
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b36a776a7fed84fa6228ffa287b4c9ccdf355ddf
+Commit:        b36a776a7fed84fa6228ffa287b4c9ccdf355ddf
+Parent:        f06dd8725a85d344820eda91835c58f489097563
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 6 11:58:09 2013 +0100
+AuthorDate:    Mon Mar 11 12:37:09 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 13 15:13:54 2013 +0100
 
-thin: mark passed args
+thin: move update_pool_params
 
-Keep the flag whether given thin pool argument has been given on command
-line or it's been 'estimated'
-
-Call of update_pool_params() must not change cmdline given args and
-needs to know this info.
-
-Since there is a need to move this update function into /lib, we cannot
-use arg_count().
-
-FIXME: we need some generic mechanism here.
+Now we may recongnize preset arguments, move
+the code for updating thin pool related values
+into /lib portion of the code.
 ---
- lib/metadata/metadata-exported.h |    8 ++++++++
- tools/lvconvert.c                |    7 ++++---
- tools/lvcreate.c                 |    5 +++--
- tools/toollib.c                  |   17 ++++++++++++-----
- tools/toollib.h                  |    5 +++--
- 5 files changed, 30 insertions(+), 12 deletions(-)
+ WHATS_NEW                        |    1 +
+ lib/metadata/metadata-exported.h |    4 ++
+ lib/metadata/thin_manip.c        |   88 ++++++++++++++++++++++++++++++++++++++
+ tools/toollib.c                  |   87 -------------------------------------
+ tools/toollib.h                  |    5 +--
+ 5 files changed, 94 insertions(+), 91 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 082b414..68a7d03 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Move update_pool_params() from /tools to /lib for better reuse.
+   Give precedence to EMC power2 devices with duplicate PVIDs.
+   Add --validate option to lvm dumpconfig to validate current config on demand.
+   Add --ignoreadvanced and --ignoreunsupported switch to lvm dumpconfig.
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 0ce5ad5..5ed8f3e 100644
+index 5ed8f3e..c2728d5 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -610,6 +610,14 @@ struct lvcreate_params {
- 	const char *vg_name; /* all */
- 	const char *lv_name; /* all */
+@@ -576,6 +576,10 @@ uint64_t extents_from_size(struct cmd_context *cmd, uint64_t size,
  
-+	/* Keep args given by the user on command line */
-+	/* FIXME: create some more universal solution here */
-+#define PASS_ARG_CHUNK_SIZE		0x01
-+#define PASS_ARG_DISCARDS		0x02
-+#define PASS_ARG_POOL_METADATA_SIZE	0x04
-+#define PASS_ARG_ZERO			0x08
-+	int passed_args;
+ int pool_is_active(const struct logical_volume *pool_lv);
+ int update_pool_lv(struct logical_volume *lv, int activate);
++int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
++		       uint32_t data_extents, uint32_t extent_size,
++		       uint32_t *chunk_size, thin_discards_t *discards,
++		       uint64_t *pool_metadata_size);
+ int get_pool_discards(const char *str, thin_discards_t *discards);
+ const char *get_pool_discards_name(thin_discards_t discards);
+ 
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index c994a2e..10c8f43 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -20,6 +20,7 @@
+ #include "lv_alloc.h"
+ #include "archiver.h"
+ #include "defaults.h"
++#include "display.h"
+ 
+ int attach_pool_metadata_lv(struct lv_segment *pool_seg, struct logical_volume *metadata_lv)
+ {
+@@ -523,6 +524,93 @@ int update_pool_lv(struct logical_volume *lv, int activate)
+ 	return 1;
+ }
+ 
++int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
++		       uint32_t data_extents, uint32_t extent_size,
++		       uint32_t *chunk_size, thin_discards_t *discards,
++		       uint64_t *pool_metadata_size)
++{
++	size_t estimate_chunk_size;
 +
- 	uint32_t stripes; /* striped */
- 	uint32_t stripe_size; /* striped */
- 	uint32_t chunk_size; /* snapshot */
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fcfcddb..88ad719 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -56,6 +56,7 @@ struct lvconvert_params {
- 
- 	struct logical_volume *lv_to_poll;
- 
-+	int passed_args;
- 	uint64_t poolmetadata_size;
- 	const char *origin_lv_name;
- 	const char *pool_data_lv_name;
-@@ -377,7 +378,7 @@ static int _read_params(struct lvconvert_params *lp, struct cmd_context *cmd,
- 			return 0;
- 		}
- 
--		if (!get_pool_params(cmd,
-+		if (!get_pool_params(cmd, &lp->passed_args,
- 				     &lp->chunk_size,
- 				     &lp->discards,
- 				     &lp->poolmetadata_size,
-@@ -2125,13 +2126,13 @@ static int _lvconvert_thinpool(struct cmd_context *cmd,
- 				  display_size(cmd, 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE));
- 			return 0;
- 		}
--		if (!update_pool_params(cmd, lp->target_attr,
-+		if (!update_pool_params(cmd, lp->target_attr, lp->passed_args,
- 					pool_lv->le_count, pool_lv->vg->extent_size,
- 					&lp->chunk_size, &lp->discards,
- 					&lp->poolmetadata_size))
- 			return_0;
- 	} else {
--		if (!update_pool_params(cmd, lp->target_attr,
-+		if (!update_pool_params(cmd, lp->target_attr, lp->passed_args,
- 					pool_lv->le_count, pool_lv->vg->extent_size,
- 					&lp->chunk_size, &lp->discards,
- 					&lp->poolmetadata_size))
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 4618321..aa75636 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -307,7 +307,7 @@ static int _update_extents_params(struct volume_group *vg,
- 	}
- 
- 	if (lp->create_thin_pool) {
--		if (!update_pool_params(vg->cmd, lp->target_attr,
-+		if (!update_pool_params(vg->cmd, lp->target_attr, lp->passed_args,
- 					lp->extents, vg->extent_size,
- 					&lp->chunk_size, &lp->discards,
- 					&lp->poolmetadatasize))
-@@ -795,7 +795,8 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	    !_read_size_params(lp, lcp, cmd) ||
- 	    !get_stripe_params(cmd, &lp->stripes, &lp->stripe_size) ||
- 	    (lp->create_thin_pool &&
--	     !get_pool_params(cmd, &lp->chunk_size, &lp->discards,
-+	     !get_pool_params(cmd, &lp->passed_args,
-+			      &lp->chunk_size, &lp->discards,
- 			      &lp->poolmetadatasize, &lp->zero)) ||
- 	    !_read_mirror_params(lp, cmd) ||
- 	    !_read_raid_params(lp, cmd))
++	if (!(attr & THIN_FEATURE_BLOCK_SIZE) &&
++	    (*chunk_size & (*chunk_size - 1))) {
++		log_error("Chunk size must be a power of 2 for this thin target version.");
++		return 0;
++	} else if (*chunk_size & (DM_THIN_MIN_DATA_BLOCK_SIZE - 1)) {
++		log_error("Chunk size must be multiple of %s.",
++			  display_size(cmd, DM_THIN_MIN_DATA_BLOCK_SIZE));
++		return 0;
++	}
++
++	if (!*pool_metadata_size) {
++		/* Defaults to nr_pool_blocks * 64b converted to size in sectors */
++		*pool_metadata_size = (uint64_t) data_extents * extent_size /
++			(*chunk_size * (SECTOR_SIZE / UINT64_C(64)));
++		/* Check if we could eventually use bigger chunk size */
++		if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
++			while ((*pool_metadata_size >
++				(DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
++			       (*chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE)) {
++				*chunk_size <<= 1;
++				*pool_metadata_size >>= 1;
++			}
++			log_verbose("Setting chunk size to %s.",
++				    display_size(cmd, *chunk_size));
++		} else if (*pool_metadata_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
++			/* Suggest bigger chunk size */
++			estimate_chunk_size = (uint64_t) data_extents * extent_size /
++				(2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE *
++				 (SECTOR_SIZE / UINT64_C(64)));
++			log_warn("WARNING: Chunk size is too small for pool, suggested minimum is %s.",
++				 display_size(cmd, UINT64_C(1) << (ffs(estimate_chunk_size) + 1)));
++		}
++
++		/* Round up to extent size */
++		if (*pool_metadata_size % extent_size)
++			*pool_metadata_size += extent_size - *pool_metadata_size % extent_size;
++	} else {
++		estimate_chunk_size =  (uint64_t) data_extents * extent_size /
++			(*pool_metadata_size * (SECTOR_SIZE / UINT64_C(64)));
++		/* Check to eventually use bigger chunk size */
++		if (!(passed_args & PASS_ARG_CHUNK_SIZE)) {
++			*chunk_size = estimate_chunk_size;
++
++			if (*chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE)
++				*chunk_size = DM_THIN_MIN_DATA_BLOCK_SIZE;
++			else if (*chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE)
++				*chunk_size = DM_THIN_MAX_DATA_BLOCK_SIZE;
++
++			log_verbose("Setting chunk size %s.",
++				    display_size(cmd, *chunk_size));
++		} else if (*chunk_size < estimate_chunk_size) {
++			/* Suggest bigger chunk size */
++			log_warn("WARNING: Chunk size is smaller then suggested minimum size %s.",
++				 display_size(cmd, estimate_chunk_size));
++		}
++	}
++
++	if ((uint64_t) *chunk_size > (uint64_t) data_extents * extent_size) {
++		log_error("Chunk size is bigger then pool data size.");
++		return 0;
++	}
++
++	if (*pool_metadata_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
++		if (passed_args & PASS_ARG_POOL_METADATA_SIZE)
++			log_warn("WARNING: Maximum supported pool metadata size is %s.",
++				 display_size(cmd, 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE));
++		*pool_metadata_size = 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE;
++	} else if (*pool_metadata_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
++		if (passed_args & PASS_ARG_POOL_METADATA_SIZE)
++			log_warn("WARNING: Minimum supported pool metadata size is %s.",
++				 display_size(cmd, 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE));
++		*pool_metadata_size = 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE;
++	}
++
++	log_verbose("Setting pool metadata size to %s.",
++		    display_size(cmd, *pool_metadata_size));
++
++	return 1;
++}
++
+ int get_pool_discards(const char *str, thin_discards_t *discards)
+ {
+ 	if (!strcasecmp(str, "passdown"))
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 6b00155..10ada7c 100644
+index 10ada7c..f00988a 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1523,7 +1523,7 @@ int get_activation_monitoring_mode(struct cmd_context *cmd,
+@@ -1583,93 +1583,6 @@ int get_pool_params(struct cmd_context *cmd, int *passed_args,
  	return 1;
  }
  
--int get_pool_params(struct cmd_context *cmd,
-+int get_pool_params(struct cmd_context *cmd, int *passed_args,
- 		    uint32_t *chunk_size,
- 		    thin_discards_t *discards,
- 		    uint64_t *pool_metadata_size,
-@@ -1531,13 +1531,16 @@ int get_pool_params(struct cmd_context *cmd,
- {
- 	const char *dstr;
- 
-+	*passed_args = 0;
- 	if (arg_count(cmd, zero_ARG)) {
-+		*passed_args |= PASS_ARG_ZERO;
- 		*zero = strcmp(arg_str_value(cmd, zero_ARG, "y"), "n");
- 		log_very_verbose("Setting pool zeroing: %u", *zero);
- 	} else
- 		*zero = find_config_tree_bool(cmd, allocation_thin_pool_zero_CFG);
- 
- 	if (arg_count(cmd, discards_ARG)) {
-+		*passed_args |= PASS_ARG_DISCARDS;
- 		*discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, 0);
- 		log_very_verbose("Setting pool discards: %s",
- 				 get_pool_discards_name(*discards));
-@@ -1552,6 +1555,7 @@ int get_pool_params(struct cmd_context *cmd,
- 			log_error("Negative chunk size is invalid.");
- 			return 0;
- 		}
-+		*passed_args |= PASS_ARG_CHUNK_SIZE;
- 		*chunk_size = arg_uint_value(cmd, chunksize_ARG,
- 					     DM_THIN_MIN_DATA_BLOCK_SIZE);
- 		log_very_verbose("Setting pool chunk size: %s",
-@@ -1567,16 +1571,19 @@ int get_pool_params(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	if (arg_sign_value(cmd, poolmetadatasize_ARG, SIGN_NONE) == SIGN_MINUS) {
--		log_error("Negative pool metadata size is invalid.");
+-int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
+-		       uint32_t data_extents, uint32_t extent_size,
+-		       uint32_t *chunk_size, thin_discards_t *discards,
+-		       uint64_t *pool_metadata_size)
+-{
+-	size_t estimate_chunk_size;
+-
+-	if (!(attr & THIN_FEATURE_BLOCK_SIZE) &&
+-	    (*chunk_size & (*chunk_size - 1))) {
+-		log_error("Chunk size must be a power of 2 for this thin target version.");
 -		return 0;
-+	if (arg_count(cmd, poolmetadatasize_ARG)) {
-+		if (arg_sign_value(cmd, poolmetadatasize_ARG, SIGN_NONE) == SIGN_MINUS) {
-+			log_error("Negative pool metadata size is invalid.");
-+			return 0;
-+		}
-+		*passed_args |= PASS_ARG_POOL_METADATA_SIZE;
- 	}
- 	*pool_metadata_size = arg_uint64_value(cmd, poolmetadatasize_ARG, UINT64_C(0));
- 
- 	return 1;
- }
- 
--int update_pool_params(struct cmd_context *cmd, unsigned attr,
-+int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
- 		       uint32_t data_extents, uint32_t extent_size,
- 		       uint32_t *chunk_size, thin_discards_t *discards,
- 		       uint64_t *pool_metadata_size)
+-	} else if (*chunk_size & (DM_THIN_MIN_DATA_BLOCK_SIZE - 1)) {
+-		log_error("Chunk size must be multiple of %s.",
+-			  display_size(cmd, DM_THIN_MIN_DATA_BLOCK_SIZE));
+-		return 0;
+-	}
+-
+-	if (!*pool_metadata_size) {
+-		/* Defaults to nr_pool_blocks * 64b converted to size in sectors */
+-		*pool_metadata_size = (uint64_t) data_extents * extent_size /
+-			(*chunk_size * (SECTOR_SIZE / UINT64_C(64)));
+-		/* Check if we could eventually use bigger chunk size */
+-		if (!arg_count(cmd, chunksize_ARG)) {
+-			while ((*pool_metadata_size >
+-				(DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
+-			       (*chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE)) {
+-				*chunk_size <<= 1;
+-				*pool_metadata_size >>= 1;
+-			}
+-			log_verbose("Setting chunk size to %s.",
+-				    display_size(cmd, *chunk_size));
+-		} else if (*pool_metadata_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
+-			/* Suggest bigger chunk size */
+-			estimate_chunk_size = (uint64_t) data_extents * extent_size /
+-				(2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE *
+-				 (SECTOR_SIZE / UINT64_C(64)));
+-			log_warn("WARNING: Chunk size is too small for pool, suggested minimum is %s.",
+-				 display_size(cmd, UINT64_C(1) << (ffs(estimate_chunk_size) + 1)));
+-		}
+-
+-		/* Round up to extent size */
+-		if (*pool_metadata_size % extent_size)
+-			*pool_metadata_size += extent_size - *pool_metadata_size % extent_size;
+-	} else {
+-		estimate_chunk_size =  (uint64_t) data_extents * extent_size /
+-			(*pool_metadata_size * (SECTOR_SIZE / UINT64_C(64)));
+-		/* Check to eventually use bigger chunk size */
+-		if (!arg_count(cmd, chunksize_ARG)) {
+-			*chunk_size = estimate_chunk_size;
+-
+-			if (*chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE)
+-				*chunk_size = DM_THIN_MIN_DATA_BLOCK_SIZE;
+-			else if (*chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE)
+-				*chunk_size = DM_THIN_MAX_DATA_BLOCK_SIZE;
+-
+-			log_verbose("Setting chunk size %s.",
+-				    display_size(cmd, *chunk_size));
+-		} else if (*chunk_size < estimate_chunk_size) {
+-			/* Suggest bigger chunk size */
+-			log_warn("WARNING: Chunk size is smaller then suggested minimum size %s.",
+-				 display_size(cmd, estimate_chunk_size));
+-		}
+-	}
+-
+-	if ((uint64_t) *chunk_size > (uint64_t) data_extents * extent_size) {
+-		log_error("Chunk size is bigger then pool data size.");
+-		return 0;
+-	}
+-
+-	if (*pool_metadata_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
+-		if (arg_count(cmd, poolmetadatasize_ARG))
+-			log_warn("WARNING: Maximum supported pool metadata size is %s.",
+-				 display_size(cmd, 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE));
+-		*pool_metadata_size = 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE;
+-	} else if (*pool_metadata_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
+-		if (arg_count(cmd, poolmetadatasize_ARG))
+-			log_warn("WARNING: Minimum supported pool metadata size is %s.",
+-				 display_size(cmd, 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE));
+-		*pool_metadata_size = 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE;
+-	}
+-
+-	log_verbose("Setting pool metadata size to %s.",
+-		    display_size(cmd, *pool_metadata_size));
+-
+-	return 1;
+-}
+-
+ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+ 					   alloc_policy_t alloc,
+ 					   const char *name,
 diff --git a/tools/toollib.h b/tools/toollib.h
-index 80c01fd..9a4743d 100644
+index 9a4743d..2ca7951 100644
 --- a/tools/toollib.h
 +++ b/tools/toollib.h
-@@ -111,12 +111,13 @@ int pvcreate_params_validate(struct cmd_context *cmd,
- 
- int get_activation_monitoring_mode(struct cmd_context *cmd,
- 				   int *monitoring_mode);
--int get_pool_params(struct cmd_context *cmd,
-+
-+int get_pool_params(struct cmd_context *cmd, int *passed_args,
- 		    uint32_t *chunk_size,
+@@ -117,10 +117,7 @@ int get_pool_params(struct cmd_context *cmd, int *passed_args,
  		    thin_discards_t *discards,
  		    uint64_t *pool_metadata_size,
  		    int *zero);
--int update_pool_params(struct cmd_context *cmd, unsigned attr,
-+int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
- 		       uint32_t data_extents, uint32_t extent_size,
- 		       uint32_t *chunk_size, thin_discards_t *discards,
- 		       uint64_t *pool_metadata_size);
+-int update_pool_params(struct cmd_context *cmd, unsigned attr, int passed_args,
+-		       uint32_t data_extents, uint32_t extent_size,
+-		       uint32_t *chunk_size, thin_discards_t *discards,
+-		       uint64_t *pool_metadata_size);
++
+ struct logical_volume *alloc_pool_metadata(struct logical_volume *pool_lv,
+ 					   alloc_policy_t alloc, const char *name,
+ 					   struct dm_list *pvh, uint32_t read_ahead,
 
 
