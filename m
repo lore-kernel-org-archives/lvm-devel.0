@@ -1,1376 +1,1630 @@
-From: David Teigland <teigland@redhat.com>
-Date: Tue, 26 Mar 2013 16:09:27 -0500
-Subject: [PATCH 7/8] toollib: rework process_each_pv
-Message-ID: <1364332168-24676-8-git-send-email-teigland@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Wed, 13 Mar 2013 17:13:25 -0500
+Subject: [PATCH 4/5] lvm2app: Move core lv re-size code (v2)
+In-Reply-To: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
+References: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1363212806-16025-4-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Split up process_each_pv, matching the previous
-renovation to process_each_vg,lv.
+Moved to allow use from command line and for library use.
 
-The VG_GLOBAL lock is now taken by the two callers
-that had wanted it.
-
-Two new flags passed to process_each_pv control
-which pvs should be processed when command args
-contain no pv names or tags:
-
-ENABLE_ALL_VGNAMES
-Scan for all vgs, including orphan vgs, and process each pv in them.
-
-ENABLE_ALL_DEVS
-Scan for all devices, including non-pvs, and process each.
-
-process_single_pv is always passed the vg
-when the pv is not an orphan.  If the pv is
-an orphan (or has no mda and is not otherwise
-identified as belonging to a vg), vg is NULL.
-
-Previously, process_single_pv would not receive
-the vg in what was the ENABLE_ALL_DEVS case,
-and had to read the vg itself.  This case is now
-removed from instances of process_single_pv.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/metadata-exported.h |   1 +
- tools/pvdisplay.c                |  74 ++--
- tools/pvresize.c                 |  37 +-
- tools/reporter.c                 |  94 ++---
- tools/toollib.c                  | 855 ++++++++++++++++++++++++++++-----------
- tools/toollib.h                  |   3 +-
- tools/vgdisplay.c                |   2 +-
- 7 files changed, 697 insertions(+), 369 deletions(-)
+ lib/metadata/lv_manip.c          | 734 +++++++++++++++++++++++++++++++++++++
+ lib/metadata/metadata-exported.h |  46 +++
+ tools/lvresize.c                 | 771 ---------------------------------------
+ 3 files changed, 780 insertions(+), 771 deletions(-)
 
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index ad8160e..5baa9b3 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -27,6 +27,8 @@
+ #include "activate.h"
+ #include "str_list.h"
+ #include "defaults.h"
++#include "lvm-exec.h"
++#include "errors.h"
+ 
+ typedef enum {
+ 	PREFERRED,
+@@ -3083,6 +3085,738 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
+ 	return lv_rename_update(cmd, lv, new_name, 1);
+ }
+ 
++/*
++ * Core lv resize code
++ */
++
++#define SIZE_BUF 128
++
++static int _validate_stripesize(struct cmd_context *cmd,
++				const struct volume_group *vg,
++				struct lvresize_params *lp)
++{
++
++	if ( lp->ac_stripesize_value > STRIPE_SIZE_LIMIT * 2) {
++		log_error("Stripe size cannot be larger than %s",
++			  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
++		return 0;
++	}
++
++	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
++		log_warn("Varied stripesize not supported. Ignoring.");
++	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
++		log_error("Reducing stripe size %s to maximum, "
++			  "physical extent size %s",
++			  display_size(cmd,lp->ac_stripesize_value),
++			  display_size(cmd, (uint64_t) vg->extent_size));
++		lp->stripe_size = vg->extent_size;
++	} else
++		lp->stripe_size = lp->ac_stripesize_value;
++
++	if (lp->stripe_size & (lp->stripe_size - 1)) {
++		log_error("Stripe size must be power of 2");
++		return 0;
++	}
++
++	return 1;
++}
++
++static int _request_confirmation(struct cmd_context *cmd,
++				 const struct volume_group *vg,
++				 const struct logical_volume *lv,
++				 const struct lvresize_params *lp)
++{
++	struct lvinfo info = { 0 };
++
++	if (!lv_info(cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
++		log_error("lv_info failed: aborting");
++		return 0;
++	}
++
++	if (lp->resizefs) {
++		if (!info.exists) {
++			log_error("Logical volume %s must be activated "
++				  "before resizing filesystem", lp->lv_name);
++			return 0;
++		}
++		return 1;
++	}
++
++	if (!info.exists)
++		return 1;
++
++	log_warn("WARNING: Reducing active%s logical volume to %s",
++		 info.open_count ? " and open" : "",
++		 display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
++
++	log_warn("THIS MAY DESTROY YOUR DATA (filesystem etc.)");
++
++	if (!lp->ac_force) {
++		if (yes_no_prompt("Do you really want to reduce %s? [y/n]: ",
++				  lp->lv_name) == 'n') {
++			log_error("Logical volume %s NOT reduced", lp->lv_name);
++			return 0;
++		}
++		if (sigint_caught())
++			return 0;
++	}
++
++	return 1;
++}
++
++enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
++#define FSADM_CMD "fsadm"
++#define FSADM_CMD_MAX_ARGS 6
++#define FSADM_CHECK_FAILS_FOR_MOUNTED 3 /* shell exist status code */
++
++/*
++ * FSADM_CMD --dry-run --verbose --force check lv_path
++ * FSADM_CMD --dry-run --verbose --force resize lv_path size
++ */
++static int _fsadm_cmd(struct cmd_context *cmd,
++		      const struct volume_group *vg,
++		      const struct lvresize_params *lp,
++		      enum fsadm_cmd_e fcmd,
++		      int *status)
++{
++	char lv_path[PATH_MAX];
++	char size_buf[SIZE_BUF];
++	const char *argv[FSADM_CMD_MAX_ARGS + 2];
++	unsigned i = 0;
++
++	argv[i++] = FSADM_CMD;
++
++	if (test_mode())
++		argv[i++] = "--dry-run";
++
++	if (verbose_level() >= _LOG_NOTICE)
++		argv[i++] = "--verbose";
++
++	if (lp->ac_force)
++		argv[i++] = "--force";
++
++	argv[i++] = (fcmd == FSADM_CMD_RESIZE) ? "resize" : "check";
++
++	if (status)
++		*status = -1;
++
++	if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", cmd->dev_dir, lp->vg_name,
++			lp->lv_name) < 0) {
++		log_error("Couldn't create LV path for %s", lp->lv_name);
++		return 0;
++	}
++
++	argv[i++] = lv_path;
++
++	if (fcmd == FSADM_CMD_RESIZE) {
++		if (dm_snprintf(size_buf, SIZE_BUF, "%" PRIu64 "K",
++				(uint64_t) lp->extents * vg->extent_size / 2) < 0) {
++			log_error("Couldn't generate new LV size string");
++			return 0;
++		}
++
++		argv[i++] = size_buf;
++	}
++
++	argv[i] = NULL;
++
++	return exec_cmd(cmd, argv, status, 1);
++}
++
++static int _adjust_policy_params(struct cmd_context *cmd,
++				 struct logical_volume *lv, struct lvresize_params *lp)
++{
++	percent_t percent;
++	int policy_threshold, policy_amount;
++
++	if (lv_is_thin_pool(lv)) {
++		policy_threshold =
++			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG) * PERCENT_1;
++		policy_amount =
++			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG);
++		if (!policy_amount && policy_threshold < PERCENT_100)
++                        return 0;
++	} else {
++		policy_threshold =
++			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG) * PERCENT_1;
++		policy_amount =
++			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG);
++	}
++
++	if (policy_threshold >= PERCENT_100)
++		return 1; /* nothing to do */
++
++	if (lv_is_thin_pool(lv)) {
++		if (!lv_thin_pool_percent(lv, 1, &percent))
++			return_0;
++		if (percent > policy_threshold) {
++			/* FIXME: metadata resize support missing */
++			log_error("Resize for %s/%s is not yet supported.",
++				  lp->vg_name, lp->lv_name);
++			return ECMD_FAILED;
++		}
++
++		if (!lv_thin_pool_percent(lv, 0, &percent))
++			return_0;
++		if (!(PERCENT_0 < percent && percent <= PERCENT_100) ||
++		    percent <= policy_threshold)
++			return 1; /* nothing to do */
++	} else {
++		if (!lv_snapshot_percent(lv, &percent))
++			return_0;
++		if (!(PERCENT_0 < percent && percent < PERCENT_100) || percent <= policy_threshold)
++			return 1; /* nothing to do */
++	}
++
++	lp->extents = policy_amount;
++
++	return 1;
++}
++
++static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
++{
++	uint32_t s;
++	struct lv_segment *seg_mirr;
++
++	/* If segment mirrored, check if images are striped */
++	if (seg_is_mirrored(seg))
++		for (s = 0; s < seg->area_count; s++) {
++			if (seg_type(seg, s) != AREA_LV)
++				continue;
++			seg_mirr = first_seg(seg_lv(seg, s));
++
++			if (seg_is_striped(seg_mirr)) {
++				seg = seg_mirr;
++				break;
++			}
++		}
++
++
++	if (seg_is_striped(seg)) {
++		*stripesize = seg->stripe_size;
++		return seg->area_count;
++	}
++
++	*stripesize = 0;
++	return 0;
++}
++
++int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
++		     struct lvresize_params *lp, struct dm_list *pvh)
++{
++	struct logical_volume *lv;
++	struct lvinfo info;
++	uint32_t stripesize_extents;
++	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size;
++	uint32_t seg_mirrors = 0;
++	uint32_t extents_used;
++	uint32_t size_rest;
++	uint32_t pv_extent_count;
++	alloc_policy_t alloc;
++	struct logical_volume *lock_lv;
++	struct lv_list *lvl;
++	struct lv_segment *seg, *uninitialized_var(mirr_seg);
++	uint32_t seg_extents;
++	uint32_t sz, str;
++	int status;
++
++	/* does LV exist? */
++	if (!(lvl = find_lv_in_vg(vg, lp->lv_name))) {
++		log_error("Logical volume %s not found in volume group %s",
++			  lp->lv_name, lp->vg_name);
++		return ECMD_FAILED;
++	}
++
++	if (lv_is_external_origin(lvl->lv)) {
++		/*
++		 * Since external-origin can be activated read-only,
++		 * there is no way to use extended areas.
++		 */
++		log_error("Cannot resize external origin \"%s\".", lvl->lv->name);
++		return EINVALID_CMD_LINE;
++	}
++
++	if (lvl->lv->status & (RAID_IMAGE | RAID_META)) {
++		log_error("Cannot resize a RAID %s directly",
++			  (lvl->lv->status & RAID_IMAGE) ? "image" :
++			  "metadata area");
++		return ECMD_FAILED;
++	}
++
++	if (lv_is_raid_with_tracking(lvl->lv)) {
++		log_error("Cannot resize %s while it is tracking a split image",
++			  lvl->lv->name);
++		return ECMD_FAILED;
++	}
++
++	if (lp->ac_stripes) {
++		if (vg->fid->fmt->features & FMT_SEGMENTS)
++			lp->stripes = lp->ac_stripes_value;
++		else
++			log_warn("Varied striping not supported. Ignoring.");
++	}
++
++	if (lp->ac_mirrors) {
++		if (vg->fid->fmt->features & FMT_SEGMENTS)
++			lp->mirrors = lp->ac_mirrors_value;
++		else
++			log_warn("Mirrors not supported. Ignoring.");
++	}
++
++	if (lp->ac_stripesize &&
++	    !_validate_stripesize(cmd, vg, lp))
++		return EINVALID_CMD_LINE;
++
++	lv = lvl->lv;
++
++	if (lp->ac_policy) {
++		if (!lv_is_cow(lv) &&
++		    !lv_is_thin_pool(lv)) {
++			log_error("Policy-based resize is supported only for snapshot and thin pool volumes.");
++			return ECMD_FAILED;
++		}
++		if (!_adjust_policy_params(cmd, lv, lp))
++			return ECMD_FAILED;
++	}
++
++	if (!lv_is_visible(lv)) {
++		log_error("Can't resize internal logical volume %s", lv->name);
++		return ECMD_FAILED;
++	}
++
++	if (lv->status & LOCKED) {
++		log_error("Can't resize locked LV %s", lv->name);
++		return ECMD_FAILED;
++	}
++
++	if (lv->status & CONVERTING) {
++		log_error("Can't resize %s while lvconvert in progress", lv->name);
++		return ECMD_FAILED;
++	}
++
++	alloc = (alloc_policy_t)(lp->ac_alloc)?lp->ac_alloc: lv->alloc;
++
++	/*
++	 * First adjust to an exact multiple of extent size.
++	 * When extending by a relative amount we round that amount up.
++	 * When reducing by a relative amount we remove at most that amount.
++	 * When changing to an absolute size, we round that size up.
++	 */
++	if (lp->size) {
++		if (lp->size % vg->extent_size) {
++			if (lp->sign == SIGN_MINUS)
++				lp->size -= lp->size % vg->extent_size;
++			else
++				lp->size += vg->extent_size -
++				    (lp->size % vg->extent_size);
++
++			log_print_unless_silent("Rounding size to boundary between physical extents: %s",
++						display_size(cmd, lp->size));
++		}
++
++		lp->extents = lp->size / vg->extent_size;
++	}
++
++	switch(lp->percent) {
++		case PERCENT_VG:
++			lp->extents = percent_of_extents(lp->extents, vg->extent_count,
++							 (lp->sign != SIGN_MINUS));
++			break;
++		case PERCENT_FREE:
++			lp->extents = percent_of_extents(lp->extents, vg->free_count,
++							 (lp->sign != SIGN_MINUS));
++			break;
++		case PERCENT_LV:
++			lp->extents = percent_of_extents(lp->extents, lv->le_count,
++							 (lp->sign != SIGN_MINUS));
++			break;
++		case PERCENT_PVS:
++			if (lp->argc) {
++				pv_extent_count = pv_list_extents_free(pvh);
++				lp->extents = percent_of_extents(lp->extents, pv_extent_count,
++								 (lp->sign != SIGN_MINUS));
++			} else
++				lp->extents = percent_of_extents(lp->extents, vg->extent_count,
++								 (lp->sign != SIGN_MINUS));
++			break;
++		case PERCENT_ORIGIN:
++			if (!lv_is_cow(lv)) {
++				log_error("Specified LV does not have an origin LV.");
++				return EINVALID_CMD_LINE;
++			}
++			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count,
++							 (lp->sign != SIGN_MINUS));
++			break;
++		case PERCENT_NONE:
++			break;
++	}
++
++	if (lp->sign == SIGN_PLUS) {
++		if (lp->extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
++			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
++				  lp->lv_name, lv->le_count, MAX_EXTENT_COUNT);
++			return EINVALID_CMD_LINE;
++		}
++		lp->extents += lv->le_count;
++	}
++
++	if (lp->sign == SIGN_MINUS) {
++		if (lp->extents >= lv->le_count) {
++			log_error("Unable to reduce %s below 1 extent",
++				  lp->lv_name);
++			return EINVALID_CMD_LINE;
++		}
++
++		lp->extents = lv->le_count - lp->extents;
++	}
++
++	if (!lp->extents) {
++		log_error("New size of 0 not permitted");
++		return EINVALID_CMD_LINE;
++	}
++
++	if (lp->extents == lv->le_count) {
++		if (lp->ac_policy)
++			return ECMD_PROCESSED; /* Nothing to do. */
++		if (!lp->resizefs) {
++			log_error("New size (%d extents) matches existing size "
++				  "(%d extents)", lp->extents, lv->le_count);
++			return EINVALID_CMD_LINE;
++		}
++		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
++	}
++
++	seg_size = lp->extents - lv->le_count;
++
++	/* Use segment type of last segment */
++	dm_list_iterate_items(seg, &lv->segments) {
++		lp->segtype = seg->segtype;
++	}
++
++	/* FIXME Support LVs with mixed segment types */
++	if (lp->segtype != get_segtype_from_string(cmd, (lp->ac_type)?lp->ac_type:lp->segtype->name)) {
++		log_error("VolumeType does not match (%s)", lp->segtype->name);
++		return EINVALID_CMD_LINE;
++	}
++
++	/* If extending, find mirrors of last segment */
++	if ((lp->extents > lv->le_count)) {
++		/*
++		 * Has the user specified that they would like the additional
++		 * extents of a mirror not to have an initial sync?
++		 */
++		if (seg_is_mirrored(first_seg(lv)) && lp->ac_no_sync)
++			lv->status |= LV_NOTSYNCED;
++
++		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
++			if (seg_is_mirrored(mirr_seg))
++				seg_mirrors = lv_mirror_count(mirr_seg->lv);
++			else
++				seg_mirrors = 0;
++			break;
++		}
++
++		if (!lp->ac_mirrors && seg_mirrors) {
++			log_print_unless_silent("Extending %" PRIu32 " mirror images.",
++						seg_mirrors);
++			lp->mirrors = seg_mirrors;
++		}
++		if ((lp->ac_mirrors || seg_mirrors) &&
++		    (lp->mirrors != seg_mirrors)) {
++			log_error("Cannot vary number of mirrors in LV yet.");
++			return EINVALID_CMD_LINE;
++		}
++
++		if (seg_mirrors && !strcmp(mirr_seg->segtype->name, "raid10")) {
++			lp->stripes = mirr_seg->area_count / seg_mirrors;
++			lp->stripe_size = mirr_seg->stripe_size;
++		}
++	}
++
++	/* If extending, find stripes, stripesize & size of last segment */
++	if ((lp->extents > lv->le_count) &&
++	    !(lp->stripes == 1 || (lp->stripes > 1 && lp->stripe_size)) &&
++	    strcmp(mirr_seg->segtype->name, "raid10")) {
++		/* FIXME Don't assume mirror seg will always be AREA_LV */
++		/* FIXME We will need to support resize for metadata LV as well,
++		 *       and data LV could be any type (i.e. mirror)) */
++		dm_list_iterate_items(seg, seg_mirrors ? &seg_lv(mirr_seg, 0)->segments :
++				      lv_is_thin_pool(lv) ? &seg_lv(first_seg(lv), 0)->segments : &lv->segments) {
++			/* Allow through "striped" and RAID 4/5/6/10 */
++			if (!seg_is_striped(seg) &&
++			    (!seg_is_raid(seg) || seg_is_mirrored(seg)) &&
++			    strcmp(seg->segtype->name, "raid10"))
++				continue;
++
++			sz = seg->stripe_size;
++			str = seg->area_count - lp->segtype->parity_devs;
++
++			if ((seg_stripesize && seg_stripesize != sz &&
++			     sz && !lp->stripe_size) ||
++			    (seg_stripes && seg_stripes != str && !lp->stripes)) {
++				log_error("Please specify number of "
++					  "stripes (-i) and stripesize (-I)");
++				return EINVALID_CMD_LINE;
++			}
++
++			seg_stripesize = sz;
++			seg_stripes = str;
++		}
++
++		if (!lp->stripes)
++			lp->stripes = seg_stripes;
++		else if (seg_is_raid(first_seg(lv)) &&
++			 (lp->stripes != seg_stripes)) {
++			log_error("Unable to extend \"%s\" segment type with different number of stripes.", first_seg(lv)->segtype->ops->name(first_seg(lv)));
++			return ECMD_FAILED;
++		}
++
++		if (!lp->stripe_size && lp->stripes > 1) {
++			if (seg_stripesize) {
++				log_print_unless_silent("Using stripesize of last segment %s",
++							display_size(cmd, (uint64_t) seg_stripesize));
++				lp->stripe_size = seg_stripesize;
++			} else {
++				lp->stripe_size =
++					find_config_tree_int(cmd, metadata_stripesize_CFG) * 2;
++				log_print_unless_silent("Using default stripesize %s",
++							display_size(cmd, (uint64_t) lp->stripe_size));
++			}
++		}
++	}
++
++	/* If reducing, find stripes, stripesize & size of last segment */
++	if (lp->extents < lv->le_count) {
++		extents_used = 0;
++
++		if (lp->stripes || lp->stripe_size || lp->mirrors)
++			log_error("Ignoring stripes, stripesize and mirrors "
++				  "arguments when reducing");
++
++		dm_list_iterate_items(seg, &lv->segments) {
++			seg_extents = seg->len;
++
++			/* Check for underlying stripe sizes */
++			seg_stripes = lvseg_get_stripes(seg, &seg_stripesize);
++
++			if (seg_is_mirrored(seg))
++				seg_mirrors = lv_mirror_count(seg->lv);
++			else
++				seg_mirrors = 0;
++
++			if (lp->extents <= extents_used + seg_extents)
++				break;
++
++			extents_used += seg_extents;
++		}
++
++		seg_size = lp->extents - extents_used;
++		lp->stripe_size = seg_stripesize;
++		lp->stripes = seg_stripes;
++		lp->mirrors = seg_mirrors;
++	}
++
++	if (lp->stripes > 1 && !lp->stripe_size) {
++		log_error("Stripesize for striped segment should not be 0!");
++		return EINVALID_CMD_LINE;
++	}
++
++	if (lp->stripes > 1) {
++		if (lp->stripe_size < STRIPE_SIZE_MIN) {
++			log_error("Invalid stripe size %s",
++				  display_size(cmd, (uint64_t) lp->stripe_size));
++			return EINVALID_CMD_LINE;
++		}
++
++		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
++			stripesize_extents = 1;
++
++		size_rest = seg_size % (lp->stripes * stripesize_extents);
++		/* Round toward the original size. */
++		if (size_rest &&
++		    ((lp->extents < lv->le_count) ||
++		     !lp->percent ||
++		     (vg->free_count >= (lp->extents - lv->le_count - size_rest +
++					 (lp->stripes * stripesize_extents))))) {
++			log_print_unless_silent("Rounding size (%d extents) up to stripe "
++						"boundary size for segment (%d extents)",
++						lp->extents, lp->extents - size_rest +
++						(lp->stripes * stripesize_extents));
++			lp->extents = lp->extents - size_rest +
++				      (lp->stripes * stripesize_extents);
++		} else if (size_rest) {
++			log_print_unless_silent("Rounding size (%d extents) down to stripe "
++						"boundary size for segment (%d extents)",
++						lp->extents, lp->extents - size_rest);
++			lp->extents = lp->extents - size_rest;
++		}
++	}
++
++	if (lp->extents < lv->le_count) {
++		if (lp->resize == LV_EXTEND) {
++			log_error("New size given (%d extents) not larger "
++				  "than existing size (%d extents)",
++				  lp->extents, lv->le_count);
++			return EINVALID_CMD_LINE;
++		}
++		lp->resize = LV_REDUCE;
++	} else if (lp->extents > lv->le_count) {
++		if (lp->resize == LV_REDUCE) {
++			log_error("New size given (%d extents) not less than "
++				  "existing size (%d extents)", lp->extents,
++				  lv->le_count);
++			return EINVALID_CMD_LINE;
++		}
++		lp->resize = LV_EXTEND;
++	} else if (lp->extents == lv->le_count) {
++		if (lp->ac_policy)
++			return ECMD_PROCESSED; /* Nothing to do. */
++		if (!lp->resizefs) {
++			log_error("New size (%d extents) matches existing size "
++				  "(%d extents)", lp->extents, lv->le_count);
++			return EINVALID_CMD_LINE;
++		}
++		lp->resize = LV_EXTEND;
++	}
++
++	if (lv_is_origin(lv)) {
++		if (lp->resize == LV_REDUCE) {
++			log_error("Snapshot origin volumes cannot be reduced "
++				  "in size yet.");
++			return ECMD_FAILED;
++		}
++
++		if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
++			log_error("Snapshot origin volumes can be resized "
++				  "only while inactive: try lvchange -an");
++			return ECMD_FAILED;
++		}
++	}
++
++	if (lv_is_thin_pool(lv)) {
++		if (lp->resize == LV_REDUCE) {
++			log_error("Thin pool volumes cannot be reduced in size yet.");
++			return ECMD_FAILED;
++		}
++
++		if (lp->resizefs) {
++			log_warn("Thin pool volumes do not have filesystem.");
++			lp->resizefs = 0;
++		}
++	}
++
++	if ((lp->resize == LV_REDUCE) && lp->argc)
++		log_warn("Ignoring PVs on command line when reducing");
++
++	/* Request confirmation before operations that are often mistakes. */
++	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
++	    !_request_confirmation(cmd, vg, lv, lp)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	if (lp->resizefs) {
++		if (!lp->nofsck &&
++		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_CHECK, &status)) {
++			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
++				log_error("Filesystem check failed.");
++				return ECMD_FAILED;
++			}
++			/* some filesystems supports online resize */
++		}
++
++		if ((lp->resize == LV_REDUCE) &&
++		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
++			log_error("Filesystem resize failed.");
++			return ECMD_FAILED;
++		}
++	}
++
++	if (!archive(vg)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	log_print_unless_silent("%sing logical volume %s to %s",
++				(lp->resize == LV_REDUCE) ? "Reduc" : "Extend",
++				lp->lv_name,
++				display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
++
++	if (lp->resize == LV_REDUCE) {
++		if (!lv_reduce(lv, lv->le_count - lp->extents)) {
++			stack;
++			return ECMD_FAILED;
++		}
++	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
++		   !lv_extend(lv, lp->segtype,
++			      lp->stripes, lp->stripe_size,
++			      lp->mirrors, first_seg(lv)->region_size,
++			      lp->extents - lv->le_count, NULL,
++			      pvh, alloc)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	/* store vg on disk(s) */
++	if (!vg_write(vg)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	/* If snapshot, must suspend all associated devices */
++	if (lv_is_cow(lv))
++		lock_lv = origin_from_cow(lv);
++	else
++		lock_lv = lv;
++
++	if (!suspend_lv(cmd, lock_lv)) {
++		log_error("Failed to suspend %s", lp->lv_name);
++		vg_revert(vg);
++		backup(vg);
++		return ECMD_FAILED;
++	}
++
++	if (!vg_commit(vg)) {
++		stack;
++		if (!resume_lv(cmd, lock_lv))
++			stack;
++		backup(vg);
++		return ECMD_FAILED;
++	}
++
++	if (!resume_lv(cmd, lock_lv)) {
++		log_error("Problem reactivating %s", lp->lv_name);
++		backup(vg);
++		return ECMD_FAILED;
++	}
++
++	backup(vg);
++
++	/*
++	 * Update lvm pool metadata (drop messages) if the pool has been
++	 * resumed and do a pool active/deactivate in other case.
++	 *
++	 * Note: Active thin pool can be waiting for resize.
++	 *
++	 * FIXME: Activate only when thin volume is active
++	 */
++	if (lv_is_thin_pool(lv) &&
++	    !update_pool_lv(lv, !lv_is_active(lv))) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
++
++	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
++	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
++		stack;
++		return ECMD_FAILED;
++	}
++
++	return ECMD_PROCESSED;
++}
++
+ char *generate_lv_name(struct volume_group *vg, const char *format,
+ 		       char *buffer, size_t len)
+ {
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 61f18d0..2089d61 100644
+index c2728d5..a792fd2 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -122,6 +122,7 @@
- /* meta-flags, useful with toollib for_each_* functions. */
- #define READ_FOR_UPDATE		0x00100000U
- #define ENABLE_ALL_VGNAMES	0x00200000U	/* run cmd on all vg names if none are named */
-+#define ENABLE_ALL_DEVS		0x00400000U	/* run cmd on all devs if none are named */
+@@ -419,6 +419,49 @@ struct pvcreate_params {
+ 	struct pvcreate_restorable_params rp;
+ };
  
- /* vg's "read_status" field */
- #define FAILED_INCONSISTENT	0x00000001U
-diff --git a/tools/pvdisplay.c b/tools/pvdisplay.c
-index c6cd412..1b10993 100644
---- a/tools/pvdisplay.c
-+++ b/tools/pvdisplay.c
-@@ -15,41 +15,18 @@
++struct lvresize_params {
++	const char *vg_name;
++	const char *lv_name;
++
++	uint32_t stripes;
++	uint32_t stripe_size;
++	uint32_t mirrors;
++
++	const struct segment_type *segtype;
++
++	/* size */
++	uint32_t extents;
++	uint64_t size;
++	sign_t sign;
++	percent_type_t percent;
++
++	enum {
++		LV_ANY = 0,
++		LV_REDUCE = 1,
++		LV_EXTEND = 2
++	} resize;
++
++	int resizefs;
++	int nofsck;
++
++	int argc;
++	char **argv;
++
++	/* Arg counts & values */
++	unsigned ac_policy;
++	unsigned ac_stripes;
++	uint32_t ac_stripes_value;
++	unsigned ac_mirrors;
++	uint32_t ac_mirrors_value;
++	unsigned ac_stripesize;
++	uint64_t ac_stripesize_value;
++	unsigned ac_alloc;
++	unsigned ac_no_sync;
++	unsigned ac_force;
++
++	const char *ac_type;
++};
++
+ struct physical_volume *pvcreate_single(struct cmd_context *cmd,
+ 					const char *pv_name,
+ 					struct pvcreate_params *pp,
+@@ -465,6 +508,9 @@ int vgs_are_compatible(struct cmd_context *cmd,
+ 		       struct volume_group *vg_to);
+ uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
+ 
++int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
++		     struct lvresize_params *lp, struct dm_list *pvh);
++
+ /*
+  * Return a handle to VG metadata.
+  */
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 4d11c16..edaed7c 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -15,183 +15,6 @@
  
  #include "tools.h"
  
-+/*
-+ * An orphan pv may be passed in with vg set to the orphan vg,
-+ * or with null vg.  vg will be NULL for a non-pv device.
-+ */
-+
- static int _pvdisplay_single(struct cmd_context *cmd,
- 			     struct volume_group *vg,
- 			     struct physical_volume *pv, void *handle)
- {
--	struct pv_list *pvl;
--	int ret = ECMD_PROCESSED;
+-#define SIZE_BUF 128
+-
+-struct lvresize_params {
+-	const char *vg_name;
+-	const char *lv_name;
+-
+-	uint32_t stripes;
+-	uint32_t stripe_size;
+-	uint32_t mirrors;
+-
+-	const struct segment_type *segtype;
+-
+-	/* size */
+-	uint32_t extents;
 -	uint64_t size;
--	struct volume_group *old_vg = vg;
+-	sign_t sign;
+-	percent_type_t percent;
 -
- 	const char *pv_name = pv_dev_name(pv);
--	const char *vg_name = NULL;
+-	enum {
+-		LV_ANY = 0,
+-		LV_REDUCE = 1,
+-		LV_EXTEND = 2
+-	} resize;
 -
--	if (!is_orphan(pv) && !vg) {
--		vg_name = pv_vg_name(pv);
--		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
--		if (vg_read_error(vg)) {
--			log_error("Skipping volume group %s", vg_name);
--			release_vg(vg);
--			/* FIXME If CLUSTERED should return ECMD_PROCESSED here */
--			return ECMD_FAILED;
--		}
+-	int resizefs;
+-	int nofsck;
 -
--	 	/*
--		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read_internal() path.
--		 */
--		 if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			 log_error("Unable to find \"%s\" in volume group \"%s\"",
--				   pv_name, vg->name);
--			 ret = ECMD_FAILED;
--			 goto out;
--		 }
+-	int argc;
+-	char **argv;
 -
--		 pv = pvl->pv;
+-	/* Arg counts & values */
+-	unsigned ac_policy;
+-	unsigned ac_stripes;
+-	uint32_t ac_stripes_value;
+-	unsigned ac_mirrors;
+-	uint32_t ac_mirrors_value;
+-	unsigned ac_stripesize;
+-	uint64_t ac_stripesize_value;
+-	unsigned ac_alloc;
+-	unsigned ac_no_sync;
+-	unsigned ac_force;
+-
+-	const char *ac_type;
+-};
+-
+-static int _validate_stripesize(struct cmd_context *cmd,
+-				const struct volume_group *vg,
+-				struct lvresize_params *lp)
+-{
+-
+-	if ( lp->ac_stripesize_value > STRIPE_SIZE_LIMIT * 2) {
+-		log_error("Stripe size cannot be larger than %s",
+-			  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
+-		return 0;
 -	}
-+	uint64_t size;
-+	int ret = ECMD_PROCESSED;
- 
- 	if (is_orphan(pv))
- 		size = pv_size(pv);
-@@ -80,18 +57,16 @@ static int _pvdisplay_single(struct cmd_context *cmd,
- 
- 	if (arg_count(cmd, maps_ARG))
- 		pvdisplay_segments(pv);
 -
- out:
--	if (vg_name)
--		unlock_vg(cmd, vg_name);
--	if (!old_vg)
--		release_vg(vg);
+-	if (!(vg->fid->fmt->features & FMT_SEGMENTS))
+-		log_warn("Varied stripesize not supported. Ignoring.");
+-	else if (lp->ac_stripesize_value > (uint64_t) vg->extent_size * 2) {
+-		log_error("Reducing stripe size %s to maximum, "
+-			  "physical extent size %s",
+-			  display_size(cmd,lp->ac_stripesize_value),
+-			  display_size(cmd, (uint64_t) vg->extent_size));
+-		lp->stripe_size = vg->extent_size;
+-	} else
+-		lp->stripe_size = lp->ac_stripesize_value;
 -
- 	return ret;
- }
- 
- int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
- {
-+	uint32_t flags = 0;
-+	int lock_global = 0;
-+	int ret;
-+
- 	if (arg_count(cmd, columns_ARG)) {
- 		if (arg_count(cmd, colon_ARG) || arg_count(cmd, maps_ARG) ||
- 		    arg_count(cmd, short_ARG)) {
-@@ -114,6 +89,29 @@ int pvdisplay(struct cmd_context *cmd, int argc, char **argv)
- 		return EINVALID_CMD_LINE;
- 	}
- 
--	return process_each_pv(cmd, argc, argv, NULL, 0, 0, NULL,
--			       _pvdisplay_single);
-+	/*
-+	 * If the lock_type is LCK_VG_READ (used only in reporting commands),
-+	 * we lock VG_GLOBAL to enable use of metadata cache.
-+	 * This can pause alongide pvscan or vgscan process for a while.
-+	 */
-+	if (!lvmetad_active()) {
-+		lock_global = 1;
-+		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ)) {
-+			log_error("Unable to obtain global lock.");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	if (!argc && arg_count(cmd, all_ARG))
-+		flags = ENABLE_ALL_DEVS;
-+	else
-+		flags = ENABLE_ALL_VGNAMES;
-+
-+	ret = process_each_pv(cmd, argc, argv, NULL, flags,
-+			      0, NULL, _pvdisplay_single);
-+
-+	if (lock_global)
-+		unlock_vg(cmd, VG_GLOBAL);
-+
-+	return ret;
- }
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 2f0693a..b72f773 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -29,12 +29,10 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 			     struct physical_volume *pv,
- 			     const uint64_t new_size)
- {
--	struct pv_list *pvl;
- 	uint64_t size = 0;
- 	int r = 0;
- 	const char *pv_name = pv_dev_name(pv);
- 	const char *vg_name = pv_vg_name(pv);
--	struct volume_group *old_vg = vg;
- 	int vg_needs_pv_write = 0;
- 
- 	if (is_orphan_vg(vg_name)) {
-@@ -48,26 +46,19 @@ static int _pv_resize_single(struct cmd_context *cmd,
- 			log_error("Unable to read PV \"%s\"", pv_name);
- 			return 0;
- 		}
--	} else {
--		vg = vg_read_for_update(cmd, vg_name, NULL, 0);
+-	if (lp->stripe_size & (lp->stripe_size - 1)) {
+-		log_error("Stripe size must be power of 2");
+-		return 0;
+-	}
 -
--		if (vg_read_error(vg)) {
--			release_vg(vg);
--			log_error("Unable to read volume group \"%s\".",
--				  vg_name);
+-	return 1;
+-}
+-
+-static int _request_confirmation(struct cmd_context *cmd,
+-				 const struct volume_group *vg,
+-				 const struct logical_volume *lv,
+-				 const struct lvresize_params *lp)
+-{
+-	struct lvinfo info = { 0 };
+-
+-	if (!lv_info(cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
+-		log_error("lv_info failed: aborting");
+-		return 0;
+-	}
+-
+-	if (lp->resizefs) {
+-		if (!info.exists) {
+-			log_error("Logical volume %s must be activated "
+-				  "before resizing filesystem", lp->lv_name);
+-			return 0;
+-		}
+-		return 1;
+-	}
+-
+-	if (!info.exists)
+-		return 1;
+-
+-	log_warn("WARNING: Reducing active%s logical volume to %s",
+-		 info.open_count ? " and open" : "",
+-		 display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
+-
+-	log_warn("THIS MAY DESTROY YOUR DATA (filesystem etc.)");
+-
+-	if (!lp->ac_force) {
+-		if (yes_no_prompt("Do you really want to reduce %s? [y/n]: ",
+-				  lp->lv_name) == 'n') {
+-			log_error("Logical volume %s NOT reduced", lp->lv_name);
+-			return 0;
+-		}
+-		if (sigint_caught())
+-			return 0;
+-	}
+-
+-	return 1;
+-}
+-
+-enum fsadm_cmd_e { FSADM_CMD_CHECK, FSADM_CMD_RESIZE };
+-#define FSADM_CMD "fsadm"
+-#define FSADM_CMD_MAX_ARGS 6
+-#define FSADM_CHECK_FAILS_FOR_MOUNTED 3 /* shell exist status code */
+-
+-/*
+- * FSADM_CMD --dry-run --verbose --force check lv_path
+- * FSADM_CMD --dry-run --verbose --force resize lv_path size
+- */
+-static int _fsadm_cmd(struct cmd_context *cmd,
+-		      const struct volume_group *vg,
+-		      const struct lvresize_params *lp,
+-		      enum fsadm_cmd_e fcmd,
+-		      int *status)
+-{
+-	char lv_path[PATH_MAX];
+-	char size_buf[SIZE_BUF];
+-	const char *argv[FSADM_CMD_MAX_ARGS + 2];
+-	unsigned i = 0;
+-
+-	argv[i++] = FSADM_CMD;
+-
+-	if (test_mode())
+-		argv[i++] = "--dry-run";
+-
+-	if (verbose_level() >= _LOG_NOTICE)
+-		argv[i++] = "--verbose";
+-
+-	if (lp->ac_force)
+-		argv[i++] = "--force";
+-
+-	argv[i++] = (fcmd == FSADM_CMD_RESIZE) ? "resize" : "check";
+-
+-	if (status)
+-		*status = -1;
+-
+-	if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", cmd->dev_dir, lp->vg_name,
+-			lp->lv_name) < 0) {
+-		log_error("Couldn't create LV path for %s", lp->lv_name);
+-		return 0;
+-	}
+-
+-	argv[i++] = lv_path;
+-
+-	if (fcmd == FSADM_CMD_RESIZE) {
+-		if (dm_snprintf(size_buf, SIZE_BUF, "%" PRIu64 "K",
+-				(uint64_t) lp->extents * vg->extent_size / 2) < 0) {
+-			log_error("Couldn't generate new LV size string");
 -			return 0;
 -		}
 -
--		if (!(pvl = find_pv_in_vg(vg, pv_name))) {
--			log_error("Unable to find \"%s\" in volume group \"%s\"",
--				  pv_name, vg->name);
--			goto out;
--		}
+-		argv[i++] = size_buf;
+-	}
 -
--		pv = pvl->pv;
-+	} else if (vg) {
-+		/*
-+		 * READ_FOR_UPDATE is passed to process_each_pv below,
-+		 * and process_each_pv uses that flag in vg_read, so
-+		 * reading the vg again here appears to be unnecessary.
-+		 */
- 
- 		if (!archive(vg))
- 			goto out;
-+	} else {
-+		/* should not happen */
-+		log_error("pv is not orphan or in a vg");
-+		return ECMD_FAILED;
- 	}
- 
- 	if (!(pv->fmt->features & FMT_RESIZE_PV)) {
-@@ -125,11 +116,11 @@ out:
- 	if (!r && vg_needs_pv_write)
- 		log_error("Use pvcreate and vgcfgrestore "
- 			  "to repair from archived metadata.");
--	unlock_vg(cmd, vg_name);
--	if (is_orphan_vg(vg_name))
-+
-+	if (is_orphan_vg(vg_name)) {
-+		unlock_vg(cmd, vg_name);
- 		free_pv_fid(pv);
--	if (!old_vg)
--		release_vg(vg);
-+	}
- 	return r;
+-	argv[i] = NULL;
+-
+-	return exec_cmd(cmd, argv, status, 1);
+-}
+-
+ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 			    struct lvresize_params *lp)
+ {
+@@ -326,600 +149,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 	return 1;
  }
  
-diff --git a/tools/reporter.c b/tools/reporter.c
-index 0e6cbe4..a276684 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -130,61 +130,12 @@ static int _pvsegs_single(struct cmd_context *cmd, struct volume_group *vg,
- static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
- 		       struct physical_volume *pv, void *handle)
- {
--	struct pv_list *pvl;
--	int ret = ECMD_PROCESSED;
--	const char *vg_name = NULL;
--	struct volume_group *old_vg = vg;
--	char uuid[64] __attribute__((aligned(8)));
+-static int _adjust_policy_params(struct cmd_context *cmd,
+-				 struct logical_volume *lv, struct lvresize_params *lp)
+-{
+-	percent_t percent;
+-	int policy_threshold, policy_amount;
 -
--	if (is_pv(pv) && !is_orphan(pv) && !vg) {
--		vg_name = pv_vg_name(pv);
+-	if (lv_is_thin_pool(lv)) {
+-		policy_threshold =
+-			find_config_tree_int(cmd, activation_thin_pool_autoextend_threshold_CFG) * PERCENT_1;
+-		policy_amount =
+-			find_config_tree_int(cmd, activation_thin_pool_autoextend_percent_CFG);
+-		if (!policy_amount && policy_threshold < PERCENT_100)
+-                        return 0;
+-	} else {
+-		policy_threshold =
+-			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG) * PERCENT_1;
+-		policy_amount =
+-			find_config_tree_int(cmd, activation_snapshot_autoextend_percent_CFG);
+-	}
 -
--		vg = vg_read(cmd, vg_name, (char *)&pv->vgid, 0);
--		if (vg_read_error(vg)) {
--			log_error("Skipping volume group %s", vg_name);
--			release_vg(vg);
+-	if (policy_threshold >= PERCENT_100)
+-		return 1; /* nothing to do */
+-
+-	if (lv_is_thin_pool(lv)) {
+-		if (!lv_thin_pool_percent(lv, 1, &percent))
+-			return_0;
+-		if (percent > policy_threshold) {
+-			/* FIXME: metadata resize support missing */
+-			log_error("Resize for %s/%s is not yet supported.",
+-				  lp->vg_name, lp->lv_name);
 -			return ECMD_FAILED;
 -		}
 -
--		/*
--		 * Replace possibly incomplete PV structure with new one
--		 * allocated in vg_read.
--		*/
--		if (!is_missing_pv(pv)) {
--			if (!(pvl = find_pv_in_vg(vg, pv_dev_name(pv)))) {
--				log_error("Unable to find \"%s\" in volume group \"%s\"",
--					  pv_dev_name(pv), vg->name);
--				ret = ECMD_FAILED;
--				goto out;
--			}
--		} else if (!(pvl = find_pv_in_vg_by_uuid(vg, &pv->id))) {
--			if (!id_write_format(&pv->id, uuid, sizeof(uuid))) {
--				stack;
--				uuid[0] = '\0';
--			}
--
--			log_error("Unable to find missing PV %s in volume group %s",
--				  uuid, vg->name);
--			ret = ECMD_FAILED;
--			goto out;
--		}
--
--		pv = pvl->pv;
+-		if (!lv_thin_pool_percent(lv, 0, &percent))
+-			return_0;
+-		if (!(PERCENT_0 < percent && percent <= PERCENT_100) ||
+-		    percent <= policy_threshold)
+-			return 1; /* nothing to do */
+-	} else {
+-		if (!lv_snapshot_percent(lv, &percent))
+-			return_0;
+-		if (!(PERCENT_0 < percent && percent < PERCENT_100) || percent <= policy_threshold)
+-			return 1; /* nothing to do */
 -	}
 -
- 	if (!report_object(handle, vg, NULL, pv, NULL, NULL)) {
- 		stack;
--		ret = ECMD_FAILED;
-+		return ECMD_FAILED;
- 	}
- 
--out:
--	if (vg_name)
--		unlock_vg(cmd, vg_name);
+-	lp->extents = policy_amount;
 -
--	if (!old_vg)
--		release_vg(vg);
--
--	return ret;
-+	return ECMD_PROCESSED;
- }
- 
- static int _label_single(struct cmd_context *cmd, struct volume_group *vg,
-@@ -207,7 +158,7 @@ static int _pvs_in_vg(struct cmd_context *cmd, const char *vg_name,
- 		return ECMD_FAILED;
- 	}
- 
--	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvs_single);
-+	return process_each_pv_in_vg(cmd, vg, handle, &_pvs_single);
- }
- 
- static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
-@@ -219,7 +170,7 @@ static int _pvsegs_in_vg(struct cmd_context *cmd, const char *vg_name,
- 		return ECMD_FAILED;
- 	}
- 
--	return process_each_pv_in_vg(cmd, vg, NULL, handle, &_pvsegs_single);
-+	return process_each_pv_in_vg(cmd, vg, handle, &_pvsegs_single);
- }
- 
- static int _report(struct cmd_context *cmd, int argc, char **argv,
-@@ -233,6 +184,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	int aligned, buffered, headings, field_prefixes, quoted;
- 	int columns_as_rows;
- 	unsigned args_are_pvs;
-+	int lock_global = 0;
-+	uint32_t flags = 0;
- 
- 	aligned = find_config_tree_bool(cmd, report_aligned_CFG);
- 	buffered = find_config_tree_bool(cmd, report_buffered_CFG);
-@@ -364,6 +317,24 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	else if (report_type & LVS)
- 		report_type = LVS;
- 
-+	/*
-+	 * This moved here as part of factoring it out of process_each_pv.
-+	 * We lock VG_GLOBAL to enable use of metadata cache.
-+	 * This can pause alongide pvscan or vgscan process for a while.
-+	 */
-+	if ((report_type == PVS || report_type == PVSEGS) && !lvmetad_active()) {
-+		lock_global = 1;
-+		if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ)) {
-+			log_error("Unable to obtain global lock.");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	if (!argc && arg_count(cmd, all_ARG))
-+		flags = ENABLE_ALL_DEVS;
-+	else
-+		flags = ENABLE_ALL_VGNAMES;
-+
- 	switch (report_type) {
- 	case LVS:
- 		r = process_each_lv(cmd, argc, argv, ENABLE_ALL_VGNAMES,
-@@ -374,13 +345,14 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 				    report_handle, &_vgs_single);
- 		break;
- 	case LABEL:
--		r = process_each_pv(cmd, argc, argv, NULL, READ_WITHOUT_LOCK,
--				    1, report_handle, &_label_single);
-+		r = process_each_pv(cmd, argc, argv, NULL,
-+				    flags | READ_WITHOUT_LOCK, 1,
-+				    report_handle, &_label_single);
- 		break;
- 	case PVS:
- 		if (args_are_pvs)
--			r = process_each_pv(cmd, argc, argv, NULL, 0,
--					    0, report_handle, &_pvs_single);
-+			r = process_each_pv(cmd, argc, argv, NULL, flags, 0,
-+					    report_handle, &_pvs_single);
- 		else
- 			r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
- 					    report_handle, &_pvs_in_vg);
-@@ -391,8 +363,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 		break;
- 	case PVSEGS:
- 		if (args_are_pvs)
--			r = process_each_pv(cmd, argc, argv, NULL, 0,
--					    0, report_handle, &_pvsegs_single);
-+			r = process_each_pv(cmd, argc, argv, NULL, flags, 0,
-+					    report_handle, &_pvsegs_single);
- 		else
- 			r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
- 					    report_handle, &_pvsegs_in_vg);
-@@ -402,6 +374,10 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 	dm_report_output(report_handle);
- 
- 	dm_report_free(report_handle);
-+
-+	if (lock_global)
-+		unlock_vg(cmd, VG_GLOBAL);
-+
- 	return r;
- }
- 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 65501e8..2e5dc49 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -268,251 +268,21 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
- }
- 
- int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
--			  const struct dm_list *tags, void *handle,
--			  process_single_pv_fn_t process_single_pv)
-+			  void *handle, process_single_pv_fn_t process_single_pv)
- {
- 	int ret_max = ECMD_PROCESSED;
- 	int ret = 0;
- 	struct pv_list *pvl;
- 
- 	dm_list_iterate_items(pvl, &vg->pvs) {
--		if (tags && !dm_list_empty(tags) &&
--		    !str_list_match_list(tags, &pvl->pv->tags, NULL)) {
--			continue;
--		}
--		if ((ret = process_single_pv(cmd, vg, pvl->pv, handle)) > ret_max)
--			ret_max = ret;
--		if (sigint_caught())
--			return ret_max;
--	}
--
--	return ret_max;
+-	return 1;
 -}
 -
--static int _process_all_devs(struct cmd_context *cmd, void *handle,
--			     process_single_pv_fn_t process_single_pv)
+-static uint32_t lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
 -{
--	struct physical_volume *pv;
--	struct physical_volume pv_dummy;
--	struct dev_iter *iter;
--	struct device *dev;
+-	uint32_t s;
+-	struct lv_segment *seg_mirr;
 -
--	int ret_max = ECMD_PROCESSED;
--	int ret = 0;
+-	/* If segment mirrored, check if images are striped */
+-	if (seg_is_mirrored(seg))
+-		for (s = 0; s < seg->area_count; s++) {
+-			if (seg_type(seg, s) != AREA_LV)
+-				continue;
+-			seg_mirr = first_seg(seg_lv(seg, s));
 -
--	if (!scan_vgs_for_pvs(cmd, 1)) {
+-			if (seg_is_striped(seg_mirr)) {
+-				seg = seg_mirr;
+-				break;
+-			}
+-		}
+-
+-
+-	if (seg_is_striped(seg)) {
+-		*stripesize = seg->stripe_size;
+-		return seg->area_count;
+-	}
+-
+-	*stripesize = 0;
+-	return 0;
+-}
+-
+-static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
+-		     struct lvresize_params *lp, struct dm_list *pvh)
+-{
+-	struct logical_volume *lv;
+-	struct lvinfo info;
+-	uint32_t stripesize_extents;
+-	uint32_t seg_stripes = 0, seg_stripesize = 0, seg_size;
+-	uint32_t seg_mirrors = 0;
+-	uint32_t extents_used;
+-	uint32_t size_rest;
+-	uint32_t pv_extent_count;
+-	alloc_policy_t alloc;
+-	struct logical_volume *lock_lv;
+-	struct lv_list *lvl;
+-	struct lv_segment *seg, *uninitialized_var(mirr_seg);
+-	uint32_t seg_extents;
+-	uint32_t sz, str;
+-	int status;
+-
+-	/* does LV exist? */
+-	if (!(lvl = find_lv_in_vg(vg, lp->lv_name))) {
+-		log_error("Logical volume %s not found in volume group %s",
+-			  lp->lv_name, lp->vg_name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (lv_is_external_origin(lvl->lv)) {
+-		/*
+-		 * Since external-origin can be activated read-only,
+-		 * there is no way to use extended areas.
+-		 */
+-		log_error("Cannot resize external origin \"%s\".", lvl->lv->name);
+-		return EINVALID_CMD_LINE;
+-	}
+-
+-	if (lvl->lv->status & (RAID_IMAGE | RAID_META)) {
+-		log_error("Cannot resize a RAID %s directly",
+-			  (lvl->lv->status & RAID_IMAGE) ? "image" :
+-			  "metadata area");
+-		return ECMD_FAILED;
+-	}
+-
+-	if (lv_is_raid_with_tracking(lvl->lv)) {
+-		log_error("Cannot resize %s while it is tracking a split image",
+-			  lvl->lv->name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (lp->ac_stripes) {
+-		if (vg->fid->fmt->features & FMT_SEGMENTS)
+-			lp->stripes = lp->ac_stripes_value;
+-		else
+-			log_warn("Varied striping not supported. Ignoring.");
+-	}
+-
+-	if (lp->ac_mirrors) {
+-		if (vg->fid->fmt->features & FMT_SEGMENTS)
+-			lp->mirrors = lp->ac_mirrors_value;
+-		else
+-			log_warn("Mirrors not supported. Ignoring.");
+-	}
+-
+-	if (lp->ac_stripesize &&
+-	    !_validate_stripesize(cmd, vg, lp))
+-		return EINVALID_CMD_LINE;
+-
+-	lv = lvl->lv;
+-
+-	if (lp->ac_policy) {
+-		if (!lv_is_cow(lv) &&
+-		    !lv_is_thin_pool(lv)) {
+-			log_error("Policy-based resize is supported only for snapshot and thin pool volumes.");
+-			return ECMD_FAILED;
+-		}
+-		if (!_adjust_policy_params(cmd, lv, lp))
+-			return ECMD_FAILED;
+-	}
+-
+-	if (!lv_is_visible(lv)) {
+-		log_error("Can't resize internal logical volume %s", lv->name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (lv->status & LOCKED) {
+-		log_error("Can't resize locked LV %s", lv->name);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (lv->status & CONVERTING) {
+-		log_error("Can't resize %s while lvconvert in progress", lv->name);
+-		return ECMD_FAILED;
+-	}
+-
+-	alloc = (alloc_policy_t)(lp->ac_alloc)?lp->ac_alloc: lv->alloc;
+-
+-	/*
+-	 * First adjust to an exact multiple of extent size.
+-	 * When extending by a relative amount we round that amount up.
+-	 * When reducing by a relative amount we remove at most that amount.
+-	 * When changing to an absolute size, we round that size up.
+-	 */
+-	if (lp->size) {
+-		if (lp->size % vg->extent_size) {
+-			if (lp->sign == SIGN_MINUS)
+-				lp->size -= lp->size % vg->extent_size;
+-			else
+-				lp->size += vg->extent_size -
+-				    (lp->size % vg->extent_size);
+-
+-			log_print_unless_silent("Rounding size to boundary between physical extents: %s",
+-						display_size(cmd, lp->size));
+-		}
+-
+-		lp->extents = lp->size / vg->extent_size;
+-	}
+-
+-	switch(lp->percent) {
+-		case PERCENT_VG:
+-			lp->extents = percent_of_extents(lp->extents, vg->extent_count,
+-							 (lp->sign != SIGN_MINUS));
+-			break;
+-		case PERCENT_FREE:
+-			lp->extents = percent_of_extents(lp->extents, vg->free_count,
+-							 (lp->sign != SIGN_MINUS));
+-			break;
+-		case PERCENT_LV:
+-			lp->extents = percent_of_extents(lp->extents, lv->le_count,
+-							 (lp->sign != SIGN_MINUS));
+-			break;
+-		case PERCENT_PVS:
+-			if (lp->argc) {
+-				pv_extent_count = pv_list_extents_free(pvh);
+-				lp->extents = percent_of_extents(lp->extents, pv_extent_count,
+-								 (lp->sign != SIGN_MINUS));
+-			} else
+-				lp->extents = percent_of_extents(lp->extents, vg->extent_count,
+-								 (lp->sign != SIGN_MINUS));
+-			break;
+-		case PERCENT_ORIGIN:
+-			if (!lv_is_cow(lv)) {
+-				log_error("Specified LV does not have an origin LV.");
+-				return EINVALID_CMD_LINE;
+-			}
+-			lp->extents = percent_of_extents(lp->extents, origin_from_cow(lv)->le_count,
+-							 (lp->sign != SIGN_MINUS));
+-			break;
+-		case PERCENT_NONE:
+-			break;
+-	}
+-
+-	if (lp->sign == SIGN_PLUS) {
+-		if (lp->extents >= (MAX_EXTENT_COUNT - lv->le_count)) {
+-			log_error("Unable to extend %s by %u extents, exceeds limit (%u).",
+-				  lp->lv_name, lv->le_count, MAX_EXTENT_COUNT);
+-			return EINVALID_CMD_LINE;
+-		}
+-		lp->extents += lv->le_count;
+-	}
+-
+-	if (lp->sign == SIGN_MINUS) {
+-		if (lp->extents >= lv->le_count) {
+-			log_error("Unable to reduce %s below 1 extent",
+-				  lp->lv_name);
+-			return EINVALID_CMD_LINE;
+-		}
+-
+-		lp->extents = lv->le_count - lp->extents;
+-	}
+-
+-	if (!lp->extents) {
+-		log_error("New size of 0 not permitted");
+-		return EINVALID_CMD_LINE;
+-	}
+-
+-	if (lp->extents == lv->le_count) {
+-		if (lp->ac_policy)
+-			return ECMD_PROCESSED; /* Nothing to do. */
+-		if (!lp->resizefs) {
+-			log_error("New size (%d extents) matches existing size "
+-				  "(%d extents)", lp->extents, lv->le_count);
+-			return EINVALID_CMD_LINE;
+-		}
+-		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
+-	}
+-
+-	seg_size = lp->extents - lv->le_count;
+-
+-	/* Use segment type of last segment */
+-	dm_list_iterate_items(seg, &lv->segments) {
+-		lp->segtype = seg->segtype;
+-	}
+-
+-	/* FIXME Support LVs with mixed segment types */
+-	if (lp->segtype != get_segtype_from_string(cmd, (lp->ac_type)?lp->ac_type:lp->segtype->name)) {
+-		log_error("VolumeType does not match (%s)", lp->segtype->name);
+-		return EINVALID_CMD_LINE;
+-	}
+-
+-	/* If extending, find mirrors of last segment */
+-	if ((lp->extents > lv->le_count)) {
+-		/*
+-		 * Has the user specified that they would like the additional
+-		 * extents of a mirror not to have an initial sync?
+-		 */
+-		if (seg_is_mirrored(first_seg(lv)) && lp->ac_no_sync)
+-			lv->status |= LV_NOTSYNCED;
+-
+-		dm_list_iterate_back_items(mirr_seg, &lv->segments) {
+-			if (seg_is_mirrored(mirr_seg))
+-				seg_mirrors = lv_mirror_count(mirr_seg->lv);
+-			else
+-				seg_mirrors = 0;
+-			break;
+-		}
+-
+-		if (!lp->ac_mirrors && seg_mirrors) {
+-			log_print_unless_silent("Extending %" PRIu32 " mirror images.",
+-						seg_mirrors);
+-			lp->mirrors = seg_mirrors;
+-		}
+-		if ((lp->ac_mirrors || seg_mirrors) &&
+-		    (lp->mirrors != seg_mirrors)) {
+-			log_error("Cannot vary number of mirrors in LV yet.");
+-			return EINVALID_CMD_LINE;
+-		}
+-
+-		if (seg_mirrors && !strcmp(mirr_seg->segtype->name, "raid10")) {
+-			lp->stripes = mirr_seg->area_count / seg_mirrors;
+-			lp->stripe_size = mirr_seg->stripe_size;
+-		}
+-	}
+-
+-	/* If extending, find stripes, stripesize & size of last segment */
+-	if ((lp->extents > lv->le_count) &&
+-	    !(lp->stripes == 1 || (lp->stripes > 1 && lp->stripe_size)) &&
+-	    strcmp(mirr_seg->segtype->name, "raid10")) {
+-		/* FIXME Don't assume mirror seg will always be AREA_LV */
+-		/* FIXME We will need to support resize for metadata LV as well,
+-		 *       and data LV could be any type (i.e. mirror)) */
+-		dm_list_iterate_items(seg, seg_mirrors ? &seg_lv(mirr_seg, 0)->segments :
+-				      lv_is_thin_pool(lv) ? &seg_lv(first_seg(lv), 0)->segments : &lv->segments) {
+-			/* Allow through "striped" and RAID 4/5/6/10 */
+-			if (!seg_is_striped(seg) &&
+-			    (!seg_is_raid(seg) || seg_is_mirrored(seg)) &&
+-			    strcmp(seg->segtype->name, "raid10"))
+-				continue;
+-
+-			sz = seg->stripe_size;
+-			str = seg->area_count - lp->segtype->parity_devs;
+-
+-			if ((seg_stripesize && seg_stripesize != sz &&
+-			     sz && !lp->stripe_size) ||
+-			    (seg_stripes && seg_stripes != str && !lp->stripes)) {
+-				log_error("Please specify number of "
+-					  "stripes (-i) and stripesize (-I)");
+-				return EINVALID_CMD_LINE;
+-			}
+-
+-			seg_stripesize = sz;
+-			seg_stripes = str;
+-		}
+-
+-		if (!lp->stripes)
+-			lp->stripes = seg_stripes;
+-		else if (seg_is_raid(first_seg(lv)) &&
+-			 (lp->stripes != seg_stripes)) {
+-			log_error("Unable to extend \"%s\" segment type with different number of stripes.", first_seg(lv)->segtype->ops->name(first_seg(lv)));
+-			return ECMD_FAILED;
+-		}
+-
+-		if (!lp->stripe_size && lp->stripes > 1) {
+-			if (seg_stripesize) {
+-				log_print_unless_silent("Using stripesize of last segment %s",
+-							display_size(cmd, (uint64_t) seg_stripesize));
+-				lp->stripe_size = seg_stripesize;
+-			} else {
+-				lp->stripe_size =
+-					find_config_tree_int(cmd, metadata_stripesize_CFG) * 2;
+-				log_print_unless_silent("Using default stripesize %s",
+-							display_size(cmd, (uint64_t) lp->stripe_size));
+-			}
+-		}
+-	}
+-
+-	/* If reducing, find stripes, stripesize & size of last segment */
+-	if (lp->extents < lv->le_count) {
+-		extents_used = 0;
+-
+-		if (lp->stripes || lp->stripe_size || lp->mirrors)
+-			log_error("Ignoring stripes, stripesize and mirrors "
+-				  "arguments when reducing");
+-
+-		dm_list_iterate_items(seg, &lv->segments) {
+-			seg_extents = seg->len;
+-
+-			/* Check for underlying stripe sizes */
+-			seg_stripes = lvseg_get_stripes(seg, &seg_stripesize);
+-
+-			if (seg_is_mirrored(seg))
+-				seg_mirrors = lv_mirror_count(seg->lv);
+-			else
+-				seg_mirrors = 0;
+-
+-			if (lp->extents <= extents_used + seg_extents)
+-				break;
+-
+-			extents_used += seg_extents;
+-		}
+-
+-		seg_size = lp->extents - extents_used;
+-		lp->stripe_size = seg_stripesize;
+-		lp->stripes = seg_stripes;
+-		lp->mirrors = seg_mirrors;
+-	}
+-
+-	if (lp->stripes > 1 && !lp->stripe_size) {
+-		log_error("Stripesize for striped segment should not be 0!");
+-		return EINVALID_CMD_LINE;
+-	}
+-
+-	if (lp->stripes > 1) {
+-		if (lp->stripe_size < STRIPE_SIZE_MIN) {
+-			log_error("Invalid stripe size %s",
+-				  display_size(cmd, (uint64_t) lp->stripe_size));
+-			return EINVALID_CMD_LINE;
+-		}
+-
+-		if (!(stripesize_extents = lp->stripe_size / vg->extent_size))
+-			stripesize_extents = 1;
+-
+-		size_rest = seg_size % (lp->stripes * stripesize_extents);
+-		/* Round toward the original size. */
+-		if (size_rest &&
+-		    ((lp->extents < lv->le_count) ||
+-		     !lp->percent ||
+-		     (vg->free_count >= (lp->extents - lv->le_count - size_rest +
+-					 (lp->stripes * stripesize_extents))))) {
+-			log_print_unless_silent("Rounding size (%d extents) up to stripe "
+-						"boundary size for segment (%d extents)",
+-						lp->extents, lp->extents - size_rest +
+-						(lp->stripes * stripesize_extents));
+-			lp->extents = lp->extents - size_rest +
+-				      (lp->stripes * stripesize_extents);
+-		} else if (size_rest) {
+-			log_print_unless_silent("Rounding size (%d extents) down to stripe "
+-						"boundary size for segment (%d extents)",
+-						lp->extents, lp->extents - size_rest);
+-			lp->extents = lp->extents - size_rest;
+-		}
+-	}
+-
+-	if (lp->extents < lv->le_count) {
+-		if (lp->resize == LV_EXTEND) {
+-			log_error("New size given (%d extents) not larger "
+-				  "than existing size (%d extents)",
+-				  lp->extents, lv->le_count);
+-			return EINVALID_CMD_LINE;
+-		}
+-		lp->resize = LV_REDUCE;
+-	} else if (lp->extents > lv->le_count) {
+-		if (lp->resize == LV_REDUCE) {
+-			log_error("New size given (%d extents) not less than "
+-				  "existing size (%d extents)", lp->extents,
+-				  lv->le_count);
+-			return EINVALID_CMD_LINE;
+-		}
+-		lp->resize = LV_EXTEND;
+-	} else if (lp->extents == lv->le_count) {
+-		if (lp->ac_policy)
+-			return ECMD_PROCESSED; /* Nothing to do. */
+-		if (!lp->resizefs) {
+-			log_error("New size (%d extents) matches existing size "
+-				  "(%d extents)", lp->extents, lv->le_count);
+-			return EINVALID_CMD_LINE;
+-		}
+-		lp->resize = LV_EXTEND;
+-	}
+-
+-	if (lv_is_origin(lv)) {
+-		if (lp->resize == LV_REDUCE) {
+-			log_error("Snapshot origin volumes cannot be reduced "
+-				  "in size yet.");
+-			return ECMD_FAILED;
+-		}
+-
+-		if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
+-			log_error("Snapshot origin volumes can be resized "
+-				  "only while inactive: try lvchange -an");
+-			return ECMD_FAILED;
+-		}
+-	}
+-
+-	if (lv_is_thin_pool(lv)) {
+-		if (lp->resize == LV_REDUCE) {
+-			log_error("Thin pool volumes cannot be reduced in size yet.");
+-			return ECMD_FAILED;
+-		}
+-
+-		if (lp->resizefs) {
+-			log_warn("Thin pool volumes do not have filesystem.");
+-			lp->resizefs = 0;
+-		}
+-	}
+-
+-	if ((lp->resize == LV_REDUCE) && lp->argc)
+-		log_warn("Ignoring PVs on command line when reducing");
+-
+-	/* Request confirmation before operations that are often mistakes. */
+-	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&
+-	    !_request_confirmation(cmd, vg, lv, lp)) {
 -		stack;
 -		return ECMD_FAILED;
 -	}
 -
--	if (!(iter = dev_iter_create(cmd->filter, 1))) {
--		log_error("dev_iter creation failed");
+-	if (lp->resizefs) {
+-		if (!lp->nofsck &&
+-		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_CHECK, &status)) {
+-			if (status != FSADM_CHECK_FAILS_FOR_MOUNTED) {
+-				log_error("Filesystem check failed.");
+-				return ECMD_FAILED;
+-			}
+-			/* some filesystems supports online resize */
+-		}
+-
+-		if ((lp->resize == LV_REDUCE) &&
+-		    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
+-			log_error("Filesystem resize failed.");
+-			return ECMD_FAILED;
+-		}
+-	}
+-
+-	if (!archive(vg)) {
+-		stack;
 -		return ECMD_FAILED;
 -	}
 -
--	while ((dev = dev_iter_get(iter))) {
--		if (!(pv = pv_read(cmd, dev_name(dev), 0, 0))) {
--			memset(&pv_dummy, 0, sizeof(pv_dummy));
--			dm_list_init(&pv_dummy.tags);
--			dm_list_init(&pv_dummy.segments);
--			pv_dummy.dev = dev;
--			pv = &pv_dummy;
+-	log_print_unless_silent("%sing logical volume %s to %s",
+-				(lp->resize == LV_REDUCE) ? "Reduc" : "Extend",
+-				lp->lv_name,
+-				display_size(cmd, (uint64_t) lp->extents * vg->extent_size));
+-
+-	if (lp->resize == LV_REDUCE) {
+-		if (!lv_reduce(lv, lv->le_count - lp->extents)) {
+-			stack;
+-			return ECMD_FAILED;
 -		}
--		ret = process_single_pv(cmd, NULL, pv, handle);
+-	} else if ((lp->extents > lv->le_count) && /* Ensure we extend */
+-		   !lv_extend(lv, lp->segtype,
+-			      lp->stripes, lp->stripe_size,
+-			      lp->mirrors, first_seg(lv)->region_size,
+-			      lp->extents - lv->le_count, NULL,
+-			      pvh, alloc)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
 -
--		free_pv_fid(pv);
+-	/* store vg on disk(s) */
+-	if (!vg_write(vg)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
 -
-+		ret = process_single_pv(cmd, vg, pvl->pv, handle);
- 		if (ret > ret_max)
- 			ret_max = ret;
- 		if (sigint_caught())
- 			break;
- 	}
- 
--	dev_iter_destroy(iter);
+-	/* If snapshot, must suspend all associated devices */
+-	if (lv_is_cow(lv))
+-		lock_lv = origin_from_cow(lv);
+-	else
+-		lock_lv = lv;
 -
--	return ret_max;
+-	if (!suspend_lv(cmd, lock_lv)) {
+-		log_error("Failed to suspend %s", lp->lv_name);
+-		vg_revert(vg);
+-		backup(vg);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!vg_commit(vg)) {
+-		stack;
+-		if (!resume_lv(cmd, lock_lv))
+-			stack;
+-		backup(vg);
+-		return ECMD_FAILED;
+-	}
+-
+-	if (!resume_lv(cmd, lock_lv)) {
+-		log_error("Problem reactivating %s", lp->lv_name);
+-		backup(vg);
+-		return ECMD_FAILED;
+-	}
+-
+-	backup(vg);
+-
+-	/*
+-	 * Update lvm pool metadata (drop messages) if the pool has been
+-	 * resumed and do a pool active/deactivate in other case.
+-	 *
+-	 * Note: Active thin pool can be waiting for resize.
+-	 *
+-	 * FIXME: Activate only when thin volume is active
+-	 */
+-	if (lv_is_thin_pool(lv) &&
+-	    !update_pool_lv(lv, !lv_is_active(lv))) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
+-
+-	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
+-
+-	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+-	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
+-		stack;
+-		return ECMD_FAILED;
+-	}
+-
+-	return ECMD_PROCESSED;
 -}
 -
--/*
-- * If the lock_type is LCK_VG_READ (used only in reporting commands),
-- * we lock VG_GLOBAL to enable use of metadata cache.
-- * This can pause alongide pvscan or vgscan process for a while.
-- */
--int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
--		    struct volume_group *vg, uint32_t flags,
--		    int scan_label_only, void *handle,
--		    process_single_pv_fn_t process_single_pv)
--{
--	int opt = 0;
--	int ret_max = ECMD_PROCESSED;
--	int ret = 0;
--	int lock_global = !(flags & READ_WITHOUT_LOCK) && !(flags & READ_FOR_UPDATE) && !lvmetad_active();
--
--	struct pv_list *pvl;
--	struct physical_volume *pv;
--	struct dm_list *pvslist, *vgnames;
--	struct dm_list tags;
--	struct str_list *sll;
--	char *at_sign, *tagname;
--	int scanned = 0;
--
--	dm_list_init(&tags);
--
--	if (lock_global && !lock_vol(cmd, VG_GLOBAL, LCK_VG_READ)) {
--		log_error("Unable to obtain global lock.");
--		return ECMD_FAILED;
--	}
--
--	if (argc) {
--		log_verbose("Using physical volume(s) on command line");
--		for (; opt < argc; opt++) {
--			dm_unescape_colons_and_at_signs(argv[opt], NULL, &at_sign);
--			if (at_sign && (at_sign == argv[opt])) {
--				tagname = at_sign + 1;
--
--				if (!validate_tag(tagname)) {
--					log_error("Skipping invalid tag %s",
--						  tagname);
--					if (ret_max < EINVALID_CMD_LINE)
--						ret_max = EINVALID_CMD_LINE;
--					continue;
--				}
--				if (!str_list_add(cmd->mem, &tags,
--						  dm_pool_strdup(cmd->mem,
--							      tagname))) {
--					log_error("strlist allocation failed");
--					goto bad;
--				}
--				continue;
--			}
--			if (vg) {
--				if (!(pvl = find_pv_in_vg(vg, argv[opt]))) {
--					log_error("Physical Volume \"%s\" not "
--						  "found in Volume Group "
--						  "\"%s\"", argv[opt],
--						  vg->name);
--					ret_max = ECMD_FAILED;
--					continue;
--				}
--				pv = pvl->pv;
--			} else {
--				if (!(pv = pv_read(cmd, argv[opt],
--						   1, scan_label_only))) {
--					log_error("Failed to read physical "
--						  "volume \"%s\"", argv[opt]);
--					ret_max = ECMD_FAILED;
--					continue;
--				}
--
--				/*
--				 * If a PV has no MDAs it may appear to be an
--				 * orphan until the metadata is read off
--				 * another PV in the same VG.  Detecting this
--				 * means checking every VG by scanning every
--				 * PV on the system.
--				 */
--				if (!scanned && is_orphan(pv) &&
--				    !dm_list_size(&pv->fid->metadata_areas_in_use)) {
--					if (!scan_label_only &&
--					    !scan_vgs_for_pvs(cmd, 1)) {
--						stack;
--						ret_max = ECMD_FAILED;
--						continue;
--					}
--					scanned = 1;
--					free_pv_fid(pv);
--					if (!(pv = pv_read(cmd, argv[opt],
--							   1,
--							   scan_label_only))) {
--						log_error("Failed to read "
--							  "physical volume "
--							  "\"%s\"", argv[opt]);
--						ret_max = ECMD_FAILED;
--						continue;
--					}
--				}
--			}
--
--			ret = process_single_pv(cmd, vg, pv, handle);
--
--			/*
--			 * Free PV only if we called pv_read before,
--			 * otherwise the PV structure is part of the VG.
--			 */
--			if (!vg)
--				free_pv_fid(pv);
--
--			if (ret > ret_max)
--				ret_max = ret;
--			if (sigint_caught())
--				goto out;
--		}
--		if (!dm_list_empty(&tags) && (vgnames = get_vgnames(cmd, 1)) &&
--			   !dm_list_empty(vgnames)) {
--			dm_list_iterate_items(sll, vgnames) {
--				vg = vg_read(cmd, sll->str, NULL, flags);
--				if (vg_read_error(vg)) {
--					ret_max = ECMD_FAILED;
--					release_vg(vg);
--					stack;
--					continue;
--				}
--
--				ret = process_each_pv_in_vg(cmd, vg, &tags,
--							    handle,
--							    process_single_pv);
--
--				unlock_and_release_vg(cmd, vg, sll->str);
--
--				if (ret > ret_max)
--					ret_max = ret;
--				if (sigint_caught())
--					goto out;
--			}
--		}
--	} else {
--		if (vg) {
--			log_verbose("Using all physical volume(s) in "
--				    "volume group");
--			ret = process_each_pv_in_vg(cmd, vg, NULL, handle,
--						    process_single_pv);
--			if (ret > ret_max)
--				ret_max = ret;
--			if (sigint_caught())
--				goto out;
--		} else if (arg_count(cmd, all_ARG)) {
--			ret = _process_all_devs(cmd, handle, process_single_pv);
--			if (ret > ret_max)
--				ret_max = ret;
--			if (sigint_caught())
--				goto out;
--		} else {
--			log_verbose("Scanning for physical volume names");
--
--			lvmcache_seed_infos_from_lvmetad(cmd);
--			if (!(pvslist = get_pvs(cmd)))
--				goto bad;
--
--			dm_list_iterate_items(pvl, pvslist) {
--				ret = process_single_pv(cmd, NULL, pvl->pv,
--						     handle);
--				free_pv_fid(pvl->pv);
--				if (ret > ret_max)
--					ret_max = ret;
--				if (sigint_caught())
--					goto out;
--			}
--		}
--	}
--out:
--	if (lock_global)
--		unlock_vg(cmd, VG_GLOBAL);
- 	return ret_max;
--bad:
--	if (lock_global)
--		unlock_vg(cmd, VG_GLOBAL);
--
--	return ECMD_FAILED;
- }
- 
- /*
-@@ -1434,19 +1204,26 @@ static int get_arg_vgnames(struct cmd_context *cmd,
- 	return ret_max;
- }
- 
--static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
-+static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames,
-+			   int include_orphan)
+ int lvresize(struct cmd_context *cmd, int argc, char **argv)
  {
--	int ret_max = ECMD_PROCESSED;
-+	struct dm_list orphan_vgnames;
- 	struct dm_list *vgnames;
-+	struct dm_list *tmp, *safe;
- 	struct str_list *sl;
- 	const char *vg_name;
-+	const char *dup_str;
-+	int ret_max = ECMD_PROCESSED;
-+	int rv;
-+
-+	dm_list_init(&orphan_vgnames);
- 
- 	log_verbose("Finding all volume groups");
- 
- 	if (!lvmetad_vg_list_to_lvmcache(cmd))
- 		stack;
- 
--	if (!(vgnames = get_vgnames(cmd, 0)) || dm_list_empty(vgnames))
-+	if (!(vgnames = get_vgnames(cmd, include_orphan)) || dm_list_empty(vgnames))
- 		goto out;
- 
- 	dm_list_iterate_items(sl, vgnames) {
-@@ -1454,12 +1231,33 @@ static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
- 		if (!vg_name)
- 			continue;
- 
--		if (!str_list_add_order(cmd->mem, all_vgnames,
--					dm_pool_strdup(cmd->mem, vg_name))) {
-+		dup_str = dm_pool_strdup(cmd->mem, vg_name);
-+		if (!dup_str) {
-+			log_error("strdup allocation failed");
-+			return ECMD_FAILED;
-+		}
-+
-+		if (include_orphan && is_orphan_vg(vg_name))
-+			rv = str_list_add(cmd->mem, &orphan_vgnames, dup_str);
-+		else
-+			rv = str_list_add_order(cmd->mem, all_vgnames, dup_str);
-+
-+		if (!rv) {
- 			log_error("strlist allocation failed");
- 			return ECMD_FAILED;
- 		}
- 	}
-+
-+	/*
-+	 * vg list processing/locking requires the orphan vgs to be at the end,
-+	 * so we save all the orphan vgs on the tmp list and then add them to
-+	 * to the end of the real list here.
-+	 */
-+	dm_list_iterate_safe(tmp, safe, &orphan_vgnames) {
-+		dm_list_del(tmp);
-+		dm_list_add(all_vgnames, tmp);
-+	}
-+
- out:
- 	return ret_max;
- }
-@@ -1480,7 +1278,9 @@ static void release_vg_list(struct cmd_context *cmd, struct dm_list *vgl_list)
- 	struct vg_list *vgl;
- 
- 	dm_list_iterate_items(vgl, vgl_list) {
--		if (vg_read_error(vgl->vg))
-+		if (is_orphan_vg(vgl->vg->name))
-+			release_vg(vgl->vg);
-+		else if (vg_read_error(vgl->vg))
- 			release_vg(vgl->vg);
- 		else
- 			unlock_and_release_vg(cmd, vgl->vg, vgl->vg->name);
-@@ -1495,6 +1295,7 @@ static int read_vg_name_list(struct cmd_context *cmd, uint32_t flags,
- 	struct vg_list *vgl;
- 	struct str_list *sl;
- 	const char *vg_name;
-+	int consistent;
- 	int ret_max = ECMD_PROCESSED;
- 
- 	dm_list_iterate_items(sl, vg_name_list) {
-@@ -1506,15 +1307,27 @@ static int read_vg_name_list(struct cmd_context *cmd, uint32_t flags,
- 			return ECMD_FAILED;
- 		}
- 
--		vg = vg_read(cmd, vg_name, NULL, flags);
--		if (vg_read_error(vg)) {
--			if (!((flags & READ_ALLOW_INCONSISTENT) &&
--			     (vg_read_error(vg) == FAILED_INCONSISTENT))) {
--				ret_max = ECMD_FAILED;
--				release_vg(vg);
-+		if (is_orphan_vg(vg_name)) {
-+			consistent = 0;
-+
-+			if (!(vg = vg_read_internal(cmd, vg_name, NULL, 1, &consistent))) {
- 				stack;
- 				continue;
- 			}
-+
-+			if (!consistent)
-+				log_warn("WARNING: Volume Group %s is not consistent", vg_name);
-+		} else {
-+			vg = vg_read(cmd, vg_name, NULL, flags);
-+			if (vg_read_error(vg)) {
-+				if (!((flags & READ_ALLOW_INCONSISTENT) &&
-+			     	     (vg_read_error(vg) == FAILED_INCONSISTENT))) {
-+					ret_max = ECMD_FAILED;
-+					release_vg(vg);
-+					stack;
-+					continue;
-+				}
-+			}
- 		}
- 
- 		vgl->vg = vg;
-@@ -1605,7 +1418,7 @@ int process_each_vg(struct cmd_context *cmd,
- 
- 	if ((dm_list_empty(&arg_vgnames) && (flags & ENABLE_ALL_VGNAMES)) ||
- 	    !dm_list_empty(&arg_tags)) {
--		ret = get_all_vgnames(cmd, &all_vgnames);
-+		ret = get_all_vgnames(cmd, &all_vgnames, 0);
- 		if (ret != ECMD_PROCESSED)
- 			return ret;
- 	}
-@@ -1843,7 +1656,7 @@ int process_each_lv(struct cmd_context *cmd,
- 
- 	if ((dm_list_empty(&arg_vgnames) && (flags & ENABLE_ALL_VGNAMES)) ||
- 	    !dm_list_empty(&arg_tags)) {
--		ret = get_all_vgnames(cmd, &all_vgnames);
-+		ret = get_all_vgnames(cmd, &all_vgnames, 0);
- 		if (ret != ECMD_PROCESSED)
- 			return ret;
- 	}
-@@ -1882,3 +1695,553 @@ out:
- 	return ret_max;
- }
- 
-+static int get_arg_pvnames(struct cmd_context *cmd,
-+			   int argc, char **argv,
-+			   struct dm_list *arg_pvnames,
-+			   struct dm_list *arg_tags)
-+{
-+	int opt = 0;
-+	char *at_sign, *tagname;
-+	char *arg_name;
-+	int ret_max = ECMD_PROCESSED;
-+
-+	log_verbose("Using physical volume(s) on command line");
-+
-+	for (; opt < argc; opt++) {
-+		arg_name = argv[opt];
-+
-+		dm_unescape_colons_and_at_signs(arg_name, NULL, &at_sign);
-+		if (at_sign && (at_sign == arg_name)) {
-+			tagname = at_sign + 1;
-+
-+			if (!validate_tag(tagname)) {
-+				log_error("Skipping invalid tag %s", tagname);
-+				if (ret_max < EINVALID_CMD_LINE)
-+					ret_max = EINVALID_CMD_LINE;
-+				continue;
-+			}
-+			if (!str_list_add(cmd->mem, arg_tags,
-+					  dm_pool_strdup(cmd->mem, tagname))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+			continue;
-+		}
-+
-+		if (!str_list_add(cmd->mem, arg_pvnames,
-+				  dm_pool_strdup(cmd->mem, arg_name))) {
-+			log_error("strlist allocation failed");
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	return ret_max;
-+}
-+
-+static int get_all_devs(struct cmd_context *cmd,
-+			struct dm_list *all_pvnames,
-+			struct dm_list *dummy_pvnames)
-+{
-+	struct physical_volume *pv;
-+	struct dev_iter *iter;
-+	struct device *dev;
-+	const char *pv_name;
-+
-+	if (!scan_vgs_for_pvs(cmd, 1)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
-+		log_error("dev_iter creation failed");
-+		return ECMD_FAILED;
-+	}
-+
-+	while ((dev = dev_iter_get(iter))) {
-+		pv_name = dev_name(dev);
-+
-+		if (!(pv = pv_read(cmd, pv_name, 0, 0))) {
-+			if (!str_list_add(cmd->mem, dummy_pvnames,
-+					  dm_pool_strdup(cmd->mem, pv_name))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+                } else {
-+			if (!str_list_add(cmd->mem, all_pvnames,
-+					  dm_pool_strdup(cmd->mem, pv_name))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+			free_pv_fid(pv);
-+		}
-+
-+		if (sigint_caught())
-+			break;
-+	}
-+
-+	dev_iter_destroy(iter);
-+
-+	return ECMD_PROCESSED;
-+}
-+
-+/*
-+ * If the vg for the pv is known, add that vg name to vg_name_list.
-+ * If the pv is known to be an orphan, duplicate that pv name onto orphan_pvnames.
-+ * If the pv has no mda's, it may be an orphan, or it may not be (if other pvs
-+ * with mdas from its vg are missing), so put a duplicate that pv name onto
-+ * nomda_pvnames.
-+ */
-+
-+static int get_vgnames_for_pvnames(struct cmd_context *cmd, uint32_t flags,
-+				   int scan_label_only,
-+				   struct dm_list *arg_pvnames,
-+				   struct dm_list *vg_name_list,
-+				   struct dm_list *orphan_pvnames,
-+				   struct dm_list *nomda_pvnames)
-+{
-+	struct physical_volume *pv;
-+	struct str_list *sl;
-+	const char *vg_name;
-+	const char *pv_name;
-+	int ret_max = ECMD_PROCESSED;
-+
-+	dm_list_iterate_items(sl, arg_pvnames) {
-+		pv_name = sl->str;
-+
-+		if (!(pv = pv_read(cmd, pv_name, 1, scan_label_only))) {
-+			log_error("Failed to read physical volume \"%s\"",
-+				  pv_name);
-+			ret_max = ECMD_FAILED;
-+			continue;
-+		}
-+
-+		if (is_orphan(pv) && !dm_list_size(&pv->fid->metadata_areas_in_use)) {
-+			if (!str_list_add(cmd->mem, nomda_pvnames,
-+					  dm_pool_strdup(cmd->mem, pv_name))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+		} else if (is_orphan(pv)) {
-+			if (!str_list_add(cmd->mem, orphan_pvnames,
-+					  dm_pool_strdup(cmd->mem, pv_name))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+		} else {
-+			vg_name = pv_vg_name(pv);
-+
-+			if (!str_list_add_order(cmd->mem, vg_name_list,
-+						dm_pool_strdup(cmd->mem, vg_name))) {
-+				log_error("strlist allocation failed");
-+				return ECMD_FAILED;
-+			}
-+		}
-+
-+		/* FIXME: why is this done after pv_read's? */
-+		free_pv_fid(pv);
-+	}
-+
-+	return ret_max;
-+}
-+
-+/*
-+ * If a PV has no MDAs it may appear to be an
-+ * orphan until the metadata is read off
-+ * another PV in the same VG.  Detecting this
-+ * means checking every VG by scanning every
-+ * PV on the system.
-+ */
-+
-+static int verify_nomda_pvnames(struct cmd_context *cmd,
-+				struct dm_list *nomda_pvnames,
-+				struct dm_list *vg_name_list)
-+{
-+	struct physical_volume *pv;
-+	struct str_list *sl, *safe;
-+	const char *vg_name;
-+	const char *pv_name;
-+	int ret_max = ECMD_PROCESSED;
-+
-+	if (!scan_vgs_for_pvs(cmd, 1)) {
-+		stack;
-+		return ECMD_FAILED;
-+	}
-+
-+	dm_list_iterate_items_safe(sl, safe, nomda_pvnames) {
-+		pv_name = sl->str;
-+
-+		if (!(pv = pv_read(cmd, pv_name, 1, 0))) {
-+			str_list_del(nomda_pvnames, pv_name);
-+			log_error("Failed to read physical volume \"%s\"", pv_name);
-+			ret_max = ECMD_FAILED;
-+			continue;
-+		}
-+
-+		if (!is_orphan(pv)) {
-+			str_list_del(nomda_pvnames, pv_name);
-+
-+			vg_name = pv_vg_name(pv);
-+			if (!str_list_add_order(cmd->mem, vg_name_list,
-+						dm_pool_strdup(cmd->mem, vg_name))) {
-+				log_error("strlist allocation failed");
-+				ret_max = ECMD_FAILED;
-+			}
-+		}
-+
-+		free_pv_fid(pv);
-+	}
-+
-+	return ret_max;
-+}
-+
-+static int process_pv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
-+				   struct dm_list *vg_name_list,
-+				   struct dm_list *pv_name_list,
-+				   struct dm_list *arg_tags,
-+				   struct dm_list *vgl_list,
-+				   void *handle,
-+				   process_single_pv_fn_t process_single_pv)
-+{
-+	struct volume_group *vg, *vg_arg;
-+	struct physical_volume *pv;
-+	struct vg_list *vgl;
-+	struct pv_list *pvl;
-+	struct str_list *sl;
-+	const char *vg_name;
-+	const char *pv_name;
-+	int process_all = 0;
-+	int process_pv;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret = 0;
-+
-+	if (dm_list_empty(pv_name_list) && dm_list_empty(arg_tags))
-+		process_all = 1;
-+
-+	dm_list_iterate_items(sl, vg_name_list) {
-+		vg_name = sl->str;
-+
-+		vgl = find_vgl(vgl_list, vg_name);
-+		if (!vgl)
-+			continue;
-+
-+		vg = vgl->vg;
-+
-+		/*
-+		 * Be consistent with process_orphan_name_list which does
-+		 * not pass the orphan vg to process_single_pv.
-+		 */
-+		if (is_orphan_vg(vg_name))
-+			vg_arg = NULL;
-+		else
-+			vg_arg = vg;
-+
-+		dm_list_iterate_items(pvl, &vg->pvs) {
-+
-+			pv = pvl->pv;
-+
-+			pv_name = pv_dev_name(pv);
-+
-+			process_pv = 0;
-+
-+			if (process_all)
-+				process_pv = 1;
-+
-+			if (!process_pv && !dm_list_empty(pv_name_list) &&
-+			    str_list_match_item(pv_name_list, pv_name))
-+				process_pv = 1;
-+
-+			if (!process_pv && !dm_list_empty(arg_tags) &&
-+			    str_list_match_list(arg_tags, &pv->tags, NULL))
-+				process_pv = 1;
-+
-+			if (process_pv)
-+				ret = process_single_pv(cmd, vg_arg, pv, handle);
-+
-+			if (ret > ret_max)
-+				ret_max = ret;
-+			if (sigint_caught())
-+				break;
-+		}
-+	}
-+
-+	return ret_max;
-+}
-+
-+static int process_orphan_name_list(struct cmd_context *cmd,
-+				    int scan_label_only,
-+				    struct dm_list *orphan_pvnames,
-+				    void *handle,
-+				    process_single_pv_fn_t process_single_pv)
-+{
-+	struct physical_volume *pv;
-+	struct str_list *sl;
-+	const char *pv_name;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret;
-+
-+	dm_list_iterate_items(sl, orphan_pvnames) {
-+		pv_name = sl->str;
-+
-+		if (!(pv = pv_read(cmd, pv_name, 1, scan_label_only))) {
-+			log_error("Failed to read physical volume \"%s\"",
-+				  pv_name);
-+			ret_max = ECMD_FAILED;
-+			continue;
-+		}
-+
-+		ret = process_single_pv(cmd, NULL, pv, handle);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+		if (sigint_caught())
-+			break;
-+
-+		free_pv_fid(pv);
-+	}
-+
-+	return ret_max;
-+}
-+
-+static int process_dummy_name_list(struct cmd_context *cmd,
-+				   struct dm_list *dummy_pvnames,
-+				   void *handle,
-+				   process_single_pv_fn_t process_single_pv)
-+{
-+	struct physical_volume *pv;
-+	struct physical_volume pv_dummy;
-+	struct str_list *sl;
-+	struct device *dev;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret;
-+
-+	dm_list_iterate_items(sl, dummy_pvnames) {
-+		dev = dev_cache_get(sl->str, NULL);
-+		if (!dev) {
-+			ret_max = ECMD_FAILED;
-+			continue;
-+		}
-+
-+		memset(&pv_dummy, 0, sizeof(pv_dummy));
-+		dm_list_init(&pv_dummy.tags);
-+		dm_list_init(&pv_dummy.segments);
-+		pv_dummy.dev = dev;
-+		pv = &pv_dummy;
-+
-+		ret = process_single_pv(cmd, NULL, pv, handle);
-+
-+		if (ret > ret_max)
-+			ret_max = ret;
-+		if (sigint_caught())
-+			break;
-+	}
-+
-+	return ret_max;
-+}
-+
-+int process_each_pv(struct cmd_context *cmd,
-+		    int argc, char **argv,
-+		    struct volume_group *vg,
-+		    uint32_t flags,
-+		    int scan_label_only,
-+		    void *handle,
-+		    process_single_pv_fn_t process_single_pv)
-+{
-+	struct dm_list arg_tags;        /* named in argv */
-+	struct dm_list arg_pvnames;     /* named in argv */
-+	struct dm_list all_pvnames;     /* real pvs from scanning all devs */
-+	struct dm_list dummy_pvnames;   /* non-pvs from scanning all devs */
-+	struct dm_list nomda_pvnames;   /* dup from arg_ or all_ */
-+	struct dm_list orphan_pvnames;  /* dup from arg_ or all_ */
-+	struct dm_list *pv_name_list;   /* set to arg_ or all_ */
-+	struct dm_list vg_name_list;    /* vgs to process pvs in */
-+	struct dm_list vgl_list;        /* result of reading vg_name_list */
-+	struct vg_list *vgl;
-+	int ret_max = ECMD_PROCESSED;
-+	int ret;
-+
-+	dm_list_init(&arg_tags);
-+	dm_list_init(&arg_pvnames);
-+	dm_list_init(&all_pvnames);
-+	dm_list_init(&dummy_pvnames);
-+	dm_list_init(&nomda_pvnames);
-+	dm_list_init(&orphan_pvnames);
-+	dm_list_init(&vg_name_list);
-+	dm_list_init(&vgl_list);
-+
-+	/*
-+	 * Create two lists from argv:
-+	 * arg_pvnames: pvs explicitly named in argv
-+	 * arg_tags: tags explicitly named in argv
-+	 */
-+
-+	ret = get_arg_pvnames(cmd, argc, argv, &arg_pvnames, &arg_tags);
-+	if (ret != ECMD_PROCESSED)
-+		return ret;
-+
-+	/*
-+	 * Caller has already selected and read one vg in which to
-+	 * process pvs. Empty arg_pvnames and empty arg_tags means
-+	 * all pvs in this vg, empty arg_pvnames and non-empty arg_tags
-+	 * means all pvs in this vg with a matching tag.
-+	 */
-+
-+	if (vg) {
-+		if (!str_list_add(cmd->mem, &vg_name_list,
-+				  dm_pool_strdup(cmd->mem, vg->name))) {
-+			log_error("strlist allocation failed");
-+			return ECMD_FAILED;
-+		}
-+		if (!(vgl = dm_pool_alloc(cmd->mem, sizeof(*vgl)))) {
-+			log_error("vg_list alloc failed");
-+			return ECMD_FAILED;
-+		}
-+		vgl->vg = vg;
-+		dm_list_add(&vgl_list, &vgl->list);
-+		goto process;
-+	}
-+
-+	/*
-+	 * Caller wants to process all devs; all devs are split into two lists:
-+	 * all_pvnames: pv names (pv_read does not return error)
-+	 * dummy_pvnames: non-pv devs (pv_read returns error)
-+	 */
-+
-+	if (dm_list_empty(&arg_pvnames) && dm_list_empty(&arg_tags) &&
-+	    (flags & ENABLE_ALL_DEVS)) {
-+		ret = get_all_devs(cmd, &all_pvnames, &dummy_pvnames);
-+		if (ret != ECMD_PROCESSED)
-+			return ret;
-+	}
-+
-+	/*
-+	 * Create list of vg names for all the pvs we want to process
-+	 * so those pvs can be processed in the context of their vg.
-+	 *
-+	 * For the pvs that are orphans, dup their name into orphan_pvnames.
-+	 * For the pvs that have no mda, dup their name into nomda_pvnames.
-+	 *
-+	 * (One or both of arg_pvnames or all_pvnames will be empty.)
-+	 */
-+
-+	ret = get_vgnames_for_pvnames(cmd, flags, scan_label_only,
-+				      &arg_pvnames, &vg_name_list,
-+				      &orphan_pvnames, &nomda_pvnames);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+
-+	ret = get_vgnames_for_pvnames(cmd, flags, scan_label_only,
-+				      &all_pvnames, &vg_name_list,
-+				      &orphan_pvnames, &nomda_pvnames);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+
-+	/*
-+	 * We now have the following lists:
-+	 * arg_tags: tags named in argv
-+	 * arg_pvnames: pvs named in argv (may be orphan or not)
-+	 * all_pvnames: pvs found from full scan (may be orphan or not)
-+	 * dummy_pvnames: devs found from full scan that are not pvs
-+	 * orphan_pvnames: pvs that are orphans (also exist in arg_ or all_)
-+	 * nomda_pvnames: pvs that have no mda (also exist in arg_ or all_)
-+	 * vg_name_list: vg names for pvs in arg_ or all_
-+	 *
-+	 * Next decide if we need to go through all vg names.
-+	 */
-+
-+	if (dm_list_empty(&arg_pvnames) &&
-+	    dm_list_empty(&all_pvnames) &&
-+	    dm_list_empty(&vg_name_list) &&
-+	    (flags & ENABLE_ALL_VGNAMES) &&
-+	    !(flags & ENABLE_ALL_DEVS) && !argc) {
-+
-+		/*
-+		 * Process all pvs in all vgs (including orphan vgs).
-+		 * This option is implied by nothing being specified,
-+		 * which means all of the conditions above should pass.
-+		 * (testing some of them is redundant but makes the point).
-+		 * In this case, orphan pvs are handled by
-+		 * process_pv_vg_name_list, and not by process_orphan_name_list
-+		 * which is used when arg_pvnames or all_pvnames include orphans.
-+		 * The "1" arg here means include orphan vgs.
-+		 */
-+
-+		ret = get_all_vgnames(cmd, &vg_name_list, 1);
-+		if (ret != ECMD_PROCESSED)
-+			return ret;
-+
-+	} else if (!dm_list_empty(&arg_tags)) {
-+
-+		/*
-+		 * We need to look at all pvs in all vgs (not including
-+		 * orphan vgs) to see if any have matching tags.  There
-+		 * may already be entries in arg_pvnames and vg_name_list,
-+		 * but all_pvnames is not used when tags are used
-+		 * (checked above).
-+		 */
-+
-+		ret = get_all_vgnames(cmd, &vg_name_list, 0);
-+		if (ret != ECMD_PROCESSED)
-+			return ret;
-+	}
-+
-+	/*
-+	 * We should be able to remove this once pv's with no mda's can
-+	 * be directly identified as member of a vg or not.
-+	 */
-+
-+	if (!dm_list_empty(&nomda_pvnames) && !scan_label_only) {
-+		ret = verify_nomda_pvnames(cmd, &nomda_pvnames, &vg_name_list);
-+		if (ret != ECMD_PROCESSED)
-+			return ret;
-+	}
-+
-+	ret = read_vg_name_list(cmd, flags, &vg_name_list, &vgl_list);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+	if (sigint_caught())
-+		goto out;
-+
-+	if (dm_list_empty(&vgl_list)) {
-+		stack;
-+		goto novg;
-+	}
-+
-+process:
-+	/* one or both of arg_pvnames/all_pvnames will be empty */
-+
-+	pv_name_list = &arg_pvnames;
-+	if (!dm_list_empty(&all_pvnames))
-+		pv_name_list = &all_pvnames;
-+
-+	/* will process all pvs when both pv_name_list and arg_tags are empty */
-+
-+	ret = process_pv_vg_name_list(cmd, flags, &vg_name_list,
-+				      pv_name_list, &arg_tags, &vgl_list,
-+				      handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+	if (sigint_caught())
-+		goto out;
-+
-+	if (!vg)
-+		release_vg_list(cmd, &vgl_list);
-+
-+novg:
-+	ret = process_orphan_name_list(cmd, scan_label_only, &orphan_pvnames,
-+				       handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+
-+	ret = process_orphan_name_list(cmd, scan_label_only, &nomda_pvnames,
-+				       handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+
-+	ret = process_dummy_name_list(cmd, &dummy_pvnames,
-+				      handle, process_single_pv);
-+	if (ret > ret_max)
-+		ret_max = ret;
-+out:
-+	return ret_max;
-+}
-+
-diff --git a/tools/toollib.h b/tools/toollib.h
-index e71b08a..cddf034 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -70,8 +70,7 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
- 			       process_single_seg_fn_t process_single_seg);
- 
- int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
--			  const struct dm_list *tags, void *handle,
--			  process_single_pv_fn_t process_single_pv);
-+			  void *handle, process_single_pv_fn_t process_single_pv);
- 
- 
- int process_each_lv_in_vg(struct cmd_context *cmd,
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index e03118a..41b6e9b 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -41,7 +41,7 @@ static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
- 				      (process_single_lv_fn_t)lvdisplay_full);
- 
- 		log_print("--- Physical volumes ---");
--		process_each_pv_in_vg(cmd, vg, NULL, NULL,
-+		process_each_pv_in_vg(cmd, vg, NULL,
- 				      (process_single_pv_fn_t)pvdisplay_short);
- 	}
- 
+ 	struct lvresize_params lp = { 0 };
 -- 
-1.8.1.rc1.5.g7e0651a
+1.8.1.2
 
 
