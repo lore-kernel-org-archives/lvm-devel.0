@@ -1,46 +1,118 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Wed, 27 Mar 2013 10:23:17 +0100
-Subject: pvresize problem
-In-Reply-To: <20130326215001.GA15037@redhat.com>
-References: <20130326165913.GA12503@redhat.com>
-	<20130326215001.GA15037@redhat.com>
-Message-ID: <5152BA85.1060001@redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Wed, 13 Mar 2013 17:13:23 -0500
+Subject: [PATCH 2/5] lvm2app: Move percent_of_extents to lvm-percent.[h|c]
+In-Reply-To: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
+References: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1363212806-16025-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 26.03.2013 22:50, David Teigland wrote:
-> On Tue, Mar 26, 2013 at 12:59:13PM -0400, David Teigland wrote:
->> I'm trying to verify shrinking with pvresize --setphysicalvolumesize
->>
->> When the pv is an orphan, it works as expected, but when the pv is
->> not an orphan, the resulting size is always 8192S less than the
->> requested size.
-> 
-> Looking in _text_pv_resize(), I'm guessing the difference I see might be
-> "pv->size -= size_reduction" which would indicate things are working as
-> intended.  If so, I'll adjust my checks to include this reduction.
-> 
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
+---
+ lib/misc/lvm-percent.c |  5 +++++
+ lib/misc/lvm-percent.h | 17 +++++++++++++++++
+ tools/toollib.c        |  6 ------
+ tools/tools.h          | 16 ----------------
+ 4 files changed, 22 insertions(+), 22 deletions(-)
 
-Yes, exactly. When the PV is orphan, we're always reporting the size that
-includes any alignments, metadata areas and PV headers (IOW, the "disk size
-itself" or "pretended disk size" if the size was forced).
-
-If the PV is in a VG, we're reporting only usable "data area" size, meaning the
-size that is reserved for the data itself where extents can be allocated.
-
-I can imagine this could cause confusion, but the problem is that it has been
-reported this way since ages (though I don't know the exact historical reason
-for this logic). The best would be if we could report the PV size for orphan
-the same way as we do for non-orphans and then have an extra field that would
-report the exact space used together with all the alignment and metadata...
-
-(Though changing the PV size report for the orphan would mean changing existing
-report which people can already use... Which is not a backward compatible
-change unfortunately.)
-
-Peter
+diff --git a/lib/misc/lvm-percent.c b/lib/misc/lvm-percent.c
+index 4b73db4..1dafa57 100644
+--- a/lib/misc/lvm-percent.c
++++ b/lib/misc/lvm-percent.c
+@@ -38,3 +38,8 @@ percent_t make_percent(uint64_t numerator, uint64_t denominator)
+     }
+ }
+ 
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
++{
++	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
++			   ((roundup) ? 99 : 0)) / 100);
++}
+diff --git a/lib/misc/lvm-percent.h b/lib/misc/lvm-percent.h
+index bf30a7e..ff3de42 100644
+--- a/lib/misc/lvm-percent.h
++++ b/lib/misc/lvm-percent.h
+@@ -31,6 +31,21 @@
+ typedef int32_t percent_t;
+ 
+ typedef enum {
++	SIGN_NONE = 0,
++	SIGN_PLUS = 1,
++	SIGN_MINUS = 2
++} sign_t;
++
++typedef enum {
++	PERCENT_NONE = 0,
++	PERCENT_VG,
++	PERCENT_FREE,
++	PERCENT_LV,
++	PERCENT_PVS,
++	PERCENT_ORIGIN
++} percent_type_t;
++
++typedef enum {
+ 	PERCENT_0 = 0,
+ 	PERCENT_1 = 1000000,
+ 	PERCENT_100 = 100 * PERCENT_1,
+@@ -41,4 +56,6 @@ typedef enum {
+ float percent_to_float(percent_t v);
+ percent_t make_percent(uint64_t numerator, uint64_t denominator);
+ 
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
++
+ #endif
+diff --git a/tools/toollib.c b/tools/toollib.c
+index f00988a..bf9876a 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1730,9 +1730,3 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 	return 1;
+ }
+ 
+-/* Return percents of extents and avoid overflow, with optional roundup */
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
+-{
+-	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
+-			   ((roundup) ? 99 : 0)) / 100);
+-}
+diff --git a/tools/tools.h b/tools/tools.h
+index 673e40b..7a57b78 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -74,21 +74,6 @@ enum {
+ #undef arg
+ };
+ 
+-typedef enum {
+-	SIGN_NONE = 0,
+-	SIGN_PLUS = 1,
+-	SIGN_MINUS = 2
+-} sign_t;
+-
+-typedef enum {
+-	PERCENT_NONE = 0,
+-	PERCENT_VG,
+-	PERCENT_FREE,
+-	PERCENT_LV,
+-	PERCENT_PVS,
+-	PERCENT_ORIGIN
+-} percent_type_t;
+-
+ #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
+ #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
+ 
+@@ -188,7 +173,6 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned
+ int mirror_remove_missing(struct cmd_context *cmd,
+ 			  struct logical_volume *lv, int force);
+ 
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
+ 
+ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 		       activation_change_t activate);
+-- 
+1.8.1.2
 
 
