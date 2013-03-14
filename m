@@ -1,68 +1,80 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 7 Dec 2018 20:53:47 -0500
-Subject: master - lvcreate/lvconvert: prohibit creation of/conversion to mirrored mirror logs
-Message-ID: <201812080153.wB81rlm5026071@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Thu, 14 Mar 2013 13:14:44 -0500
+Subject: [PATCH 5/5] lvm2app: Implement lv resize (v2)
+In-Reply-To: <1363284884-20506-1-git-send-email-tasleson@redhat.com>
+References: <1363284884-20506-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1363284884-20506-5-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=edb72cb70cb8abd0acb92f07937715be2816d04a
-Commit:        edb72cb70cb8abd0acb92f07937715be2816d04a
-Parent:        a4b8377488f82c496b14ee6d644fc681968acaca
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Dec 7 19:56:49 2018 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Sat Dec 8 02:52:50 2018 +0100
+Simplified version of lv resize.
 
-lvcreate/lvconvert: prohibit creation of/conversion to mirrored mirror logs
-
-In RHEL7 we marked mirrored mirror logs as deprecated and
-added a related message.  This patch prohibits creating new
-'mirror' LVs with that log type or converting existing LVs
-to have one.
-
-Existing LVs with mirrored mirror log can be activated
-and converted to disk/core logs.
-
-Avoid double deprecation message when running lvconvert.
-
-Resolves: rhbz1643562
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/metadata/mirror.c |    3 ++-
- tools/lvconvert.c     |    5 -----
- 2 files changed, 2 insertions(+), 6 deletions(-)
+ lib/metadata/metadata-exported.h |  1 +
+ liblvm/lvm2app.h                 |  2 --
+ liblvm/lvm_lv.c                  | 19 ++++++++++++++++---
+ 3 files changed, 17 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index ba3f33d..8b20979 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1908,7 +1908,8 @@ int add_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
- 	}
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index d28066a..b38ea09 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -26,6 +26,7 @@
+ #include "vg.h"
+ #include "lv.h"
+ #include "lvm-percent.h"
++#include "errors.h"
  
- 	if (log_count > 1) {
--		log_warn("WARNING: Log type \"mirrored\" is DEPRECATED and will be removed in the future. Use RAID1 LV or disk log instead.");
-+		log_err("Log type \"mirrored\" is DEPRECATED. Use RAID1 LV or disk log instead.");
-+		return 0;
- 	}
+ #define MAX_STRIPES 128U
+ #define SECTOR_SHIFT 9L
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 935c53b..98585c0 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1365,8 +1365,6 @@ int lvm_lv_rename(lv_t lv, const char *new_name);
+  *
+  * \memberof lv_t
+  *
+- * NOTE: This function is currently not implemented.
+- *
+  * \param   lv
+  * Logical volume handle.
+  *
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 91948a6..8167fc3 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -309,9 +309,22 @@ int lvm_lv_rename(lv_t lv, const char *new_name)
  
- 	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0, 0)))
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 65a4ed3..dbc9fea 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1262,11 +1262,6 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
- 	    (old_log_count == new_log_count))
- 		return 1;
+ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+ {
+-	/* FIXME: add lv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	struct lvresize_params lp = { 0 };
++
++	lp.vg_name = lv->vg->name;
++	lp.lv_name = lv->name;
++	lp.sign = SIGN_NONE;
++	lp.percent = PERCENT_NONE;
++	lp.resize = LV_ANY;
++	lp.size = new_size >> SECTOR_SHIFT;
++	lp.ac_force = 1;	/* Assume the user has a good backup? */
++
++	if (ECMD_PROCESSED != lv_resize(lv->vg->cmd, lv->vg, &lp, &lv->vg->pvs)) {
++		log_verbose("LV Re-size failed.");
++		return -1;
++	}
++
++	return 0;
+ }
  
--	if ((old_log_count != new_log_count) &&
--	    (new_log_count == MIRROR_LOG_MIRRORED)) {
--		log_warn("WARNING: Log type \"mirrored\" is DEPRECATED and will be removed in the future. Use RAID1 LV or disk log instead.");
--	}
--
- 	if (!_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
- 				    new_mimage_count, new_log_count, lp->pvh))
- 		return_0;
+ lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size)
+-- 
+1.8.1.2
 
 
