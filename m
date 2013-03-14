@@ -1,240 +1,118 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 4 Dec 2018 15:11:03 -0500
-Subject: master - remove unused full filter
-Message-ID: <201812042011.wB4KB3Wh024229@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Thu, 14 Mar 2013 13:14:41 -0500
+Subject: [PATCH 2/5] lvm2app: Move percent_of_extents to lvm-percent.[h|c]
+In-Reply-To: <1363284884-20506-1-git-send-email-tasleson@redhat.com>
+References: <1363284884-20506-1-git-send-email-tasleson@redhat.com>
+Message-ID: <1363284884-20506-2-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d2fd95af78c6f8a34c2d602285bd2230d89b3fd
-Commit:        3d2fd95af78c6f8a34c2d602285bd2230d89b3fd
-Parent:        89c11a2b49182f6858629857b8c6b3ba126c5970
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Dec 4 14:06:46 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Dec 4 14:06:46 2018 -0600
-
-remove unused full filter
-
-it's the same as cmd->filter
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/cache/lvmcache.c       |    4 ++--
- lib/commands/toolcontext.c |   10 ++++------
- lib/commands/toolcontext.h |    3 +--
- lib/label/label.c          |    4 ++--
- tools/lvmdiskscan.c        |    4 ++--
- tools/pvscan.c             |   12 ++++++------
- tools/reporter.c           |    2 +-
- tools/toollib.c            |    8 ++++----
- 8 files changed, 22 insertions(+), 25 deletions(-)
+ lib/misc/lvm-percent.c |  5 +++++
+ lib/misc/lvm-percent.h | 17 +++++++++++++++++
+ tools/toollib.c        |  6 ------
+ tools/tools.h          | 16 ----------------
+ 4 files changed, 22 insertions(+), 22 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index d35b366..da8b4d8 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -857,8 +857,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
- 	_scanning_in_progress = 1;
- 
- 	/* FIXME: can this happen? */
--	if (!cmd->full_filter) {
--		log_error("label scan is missing full filter");
-+	if (!cmd->filter) {
-+		log_error("label scan is missing filter");
- 		goto out;
- 	}
- 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 8b2ab4e..c42ed56 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1181,9 +1181,7 @@ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
- 		goto bad;
- 	}
- 
--	cmd->filter = filter = pfilter;
--
--	cmd->full_filter = filter;
-+	cmd->filter = pfilter;
- 
- 	cmd->initialized.filters = 1;
- 	return 1;
-@@ -1834,9 +1832,9 @@ static void _destroy_dev_types(struct cmd_context *cmd)
- 
- static void _destroy_filters(struct cmd_context *cmd)
- {
--	if (cmd->full_filter) {
--		cmd->full_filter->destroy(cmd->full_filter);
--		cmd->filter = cmd->full_filter = NULL;
-+	if (cmd->filter) {
-+		cmd->filter->destroy(cmd->filter);
-+		cmd->filter = NULL;
- 	}
- 	cmd->initialized.filters = 0;
+diff --git a/lib/misc/lvm-percent.c b/lib/misc/lvm-percent.c
+index 4b73db4..1dafa57 100644
+--- a/lib/misc/lvm-percent.c
++++ b/lib/misc/lvm-percent.c
+@@ -38,3 +38,8 @@ percent_t make_percent(uint64_t numerator, uint64_t denominator)
+     }
  }
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index f820ba1..6396f6c 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -176,8 +176,7 @@ struct cmd_context {
- 	/*
- 	 * Filtering.
- 	 */
--	struct dev_filter *filter;		/* post-lvmetad filter chain */
--	struct dev_filter *full_filter;		/* lvmetad_filter + filter */
-+	struct dev_filter *filter;
  
- 	/*
- 	 * Configuration.
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 1fb374e..0517312 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -855,7 +855,7 @@ int label_scan(struct cmd_context *cmd)
- 	 */
- 	dev_cache_scan();
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
++{
++	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
++			   ((roundup) ? 99 : 0)) / 100);
++}
+diff --git a/lib/misc/lvm-percent.h b/lib/misc/lvm-percent.h
+index bf30a7e..ff3de42 100644
+--- a/lib/misc/lvm-percent.h
++++ b/lib/misc/lvm-percent.h
+@@ -31,6 +31,21 @@
+ typedef int32_t percent_t;
  
--	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
-+	if (!(iter = dev_iter_create(cmd->filter, 0))) {
- 		log_error("Scanning failed to get devices.");
- 		return 0;
- 	}
-@@ -898,7 +898,7 @@ int label_scan(struct cmd_context *cmd)
- 			return 0;
- 	}
+ typedef enum {
++	SIGN_NONE = 0,
++	SIGN_PLUS = 1,
++	SIGN_MINUS = 2
++} sign_t;
++
++typedef enum {
++	PERCENT_NONE = 0,
++	PERCENT_VG,
++	PERCENT_FREE,
++	PERCENT_LV,
++	PERCENT_PVS,
++	PERCENT_ORIGIN
++} percent_type_t;
++
++typedef enum {
+ 	PERCENT_0 = 0,
+ 	PERCENT_1 = 1000000,
+ 	PERCENT_100 = 100 * PERCENT_1,
+@@ -41,4 +56,6 @@ typedef enum {
+ float percent_to_float(percent_t v);
+ percent_t make_percent(uint64_t numerator, uint64_t denominator);
  
--	_scan_list(cmd, cmd->full_filter, &all_devs, NULL);
-+	_scan_list(cmd, cmd->filter, &all_devs, NULL);
- 
- 	dm_list_iterate_items_safe(devl, devl2, &all_devs) {
- 		dm_list_del(&devl->list);
-diff --git a/tools/lvmdiskscan.c b/tools/lvmdiskscan.c
-index 0b97eba..a504c3a 100644
---- a/tools/lvmdiskscan.c
-+++ b/tools/lvmdiskscan.c
-@@ -100,9 +100,9 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
- 	/* Call before using dev_iter which uses filters which want bcache data. */
- 	label_scan(cmd);
- 
--	max_len = _get_max_dev_name_len(cmd, cmd->full_filter);
-+	max_len = _get_max_dev_name_len(cmd, cmd->filter);
- 
--	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
-+	if (!(iter = dev_iter_create(cmd->filter, 0))) {
- 		log_error("dev_iter_create failed");
- 		return ECMD_FAILED;
- 	}
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 884a824..2a884df 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -539,7 +539,7 @@ static void _online_pvscan_all_devs(struct cmd_context *cmd,
- 
- 	label_scan(cmd);
- 
--	if (!(iter = dev_iter_create(cmd->full_filter, 1))) {
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
- 		log_error("dev_iter creation failed");
- 		return;
- 	}
-@@ -680,7 +680,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	while (argc--) {
- 		pv_name = *argv++;
- 		if (pv_name[0] == '/') {
--			if (!(dev = dev_cache_get(cmd, pv_name, cmd->full_filter))) {
-+			if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
- 				log_debug("pvscan arg %s not found.", pv_name);
- 				if ((dev = dev_cache_get(cmd, pv_name, NULL))) {
- 					/* nothing to do for this dev name */
-@@ -707,7 +707,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 			}
- 			devno = MKDEV(major, minor);
- 
--			if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->full_filter))) {
-+			if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->filter))) {
- 				log_debug("pvscan arg %d:%d not found.", major, minor);
- 				_online_pvid_file_remove_devno(major, minor);
- 			} else {
-@@ -731,7 +731,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	if (!dm_list_empty(&single_devs)) {
--		label_scan_devs(cmd, cmd->full_filter, &single_devs);
-+		label_scan_devs(cmd, cmd->filter, &single_devs);
- 
- 		dm_list_iterate_items(devl, &single_devs) {
- 			dev = devl->dev;
-@@ -763,7 +763,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 
- 		devno = MKDEV(major, minor);
- 
--		if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->full_filter))) {
-+		if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->filter))) {
- 			log_debug("pvscan arg %d:%d not found.", major, minor);
- 			_online_pvid_file_remove_devno(major, minor);
- 		} else {
-@@ -782,7 +782,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	if (!dm_list_empty(&single_devs)) {
--		label_scan_devs(cmd, cmd->full_filter, &single_devs);
-+		label_scan_devs(cmd, cmd->filter, &single_devs);
- 
- 		dm_list_iterate_items(devl, &single_devs) {
- 			dev = devl->dev;
-diff --git a/tools/reporter.c b/tools/reporter.c
-index cd2a41e..c321d21 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -719,7 +719,7 @@ static void _check_pv_list(struct cmd_context *cmd, struct report_args *args, st
- 
- 	if (single_args->args_are_pvs && args->argc) {
- 		for (i = 0; i < args->argc; i++) {
--			if (!rescan_done && !dev_cache_get(cmd, args->argv[i], cmd->full_filter)) {
-+			if (!rescan_done && !dev_cache_get(cmd, args->argv[i], cmd->filter)) {
- 				cmd->filter->wipe(cmd->filter);
- 				/* FIXME scan only one device */
- 				lvmcache_label_scan(cmd);
++uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
++
+ #endif
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 6c38eb2..d8394a3 100644
+index f00988a..bf9876a 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -1477,7 +1477,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+@@ -1730,9 +1730,3 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 	return 1;
+ }
  
- 	if (argc) {
- 		for (; opt < argc; opt++) {
--			if (!(dev = dev_cache_get(cmd, argv[opt], cmd->full_filter))) {
-+			if (!(dev = dev_cache_get(cmd, argv[opt], cmd->filter))) {
- 				log_error("Failed to find device "
- 					  "\"%s\".", argv[opt]);
- 				ret_max = ECMD_FAILED;
-@@ -1548,7 +1548,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 		goto out;
- 	}
+-/* Return percents of extents and avoid overflow, with optional roundup */
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
+-{
+-	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
+-			   ((roundup) ? 99 : 0)) / 100);
+-}
+diff --git a/tools/tools.h b/tools/tools.h
+index 673e40b..7a57b78 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -74,21 +74,6 @@ enum {
+ #undef arg
+ };
  
--	if (!(iter = dev_iter_create(cmd->full_filter, 1))) {
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
- 		log_error("dev_iter creation failed.");
- 		ret_max = ECMD_FAILED;
- 		goto out;
-@@ -3917,7 +3917,7 @@ static int _get_all_devices(struct cmd_context *cmd, struct dm_list *all_devices
+-typedef enum {
+-	SIGN_NONE = 0,
+-	SIGN_PLUS = 1,
+-	SIGN_MINUS = 2
+-} sign_t;
+-
+-typedef enum {
+-	PERCENT_NONE = 0,
+-	PERCENT_VG,
+-	PERCENT_FREE,
+-	PERCENT_LV,
+-	PERCENT_PVS,
+-	PERCENT_ORIGIN
+-} percent_type_t;
+-
+ #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
+ #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
  
- 	log_debug("Getting list of all devices");
+@@ -188,7 +173,6 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned
+ int mirror_remove_missing(struct cmd_context *cmd,
+ 			  struct logical_volume *lv, int force);
  
--	if (!(iter = dev_iter_create(cmd->full_filter, 1))) {
-+	if (!(iter = dev_iter_create(cmd->filter, 1))) {
- 		log_error("dev_iter creation failed.");
- 		return ECMD_FAILED;
- 	}
-@@ -5424,7 +5424,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
- 	 * Translate arg names into struct device's.
- 	 */
- 	dm_list_iterate_items(pd, &pp->arg_devices)
--		pd->dev = dev_cache_get(cmd, pd->name, cmd->full_filter);
-+		pd->dev = dev_cache_get(cmd, pd->name, cmd->filter);
+-uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
  
- 	/*
- 	 * Use process_each_pv to search all existing PVs and devices.
+ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 		       activation_change_t activate);
+-- 
+1.8.1.2
 
 
