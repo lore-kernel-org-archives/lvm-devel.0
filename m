@@ -1,41 +1,62 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 30 Nov 2018 19:08:11 -0500
-Subject: master - gcc: ensure sector is initilized
-Message-ID: <201812010008.wB108B7J031246@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Thu, 14 Mar 2013 13:14:40 -0500
+Subject: [PATCH 1/5] lvm2app: Implementation of pv resize (v6)
+Message-ID: <1363284884-20506-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a5e3bcf153eddc6a03554e26f6f8d795fead96e
-Commit:        5a5e3bcf153eddc6a03554e26f6f8d795fead96e
-Parent:        d8ad73e9377adea67819db083d66debc39dec993
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 30 22:26:26 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Dec 1 01:07:01 2018 +0100
-
-gcc: ensure sector is initilized
-
-Some older gcc errnously report the variable can be used uninitlized.
-Quite warning by explicit initalization.
+Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- lib/label/label.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ liblvm/lvm2app.h |  2 --
+ liblvm/lvm_pv.c  | 20 +++++++++++++++++---
+ 2 files changed, 17 insertions(+), 5 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 82ebd71..1fb374e 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -356,7 +356,7 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
- 	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
- 	struct label *label = NULL;
- 	struct labeller *labeller;
--	uint64_t sector;
-+	uint64_t sector = 0;
- 	int ret = 0;
- 	int pass;
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 93a78c3..935c53b 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1626,8 +1626,6 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+  *
+  * \memberof pv_t
+  *
+- * NOTE: This function is currently not implemented.
+- *
+  * \param   pv
+  * Physical volume handle.
+  *
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+index 90edaed..bf9f630 100644
+--- a/liblvm/lvm_pv.c
++++ b/liblvm/lvm_pv.c
+@@ -123,7 +123,21 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
  
+ int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+ {
+-	/* FIXME: add pv resize code here */
+-	log_error("NOT IMPLEMENTED YET");
+-	return -1;
++	uint64_t size = new_size >> SECTOR_SHIFT;
++
++	if (new_size % SECTOR_SIZE) {
++		log_errno(EINVAL, "Size not a multiple of 512");
++		return -1;
++	}
++
++	if (!vg_check_write_mode(pv->vg)) {
++		return -1;
++	}
++
++	if (!pv_resize(pv, pv->vg, size)) {
++		log_error("PV re-size failed!");
++		return -1;
++	} else {
++		return 0;
++	}
+ }
+-- 
+1.8.1.2
 
 
