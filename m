@@ -1,62 +1,60 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Wed, 13 Mar 2013 17:13:22 -0500
-Subject: [PATCH 1/5] lvm2app: Implementation of pv resize (v6)
-Message-ID: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Sat, 16 Mar 2013 12:22:23 -0400 (EDT)
+Subject: [PATCH] libdevmapper.h: make this include file standard-compliant
+Message-ID: <Pine.LNX.4.64.1303161221480.4777@file.rdu.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
----
- liblvm/lvm2app.h |  2 --
- liblvm/lvm_pv.c  | 20 +++++++++++++++++---
- 2 files changed, 17 insertions(+), 5 deletions(-)
+libdevmapper.h: make this include file standard-compliant
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 93a78c3..935c53b 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1626,8 +1626,6 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
-  *
-  * \memberof pv_t
-  *
-- * NOTE: This function is currently not implemented.
-- *
-  * \param   pv
-  * Physical volume handle.
-  *
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-index 90edaed..bf9f630 100644
---- a/liblvm/lvm_pv.c
-+++ b/liblvm/lvm_pv.c
-@@ -123,7 +123,21 @@ pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
+This file may be included by other programs, so it should be compliant
+with the C standard.
+
+* use __linux__ instead of linux - __linux__ is always defined, linux is
+  not defined when gcc runs in standard-compliant mode (with -std=c89 or
+  -std=c99) because the C standard doesn't allow polluting namespace
+  with arbitrary defines.
+
+* the inline keyword is not present in the c89 standard (with gcc
+  -std=c89). If the compiler runs in c89 mode, use __inline__ (which is
+  gcc extension), or nothing at all if we don't use gcc.
+
+Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+
+---
+ libdm/libdevmapper.h |   10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+Index: LVM2.2.02.98/libdm/libdevmapper.h
+===================================================================
+--- LVM2.2.02.98.orig/libdm/libdevmapper.h	2013-03-16 02:10:56.000000000 +0100
++++ LVM2.2.02.98/libdm/libdevmapper.h	2013-03-16 02:20:51.000000000 +0100
+@@ -21,7 +21,7 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
  
- int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+-#ifdef linux
++#ifdef __linux__
+ #  include <linux/types.h>
+ #endif
+ 
+@@ -940,7 +940,13 @@ int dm_bit_get_next(dm_bitset_t bs, int 
+    memcpy((bs1) + 1, (bs2) + 1, ((*(bs1) / DM_BITS_PER_INT) + 1) * sizeof(int))
+ 
+ /* Returns number of set bits */
+-static inline unsigned hweight32(uint32_t i)
++static
++#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901
++inline
++#elif defined(__GNUC__)
++__inline__
++#endif
++unsigned hweight32(uint32_t i)
  {
--	/* FIXME: add pv resize code here */
--	log_error("NOT IMPLEMENTED YET");
--	return -1;
-+	uint64_t size = new_size >> SECTOR_SHIFT;
-+
-+	if (new_size % SECTOR_SIZE) {
-+		log_errno(EINVAL, "Size not a multiple of 512");
-+		return -1;
-+	}
-+
-+	if (!vg_check_write_mode(pv->vg)) {
-+		return -1;
-+	}
-+
-+	if (!pv_resize(pv, pv->vg, size)) {
-+		log_error("PV re-size failed!");
-+		return -1;
-+	} else {
-+		return 0;
-+	}
- }
--- 
-1.8.1.2
+ 	unsigned r = (i & 0x55555555) + ((i >> 1) & 0x55555555);
+ 
 
 
