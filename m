@@ -1,308 +1,140 @@
-From: M. Mohan Kumar <mohan@in.ibm.com>
-Date: Tue, 19 Mar 2013 22:54:52 +0530
-Subject: [PATCH V4] lvm2app: Add thin and thin pool lv creation
-Message-ID: <1363713892-14704-1-git-send-email-mohan@in.ibm.com>
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 20 Mar 2013 00:39:27 +0100
+Subject: [PATCH] Pass parsed metadata to activation code.
+Message-ID: <8738vrc634.fsf@mornfall.net>
+	(sfid-20130320_003928_215503_2A328EE0)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: "M. Mohan Kumar" <mohan@in.ibm.com>
+Hi,
 
-Add thin and thin pool lv creation support to lvm library
+the actual patches can be seen as follows:
 
-Signed-off-by: M. Mohan Kumar <mohan@in.ibm.com>
----
-Changes from V3:
-* Added paramater to specify metadata size, flags
+$ git clone http://repos.mornfall.net/lvm2/mornfall.git
+$ git checkout origin/mornfall
+$ git log 6a995ba..65718c8 -p
 
-Changes from V2:
-* Specify percentage for low water mark threshold instead of number of
-  blocks
+There might be some cleaning up to do, but otherwise the patches should
+be in a reasonably good shape. Since the status on Monday, both
+precommit (incore) and ondisk (committed) metadata is now passed into
+suspend, so no reading or scanning is necessary.
 
-Changes from previous version:
-* Add support to specify data block size and low water mark thresold for
-newly created thin pool.
+These patches directly improve performance when lvmetad is in use (since
+when lvmetad is active, lvmcache is bypassed in those calls, causing an
+extra roundtrip to lvmetad). They also pave way for removing the
+dependency of the activation code on lvmcache (in a later patchset).
 
- lib/metadata/lv_manip.c          |   2 +-
- lib/metadata/metadata-exported.h |   1 +
- liblvm/lvm2app.h                 |  73 +++++++++++++++++++
- liblvm/lvm_lv.c                  | 154 +++++++++++++++++++++++++++++++++++++++
- 4 files changed, 229 insertions(+), 1 deletion(-)
+Petr
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index c1437eb..4dd5ebf 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4518,7 +4518,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg, struct l
- 		first_seg(lv)->chunk_size = lp->chunk_size;
- 		first_seg(lv)->discards = lp->discards;
- 		/* FIXME: use lowwatermark  via lvm.conf global for all thinpools ? */
--		first_seg(lv)->low_water_mark = 0;
-+		first_seg(lv)->low_water_mark = lp->low_water_mark;
- 	} else if (seg_is_thin_volume(lp)) {
- 		pool_lv = first_seg(lv)->pool_lv;
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index ffec129..40519f5 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -617,6 +617,7 @@ struct lvcreate_params {
- 	uint64_t voriginsize; /* snapshot */
- 	uint32_t poolmetadataextents; /* thin pool */
- 	uint64_t poolmetadatasize; /* thin pool */
-+	uint64_t low_water_mark;  /* thin_pool */
- 	struct dm_list *pvh; /* all */
- 
- 	uint32_t permission; /* all */
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 93a78c3..0f8e39c 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1400,6 +1400,79 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size);
-  */
- lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
- 
-+
-+#define THIN_FL_DISCARDS_IGNORE          0x0001
-+#define THIN_FL_DISCARDS_NO_PASSDOWN     0x0010
-+#define THIN_FL_SKIP_ZERO                0x0100
-+
-+/**
-+ * Create a thinpool in a given VG
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param   size
-+ * size of the pool
-+ *
-+ * \param   chunk_size
-+ * data block size of the pool
-+ * Default value is DEFAULT_THIN_POOL_CHUNK_SIZE * 2 when 0 passed as chunk_size
-+ * DM_THIN_MIN_DATA_BLOCK_SIZE < chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE
-+ *
-+ * \param  threshold in percentage
-+ * When percentage of free blocks in the pool reaches <= this thresold a dm
-+ * event is sent. For example if threshold is specified 25, an dm event will be
-+ * generated when the percentage of free blocks goes <= 25%.
-+ *
-+ * Note: when 0 is passed as threshold, an event will be generated only when all
-+ * blocks are consumed in the pool.
-+ *
-+ * \param meta_size
-+ * Size of thin pool's metadata logical volume. Allowed range is 2MB-16GB.
-+ * Default value (ie if 0) pool size / pool chunk size * 64
-+ *
-+ * \param flags
-+ * As of now supported flags are
-+ * THIN_FL_DISCARDS_IGNORE,
-+ * THIN_FL_DISCARDS_NO_PASSDOWN,
-+ * THIN_FL_SKIP_ZERO
-+ *
-+ * If none of Discard related flag passed THIN_DISCARDS_PASSDOWN is enabled.
-+ *
-+ * \return
-+ * Valid lv pointer on success, else NULL on error.
-+ *
-+ */
-+lv_t lvm_lv_thinpool(const vg_t vg, const char *pool_name, uint64_t size,
-+		     uint32_t chunk_size, uint64_t meta_size, int threshold,
-+		     int flags);
-+
-+/**
-+ * Create a thin LV in a given VG & thin pool
-+ *
-+ * \param   vg
-+ * Volume Group handle.
-+ *
-+ * \param   pool_name
-+ * Name of the pool.
-+ *
-+ * \param lvname
-+ * Name of the LV to create
-+ *
-+ * \param   size
-+ * Size of logical volume
-+ *
-+ * \return
-+ * Valid lv pointer on success, else NULL on error.
-+ *
-+ */
-+
-+lv_t lvm_lv_thin(const vg_t vg, const char *pool_name, const char *lvname,
-+		uint64_t size);
-+
- /************************** physical volume handling ************************/
- 
- /**
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 91948a6..d4645f4 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -350,3 +350,157 @@ lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_siz
- 		return NULL;
- 	return (lv_t) lvl->lv;
- }
-+
-+/* Set defaults for thin pool specific LV parameters */
-+static void _lv_set_pool_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				uint64_t extents, uint64_t meta_size)
-+{
-+	_lv_set_default_params(lp, vg, NULL, extents);
-+
-+	lp->pool = pool;
-+
-+	lp->create_thin_pool = 1;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin-pool");
-+	lp->stripes = 1;
-+
-+	if (!meta_size) {
-+		lp->poolmetadatasize = extents * vg->extent_size /
-+			(lp->chunk_size * (SECTOR_SIZE / 64));
-+		while ((lp->poolmetadatasize >
-+			(2 * DEFAULT_THIN_POOL_OPTIMAL_SIZE / SECTOR_SIZE)) &&
-+		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+			lp->chunk_size <<= 1;
-+			lp->poolmetadatasize >>= 1;
-+	         }
-+	} else
-+		lp->poolmetadatasize = meta_size;
-+
-+	if (lp->poolmetadatasize % vg->extent_size)
-+		lp->poolmetadatasize +=
-+			vg->extent_size - lp->poolmetadatasize % vg->extent_size;
-+
-+	lp->poolmetadataextents =
-+		extents_from_size(vg->cmd, lp->poolmetadatasize / SECTOR_SIZE,
-+						   vg->extent_size);
-+}
-+
-+lv_t lvm_lv_thinpool(const vg_t vg, const char *pool, uint64_t size,
-+		     uint32_t chunk_size, uint64_t meta_size, int threshold,
-+		     int flags)
-+{
-+	struct lvcreate_params lp = { 0 };
-+	uint64_t extents = 0;
-+	struct lv_list *lvl = NULL;
-+	uint64_t lwmb = 0;
-+
-+	if (meta_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
-+		return NULL;
-+	}
-+
-+	if (meta_size &&
-+	    meta_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
-+		log_error("Invalid metadata size");
-+		return NULL;
-+	}
-+
-+	if (vg_read_error(vg))
-+		return NULL;
-+
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
-+
-+	if (threshold < 0 || threshold > 100) {
-+		log_error("Invalid threshold, should be between 0-100");
-+		return NULL;
-+	}
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+					  vg->extent_size))) {
-+		log_error("Unable to create LV thin pool without size.");
-+		return NULL;
-+	}
-+
-+	if (flags & THIN_FL_DISCARDS_NO_PASSDOWN)
-+		lp.discards = THIN_DISCARDS_NO_PASSDOWN;
-+	else if (flags & THIN_FL_DISCARDS_IGNORE)
-+		lp.discards = THIN_DISCARDS_IGNORE;
-+	else
-+		lp.discards = THIN_DISCARDS_PASSDOWN;
-+
-+	if (chunk_size)
-+		lp.chunk_size = chunk_size;
-+	else
-+		lp.chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE * 2;
-+
-+	if (lp.chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE ||
-+	    lp.chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
-+		log_error("Invalid chunk_size");
-+		return NULL;
-+	}
-+
-+	_lv_set_pool_params(&lp, vg, pool, extents, meta_size);
-+
-+	if (flags & THIN_FL_SKIP_ZERO)
-+		lp.zero = 0;
-+	/*
-+	  threshold specified in percentage, convert that into
-+	  number of blocks
-+	*/
-+	lp.low_water_mark = size / (chunk_size * SECTOR_SIZE) * threshold / 100;
-+	if (!lp.segtype)
-+		return_NULL;
-+	if (!lv_create_single(vg, &lp))
-+		return_NULL;
-+	if (!(lvl = find_lv_in_vg(vg, pool)))
-+		return_NULL;
-+	return (lv_t) lvl->lv;
-+}
-+
-+/* Set defaults for thin LV specific parameters */
-+static void _lv_set_thin_params(struct lvcreate_params *lp,
-+				vg_t vg, const char *pool,
-+				const char *lvname,
-+				uint64_t extents)
-+{
-+	_lv_set_default_params(lp, vg, lvname, extents);
-+
-+	lp->thin = 1;
-+	lp->pool = pool;
-+	lp->segtype = get_segtype_from_string(vg->cmd, "thin");
-+
-+	lp->voriginsize = extents * vg->extent_size;
-+	lp->voriginextents = extents_from_size(vg->cmd, lp->voriginsize,
-+						   vg->extent_size);
-+
-+	lp->stripes = 1;
-+}
-+
-+lv_t lvm_lv_thin(const vg_t vg, const char *pool,
-+		 const char *lvname, uint64_t size)
-+{
-+	struct lvcreate_params lp = { 0 };
-+	uint64_t extents = 0;
-+	struct lv_list *lvl = NULL;
-+
-+	if (vg_read_error(vg))
-+		return NULL;
-+	if (!vg_check_write_mode(vg))
-+		return NULL;
-+
-+	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
-+					  vg->extent_size))) {
-+		log_error("Unable to create thin LV without size.");
-+		return NULL;
-+	}
-+
-+	_lv_set_thin_params(&lp, vg, pool, lvname, extents);
-+
-+	if (!lp.segtype)
-+		return_NULL;
-+	if (!lv_create_single(vg, &lp))
-+		return_NULL;
-+	if (!(lvl = find_lv_in_vg(vg, pool)))
-+		return_NULL;
-+	return (lv_t) lvl->lv;
-+}
+PS: The current incarnation just went into Hydra, so I don't have
+complete test results yet. I moved to using an explicit in-repo branch
+in git and hydra kept picking up "master" which is the same in my repo
+as it is in fedorahosted. Tests seem OK on my machine though.
+
+commit 65718c8cc49bc980a43ab4089b51dc7f0f40eb96
+Author: Petr Rockai <me@mornfall.net>
+Date:   Wed Mar 20 00:00:11 2013 +0100
+
+    activation: Pass both ondisk and incore LV to suspend.
+
+ daemons/clvmd/lvm-functions.c |  2 +-
+ lib/activate/activate.c       | 69 ++++++++++++++++++++++---------------------
+ lib/activate/activate.h       |  2 +-
+ lib/locking/file_locking.c    |  2 +-
+ lib/locking/no_locking.c      |  4 +--
+ 5 files changed, 40 insertions(+), 39 deletions(-)
+
+commit 777b50c117b6bcd587bc54066dede378976cf97b
+Author: Petr Rockai <me@mornfall.net>
+Date:   Mon Mar 18 15:46:00 2013 +0100
+
+    metadata: Fix a pool CRC failure due to "late" ondisk copy creation.
+
+ lib/metadata/metadata.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+commit 665ba9afb5a427965d22f04489ba4e04808e3b86
+Author: Petr Rockai <me@mornfall.net>
+Date:   Sun Mar 17 21:49:00 2013 +0100
+
+    Actually pass LV metadata to activation code, when available.
+    
+    This ties the two preceding changes together, actually using the "ondisk"
+    version of VG metadata instead of calling into lvmcache when activating
+    volumes. The cache hooks are still used as a fallback, because we don't have an
+    uncached scanning API yet.
+
+ lib/locking/file_locking.c | 10 +++++-----
+ lib/locking/no_locking.c   |  6 +++---
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+commit 1c3b3c37745f8e666840e52af6f892bb08ff8f3a
+Author: Petr Rockai <me@mornfall.net>
+Date:   Sun Mar 17 21:29:58 2013 +0100
+
+    locking: Make it possible to pass down an LV to activation code.
+    
+    Previously, we have relied on UUIDs alone, and on lvmcache to make getting a
+    "new copy" of VG metadata fast. If the code which triggers the activation has
+    the correct VG metadata at hand (the version which is currently on disk), it can
+    now hand it to the activation code directly.
+
+ daemons/clvmd/lvm-functions.c  | 12 +++----
+ lib/activate/activate.c        | 79 ++++++++++++++++++++++--------------------
+ lib/activate/activate.h        | 14 ++++----
+ lib/locking/cluster_locking.c  |  4 +--
+ lib/locking/external_locking.c |  2 +-
+ lib/locking/file_locking.c     | 12 +++----
+ lib/locking/locking.c          | 14 ++++----
+ lib/locking/locking.h          | 16 +++++----
+ lib/locking/locking_types.h    |  2 +-
+ lib/locking/no_locking.c       | 16 ++++-----
+ lib/metadata/metadata.c        |  8 ++---
+ liblvm/lvm_vg.c                |  4 +--
+ tools/lvconvert.c              |  2 +-
+ tools/pvchange.c               |  2 +-
+ tools/pvcreate.c               |  2 +-
+ tools/pvremove.c               |  2 +-
+ tools/pvresize.c               |  2 +-
+ tools/pvscan.c                 |  4 +--
+ tools/toollib.c                |  2 +-
+ tools/vgcfgrestore.c           |  4 +--
+ tools/vgcreate.c               |  2 +-
+ tools/vgextend.c               |  2 +-
+ tools/vgreduce.c               |  2 +-
+ tools/vgscan.c                 |  2 +-
+ 24 files changed, 108 insertions(+), 103 deletions(-)
+
+commit 9c305583ef0c33d606bd7459de9b3383c35f3e98
+Author: Petr Rockai <me@mornfall.net>
+Date:   Sun Mar 17 16:27:44 2013 +0100
+
+    Add and track an "ondisk" pointer to struct volume_group.
+    
+    This allows us to get the current on-disk version of the metadata whenever we
+    have the current in-flight version, without a recourse to scanning or lvmcache.
+
+ lib/metadata/lv.h       |  1 +
+ lib/metadata/metadata.c | 57 +++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/metadata/vg.c       |  1 +
+ lib/metadata/vg.h       |  3 +++
+ 4 files changed, 62 insertions(+)
+
+commit 9fd154e68d4c204845410c0563b577341959bb3b
+Author: Petr Rockai <me@mornfall.net>
+Date:   Sun Mar 17 16:25:12 2013 +0100
+
+    Move export_vg_to_config_tree alongside export_vg_to_buffer.
+
+ lib/cache/lvmetad.c      | 24 ++----------------------
+ lib/format_text/export.c | 20 ++++++++++++++++++++
+ lib/metadata/metadata.h  |  2 +-
+ 3 files changed, 23 insertions(+), 23 deletions(-)
+
 -- 
-1.7.11.7
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
 
 
