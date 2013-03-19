@@ -1,104 +1,71 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 19 Mar 2013 14:29:11 +0000 (UTC)
-Subject: master - metadata: add 'allow_orphan' arg to find_pv_by_name fn
-Message-ID: <20130319142911.100ACA1CC4@fedorahosted.org>
+Date: Tue, 19 Mar 2013 14:29:16 +0000 (UTC)
+Subject: master - vgextend: do not allow PV with 0 MDAs to be added while already in a VG
+Message-ID: <20130319142916.CE42AA1CC4@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=59878d0129f63c3e8c1c4bc9715a400dc8fa808a
-Commit:        59878d0129f63c3e8c1c4bc9715a400dc8fa808a
-Parent:        5b6bab2e30f9f3f8f447e33c19590533c8c92123
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7e5e2dd4ee684137485a86c00e8ff29e7f169e14
+Commit:        7e5e2dd4ee684137485a86c00e8ff29e7f169e14
+Parent:        59878d0129f63c3e8c1c4bc9715a400dc8fa808a
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 19 14:05:19 2013 +0100
+AuthorDate:    Tue Mar 19 14:13:44 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Mar 19 14:57:31 2013 +0100
+CommitterDate: Tue Mar 19 14:57:36 2013 +0100
 
-metadata: add 'allow_orphan' arg to find_pv_by_name fn
+vgextend: do not allow PV with 0 MDAs to be added while already in a VG
 
-Before, the find_pv_by_name call always failed if the PV found was orphan.
-However, we might use this function even for a PV that is not part of any VG.
-This patch adds 'allow_orphan' arg to find_pv_by_name fn that allows that.
+If extending a VG and including a PV with 0 MDAs that was already
+a part of a VG, the vgextend allowed that PV to be added and we
+ended up *with one PV in two VGs*!
+
+The vgextend code used the 'pv_by_path' fn that returned a PV for
+a given path. However, when the PV did not have any metadata areas,
+the fn just returned a PV without any reference to existing VG.
+Consequently, any checks for the existing VG failed.
+
+[0] raw/~ # pvcreate --metadatacopies 0 /dev/sda
+  Physical volume "/dev/sda" successfully created
+
+[0] raw/~ # pvcreate --metadatacopies 1 /dev/sdb
+  Physical volume "/dev/sdb" successfully created
+
+[0] raw/~ # vgcreate vg1 /dev/sda /dev/sdb
+  Volume group "vg1" successfully created
+
+[0] raw/~ # pvcreate --metadatacopies 1 /dev/sdc
+  Physical volume "/dev/sdc" successfully created
+
+[0] raw/~ # vgcreate vg2 /dev/sdc
+  Volume group "vg2" successfully created
+
+Before this patch (incorrect):
+[0] raw/~ # vgextend vg2 /dev/sda
+  Volume group "vg2" successfully extended
+
+With this patch (correct):
+[0] raw/~ # vgextend vg2 /dev/sda
+  Physical volume '/dev/sda' is already in volume group 'vg1'
+  Unable to add physical volume '/dev/sda' to volume group 'vg2'.
 ---
- lib/metadata/metadata-exported.h |    3 ++-
- lib/metadata/metadata.c          |    5 +++--
- lib/metadata/mirror.c            |    2 +-
- tools/pvmove.c                   |    4 ++--
- 4 files changed, 8 insertions(+), 6 deletions(-)
+ lib/metadata/metadata.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index c2728d5..f218f47 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -690,7 +690,8 @@ struct lv_list *find_lv_in_vg(const struct volume_group *vg,
- struct logical_volume *find_lv(const struct volume_group *vg,
- 			       const char *lv_name);
- struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
--					const char *pv_name);
-+					const char *pv_name,
-+					int allow_orphan);
- 
- const char *find_vgname_from_pvname(struct cmd_context *cmd,
- 				    const char *pvname);
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 7c2846c..fdf47db 100644
+index fdf47db..775e40d 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -1802,7 +1802,8 @@ struct physical_volume *find_pv(struct volume_group *vg, struct device *dev)
- 
- /* FIXME: liblvm todo - make into function that returns handle */
- struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
--					const char *pv_name)
-+					const char *pv_name,
-+					int allow_orphan)
+@@ -629,7 +629,7 @@ static int vg_extend_single_pv(struct volume_group *vg, char *pv_name,
  {
  	struct physical_volume *pv;
  
-@@ -1822,7 +1823,7 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
- 		}
- 	}
- 
--	if (is_orphan_vg(pv->vg_name)) {
-+	if (!allow_orphan && is_orphan_vg(pv->vg_name)) {
- 		log_error("Physical volume %s not in a volume group", pv_name);
- 		goto bad;
- 	}
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 04a5638..fecab45 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1572,7 +1572,7 @@ struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
- 	struct physical_volume *pv;
- 	struct logical_volume *lv;
- 
--	if (!(pv = find_pv_by_name(cmd, name)))
-+	if (!(pv = find_pv_by_name(cmd, name, 0)))
- 		return_NULL;
- 
- 	lv = find_pvmove_lv(vg, pv->dev, lv_type);
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index fcc5b31..575f296 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -494,7 +494,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
- 	argv++;
- 
- 	/* Find PV (in VG) */
--	if (!(pv = find_pv_by_name(cmd, pv_name))) {
-+	if (!(pv = find_pv_by_name(cmd, pv_name, 0))) {
+-	if (!(pv = pv_by_path(vg->fid->fmt->cmd, pv_name)))
++	if (!(pv = find_pv_by_name(vg->cmd, pv_name, 1)))
  		stack;
- 		return EINVALID_CMD_LINE;
- 	}
-@@ -676,7 +676,7 @@ static struct volume_group *_get_move_vg(struct cmd_context *cmd,
- 	struct volume_group *vg;
- 
- 	/* Reread all metadata in case it got changed */
--	if (!(pv = find_pv_by_name(cmd, name))) {
-+	if (!(pv = find_pv_by_name(cmd, name, 0))) {
- 		log_error("ABORTING: Can't reread PV %s", name);
- 		/* What more could we do here? */
- 		return NULL;
+ 	if (!pv && !pp) {
+ 		log_error("%s not identified as an existing "
 
 
