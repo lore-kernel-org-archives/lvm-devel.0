@@ -1,83 +1,104 @@
 From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 19 Mar 2013 14:30:58 +0000 (UTC)
-Subject: master - cleanup: remove unused 'pv_by_path' fn
-Message-ID: <20130319143058.A0D561472@fedorahosted.org>
+Date: Tue, 19 Mar 2013 14:30:06 +0000 (UTC)
+Subject: master - metadata: add 'allow_orphan' arg to find_pv_by_name fn
+Message-ID: <20130319143006.C4F2576E@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ea36d0501e0ede347f251f6cda20903ad13f3700
-Commit:        ea36d0501e0ede347f251f6cda20903ad13f3700
-Parent:        7e5e2dd4ee684137485a86c00e8ff29e7f169e14
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=59878d0129f63c3e8c1c4bc9715a400dc8fa808a
+Commit:        59878d0129f63c3e8c1c4bc9715a400dc8fa808a
+Parent:        5b6bab2e30f9f3f8f447e33c19590533c8c92123
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Mar 19 14:17:53 2013 +0100
+AuthorDate:    Tue Mar 19 14:05:19 2013 +0100
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Mar 19 14:57:36 2013 +0100
+CommitterDate: Tue Mar 19 14:57:31 2013 +0100
 
-cleanup: remove unused 'pv_by_path' fn
+metadata: add 'allow_orphan' arg to find_pv_by_name fn
 
-The pv_by_path might be also dangerous to use as it does not
-count with any other metadata areas but the ones found on the PV
-itself. If metadata was not found on the PV referenced by the path,
-it returned no PV though it might have been referenced by metadata
-elsewhere (on other PVs...).
+Before, the find_pv_by_name call always failed if the PV found was orphan.
+However, we might use this function even for a PV that is not part of any VG.
+This patch adds 'allow_orphan' arg to find_pv_by_name fn that allows that.
 ---
- lib/metadata/metadata-exported.h |    3 +--
- lib/metadata/metadata.c          |   16 ----------------
- lib/metadata/metadata.h          |    1 -
- 3 files changed, 1 insertions(+), 19 deletions(-)
+ lib/metadata/metadata-exported.h |    3 ++-
+ lib/metadata/metadata.c          |    5 +++--
+ lib/metadata/mirror.c            |    2 +-
+ tools/pvmove.c                   |    4 ++--
+ 4 files changed, 8 insertions(+), 6 deletions(-)
 
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f218f47..df21759 100644
+index c2728d5..f218f47 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -522,8 +522,7 @@ int remove_lvs_in_vg(struct cmd_context *cmd,
+@@ -690,7 +690,8 @@ struct lv_list *find_lv_in_vg(const struct volume_group *vg,
+ struct logical_volume *find_lv(const struct volume_group *vg,
+ 			       const char *lv_name);
+ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+-					const char *pv_name);
++					const char *pv_name,
++					int allow_orphan);
  
- /*
-  * free_pv_fid() must be called on every struct physical_volume allocated
-- * by pv_create, pv_read, find_pv_by_name or pv_by_path to free it when
-- * no longer required.
-+ * by pv_create, pv_read, find_pv_by_name or to free it when no longer required.
-  */
- void free_pv_fid(struct physical_volume *pv);
- 
+ const char *find_vgname_from_pvname(struct cmd_context *cmd,
+ 				    const char *pvname);
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 775e40d..a913597 100644
+index 7c2846c..fdf47db 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -4524,19 +4524,3 @@ char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tags)
+@@ -1802,7 +1802,8 @@ struct physical_volume *find_pv(struct volume_group *vg, struct device *dev)
+ 
+ /* FIXME: liblvm todo - make into function that returns handle */
+ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+-					const char *pv_name)
++					const char *pv_name,
++					int allow_orphan)
+ {
+ 	struct physical_volume *pv;
+ 
+@@ -1822,7 +1823,7 @@ struct physical_volume *find_pv_by_name(struct cmd_context *cmd,
+ 		}
  	}
- 	return dm_pool_end_object(mem);
- }
--
--/**
-- * pv_by_path - Given a device path return a PV handle if it is a PV
-- * @cmd - handle to the LVM command instance
-- * @pv_name - device path to read for the PV
-- *
-- * Returns:
-- *  NULL - device path does not contain a valid PV
-- *  non-NULL - PV handle corresponding to device path
-- *
-- * FIXME: merge with find_pv_by_name ?
-- */
--struct physical_volume *pv_by_path(struct cmd_context *cmd, const char *pv_name)
--{
--	return _pv_read(cmd, cmd->mem, pv_name, NULL, 1, 0);
--}
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index f7b3409..0c13a97 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -483,7 +483,6 @@ struct id pv_id(const struct physical_volume *pv);
- const struct format_type *pv_format_type(const struct physical_volume *pv);
- struct id pv_vgid(const struct physical_volume *pv);
  
--struct physical_volume *pv_by_path(struct cmd_context *cmd, const char *pv_name);
- int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 		 struct physical_volume *pv, struct pvcreate_params *pp);
+-	if (is_orphan_vg(pv->vg_name)) {
++	if (!allow_orphan && is_orphan_vg(pv->vg_name)) {
+ 		log_error("Physical volume %s not in a volume group", pv_name);
+ 		goto bad;
+ 	}
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 04a5638..fecab45 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1572,7 +1572,7 @@ struct logical_volume *find_pvmove_lv_from_pvname(struct cmd_context *cmd,
+ 	struct physical_volume *pv;
+ 	struct logical_volume *lv;
  
+-	if (!(pv = find_pv_by_name(cmd, name)))
++	if (!(pv = find_pv_by_name(cmd, name, 0)))
+ 		return_NULL;
+ 
+ 	lv = find_pvmove_lv(vg, pv->dev, lv_type);
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index fcc5b31..575f296 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -494,7 +494,7 @@ static int _set_up_pvmove(struct cmd_context *cmd, const char *pv_name,
+ 	argv++;
+ 
+ 	/* Find PV (in VG) */
+-	if (!(pv = find_pv_by_name(cmd, pv_name))) {
++	if (!(pv = find_pv_by_name(cmd, pv_name, 0))) {
+ 		stack;
+ 		return EINVALID_CMD_LINE;
+ 	}
+@@ -676,7 +676,7 @@ static struct volume_group *_get_move_vg(struct cmd_context *cmd,
+ 	struct volume_group *vg;
+ 
+ 	/* Reread all metadata in case it got changed */
+-	if (!(pv = find_pv_by_name(cmd, name))) {
++	if (!(pv = find_pv_by_name(cmd, name, 0))) {
+ 		log_error("ABORTING: Can't reread PV %s", name);
+ 		/* What more could we do here? */
+ 		return NULL;
 
 
