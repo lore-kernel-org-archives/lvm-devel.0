@@ -1,7 +1,7 @@
 From: David Teigland <teigland@redhat.com>
-Date: Tue, 26 Mar 2013 16:09:21 -0500
-Subject: [PATCH 1/8] toollib: rework process_each_vg
-Message-ID: <1364332168-24676-2-git-send-email-teigland@redhat.com>
+Date: Tue, 26 Mar 2013 16:09:22 -0500
+Subject: [PATCH 2/8] toollib: rework process_each_lv
+Message-ID: <1364332168-24676-3-git-send-email-teigland@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -9,337 +9,525 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 A new flag from commands makes explicit when
-process_each_vg may query for "all vgs" and
+process_each_lv may query for "all vgs" and
 run the command on each.  A command is run
 against all vgs only when this flag is
-provided and no vg names or tags are provided.
+provided and no vg/lv names or tags are provided.
 
-When vg names or tags are explicitly named
+When vg/lv names or tags are explicitly named
 on the command line, the command is only run
-against named vgs, or vgs with tags matching
-one provided.
+against named vgs/lvs, or vgs/lvs with tags
+matching one provided.
 
 There should be no functional change.
 ---
- lib/metadata/metadata-exported.h |   3 +-
- tools/polldaemon.c               |   3 +-
- tools/reporter.c                 |   6 +-
- tools/toollib.c                  | 244 ++++++++++++++++++++++++---------------
- tools/vgcfgbackup.c              |   2 +-
- tools/vgchange.c                 |   8 +-
- tools/vgck.c                     |   2 +-
- tools/vgdisplay.c                |   2 +-
- tools/vgexport.c                 |   7 +-
- tools/vgscan.c                   |   2 +-
- 10 files changed, 174 insertions(+), 105 deletions(-)
+ tools/lvdisplay.c |   4 +-
+ tools/lvscan.c    |   4 +-
+ tools/reporter.c  |   8 +-
+ tools/toollib.c   | 459 ++++++++++++++++++++++++++++++------------------------
+ tools/vgmknodes.c |   4 +-
+ 5 files changed, 267 insertions(+), 212 deletions(-)
 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index df21759..61f18d0 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -119,8 +119,9 @@
- #define READ_ALLOW_EXPORTED	0x00020000U
- #define READ_WITHOUT_LOCK	0x00040000U
+diff --git a/tools/lvdisplay.c b/tools/lvdisplay.c
+index f5531cb..a899b1e 100644
+--- a/tools/lvdisplay.c
++++ b/tools/lvdisplay.c
+@@ -54,6 +54,6 @@ int lvdisplay(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
  
--/* A meta-flag, useful with toollib for_each_* functions. */
-+/* meta-flags, useful with toollib for_each_* functions. */
- #define READ_FOR_UPDATE		0x00100000U
-+#define ENABLE_ALL_VGNAMES	0x00200000U	/* run cmd on all vg names if none are named */
+-	return process_each_lv(cmd, argc, argv, 0, NULL,
+-			       &_lvdisplay_single);
++	return process_each_lv(cmd, argc, argv, ENABLE_ALL_VGNAMES,
++			       NULL, &_lvdisplay_single);
+ }
+diff --git a/tools/lvscan.c b/tools/lvscan.c
+index 636ac45..af82bbb 100644
+--- a/tools/lvscan.c
++++ b/tools/lvscan.c
+@@ -74,6 +74,6 @@ int lvscan(struct cmd_context *cmd, int argc, char **argv)
+ 		return EINVALID_CMD_LINE;
+ 	}
  
- /* vg's "read_status" field */
- #define FAILED_INCONSISTENT	0x00000001U
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index 5724623..95f048b 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -290,7 +290,8 @@ static void _poll_for_all_vgs(struct cmd_context *cmd,
- {
- 	while (1) {
- 		parms->outstanding_count = 0;
--		process_each_vg(cmd, 0, NULL, READ_FOR_UPDATE, parms, _poll_vg);
-+		process_each_vg(cmd, 0, NULL, READ_FOR_UPDATE | ENABLE_ALL_VGNAMES,
-+				parms, _poll_vg);
- 		if (!parms->outstanding_count)
- 			break;
- 		sleep(parms->interval);
+-	return process_each_lv(cmd, argc, argv, 0, NULL,
+-			       &lvscan_single);
++	return process_each_lv(cmd, argc, argv, ENABLE_ALL_VGNAMES,
++			       NULL, &lvscan_single);
+ }
 diff --git a/tools/reporter.c b/tools/reporter.c
-index 3db8b83..ead401b 100644
+index ead401b..0e6cbe4 100644
 --- a/tools/reporter.c
 +++ b/tools/reporter.c
-@@ -370,7 +370,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 				    &_lvs_single);
+@@ -366,8 +366,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	switch (report_type) {
+ 	case LVS:
+-		r = process_each_lv(cmd, argc, argv, 0, report_handle,
+-				    &_lvs_single);
++		r = process_each_lv(cmd, argc, argv, ENABLE_ALL_VGNAMES,
++				    report_handle, &_lvs_single);
  		break;
  	case VGS:
--		r = process_each_vg(cmd, argc, argv, 0,
-+		r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
- 				    report_handle, &_vgs_single);
- 		break;
- 	case LABEL:
-@@ -382,7 +382,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 			r = process_each_pv(cmd, argc, argv, NULL, 0,
- 					    0, report_handle, &_pvs_single);
- 		else
--			r = process_each_vg(cmd, argc, argv, 0,
-+			r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
+ 		r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
+@@ -386,8 +386,8 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
  					    report_handle, &_pvs_in_vg);
  		break;
  	case SEGS:
-@@ -394,7 +394,7 @@ static int _report(struct cmd_context *cmd, int argc, char **argv,
- 			r = process_each_pv(cmd, argc, argv, NULL, 0,
- 					    0, report_handle, &_pvsegs_single);
- 		else
--			r = process_each_vg(cmd, argc, argv, 0,
-+			r = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES,
- 					    report_handle, &_pvsegs_in_vg);
+-		r = process_each_lv(cmd, argc, argv, 0, report_handle,
+-				    &_lvsegs_single);
++		r = process_each_lv(cmd, argc, argv, ENABLE_ALL_VGNAMES,
++				    report_handle, &_lvsegs_single);
  		break;
- 	}
+ 	case PVSEGS:
+ 		if (args_are_pvs)
 diff --git a/tools/toollib.c b/tools/toollib.c
-index f00988a..247462b 100644
+index 247462b..e38e20c 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -477,7 +477,6 @@ int process_each_segment_in_lv(struct cmd_context *cmd,
+@@ -194,208 +194,6 @@ int process_each_lv_in_vg(struct cmd_context *cmd,
+ 	return ret_max;
  }
  
- static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
--			   const char *vgid,
- 			   struct dm_list *tags, struct dm_list *arg_vgnames,
- 			   uint32_t flags, void *handle, int ret_max,
- 			   process_single_vg_fn_t process_single_vg)
-@@ -489,7 +488,7 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
- 	log_verbose("Finding volume group \"%s\"", vg_name);
- 
- 	dm_list_init(&cmd_vgs);
--	if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs, vg_name, vgid, flags)))
-+	if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs, vg_name, NULL, flags)))
- 		return_0;
- 
- 	for (;;) {
-@@ -529,98 +528,6 @@ static int _process_one_vg(struct cmd_context *cmd, const char *vg_name,
- 	return (ret > ret_max) ? ret : ret_max;
- }
- 
--int process_each_vg(struct cmd_context *cmd, int argc, char **argv,
+-int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
 -		    uint32_t flags, void *handle,
--		    process_single_vg_fn_t process_single_vg)
+-		    process_single_lv_fn_t process_single_lv)
 -{
 -	int opt = 0;
 -	int ret_max = ECMD_PROCESSED;
+-	int ret = 0;
 -
--	struct str_list *sl;
--	struct dm_list *vgnames, *vgids;
--	struct dm_list arg_vgnames, tags;
+-	struct dm_list *tags_arg;
+-	struct dm_list *vgnames;	/* VGs to process */
+-	struct str_list *sll, *strl;
+-	struct cmd_vg *cvl_vg;
+-	struct dm_list cmd_vgs;
+-	struct dm_list failed_lvnames;
+-	struct dm_list tags, lvnames;
+-	struct dm_list arg_lvnames;	/* Cmdline vgname or vgname/lvname */
+-	struct dm_list arg_vgnames;
+-	char *vglv;
+-	size_t vglv_sz;
 -
--	const char *vg_name, *vgid;
+-	const char *vgname;
 -
 -	dm_list_init(&tags);
--	dm_list_init(&arg_vgnames);
+-	dm_list_init(&arg_lvnames);
+-	dm_list_init(&failed_lvnames);
 -
 -	if (argc) {
--		log_verbose("Using volume group(s) on command line");
+-		log_verbose("Using logical volume(s) on command line");
+-		dm_list_init(&arg_vgnames);
 -
 -		for (; opt < argc; opt++) {
--			vg_name = argv[opt];
--			if (*vg_name == '@') {
--				if (!validate_tag(vg_name + 1)) {
+-			const char *lv_name = argv[opt];
+-			const char *tmp_lv_name;
+-			char *vgname_def;
+-			unsigned dev_dir_found = 0;
+-
+-			/* Do we have a tag or vgname or lvname? */
+-			vgname = lv_name;
+-
+-			if (*vgname == '@') {
+-				if (!validate_tag(vgname + 1)) {
 -					log_error("Skipping invalid tag %s",
--						  vg_name);
--					if (ret_max < EINVALID_CMD_LINE)
--						ret_max = EINVALID_CMD_LINE;
+-						  vgname);
 -					continue;
 -				}
 -				if (!str_list_add(cmd->mem, &tags,
 -						  dm_pool_strdup(cmd->mem,
--							      vg_name + 1))) {
+-							      vgname + 1))) {
 -					log_error("strlist allocation failed");
 -					return ECMD_FAILED;
 -				}
 -				continue;
 -			}
 -
--			vg_name = skip_dev_dir(cmd, vg_name, NULL);
--			if (strchr(vg_name, '/')) {
--				log_error("Invalid volume group name: %s",
--					  vg_name);
--				if (ret_max < EINVALID_CMD_LINE)
--					ret_max = EINVALID_CMD_LINE;
+-			/* FIXME Jumbled parsing */
+-			vgname = skip_dev_dir(cmd, vgname, &dev_dir_found);
+-
+-			if (*vgname == '/') {
+-				log_error("\"%s\": Invalid path for Logical "
+-					  "Volume", argv[opt]);
+-				if (ret_max < ECMD_FAILED)
+-					ret_max = ECMD_FAILED;
 -				continue;
 -			}
+-			lv_name = vgname;
+-			if ((tmp_lv_name = strchr(vgname, '/'))) {
+-				/* Must be an LV */
+-				lv_name = tmp_lv_name;
+-				while (*lv_name == '/')
+-					lv_name++;
+-				if (!(vgname = extract_vgname(cmd, vgname))) {
+-					if (ret_max < ECMD_FAILED) {
+-						stack;
+-						ret_max = ECMD_FAILED;
+-					}
+-					continue;
+-				}
+-			} else if (!dev_dir_found &&
+-				   (vgname_def = default_vgname(cmd))) {
+-				vgname = vgname_def;
+-			} else
+-				lv_name = NULL;
+-
 -			if (!str_list_add(cmd->mem, &arg_vgnames,
--					  dm_pool_strdup(cmd->mem, vg_name))) {
+-					  dm_pool_strdup(cmd->mem, vgname))) {
 -				log_error("strlist allocation failed");
 -				return ECMD_FAILED;
 -			}
--		}
 -
+-			if (!lv_name) {
+-				if (!str_list_add(cmd->mem, &arg_lvnames,
+-						  dm_pool_strdup(cmd->mem,
+-							      vgname))) {
+-					log_error("strlist allocation failed");
+-					return ECMD_FAILED;
+-				}
+-			} else {
+-				vglv_sz = strlen(vgname) + strlen(lv_name) + 2;
+-				if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
+-				    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname,
+-						 lv_name) < 0) {
+-					log_error("vg/lv string alloc failed");
+-					return ECMD_FAILED;
+-				}
+-				if (!str_list_add(cmd->mem, &arg_lvnames, vglv)) {
+-					log_error("strlist allocation failed");
+-					return ECMD_FAILED;
+-				}
+-			}
+-		}
 -		vgnames = &arg_vgnames;
 -	}
 -
 -	if (!argc || !dm_list_empty(&tags)) {
--		log_verbose("Finding all volume groups");
+-		log_verbose("Finding all logical volumes");
 -		if (!lvmetad_vg_list_to_lvmcache(cmd))
 -			stack;
--		if (!(vgids = get_vgids(cmd, 0)) || dm_list_empty(vgids)) {
+-		if (!(vgnames = get_vgnames(cmd, 0)) || dm_list_empty(vgnames)) {
 -			log_error("No volume groups found");
 -			return ret_max;
 -		}
--		dm_list_iterate_items(sl, vgids) {
--			vgid = sl->str;
--			if (!(vgid) || !(vg_name = lvmcache_vgname_from_vgid(cmd->mem, vgid)))
--				continue;
--			ret_max = _process_one_vg(cmd, vg_name, vgid, &tags,
--						  &arg_vgnames,
--						  flags, handle,
--					  	  ret_max, process_single_vg);
--			if (sigint_caught())
--				return ret_max;
+-	}
+-
+-	dm_list_iterate_items(strl, vgnames) {
+-		vgname = strl->str;
+-		dm_list_init(&cmd_vgs);
+-		if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs,
+-					  vgname, NULL, flags))) {
+-			stack;
+-			return ECMD_FAILED;
 -		}
--	} else {
--		dm_list_iterate_items(sl, vgnames) {
--			vg_name = sl->str;
--			if (is_orphan_vg(vg_name))
--				continue;	/* FIXME Unnecessary? */
--			ret_max = _process_one_vg(cmd, vg_name, NULL, &tags,
--						  &arg_vgnames,
--						  flags, handle,
--					  	  ret_max, process_single_vg);
--			if (sigint_caught())
--				return ret_max;
+-
+-		if (!cmd_vg_read(cmd, &cmd_vgs)) {
+-			free_cmd_vgs(&cmd_vgs);
+-			if (ret_max < ECMD_FAILED) {
+-				log_error("Skipping volume group %s", vgname);
+-				ret_max = ECMD_FAILED;
+-			} else
+-				stack;
+-			continue;
+-		}
+-
+-		tags_arg = &tags;
+-		dm_list_init(&lvnames);	/* LVs to be processed in this VG */
+-		dm_list_iterate_items(sll, &arg_lvnames) {
+-			const char *vg_name = sll->str;
+-			const char *lv_name = strchr(vg_name, '/');
+-
+-			if ((!lv_name && !strcmp(vg_name, vgname))) {
+-				/* Process all LVs in this VG */
+-				tags_arg = NULL;
+-				dm_list_init(&lvnames);
+-				break;
+-			} else if (!strncmp(vg_name, vgname, strlen(vgname)) && lv_name &&
+-				   strlen(vgname) == (size_t) (lv_name - vg_name)) {
+-				if (!str_list_add(cmd->mem, &lvnames,
+-						  dm_pool_strdup(cmd->mem,
+-								 lv_name + 1))) {
+-					log_error("strlist allocation failed");
+-					free_cmd_vgs(&cmd_vgs);
+-					return ECMD_FAILED;
+-				}
+-			}
+-		}
+-
+-		while (!sigint_caught()) {
+-			ret = process_each_lv_in_vg(cmd, cvl_vg->vg, &lvnames,
+-						    tags_arg, &failed_lvnames,
+-						    handle, process_single_lv);
+-			if (ret != ECMD_PROCESSED) {
+-				stack;
+-				break;
+-			}
+-
+-			if (dm_list_empty(&failed_lvnames))
+-				break;
+-
+-			/* Try again with failed LVs in this VG */
+-			dm_list_init(&lvnames);
+-			dm_list_splice(&lvnames, &failed_lvnames);
+-
+-			free_cmd_vgs(&cmd_vgs);
+-			if (!cmd_vg_read(cmd, &cmd_vgs)) {
+-				stack;
+-				ret = ECMD_FAILED; /* break */
+-				break;
+-			}
+-		}
+-		if (ret > ret_max)
+-			ret_max = ret;
+-
+-		free_cmd_vgs(&cmd_vgs);
+-		/* FIXME: logic for breaking command is not consistent */
+-		if (sigint_caught()) {
+-			stack;
+-			return ECMD_FAILED;
 -		}
 -	}
 -
 -	return ret_max;
 -}
 -
- int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 			  const struct dm_list *tags, void *handle,
- 			  process_single_pv_fn_t process_single_pv)
-@@ -1736,3 +1643,152 @@ uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
- 	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
- 			   ((roundup) ? 99 : 0)) / 100);
+ int process_each_segment_in_pv(struct cmd_context *cmd,
+ 			       struct volume_group *vg,
+ 			       struct physical_volume *pv,
+@@ -1792,3 +1590,260 @@ int process_each_vg(struct cmd_context *cmd,
+ 	return ret;
  }
-+
+ 
 +/*
-+ * If arg is tag, add it to arg_tags.
-+ * Else the arg is vgname, add the vgname
-+ * from each arg to arg_vgnames.
++ * If arg is tag, add it to arg_tags
++ * else the arg is either vgname or vgname/lvname:
++ * - add the vgname of each arg to arg_vgnames
++ * - if arg has no lvname, add just vgname arg_lvnames,
++ *   it represents all lvs in the vg
++ * - if arg has lvname, add vgname/lvname to arg_lvnames
 + */
 +
-+static int get_arg_vgnames(struct cmd_context *cmd,
++static int get_arg_lvnames(struct cmd_context *cmd,
 +			   int argc, char **argv,
 +			   struct dm_list *arg_vgnames,
++			   struct dm_list *arg_lvnames,
 +			   struct dm_list *arg_tags)
 +{
 +	int opt = 0;
 +	int ret_max = ECMD_PROCESSED;
-+	const char *vg_name;
++	char *vglv;
++	size_t vglv_sz;
++	const char *vgname;
 +
-+	log_verbose("Using volume group(s) on command line");
++	log_verbose("Using logical volume(s) on command line");
 +
 +	for (; opt < argc; opt++) {
-+		vg_name = argv[opt];
-+		if (*vg_name == '@') {
-+			if (!validate_tag(vg_name + 1)) {
-+				log_error("Skipping invalid tag %s", vg_name);
-+				if (ret_max < EINVALID_CMD_LINE)
-+					ret_max = EINVALID_CMD_LINE;
++		const char *lv_name = argv[opt];
++		const char *tmp_lv_name;
++		char *vgname_def;
++		unsigned dev_dir_found = 0;
++
++		/* Do we have a tag or vgname or lvname? */
++		vgname = lv_name;
++
++		if (*vgname == '@') {
++			if (!validate_tag(vgname + 1)) {
++				log_error("Skipping invalid tag %s", vgname);
 +				continue;
 +			}
 +			if (!str_list_add(cmd->mem, arg_tags,
-+					  dm_pool_strdup(cmd->mem, vg_name + 1))) {
++					  dm_pool_strdup(cmd->mem, vgname + 1))) {
 +				log_error("strlist allocation failed");
 +				return ECMD_FAILED;
 +			}
 +			continue;
 +		}
 +
-+		vg_name = skip_dev_dir(cmd, vg_name, NULL);
-+		if (strchr(vg_name, '/')) {
-+			log_error("Invalid volume group name: %s", vg_name);
-+			if (ret_max < EINVALID_CMD_LINE)
-+				ret_max = EINVALID_CMD_LINE;
++		/* FIXME Jumbled parsing */
++		vgname = skip_dev_dir(cmd, vgname, &dev_dir_found);
++
++		if (*vgname == '/') {
++			log_error("\"%s\": Invalid path for Logical Volume",
++				  argv[opt]);
++			if (ret_max < ECMD_FAILED)
++				ret_max = ECMD_FAILED;
 +			continue;
 +		}
++		lv_name = vgname;
++		if ((tmp_lv_name = strchr(vgname, '/'))) {
++			/* Must be an LV */
++			lv_name = tmp_lv_name;
++			while (*lv_name == '/')
++				lv_name++;
++			if (!(vgname = extract_vgname(cmd, vgname))) {
++				if (ret_max < ECMD_FAILED) {
++					stack;
++					ret_max = ECMD_FAILED;
++				}
++				continue;
++			}
++		} else if (!dev_dir_found &&
++			   (vgname_def = default_vgname(cmd))) {
++			vgname = vgname_def;
++		} else
++			lv_name = NULL;
++
 +		if (!str_list_add(cmd->mem, arg_vgnames,
-+				  dm_pool_strdup(cmd->mem, vg_name))) {
++				  dm_pool_strdup(cmd->mem, vgname))) {
 +			log_error("strlist allocation failed");
 +			return ECMD_FAILED;
++		}
++
++		if (!lv_name) {
++			if (!str_list_add(cmd->mem, arg_lvnames,
++					  dm_pool_strdup(cmd->mem, vgname))) {
++				log_error("strlist allocation failed");
++				return ECMD_FAILED;
++			}
++		} else {
++			vglv_sz = strlen(vgname) + strlen(lv_name) + 2;
++			if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
++			    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lv_name) < 0) {
++				log_error("vg/lv string alloc failed");
++				return ECMD_FAILED;
++			}
++			if (!str_list_add(cmd->mem, arg_lvnames, vglv)) {
++				log_error("strlist allocation failed");
++				return ECMD_FAILED;
++			}
 +		}
 +	}
 +
 +	return ret_max;
 +}
 +
-+static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
++static int process_lv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
++				   struct dm_list *vg_name_list,
++				   struct dm_list *arg_vgnames,
++				   struct dm_list *arg_lvnames,
++				   struct dm_list *arg_tags,
++				   void *handle,
++				   process_single_lv_fn_t process_single_lv)
 +{
-+	int ret_max = ECMD_PROCESSED;
-+	struct dm_list *vgnames;
-+	struct str_list *sl;
-+	const char *vg_name;
-+
-+	log_verbose("Finding all volume groups");
-+
-+	if (!lvmetad_vg_list_to_lvmcache(cmd))
-+		stack;
-+
-+	if (!(vgnames = get_vgnames(cmd, 0)) || dm_list_empty(vgnames))
-+		goto out;
-+
-+	dm_list_iterate_items(sl, vgnames) {
-+		vg_name = sl->str;
-+		if (!vg_name)
-+			continue;
-+
-+		if (!str_list_add(cmd->mem, all_vgnames,
-+				  dm_pool_strdup(cmd->mem, vg_name))) {
-+			log_error("strlist allocation failed");
-+			return ECMD_FAILED;
-+		}
-+	}
-+out:
-+	return ret_max;
-+}
-+
-+static int process_vg_name_list(struct cmd_context *cmd, uint32_t flags,
-+				struct dm_list *vg_name_list,
-+				struct dm_list *arg_vgnames,
-+				struct dm_list *arg_tags,
-+				void *handle,
-+				process_single_vg_fn_t process_single_vg)
-+{
-+	struct str_list *sl;
++	struct str_list *sl, *sll;
++	struct cmd_vg *cvl_vg;
++	struct dm_list *tags_arg;
++	struct dm_list cmd_vgs;
++	struct dm_list failed_lvnames;
++	struct dm_list lvnames;
 +	const char *vgname;
 +	int ret_max = ECMD_PROCESSED;
++	int ret = 0;
++
++	dm_list_init(&failed_lvnames);
 +
 +	dm_list_iterate_items(sl, vg_name_list) {
 +		vgname = sl->str;
-+		ret_max = _process_one_vg(cmd, vgname,
-+					  arg_tags, arg_vgnames,
-+					  flags, handle, ret_max,
-+					  process_single_vg);
 +
-+		if (sigint_caught())
-+			break;
++		dm_list_init(&cmd_vgs);
++		if (!(cvl_vg = cmd_vg_add(cmd->mem, &cmd_vgs,
++					  vgname, NULL, flags))) {
++			stack;
++			return ECMD_FAILED;
++		}
++
++		if (!cmd_vg_read(cmd, &cmd_vgs)) {
++			free_cmd_vgs(&cmd_vgs);
++			if (ret_max < ECMD_FAILED) {
++				log_error("Skipping volume group %s", vgname);
++				ret_max = ECMD_FAILED;
++			} else
++				stack;
++			continue;
++		}
++
++		/*
++		 * arg_lvnames contains some elements that are just "vgname"
++		 * which means process all lvs in the vg.  Other elements
++		 * are "vgname/lvname" which means process only the select
++		 * lvs in the vg.
++		 */
++
++		tags_arg = arg_tags;
++		dm_list_init(&lvnames);	/* LVs to be processed in this VG */
++
++		dm_list_iterate_items(sll, arg_lvnames) {
++			const char *vg_name = sll->str;
++			const char *lv_name = strchr(vg_name, '/');
++
++			if (!lv_name && !strcmp(vg_name, vgname)) {
++				/* Process all LVs in this VG */
++				tags_arg = NULL;
++				dm_list_init(&lvnames);
++				break;
++			}
++			
++			if (lv_name && !strncmp(vg_name, vgname, strlen(vgname)) &&
++			    strlen(vgname) == (size_t) (lv_name - vg_name)) {
++				if (!str_list_add(cmd->mem, &lvnames,
++						  dm_pool_strdup(cmd->mem, lv_name + 1))) {
++					log_error("strlist allocation failed");
++					free_cmd_vgs(&cmd_vgs);
++					return ECMD_FAILED;
++				}
++			}
++		}
++
++		while (!sigint_caught()) {
++			ret = process_each_lv_in_vg(cmd, cvl_vg->vg, &lvnames,
++						    tags_arg, &failed_lvnames,
++						    handle, process_single_lv);
++			if (ret != ECMD_PROCESSED) {
++				stack;
++				break;
++			}
++
++			if (dm_list_empty(&failed_lvnames))
++				break;
++
++			/* Try again with failed LVs in this VG */
++			dm_list_init(&lvnames);
++			dm_list_splice(&lvnames, &failed_lvnames);
++
++			free_cmd_vgs(&cmd_vgs);
++			if (!cmd_vg_read(cmd, &cmd_vgs)) {
++				stack;
++				ret = ECMD_FAILED; /* break */
++				break;
++			}
++		}
++		if (ret > ret_max)
++			ret_max = ret;
++
++		free_cmd_vgs(&cmd_vgs);
++		/* FIXME: logic for breaking command is not consistent */
++		if (sigint_caught()) {
++			stack;
++			return ECMD_FAILED;
++		}
 +	}
 +
 +	return ret_max;
 +}
 +
-+int process_each_vg(struct cmd_context *cmd,
++int process_each_lv(struct cmd_context *cmd,
 +		    int argc, char **argv, uint32_t flags,
 +		    void *handle,
-+		    process_single_vg_fn_t process_single_vg)
++		    process_single_lv_fn_t process_single_lv)
 +{
 +	struct dm_list all_vgnames;
 +	struct dm_list arg_vgnames;
++	struct dm_list arg_lvnames;
 +	struct dm_list arg_tags;
 +	struct dm_list *vg_name_list;
 +	int ret;
 +
 +	dm_list_init(&all_vgnames);
 +	dm_list_init(&arg_vgnames);
++	dm_list_init(&arg_lvnames);
 +	dm_list_init(&arg_tags);
 +
-+	ret = get_arg_vgnames(cmd, argc, argv, &arg_vgnames, &arg_tags);
++	ret = get_arg_lvnames(cmd, argc, argv,
++			      &arg_vgnames, &arg_lvnames, &arg_tags);
 +	if (ret != ECMD_PROCESSED)
 +		return ret;
 +
@@ -360,112 +548,25 @@ index f00988a..247462b 100644
 +	else
 +		vg_name_list = &arg_vgnames;
 +
-+	ret = process_vg_name_list(cmd, flags, vg_name_list,
-+				   &arg_vgnames, &arg_tags,
-+				   handle, process_single_vg);
++	ret = process_lv_vg_name_list(cmd, flags, vg_name_list,
++				      &arg_vgnames, &arg_lvnames, &arg_tags,
++				      handle, process_single_lv);
 +	return ret;
 +}
 +
-diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
-index 32948d8..84f85cc 100644
---- a/tools/vgcfgbackup.c
-+++ b/tools/vgcfgbackup.c
-@@ -92,7 +92,7 @@ int vgcfgbackup(struct cmd_context *cmd, int argc, char **argv)
- 
- 	init_pvmove(1);
- 
--	ret = process_each_vg(cmd, argc, argv, READ_ALLOW_INCONSISTENT,
-+	ret = process_each_vg(cmd, argc, argv, READ_ALLOW_INCONSISTENT | ENABLE_ALL_VGNAMES,
- 			      &last_filename, &vg_backup_single);
- 
- 	dm_free(last_filename);
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index ccf31da..d359af0 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -538,6 +538,8 @@ static int vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 
- int vgchange(struct cmd_context *cmd, int argc, char **argv)
- {
-+	uint32_t flags = 0;
-+
- 	/* Update commands that can be combined */
- 	int update_partial_safe =
- 		arg_count(cmd, deltag_ARG) ||
-@@ -618,6 +620,10 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	if (!update || !update_partial_unsafe)
- 		cmd->handles_missing_pvs = 1;
- 
--	return process_each_vg(cmd, argc, argv, update ? READ_FOR_UPDATE : 0,
-+	flags = ENABLE_ALL_VGNAMES;
-+	if (update)
-+		flags |= READ_FOR_UPDATE;
-+
-+	return process_each_vg(cmd, argc, argv, flags,
- 			       NULL, &vgchange_single);
- }
-diff --git a/tools/vgck.c b/tools/vgck.c
-index bdfee05..3583ebb 100644
---- a/tools/vgck.c
-+++ b/tools/vgck.c
-@@ -42,6 +42,6 @@ static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
- 
- int vgck(struct cmd_context *cmd, int argc, char **argv)
- {
--	return process_each_vg(cmd, argc, argv, 0, NULL,
-+	return process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES, NULL,
- 			       &vgck_single);
- }
-diff --git a/tools/vgdisplay.c b/tools/vgdisplay.c
-index afc92fe..6efbab7 100644
---- a/tools/vgdisplay.c
-+++ b/tools/vgdisplay.c
-@@ -88,7 +88,7 @@ int vgdisplay(struct cmd_context *cmd, int argc, char **argv)
- 	}
- **********/
- 
--	return process_each_vg(cmd, argc, argv, 0, NULL,
-+	return process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES, NULL,
- 			       vgdisplay_single);
- 
- /******** FIXME Need to count number processed
-diff --git a/tools/vgexport.c b/tools/vgexport.c
-index c573619..26eb4fb 100644
---- a/tools/vgexport.c
-+++ b/tools/vgexport.c
-@@ -54,6 +54,8 @@ bad:
- 
- int vgexport(struct cmd_context *cmd, int argc, char **argv)
- {
-+	uint32_t flags = READ_FOR_UPDATE;
-+
- 	if (!argc && !arg_count(cmd, all_ARG)) {
- 		log_error("Please supply volume groups or use -a for all.");
- 		return ECMD_FAILED;
-@@ -64,6 +66,9 @@ int vgexport(struct cmd_context *cmd, int argc, char **argv)
+diff --git a/tools/vgmknodes.c b/tools/vgmknodes.c
+index 0fd273f..a012230 100644
+--- a/tools/vgmknodes.c
++++ b/tools/vgmknodes.c
+@@ -39,6 +39,6 @@ int vgmknodes(struct cmd_context *cmd, int argc, char **argv)
  		return ECMD_FAILED;
  	}
  
--	return process_each_vg(cmd, argc, argv, READ_FOR_UPDATE, NULL,
-+	if (!argc && arg_count(cmd, all_ARG))
-+		flags |= ENABLE_ALL_VGNAMES;
-+
-+	return process_each_vg(cmd, argc, argv, flags, NULL,
- 			       &vgexport_single);
+-	return process_each_lv(cmd, argc, argv, LCK_VG_READ, NULL,
+-			    &_vgmknodes_single);
++	return process_each_lv(cmd, argc, argv, LCK_VG_READ | ENABLE_ALL_VGNAMES,
++			       NULL, &_vgmknodes_single);
  }
-diff --git a/tools/vgscan.c b/tools/vgscan.c
-index 99124ef..b960960 100644
---- a/tools/vgscan.c
-+++ b/tools/vgscan.c
-@@ -60,7 +60,7 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
- 
- 	log_print_unless_silent("Reading all physical volumes.  This may take a while...");
- 
--	maxret = process_each_vg(cmd, argc, argv, 0, NULL,
-+	maxret = process_each_vg(cmd, argc, argv, ENABLE_ALL_VGNAMES, NULL,
- 				 &vgscan_single);
- 
- 	if (arg_count(cmd, mknodes_ARG)) {
 -- 
 1.8.1.rc1.5.g7e0651a
 
