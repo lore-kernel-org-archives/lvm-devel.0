@@ -1,1254 +1,391 @@
 From: David Teigland <teigland@redhat.com>
-Date: Tue, 26 Mar 2013 16:09:25 -0500
-Subject: [PATCH 5/8] test: add process-each-vg and process-each-lv
-Message-ID: <1364332168-24676-6-git-send-email-teigland@redhat.com>
+Date: Tue, 26 Mar 2013 16:09:26 -0500
+Subject: [PATCH 6/8] toollib: read vgs before processing
+Message-ID: <1364332168-24676-7-git-send-email-teigland@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-These test the toollib functions that select
-vgs/lvs to process based on command line args:
-empty, vg name(s), lv names(s), vg tag(s),
-lv tags(s), and combinations of all.
----
- test/shell/process-each-lv.sh | 954 ++++++++++++++++++++++++++++++++++++++++++
- test/shell/process-each-vg.sh | 264 ++++++++++++
- 2 files changed, 1218 insertions(+)
- create mode 100644 test/shell/process-each-lv.sh
- create mode 100644 test/shell/process-each-vg.sh
+In process_each_vg,lv, read all vgs, then
+process each, rather than reading and
+processing one at a time.
 
-diff --git a/test/shell/process-each-lv.sh b/test/shell/process-each-lv.sh
-new file mode 100644
-index 0000000..0140c26
---- /dev/null
-+++ b/test/shell/process-each-lv.sh
-@@ -0,0 +1,954 @@
-+#!/bin/sh
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Exercise toollib process_each_lv'
-+
-+. lib/test
-+
-+aux prepare_devs 10
-+
-+#
-+# process_each_lv is used by a number of lv commands:
-+# lvconvert lv      (none is error)
-+# lvchange  vg|lv   (none is error)
-+# lvremove  vg|lv   (none is error)
-+# lvdisplay [vg|lv] (none is all)
-+# vgmknodes [vg|lv] (none is all)
-+# lvs       [vg|lv] (none is all)
-+# lvscan            (none is all)
-+#
-+# (lv can also be a tag matching an lv tag, and
-+#  vg can also be a tag matching a vg tag.)
-+#
-+# The logic in process_each_vl is mainly related to
-+# selecting which vgs/lvs to process.
-+#
-+
-+#
-+# test lvremove vg|lv names
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+not lvremove
-+not lvremove garbage
-+not lvremove $vg1/garbage
-+
-+lvremove $vg1
-+lvs $vg1
-+not lvs $vg1/$lv1
-+vgremove $vg1
-+
-+lvremove $vg2
-+lvs $vg2
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+vgremove $vg2
-+
-+lvremove $vg3/$lv1
-+lvremove $vg3/$lv2 $vg3/$lv3
-+lvs $vg3
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+vgremove $vg3
-+
-+lvremove $vg4
-+lvs $vg4
-+vgremove $vg4
-+
-+lvremove $vg5/$lv1 $vg5 $vg5/$lv3
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove vg|lv names from multiple vgs
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove $vg2 $vg3/$lv3 $vg5/$lv1
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+not lvs $vg3/$lv3
-+not lvs $vg5/$lv1
-+
-+lvremove $vg2 $vg1
-+not lvs $vg1/$lv1
-+
-+lvremove $vg3/$lv1 $vg3 $vg4 $vg5/$lv2
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg5/$lv2
-+
-+lvremove $vg5 $vg1 $vg5/$lv3
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove @lvtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+lvchange --addtag V1L1 $vg1/$lv1
-+lvchange --addtag V2L1 $vg2/$lv1
-+lvchange --addtag V2L2 $vg2/$lv2
-+lvchange --addtag V23  $vg2/$lv1
-+lvchange --addtag V23  $vg2/$lv2
-+lvchange --addtag V23  $vg3/$lv1
-+lvchange --addtag V23  $vg3/$lv2
-+lvchange --addtag V23  $vg3/$lv3
-+lvchange --addtag V3L2 $vg3/$lv2
-+lvchange --addtag V3L3A $vg3/$lv3
-+lvchange --addtag V3L3B $vg3/$lv3
-+lvchange --addtag V5L1   $vg5/$lv1
-+lvchange --addtag V5L234 $vg5/$lv2
-+lvchange --addtag V5L234 $vg5/$lv3
-+lvchange --addtag V5L234 $vg5/$lv4
-+lvchange --addtag V5L5   $vg5/$lv5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+# verify all exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+lvs $vg3/$lv3
-+lvs $vg5/$lv1
-+lvs $vg5/$lv2
-+lvs $vg5/$lv3
-+lvs $vg5/$lv4
-+lvs $vg5/$lv5
-+
-+lvremove @garbage
-+
-+lvremove @V3L3A
-+not lvs $vg3/$lv3
-+# verify unremoved still exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+lvs $vg5/$lv1
-+lvs $vg5/$lv2
-+lvs $vg5/$lv3
-+lvs $vg5/$lv4
-+lvs $vg5/$lv5
-+
-+lvremove @V5L234
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+# verify unremoved still exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+lvs $vg5/$lv1
-+lvs $vg5/$lv5
-+
-+lvremove @V5L1 @V5L5
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv5
-+# verify unremoved still exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+
-+lvremove @V23 @V1L1 @V3L2
-+not lvs $vg1/$lv1
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove @vgtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove @V4
-+# verify unremoved exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+lvs $vg3/$lv3
-+lvs $vg5/$lv1
-+lvs $vg5/$lv2
-+lvs $vg5/$lv3
-+lvs $vg5/$lv4
-+lvs $vg5/$lv5
-+
-+lvremove @V5
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+# verify unremoved exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv2
-+lvs $vg3/$lv3
-+
-+lvremove @V1 @V23
-+not lvs $vg1/$lv1
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove @V35 @V5
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+# verify unremoved exist
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+
-+lvremove @V1 @V23
-+not lvs $vg1/$lv1
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove vg|lv names and @lvtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+lvchange --addtag V1L1 $vg1/$lv1
-+lvchange --addtag V2L1 $vg2/$lv1
-+lvchange --addtag V2L2 $vg2/$lv2
-+lvchange --addtag V23  $vg2/$lv1
-+lvchange --addtag V23  $vg2/$lv2
-+lvchange --addtag V23  $vg3/$lv1
-+lvchange --addtag V23  $vg3/$lv2
-+lvchange --addtag V23  $vg3/$lv3
-+lvchange --addtag V3L2 $vg3/$lv2
-+lvchange --addtag V3L3A $vg3/$lv3
-+lvchange --addtag V3L3B $vg3/$lv3
-+lvchange --addtag V5L1   $vg5/$lv1
-+lvchange --addtag V5L234 $vg5/$lv2
-+lvchange --addtag V5L234 $vg5/$lv3
-+lvchange --addtag V5L234 $vg5/$lv4
-+lvchange --addtag V5L5   $vg5/$lv5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove $vg1/$lv1 @V3L2 @V5L234
-+not lvs $vg1/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+# verify unremoved exist
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+lvs $vg3/$lv1
-+lvs $vg3/$lv3
-+lvs $vg5/$lv1
-+lvs $vg5/$lv5
-+
-+lvremove $vg2/$lv1 @V23 $vg5/$lv1 @V5L5
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove vg|lv names and @vgtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove $vg1/$lv1 @V35
-+not lvs $vg1/$lv1
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+# verify unremoved exist
-+lvs $vg2/$lv1
-+lvs $vg2/$lv2
-+
-+lvremove $vg2/$lv1 @V23 $vg2/$lv2
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove @lvtags and @vgtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+lvchange --addtag V1L1 $vg1/$lv1
-+lvchange --addtag V2L1 $vg2/$lv1
-+lvchange --addtag V2L2 $vg2/$lv2
-+lvchange --addtag V23  $vg2/$lv1
-+lvchange --addtag V23  $vg2/$lv2
-+lvchange --addtag V23  $vg3/$lv1
-+lvchange --addtag V23  $vg3/$lv2
-+# to check that vg tag @V23 includes this
-+# lvchange --addtag V23  $vg3/$lv3
-+lvchange --addtag V3L2 $vg3/$lv2
-+lvchange --addtag V3L3A $vg3/$lv3
-+lvchange --addtag V3L3B $vg3/$lv3
-+lvchange --addtag V5L1   $vg5/$lv1
-+lvchange --addtag V5L234 $vg5/$lv2
-+lvchange --addtag V5L234 $vg5/$lv3
-+lvchange --addtag V5L234 $vg5/$lv4
-+lvchange --addtag V5L5   $vg5/$lv5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove @V23 @V35
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+not lvs $vg5/$lv5
-+# verify unremoved exist
-+lvs $vg1/$lv1
-+
-+lvremove @V1 @V1L1
-+not lvs $vg1/$lv1
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvremove vg|lv names and @lvtags and @vgtags
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+lvchange --addtag V1L1 $vg1/$lv1
-+lvchange --addtag V2L1 $vg2/$lv1
-+lvchange --addtag V2L2 $vg2/$lv2
-+lvchange --addtag V23  $vg2/$lv1
-+lvchange --addtag V23  $vg2/$lv2
-+lvchange --addtag V23  $vg3/$lv1
-+lvchange --addtag V23  $vg3/$lv2
-+# to check that vg tag @V23 includes this
-+# lvchange --addtag V23  $vg3/$lv3
-+lvchange --addtag V3L2 $vg3/$lv2
-+lvchange --addtag V3L3A $vg3/$lv3
-+lvchange --addtag V3L3B $vg3/$lv3
-+lvchange --addtag V5L1   $vg5/$lv1
-+lvchange --addtag V5L234 $vg5/$lv2
-+lvchange --addtag V5L234 $vg5/$lv3
-+lvchange --addtag V5L234 $vg5/$lv4
-+lvchange --addtag V5L5   $vg5/$lv5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+lvremove $vg1/$lv1 @V23 @V5L5
-+not lvs $vg1/$lv1
-+not lvs $vg2/$lv1
-+not lvs $vg2/$lv2
-+not lvs $vg3/$lv1
-+not lvs $vg3/$lv2
-+not lvs $vg3/$lv3
-+not lvs $vg5/$lv5
-+# verify unremoved exist
-+lvs $vg5/$lv1
-+lvs $vg5/$lv2
-+lvs $vg5/$lv3
-+lvs $vg5/$lv4
-+
-+lvremove $vg5/$lv2 @V5L234 @V5
-+not lvs $vg5/$lv1
-+not lvs $vg5/$lv2
-+not lvs $vg5/$lv3
-+not lvs $vg5/$lv4
-+
-+vgremove $vg1
-+vgremove $vg2
-+vgremove $vg3
-+vgremove $vg4
-+vgremove $vg5
-+
-+
-+#
-+# test lvs: empty, vg(s), lv(s), vgtag(s), lvtag(s), garbage, combinations
-+#
-+
-+# set up vgs/lvs that we will remove
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+vgcreate $vg3 "$dev5" "$dev6"
-+vgcreate $vg4 "$dev7" "$dev8"
-+vgcreate $vg5 "$dev9" "$dev10"
-+lvcreate -l 2 -n $lv1 $vg1
-+lvcreate -l 2 -n $lv1 $vg2
-+lvcreate -l 2 -n $lv2 $vg2
-+lvcreate -l 2 -n $lv1 $vg3
-+lvcreate -l 2 -n $lv2 $vg3
-+lvcreate -l 2 -n $lv3 $vg3
-+lvcreate -l 2 -n $lv1 $vg5
-+lvcreate -l 2 -n $lv2 $vg5
-+lvcreate -l 2 -n $lv3 $vg5
-+lvcreate -l 2 -n $lv4 $vg5
-+lvcreate -l 2 -n $lv5 $vg5
-+lvchange --addtag V1L1 $vg1/$lv1
-+lvchange --addtag V2L1 $vg2/$lv1
-+lvchange --addtag V2L2 $vg2/$lv2
-+lvchange --addtag V23  $vg2/$lv1
-+lvchange --addtag V23  $vg2/$lv2
-+lvchange --addtag V23  $vg3/$lv1
-+lvchange --addtag V23  $vg3/$lv2
-+lvchange --addtag V23  $vg3/$lv3
-+lvchange --addtag V3L2 $vg3/$lv2
-+lvchange --addtag V3L3A $vg3/$lv3
-+lvchange --addtag V3L3B $vg3/$lv3
-+lvchange --addtag V5L1   $vg5/$lv1
-+lvchange --addtag V5L234 $vg5/$lv2
-+lvchange --addtag V5L234 $vg5/$lv3
-+lvchange --addtag V5L234 $vg5/$lv4
-+lvchange --addtag V5L5   $vg5/$lv5
-+vgchange --addtag V1  $vg1
-+vgchange --addtag V23 $vg2
-+vgchange --addtag V23 $vg3
-+vgchange --addtag V35 $vg3
-+vgchange --addtag V4  $vg4
-+vgchange --addtag V35 $vg5
-+vgchange --addtag V5  $vg5
-+vgchange -an $vg1
-+vgchange -an $vg2
-+vgchange -an $vg3
-+vgchange -an $vg4
-+vgchange -an $vg5
-+
-+# empty
-+lvs -o vg_name,lv_name --separator '-' >err
-+grep $vg1-$lv1 err
-+grep $vg2-$lv1 err
-+grep $vg2-$lv2 err
-+grep $vg3-$lv1 err
-+grep $vg3-$lv2 err
-+grep $vg3-$lv3 err
-+grep $vg5-$lv1 err
-+grep $vg5-$lv2 err
-+grep $vg5-$lv3 err
-+grep $vg5-$lv4 err
-+grep $vg5-$lv5 err
-+
-+# vg
-+lvs -o vg_name,lv_name --separator '-' $vg1 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# vgs
-+lvs -o vg_name,lv_name --separator '-' $vg1 $vg2 >err
-+grep $vg1-$lv1 err
-+grep $vg2-$lv1 err
-+grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# lv
-+lvs -o vg_name,lv_name --separator '-' $vg1/$lv1 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# lvs
-+lvs -o vg_name,lv_name --separator '-' $vg1/$lv1 $vg2/$lv1 $vg2/$lv2 >err
-+grep $vg1-$lv1 err
-+grep $vg2-$lv1 err
-+grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# vgtag
-+lvs -o vg_name,lv_name --separator '-' @V1 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# vgtags
-+lvs -o vg_name,lv_name --separator '-' @V1 @V35 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+grep $vg3-$lv1 err
-+grep $vg3-$lv2 err
-+grep $vg3-$lv3 err
-+grep $vg5-$lv1 err
-+grep $vg5-$lv2 err
-+grep $vg5-$lv3 err
-+grep $vg5-$lv4 err
-+grep $vg5-$lv5 err
-+
-+# lvtag
-+lvs -o vg_name,lv_name --separator '-' @V1L1 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# lvtags
-+lvs -o vg_name,lv_name --separator '-' @V1L1 @V5L234 >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+grep $vg5-$lv2 err
-+grep $vg5-$lv3 err
-+grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# vg and lv and vgtag and lvtag
-+lvs -o vg_name,lv_name --separator '-' $vg2 $vg5/$lv5 @V1 @V5L234 >err
-+grep $vg1-$lv1 err
-+grep $vg2-$lv1 err
-+grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+grep $vg5-$lv2 err
-+grep $vg5-$lv3 err
-+grep $vg5-$lv4 err
-+grep $vg5-$lv5 err
-+
-+# garbage name gives an error if used without a tag
-+
-+not lvs -o vg_name,lv_name --separator '-' garbage >err
-+not grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+not lvs -o vg_name,lv_name --separator '-' $vg1/$lv1 garbage >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# garbage name does not give an error if used with a tag
-+
-+lvs -o vg_name,lv_name --separator '-' @V1 garbage >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+lvs -o vg_name,lv_name --separator '-' @garbage garbage >err
-+not grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+# garbage tag never gives an error
-+
-+lvs -o vg_name,lv_name --separator '-' @V1 @garbage >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+lvs -o vg_name,lv_name --separator '-' $vg1/$lv1 @garbage >err
-+grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-+lvs -o vg_name,lv_name --separator '-' @garbage >err
-+not grep $vg1-$lv1 err
-+not grep $vg2-$lv1 err
-+not grep $vg2-$lv2 err
-+not grep $vg3-$lv1 err
-+not grep $vg3-$lv2 err
-+not grep $vg3-$lv3 err
-+not grep $vg5-$lv1 err
-+not grep $vg5-$lv2 err
-+not grep $vg5-$lv3 err
-+not grep $vg5-$lv4 err
-+not grep $vg5-$lv5 err
-+
-diff --git a/test/shell/process-each-vg.sh b/test/shell/process-each-vg.sh
-new file mode 100644
-index 0000000..90c0dbc
---- /dev/null
-+++ b/test/shell/process-each-vg.sh
-@@ -0,0 +1,264 @@
-+#!/bin/sh
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Exercise toollib process_each_vg'
-+
-+. lib/test
-+
-+aux prepare_devs 6
-+
-+#
-+# process_each_vg is used by a number of vg commands;
-+# use 'vgremove' and 'vgs' to test it.
-+#
-+# The logic in process_each_vg is mainly related to
-+# selecting which vg's to process.
-+#
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate $vg1 "$dev1"
-+vgcreate $vg2 "$dev2"
-+vgcreate $vg3 "$dev3"
-+vgcreate $vg4 "$dev4"
-+
-+# these two vgs will not be removed
-+vgcreate $vg5 "$dev5"
-+vgchange --addtag tagvg5 $vg5
-+lvcreate -l 4 -n $lv1 $vg5
-+vgcreate $vg6 "$dev6"
-+lvcreate -l 4 -n $lv2 $vg6
-+
-+# should fail without any arg
-+not vgremove
-+
-+# should succeed
-+vgremove $vg1
-+vgremove $vg2 $vg3 $vg4
-+
-+# these should fail because they are already removed
-+not vgremove $vg1
-+not vgremove $vg2
-+not vgremove $vg3
-+not vgremove $vg4
-+
-+# these should fail because they have lvs in them
-+not vgremove $vg5
-+not vgremove $vg6
-+
-+# check that the vgs we removed are gone
-+not vgs $vg1
-+not vgs $vg2
-+not vgs $vg3
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+# should do nothing and fail
-+not vgremove garbage
-+
-+# should find nothing to remove
-+vgremove @garbage
-+
-+# should find nothing to remove
-+vgremove @$vg1
-+
-+# should succeed
-+vgremove $vg1
-+not vgs $vg1
-+
-+vgremove $vg2 $vg3 $vg4
-+not vgs $vg2
-+not vgs $vg3
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+vgremove @tagfoo
-+not vgs $vg1
-+not vgs $vg2
-+
-+vgremove @tagfoo2 @tagbar
-+not vgs $vg3
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+vgremove $vg1 @tagfoo2
-+not vgs $vg1
-+not vgs $vg3
-+
-+vgremove @tagbar $vg2
-+not vgs $vg2
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+vgremove @foo @tagfoo2 $vg1 $vg2
-+not vgs $vg1
-+not vgs $vg2
-+not vgs $vg3
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+vgremove @tagfoo $vg1 @tagfoo @tagfoo2 $vg3 @tagbar
-+not vgs $vg1
-+not vgs $vg2
-+not vgs $vg3
-+not vgs $vg4
-+
-+
-+#
-+# set up four vgs that we will remove
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+not vgremove garbage $vg1
-+not vgs $vg1
-+
-+not vgremove $vg2 garbage
-+not vgs $vg2
-+
-+vgremove $vg3 @garbage
-+not vgs $vg3
-+
-+vgremove @garbage $vg4
-+not vgs $vg4
-+
-+
-+#
-+# end vgremove tests
-+# check that the two vgs we did not intend to remove
-+# are still there, and then remove them
-+#
-+vgs $vg5
-+vgs $vg6
-+vgremove -f $vg5
-+vgremove -f $vg6
-+not vgs $vg5
-+not vgs $vg6
-+
-+
-+#
-+# set up four vgs that we will report
-+#
-+vgcreate --addtag tagfoo $vg1 "$dev1"
-+vgcreate --addtag tagfoo $vg2 "$dev2"
-+vgcreate --addtag tagfoo2 $vg3 "$dev3"
-+vgcreate --addtag tagbar $vg4 "$dev4"
-+vgchange --addtag foo $vg4
-+
-+vgs >err
-+grep $vg1 err
-+grep $vg2 err
-+grep $vg3 err
-+grep $vg4 err
-+
-+vgs $vg1 $vg2 >err
-+grep $vg1 err
-+grep $vg2 err
-+not grep $vg3 err
-+not grep $vg4 err
-+
-+vgs @tagfoo >err
-+grep $vg1 err
-+grep $vg2 err
-+not grep $vg3 err
-+not grep $vg4 err
-+
-+vgs @tagfoo2 >err
-+grep $vg3 err
-+not grep $vg1 err
-+not grep $vg2 err
-+not grep $vg4 err
-+
-+vgs @tagfoo2 @tagbar >err
-+grep $vg3 err
-+grep $vg4 err
-+not grep $vg1 err
-+not grep $vg2 err
-+
-+vgs $vg1 @tagbar >err
-+grep $vg1 err
-+grep $vg4 err
-+not grep $vg2 err
-+not grep $vg3 err
-+
-+vgs $vg1 @tagfoo >err
-+grep $vg1 err
-+grep $vg2 err
-+not grep $vg3 err
-+not grep $vg4 err
-+
-+not vgs garbage >err
-+not grep $vg1 err
-+not grep $vg2 err
-+not grep $vg3 err
-+not grep $vg4 err
-+
-+not vgs garbage $vg1 >err
-+grep $vg1 err
-+not grep $vg2 err
-+not grep $vg3 err
-+not grep $vg4 err
-+
-+vgs @garbage @foo >err
-+grep $vg4 err
-+not grep $vg1 err
-+not grep $vg2 err
-+not grep $vg3 err
-+
+Locking is currently hidden within vg_read,
+so another effect of this change is that all
+locks are acquired and held together at the
+start rather than being acquired and released
+individually.
+---
+ lib/datastruct/str_list.c |  38 +++++++++++
+ lib/datastruct/str_list.h |   1 +
+ tools/toollib.c           | 169 ++++++++++++++++++++++++++++++++++++----------
+ 3 files changed, 173 insertions(+), 35 deletions(-)
+
+diff --git a/lib/datastruct/str_list.c b/lib/datastruct/str_list.c
+index dfce69c..374de5c 100644
+--- a/lib/datastruct/str_list.c
++++ b/lib/datastruct/str_list.c
+@@ -50,6 +50,44 @@ int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str)
+ 	return 1;
+ }
+ 
++int str_list_add_order(struct dm_pool *mem, struct dm_list *sll, const char *str)
++{
++	struct str_list *sl_tmp;
++	struct str_list *sl_new;
++
++	if (!str)
++		return_0;
++
++	/* Already in list? */
++	if (str_list_match_item(sll, str))
++		return 1;
++
++	if (!(sl_new = dm_pool_alloc(mem, sizeof(*sl_new))))
++		return_0;
++
++	sl_new->str = str;
++
++	if (dm_list_empty(sll)) {
++		dm_list_add(sll, &sl_new->list);
++		return 1;
++	}
++
++	dm_list_iterate_items(sl_tmp, sll) {
++		/*
++		 * If new str (s1) is less than existing/tmp str (s2),
++		 * then break and insert new before existing.
++		 */
++		if (strcmp(sl_new->str, sl_tmp->str) < 0)
++			break;
++	}
++
++	sl_new->list.n    = &sl_tmp->list;
++	sl_new->list.p    = sl_tmp->list.p;
++	sl_tmp->list.p->n = &sl_new->list;
++	sl_tmp->list.p    = &sl_new->list;
++	return 1;
++}
++
+ void str_list_del(struct dm_list *sll, const char *str)
+ {
+ 	struct dm_list *slh, *slht;
+diff --git a/lib/datastruct/str_list.h b/lib/datastruct/str_list.h
+index 42f47da..bab6d9b 100644
+--- a/lib/datastruct/str_list.h
++++ b/lib/datastruct/str_list.h
+@@ -18,6 +18,7 @@
+ 
+ struct dm_list *str_list_create(struct dm_pool *mem);
+ int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str);
++int str_list_add_order(struct dm_pool *mem, struct dm_list *sll, const char *str);
+ void str_list_del(struct dm_list *sll, const char *str);
+ int str_list_match_item(const struct dm_list *sll, const char *str);
+ int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **tag_matched);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b593b93..65501e8 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -16,6 +16,11 @@
+ #include "tools.h"
+ #include <sys/stat.h>
+ 
++struct vg_list {
++	struct dm_list list;
++	struct volume_group *vg;
++};
++
+ const char *command_name(struct cmd_context *cmd)
+ {
+ 	return cmd->command->name;
+@@ -1419,8 +1424,8 @@ static int get_arg_vgnames(struct cmd_context *cmd,
+ 				ret_max = EINVALID_CMD_LINE;
+ 			continue;
+ 		}
+-		if (!str_list_add(cmd->mem, arg_vgnames,
+-				  dm_pool_strdup(cmd->mem, vg_name))) {
++		if (!str_list_add_order(cmd->mem, arg_vgnames,
++					dm_pool_strdup(cmd->mem, vg_name))) {
+ 			log_error("strlist allocation failed");
+ 			return ECMD_FAILED;
+ 		}
+@@ -1449,8 +1454,8 @@ static int get_all_vgnames(struct cmd_context *cmd, struct dm_list *all_vgnames)
+ 		if (!vg_name)
+ 			continue;
+ 
+-		if (!str_list_add(cmd->mem, all_vgnames,
+-				  dm_pool_strdup(cmd->mem, vg_name))) {
++		if (!str_list_add_order(cmd->mem, all_vgnames,
++					dm_pool_strdup(cmd->mem, vg_name))) {
+ 			log_error("strlist allocation failed");
+ 			return ECMD_FAILED;
+ 		}
+@@ -1459,14 +1464,79 @@ out:
+ 	return ret_max;
+ }
+ 
++static struct vg_list *find_vgl(struct dm_list *vgl_list, const char *vg_name)
++{
++	struct vg_list *vgl;
++
++	dm_list_iterate_items(vgl, vgl_list) {
++		if (!strcmp(vg_name, vgl->vg->name))
++			return vgl;
++	}
++	return NULL;
++}
++
++static void release_vg_list(struct cmd_context *cmd, struct dm_list *vgl_list)
++{
++	struct vg_list *vgl;
++
++	dm_list_iterate_items(vgl, vgl_list) {
++		if (vg_read_error(vgl->vg))
++			release_vg(vgl->vg);
++		else
++			unlock_and_release_vg(cmd, vgl->vg, vgl->vg->name);
++	}
++}
++
++static int read_vg_name_list(struct cmd_context *cmd, uint32_t flags,
++			     struct dm_list *vg_name_list,
++			     struct dm_list *vgl_list)
++{
++	struct volume_group *vg;
++	struct vg_list *vgl;
++	struct str_list *sl;
++	const char *vg_name;
++	int ret_max = ECMD_PROCESSED;
++
++	dm_list_iterate_items(sl, vg_name_list) {
++		vg_name = sl->str;
++
++		if (!(vgl = dm_pool_alloc(cmd->mem, sizeof(*vgl)))) {
++			log_error("vg_list alloc failed");
++			release_vg_list(cmd, vgl_list);
++			return ECMD_FAILED;
++		}
++
++		vg = vg_read(cmd, vg_name, NULL, flags);
++		if (vg_read_error(vg)) {
++			if (!((flags & READ_ALLOW_INCONSISTENT) &&
++			     (vg_read_error(vg) == FAILED_INCONSISTENT))) {
++				ret_max = ECMD_FAILED;
++				release_vg(vg);
++				stack;
++				continue;
++			}
++		}
++
++		vgl->vg = vg;
++		dm_list_add(vgl_list, &vgl->list);
++
++		if (sigint_caught())
++			break;
++	}
++
++	return ret_max;
++}
++
+ static int process_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 				struct dm_list *vg_name_list,
+ 				struct dm_list *arg_vgnames,
+ 				struct dm_list *arg_tags,
++				struct dm_list *vgl_list,
+ 				void *handle,
+ 				process_single_vg_fn_t process_single_vg)
+ {
+ 	struct volume_group *vg;
++	struct vg_list *vgl;
+ 	struct str_list *sl;
+ 	const char *vgname;
+ 	int ret_max = ECMD_PROCESSED;
+@@ -1480,16 +1550,11 @@ static int process_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 	dm_list_iterate_items(sl, vg_name_list) {
+ 		vgname = sl->str;
+ 
+-		vg = vg_read(cmd, vgname, NULL, flags);
+-		if (vg_read_error(vg)) {
+-			if (!((flags & READ_ALLOW_INCONSISTENT) &&
+-			     (vg_read_error(vg) == FAILED_INCONSISTENT))) {
+-				ret_max = ECMD_FAILED;
+-				release_vg(vg);
+-				stack;
+-				continue;
+-			}
+-		}
++		vgl = find_vgl(vgl_list, vgname);
++		if (!vgl)
++			continue;
++
++		vg = vgl->vg;
+ 
+ 		process_vg = 0;
+ 
+@@ -1507,11 +1572,6 @@ static int process_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 		if (process_vg)
+ 			ret = process_single_vg(cmd, vgname, vg, handle);
+ 
+-		if (vg_read_error(vg))
+-			release_vg(vg);
+-		else
+-			unlock_and_release_vg(cmd, vg, vgname);
+-
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+ 		if (sigint_caught())
+@@ -1529,12 +1589,15 @@ int process_each_vg(struct cmd_context *cmd,
+ 	struct dm_list all_vgnames;
+ 	struct dm_list arg_vgnames;
+ 	struct dm_list arg_tags;
++	struct dm_list vgl_list;
+ 	struct dm_list *vg_name_list;
++	int ret_max = ECMD_PROCESSED;
+ 	int ret;
+ 
+ 	dm_list_init(&all_vgnames);
+ 	dm_list_init(&arg_vgnames);
+ 	dm_list_init(&arg_tags);
++	dm_list_init(&vgl_list);
+ 
+ 	ret = get_arg_vgnames(cmd, argc, argv, &arg_vgnames, &arg_tags);
+ 	if (ret != ECMD_PROCESSED)
+@@ -1557,10 +1620,27 @@ int process_each_vg(struct cmd_context *cmd,
+ 	else
+ 		vg_name_list = &arg_vgnames;
+ 
++	ret = read_vg_name_list(cmd, flags, vg_name_list, &vgl_list);
++
++	if (ret > ret_max)
++		ret_max = ret;
++	if (sigint_caught())
++		goto out;
++
++	if (dm_list_empty(&vgl_list)) {
++		stack;
++		goto out;
++	}
++
+ 	ret = process_vg_name_list(cmd, flags, vg_name_list,
+-				   &arg_vgnames, &arg_tags,
+-				   handle, process_single_vg);
+-	return ret;
++			           &arg_vgnames, &arg_tags,
++			           &vgl_list,
++			           handle, process_single_vg);
++	if (ret > ret_max)
++		ret_max = ret;
++out:
++	release_vg_list(cmd, &vgl_list);
++	return ret_max;
+ }
+ 
+ /*
+@@ -1637,8 +1717,8 @@ static int get_arg_lvnames(struct cmd_context *cmd,
+ 		} else
+ 			lv_name = NULL;
+ 
+-		if (!str_list_add(cmd->mem, arg_vgnames,
+-				  dm_pool_strdup(cmd->mem, vgname))) {
++		if (!str_list_add_order(cmd->mem, arg_vgnames,
++					dm_pool_strdup(cmd->mem, vgname))) {
+ 			log_error("strlist allocation failed");
+ 			return ECMD_FAILED;
+ 		}
+@@ -1671,10 +1751,12 @@ static int process_lv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 				   struct dm_list *arg_vgnames,
+ 				   struct dm_list *arg_lvnames,
+ 				   struct dm_list *arg_tags,
++				   struct dm_list *vgl_list,
+ 				   void *handle,
+ 				   process_single_lv_fn_t process_single_lv)
+ {
+ 	struct volume_group *vg;
++	struct vg_list *vgl;
+ 	struct str_list *sl, *sll;
+ 	struct dm_list *tags_arg;
+ 	struct dm_list lvnames;
+@@ -1685,6 +1767,12 @@ static int process_lv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 	dm_list_iterate_items(sl, vg_name_list) {
+ 		vgname = sl->str;
+ 
++		vgl = find_vgl(vgl_list, vgname);
++		if (!vgl)
++			continue;
++
++		vg = vgl->vg;
++
+ 		/*
+ 		 * arg_lvnames contains some elements that are just "vgname"
+ 		 * which means process all lvs in the vg.  Other elements
+@@ -1716,19 +1804,9 @@ static int process_lv_vg_name_list(struct cmd_context *cmd, uint32_t flags,
+ 			}
+ 		}
+ 
+-		vg = vg_read(cmd, vgname, NULL, flags);
+-		if (vg_read_error(vg)) {
+-			ret_max = ECMD_FAILED;
+-			release_vg(vg);
+-			stack;
+-			continue;
+-		}
+-
+ 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg,
+ 					    handle, process_single_lv);
+ 
+-		unlock_and_release_vg(cmd, vg, vgname);
+-
+ 		if (ret > ret_max)
+ 			ret_max = ret;
+ 		if (sigint_caught())
+@@ -1747,13 +1825,16 @@ int process_each_lv(struct cmd_context *cmd,
+ 	struct dm_list arg_vgnames;
+ 	struct dm_list arg_lvnames;
+ 	struct dm_list arg_tags;
++	struct dm_list vgl_list;
+ 	struct dm_list *vg_name_list;
++	int ret_max = ECMD_PROCESSED;
+ 	int ret;
+ 
+ 	dm_list_init(&all_vgnames);
+ 	dm_list_init(&arg_vgnames);
+ 	dm_list_init(&arg_lvnames);
+ 	dm_list_init(&arg_tags);
++	dm_list_init(&vgl_list);
+ 
+ 	ret = get_arg_lvnames(cmd, argc, argv,
+ 			      &arg_vgnames, &arg_lvnames, &arg_tags);
+@@ -1777,9 +1858,27 @@ int process_each_lv(struct cmd_context *cmd,
+ 	else
+ 		vg_name_list = &arg_vgnames;
+ 
++	ret = read_vg_name_list(cmd, flags, vg_name_list, &vgl_list);
++
++	if (ret > ret_max)
++		ret_max = ret;
++	if (sigint_caught())
++		goto out;
++
++	if (dm_list_empty(&vgl_list)) {
++		stack;
++		goto out;
++	}
++
+ 	ret = process_lv_vg_name_list(cmd, flags, vg_name_list,
+ 				      &arg_vgnames, &arg_lvnames, &arg_tags,
++				      &vgl_list,
+ 				      handle, process_single_lv);
+-	return ret;
++	if (ret > ret_max)
++		ret_max = ret;
++out:
++	release_vg_list(cmd, &vgl_list);
++
++	return ret_max;
+ }
+ 
 -- 
 1.8.1.rc1.5.g7e0651a
 
