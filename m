@@ -1,182 +1,144 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Thu, 27 Sep 2012 21:54:21 +0000 (UTC)
-Subject: master - RAID: Fix problems with creating, extending and converting large RAID LVs
-Message-ID: <20120927215421.7A0FCA33AF@fedorahosted.org>
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 1 Apr 2013 17:13:39 -0400
+Subject: [PATCH] clvmd: detect 3.7 dlm kernel bug
+Message-ID: <20130401211339.GB11525@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=886656e4ac5e5c932d9fbe60d18c063136288a38
-Commit:        886656e4ac5e5c932d9fbe60d18c063136288a38
-Parent:        662a2122f6224b5404d9f1276868bc3069766c49
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Thu Sep 27 16:51:22 2012 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Thu Sep 27 16:51:22 2012 -0500
+Kernel commit 2b75bc9121e54e22537207b47b71373bcb0be41c
+included a bug that causes dlm lock requests on max len
+resources to return an EINVAL error, on CONFIG_COMPAT systems.
+This bug was included in 3.7 and fixed in 3.8 by commit
+d4b0bcf32b946590afd29e202d6a399b84fe6c67.
 
-RAID: Fix problems with creating, extending and converting large RAID LVs
+This clvmd patch acquires a new dlm lock on a per-node max len
+resource during startup.  If this fails with EINVAL, and the
+system may be config compat, then we try taking a dlm lock
+on a non-max len resource.  If the second lock is successful,
+then log a message stating that the kernel may include the
+dlm bug above.  The other reasons for the dlm to return EINVAL
+do not appear likely to apply to this case.
 
-MD's bitmaps can handle 2^21 regions at most.  The RAID code has always
-used a region_size of 1024 sectors.  That means the size of a RAID LV was
-limited to 1TiB.  (The user can adjust the region_size when creating a
-RAID LV, which can affect the maximum size.)  Thus, creating, extending or
-converting to a RAID LV greater than 1TiB would result in a failure to
-load the new device-mapper table.
+(I don't know if the 3.7 kernel is still used widely enough
+to include this patch.)
 
-Again, the size of the RAID LV is not limited by how much space is allocated
-for the metadata area, but by the limitations of the MD bitmap.  Therefore,
-we must adjust the 'region_size' to ensure that the number of regions does
-not exceed the limit.  I've added code to do this when extending a RAID LV
-(which covers 'create' and 'extend' operations) and when up-converting -
-specifically from linear to RAID1.
 ---
- WHATS_NEW                    |    1 +
- lib/metadata/lv_manip.c      |   12 +++++++-
- lib/metadata/raid_manip.c    |    6 ++++
- test/shell/lvcreate-large.sh |   65 ++++++++++++++++++++++++++++++++++++------
- 4 files changed, 74 insertions(+), 10 deletions(-)
+ daemons/clvmd/clvmd-corosync.c | 77 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 77 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 448f306..dc62d77 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.98 -
- =================================
-+  Fix inability to create, extend or convert to a large (> 1TiB) RAID LV.
-   Add (p)artial attribute to lvs.
-   Don't try to issue discards to a missing PV to avoid segfault.
-   Prevent lvremove from removing LVs that have any part missing.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 6c62bb3..f2d99b8 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2660,7 +2660,17 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
- 	seg->area_len += extents;
- 	seg->len += extents;
- 	lv->le_count += extents;
--	lv->size += (uint64_t) extents *lv->vg->extent_size;
-+	lv->size += (uint64_t) extents * lv->vg->extent_size;
+diff --git a/daemons/clvmd/clvmd-corosync.c b/daemons/clvmd/clvmd-corosync.c
+index d85ec1e..6fbc652 100644
+--- a/daemons/clvmd/clvmd-corosync.c
++++ b/daemons/clvmd/clvmd-corosync.c
+@@ -42,6 +42,7 @@
+ #include <libdlm.h>
+ 
+ #include <syslog.h>
++#include <sys/utsname.h>
+ 
+ /* Timeout value for several corosync calls */
+ #define LOCKSPACE_NAME "clvmd"
+@@ -75,6 +76,9 @@ static quorum_handle_t quorum_handle;
+ /* DLM Handle */
+ static dlm_lshandle_t *lockspace;
+ 
++static char node_resource_str[DLM_RESNAME_MAXLEN + 1];
++static uint32_t node_resource_lkid;
++
+ static struct cpg_name cpg_group_name;
+ 
+ /* Corosync callback structs */
+@@ -278,6 +282,72 @@ static void corosync_cpg_confchg_callback(cpg_handle_t handle,
+ 	num_nodes = member_list_entries;
+ }
+ 
++static int _lock_node_resource(void)
++{
++	struct dlm_lksb lksb;
++	int i, rv, error;
++
++	memset(node_resource_str, 0, DLM_RESNAME_MAXLEN);
++	sprintf(node_resource_str, "node%08x", our_nodeid);
++
++	/* make the resource name the max length */
++	for (i = strlen(node_resource_str); i < DLM_RESNAME_MAXLEN; i++)
++		node_resource_str[i] = '.';
++
++	DEBUGLOG("lock_node_resource len %zu %s\n",
++		 strlen(node_resource_str), node_resource_str);
++
++	memset(&lksb, 0, sizeof(lksb));
++
++	rv = dlm_ls_lock_wait(lockspace, LKM_EXMODE, &lksb, 0,
++			      node_resource_str, DLM_RESNAME_MAXLEN,
++			      0, NULL, NULL, NULL);
++	if (!rv) {
++		node_resource_lkid = lksb.sb_lkid;
++		return 0;
++	}
++
++	error = errno;
 +
 +	/*
-+	 * The MD bitmap is limited to being able to track 2^21 regions.
-+	 * The region_size must be adjusted to meet that criteria.
++	 * Check if this may be the 3.7 dlm kernel bug so we can
++	 * log an informative error message.  Remove this check
++	 * once 3.7 kernels are not being used.
 +	 */
-+	while (seg_is_raid(seg) && (seg->region_size < (lv->size / (1 << 21)))) {
-+		seg->region_size *= 2;
-+		log_very_verbose("Forced to adjust RAID region_size to %uS",
-+				 seg->region_size);
-+	}
- 
- 	return 1;
- }
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 0266013..98a7db3 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -731,6 +731,12 @@ static int _raid_add_images(struct logical_volume *lv,
- 		seg = first_seg(lv);
- 		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
- 		seg->region_size = RAID_REGION_SIZE;
-+		/* MD's bitmap is limited to tracking 2^21 regions */
-+		while (seg->region_size < (lv->size / (1 << 21))) {
-+			seg->region_size *= 2;
-+			log_very_verbose("Setting RAID1 region_size to %uS",
-+					 seg->region_size);
++
++	if ((error == EINVAL) && (sizeof(long) != sizeof(long long))) {
++		struct utsname un;
++
++		/*
++		 * Do not make resource name the max length; the shorter
++		 * length should pass the buggy size check.  If the max
++		 * len fails with EINVAL and the short len succeeds, then
++		 * this is probably the buggy size check in the kernel.
++		 */
++
++		memset(node_resource_str, 0, DLM_RESNAME_MAXLEN);
++		sprintf(node_resource_str, "test%08x", our_nodeid);
++
++		memset(&lksb, 0, sizeof(lksb));
++
++		rv = dlm_ls_lock_wait(lockspace, LKM_NLMODE, &lksb, 0,
++				      node_resource_str, strlen(node_resource_str),
++				      0, NULL, NULL, NULL);
++		if (!rv) {
++			memset(&un, 0, sizeof(un));
++			uname(&un);
++
++			DEBUGLOG("dlm 3.7 CONFIG_COMPAT bug may exist in kernel %s\n", un.release);
++			syslog(LOG_ERR, "dlm 3.7 CONFIG_COMPAT bug may exist in kernel %s\n", un.release);
 +		}
- 		seg->segtype = get_segtype_from_string(lv->vg->cmd, "raid1");
- 		if (!seg->segtype)
- 			return_0;
-diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
-index b61ccca..127b434 100644
---- a/test/shell/lvcreate-large.sh
-+++ b/test/shell/lvcreate-large.sh
-@@ -13,28 +13,75 @@
- 
- . lib/test
- 
--aux prepare_vg 4
-+aux prepare_vg 5
- 
--lvcreate -s -l 100%FREE -n $lv $vg --virtualsize 1024T
-+lvcreate -s -l 20%FREE -n $lv1 $vg --virtualsize 256T
-+lvcreate -s -l 20%FREE -n $lv2 $vg --virtualsize 256T
-+lvcreate -s -l 20%FREE -n $lv3 $vg --virtualsize 256T
-+lvcreate -s -l 20%FREE -n $lv4 $vg --virtualsize 256T
-+lvcreate -s -l 20%FREE -n $lv5 $vg --virtualsize 256T
- 
- #FIXME this should be 1024T
- #check lv_field $vg/$lv size "128.00m"
- 
- aux lvmconf 'devices/filter = [ "a/dev\/mapper\/.*$/", "a/dev\/LVMTEST/", "r/.*/" ]'
- 
--pvcreate $DM_DEV_DIR/$vg/$lv
--vgcreate -c n $vg1 $DM_DEV_DIR/$vg/$lv
-+pvcreate $DM_DEV_DIR/$vg/$lv[12345]
-+vgcreate -c n $vg1 $DM_DEV_DIR/$vg/$lv[12345]
- 
- lvcreate -l 100%FREE -n $lv1 $vg1
--check lv_field $vg1/$lv1 size "1024.00t"
-+check lv_field $vg1/$lv1 size "1.25p"
- lvresize -f -l 72%VG $vg1/$lv1
--check lv_field $vg1/$lv1 size "737.28t"
-+check lv_field $vg1/$lv1 size "921.60t"
- lvremove -ff $vg1/$lv1
- 
- lvcreate -l 100%VG -n $lv1 $vg1
--check lv_field $vg1/$lv1 size "1024.00t"
-+check lv_field $vg1/$lv1 size "1.25p"
- lvresize -f -l 72%VG $vg1/$lv1
--check lv_field $vg1/$lv1 size "737.28t"
-+check lv_field $vg1/$lv1 size "921.60t"
- lvremove -ff $vg1/$lv1
- 
--lvremove -ff $vg/$lv
-+if aux target_at_least dm-raid 1 1 0; then
-+	# bz837927 START
++	}
 +
-+	#
-+	# Create large RAID LVs
-+	#
-+	# We need '--nosync' or our virtual devices won't work
-+	lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
-+	check lv_field $vg1/$lv1 size "200.00t"
-+	lvremove -ff $vg1
++	DEBUGLOG("dlm lock error %d on node %d resource\n", error, our_nodeid);
++	syslog(LOG_ERR, "dlm lock error %d on node %d resource\n", error, our_nodeid);
 +
-+	lvcreate --type raid10 -m 1 -i 2 -L 200T -n $lv1 $vg1 --nosync
-+	check lv_field $vg1/$lv1 size "200.00t"
-+	lvremove -ff $vg1
++	return error;
++}
 +
-+	for segtype in raid4 raid5 raid6; do
-+		lvcreate --type $segtype -i 3 -L 750T -n $lv1 $vg1 --nosync
-+		check lv_field $vg1/$lv1 size "750.00t"
-+		lvremove -ff $vg1
-+	done
+ static int _init_cluster(void)
+ {
+ 	cs_error_t err;
+@@ -358,6 +428,13 @@ static int _init_cluster(void)
+ 	}
+ 	DEBUGLOG("Our local node id is %d\n", our_nodeid);
+ 
++	if (_lock_node_resource()) {
++		dlm_release_lockspace(LOCKSPACE_NAME, lockspace, 1);
++		cpg_finalize(cpg_handle);
++		quorum_finalize(quorum_handle);
++		return -1;
++	}
 +
-+	#
-+	# Convert large linear to RAID1 (belong in different test script?)
-+	#
-+	lvcreate -L 200T -n $lv1 $vg1
-+	# Need to deactivate or the up-convert will start sync'ing
-+	lvchange -an $vg1/$lv1
-+	lvconvert --type raid1 -m 1 $vg1/$lv1
-+	check lv_field $vg1/$lv1 size "200.00t"
-+	lvremove -ff $vg1
-+
-+	#
-+	# Extending large RAID LV (belong in different script?)
-+	#
-+	lvcreate --type raid1 -m 1 -L 200T -n $lv1 $vg1 --nosync
-+	check lv_field $vg1/$lv1 size "200.00t"
-+	lvextend -L +200T $vg1/$lv1
-+	check lv_field $vg1/$lv1 size "400.00t"
-+	lvremove -ff $vg1
-+
-+	# bz837927 END
-+fi
-+
-+lvremove -ff $vg
+ 	DEBUGLOG("Connected to Corosync\n");
+ 
+ 	return 0;
+-- 
+1.8.1.rc1.5.g7e0651a
 
 
