@@ -1,118 +1,49 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Mon,  1 Apr 2013 16:34:56 -0500
-Subject: [PATCH 2/7] lvm2app: Move percent_of_extents to lvm-percent.[h|c]
-In-Reply-To: <1364852101-14961-1-git-send-email-tasleson@redhat.com>
-References: <1364852101-14961-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1364852101-14961-2-git-send-email-tasleson@redhat.com>
+From: Zdenek Kabelac <zkabelac@fedoraproject.org>
+Date: Tue,  2 Apr 2013 13:18:22 +0000 (UTC)
+Subject: master - log: reenable abort
+Message-ID: <20130402131822.5E5BEE2C@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
----
- lib/misc/lvm-percent.c |  5 +++++
- lib/misc/lvm-percent.h | 17 +++++++++++++++++
- tools/toollib.c        |  6 ------
- tools/tools.h          | 16 ----------------
- 4 files changed, 22 insertions(+), 22 deletions(-)
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2edf488b3844a067bcdfe8f8efdf1a086c52a5cf
+Commit:        2edf488b3844a067bcdfe8f8efdf1a086c52a5cf
+Parent:        5c93f3997b11b33742c562b39d60949bf7e6c01d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 28 13:33:20 2013 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Apr 2 15:16:04 2013 +0200
 
-diff --git a/lib/misc/lvm-percent.c b/lib/misc/lvm-percent.c
-index 4b73db4..1dafa57 100644
---- a/lib/misc/lvm-percent.c
-+++ b/lib/misc/lvm-percent.c
-@@ -38,3 +38,8 @@ percent_t make_percent(uint64_t numerator, uint64_t denominator)
-     }
- }
+log: reenable abort
+
+abort_on_internal_error got ignored with the new class logging commit.j
+Put this check back in this return path, so the check is not skipped.
+---
+ lib/log/log.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 3b038f5..06e053f 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -346,11 +346,12 @@ void print_log(int level, const char *file, int line, int dm_errno_or_class,
+ 		va_end(ap);
+ 	}
  
-+uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
-+{
-+	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
-+			   ((roundup) ? 99 : 0)) / 100);
-+}
-diff --git a/lib/misc/lvm-percent.h b/lib/misc/lvm-percent.h
-index bf30a7e..ff3de42 100644
---- a/lib/misc/lvm-percent.h
-+++ b/lib/misc/lvm-percent.h
-@@ -31,6 +31,21 @@
- typedef int32_t percent_t;
- 
- typedef enum {
-+	SIGN_NONE = 0,
-+	SIGN_PLUS = 1,
-+	SIGN_MINUS = 2
-+} sign_t;
-+
-+typedef enum {
-+	PERCENT_NONE = 0,
-+	PERCENT_VG,
-+	PERCENT_FREE,
-+	PERCENT_LV,
-+	PERCENT_PVS,
-+	PERCENT_ORIGIN
-+} percent_type_t;
-+
-+typedef enum {
- 	PERCENT_0 = 0,
- 	PERCENT_1 = 1000000,
- 	PERCENT_100 = 100 * PERCENT_1,
-@@ -41,4 +56,6 @@ typedef enum {
- float percent_to_float(percent_t v);
- percent_t make_percent(uint64_t numerator, uint64_t denominator);
- 
-+uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
-+
- #endif
-diff --git a/tools/toollib.c b/tools/toollib.c
-index f00988a..bf9876a 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1730,9 +1730,3 @@ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
- 	return 1;
- }
- 
--/* Return percents of extents and avoid overflow, with optional roundup */
--uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup)
--{
--	return (uint32_t)(((uint64_t)percents * (uint64_t)count +
--			   ((roundup) ? 99 : 0)) / 100);
--}
-diff --git a/tools/tools.h b/tools/tools.h
-index 673e40b..7a57b78 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -74,21 +74,6 @@ enum {
- #undef arg
- };
- 
--typedef enum {
--	SIGN_NONE = 0,
--	SIGN_PLUS = 1,
--	SIGN_MINUS = 2
--} sign_t;
+-	if (level > debug_level())
+-		return;
 -
--typedef enum {
--	PERCENT_NONE = 0,
--	PERCENT_VG,
--	PERCENT_FREE,
--	PERCENT_LV,
--	PERCENT_PVS,
--	PERCENT_ORIGIN
--} percent_type_t;
--
- #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
- #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
+-	if (level >= _LOG_DEBUG && !debug_class_is_logged(dm_errno_or_class))
++	if ((level > debug_level()) ||
++	    (level >= _LOG_DEBUG && !debug_class_is_logged(dm_errno_or_class))) {
++		if (fatal_internal_error)
++			abort();
+ 		return;
++	}
  
-@@ -188,7 +173,6 @@ int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned
- int mirror_remove_missing(struct cmd_context *cmd,
- 			  struct logical_volume *lv, int force);
- 
--uint32_t percent_of_extents(uint32_t percents, uint32_t count, int roundup);
- 
- int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 		       activation_change_t activate);
--- 
-1.8.1.4
+ 	if (_log_to_file && (_log_while_suspended || !critical_section())) {
+ 		fprintf(_log_file, "%s:%d %s%s", file, line, log_command_name(),
 
 
