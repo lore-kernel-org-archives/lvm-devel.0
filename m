@@ -1,56 +1,39 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue,  2 Apr 2013 13:18:24 +0000 (UTC)
-Subject: master - cmdline: add arg_long_option_name
-Message-ID: <20130402131824.99F5D208D@fedorahosted.org>
+Date: Tue,  2 Apr 2013 13:18:26 +0000 (UTC)
+Subject: master - cleanup: indent line
+Message-ID: <20130402131826.D8E60208D@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=b57b394ebbb4b4078d532318110cff60e38035d3
-Commit:        b57b394ebbb4b4078d532318110cff60e38035d3
-Parent:        2edf488b3844a067bcdfe8f8efdf1a086c52a5cf
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=435e0bb60895b3831840a10a5deb68a51936f3e9
+Commit:        435e0bb60895b3831840a10a5deb68a51936f3e9
+Parent:        b57b394ebbb4b4078d532318110cff60e38035d3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 22 20:20:33 2013 +0100
+AuthorDate:    Wed Mar 27 11:49:10 2013 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 2 15:16:53 2013 +0200
+CommitterDate: Tue Apr 2 15:17:05 2013 +0200
 
-cmdline: add arg_long_option_name
+cleanup: indent line
 
-Add simple function to return long_name string option for given arg.
 ---
- tools/lvmcmdline.c |    5 +++++
- tools/tools.h      |    1 +
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ lib/metadata/segtype.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index c7820e0..c69d20d 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -73,6 +73,11 @@ unsigned grouped_arg_is_set(const struct arg_values *av, int a)
- 	return grouped_arg_count(av, a) ? 1 : 0;
- }
- 
-+const char *arg_long_option_name(int a)
-+{
-+	return _cmdline.arg_props[a].long_arg;
-+}
-+
- const char *arg_value(struct cmd_context *cmd, int a)
- {
- 	return cmd->arg_values[a].value;
-diff --git a/tools/tools.h b/tools/tools.h
-index 673e40b..15d1f84 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -163,6 +163,7 @@ int major_minor_valid(const struct cmd_context * cmd, const struct format_type *
- /* we use the enums to access the switches */
- unsigned arg_count(const struct cmd_context *cmd, int a);
- unsigned arg_is_set(const struct cmd_context *cmd, int a);
-+const char *arg_long_option_name(int a);
- const char *arg_value(struct cmd_context *cmd, int a);
- const char *arg_str_value(struct cmd_context *cmd, int a, const char *def);
- int32_t arg_int_value(struct cmd_context *cmd, int a, const int32_t def); 
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index d3ad2b2..1a23658 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -47,7 +47,7 @@ struct dev_manager;
+ #define seg_is_replicator(seg)	((seg)->segtype->flags & SEG_REPLICATOR ? 1 : 0)
+ #define seg_is_replicator_dev(seg) ((seg)->segtype->flags & SEG_REPLICATOR_DEV ? 1 : 0)
+ #define seg_is_striped(seg)	((seg)->segtype->flags & SEG_AREAS_STRIPED ? 1 : 0)
+-#define     seg_is_linear(seg)  (seg_is_striped(seg) && ((seg)->area_count == 1))
++#define seg_is_linear(seg)	(seg_is_striped(seg) && ((seg)->area_count == 1))
+ #define seg_is_snapshot(seg)	((seg)->segtype->flags & SEG_SNAPSHOT ? 1 : 0)
+ #define seg_is_virtual(seg)	((seg)->segtype->flags & SEG_VIRTUAL ? 1 : 0)
+ #define seg_is_raid(seg)	((seg)->segtype->flags & SEG_RAID ? 1 : 0)
 
 
