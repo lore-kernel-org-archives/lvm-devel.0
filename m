@@ -1,42 +1,38 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 3 Apr 2013 11:22:37 -0400
-Subject: duplicate pv names
-In-Reply-To: <87r4isklih.fsf@mornfall.net>
-References: <20130402212408.GA1923@redhat.com>
- <87r4isklih.fsf@mornfall.net>
-Message-ID: <20130403152237.GA1031@redhat.com>
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed,  3 Apr 2013 20:20:41 +0000 (UTC)
+Subject: master - test: Invalidate .cache after vgimportclone.
+Message-ID: <20130403202041.3398A954@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Apr 03, 2013 at 11:32:06AM +0200, Petr Rockai wrote:
-> I ran into similar problems with a different set of patches, that remove
-> pv_read. What I'll probably need to do is adding a list of devices to
-> PVs, so we can check whether something on the command line matches any
-> of the "duplicate" PVs.
-> 
-> I see you make quite heavy use of pv_read in your new version of
-> process_each_pv. You can have a look at:
-> 
-> (git clone) http://repos.mornfall.net/lvm2/mornfall.git
-> 
-> branch "merged" or for more limited view of the pv_read removal patches,
-> branch "lvmcache". (git checkout origin/merged).
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=72921d79225bb822f156212177253ac2a0cb8082
+Commit:        72921d79225bb822f156212177253ac2a0cb8082
+Parent:        95372a852bbcacc9f194324832b94fcf1493f7c5
+Author:        Petr Rockai <prockai@redhat.com>
+AuthorDate:    Wed Apr 3 22:08:46 2013 +0200
+Committer:     Petr Rockai <prockai@redhat.com>
+CommitterDate: Wed Apr 3 22:08:46 2013 +0200
 
-I wish I'd known you were also working on toollib.c; we could have
-coordinated the sequence of changes a little better.  Perhaps we could
-all push our in-progress work to an lvm2.git branch like I've done in
-http://git.fedorahosted.org/cgit/lvm2.git/log/?h=dev-dct-process-each
+test: Invalidate .cache after vgimportclone.
 
-> It would be good if we could get rid of pv_read, as the code for
-> handling nomda PVs is wrong anyway, and we always need to scan. I think
-> the only remaining issue with the non-pv_read version is the duplicate
-> handling as outlined above.
+---
+ test/shell/vgimportclone.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-OK, it'll be nice to get rid of the nomda case.  I'll study your changes
-further and try to rework my new process_each_pv to avoid using pv_read.
-Perhaps you'll then be able to drop the toollib commit in your tree.
+diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
+index 9b1c121..0a476ec 100644
+--- a/test/shell/vgimportclone.sh
++++ b/test/shell/vgimportclone.sh
+@@ -31,6 +31,7 @@ vgimportclone --basevgname $vg2 "$dev2"
+ # concerned, can only live on a single device. With the last pvscan, we told it
+ # that PV from $dev1 now lives on $dev2, but in fact this is not true anymore,
+ # since we wrote a different PV over $dev2.
++rm $TESTDIR/etc/.cache
+ aux notify_lvmetad "$dev2"
+ aux notify_lvmetad "$dev1"
+ 
 
 
