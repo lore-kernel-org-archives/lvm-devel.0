@@ -1,49 +1,44 @@
-From: David Teigland <teigland@redhat.com>
-Date: Tue, 2 Apr 2013 17:24:08 -0400
+From: Petr Rockai <prockai@redhat.com>
+Date: Wed, 03 Apr 2013 11:32:06 +0200
 Subject: duplicate pv names
-Message-ID: <20130402212408.GA1923@redhat.com>
+In-Reply-To: <20130402212408.GA1923@redhat.com> (David Teigland's message of
+	"Tue, 2 Apr 2013 17:24:08 -0400")
+References: <20130402212408.GA1923@redhat.com>
+Message-ID: <87r4isklih.fsf@mornfall.net>
+	(sfid-20130403_113207_733349_96E34192)
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-My current patch set it having a problem with the test vgimportclone.sh,
-which has me questioning the desired pvs output with duplicate pv names.
+Hi,
 
-# dd if=/dev/sdc2 of=/dev/sdc3 bs=256K count=1
+David Teigland <teigland@redhat.com> writes:
+> My current patch set it having a problem with the test vgimportclone.sh,
+> which has me questioning the desired pvs output with duplicate pv names.
 
-# pvs
-  Found duplicate PV mPJxALsM0WGwdEZfoE7ewO8inDs1EhyG: using /dev/sdc3 not /dev/sdc2
-  PV         VG           Fmt  Attr PSize   PFree  
-  /dev/sdc1  vgu          lvm2 a--   32.00g  23.00g
-  /dev/sdc3  vgv          lvm2 a--   16.00m  16.00m
-  /dev/sdc4  vgv          lvm2 a--   16.00m  16.00m
+I ran into similar problems with a different set of patches, that remove
+pv_read. What I'll probably need to do is adding a list of devices to
+PVs, so we can check whether something on the command line matches any
+of the "duplicate" PVs.
 
-Do we want to omit /dev/sdc2 from this list?  (Suggest no.)
+I see you make quite heavy use of pv_read in your new version of
+process_each_pv. You can have a look at:
 
-# pvs -a
-  Found duplicate PV mPJxALsM0WGwdEZfoE7ewO8inDs1EhyG: using /dev/sdc3 not /dev/sdc2
-  PV                     VG           Fmt  Attr PSize   PFree  
-  /dev/sdc1              vgu          lvm2 a--   32.00g  23.00g
-  /dev/sdc3              vgv          lvm2 a--   16.00m  16.00m
-  /dev/sdc3              vgv          lvm2 a--   16.00m  16.00m
-  /dev/sdc4              vgv          lvm2 a--   16.00m  16.00m
+(git clone) http://repos.mornfall.net/lvm2/mornfall.git
 
-Do we want /dev/sdc3 to appear twice, or one of them to be /dev/sdc2, or
-omit one like above?  (Suggest both sdc2 and sdc3 appear.)
+branch "merged" or for more limited view of the pv_read removal patches,
+branch "lvmcache". (git checkout origin/merged).
 
-# pvs /dev/sdc2
-  Found duplicate PV mPJxALsM0WGwdEZfoE7ewO8inDs1EhyG: using /dev/sdc3 not /dev/sdc2
-  PV         VG   Fmt  Attr PSize  PFree 
-  /dev/sdc3  vgv  lvm2 a--  16.00m 16.00m
+It would be good if we could get rid of pv_read, as the code for
+handling nomda PVs is wrong anyway, and we always need to scan. I think
+the only remaining issue with the non-pv_read version is the duplicate
+handling as outlined above.
 
-# pvs /dev/sdc3
-  Found duplicate PV mPJxALsM0WGwdEZfoE7ewO8inDs1EhyG: using /dev/sdc2 not /dev/sdc3
-  PV         VG   Fmt  Attr PSize  PFree 
-  /dev/sdc2  vgv  lvm2 a--  16.00m 16.00m
+Petr
 
-It seems strange that we use the duplicate that was *not* specified.
-Is that what we want?  (Suggest it be reversed.)
+-- 
+id' Ash = Ash; id' Dust = Dust; id' _ = undefined
 
 
