@@ -1,44 +1,76 @@
-From: Petr Rockai <prockai@redhat.com>
-Date: Wed, 03 Apr 2013 11:32:06 +0200
-Subject: duplicate pv names
-In-Reply-To: <20130402212408.GA1923@redhat.com> (David Teigland's message of
-	"Tue, 2 Apr 2013 17:24:08 -0400")
-References: <20130402212408.GA1923@redhat.com>
-Message-ID: <87r4isklih.fsf@mornfall.net>
-	(sfid-20130403_113207_733349_96E34192)
+From: Petr Rockai <mornfall@fedoraproject.org>
+Date: Wed,  3 Apr 2013 09:42:04 +0000 (UTC)
+Subject: master - lvmetad: Mark PVs visible to lvmetad but not to us as MISSING.
+Message-ID: <20130403094204.1D0363721@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=00ed6759c8cbf2f4497fa0d5f7df69780159539a
+Commit:        00ed6759c8cbf2f4497fa0d5f7df69780159539a
+Parent:        6ac4cba276e8d7842e4efedc117f4b9aafa90c71
+Author:        Petr Rockai <me@mornfall.net>
+AuthorDate:    Wed Apr 3 11:10:52 2013 +0200
+Committer:     Petr Rockai <me@mornfall.net>
+CommitterDate: Wed Apr 3 11:40:29 2013 +0200
 
-David Teigland <teigland@redhat.com> writes:
-> My current patch set it having a problem with the test vgimportclone.sh,
-> which has me questioning the desired pvs output with duplicate pv names.
+lvmetad: Mark PVs visible to lvmetad but not to us as MISSING.
 
-I ran into similar problems with a different set of patches, that remove
-pv_read. What I'll probably need to do is adding a list of devices to
-PVs, so we can check whether something on the command line matches any
-of the "duplicate" PVs.
+---
+ lib/cache/lvmetad.c            |    6 +++++-
+ test/shell/lvcreate-missing.sh |   19 +++++++++++++++++++
+ 2 files changed, 24 insertions(+), 1 deletions(-)
 
-I see you make quite heavy use of pv_read in your new version of
-process_each_pv. You can have a look at:
-
-(git clone) http://repos.mornfall.net/lvm2/mornfall.git
-
-branch "merged" or for more limited view of the pv_read removal patches,
-branch "lvmcache". (git checkout origin/merged).
-
-It would be good if we could get rid of pv_read, as the code for
-handling nomda PVs is wrong anyway, and we always need to scan. I think
-the only remaining issue with the non-pv_read version is the duplicate
-handling as outlined above.
-
-Petr
-
--- 
-id' Ash = Ash; id' Dust = Dust; id' _ = undefined
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index 3cde71e..a7354a7 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -387,14 +387,18 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
+ 			if ((info = lvmcache_info_from_pvid((const char *)&pvl->pv->id, 0))) {
+ 				pvl->pv->label_sector = lvmcache_get_label(info)->sector;
+ 				pvl->pv->dev = lvmcache_device(info);
++				if (!pvl->pv->dev)
++					pvl->pv->status |= MISSING_PV;
+ 				if (!lvmcache_fid_add_mdas_pv(info, fid)) {
+ 					vg = NULL;
+ 					goto_out;	/* FIXME error path */
+ 				}
+-			} /* else probably missing */
++			} else
++				pvl->pv->status |= MISSING_PV; /* probably missing */
+ 		}
+ 
+ 		lvmcache_update_vg(vg, 0);
++		vg_mark_partial_lvs(vg, 1);
+ 	}
+ 
+ out:
+diff --git a/test/shell/lvcreate-missing.sh b/test/shell/lvcreate-missing.sh
+new file mode 100644
+index 0000000..63471c3
+--- /dev/null
++++ b/test/shell/lvcreate-missing.sh
+@@ -0,0 +1,19 @@
++#!/bin/sh
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++. lib/test
++
++aux prepare_vg 2
++init_udev_transaction
++dmsetup remove -f "$dev1" || true
++finish_udev_transaction
++
++not lvcreate -n "foo" $vg -l 1
 
 
