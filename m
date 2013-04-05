@@ -1,86 +1,645 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  5 Apr 2013 12:16:17 +0000 (UTC)
-Subject: master - libdm: validate params for NULL
-Message-ID: <20130405121618.0EE4435ED@fedorahosted.org>
+Date: Fri,  5 Apr 2013 12:16:20 +0000 (UTC)
+Subject: master - man: updates for lvconvert and lvcreate
+Message-ID: <20130405121620.85ECE379A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3fd0242a0af7b473f545ab89defcd0f56bcb9753
-Commit:        3fd0242a0af7b473f545ab89defcd0f56bcb9753
-Parent:        72921d79225bb822f156212177253ac2a0cb8082
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ddafa0115e6881f30ada55f40cb07dd41a6afd2f
+Commit:        ddafa0115e6881f30ada55f40cb07dd41a6afd2f
+Parent:        3fd0242a0af7b473f545ab89defcd0f56bcb9753
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 2 15:01:26 2013 +0200
+AuthorDate:    Fri Apr 5 12:24:32 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 5 14:13:12 2013 +0200
+CommitterDate: Fri Apr 5 14:14:20 2013 +0200
 
-libdm: validate params for NULL
+man: updates for lvconvert and lvcreate
 
-Validate passed params and report error
-instead of dereferencing NULL passed argument.
+Cleanup and improvement on man pages.
 ---
- WHATS_NEW_DM          |    1 +
- libdm/libdm-deptree.c |   19 ++++++++++++++++---
- 2 files changed, 17 insertions(+), 3 deletions(-)
+ WHATS_NEW          |    1 +
+ man/lvconvert.8.in |   86 ++++++++++++++----------
+ man/lvcreate.8.in  |  185 ++++++++++++++++++++++++++++++----------------------
+ man/lvm.8.in       |   26 ++++----
+ 4 files changed, 169 insertions(+), 129 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 98ffa6f..eff6bd6 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 61a2558..539d8fb 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.78 - 
+ Version 2.02.99 - 
  ===================================
-+  Validate passed params to dm_get_status_raid/thin/thin_pool(). 
-   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
-   Add dm_config_write_{node_out/one_node_out} for enhanced config output.
-   Add dm_config_value_is_bool to check for boolean value in supported formats.
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index e702a25..8292791 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2877,11 +2877,14 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 		       struct dm_status_raid **status)
- {
- 	int dev_count;
--	const char *p = params;
-+	const char *p;
- 	struct dm_status_raid *s;
++  Improve lvcreate, lvconvert and lvm man pages.
+   Clean up format1 PV write to remove a need for an orphan VG for it to pass.
+   Fix vgextend to not allow a PV with 0 MDAs to be used while already in a VG.
+   Move update_pool_params() from /tools to /lib for better reuse.
+diff --git a/man/lvconvert.8.in b/man/lvconvert.8.in
+index c5929c2..d22994e 100644
+--- a/man/lvconvert.8.in
++++ b/man/lvconvert.8.in
+@@ -96,14 +96,14 @@ lvconvert \- convert a logical volume from linear to mirror or snapshot
+ .IR StripeSize ]]]
+ .RB [ \-Z | \-\-zero
+ .RI { y | n }]
+-.RB [ \-h | \-? | \-\-help ]
+-.RB [ \-v | \-\-verbose ]
+-.RB [ \-\-version ]
+ .RB [ \-T | \-\-thin
+ .IR ExternalOriginLogicalVolume { Name | Path }
+ .RB [ \-\-originname
+ .IR NewExternalOriginVolumeName ]]
+ .RI [ PhysicalVolume [ Path ][ :PE [ -PE ]]...]
++.RB [ \-h | \-? | \-\-help ]
++.RB [ \-v | \-\-verbose ]
++.RB [ \-\-version ]
+ .sp
  
--	if (!(p = strchr(p, ' ')))
--		return_0;
-+	if (!params || !(p = strchr(params, ' '))) {
-+		log_error("Failed to parse invalid raid params.");
-+		return 0;
-+	}
-+
- 	p++;
+ .SH DESCRIPTION
+@@ -123,11 +123,20 @@ the freed extents come first from the specified PhysicalVolumes.
+ .SH OPTIONS
+ See \fBlvm\fP(8) for common options.
+ .br
+-Exactly one of 
+-.BR \-\-merge ", " \-\-mirrors ", " \-\-repair ", " \-\-replace
+-.RB ", " \-\-snapshot ", " \-\-splitmirrors " or " \-\-thinpool
++Exactly one of
++.BR \-\-merge ,
++.BR \-\-mirrors ,
++.BR \-\-repair ,
++.BR \-\-replace ,
++.BR \-\-snapshot ,
++.BR \-\-splitmirrors
++or
++.BR \-\-thinpool
+ arguments is required.
+ .TP
++.BR \-b ", " \-\-background
++Run the daemon in the background.
++.TP
+ .BR \-m ", " \-\-mirrors " " \fIMirrors
+ Specifies the degree of the mirror you wish to create.
+ For example, "\fB-m 1\fP" would convert the original logical
+@@ -136,17 +145,17 @@ linear volume plus one copy.
+ .TP
+ .IR \fB\-\-mirrorlog " {" disk | core | mirrored }
+ Specifies the type of log to use.
+-The default is disk, which is persistent and requires
++The default is \fIdisk\fP, which is persistent and requires
+ a small amount of storage space, usually on a separate device
+-from the data being mirrored. 
+-Core may be useful for short-lived mirrors: It means the mirror is
++from the data being mirrored.
++\fICore\fP may be useful for short-lived mirrors: It means the mirror is
+ regenerated by copying the data from the first device again every
+ time the device is activated - perhaps, for example, after every reboot.
+-Using "mirrored" will create a persistent log that is itself mirrored.
++Using \fImirrored\fP will create a persistent log that is itself mirrored.
+ .TP
+ .B \-\-corelog
+-The optional argument \fB--corelog\fP is the same as specifying
+-\fB--mirrorlog core\fP.
++The optional argument \fB\-\-corelog\fP is the same as specifying
++\fB\-\-mirrorlog\fP \fIcore\fP.
+ .TP
+ .BR \-R ", " \-\-regionsize " " \fIMirrorLogRegionSize
+ A mirror is divided into regions of this size (in MB), and the mirror log
+@@ -157,14 +166,11 @@ Used to convert a logical volume to another segment type or to explicitly state
+ the desired RAID1 segment type (\fImirror\fP or \fIraid1\fP) when converting
+ a linear logical volume to a mirror with the \fB-m\fP argument.
+ .TP
+-.BR \-b ", " \-\-background
+-Run the daemon in the background.
+-.TP
+ .BR \-i ", " \-\-interval " " \fISeconds
+ Report progress as a percentage at regular intervals.
+ .TP
+ .B \-\-noudevsync
+-Disable udev synchronisation. The
++Disables udev synchronisation. The
+ process will not wait for notification from udev.
+ It will continue irrespective of any possible udev processing
+ in the background.  You should only use this if udev is not running
+@@ -176,7 +182,7 @@ to form a new logical volume.  A name must be supplied for the
+ newly-split-off logical volume using the \fB\-\-name\fP argument, unless
+ the \fB\-\-trackchanges\fP argument is given.
+ .TP
+-.B \-n \fIName
++.BR \-n ", " \-\-name\  \fIName
+ The name to apply to a logical volume which has been split off from
+ a mirror logical volume.
+ .TP
+@@ -190,21 +196,23 @@ Please note that this feature is only supported with the new md-based mirror
+ implementation and not with the original device-mapper mirror implementation.
+ .TP
+ .B \-s, \-\-snapshot
+-Create a snapshot from existing logical volume using another
++Creates a snapshot from existing logical volume using another
+ existing logical volume as its origin.
+ .TP
+ .BR \-c ", " \-\-chunksize " " \fIChunkSize [ \fIbBsSkKmMgG ]
+ Gives the size of chunk for snapshot and thin pool logical volumes.
++Default unit is in kilobytes.
++.br
+ For snapshots the value must be power of 2 between 4KiB and 512KiB
+ and the default value is 4.
++.br
+ For thin pools the value must be between 64KiB and
+ 1GiB and the default value starts with 64 and scales
+-up to fit the pool metadata size within 128MB,
++up to fit the pool metadata size within 128MiB,
+ if the pool metadata size is not specified.
+-Older dm thin pool target version (<1.4) requires the value to be power of 2.
+-The newer version requires to be the multiple of 64KiB, however discard is
+-not supported for non power of 2 values.
+-Default unit is in kilobytes.
++Thin pool target version <1.4 requires the value to be a power of 2.
++The newer target version relaxes limitation to be a multiple of 64KiB.
++For target version <1.5 discard is not supported for non power of 2 values.
+ .TP
+ .BR \-\-discards " {" \fIignore | \fInopassdown | \fIpassdown }
+ Sets discards behavior for thin pool.
+@@ -235,11 +243,12 @@ be specified on the commandline or a @tag may be used to specify
+ multiple snapshots be merged to their respective origin.
+ .TP
+ .B \-\-originname \fINewExternalOriginVolumeName\fP
+-The name for converted external origin volume.
++The new name for original logical volume, which becomes external origin volume.
+ .br
+ Without this option a default names of "lvol#" will be generated where
+ # is the LVM internal number of the logical volume.
+-Converted volume will be read-only.
++This volume will be read-only and cannot be further modified as long,
++as it is being used as external origin.
+ .TP
+ .BR \-\-poolmetadata " " \fIThinPoolMetadataLogicalVolume { \fIName | \fIPath }
+ Specifies thin pool metadata logical volume.
+@@ -300,11 +309,13 @@ For metadata in LVM2 format, the stripe size may be a larger
+ power of 2 but must not exceed the physical extent size.
+ .TP
+ .IR \fB\-T ", " \fB\-\-thin " " ExternalOriginLogicalVolume { Name | Path }
+-Changes the logical volume into a thin volume for the thin pool
+-specified with the option \fB\-\-thinpool\fP. \fIExternalOriginLogicalVolume\fP
+-is converted into a new read-only logical volume which will be used as an
+-external origin volume for unprovisioned areas.
+-The non-default name for this new volume can be specified with \fB\-\-originname\fP.
++Converts the logical volume into a thin logical volume of the thin pool
++specified with \fB\-\-thinpool\fP. The original logical volume
++.I ExternalOriginLogicalVolume
++is renamed into a new read-only logical volume.
++The non-default name for this volume use \fB\-\-originname\fP.
++The volume cannot be further modified as long as it is used as an
++external origin volume for unprovisioned areas of any thin logical volume.
+ .TP
+ .IR \fB\-\-thinpool " " ThinPoolLogicalVolume { Name | Path }
+ Changes logical volume into a thin pool volume. The volume
+@@ -361,7 +372,7 @@ Merges "vg00/lvol1_snap" into its origin:
+ .B lvconvert \-\-merge vg00/lvol1_snap
  
- 	if (sscanf(p, "%d", &dev_count) != 1)
-@@ -3318,6 +3321,11 @@ int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
- 	struct dm_status_thin_pool *s;
- 	int pos;
+ If "vg00/lvol1", "vg00/lvol2" and "vg00/lvol3" are all tagged with "some_tag"
+-each snapshot logical volume will be merged serially, 
++each snapshot logical volume will be merged serially,
+ e.g.: "vg00/lvol1", then "vg00/lvol2", then "vg00/lvol3".
+ If \-\-background were used it would start
+ all snapshot logical volume merges in parallel.
+@@ -413,12 +424,13 @@ For the read-only external origin use the new name "vg00/external".
  
-+	if (!params) {
-+		log_error("Failed to parse invalid thin pool params.");
-+		return 0;
-+	}
-+
- 	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_thin_pool)))) {
- 		log_error("Failed to allocate thin_pool status structure.");
- 		return 0;
-@@ -3354,6 +3362,11 @@ int dm_get_status_thin(struct dm_pool *mem, const char *params,
- {
- 	struct dm_status_thin *s;
+ .SH SEE ALSO
+ .BR lvm (8),
+-.BR vgcreate (8),
+-.BR lvremove (8),
+-.BR lvrename (8),
++.BR lvm.conf (5),
++.BR lvdisplay (8),
+ .BR lvextend (8),
+ .BR lvreduce (8),
+-.BR lvdisplay (8),
++.BR lvremove (8),
++.BR lvrename (8),
+ .BR lvscan (8),
+-.BR thin_dump(8),
+-.BR thin_restore(8)
++.BR vgcreate (8),
++.BR thin_dump (8),
++.BR thin_restore (8)
+diff --git a/man/lvcreate.8.in b/man/lvcreate.8.in
+index da4c1fe..d208cad 100644
+--- a/man/lvcreate.8.in
++++ b/man/lvcreate.8.in
+@@ -79,7 +79,8 @@ lvcreate \- create a logical volume in an existing volume group
+ .IR ChunkSize [ bBsSkK ]]
+ .RB [ \-\-noudevsync ]
+ .RB [ \-\-ignoremonitoring ]
+-.RB [ \-\-monitor " {" \fIy | \fIn }]
++.RB [ \-\-monitor
++.RI { y | n }]
+ .RB [ \-n | \-\-name
+ .IR SnapshotLogicalVolume { Name | Path }]
+ .BR \-s | \-\-snapshot
+@@ -116,27 +117,31 @@ By default, new Logical Volumes are activated (\fB-a\fIy\fR).
+ If it is possible technically, \fB-a\fIn\fR will leave the new Logical
+ Volume inactive. But for example, snapshots can only be created
+ in the active state so \fB\-a\fIn\fR cannot be used with \fB\-\-snapshot\fP.
+-Normally the \fB\-\-zero n\fP argument has to be supplied too because
++Normally the \fB\-\-zero\fP \fIn\fP argument has to be supplied too because
+ zeroing (the default behaviour) also requires activation.
+ If autoactivation option is used (\fB\-a\fIay\fR), the logical volume is
+-activated only if it matches an item in the activation/auto_activation_volume_list
+-set in lvm.conf. For autoactivated logical volumes, \fB\-\-zero n\fP is
+-always assumed and it can't be overridden. If clustered locking is enabled,
++activated only if it matches an item in the
++.B activation/auto_activation_volume_list
++set in \fBlvm.conf\fP(5).
++For autoactivated logical volumes, \fB\-\-zero\fP \fIn\fP is always assumed
++and it can't be overridden. If the clustered locking is enabled,
+ \fB\-a\fIey\fR will activate exclusively on one node and \fB\-a\fIly\fR will
+ activate only on the local node.
+ .TP
+ .BR \-c ", " \-\-chunksize " " \fIChunkSize [ \fIbBsSkKmMgG ]
+ Gives the size of chunk for snapshot and thin pool logical volumes.
++Default unit is in kilobytes.
++.br
+ For snapshots the value must be power of 2 between 4KiB and 512KiB
+ and the default value is 4.
++.br
+ For thin pools the value must be between 64KiB and
+ 1GiB and the default value starts with 64 and scales
+-up to fit the pool metadata size within 128MB,
++up to fit the pool metadata size within 128MiB,
+ if the pool metadata size is not specified.
+-Older dm thin pool target version (<1.4) requires the value to be power of 2.
+-The newer version requires to be the multiple of 64KiB, however discard is
+-not supported for non power of 2 values.
+-Default unit is in kilobytes.
++Thin pool target version <1.4 requires the value to be a power of 2.
++The newer target version relaxes limitation to be a multiple of 64KiB.
++For target version <1.5 discard is not supported for non power of 2 values.
+ .TP
+ .BR \-C ", " \-\-contiguous " {" \fIy | \fIn }
+ Sets or resets the contiguous allocation policy for
+@@ -144,7 +149,7 @@ logical volumes. Default is no contiguous allocation based
+ on a next free principle.
+ .TP
+ .BR \-\-discards " {" \fIignore | \fInopassdown | \fIpassdown }
+-Set discards behavior for thin pool.
++Sets discards behavior for thin pool.
+ Default is \fIpassdown\fP.
+ .TP
+ .BR \-i ", " \-\-stripes " " \fIStripes
+@@ -152,9 +157,10 @@ Gives the number of stripes.
+ This is equal to the number of physical volumes to scatter
+ the logical volume.  When creating a RAID 4/5/6 logical volume,
+ the extra devices which are necessary for parity are
+-internally accounted for.  Specifying '\-i 3' would use 3 devices
+-for striped logical volumes, 4 devices for RAID 4/5, and 5 devices
+-for RAID 6.
++internally accounted for.  Specifying
++.BI \-i 3
++would use 3 devices for striped logical volumes,
++4 devices for RAID 4/5, and 5 devices for RAID 6.
+ .TP
+ .BR \-I ", " \-\-stripesize " " \fIStripeSize
+ Gives the number of kilobytes for the granularity of the stripes.
+@@ -163,6 +169,10 @@ StripeSize must be 2^n (n = 2 to 9) for metadata in LVM1 format.
+ For metadata in LVM2 format, the stripe size may be a larger
+ power of 2 but must not exceed the physical extent size.
+ .TP
++.B \-\-ignoremonitoring
++Make no attempt to interact with dmeventd unless \fB\-\-monitor\fP
++is specified.
++.TP
+ .IR \fB\-l ", " \fB\-\-extents " " LogicalExtentsNumber [ % { VG | PVS | FREE | ORIGIN }]
+ Gives the number of logical extents to allocate for the new
+ logical volume.
+@@ -182,84 +192,84 @@ or \fIE\fR for exabytes is optional.
+ .br
+ Default unit is megabytes.
+ .TP
+-.B \-\-minor \fIminor
+-Set the minor number.
+-.TP
+-.IR \fB\-M ", " \fB\-\-persistent " {" y | n }
+-Set to y to make the minor number specified persistent.
+-.TP
+ .BR \-m ", " \-\-mirrors " " \fIMirrors
+-Creates a mirrored logical volume with Mirrors copies.  For example,
+-specifying "-m 1" would result in a mirror with two-sides; that is, a
+-linear volume plus one copy.
++Creates a mirrored logical volume with \fIMirrors\fP copies.
++For example, specifying
++.BI -m 1
++would result in a mirror with two-sides; that is,
++a linear volume plus one copy.
  
-+	if (!params) {
-+		log_error("Failed to parse invalid thin params.");
-+		return 0;
-+	}
-+
- 	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_thin)))) {
- 		log_error("Failed to allocate thin status structure.");
- 		return 0;
+-Specifying the optional argument --nosync will cause the creation
++Specifying the optional argument \fB\-\-nosync\fP will cause the creation
+ of the mirror to skip the initial resynchronization.  Any data written
+ afterwards will be mirrored, but the original contents will not be
+ copied.  This is useful for skipping a potentially long and resource
+ intensive initial sync of an empty device.
+ 
+-The optional argument --mirrorlog specifies the type of log to be used.
+-The default is disk, which is persistent and requires
++The optional argument \fB\-\-mirrorlog\fP specifies the type of log to be used.
++The default is \fIdisk\fP, which is persistent and requires
+ a small amount of storage space, usually on a separate device from the
+-data being mirrored.  Using core means the mirror is regenerated
++data being mirrored.  Using \fIcore\fP means the mirror is regenerated
+ by copying the data from the first device again each time the
+-device is activated, for example, after every reboot.  Using "mirrored"
++device is activated, for example, after every reboot.  Using \fImirrored\fP
+ will create a persistent log that is itself mirrored.
+ 
+-The optional argument --corelog is equivalent to --mirrorlog core.
+-
++The optional argument \fB\-\-corelog\fP is equivalent
++to \fB\-\-mirrorlog\fP \fIcore\fP.
++.TP
++.IR \fB\-M ", " \fB\-\-persistent " {" y | n }
++Set to \fIy\fP to make the minor number specified persistent.
++.TP
++.B \-\-minor \fIminor
++Sets the minor number.
++.TP
++.BR \-\-monitor " {" \fIy | \fIn }
++Starts or avoids monitoring a mirrored, snapshot or thin pool logical volume with
++dmeventd, if it is installed.
++If a device used by a monitored mirror reports an I/O error,
++the failure is handled according to
++.B activation/mirror_image_fault_policy
++and
++.B activation/mirror_log_fault_policy
++set in \fBlvm.conf\fP(5).
+ .TP
+ .IR \fB\-n ", " \fB\-\-name " " LogicalVolume { Name | Path }
+-The name for the new logical volume.
++Sets the name for the new logical volume.
+ .br
+-Without this option a default names of "lvol#" will be generated where
++Without this option a default name of "lvol#" will be generated where
+ # is the LVM internal number of the logical volume.
+ .TP
+ .B \-\-noudevsync
+-Disable udev synchronisation. The
++Disables udev synchronisation. The
+ process will not wait for notification from udev.
+ It will continue irrespective of any possible udev processing
+ in the background.  You should only use this if udev is not running
+ or has rules that ignore the devices LVM2 creates.
+ .TP
+-.BR \-\-monitor " {" \fIy | \fIn }
+-Start or avoid monitoring a mirrored or snapshot logical volume with
+-dmeventd, if it is installed.
+-If a device used by a monitored mirror reports an I/O error,
+-the failure is handled according to
+-\fBmirror_image_fault_policy\fP and \fBmirror_log_fault_policy\fP
+-set in \fBlvm.conf\fP.
+-.TP
+-.B \-\-ignoremonitoring
+-Make no attempt to interact with dmeventd unless \-\-monitor
+-is specified.
+-.TP
+ .BR \-p ", " \-\-permission " {" \fIr | \fIrw }
+-Set access permissions to read only or read and write.
++Sets access permissions to read only (\fIr\fP) or read and write (\fIrw\fP).
+ .br
+ Default is read and write.
+ .TP
+ .IR \fB\-\-poolmetadatasize " " ThinPoolMetadataSize [ bBsSkKmMgG ]
+-Set the size of thin pool's metadata logical volume.
+-Supported value is in range between 2MiB and 16GiB.
++Sets the size of thin pool's metadata logical volume.
++Supported values are in range between 2MiB and 16GiB.
+ Default value is  (Pool_LV_size / Pool_LV_chunk_size * 64b).
+ Default unit is megabytes.
+ .TP
+ .IR \fB\-r ", " \fB\-\-readahead " {" ReadAheadSectors | auto | none }
+-Set read ahead sector count of this logical volume.
++Sets read ahead sector count of this logical volume.
+ For volume groups with metadata in lvm1 format, this must
+ be a value between 2 and 120.
+-The default value is "auto" which allows the kernel to choose
++The default value is \fIauto\fP which allows the kernel to choose
+ a suitable value automatically.
+-"None" is equivalent to specifying zero.
++\fINone\fP is equivalent to specifying zero.
+ .TP
+ .BR \-R ", " \-\-regionsize " " \fIMirrorLogRegionSize
+-A mirror is divided into regions of this size (in MB), and the mirror log
++A mirror is divided into regions of this size (in MiB), and the mirror log
+ uses this granularity to track which regions are in sync.
+ .TP
+ .IR \fB\-s ", " \fB\-\-snapshot " " OriginalLogicalVolume { Name | Path }
+-Create a snapshot logical volume (or snapshot) for an existing, so called
++Creates a snapshot logical volume (or snapshot) for an existing, so called
+ original logical volume (or origin).
+ Snapshots provide a 'frozen image' of the contents of the origin
+ while the origin can still be updated. They enable consistent
+@@ -274,13 +284,13 @@ In case the snapshot runs out of storage, use
+ to grow it. Shrinking a snapshot is supported by
+ .BR lvreduce (8)
+ as well. Run
+-.BR lvdisplay (8)
++.BR lvs (8)
+ on the snapshot in order to check how much data is allocated to it.
+-Note that a small amount of the space you allocate to the snapshot is
++Note: a small amount of the space you allocate to the snapshot is
+ used to track the locations of the chunks of data, so you should
+-allocate slightly more space than you actually need and monitor the
+-rate at which the snapshot data is growing so you can avoid running out
+-of space.
++allocate slightly more space than you actually need and monitor
++(\fB\-\-monitor\fP) the rate at which the snapshot data is growing
++so you can \fBavoid\fP running out of space.
+ .TP
+ .IR \fB\-T ", " \fB\-\-thin ", " \fB\-\-thinpool " " ThinPoolLogicalVolume { Name | Path }
+ Creates thin pool or thin logical volume or both.
+@@ -295,30 +305,44 @@ from kernel 3.2 or newer.
+ .TP
+ .B \-\-type \fISegmentType
+ Create a logical volume that uses the specified segment type
+-(e.g. "raid5", "mirror", "snapshot", "thin", "thin-pool").
++(e.g.
++.IR mirror ( \fB\-m ),
++.IR raid5 ,
++.IR snapshot ( \fB\-s ),
++.IR thin ( \fB\-T ),
++.IR thin-pool ,\ ...).
+ Many segment types have a
+ commandline switch alias that will enable their use
+-(\fB\-s\fP is an alias for \fB\-\-type snapshot\fP).
++(\fB\-s\fP is an alias for
++.B \-\-type \fIsnapshot\fP).
+ However, this argument must be used when no existing
+ commandline switch alias is available for the desired type,
+ as is the case with
+-.IR error ", " zero ", " raid1 ", " raid10 ", " raid4 ", " raid5 " or " raid6 .
++.IR error ,
++.IR raid1 ,
++.IR raid4 ,
++.IR raid5 ,
++.IR raid6 ,
++.IR raid10
++or
++.IR zero .
+ .TP
+ .BR \-V ", " \-\-virtualsize " " \fIVirtualSize [ \fIbBsSkKmMgGtTpPeE ]
+-Create a sparse device of the given size (in MB by default) using a snapshot
++Creates a sparse device of the given size (in MiB by default) using a snapshot
+ or thinly provisioned device when thin pool is specified.
+ Anything written to the device will be returned when reading from it.
+ Reading from other areas of the device will return blocks of zeros.
+ Virtual snapshot is implemented by creating a hidden virtual device of the
+ requested size using the zero target.  A suffix of _vorigin is used for
+-this device.
++this device. Note: using sparse snapshots is not efficient for larger
++device sizes (GiB), thin provisioning should be used for this case.
+ .TP
+ .BR \-Z ", " \-\-zero " {" \fIy | \fIn }
+-Controls zeroing of the first KB of data in the new logical volume.
++Controls zeroing of the first KiB of data in the new logical volume.
+ .br
+-Default is yes.
++Default is \fIy\fPes.
+ .br
+-Volume will not be zeroed if read only flag is set.
++Volume will not be zeroed if the read only flag is set.
+ .br
+ Snapshot volumes are zeroed always.
+ 
+@@ -326,15 +350,16 @@ Snapshot volumes are zeroed always.
+ Warning: trying to mount an unzeroed logical volume can cause the system to
+ hang.
+ .SH Examples
+-Creates a striped logical volume with 3 stripes, a stripesize of 8KB
+-and a size of 100MB in the volume group named vg00.
++Creates a striped logical volume with 3 stripes, a stripe size of 8KiB
++and a size of 100MiB in the volume group named vg00.
+ The logical volume name will be chosen by lvcreate:
+ .sp
+ .B lvcreate \-i 3 \-I 8 \-L 100M vg00
+ 
+ Creates a mirror logical volume with 2 sides with a useable size of 500 MiB.
+-This operation would require 3 devices (or option --alloc anywhere) - two
+-for the mirror devices and one for the disk log:
++This operation would require 3 devices (or option
++.BI \-\-alloc \ anywhere
++) - two for the mirror devices and one for the disk log:
+ .sp
+ .B lvcreate \-m1 \-L 500M vg00
+ 
+@@ -368,10 +393,11 @@ a parity drive for a total of 4 devices) and a stripesize of 64KiB:
+ .B lvcreate \-\-type raid5 \-L 5G \-i 3 \-I 64 \-n my_lv vg00
+ 
+ Creates a 5GiB RAID10 logical volume "vg00/my_lv", with 2 stripes on
+-2 2-way mirrors.  Note that the '-i' and '-m' arguments behave differently.
+-The '-i' specifies the number of stripes.  The '-m' specifies the number of
+-.B additional 
+-copies.
++2 2-way mirrors.  Note that the \fB-i\fP and \fB-m\fP arguments behave differently.
++The \fB-i\fP specifies the number of stripes.
++The \fB-m\fP specifies the number of
++.B additional
++copies:
+ .sp
+ .B lvcreate \-\-type raid10 \-L 5G \-i 2 \-m 1 \-n my_lv vg00
+ 
+@@ -383,11 +409,12 @@ build with 2 stripes 64KiB and chunk size 256KiB together with
+ 
+ .SH SEE ALSO
+ .BR lvm (8),
+-.BR vgcreate (8),
++.BR lvm.conf (5),
+ .BR lvchange (8),
+-.BR lvremove (8),
+-.BR lvrename (8)
+ .BR lvextend (8),
+ .BR lvreduce (8),
+-.BR lvdisplay (8),
+-.BR lvscan (8)
++.BR lvremove (8),
++.BR lvrename (8)
++.BR lvs (8),
++.BR lvscan (8),
++.BR vgcreate (8)
+diff --git a/man/lvm.8.in b/man/lvm.8.in
+index 2ce0065..d15e86b 100644
+--- a/man/lvm.8.in
++++ b/man/lvm.8.in
+@@ -21,6 +21,8 @@ that command.
+ On invocation, \fBlvm\fP requires that only the standard file descriptors
+ stdin, stdout and stderr are available.  If others are found, they
+ get closed and messages are issued warning about the leak.
++This warning can be suppressed by setting enviromental variable
++.B LVM_SUPPRESS_FD_WARNINGS\fP.
+ .LP
+ Where commands take VG or LV names as arguments, the full path name is
+ optional.  An LV called "lvol0" in a VG called "vg0" can be specified
+@@ -150,7 +152,7 @@ The following options are available for many of the commands.
+ They are implemented generically and documented here rather
+ than repeated on individual manual pages.
+ .TP
+-.BR \-h ", " \-\-help
++.BR \-h ", " \-? ", " \-\-help
+ Display the help text.
+ .TP
+ .B \-\-version
+@@ -235,15 +237,9 @@ and as of version 2.02.78 the following characters are also accepted:
+ Delete the tag \fITag\fP from a PV, VG or LV, if it's present.
+ Supply this argument multiple times to remove more than one tag@once.
+ .TP
+-.B \-\-alloc \fIAllocationPolicy
+-The allocation policy to use:
+-.IR contiguous ,
+-.IR cling ,
+-.IR normal ,
+-.IR anywhere " or"
+-.IR inherit .
+-When a command needs to allocate Physical Extents from the Volume Group,
+-the allocation policy controls how they are chosen.
++.IR \fB\-\-alloc \ { anywhere | contiguous | cling | inherit | normal }
++Selects the allocation policy when a command needs to allocate
++Physical Extents from the Volume Group.
+ Each Volume Group and Logical Volume has an allocation policy defined.
+ The default for a Volume Group is \fInormal\fP which applies
+ common-sense rules such as not placing parallel stripes on the same
+@@ -269,6 +265,10 @@ shell is invoked.
+ Directory containing \fBlvm.conf\fP(5) and other LVM system files.
+ Defaults to "#DEFAULT_SYS_DIR#".
+ .TP
++.B LVM_SUPPRESS_FD_WARNINGS
++Suppress warnings about openned file descriptors, when lvm command
++is executed.
++.TP
+ .B LVM_VG_NAME
+ The Volume Group name that is assumed for
+ any reference to a Logical Volume that doesn't specify a path.
+@@ -351,7 +351,7 @@ restrictions described above applied to each step leave the tools no
+ discretion over the layout.
+ 
+ To view the way the allocation process currently works in any specific
+-case, read the debug logging output, for example by adding \-vvvv to
++case, read the debug logging output, for example by adding \fB\-vvvv\fP to
+ a command.
+ .SH DIAGNOSTICS
+ All tools return a status code of zero on success or non-zero on failure.
+@@ -360,6 +360,7 @@ All tools return a status code of zero on success or non-zero on failure.
+ .br
+ .I $HOME/.lvm_history
+ .SH SEE ALSO
++.BR lvm.conf (5),
+ .BR clvmd (8),
+ .BR lvchange (8),
+ .BR lvcreate (8),
+@@ -398,5 +399,4 @@ All tools return a status code of zero on success or non-zero on failure.
+ .BR vgs (8),
+ .BR vgscan (8),
+ .BR vgsplit (8),
+-.BR readline (3),
+-.BR lvm.conf (5)
++.BR readline (3)
 
 
