@@ -1,155 +1,101 @@
 From: Jonathan Brassow <jbrassow@redhat.com>
-Date: Mon, 08 Apr 2013 20:44:01 -0500
-Subject: [PATCH 2 of 4] LVM RAID: Update lv_attr field to indicate more RAID states
-Message-ID: <1365471841.13988.3.camel@f16>
+Date: Mon, 08 Apr 2013 20:45:56 -0500
+Subject: [PATCH 3 of 4] LVM RAID: Add ability to report RAID 'Mismatches'
+Message-ID: <1365471956.13988.5.camel@f16>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-'lvs':  Change 'p'artial lv_attr character to report volume health
+'lvs':  Add ability to report the 'Mismatches' in RAID volumes
 
-This patch expands the role of the 'p'artial character in the lv_attr
-report field.  "Partial" is really an indicator for the health of a
-logical volume and it makes sense to extend this include other heath
-indicators as well.  Specifically for this patch:
-	'm'ismatches:  Indicates that there are discrepancies in a RAID
-                       LV.  This character is shown after a scrubbing
-                       operation has detected that portions of the RAID
-                       are not coherent.
-	'r'efresh   :  Indicates that a device in a RAID array has suffered
-                       a failure and the kernel regards it as failed -
-                       even though LVM can read the device label and
-                       considers the device to be ok.  The LV should be
-                       'r'efreshed to notify the kernel that the device is
-                       now available, or the device should be 'r'eplaced
-                       if it is suspected of failing.
-                       
-Index: lvm2/lib/activate/activate.c
+'lvchange' can be used to initiate RAID scrubbing operations.  The number
+of discrepancies found or repaired by a scrubbing operation are called
+"mismatches".  This patch allows the user to query the mismatch count and
+display it via 'lvs'.
+
+Index: lvm2/lib/report/columns.h
 ===================================================================
---- lvm2.orig/lib/activate/activate.c
-+++ lvm2/lib/activate/activate.c
-@@ -183,6 +183,10 @@ int lv_raid_dev_health(const struct logi
- {
- 	return 0;
- }
-+int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt)
-+{
-+	return 0;
-+}
- int lv_raid_message(const struct logical_volume *lv, const char *msg)
- {
- 	return 0;
-@@ -800,7 +804,7 @@ int lv_raid_dev_health(const struct logi
- 	*dev_health = NULL;
- 
- 	if (!activation())
--		return 0;
-+		return_0;
- 
- 	log_debug_activation("Checking raid device health for LV %s/%s",
- 			     lv->vg->name, lv->name);
-@@ -824,6 +828,36 @@ int lv_raid_dev_health(const struct logi
- 	return r;
+--- lvm2.orig/lib/report/columns.h
++++ lvm2/lib/report/columns.h
+@@ -80,6 +80,7 @@ FIELD(LVS, lv, NUM, "Snap%", lvid, 6, sn
+ FIELD(LVS, lv, NUM, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For thin pools, the percentage of metadata full if LV is active.", 0)
+ FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
+ FIELD(LVS, lv, NUM, "Cpy%Sync", lvid, 8, copypercent, sync_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
++FIELD(LVS, lv, NUM, "Mismatches", lvid, 10, mismatch_count, mismatches, "For RAID, number of mismatches found or repaired.", 0)
+ FIELD(LVS, lv, STR, "Move", lvid, 4, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
+ FIELD(LVS, lv, STR, "Convert", lvid, 7, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
+ FIELD(LVS, lv, STR, "Log", lvid, 3, loglv, mirror_log, "For mirrors, the LV holding the synchronisation log.", 0)
+Index: lvm2/lib/report/report.c
+===================================================================
+--- lvm2.orig/lib/report/report.c
++++ lvm2/lib/report/report.c
+@@ -936,6 +936,24 @@ no_copypercent:
+ 	return 1;
  }
  
-+int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt)
++static int _mismatch_count_disp(struct dm_report *rh __attribute__((unused)),
++				struct dm_pool *mem,
++				struct dm_report_field *field,
++				const void *data,
++				void *private __attribute__((unused)))
 +{
-+	struct dev_manager *dm;
-+	struct dm_status_raid *status;
++	const struct logical_volume *lv = (const struct logical_volume *) data;
++	uint64_t mismatch_count;
 +
-+	*cnt = 0;
-+
-+	if (!activation())
-+		return 0;
-+
-+	log_debug_activation("Checking raid mismatch count for LV %s/%s",
-+			     lv->vg->name, lv->name);
-+
-+	if (!lv_is_active(lv))
-+		return_0;
-+
-+	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
-+		return_0;
-+
-+	if (!dev_manager_raid_status(dm, lv, &status)) {
-+		dev_manager_destroy(dm);
-+		return_0;
++	if (!(lv->status & RAID) ||
++	    !lv_raid_mismatch_count(lv, &mismatch_count)) {
++		dm_report_field_set_value(field, "", NULL);
++		return 1;
 +	}
-+	*cnt = status->mismatch_count;
 +
-+	dev_manager_destroy(dm);
-+
-+	return 1;
++	return  dm_report_field_uint64(rh, field, &mismatch_count);
 +}
 +
- int lv_raid_message(const struct logical_volume *lv, const char *msg)
- {
- 	int r = 0;
-Index: lvm2/lib/activate/activate.h
-===================================================================
---- lvm2.orig/lib/activate/activate.h
-+++ lvm2/lib/activate/activate.h
-@@ -117,6 +117,7 @@ int lv_mirror_percent(struct cmd_context
- 		      int wait, percent_t *percent, uint32_t *event_nr);
- int lv_raid_percent(const struct logical_volume *lv, percent_t *percent);
- int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health);
-+int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt);
- int lv_raid_message(const struct logical_volume *lv, const char *msg);
- int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
- 			 percent_t *percent);
-Index: lvm2/lib/metadata/lv.c
-===================================================================
---- lvm2.orig/lib/metadata/lv.c
-+++ lvm2/lib/metadata/lv.c
-@@ -597,11 +597,17 @@ char *lv_attr_dup(struct dm_pool *mem, c
- 	else
- 		repstr[7] = '-';
- 
--	if (lv->status & PARTIAL_LV ||
--	    (lv_is_raid_type(lv) && !_lv_raid_healthy(lv)))
-+	repstr[8] = '-';
-+	if (lv->status & PARTIAL_LV)
- 		repstr[8] = 'p';
--	else
--		repstr[8] = '-';
-+	else if (lv_is_raid_type(lv)) {
-+		uint64_t n;
-+		if (!_lv_raid_healthy(lv))
-+			repstr[8] = 'r';  /* RAID needs 'r'efresh */
-+		else if ((lv->status & RAID) &&
-+			 lv_raid_mismatch_count(lv, &n) && n)
-+			repstr[8] = 'm';  /* RAID contains 'm'ismatches */
-+	}
- 
- out:
- 	return repstr;
+ static int _dtpercent_disp(int metadata, struct dm_report *rh,
+ 			   struct dm_pool *mem,
+ 			   struct dm_report_field *field,
 Index: lvm2/man/lvs.8.in
 ===================================================================
 --- lvm2.orig/man/lvs.8.in
 +++ lvm2/man/lvs.8.in
-@@ -159,8 +159,18 @@ snapshots of thin volumes using the new
- .IP 8 3
- Newly-allocated data blocks are overwritten with blocks of (z)eroes before use.
- .IP 9 3
--(p)artial: One or more of the Physical Volumes this Logical Volume uses is
--missing from the system.
-+Volume Health: (p)artial, (r)efresh needed, (m)ismatches exist.
-+(p)artial signifies that one or more of the Physical Volumes this Logical
-+Volume uses is missing from the system.  (r)efresh signifies that one or
-+more of the Physical Volumes this RAID Logical Volume uses had suffered a
-+write error.  The write error could be due to a temporary failure of that
-+Physical Volume or an indication that it is failing.  The device should be
-+refreshed or replaced.  (m)ismatches signifies that the RAID logical volume
-+has portions of the array that are not coherent or that the array has
-+recently repaired inconsistencies.  An additional "check" after a "repair"
-+of a RAID logical volume will clear this flag if no additional discrepancies
-+are found.  ("check" and "repair" of a RAID Logical Volume can be done via
-+the 'lvchange' command.)
- .RE
- .TP
- .BR \-O ", " \-\-sort
+@@ -97,6 +97,7 @@ lv_time,
+ lv_uuid,
+ metadata_lv,
+ mirror_log,
++mismatches,
+ modules,
+ move_pv,
+ origin,
+Index: lvm2/lib/report/properties.c
+===================================================================
+--- lvm2.orig/lib/report/properties.c
++++ lvm2/lib/report/properties.c
+@@ -93,6 +93,14 @@ static percent_t _copy_percent(const str
+ 	return perc;
+ }
+ 
++static uint64_t _mismatches(const struct logical_volume *lv) {
++	uint64_t cnt;
++
++	if (!lv_raid_mismatch_count(lv, &cnt))
++		return 0;
++	return cnt;
++}
++
+ static percent_t _snap_percent(const struct logical_volume *lv) {
+ 	percent_t perc;
+ 
+@@ -195,6 +203,8 @@ GET_LV_NUM_PROPERTY_FN(copy_percent, _co
+ #define _copy_percent_set _not_implemented_set
+ GET_LV_NUM_PROPERTY_FN(sync_percent, _copy_percent(lv))
+ #define _sync_percent_set _not_implemented_set
++GET_LV_NUM_PROPERTY_FN(mismatches, _mismatches(lv))
++#define _mismatches_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
+ #define _move_pv_set _not_implemented_set
+ GET_LV_STR_PROPERTY_FN(convert_lv, lv_convert_lv_dup(lv->vg->vgmem, lv))
 
 
 
