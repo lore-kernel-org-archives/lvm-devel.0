@@ -1,204 +1,330 @@
-From: Jonathan Brassow <jbrassow@fedoraproject.org>
-Date: Mon,  8 Apr 2013 20:15:27 +0000 (UTC)
-Subject: master - RAID: Capture new RAID kernel sync_action status fields
-Message-ID: <20130408201527.D4F7D145A@fedorahosted.org>
+From: Jonathan Brassow <jbrassow@redhat.com>
+Date: Mon, 08 Apr 2013 20:42:05 -0500
+Subject: [PATCH 1 of 4] LVM RAID: Add ability to scrub RAID LVs
+Message-ID: <1365471725.13988.1.camel@f16>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=38f8f4a958980c236bf19f6e58afd55fdcdd3312
-Commit:        38f8f4a958980c236bf19f6e58afd55fdcdd3312
-Parent:        c22e925ce4fa765b208670e851eae5103fb141f4
-Author:        Jonathan Brassow <jbrassow@redhat.com>
-AuthorDate:    Mon Apr 8 15:04:08 2013 -0500
-Committer:     Jonathan Brassow <jbrassow@redhat.com>
-CommitterDate: Mon Apr 8 15:04:08 2013 -0500
+RAID: Implement the LVM interface to the dm-raid sync actions for scrubbing
 
-RAID:  Capture new RAID kernel sync_action status fields
+New operations:
+	lvchange --syncaction {check|repair) vg/raid_lv
 
-I've updated the dm_status_raid structure and dm_get_status_raid()
-function to make it handle the new kernel status fields that will
-be coming in dm-raid v1.5.0.  It is backwards compatible with the
-old status line - initializing the new fields to '0'.  The new
-structure is also more amenable to future changes.  It includes a
-'reserved' field that is currently initialized to zero but could
-be used to hold flags describing new features.  It also now uses
-pointers for the character strings instead of attempting to allocate
-their space along with the structure (causing the size of the
-structure to be variable).  This allows future fields to be appended.
+RAID scrubbing is the process of reading all the data and parity blocks in
+an array and checking to see whether they are coherent.  'lvchange' can
+now initaite the two scrubbing operations: "check" and "repair".  "check"
+will go over the array and recored the number of discrepancies but not
+repair them.  "repair" will correct the discrepancies as it finds them.
 
-The new fields that are available are:
- - sync_action : shows what the sync thread in the kernel is doing
-                 (idle, frozen, resync, recover, check, repair, or
-                 reshape)
- - mismatch_count: shows the number of discrepancies which were
-                   found or repaired by a "check" or "repair"
-                   process, respectively.
----
- lib/activate/activate.c    |    6 +++-
- lib/activate/dev_manager.c |    7 ++++-
- libdm/libdevmapper.h       |   14 +++++++++-
- libdm/libdm-deptree.c      |   55 ++++++++++++++++++++++++++++++++++++-------
- 4 files changed, 68 insertions(+), 14 deletions(-)
+'lvchange --syncaction repair vg/raid_lv' is not to be confused with
+'lvconvert --repair vg/raid_lv'.  The former initiates a background
+synchronization operation on the array, while the latter is designed to
+repair/replace failed devices in a mirror or RAID logical volume.
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 26d357b..572383f 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -809,8 +809,10 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
+Index: lvm2/lib/activate/dev_manager.c
+===================================================================
+--- lvm2.orig/lib/activate/dev_manager.c
++++ lvm2/lib/activate/dev_manager.c
+@@ -1066,6 +1066,55 @@ out:
+ 	return r;
+ }
  
- 	if (!(r = dev_manager_raid_status(dm, lv, &status)) ||
- 	    !(*dev_health = dm_pool_strdup(lv->vg->cmd->mem,
--					   status->dev_health)))
--		stack;
-+					   status->dev_health))) {
-+		dev_manager_destroy(dm);
-+		return_0;
++int dev_manager_raid_message(struct dev_manager *dm,
++			     const struct logical_volume *lv,
++			     const char *msg)
++{
++	int r = 0;
++	const char *dlid;
++	struct dm_task *dmt;
++	const char *layer = lv_layer(lv);
++
++	if (!(lv->status & RAID)) {
++		log_error(INTERNAL_ERROR "%s/%s is not a RAID logical volume",
++			  lv->vg->name, lv->name);
++		return 0;
 +	}
++
++	/* These are the supported RAID messages for dm-raid v1.5.0 */
++	if (!strcmp(msg, "idle") &&
++	    !strcmp(msg, "frozen") &&
++	    !strcmp(msg, "resync") &&
++	    !strcmp(msg, "recover") &&
++	    !strcmp(msg, "check") &&
++	    !strcmp(msg, "repair") &&
++	    !strcmp(msg, "reshape")) {
++		log_error("Unknown RAID message: %s", msg);
++		return 0;
++	}
++
++	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
++		return_0;
++
++	if (!(dmt = _setup_task(NULL, dlid, 0, DM_DEVICE_TARGET_MSG, 0, 0)))
++		return_0;
++
++	if (!dm_task_no_open_count(dmt))
++		log_error("Failed to disable open_count.");
++
++	if (!dm_task_set_message(dmt, msg))
++		goto_out;
++
++	if (!dm_task_run(dmt))
++		goto_out;
++
++	r = 1;
++out:
++	dm_task_destroy(dmt);
++
++	return r;
++}
++
+ #if 0
+ 	log_very_verbose("%s %s", sus ? "Suspending" : "Resuming", name);
  
- 	cached_dev_health = *dev_health;
+Index: lvm2/man/lvchange.8.in
+===================================================================
+--- lvm2.orig/man/lvchange.8.in
++++ lvm2/man/lvchange.8.in
+@@ -26,6 +26,8 @@ lvchange \- change attributes of a logic
+ .RI { y | n }]
+ .RB [ \-\-poll
+ .RI { y | n }]
++.RB [ \-\-syncaction
++.RI { check | repair }]
+ .RB [ \-\-sysinit ]
+ .RB [ \-\-noudevsync ]
+ .RB [ \-M | \-\-persistent
+@@ -107,6 +109,18 @@ process from its last checkpoint.  Howev
+ immediately poll a logical volume when it is activated, use
+ \fB\-\-poll n\fP to defer and then \fB\-\-poll y\fP to restart the process.
+ .TP
++.BR \-\-syncaction " {" \fIcheck | \fIrepair }
++This argument is used to initiate various RAID synchronization operations.
++The \fIcheck\fP and \fIrepair\fP options provide a way to check the
++integrity of a RAID logical volume (often referred to as "scrubbing").
++These options cause the RAID logical volume to
++read all of the data and parity blocks in the array and check for any
++discrepancies (e.g. mismatches between mirrors or incorrect parity values).
++If \fIcheck\fP is used, the discrepancies will be counted but not repaired.
++If \fIrepair\fP is used, the discrepancies will be corrected as they are
++encountered.  The 'lvs' command can be used to show the number of
++discrepancies found or repaired.
++.TP
+ .B \-\-sysinit
+ Indicates that \fBlvchange\fP(8) is being invoked from early system
+ initialisation scripts (e.g. rc.sysinit or an initrd),
+Index: lvm2/tools/args.h
+===================================================================
+--- lvm2.orig/tools/args.h
++++ lvm2/tools/args.h
+@@ -86,6 +86,7 @@ arg(ignoreadvanced_ARG, '\0', "ignoreadv
+ arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", NULL, 0)
+ arg(atversion_ARG, '\0', "atversion", string_arg, 0)
+ arg(validate_ARG, '\0', "validate", NULL, 0)
++arg(syncaction_ARG, '\0', "syncaction", string_arg, 0)
+ 
+ /* Allow some variations */
+ arg(resizable_ARG, '\0', "resizable", yes_no_arg, 0)
+Index: lvm2/tools/commands.h
+===================================================================
+--- lvm2.orig/tools/commands.h
++++ lvm2/tools/commands.h
+@@ -90,6 +90,7 @@ xx(lvchange,
+    "\t[-r|--readahead ReadAheadSectors|auto|none]\n"
+    "\t[--refresh]\n"
+    "\t[--resync]\n"
++   "\t[--syncaction {check|repair}\n"
+    "\t[--sysinit]\n"
+    "\t[-t|--test]\n"
+    "\t[-v|--verbose]\n"
+@@ -102,8 +103,8 @@ xx(lvchange,
+    discards_ARG, force_ARG, ignorelockingfailure_ARG, ignoremonitoring_ARG,
+    major_ARG, minor_ARG, monitor_ARG, noudevsync_ARG, partial_ARG,
+    permission_ARG, persistent_ARG, poll_ARG, readahead_ARG, resync_ARG,
+-   refresh_ARG, addtag_ARG, deltag_ARG, sysinit_ARG, test_ARG, yes_ARG,
+-   zero_ARG)
++   refresh_ARG, addtag_ARG, deltag_ARG, syncaction_ARG, sysinit_ARG, test_ARG,
++   yes_ARG, zero_ARG)
+ 
+ xx(lvconvert,
+    "Change logical volume layout",
+Index: lvm2/tools/lvchange.c
+===================================================================
+--- lvm2.orig/tools/lvchange.c
++++ lvm2/tools/lvchange.c
+@@ -261,13 +261,6 @@ static int _lvchange_activate(struct cmd
+ 	return 1;
+ }
+ 
+-static int lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+-{
+-	log_verbose("Refreshing logical volume \"%s\" (if active)", lv->name);
+-
+-	return lv_refresh(cmd, lv);
+-}
+-
+ static int detach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
+ {
+ 	uint32_t s;
+@@ -328,8 +321,28 @@ static int attach_metadata_devices(struc
+ 	return 1;
+ }
+ 
+-static int lvchange_resync(struct cmd_context *cmd,
+-			      struct logical_volume *lv)
++/*
++ * lvchange_refresh
++ * @cmd
++ * @lv
++ *
++ * Suspend and resume a logical volume.
++ */
++static int lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
++{
++	log_verbose("Refreshing logical volume \"%s\" (if active)", lv->name);
++
++	return lv_refresh(cmd, lv);
++}
++
++/*
++ * lvchange_resync
++ * @cmd
++ * @lv
++ *
++ * Force a mirror or RAID array to undergo a complete initializing resync.
++ */
++static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+ 	int active = 0;
+ 	int monitored;
+@@ -898,6 +911,13 @@ static int lvchange_single(struct cmd_co
+ 			return ECMD_FAILED;
+ 		}
+ 
++	if (arg_count(cmd, syncaction_ARG)) {
++		if (!lv_raid_message(lv, arg_str_value(cmd, syncaction_ARG, NULL))) {
++			stack;
++			return ECMD_FAILED;
++		}
++	}
++
+ 	/* activation change */
+ 	if (arg_count(cmd, activate_ARG)) {
+ 		if (!_lvchange_activate(cmd, lv)) {
+@@ -956,6 +976,7 @@ int lvchange(struct cmd_context *cmd, in
+ 		arg_count(cmd, resync_ARG) ||
+ 		arg_count(cmd, alloc_ARG) ||
+ 		arg_count(cmd, discards_ARG) ||
++		arg_count(cmd, syncaction_ARG) ||
+ 		arg_count(cmd, zero_ARG);
+ 	int update = update_partial_safe || update_partial_unsafe;
+ 
+Index: lvm2/lib/activate/activate.c
+===================================================================
+--- lvm2.orig/lib/activate/activate.c
++++ lvm2/lib/activate/activate.c
+@@ -183,6 +183,10 @@ int lv_raid_dev_health(const struct logi
+ {
+ 	return 0;
+ }
++int lv_raid_message(const struct logical_volume *lv, const char *msg)
++{
++	return 0;
++}
+ int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
+ 			 percent_t *percent)
+ {
+@@ -818,6 +822,61 @@ int lv_raid_dev_health(const struct logi
  	dev_manager_destroy(dm);
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 906f53a..4a77320 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1031,7 +1031,6 @@ int dev_manager_raid_status(struct dev_manager *dm,
- 	char *params = NULL;
- 	const char *layer = lv_layer(lv);
  
--	/* Build dlid for the thin pool layer */
- 	if (!(dlid = build_dm_uuid(dm->mem, lv->lvid.s, layer)))
- 		return_0;
- 
-@@ -1051,6 +1050,12 @@ int dev_manager_raid_status(struct dev_manager *dm,
- 
- 	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
- 
-+	if (!type || strcmp(type, "raid")) {
-+		log_debug("Expected raid segment type but got %s instead",
-+			  type ? type : "NULL");
+ 	return r;
++}
++
++int lv_raid_message(const struct logical_volume *lv, const char *msg)
++{
++	int r = 0;
++	struct dev_manager *dm;
++	struct dm_status_raid *status;
++
++	if (!lv_is_active(lv)) {
++		log_error("Unable to send message to an inactive logical volume.");
++		return 0;
++	}
++
++	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
++		return_0;
++
++	if (!(r = dev_manager_raid_status(dm, lv, &status))) {
++		log_error("Failed to retrieve status of %s/%s",
++			  lv->vg->name, lv->name);
 +		goto out;
 +	}
 +
- 	if (!dm_get_status_raid(dm->mem, params, status))
- 		goto_out;
- 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 184615f..2f2c77d 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -265,12 +265,22 @@ void *dm_get_next_target(struct dm_task *dmt,
-  */
- struct dm_pool;
- 
-+/*
-+ * dm_get_status_raid will allocate the dm_status_raid structure and
-+ * the necessary character arrays from the mempool provided to the
-+ * function.  If the mempool is from a dev_manager struct (dm->mem),
-+ * then the caller does not need to free the memory - simply calling
-+ * dev_manager_destroy will do.
-+ */
- struct dm_status_raid {
-+	uint64_t reserved;
- 	uint64_t total_regions;
- 	uint64_t insync_regions;
-+	uint64_t mismatch_count;
- 	int dev_count;
--	char raid_type[16];
--	char dev_health[0];
-+	char *raid_type;
-+	char *dev_health;
-+	char *sync_action;
- };
- 
- int dm_get_status_raid(struct dm_pool *mem, const char *params,
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 8292791..750f494 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -2873,28 +2873,39 @@ int dm_tree_node_add_raid_target(struct dm_tree_node *node,
- 	return 1;
- }
- 
++	if (!status->sync_action) {
++		log_error("Kernel driver does not support this action: %s", msg);
++		goto out;
++	}
 +
-+/*
-+ * Various RAID status versions include:
-+ * Versions < 1.5.0 (4 fields):
-+ *   <raid_type> <#devs> <health_str> <sync_ratio>
-+ * Versions 1.5.0+  (6 fields):
-+ *   <raid_type> <#devs> <health_str> <sync_ratio> <sync_action> <mismatch_cnt>
-+ */
- int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 		       struct dm_status_raid **status)
- {
--	int dev_count;
--	const char *p;
-+	int i;
-+	const char *pp, *p;
- 	struct dm_status_raid *s;
- 
- 	if (!params || !(p = strchr(params, ' '))) {
- 		log_error("Failed to parse invalid raid params.");
- 		return 0;
- 	}
--
- 	p++;
- 
--	if (sscanf(p, "%d", &dev_count) != 1)
-+	/* second field holds the device count */
-+	if (sscanf(p, "%d", &i) != 1)
- 		return_0;
- 
--	s = dm_pool_zalloc(mem, sizeof(struct dm_status_raid) + dev_count + 1);
--	if (!s) {
--		log_error("Failed to allocate raid status structure.");
--		return 0;
--	}
-+	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_raid))))
-+		return_0;
-+
-+	if (!(s->raid_type = dm_pool_zalloc(mem, p - params)))
-+		return_0; /* memory is freed went pool is destroyed */
-+
-+	if (!(s->dev_health = dm_pool_zalloc(mem, i + 1)))
-+		return_0;
- 
- 	if (sscanf(params, "%s %d %s %" PRIu64 "/%" PRIu64,
- 		   s->raid_type,
-@@ -2908,6 +2919,32 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
- 
- 	*status = s;
- 
 +	/*
-+	 * All pre-1.5.0 version parameters are read.  Now we check
-+	 * for additional 1.5.0+ parameters.
-+	 *
-+	 * Note that 'sync_action' will be NULL (and mismatch_count
-+	 * will be 0) if the kernel returns a pre-1.5.0 status.
++	 * Note that 'dev_manager_raid_message' allows us to pass down any
++	 * currently valid message.  However, this function restricts the
++	 * number of user available combinations to a minimum.  Specifically,
++	 *     "idle" -> "check"
++	 *     "idle" -> "repair"
++	 * (The state automatically switches to "idle" when a sync process is
++	 * complete.)
 +	 */
-+	for (p = params, i = 0; i < 4; i++, p++)
-+		if (!(p = strchr(p, ' ')))
-+			return 1;  /* return pre-1.5.0 status */
-+
-+	pp = p;
-+	if (!(p = strchr(p, ' '))) {
-+		log_error(INTERNAL_ERROR "Bad RAID status received.");
-+		return 0;
++	if (strcmp(msg, "check") && strcmp(msg, "repair")) {
++		/*
++		 * MD allows "frozen" to operate in a toggling fashion.
++		 * We could allow this if we like...
++		 */
++		log_error("\"%s\" is not a supported sync operation.", msg);
++		goto out;
 +	}
-+	p++;
-+
-+	if (!(s->sync_action = dm_pool_zalloc(mem, p - pp)))
-+		return_0;
-+
-+	if (sscanf(pp, "%s %" PRIu64, s->sync_action, &s->mismatch_count) != 2) {
-+		log_error("Failed to parse raid params: %s", params);
-+		return 0;
++	if (strcmp(status->sync_action, "idle")) {
++		log_error("%s/%s state is currently \"%s\".  Unable to switch to \"%s\".",
++			  lv->vg->name, lv->name, status->sync_action, msg);
++		goto out;
 +	}
 +
- 	return 1;
++	r = dev_manager_raid_message(dm, lv, msg);
++out:
++	dev_manager_destroy(dm);
++
++	return r;
  }
  
+ /*
+Index: lvm2/lib/activate/activate.h
+===================================================================
+--- lvm2.orig/lib/activate/activate.h
++++ lvm2/lib/activate/activate.h
+@@ -117,6 +117,7 @@ int lv_mirror_percent(struct cmd_context
+ 		      int wait, percent_t *percent, uint32_t *event_nr);
+ int lv_raid_percent(const struct logical_volume *lv, percent_t *percent);
+ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health);
++int lv_raid_message(const struct logical_volume *lv, const char *msg);
+ int lv_thin_pool_percent(const struct logical_volume *lv, int metadata,
+ 			 percent_t *percent);
+ int lv_thin_percent(const struct logical_volume *lv, int mapped,
+Index: lvm2/lib/activate/dev_manager.h
+===================================================================
+--- lvm2.orig/lib/activate/dev_manager.h
++++ lvm2/lib/activate/dev_manager.h
+@@ -57,6 +57,9 @@ int dev_manager_mirror_percent(struct de
+ int dev_manager_raid_status(struct dev_manager *dm,
+ 			    const struct logical_volume *lv,
+ 			    struct dm_status_raid **status);
++int dev_manager_raid_message(struct dev_manager *dm,
++			     const struct logical_volume *lv,
++			     const char *msg);
+ int dev_manager_thin_pool_status(struct dev_manager *dm,
+ 				 const struct logical_volume *lv,
+ 				 struct dm_status_thin_pool **status,
+
 
 
