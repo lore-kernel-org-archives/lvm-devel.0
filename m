@@ -1,9 +1,7 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 11 Apr 2013 15:58:51 -0500
-Subject: [PATCH 2/2] python-lvm: Added lv method getOrigin
-In-Reply-To: <1365713931-12666-1-git-send-email-tasleson@redhat.com>
-References: <1365713931-12666-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1365713931-12666-2-git-send-email-tasleson@redhat.com>
+Date: Thu, 11 Apr 2013 15:58:50 -0500
+Subject: [PATCH 1/2] lvm2app: Add function to retrieve the origin.
+Message-ID: <1365713931-12666-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,36 +10,53 @@ Content-Transfer-Encoding: 7bit
 
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- python/liblvm.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ liblvm/lvm2app.h | 16 ++++++++++++++++
+ liblvm/lvm_lv.c  |  5 +++++
+ 2 files changed, 21 insertions(+)
 
-diff --git a/python/liblvm.c b/python/liblvm.c
-index 96e94d4..09892ca 100644
---- a/python/liblvm.c
-+++ b/python/liblvm.c
-@@ -1202,6 +1202,14 @@ liblvm_lvm_lv_get_attr(lvobject *self)
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+index 15827ac..369c300 100644
+--- a/liblvm/lvm2app.h
++++ b/liblvm/lvm2app.h
+@@ -1223,6 +1223,22 @@ const char *lvm_lv_get_name(const lv_t lv);
+ const char *lvm_lv_get_attr(const lv_t lv);
+ 
+ /**
++ * Get the origin of a snapshot.
++ *
++ * \memberof lv_t
++ *
++ * The memory allocated for the name is tied to the vg_t handle and will be
++ * released when lvm_vg_close() is called.
++ *
++ * \param   lv
++ * Logical volume handle.
++ *
++ * \return
++ * Null if the logical volume is not a snapshot, else origin name.
++ */
++const char *lvm_lv_get_origin(const lv_t lv);
++
++/**
+  * Get the current size in bytes of a logical volume.
+  *
+  * \memberof lv_t
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+index 9d3ae79..f244a60 100644
+--- a/liblvm/lvm_lv.c
++++ b/liblvm/lvm_lv.c
+@@ -53,6 +53,11 @@ const char *lvm_lv_get_attr(const lv_t lv)
+ 	return lv_attr_dup(lv->vg->vgmem, lv);
  }
  
- static PyObject *
-+liblvm_lvm_lv_get_origin(lvobject *self)
++const char *lvm_lv_get_origin(const lv_t lv)
 +{
-+	LV_VALID(self);
-+
-+	return Py_BuildValue("s", lvm_lv_get_origin(self->lv));
++	return lv_origin_dup(lv->vg->vgmem, lv);
 +}
 +
-+static PyObject *
- liblvm_lvm_lv_get_name(lvobject *self)
+ struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
  {
- 	LV_VALID(self);
-@@ -1758,6 +1766,7 @@ static PyMethodDef liblvm_lv_methods[] = {
- 	/* lv methods */
- 	{ "getAttr",		(PyCFunction)liblvm_lvm_lv_get_attr, METH_NOARGS },
- 	{ "getName",		(PyCFunction)liblvm_lvm_lv_get_name, METH_NOARGS },
-+	{ "getOrigin",		(PyCFunction)liblvm_lvm_lv_get_origin, METH_NOARGS },
- 	{ "getUuid",		(PyCFunction)liblvm_lvm_lv_get_uuid, METH_NOARGS },
- 	{ "activate",		(PyCFunction)liblvm_lvm_lv_activate, METH_NOARGS },
- 	{ "deactivate",		(PyCFunction)liblvm_lvm_lv_deactivate, METH_NOARGS },
+ 	return get_property(NULL, NULL, lv, NULL, NULL, name);
 -- 
 1.8.1.4
 
