@@ -1,32 +1,42 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri, 12 Apr 2013 10:21:46 -0500
-Subject: [PATCH V4] lvm2app: Add thin and thin pool lv creation
-In-Reply-To: <516800C9.8000505@redhat.com>
-References: <1363713892-14704-1-git-send-email-mohan@in.ibm.com>
-	<515DF3F3.70004@redhat.com> <87zjx47x7a.fsf@in.ibm.com>
-	<516800C9.8000505@redhat.com>
-Message-ID: <5168268A.6040701@redhat.com>
+Date: Fri, 12 Apr 2013 10:44:11 -0500
+Subject: [PATCH 1/2] lvm2app: Add function to retrieve the origin.
+In-Reply-To: <5167C42E.4000407@redhat.com>
+References: <1365713931-12666-1-git-send-email-tasleson@redhat.com>
+	<5167C42E.4000407@redhat.com>
+Message-ID: <51682BCB.6070504@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 04/12/2013 07:40 AM, Zdenek Kabelac wrote:
- > We really need here separate type of object to set all properties for
-thin.
-> (Since their amount will grow over the time) so you can't solve with any
-> bit field - this is not extensible.
-> 
-> We need to create 'object' with properties, that can be controled in C++
-> like way - so we may extend it in future easily, without breaking API,
-> and leaving
-> 'old' unusable calls in the library.
+On 04/12/2013 03:22 AM, Zdenek Kabelac wrote:
+> If you need just 'const' pointer - it would be probably better,
+> to directly return the name - instead of duplication.
 
-I will take a swag at something early next week and post for people to
-review.  We need to get something in soon so that people can utilize the
-new thinp stuff.
+Agreed.
 
--Tony
+> i.e. lv_origin_dup() ->  rewrite to  'const char *lv_get_origin(.)' ->
+> and use it for  lv_name_dup() in lv_origin_dup() which returns char *.
+> as well as for  lvm_lv_get_origin().
+
+I ran into at least 2 different implementations of *get_origin.  There
+is lv_origin_dup() and _origin_disp.  Both utilize the same logic with
+slightly different output.  I haven't looked around it see if there are
+others.
+
+To clean this up correctly I would want to write what you are suggesting
+and then use it in all the different places.
+
+There is quite a bit of code that could certainly benefit from
+decoupling the generation/manipulation of the data from the presentation
+of it.
+
+I've added this to a todo list.
+
+Regards,
+Tony
+
 
 
