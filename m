@@ -1,45 +1,60 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 12 Apr 2013 17:51:31 +0200
-Subject: [PATCH 1/2] lvm2app: Add function to retrieve the origin.
-In-Reply-To: <51682BCB.6070504@redhat.com>
-References: <1365713931-12666-1-git-send-email-tasleson@redhat.com>
-	<5167C42E.4000407@redhat.com> <51682BCB.6070504@redhat.com>
-Message-ID: <51682D83.4090506@redhat.com>
+From: Jonathan Brassow <jbrassow@fedoraproject.org>
+Date: Fri, 12 Apr 2013 16:34:45 +0000 (UTC)
+Subject: master - CLEAN-UP: Better string checking to avoid substring matches
+Message-ID: <20130412163445.CBF241D59@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12.4.2013 17:44, Tony Asleson napsal(a):
-> On 04/12/2013 03:22 AM, Zdenek Kabelac wrote:
->> If you need just 'const' pointer - it would be probably better,
->> to directly return the name - instead of duplication.
->
-> Agreed.
->
->> i.e. lv_origin_dup() ->  rewrite to  'const char *lv_get_origin(.)' ->
->> and use it for  lv_name_dup() in lv_origin_dup() which returns char *.
->> as well as for  lvm_lv_get_origin().
->
-> I ran into at least 2 different implementations of *get_origin.  There
-> is lv_origin_dup() and _origin_disp.  Both utilize the same logic with
-> slightly different output.  I haven't looked around it see if there are
-> others.
->
-> To clean this up correctly I would want to write what you are suggesting
-> and then use it in all the different places.
->
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c363c74a251a5745e8ac6e274d1f7a1e32fa1843
+Commit:        c363c74a251a5745e8ac6e274d1f7a1e32fa1843
+Parent:        58734d2538854ef79e6605ba69c57723737d12c2
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Fri Apr 12 11:30:04 2013 -0500
+Committer:     Jonathan Brassow <jbrassow@redhat.com>
+CommitterDate: Fri Apr 12 11:30:04 2013 -0500
 
-Yep, that would be very useful - since we already do a tons of useless string 
-duplication - we should try to avoid a new set of those ;)
+CLEAN-UP:  Better string checking to avoid substring matches
 
-There are many more places, where we could be happy with just const reference,
-since the lifetime of object is clearly defined and parent object cannot be 
-removed/changed, so there is no benefit of using duplicate copies.
+Commit 9fd7ac7d035f0b2f8dcc3cb19935eb181816bd76 introduced a way a
+method of avoiding reading from mirrors with a device failure.  If
+a device was found to be dead, the mapping table was checked for
+'handle_errors' or 'block_on_error'.  These strings were checked for
+in the table string via 'strstr', which could also match on strings
+like, 'no_handle_errors' or 'no_block_on_error'.  No such strings
+exist, but we don't want to have problems in the future if they do.
+So, we check for ' <string>{'\0'|' '}'.
+---
+ lib/activate/dev_manager.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-Regards
-
-Zdenek
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 8c06476..00c0126 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -239,7 +239,7 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 	dev_t log_dev;
+ 	char *images_health, *log_health;
+ 	uint64_t s,l;
+-	char *params, *target_type = NULL;
++	char *p, *params, *target_type = NULL;
+ 	void *next = NULL;
+ 	struct dm_task *dmt = NULL;
+ 	int r = 0;
+@@ -306,8 +306,10 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 			if (strcmp(target_type, "mirror"))
+ 				goto_out;
+ 
+-			if (strstr(params, "block_on_error") ||
+-			    strstr(params, "handle_errors")) {
++			if (((p = strstr(params, " block_on_error")) &&
++			     (p[15] == '\0' || p[15] == ' ')) ||
++			    ((p = strstr(params, " handle_errors")) &&
++			     (p[14] == '\0' || p[14] == ' '))) {
+ 				log_debug_activation("%s: I/O blocked to mirror device",
+ 						     dev_name(dev));
+ 				goto out;
 
 
