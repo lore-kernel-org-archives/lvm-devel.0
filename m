@@ -1,108 +1,89 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:54 +0000 (UTC)
-Subject: master - lv_manip: check remove_seg_from_segs_using_this_lv()
-Message-ID: <20130421211654.5A8681241@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:56 +0000 (UTC)
+Subject: master - vgread: fix fid transfer for lvm1 and pool format
+Message-ID: <20130421211656.A1D151241@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5e7eae59da2ce859e99c62b578f9164b87a1f944
-Commit:        5e7eae59da2ce859e99c62b578f9164b87a1f944
-Parent:        8f1dd00c3634d111be9a42524ab50b2f31962530
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1951798d7225dce35baa7689a308998f27379b6f
+Commit:        1951798d7225dce35baa7689a308998f27379b6f
+Parent:        5e7eae59da2ce859e99c62b578f9164b87a1f944
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 13:18:53 2013 +0200
+AuthorDate:    Sun Apr 21 21:36:08 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:10:43 2013 +0200
+CommitterDate: Sun Apr 21 23:13:57 2013 +0200
 
-lv_manip: check remove_seg_from_segs_using_this_lv()
+vgread: fix fid transfer for lvm1 and pool format
 
-Add missing check for result of remove_seg_from_segs_using_this_lv().
-Failure is reported as internal error.
+Assign fid as the last step before returning VG.
+Make the format reader for 'lvm1' and 'pool' equal to 'lvm2' format reader.
+
+It has caused memory corruption to lvmetad as it later calls
+destroy_instance() to allocated fid. This patch should fix problems
+with crashing test lvmetad-lvm1.sh.
 ---
- lib/metadata/lv_manip.c   |    5 ++++-
- lib/metadata/mirror.c     |    3 ++-
- lib/metadata/raid_manip.c |    8 +++++---
- lib/metadata/thin_manip.c |    3 ++-
- 4 files changed, 13 insertions(+), 6 deletions(-)
+ WHATS_NEW                     |    1 +
+ lib/format1/format1.c         |    4 ++--
+ lib/format_pool/format_pool.c |    4 ++--
+ 3 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a353932..7580464 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -246,6 +246,8 @@ int remove_seg_from_segs_using_this_lv(struct logical_volume *lv,
- 		return 1;
- 	}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 5d4c7a7..c1324de 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.99 - 
+ ===================================
++  Fix assignment order for vg fid for lvm1 and pool format.
+   Fix memleak in dmeventd thin plugin in device list obtaining err path.
+   Add explicit message about unsupported pvmove for thin/thinpool volumes.
+   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index f47ed95..2864227 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -200,8 +200,6 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if (dm_list_empty(&pvs))
+ 		goto_bad;
  
-+	log_error(INTERNAL_ERROR "Segment %s:%u is not a user of %s.",
-+                  seg->lv->name, seg->le, lv->name);
- 	return 0;
- }
+-	vg_set_fid(vg, fid);
+-
+ 	if (!_check_vgs(&pvs, vg))
+ 		goto_bad;
  
-@@ -514,7 +516,8 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
- 				 seg->lv->name, seg->le, s,
- 				 seg_lv(seg, s)->name, seg_le(seg, s));
+@@ -226,6 +224,8 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
+ 		goto_bad;
  
--		remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg);
-+		if (!remove_seg_from_segs_using_this_lv(seg_lv(seg, s), seg))
-+			return_0;
- 		seg_lv(seg, s) = NULL;
- 		seg_le(seg, s) = 0;
- 		seg_type(seg, s) = AREA_UNASSIGNED;
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index fecab45..18d0d33 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -482,7 +482,8 @@ struct logical_volume *detach_mirror_log(struct lv_segment *mirrored_seg)
- 	mirrored_seg->log_lv = NULL;
- 	lv_set_visible(log_lv);
- 	log_lv->status &= ~MIRROR_LOG;
--	remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg);
-+	if (!remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg))
-+		return_0;
++	vg_set_fid(vg, fid);
++
+ 	return vg;
  
- 	return log_lv;
- }
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f9d3861..707db1f 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -195,7 +195,8 @@ static int _raid_remove_top_layer(struct logical_volume *lv,
- 	/* Add last metadata area to removal_list */
- 	lvl_array[0].lv = seg_metalv(seg, 0);
- 	lv_set_visible(seg_metalv(seg, 0));
--	remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg);
-+	if (!remove_seg_from_segs_using_this_lv(seg_metalv(seg, 0), seg))
-+		return_0;
- 	seg_metatype(seg, 0) = AREA_UNASSIGNED;
- 	dm_list_add(removal_list, &(lvl_array[0].list));
+ bad:
+diff --git a/lib/format_pool/format_pool.c b/lib/format_pool/format_pool.c
+index c051968..0891524 100644
+--- a/lib/format_pool/format_pool.c
++++ b/lib/format_pool/format_pool.c
+@@ -122,8 +122,6 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
+ 	if (!read_pool_pds(fid->fmt, vg_name, vg->vgmem, &pds))
+ 		goto_bad;
  
-@@ -835,8 +836,9 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
- 	lv_set_visible(meta_lv);
+-	vg_set_fid(vg, fid);
+-
+ 	/* Setting pool seqno to 1 because the code always did this,
+ 	 * although we don't think it's needed. */
+ 	vg->seqno = 1;
+@@ -155,6 +153,8 @@ static struct volume_group *_pool_vg_read(struct format_instance *fid,
+ 	if (!import_pool_segments(&vg->lvs, vg->vgmem, usp, sp_count))
+ 		goto_bad;
  
- 	/* release removes data and meta areas */
--	remove_seg_from_segs_using_this_lv(data_lv, seg);
--	remove_seg_from_segs_using_this_lv(meta_lv, seg);
-+	if (!remove_seg_from_segs_using_this_lv(data_lv, seg) ||
-+	    !remove_seg_from_segs_using_this_lv(meta_lv, seg))
-+		return_0;
++	vg_set_fid(vg, fid);
++
+ 	return vg;
  
- 	seg_type(seg, idx) = AREA_UNASSIGNED;
- 	seg_metatype(seg, idx) = AREA_UNASSIGNED;
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 10c8f43..1239af9 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -474,7 +474,8 @@ int extend_pool(struct logical_volume *pool_lv, const struct segment_type *segty
- 		return_0;
- 
- 	/* Drop reference as attach_pool_data_lv() takes it again */
--	remove_seg_from_segs_using_this_lv(data_lv, seg);
-+	if (!remove_seg_from_segs_using_this_lv(data_lv, seg))
-+		return_0;
- 	if (!attach_pool_data_lv(seg, data_lv))
- 		return_0;
- 
+ bad:
 
 
