@@ -1,65 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:49 +0000 (UTC)
-Subject: master - thin: fix resource leak in err path
-Message-ID: <20130421211649.A2B7311FE@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:52 +0000 (UTC)
+Subject: master - libdm: improve check in dm_split_lvm_name
+Message-ID: <20130421211652.07DDB910@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2b76a6f022920abd59072decfa7d3d76eeda913
-Commit:        a2b76a6f022920abd59072decfa7d3d76eeda913
-Parent:        17a691505467cd5a73059fe5ca22fe50dafd345a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8f1dd00c3634d111be9a42524ab50b2f31962530
+Commit:        8f1dd00c3634d111be9a42524ab50b2f31962530
+Parent:        a2b76a6f022920abd59072decfa7d3d76eeda913
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 12:19:25 2013 +0200
+AuthorDate:    Sun Apr 21 12:48:24 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:10:30 2013 +0200
+CommitterDate: Sun Apr 21 23:10:43 2013 +0200
 
-thin: fix resource leak in err path
+libdm: improve check in dm_split_lvm_name
 
-If the devices list could not have been obtained, FILE* was leaked.
+We support both type of call - with or without mem pool.
+So ensure we will not use NULL vgname also when mem is given.
 ---
- WHATS_NEW                                     |    1 +
- daemons/dmeventd/plugins/thin/dmeventd_thin.c |    6 +++---
- 2 files changed, 4 insertions(+), 3 deletions(-)
+ libdm/libdm-string.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b016b8e..5d4c7a7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix memleak in dmeventd thin plugin in device list obtaining err path.
-   Add explicit message about unsupported pvmove for thin/thinpool volumes.
-   Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
-   Fix clvmd _cluster_request() return code in memory fail path.
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index ba72c4a..95ab27a 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -246,7 +246,7 @@ static void _umount(struct dm_task *dmt, const char *device)
+diff --git a/libdm/libdm-string.c b/libdm/libdm-string.c
+index 5ef6334..9d667bb 100644
+--- a/libdm/libdm-string.c
++++ b/libdm/libdm-string.c
+@@ -92,7 +92,10 @@ static char *_unquote(char *component)
+ int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
+ 		      char **vgname, char **lvname, char **layer)
  {
- 	static const char mountinfo[] = "/proc/self/mountinfo";
- 	static const size_t MINORS = 4096;
--	FILE *minfo;
-+	FILE *minfo = NULL;
- 	char buffer[4096];
- 	char target[PATH_MAX];
- 	struct dm_info info;
-@@ -288,10 +288,10 @@ static void _umount(struct dm_task *dmt, const char *device)
- 		}
- 	}
+-	if (mem && !(*vgname = dm_pool_strdup(mem, dmname)))
++	if (mem)
++		*vgname = dm_pool_strdup(mem, dmname);
++
++	if (!*vgname)
+ 		return 0;
  
--	if (fclose(minfo))
-+out:
-+	if (minfo && fclose(minfo))
- 		syslog(LOG_ERR, "Failed to close %s\n", mountinfo);
- 
--out:
- 	if (minors)
- 		dm_bitset_destroy(minors);
- 	dmeventd_lvm2_lock();
+ 	_unquote(*layer = _unquote(*lvname = _unquote(*vgname)));
 
 
