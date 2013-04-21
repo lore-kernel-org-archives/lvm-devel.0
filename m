@@ -1,61 +1,47 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:17:17 +0000 (UTC)
-Subject: master - test: singlenode minor cleanups
-Message-ID: <20130421211717.981F816CF@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:55:58 +0000 (UTC)
+Subject: master - format1: add workaround for vg_set_fid
+Message-ID: <20130421215558.395531558@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=994c32272e7c36f45defda12848d3856590a0d1f
-Commit:        994c32272e7c36f45defda12848d3856590a0d1f
-Parent:        9cdcde494f2824dbf8e549638331ab65b1f56b3a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a12f92c494a60fe6e6c9e133aa879bd0d0da069a
+Commit:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
+Parent:        994c32272e7c36f45defda12848d3856590a0d1f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 18 18:01:52 2013 +0200
+AuthorDate:    Sun Apr 21 23:53:53 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:15:07 2013 +0200
+CommitterDate: Sun Apr 21 23:53:53 2013 +0200
 
-test: singlenode minor cleanups
+format1: add workaround for vg_set_fid
 
-Move unnecessary code out of locks.
+Since we want to set fid just before return of vg,
+add this termporary workaround.
 ---
- daemons/clvmd/clvmd-singlenode.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/format1/format1.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd-singlenode.c b/daemons/clvmd/clvmd-singlenode.c
-index b968c5f..a79100f 100644
---- a/daemons/clvmd/clvmd-singlenode.c
-+++ b/daemons/clvmd/clvmd-singlenode.c
-@@ -218,8 +218,8 @@ maybe_retry:
- 		goto retry;
- 	}
- bad:
--	DEBUGLOG("Failed to lock resource %s\n", resource);
- 	pthread_mutex_unlock(&_lock_mutex);
-+	DEBUGLOG("Failed to lock resource %s\n", resource);
+diff --git a/lib/format1/format1.c b/lib/format1/format1.c
+index 2864227..115f8d1 100644
+--- a/lib/format1/format1.c
++++ b/lib/format1/format1.c
+@@ -217,8 +217,13 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
+ 	if (!import_extents(fid->fmt->cmd, vg, &pvs))
+ 		goto_bad;
  
- 	return 1; /* fail */
- }
-@@ -251,9 +251,9 @@ static int _unlock_resource(const char *resource, int lockid)
- 	}
+-	if (!import_snapshots(vg->vgmem, vg, &pvs))
++	/* FIXME: workaround - temporary assignment of fid */
++	vg->fid = fid;
++	if (!import_snapshots(vg->vgmem, vg, &pvs)) {
++		vg->fid = NULL;
+ 		goto_bad;
++	}
++	vg->fid = NULL;
  
- 	dm_hash_remove(_locks, resource);
--	dm_free(lck);
- 	pthread_cond_broadcast(&_lock_cond); /* wakeup waiters */
- 	pthread_mutex_unlock(&_lock_mutex);
-+	dm_free(lck);
- 
- 	return 0;
- }
-@@ -312,6 +312,6 @@ struct cluster_ops *init_singlenode_cluster(void)
- {
- 	if (!_init_cluster())
- 		return &_cluster_singlenode_ops;
--	else
--		return NULL;
-+
-+	return NULL;
- }
+ 	/* Fix extents counts by adding missing PV if partial VG */
+ 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
 
 
