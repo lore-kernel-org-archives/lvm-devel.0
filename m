@@ -1,121 +1,90 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:08 +0000 (UTC)
-Subject: master - clmvd: fix responce status
-Message-ID: <20130421211610.5D07D145A@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:14 +0000 (UTC)
+Subject: master - clvmd: preserve foreground mode across restart
+Message-ID: <20130421211614.7104F145A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c9d8d22224f5516f364bd66ce41aa506a39801a6
-Commit:        c9d8d22224f5516f364bd66ce41aa506a39801a6
-Parent:        764195207d4773cf6f1674a2fb16e9a0acda304a
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=0125518d6d0a0fce63998fc898c203255ad73700
+Commit:        0125518d6d0a0fce63998fc898c203255ad73700
+Parent:        c9d8d22224f5516f364bd66ce41aa506a39801a6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 21:11:32 2013 +0200
+AuthorDate:    Sat Apr 20 22:23:36 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 22:54:42 2013 +0200
+CommitterDate: Sun Apr 21 22:56:48 2013 +0200
 
-clmvd: fix responce status
+clvmd: preserve foreground mode across restart
 
-Failing status code is expected to be 0.
-Also do not return '*response' as pointer which has been already free().
+Keep clvmd in foreground when restarted.
+Useful for testing.
 ---
- WHATS_NEW                     |    1 +
- daemons/clvmd/refresh_clvmd.c |   15 ++++++---------
- lib/locking/cluster_locking.c |   10 ++++------
- 3 files changed, 11 insertions(+), 15 deletions(-)
+ daemons/clvmd/clvmd-command.c |    8 ++++++--
+ daemons/clvmd/clvmd.c         |    5 +++++
+ daemons/clvmd/clvmd.h         |    1 +
+ 3 files changed, 12 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 76347e9..95b6e13 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.99 - 
- ===================================
-+  Fix clvmd _cluster_request() return code in memory fail path.
-   Add writemostly/writebehind support for RAID1
-   Add lv_change_activate() for common activation code in vg/lvchange.
-   Revert change that allowed identical table reload for RAID.
-diff --git a/daemons/clvmd/refresh_clvmd.c b/daemons/clvmd/refresh_clvmd.c
-index 28b5625..42c3958 100644
---- a/daemons/clvmd/refresh_clvmd.c
-+++ b/daemons/clvmd/refresh_clvmd.c
-@@ -225,16 +225,14 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 	 * With an extra pair of INTs on the front to sanity
- 	 * check the pointer when we are given it back to free
+diff --git a/daemons/clvmd/clvmd-command.c b/daemons/clvmd/clvmd-command.c
+index c5cd461..5d93f38 100644
+--- a/daemons/clvmd/clvmd-command.c
++++ b/daemons/clvmd/clvmd-command.c
+@@ -383,7 +383,7 @@ static int restart_clvmd(void)
+ 	} while (hn);
+ 
+ 	/* clvmd + locks (-E uuid) + debug (-d X) + NULL */
+-	if (!(argv = malloc((max_locks * 2 + 5) * sizeof(*argv))))
++	if (!(argv = malloc((max_locks * 2 + 6) * sizeof(*argv))))
+ 		goto_out;
+ 
+ 	/*
+@@ -391,13 +391,17 @@ static int restart_clvmd(void)
  	 */
--	*response = dm_malloc(sizeof(lvm_response_t) * num_responses +
--			    sizeof(int) * 2);
--	if (!*response) {
-+	*response = NULL;
-+	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses +
-+				 sizeof(int) * 2))) {
- 		errno = ENOMEM;
- 		status = 0;
- 		goto out;
+ 	argv[argc++] = "clvmd";
+ 
+-	/* Propogate debug options */
++	/* Propagate debug options */
+ 	if (clvmd_get_debug()) {
+ 		if (dm_snprintf(debug_arg, sizeof(debug_arg), "-d%u", clvmd_get_debug()) < 0)
+ 			goto_out;
+ 		argv[argc++] = debug_arg;
  	}
  
--	rarray = *response;
--
- 	/* Unpack the response into an lvm_response_t array */
- 	inptr = head->args;
- 	i = 0;
-@@ -251,9 +249,9 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 			int j;
- 			for (j = 0; j < i; j++)
- 				dm_free(rarray[i].response);
--			free(*response);
-+			dm_free(rarray);
- 			errno = ENOMEM;
--			status = -1;
-+			status = 0;
- 			goto out;
- 		}
++	/* Propagate foreground options */
++	if (clvmd_get_foreground())
++		argv[argc++] = "-f";
++
+ 	argv[argc++] = "-I";
+ 	argv[argc++] = clops->name;
  
-@@ -266,8 +264,7 @@ static int _cluster_request(char cmd, const char *node, void *data, int len,
- 	*response = rarray;
- 
-       out:
--	if (retbuf)
--		dm_free(retbuf);
-+	dm_free(retbuf);
- 
- 	return status;
+diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
+index 54cf1ac..c649bbe 100644
+--- a/daemons/clvmd/clvmd.c
++++ b/daemons/clvmd/clvmd.c
+@@ -249,6 +249,11 @@ debug_t clvmd_get_debug(void)
+ 	return debug;
  }
-diff --git a/lib/locking/cluster_locking.c b/lib/locking/cluster_locking.c
-index 01a47b0..3169f0d 100644
---- a/lib/locking/cluster_locking.c
-+++ b/lib/locking/cluster_locking.c
-@@ -241,15 +241,13 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 	 * With an extra pair of INTs on the front to sanity
- 	 * check the pointer when we are given it back to free
- 	 */
--	*response = dm_malloc(sizeof(lvm_response_t) * num_responses);
--	if (!*response) {
-+	*response = NULL;
-+	if (!(rarray = dm_malloc(sizeof(lvm_response_t) * num_responses))) {
- 		errno = ENOMEM;
- 		status = 0;
- 		goto out;
- 	}
  
--	rarray = *response;
--
- 	/* Unpack the response into an lvm_response_t array */
- 	inptr = head->args;
- 	i = 0;
-@@ -266,9 +264,9 @@ static int _cluster_request(char clvmd_cmd, const char *node, void *data, int le
- 			int j;
- 			for (j = 0; j < i; j++)
- 				dm_free(rarray[i].response);
--			free(*response);
-+			dm_free(rarray);
- 			errno = ENOMEM;
--			status = -1;
-+			status = 0;
- 			goto out;
- 		}
++int clvmd_get_foreground(void)
++{
++	return foreground_mode;
++}
++
+ static const char *decode_cmd(unsigned char cmdl)
+ {
+ 	static char buf[128];
+diff --git a/daemons/clvmd/clvmd.h b/daemons/clvmd/clvmd.h
+index 5bad43a..67ea41e 100644
+--- a/daemons/clvmd/clvmd.h
++++ b/daemons/clvmd/clvmd.h
+@@ -119,6 +119,7 @@ extern void debuglog(const char *fmt, ... )
  
+ void clvmd_set_debug(debug_t new_de);
+ debug_t clvmd_get_debug(void);
++int clvmd_get_foreground(void);
+ 
+ int sync_lock(const char *resource, int mode, int flags, int *lockid);
+ int sync_unlock(const char *resource, int lockid);
 
 
