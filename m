@@ -1,58 +1,65 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:47 +0000 (UTC)
-Subject: master - thin: explicitly avoid pvmove operation
-Message-ID: <20130421211647.545A211FE@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:49 +0000 (UTC)
+Subject: master - thin: fix resource leak in err path
+Message-ID: <20130421211649.A2B7311FE@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=17a691505467cd5a73059fe5ca22fe50dafd345a
-Commit:        17a691505467cd5a73059fe5ca22fe50dafd345a
-Parent:        78a42bac157edba2b68bdfd77ea5c3096845aceb
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a2b76a6f022920abd59072decfa7d3d76eeda913
+Commit:        a2b76a6f022920abd59072decfa7d3d76eeda913
+Parent:        17a691505467cd5a73059fe5ca22fe50dafd345a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 08:49:17 2013 +0200
+AuthorDate:    Sun Apr 21 12:19:25 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:09:11 2013 +0200
+CommitterDate: Sun Apr 21 23:10:30 2013 +0200
 
-thin: explicitly avoid pvmove operation
+thin: fix resource leak in err path
 
-So far we do not support pvmove for thin volumes
-and thin pools.
+If the devices list could not have been obtained, FILE* was leaked.
 ---
- WHATS_NEW      |    1 +
- tools/pvmove.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ WHATS_NEW                                     |    1 +
+ daemons/dmeventd/plugins/thin/dmeventd_thin.c |    6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 819fea4..b016b8e 100644
+index b016b8e..5d4c7a7 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.99 - 
  ===================================
-+  Add explicit message about unsupported pvmove for thin/thinpool volumes.
++  Fix memleak in dmeventd thin plugin in device list obtaining err path.
+   Add explicit message about unsupported pvmove for thin/thinpool volumes.
    Fix lvmetad error path in lvmetad_vg_lookup() for null vgname.
    Fix clvmd _cluster_request() return code in memory fail path.
-   Add writemostly/writebehind support for RAID1
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index a733049..5c51c5f 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -248,6 +248,13 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			log_print_unless_silent("Skipping mirror image LV %s", lv->name);
- 			continue;
+diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+index ba72c4a..95ab27a 100644
+--- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
++++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
+@@ -246,7 +246,7 @@ static void _umount(struct dm_task *dmt, const char *device)
+ {
+ 	static const char mountinfo[] = "/proc/self/mountinfo";
+ 	static const size_t MINORS = 4096;
+-	FILE *minfo;
++	FILE *minfo = NULL;
+ 	char buffer[4096];
+ 	char target[PATH_MAX];
+ 	struct dm_info info;
+@@ -288,10 +288,10 @@ static void _umount(struct dm_task *dmt, const char *device)
  		}
-+		if (lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) {
-+			lv_skipped = 1;
-+			log_print_unless_silent("Skipping thin%s LV %s",
-+						lv_is_thin_pool(lv) ? "-pool" : "",
-+						lv->name);
-+			continue;
-+		}
- 		if (lv->status & LOCKED) {
- 			lv_skipped = 1;
- 			log_print_unless_silent("Skipping locked LV %s", lv->name);
+ 	}
+ 
+-	if (fclose(minfo))
++out:
++	if (minfo && fclose(minfo))
+ 		syslog(LOG_ERR, "Failed to close %s\n", mountinfo);
+ 
+-out:
+ 	if (minors)
+ 		dm_bitset_destroy(minors);
+ 	dmeventd_lvm2_lock();
 
 
