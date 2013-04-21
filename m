@@ -1,40 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:17:08 +0000 (UTC)
-Subject: master - cleanup: cast to len's type
-Message-ID: <20130421211708.2B8B016CF@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:17:10 +0000 (UTC)
+Subject: master - cleanup: add printf attribute
+Message-ID: <20130421211710.73A0F16CF@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d38af2857fe86a5e0916d67aee7597e5a0dea6c8
-Commit:        d38af2857fe86a5e0916d67aee7597e5a0dea6c8
-Parent:        4eb8db26ac9ddd679a32788e8d02ad1e8979e68d
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=855175fa261c2c5de0e030615e2f274344e2d129
+Commit:        855175fa261c2c5de0e030615e2f274344e2d129
+Parent:        d38af2857fe86a5e0916d67aee7597e5a0dea6c8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Apr 20 20:55:10 2013 +0200
+AuthorDate:    Sat Apr 20 20:56:07 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 23:14:05 2013 +0200
 
-cleanup: cast to len's type
+cleanup: add printf attribute
 
-Cleanup different signess gcc warning.
+Add gcc attribute for printf for daemon_logf().
 ---
- daemons/clvmd/clvmd.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdaemon/server/daemon-server.h |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index a64bd54..a276cbc 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -1217,7 +1217,7 @@ static int read_from_local_sock(struct local_client *thisfd)
- 			missing_len = 0;
+diff --git a/libdaemon/server/daemon-server.h b/libdaemon/server/daemon-server.h
+index f184853..eb6df43 100644
+--- a/libdaemon/server/daemon-server.h
++++ b/libdaemon/server/daemon-server.h
+@@ -140,7 +140,8 @@ void daemon_log_cft(log_state *s, int type, const char *prefix,
+ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *message);
  
- 		/* We need at least sizeof(struct clvm_header) bytes in buffer */
--		if (len < sizeof(struct clvm_header) || argslen < 0 ||
-+		if (len < (int)sizeof(struct clvm_header) || argslen < 0 ||
- 		    missing_len > MAX_MISSING_LEN) {
- 			struct clvm_header reply = {
- 				.cmd = CLVMD_CMD_REPLY,
+ /* Log a formatted message as "type". See also daemon-log.h. */
+-void daemon_logf(log_state *s, int type, const char *format, ...);
++void daemon_logf(log_state *s, int type, const char *format, ...)
++	__attribute__ ((format(printf, 3, 4)));
+ 
+ /*
+  * Configure log_state to send messages of type "type" to the log outlet
 
 
