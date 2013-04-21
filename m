@@ -1,62 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:40 +0000 (UTC)
-Subject: master - raid: read segment only for known LV
-Message-ID: <20130421211640.3ADDF12A9@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:42 +0000 (UTC)
+Subject: master - raid: test for target_pvs
+Message-ID: <20130421211642.93C601241@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9e24d563c6e281a582bf1a98673305ce88d6cd05
-Commit:        9e24d563c6e281a582bf1a98673305ce88d6cd05
-Parent:        4ca6a4105db63344abe3e62eaa0cbcfcb23c47f9
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24f8daa13d82869fbe088f7edf3c95c11660b186
+Commit:        24f8daa13d82869fbe088f7edf3c95c11660b186
+Parent:        9e24d563c6e281a582bf1a98673305ce88d6cd05
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 08:47:59 2013 +0200
+AuthorDate:    Sun Apr 21 12:53:04 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-raid: read segment only for known LV
+raid: test for target_pvs
 
-Avoid reading first_seg() on unknown LV and find it only when needed.
+If target_pvs is NULL do not call lv_is_on_pvs()
 ---
- tools/pvmove.c |   16 ++++++++--------
- 1 files changed, 8 insertions(+), 8 deletions(-)
+ lib/metadata/raid_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 575f296..a733049 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -207,7 +207,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 	/* Find segments to be moved and set up mirrors */
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv = lvl->lv;
--		seg = first_seg(lv);
- 		if (lv == lv_mirr)
- 			continue;
- 		if (lv_name) {
-@@ -220,14 +219,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			log_print_unless_silent("Skipping snapshot-related LV %s", lv->name);
- 			continue;
- 		}
--		if (seg_is_raid(seg)) {
--			lv_skipped = 1;
--			log_print_unless_silent("Skipping %s LV %s",
--						seg->segtype->ops->name(seg),
--						lv->name);
--			continue;
--		}
- 		if (lv_is_raid_type(lv)) {
-+			seg = first_seg(lv);
-+			if (seg_is_raid(seg)) {
-+				lv_skipped = 1;
-+				log_print_unless_silent("Skipping %s LV %s",
-+							seg->segtype->ops->name(seg),
-+							lv->name);
-+				continue;
-+			}
- 			lv_skipped = 1;
- 			log_print_unless_silent("Skipping RAID sub-LV %s",
- 						lv->name);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 38ea2c2..f9d3861 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -934,7 +934,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
+ 				  seg_metalv(seg, s)->name, seg_lv(seg, s)->name);
+ 		} else {
+ 			/* Conditions for second pass */
+-			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
++			if (!target_pvs || !lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
+ 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+ 				continue;
+ 
 
 
