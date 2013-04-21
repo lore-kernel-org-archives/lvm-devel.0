@@ -1,63 +1,44 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:19 +0000 (UTC)
-Subject: master - clvmd: avoid logging in signal handler
-Message-ID: <20130421211619.236CF145A@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:21 +0000 (UTC)
+Subject: master - config: check for hash success
+Message-ID: <20130421211621.8DB39145A@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5070ffbca7b16e4139b3da72bdff0c9add517351
-Commit:        5070ffbca7b16e4139b3da72bdff0c9add517351
-Parent:        61d0ae7019aa14d78678a36f1eeb43b29a113e80
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ba3cee36300d56efcdcb0af883141b1b0a6129a1
+Commit:        ba3cee36300d56efcdcb0af883141b1b0a6129a1
+Parent:        5070ffbca7b16e4139b3da72bdff0c9add517351
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 17 23:16:30 2013 +0200
+AuthorDate:    Sun Apr 21 13:12:58 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 22:56:59 2013 +0200
 
-clvmd: avoid logging in signal handler
+config: check for hash success
 
-debuglog in the main thread.
+Hash insert may fail.
 ---
- daemons/clvmd/clvmd.c |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ lib/config/config.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/clvmd/clvmd.c b/daemons/clvmd/clvmd.c
-index c649bbe..a64bd54 100644
---- a/daemons/clvmd/clvmd.c
-+++ b/daemons/clvmd/clvmd.c
-@@ -874,6 +874,7 @@ static void main_loop(int local_sock, int cmd_timeout)
- 			int saved_errno = errno;
- 
- 			reread_config = 0;
-+			DEBUGLOG("got SIGHUP\n");
- 			if (clops->reread_config)
- 				clops->reread_config();
- 			errno = saved_errno;
-@@ -982,6 +983,8 @@ static void main_loop(int local_sock, int cmd_timeout)
- 
-       closedown:
- 	clops->cluster_closedown();
-+	if (quit)
-+		DEBUGLOG("SIGTERM received\n");
- }
- 
- static __attribute__ ((noreturn)) void wait_for_child(int c_pipe, int timeout)
-@@ -2253,14 +2256,12 @@ static void sigusr2_handler(int sig)
- 
- static void sigterm_handler(int sig)
- {
--	DEBUGLOG("SIGTERM received\n");
- 	quit = 1;
- 	return;
- }
- 
- static void sighup_handler(int sig)
- {
--        DEBUGLOG("got SIGHUP\n");
- 	reread_config = 1;
- }
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 2c77f30..d1cf590 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -577,7 +577,11 @@ int config_def_check(struct cmd_context *cmd, int force, int skip, int suppress_
+ 				cmd->cft_def_hash = NULL;
+ 				r = 0; goto out;
+ 			}
+-			dm_hash_insert(cmd->cft_def_hash, vp, def);
++			if (!dm_hash_insert(cmd->cft_def_hash, vp, def)) {
++				log_error("Failed to insert configuration to hash.");
++				r = 0;
++				goto out;
++			}
+ 		}
+ 	}
  
 
 
