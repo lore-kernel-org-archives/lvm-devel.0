@@ -1,40 +1,41 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:16:42 +0000 (UTC)
-Subject: master - raid: test for target_pvs
-Message-ID: <20130421211642.93C601241@fedorahosted.org>
+Date: Sun, 21 Apr 2013 21:16:44 +0000 (UTC)
+Subject: master - thin: fix cut&paste bug
+Message-ID: <20130421211644.E32191241@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=24f8daa13d82869fbe088f7edf3c95c11660b186
-Commit:        24f8daa13d82869fbe088f7edf3c95c11660b186
-Parent:        9e24d563c6e281a582bf1a98673305ce88d6cd05
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=78a42bac157edba2b68bdfd77ea5c3096845aceb
+Commit:        78a42bac157edba2b68bdfd77ea5c3096845aceb
+Parent:        24f8daa13d82869fbe088f7edf3c95c11660b186
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 12:53:04 2013 +0200
+AuthorDate:    Fri Apr 19 21:03:38 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Apr 21 23:07:00 2013 +0200
 
-raid: test for target_pvs
+thin: fix cut&paste bug
 
-If target_pvs is NULL do not call lv_is_on_pvs()
+Use proper external_lv.
+(In release fix)
 ---
- lib/metadata/raid_manip.c |    2 +-
+ lib/display/display.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 38ea2c2..f9d3861 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -934,7 +934,7 @@ static int _raid_extract_images(struct logical_volume *lv, uint32_t new_count,
- 				  seg_metalv(seg, s)->name, seg_lv(seg, s)->name);
- 		} else {
- 			/* Conditions for second pass */
--			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
-+			if (!target_pvs || !lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
- 			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
- 				continue;
- 
+diff --git a/lib/display/display.c b/lib/display/display.c
+index c766674..26bc384 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -595,7 +595,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 				  seg->origin->name);
+ 		if (seg->external_lv)
+ 			log_print("LV External origin name %s",
+-				  seg->origin->name);
++				  seg->external_lv->name);
+ 		if (inkernel)
+ 			thin_active = lv_thin_percent(lv, 0, &thin_percent);
+ 	} else if (lv_is_thin_pool(lv)) {
 
 
