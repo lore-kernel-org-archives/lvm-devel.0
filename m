@@ -1,47 +1,27 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Sun, 21 Apr 2013 21:55:58 +0000 (UTC)
-Subject: master - format1: add workaround for vg_set_fid
-Message-ID: <20130421215558.395531558@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 22 Apr 2013 11:08:29 +0200
+Subject: [PATCH 0/2] Cluster snapshot fixes
+Message-ID: <cover.1366621483.git.zkabelac@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a12f92c494a60fe6e6c9e133aa879bd0d0da069a
-Commit:        a12f92c494a60fe6e6c9e133aa879bd0d0da069a
-Parent:        994c32272e7c36f45defda12848d3856590a0d1f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 21 23:53:53 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:53:53 2013 +0200
+Small patch series tries to address problem with snapshot in cluster.
+1st. patch is fixing the problem of incorrect MDA caching in clvmd.
+2nd. is 'possibly' correcting exclusive locking of COW volume.
 
-format1: add workaround for vg_set_fid
+Zdenek Kabelac (2):
+  clvmd: avoid precheck of dev existance
+  snapshot: rework creation and removal of snapshots
 
-Since we want to set fid just before return of vg,
-add this termporary workaround.
----
- lib/format1/format1.c |    7 ++++++-
- 1 files changed, 6 insertions(+), 1 deletions(-)
+ daemons/clvmd/lvm-functions.c |  7 +------
+ lib/metadata/lv_manip.c       | 15 +++++----------
+ lib/metadata/snapshot_manip.c | 33 ++++++++++++++++++++++++---------
+ 3 files changed, 30 insertions(+), 25 deletions(-)
 
-diff --git a/lib/format1/format1.c b/lib/format1/format1.c
-index 2864227..115f8d1 100644
---- a/lib/format1/format1.c
-+++ b/lib/format1/format1.c
-@@ -217,8 +217,13 @@ static struct volume_group *_format1_vg_read(struct format_instance *fid,
- 	if (!import_extents(fid->fmt->cmd, vg, &pvs))
- 		goto_bad;
- 
--	if (!import_snapshots(vg->vgmem, vg, &pvs))
-+	/* FIXME: workaround - temporary assignment of fid */
-+	vg->fid = fid;
-+	if (!import_snapshots(vg->vgmem, vg, &pvs)) {
-+		vg->fid = NULL;
- 		goto_bad;
-+	}
-+	vg->fid = NULL;
- 
- 	/* Fix extents counts by adding missing PV if partial VG */
- 	if ((vg->status & PARTIAL_VG) && !_fix_partial_vg(vg, &pvs))
+-- 
+1.8.2
 
 
