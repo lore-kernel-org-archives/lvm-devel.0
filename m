@@ -1,83 +1,40 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Apr 2013 12:40:31 +0000 (UTC)
-Subject: master - test: new test new fail
-Message-ID: <20130423124031.13F411ECB@fedorahosted.org>
+Date: Tue, 23 Apr 2013 12:40:33 +0000 (UTC)
+Subject: master - test: fix filter
+Message-ID: <20130423124033.703BB35B0@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7c5a840c1aca9712134b8afee8abcba5cb8116f
-Commit:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
-Parent:        68ef288901820b522e3765e5fbec972ea348e3b7
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=67fc56f5ca1e05f78cedc5f729745e176447c6b2
+Commit:        67fc56f5ca1e05f78cedc5f729745e176447c6b2
+Parent:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 14:15:04 2013 +0200
+AuthorDate:    Tue Apr 23 14:28:27 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 14:15:04 2013 +0200
+CommitterDate: Tue Apr 23 14:28:27 2013 +0200
 
-test: new test new fail
+test: fix filter
 
-Do not hide new features into old test files.
+Fix filter for use with real /dev
 ---
- test/shell/lvchange-partial-raid10.sh |   29 +++++++++++++++++++++++++++++
- test/shell/lvchange-partial.sh        |   12 ------------
- 2 files changed, 29 insertions(+), 12 deletions(-)
+ test/shell/mdata-strings.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvchange-partial-raid10.sh b/test/shell/lvchange-partial-raid10.sh
-new file mode 100644
-index 0000000..64a2389
---- /dev/null
-+++ b/test/shell/lvchange-partial-raid10.sh
-@@ -0,0 +1,29 @@
-+#!/bin/bash
-+# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+. lib/test
-+
-+aux target_at_least dm-raid 1 3 2 || skip
-+
-+aux prepare_vg 4
-+
-+# rhbz 889358
-+# Should be able to activate when RAID10
-+# has failed devs in different mirror sets.
-+lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
-+aux wait_for_sync $vg $lv1
-+lvchange -an $vg/$lv1
-+aux disable_dev "$dev1" "$dev3"
-+lvchange -ay $vg/$lv1 --partial
-+lvchange -an $vg/$lv1
-+
-+aux enable_dev "$dev1"
-+lvremove -ff $vg
-diff --git a/test/shell/lvchange-partial.sh b/test/shell/lvchange-partial.sh
-index bc9a514..891dd0a 100644
---- a/test/shell/lvchange-partial.sh
-+++ b/test/shell/lvchange-partial.sh
-@@ -66,15 +66,3 @@ not lvchange --resync --addtag foo $vg/$lv1
+diff --git a/test/shell/mdata-strings.sh b/test/shell/mdata-strings.sh
+index 16e9360..95a630e 100644
+--- a/test/shell/mdata-strings.sh
++++ b/test/shell/mdata-strings.sh
+@@ -14,7 +14,7 @@
+ . lib/test
  
- aux enable_dev "$dev1"
- lvremove -ff $vg
--
--# rhbz 889358
--# Should be able to activate when RAID10
--# has failed devs in different mirror sets.
--if aux target_at_least dm-raid 1 3 2; then
--	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
--	aux wait_for_sync $vg $lv1
--	lvchange -an $vg/$lv1
--	aux disable_dev "$dev1" "$dev3"
--	lvchange -ay $vg/$lv1 --partial
--	lvchange -an $vg/$lv1
--fi
+ aux prepare_devs 2
+-aux lvmconf 'devices/global_filter = [ "a|.*LVMTEST.*dev/mapper/.*pv[0-9_]*$|", "r|.*|" ]'
++aux lvmconf 'devices/global_filter = [ "a|.*dev/mapper/.*LVMTEST.*pv[0-9_]*$|", "r|.*|" ]'
+ 
+ # for udev impossible to create
+ pv_ugly="__\"!@#\$%^&*,()|@||'\\\"__pv1"
 
 
