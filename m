@@ -1,60 +1,83 @@
 From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Tue, 23 Apr 2013 12:40:28 +0000 (UTC)
-Subject: master - raid: remove wrong pool free
-Message-ID: <20130423124028.A46EC1ECB@fedorahosted.org>
+Date: Tue, 23 Apr 2013 12:40:31 +0000 (UTC)
+Subject: master - test: new test new fail
+Message-ID: <20130423124031.13F411ECB@fedorahosted.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=68ef288901820b522e3765e5fbec972ea348e3b7
-Commit:        68ef288901820b522e3765e5fbec972ea348e3b7
-Parent:        1445d407949735c8fc17c9c0871d39224ef6d716
+Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c7c5a840c1aca9712134b8afee8abcba5cb8116f
+Commit:        c7c5a840c1aca9712134b8afee8abcba5cb8116f
+Parent:        68ef288901820b522e3765e5fbec972ea348e3b7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 23 14:06:40 2013 +0200
+AuthorDate:    Tue Apr 23 14:15:04 2013 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 23 14:06:40 2013 +0200
+CommitterDate: Tue Apr 23 14:15:04 2013 +0200
 
-raid: remove wrong pool free
+test: new test new fail
 
-No, we cannot free pool members here.
+Do not hide new features into old test files.
 ---
- tools/lvchange.c |   12 +++---------
- 1 files changed, 3 insertions(+), 9 deletions(-)
+ test/shell/lvchange-partial-raid10.sh |   29 +++++++++++++++++++++++++++++
+ test/shell/lvchange-partial.sh        |   12 ------------
+ 2 files changed, 29 insertions(+), 12 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index cc3e96b..796e512 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -266,25 +266,19 @@ static int detach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- static int attach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
- {
- 	struct cmd_context *cmd = seg->lv->vg->cmd;
--	struct lv_list *lvl, *tmp;
-+	struct lv_list *lvl;
+diff --git a/test/shell/lvchange-partial-raid10.sh b/test/shell/lvchange-partial-raid10.sh
+new file mode 100644
+index 0000000..64a2389
+--- /dev/null
++++ b/test/shell/lvchange-partial-raid10.sh
+@@ -0,0 +1,29 @@
++#!/bin/bash
++# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++
++. lib/test
++
++aux target_at_least dm-raid 1 3 2 || skip
++
++aux prepare_vg 4
++
++# rhbz 889358
++# Should be able to activate when RAID10
++# has failed devs in different mirror sets.
++lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
++aux wait_for_sync $vg $lv1
++lvchange -an $vg/$lv1
++aux disable_dev "$dev1" "$dev3"
++lvchange -ay $vg/$lv1 --partial
++lvchange -an $vg/$lv1
++
++aux enable_dev "$dev1"
++lvremove -ff $vg
+diff --git a/test/shell/lvchange-partial.sh b/test/shell/lvchange-partial.sh
+index bc9a514..891dd0a 100644
+--- a/test/shell/lvchange-partial.sh
++++ b/test/shell/lvchange-partial.sh
+@@ -66,15 +66,3 @@ not lvchange --resync --addtag foo $vg/$lv1
  
- 	if (seg_is_raid(seg)) {
--		dm_list_iterate_items_safe(lvl, tmp, list) {
-+		dm_list_iterate_items(lvl, list)
- 			lv_set_hidden(lvl->lv);
--			dm_pool_free(cmd->mem, lvl);
--		}
- 		return 1;
- 	}
- 
- 	dm_list_iterate_items(lvl, list)
- 		break;  /* get first item */
- 
--	if (!attach_mirror_log(seg, lvl->lv)) {
--		dm_pool_free(cmd->mem, lvl);
-+	if (!attach_mirror_log(seg, lvl->lv))
- 		return_0;
--	}
+ aux enable_dev "$dev1"
+ lvremove -ff $vg
 -
--	dm_pool_free(cmd->mem, lvl);
- 
- 	return 1;
- }
+-# rhbz 889358
+-# Should be able to activate when RAID10
+-# has failed devs in different mirror sets.
+-if aux target_at_least dm-raid 1 3 2; then
+-	lvcreate --type raid10 -m 1 -i 2 -l 2 -n $lv1 $vg
+-	aux wait_for_sync $vg $lv1
+-	lvchange -an $vg/$lv1
+-	aux disable_dev "$dev1" "$dev3"
+-	lvchange -ay $vg/$lv1 --partial
+-	lvchange -an $vg/$lv1
+-fi
 
 
