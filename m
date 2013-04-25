@@ -1,50 +1,30 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu, 25 Apr 2013 15:34:38 +0000 (UTC)
-Subject: master - cleanup: use dm_list_iterate_items
-Message-ID: <20130425153438.37D3F1C9D@fedorahosted.org>
+From: Tony Asleson <tasleson@redhat.com>
+Date: Thu, 25 Apr 2013 14:57:32 -0500
+Subject: [PATCH V4] lvm2app: Add thin and thin pool lv creation
+In-Reply-To: <87r4i98ybi.fsf@in.ibm.com>
+References: <1363713892-14704-1-git-send-email-mohan@in.ibm.com>
+	<515DF3F3.70004@redhat.com> <87zjx47x7a.fsf@in.ibm.com>
+	<516800C9.8000505@redhat.com> <5168268A.6040701@redhat.com>
+	<516DAA0F.2090604@redhat.com> <87r4i98ybi.fsf@in.ibm.com>
+Message-ID: <51798AAC.8090408@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f39f5b86c3f94fe83744054012d6d8b33bb7d7a0
-Commit:        f39f5b86c3f94fe83744054012d6d8b33bb7d7a0
-Parent:        c1eb17ab07f457d92bff58ea489c670be7bed9ed
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 25 11:46:17 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Apr 25 17:33:24 2013 +0200
+On 04/17/2013 01:29 AM, M. Mohan Kumar wrote:
+> As per Zdenek, thin LV snapshot can be created from a non thin LV
+> also. Should thin_lv_creation API support this feature also?
 
-cleanup: use dm_list_iterate_items
+Eventually the API should support everything :-)  Lets try to get the
+thin pool, thin logical volume creation worked out and then we can take
+a look at this.
 
----
- lib/activate/activate.c |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+> Tony, here is the rebased patch.
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 670b85c..05cfb66 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1410,7 +1410,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
- #ifdef DMEVENTD
- 	int i, pending = 0, monitored;
- 	int r = 1;
--	struct dm_list *tmp, *snh, *snht;
-+	struct dm_list *snh, *snht;
- 	struct lv_segment *seg;
- 	struct lv_segment *log_seg;
- 	int (*monitor_fn) (struct lv_segment *s, int e);
-@@ -1473,9 +1473,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, struct logical_volume *lv,
- 		if (!monitor_dev_for_events(cmd, seg->log_lv, NULL, monitor))
- 			r = 0;
- 
--	dm_list_iterate(tmp, &lv->segments) {
--		seg = dm_list_item(tmp, struct lv_segment);
--
-+	dm_list_iterate_items(seg, &lv->segments) {
- 		/* Recurse for AREA_LV */
- 		for (s = 0; s < seg->area_count; s++) {
- 			if (seg_type(seg, s) != AREA_LV)
+Thanks!
+
+-Tony
 
 
