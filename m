@@ -1,7 +1,7 @@
 From: Tony Asleson <tasleson@redhat.com>
-Date: Fri,  3 May 2013 11:02:33 -0500
-Subject: [PATCH] lvm2app: Add thin and thin pool lv creation
-Message-ID: <1367596953-7024-1-git-send-email-tasleson@redhat.com>
+Date: Fri,  3 May 2013 11:08:32 -0500
+Subject: [PATCH] lvm2app: Add thin and thin pool lv creation V2
+Message-ID: <1367597312-7157-1-git-send-email-tasleson@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,6 +15,9 @@ Add thin and thin pool lv creation support to lvm library
 This is Mohan's patch, re-worked to include suggestions
 from Zdenek.
 
+V2: Remove const lvm_lv_params_create_thin
+    Add const lvm_lv_params_skip_zero_get
+
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
  liblvm/lvm2app.h | 116 +++++++++++++++++++++++++++++++
@@ -22,7 +25,7 @@ Signed-off-by: Tony Asleson <tasleson@redhat.com>
  2 files changed, 321 insertions(+)
 
 diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index 93a78c3..bbdc037 100644
+index 93a78c3..0a00425 100644
 --- a/liblvm/lvm2app.h
 +++ b/liblvm/lvm2app.h
 @@ -97,6 +97,7 @@ struct volume_group;
@@ -92,7 +95,7 @@ index 93a78c3..bbdc037 100644
 + * closed.
 + *
 + */
-+lv_create_params_t lvm_lv_params_create_thin_pool(const vg_t vg,
++lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
 +		const char *pool_name, uint64_t size, uint32_t chunk_size,
 +		uint64_t meta_size, lvm_thin_discards_t discard);
 +
@@ -124,7 +127,7 @@ index 93a78c3..bbdc037 100644
 + * \return
 + * -1 on error, else 0 == zero, 1 == skip zero
 + */
-+int lvm_lv_params_skip_zero_get(lv_create_params_t params);
++int lvm_lv_params_skip_zero_get(const lv_create_params_t params);
 +
 +/**
 + * Create a thin LV creation parameters in a given VG & thin pool
@@ -163,7 +166,7 @@ index 93a78c3..bbdc037 100644
  
  /**
 diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index 91948a6..7e49cb3 100644
+index 91948a6..e1b76be 100644
 --- a/liblvm/lvm_lv.c
 +++ b/liblvm/lvm_lv.c
 @@ -22,6 +22,15 @@
@@ -221,7 +224,7 @@ index 91948a6..7e49cb3 100644
 +						   vg->extent_size);
 +}
 +
-+lv_create_params_t lvm_lv_params_create_thin_pool(const vg_t vg,
++lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
 +		const char *pool_name, uint64_t size, uint32_t chunk_size,
 +		uint64_t meta_size, lvm_thin_discards_t discard)
 +{
@@ -355,7 +358,7 @@ index 91948a6..7e49cb3 100644
 +	return rc;
 +}
 +
-+int lvm_lv_params_skip_zero_get(lv_create_params_t params)
++int lvm_lv_params_skip_zero_get(const lv_create_params_t params)
 +{
 +	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
 +		return params->lvp.zero;
